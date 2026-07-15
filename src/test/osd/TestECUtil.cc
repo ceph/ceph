@@ -21,11 +21,73 @@
 #include "osd/osd_types.h"
 #include "common/ceph_argparse.h"
 #include "osd/ECTransaction.h"
-
 using namespace std;
 using namespace ECUtil;
 
-// FIXME: Once PRs are in, we should move the other ECUtil tests are moved here.
+TEST(ECUtil, stripe_info_t)
+{
+  const uint64_t swidth = 4096;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+
+  stripe_info_t s(k, m, swidth);
+  ASSERT_EQ(s.get_stripe_width(), swidth);
+
+  ASSERT_EQ(s.ro_offset_to_next_chunk_offset(0), 0u);
+  ASSERT_EQ(s.ro_offset_to_next_chunk_offset(1), s.get_chunk_size());
+  ASSERT_EQ(s.ro_offset_to_next_chunk_offset(swidth - 1),
+	    s.get_chunk_size());
+
+  ASSERT_EQ(s.ro_offset_to_prev_chunk_offset(0), 0u);
+  ASSERT_EQ(s.ro_offset_to_prev_chunk_offset(swidth), s.get_chunk_size());
+  ASSERT_EQ(s.ro_offset_to_prev_chunk_offset((swidth * 2) - 1),
+	    s.get_chunk_size());
+
+  ASSERT_EQ(s.ro_offset_to_next_stripe_ro_offset(0), 0u);
+  ASSERT_EQ(s.ro_offset_to_next_stripe_ro_offset(swidth - 1),
+	    s.get_stripe_width());
+
+  ASSERT_EQ(s.ro_offset_to_prev_stripe_ro_offset(swidth), s.get_stripe_width());
+  ASSERT_EQ(s.ro_offset_to_prev_stripe_ro_offset(swidth), s.get_stripe_width());
+  ASSERT_EQ(s.ro_offset_to_prev_stripe_ro_offset((swidth * 2) - 1),
+	    s.get_stripe_width());
+
+  ASSERT_EQ(s.aligned_ro_offset_to_chunk_offset(2*swidth),
+	    2*s.get_chunk_size());
+  ASSERT_EQ(s.shard_offset_to_ro_offset(shard_id_t(0), 2*s.get_chunk_size()),
+	    2*s.get_stripe_width());
+
+  // Stripe 1 + 1 chunk for 10 stripes needs to read 11 stripes starting
+  // from 1 because there is a partial stripe at the start and end
+  ASSERT_EQ(s.chunk_aligned_ro_range_to_shard_ro_range(swidth+s.get_chunk_size(), 10*swidth),
+	    make_pair(s.get_chunk_size(), 11*s.get_chunk_size()));
+
+  // Stripe 1 + 0 chunks for 10 stripes needs to read 10 stripes starting
+  // from 1 because there are no partial stripes
+  ASSERT_EQ(s.chunk_aligned_ro_range_to_shard_ro_range(swidth, 10*swidth),
+	    make_pair(s.get_chunk_size(), 10*s.get_chunk_size()));
+
+  // Stripe 0 + 1 chunk for 10 stripes needs to read 11 stripes starting
+  // from 0 because there is a partial stripe at the start and end
+  ASSERT_EQ(s.chunk_aligned_ro_range_to_shard_ro_range(s.get_chunk_size(), 10*swidth),
+	    make_pair<uint64_t>(0, 11*s.get_chunk_size()));
+
+  // Stripe 0 + 1 chunk for (10 stripes + 1 chunk) needs to read 11 stripes
+  // starting from 0 because there is a partial stripe at the start and end
+  ASSERT_EQ(s.chunk_aligned_ro_range_to_shard_ro_range(s.get_chunk_size(),
+							  10*swidth + s.get_chunk_size()),
+	    make_pair<uint64_t>(0, 11*s.get_chunk_size()));
+
+  // Stripe 0 + 2 chunks for (10 stripes + 2 chunks) needs to read 11 stripes
+  // starting from 0 because there is a partial stripe at the start
+  ASSERT_EQ(s.chunk_aligned_ro_range_to_shard_ro_range(2*s.get_chunk_size(),
+    10*swidth + 2*s.get_chunk_size()),
+    make_pair<uint64_t>(0, 11*s.get_chunk_size()));
+
+  ASSERT_EQ(s.ro_offset_len_to_stripe_ro_offset_len(swidth-10, (uint64_t)20),
+            make_pair((uint64_t)0, 2*swidth));
+}
+
 
 TEST(ECUtil, stripe_info_t_chunk_mapping)
 {
@@ -1101,4 +1163,456 @@ TEST(ECUtil, debug_string)
   semap.insert_in_shard(shard_id_t(0), 348740, bl1);
 
   semap.debug_string(2048, 0);
+}
+
+// Comprehensive tests for erase_after_ro_offset
+// These tests cover various edge cases and scenarios that were not previously tested
+
+TEST(ECUtil, erase_after_ro_offset_empty_map)
+{
+  // Test erasing on an empty shard extent map
+  int k = 2;
+  int m = 1;
+  int chunk_size = 4096;
+
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t semap(&sinfo);
+
+  // Should not crash on empty map
+  semap.erase_after_ro_offset(0);
+  semap.erase_after_ro_offset(chunk_size);
+  semap.erase_after_ro_offset(chunk_size * k);
+
+  ASSERT_TRUE(semap.empty());
+}
+
+TEST(ECUtil, erase_after_ro_offset_at_stripe_boundary)
+{
+  // Test erasing exactly at stripe boundaries
+  int k = 2;
+  int m = 1;
+  int chunk_size = 4096;
+
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t semap(&sinfo);
+
+  // Insert two full stripes
+  bufferlist bl;
+  bl.append_zero(chunk_size * k * 2);
+  extent_map emap;
+  emap.insert(0, chunk_size * k * 2, bl);
+  semap.insert_ro_extent_map(emap);
+
+  // Verify initial state: both shards should have 2 chunks each
+  ASSERT_EQ(0, semap.get_ro_start());
+  ASSERT_EQ(chunk_size * k * 2, semap.get_ro_end());
+  ASSERT_TRUE(semap.contains_shard(shard_id_t(0)));
+  ASSERT_TRUE(semap.contains_shard(shard_id_t(1)));
+
+  // Erase after first stripe boundary
+  semap.erase_after_ro_offset(chunk_size * k);
+
+  // Should have exactly one stripe left
+  ASSERT_EQ(0, semap.get_ro_start());
+  ASSERT_EQ(chunk_size * k, semap.get_ro_end());
+  ASSERT_TRUE(semap.contains_shard(shard_id_t(0)));
+  ASSERT_TRUE(semap.contains_shard(shard_id_t(1)));
+
+  extent_set shard0_extents = semap.get_extent_set(shard_id_t(0));
+  extent_set shard1_extents = semap.get_extent_set(shard_id_t(1));
+  ASSERT_EQ(chunk_size, shard0_extents.range_end());
+  ASSERT_EQ(chunk_size, shard1_extents.range_end());
+}
+
+TEST(ECUtil, erase_after_ro_offset_within_stripe)
+{
+  // Test erasing in the middle of a stripe
+  int k = 2;
+  int m = 1;
+  int chunk_size = 4096;
+
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t semap(&sinfo);
+
+  // Insert one full stripe
+  bufferlist bl;
+  bl.append_zero(chunk_size * k);
+  extent_map emap;
+  emap.insert(0, chunk_size * k, bl);
+  semap.insert_ro_extent_map(emap);
+
+  // Erase after half a stripe (should affect shard 1)
+  semap.erase_after_ro_offset(chunk_size);
+
+  ASSERT_EQ(0, semap.get_ro_start());
+  ASSERT_EQ(chunk_size, semap.get_ro_end());
+  
+  // Shard 0 should still have data
+  ASSERT_TRUE(semap.contains_shard(shard_id_t(0)));
+  extent_set shard0_extents = semap.get_extent_set(shard_id_t(0));
+  ASSERT_EQ(chunk_size, shard0_extents.range_end());
+
+  // Shard 1 should be empty
+  ASSERT_FALSE(semap.contains_shard(shard_id_t(1)));
+}
+
+TEST(ECUtil, erase_after_ro_offset_misaligned)
+{
+  // Test erasing at misaligned offsets
+  int k = 2;
+  int m = 1;
+  int chunk_size = 4096;
+
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t semap(&sinfo);
+
+  // Insert data
+  bufferlist bl;
+  bl.append_zero(chunk_size * k * 2);
+  extent_map emap;
+  emap.insert(0, chunk_size * k * 2, bl);
+  semap.insert_ro_extent_map(emap);
+
+  // Erase at misaligned offset (1.5 chunks)
+  uint64_t erase_offset = chunk_size + chunk_size / 2;
+  semap.erase_after_ro_offset(erase_offset);
+
+  ASSERT_EQ(0, semap.get_ro_start());
+  ASSERT_EQ(erase_offset, semap.get_ro_end());
+
+  // Shard 0 should have full chunk
+  ASSERT_TRUE(semap.contains_shard(shard_id_t(0)));
+  extent_set shard0_extents = semap.get_extent_set(shard_id_t(0));
+  ASSERT_EQ(chunk_size, shard0_extents.range_end());
+
+  // Shard 1 should have partial chunk
+  ASSERT_TRUE(semap.contains_shard(shard_id_t(1)));
+  extent_set shard1_extents = semap.get_extent_set(shard_id_t(1));
+  ASSERT_EQ(chunk_size / 2, shard1_extents.range_end());
+}
+
+TEST(ECUtil, erase_after_ro_offset_before_start)
+{
+  // NOTE: This tests detects the issue fixed in the same commit in ECUtil.cc
+  // Test erasing before the start of data (should erase everything)
+  int k = 2;
+  int m = 1;
+  int chunk_size = 4096;
+
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t semap(&sinfo);
+
+  // Insert data starting at offset chunk_size
+  bufferlist bl;
+  bl.append_zero(chunk_size * k);
+  extent_map emap;
+  emap.insert(chunk_size, chunk_size * k, bl);
+  semap.insert_ro_extent_map(emap);
+
+  ASSERT_EQ(chunk_size, semap.get_ro_start());
+  ASSERT_EQ(chunk_size * k + chunk_size, semap.get_ro_end());
+
+  // Erase before the start
+  semap.erase_after_ro_offset(512);
+
+  // Everything should be erased
+  ASSERT_TRUE(semap.empty());
+}
+
+TEST(ECUtil, erase_after_ro_offset_after_end)
+{
+  // Test erasing after the end of data (should do nothing)
+  int k = 2;
+  int m = 1;
+  int chunk_size = 4096;
+
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t semap(&sinfo);
+
+  // Insert data
+  bufferlist bl;
+  bl.append_zero(chunk_size * k);
+  extent_map emap;
+  emap.insert(0, chunk_size * k, bl);
+  semap.insert_ro_extent_map(emap);
+
+  uint64_t original_start = semap.get_ro_start();
+  uint64_t original_end = semap.get_ro_end();
+
+  // Erase after the end
+  semap.erase_after_ro_offset(chunk_size * k * 2);
+
+  // Nothing should change
+  ASSERT_EQ(original_start, semap.get_ro_start());
+  ASSERT_EQ(original_end, semap.get_ro_end());
+  ASSERT_TRUE(semap.contains_shard(shard_id_t(0)));
+  ASSERT_TRUE(semap.contains_shard(shard_id_t(1)));
+}
+
+TEST(ECUtil, erase_after_ro_offset_partial_shard_data)
+{
+  int k = 2;
+  int m = 2;
+  int chunk_size = 16384;
+
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t semap(&sinfo);
+
+  // Insert 12KB of data (less than one full stripe of 32KB)
+  // This should only populate shard 0
+  bufferlist bl;
+  bl.append_zero(12288);
+  extent_map emap;
+  emap.insert(0, 12288, bl);
+  semap.insert_ro_extent_map(emap);
+
+  // Verify initial state
+  ASSERT_EQ(0, semap.get_ro_start());
+  ASSERT_EQ(12288, semap.get_ro_end());
+  ASSERT_TRUE(semap.contains_shard(shard_id_t(0)));
+  ASSERT_FALSE(semap.contains_shard(shard_id_t(1)));
+
+  // Now simulate what happens during recovery: decode adds data to shard 1
+  // (This simulates the bug where decode incorrectly populates shard 1)
+  bufferlist shard1_bl;
+  shard1_bl.append_zero(4096);
+  semap.insert_in_shard(shard_id_t(1), 8192, shard1_bl);
+
+  // Now shard 1 incorrectly has data
+  ASSERT_TRUE(semap.contains_shard(shard_id_t(1)));
+
+  // Erase after aligned object size (16KB)
+  uint64_t aligned_size = 16384;
+  semap.erase_after_ro_offset(aligned_size);
+
+  // After erase, shard 1 should be completely empty
+  // This is the critical assertion that would fail with the bug
+  ASSERT_FALSE(semap.contains_shard(shard_id_t(1)));
+
+  // Shard 0 should still have data up to 12KB
+  ASSERT_TRUE(semap.contains_shard(shard_id_t(0)));
+  extent_set shard0_extents = semap.get_extent_set(shard_id_t(0));
+  ASSERT_EQ(12288, shard0_extents.range_end());
+}
+
+TEST(ECUtil, erase_after_ro_offset_multiple_stripes)
+{
+  // Test erasing across multiple stripes
+  int k = 3;
+  int m = 2;
+  int chunk_size = 4096;
+
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t semap(&sinfo);
+
+  // Insert 4 full stripes
+  bufferlist bl;
+  bl.append_zero(chunk_size * k * 4);
+  extent_map emap;
+  emap.insert(0, chunk_size * k * 4, bl);
+  semap.insert_ro_extent_map(emap);
+
+  // Erase after 2.5 stripes
+  uint64_t erase_offset = chunk_size * k * 2 + chunk_size;
+  semap.erase_after_ro_offset(erase_offset);
+
+  ASSERT_EQ(0, semap.get_ro_start());
+  ASSERT_EQ(erase_offset, semap.get_ro_end());
+
+  // All shards should still exist
+  for (int i = 0; i < k; i++) {
+    ASSERT_TRUE(semap.contains_shard(shard_id_t(i)));
+  }
+
+  // Shard 0 should have 3 chunks (2 full stripes + 1 from partial)
+  extent_set shard0_extents = semap.get_extent_set(shard_id_t(0));
+  ASSERT_EQ(chunk_size * 3, shard0_extents.range_end());
+
+  // Shards 1 and 2 should have 2 chunks each
+  extent_set shard1_extents = semap.get_extent_set(shard_id_t(1));
+  extent_set shard2_extents = semap.get_extent_set(shard_id_t(2));
+  ASSERT_EQ(chunk_size * 2, shard1_extents.range_end());
+  ASSERT_EQ(chunk_size * 2, shard2_extents.range_end());
+}
+
+TEST(ECUtil, erase_after_ro_offset_sparse_data)
+{
+  // Test erasing with sparse (non-contiguous) data
+  int k = 2;
+  int m = 1;
+  int chunk_size = 4096;
+
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t semap(&sinfo);
+
+  // Insert sparse data: first stripe and third stripe
+  bufferlist bl1, bl2;
+  bl1.append_zero(chunk_size * k);
+  bl2.append_zero(chunk_size * k);
+  extent_map emap;
+  emap.insert(0, chunk_size * k, bl1);
+  emap.insert(chunk_size * k * 2, chunk_size * k, bl2);
+  semap.insert_ro_extent_map(emap);
+
+  ASSERT_EQ(0, semap.get_ro_start());
+  ASSERT_EQ(chunk_size * k * 3, semap.get_ro_end());
+
+  // Erase after 2.5 stripes (in the middle of the third stripe)
+  semap.erase_after_ro_offset(chunk_size * k * 2 + chunk_size);
+
+  ASSERT_EQ(0, semap.get_ro_start());
+  ASSERT_EQ(chunk_size * k * 2 + chunk_size, semap.get_ro_end());
+
+  // Shard 0 should have data from first stripe and partial third stripe
+  extent_set shard0_extents = semap.get_extent_set(shard_id_t(0));
+  ASSERT_TRUE(shard0_extents.contains(0, chunk_size));
+  ASSERT_TRUE(shard0_extents.contains(chunk_size * 2, chunk_size));
+
+  // Shard 1 should only have data from first stripe
+  extent_set shard1_extents = semap.get_extent_set(shard_id_t(1));
+  ASSERT_TRUE(shard1_extents.contains(0, chunk_size));
+  ASSERT_FALSE(shard1_extents.contains(chunk_size * 2, chunk_size));
+}
+
+TEST(ECUtil, erase_after_ro_offset_with_offset_data)
+{
+  // Test erasing when data doesn't start at offset 0
+  int k = 2;
+  int m = 1;
+  int chunk_size = 4096;
+
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t semap(&sinfo);
+
+  // Insert data starting at offset 1024 (within first chunk)
+  // This will only affect shard 0
+  bufferlist bl;
+  bl.append_zero(chunk_size - 1024);
+  extent_map emap;
+  emap.insert(1024, chunk_size - 1024, bl);
+  semap.insert_ro_extent_map(emap);
+
+  ASSERT_EQ(1024, semap.get_ro_start());
+  ASSERT_EQ(chunk_size, semap.get_ro_end());
+
+  // Verify only shard 0 has data
+  ASSERT_TRUE(semap.contains_shard(shard_id_t(0)));
+  ASSERT_FALSE(semap.contains_shard(shard_id_t(1)));
+
+  // Erase after 1024 + 512 (keep only first 512 bytes)
+  semap.erase_after_ro_offset(1024 + 512);
+
+  ASSERT_EQ(1024, semap.get_ro_start());
+  ASSERT_EQ(1024 + 512, semap.get_ro_end());
+
+  // Shard 0 should have partial data
+  ASSERT_TRUE(semap.contains_shard(shard_id_t(0)));
+  extent_set shard0_extents = semap.get_extent_set(shard_id_t(0));
+  // The shard extent goes from 1024 to 1024+512 = 1536
+  ASSERT_EQ(1536, shard0_extents.range_end());
+
+  // Shard 1 should still be empty
+  ASSERT_FALSE(semap.contains_shard(shard_id_t(1)));
+}
+
+TEST(ECUtil, erase_after_ro_offset_k4_m2)
+{
+  // Test with different k/m configuration (k=4, m=2)
+  int k = 4;
+  int m = 2;
+  int chunk_size = 4096;
+
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t semap(&sinfo);
+
+  // Insert 2 full stripes
+  bufferlist bl;
+  bl.append_zero(chunk_size * k * 2);
+  extent_map emap;
+  emap.insert(0, chunk_size * k * 2, bl);
+  semap.insert_ro_extent_map(emap);
+
+  // Erase after 1.5 stripes (should affect shards 2 and 3)
+  uint64_t erase_offset = chunk_size * k + chunk_size * 2;
+  semap.erase_after_ro_offset(erase_offset);
+
+  ASSERT_EQ(0, semap.get_ro_start());
+  ASSERT_EQ(erase_offset, semap.get_ro_end());
+
+  // Shards 0 and 1 should have 2 chunks each
+  extent_set shard0_extents = semap.get_extent_set(shard_id_t(0));
+  extent_set shard1_extents = semap.get_extent_set(shard_id_t(1));
+  ASSERT_EQ(chunk_size * 2, shard0_extents.range_end());
+  ASSERT_EQ(chunk_size * 2, shard1_extents.range_end());
+
+  // Shards 2 and 3 should have 1 chunk each
+  extent_set shard2_extents = semap.get_extent_set(shard_id_t(2));
+  extent_set shard3_extents = semap.get_extent_set(shard_id_t(3));
+  ASSERT_EQ(chunk_size, shard2_extents.range_end());
+  ASSERT_EQ(chunk_size, shard3_extents.range_end());
+}
+
+TEST(ECUtil, erase_after_ro_offset_exact_chunk_boundary)
+{
+  // Test erasing exactly at chunk boundaries within a stripe
+  int k = 3;
+  int m = 1;
+  int chunk_size = 4096;
+
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t semap(&sinfo);
+
+  // Insert one full stripe
+  bufferlist bl;
+  bl.append_zero(chunk_size * k);
+  extent_map emap;
+  emap.insert(0, chunk_size * k, bl);
+  semap.insert_ro_extent_map(emap);
+
+  // Erase after exactly 2 chunks (should keep shards 0 and 1, remove shard 2)
+  semap.erase_after_ro_offset(chunk_size * 2);
+
+  ASSERT_EQ(0, semap.get_ro_start());
+  ASSERT_EQ(chunk_size * 2, semap.get_ro_end());
+
+  ASSERT_TRUE(semap.contains_shard(shard_id_t(0)));
+  ASSERT_TRUE(semap.contains_shard(shard_id_t(1)));
+  ASSERT_FALSE(semap.contains_shard(shard_id_t(2)));
+
+  extent_set shard0_extents = semap.get_extent_set(shard_id_t(0));
+  extent_set shard1_extents = semap.get_extent_set(shard_id_t(1));
+  ASSERT_EQ(chunk_size, shard0_extents.range_end());
+  ASSERT_EQ(chunk_size, shard1_extents.range_end());
+}
+
+TEST(ECUtil, erase_after_ro_offset_single_byte)
+{
+  // Test erasing after just one byte
+  int k = 2;
+  int m = 1;
+  int chunk_size = 4096;
+
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t semap(&sinfo);
+
+  // Insert data
+  bufferlist bl;
+  bl.append_zero(chunk_size * k);
+  extent_map emap;
+  emap.insert(0, chunk_size * k, bl);
+  semap.insert_ro_extent_map(emap);
+
+  // Erase after 1 byte
+  semap.erase_after_ro_offset(1);
+
+  ASSERT_EQ(0, semap.get_ro_start());
+  ASSERT_EQ(1, semap.get_ro_end());
+
+  // Shard 0 should have just 1 byte
+  ASSERT_TRUE(semap.contains_shard(shard_id_t(0)));
+  extent_set shard0_extents = semap.get_extent_set(shard_id_t(0));
+  ASSERT_EQ(1, shard0_extents.range_end());
+
+  // Shard 1 should be empty
+  ASSERT_FALSE(semap.contains_shard(shard_id_t(1)));
 }

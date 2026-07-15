@@ -1215,6 +1215,17 @@ void PG::requeue_op(OpRequestRef op)
 
 void PG::requeue_ops(list<OpRequestRef> &ls)
 {
+  if (!waiting_for_readable.empty() && &ls != &waiting_for_peered &&
+      &ls != &waiting_for_flush && &ls != &waiting_for_active &&
+      &ls != &waiting_for_readable) {
+    dout(20) << __func__ << " not readable ops (count=" << ls.size() << ")"
+             << dendl;
+    for (auto& op : ls) {
+      op->mark_delayed("waiting for readable");
+    }
+    waiting_for_readable.splice(waiting_for_readable.begin(), ls);
+  }
+
   for (list<OpRequestRef>::reverse_iterator i = ls.rbegin();
        i != ls.rend();
        ++i) {
@@ -1289,15 +1300,6 @@ Scrub::schedule_result_t PG::start_scrubbing(
 
   return m_scrubber->start_scrub_session(
       candidate.level, osd_restrictions, pg_cond);
-}
-
-double PG::next_deepscrub_interval() const
-{
-  double deep_scrub_interval =
-    pool.info.opts.value_or(pool_opts_t::DEEP_SCRUB_INTERVAL, 0.0);
-  if (deep_scrub_interval <= 0.0)
-    deep_scrub_interval = cct->_conf->osd_deep_scrub_interval;
-  return info.history.last_deep_scrub_stamp + deep_scrub_interval;
 }
 
 void PG::on_scrub_schedule_input_change()

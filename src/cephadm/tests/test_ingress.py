@@ -184,7 +184,12 @@ def test_haproxy_get_sysctl_settings():
             SAMPLE_HAPROXY_IMAGE,
         )
         ss = hap.get_sysctl_settings()
-        assert len(ss) == 3
+        assert ss == [
+            '# IP forwarding and non-local bind',
+            'net.ipv4.ip_forward = 1',
+            'net.ipv4.ip_nonlocal_bind = 1',
+            'net.ipv6.ip_nonlocal_bind = 1',
+        ]
 
 
 @pytest.mark.parametrize(
@@ -347,4 +352,9 @@ def test_keepalived_get_sysctl_settings():
             SAMPLE_KEEPALIVED_IMAGE,
         )
         ss = kad.get_sysctl_settings()
-        assert len(ss) == 3
+        assert ss == [
+            '# IP forwarding and non-local bind',
+            'net.ipv4.ip_forward = 1',
+            'net.ipv4.ip_nonlocal_bind = 1',
+            'net.ipv6.ip_nonlocal_bind = 1',
+        ]

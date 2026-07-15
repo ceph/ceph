@@ -4,23 +4,30 @@
 
 Currently, the ceph mgr code in python is most commonly written by adding mgr
 modules and corresponding classes and then adding methods to those classes that
-are decorated using `@CLICommand` from  `mgr_module.py`.  These methods (that
-will be called endpoints subsequently) then implement the logic that is
-executed when the mgr receives a command from a client.  These endpoints are
+are decorated using per-module command registries created from `CLICommandBase`
+in `mgr_module.py`. These methods (endpoints) then implement the logic that is
+executed when the mgr receives a command from a client. These endpoints are
 currently responsible for forming a response tuple of (int, str, str) where the
 int represents a return value (error code) and the first string the "body" of
 the response. The mgr supports a generic `format` parameter (`--format` on the
-ceph cli) that each endpoint must then explicitly handle. At the time of this
+ceph CLI) that each endpoint must then explicitly handle. At the time of this
 writing, many endpoints do not handle alternate formats and are each
 implementing formatting/serialization of values in various different ways.
 
 The `object_format` module aims to make the process of writing endpoint
 functions easier, more consistent, and (hopefully) better documented.  At the
 highest level, the module provides a new decorator `Responder` that must be
-placed below the `CLICommand` decorator (so that it decorates the endpoint
-before `CLICommand`). This decorator helps automatically convert Python objects
-to response tuples expected by the manager, while handling the `format`
+placed below the command decorator so that it decorates the endpoint before
+the command decorator. This decorator helps automatically convert Python
+objects to response tuples expected by the manager, while handling the `format`
 parameter automatically.
+
+NOTE: The examples below use placeholder names like `StatusCLICommand` to
+represent module-specific command registries. Each module must create its own
+registry using `CLICommandBase.make_registry_subtype()` in a `cli.py` file,
+then import and use that specific registry type in decorators. The decorators
+must use the specific type name (e.g., `@StatusCLICommand.Read`), NOT
+`@CLICommand`. See `doc/mgr/modules.rst` for complete setup instructions.
 
 In addition to the decorator the module provides a few other types and methods
 that intended to interoperate with the decorator and make small customizations
@@ -29,7 +36,7 @@ and error handling easier.
 == Using Responder ==
 
 The simple and intended way to use the decorator is as follows:
-    @CLICommand("command name", perm="r")
+    @StatusCLICommand.Read("command name")
     Responder()
     def create_something(self, name: str) -> Dict[str, str]:
         ...  # implementation
@@ -44,7 +51,7 @@ implementation then the response code is always zero (success).
 The object_format module provides an exception type `ErrorResponse`
 that assists in returning "clean" error conditions to the client.
 Extending the previous example to use this exception:
-    @CLICommand("command name", perm="r")
+    @StatusCLICommand.Read("command name")
     Responder()
     def create_something(self, name: str) -> Dict[str, str]:
         try:
@@ -84,7 +91,7 @@ the method will be called and the result serialized. Example:
       def to_simplified(self) -> Dict[str, int]:
          return {"temp": self.temperature, "qty": self.quantity}
 
-    @CLICommand("command name", perm="r")
+    @StatusCLICommand.Read("command name")
     Responder()
     def create_something_cool(self) -> CoolStuff:
        cool_stuff: CoolStuff = self._make_cool_stuff()  # implementation
@@ -108,7 +115,7 @@ enabled. Note that Responder takes as an argument any callable that returns a
       def to_json(self) -> Dict[str, Any]:
          return {"name": self.name, "height": self.height}
 
-    @CLICommand("command name", perm="r")
+    @StatusCLICommand.Read("command name")
     Responder(functools.partial(ObjectFormatAdapter, compatible=True))
     def create_an_item(self) -> MyExistingClass:
        item: MyExistingClass = self._new_item()  # implementation

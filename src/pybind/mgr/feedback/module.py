@@ -7,7 +7,9 @@ See doc/mgr/feedback.rst for more info.
 
 from requests.exceptions import RequestException
 
-from mgr_module import CLIReadCommand, HandleCommandResult, MgrModule
+from .cli import FeedbackCLICommand
+
+from mgr_module import HandleCommandResult, MgrModule, Option
 import errno
 
 from .service import CephTrackerClient
@@ -15,9 +17,19 @@ from .model import Feedback
 
 
 class FeedbackModule(MgrModule):
+    CLICommand = FeedbackCLICommand
+
+    MODULE_OPTIONS = [
+        Option(
+            name='tracker_url',
+            type='str',
+            default='tracker.ceph.com',
+            desc='Hostname of the Ceph issue tracker (Redmine) instance',
+            runtime=True),
+    ]
 
     # there are CLI commands we implement
-    @CLIReadCommand('feedback set api-key')
+    @FeedbackCLICommand.Read('feedback set api-key')
     def _cmd_feedback_set_api_key(self, key: str) -> HandleCommandResult:
         """
         Set Ceph Issue Tracker API key
@@ -28,7 +40,7 @@ class FeedbackModule(MgrModule):
             return HandleCommandResult(stderr=f'Exception in setting API key : {error}')
         return HandleCommandResult(stdout="Successfully updated API key")
 
-    @CLIReadCommand('feedback delete api-key')
+    @FeedbackCLICommand.Read('feedback delete api-key')
     def _cmd_feedback_delete_api_key(self) -> HandleCommandResult:
         """
         Delete Ceph Issue Tracker API key
@@ -39,7 +51,7 @@ class FeedbackModule(MgrModule):
             return HandleCommandResult(stderr=f'Exception in deleting API key : {error}')
         return HandleCommandResult(stdout="Successfully deleted key")
 
-    @CLIReadCommand('feedback get api-key')
+    @FeedbackCLICommand.Read('feedback get api-key')
     def _cmd_feedback_get_api_key(self) -> HandleCommandResult:
         """
         Get Ceph Issue Tracker API key
@@ -52,19 +64,19 @@ class FeedbackModule(MgrModule):
             return HandleCommandResult(stderr=f'Error in retreiving issue tracker API key: {error}')
         return HandleCommandResult(stdout=f'Your key: {key}')
 
-    @CLIReadCommand('feedback issue list')
+    @FeedbackCLICommand.Read('feedback issue list')
     def _cmd_feedback_issue_list(self) -> HandleCommandResult:
         """
         Fetch issue list
         """
-        tracker_client = CephTrackerClient()
+        tracker_client = CephTrackerClient(self.get_module_option('tracker_url'))
         try:
             response = tracker_client.list_issues()
         except Exception:
             return HandleCommandResult(stderr="Error occurred. Try again later")
         return HandleCommandResult(stdout=str(response))
 
-    @CLIReadCommand('feedback issue report')
+    @FeedbackCLICommand.Read('feedback issue report')
     def _cmd_feedback_issue_report(self, project: str, tracker: str, subject: str, description: str) -> HandleCommandResult:
         """
         Create an issue
@@ -80,7 +92,7 @@ class FeedbackModule(MgrModule):
                 return HandleCommandResult(stderr='Issue tracker key is not set. Set key with `ceph set issue_key <your_key>`')
         except Exception as error:
             return HandleCommandResult(stderr=f'Error in retreiving issue tracker API key: {error}')
-        tracker_client = CephTrackerClient()
+        tracker_client = CephTrackerClient(self.get_module_option('tracker_url'))
         try:
             response = tracker_client.create_issue(feedback, current_api_key)
         except RequestException as error:
@@ -118,13 +130,13 @@ class FeedbackModule(MgrModule):
         return 'Successfully deleted API key'
 
     def get_issues(self):
-        tracker_client = CephTrackerClient()
+        tracker_client = CephTrackerClient(self.get_module_option('tracker_url'))
         return tracker_client.list_issues()
 
     def validate_and_create_issue(self, project: str, tracker: str, subject: str, description: str, api_key=None):
         feedback = Feedback(Feedback.Project[project].value,
                                 Feedback.TrackerType[tracker].value, subject, description)
-        tracker_client = CephTrackerClient()
+        tracker_client = CephTrackerClient(self.get_module_option('tracker_url'))
         stored_api_key = self.get_store('api_key')
         try:
             if api_key:

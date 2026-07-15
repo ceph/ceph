@@ -3,9 +3,11 @@
 
 #include "./scrub_job.h"
 
-#include "pg_scrubber.h"
-
 #include "common/debug.h"
+
+#include "common/Formatter.h"
+
+#include "pg_scrubber.h"
 
 using must_scrub_t = Scrub::must_scrub_t;
 using sched_params_t = Scrub::sched_params_t;
@@ -16,6 +18,20 @@ using ScrubJob = Scrub::ScrubJob;
 using namespace std::chrono;
 
 using SchedEntry = Scrub::SchedEntry;
+
+// ////////////////////////////////////////////////////////////////////////// //
+// SchedEntry
+
+void SchedEntry::dump(ceph::Formatter& f) const
+{
+  f.dump_named_fmt("pgid", "{}", pgid);
+  f.dump_string("level", level == scrub_level_t::shallow ? "shallow" : "deep");
+  f.dump_named_fmt("urgency", "{}", urgency);
+  f.dump_named_fmt("sched_time", "{}", schedule.not_before);
+  f.dump_named_fmt("orig_sched_time", "{}", schedule.scheduled_at);
+  f.dump_named_fmt("last_issue", "{}", last_issue);
+  f.dump_bool("forced", urgency >= urgency_t::operator_requested);
+}
 
 // ////////////////////////////////////////////////////////////////////////// //
 // SchedTarget
@@ -97,8 +113,7 @@ void ScrubJob::set_both_targets_queued()
 
 void ScrubJob::adjust_shallow_schedule(
     utime_t last_scrub,
-    const Scrub::sched_conf_t& app_conf,
-    utime_t scrub_clock_now)
+    const Scrub::sched_conf_t& app_conf)
 {
   dout(10) << fmt::format(
 		  "at entry: shallow target:{}, conf:{}, last-stamp:{:s}",
@@ -113,7 +128,8 @@ void ScrubJob::adjust_shallow_schedule(
 
     // add a random delay to the proposed scheduled time
     adj_target += app_conf.shallow_interval;
-    double r = rand() / (double)RAND_MAX;
+    std::uniform_real_distribution<double> dist{0.0, 1.0};
+    double r = dist(random_gen);
     adj_target +=
 	app_conf.shallow_interval * app_conf.interval_randomize_ratio * r;
 
@@ -143,8 +159,8 @@ double ScrubJob::guaranteed_offset(
   if (s_or_d == scrub_level_t::deep) {
     // use the sdv of the deep scrub distribution, times 3 (3-sigma...)
     const double sdv = app_conf.deep_interval * app_conf.deep_randomize_ratio;
-  // note: the '+10.0' is there just to guarantee inequality if '._ratio' is 0
-    return app_conf.deep_interval + abs(3 * sdv) + 10.0;
+    // note: the '+10.0' is there just to guarantee inequality if '._ratio' is 0
+    return app_conf.deep_interval + std::abs(3 * sdv) + 10.0;
   }
 
   // shallow scrub
@@ -234,8 +250,7 @@ utime_t ScrubJob::get_sched_time() const
 
 void ScrubJob::adjust_deep_schedule(
     utime_t last_deep,
-    const Scrub::sched_conf_t& app_conf,
-    utime_t scrub_clock_now)
+    const Scrub::sched_conf_t& app_conf)
 {
   dout(10) << fmt::format(
 		  "at entry: deep target:{}, conf:{}, last-stamp:{:s}",
@@ -280,20 +295,19 @@ SchedTarget& ScrubJob::delay_on_failure(
     delay_cause_t delay_cause,
     utime_t scrub_clock_now)
 {
-  seconds delay = seconds(cct->_conf.get_val<int64_t>("osd_scrub_retry_delay"));
+  const char* delay_param = "osd_scrub_retry_delay";
   switch (delay_cause) {
     case delay_cause_t::flags:
-      delay =
-	  seconds(cct->_conf.get_val<int64_t>("osd_scrub_retry_after_noscrub"));
+      delay_param = "osd_scrub_retry_after_noscrub";
       break;
     case delay_cause_t::pg_state:
-      delay = seconds(cct->_conf.get_val<int64_t>("osd_scrub_retry_pg_state"));
+      delay_param = "osd_scrub_retry_pg_state";
       break;
     case delay_cause_t::snap_trimming:
-      delay = seconds(cct->_conf.get_val<int64_t>("osd_scrub_retry_trimming"));
+      delay_param = "osd_scrub_retry_trimming";
       break;
     case delay_cause_t::interval:
-      delay = seconds(cct->_conf.get_val<int64_t>("osd_scrub_retry_new_interval"));
+      delay_param = "osd_scrub_retry_new_interval";
       break;
     case delay_cause_t::local_resources:
     case delay_cause_t::aborted:
@@ -301,6 +315,7 @@ SchedTarget& ScrubJob::delay_on_failure(
       // for all other possible delay causes: use the default delay
       break;
   }
+  const seconds delay = seconds(cct->_conf.get_val<int64_t>(delay_param));
 
   auto& delayed_target =
       (level == scrub_level_t::deep) ? deep_target : shallow_target;
@@ -350,17 +365,6 @@ std::ostream& ScrubJob::gen_prefix(std::ostream& out, std::string_view fn) const
   return out << log_msg_prefix << fn << ": ";
 }
 
-void ScrubJob::dump(ceph::Formatter* f) const
-{
-  const auto& entry = earliest_target().sched_info;
-  const auto& sch = entry.schedule;
-  Formatter::ObjectSection scrubjob_section{*f, "scrub"sv};
-  f->dump_stream("pgid") << pgid;
-  f->dump_stream("sched_time") << get_sched_time();
-  f->dump_stream("orig_sched_time") << sch.scheduled_at;
-  f->dump_bool("forced", entry.urgency >= urgency_t::operator_requested);
-}
-
 // a set of static functions to determine, given a scheduling target's urgency,
 // what restrictions apply to that target (and what exemptions it has).
 
@@ -371,7 +375,7 @@ bool ScrubJob::observes_noscrub_flags(urgency_t urgency)
 
 bool ScrubJob::observes_allowed_hours(urgency_t urgency)
 {
-  return urgency < urgency_t::operator_requested;
+  return urgency < urgency_t::repairing;
 }
 
 bool ScrubJob::observes_extended_sleep(urgency_t urgency)
@@ -382,6 +386,11 @@ bool ScrubJob::observes_extended_sleep(urgency_t urgency)
 bool ScrubJob::observes_load_limit(urgency_t urgency)
 {
   return urgency < urgency_t::after_repair;
+}
+
+bool ScrubJob::observes_trims_load(urgency_t urgency)
+{
+  return urgency < urgency_t::repairing;
 }
 
 bool ScrubJob::requires_reservation(urgency_t urgency)

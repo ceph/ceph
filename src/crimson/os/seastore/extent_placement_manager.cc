@@ -3,7 +3,7 @@
 
 #include "crimson/os/seastore/extent_placement_manager.h"
 
-#include "crimson/common/errorator-loop.h"
+#include "crimson/common/errorator-utils.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/os/seastore/logging.h"
 
@@ -12,11 +12,13 @@ SET_SUBSYS(seastore_epm);
 namespace crimson::os::seastore {
 
 SegmentedOolWriter::SegmentedOolWriter(
+  store_index_t store_index,
   data_category_t category,
   rewrite_gen_t gen,
   SegmentProvider& sp,
   SegmentSeqAllocator &ssa)
-  : segment_allocator(nullptr, category, gen, sp, ssa),
+  : store_index(store_index),
+    segment_allocator(nullptr, category, gen, sp, ssa),
     record_submitter(crimson::common::get_conf<uint64_t>(
                        "seastore_journal_iodepth_limit"),
                      crimson::common::get_conf<uint64_t>(
@@ -215,7 +217,7 @@ void ExtentPlacementManager::init(
     // DATA
     data_writers_by_gen.resize(num_writers, nullptr);
     for (rewrite_gen_t gen = OOL_GENERATION; gen < hot_tier_generations; ++gen) {
-      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
+      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(store_index,
 	    data_category_t::DATA, gen, *segment_cleaner,
             *ool_segment_seq_allocator));
       data_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
@@ -224,7 +226,7 @@ void ExtentPlacementManager::init(
     // METADATA
     md_writers_by_gen.resize(num_writers, {});
     for (rewrite_gen_t gen = OOL_GENERATION; gen < hot_tier_generations; ++gen) {
-      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
+      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(store_index,
 	    data_category_t::METADATA, gen, *segment_cleaner,
             *ool_segment_seq_allocator));
       md_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
@@ -256,14 +258,14 @@ void ExtentPlacementManager::init(
   if (cold_segment_cleaner) {
     // Cold DATA Segments
     for (rewrite_gen_t gen = hot_tier_generations; gen <= dynamic_max_rewrite_generation; ++gen) {
-      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
+      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(store_index,
             data_category_t::DATA, gen, *cold_segment_cleaner,
             *ool_segment_seq_allocator));
       data_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
     }
     for (rewrite_gen_t gen = hot_tier_generations; gen <= dynamic_max_rewrite_generation; ++gen) {
       // Cold METADATA Segments
-      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
+      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(store_index,
             data_category_t::METADATA, gen, *cold_segment_cleaner,
             *ool_segment_seq_allocator));
       md_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
@@ -597,14 +599,14 @@ void ExtentPlacementManager::BackgroundProcess::log_state(const char *caller) co
   }
 }
 
-ExtentPlacementManager::mount_ret ExtentPlacementManager::BackgroundProcess::mount() {
+ExtentPlacementManager::mount_ret ExtentPlacementManager::BackgroundProcess::mount(store_index_t store_index) {
   LOG_PREFIX(BackgroundProcess::mount);
   DEBUG("start");
   ceph_assert(state == state_t::STOP);
   state = state_t::MOUNT;
   trimmer->reset();
   stats = {};
-  register_metrics();
+  register_metrics(store_index);
   DEBUG("mounting main cleaner");
   co_await main_cleaner->mount();
   if (has_cold_tier()) {
@@ -697,6 +699,30 @@ ExtentPlacementManager::BackgroundProcess::run_until_halt()
 }
 
 seastar::future<>
+ExtentPlacementManager::BackgroundProcess::run_cleaner_until_done()
+{
+  LOG_PREFIX(BackgroundProcess::run_cleaner_until_done);
+  ceph_assert(state == state_t::HALT);
+  assert(!is_running());
+  INFO("started...");
+  return seastar::do_until(
+    [this] {
+      return !main_cleaner->should_clean_space();
+    },
+    [this] {
+      return main_cleaner->clean_space(
+      ).handle_error(
+        crimson::ct_error::assert_all(
+          "run_cleaner_until_done encountered error in clean_space"
+        )
+      );
+    }
+  ).finally([FNAME] {
+    INFO("finished");
+  });
+}
+
+seastar::future<>
 ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
     io_usage_t usage)
 {
@@ -729,8 +755,14 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
     ++stats.io_blocked_count;
     stats.io_blocked_sum += stats.io_blocking_num;
 
-    blocking_io = seastar::promise<>();
     auto begin_time = seastar::lowres_system_clock::now();
+    // IO blocked -> needs cleaner -> cleaner sleeping -> nothing runs -> deadlock.
+    // Kick the background so it can free space and call maybe_wake_blocked_io().
+    auto arm_blocking_io_and_wake = [this] {
+      blocking_io = seastar::promise<>();
+      do_wake_background();
+    };
+    arm_blocking_io_and_wake();
     // we just blocked this IO, now wait until
     // maybe_wake_blocked_io will set value to blocking_io
     do {
@@ -758,7 +790,7 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
           if (!res.cleaner_result.is_successful()) {
           ++stats.io_retried_blocked_count_clean;
         }
-        blocking_io = seastar::promise<>();
+        arm_blocking_io_and_wake();
       }
     } while (blocking_io);
   }
@@ -775,6 +807,11 @@ ExtentPlacementManager::BackgroundProcess::maybe_wake_blocked_io()
     DEBUG("");
     blocking_io->set_value();
     blocking_io = std::nullopt;
+    // Remember that we just woke a blocked IO; run() yields once on
+    // this edge so the woken continuation has a chance to retry the
+    // reservation before the cleaner spins another cycle and consumes
+    // the projected_avail headroom we just freed.
+    pending_user_io_wake = true;
   }
 }
 
@@ -786,11 +823,30 @@ ExtentPlacementManager::BackgroundProcess::run()
     if (background_should_run()) {
       log_state("run(background)");
       co_await do_background_cycle();
+      // Edge-triggered: yield only when a blocked IO was actually woken, so the
+      // resumed continuation retries try_reserve_io() before the next cycle runs.
+      if (pending_user_io_wake) {
+        pending_user_io_wake = false;
+        co_await seastar::yield();
+      }
+      // Adaptive threshold hook: each cleaner has its own state and floor.
+      if (main_cleaner) {
+        main_cleaner->maybe_adjust_thresholds();
+      }
+      if (cold_cleaner) {
+        cold_cleaner->maybe_adjust_thresholds();
+      }
     } else {
       log_state("run(block)");
       assert(!blocking_background);
       blocking_background = seastar::promise<>();
       co_await blocking_background->get_future();
+      // After waking (typically because arm_blocking_io_and_wake() kicked us),
+      // give any blocked user IO a chance to proceed. Without this call the
+      // loop would go straight back to sleep if background_should_run() is
+      // still false, but the space condition (should_block_io) may already be
+      // satisfied, leaving blocked IO stuck with no future trigger to re-check.
+      maybe_wake_blocked_io();
     }
   }
   log_state("run(exit)");
@@ -975,9 +1031,9 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
               main_cleaner_should_fast_evict());
         return main_cleaner->clean_space(
         ).handle_error(
-          crimson::ct_error::assert_all{
+          crimson::ct_error::assert_all(
             "do_background_cycle encountered invalid error in main clean_space"
-          }
+          )
         ).finally([this, main_cold_usage, FNAME] {
           DEBUG("finished clean main");
           abort_cold_usage(main_cold_usage, true);
@@ -995,9 +1051,9 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
               should_clean_cold_for_main);
         return cold_cleaner->clean_space(
         ).handle_error(
-          crimson::ct_error::assert_all{
+          crimson::ct_error::assert_all(
             "do_background_cycle encountered invalid error in cold clean_space"
-          }
+          )
         ).finally([FNAME] {
           DEBUG("finished clean cold");
         });
@@ -1006,26 +1062,34 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
   }
 }
 
-void ExtentPlacementManager::BackgroundProcess::register_metrics()
+void ExtentPlacementManager::BackgroundProcess::register_metrics(store_index_t store_index)
 {
   namespace sm = seastar::metrics;
   metrics.add_group("background_process", {
     sm::make_counter("io_count", stats.io_count,
-                     sm::description("the sum of IOs")),
+                     sm::description("the sum of IOs"),
+                     {sm::label_instance("shard_store_index", std::to_string(store_index))}),
     sm::make_counter("io_blocked_count", stats.io_blocked_count,
-                     sm::description("IOs that are blocked by gc")),
+                     sm::description("IOs that are blocked by gc"),
+                     {sm::label_instance("shard_store_index", std::to_string(store_index))}),
     sm::make_counter("io_blocked_count_trim", stats.io_blocked_count_trim,
-                     sm::description("IOs that are blocked by trimming")),
+                     sm::description("IOs that are blocked by trimming"),
+                     {sm::label_instance("shard_store_index", std::to_string(store_index))}),
     sm::make_counter("io_retried_blocked_count_clean", stats.io_blocked_count_clean,
-                     sm::description("Retried IOs that are blocked by cleaning")),
+                     sm::description("Retried IOs that are blocked by cleaning"),
+                     {sm::label_instance("shard_store_index", std::to_string(store_index))}),
     sm::make_counter("io_retried_blocked_count_trim", stats.io_blocked_count_trim,
-                     sm::description("Retried IOs that are blocked by trimming")),
+                     sm::description("Retried IOs that are blocked by trimming"),
+                     {sm::label_instance("shard_store_index", std::to_string(store_index))}),
     sm::make_counter("io_blocked_count_clean", stats.io_blocked_count_clean,
-                     sm::description("IOs that are blocked by cleaning")),
+                     sm::description("IOs that are blocked by cleaning"),
+                     {sm::label_instance("shard_store_index", std::to_string(store_index))}),
     sm::make_counter("io_blocked_sum", stats.io_blocked_sum,
-                     sm::description("the sum of blocking IOs")),
+                     sm::description("the sum of blocking IOs"),
+                     {sm::label_instance("shard_store_index", std::to_string(store_index))}),
     sm::make_counter("io_blocked_time", stats.io_blocked_time,
-                     sm::description("the sum of the time(ms) in which IOs are blocked"))
+                     sm::description("the sum of the time(ms) in which IOs are blocked"),
+                     {sm::label_instance("shard_store_index", std::to_string(store_index))})
   });
 }
 
@@ -1153,8 +1217,8 @@ RandomBlockOolWriter::do_write(
         return info.rbm->write(info.offset, info.bp
         ).handle_error(
           alloc_write_ertr::pass_further{},
-          crimson::ct_error::assert_all{
-            "Invalid error when writing record"}
+          crimson::ct_error::assert_all(
+            "Invalid error when writing record")
         );
       });
     })

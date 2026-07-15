@@ -12,7 +12,7 @@ import _ from 'lodash';
 import { forkJoin, Observable, of } from 'rxjs';
 import { catchError, debounceTime, distinctUntilChanged, map, mergeMap } from 'rxjs/operators';
 
-import { SUPPORTED_FSAL } from '~/app/ceph/nfs/models/nfs.fsal';
+import { RGW_USER_EXPORT_PATH, SUPPORTED_FSAL } from '~/app/ceph/nfs/models/nfs.fsal';
 import { Directory, NfsService } from '~/app/shared/api/nfs.service';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { RgwSiteService } from '~/app/shared/api/rgw-site.service';
@@ -112,7 +112,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().pool;
-    this.resource = $localize`NFS export`;
+    this.resource = $localize`NFS share`;
     this.storageBackend = getFsalFromRoute(this.router.url);
   }
 
@@ -498,8 +498,9 @@ export class NfsFormComponent extends CdForm implements OnInit {
         )
         .subscribe({
           error: (error) => {
-            const fsalDescr = this.nfsService.nfsFsal.find((f) => f.value === this.storageBackend)
-              .descr;
+            const fsalDescr = this.nfsService.nfsFsal.find(
+              (f) => f.value === this.storageBackend
+            ).descr;
             this.storageBackendError = $localize`${fsalDescr} backend is not available. ${error}`;
           }
         });
@@ -643,8 +644,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
   }
 
   private buildRequest() {
-    const requestModel: any = _.cloneDeep(this.nfsForm.value);
-    requestModel.fsal = this.nfsForm.get('fsal').value;
+    const requestModel: any = _.cloneDeep(this.nfsForm.getRawValue());
     if (this.isEdit) {
       requestModel.export_id = _.parseInt(this.export_id);
       requestModel.path = this.nfsForm.get('path').value;
@@ -658,7 +658,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
       if (requestModel.rgw_export_type === 'bucket') {
         delete requestModel.fsal.user_id;
       } else {
-        requestModel.path = '';
+        requestModel.path = RGW_USER_EXPORT_PATH;
       }
     } else {
       delete requestModel.fsal.user_id;

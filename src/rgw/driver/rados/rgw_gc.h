@@ -50,13 +50,8 @@ public:
     finalize();
   }
   std::vector<bool> transitioned_objects_cache;
+  int get_max_objs() const { return max_objs; }
   std::tuple<int, std::optional<cls_rgw_obj_chain>> send_split_chain(const cls_rgw_obj_chain& chain, const std::string& tag, optional_yield y);
-
-  // asynchronously defer garbage collection on an object that's still being read
-  int async_defer_chain(const std::string& tag, const cls_rgw_obj_chain& info);
-
-  // callback for when async_defer_chain() fails with ECANCELED
-  void on_defer_canceled(const cls_rgw_gc_obj_info& info);
 
   int remove(int index, const std::vector<std::string>& tags, librados::AioCompletion **pc, optional_yield y);
   int remove(int index, int num_entries, optional_yield y);

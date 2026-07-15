@@ -26,7 +26,7 @@ from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent, service
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from mgr_util import parse_combined_pem_file
 
-from .utils import resolve_ip, SpecialHostLabels
+from .utils import get_node_proxy_status_value, resolve_ip, SpecialHostLabels
 from .migrations import queue_migrate_nfs_spec, queue_migrate_rgw_spec
 
 if TYPE_CHECKING:
@@ -239,7 +239,7 @@ class SpecDescription(NamedTuple):
     spec: ServiceSpec
     rank_map: Optional[Dict[int, Dict[int, Optional[str]]]]
     created: datetime.datetime
-    deleted: Optional[datetime.datetime]
+    deleted: Optional[Tuple[datetime.datetime, bool]]
 
 
 class SpecStore():
@@ -250,7 +250,7 @@ class SpecStore():
         # service_name -> rank -> gen -> daemon_id
         self._rank_maps = {}    # type: Dict[str, Dict[int, Dict[int, Optional[str]]]]
         self.spec_created = {}  # type: Dict[str, datetime.datetime]
-        self.spec_deleted = {}  # type: Dict[str, datetime.datetime]
+        self.spec_deleted = {}  # type: Dict[str, Tuple[datetime.datetime, bool]]
         self.spec_preview = {}  # type: Dict[str, ServiceSpec]
         self._needs_configuration: Dict[str, bool] = {}
 
@@ -315,8 +315,11 @@ class SpecStore():
                 self.spec_created[service_name] = created
 
                 if 'deleted' in j:
-                    deleted = str_to_datetime(cast(str, j['deleted']))
-                    self.spec_deleted[service_name] = deleted
+                    deleted_ts = str_to_datetime(cast(str, j['deleted']))
+                    force_delete_data = cast(
+                        bool, j.get('force_delete_data', False)
+                    )
+                    self.spec_deleted[service_name] = (deleted_ts, force_delete_data)
 
                 if 'needs_configuration' in j:
                     self._needs_configuration[service_name] = cast(bool, j['needs_configuration'])
@@ -378,7 +381,9 @@ class SpecStore():
         if name in self._rank_maps:
             data['rank_map'] = self._rank_maps[name]
         if name in self.spec_deleted:
-            data['deleted'] = datetime_to_str(self.spec_deleted[name])
+            deleted_time, force_delete_data = self.spec_deleted[name]
+            data['deleted'] = datetime_to_str(deleted_time)
+            data['force_delete_data'] = force_delete_data
         if name in self._needs_configuration:
             data['needs_configuration'] = self._needs_configuration[name]
 
@@ -469,7 +474,7 @@ class SpecStore():
                         service_name=nvmeof_spec.service_name(),
                         user_made=True)
 
-    def rm(self, service_name: str) -> bool:
+    def rm(self, service_name: str, force_delete_data: bool = False) -> bool:
         if service_name not in self._specs:
             return False
 
@@ -477,7 +482,7 @@ class SpecStore():
             self.finally_rm(service_name)
             return True
 
-        self.spec_deleted[service_name] = datetime_now()
+        self.spec_deleted[service_name] = (datetime_now(), force_delete_data)
         self.save(self._specs[service_name], update_create=False)
         return True
 
@@ -842,11 +847,17 @@ class HostCache():
                 self.devices[host] += self.load_host_devices(host)
                 self.networks[host] = j.get('networks_and_interfaces', {})
                 self.osdspec_previews[host] = j.get('osdspec_previews', {})
-                self.last_client_files[host] = j.get('last_client_files', {})
+                self.last_client_files[host] = {
+                    path: tuple(v) for path, v in j.get('last_client_files', {}).items()
+                }
                 for name, ts in j.get('osdspec_last_applied', {}).items():
                     self.osdspec_last_applied[host][name] = str_to_datetime(ts)
 
                 for name, d in j.get('daemon_config_deps', {}).items():
+                    # drop potential leftover daemon_config_deps entries
+                    # assume if we didn't find a daemon entry, it's a leftover
+                    if name not in self.daemons.get(host, {}):
+                        continue
                     self.daemon_config_deps[host][name] = {
                         'deps': d.get('deps', []),
                         'last_config': str_to_datetime(d['last_config']),
@@ -949,6 +960,14 @@ class HostCache():
     ) -> None:
         self.networks[host] = nets
         self.last_network_update[host] = datetime_now()
+
+    def get_interface_for_ip(self, host: str, ip: str) -> Optional[str]:
+        """Return the network interface name that has the given IP on host, or None."""
+        for _subnet, ifaces in self.networks.get(host, {}).items():
+            for iface, ips in ifaces.items():
+                if ip in ips:
+                    return iface
+        return None
 
     def update_daemon_config_deps(self, host: str, name: str, deps: List[str], stamp: datetime.datetime) -> None:
         self.daemon_config_deps[host][name] = {
@@ -1331,7 +1350,7 @@ class HostCache():
             if host in self.mgr.offline_hosts:
                 dd.status = orchestrator.DaemonDescriptionStatus.error
                 dd.status_desc = 'host is offline'
-            elif self.mgr.inventory._inventory[host].get("status", "").lower() == "maintenance":
+            elif self.mgr.inventory._inventory.get(host, {}).get("status", "").lower() == "maintenance":
                 # We do not refresh daemons on hosts in maintenance mode, so stored daemon statuses
                 # could be wrong. We must assume maintenance is working and daemons are stopped
                 dd.status = orchestrator.DaemonDescriptionStatus.stopped
@@ -1557,6 +1576,9 @@ class HostCache():
         if host in self.daemons:
             if name in self.daemons[host]:
                 del self.daemons[host][name]
+        if host in self.daemon_config_deps:
+            if name in self.daemon_config_deps[host]:
+                del self.daemon_config_deps[host][name]
 
     def daemon_cache_filled(self) -> bool:
         """
@@ -1621,6 +1643,12 @@ class NodeProxyCache:
         self.oob: Dict[str, Any] = {}
         self.keyrings: Dict[str, str] = {}
 
+    @staticmethod
+    def _host_firmware(host_data: Dict[str, Any]) -> Any:
+        if 'firmware' in host_data:
+            return host_data['firmware']
+        return host_data.get('firmwares', {})
+
     def load(self) -> None:
         _oob = self.mgr.get_store(f'{NODE_PROXY_CACHE_PREFIX}/oob', '{}')
         self.oob = json.loads(_oob)
@@ -1657,6 +1685,28 @@ class NodeProxyCache:
         self.keyrings[host] = key
         self.mgr.set_store(f'{NODE_PROXY_CACHE_PREFIX}/keyrings', json.dumps(self.keyrings))
 
+    def _get_health_value(self, status: Any) -> str:
+        return get_node_proxy_status_value(status, 'health', lower=True)
+
+    def _has_health_value(self, statuses: ValuesView, health_value: str) -> bool:
+        return any([self._get_health_value(status) == health_value for status in statuses])
+
+    def _is_error_status(self, statuses: ValuesView) -> bool:
+        return self._has_health_value(statuses, 'error')
+
+    def _is_unknown_status(self, statuses: ValuesView) -> bool:
+        return self._has_health_value(statuses, 'unknown') and not self._is_error_status(statuses)
+
+    def _resolve_hosts(self, **kw: Any) -> List[str]:
+        hostname = kw.get('hostname')
+        if hostname is None:
+            return list(self.data.keys())
+        if hostname not in self.data:
+            raise OrchestratorError(
+                f"Host '{hostname}' has no node-proxy data (unknown host or node-proxy not running)."
+            )
+        return [hostname]
+
     def fullreport(self, **kw: Any) -> Dict[str, Any]:
         """
         Retrieves the full report for the specified hostname.
@@ -1671,8 +1721,7 @@ class NodeProxyCache:
         :return: The full report data for the specified hostname(s).
         :rtype: dict
         """
-        hostname = kw.get('hostname')
-        hosts = [hostname] if hostname else self.data.keys()
+        hosts = self._resolve_hosts(**kw)
         return {host: self.data[host] for host in hosts}
 
     def summary(self, **kw: Any) -> Dict[str, Any]:
@@ -1691,15 +1740,7 @@ class NodeProxyCache:
                 host or all hosts and their components.
         :rtype: Dict[str, Dict[str, str]]
         """
-        hostname = kw.get('hostname')
-        hosts = [hostname] if hostname else self.data.keys()
-
-        def is_unknown(statuses: ValuesView) -> bool:
-            return any([status['status']['health'].lower() == 'unknown' for status in statuses]) and not is_error(statuses)
-
-        def is_error(statuses: ValuesView) -> bool:
-            return any([status['status']['health'].lower() == 'error' for status in statuses])
-
+        hosts = self._resolve_hosts(**kw)
         _result: Dict[str, Any] = {}
 
         for host in hosts:
@@ -1711,9 +1752,9 @@ class NodeProxyCache:
                 _sys_id_res: List[str] = []
                 for element in details.values():
                     values = element.values()
-                    if is_error(values):
+                    if self._is_error_status(values):
                         state = 'error'
-                    elif is_unknown(values) or not values:
+                    elif self._is_unknown_status(values) or not values:
                         state = 'unknown'
                     else:
                         state = 'ok'
@@ -1727,7 +1768,7 @@ class NodeProxyCache:
                 _result[host]['status'][component] = state
             _result[host]['sn'] = data['sn']
             _result[host]['host'] = data['host']
-            _result[host]['status']['firmwares'] = data['firmwares']
+            _result[host]['status']['firmware'] = self._host_firmware(data)
         return _result
 
     def common(self, endpoint: str, **kw: Any) -> Dict[str, Any]:
@@ -1745,9 +1786,8 @@ class NodeProxyCache:
         :return: Endpoint information for the specified host(s).
         :rtype: Union[Dict[str, Any], Any]
         """
-        hostname = kw.get('hostname')
+        hosts = self._resolve_hosts(**kw)
         _result = {}
-        hosts = [hostname] if hostname else self.data.keys()
 
         for host in hosts:
             try:
@@ -1756,7 +1796,7 @@ class NodeProxyCache:
                 raise KeyError(f'Invalid host {host} or component {endpoint}.')
         return _result
 
-    def firmwares(self, **kw: Any) -> Dict[str, Any]:
+    def firmware(self, **kw: Any) -> Dict[str, Any]:
         """
         Retrieves firmware information for a specific hostname or all hosts.
 
@@ -1770,26 +1810,28 @@ class NodeProxyCache:
         :return: A dictionary containing firmware information for each host.
         :rtype: Dict[str, Any]
         """
-        hostname = kw.get('hostname')
-        hosts = [hostname] if hostname else self.data.keys()
-
-        return {host: self.data[host]['firmwares'] for host in hosts}
+        hosts = self._resolve_hosts(**kw)
+        return {host: self._host_firmware(self.data[host]) for host in hosts}
 
     def get_critical_from_host(self, hostname: str) -> Dict[str, Any]:
+        if hostname not in self.data:
+            raise OrchestratorError(
+                f"Host '{hostname}' has no node-proxy data (unknown host or node-proxy not running)."
+            )
         results: Dict[str, Any] = {}
-        for sys_id, component in self.data[hostname]['status'].items():
-            for component_name, data_component in component.items():
-                if component_name not in results.keys():
-                    results[component_name] = {}
-                for member, data_member in data_component.items():
-                    if component_name == 'power':
-                        data_member['status']['health'] = 'critical'
-                        data_member['status']['state'] = 'unplugged'
-                    if component_name == 'memory':
-                        data_member['status']['health'] = 'critical'
-                        data_member['status']['state'] = 'errors detected'
-                    if data_member['status']['health'].lower() != 'ok':
-                        results[component_name][member] = data_member
+
+        for component, component_data in self.data[hostname]['status'].items():
+            for sys_id, data_sys in component_data.items():
+                if sys_id not in results.keys():
+                    results[sys_id] = {}
+                if component not in results[sys_id].keys():
+                    results[sys_id][component] = {}
+                for member_name, member_data in data_sys.items():
+                    _health = self._get_health_value(member_data)
+                    if _health and _health != 'ok':
+                        if member_name not in results.keys():
+                            results[sys_id][component][member_name] = {}
+                        results[sys_id][component][member_name] = member_data
         return results
 
     def criticals(self, **kw: Any) -> Dict[str, Any]:
@@ -1806,10 +1848,9 @@ class NodeProxyCache:
         :return: A dictionary containing critical information for each host.
         :rtype: List[Dict[str, Any]]
         """
-        hostname = kw.get('hostname')
+        hosts = self._resolve_hosts(**kw)
         results: Dict[str, Any] = {}
 
-        hosts = [hostname] if hostname else self.data.keys()
         for host in hosts:
             results[host] = self.get_critical_from_host(host)
         return results

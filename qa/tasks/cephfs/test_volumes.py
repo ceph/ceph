@@ -10235,22 +10235,40 @@ class TestMisc(TestVolumesHelper):
         self.wait_until_evicted(sessions[0]['id'], timeout=90)
 
     def test_mgr_eviction(self):
-        # unmount any cephfs mounts
+        # unmount any cephfs mounts to start from a clean state
         for i in range(0, self.CLIENTS_REQUIRED):
             self.mounts[i].umount_wait()
-        sessions = self._session_list()
-        self.assertLessEqual(len(sessions), 1) # maybe mgr is already mounted
 
-        # Get the mgr to definitely mount cephfs
+        # Helper to get mgr-specific sessions (type 16)
+        def get_mgr_sessions():
+            all_sessions = self._session_list()
+            mgr_sessions = [s for s in all_sessions if s.get('auth_name', {}).get('type') == 16]
+            return all_sessions, mgr_sessions
+
+        # Ensure we start with only mgr sessions (if any)
+        all_s, mgr_s = get_mgr_sessions()
+        self.assertEqual(len(all_s), len(mgr_s), f"Non-mgr sessions found: {all_s}")
+
+        # Trigger mgr activity to ensure sessions are active
         subvolume = self._gen_subvol_name()
         self._fs_cmd("subvolume", "create", self.volname, subvolume)
-        sessions = self._session_list()
-        self.assertEqual(len(sessions), 1)
 
-        # Now fail the mgr, check the session was evicted
-        mgr = self.mgr_cluster.get_active_id()
-        self.mgr_cluster.mgr_fail(mgr)
-        self.wait_until_evicted(sessions[0]['id'])
+        # Get updated session list and verify they are all mgr types
+        all_sessions, mgr_sessions = get_mgr_sessions()
+        self.assertGreaterEqual(len(mgr_sessions), 1)
+        self.assertEqual(len(all_sessions), len(mgr_sessions),
+                         f"Unexpected session types found: {all_sessions}")
+
+        # Store IDs for eviction check
+        mgr_session_ids = [s['id'] for s in mgr_sessions]
+
+        # Fail the mgr
+        mgr_id = self.mgr_cluster.get_active_id()
+        self.mgr_cluster.mgr_fail(mgr_id)
+
+        # Assert all identified mgr session IDs are evicted
+        for s_id in mgr_session_ids:
+            self.wait_until_evicted(s_id)
 
     def test_names_can_only_be_goodchars(self):
         """
@@ -10798,3 +10816,67 @@ class TestPerModuleFinsherThread(TestVolumesHelper):
 
         # verify trash dir is clean
         self._wait_for_trash_empty()
+
+class TestCorruptedSubvolumes(TestVolumesHelper):
+    '''
+    Test that certain cases like subvolume deletion and clone cancellations and
+    deletions are handled well on a corrupted subvolume as well.
+    '''
+
+    def test_rm_subvol_with_missing_UUID_dir(self):
+        sv1 = 'sv1'
+
+        self.run_ceph_cmd(f'fs subvolume create {self.volname} {sv1}')
+
+        sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {self.volname} '
+                                           f'{sv1}').strip()[1:]
+        sv_path = os.path.join(self.mount_a.hostfs_mntpt, sv_path)
+        self.mount_a.run_shell(f'sudo rmdir {sv_path}', omit_sudo=False)
+
+        self.negtest_ceph_cmd(f'fs subvolume rm {self.volname} {sv1}',
+                              retval=errno.ENOENT,
+                              errmsgs='mount path missing for subvolume')
+        self.run_ceph_cmd(f'fs subvolume rm {self.volname} {sv1} --force')
+
+    def test_rm_subvol_that_has_snap_and_missing__UUID_dir(self):
+        sv1 = 'sv1'
+        ss1 = 'ss1'
+
+        self.run_ceph_cmd(f'fs subvolume create {self.volname} {sv1}')
+        self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} {sv1} {ss1}')
+
+        sv_path = self.get_ceph_cmd_stdout('fs subvolume getpath '
+                                           f'{self.volname} {sv1}').strip()[1:]
+        self.mount_a.run_shell(f'sudo rmdir {sv_path}', omit_sudo=False)
+
+        self.negtest_ceph_cmd(f'fs subvolume snapshot rm {self.volname} {sv1} {ss1}',
+                              retval=errno.ENOENT,
+                              errmsgs='mount path missing for subvolume')
+        self.run_ceph_cmd(f'fs subvolume snapshot rm {self.volname} {sv1} {ss1} '
+                           '--force')
+
+        # cleanup
+        self.run_ceph_cmd(f'fs subvolume rm {self.volname} {sv1} --force')
+
+    def test_clone_when_src_subvol_has_missing_UUID_dir(self):
+        sv1 = 'sv1'
+        ss1 = 'ss1'
+        c1 = 'c1'
+
+        self.run_ceph_cmd(f'fs subvolume create {self.volname} {sv1}')
+        sv_path = self.get_ceph_cmd_stdout('fs subvolume getpath '
+                                           f'{self.volname} {sv1}').strip()
+        sv_path = sv_path[1:]
+        self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} {sv1} {ss1}')
+        self.run_ceph_cmd('config set mgr mgr/volumes/snapshot_clone_delay 2')
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {self.volname} {sv1} {ss1} {c1}')
+
+        self.mount_a.run_shell(f'sudo rmdir {sv_path}', omit_sudo=False)
+
+        time.sleep(2)
+        self._wait_for_clone_to_fail(c1, timo=20)
+
+        # cleanup
+        self.run_ceph_cmd(f'fs subvolume snapshot rm {self.volname} {sv1} {ss1} '
+                           '--force')
+        self.run_ceph_cmd(f'fs subvolume rm {self.volname} {sv1} --force')

@@ -1,3 +1,4 @@
+# cython: language_level=3
 # cython: embedsignature=True, binding=True
 """
 This module is a thin wrapper around librados.
@@ -18,10 +19,26 @@ from cpython.pycapsule cimport *
 from libc cimport errno
 from libc.stdint cimport *
 from libc.stdlib cimport malloc, realloc, free
-IF BUILD_DOC:
-    include "mock_rados.pxi"
-ELSE:
-    from c_rados cimport *
+
+# Platform-specific errno handling using C preprocessor
+cdef extern from *:
+    """
+    #include <errno.h>
+    #if defined(__FreeBSD__) || defined(__APPLE__)
+    // FreeBSD/Darwin use ENOATTR for "no data"
+    #define CEPH_ENODATA ENOATTR
+    #else
+    // Linux uses ENODATA
+    #define CEPH_ENODATA ENODATA
+    #endif
+    """
+    int CEPH_ENODATA
+
+{{if BUILD_DOC}}
+include "mock_rados.pxi"
+{{else}}
+from c_rados cimport *
+{{endif}}
 
 import threading
 import time
@@ -39,7 +56,6 @@ cdef extern from "Python.h":
     PyObject *PyBytes_FromStringAndSize(char *v, Py_ssize_t len) except NULL
     char* PyBytes_AsString(PyObject *string) except NULL
     int _PyBytes_Resize(PyObject **string, Py_ssize_t newsize) except -1
-    void PyEval_InitThreads()
 
 LIBRADOS_OP_FLAG_EXCL = _LIBRADOS_OP_FLAG_EXCL
 LIBRADOS_OP_FLAG_FAILOK = _LIBRADOS_OP_FLAG_FAILOK
@@ -231,43 +247,25 @@ class ConnectionShutdown(OSError):
         super(ConnectionShutdown, self).__init__(
                 "RADOS connection was shutdown (%s)" % message, errno)
 
-
-IF UNAME_SYSNAME == "FreeBSD":
-    cdef errno_to_exception = {
-        errno.EPERM     : PermissionError,
-        errno.ENOENT    : ObjectNotFound,
-        errno.EIO       : IOError,
-        errno.ENOSPC    : NoSpace,
-        errno.EEXIST    : ObjectExists,
-        errno.EBUSY     : ObjectBusy,
-        errno.ENOATTR   : NoData,
-        errno.EINTR     : InterruptedOrTimeoutError,
-        errno.ETIMEDOUT : TimedOut,
-        errno.EACCES    : PermissionDeniedError,
-        errno.EINPROGRESS : InProgress,
-        errno.EISCONN   : IsConnected,
-        errno.EINVAL    : InvalidArgumentError,
-        errno.ENOTCONN  : NotConnected,
-        errno.ESHUTDOWN : ConnectionShutdown,
-    }
-ELSE:
-    cdef errno_to_exception = {
-        errno.EPERM     : PermissionError,
-        errno.ENOENT    : ObjectNotFound,
-        errno.EIO       : IOError,
-        errno.ENOSPC    : NoSpace,
-        errno.EEXIST    : ObjectExists,
-        errno.EBUSY     : ObjectBusy,
-        errno.ENODATA   : NoData,
-        errno.EINTR     : InterruptedOrTimeoutError,
-        errno.ETIMEDOUT : TimedOut,
-        errno.EACCES    : PermissionDeniedError,
-        errno.EINPROGRESS : InProgress,
-        errno.EISCONN   : IsConnected,
-        errno.EINVAL    : InvalidArgumentError,
-        errno.ENOTCONN  : NotConnected,
-        errno.ESHUTDOWN : ConnectionShutdown,
-    }
+# Build errno mapping
+# Use CEPH_ENODATA which resolves to ENOATTR on FreeBSD or ENODATA on Linux
+cdef errno_to_exception = {
+    errno.EPERM     : PermissionError,
+    errno.ENOENT    : ObjectNotFound,
+    errno.EIO       : IOError,
+    errno.ENOSPC    : NoSpace,
+    errno.EEXIST    : ObjectExists,
+    errno.EBUSY     : ObjectBusy,
+    CEPH_ENODATA    : NoData,
+    errno.EINTR     : InterruptedOrTimeoutError,
+    errno.ETIMEDOUT : TimedOut,
+    errno.EACCES    : PermissionDeniedError,
+    errno.EINPROGRESS : InProgress,
+    errno.EISCONN   : IsConnected,
+    errno.EINVAL    : InvalidArgumentError,
+    errno.ENOTCONN  : NotConnected,
+    errno.ESHUTDOWN : ConnectionShutdown,
+}
 
 
 cdef make_ex(ret: int, msg: str):
@@ -394,7 +392,6 @@ cdef class Rados(object):
     # NOTE(sileht): attributes declared in .pyd
 
     def __init__(self, *args, **kwargs):
-        PyEval_InitThreads()
         self.__setup(*args, **kwargs)
 
     NO_CONF_FILE = -1

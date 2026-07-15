@@ -4,7 +4,7 @@ Metrics
 
 The Ceph Object Gateway uses :ref:`Perf Counters` to track metrics. The counters can be labeled (:ref:`Labeled Perf Counters`). When counters are labeled, they are stored in the Ceph Object Gateway specific caches.
 
-These metrics can be sent to the time series database Prometheus to visualize a cluster wide view of usage data (ex: number of S3 put operations on a specific bucket) over time.
+These metrics can be sent to the time series database Prometheus to visualize a cluster-wide view of usage data (for example, number of S3 put operations on a specific bucket) over time.
 
 .. contents::
 
@@ -74,6 +74,12 @@ The following metrics related to S3 or Swift operations are tracked per Ceph Obj
    * - list_bucket_lat
      - Gauge
      - Total latency of list bucket operations
+   * - head_obj_ops
+     - Counter
+     - Number of successful HEAD Object operations
+   * - head_obj_lat
+     - Gauge
+     - Total latency of HEAD Object operations
 
 There are three different sections in the output of the ``counter dump`` and ``counter schema`` commands that show the op metrics and their information.
 The sections are ``rgw_op``, ``rgw_op_per_user``, and ``rgw_op_per_bucket``.
@@ -109,6 +115,12 @@ To view op metrics in the Ceph Object Gateway go to the ``rgw_op`` sections of t
                     "avgcount": 1,
                     "sum": 0.002300000,
                     "avgtime": 0.002300000
+                },
+                "head_obj_ops": 3,
+                "head_obj_lat": {
+                    "avgcount": 3,
+                    "sum": 0.006123456,
+                    "avgtime": 0.002041152
                 }
             }
         },
@@ -146,6 +158,12 @@ Op metrics can also be tracked per-user or per-bucket. These metrics are exporte
                     "avgcount": 1,
                     "sum": 0.002300000,
                     "avgtime": 0.002300000
+                },
+                "head_obj_ops": 3,
+                "head_obj_lat": {
+                    "avgcount": 3,
+                    "sum": 0.006123456,
+                    "avgtime": 0.002041152
                 }
             }
         },
@@ -187,9 +205,350 @@ Cache sizing can depend on a number of factors. These factors include:
 #. Number of users in the cluster
 #. Number of buckets in the cluster
 #. Memory usage of the Ceph Object Gateway
-#. Disk and memory usage of Promtheus. 
+#. Disk and memory usage of Prometheus.
 
 To help calculate the Ceph Object Gateway's memory usage of a cache, it should be noted that each cache entry, encompassing all of the op metrics, is 1360 bytes. This is an estimate and subject to change if metrics are added or removed from the op metrics list.
+
+Lifecycle Metrics
+=================
+
+The following metrics related to lifecycle (LC) processing are tracked per bucket by the Ceph Object Gateway.
+
+.. list-table:: Ceph Object Gateway Lifecycle Metrics
+   :widths: 25 25 75
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * - ``start_time``
+     - Gauge
+     - LC processing start timestamp (Unix epoch seconds)
+   * - ``end_time``
+     - Gauge
+     - LC processing end timestamp (Unix epoch seconds)
+   * - ``objects_scanned``
+     - Counter
+     - Total objects scanned for lifecycle rules (cumulative across all runs since RGW start)
+   * - ``objects_pending``
+     - Gauge
+     - Objects currently pending lifecycle processing
+   * - ``objects_expired``
+     - Counter
+     - Current-version objects expired by lifecycle in current run
+   * - ``objects_noncurrent_expired``
+     - Counter
+     - Noncurrent-version objects expired by lifecycle in current run
+   * - ``objects_dm_expired``
+     - Counter
+     - Delete markers expired by lifecycle in current run
+   * - ``objects_transitioned``
+     - Counter
+     - Objects transitioned to another storage class by lifecycle in current run
+   * - ``objects_mpu_aborted``
+     - Counter
+     - Multipart uploads aborted by lifecycle in current run
+
+Lifecycle metrics are labeled per-bucket in the ``rgw_lc_per_bucket`` section.
+
+The action metrics (``objects_expired``, ``objects_noncurrent_expired``,
+``objects_dm_expired``, ``objects_transitioned``, ``objects_mpu_aborted``) and
+``objects_scanned`` are monotonic counters that accumulate across every LC run
+for the lifetime of the Ceph Object Gateway process.
+
+To compute per-run deltas in Prometheus, use ``increase()`` over a window that
+covers a single LC run (for example, ``increase(rgw_lc_per_bucket_objects_scanned[24h])``
+on the default daily LC schedule). To detect a new LC run, look for a change
+in ``start_time``.
+
+Information about lifecycle metrics can be seen in the ``rgw_lc_per_bucket``
+section from the output of the ``counter schema`` command.
+
+To retrieve lifecycle metrics from a ``radosgw`` daemon's admin socket, see the
+``rgw_lc_per_bucket`` section in the output of the ``counter dump`` command::
+
+    "rgw_lc_per_bucket": [
+        {
+            "labels": {
+                "bucket": "mybucket",
+                "tenant": ""
+            },
+            "counters": {
+                "start_time": 1728139406,
+                "end_time": 0,
+                "objects_scanned": 15000,
+                "objects_pending": 2300,
+                "objects_expired": 1200,
+                "objects_noncurrent_expired": 300,
+                "objects_dm_expired": 50,
+                "objects_transitioned": 800,
+                "objects_mpu_aborted": 10
+            }
+        },
+        ...
+    ]
+
+Lifecycle Counter Cache
+-----------------------
+
+To track lifecycle metrics per bucket, set :confval:`rgw_lc_counters_cache` to ``true``. The default value is ``false``.
+
+Lifecycle metrics are stored as labeled performance counters in memory. All counters are lost when the Ceph Object Gateway restarts or crashes.
+
+Since ``ceph-mgr`` cannot expose labeled counters today; use the per-host ``ceph-exporter`` daemon to scrape these metrics.
+
+Lifecycle Counter Cache Size & Eviction
+----------------------------------------
+
+The :confval:`rgw_lc_counters_cache_size` option can be used to set number of entries in the cache.
+
+When the number of cached counters exceeds this value, the least recently used (LRU) counters are evicted.
+
+Lifecycle Counter Batching
+---------------------------
+
+To minimize performance impact, lifecycle counter updates are batched. The :confval:`rgw_lc_counters_batch_size` option controls how often counter updates are flushed to the cache.
+
+Lower values provide more frequent updates but with slightly higher overhead. Higher values reduce overhead but updates appear less frequently.
+
+Lifecycle Metric Usage Examples
+-------------------------------
+
+The following examples show how to use each per-bucket lifecycle metric.
+PromQL examples assume that the ``ceph-exporter`` is being scraped by
+Prometheus. Admin-socket examples use ``ceph daemon`` directly against a
+specific ``radosgw`` daemon instance.
+
+In a multi-RGW deployment only one RGW processes a given bucket per LC cycle. To find which daemon ran (or is running) LC for a bucket, take the series with the highest ``start_time`` for that bucket label.
+
+``start_time`` (gauge, Unix epoch seconds)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The timestamp when the most recent LC run started for the bucket. ``0`` means LC has not run for this bucket since the RGW started.
+
+* Find buckets whose LC run started in the last hour:
+
+  .. code-block:: promql
+
+      time() - rgw_lc_per_bucket_start_time < 3600 and rgw_lc_per_bucket_start_time > 0
+
+* Identify which RGW most recently ran LC for ``mybucket``:
+
+  .. code-block:: promql
+
+      topk(1, rgw_lc_per_bucket_start_time{bucket="mybucket"})
+
+* Detect missed LC runs (no run in over 36 hours on a daily LC schedule):
+
+  .. code-block:: promql
+
+      time() - max by (bucket, tenant) (rgw_lc_per_bucket_start_time) > 36 * 3600
+
+``end_time`` (gauge, Unix epoch seconds)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The timestamp when the most recent LC run finished for the bucket. ``0`` while ``start_time > 0`` means LC is currently in progress on that RGW.
+
+* Buckets currently being processed:
+
+  .. code-block:: promql
+
+      rgw_lc_per_bucket_start_time > 0 and rgw_lc_per_bucket_end_time == 0
+
+* Per-run LC duration (seconds):
+
+  .. code-block:: promql
+
+      rgw_lc_per_bucket_end_time - rgw_lc_per_bucket_start_time
+        and rgw_lc_per_bucket_end_time > 0
+
+* Buckets whose last LC run took longer than 30 minutes:
+
+  .. code-block:: promql
+
+      (rgw_lc_per_bucket_end_time - rgw_lc_per_bucket_start_time > 1800)
+        and rgw_lc_per_bucket_end_time > 0
+
+``objects_scanned`` (counter)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Cumulative count of objects examined by LC for this bucket since the RGW process started. Use ``increase()`` to compute the per-run scan total.
+
+* Objects scanned per bucket in the last 24 hours:
+
+  .. code-block:: promql
+
+      increase(rgw_lc_per_bucket_objects_scanned[24h])
+
+* Top 10 buckets by LC scan rate over the last hour:
+
+  .. code-block:: promql
+
+      topk(10, rate(rgw_lc_per_bucket_objects_scanned[1h]))
+
+* Live scan progress for an in-flight run via admin socket:
+
+  .. code-block:: bash
+
+      ceph daemon radosgw.<id>.asok counter dump \
+        | jq '.rgw_lc_per_bucket[]
+              | select(.labels.bucket == "mybucket")
+              | .counters.objects_scanned'
+
+``objects_pending`` (gauge)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Number of objects currently queued for LC action evaluation. Returns to 0 once the run finishes.
+
+* Buckets with significant in-flight LC work:
+
+  .. code-block:: promql
+
+      rgw_lc_per_bucket_objects_pending > 1000
+
+* Aggregate pending work across the cluster:
+
+  .. code-block:: promql
+
+      sum(rgw_lc_per_bucket_objects_pending)
+
+* Detect a stalled run (pending > 0 but no scan progress in the last 5 minutes):
+
+  .. code-block:: promql
+
+      rgw_lc_per_bucket_objects_pending > 0
+        and rate(rgw_lc_per_bucket_objects_scanned[5m]) == 0
+
+``objects_expired`` (counter)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Cumulative current-version objects expired by LC for this bucket since RGW start.
+
+* Objects expired per bucket in the last 24 hours:
+
+  .. code-block:: promql
+
+      increase(rgw_lc_per_bucket_objects_expired[24h])
+
+* Cluster-wide expiration rate (objects/sec):
+
+  .. code-block:: promql
+
+      sum(rate(rgw_lc_per_bucket_objects_expired[5m]))
+
+* Buckets with no expirations in the last 7 days (possible rule misconfiguration on a bucket where you expect deletes):
+
+  .. code-block:: promql
+
+      increase(rgw_lc_per_bucket_objects_expired[7d]) == 0
+        and rgw_lc_per_bucket_start_time > 0
+
+``objects_noncurrent_expired`` (counter)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Cumulative noncurrent-version objects expired by LC. Useful only on versioned buckets.
+
+* Noncurrent-version objects removed per run:
+
+  .. code-block:: promql
+
+      increase(rgw_lc_per_bucket_objects_noncurrent_expired[24h])
+
+* Ratio of noncurrent vs current expirations (high ratio indicates a versioning-heavy workload):
+
+  .. code-block:: promql
+
+      sum by (bucket) (increase(rgw_lc_per_bucket_objects_noncurrent_expired[24h]))
+        /
+      (sum by (bucket) (increase(rgw_lc_per_bucket_objects_expired[24h])) > 0)
+
+``objects_dm_expired`` (counter)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Cumulative delete markers expired by LC. A non-zero value means LC is reclaiming dangling delete markers on a versioned bucket.
+
+* Delete markers cleaned per run:
+
+  .. code-block:: promql
+
+      increase(rgw_lc_per_bucket_objects_dm_expired[24h])
+
+* Buckets accumulating delete markers without cleanup (no DM expiration in 7 days but recent runs occurred):
+
+  .. code-block:: promql
+
+      increase(rgw_lc_per_bucket_objects_dm_expired[7d]) == 0
+        and increase(rgw_lc_per_bucket_objects_scanned[7d]) > 0
+
+``objects_transitioned`` (counter)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Cumulative objects transitioned to another storage class (including cloud tiers) by LC.
+
+* Objects transitioned per bucket in the last 24 hours:
+
+  .. code-block:: promql
+
+      increase(rgw_lc_per_bucket_objects_transitioned[24h])
+
+* Cluster-wide transition throughput (objects/sec):
+
+  .. code-block:: promql
+
+      sum(rate(rgw_lc_per_bucket_objects_transitioned[5m]))
+
+* Buckets with a configured transition rule but zero transitions in the last 24h (likely investigation target):
+
+  .. code-block:: promql
+
+      increase(rgw_lc_per_bucket_objects_transitioned[24h]) == 0
+        and increase(rgw_lc_per_bucket_objects_scanned[24h]) > 0
+
+``objects_mpu_aborted`` (counter)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Cumulative incomplete multipart uploads aborted by LC. Driven by ``AbortIncompleteMultipartUpload`` rules.
+
+* Aborted multipart uploads per bucket per run:
+
+  .. code-block:: promql
+
+      increase(rgw_lc_per_bucket_objects_mpu_aborted[24h])
+
+* Cluster-wide rate of MPU cleanup:
+
+  .. code-block:: promql
+
+      sum(rate(rgw_lc_per_bucket_objects_mpu_aborted[5m]))
+
+Combined Examples
+^^^^^^^^^^^^^^^^^
+
+* Total LC work done per bucket in the last 24 hours (scan + all action types):
+
+  .. code-block:: promql
+
+      sum by (bucket, tenant) (
+        increase(rgw_lc_per_bucket_objects_expired[24h])
+        + increase(rgw_lc_per_bucket_objects_noncurrent_expired[24h])
+        + increase(rgw_lc_per_bucket_objects_dm_expired[24h])
+        + increase(rgw_lc_per_bucket_objects_transitioned[24h])
+        + increase(rgw_lc_per_bucket_objects_mpu_aborted[24h])
+      )
+
+* Per-bucket LC hit rate (fraction of scanned objects acted on):
+
+  .. code-block:: promql
+
+      (
+        increase(rgw_lc_per_bucket_objects_expired[24h])
+        + increase(rgw_lc_per_bucket_objects_noncurrent_expired[24h])
+        + increase(rgw_lc_per_bucket_objects_dm_expired[24h])
+        + increase(rgw_lc_per_bucket_objects_transitioned[24h])
+        + increase(rgw_lc_per_bucket_objects_mpu_aborted[24h])
+      )
+      /
+      increase(rgw_lc_per_bucket_objects_scanned[24h])
 
 Sending Metrics to Prometheus
 =============================

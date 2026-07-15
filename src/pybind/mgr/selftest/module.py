@@ -1,5 +1,5 @@
 
-from mgr_module import MgrModule, CommandResult, HandleCommandResult, CLICommand, Option
+from mgr_module import MgrModule, CommandResult, HandleCommandResult, Option
 import enum
 import json
 import random
@@ -9,6 +9,8 @@ from code import InteractiveInterpreter
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from typing import Any, Dict, List, Optional, Tuple
+
+from .cli import SelftestCLICommand
 
 
 # These workloads are things that can be requested to run inside the
@@ -20,6 +22,7 @@ class Workload(enum.Enum):
 
 
 class Module(MgrModule):
+    CLICommand = SelftestCLICommand
     """
     This module is for testing the ceph-mgr python interface from within
     a running ceph-mgr daemon.
@@ -65,7 +68,7 @@ class Module(MgrModule):
         self._health: Dict[str, Dict[str, Any]] = {}
         self._repl = InteractiveInterpreter(dict(mgr=self))
 
-    @CLICommand('mgr self-test python-version', perm='r')
+    @SelftestCLICommand('mgr self-test python-version', perm='r')
     def python_version(self) -> Tuple[int, str, str]:
         '''
         Query the version of the embedded Python runtime
@@ -75,7 +78,7 @@ class Module(MgrModule):
         micro = sys.version_info.micro
         return 0, f'{major}.{minor}.{micro}', ''
 
-    @CLICommand('mgr self-test run')
+    @SelftestCLICommand('mgr self-test run')
     def run(self) -> Tuple[int, str, str]:
         '''
         Run mgr python interface tests
@@ -83,7 +86,7 @@ class Module(MgrModule):
         self._self_test()
         return 0, '', 'Self-test succeeded'
 
-    @CLICommand('mgr self-test background start')
+    @SelftestCLICommand('mgr self-test background start')
     def backgroun_start(self, workload: Workload) -> Tuple[int, str, str]:
         '''
         Activate a background workload (one of command_spam, throw_exception)
@@ -92,7 +95,7 @@ class Module(MgrModule):
         self._event.set()
         return 0, '', 'Running `{0}` in background'.format(self._workload)
 
-    @CLICommand('mgr self-test background stop')
+    @SelftestCLICommand('mgr self-test background stop')
     def background_stop(self) -> Tuple[int, str, str]:
         '''
         Stop background workload if any is running
@@ -106,21 +109,21 @@ class Module(MgrModule):
         else:
             return 0, '', 'No background workload was running'
 
-    @CLICommand('mgr self-test config get')
+    @SelftestCLICommand('mgr self-test config get')
     def config_get(self, key: str) -> Tuple[int, str, str]:
         '''
         Peek at a configuration value
         '''
         return 0, str(self.get_module_option(key)), ''
 
-    @CLICommand('mgr self-test config get_localized')
+    @SelftestCLICommand('mgr self-test config get_localized')
     def config_get_localized(self, key: str) -> Tuple[int, str, str]:
         '''
         Peek at a configuration value (localized variant)
         '''
         return 0, str(self.get_localized_module_option(key)), ''
 
-    @CLICommand('mgr self-test remote')
+    @SelftestCLICommand('mgr self-test remote')
     def test_remote(self) -> Tuple[int, str, str]:
         '''
         Test inter-module calls
@@ -128,7 +131,7 @@ class Module(MgrModule):
         self._test_remote_calls()
         return 0, '', 'Successfully called'
 
-    @CLICommand('mgr self-test module')
+    @SelftestCLICommand('mgr self-test module')
     def module(self, module: str) -> Tuple[int, str, str]:
         '''
         Run another module's self_test() method
@@ -140,7 +143,7 @@ class Module(MgrModule):
         else:
             return 0, str(r), "Self-test OK"
 
-    @CLICommand('mgr self-test cluster-log')
+    @SelftestCLICommand('mgr self-test cluster-log')
     def do_cluster_log(self,
                        channel: str,
                        priority: str,
@@ -159,7 +162,7 @@ class Module(MgrModule):
                          message)
         return 0, '', 'Successfully called'
 
-    @CLICommand('mgr self-test health set')
+    @SelftestCLICommand('mgr self-test health set')
     def health_set(self, checks: str) -> Tuple[int, str, str]:
         '''
         Set a health check from a JSON-formatted description.
@@ -183,7 +186,7 @@ class Module(MgrModule):
         self.set_health_checks(self._health)
         return 0, "", ""
 
-    @CLICommand('mgr self-test health clear')
+    @SelftestCLICommand('mgr self-test health clear')
     def health_clear(self, checks: Optional[List[str]] = None) -> Tuple[int, str, str]:
         '''
         Clear health checks by name. If no names provided, clear all.
@@ -198,7 +201,7 @@ class Module(MgrModule):
         self.set_health_checks(self._health)
         return 0, "", ""
 
-    @CLICommand('mgr self-test insights_set_now_offset')
+    @SelftestCLICommand('mgr self-test insights_set_now_offset')
     def insights_set_now_offset(self, hours: int) -> Tuple[int, str, str]:
         '''
         Set the now time for the insights module.
@@ -468,7 +471,7 @@ class Module(MgrModule):
         self._event.clear()
         self.log.info("Ended command_spam workload...")
 
-    @CLICommand('mgr self-test eval')
+    @SelftestCLICommand('mgr self-test eval')
     def eval(self,
              s: Optional[str] = None,
              inbuf: Optional[str] = None) -> HandleCommandResult:
@@ -492,6 +495,133 @@ class Module(MgrModule):
                 stdout = out.getvalue()
                 stderr = err.getvalue()
             return HandleCommandResult(retval, stdout, stderr)
+
+    @SelftestCLICommand('mgr self-test logging')
+    def test_logging(self) -> Tuple[int, str, str]:
+        '''
+        Test logging isolation between mgr modules
+        '''
+        import logging
+
+        errors = []
+
+        mod_logger = self.getLogger()
+        if mod_logger.name != self.module_name:
+            errors.append(
+                f"getLogger() returned '{mod_logger.name}', "
+                f"expected '{self.module_name}'"
+            )
+
+        if mod_logger is logging.getLogger():
+            errors.append("getLogger() returned root logger")
+
+        if not mod_logger.handlers:
+            errors.append("module logger has no handlers")
+
+        if mod_logger.propagate:
+            errors.append("module logger propagate is True, expected False")
+
+        child = logging.getLogger(f"{self.module_name}.sub.test")
+        if not child.name.startswith(self.module_name + "."):
+            errors.append(
+                f"child logger '{child.name}' is not under "
+                f"'{self.module_name}'"
+            )
+
+        if not child.propagate:
+            errors.append("child logger propagate is False")
+
+        root = logging.getLogger()
+        if not root.handlers:
+            errors.append("root logger has no fallback handler")
+
+        try:
+            mod_logger.debug("selftest: debug message")
+            mod_logger.info("selftest: info message")
+            mod_logger.warning("selftest: warning message")
+            child.info("selftest: child logger message")
+        except Exception as e:
+            errors.append(f"logging raised exception: {e}")
+
+        # --- Cross-module isolation ---
+        other_logger = logging.getLogger("balancer")
+        our_handlers = set(id(h) for h in mod_logger.handlers)
+        other_handlers = set(id(h) for h in other_logger.handlers)
+        shared = our_handlers & other_handlers
+        if shared:
+            errors.append(
+                f"selftest and balancer share {len(shared)} handler(s)"
+            )
+
+        # --- Message capture and routing ---
+        captured_mod = []
+        captured_root = []
+
+        class ModCaptureHandler(logging.Handler):
+            def emit(self, record: logging.LogRecord) -> None:
+                captured_mod.append(record)
+
+        class RootCaptureHandler(logging.Handler):
+            def emit(self, record: logging.LogRecord) -> None:
+                captured_root.append(record)
+
+        mod_capture = ModCaptureHandler()
+        mod_capture.setLevel(logging.DEBUG)
+        mod_logger.addHandler(mod_capture)
+
+        root_capture = RootCaptureHandler()
+        root_capture.setLevel(logging.DEBUG)
+        root.handlers.insert(0, root_capture)
+
+        try:
+            # Module logger should be captured
+            mod_logger.info("selftest: direct module message")
+
+            # Child logger should propagate to module handler
+            child_logger = logging.getLogger(f"{self.module_name}.test.capture")
+            child_logger.info("selftest: child module message")
+
+            # Verify both messages reached module handler
+            if len(captured_mod) < 2:
+                errors.append(
+                    f"expected at least 2 module messages, got {len(captured_mod)}"
+                )
+
+            # Verify correct attribution
+            mod_names = [r.name for r in captured_mod]
+            if self.module_name not in mod_names:
+                errors.append(f"no message from '{self.module_name}'")
+            expected_child = f"{self.module_name}.test.capture"
+            if expected_child not in mod_names:
+                errors.append(f"no message from '{expected_child}'")
+
+            # Verify no foreign messages leaked into module handler
+            for r in captured_mod:
+                if not r.name.startswith(self.module_name):
+                    errors.append(
+                        f"unexpected message from '{r.name}' in module handler"
+                    )
+
+            # Module messages should NOT reach root (propagate=False)
+            if any(r.name.startswith(self.module_name) for r in captured_root):
+                errors.append("module message leaked to root handler")
+
+            # Orphan logger should reach root
+            import uuid
+            marker = f"selftest-orphan-{uuid.uuid4().hex[:8]}"
+            orphan = logging.getLogger("some.random.library")
+            orphan.warning(marker)
+
+            if not any(marker in r.getMessage() for r in captured_root):
+                errors.append("orphan message did not reach root handler")
+
+        finally:
+            mod_logger.removeHandler(mod_capture)
+            root.removeHandler(root_capture)
+
+        if errors:
+            return -1, '', 'Logging self-test failed:\n' + '\n'.join(errors)
+        return 0, '', 'Logging self-test passed'
 
     def serve(self) -> None:
         while True:

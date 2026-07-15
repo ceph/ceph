@@ -101,7 +101,7 @@ public:
   void put();
 private:
   std::unique_ptr<CryptoRandom> _crypto_random;
-  unsigned nref;
+  unsigned nref = 1;
   ceph::PluginRegistry* _plugin_registry;
 };
 }

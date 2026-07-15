@@ -32,7 +32,7 @@ possibly an associated capability specification. Each key is
 associated with an entity name, of the form
 ``{client,mon,mds,osd}.name``.
 
-**WARNING** Ceph provides authentication and protection against
+**WARNING:** Ceph provides authentication and protection against
 man-in-the-middle attacks once secret keys are in place.  However,
 data over the wire is not encrypted, which may include the messages
 used to configure said keys. The system is primarily intended to be
@@ -85,7 +85,7 @@ Options
 
 .. option:: --mode *mode*
 
-   will set the desired file mode to the keyring e.g: 0644, defaults to 0600
+   will set the desired file mode to the keyring e.g.: 0644, defaults to 0600
 
 
 Capabilities
@@ -95,7 +95,7 @@ The subsystem is the name of a Ceph subsystem: ``mon``, ``mds``, or
 ``osd``.
 
 The capability is a string describing what the given user is allowed
-to do. This takes the form of a comma separated list of allow
+to do. This takes the form of a comma-separated list of allow
 clauses with a permission specifier containing one or more of rwx for
 read, write, and execute permission. The ``allow *`` grants full
 superuser permissions for the given subsystem.

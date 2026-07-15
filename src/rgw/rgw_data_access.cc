@@ -41,13 +41,13 @@ public:
   }
   void finish(std::string *etag) {
     char etag_buf[S];
-    char etag_buf_str[S * 2 + 16];
 
     hash.Final((unsigned char *)etag_buf);
-    buf_to_hex((const unsigned char *)etag_buf, S,
-	       etag_buf_str);
-
-    *etag = etag_buf_str;
+    if (etag) {
+      etag->clear();
+      etag->reserve(S * 2);
+      buf_to_hex(etag_buf, std::back_inserter(*etag));
+    }
   }
 };
 
@@ -127,19 +127,26 @@ int RGWDataAccess::Object::put(bufferlist& data,
   std::string req_id = driver->zone_unique_id(driver->get_new_req_id());
 
   std::unique_ptr<rgw::sal::Writer> processor;
+
+  if (bucket_info.versioning_enabled() && obj->get_instance().empty()) {
+    obj->gen_rand_obj_instance_name();
+  }
+
   processor = driver->get_atomic_writer(dpp, y, obj.get(), owner,
 				       nullptr, olh_epoch, req_id);
 
   int ret = processor->prepare(y);
-  if (ret < 0)
+  if (ret < 0) {
     return ret;
+  }
 
   rgw::sal::DataProcessor *filter = processor.get();
 
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
 
-  const auto& compression_type = driver->get_compression_type(bucket_info.placement_rule);
+  const auto& compression_type =
+    driver->get_compression_type(bucket_info.placement_rule);
   if (compression_type != "none") {
     plugin = Compressor::create(driver->ctx(), compression_type);
     if (!plugin) {

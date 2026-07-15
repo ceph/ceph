@@ -1,9 +1,20 @@
 import logging
 import json
 import socket
+from dataclasses import dataclass
 from enum import Enum
 from functools import wraps
-from typing import Optional, Callable, TypeVar, List, NewType, TYPE_CHECKING, Any, NamedTuple
+from typing import (
+    Any,
+    Callable,
+    List,
+    NamedTuple,
+    NewType,
+    Optional,
+    TYPE_CHECKING,
+    TypeVar,
+    Union,
+)
 from orchestrator import OrchestratorError
 import hashlib
 
@@ -28,7 +39,7 @@ GATEWAY_TYPES = ['iscsi', 'nfs', 'nvmeof', 'smb']
 MONITORING_STACK_TYPES = ['node-exporter', 'prometheus',
                           'alertmanager', 'grafana', 'loki', 'promtail', 'alloy']
 MGMT_GATEWAY_STACK_TYPES = ['mgmt-gateway', 'oauth2-proxy']
-RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES = ['haproxy', 'nfs']
+RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES = ['haproxy', 'nfs', 'keepalived']
 
 CEPH_UPGRADE_ORDER = CEPH_TYPES + GATEWAY_TYPES + MONITORING_STACK_TYPES + MGMT_GATEWAY_STACK_TYPES
 
@@ -61,6 +72,35 @@ class SpecialHostLabels(str, Enum):
 
     def __str__(self) -> str:
         return self.value
+
+
+class Action(str, Enum):
+    NO_ACTION = ''
+    RECONFIG = 'reconfig'
+    REDEPLOY = 'redeploy'
+    RESTART = 'restart'
+    ROTATE_KEY = 'rotate-key'
+    START = 'start'
+    STOP = 'stop'
+
+    @classmethod
+    def create(cls, action: Union[str, 'Action', None]) -> 'Action':
+        if not action:
+            return cls.NO_ACTION
+        return cls(action)
+
+    def __str__(self) -> str:
+        return self.value
+
+
+@dataclass(frozen=True)
+class NextDaemonStep:
+    """Result of CephadmService.choose_next_action: high-level action plus
+    optional reconfig hints (e.g. HAProxy reload via signal instead of restart).
+    """
+    action: Action
+    skip_restart_for_reconfig: bool = False
+    send_signal_to_daemon: Optional[str] = None
 
 
 def name_to_config_section(name: str) -> ConfEntity:
@@ -158,7 +198,22 @@ def file_mode_to_str(mode: int) -> str:
     return r
 
 
-def md5_hash(input_value: str) -> str:
-    input_str = str(input_value).encode('utf-8')
-    hash_object = hashlib.md5(input_str)
-    return hash_object.hexdigest()
+def config_hash(input_value: str) -> str:
+    """
+    Short stable digest for config/dependency change detection.
+    Uses SHA-256 so this works on FIPS-enabled systems (MD5 may be blocked).
+    """
+    input_str = input_value.encode('utf-8')
+    return hashlib.sha256(input_str).hexdigest()[:8]
+
+
+def get_node_proxy_status_value(data: Any, key: str, lower: bool = False) -> str:
+    if not isinstance(data, dict):
+        return ''
+    status = data.get('status', {})
+    if not isinstance(status, dict):
+        return ''
+    value = status.get(key, '')
+    if not isinstance(value, str):
+        return ''
+    return value.lower() if lower else value

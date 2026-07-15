@@ -148,7 +148,7 @@ Filtering:
 * ``--type <type string>`` only include events of this type
 * ``--frag <ino>[.frag id]`` only include events referring to this directory fragment
 * ``--dname <string>`` only include events referring to this named dentry within a directory
-  fragment (may only be used in conjunction with ``--frag``
+  fragment (may only be used in conjunction with ``--frag``)
 * ``--client <int>`` only include events from this client session ID
 
 Filters may be combined on an AND basis (i.e. only the intersection of events from each filter).
@@ -157,8 +157,8 @@ Output modes:
 
 * ``binary``: write each event as a binary file, within a folder whose name is controlled by ``--path``
 * ``json``: write all events to a single file specified by ``--path``, as a JSON serialized list of objects.
-* ``summary``: write a human readable summary of the events read to standard out
-* ``list``: write a human readable terse listing of the type of each event, and
+* ``summary``: write a human-readable summary of the events read to stdout
+* ``list``: write a human-readable terse listing of the type of each event, and
   which file paths the event affects.
 
 

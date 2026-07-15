@@ -338,9 +338,4 @@ void Option::print(ostream *out) const
   }
 }
 
-const std::vector<Option>& get_ceph_options() {
-  // Use a static pointer that's never destroyed to avoid use-after-free
-  // when background threads access options during program exit
-  static const std::vector<Option>* options = new std::vector<Option>(build_options());
-  return *options;
-}
+const std::vector<Option> ceph_options = build_options();

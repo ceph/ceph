@@ -17,7 +17,7 @@
 
 #include "mgr/Types.h" // for PerformanceCounters
 #include "mgr/MetricTypes.h" // for MetricPayload
-#include "mgr/MDSPerfMetricTypes.h"
+#include "mds/MDSPerfMetricTypes.h"
 
 #include "mdstypes.h"
 #include "MDSPinger.h"
@@ -74,9 +74,10 @@ private:
 
   PerfCounters *m_perf_counters;
   std::map<std::pair<entity_inst_t, mds_rank_t>, PerfCounters*> client_perf_counters;
-  uint64_t subv_window_sec;
+  uint64_t subv_window_sec = 0;
   std::unordered_map<std::string, SlidingWindowTracker<SubvolumeMetric>> subvolume_aggregated_metrics;
   std::map<std::string, PerfCounters*> subvolume_perf_counters;
+  std::map<mds_rank_t, PerfCounters*> rank_perf_counters;
 
   void handle_mds_metrics(const cref_t<MMDSMetrics> &m);
 
@@ -84,6 +85,8 @@ private:
                                 const Metrics &metrics);
   void refresh_subvolume_metrics_for_rank(mds_rank_t rank, const std::vector<SubvolumeMetric> &metrics);
   void remove_metrics_for_rank(const entity_inst_t &client, mds_rank_t rank, bool remove);
+  void update_rank_perf_metrics(mds_rank_t rank, const RankPerfMetrics& metrics);
+  void remove_rank_perf_metrics_for_rank(mds_rank_t rank);
 
   void cull_metrics_for_rank(mds_rank_t rank);
 

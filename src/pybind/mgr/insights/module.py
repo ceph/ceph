@@ -3,7 +3,9 @@ import json
 import re
 import threading
 
-from mgr_module import CLICommand, CLIReadCommand, HandleCommandResult
+from .cli import InsightsCLICommand
+
+from mgr_module import HandleCommandResult
 from mgr_module import MgrModule, CommandResult, NotifyType
 from . import health as health_util
 
@@ -20,6 +22,7 @@ ON_DISK_VERSION = 1
 
 
 class Module(MgrModule):
+    CLICommand = InsightsCLICommand
 
     NOTIFY_TYPES = [NotifyType.health]
 
@@ -244,7 +247,7 @@ class Module(MgrModule):
                     ret={}, outs=\"{}\"".format(ret, outs))
             return [], ["Failed to read monitor config dump"]
 
-    @CLIReadCommand('insights')
+    @InsightsCLICommand.Read('insights')
     def do_report(self):
         '''
         Retrieve insights report
@@ -270,8 +273,8 @@ class Module(MgrModule):
         report["config"] = config
         health_check_details.extend(health_details)
 
-        osd_map = self.get("osd_map")
-        del osd_map['pg_temp']
+        osd_map = self.get("osd_map", mutable=True)
+        osd_map.pop("pg_temp", None)
         self._apply_osd_stats(osd_map)
         report["osd_dump"] = osd_map
 
@@ -302,7 +305,7 @@ class Module(MgrModule):
         result = json.dumps(report, indent=2, cls=health_util.HealthEncoder)
         return HandleCommandResult(stdout=result)
 
-    @CLICommand('insights prune-health')
+    @InsightsCLICommand('insights prune-health')
     def do_prune_health(self, hours: int):
         '''
         Remove health history older than <hours> hours

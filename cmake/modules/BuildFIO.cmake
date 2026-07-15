@@ -30,10 +30,10 @@ function(build_fio)
   file(MAKE_DIRECTORY ${source_dir})
   ExternalProject_Add(fio_ext
     UPDATE_COMMAND "" # this disables rebuild on each run
-    GIT_REPOSITORY "https://github.com/ceph/fio.git"
+    GIT_REPOSITORY "https://github.com/axboe/fio.git"
     GIT_CONFIG advice.detachedHead=false
     GIT_SHALLOW 1
-    GIT_TAG "fio-3.27-cxx"
+    GIT_TAG "fio-3.42"
     SOURCE_DIR ${source_dir}
     BUILD_IN_SOURCE 1
     CONFIGURE_COMMAND <SOURCE_DIR>/configure

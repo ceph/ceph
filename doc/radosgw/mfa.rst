@@ -10,7 +10,7 @@ The S3 multifactor authentication (MFA) feature allows
 users to require the use of one-time password when removing
 objects on certain buckets. The buckets need to be configured
 with versioning and MFA enabled which can be done through
-the S3 api.
+the S3 API.
 
 Time-based one time password tokens can be assigned to a user
 through radosgw-admin. Each token has a secret seed, and a serial
@@ -22,7 +22,7 @@ Multisite
 
 While the MFA IDs are set on the user's metadata, the
 actual MFA one time password configuration resides in the local zone's
-osds. Therefore, in a multi-site environment it is advisable to use
+OSDs. Therefore, in a multi-site environment it is advisable to use
 different tokens for different zones.
 
 
@@ -97,6 +97,6 @@ In order to re-sync the TOTP token (in case of time skew). This requires
 feeding two consecutive pins: the previous pin, and the current pin. ::
 
    # radosgw-admin mfa resync --uid=<user-id> --totp-serial=<serial> \
-                              --totp-pin=<prev-pin> --totp=pin=<current-pin>
+                              --totp-pin=<prev-pin> --totp-pin=<current-pin>
 
 

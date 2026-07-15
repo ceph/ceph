@@ -22,28 +22,28 @@ In order to deploy the ``mgmt-gateway`` service, use the following command:
     ceph orch apply mgmt-gateway [--placement ...] ...
 
 Once applied cephadm will reconfigure specific running daemons (such as monitoring) to run behind the
-new created service. External access to those services will not be possible anymore. Access will be
+newly created service. External access to those services will not be possible anymore. Access will be
 consolidated behind the new service endpoint: ``https://<node-ip>:<port>``.
 
 
 Benefits of the mgmt-gateway service
 ====================================
-* ``Unified Access``: Consolidated access through nginx improves security and provide a single entry point to services.
-* ``Improved user experience``: User no longer need to know where each application is running (ip/host).
+* ``Unified Access``: Consolidated access through nginx improves security and provides a single entry point to services.
+* ``Improved user experience``: Users no longer need to know where each application is running (IP/host).
 * ``High Availability for dashboard``: nginx HA mechanisms are used to provide high availability for the Ceph dashboard.
 * ``High Availability for monitoring``: nginx HA mechanisms are used to provide high availability for monitoring.
 
 Security enhancements
 =====================
 
-Once the ``mgmt-gateway`` service is deployed user cannot access monitoring services without authentication through the
+Once the ``mgmt-gateway`` service is deployed, users cannot access monitoring services without authentication through the
 Ceph dashboard.
 
 
 High availability enhancements
 ==============================
 nginx HA mechanisms are used to provide high availability for all the Ceph management applications including the Ceph dashboard
-and monitoring stack. In case of the Ceph dashboard user no longer need to know where the active manager is running.
+and monitoring stack. In case of the Ceph dashboard, users no longer need to know where the active manager is running.
 ``mgmt-gateway`` handles manager failover transparently and redirects the user to the active manager. In case of the
 monitoring ``mgmt-gateway`` takes care of handling HA when several instances of Prometheus, Alertmanager or Grafana are
 available. The reverse proxy will automatically detect healthy instances and use them to process user requests.
@@ -58,7 +58,7 @@ even if certain core components for the service fail, including the ``mgmt-gatew
 
 Multiple ``mgmt-gateway`` instances can be deployed in an active/standby configuration using keepalived
 for seamless failover. The ``oauth2-proxy`` service can be deployed as multiple stateless instances,
-with nginx acting as a load balancer across them using round-robin strategy. This setup removes
+with nginx acting as a load balancer across them using a round-robin strategy. This setup removes
 single points of failure and enhances the resilience of the entire system.
 
 In this setup, the underlying internal services follow the same high availability mechanism. Instead of
@@ -66,13 +66,13 @@ directly accessing the ``mgmt-gateway`` internal endpoint, services use the virt
 This ensures that the high availability mechanism for ``mgmt-gateway`` is transparent to other services.
 
 The simplest and recommended way to deploy the ``mgmt-gateway`` in high availability mode is by using labels. To
-run the ``mgmt-gateway`` in HA mode users can either use the cephadm command line as follows:
+run the ``mgmt-gateway`` in HA mode, users can either use the cephadm command line as follows:
 
 .. prompt:: bash #
 
     ceph orch apply mgmt-gateway --virtual_ip 192.168.100.220 --enable-auth=true --placement="label:mgmt"
 
-Or provide specification files as following:
+Or provide specification files as follows:
 
 ``mgmt-gateway`` configuration:
 
@@ -109,7 +109,7 @@ the ``mgmt-gateway`` daemons are replicated to the corresponding keepalived inst
 Accessing services with mgmt-gateway
 ====================================
 
-Once the ``mgmt-gateway`` service is deployed direct access to the monitoring services will not be allowed anymore.
+Once the ``mgmt-gateway`` service is deployed, direct access to the monitoring services will not be allowed anymore.
 Applications including: Prometheus, Grafana and Alertmanager are now accessible through links
 from ``Administration > Services``.
 
@@ -194,8 +194,8 @@ The ``mgmt-gateway`` service internally makes use of nginx reverse proxy. The fo
 
     mgr/cephadm/container_image_nginx = 'quay.io/ceph/nginx:sclorg-nginx-126'
 
-Admins can specify the image to be used by changing the ``container_image_nginx`` cephadm module option. If there were already
-running daemon(s) you must redeploy the daemon(s) in order to have them actually use the new image.
+Admins can specify the image to be used by changing the ``container_image_nginx`` cephadm module option. If there are already
+running daemon(s), you must redeploy the daemon(s) in order to have them actually use the new image.
 
 For example:
 

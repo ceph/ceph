@@ -22,9 +22,7 @@ public:
   ReplicatedRecoveryBackend(crimson::osd::PG& pg,
 			    crimson::osd::ShardServices& shard_services,
 			    crimson::os::CollectionRef coll,
-			    PGBackend* backend)
-    : RecoveryBackend(pg, shard_services, coll, backend)
-  {}
+			    PGBackend* backend);
   interruptible_future<> handle_recovery_op(
     Ref<MOSDFastDispatchOp> m,
     crimson::net::ConnectionXcoreRef conn) final;
@@ -32,12 +30,7 @@ public:
   interruptible_future<> recover_object(
     const hobject_t& soid,
     eversion_t need) final;
-  interruptible_future<> recover_delete(
-    const hobject_t& soid,
-    eversion_t need) final;
-  interruptible_future<> push_delete(
-    const hobject_t& soid,
-    eversion_t need) final;
+
 protected:
   interruptible_future<> handle_pull(
     Ref<MOSDPGPull> m);
@@ -47,10 +40,6 @@ protected:
     Ref<MOSDPGPush> m);
   interruptible_future<> handle_push_reply(
     Ref<MOSDPGPushReply> m);
-  interruptible_future<> handle_recovery_delete(
-    Ref<MOSDPGRecoveryDelete> m);
-  interruptible_future<> handle_recovery_delete_reply(
-    Ref<MOSDPGRecoveryDeleteReply> m);
   interruptible_future<PushOp> prep_push_to_replica(
     const hobject_t& soid,
     eversion_t need,
@@ -60,7 +49,8 @@ protected:
     eversion_t need,
     pg_shard_t pg_shard,
     const crimson::osd::subsets_t& subsets,
-    const SnapSet push_info_ss);
+    const SnapSet push_info_ss,
+    RecoveryCloneLockManager&& clone_lock_manager = {});
   void prepare_pull(
     const crimson::osd::ObjectContextRef &head_obc,
     PullOp& pull_op,
@@ -69,7 +59,13 @@ protected:
     eversion_t need);
   ObjectRecoveryInfo set_recovery_info(
     const hobject_t& soid,
-    const crimson::osd::SnapSetContextRef ssc);
+    const crimson::osd::SnapSetContextRef ssc,
+    RecoveryCloneLockManager& clone_lock_manager);
+  /// Lock the first usable candidate from each preference list and
+  /// build final recovery subsets.  Lock policy stays in the backend.
+  subsets_t commit_clone_overlap_plan(
+    clone_overlap_plan_t plan,
+    RecoveryCloneLockManager& clone_lock_manager);
   std::vector<pg_shard_t> get_shards_to_push(
     const hobject_t& soid) const;
   interruptible_future<PushOp> build_push_op(
@@ -84,7 +80,8 @@ protected:
     PullOp* response);
   void recalc_subsets(
     ObjectRecoveryInfo& recovery_info,
-    crimson::osd::SnapSetContextRef ssc);
+    crimson::osd::SnapSetContextRef ssc,
+    RecoveryCloneLockManager& clone_lock_manager);
   std::pair<interval_set<uint64_t>, ceph::bufferlist> trim_pushed_data(
     const interval_set<uint64_t> &copy_subset,
     const interval_set<uint64_t> &intervals_received,
@@ -107,15 +104,6 @@ protected:
   interruptible_future<std::optional<PushOp>> _handle_push_reply(
     pg_shard_t peer,
     const PushReplyOp &op);
-  interruptible_future<> on_local_recover_persist(
-    const hobject_t& soid,
-    const ObjectRecoveryInfo& _recovery_info,
-    bool is_delete,
-    epoch_t epoch_to_freeze);
-  interruptible_future<> local_recover_delete(
-    const hobject_t& soid,
-    eversion_t need,
-    epoch_t epoch_frozen);
   seastar::future<> on_stop() final {
     return seastar::now();
   }

@@ -28,6 +28,34 @@ using ceph::bufferlist;
 using ceph::bufferptr;
 using ceph::Formatter;
 
+//bluestore_stats_t
+
+std::ostream& operator<<(std::ostream& out, const bluestore_stats_t& s)
+{
+  out << "(" << s.num_objects << " objects, "
+      << s.num_sharded_objects << " sharded objects, "
+      << s.num_extents << " extents, "
+      << s.num_blobs << " blobs, "
+      << s.num_spanning_blobs << " spanning blobs, "
+      << s.num_shared_blobs << " shared blobs, "
+      << s.warnings_found << " warnings found, "
+      << s.errors_found << " errors found"
+      << ")";
+  return out;
+}
+
+void bluestore_stats_t::dump(Formatter* f) const
+{
+  f->dump_unsigned("num_objects", num_objects);
+  f->dump_unsigned("num_sharded_objects", num_sharded_objects);
+  f->dump_unsigned("num_extents", num_extents);
+  f->dump_unsigned("num_blobs", num_blobs);
+  f->dump_unsigned("num_spanning_blobs", num_spanning_blobs);
+  f->dump_unsigned("num_shared_blobs", num_shared_blobs);
+  f->dump_unsigned("warnings_found", warnings_found);
+  f->dump_unsigned("errors_found", errors_found);
+}
+
 // bluestore_bdev_label_t
 
 void bluestore_bdev_label_t::encode(bufferlist& bl) const
@@ -1161,7 +1189,9 @@ uint32_t bluestore_blob_t::release_extents(
   uint32_t released_length = 0;
   constexpr auto EMPTY = bluestore_pextent_t::INVALID_OFFSET;
   if (offset == 0 && length == get_logical_length()) {
-    released_length = get_ondisk_length();
+    // There are 2 distinct cases for releasing whole blob:
+    // a) releasing compressed blob b) speedup for releasing whole regular blob
+    released_length = get_ondisk_capacity();
     released_disk->insert(released_disk->end(), extents.begin(), extents.end());
     extents.resize(1);
     extents[0].offset = EMPTY;

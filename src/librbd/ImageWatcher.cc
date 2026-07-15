@@ -1067,11 +1067,11 @@ bool ImageWatcher<I>::handle_payload(const RequestLockPayload &payload,
         return true;
       }
 
-      ldout(m_image_ctx.cct, 10) << this << " queuing release of exclusive lock"
-                                 << dendl;
+      // potentially queue release of exclusive lock
       r = m_image_ctx.get_exclusive_lock_policy()->lock_requested(
         payload.force);
     }
+    ldout(m_image_ctx.cct, 10) << this << " responding with r=" << r << dendl;
     encode(ResponseMessage(r), ack_ctx->out);
   }
   return true;

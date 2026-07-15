@@ -72,7 +72,11 @@ function(distutils_add_cython_module target name src)
   list(APPEND PY_CPPFLAGS -D'__Pyx_check_single_interpreter\(ARG\)=ARG\#\#0')
   set(PY_CC ${compiler_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1})
   set(PY_CXX ${compiler_launcher} ${CMAKE_CXX_COMPILER} ${cxx_compiler_arg1})
-  set(PY_LDSHARED ${link_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1} "-shared")
+  if(USING_MOLD_LINKER)
+    set(PY_LDSHARED ${link_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1} "-shared" "${MOLD_FUSE_LD_FLAG}")
+  else()
+    set(PY_LDSHARED ${link_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1} "-shared")
+  endif()
   string(REPLACE " " ";" PY_LDFLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
   list(APPEND PY_LDFLAGS -L${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
 
@@ -117,7 +121,12 @@ function(distutils_install_cython_module name)
   get_property(compiler_launcher GLOBAL PROPERTY RULE_LAUNCH_COMPILE)
   get_property(link_launcher GLOBAL PROPERTY RULE_LAUNCH_LINK)
   set(PY_CC "${compiler_launcher} ${CMAKE_C_COMPILER}")
-  set(PY_LDSHARED "${link_launcher} ${CMAKE_C_COMPILER} -shared")
+  if(USING_MOLD_LINKER)
+    set(PY_LDSHARED "${link_launcher} ${CMAKE_C_COMPILER} -shared ${MOLD_FUSE_LD_FLAG}")
+  else()
+    set(PY_LDSHARED "${link_launcher} ${CMAKE_C_COMPILER} -shared")
+  endif()
+  set(PY_LDFLAGS "${CMAKE_SHARED_LINKER_FLAGS} -L${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
   cmake_parse_arguments(DU "DISABLE_VTA" "" "" ${ARGN})
   if(DU_DISABLE_VTA AND HAS_VTA)
     set(CFLAG_DISABLE_VTA -fno-var-tracking-assignments)
@@ -136,25 +145,27 @@ function(distutils_install_cython_module name)
     set(ENV{CYTHON_BUILD_DIR} \"${CMAKE_CURRENT_BINARY_DIR}\")
     set(ENV{CEPH_LIBDIR} \"${CMAKE_LIBRARY_OUTPUT_DIRECTORY}\")
 
-    set(options --prefix=${CMAKE_INSTALL_PREFIX})
+    set(options
+      --prefix=${CMAKE_INSTALL_PREFIX}
+      --use-pep517
+      --no-build-isolation
+      --no-deps
+      --ignore-installed)
     if(DEFINED ENV{DESTDIR})
       if(EXISTS /etc/debian_version)
-        list(APPEND options --install-layout=deb)
+        list(APPEND env_vars \"DEB_PYTHON_INSTALL_LAYOUT=deb\")
       endif()
       list(APPEND options --root=\$ENV{DESTDIR})
     else()
       list(APPEND options --root=/)
     endif()
     execute_process(
-       COMMAND
-           ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py
-           build ${maybe_verbose} --build-base ${CYTHON_MODULE_DIR}
-           --build-platlib ${CYTHON_MODULE_DIR}/lib.3
-           build_ext --cython-c-in-temp --build-temp ${CMAKE_CURRENT_BINARY_DIR} --cython-include-dirs ${PROJECT_SOURCE_DIR}/src/pybind/rados
-           install \${options} --single-version-externally-managed --record /dev/null
-           egg_info --egg-base ${CMAKE_CURRENT_BINARY_DIR}
+       COMMAND env \${env_vars}
+           ${Python3_EXECUTABLE} -m pip install
+           \${options}
            ${maybe_verbose}
-       WORKING_DIRECTORY \"${CMAKE_CURRENT_SOURCE_DIR}\"
+           ${CMAKE_CURRENT_SOURCE_DIR}
+       WORKING_DIRECTORY \"${CMAKE_CURRENT_BINARY_DIR}\"
        RESULT_VARIABLE install_res)
     if(NOT \"\${install_res}\" STREQUAL 0)
       message(FATAL_ERROR \"Failed to build and install ${name} python module\")

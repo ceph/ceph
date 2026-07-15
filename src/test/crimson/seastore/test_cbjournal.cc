@@ -142,7 +142,7 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
   uint64_t block_size;
   WritePipeline pipeline;
 
-  cbjournal_test_t() = default;
+  cbjournal_test_t() : JournalTrimmer(true) {}
 
   /*
    * JournalTrimmer interfaces
@@ -249,7 +249,7 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
 	     auto &dirty_seq,
 	     auto &alloc_seq,
 	     auto last_modified) {
-      bool found = false;
+      [[maybe_unused]] bool found = false;
       for (auto &i : entries) {
 	paddr_t base = offsets.write_result.start_seq.offset; 
 	rbm_abs_addr addr = convert_paddr_to_abs_addr(base);
@@ -287,7 +287,7 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
     });
   }
   seastar::future<> close() {
-    return cbj->close().handle_error(crimson::ct_error::assert_all{});
+    return cbj->close().handle_error(crimson::ct_error::assert_all("unexpected error"));
   }
   auto get_records_available_size() {
     return cbj->get_cjs().get_records_available_size();
@@ -331,7 +331,7 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
   seastar::future<> set_up_fut() final {
     device = random_block_device::create_test_ephemeral(
      random_block_device::DEFAULT_TEST_CBJOURNAL_SIZE, 0);
-    cbj.reset(new CircularBoundedJournal(*this, device.get(), std::string()));
+    cbj.reset(new CircularBoundedJournal(0, *this, device.get(), std::string()));
     block_size = device->get_block_size();
     cbj->set_write_pipeline(&pipeline);
     return mkfs(
@@ -343,7 +343,7 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
 	  return replay();
 	});
       });
-    }).handle_error(crimson::ct_error::assert_all{});
+    }).handle_error(crimson::ct_error::assert_all("unexpected error"));
   }
 };
 
@@ -583,7 +583,7 @@ TEST_F(cbjournal_test_t, multiple_submit_at_end)
 	  }
 	});
       }).get();
-    auto old_written_to = get_written_to();
+    [[maybe_unused]] auto old_written_to = get_written_to();
     cbj->close().unsafe_get();
     cbj->replay(
       [](const auto &offsets,
@@ -594,6 +594,6 @@ TEST_F(cbjournal_test_t, multiple_submit_at_end)
       return Journal::replay_ertr::make_ready_future<
 	std::pair<bool, CachedExtentRef>>(true, nullptr);
     }).unsafe_get();
-    assert(get_written_to() == old_written_to);
+    ASSERT_EQ(get_written_to(), old_written_to);
   });
 }

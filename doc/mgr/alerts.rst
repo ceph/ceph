@@ -31,23 +31,23 @@ separating them with commas.
 
 .. prompt:: bash #
 
-   ceph config set mgr mgr/alerts/smtp_host *<smtp-server>*
-   ceph config set mgr mgr/alerts/smtp_destination *<email-address-to-send-to>*
-   ceph config set mgr mgr/alerts/smtp_sender *<from-email-address>*
+   ceph config set mgr mgr/alerts/smtp_host <smtp-server>
+   ceph config set mgr mgr/alerts/smtp_destination <email-address-to-send-to>
+   ceph config set mgr mgr/alerts/smtp_sender <from-email-address>
 
 The alerts module uses SSL and port 465 by default. These settings can be changed by running commands of the following forms:
 
 .. prompt:: bash #
 
    ceph config set mgr mgr/alerts/smtp_ssl false   # if not SSL
-   ceph config set mgr mgr/alerts/smtp_port *<port-number>*  # if not 465
+   ceph config set mgr mgr/alerts/smtp_port <port-number>  # if not 465
 
 To authenticate to the SMTP server, you must set the user and password:
 
 .. prompt:: bash #
 
-   ceph config set mgr mgr/alerts/smtp_user *<username>*
-   ceph config set mgr mgr/alerts/smtp_password *<password>*
+   ceph config set mgr mgr/alerts/smtp_user <username>
+   ceph config set mgr mgr/alerts/smtp_password <password>
 
 By default, the name in the ``From:`` line is simply ``Ceph``.  To change this
 default (that is, to identify which cluster this is), run a command of the
@@ -63,7 +63,7 @@ frequency of the alert module's cluster health checks by running a command of th
 
 .. prompt:: bash #
 
-   ceph config set mgr mgr/alerts/interval *<interval>*   # e.g., "5m" for 5 minutes
+   ceph config set mgr mgr/alerts/interval <interval>   # e.g., "5m" for 5 minutes
 
 Commands
 --------

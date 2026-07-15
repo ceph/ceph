@@ -202,7 +202,7 @@ void shard_extent_map_t::erase_after_ro_offset(uint64_t ro_offset) {
   }
 
   shard_extent_set_t ro_to_erase(sinfo->get_k_plus_m());
-  sinfo->ro_range_to_shard_extent_set(ro_offset, ro_end - ro_start,
+  sinfo->ro_range_to_shard_extent_set(ro_offset, ro_end - ro_offset,
                                       ro_to_erase);
   for (auto &&[shard, eset] : ro_to_erase) {
     if (extent_maps.contains(shard)) {

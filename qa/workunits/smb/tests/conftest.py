@@ -16,7 +16,7 @@ def read_smb_test_meta(conf_file=None):
     return SMBTestConf(json_data)
 
 
-@pytest.fixture
+@pytest.fixture(scope='module')
 def smb_cfg():
     conf = read_smb_test_meta()
     if not conf:

@@ -650,65 +650,155 @@ groups:
           type: "ceph_default"
   - name: "hardware"
     rules:
-      - alert: "HardwareStorageError"
+      - alert: "PowerSupplyDegraded"
         annotations:
-          description: "Some storage devices are in error. Check `ceph health detail`."
-          summary: "Storage devices error(s) detected on cluster {{ $labels.cluster }}"
-        expr: "ceph_health_detail{name=\"HARDWARE_STORAGE\"} > 0"
-        for: "30s"
+          description: "PSU {{ $labels.component }} is in a degraded state on {{ $labels.hostname }}."
+          summary: "Power supply {{ $labels.component }} degraded on {{ $labels.hostname }} on cluster {{ $labels.cluster }}"
+        expr: "ceph_hardware_health{category=\"power\"} == 1"
+        for: "1m"
         labels:
-          oid: "1.3.6.1.4.1.50495.1.2.1.13.1"
-          severity: "critical"
+          severity: "warning"
           type: "ceph_default"
-      - alert: "HardwareMemoryError"
+      - alert: "PowerSupplyFailed"
         annotations:
-          description: "DIMM error(s) detected. Check `ceph health detail`."
-          summary: "DIMM error(s) detected on cluster {{ $labels.cluster }}"
-        expr: "ceph_health_detail{name=\"HARDWARE_MEMORY\"} > 0"
-        for: "30s"
-        labels:
-          oid: "1.3.6.1.4.1.50495.1.2.1.13.2"
-          severity: "critical"
-          type: "ceph_default"
-      - alert: "HardwareProcessorError"
-        annotations:
-          description: "Processor error(s) detected. Check `ceph health detail`."
-          summary: "Processor error(s) detected on cluster {{ $labels.cluster }}"
-        expr: "ceph_health_detail{name=\"HARDWARE_PROCESSOR\"} > 0"
-        for: "30s"
-        labels:
-          oid: "1.3.6.1.4.1.50495.1.2.1.13.3"
-          severity: "critical"
-          type: "ceph_default"
-      - alert: "HardwareNetworkError"
-        annotations:
-          description: "Network error(s) detected. Check `ceph health detail`."
-          summary: "Network error(s) detected on cluster {{ $labels.cluster }}"
-        expr: "ceph_health_detail{name=\"HARDWARE_NETWORK\"} > 0"
-        for: "30s"
-        labels:
-          oid: "1.3.6.1.4.1.50495.1.2.1.13.4"
-          severity: "critical"
-          type: "ceph_default"
-      - alert: "HardwarePowerError"
-        annotations:
-          description: "Power supply error(s) detected. Check `ceph health detail`."
-          summary: "Power supply error(s) detected on cluster {{ $labels.cluster }}"
-        expr: "ceph_health_detail{name=\"HARDWARE_POWER\"} > 0"
-        for: "30s"
+          description: "PSU fault detected on {{ $labels.hostname }}. PSU {{ $labels.component }} has failed."
+          summary: "Power supply {{ $labels.component }} failed on {{ $labels.hostname }} on cluster {{ $labels.cluster }}"
+        expr: "ceph_hardware_health{category=\"power\"} == 2"
+        for: "1m"
         labels:
           oid: "1.3.6.1.4.1.50495.1.2.1.13.5"
           severity: "critical"
           type: "ceph_default"
-      - alert: "HardwareFanError"
+      - alert: "CoolingDegraded"
         annotations:
-          description: "Fan error(s) detected. Check `ceph health detail`."
-          summary: "Fan error(s) detected on cluster {{ $labels.cluster }}"
-        expr: "ceph_health_detail{name=\"HARDWARE_FANS\"} > 0"
-        for: "30s"
+          description: "Fan module {{ $labels.component }} is in a degraded state on {{ $labels.hostname }}."
+          summary: "Fan {{ $labels.component }} degraded on {{ $labels.hostname }} on cluster {{ $labels.cluster }}"
+        expr: "ceph_hardware_health{category=\"fans\"} == 1"
+        for: "1m"
+        labels:
+          severity: "warning"
+          type: "ceph_default"
+      - alert: "CoolingFailed"
+        annotations:
+          description: "A cooling fault has been detected on {{ $labels.hostname }}. A cooling FAN within the enclosure has failed."
+          summary: "Fan {{ $labels.component }} failed on {{ $labels.hostname }} on cluster {{ $labels.cluster }}"
+        expr: "ceph_hardware_health{category=\"fans\"} == 2"
+        for: "1m"
         labels:
           oid: "1.3.6.1.4.1.50495.1.2.1.13.6"
           severity: "critical"
+          type: "ceph_default"
+      - alert: "NVMeDriveDegraded"
+        annotations:
+          description: "Storage device {{ $labels.component }} is in a degraded state on {{ $labels.hostname }}."
+          summary: "Storage device {{ $labels.component }} degraded on {{ $labels.hostname }} on cluster {{ $labels.cluster }}"
+        expr: "ceph_hardware_health{category=\"storage\"} == 1"
+        for: "1m"
+        labels:
+          severity: "warning"
+          type: "ceph_default"
+      - alert: "NVMeDriveFailed"
+        annotations:
+          description: "A drive fault has been detected on {{ $labels.hostname }}. Storage device {{ $labels.component }} has failed."
+          summary: "Storage device {{ $labels.component }} failed on {{ $labels.hostname }} on cluster {{ $labels.cluster }}"
+        expr: "ceph_hardware_health{category=\"storage\"} == 2"
+        for: "1m"
+        labels:
+          oid: "1.3.6.1.4.1.50495.1.2.1.13.1"
+          severity: "critical"
+          type: "ceph_default"
+      - alert: "MemoryDegraded"
+        annotations:
+          description: "Memory module {{ $labels.component }} is in a degraded state on {{ $labels.hostname }}."
+          summary: "Memory module {{ $labels.component }} degraded on {{ $labels.hostname }} on cluster {{ $labels.cluster }}"
+        expr: "ceph_hardware_health{category=\"memory\"} == 1"
+        for: "1m"
+        labels:
+          severity: "warning"
+          type: "ceph_default"
+      - alert: "MemoryFailed"
+        annotations:
+          description: "A memory fault has been detected on {{ $labels.hostname }}. Memory module {{ $labels.component }} has failed."
+          summary: "Memory module {{ $labels.component }} failed on {{ $labels.hostname }} on cluster {{ $labels.cluster }}"
+        expr: "ceph_hardware_health{category=\"memory\"} == 2"
+        for: "1m"
+        labels:
+          oid: "1.3.6.1.4.1.50495.1.2.1.13.2"
+          severity: "critical"
+          type: "ceph_default"
+      - alert: "ProcessorDegraded"
+        annotations:
+          description: "Processor {{ $labels.component }} is in a degraded state on {{ $labels.hostname }}."
+          summary: "Processor {{ $labels.component }} degraded on {{ $labels.hostname }} on cluster {{ $labels.cluster }}"
+        expr: "ceph_hardware_health{category=\"processors\"} == 1"
+        for: "1m"
+        labels:
+          severity: "warning"
+          type: "ceph_default"
+      - alert: "ProcessorFailed"
+        annotations:
+          description: "A processor fault has been detected on {{ $labels.hostname }}. Processor {{ $labels.component }} has failed."
+          summary: "Processor {{ $labels.component }} failed on {{ $labels.hostname }} on cluster {{ $labels.cluster }}"
+        expr: "ceph_hardware_health{category=\"processors\"} == 2"
+        for: "1m"
+        labels:
+          oid: "1.3.6.1.4.1.50495.1.2.1.13.3"
+          severity: "critical"
+          type: "ceph_default"
+      - alert: "NetworkDegraded"
+        annotations:
+          description: "Network interface {{ $labels.component }} is in a degraded state on {{ $labels.hostname }}."
+          summary: "Network interface {{ $labels.component }} degraded on {{ $labels.hostname }} on cluster {{ $labels.cluster }}"
+        expr: "ceph_hardware_health{category=\"network\"} == 1"
+        for: "1m"
+        labels:
+          severity: "warning"
+          type: "ceph_default"
+      - alert: "NetworkFailed"
+        annotations:
+          description: "A network fault has been detected on {{ $labels.hostname }}. Network interface {{ $labels.component }} has failed."
+          summary: "Network interface {{ $labels.component }} failed on {{ $labels.hostname }} on cluster {{ $labels.cluster }}"
+        expr: "ceph_hardware_health{category=\"network\"} == 2"
+        for: "1m"
+        labels:
+          oid: "1.3.6.1.4.1.50495.1.2.1.13.4"
+          severity: "critical"
+          type: "ceph_default"
+      - alert: "MotherboardTemperatureHigh"
+        annotations:
+          description: "Prolonged high temperatures could lead to platform instability. Investigate cooling issues and hot-spots in the server room/hall."
+          summary: "Motherboard sensor {{ $labels.sensor_name }} above 60°C on {{ $labels.hostname }} on cluster {{ $labels.cluster }}"
+        expr: "ceph_hardware_temperature_celsius{sensor_name=~\".*MB_TEMP.*\"} > 60"
+        for: "1m"
+        labels:
+          severity: "warning"
+          type: "ceph_default"
+      - alert: "DIMMTemperatureHigh"
+        annotations:
+          description: "Prolonged high temperatures could lead to platform instability. Investigate cooling issues and hot-spots in the server room/hall."
+          summary: "DIMM sensor {{ $labels.sensor_name }} above 80°C on {{ $labels.hostname }} on cluster {{ $labels.cluster }}"
+        expr: "ceph_hardware_temperature_celsius{sensor_name=~\".*DIMM.*_TEMP\"} > 80"
+        for: "1m"
+        labels:
+          severity: "warning"
+          type: "ceph_default"
+      - alert: "ProcessorTemperatureHigh"
+        annotations:
+          description: "Prolonged high temperatures could lead to platform instability. Investigate cooling issues and hot-spots in the server room/hall."
+          summary: "CPU sensor {{ $labels.sensor_name }} above 80°C on {{ $labels.hostname }} on cluster {{ $labels.cluster }}"
+        expr: "ceph_hardware_temperature_celsius{sensor_name=~\".*CPU_TEMP\"} > 80"
+        for: "1m"
+        labels:
+          severity: "warning"
+          type: "ceph_default"
+      - alert: "NVMeTemperatureHigh"
+        annotations:
+          description: "An NVMe temperature sensor is indicating a potential cooling problem. NVMe may power down if the temperature continues to rise."
+          summary: "NVMe sensor {{ $labels.sensor_name }} above 70°C on {{ $labels.hostname }} on cluster {{ $labels.cluster }}"
+        expr: "ceph_hardware_temperature_celsius{sensor_name=~\"NVME.*_TEMP\"} > 70"
+        for: "1m"
+        labels:
+          severity: "warning"
           type: "ceph_default"
   - name: "PrometheusServer"
     rules:
@@ -804,8 +894,8 @@ groups:
       - alert: "NVMeoFMultipleNamespacesOfRBDImage"
         annotations:
           description: "Each NVMeoF namespace must have a unique RBD pool and image, across all different gateway groups."
-          summary: "RBD image {{ $labels.pool_name }}/{{ $labels.rbd_name }} cannot be reused for multiple NVMeoF namespace "
-        expr: "count by(pool_name, rbd_name) (count by(bdev_name, pool_name, rbd_name) (ceph_nvmeof_bdev_metadata and on (bdev_name) ceph_nvmeof_subsystem_namespace_metadata)) > 1"
+          summary: "RBD image {{ $labels.pool_name }}/{{ if $labels.rados_namespace_name }}{{ $labels.rados_namespace_name }}/{{ end }}{{ $labels.rbd_name }} cannot be reused for multiple NVMeoF namespaces"
+        expr: "count by(pool_name, rbd_name, rados_namespace_name) (count by(bdev_name, pool_name, rbd_name, rados_namespace_name) (ceph_nvmeof_bdev_metadata * on (bdev_name, instance, cluster) group_left(rados_namespace_name) ceph_nvmeof_subsystem_namespace_metadata)) > 1"
         for: "1m"
         labels:
           severity: "warning"
@@ -875,9 +965,9 @@ groups:
           type: "ceph_default"
       - alert: "NVMeoFTooManyNamespaces"
         annotations:
-          description: "NVMeoF gateway {{ $labels.gateway_host }} has reached or exceeded the supported maximum of 2048 namespaces. Current count: {{ $value }}."
+          description: "NVMeoF gateway {{ $labels.gateway_host }} has reached or exceeded the supported maximum of 4096 namespaces. Current count: {{ $value }}."
           summary: "The number of namespaces defined to the NVMeoF gateway reached or exceeded supported values on cluster {{ $labels.cluster }}"
-        expr: "sum by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_namespace_count,\"gateway_host\",\"$1\",\"instance\",\"(.*?)(?::.*)?\")) >= 2048.00"
+        expr: "sum by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_namespace_count,\"gateway_host\",\"$1\",\"instance\",\"(.*?)(?::.*)?\")) >= 4096.00"
         for: "1m"
         labels:
           severity: "warning"
@@ -971,5 +1061,27 @@ groups:
         expr: "ceil(changes(ceph_nvmeof_host_keepalive_timeout[24h:]) / 2) > 0"
         for: "1m"
         labels:
+          severity: "warning"
+          type: "ceph_default"
+  - name: "certmgr"
+    rules:
+      - alert: "CephCertificateError"
+        annotations:
+          description: "{{ $labels.message }}. Please check 'ceph health detail' for more information and take appropriate action to resolve the certificate issue."
+          summary: "Ceph certificate error detected on cluster {{ $labels.cluster }}"
+        expr: "ceph_health_detail{name=\"CEPHADM_CERT_ERROR\"} == 1"
+        for: "1m"
+        labels:
+          oid: "1.3.6.1.4.1.50495.1.2.1.15.1"
+          severity: "critical"
+          type: "ceph_default"
+      - alert: "CephCertificateWarning"
+        annotations:
+          description: "{{ $labels.message }}. Please check 'ceph health detail' for more information and take appropriate action to resolve the certificate issue."
+          summary: "Ceph certificate warning detected on cluster {{ $labels.cluster }}"
+        expr: "ceph_health_detail{name=\"CEPHADM_CERT_WARNING\"} == 1"
+        for: "1m"
+        labels:
+          oid: "1.3.6.1.4.1.50495.1.2.1.15.2"
           severity: "warning"
           type: "ceph_default"

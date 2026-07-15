@@ -15,20 +15,21 @@ describe('Host Page', () => {
   });
 
   describe('should have all host details', () => {
-    it('should have hostname'),
+    (it('should have hostname'),
       () => {
         cy.get('[data-testid="hostname"]').should('not.be.empty');
-      };
-    it('should have IP address'),
+      });
+    (it('should have IP address'),
       () => {
         cy.get('[data-testid="ip-address"]').should('not.be.empty');
-      };
+      });
   });
 
   // rgw is needed for testing the force maintenance
   it('should create rgw services', () => {
     services.navigateTo('create');
     services.addService('rgw', false, 4);
+    services.navigateTo('index');
     services.checkExist('rgw.foo', true);
   });
 

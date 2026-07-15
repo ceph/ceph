@@ -2,6 +2,7 @@
 
 #include <boost/asio/io_context.hpp>
 #include <iostream>
+#include <random>
 #include <vector>
 
 #include "common/Formatter.h"
@@ -53,6 +54,8 @@ using TruncateOp = ceph::io_exerciser::TruncateOp;
 using SingleFailedWriteOp = ceph::io_exerciser::SingleFailedWriteOp;
 using DoubleFailedWriteOp = ceph::io_exerciser::DoubleFailedWriteOp;
 using TripleFailedWriteOp = ceph::io_exerciser::TripleFailedWriteOp;
+
+using GenerationType = ceph::io_exerciser::data_generation::GenerationType;
 
 namespace {
 struct Size {};
@@ -136,8 +139,8 @@ constexpr std::string_view usage[] = {
     "                            --objectsize <min,max> --threads <t>",
     "ceph_test_rados_io_sequence --blocksize <b> --pool <p> --object <oid>",
     "                            --objectsize <min,max> --threads <t>",
-    "\tCustomize the test, if a pool is specified then it defines the",
-    "\tReplicated/EC configuration",
+    "\t Customize the test, if a pool is specified then it defines the",
+    "\t Replicated/EC configuration",
     "",
     "ceph_test_rados_io_sequence --listsequence",
     "\t Display list of supported I/O sequences",
@@ -163,9 +166,12 @@ constexpr std::string_view usage[] = {
     "\t\t remove",
     "\t\t swap",
     "\t\t copy",
-    "\t\t read|write|failedwrite <off> <len>",
-    "\t\t read2|write2|failedwrite2 <off> <len> <off> <len>",
-    "\t\t read3|write3|failedwrite3 <off> <len> <off> <len> <off> <len>",
+    "\t\t read <off> <len> [balanced]",
+    "\t\t write|failedwrite <off> <len>",
+    "\t\t read2 <off> <len> <off> <len> [balanced]",
+    "\t\t write2|failedwrite2 <off> <len> <off> <len>",
+    "\t\t read3 <off> <len> <off> <len> <off> <len> [balanced]",
+    "\t\t write3|failedwrite3 <off> <len> <off> <len> <off> <len>",
     "\t\t append",
     "\t\t truncate",
     "\t\t injecterror <io_type> <shard> <type> <good_count> <fail_count>",
@@ -175,8 +181,8 @@ constexpr std::string_view usage[] = {
 
 po::options_description get_options_description() {
   po::options_description desc("ceph_test_rados_io options");
-  desc.add_options()("help,h", "show help message")("listsequence,l",
-                                                    "show list of sequences")(
+  desc.add_options()("help,h", "show help message")(
+      "listsequence,l", "show list of sequences")(
       "dryrun,d", "test sequence, do not issue any I/O")(
       "verbose", "more verbose output during test")(
       "sequence,s", po::value<SequencePair>(), "test specified sequence range")(
@@ -218,9 +224,34 @@ po::options_description get_options_description() {
       "Disables EC optimizations. Enabled by default.")(
       "allow_unstable_pool_configs",
       "Permits pool configs that are known to be unstable. This option "
-      " may be removed. at a later date. Disabled by default if ec optimized");
+      " may be removed. at a later date. Disabled by default if ec optimized")(
+      "dont_delete_objects",
+      "Stops the IO exerciser from deleting the object it was running the test "
+      "against once the test finishes. Does not affect interactive mode")(
+      "balanced_read_percentage", po::value<int>(),
+      "The percentage of read operations that should be performed with "
+      "balanced reads enabled. 100 by default. Doesn't affect interactive mode.")(
+      "data_generation_type", po::value<std::string>(),
+      "Data generation type to use for write IOs. Default is HeaderedSeededRandom");
 
   return desc;
+}
+
+GenerationType parse_data_generation_type(po::variables_map& vm) {
+  if (!vm.contains("data_generation_type")) {
+    // Default value
+    return GenerationType::HeaderedSeededRandom;
+  }
+
+  std::string data_generation_type = vm["data_generation_type"].as<std::string>();
+  if (data_generation_type == "HeaderedSeededRandom") {
+    return GenerationType::HeaderedSeededRandom;
+  } else if (data_generation_type == "SeededRandom") {
+    return GenerationType::SeededRandom;
+  } else {
+    throw std::invalid_argument(
+      fmt::format("Unrecognised data generation type: {}", data_generation_type));
+  }
 }
 
 int parse_io_seq_options(po::variables_map& vm, int argc, char** argv) {
@@ -298,7 +329,7 @@ ceph::io_sequence::tester::SelectSeqRange::select() {
 }
 
 ceph::io_sequence::tester::SelectErasureTechnique::SelectErasureTechnique(
-    ceph::util::random_number_generator<int>& rng,
+    std::mt19937_64& rng,
     po::variables_map& vm,
     std::string_view plugin,
     bool first_use)
@@ -336,7 +367,7 @@ ceph::io_sequence::tester::SelectErasureTechnique::generate_selections() {
 }
 
 ceph::io_sequence::tester::lrc::SelectMappingAndLayers::SelectMappingAndLayers(
-    ceph::util::random_number_generator<int>& rng,
+    std::mt19937_64& rng,
     po::variables_map& vm,
     bool first_use)
     : rng_seed(rng()),
@@ -363,7 +394,7 @@ ceph::io_sequence::tester::lrc::SelectMappingAndLayers::select() {
 }
 
 ceph::io_sequence::tester::SelectErasureKM::SelectErasureKM(
-    ceph::util::random_number_generator<int>& rng,
+    std::mt19937_64& rng,
     po::variables_map& vm,
     std::string_view plugin,
     const std::optional<std::string>& technique,
@@ -413,7 +444,7 @@ ceph::io_sequence::tester::SelectErasureKM::generate_selections() {
 }
 
 ceph::io_sequence::tester::jerasure::SelectErasureW::SelectErasureW(
-    ceph::util::random_number_generator<int>& rng,
+    std::mt19937_64& rng,
     po::variables_map& vm,
     std::string_view plugin,
     const std::optional<std::string_view>& technique,
@@ -454,7 +485,7 @@ ceph::io_sequence::tester::jerasure::SelectErasureW::generate_selections() {
 }
 
 ceph::io_sequence::tester::shec::SelectErasureC::SelectErasureC(
-    ceph::util::random_number_generator<int>& rng,
+    std::mt19937_64& rng,
     po::variables_map& vm,
     std::string_view plugin,
     const std::optional<std::pair<int, int>>& km,
@@ -481,7 +512,7 @@ ceph::io_sequence::tester::shec::SelectErasureC::generate_selections() {
 }
 
 ceph::io_sequence::tester::jerasure::SelectErasurePacketSize::
-    SelectErasurePacketSize(ceph::util::random_number_generator<int>& rng,
+    SelectErasurePacketSize(std::mt19937_64& rng,
                             po::variables_map& vm,
                             std::string_view plugin,
                             const std::optional<std::string_view>& technique,
@@ -529,7 +560,7 @@ const std::vector<uint64_t> ceph::io_sequence::tester::jerasure::
 }
 
 ceph::io_sequence::tester::SelectErasureChunkSize::SelectErasureChunkSize(
-    ceph::util::random_number_generator<int>& rng,
+    std::mt19937_64& rng,
     po::variables_map& vm,
     ErasureCodeInterfaceRef ec_impl,
     bool first_use)
@@ -546,22 +577,30 @@ ceph::io_sequence::tester::SelectErasureChunkSize::generate_selections() {
 
   std::vector<uint64_t> choices = {};
 
+  auto generate_random_int = [this](uint64_t range) -> uint64_t {
+    uint64_t rand_value = rng();
+    return rand_value % range;;
+  };
+
   if (4096 % minimum_chunksize == 0) {
     choices.push_back(4096);
   } else {
-    choices.push_back(minimum_chunksize * (rng(4) + 1));
+    uint64_t r = generate_random_int(4); // [0–3]
+    choices.push_back(minimum_chunksize * (r + 1));
   }
 
   if ((64 * 1024) % minimum_chunksize == 0) {
     choices.push_back(64 * 1024);
   } else {
-    choices.push_back(minimum_chunksize * (rng(64) + 1));
+    uint64_t r = generate_random_int(64); // [0–63]
+    choices.push_back(minimum_chunksize * (r + 1));
   }
 
   if ((256 * 1024) % minimum_chunksize == 0) {
     choices.push_back(256 * 1024);
   } else {
-    choices.push_back(minimum_chunksize * (rng(256) + 1));
+    uint64_t r = generate_random_int(256); // [0–255]
+    choices.push_back(minimum_chunksize * (r + 1));
   }
 
   return choices;
@@ -569,7 +608,7 @@ ceph::io_sequence::tester::SelectErasureChunkSize::generate_selections() {
 
 ceph::io_sequence::tester::SelectErasureProfile::SelectErasureProfile(
     boost::intrusive_ptr<CephContext> cct,
-    ceph::util::random_number_generator<int>& rng,
+    std::mt19937_64& rng,
     po::variables_map& vm,
     librados::Rados& rados,
     bool dry_run,
@@ -792,7 +831,7 @@ ceph::io_sequence::tester::SelectErasureProfile::selectExistingProfile(
 
 ceph::io_sequence::tester::SelectErasurePool::SelectErasurePool(
     boost::intrusive_ptr<CephContext> cct,
-    ceph::util::random_number_generator<int>& rng,
+    std::mt19937_64& rng,
     po::variables_map& vm,
     librados::Rados& rados,
     bool dry_run,
@@ -987,16 +1026,22 @@ void ceph::io_sequence::tester::SelectErasurePool::configureServices(
                                         std::nullopt};
       rc = send_mon_command(allow_ec_optimisations_request, rados,
                             "OSDPoolSetRequest", {}, &outbl, formatter.get());
+      if (rc != 0) {
+        throw std::invalid_argument("Failed to enable EC optimisations, "
+                                    "the specified plugin type may not "
+                                    "support them");
+      }
+
       ceph_assert(rc == 0);
     }
 
     if (allow_pool_ec_overwrites) {
       ceph::messaging::osd::OSDPoolSetRequest
-          allow_ec_optimisations_request{pool_name,
+          allow_ec_overwrites_request{pool_name,
                                         "allow_ec_overwrites",
                                         "true",
                                         std::nullopt};
-      rc = send_mon_command(allow_ec_optimisations_request, rados,
+      rc = send_mon_command(allow_ec_overwrites_request, rados,
                             "OSDPoolSetRequest", {}, &outbl, formatter.get());
       ceph_assert(rc == 0);
     }
@@ -1021,14 +1066,17 @@ ceph::io_sequence::tester::TestObject::TestObject(
     const std::string primary_oid, const std::string secondary_oid, librados::Rados& rados,
     boost::asio::io_context& asio, SelectBlockSize& sbs, SelectErasurePool& spo,
     SelectObjectSize& sos, SelectNumThreads& snt, SelectSeqRange& ssr,
-    ceph::util::random_number_generator<int>& rng, ceph::mutex& lock,
+    std::mt19937_64& rng, ceph::mutex& lock,
     ceph::condition_variable& cond, bool dryrun, bool verbose,
-    std::optional<int> seqseed, bool testrecovery, bool checkconsistency)
-    : rng(rng), verbose(verbose), seqseed(seqseed),
-      testrecovery(testrecovery), checkconsistency(checkconsistency) {
+    std::optional<int> seqseed, bool testrecovery, bool checkconsistency, bool delete_objects,
+    int balanced_read_percentage, GenerationType data_generation_type)
+    : rng(rng), verbose(verbose), seqseed(seqseed), testrecovery(testrecovery), checkconsistency(checkconsistency),
+      delete_objects(delete_objects), balanced_read_percentage(balanced_read_percentage),
+      data_generation_type(data_generation_type) {
   if (dryrun) {
+    int model_seed = rng();
     exerciser_model = std::make_unique<ceph::io_exerciser::ObjectModel>(
-        primary_oid, secondary_oid, sbs.select(), rng());
+        primary_oid, secondary_oid, sbs.select(), model_seed, delete_objects);
   } else {
     const std::string pool = spo.select();
     if (!dryrun) {
@@ -1046,11 +1094,12 @@ ceph::io_sequence::tester::TestObject::TestObject(
 
     bufferlist outbl;
     auto formatter = std::make_unique<JSONFormatter>(false);
-
+    int model_seed = rng();
     exerciser_model = std::make_unique<ceph::io_exerciser::RadosIo>(
-        rados, asio, pool, primary_oid, secondary_oid, sbs.select(), rng(),
+        rados, asio, pool, primary_oid, secondary_oid, sbs.select(), model_seed,
         threads, lock, cond, spo.is_replicated_pool(),
-        spo.get_allow_pool_ec_optimizations());
+        spo.get_allow_pool_ec_optimizations(), balanced_read_percentage,
+        data_generation_type, seq, delete_objects);
     dout(0) << "= " << primary_oid << " pool=" << pool << " threads=" << threads
             << " blocksize=" << exerciser_model->get_block_size() << " ="
             << dendl;
@@ -1130,7 +1179,7 @@ ceph::io_sequence::tester::TestRunner::TestRunner(
     librados::Rados& rados)
     : rados(rados),
       seed(vm.contains("seed") ? vm["seed"].as<int>() : time(nullptr)),
-      rng(ceph::util::random_number_generator<int>(seed)),
+      rng(seed),
       sbs{rng, vm, "blocksize", true},
       sos{rng, vm, "objectsize", true},
       spo{cct,
@@ -1151,6 +1200,9 @@ ceph::io_sequence::tester::TestRunner::TestRunner(
 
   verbose = vm.contains("verbose");
   dryrun = vm.contains("dryrun");
+  delete_objects = !vm.contains("dont_delete_objects");
+
+  data_generation_type = parse_data_generation_type(vm);
 
   seqseed = std::nullopt;
   if (vm.contains("seqseed")) {
@@ -1167,6 +1219,21 @@ ceph::io_sequence::tester::TestRunner::TestRunner(
   allow_pool_balancer = vm.contains("allow_pool_balancer");
   allow_pool_deep_scrubbing = vm.contains("allow_pool_deep_scrubbing");
   allow_pool_scrubbing = vm.contains("allow_pool_scrubbing");
+
+  if (vm.contains("balanced_read_percentage")) {
+    balanced_read_percentage = vm["balanced_read_percentage"].as<int>();
+    if (balanced_read_percentage > 100) {
+      balanced_read_percentage = 100;
+    } else if (balanced_read_percentage < 0) {
+      balanced_read_percentage = 0;
+    }
+    if (interactive) {
+      dout(0) << "Balanced read percentage cannot be specified in interactive mode. "
+              << "Use the \"-b\" or \"balanced\" flag to make a balanced read operation in the interactive terminal." << dendl;
+    }
+  } else {
+    balanced_read_percentage = 100;
+  }
 
   if (testrecovery && (num_object_pairs > 1)) {
     throw std::invalid_argument("testrecovery option not allowed if parallel is"
@@ -1202,7 +1269,7 @@ void ceph::io_sequence::tester::TestRunner::list_sequence(bool testrecovery) {
   // List sequences
   std::pair<int, int> obj_size_range = sos.select();
   ceph::io_exerciser::Sequence s = ceph::io_exerciser::Sequence::SEQUENCE_BEGIN;
-  std::unique_ptr<ceph::io_exerciser::IoSequence> seq;
+  std::shared_ptr<ceph::io_exerciser::IoSequence> seq;
   std::optional<std::pair<int, int>> km;
   std::optional<std::pair<std::string_view, std::string_view>> mappinglayers;
   if (testrecovery) {
@@ -1308,16 +1375,19 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
   std::unique_ptr<ceph::io_exerciser::Model> model;
 
   if (dryrun) {
+    int model_seed = rng();
     model = std::make_unique<ceph::io_exerciser::ObjectModel>(
-        primary_object_name, secondary_object_name, sbs.select(), rng());
+        primary_object_name, secondary_object_name, sbs.select(), model_seed);
   } else {
     const std::string pool = spo.select();
-
+    dout(0) << "Pool name: " << pool << dendl;
+    int model_seed = rng();
     model = std::make_unique<ceph::io_exerciser::RadosIo>(
-        rados, asio, pool, primary_object_name, secondary_object_name, sbs.select(), rng(),
+        rados, asio, pool, primary_object_name, secondary_object_name, sbs.select(), model_seed,
         1,  // 1 thread
         lock, cond, spo.is_replicated_pool(),
-        spo.get_allow_pool_ec_optimizations());
+        spo.get_allow_pool_ec_optimizations(), balanced_read_percentage,
+        data_generation_type);
   }
 
   while (!done) {
@@ -1339,13 +1409,23 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
     } else if (op == "read") {
       uint64_t offset = get_numeric_token();
       uint64_t length = get_numeric_token();
-      ioop = ceph::io_exerciser::SingleReadOp::generate(offset, length);
+      std::optional<std::string> token = get_optional_token();
+      if (token.has_value() && (*token == "-b" || *token == "balanced")) {
+        ioop = ceph::io_exerciser::SingleReadOp::generate(offset, length, true);
+      } else {
+        ioop = ceph::io_exerciser::SingleReadOp::generate(offset, length, false);
+      }
     } else if (op == "read2") {
       uint64_t offset1 = get_numeric_token();
       uint64_t length1 = get_numeric_token();
       uint64_t offset2 = get_numeric_token();
       uint64_t length2 = get_numeric_token();
-      ioop = DoubleReadOp::generate(offset1, length1, offset2, length2);
+      std::optional<std::string> token = get_optional_token();
+      if (token.has_value() && (*token == "-b" || *token == "balanced")) {
+        ioop = DoubleReadOp::generate(offset1, length1, offset2, length2, true);
+      } else {
+        ioop = DoubleReadOp::generate(offset1, length1, offset2, length2, false);
+      }
     } else if (op == "read3") {
       uint64_t offset1 = get_numeric_token();
       uint64_t length1 = get_numeric_token();
@@ -1353,8 +1433,14 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
       uint64_t length2 = get_numeric_token();
       uint64_t offset3 = get_numeric_token();
       uint64_t length3 = get_numeric_token();
-      ioop = TripleReadOp::generate(offset1, length1, offset2, length2, offset3,
-                                    length3);
+      std::optional<std::string> token = get_optional_token();
+      if (token.has_value() && (*token == "-b" || *token == "balanced")) {
+        ioop = TripleReadOp::generate(offset1, length1, offset2, length2, offset3,
+                                    length3, true);
+      } else {
+        ioop = TripleReadOp::generate(offset1, length1, offset2, length2, offset3,
+                                    length3, false);
+      }
     } else if (op == "write") {
       uint64_t offset = get_numeric_token();
       uint64_t length = get_numeric_token();
@@ -1473,7 +1559,8 @@ bool ceph::io_sequence::tester::TestRunner::run_automated_test() {
       test_objects.push_back(
           std::make_shared<ceph::io_sequence::tester::TestObject>(
               primary_name, secondary_name, rados, asio, sbs, spo, sos, snt, ssr, rng, lock, cond,
-              dryrun, verbose, seqseed, testrecovery, checkconsistency));
+              dryrun, verbose, seqseed, testrecovery, checkconsistency, delete_objects,
+              balanced_read_percentage, data_generation_type));
     }
     catch (const std::runtime_error &e) {
       std::cerr << "Error: " << e.what() << std::endl;

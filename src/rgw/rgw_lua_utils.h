@@ -14,6 +14,7 @@
 #include "include/common_fwd.h"
 #include "rgw_perf_counters.h"
 #include <common/ceph_time.h>
+#include "rgw_lua_types.h"
 
 // a helper type traits structs for detecting std::variant
 template<class>
@@ -83,14 +84,10 @@ class lua_state_guard {
                   const DoutPrefixProvider* _dpp);
   ~lua_state_guard();
   lua_State* get() { return state; }
-  void reset_start_time() { start_time = ceph::real_clock::now(); }
 
   std::size_t get_max_memory() const { return max_memory; }
   std::size_t get_mem_in_use() const { return mem_in_use; }
-  std::chrono::milliseconds get_max_runtime() const { return max_runtime; }
-  bool set_max_memory(std::size_t _max_memory);
   void set_mem_in_use(std::size_t _mem_in_use);
-  void set_max_runtime(std::uint64_t _max_runtime);
 };
 
 int dostring(lua_State* L, const char* str);
@@ -534,6 +531,8 @@ struct StringMapMetaTable : public EmptyMetaTable {
     return ONE_RETURNVAL;
   }
 };
+
+int lua_execute(lua_State* L, const DoutPrefixProvider* dpp, const rgw::lua::LuaCodeType& code);
 
 } // namespace rgw::lua
 

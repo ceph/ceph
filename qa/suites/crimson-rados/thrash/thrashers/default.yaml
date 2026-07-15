@@ -5,6 +5,11 @@ overrides:
     - objects unfound and apparently lost
     conf:
       osd:
+        # osd_target_transaction_size added to 
+        # avoid https://tracker.ceph.com/issues/73791.
+        # we should return to the default value of 
+        # 30 eventually (https://tracker.ceph.com/issues/74507).
+        osd target transaction size: 5
         osd debug reject backfill probability: .3
         osd scrub min interval: 60
         osd scrub max interval: 120

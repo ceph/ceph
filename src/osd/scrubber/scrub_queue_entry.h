@@ -10,6 +10,10 @@
 #include "osd/osd_types.h"
 #include "osd/scrubber_common.h"
 
+namespace ceph {
+class Formatter;
+}  // namespace ceph
+
 namespace Scrub {
 
 /**
@@ -84,6 +88,8 @@ struct SchedEntry {
   /// either 'none', or the reason for the latest failure/delay (for
   /// logging/reporting purposes)
   delay_cause_t last_issue{delay_cause_t::none};
+
+  void dump(ceph::Formatter& f) const;
 };
 
 
@@ -101,8 +107,8 @@ static inline std::weak_ordering cmp_ripe_entries(
       cmp != 0) {
     return cmp;
   }
-  if (r.level < l.level) {
-    return std::weak_ordering::less;
+  if (auto cmp = r.level <=> l.level; cmp != 0) {
+    return cmp;
   }
   if (auto cmp = std::weak_order(
 	  double(l.schedule.not_before), double(r.schedule.not_before));
@@ -130,8 +136,8 @@ static inline std::weak_ordering cmp_future_entries(
       cmp != 0) {
     return cmp;
   }
-  if (r.level < l.level) {
-    return std::weak_ordering::less;
+  if (auto cmp = r.level <=> l.level; cmp != 0) {
+    return cmp;
   }
   return std::weak_ordering::greater;
 }

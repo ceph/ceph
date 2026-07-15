@@ -8,57 +8,64 @@
 
 Main Scrubber interfaces:
 
-┌──────────────────────────────────────────────┬────┐
-│                                              │    │
-│                                              │    │
-│       PG                                     │    │
-│                                              │    │
-│                                              │    │
-├──────────────────────────────────────────────┘    │
-│                                                   │
-│       PrimaryLogPG                                │
-└────────────────────────────────┬──────────────────┘
-                                 │
-                                 │
-                                 │ owns & uses
-                                 │
-                                 │
-                                 │
-┌────────────────────────────────▼──────────────────┐
-│               <<ScrubPgIF>>                       │
-└───────────────────────────▲───────────────────────┘
-                            │
-                            │
-                            │implements
-                            │
-                            │
-                            │
-┌───────────────────────────┴───────────────┬───────┐
-│                                           │       │
-│         PgScrubber                        │       │
-│                                           │       │
-│                                           │       ├───────┐
-├───────────────────────────────────────────┘       │       │
-│                                                   │       │
-│         PrimaryLogScrub                           │       │
-└─────┬───────────────────┬─────────────────────────┘       │
-      │                   │                         implements
-      │    owns & uses    │                                 │
-      │                   │       ┌─────────────────────────▼──────┐
-      │                   │       │    <<ScrubMachineListener>>    │
-      │                   │       └─────────▲──────────────────────┘
-      │                   │                 │
-      │                   │                 │
-      │                   ▼                 │
-      │    ┌────────────────────────────────┴───────┐
-      │    │                                        │
-      │    │        ScrubMachine                    │
-      │    │                                        │
-      │    └────────────────────────────────────────┘
+┌──────────────────────────────────────────────────┬────┐
+│                                                  │    │
+│       PG                                         │    │
+│       (implements <<PgScrubBeListener>>)         │    │
+│                                                  │    │
+├──────────────────────────────────────────────────┘    │
+│                                                       │
+│       PrimaryLogPG                                    │
+└──────────────────────────┬────────────────────────────┘
+                           │
+                           │ owns & uses
+                           │
+┌──────────────────────────▼────────────────────────────┐
+│                   <<ScrubPgIF>>                       │
+└──────────────────────────▲────────────────────────────┘
+                           │
+                           │ implements
+                           │
+┌──────────────────────────┴──────────────┬──────┐        ┌──────────────────────────────────┐
+│                                         │      │        │                                  │
+│       PgScrubber                        │      ├───────►│    <<ScrubMachineListener>>      │
+│                                         │      │        │                                  │
+│                                         │      │        └──────────────────────────────▲───┘
+│                                         │      │implements                             │
+│                                         │      │        ┌──────────────────────────┐   │
+│                                         │      ├───────►│    <<ScrubBeListener>>   │   │
+│                                         │      │        │                          │   │
+├─────────────────────────────────────────┘      │        └─────────────────▲────────┘   │
+│                                                │                          │            │
+│       PrimaryLogScrub                          │                     uses │       uses │
+│                                                │                          │            │
+└─────┬──────────────────┬──────────────┬────────┘                          │            │
+      │                  │              │                                   │            │
+      │   owns & uses    │  owns & uses │  owns & uses                      │            │
+      │                  │              │                                   │            │
+      │                  │        ┌─────▼──────────────────────────┐        │            │
+      │                  │        │                                ├────────┘            │
+      │                  │        │    ScrubBackend                │                     │
+      │                  │        │    (also uses                  │                     │
+      │                  │        │     <<PgScrubBeListener>>)     │                     │
+      │                  │        │                                │                     │
+      │                  │        └────────────────────────────────┘                     │
+      │                  │                                                               │
+      │    ┌─────────────▼─────────────────────────────┐                                 │
+      │    │             <<ScrubFsmIf>>                │                                 │
+      │    └────────────────────▲──────────────────────┘                                 │
+      │                         │                                                        │
+      │                         │ implements                                             │
+      │                         │                                                        │
+      │    ┌────────────────────┴──────────────────────┐                                 │
+      │    │                                           ├─────────────────────────────────┘
+      │    │        ScrubMachine                       │
+      │    │                                           │
+      │    └───────────────────────────────────────────┘
       │
   ┌───▼─────────────────────────────────┐
   │                                     │
-  │       ScrubStore                    │
+  │       Scrub::Store                  │
   │                                     │
   └─────────────────────────────────────┘
 
@@ -340,6 +347,9 @@ class PgScrubber : public ScrubPgIF,
       scrub_level_t scrub_level,
       scrub_type_t scrub_type) final;
 
+  void on_operator_abort_scrub(
+      ceph::Formatter* f) final;
+
   /**
    * let the scrubber know that a recovery operation has completed.
    * This might trigger an 'after repair' scrub.
@@ -516,6 +526,17 @@ class PgScrubber : public ScrubPgIF,
 
   void on_mid_scrub_abort(Scrub::delay_cause_t issue) final;
 
+  /**
+   *  an auxiliary used by on_mid_scrub_abort()
+   *  If the target has operator-initiated urgency (either 'must_repair' -
+   *  operator-requested repair or 'operator_requested' - operator-requested
+   *  scrub) - downgrade it to regular periodic.
+   *  \retval true: the urgency was downgraded
+   */
+  bool downgrade_on_operator_abort(
+    Scrub::SchedTarget& targ,
+    utime_t scrub_clock_now);
+
   ScrubMachineListener::MsgAndEpoch prep_replica_map_msg(
     Scrub::PreemptionNoted was_preempted) final;
 
@@ -575,8 +596,6 @@ class PgScrubber : public ScrubPgIF,
   std::string_view registration_state() const;
 
   virtual void _scrub_clear_state() {}
-
-  utime_t m_scrub_reg_stamp;		///< stamp we registered for
 
   /// the sub-object that manages this PG's scheduling parameters.
   /// An Optional instead of a regular member, as we wish to directly
@@ -742,6 +761,11 @@ class PgScrubber : public ScrubPgIF,
    * the derivative-specific scrub-finishing touches:
    */
   virtual void _scrub_finish() {}
+
+  /**
+   *  update the PG's state and stats
+   */
+  void emit_scrub_result();
 
   // common code used by build_primary_map_chunk() and
   // build_replica_map_chunk():

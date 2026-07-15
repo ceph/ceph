@@ -6,7 +6,7 @@ Encryption
 Logical volumes can be encrypted using ``dmcrypt`` by specifying the
 ``--dmcrypt`` flag when creating OSDs. When using LVM, logical volumes can be
 encrypted in different ways. ``ceph-volume`` does not offer as many options as
-LVM does, but it encrypts logical volumes in a way that  is consistent and
+LVM does, but it encrypts logical volumes in a way that is consistent and
 robust.
 
 In this case, ``ceph-volume lvm`` follows this constraint:
@@ -21,7 +21,7 @@ implement but not widely available in all Linux distributions supported by
 Ceph. 
 
 .. note:: Version 1 of LUKS is referred to in this documentation as "LUKS".
-   Version 2 is of LUKS is referred to in this documentation as "LUKS2".
+   Version 2 of LUKS is referred to in this documentation as "LUKS2".
 
 
 LUKS on LVM
@@ -62,8 +62,8 @@ compatibility and prevent ceph-disk from breaking, ceph-volume uses the same
 naming convention *although it does not make sense for the new encryption
 workflow*.
 
-After the common steps of setting up the OSD during the "prepare stage" (
-with :term:`bluestore`), the logical volume is left ready
+After the common steps of setting up the OSD during the "prepare stage"
+(with :term:`BlueStore`), the logical volume is left ready
 to be activated, regardless of the state of the device (encrypted or
 decrypted).
 

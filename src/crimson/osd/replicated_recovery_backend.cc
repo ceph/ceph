@@ -21,6 +21,14 @@ using std::string;
 
 namespace crimson::osd {
 
+ReplicatedRecoveryBackend::ReplicatedRecoveryBackend(
+  crimson::osd::PG& pg,
+  crimson::osd::ShardServices& shard_services,
+  crimson::os::CollectionRef coll,
+  PGBackend* backend)
+    : RecoveryBackend(pg, shard_services, coll, pg.get_store_index(), backend)
+{}
+
 RecoveryBackend::interruptible_future<>
 ReplicatedRecoveryBackend::recover_object(
   const hobject_t& soid,
@@ -31,34 +39,45 @@ ReplicatedRecoveryBackend::recover_object(
   // always add_recovering(soid) before recover_object(soid)
   assert(is_recovering(soid));
   // start tracking the recovery of soid
-  return maybe_pull_missing_obj(
-    soid, need
-  ).then_interruptible([FNAME, this, soid, need] {
+  return maybe_pull_missing_obj(soid, need).then_interruptible([FNAME, this, soid, need] {
     DEBUGDPP("loading obc: {}", pg, soid);
-    return pg.obc_loader.with_obc<RWState::RWREAD>(
-      soid,
+    return pg.obc_loader.with_obc<RWState::RWREAD>(soid,
       [FNAME, this, soid, need](auto head, auto obc) {
-	if (!obc->obs.exists) {
-	  // XXX: this recovery must be triggered by backfills and the corresponding
-	  //      object must have been deleted by some client request after the object
-	  //      is enqueued for push but before the lock is acquired by the recovery.
-	  //
-	  //      Abort the recovery in this case, a "recover_delete" must have been
-	  //      added for this object by the client request that deleted it.
-	  return interruptor::now();
-	}
-	DEBUGDPP("loaded obc: {}", pg, obc->obs.oi.soid);
-	auto& recovery_waiter = get_recovering(soid);
-	recovery_waiter.obc = obc;
-	return maybe_push_shards(head, soid, need);
-      }, false).handle_error_interruptible(
-	crimson::osd::PG::load_obc_ertr::all_same_way(
-	  [FNAME, this, soid](auto& code) {
-	    // TODO: may need eio handling?
-	    ERRORDPP("saw error code {}, ignoring object {}",
-		     pg, code, soid);
-	    return seastar::now();
-	  }));
+	    if (!obc->obs.exists) {
+	      // XXX: this recovery must be triggered by backfills and the corresponding
+	      //      object must have been deleted by some client request after the object
+	      //      is enqueued for push but before the lock is acquired by the recovery.
+	      //
+	      //      Abort the recovery in this case. A MOSDPGRecoveryDelete must have been
+	      //      sent, for this object to peers, by the client request that deleted it.
+	      DEBUGDPP("obj={}, v={} not found on primary, aborting backfill", pg, soid, need);
+      
+	      // if client delete request sent MOSDPGRecoveryDelete, we need to wait 
+	      // for MOSDPGRecoveryDeleteReply from peers. 
+	      auto& recovery_waiter = get_recovering(soid);
+	      if (recovery_waiter.has_pushes()) {
+	    	DEBUGDPP("obj={}, v={} waiting for pushes", pg, soid, need);
+	        return interruptor::make_interruptible(
+	          recovery_waiter.wait_for_all_pushes()
+	        ).then_interruptible([this, soid] {
+	          object_stat_sum_t stat_diff;
+	          stat_diff.num_objects_recovered = 1;
+	          pg.get_recovery_handler()->on_global_recover(soid, stat_diff, true);
+	        });
+	      }
+	      return interruptor::now();
+	    }
+      DEBUGDPP("loaded obc: {}", pg, obc->obs.oi.soid);
+      auto& recovery_waiter = get_recovering(soid);
+      recovery_waiter.obc = obc;
+      recovery_waiter.obc->wait_recovery_read();
+      return maybe_push_shards(head, soid, need);
+    }, false).handle_error_interruptible(
+      crimson::osd::PG::load_obc_ertr::all_same_way([FNAME, this, soid](auto& code) {
+      // TODO: may need eio handling?
+      ERRORDPP("saw error code {}, ignoring object {}", pg, code, soid);
+      return seastar::now();
+    }));
   });
 }
 
@@ -111,6 +130,16 @@ ReplicatedRecoveryBackend::maybe_push_shards(
     }
     return seastar::make_ready_future<>();
   }).handle_exception_interruptible([this, soid](auto e) {
+    auto &recovery = get_recovering(soid);
+    if (recovery.obc) {
+      recovery.obc->drop_recovery_read();
+    }
+    for (auto& kv : recovery.pushing) {
+      kv.second.clone_lock_manager.release_locks();
+    }
+    if (recovery.pull_info) {
+      recovery.pull_info->clone_lock_manager.release_locks();
+    }
     recovering.erase(soid);
     return seastar::make_exception_future<>(e);
   });
@@ -164,13 +193,13 @@ ReplicatedRecoveryBackend::maybe_pull_missing_obj(
            });
        });
   }).handle_error_interruptible(
-    crimson::ct_error::assert_all(fmt::format(
-      "{} {} error with {} need {} ", pg, FNAME, soid, need).c_str())
+    crimson::ct_error::assert_all("{} {} error with {} need {}",
+                                      std::cref(pg), FNAME, soid, need)
   );
 }
 
 RecoveryBackend::interruptible_future<>
-ReplicatedRecoveryBackend::push_delete(
+RecoveryBackend::push_delete(
   const hobject_t& soid,
   eversion_t need)
 {
@@ -208,7 +237,7 @@ ReplicatedRecoveryBackend::push_delete(
 }
 
 RecoveryBackend::interruptible_future<>
-ReplicatedRecoveryBackend::handle_recovery_delete(
+RecoveryBackend::handle_recovery_delete(
   Ref<MOSDPGRecoveryDelete> m)
 {
   LOG_PREFIX(ReplicatedRecoveryBackend::handle_recovery_delete);
@@ -230,7 +259,7 @@ ReplicatedRecoveryBackend::handle_recovery_delete(
 }
 
 RecoveryBackend::interruptible_future<>
-ReplicatedRecoveryBackend::on_local_recover_persist(
+RecoveryBackend::on_local_recover_persist(
   const hobject_t& soid,
   const ObjectRecoveryInfo& _recovery_info,
   bool is_delete,
@@ -245,7 +274,9 @@ ReplicatedRecoveryBackend::on_local_recover_persist(
       soid, _recovery_info, is_delete, t
     ).then_interruptible([FNAME, this, &t] {
       DEBUGDPP("submitting transaction", pg);
-      return shard_services.get_store().do_transaction(coll, std::move(t));
+      return crimson::os::with_store_do_transaction(
+        shard_services.get_store(pg.get_store_index()),
+        coll, std::move(t));
     }).then_interruptible(
       [this, epoch_frozen, last_complete = pg.get_info().last_complete] {
       pg.get_recovery_handler()->_committed_pushed_object(epoch_frozen, last_complete);
@@ -255,7 +286,7 @@ ReplicatedRecoveryBackend::on_local_recover_persist(
 }
 
 RecoveryBackend::interruptible_future<>
-ReplicatedRecoveryBackend::local_recover_delete(
+RecoveryBackend::local_recover_delete(
   const hobject_t& soid,
   eversion_t need,
   epoch_t epoch_to_freeze)
@@ -272,8 +303,10 @@ ReplicatedRecoveryBackend::local_recover_delete(
         }).then_interruptible(
 	  [FNAME, this, &txn]() mutable {
 	  DEBUGDPP("submitting transaction", pg);
-	  return shard_services.get_store().do_transaction(coll,
-							   std::move(txn));
+	  return crimson::os::with_store_do_transaction(
+      shard_services.get_store(pg.get_store_index()),
+      coll,
+      std::move(txn));
 	});
       });
     }
@@ -302,7 +335,7 @@ ReplicatedRecoveryBackend::local_recover_delete(
 }
 
 RecoveryBackend::interruptible_future<>
-ReplicatedRecoveryBackend::recover_delete(
+RecoveryBackend::recover_delete(
   const hobject_t &soid, eversion_t need)
 {
   LOG_PREFIX(ReplicatedRecoveryBackend::recover_delete);
@@ -319,7 +352,7 @@ ReplicatedRecoveryBackend::recover_delete(
 	for (const auto& shard : pg.get_acting_recovery_backfill()) {
 	  if (shard == pg.get_pg_whoami())
 	    continue;
-	  if (pg.get_shard_missing(shard)->is_missing(soid)) {
+	  if (pg.get_shard_missing(shard).is_missing(soid)) {
 	    DEBUGDPP(
 	      "soid {} needs to be deleted from replica {}",
 	      pg, soid, shard);
@@ -359,6 +392,7 @@ ReplicatedRecoveryBackend::prep_push_to_replica(
   auto& obc = recovery_waiter.obc;
   SnapSet push_info_ss; // only populated if soid is_snap()
   crimson::osd::subsets_t subsets;
+  RecoveryCloneLockManager clone_lock_manager;
   const auto& missing =
     pg.get_shard_missing().find(pg_shard)->second;
 
@@ -386,30 +420,35 @@ ReplicatedRecoveryBackend::prep_push_to_replica(
     push_info_ss = ssc->snapset;
     DEBUGDPP("snapset is {}", pg, ssc->snapset);
 
-    subsets = crimson::osd::calc_clone_subsets(
-      ssc->snapset, soid,
-      missing,
-      // get_peer_info() asserts `peer_info` existence.
-      pg.get_peering_state().get_peer_info(
-        pg_shard).last_backfill);
+    subsets = commit_clone_overlap_plan(
+      crimson::osd::calc_clone_subsets(
+        ssc->snapset, soid,
+        missing,
+        // get_peer_info() asserts `peer_info` existence.
+        pg.get_peering_state().get_peer_info(
+          pg_shard).last_backfill),
+      clone_lock_manager);
   } else if (soid.snap == CEPH_NOSNAP) {
     // pushing head or unversioned object.
     // base this on partially on replica's clones?
     auto ssc = obc->ssc;
     ceph_assert(ssc);
     DEBUGDPP("snapset is {}", pg, ssc->snapset);
-    subsets = crimson::osd::calc_head_subsets(
-      obc->obs.oi.size,
-      ssc->snapset, soid,
-      missing,
-      pg.get_peering_state().get_peer_info(
-        pg_shard).last_backfill);
+    subsets = commit_clone_overlap_plan(
+      crimson::osd::calc_head_subsets(
+        obc->obs.oi.size,
+        ssc->snapset, soid,
+        missing,
+        pg.get_peering_state().get_peer_info(
+          pg_shard).last_backfill),
+      clone_lock_manager);
   }
   return prep_push(soid,
                    need,
                    pg_shard,
                    subsets,
-                   push_info_ss);
+                   push_info_ss,
+                   std::move(clone_lock_manager));
 }
 
 RecoveryBackend::interruptible_future<PushOp>
@@ -418,7 +457,8 @@ ReplicatedRecoveryBackend::prep_push(
   eversion_t need,
   pg_shard_t pg_shard,
   const crimson::osd::subsets_t& subsets,
-  const SnapSet push_info_ss)
+  const SnapSet push_info_ss,
+  RecoveryCloneLockManager&& clone_lock_manager)
 {
   LOG_PREFIX(ReplicatedRecoveryBackend::prep_push);
   DEBUGDPP("{}, {}", pg, soid, need);
@@ -432,6 +472,7 @@ ReplicatedRecoveryBackend::prep_push(
   assert(missing_iter != pmissing_iter->second.get_items().end());
 
   push_info.obc = obc;
+  push_info.clone_lock_manager = std::move(clone_lock_manager);
   push_info.recovery_info.size = obc->obs.oi.size;
   push_info.recovery_info.copy_subset = subsets.data_subset;
   push_info.recovery_info.clone_subset = subsets.clone_subsets;
@@ -476,7 +517,7 @@ void ReplicatedRecoveryBackend::prepare_pull(
   pg_shard_t fromshard = *(iter);
 
   pull_op.recovery_info =
-    set_recovery_info(soid, head_obc->ssc);
+    set_recovery_info(soid, head_obc->ssc, pull_info.clone_lock_manager);
   pull_op.soid = soid;
   pull_op.recovery_progress.data_complete = false;
   pull_op.recovery_progress.omap_complete =
@@ -493,7 +534,8 @@ void ReplicatedRecoveryBackend::prepare_pull(
 
 ObjectRecoveryInfo ReplicatedRecoveryBackend::set_recovery_info(
   const hobject_t& soid,
-  const crimson::osd::SnapSetContextRef ssc)
+  const crimson::osd::SnapSetContextRef ssc,
+  RecoveryCloneLockManager& clone_lock_manager)
 {
   LOG_PREFIX(ReplicatedRecoveryBackend::set_recovery_info);
   pg_missing_tracker_t local_missing = pg.get_local_missing();
@@ -503,8 +545,10 @@ ObjectRecoveryInfo ReplicatedRecoveryBackend::set_recovery_info(
     assert(!local_missing.is_missing(soid.get_head()));
     assert(ssc);
     recovery_info.ss = ssc->snapset;
-    auto subsets = crimson::osd::calc_clone_subsets(
-      ssc->snapset, soid, local_missing, pg.get_info().last_backfill);
+    auto subsets = commit_clone_overlap_plan(
+      crimson::osd::calc_clone_subsets(
+        ssc->snapset, soid, local_missing, pg.get_info().last_backfill),
+      clone_lock_manager);
     crimson::osd::set_subsets(subsets, recovery_info);
     DEBUGDPP("pulling {}", pg, recovery_info);
     ceph_assert(ssc->snapset.clone_size.count(soid.snap));
@@ -601,7 +645,7 @@ ReplicatedRecoveryBackend::read_metadata_for_push_op(
     PushOp* push_op)
 {
   LOG_PREFIX(ReplicatedRecoveryBackend::read_metadata_for_push_op);
-  DEBUGDPP("{}", pg, oid);
+  DEBUGDPP("{} progress.first {}", pg, oid, progress.first);
   if (!progress.first) {
     return seastar::make_ready_future<eversion_t>(ver);
   }
@@ -615,7 +659,8 @@ ReplicatedRecoveryBackend::read_metadata_for_push_op(
 	  return seastar::make_ready_future<bufferlist>();
 	})),
       interruptor::make_interruptible(
-        store->get_attrs(coll, ghobject_t(oid), CEPH_OSD_OP_FLAG_FADVISE_DONTNEED)
+        crimson::os::with_store<&crimson::os::FuturizedStore::Shard::get_attrs>(
+          store, coll, ghobject_t(oid), CEPH_OSD_OP_FLAG_FADVISE_DONTNEED)
       ).handle_error_interruptible<false>(
 	crimson::os::FuturizedStore::Shard::get_attrs_ertr::all_same_way(
 	  [FNAME, this, oid] (const std::error_code& e) {
@@ -635,7 +680,7 @@ ReplicatedRecoveryBackend::read_metadata_for_push_op(
     }
     DEBUGDPP("{}", pg, push_op->attrset[OI_ATTR]);
     object_info_t oi;
-    oi.decode_no_oid(push_op->attrset[OI_ATTR]);
+    oi.decode(push_op->attrset[OI_ATTR]);
     new_progress.first = false;
     return oi.version;
   });
@@ -679,10 +724,11 @@ ReplicatedRecoveryBackend::read_object_for_push_op(
     // 3. read the truncated extents
     // TODO: check if the returned extents are pruned
     return interruptor::make_interruptible(
-      store->readv(
+      crimson::os::with_store<&crimson::os::FuturizedStore::Shard::readv>(
+        store,
         coll,
         ghobject_t{oid},
-        push_op->data_included,
+        std::ref(push_op->data_included),
         CEPH_OSD_OP_FLAG_FADVISE_DONTNEED));
   }).safe_then_interruptible([push_op, range_end=copy_subset.range_end()](auto &&bl) {
     push_op->data.claim_append(std::move(bl));
@@ -699,11 +745,6 @@ ReplicatedRecoveryBackend::read_object_for_push_op(
     DEBUGDPP("read exception", pg);
     return seastar::make_exception_future<uint64_t>(e);
   }));
-}
-
-static std::optional<std::string> nullopt_if_empty(const std::string& s)
-{
-  return s.empty() ? std::nullopt : std::make_optional(s);
 }
 
 static bool is_too_many_entries_per_chunk(const PushOp* push_op)
@@ -750,8 +791,9 @@ ReplicatedRecoveryBackend::read_omap_for_push_op(
   };
 
   co_await interruptor::make_interruptible(
-    shard_services.get_store().omap_iterate(
-      coll, ghobject_t{oid}, start_from, callback
+    crimson::os::with_store<&crimson::os::FuturizedStore::Shard::omap_iterate>(
+      shard_services.get_store(pg.get_store_index()),
+      coll, ghobject_t{oid}, start_from, callback, 0, nullptr
     ).safe_then([&new_progress](auto ret) {
       if (ret == ObjectStore::omap_iter_ret_t::NEXT) {
         new_progress.omap_complete = true;
@@ -759,8 +801,9 @@ ReplicatedRecoveryBackend::read_omap_for_push_op(
         new_progress.omap_complete = false;
       }
     }).handle_error(
-      crimson::os::FuturizedStore::Shard::read_errorator::assert_all(fmt::format(
-        "{} ReplicatedRecoveryBackend::read_omap_for_push_op error with {}", pg, oid).c_str())
+      crimson::os::FuturizedStore::Shard::read_errorator::assert_all(
+        "{} ReplicatedRecoveryBackend::read_omap_for_push_op error with {}",
+        std::cref(pg), oid)
     )
   );
 }
@@ -866,7 +909,8 @@ ReplicatedRecoveryBackend::_handle_pull_response(
     if (pull_info.recovery_info.soid.snap &&
 	pull_info.recovery_info.soid.snap < CEPH_NOSNAP) {
       recalc_subsets(pull_info.recovery_info,
-		     ssc);
+		     ssc,
+		     pull_info.clone_lock_manager);
     }
 
     pull_info.obc = recovery_waiter.obc =
@@ -905,6 +949,7 @@ ReplicatedRecoveryBackend::_handle_pull_response(
 
   if (complete) {
     pull_info.stat.num_objects_recovered++;
+    pull_info.clone_lock_manager.release_locks();
     auto manager = pg.obc_loader.get_obc_manager(
       recovery_waiter.obc);
     manager.lock_excl_sync(); /* cannot already be locked */
@@ -914,14 +959,18 @@ ReplicatedRecoveryBackend::_handle_pull_response(
     );
     DEBUGDPP("submitting transaction, complete", pg);
     co_await interruptor::make_interruptible(
-      shard_services.get_store().do_transaction(coll, std::move(t)));
+      crimson::os::with_store_do_transaction(
+        shard_services.get_store(pg.get_store_index()),
+        coll, std::move(t)));
   } else {
     response->soid = push_op.soid;
     response->recovery_info = pull_info.recovery_info;
     response->recovery_progress = pull_info.recovery_progress;
     DEBUGDPP("submitting transaction, incomplete", pg);
     co_await interruptor::make_interruptible(
-      shard_services.get_store().do_transaction(coll, std::move(t)));
+      crimson::os::with_store_do_transaction(
+        shard_services.get_store(pg.get_store_index()),
+        coll, std::move(t)));
   }
 
   co_return complete;
@@ -929,13 +978,65 @@ ReplicatedRecoveryBackend::_handle_pull_response(
 
 void ReplicatedRecoveryBackend::recalc_subsets(
     ObjectRecoveryInfo& recovery_info,
-    crimson::osd::SnapSetContextRef ssc)
+    crimson::osd::SnapSetContextRef ssc,
+    RecoveryCloneLockManager& clone_lock_manager)
 {
   assert(ssc);
-  auto subsets = crimson::osd::calc_clone_subsets(
-    ssc->snapset, recovery_info.soid, pg.get_local_missing(),
-    pg.get_info().last_backfill);
+  clone_lock_manager.release_locks();
+  auto subsets = commit_clone_overlap_plan(
+    crimson::osd::calc_clone_subsets(
+      ssc->snapset, recovery_info.soid, pg.get_local_missing(),
+      pg.get_info().last_backfill),
+    clone_lock_manager);
   crimson::osd::set_subsets(subsets, recovery_info);
+}
+
+subsets_t ReplicatedRecoveryBackend::commit_clone_overlap_plan(
+  clone_overlap_plan_t plan,
+  RecoveryCloneLockManager& clone_lock_manager)
+{
+  LOG_PREFIX(ReplicatedRecoveryBackend::commit_clone_overlap_plan);
+  subsets_t subsets;
+  subsets.data_subset = std::move(plan.data_subset);
+  interval_set<uint64_t> cloning;
+
+  auto try_commit = [&](std::vector<clone_candidate_t>& candidates) {
+    for (auto& c : candidates) {
+      // missing was already filtered in calc_*; re-check local missing
+      // in case the set changed, then try the read lock.
+      if (pg.get_local_missing().is_missing(c.clone)) {
+        DEBUGDPP("skip candidate {}, now missing", pg, c.clone);
+        continue;
+      }
+      if (!clone_lock_manager.try_lock_for_read(c.clone, pg.obc_registry)) {
+        DEBUGDPP("skip candidate {}, cannot lock for read", pg, c.clone);
+        continue;
+      }
+      DEBUGDPP("locked candidate {} overlap {}", pg, c.clone, c.overlap);
+      subsets.clone_subsets[c.clone] = c.overlap;
+      cloning.union_of(c.overlap);
+      return;
+    }
+  };
+
+  try_commit(plan.older_candidates);
+  try_commit(plan.newer_candidates);
+
+#ifndef UNIT_TESTS_BUILT
+  if (cloning.num_intervals() >
+      crimson::common::local_conf().get_val<uint64_t>(
+        "osd_recover_clone_overlap_limit")) {
+    DEBUGDPP("skipping clone, too many holes", pg);
+    clone_lock_manager.release_locks();
+    subsets.clone_subsets.clear();
+    cloning.clear();
+  }
+#endif
+
+  subsets.data_subset.subtract(cloning);
+  DEBUGDPP("data_subset {} clone_subsets {}",
+           pg, subsets.data_subset, subsets.clone_subsets);
+  return subsets;
 }
 
 RecoveryBackend::interruptible_future<>
@@ -1039,14 +1140,17 @@ ReplicatedRecoveryBackend::handle_push(
       false, t);
 
     co_await interruptor::make_interruptible(
-      shard_services.get_store().do_transaction(coll, std::move(t)));
+      crimson::os::with_store_do_transaction(
+        shard_services.get_store(pg.get_store_index()),
+        coll, std::move(t)));
     replica_push_targets.erase(ptiter);
 
     pg.get_recovery_handler()->_committed_pushed_object(
       epoch_frozen, pg.get_info().last_complete);
   } else {
     co_await interruptor::make_interruptible(
-      shard_services.get_store().do_transaction(coll, std::move(t)));
+      crimson::os::with_store_do_transaction(
+        shard_services.get_store(pg.get_store_index()), coll, std::move(t)));
   }
 
   auto reply = crimson::make_message<MOSDPGPushReply>();
@@ -1089,6 +1193,7 @@ ReplicatedRecoveryBackend::_handle_push_reply(
       }).handle_exception_interruptible(
         [recovering_iter, &push_info, peer] (auto e) {
         push_info.recovery_progress.error = true;
+        push_info.clone_lock_manager.release_locks();
         recovering_iter->second->set_push_failed(peer, e);
         return seastar::make_ready_future<std::optional<PushOp>>();
       });
@@ -1098,6 +1203,7 @@ ReplicatedRecoveryBackend::_handle_push_reply(
                                                  soid,
                                                  push_info.recovery_info);
     }
+    push_info.clone_lock_manager.release_locks();
     recovering_iter->second->set_pushed(peer);
     return seastar::make_ready_future<std::optional<PushOp>>();
   }
@@ -1195,9 +1301,16 @@ ReplicatedRecoveryBackend::prep_push_target(
   // create a new object
   if (!complete || !recovery_info.object_exist) {
     t->remove(coll->get_cid(), target_oid);
-    t->touch(coll->get_cid(), target_oid);
+    if (complete) {
+      t->touch(coll->get_cid(), target_oid);
+    } else {
+      t->touch_temp(
+        coll->get_cid(),
+        target_oid,
+        ghobject_t(recovery_info.soid));
+    }
     object_info_t oi;
-    oi.decode_no_oid(attrs.at(OI_ATTR));
+    oi.decode(attrs.at(OI_ATTR));
     t->set_alloc_hint(coll->get_cid(), target_oid,
                       oi.expected_object_size,
                       oi.expected_write_size,
@@ -1222,7 +1335,8 @@ ReplicatedRecoveryBackend::prep_push_target(
 
   // clone overlap content in local object if using a new object
   auto st = co_await interruptor::make_interruptible(
-    store->stat(coll, ghobject_t(recovery_info.soid)));
+    crimson::os::with_store<&crimson::os::FuturizedStore::Shard::stat>(
+      store, coll, ghobject_t(recovery_info.soid), 0));
 
   // TODO: pg num bytes counting
   uint64_t local_size = std::min(recovery_info.size, (uint64_t)st.st_size);
@@ -1320,7 +1434,7 @@ void ReplicatedRecoveryBackend::submit_push_complete(
 }
 
 RecoveryBackend::interruptible_future<>
-ReplicatedRecoveryBackend::handle_recovery_delete_reply(
+RecoveryBackend::handle_recovery_delete_reply(
   Ref<MOSDPGRecoveryDeleteReply> m)
 {
   auto& p = m->objects.front();
@@ -1356,15 +1470,9 @@ ReplicatedRecoveryBackend::handle_recovery_op(
   case MSG_OSD_PG_PUSH_REPLY:
     return handle_push_reply(
 	boost::static_pointer_cast<MOSDPGPushReply>(m));
-  case MSG_OSD_PG_RECOVERY_DELETE:
-    return handle_recovery_delete(
-	boost::static_pointer_cast<MOSDPGRecoveryDelete>(m));
-  case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
-    return handle_recovery_delete_reply(
-	boost::static_pointer_cast<MOSDPGRecoveryDeleteReply>(m));
   default:
-    // delegate backfill messages to parent class
-    return handle_backfill_op(std::move(m), conn);
+    // delegate to parent class for handling backend-agnostic recovery ops.
+    return RecoveryBackend::handle_recovery_op(std::move(m), conn);
   }
 }
 
@@ -1373,7 +1481,8 @@ ReplicatedRecoveryBackend::get_md_from_push_op(PushOp &push_op)
 {
   LOG_PREFIX(ReplicatedRecoveryBackend::get_md_from_push_op);
   object_info_t oi;
-  oi.decode_no_oid(push_op.attrset.at(OI_ATTR), push_op.soid);
+  oi.decode(push_op.attrset.at(OI_ATTR));
+  assert(oi.soid == push_op.soid);
 
   crimson::osd::SnapSetContextRef ssc;
   if (auto ss_attr_iter = push_op.attrset.find(SS_ATTR);

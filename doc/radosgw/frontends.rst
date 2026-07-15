@@ -34,7 +34,7 @@ Options
 :Description: Sets the listening address in the form ``address[:port]``, where
               the address is an IPv4 address string in dotted decimal form, or
               an IPv6 address in hexadecimal notation surrounded by square
-              brackets. Specifying a IPv6 endpoint would listen to IPv6 only. The
+              brackets. Specifying an IPv6 endpoint would listen to IPv6 only. The
               optional port defaults to 80 for ``endpoint`` and 443 for
               ``ssl_endpoint``. Can be specified multiple times as in
               ``endpoint=[::1] endpoint=192.168.0.100:8000``.
@@ -98,11 +98,24 @@ Options
 :Type: String
 :Default: ``no_sslv2:no_sslv3:no_tlsv1:no_tlsv1_1``
 
-``ssl_ciphers``
+``ssl_ciphers`` and ``ssl_ciphersuites``
 
 :Description: Optional list of one or more cipher strings separated by colons.
               The format of the string is described in OpenSSL's ciphers(1)
-              manual.
+              manual. The ``ssl_ciphers`` option only applies to connections
+              using TLS v1.2 and below, while ``ssl_ciphersuites`` only applies
+              to TLS v1.3.
+
+:Type: String
+:Default: None
+
+``tls_groups``
+
+:Description: Optional list of one or more `TLS Group`_ strings separated by colons.
+              The pseudo group name ``DEFAULT`` can be used to select the OpenSSL
+              built-in default list of groups. Other valid group names will depend on
+              OpenSSL version. As of OpenSSL 3.5, names can be listed with commands
+              ``openssl list -tls-groups`` and ``openssl list -all-tls-groups``.
 
 :Type: String
 :Default: None
@@ -172,3 +185,5 @@ Some frontend options are generic and supported by all frontends:
 :Type: String
 :Default: None
 
+
+.. _TLS Group: https://openssl-library.org/post/2022-10-21-tls-groups-configuration/

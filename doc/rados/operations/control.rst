@@ -83,7 +83,7 @@ command:
 
    ceph pg dump [--format {format}]
 
-Here the valid formats are ``plain`` (default), ``json`` ``json-pretty``,
+Here the valid formats are ``plain`` (default), ``json``, ``json-pretty``,
 ``xml``, and ``xml-pretty``.  When implementing monitoring tools and other
 tools, it is best to use the ``json`` format.  JSON parsing is more
 deterministic than the ``plain`` format (which is more human readable), and the
@@ -354,7 +354,7 @@ command:
 
 .. note:: Any assigned override reweight value will conflict with the balancer.
    This means that when the balancer is in use, all override reweight values
-   must be be reset to ``1.0000`` in order to avoid unbalanced usage and
+   must be reset to ``1.0000`` in order to avoid unbalanced usage and
    full OSDs. Most clusters with no clients older than the Luminous release
    should use the pg-upmap balancer instead of legacy reweighting.
 
@@ -397,7 +397,7 @@ OSDs being evacuated or slowly brought into service.
 
 Operators of deployments that utilize Nautilus or newer (or later revisions of
 Luminous and Mimic) and that have no pre-Luminous clients might likely instead
-want to enable the `balancer`` module for ``ceph-mgr``.
+want to enable the ``balancer`` module for ``ceph-mgr``.
 
 The blocklist can be modified by adding or removing an IP address or a CIDR
 range. If an address is blocklisted, it will be unable to connect to any OSD.

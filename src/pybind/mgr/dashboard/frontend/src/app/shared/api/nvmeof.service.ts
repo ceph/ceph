@@ -2,9 +2,26 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 
 import _ from 'lodash';
-import { Observable, of as observableOf } from 'rxjs';
-import { catchError, mapTo } from 'rxjs/operators';
+import { Observable, forkJoin, of as observableOf } from 'rxjs';
+import { catchError, map, mapTo, mergeMap, switchMap } from 'rxjs/operators';
 import { CephServiceSpec } from '../models/service.interface';
+import {
+  AUTHENTICATION,
+  ListenerItem,
+  NvmeofSubsystem,
+  NvmeofSubsystemNamespace
+} from '../models/nvmeof';
+import { HostService } from './host.service';
+import { OrchestratorService } from './orchestrator.service';
+import { HostStatus } from '../enum/host-status.enum';
+import { Host } from '../models/host.interface';
+import { OrchestratorStatus } from '../models/orchestrator.interface';
+
+export type SetupState = {
+  hasGatewayGroups: boolean;
+  hasSubsystems: boolean;
+  hasNamespaces: boolean;
+};
 
 export const DEFAULT_MAX_NAMESPACE_PER_SUBSYSTEM = 512;
 
@@ -27,9 +44,11 @@ export type ListenerRequest = NvmeofRequest & {
 };
 
 export type NamespaceCreateRequest = NvmeofRequest & {
-  rbd_image_name: string;
+  rbd_image_name?: string;
   rbd_pool: string;
   rbd_image_size?: number;
+  no_auto_visible?: boolean;
+  block_size?: number;
   create_image: boolean;
 };
 
@@ -39,6 +58,22 @@ export type NamespaceUpdateRequest = NvmeofRequest & {
 
 export type InitiatorRequest = NvmeofRequest & {
   host_nqn: string;
+  dhchap_key?: string;
+};
+
+export type SubsystemInitiatorRequest = NvmeofRequest & {
+  hosts: Array<{ dhchap_key: string; host_nqn: string }>;
+  allow_all: boolean;
+};
+
+export type NamespaceInitiatorRequest = InitiatorRequest & {
+  subsystem_nqn: string;
+};
+
+export type AuthKeyUpdate = {
+  authType: AUTHENTICATION;
+  subsystemKey: string | null;
+  hostKeyList: Array<{ host_nqn: string; dhchap_key: string | null }>;
 };
 
 const API_PATH = 'api/nvmeof';
@@ -48,7 +83,90 @@ const UI_API_PATH = 'ui-api/nvmeof';
   providedIn: 'root'
 })
 export class NvmeofService {
-  constructor(private http: HttpClient) {}
+  constructor(
+    private http: HttpClient,
+    private hostService: HostService,
+    private orchService: OrchestratorService
+  ) {}
+
+  getAvailableHosts(params: any = {}): Observable<Host[]> {
+    return forkJoin({
+      groups: this.listGatewayGroups(),
+      hosts: this.orchService.status().pipe(
+        mergeMap((orchStatus: OrchestratorStatus) => {
+          const factsAvailable = this.hostService.checkHostsFactsAvailable(orchStatus);
+          return this.hostService.list(params, factsAvailable.toString()) as Observable<Host[]>;
+        }),
+        map((hosts: Host[]) => {
+          return (hosts || []).map((host: Host) => ({
+            ...host,
+            status: host.status || HostStatus.AVAILABLE
+          }));
+        })
+      )
+    }).pipe(
+      map(({ groups, hosts }) => {
+        const usedHosts = new Set<string>();
+
+        (groups?.[0] ?? []).forEach((group: CephServiceSpec) => {
+          const placementHosts = group.placement?.hosts || [];
+          const placementLabel = group.placement?.label;
+
+          placementHosts.forEach((hostname: string) => usedHosts.add(hostname));
+
+          if (placementLabel) {
+            (hosts || []).forEach((host: Host) => {
+              if (host.labels?.includes(placementLabel as string)) {
+                usedHosts.add(host.hostname);
+              }
+            });
+          }
+        });
+
+        return (hosts || []).filter((host: Host) => {
+          const isAvailable =
+            host.status === HostStatus.AVAILABLE || host.status === HostStatus.RUNNING;
+          return !usedHosts.has(host.hostname) && isAvailable;
+        });
+      })
+    );
+  }
+
+  fetchHostsAndGroups(): Observable<{ groups: CephServiceSpec[][]; hosts: Host[] }> {
+    return forkJoin({
+      groups: this.listGatewayGroups(),
+      hosts: this.hostService.getAllHosts().pipe(
+        map((hosts: Host[]) => {
+          return (hosts || []).map((host: Host) => ({
+            ...host,
+            status: host.status || HostStatus.AVAILABLE
+          }));
+        })
+      )
+    });
+  }
+
+  getHostsForGroup(groupName: string): Observable<Host[]> {
+    return forkJoin({
+      gwGroups: this.listGatewayGroups(),
+      allHosts: this.hostService.getAllHosts()
+    }).pipe(
+      map(({ gwGroups, allHosts }) => {
+        const group = gwGroups?.[0]?.find(
+          (gwGroup: CephServiceSpec) => gwGroup?.spec?.group === groupName
+        );
+        const placement = group?.placement || { hosts: [], label: [] };
+        const { hosts, label } = placement;
+
+        if (hosts?.length) {
+          return allHosts.filter((host: Host) => hosts.includes(host.hostname));
+        } else if (label) {
+          return allHosts.filter((host: Host) => host?.labels?.includes(label as string));
+        }
+        return [];
+      })
+    );
+  }
 
   // formats the gateway groups to be consumed for combobox item
   formatGwGroupsList(
@@ -72,6 +190,60 @@ export class NvmeofService {
     }, []);
   }
 
+  private normalizeListResponse<T>(response: unknown, key: string): T[] {
+    if (Array.isArray(response)) {
+      return response as T[];
+    }
+
+    const nested = (response as Record<string, T[]> | null)?.[key];
+    return Array.isArray(nested) ? nested : [];
+  }
+
+  fetchSetupState(): Observable<SetupState> {
+    return this.listGatewayGroups().pipe(
+      switchMap((gatewayGroups: CephServiceSpec[][]) => {
+        const rawGroups = Array.isArray(gatewayGroups[0]) ? gatewayGroups[0] : [];
+        const groups = rawGroups.filter((serviceSpec: CephServiceSpec) => serviceSpec?.spec?.group);
+        const hasGatewayGroups = groups.length > 0;
+
+        if (!hasGatewayGroups) {
+          return observableOf({
+            hasGatewayGroups: false,
+            hasSubsystems: false,
+            hasNamespaces: false
+          });
+        }
+
+        const firstGroupName = groups[0].spec.group;
+
+        return forkJoin({
+          subsystems: this.listSubsystems(firstGroupName).pipe(
+            map((resp: unknown) => this.normalizeListResponse<NvmeofSubsystem>(resp, 'subsystems')),
+            catchError(() => observableOf([]))
+          ),
+          namespaces: this.listNamespaces(firstGroupName).pipe(
+            map((resp: unknown) =>
+              this.normalizeListResponse<NvmeofSubsystemNamespace>(resp, 'namespaces')
+            ),
+            catchError(() => observableOf([]))
+          )
+        }).pipe(
+          map(({ subsystems, namespaces }) => ({
+            hasGatewayGroups,
+            hasSubsystems: subsystems.length > 0,
+            hasNamespaces: namespaces.length > 0
+          })),
+          catchError(() =>
+            observableOf({ hasGatewayGroups, hasSubsystems: false, hasNamespaces: false })
+          )
+        );
+      }),
+      catchError(() =>
+        observableOf({ hasGatewayGroups: false, hasSubsystems: false, hasNamespaces: false })
+      )
+    );
+  }
+
   // Gateway groups
   listGatewayGroups() {
     return this.http.get<CephServiceSpec[][]>(`${API_PATH}/gateway/group`);
@@ -93,16 +265,20 @@ export class NvmeofService {
 
   createSubsystem(request: {
     nqn: string;
-    enable_ha: boolean;
     gw_group: string;
-    max_namespaces?: number;
+    dhchap_key: string;
+    network_mask?: string[];
   }) {
     return this.http.post(`${API_PATH}/subsystem`, request, { observe: 'response' });
   }
 
   deleteSubsystem(subsystemNQN: string, group: string) {
-    return this.http.delete(`${API_PATH}/subsystem/${subsystemNQN}?gw_group=${group}`, {
-      observe: 'response'
+    return this.http.delete(`${API_PATH}/subsystem/${subsystemNQN}`, {
+      observe: 'response',
+      params: {
+        gw_group: group,
+        force: 'true'
+      }
     });
   }
 
@@ -110,7 +286,9 @@ export class NvmeofService {
     return this.getSubsystem(subsystemNqn, group).pipe(
       mapTo(true),
       catchError((e) => {
-        e?.preventDefault();
+        if (_.isFunction(e?.preventDefault)) {
+          e.preventDefault();
+        }
         return observableOf(false);
       })
     );
@@ -121,10 +299,59 @@ export class NvmeofService {
     return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}/host?gw_group=${group}`);
   }
 
-  addInitiators(subsystemNQN: string, request: InitiatorRequest) {
+  addSubsystemInitiators(subsystemNQN: string, request: SubsystemInitiatorRequest) {
     return this.http.post(`${UI_API_PATH}/subsystem/${subsystemNQN}/host`, request, {
       observe: 'response'
     });
+  }
+
+  addNamespaceInitiators(nsid: number | string, request: NamespaceInitiatorRequest) {
+    return this.http.post(`${UI_API_PATH}/namespace/${nsid}/host`, request, {
+      observe: 'response'
+    });
+  }
+
+  changeSubsystemKey(subsystemNQN: string, dhchapKey: string, gwGroup: string) {
+    return this.http.put(
+      `${API_PATH}/subsystem/${subsystemNQN}/change_key`,
+      { dhchap_key: dhchapKey, gw_group: gwGroup },
+      { observe: 'response' }
+    );
+  }
+
+  updateHostKey(subsystemNQN: string, request: InitiatorRequest) {
+    return this.http.put(
+      `${API_PATH}/subsystem/${subsystemNQN}/host/${request.host_nqn}/change_key`,
+      request,
+      {
+        observe: 'response'
+      }
+    );
+  }
+
+  updateAuthenticationKey(
+    subsystemNQN: string,
+    gwGroup: string,
+    update: AuthKeyUpdate
+  ): Observable<void> {
+    const { authType, subsystemKey, hostKeyList } = update;
+
+    const subsystemKeyCall =
+      authType === AUTHENTICATION.Bidirectional && subsystemKey
+        ? this.changeSubsystemKey(subsystemNQN, subsystemKey, gwGroup)
+        : observableOf(null);
+
+    const hostKeyCalls = hostKeyList
+      .filter((item) => !!item.dhchap_key)
+      .map((item) =>
+        this.updateHostKey(subsystemNQN, {
+          host_nqn: item.host_nqn,
+          dhchap_key: item.dhchap_key,
+          gw_group: gwGroup
+        }).pipe(catchError(() => observableOf(null)))
+      );
+
+    return forkJoin([subsystemKeyCall, ...hostKeyCalls]).pipe(map(() => undefined));
   }
 
   removeInitiators(subsystemNQN: string, request: InitiatorRequest) {
@@ -145,6 +372,18 @@ export class NvmeofService {
     return this.http.post(`${API_PATH}/subsystem/${subsystemNQN}/listener`, request, {
       observe: 'response'
     });
+  }
+
+  createListeners(subsystemNQN: string, gwGroup: string, listeners: ListenerItem[]) {
+    const listenerCalls = listeners.map((listener: ListenerItem) =>
+      this.createListener(subsystemNQN, {
+        gw_group: gwGroup,
+        host_name: listener.content,
+        traddr: listener.addr,
+        trsvcid: 4420
+      })
+    );
+    return forkJoin(listenerCalls);
   }
 
   deleteListener(
@@ -168,7 +407,7 @@ export class NvmeofService {
   }
 
   // Namespaces
-  listNamespaces(subsystemNQN: string, group: string) {
+  listNamespaces(group: string, subsystemNQN: string = '*') {
     return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}/namespace?gw_group=${group}`);
   }
 
@@ -196,6 +435,22 @@ export class NvmeofService {
       {
         observe: 'response'
       }
+    );
+  }
+
+  // Check if gateway group exists
+  exists(groupName: string): Observable<boolean> {
+    return this.listGatewayGroups().pipe(
+      map((groups: CephServiceSpec[][]) => {
+        const groupsList = groups?.[0] ?? [];
+        return groupsList.some((group: CephServiceSpec) => group?.spec?.group === groupName);
+      }),
+      catchError((error: any) => {
+        if (_.isFunction(error?.preventDefault)) {
+          error.preventDefault();
+        }
+        return observableOf(false);
+      })
     );
   }
 }

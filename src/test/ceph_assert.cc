@@ -52,5 +52,6 @@ int main(int argc, char **argv) {
       "{}:{}, {}:{}", __FILE__, /* LINE21 */21, __FILE__, /* LINE24 */24));
   common_init_finish(g_ceph_context);
   testing::InitGoogleTest(&argc, argv);
+  GTEST_FLAG_SET(death_test_style, "threadsafe");
   return RUN_ALL_TESTS();
 }

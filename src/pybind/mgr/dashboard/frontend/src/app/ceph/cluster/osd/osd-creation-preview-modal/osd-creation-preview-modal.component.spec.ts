@@ -4,7 +4,6 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
 
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
@@ -15,13 +14,7 @@ describe('OsdCreationPreviewModalComponent', () => {
   let fixture: ComponentFixture<OsdCreationPreviewModalComponent>;
 
   configureTestBed({
-    imports: [
-      HttpClientTestingModule,
-      ReactiveFormsModule,
-      SharedModule,
-      RouterTestingModule,
-      ToastrModule.forRoot()
-    ],
+    imports: [HttpClientTestingModule, ReactiveFormsModule, SharedModule, RouterTestingModule],
     providers: [NgbActiveModal],
     declarations: [OsdCreationPreviewModalComponent]
   });

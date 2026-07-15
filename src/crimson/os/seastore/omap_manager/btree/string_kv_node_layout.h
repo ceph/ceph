@@ -70,18 +70,28 @@ static void copy_from_local(
   assert(tgt->node == from_src->node);
   assert(to_src->node == from_src->node);
 
+  auto end = to_src->get_right_ptr_end();
+  auto key_end = to_src->get_node_key_ptr();
+  auto key_len = from_src->get_node_key_ptr() - tgt->get_node_key_ptr();
+
   auto to_copy = from_src->get_right_ptr_end() - to_src->get_right_ptr_end();
-  assert(to_copy > 0);
+  assert(to_copy >= 0);
   int adjust_offset = tgt > from_src? -len : len;
   memmove(to_src->get_right_ptr_end() + adjust_offset,
           to_src->get_right_ptr_end(),
           to_copy);
 
+  if (from_src > tgt) {   //keep same content for rm_key and rm_keyrange in case replay has crc error
+    memset(end, 0, len);
+  }
   for ( auto ite = from_src; ite < to_src; ite++) {
       ite->update_offset(-adjust_offset);
   }
   memmove(tgt->get_node_key_ptr(), from_src->get_node_key_ptr(),
           to_src->get_node_key_ptr() - from_src->get_node_key_ptr());
+  if (from_src > tgt) {
+    memset(key_end - key_len, 0, key_len);
+  }
 }
 
 struct delta_inner_t {
@@ -91,13 +101,13 @@ struct delta_inner_t {
     REMOVE,
   } op;
   std::string key;
-  laddr_t addr;
+  laddr_block_offset_t block_offset;
 
   DENC(delta_inner_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.op, p);
     denc(v.key, p);
-    denc(v.addr, p);
+    denc(v.block_offset, p);
     DENC_FINISH(p);
   }
 
@@ -105,7 +115,7 @@ struct delta_inner_t {
   bool operator==(const delta_inner_t &rhs) const {
     return op == rhs.op &&
            key == rhs.key &&
-           addr == rhs.addr;
+           block_offset == rhs.block_offset;
   }
 };
 }
@@ -148,22 +158,22 @@ public:
   }
   void insert(
     const std::string &key,
-    laddr_t addr) {
+    laddr_block_offset_t block_offset) {
     buffer.push_back(
       delta_inner_t{
         delta_inner_t::op_t::INSERT,
         key,
-        addr
+        block_offset
       });
   }
   void update(
     const std::string &key,
-    laddr_t addr) {
+    laddr_block_offset_t block_offset) {
     buffer.push_back(
       delta_inner_t{
 	delta_inner_t::op_t::UPDATE,
 	key,
-	addr
+	block_offset
       });
   }
   void remove(const std::string &key) {
@@ -171,7 +181,7 @@ public:
       delta_inner_t{
 	delta_inner_t::op_t::REMOVE,
 	key,
-	L_ADDR_NULL
+	LADDR_BLOCK_OFFSET_NULL
       });
   }
 
@@ -450,8 +460,8 @@ public:
 	get_node_key().key_len);
     }
 
-    laddr_t get_val() const {
-      return get_node_key().laddr;
+    laddr_block_offset_t get_val() const {
+      return get_node_key().block_offset;
     }
 
     bool contains(std::string_view key) const {
@@ -470,28 +480,28 @@ public:
 public:
   void journal_inner_insert(
     const_iterator _iter,
-    const laddr_t laddr,
+    const laddr_block_offset_t block_offset,
     const std::string &key,
     delta_inner_buffer_t *recorder) {
     auto iter = iterator(this, _iter.index);
     if (recorder) {
       recorder->insert(
 	key,
-	laddr);
+	block_offset);
     }
-    inner_insert(iter, key, laddr);
+    inner_insert(iter, key, block_offset);
   }
 
   void journal_inner_update(
     const_iterator _iter,
-    const laddr_t laddr,
+    const laddr_block_offset_t block_offset,
     delta_inner_buffer_t *recorder) {
     auto iter = iterator(this, _iter.index);
     auto key = iter->get_key();
     if (recorder) {
-      recorder->update(key, laddr);
+      recorder->update(key, block_offset);
     }
-    inner_update(iter, laddr);
+    inner_update(iter, block_offset);
   }
 
   void journal_inner_remove(
@@ -846,7 +856,7 @@ private:
   void inner_insert(
     iterator iter,
     const std::string &key,
-    laddr_t val) {
+    laddr_block_offset_t val) {
     if (iter != iter_begin()) {
       assert((iter - 1)->get_key() < key);
     }
@@ -861,7 +871,7 @@ private:
 
     omap_inner_key_t nkey;
     nkey.key_len = key.size();
-    nkey.laddr = val;
+    nkey.block_offset = val;
     if (iter != iter_begin()) {
       auto pkey = (iter - 1).get_node_key();
       nkey.key_off = nkey.key_len + pkey.key_off;
@@ -876,10 +886,10 @@ private:
 
   void inner_update(
     iterator iter,
-    laddr_t addr) {
+    laddr_block_offset_t block_offset) {
     assert(iter != iter_end());
     auto node_key = iter->get_node_key();
-    node_key.laddr = addr;
+    node_key.block_offset = block_offset;
     iter->set_node_key(node_key);
   }
 
@@ -1136,6 +1146,21 @@ public:
       recorder->remove(iter->get_key());
     }
     leaf_remove(iter);
+  }
+  void journal_leaf_remove_range(
+    const_iterator _fiter,
+    const_iterator _liter,
+    delta_leaf_buffer_t *recorder) {
+    assert(_fiter != iter_end());
+    assert(_fiter != _liter);
+    auto fiter = iterator(this, _fiter.index);
+    auto liter = iterator(this, _liter.index);
+    if (recorder) {
+      for(auto iter = fiter; iter != liter; iter++) {
+        recorder->remove(iter->get_key());
+      }
+    }
+    leaf_remove_range(fiter, liter);
   }
 
   StringKVLeafNodeLayout() : buf(nullptr) {}
@@ -1517,13 +1542,21 @@ private:
 
   void leaf_remove(iterator iter) {
     assert(iter != iter_end());
-    if ((iter + 1) != iter_end()) {
-      omap_leaf_key_t key = iter->get_node_key();
-      copy_from_local(key.key_len + key.val_len, iter, iter + 1, iter_end());
-    }
+
+    omap_leaf_key_t key = iter->get_node_key();
+    copy_from_local(key.key_len + key.val_len, iter, iter + 1, iter_end());
+
     set_size(get_size() - 1);
   }
+  void leaf_remove_range(iterator fiter, iterator liter) {
+    assert(fiter != iter_end());
 
+    auto adjust_len = fiter->get_right_ptr_end() - liter->get_right_ptr_end();
+    copy_from_local(adjust_len, fiter, liter, iter_end());
+
+
+    set_size(get_size() - (liter - fiter));
+  }
   /**
    * get_key_ptr
    *
@@ -1541,13 +1574,13 @@ private:
 inline void delta_inner_t::replay(StringKVInnerNodeLayout &l) {
   switch (op) {
     case op_t::INSERT: {
-      l.inner_insert(l.string_lower_bound(key), key, addr);
+      l.inner_insert(l.string_lower_bound(key), key, block_offset);
       break;
     }
     case op_t::UPDATE: {
       auto iter = l.find_string_key(key);
       assert(iter != l.iter_end());
-      l.inner_update(iter, addr);
+      l.inner_update(iter, block_offset);
       break;
     }
     case op_t::REMOVE: {

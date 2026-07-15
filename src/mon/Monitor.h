@@ -31,14 +31,10 @@
 
 #include "include/types.h"
 #include "include/health.h"
-#include "msg/Messenger.h"
 
 #include "common/Timer.h"
 
-#include "health_check.h"
-#include "MonMap.h"
 #include "Elector.h"
-#include "Paxos.h"
 #include "Session.h"
 #include "MonCommand.h"
 
@@ -51,14 +47,20 @@
 #include "auth/AuthMethodList.h"
 #include "auth/KeyRing.h"
 #include "include/common_fwd.h"
-#include "messages/MMonCommand.h"
+#include "include/CompatSet.h"
 #include "mon/MonitorDBStore.h"
+#include "mon/mon_types.h" // for Metadata, PAXOS_*, ScrubResult
+#include "mon/MonitorBackup.h"
 #include "mgr/MgrClient.h"
 #include <boost/smart_ptr/atomic_shared_ptr.hpp>
 #include <boost/smart_ptr/shared_ptr.hpp>
 
 #include "mon/MonOpRequest.h"
 #include "common/WorkQueue.h"
+
+struct health_check_map_t;
+class Messenger;
+class MonMap;
 
 using namespace TOPNSPC::common;
 
@@ -99,9 +101,29 @@ enum {
   l_mon_election_call,
   l_mon_election_win,
   l_mon_election_lose,
+  l_mon_backup_running,
+  l_mon_backup_started,
+  l_mon_backup_success,
+  l_mon_backup_failed,
+  l_mon_backup_duration,
+  l_mon_backup_last_success,
+  l_mon_backup_last_success_id,
+  l_mon_backup_last_failed,
+  l_mon_backup_last_size,
+  l_mon_backup_last_files,
+  l_mon_backup_cleanup_started,
+  l_mon_backup_cleanup_running,
+  l_mon_backup_cleanup_success,
+  l_mon_backup_cleanup_failed,
+  l_mon_backup_cleanup_size,
+  l_mon_backup_cleanup_kept,
+  l_mon_backup_cleanup_duration,
+  l_mon_backup_cleanup_freed,
+  l_mon_backup_cleanup_deleted,
   l_mon_last,
 };
 
+class Paxos;
 class PaxosService;
 
 class AdminSocketHook;
@@ -225,12 +247,7 @@ public:
     return age.count();
   }
 
-  bool is_mon_down() const {
-    int max = monmap->size();
-    int actual = get_quorum().size();
-    auto now = ceph::real_clock::now();
-    return actual < max && now > monmap->created.to_real_time();
-  }
+  bool is_mon_down() const;
 
   // -- elector --
 private:
@@ -632,16 +649,9 @@ private:
 public:
   epoch_t get_epoch();
   int get_leader() const { return leader; }
-  std::string get_leader_name() {
-    return quorum.empty() ? std::string() : monmap->get_name(leader);
-  }
+  std::string get_leader_name();
   const std::set<int>& get_quorum() const { return quorum; }
-  std::list<std::string> get_quorum_names() {
-    std::list<std::string> q;
-    for (auto p = quorum.begin(); p != quorum.end(); ++p)
-      q.push_back(monmap->get_name(*p));
-    return q;
-  }
+  std::list<std::string> get_quorum_names();
   uint64_t get_quorum_con_features() const {
     return quorum_con_features;
   }
@@ -651,9 +661,7 @@ public:
   uint64_t get_required_features() const {
     return required_features;
   }
-  mon_feature_t get_required_mon_features() const {
-    return monmap->get_required_features();
-  }
+  mon_feature_t get_required_mon_features() const;
   void apply_quorum_to_compatset_features();
   void apply_monmap_to_compatset_features();
   void calc_quorum_requirements();
@@ -913,41 +921,7 @@ public:
     C_Command(Monitor &_mm, MonOpRequestRef _op, int r, std::string s, ceph::buffer::list rd, version_t v) :
       C_MonOp(_op), mon(_mm), rc(r), rs(s), rdata(rd), version(v){}
 
-    void _finish(int r) override {
-      auto m = op->get_req<MMonCommand>();
-      if (r >= 0) {
-	std::ostringstream ss;
-        if (!op->get_req()->get_connection()) {
-          ss << "connection dropped for command ";
-        } else {
-          MonSession *s = op->get_session();
-
-          // if client drops we may not have a session to draw information from.
-          if (s) {
-            ss << "from='" << s->name << " " << s->addrs << "' "
-              << "entity='" << s->entity_name << "' ";
-          } else {
-            ss << "session dropped for command ";
-          }
-        }
-        cmdmap_t cmdmap;
-        std::ostringstream ds;
-        std::string prefix;
-        cmdmap_from_json(m->cmd, &cmdmap, ds);
-        cmd_getval(cmdmap, "prefix", prefix);
-        if (prefix != "config set" && prefix != "config-key set")
-          ss << "cmd='" << m->cmd << "': finished";
-
-        mon.audit_clog->info() << ss.str();
-        mon.reply_command(op, rc, rs, rdata, version);
-      }
-      else if (r == -ECANCELED)
-        return;
-      else if (r == -EAGAIN)
-        mon.dispatch_op(op);
-      else
-	ceph_abort_msg("bad C_Command return value");
-    }
+    void _finish(int r) override;
   };
 
  private:
@@ -1047,6 +1021,8 @@ private:
 
   OpTracker op_tracker;
 
+  std::unique_ptr<MonitorBackupManager> backup_manager;
+
  public:
   Monitor(CephContext *cct_, std::string nm, MonitorDBStore *s,
 	  Messenger *m, Messenger *mgr_m, MonMap *map);
@@ -1091,6 +1067,10 @@ private:
 		       ceph::Formatter *f,
 		       std::ostream& err,
 		       std::ostream& out);
+
+  // Execute mon database backup
+  int perform_backup();
+  int cleanup_backup();
 
 private:
   // don't allow copying
@@ -1153,6 +1133,7 @@ private:
 #define CEPH_MON_FEATURE_INCOMPAT_REEF CompatSet::Feature(15, "reef ondisk layout")
 #define CEPH_MON_FEATURE_INCOMPAT_SQUID CompatSet::Feature(16, "squid ondisk layout")
 #define CEPH_MON_FEATURE_INCOMPAT_TENTACLE CompatSet::Feature(17, "tentacle ondisk layout")
+#define CEPH_MON_FEATURE_INCOMPAT_UMBRELLA CompatSet::Feature(18, "umbrella ondisk layout")
 
 // Release-independent features
 #define CEPH_MON_FEATURE_INCOMPAT_NVMEOF_BEACON_DIFF CompatSet::Feature(32, "nvmeof beacon diff")

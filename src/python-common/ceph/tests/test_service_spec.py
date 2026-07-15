@@ -12,12 +12,17 @@ from ceph.deployment.service_spec import (
     CustomContainerSpec,
     GrafanaSpec,
     HostPlacementSpec,
+    IngressSpec,
     IscsiServiceSpec,
     NFSServiceSpec,
+    NodeProxySpec,
+    OAuth2ProxySpec,
     PlacementSpec,
     PrometheusSpec,
     RGWSpec,
     ServiceSpec,
+    YamlLiteralString,
+    TunedProfileSpec,
 )
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import SpecValidationError
@@ -71,6 +76,33 @@ def test_apply_grafana(spec: GrafanaSpec, raise_exception: bool, msg: str):
         with pytest.raises(SpecValidationError, match=msg):
             spec.validate()
     else:
+        spec.validate()
+
+
+@pytest.mark.parametrize(
+    "spec_kwargs, expected_missing",
+    [
+        ({}, 'provider_display_name, oidc_issuer_url, client_id, client_secret'),
+        (
+            {
+                'provider_display_name': 'My OIDC Provider',
+                'oidc_issuer_url': 'https://idp.example.com',
+            },
+            'client_id, client_secret',
+        ),
+        (
+            {
+                'provider_display_name': 'My OIDC Provider',
+                'oidc_issuer_url': 'https://idp.example.com',
+                'client_secret': 'secret',
+            },
+            'client_id',
+        ),
+    ])
+def test_oauth2_proxy_missing_required_fields(spec_kwargs, expected_missing):
+    spec = OAuth2ProxySpec(**spec_kwargs)
+    expected = f'Missing required fields for oauth2-proxy: {expected_missing}.'
+    with pytest.raises(SpecValidationError, match=re.escape(expected)):
         spec.validate()
 
 @pytest.mark.parametrize(
@@ -306,6 +338,18 @@ def test_osd_unmanaged():
     assert dg_spec.unmanaged == True
 
 
+def test_node_proxy_unmanaged():
+    node_proxy_spec = {"placement": {"host_pattern": "*"},
+                       "service_name": "node-proxy",
+                       "service_type": "node-proxy",
+                       "unmanaged": True}
+
+    spec = ServiceSpec.from_json(node_proxy_spec)
+    assert isinstance(spec, NodeProxySpec)
+    assert spec.unmanaged is True
+    ServiceSpec.from_json(spec.to_json())
+
+
 @pytest.mark.parametrize("y",
 """service_type: crash
 service_name: crash
@@ -356,6 +400,20 @@ spec:
   wal_devices:
     model: NVME-QQQQ-987
   termination_grace_period_seconds: 30
+  osd_type: classic
+---
+service_type: osd
+service_id: osd_spec_seastore
+service_name: osd.osd_spec_seastore
+placement:
+  host_pattern: '*'
+spec:
+  data_devices:
+    model: MC-55-44-XZ
+  filter_logic: AND
+  objectstore: seastore
+  termination_grace_period_seconds: 30
+  osd_type: crimson
 ---
 service_type: alertmanager
 service_name: alertmanager
@@ -536,6 +594,61 @@ def test_alertmanager_spec_2():
     assert isinstance(spec.user_data, dict)
     assert 'default_webhook_urls' in spec.user_data.keys()
 
+
+def test_nfs_spec_rdma_default():
+    """NFS spec without RDMA: enable_rdma is False, get_port_start returns 2 ports."""
+    spec = NFSServiceSpec(service_id='mynfs', placement=PlacementSpec(count=1))
+    assert spec.enable_rdma is False
+    assert spec.rdma_port is None
+    assert spec.get_port_start() == [2049, 9587, 31311]
+    assert spec.get_colocation_port_fields() == ['data_port', 'monitoring_port', 'cluster_qos_port']
+
+
+def test_nfs_spec_rdma_enabled():
+    """NFS spec with enable_rdma: get_port_start returns 3 ports, default rdma_port 20049."""
+    spec = NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(count=1),
+        enable_rdma=True,
+    )
+    assert spec.enable_rdma is True
+    assert spec.rdma_port is None
+    assert spec.get_port_start() == [2049, 9587, 31311, 20049]
+    assert spec.get_colocation_port_fields() == ['data_port', 'monitoring_port', 'cluster_qos_port', 'rdma_port']
+
+
+def test_nfs_spec_rdma_custom_port():
+    """NFS spec with enable_rdma and custom rdma_port."""
+    spec = NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(count=1),
+        port=3049,
+        monitoring_port=9588,
+        enable_rdma=True,
+        rdma_port=20050,
+    )
+    assert spec.enable_rdma is True
+    assert spec.rdma_port == 20050
+    assert spec.get_port_start() == [3049, 9588, 31311, 20050]
+
+
+def test_nfs_spec_from_json_rdma():
+    """NFS spec enable_rdma and rdma_port roundtrip via from_json/to_json."""
+    data = {
+        'service_id': 'mynfs',
+        'service_type': 'nfs',
+        'placement': {'count': 1},
+        'spec': {
+            'enable_rdma': True,
+            'rdma_port': 1234,
+        },
+    }
+    spec = NFSServiceSpec.from_json(data)
+    assert spec.enable_rdma is True
+    assert spec.rdma_port == 1234
+    out = spec.to_json()
+    assert out.get('spec', {}).get('enable_rdma') is True
+    assert out.get('spec', {}).get('rdma_port') == 1234
 
 
 def test_repr():
@@ -718,6 +831,57 @@ spec:
     assert spec.virtual_ip == "192.168.20.1/24"
     assert spec.frontend_port == 8080
     assert spec.monitor_port == 8081
+
+
+def test_ingress_spec_haproxy_peer_communication_port():
+    """NFS ingress reserves peer port 1024 by default; custom value overrides."""
+    nfs_ingress = IngressSpec(
+        service_type='ingress',
+        service_id='nfs.foo',
+        backend_service='nfs.foo',
+        frontend_port=2049,
+        monitor_port=9049,
+        virtual_ip='192.168.1.1/24',
+    )
+    assert nfs_ingress.get_port_start() == [2049, 9049, 1024]
+
+    nfs_custom = IngressSpec(
+        service_type='ingress',
+        service_id='nfs.foo',
+        backend_service='nfs.foo',
+        frontend_port=2049,
+        monitor_port=9049,
+        virtual_ip='192.168.1.1/24',
+        haproxy_peer_communication_port=5000,
+    )
+    assert nfs_custom.get_port_start() == [2049, 9049, 5000]
+
+    rgw_ingress = IngressSpec(
+        service_type='ingress',
+        service_id='rgw.foo',
+        backend_service='rgw.foo',
+        frontend_port=8080,
+        monitor_port=8081,
+        virtual_ip='192.168.1.1/24',
+    )
+    assert rgw_ingress.get_port_start() == [8080, 8081]
+
+    yaml_str = """service_type: ingress
+service_id: nfs.foo
+placement:
+  hosts:
+    - host1
+spec:
+  virtual_ip: 192.168.20.1/24
+  backend_service: nfs.foo
+  frontend_port: 2049
+  monitor_port: 9049
+  haproxy_peer_communication_port: 5000
+"""
+    loaded = ServiceSpec.from_json(yaml.safe_load(yaml_str))
+    assert isinstance(loaded, IngressSpec)
+    assert loaded.haproxy_peer_communication_port == 5000
+    assert loaded.get_port_start() == [2049, 9049, 5000]
 
 
 @pytest.mark.parametrize("y, error_match", [
@@ -1408,3 +1572,83 @@ def test_non_osd_services_do_not_get_default_termination_if_not_provided(spec_da
 
     spec_section = j.get('spec', {})
     assert 'termination_grace_period_seconds' not in spec_section
+
+def test_yaml_literal_string_class_represents_multiline_strings_as_literal():
+    multiline_string = "test1\ntest2\n"
+    dumped = yaml.dump(YamlLiteralString(multiline_string))
+
+    assert dumped.startswith('|')
+
+def test_yaml_representer_can_handle_multiline_strings_for_export():
+    spec_data = """
+service_type: iscsi
+service_id: iscsi
+placement:
+  label: iscsi
+spec:
+  pool: testpool
+  ssl_cert: |
+    -----BEGIN CERTIFICATE-----
+    FILLERFILLERFILLERFILLERFILLERFILLERFILLERFILLERFILLERFILLER
+    FILLERFILLERFILLERFILLERFILLERFILLERFILLERFILLERFILLERFILLER
+    -----END CERTIFICATE-----
+  ssl_key: |
+    -----BEGIN PRIVATE KEY-----
+    FILLERFILLERFILLERFILLERFILLERFILLERFILLERFILLERFILLERFILLER
+    FILLERFILLERFILLERFILLERFILLERFILLERFILLERFILLERFILLERFILLER
+    -----END PRIVATE KEY-----
+"""
+
+    data = yaml.safe_load(spec_data)
+    spec_obj = ServiceSpec.from_json(data)
+
+    dumped = yaml.dump(spec_obj, default_flow_style=False)
+
+    assert 'ssl_cert: |' in dumped
+    assert 'ssl_key: |' in dumped
+
+# Tuned profile spec (e.g. ceph orch tuned-profile apply -i os-tune.spec)
+VALID_TUNED_PROFILE_SPEC = """
+profile_name: os-tune
+placement:
+  hosts:
+    - ceph-node-0
+    - ceph-node-1
+    - ceph-node-2
+"""
+
+EMPTY_PROFILE_NAME_SPEC = """
+profile_name: ''
+placement:
+  hosts:
+    - ceph-node-0
+    - ceph-node-1
+    - ceph-node-2
+"""
+
+MISSING_PROFILE_NAME_SPEC = """
+placement:
+  hosts:
+    - ceph-node-0
+    - ceph-node-1
+    - ceph-node-2
+"""
+
+
+@pytest.mark.parametrize("spec_yaml, expect_error, error_match", [
+    (EMPTY_PROFILE_NAME_SPEC, True, r'Invalid profile_name: Must be a non-empty string\.'),
+    (MISSING_PROFILE_NAME_SPEC, True, r'Tuned profile spec must include "profile_name" field'),
+    (VALID_TUNED_PROFILE_SPEC, False, None),
+])
+def test_tuned_profile_spec_profile_name_validation(spec_yaml, expect_error, error_match):
+    """Test TunedProfileSpec.from_json validation for profile_name (ceph orch tuned-profile apply -i <spec>)."""
+    data = yaml.safe_load(spec_yaml)
+    if expect_error:
+        with pytest.raises(SpecValidationError, match=error_match):
+            TunedProfileSpec.from_json(data)
+    else:
+        spec = TunedProfileSpec.from_json(data)
+        assert spec.profile_name == 'os-tune'
+        assert spec.placement is not None
+        # round-trip
+        assert TunedProfileSpec.from_json(spec.to_json()).profile_name == spec.profile_name

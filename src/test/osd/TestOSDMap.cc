@@ -10,6 +10,8 @@
 #include "common/common_init.h"
 #include "common/ceph_argparse.h"
 #include "common/ceph_json.h"
+#include "crush/CrushWrapper.h"
+#include "include/stringify.h"
 
 #include <iostream>
 #include <cmath>
@@ -1366,6 +1368,220 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
   }
 }
 
+TEST_F(OSDMapTest, CleanPGUpmapPrimaries) {
+  // Set up a default osdmap
+  set_up_map();
+
+  // Arrange CRUSH topology with 3 hosts; 2 OSDs per host
+  const int EXPECTED_HOST_NUM = 3;
+  int osd_per_host = get_num_osds() / EXPECTED_HOST_NUM;
+  ASSERT_GE(osd_per_host, 2);
+  int index = 0;
+  for (int i = 0; i < (int)get_num_osds(); i++) {
+    if (i && i % osd_per_host == 0) {
+      ++index;
+    }
+    stringstream osd_name;
+    stringstream host_name;
+    vector<string> move_to;
+    osd_name << "osd." << i;
+    host_name << "host-" << index;
+    move_to.push_back("root=default");
+    string host_loc = "host=" + host_name.str();
+    move_to.push_back(host_loc);
+    int r = crush_move(osdmap, osd_name.str(), move_to);
+    ASSERT_EQ(0, r);
+  }
+
+  // Create a replicated CRUSH rule
+  const string upmap_primary_rule = "upmap_primary";
+  int upmap_primary_rule_no = crush_rule_create_replicated(
+    upmap_primary_rule, "default", "host");
+  ASSERT_LT(0, upmap_primary_rule_no);
+
+  // Create a replicated pool (size 3) with 64 PGs
+  OSDMap::Incremental new_pool_inc(osdmap.get_epoch() + 1);
+  new_pool_inc.new_pool_max = osdmap.get_pool_max();
+  new_pool_inc.fsid = osdmap.get_fsid();
+  pg_pool_t empty;
+  uint64_t upmap_primary_pool_id = ++new_pool_inc.new_pool_max;
+  pg_pool_t *p = new_pool_inc.get_new_pool(upmap_primary_pool_id, &empty);
+  p->size = 3;
+  p->set_pg_num(64);
+  p->set_pgp_num(64);
+  p->type = pg_pool_t::TYPE_REPLICATED;
+  p->crush_rule = upmap_primary_rule_no;
+  p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+  new_pool_inc.new_pool_names[upmap_primary_pool_id] = "upmap_primary_pool";
+  osdmap.apply_incremental(new_pool_inc);
+
+  {
+    // Sanity check - we shouldn't have any pg_upmap_primary entries yet
+    ASSERT_EQ(osdmap.get_num_pg_upmap_primaries(), 0);
+
+    // Create valid pg_upmap_primary mappings on the "upmap_primary_pool"
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    OSDMap tmp_osd_map;
+    tmp_osd_map.deepish_copy_from(osdmap);
+    int num_changes = osdmap.balance_primaries(g_ceph_context, upmap_primary_pool_id,
+		                               &pending_inc, tmp_osd_map);
+    osdmap.apply_incremental(pending_inc);
+      
+    // Check for mappings; `balance_primaries` should have created 10 pg_upmap_primary
+    //   mappings for this configuration
+    ASSERT_EQ(num_changes, 10);
+    ASSERT_EQ(osdmap.get_num_pg_upmap_primaries(), 10);
+  }
+
+  // -------TEST 1: Reduce number of PGs --------------
+  // For the sake of the unit test, we will simulate reducing the pg_num by removing
+  //   the current pool and swapping it out with a new pool that has all the same info,
+  //   except a decreased pg_num  
+  {
+    // Remove current pool
+    OSDMap::Incremental remove_pool_inc(osdmap.get_epoch() + 1);
+    remove_pool_inc.old_pools.insert(osdmap.lookup_pg_pool_name("upmap_primary_pool"));
+    osdmap.apply_incremental(remove_pool_inc);
+
+    // Add same pool back in with reduced pg_num (64 --> 16)
+    OSDMap::Incremental reduced_pool_inc(osdmap.get_epoch() + 1);
+    pg_pool_t new_empty;
+    pg_pool_t *reduced_pool = reduced_pool_inc.get_new_pool(upmap_primary_pool_id, &new_empty);
+    reduced_pool->size = 3;
+    reduced_pool->set_pg_num(16);
+    reduced_pool->set_pgp_num(16);
+    reduced_pool->type = pg_pool_t::TYPE_REPLICATED;
+    reduced_pool->crush_rule = upmap_primary_rule_no;
+    reduced_pool->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+    reduced_pool_inc.new_pool_names[upmap_primary_pool_id] = "upmap_primary_pool";
+    osdmap.apply_incremental(reduced_pool_inc);
+  }
+  {
+    // Clean invalid pg_upmap_primary entries
+    OSDMap::Incremental cleanup_inc(osdmap.get_epoch() + 1);
+    clean_pg_upmaps(g_ceph_context, osdmap, cleanup_inc);
+    osdmap.apply_incremental(cleanup_inc);
+
+    // Ensure that all pg_upmap_primary mappings have been removed
+    ASSERT_EQ(osdmap.get_num_pg_upmap_primaries(), 0);
+  }
+
+  // -------TEST 2: Create Invalid Mapping --------------
+  {
+    // Create 10 valid pg_upmap_primary mappings on the "upmap_primary_pool".
+    //   Valid mappings are where a new primary is set to an OSD that already exists
+    //   in the PG up set but which is not the current primary OSD.
+    OSDMap::Incremental valid_mappings_inc(osdmap.get_epoch() + 1);
+    std::cout << osdmap << std::endl;
+    for (int pg_num = 0; pg_num < 10; ++pg_num) {
+      pg_t rawpg(pg_num, upmap_primary_pool_id);
+      pg_t pgid = osdmap.raw_pg_to_pg(rawpg);
+      vector<int> raw, up;
+      osdmap.pg_to_raw_upmap(rawpg, &raw, &up);
+      int new_primary = raw[1]; // pick the second OSD to be the new prim (this is valid!)
+      ASSERT_NE(raw[0], new_primary);
+      valid_mappings_inc.new_pg_upmap_primary[pgid] = new_primary;
+    }
+    osdmap.apply_incremental(valid_mappings_inc);
+
+    // Check for 10 pg_upmap_primary mappings.
+    ASSERT_EQ(osdmap.get_num_pg_upmap_primaries(), 10);
+  }
+  {
+    // Make an illegal mapping on the next PG by setting the primary
+    // to an OSD that exists outside the up set.
+    OSDMap::Incremental illegal_mapping_inc(osdmap.get_epoch() +1);
+    pg_t rawpg(10, upmap_primary_pool_id);
+    pg_t pgid = osdmap.raw_pg_to_pg(rawpg);
+    vector<int> raw, up;
+    osdmap.pg_to_raw_upmap(rawpg, &raw, &up);
+    int new_primary = 2;
+    for (int osd : raw) {
+      ASSERT_NE(osd, new_primary);
+    }
+    illegal_mapping_inc.new_pg_upmap_primary[pgid] = new_primary;
+    osdmap.apply_incremental(illegal_mapping_inc);
+  }
+  {
+    // Check for 11 mappings (10 legal, 1 illegal)
+    ASSERT_EQ(osdmap.get_num_pg_upmap_primaries(), 11);
+
+    // Clean invalid pg_upmap_primary entry
+    OSDMap::Incremental cleanup_inc(osdmap.get_epoch() + 1);
+    clean_pg_upmaps(g_ceph_context, osdmap, cleanup_inc);
+    osdmap.apply_incremental(cleanup_inc);
+
+    // Ensure that the illegal mapping was removed
+    ASSERT_EQ(osdmap.get_num_pg_upmap_primaries(), 10);
+  }
+
+  // -------TEST 3: Mark an OSD Out --------------
+  {
+    // mark one of the OSDs out
+    OSDMap::Incremental out_osd_inc(osdmap.get_epoch() + 1);
+    out_osd_inc.new_weight[0] = CEPH_OSD_OUT;
+    osdmap.apply_incremental(out_osd_inc);
+    ASSERT_TRUE(osdmap.is_out(0));
+    std::cout << osdmap << std::endl;
+  }
+  {
+    // Clean mappings for out OSDs
+    OSDMap::Incremental cleanup_inc(osdmap.get_epoch() + 1);
+    clean_pg_upmaps(g_ceph_context, osdmap, cleanup_inc);
+    osdmap.apply_incremental(cleanup_inc);
+
+    // Ensure that mappings with out OSDs were removed
+    ASSERT_EQ(osdmap.get_num_pg_upmap_primaries(), 7);
+  }
+
+  // -------TEST 4: Create redundant mapping -----
+  {
+    // Make a redundant mapping on the next PG by setting the primary
+    // to an OSD that is already primary.
+    OSDMap::Incremental redundant_mapping_inc(osdmap.get_epoch() +1);
+    pg_t rawpg(10, upmap_primary_pool_id);
+    pg_t pgid = osdmap.raw_pg_to_pg(rawpg);
+    vector<int> raw, up;
+    osdmap.pg_to_raw_upmap(rawpg, &raw, &up);
+    int new_primary = 3;
+    ASSERT_EQ(raw[0], new_primary);
+    redundant_mapping_inc.new_pg_upmap_primary[pgid] = new_primary;
+    osdmap.apply_incremental(redundant_mapping_inc);
+  }
+  {
+    // Check for 8 mappings (7 legal, 1 illegal)
+    ASSERT_EQ(osdmap.get_num_pg_upmap_primaries(), 8);
+
+    // Clean invalid pg_upmap_primary entry
+    OSDMap::Incremental cleanup_inc(osdmap.get_epoch() + 1);
+    clean_pg_upmaps(g_ceph_context, osdmap, cleanup_inc);
+    osdmap.apply_incremental(cleanup_inc);
+
+    // Ensure that the illegal mapping was removed
+    ASSERT_EQ(osdmap.get_num_pg_upmap_primaries(), 7);
+  }
+
+  // -------TEST 5: Delete the pool --------------
+  {
+    // Delete "upmap_primary_pool"
+    OSDMap::Incremental delete_pool_inc(osdmap.get_epoch() + 1);
+    delete_pool_inc.old_pools.insert(osdmap.lookup_pg_pool_name("upmap_primary_pool"));
+    osdmap.apply_incremental(delete_pool_inc);
+  }
+  {
+    // Verify that mappings (now invalid) still exist before cleanup
+    ASSERT_EQ(osdmap.get_num_pg_upmap_primaries(), 7);
+
+    // Clean invalid pg_upmap_primary entries
+    OSDMap::Incremental cleanup_inc(osdmap.get_epoch() + 1);
+    clean_pg_upmaps(g_ceph_context, osdmap, cleanup_inc);
+    osdmap.apply_incremental(cleanup_inc);
+
+    // Ensure that all pg_upmap_primary mappings have been removed
+    ASSERT_EQ(osdmap.get_num_pg_upmap_primaries(), 0);
+  }
+}
+
 TEST_F(OSDMapTest, BUG_38897) {
   // http://tracker.ceph.com/issues/38897
   // build a fresh map with 12 OSDs, without any default pools
@@ -1624,6 +1840,166 @@ TEST_F(OSDMapTest, BUG_40104) {
     auto latency = mono_clock::now() - start;
     std::cout << "clean_pg_upmaps (~" << big_pg_num
               << " pg_upmap_items) latency:" << timespan_str(latency)
+              << std::endl;
+  }
+}
+
+TEST_F(OSDMapTest, TryDropRemapOverfullBothOverfull) {
+  // https://tracker.ceph.com/issues/63137
+  //
+  // try_drop_remap_overfull must not drop a [um_from -> osd] pair when
+  // um_from is itself overfull: the drop returns the PG to an OSD that
+  // already carries too many PGs, providing no net improvement.
+  //
+  // Setup (size=1, 12 PGs, 3 OSDs, target=4 each):
+  //   pg_upmap:       pg0..pg6 -> osd.0 (7 PGs), pg7..pg11 -> osd.1 (5 PGs)
+  //   pg_upmap_items: pg6: [osd.0 -> osd.1]
+  //   pgs_by_osd:     osd.0=6 (+2), osd.1=6 (+2), osd.2=0 (-4)
+  //
+  // Dropping pg6's entry would return it to osd.0, raising osd.0's deviation
+  // from +2 to +3 while lowering osd.1's from +2 to +1 -- a net wash that
+  // leaves one OSD worse off.
+  set_up_map(3, true);
+
+  OSDMap::Incremental pool_inc(osdmap.get_epoch() + 1);
+  pool_inc.new_pool_max = osdmap.get_pool_max();
+  pg_pool_t empty;
+  int64_t pool_id = ++pool_inc.new_pool_max;
+  pg_pool_t *p = pool_inc.get_new_pool(pool_id, &empty);
+  p->size = 1;
+  p->min_size = 1;
+  p->set_pg_num(12);
+  p->set_pgp_num(12);
+  p->type = pg_pool_t::TYPE_REPLICATED;
+  p->crush_rule = 0;
+  p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+  pool_inc.new_pool_names[pool_id] = "testpool";
+  osdmap.apply_incremental(pool_inc);
+
+  // Force placement via pg_upmap: pg0..pg6 -> osd.0, pg7..pg11 -> osd.1
+  {
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    for (int i = 0; i <= 6; ++i) {
+      pg_t pg = osdmap.raw_pg_to_pg(pg_t(i, pool_id));
+      inc.new_pg_upmap[pg] = mempool::osdmap::vector<int32_t>{0};
+    }
+    for (int i = 7; i <= 11; ++i) {
+      pg_t pg = osdmap.raw_pg_to_pg(pg_t(i, pool_id));
+      inc.new_pg_upmap[pg] = mempool::osdmap::vector<int32_t>{1};
+    }
+    osdmap.apply_incremental(inc);
+  }
+
+  // Add pg_upmap_items pg6: [osd.0 -> osd.1]
+  // pgs_by_osd after all upmaps: osd.0=6 (+2), osd.1=6 (+2), osd.2=0 (-4)
+  pg_t pg6 = osdmap.raw_pg_to_pg(pg_t(6, pool_id));
+  {
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.new_pg_upmap_items[pg6] =
+      mempool::osdmap::vector<pair<int32_t,int32_t>>{{0, 1}};
+    osdmap.apply_incremental(inc);
+  }
+
+  // Verify pg6 acts from osd.1 before the balancer runs
+  {
+    vector<int> up;
+    int up_primary;
+    osdmap.pg_to_up_acting_osds(pg6, &up, &up_primary, nullptr, nullptr);
+    ASSERT_EQ(up[0], 1);
+  }
+
+  set<int64_t> only_pools = {pool_id};
+  OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+  osdmap.calc_pg_upmaps(g_ceph_context, 1, 100, only_pools, &pending_inc);
+
+  OSDMap newmap;
+  newmap.deepish_copy_from(osdmap);
+  newmap.apply_incremental(pending_inc);
+
+  // pg6 must still act from osd.1: returning it to osd.0 would not improve
+  // the distribution (osd.0 deviation would rise from +2 to +3).
+  {
+    vector<int> up;
+    int up_primary;
+    newmap.pg_to_up_acting_osds(pg6, &up, &up_primary, nullptr, nullptr);
+    ASSERT_EQ(up[0], 1);
+  }
+}
+
+TEST_F(OSDMapTest, BUG_63137_calc_pg_upmaps_perf) {
+  // https://tracker.ceph.com/issues/63137
+  //
+  // try_drop_remap_overfull used to call test_change (full stddev recompute
+  // over all OSDs) for every incoming pg_upmap_items pair that cannot improve
+  // distribution.  With R incoming pairs per cohort OSD, that is O(n_cohort*R)
+  // wasted test_change calls.
+  //
+  // Setup (size=1, n_osds=600, pg_num=6000, target=10 per OSD):
+  //   cohort OSDs 0..499: 12 PGs each (deviation +2)
+  //   sink   OSDs 500..599: 0 PGs each (deviation -10)
+  //
+  //   pg_upmap:       pg(i*12+j) -> osd.i   for i in 0..499, j in 0..11
+  //   pg_upmap_items: pg(i*12+k) [osd.i -> osd.(i+k)%500]   k in 1..R
+  //
+  // After all upmaps each cohort OSD has (12-R) natural + R incoming = 12 PGs.
+  // When processing overfull osd.i, there are R incoming ring pairs with
+  // um_from also at deviation +2. Old code tried dropping each and paid
+  // test_change; new code skips them with the um_from overload check.
+  const int n_cohort = 500;
+  const int n_sink = 100;
+  const int n_osds = n_cohort + n_sink;
+  const int pgs_per_cohort = 12;
+  const int total_pgs = n_cohort * pgs_per_cohort;
+  const int R = 5;
+
+  set_up_map(n_osds, true);
+
+  int pool_id;
+  {
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    pending_inc.new_pool_max = osdmap.get_pool_max();
+    pool_id = ++pending_inc.new_pool_max;
+    pg_pool_t empty;
+    auto p = pending_inc.get_new_pool(pool_id, &empty);
+    p->size = 1;
+    p->min_size = 1;
+    p->set_pg_num(total_pgs);
+    p->set_pgp_num(total_pgs);
+    p->type = pg_pool_t::TYPE_REPLICATED;
+    p->crush_rule = 0;
+    p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+    pending_inc.new_pool_names[pool_id] = "perf_pool";
+    osdmap.apply_incremental(pending_inc);
+    ASSERT_TRUE(osdmap.have_pg_pool(pool_id));
+  }
+
+  // pg_upmap: assign all PGs for cohort OSD i to osd.i
+  // pg_upmap_items ring: pg(i*12+k) [osd.i -> osd.(i+k)%n_cohort]
+  {
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    for (int i = 0; i < n_cohort; ++i) {
+      for (int j = 0; j < pgs_per_cohort; ++j) {
+        pg_t pg = osdmap.raw_pg_to_pg(pg_t(i * pgs_per_cohort + j, pool_id));
+        inc.new_pg_upmap[pg] = mempool::osdmap::vector<int32_t>{i};
+      }
+      for (int k = 1; k <= R; ++k) {
+        pg_t pg = osdmap.raw_pg_to_pg(pg_t(i * pgs_per_cohort + k, pool_id));
+        int um_to = (i + k) % n_cohort;
+        inc.new_pg_upmap_items[pg] =
+          mempool::osdmap::vector<pair<int32_t,int32_t>>{{i, um_to}};
+      }
+    }
+    osdmap.apply_incremental(inc);
+  }
+
+  {
+    set<int64_t> only_pools = {pool_id};
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    auto start = mono_clock::now();
+    osdmap.calc_pg_upmaps(g_ceph_context, 1, 10000, only_pools, &pending_inc);
+    auto latency = mono_clock::now() - start;
+    std::cout << "calc_pg_upmaps (63137 scenario, n_cohort=" << n_cohort
+              << " R=" << R << ") latency: " << timespan_str(latency)
               << std::endl;
   }
 }

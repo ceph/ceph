@@ -26,8 +26,8 @@ growth by depth (across a single MDS) leads to a hotspot of activity.
 This results in lack of vertical scaling and wastage of non-busy resources/MDSs. 
 
 This led to the adoption of a more dynamic way of handling
-metadata: Dynamic Subtree Partitioning, where load intensive portions
-of the directory hierarchy from busy MDSs are migrated to non busy MDSs. 
+metadata: Dynamic Subtree Partitioning, where load-intensive portions
+of the directory hierarchy from busy MDSs are migrated to non-busy MDSs. 
 
 This strategy ensures that activity hotspots are relieved as they
 appear and so leads to vertical scaling of the metadata workload in
@@ -37,7 +37,7 @@ Export Process During Subtree Migration
 ---------------------------------------
 
 Once the exporter verifies that the subtree is permissible to be exported
-(Non degraded cluster, non-frozen subtree root), the subtree root
+(non-degraded cluster, non-frozen subtree root), the subtree root
 directory is temporarily auth pinned, the subtree freeze is initiated,
 and the exporter is committed to the subtree migration, barring an
 intervening failure of the importer or itself.

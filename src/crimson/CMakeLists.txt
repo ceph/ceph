@@ -1,6 +1,12 @@
 add_library(crimson::cflags INTERFACE IMPORTED)
 set(crimson_cflag_definitions "WITH_CRIMSON=1")
 
+option(WITH_CRIMSON_DETAILED_SAMPLING
+  "Enable detailed onode-tree sampling metrics in crimson-seastore" OFF)
+if(WITH_CRIMSON_DETAILED_SAMPLING)
+  list(APPEND crimson_cflag_definitions "CRIMSON_DETAILED_SAMPLING=1")
+endif()
+
 set_target_properties(crimson::cflags PROPERTIES
   INTERFACE_COMPILE_DEFINITIONS "${crimson_cflag_definitions}"
   INTERFACE_LINK_LIBRARIES Seastar::seastar)
@@ -26,6 +32,7 @@ include_directories(${CMAKE_SOURCE_DIR}/src/dmclock/support/src)
 #  - the logging is sent to Seastar backend
 #  - and the template parameter of lock_policy is SINGLE
 add_library(crimson-common STATIC
+  ${PROJECT_SOURCE_DIR}/src/auth/Auth.cc
   ${PROJECT_SOURCE_DIR}/src/auth/Crypto.cc
   ${PROJECT_SOURCE_DIR}/src/common/admin_socket_client.cc
   ${PROJECT_SOURCE_DIR}/src/common/bit_str.cc
@@ -119,6 +126,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/msg/msg_types.cc
   ${PROJECT_SOURCE_DIR}/src/msg/Message.cc
   ${PROJECT_SOURCE_DIR}/src/mon/PGMap.cc
+  ${PROJECT_SOURCE_DIR}/src/mon/MgrMap.cc
   ${PROJECT_SOURCE_DIR}/src/mon/MonCap.cc
   ${PROJECT_SOURCE_DIR}/src/mon/MonMap.cc
   ${PROJECT_SOURCE_DIR}/src/osd/osd_types.cc

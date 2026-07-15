@@ -20,22 +20,22 @@ Synopsis
 Description
 ===========
 
-**ceph-conf** is a utility for getting information from a ceph
+**ceph-conf** is a utility for getting information from a Ceph
 configuration file. As with most Ceph programs, you can specify which
 Ceph configuration file to use with the ``-c`` flag.
 
-Note that unlike other ceph tools, **ceph-conf** will *only* read from
+Note that unlike other Ceph tools, **ceph-conf** will *only* read from
 config files (or return compiled-in default values)--it will *not*
-fetch config values from the monitor cluster.  For this reason it is
+fetch config values from the Monitor cluster.  For this reason it is
 recommended that **ceph-conf** only be used in legacy environments
 that are strictly config-file based.  New deployments and tools should
-instead rely on either querying the monitor explicitly for
+instead rely on either querying the Monitors' central config store explicitly for
 configuration (e.g., ``ceph config get <daemon> <option>``) or use
 daemons themselves to fetch effective config options (e.g.,
 ``ceph-osd -i 123 --show-config-value osd_data``).  The latter option
 has the advantages of drawing from compiled-in defaults (which
-occasionally vary between daemons), config files, and the monitor's
-config database, providing the exact value that that daemon would be
+occasionally vary between daemons), config files, and the Monitors'
+config database, providing the exact value that a daemon would be
 using if it were started.
 
 Actions
@@ -94,7 +94,7 @@ Options
 .. option:: -r, --resolve-search
 
    search for the first file that exists and can be opened in the resulted
-   comma delimited search list.
+   comma-delimited search list.
 
 .. option:: -s, --section
 
@@ -124,7 +124,7 @@ To list all sections::
 
 To print the path of the "keyring" used by "client.0"::
 
-       ceph-conf --name client.0 -r -l keyring
+        ceph-conf --name client.0 -r -l keyring
 
 
 Files
@@ -146,4 +146,4 @@ information.
 See also
 ========
 
-:doc:`ceph <ceph>`\(8),
+:doc:`ceph <ceph>`\(8)

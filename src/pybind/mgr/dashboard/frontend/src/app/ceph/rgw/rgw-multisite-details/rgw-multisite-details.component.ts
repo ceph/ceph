@@ -606,11 +606,11 @@ export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, O
         }
       });
     } else if (node?.data?.type === 'zonegroup') {
-      this.modalRef = this.modalService.show(RgwMultisiteZonegroupDeletionFormComponent, {
+      this.cdsModalService.show(RgwMultisiteZonegroupDeletionFormComponent, {
         zonegroup: node.data
       });
     } else if (node?.data?.type === 'zone') {
-      this.modalRef = this.modalService.show(RgwMultisiteZoneDeletionFormComponent, {
+      this.cdsModalService.show(RgwMultisiteZoneDeletionFormComponent, {
         zone: node.data
       });
     }

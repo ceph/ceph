@@ -8,15 +8,50 @@ preparing, activating, and creating OSDs.
 
 It deviates from ``ceph-disk`` by not interacting or relying on the udev rules
 that come installed for Ceph. These rules allow automatic detection of
-previously setup devices that are in turn fed into ``ceph-disk`` to activate
+previously set up devices that are in turn fed into ``ceph-disk`` to activate
 them.
+
+Cephadm shell
+-------------
+Do not run ``ceph-volume`` from a container session that was started with
+``cephadm shell`` while relying on that shell's default bind mounts. By design,
+``cephadm shell`` omits several host bind mounts that ``ceph-volume`` expects
+(for example /run/udev, /run/lvm, etc.). Invoking ``ceph-volume`` in that
+environment is likely to fail or behave incorrectly.
+
+Running ``ceph-volume`` yourself, outside of what ``ceph orch`` / cephadm
+drives, is not the normal operational path: it is mainly for debugging,
+testing, or development.
+
+.. note:: Advanced use only
+
+   If you truly understand the implications, you can extend the default container
+   environment by passing ``cephadm shell`` a single ``-m`` (or ``--mount``)
+   option followed by every bind mount you need, for example:
+
+   .. code-block:: bash
+
+      cephadm shell -m /dev:/dev /run/udev:/run/udev /sys:/sys /run/lvm:/run/lvm /run/lock/lvm:/run/lock/lvm /:/rootfs
+
+   From **inside** that shell, if you still need the ``client.bootstrap-osd``
+   keyring (``cephadm shell`` does not expose it by default), you can obtain it
+   with the cluster tools available in the container, for example:
+
+   .. code-block:: bash
+
+      ceph auth get client.bootstrap-osd -o /var/lib/ceph/bootstrap-osd/ceph.keyring
+
+   Prefer doing this inside the enriched shell rather than generating key
+   material on the host and bind-mounting it in: the latter is easy to get
+   wrong, can leave sensitive files behind on the host, and is generally more
+   intrusive than running the same command from within the shell session.
 
 .. _ceph-disk-replaced:
 
 Replacing ``ceph-disk``
 -----------------------
 The ``ceph-disk`` tool was created at a time when the project was required to
-support many different types of init systems (upstart, sysvinit, etc...) while
+support many different types of init systems (upstart, sysvinit, etc.) while
 being able to discover devices. This caused the tool to concentrate initially
 (and exclusively afterwards) on GPT partitions. Specifically on GPT GUIDs,
 which were used to label devices in a unique way to answer questions like:
@@ -35,7 +70,7 @@ a node.
 It was hard to debug, or even replicate these problems given the asynchronous
 behavior of ``UDEV``.
 
-Since the world-view of ``ceph-disk`` had to be GPT partitions exclusively, it meant
+Since the worldview of ``ceph-disk`` had to be GPT partitions exclusively, it meant
 that it couldn't work with other technologies like LVM, or similar device
 mapper devices. It was ultimately decided to create something modular, starting
 with LVM support, and the ability to expand on other technologies as needed.
@@ -66,13 +101,13 @@ Modularity
 there are going to be lots of ways that people provision the hardware devices
 that we need to consider. There are already two: legacy ceph-disk devices that
 are still in use and have GPT partitions (handled by :ref:`ceph-volume-simple`),
-and lvm. SPDK devices where we manage NVMe devices directly from userspace are
+and LVM. SPDK devices where we manage NVMe devices directly from userspace are
 on the immediate horizon, where LVM won't work there since the kernel isn't
 involved at all.
 
 ``ceph-volume lvm``
 -------------------
-By making use of :term:`LVM tags`, the :ref:`ceph-volume-lvm` sub-command is
+By making use of :term:`LVM tags`, the :ref:`ceph-volume-lvm` subcommand is
 able to store and later re-discover and query devices associated with OSDs so
 that they can later be activated.
 

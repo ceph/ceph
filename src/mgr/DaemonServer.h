@@ -20,6 +20,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -51,10 +52,12 @@ class MonClient;
 class CommandContext;
 struct OSDPerfMetricQuery;
 struct MDSPerfMetricQuery;
+class StatsAutotuner;
 
 
 struct offline_pg_report {
-  std::set<int> osds;
+  using ContainerType = std::variant<std::vector<int>, std::set<int>>;
+  ContainerType osds;
   std::set<pg_t> ok, not_ok, unknown;
   std::set<pg_t> ok_become_degraded, ok_become_more_degraded;             // ok
   std::set<pg_t> bad_no_pool, bad_already_inactive, bad_become_inactive;  // not ok
@@ -66,9 +69,11 @@ struct offline_pg_report {
   void dump(Formatter *f) const {
     f->dump_bool("ok_to_stop", ok_to_stop());
     f->open_array_section("osds");
-    for (auto o : osds) {
-      f->dump_int("osd", o);
-    }
+    std::visit([&f](auto&& container) {
+      for (const auto& o : container) {
+        f->dump_int("osd", o);
+      }
+    }, osds);
     f->close_section();
     f->dump_unsigned("num_ok_pgs", ok.size());
     f->dump_unsigned("num_not_ok_pgs", not_ok.size());
@@ -123,6 +128,22 @@ struct offline_pg_report {
   }
 };
 
+struct upgrade_osd_report {
+  std::vector<int> osds;
+  std::vector<int> ok_upgrade, ok_upgraded, bad_no_version;
+
+  bool ok_to_upgrade() const {
+    return !ok_upgrade.empty() && bad_no_version.empty();
+  }
+
+  bool all_osds_upgraded() const {
+    return ((osds.size() == ok_upgraded.size()) &&
+            ok_upgrade.empty() && bad_no_version.empty());
+  }
+
+  void dump(Formatter *f) const;
+};
+
 /**
  * Server used in ceph-mgr to communicate with Ceph daemons like
  * MDSs and OSDs.
@@ -173,6 +194,7 @@ protected:
   class DaemonServerHook *asok_hook;
 
 private:
+  using ContainerType = std::variant<std::vector<int>, std::set<int>>;
   friend class ReplyOnFinish;
   bool _reply(MCommand* m,
 	      int ret, const std::string& s, const bufferlist& payload);
@@ -180,7 +202,7 @@ private:
   void _prune_pending_service_map();
 
   void _check_offlines_pgs(
-    const std::set<int>& osds,
+    const ContainerType& osds,
     const OSDMap& osdmap,
     const PGMap& pgmap,
     offline_pg_report *report);
@@ -190,6 +212,32 @@ private:
     const OSDMap& osdmap,
     const PGMap& pgmap,
     offline_pg_report *report);
+  void _maximize_ok_to_upgrade_set(
+    const std::vector<int>& orig_osds,
+    unsigned max,
+    const OSDMap& osdmap,
+    const PGMap& pgmap,
+    std::string_view ceph_version_new,
+    upgrade_osd_report *osd_report,
+    offline_pg_report *pg_report,
+    std::ostream *ss);
+  std::optional<std::string> get_osd_metadata(
+    const std::string& name,
+    const std::string& osd_id);
+  void _update_upgraded_osds(
+    const std::vector<int>& orig_osds,
+    const std::vector<int>& to_upgrade,
+    const std::vector<int>& upgraded,
+    const std::vector<int>& version_unknown,
+    upgrade_osd_report *osd_report);
+  bool _valid_bucket_type_for_upgrade_check(
+    std::string_view bucket_type_str);
+  int _populate_crush_bucket_osds(
+    const int item_id,
+    const OSDMap& osdmap,
+    const PGMap& pgmap,
+    std::vector<int>& crush_bucket_osds,
+    std::ostream *ss);
 
   utime_t started_at;
   std::atomic<bool> pgmap_ready;
@@ -199,6 +247,7 @@ private:
   SafeTimer timer;
   Context *tick_event;
   void tick();
+  void maybe_adjust_stats_period();
   void schedule_tick_locked(double delay_sec);
 
   class OSDPerfMetricCollectorListener : public MetricListener {
@@ -261,7 +310,7 @@ private:
 private:
   // -- op tracking --
   OpTracker op_tracker;
-
+  std::unique_ptr<StatsAutotuner> stats_autotuner;
 public:
   int init(uint64_t gid, entity_addrvec_t client_addrs);
 
@@ -326,5 +375,88 @@ public:
                     std::ostream& ss);
 };
 
+class StatsAutotuner {
+private:
+  int64_t baseline_period;
+  int64_t changed_stats_period;
+  utime_t last_period_check;
+  
+  static constexpr int64_t MAX_PERIOD = 60;
+  static constexpr int64_t RECOVERY_THRESHOLD = 20;
+  static constexpr int64_t MIN_QUEUE_DEPTH = 5;
+  
+public:
+  explicit StatsAutotuner(int64_t baseline) 
+    : baseline_period(baseline), changed_stats_period(baseline) {}
+  
+  void set_baseline_period(int64_t period) { 
+    baseline_period = changed_stats_period = period; 
+  }
+
+  void record_our_change(int64_t new_period) {
+    changed_stats_period = new_period;  // We changed it
+  }
+
+  bool was_changed_by_user(int64_t current_period) const {
+    return changed_stats_period != current_period;
+  }
+  
+  bool should_check_now(utime_t now, double tick_period) {
+    if (now - last_period_check > tick_period * 5) {
+      last_period_check = now;
+      return true;
+    }
+    return false;
+  }
+
+
+  // Add enum reasons
+  enum class AdjustmentReason : uint8_t {
+    high_queue_depth = 0,
+    performance_recovered,
+    no_adjustment_needed
+  };
+  
+  struct AdjustmentResult {
+    int64_t new_period = 0;
+    AdjustmentReason reason_code = AdjustmentReason::no_adjustment_needed;
+
+    std::string_view reason_str() const {
+      switch (reason_code) {
+        case AdjustmentReason::high_queue_depth:
+          return "high_queue_depth";
+        case AdjustmentReason::performance_recovered:
+          return "performance_recovered";
+        case AdjustmentReason::no_adjustment_needed:
+          return "no_adjustment_needed";
+        default:
+          return "unknown_reason";
+      }
+    }
+  };
+
+  AdjustmentResult evaluate_adjustment(
+    int64_t queue_depth, 
+    int64_t current_period, 
+    int64_t queue_threshold) {
+
+    if (queue_depth > queue_threshold) {
+      int64_t increment = std::max(MIN_QUEUE_DEPTH, current_period / 4);
+      int64_t new_period = std::min(current_period + increment, MAX_PERIOD);
+      
+      if (new_period > current_period) {
+        return {new_period, AdjustmentReason::high_queue_depth};
+      }
+    } else if (current_period > baseline_period && queue_depth < RECOVERY_THRESHOLD) {
+      int64_t new_period = std::max(current_period / 2, baseline_period);
+      
+      if (new_period < current_period) {
+        return {new_period, AdjustmentReason::performance_recovered};
+      }
+    }
+    
+    return {current_period, AdjustmentReason::no_adjustment_needed};
+  }
+};
 #endif
 

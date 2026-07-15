@@ -17,14 +17,14 @@ class KeyValueDB;
 class StoreTool
 {
   struct Deleter {
-    ObjectStore *store = nullptr;
+    ObjectStore* store = nullptr;
+    std::function<void(ObjectStore*)> cb;
     Deleter() {}
-    Deleter(ObjectStore *_store)
-      : store(_store) {}
+    Deleter(ObjectStore* _store, std::function<void(ObjectStore*)> _cb)
+      : store(_store), cb(_cb) {}
     void operator()(KeyValueDB *db) {
-      if (store) {
-	store->umount();
-	delete store;
+      if (cb) {
+        cb(store);
       } else {
 	delete db;
       }
@@ -42,10 +42,12 @@ public:
 	    bool need_stats = false);
   uint32_t traverse(const std::string& prefix,
                     const bool do_crc,
+                    const bool pretty_binary_key,
                     const bool do_value_dump,
                     std::ostream *out);
   void list(const std::string& prefix,
 	    const bool do_crc,
+	    const bool pretty_binary_key,
 	    const bool do_value_dump);
   bool exists(const std::string& prefix);
   bool exists(const std::string& prefix, const std::string& key);

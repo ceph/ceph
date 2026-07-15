@@ -48,10 +48,18 @@ void PerfCountersCollectionImpl::add(PerfCounters *l)
 
   m_loggers.insert(l);
 
-  const auto rc_name = l->get_name();
-  for (auto& dt: l->m_data) {
-    const auto path = rc_name + "." + dt.name;
-    by_path[path] = {&dt, l};
+  const auto& rc_name = l->get_name();
+  std::string path;
+  // +1 for the dot, +64 for the counter name (48 is the current
+  // max length)
+  const auto reserve_size = rc_name.size() + 1 + 64;
+  for (auto& dt : l->m_data) {
+    std::string path;
+    path.reserve(reserve_size);
+    path.assign(rc_name);
+    path += '.';
+    path += dt.name;
+    by_path.insert_or_assign(std::move(path), PerfCounterRef{&dt, l});
   }
 }
 

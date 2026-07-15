@@ -4,7 +4,7 @@ import { USER } from '~/app/shared/constants/app.constants';
 export interface SMBCluster {
   resource_type: typeof CLUSTER_RESOURCE;
   cluster_id: string;
-  auth_mode: typeof AUTHMODE[keyof typeof AUTHMODE];
+  auth_mode: (typeof AUTHMODE)[keyof typeof AUTHMODE];
   domain_settings?: DomainSettings;
   user_group_settings?: JoinSource[];
   custom_dns?: string[];
@@ -28,6 +28,7 @@ interface SMBCephfs {
   subvolumegroup?: string;
   subvolume?: string;
   provider?: string;
+  qos?: SMBShareQoS;
 }
 
 interface SMBShareLoginControl {
@@ -77,6 +78,15 @@ export const PLACEMENT = {
   label: 'label'
 };
 
+export interface SMBShareQoS {
+  read_iops_limit?: number;
+  write_iops_limit?: number;
+  read_bw_limit?: number;
+  write_bw_limit?: number;
+  read_delay_max?: number;
+  write_delay_max?: number;
+}
+
 export interface SMBShare {
   resource_type: string;
   cluster_id: string;
@@ -88,20 +98,6 @@ export interface SMBShare {
   browseable?: boolean;
   restrict_access?: boolean;
   login_control?: SMBShareLoginControl;
-}
-
-interface SMBCephfs {
-  volume: string;
-  path: string;
-  subvolumegroup?: string;
-  subvolume?: string;
-  provider?: string;
-}
-
-interface SMBShareLoginControl {
-  name: string;
-  access: 'read' | 'read-write' | 'none' | 'admin';
-  category?: typeof USER | 'group';
 }
 
 export interface SMBJoinAuth {

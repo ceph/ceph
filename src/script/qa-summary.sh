@@ -15,7 +15,7 @@ Help:
    qa-summary.sh --help
 
 Usage:
-   qa-summary.sh < test_failure_tickets.txt
+   qa-summary.sh < test_failure_tickets.txt {--detail}
 
 Before running the script, prep a 'test_failure_tickets.txt' file
 (name is subjective) containing links to all the tracker tickets
@@ -31,27 +31,28 @@ $ cat test_failure_tickets.txt
   https://tracker.ceph.com/issues/71506
   https://tracker.ceph.com/issues/71182
 
+To print more detail about assignee, priority, and status
+for each ticket, append the "--detail" flag to your command.
+
 EOM
 }
 
-function extract_tracker_project {
-    redmine_url=$1
-    remote_api_output="$(curl --silent "${redmine_url}.json")"
-    project="$(echo "$remote_api_output" | jq -r '.issue.project.name')"
-    echo "$project"
-}
+DETAIL=false
 
-function extract_tracker_subject {
-    redmine_url=$1
-    remote_api_output="$(curl --silent "${redmine_url}.json")"
-    subject="$(echo "$remote_api_output" | jq -r '.issue.subject')"
-    echo "$subject"
+function extract_json {
+   redmine_url=$1
+   json_output="$(curl --silent "${redmine_url}.json")"
+   echo "$json_output"
 }
 
 
 if [ "$1" == "--help" ]; then
     print_help
     exit
+fi
+
+if [ "$1" == "--detail" ]; then
+    DETAIL=true
 fi
 
 # Check for std input
@@ -65,8 +66,12 @@ fi
 printf "\nFailures, unrelated:\n\n"
 failure_num=1
 while IFS= read -r arg || [ -n "$arg" ]; do
-    project="$(extract_tracker_project $arg)"
-    subject="$(extract_tracker_subject $arg)"
+    json_output="$(extract_json $arg)"
+    project="$(echo "$json_output" | jq -r '.issue.project.name')"
+    subject="$(echo "$json_output" | jq -r '.issue.subject')"
+    assignee="$(echo "$json_output" | jq -r '.issue.assigned_to.name')"
+    priority="$(echo "$json_output" | jq -r '.issue.priority.name')"
+    stat="$(echo "$json_output" | jq -r '.issue.status.name')"
     if [ -z "${project}" ]; then
          echo "Could not find a project for the following ticket: $arg"
          exit
@@ -75,7 +80,20 @@ while IFS= read -r arg || [ -n "$arg" ]; do
          echo "Could not find a subject for the following ticket: $arg"
 	 exit
     fi
+    if [ -z "${priority}" ]; then
+         echo "Could not find a priority for the following ticket: $arg"
+         exit
+    fi
+    if [ -z "${stat}" ]; then
+         echo "Could not find a status for the following ticket: $arg"
+         exit
+    fi
     echo "$failure_num. $arg - $subject - ($project)"
+    if $DETAIL; then
+        echo "   Priority: $priority"
+        echo "   Assignee: $assignee"
+        echo "   Status: $stat"
+    fi
     ((failure_num++))
 done
 

@@ -21,6 +21,7 @@
 #include "MDSRank.h"
 #include "SnapClient.h"
 #include "common/debug.h"
+#include "include/ceph_assert.h"
 
 #include <string_view>
 
@@ -56,12 +57,16 @@ ostream& operator<<(ostream& out, const SnapRealm& realm)
     out << " past_parent_snaps=" << realm.srnode.past_parent_snaps;
   }
 
-  if (realm.srnode.is_parent_global())
-    out << " global ";
+  if (realm.srnode.is_parent_global()) {
+    out << " global";
+  }
+  if (realm.srnode.is_subvolume()) {
+    out << " subvol";
+  }
   out << " last_modified " << realm.srnode.last_modified
       << " change_attr " << realm.srnode.change_attr
-      << " is_snapdir_visible " << realm.srnode.is_snapdir_visible();
-  out << " " << &realm << ")";
+      << " is_snapdir_visible " << realm.srnode.is_snapdir_visible()
+      << " " << &realm << ")";
   return out;
 }
 
@@ -298,6 +303,14 @@ snapid_t SnapRealm::resolve_snapname(std::string_view n, inodeno_t atino, snapid
   if (parent && srnode.current_parent_since <= last)
     return parent->resolve_snapname(n, atino, std::max(first, srnode.current_parent_since), last);
   return 0;
+}
+
+
+bool SnapRealm::will_md_op_succeed(const snapid_t snap_id, const string& md_key,
+                                   const string& md_val,
+                                   const unsigned int op_flag) const
+{
+  return srnode.snaps.at(snap_id).will_md_op_succeed(md_key, md_val, op_flag);
 }
 
 

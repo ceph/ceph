@@ -33,14 +33,14 @@ constexpr size_t INTERNAL_NODE_CAPACITY = 254;
  *   checksum   : ceph_le32[1]                    4B
  *   size       : ceph_le32[1]                    4B
  *   meta       : backref_node_meta_le_t[1]       20B
- *   keys       : paddr_le_t[CAPACITY]            (193*8)B
- *   values     : backref_map_val_le_t[CAPACITY]  (193*13)B
- *                                                = 4081B
+ *   keys       : paddr_le_t[CAPACITY]            (140*8)B
+ *   values     : backref_map_val_le_t[CAPACITY]  (140*21)B
+ *                                                = 4088B
  *
  * TODO: update FixedKVNodeLayout to handle the above calculation
  * TODO: the above alignment probably isn't portable without further work
  */
-constexpr size_t LEAF_NODE_CAPACITY = 193;
+constexpr size_t LEAF_NODE_CAPACITY = 140;
 
 using BackrefNode = FixedKVNode<paddr_t>;
 
@@ -105,7 +105,8 @@ public:
 
   void update(
     const_iterator iter,
-    backref_map_val_t val) final {
+    backref_map_val_t val,
+    modification_t) final {
     return journal_update(
       iter,
       val,
@@ -167,6 +168,40 @@ public:
 };
 using BackrefLeafNodeRef = BackrefLeafNode::Ref;
 
+struct BackrefCursor :
+  BtreeCursor<paddr_t, backref::backref_map_val_t, BackrefLeafNode>
+{
+  using Base = BtreeCursor<paddr_t,
+			   backref::backref_map_val_t,
+			   BackrefLeafNode>;
+  using Base::BtreeCursor;
+  paddr_t get_paddr() const {
+    assert(key.is_absolute());
+    return key;
+  }
+  laddr_t get_laddr() const {
+    assert(is_viewable());
+    assert(!is_end());
+    return iter.get_val().laddr;
+  }
+  extent_types_t get_type() const {
+    assert(!is_end());
+    return iter.get_val().type;
+  }
+
+  BackrefCursor* renew_cursor(Transaction &t) {
+    auto c = op_context_t{ctx.cache, t};
+    t.maybe_add_to_read_set(parent);
+    return new BackrefCursor(
+      c,
+      std::move(parent),
+      modifications,
+      std::move(iter));
+  }
+
+};
+using BackrefCursorRef = boost::intrusive_ptr<BackrefCursor>;
+
 } // namespace crimson::os::seastore::backref
 
 #if FMT_VERSION >= 90000
@@ -174,4 +209,5 @@ template <> struct fmt::formatter<crimson::os::seastore::backref::backref_map_va
 template <> struct fmt::formatter<crimson::os::seastore::backref::BackrefInternalNode> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::backref::BackrefLeafNode> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::backref::backref_node_meta_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::backref::BackrefCursor> : fmt::ostream_formatter {};
 #endif

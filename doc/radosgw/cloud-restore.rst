@@ -10,7 +10,7 @@ of those transitioned objects from the remote S3 endpoints into the local
 RGW deployment.
 
 This feature currently enables the restoration of objects transitioned to
-S3-compatible cloud services. In order to faciliate this,
+S3-compatible cloud services. In order to facilitate this,
 the ``retain_head_object`` option should be set to ``true``
 in the ``tier-config`` when configuring the storage class.
 
@@ -32,7 +32,7 @@ objects as well::
 
     {
       "access_key": <access>,
-      "secret": <secret>,`
+      "secret": <secret>,
       "endpoint": <endpoint>,
       "region": <region>,
       "host_style": <path | virtual>,
@@ -227,8 +227,10 @@ Example 3:
 
 This will restore the object ``doc3.rtf`` for ``read_through_restore_days`` days.
 
-.. note:: The above CLI command may time out if object restoration takes too long.
-          You can verify the restore status before reissuing the command.
+The ``rgw_read_through_timeout_ms`` configuration option controls how long the
+``GET`` request will wait for restore completion before returning a timeout error.
+The default is 10000 milliseconds (10 seconds). Setting this to 0 disables waiting,
+requiring clients to poll for completion by retrying the ``GET`` request.
 
 
 Verifying the Restoration Status

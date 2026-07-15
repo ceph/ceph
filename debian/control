@@ -49,6 +49,7 @@ Build-Depends: automake,
                libhwloc-dev <pkg.ceph.crimson>,
                libibverbs-dev,
                libicu-dev,
+               libjerasure-dev,
                librdmacm-dev,
                libkeyutils-dev,
                libldap2-dev,
@@ -72,20 +73,18 @@ Build-Depends: automake,
                libxml2-dev,
                librabbitmq-dev,
                libre2-dev,
+               libgrpc++-dev,
+               protobuf-compiler-grpc,
                libutf8proc-dev (>= 2.2.0),
-               librdkafka-dev,
+               librdkafka-dev (>= 1.1.0),
                libthrift-dev (>= 0.13.0),
                libyaml-cpp-dev (>= 0.6),
                libzstd-dev <pkg.ceph.check>,
-               libxmlsec1 <pkg.ceph.check>,
-               libxmlsec1-nss <pkg.ceph.check>,
-               libxmlsec1-openssl <pkg.ceph.check>,
-               libxmlsec1-dev <pkg.ceph.check>,
                libdaxctl-dev (>= 63) <pkg.ceph.pmdk>,
                libndctl-dev (>= 63) <pkg.ceph.pmdk>,
                libpmem-dev <pkg.ceph.pmdk>,
                libpmemobj-dev (>= 1.8) <pkg.ceph.pmdk>,
-               libprotobuf-dev <pkg.ceph.crimson>,
+               libprotobuf-dev,
                libxsimd-dev <!pkg.ceph.arrow>,
                ninja-build,
                nlohmann-json3-dev,
@@ -110,7 +109,9 @@ Build-Depends: automake,
                python3-onelogin-saml2 <pkg.ceph.check>,
                python3-jinja2,
                python3-markupsafe,
+               python3-pip,
                python3-setuptools,
+               python3-wheel,
                python3-sphinx,
                python3-venv,
                python3-yaml,
@@ -142,6 +143,7 @@ Package: ceph-base
 Architecture: linux-any
 Depends: binutils,
          ceph-common (= ${binary:Version}),
+         libjerasure2,
          logrotate,
          parted,
          psmisc,
@@ -243,11 +245,30 @@ Depends: ceph-base (= ${binary:Version}),
          ${misc:Depends},
          ${python3:Depends},
          ${shlibs:Depends},
-Recommends: ceph-mgr-dashboard,
+Recommends: ceph-mgr-alerts,
+            ceph-mgr-cephadm,
+            ceph-mgr-cli-api,
+            ceph-mgr-dashboard,
             ceph-mgr-diskprediction-local,
+            ceph-mgr-influx,
+            ceph-mgr-insights,
+            ceph-mgr-iostat,
             ceph-mgr-k8sevents,
-            ceph-mgr-cephadm
-Suggests: python3-influxdb
+            ceph-mgr-localpool,
+            ceph-mgr-mds-autoscaler,
+            ceph-mgr-mirroring,
+            ceph-mgr-nfs,
+            ceph-mgr-nvmeof,
+            ceph-mgr-osd-perf-query,
+            ceph-mgr-osd-support,
+            ceph-mgr-prometheus,
+            ceph-mgr-rgw,
+            ceph-mgr-selftest,
+            ceph-mgr-smb,
+            ceph-mgr-snap-schedule,
+            ceph-mgr-stats,
+            ceph-mgr-telegraf,
+            ceph-mgr-test-orchestrator
 Replaces: ceph (<< 0.93-417),
 Breaks: ceph (<< 0.93-417),
 Description: manager for the ceph distributed storage system
@@ -261,6 +282,7 @@ Description: manager for the ceph distributed storage system
 Package: ceph-mgr-dashboard
 Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
+         ceph-mgr-smb (= ${binary:Version}),
          ${python3:Depends}
 Description: dashboard module for ceph-mgr
  Ceph is a massively scalable, open-source, distributed
@@ -288,7 +310,8 @@ Description: diskprediction-local module for ceph-mgr
 
 Package: ceph-mgr-modules-core
 Architecture: all
-Depends: ${misc:Depends},
+Depends: python3-prettytable,
+         ${misc:Depends},
          ${python3:Depends},
 Replaces: ceph-mgr (<< 15.1.0)
 Breaks: ceph-mgr (<< 15.1.0)
@@ -300,9 +323,43 @@ Description: ceph manager modules which are always enabled
  This package contains a set of core ceph-mgr modules which are always
  enabled.
 
+Package: ceph-mgr-modules-standard
+Architecture: all
+Depends: ceph-mgr-modules-core (= ${binary:Version}),
+         ceph-mgr-alerts (= ${binary:Version}),
+         ceph-mgr-influx (= ${binary:Version}),
+         ceph-mgr-insights (= ${binary:Version}),
+         ceph-mgr-iostat (= ${binary:Version}),
+         ceph-mgr-localpool (= ${binary:Version}),
+         ceph-mgr-mds-autoscaler (= ${binary:Version}),
+         ceph-mgr-mirroring (= ${binary:Version}),
+         ceph-mgr-nfs (= ${binary:Version}),
+         ceph-mgr-nvmeof (= ${binary:Version}),
+         ceph-mgr-osd-perf-query (= ${binary:Version}),
+         ceph-mgr-osd-support (= ${binary:Version}),
+         ceph-mgr-prometheus (= ${binary:Version}),
+         ceph-mgr-rgw (= ${binary:Version}),
+         ceph-mgr-selftest (= ${binary:Version}),
+         ceph-mgr-smb (= ${binary:Version}),
+         ceph-mgr-snap-schedule (= ${binary:Version}),
+         ceph-mgr-stats (= ${binary:Version}),
+         ceph-mgr-telegraf (= ${binary:Version}),
+         ceph-mgr-test-orchestrator (= ${binary:Version}),
+         ${misc:Depends},
+Description: Ceph Manager modules without heavy external dependencies
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This meta-package has no files of its own. It pulls in the full set of
+ ceph-mgr modules that were formerly shipped together in
+ ceph-mgr-modules-core, so that existing users or scripts that want the
+ complete standard module set can depend on a single package.
+
 Package: ceph-mgr-rook
 Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
+         ceph-mgr-nfs (= ${binary:Version}),
          ${misc:Depends},
          ${python3:Depends},
          ${shlibs:Depends},
@@ -333,7 +390,9 @@ Description: kubernetes events module for ceph-mgr
 Package: ceph-mgr-cephadm
 Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
-	 cephadm,
+         ceph-mgr-nfs (= ${binary:Version}),
+         ceph-mgr-smb (= ${binary:Version}),
+         cephadm,
          ${misc:Depends},
          ${python3:Depends},
          openssh-client,
@@ -347,6 +406,307 @@ Description: cephadm orchestrator module for ceph-mgr
  This package contains the CEPHADM module for ceph-mgr's orchestration
  functionality, to allow ceph-mgr to perform orchestration functions
  over a standard SSH connection.
+
+Package: ceph-mgr-cli-api
+Architecture: all
+Depends: ceph-mgr (= ${binary:Version}),
+         ${misc:Depends},
+         ${python3:Depends},
+Description: CLI API module for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the CLI API module for ceph-mgr, which provides
+ a REST-like API for the Ceph command-line interface.
+
+Package: ceph-mgr-alerts
+Architecture: all
+Depends: ceph-mgr (= ${binary:Version}),
+         ${misc:Depends},
+         ${python3:Depends},
+Breaks: ceph-mgr-modules-core (<< 21.0.0)
+Replaces: ceph-mgr-modules-core (<< 21.0.0)
+Description: alerts module for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the alerts module for ceph-mgr, which sends
+ email notifications on cluster health state changes.
+
+Package: ceph-mgr-influx
+Architecture: all
+Depends: ceph-mgr (= ${binary:Version}),
+         ${misc:Depends},
+         ${python3:Depends},
+Suggests: python3-influxdb
+Breaks: ceph-mgr-modules-core (<< 21.0.0)
+Replaces: ceph-mgr-modules-core (<< 21.0.0)
+Description: influx module for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the influx module for ceph-mgr, which sends
+ performance metrics to an InfluxDB time-series database.
+
+Package: ceph-mgr-insights
+Architecture: all
+Depends: ceph-mgr (= ${binary:Version}),
+         ${misc:Depends},
+         ${python3:Depends},
+Breaks: ceph-mgr-modules-core (<< 21.0.0)
+Replaces: ceph-mgr-modules-core (<< 21.0.0)
+Description: insights module for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the insights module for ceph-mgr, which records
+ cluster health history to support cluster analysis.
+
+Package: ceph-mgr-iostat
+Architecture: all
+Depends: ceph-mgr (= ${binary:Version}),
+         ${misc:Depends},
+         ${python3:Depends},
+Breaks: ceph-mgr-modules-core (<< 21.0.0)
+Replaces: ceph-mgr-modules-core (<< 21.0.0)
+Description: iostat module for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the iostat module for ceph-mgr, which displays
+ a running summary of I/O statistics across the cluster.
+
+Package: ceph-mgr-localpool
+Architecture: all
+Depends: ceph-mgr (= ${binary:Version}),
+         ${misc:Depends},
+         ${python3:Depends},
+Breaks: ceph-mgr-modules-core (<< 21.0.0)
+Replaces: ceph-mgr-modules-core (<< 21.0.0)
+Description: localpool module for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the localpool module for ceph-mgr, which
+ automatically creates per-host CRUSH rules and pools.
+
+Package: ceph-mgr-mds-autoscaler
+Architecture: all
+Depends: ceph-mgr (= ${binary:Version}),
+         ${misc:Depends},
+         ${python3:Depends},
+Breaks: ceph-mgr-modules-core (<< 21.0.0)
+Replaces: ceph-mgr-modules-core (<< 21.0.0)
+Description: mds_autoscaler module for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the mds_autoscaler module for ceph-mgr, which
+ automatically scales the number of MDS daemons based on file system needs.
+
+Package: ceph-mgr-mirroring
+Architecture: all
+Depends: ceph-mgr (= ${binary:Version}),
+         ${misc:Depends},
+         ${python3:Depends},
+Breaks: ceph-mgr-modules-core (<< 21.0.0)
+Replaces: ceph-mgr-modules-core (<< 21.0.0)
+Description: mirroring module for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the mirroring module for ceph-mgr, which
+ provides management commands for CephFS mirroring.
+
+Package: ceph-mgr-nfs
+Architecture: all
+Depends: ceph-mgr (= ${binary:Version}),
+         ${misc:Depends},
+         ${python3:Depends},
+Breaks: ceph-mgr-modules-core (<< 21.0.0)
+Replaces: ceph-mgr-modules-core (<< 21.0.0)
+Description: nfs module for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the nfs module for ceph-mgr, which manages
+ NFS gateway deployments on top of CephFS and RGW.
+
+Package: ceph-mgr-nvmeof
+Architecture: all
+Depends: ceph-mgr (= ${binary:Version}),
+         ${misc:Depends},
+         ${python3:Depends},
+Breaks: ceph-mgr-modules-core (<< 21.0.0)
+Replaces: ceph-mgr-modules-core (<< 21.0.0)
+Description: nvmeof module for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the nvmeof module for ceph-mgr, which manages
+ NVMe-oF gateway deployments for Ceph RBD.
+
+Package: ceph-mgr-osd-perf-query
+Architecture: all
+Depends: ceph-mgr (= ${binary:Version}),
+         python3-prettytable,
+         ${misc:Depends},
+         ${python3:Depends},
+Breaks: ceph-mgr-modules-core (<< 21.0.0)
+Replaces: ceph-mgr-modules-core (<< 21.0.0)
+Description: osd_perf_query module for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the osd_perf_query module for ceph-mgr, which
+ exposes OSD performance counter query functionality.
+
+Package: ceph-mgr-osd-support
+Architecture: all
+Depends: ceph-mgr (= ${binary:Version}),
+         ${misc:Depends},
+         ${python3:Depends},
+Breaks: ceph-mgr-modules-core (<< 21.0.0)
+Replaces: ceph-mgr-modules-core (<< 21.0.0)
+Description: osd_support module for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the osd_support module for ceph-mgr, which
+ provides additional OSD management commands.
+
+Package: ceph-mgr-prometheus
+Architecture: all
+Depends: ceph-mgr (= ${binary:Version}),
+         python3-cherrypy3,
+         ${misc:Depends},
+         ${python3:Depends},
+Breaks: ceph-mgr-modules-core (<< 21.0.0)
+Replaces: ceph-mgr-modules-core (<< 21.0.0)
+Description: prometheus module for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the prometheus module for ceph-mgr, which
+ exposes cluster metrics in Prometheus exposition format.
+
+Package: ceph-mgr-rgw
+Architecture: all
+Depends: ceph-mgr (= ${binary:Version}),
+         ${misc:Depends},
+         ${python3:Depends},
+Breaks: ceph-mgr-modules-core (<< 21.0.0)
+Replaces: ceph-mgr-modules-core (<< 21.0.0)
+Description: rgw module for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the rgw module for ceph-mgr, which provides
+ management and status commands for the RADOS Gateway.
+
+Package: ceph-mgr-selftest
+Architecture: all
+Depends: ceph-mgr (= ${binary:Version}),
+         ${misc:Depends},
+         ${python3:Depends},
+Breaks: ceph-mgr-modules-core (<< 21.0.0)
+Replaces: ceph-mgr-modules-core (<< 21.0.0)
+Description: selftest module for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the selftest module for ceph-mgr, used for
+ testing the manager framework.
+
+Package: ceph-mgr-smb
+Architecture: all
+Depends: ceph-mgr (= ${binary:Version}),
+         ${misc:Depends},
+         ${python3:Depends},
+Breaks: ceph-mgr-modules-core (<< 21.0.0)
+Replaces: ceph-mgr-modules-core (<< 21.0.0)
+Description: smb module for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the smb module for ceph-mgr, which manages
+ SMB gateway deployments on Ceph.
+
+Package: ceph-mgr-snap-schedule
+Architecture: all
+Depends: ceph-mgr (= ${binary:Version}),
+         ${misc:Depends},
+         ${python3:Depends},
+Breaks: ceph-mgr-modules-core (<< 21.0.0)
+Replaces: ceph-mgr-modules-core (<< 21.0.0)
+Description: snap_schedule module for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the snap_schedule module for ceph-mgr, which
+ manages automated CephFS snapshot schedules.
+
+Package: ceph-mgr-stats
+Architecture: all
+Depends: ceph-mgr (= ${binary:Version}),
+         ${misc:Depends},
+         ${python3:Depends},
+Breaks: ceph-mgr-modules-core (<< 21.0.0)
+Replaces: ceph-mgr-modules-core (<< 21.0.0)
+Description: stats module for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the stats module for ceph-mgr, which exposes
+ file system client I/O statistics.
+
+Package: ceph-mgr-telegraf
+Architecture: all
+Depends: ceph-mgr (= ${binary:Version}),
+         ${misc:Depends},
+         ${python3:Depends},
+Breaks: ceph-mgr-modules-core (<< 21.0.0)
+Replaces: ceph-mgr-modules-core (<< 21.0.0)
+Description: telegraf module for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the telegraf module for ceph-mgr, which sends
+ performance metrics to a Telegraf agent.
+
+Package: ceph-mgr-test-orchestrator
+Architecture: all
+Depends: ceph-mgr (= ${binary:Version}),
+         ${misc:Depends},
+         ${python3:Depends},
+Breaks: ceph-mgr-modules-core (<< 21.0.0)
+Replaces: ceph-mgr-modules-core (<< 21.0.0)
+Description: test_orchestrator module for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the test_orchestrator module for ceph-mgr, used
+ for testing the orchestrator framework.
 
 Package: ceph-mgr-dbg
 Architecture: linux-any
@@ -414,6 +774,33 @@ Description: debugging symbols for ceph-mon
  block and file system storage.
  .
  This package contains the debugging symbols for ceph-mon.
+
+Package: ceph-mon-client-nvmeof
+Architecture: linux-any
+Depends: librados2 (= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends},
+Description: NVMe-oF Gateway Monitor Client for Ceph
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the NVMe-oF Gateway Monitor Client. It distributes
+ Paxos ANA info to the NVMe-oF Gateway and provides beacons to the
+ ceph-mon daemon.
+
+Package: ceph-mon-client-nvmeof-dbg
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: ceph-mon-client-nvmeof (= ${binary:Version}),
+         ${misc:Depends},
+Description: debugging symbols for ceph-mon-client-nvmeof
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the debugging symbols for ceph-mon-client-nvmeof.
 
 Package: ceph-osd
 Architecture: linux-any
@@ -491,7 +878,6 @@ Architecture: any
 Depends: ceph-base (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends},
-         libprotobuf23,
 Recommends: ceph-volume (= ${binary:Version}),
             nvme-cli,
             smartmontools,

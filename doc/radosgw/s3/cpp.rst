@@ -73,7 +73,7 @@ This creates a connection so that you can interact with the server.
 Listing Owned Buckets
 ---------------------
 
-This gets a list of Buckets that you own.
+This gets a list of buckets that you own.
 This also prints out the bucket name, owner ID, and display name
 for each bucket.
 
@@ -180,7 +180,7 @@ Deleting a Bucket
 
 .. note::
 
-   The Bucket must be empty! Otherwise it won't work!
+   The bucket must be empty! Otherwise it won't work!
 
 .. code-block:: cpp
 

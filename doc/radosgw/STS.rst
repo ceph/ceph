@@ -30,17 +30,17 @@ The following STS REST APIs have been implemented in Ceph Object Gateway:
     **DurationSeconds** (Integer/ Optional): The duration in seconds of the session.
     Its default value is 3600.
 
-    **ExternalId** (String/ Optional): A unique Id that might be used when a role is
+    **ExternalId** (String/ Optional): A unique ID that might be used when a role is
     assumed in another account.
 
-    **SerialNumber** (String/ Optional): The Id number of the MFA device associated
+    **SerialNumber** (String/ Optional): The ID number of the MFA device associated
     with the user making the AssumeRole call.
 
     **TokenCode** (String/ Optional): The value provided by the MFA device, if the
     trust policy of the role being assumed requires MFA.
 
 #. AssumeRoleWithWebIdentity: Returns a set of temporary credentials for users that
-   have been authenticated by a web/mobile app by an OpenID Connect /OAuth2.0 Identity Provider.
+   have been authenticated by a web/mobile app by an OpenID Connect/OAuth 2.0 Identity Provider.
    Currently Keycloak has been tested and integrated with RGW.
 
    Parameters:
@@ -55,19 +55,19 @@ The following STS REST APIs have been implemented in Ceph Object Gateway:
     Its default value is 3600.
 
     **ProviderId** (String/ Optional): Fully qualified host component of the domain name
-    of the IDP. Valid only for OAuth2.0 tokens (not for OpenID Connect tokens).
+    of the IDP. Valid only for OAuth 2.0 tokens (not for OpenID Connect tokens).
 
-    **WebIdentityToken** (String/ Required): The OpenID Connect/ OAuth2.0 token, which the
+    **WebIdentityToken** (String/ Required): The OpenID Connect/OAuth 2.0 token, which the
     application gets in return after authenticating its user with an IDP.
 
 #. GetCallerIdentity: Returns details about the IAM user or role whose credentials are used to call the operation.
 
    Response:
-    **Account** (The account ID that owns or contains the calling entity.
+    **Account** The account ID that owns or contains the calling entity.
 
     **Arn** The ARN associated with the calling entity.
 
-    **UserId** The unique identifier of the calling entity(user or assumed role).
+    **UserId** The unique identifier of the calling entity (user or assumed role).
 
 .. note:: No permissions are required to perform GetCallerIdentity.
 
@@ -91,9 +91,9 @@ Similarly, an example of a policy that uses 'azp' claim in the condition is of t
 
     "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Federated\":[\"arn:aws:iam:::oidc-provider/<URL of IDP>\"]},\"Action\":[\"sts:AssumeRoleWithWebIdentity\"],\"Condition\":{\"StringEquals\":{\"<URL of IDP> :azp\":\"<azp>\"\}\}\}\]\}"
 
-A shadow user is created corresponding to every federated user. The user id is derived from the 'sub' field of the incoming web token.
-The user is created in a separate namespace - 'oidc' such that the user id doesn't clash with any other user ids in RGW. The format of the user id
-is - ``<tenant>$<user-namespace>$<sub>`` where user-namespace is 'oidc' for users that authenticate with oidc providers.
+A shadow user is created corresponding to every federated user. The user ID is derived from the ``sub`` field of the incoming web token.
+The user is created in a separate namespace ``oidc`` such that the user ID doesn't clash with any other user IDs in RGW. The format of the user ID
+is ``<tenant>$<user-namespace>$<sub>`` where ``user-namespace`` is ``oidc`` for users that authenticate with OIDC providers.
 
 RGW now supports Session tags that can be passed in the web token to AssumeRoleWithWebIdentity call. More information related to Session Tags can be found here
 :doc:`session-tags`.
@@ -175,7 +175,7 @@ Examples
     resp = s3client.list_buckets()
 
 #. The following is an example of AssumeRoleWithWebIdentity API call, where an external app that has users authenticated with
-   an OpenID Connect/ OAuth2 IDP (Keycloak in this example), assumes a role to get back temporary credentials and access S3 resources
+   an OpenID Connect/OAuth 2.0 IDP (Keycloak in this example), assumes a role to get back temporary credentials and access S3 resources
    according to permission policy of the role.
 
    .. code-block:: python
@@ -190,7 +190,7 @@ Examples
     )
 
     oidc_response = iam_client.create_open_id_connect_provider(
-        Url=<URL of the OpenID Connect Provider,
+        Url=<URL of the OpenID Connect Provider>,
         ClientIDList=[
             <Client id registered with the IDP>
         ],
@@ -221,7 +221,7 @@ Examples
     region_name='',
     )
 
-    response = client.assume_role_with_web_identity(
+    response = sts_client.assume_role_with_web_identity(
     RoleArn=role_response['Role']['Arn'],
     RoleSessionName='Bob',
     DurationSeconds=3600,

@@ -246,7 +246,7 @@ public:
                    PerfCounters *perfcounter, Context *user_req);
 
   ~C_DiscardRequest() override;
-  void finish_req(int r) override {}
+  void finish_req(int r) override;
 
   bool alloc_resources() override;
 

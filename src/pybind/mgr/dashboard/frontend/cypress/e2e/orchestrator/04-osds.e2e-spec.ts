@@ -1,9 +1,9 @@
 import { OSDsPageHelper } from '../cluster/osds.po';
-import { DashboardV3PageHelper } from '../ui/dashboard-v3.po';
+import { OverviewPagehelper } from '../ui/overview.po';
 
 describe('OSDs page', () => {
   const osds = new OSDsPageHelper();
-  const dashboard = new DashboardV3PageHelper();
+  const overview = new OverviewPagehelper();
 
   before(() => {
     cy.login();
@@ -28,8 +28,12 @@ describe('OSDs page', () => {
           osds.expectTableCount('total', expectedCount);
 
           // landing page is easier to check OSD status
-          dashboard.navigateTo();
-          dashboard.cardRow('OSD').should('contain.text', `${expectedCount} OSDs`);
+          overview.navigateTo();
+          overview.clickSystemsTab();
+          cy.get(`[data-test-id="OSD-value"]`).should(
+            'contain.text',
+            `${expectedCount}/${expectedCount} in/up`
+          );
 
           cy.wait(30000);
           expect(Number(newCount)).to.be.gte(2);

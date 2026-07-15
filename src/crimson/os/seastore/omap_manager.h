@@ -58,7 +58,9 @@ public:
    */
   using initialize_omap_iertr = base_iertr;
   using initialize_omap_ret = initialize_omap_iertr::future<omap_root_t>;
-  virtual initialize_omap_ret initialize_omap(Transaction &t, laddr_t hint,
+  virtual initialize_omap_ret initialize_omap(
+    Transaction &t,
+    laddr_hint_t hint,
     omap_type_t type) = 0;
 
   /**
@@ -75,7 +77,7 @@ public:
   virtual omap_get_value_ret omap_get_value(
     const omap_root_t &omap_root,
     Transaction &t,
-    const std::string &key) = 0;
+    std::string key) = 0;
 
   /**
    * set key value mapping in omap
@@ -91,15 +93,15 @@ public:
   virtual omap_set_key_ret omap_set_key(
     omap_root_t &omap_root,
     Transaction &t,
-    const std::string &key,
-    const ceph::bufferlist &value) = 0;
+    std::string key,
+    ceph::bufferlist value) = 0;
 
   using omap_set_keys_iertr = omap_set_key_iertr;
   using omap_set_keys_ret = omap_set_keys_iertr::future<>;
   virtual omap_set_keys_ret omap_set_keys(
     omap_root_t &omap_root,
     Transaction &t,
-    std::map<std::string, ceph::bufferlist>&& keys) = 0;
+    std::map<std::string, ceph::bufferlist> keys) = 0;
 
   /**
    * remove key value mapping in omap tree
@@ -113,7 +115,14 @@ public:
   virtual omap_rm_key_ret omap_rm_key(
     omap_root_t &omap_root,
     Transaction &t,
-    const std::string &key) = 0;
+    std::string key) = 0;
+
+  using omap_rm_keys_iertr = base_iertr;
+  using omap_rm_keys_ret = omap_rm_keys_iertr::future<>;
+  virtual omap_rm_keys_ret omap_rm_keys(
+    omap_root_t& root,
+    Transaction& t,
+    std::set<std::string> keys) = 0;
 
   /**
    * omap_iterate
@@ -225,14 +234,21 @@ public:
    * @param string &first, range start
    * @param string &last, range end
    */
+  struct key_range_t{
+    std::string first;
+    std::string last;
+    depth_t root_depth;
+    bool get_next;
+    bool total_complete;
+  };
+
   using omap_rm_key_range_iertr = base_iertr;
   using omap_rm_key_range_ret = omap_rm_key_range_iertr::future<>;
   virtual omap_rm_key_range_ret omap_rm_key_range(
     omap_root_t &omap_root,
     Transaction &t,
     const std::string &first,
-    const std::string &last,
-    omap_list_config_t config) = 0;
+    const std::string &last) = 0;
 
   /**
    * clear all omap tree key->value mapping

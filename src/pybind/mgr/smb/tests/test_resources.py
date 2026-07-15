@@ -750,6 +750,89 @@ login_control:
     assert share.login_control[3].access == enums.LoginAccess.NONE
 
 
+def test_cluster_client_compat_default():
+    """Test cluster with default client support mode (not set)."""
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.cluster
+cluster_id: testcluster
+auth_mode: user
+user_group_settings:
+  - source_type: resource
+    ref: testusers
+"""
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+    cluster = loaded[0]
+
+    # When not set, should default to None
+    assert cluster.client_compat is None
+    # effective_client_compat should return DEFAULT
+    assert cluster.effective_client_compat == enums.ClientSupportMode.DEFAULT
+    # is_macos_compatibility_enabled should be False
+    assert cluster.is_macos_compatibility_enabled is False
+
+
+def test_cluster_client_compat_macos():
+    """Test cluster with macos client support mode enabled."""
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.cluster
+cluster_id: maccluster
+auth_mode: user
+user_group_settings:
+  - source_type: resource
+    ref: macusers
+client_compat: macos
+"""
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+    cluster = loaded[0]
+
+    # Should be set to MACOS
+    assert cluster.client_compat == enums.ClientSupportMode.MACOS
+    # effective_client_compat should return MACOS
+    assert cluster.effective_client_compat == enums.ClientSupportMode.MACOS
+    # is_macos_compatibility_enabled should be True
+    assert cluster.is_macos_compatibility_enabled is True
+
+    # Verify it's in the simplified output
+    sd = cluster.to_simplified()
+    assert sd
+    assert 'client_compat' in sd
+    assert sd['client_compat'] == 'macos'
+
+
+def test_cluster_client_compat_explicit_default():
+    """Test cluster with explicitly set default client support mode."""
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.cluster
+cluster_id: defaultcluster
+auth_mode: user
+user_group_settings:
+  - source_type: resource
+    ref: defaultusers
+client_compat: default
+"""
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+    cluster = loaded[0]
+
+    # Should be explicitly set to DEFAULT
+    assert cluster.client_compat == enums.ClientSupportMode.DEFAULT
+    # effective_client_compat should return DEFAULT
+    assert cluster.effective_client_compat == enums.ClientSupportMode.DEFAULT
+    # is_macos_compatibility_enabled should be False
+    assert cluster.is_macos_compatibility_enabled is False
+
+
 def test_tls_credential():
     import yaml
 
@@ -955,3 +1038,553 @@ comment: "Invalid\\nComment"
     data = yaml.safe_load_all(yaml_str)
     with pytest.raises(ValueError, match="Comment cannot contain newlines"):
         smb.resources.load(data)
+
+
+def test_share_with_qos():
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.share
+cluster_id: qoscluster
+share_id: qostest
+name: QoS Test Share
+cephfs:
+    volume: myvol
+    path: /qos
+    qos:
+        read_iops_limit: 100
+        write_iops_limit: 200
+        read_bw_limit: "1048576"
+        write_bw_limit: "2097152"
+        read_burst_mult: 20
+        write_burst_mult: 15
+"""
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+
+    share = loaded[0]
+    assert share.cephfs.qos is not None
+    assert share.cephfs.qos.read_iops_limit == 100
+    assert share.cephfs.qos.write_iops_limit == 200
+    assert share.cephfs.qos.read_bw_limit == "1048576"
+    assert share.cephfs.qos.write_bw_limit == "2097152"
+    assert share.cephfs.qos.read_burst_mult == 20
+    assert share.cephfs.qos.write_burst_mult == 15
+
+
+def test_share_update_qos():
+    share = smb.resources.Share(
+        cluster_id='qoscluster',
+        share_id='qostest',
+        name='QoS Test Share',
+        cephfs=smb.resources.CephFSStorage(
+            volume='myvol',
+            path='/qos',
+            qos=smb.resources.QoSConfig(
+                read_iops_limit=100,
+                write_iops_limit=200,
+                read_burst_mult=20,
+                write_burst_mult=15,
+            ),
+        ),
+    )
+
+    # Update with new QoS values
+    updated_cephfs = share.cephfs.update_qos(
+        read_bw_limit="1048576",
+        write_bw_limit="2M",
+        read_iops_limit=300,
+        read_burst_mult=25,
+    )
+
+    assert updated_cephfs.qos is not None
+    assert updated_cephfs.qos.read_iops_limit == 300  # new value
+    assert updated_cephfs.qos.write_iops_limit == 200  # preserved original
+    assert updated_cephfs.qos.read_bw_limit == "1048576"  # new value
+    assert updated_cephfs.qos.write_bw_limit == "2M"  # new value
+    assert updated_cephfs.qos.read_burst_mult == 25  # new value
+    assert updated_cephfs.qos.write_burst_mult == 15  # preserved original
+
+    # Verify share with updated QoS works
+    data = share.to_simplified()
+    data.pop("resource_type", None)
+    updated_share = smb.resources.Share(**{**data, 'cephfs': updated_cephfs})
+    assert updated_share.cephfs.qos.read_bw_limit == "1048576"
+    assert updated_share.cephfs.qos.read_burst_mult == 25
+
+
+def test_share_qos_remove():
+    share = smb.resources.Share(
+        cluster_id='qoscluster',
+        share_id='qostest',
+        name='QoS Test Share',
+        cephfs=smb.resources.CephFSStorage(
+            volume='myvol',
+            path='/qos',
+            qos=smb.resources.QoSConfig(
+                read_iops_limit=100,
+                write_iops_limit=200,
+                read_burst_mult=20,
+                write_burst_mult=15,
+            ),
+        ),
+    )
+
+    # Disable QoS by setting all limits to 0
+    updated_cephfs = share.cephfs.update_qos(
+        read_iops_limit=0,
+        write_iops_limit=0,
+        read_bw_limit="0",
+        write_bw_limit="0",
+    )
+
+    # Verify QoS is completely removed
+    assert updated_cephfs.qos is None
+
+
+def test_share_qos_default_burst_mult():
+    """Test that burst_mult defaults to 15 when not specified"""
+    share = smb.resources.Share(
+        cluster_id='qoscluster',
+        share_id='qostest',
+        name='QoS Test Share',
+        cephfs=smb.resources.CephFSStorage(
+            volume='myvol',
+            path='/qos',
+            qos=smb.resources.QoSConfig(
+                read_iops_limit=100, write_iops_limit=200
+            ),
+        ),
+    )
+
+    assert share.cephfs.qos is not None
+    assert share.cephfs.qos.read_burst_mult == 15  # Default value
+    assert share.cephfs.qos.write_burst_mult == 15  # Default value
+
+
+def test_share_qos_max_allowed_iops_and_bandwidth():
+    """Test that IOPS and bandwidth values exceeding limits will be capped"""
+    IOPS_LIMIT_MAX = 1_000_000
+    BYTES_LIMIT_MAX = 1 << 40  # 1 TB
+
+    share = smb.resources.Share(
+        cluster_id="qoscluster",
+        share_id="qostest",
+        name="QoS Test Share",
+        cephfs=smb.resources.CephFSStorage(
+            volume="myvol",
+            path="/qos",
+            qos=smb.resources.QoSConfig(
+                read_iops_limit=100,
+                write_iops_limit=200,
+            ),
+        ),
+    )
+
+    updated_cephfs = share.cephfs.update_qos(
+        read_iops_limit=1_500_000_000,  # way above limit
+        write_bw_limit="2000000000000",  # ~2 TB as string, way above limit
+    )
+
+    assert updated_cephfs.qos is not None
+    assert updated_cephfs.qos.read_iops_limit == IOPS_LIMIT_MAX  # capped
+    assert updated_cephfs.qos.write_bw_limit == str(BYTES_LIMIT_MAX)  # capped
+
+
+def test_share_update_qos_human_readable():
+    """Test update_qos with human-readable bandwidth limits (pass-through to Samba)."""
+    share = smb.resources.Share(
+        cluster_id='qoscluster',
+        share_id='qostest',
+        name='QoS Test Share',
+        cephfs=smb.resources.CephFSStorage(
+            volume='myvol',
+            path='/qos',
+        ),
+    )
+
+    # Update with human-readable format (stored as-is)
+    updated_cephfs = share.cephfs.update_qos(
+        read_bw_limit="10M",
+        write_bw_limit="1G",
+        read_iops_limit=100,
+        read_burst_mult=20,
+    )
+
+    assert updated_cephfs.qos is not None
+    assert updated_cephfs.qos.read_bw_limit == "10M"
+    assert updated_cephfs.qos.write_bw_limit == "1G"
+    assert updated_cephfs.qos.read_iops_limit == 100
+    assert updated_cephfs.qos.read_burst_mult == 20
+
+    # Update with byte values (also strings)
+    updated_cephfs2 = share.cephfs.update_qos(
+        read_bw_limit="50M",
+        write_bw_limit="52428800",
+    )
+
+    assert updated_cephfs2.qos.read_bw_limit == "50M"
+    assert updated_cephfs2.qos.write_bw_limit == "52428800"
+
+
+def test_share_qos_backward_compat_integers():
+    """Test backward compatibility with integer bandwidth values from YAML."""
+    import yaml
+
+    # Old-style YAML with integer bandwidth values (pre-human-readable support)
+    yaml_str = """
+resource_type: ceph.smb.share
+cluster_id: qoscluster
+share_id: oldstyle
+name: Old Style Share
+cephfs:
+    volume: myvol
+    path: /old
+    qos:
+        read_iops_limit: 100
+        write_iops_limit: 200
+        read_bw_limit: 1048576
+        write_bw_limit: 2097152
+"""
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+
+    share = loaded[0]
+    assert share.cephfs.qos is not None
+    assert share.cephfs.qos.read_bw_limit == "1048576"
+    assert share.cephfs.qos.write_bw_limit == "2097152"
+
+
+def test_share_qos_remove_individual_limit():
+    """Test removing individual limits while keeping others."""
+    share = smb.resources.Share(
+        cluster_id='qoscluster',
+        share_id='qostest',
+        name='QoS Test Share',
+        cephfs=smb.resources.CephFSStorage(
+            volume='myvol',
+            path='/qos',
+            qos=smb.resources.QoSConfig(
+                read_iops_limit=100,
+                write_iops_limit=200,
+                read_bw_limit="10M",
+                write_bw_limit="20M",
+            ),
+        ),
+    )
+
+    # Remove only read IOPS limit
+    updated_cephfs = share.cephfs.update_qos(read_iops_limit=0)
+
+    assert updated_cephfs.qos is not None
+    assert updated_cephfs.qos.read_iops_limit is None  # Removed
+    assert updated_cephfs.qos.write_iops_limit == 200  # Preserved
+    assert updated_cephfs.qos.read_bw_limit == "10M"  # Preserved
+    assert updated_cephfs.qos.write_bw_limit == "20M"  # Preserved
+
+
+def test_rgw_storage_basic():
+    """Test basic RGWStorage creation and validation."""
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.share
+cluster_id: rgwcluster
+share_id: rgwshare
+name: RGW Share
+rgw:
+    bucket: my-bucket
+"""
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+
+    share = loaded[0]
+    assert isinstance(share.rgw, smb.resources.RGWStorage)
+    assert share.rgw.bucket == 'my-bucket'
+    assert share.rgw.user_id is None
+    assert share.rgw.credential_ref is None
+
+
+def test_rgw_storage_with_credentials():
+    """Test RGWStorage with credential_ref."""
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.share
+cluster_id: rgwcluster
+share_id: rgwshare
+name: RGW Share
+rgw:
+    bucket: my-bucket
+    user_id: testuser
+    credential_ref: testuser
+"""
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+
+    share = loaded[0]
+    assert share.rgw.bucket == 'my-bucket'
+    assert share.rgw.user_id == 'testuser'
+    assert share.rgw.credential_ref == 'testuser'
+
+
+def test_rgw_storage_missing_bucket():
+    """Test validation error when bucket is missing."""
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.share
+cluster_id: rgwcluster
+share_id: rgwshare
+name: RGW Share
+rgw:
+    bucket: ""
+"""
+    data = yaml.safe_load_all(yaml_str)
+    with pytest.raises(ValueError, match='bucket requires a value'):
+        smb.resources.load(data)
+
+
+def test_rgw_storage_convert_mask():
+    """Test RGWStorage conversion - credentials now in RGWCredential."""
+    storage = smb.resources.RGWStorage(
+        bucket='my-bucket',
+        user_id='testuser',
+        credential_ref='testuser',
+    )
+
+    masked = storage.convert(
+        (smb.enums.PasswordFilter.NONE, smb.enums.PasswordFilter.HIDDEN)
+    )
+    assert masked.bucket == 'my-bucket'
+    assert masked.user_id == 'testuser'
+    assert masked.credential_ref == 'testuser'
+
+
+def test_rgw_storage_convert_none_credentials():
+    """Test conversion when credential_ref is None."""
+    storage = smb.resources.RGWStorage(
+        bucket='my-bucket',
+    )
+
+    encoded = storage.convert(
+        (smb.enums.PasswordFilter.NONE, smb.enums.PasswordFilter.BASE64)
+    )
+    assert encoded.credential_ref is None
+
+    masked = storage.convert(
+        (smb.enums.PasswordFilter.NONE, smb.enums.PasswordFilter.HIDDEN)
+    )
+    assert masked.credential_ref is None
+
+
+def test_rgw_storage_to_simplified():
+    """Test RGWStorage serialization to simplified format."""
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.share
+cluster_id: rgwcluster
+share_id: rgwshare
+name: RGW Share
+rgw:
+    bucket: my-bucket
+    user_id: testuser
+    credential_ref: testuser
+"""
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+
+    share = loaded[0]
+    simplified = share.to_simplified()
+
+    assert 'rgw' in simplified
+    assert simplified['rgw']['bucket'] == 'my-bucket'
+    assert simplified['rgw']['user_id'] == 'testuser'
+    # Credentials are now referenced via credential_ref
+    assert simplified['rgw']['credential_ref'] == 'testuser'
+
+
+def test_rgw_storage_invalid_credentials():
+    """Test RGWStorage with invalid credential_ref."""
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.share
+cluster_id: rgwcluster
+share_id: rgwshare
+name: RGW Share
+rgw:
+    bucket: my-bucket
+    credential_ref: "invalid-ref-with-spaces"
+"""
+    data = yaml.safe_load_all(yaml_str)
+    # Note: Credential validation happens during staging, not at load time
+    # This test documents that RGWStorage accepts any credential_ref string
+    loaded = smb.resources.load(data)
+    assert loaded
+    assert loaded[0].rgw.credential_ref == "invalid-ref-with-spaces"
+
+
+def test_share_with_rgw_and_cephfs_mutual_exclusion():
+    """Test that share cannot have both rgw and cephfs."""
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.share
+cluster_id: testcluster
+share_id: testshare
+name: Invalid Share
+cephfs:
+    volume: cephfs
+    path: /
+rgw:
+    bucket: my-bucket
+    path: /
+"""
+    data = yaml.safe_load_all(yaml_str)
+    with pytest.raises(ValueError, match='only one storage backend'):
+        smb.resources.load(data)
+
+
+def test_rgw_credential_basic():
+    """Test basic RGWCredential creation and validation."""
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.rgw.credential
+rgw_credential_id: rgwcred1
+user_id: s3user
+access_key_id: AKIAIOSFODNN7EXAMPLE
+secret_access_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+"""
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+
+    cred = loaded[0]
+    assert isinstance(cred, smb.resources.RGWCredential)
+    assert cred.rgw_credential_id == 'rgwcred1'
+    assert cred.user_id == 's3user'
+    assert cred.access_key_id == 'AKIAIOSFODNN7EXAMPLE'
+    assert (
+        cred.secret_access_key == 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'
+    )
+    assert cred.intent == smb.enums.Intent.PRESENT
+
+
+def test_rgw_credential_missing_required_fields():
+    """Test that RGWCredential requires user_id, access_key_id, and secret_access_key."""
+    import yaml
+
+    # Missing user_id
+    yaml_str = """
+resource_type: ceph.smb.rgw.credential
+rgw_credential_id: rgwcred1
+access_key_id: AKIAIOSFODNN7EXAMPLE
+secret_access_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+"""
+    data = yaml.safe_load_all(yaml_str)
+    with pytest.raises(Exception):  # Will fail during construction
+        smb.resources.load(data)
+
+    # Missing access_key_id
+    yaml_str = """
+resource_type: ceph.smb.rgw.credential
+rgw_credential_id: rgwcred1
+user_id: s3user
+secret_access_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+"""
+    data = yaml.safe_load_all(yaml_str)
+    with pytest.raises(Exception):  # Will fail during construction
+        smb.resources.load(data)
+
+    # Missing secret_access_key
+    yaml_str = """
+resource_type: ceph.smb.rgw.credential
+rgw_credential_id: rgwcred1
+user_id: s3user
+access_key_id: AKIAIOSFODNN7EXAMPLE
+"""
+    data = yaml.safe_load_all(yaml_str)
+    with pytest.raises(Exception):  # Will fail during construction
+        smb.resources.load(data)
+
+
+def test_rgw_credential_password_conversion():
+    """Test RGWCredential password field conversion."""
+    cred = smb.resources.RGWCredential(
+        rgw_credential_id='test_cred',
+        user_id='testuser',
+        access_key_id='AKIATEST',
+        secret_access_key='secretkey123',
+    )
+
+    # Test masking (NONE -> HIDDEN)
+    masked = cred.convert(
+        (smb.enums.PasswordFilter.NONE, smb.enums.PasswordFilter.HIDDEN)
+    )
+    assert masked.access_key_id == '****************'
+    assert masked.secret_access_key == '****************'
+    assert masked.user_id == 'testuser'  # user_id should not be masked
+
+    # Test base64 encoding (NONE -> BASE64)
+    encoded = cred.convert(
+        (smb.enums.PasswordFilter.NONE, smb.enums.PasswordFilter.BASE64)
+    )
+    assert encoded.access_key_id != 'AKIATEST'
+    assert encoded.secret_access_key != 'secretkey123'
+    assert encoded.user_id == 'testuser'
+
+    # Test base64 decoding (BASE64 -> NONE)
+    decoded = encoded.convert(
+        (smb.enums.PasswordFilter.BASE64, smb.enums.PasswordFilter.NONE)
+    )
+    assert decoded.access_key_id == 'AKIATEST'
+    assert decoded.secret_access_key == 'secretkey123'
+
+
+def test_rgw_credential_with_linked_cluster():
+    """Test RGWCredential with linked_to_cluster."""
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.rgw.credential
+rgw_credential_id: rgwcred1
+user_id: s3user
+access_key_id: AKIAIOSFODNN7EXAMPLE
+secret_access_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+linked_to_cluster: mysmb
+"""
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+
+    cred = loaded[0]
+    assert cred.linked_to_cluster == 'mysmb'
+
+
+def test_rgw_credential_removed():
+    """Test RGWCredential with removed intent."""
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.rgw.credential
+rgw_credential_id: rgwcred1
+user_id: placeholder
+access_key_id: placeholder
+secret_access_key: placeholder
+intent: removed
+"""
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+
+    cred = loaded[0]
+    assert cred.intent == smb.enums.Intent.REMOVED
+    assert cred.rgw_credential_id == 'rgwcred1'

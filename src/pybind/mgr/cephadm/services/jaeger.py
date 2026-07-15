@@ -1,8 +1,11 @@
+from dataclasses import replace
 from typing import List, cast, Optional, TYPE_CHECKING
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec
 from ceph.deployment.service_spec import TracingSpec, ServiceSpec
+from orchestrator import DaemonDescription
 from .service_registry import register_cephadm_service
 from mgr_util import build_url
+from cephadm import utils
 
 if TYPE_CHECKING:
     from ..module import CephadmOrchestrator
@@ -48,6 +51,29 @@ class JaegerAgentService(CephadmService):
         daemon_spec.final_config = {'collector_nodes': ",".join(collectors)}
         daemon_spec.deps = self.get_dependencies(self.mgr)
         return daemon_spec
+
+    def choose_next_action(
+        self,
+        scheduled_action: utils.Action,
+        daemon_type: Optional[str],
+        spec: Optional[ServiceSpec],
+        curr_deps: List[str],
+        last_deps: List[str],
+        daemon: Optional[DaemonDescription] = None,
+    ) -> utils.NextDaemonStep:
+        """Given the scheduled_action, service spec, daemon_type, and
+        current and previous dependency lists return the next action that
+        this service would prefer cephadm take.
+        """
+        step = super().choose_next_action(
+            scheduled_action, daemon_type, spec, curr_deps, last_deps
+        )
+        # changes to jaeger-agent deps affect the way the unit.run for
+        # the daemon is written, which we rewrite on redeploy, but not
+        # on reconfig.
+        if step.action is utils.Action.RECONFIG:
+            return replace(step, action=utils.Action.REDEPLOY)
+        return step
 
 
 @register_cephadm_service

@@ -37,14 +37,15 @@
 
 class OSDriver : public MapCacher::StoreDriver<std::string, ceph::buffer::list> {
 #ifdef WITH_CRIMSON
-  using ObjectStoreT = crimson::os::FuturizedStore::Shard;
-  using CollectionHandleT = ObjectStoreT::CollectionRef;
+  using ObjectStoreT = crimson::os::BackendStore;
+  using CollectionHandleT = crimson::os::FuturizedStore::Shard::CollectionRef;
+  ObjectStoreT os;
 #else
   using ObjectStoreT = ObjectStore;
   using CollectionHandleT = ObjectStoreT::CollectionHandle;
+  ObjectStoreT *os;
 #endif
 
-  ObjectStoreT *os;
   CollectionHandleT ch;
   ghobject_t hoid;
 
@@ -83,10 +84,18 @@ public:
   OSDriver(ObjectStoreT *os, const coll_t& cid, const ghobject_t &hoid) :
     OSDriver(os, os->open_collection(cid), hoid) {}
 #endif
+
+#ifdef WITH_CRIMSON
+  OSDriver(ObjectStoreT os, CollectionHandleT ch, const ghobject_t &hoid) :
+    os(os),
+    ch(ch),
+    hoid(hoid) {}
+#else
   OSDriver(ObjectStoreT *os, CollectionHandleT ch, const ghobject_t &hoid) :
     os(os),
     ch(ch),
     hoid(hoid) {}
+#endif
 
   int get_keys(
     const std::set<std::string> &keys,
@@ -171,12 +180,6 @@ public:
       return o;
     }
   };
-
-  static const std::string LEGACY_MAPPING_PREFIX;
-  static const std::string MAPPING_PREFIX;
-  static const std::string OBJECT_PREFIX;
-  static const char *PURGED_SNAP_EPOCH_PREFIX;
-  static const char *PURGED_SNAP_PREFIX;
 
 #ifndef WITH_CRIMSON
   struct Scrubber {
@@ -328,9 +331,13 @@ private:
     return prefix_itr;
   }
 
-  /// reset the MapCacher backend, this should be called on pg interval change
-  void reset_backend() {
-    backend.reset();
+  /// Flush pending snap-mapper writes into the provided transaction,
+  /// then reset the MapCacher backend. This should be called on pg
+  /// interval change to ensure in-flight snap-mapper state is persisted
+  /// before the cache is cleared.
+  void flush_and_reset_backend(
+    MapCacher::Transaction<std::string, ceph::buffer::list> *t) {
+    backend.flush_and_reset(t);
   }
 
   /// Update snaps for oid, empty new_snaps removes the mapping

@@ -3,21 +3,21 @@
 import json
 import logging
 from functools import wraps
-from typing import List
+from typing import List, Optional
 
 from smb.enums import Intent
 from smb.proto import Simplified
 from smb.resources import Cluster, JoinAuth, Share, UsersAndGroups
 
 from dashboard.controllers._docs import EndpointDoc
-from dashboard.controllers._permissions import CreatePermission, DeletePermission
+from dashboard.controllers._permissions import CreatePermission, DeletePermission, UpdatePermission
 from dashboard.exceptions import DashboardException
 
 from .. import mgr
 from ..security import Scope
 from . import APIDoc, APIRouter, Endpoint, ReadPermission, RESTController, UIRouter
 
-logger = logging.getLogger('controllers.smb')
+logger = logging.getLogger(__name__)
 
 CLUSTER_SCHEMA = {
     "resource_type": (str, "ceph.smb.cluster"),
@@ -61,7 +61,13 @@ SHARE_SCHEMA = {
         "provider": (str, "Provider of the CephFS share, e.g., 'samba-vfs'"),
         "subvolumegroup": (str, "Subvolume Group in CephFS file system"),
         "subvolume": (str, "Subvolume within the CephFS file system"),
-    }, "Configuration for the CephFS share")
+    }, "Configuration for the CephFS share"),
+    "read_iops_limit": (int, "QoS: max read IOPS (0=disabled)"),
+    "write_iops_limit": (int, "QoS: max write IOPS (0=disabled)"),
+    "read_bw_limit": (int, "QoS: max read bandwidth B/s (0=disabled)"),
+    "write_bw_limit": (int, "QoS: max write bandwidth B/s (0=disabled)"),
+    "read_delay_max": (int, "QoS: max read delay in seconds (0-300)"),
+    "write_delay_max": (int, "QoS: max write delay in seconds (0-300)"),
 }
 
 JOIN_AUTH_SCHEMA = {
@@ -272,7 +278,48 @@ class SMBShare(RESTController):
         return mgr.remote('smb', 'show', [f'{self._resource}.{cluster_id}.{share_id}'])
 
     @raise_on_failure
-    @DeletePermission
+    @UpdatePermission
+    @Endpoint(method='PUT', path='/qos')
+    @EndpointDoc(
+        "Update SMB share QoS rate limiting",
+        parameters={
+            'cluster_id': (str, 'Unique identifier for the cluster'),
+            'share_id': (str, 'Unique identifier for the share'),
+            'read_iops_limit': (int, 'Max read IOPS (0=disabled, 0-1000000)'),
+            'write_iops_limit': (int, 'Max write IOPS (0=disabled, 0-1000000)'),
+            'read_bw_limit': (int, 'Max read bandwidth B/s (0=disabled)'),
+            'write_bw_limit': (int, 'Max write bandwidth B/s (0=disabled)'),
+            'read_delay_max': (int, 'Max read delay in seconds (0-300)'),
+            'write_delay_max': (int, 'Max write delay in seconds (0-300)'),
+        })
+    def update_qos(
+        self,
+        cluster_id: str,
+        share_id: str,
+        read_iops_limit: Optional[int] = None,
+        write_iops_limit: Optional[int] = None,
+        read_bw_limit: Optional[int] = None,
+        write_bw_limit: Optional[int] = None,
+        read_delay_max: Optional[int] = None,
+        write_delay_max: Optional[int] = None,
+    ):
+        """
+        Update QoS rate limit parameters for an SMB share.
+        Omitted parameters are left unchanged. Use 0 to disable a limit.
+        """
+        return mgr.remote(
+            'smb',
+            'share_update_qos',
+            cluster_id,
+            share_id,
+            read_iops_limit,
+            write_iops_limit,
+            read_bw_limit,
+            write_bw_limit,
+            read_delay_max,
+            write_delay_max
+        ).to_simplified()
+
     @EndpointDoc("Remove an smb share",
                  parameters={
                      'cluster_id': (str, 'Unique identifier for the cluster'),
@@ -451,6 +498,9 @@ class SMBStatus(RESTController):
     def status(self):
         status = {'available': False, 'message': None}
         try:
+            if not mgr.remote('smb', 'db_ready'):
+                status['message'] = 'SMB DB not ready. SMB module is unavailable.'
+                return status
             mgr.remote('smb', 'show', ['ceph.smb.cluster'])
             status['available'] = True
         except (ImportError, RuntimeError):

@@ -225,7 +225,8 @@ class TestActivateAll(object):
                            no_tmpfs=False,
                            objectstore='bluestore',
                            osd_fsid=None,
-                           osd_id=None),
+                           osd_id=None,
+                           osd_type='classic'),
                            osd_id='0',
                            osd_fsid='957d22b7-24ce-466a-9883-b8218eaa1634'),
             call(Namespace(activate_all=True,
@@ -235,7 +236,8 @@ class TestActivateAll(object):
                            no_tmpfs=False,
                            objectstore='bluestore',
                            osd_fsid=None,
-                           osd_id=None),
+                           osd_id=None,
+                           osd_type='classic'),
                            osd_id='1',
                            osd_fsid='d0f3e4ad-e52a-4520-afc0-a8789a96ce8b')
         ]
@@ -255,7 +257,8 @@ class TestActivateAll(object):
                            no_tmpfs=False,
                            objectstore='bluestore',
                            osd_fsid=None,
-                           osd_id=None),
+                           osd_id=None,
+                           osd_type='classic'),
                            osd_id='0',
                            osd_fsid='957d22b7-24ce-466a-9883-b8218eaa1634'),
             call(Namespace(activate_all=True,
@@ -265,7 +268,8 @@ class TestActivateAll(object):
                            no_tmpfs=False,
                            objectstore='bluestore',
                            osd_fsid=None,
-                           osd_id=None),
+                           osd_id=None,
+                           osd_type='classic'),
                            osd_id='1',
                            osd_fsid='d0f3e4ad-e52a-4520-afc0-a8789a96ce8b')
         ]

@@ -136,7 +136,7 @@ function TEST_backfill_priority() {
     ceph osd pool set $pool3 size 1 --yes-i-really-mean-it
     wait_for_clean || return 1
 
-    dd if=/dev/urandom of=$dir/data bs=1M count=10
+    dd if=/dev/urandom of=$dir/data bs=1M count=100
     p=1
     for pname in $pool1 $pool2 $pool3
     do
@@ -414,7 +414,7 @@ function TEST_backfill_pool_priority() {
     ceph osd pool set $pool2 recovery_priority $pool2_extra_prio
     wait_for_clean || return 1
 
-    dd if=/dev/urandom of=$dir/data bs=1M count=10
+    dd if=/dev/urandom of=$dir/data bs=1M count=100
     p=1
     for pname in $pool1 $pool2
     do
@@ -432,7 +432,43 @@ function TEST_backfill_pool_priority() {
 
     ceph osd pool set $pool1 size 2
     ceph osd pool set $pool2 size 2
-    sleep 5
+
+    # Wait for recovery reservations to have items in progress
+    # This whole while loop is to just check whether the remote/local reservations
+    # have started. The real validation happens after loop where we are writing to
+    # .out files and not the mock .tmp files.
+    TIMEOUT=30
+    count=0
+    while(true)
+    do
+      CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_recovery_reservations > $dir/dump.${chk_osd1_1}.tmp 2>/dev/null || true
+      CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd2_1}) dump_recovery_reservations > $dir/dump.${chk_osd2_1}.tmp 2>/dev/null || true
+      
+      in_progress_count=0
+      if [ -f $dir/dump.${chk_osd1_1}.tmp ]; then
+        if jq -e '.local_reservations.in_progress[0].item' $dir/dump.${chk_osd1_1}.tmp > /dev/null 2>&1; then
+          in_progress_count=$((in_progress_count + 1))
+        fi
+      fi
+      if [ -f $dir/dump.${chk_osd2_1}.tmp ]; then
+        if jq -e '.local_reservations.in_progress[0].item' $dir/dump.${chk_osd2_1}.tmp > /dev/null 2>&1; then
+          in_progress_count=$((in_progress_count + 1))
+        fi
+      fi
+      
+      if [[ $in_progress_count -eq 2 ]]; then
+        echo "Recovery reservations are in progress on both OSDs"
+        break
+      fi
+      
+      sleep 2
+      if [ $count -gt $TIMEOUT ]; then
+        echo "Recovery reservations never showed in progress items on both OSDs"
+        return 1
+      fi
+      count=$(expr $count + 1)
+    done
+
     CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_recovery_reservations > $dir/dump.${chk_osd1_1}.out
     echo osd.${chk_osd1_1}
     cat $dir/dump.${chk_osd1_1}.out

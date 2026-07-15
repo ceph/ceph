@@ -1,5 +1,8 @@
 Feature: OSD Overview
 
+  Background:
+    Given the dashboard is `osds-overview`
+
 Scenario: "Test OSD onode Hits Ratio"
   Given the following series:
     | metrics | values |

@@ -15,6 +15,8 @@ import time
 import logging
 import json
 
+from .cli import ProgressCLICommand
+
 
 ENCODING_VERSION = 2
 
@@ -182,7 +184,7 @@ class GhostEvent(Event):
 
 class GlobalRecoveryEvent(Event):
     """
-    An event whoese completion is determined by active+clean/total_pg_num
+    An event whose completion is determined by active+clean/total_pg_num
     """
 
     def __init__(self, message, refs, add_to_ceph_s, start_epoch, active_clean_num):
@@ -415,6 +417,7 @@ class PgId(object):
 
 
 class Module(MgrModule):
+    CLICommand = ProgressCLICommand
     COMMANDS = [
         {"cmd": "progress",
          "desc": "Show progress of recovery operations",
@@ -790,7 +793,6 @@ class Module(MgrModule):
             self._complete(ev)
         except KeyError:
             self.log.warning("complete: ev {0} does not exist".format(ev_id))
-            pass
 
     def fail(self, ev_id, message):
         """

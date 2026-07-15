@@ -12,9 +12,8 @@ import { CephSharedModule } from '../shared/ceph-shared.module';
 import { DashboardAreaChartComponent } from './dashboard-area-chart/dashboard-area-chart.component';
 import { DashboardPieComponent } from './dashboard-pie/dashboard-pie.component';
 import { DashboardTimeSelectorComponent } from './dashboard-time-selector/dashboard-time-selector.component';
-import { DashboardV3Component } from './dashboard/dashboard-v3.component';
-import { PgSummaryPipe } from './pg-summary.pipe';
 import { InlineLoadingModule, ToggletipModule, TagModule } from 'carbon-components-angular';
+import { ProductiveCardComponent } from '~/app/shared/components/productive-card/productive-card.component';
 
 @NgModule({
   imports: [
@@ -30,21 +29,15 @@ import { InlineLoadingModule, ToggletipModule, TagModule } from 'carbon-componen
     BaseChartDirective,
     ToggletipModule,
     InlineLoadingModule,
-    TagModule
+    TagModule,
+    ProductiveCardComponent
   ],
   declarations: [
-    DashboardV3Component,
     DashboardPieComponent,
-    PgSummaryPipe,
     DashboardAreaChartComponent,
     DashboardTimeSelectorComponent
   ],
-  exports: [
-    DashboardV3Component,
-    DashboardAreaChartComponent,
-    DashboardTimeSelectorComponent,
-    DashboardPieComponent
-  ],
+  exports: [DashboardAreaChartComponent, DashboardTimeSelectorComponent, DashboardPieComponent],
   providers: [provideCharts(withDefaultRegisterables())]
 })
 export class DashboardV3Module {}

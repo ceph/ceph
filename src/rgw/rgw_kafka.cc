@@ -76,13 +76,29 @@ connection_id_t::connection_id_t(
     const std::string& _password,
     const boost::optional<const std::string&>& _ca_location,
     const boost::optional<const std::string&>& _mechanism,
-    bool _ssl)
-    : broker(_broker), user(_user), password(_password), ssl(_ssl) {
+    bool _ssl,
+    bool _verify_ssl,
+    const boost::optional<const std::string&>& _ssl_certificate,
+    const boost::optional<const std::string&>& _ssl_key,
+    const boost::optional<const std::string&>& _ssl_key_password
+  )
+    : broker(_broker), user(_user), password(_password), ssl(_ssl),
+      verify_ssl(_verify_ssl) {
+
   if (_ca_location.has_value()) {
     ca_location = _ca_location.get();
   }
   if (_mechanism.has_value()) {
     mechanism = _mechanism.get();
+  }
+  if (_ssl_certificate.has_value()) {
+    ssl_certificate = _ssl_certificate.get();
+  }
+  if (_ssl_key.has_value()) {
+    ssl_key = _ssl_key.get();
+  }
+  if (_ssl_key_password.has_value()) {
+    ssl_key_password = _ssl_key_password.get();
   }
 }
 
@@ -91,7 +107,11 @@ connection_id_t::connection_id_t(
 bool operator==(const connection_id_t& lhs, const connection_id_t& rhs) {
   return lhs.broker == rhs.broker && lhs.user == rhs.user &&
          lhs.password == rhs.password && lhs.ca_location == rhs.ca_location &&
-         lhs.mechanism == rhs.mechanism && lhs.ssl == rhs.ssl;
+         lhs.mechanism == rhs.mechanism && lhs.ssl == rhs.ssl &&
+         lhs.verify_ssl == rhs.verify_ssl &&
+         lhs.ssl_certificate == rhs.ssl_certificate &&
+         lhs.ssl_key == rhs.ssl_key &&
+         lhs.ssl_key_password == rhs.ssl_key_password;
 }
 
 struct connection_id_hasher {
@@ -103,6 +123,10 @@ struct connection_id_hasher {
     boost::hash_combine(h, k.ca_location);
     boost::hash_combine(h, k.mechanism);
     boost::hash_combine(h, k.ssl);
+    boost::hash_combine(h, k.verify_ssl);
+    boost::hash_combine(h, k.ssl_certificate);
+    boost::hash_combine(h, k.ssl_key);
+    boost::hash_combine(h, k.ssl_key_password);
     return h;
   }
 };
@@ -159,11 +183,14 @@ struct connection_t {
   CallbackList callbacks;
   const std::string broker;
   const bool use_ssl;
-  const bool verify_ssl; // TODO currently ignored, not supported in librdkafka v0.11.6
+  const bool verify_ssl;
   const boost::optional<std::string> ca_location;
   const std::string user;
   const std::string password;
   const boost::optional<std::string> mechanism;
+  const boost::optional<std::string> ssl_certificate;
+  const boost::optional<std::string> ssl_key;
+  const boost::optional<std::string> ssl_key_password;
   utime_t timestamp = ceph_clock_now();
 
   // cleanup of all internal connection resource
@@ -196,8 +223,12 @@ struct connection_t {
   // ctor for setting immutable values
   connection_t(CephContext* _cct, const std::string& _broker, bool _use_ssl, bool _verify_ssl, 
           const boost::optional<const std::string&>& _ca_location,
-          const std::string& _user, const std::string& _password, const boost::optional<const std::string&>& _mechanism) :
-      cct(_cct), broker(_broker), use_ssl(_use_ssl), verify_ssl(_verify_ssl), ca_location(_ca_location), user(_user), password(_password), mechanism(_mechanism) {}                                                                                                                                                        
+          const std::string& _user, const std::string& _password, const boost::optional<const std::string&>& _mechanism,
+          const boost::optional<const std::string&>& _ssl_certificate,
+          const boost::optional<const std::string&>& _ssl_key,
+          const boost::optional<const std::string&>& _ssl_key_password) :
+      cct(_cct), broker(_broker), use_ssl(_use_ssl), verify_ssl(_verify_ssl), ca_location(_ca_location), user(_user), password(_password), mechanism(_mechanism),
+      ssl_certificate(_ssl_certificate), ssl_key(_ssl_key), ssl_key_password(_ssl_key_password) {}                                                                                                                                                        
 
   // dtor also destroys the internals
   ~connection_t() {
@@ -286,9 +317,22 @@ bool new_producer(connection_t* conn) {
   // however, testing with librdkafka v1.6.1 did not expire the message in that case. hence, a value of zero is changed to 1ms
   constexpr std::uint64_t min_message_timeout = 1;
   const auto message_timeout = std::max(min_message_timeout, conn->cct->_conf->rgw_kafka_message_timeout);
+  const auto batch_size = conn->cct->_conf->rgw_kafka_max_batch_size;
+  ldout(conn->cct, 1) << "Kafka connect: broker=" << conn->broker
+      << " use_ssl=" << conn->use_ssl
+      << " user=" << conn->user
+      << " message_timeout=" << message_timeout
+      << " batch_size=" << batch_size << dendl;
+
   if (rd_kafka_conf_set(conf.get(), "message.timeout.ms", 
         std::to_string(message_timeout).c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
 
+  if (batch_size > 0) {
+    if (rd_kafka_conf_set(conf.get(), "batch.size",
+        std::to_string(batch_size).c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+    if (rd_kafka_conf_set(conf.get(), "message.max.bytes",
+        std::to_string(batch_size).c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+  }
   // get list of brokers based on the bootstrap broker
   if (rd_kafka_conf_set(conf.get(), "bootstrap.servers", conn->broker.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
 
@@ -318,6 +362,23 @@ bool new_producer(connection_t* conn) {
       ldout(conn->cct, 20) << "Kafka connect: successfully configured CA location" << dendl;
     } else {
       ldout(conn->cct, 20) << "Kafka connect: using default CA location" << dendl;
+    }
+    if (rd_kafka_conf_set(conf.get(), "enable.ssl.certificate.verification",
+                          conn->verify_ssl ? "true" : "false",
+                          errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+      goto conf_error;
+    }
+    if (conn->ssl_certificate) {
+      if (rd_kafka_conf_set(conf.get(), "ssl.certificate.location", conn->ssl_certificate->c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+      ldout(conn->cct, 20) << "Kafka connect: successfully configured client certificate location" << dendl;
+    }
+    if (conn->ssl_key) {
+      if (rd_kafka_conf_set(conf.get(), "ssl.key.location", conn->ssl_key->c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+      ldout(conn->cct, 20) << "Kafka connect: successfully configured client key location" << dendl;
+    }
+    if (conn->ssl_key_password) {
+      if (rd_kafka_conf_set(conf.get(), "ssl.key.password", conn->ssl_key_password->c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+      ldout(conn->cct, 20) << "Kafka connect: successfully configured client key password" << dendl;
     }
     // Note: when librdkafka.1.0 is available the following line could be uncommented instead of the callback setting call
     // if (rd_kafka_conf_set(conn->conf, "enable.ssl.certificate.verification", "0", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
@@ -600,7 +661,10 @@ public:
                boost::optional<const std::string&> mechanism,
                boost::optional<const std::string&> topic_user_name,
                boost::optional<const std::string&> topic_password,
-               boost::optional<const std::string&> brokers) {
+               boost::optional<const std::string&> brokers,
+               boost::optional<const std::string&> ssl_certificate,
+               boost::optional<const std::string&> ssl_key,
+               boost::optional<const std::string&> ssl_key_password) {
     if (stopped) {
       ldout(cct, 1) << "Kafka connect: manager is stopped" << dendl;
       return false;
@@ -638,13 +702,20 @@ public:
       return false;
     }
 
+    // ssl_certificate and ssl_key must both be provided for mTLS
+    if (ssl_certificate.has_value() != ssl_key.has_value()) {
+      ldout(cct, 1) << "Kafka connect: both ssl_certificate and ssl_key must be provided for mTLS (got only "
+                    << (ssl_certificate.has_value() ? "ssl_certificate" : "ssl_key") << ")" << dendl;
+      return false;
+    }
+
     if (brokers.has_value()) {
       broker_list.append(",");
       broker_list.append(brokers.get());
     }
 
     connection_id_t tmp_id(broker_list, user, password, ca_location, mechanism,
-                           use_ssl);
+                           use_ssl, verify_ssl, ssl_certificate, ssl_key, ssl_key_password);
     std::lock_guard lock(connections_lock);
     const auto it = connections.find(tmp_id);
     // note that ssl vs. non-ssl connection to the same host are two separate connections
@@ -663,7 +734,7 @@ public:
       return false;
     }
 
-    auto conn = std::make_unique<connection_t>(cct, broker_list, use_ssl, verify_ssl, ca_location, user, password, mechanism);
+    auto conn = std::make_unique<connection_t>(cct, broker_list, use_ssl, verify_ssl, ca_location, user, password, mechanism, ssl_certificate, ssl_key, ssl_key_password);
     if (!new_producer(conn.get())) {
       ldout(cct, 10) << "Kafka connect: producer creation failed in new connection" << dendl;
       return false;
@@ -782,11 +853,15 @@ bool connect(connection_id_t& conn_id,
              boost::optional<const std::string&> mechanism,
              boost::optional<const std::string&> user_name,
              boost::optional<const std::string&> password,
-             boost::optional<const std::string&> brokers) {
+             boost::optional<const std::string&> brokers,
+             boost::optional<const std::string&> ssl_certificate,
+             boost::optional<const std::string&> ssl_key,
+             boost::optional<const std::string&> ssl_key_password) {
   std::shared_lock lock(s_manager_mutex);
   if (!s_manager) return false;
   return s_manager->connect(conn_id, url, use_ssl, verify_ssl, ca_location,
-                            mechanism, user_name, password, brokers);
+                            mechanism, user_name, password, brokers,
+                            ssl_certificate, ssl_key, ssl_key_password);
 }
 
 int publish(const connection_id_t& conn_id,

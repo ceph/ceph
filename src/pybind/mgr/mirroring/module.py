@@ -1,11 +1,29 @@
 from typing import List, Optional
 
-from mgr_module import MgrModule, CLIReadCommand, CLIWriteCommand, Option, NotifyType
+from .cli import MirroringCLICommand
+
+from mgr_module import MgrModule, Option, NotifyType
 
 from .fs.snapshot_mirror import FSSnapshotMirror
 
 class Module(MgrModule):
-    MODULE_OPTIONS: List[Option] = []
+    CLICommand = MirroringCLICommand
+    MODULE_OPTIONS: List[Option] = [
+        Option(
+            'snapshot_mirror_metrics_cache_enabled',
+            type='bool',
+            default=True,
+            desc='Cache fs snapshot mirror status omap metrics',
+            runtime=True,
+        ),
+        Option(
+            'snapshot_mirror_metrics_cache_ttl',
+            type='secs',
+            default=15,
+            desc='TTL for cached fs snapshot mirror status omap metrics',
+            runtime=True,
+        ),
+    ]
     NOTIFY_TYPES = [NotifyType.fs_map]
 
     def __init__(self, *args, **kwargs):
@@ -15,19 +33,19 @@ class Module(MgrModule):
     def notify(self, notify_type: NotifyType, notify_id):
         self.fs_snapshot_mirror.notify(notify_type)
 
-    @CLIWriteCommand('fs snapshot mirror enable')
+    @MirroringCLICommand.Write('fs snapshot mirror enable')
     def snapshot_mirror_enable(self,
                                fs_name: str):
         """Enable snapshot mirroring for a filesystem"""
         return self.fs_snapshot_mirror.enable_mirror(fs_name)
 
-    @CLIWriteCommand('fs snapshot mirror disable')
+    @MirroringCLICommand.Write('fs snapshot mirror disable')
     def snapshot_mirror_disable(self,
                                 fs_name: str):
         """Disable snapshot mirroring for a filesystem"""
         return self.fs_snapshot_mirror.disable_mirror(fs_name)
 
-    @CLIWriteCommand('fs snapshot mirror peer_add')
+    @MirroringCLICommand.Write('fs snapshot mirror peer_add')
     def snapshot_mirorr_peer_add(self,
                                  fs_name: str,
                                  remote_cluster_spec: str,
@@ -46,20 +64,21 @@ class Module(MgrModule):
                "future release. Use 'peer_bootstrap' instead.\n")
         return r, out, err
 
-    @CLIReadCommand('fs snapshot mirror peer_list')
+    @MirroringCLICommand.Read('fs snapshot mirror peer_list')
     def snapshot_mirror_peer_list(self,
-                                  fs_name: str):
+                                  fs_name: str,
+                                  format: str = 'json'):
         """List configured peers for a file system"""
-        return self.fs_snapshot_mirror.peer_list(fs_name)
+        return self.fs_snapshot_mirror.peer_list(fs_name, format)
 
-    @CLIWriteCommand('fs snapshot mirror peer_remove')
+    @MirroringCLICommand.Write('fs snapshot mirror peer_remove')
     def snapshot_mirror_peer_remove(self,
                                     fs_name: str,
                                     peer_uuid: str):
         """Remove a filesystem peer"""
         return self.fs_snapshot_mirror.peer_remove(fs_name, peer_uuid)
 
-    @CLIWriteCommand('fs snapshot mirror peer_bootstrap create')
+    @MirroringCLICommand.Write('fs snapshot mirror peer_bootstrap create')
     def snapshot_mirror_peer_bootstrap_create(self,
                                               fs_name: str,
                                               client_name: str,
@@ -67,47 +86,89 @@ class Module(MgrModule):
         """Bootstrap a filesystem peer"""
         return self.fs_snapshot_mirror.peer_bootstrap_create(fs_name, client_name, site_name)
 
-    @CLIWriteCommand('fs snapshot mirror peer_bootstrap import')
+    @MirroringCLICommand.Write('fs snapshot mirror peer_bootstrap import')
     def snapshot_mirror_peer_bootstrap_import(self,
                                               fs_name: str,
                                               token: str):
         """Import a bootstrap token"""
         return self.fs_snapshot_mirror.peer_bootstrap_import(fs_name, token)
 
-    @CLIWriteCommand('fs snapshot mirror add')
+    @MirroringCLICommand.Write('fs snapshot mirror add')
     def snapshot_mirror_add_dir(self,
                                 fs_name: str,
                                 path: str):
         """Add a directory for snapshot mirroring"""
         return self.fs_snapshot_mirror.add_dir(fs_name, path)
 
-    @CLIWriteCommand('fs snapshot mirror remove')
+    @MirroringCLICommand.Write('fs snapshot mirror remove')
     def snapshot_mirror_remove_dir(self,
                                    fs_name: str,
                                    path: str):
         """Remove a snapshot mirrored directory"""
         return self.fs_snapshot_mirror.remove_dir(fs_name, path)
 
-    @CLIReadCommand('fs snapshot mirror ls')
+    @MirroringCLICommand.Read('fs snapshot mirror ls')
     def snapshot_mirror_ls(self,
                            fs_name: str):
         """List the snapshot mirrored directories"""
         return self.fs_snapshot_mirror.list_dirs(fs_name)
 
-    @CLIReadCommand('fs snapshot mirror dirmap')
+    @MirroringCLICommand.Read('fs snapshot mirror dirmap')
     def snapshot_mirror_dirmap(self,
                                fs_name: str,
                                path: str):
         """Get current mirror instance map for a directory"""
         return self.fs_snapshot_mirror.status(fs_name, path)
 
-    @CLIReadCommand('fs snapshot mirror show distribution')
+    @MirroringCLICommand.Read('fs snapshot mirror show distribution')
     def snapshot_mirror_distribution(self,
                                      fs_name: str):
         """Get current instance to directory map for a filesystem"""
         return self.fs_snapshot_mirror.show_distribution(fs_name)
 
-    @CLIReadCommand('fs snapshot mirror daemon status')
-    def snapshot_mirror_daemon_status(self):
+    @MirroringCLICommand.Read('fs snapshot mirror daemon status')
+    def snapshot_mirror_daemon_status(self,
+                                      format: str = 'json'):
         """Get mirror daemon status"""
-        return self.fs_snapshot_mirror.daemon_status()
+        return self.fs_snapshot_mirror.daemon_status(format)
+
+    @MirroringCLICommand.Read('fs snapshot mirror status')
+    def snapshot_mirror_status(self,
+                               fs_name: str,
+                               mirrored_dir_path: Optional[str] = None,
+                               _end_positional_: int = 0,
+                               peer_uuid: Optional[str] = None):
+        """Get snapshot mirror metrics for a filesystem (optional mirrored directory and peer)"""
+        return self.fs_snapshot_mirror.metrics_status(fs_name, mirrored_dir_path,
+                                                      peer_uuid)
+
+    @MirroringCLICommand.Write('fs snapshot mirror checkpoint add')
+    def snapshot_mirror_checkpoint_add(self,
+                                       fs_name: str,
+                                       path: str,
+                                       snap_name: str):
+        """Add a checkpoint for a snapshot"""
+        return self.fs_snapshot_mirror.checkpoint_add(fs_name, path, snap_name)
+
+    @MirroringCLICommand.Write('fs snapshot mirror checkpoint remove')
+    def snapshot_mirror_checkpoint_remove(self,
+                                          fs_name: str,
+                                          path: str,
+                                          snap_name: str):
+        """Remove a checkpoint from a snapshot"""
+        return self.fs_snapshot_mirror.checkpoint_remove(fs_name, path, snap_name)
+
+    @MirroringCLICommand.Read('fs snapshot mirror checkpoint ls')
+    def snapshot_mirror_checkpoint_ls(self,
+                                       fs_name: str,
+                                       path: str,
+                                       format: str = 'json'):
+        """List all checkpoints for a directory"""
+        return self.fs_snapshot_mirror.checkpoint_ls(fs_name, path, format)
+
+    @MirroringCLICommand.Write('fs snapshot mirror checkpoint now')
+    def snapshot_mirror_checkpoint_now(self,
+                                       fs_name: str,
+                                       path: str):
+        """Create a checkpoint on the latest snapshot"""
+        return self.fs_snapshot_mirror.checkpoint_now(fs_name, path)

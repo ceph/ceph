@@ -166,6 +166,10 @@ class BackfillFixture : public crimson::osd::BackfillState::BackfillListener {
     const hobject_t& obj,
     const eversion_t& v) override;
 
+  void send_recovery_deletes(
+    const hobject_t& obj,
+    const std::vector<pg_shard_t>& peers) override;
+
   void maybe_flush() override;
 
   void update_peers_last_backfill(
@@ -397,6 +401,13 @@ void BackfillFixture::enqueue_drop(
   const eversion_t& v)
 {
   enqueued_drops[target].emplace_back(obj, v);
+}
+
+void BackfillFixture::send_recovery_deletes(
+  const hobject_t& obj,
+  const std::vector<pg_shard_t>& peers)
+{
+  // no-op in test mock
 }
 
 void BackfillFixture::maybe_flush()

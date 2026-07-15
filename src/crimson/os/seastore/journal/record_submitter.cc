@@ -195,10 +195,20 @@ RecordSubmitter::wa_ertr::future<>
 RecordSubmitter::wait_available()
 {
   LOG_PREFIX(RecordSubmitter::wait_available);
-  assert(!is_available());
   if (has_io_error) {
     ERROR("{} I/O is failed before wait", get_name());
     return crimson::ct_error::input_output_error::make();
+  }
+  if (is_available()) {
+    // The continuation that resolves wait_available_promise can
+    // run before this function is entered -- e.g. from
+    // roll_segment() after the chained
+    // journal_allocator.roll().safe_then(...) completes inline.
+    // In that case there is nothing left to wait for; honour the
+    // documented "check is_available() again when the future is
+    // resolved" contract by returning a successful no-op.
+    DEBUG("{} already available", get_name());
+    return wa_ertr::now();
   }
   return wait_available_promise->get_shared_future(
   ).then([FNAME, this]() -> wa_ertr::future<> {
@@ -389,10 +399,10 @@ RecordSubmitter::submit(
 }
 
 RecordSubmitter::open_ret
-RecordSubmitter::open(bool is_mkfs)
+RecordSubmitter::open(store_index_t store_index, bool is_mkfs)
 {
   return journal_allocator.open(is_mkfs
-  ).safe_then([this](journal_seq_t ret) {
+  ).safe_then([this, store_index](journal_seq_t ret) {
     LOG_PREFIX(RecordSubmitter::open);
     DEBUG("{} register metrics", get_name());
     stats = {};
@@ -400,6 +410,8 @@ RecordSubmitter::open(bool is_mkfs)
     namespace sm = seastar::metrics;
     std::vector<sm::label_instance> label_instances;
     label_instances.push_back(sm::label_instance("submitter", get_name()));
+    label_instances.push_back(sm::label_instance("shard_store_index", std::to_string(store_index)));
+
     metrics.add_group(
       "journal",
       {

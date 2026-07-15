@@ -17,6 +17,10 @@
 #include "osdc/Journaler.h"
 
 #include <typeinfo>
+#include <fstream>
+#include <iterator>
+#include <vector>
+#include <cstdlib>
 #include "common/DecayCounter.h"
 #include "common/debug.h"
 #include "common/errno.h"
@@ -506,6 +510,7 @@ MDSRank::MDSRank(
   purge_queue.update_op_limit(*mdsmap);
 
   objecter->unset_honor_pool_full();
+  objecter->set_balanced_budget();
 
   finisher = new Finisher(cct, "MDSRank", "mds-rank-fin");
 
@@ -3103,19 +3108,9 @@ void MDSRankDispatcher::handle_asok_command(
   } else if (command == "dump stray") {
     dout(10) << "dump_stray start" <<  dendl;
     // the context is a wrapper for formatter to be used while scanning stray dir
-    auto context = std::make_unique<MDCache::C_MDS_DumpStrayDirCtx>(mdcache, f,
-     [this,on_finish](int r) {
-      // completion callback, will be called when scan is done
-      dout(10) << "dump_stray done" <<  dendl;
-      bufferlist bl;
-      on_finish(r, "", bl);
-    });
+    auto ctx = new MDCache::C_MDS_DumpStrayDirCtx(mdcache, f, on_finish);
     std::lock_guard l(mds_lock);
-    r = mdcache->stray_status(std::move(context));
-    // since the scanning op can be async, we want to know it, for better semantics
-    if (r == -EAGAIN) {
-     dout(10) << "dump_stray wait" << dendl;
-    }
+    mdcache->stray_status(ctx);
     return;
   } else {
     r = -ENOSYS;
@@ -4085,6 +4080,14 @@ std::string MDSRank::get_path(inodeno_t ino) {
   return res;
 }
 
+uint64_t MDSRank::get_inode_rbytes(inodeno_t ino) {
+  std::lock_guard locker(mds_lock);
+  CInode* inode = mdcache->get_inode(ino);
+  if (!inode) return 0;
+  const auto& pi = inode->get_projected_inode();
+  return pi->rstat.rbytes > 0 ? static_cast<uint64_t>(pi->rstat.rbytes) : 0;
+}
+
 std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     const noexcept
 {
@@ -4271,7 +4274,7 @@ void MDSRank::get_task_status(std::map<std::string, std::string> *status) {
   std::string_view scrub_summary = scrubstack->scrub_summary();
   if (!ScrubStack::is_idle(scrub_summary)) {
     send_status = true;
-    status->emplace(SCRUB_STATUS_KEY, std::move(scrub_summary));
+    status->emplace(SCRUB_STATUS_KEY, scrub_summary);
   }
 }
 

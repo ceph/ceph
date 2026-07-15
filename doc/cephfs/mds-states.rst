@@ -28,7 +28,7 @@ and its rank in the file system is available.
     up:standby
 
 The MDS is available to takeover for a failed rank (see also :ref:`mds-standby`).
-The monitor will automatically assign an MDS in this state to a failed rank
+The Monitor will automatically assign an MDS in this state to a failed rank
 once available.
 
 
@@ -51,7 +51,7 @@ Less common or transitory states
 
     up:boot
 
-This state is broadcast to the Ceph monitors during startup. This state is
+This state is broadcast to the Ceph Monitors during startup. This state is
 never visible as the Monitor immediately assign the MDS to an available rank or
 commands the MDS to operate as a standby. The state is documented here for
 completeness.
@@ -77,7 +77,7 @@ and enters the MDS cluster.
 
     up:stopping
 
-When a rank is stopped, the monitors command an active MDS to enter the
+When a rank is stopped, the Monitors command an active MDS to enter the
 ``up:stopping`` state. In this state, the MDS accepts no new client
 connections, migrates all subtrees to other ranks in the file system, flush its
 metadata journal, and, if the last rank (0), evict all clients and shutdown

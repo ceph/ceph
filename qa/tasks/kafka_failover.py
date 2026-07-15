@@ -115,8 +115,13 @@ def install_kafka(ctx, config):
 
         link1 = '{apache_mirror_url_front}/kafka/'.format(apache_mirror_url_front=apache_mirror_url_front) + \
             current_version + '/' + kafka_file
+        archive_link = 'https://archive.apache.org/dist/kafka/' + current_version + '/' + kafka_file
+        log.info('Trying to download Kafka from mirror: %s', link1)
+        log.info('Archive fallback URL: %s', archive_link)
         ctx.cluster.only(client).run(
-            args=['cd', '{tdir}'.format(tdir=test_dir), run.Raw('&&'), 'wget', link1],
+            args=['cd', '{tdir}'.format(tdir=test_dir), run.Raw('&&'),
+                  'wget', link1, run.Raw('||'),
+                  run.Raw('('), 'rm', '-f', kafka_file, run.Raw('&&'), 'wget', archive_link, run.Raw(')')],
         )
 
         ctx.cluster.only(client).run(
@@ -139,6 +144,9 @@ def install_kafka(ctx, config):
         for (client,_) in config.items():
             ctx.cluster.only(client).run(
                 args=['rm', '-rf', '{tdir}'.format(tdir=kafka_dir)],
+            )
+            ctx.cluster.only(client).run(
+                args=['rm', '-rf', '{tdir}/{doc}'.format(tdir=teuthology.get_testdir(ctx),doc=kafka_file)],
             )
 
 
@@ -302,6 +310,8 @@ def task(ctx,config):
         config = all_clients
     if isinstance(config, list):
         config = dict.fromkeys(config)
+
+    ctx.kafka_dir = get_kafka_dir(ctx, config)
 
     log.debug('Kafka config is %s', config)
 

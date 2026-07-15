@@ -3,7 +3,9 @@ import threading
 from typing import Tuple, Optional, List, Dict, Any
 import yaml
 
-from mgr_module import MgrModule, CLICommand, Option, CLICheckNonemptyFileInput
+from .cli import NFSCLICommand
+
+from mgr_module import MgrModule, Option, CLICheckNonemptyFileInput
 import object_format
 import orchestrator
 from orchestrator.module import IngressType
@@ -11,12 +13,14 @@ from mgr_util import CephFSEarmarkResolver
 
 from .export import ExportMgr, AppliedExportResults
 from .cluster import NFSCluster
-from .utils import available_clusters
+from .utils import available_clusters, cephfs_client_for_mgr
+from .qos_conf import QOSType, QOSBandwidthControl, UserQoSType, QOSOpsControl
 
 log = logging.getLogger(__name__)
 
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
+    CLICommand = NFSCLICommand
     MODULE_OPTIONS: List[Option] = []
 
     def __init__(self, *args: str, **kwargs: Any) -> None:
@@ -28,7 +32,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             self.nfs = NFSCluster(self)
             self.inited = True
 
-    @CLICommand('nfs export create cephfs', perm='rw')
+    @NFSCLICommand('nfs export create cephfs', perm='rw')
     @object_format.Responder()
     def _cmd_nfs_export_create_cephfs(
             self,
@@ -40,10 +44,15 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             client_addr: Optional[List[str]] = None,
             squash: str = 'none',
             sectype: Optional[List[str]] = None,
-            cmount_path: Optional[str] = "/"
+            xprtsec: Optional[str] = None,
+            cmount_path: Optional[str] = "/",
+            transports: Optional[List[str]] = None,
+            skip_notify_nfs_server: bool = False
     ) -> Dict[str, Any]:
         """Create a CephFS export"""
-        earmark_resolver = CephFSEarmarkResolver(self)
+        self.export_mgr.skip_notify_nfs_server = skip_notify_nfs_server
+        earmark_resolver = CephFSEarmarkResolver(
+            self, client=cephfs_client_for_mgr(self))
         return self.export_mgr.create_export(
             fsal_type='cephfs',
             fs_name=fsname,
@@ -54,11 +63,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             squash=squash,
             addr=client_addr,
             sectype=sectype,
+            xprtsec=xprtsec,
             cmount_path=cmount_path,
+            transports=transports,
             earmark_resolver=earmark_resolver
         )
 
-    @CLICommand('nfs export create rgw', perm='rw')
+    @NFSCLICommand('nfs export create rgw', perm='rw')
     @object_format.Responder()
     def _cmd_nfs_export_create_rgw(
             self,
@@ -70,8 +81,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             client_addr: Optional[List[str]] = None,
             squash: str = 'none',
             sectype: Optional[List[str]] = None,
+            xprtsec: Optional[str] = None,
+            transports: Optional[List[str]] = None,
+            skip_notify_nfs_server: bool = False
     ) -> Dict[str, Any]:
         """Create an RGW export"""
+        self.export_mgr.skip_notify_nfs_server = skip_notify_nfs_server
         return self.export_mgr.create_export(
             fsal_type='rgw',
             bucket=bucket,
@@ -82,48 +97,63 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             squash=squash,
             addr=client_addr,
             sectype=sectype,
+            xprtsec=xprtsec,
+            transports=transports,
         )
 
-    @CLICommand('nfs export rm', perm='rw')
+    @NFSCLICommand('nfs export rm', perm='rw')
     @object_format.EmptyResponder()
-    def _cmd_nfs_export_rm(self, cluster_id: str, pseudo_path: str) -> None:
+    def _cmd_nfs_export_rm(self,
+                           cluster_id: str,
+                           pseudo_path: str,
+                           skip_notify_nfs_server: bool = False) -> None:
         """Remove a cephfs export"""
+        self.export_mgr.skip_notify_nfs_server = skip_notify_nfs_server
         return self.export_mgr.delete_export(cluster_id=cluster_id, pseudo_path=pseudo_path)
 
-    @CLICommand('nfs export delete', perm='rw')
+    @NFSCLICommand('nfs export delete', perm='rw')
     @object_format.EmptyResponder()
-    def _cmd_nfs_export_delete(self, cluster_id: str, pseudo_path: str) -> None:
+    def _cmd_nfs_export_delete(self,
+                               cluster_id: str,
+                               pseudo_path: str,
+                               skip_notify_nfs_server: bool = False) -> None:
         """Delete a cephfs export (DEPRECATED)"""
+        self.export_mgr.skip_notify_nfs_server = skip_notify_nfs_server
         return self.export_mgr.delete_export(cluster_id=cluster_id, pseudo_path=pseudo_path)
 
-    @CLICommand('nfs export ls', perm='r')
+    @NFSCLICommand('nfs export ls', perm='r')
     @object_format.Responder()
     def _cmd_nfs_export_ls(self, cluster_id: str, detailed: bool = False) -> List[Any]:
         """List exports of a NFS cluster"""
         return self.export_mgr.list_exports(cluster_id=cluster_id, detailed=detailed)
 
-    @CLICommand('nfs export info', perm='r')
+    @NFSCLICommand('nfs export info', perm='r')
     @object_format.Responder()
     def _cmd_nfs_export_info(self, cluster_id: str, pseudo_path: str) -> Dict[str, Any]:
         """Fetch a export of a NFS cluster given the pseudo path/binding"""
         return self.export_mgr.get_export(cluster_id=cluster_id, pseudo_path=pseudo_path)
 
-    @CLICommand('nfs export get', perm='r')
+    @NFSCLICommand('nfs export get', perm='r')
     @object_format.Responder()
     def _cmd_nfs_export_get(self, cluster_id: str, pseudo_path: str) -> Dict[str, Any]:
         """Fetch a export of a NFS cluster given the pseudo path/binding (DEPRECATED)"""
         return self.export_mgr.get_export(cluster_id=cluster_id, pseudo_path=pseudo_path)
 
-    @CLICommand('nfs export apply', perm='rw')
+    @NFSCLICommand('nfs export apply', perm='rw')
     @CLICheckNonemptyFileInput(desc='Export JSON or Ganesha EXPORT specification')
     @object_format.Responder()
-    def _cmd_nfs_export_apply(self, cluster_id: str, inbuf: str) -> AppliedExportResults:
-        earmark_resolver = CephFSEarmarkResolver(self)
+    def _cmd_nfs_export_apply(self,
+                              cluster_id: str,
+                              inbuf: str,
+                              skip_notify_nfs_server: bool = False) -> AppliedExportResults:
         """Create or update an export by `-i <json_or_ganesha_export_file>`"""
+        earmark_resolver = CephFSEarmarkResolver(
+            self, client=cephfs_client_for_mgr(self))
+        self.export_mgr.skip_notify_nfs_server = skip_notify_nfs_server
         return self.export_mgr.apply_export(cluster_id, export_config=inbuf,
                                             earmark_resolver=earmark_resolver)
 
-    @CLICommand('nfs cluster create', perm='rw')
+    @NFSCLICommand('nfs cluster create', perm='rw')
     @object_format.EmptyResponder()
     def _cmd_nfs_cluster_create(self,
                                 cluster_id: str,
@@ -132,12 +162,21 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 virtual_ip: Optional[str] = None,
                                 ingress_mode: Optional[IngressType] = None,
                                 port: Optional[int] = None,
+                                bind_addrs: Optional[str] = None,
+                                monitoring_addrs: Optional[str] = None,
+                                monitoring_port: Optional[int] = None,
+                                enable_rdma: bool = False,
+                                rdma_port: Optional[int] = None,
+                                enable_nfsv3: bool = False,
+                                ingress_placement: Optional[str] = None,
                                 inbuf: Optional[str] = None) -> None:
         """Create an NFS Cluster"""
+        cluster_qos_config = None
         ssl_cert = ssl_key = ssl_ca_cert = tls_min_version = tls_ciphers = None
         ssl = tls_ktls = tls_debug = False
         if inbuf:
             config = yaml.safe_load(inbuf)
+            cluster_qos_config = config.get('cluster_qos_config')
             ssl = config.get('ssl')
             ssl_cert = config.get('ssl_cert')
             ssl_key = config.get('ssl_key')
@@ -147,9 +186,31 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             tls_debug = config.get('tls_debug')
             tls_ciphers = config.get('tls_ciphers')
 
+        # Parse bind_addrs and monitoring_addrs from CLI format
+        ip_addrs = None
+        if bind_addrs:
+            ip_addrs = {}
+            for pair in bind_addrs.split(','):
+                if ':' in pair:
+                    host, ip = pair.split(':', 1)
+                    ip_addrs[host.strip()] = ip.strip()
+
+        monitoring_ip_addrs = None
+        if monitoring_addrs:
+            monitoring_ip_addrs = {}
+            for pair in monitoring_addrs.split(','):
+                if ':' in pair:
+                    host, ip = pair.split(':', 1)
+                    monitoring_ip_addrs[host.strip()] = ip.strip()
+
         return self.nfs.create_nfs_cluster(cluster_id=cluster_id, placement=placement,
                                            virtual_ip=virtual_ip, ingress=ingress,
                                            ingress_mode=ingress_mode, port=port,
+                                           cluster_qos_config=cluster_qos_config,
+                                           enable_nfsv3=enable_nfsv3,
+                                           ip_addrs=ip_addrs,
+                                           monitoring_ip_addrs=monitoring_ip_addrs,
+                                           monitoring_port=monitoring_port,
                                            ssl=ssl,
                                            ssl_cert=ssl_cert,
                                            ssl_key=ssl_key,
@@ -157,54 +218,61 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                            tls_ktls=tls_ktls,
                                            tls_debug=tls_debug,
                                            tls_min_version=tls_min_version,
-                                           tls_ciphers=tls_ciphers)
+                                           tls_ciphers=tls_ciphers,
+                                           enable_rdma=enable_rdma,
+                                           rdma_port=rdma_port,
+                                           ingress_placement=ingress_placement)
 
-    @CLICommand('nfs cluster rm', perm='rw')
+    @NFSCLICommand('nfs cluster rm', perm='rw')
     @object_format.EmptyResponder()
     def _cmd_nfs_cluster_rm(self, cluster_id: str) -> None:
         """Removes an NFS Cluster"""
         return self.nfs.delete_nfs_cluster(cluster_id=cluster_id)
 
-    @CLICommand('nfs cluster delete', perm='rw')
+    @NFSCLICommand('nfs cluster delete', perm='rw')
     @object_format.EmptyResponder()
     def _cmd_nfs_cluster_delete(self, cluster_id: str) -> None:
         """Removes an NFS Cluster (DEPRECATED)"""
         return self.nfs.delete_nfs_cluster(cluster_id=cluster_id)
 
-    @CLICommand('nfs cluster ls', perm='r')
+    @NFSCLICommand('nfs cluster ls', perm='r')
     @object_format.Responder()
     def _cmd_nfs_cluster_ls(self) -> List[str]:
         """List NFS Clusters"""
         return self.nfs.list_nfs_cluster()
 
-    @CLICommand('nfs cluster info', perm='r')
+    @NFSCLICommand('nfs cluster info', perm='r')
     @object_format.Responder()
     def _cmd_nfs_cluster_info(self, cluster_id: Optional[str] = None) -> Dict[str, Any]:
         """Displays NFS Cluster info"""
         return self.nfs.show_nfs_cluster_info(cluster_id=cluster_id)
 
-    @CLICommand('nfs cluster config get', perm='r')
+    @NFSCLICommand('nfs cluster config get', perm='r')
     @object_format.ErrorResponseHandler()
     def _cmd_nfs_cluster_config_get(self, cluster_id: str) -> Tuple[int, str, str]:
         """Fetch NFS-Ganesha config"""
         conf = self.nfs.get_nfs_cluster_config(cluster_id=cluster_id)
         return 0, conf, ""
 
-    @CLICommand('nfs cluster config set', perm='rw')
+    @NFSCLICommand('nfs cluster config set', perm='rw')
     @CLICheckNonemptyFileInput(desc='NFS-Ganesha Configuration')
     @object_format.EmptyResponder()
     def _cmd_nfs_cluster_config_set(self, cluster_id: str, inbuf: str) -> None:
         """Set NFS-Ganesha config by `-i <config_file>`"""
         return self.nfs.set_nfs_cluster_config(cluster_id=cluster_id, nfs_config=inbuf)
 
-    @CLICommand('nfs cluster config reset', perm='rw')
+    @NFSCLICommand('nfs cluster config reset', perm='rw')
     @object_format.EmptyResponder()
     def _cmd_nfs_cluster_config_reset(self, cluster_id: str) -> None:
         """Reset NFS-Ganesha Config to default"""
         return self.nfs.reset_nfs_cluster_config(cluster_id=cluster_id)
 
-    def fetch_nfs_export_obj(self) -> ExportMgr:
-        return self.export_mgr
+    def export_apply(self, cluster_id: str, export_config: str) -> AppliedExportResults:
+        """Create or update an export by `export_config` which can be json string or ganesha export specification"""
+        earmark_resolver = CephFSEarmarkResolver(
+            self, client=cephfs_client_for_mgr(self))
+        return self.export_mgr.apply_export(cluster_id, export_config=export_config,
+                                            earmark_resolver=earmark_resolver)
 
     def export_ls(self, cluster_id: Optional[str] = None, detailed: bool = False) -> List[Dict[Any, Any]]:
         if not (cluster_id):
@@ -225,3 +293,154 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def fetch_nfs_cluster_obj(self) -> NFSCluster:
         return self.nfs
+
+    @CLICommand('nfs export qos enable bandwidth_control', perm='rw')
+    @object_format.EmptyResponder()
+    def _cmd_export_qos_bw_enable(self,
+                                  cluster_id: str,
+                                  pseudo_path: str,
+                                  combined_rw_bw_ctrl: bool = False,
+                                  max_export_write_bw: str = '0',
+                                  max_export_read_bw: str = '0',
+                                  max_client_write_bw: str = '0',
+                                  max_client_read_bw: str = '0',
+                                  max_export_combined_bw: str = '0',
+                                  max_client_combined_bw: str = '0',
+                                  skip_notify_nfs_server: bool = False
+                                  ) -> None:
+        """enable QOS bandwidth control for NFS export and set different bandwidth"""
+        try:
+            self.export_mgr.skip_notify_nfs_server = skip_notify_nfs_server
+            bw_obj = QOSBandwidthControl(enable_bw_ctrl=True,
+                                         combined_bw_ctrl=combined_rw_bw_ctrl,
+                                         export_writebw=max_export_write_bw,
+                                         export_readbw=max_export_read_bw,
+                                         client_writebw=max_client_write_bw,
+                                         client_readbw=max_client_read_bw,
+                                         export_rw_bw=max_export_combined_bw,
+                                         client_rw_bw=max_client_combined_bw)
+        except Exception as e:
+            raise object_format.ErrorResponse.wrap(e)
+        return self.export_mgr.enable_export_qos_bw(cluster_id=cluster_id,
+                                                    pseudo_path=pseudo_path,
+                                                    bw_obj=bw_obj)
+
+    @CLICommand('nfs export qos get', perm='r')
+    @object_format.Responder()
+    def _cmd_export_qos_get(self, cluster_id: str, pseudo_path: str) -> Dict[str, int]:
+        """Get NFS export QOS config"""
+        return self.export_mgr.get_export_qos(cluster_id, pseudo_path)
+
+    @CLICommand('nfs export qos disable bandwidth_control', perm='rw')
+    @object_format.EmptyResponder()
+    def _cmd_export_qos_bw_disable(self,
+                                   cluster_id: str,
+                                   pseudo_path: str,
+                                   skip_notify_nfs_server: bool = False) -> None:
+        """Disable NFS export QOS bandwidth control"""
+        self.export_mgr.skip_notify_nfs_server = skip_notify_nfs_server
+        return self.export_mgr.disable_export_qos_bw(cluster_id, pseudo_path)
+
+    @CLICommand('nfs cluster qos enable bandwidth_control', perm='rw')
+    @object_format.EmptyResponder()
+    def _cmd_cluster_qos_bw_enable(self,
+                                   cluster_id: str,
+                                   qos_type: UserQoSType,
+                                   combined_rw_bw_ctrl: bool = False,
+                                   max_export_write_bw: str = '0',
+                                   max_export_read_bw: str = '0',
+                                   max_client_write_bw: str = '0',
+                                   max_client_read_bw: str = '0',
+                                   max_export_combined_bw: str = '0',
+                                   max_client_combined_bw: str = '0') -> None:
+        """Enable QOS bandwidth control for NFS cluster and set default export and client max bandwidth"""
+        try:
+            bw_obj = QOSBandwidthControl(enable_bw_ctrl=True,
+                                         combined_bw_ctrl=combined_rw_bw_ctrl,
+                                         export_writebw=max_export_write_bw,
+                                         export_readbw=max_export_read_bw,
+                                         client_writebw=max_client_write_bw,
+                                         client_readbw=max_client_read_bw,
+                                         export_rw_bw=max_export_combined_bw,
+                                         client_rw_bw=max_client_combined_bw)
+        except Exception as e:
+            raise object_format.ErrorResponse.wrap(e)
+        return self.nfs.enable_cluster_qos_bw(cluster_id=cluster_id,
+                                              qos_type=QOSType[qos_type.value],
+                                              bw_obj=bw_obj)
+
+    @CLICommand('nfs cluster qos disable bandwidth_control', perm='rw')
+    @object_format.EmptyResponder()
+    def _cmd_cluster_qos_bw_disable(self, cluster_id: str) -> None:
+        """Disable QOS bandwidth control for NFS cluster"""
+        return self.nfs.disable_cluster_qos_bw(cluster_id)
+
+    @CLICommand('nfs cluster qos set', perm='rw')
+    @object_format.EmptyResponder()
+    def _cmd_nfs_cluster_global_qos(self,
+                                    cluster_id: str,
+                                    msg_interval: int) -> None:
+        """Set the message interval for cluster QoS synchronization among hosts."""
+        return self.nfs.cluster_qos_set_config(cluster_id, msg_interval)
+
+    @CLICommand('nfs cluster qos get', perm='r')
+    @object_format.Responder()
+    def _cmd_cluster_qos_get(self, cluster_id: str) -> Dict[str, Any]:
+        """Get QOS configuration of NFS cluster"""
+        return self.nfs.get_cluster_qos(cluster_id)
+
+    @CLICommand('nfs export qos enable ops_control', perm='rw')
+    @object_format.EmptyResponder()
+    def _cmd_export_qos_ops_enable(self,
+                                   cluster_id: str,
+                                   pseudo_path: str,
+                                   max_export_iops: int = 0,
+                                   max_client_iops: int = 0,
+                                   skip_notify_nfs_server: bool = False
+                                   ) -> None:
+        """enable QOS IOPS control for NFS export"""
+        try:
+            self.export_mgr.skip_notify_nfs_server = skip_notify_nfs_server
+            ops_obj = QOSOpsControl(enable_iops_ctrl=True,
+                                    max_export_iops=max_export_iops,
+                                    max_client_iops=max_client_iops)
+        except Exception as e:
+            raise object_format.ErrorResponse.wrap(e)
+        return self.export_mgr.enable_export_qos_ops(cluster_id=cluster_id,
+                                                     pseudo_path=pseudo_path,
+                                                     ops_obj=ops_obj)
+
+    @CLICommand('nfs export qos disable ops_control', perm='rw')
+    @object_format.EmptyResponder()
+    def _cmd_export_qos_ops_disable(self,
+                                    cluster_id: str,
+                                    pseudo_path: str,
+                                    skip_notify_nfs_server: bool = False) -> None:
+        """Disable NFS export QOS IOPS control"""
+        self.export_mgr.skip_notify_nfs_server = skip_notify_nfs_server
+        return self.export_mgr.disable_export_qos_ops(cluster_id, pseudo_path)
+
+    @CLICommand('nfs cluster qos enable ops_control', perm='rw')
+    @object_format.EmptyResponder()
+    def _cmd_cluster_qos_ops_enable(self,
+                                    cluster_id: str,
+                                    qos_type: UserQoSType,
+                                    max_export_iops: int = 0,
+                                    max_client_iops: int = 0,
+                                    ) -> None:
+        """enable QOS IOPS control for NFS cluster"""
+        try:
+            ops_obj = QOSOpsControl(enable_iops_ctrl=True,
+                                    max_export_iops=max_export_iops,
+                                    max_client_iops=max_client_iops)
+        except Exception as e:
+            raise object_format.ErrorResponse.wrap(e)
+        return self.nfs.enable_cluster_qos_ops(cluster_id=cluster_id,
+                                               qos_type=QOSType[qos_type.value],
+                                               ops_obj=ops_obj)
+
+    @CLICommand('nfs cluster qos disable ops_control', perm='rw')
+    @object_format.EmptyResponder()
+    def _cmd_cluster_qos_ops_disable(self, cluster_id: str) -> None:
+        """Disable NFS cluster QOS IOPS control"""
+        return self.nfs.disable_cluster_qos_ops(cluster_id)

@@ -272,6 +272,46 @@ struct OwnerMetaTable : public EmptyMetaTable {
   }
 };
 
+struct BucketTagsTable : public EmptyMetaTable {
+  static int IndexClosure(lua_State* L) {
+    const auto bl = reinterpret_cast<bufferlist*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
+    const char* key = luaL_checkstring(L, 2);
+    try {
+      RGWObjTags tags;
+      auto bl_it = bl->cbegin();
+      tags.decode(bl_it);
+
+      const auto& tag_map = tags.get_tags();
+      auto tag_it = tag_map.find(key);
+
+      if (tag_it != tag_map.end()) {
+        pushstring(L, tag_it->second);
+        return ONE_RETURNVAL;
+      }
+    } catch (const buffer::error& err) {
+      lua_pushnil(L);
+      return ONE_RETURNVAL;
+    }
+    lua_pushnil(L);
+    return ONE_RETURNVAL;
+  }
+
+  static int LenClosure(lua_State* L) {
+    const auto bl = reinterpret_cast<bufferlist*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+
+    try {
+      RGWObjTags tags;
+      auto bl_it = bl->cbegin();
+      tags.decode(bl_it);
+      lua_pushinteger(L, tags.get_tags().size());
+      return ONE_RETURNVAL;
+    } catch (const buffer::error& err) {
+      lua_pushinteger(L, 0);
+      return ONE_RETURNVAL;
+    }
+  }
+};
+
 struct BucketMetaTable : public EmptyMetaTable {
   static int IndexClosure(lua_State* L) {
     const auto name = table_name_upvalue(L);
@@ -300,6 +340,13 @@ struct BucketMetaTable : public EmptyMetaTable {
       pushtime(L, bucket->get_creation_time());
     } else if (strcasecmp(index, "MTime") == 0) {
       pushtime(L, bucket->get_modification_time());
+    } else if (strcasecmp(index, "Tags") == 0) {
+      auto it = s->bucket_attrs.find(RGW_ATTR_TAGS);
+      if (it != s->bucket_attrs.end()) {
+        create_metatable<BucketTagsTable>(L, name, index, false, &(it->second));
+      } else {
+        lua_pushnil(L);
+    }
     } else if (strcasecmp(index, "Quota") == 0) {
       create_metatable<QuotaMetaTable>(L, name, index, false, &(bucket->get_info().quota));
     } else if (strcasecmp(index, "PlacementRule") == 0) {
@@ -788,7 +835,8 @@ int execute(
     OpsLogSink* olog,
     req_state* s, 
     RGWOp* op,
-    const std::string& script)
+    const rgw::lua::LuaCodeType& code,
+    int& script_return_code)
 {
   lua_state_guard lguard(s->cct->_conf->rgw_lua_max_memory_per_state,
                          s->cct->_conf->rgw_lua_max_runtime_per_state, s);
@@ -808,6 +856,9 @@ int execute(
   
     create_top_metatable(L, s, const_cast<char*>(op_name));  
 
+    //Make special error code available to lua scripts
+    lua_pushinteger(L, -EPERM);
+    lua_setglobal(L, "RGW_ABORT_REQUEST");
     // add the ops log action
     pushstring(L, RequestLogAction);
     lua_pushlightuserdata(L, rest);
@@ -820,12 +871,15 @@ int execute(
     if (s->penv.lua.background) {
       s->penv.lua.background->create_background_metatable(L);
     }
+    rc = rgw::lua::lua_execute(L, s, code);
 
-    // execute the lua script
-    if (luaL_dostring(L, script.c_str()) != LUA_OK) {
-      const std::string err(lua_tostring(L, -1));
-      ldpp_dout(s, 1) << "Lua ERROR: " << err << dendl;
-      rc = -1;
+    if (!rc) {
+      if (lua_isinteger(L, -1)) {
+        script_return_code = static_cast<int>(lua_tointeger(L, -1));
+        ldpp_dout(s, 20) << "Lua script executed successfully and returned code: " << script_return_code << dendl;
+      } else {
+        ldpp_dout(s, 20) << "Lua script executed, but did not return an integer. Ignoring return code." << dendl;
+      }
     }
   } catch (const std::runtime_error& e) {
     ldpp_dout(s, 1) << "Lua ERROR: " << e.what() << dendl;
@@ -836,6 +890,17 @@ int execute(
   }
 
   return rc;
+}
+
+int execute(
+    RGWREST* rest,
+    OpsLogSink* olog,
+    req_state* s, 
+    RGWOp* op,
+    const rgw::lua::LuaCodeType& code)
+{
+  int dummy_script_return_code = 0;
+  return execute(rest, olog, s, op, code, dummy_script_return_code);
 }
 
 } // namespace rgw::lua::request

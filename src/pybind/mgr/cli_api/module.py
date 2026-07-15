@@ -6,7 +6,9 @@ import time
 import errno
 from typing import Any, Callable, Dict, List
 
-from mgr_module import MgrModule, HandleCommandResult, CLICommand, API
+from .cli import CLIAPICLICommand
+
+from mgr_module import MgrModule, HandleCommandResult, API
 
 logger = logging.getLogger()
 get_time = time.perf_counter
@@ -14,7 +16,21 @@ get_time = time.perf_counter
 
 def pretty_json(obj: Any) -> Any:
     import json
-    return json.dumps(obj, sort_keys=True, indent=2)
+    return json.dumps(_make_serializable(obj), sort_keys=True, indent=2)
+
+
+def _make_serializable(obj):
+    """Convert non-JSON-serializable objects to serializable equivalents"""
+    if obj.__class__.__name__ == 'mappingproxy':
+        return {k: _make_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, tuple):
+        return [_make_serializable(item) for item in obj]
+    elif isinstance(obj, list):
+        return [_make_serializable(item) for item in obj]
+    elif isinstance(obj, dict):
+        return {k: _make_serializable(v) for k, v in obj.items()}
+    else:
+        return obj
 
 
 class CephCommander:
@@ -53,7 +69,7 @@ class MgrAPIReflector(type):
                 # save functions to klass._cli_{n}() methods. This
                 # can help on unit testing
                 wrapper = cls.func_wrapper(func)
-                command = CLICommand(**CephCommander(func).to_ceph_signature())(  # type: ignore
+                command = CLIAPICLICommand(**CephCommander(func).to_ceph_signature())(  # type: ignore
                     wrapper)
                 setattr(
                     klass,
@@ -84,7 +100,9 @@ class MgrAPIReflector(type):
 
 
 class CLI(MgrModule, metaclass=MgrAPIReflector):
-    @CLICommand('mgr cli_benchmark')
+    CLICommand = CLIAPICLICommand
+
+    @CLIAPICLICommand('mgr cli_benchmark')
     def benchmark(self, iterations: int, threads: int, func_name: str,
                   func_args: List[str] = None) -> HandleCommandResult:  # type: ignore
         func_args = () if func_args is None else func_args
@@ -114,6 +132,19 @@ class CLI(MgrModule, metaclass=MgrAPIReflector):
             "min": min(results),
         }
         return HandleCommandResult(stdout=pretty_json(stats))
+
+    @CLICommand('mgr cli cache flush')
+    def erase_cache(self, what: str) -> HandleCommandResult:
+        """
+        Erase a cached map by its name.
+        """
+        r = self.erase(what)
+        if r is False:
+            return HandleCommandResult(
+                errno.EINVAL,
+                stderr=f"no cached map named {what}"
+            )
+        return HandleCommandResult(stdout=f"Cache map {what} erased successfully")
 
 
 class BenchmarkException(Exception):

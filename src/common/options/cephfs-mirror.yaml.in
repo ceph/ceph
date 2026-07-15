@@ -5,13 +5,67 @@ options:
 - name: cephfs_mirror_max_concurrent_directory_syncs
   type: uint
   level: advanced
-  desc: maximum number of concurrent snapshot synchronization threads
-  long_desc: maximum number of directory snapshots that can be synchronized concurrently
-    by cephfs-mirror daemon. Controls the number of synchronization threads.
+  desc: maximum number of concurrent snapshot synchronization crawler threads
+  long_desc: maximum number of directory snapshots that can be crawled concurrently
+    by cephfs-mirror daemon. Controls the number of synchronization crawler threads.
+    Note that the crawler threads also does entry operations like directory creations,
+    file deletes and snapshot deletes/renames.
   default: 3
   services:
   - cephfs-mirror
   min: 1
+- name: cephfs_mirror_max_datasync_threads
+  type: uint
+  level: advanced
+  desc: maximum number of concurrent snapshot data synchronization threads
+  long_desc: specifies the maximum number of worker threads in the CephFS mirror
+    data synchronization thread pool. These threads process file synchronization tasks
+    produced by crawler threads for mirrored directory snapshots.
+  default: 6
+  services:
+  - cephfs-mirror
+  min: 1
+- name: cephfs_mirror_distribute_datasync_threads
+  type: bool
+  level: advanced
+  desc: distribute data synchronization threads evenly across multiple snapshots.
+  long_desc: controls how datasync worker threads are scheduled when multiple snapshots are
+    queued for synchronization. When enabled, worker threads are distributed fairly across
+    active snapshots, preventing a single large snapshot from monopolizing all available
+    threads and causing other snapshots to starve. When disabled, datasync threads process
+    one snapshot until completion before switching to another, which can improve
+    throughput for individual large snapshots but may increase latency for other queued snapshots.
+    Enabling this option improves responsiveness and reduces starvation in environments
+    where multiple directories are configured to be mirrored.
+  default: true
+  services:
+  - cephfs-mirror
+- name: cephfs_mirror_datasync_files_per_batch
+  type: uint
+  level: advanced
+  desc: maximum number of files processed by datasync threads per scheduling cycle before yielding.
+  long_desc: defines the maximum number of files a data synchronization thread will process for a
+    specific snapshot before yielding the thread to re-check scheduling logic. This is applicable
+    only when cephfs_mirror_distribute_datasync_threads is enabled. This batch size determines the
+    granularity of thread distribution; smaller batches allow threads to rotate between snapshots
+    more frequently, while larger batches improve throughput by minimizing the overhead of thread
+    re-assignment.
+  default: 64
+  services:
+  - cephfs-mirror
+  min: 1
+- name: cephfs_mirror_blockdiff_min_file_size
+  type: size
+  level: advanced
+  desc: minimum file size threshold in bytes above which block-level diff is used during CephFS mirroring.
+  long_desc: defines the minimum file size, in bytes, required for CephFS mirroring to use block-level
+    delta synchronization instead of performing a full file copy. When a file’s size is greater than to
+    this threshold, the mirroring engine attempts to synchronize only the modified block extents between
+    snapshots. For files smaller than or equal to this value, a full file copy is performed instead, as
+    block-level diff may not provide meaningful performance benefits for small files.
+  default: 16_M
+  services:
+  - cephfs-mirror
 - name: cephfs_mirror_action_update_interval
   type: secs
   level: advanced
@@ -47,6 +101,17 @@ options:
   desc: interval to scan directories to mirror snapshots
   long_desc: interval in seconds to scan configured directories for snapshot mirroring.
   default: 10
+  services:
+  - cephfs-mirror
+  min: 1
+- name: cephfs_mirror_tick_interval
+  type: secs
+  level: advanced
+  desc: interval for the per-peer mirroring tick thread
+  long_desc: interval in seconds for the per-peer tick thread that runs periodic
+    mirroring work. The value is re-read each iteration so configuration changes
+    take effect without restarting the daemon.
+  default: 5
   services:
   - cephfs-mirror
   min: 1

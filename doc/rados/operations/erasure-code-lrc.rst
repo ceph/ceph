@@ -1,5 +1,5 @@
 ======================================
-Locally repairable erasure code plugin
+Locally Repairable Erasure Code Plugin
 ======================================
 
 With the *isa* plugin, when an erasure coded object is stored on
@@ -14,17 +14,17 @@ recovery using fewer surviving OSDs. For instance if *lrc* is configured with
 every four OSDs. When a single OSD is lost, it can be recovered with
 only four OSDs instead of eight.
 
-Erasure code profile examples
+Erasure Code Profile Examples
 =============================
 
-Reduce recovery bandwidth between hosts
+Reduce Recovery Bandwidth Between Hosts
 ---------------------------------------
 
 Although it is probably not an interesting use case when all hosts are
 connected to the same switch, reduced bandwidth usage can actually be
-observed.:
+observed:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph osd erasure-code-profile set LRCprofile \
       plugin=lrc \
@@ -33,13 +33,13 @@ observed.:
    ceph osd pool create lrcpool erasure LRCprofile
 
 
-Reduce recovery bandwidth between racks
+Reduce Recovery Bandwidth Between Racks
 ---------------------------------------
 
-In Firefly the bandwidth reduction will only be observed if the primary
-OSD is in the same rack as the lost chunk.:
+In Firefly, bandwidth reduction will only be observed if the primary
+OSD is in the same rack as the lost chunk:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph osd erasure-code-profile set LRCprofile \
       plugin=lrc \
@@ -49,30 +49,30 @@ OSD is in the same rack as the lost chunk.:
    ceph osd pool create lrcpool erasure LRCprofile
 
 
-Create an lrc profile
+Create an LRC Profile
 =====================
 
-To create a new lrc erasure code profile:
+To create a new LRC erasure code profile:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph osd erasure-code-profile set {name} \
-       plugin=lrc \
-       k={data-chunks} \
-       m={coding-chunks} \
-       l={locality} \
-       [crush-root={root}] \
-       [crush-locality={bucket-type}] \
-       [crush-failure-domain={bucket-type}] \
-       [crush-device-class={device-class}] \
-       [directory={directory}] \
-       [--force]
+      plugin=lrc \
+      k={data-chunks} \
+      m={coding-chunks} \
+      l={locality} \
+      [crush-root={root}] \
+      [crush-locality={bucket-type}] \
+      [crush-failure-domain={bucket-type}] \
+      [crush-device-class={device-class}] \
+      [directory={directory}] \
+      [--force]
 
 Where:
 
-``k={data chunks}``
+``k={data-chunks}``
 
-:Description: Each object is split in **data-chunks** parts,
+:Description: Each object is split in ``data-chunks`` parts,
               each stored on a different OSD.
 
 :Type: Integer
@@ -81,7 +81,7 @@ Where:
 
 ``m={coding-chunks}``
 
-:Description: Compute **coding chunks** for each object and store them
+:Description: Compute ``coding-chunks`` for each object and store them
               on different OSDs. The number of coding chunks is also
               the number of OSDs that can be down without losing data.
 
@@ -92,8 +92,8 @@ Where:
 ``l={locality}``
 
 :Description: Group the coding and data chunks into sets of size
-              **locality**. For instance, for **k=4** and **m=2**,
-              when **locality=3** two groups of three are created.
+              ``locality``. For instance, for *k=4* and *m=2*,
+              when *locality=3* two groups of three are created.
               Each set can be recovered without reading chunks
               from another set.
 
@@ -103,8 +103,8 @@ Where:
 
 ``crush-root={root}``
 
-:Description: The name of the crush bucket used for the first step of
-              the CRUSH rule. For instance **step take default**.
+:Description: The name of the CRUSH bucket used for the first step of
+              the CRUSH rule. For instance ``step take default``.
 
 :Type: String
 :Required: No.
@@ -113,10 +113,10 @@ Where:
 ``crush-locality={bucket-type}``
 
 :Description: The type of the CRUSH bucket in which each set of chunks
-              defined by **l** will be stored. For instance, if it is
-              set to **rack**, each group of **l** chunks will be
+              defined by *l* will be stored. For instance, if it is
+              set to ``rack``, each group of *l* chunks will be
               placed in a different rack. It is used to create a
-              CRUSH rule step such as **step choose rack**. If it is not
+              CRUSH rule step such as ``step choose rack``. If it is not
               set, no such grouping is done.
 
 :Type: String
@@ -126,9 +126,9 @@ Where:
 
 :Description: Ensure that no two chunks are in a bucket with the same
               failure domain. For instance, if the failure domain is
-              **host** no two chunks will be stored on the same
-              host. It is used to create a CRUSH rule step such as **step
-              chooseleaf host**.
+              ``host``, no two chunks will be stored on the same
+              host. It is used to create a CRUSH rule step such as ``step
+              chooseleaf host``.
 
 :Type: String
 :Required: No.
@@ -137,7 +137,7 @@ Where:
 ``crush-device-class={device-class}``
 
 :Description: Restrict placement to devices of a specific class (e.g.,
-              ``ssd`` or ``hdd``), using the crush device class names
+              ``ssd`` or ``hdd``), using the CRUSH device class names
               in the CRUSH map.
 
 :Type: String
@@ -146,7 +146,7 @@ Where:
 
 ``directory={directory}``
 
-:Description: Set the **directory** name from which the erasure code
+:Description: Set the ``directory`` name from which the erasure code
               plugin is loaded.
 
 :Type: String
@@ -160,16 +160,16 @@ Where:
 :Type: String
 :Required: No.
 
-Low level plugin configuration
+Low Level Plugin Configuration
 ==============================
 
-The sum of **k** and **m** must be a multiple of the **l** parameter.
+The sum of *k* and *m* must be a multiple of the *l* parameter.
 The low level configuration parameters however do not enforce this
 restriction and it may be advantageous to use them for specific
 purposes. It is for instance possible to define two groups, one with 4
 chunks and another with 3 chunks. It is also possible to recursively
 define locality sets, for instance datacenters and racks into
-datacenters. The **k/m/l** are implemented by generating a low level
+datacenters. The *k*\ /\ *m*\ /\ *l* are implemented by generating a low-level
 configuration.
 
 The *lrc* erasure code plugin recursively applies erasure code
@@ -183,84 +183,84 @@ For instance, when three coding steps are described as::
    step 2      cDDD____
    step 3      ____cDDD
 
-where *c* are coding chunks calculated from the data chunks *D*, the
+where ``c`` are coding chunks calculated from the data chunks ``D``, the
 loss of chunk *7* can be recovered with the last four chunks. And the
-loss of chunk *2* chunk can be recovered with the first four
+loss of chunk *2* can be recovered with the first four
 chunks.
 
-Erasure code profile examples using low level configuration
+Erasure Code Profile Examples Using Low-Level Configuration
 ===========================================================
 
-Minimal testing
+Minimal Testing
 ---------------
 
-It is strictly equivalent to using a *K=2* *M=1* erasure code profile. The *DD*
-implies *K=2*, the *c* implies *M=1* and the *isa* plugin is used
-by default.:
+The following example is strictly equivalent to using a *k=2*, *m=1* erasure code profile. The ``DD``
+implies *k=2*, the ``c`` implies *m=1* and the *isa* plugin is used
+by default:
 
-.. prompt:: bash $
-   
+.. prompt:: bash #
+
    ceph osd erasure-code-profile set LRCprofile \
       plugin=lrc \
       mapping=DD_ \
       layers='[ [ "DDc", "" ] ]'
    ceph osd pool create lrcpool erasure LRCprofile
 
-Reduce recovery bandwidth between hosts
+Reduce Recovery Bandwidth Between Hosts
 ---------------------------------------
 
 Although it is probably not an interesting use case when all hosts are
 connected to the same switch, reduced bandwidth usage can actually be
-observed. It is equivalent to **k=4**, **m=2** and **l=3** although
-the layout of the chunks is different. **WARNING: PROMPTS ARE SELECTABLE**
+observed. It is equivalent to *k=4*, *m=2* and *l=3* although
+the layout of the chunks is different.
 
-::
+.. prompt:: bash # auto
 
-   $ ceph osd erasure-code-profile set LRCprofile \
-        plugin=lrc \
-        mapping=__DD__DD \
-        layers='[
-                  [ "_cDD_cDD", "" ],
-                  [ "cDDD____", "" ],
-                  [ "____cDDD", "" ],
-                ]'
-   $ ceph osd pool create lrcpool erasure LRCprofile
+   # ceph osd erasure-code-profile set LRCprofile \
+      plugin=lrc \
+      mapping=__DD__DD \
+      layers='[
+                [ "_cDD_cDD", "" ],
+                [ "cDDD____", "" ],
+                [ "____cDDD", "" ],
+              ]'
+   # ceph osd pool create lrcpool erasure LRCprofile
 
 
-Reduce recovery bandwidth between racks
+Reduce Recovery Bandwidth Between Racks
 ---------------------------------------
 
-In Firefly the reduced bandwidth will only be observed if the primary OSD is in
-the same rack as the lost chunk. **WARNING: PROMPTS ARE SELECTABLE**
+In Firefly, the reduced bandwidth will only be observed if the primary OSD is in
+the same rack as the lost chunk.
 
-::
+.. prompt:: bash # auto
 
-   $ ceph osd erasure-code-profile set LRCprofile \
-       plugin=lrc \
-       mapping=__DD__DD \
-       layers='[
-                 [ "_cDD_cDD", "" ],
-                 [ "cDDD____", "" ],
-                 [ "____cDDD", "" ],
-               ]' \
-       crush-steps='[
-                       [ "choose", "rack", 2 ],
-                       [ "chooseleaf", "host", 4 ],
-                      ]'
-  
-   $ ceph osd pool create lrcpool erasure LRCprofile
+   # ceph osd erasure-code-profile set LRCprofile \
+      plugin=lrc \
+      mapping=__DD__DD \
+      layers='[
+                [ "_cDD_cDD", "" ],
+                [ "cDDD____", "" ],
+                [ "____cDDD", "" ],
+              ]' \
+      crush-steps='[
+                      [ "choose", "rack", 2 ],
+                      [ "chooseleaf", "host", 4 ],
+                     ]'
 
-Testing with different Erasure Code backends
+   # ceph osd pool create lrcpool erasure LRCprofile
+
+Testing with Different Erasure Code Backends
 --------------------------------------------
 
 LRC now uses ISA as the default EC backend. It is possible to
-specify the EC backend/algorithm on a per layer basis using the low
-level configuration. The second argument in layers='[ [ "DDc", "" ] ]'
+specify the EC backend/algorithm on a per-layer basis using the low-level
+configuration. The second argument in ``layers='[ [ "DDc", "" ] ]'``
 is actually an erasure code profile to be used for this level. The
 example below specifies the Jerasure backend with the cauchy technique to
-be used in the lrcpool.:
+be used in the pool named ``lrcpool``:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph osd erasure-code-profile set LRCprofile \
       plugin=lrc \
@@ -269,23 +269,22 @@ be used in the lrcpool.:
    ceph osd pool create lrcpool erasure LRCprofile
 
 You could also use a different erasure code profile for each
-layer. **WARNING: PROMPTS ARE SELECTABLE**
+layer:
 
-::
+.. prompt:: bash # auto
 
-   $ ceph osd erasure-code-profile set LRCprofile \
-        plugin=lrc \
-        mapping=__DD__DD \
-        layers='[
-                  [ "_cDD_cDD", "plugin=isa technique=cauchy" ],
-                  [ "cDDD____", "plugin=isa" ],
-                  [ "____cDDD", "plugin=jerasure" ],
-                ]'
-   $ ceph osd pool create lrcpool erasure LRCprofile
+   # ceph osd erasure-code-profile set LRCprofile \
+      plugin=lrc \
+      mapping=__DD__DD \
+      layers='[
+                [ "_cDD_cDD", "plugin=isa technique=cauchy" ],
+                [ "cDDD____", "plugin=isa" ],
+                [ "____cDDD", "plugin=jerasure" ],
+              ]'
+   # ceph osd pool create lrcpool erasure LRCprofile
 
 
-
-Erasure coding and decoding algorithm
+Erasure Coding and Decoding Algorithm
 =====================================
 
 The steps found in the layers description::
@@ -298,15 +297,15 @@ The steps found in the layers description::
 
 are applied in order. For instance, if a 4K object is encoded, it will
 first go through *step 1* and be divided in four 1K chunks (the four
-uppercase D). They are stored in the chunks 2, 3, 6 and 7, in
+uppercase ``D``). They are stored in the chunks *2*, *3*, *6* and *7*, in
 order. From these, two coding chunks are calculated (the two lowercase
-c). The coding chunks are stored in the chunks 1 and 5, respectively.
+``c``). The coding chunks are stored in the chunks *1* and *5*, respectively.
 
 The *step 2* re-uses the content created by *step 1* in a similar
-fashion and stores a single coding chunk *c* at position 0. The last four
-chunks, marked with an underscore (*_*) for readability, are ignored.
+fashion and stores a single coding chunk ``c`` at position *0*. The last four
+chunks, marked with an underscore (``_``) for readability, are ignored.
 
-The *step 3* stores a single coding chunk *c* at position 4. The three
+The *step 3* stores a single coding chunk ``c`` at position *4*. The three
 chunks created by *step 1* are used to compute this coding chunk,
 i.e. the coding chunk from *step 1* becomes a data chunk in *step 3*.
 
@@ -319,7 +318,7 @@ If chunk *2* is lost::
    step 3      __ _cDDD
 
 decoding will attempt to recover it by walking the steps in reverse
-order: *step 3* then *step 2* and finally *step 1*.
+order: *step 3*, then *step 2*, and finally *step 1*.
 
 The *step 3* knows nothing about chunk *2* (i.e. it is an underscore)
 and is skipped.
@@ -328,7 +327,7 @@ The coding chunk from *step 2*, stored in chunk *0*, allows it to
 recover the content of chunk *2*. There are no more chunks to recover
 and the process stops, without considering *step 1*.
 
-Recovering chunk *2* requires reading chunks *0, 1, 3* and writing
+Recovering chunk *2* requires reading chunks *0*, *1*, *3* and writing
 back chunk *2*.
 
 If chunk *2, 3, 6* are lost::
@@ -348,11 +347,11 @@ The *step 3* can recover the content of chunk *6*::
    step 3      __  cDDD
 
 The *step 2* fails to recover and is skipped because there are two
-chunks missing (*2, 3*) and it can only recover from one missing
+chunks missing (*2*, *3*) and it can only recover from one missing
 chunk.
 
-The coding chunk from *step 1*, stored in chunk *1, 5*, allows it to
-recover the content of chunk *2, 3*::
+The coding chunk from *step 1*, stored in chunk *1*, *5*, allows it to
+recover the content of chunk *2*, *3*::
 
    chunk nr    01234567
 
@@ -360,7 +359,7 @@ recover the content of chunk *2, 3*::
    step 2      cDDD____
    step 3      ____cDDD
 
-Controlling CRUSH placement
+Controlling CRUSH Placement
 ===========================
 
 The default CRUSH rule provides OSDs that are on different hosts. For instance::
@@ -371,9 +370,9 @@ The default CRUSH rule provides OSDs that are on different hosts. For instance::
    step 2      cDDD____
    step 3      ____cDDD
 
-needs exactly *8* OSDs, one for each chunk. If the hosts are in two
-adjacent racks, the first four chunks can be placed in the first rack
-and the last four in the second rack. So that recovering from the loss
+needs exactly 8 OSDs, one for each chunk. If the hosts are in two
+adjacent racks, the first four chunks can be placed in the first rack,
+and the last four in the second rack, so that recovering from the loss
 of a single OSD does not require using bandwidth between the two
 racks.
 
@@ -381,8 +380,8 @@ For instance::
 
    crush-steps='[ [ "choose", "rack", 2 ], [ "chooseleaf", "host", 4 ] ]'
 
-will create a rule that will select two crush buckets of type
-*rack* and for each of them choose four OSDs, each of them located in
-different buckets of type *host*.
+will create a rule that will select two CRUSH buckets of type
+``rack`` and for each of them choose four OSDs, each of them located in
+different buckets of type ``host``.
 
 The CRUSH rule can also be manually crafted for finer control.

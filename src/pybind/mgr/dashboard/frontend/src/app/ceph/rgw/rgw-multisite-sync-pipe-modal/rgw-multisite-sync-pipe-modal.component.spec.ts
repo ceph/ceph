@@ -2,7 +2,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { RgwMultisiteSyncPipeModalComponent } from './rgw-multisite-sync-pipe-modal.component';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ToastrModule } from 'ngx-toastr';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { ReactiveFormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
@@ -28,7 +27,6 @@ describe('RgwMultisiteSyncPipeModalComponent', () => {
       declarations: [RgwMultisiteSyncPipeModalComponent],
       imports: [
         HttpClientTestingModule,
-        ToastrModule.forRoot(),
         PipesModule,
         ReactiveFormsModule,
         CommonModule,
@@ -54,7 +52,7 @@ describe('RgwMultisiteSyncPipeModalComponent', () => {
     }).compileComponents();
 
     fixture = TestBed.createComponent(RgwMultisiteSyncPipeModalComponent);
-    multisiteServiceMock = (TestBed.inject(RgwMultisiteService) as unknown) as MultisiteServiceMock;
+    multisiteServiceMock = TestBed.inject(RgwMultisiteService) as unknown as MultisiteServiceMock;
     component = fixture.componentInstance;
     fixture.detectChanges();
   });

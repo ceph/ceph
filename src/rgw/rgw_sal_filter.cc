@@ -673,18 +673,20 @@ int FilterDriver::list_roles(const DoutPrefixProvider *dpp,
 int FilterDriver::store_oidc_provider(const DoutPrefixProvider* dpp,
                                       optional_yield y,
                                       const RGWOIDCProviderInfo& info,
-                                      bool exclusive)
+                                      bool exclusive,
+                                      RGWObjVersionTracker* objv_tracker)
 {
-  return next->store_oidc_provider(dpp, y, info, exclusive);
+  return next->store_oidc_provider(dpp, y, info, exclusive, objv_tracker);
 }
 
 int FilterDriver::load_oidc_provider(const DoutPrefixProvider* dpp,
                                      optional_yield y,
                                      std::string_view tenant,
                                      std::string_view url,
-                                     RGWOIDCProviderInfo& info)
+                                     RGWOIDCProviderInfo& info,
+                                     RGWObjVersionTracker* objv_tracker)
 {
-  return next->load_oidc_provider(dpp, y, tenant, url, info);
+  return next->load_oidc_provider(dpp, y, tenant, url, info, objv_tracker);
 }
 
 int FilterDriver::delete_oidc_provider(const DoutPrefixProvider* dpp,
@@ -1114,10 +1116,10 @@ void FilterObject::gen_rand_obj_instance_name()
   return next->gen_rand_obj_instance_name();
 }
 
-std::unique_ptr<MPSerializer> FilterObject::get_serializer(const DoutPrefixProvider *dpp,
+std::unique_ptr<MPSerializer> FilterObject::get_serializer(const DoutPrefixProvider *dpp, optional_yield y,
 							   const std::string& lock_name)
 {
-  std::unique_ptr<MPSerializer> s = next->get_serializer(dpp, lock_name);
+  std::unique_ptr<MPSerializer> s = next->get_serializer(dpp, y, lock_name);
   return std::make_unique<FilterMPSerializer>(std::move(s));
 }
 
@@ -1384,7 +1386,7 @@ std::unique_ptr<Writer> FilterMultipartUpload::get_writer(
   return std::make_unique<FilterWriter>(std::move(writer), obj);
 }
 
-int FilterMPSerializer::try_lock(const DoutPrefixProvider *dpp, utime_t dur,
+int FilterMPSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur,
 				 optional_yield y)
 {
   return next->try_lock(dpp, dur, y);
@@ -1394,7 +1396,7 @@ int FilterMPSerializer::unlock(const DoutPrefixProvider* dpp, optional_yield y)
   return next->unlock(dpp, y);
 }
 
-int FilterLCSerializer::try_lock(const DoutPrefixProvider *dpp, utime_t dur,
+int FilterLCSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur,
 				 optional_yield y)
 {
   return next->try_lock(dpp, dur, y);
@@ -1461,7 +1463,7 @@ std::unique_ptr<LCSerializer> FilterLifecycle::get_serializer(
   return std::make_unique<FilterLCSerializer>(std::move(ns));
 }
 
-int FilterRestoreSerializer::try_lock(const DoutPrefixProvider *dpp, utime_t dur,
+int FilterRestoreSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur,
 				 optional_yield y)
 {
   return next->try_lock(dpp, dur, y);
@@ -1541,6 +1543,12 @@ int FilterLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y
   return next->get_script(dpp, y, key, script);
 }
 
+std::tuple<rgw::lua::LuaCodeType, int> FilterLuaManager::get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y,
+				             const std::string& key)
+{
+  return next->get_script_or_bytecode(dpp, y, key);
+}
+
 int FilterLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y,
 				const std::string& key, const std::string& script)
 {
@@ -1582,6 +1590,9 @@ const std::string& FilterLuaManager::luarocks_path() const {
 
 void FilterLuaManager::set_luarocks_path(const std::string& path) {
   next->set_luarocks_path(path);
+}
+void FilterLuaManager::set_lua_background(rgw::lua::Background* background) {
+  next->set_lua_background(background);
 }
 
 } } // namespace rgw::sal

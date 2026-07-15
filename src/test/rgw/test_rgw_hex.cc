@@ -6,14 +6,15 @@
 
 #include "rgw/rgw_hex.h"
 
-#include <ranges>
-#include <cstring>
+#include <string_view>
+#include <vector>
 
 using std::end;
 using std::begin;
 using std::array;
 using std::string;
 using std::string_view;
+using std::vector;
 
 TEST_CASE("hexdigit", "[rgw]") {
 
@@ -29,25 +30,25 @@ TEST_CASE("hexdigit", "[rgw]") {
 
 TEST_CASE("buf_to_hex", "[rgw]") {
 
-  constexpr auto in = "AabcdefghA";
+  constexpr string_view in = "AabcdefghA";
   constexpr string_view out_expected { "41616263646566676841" };
 
   SECTION("C character array overload") {
     SECTION("empty input") {
-      constexpr auto in_empty = "";
-      const string_view out_expected_empty { "" };
-      char out_data[] = {};
+      constexpr string_view in_empty{};
+      const vector<char> out_expected_empty{};
+      vector<char> out_data;
 
-      buf_to_hex((const unsigned char* const)(in_empty), std::strlen(in_empty), out_data);
+      buf_to_hex(in_empty, std::back_inserter(out_data));
 
       CHECK(out_expected_empty == out_data);
     }
 
     SECTION("heuristic (known value)") {
-      char out_data[1 + (3*sizeof(in))] = {};
+      std::string out_data;
   
       CAPTURE(out_data);
-      buf_to_hex((const unsigned char* const)(in), std::strlen(in), out_data);
+      buf_to_hex(in, std::back_inserter(out_data));
       CAPTURE(out_data);
   
       CHECK(out_expected == out_data);

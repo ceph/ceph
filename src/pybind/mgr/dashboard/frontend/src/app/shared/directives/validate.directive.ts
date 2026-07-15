@@ -38,7 +38,7 @@ export class ValidateDirective implements OnInit, OnDestroy {
 
     const submit$ = this.formGroupDir ? this.formGroupDir.ngSubmit : new Subject();
 
-    merge(this.ngControl.control.statusChanges, submit$)
+    merge(this.ngControl.control.statusChanges, this.ngControl.control.valueChanges, submit$)
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => {
         this.updateState();

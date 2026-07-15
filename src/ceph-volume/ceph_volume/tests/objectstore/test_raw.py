@@ -92,12 +92,92 @@ class TestRaw:
         assert self.raw_bs.prepare_osd_req.mock_calls == [call(tmpfs=True)]
         assert self.raw_bs.osd_mkfs.called
         assert self.raw_bs.prepare_dmcrypt.called
+        m_generate_uuid.assert_called_once()
+
+    @patch('ceph_volume.objectstore.raw.nvme_utils.preformat', return_value=False)
+    @patch('ceph_volume.objectstore.raw.prepare_utils.create_id')
+    @patch('ceph_volume.objectstore.raw.system.generate_uuid')
+    def test_prepare_uses_external_osd_fsid(self,
+                                            m_generate_uuid,
+                                            m_create_id,
+                                            m_nvme_preformat,
+                                            is_root,
+                                            factory):
+        external = '824f7edf-371f-4b75-9231-4ab62a32d5c0'
+        m_create_id.return_value = MagicMock()
+        args = factory(crush_device_class=None, no_tmpfs=True, osd_fsid=external)
+        args.data = '/dev/sdx'
+        self.raw_bs.args = args
+        self.raw_bs.osd_fsid = getattr(args, 'osd_fsid', '')
+        self.raw_bs.block_device_path = args.data
+        self.raw_bs.prepare_dmcrypt = MagicMock()
+        self.raw_bs.prepare_osd_req = MagicMock()
+        self.raw_bs.osd_mkfs = MagicMock()
+        self.raw_bs.secrets = {}
+        self.raw_bs.encrypted = False
+        self.raw_bs.prepare()
+        m_generate_uuid.assert_not_called()
+        m_create_id.assert_called_once()
+        assert m_create_id.call_args[0][0] == external
+        assert self.raw_bs.osd_fsid == external
+
+    @patch('ceph_volume.objectstore.raw.nvme_utils.preformat', return_value=True)
+    @patch('ceph_volume.objectstore.raw.prepare_utils.create_id')
+    @patch('ceph_volume.objectstore.raw.system.generate_uuid')
+    def test_prepare_sets_discard_flag_after_nvme_format(self,
+                                                         m_generate_uuid,
+                                                         m_create_id,
+                                                         m_nvme,
+                                                         is_root,
+                                                         factory):
+        m_generate_uuid.return_value = 'fake-uuid'
+        m_create_id.return_value = MagicMock()
+        self.raw_bs.prepare_dmcrypt = MagicMock()
+        self.raw_bs.prepare_osd_req = MagicMock()
+        self.raw_bs.osd_mkfs = MagicMock()
+        args = factory(no_tmpfs=True, crush_device_class=None)
+        args.data = '/dev/nvme0n1'
+        self.raw_bs.args = args
+        self.raw_bs.block_device_path = args.data
+        self.raw_bs.secrets = dict()
+        self.raw_bs.encrypted = False
+        self.raw_bs.prepare()
+        assert self.raw_bs.skip_mkfs_discard is True
+        m_nvme.assert_called_once_with(args.data)
+
+    @patch('ceph_volume.objectstore.raw.nvme_utils.preformat', return_value=False)
+    @patch('ceph_volume.objectstore.raw.prepare_utils.create_id')
+    @patch('ceph_volume.objectstore.raw.system.generate_uuid')
+    def test_prepare_keeps_discard_when_no_nvme_format(self,
+                                                       m_generate_uuid,
+                                                       m_create_id,
+                                                       m_nvme,
+                                                       is_root,
+                                                       factory):
+        m_generate_uuid.return_value = 'fake-uuid'
+        m_create_id.return_value = MagicMock()
+        self.raw_bs.prepare_dmcrypt = MagicMock()
+        self.raw_bs.prepare_osd_req = MagicMock()
+        self.raw_bs.osd_mkfs = MagicMock()
+        args = factory(no_tmpfs=True, crush_device_class=None)
+        args.data = '/dev/nvme0n1'
+        self.raw_bs.args = args
+        self.raw_bs.block_device_path = args.data
+        self.raw_bs.secrets = dict()
+        self.raw_bs.encrypted = False
+        self.raw_bs.prepare()
+        assert self.raw_bs.skip_mkfs_discard is False
+        m_nvme.assert_called_once_with(args.data)
 
     @patch('ceph_volume.conf.cluster', 'ceph')
+    @patch(
+        'ceph_volume.objectstore.raw.RawOsdCryptMappers.backing_device_path',
+        return_value='',
+    )
     @patch('ceph_volume.objectstore.raw.prepare_utils.link_wal')
     @patch('ceph_volume.objectstore.raw.prepare_utils.link_db')
     @patch('ceph_volume.objectstore.raw.prepare_utils.link_block')
-    @patch('os.path.exists')
+    @patch('os.path.lexists')
     @patch('os.unlink')
     @patch('ceph_volume.objectstore.raw.prepare_utils.create_osd_path')
     @patch('ceph_volume.objectstore.raw.process.run')
@@ -109,6 +189,7 @@ class TestRaw:
                        m_link_block,
                        m_link_db,
                        m_link_wal,
+                       m_backing_device_path,
                        monkeypatch,
                        factory):
         args = factory(no_tmpfs=False)
@@ -122,7 +203,9 @@ class TestRaw:
         m_unlink.return_value = MagicMock()
         monkeypatch.setattr(system, 'chown', lambda path: 0)
         monkeypatch.setattr(system, 'path_is_mounted', lambda path: 0)
-        self.raw_bs._activate('1', True)
+        self.raw_bs.osd_id = '1'
+        self.raw_bs.osd_fsid = 'test-fsid'
+        self.raw_bs._activate()
         calls = [call('/var/lib/ceph/osd/ceph-1/block'),
                  call('/var/lib/ceph/osd/ceph-1/block.db'),
                  call('/var/lib/ceph/osd/ceph-1/block.wal')]
@@ -214,6 +297,6 @@ class TestRaw:
             rawbluestore.osd_id = '0'
             rawbluestore._activate = MagicMock()
             rawbluestore.activate()
-            assert rawbluestore._activate.mock_calls == [call(0, 'db32a338-b640-4cbc-af17-f63808b1c36e')]
+            rawbluestore._activate.assert_called_once_with()
             assert rawbluestore.block_device_path == '/dev/mapper/ceph-db32a338-b640-4cbc-af17-f63808b1c36e-sdb-block-dmcrypt'
             assert rawbluestore.db_device_path == '/dev/mapper/ceph-db32a338-b640-4cbc-af17-f63808b1c36e-sdc-db-dmcrypt'

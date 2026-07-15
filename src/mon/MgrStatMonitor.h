@@ -3,10 +3,13 @@
 
 #pragma once
 
+#include "common/ceph_mutex.h"
 #include "include/Context.h"
 #include "PaxosService.h"
 #include "mon/PGMap.h"
 #include "mgr/ServiceMap.h"
+
+struct Subscription;
 
  class MgrStatMonitor : public PaxosService, 
                         public md_config_obs_t {

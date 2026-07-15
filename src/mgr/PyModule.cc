@@ -23,6 +23,7 @@
 #include "include/stringify.h"
 #include "common/BackTrace.h"
 #include "common/JSONFormatter.h"
+#include "common/split.h"
 #include "global/signal_handler.h"
 
 #include "common/debug.h"
@@ -156,6 +157,48 @@ std::string peek_pyerror()
   return exc_msg;
 }
 
+std::span<std::byte const> py_bytes_as_span(PyObject *bytes)
+{
+  assert(bytes);
+  assert(PyBytes_CheckExact(bytes));
+  Py_ssize_t length;
+  char *buf;
+  [[maybe_unused]] int r = PyBytes_AsStringAndSize(
+    bytes, &buf, &length);
+  assert(r == 0);
+  return std::span<std::byte const>((const std::byte*)buf, size_t(length));
+}
+
+PyObject *py_bytes_from_span(std::span<std::byte const> s)
+{
+  auto ret = PyBytes_FromStringAndSize(
+    reinterpret_cast<const char*>(s.data()), s.size_bytes());
+  assert(ret);
+  return ret;
+}
+
+std::vector<std::byte> py_bytes_as_vec(PyObject *bytes)
+{
+  assert(bytes);
+  assert(PyBytes_CheckExact(bytes));
+  Py_ssize_t length;
+  char *buf;
+  [[maybe_unused]] int r = PyBytes_AsStringAndSize(
+    bytes, &buf, &length);
+  assert(r == 0);
+  return std::vector<std::byte>{
+    reinterpret_cast<const std::byte*>(buf),
+    reinterpret_cast<const std::byte*>(buf) + size_t(length)};
+}
+
+PyObject *py_bytes_from_vec(const std::vector<std::byte> &s)
+{
+  auto ret = PyBytes_FromStringAndSize(
+    reinterpret_cast<const char *>(s.data()), s.size());
+  assert(ret);
+  return ret;
+}
+
 
 namespace {
   PyObject* log_write(PyObject*, PyObject* args) {
@@ -244,6 +287,10 @@ std::pair<int, std::string> PyModuleConfig::set_config(
   }
 }
 
+  PyModule::PyModule(const std::string &module_name_)
+    : module_name(module_name_)
+  { }
+
 PyObject* PyModule::init_ceph_logger()
 {
   auto py_logger = PyModule_Create(&ceph_logger_module);
@@ -293,8 +340,23 @@ int PyModule::load(PyThreadState *pMainThreadState)
 {
   ceph_assert(pMainThreadState != nullptr);
 
-  // Configure sub-interpreter
-  {
+  const auto subinterpreter_modules_opt = g_conf().get_val<std::string>(
+    "mgr_subinterpreter_modules"
+  );
+  auto subinterpreter_modules = ceph::split(subinterpreter_modules_opt);
+  use_main_interpreter = std::count(
+    subinterpreter_modules.begin(), subinterpreter_modules.end(), "*"
+  ) == 0 && std::count(
+    subinterpreter_modules.begin(), subinterpreter_modules.end(), module_name
+  ) == 0;
+
+  if (use_main_interpreter) {
+    // Use main interpreter
+    derr << "Loading module " << module_name << " in main interpreter" << dendl;
+    pMyThreadState.set(pMainThreadState);
+  } else {
+    // Configure sub-interpreter
+    derr << "Loading module " << module_name << " in sub-interpreter" << dendl;
     SafeThreadState sts(pMainThreadState);
     Gil gil(sts);
 
@@ -306,11 +368,19 @@ int PyModule::load(PyThreadState *pMainThreadState)
       pMyThreadState.set(thread_state);
     }
   }
+
   // Environment is all good, import the external module
   {
     Gil gil(pMyThreadState);
 
     int r;
+
+    pPickleModule = PyImport_ImportModule("pickle");
+    if (!pPickleModule) {
+      derr << "Unable to load pickle" << dendl;
+      return -EINVAL;
+    }
+
     r = load_subclass_of("MgrModule", &pClass);
     if (r) {
       derr << "Class not found in module '" << module_name << "'" << dendl;
@@ -718,8 +788,26 @@ PyModule::~PyModule()
     Gil gil(pMyThreadState, true);
     Py_XDECREF(pClass);
     Py_XDECREF(pStandbyClass);
-    Py_EndInterpreter(pMyThreadState.ts);
+    Py_XDECREF(pPickleModule);
+    if (use_main_interpreter) {
+      Py_EndInterpreter(pMyThreadState.ts);
+    }
     pMyThreadState.ts = nullptr;
   }
 }
 
+int PyModule::perf_counter_build(CephContext *cct) {
+  ceph_assert(perfcounter == nullptr);
+  PerfCountersBuilder pcb(cct, "mgr_module_" + get_name(), l_pym_first, l_pym_last);
+  pcb.add_u64_avg(l_pym_notify_avg_usec, "notify_avg_usec", "Average time spent in notify calls", "nsec", 0);
+  pcb.add_u64_avg(l_pym_cmd_avg_usec, "cmd_avg_usec", "Average time spent in command calls", "csec", 0);
+  pcb.add_u64(l_pym_alive, "alive", "Is the module alive?", "aliv", 0, uint64_t(1));
+  pcb.add_u64(l_pym_cpu_usage, "cpu_usage", "CPU usage in percent", "cpu", 0, uint64_t(100));
+  pcb.add_u64(l_pym_mem_rss_change, "mem_rss_change", "Memory RSS change in bytes", "", 0);
+  pcb.add_u64(l_pym_mem_rss_current, "mem_rss_current", "Memory RSS current in bytes", "", 0);
+  pcb.add_u64(l_pym_serve_cpu_usage, "serve_cpu_usage", "Serve thread CPU usage in percent", "cpu", 0, uint64_t(100));
+  perfcounter = std::unique_ptr<PerfCounters>(pcb.create_perf_counters());
+  cct->get_perfcounters_collection()->add(perfcounter.get());
+
+  return 0;
+}

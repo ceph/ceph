@@ -209,14 +209,15 @@ public:
   {}
   seastar::future<tell_result_t> call(const cmdmap_t&,
 				      std::string_view format,
-				      ceph::bufferlist&& input) const final
+				      ceph::bufferlist&&) const final
   {
     LOG_PREFIX(AdminSocketHook::FlushPgStatsHook);
     DEBUG("");
-    uint64_t seq = osd.send_pg_stats();
-    unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
-    f->dump_unsigned("stat_seq", seq);
-    co_return std::move(f);
+    return osd.send_pg_stats().then([format](uint64_t seq) {
+      unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
+      f->dump_unsigned("stat_seq", seq);
+      return seastar::make_ready_future<tell_result_t>(std::move(f));
+    });
   }
 
 private:
@@ -347,7 +348,7 @@ public:
 	seastar::scollectd::get_value_map(),
 	f,
 	[prefix](const auto &full_name) {
-	  return prefix.empty() || full_name.compare(0, prefix.size(), prefix) != 0;
+	  return prefix.empty() || full_name.compare(0, prefix.size(), prefix) == 0;
 	});
     });
     fref->close_section();
@@ -442,7 +443,9 @@ public:
       logger().info("error during data error injection: {}", e.what());
       co_return tell_result_t(-EINVAL, e.what());
     }
-    co_await shard_services.get_store().inject_data_error(obj);
+    co_await crimson::os::with_store<&crimson::os::FuturizedStore::Shard::inject_data_error>(
+      shard_services.get_store(META_STORE_INDEX),
+      obj);
     logger().info("successfully injected data error for obj={}", obj);
     ceph::bufferlist bl;
     bl.append("ok"sv);
@@ -484,7 +487,9 @@ public:
       logger().info("error during metadata error injection: {}", e.what());
       co_return tell_result_t(-EINVAL, e.what());
     }
-    co_await shard_services.get_store().inject_mdata_error(obj);
+    co_await crimson::os::with_store<&crimson::os::FuturizedStore::Shard::inject_mdata_error>(
+      shard_services.get_store(META_STORE_INDEX),
+      obj);
     logger().info("successfully injected metadata error for obj={}", obj);
     ceph::bufferlist bl;
     bl.append("ok"sv);
@@ -613,5 +618,51 @@ private:
 };
 template std::unique_ptr<AdminSocketHook>
 make_asok_hook<DumpRecoveryReservationsHook>(crimson::osd::ShardServices& shard_services);
+
+class DumpReactorBackendHook final: public AdminSocketHook {
+public:
+  explicit DumpReactorBackendHook() :
+    AdminSocketHook{"reactor_backend",
+                    "",
+                    "seastar reactor backend used"}
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
+                                      std::string_view format,
+                                      ceph::bufferlist&& input) const final
+  {
+    LOG_PREFIX(AdminSocketHook::DumpReactorBackendHook);
+    DEBUG("");
+
+    std::string_view reactor_backend_name = seastar::engine().get_backend_name();
+    std::unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
+    f->dump_string("reactor_backend_name", reactor_backend_name);
+    co_return std::move(f);
+  }
+};
+template std::unique_ptr<AdminSocketHook> make_asok_hook<DumpReactorBackendHook>();
+
+class StoreShardNumsHook : public AdminSocketHook {
+public:
+  explicit StoreShardNumsHook(crimson::osd::ShardServices& shard_services) :
+    AdminSocketHook{"dump_store_shards", "", "show store shards on each osd shard"},
+    shard_services(shard_services)
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t&,
+                                     std::string_view format,
+                                     ceph::bufferlist&& input) const final
+  {
+    LOG_PREFIX(AdminSocketHook::StoreShardNumsHook);
+    DEBUG("");
+    unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
+    f->open_object_section("Store shards");
+    co_await shard_services.dump_store_shards(f.get());
+    f->close_section();
+    co_return std::move(f);
+  }
+private:
+  crimson::osd::ShardServices& shard_services;
+};
+template std::unique_ptr<AdminSocketHook>
+make_asok_hook<StoreShardNumsHook>(crimson::osd::ShardServices& shard_services);
 
 } // namespace crimson::admin

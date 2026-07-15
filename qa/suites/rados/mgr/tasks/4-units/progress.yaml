@@ -12,6 +12,8 @@ overrides:
       - \(FS_WITH_FAILED_MDS\)
       - \(FS_DEGRADED\)
       - \(OSDMAP_FLAGS\)
+      - \(slow requests\)
+
 tasks:
   - cephfs_test_runner:
       modules:

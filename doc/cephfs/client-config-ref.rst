@@ -4,7 +4,7 @@ Client Configuration
 Updating Client Configuration
 -----------------------------
 
-Certain client configurations can be applied at runtime. To check if a configuration option can be applied (taken into affect by a client) at runtime, use the `config help` command::
+Certain client configurations can be applied at runtime. To check if a configuration option can be applied (taken into effect by a client) at runtime, use the `config help` command::
 
    ceph config help debug_client
     debug_client - Debug level for client

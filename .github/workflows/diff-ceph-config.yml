@@ -1,5 +1,6 @@
-name: Check ceph config changes
+---
 
+name: Check Ceph config changes
 on:
   pull_request_target:
     types:
@@ -7,16 +8,12 @@ on:
       - synchronize
       - edited
       - reopened
-
 permissions:
   issues: write
   contents: read
   pull-requests: write
-
 jobs:
   pull_request:
-    runs-on: ubuntu-latest
-
     env:
       PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -24,19 +21,20 @@ jobs:
       BASE_REPO_URL: ${{ github.event.pull_request.base.repo.clone_url }}
       BASE_REF: ${{ github.event.pull_request.base.ref }}
       HEAD_REPO_URL: ${{ github.event.pull_request.head.repo.clone_url }}
-
+    if: github.repository == 'ceph/ceph'
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout ceph.git
+      - name: Checkout main branch for pull_request_target
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: 'refs/heads/main'
           path: ceph
           sparse-checkout: |
             src/script
             src/common/options
             .github/workflows
 
-      - name: Get common ancestor between PR and ceph upstream main branch
+      - name: Get common ancestor between PR and Ceph upstream main branch
         id: get_common_ancestor
         working-directory: ceph
         env:

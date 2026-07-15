@@ -42,16 +42,16 @@ reviewed_by_re = re.compile(r"Rev(.*)By", re.IGNORECASE)
 labels = {'bluestore', 'build/ops', 'cephfs', 'common', 'core', 'mgr',
           'mon', 'performance', 'pybind', 'rdma', 'rgw', 'rbd', 'tests',
           'tools'}
-merge_re = re.compile("Merge (pull request|PR) #(\d+).*")
+merge_re = re.compile(r"Merge (pull request|PR) #(\d+).*")
 # prefixes is the list of commit description prefixes we recognize
 prefixes = ['bluestore', 'build/ops', 'cephfs', 'cephx', 'cli', 'cmake',
             'common', 'core', 'crush', 'doc', 'fs', 'librados', 'librbd',
             'log', 'mds', 'mgr', 'mon', 'msg', 'objecter', 'osd', 'pybind',
             'rbd', 'rbd-mirror', 'rbd-nbd', 'rgw', 'tests', 'tools']
-signed_off_re = re.compile("Signed-off-by: (.+) <")
-tracker_re = re.compile("http://tracker.ceph.com/issues/(\d+)")
+signed_off_re = re.compile(r"Signed-off-by: (.+) <")
+tracker_re = re.compile(r"http://tracker.ceph.com/issues/(\d+)")
 rst_link_re = re.compile(r"([a-zA-Z0-9])_(\W)")
-release_re = re.compile(r"^(nautilus|octopus|pacific|quincy|reef|squid|tentacle):\s*", re.IGNORECASE)
+release_re = re.compile(r"^(nautilus|octopus|pacific|quincy|reef|squid|tentacle|umbrella):\s*", re.IGNORECASE)
 
 tracker_uri = "http://tracker.ceph.com/issues/{0}.json"
 
@@ -216,14 +216,14 @@ def make_release_notes(gh, repo, ref, cherry_picks, plaintext, html, markdown, v
                     "{sha1}^1..{sha1}^2".format(sha1=commit.hexsha)
                     ):
                 for author in re.findall(
-                        "Signed-off-by:\s*(.*?)\s*<", c.message
+                        r"Signed-off-by:\s*(.*?)\s*<", c.message
                         ):
                     authors[author] = 1
                     issues.extend(fixes_re.findall(c.message) +
                             tracker_re.findall(c.message))
         else:
             for author in re.findall(
-                    "Signed-off-by:\s*(.*?)\s*<", message
+                    r"Signed-off-by:\s*(.*?)\s*<", message
                     ):
                 if author == "[Your Name]":
                     continue
@@ -243,7 +243,7 @@ def make_release_notes(gh, repo, ref, cherry_picks, plaintext, html, markdown, v
 
         if strict:
             title_re = (
-                '^(?:nautilus|octopus|pacific|quincy):\s+(' +
+                r'^(?:nautilus|octopus|pacific|quincy):\s+(' +
                 '|'.join(prefixes) +
                 ')(:.*)'
             )
@@ -257,10 +257,10 @@ def make_release_notes(gh, repo, ref, cherry_picks, plaintext, html, markdown, v
         if use_tags:
             title = split_component(title, gh, number)
 
-        title = title.strip(' \t\n\r\f\v\.\,\;\:\-\=')
+        title = title.strip(' \t\n\r\f\v.,;:-=')
         # escape asterisks, which is used by reStructuredTextrst for inline
         # emphasis
-        title = title.replace('*', '\*')
+        title = title.replace('*', r'\*')
         # and escape the underscores for noting a link
         title = rst_link_re.sub(r'\1\_\2', title)
         # remove release prefix for backports
@@ -326,7 +326,7 @@ def make_release_notes(gh, repo, ref, cherry_picks, plaintext, html, markdown, v
                 )
             )
         elif markdown:
-            markdown_title = title.replace('_', '\_').replace('.', '<span></span>.')
+            markdown_title = title.replace('_', r'\_').replace('.', '<span></span>.')
             print ("- {title} ({issues}[pr#{pr}](https://github.com/ceph/ceph/pull/{pr}), {author})\n".format(
                     title=markdown_title,
                     issues=issues,
@@ -397,8 +397,7 @@ if __name__ == "__main__":
                         help="Include full PR message in addition to PR title, if available")
 
     args = parser.parse_args()
-    gh = github.GitHub(
-        access_token=args.token)
+    gh = github.GitHub(args.token)
 
     make_release_notes(
         gh,

@@ -1,0 +1,55 @@
+
+* If you're looking for some information about how to use the library, interface.h is the "user interface".
+
+----
+Network and Database Options:
+
+There are various database at network settings that can be adjusted; see the "options" test for some examples of using
+the network_options and database_options structures. But what may be tweaked, you ask? Excellent question-- and when
+you go to fdb_c's documentation, you will find little, because they are GENERATED! And, from whence? Well... because 
+this file is VERY hard to find (in the FDB source), here you are:
+    fdbclient/vexillographer/fdb.options
+
+----
+Equivalence with FDBStreamingMode:
+
+FDB_STREAMING_MODE_ITERATOR
+
+The caller is implementing an iterator (most likely in a binding to a higher level language). The amount of data returned depends on the value of the iteration parameter to fdb_transaction_get_range().
+
+FDB_STREAMING_MODE_SMALL
+
+Data is returned in small batches (not much more expensive than reading individual key-value pairs).
+
+FDB_STREAMING_MODE_MEDIUM
+
+Data is returned in batches between _SMALL and _LARGE.
+
+FDB_STREAMING_MODE_LARGE
+
+Data is returned in batches large enough to be, in a high-concurrency environment, nearly as efficient as possible. If the caller does not need the entire range, some disk and network bandwidth may be wasted. The batch size may be still be too small to allow a single client to get high throughput from the database.
+
+FDB_STREAMING_MODE_SERIAL
+
+Data is returned in batches large enough that an individual client can get reasonable read bandwidth from the database. If the caller does not need the entire range, considerable disk and network bandwidth may be wasted.
+
+FDB_STREAMING_MODE_WANT_ALL
+
+The caller intends to consume the entire range and would like it all transferred as early as possible.
+
+FDB_STREAMING_MODE_EXACT
+
+The caller has passed a specific row limit and wants that many rows delivered in a single batch.
+
+enum struct streaming_mode_t : int {
+ iterator	= FDB_STREAMING_MODE_ITERATOR,
+ small		= FDB_STREAMING_MODE_SMALL,
+ medium		= FDB_STREAMING_MODE_MEDIUM,
+ large		= FDB_STREAMING_MODE_LARGE,
+ serial		= FDB_STREAMING_MODE_SERIAL,
+ all		= FDB_STREAMING_MODE_WANT_ALL,
+3F exact		= FDB_STREAMING_MODE_EXACT
+};
+
+...these are not defined in terms of int or enum as far as I can tell, needs more exploring.
+

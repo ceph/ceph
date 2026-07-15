@@ -16,9 +16,9 @@ Description
 ===========
 
 :program:`ceph-create-keys` is a utility to generate bootstrap keyrings using
-the given monitor when it is ready.
+the given Monitor when it is ready.
 
-It creates following auth entities (or users)
+It creates the following auth entities (or users)
 
 ``client.admin``
 
@@ -42,11 +42,11 @@ Options
 
 .. option:: -t
 
-   time out after **seconds** (default: 600) waiting for a response from the monitor
+   time out after **seconds** (default: 600) waiting for a response from the Monitor
 
 .. option:: -i, --id
 
-   id of a ceph-mon that is coming up. **ceph-create-keys** will wait until it joins quorum.
+   ID of a ceph-mon that is coming up. **ceph-create-keys** will wait until it joins quorum.
 
 .. option:: -v, --verbose
 

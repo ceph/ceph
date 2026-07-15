@@ -2102,10 +2102,12 @@ void OSDMap::clean_temps(CephContext *cct,
 
 void OSDMap::get_upmap_pgs(vector<pg_t> *upmap_pgs) const
 {
-  upmap_pgs->reserve(pg_upmap.size() + pg_upmap_items.size());
+  upmap_pgs->reserve(pg_upmap.size() + pg_upmap_items.size() + pg_upmap_primaries.size());
   for (auto& p : pg_upmap)
     upmap_pgs->push_back(p.first);
   for (auto& p : pg_upmap_items)
+    upmap_pgs->push_back(p.first);
+  for (auto& p : pg_upmap_primaries)
     upmap_pgs->push_back(p.first);
 }
 
@@ -2113,6 +2115,8 @@ bool OSDMap::check_pg_upmaps(
   CephContext *cct,
   const vector<pg_t>& to_check,
   vector<pg_t> *to_cancel,
+  vector<pg_t> *to_cancel_upmap_primary_only,
+  set<uint64_t> *affected_pools,
   map<pg_t, mempool::osdmap::vector<pair<int,int>>> *to_remap) const
 {
   bool any_change = false;
@@ -2123,12 +2127,14 @@ bool OSDMap::check_pg_upmaps(
       ldout(cct, 0) << __func__ << " pg " << pg << " is gone or merge source"
 		    << dendl;
       to_cancel->push_back(pg);
+      affected_pools->emplace(pg.pool());
       continue;
     }
     if (pi->is_pending_merge(pg, nullptr)) {
       ldout(cct, 0) << __func__ << " pg " << pg << " is pending merge"
 		    << dendl;
       to_cancel->push_back(pg);
+      affected_pools->emplace(pg.pool());
       continue;
     }
     vector<int> raw, up;
@@ -2182,6 +2188,7 @@ bool OSDMap::check_pg_upmaps(
     }
     if (!to_cancel->empty() && to_cancel->back() == pg)
       continue;
+
     // okay, upmap is valid
     // continue to check if it is still necessary
     auto i = pg_upmap.find(pg);
@@ -2234,8 +2241,28 @@ bool OSDMap::check_pg_upmaps(
         any_change = true;
       }
     }
+    // Cancel any pg_upmap_primary mapping where the mapping is set
+    //   to an OSD outside the raw set, or if the mapping is redundant
+    auto k = pg_upmap_primaries.find(pg);
+    if (k != pg_upmap_primaries.end()) {
+      auto curr_prim = k->second;
+      bool valid_prim = false;
+      for (auto osd : raw) {
+        if ((curr_prim == osd) &&
+	    (curr_prim != raw.front())) {
+	  valid_prim = true;
+          break;
+	}
+      }
+      if (!valid_prim) {
+        ldout(cct, 10) << __func__ << " pg_upmap_primary (PG " << pg << " has an invalid or redundant primary: "
+		      << curr_prim << " -> " << raw << ")" << dendl;
+        to_cancel_upmap_primary_only->push_back(pg);
+        any_change = true;
+      }
+    }
   }
-  any_change = any_change || !to_cancel->empty();
+  any_change = any_change || !to_cancel->empty() || !to_cancel_upmap_primary_only->empty();
   return any_change;
 }
 
@@ -2243,6 +2270,8 @@ void OSDMap::clean_pg_upmaps(
   CephContext *cct,
   Incremental *pending_inc,
   const vector<pg_t>& to_cancel,
+  const vector<pg_t>& to_cancel_upmap_primary_only,
+  const set<uint64_t>& affected_pools,
   const map<pg_t, mempool::osdmap::vector<pair<int,int>>>& to_remap) const
 {
   for (auto &pg: to_cancel) {
@@ -2260,6 +2289,21 @@ void OSDMap::clean_pg_upmaps(
                      << j->first << "->" << j->second
                      << dendl;
       pending_inc->old_pg_upmap.insert(pg);
+    }
+    auto k = pending_inc->new_pg_upmap_primary.find(pg);
+    if (k != pending_inc->new_pg_upmap_primary.end()) {
+      ldout(cct, 10) << __func__ << " cancel invalid pending "
+	             << "pg_upmap_primaries entry "
+		     << k->first << "->" << k->second
+		     << dendl;
+      pending_inc->new_pg_upmap_primary.erase(k);
+    }
+    auto l = pg_upmap_primaries.find(pg);
+    if (l != pg_upmap_primaries.end()) {
+      ldout(cct, 10) << __func__ << " cancel invalid pg_upmap_primaries entry "
+	             << l->first << "->" << l->second
+		     << dendl;
+      pending_inc->old_pg_upmap_primary.insert(pg);
     }
     auto p = pending_inc->new_pg_upmap_items.find(pg);
     if (p != pending_inc->new_pg_upmap_items.end()) {
@@ -2280,6 +2324,36 @@ void OSDMap::clean_pg_upmaps(
   }
   for (auto& i : to_remap)
     pending_inc->new_pg_upmap_items[i.first] = i.second;
+
+  // Cancel mappings that are only invalid for pg_upmap_primary.
+  //   For example, if a selected primary OSD does not exist
+  //   in that PG's up set, it should be canceled. But this
+  //   could be valid for pg_upmap/pg_upmap_items.
+  for (auto &pg_prim: to_cancel_upmap_primary_only) {
+    auto k = pending_inc->new_pg_upmap_primary.find(pg_prim);
+    if (k != pending_inc->new_pg_upmap_primary.end()) {
+      ldout(cct, 10) << __func__ << " cancel invalid pending "
+                     << "pg_upmap_primaries entry "
+                     << k->first << "->" << k->second
+                     << dendl;
+      pending_inc->new_pg_upmap_primary.erase(k);
+    }
+    auto l = pg_upmap_primaries.find(pg_prim);
+    if (l != pg_upmap_primaries.end()) {
+      ldout(cct, 10) << __func__ << " cancel invalid pg_upmap_primaries entry "
+                     << l->first << "->" << l->second
+                     << dendl;
+      pending_inc->old_pg_upmap_primary.insert(pg_prim);
+    }
+  }
+
+  // Clean all pg_upmap_primary entries where the pool size was changed,
+  // as old records no longer make sense optimization-wise.
+  for (auto pid : affected_pools) {
+    ldout(cct, 10) << __func__ << " cancel all pg_upmap_primaries for pool " << pid
+	          << " since pg_num changed" << dendl;
+    rm_all_upmap_prims(cct, pending_inc, pid);
+  }
 }
 
 bool OSDMap::clean_pg_upmaps(
@@ -2289,14 +2363,14 @@ bool OSDMap::clean_pg_upmaps(
   ldout(cct, 10) << __func__ << dendl;
   vector<pg_t> to_check;
   vector<pg_t> to_cancel;
+  vector<pg_t> to_cancel_upmap_primary_only;
+  set<uint64_t> affected_pools;
   map<pg_t, mempool::osdmap::vector<pair<int,int>>> to_remap;
 
   get_upmap_pgs(&to_check);
-  auto any_change = check_pg_upmaps(cct, to_check, &to_cancel, &to_remap);
-  clean_pg_upmaps(cct, pending_inc, to_cancel, to_remap);
-  //TODO: Create these 3 functions for pg_upmap_primaries and so they can be checked 
-  //      and cleaned in the same way as pg_upmap. This is not critical since invalid
-  //      pg_upmap_primaries are never applied, (the final check is in _apply_upmap).
+  auto any_change = check_pg_upmaps(cct, to_check, &to_cancel, &to_cancel_upmap_primary_only,
+		                    &affected_pools, &to_remap);
+  clean_pg_upmaps(cct, pending_inc, to_cancel, to_cancel_upmap_primary_only, affected_pools, to_remap);
   return any_change;
 }
 
@@ -3167,6 +3241,9 @@ bool OSDMap::primary_changed_broken(
 uint64_t OSDMap::get_encoding_features() const
 {
   uint64_t f = SIGNIFICANT_FEATURES;
+  if (require_osd_release < ceph_release_t::umbrella) {
+    f &= ~CEPH_FEATURE_SERVER_UMBRELLA;
+  }
   if (require_osd_release < ceph_release_t::tentacle) {
     f &= ~CEPH_FEATURE_SERVER_TENTACLE;
   }
@@ -5347,17 +5424,21 @@ int OSDMap::balance_primaries(
   return num_changes;
 }
 
-void OSDMap::rm_all_upmap_prims(CephContext *cct, OSDMap::Incremental *pending_inc, uint64_t pid) {
+void OSDMap::rm_all_upmap_prims(
+  CephContext *cct,
+  OSDMap::Incremental *pending_inc,
+  uint64_t pid) const
+{
   map<uint64_t,set<pg_t>> prim_pgs_by_osd;
   get_pgs_by_osd(cct, pid, &prim_pgs_by_osd);
   for (auto &[_, pgs] : prim_pgs_by_osd) {
     for (auto &pg : pgs) {
       if (pending_inc->new_pg_upmap_primary.contains(pg)) {
-        ldout(cct,30) << __func__ << "Removing pending pg_upmap_prim for pg " << pg << dendl;
+        ldout(cct, 30) << __func__ << " Removing pending pg_upmap_prim for pg " << pg << dendl;
         pending_inc->new_pg_upmap_primary.erase(pg);
       }
       if (pg_upmap_primaries.contains(pg)) {
-        ldout(cct, 30) << __func__ << "Removing pg_upmap_prim for pg " << pg << dendl;
+        ldout(cct, 30) << __func__ << " Removing pg_upmap_prim for pg " << pg << dendl;
         pending_inc->old_pg_upmap_primary.insert(pg);
       }
     }
@@ -5366,7 +5447,7 @@ void OSDMap::rm_all_upmap_prims(CephContext *cct, OSDMap::Incremental *pending_i
 
 void OSDMap::rm_all_upmap_prims(
   CephContext *cct,
-  OSDMap::Incremental *pending_inc)
+  OSDMap::Incremental *pending_inc) const
 {
   for (const auto& [pg, _] : pg_upmap_primaries) {
     if (pending_inc->new_pg_upmap_primary.contains(pg)) {
@@ -5823,7 +5904,7 @@ int OSDMap::calc_pg_upmaps(
       }
       // look for remaps we can un-remap
       if (try_drop_remap_overfull(cct, pgs, tmp_osd_map, osd,
-				  temp_pgs_by_osd, to_unmap, to_upmap))
+				  temp_pgs_by_osd, to_unmap, to_upmap, osd_deviation))
 	goto test_change;
 
       // try upmap
@@ -5900,28 +5981,32 @@ int OSDMap::calc_pg_upmaps(
     ceph_assert(!(to_unmap.size() || to_upmap.size()));
     ldout(cct, 10) << " failed to find any changes for overfull osds"
                    << dendl;
-    for (auto& [deviation, osd] : deviation_osd) {
-      if (std::find(underfull.begin(), underfull.end(), osd) ==
-                    underfull.end())
-        break;
-      float target = osd_weight[osd] * pgs_per_weight;
-      ceph_assert(target > 0);
-      if (fabsf(deviation) < max_deviation) {
-        // respect max_deviation too
-        ldout(cct, 10) << " osd." << osd
-                       << " target " << target
-                       << " deviation " << deviation
-                       << " -> absolute " << fabsf(deviation)
-                       << " < max " << max_deviation
-                       << dendl;
-        break;
-      }
-      // look for remaps we can un-remap
-      candidates_t candidates = build_candidates(cct, tmp_osd_map, to_skip,
-      						 only_pools, aggressive, p_seed);
-      if (try_drop_remap_underfull(cct, candidates, osd, temp_pgs_by_osd,
-          to_unmap, to_upmap)) {
-	goto test_change;
+    {
+      const auto candidates_by_osd = build_candidates_by_osd(
+        cct, tmp_osd_map, to_skip, only_pools, aggressive, p_seed);
+      for (auto& [deviation, osd] : deviation_osd) {
+        if (std::find(underfull.begin(), underfull.end(), osd) ==
+                      underfull.end())
+          break;
+        float target = osd_weight[osd] * pgs_per_weight;
+        ceph_assert(target > 0);
+        if (fabsf(deviation) < max_deviation) {
+          // respect max_deviation too
+          ldout(cct, 10) << " osd." << osd
+                         << " target " << target
+                         << " deviation " << deviation
+                         << " -> absolute " << fabsf(deviation)
+                         << " < max " << max_deviation
+                         << dendl;
+          break;
+        }
+        // look for remaps we can un-remap
+        auto candidates = candidates_by_osd.find(osd);
+        if (candidates != candidates_by_osd.end() &&
+            try_drop_remap_underfull(cct, candidates->second, osd,
+                                     temp_pgs_by_osd, to_unmap, to_upmap)) {
+	  goto test_change;
+        }
       }
     }
 
@@ -6014,11 +6099,18 @@ map<uint64_t,set<pg_t>> OSDMap::get_pgs_by_osd(
   OSDMap tmp_osd_map;
   tmp_osd_map.deepish_copy_from(*this);
 
+  // Set up map to return
+  map<uint64_t,set<pg_t>> pgs_by_osd;
+
   // Get the pool from the provided pool id
   const pg_pool_t* pool = get_pg_pool(pid);
+  if (!pool) {
+    ldout(cct, 20) << __func__ << " pool " << pid
+	          << " does not exist" << dendl;
+    return pgs_by_osd;
+  }
 
   // build array of pgs from the pool
-  map<uint64_t,set<pg_t>> pgs_by_osd;
   for (unsigned ps = 0; ps < pool->get_pg_num(); ++ps) {
     pg_t pg(ps, pid);
     vector<int> up;
@@ -6105,7 +6197,7 @@ float OSDMap::build_pool_pgs_info (
     }
     total_pgs += pdata.get_size() * pdata.get_pg_num();
 
-    osds_weight_total = get_osds_weight(cct, tmp_osd_map, pid, osds_weight);
+    osds_weight_total += get_osds_weight(cct, tmp_osd_map, pid, osds_weight);
   }
   for (auto& [oid, oweight] : osds_weight) {
     int pgs = 0;
@@ -6267,23 +6359,27 @@ bool OSDMap::try_drop_remap_overfull(
   int osd,
   map<int,std::set<pg_t>>& temp_pgs_by_osd,
   set<pg_t>& to_unmap,
-  map<pg_t, mempool::osdmap::vector<pair<int32_t,int32_t>>>& to_upmap)
+  map<pg_t, mempool::osdmap::vector<pair<int32_t,int32_t>>>& to_upmap,
+  const map<int,float>& osd_deviation)
 {
   //
   // This function tries to drop existimg upmap items which map data to overfull 
   // OSDs. It updates temp_pgs_by_osd, to_unmap and to_upmap and rerturns true 
   // if it found an item that can be dropped, false if not. 
   //
+  const float osd_dev = osd_deviation.at(osd);
   for (auto pg : pgs) {
     auto p = tmp_osd_map.pg_upmap_items.find(pg);
     if (p == tmp_osd_map.pg_upmap_items.end())
       continue;
     mempool::osdmap::vector<pair<int32_t,int32_t>> new_upmap_items;
     auto& pg_upmap_items = p->second;
-    for (auto um_pair : pg_upmap_items) {
+    for (auto& um_pair : pg_upmap_items) {
       auto& um_from = um_pair.first;
       auto& um_to = um_pair.second;
-      if (um_to == osd) {
+      // +1: dropping this pair moves one PG from um_to back to um_from. Skip
+      // the drop if it would leave um_from at least as overfull as osd is today.
+      if (um_to == osd && osd_deviation.at(um_from) + 1 < osd_dev) {
         ldout(cct, 10) << " will try dropping existing"
                        << " remapping pair "
                        << um_from << " -> " << um_to
@@ -6435,7 +6531,7 @@ int OSDMap::find_best_remap (
   return best_pos;
 }
 
-OSDMap::candidates_t OSDMap::build_candidates(
+OSDMap::candidates_by_osd_t OSDMap::build_candidates_by_osd(
   CephContext *cct,
   const OSDMap& tmp_osd_map,
   const set<pg_t> to_skip,
@@ -6459,7 +6555,13 @@ OSDMap::candidates_t OSDMap::build_candidates(
     // shuffle candidates so they all get equal (in)attention
     std::shuffle(candidates.begin(), candidates.end(), get_random_engine(cct, p_seed));
   }
-  return candidates;
+  candidates_by_osd_t candidates_by_osd;
+  for (auto& candidate : candidates) {
+    for (auto& mapping : candidate.second) {
+      candidates_by_osd[mapping.first].push_back(candidate);
+    }
+  }
+  return candidates_by_osd;
 }
 
 // return -1 if all PGs are OK, else the first PG which includes only zero PA OSDs
@@ -6945,6 +7047,29 @@ public:
     average_util = average_utilization();
   }
 
+  void dump(F *f) {
+    if (tree) {
+      CrushTreeDumper::Dumper<F>::dump(f);
+    } else {
+      this->reset();
+      CrushTreeDumper::Item qi;
+      std::vector<CrushTreeDumper::Item> flat_items;
+
+      while (this->next(qi)) {
+        if (!qi.is_bucket()) {
+          flat_items.push_back(qi);
+        }
+      }
+
+      std::sort(flat_items.begin(), flat_items.end(),
+                [](const auto& a, const auto& b) { return a.id < b.id; });
+
+      for (const auto& item : flat_items) {
+        this->dump_item(item, f);
+      }
+    }
+  }
+
 protected:
 
   bool should_dump(int id) const {
@@ -7168,6 +7293,7 @@ public:
 	 << byte_u_t(sum.statfs.available)
 	 << lowprecision_t(average_util)
 	 << ""
+   << sum.num_pgs
 	 << TextTable::endrow;
   }
 
@@ -7684,7 +7810,7 @@ void OSDMap::check_health(CephContext *cct,
     }
     if (!detail.empty()) {
       ostringstream ss;
-      ss << detail.size() << " OSDs or CRUSH {nodes, device-classes} have {NOUP,NODOWN,NOIN,NOOUT} flags set";
+      ss << detail.size() << " OSDs or CRUSH nodes/device-classes have one or more of these flags set: NOUP, NODOWN, NOIN, NOOUT";
       auto& d = checks->add("OSD_FLAGS", HEALTH_WARN, ss.str(), detail.size());
       d.detail.swap(detail);
     }
@@ -7858,7 +7984,7 @@ void OSDMap::check_health(CephContext *cct,
 			    ss.str(), 0);
     }
   }
-  // UNEQUAL_WEIGHT
+  // INCORRECT_NUM_BUCKETS_STRETCH_MODE
   if (stretch_mode_enabled) {
     vector<int> subtrees;
     crush->get_subtree_of_type(stretch_mode_bucket, &subtrees);
@@ -7868,12 +7994,15 @@ void OSDMap::check_health(CephContext *cct,
       checks->add("INCORRECT_NUM_BUCKETS_STRETCH_MODE", HEALTH_WARN, ss.str(), 0);
       return;
     }
+    // STRETCH_MODE_BUCKET_WEIGHT_IMBALANCE
     int weight1 = crush->get_item_weight(subtrees[0]);
     int weight2 = crush->get_item_weight(subtrees[1]);
+    double stretch_max_weight_delta = cct->_conf.get_val<double>("mon_stretch_max_bucket_weight_delta");
     stringstream ss;
-    if (weight1 != weight2) {
-      ss << "Stretch mode buckets have different weights!";
-      checks->add("UNEVEN_WEIGHTS_STRETCH_MODE", HEALTH_WARN, ss.str(), 0);
+    if (abs(weight1 - weight2) >
+      (stretch_max_weight_delta * std::min(weight1, weight2))) {
+      ss << "Stretch mode buckets differ in weight by more than " << (stretch_max_weight_delta * 100) << "%";
+      checks->add("STRETCH_MODE_BUCKET_WEIGHT_IMBALANCE", HEALTH_WARN, ss.str(), 0);
     }
   }
 
@@ -8027,6 +8156,10 @@ unsigned OSDMap::get_device_class_flags(int id) const
 
 std::optional<std::string> OSDMap::pending_require_osd_release() const
 {
+  if (HAVE_FEATURE(get_up_osd_features(), SERVER_UMBRELLA) &&
+      require_osd_release < ceph_release_t::umbrella) {
+    return "umbrella";
+  }
   if (HAVE_FEATURE(get_up_osd_features(), SERVER_TENTACLE) &&
       require_osd_release < ceph_release_t::tentacle) {
     return "tentacle";

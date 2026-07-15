@@ -126,15 +126,8 @@ struct MDSCapMatch {
 
     normalize_path();
   }
-
-  const MDSCapMatch& operator=(const MDSCapMatch& m) {
-    uid = m.uid;
-    gids = m.gids;
-    path = m.path;
-    fs_name = m.fs_name;
-    root_squash = m.root_squash;
-    return *this;
-  }
+  MDSCapMatch(const MDSCapMatch& m) = default;
+  MDSCapMatch& operator=(const MDSCapMatch& m) = default;
 
   void normalize_path();
 
@@ -197,12 +190,8 @@ struct MDSCapAuth {
   MDSCapAuth(MDSCapMatch m, bool r, bool w) :
     match(m), readable(r), writeable(w) {}
 
-  const MDSCapAuth& operator=(const MDSCapAuth& m) {
-    match = m.match;
-    readable = m.readable;
-    writeable = m.writeable;
-    return *this;
-  }
+  MDSCapAuth(const MDSCapAuth& m) = default;
+  MDSCapAuth& operator=(const MDSCapAuth& m) = default;
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);

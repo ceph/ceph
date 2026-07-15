@@ -29,17 +29,5 @@ python3 -m venv --system-site-packages virtualenv
 
 # avoid pip bugs
 ./virtualenv/bin/pip install --upgrade pip
-#pip3 install --upgrade setuptools cffi  # address pip issue: https://github.com/pypa/pip/issues/6264
-
-# work-around change in pip 1.5
-#./virtualenv/bin/pip install six
-#./virtualenv/bin/pip install -I nose
-#./virtualenv/bin/pip install setuptools
 
 ./virtualenv/bin/pip install -U -r requirements.txt
-
-# forbid setuptools from using the network because it'll try to use
-# easy_install, and we really wanted pip; next line will fail if pip
-# requirements.txt does not match setup.py requirements -- sucky but
-# good enough for now
-./virtualenv/bin/python setup.py develop

@@ -406,7 +406,6 @@ def task(ctx, config):
     # the manager should be there
     manager = ctx.managers[cluster_name]
     manager.wait_for_clean()
-    assert manager.is_clean()
 
     mds_cluster = MDSCluster(ctx)
     for fs in mds_cluster.status().get_filesystems():

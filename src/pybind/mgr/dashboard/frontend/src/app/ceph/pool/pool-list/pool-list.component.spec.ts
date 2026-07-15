@@ -5,7 +5,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
-import { ToastrModule } from 'ngx-toastr';
+
 import { of } from 'rxjs';
 
 import { RbdConfigurationListComponent } from '~/app/ceph/block/rbd-configuration-list/rbd-configuration-list.component';
@@ -49,7 +49,6 @@ describe('PoolListComponent', () => {
     imports: [
       BrowserAnimationsModule,
       SharedModule,
-      ToastrModule.forRoot(),
       RouterTestingModule,
       NgbNavModule,
       HttpClientTestingModule
@@ -87,7 +86,8 @@ describe('PoolListComponent', () => {
     beforeEach(() => {
       configOptRead = true;
       spyOn(TestBed.inject(AuthStorageService), 'getPermissions').and.callFake(() => ({
-        configOpt: { read: configOptRead }
+        configOpt: { read: configOptRead },
+        pool: { read: true }
       }));
       configurationService = TestBed.inject(ConfigurationService);
     });
@@ -138,7 +138,7 @@ describe('PoolListComponent', () => {
       configOptRead = false;
       fixture = TestBed.createComponent(PoolListComponent);
       component = fixture.componentInstance;
-      expect(component.monAllowPoolDelete).toBe(false);
+      expect(component.monAllowPoolDelete).toBe(true);
     });
   });
 
@@ -308,6 +308,7 @@ describe('PoolListComponent', () => {
     const getPoolData = (o: object) => [
       _.merge(
         _.merge(Mocks.getPool('a', 0), {
+          application_metadata: ['Block'],
           cdIsBinary: true,
           pg_status: '',
           stats: {

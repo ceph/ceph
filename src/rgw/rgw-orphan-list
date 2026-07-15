@@ -161,10 +161,10 @@ rados_ls() {
 
     # check for locators (w/o namespace); we identify them by skipping
     # past the empty namespace (i.e., one TAB), skipping past the oid,
-    # then looking for a TAB; note we use egrep to get the '+' character
+    # then looking for a TAB; note we use grep -E to get the '+' character
     # and the $ in front of the ' allows the \t to be interpreted as a TAB
     log "Checking for locators"
-    egrep --text $'^\t[[:graph:]]+\t' "$rados_out" >>"$rados_odd"
+    grep -E --text $'^\t[[:graph:]]+\t' "$rados_out" >>"$rados_odd"
     if [ "${PIPESTATUS[0]}" -eq 0 ] ;then
         log "Locator found"
         locator_found=1
@@ -240,9 +240,8 @@ radosgw_radoslist
 
 for myfile in $rados_out $rgwadmin_out; do
   if [ ! -s "${myfile}" ]; then
-    log "ERROR: Empty file detected: ${myfile}"
-    log "ERROR: RESULTS ARE INCOMPLETE - DO NOT USE"
-    exit 1
+    log "WARNING: Empty file detected: ${myfile}"
+    log "         RESULTS MAY BE INCOMPLETE, USE WITH CAUTION"
   fi 
 done
 

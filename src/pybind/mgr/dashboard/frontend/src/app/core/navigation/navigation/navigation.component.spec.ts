@@ -3,7 +3,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastrModule } from 'ngx-toastr';
 import { SimplebarAngularModule } from 'simplebar-angular';
 import { of } from 'rxjs';
 
@@ -69,7 +68,6 @@ describe('NavigationComponent', () => {
     imports: [
       HttpClientTestingModule,
       SharedModule,
-      ToastrModule.forRoot(),
       RouterTestingModule,
       SimplebarAngularModule,
       NgbModule,
@@ -227,7 +225,7 @@ describe('NavigationComponent', () => {
       fixture.detectChanges();
 
       const expectedTexts = {
-        '.tc_menuitem_dashboard': 'Dashboard',
+        '.tc_menuitem_overview': 'Overview',
         '.tc_submenuitem_multiCluster_overview': 'Overview',
         '.tc_submenuitem_multiCluster_manage_clusters': 'Manage clusters',
         '.tc_submenuitem_cluster_pool': 'Pools',

@@ -2,13 +2,15 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-
-import { ToastrModule } from 'ngx-toastr';
+import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
+import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { of } from 'rxjs';
 
 import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 
 import { SharedModule } from '~/app/shared/shared.module';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
+import { ALLOW_ALL_HOST, HOST_TYPE } from '~/app/shared/models/nvmeof';
 
 import { NvmeofInitiatorsFormComponent } from './nvmeof-initiators-form.component';
 
@@ -17,19 +19,32 @@ describe('NvmeofInitiatorsFormComponent', () => {
   let fixture: ComponentFixture<NvmeofInitiatorsFormComponent>;
   let nvmeofService: NvmeofService;
   const mockTimestamp = 1720693470789;
+  const mockGroupName = 'default';
 
   beforeEach(async () => {
     spyOn(Date, 'now').and.returnValue(mockTimestamp);
     await TestBed.configureTestingModule({
       declarations: [NvmeofInitiatorsFormComponent],
-      providers: [NgbActiveModal],
+      schemas: [NO_ERRORS_SCHEMA],
+      providers: [
+        NgbActiveModal,
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            queryParamMap: of(convertToParamMap({ group: 'test-group' })),
+            params: of({ subsystem_nqn: 'nqn.test' }),
+            parent: {
+              params: of({ subsystem_nqn: 'nqn.test' })
+            }
+          }
+        }
+      ],
       imports: [
         HttpClientTestingModule,
         NgbTypeaheadModule,
         ReactiveFormsModule,
         RouterTestingModule,
-        SharedModule,
-        ToastrModule.forRoot()
+        SharedModule
       ]
     }).compileComponents();
 
@@ -37,24 +52,124 @@ describe('NvmeofInitiatorsFormComponent', () => {
     component = fixture.componentInstance;
     component.ngOnInit();
     fixture.detectChanges();
+    component.group = mockGroupName;
   });
 
   it('should create', () => {
     expect(component).toBeTruthy();
   });
 
+  it('should set allowAllHosts to true when disableAllowAll is not set', () => {
+    const router = TestBed.inject(Router);
+    spyOn(router, 'getCurrentNavigation').and.returnValue(null);
+    component.ngOnInit();
+    expect(component.allowAllHosts).toBe(true);
+  });
+
+  it('should set allowAllHosts to false when disableAllowAll is true in navigation state', () => {
+    const router = TestBed.inject(Router);
+    spyOn(router, 'getCurrentNavigation').and.returnValue({
+      extras: { state: { disableAllowAll: true } }
+    } as any);
+    component.ngOnInit();
+    expect(component.allowAllHosts).toBe(false);
+  });
+
+  it('should initialize with two steps (Host access control + Authentication optional)', () => {
+    expect(component.steps.length).toBe(2);
+    expect(component.steps[0].label).toBe('Host access control');
+    expect(component.steps[1].label).toBe('Authentication (optional)');
+  });
+
+  it('should hide Authentication step when showAuthStep is false', () => {
+    component.showAuthStep = false;
+    component.rebuildSteps();
+    expect(component.steps.length).toBe(1);
+    expect(component.steps[0].label).toBe('Host access control');
+  });
+
   describe('should test form', () => {
     beforeEach(() => {
       nvmeofService = TestBed.inject(NvmeofService);
-      spyOn(nvmeofService, 'addInitiators').and.stub();
+      spyOn(nvmeofService, 'addSubsystemInitiators').and.returnValue(of({}));
+      spyOn(nvmeofService, 'removeInitiators').and.returnValue(of({}));
     });
 
     it('should be creating request correctly', () => {
-      const subsystemNQN = 'nqn.2001-07.com.ceph:' + mockTimestamp;
+      const subsystemNQN = 'nqn.test';
       component.subsystemNQN = subsystemNQN;
-      component.onSubmit();
-      expect(nvmeofService.addInitiators).toHaveBeenCalledWith(subsystemNQN, {
-        host_nqn: ''
+      component.group = 'test-group';
+
+      const payload: any = {
+        hostType: HOST_TYPE.SPECIFIC,
+        hostDchapKeyList: [{ dhchap_key: '', host_nqn: 'host1' }],
+        gw_group: 'test-group'
+      };
+
+      component.onSubmit(payload);
+      expect(nvmeofService.addSubsystemInitiators).toHaveBeenCalledWith(subsystemNQN, {
+        allow_all: false,
+        gw_group: 'test-group',
+        hosts: [{ dhchap_key: '', host_nqn: 'host1' }]
+      });
+    });
+
+    it('should build hosts from addedHosts when hostDchapKeyList is absent', () => {
+      const subsystemNQN = 'nqn.test';
+      component.subsystemNQN = subsystemNQN;
+      component.group = 'test-group';
+
+      const payload: any = {
+        hostType: HOST_TYPE.SPECIFIC,
+        addedHosts: ['host2'],
+        gw_group: 'test-group'
+      };
+
+      component.onSubmit(payload);
+      expect(nvmeofService.addSubsystemInitiators).toHaveBeenCalledWith(subsystemNQN, {
+        allow_all: false,
+        gw_group: 'test-group',
+        hosts: [{ dhchap_key: '', host_nqn: 'host2' }]
+      });
+    });
+
+    it('should not submit when hostType is SPECIFIC and no host is provided', () => {
+      const subsystemNQN = 'nqn.test';
+      component.subsystemNQN = subsystemNQN;
+      component.group = 'test-group';
+
+      const payload: any = {
+        hostType: HOST_TYPE.SPECIFIC,
+        addedHosts: []
+      };
+
+      component.onSubmit(payload);
+
+      expect(nvmeofService.addSubsystemInitiators).not.toHaveBeenCalled();
+      expect(component.isSubmitLoading).toBe(false);
+    });
+
+    it('should remove wildcard host before adding specific hosts', () => {
+      const subsystemNQN = 'nqn.test';
+      component.subsystemNQN = subsystemNQN;
+      component.group = 'test-group';
+      component.existingHosts = [ALLOW_ALL_HOST];
+
+      const payload: any = {
+        hostType: HOST_TYPE.SPECIFIC,
+        addedHosts: ['host3']
+      };
+
+      component.onSubmit(payload);
+
+      expect(nvmeofService.removeInitiators).toHaveBeenCalledWith(subsystemNQN, {
+        host_nqn: ALLOW_ALL_HOST,
+        gw_group: 'test-group'
+      });
+      expect(nvmeofService.addSubsystemInitiators).toHaveBeenCalledWith(subsystemNQN, {
+        allow_all: false,
+        gw_group: 'test-group',
+        hosts: [{ dhchap_key: '', host_nqn: 'host3' }]
       });
     });
   });

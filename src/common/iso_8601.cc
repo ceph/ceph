@@ -49,7 +49,7 @@ optional<real_time> calculate(const tm& t, uint32_t n = 0) {
 }
 
 optional<real_time> from_iso_8601(const string_view s,
-				  const bool ws_terminates) noexcept {
+				  const bool ws_terminates) {
   auto end = s.cend();
   auto read_digit = [end](sriter& c) mutable {
     if (c == end) {

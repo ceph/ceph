@@ -444,10 +444,11 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
     post_event(RequestPrimaryScanning{});
     return;
   } else {
-    if (backfill_state().progress_tracker->tracked_objects_completed()
+    if (backfill_state().progress_tracker->tracked_pushes_completed()
 	&& Enqueuing::all_enqueued(peering_state(),
 				   backfill_state().backfill_info,
 				   backfill_state().peer_backfill_info)) {
+      backfill_state().progress_tracker->complete_drops();
       backfill_state().last_backfill_started = hobject_t::get_max();
       backfill_listener().update_peers_last_backfill(hobject_t::get_max());
     }
@@ -686,6 +687,10 @@ bool BackfillState::ProgressTracker::enqueue_push(const hobject_t& obj)
 {
   [[maybe_unused]] const auto [it, first_seen] = registry.try_emplace(
     obj, registry_item_t{op_stage_t::enqueued_push, std::nullopt});
+  if (first_seen) {
+    // multiple targets may enqueue the same object; only count it once
+    ++num_pending_pushes;
+  }
   return first_seen;
 }
 
@@ -704,6 +709,10 @@ void BackfillState::ProgressTracker::complete_to(
   DEBUGDPP("obj={}", pg(), obj);
   if (auto completion_iter = registry.find(obj);
       completion_iter != std::end(registry)) {
+    if (completion_iter->second.stage == op_stage_t::enqueued_push) {
+      ceph_assert(num_pending_pushes > 0);
+      --num_pending_pushes;
+    }
     completion_iter->second = \
       registry_item_t{ op_stage_t::completed_push, stats };
   } else {
@@ -734,6 +743,27 @@ void BackfillState::ProgressTracker::complete_to(
   }
 }
 
+void BackfillState::ProgressTracker::complete_drops()
+{
+  LOG_PREFIX(BackfillState::ProgressTracker::complete_drops);
+  ceph_assert(num_pending_pushes == 0);
+  auto new_last_backfill = peering_state().earliest_backfill();
+  for (auto it = std::begin(registry);
+       it != std::end(registry);
+       it = registry.erase(it)) {
+    const auto& [soid, item] = *it;
+    ceph_assert(item.stage == op_stage_t::enqueued_drop);
+    assert(item.stats);
+    DEBUGDPP("draining drop obj={}", pg(), soid);
+    peering_state().update_complete_backfill_object_stats(
+      soid,
+      *item.stats);
+    assert(soid > new_last_backfill);
+    new_last_backfill = soid;
+  }
+  backfill_listener().update_peers_last_backfill(new_last_backfill);
+}
+
 void BackfillState::enqueue_standalone_push(
   const hobject_t &obj,
   const eversion_t &v,
@@ -747,10 +777,7 @@ void BackfillState::enqueue_standalone_delete(
   const eversion_t &v,
   const std::vector<pg_shard_t> &peers)
 {
-  progress_tracker->enqueue_drop(obj);
-  for (auto bt : peers) {
-    backfill_machine.backfill_listener.enqueue_drop(bt, obj, v);
-  }
+  backfill_machine.backfill_listener.send_recovery_deletes(obj, peers);
 }
 
 std::ostream &operator<<(std::ostream &out, const BackfillState::PGFacade &pg) {

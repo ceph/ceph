@@ -15,10 +15,11 @@ Configure OPA
 To configure OPA, load custom policies into OPA that control the resources users
 are allowed to access. Relevant data or context can also be loaded into OPA to make decisions.
 
-Policies and data can be loaded into OPA in the following ways::
-  * OPA's RESTful APIs
-  * OPA's *bundle* feature that downloads policies and data from remote HTTP servers
-  * Filesystem
+Policies and data can be loaded into OPA in the following ways:
+
+* OPA's RESTful APIs
+* OPA's *bundle* feature that downloads policies and data from remote HTTP servers
+* Filesystem
 
 Configure the Ceph Object Gateway
 =================================
@@ -66,7 +67,7 @@ Response::
    {"result": true}
 
 The above is a sample request sent to OPA which contains information about the
-user, resource and the action to be performed on the resource. Based on the polices
+user, resource and the action to be performed on the resource. Based on the policies
 and data loaded into OPA, it will verify whether the request should be allowed or denied.
 In the sample request, RGW makes a POST request to the endpoint */v1/data/ceph/authz*,
 where *ceph* is the package name and *authz* is the rule name.

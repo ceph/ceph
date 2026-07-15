@@ -31,6 +31,52 @@ which should now include a mgr status line::
 
     mgr active: $name
 
+Interpreting Manager Daemon Status
+==================================
+
+A cluster's health status will show each ``ceph-mgr`` daemon in one of three states:
+
+1. **active**
+
+   This Manager daemon has been fully initialized, which means it is ready to receive
+   and execute commands. Only one Manager will be in this state at a time.
+
+2. **active (starting)**
+
+   This Manager daemon has been chosen to be ``active``, but it is not done initializing.
+   Although it is not yet ready to execute commands, an operator may still issue commands,
+   which will be held and executed once the Manager becomes ``active``. Only one Manager
+   will be in this state at a time.
+
+3. **standby**
+
+   This Manager daemon is not currently receiving or executing commands, but it is ready to
+   take over if the current active Manager becomes unavailable. An administrator may
+   manually promote a standby to become active via ``ceph mgr fail`` if desired. All other
+   Manager daemons which are not ``active`` or ``active (starting)`` will be in this state.
+
+Each of these states are visible in the output of the ``ceph status`` command. For example:
+
+.. code-block:: console
+
+   $ ceph status
+     cluster:
+       id:     b150f540-745a-460c-a566-376b28b95ac3
+       health: HEALTH_OK
+
+     services:
+       mon: 3 daemons, quorum a,b,c (age 47m) [leader: a]
+       mgr: x(active, starting, since 3s)
+       mds: 1/1 daemons up, 2 standby
+       osd: 4 osds: 4 up (since 47m), 4 in (since 47m)
+
+     data:
+       volumes: 1/1 healthy
+       pools:   4 pools, 177 pgs
+       objects: 24 objects, 451 KiB
+       usage:   4.0 GiB used, 400 GiB / 404 GiB avail
+       pgs:     177 active+clean
+
 Client authentication
 ---------------------
 
@@ -61,20 +107,71 @@ daemon as failed using ``ceph mgr fail <mgr name>``.
 
 Performance and Scalability
 ---------------------------
+Manager modules share a cache that is enabled by default. The cache
+uses an event-driven invalidation strategy, automatically updating when cluster
+maps change to ensure modules always work with current data while maximizing
+performance.
 
-All the mgr modules share a cache that can be enabled with
-``ceph config set mgr mgr_ttl_cache_expire_seconds <seconds>``, where seconds
-is the time to live of the cached python objects.
+The cache is particularly beneficial for clusters with 500+ OSDs or 10k+ PGs
+as internal structures increase in size, which may result in latency issues when
+requesting large structures. As an example, an OSDMap with 1000 OSDs has an
+approximate size of 4MiB. With heavy load, on a 3000 OSD cluster, the response
+latency for cached requests reduces by approximately 50% when the cache
+is enabled.
 
-It is recommended to enable the cache with a 10 seconds TTL when there are 500+
-osds or 10k+ pgs as internal structures might increase in size, and cause latency
-issues when requesting large structures. As an example, an OSDMap with 1000 osds
-has a approximate size of 4MiB. With heavy load, on a 3000 osd cluster there has
-been a 1.5x improvement enabling the cache.
+The cache automatically invalidates entries when the underlying cluster maps
+(such as OSDMap, PGMap, or MonMap) are updated. If needed, you can manually
+flush specific cached maps using ``ceph mgr cli cache flush [map-name]``.
 
-Furthermore, you can run ``ceph daemon mgr.${MGRNAME} perf dump`` to retrieve
-perf counters of a mgr module. In ``mgr.cache_hit`` and ``mgr.cache_miss``
-you'll find the hit/miss ratio of the mgr cache.
+To disable the cache (not recommended for large clusters), run:
+``ceph config set mgr mgr_map_cache_enabled false``
+
+You can run ``ceph daemon mgr.${MGRNAME} perf dump`` to retrieve
+perf counters of a Manager module. In ``mgr.cache_hit`` and ``mgr.cache_miss``
+you'll find the hit/miss ratio of the Manager cache, which can help verify the
+cache is operating effectively.
+
+The Manager includes a ThreadMonitor that tracks CPU usage and memory consumption
+for each enabled module. This monitoring can be configured with
+``ceph config set mgr mgr_module_monitor_interval <seconds>``, where ``seconds``
+is the monitoring interval. Setting this to 0 disables module monitoring.
+
+The ThreadMonitor provides per-module performance counters accessible via
+``ceph daemon mgr.${MGRNAME} perf dump``, including:
+
+- ``notify_avg_usec``: Average time spent in notify calls (microseconds)
+- ``cmd_avg_usec``: Average time spent in command calls (microseconds)  
+- ``alive``: Module health status (0=dead, 1=alive)
+- ``cpu_usage``: CPU percentage for the main module thread
+- ``serve_cpu_usage``: CPU percentage for the module's serve thread (if present)
+- ``mem_rss_current``: Current process memory usage (RSS) in bytes
+- ``mem_rss_change``: Memory usage change since last measurement in bytes
+
+These counters help identify resource-intensive modules and can be useful for
+debugging performance issues or memory leaks. The ``notify_avg_usec`` and 
+``cmd_avg_usec`` counters track the performance of module operations, while
+the CPU and memory counters monitor resource consumption. The default monitoring
+interval is 2 seconds.
+
+
+Automatic Stats Period Tuning
+------------------------------
+
+The Manager automatically adjusts :confval:`mgr_stats_period` based on message queue
+depth to prevent overload during high cluster activity. This feature is enabled by
+default and can be controlled with the following settings:
+
+- :confval:`mgr_stats_period_autotune` : Enable or disable
+  automatic tuning of the stats period.
+- :confval:`mgr_stats_period_autotune_queue_threshold` :
+  The message queue depth threshold that triggers an increase in the stats period.
+
+When the queue depth exceeds this threshold, the stats period is increased to
+reduce load. Conversely, if the queue depth remains low and the stats period is
+above the baseline, the period is decreased to improve responsiveness. In order 
+to ensure timely updates, the effective stats period will not exceed 60 seconds 
+regardless of these settings.
+
 
 Using modules
 -------------
@@ -191,5 +288,8 @@ Configuration
 .. confval:: mgr_data
 .. confval:: mgr_tick_period
 .. confval:: mon_mgr_beacon_grace
+.. confval:: mgr_stats_period
+.. confval:: mgr_stats_period_autotune
+.. confval:: mgr_stats_period_autotune_queue_threshold
 
 .. _Modifying User Capabilities: ../../rados/operations/user-management/#modify-user-capabilities

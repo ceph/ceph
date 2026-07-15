@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <iostream>
 #include <mutex>
+#include <filesystem>
 #include <condition_variable>
 #include "fmt/format.h"
 #include <map>
@@ -26,10 +27,17 @@ namespace rgw { namespace store {
 
 class DB;
 
+struct DBOpAccountInfo {
+  RGWAccountInfo info = {};
+  obj_version account_version;
+  rgw::sal::Attrs account_attrs;
+};
+
 struct DBOpUserInfo {
   RGWUserInfo uinfo = {};
   obj_version user_version;
   rgw::sal::Attrs user_attrs;
+  std::list<RGWUserInfo> list_entries;
 };
 
 struct DBOpBucketInfo {
@@ -122,6 +130,7 @@ struct DBOpInfo {
    * be able to query easily.
    *
    * XXX: Swift keys and subuser not supported for now */
+  DBOpAccountInfo account;
   DBOpUserInfo user;
   std::string query_str;
   DBOpBucketInfo bucket;
@@ -136,6 +145,7 @@ struct DBOpParams {
   CephContext *cct;
 
   /* Tables */
+  std::string account_table;
   std::string user_table;
   std::string bucket_table;
   std::string object_table;
@@ -162,6 +172,20 @@ struct DBOpParams {
  * These identifiers are used in prepare and bind statements
  * to get the right index of each param.
  */
+struct DBOpAccountPrepareInfo {
+  static constexpr const char* account_id = ":account_id";
+  static constexpr const char* tenant = ":tenant";
+  static constexpr const char* account_name = ":account_name";
+  static constexpr const char* email = ":email";
+  static constexpr const char* quota = ":quota";
+  static constexpr const char* bucket_quota = ":bucket_quota";
+  static constexpr const char* max_users = ":max_users";
+  static constexpr const char* max_roles = ":max_roles";
+  static constexpr const char* max_groups = ":max_groups";
+  static constexpr const char* max_buckets = ":max_buckets";
+  static constexpr const char* max_access_keys = ":max_access_keys";
+};
+
 struct DBOpUserPrepareInfo {
   static constexpr const char* user_id = ":user_id";
   static constexpr const char* tenant = ":tenant";
@@ -313,6 +337,7 @@ struct DBOpLCHeadPrepareInfo {
 };
 
 struct DBOpPrepareInfo {
+  DBOpAccountPrepareInfo account;
   DBOpUserPrepareInfo user;
   std::string_view query_str; // view into DBOpInfo::query_str
   DBOpBucketPrepareInfo bucket;
@@ -325,6 +350,7 @@ struct DBOpPrepareInfo {
 
 struct DBOpPrepareParams {
   /* Tables */
+  std::string account_table;
   std::string user_table;
   std::string bucket_table;
   std::string object_table;
@@ -342,9 +368,13 @@ struct DBOpPrepareParams {
 };
 
 struct DBOps {
+  std::shared_ptr<class InsertAccountOp> InsertAccount;
+  std::shared_ptr<class RemoveAccountOp> RemoveAccount;
+  std::shared_ptr<class GetAccountOp> GetAccount;
   std::shared_ptr<class InsertUserOp> InsertUser;
   std::shared_ptr<class RemoveUserOp> RemoveUser;
   std::shared_ptr<class GetUserOp> GetUser;
+  std::shared_ptr<class ListUsersOp> ListUsers;
   std::shared_ptr<class InsertBucketOp> InsertBucket;
   std::shared_ptr<class UpdateBucketOp> UpdateBucket;
   std::shared_ptr<class RemoveBucketOp> RemoveBucket;
@@ -382,6 +412,30 @@ class ObjectOp {
 
 class DBOp {
   private:
+    static constexpr std::string_view CreateAccountTableQ =
+      /* Corresponds to RGWAccountInfo
+       *
+       * AccountID is made Primary key.
+       * If multiple tenants are stored in single .db handle, should
+       * make both (AccountID, Tenant) as Primary Key.
+       *
+       * XXX:
+       * - Quota stored as blob .. should be linked to quota table.
+       */
+      "CREATE TABLE IF NOT EXISTS '{}' (	\
+      AccountID TEXT NOT NULL UNIQUE,		\
+      Tenant TEXT ,		\
+      AccountName TEXT , \
+      Email TEXT ,	\
+      Quota BLOB ,	\
+      BucketQuota BLOB ,	\
+      MaxUsers INTEGER ,	\
+      MaxRoles INTEGER ,	\
+      MaxGroups INTEGER ,	\
+      MaxBuckets INTEGER ,	\
+      MaxAccessKeys INTEGER ,	\
+      PRIMARY KEY (AccountID) \n);";
+
     static constexpr std::string_view CreateUserTableQ =
       /* Corresponds to rgw::sal::User
        *
@@ -653,6 +707,9 @@ class DBOp {
 
     static std::string CreateTableSchema(std::string_view type,
                                          const DBOpParams *params) {
+      if (!type.compare("Account"))
+        return fmt::format(CreateAccountTableQ,
+            params->account_table);
       if (!type.compare("User"))
         return fmt::format(CreateUserTableQ,
             params->user_table);
@@ -703,6 +760,76 @@ class DBOp {
     virtual int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params) { return 0; }
     virtual int Bind(const DoutPrefixProvider *dpp, DBOpParams *params) { return 0; }
     virtual int Execute(const DoutPrefixProvider *dpp, DBOpParams *params) { return 0; }
+};
+
+class InsertAccountOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "INSERT OR REPLACE INTO '{}'	\
+                          (AccountID, Tenant, AccountName, Email, \
+                           Quota, BucketQuota, MaxUsers, MaxRoles, MaxGroups, \
+                           MaxBuckets, MaxAccessKeys) \
+                          VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});";
+
+  public:
+    virtual ~InsertAccountOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.account_table,
+          params.op.account.account_id, params.op.account.tenant,
+          params.op.account.account_name, params.op.account.email,
+          params.op.account.quota, params.op.account.bucket_quota,
+          params.op.account.max_users, params.op.account.max_roles,
+          params.op.account.max_groups, params.op.account.max_buckets,
+          params.op.account.max_access_keys);
+    }
+};
+
+class RemoveAccountOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view Query =
+      "DELETE from '{}' where AccountID = {}";
+
+  public:
+    virtual ~RemoveAccountOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.account_table,
+          params.op.account.account_id);
+    }
+};
+
+class GetAccountOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "SELECT \
+                          AccountID, Tenant, AccountName, Email, \
+                          Quota, BucketQuota, MaxUsers, MaxRoles, MaxGroups, \
+                          MaxBuckets, MaxAccessKeys from '{}' where AccountID = {}";
+
+    static constexpr std::string_view QueryByName = "SELECT \
+                          AccountID, Tenant, AccountName, Email, \
+                          Quota, BucketQuota, MaxUsers, MaxRoles, MaxGroups, \
+                          MaxBuckets, MaxAccessKeys from '{}' where AccountName = {}";
+
+    static constexpr std::string_view QueryByEmail = "SELECT \
+                          AccountID, Tenant, AccountName, Email, \
+                          Quota, BucketQuota, MaxUsers, MaxRoles, MaxGroups, \
+                          MaxBuckets, MaxAccessKeys from '{}' where Email = {}";
+
+  public:
+    virtual ~GetAccountOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      if (params.op.query_str == "name") {
+        return fmt::format(QueryByName, params.account_table,
+            params.op.account.account_name);
+      } else if (params.op.query_str == "email") {
+        return fmt::format(QueryByEmail, params.account_table,
+            params.op.account.email);
+      } else {
+        return fmt::format(Query, params.account_table,
+            params.op.account.account_id);
+      }
+    }
 };
 
 class InsertUserOp : virtual public DBOp {
@@ -820,6 +947,28 @@ class GetUserOp: virtual public DBOp {
         return fmt::format(Query, params.user_table,
             params.op.user.user_id);
       }
+    }
+};
+
+
+class ListUsersOp: virtual public DBOp {
+    static constexpr std::string_view Query = "SELECT \
+                          UserID, Tenant, NS, DisplayName, UserEmail, \
+                          AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
+                          SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
+                          System, PlacementName, PlacementStorageClass, PlacementTags, \
+                          BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
+                          UserAttrs, UserVersion, UserVersionTag from '{}' where \
+                          UserID >= {} ORDER BY UserID ASC LIMIT {} ";
+
+  public:
+    virtual ~ListUsersOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query,
+        params.user_table,
+        params.op.user.user_id,
+        params.op.list_max_count);
     }
 };
 
@@ -1479,7 +1628,9 @@ WRITE_CLASS_ENCODER(DBOLHInfo)
 class DB {
   private:
     const std::string db_name;
+    const std::string table_name_prefix;
     rgw::sal::Driver* driver;
+    const std::string account_table;
     const std::string user_table;
     const std::string bucket_table;
     const std::string quota_table;
@@ -1501,17 +1652,22 @@ class DB {
 
   public:
     DB(std::string db_name, CephContext *_cct) : db_name(db_name),
-    user_table(db_name+"_user_table"),
-    bucket_table(db_name+"_bucket_table"),
-    quota_table(db_name+"_quota_table"),
-    lc_head_table(db_name+"_lc_head_table"),
-    lc_entry_table(db_name+"_lc_entry_table"),
+    table_name_prefix(std::filesystem::path(db_name).filename()),
+    account_table(table_name_prefix + "_account_table"),
+    user_table(table_name_prefix + "_user_table"),
+    bucket_table(table_name_prefix + "_bucket_table"),
+    quota_table(table_name_prefix + "_quota_table"),
+    lc_head_table(table_name_prefix + "_lc_head_table"),
+    lc_entry_table(table_name_prefix + "_lc_entry_table"),
     cct(_cct),
     dp(_cct, ceph_subsys_rgw, "rgw DBStore backend: ")
   {}
     /*	DB() {}*/
 
     DB(CephContext *_cct) : db_name("default_db"),
+
+    table_name_prefix(db_name),
+    account_table(db_name+"_account_table"),
     user_table(db_name+"_user_table"),
     bucket_table(db_name+"_bucket_table"),
     quota_table(db_name+"_quota_table"),
@@ -1524,19 +1680,20 @@ class DB {
 
     const std::string getDBname() { return db_name; }
     const std::string getDBfile() { return db_name + ".db"; }
+    const std::string getAccountTable() { return account_table; }
     const std::string getUserTable() { return user_table; }
     const std::string getBucketTable() { return bucket_table; }
     const std::string getQuotaTable() { return quota_table; }
     const std::string getLCHeadTable() { return lc_head_table; }
     const std::string getLCEntryTable() { return lc_entry_table; }
     const std::string getObjectTable(std::string bucket) {
-      return db_name+"_"+bucket+"_object_table"; }
+      return table_name_prefix+"_"+bucket+"_object_table"; }
     const std::string getObjectDataTable(std::string bucket) {
-      return db_name+"_"+bucket+"_objectdata_table"; }
+      return table_name_prefix+"_"+bucket+"_objectdata_table"; }
     const std::string getObjectView(std::string bucket) {
-      return db_name+"_"+bucket+"_object_view"; }
+      return table_name_prefix+"_"+bucket+"_object_view"; }
     const std::string getObjectTrigger(std::string bucket) {
-      return db_name+"_"+bucket+"_object_trigger"; }
+      return table_name_prefix+"_"+bucket+"_object_trigger"; }
 
     std::map<std::string, class ObjectOp*> getObjectMap();
 
@@ -1589,6 +1746,20 @@ class DB {
         RGWObjVersionTracker *pobjv_tracker, RGWUserInfo* pold_info);
     int remove_user(const DoutPrefixProvider *dpp,
         RGWUserInfo& uinfo, RGWObjVersionTracker *pobjv_tracker);
+    int list_users(const DoutPrefixProvider *dpp,
+        const std::string& marker,
+        uint64_t max,
+        std::list<std::string>& keys,
+        bool *is_truncated);
+    int get_account(const DoutPrefixProvider *dpp,
+        const std::string& query_str, const std::string& query_str_val,
+        RGWAccountInfo& ainfo, std::map<std::string, bufferlist> *pattrs,
+        RGWObjVersionTracker *pobjv_tracker);
+    int store_account(const DoutPrefixProvider *dpp,
+        const RGWAccountInfo& ainfo, bool exclusive, const std::map<std::string, bufferlist> *pattrs,
+        RGWObjVersionTracker *pobjv_tracker);
+    int remove_account(const DoutPrefixProvider *dpp,
+        const RGWAccountInfo &ainfo, RGWObjVersionTracker *pobjv_tracker);
     int get_bucket_info(const DoutPrefixProvider *dpp, const std::string& query_str,
         const std::string& query_str_val,
         RGWBucketInfo& info, rgw::sal::Attrs* pattrs, ceph::real_time* pmtime,

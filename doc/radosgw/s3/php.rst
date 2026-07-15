@@ -33,7 +33,7 @@ This creates a connection so that you can interact with the server.
 	define('AWS_SECRET_KEY', 'place secret key here');
 	$ENDPOINT = 'http://objects.dreamhost.com';
 
-	// require the amazon sdk from your composer vendor dir
+	// require the Amazon SDK from your composer vendor dir
 	require __DIR__.'/vendor/autoload.php';
 
 	// Instantiate the S3 class and point it at the desired host
@@ -119,7 +119,7 @@ This deletes the bucket called ``my-old-bucket`` and returns a
 
 .. note::
 
-   The Bucket must be empty! Otherwise it won't work!
+   The bucket must be empty! Otherwise it won't work!
 
 .. code-block:: php
 

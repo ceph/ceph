@@ -8,7 +8,10 @@ import { ConfigurationFormComponent } from './ceph/cluster/configuration/configu
 import { ConfigurationComponent } from './ceph/cluster/configuration/configuration.component';
 import { CreateClusterComponent } from './ceph/cluster/create-cluster/create-cluster.component';
 import { CrushmapComponent } from './ceph/cluster/crushmap/crushmap.component';
+import { HostSidebarComponent } from './ceph/cluster/hosts/host-resource-sidebar/host-resource-sidebar.component';
 import { HostFormComponent } from './ceph/cluster/hosts/host-form/host-form.component';
+import { HostResourceBreadcrumbResolver } from './ceph/cluster/hosts/host-resource-page/host-resource-breadcrumb.resolver';
+import { HostResourcePageComponent } from './ceph/cluster/hosts/host-resource-page/host-resource-page.component';
 import { HostsComponent } from './ceph/cluster/hosts/hosts.component';
 import { InventoryComponent } from './ceph/cluster/inventory/inventory.component';
 import { LogsComponent } from './ceph/cluster/logs/logs.component';
@@ -24,7 +27,6 @@ import { SilenceListComponent } from './ceph/cluster/prometheus/silence-list/sil
 import { ServiceFormComponent } from './ceph/cluster/services/service-form/service-form.component';
 import { ServicesComponent } from './ceph/cluster/services/services.component';
 import { TelemetryComponent } from './ceph/cluster/telemetry/telemetry.component';
-import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
 import { NfsFormComponent } from './ceph/nfs/nfs-form/nfs-form.component';
 import { PerformanceCounterComponent } from './ceph/performance-counter/performance-counter/performance-counter.component';
 import { LoginPasswordFormComponent } from './core/auth/login-password-form/login-password-form.component';
@@ -35,7 +37,11 @@ import { BlankLayoutComponent } from './core/layouts/blank-layout/blank-layout.c
 import { LoginLayoutComponent } from './core/layouts/login-layout/login-layout.component';
 import { WorkbenchLayoutComponent } from './core/layouts/workbench-layout/workbench-layout.component';
 import { ApiDocsComponent } from './core/navigation/api-docs/api-docs.component';
-import { ActionLabels, URLVerbs } from './shared/constants/app.constants';
+import {
+  ActionLabels,
+  CEPHFS_MIRRORING_PAGE_HEADER,
+  URLVerbs
+} from './shared/constants/app.constants';
 import { CrudFormComponent } from './shared/forms/crud-form/crud-form.component';
 import { CRUDTableComponent } from './shared/datatable/crud-table/crud-table.component';
 import { BreadcrumbsResolver, IBreadcrumb } from './shared/models/breadcrumbs';
@@ -60,6 +66,10 @@ import { SmbUsersgroupsListComponent } from './ceph/smb/smb-usersgroups-list/smb
 import { SmbOverviewComponent } from './ceph/smb/smb-overview/smb-overview.component';
 import { MultiClusterFormComponent } from './ceph/cluster/multi-cluster/multi-cluster-form/multi-cluster-form.component';
 import { CephfsMirroringListComponent } from './ceph/cephfs/cephfs-mirroring-list/cephfs-mirroring-list.component';
+import { NotificationsPageComponent } from './core/navigation/notification-panel/notifications-page/notifications-page.component';
+import { CephfsMirroringWizardComponent } from './ceph/cephfs/cephfs-mirroring-wizard/cephfs-mirroring-wizard.component';
+import { CephfsMirroringErrorComponent } from './ceph/cephfs/cephfs-mirroring-error/cephfs-mirroring-error.component';
+import { OverviewComponent } from './ceph/overview/overview.component';
 
 @Injectable()
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
@@ -94,8 +104,8 @@ export class StartCaseBreadcrumbsResolver extends BreadcrumbsResolver {
 }
 
 const routes: Routes = [
-  // Dashboard
-  { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
+  // Overview
+  { path: '', redirectTo: 'overview', pathMatch: 'full' },
   { path: 'api-docs', component: ApiDocsComponent },
   {
     path: '',
@@ -103,21 +113,35 @@ const routes: Routes = [
     canActivate: [AuthGuardService, ChangePasswordGuardService],
     canActivateChild: [AuthGuardService, ChangePasswordGuardService],
     children: [
-      { path: 'dashboard', component: DashboardComponent },
+      { path: 'overview', component: OverviewComponent },
       { path: 'error', component: ErrorComponent },
+      {
+        path: 'cephfs/mirroring/error',
+        component: CephfsMirroringErrorComponent,
+        data: {
+          breadcrumbs: 'File/Mirroring',
+          pageHeader: CEPHFS_MIRRORING_PAGE_HEADER
+        }
+      },
 
       // Cluster
       {
-        path: 'expand-cluster',
+        path: 'notifications',
+        data: {
+          breadcrumbs: 'Overview/Notifications'
+        },
+        component: NotificationsPageComponent
+      },
+      {
+        path: 'add-storage',
         component: CreateClusterComponent,
         canActivate: [ModuleStatusGuardService],
         data: {
           moduleStatusGuardConfig: {
             uiApiPath: 'orchestrator',
-            redirectTo: 'dashboard',
+            redirectTo: 'overview',
             backend: 'cephadm'
-          },
-          breadcrumbs: 'Cluster/Expand Cluster'
+          }
         }
       },
       {
@@ -129,6 +153,34 @@ const routes: Routes = [
             path: URLVerbs.ADD,
             component: HostFormComponent,
             outlet: 'modal'
+          }
+        ]
+      },
+      {
+        path: 'hosts/:hostname',
+        component: HostSidebarComponent,
+        data: { breadcrumbs: HostResourceBreadcrumbResolver },
+        children: [
+          { path: '', redirectTo: 'overview', pathMatch: 'full' },
+          {
+            path: 'overview',
+            component: HostResourcePageComponent,
+            data: { breadcrumbs: 'Overview', section: 'overview' }
+          },
+          {
+            path: 'storage-devices',
+            component: HostResourcePageComponent,
+            data: { breadcrumbs: 'Storage Devices', section: 'storage-devices' }
+          },
+          {
+            path: 'daemons',
+            component: HostResourcePageComponent,
+            data: { breadcrumbs: 'Daemons', section: 'daemons' }
+          },
+          {
+            path: 'performance',
+            component: HostResourcePageComponent,
+            data: { breadcrumbs: 'Performance', section: 'performance' }
           }
         ]
       },
@@ -250,13 +302,13 @@ const routes: Routes = [
       },
       {
         path: 'osd',
+        component: OsdListComponent,
         data: { breadcrumbs: 'Cluster/OSDs' },
         children: [
-          { path: '', component: OsdListComponent },
           {
             path: URLVerbs.CREATE,
             component: OsdFormComponent,
-            data: { breadcrumbs: ActionLabels.CREATE }
+            outlet: 'modal'
           }
         ]
       },
@@ -299,7 +351,7 @@ const routes: Routes = [
           },
           {
             path: 'alerts',
-            data: { breadcrumbs: 'Alerts' },
+            data: { breadcrumbs: 'Alert Rules' },
             component: RulesListComponent
           },
           {
@@ -419,8 +471,23 @@ const routes: Routes = [
           },
           {
             path: 'mirroring',
+            canActivate: [ModuleStatusGuardService],
             component: CephfsMirroringListComponent,
-            data: { breadcrumbs: 'File/Mirroring' }
+            data: {
+              moduleStatusGuardConfig: {
+                uiApiPath: 'cephfs/mirror',
+                redirectTo: 'cephfs/mirroring/error',
+                module_name: 'mirroring',
+                navigate_to: 'File/Mirroring'
+              },
+              breadcrumbs: 'File/Mirroring',
+              pageHeader: CEPHFS_MIRRORING_PAGE_HEADER
+            }
+          },
+          {
+            path: `mirroring/${URLVerbs.CREATE}`,
+            component: CephfsMirroringWizardComponent,
+            data: { breadcrumbs: ActionLabels.CREATE }
           },
           {
             path: 'nfs',

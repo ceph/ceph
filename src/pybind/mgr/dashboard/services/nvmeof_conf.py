@@ -9,7 +9,7 @@ from .. import mgr
 from ..exceptions import DashboardException
 from ..services.orchestrator import OrchClient
 
-logger = logging.getLogger('nvmeof_conf')
+logger = logging.getLogger(__name__)
 
 
 class NvmeofGatewayAlreadyExists(Exception):
@@ -120,35 +120,11 @@ class NvmeofGatewaysConfig(object):
             )
 
     @classmethod
-    def get_client_cert(cls, service_name: str):
-        client_cert = cls.from_cert_store('nvmeof_client_cert', service_name)
-        return client_cert.encode() if client_cert else None
-
-    @classmethod
-    def get_client_key(cls, service_name: str):
-        client_key = cls.from_cert_store('nvmeof_client_key', service_name, key=True)
-        return client_key.encode() if client_key else None
-
-    @classmethod
-    def get_root_ca_cert(cls, service_name: str):
-        root_ca_cert = cls.from_cert_store('nvmeof_root_ca_cert', service_name)
-        return root_ca_cert.encode() if root_ca_cert else None
-
-    @classmethod
-    def get_ssl_cert(cls, service_name: str):
-        server_cert = cls.from_cert_store('nvmeof_ssl_cert', service_name)
-        return server_cert.encode() if server_cert else None
-
-    @classmethod
-    def from_cert_store(cls, entity: str, service_name: str, key=False):
+    def get_nvmeof_tls_bundle(cls, service_name: str, daemon_name: str):
         try:
             orch = OrchClient.instance()
             if orch.available():
-                if key:
-                    return orch.cert_store.get_key(entity, service_name,
-                                                   ignore_missing_exception=True)
-                return orch.cert_store.get_cert(entity, service_name,
-                                                ignore_missing_exception=True)
+                return orch.cert_store.get_nvmeof_tls_bundle(service_name, daemon_name)
             return None
         except OrchestratorError:
             # just return None if any orchestrator error is raised
@@ -168,7 +144,7 @@ def _get_name_url_for_group(gateways, group):
                 config = _get_running_daemon_svc_config(svc_config, running_daemons)
 
                 if config:
-                    return service_name, config['service_url']
+                    return service_name, config['service_url'], config['daemon_name']
         return None
 
     except OrchestratorError:
@@ -206,7 +182,8 @@ def _get_default_service(gateways):
                 component="nvmeof"
             )
         service_name = gateway_keys[0]
-        return service_name, gateways[service_name][0]['service_url']
+        return service_name, gateways[service_name][0]['service_url'], \
+            gateways[service_name][0]['daemon_name']
     return None
 
 
@@ -216,3 +193,12 @@ def is_mtls_enabled(service_name: str):
         return orch.services.get(service_name)[0].spec.enable_auth
     except OrchestratorError:
         return False
+
+
+def get_pool_group_name(service_name: str):
+    try:
+        orch = OrchClient.instance()
+        spec = orch.services.get(service_name)[0].spec
+        return (spec.pool, spec.group)
+    except OrchestratorError:
+        return None

@@ -1,10 +1,14 @@
 cmake_minimum_required(VERSION 3.22.1)
 
 project(ceph
-  VERSION 20.0.0
+  VERSION 21.0.0
   LANGUAGES CXX C ASM)
 
-foreach(policy CMP0127 CMP0135 CMP0175)
+foreach(policy CMP0127 CMP0135
+  CMP0144 # Ensure taking `BOOST_ROOT` keeps working. Otherwise,
+	  # config-based `find_package` will take `Boost_ROOT`.
+  CMP0167 # Use Boost's own CMake config files instead of FindBoost module.
+  CMP0175)
   if(POLICY ${policy})
     cmake_policy(SET ${policy} NEW)
   endif()
@@ -69,6 +73,20 @@ if(MINGW)
     "<CMAKE_CXX_COMPILER> <FLAGS> <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> <OBJECTS> -o <TARGET> ${CMAKE_GNULD_IMAGE_VERSION} <LINK_LIBRARIES>")
 
   link_directories(${MINGW_LINK_DIRECTORIES})
+endif()
+
+option(WITH_MOLD "Use the Mold linker" OFF)
+if(WITH_MOLD)
+  find_program(_mold_path mold REQUIRED)
+  message(STATUS "Mold linker: ${_mold_path}")
+  set(CMAKE_LINKER ${_mold_path} CACHE FILEPATH "Linker" FORCE)
+  set(MOLD_FUSE_LD_FLAG "-fuse-ld=mold" CACHE INTERNAL "")
+  foreach(_flags CMAKE_EXE_LINKER_FLAGS CMAKE_SHARED_LINKER_FLAGS CMAKE_MODULE_LINKER_FLAGS)
+    if(NOT "${${_flags}}" MATCHES "fuse-ld=")
+      string(APPEND ${_flags} " ${MOLD_FUSE_LD_FLAG}")
+    endif()
+  endforeach()
+  set(USING_MOLD_LINKER TRUE CACHE INTERNAL "")
 endif()
 
 option(WITH_CCACHE "Build with ccache.")
@@ -241,12 +259,18 @@ endif()
 
 option(WITH_BLUESTORE "Bluestore OSD backend" ON)
 if(WITH_BLUESTORE)
+  if(FREEBSD)
+    # POSIX AIO is integrated into FreeBSD kernel, and exposed by libc.
+    set(HAVE_POSIXAIO ON)
+  endif()
+endif()
+
+option(WITH_CRIMSON "Build Crimson components" OFF)
+
+if(WITH_BLUESTORE OR WITH_CRIMSON)
   if(LINUX)
     find_package(aio)
     set(HAVE_LIBAIO ${AIO_FOUND})
-  elseif(FREEBSD)
-    # POSIX AIO is integrated into FreeBSD kernel, and exposed by libc.
-    set(HAVE_POSIXAIO ON)
   endif()
 endif()
 
@@ -264,12 +288,12 @@ endif()
 
 include(CMakeDependentOption)
 
-CMAKE_DEPENDENT_OPTION(WITH_LIBURING "Enable io_uring bluestore backend" ON
-  "WITH_BLUESTORE;HAVE_LIBAIO" OFF)
+CMAKE_DEPENDENT_OPTION(WITH_LIBURING "Enable io_uring for bluestore backend or crimson" ON
+  "HAVE_LIBAIO" OFF)
 set(HAVE_LIBURING ${WITH_LIBURING})
 
 CMAKE_DEPENDENT_OPTION(WITH_SYSTEM_LIBURING "Require and build with system liburing" OFF
-  "HAVE_LIBAIO;WITH_BLUESTORE" OFF)
+  "HAVE_LIBAIO" OFF)
 
 if(WITH_LIBURING)
   if(WITH_SYSTEM_LIBURING)
@@ -277,11 +301,6 @@ if(WITH_LIBURING)
   else()
     include(Builduring)
     build_uring()
-  endif()
-  # enable uring in boost::asio
-
-  if(CMAKE_SYSTEM_VERSION VERSION_GREATER_EQUAL "5.10")
-    add_compile_definitions("BOOST_ASIO_HAS_IO_URING")
   endif()
 endif()
 
@@ -321,13 +340,18 @@ if(WITH_BLUESTORE_PMEM)
 endif()
 
 CMAKE_DEPENDENT_OPTION(WITH_SPDK "Enable SPDK" OFF
-  "CMAKE_SYSTEM_PROCESSOR MATCHES i386|i686|amd64|x86_64|AMD64|aarch64" OFF)
+  "CMAKE_SYSTEM_PROCESSOR MATCHES i386|i686|amd64|x86_64|AMD64|aarch64|riscv64" OFF)
+option(WITH_SYSTEM_SPDK "Require a system SPDK instead of building bundled src/spdk" OFF)
 if(WITH_SPDK)
   if(NOT WITH_BLUESTORE)
     message(SEND_ERROR "Please enable WITH_BLUESTORE for using SPDK")
   endif()
-  include(BuildSPDK)
-  build_spdk()
+  if(WITH_SYSTEM_SPDK)
+    find_package(spdk REQUIRED)
+  else()
+    include(BuildSPDK)
+    build_spdk()
+  endif()
   set(HAVE_SPDK TRUE)
 endif(WITH_SPDK)
 
@@ -450,6 +474,10 @@ if(ALLOCATOR)
   elseif(NOT ALLOCATOR STREQUAL "libc")
     message(FATAL_ERROR "Unsupported allocator selected: ${ALLOCATOR}")
   endif()
+elseif(WITH_ASAN)
+  # Force libc: tcmalloc/jemalloc still export operator new/delete even when the
+  # sanitizer shadows malloc, so sanitizer-allocated memory is freed via tcmalloc and SIGSEGVs.
+  set(ALLOCATOR "libc")
 else(ALLOCATOR)
   find_package(gperftools 2.6.2)
   set(HAVE_LIBTCMALLOC ${gperftools_FOUND})
@@ -535,7 +563,14 @@ if(WITH_CATCH2)
   # Restore the original CPM settings in case someone else wants to use the module:
   set(CPM_USE_LOCAL_PACKAGES_ONLY, ${ORIG_CPM_USE_LOCAL_PACKAGES_ONLY})
 
-  message("-- Enabled Catch2 support")
+  # CPM skips the fetch silently if downloads are disabled,
+  # e.g. with FETCHCONTENT_FULLY_DISCONNECTED=ON on deb builds
+  if(NOT TARGET Catch2::Catch2WithMain)
+    message(WARNING "Catch2 unavailable, disabling Catch2 tests")
+    set(WITH_CATCH2 OFF)
+  else()
+    message("-- Enabled Catch2 support")
+  endif()
 endif()
 
 # enable breakpad unless win32 or power
@@ -557,7 +592,7 @@ option(WITH_RADOSGW_DBSTORE "DBStore backend for RADOS Gateway" ON)
 option(WITH_RADOSGW_MOTR "CORTX-Motr backend for RADOS Gateway" OFF)
 option(WITH_RADOSGW_DAOS "DAOS backend for RADOS Gateway" OFF)
 option(WITH_RADOSGW_D4N "D4N wrapper for RADOS Gateway" ON)
-cmake_dependent_option(WITH_RADOSGW_POSIX "POSIX backend for RADOS Gateway" ON WITH_RADOSGW_DBSTORE OFF) # posix depends on dbstore
+option(WITH_RADOSGW_FDB "FoundationDB support for RADOS Gateway (experimental)" OFF)
 option(WITH_RADOSGW_RADOS "RADOS backend for Rados Gateway" ON)
 option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" ON)
 option(WITH_RADOSGW_ARROW_FLIGHT "Build arrow flight when not using system-provided arrow" OFF)
@@ -565,6 +600,9 @@ option(WITH_RADOSGW_BACKTRACE_LOGGING "Enable backtraces in rgw logs" OFF)
 
 option(WITH_SYSTEM_ARROW "Use system-provided arrow" OFF)
 option(WITH_SYSTEM_UTF8PROC "Use system-provided utf8proc" OFF)
+
+# POSIX depends on DBStore:
+cmake_dependent_option(WITH_RADOSGW_POSIX "POSIX backend for RADOS Gateway" ON WITH_RADOSGW_DBSTORE OFF) 
 
 if(WITH_RADOSGW)
   find_package(EXPAT REQUIRED)
@@ -618,6 +656,23 @@ if(WITH_RADOSGW)
   message(STATUS "ssl soname: ${LIBSSL_SONAME}")
   message(STATUS "crypto soname: ${LIBCRYPTO_SONAME}")
 endif (WITH_RADOSGW)
+
+if(WITH_RADOSGW_FDB)
+ include(${CMAKE_MODULE_PATH}/CPM.cmake)
+
+ CPMAddPackage("gh:eyalz800/zpp_bits@4.5.1")
+ message("-- enabled zpp_bits")
+
+# JFW: sadly, I'm having trouble getting FoundationDB to build, but this is VERY close
+# to "just working". But, how would we install the RPMs, etc.? This will need looking at
+# before this can be non-experimental:
+# CPMAddPackage("gh:apple/foundationdb@7.3.63")
+ message("FoundationDB support is EXPERIMENTAL and requires manual setup:")
+ message(" wget https://github.com/apple/foundationdb/releases/download/7.3.63/foundationdb-clients-7.3.63-1.el7.x86_64.rpm")
+ message(" wget https://github.com/apple/foundationdb/releases/download/7.3.63/foundationdb-server-7.3.63-1.el7.x86_64.rpm")
+ message("-- enabled FoundationDB (whether its there or not)")
+
+endif()
 
 #option for CephFS
 option(WITH_CEPHFS "CephFS is enabled" ON)
@@ -703,6 +758,13 @@ endif(LINUX)
 option(WITH_ASAN "build with ASAN" OFF)
 if(WITH_ASAN)
   list(APPEND sanitizers "address")
+  # Shared ASan/LSan runtime options: the in-tree suppression files plus the
+  # flags our tests need.  Consumed by add_ceph_test() and baked into bin/ceph
+  # so both ignore the same still-reachable third-party leaks.
+  set(CEPH_ASAN_OPTIONS "suppressions=${CMAKE_SOURCE_DIR}/qa/asan.supp,detect_odr_violation=0"
+      CACHE INTERNAL "ASAN_OPTIONS for ceph tests and the ceph CLI")
+  set(CEPH_LSAN_OPTIONS "suppressions=${CMAKE_SOURCE_DIR}/qa/lsan.supp,print_suppressions=0"
+      CACHE INTERNAL "LSAN_OPTIONS for ceph tests and the ceph CLI")
 endif()
 
 option(WITH_ASAN_LEAK "explicitly enable ASAN leak detection" OFF)
@@ -728,13 +790,17 @@ if(sanitizers)
   string(APPEND CMAKE_SHARED_LINKER_FLAGS " ${sanitiers_compile_flags}")
 endif()
 
+# Jerasure & GF-Complete
+option(WITH_SYSTEM_JERASURE "require and build with system jerasure and gf-complete" OFF)
+if(WITH_SYSTEM_JERASURE)
+  find_package(Jerasure REQUIRED)
+endif()
+
 # Rocksdb
 option(WITH_SYSTEM_ROCKSDB "require and build with system rocksdb" OFF)
 if (WITH_SYSTEM_ROCKSDB)
   find_package(RocksDB 5.14 REQUIRED)
 endif()
-
-option(WITH_CRIMSON "Build Crimson components" OFF)
 
 # Boost
 option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
@@ -796,8 +862,21 @@ else()
   include(BuildBoost)
   build_boost(1.87
     COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
+  if(WITH_ASAN)
+    # Boost.Context is built ucontext-only here (context-impl=ucontext); define
+    # the matching backend tree-wide so every Boost.Context/Coroutine2 consumer
+    # agrees on it, instead of relying on per-target propagation that is easy to miss.
+    add_compile_definitions(BOOST_USE_ASAN BOOST_USE_UCONTEXT)
+  endif()
 endif()
 include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
+add_library(Boost::asio INTERFACE IMPORTED)
+if(WITH_LIBURING AND CMAKE_SYSTEM_VERSION VERSION_GREATER_EQUAL "5.10")
+  # enable uring in boost::asio
+  set_target_properties(Boost::asio PROPERTIES
+    INTERFACE_COMPILE_DEFINITIONS "BOOST_ASIO_HAS_IO_URING"
+    INTERFACE_LINK_LIBRARIES "Boost::headers;uring::uring")
+endif()
 
 # dashboard angular2 frontend
 option(WITH_MGR_DASHBOARD_FRONTEND "Build the mgr/dashboard frontend using `npm`" ON)
@@ -865,4 +944,3 @@ add_tags(ctags
   EXCLUDE_OPTS ${CTAG_EXCLUDES}
   EXCLUDES "*.js" "*.css" ".tox" "python-common/build")
 add_custom_target(tags DEPENDS ctags)
-

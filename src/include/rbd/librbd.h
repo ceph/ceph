@@ -33,7 +33,7 @@ extern "C" {
 #include "features.h"
 
 #define LIBRBD_VER_MAJOR 1
-#define LIBRBD_VER_MINOR 20
+#define LIBRBD_VER_MINOR 21
 #define LIBRBD_VER_EXTRA 0
 
 #define LIBRBD_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
@@ -311,6 +311,7 @@ typedef struct {
 typedef enum {
   RBD_LOCK_MODE_EXCLUSIVE = 0,
   RBD_LOCK_MODE_SHARED = 1,
+  RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT = 2
 } rbd_lock_mode_t;
 
 CEPH_RBD_API void rbd_version(int *major, int *minor, int *extra);

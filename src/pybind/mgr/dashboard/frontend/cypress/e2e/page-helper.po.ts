@@ -95,6 +95,10 @@ export abstract class PageHelper {
     return cy.contains('.nav.nav-tabs a', tabName);
   }
 
+  getCdsTab(tabName: string) {
+    return cy.contains('cds-tab-headers button[role="tab"]', tabName);
+  }
+
   getTabText(index: number) {
     return this.getTabs().its(index).text();
   }
@@ -286,8 +290,13 @@ export abstract class PageHelper {
 
   filterTable(name: string, option: string) {
     this.waitDataTableToLoad();
-    cy.get('select#filter_name').select(name);
-    cy.get('select#filter_option').select(option);
+    cy.get('[data-testid=filter-button]').click();
+    cy.get('cds-popover-content')
+      .should('be.visible')
+      .within(() => {
+        cy.get(`[data-testid="filter-select-${name}"]`).find('select').select(option);
+        cy.get('[data-testid="apply-filters"]').click();
+      });
   }
 
   setPageSize(size: string) {

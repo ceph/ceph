@@ -245,7 +245,7 @@ struct TestMockIoCopyupRequest : public TestMockFixture {
     auto& mock_io_ctx = librados::get_mock_io_ctx(
       mock_image_ctx.rados_api, *mock_image_ctx.get_data_io_context());
     EXPECT_CALL(mock_io_ctx,
-                exec(oid, _, StrEq("rbd"), StrEq("copyup"),
+                exec_internal(oid, _, StrEq("rbd"), StrEq("copyup"),
                      ContentsEqual(in_bl), _, _, snapc))
       .WillOnce(Return(r));
   }
@@ -269,7 +269,7 @@ struct TestMockIoCopyupRequest : public TestMockFixture {
     auto& mock_io_ctx = librados::get_mock_io_ctx(
       mock_image_ctx.rados_api, *mock_image_ctx.get_data_io_context());
     EXPECT_CALL(mock_io_ctx,
-                exec(oid, _, StrEq("rbd"), StrEq("sparse_copyup"),
+                exec_internal(oid, _, StrEq("rbd"), StrEq("sparse_copyup"),
                      ContentsEqual(in_bl), _, _, snapc))
       .WillOnce(Return(r));
   }

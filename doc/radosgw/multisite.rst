@@ -86,7 +86,7 @@ At the top of this diagram, we see two applications (also known as "clients").
 The application on the right is both writing and reading data from the Ceph
 Cluster, by means of the RADOS Gateway (RGW). The application on the left is
 only *reading* data from the Ceph Cluster, by means of an instance of RADOS
-Gateway. In both cases (read-and-write and read-only), the transmssion of
+Gateway. In both cases (read-and-write and read-only), the transmission of
 data is handled RESTfully.
 
 In the middle of this diagram, we see two zones, each of which contains an
@@ -108,8 +108,8 @@ Beginning with Kraken, each Ceph Object Gateway can be configured to work in an
 active-active zone mode. This makes it possible to write to non-master zones.
 
 The multi-site configuration is stored within a container called a "realm". The
-realm stores zonegroups, zones, and a time "period" with multiple epochs (which
-(the epochs) are used for tracking changes to the configuration). 
+realm stores zonegroups, zones, and a time "period" with multiple epochs.
+The epochs are used for tracking changes to the configuration.
 
 Beginning with Kraken, the ``ceph-radosgw`` daemons handle the synchronization
 of data across zones, which eliminates the need for a separate synchronization
@@ -121,16 +121,16 @@ Requirements and Assumptions
 ============================
 
 A multi-site configuration requires at least two Ceph storage clusters. The
-multi-site configuration must have at least two Ceph object gateway instances
+multi-site configuration must have at least two Ceph Object Gateway instances
 (one for each Ceph storage cluster).
 
 This guide assumes that at least two Ceph storage clusters are in
 geographically separate locations; however, the configuration can work on the
-same site. This guide also assumes two Ceph object gateway servers named
+same site. This guide also assumes two Ceph Object Gateway servers named
 ``rgw1`` and ``rgw2``.
 
-.. important:: Running a single geographically-distributed Ceph storage cluster
-   is NOT recommended unless you have low latency WAN connections.
+.. important:: Running a single geographically distributed Ceph storage cluster
+   is NOT recommended unless you have low-latency WAN connections.
 
 A multi-site configuration requires a master zonegroup and a master zone. Each
 zonegroup requires a master zone. Zonegroups may have one or more secondary
@@ -140,8 +140,8 @@ In this guide, the ``rgw1`` host will serve as the master zone of the master
 zonegroup; and, the ``rgw2`` host will serve as the secondary zone of the
 master zonegroup.
 
-See `Pools`_ for instructions on creating and tuning pools for Ceph Object
-Storage.
+See :ref:`radosgw-pools` for instructions on creating and tuning pools for the
+Ceph Object Gateway.
 
 See :ref:`Sync Policy Config <radosgw-multisite-sync-policy>` for instructions
 on defining fine-grained bucket sync policy rules.
@@ -288,7 +288,7 @@ Delete Default Zonegroup and Zone
 
    .. prompt:: bash #
 
-      radosgw-admin zonegroup delete --rgw-zonegroup=default --rgw-zone=default
+      radosgw-admin zonegroup remove --rgw-zonegroup=default --rgw-zone=default
       radosgw-admin period update --commit
       radosgw-admin zone delete --rgw-zone=default
       radosgw-admin period update --commit
@@ -1381,7 +1381,9 @@ Zones
 -----
 
 A zone defines a logical group that consists of one or more Ceph Object Gateway
-instances. All Ceph Object Gateways in a given zone serve S3 objects that are backed by RADOS objects that are stored in the same set of pools in the same cluster. Ceph Object Gateway supports zones.
+instances. All Ceph Object Gateways in a given zone serve S3 objects that are
+backed by RADOS objects that are stored in the same set of pools in the same
+cluster. Ceph Object Gateway supports zones.
 
 The procedure for configuring zones differs from typical configuration
 procedures, because not all of the settings end up in a Ceph configuration
@@ -1600,5 +1602,3 @@ instance.
 |                                     | changing this setting.            |         |                       |
 +-------------------------------------+-----------------------------------+---------+-----------------------+
 
-
-.. _`Pools`: ../pools

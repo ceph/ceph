@@ -19,7 +19,7 @@ command of the following form:
 
 .. prompt:: bash $
 
-  $ ceph mon set election_strategy {classic|disallow|connectivity}
+   ceph mon set election_strategy {classic|disallow|connectivity}
 
 Choosing a mode
 ===============

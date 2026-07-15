@@ -579,7 +579,8 @@ private:
     CEPH_FEATUREMASK_SERVER_NAUTILUS |
     CEPH_FEATUREMASK_SERVER_OCTOPUS |
     CEPH_FEATUREMASK_SERVER_REEF |
-    CEPH_FEATUREMASK_SERVER_TENTACLE;
+    CEPH_FEATUREMASK_SERVER_TENTACLE |
+    CEPH_FEATUREMASK_SERVER_UMBRELLA;
 
   struct addrs_s {
     mempool::osdmap::vector<std::shared_ptr<entity_addrvec_t> > client_addrs;
@@ -1137,16 +1138,21 @@ public:
    */
   uint64_t get_up_osd_features() const;
 
+  int get_num_pg_upmap_primaries() const { return pg_upmap_primaries.size(); };
   void get_upmap_pgs(std::vector<pg_t> *upmap_pgs) const;
   bool check_pg_upmaps(
     CephContext *cct,
     const std::vector<pg_t>& to_check,
     std::vector<pg_t> *to_cancel,
+    std::vector<pg_t> *to_cancel_upmap_primary_only,
+    std::set<uint64_t> *affected_pools,
     std::map<pg_t, mempool::osdmap::vector<std::pair<int,int>>> *to_remap) const;
   void clean_pg_upmaps(
     CephContext *cct,
     Incremental *pending_inc,
     const std::vector<pg_t>& to_cancel,
+    const std::vector<pg_t>& to_cancel_upmap_primary_only,
+    const std::set<uint64_t>& affected_pools,
     const std::map<pg_t, mempool::osdmap::vector<std::pair<int,int>>>& to_remap) const;
   bool clean_pg_upmaps(CephContext *cct, Incremental *pending_inc) const;
 
@@ -1350,7 +1356,7 @@ public:
     if (poolit->second.is_erasure()) {
       for (uint8_t i = 0; i < acting.size(); ++i) {
 	if (acting[i] == *primary) {
-	  *out = spg_t(pgid, pgtemp_undo_primaryfirst(poolit->second, pgid, shard_id_t(i)));
+	  *out = spg_t(pgid, shard_id_t(i));
 	  return true;
 	}
       }
@@ -1522,10 +1528,13 @@ public:
     OSDMap& tmp_osd_map,
     const std::optional<rb_policy>& rbp = std::nullopt) const;
 
-  void rm_all_upmap_prims(CephContext *cct, Incremental *pending_inc, uint64_t pid); // per pool
   void rm_all_upmap_prims(
     CephContext *cct,
-    OSDMap::Incremental *pending_inc); // total
+    Incremental *pending_inc,
+    uint64_t pid) const; // per pool
+  void rm_all_upmap_prims(
+    CephContext *cct,
+    OSDMap::Incremental *pending_inc) const; // total
 
   int calc_desired_primary_distribution(
     CephContext *cct,
@@ -1623,11 +1632,13 @@ private: // Bunch of internal functions used only by calc_pg_upmaps (result of c
     int osd,
     std::map<int,std::set<pg_t>>& temp_pgs_by_osd,
     std::set<pg_t>& to_unmap,
-    std::map<pg_t, mempool::osdmap::vector<std::pair<int32_t,int32_t>>>& to_upmap
+    std::map<pg_t, mempool::osdmap::vector<std::pair<int32_t,int32_t>>>& to_upmap,
+    const std::map<int,float>& osd_deviation
   );
 
 typedef std::vector<std::pair<pg_t, mempool::osdmap::vector<std::pair<int, int>>>>
   candidates_t;
+typedef std::map<int, candidates_t> candidates_by_osd_t;
 
 bool try_drop_remap_underfull(
     CephContext *cct,
@@ -1659,7 +1670,7 @@ bool try_drop_remap_underfull(
     const std::map<int,float> osd_deviation
   );
 
-  candidates_t build_candidates(
+  candidates_by_osd_t build_candidates_by_osd(
     CephContext *cct,
     const OSDMap& tmp_osd_map,
     const std::set<pg_t> to_skip,

@@ -33,6 +33,7 @@ export enum URLVerbs {
   /* Non-standard verbs */
   COPY = 'copy',
   CLONE = 'clone',
+  VIEW = 'view',
 
   /* Prometheus wording */
   RECREATE = 'recreate',
@@ -43,7 +44,8 @@ export enum URLVerbs {
 
   /* Multi-cluster */
   CONNECT = 'connect',
-  RECONNECT = 'reconnect'
+  RECONNECT = 'reconnect',
+  GATEWAY_GROUP = 'Gateway group'
 }
 
 export enum ActionLabels {
@@ -86,7 +88,12 @@ export enum ActionLabels {
 
   /* Multi-cluster */
   CONNECT = 'connect',
-  RECONNECT = 'reconnect'
+  RECONNECT = 'reconnect',
+  VIEW = 'View',
+
+  /* Hosts */
+  MAINTENANCE = 'Maintenance',
+  DRAIN = 'Drain'
 }
 
 @Injectable({
@@ -158,10 +165,11 @@ export class ActionLabelsI18n {
   DISCONNECT: string;
   RECONNECT: string;
   AUTHORIZE: string;
-  EXPAND_CLUSTER: string;
+  ADD_STORAGE: string;
   SETUP_MULTISITE_REPLICATION: string;
   NFS_EXPORT: string;
-
+  VIEW: string;
+  EDIT_GATEWAYS_GROUP: string;
   constructor() {
     /* Create a new item */
     this.CREATE = $localize`Create`;
@@ -250,9 +258,11 @@ export class ActionLabelsI18n {
     this.CONNECT = $localize`Connect`;
     this.DISCONNECT = $localize`Disconnect`;
     this.RECONNECT = $localize`Reconnect`;
-    this.EXPAND_CLUSTER = $localize`Expand Cluster`;
+    this.ADD_STORAGE = $localize`Add Storage`;
 
-    this.NFS_EXPORT = $localize`Create NFS Export`;
+    this.NFS_EXPORT = $localize`Create NFS Share`;
+    this.VIEW = $localize`View`;
+    this.EDIT_GATEWAYS_GROUP = $localize`Edit gateways group`;
   }
 }
 
@@ -382,3 +392,8 @@ export const SSL_CIPHERS = [
 
 export const USER = 'user';
 export const VERSION_PREFIX = 'ceph version';
+
+export const CEPHFS_MIRRORING_PAGE_HEADER = {
+  title: $localize`CephFS Mirroring`,
+  description: $localize`Centralised view of all CephFS Mirroring relationships.`
+};

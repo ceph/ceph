@@ -10,6 +10,7 @@
 #include "ceph_ver.h"
 #include "common/HTMLFormatter.h"
 #include "common/XMLFormatter.h"
+#include "common/split.h"
 #include "common/utf8.h"
 #include "include/str_list.h"
 #include "rgw_common.h"
@@ -135,50 +136,6 @@ map<string, string> rgw_to_http_attrs;
 static map<string, string> generic_attrs_map;
 map<int, const char *> http_status_names;
 
-/*
- * make attrs look_like_this
- * converts dashes to underscores
- */
-string lowercase_underscore_http_attr(const string& orig)
-{
-  const char *s = orig.c_str();
-  char buf[orig.size() + 1];
-  buf[orig.size()] = '\0';
-
-  for (size_t i = 0; i < orig.size(); ++i, ++s) {
-    switch (*s) {
-      case '-':
-        buf[i] = '_';
-        break;
-      default:
-        buf[i] = tolower(*s);
-    }
-  }
-  return string(buf);
-}
-
-/*
- * make attrs LOOK_LIKE_THIS
- * converts dashes to underscores
- */
-string uppercase_underscore_http_attr(const string& orig)
-{
-  const char *s = orig.c_str();
-  char buf[orig.size() + 1];
-  buf[orig.size()] = '\0';
-
-  for (size_t i = 0; i < orig.size(); ++i, ++s) {
-    switch (*s) {
-      case '-':
-        buf[i] = '_';
-        break;
-      default:
-        buf[i] = toupper(*s);
-    }
-  }
-  return string(buf);
-}
-
 /* avoid duplicate hostnames in hostnames lists */
 static set<string> hostnames_set;
 static set<string> hostnames_s3website_set;
@@ -199,12 +156,13 @@ void rgw_rest_init(CephContext *cct, const rgw::sal::ZoneGroup& zone_group)
   list<string>::iterator iter;
   for (iter = extended_http_attrs.begin(); iter != extended_http_attrs.end(); ++iter) {
     string rgw_attr = RGW_ATTR_PREFIX;
-    rgw_attr.append(lowercase_underscore_http_attr(*iter));
+    // bidirectional mimics the '-' -> '_' behavior
+    lowercase_dash_transform(*iter, std::back_inserter(rgw_attr), true);
 
     rgw_to_http_attrs[rgw_attr] = camelcase_dash_http_attr(*iter);
 
     string http_header = "HTTP_";
-    http_header.append(uppercase_underscore_http_attr(*iter));
+    uppercase_dash_transform(*iter, std::back_inserter(http_header));
 
     generic_attrs_map[http_header] = rgw_attr;
   }
@@ -718,6 +676,10 @@ void abort_early(req_state *s, RGWOp* op, int err_no,
     }
 
     dump_errno(s);
+    if (err_no == -ERR_RATE_LIMITED && s->ratelimit_retry_after > 0) {
+      dump_header(s, "Retry-After",
+                  static_cast<long long>(s->ratelimit_retry_after));
+    }
     dump_bucket_from_state(s);
     if (err_no == -ERR_PERMANENT_REDIRECT || err_no == -ERR_WEBSITE_REDIRECT) {
       string dest_uri;
@@ -742,7 +704,12 @@ void abort_early(req_state *s, RGWOp* op, int err_no,
        *   x-amz-error-detail-Key: foo
        */
       end_header(s, op, NULL, error_content.size(), false, true);
-      RESTFUL_IO(s)->send_body(error_content.c_str(), error_content.size());
+      try {
+        RESTFUL_IO(s)->send_body(error_content.c_str(), error_content.size());
+      } catch (rgw::io::Exception& e) {
+        ldpp_dout(s, 0) << "ERROR: abort_early: send_body() returned err="
+                        << e.what() << dendl;
+      }
     } else {
       end_header(s, op);
     }
@@ -871,6 +838,8 @@ int RESTArgs::get_string(req_state *s, const string& name,
     return 0;
   }
 
+  constexpr bool in_query = true; // url-decode query params
+  *val = url_decode(*val, in_query);
   return 0;
 }
 
@@ -1231,7 +1200,9 @@ int RGWPostObj_ObjStore::read_with_boundary(ceph::bufferlist& bl,
 
     bufferptr bp(need_to_read);
 
+    ACCOUNTING_IO(s)->set_account(true);
     const auto read_len = recv_body(s, bp.c_str(), need_to_read);
+    ACCOUNTING_IO(s)->set_account(false);
     if (read_len < 0) {
       return read_len;
     }
@@ -1263,7 +1234,9 @@ int RGWPostObj_ObjStore::read_with_boundary(ceph::bufferlist& bl,
     if (left < skip + 2) {
       int need = skip + 2 - left;
       bufferptr boundary_bp(need);
+      ACCOUNTING_IO(s)->set_account(true);
       const int r = recv_body(s, boundary_bp.c_str(), need);
+      ACCOUNTING_IO(s)->set_account(false);
       if (r < 0) {
         return r;
       }
@@ -2030,37 +2003,28 @@ RGWRESTMgr::~RGWRESTMgr()
   delete default_mgr;
 }
 
-int RGWREST::preprocess(req_state *s, rgw::io::BasicClient* cio)
+int rgw_rest_transform_s3_vhost_style(req_state* s)
 {
-  req_info& info = s->info;
-
-  /* save the request uri used to hash on the client side. request_uri may suffer
-     modifications as part of the bucket encoding in the subdomain calling format.
-     request_uri_aws4 will be used under aws4 auth */
-  s->info.request_uri_aws4 = s->info.request_uri;
-
-  s->cio = cio;
-
   // We need to know if this RGW instance is running the s3website API with a
   // higher priority than regular S3 API, or possibly in place of the regular
   // S3 API.
   // Map the listing of rgw_enable_apis in REVERSE order, so that items near
   // the front of the list have a higher number assigned (and -1 for items not in the list).
-  list<string> apis;
-  get_str_list(g_conf()->rgw_enable_apis, apis);
+  const auto apis = ceph::split(g_conf()->rgw_enable_apis);
   int api_priority_s3 = -1;
   int api_priority_s3website = -1;
   auto api_s3website_priority_rawpos = std::find(apis.begin(), apis.end(), "s3website");
   auto api_s3_priority_rawpos = std::find(apis.begin(), apis.end(), "s3");
   if (api_s3_priority_rawpos != apis.end()) {
-    api_priority_s3 = apis.size() - std::distance(apis.begin(), api_s3_priority_rawpos);
+    api_priority_s3 = std::distance(api_s3_priority_rawpos, apis.end());
   }
   if (api_s3website_priority_rawpos != apis.end()) {
-    api_priority_s3website = apis.size() - std::distance(apis.begin(), api_s3website_priority_rawpos);
+    api_priority_s3website = std::distance(api_s3website_priority_rawpos, apis.end());
   }
   ldpp_dout(s, 10) << "rgw api priority: s3=" << api_priority_s3 << " s3website=" << api_priority_s3website << dendl;
   bool s3website_enabled = api_priority_s3website >= 0;
 
+  req_info& info = s->info;
   if (info.host.size()) {
     ssize_t pos;
     if (info.host.find('[') == 0) {
@@ -2199,6 +2163,26 @@ int RGWREST::preprocess(req_state *s, rgw::io::BasicClient* cio)
   if (s->info.domain.empty()) {
     s->info.domain = s->cct->_conf->rgw_dns_name;
   }
+
+  s->decoded_uri = url_decode(s->info.request_uri);
+  /* Validate for being free of the '\0' buried in the middle of the string. */
+  if (std::strlen(s->decoded_uri.c_str()) != s->decoded_uri.length()) {
+    return -ERR_ZERO_IN_URL;
+  }
+
+  return 0;
+}
+
+int RGWREST::preprocess(req_state *s, rgw::io::BasicClient* cio)
+{
+  req_info& info = s->info;
+
+  /* save the request uri used to hash on the client side. request_uri may suffer
+     modifications as part of the bucket encoding in the subdomain calling format.
+     request_uri_aws4 will be used under aws4 auth */
+  s->info.request_uri_aws4 = s->info.request_uri;
+
+  s->cio = cio;
 
   s->decoded_uri = url_decode(s->info.request_uri);
   /* Validate for being free of the '\0' buried in the middle of the string. */

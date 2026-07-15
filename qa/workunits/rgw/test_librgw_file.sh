@@ -34,11 +34,16 @@ ceph_test_librgw_file_nfsns ${K} --hier1 --dirs1 --create --rename --verbose
 
 # the older librgw_file can consume the namespace
 echo "phase 1.2"
-ceph_test_librgw_file_nfsns ${K} --getattr --verbose
+ceph_test_librgw_file_nfsns ${K} --dirs1 --verbose
 
 # and delete the hierarchy
 echo "phase 1.3"
 ceph_test_librgw_file_nfsns ${K} --hier1 --dirs1 --delete --verbose
+
+# common-prefix anti-regression test
+echo "phase 1.4"
+ceph_test_librgw_file_cpref ${K} --create
+ceph_test_librgw_file_cpref ${K} # crashed w/unfixed cp_ref assignment
 
 # bulk create/delete buckets
 echo "phase 2.1"

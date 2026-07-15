@@ -3,14 +3,14 @@
 ==========
 
 The Swift-compatible API tutorials follow a simple container-based object 
-lifecycle. The first step requires you to setup a connection between your 
+lifecycle. The first step requires you to set up a connection between your
 client and the RADOS Gateway server. Then, you may follow a natural 
 container and object lifecycle, including adding and retrieving object 
 metadata. See example code for the following languages:
 
-- `Java`_
-- `Python`_
-- `Ruby`_
+- :ref:`Java <java_swift>`
+- :ref:`Python <python_swift>`
+- :ref:`Ruby <ruby_swift>`
 
 
 .. ditaa::
@@ -57,6 +57,3 @@ metadata. See example code for the following languages:
            |                            |        |                             |
            +----------------------------+        +-----------------------------+
 
-.. _Java: ../java
-.. _Python: ../python
-.. _Ruby: ../ruby

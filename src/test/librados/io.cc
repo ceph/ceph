@@ -19,7 +19,7 @@ using std::string;
 typedef RadosTest LibRadosIo;
 typedef RadosTestEC LibRadosIoEC;
 
-TEST_F(LibRadosIo, SimpleWrite) {
+TEST_P(LibRadosIo, SimpleWrite) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
@@ -27,7 +27,7 @@ TEST_F(LibRadosIo, SimpleWrite) {
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
 }
 
-TEST_F(LibRadosIo, TooBig) {
+TEST_P(LibRadosIo, TooBig) {
   char buf[1] = { 0 };
   ASSERT_EQ(-E2BIG, rados_write(ioctx, "A", buf, UINT_MAX, 0));
   ASSERT_EQ(-E2BIG, rados_append(ioctx, "A", buf, UINT_MAX));
@@ -35,7 +35,7 @@ TEST_F(LibRadosIo, TooBig) {
   ASSERT_EQ(-E2BIG, rados_writesame(ioctx, "A", buf, sizeof(buf), UINT_MAX, 0));
 }
 
-TEST_F(LibRadosIo, ReadTimeout) {
+TEST_P(LibRadosIo, ReadTimeout) {
   char buf[128];
   memset(buf, 'a', sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
@@ -89,7 +89,7 @@ TEST_F(LibRadosIo, ReadTimeout) {
 }
 
 
-TEST_F(LibRadosIo, RoundTrip) {
+TEST_P(LibRadosIo, RoundTrip) {
   char buf[128];
   char buf2[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -106,7 +106,7 @@ TEST_F(LibRadosIo, RoundTrip) {
   ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
 }
 
-TEST_F(LibRadosIo, Checksum) {
+TEST_P(LibRadosIo, Checksum) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
@@ -123,7 +123,7 @@ TEST_F(LibRadosIo, Checksum) {
   ASSERT_EQ(expected_crc, crc[1]);
 }
 
-TEST_F(LibRadosIo, OverlappingWriteRoundTrip) {
+TEST_P(LibRadosIo, OverlappingWriteRoundTrip) {
   char buf[128];
   char buf2[64];
   char buf3[128];
@@ -137,7 +137,7 @@ TEST_F(LibRadosIo, OverlappingWriteRoundTrip) {
   ASSERT_EQ(0, memcmp(buf3 + sizeof(buf2), buf, sizeof(buf) - sizeof(buf2)));
 }
 
-TEST_F(LibRadosIo, WriteFullRoundTrip) {
+TEST_P(LibRadosIo, WriteFullRoundTrip) {
   char buf[128];
   char buf2[64];
   char buf3[128];
@@ -150,7 +150,7 @@ TEST_F(LibRadosIo, WriteFullRoundTrip) {
   ASSERT_EQ(0, memcmp(buf2, buf3, sizeof(buf2)));
 }
 
-TEST_F(LibRadosIo, AppendRoundTrip) {
+TEST_P(LibRadosIo, AppendRoundTrip) {
   char buf[64];
   char buf2[64];
   char buf3[sizeof(buf) + sizeof(buf2)];
@@ -164,7 +164,7 @@ TEST_F(LibRadosIo, AppendRoundTrip) {
   ASSERT_EQ(0, memcmp(buf3 + sizeof(buf), buf2, sizeof(buf2)));
 }
 
-TEST_F(LibRadosIo, ZeroLenZero) {
+TEST_P(LibRadosIo, ZeroLenZero) {
   rados_write_op_t op = rados_create_write_op();
   ASSERT_TRUE(op);
   rados_write_op_zero(op, 0, 0);
@@ -172,7 +172,7 @@ TEST_F(LibRadosIo, ZeroLenZero) {
   rados_release_write_op(op);
 }
 
-TEST_F(LibRadosIo, TruncTest) {
+TEST_P(LibRadosIo, TruncTest) {
   char buf[128];
   char buf2[sizeof(buf)];
   memset(buf, 0xaa, sizeof(buf));
@@ -183,7 +183,7 @@ TEST_F(LibRadosIo, TruncTest) {
   ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)/2));
 }
 
-TEST_F(LibRadosIo, RemoveTest) {
+TEST_P(LibRadosIo, RemoveTest) {
   char buf[128];
   char buf2[sizeof(buf)];
   memset(buf, 0xaa, sizeof(buf));
@@ -193,7 +193,7 @@ TEST_F(LibRadosIo, RemoveTest) {
   ASSERT_EQ(-ENOENT, rados_read(ioctx, "foo", buf2, sizeof(buf2), 0));
 }
 
-TEST_F(LibRadosIo, XattrsRoundTrip) {
+TEST_P(LibRadosIo, XattrsRoundTrip) {
   char buf[128];
   char attr1[] = "attr1";
   char attr1_buf[] = "foo bar baz";
@@ -206,7 +206,7 @@ TEST_F(LibRadosIo, XattrsRoundTrip) {
   ASSERT_EQ(0, memcmp(attr1_buf, buf, sizeof(attr1_buf)));
 }
 
-TEST_F(LibRadosIo, RmXattr) {
+TEST_P(LibRadosIo, RmXattr) {
   char buf[128];
   char attr1[] = "attr1";
   char attr1_buf[] = "foo bar baz";
@@ -229,7 +229,7 @@ TEST_F(LibRadosIo, RmXattr) {
   ASSERT_EQ(-ENOENT, rados_rmxattr(ioctx, "foo_rmxattr", attr2));
 }
 
-TEST_F(LibRadosIo, XattrIter) {
+TEST_P(LibRadosIo, XattrIter) {
   char buf[128];
   char attr1[] = "attr1";
   char attr1_buf[] = "foo bar baz";
@@ -269,8 +269,7 @@ TEST_F(LibRadosIo, XattrIter) {
   rados_getxattrs_end(iter);
 }
 
-TEST_F(LibRadosIoEC, SimpleWrite) {
-  SKIP_IF_CRIMSON();
+TEST_P(LibRadosIoEC, SimpleWrite) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
@@ -278,8 +277,7 @@ TEST_F(LibRadosIoEC, SimpleWrite) {
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
 }
 
-TEST_F(LibRadosIoEC, RoundTrip) {
-  SKIP_IF_CRIMSON();
+TEST_P(LibRadosIoEC, RoundTrip) {
   char buf[128];
   char buf2[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -288,12 +286,13 @@ TEST_F(LibRadosIoEC, RoundTrip) {
   ASSERT_EQ((int)sizeof(buf2), rados_read(ioctx, "foo", buf2, sizeof(buf2), 0));
   ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
 
-  uint64_t off = 19;
-  ASSERT_EQ(-EOPNOTSUPP, rados_write(ioctx, "bar", buf, sizeof(buf), off));
+  if (!is_crimson_cluster()) {
+    uint64_t off = 19;
+    ASSERT_EQ(-EOPNOTSUPP, rados_write(ioctx, "bar", buf, sizeof(buf), off));
+  }
 }
 
-TEST_F(LibRadosIoEC, OverlappingWriteRoundTrip) {
-  SKIP_IF_CRIMSON();
+TEST_P(LibRadosIoEC, OverlappingWriteRoundTrip) {
   int bsize = alignment;
   int dbsize = bsize * 2;
   char *buf = (char *)new char[dbsize];
@@ -307,16 +306,17 @@ TEST_F(LibRadosIoEC, OverlappingWriteRoundTrip) {
   scope_guard<decltype(cleanup)> sg(std::move(cleanup));
   memset(buf, 0xcc, dbsize);
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, dbsize, 0));
-  memset(buf2, 0xdd, bsize);
-  ASSERT_EQ(-EOPNOTSUPP, rados_write(ioctx, "foo", buf2, bsize, 0));
-  memset(buf3, 0xdd, dbsize);
-  ASSERT_EQ(dbsize, rados_read(ioctx, "foo", buf3, dbsize, 0));
-  // Read the same as first write
-  ASSERT_EQ(0, memcmp(buf3, buf, dbsize));
+  if (!is_crimson_cluster()) {
+    memset(buf2, 0xdd, bsize);
+    ASSERT_EQ(-EOPNOTSUPP, rados_write(ioctx, "foo", buf2, bsize, 0));
+    memset(buf3, 0xdd, dbsize);
+    ASSERT_EQ(dbsize, rados_read(ioctx, "foo", buf3, dbsize, 0));
+    // Read the same as first write
+    ASSERT_EQ(0, memcmp(buf3, buf, dbsize));
+  }
 }
 
-TEST_F(LibRadosIoEC, WriteFullRoundTrip) {
-  SKIP_IF_CRIMSON();
+TEST_P(LibRadosIoEC, WriteFullRoundTrip) {
   char buf[128];
   char buf2[64];
   char buf3[128];
@@ -329,8 +329,7 @@ TEST_F(LibRadosIoEC, WriteFullRoundTrip) {
   ASSERT_EQ(0, memcmp(buf3, buf2, sizeof(buf2)));
 }
 
-TEST_F(LibRadosIoEC, AppendRoundTrip) {
-  SKIP_IF_CRIMSON();
+TEST_P(LibRadosIoEC, AppendRoundTrip) {
   char *buf = (char *)new char[alignment];
   char *buf2 = (char *)new char[alignment];
   char *buf3 = (char *)new char[alignment *2];
@@ -353,25 +352,27 @@ TEST_F(LibRadosIoEC, AppendRoundTrip) {
   ASSERT_EQ(0, memcmp(buf3 + alignment, buf2, alignment));
   memset(unalignedbuf, 0, uasize);
   ASSERT_EQ(0, rados_append(ioctx, "foo", unalignedbuf, uasize));
-  ASSERT_EQ(-EOPNOTSUPP, rados_append(ioctx, "foo", unalignedbuf, uasize));
+  if (!is_crimson_cluster()) {
+    ASSERT_EQ(-EOPNOTSUPP, rados_append(ioctx, "foo", unalignedbuf, uasize));
+  }
 }
 
-TEST_F(LibRadosIoEC, TruncTest) {
-  SKIP_IF_CRIMSON();
+TEST_P(LibRadosIoEC, TruncTest) {
   char buf[128];
   char buf2[sizeof(buf)];
   memset(buf, 0xaa, sizeof(buf));
   ASSERT_EQ(0, rados_append(ioctx, "foo", buf, sizeof(buf)));
-  ASSERT_EQ(-EOPNOTSUPP, rados_trunc(ioctx, "foo", sizeof(buf) / 2));
-  memset(buf2, 0, sizeof(buf2));
-  // Same size
-  ASSERT_EQ((int)sizeof(buf), rados_read(ioctx, "foo", buf2, sizeof(buf2), 0));
-  // No change
-  ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
+  if (!is_crimson_cluster()) {
+    ASSERT_EQ(-EOPNOTSUPP, rados_trunc(ioctx, "foo", sizeof(buf) / 2));
+    memset(buf2, 0, sizeof(buf2));
+    // Same size
+    ASSERT_EQ((int)sizeof(buf), rados_read(ioctx, "foo", buf2, sizeof(buf2), 0));
+    // No change
+    ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
+  }
 }
 
-TEST_F(LibRadosIoEC, RemoveTest) {
-  SKIP_IF_CRIMSON();
+TEST_P(LibRadosIoEC, RemoveTest) {
   char buf[128];
   char buf2[sizeof(buf)];
   memset(buf, 0xaa, sizeof(buf));
@@ -381,8 +382,7 @@ TEST_F(LibRadosIoEC, RemoveTest) {
   ASSERT_EQ(-ENOENT, rados_read(ioctx, "foo", buf2, sizeof(buf2), 0));
 }
 
-TEST_F(LibRadosIoEC, XattrsRoundTrip) {
-  SKIP_IF_CRIMSON();
+TEST_P(LibRadosIoEC, XattrsRoundTrip) {
   char buf[128];
   char attr1[] = "attr1";
   char attr1_buf[] = "foo bar baz";
@@ -395,8 +395,7 @@ TEST_F(LibRadosIoEC, XattrsRoundTrip) {
   ASSERT_EQ(0, memcmp(attr1_buf, buf, sizeof(attr1_buf)));
 }
 
-TEST_F(LibRadosIoEC, RmXattr) {
-  SKIP_IF_CRIMSON();
+TEST_P(LibRadosIoEC, RmXattr) {
   char buf[128];
   char attr1[] = "attr1";
   char attr1_buf[] = "foo bar baz";
@@ -419,8 +418,7 @@ TEST_F(LibRadosIoEC, RmXattr) {
   ASSERT_EQ(-ENOENT, rados_rmxattr(ioctx, "foo_rmxattr", attr2));
 }
 
-TEST_F(LibRadosIoEC, XattrIter) {
-  SKIP_IF_CRIMSON();
+TEST_P(LibRadosIoEC, XattrIter) {
   char buf[128];
   char attr1[] = "attr1";
   char attr1_buf[] = "foo bar baz";
@@ -459,3 +457,6 @@ TEST_F(LibRadosIoEC, XattrIter) {
   }
   rados_getxattrs_end(iter);
 }
+
+INSTANTIATE_TEST_SUITE_P_REPLICA(LibRadosIo);
+INSTANTIATE_TEST_SUITE_P_EC(LibRadosIoEC);

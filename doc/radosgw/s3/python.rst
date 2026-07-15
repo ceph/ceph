@@ -27,7 +27,7 @@ This creates a connection so that you can interact with the server.
 Listing Owned Buckets
 ---------------------
 
-This gets a list of Buckets that you own.
+This gets a list of buckets that you own.
 This also prints out the bucket name and creation date of each bucket.
 
 .. code-block:: python
@@ -82,7 +82,7 @@ Deleting a Bucket
 
 .. note::
 
-   The Bucket must be empty! Otherwise it won't work!
+   The bucket must be empty! Otherwise it won't work!
 
 .. code-block:: python
 
@@ -183,7 +183,7 @@ The output of this will look something like::
 Using S3 API Extensions 
 -----------------------
 
-To use the boto3 client to tests the RadosGW extensions to the S3 API, the `extensions file`_ should be placed under: ``~/.aws/models/s3/2006-03-01/`` directory.
+To use the boto3 client to test the RadosGW extensions to the S3 API, the `extensions file`_ should be placed under: ``~/.aws/models/s3/2006-03-01/`` directory.
 For example, unordered list of objects could be fetched using:
 
 .. code-block:: python

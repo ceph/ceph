@@ -171,33 +171,44 @@ struct omap_manager_test_t :
     const std::string &first,
     const std::string &last) {
     logger().debug("rm keys in range {} ~ {}", first, last);
-    auto config = OMapManager::omap_list_config_t()
-      .with_max(3000)
-      .with_inclusive(true, false);
 
     with_trans_intr(
       t,
       [&, this](auto &t) {
       return omap_manager->omap_rm_key_range(
-	omap_root, t, first, last, config);
+        omap_root, t, first, last);
     }).unsafe_get();
 
     std::vector<std::string> keys;
-    size_t count = 0;
     for (auto iter = test_omap_mappings.begin();
-	iter != test_omap_mappings.end(); ) {
+      iter != test_omap_mappings.end(); ) {
       if (iter->first >= first && iter->first < last) {
-	keys.push_back(iter->first);
-	iter = test_omap_mappings.erase(iter);
-	count++;
+        keys.push_back(iter->first);
+        iter = test_omap_mappings.erase(iter);
       } else {
-	iter++;
+        iter++;
       }
-      if (count == config.max_result_size) {
-	break;
+      if (iter->first >= last) {
+        break;
       }
     }
     return keys;
+  }
+
+  unsigned count_live_omap_extents() {
+    auto t = create_read_transaction();
+    unsigned count = 0;
+    with_trans_intr(*t, [this, &count](auto &t) {
+      return tm->get_lba_manager()->scan_mapped_space(
+        t,
+        [&count](paddr_t paddr, extent_len_t len, extent_types_t type, laddr_t laddr) {
+          if (type == extent_types_t::OMAP_INNER ||
+              type == extent_types_t::OMAP_LEAF) {
+            count++;
+          }
+        });
+    }).unsafe_get();
+    return count;
   }
 
   void list(
@@ -387,7 +398,8 @@ struct omap_manager_test_t :
     omap_root_t omap_root = with_trans_intr(
       *t,
       [this](auto &t) {
-	return omap_manager->initialize_omap(t, L_ADDR_MIN,
+	auto hint = laddr_hint_t::create_global_md_hint();
+	return omap_manager->initialize_omap(t, hint,
 	  omap_type_t::OMAP);
       }).unsafe_get();
     submit_transaction(std::move(t));
@@ -533,6 +545,17 @@ TEST_P(omap_manager_test_t, leafnode_split_merge_balancing)
       submit_transaction(std::move(t));
       check_mappings(omap_root);
     }
+    auto final_count = count_live_omap_extents();
+    logger().debug("leafnode_split_merge_balancing final live omap extents: {}",
+                   final_count);
+    // After contracting back to depth 1, the tree consists of exactly the root leaf node.
+    EXPECT_EQ(final_count, 1U);
+
+    logger().debug("== clearing entire tree and verifying no leaks");
+    auto t_clear = create_mutate_transaction();
+    clear(omap_root, *t_clear);
+    submit_transaction(std::move(t_clear));
+    EXPECT_EQ(count_live_omap_extents(), 0U);
   });
 }
 
@@ -585,6 +608,18 @@ TEST_P(omap_manager_test_t, innernode_split_merge_balancing)
       submit_transaction(std::move(t));
     }
     check_mappings(omap_root);
+    auto final_count = count_live_omap_extents();
+    logger().debug("innernode_split_merge_balancing final live omap extents: {}",
+                   final_count);
+    // Bound derivation: 64 KiB OMAP_LEAF_BLOCK_SIZE / ~580 B entry size (50 B key + 512 B value
+    // + overhead) => healthy post-merge leaves hold >=55 entries, so count is <= size / 55 + C.
+    EXPECT_LE(final_count, test_omap_mappings.size() / 40 + 20U);
+
+    logger().debug("== clearing entire tree and verifying no leaks");
+    auto t_clear = create_mutate_transaction();
+    clear(omap_root, *t_clear);
+    submit_transaction(std::move(t_clear));
+    EXPECT_EQ(count_live_omap_extents(), 0U);
   });
 }
 
@@ -607,6 +642,7 @@ TEST_P(omap_manager_test_t, clear)
     auto t = create_mutate_transaction();
     clear(omap_root, *t);
     submit_transaction(std::move(t));
+    EXPECT_EQ(count_live_omap_extents(), 0U);
   });
 }
 

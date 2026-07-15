@@ -2,10 +2,16 @@ teuthology:
   premerge: |
     log.debug("base kernel %s", base_config.kernel)
     local kernel = base_config.kernel
-    if kernel.branch ~= "distro" then
+    if kernel ~= nil and kernel.branch ~= "distro" then
       log.debug("overriding testing kernel with %s", kernel)
       yaml_fragment.kernel.client = kernel
     end
+  postmerge:
+    - |
+      if yaml.os_type == "rocky" then
+        log.debug("not testing on rocky: https://tracker.ceph.com/issues/74907")
+        reject()
+      end
 
 kernel:
   client:

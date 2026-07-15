@@ -20,9 +20,8 @@ Advanced: Metadata repair tools
 .. note:: The Ceph file system must be offline before metadata repair tools can
    be used on it. The tools will complain if they are invoked when the file
    system is online. If any of the recovery steps do not complete successfully,
-   DO NOT proceeed to run any more recovery steps. If any recovery step fails,
-   seek help from experts via mailing lists and IRC channels and Slack
-   channels.
+   DO NOT proceed to run any more recovery steps. If any recovery step fails,
+   seek help from experts via mailing lists or IRC/Slack channels.
 
 Journal export
 --------------
@@ -90,7 +89,7 @@ file system has or had multiple active MDS daemons.
    journal data has been extracted by other means such as ``recover_dentries``.
    Resetting the journal is likely to leave orphaned objects in the data pool
    and could result in the re-allocation of already-written inodes resulting in
-   faulty behaviour of the file system (bugs, etc..).
+   faulty behavior of the file system (bugs, etc..).
 
 MDS table wipes
 ---------------
@@ -215,7 +214,7 @@ time for long running tasks.
     ceph -s
 
 The data scan tools (``scan_extents``, ``scan_inodes``, and ``scan_links``)
-will automatically report their progress to the Ceph manager if the ``cli_api``
+will automatically report their progress to the Ceph Manager if the ``cli_api``
 module is enabled. Progress updates include:
 
 - Number of objects processed and total objects
@@ -231,15 +230,15 @@ unique progress event identified by the operation name and process ID.
    to function. If progress updates are not appearing in ``ceph -s``, verify
    that:
 
-   - The ``cli_api`` manager module is enabled
+   - The ``cli_api`` Manager module is enabled
    - The ``ceph`` command is available in your PATH
    - Your ``CEPH_CONF`` environment variable (if set) points to a valid
      configuration file
 
 Progress updates will be automatically disabled if the system cannot
-communicate with the Ceph manager or if the required module is not available.
+communicate with the Ceph Manager or if the required module is not available.
 Console output will continue to show local progress information even if
-manager updates are disabled.
+Manager updates are disabled.
 
 If the root inode or MDS directory (``~mdsdir``) is missing or corrupt, run the following command: 
 
@@ -402,7 +401,7 @@ at recovery since the existing metadata pool would not be modified.
 
 #. Create a recovery file system. This recovery file system will be used to
    recover the data in the damaged pool. First, the filesystem will have a data
-   pool deployed for it. Then you will attacha new metadata pool to the new
+   pool deployed for it. Then you will attach a new metadata pool to the new
    data pool. Then you will set the new metadata pool to be backed by the old
    data pool. 
 
@@ -417,7 +416,7 @@ at recovery since the existing metadata pool would not be modified.
       The ``--recover`` flag prevents any MDS daemon from joining the new file
       system.
 
-#. Create the intial metadata for the file system:
+#. Create the initial metadata for the file system:
 
    .. prompt:: bash #
 

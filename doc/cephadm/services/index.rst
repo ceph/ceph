@@ -42,13 +42,13 @@ type, use the optional ``--type`` parameter
 
 .. prompt:: bash #
 
-    ceph orch ls [--service_type type] [--service_name name] [--export] [--format f] [--refresh]
+    ceph orch ls [--service_type type] [--service_name name] [--export] [--format f] [--refresh]
 
 Discover the status of a particular service or daemon:
 
 .. prompt:: bash #
 
-    ceph orch ls --service_type type --service_name <name> [--refresh]
+    ceph orch ls --service_type type --service_name <name> [--refresh]
 
 To export the service specifications known to the orchestrator, run the following command:
 
@@ -638,6 +638,8 @@ false. Examples:
       - argument: "--annotation=com.example.note=a simple example"
 
 
+.. _cephadm-container-mount:
+
 Mounting Files with Extra Container Arguments
 ---------------------------------------------
 
@@ -804,6 +806,13 @@ For example:
 
     ceph orch rm rgw.myrgw
 
+The same command accepts ``--force`` and ``--force-delete-data``. Use
+``ceph orch rm <service-name> --force --force-delete-data`` when you want
+cephadm to remove on-disk data for supported daemon types instead of relocating
+it under ``<fsid>/removed/``. The latter flag requires ``--force``. The same
+pair of flags applies to ``ceph orch daemon rm <daemon-name>`` when removing
+individual daemons.
+
 
 .. _cephadm-spec-unmanaged:
 
@@ -819,7 +828,7 @@ In order to fully remove a service, see :ref:`orch-rm`.
 Disabling Automatic Management of Daemons
 -----------------------------------------
 
-To disable the automatic management of dameons, set ``unmanaged=True`` in the
+To disable the automatic management of daemons, set ``unmanaged=True`` in the
 :ref:`orchestrator-cli-service-spec` (``mgr.yaml``).
 
 ``mgr.yaml``:

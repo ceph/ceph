@@ -47,10 +47,10 @@ from ceph.deployment.service_spec import (
     TunedProfileSpec,
 )
 from ceph.deployment.drive_group import DriveGroupSpec
-from ceph.deployment.hostspec import HostSpec, SpecValidationError
+from ceph.deployment.hostspec import HostSpec
 from ceph.utils import datetime_to_str, str_to_datetime
 
-from mgr_module import MgrModule, CLICommand, HandleCommandResult
+from mgr_module import MgrModule, HandleCommandResult
 
 
 logger = logging.getLogger(__name__)
@@ -103,30 +103,6 @@ def set_exception_subject(kind: str, subject: str, overwrite: bool = False) -> I
         raise
 
 
-def handle_exception(prefix: str, perm: str, func: FuncT) -> FuncT:
-    @wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
-        try:
-            return func(*args, **kwargs)
-        except (OrchestratorError, SpecValidationError) as e:
-            # Do not print Traceback for expected errors.
-            return HandleCommandResult(retval=e.errno, stderr=str(e))
-        except ImportError as e:
-            return HandleCommandResult(retval=-errno.ENOENT, stderr=str(e))
-        except NotImplementedError:
-            msg = 'This Orchestrator does not support `{}`'.format(prefix)
-            return HandleCommandResult(retval=-errno.ENOENT, stderr=msg)
-
-    # misuse lambda to copy `wrapper`
-    wrapper_copy = lambda *l_args, **l_kwargs: wrapper(*l_args, **l_kwargs)  # noqa: E731
-    wrapper_copy._prefix = prefix  # type: ignore
-    wrapper_copy._cli_command = CLICommand(prefix, perm)  # type: ignore
-    wrapper_copy._cli_command.store_func_metadata(func)  # type: ignore
-    wrapper_copy._cli_command.func = wrapper_copy  # type: ignore
-
-    return cast(FuncT, wrapper_copy)
-
-
 def handle_orch_error(f: Callable[..., T]) -> Callable[..., 'OrchResult[T]']:
     """
     Decorator to make Orchestrator methods return
@@ -145,47 +121,6 @@ def handle_orch_error(f: Callable[..., T]) -> Callable[..., 'OrchResult[T]']:
             return OrchResult(None, exception=e)
 
     return cast(Callable[..., OrchResult[T]], wrapper)
-
-
-class InnerCliCommandCallable(Protocol):
-    def __call__(self, prefix: str) -> Callable[[FuncT], FuncT]:
-        ...
-
-
-def _cli_command(perm: str) -> InnerCliCommandCallable:
-    def inner_cli_command(prefix: str) -> Callable[[FuncT], FuncT]:
-        return lambda func: handle_exception(prefix, perm, func)
-    return inner_cli_command
-
-
-_cli_read_command = _cli_command('r')
-_cli_write_command = _cli_command('rw')
-
-
-class CLICommandMeta(type):
-    """
-    This is a workaround for the use of a global variable CLICommand.COMMANDS which
-    prevents modules from importing any other module.
-
-    We make use of CLICommand, except for the use of the global variable.
-    """
-    def __init__(cls, name: str, bases: Any, dct: Any) -> None:
-        super(CLICommandMeta, cls).__init__(name, bases, dct)
-        dispatch: Dict[str, CLICommand] = {}
-        for v in dct.values():
-            try:
-                dispatch[v._prefix] = v._cli_command
-            except AttributeError:
-                pass
-
-        def handle_command(self: Any, inbuf: Optional[str], cmd: dict) -> Any:
-            if cmd['prefix'] not in dispatch:
-                return self.handle_command(inbuf, cmd)
-
-            return dispatch[cmd['prefix']].call(self, cmd, inbuf)
-
-        cls.COMMANDS = [cmd.dump_cmd() for cmd in dispatch.values()]
-        cls.handle_command = handle_command
 
 
 class OrchResult(Generic[T]):
@@ -432,9 +367,17 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def node_proxy_firmware(self, hostname: Optional[str] = None) -> OrchResult[Dict[str, Any]]:
+        """
+        Return node-proxy firmware report
+
+        :param hostname: hostname
+        """
+        raise NotImplementedError()
+
     def node_proxy_firmwares(self, hostname: Optional[str] = None) -> OrchResult[Dict[str, Any]]:
         """
-        Return node-proxy firmwares report
+        Return node-proxy firmware report (deprecated alias)
 
         :param hostname: hostname
         """
@@ -604,6 +547,9 @@ class Orchestrator(object):
     def cert_store_key_ls(self, include_cephadm_generated_keys: bool = False) -> OrchResult[Dict[str, Any]]:
         raise NotImplementedError()
 
+    def get_nvmeof_tls_bundle(self, service_name: str, daemon_name: str) -> OrchResult[Dict[str, str]]:
+        raise NotImplementedError()
+
     def cert_store_get_cert(
         self,
         cert_name: str,
@@ -727,7 +673,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_daemons(self, names: List[str]) -> OrchResult[List[str]]:
+    def remove_daemons(self, names: List[str], force_delete_data: bool = False) -> OrchResult[List[str]]:
         """
         Remove specific daemon(s).
 
@@ -735,7 +681,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_service(self, service_name: str, force: bool = False) -> OrchResult[str]:
+    def remove_service(self, service_name: str, force: bool = False, force_delete_data: bool = False) -> OrchResult[str]:
         """
         Remove a service (a collection of daemons).
 
@@ -927,6 +873,14 @@ class Orchestrator(object):
         """remove prometheus target for multi-cluster"""
         raise NotImplementedError()
 
+    def set_prometheus_remote_write(self, url: str, remote_write_allowed_metrics: List[str]) -> OrchResult[str]:
+        """set prometheus remote write url and allowed metrics for multi-cluster"""
+        raise NotImplementedError()
+
+    def remove_prometheus_remote_write(self, url: str) -> OrchResult[str]:
+        """remove prometheus remote write url and allowed metrics for multi-cluster"""
+        raise NotImplementedError()
+
     def get_alertmanager_access_info(self) -> OrchResult[Dict[str, str]]:
         """get alertmanager access information"""
         raise NotImplementedError()
@@ -1014,7 +968,8 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def upgrade_start(self, image: Optional[str], version: Optional[str], daemon_types: Optional[List[str]],
-                      hosts: Optional[str], services: Optional[List[str]], limit: Optional[int]) -> OrchResult[str]:
+                      hosts: Optional[str], services: Optional[List[str]], limit: Optional[int],
+                      bucket_type: Optional[str] = None, bucket_name: Optional[str] = None) -> OrchResult[str]:
         raise NotImplementedError()
 
     def upgrade_pause(self) -> OrchResult[str]:
@@ -1271,7 +1226,8 @@ class DaemonDescription(object):
                  rank_generation: Optional[int] = None,
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
-                 pending_daemon_config: bool = False
+                 pending_daemon_config: bool = False,
+                 user_stopped: bool = False
                  ) -> None:
 
         #: Host is at the same granularity as InventoryHost
@@ -1347,6 +1303,7 @@ class DaemonDescription(object):
             self.extra_entrypoint_args = ArgumentSpec.from_general_args(
                 extra_entrypoint_args)
         self.pending_daemon_config = pending_daemon_config
+        self.user_stopped = user_stopped
 
     def __setattr__(self, name: str, value: Any) -> None:
         if value is not None and name in ('extra_container_args', 'extra_entrypoint_args'):
@@ -1471,6 +1428,9 @@ class DaemonDescription(object):
     def update_pending_daemon_config(self, value: bool) -> None:
         self.pending_daemon_config = value
 
+    def update_user_stopped_status(self, value: bool) -> None:
+        self.user_stopped = value
+
     def __repr__(self) -> str:
         return "<DaemonDescription>({type}.{id})".format(type=self.daemon_type,
                                                          id=self.daemon_id)
@@ -1505,6 +1465,7 @@ class DaemonDescription(object):
         out['rank_generation'] = self.rank_generation
         out['systemd_unit'] = self.systemd_unit
         out['pending_daemon_config'] = self.pending_daemon_config
+        out['user_stopped'] = self.user_stopped
 
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
                   'last_configured']:
@@ -1543,6 +1504,7 @@ class DaemonDescription(object):
         out['ip'] = self.ip
         out['systemd_unit'] = self.systemd_unit
         out['pending_daemon_config'] = self.pending_daemon_config
+        out['user_stopped'] = self.user_stopped
 
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
                   'last_configured']:

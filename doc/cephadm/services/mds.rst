@@ -8,7 +8,7 @@ MDS Service
 Deploy CephFS
 =============
 
-One or more MDS daemons is required to use the :term:`CephFS` file system.
+One or more MDS daemons are required to use the :term:`CephFS` file system.
 These are created automatically if the newer ``ceph fs volume``
 interface is used to create a new file system. For more information,
 see :ref:`fs-volumes-and-subvolumes`.

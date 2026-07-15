@@ -21,7 +21,7 @@ from teuthology import packaging
 from teuthology.orchestra import run
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.config import config as teuth_config
-from teuthology.exceptions import ConfigError, CommandFailedError
+from teuthology.exceptions import ConfigError, CommandFailedError, MaxWhileTries
 from textwrap import dedent
 from tasks.cephfs.filesystem import MDSCluster, Filesystem
 from tasks.daemonwatchdog import DaemonWatchdog
@@ -371,7 +371,6 @@ def ceph_log(ctx, config):
 
     update_archive_setting(ctx, 'log', '/var/log/ceph')
 
-
     try:
         yield
 
@@ -382,41 +381,73 @@ def ceph_log(ctx, config):
 
     finally:
         log.info('Checking cluster log for badness...')
+
+        log_path = '/var/log/ceph/{fsid}/ceph.log'.format(fsid=fsid)
+
+        def _ceph_log_exists():
+            try:
+                ctx.ceph[cluster_name].bootstrap_remote.run(
+                    args=['sudo', 'test', '-f', log_path],
+                )
+                return True
+            except CommandFailedError:
+                return False
+
         def first_in_ceph_log(pattern, excludes, only_match):
             """
-            Find the first occurrence of the pattern specified in the Ceph log,
-            Returns None if none found.
+            Find the first occurrence of the pattern specified in the Ceph log.
 
-            :param pattern: Pattern scanned for.
-            :param excludes: Patterns to ignore.
-            :return: First line of text (or None if not found)
+            Returns:
+                - matching line as a string if found
+                - None if the file does not exist or no match is found
+
+            Raises:
+                - CommandFailedError if the scan command itself fails unexpectedly
             """
+            if not _ceph_log_exists():
+                log.warning('Skipping cluster log scan: %s does not exist', log_path)
+                return None
+
             args = [
                 'sudo',
-                'egrep', pattern,
-                '/var/log/ceph/{fsid}/ceph.log'.format(
-                    fsid=fsid),
+                'grep', '-E', pattern,
+                log_path,
             ]
             if only_match:
-                args.extend([run.Raw('|'), 'egrep', '|'.join(only_match)])
+                args.extend([run.Raw('|'), 'grep', '-E', '|'.join(only_match)])
             if excludes:
                 for exclude in excludes:
-                    args.extend([run.Raw('|'), 'egrep', '-v', exclude])
+                    args.extend([run.Raw('|'), 'grep', '-E', '-v', exclude])
             args.extend([
                 run.Raw('|'), 'head', '-n', '1',
             ])
+
             r = ctx.ceph[cluster_name].bootstrap_remote.run(
                 stdout=BytesIO(),
                 args=args,
                 stderr=StringIO(),
+                check_status=False,
             )
-            stdout = r.stdout.getvalue().decode()
+
+            stdout = r.stdout.getvalue().decode(errors='replace')
+            stderr = r.stderr.getvalue().strip()
+            exitstatus = getattr(r, 'exitstatus', None)
+
             if stdout:
                 return stdout
-            stderr = r.stderr.getvalue()
-            if stderr:
-                return stderr
-            return None
+
+            # No stdout and no stderr means no match.
+            if not stderr:
+                return None
+
+            # stderr is a grep/pipeline execution problem, not a log match.
+            raise CommandFailedError(
+                'error scanning cluster log {}: {}{}'.format(
+                    log_path,
+                    stderr,
+                    '' if exitstatus is None else ' (exitstatus={})'.format(exitstatus),
+                )
+            )
 
         # NOTE: technically the first and third arg to first_in_ceph_log
         # are serving a similar purpose here of being something we
@@ -425,21 +456,32 @@ def ceph_log(ctx, config):
         # we match even if the test yaml specifies nothing else, and then the
         # log-only-match options are for when a test only wants to fail on
         # a specific subset of log lines that '\[ERR\]|\[WRN\]|\[SEC\]' matches
-        if first_in_ceph_log('\[ERR\]|\[WRN\]|\[SEC\]',
-                             config.get('log-ignorelist'),
-                             config.get('log-only-match')) is not None:
-            log.warning('Found errors (ERR|WRN|SEC) in cluster log')
-            ctx.summary['success'] = False
-            # use the most severe problem as the failure reason
+        try:
+            if first_in_ceph_log(
+                r'\[ERR\]|\[WRN\]|\[SEC\]',
+                config.get('log-ignorelist'),
+                config.get('log-only-match'),
+            ) is not None:
+                log.warning('Found errors (ERR|WRN|SEC) in cluster log')
+                ctx.summary['success'] = False
+                # use the most severe problem as the failure reason
+                if 'failure_reason' not in ctx.summary:
+                    for pattern in [r'\[SEC\]', r'\[ERR\]', r'\[WRN\]']:
+                        match = first_in_ceph_log(
+                            pattern,
+                            config.get('log-ignorelist'),
+                            config.get('log-only-match'),
+                        )
+                        if match is not None:
+                            ctx.summary['failure_reason'] = \
+                                '"{match}" in cluster log'.format(
+                                    match=match.rstrip('\n'),
+                                )
+                            break
+        except CommandFailedError as e:
+            log.warning('Unable to scan cluster log safely: %s', e)
             if 'failure_reason' not in ctx.summary:
-                for pattern in ['\[SEC\]', '\[ERR\]', '\[WRN\]']:
-                    match = first_in_ceph_log(pattern, config['log-ignorelist'], config.get('log-only-match'))
-                    if match is not None:
-                        ctx.summary['failure_reason'] = \
-                            '"{match}" in cluster log'.format(
-                                match=match.rstrip('\n'),
-                            )
-                        break
+                ctx.summary['failure_reason'] = 'cluster log scan failed'
 
         if ctx.archive is not None and \
                 not (ctx.config.get('archive-on-error') and ctx.summary['success']):
@@ -487,8 +529,11 @@ def ceph_log(ctx, config):
                 except OSError:
                     pass
                 try:
-                    teuthology.pull_directory(remote, '/var/log/ceph',  # everything
-                                              os.path.join(sub, 'log'))
+                    teuthology.pull_directory(
+                        remote,
+                        '/var/log/ceph',
+                        os.path.join(sub, 'log'),
+                    )
                 except ReadError:
                     pass
 
@@ -583,12 +628,14 @@ def setup_ca_signed_keys(ctx, config):
             'sudo', 'tee', '-a', '/etc/ssh/ca-key.pub',
         ])
         # make sshd accept the CA signed key
+        # NOTE: the SSH server systemd unit is named 'ssh' on Debian/Ubuntu
+        # and 'sshd' on RHEL/CentOS/Rocky -- try both, but only after the
+        # config write itself has succeeded (grouped with parens so the
+        # restart fallback doesn't mask a failed config write).
         remote.run(args=[
-            'sudo', 'echo', 'TrustedUserCAKeys /etc/ssh/ca-key.pub',
-            run.Raw('|'),
-            'sudo', 'tee', '-a', '/etc/ssh/sshd_config',
-            run.Raw('&&'),
-            'sudo', 'systemctl', 'restart', 'sshd',
+            'sudo', 'sh', '-c',
+            "echo 'TrustedUserCAKeys /etc/ssh/ca-key.pub' | sudo tee -a /etc/ssh/sshd_config && "
+            "(sudo systemctl restart ssh || sudo systemctl restart sshd)"
         ])
 
     # generate a new key pair and sign the pub key to make a cert
@@ -804,11 +851,40 @@ def ceph_bootstrap(ctx, config):
                 'ceph', 'orch', 'host', 'add',
                 remote.shortname
             ])
-            r = _shell(ctx, cluster_name, bootstrap_remote,
-                       ['ceph', 'orch', 'host', 'ls', '--format=json'],
-                       stdout=StringIO())
-            hosts = [node['hostname'] for node in json.loads(r.stdout.getvalue())]
-            assert remote.shortname in hosts
+            try:
+                with contextutil.safe_while(sleep=5, tries=10) as proceed:
+                    while proceed():
+                        # check host has been added
+                        r = _shell(ctx, cluster_name, bootstrap_remote,
+                                   ['ceph', 'orch', 'host', 'ls', '--format=json'],
+                                   stdout=StringIO())
+                        hosts = [node['hostname'] for node in json.loads(r.stdout.getvalue())]
+                        # check host has been given config-key store entry
+                        r = _shell(ctx, cluster_name, bootstrap_remote,
+                                   ['ceph', 'config-key', 'ls'],
+                                   stdout=StringIO())
+                        key_entries = r.stdout.getvalue()
+                        # check host has been added to config-key inventory entry
+                        r = _shell(ctx, cluster_name, bootstrap_remote,
+                                   ['ceph', 'config-key', 'get', 'mgr/cephadm/inventory'],
+                                   stdout=StringIO())
+                        stored_inventory = json.loads(r.stdout.getvalue())
+                        if (
+                            remote.shortname in hosts
+                            and  remote.shortname in key_entries
+                            and remote.shortname in stored_inventory
+                        ):
+                            break
+                        else:
+                            log.info(
+                                f'Host add for {remote.shortname} incomplete\n'
+                                f'Host in host ls: {str(remote.shortname in hosts)}\n'
+                                f'Host got config-key entry: {str(remote.shortname in key_entries)}\n'
+                                f'Host in cephadm inventory config-key entry: {str(remote.shortname in stored_inventory)}\n'
+                            )
+            except MaxWhileTries as e:
+                log.error(f'Hit timeout while adding host {remote.shortname}: {str(e)}')
+                raise e
 
         yield
 
@@ -1083,6 +1159,12 @@ def ceph_osds(ctx, config):
             osd_method = config.get('osd_method')
             if osd_method:
                 add_osd_args.append(osd_method)
+            osd_type = config.get('osd_type')
+            if osd_type:
+                add_osd_args.extend(['--osd-type', osd_type])
+            objectstore = config.get('conf', {}).get('osd', {}).get('osd objectstore')
+            if objectstore and objectstore != 'bluestore':
+                add_osd_args.extend(['--objectstore', objectstore])
             if use_skip_validation:
                 try:
                     _shell(ctx, cluster_name, remote, add_osd_args + ['--skip-validation'])
@@ -1104,9 +1186,37 @@ def ceph_osds(ctx, config):
             cur += 1
 
         if cur == 0:
+            for remote, devs in devs_by_remote.items():
+                for dev in devs:
+                    log.info(f'Zapping device {dev} on {remote.shortname} before OSD deployment')
+                    remote.run(
+                        args=[
+                            'sudo',
+                            ctx.cephadm,
+                            '--image', ctx.ceph[cluster_name].image,
+                            'ceph-volume',
+                            '-c', '/etc/ceph/{}.conf'.format(cluster_name),
+                            '-k', '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
+                            '--fsid', ctx.ceph[cluster_name].fsid,
+                            '--', 'lvm', 'zap', dev
+                        ],
+                        check_status=False,
+                     )
+                    remote.run(args=['sudo', 'wipefs', '--all', dev], check_status=False)
+                    remote.run(
+                        args=['sudo', 'dd', 'if=/dev/zero', f'of={dev}', 'bs=1M', 'count=10', 'conv=fsync'],
+                        check_status=False,
+                    )
+            _shell(ctx, cluster_name, remote, ['ceph', 'orch', 'device', 'ls', '--refresh'])
             osd_cmd = ['ceph', 'orch', 'apply', 'osd', '--all-available-devices']
             if raw:
                 osd_cmd.extend(['--method', 'raw'])
+            osd_type = config.get('osd_type')
+            if osd_type:
+                osd_cmd.extend(['--osd-type', osd_type])
+            objectstore = config.get('conf', {}).get('osd', {}).get('osd objectstore')
+            if objectstore and objectstore != 'bluestore':
+                osd_cmd.extend(['--objectstore', objectstore])
             _shell(ctx, cluster_name, remote, osd_cmd)
             # expect the number of scratch devs
             num_osds = sum(map(len, devs_by_remote.values()))
@@ -1137,6 +1247,21 @@ def ceph_osds(ctx, config):
         yield
     finally:
         pass
+
+
+@contextlib.contextmanager
+def check_enable_crimson(ctx, config):
+    """
+    Enable crimson-related flags if crimson_compat is set.
+    """
+    cluster_name = config['cluster']
+    if config.get('crimson_compat', False):
+        log.info('Enabling crimson flags...')
+        remote = ctx.ceph[cluster_name].bootstrap_remote
+        _shell(ctx, cluster_name, remote, [
+            'ceph', 'osd', 'set-allow-crimson', '--yes-i-really-mean-it'
+        ])
+    yield
 
 
 @contextlib.contextmanager
@@ -1968,19 +2093,20 @@ def task(ctx, config):
                             "section.")
         sha1 = config.get('sha1')
         flavor = config.get('flavor', 'default')
+        distro_suffix = config.get('distro-suffix', None)
 
         if any(_ in container_image_name for _ in (':', '@')):
             log.info('Provided image contains tag or digest, using it as is')
             ctx.ceph[cluster_name].image = container_image_name
-        elif sha1:
-            if flavor == "crimson-debug" or flavor == "crimson-release":
-                ctx.ceph[cluster_name].image = container_image_name + ':' + sha1 + '-' + flavor
-            else:
-                ctx.ceph[cluster_name].image = container_image_name + ':' + sha1
-            ref = sha1
         else:
-            # fall back to using the branch value
+            if sha1:
+                ref = sha1
             ctx.ceph[cluster_name].image = container_image_name + ':' + ref
+
+            if distro_suffix is not None:
+                ctx.ceph[cluster_name].image += '-' + distro_suffix
+            if flavor == "crimson-debug" or flavor == "crimson-release":
+                ctx.ceph[cluster_name].image += '-' + flavor
     log.info('Cluster image is %s' % ctx.ceph[cluster_name].image)
 
 
@@ -2005,6 +2131,7 @@ def task(ctx, config):
             lambda: module_setup(ctx=ctx, config=config),
             lambda: ceph_mgrs(ctx=ctx, config=config),
             lambda: conf_setup(ctx=ctx, config=config),
+            lambda: check_enable_crimson(ctx=ctx, config=config),
             lambda: ceph_osds(ctx=ctx, config=config),
             lambda: ceph_mdss(ctx=ctx, config=config),
             lambda: cephfs_setup(ctx=ctx, config=config),

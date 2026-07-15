@@ -25,6 +25,24 @@ class CliFieldTransformer:
         return self.func(data)
 
 
+class CliEmptyMessage:
+    """Annotation to specify message when EXCLUSIVE_LIST is empty.
+
+    Template variables available:
+     - Fields from the response dict / parent NamedTuple (e.g., {subsystem_nqn})
+     - CLI command arguments passed to NvmeofCLICommand (e.g., {nqn})
+
+    Example:
+        listeners: Annotated[
+            List[Listener],
+            CliFlags.EXCLUSIVE_LIST,
+            CliEmptyMessage("No listeners for {subsystem_nqn}")
+        ]
+    """
+    def __init__(self, template: str):
+        self.template = template
+
+
 class GatewayInfo(NamedTuple):
     bool_status: Annotated[bool, CliFlags.DROP]
     status: int
@@ -41,6 +59,9 @@ class GatewayInfo(NamedTuple):
     max_namespaces: Annotated[int, CliFlags.DROP]
     max_namespaces_per_subsystem: Annotated[int, CliFlags.DROP]
     max_subsystems: Annotated[int, CliFlags.DROP]
+    gateway_initialization_over: Annotated[bool, CliFlags.DROP]
+    io_stats_enabled: Annotated[bool, CliFlags.DROP]
+    location: Annotated[str, CliFlags.DROP]
     spdk_version: Optional[str] = ""
 
 
@@ -82,12 +103,14 @@ class Subsystem(NamedTuple):
     has_dhchap_key: bool
     allow_any_host: bool
     created_without_key: bool = False
+    network_mask: Annotated[List[str], CliFieldTransformer(lambda v: "\n".join(v))] = []
 
 
 class SubsystemList(NamedTuple):
     status: int
     error_message: str
-    subsystems: Annotated[List[Subsystem], CliFlags.EXCLUSIVE_LIST]
+    subsystems: Annotated[List[Subsystem], CliFlags.EXCLUSIVE_LIST,
+                          CliEmptyMessage("No subsystems")]
 
 
 class SubsystemStatus(NamedTuple):
@@ -96,7 +119,21 @@ class SubsystemStatus(NamedTuple):
     nqn: str
 
 
+class KMIPServerEndpoint(NamedTuple):
+    subsystem_nqn: str
+    server_name: str
+    address: str
+    port: int
+
+
+class SubsystemListKMIPEndpoints(NamedTuple):
+    status: int
+    error_message: str
+    endpoints: Annotated[List[KMIPServerEndpoint], CliFlags.EXCLUSIVE_LIST]
+
+
 class Connection(NamedTuple):
+    nqn: str
     traddr: str
     trsvcid: int
     trtype: str
@@ -106,6 +143,7 @@ class Connection(NamedTuple):
     controller_id: int
     use_psk: Optional[bool]
     use_dhchap: Optional[bool]
+    dhchap_controller_origin: Optional[str]
     subsystem: Optional[str]
     disconnected_due_to_keepalive_timeout: Optional[bool]
 
@@ -114,7 +152,37 @@ class ConnectionList(NamedTuple):
     status: int
     error_message: str
     subsystem_nqn: str
-    connections: Annotated[List[Connection], CliFlags.EXCLUSIVE_LIST]
+    connections: Annotated[List[Connection], CliFlags.EXCLUSIVE_LIST,
+                           CliEmptyMessage("No connections for {subsystem_nqn}")]
+
+
+class LatencyStats(NamedTuple):
+    min: int
+    max: int
+    mean: int
+
+
+class LatencyGroup(NamedTuple):
+    io_count: int
+    total: LatencyStats
+    bdev: LatencyStats
+    net: LatencyStats
+    qos: LatencyStats
+
+
+class BucketInfo(NamedTuple):
+    size: int
+    read: LatencyGroup
+    write: LatencyGroup
+
+
+class ConnectionIOStatistics(NamedTuple):
+    status: int
+    error_message: str
+    subsystem_nqn: str
+    host_nqn: str
+    total_num_ios: int
+    buckets: Annotated[List[BucketInfo], CliFlags.EXCLUSIVE_LIST]
 
 
 class NamespaceCreation(NamedTuple):
@@ -123,9 +191,15 @@ class NamespaceCreation(NamedTuple):
     nsid: int
 
 
+class EncryptionEntry(NamedTuple):
+    format: str
+    key_id: str
+
+
 class Namespace(NamedTuple):
     bdev_name: str
     rbd_image_name: Annotated[str, CliHeader("RBD Image")]
+    rados_namespace_name: Annotated[Optional[str], CliHeader("RADOS Namespace")]
     rbd_pool_name: Annotated[str, CliHeader("RBD Pool")]
     load_balancing_group: Annotated[int, CliHeader('LB Group')]
     rbd_image_size: Annotated[int, CliFlags.SIZE]
@@ -142,12 +216,44 @@ class Namespace(NamedTuple):
     trash_image: Optional[bool]
     disable_auto_resize: Optional[bool]
     read_only: Optional[bool]
+    location: Optional[str]
+    encryption_algorithm: Optional[str]
+    encryption_entries: Annotated[List[EncryptionEntry], CliFlags.EXCLUSIVE_LIST]
 
 
 class NamespaceList(NamedTuple):
     status: int
     error_message: str
     namespaces: Annotated[List[Namespace], CliFlags.EXCLUSIVE_LIST]
+
+
+class NamespaceHostInfo(NamedTuple):
+    nqn: Annotated[str, CliHeader("NQN")]
+    nsid: Annotated[int, CliHeader("NSID")]
+    hosts: Annotated[
+        List[str],
+        CliHeader("Hosts"),
+        CliFieldTransformer(lambda v: "\n".join(v) if v else "None")
+    ]
+
+
+class NamespaceHostsList(NamedTuple):
+    status: int
+    error_message: str
+    namespaces: Annotated[List[NamespaceHostInfo], CliFlags.EXCLUSIVE_LIST]
+
+
+class NamespaceLocationInfo(NamedTuple):
+    subsystem: Annotated[str, CliHeader("Subsystem")]
+    load_balancing_group: Annotated[int, CliHeader("Load Balancing Group")]
+    location: Annotated[str, CliHeader("Location")]
+    namespace_count: Annotated[int, CliHeader("Count")]
+
+
+class NamespaceLocationsList(NamedTuple):
+    status: int
+    error_message: str
+    locations: Annotated[List[NamespaceLocationInfo], CliFlags.EXCLUSIVE_LIST]
 
 
 class NamespaceIOStats(NamedTuple):
@@ -183,23 +289,27 @@ class NamespaceIOStats(NamedTuple):
 class Listener(NamedTuple):
     host_name: Annotated[str, CliHeader("Host")]
     trtype: Annotated[str, CliHeader("Transport")]
-    traddr: Annotated[str, CliHeader("Target Address")]
+    adrfam: Annotated[int, CliHeader("Address Family")]  # 0: IPv4, 1: IPv6
+    traddr: Annotated[str, CliHeader("Address")]
+    trsvcid: Annotated[int, CliHeader("Port")]
     secure: Optional[bool]
     active: Optional[bool]
-    adrfam: Annotated[int, CliHeader("Address Family")] = 0  # 0: IPv4, 1: IPv6
-    trsvcid: Annotated[int, CliHeader("Target Port")] = 4420
+    manual: Optional[bool]
 
 
 class ListenerList(NamedTuple):
     status: int
     error_message: str
-    listeners: Annotated[List[Listener], CliFlags.EXCLUSIVE_LIST]
+    listeners: Annotated[List[Listener], CliFlags.EXCLUSIVE_LIST,
+                         CliEmptyMessage("No listeners for {nqn}")]
+    nqn: Annotated[str, CliFlags.DROP] = ""
 
 
 class Host(NamedTuple):
     nqn: str
     use_psk: Optional[bool]
     use_dhchap: Optional[bool]
+    dhchap_controller_origin: Optional[str]
     disconnected_due_to_keepalive_timeout: Annotated[Optional[bool], CliFlags.DROP]
 
 
@@ -208,7 +318,8 @@ class HostsInfo(NamedTuple):
     error_message: str
     allow_any_host: bool
     subsystem_nqn: str
-    hosts: Annotated[List[Host], CliFlags.EXCLUSIVE_LIST]
+    hosts: Annotated[List[Host], CliFlags.EXCLUSIVE_LIST,
+                     CliEmptyMessage("No hosts are allowed to access {subsystem_nqn}")]
 
 
 class PollGroupTransportInfo(NamedTuple):
@@ -231,6 +342,19 @@ class GatewayStatsInfo(NamedTuple):
     error_message: str
     tick_rate: int
     poll_groups: Annotated[List[PollGroupInfo], CliFlags.EXCLUSIVE_LIST]
+
+
+class SpdkThreadInfo(NamedTuple):
+    name: str
+    busy: int
+    idle: int
+
+
+class ThreadStatsInfo(NamedTuple):
+    status: int
+    error_message: str
+    tick_rate: int
+    threads: Annotated[List[SpdkThreadInfo], CliFlags.EXCLUSIVE_LIST]
 
 
 class AnaState(Enum):
@@ -266,6 +390,13 @@ class GatewayListenersInfo(NamedTuple):
 class RequestStatus(NamedTuple):
     status: Annotated[int, CliFlags.EXCLUSIVE_RESULT]
     error_message: str
+
+
+class GwRefreshNetworkStatus(NamedTuple):
+    status: int
+    error_message: str
+    added: List[str]
+    removed: List[str]
 
 
 class ListenAdress(NamedTuple):

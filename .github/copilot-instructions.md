@@ -1,0 +1,399 @@
+# Ceph Coding Agent Instructions
+
+## Repository Overview
+
+Ceph is a scalable distributed storage system providing object, block, and file storage in a unified platform. The codebase is large (hundreds of megabytes) with many CMakeLists.txt files across the project.
+
+**Primary Languages & Technologies:**
+- C++ (main codebase - follows Google C++ Style Guide with modifications)
+- Python 3 (management tools, tests)
+- CMake (build system using Ninja)
+- Bash (scripts and utilities)
+
+**Key Components:**
+- **MON (Monitor)**: Cluster membership and state (`src/mon/`)
+- **OSD (Object Storage Daemon)**: Data storage and replication (`src/osd/`)
+- **MDS (Metadata Server)**: CephFS metadata (`src/mds/`)
+- **MGR (Manager)**: Cluster management and monitoring (`src/mgr/`)
+- **RGW (RADOS Gateway)**: Object storage API (S3/Swift) (`src/rgw/`)
+- **Client Libraries**: librados, librbd, libcephfs (`src/librados/`, `src/librbd/`, etc.)
+
+## Critical Build Requirements
+
+**IMPORTANT: Git Submodule Handling**
+- **DO NOT commit submodule updates** unless specifically working on submodule version updates
+- Use `git add <specific-files>` instead of `git add .` to avoid accidentally staging submodule changes
+- Submodules include: `ceph-erasure-code-corpus`, `ceph-object-corpus`, `src/BLAKE3`, and others
+- If submodules appear modified in `git status`, verify you haven't unintentionally updated them
+
+### Prerequisites (MUST run before building)
+```bash
+# 1. Initialize submodules (REQUIRED - will fail without this)
+git submodule update --init --recursive --recommend-shallow --progress
+
+# 2. Install dependencies
+./install-deps.sh
+
+# 3. For Ubuntu/Debian, also install (verified necessary):
+apt install python3-routes
+```
+
+### Build Process (Standard Development Build)
+```bash
+# From repository root:
+./do_cmake.sh
+cd build
+ninja -j3  # Use -j3 or lower to avoid OOM; each job needs ~2.5GB RAM
+```
+
+**IMPORTANT BUILD NOTES:**
+- `do_cmake.sh` creates **Debug builds** by default (if `.git` exists). Debug builds are 5x slower than release builds.
+- For performance testing, always use: `ARGS="-DCMAKE_BUILD_TYPE=RelWithDebInfo" ./do_cmake.sh`
+- The `build/` directory must NOT exist before running `do_cmake.sh` (script will exit with error)
+- Build can take 40-60GB disk space. Ensure adequate space before starting.
+- Memory: Plan for ~2.5GB RAM per ninja job. Use `-j<N>` to limit jobs on constrained systems.
+- If you see `g++: fatal error: Killed signal terminated program cc1plus`, reduce ninja jobs.
+
+### Running Tests
+
+**Unit Tests (ctest):**
+```bash
+cd build
+ninja  # Ensure build is complete first
+ctest -j$(nproc)  # Run all tests in parallel
+
+# To run specific tests:
+ctest -R <regex_pattern>
+
+# For verbose output:
+ctest -V -R <pattern>
+```
+
+**Note:** Targets starting with `unittest_*` are run by ctest. Targets starting with `ceph_test_*` must be run manually.
+
+**Make Check (Full Test Suite):**
+```bash
+# From repository root:
+./run-make-check.sh
+
+# Or manually:
+cd build
+ninja check -j$(nproc)
+```
+
+**Prerequisites for make check:**
+- `ulimit -n` must be >= 1024 (script sets this automatically)
+- `hostname --fqdn` must work (will fail otherwise)
+- Sufficient file descriptors and AIO resources
+
+**Test logs on failure:** Located in `build/Testing/Temporary/`
+
+**Standalone Tests:**
+```bash
+cd build
+../qa/run-standalone.sh  # Runs standalone test suite
+```
+
+Note: Standalone tests are more extensive and take longer. Capture output to file for analysis.
+
+### Development Cluster (vstart)
+
+Start a local test cluster for development:
+```bash
+cd build
+ninja vstart  # Builds minimal required components
+../src/vstart.sh --debug --new -x --localhost --bluestore
+./bin/ceph -s  # Check cluster status
+
+# Test commands:
+./bin/rbd create foo --size 1000
+./bin/rados -p foo bench 30 write
+
+# Stop cluster:
+../src/stop.sh
+```
+
+**vstart Options:**
+- `--new` or `-n`: Start fresh cluster, destroying existing data
+- `--debug` or `-d`: Enable debug logging
+- `--localhost` or `-l`: Bind to localhost only
+- `--bluestore` or `-b`: Use BlueStore backend (default)
+- `-x`: Enable cephx authentication (on by default)
+- No flags: Reuses existing cluster data (preserves data between restarts)
+
+## Coding Standards
+
+### C++ Code (src/)
+- Follow Google C++ Style Guide with Ceph modifications (see `CodingStyle` file)
+- **Naming:**
+  - Functions: `use_underscores()` (NOT CamelCase)
+  - Classes: `CamelCase` with `m_` prefix for members
+  - Structs (data containers): `lowercase_t`
+  - Constants: `ALL_CAPS` (NOT Google's kConstantName style)
+  - Enums: `ALL_CAPS`
+- **Formatting:**
+  - Indent: 2 spaces (NO tabs)
+  - Always use braces for conditionals, even one-liners
+  - No spaces inside conditionals: `if (foo)` not `if ( foo )`
+- **Headers:** Use `#pragma once` (preferred over include guards)
+- Use `.clang-format` for C++ code formatting
+
+### Python Code
+- Follow PEP-8 strictly for new code
+- Multiple `tox.ini` files exist for Python linting (mypy, flake8, pylint):
+  - `src/pybind/tox.ini` (includes mypy type checking)
+  - `src/cephadm/tox.ini`
+  - `src/ceph-volume/tox.ini`
+  - `src/python-common/tox.ini`
+  - `qa/tox.ini`
+- Run Python tests with `tox` in the relevant directory before submitting
+
+### Commit Messages
+- **Title Format:** `<subsystem>: <imperative mood description>` (max 72 chars)
+  - Examples: `mon: add perf counter for finisher`, `doc/mgr: fix typo`
+- **Body:** Explain both "what" changed and "why", not just "what" changed
+- **Required:** `Signed-off-by: Your Name <email@example.com>` (use `git commit -s`)
+- **Optional:** `Fixes: http://tracker.ceph.com/issues/XXXXX` (before Signed-off-by)
+
+**Common Subsystems:**
+- Core daemons: `mon`, `osd`, `mds`, `mgr`, `rgw`
+- Client libraries: `rados`, `rbd`, `librados`, `librbd`, `libcephfs`
+- Filesystems: `cephfs`, `cephfs-shell`, `cephfs-top`
+- Management: `mgr/dashboard`, `mgr/orchestrator`, `mgr/telemetry`, `cephadm`, `ceph-volume`
+- Storage backends: `bluestore`, `objectstore`, `rocksdb`
+- Core libraries: `common`, `global`, `msg`, `auth`, `crush`, `osdc`
+- Erasure coding: `erasure-code`, `cls`
+- Testing/QA: `qa`, `qa/suites`, `qa/tasks`
+- Build/Infrastructure: `build`, `cmake`, `debian`, `rpm`, `doc`, `admin`
+- Tools: `tools`, `rbd-mirror`, `rbd-nbd`, `ceph-fuse`
+- Other: `crimson`, `pybind`, `python-common`, `compressor`, `crypto`
+- Use path-based prefix for subdirectories: `mgr/dashboard`, `qa/suites`, `src/pybind`
+
+## Common Build Patterns
+
+### CMake Options (via ARGS)
+```bash
+# Performance build:
+ARGS="-DCMAKE_BUILD_TYPE=RelWithDebInfo" ./do_cmake.sh
+
+# Without RADOS Gateway:
+ARGS="-DWITH_RADOSGW=OFF" ./do_cmake.sh
+
+# Use system Boost:
+ARGS="-DWITH_SYSTEM_BOOST=ON" ./do_cmake.sh
+
+# Enable ccache/sccache (auto-detected and used if available in PATH):
+# No manual configuration needed - do_cmake.sh detects them automatically
+
+# Custom compiler:
+ARGS="-DCMAKE_C_COMPILER=gcc-12 -DCMAKE_CXX_COMPILER=g++-12" ./do_cmake.sh
+```
+
+### Building Specific Targets
+```bash
+cd build
+ninja <target_name>  # Build only specific target
+```
+
+## Container Builds
+
+Use `src/script/build-with-container.py` for isolated builds:
+
+```bash
+# Build on CentOS 9:
+./src/script/build-with-container.py -d centos9 -b build.centos9 -e build
+
+# Build on Ubuntu 22.04:
+./src/script/build-with-container.py -d ubuntu22.04 -b build.u2204 -e build
+
+# Run tests in container:
+./src/script/build-with-container.py -e tests
+
+# Interactive shell:
+./src/script/build-with-container.py -e interactive
+```
+
+## CI/CD Workflows
+
+**GitHub Actions Workflows (`.github/workflows/`):**
+- `pr-checklist.yml`: Validates PR checklist completion
+- `check-license.yml`: Ensures no GPL code in certain areas
+- `pr-check-deps.yml`: Dependency validation
+- Other workflows for backports, triage, etc.
+
+**Jenkins CI:**
+- Triggered by PRs or comment: `jenkins test make check`
+- Runs full `run-make-check.sh` on Sepia Lab infrastructure
+- Results posted back to GitHub PR
+
+## Directory Structure
+
+**Essential Paths:**
+```
+ceph/
+├── src/                    # All source code
+│   ├── mon/               # Monitor daemon
+│   ├── osd/               # OSD daemon
+│   ├── mds/               # MDS daemon
+│   ├── mgr/               # Manager daemon
+│   ├── rgw/               # RADOS Gateway
+│   ├── client/            # Client-side code
+│   ├── common/            # Common utilities
+│   ├── msg/               # Messaging layer
+│   ├── auth/              # Authentication
+│   ├── cls/               # Object classes
+│   ├── librados/          # RADOS client library
+│   ├── librbd/            # RBD client library
+│   ├── pybind/            # Python bindings
+│   ├── test/              # Unit tests
+│   ├── script/            # Build and utility scripts
+│   └── vstart.sh          # Development cluster script
+├── qa/                     # Integration test suites (teuthology)
+├── doc/                    # Documentation (RST format)
+├── cmake/                  # CMake modules
+├── build/                  # Build directory (created by do_cmake.sh)
+├── CMakeLists.txt          # Root CMake configuration
+├── do_cmake.sh             # CMake wrapper script
+├── install-deps.sh         # Dependency installation
+├── run-make-check.sh       # Full test suite runner
+└── .clang-format           # C++ formatting rules
+```
+
+## Common Pitfalls & Solutions
+
+### Build Failures
+1. **"No such file or directory" for submodule files:**
+   - **Solution:** Run `git submodule update --init --recursive --recommend-shallow`
+   
+2. **"g++: fatal error: Killed":**
+   - **Solution:** Out of memory. Use `ninja -j2` or `ninja -j1`
+
+3. **"'build' dir already exists":**
+   - **Solution:** `rm -rf build` then re-run `do_cmake.sh`
+
+4. **Python module import errors:**
+   - **Solution:** Run `apt install python3-routes` (often missed in install-deps.sh)
+
+### Test Failures
+1. **"ulimit -n too small":**
+   - **Solution:** `ulimit -n 4096` before running tests
+   
+2. **"hostname --fqdn" fails:**
+   - **Solution:** Fix system hostname configuration
+
+3. **Temp files accumulate in /tmp:**
+   - **Solution:** `rm -fr /tmp/ceph-asok.*` between test runs
+
+## Documentation
+
+- Build documentation: `admin/build-doc` (requires packages from `doc_deps.deb.txt`)
+- Documentation source: `doc/` directory (RST format)
+- Follow Google Developer Documentation Style Guide for doc changes
+- Doc changes must accompany user-facing functionality changes
+
+## Submitting Changes
+
+Ceph has two distinct workflows for submitting changes:
+
+### Workflow 1: Regular PRs (targeting main branch)
+
+**PR Requirements:**
+1. **Target branch**: `main` (NOT stable branches)
+2. **Commits must be signed**: Use `git commit -s` to add `Signed-off-by:` line
+3. **Follow commit message format** (see Commit Messages section above)
+4. **Update documentation** for user-facing changes
+5. **Code licensing**: Must be LGPL 2.1/3.0 compatible (NO GPL in most areas)
+
+**PR Title Format:**
+- Use `<subsystem>: <description>` format
+- Examples: `osd: fix memory leak in BlueStore`, `mgr/dashboard: add user management UI`
+
+**PR Description:**
+- Summarize the PR as a whole
+- Link to tracker issues if applicable
+- Can include notices to maintainers, to-do lists, etc.
+
+**Flagging for Backport:**
+If changes should be backported to stable branches after merging:
+1. Open a tracker issue at https://tracker.ceph.com explaining:
+   - What bug is fixed
+   - Why the bug needs to be fixed in `<release>`
+2. Fill out the Backport field: `Backport: mimic, nautilus`
+
+**Before Submitting:**
+```bash
+# Build and verify:
+./install-deps.sh
+./do_cmake.sh
+cd build && ninja
+
+# Run tests (recommended):
+ctest -R <relevant_tests>
+```
+
+### Workflow 2: Backport PRs (targeting stable branches)
+
+**IMPORTANT:** All fixes should land in `main` first, then be cherry-picked to stable branches.
+
+**PR Requirements:**
+1. **Target branch**: Stable branch (e.g., `nautilus`, `octopus`, `pacific`, `quincy`, `reef`, `squid`, `tentacle`)
+2. **PR Title Format**: **MUST** be prefixed with target branch name
+   - Format: `<branch>: <subsystem>: <description>`
+   - Examples: 
+     - `nautilus: osd: fix memory leak in BlueStore`
+     - `squid: mgr/dashboard: fix user permissions bug`
+     - `tentacle: mon: prevent election storm`
+3. **Milestone**: Set PR milestone to the target stable branch name (e.g., milestone = "nautilus")
+4. **Cherry-pick requirements**:
+   - Use `git cherry-pick -x` to preserve original commit reference
+   - Do NOT modify original commit message except to add "Conflicts" section
+   - All commits must be cherry-picked from `main` branch
+
+**Cherry-Picking Rules:**
+- Cherry-picks MUST use `git cherry-pick -x` 
+- Check `main` git history for follow-up fixes: `git log --grep <SHA1>`
+- If cherry-pick cannot be done, explain why in commit message
+- Commit message generated by `git cherry-pick -x` must NOT be modified except:
+  - Add "Conflicts" section below "cherry picked from commit..." line
+  - Describe manual changes in "Conflicts" section
+  - List all files with manual changes (not just git-flagged conflicts)
+
+**Conflicts Section Example:**
+```
+(cherry picked from commit 01d73020da12f40ccd95ea1e49cfcf663f1a3a75)
+
+Conflicts:
+    src/osd/batlo.cc
+- add_batlo_check has an extra arg in newer code
+```
+
+**Backport Tracker Workflow:**
+1. Create backport tracker issues for tracking (if targeting multiple stable branches)
+2. Use `src/script/backport-create-issue` script from `main` branch
+3. Use `src/script/ceph-backport.sh` script to automate cherry-picking and PR creation
+4. Branch naming convention: `wip-<backport_issue_number>-<stable_branch>`
+
+**Labelling:**
+- Set Milestone to target stable branch
+- Apply same component label as original `main` PR
+
+**DO NOT merge backport PRs yourself** - this is done by release maintainers.
+
+## Quick Reference
+
+**Environment Variables:**
+- `BUILD_DIR`: Override build directory (default: `build`)
+- `CEPH_GIT_DIR`: Path to ceph git checkout (default: `..`)
+- `ARGS`: Pass additional CMake arguments to do_cmake.sh
+
+**Important Files:**
+- `CONTRIBUTING.rst`: Contribution guidelines
+- `SubmittingPatches.rst`: Patch submission process for main branch
+- `SubmittingPatches-backports.rst`: Detailed backport workflow and requirements
+- `CodingStyle`: Coding standards
+- `README.md`: General project information
+- `.clang-format`: C++ code formatting rules
+
+---
+
+**Trust these instructions first.** Only search for additional information if these instructions are incomplete or incorrect. The Ceph build system is complex but well-documented. When in doubt, consult README.md, SubmittingPatches.rst, or ask for guidance.

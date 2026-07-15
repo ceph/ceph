@@ -102,6 +102,9 @@ struct OSDRestrictions {
   /// the CPU load is high. No regular scrubs are allowed.
   bool cpu_overloaded:1{false};
 
+  /// long snap-trimming queues.
+  bool overload_of_snap_trimming:1{false};
+
   /// outside of allowed scrubbing hours/days
   bool restricted_time:1{false};
 
@@ -181,10 +184,11 @@ struct formatter<Scrub::OSDRestrictions> {
   template <typename FormatContext>
   auto format(const Scrub::OSDRestrictions& conds, FormatContext& ctx) const {
     return fmt::format_to(
-	ctx.out(), "<{}.{}.{}.{}.{}>",
+	ctx.out(), "<{}.{}.{}.{}.{}.{}>",
 	conds.max_concurrency_reached ? "max-scrubs" : "",
 	conds.random_backoff_active ? "backoff" : "",
 	conds.cpu_overloaded ? "high-load" : "",
+	conds.overload_of_snap_trimming ? "trim-overload" : "",
 	conds.restricted_time ? "time-restrict" : "",
 	conds.recovery_in_progress ? "recovery" : "");
   }
@@ -219,6 +223,7 @@ enum class delay_cause_t {
   aborted,	    ///< scrub was aborted w/ unspecified reason
   interval,	    ///< the interval had ended mid-scrub
   scrub_params,     ///< the specific scrub type is not allowed
+  operator_abort    ///< operator-requested abort
 };
 }  // namespace Scrub
 
@@ -242,6 +247,7 @@ struct formatter<Scrub::delay_cause_t> : ::fmt::formatter<std::string_view> {
       case aborted:             desc = "aborted"; break;
       case interval:            desc = "interval"; break;
       case scrub_params:        desc = "scrub-mode"; break;
+      case operator_abort:      desc = "operator-abort"; break;
       // better to not have a default case, so that the compiler will warn
     }
     return ::fmt::formatter<string_view>::format(desc, ctx);
@@ -479,6 +485,10 @@ struct ScrubPgIF {
   virtual void on_operator_forced_scrub(
     ceph::Formatter* f,
     scrub_level_t scrub_level) = 0;
+
+  /// abort an ongoing scrub, and cancel any pending operator scrub request
+  virtual void on_operator_abort_scrub(
+    ceph::Formatter* f) = 0;
 
   virtual void dump_scrubber(ceph::Formatter* f) const = 0;
 

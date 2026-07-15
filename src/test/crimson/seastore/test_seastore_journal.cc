@@ -85,7 +85,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
 
   mutable segment_info_t tmp_info;
 
-  journal_test_t() = default;
+  journal_test_t() : JournalTrimmer(true) {}
 
   /*
    * JournalTrimmer interfaces
@@ -157,14 +157,14 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
       block_size = segment_manager->get_block_size();
       sms.reset(new SegmentManagerGroup());
       next = segment_id_t(segment_manager->get_device_id(), 0);
-      journal = journal::make_segmented(*this, *this);
+      journal = journal::make_segmented(0, *this, *this);
       journal->set_write_pipeline(&pipeline);
       sms->add_segment_manager(segment_manager.get());
       return journal->open_for_mkfs();
     }).safe_then([this](auto) {
       dummy_tail = journal_seq_t{0,
         paddr_t::make_seg_paddr(segment_id_t(segment_manager->get_device_id(), 0), 0)};
-    }, crimson::ct_error::assert_all{"Unable to mount"});
+    }, crimson::ct_error::assert_all("Unable to mount"));
   }
 
   seastar::future<> tear_down_fut() final {
@@ -174,7 +174,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
       sms.reset();
       journal.reset();
     }).handle_error(
-      crimson::ct_error::assert_all{"Unable to close"}
+      crimson::ct_error::assert_all("Unable to close")
     );
   }
 
@@ -182,7 +182,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
   auto replay(T &&f) {
     return journal->close(
     ).safe_then([this, f=std::move(f)]() mutable {
-      journal = journal::make_segmented(*this, *this);
+      journal = journal::make_segmented(0, *this, *this);
       journal->set_write_pipeline(&pipeline);
       return journal->replay(std::forward<T>(std::move(f)));
     }).safe_then([this] {

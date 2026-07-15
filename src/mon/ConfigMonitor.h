@@ -11,6 +11,7 @@
 #include <string>
 
 class MonSession;
+struct Subscription;
 
 class ConfigMonitor : public PaxosService
 {

@@ -22,10 +22,17 @@ import { BehaviorSubject, Observable, of, Subject, Subscription } from 'rxjs';
 
 import { TableStatus } from '~/app/shared/classes/table-status';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { Icons, IconSize, ICON_TYPE } from '~/app/shared/enum/icons.enum';
+import { Icons, IconSize, EMPTY_STATE_IMAGE } from '~/app/shared/enum/icons.enum';
 
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
-import { CdTableColumnFilter } from '~/app/shared/models/cd-table-column-filter';
+import {
+  CdTableActiveColumnFilter,
+  CdTableColumnFilter,
+  CdTableColumnFilterOption,
+  CdTableColumnSelectedFilter,
+  CdTableColumnStagedFilter,
+  CdTableCustomColumnFilter
+} from '~/app/shared/models/cd-table-column-filter';
 import { CdTableColumnFiltersChange } from '~/app/shared/models/cd-table-column-filters-change';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -169,7 +176,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   // Allows other components to specify which type of selection they want,
   // e.g. 'single' or 'multi'.
   @Input()
-  selectionType: string = undefined;
+  selectionType: 'single' | 'multiClick' | 'singleRadio' = undefined;
   // By default selected item details will be updated on table refresh, if data has changed
   @Input()
   updateSelectionOnRefresh: 'always' | 'never' | 'onChange' = 'onChange';
@@ -191,6 +198,21 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   // Columns that aren't displayed but can be used as filters
   @Input()
   extraFilterableColumns: CdTableColumn[] = [];
+
+  /*
+  Used to set custom filters on the table.
+  boolean - if you just want to enable custom filters with default settings
+  string - if you want to enable custom filters and set a specific col prop to be used as filter name
+  */
+  @Input()
+  customFilter: boolean | string = false;
+  get isCustomFilterString(): boolean {
+    return typeof this.customFilter === 'string';
+  }
+
+  isCustomFilterLabel(): boolean {
+    return typeof this.customFilter === 'string';
+  }
 
   @Input()
   status = new TableStatus();
@@ -238,10 +260,10 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   @Input()
   emptyStateMessage: string = $localize`There are currently no records to display.`;
   /**
-   * Icon to be displayed when there is no data
+   * Illustration image to be displayed when there is no data
    */
   @Input()
-  emptyStateIcon: string = ICON_TYPE.deploy;
+  emptyStateImage: string = EMPTY_STATE_IMAGE.default;
 
   /**
    * Should be a function to update the input data if undefined nothing will be triggered
@@ -268,6 +290,8 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
   @Output()
   setExpandedRow = new EventEmitter();
+  @Input()
+  compactSearchField? = false;
 
   /**
    * This should be defined if you need access to the applied column filters.
@@ -284,6 +308,12 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     state: { [field: string]: string };
     row: any;
   }>();
+
+  @Output()
+  isCellEditingEvent = new EventEmitter<boolean>();
+
+  @Output()
+  customFilterChange = new EventEmitter<CdTableCustomColumnFilter[]>();
 
   /**
    * Use this variable to access the selected row(s).
@@ -313,11 +343,11 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   }
 
   get showSelectionColumn() {
-    return this.selectionType === 'multiClick';
+    return this.selectionType === 'multiClick' || this.selectionType === 'singleRadio';
   }
 
   get enableSingleSelect() {
-    return this.selectionType === 'single';
+    return this.selectionType === 'single' || this.selectionType === 'singleRadio';
   }
 
   get headerTitle(): string | TemplateRef<any> {
@@ -420,16 +450,52 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   columnFilters: CdTableColumnFilter[] = [];
   selectedFilter: CdTableColumnFilter;
   get columnFiltered(): boolean {
-    return _.some(this.columnFilters, (filter: any) => {
+    const hasStandardFilters = _.some(this.columnFilters, (filter: any) => {
       return filter.value !== undefined;
     });
+    const hasCustomFilters = this.customFilters && this.customFilters.length > 0;
+
+    return hasStandardFilters || hasCustomFilters;
   }
+  customFilters: CdTableCustomColumnFilter[] = [];
+  private nextFilterId = 0;
   private previousRows = new Map<string | number, TableItem[]>();
   private debouncedSearch = this.reloadData.bind(this);
 
   editingCells = new Set<string>();
   editStates: EditState = {};
   formGroup: CdFormGroup = new CdFormGroup({});
+
+  openFilterPopover = false;
+  stagedFilters: CdTableColumnStagedFilter = {};
+  selectedFilters: CdTableColumnSelectedFilter = {};
+  stagedCustomFilters: CdTableCustomColumnFilter[] = [];
+
+  get activeFilters() {
+    const standard: CdTableActiveColumnFilter[] = this.columnFilters
+      .filter((filter) => filter.value)
+      .map((filter) => ({
+        isCustom: false,
+        id: `std_${filter.column.name}`,
+        name: filter.column.name,
+        value: filter.value.formatted,
+        original: filter
+      }));
+
+    const custom: CdTableActiveColumnFilter[] = (this.customFilters || []).map((filter) => ({
+      isCustom: true,
+      id: `cst_${filter.id}`,
+      name: filter.key,
+      value: filter.value,
+      original: filter
+    }));
+
+    return [...standard, ...custom];
+  }
+
+  get isApplyFilterDisabled(): boolean {
+    return this.stagedCustomFilters.some((filter) => !filter.key.trim() || !filter.value.trim());
+  }
 
   constructor(
     // private ngZone: NgZone,
@@ -751,6 +817,31 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     this.tableColumns = this.localColumns;
   }
 
+  toggleFilterPopover() {
+    this.openFilterPopover = !this.openFilterPopover;
+
+    if (this.openFilterPopover) {
+      this.stagedCustomFilters = _.cloneDeep(this.customFilters || []);
+
+      if (this.customFilter && this.customFilters.length === 0) {
+        this.addCustomFilter();
+      }
+    }
+  }
+
+  addCustomFilter() {
+    this.stagedCustomFilters = [
+      ...this.stagedCustomFilters,
+      { id: this.nextFilterId++, key: '', value: '' }
+    ];
+  }
+
+  removeCustomFilter(idToRemove: number) {
+    this.stagedCustomFilters = this.stagedCustomFilters.filter(
+      (filter) => filter.id !== idToRemove
+    );
+  }
+
   initColumnFilters() {
     let filterableColumns = _.filter(this.localColumns, { filterable: true });
     filterableColumns = [...filterableColumns, ...this.extraFilterableColumns];
@@ -764,6 +855,13 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       };
     });
     this.selectedFilter = _.first(this.columnFilters);
+    this.initSelectedColumnFilters();
+  }
+
+  private initSelectedColumnFilters() {
+    this.columnFilters.forEach((filter) => {
+      this.selectedFilters[filter.column.name] = filter.value?.raw;
+    });
   }
 
   private createColumnFilterOption(
@@ -802,15 +900,64 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     });
   }
 
-  onSelectFilter(filter: string) {
-    const value = this.columnFilters.find((x) => x.column.name === filter);
-    this.selectedFilter = value;
+  // saving the filters to a staged variable so they are not applied immediately
+  onChangeFilter(selectedValue: string, filter: CdTableColumnFilter) {
+    const filterName = filter.column.name;
+    const selectedFilter = this.selectedFilters[filterName];
+    const newSelectedFilter = selectedFilter === selectedValue ? undefined : selectedValue;
+
+    this.selectedFilters[filterName] = newSelectedFilter;
+
+    const option = filter.options.find(
+      (x: CdTableColumnFilterOption) => x.raw === newSelectedFilter
+    );
+    this.stagedFilters[filterName] = option;
   }
 
-  onChangeFilter(filter: string) {
-    const option = this.selectedFilter.options.find((x) => x.raw === filter);
-    this.selectedFilter.value = _.isEqual(this.selectedFilter.value, option) ? undefined : option;
+  onSubmitFilter() {
+    this.columnFilters.forEach((filter) => {
+      const filterName = filter.column.name;
+
+      if (this.stagedFilters.hasOwnProperty(filterName)) {
+        filter.value = this.stagedFilters[filterName];
+        this.selectedFilter = filter;
+      }
+    });
+    this.stagedFilters = {};
+
+    if (this.customFilter) {
+      this.customFilters = this.stagedCustomFilters.filter(
+        (customFilter: CdTableCustomColumnFilter) =>
+          customFilter.key.trim() !== '' && customFilter.value.trim() !== ''
+      );
+      this.customFilterChange.emit(this.customFilters);
+    }
+
     this.updateFilter();
+    this.openFilterPopover = false;
+  }
+
+  onRemoveFilter(filter: CdTableActiveColumnFilter) {
+    if (filter.isCustom) {
+      this.customFilters = (this.customFilters || []).filter(
+        (customFilter: CdTableCustomColumnFilter) => customFilter.id !== filter.original.id
+      );
+      this.stagedCustomFilters = this.stagedCustomFilters.filter(
+        (customFilter: CdTableCustomColumnFilter) => customFilter.id !== filter.original.id
+      );
+
+      this.customFilterChange.emit(this.customFilters);
+      this.updateFilter();
+    } else {
+      const filterName = filter.original.name;
+      filter.original.value = undefined;
+      this.selectedFilters[filterName] = undefined;
+      delete this.stagedFilters[filterName];
+      if (this.selectedFilter?.column.name === filterName) {
+        this.selectedFilter = undefined;
+      }
+      this.updateFilter();
+    }
   }
 
   doColumnFiltering() {
@@ -840,6 +987,85 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       data = parts[0];
       dataOut = [...dataOut, ...parts[1]];
     });
+
+    if (this.customFilter && this.customFilters.length > 0) {
+      this.customFilters.forEach((customFilter: CdTableCustomColumnFilter) => {
+        const matchingColumn = this.localColumns.find(
+          (col: CdTableColumn) =>
+            col.name && col.name.toLowerCase() === customFilter.key.trim().toLowerCase()
+        );
+        const resolvedProp = matchingColumn
+          ? (matchingColumn.prop as string)
+          : customFilter.key.trim();
+        const displayKeyName = matchingColumn ? matchingColumn.name : customFilter.key;
+
+        appliedFilters.push({
+          name: displayKeyName,
+          prop: typeof this.customFilter === 'string' ? this.customFilter : resolvedProp,
+          value: { raw: customFilter.value, formatted: customFilter.value }
+        });
+      });
+
+      // grouping filters by keys so we can filter the data with all the given filters
+      const groupedFilters = _.groupBy(
+        this.customFilters,
+        (customFilter: CdTableCustomColumnFilter) => customFilter.key.trim().toLowerCase()
+      );
+      const filterGroups = Object.values(groupedFilters);
+
+      const parts = _.partition(data, (row) => {
+        return filterGroups.every((group) => {
+          return group.some((customFilter: CdTableCustomColumnFilter) => {
+            const matchingColumn = this.localColumns.find(
+              (col: CdTableColumn) =>
+                col.name && col.name.toLowerCase() === customFilter.key.trim().toLowerCase()
+            );
+
+            const filterKey = matchingColumn
+              ? (matchingColumn.prop as string)
+              : customFilter.key.trim();
+            const rawKey = customFilter.key.trim();
+            const filterValue = customFilter.value;
+
+            if (_.has(row, filterKey)) {
+              if (`${_.get(row, filterKey)}` === filterValue) return true;
+            }
+
+            // this is only when the customFilter is for a column that has a
+            // key-value pair for its values.
+            // eg: tags of objects in s3.
+            if (typeof this.customFilter === 'string' && _.has(row, this.customFilter)) {
+              const nestedData = _.get(row, this.customFilter);
+
+              // when the data is an array of objects or strings,
+              // we need to check each element in the array.
+              if (_.isArray(nestedData)) {
+                return _.some(nestedData, (key) => {
+                  if (_.isObject(key) && _.has(key, rawKey)) {
+                    return `${(key as any)[rawKey]}` === filterValue;
+                  }
+                  if (typeof key === 'string') {
+                    return key === `${rawKey}:${filterValue}` || key === `${rawKey}=${filterValue}`;
+                  }
+                  return false;
+                });
+              }
+
+              // if object is a simple dict
+              if (_.isObject(nestedData) && !_.isArray(nestedData)) {
+                if (_.has(nestedData, rawKey)) {
+                  if (`${(nestedData as any)[rawKey]}` === filterValue) return true;
+                }
+              }
+            }
+            return false;
+          });
+        });
+      });
+
+      data = parts[0];
+      dataOut = [...dataOut, ...parts[1]];
+    }
 
     this.columnFiltersChanged.emit({
       filters: appliedFilters,
@@ -1048,43 +1274,78 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
    * or some selected items may have been removed.
    */
   updateSelected() {
-    if (!this.selection?.selected?.length) return;
+    // In server-side mode, if data is empty or not yet loaded, preserve existing selection
+    // This prevents clearing selection during page transitions when data is being fetched
+    if (this.serverSide && (!this.data || this.data.length === 0)) {
+      return;
+    }
 
-    const newSelected = new Set();
+    const itemsFoundOnCurrentPage = new Set();
+    const itemsFromOtherPages = new Set();
+
     this.selection.selected.forEach((selectedItem) => {
+      let foundOnCurrentPage = false;
       for (const row of this.data) {
         if (selectedItem[this.identifier] === row[this.identifier]) {
-          newSelected.add(row);
+          itemsFoundOnCurrentPage.add(row);
+          foundOnCurrentPage = true;
+          break;
         }
+      }
+      // For server-side pagination, preserve items not on current page
+      if (!foundOnCurrentPage && this.serverSide) {
+        itemsFromOtherPages.add(selectedItem);
       }
     });
 
-    const newSelectedArray = Array.from(newSelected.values());
+    const selectedItemsOnCurrentPage = Array.from(itemsFoundOnCurrentPage.values());
+    const selectedItemsOnOtherPages = Array.from(itemsFromOtherPages.values());
 
-    if (newSelectedArray.length === 0) {
+    // For server-side pagination, if no items found on current page but we have
+    // items from other pages, preserve them
+    if (
+      selectedItemsOnCurrentPage.length === 0 &&
+      selectedItemsOnOtherPages.length > 0 &&
+      this.serverSide
+    ) {
+      // No items on current page are selected, but we have selections from other pages
+      // Keep the selection with items from other pages
+      this.selection.selected = selectedItemsOnOtherPages;
+      if (this.updateSelectionOnRefresh !== 'never') {
+        this.updateSelection.emit(_.clone(this.selection));
+      }
+      return;
+    }
+
+    if (selectedItemsOnCurrentPage.length === 0) {
       this.selection.selected = [];
       this.updateSelection.emit(_.clone(this.selection));
       return;
     }
 
-    newSelectedArray.forEach((selection: any) => {
+    selectedItemsOnCurrentPage.forEach((selectedItem: any) => {
       const rowIndex = this.model.data.findIndex(
         (row: TableItem[]) =>
-          _.get(row, [0, 'selected', this.identifier]) === selection[this.identifier]
+          _.get(row, [0, 'selected', this.identifier]) === selectedItem[this.identifier]
       );
       if (rowIndex > -1) {
         this.model.selectRow(rowIndex, true);
       }
     });
 
+    // For server-side pagination, combine found items with items from other pages
+    const finalSelection = this.serverSide
+      ? [...selectedItemsOnCurrentPage, ...selectedItemsOnOtherPages]
+      : selectedItemsOnCurrentPage;
+
     if (
       this.updateSelectionOnRefresh === 'onChange' &&
-      _.isEqual(this.selection.selected, newSelectedArray)
+      _.isEqual(this.selection.selected, finalSelection)
     ) {
       return;
     }
 
-    this.selection.selected = newSelectedArray;
+    this.selection.selected = finalSelection;
 
     if (this.updateSelectionOnRefresh !== 'never') {
       this.updateSelection.emit(_.clone(this.selection));
@@ -1123,7 +1384,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   }
 
   onSelect(selectedRowIndex: number) {
-    if (this.selectionType === 'single') {
+    if (this.selectionType === 'single' || this.selectionType === 'singleRadio') {
       this.model.selectAll(false);
       this.selection.selected = [_.get(this.model.data?.[selectedRowIndex], [0, 'selected'])];
       this.model.selectRow(selectedRowIndex, true);
@@ -1146,7 +1407,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
   onDeselect(deselectedRowIndex: number) {
     this.model.selectRow(deselectedRowIndex, false);
-    if (this.selectionType === 'single') {
+    if (this.selectionType === 'single' || this.selectionType === 'singleRadio') {
       return;
     }
     this._toggleSelection(deselectedRowIndex, false);
@@ -1284,7 +1545,15 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       filter.value = undefined;
     });
     this.selectedFilter = _.first(this.columnFilters);
+    this.customFilters = [];
+    this.stagedCustomFilters = [];
+
+    if (this.customFilter) {
+      this.addCustomFilter();
+    }
+
     this.updateFilter();
+    this.initSelectedColumnFilters();
   }
 
   updateFilter() {
@@ -1300,7 +1569,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       }
       this.rows = this.data;
     } else {
-      let rows = this.columnFilters.length !== 0 ? this.doColumnFiltering() : this.data;
+      let rows = this.doColumnFiltering();
 
       if (this.search.length > 0 && rows?.length) {
         const columns = this.localColumns.filter(
@@ -1445,6 +1714,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     }
     this.formGroup?.get(key).setValue(value);
     this.editStates[rowId][column.prop] = value;
+    this.isCellEditingEvent.emit(true);
   }
 
   saveCellItem(row: any, colProp: string) {
@@ -1470,5 +1740,28 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
   valueChange(rowId: string, colProp: string, value: string) {
     this.editStates[rowId][colProp] = value;
+  }
+
+  cancelCellEdit(rowId: string, colProp: string, event?: Event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    const key = `${rowId}-${colProp}`;
+    if (!this.formGroup.controls[key]) {
+      return;
+    }
+
+    if (this.editStates[rowId]) {
+      delete this.editStates[rowId][colProp];
+    }
+    this.editingCells.clear();
+    this.isCellEditingEvent.emit(false);
+
+    setTimeout(() => {
+      if (this.formGroup.controls[key]) {
+        this.formGroup.removeControl(key);
+      }
+    }, 0);
   }
 }

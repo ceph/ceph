@@ -124,7 +124,7 @@ namespace rgw::dedup {
     ldpp_dout(dpp, 10) << __func__ << "::oid=" << oid << dendl;
     bool exclusive = true; // block overwrite of old objects
     ret = ctl_ioctx.create(oid, exclusive);
-    if (ret >= 0) {
+    if (ret == 0) {
       ldpp_dout(dpp, 10) << __func__ << "::successfully created Epoch object!" << dendl;
       // now try and take ownership
     }
@@ -495,7 +495,7 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 15) << __func__ << "::creating object: " << oid << dendl;
       bool exclusive = true;
       ret = ctl_ioctx.create(oid, exclusive);
-      if (ret >= 0) {
+      if (ret == 0) {
         ldpp_dout(dpp, 15) << __func__ << "::oid=" << oid << " was created!" << dendl;
       }
       else if (ret == -EEXIST) {
@@ -973,7 +973,6 @@ namespace rgw::dedup {
     Formatter::ObjectSection section{*fmt, "dedup_ratio_estimate"};
     fmt->dump_unsigned("s3_bytes_before", s3_bytes_before);
     fmt->dump_unsigned("s3_bytes_after", s3_bytes_after);
-    fmt->dump_unsigned("dup_head_bytes", md5_stats_sum.dup_head_bytes_estimate);
 
     if (s3_bytes_before > s3_bytes_after && s3_bytes_after) {
       double dedup_ratio = (double)s3_bytes_before/s3_bytes_after;
@@ -997,7 +996,6 @@ namespace rgw::dedup {
     Formatter::ObjectSection section{*fmt, "dedup_ratio_actual"};
     fmt->dump_unsigned("s3_bytes_before", s3_bytes_before);
     fmt->dump_unsigned("s3_bytes_after", s3_bytes_after);
-    fmt->dump_unsigned("dup_head_bytes", md5_stats_sum.dup_head_bytes);
     if (s3_bytes_before > s3_bytes_after && s3_bytes_after) {
       double dedup_ratio = (double)s3_bytes_before/s3_bytes_after;
       fmt->dump_float("dedup_ratio", dedup_ratio);
@@ -1030,10 +1028,10 @@ namespace rgw::dedup {
     {
       std::map<std::string, member_time_t> owner_map;
       bool show_time = true;
-      bufferlist bl_arr[num_work_shards];
-      shard_progress_t sp_arr[num_work_shards];
+      std::vector<bufferlist> bl_arr(num_work_shards);
+      std::vector<shard_progress_t> sp_arr(num_work_shards);
       int cnt = collect_shard_stats(store, dpp, epoch.time, num_work_shards,
-                                    WORKER_SHARD_PREFIX, bl_arr, sp_arr);
+                                    WORKER_SHARD_PREFIX, bl_arr.data(), sp_arr.data());
       if (cnt != num_work_shards && 0) {
         std::cerr << ">>>Partial work shard stats recived " << cnt << " / "
                   << num_work_shards << "\n" << std::endl;
@@ -1055,11 +1053,11 @@ namespace rgw::dedup {
           std::cerr << __func__ << "::(2)failed worker_stats_t decode #" << shard << std::endl;
           continue;
         }
-        collect_single_shard_stats(dpp, owner_map, sp_arr, shard, &show_time, "WORKER");
+        collect_single_shard_stats(dpp, owner_map, sp_arr.data(), shard, &show_time, "WORKER");
       }
       Formatter::ObjectSection worker_stats(*fmt, "worker_stats");
-      wrk_stats_sum.dump(fmt);
-      show_incomplete_shards_fmt(has_incomplete_shards, num_work_shards, sp_arr, fmt);
+      wrk_stats_sum.dump(fmt, num_work_shards);
+      show_incomplete_shards_fmt(has_incomplete_shards, num_work_shards, sp_arr.data(), fmt);
       md5_start_time = show_time_func_fmt(epoch.time, show_time, owner_map, fmt);
     }
 
@@ -1067,10 +1065,10 @@ namespace rgw::dedup {
       std::map<std::string, member_time_t> owner_map;
       bool show_time = true;
       md5_stats_t md5_stats_sum;
-      bufferlist bl_arr[num_md5_shards];
-      shard_progress_t sp_arr[num_md5_shards];
+      std::vector<bufferlist> bl_arr(num_md5_shards);
+      std::vector<shard_progress_t> sp_arr(num_md5_shards);
       int cnt = collect_shard_stats(store, dpp, epoch.time, num_md5_shards,
-                                    MD5_SHARD_PREFIX, bl_arr, sp_arr);
+                                    MD5_SHARD_PREFIX, bl_arr.data(), sp_arr.data());
       if (cnt != num_md5_shards && 0) {
         std::cerr << ">>>Partial MD5_SHARD stats recived " << cnt << " / "
                   << num_md5_shards << "\n" << std::endl;
@@ -1092,12 +1090,12 @@ namespace rgw::dedup {
           std::cerr << __func__ << "::failed md5_stats_t decode #" << shard << std::endl;
           continue;
         }
-        collect_single_shard_stats(dpp, owner_map, sp_arr, shard, &show_time, "MD5");
+        collect_single_shard_stats(dpp, owner_map, sp_arr.data(), shard, &show_time, "MD5");
       }
       {
         Formatter::ObjectSection outer(*fmt, "md5_stats");
         md5_stats_sum.dump(fmt);
-        show_incomplete_shards_fmt(has_incomplete_shards, num_md5_shards, sp_arr, fmt);
+        show_incomplete_shards_fmt(has_incomplete_shards, num_md5_shards, sp_arr.data(), fmt);
         show_time_func_fmt(md5_start_time, show_time, owner_map, fmt);
       }
       show_dedup_ratio_estimate_fmt(wrk_stats_sum, md5_stats_sum, fmt);
@@ -1124,7 +1122,7 @@ namespace rgw::dedup {
     // create the object to watch (object may already exist)
     bool exclusive = true;
     ret = ctl_ioctx.create(oid, exclusive);
-    if (ret >= 0) {
+    if (ret == 0) {
       ldpp_dout(dpp, 10) << "dedup_bg::watch_reload():" << oid
                          << " was created!" << dendl;
     }
@@ -1193,24 +1191,21 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  static void report_throttle_state(const struct rgw::dedup::control_t &ctl)
+  static void report_throttle_state(const struct rgw::dedup::control_t &ctl,
+                                    Formatter *fmt)
   {
+    Formatter::ObjectSection section{*fmt, "throttle"};
+    fmt->dump_bool("bucket_index_throttle_enabled",
+                   !ctl.bucket_index_throttle.is_disabled());
     if (!ctl.bucket_index_throttle.is_disabled()) {
-      std::cout << "bucket-index throttle="
-                << ctl.bucket_index_throttle.get_max_calls_per_second()
-                << std::endl;
+      fmt->dump_unsigned("bucket_index_throttle",
+                         ctl.bucket_index_throttle.get_max_calls_per_second());
     }
-    else {
-      std::cout << "bucket-index throttle is disabled" << std::endl;
-    }
-
+    fmt->dump_bool("metadata_throttle_enabled",
+                   !ctl.metadata_access_throttle.is_disabled());
     if (!ctl.metadata_access_throttle.is_disabled()) {
-      std::cout << "metadata throttle="
-                << ctl.metadata_access_throttle.get_max_calls_per_second()
-                << std::endl;
-    }
-    else {
-      std::cout << "metadata throttle is disabled" << std::endl;
+      fmt->dump_unsigned("metadata_throttle",
+                         ctl.metadata_access_throttle.get_max_calls_per_second());
     }
   }
 
@@ -1219,7 +1214,9 @@ namespace rgw::dedup {
   int cluster::dedup_control_bl(rgw::sal::RadosStore *store,
                                 const DoutPrefixProvider *dpp,
                                 urgent_msg_t urgent_msg,
-                                bufferlist urgent_msg_bl)
+                                bufferlist urgent_msg_bl,
+                                Formatter *fmt,
+                                optional_yield y)
   {
     librados::IoCtx ctl_ioctx;
     int ret = get_control_ioctx(store, dpp, ctl_ioctx);
@@ -1227,11 +1224,11 @@ namespace rgw::dedup {
       return ret;
     }
 
-    // 10 seconds timeout
-    const uint64_t timeout_ms = 10*1000;
+    // unlimited timeout
+    const uint64_t timeout_ms = 0;
     bufferlist reply_bl;
     ret = rgw_rados_notify(dpp, ctl_ioctx, DEDUP_WATCH_OBJ, urgent_msg_bl,
-                           timeout_ms, &reply_bl, null_yield);
+                           timeout_ms, &reply_bl, y);
     if (ret < 0) {
       ldpp_dout(dpp, 1) << __func__ << "::failed rgw_rados_notify("
                         << DEDUP_WATCH_OBJ << ")::err="<<cpp_strerror(-ret) << dendl;
@@ -1246,6 +1243,7 @@ namespace rgw::dedup {
       return -EAGAIN;
     }
 
+    bool throttle_reported = false;
     for (auto& ack : acks) {
       try {
         ldpp_dout(dpp, 20) << __func__ << "::ACK: notifier_id=" << ack.notifier_id
@@ -1255,8 +1253,11 @@ namespace rgw::dedup {
         struct rgw::dedup::control_t ctl;
         decode(ctl, iter);
         ldpp_dout(dpp, 10) << __func__ << "::++ACK::ctl=" << ctl << "::ret=" << ret << dendl;
-        if (urgent_msg == URGENT_MSG_THROTTLE) {
-          report_throttle_state(ctl);
+        if (urgent_msg == URGENT_MSG_THROTTLE && !throttle_reported) {
+          ceph_assert(fmt);
+          // report only once
+          report_throttle_state(ctl, fmt);
+          throttle_reported = true;
         }
       } catch (buffer::error& err) {
         ldpp_dout(dpp, 1) << __func__ << "::failed decoding notify acks" << dendl;
@@ -1276,7 +1277,8 @@ namespace rgw::dedup {
   // command-line called from radosgw-admin.cc
   int cluster::dedup_control(rgw::sal::RadosStore *store,
                              const DoutPrefixProvider *dpp,
-                             urgent_msg_t urgent_msg)
+                             urgent_msg_t urgent_msg,
+                             optional_yield y)
   {
     ldpp_dout(dpp, 10) << __func__ << "::dedup_control req = "
                        << get_urgent_msg_names(urgent_msg) << dendl;
@@ -1290,14 +1292,16 @@ namespace rgw::dedup {
 
     bufferlist urgent_msg_bl;
     ceph::encode(urgent_msg, urgent_msg_bl);
-    return dedup_control_bl(store, dpp, urgent_msg, urgent_msg_bl);
+    return dedup_control_bl(store, dpp, urgent_msg, urgent_msg_bl, nullptr, y);
   }
 
   //---------------------------------------------------------------------------
   // command-line called from radosgw-admin.cc
   int cluster::dedup_restart_scan(rgw::sal::RadosStore *store,
                                   dedup_req_type_t dedup_type,
-                                  const DoutPrefixProvider *dpp)
+                                  const DoutPrefixProvider *dpp,
+                                  const dedup_filter_t *p_filter,
+                                  optional_yield y)
   {
     ldpp_dout(dpp, 1) << __func__ << "::dedup_type = " << dedup_type << dendl;
 
@@ -1317,7 +1321,7 @@ namespace rgw::dedup {
     }
 
     // first abort all dedup work!
-    ret = dedup_control(store, dpp, URGENT_MSG_ABORT);
+    ret = dedup_control(store, dpp, URGENT_MSG_ABORT, y);
     if (ret != 0) {
       return ret;
     }
@@ -1339,7 +1343,31 @@ namespace rgw::dedup {
     ret = swap_epoch(store, dpp, &old_epoch, dedup_type, 0, 0);
     if (ret == 0) {
       ldpp_dout(dpp, 10) << __func__ << "::Epoch object was reset" << dendl;
-      return dedup_control(store, dpp, URGENT_MSG_RESTART);
+
+      // Build the RESTART bufferlist, optionally including the filter
+      bufferlist urgent_msg_bl;
+      ceph::encode(URGENT_MSG_RESTART, urgent_msg_bl);
+      bool has_filter = (p_filter != nullptr);
+      ceph::encode(has_filter, urgent_msg_bl);
+      if (has_filter) {
+        const auto& bucket_set = p_filter->get_bucket_filter();
+        ldpp_dout(dpp, 20) << __func__ << "::bucket_set.size()="
+                           << bucket_set.size() << dendl;
+        for (const auto& name : bucket_set) {
+          ldpp_dout(dpp, 20) << __func__ << "::bucket_set::" << name << dendl;
+        }
+
+        const auto& sc_vec = p_filter->get_storage_class_filter();
+        ldpp_dout(dpp, 20) << __func__ << "::sc_vec.size()="
+                           << sc_vec.size() << dendl;
+        for (const auto& name : sc_vec) {
+          ldpp_dout(dpp, 20) << __func__ << "::sc_vec::" << name << dendl;
+        }
+
+        encode(*p_filter, urgent_msg_bl);
+      }
+      return dedup_control_bl(store, dpp, URGENT_MSG_RESTART, urgent_msg_bl,
+                              nullptr, y);
     }
     else {
       return ret;

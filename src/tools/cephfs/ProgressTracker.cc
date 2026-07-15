@@ -6,13 +6,21 @@
 #include <string_view>
 
 #include <boost/asio.hpp>
-#include <boost/process.hpp>
+#include <boost/process/v1.hpp>
+#include <boost/process/v1/child.hpp>
+#include <boost/process/v1/env.hpp>
+#include <boost/process/v1/environment.hpp>
+#include <boost/process/v1/io.hpp>
+#include <boost/process/v1/async_pipe.hpp>
+#include <boost/process/v1/pipe.hpp>
+#include <boost/process/v1/search_path.hpp>
+#include <boost/process/v1/start_dir.hpp>
 
 #include "common/ceph_context.h"
 #include "global/global_context.h"
 #include "include/cephfs/libcephfs.h"
 
-namespace bp = boost::process;
+namespace bp = boost::process::v1;
 namespace asio = boost::asio;
 
 namespace {
@@ -105,7 +113,9 @@ ProgressTracker::set_total(uint64_t total)
 void
 ProgressTracker::display_progress() const
 {
-  if (!started) {
+  auto processed = processed_items.load();
+  auto total = total_items.load();
+  if (!started || !total || (processed > total)) {
     return;
   }
   const time_point now = clock::now();
@@ -290,6 +300,7 @@ ProgressTracker::display_final_summary() const
   if (!started) {
     return;
   }
+
   std::lock_guard<std::mutex> lock(display_mutex);
   std::string completed_status = get_completed_status();
   write_console_line(fmt::format("Completed {}! Processed {}", operation_name, completed_status), false);

@@ -326,12 +326,15 @@ public:
         // do not dispatch out
         return false;
       default:
-        crimson::get_logger(ceph_subsys_ms).error(
-          "{} try_enter_out_dispatching() got wrong io_state {}",
-          conn, io_state);
-        ceph_abort_msg("impossible");
+        abort_wrong_io_state(conn);
       }
     }
+
+    // defined out of line: logging io_state_t here, inside IOHandler, would
+    // instantiate fmt::formatter<io_state_t> before it is declared (it can
+    // only be declared after IOHandler). only this impossible-state path
+    // formats it, so keep the hot switch inline and move the abort out.
+    [[noreturn]] void abort_wrong_io_state(SocketConnection &conn);
 
     void notify_out_dispatching_stopped(
         const char *what, SocketConnection &conn);

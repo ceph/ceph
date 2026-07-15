@@ -1,0 +1,7 @@
+tasks:
+  - exec:
+      client.0:
+        - cephfs-tool -i 0 bench --dir-prefix test1 --files 256 --size=$(( 128 * 2 ** 20 )) --threads=1 --iterations 3
+        - cephfs-tool -i 0 bench --dir-prefix test2 --files 256 --size=$(( 128 * 2 ** 20 )) --threads=16 --iterations 3
+        - cephfs-tool -i 0 bench --dir-prefix test1 --files 256 --size=$(( 128 * 2 ** 20 )) --threads=1 --iterations 3 --per-thread-mount
+        - cephfs-tool -i 0 bench --dir-prefix test2 --files 256 --size=$(( 128 * 2 ** 20 )) --threads=16 --iterations 3 --per-thread-mount

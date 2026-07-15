@@ -11,7 +11,7 @@ from ._version import APIVersion
 
 NO_DESCRIPTION_AVAILABLE = "*No description available*"
 
-logger = logging.getLogger('controllers.docs')
+logger = logging.getLogger(__name__)
 
 
 @Router('/docs', secure=False)
@@ -209,34 +209,33 @@ class Docs(BaseController):
 
         if method.lower() == 'get':
             resp['200'] = {'description': "OK",
-                           'content': {version.to_mime_type():
-                                       {'type': 'object'}}}
+                           'content': {version.to_mime_type(): {'schema': {'type': 'object'}},
+                                       'application/json': {'schema': {'type': 'object'}}}}
         if method.lower() == 'post':
             resp['201'] = {'description': "Resource created.",
-                           'content': {version.to_mime_type():
-                                       {'type': 'object'}}}
+                           'content': {version.to_mime_type(): {'schema': {'type': 'object'}},
+                                       'application/json': {'schema': {'type': 'object'}}}}
         if method.lower() in ['put', 'patch']:
             resp['200'] = {'description': "Resource updated.",
-                           'content': {version.to_mime_type():
-                                       {'type': 'object'}}}
+                           'content': {version.to_mime_type(): {'schema': {'type': 'object'}},
+                                       'application/json': {'schema': {'type': 'object'}}}}
         if method.lower() == 'delete':
             resp['204'] = {'description': "Resource deleted.",
-                           'content': {version.to_mime_type():
-                                       {'type': 'object'}}}
+                           'content': {version.to_mime_type(): {'schema': {'type': 'object'}},
+                                       'application/json': {'schema': {'type': 'object'}}}}
         if method.lower() in ['post', 'put', 'delete']:
             resp['202'] = {'description': "Operation is still executing."
                                           " Please check the task queue.",
-                           'content': {version.to_mime_type():
-                                       {'type': 'object'}}}
+                           'content': {version.to_mime_type(): {'schema': {'type': 'object'}},
+                                       'application/json': {'schema': {'type': 'object'}}}}
 
         if resp_object:
             for status_code, response_body in resp_object.items():
                 if status_code in resp:
+                    schema = {'schema': cls._gen_schema_for_content(response_body)}
                     resp[status_code].update(
-                        {'content':
-                         {version.to_mime_type():
-                          {'schema': cls._gen_schema_for_content(response_body)}
-                          }})
+                        {'content': {version.to_mime_type(): schema,
+                                     'application/json': schema}})
 
         return resp
 

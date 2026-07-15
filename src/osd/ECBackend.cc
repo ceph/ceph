@@ -75,7 +75,8 @@ ECBackend::ECBackend(
   uint64_t stripe_width,
   ECSwitch *s,
   ECExtentCache::LRU &ec_extent_cache_lru)
-  : parent(pg), cct(cct), switcher(s),
+  : ECCommon(*pg->get_dpp()),
+    parent(pg), cct(cct), switcher(s),
 #ifdef WITH_CRIMSON
     read_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener(), *this),
 #else
@@ -121,6 +122,7 @@ void ECBackend::handle_recovery_push(
   recovery_backend.handle_recovery_push(op, m, is_repair);
 
   if (op.after_progress.data_complete &&
+    op.after_progress.omap_complete &&
     !(get_parent()->pgb_is_primary()) &&
     get_parent()->pg_is_remote_backfilling()) {
     struct stat st;
@@ -420,6 +422,28 @@ void ECBackend::handle_sub_write(
   switcher->clear_temp_objs(op.temp_removed);
   dout(30) << __func__ << " missing before " <<
     get_parent()->get_log().get_missing().get_items() << dendl;
+
+  // Update EC omap journal on non-primary shards from log entries
+  // This ensures the journal has the correct generation info when transactions are applied
+  if (get_parent()->get_pool().supports_omap()) {
+    for (auto &&e: op.log_entries) {
+      if (e.is_delete() || e.is_lost_delete() || e.is_replace() || (e.is_clone() && !e.soid.is_snap())) {
+        if (!op.backfill_or_async_recovery) {
+          ec_omap_journal.append_delete(e.soid, e.version.version, e.is_lost_delete());
+          dout(20) << __func__ << " appending delete to journal: "
+                   << (e.is_clone() ? "clone" : "delete")
+                   << " " << e.soid << " version=" << e.version.version
+                   << " lost_delete=" << e.is_lost_delete() << dendl;
+        } else {
+          dout(20) << __func__ << " skipping journal append_delete during backfill/recovery: "
+                   << (e.is_clone() ? "clone" : "delete")
+                   << " " << e.soid << " version=" << e.version.version
+                   << " lost_delete=" << e.is_lost_delete() << dendl;
+        }
+      }
+    }
+  }
+
   // flag set to true during async recovery
   bool async = false;
   pg_missing_tracker_t pmissing = get_parent()->get_local_missing();
@@ -433,6 +457,16 @@ void ECBackend::handle_sub_write(
       dout(30) << " entry is_delete " << e.is_delete() << dendl;
     }
   }
+
+  dout(20) << __func__ << " log_operation: "
+           << "log_entries.size=" << op.log_entries.size()
+           << " updated_hit_set_history=" << (op.updated_hit_set_history ? "present" : "none")
+           << " trim_to=" << op.trim_to
+           << " roll_forward_to=" << op.pg_committed_to
+           << " pg_committed_to=" << op.pg_committed_to
+           << " transaction_applied=" << !op.backfill_or_async_recovery
+           << " async=" << async
+           << dendl;
   get_parent()->log_operation(
     std::move(op.log_entries),
     op.updated_hit_set_history,
@@ -570,8 +604,134 @@ void ECBackend::handle_sub_read(
       reply->attrs_read.erase(*i);
       reply->buffers_read.erase(*i);
       reply->errors[*i] = r;
+      continue;
+    }
+
+    if (!op.omap_headers_to_read.contains(*i)) {
+      continue;
+    }
+
+    if (!get_parent()->get_pool().supports_omap()) {
+      continue;
+    }
+
+    // During recovery, if the OI attribute isn't accessible, we speculatively
+    // say that we want to read omap data.
+    // Now we have access to the OI attribute so we can determine if omap data
+    // should be read or not.
+    auto oi_iter = reply->attrs_read[*i].find(OI_ATTR);
+    if (oi_iter == reply->attrs_read[*i].end()) {
+      continue;
+    }
+
+    try {
+      object_info_t oi;
+      auto p = oi_iter->second.cbegin();
+      decode(oi, p);
+      if (!oi.is_omap()) {
+        reply->omaps_complete[*i] = true;
+        dout(20) << __func__ << ": object " << *i
+                 << " has no omap flag, skipping omap read" << dendl;
+      } else {
+        dout(20) << __func__ << ": object " << *i
+                 << " has omap flag set" << dendl;
+      }
+    } catch (ceph::buffer::error& e) {
+      lgeneric_derr(cct) << __func__ << ": failed to decode OI for " << *i
+              << ": " << e.what() << dendl;
+      get_parent()->clog_warn() << "corrupt object info attribute for " << *i;
+      reply->errors[*i] = -EIO;
+      continue;
     }
   }
+
+  if (get_parent()->get_pool().supports_omap()) {
+    for (set<hobject_t>::iterator i = op.omap_headers_to_read.begin();
+         i != op.omap_headers_to_read.end();
+         ++i) {
+      dout(20) << __func__ << ": fulfilling omap header request on "
+               << *i << dendl;
+      if (reply->errors.contains(*i)) {
+        continue;
+      }
+
+      // Skip if attrs already proved omap processing is complete.
+      if (reply->omaps_complete.contains(*i) && reply->omaps_complete[*i]) {
+        dout(20) << __func__ << ": skipping omap header read for " << *i
+                 << " (no omap flag)" << dendl;
+        continue;
+      }
+
+      int r = omap_get_header(
+        switcher->ch,
+        ghobject_t(*i, ghobject_t::NO_GEN, shard),
+        &reply->omap_headers_read[*i], false,
+        switcher->store);
+      if (r < 0) {
+        reply->attrs_read.erase(*i);
+        reply->omap_headers_read.erase(*i);
+        reply->buffers_read.erase(*i);
+        reply->errors[*i] = r;
+      }
+    }
+
+    for (auto const& [hoid, read_from] : op.omap_read_from) {
+      auto const&[start_key, max_bytes] = read_from;
+      dout(20) << __func__ << ": fulfilling omap read request on " << hoid
+              << " from key " << start_key << dendl;
+
+      if (reply->errors.contains(hoid))
+        continue;
+
+      // Skip if attrs already proved omap processing is complete.
+      if (reply->omaps_complete.contains(hoid) && reply->omaps_complete[hoid]) {
+        dout(20) << __func__ << ": skipping omap entries read for " << hoid
+                 << " (no omap flag)" << dendl;
+        continue;
+      }
+
+      std::map<std::string, ceph::buffer::list> current_batch;
+      reply->omaps_complete[hoid] = false;
+
+      uint64_t available = max_bytes;
+      const auto result = omap_iterate(
+        switcher->ch,
+        ghobject_t(hoid, ghobject_t::NO_GEN, shard),
+        ObjectStore::omap_iter_seek_t{
+        .seek_position = start_key,
+        .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
+        },
+        [max_entries=cct->_conf->osd_recovery_max_omap_entries_per_chunk, &available, &current_batch]
+        (std::string_view key, std::string_view value) {
+          const auto num_new_bytes = key.size() + value.size();
+          if (auto cur_num_entries = current_batch.size(); cur_num_entries > 0) {
+            if (max_entries > 0 && cur_num_entries >= max_entries) {
+              return ObjectStore::omap_iter_ret_t::STOP;
+            }
+            if (num_new_bytes >= available) {
+              return ObjectStore::omap_iter_ret_t::STOP;
+            }
+          }
+          bufferlist val_bl;
+          val_bl.append(value);
+          current_batch.insert(make_pair(key, val_bl));
+          available -= std::min(available, num_new_bytes);
+          return ObjectStore::omap_iter_ret_t::NEXT;
+        }, switcher->store);
+
+      if (result < 0) {
+        reply->attrs_read.erase(hoid);
+        reply->omap_headers_read.erase(hoid);
+        reply->buffers_read.erase(hoid);
+        reply->errors[hoid] = result;
+        current_batch.clear();
+      } else if (result == 0) {
+        reply->omaps_complete[hoid] = true;
+      }
+      reply->omap_entries_read[hoid] = std::move(current_batch);
+    }
+  }
+
   reply->from = get_parent()->whoami_shard();
   reply->tid = op.tid;
 }
@@ -687,7 +847,7 @@ void ECBackend::handle_sub_read_reply(
     }
   }
   for (auto &&[hoid, attr]: op.attrs_read) {
-    ceph_assert(!op.errors.count(hoid));
+    ceph_assert(!op.errors.contains(hoid));
     // if read error better not have sent an attribute
     if (!rop.to_read.contains(hoid)) {
       // We canceled this read! @see filter_read_op
@@ -699,6 +859,49 @@ void ECBackend::handle_sub_read_reply(
     }
     rop.complete.at(hoid).attrs.emplace();
     (*(rop.complete.at(hoid).attrs)).swap(attr);
+  }
+  if (get_parent()->get_pool().supports_omap()) {
+    for (auto &&[hoid, header]: op.omap_headers_read) {
+      ceph_assert(!op.errors.contains(hoid));
+      // if read error better not have sent an attribute
+      if (!rop.to_read.contains(hoid)) {
+        // We canceled this read! @see filter_read_op
+        dout(20) << __func__ << " to_read skipping" << dendl;
+        continue;
+      }
+      if (!rop.complete.contains(hoid)) {
+        rop.complete.emplace(hoid, &sinfo);
+      }
+      rop.complete.at(hoid).omap_header.emplace();
+      (*(rop.complete.at(hoid).omap_header)).swap(header);
+    }
+    for (auto &&[hoid, entries]: op.omap_entries_read) {
+      ceph_assert(!op.errors.contains(hoid));
+      // if read error better not have sent any entries
+      if (!rop.to_read.contains(hoid)) {
+        // We canceled this read! @see filter_read_op
+        dout(20) << __func__ << " to_read skipping" << dendl;
+        continue;
+      }
+      if (!rop.complete.contains(hoid)) {
+        rop.complete.emplace(hoid, &sinfo);
+      }
+      rop.complete.at(hoid).omap_entries.emplace();
+      (*(rop.complete.at(hoid).omap_entries)).swap(entries);
+    }
+    for (auto &&[hoid, omap_complete]: op.omaps_complete) {
+      ceph_assert(!op.errors.contains(hoid));
+      // if read error better not have sent any entries
+      if (!rop.to_read.contains(hoid)) {
+        // We canceled this read! @see filter_read_op
+        dout(20) << __func__ << " to_read skipping" << dendl;
+        continue;
+      }
+      if (!rop.complete.contains(hoid)) {
+        rop.complete.emplace(hoid, &sinfo);
+      }
+      rop.complete.at(hoid).omap_complete = omap_complete;
+    }
   }
   for (auto &&[hoid, err]: op.errors) {
     if (!rop.complete.contains(hoid)) {
@@ -746,7 +949,24 @@ void ECBackend::handle_sub_read_reply(
       }
 
       int err = -EIO; // If attributes needed but not read.
-      if (!rop.to_read.at(oid).want_attrs || rop.complete.at(oid).attrs) {
+      const auto& to_read = rop.to_read.at(oid);
+      const auto& complete = rop.complete.at(oid);
+      bool attrs_satisfied = !to_read.want_attrs || complete.attrs;
+
+      bool omap_satisfied = true;
+      if (get_parent()->get_pool().supports_omap()
+          && (to_read.want_omap_header || to_read.want_omap_keys)) {
+        for (const auto &[shard_id, shard_read] : to_read.shard_reads) {
+          if (shard_read.omap_source) {
+            if (complete.errors.contains(shard_read.pg_shard)) {
+              omap_satisfied = false;
+            }
+            break;
+          }
+        }
+      }
+
+      if (attrs_satisfied && omap_satisfied) {
         err = ec_impl->minimum_to_decode(want_to_read, have, dummy_minimum,
                                                     nullptr);
       }
@@ -799,6 +1019,8 @@ void ECBackend::handle_sub_read_reply(
         // uncompleted objects
         rop.to_read.at(oid).shard_reads.clear();
         rop.to_read.at(oid).want_attrs = false;
+        rop.to_read.at(oid).want_omap_header = false;
+        rop.to_read.at(oid).want_omap_keys = false;
         ++is_complete;
       }
     }
@@ -855,6 +1077,7 @@ void ECBackend::check_recovery_sources(const OSDMapRef &osdmap) {
 }
 
 void ECBackend::on_change() {
+  ec_omap_journal.clear_all();
   rmw_pipeline.on_change();
   read_pipeline.on_change();
   rmw_pipeline.on_change2();
@@ -898,7 +1121,9 @@ struct ECClassicalOp : ECCommon::RMWPipeline::Op {
     map<hobject_t, ECUtil::shard_extent_map_t> *written,
     shard_id_map<ObjectStore::Transaction> *transactions,
     DoutPrefixProvider *dpp,
-    const OSDMapRef &osdmap) final {
+    const OSDMapRef &osdmap,
+    bool& first_write_in_interval,
+    ECOmapJournal &ec_omap_journal) final {
     ceph_assert(t);
     ECTransaction::generate_transactions(
       t.get(),
@@ -913,7 +1138,10 @@ struct ECClassicalOp : ECCommon::RMWPipeline::Op {
       &temp_added,
       &temp_cleared,
       dpp,
-      osdmap);
+      osdmap,
+      first_write_in_interval,
+      ec_omap_journal,
+      pipeline->get_parent()->get_log());
   }
 
   bool skip_transaction(
@@ -1002,6 +1230,38 @@ void ECBackend::submit_transaction(
 }
 
 int ECBackend::objects_read_sync(
+  const hobject_t &hoid,
+  uint64_t object_size,
+  const std::list<std::pair<ec_align_t,
+  std::pair<ceph::buffer::list*, Context*>>> &to_read,
+  CoroHandles coro)
+{
+  int result = 0;
+  bool done = false;
+  bool waiting = false;
+
+  // Callback for the async read
+  Context *on_finish = new LambdaContext([&, coro](int r) {
+    result = r;
+    done = true;
+
+    if (waiting) {
+      coro.resume();
+    }
+  });
+
+  objects_read_async(hoid, object_size, to_read, on_finish, true);
+
+  // If the async read is not yet complete, yield and wait for it to complete
+  if (!done) {
+    waiting = true;
+    coro.yield();
+  }
+
+  return result;
+}
+
+int ECBackend::objects_read_local(
     const hobject_t &hoid,
     uint64_t off,
     uint64_t len,
@@ -1012,12 +1272,11 @@ int ECBackend::objects_read_sync(
     return -EOPNOTSUPP;
   }
 
-  if (get_parent()->get_local_missing().is_missing(hoid)) {
-    return -EIO;  // Permission denied (cos its missing)
-  }
+  // Cannot return EAGAIN here: the op would get dropped.  This check must have
+  // been done earlier.
+  ceph_assert(!get_parent()->get_local_missing().is_missing(hoid));
 
   auto [shard_offset, shard_len] = extent_to_shard_extent(off, len);
-
 
   dout(20) << __func__ << " Submitting sync read: "
       << " hoid=" << hoid
@@ -1026,7 +1285,6 @@ int ECBackend::objects_read_sync(
       << " op_flags=" << op_flags
       << " primary=" << switcher->is_primary()
       << dendl;
-
 
   return switcher->store->read(switcher->ch,
           ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
@@ -1062,13 +1320,13 @@ int ECBackend::objects_readv_sync(const hobject_t &hoid,
      std::map<uint64_t, uint64_t>& m,
      uint32_t op_flags,
      ceph::buffer::list *bl) {
-  if (get_parent()->get_local_missing().is_missing(hoid)) {
-    return -EACCES;  // Permission denied (cos its missing)
-  }
 
-  // Not using extent set, since we need the one used by readv.
+  // Cannot return EAGAIN here: the op would get dropped.  This check must have
+  // been done earlier.
+  ceph_assert(!get_parent()->get_local_missing().is_missing(hoid));
 
   auto shard = get_parent()->whoami_shard().shard;
+  // Not using extent_set, since we need the one used by readv.
   interval_set im(std::move(m));
   m.clear(); // Make m safe to write to again.
   auto r = switcher->store->readv(switcher->ch, ghobject_t(hoid, ghobject_t::NO_GEN, shard), im, *bl, op_flags);
@@ -1374,4 +1632,258 @@ int ECBackend::be_deep_scrub(
   o.omap_digest = -1;
   o.omap_digest_present = true;
   return 0;
+}
+
+bool ECBackend::remove_ec_omap_journal_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry) {
+  return ec_omap_journal.remove_entry(hoid, entry);
+}
+
+std::pair<gen_t, bool> ECBackend::omap_get_generation(const hobject_t& hoid) {
+  return ec_omap_journal.get_generation(hoid);
+}
+
+void ECBackend::omap_trim_delete_from_journal(const hobject_t &hoid, const version_t version) {
+  return ec_omap_journal.trim_delete(hoid, version);
+}
+
+int ECBackend::omap_iterate (
+  ObjectStore::CollectionHandle &c_, ///< [in] collection
+  const ghobject_t &oid, ///< [in] object
+  const ObjectStore::omap_iter_seek_t &start_from,
+  ///^ [in] where the iterator should point to at the beginning
+  const OmapIterFunction &f, ///< [in] function to call for each key/value pair
+  ObjectStore *store
+) {
+  if (!get_parent()->get_pool().supports_omap()) {
+    return -EOPNOTSUPP;
+  }
+
+  // Updates in update_map take priority over removed_ranges
+  auto [update_map, removed_ranges] = ec_omap_journal.get_value_updates(oid.hobj);
+
+  auto journal_it = update_map.begin();
+  if (!start_from.seek_position.empty()) {
+    journal_it = update_map.lower_bound(start_from.seek_position);
+  }
+
+  auto wrapper = [&](const std::string_view store_key, const std::string_view store_value) {
+    bool found_store_key_in_journal = false;
+    
+    while (journal_it != update_map.end() && journal_it->first <= store_key) {
+      if (journal_it->first == store_key) {
+        found_store_key_in_journal = true;
+      }
+      if (journal_it->second.value.has_value()) {
+        ObjectStore::omap_iter_ret_t r = f(
+          journal_it->first,
+          std::string_view(
+            journal_it->second.value->c_str(),
+            journal_it->second.value->length()
+          )
+        );
+        if (r == ObjectStore::omap_iter_ret_t::STOP) {
+          return r;
+        }
+      }
+      ++journal_it;
+    }
+
+    if (found_store_key_in_journal) {
+      return ObjectStore::omap_iter_ret_t::NEXT;
+    }
+
+    if (should_be_removed(removed_ranges, store_key)) {
+      return ObjectStore::omap_iter_ret_t::NEXT;
+    }
+
+    return f(store_key, store_value);
+  };
+
+  if (const auto result = store->omap_iterate(c_, oid, start_from, wrapper);
+    result < 0) {
+    return result;
+  } else if (result > 0) {
+    return 1;
+  }
+
+  auto ret = ObjectStore::omap_iter_ret_t::NEXT;
+  while (journal_it != update_map.end()) {
+    if (journal_it->second.value.has_value()) {
+      ret = f(journal_it->first, std::string_view(journal_it->second.value->c_str(), journal_it->second.value->length()));
+      if (ret == ObjectStore::omap_iter_ret_t::STOP) {
+        break;
+      }
+    }
+    ++journal_it;
+  }
+
+  return ret == ObjectStore::omap_iter_ret_t::STOP ? 1 : 0;
+}
+
+int ECBackend::omap_get_values(
+  ObjectStore::CollectionHandle &c_, ///< [in] collection
+  const ghobject_t &oid,              ///< [in] object
+  const std::set<std::string> &keys,  ///< [in] keys to get
+  std::map<std::string, ceph::buffer::list> *out, ///< [out] returned key/values
+  ObjectStore *store
+) {
+  if (!get_parent()->get_pool().supports_omap()) {
+    return -EOPNOTSUPP;
+  }
+
+  auto [update_map, removed_ranges] = ec_omap_journal.get_value_updates(oid.hobj);
+  
+  set<string> keys_still_to_get;
+  for (auto &key : keys) {
+    if (auto it = update_map.find(key);
+      it != update_map.end()) {
+      if (!it->second.value.has_value()) {
+        continue;
+      }
+      (*out)[key] = *(it->second.value);
+    } else if (should_be_removed(removed_ranges, key)) {
+      continue;
+    } else {
+      keys_still_to_get.insert(key);
+    }
+  }
+  store->omap_get_values(c_, oid, keys_still_to_get, out);
+
+  return 0;
+}
+
+int ECBackend::omap_get_header(
+  ObjectStore::CollectionHandle &c_,    ///< [in] Collection containing oid
+  const ghobject_t &oid,   ///< [in] Object containing omap
+  ceph::buffer::list *header,      ///< [out] omap header
+  const bool allow_eio, ///< [in] don't assert on eio
+  ObjectStore *store
+) {
+  if (!get_parent()->get_pool().supports_omap()) {
+    return -EOPNOTSUPP;
+  }
+
+  std::optional<ceph::buffer::list> header_from_journal = ec_omap_journal.get_updated_header(oid.hobj);
+  if (header_from_journal) {
+    *header = *header_from_journal;
+    dout(20) << __func__ << ": oid=" << oid
+            << " from_journal=true header_size=" << header->length() << dendl;
+  } else {
+    header->clear();
+    store->omap_get_header(c_, oid, header, allow_eio);
+    dout(20) << __func__ << ": oid=" << oid
+            << " from_journal=false header_size=" << header->length() << dendl;
+  }
+  return 0;
+}
+
+int ECBackend::omap_get(
+  ObjectStore::CollectionHandle &c_,    ///< [in] Collection containing oid
+  const ghobject_t &oid,   ///< [in] Object containing omap
+  ceph::buffer::list *header,      ///< [out] omap header
+  std::map<std::string, ceph::buffer::list> *out, /// < [out] Key to value map
+  ObjectStore *store
+) {
+  if (!get_parent()->get_pool().supports_omap()) {
+    return -EOPNOTSUPP;
+  }
+
+  // Update map takes priority over removed_ranges
+  auto [update_map, removed_ranges] = ec_omap_journal.get_value_updates(oid.hobj);
+  const auto updated_header = ec_omap_journal.get_updated_header(oid.hobj);
+
+  if (const int r = store->omap_get(c_, oid, header, out);
+    r < 0) {
+    return r;
+  }
+
+  // Update header if present
+  if (updated_header) {
+    *header = *updated_header;
+    dout(20) << __func__ << ": oid=" << oid
+            << " updated_header=true header_size=" << header->length() << dendl;
+  } else {
+    dout(20) << __func__ << ": oid=" << oid
+            << " updated_header=false header_size=" << header->length() << dendl;
+  }
+
+  // Remove keys in removed_ranges
+  for (auto out_it = out->begin(); out_it != out->end(); ++out_it) {
+    if (should_be_removed(removed_ranges, out_it->first)) {
+      out->erase(out_it->first);
+    }
+  }
+
+  // Apply updates in update_map
+  for (const auto &[key, val_opt] : update_map) {
+    if (val_opt.value.has_value()) {
+      (*out)[key] = *(val_opt.value);
+    } else {
+      out->erase(key);
+    }
+  }
+
+  return 0;
+}
+
+int ECBackend::omap_check_keys(
+  ObjectStore::CollectionHandle &c_,    ///< [in] Collection containing oid
+  const ghobject_t &oid,   ///< [in] Object containing omap
+  const std::set<std::string> &keys, ///< [in] Keys to check
+  std::set<std::string> *out,         ///< [out] Subset of keys defined on oid
+  ObjectStore *store
+) {
+  if (!get_parent()->get_pool().supports_omap()) {
+    return -EOPNOTSUPP;
+  }
+
+  // Update map takes priority over removed_ranges
+  auto [update_map, removed_ranges] = ec_omap_journal.get_value_updates(oid.hobj);
+  auto updated_header = ec_omap_journal.get_updated_header(oid.hobj);
+
+  // First check keys in update_map and removed_ranges
+  set<string> keys_to_check_on_disk;
+  for (const auto &key : keys) {
+    if (auto it = update_map.find(key);
+      it != update_map.end()) {
+      if (it->second.value.has_value()) {
+        out->insert(key);
+      }
+    } else if (should_be_removed(removed_ranges, key)) {
+      continue;
+    } else {
+      keys_to_check_on_disk.insert(key);
+    }
+  }
+
+  const int r = store->omap_check_keys(c_, oid, keys_to_check_on_disk, out);
+
+  return r;
+}
+
+bool ECBackend::should_be_removed(
+  const std::map<std::string, std::optional<std::string>>& removed_ranges,
+  const std::string_view key) {
+  if (removed_ranges.empty()) {
+    return false;
+  }
+  
+  // Find range that comes after this key
+  auto it = removed_ranges.upper_bound(std::string(key));
+
+  // If all ranges start after the key, it can't be in any range
+  if (it == removed_ranges.begin()) {
+    return false;
+  }
+
+  // Go back to the previous range
+  --it;
+  // If this range contains the key, return true
+  const auto& end_opt = it->second;
+  if (!end_opt || key < *end_opt) {
+    return true;
+  }
+
+  // No ranges contain the key, return false
+  return false;
 }

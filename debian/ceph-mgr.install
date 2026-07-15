@@ -3,3 +3,4 @@ usr/bin/ceph-mgr
 usr/share/ceph/mgr/mgr_module.*
 usr/share/ceph/mgr/mgr_util.*
 usr/share/ceph/mgr/object_format.*
+usr/share/ceph/mgr/cherrypy_mgr.*

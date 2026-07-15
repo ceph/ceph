@@ -188,7 +188,7 @@ between distinct pairs of OSDs are detected, this might indicate a failed
 network switch, a NIC failure, or a layer 1 failure.
 
 By default, a heartbeat time that exceeds 1 second (1000 milliseconds) raises a
-health check (a ``HEALTH_WARN``. For example:
+health check (a ``HEALTH_WARN``). For example:
 
 ::
 
@@ -845,12 +845,12 @@ it is not possible to set this interval less than the config value set
 for ``paxos_propose_interval``.
 
 
-This feature is on by default. To turn the feature off, e.g. - for an expected
-downtime, the ``enable_availability_tracking`` config option can be set to ``false``.
+This feature is off by default. To turn the feature on, the 
+``enable_availability_tracking`` config option can be set to ``true``.
 
 .. prompt:: bash #
 
-   ceph config set mon enable_availability_tracking false
+   ceph config set mon enable_availability_tracking true
 
 While the feature is turned off, the last calculated score will be preserved. The
 score will again start updating once the feature is turned on again.

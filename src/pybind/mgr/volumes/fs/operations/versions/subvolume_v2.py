@@ -282,12 +282,14 @@ class SubvolumeV2(SubvolumeV1):
                 SubvolumeOpType.LIST,
                 SubvolumeOpType.INFO,
                 SubvolumeOpType.SNAP_REMOVE,
+                SubvolumeOpType.SNAP_REMOVE_FORCE,
                 SubvolumeOpType.SNAP_LIST,
                 SubvolumeOpType.SNAP_GETPATH,
                 SubvolumeOpType.SNAP_INFO,
                 SubvolumeOpType.SNAP_PROTECT,
                 SubvolumeOpType.SNAP_UNPROTECT,
-                SubvolumeOpType.CLONE_SOURCE
+                SubvolumeOpType.CLONE_SOURCE,
+                SubvolumeOpType.CLONE_FAILED
             }
 
         return {SubvolumeOpType.REMOVE_FORCE,
@@ -295,7 +297,8 @@ class SubvolumeV2(SubvolumeV1):
                 SubvolumeOpType.CLONE_STATUS,
                 SubvolumeOpType.CLONE_CANCEL,
                 SubvolumeOpType.CLONE_INTERNAL,
-                SubvolumeOpType.CLONE_SOURCE}
+                SubvolumeOpType.CLONE_SOURCE,
+                SubvolumeOpType.CLONE_FAILED}
 
     def open(self, op_type):
         if not isinstance(op_type, SubvolumeOpType):
@@ -337,6 +340,16 @@ class SubvolumeV2(SubvolumeV1):
                 raise VolumeException(-errno.ENOENT, "subvolume '{0}' does not exist".format(self.subvolname))
             raise VolumeException(me.args[0], me.args[1])
         except cephfs.ObjectNotFound:
+            if op_type in (SubvolumeOpType.REMOVE_FORCE, SubvolumeOpType.SNAP_REMOVE_FORCE):
+                log.debug("since --force is passed, ignoring missing subvolume '"
+                          f"path '{subvol_path}' for subvolume "
+                          f"{self.subvolname}'")
+                return
+            elif op_type == SubvolumeOpType.CLONE_FAILED:
+                log.debug('since clone failed, letting that register in .meta '
+                          'file and ignoring missing subvolume path '
+                          f'{subvol_path} for subvolume {self.subvolname}')
+                return
             log.debug("missing subvolume path '{0}' for subvolume '{1}'".format(subvol_path, self.subvolname))
             raise VolumeException(-errno.ENOENT, "mount path missing for subvolume '{0}'".format(self.subvolname))
         except cephfs.Error as e:

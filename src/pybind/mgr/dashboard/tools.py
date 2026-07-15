@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 
 import cherrypy
 from ceph.utils import strtobool
+from cherrypy_mgr import CherryPyMgr
 from mgr_util import build_url
 
 from . import mgr
@@ -30,7 +31,7 @@ class RequestLoggingTool(cherrypy.Tool):
     def __init__(self):
         cherrypy.Tool.__init__(self, 'before_handler', self.request_begin,
                                priority=10)
-        self.logger = logging.getLogger('request')
+        self.logger = logging.getLogger(__name__)
 
     def _setup(self):
         cherrypy.Tool._setup(self)
@@ -180,7 +181,7 @@ class ViewCache(object):
             self.latency = 0
             self.exception = None
             self.lock = threading.Lock()
-            self.logger = logging.getLogger('viewcache')
+            self.logger = logging.getLogger(__name__)
 
         def reset(self):
             with self.lock:
@@ -271,7 +272,7 @@ class NotificationQueue(threading.Thread):
                 return
             cls._running = True
             cls._instance = NotificationQueue()
-        cls.logger = logging.getLogger('notification_queue')  # type: ignore
+        cls.logger = logging.getLogger(__name__)  # type: ignore
         cls.logger.debug("starting notification queue")  # type: ignore
         cls._instance.start()
 
@@ -413,7 +414,7 @@ class TaskManager(object):
 
     @classmethod
     def init(cls):
-        cls.logger = logging.getLogger('taskmgr')  # type: ignore
+        cls.logger = logging.getLogger(__name__)  # type: ignore
         NotificationQueue.register(cls._handle_finished_task, 'cd_task_finished')
 
     @classmethod
@@ -510,7 +511,7 @@ class TaskManager(object):
 # pylint: disable=protected-access
 class TaskExecutor(object):
     def __init__(self):
-        self.logger = logging.getLogger('taskexec')
+        self.logger = logging.getLogger(__name__)
         self.task = None
 
     def init(self, task):
@@ -573,7 +574,7 @@ class Task(object):
         self._end_time: Optional[float] = None
         self.duration = 0.0
         self.exception = None
-        self.logger = logging.getLogger('task')
+        self.logger = logging.getLogger(__name__)
         self.lock = threading.Lock()
 
     def __hash__(self):
@@ -840,7 +841,7 @@ def merge_list_of_dicts_by_key(target_list: list, source_list: list, key: str):
     return target_list
 
 
-def configure_cors(url: str = ''):
+def configure_cors(url: str = '', startup_config: Optional[Dict] = None):
     """
     Allow CORS requests if the cross_origin_url option is set.
     """
@@ -850,11 +851,23 @@ def configure_cors(url: str = ''):
     else:
         cross_origin_url = mgr.get_localized_module_option('cross_origin_url', '')
     if cross_origin_url:
-        cherrypy.tools.CORS = cherrypy.Tool('before_handler', cors_tool)
-        config = {
-            'tools.CORS.on': True,
-        }
-        cherrypy.config.update(config)
+        if not hasattr(cherrypy.tools, 'CORS'):
+            cherrypy.tools.CORS = cherrypy.Tool('before_handler', cors_tool)
+
+        def _apply_cors(target_config):
+            if target_config is not None:
+                if '/' not in target_config or target_config['/'] is None:
+                    target_config['/'] = {}
+                target_config['/']['tools.CORS.on'] = True
+
+        _apply_cors(startup_config)
+
+        url_prefix = prepare_url_prefix(mgr.get_module_option('url_prefix', default=''))
+        config = CherryPyMgr.get_server_config(
+            name='ceph-dashboard',
+            mount_point=url_prefix
+        )
+        _apply_cors(config)
 
 
 def cors_tool():

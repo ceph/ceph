@@ -31,8 +31,6 @@
 #include "include/encoding.h"
 #include "common/simple_cache.hpp"
 #include "common/PriorityCache.h"
-#include "msg/Messenger.h"
-#include "common/prime.h"
 
 #include "osd/OSDMap.h"
 #include "osd/OSDMapMapping.h"
@@ -48,7 +46,7 @@ class Monitor;
 class PGMap;
 struct MonSession;
 class MOSDMap;
-
+struct Subscription;
 
 /// information about a particular peer's failure reports for one osd
 struct failure_reporter_t {
@@ -275,12 +273,16 @@ public:
 
     void process(const std::vector<pg_t>& to_check) override {
       std::vector<pg_t> to_cancel;
+      std::vector<pg_t> to_cancel_upmap_primary_only;
+      std::set<uint64_t> affected_pools;
       std::map<pg_t, mempool::osdmap::vector<std::pair<int,int>>> to_remap;
-      osdmap.check_pg_upmaps(cct, to_check, &to_cancel, &to_remap);
+      osdmap.check_pg_upmaps(cct, to_check, &to_cancel, &to_cancel_upmap_primary_only,
+		             &affected_pools, &to_remap);
       // don't bother taking lock if nothing changes
-      if (!to_cancel.empty() || !to_remap.empty()) {
+      if (!to_cancel.empty() || !to_remap.empty() || !to_cancel_upmap_primary_only.empty()) {
         std::lock_guard l(pending_inc_lock);
-        osdmap.clean_pg_upmaps(cct, &pending_inc, to_cancel, to_remap);
+        osdmap.clean_pg_upmaps(cct, &pending_inc, to_cancel, to_cancel_upmap_primary_only,
+			       affected_pools, to_remap);
       }
     }
 
@@ -467,6 +469,9 @@ private:
 
   bool preprocess_pg_ready_to_merge(MonOpRequestRef op);
   bool prepare_pg_ready_to_merge(MonOpRequestRef op);
+
+  bool preprocess_pg_stop_merge(MonOpRequestRef op);
+  bool prepare_pg_stop_merge(MonOpRequestRef op);
 
   int _check_remove_pool(int64_t pool_id, const pg_pool_t &pool, std::ostream *ss);
   bool _check_become_tier(
@@ -746,7 +751,7 @@ public:
   int enable_pool_ec_optimizations(pg_pool_t &pool,
                                    std::stringstream *ss,
                                    bool enable);
-  void enable_pool_ec_direct_reads(pg_pool_t &p);
+  void maybe_enable_pool_split_ops(pg_pool_t &p);
   int prepare_command_pool_set(const cmdmap_t& cmdmap,
                                std::stringstream& ss);
 
@@ -849,7 +854,8 @@ public:
 			       const std::string& dividing_bucket,
 			       uint32_t bucket_count,
 			       const std::set<pg_pool_t*>& pools,
-			       const std::string& new_crush_rule);
+			       const std::string& new_crush_rule,
+			       CrushWrapper& crush);
   /**
   *
   * Set all stretch mode values of all pools back to pre-stretch mode values.

@@ -81,7 +81,7 @@ struct cache_test_t : public seastar_test_suite_t {
 	cache->complete_commit(*t, prev, seq /* TODO */);
         return prev;
       },
-      crimson::ct_error::assert_all{"failed to submit"}
+      crimson::ct_error::assert_all("failed to submit")
      );
   }
 
@@ -115,8 +115,8 @@ struct cache_test_t : public seastar_test_suite_t {
       rewrite_gen_t cold_tier_generations = crimson::common::get_conf<uint64_t>(
 	"seastore_cold_tier_generations");
       epm.reset(new ExtentPlacementManager(
-	hot_tier_generations, cold_tier_generations));
-      cache.reset(new Cache(*epm));
+	hot_tier_generations, cold_tier_generations, 0));
+      cache.reset(new Cache(*epm, 0));
       current = paddr_t::make_seg_paddr(segment_id_t(segment_manager->get_device_id(), 0), 0);
       epm->test_init_no_background(segment_manager.get());
       return seastar::do_with(
@@ -131,7 +131,7 @@ struct cache_test_t : public seastar_test_suite_t {
         });
       });
     }).handle_error(
-      crimson::ct_error::assert_all{"failed to submit"}
+      crimson::ct_error::assert_all("failed to submit")
     );
   }
 
@@ -142,7 +142,7 @@ struct cache_test_t : public seastar_test_suite_t {
       epm.reset();
       cache.reset();
     }).handle_error(
-      Cache::close_ertr::assert_all{}
+      Cache::close_ertr::assert_all("unexpected error")
     );
   }
 };

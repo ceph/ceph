@@ -239,13 +239,17 @@ ErasureCodeIsaTableCache::getDecodingTableFromCache(std::string &signature,
 {
   // --------------------------------------------------------------------------
   // LRU decoding matrix cache
+  //
+  // IMPORTANT: The signature parameter MUST include k and m values to ensure
+  // cache key uniqueness. Different (k,m) configurations with similar erasure
+  // patterns would otherwise collide, causing buffer size mismatches that lead
+  // to heap-buffer-overflow or data corruption. The table size is k*(m+k)*32
+  // bytes and depends on both k and m.
   // --------------------------------------------------------------------------
 
   dout(12) << "[ get table    ] = " << signature << dendl;
 
   // we try to fetch a decoding table from an LRU cache
-  bool found = false;
-
   std::lock_guard lock{codec_tables_guard};
 
   lru_map_t* decode_tbls_map =
@@ -254,17 +258,18 @@ ErasureCodeIsaTableCache::getDecodingTableFromCache(std::string &signature,
   lru_list_t* decode_tbls_lru =
     getDecodingTablesLru(matrixtype);
 
-  if (decode_tbls_map->count(signature)) {
-    dout(12) << "[ cached table ] = " << signature << dendl;
-    // copy the table out of the cache
-    memcpy(table, (*decode_tbls_map)[signature].second.c_str(), k * (m + k)*32);
-    // find item in LRU queue and push back
-    dout(12) << "[ cache size   ] = " << decode_tbls_lru->size() << dendl;
-    decode_tbls_lru->splice( (decode_tbls_lru->begin()), *decode_tbls_lru, (*decode_tbls_map)[signature].first);
-    found = true;
+  auto lru_map_it = decode_tbls_map->find(signature);
+  if (lru_map_it == decode_tbls_map->end()) {
+    return false;
   }
-
-  return found;
+  const auto& [lru_list_it, cached_table] = lru_map_it->second;
+  dout(12) << "[ cached table ] = " << signature << dendl;
+  // copy the table out of the cache
+  memcpy(table, cached_table.c_str(), k * (m + k)*32);
+  // find item in LRU queue and push back
+  dout(12) << "[ cache size   ] = " << decode_tbls_lru->size() << dendl;
+  decode_tbls_lru->splice( (decode_tbls_lru->begin()), *decode_tbls_lru, lru_list_it);
+  return true;
 }
 
 // -----------------------------------------------------------------------------
@@ -278,6 +283,9 @@ ErasureCodeIsaTableCache::putDecodingTableToCache(std::string &signature,
 {
   // --------------------------------------------------------------------------
   // LRU decoding matrix cache
+  //
+  // IMPORTANT: The signature parameter MUST include k and m values to ensure
+  // cache key uniqueness. See getDecodingTableFromCache() for details.
   // --------------------------------------------------------------------------
 
   dout(12) << "[ put table    ] = " << signature << dendl;

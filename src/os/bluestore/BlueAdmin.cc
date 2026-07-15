@@ -3,9 +3,13 @@
 
 #include "BlueAdmin.h"
 #include "Compression.h"
+#include "common/errno.h"
 #include "common/pretty_binary.h"
+#include "os/bluestore/BlueStore.h"
 #include "common/debug.h"
 #include <asm-generic/errno-base.h>
+#include <iostream>
+#include <sstream>
 #include <vector>
 #include <limits>
 
@@ -48,6 +52,40 @@ BlueStore::SocketHook::SocketHook(BlueStore& store)
       "name=collection,type=CephString,req=false",
       this,
       "print compression stats, per collection");
+    ceph_assert(r == 0);
+    r = admin_socket->register_command(
+      "bluestore runtime frag score "
+      "name=collection,type=CephString,req=false",
+      this,
+      "print runtime fragmentation score, per collection");
+    ceph_assert(r == 0);
+    r = admin_socket->register_command(
+      "bluestore clear runtime frag "
+      "name=collection,type=CephString,req=false",
+      this,
+      "clear runtime fragmentation score, per collection");
+    ceph_assert(r == 0);
+    r = admin_socket->register_command(
+      "bluestore static frag score "
+      "name=collection,type=CephString,req=false",
+      this,
+      "print static fragmentation score, per collection");
+    ceph_assert(r == 0);
+    r = admin_socket->register_command(
+      "bluestore clear static frag "
+      "name=collection,type=CephString,req=false",
+      this,
+      "clear static fragmentation score, per collection");
+    ceph_assert(r == 0);
+    r = admin_socket->register_command(
+      "bluestore show sharding ",
+      this,
+      "print RocksDB sharding");
+    ceph_assert(r == 0);
+    r = admin_socket->register_command("bluestore bluefs-bdev-expand",
+                                       this,
+                                       "Instruct BlueFS to check the size of its block devices"
+                                       " and, if they have expanded, make use of the additional space.");
     ceph_assert(r == 0);
   }
 }
@@ -177,6 +215,96 @@ int BlueStore::SocketHook::call(
     }
     f->close_section();
     return 0;
+  } else if (command == "bluestore show sharding") {
+    int r = 0;
+    std::string sharding;
+    if (store.get_db_sharding(sharding)) {
+      out.append(sharding + '\n');
+    } else {
+      r = -EFAULT;
+      ss << "Failed to get sharding" << std::endl;
+    }
+    return r;
+  } else if (command == "bluestore runtime frag score") {
+    std::shared_lock l(store.coll_lock);
+    std::string coll;
+    cmd_getval(cmdmap, "collection", coll);
+    f->open_array_section("runtime_frag_score");
+    for (const auto& it : store.coll_map) {
+      auto c = it.second;
+      std::shared_lock l(c->lock);
+      if (coll.empty() || coll == c->get_cid().c_str()) {
+        f->open_object_section("collection");
+        f->dump_string("cid", c->get_cid().c_str());
+        auto samples = c->runtime_read_samples.load(std::memory_order_relaxed);
+        auto sum = c->runtime_frag_count.load(std::memory_order_relaxed);
+        f->dump_unsigned("object_read_samples", samples);
+        f->dump_unsigned("runtime_frag_count", sum);
+        if (samples == 0) {
+          f->dump_int("runtime_frag_score", 0);
+        } else {
+          f->dump_float("runtime_frag_score", (float)sum / samples);
+        }
+        f->close_section();
+      }
+    }
+    f->close_section();
+    return 0;
+  } else if (command == "bluestore clear runtime frag") {
+    std::shared_lock l(store.coll_lock);
+    std::string coll;
+    cmd_getval(cmdmap, "collection", coll);
+    for (const auto& it : store.coll_map) {
+      auto c = it.second;
+      std::shared_lock l(c->lock);
+      if (coll.empty() || coll == c->get_cid().c_str()) {
+        c->runtime_frag_count.store(0, std::memory_order_relaxed);
+        c->runtime_read_samples.store(0, std::memory_order_relaxed);
+      }
+    }
+    return 0;
+  } else if (command == "bluestore static frag score") {
+    std::shared_lock l(store.coll_lock);
+    std::string coll;
+    cmd_getval(cmdmap, "collection", coll);
+    f->open_array_section("static_frag_score");
+    for (const auto& it : store.coll_map) {
+      auto c = it.second;
+      std::shared_lock l(c->lock);
+      if (coll.empty() || coll == c->get_cid().c_str()) {
+        f->open_object_section("collection");
+        f->dump_string("cid", c->get_cid().c_str());
+        auto score = c->static_frag_score.load(std::memory_order_relaxed);
+        auto count = c->object_read_samples.load(std::memory_order_relaxed);
+        f->dump_unsigned("static_frag_score", score);
+        f->dump_unsigned("object_read_samples", count);
+        f->close_section();
+      }
+    }
+    f->close_section();
+    return 0;
+  } else if (command == "bluestore clear static frag") {
+    std::shared_lock l(store.coll_lock);
+    std::string coll;
+    cmd_getval(cmdmap, "collection", coll);
+    for (const auto& it : store.coll_map) {
+      auto c = it.second;
+      std::shared_lock l(c->lock);
+      if (coll.empty() || coll == c->get_cid().c_str()) {
+        c->static_frag_score.store(0, std::memory_order_relaxed);
+        c->object_read_samples.store(0, std::memory_order_relaxed);
+      }
+    }
+    return 0;
+  } else if (command == "bluestore bluefs-bdev-expand"){
+    std::stringstream result;
+    int ret = store.expand_devices(result);
+    if (ret < 0) {
+      ss << "expand device failed: " << cpp_strerror(ret) << std::endl;
+    } else {
+      out.append(result.str());
+    }
+    return ret;
   } else {
     ss << "Invalid command" << std::endl;
     r = -ENOSYS;

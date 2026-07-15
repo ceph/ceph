@@ -15,7 +15,6 @@ from itertools import zip_longest # type: ignore
 from urllib.parse import urlparse
 
 from .multisite import *
-from .tools import *
 
 log = logging.getLogger(__name__)
 

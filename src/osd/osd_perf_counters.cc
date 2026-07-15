@@ -248,10 +248,10 @@ PerfCounters *build_osd_logger(CephContext *cct) {
   osd_plb.add_u64_counter(l_osd_map, "map_messages", "OSD map messages");
   osd_plb.add_u64_counter(
     l_osd_full_map_received, "full_map_received",
-    "number of full OSD map recieved via MOSDMap");
+    "number of full OSD map received via MOSDMap");
   osd_plb.add_u64_counter(
     l_osd_inc_map_received, "inc_map_received",
-    "number of incremental OSD map recieved via MOSDMap");
+    "number of incremental OSD map received via MOSDMap");
   osd_plb.add_u64_counter(l_osd_mape, "map_message_epochs", "OSD map epochs");
   osd_plb.add_u64_counter(
     l_osd_mape_dup, "map_message_epoch_dups", "OSD map duplicates");
@@ -536,6 +536,21 @@ PerfCounters *build_recoverystate_perf(CephContext *cct) {
   rs_perf.add_time_avg(rs_getmissing_latency, "getmissing_latency", "Getmissing recovery state latency");
   rs_perf.add_time_avg(rs_waitupthru_latency, "waitupthru_latency", "Waitupthru recovery state latency");
   rs_perf.add_time_avg(rs_notrecovering_latency, "notrecovering_latency", "Notrecovering recovery state latency");
+  rs_perf.add_u64_counter(rs_process_log_stats_invalidated, "process_log_stats_invalidated", "Number of times pg stats received invalidations during log processing");
+  rs_perf.add_u64_counter(rs_pg_split_parent_stats_invalidated, "pg_split_parent_stats_invalidated", "Number of times parent pg stats received invalidations during pg splitting");
+  rs_perf.add_u64_counter(rs_pg_split_child_stats_invalidated, "pg_split_child_stats_invalidated", "Number of times child pg stats received invalidations during pg splitting");
+  rs_perf.add_u64_counter(rs_update_stats_invalidated, "update_stats_invalidated", "Number of times pg stats received invalidations during stats updates");
+  rs_perf.add_u64_counter(rs_append_log_stats_invalidated, "append_log_stats_invalidated", "Number of times pg stats received invalidations when appending new log entries");
+  rs_perf.add_u64_counter(rs_merge_log_stats_invalidated, "merge_log_stats_invalidated", "Number of times pg stats received invalidations during merging of log entries");
+  rs_perf.add_time_avg(rs_pg_rebuild_duration, "pg_rebuild_duration",
+    "Average PG rebuild duration on this OSD (primary role only)",
+    NULL, PerfCountersBuilder::PRIO_USEFUL);
+  rs_perf.add_u64(rs_pg_rebuild_max_secs, "pg_rebuild_max_secs",
+    "Max PG rebuild duration seen on this OSD in seconds (primary role only)",
+    NULL, PerfCountersBuilder::PRIO_USEFUL);
+  rs_perf.add_u64(rs_pg_rebuild_min_secs, "pg_rebuild_min_secs",
+    "Min PG rebuild duration seen on this OSD in seconds (primary role only)",
+    NULL, PerfCountersBuilder::PRIO_USEFUL);
 
   return rs_perf.create_perf_counters();
 }
@@ -553,7 +568,6 @@ PerfCounters *build_scrub_labeled_perf(CephContext *cct, std::string label)
   scrub_perf.add_u64_counter(scrbcnt_chunks_selected, "chunk_selected", "chunk selection during scrubs");
   scrub_perf.add_u64_counter(scrbcnt_chunks_busy, "chunk_busy", "chunk busy during scrubs");
   scrub_perf.add_u64_counter(scrbcnt_blocked, "locked_object", "waiting on locked object events");
-  scrub_perf.add_u64_counter(scrbcnt_write_blocked, "write_blocked_by_scrub", "write blocked by scrub");
 
 
   return scrub_perf.create_perf_counters();

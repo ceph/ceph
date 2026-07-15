@@ -1,10 +1,16 @@
-<cds-modal size="sm"
-           [open]="open"
-           [hasScrollingContent]="false"
-           (overlaySelected)="closeModal()">
+<cds-modal
+  size="sm"
+  [open]="open"
+  [hasScrollingContent]="false"
+  (overlaySelected)="closeModal()"
+>
   <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        i18n>Create Realm/Zonegroup/Zone</h3>
+    <h3
+      cdsModalHeaderHeading
+      i18n
+    >
+      Create Realm/Zonegroup/Zone
+    </h3>
     <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
   </cds-modal-header>
   <form
@@ -14,15 +20,19 @@
     novalidate
   >
     <div cdsModalContent>
-      <cd-alert-panel type="info"
-                      spacingClass="mt-3"
-                      i18n>The realm/zonegroup/zone created will be set as default and master.
+      <cd-alert-panel
+        type="info"
+        spacingClass="mt-3"
+        i18n
+        >The realm/zonegroup/zone created will be set as default and master.
       </cd-alert-panel>
       <div class="form-item">
         <cds-text-label
           labelInputID="realmName"
-          [invalid]="createMultisiteEntitiesForm.controls.realmName.invalid &&
-                     createMultisiteEntitiesForm.controls.realmName.dirty"
+          [invalid]="
+            createMultisiteEntitiesForm.controls.realmName.invalid &&
+            createMultisiteEntitiesForm.controls.realmName.dirty
+          "
           [invalidText]="realmNameError"
           i18n
           >Realm Name
@@ -33,7 +43,8 @@
             formControlName="realmName"
             [invalid]="
               createMultisiteEntitiesForm.controls.realmName.invalid &&
-              createMultisiteEntitiesForm.controls.realmName.dirty"
+              createMultisiteEntitiesForm.controls.realmName.dirty
+            "
             [autofocus]="true"
             modal-primary-focus
           />
@@ -51,8 +62,10 @@
       <div class="form-item">
         <cds-text-label
           labelInputID="zonegroupName"
-          [invalid]="createMultisiteEntitiesForm.controls.zonegroupName.invalid &&
-                     createMultisiteEntitiesForm.controls.zonegroupName.dirty"
+          [invalid]="
+            createMultisiteEntitiesForm.controls.zonegroupName.invalid &&
+            createMultisiteEntitiesForm.controls.zonegroupName.dirty
+          "
           [invalidText]="zoneGroupNameError"
           i18n
           >Zonegroup Name
@@ -63,8 +76,10 @@
             id="zonegroupName"
             name="zonegroupName"
             formControlName="zonegroupName"
-            [invalid]="createMultisiteEntitiesForm.controls.zonegroupName.invalid &&
-                       createMultisiteEntitiesForm.controls.zonegroupName.dirty"
+            [invalid]="
+              createMultisiteEntitiesForm.controls.zonegroupName.invalid &&
+              createMultisiteEntitiesForm.controls.zonegroupName.dirty
+            "
           />
         </cds-text-label>
         <ng-template #zoneGroupNameError>
@@ -80,8 +95,10 @@
       <div class="form-item">
         <cds-text-label
           labelInputID="zoneName"
-          [invalid]="createMultisiteEntitiesForm.controls.zoneName.invalid &&
-                     createMultisiteEntitiesForm.controls.zoneName.dirty"
+          [invalid]="
+            createMultisiteEntitiesForm.controls.zoneName.invalid &&
+            createMultisiteEntitiesForm.controls.zoneName.dirty
+          "
           [invalidText]="zoneNameError"
           i18n
           >Zone Name
@@ -92,8 +109,10 @@
             id="zoneName"
             name="zoneName"
             formControlName="zoneName"
-            [invalid]="createMultisiteEntitiesForm.controls.zoneName.invalid &&
-                       createMultisiteEntitiesForm.controls.zoneName.dirty"
+            [invalid]="
+              createMultisiteEntitiesForm.controls.zoneName.invalid &&
+              createMultisiteEntitiesForm.controls.zoneName.dirty
+            "
           />
         </cds-text-label>
         <ng-template #zoneNameError>

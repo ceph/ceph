@@ -46,13 +46,16 @@ void LBALeafNode::resolve_relative_addrs(paddr_t base)
 
 void LBALeafNode::update(
   internal_const_iterator_t iter,
-  lba_map_val_t val)
+  lba_map_val_t val,
+  modification_t mod)
 {
   LOG_PREFIX(LBALeafNode::update);
   SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}",
     this->pending_for_transaction,
     iter.get_offset());
-  this->on_modify();
+  if (likely(mod == modification_t::USER_MODIFY)) {
+    this->on_modify();
+  }
   if (val.pladdr.is_paddr()) {
     val.pladdr = maybe_generate_relative(val.pladdr.get_paddr());
   }
@@ -82,6 +85,61 @@ LBALeafNode::internal_const_iterator_t LBALeafNode::insert(
     val,
     this->maybe_get_delta_buffer());
   return iter;
+}
+
+base_iertr::future<> LBACursor::refresh()
+{
+  LOG_PREFIX(LBACursor::refresh);
+
+  auto btree = co_await get_btree<LBABtree>(ctx.cache, ctx);
+  ctx.trans.cursor_stats.num_refresh_parent_total++;
+
+  if (!parent->is_valid()) {
+    ctx.trans.cursor_stats.num_refresh_invalid_parent++;
+    SUBTRACET(
+      seastore_lba,
+      "cursor {} parent is invalid, re-search from scratch",
+       ctx.trans, *this);
+    lba::LBABtree::iterator it = co_await btree.lower_bound(
+      ctx, this->get_laddr());
+    assert(this->get_laddr() == it.get_key());
+    iter = LBALeafNode::iterator(
+      it.get_leaf_node().get(),
+      it.get_leaf_pos());
+    auto leaf = it.get_leaf_node();
+    parent = leaf;
+    modifications = leaf->modifications;
+    co_return;
+  }
+  assert(parent->is_stable() ||
+    parent->is_pending_in_trans(ctx.trans.get_trans_id()));
+  auto leaf = parent->cast<lba::LBALeafNode>();
+  if (leaf->is_pending_in_trans(ctx.trans.get_trans_id())) {
+    if (leaf->modified_since(modifications)) {
+      ctx.trans.cursor_stats.num_refresh_modified_viewable_parent++;
+    } else {
+      // no need to refresh
+      co_return;
+    }
+  } else {
+    auto [viewable, l] = leaf->resolve_transaction(ctx.trans, get_laddr());
+      SUBTRACET(seastore_lba, "cursor: {} viewable: {}",
+        ctx.trans, *this, viewable);
+    if (!viewable) {
+      leaf = l;
+      ctx.trans.cursor_stats.num_refresh_unviewable_parent++;
+      parent = leaf;
+    } else {
+      assert(leaf.get() == l.get());
+      assert(leaf->is_stable());
+      co_return;
+    }
+  }
+
+  modifications = leaf->modifications;
+  iter = leaf->lower_bound(get_laddr());
+  assert(iter == leaf->end() || iter.get_key() == get_laddr());
+  assert(is_viewable());
 }
 
 }

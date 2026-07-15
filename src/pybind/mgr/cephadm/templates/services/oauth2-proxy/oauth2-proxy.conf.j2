@@ -14,8 +14,13 @@ oidc_issuer_url= "{{ spec.oidc_issuer_url }}"
 {% if redirect_url %}
 redirect_url= "{{ redirect_url }}"
 {% endif %}
+{% if spec.scope %}
+scope= "{{ spec.scope }}"
+{% endif %}
 
+{% if spec.ssl_insecure_skip_verify %}
 ssl_insecure_skip_verify=true
+{% endif %}
 
 # following configuration is needed to avoid getting Forbidden
 # when using chrome like browsers as they handle 3rd party cookies
@@ -33,5 +38,5 @@ set_xauthrequest= true
 
 # Secret value for encrypting cookies.
 cookie_secret= "{{ cookie_secret }}"
-email_domains= "*"
+email_domains= "{{ (email_domains | join(',')) or '*' }}"
 whitelist_domains= "{{ allowlist_domains | join(',') }}"

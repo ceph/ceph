@@ -27,7 +27,7 @@ the cluster.
 
 Since the cache is distributed, the MDS must take great care to ensure
 that no client holds capabilities that may conflict with other clients'
-capabilities, or operations that it does itself. This allows cephfs
+capabilities, or operations that it does itself. This allows CephFS
 clients to rely on much greater cache coherence than a filesystem like
 NFS, where the client may cache data and metadata beyond the point where
 it has changed on the server.

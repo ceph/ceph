@@ -157,13 +157,27 @@ class Pool(RESTController):
         if not pool:
             raise cherrypy.NotFound('No such pool')
 
-        schedule_info = RbdMirroringService.get_snapshot_schedule_info()
-        if schedule_info:
-            filtered = [
-                info for info in schedule_info
-                if info["name"].split("/", 1)[0] == pool_name
-            ]
-            pool[0]['schedule_info'] = filtered[0] if filtered else {}
+        pool_schedule_spec = f"{pool_name}/"
+        pool_interval = RbdMirroringService.get_schedule_interval(pool_schedule_spec)
+
+        if pool_interval:
+            pool[0]['schedule_info'] = {
+                'name': pool_schedule_spec,
+                'schedule_interval': pool_interval,
+                'schedule_time': None,
+                'inherited': None
+            }
+        else:
+            cluster_interval = RbdMirroringService.get_schedule_interval('')
+            if cluster_interval:
+                pool[0]['schedule_info'] = {
+                    'name': '',
+                    'schedule_interval': cluster_interval,
+                    'schedule_time': None,
+                    'inherited': 'cluster'
+                }
+            else:
+                pool[0]['schedule_info'] = {}
         return pool[0]
 
     def get(self, pool_name: str, attrs: Optional[str] = None, stats: bool = False) -> dict:

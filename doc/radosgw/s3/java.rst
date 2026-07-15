@@ -3,8 +3,8 @@
 Java S3 Examples
 ================
 
-Pre-requisites
---------------
+Prerequisites
+-------------
 
 All examples are written against AWS Java SDK 2.17.42. You may need
 to change some code when using another client.
@@ -12,7 +12,7 @@ to change some code when using another client.
 Setup
 -----
 
-The following examples may require some or all of the following java
+The following examples may require some or all of the following Java
 classes to be imported:
 
 .. code-block:: java
@@ -129,7 +129,7 @@ Deleting a Bucket
 -----------------
 
 .. note::
-   The Bucket must be empty! Otherwise it won't work!
+   The bucket must be empty! Otherwise it won't work!
 
 .. code-block:: java
 
@@ -215,7 +215,7 @@ period even if the object is private (when the time period is up, the
 URL will stop working).
 
 .. note::
-   The java library does not have a method for generating unsigned
+   The Java library does not have a method for generating unsigned
    URLs, so the example below just generates a signed URL.
 
 .. code-block:: java

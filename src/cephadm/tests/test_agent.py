@@ -254,8 +254,8 @@ def test_agent_daemon_ls_subset(cephadm_fs, funkypatch):
         assert daemons['mgr.host1.pntmho']['container_id'] == mgr_cid
         assert daemons['crash.host1']['container_id'] == crash_cid
 
-        assert daemons['mgr.host1.pntmho']['memory_usage'] == 478570086  # 456.4 MB
-        assert daemons['crash.host1']['memory_usage'] == 7426015  # 7.082 MB
+        assert daemons['mgr.host1.pntmho']['memory_usage'] == 456400000  # 456.4 MB
+        assert daemons['crash.host1']['memory_usage'] == 7082000  # 7.082 MB
 
 
 @mock.patch("cephadm.list_daemons")

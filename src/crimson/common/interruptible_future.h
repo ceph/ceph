@@ -322,7 +322,7 @@ Result non_futurized_call_with_interruption(
     // Clear the global "interrupt_cond" to prevent it from interfering other
     // continuation chains.
     interrupt_cond<InterruptCond>.reset();
-    std::throw_with_nested(std::runtime_error("failed to run interruptible continuation"));
+    throw;
   }
 }
 
@@ -429,33 +429,35 @@ public:
   value_type&& get() {
     if (core_type::available()) {
       return core_type::get();
-    } else {
-      // destined to wait!
-      auto interruption_condition = interrupt_cond<InterruptCond>.interrupt_cond;
-      INTR_FUT_DEBUG(
-	"interruptible_future_detail::get() waiting, interrupt_cond: {},{}",
-	(void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
-	typeid(InterruptCond).name());
-      interrupt_cond<InterruptCond>.reset();
-      try {
-	auto&& value = core_type::get();
-	interrupt_cond<InterruptCond>.set(interruption_condition);
-	INTR_FUT_DEBUG(
-	  "interruptible_future_detail::get() got, interrupt_cond: {},{}",
-	  (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
-	  typeid(InterruptCond).name());
-	return std::move(value);
-      } catch (std::exception &e) {
-	interrupt_cond<InterruptCond>.set(interruption_condition);
-	INTR_FUT_DEBUG(
-	  "interruptible_future_detail::get() error {}, interrupt_cond: {},{}",
-	  e,
-	  (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
-	  typeid(InterruptCond).name());
-	std::throw_with_nested(
-	  std::runtime_error(
-	    "failed to run interruptible continuation"));
+    }
+    // destined to wait!
+    auto interruption_condition = interrupt_cond<InterruptCond>.interrupt_cond;
+    INTR_FUT_DEBUG(
+      "interruptible_future_detail::get() waiting, interrupt_cond: {},{}",
+      (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
+      typeid(InterruptCond).name());
+    interrupt_cond<InterruptCond>.reset();
+    try {
+      auto&& value = core_type::get();
+      auto ifut = interruption_condition->template may_interrupt<seastar::future<>>();
+      if (ifut) {
+        std::rethrow_exception(ifut->get_exception());
       }
+
+      interrupt_cond<InterruptCond>.set(interruption_condition);
+      INTR_FUT_DEBUG(
+        "interruptible_future_detail::get() got, interrupt_cond: {},{}",
+        (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
+        typeid(InterruptCond).name());
+      return std::move(value);
+    } catch (std::exception &e) {
+      interrupt_cond<InterruptCond>.set(interruption_condition);
+      INTR_FUT_DEBUG(
+        "interruptible_future_detail::get() error {}, interrupt_cond: {},{}",
+        e,
+        (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
+        typeid(InterruptCond).name());
+      throw;
     }
   }
 
@@ -1441,7 +1443,7 @@ public:
         ret = seastar::futurize_invoke(mapper, *begin++).then_wrapped_interruptible(
 	    [s = s.get(), ret = std::move(ret)] (auto f) mutable {
             try {
-                s->result = s->reduce(std::move(s->result), std::move(f.get()));
+                s->result = s->reduce(std::move(s->result), std::move(f).get());
                 return std::move(ret);
             } catch (...) {
                 return std::move(ret).then_wrapped_interruptible([ex = std::current_exception()] (auto f) {
@@ -1524,33 +1526,34 @@ public:
   static decltype(auto) green_get(FutureT&& fut) {
     if (fut.available()) {
       return fut.get();
-    } else {
-      // destined to wait!
-      auto interruption_condition = interrupt_cond<InterruptCond>.interrupt_cond;
+    }
+    // destined to wait!
+    auto interruption_condition = interrupt_cond<InterruptCond>.interrupt_cond;
+    INTR_FUT_DEBUG(
+      "green_get() waiting, interrupt_cond: {},{}",
+      (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
+      typeid(InterruptCond).name());
+    interrupt_cond<InterruptCond>.reset();
+    try {
+      auto&& value = fut.get();
+      auto ifut = interruption_condition->template may_interrupt<future<void>>();
+      if (ifut) {
+        std::rethrow_exception(ifut->get_exception());
+      }
+      interrupt_cond<InterruptCond>.set(interruption_condition);
       INTR_FUT_DEBUG(
-        "green_get() waiting, interrupt_cond: {},{}",
+        "green_get() got, interrupt_cond: {},{}",
         (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
         typeid(InterruptCond).name());
-      interrupt_cond<InterruptCond>.reset();
-      try {
-	auto&& value = fut.get();
-	interrupt_cond<InterruptCond>.set(interruption_condition);
-	INTR_FUT_DEBUG(
-	  "green_get() got, interrupt_cond: {},{}",
-	  (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
-	  typeid(InterruptCond).name());
-	return std::move(value);
-      } catch (std::exception &e) {
-	interrupt_cond<InterruptCond>.set(interruption_condition);
-	INTR_FUT_DEBUG(
-	  "green_get() error {}, interrupt_cond: {},{}",
-	  e,
-	  (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
-	  typeid(InterruptCond).name());
-	std::throw_with_nested(
-	  std::runtime_error(
-	    "failed to run interruptible continuation"));
-      }
+      return std::move(value);
+    } catch (std::exception &e) {
+      interrupt_cond<InterruptCond>.set(interruption_condition);
+      INTR_FUT_DEBUG(
+        "green_get() error {}, interrupt_cond: {},{}",
+        e,
+        (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
+        typeid(InterruptCond).name());
+      throw;
     }
   }
 
@@ -1577,9 +1580,12 @@ public:
 	e,
 	(void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
 	typeid(InterruptCond).name());
-      std::throw_with_nested(
-	std::runtime_error(
-	  "failed to run interruptible continuation"));
+      throw;
+    }
+    auto &interrupt_condition = *interrupt_cond<InterruptCond>.interrupt_cond;
+    auto fut = interrupt_condition.template may_interrupt<future<void>>();
+    if (fut) {
+      std::rethrow_exception(fut->get_exception());
     }
   }
 
@@ -1607,9 +1613,12 @@ public:
 	  e,
 	  (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
 	  typeid(InterruptCond).name());
-	std::throw_with_nested(
-	  std::runtime_error(
-	    "failed to run interruptible continuation"));
+        throw;
+      }
+      auto &interrupt_condition = *interrupt_cond<InterruptCond>.interrupt_cond;
+      auto fut = interrupt_condition.template may_interrupt<future<void>>();
+      if (fut) {
+        std::rethrow_exception(fut->get_exception());
       }
     }
   }

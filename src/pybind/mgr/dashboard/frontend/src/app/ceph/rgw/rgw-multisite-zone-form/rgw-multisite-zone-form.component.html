@@ -1,17 +1,27 @@
-<cds-modal size="lg"
-           [open]="open"
-           [hasScrollingContent]="true"
-           (overlaySelected)="closeModal()">
+<cds-modal
+  size="lg"
+  [open]="open"
+  [hasScrollingContent]="true"
+  (overlaySelected)="closeModal()"
+>
   <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        i18n>{{ action | titlecase }} {{ resource }}</h3>
+    <h3
+      cdsModalHeaderHeading
+      i18n
+    >
+      {{ action | titlecase }} {{ resource }}
+    </h3>
   </cds-modal-header>
-  <form name="multisiteZoneForm"
-        #formDir="ngForm"
-        [formGroup]="multisiteZoneForm"
-        novalidate>
-    <div cdsModalContent
-         class="modal-wrapper scroll-overflow">
+  <form
+    name="multisiteZoneForm"
+    #formDir="ngForm"
+    [formGroup]="multisiteZoneForm"
+    novalidate
+  >
+    <div
+      cdsModalContent
+      class="modal-wrapper scroll-overflow"
+    >
       <div class="form-item">
         <cds-select
           formControlName="selectedZonegroup"
@@ -73,7 +83,8 @@
           i18n
           [disabled]="action === actionLabels.EDIT ? true : null"
           >Mark as default zone
-          <cd-help-text *ngIf="disableDefault && action === actionLabels.CREATE">Default zone can only exist in a default zonegroup.
+          <cd-help-text *ngIf="disableDefault && action === actionLabels.CREATE"
+            >Default zone can only exist in a default zonegroup.
           </cd-help-text>
           <cd-help-text *ngIf="isDefaultZone">
             <span>You cannot unset the default flag.</span>
@@ -94,7 +105,8 @@
           [disabled]="action === actionLabels.EDIT ? true : null"
           i18n
           >Master
-          <cd-help-text *ngIf="disableMaster">Master zone already exist for the selected zonegroup.
+          <cd-help-text *ngIf="disableMaster"
+            >Master zone already exist for the selected zonegroup.
           </cd-help-text>
           <cd-help-text *ngIf="isMasterZone">
             <span>You cannot unset the master flag. </span>
@@ -107,6 +119,70 @@
           </cd-help-text>
         </cds-checkbox>
       </div>
+      <div
+        *ngIf="multisiteZoneForm.get('master_zone')?.value === false"
+        class="form-item"
+      >
+        <cds-checkbox
+          id="archive_zone"
+          formControlName="archive_zone"
+          cdOptionalField="Archive"
+          (checkedChange)="onArchiveZoneChange($event)"
+          i18n
+          >Archive
+          <cd-help-text>
+            <span
+              >Enable archival storage to keep all object versions and protect data from deletion or
+              corruption.</span
+            >
+          </cd-help-text>
+        </cds-checkbox>
+      </div>
+      <div class="form-item">
+        <cds-checkbox
+          id="sync_from_all"
+          formControlName="sync_from_all"
+          cdOptionalField="Sync from all"
+          (checkedChange)="onZoneGroupChange(multisiteZoneForm.getValue('selectedZonegroup'))"
+          i18n
+          >Sync from all zones
+          <cd-help-text>
+            <span>Enable this option to synchronize data from all zones.</span>
+          </cd-help-text>
+          <div class="cds-mt-3">
+            <cd-alert-panel
+              *ngIf="multisiteZoneForm.get('archive_zone')?.value === true"
+              type="warning"
+            >
+              “Sync from all zones” is disabled to avoid duplicate objects in archive zones. Please
+              select specific zones instead.
+            </cd-alert-panel>
+          </div>
+        </cds-checkbox>
+      </div>
+      <div
+        *ngIf="multisiteZoneForm.get('sync_from_all')?.value === false"
+        class="form-item"
+      >
+        <cds-combo-box
+          type="multi"
+          selectionFeedback="top-after-reopen"
+          label="Sync from zones"
+          formControlName="sync_from_zones"
+          id="sync_from_zones"
+          [appendInline]="true"
+          [items]="syncFromZonesOptions"
+          i18n
+        >
+          <cds-dropdown-list></cds-dropdown-list>
+        </cds-combo-box>
+        <cd-help-text>
+          <span i18n
+            >Select specific zones to synchronize data from when "Sync from all zones" is
+            disabled.</span
+          >
+        </cd-help-text>
+      </div>
       <div class="form-item">
         <cds-text-label
           i18n
@@ -116,9 +192,12 @@
           "
           cdRequiredField="Endpoints"
           [invalidText]="
-                            multisiteZoneForm.controls['zone_endpoints'].errors?.['required'] ? 'This field is required.' :
-                            multisiteZoneForm.controls['zone_endpoints'].errors?.['invalidURL'] ? 'Please enter a valid URL.' : ''
-                          "
+            multisiteZoneForm.controls['zone_endpoints'].errors?.['required']
+              ? 'This field is required.'
+              : multisiteZoneForm.controls['zone_endpoints'].errors?.['invalidURL']
+                ? 'Please enter a valid URL.'
+                : ''
+          "
           i18n-invalidText
           >Endpoints
           <input
@@ -134,9 +213,11 @@
       </div>
 
       <div class="form-item">
-        <cds-password-label labelInputID="access_key"
-                            [helperText]="AccessKeyText"
-                            i18n>S3 access key
+        <cds-password-label
+          labelInputID="access_key"
+          [helperText]="AccessKeyText"
+          i18n
+          >S3 access key
           <input
             cdsPassword
             type="password"
@@ -148,9 +229,11 @@
         </cds-password-label>
       </div>
       <div class="form-item">
-        <cds-password-label labelInputID="secret_key"
-                            [helperText]="SecretKeyText"
-                            i18n>S3 secret key
+        <cds-password-label
+          labelInputID="secret_key"
+          [helperText]="SecretKeyText"
+          i18n
+          >S3 secret key
           <input
             cdsPassword
             type="password"
@@ -162,8 +245,12 @@
         </cds-password-label>
       </div>
       <div *ngIf="action === actionLabels.EDIT">
-        <legend class="cd-header"
-                i18n>Placement Targets</legend>
+        <legend
+          class="cd-header"
+          i18n
+        >
+          Placement Targets
+        </legend>
         <div class="form-item">
           <cds-select
             formControlName="placementTarget"
@@ -183,9 +270,11 @@
           </cds-select>
         </div>
         <div class="form-item">
-          <cds-select formControlName="placementDataPool"
-                      label="Data pool"
-                      i18n>Data pool
+          <cds-select
+            formControlName="placementDataPool"
+            label="Data pool"
+            i18n
+            >Data pool
 
             <option
               *ngFor="let pool of poolList"
@@ -197,9 +286,11 @@
           </cds-select>
         </div>
         <div class="form-item">
-          <cds-select formControlName="placementIndexPool"
-                      label="Index pool"
-                      i18n>Index pool
+          <cds-select
+            formControlName="placementIndexPool"
+            label="Index pool"
+            i18n
+            >Index pool
 
             <option
               *ngFor="let pool of poolList"
@@ -211,9 +302,11 @@
           </cds-select>
         </div>
         <div class="form-item">
-          <cds-select formControlName="placementDataExtraPool"
-                      label="Data extra pool"
-                      i18n>Data extra pool
+          <cds-select
+            formControlName="placementDataExtraPool"
+            label="Data extra pool"
+            i18n
+            >Data extra pool
             <option
               *ngFor="let pool of poolList"
               [value]="pool.poolname"
@@ -225,8 +318,12 @@
         </div>
 
         <div>
-          <legend class="cd-header"
-                  i18n>Storage Classes</legend>
+          <legend
+            class="cd-header"
+            i18n
+          >
+            Storage Classes
+          </legend>
           <div class="form-item">
             <cds-select
               formControlName="storageClass"
@@ -235,16 +332,20 @@
               i18n
               >Storage class
 
-              <option *ngFor="let storageClass of storageClassList"
-                      [value]="storageClass.key">
+              <option
+                *ngFor="let storageClass of storageClassList"
+                [value]="storageClass.key"
+              >
                 {{ storageClass.key }}
               </option>
             </cds-select>
           </div>
           <div class="form-item">
-            <cds-select formControlName="storageDataPool"
-                        label="Data pool"
-                        i18n>Data pool
+            <cds-select
+              formControlName="storageDataPool"
+              label="Data pool"
+              i18n
+              >Data pool
               <option
                 *ngFor="let pool of poolList"
                 [value]="pool.poolname"
@@ -255,11 +356,15 @@
             </cds-select>
           </div>
           <div class="form-item">
-            <cds-select formControlName="storageCompression"
-                        label="Compression"
-                        i18n>Compression
-              <option *ngFor="let compression of compressionTypes"
-                      [value]="compression">
+            <cds-select
+              formControlName="storageCompression"
+              label="Compression"
+              i18n
+              >Compression
+              <option
+                *ngFor="let compression of compressionTypes"
+                [value]="compression"
+              >
                 {{ compression }}
               </option>
             </cds-select>

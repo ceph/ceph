@@ -25,12 +25,16 @@
 #include "FSCommands.h"
 #include "Monitor.h"
 #include "MonitorDBStore.h"
+#include "MonMap.h"
 #include "OSDMonitor.h"
+#include "Paxos.h"
 
 #include "common/strtol.h"
 #include "common/perf_counters.h"
 #include "common/config.h"
 #include "common/cmdparse.h"
+#include "common/debug.h"
+#include "common/errno.h"
 #include "messages/MMDSMap.h"
 #include "messages/MFSMap.h"
 #include "messages/MFSMapUser.h"
@@ -41,6 +45,7 @@
 #include "include/ceph_assert.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
+#include "include/util.h" // for dump_services()
 #include "mds/cephfs_features.h"
 #include "mds/mdstypes.h"
 #include "mds/cephfs_features.h" // for CEPHFS_FEATURE_*
@@ -1395,6 +1400,10 @@ bool MDSMonitor::fail_mds_gid(FSMap &fsmap, mds_gid_t gid)
   }
 
   return blocklist_epoch != 0;
+}
+
+bool MDSMonitor::is_leader() const {
+  return mon.is_leader();
 }
 
 mds_gid_t MDSMonitor::gid_from_arg(const FSMap &fsmap, const string &arg, ostream &ss)

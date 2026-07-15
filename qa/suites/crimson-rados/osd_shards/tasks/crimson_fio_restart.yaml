@@ -1,0 +1,123 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - PG_DEGRADED
+      - OSD_DOWN
+      - OSD_HOST_DOWN
+      - OSD_ROOT_DOWN
+      - PG_AVAILABILITY
+    osd-mkfs-args:
+      - --crimson_cpu_num
+      - "3"
+tasks:
+- ceph:
+    pre-mgr-commands:
+      - echo PRE_MGR_COMMAND_RUNNING
+      - sudo ceph -s
+      - sudo ceph config set osd crimson_cpu_num 3
+- exec:
+    mon.a:
+      - ceph -s
+
+- exec:
+    client.0:
+      - |
+        set -ex
+        if ! ceph osd pool ls | grep -qx 'testpool'; then
+          ceph osd pool create testpool 64 64
+        fi
+        ceph osd pool application enable testpool rbd || true
+        ceph -s
+        if ! rbd info testpool/testimage; then
+          rbd create testpool/testimage --size 10G --image-format=2
+        fi
+- exec:
+    client.0:
+      - |
+        set -ex
+        fio --name=rbdtest \
+            --ioengine=rbd \
+            --pool=testpool \
+            --rbdname=testimage \
+            --clientname=admin \
+            --rw=randwrite \
+            --bs=4k \
+            --iodepth=32 \
+            --numjobs=4 \
+            --runtime=120 \
+            --time_based  \
+            --group_reporting \
+            --direct=1 \
+            --invalidate=0
+        ceph daemon osd.0 dump_store_shards
+        ceph config set osd seastore_require_partition_count_match_reactor_count false
+        ceph config set osd.0 crimson_cpu_num 2
+        ceph config set osd.1 crimson_cpu_num 2
+        ceph config set osd.2 crimson_cpu_num 2
+
+- ceph.restart:
+    daemons: [osd.0, osd.1, osd.2]
+    wait-for-healthy: false
+    wait-for-osds-up: true
+
+- exec:
+    osd.0:
+      - |
+        set -ex
+        ceph health detail
+        ceph daemon osd.0 config show
+- exec:
+    client.0:
+      - |
+        set -ex
+        rbd info testpool/testimage
+        fio --name=rbdtest \
+            --ioengine=rbd \
+            --pool=testpool \
+            --rbdname=testimage \
+            --clientname=admin \
+            --rw=randwrite \
+            --bs=4k \
+            --iodepth=32 \
+            --numjobs=4 \
+            --runtime=120 \
+            --time_based  \
+            --group_reporting \
+            --direct=1 \
+            --invalidate=0
+        ceph daemon osd.0 dump_store_shards
+        ceph config set osd.0 crimson_cpu_num 5
+        ceph config set osd.1 crimson_cpu_num 5
+        ceph config set osd.2 crimson_cpu_num 5
+- ceph.restart:
+    daemons: [osd.0, osd.1, osd.2]
+    wait-for-healthy: false
+    wait-for-osds-up: true
+
+- exec:
+    osd.0:
+      - |
+        set -ex
+        ceph health detail
+        ceph daemon osd.0 config show
+
+- exec:
+    client.0:
+      - |
+        set -ex
+        rbd info testpool/testimage
+        fio --name=rbdtest \
+            --ioengine=rbd \
+            --pool=testpool \
+            --rbdname=testimage \
+            --clientname=admin \
+            --rw=randwrite \
+            --bs=4k \
+            --iodepth=32 \
+            --numjobs=4 \
+            --runtime=120 \
+            --time_based  \
+            --group_reporting \
+            --direct=1 \
+            --invalidate=0
+        ceph daemon osd.0 dump_store_shards

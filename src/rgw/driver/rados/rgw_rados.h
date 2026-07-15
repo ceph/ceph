@@ -173,11 +173,6 @@ class RGWObjectCtx {
   std::map<rgw_obj, RGWObjStateManifest> objs_state;
 public:
   explicit RGWObjectCtx(rgw::sal::Driver* _driver) : driver(_driver) {}
-  RGWObjectCtx(RGWObjectCtx& _o) {
-    std::unique_lock wl{lock};
-    this->driver = _o.driver;
-    this->objs_state = _o.objs_state;
-  }
 
   rgw::sal::Driver* get_driver() {
     return driver;
@@ -191,6 +186,15 @@ public:
   void invalidate(const rgw_obj& obj);
 };
 
+// Enforce at compile time that RGWObjectCtx is neither copyable nor movable
+static_assert(!std::is_copy_constructible<RGWObjectCtx>::value,
+              "RGWObjectCtx must not be copy-constructed");
+static_assert(!std::is_copy_assignable<RGWObjectCtx>::value,
+              "RGWObjectCtx must not be copy-assigned");
+static_assert(!std::is_move_constructible<RGWObjectCtx>::value,
+              "RGWObjectCtx must not be move-constructed");
+static_assert(!std::is_move_assignable<RGWObjectCtx>::value,
+              "RGWObjectCtx must not be move-assigned");
 
 struct RGWRawObjState {
   rgw_raw_obj obj;
@@ -1017,7 +1021,9 @@ public:
 		   optional_yield y,
 		   const std::string *user_data = nullptr,
 		   bool appendable = false,
-                   bool log_op = true);
+                   bool log_op = true,
+		   uint8_t restore_status = 0,
+		   ceph::real_time restore_expiry_date = {});
       int complete_del(const DoutPrefixProvider *dpp,
                        int64_t poolid, uint64_t epoch,
                        ceph::real_time& removed_mtime, /* mtime of removed object */
@@ -1267,6 +1273,7 @@ public:
                rgw::sal::DataProcessorFactory *dp_factory,
                const DoutPrefixProvider *dpp,
                optional_yield y,
+               uint64_t src_accounted_size = 0,
                bool log_op = true);
 
   int transition_obj(RGWObjectCtx& obj_ctx,
@@ -1626,7 +1633,6 @@ public:
   int list_gc_objs(int *index, std::string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated, bool& processing_queue);
   int process_gc(bool expired_only, optional_yield y);
   bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y);
-  int defer_gc(const DoutPrefixProvider *dpp, RGWObjectCtx* ctx, RGWBucketInfo& bucket_info, const rgw_obj& obj, optional_yield y);
 
   int process_lc(const std::unique_ptr<rgw::sal::Bucket>& optional_bucket);
 

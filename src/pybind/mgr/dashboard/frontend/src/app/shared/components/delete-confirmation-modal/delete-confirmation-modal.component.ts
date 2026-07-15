@@ -21,8 +21,6 @@ export class DeleteConfirmationModalComponent extends BaseModal implements OnIni
   submitButton: SubmitButtonComponent;
   deletionForm: CdFormGroup;
   impactEnum = DeletionImpact;
-  childFormGroup: CdFormGroup;
-  childFormGroupTemplate: TemplateRef<any>;
   submitDisabled$: Observable<boolean> = of(false);
   constructor(
     @Optional() @Inject('impact') public impact: DeletionImpact,
@@ -42,7 +40,10 @@ export class DeleteConfirmationModalComponent extends BaseModal implements OnIni
     public submitActionObservable?: () => Observable<any>,
     @Optional()
     @Inject('callBackAtionObservable')
-    public callBackAtionObservable?: () => Observable<any>
+    public callBackAtionObservable?: () => Observable<any>,
+    @Optional() @Inject('hideDefaultWarning') public hideDefaultWarning?: boolean,
+    @Optional() @Inject('childFormGroup') public childFormGroup?: CdFormGroup,
+    @Optional() @Inject('childFormGroupTemplate') public childFormGroupTemplate?: TemplateRef<any>
   ) {
     super();
     this.actionDescription = actionDescription || 'delete';
@@ -50,7 +51,7 @@ export class DeleteConfirmationModalComponent extends BaseModal implements OnIni
   }
 
   ngOnInit() {
-    const controls = {
+    const controls: Record<string, AbstractControl> = {
       impact: new UntypedFormControl(this.impact),
       confirmation: new UntypedFormControl(false, {
         validators: [
@@ -71,6 +72,13 @@ export class DeleteConfirmationModalComponent extends BaseModal implements OnIni
         ]
       })
     };
+
+    if (
+      this.impact === this.impactEnum.high &&
+      this.bodyContext?.forceDeleteAcknowledgementMessage
+    ) {
+      controls.forceDeleteAck = new UntypedFormControl(false, [Validators.requiredTrue]);
+    }
 
     if (this.childFormGroup) {
       controls['child'] = this.childFormGroup;
@@ -93,6 +101,16 @@ export class DeleteConfirmationModalComponent extends BaseModal implements OnIni
         map((value: string) => value !== target)
       );
     }
+  }
+
+  get forceDeleteAckSatisfied(): boolean {
+    if (!(
+      this.impact === this.impactEnum.high && this.bodyContext?.forceDeleteAcknowledgementMessage
+    )) {
+      return true;
+    }
+    const c = this.deletionForm?.get('forceDeleteAck');
+    return c ? !!c.value : true;
   }
 
   matchResourceName(control: AbstractControl): ValidationErrors | null {

@@ -14,7 +14,8 @@ class TestZap(object):
         with pytest.raises(SystemExit):
             lvm.zap.Zap(argv=['--help']).main()
         stdout, stderr = capsys.readouterr()
-        assert 'optional arguments' in stdout
+        assert 'positional' in stdout
+        assert '-h' in stdout or '--help' in stdout
 
     @pytest.mark.parametrize('device_name', [
         '/dev/mapper/foo',

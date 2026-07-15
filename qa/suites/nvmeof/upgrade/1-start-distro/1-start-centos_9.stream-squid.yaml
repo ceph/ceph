@@ -2,6 +2,16 @@ os_type: centos
 os_version: "9.stream"
 
 tasks:
+- install:
+    branch: squid-nvmeof
+    exclude_packages:
+      - ceph-volume
+      - ceph-osd-classic
+      - ceph-osd-crimson
+    extra_packages:
+      - nvme-cli
+- print: "**** done install task..."
+
 - cephadm:
     image: quay.ceph.io/ceph-ci/ceph:squid-nvmeof
     compiled_cephadm_branch: squid-nvmeof

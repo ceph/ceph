@@ -1,0 +1,23 @@
+// Scoped to this component (ViewEncapsulation.None)
+cd-nvmeof-gateway-node-add-modal {
+  .cds--modal-container {
+    height: 80vh;
+    max-height: 80vh;
+  }
+
+  .cds--modal-header {
+    border-bottom: none;
+  }
+
+  .cds--modal-content {
+    background-color: var(--cds-background);
+    padding: 0;
+  }
+
+  cd-table {
+    display: block;
+    background-color: var(--cds-layer);
+    border: 1px solid var(--cds-border-subtle-01);
+    margin: 0 var(--cds-spacing-05) var(--cds-spacing-05);
+  }
+}

@@ -142,7 +142,7 @@ by the Ceph daemon itself, run a command of the following form:
 
 .. prompt:: bash
 
-   ceph tell {daemon-type}{daemon-id} heap release
+   ceph tell {daemon-type}.{daemon-id} heap release
 
 For example:
 

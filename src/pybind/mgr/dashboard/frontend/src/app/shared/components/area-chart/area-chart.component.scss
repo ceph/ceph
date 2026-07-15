@@ -1,0 +1,13 @@
+.chart-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.chart-header {
+  margin-bottom: var(--cds-spacing-04);
+}
+
+.chart-subheading {
+  margin-top: var(--cds-spacing-02);
+  color: var(--cds-text-secondary);
+}

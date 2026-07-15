@@ -1,49 +1,44 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <fmt/format.h>
+
 #include <string>
-#include <regex>
+
+#include <boost/url/parse.hpp>
+#include <boost/url/url_view.hpp>
 
 namespace rgw {
 
-namespace {
-  const auto USER_GROUP_IDX = 3;
-  const auto PASSWORD_GROUP_IDX = 4;
-  const auto HOST_GROUP_IDX = 5;
-
-  const std::string schema_re = "([[:alpha:]]+:\\/\\/)";
-  const std::string user_pass_re = "(([^:\\s]+):([^@\\s]+)@)?";
-  const std::string host_port_re = "([[:alnum:].:-]+)";
-  const std::string path_re = "(/[[:print:]]*)?";
-}
-
-bool parse_url_authority(const std::string& url, std::string& host, std::string& user, std::string& password) {
-  const std::string re = schema_re + user_pass_re + host_port_re + path_re;
-  const std::regex url_regex(re, std::regex::icase);
-  std::smatch url_match_result;
-
-  if (std::regex_match(url, url_match_result, url_regex)) {
-    host = url_match_result[HOST_GROUP_IDX];
-    user = url_match_result[USER_GROUP_IDX];
-    password = url_match_result[PASSWORD_GROUP_IDX];
-    return true;
+bool parse_url_authority(const std::string& url,
+                         std::string& host,
+                         std::string& user,
+                         std::string& password) {
+  auto r = boost::urls::parse_uri(url);
+  if (!r) {
+    return false;
   }
-
-  return false;
-}
-
-bool parse_url_userinfo(const std::string& url, std::string& user, std::string& password) {
-  const std::string re = schema_re + user_pass_re + host_port_re + path_re;
-  const std::regex url_regex(re);
-  std::smatch url_match_result;
-
-  if (std::regex_match(url, url_match_result, url_regex)) {
-    user = url_match_result[USER_GROUP_IDX];
-    password = url_match_result[PASSWORD_GROUP_IDX];
-    return true;
+  const auto& v = r.value();
+  if (v.has_port()) {
+    host = fmt::format("{}:{}", v.host(), v.port());
+  } else {
+    host = std::string(v.host());
   }
-
-  return false;
+  user = std::string(v.user());
+  password = std::string(v.password());
+  return true;
 }
-}
 
+bool parse_url_userinfo(const std::string& url,
+                        std::string& user,
+                        std::string& password) {
+  auto r = boost::urls::parse_uri(url);
+  if (!r) {
+    return false;
+  }
+  const auto& v = r.value();
+  user = std::string(v.user());
+  password = std::string(v.password());
+  return true;
+}
+} // namespace rgw

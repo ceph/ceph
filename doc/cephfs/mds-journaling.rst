@@ -24,7 +24,7 @@ CephFS uses journaling for couple of reasons:
 #. Consistency: On an MDS failover, the journal events can be replayed to reach a
    consistent file system state. Also, metadata operations that require multiple
    updates to the backing store need to be journaled for crash consistency (along
-   with other consistency mechanisms such as locking, etc..).
+   with other consistency mechanisms such as locking, etc.).
 
 #. Performance: Journal updates are (mostly) sequential, hence updates to journals
    are fast. Furthermore, updates can be batched into single write, thereby saving
@@ -41,7 +41,7 @@ Journal Events
 
 Apart from journaling file system metadata updates, CephFS journals various other events
 such as client session info and directory import/export state to name a few. These events
-are used by the metadata sever to reestablish correct state as required, e.g., Ceph MDS
+are used by the metadata server to reestablish correct state as required, e.g., Ceph MDS
 tries to reconnect clients on restart when journal events get replayed and a specific
 event type in the journal specifies that a client entity type has a session with the MDS
 before it was restarted.
@@ -137,7 +137,7 @@ the rank from this initial state.
 Configurations
 --------------
 
-The targetted size of a log segment in terms of number of events is controlled by:
+The targeted size of a log segment in terms of number of events is controlled by:
 
 .. confval:: mds_log_events_per_segment
 

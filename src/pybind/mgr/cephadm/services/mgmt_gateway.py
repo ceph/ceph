@@ -1,6 +1,8 @@
 import logging
 from typing import List, Any, Tuple, Dict, cast, Optional, TYPE_CHECKING
 
+from ceph.deployment.utils import wrap_ipv6
+
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import MgmtGatewaySpec, GrafanaSpec, ServiceSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_endpoints
@@ -24,18 +26,20 @@ class MgmtGatewayService(CephadmService):
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
-        super().register_for_certificates(daemon_spec)
+        super().prepare_certificates(daemon_spec)
         self.mgr.cert_mgr.register_self_signed_cert_key_pair(MgmtGatewayService.TYPE, INTERNAL_CERT_LABEL)
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         return daemon_spec
 
     def get_service_endpoints(self, service_name: str) -> List[str]:
+        # return host:port strings for every daemon of the given service
+        # wrap IPv6 addresses in square brackets so a port can be added later
         srv_entries = []
         for dd in self.mgr.cache.get_daemons_by_service(service_name):
             assert dd.hostname is not None
             addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
             port = dd.ports[0] if dd.ports else None
-            srv_entries.append(f'{addr}:{port}')
+            srv_entries.append(f'{wrap_ipv6(addr)}:{port}')
         return srv_entries
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
@@ -56,11 +60,14 @@ class MgmtGatewayService(CephadmService):
         self.mgr.set_module_option_ex('dashboard', 'standby_behaviour', 'error')
 
     def get_service_discovery_endpoints(self) -> List[str]:
+        # the mgmt gateway uses this internally when generating its nginx
+        # configuration and the URL prefixes that we publish to the world.
+        # A literal IPv6 address needs to be wrapped in brackets.
         sd_endpoints = []
         for dd in self.mgr.cache.get_daemons_by_service('mgr'):
             assert dd.hostname is not None
             addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
-            sd_endpoints.append(f"{addr}:{self.mgr.service_discovery_port}")
+            sd_endpoints.append(f"{wrap_ipv6(addr)}:{self.mgr.service_discovery_port}")
         return sd_endpoints
 
     @classmethod
@@ -79,7 +86,8 @@ class MgmtGatewayService(CephadmService):
             for service in ['mgr']
             for d in mgr.cache.get_daemons_by_service(service)
         ]
-        return deps
+        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
+        return sorted(deps + parent_deps)
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
@@ -135,7 +143,7 @@ class MgmtGatewayService(CephadmService):
 
         if svc_spec.ssl:
             ip = self.get_mgmt_gw_ip(svc_spec, daemon_spec)
-            tls_pair = self.get_certificates(daemon_spec, [ip])
+            tls_pair = self.get_certificates(daemon_spec, ips=[ip])
             daemon_config["files"]["nginx.crt"] = tls_pair.cert
             daemon_config["files"]["nginx.key"] = tls_pair.key
 

@@ -8,7 +8,13 @@
 #include "rgw_lua.h"
 #ifdef WITH_RADOSGW_LUA_PACKAGES
 #include <filesystem>
-#include <boost/process.hpp>
+#include <boost/process/v1/child.hpp>
+#include <boost/process/v1/env.hpp>
+#include <boost/process/v1/environment.hpp>
+#include <boost/process/v1/io.hpp>
+#include <boost/process/v1/pipe.hpp>
+#include <boost/process/v1/search_path.hpp>
+#include <boost/process/v1/start_dir.hpp>
 #endif
 
 #define dout_subsys ceph_subsys_rgw
@@ -19,6 +25,9 @@ context to_context(const std::string& s)
 {
   if (strcasecmp(s.c_str(), "prerequest") == 0) {
     return context::preRequest;
+  }
+  if (strcasecmp(s.c_str(), "postauth") == 0) {
+    return context::postAuth;
   }
   if (strcasecmp(s.c_str(), "postrequest") == 0) {
     return context::postRequest;
@@ -40,6 +49,8 @@ std::string to_string(context ctx)
   switch (ctx) {
     case context::preRequest:
       return "prerequest";
+    case context::postAuth:
+      return "postauth";
     case context::postRequest:
       return "postrequest";
     case context::background:
@@ -84,6 +95,12 @@ int read_script(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const s
   return manager ? manager->get_script(dpp, y, script_oid(ctx, tenant), script) : -ENOENT;
 }
 
+std::tuple<LuaCodeType, int> read_script_or_bytecode(const DoutPrefixProvider *dpp, sal::LuaManager* manager,
+                                                     const std::string& tenant, optional_yield y, context ctx)
+{
+  return manager ? manager->get_script_or_bytecode(dpp, y, script_oid(ctx, tenant)) : std::make_tuple("", -ENOENT);
+}
+
 int write_script(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, const std::string& script)
 {
   return manager ? manager->put_script(dpp, y, script_oid(ctx, tenant), script) : -ENOENT;
@@ -96,7 +113,7 @@ int delete_script(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const
 
 #ifdef WITH_RADOSGW_LUA_PACKAGES
 
-namespace bp = boost::process;
+namespace bp = boost::process::v1;
 
 int add_package(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver, optional_yield y, const std::string& package_name, bool allow_compilation)
 {
@@ -141,8 +158,6 @@ int remove_package(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, opti
 {
   return driver->get_lua_manager("")->remove_package(dpp, y, package_name);
 }
-
-namespace bp = boost::process;
 
 int list_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, optional_yield y, packages_t& packages)
 {
@@ -238,6 +253,9 @@ int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
     ldpp_dout(dpp, 1) << "Lua ERROR: failed to create temporary directory from template: " << 
       tmp_path_template << ". error: " << rc << dendl;
     return rc;
+  } else {
+    // rgw starts as root and will later drop to user ceph
+    chmod(tmp_luarocks_path, 0755);
   }
   install_dir.assign(tmp_luarocks_path);
 

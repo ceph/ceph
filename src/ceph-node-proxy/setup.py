@@ -19,14 +19,18 @@ setup(
                                                        'python-common#egg=ceph-1.0.0')])],
     tests_require=[
         'pytest >=2.1.3',
+        'PyYAML',
         'tox',
         'ceph',
     ],
-    entry_points=dict(
-        console_scripts=[
+    entry_points={
+        'console_scripts': [
             'ceph-node-proxy = ceph_node_proxy.main:main',
         ],
-    ),
+        # vendors can register Redfish system implementations
+        # example: 'myvendor = mypackage.redfish_system:MyVendorSystem'
+        'ceph_node_proxy.systems': [],
+    },
     classifiers=[
         'Environment :: Console',
         'Intended Audience :: Information Technology',

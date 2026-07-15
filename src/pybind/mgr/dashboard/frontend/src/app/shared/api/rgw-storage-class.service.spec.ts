@@ -30,6 +30,16 @@ describe('RgwStorageClassService', () => {
       'api/rgw/zonegroup/storage-class/default-placement/Cloud8ibm'
     );
     expect(req.request.method).toBe('DELETE');
+    expect(req.request.params.has('zone_name')).toBe(false);
+  });
+
+  it('should call remove with zone_name query param when provided', () => {
+    service.removeStorageClass('default-placement', 'Cloud8ibm', 'us-east-1').subscribe();
+    const req = httpTesting.expectOne(
+      'api/rgw/zonegroup/storage-class/default-placement/Cloud8ibm?zone_name=us-east-1'
+    );
+    expect(req.request.method).toBe('DELETE');
+    expect(req.request.params.get('zone_name')).toBe('us-east-1');
   });
 
   it('should call create', () => {

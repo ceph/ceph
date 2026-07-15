@@ -92,7 +92,7 @@ after careful reading of the documentation.
 
 If the ``--fscid`` option is provided then this creates a file system with a
 specific fscid. This can be used when an application expects the file system's ID
-to be stable after it has been recovered, e.g., after monitor databases are
+to be stable after it has been recovered, e.g., after Monitor databases are
 lost and rebuilt. Consequently, file system IDs don't always keep increasing
 with newer file systems.
 

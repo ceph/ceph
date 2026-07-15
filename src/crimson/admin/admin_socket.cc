@@ -14,10 +14,12 @@
 #include <seastar/core/thread.hh>
 #include <seastar/util/std-compat.hh>
 
+#include "common/errno.h" // for cpp_strerror()
 #include "common/options.h"
 #include "common/version.h"
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
+#include "crimson/common/config_proxy.h" // for local_conf()
 #include "crimson/common/log.h"
 #include "crimson/net/Socket.h"
 #include "crimson/net/Connection.h"
@@ -95,7 +97,18 @@ auto AdminSocket::parse_cmd(const std::vector<std::string>& cmd)
     cmd_getval(cmdmap, "prefix", prefix);
     // tolerate old-style pg <pgid> command <args> style formatting
     if (prefix == "pg") {
-      cmd_getval(cmdmap, "cmd", prefix);
+      std::string pg_subcmd;
+      cmd_getval(cmdmap, "cmd", pg_subcmd);
+      prefix = pg_subcmd;
+
+      if (auto arg = cmd_getval<std::string>(cmdmap, "arg"); arg) {
+        if (pg_subcmd == "list_unfound") {
+          cmdmap["offset"] = std::move(*arg);
+        } else if (pg_subcmd == "mark_unfound_lost") {
+          cmdmap["mulcmd"] = std::move(*arg);
+        }
+        cmdmap.erase("arg");
+      }
     }
   } catch (const bad_cmd_get& e) {
     ERROR("invalid syntax: {}", cmd);
@@ -185,7 +198,12 @@ auto AdminSocket::execute_command(const std::vector<std::string>& cmd,
         tell_result_t{-EINVAL, "invalid command json", std::move(out)});
     }
     DEBUG("validated {} {}", cmd, os.str());
-    return parsed->hook.call(parsed->params, parsed->format, std::move(buf));
+    auto owned = std::move(*parsed);
+    return seastar::do_with(std::move(owned), std::move(buf),
+                            [](const parsed_command_t& parsed,
+                               ceph::bufferlist& buf) mutable {
+      return parsed.hook.call(parsed.params, parsed.format, std::move(buf));
+    });
   } else {
     DEBUG("failed to parse");
     auto& result = std::get<tell_result_t>(maybe_parsed);
@@ -574,7 +592,7 @@ public:
     unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
     // Output all
     f->open_array_section("options");
-    for (const auto &option : get_ceph_options()) {
+    for (const auto &option : ceph_options) {
       f->dump_object("option", option);
     }
     f->close_section();

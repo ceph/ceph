@@ -25,7 +25,7 @@ In commands of this form, the arguments ``host-pattern``, ``label``, and
   against name, label and status simultaneously, or to filter against any
   proper subset of name, label and status.
 
-The ``detail`` parameter provides more host related information for cephadm-based
+The ``detail`` parameter provides more host-related information for cephadm-based
 clusters. For example:
 
 .. prompt:: bash #
@@ -152,7 +152,7 @@ cluster by running a command of the following form:
 Offline Host Removal
 --------------------
 
-If a host is offline and can not be recovered, it can be removed from the
+If a host is offline and cannot be recovered, it can be removed from the
 cluster by running a command of the following form:
 
 .. prompt:: bash #
@@ -171,7 +171,7 @@ Host Labels
 ===========
 
 The orchestrator supports assigning labels to hosts. Labels
-are free-form and have no particular meaning by itself and each host
+are free-form and have no particular meaning by themselves. Each host
 can have multiple labels. They can be used to specify the placement
 of daemons. For more information, see :ref:`orch-placement-by-labels`.
 
@@ -182,7 +182,7 @@ Labels can be added when adding a host with the ``--labels`` flag:
    ceph orch host add my_hostname --labels=my_label1
    ceph orch host add my_hostname --labels=my_label1,my_label2
 
-To add a label a existing host, run:
+To add a label to an existing host, run:
 
 .. prompt:: bash #
 
@@ -226,7 +226,7 @@ The following host labels have a special meaning to cephadm.  All start with ``_
   bootstrap was originally run), and the ``client.admin`` key is set to be distributed
   to that host via the ``ceph orch client-keyring ...`` function.  Adding this label
   to additional hosts will normally cause cephadm to deploy configuration and keyring files
-  in ``/etc/ceph``. Starting from versions 16.2.10 (Pacific) and 17.2.1 (Quincy) in
+  in ``/etc/ceph``. Starting from versions 16.2.10 (Pacific) and 17.2.1 (Quincy), in
   addition to the default location ``/etc/ceph/`` cephadm also stores config and keyring
   files in the ``/var/lib/ceph/<fsid>/config`` directory.
 
@@ -371,7 +371,7 @@ cephadm control.
 
   Removal from the CRUSH map will fail if there are OSDs deployed on the
   host. If you would like to remove all the host's OSDs as well, please start
-  by using  the ``ceph orch host drain`` command to do so. Once the OSDs
+  by using the ``ceph orch host drain`` command to do so. Once the OSDs
   have been removed, then you may direct cephadm to remove the CRUSH bucket
   along with the host using the ``--rm-crush-entry`` flag.
 
@@ -551,8 +551,28 @@ cephadm operations. Run a command of the following form:
 
    ceph cephadm set-user <user>
 
-Prior to running this, the cluster SSH key needs to be added to this user's
-``authorized_keys`` file and non-root users must have passwordless sudo access.
+The ``set-user`` command automatically configures the specified user on all cluster
+hosts by calling ``cephadm setup-ssh-user`` on each host. This command includes the following:
+
+- Setting up passwordless sudo access for non-root users
+- Authorizing the cluster's SSH public key for the user
+
+If you have already manually configured the user on all hosts, you can skip
+the automatic setup by using the ``--skip-pre-steps`` flag:
+
+.. prompt:: bash #
+
+   ceph cephadm set-user <user> --skip-pre-steps
+
+For manual setup of SSH users on individual hosts, you can use the
+``cephadm setup-ssh-user`` command directly:
+
+.. prompt:: bash #
+
+   cephadm setup-ssh-user --ssh-user <user> --ssh-pub-key <public_key>
+
+This command validates that the user exists, configures passwordless sudo access,
+and authorizes the SSH public key.
 
 
 Customizing the SSH Configuration
@@ -668,6 +688,95 @@ when executing ``ceph * metadata``. This in turn means cephadm also
 requires the bare host name when adding a host to the cluster:
 ``ceph orch host add <bare-name>``.
 
-..
-  TODO: This chapter needs to provide way for users to configure
-  Grafana in the dashboard, as this is right now very hard to do.
+Sudo Hardening
+==============
+
+Cephadm supports sudo hardening to enhance security by restricting sudo privilege
+escalation for non-root SSH users. When sudo hardening is enabled, cephadm uses the
+``cephadm_invoker.py`` script to securely execute cephadm commands with controlled
+privilege escalation.
+
+Enabling Sudo Hardening
+-----------------------
+
+To enable sudo hardening for the entire cluster, use the following command:
+
+.. prompt:: bash #
+
+  ceph cephadm prepare-host-and-enable-sudo-hardening <user>
+
+This command performs a comprehensive sudo hardening setup:
+
+1. **Host Preparation**: Prepares all cluster hosts for sudo hardening by:
+   - Installing/upgrading cephadm RPM with the invoker script
+   - Configuring restricted sudo access for non-root users
+   - Setting up SSH key authorization
+
+2. **SSH User Configuration**: Sets the specified user for cluster SSH operations
+
+3. **Global Enablement**: Enables sudo hardening cluster-wide
+
+The ``<user>`` parameter specifies which non-root user should be configured for SSH access.
+This user will have restricted sudo access configured through the sudoers file.
+
+You can manually prepare a host for sudo hardening using:
+
+.. prompt:: bash #
+
+  cephadm prepare-host-sudo-hardening --ssh-user <user> --ssh-pub-key <pub_key>
+
+.. note:: During initial host addition, the root user is used for setup. After
+   Sudo hardening is enabled, the specified non-root user with restricted sudo
+   access will be used for ongoing operations.
+
+Sudo Hardening Workflow
+-----------------------
+
+When sudo hardening is enabled, the following workflow is used:
+
+1. **Host Addition**: Before adding a new host with ``ceph orch host add``,
+   the cluster SSH key needs to be added to this user's ``authorized_keys``
+   file and non-root users must have passwordless sudo access.
+2. **Command Execution**: Instead of executing cephadm directly, commands are
+   routed through ``cephadm_invoker.py``
+3. **Binary Verification**: The invoker validates the cephadm binary's hash before execution
+4. **Secure Execution**: Commands are executed with restricted permissions
+
+The ``cephadm_invoker.py`` script provides the following subcommands:
+
+- ``run``: Execute cephadm binary with hash verification
+- ``deploy_cephadm_binary``: Deploy cephadm binary to final location
+- ``check_existence``: Check if a file exists
+
+Sudo Access Restrictions
+-------------------------
+
+Sudo hardening restricts sudo access for non-root users to enhance security. When a
+host is prepared for sudo hardening, the sudoers configuration is modified to limit
+the commands that can be executed with sudo. This prevents unauthorized command
+execution while still allowing necessary cephadm operations.
+
+The sudoers configuration restricts access to only the ``cephadm_invoker.py`` script
+and essential system commands, providing a secure execution environment.
+
+Security Benefits
+-----------------
+Sudo hardening provides the following security benefits:
+
+1. The invoker validates the cephadm binary's hash
+2. If validation fails, it signals for binary redeployment
+3. Commands are executed with restricted sudo permissions
+4. All operations are logged for security auditing
+
+
+Disabling Sudo Hardening
+------------------------
+
+To disable sudo hardening:
+
+.. prompt:: bash #
+
+  ceph config set mgr mgr/cephadm/sudo_hardening false
+
+.. note:: Disabling sudo hardening does not automatically revert host configurations.
+   Hosts that were prepared for sudo hardening will retain the invoker setup.

@@ -1,7 +1,10 @@
 from mgr_module import MgrModule
 
+from .cli import OSDSupportCLICommand
+
 
 class OSDSupport(MgrModule):
+    CLICommand = OSDSupportCLICommand
     # Kept to keep upgrades from older point releases working.
     # This module can be removed as soon as we no longer
     # support upgrades from old octopus point releases.

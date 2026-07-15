@@ -218,12 +218,7 @@ class DataLogBackends final
 			  shards), datalog(datalog) {}
 public:
 
-  boost::intrusive_ptr<RGWDataChangesBE> head() {
-    std::unique_lock l(m);
-    auto i = end();
-    --i;
-    return i->second;
-  }
+  boost::intrusive_ptr<RGWDataChangesBE> head();
   asio::awaitable<std::tuple<std::span<rgw_data_change_log_entry>,
 			     std::string>>
   list(const DoutPrefixProvider *dpp, int shard,

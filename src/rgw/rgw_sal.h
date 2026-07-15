@@ -66,6 +66,10 @@ namespace rgw::restore {
   struct RestoreEntry;
 }
 
+namespace rgw::lua {
+  class Background;
+}
+
 class RGWGetDataCB {
 public:
   virtual int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) = 0;
@@ -675,12 +679,14 @@ class Driver {
     virtual int store_oidc_provider(const DoutPrefixProvider* dpp,
                                     optional_yield y,
                                     const RGWOIDCProviderInfo& info,
-                                    bool exclusive) = 0;
+                                    bool exclusive,
+                                    RGWObjVersionTracker* objv_tracker) = 0;
     virtual int load_oidc_provider(const DoutPrefixProvider* dpp,
                                    optional_yield y,
                                    std::string_view tenant,
                                    std::string_view url,
-                                   RGWOIDCProviderInfo& info) = 0;
+                                   RGWOIDCProviderInfo& info,
+                                   RGWObjVersionTracker* objv_tracker) = 0;
     virtual int delete_oidc_provider(const DoutPrefixProvider* dpp,
                                      optional_yield y,
                                      std::string_view tenant,
@@ -1287,7 +1293,7 @@ class Object {
     /** Create a randomized instance ID for this object */
     virtual void gen_rand_obj_instance_name() = 0;
     /** Get a multipart serializer for this object */
-    virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp,
+    virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp, optional_yield y,
 							 const std::string& lock_name) = 0;
     /** Move the data of an object to new placement storage */
     virtual int transition(Bucket* bucket,
@@ -1537,6 +1543,9 @@ public:
   /** Get the Object that represents this upload */
   virtual std::unique_ptr<rgw::sal::Object> get_meta_obj() = 0;
 
+  /** True if this store persists per-part GCM salts; gates AEAD UploadPart salt emission. */
+  virtual bool supports_crypt_part_salts() const { return false; }
+
   /** Initialize this upload */
   virtual int init(const DoutPrefixProvider* dpp, optional_yield y, ACLOwner& owner, rgw_placement_rule& dest_placement, rgw::sal::Attrs& attrs) = 0;
   /** List all the parts of this upload, filling the parts cache */
@@ -1608,7 +1617,7 @@ public:
   virtual ~Serializer() = default;
 
   /** Try to take the lock for the given amount of time. */
-  virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) = 0;
+  virtual int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) = 0;
   /** Unlock the lock */
   virtual int unlock(const DoutPrefixProvider *dpp, optional_yield y)  = 0;
 
@@ -1922,6 +1931,8 @@ public:
 
   /** Get a script named with the given key from the backing store */
   virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) = 0;
+  /** Get a copy of the lua bytecode if it exists, else the script named with the given key from the backing store */
+  virtual std::tuple<rgw::lua::LuaCodeType, int> get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) = 0;
   /** Put a script named with the given key to the backing store */
   virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) = 0;
   /** Delete a script named with the given key from the backing store */
@@ -1938,6 +1949,8 @@ public:
   virtual const std::string& luarocks_path() const = 0;
   /** Set the path to the loarocks install location **/
   virtual void set_luarocks_path(const std::string& path) = 0;
+
+  virtual void set_lua_background(rgw::lua::Background* background) = 0;
 };
 
 /** @} namespace rgw::sal in group RGWSAL */

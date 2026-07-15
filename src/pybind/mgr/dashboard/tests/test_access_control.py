@@ -216,6 +216,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         self.assertEqual(str(ctx.exception), "Role 'test_role' does not exist")
 
     def test_add_role_invalid_scope_perms(self):
+        assert "dashboard ac-role-create" in self._dashboard_module.CLICommand.COMMANDS
         self.test_create_role()
 
         with self.assertRaises(CmdException) as ctx:

@@ -808,6 +808,7 @@ int BlkDev::partition(char *partition, size_t max) const
 
 int BlkDev::wholedisk(char *device, size_t max) const
 {
+  return -EOPNOTSUPP;
 }
 
 

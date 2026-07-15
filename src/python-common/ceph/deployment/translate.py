@@ -134,9 +134,15 @@ class to_ceph_volume(object):
                     cmd += " --crush-device-class {}".format(d)
 
                 cmd += " --objectstore {}".format(self.spec.objectstore)
+
                 cmds.append(cmd)
 
         for i in range(len(cmds)):
+            if self.spec.osd_type:
+                osd_type_str = getattr(self.spec.osd_type, 'value', self.spec.osd_type)
+                if osd_type_str != 'classic':
+                    cmds[i] += " --osd-type {}".format(osd_type_str)
+
             if self.spec.encrypted:
                 cmds[i] += " --dmcrypt"
 
@@ -150,7 +156,13 @@ class to_ceph_volume(object):
                 cmds[i] += " --data-allocate-fraction {}".format(self.spec.data_allocate_fraction)
 
             if self.osd_id_claims:
-                cmds[i] += " --osd-ids {}".format(" ".join(self.osd_id_claims))
+                if self.spec.method == 'raw':
+                    # raw prepare expects --osd-id (singular) for each device
+                    if i < len(self.osd_id_claims):
+                        cmds[i] += " --osd-id {}".format(self.osd_id_claims[i])
+                else:
+                    # lvm batch expects --osd-ids (plural) with all ids
+                    cmds[i] += " --osd-ids {}".format(" ".join(self.osd_id_claims))
 
             if self.spec.method != 'raw':
                 cmds[i] += " --yes"

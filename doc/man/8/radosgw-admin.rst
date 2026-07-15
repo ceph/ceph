@@ -1,5 +1,7 @@
 :orphan:
 
+.. _man-radosgw-admin:
+
 =================================================================
  radosgw-admin -- rados REST gateway user administration utility
 =================================================================
@@ -81,6 +83,10 @@ as follows:
   list its objects. Adding --allow-unordered
   removes the ordering requirement, possibly generating results more
   quickly for buckets with large number of objects.
+  Use --marker to paginate through object listings (requires ordered listing;
+  do not use with --allow-unordered). For versioned buckets, also specify
+  --object-version with the instance/version ID to resume from a specific version
+  (e.g., ``--marker=obj1 --object-version=abc123``).
 
 :command:`bucket limit check`
   Show bucket sharding stats.
@@ -122,6 +128,16 @@ as follows:
 :command:`bucket sync enable`
   Enable bucket sync.
 
+:command:`bucket logging list`
+  List pending log objects for a source bucket.
+
+:command:`bucket logging info`
+  Show logging configuration for a source bucket, or list source buckets
+  logging to a specific log bucket.
+
+:command:`bucket logging flush`
+  Flush pending log objects to the log bucket immediately.
+
 :command:`bi get`
   Retrieve bucket index object entries.
 
@@ -156,7 +172,7 @@ as follows:
 :command:`objects expire`
   Run expired objects cleanup.
 
-:command:`period rm`
+:command:`period delete`
   Remove a period.
 
 :command:`period get`
@@ -240,7 +256,7 @@ as follows:
 :command:`zonegroup default`
   Set the default zone group.
 
-:command:`zonegroup rm`
+:command:`zonegroup delete`
   Remove a zone group info.
 
 :command:`zonegroup get`
@@ -279,7 +295,7 @@ as follows:
 :command:`zone create`
   Create a new zone.
 
-:command:`zone rm`
+:command:`zone delete`
   Remove a zone.
 
 :command:`zone get`
@@ -437,7 +453,7 @@ as follows:
 :command:`role create`
   Create a new role for use with STS (Security Token Service).
 
-:command:`role rm`
+:command:`role delete`
   Remove a role.
 
 :command:`role get`
@@ -458,7 +474,7 @@ as follows:
 :command:`role-policy get`
   Get the specified inline policy document embedded with the given role.
 
-:command:`role-policy rm`
+:command:`role-policy delete`
   Remove the policy attached to a role
 
 :command:`reshard add`
@@ -807,6 +823,12 @@ Options
 .. option:: --format=<format>
 
     Specify output format for certain operations. Supported formats: xml, json.
+
+.. option:: --pretty-format
+
+    Enable pretty formatting for JSON/XML output with indentation and newlines.
+    If no format is specified, default is true. Use ``--format <json/xml>`` to disable
+    for more compact output.
 
 .. option:: --sync-stats
 

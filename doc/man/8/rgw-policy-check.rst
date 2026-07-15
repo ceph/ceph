@@ -34,7 +34,7 @@ status if one or more policies could not be read or parsed.
 Options
 =======
 
-.. option: -t *tenant*
+.. option:: -t *tenant*
 
    Specify *tenant* as the tenant.  This is required by the
    policy parsing logic and is used to construct the internal

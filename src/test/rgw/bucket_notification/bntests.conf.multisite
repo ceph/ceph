@@ -1,0 +1,13 @@
+[DEFAULT]
+port = 8101
+host = localhost
+zonegroup = zg1
+cluster = c1
+version = v2
+
+[s3 main]
+access_key = 0987654321
+secret_key = crayon
+display_name = RegularUser
+user_id = regular.user
+email =

@@ -2,7 +2,7 @@
 Orphan List and Associated Tooling
 ==================================
 
-.. version added:: Luminous
+.. versionadded:: Luminous
 
 .. contents::
 
@@ -51,7 +51,7 @@ available pools and prompt the user to enter the name of the data
 pool. At that point the tool will, perhaps after an extended period of
 time, produce a local file containing the RADOS objects from the
 designated pool that appear to be orphans. The administrator is free
-to examine this file and the decide on a course of action, perhaps
+to examine this file and then decide on a course of action, perhaps
 removing those RADOS objects from the designated pool.
 
 All intermediate results are stored on the local file system rather
@@ -113,5 +113,3 @@ RGW. When larger objects are copied from bucket to bucket, only the
 shared. Those shared objects will contain the marker of the original
 bucket.
 
-.. _Data Layout in RADOS : ../layout
-.. _Pool Placement and Storage Classes : ../placement

@@ -689,63 +689,163 @@
       name: 'hardware',
       rules: [
         {
-          alert: 'HardwareStorageError',
-          'for': '30s',
-          expr: 'ceph_health_detail{name="HARDWARE_STORAGE"} > 0',
-          labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.1' },
+          alert: 'PowerSupplyDegraded',
+          'for': '1m',
+          expr: 'ceph_hardware_health{category="power"} == 1',
+          labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
-            summary: 'Storage devices error(s) detected%(cluster)s' % $.MultiClusterSummary(),
-            description: 'Some storage devices are in error. Check `ceph health detail`.',
+            summary: 'Power supply {{ $labels.component }} degraded on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
+            description: 'PSU {{ $labels.component }} is in a degraded state on {{ $labels.hostname }}.',
           },
         },
         {
-          alert: 'HardwareMemoryError',
-          'for': '30s',
-          expr: 'ceph_health_detail{name="HARDWARE_MEMORY"} > 0',
-          labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.2' },
-          annotations: {
-            summary: 'DIMM error(s) detected%(cluster)s' % $.MultiClusterSummary(),
-            description: 'DIMM error(s) detected. Check `ceph health detail`.',
-          },
-        },
-        {
-          alert: 'HardwareProcessorError',
-          'for': '30s',
-          expr: 'ceph_health_detail{name="HARDWARE_PROCESSOR"} > 0',
-          labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.3' },
-          annotations: {
-            summary: 'Processor error(s) detected%(cluster)s' % $.MultiClusterSummary(),
-            description: 'Processor error(s) detected. Check `ceph health detail`.',
-          },
-        },
-        {
-          alert: 'HardwareNetworkError',
-          'for': '30s',
-          expr: 'ceph_health_detail{name="HARDWARE_NETWORK"} > 0',
-          labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.4' },
-          annotations: {
-            summary: 'Network error(s) detected%(cluster)s' % $.MultiClusterSummary(),
-            description: 'Network error(s) detected. Check `ceph health detail`.',
-          },
-        },
-        {
-          alert: 'HardwarePowerError',
-          'for': '30s',
-          expr: 'ceph_health_detail{name="HARDWARE_POWER"} > 0',
+          alert: 'PowerSupplyFailed',
+          'for': '1m',
+          expr: 'ceph_hardware_health{category="power"} == 2',
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.5' },
           annotations: {
-            summary: 'Power supply error(s) detected%(cluster)s' % $.MultiClusterSummary(),
-            description: 'Power supply error(s) detected. Check `ceph health detail`.',
+            summary: 'Power supply {{ $labels.component }} failed on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
+            description: 'PSU fault detected on {{ $labels.hostname }}. PSU {{ $labels.component }} has failed.',
           },
         },
         {
-          alert: 'HardwareFanError',
-          'for': '30s',
-          expr: 'ceph_health_detail{name="HARDWARE_FANS"} > 0',
+          alert: 'CoolingDegraded',
+          'for': '1m',
+          expr: 'ceph_hardware_health{category="fans"} == 1',
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'Fan {{ $labels.component }} degraded on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
+            description: 'Fan module {{ $labels.component }} is in a degraded state on {{ $labels.hostname }}.',
+          },
+        },
+        {
+          alert: 'CoolingFailed',
+          'for': '1m',
+          expr: 'ceph_hardware_health{category="fans"} == 2',
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.6' },
           annotations: {
-            summary: 'Fan error(s) detected%(cluster)s' % $.MultiClusterSummary(),
-            description: 'Fan error(s) detected. Check `ceph health detail`.',
+            summary: 'Fan {{ $labels.component }} failed on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
+            description: 'A cooling fault has been detected on {{ $labels.hostname }}. A cooling FAN within the enclosure has failed.',
+          },
+        },
+        {
+          alert: 'NVMeDriveDegraded',
+          'for': '1m',
+          expr: 'ceph_hardware_health{category="storage"} == 1',
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'Storage device {{ $labels.component }} degraded on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
+            description: 'Storage device {{ $labels.component }} is in a degraded state on {{ $labels.hostname }}.',
+          },
+        },
+        {
+          alert: 'NVMeDriveFailed',
+          'for': '1m',
+          expr: 'ceph_hardware_health{category="storage"} == 2',
+          labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.1' },
+          annotations: {
+            summary: 'Storage device {{ $labels.component }} failed on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
+            description: 'A drive fault has been detected on {{ $labels.hostname }}. Storage device {{ $labels.component }} has failed.',
+          },
+        },
+        {
+          alert: 'MemoryDegraded',
+          'for': '1m',
+          expr: 'ceph_hardware_health{category="memory"} == 1',
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'Memory module {{ $labels.component }} degraded on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
+            description: 'Memory module {{ $labels.component }} is in a degraded state on {{ $labels.hostname }}.',
+          },
+        },
+        {
+          alert: 'MemoryFailed',
+          'for': '1m',
+          expr: 'ceph_hardware_health{category="memory"} == 2',
+          labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.2' },
+          annotations: {
+            summary: 'Memory module {{ $labels.component }} failed on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
+            description: 'A memory fault has been detected on {{ $labels.hostname }}. Memory module {{ $labels.component }} has failed.',
+          },
+        },
+        {
+          alert: 'ProcessorDegraded',
+          'for': '1m',
+          expr: 'ceph_hardware_health{category="processors"} == 1',
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'Processor {{ $labels.component }} degraded on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
+            description: 'Processor {{ $labels.component }} is in a degraded state on {{ $labels.hostname }}.',
+          },
+        },
+        {
+          alert: 'ProcessorFailed',
+          'for': '1m',
+          expr: 'ceph_hardware_health{category="processors"} == 2',
+          labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.3' },
+          annotations: {
+            summary: 'Processor {{ $labels.component }} failed on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
+            description: 'A processor fault has been detected on {{ $labels.hostname }}. Processor {{ $labels.component }} has failed.',
+          },
+        },
+        {
+          alert: 'NetworkDegraded',
+          'for': '1m',
+          expr: 'ceph_hardware_health{category="network"} == 1',
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'Network interface {{ $labels.component }} degraded on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
+            description: 'Network interface {{ $labels.component }} is in a degraded state on {{ $labels.hostname }}.',
+          },
+        },
+        {
+          alert: 'NetworkFailed',
+          'for': '1m',
+          expr: 'ceph_hardware_health{category="network"} == 2',
+          labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.4' },
+          annotations: {
+            summary: 'Network interface {{ $labels.component }} failed on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
+            description: 'A network fault has been detected on {{ $labels.hostname }}. Network interface {{ $labels.component }} has failed.',
+          },
+        },
+        {
+          alert: 'MotherboardTemperatureHigh',
+          'for': '1m',
+          expr: 'ceph_hardware_temperature_celsius{sensor_name=~".*MB_TEMP.*"} > %d' % $._config.HWTempMotherboardWarning,
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'Motherboard sensor {{ $labels.sensor_name }} above %d°C on {{ $labels.hostname }}%s' % [$._config.HWTempMotherboardWarning, $.MultiClusterSummary()],
+            description: 'Prolonged high temperatures could lead to platform instability. Investigate cooling issues and hot-spots in the server room/hall.',
+          },
+        },
+        {
+          alert: 'DIMMTemperatureHigh',
+          'for': '1m',
+          expr: 'ceph_hardware_temperature_celsius{sensor_name=~".*DIMM.*_TEMP"} > %d' % $._config.HWTempDIMMWarning,
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'DIMM sensor {{ $labels.sensor_name }} above %d°C on {{ $labels.hostname }}%s' % [$._config.HWTempDIMMWarning, $.MultiClusterSummary()],
+            description: 'Prolonged high temperatures could lead to platform instability. Investigate cooling issues and hot-spots in the server room/hall.',
+          },
+        },
+        {
+          alert: 'ProcessorTemperatureHigh',
+          'for': '1m',
+          expr: 'ceph_hardware_temperature_celsius{sensor_name=~".*CPU_TEMP"} > %d' % $._config.HWTempProcessorWarning,
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'CPU sensor {{ $labels.sensor_name }} above %d°C on {{ $labels.hostname }}%s' % [$._config.HWTempProcessorWarning, $.MultiClusterSummary()],
+            description: 'Prolonged high temperatures could lead to platform instability. Investigate cooling issues and hot-spots in the server room/hall.',
+          },
+        },
+        {
+          alert: 'NVMeTemperatureHigh',
+          'for': '1m',
+          expr: 'ceph_hardware_temperature_celsius{sensor_name=~"NVME.*_TEMP"} > %d' % $._config.HWTempNVMeWarning,
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'NVMe sensor {{ $labels.sensor_name }} above %d°C on {{ $labels.hostname }}%s' % [$._config.HWTempNVMeWarning, $.MultiClusterSummary()],
+            description: 'An NVMe temperature sensor is indicating a potential cooling problem. NVMe may power down if the temperature continues to rise.',
           },
         },
       ],
@@ -858,10 +958,10 @@
         {
           alert: 'NVMeoFMultipleNamespacesOfRBDImage',
           'for': '1m',
-          expr: 'count by(pool_name, rbd_name) (count by(bdev_name, pool_name, rbd_name) (ceph_nvmeof_bdev_metadata and on (bdev_name) ceph_nvmeof_subsystem_namespace_metadata)) > 1',
+          expr: 'count by(pool_name, rbd_name, rados_namespace_name) (count by(bdev_name, pool_name, rbd_name, rados_namespace_name) (ceph_nvmeof_bdev_metadata * on (bdev_name, instance, cluster) group_left(rados_namespace_name) ceph_nvmeof_subsystem_namespace_metadata)) > 1',
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
-            summary: 'RBD image {{ $labels.pool_name }}/{{ $labels.rbd_name }} cannot be reused for multiple NVMeoF namespace ',
+            summary: 'RBD image {{ $labels.pool_name }}/{{ if $labels.rados_namespace_name }}{{ $labels.rados_namespace_name }}/{{ end }}{{ $labels.rbd_name }} cannot be reused for multiple NVMeoF namespaces',
             description: 'Each NVMeoF namespace must have a unique RBD pool and image, across all different gateway groups.',
           },
         },
@@ -1043,6 +1143,31 @@
           annotations: {
             summary: 'Host ({{ $labels.host_nqn }}) was disconnected {{ $value }} times from subsystem ({{ $labels.nqn }}) in last %(NVMeoFHostKeepAliveTimeoutTrackDurationHours)d hours' % $._config,
             description: 'Host was disconnected due to host keep alive timeout',
+          },
+        },
+      ],
+    },
+    {
+      name: 'certmgr',
+      rules: [
+        {
+          alert: 'CephCertificateError',
+          'for': '1m',
+          expr: 'ceph_health_detail{name="CEPHADM_CERT_ERROR"} == 1',
+          labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.15.1' },
+          annotations: {
+            summary: 'Ceph certificate error detected%(cluster)s' % $.MultiClusterSummary(),
+            description: "{{ $labels.message }}. Please check 'ceph health detail' for more information and take appropriate action to resolve the certificate issue.",
+          },
+        },
+        {
+          alert: 'CephCertificateWarning',
+          'for': '1m',
+          expr: 'ceph_health_detail{name="CEPHADM_CERT_WARNING"} == 1',
+          labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.15.2' },
+          annotations: {
+            summary: 'Ceph certificate warning detected%(cluster)s' % $.MultiClusterSummary(),
+            description: "{{ $labels.message }}. Please check 'ceph health detail' for more information and take appropriate action to resolve the certificate issue.",
           },
         },
       ],

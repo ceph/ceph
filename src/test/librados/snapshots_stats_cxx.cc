@@ -15,7 +15,7 @@ using namespace librados;
 
 using std::string;
 
-class LibRadosSnapshotStatsSelfManagedPP : public RadosTestPP {
+class LibRadosSnapshotStatsSelfManagedPP : public RadosTestPPNS {
 public:
   LibRadosSnapshotStatsSelfManagedPP() {};
   ~LibRadosSnapshotStatsSelfManagedPP() override {};
@@ -39,7 +39,7 @@ protected:
     cmd = "{\"prefix\": \"osd set\",\"key\":\"nodeep-scrub\"}";
     ASSERT_EQ(0, s_cluster.mon_command(std::move(cmd), {},  &outbl, NULL));
 
-    RadosTestPP::SetUp();
+    RadosTestPPNS::SetUp();
   }
 
   void TearDown() override {
@@ -61,7 +61,7 @@ protected:
     cmd = string("{\"prefix\": \"osd unset\",\"key\":\"nodeep-scrub\"}");
     ASSERT_EQ(0, s_cluster.mon_command(std::move(cmd), {},  &outbl, NULL));
 
-    RadosTestPP::TearDown();
+    RadosTestPPNS::TearDown();
   }
 };
 
@@ -233,8 +233,10 @@ TEST_F(LibRadosSnapshotStatsSelfManagedPP, SnaptrimStatsPP) {
   }
 }
 
+int total_num_objs = 0;
+
 // EC testing
-TEST_F(LibRadosSnapshotStatsSelfManagedECPP, SnaptrimStatsECPP) {
+TEST_P(LibRadosSnapshotStatsSelfManagedECPP, SnaptrimStatsECPP) {
   int num_objs = 10;
   int bsize = alignment;
 
@@ -302,7 +304,8 @@ TEST_F(LibRadosSnapshotStatsSelfManagedECPP, SnaptrimStatsECPP) {
   } while(objects_trimmed < num_objs && tries < 5);
 
   // final check for objects trimmed
-  ASSERT_EQ(objects_trimmed, num_objs);
+  total_num_objs += num_objs;
+  ASSERT_EQ(objects_trimmed, total_num_objs);
   std::cout << "Snaptrim duration: " << snaptrim_duration << std::endl;
   ASSERT_GT(snaptrim_duration, 0.0);
 
@@ -316,3 +319,5 @@ TEST_F(LibRadosSnapshotStatsSelfManagedECPP, SnaptrimStatsECPP) {
   delete[] buf;
   delete[] buf2;
 }
+
+INSTANTIATE_TEST_SUITE_P_EC(LibRadosSnapshotStatsSelfManagedECPP);

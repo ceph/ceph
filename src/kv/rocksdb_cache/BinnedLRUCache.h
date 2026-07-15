@@ -18,6 +18,7 @@
 #include "common/dout.h"
 #include "include/ceph_assert.h"
 #include "common/ceph_context.h"
+#include "common/admin_socket.h"
 
 namespace rocksdb_cache {
 
@@ -49,6 +50,7 @@ namespace rocksdb_cache {
 
 std::shared_ptr<rocksdb::Cache> NewBinnedLRUCache(
     CephContext *c,
+    const std::string& name,
     size_t capacity,
     int num_shard_bits = -1,
     bool strict_capacity_limit = false,
@@ -56,8 +58,8 @@ std::shared_ptr<rocksdb::Cache> NewBinnedLRUCache(
 
 struct BinnedLRUHandle {
   std::shared_ptr<uint64_t> age_bin;
-  void* value;
-  DeleterFn deleter;
+  rocksdb::Cache::ObjectPtr value;
+  const rocksdb::Cache::CacheItemHelper* helper;
   BinnedLRUHandle* next_hash;
   BinnedLRUHandle* next;
   BinnedLRUHandle* prev;
@@ -119,8 +121,8 @@ struct BinnedLRUHandle {
 
   void Free() {
     ceph_assert((refs == 1 && InCache()) || (refs == 0 && !InCache()));
-    if (deleter) {
-      (*deleter)(key(), value);
+    if (helper && helper->del_cb) {
+      (*helper->del_cb)(value, /*allocator=*/nullptr);
     }
     delete[] key_data;
     delete this;
@@ -169,6 +171,56 @@ class BinnedLRUHandleTable {
   uint32_t elems_;
 };
 
+enum stat_e : int {
+  l_capacity = 0, // capacity assigned to the shard
+  l_usage,        // current usage of the shard
+  l_pinned,       // size in elements currently referenced
+  l_elems,        // count of separate items in shard
+  l_inserts,      // increased when element inserted into the cache
+  l_lookups,      // increased when trying to find element in shard
+  l_hits,         // increased when lookup successful
+  l_misses,       // calculated from lookups - hits
+  stat_cnt
+};
+
+struct ShardStats {
+  uint64_t val[stat_cnt] = {0};
+  uint64_t& operator[](int idx) {
+    return val[idx];
+  }
+
+  static constexpr char const* stat_name[stat_cnt] = {
+    "capacity",
+    "usage",
+    "pinned",
+    "elems",
+    "inserts",
+    "lookups",
+    "hits",
+    "misses",
+  };
+  static constexpr char const* stat_descr[stat_cnt] = {
+    "capacity assigned",
+    "current usage",
+    "currently pinned size (in use)",
+    "number of elems in shard",
+    "inserts into shard",
+    "lookups for an element",
+    "lookup successful",
+    "lookup failure",
+  };
+  void add(const ShardStats& other) {
+    for (int j = 0; j < stat_cnt; j++) {
+      val[j] += other.val[j];
+    }
+  }
+  void sub(const ShardStats& other) {
+    for (int j = 0; j < stat_cnt; j++) {
+      val[j] -= other.val[j];
+    }
+  }
+};
+
 // A single shard of sharded cache.
 class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
  public:
@@ -188,9 +240,10 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
   void SetHighPriPoolRatio(double high_pri_pool_ratio);
 
   // Like Cache methods, but with an extra "hash" parameter.
-  virtual rocksdb::Status Insert(const rocksdb::Slice& key, uint32_t hash, void* value,
+  virtual rocksdb::Status Insert(const rocksdb::Slice& key, uint32_t hash,
+                        rocksdb::Cache::ObjectPtr value,
+                        const rocksdb::Cache::CacheItemHelper* helper,
                         size_t charge,
-                        DeleterFn deleter,
                         rocksdb::Cache::Handle** handle,
                         rocksdb::Cache::Priority priority) override;
   virtual rocksdb::Cache::Handle* Lookup(const rocksdb::Slice& key, uint32_t hash) override;
@@ -208,16 +261,17 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
 
   virtual void ApplyToAllCacheEntries(
     const std::function<void(const rocksdb::Slice& key,
-                             void* value,
+                             rocksdb::Cache::ObjectPtr value,
                              size_t charge,
-                             DeleterFn)>& callback,
+                             const rocksdb::Cache::CacheItemHelper* helper)>& callback,
     bool thread_safe) override;
 
   virtual void EraseUnRefEntries() override;
 
   virtual std::string GetPrintableOptions() const override;
 
-  virtual DeleterFn GetDeleter(rocksdb::Cache::Handle* handle) const override;
+  virtual const rocksdb::Cache::CacheItemHelper* GetCacheItemHelper(
+      rocksdb::Cache::Handle* handle) const override;
 
   void TEST_GetLRUList(BinnedLRUHandle** lru, BinnedLRUHandle** lru_low_pri);
 
@@ -243,6 +297,10 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
   // Get the byte counts for a range of age bins
   uint64_t sum_bins(uint32_t start, uint32_t end) const;
 
+  ShardStats GetStats();
+  void ClearStats();
+  void print_bins(std::stringstream& out) const;
+
  private:
   CephContext *cct;
   void LRU_Remove(BinnedLRUHandle* e);
@@ -262,13 +320,7 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
   // holding the mutex_
   void EvictFromLRU(size_t charge, BinnedLRUHandle*& deleted);
 
-  void FreeDeleted(BinnedLRUHandle* deleted) {
-    while (deleted) {
-      auto* entry = deleted;
-      deleted = deleted->next;
-      entry->Free();
-    }
-  }
+  int FreeDeleted(BinnedLRUHandle* deleted);
 
   // Initialized before use.
   size_t capacity_;
@@ -294,6 +346,8 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
   // Pointer to head of low-pri pool in LRU list.
   BinnedLRUHandle* lru_low_pri_;
 
+  // Info about the shard
+  ShardStats stats;
   // ------------^^^^^^^^^^^^^-----------
   // Not frequently modified data members
   // ------------------------------------
@@ -324,19 +378,18 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
 
 class BinnedLRUCache : public ShardedCache {
  public:
-  BinnedLRUCache(CephContext *c, size_t capacity, int num_shard_bits,
+  BinnedLRUCache(CephContext *c, const std::string& name, size_t capacity, int num_shard_bits,
       bool strict_capacity_limit, double high_pri_pool_ratio);
   virtual ~BinnedLRUCache();
   virtual const char* Name() const override { return "BinnedLRUCache"; }
   virtual CacheShard* GetShard(int shard) override;
   virtual const CacheShard* GetShard(int shard) const override;
-  virtual void* Value(Handle* handle) override;
+  virtual rocksdb::Cache::ObjectPtr Value(Handle* handle) override;
   virtual size_t GetCharge(Handle* handle) const override;
   virtual uint32_t GetHash(Handle* handle) const override;
   virtual void DisownData() override;
-#if (ROCKSDB_MAJOR >= 7 || (ROCKSDB_MAJOR == 6 && ROCKSDB_MINOR >= 22))
-  virtual DeleterFn GetDeleter(Handle* handle) const override;
-#endif
+  virtual const rocksdb::Cache::CacheItemHelper* GetCacheItemHelper(
+      Handle* handle) const override;
   //  Retrieves number of elements in LRU, for unit test purpose only
   size_t TEST_GetLRUSize();
   // Sets the high pri pool ratio
@@ -363,9 +416,19 @@ class BinnedLRUCache : public ShardedCache {
   }
 
  private:
+  void SetupPerfCounters();
+  void UpdatePerfCounters();
+  void printshard(int shard_no, std::stringstream& out);
+ private:
   CephContext *cct;
+  std::string name;
   BinnedLRUCacheShard* shards_;
   int num_shards_ = 0;
+  PerfCounters* perfstats = nullptr;
+  ShardStats prev_stats;
+  class SocketHook;
+  friend class SocketHook;
+  AdminSocketHook* asok_hook = nullptr;
 };
 
 }  // namespace rocksdb_cache

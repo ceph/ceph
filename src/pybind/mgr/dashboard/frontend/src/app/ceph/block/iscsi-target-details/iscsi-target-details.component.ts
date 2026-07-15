@@ -97,25 +97,25 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
       target: {
         expanded: _.join(
           this.selectedItem.cdExecuting
-            ? [Icons.large, Icons.spinner, Icons.spin]
-            : [Icons.large, Icons.bullseye],
+            ? [Icons.size24, Icons.spinner]
+            : [Icons.size24, Icons.bullseye],
           ' '
         )
       },
       initiators: {
-        expanded: _.join([Icons.large, Icons.user], ' '),
+        expanded: _.join([Icons.size24, Icons.user], ' '),
         leaf: _.join([Icons.user], ' ')
       },
       groups: {
-        expanded: _.join([Icons.large, Icons.users], ' '),
+        expanded: _.join([Icons.size24, Icons.users], ' '),
         leaf: _.join([Icons.users], ' ')
       },
       disks: {
-        expanded: _.join([Icons.large, Icons.disk], ' '),
+        expanded: _.join([Icons.size24, Icons.disk], ' '),
         leaf: _.join([Icons.disk], ' ')
       },
       portals: {
-        expanded: _.join([Icons.large, Icons.server], ' '),
+        expanded: _.join([Icons.size24, Icons.server], ' '),
         leaf: _.join([Icons.server], ' ')
       }
     };

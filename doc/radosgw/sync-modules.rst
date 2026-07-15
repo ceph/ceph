@@ -5,29 +5,29 @@ Sync Modules
 .. versionadded:: Kraken
 
 The :ref:`multisite` functionality of RGW introduced in Jewel allowed the ability to
-create multiple zones and mirror data and metadata between them. ``Sync Modules``
-are built atop of the multisite framework that allows for forwarding data and
+create multiple zones and mirror data and metadata between them. *Sync Modules*
+are built on top of the multisite framework that allows for forwarding data and
 metadata to a different external tier. A sync module allows for a set of actions
 to be performed whenever a change in data occurs (metadata ops like bucket or
 user creation etc. are also regarded as changes in data). As the RGW multisite
 changes are eventually consistent at remote sites, changes are propagated
 asynchronously. This would allow for unlocking use cases such as backing up the
 object storage to an external cloud cluster or a custom backup solution using
-tape drives, indexing metadata in ElasticSearch etc.
+tape drives, indexing metadata in Elasticsearch etc.
 
 A sync module configuration is local to a zone. The sync module determines
 whether the zone exports data or can only consume data that was modified in
-another zone. As of Luminous the supported sync plugins are `elasticsearch`_,
+another zone. As of Luminous the supported sync plugins are :ref:`elasticsearch <radosgw-elastic-sync-module>`,
 ``rgw``, which is the default sync plugin that synchronizes data between the
 zones and ``log`` which is a trivial sync plugin that logs the metadata
 operation that happens in the remote zones. The following docs are written with
-the example of a zone using `elasticsearch sync module`_, the process would be similar
+the example of a zone using :ref:`radosgw-elastic-sync-module`, the process would be similar
 for configuring any sync plugin.
 
 .. toctree::
    :maxdepth: 1
 
-   ElasticSearch Sync Module <elastic-sync-module>
+   Elasticsearch Sync Module <elastic-sync-module>
    Cloud Sync Module <cloud-sync-module>
    Archive Sync Module <archive-sync-module>
 
@@ -71,7 +71,7 @@ For example in the ``elasticsearch`` sync module
                                --tier-config=endpoint=http://localhost:9200,num_shards=10,num_replicas=1
 
 
-For the various supported tier-config options refer to the `elasticsearch sync module`_ docs.
+For the various supported tier-config options refer to the :ref:`radosgw-elastic-sync-module` docs.
 
 Finally update the period
 
@@ -87,9 +87,3 @@ Now start the radosgw in the zone
    systemctl start ceph-radosgw@rgw.`hostname -s`
    systemctl enable ceph-radosgw@rgw.`hostname -s`
 
-
-
-.. _`elasticsearch sync module`: ../elastic-sync-module
-.. _`elasticsearch`: ../elastic-sync-module
-.. _`cloud sync module`: ../cloud-sync-module
-.. _`archive sync module`: ../archive-sync-module

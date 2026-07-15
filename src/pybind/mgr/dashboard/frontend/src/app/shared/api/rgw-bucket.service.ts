@@ -27,7 +27,10 @@ export class RgwBucketService extends ApiClient {
   totalUsedCapacity$ = this.totalUsedCapacitySubject.asObservable();
   averageObjectSize$ = this.averageObjectSizeSubject.asObservable();
 
-  constructor(private http: HttpClient, private rgwDaemonService: RgwDaemonService) {
+  constructor(
+    private http: HttpClient,
+    private rgwDaemonService: RgwDaemonService
+  ) {
     super();
   }
 
@@ -170,10 +173,9 @@ export class RgwBucketService extends ApiClient {
     lifecycle: string
   ) {
     return this.rgwDaemonService.request((params: HttpParams) => {
-      params = params.appendAll({
+      const paramsObject: Record<string, string> = {
         bucket_id: bucketId,
         uid: uid,
-        versioning_state: versioningState,
         encryption_state: String(encryptionState),
         encryption_type: encryptionType,
         key_id: keyId,
@@ -187,7 +189,11 @@ export class RgwBucketService extends ApiClient {
         canned_acl: cannedAcl,
         replication: replication,
         lifecycle: lifecycle
-      });
+      };
+      if (versioningState) {
+        paramsObject['versioning_state'] = versioningState;
+      }
+      params = params.appendAll(paramsObject);
       return this.http.put(`${this.url}/${bucket}`, null, { params: params });
     });
   }

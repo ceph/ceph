@@ -12,7 +12,7 @@ single-cluster deployment or a particular *realm* and *zone* in a
 multisite deployment.  (For more information about realms and zones,
 see :ref:`multisite`.)
 
-Note that with ``cephadm``, ``radosgw`` daemons are configured via the monitor
+Note that with ``cephadm``, ``radosgw`` daemons are configured via the Monitor
 configuration database instead of via a `ceph.conf` or the command line.  If
 that configuration isn't already in place (usually in the
 ``client.rgw.<something>`` section), then the ``radosgw``
@@ -501,7 +501,7 @@ where the properties of this service specification are:
 * ``use_keepalived_multicast``
     Default is False. By default, cephadm will deploy keepalived config to use unicast IPs,
     using the IPs of the hosts. The IPs chosen will be the same IPs cephadm uses to connect
-    to the machines. But if multicast is prefered, we can set ``use_keepalived_multicast``
+    to the machines. But if multicast is preferred, we can set ``use_keepalived_multicast``
     to ``True`` and Keepalived will use multicast IP (224.0.0.18) to communicate between instances,
     using the same interfaces as where the VIPs are.
 * ``vrrp_interface_network``
@@ -535,10 +535,10 @@ where the properties of this service specification are:
     'cephadm-signed'. This should have the key .pem format.
 * ``monitor_ip_addrs``
     If ``monitor_ip_addrs`` is provided and the specified IP address is assigned to the host,
-    that IP address will be used. If IP address is not present, then 'monitor_networks' will be checked.
+    that IP address will be used. If an IP address is not present, then 'monitor_networks' will be checked.
 * ``monitor_networks``
     If ``monitor_networks`` is specified, an IP address that matches one of the specified
-    networks will be used. If IP not present, then default host ip will be used.
+    networks will be used. If an IP address is not present, then default host IP will be used.
 
 .. _ingress-virtual-ip:
 

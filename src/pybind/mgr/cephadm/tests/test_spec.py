@@ -133,6 +133,7 @@ def test_spec_octopus(spec_json):
     converted = convert_to_old_style_json(spec.to_json())
     if spec_json.get('service_type') == 'osd':
         spec_json['termination_grace_period_seconds'] = 30
+        spec_json['osd_type'] = "classic"
     assert spec_json == converted
 
 
@@ -299,7 +300,7 @@ def test_dd_octopus(dd_json):
         del j['daemon_name']
         return j
 
-    dd_json.update({'pending_daemon_config': False})
+    dd_json.update({'pending_daemon_config': False, 'user_stopped': False})
     assert dd_json == convert_to_old_style_json(
         DaemonDescription.from_json(dd_json).to_json())
 

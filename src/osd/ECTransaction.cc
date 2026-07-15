@@ -14,13 +14,21 @@
  */
 
 #include <iostream>
-#include <vector>
+#include <map>
 #include <sstream>
+#include <vector>
 
 #include "ECTransaction.h"
 #include "ECUtil.h"
 #include "os/ObjectStore.h"
 #include "common/inline_variant.h"
+#include "PGLog.h"
+
+#ifndef WITH_CRIMSON
+#include "osd/osd_internal_types.h"
+#else
+#include "crimson/osd/object_context.h"
+#endif
 
 using std::less;
 using std::make_pair;
@@ -141,7 +149,7 @@ ECTransaction::WritePlanObj::WritePlanObj(
    * 2. ALL delete operations (do NOT use is_delete() here!!!)
    * 3. Truncates that reduce size.
    */
-  invalidates_cache = op.has_source(&source) || op.delete_first || projected_size < orig_size;
+  invalidates_cache = op.has_source(&source) || op.delete_first || (op.truncate && op.truncate->first < orig_size);
 
   op.buffer_updates.to_interval_set(unaligned_ro_writes);
 
@@ -207,7 +215,7 @@ ECTransaction::WritePlanObj::WritePlanObj(
 
       /* Here we decide if we want to do a conventional write or a parity delta write. */
       if (sinfo.supports_parity_delta_writes() && !object_in_cache &&
-          orig_size == projected_size && !reads.empty()) {
+          orig_size == projected_size && !reads.empty() && !op.truncate) {
 
         shard_id_set read_shards = reads.get_shard_id_set();
         shard_id_set pdw_read_shards = pdw_reads.get_shard_id_set();
@@ -259,6 +267,15 @@ ECTransaction::WritePlanObj::WritePlanObj(
    * read the existing data on the partial stripe.
    */
   if (op.truncate && op.truncate->first < orig_size) {
+    if (to_read) {
+      ECUtil::shard_extent_set_t truncate_mask(sinfo.get_k_plus_m());
+      sinfo.ro_range_to_shard_extent_set(0, op.truncate->first, truncate_mask);
+      
+      to_read->intersection_of(truncate_mask);
+      if (to_read->empty()) {
+          to_read = std::nullopt;
+      }
+    }
     ECUtil::shard_extent_set_t truncate_read(sinfo.get_k_plus_m());
     uint64_t prev_stripe = sinfo.ro_offset_to_prev_stripe_ro_offset(op.truncate->first);
     uint64_t next_align = ECUtil::align_next(op.truncate->first);
@@ -286,7 +303,7 @@ ECTransaction::WritePlanObj::WritePlanObj(
 
       // We only need to update the parity buffer for the write
       for (auto && shard : sinfo.get_parity_shards()) {
-        will_write[shard] = truncate_write;
+        will_write[shard].insert(truncate_write);
       }
     }
   }
@@ -319,6 +336,9 @@ void ECTransaction::Generate::shards_written(const shard_id_set &shards) {
   }
 }
 
+// This function converts a truncate-to-zero operation into a delete+recreate,
+// which clears the object's omap data. Therefore, this function should not be
+// called for objects with omap data.
 void ECTransaction::Generate::zero_truncate_to_delete() {
   ceph_assert(obc);
 
@@ -386,15 +406,9 @@ void ECTransaction::Generate::process_init() {
     [&](const PGTransaction::ObjectOperation::Init::Create &_) {
       all_shards_written();
       for (auto &&[shard, t]: transactions) {
-        if (osdmap->require_osd_release >= ceph_release_t::octopus) {
-          t.create(
-            coll_t(spg_t(pgid, shard)),
-            ghobject_t(oid, ghobject_t::NO_GEN, shard));
-        } else {
-          t.touch(
-            coll_t(spg_t(pgid, shard)),
-            ghobject_t(oid, ghobject_t::NO_GEN, shard));
-        }
+        t.create(
+          coll_t(spg_t(pgid, shard)),
+          ghobject_t(oid, ghobject_t::NO_GEN, shard));
       }
     },
     [&](const PGTransaction::ObjectOperation::Init::Clone &cop) {
@@ -404,6 +418,25 @@ void ECTransaction::Generate::process_init() {
           coll_t(spg_t(pgid, shard)),
           ghobject_t(cop.source, ghobject_t::NO_GEN, shard),
           ghobject_t(oid, ghobject_t::NO_GEN, shard));
+      }
+
+      // Check ECOmapJournal first to see if there are pending omap updates
+      // This avoids costly PG log traversal when not necessary
+      if (osdmap->get_pg_pool(pgid.pool())->supports_omap() &&
+          ec_omap_journal.has_omap_updates(cop.source)) {
+        // There are incomplete omap updates which need to be applied to the clone
+        eversion_t can_rollback_to = pg_log.get_can_rollback_to();
+        OmapCloneVisitor omap_visitor(transactions, pgid, cop.source, oid, sinfo, ec_omap_journal, dpp);
+
+        for (auto &log_entry : get_incomplete_ec_omap_log_entries(cop.source, can_rollback_to)) {
+          // Only apply updates after can_rollback_to version
+          if (log_entry->version > can_rollback_to && log_entry->mod_desc.can_rollback()) {
+            log_entry->mod_desc.visit(&omap_visitor);
+          }
+        }
+        
+        // Apply accumulated omap updates to clone
+        omap_visitor.apply_to_clone();
       }
 
       if (obc) {
@@ -457,6 +490,193 @@ void alloc_hint(PGTransaction::ObjectOperation& op,
   }
 }
 
+void ECTransaction::accumulate_omap_updates(
+  bool clear_omap,
+  const std::optional<ceph::buffer::list>& header,
+  const std::vector<std::pair<OmapUpdateType, ceph::buffer::list>>& updates,
+  std::optional<ceph::buffer::list>& out_header,
+  std::map<std::string, std::optional<ceph::buffer::list>>& key_updates,
+  std::list<std::pair<std::string, std::optional<std::string>>>& removed_ranges)
+{
+  // Handle clear_omap flag
+  if (clear_omap) {
+    key_updates.clear();
+    removed_ranges.clear();
+    removed_ranges.emplace_back("", std::nullopt);
+    out_header.reset();
+  }
+  
+  // Handle omap header
+  if (header) {
+    out_header = header;
+  }
+  
+  // Decode and accumulate updates
+  for (auto &[type, bl] : updates) {
+    auto p = bl.cbegin();
+    
+    switch (type) {
+      case OmapUpdateType::Insert: {
+        std::map<std::string, ceph::buffer::list> kv_map;
+        decode(kv_map, p);
+        for (auto &[key, value] : kv_map) {
+          key_updates[key] = value;
+        }
+        break;
+      }
+      case OmapUpdateType::Remove: {
+        std::set<std::string> keys_to_remove;
+        decode(keys_to_remove, p);
+        for (auto &key : keys_to_remove) {
+          key_updates[key] = std::nullopt;
+        }
+        break;
+      }
+      case OmapUpdateType::RemoveRange: {
+        std::string range_start, range_end;
+        decode(range_start, p);
+        decode(range_end, p);
+        removed_ranges.emplace_back(range_start, range_end);
+        
+        // Mark keys within range as removed
+        auto map_it = key_updates.lower_bound(range_start);
+        while (map_it != key_updates.end()) {
+          if (map_it->first >= range_end) break;
+          map_it->second = std::nullopt;
+          ++map_it;
+        }
+        break;
+      }
+    }
+  }
+}
+
+void ECTransaction::apply_omap_to_transactions(
+  shard_id_map<ceph::os::Transaction>& transactions,
+  const pg_t& pgid,
+  const hobject_t& target_oid,
+  const ECUtil::stripe_info_t& sinfo,
+  bool clear_omap,
+  const std::optional<ceph::buffer::list>& header,
+  const std::map<std::string, std::optional<ceph::buffer::list>>& key_updates,
+  const std::list<std::pair<std::string, std::optional<std::string>>>& removed_ranges,
+  const DoutPrefixProvider* dpp)
+{
+  for (auto &&[shard, t] : transactions) {
+    // Only primary capable-shards store omap
+    if (sinfo.is_nonprimary_shard(shard)) {
+      continue;
+    }
+    
+    coll_t coll(spg_t(pgid, shard));
+    ghobject_t goid(target_oid, ghobject_t::NO_GEN, shard);
+    
+    // Apply clear_omap if needed
+    if (clear_omap) {
+      t.omap_clear(coll, goid);
+    }
+    
+    // Apply removed ranges
+    for (auto &[range_start, range_end] : removed_ranges) {
+      if (range_end) {
+        t.omap_rmkeyrange(coll, goid, range_start, *range_end);
+      } else {
+        t.omap_rmkeyrange(coll, goid, range_start, "");
+      }
+    }
+    
+    // Apply header update if present
+    if (header) {
+      ldpp_dout(dpp, 20) << __func__ << ": omap_setheader oid="
+                << target_oid << " header_size=" << header->length() << dendl;
+      t.omap_setheader(coll, goid, *header);
+    }
+    
+    // Apply key updates
+    if (!key_updates.empty()) {
+      std::map<std::string, ceph::buffer::list> to_set;
+      std::set<std::string> to_remove;
+      
+      for (auto &[key, val] : key_updates) {
+        if (val) {
+          to_set[key] = *val;
+        } else {
+          to_remove.insert(key);
+        }
+      }
+      
+      if (!to_set.empty()) {
+        t.omap_setkeys(coll, goid, to_set);
+      }
+      if (!to_remove.empty()) {
+        t.omap_rmkeys(coll, goid, to_remove);
+      }
+    }
+  }
+}
+
+
+void ECTransaction::OmapCloneVisitor::ec_omap(
+  bool clear_omap,
+  std::optional<ceph::buffer::list> header,
+  std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &updates) {
+  
+  ldpp_dout(dpp, 20) << __func__ << ": src=" << source_oid
+          << " dest=" << dest_oid << " clear_omap=" << clear_omap
+          << " header_size=" << (header ? header->length() : 0) << dendl;
+  
+  accumulate_omap_updates(
+    clear_omap,
+    header,
+    updates,
+    omap_header,
+    omap_updates,
+    removed_ranges);
+  
+  if (clear_omap) {
+    has_clear_omap = true;
+  }
+}
+
+void ECTransaction::OmapCloneVisitor::apply_to_clone() {
+  apply_omap_to_transactions(
+    transactions,
+    pgid,
+    dest_oid,
+    sinfo,
+    has_clear_omap,
+    omap_header,
+    omap_updates,
+    removed_ranges,
+    dpp);
+}
+
+void ECTransaction::Generate::apply_omap_updates_without_journal() {
+  std::map<std::string, std::optional<ceph::buffer::list>> key_updates;
+  std::list<std::pair<std::string, std::optional<std::string>>> removed_ranges;
+  std::optional<ceph::buffer::list> header_out;
+  
+  accumulate_omap_updates(
+    op.clear_omap,
+    op.omap_header,
+    op.omap_updates,
+    header_out,
+    key_updates,
+    removed_ranges);
+  
+  apply_omap_to_transactions(
+    transactions,
+    pgid,
+    oid,
+    sinfo,
+    op.clear_omap,
+    header_out,
+    key_updates,
+    removed_ranges,
+    dpp);
+}
+
+
 ECTransaction::Generate::Generate(PGTransaction &t,
     ErasureCodeInterfaceRef &ec_impl,
     pg_t &pgid,
@@ -469,7 +689,10 @@ ECTransaction::Generate::Generate(PGTransaction &t,
     PGTransaction::ObjectOperation &op,
     WritePlanObj &plan,
     DoutPrefixProvider *dpp,
-    pg_log_entry_t *entry)
+    pg_log_entry_t *entry,
+    bool &first_write_in_interval,
+    ECOmapJournal &ec_omap_journal,
+    const PGLog &pg_log)
   : t(t),
     ec_impl(ec_impl),
     pgid(pgid),
@@ -482,7 +705,13 @@ ECTransaction::Generate::Generate(PGTransaction &t,
     op(op),
     plan(plan),
     read_sem(&sinfo),
-    to_write(&sinfo) {
+    to_write(&sinfo),
+    ec_omap_journal(ec_omap_journal),
+    pg_log(pg_log) {
+  ldpp_dout(dpp, 20) << __func__ << ": " << oid
+		     << " partial_extents=" << partial_extents
+		     << " written_map=" << *written_map
+                     << dendl;
 
   vector<unsigned> old_transaction_counts(sinfo.get_k_plus_m());
 
@@ -501,7 +730,7 @@ ECTransaction::Generate::Generate(PGTransaction &t,
     ceph_assert(oid.is_temp());
   }
 
-  if (entry && entry->is_modify() && op.updated_snaps) {
+  if (entry && (entry->is_modify() || entry->is_replace()) && op.updated_snaps) {
     bufferlist bl(op.updated_snaps->second.size() * 8 + 8);
     encode(op.updated_snaps->second, bl);
     entry->snaps.swap(bl);
@@ -520,7 +749,10 @@ ECTransaction::Generate::Generate(PGTransaction &t,
   }
 
   if (op.is_none() && op.truncate && op.truncate->first == 0) {
-    zero_truncate_to_delete();
+    // Skip zero_truncate_to_delete if object has omap data to preserve it
+    if (!obc || !obc->obs.oi.is_omap()) {
+      zero_truncate_to_delete();
+    }
   }
 
   if (op.delete_first) {
@@ -529,12 +761,12 @@ ECTransaction::Generate::Generate(PGTransaction &t,
 
   if (op.is_fresh_object() && entry) {
     entry->mod_desc.create();
+    if (osdmap->get_pg_pool(pgid.pool())->supports_omap()) {
+      ec_omap_journal.append_create(plan.hoid);
+    }
   }
 
   process_init();
-
-  // omap not supported (except 0, handled above)
-  ceph_assert(!(op.clear_omap) && !(op.omap_header) && op.omap_updates.empty());
 
   if (op.alloc_hint) {
     all_shards_written();
@@ -573,20 +805,38 @@ ECTransaction::Generate::Generate(PGTransaction &t,
   // we want to update OI on all shards
   bool size_change = plan.orig_size != plan.projected_size;
   bool clear_whiteout = false;
+  bool create_whiteout = false;
 
-  // If we are updating the OI and we have a cache of the previous OI values
-  if (op.attr_updates.contains(OI_ATTR) && obc && obc->attr_cache.contains(OI_ATTR))
-  {
-    object_info_t oi_cache((obc->attr_cache[OI_ATTR]));
-    if (oi_cache.test_flag(object_info_t::FLAG_WHITEOUT))
-    {
-      object_info_t oi_updates(*(op.attr_updates[OI_ATTR]));
-      clear_whiteout = !oi_updates.test_flag(object_info_t::FLAG_WHITEOUT);
+  if (op.attr_updates.contains(OI_ATTR)) {
+    bufferlist &bl = op.attr_updates.find(OI_ATTR)->second.value();
+    auto p = bl.cbegin();
+    object_info_t new_oi;
+    decode(new_oi, p);
+
+    if (new_oi.is_whiteout()) {
+      create_whiteout = true;
+    }
+
+    if (obc && obc->attr_cache.contains(OI_ATTR)) {
+      object_info_t oi_cache((obc->attr_cache[OI_ATTR]));
+      if (oi_cache.test_flag(object_info_t::FLAG_WHITEOUT))
+      {
+        object_info_t oi_updates(*(op.attr_updates[OI_ATTR]));
+        clear_whiteout = !oi_updates.test_flag(object_info_t::FLAG_WHITEOUT);
+      }
     }
   }
 
-  if (size_change || clear_whiteout) {
+  if (create_whiteout) {
+    ldpp_dout(dpp, 10) << __func__ << " detecting whiteout creation for " << oid << dendl;
+    if (osdmap->get_pg_pool(pgid.pool())->supports_omap()) {
+      ec_omap_journal.append_whiteout(plan.hoid);
+    }
+  }
+
+  if (size_change || clear_whiteout || first_write_in_interval) {
     all_shards_written();
+    first_write_in_interval = false;
   } else {
     // All primary shards must always be written, regardless of the write plan.
     shards_written(sinfo.get_parity_shards());
@@ -597,6 +847,20 @@ ECTransaction::Generate::Generate(PGTransaction &t,
 
   if (!op.attr_updates.empty()) {
     attr_updates();
+  }
+
+  if (!op.omap_updates.empty() || op.clear_omap || op.omap_header) {
+    ceph_assert(osdmap->get_pg_pool(pgid.pool())->supports_omap());
+    if (entry) {
+      ECOmapJournalEntry new_entry(entry->version, op.clear_omap, op.omap_header, op.omap_updates);
+      entry->mod_desc.ec_omap(
+        op.clear_omap,
+        op.omap_header,
+        op.omap_updates);
+      ec_omap_journal.add_entry(plan.hoid, new_entry);
+    } else {
+      apply_omap_updates_without_journal();
+    }
   }
 
   if (!entry) {
@@ -751,7 +1015,7 @@ void ECTransaction::Generate::appends_and_clone_ranges() {
   ECUtil::shard_extent_set_t cloneable_range(sinfo.get_k_plus_m());
   sinfo.ro_size_to_read_mask(clone_max, cloneable_range);
 
-  if (plan.orig_size < plan.projected_size) {
+  if (op.delete_first || op.truncate || plan.orig_size < plan.projected_size) {
     ECUtil::shard_extent_set_t projected_cloneable_range(sinfo.get_k_plus_m());
     sinfo.ro_size_to_read_mask(plan.projected_size,projected_cloneable_range);
 
@@ -1008,7 +1272,10 @@ void ECTransaction::generate_transactions(
     set<hobject_t> *temp_added,
     set<hobject_t> *temp_removed,
     DoutPrefixProvider *dpp,
-    const OSDMapRef &osdmap) {
+    const OSDMapRef &osdmap,
+    bool &first_write_in_interval,
+    ECOmapJournal &ec_omap_journal,
+    const PGLog &pg_log) {
   ceph_assert(written_map);
   ceph_assert(transactions);
   ceph_assert(temp_added);
@@ -1041,8 +1308,50 @@ void ECTransaction::generate_transactions(
       ceph_assert(plan.hoid == oid);
 
       Generate generate(t, ec_impl, pgid, sinfo, partial_extents, written_map,
-        *transactions, osdmap, oid, op, plan, dpp, entry);
+        *transactions, osdmap, oid, op, plan, dpp, entry,
+        first_write_in_interval, ec_omap_journal, pg_log);
 
       plans.plans.pop_front();
   });
+}
+
+std::vector<const pg_log_entry_t*> ECTransaction::Generate::get_incomplete_ec_omap_log_entries(
+  const hobject_t &hoid,
+  eversion_t can_rollback_to) {
+  
+  std::vector<const pg_log_entry_t*> result;
+  
+  // Helper visitor to check if a log entry has EC omap updates
+  struct OmapChecker : public ObjectModDesc::Visitor {
+    bool has_omap = false;
+    
+    void ec_omap(
+      bool clear_omap,
+      std::optional<ceph::buffer::list> header,
+      std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &updates) override {
+      has_omap = true;
+    }
+  };
+  
+  // Iterate through the PG log to find incomplete entries for this object
+  for (const auto &entry : pg_log.get_log().log) {
+    // Filter by object, version, and rollback capability
+    if (entry.soid == hoid &&
+        entry.version > can_rollback_to &&
+        entry.mod_desc.can_rollback()) {
+      
+      // Check if this entry has EC omap updates
+      OmapChecker checker;
+      entry.mod_desc.visit(&checker);
+      if (checker.has_omap) {
+        result.push_back(&entry);
+      }
+    }
+  }
+  
+  ldpp_dout(dpp, 20) << __func__ << ": found " << result.size()
+                     << " incomplete log entries with EC omap updates for " << hoid
+                     << " after version " << can_rollback_to << dendl;
+  
+  return result;
 }

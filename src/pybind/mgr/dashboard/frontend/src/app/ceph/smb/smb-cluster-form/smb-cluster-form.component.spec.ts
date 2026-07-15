@@ -5,7 +5,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { SharedModule } from '~/app/shared/shared.module';
 import { RouterTestingModule } from '@angular/router/testing';
 import { FormArray, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ToastrModule } from 'ngx-toastr';
+
 import { ComboBoxModule, GridModule, InputModule, SelectModule } from 'carbon-components-angular';
 import { AUTHMODE } from '../smb.model';
 import { FOO_USERSGROUPS } from '../smb-usersgroups-form/smb-usersgroups-form.component.spec';
@@ -25,7 +25,6 @@ describe('SmbClusterFormComponent', () => {
         HttpClientTestingModule,
         RouterTestingModule,
         ReactiveFormsModule,
-        ToastrModule.forRoot(),
         GridModule,
         InputModule,
         SelectModule,

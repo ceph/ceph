@@ -1006,9 +1006,11 @@ struct SubvolumeMetric {
     uint64_t avg_read_latency = 0;
     uint64_t avg_write_latency = 0;
     uint64_t time_stamp = 0;
+    uint64_t quota_bytes = 0;
+    uint64_t used_bytes = 0;
 
     DENC(SubvolumeMetric, v, p) {
-      DENC_START(1, 1, p);
+      DENC_START(2, 1, p);
       denc(v.subvolume_path, p);
       denc(v.read_ops, p);
       denc(v.write_ops, p);
@@ -1017,6 +1019,14 @@ struct SubvolumeMetric {
       denc(v.avg_read_latency, p);
       denc(v.avg_write_latency, p);
       denc(v.time_stamp, p);
+      if (struct_v >= 2) {
+        denc(v.quota_bytes, p);
+        denc(v.used_bytes, p);
+      } else {
+        auto &mutable_v = const_cast<SubvolumeMetric&>(v);
+        mutable_v.quota_bytes = 0;
+        mutable_v.used_bytes = 0;
+      }
       DENC_FINISH(p);
     }
 

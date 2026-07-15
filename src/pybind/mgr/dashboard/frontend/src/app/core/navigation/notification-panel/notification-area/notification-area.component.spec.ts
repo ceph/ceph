@@ -9,7 +9,7 @@ import { CdNotification, CdNotificationConfig } from '../../../../shared/models/
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
 import { SharedModule } from '../../../../shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 describe('NotificationAreaComponent', () => {
   let component: NotificationAreaComponent;
   let fixture: ComponentFixture<NotificationAreaComponent>;
@@ -19,6 +19,10 @@ describe('NotificationAreaComponent', () => {
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
+
+  configureTestBed({
+    imports: [HttpClientTestingModule]
+  });
 
   const createNotification = (
     type: NotificationType,
@@ -46,7 +50,8 @@ describe('NotificationAreaComponent', () => {
     const spy = {
       remove: jasmine.createSpy('remove'),
       dataSource: mockDataSource,
-      data$: mockDataSource.asObservable()
+      data$: mockDataSource.asObservable(),
+      getNotificationsSnapshot: () => mockDataSource.getValue()
     };
 
     TestBed.overrideProvider(NotificationService, { useValue: spy });
@@ -90,7 +95,7 @@ describe('NotificationAreaComponent', () => {
   });
 
   it('should unsubscribe from notification service on destroy', () => {
-    const subSpy = spyOn(component['sub'], 'unsubscribe');
+    const subSpy = spyOn(component['subs'], 'unsubscribe');
     component.ngOnDestroy();
     expect(subSpy).toHaveBeenCalled();
   });
@@ -179,12 +184,12 @@ describe('NotificationAreaComponent', () => {
     const infoNotification = createNotification(
       NotificationType.info,
       'Info Today',
-      new Date(today.getTime() + 1000).toISOString()
+      new Date(today.getTime() - 60000).toISOString()
     );
     const warningNotification = createNotification(
       NotificationType.warning,
       'Warning Today',
-      new Date(today.getTime() + 2000).toISOString()
+      new Date(today.getTime() - 30000).toISOString()
     );
 
     mockDataSource.next([infoNotification, warningNotification]);
@@ -211,12 +216,12 @@ describe('NotificationAreaComponent', () => {
       createNotification(
         NotificationType.success,
         'Success 1',
-        new Date(today.getTime() + 1000).toISOString()
+        new Date(today.getTime() - 60000).toISOString()
       ),
       createNotification(
         NotificationType.info,
         'Info 1',
-        new Date(today.getTime() + 2000).toISOString()
+        new Date(today.getTime() - 30000).toISOString()
       )
     ];
 

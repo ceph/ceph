@@ -72,6 +72,7 @@ set(librbd_internal_srcs
   deep_copy/SnapshotCreateRequest.cc
   deep_copy/Utils.cc
   exclusive_lock/AutomaticPolicy.cc
+  exclusive_lock/TransientPolicy.cc
   exclusive_lock/ImageDispatch.cc
   exclusive_lock/PreAcquireRequest.cc
   exclusive_lock/PostAcquireRequest.cc
@@ -355,7 +356,7 @@ endif()
 if(ENABLE_SHARED)
   set_target_properties(librbd PROPERTIES
     OUTPUT_NAME rbd
-    VERSION 1.20.0
+    VERSION 1.21.0
     SOVERSION 1
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON)

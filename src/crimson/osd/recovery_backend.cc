@@ -6,12 +6,17 @@
 #include "crimson/common/coroutine.h"
 #include "crimson/common/exception.h"
 #include "crimson/common/log.h"
+#include "crimson/osd/ec_backend.h"
+#include "crimson/osd/ec_recovery_backend.h"
 #include "crimson/osd/recovery_backend.h"
+#include "crimson/osd/replicated_recovery_backend.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_backend.h"
 #include "crimson/osd/osd_operations/background_recovery.h"
 
 #include "messages/MOSDFastDispatchOp.h"
+#include "messages/MOSDPGRecoveryDelete.h"
+#include "messages/MOSDPGRecoveryDeleteReply.h"
 #include "osd/osd_types.h"
 
 SET_SUBSYS(osd);
@@ -55,6 +60,12 @@ void RecoveryBackend::clean_up(ceph::os::Transaction& t,
   replica_push_targets.clear();
 
   for (auto& [soid, recovery_waiter] : recovering) {
+    for (auto& kv : recovery_waiter->pushing) {
+      kv.second.clone_lock_manager.release_locks();
+    }
+    if (recovery_waiter->pull_info) {
+      recovery_waiter->pull_info->clone_lock_manager.release_locks();
+    }
     if (recovery_waiter->obc) {
       recovery_waiter->obc->interrupt(
 	  ::crimson::common::actingset_changed(
@@ -158,7 +169,8 @@ RecoveryBackend::handle_backfill_progress(
     m.op == MOSDPGBackfill::OP_BACKFILL_PROGRESS,
     t);
   DEBUGDPP("submitting transaction", pg);
-  return shard_services.get_store().do_transaction(
+  return crimson::os::with_store_do_transaction(
+    shard_services.get_store(pg.get_store_index()),
     pg.get_collection_ref(), std::move(t)).or_terminate();
 }
 
@@ -217,7 +229,8 @@ RecoveryBackend::handle_backfill_remove(
   }
   DEBUGDPP("submitting transaction", pg);
   co_await interruptor::make_interruptible(
-    shard_services.get_store().do_transaction(
+    crimson::os::with_store_do_transaction(
+      shard_services.get_store(pg.get_store_index()),
       pg.get_collection_ref(), std::move(t)).or_terminate());
 }
 
@@ -248,7 +261,8 @@ RecoveryBackend::scan_for_backfill_primary(
       crimson::ct_error::enoent::handle([](auto) {
 	return false;
       }),
-      crimson::ct_error::assert_all(fmt::format("{} {} error when loading obc", pg, FNAME).c_str())
+      crimson::ct_error::assert_all("{} {} error when loading obc",
+                                        std::cref(pg), FNAME)
     );
     if (!found) {
       // if the object does not exist here, it must have been removed
@@ -323,7 +337,8 @@ RecoveryBackend::scan_for_backfill_replica(
       crimson::ct_error::enoent::handle([](auto) {
 	return false;
       }),
-      crimson::ct_error::assert_all(fmt::format("{} {} error when loading obc", pg, FNAME).c_str())
+      crimson::ct_error::assert_all("{} {} error when loading obc",
+                                        std::cref(pg), FNAME)
     );
     if (!found) {
       // if the object does not exist here, it must have been removed
@@ -442,11 +457,17 @@ RecoveryBackend::handle_scan(
 }
 
 RecoveryBackend::interruptible_future<>
-RecoveryBackend::handle_backfill_op(
+RecoveryBackend::handle_recovery_op(
   Ref<MOSDFastDispatchOp> m,
   crimson::net::ConnectionXcoreRef conn)
 {
   switch (m->get_header().type) {
+  case MSG_OSD_PG_RECOVERY_DELETE:
+    return handle_recovery_delete(
+	boost::static_pointer_cast<MOSDPGRecoveryDelete>(m));
+  case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
+    return handle_recovery_delete_reply(
+	boost::static_pointer_cast<MOSDPGRecoveryDeleteReply>(m));
   case MSG_OSD_PG_BACKFILL:
     return handle_backfill(*boost::static_pointer_cast<MOSDPGBackfill>(m), conn);
   case MSG_OSD_PG_BACKFILL_REMOVE:
@@ -460,4 +481,24 @@ RecoveryBackend::handle_backfill_op(
   }
 }
 
+std::unique_ptr<RecoveryBackend> RecoveryBackend::create(
+  const pg_pool_t& pool,
+  crimson::osd::PG& pg,
+  crimson::osd::ShardServices& shard_services,
+  crimson::os::CollectionRef coll,
+  PGBackend* backend)
+{
+  switch (pool.type) {
+  case pg_pool_t::TYPE_REPLICATED:
+    return std::make_unique<ReplicatedRecoveryBackend>(
+      pg, shard_services, coll, backend);
+  case pg_pool_t::TYPE_ERASURE:
+    return std::make_unique<ECRecoveryBackend>(
+      pg, shard_services, coll, static_cast<ECBackend*>(backend));
+  default:
+    ceph_abort_msg(seastar::format(
+      "unsupported pool type '{}'", pool.type));
+  }
 }
+
+} // namespace crimson::osd

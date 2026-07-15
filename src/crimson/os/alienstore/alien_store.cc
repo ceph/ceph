@@ -84,7 +84,7 @@ AlienStore::~AlienStore()
 {
 }
 
-seastar::future<> AlienStore::start()
+seastar::future<uint32_t> AlienStore::start()
 {
   cct = std::make_unique<CephContext>(
     CEPH_ENTITY_TYPE_OSD,
@@ -119,7 +119,9 @@ seastar::future<> AlienStore::start()
   const auto num_threads =
     get_conf<uint64_t>("crimson_bluestore_num_threads");
   tp = std::make_unique<crimson::os::ThreadPool>(num_threads, 128, alien_thread_cpu_cores);
-  return tp->start();
+  return tp->start().then([]() {
+    return seastar::make_ready_future<uint32_t>(seastar::smp::count);
+  });
 }
 
 seastar::future<> AlienStore::stop()
@@ -273,7 +275,7 @@ seastar::future<std::vector<coll_core_t>> AlienStore::list_collections()
       ret.resize(ls.size());
       std::transform(
         ls.begin(), ls.end(), ret.begin(),
-        [](auto p) { return std::make_pair(p, NULL_CORE); });
+        [](auto p) { return std::make_pair(p, std::make_pair(NULL_CORE, NULL_STORE_INDEX)); });
       return seastar::make_ready_future<std::vector<coll_core_t>>(std::move(ret));
     });
   });
@@ -429,7 +431,8 @@ AlienStore::omap_iterate(CollectionRef ch,
                          const ghobject_t &oid,
                          ObjectStore::omap_iter_seek_t start_from,
                          omap_iterate_cb_t callback,
-                         uint32_t op_flags)
+                         uint32_t op_flags,
+			 omap_iterate_conf_t on_conflict)
 {
   logger().debug("{} with_start", __func__);
   assert(tp);
@@ -527,11 +530,7 @@ AlienStore::read_meta(const std::string& key)
     return tp->submit([key, this] {
       std::string value;
       int r = store->read_meta(key, &value);
-      if (r > 0) {
-        value.resize(r);
-        boost::algorithm::trim_right_if(value,
-          [] (unsigned char c) {return isspace(c);});
-      } else {
+      if (r < 0) {
         value.clear();
       }
       return std::make_pair(r, value);

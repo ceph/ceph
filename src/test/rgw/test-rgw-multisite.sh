@@ -18,6 +18,8 @@ zg=zg1
 
 system_access_key="1234567890"
 system_secret="pencil"
+regular_access_key="0987654321"
+regular_secret="crayon"
 
 # bring up first cluster
 x $(start_ceph_cluster c1) -n $(get_mstart_parameters 1)
@@ -39,6 +41,8 @@ done
 
 # create realm, zonegroup, zone, start rgws
 init_first_zone c1 $realm_name $zg ${zg}-1 $endpoints $system_access_key $system_secret
+# create a regular (non-system) user for S3 operations
+x $(rgw_admin c1) user create --uid=regular.user --display-name=RegularUser --access-key=${regular_access_key} --secret=${regular_secret}
 i=1
 while [ $i -le $rgws ]; do
   port=$((8100+i))

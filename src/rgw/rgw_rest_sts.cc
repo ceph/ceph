@@ -110,7 +110,7 @@ int WebTokenEngine::load_provider(const DoutPrefixProvider* dpp, optional_yield 
     idp_url.erase(pos, 7);
   }
 
-  return driver->load_oidc_provider(dpp, y, tenant, idp_url, info);
+  return driver->load_oidc_provider(dpp, y, tenant, idp_url, info, nullptr);
 }
 
 bool
@@ -312,9 +312,6 @@ WebTokenEngine::get_cert_url(const string& iss, const DoutPrefixProvider *dpp, o
   openidc_wellknown_url.append("/.well-known/openid-configuration");
 
   RGWHTTPTransceiver openidc_req(cct, "GET", openidc_wellknown_url, &openidc_resp);
-
-  //Headers
-  openidc_req.append_header("Content-Type", "application/x-www-form-urlencoded");
 
   int res = openidc_req.process(dpp, y);
   if (res < 0) {
@@ -586,6 +583,12 @@ bool WebTokenEngine::verify_oidc_thumbprint(const DoutPrefixProvider* dpp, const
     return true;
   }
 
+  if (thumbprints.empty()) {
+    ldpp_dout(dpp, 5) << "No thumbprints registered with oidc provider,"
+                         " skipping JWKS url verification" << dendl;
+    return true;
+  }
+
   // Fetch and verify cert according to https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_create_oidc_verify-thumbprint.html
   const auto hostname = get_top_level_domain_from_host(dpp, cert_url);
   ldpp_dout(dpp, 20) << "Validating hostname: " << hostname << dendl;
@@ -620,8 +623,6 @@ WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::dec
     // Get certificate
     bufferlist cert_resp;
     RGWHTTPTransceiver cert_req(cct, "GET", cert_url, &cert_resp);
-    //Headers
-    cert_req.append_header("Content-Type", "application/x-www-form-urlencoded");
 
     int res = cert_req.process(dpp, y);
     if (res < 0) {
@@ -652,7 +653,14 @@ WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::dec
             if (JSONDecoder::decode_json("x5c", x5c, &k_parser)) {
               string cert;
               bool found_valid_cert = false;
-              bool skip_thumbprint_verification = cct->_conf.get_val<bool>("rgw_enable_jwks_url_verification");
+              bool skip_thumbprint_verification = cct->_conf.get_val<bool>(
+                  "rgw_enable_jwks_url_verification");
+              if (!skip_thumbprint_verification && thumbprints.empty()) {
+                ldpp_dout(dpp, 0) << "x5c cert validation requires registered "
+                                     "thumbprints, but thumbprint list is empty"
+                                  << dendl;
+                throw std::system_error(EINVAL, std::system_category());
+              }
               for (auto& it : x5c) {
                 cert = "-----BEGIN CERTIFICATE-----\n" + it + "\n-----END CERTIFICATE-----";
                 ldpp_dout(dpp, 20) << "Certificate is: " << cert.c_str() << dendl;

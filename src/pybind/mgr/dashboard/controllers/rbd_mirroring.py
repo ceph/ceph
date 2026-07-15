@@ -22,7 +22,7 @@ from . import APIDoc, APIRouter, BaseController, CreatePermission, Endpoint, \
     EndpointDoc, ReadPermission, RESTController, Task, UIRouter, \
     UpdatePermission, allow_empty_body
 
-logger = logging.getLogger('controllers.rbd_mirror')
+logger = logging.getLogger(__name__)
 
 
 class MirrorHealth(IntEnum):

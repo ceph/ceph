@@ -8,7 +8,7 @@
 #include <seastar/coroutine/parallel_for_each.hh>
 
 #include "crimson/common/log.h"
-#include "crimson/common/errorator-loop.h"
+#include "crimson/common/errorator-utils.h"
 
 #include "include/buffer.h"
 #include "rbm_device.h"
@@ -19,9 +19,30 @@ SET_SUBSYS(seastore_device);
 
 namespace crimson::os::seastore::random_block_device::nvme {
 
+seastar::future<> NVMeBlockDevice::start(uint32_t shard_nums)
+{
+  device_shard_nums = shard_nums;
+  auto num_shard_services = (device_shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
+  LOG_PREFIX(NVMeBlockDevice::start);
+  DEBUG("device_shard_nums={} seastar::smp={}, num_shard_services={}", device_shard_nums, seastar::smp::count, num_shard_services);
+  return shard_devices.start(num_shard_services, device_path);
+
+}
+
+seastar::future<> NVMeBlockDevice::stop()
+{
+  return shard_devices.stop();
+}
+
+Device& NVMeBlockDevice::get_sharded_device(store_index_t store_index)
+{
+  assert(store_index < shard_devices.local().mshard_devices.size());
+  return *shard_devices.local().mshard_devices[store_index];
+}
+
 NVMeBlockDevice::mkfs_ret NVMeBlockDevice::mkfs(device_config_t config) {
   using crimson::common::get_conf;
-  co_await shard_devices.local().do_primary_mkfs(config,
+  co_await shard_devices.local().mshard_devices[0]->do_primary_mkfs(config,
     seastar::smp::count,
     get_conf<Option::size_t>("seastore_cbjournal_size") 
   );
@@ -76,10 +97,12 @@ NVMeBlockDevice::mount_ret NVMeBlockDevice::mount()
   LOG_PREFIX(NVMeBlockDevice::mount);
   DEBUG("mount");
   co_await shard_devices.invoke_on_all([](auto &local_device) {
-    return local_device.do_shard_mount(
-    ).handle_error(
-      crimson::ct_error::assert_all{
-	"Invalid error in NVMeBlockDevice::do_shard_mount"
+    return seastar::do_for_each(local_device.mshard_devices, [](auto& mshard_device) {
+      return mshard_device->do_shard_mount(
+      ).handle_error(
+        crimson::ct_error::assert_all(
+          "Invalid error in NVMeBlockDevice::do_shard_mount"
+      ));
     });
   });
 
@@ -163,6 +186,39 @@ read_ertr::future<> NVMeBlockDevice::read(
     co_await read_ertr::future<>(
       crimson::ct_error::input_output_error::make());
   }
+}
+
+read_ertr::future<> NVMeBlockDevice::_readv(
+  uint64_t offset,
+  std::vector<bufferptr> ptrs) {
+  LOG_PREFIX(NVMeBlockDevice::_readv);
+  DEBUG("block: read offset {}, {} buffers", offset, ptrs.size());
+  if (ptrs.size() == 0) {
+    return read_ertr::now();
+  }
+
+  if (is_end_to_end_data_protection()) {
+    return nvme_readv(offset, std::move(ptrs));
+  }
+  std::vector<iovec> iov;
+  size_t length = 0;
+  for (auto &ptr : ptrs) {
+    length += ptr.length();
+    assert((ptr.length() % super.block_size) == 0);
+    iov.emplace_back(ptr.c_str(), ptr.length());
+  }
+  return device.dma_read(offset, std::move(iov)
+  ).handle_exception(
+    [FNAME](auto e) -> read_ertr::future<size_t> {
+      ERROR("read: dma_read got error{}", e);
+      return crimson::ct_error::input_output_error::make();
+    }).then([length, FNAME](auto result) -> read_ertr::future<> {
+      if (result != length) {
+        ERROR("read: dma_read got error with not proper length");
+        return crimson::ct_error::input_output_error::make();
+      }
+      return read_ertr::now();
+    });
 }
 
 write_ertr::future<> NVMeBlockDevice::writev(
@@ -417,6 +473,30 @@ read_ertr::future<> NVMeBlockDevice::nvme_read(
     ERROR("read nvm command with checksum offload fails : {}", ret);
     ceph_abort();
   }
+}
+
+read_ertr::future<> NVMeBlockDevice::nvme_readv(
+  uint64_t offset, std::vector<bufferptr> ptrs) {
+  struct io_t {
+    uint64_t offset = 0;
+    bufferptr ptr;
+  };
+  std::vector<io_t> iov;
+  size_t off = 0;
+  for (auto &ptr : ptrs) {
+    auto len = ptr.length();
+    iov.emplace_back(offset + off, std::move(ptr));
+    off += len;
+  }
+  return seastar::do_with(
+    std::move(iov),
+    [this](auto &iov) {
+    return read_ertr::parallel_for_each(
+      iov,
+      [this](auto &io) {
+      return nvme_read(io.offset, io.ptr.length(), io.ptr.c_str());
+    });
+  });
 }
 
 }

@@ -32,7 +32,7 @@ class LCDBSerializer : public StoreLCSerializer {
 public:
   LCDBSerializer(DBStore* store, const std::string& oid, const std::string& lock_name, const std::string& cookie) {}
 
-  virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override { return 0; }
+  virtual int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override { return 0; }
   virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override {
     return 0;
   }
@@ -330,6 +330,9 @@ protected:
 
     /** Get a script named with the given key from the backing store */
     virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override;
+    /** Get a ref to the Lua bytecode if it exists, else the script named with the given key from the backing store */
+    virtual std::tuple<rgw::lua::LuaCodeType, int> get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y,
+                                                                          const std::string& key) override;
     /** Put a script named with the given key to the backing store */
     virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override;
     /** Delete a script named with the given key from the backing store */
@@ -342,6 +345,7 @@ protected:
     virtual int list_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& packages) override;
     /** Reload lua packages */
     virtual int reload_packages(const DoutPrefixProvider* dpp, optional_yield y) override;
+
   };
 
   /*
@@ -585,6 +589,7 @@ protected:
         return std::unique_ptr<Object>(new DBObject(*this));
       }
       virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp,
+							   optional_yield y,
 							   const std::string& lock_name) override;
       virtual int transition(Bucket* bucket,
           const rgw_placement_rule& placement_rule,
@@ -624,8 +629,8 @@ protected:
   public:
     MPDBSerializer(const DoutPrefixProvider *dpp, DBStore* store, DBObject* obj, const std::string& lock_name) {}
 
-    virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override {return 0; }
-    virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override { return 0;}
+    virtual int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override;
+    virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override;
   };
 
   class DBAtomicWriter : public StoreWriter {
@@ -990,12 +995,14 @@ public:
       int store_oidc_provider(const DoutPrefixProvider *dpp,
                               optional_yield y,
                               const RGWOIDCProviderInfo& info,
-                              bool exclusive) override;
+                              bool exclusive,
+                              RGWObjVersionTracker* objv_tracker) override;
       int load_oidc_provider(const DoutPrefixProvider *dpp,
                              optional_yield y,
                              std::string_view tenant,
                              std::string_view url,
-                             RGWOIDCProviderInfo& info) override;
+                             RGWOIDCProviderInfo& info,
+                             RGWObjVersionTracker* objv_tracker) override;
       int delete_oidc_provider(const DoutPrefixProvider *dpp,
                                optional_yield y,
                                std::string_view tenant,

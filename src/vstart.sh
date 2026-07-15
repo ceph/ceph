@@ -64,6 +64,14 @@ if [ -e CMakeCache.txt ]; then
     CEPH_ROOT=$(get_cmake_variable ceph_SOURCE_DIR)
     CEPH_BUILD_DIR=`pwd`
     [ -z "$MGR_PYTHON_PATH" ] && MGR_PYTHON_PATH=$CEPH_ROOT/src/pybind/mgr
+
+    # Point the sanitizers at the in-tree suppression files so vstart daemons
+    # ignore the same still-reachable third-party leaks AddCephTest.cmake suppresses for
+    # unittests. Without this `ceph-mon --mkfs` aborts on LeakSanitizer.
+    if [ "$(get_cmake_variable WITH_ASAN)" = "ON" ]; then
+        [ -z "$ASAN_OPTIONS" ] && export ASAN_OPTIONS="suppressions=$CEPH_ROOT/qa/asan.supp,detect_odr_violation=0"
+        [ -z "$LSAN_OPTIONS" ] && export LSAN_OPTIONS="suppressions=$CEPH_ROOT/qa/lsan.supp,print_suppressions=0"
+    fi
 fi
 
 # use CEPH_BUILD_ROOT to vstart from a 'make install'
@@ -281,6 +289,7 @@ options:
 	--osds-per-host: populate crush_location as each host holds the specified number of osds if set
 	--require-osd-and-client-version: if supplied, do set-require-min-compat-client and require-osd-release to specified value
 	--use-crush-tunables: if supplied, set tunables to specified value
+	--reactor-backend: configre seastar reactor backend options like io_uring or linux-aio
 \n
 EOF
 
@@ -614,6 +623,10 @@ case $1 in
         ;;
     --crimson-smp)
         crimson_smp=$2
+        shift
+        ;;
+    --reactor-backend)
+        crimson_reactor_backend=$2
         shift
         ;;
     --crimson-alien-num-threads)
@@ -1021,8 +1034,6 @@ $DAEMONOPTS
 
         bluestore fsck on mount = true
         bluestore block create = true
-        bluestore allocator = bitmap
-        bluestore alloc favor spatial locality = false
         
 $BLUESTORE_OPTS
 
@@ -1154,6 +1165,7 @@ start_mon() {
 [mon.$f]
         host = $HOSTNAME
         mon data = $CEPH_DEV_DIR/mon.$f
+        mon backup path = $CEPH_DEV_DIR/mon.$f-backup
 EOF
             count=$(($count + 2))
         done
@@ -1257,6 +1269,10 @@ start_osd() {
         if $crimson_poll_mode; then
             echo "$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_poll_mode true"
             $CEPH_BIN/ceph -c $conf_fn config set "osd.$osd" crimson_poll_mode true
+        fi
+        if [ -n "$crimson_reactor_backend" ]; then
+            echo "$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_reactor_backend $crimson_reactor_backend"
+            $CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_reactor_backend $crimson_reactor_backend
         fi
     fi
 	if [ "$new" -eq 1 -o $inc_osd_num -gt 0 ]; then
@@ -1466,6 +1482,19 @@ EOF
     fi
 }
 
+create_fs_volume() {
+    local name=$1
+    if [ "$CEPH_NUM_MGR" -gt 0 ]; then
+        ceph_adm fs volume create ${name}
+    else
+        local meta_pool="cephfs.${name}.meta"
+        local data_pool="cephfs.${name}.data"
+        ceph_adm osd pool create "$meta_pool"
+        ceph_adm osd pool create "$data_pool" --bulk
+        ceph_adm fs new ${name} "$meta_pool" "$data_pool"
+    fi
+}
+
 start_mds() {
     local mds=0
     for name in a b c d e f g h i j k l m n o p
@@ -1516,12 +1545,15 @@ EOF
                 ceph_adm fs flag set enable_multiple true --yes-i-really-mean-it
             fi
 
-	    # wait for volume module to load
-	    while ! ceph_adm fs volume ls ; do sleep 1 ; done
+            if [ "$CEPH_NUM_MGR" -gt 0 ]; then
+                # wait for volume module to load
+                while ! ceph_adm fs volume ls ; do sleep 1 ; done
+            fi
+
             local fs=0
             for name in a b c d e f g h i j k l m n o p
             do
-                ceph_adm fs volume create ${name}
+                create_fs_volume ${name}
                 ceph_adm fs authorize ${name} "client.fs_${name}" / rwp >> "$keyring_fn"
                 fs=$(($fs + 1))
                 [ $fs -eq $CEPH_NUM_FS ] && break
@@ -1575,6 +1607,7 @@ start_ganesha() {
             Enable_RQUOTA = false;
             Protocols = 4;
             NFS_Port = $port;
+            allow_set_io_flusher_fail = true;
         }
 
         MDCACHE {
@@ -1582,20 +1615,20 @@ start_ganesha() {
         }
 
         NFSv4 {
-           RecoveryBackend = rados_cluster;
+           RecoveryBackend = "\"rados_cluster\"";
            Minor_Versions = 1, 2;
         }
 
         RADOS_KV {
-           pool = '$pool_name';
-           namespace = $namespace;
-           UserId = $test_user;
+           pool = "\"$pool_name\"";
+           namespace = "\"$namespace\"";
+           UserId = "\"$test_user\"";
            nodeid = $name;
         }
 
         RADOS_URLS {
-	   Userid = $test_user;
-	   watch_url = '$url';
+	   Userid = "\"$test_user\"";
+	   watch_url = "\"$url\"";
         }
 
 	%url $url" > "$ganesha_dir/ganesha-$name.conf"
@@ -1662,7 +1695,7 @@ if [ -z "$CEPH_PORT" ]; then
     while [ true ]
     do
         CEPH_PORT="$(echo $(( RANDOM % 1000 + 40000 )))"
-        ss -a -n | egrep "\<LISTEN\>.+:${CEPH_PORT}\s+" 1>/dev/null 2>&1 || break
+        ss -a -n | grep -E "\<LISTEN\>.+:${CEPH_PORT}\s+" 1>/dev/null 2>&1 || break
     done
 fi
 

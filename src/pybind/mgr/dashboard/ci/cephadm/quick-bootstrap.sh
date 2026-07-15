@@ -13,6 +13,7 @@ show_help() {
   echo "  -e, --expanded-cluster     To add all the hosts and deploy OSDs on top of it."
   echo "  -c, --clusters          Number of clusters to be created. Default is 1."
   echo "  -n, --nodes           Number of nodes to be created per cluster. Default is 3."
+  echo "  -i, --ceph-image       The cephadm image to be used for bootstrapping the cluster. Default is quay.ceph.io/ceph-ci/ceph:main."
   echo "  -h, --help             Display this help message."
   echo ""
   echo "Example:"
@@ -46,6 +47,11 @@ for arg in "$@"; do
     -c=*|--clusters=*)
       CLUSTERS="${arg#*=}"
       ;;
+    -i=*|--ceph-image=*)
+      CEPHADM_IMAGE="${arg#*=}"
+      echo "Using custom Ceph image: $CEPHADM_IMAGE"
+      extra_args+=" -P custom_image=${CEPHADM_IMAGE}"
+      ;;
     -h|--help)
       show_help
       exit 0
@@ -58,19 +64,18 @@ for arg in "$@"; do
   esac
 done
 
-image_name=$(echo "$CEPHADM_IMAGE")
-
+image_name="${CEPHADM_IMAGE:-quay.ceph.io/ceph-ci/ceph:main}"
 extra_args+=" -P nodes=${NODES}"
 
 if [[ ${use_cached_image} == false ]]; then
     printf "Pulling the image: %s\n" "$image_name"
-    podman pull "${image_name}"
+    podman pull "$image_name"
 fi
 
 rm -f ceph_image.tar
 
 printf "Saving the image: %s\n" "$image_name"
-podman save -o ceph_image.tar quay.ceph.io/ceph-ci/ceph:main
+podman save -o ceph_image.tar "$image_name"
 
 # build cephadm binary if it does not exist
 printf "\nChecking for cephadm binary...\n"

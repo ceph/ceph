@@ -22,11 +22,11 @@ class EndPoint:
     """EndPoint representing an ip:port format"""
 
     def __init__(self, ip: str, port: int) -> None:
-        self.ip = ip
+        self.ip = ip.strip('[]')  # normalize: always store bare IP
         self.port = port
         self.is_ipv4 = True
         try:
-            if ip and ipaddress.ip_network(ip).version == 6:
+            if self.ip and ipaddress.ip_network(self.ip).version == 6:
                 self.is_ipv4 = False
         except Exception:
             logger.exception('Failed to check ip address version')
@@ -307,7 +307,8 @@ def build_addrv_params(addrv: List[EndPoint]) -> str:
         else:
             ver = 'v2'  # default mon protocol version if port is not provided
             logger.warning(f'Using msgr2 protocol for unrecognized port {ep}')
-        addr_arg_list.append(f'{ver}:{ep.ip}:{ep.port}')
+        ip = wrap_ipv6(ep.ip) if is_ipv6(ep.ip) else ep.ip
+        addr_arg_list.append(f'{ver}:{ip}:{ep.port}')
 
     addr_arg = '[{0}]'.format(','.join(addr_arg_list))
     return addr_arg

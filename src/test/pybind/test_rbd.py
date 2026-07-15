@@ -33,7 +33,8 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_MIRROR_IMAGE_ENABLED, RBD_MIRROR_IMAGE_DISABLED,
                  MIRROR_IMAGE_STATUS_STATE_UNKNOWN,
                  RBD_MIRROR_IMAGE_MODE_JOURNAL, RBD_MIRROR_IMAGE_MODE_SNAPSHOT,
-                 RBD_LOCK_MODE_EXCLUSIVE, RBD_OPERATION_FEATURE_GROUP,
+                 RBD_LOCK_MODE_EXCLUSIVE, RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT,
+                 RBD_OPERATION_FEATURE_GROUP,
                  RBD_OPERATION_FEATURE_CLONE_CHILD,
                  RBD_SNAP_NAMESPACE_TYPE_USER,
                  RBD_SNAP_NAMESPACE_TYPE_GROUP,
@@ -2444,9 +2445,12 @@ class TestExclusiveLock(object):
             for offset in [0, IMG_SIZE // 2]:
                 read = image2.read(offset, 256)
                 eq(data, read)
+
     def test_acquire_release_lock(self):
         with Image(ioctx, image_name) as image:
             image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE)
+            image.lock_release()
+            image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT)
             image.lock_release()
 
     def test_break_lock(self):
@@ -3074,6 +3078,7 @@ class TestGroups(object):
         create_group()
         snap_name = get_temp_snap_name()
         self.group = Group(ioctx, group_name)
+        self.dne_group = Group(ioctx, "group_does_not_exist")
 
     def teardown_method(self, method):
         remove_group()
@@ -3187,6 +3192,7 @@ class TestGroups(object):
 
     def test_group_snap(self):
         global snap_name
+        assert_raises(ObjectNotFound, self.dne_group.list_snaps)
         eq([], list(self.group.list_snaps()))
         self.group.create_snap(snap_name)
         eq([snap_name], [snap['name'] for snap in self.group.list_snaps()])

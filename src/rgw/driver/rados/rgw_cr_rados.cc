@@ -103,6 +103,10 @@ void RGWAsyncRadosProcessor::handle_request(const DoutPrefixProvider *dpp, RGWAs
 }
 
 void RGWAsyncRadosProcessor::queue(RGWAsyncRadosRequest *req) {
+  if (is_going_down()) {
+    req->complete_immediate(-ECANCELED);
+    return;
+  }
   req_throttle.get(1);
   req_wq.queue(req);
 }
@@ -217,58 +221,6 @@ RGWOmapAppend::RGWOmapAppend(RGWAsyncRadosProcessor *_async_rados, rgw::sal::Rad
                              uint64_t _window_size)
                       : RGWConsumerCR<string>(_store->ctx()), async_rados(_async_rados),
                         store(_store), obj(_obj), going_down(false), num_pending_entries(0), window_size(_window_size), total_entries(0)
-{
-}
-
-int RGWAsyncLockSystemObj::_send_request(const DoutPrefixProvider *dpp)
-{
-  rgw_rados_ref ref;
-  int r = store->getRados()->get_raw_obj_ref(dpp, obj, &ref);
-  if (r < 0) {
-    ldpp_dout(dpp, -1) << "ERROR: failed to get ref for (" << obj << ") ret=" << r << dendl;
-    return r;
-  }
-
-  rados::cls::lock::Lock l(lock_name);
-  utime_t duration(duration_secs, 0);
-  l.set_duration(duration);
-  l.set_cookie(cookie);
-  l.set_may_renew(true);
-
-  return l.lock_exclusive(&ref.ioctx, ref.obj.oid);
-}
-
-RGWAsyncLockSystemObj::RGWAsyncLockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore* _store,
-                      RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
-                       const string& _name, const string& _cookie, uint32_t _duration_secs) : RGWAsyncRadosRequest(caller, cn), store(_store),
-				 obj(_obj),
-				 lock_name(_name),
-				 cookie(_cookie),
-				 duration_secs(_duration_secs)
-{
-}
-
-int RGWAsyncUnlockSystemObj::_send_request(const DoutPrefixProvider *dpp)
-{
-  rgw_rados_ref ref;
-  int r = store->getRados()->get_raw_obj_ref(dpp, obj, &ref);
-  if (r < 0) {
-    ldpp_dout(dpp, -1) << "ERROR: failed to get ref for (" << obj << ") ret=" << r << dendl;
-    return r;
-  }
-
-  rados::cls::lock::Lock l(lock_name);
-
-  l.set_cookie(cookie);
-
-  return l.unlock(&ref.ioctx, ref.obj.oid);
-}
-
-RGWAsyncUnlockSystemObj::RGWAsyncUnlockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore* _store,
-                                                 RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
-                                                 const string& _name, const string& _cookie) : RGWAsyncRadosRequest(caller, cn), store(_store),
-  obj(_obj),
-  lock_name(_name), cookie(_cookie)
 {
 }
 
@@ -518,33 +470,43 @@ RGWSimpleRadosLockCR::RGWSimpleRadosLockCR(RGWAsyncRadosProcessor *_async_rados,
 			     lock_name(_lock_name),
 			     cookie(_cookie),
            duration(_duration),
-			     obj(_obj),
-			     req(nullptr)
+			     obj(_obj)
 {
   set_description() << "rados lock dest=" << obj << " lock=" << lock_name << " cookie=" << cookie << " duration=" << duration;
 }
 
 void RGWSimpleRadosLockCR::request_cleanup()
 {
-  if (req) {
-    req->finish();
-    req = NULL;
-  }
 }
 
 int RGWSimpleRadosLockCR::send_request(const DoutPrefixProvider *dpp)
 {
+  int r = store->getRados()->get_raw_obj_ref(dpp, obj, &ref);
+  if (r < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: failed to get ref for (" << obj << ") ret=" << r << dendl;
+    return r;
+  }
+
   set_status() << "sending request";
-  req = new RGWAsyncLockSystemObj(this, stack->create_completion_notifier(),
-                                 store, NULL, obj, lock_name, cookie, duration);
-  async_rados->queue(req);
-  return 0;
+
+  rados::cls::lock::Lock l(lock_name);
+  utime_t dur(duration, 0);
+  l.set_duration(dur);
+  l.set_cookie(cookie);
+  l.set_may_renew(true);
+
+  librados::ObjectWriteOperation op;
+  l.lock_exclusive(&op);
+
+  cn = stack->create_completion_notifier();
+  return ref.ioctx.aio_operate(ref.obj.oid, cn->completion(), &op);
 }
 
 int RGWSimpleRadosLockCR::request_complete()
 {
-  set_status() << "request complete; ret=" << req->get_ret_status();
-  return req->get_ret_status();
+  int r = cn->completion()->get_return_value();
+  set_status() << "request complete; ret=" << r;
+  return r;
 }
 
 RGWSimpleRadosUnlockCR::RGWSimpleRadosUnlockCR(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RadosStore* _store,
@@ -555,34 +517,40 @@ RGWSimpleRadosUnlockCR::RGWSimpleRadosUnlockCR(RGWAsyncRadosProcessor *_async_ra
                                                 store(_store),
                                                 lock_name(_lock_name),
                                                 cookie(_cookie),
-                                                obj(_obj),
-                                                req(NULL)
+                                                obj(_obj)
 {
   set_description() << "rados unlock dest=" << obj << " lock=" << lock_name << " cookie=" << cookie;
 }
 
 void RGWSimpleRadosUnlockCR::request_cleanup()
 {
-  if (req) {
-    req->finish();
-    req = NULL;
-  }
 }
 
 int RGWSimpleRadosUnlockCR::send_request(const DoutPrefixProvider *dpp)
 {
+  int r = store->getRados()->get_raw_obj_ref(dpp, obj, &ref);
+  if (r < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: failed to get ref for (" << obj << ") ret=" << r << dendl;
+    return r;
+  }
+
   set_status() << "sending request";
 
-  req = new RGWAsyncUnlockSystemObj(this, stack->create_completion_notifier(),
-                                 store, NULL, obj, lock_name, cookie);
-  async_rados->queue(req);
-  return 0;
+  rados::cls::lock::Lock l(lock_name);
+  l.set_cookie(cookie);
+
+  librados::ObjectWriteOperation op;
+  l.unlock(&op);
+
+  cn = stack->create_completion_notifier();
+  return ref.ioctx.aio_operate(ref.obj.oid, cn->completion(), &op);
 }
 
 int RGWSimpleRadosUnlockCR::request_complete()
 {
-  set_status() << "request complete; ret=" << req->get_ret_status();
-  return req->get_ret_status();
+  int r = cn->completion()->get_return_value();
+  set_status() << "request complete; ret=" << r;
+  return r;
 }
 
 int RGWOmapAppend::operate(const DoutPrefixProvider *dpp) {
@@ -718,7 +686,7 @@ int RGWRadosBILogTrimCR::send_request(const DoutPrefixProvider *dpp)
 
   librados::ObjectWriteOperation op;
   op.assert_exists();
-  op.exec(RGW_CLASS, RGW_BI_LOG_TRIM, in);
+  op.exec(cls::rgw::method::bi_log_trim, in);
 
   cn = stack->create_completion_notifier();
   return bs.bucket_obj.aio_operate(cn->completion(), &op);
@@ -1031,7 +999,11 @@ int RGWContinuousLeaseCR::operate(const DoutPrefixProvider *dpp)
       current_time = ceph::coarse_mono_clock::now();
       yield call(new RGWSimpleRadosLockCR(async_rados, store, obj, lock_name, cookie, interval));
       if (latency) {
-	      latency->add_latency(ceph::coarse_mono_clock::now() - current_time);
+	      auto elapsed = ceph::coarse_mono_clock::now() - current_time;
+	      latency->add_latency(elapsed);
+	      if (counters) {
+	        counters->tinc(sync_counters::l_lock, elapsed);
+	      }
       }
       current_time = ceph::coarse_mono_clock::now();
       if (current_time - last_renew_try_time > interval_tolerance) {
@@ -1055,7 +1027,11 @@ int RGWContinuousLeaseCR::operate(const DoutPrefixProvider *dpp)
     current_time = ceph::coarse_mono_clock::now();
     yield call(new RGWSimpleRadosUnlockCR(async_rados, store, obj, lock_name, cookie));
     if (latency) {
-      latency->add_latency(ceph::coarse_mono_clock::now() - current_time);
+      auto elapsed = ceph::coarse_mono_clock::now() - current_time;
+      latency->add_latency(elapsed);
+      if (counters) {
+        counters->tinc(sync_counters::l_lock, elapsed);
+      }
     }
     return set_state(RGWCoroutine_Done);
   }

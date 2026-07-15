@@ -19,13 +19,23 @@ from mgr_module import NotifyType
 from .blocklist import blocklist
 from .notify import Notifier, InstanceWatcher
 from .utils import INSTANCE_ID_PREFIX, MIRROR_OBJECT_NAME, Finisher, \
-    AsyncOpTracker, connect_to_filesystem, disconnect_from_filesystem
+    AsyncOpTracker, get_metadata_pool, norm_path, connect_to_filesystem, \
+    disconnect_from_filesystem
+from .metrics.cache import (
+    COMPLETE_CACHE_MAX, lru_cache_timeout, PARTIAL_CACHE_MAX,
+    metrics_for_dir_and_peers, try_get_from_complete)
+from .metrics import load as metrics_load
 from .exception import MirrorException
 from .dir_map.create import create_mirror_object
 from .dir_map.load import load_dir_map, load_instances
 from .dir_map.update import UpdateDirMapRequest, UpdateInstanceRequest
 from .dir_map.policy import Policy
-from .dir_map.state_transition import ActionType
+from .dir_map.state_transition import ActionType, State
+from .checkpoint import (
+    Checkpoint,
+    checkpoint_from_snap,
+    is_checkpointed,
+)
 
 log = logging.getLogger(__name__)
 
@@ -60,6 +70,13 @@ class FSPolicy:
 
     def schedule_action(self, dir_paths):
         self.dir_paths.extend(dir_paths)
+
+    def get_live_instance_ids(self):
+        watcher = self.instance_watcher
+        if watcher is None:
+            return None
+        with watcher.lock:
+            return frozenset(str(instance_id) for instance_id in watcher.instances)
 
     def init(self, dir_mapping, instances):
         with self.lock:
@@ -176,15 +193,28 @@ class FSPolicy:
             finally:
                 self.op_tracker.finish_async_op()
 
+    def handle_checkpoint_acquire_ack(self, dir_path, r):
+        """Ack for checkpoint refresh acquire; does not advance the policy state machine."""
+        log.debug(f'handle_checkpoint_acquire_ack: {dir_path} r={r}')
+        with self.lock:
+            try:
+                if self.stopping.is_set():
+                    log.debug('handle_checkpoint_acquire_ack: policy shutting down')
+                    return
+            finally:
+                self.op_tracker.finish_async_op()
+
     def process_updates(self):
         def acquire_message(dir_path):
             return json.dumps({'dir_path': dir_path,
                                'mode': 'acquire'
                                })
-        def release_message(dir_path):
-            return json.dumps({'dir_path': dir_path,
-                               'mode': 'release'
-                               })
+        def release_message(dir_path, purging=False):
+            msg = {'dir_path': dir_path,
+                   'mode': 'release'}
+            if purging:
+                msg['purging'] = True
+            return json.dumps(msg)
         with self.lock:
             if not self.dir_paths or self.stopping.is_set():
                 return
@@ -211,7 +241,9 @@ class FSPolicy:
                 elif action_type == ActionType.ACQUIRE:
                     notifies[dir_path] = (lookup_info['instance_id'], acquire_message(dir_path))
                 elif action_type == ActionType.RELEASE:
-                    notifies[dir_path] = (lookup_info['instance_id'], release_message(dir_path))
+                    notifies[dir_path] = (lookup_info['instance_id'],
+                                          release_message(dir_path,
+                                                          lookup_info['purging']))
             if update_map or removals:
                 self.update_mapping(update_map, removals, callback=self.continue_action)
             for dir_path, message in notifies.items():
@@ -288,6 +320,7 @@ class FSSnapshotMirror:
         self.lock = threading.Lock()
         self.refresh_pool_policy()
         self.local_fs = CephfsClient(mgr)
+        self.checkpoint = Checkpoint(self._client_snapdir)
 
     def notify(self, notify_type: NotifyType):
         log.debug(f'got notify type {notify_type}')
@@ -308,13 +341,6 @@ class FSSnapshotMirror:
             return client_name, cluster_name
         except ValueError:
             raise MirrorException(-errno.EINVAL, f'invalid cluster spec {spec}')
-
-    @staticmethod
-    def get_metadata_pool(filesystem, fs_map):
-        for fs in fs_map['filesystems']:
-            if fs['mdsmap']['fs_name'] == filesystem:
-                return fs['mdsmap']['metadata_pool']
-        return None
 
     @staticmethod
     def get_filesystem_id(filesystem, fs_map):
@@ -479,7 +505,7 @@ class FSSnapshotMirror:
             disconnect_from_filesystem(cluster_name, remote_fs_name, remote_cluster, remote_fs)
 
     def init_pool_policy(self, filesystem):
-        metadata_pool_id = FSSnapshotMirror.get_metadata_pool(filesystem, self.fs_map)
+        metadata_pool_id = get_metadata_pool(filesystem, self.fs_map)
         if not metadata_pool_id:
             log.error(f'cannot find metadata pool-id for filesystem {filesystem}')
             raise Exception(-errno.EINVAL)
@@ -518,7 +544,7 @@ class FSSnapshotMirror:
         log.info(f'enabling mirror for filesystem {filesystem}')
         with self.lock:
             try:
-                metadata_pool_id = FSSnapshotMirror.get_metadata_pool(filesystem, self.fs_map)
+                metadata_pool_id = get_metadata_pool(filesystem, self.fs_map)
                 if not metadata_pool_id:
                     log.error(f'cannot find metadata pool-id for filesystem {filesystem}')
                     raise Exception(-errno.EINVAL)
@@ -549,7 +575,7 @@ class FSSnapshotMirror:
         except Exception as e:
             return e.args[0], '', 'failed to disable mirroring'
 
-    def peer_list(self, filesystem):
+    def peer_list(self, filesystem, format='json'):
         try:
             with self.lock:
                 fspolicy = self.pool_policy.get(filesystem, None)
@@ -563,7 +589,10 @@ class FSSnapshotMirror:
                                            'site_name': remote['cluster_name'],
                                            'fs_name': remote['fs_name']
                                            }
-                return 0, json.dumps(peer_res), ''
+                if format == 'json-pretty':
+                    return 0, json.dumps(peer_res, indent=2), ''
+                else:
+                    return 0, json.dumps(peer_res), ''
         except MirrorException as me:
             return me.args[0], '', me.args[1]
         except Exception as e:
@@ -683,12 +712,6 @@ class FSSnapshotMirror:
         remote_cluster_spec = f'{client_name}@{cluster_name}'
         return self.peer_add(filesystem, remote_cluster_spec, remote_fs_name, token_dct)
 
-    @staticmethod
-    def norm_path(dir_path):
-        if not os.path.isabs(dir_path):
-            raise MirrorException(-errno.EINVAL, f'{dir_path} should be an absolute path')
-        return os.path.normpath(dir_path)
-
     def add_dir(self, filesystem, dir_path):
         try:
             with self.lock:
@@ -697,7 +720,7 @@ class FSSnapshotMirror:
                 fspolicy = self.pool_policy.get(filesystem, None)
                 if not fspolicy:
                     raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
-                dir_path = FSSnapshotMirror.norm_path(dir_path)
+                dir_path = norm_path(dir_path)
                 log.debug(f'path normalized to {dir_path}')
                 fspolicy.add_dir(dir_path)
                 return 0, json.dumps({}), ''
@@ -714,7 +737,7 @@ class FSSnapshotMirror:
                 fspolicy = self.pool_policy.get(filesystem, None)
                 if not fspolicy:
                     raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
-                dir_path = FSSnapshotMirror.norm_path(dir_path)
+                dir_path = norm_path(dir_path)
                 fspolicy.remove_dir(dir_path)
                 return 0, json.dumps({}), ''
         except MirrorException as me:
@@ -744,7 +767,7 @@ class FSSnapshotMirror:
                 fspolicy = self.pool_policy.get(filesystem, None)
                 if not fspolicy:
                     raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
-                dir_path = FSSnapshotMirror.norm_path(dir_path)
+                dir_path = norm_path(dir_path)
                 return fspolicy.status(dir_path)
         except MirrorException as me:
             return me.args[0], '', me.args[1]
@@ -761,7 +784,175 @@ class FSSnapshotMirror:
         except MirrorException as me:
             return me.args[0], '', me.args[1]
 
-    def daemon_status(self):
+    def _metrics_cache_enabled(self):
+        return self.mgr.get_module_option('snapshot_mirror_metrics_cache_enabled')
+
+    @lru_cache_timeout(
+        lambda self, *_args, **_kwargs: self.mgr.get_module_option(
+            'snapshot_mirror_metrics_cache_ttl'),
+        COMPLETE_CACHE_MAX)
+    def sync_stat_complete_cache(self, filesystem):
+        """Load all directories and all peers for a filesystem from omap.
+
+        Cache key: (time_token, filesystem). Each entry stores the full omap
+        snapshot for that filesystem (all dirs, all peers). A hit means every
+        directory is present, so full-scan queries can be served safely.
+        Used for 'status <fs>' and 'status <fs> --peer_uuid=<uuid>'; peer
+        filtering is applied when serving.
+        """
+        log.debug('sync stat metrics for filesystem %s loaded from omap (complete)',
+                  filesystem)
+        fspolicy = self.pool_policy[filesystem]
+        ioctx = metrics_load.open_metadata_ioctx(
+            self.rados, self.fs_map, filesystem)
+        return metrics_load.load_sync_stat_metrics(
+            ioctx, filesystem, None, fspolicy.policy,
+            fspolicy.get_live_instance_ids(),
+            self.get_filesystem_peers(filesystem))
+
+    @lru_cache_timeout(
+        lambda self, *_args, **_kwargs: self.mgr.get_module_option(
+            'snapshot_mirror_metrics_cache_ttl'),
+        PARTIAL_CACHE_MAX)
+    def sync_stat_partial_cache(self, filesystem, dir_path, peer_ids):
+        """Load sync-stat omap keys for one directory and a peer set.
+
+        Cache key: (time_token, filesystem, dir_path, peer_ids). Used as a
+        fallback for 'status <fs> <dir>' when the complete cache is cold or
+        does not contain the requested directory.
+        """
+        peer_scope = (next(iter(peer_ids)) if len(peer_ids) == 1 else '*')
+        log.debug('sync stat metrics for filesystem %s (dir=%s, peer=%s) '
+                  'loaded from omap',
+                  filesystem, dir_path, peer_scope)
+        peers = {peer_id: None for peer_id in peer_ids}
+        fspolicy = self.pool_policy[filesystem]
+        ioctx = metrics_load.open_metadata_ioctx(
+            self.rados, self.fs_map, filesystem)
+        metrics, _, _ = metrics_load.fetch_sync_stat_metrics(
+            ioctx, filesystem, peers, dir_path, None,
+            fspolicy.policy, fspolicy.get_live_instance_ids())
+        return metrics
+
+    def _load_sync_stat_metrics_from_omap(self, filesystem, mirrored_dir_path,
+                                          peer_uuid, peers, fspolicy):
+        ioctx = metrics_load.open_metadata_ioctx(
+            self.rados, self.fs_map, filesystem)
+        if mirrored_dir_path:
+            dir_path = norm_path(mirrored_dir_path)
+            metrics, _, _ = metrics_load.fetch_sync_stat_metrics(
+                ioctx, filesystem, peers, mirrored_dir_path, peer_uuid,
+                fspolicy.policy, fspolicy.get_live_instance_ids())
+            return metrics_for_dir_and_peers(metrics, dir_path, peers)
+        complete_metrics = metrics_load.load_sync_stat_metrics(
+            ioctx, filesystem, None, fspolicy.policy,
+            fspolicy.get_live_instance_ids(), peers)
+        return try_get_from_complete(
+            complete_metrics, mirrored_dir_path, peer_uuid, peers)
+
+    def metrics_status(self, filesystem, mirrored_dir_path, peer_uuid):
+        """Return persisted mirror directory snapshot metrics as JSON.
+
+        Uses two caches (see metrics/cache.py): complete for full-scan queries
+        where a hit proves all dirs are present; partial for single-dir
+        queries when the complete cache is cold or lacks that directory.
+        """
+        try:
+            with self.lock:
+                if not self.filesystem_exist(filesystem):
+                    raise MirrorException(-errno.ENOENT,
+                                          f'filesystem {filesystem} does not exist')
+                fspolicy = self.pool_policy.get(filesystem, None)
+                if not fspolicy:
+                    raise MirrorException(-errno.EINVAL,
+                                          f'filesystem {filesystem} is not mirrored')
+                if mirrored_dir_path:
+                    dir_path = norm_path(mirrored_dir_path)
+                    if not fspolicy.policy.lookup(dir_path):
+                        raise MirrorException(-errno.ENOENT,
+                                              f'directory {dir_path} is not mirrored')
+                all_peers = self.get_filesystem_peers(filesystem)
+                if not all_peers:
+                    return 0, json.dumps({'metrics': {}}, indent=4), ''
+
+                if peer_uuid:
+                    if peer_uuid not in all_peers:
+                        raise MirrorException(-errno.ENOENT,
+                                              f'peer {peer_uuid} not found for '
+                                              f'filesystem {filesystem}')
+                    requested_peers = {peer_uuid: all_peers[peer_uuid]}
+                else:
+                    requested_peers = all_peers
+
+                if not self._metrics_cache_enabled():
+                    log.debug('sync stat metrics for filesystem %s (dir=%s, peer=%s) '
+                              'cache disabled; loading from omap',
+                              filesystem, mirrored_dir_path or '*',
+                              peer_uuid or '*')
+                    metrics = self._load_sync_stat_metrics_from_omap(
+                        filesystem, mirrored_dir_path, peer_uuid,
+                        requested_peers, fspolicy)
+                    return 0, json.dumps({'metrics': metrics}, indent=4), ''
+
+                if mirrored_dir_path:
+                    dir_path = norm_path(mirrored_dir_path)
+                    # Single-dir query: peek complete cache (key: filesystem
+                    # only); on miss fall back to partial cache (key:
+                    # filesystem, dir_path, peer_ids).
+                    complete_metrics = self.sync_stat_complete_cache.cache_peek(
+                        filesystem)
+                    if complete_metrics is not None:
+                        metrics = try_get_from_complete(
+                            complete_metrics, mirrored_dir_path, peer_uuid,
+                            requested_peers)
+                        if metrics is not None:
+                            log.debug('sync stat metrics for filesystem %s (dir=%s, peer=%s) '
+                                      'served from complete cache',
+                                      filesystem, dir_path, peer_uuid or '*')
+                            return 0, json.dumps({'metrics': metrics}, indent=4), ''
+
+                    partial_info_before = self.sync_stat_partial_cache.cache_info()
+                    raw_metrics = self.sync_stat_partial_cache(
+                        filesystem, dir_path, frozenset(requested_peers))
+                    if (self.sync_stat_partial_cache.cache_info().hits >
+                            partial_info_before.hits):
+                        log.debug('sync stat metrics for filesystem %s (dir=%s, peer=%s) '
+                                  'served from partial cache',
+                                  filesystem, dir_path, peer_uuid or '*')
+                    else:
+                        log.debug('sync stat metrics for filesystem %s (dir=%s, peer=%s) '
+                                  'loaded from omap',
+                                  filesystem, dir_path, peer_uuid or '*')
+                    metrics = metrics_for_dir_and_peers(
+                        raw_metrics, dir_path, requested_peers)
+                    return 0, json.dumps({'metrics': metrics}, indent=4), ''
+
+                # Full-scan query: load complete cache on miss (key: filesystem
+                # only); peer filtering is applied when serving.
+                complete_info_before = self.sync_stat_complete_cache.cache_info()
+                complete_metrics = self.sync_stat_complete_cache(filesystem)
+                complete_hit = (self.sync_stat_complete_cache.cache_info().hits >
+                                complete_info_before.hits)
+                metrics = try_get_from_complete(
+                    complete_metrics, mirrored_dir_path, peer_uuid, requested_peers)
+                if complete_hit:
+                    log.debug('sync stat metrics for filesystem %s (dir=%s, peer=%s) '
+                              'served from complete cache',
+                              filesystem, mirrored_dir_path or '*',
+                              peer_uuid or '*')
+                else:
+                    log.debug('sync stat metrics for filesystem %s (dir=%s, peer=%s) '
+                              'loaded from omap',
+                              filesystem, mirrored_dir_path or '*',
+                              peer_uuid or '*')
+                return 0, json.dumps({'metrics': metrics}, indent=4), ''
+        except MirrorException as me:
+            return me.args[0], '', me.args[1]
+        except Exception as e:
+            log.error(f'failed to get snapshot mirror metrics: {e}')
+            return -errno.EINVAL, '', 'failed to get snapshot mirror metrics'
+
+    def daemon_status(self, format='json'):
         try:
             with self.lock:
                 daemons = []
@@ -790,14 +981,210 @@ class FSSnapshotMirror:
                                 'peers'           : []
                             } # type: Dict[str, Any]
                             for peer_uuid, peer_desc in fs_desc['peers'].items():
+                                # Get basic peer info from daemon status (FSMap data)
+                                remote = peer_desc['remote'].copy()  # Don't modify original
+
+                                # Fetch mon_host and fsid from config database
+                                config_key = FSSnapshotMirror.peer_config_key(fs_desc['name'], peer_uuid)
+                                try:
+                                    remote_config = self.config_get(config_key)
+                                    if remote_config:
+                                        if 'mon_host' in remote_config:
+                                            remote['mon_host'] = remote_config['mon_host']
+                                        if 'fsid' in remote_config:
+                                            remote['fsid'] = remote_config['fsid']
+                                except Exception as e:
+                                    log.warning(f'failed to fetch config for fs={fs_desc["name"]}, peer={peer_uuid}: {e}')
                                 peer = {
                                     'uuid'   : peer_uuid,
-                                    'remote' : peer_desc['remote'],
+                                    'remote' : remote,
                                     'stats'  : peer_desc['stats']
                                 }
                                 fs['peers'].append(peer)
                             daemon['filesystems'].append(fs)
                         daemons.append(daemon)
-                return 0, json.dumps(daemons), ''
+                if format == 'json-pretty':
+                    return 0, json.dumps(daemons, indent=2), ''
+                else:
+                    return 0, json.dumps(daemons), ''
         except MirrorException as me:
             return me.args[0], '', me.args[1]
+
+    def _validate_checkpoint_dir(self, fs_name, dir_path):
+        """Validate filesystem and mirrored directory; return normalized dir path."""
+        if not self.filesystem_exist(fs_name):
+            raise MirrorException(-errno.ENOENT, f'filesystem {fs_name} does not exist')
+
+        fspolicy = self.pool_policy.get(fs_name, None)
+        if not fspolicy:
+            raise MirrorException(-errno.EINVAL, f'filesystem {fs_name} is not mirrored')
+
+        dir_path = norm_path(dir_path)
+        if not dir_path:
+            raise MirrorException(-errno.EINVAL, 'directory path is required')
+
+        lookup_info = fspolicy.policy.lookup(dir_path)
+        if not lookup_info:
+            raise MirrorException(-errno.ENOENT, f'directory {dir_path} is not tracked')
+
+        if lookup_info['purging']:
+            raise MirrorException(-errno.EINVAL, f'directory {dir_path} is under removal')
+
+        return dir_path
+
+    def _client_snapdir(self):
+        return self.mgr.get_foreign_ceph_option('client', 'client_snapdir')
+
+    def _send_acquire_notification(self, fs_name, dir_path):
+        """Send acquire notification directly to daemon for a directory."""
+        try:
+            with self.lock:
+                fspolicy = self.pool_policy.get(fs_name, None)
+                if not fspolicy:
+                    log.warning(f'filesystem {fs_name} is not mirrored')
+                    return
+
+                with fspolicy.lock:
+                    lookup_info = fspolicy.policy.lookup(dir_path)
+                    if not lookup_info:
+                        log.warning(f'directory {dir_path} not found in policy map')
+                        return
+
+                    if lookup_info.get('state') != State.ASSOCIATED:
+                        log.debug(f'directory {dir_path} is not associated yet '
+                                  f'(state={lookup_info.get("state")}), skipping acquire notification')
+                        return
+
+                    instance_id = lookup_info['instance_id']
+                    if not instance_id:
+                        log.warning(f'directory {dir_path} not mapped to any instance yet')
+                        return
+
+                    acquire_msg = json.dumps({'dir_path': dir_path, 'mode': 'acquire'})
+
+                    log.debug(f'sending acquire notification for {dir_path} to instance {instance_id}')
+                    fspolicy.op_tracker.start_async_op()
+                    fspolicy.notifier.notify(dir_path, (instance_id, acquire_msg),
+                                               fspolicy.handle_checkpoint_acquire_ack)
+        except Exception as e:
+            log.error(f'failed to send acquire notification for {dir_path}: {e}')
+
+    def checkpoint_add(self, fs_name, dir_path, snap_name):
+        """Add a checkpoint for a snapshot via snapshot metadata on the primary filesystem."""
+        try:
+            with self.lock:
+                dir_path = self._validate_checkpoint_dir(fs_name, dir_path)
+
+            with open_filesystem(self.local_fs, fs_name) as fsh:
+                info = self.checkpoint.snap_info(fsh, dir_path, snap_name)
+                self.checkpoint.write_metadata(fsh, dir_path, snap_name, info)
+
+            # Send acquire notification to trigger checkpoint state initialization
+            self._send_acquire_notification(fs_name, dir_path)
+
+            result = {
+                'status': 'success',
+                'message': f'checkpoint added for snapshot {snap_name}',
+                'dir_root': dir_path,
+                'snap_id': info['id'],
+                'snap_name': snap_name,
+                'checkpoint_status': 'created',
+            }
+            return 0, json.dumps(result), ''
+        except MirrorException as me:
+            return me.args[0], '', me.args[1]
+        except cephfs.Error as e:
+            return -e.errno, '', f'failed to add checkpoint: {e}'
+        except Exception as e:
+            log.error(f'failed to add checkpoint: {e}')
+            return -errno.EINVAL, '', f'failed to add checkpoint: {str(e)}'
+
+    def checkpoint_remove(self, fs_name, dir_path, snap_name):
+        """Remove a checkpoint from a snapshot via snapshot metadata on the primary filesystem."""
+        try:
+            with self.lock:
+                dir_path = self._validate_checkpoint_dir(fs_name, dir_path)
+
+            with open_filesystem(self.local_fs, fs_name) as fsh:
+                info = self.checkpoint.snap_info(fsh, dir_path, snap_name)
+                self.checkpoint.remove_metadata(fsh, dir_path, snap_name, info)
+
+            result = {
+                'status': 'success',
+                'message': f'checkpoint removed for snapshot {snap_name}',
+                'dir_root': dir_path,
+                'snap_name': snap_name,
+            }
+            return 0, json.dumps(result), ''
+        except MirrorException as me:
+            return me.args[0], '', me.args[1]
+        except cephfs.Error as e:
+            return -e.errno, '', f'failed to remove checkpoint: {e}'
+        except Exception as e:
+            log.error(f'failed to remove checkpoint: {e}')
+            return -errno.EINVAL, '', f'failed to remove checkpoint: {str(e)}'
+
+    def checkpoint_ls(self, fs_name, dir_path, format='json'):
+        """List all checkpoints for a directory from snapshot metadata on the primary filesystem."""
+        try:
+            with self.lock:
+                dir_path = self._validate_checkpoint_dir(fs_name, dir_path)
+
+            checkpoints = []
+            with open_filesystem(self.local_fs, fs_name) as fsh:
+                for snap_name in self.checkpoint.list_directory_snapshots(fsh, dir_path):
+                    try:
+                        info = self.checkpoint.snap_info(fsh, dir_path, snap_name)
+                    except MirrorException as me:
+                        log.warning(
+                            f'failed to get snapshot info for {snap_name!r} '
+                            f'under {dir_path}: {me.args[1]}')
+                        continue
+                    md = info.get('metadata', {})
+                    if is_checkpointed(md):
+                        checkpoints.append(
+                            checkpoint_from_snap(info['id'], snap_name, md))
+
+            checkpoints.sort(key=lambda cp: cp['snap_id'])
+            result = {'dir_root': dir_path, 'checkpoints': checkpoints}
+
+            if format == 'json-pretty':
+                return 0, json.dumps(result, indent=2), ''
+            return 0, json.dumps(result), ''
+        except MirrorException as me:
+            return me.args[0], '', me.args[1]
+        except cephfs.Error as e:
+            return -e.errno, '', f'failed to list checkpoints: {e}'
+        except Exception as e:
+            log.error(f'failed to list checkpoints: {e}')
+            return -errno.EINVAL, '', f'failed to list checkpoints: {str(e)}'
+
+    def checkpoint_now(self, fs_name, dir_path):
+        """Create a checkpoint on the latest snapshot via snapshot metadata."""
+        try:
+            with self.lock:
+                dir_path = self._validate_checkpoint_dir(fs_name, dir_path)
+
+            with open_filesystem(self.local_fs, fs_name) as fsh:
+                snap_name, info = self.checkpoint.get_latest_snap(fsh, dir_path)
+                self.checkpoint.write_metadata(fsh, dir_path, snap_name, info)
+
+            # Send acquire notification to trigger checkpoint state initialization
+            self._send_acquire_notification(fs_name, dir_path)
+
+            result = {
+                'status': 'success',
+                'message': 'checkpoint created on latest snapshot',
+                'dir_root': dir_path,
+                'snap_id': info['id'],
+                'snap_name': snap_name,
+                'checkpoint_status': 'created',
+            }
+            return 0, json.dumps(result), ''
+        except MirrorException as me:
+            return me.args[0], '', me.args[1]
+        except cephfs.Error as e:
+            return -e.errno, '', f'failed to create checkpoint: {e}'
+        except Exception as e:
+            log.error(f'failed to create checkpoint: {e}')
+            return -errno.EINVAL, '', f'failed to create checkpoint: {str(e)}'

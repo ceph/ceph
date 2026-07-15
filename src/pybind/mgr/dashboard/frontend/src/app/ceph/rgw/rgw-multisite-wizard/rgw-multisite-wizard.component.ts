@@ -133,9 +133,10 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
         .flat()
         .filter((cluster) => cluster['url'] !== currentUrl);
       this.isMultiClusterConfigured = this.clusterDetailsArray.length > 0;
-      this.stepTitles = (this.isMultiClusterConfigured
-        ? STEP_TITLES_MULTI_CLUSTER_CONFIGURED
-        : STEP_TITLES_SINGLE_CLUSTER
+      this.stepTitles = (
+        this.isMultiClusterConfigured
+          ? STEP_TITLES_MULTI_CLUSTER_CONFIGURED
+          : STEP_TITLES_SINGLE_CLUSTER
       ).map((label, index) => ({
         label,
         onClick: () => (this.currentStep.stepIndex = index)
@@ -236,7 +237,8 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
         validators: [Validators.required]
       }),
       configType: new UntypedFormControl(ConfigType.NewRealm, {}),
-      selectedRealm: new UntypedFormControl(null, {})
+      selectedRealm: new UntypedFormControl(null, {}),
+      secondary_archive_zone: new UntypedFormControl(false, {})
     });
 
     if (!this.isMultiClusterConfigured) {
@@ -296,7 +298,6 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
       const zoneName = values['zoneName'];
       const zoneEndpoints = this.rgwEndpoints.value.join(',');
       const username = values['username'];
-
       if (!this.isMultiClusterConfigured || this.stepsToSkip['Select Cluster']) {
         this.rgwMultisiteService
           .setUpMultisiteReplication(
@@ -307,7 +308,7 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
             zoneEndpoints,
             username
           )
-          .subscribe((data: object[]) => {
+          .subscribe((data: object) => {
             this.setupCompleted = true;
             this.rgwMultisiteService.setRestartGatewayMessage(false);
             this.loading = false;
@@ -317,6 +318,7 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
       } else {
         const cluster = values['cluster'];
         const replicationZoneName = values['replicationZoneName'];
+        const secondaryTierType = values['secondary_archive_zone'] ? 'archive' : '';
         let selectedRealmName = '';
 
         if (this.multisiteSetupForm.get('configType').value === ConfigType.ExistingRealm) {
@@ -333,6 +335,7 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
             username,
             cluster,
             replicationZoneName,
+            secondaryTierType,
             this.clusterDetailsArray,
             selectedRealmName
           )

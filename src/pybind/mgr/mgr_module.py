@@ -9,7 +9,9 @@ from typing import (
     List,
     Mapping,
     NamedTuple,
+    no_type_check,
     Optional,
+    overload,
     Sequence,
     Set,
     TYPE_CHECKING,
@@ -35,7 +37,6 @@ import threading
 from collections import defaultdict
 from contextlib import contextmanager
 from enum import IntEnum, Enum
-import os
 import rados
 import re
 import socket
@@ -407,8 +408,8 @@ def _extract_target_func(
     return f, extra_args
 
 
-class CLICommand(object):
-    COMMANDS = {}  # type: Dict[str, CLICommand]
+class CLICommandBase(object):
+    COMMANDS: Dict[str, 'CLICommandBase'] = {}
 
     def __init__(self,
                  prefix: str,
@@ -475,8 +476,8 @@ class CLICommand(object):
 
     def _register_handler(self, func: HandlerFuncType) -> HandlerFuncType:
         self.store_func_metadata(func)
+        self.COMMANDS[self.prefix] = self  # type: ignore[attr-defined]
         self.func = func
-        self.COMMANDS[self.prefix] = self
         return self.func
 
     def __call__(self, func: HandlerFuncType) -> HandlerFuncType:
@@ -504,7 +505,7 @@ class CLICommand(object):
         special_args = set()
         kwargs_switch = False
         for index, (name, tp) in enumerate(self.arg_spec.items()):
-            if name in CLICommand.KNOWN_ARGS:
+            if name in self.KNOWN_ARGS:
                 special_args.add(name)
                 continue
             assert self.first_default >= 0
@@ -542,16 +543,39 @@ class CLICommand(object):
         }
 
     @classmethod
+    def Read(cls, prefix: str, poll: bool = False) -> 'CLICommandBase':
+        return cls(prefix, "r", poll)
+
+    @classmethod
+    def Write(cls, prefix: str, poll: bool = False) -> 'CLICommandBase':
+        return cls(prefix, "w", poll)
+
+    @classmethod
     def dump_cmd_list(cls) -> List[Dict[str, Union[str, bool]]]:
-        return [cmd.dump_cmd() for cmd in cls.COMMANDS.values()]
+        return [cmd.dump_cmd() for cmd in cls.COMMANDS.values()]  # type: ignore[attr-defined]
+
+    @classmethod
+    @no_type_check
+    def make_registry_subtype(cls, name) -> 'CLICommandBase':
+        return type(name, (cls,), {
+            'COMMANDS': {},
+        })
 
 
-def CLIReadCommand(prefix: str, poll: bool = False) -> CLICommand:
-    return CLICommand(prefix, "r", poll)
+class Command(CLICommandBase):
+    """Backward-compatible shim for modules that use Command(prefix, handler=func)"""
+    def __init__(self, prefix: str, perm: str = 'rw', poll: bool = False,
+                 handler: Optional[Callable] = None, **kwargs: Any):
+        super().__init__(prefix, perm, poll)
+        if handler is not None:
+            self._register_handler(handler)
 
 
-def CLIWriteCommand(prefix: str, poll: bool = False) -> CLICommand:
-    return CLICommand(prefix, "w", poll)
+# Backward-compatible alias: the mgr daemon binary imports CLICommand by name
+CLICommand = CLICommandBase
+# Backward-compatible aliases for built-in modules that import these names
+CLIReadCommand = CLICommandBase.Read
+CLIWriteCommand = CLICommandBase.Write
 
 
 def CLICheckNonemptyFileInput(desc: str) -> Callable[[HandlerFuncType], HandlerFuncType]:
@@ -595,8 +619,13 @@ def MgrModuleRecoverDB(func: Callable) -> Callable:
                 if retries > MAX_DBCLEANUP_RETRIES:
                     raise
                 self.log.debug("attempting reopen of database")
-                self.close_db()
-                self.open_db()
+                try:
+                    self.close_db()
+                    self.open_db()
+                except sqlite3.DatabaseError as e2:
+                    self.log.warning(
+                        f"reopen attempt {retries}/{MAX_DBCLEANUP_RETRIES} failed: {e2}"
+                    )
                 # allow retry of func(...)
     check.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
     return check
@@ -661,55 +690,6 @@ class Option(Dict):
             if k != 'self' and v is not None)
 
 
-class Command(dict):
-    """
-    Helper class to declare options for COMMANDS list.
-
-    It also allows to specify prefix and args separately, as well as storing a
-    handler callable.
-
-    Usage:
-    >>> def handler(): return 0, "", ""
-    >>> Command(prefix="example",
-    ...         handler=handler,
-    ...         perm='w')
-    {'perm': 'w', 'poll': False}
-    """
-
-    def __init__(
-            self,
-            prefix: str,
-            handler: HandlerFuncType,
-            perm: str = "rw",
-            poll: bool = False,
-    ):
-        super().__init__(perm=perm,
-                         poll=poll)
-        self.prefix = prefix
-        self.handler = handler
-
-    @staticmethod
-    def returns_command_result(instance: Any,
-                               f: HandlerFuncType) -> Callable[..., HandleCommandResult]:
-        @functools.wraps(f)
-        def wrapper(mgr: Any, *args: Any, **kwargs: Any) -> HandleCommandResult:
-            retval, stdout, stderr = f(instance or mgr, *args, **kwargs)
-            return HandleCommandResult(retval, stdout, stderr)
-        wrapper.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
-        return wrapper
-
-    def register(self, instance: bool = False) -> HandlerFuncType:
-        """
-        Register a CLICommand handler. It allows an instance to register bound
-        methods. In that case, the mgr instance is not passed, and it's expected
-        to be available in the class instance.
-        It also uses HandleCommandResult helper to return a wrapped a tuple of 3
-        items.
-        """
-        cmd = CLICommand(prefix=self.prefix, perm=self['perm'])
-        return cmd(self.returns_command_result(instance, self.handler))
-
-
 class CPlusPlusHandler(logging.Handler):
     def __init__(self, module_inst: Any):
         super(CPlusPlusHandler, self).__init__()
@@ -720,6 +700,17 @@ class CPlusPlusHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         if record.levelno >= self.level:
             self._module._ceph_log(self.format(record))
+
+
+class MgrRootHandler(CPlusPlusHandler):
+    def __init__(self, module_inst: 'MgrModuleLoggingMixin') -> None:
+        super().__init__(module_inst)
+        self.setFormatter(logging.Formatter(
+            "[mgr %(levelname)-4s %(name)s] %(message)s"
+        ))
+
+    def set_module(self, module_inst: 'MgrModuleLoggingMixin') -> None:
+        self._module = module_inst
 
 
 class ClusterLogHandler(logging.Handler):
@@ -756,6 +747,9 @@ class FileHandler(logging.FileHandler):
 
 
 class MgrModuleLoggingMixin(object):
+    module_name: str
+    _root_log_handler: Optional[MgrRootHandler] = None
+
     def _configure_logging(self,
                            mgr_level: str,
                            module_level: str,
@@ -764,7 +758,7 @@ class MgrModuleLoggingMixin(object):
                            log_to_cluster: bool) -> None:
         self._mgr_level: Optional[str] = None
         self._module_level: Optional[str] = None
-        self._root_logger = logging.getLogger()
+        self._module_logger = logging.getLogger(self.module_name)
 
         self._unconfigure_logging()
 
@@ -776,24 +770,40 @@ class MgrModuleLoggingMixin(object):
         self.log_to_file = log_to_file
         self.log_to_cluster = log_to_cluster
 
-        self._root_logger.addHandler(self._mgr_log_handler)
-        if log_to_file:
-            self._root_logger.addHandler(self._file_log_handler)
-        if log_to_cluster:
-            self._root_logger.addHandler(self._cluster_log_handler)
+        root = logging.getLogger()
+        root_handler = None
+        for handler in root.handlers:
+            if isinstance(handler, MgrRootHandler):
+                root_handler = handler
+                break
+        if root_handler is None:
+            root_handler = MgrRootHandler(self)
+            root.addHandler(root_handler)
+        else:
+            root_handler.set_module(self)
+        self._root_log_handler = root_handler
+        # Module loggers rely on handler thresholds, so keep root permissive
+        # and apply the mgr fallback threshold on MgrRootHandler itself.
+        root.setLevel(logging.NOTSET)
 
-        self._root_logger.setLevel(logging.NOTSET)
+        self._module_logger.addHandler(self._mgr_log_handler)
+        if log_to_file:
+            self._module_logger.addHandler(self._file_log_handler)
+        if log_to_cluster:
+            self._module_logger.addHandler(self._cluster_log_handler)
+
+        self._module_logger.propagate = False
         self._set_log_level(mgr_level, module_level, cluster_level)
 
     def _unconfigure_logging(self) -> None:
         # remove existing handlers:
         rm_handlers = [
-            h for h in self._root_logger.handlers
+            h for h in self._module_logger.handlers
             if (isinstance(h, CPlusPlusHandler)
                 or isinstance(h, FileHandler)
                 or isinstance(h, ClusterLogHandler))]
         for h in rm_handlers:
-            self._root_logger.removeHandler(h)
+            self._module_logger.removeHandler(h)
         self.log_to_file = False
         self.log_to_cluster = False
 
@@ -802,6 +812,8 @@ class MgrModuleLoggingMixin(object):
                        module_level: str,
                        cluster_level: str) -> None:
         self._cluster_log_handler.setLevel(cluster_level.upper())
+        if self._root_log_handler is not None:
+            self._root_log_handler.setLevel(self._ceph_log_level_to_python(mgr_level))
 
         module_level = module_level.upper() if module_level else ''
         if not self._module_level:
@@ -836,25 +848,25 @@ class MgrModuleLoggingMixin(object):
         # enable file log
         self.getLogger().warning("enabling logging to file")
         self.log_to_file = True
-        self._root_logger.addHandler(self._file_log_handler)
+        self._module_logger.addHandler(self._file_log_handler)
 
     def _disable_file_log(self) -> None:
         # disable file log
         self.getLogger().warning("disabling logging to file")
         self.log_to_file = False
-        self._root_logger.removeHandler(self._file_log_handler)
+        self._module_logger.removeHandler(self._file_log_handler)
 
     def _enable_cluster_log(self) -> None:
         # enable cluster log
         self.getLogger().warning("enabling logging to cluster")
         self.log_to_cluster = True
-        self._root_logger.addHandler(self._cluster_log_handler)
+        self._module_logger.addHandler(self._cluster_log_handler)
 
     def _disable_cluster_log(self) -> None:
         # disable cluster log
         self.getLogger().warning("disabling logging to cluster")
         self.log_to_cluster = False
-        self._root_logger.removeHandler(self._cluster_log_handler)
+        self._module_logger.removeHandler(self._cluster_log_handler)
 
     def _ceph_log_level_to_python(self, log_level: str) -> str:
         if log_level:
@@ -875,7 +887,11 @@ class MgrModuleLoggingMixin(object):
         return log_level
 
     def getLogger(self, name: Optional[str] = None) -> logging.Logger:
-        return logging.getLogger(name)
+        logger = getattr(self, '_module_logger', None) \
+            or logging.getLogger(self.module_name)
+        if name is None:
+            return logger
+        return logger.getChild(name)
 
 
 class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
@@ -888,20 +904,9 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
     from their active peer), and to configuration settings (read only).
     """
 
-    MODULE_OPTIONS: List[Option] = []
-    MODULE_OPTION_DEFAULTS = {}  # type: Dict[str, Any]
-
     def __init__(self, module_name: str, capsule: Any):
         super(MgrStandbyModule, self).__init__(capsule)
         self.module_name = module_name
-
-        # see also MgrModule.__init__()
-        for o in self.MODULE_OPTIONS:
-            if 'default' in o:
-                if 'type' in o:
-                    self.MODULE_OPTION_DEFAULTS[o['name']] = o['default']
-                else:
-                    self.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
 
         # mock does not return a str
         mgr_level = cast(str, self.get_ceph_option("debug_mgr"))
@@ -914,7 +919,14 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
         self._logger = self.getLogger()
 
     @classmethod
+    @no_type_check
     def _register_options(cls, module_name: str) -> None:
+        if not hasattr(cls, 'MODULE_OPTIONS'):
+            cls.MODULE_OPTIONS = []
+
+        if not hasattr(cls, 'MODULE_OPTION_DEFAULTS'):
+            cls.MODULE_OPTION_DEFAULTS = {}
+
         cls.MODULE_OPTIONS.append(
             Option(name='log_level', type='str', default="", runtime=True,
                    enum_allowed=['info', 'debug', 'critical', 'error',
@@ -932,6 +944,13 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
                    runtime=True,
                    enum_allowed=['info', 'debug', 'critical', 'error',
                                  'warning', '']))
+
+        for o in cls.MODULE_OPTIONS:
+            if 'default' in o:
+                if 'type' in o:
+                    cls.MODULE_OPTION_DEFAULTS[o['name']] = o['default']
+                else:
+                    cls.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
 
     @property
     def log(self) -> logging.Logger:
@@ -955,7 +974,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
         """
         r = self._ceph_get_module_option(key)
         if r is None:
-            return self.MODULE_OPTION_DEFAULTS.get(key, default)
+            return self.MODULE_OPTION_DEFAULTS.get(key, default)  # type: ignore[attr-defined]
         else:
             return r
 
@@ -997,7 +1016,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
     def get_localized_module_option(self, key: str, default: OptionValue = None) -> OptionValue:
         r = self._ceph_get_module_option(key, self.get_mgr_id())
         if r is None:
-            return self.MODULE_OPTION_DEFAULTS.get(key, default)
+            return self.MODULE_OPTION_DEFAULTS.get(key, default)  # type: ignore[attr-defined]
         else:
             return r
 
@@ -1037,14 +1056,6 @@ class API:
 class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     MGR_POOL_NAME = ".mgr"
 
-    COMMANDS = []  # type: List[Any]
-    MODULE_OPTIONS: List[Option] = []
-    MODULE_OPTION_DEFAULTS = {}  # type: Dict[str, Any]
-
-    # Database Schema
-    SCHEMA = None  # type: Optional[List[str]]
-    SCHEMA_VERSIONED = None  # type: Optional[List[List[str]]]
-
     # Priority definitions for perf counters
     PRIO_CRITICAL = 10
     PRIO_INTERESTING = 8
@@ -1078,18 +1089,6 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         self.module_name = module_name
         super(MgrModule, self).__init__(py_modules_ptr, this_ptr)
 
-        for o in self.MODULE_OPTIONS:
-            if 'default' in o:
-                if 'type' in o:
-                    # we'll assume the declared type matches the
-                    # supplied default value's type.
-                    self.MODULE_OPTION_DEFAULTS[o['name']] = o['default']
-                else:
-                    # module not declaring it's type, so normalize the
-                    # default value to be a string for consistent behavior
-                    # with default and user-supplied option values.
-                    self.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
-
         mgr_level = cast(str, self.get_ceph_option("debug_mgr"))
         log_level = cast(str, self.get_module_option("log_level"))
         cluster_level = cast(str, self.get_module_option('log_to_cluster_level'))
@@ -1120,7 +1119,14 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         self._db_lock = threading.Lock()
 
     @classmethod
+    @no_type_check
     def _register_options(cls, module_name: str) -> None:
+        if not hasattr(cls, 'MODULE_OPTIONS'):
+            cls.MODULE_OPTIONS = []
+
+        if not hasattr(cls, 'MODULE_OPTION_DEFAULTS'):
+            cls.MODULE_OPTION_DEFAULTS = {}
+
         cls.MODULE_OPTIONS.append(
             Option(name='log_level', type='str', default="", runtime=True,
                    enum_allowed=['info', 'debug', 'critical', 'error',
@@ -1139,9 +1145,25 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                    enum_allowed=['info', 'debug', 'critical', 'error',
                                  'warning', '']))
 
+        for o in cls.MODULE_OPTIONS:
+            if 'default' in o:
+                if 'type' in o:
+                    # we'll assume the declared type matches the
+                    # supplied default value's type.
+                    cls.MODULE_OPTION_DEFAULTS[o['name']] = o['default']
+                else:
+                    # module not declaring it's type, so normalize the
+                    # default value to be a string for consistent behavior
+                    # with default and user-supplied option values.
+                    cls.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
+
     @classmethod
+    @no_type_check
     def _register_commands(cls, module_name: str) -> None:
-        cls.COMMANDS.extend(CLICommand.dump_cmd_list())
+        if not hasattr(cls, 'COMMANDS'):
+            cls.COMMANDS = []
+
+        cls.COMMANDS.extend(cls.CLICommand.dump_cmd_list())
 
     @property
     def log(self) -> logging.Logger:
@@ -1168,6 +1190,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def have_enough_osds(self) -> bool:
         # wait until we have enough OSDs to allow the pool to be healthy
         ready = 0
+        self.log.debug("checking for enough OSDs")
+        self.log.debug(f'osds returned from osd_map: {self.get("osd_map")["osds"]}')
+        self.log.debug(f'osd_map: {self.get("osd_map")}')
         for osd in self.get("osd_map")["osds"]:
             if osd["up"] and osd["in"]:
                 ready += 1
@@ -1280,12 +1305,14 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
     def maybe_upgrade(self, db: sqlite3.Connection, version: int) -> None:
         if version <= 0:
+            assert hasattr(self, 'SCHEMA')
             self.log.info(f"creating main.db for {self.module_name}")
             assert self.SCHEMA is not None
             for sql in self.SCHEMA:
                 db.execute(sql)
             self.update_schema_version(db, 1)
         else:
+            assert hasattr(self, 'SCHEMA_VERSIONED')
             assert self.SCHEMA_VERSIONED is not None
             latest = len(self.SCHEMA_VERSIONED)
             if latest < version:
@@ -1307,16 +1334,16 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             db.execute('BEGIN;')
             self.create_skeleton_schema(db)
             if kv == 1:
-                os._exit(120)
+                return self._ceph_exit(120, hard=True)
             cur = db.execute(SQL)
             row = cur.fetchone()
             self.maybe_upgrade(db, int(row['value']))
             assert cur.fetchone() is None
             cur.close()
             if kv == 2:
-                os._exit(120)
+                return self._ceph_exit(120, hard=True)
         if kv == 3:
-            os._exit(120)
+            return self._ceph_exit(120, hard=True)
 
     def configure_db(self, db: sqlite3.Connection) -> None:
         db.execute('PRAGMA FOREIGN_KEYS = 1')
@@ -1485,7 +1512,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             self._rados = None
 
     @API.expose
-    def get(self, data_name: str) -> Any:
+    def get(self, data_name: str, mutable: bool = False) -> Any:
         """
         Called by the plugin to fetch named cluster-wide objects from ceph-mgr.
 
@@ -1496,16 +1523,29 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                 pool_stats, pg_ready, osd_ping_times, mgr_map, mgr_ips,
                 modified_config_options, service_map, mds_metadata,
                 have_local_config_map, osd_pool_stats, pg_status.
+        :param bool mutable: If True, returns a mutable copy of the data that can
+                be modified safely. If False (default), returns read-only cached
+                data (in case cached enabled) for better performance and cache protection.
 
         Note:
             All these structures have their own JSON representations: experiment
             or look at the C++ ``dump()`` methods to learn about them.
         """
-        obj = self._ceph_get(data_name)
-        if isinstance(obj, bytes):
-            obj = json.loads(obj)
+        return self._ceph_get(data_name, mutable)
 
-        return obj
+    @API.expose
+    def erase(self, data_name: str) -> None:
+        """
+        Called by the plugin to erase cache entries for named
+        cluster-wide objects from ceph-mgr.
+        :param str data_name: Valid things to erase are osd_map, mon_map,
+                fs_map, pg_summary, io_rate, pg_dump, df, osd_stats,
+                health, mon_status, devices, pg_stats, pool_stats,
+                pg_ready, osd_ping_times, mgr_map, mgr_ips,
+                modified_config_options, service_map, mds_metadata,
+                have_local_config_map, osd_pool_stats, pg_status.
+        """
+        return self._ceph_erase(data_name)
 
     def _stattype_to_str(self, stattype: int) -> str:
 
@@ -1742,6 +1782,26 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return cast(List[ServerInfoT], self._ceph_get_server(None))
 
+    @overload
+    def get_metadata(self,
+                     svc_type: str,
+                     svc_id: str) -> Optional[Dict[str, str]]:
+        ...
+
+    @overload
+    def get_metadata(self,
+                     svc_type: str,
+                     svc_id: str,
+                     default: None) -> Optional[Dict[str, str]]:
+        ...
+
+    @overload
+    def get_metadata(self,
+                     svc_type: str,
+                     svc_id: str,
+                     default: Dict[str, str]) -> Dict[str, str]:
+        ...
+
     def get_metadata(self,
                      svc_type: str,
                      svc_id: str,
@@ -1751,12 +1811,14 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         ceph-mgr fetches metadata asynchronously, so are windows of time during
         addition/removal of services where the metadata is not available to
-        modules.  ``None`` is returned if no metadata is available.
+        modules.  ``None`` is returned if no metadata is available, unless
+        ``default`` is provided, in which case ``default`` is returned.
 
         :param str svc_type: service type (e.g., 'mds', 'osd', 'mon')
         :param str svc_id: service id. convert OSD integer IDs to strings when
             calling this
-        :rtype: dict, or None if no metadata found
+        :param default: value to return when no metadata is available
+        :rtype: dict, or None if no metadata found and no default given
         """
         metadata = self._ceph_get_metadata(svc_type, svc_id)
         if not metadata:
@@ -2004,10 +2066,10 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                         inbuf: str,
                         cmd: Dict[str, Any]) -> Union[HandleCommandResult,
                                                       Tuple[int, str, str]]:
-        if cmd['prefix'] not in CLICommand.COMMANDS:
+        if cmd['prefix'] not in self.CLICommand.COMMANDS:  # type: ignore[attr-defined]
             return self.handle_command(inbuf, cmd)
 
-        return CLICommand.COMMANDS[cmd['prefix']].call(self, cmd, inbuf)
+        return self.CLICommand.COMMANDS[cmd['prefix']].call(self, cmd, inbuf)  # type: ignore[attr-defined]
 
     def handle_command(self,
                        inbuf: str,
@@ -2074,7 +2136,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         access config options that they didn't declare
         in their schema.
         """
-        if key not in [o['name'] for o in self.MODULE_OPTIONS]:
+        if key not in [o['name'] for o in self.MODULE_OPTIONS]:  # type: ignore[attr-defined]
             raise RuntimeError("Config option '{0}' is not in {1}.MODULE_OPTIONS".
                                format(key, self.__class__.__name__))
 
@@ -2085,7 +2147,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         r = self._ceph_get_module_option(self.module_name, key,
                                          localized_prefix)
         if r is None:
-            return self.MODULE_OPTION_DEFAULTS.get(key, default)
+            return self.MODULE_OPTION_DEFAULTS.get(key, default)  # type: ignore[attr-defined]
         else:
             return r
 

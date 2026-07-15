@@ -61,9 +61,9 @@ class CircularJournalSpace : public JournalAllocator {
       return close_ertr::now();
     }).handle_error(
       Journal::open_for_mount_ertr::pass_further{},
-      crimson::ct_error::assert_all{
+      crimson::ct_error::assert_all(
 	"Invalid error write_header"
-      }
+      )
     );
   }
 
@@ -220,6 +220,23 @@ class CircularJournalSpace : public JournalAllocator {
     return device->read(offset, bptr);
   }
 
+  void update_journal_tail_on_startup(
+    journal_seq_t dirty,
+    journal_seq_t alloc) {
+    LOG_PREFIX(CircularJournalSpace);
+    SUBDEBUG(seastore_journal,
+      "update tail during replay: dirty={} alloc={}",
+      dirty, alloc);
+    if (dirty > header.dirty_tail ||
+        header.dirty_tail == JOURNAL_SEQ_NULL) {
+      header.dirty_tail = dirty;
+    }
+    if (alloc >= header.alloc_tail ||
+        header.alloc_tail == JOURNAL_SEQ_NULL) {
+      header.alloc_tail = alloc;
+    }
+  }
+
   seastar::future<> update_journal_tail(
     journal_seq_t dirty,
     journal_seq_t alloc) {
@@ -227,9 +244,9 @@ class CircularJournalSpace : public JournalAllocator {
     header.alloc_tail = alloc;
     return write_header(
     ).handle_error(
-      crimson::ct_error::assert_all{
+      crimson::ct_error::assert_all(
       "encountered invalid error in update_journal_tail"
-    });
+    ));
   }
 
   void set_initialized(bool init) {

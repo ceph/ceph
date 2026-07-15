@@ -90,7 +90,7 @@ following characteristics:
 
 - NFS protocol security is provided by the NFS-Ganesha server, as negotiated by the NFS server and clients
 
-  + e.g., clients can by trusted (AUTH_SYS), or required to present Kerberos user credentials (RPCSEC_GSS)
+  + e.g., clients can be trusted (AUTH_SYS), or required to present Kerberos user credentials (RPCSEC_GSS)
   + RPCSEC_GSS wire security can be integrity only (krb5i) or integrity and privacy (encryption, krb5p)
   + various NFS-specific security and permission rules are available
 
@@ -127,7 +127,7 @@ optional.
 A small number of config variables (e.g., ``rgw_nfs_namespace_expire_secs``)
 are unique to RGW NFS.
 
-In particular, front-end selection is handled specially by the librgw.so runtime.  By default, only the
+In particular, frontend selection is handled specially by the librgw.so runtime.  By default, only the
 ``rgw-nfs`` frontend is started. Additional frontends (e.g., ``beast``) are enabled via the
 ``rgw nfs frontends`` config option.  Its syntax is identical to the ordinary ``rgw frontends`` option.
 Default options for non-default frontends are specified via ``rgw frontend defaults`` as normal.
@@ -298,7 +298,7 @@ RGW vs RGW NFS
 ==============
 
 Exporting an NFS namespace and other RGW namespaces (e.g., S3 or Swift
-via the Civetweb HTTP front-end) from the same program instance is
+via the Civetweb HTTP frontend) from the same program instance is
 currently not supported.
 
 When adding objects and buckets outside of NFS, those objects will

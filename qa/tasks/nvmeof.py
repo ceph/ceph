@@ -1,13 +1,14 @@
 import logging
 import random
 import time
+import json
 from collections import defaultdict
 from datetime import datetime
 from textwrap import dedent
 from gevent.event import Event
 from gevent.greenlet import Greenlet
 from teuthology.task import Task
-from teuthology import misc
+from teuthology import misc, contextutil
 from teuthology.exceptions import ConfigError
 from teuthology.orchestra import run
 from tasks.util import get_remote_for_role
@@ -84,6 +85,9 @@ class Nvmeof(Task):
         self.port = gateway_config.get('port', '4420')
         self.srport = gateway_config.get('srport', '5500')
         self.create_mtls_secrets = gateway_config.get('create_mtls_secrets', False)
+        self.auto_pool_create = gateway_config.get('auto_pool_create', False)
+        if self.auto_pool_create:
+            self.poolname = ".nvmeof"
 
     def deploy_nvmeof(self):
         """
@@ -117,15 +121,16 @@ class Nvmeof(Task):
 
             poolname = self.poolname
 
-            log.info(f'[nvmeof]: ceph osd pool create {poolname}')
-            _shell(self.ctx, self.cluster_name, self.remote, [
-                'ceph', 'osd', 'pool', 'create', poolname
-            ])
+            if not self.auto_pool_create:
+                log.info(f'[nvmeof]: ceph osd pool create {poolname}')
+                _shell(self.ctx, self.cluster_name, self.remote, [
+                    'ceph', 'osd', 'pool', 'create', poolname
+                ])
 
-            log.info(f'[nvmeof]: rbd pool init {poolname}')
-            _shell(self.ctx, self.cluster_name, self.remote, [
-                'rbd', 'pool', 'init', poolname
-            ])
+                log.info(f'[nvmeof]: rbd pool init {poolname}')
+                _shell(self.ctx, self.cluster_name, self.remote, [
+                    'rbd', 'pool', 'init', poolname
+                ])
 
             if self.enable_groups:
                 group_to_nodes = defaultdict(list)
@@ -134,11 +139,18 @@ class Nvmeof(Task):
                     group_to_nodes[group_name] += [node]
                 for group_name in group_to_nodes:
                     gp_nodes = group_to_nodes[group_name]
-                    log.info(f'[nvmeof]: ceph orch apply nvmeof {poolname} {group_name}')
-                    _shell(self.ctx, self.cluster_name, self.remote, [
-                        'ceph', 'orch', 'apply', 'nvmeof', poolname, group_name,
-                        '--placement', ';'.join(gp_nodes)
-                    ])
+                    if self.auto_pool_create:
+                        log.info(f'[nvmeof]: ceph orch apply nvmeof {group_name}') 
+                        _shell(self.ctx, self.cluster_name, self.remote, [
+                            'ceph', 'orch', 'apply', 'nvmeof', '--group', group_name,
+                            '--placement', ';'.join(gp_nodes)
+                        ])
+                    else:
+                        log.info(f'[nvmeof]: ceph orch apply nvmeof {poolname} {group_name}')
+                        _shell(self.ctx, self.cluster_name, self.remote, [
+                            'ceph', 'orch', 'apply', 'nvmeof', '--pool',poolname, '--group', group_name,
+                            '--placement', ';'.join(gp_nodes)
+                        ])
             else:
                 _shell(self.ctx, self.cluster_name, self.remote, [
                         'ceph', 'orch', 'apply', 'nvmeof', poolname,
@@ -343,9 +355,9 @@ class NvmeofThrasher(Thrasher, Greenlet):
         self.daemon_max_thrash_times = int(self.config.get('daemon_max_thrash_times', 4))
         self.daemon_max_thrash_period = int(self.config.get('daemon_max_thrash_period', 30 * 60)) # seconds
 
-        self.min_thrash_delay = int(self.config.get('min_thrash_delay', 60))
+        self.min_thrash_delay = int(self.config.get('min_thrash_delay', 100))
         self.max_thrash_delay = int(self.config.get('max_thrash_delay', self.min_thrash_delay + 30))
-        self.min_revive_delay = int(self.config.get('min_revive_delay', 60))
+        self.min_revive_delay = int(self.config.get('min_revive_delay', 100))
         self.max_revive_delay = int(self.config.get('max_revive_delay', self.min_revive_delay + 30))
 
     def _get_devices(self, remote):
@@ -381,7 +393,9 @@ class NvmeofThrasher(Thrasher, Greenlet):
         Run some checks to see if everything is running well during thrashing.
         """
         self.log('display and verify stats:')
-        for retry in range(5):
+        max_retry = 5
+        retry_delay = 30
+        for retry in range(1, max_retry+1):
             try: 
                 random_gateway_host = None
                 initiator_host = self.checker_host 
@@ -392,7 +406,13 @@ class NvmeofThrasher(Thrasher, Greenlet):
                 random_gateway_host.run(args=['ceph', 'orch', 'ps', '--daemon-type', 'nvmeof'])
                 random_gateway_host.run(args=['ceph', 'health', 'detail'])
                 random_gateway_host.run(args=['ceph', '-s'])
-                random_gateway_host.run(args=['ceph', 'nvme-gw', 'show', 'mypool', 'mygroup0'])
+
+                gw_show = random_gateway_host.sh('ceph nvme-gw show mypool mygroup0')
+                gw_show_json = json.loads(gw_show)
+                if gw_show_json["num-namespaces"] > 30:
+                    retry_delay = int(gw_show_json["num-namespaces"]) / 3
+                if '"CREATED"' in gw_show:
+                    raise Exception("Some gateway is in CREATED state - in middle of restart")
 
                 initiator_host.run(args=['sudo', 'nvme', 'list'])
                 for dev in self.devices:
@@ -402,8 +422,11 @@ class NvmeofThrasher(Thrasher, Greenlet):
                     ]
                     initiator_host.run(args=device_check_cmd)
                 break
-            except run.CommandFailedError:
+            except Exception:
                 self.log(f"retry do_checks() for {retry} time")
+                if retry == max_retry:
+                    raise
+                time.sleep(retry_delay) # blocking wait
 
     def switch_task(self):
         """
@@ -435,19 +458,20 @@ class NvmeofThrasher(Thrasher, Greenlet):
         ]
         chosen_method = self.rng.choice(kill_methods)
         d_name = '%s.%s' % (daemon.type_, daemon.id_)
+        self.log('kill {dname} by {method}'.format(
+            dname=d_name, method=chosen_method))
         if chosen_method == "ceph_daemon_stop": 
             daemon.remote.run(args=[
-                "ceph", "orch", "daemon", "stop",
-                d_name
-            ], check_status=False)
+                "ceph", "orch", "daemon", "stop", d_name
+            ])
         elif chosen_method == "systemctl_stop":
             # To bypass is_started logic of CephadmUnit
             daemon.remote.sh(daemon.stop_cmd, check_status=False)
         elif chosen_method == "daemon_remove":
             daemon.remote.run(args=[
-                "ceph", "orch", "daemon", "rm",
-                d_name
-            ], check_status=False)
+                "ceph", "orch", "daemon", "rm", d_name
+            ])
+            time.sleep(15) # blocking wait
         return chosen_method
 
     def revive_daemon(self, daemon, killed_method):
@@ -464,11 +488,25 @@ class NvmeofThrasher(Thrasher, Greenlet):
                 "ceph", "orch", "daemon", "start",
                 name
             ])
+        elif killed_method == "daemon_remove": 
+            self._wait_for_daemon(daemon)
         else:
             daemon.remote.run(args=[
                 "ceph", "orch", "daemon", "start",
                 name
             ])
+    
+    def _wait_for_daemon(self, daemon, tries=15):
+        dname = '%s.%s' % (daemon.type_, daemon.id_)
+        self.log(f'waiting for {dname} to start...') 
+        retry = 1
+        with contextutil.safe_while(sleep=20, tries=tries) as proceed:
+            while proceed():
+                out = daemon.remote.sh(daemon.status_cmd, check_status=False)
+                if "running" in out:
+                    break
+                retry += 1
+                self.log(f'waiting for {dname} to start (retry: {retry}/{tries})')
 
     def do_thrash(self):
         self.log('start thrashing')
@@ -504,7 +542,6 @@ class NvmeofThrasher(Thrasher, Greenlet):
                                  f'in {self.daemon_max_thrash_period} seconds.')
                         continue
 
-                self.log('kill {label}'.format(label=daemon.id_))
                 kill_method = self.kill_daemon(daemon)
 
                 killed_daemons[kill_method].append(daemon)
@@ -530,8 +567,8 @@ class NvmeofThrasher(Thrasher, Greenlet):
                 # revive after thrashing
                 for kill_method in killed_daemons:
                     for daemon in killed_daemons[kill_method]:
-                        self.log('reviving {label}'.format(label=daemon.id_))
-                        # daemon.restart()
+                        self.log('reviving {label} from {kmethod}'.format(
+                            label=daemon.id_, kmethod=kill_method))
                         self.revive_daemon(daemon, kill_method)
                 
                 # delay before thrashing

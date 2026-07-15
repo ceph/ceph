@@ -1,14 +1,16 @@
+.. _radosgw-elastic-sync-module:
+
 =========================
-ElasticSearch Sync Module
+Elasticsearch Sync Module
 =========================
 
 .. versionadded:: Kraken
 
 .. note::
-     As of 31 May 2020, only Elasticsearch 6 and lower are supported. ElasticSearch 7 is not supported.
+     As of 31 May 2020, only Elasticsearch 6 and lower are supported. Elasticsearch 7 is not supported.
 
-This sync module writes the metadata from other zones to `ElasticSearch`_. As of
-luminous this is a json of data fields we currently store in ElasticSearch.
+This sync module writes the metadata from other zones to `Elasticsearch`_. As of
+Luminous this is a JSON of data fields we currently store in Elasticsearch.
 
 ::
 
@@ -39,7 +41,7 @@ luminous this is a json of data fields we currently store in ElasticSearch.
 
 
 
-ElasticSearch tier type configurables
+Elasticsearch tier type configurables
 -------------------------------------
 
 * ``endpoint``
@@ -78,7 +80,7 @@ be indexed. Suffixes and prefixes can also be provided.
 
 * ``override_index_path`` (string)
 
-if not empty, this string will be used as the elasticsearch index
+if not empty, this string will be used as the Elasticsearch index
 path. Otherwise the index path will be determined and generated on
 sync initialization.
 
@@ -88,24 +90,24 @@ End user metadata queries
 
 .. versionadded:: Luminous
 
-Since the ElasticSearch cluster now stores object metadata, it is important that
-the ElasticSearch endpoint is not exposed to the public and only accessible to
+Since the Elasticsearch cluster now stores object metadata, it is important that
+the Elasticsearch endpoint is not exposed to the public and only accessible to
 the cluster administrators. For exposing metadata queries to the end user itself
 this poses a problem since we'd want the user to only query their metadata and
-not of any other users, this would require the ElasticSearch cluster to
+not of any other users, this would require the Elasticsearch cluster to
 authenticate users in a way similar to RGW does which poses a problem.
 
 As of Luminous RGW in the metadata master zone can now service end user
-requests. This allows for not exposing the elasticsearch endpoint in public and
+requests. This allows for not exposing the Elasticsearch endpoint in public and
 also solves the authentication and authorization problem since RGW itself can
 authenticate the end user requests. For this purpose RGW introduces a new query
-in the bucket APIs that can service elasticsearch requests. All these requests
+in the bucket APIs that can service Elasticsearch requests. All these requests
 must be sent to the metadata master zone.
 
 Syntax
 ~~~~~~
 
-Get an elasticsearch query
+Get an Elasticsearch query
 ``````````````````````````
 
 ::

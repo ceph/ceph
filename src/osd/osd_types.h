@@ -28,6 +28,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <variant>
 
 #ifdef WITH_CRIMSON
@@ -145,6 +146,8 @@ typedef interval_set<
 using shard_id_set = bitset_set<128, shard_id_t>;
 WRITE_CLASS_DENC(shard_id_set)
 
+enum class OmapUpdateType : uint8_t {Remove, Insert, RemoveRange};
+
 /**
  * osd request identifier
  *
@@ -238,12 +241,10 @@ inline bool operator!=(const osd_reqid_t& l, const osd_reqid_t& r) {
   return (l.name != r.name) || (l.inc != r.inc) || (l.tid != r.tid);
 }
 inline bool operator<(const osd_reqid_t& l, const osd_reqid_t& r) {
-  return (l.name < r.name) || (l.inc < r.inc) || 
-    (l.name == r.name && l.inc == r.inc && l.tid < r.tid);
+  return std::tie(l.name, l.inc, l.tid) < std::tie(r.name, r.inc, r.tid);
 }
 inline bool operator<=(const osd_reqid_t& l, const osd_reqid_t& r) {
-  return (l.name < r.name) || (l.inc < r.inc) ||
-    (l.name == r.name && l.inc == r.inc && l.tid <= r.tid);
+  return std::tie(l.name, l.inc, l.tid) <= std::tie(r.name, r.inc, r.tid);
 }
 inline bool operator>(const osd_reqid_t& l, const osd_reqid_t& r) { return !(l <= r); }
 inline bool operator>=(const osd_reqid_t& l, const osd_reqid_t& r) { return !(l < r); }
@@ -376,6 +377,8 @@ enum {
   CEPH_OSD_RMW_FLAG_RETURNVEC = (1 << 11),
   CEPH_OSD_RMW_FLAG_READ_DATA  = (1 << 12),
   CEPH_OSD_RMW_FLAG_EC_DIRECT_READ  = (1 << 13),
+  CEPH_OSD_RMW_FLAG_EC_SYNC_READ    = (1 << 14),
+  CEPH_OSD_RMW_FLAG_CLASS_READ_DATA = (1 << 15),
 };
 
 
@@ -1278,9 +1281,9 @@ class OSDMap;
  * pg_pool
  */
 struct pg_pool_t {
-  static const char *APPLICATION_NAME_CEPHFS;
-  static const char *APPLICATION_NAME_RBD;
-  static const char *APPLICATION_NAME_RGW;
+  inline static constexpr const char *APPLICATION_NAME_CEPHFS = "cephfs";
+  inline static constexpr const char *APPLICATION_NAME_RBD = "rbd";
+  inline static constexpr const char *APPLICATION_NAME_RGW = "rgw";
 
   enum {
     TYPE_REPLICATED = 1,     // replication
@@ -1325,6 +1328,10 @@ struct pg_pool_t {
     FLAG_CRIMSON = 1<<18,
     FLAG_EC_OPTIMIZATIONS = 1<<19, // enable optimizations, once enabled, cannot be disabled
     FLAG_CLIENT_SPLIT_READS = 1<<20, // Optimized EC is permitted to do direct reads.
+    FLAG_OMAP = 1<<21, // Pool is permitted to perform OMAP operations
+    // Allow decreasing pg_num/pgp_num (PG merge) for crimson pools.
+    // Note: requires that the pool is currently all bluestore.
+    FLAG_CRIMSON_ALLOW_PG_MERGE = 1<<22,
   };
 
   static const char *get_flag_name(uint64_t f) {
@@ -1349,6 +1356,9 @@ struct pg_pool_t {
     case FLAG_BULK: return "bulk";
     case FLAG_CRIMSON: return "crimson";
     case FLAG_EC_OPTIMIZATIONS: return "ec_optimizations";
+    case FLAG_CLIENT_SPLIT_READS: return "split_reads";
+    case FLAG_OMAP: return "supports_omap";
+    case FLAG_CRIMSON_ALLOW_PG_MERGE: return "crimson_allow_pg_merge";
     default: return "???";
     }
   }
@@ -1405,8 +1415,14 @@ struct pg_pool_t {
       return FLAG_BULK;
     if (name == "crimson")
       return FLAG_CRIMSON;
+    if (name == "crimson_allow_pg_merge")
+      return FLAG_CRIMSON_ALLOW_PG_MERGE;
     if (name == "ec_optimizations")
       return FLAG_EC_OPTIMIZATIONS;
+    if (name == "split_reads")
+      return FLAG_CLIENT_SPLIT_READS;
+    if (name == "supports_omap")
+      return FLAG_OMAP;
     return 0;
   }
 
@@ -1514,6 +1530,9 @@ private:
 public:
   std::map<std::string, std::string> properties;  ///< OBSOLETE
   std::string erasure_code_profile; ///< name of the erasure code profile in OSDMap
+  // Profile values stored in integer format to allow reading efficiently
+  // without parsing the erasure_code_profile string
+  std::optional<uint8_t> ec_data_shard_count, ec_coding_shard_count; ///< ec profile values
   epoch_t last_change = 0;      ///< most recent epoch changed, exclusing snapshot changes
   // If non-zero, require OSDs in at least this many different instances...
   uint32_t peering_crush_bucket_count = 0;
@@ -1744,6 +1763,7 @@ public:
 
 private:
   std::vector<uint32_t> grade_table;
+  std::vector<shard_id_t> shard_mapping; // Used by EC direct reads.
 
 public:
   uint32_t get_grade(unsigned i) const {
@@ -1799,6 +1819,10 @@ public:
   snapid_t get_snap_seq() const { return snap_seq; }
   uint64_t get_auid() const { return auid; }
 
+  uint8_t get_ec_data_shard_count() const {
+    return ec_data_shard_count.value_or(nonprimary_shards.size() + 1);
+  }
+
   void set_snap_seq(snapid_t s) { snap_seq = s; }
   void set_snap_epoch(epoch_t e) { snap_epoch = e; }
 
@@ -1809,7 +1833,7 @@ public:
   bool is_erasure() const { return get_type() == TYPE_ERASURE; }
 
   bool supports_omap() const {
-    return !(get_type() == TYPE_ERASURE);
+    return has_flag(FLAG_OMAP) || is_replicated();
   }
 
   bool requires_aligned_append() const {
@@ -1959,6 +1983,21 @@ public:
   /// EC partial writes: test if a shard is a non-primary
   bool is_nonprimary_shard(const shard_id_t shard) const {
     return !nonprimary_shards.empty() && nonprimary_shards.contains(shard);
+  }
+
+  void set_shard_mapping(std::vector<shard_id_t> && mapping) {
+    shard_mapping = mapping;
+  }
+
+  shard_id_t get_shard(raw_shard_id_t raw) const {
+    if (shard_mapping.empty()) {
+      return shard_id_t((int)raw);
+    }
+    if (std::cmp_less((int)raw, shard_mapping.size())) {
+      return shard_mapping[(int)raw];
+    } else {
+      return shard_id_t::NO_SHARD;
+    }
   }
 
   void encode(ceph::buffer::list& bl, uint64_t features) const;
@@ -2305,6 +2344,7 @@ struct pg_stat_t {
   utime_t last_active;  // state & PG_STATE_ACTIVE
   utime_t last_peered;  // state & PG_STATE_ACTIVE || state & PG_STATE_PEERED
   utime_t last_clean;   // state & PG_STATE_CLEAN
+  utime_t last_degraded; // state & (PG_STATE_DEGRADED | PG_STATE_UNDERSIZED)
   utime_t last_unstale; // (state & PG_STATE_STALE) == 0
   utime_t last_undegraded; // (state & PG_STATE_DEGRADED) == 0
   utime_t last_fullsized; // (state & PG_STATE_UNDERSIZED) == 0
@@ -4077,6 +4117,8 @@ public:
   public:
     virtual void append(uint64_t old_offset) {}
     virtual void setattrs(std::map<std::string, std::optional<ceph::buffer::list>> &attrs) {}
+    virtual void ec_omap(bool clear_omap, std::optional<ceph::buffer::list> omap_header,
+      std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates) {}
     virtual void rmobject(version_t old_version) {}
     /**
      * Used to support the unfound_lost_delete log event: if the stashed
@@ -4105,7 +4147,8 @@ public:
     CREATE = 4,
     UPDATE_SNAPS = 5,
     TRY_DELETE = 6,
-    ROLLBACK_EXTENTS = 7
+    ROLLBACK_EXTENTS = 7,
+    EC_OMAP = 8
   };
   ObjectModDesc() : can_local_rollback(true), rollback_info_completed(false) {
     bl.reassign_to_mempool(mempool::mempool_osd_pglog);
@@ -4155,6 +4198,18 @@ public:
     ENCODE_START(1, 1, bl);
     append_id(SETATTRS);
     encode(old_attrs, bl);
+    ENCODE_FINISH(bl);
+  }
+  void ec_omap(bool clear_omap, std::optional<ceph::buffer::list> omap_header,
+    std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates) {
+    if(!can_local_rollback) {
+      return;
+    }
+    ENCODE_START(1, 1, bl);
+    append_id(EC_OMAP);
+    encode(clear_omap, bl);
+    encode(omap_header, bl);
+    encode(omap_updates, bl);
     ENCODE_FINISH(bl);
   }
   bool rmobject(version_t deletion_version) {
@@ -4270,7 +4325,7 @@ private:
   bool new_object;
   bool clean_omap;
   interval_set<uint64_t> clean_offsets;
-  static std::atomic<uint32_t> max_num_intervals;
+  inline static std::atomic<uint32_t> max_num_intervals{10};
 
   /**
    * trim the number of intervals if clean_offsets.num_intervals()
@@ -4484,6 +4539,7 @@ struct pg_log_entry_t {
     PROMOTE = 8,     // promoted object from another tier
     CLEAN = 9,       // mark an object clean
     ERROR = 10,      // write that returned an error
+    REPLACE = 11,    // replace (delete + recreate) operation
   };
   static const char *get_op_name(int op) {
     switch (op) {
@@ -4505,6 +4561,8 @@ struct pg_log_entry_t {
       return "clean";
     case ERROR:
       return "error";
+    case REPLACE:
+      return "replace";
     default:
       return "unknown";
     }
@@ -4561,11 +4619,12 @@ struct pg_log_entry_t {
   bool is_lost_delete() const { return op == LOST_DELETE; }
   bool is_lost_mark() const { return op == LOST_MARK; }
   bool is_error() const { return op == ERROR; }
+  bool is_replace() const { return op == REPLACE; }
 
   bool is_update() const {
     return
       is_clone() || is_modify() || is_promote() || is_clean() ||
-      is_lost_revert() || is_lost_mark();
+      is_lost_revert() || is_lost_mark() || is_replace();
   }
   bool is_delete() const {
     return op == DELETE || op == LOST_DELETE;
@@ -4593,7 +4652,7 @@ struct pg_log_entry_t {
 
   bool reqid_is_indexed() const {
     return reqid != osd_reqid_t() &&
-      (op == MODIFY || op == DELETE || op == ERROR);
+      (op == MODIFY || op == DELETE || op == ERROR || op == REPLACE);
   }
 
   void set_op_returns(const std::vector<OSDOp>& ops) {
@@ -5013,7 +5072,7 @@ class pg_missing_const_i {
 public:
   virtual const std::map<hobject_t, pg_missing_item> &
     get_items() const = 0;
-  virtual const std::map<version_t, hobject_t> &get_rmissing() const = 0;
+  virtual const std::multimap<eversion_t, hobject_t> &get_rmissing() const = 0;
   virtual bool get_may_include_deletes() const = 0;
   virtual unsigned int num_missing() const = 0;
   virtual bool have_missing() const = 0;
@@ -5059,8 +5118,57 @@ template <bool TrackChanges>
 class pg_missing_set : public pg_missing_const_i {
   using item = pg_missing_item;
   std::map<hobject_t, item> missing;  // oid -> (need v, have v)
-  std::map<version_t, hobject_t> rmissing;  // v -> oid
+  /**
+   * rmissing
+   *
+   * Reverse mapping from pg_missing_item::need -> object
+   *
+   * This mapping uses eversion_t as a key because although the log
+   * and missing sets may not contain two entries with the same version,
+   * this doesn't hold *during* the log merge process because
+   * the order of divergent entries may not match the order of the
+   * corresponding entries in the authoritiative log.
+   *
+   * See https://tracker.ceph.com/issues/74306
+   */
+  std::multimap<eversion_t, hobject_t> rmissing;  // v -> oid
   ChangeTracker<TrackChanges> tracker;
+private:
+  // Private wrapper functions for rmissing manipulation
+  // These ensure rmissing can only be modified through controlled interfaces
+  
+  // Erase a version mapping, returns count of erased elements (0 or 1)
+  size_t rmissing_erase(const eversion_t& version, const hobject_t& oid) {
+    auto range = rmissing.equal_range(version);
+    for (auto it = range.first; it != range.second; ++it) {
+      if (it->second == oid) {
+        rmissing.erase(it);
+        return 1;
+      }
+    }
+    // If we get here, the (version, oid) pair wasn't found
+    return 0;
+  }
+
+  // Insert a version-to-object mapping while allowing distinct objects to
+  // legitimately share the same version. The same object still may not be
+  // inserted twice for that version.
+  void rmissing_insert(
+      const eversion_t& version,
+      const hobject_t& object) {
+    auto it = rmissing.lower_bound(version);
+
+    if (it != rmissing.end() && it->first == version) {
+      auto range = rmissing.equal_range(version);
+      for (auto check_it = range.first; check_it != range.second; ++check_it) {
+        if (check_it->second == object) {
+          return; // Entry already exists.
+        }
+      }
+    }
+
+    rmissing.insert(it, {version, object});
+  }
 
 public:
   pg_missing_set() = default;
@@ -5079,7 +5187,7 @@ public:
   const std::map<hobject_t, item> &get_items() const override {
     return missing;
   }
-  const std::map<version_t, hobject_t> &get_rmissing() const override {
+  const std::multimap<eversion_t, hobject_t> &get_rmissing() const override {
     return rmissing;
   }
   bool get_may_include_deletes() const override {
@@ -5147,7 +5255,8 @@ public:
     if (e.prior_version == eversion_t() || e.is_clone()) {
       // new object.
       if (is_missing_divergent_item) {  // use iterator
-        rmissing.erase(missing_it->second.need.version);
+        auto erased = rmissing_erase(missing_it->second.need, e.soid);
+        ceph_assert(erased == 1);  // Should always erase exactly one entry
         // .have = nil
         missing_it->second = item(e.version, eversion_t(), e.is_delete());
         missing_it->second.clean_regions.mark_fully_dirty();
@@ -5162,7 +5271,8 @@ public:
       }
     } else if (is_missing_divergent_item) {
       // already missing (prior).
-      rmissing.erase((missing_it->second).need.version);
+      auto erased = rmissing_erase((missing_it->second).need, e.soid);
+      ceph_assert(erased == 1);  // Should always erase exactly one entry
       missing_it->second.need = e.version;  // leave .have unchanged.
       missing_it->second.set_delete(e.is_delete());
       if (e.is_lost_revert())
@@ -5182,7 +5292,7 @@ public:
         missing[e.soid].clean_regions = e.clean_regions;
     }
     if (!skipped) {
-      rmissing[e.version.version] = e.soid;
+      rmissing_insert(e.version, e.soid);
       tracker.changed(e.soid);
     }
   }
@@ -5190,7 +5300,8 @@ public:
   void revise_need(hobject_t oid, eversion_t need, bool is_delete) {
     auto p = missing.find(oid);
     if (p != missing.end()) {
-      rmissing.erase((p->second).need.version);
+      auto erased = rmissing_erase((p->second).need, oid);
+      ceph_assert(erased == 1);  // Should always erase exactly one entry
       p->second.need = need;          // do not adjust .have
       p->second.set_delete(is_delete);
       p->second.clean_regions.mark_fully_dirty();
@@ -5198,8 +5309,7 @@ public:
       missing[oid] = item(need, eversion_t(), is_delete);
       missing[oid].clean_regions.mark_fully_dirty();
     }
-    rmissing[need.version] = oid;
-
+    rmissing_insert(need, oid);
     tracker.changed(oid);
   }
 
@@ -5222,12 +5332,12 @@ public:
   void add(const hobject_t& oid, eversion_t need, eversion_t have,
 	   bool is_delete) {
     missing[oid] = item(need, have, is_delete, true);
-    rmissing[need.version] = oid;
+    rmissing_insert(need, oid);
     tracker.changed(oid);
   }
 
   void add(const hobject_t& oid, pg_missing_item&& item) {
-    rmissing[item.need.version] = oid;
+    rmissing_insert(item.need, oid);
     missing.insert({oid, std::move(item)});
     tracker.changed(oid);
   }
@@ -5240,7 +5350,8 @@ public:
 
   void rm(std::map<hobject_t, item>::const_iterator m) {
     tracker.changed(m->first);
-    rmissing.erase(m->second.need.version);
+    auto erased = rmissing_erase(m->second.need, m->first);
+    ceph_assert(erased == 1);  // Should always erase exactly one entry
     missing.erase(m);
   }
 
@@ -5253,7 +5364,8 @@ public:
 
   void got(std::map<hobject_t, item>::const_iterator m) {
     tracker.changed(m->first);
-    rmissing.erase(m->second.need.version);
+    auto erased = rmissing_erase(m->second.need, m->first);
+    ceph_assert(erased == 1);  // Should always erase exactly one entry
     missing.erase(m);
   }
 
@@ -5321,8 +5433,9 @@ public:
     for (std::map<hobject_t,item>::iterator it =
 	   missing.begin();
 	 it != missing.end();
-	 ++it)
-      rmissing[it->second.need.version] = it->first;
+	 ++it) {
+      rmissing_insert(it->second.need, it->first);
+    }
     for (auto const &i: missing)
       tracker.changed(i.first);
   }
@@ -6433,13 +6546,14 @@ struct ObjectRecoveryInfo {
   hobject_t soid;
   eversion_t version;
   uint64_t size;
+  uint64_t num_omap_keys;
   object_info_t oi;
   SnapSet ss;   // only populated if soid is_snap()
   interval_set<uint64_t> copy_subset;
   std::map<hobject_t, interval_set<uint64_t>> clone_subset;
   bool object_exist;
 
-  ObjectRecoveryInfo() : size(0), object_exist(true) { }
+  ObjectRecoveryInfo() : size(0), num_omap_keys(0), object_exist(true) { }
 
   static std::list<ObjectRecoveryInfo> generate_test_instances();
   void encode(ceph::buffer::list &bl, uint64_t features) const;

@@ -1,5 +1,6 @@
 #include <charconv> // for std::to_chars()
 #include <string>
+#include <variant>
 #include <lua.hpp>
 #include "common/ceph_context.h"
 #include "common/debug.h"
@@ -116,7 +117,11 @@ void* allocator(void* ud, void* ptr, std::size_t osize, std::size_t nsize) {
 
 // create new lua state together with reference to the guard
 lua_State* newstate(lua_state_guard* guard) {
+#if LUA_VERSION_NUM >= 505
+  lua_State* L = lua_newstate(allocator, guard, 0);
+#else
   lua_State* L = lua_newstate(allocator, guard);
+#endif
   if (L) {
     lua_atpanic(L, [](lua_State* L) -> int {
       const char* msg = lua_tostring(L, -1);
@@ -181,52 +186,8 @@ lua_state_guard::~lua_state_guard() {
   }
 }
 
-bool lua_state_guard::set_max_memory(std::size_t _max_memory) {
-  if (_max_memory == max_memory) {
-    return true;
-  }
-  ldpp_dout(dpp, 20) << "Lua is using: " << mem_in_use << " bytes ("
-                     << std::to_string(100.0 -
-                                       (100.0 * mem_in_use / max_memory))
-                     << "%)" << dendl;
-
-  if (mem_in_use > _max_memory && _max_memory > 0) {
-    max_memory = _max_memory;
-    ldpp_dout(dpp, 10) << "Lua memory limit is below current usage" << dendl;
-    ldpp_dout(dpp, 20) << "Lua memory limit set to: " << max_memory << " bytes"
-                       << dendl;
-    return false;
-  }
-
-  max_memory = _max_memory;
-  ldpp_dout(dpp, 20) << "Lua memory limit set to: "
-                     << (max_memory > 0 ? std::to_string(max_memory) : "N/A")
-                     << " bytes" << dendl;
-  return true;
-}
-
 void lua_state_guard::set_mem_in_use(std::size_t _mem_in_use) {
   mem_in_use = _mem_in_use;
-}
-
-void lua_state_guard::set_max_runtime(std::uint64_t _max_runtime) {
-  if (static_cast<uint64_t>(max_runtime.count()) != _max_runtime) {
-    if (_max_runtime > 0) {
-      auto omax_runtime = max_runtime.count();
-      max_runtime = std::chrono::milliseconds(_max_runtime);
-      if (omax_runtime == 0) {
-        set_runtime_hook();
-      }
-    } else {
-      max_runtime = std::chrono::milliseconds(0);
-      lua_sethook(state, nullptr, 0, 0);
-    }
-    ldpp_dout(dpp, 20) << "Lua runtime limit set to: "
-                       << (max_runtime.count() > 0
-                               ? std::to_string(max_runtime.count())
-                               : "N/A")
-                       << " milliseconds" << dendl;
-  }
 }
 
 void lua_state_guard::runtime_hook(lua_State* L, lua_Debug* ar) {
@@ -265,6 +226,41 @@ void lua_state_guard::set_runtime_hook() {
 
   // Check runtime after each line or every 1000 VM instructions
   lua_sethook(state, runtime_hook, LUA_MASKLINE | LUA_MASKCOUNT, 1000);
+}
+
+// helper type for the visitor
+template<class... Ts>
+struct overloads : Ts... { using Ts::operator()...; };
+template<class... Ts> overloads(Ts...) -> overloads<Ts...>;
+
+int lua_execute(lua_State* L, const DoutPrefixProvider* dpp, const LuaCodeType& code) {
+  // execute the lua script or bytecode
+  return std::visit(overloads {
+        [L, dpp](const std::string& script) -> int {
+          if (luaL_dostring(L, script.c_str()) != LUA_OK) {
+            const std::string err(lua_tostring(L, -1));
+            ldpp_dout(dpp, 1) << "Lua ERROR: failed to execute script : " << err << dendl;
+            lua_pop(L, 1);
+            return -1;
+          }
+          return 0;
+        },
+        [L, dpp](const std::vector<char>& bytecode) -> int  {
+          if (luaL_loadbuffer(L, bytecode.data(), bytecode.size(), "bytecode_chunk") != LUA_OK) {
+            const std::string err(lua_tostring(L, -1));
+            ldpp_dout(dpp, 1) << "Lua ERROR: failed to load buffer for bytecode : " << err << dendl;
+            lua_pop(L, 1);
+            return -1;
+          }
+          if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
+            const std::string err(lua_tostring(L, -1));
+            ldpp_dout(dpp, 1) << "Lua ERROR: failed to execute bytecode : " << err << dendl;
+            lua_pop(L, 1);
+            return -1;
+          }
+          return 0;
+      }
+    }, code);
 }
 
 } // namespace rgw::lua

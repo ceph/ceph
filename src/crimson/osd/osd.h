@@ -91,8 +91,6 @@ class OSD final : public crimson::net::Dispatcher,
   //< since when there is no more pending pg creates from mon
   epoch_t last_pg_create_epoch = 0;
 
-  ceph::mono_time startup_time;
-
   seastar::shared_mutex handle_osd_map_lock;
 
   OSDSuperblock superblock;
@@ -106,8 +104,6 @@ class OSD final : public crimson::net::Dispatcher,
 
   // mgr::WithStats methods
   // pg statistics including osd ones
-  osd_stat_t osd_stat;
-  uint32_t osd_stat_seq = 0;
   epoch_t min_last_epoch_clean = 0;
   // which pgs were scanned for min_lec
   std::vector<pg_t> min_last_epoch_clean_pgs;
@@ -129,9 +125,17 @@ class OSD final : public crimson::net::Dispatcher,
 
   std::unique_ptr<Heartbeat> heartbeat;
   seastar::timer<seastar::lowres_clock> tick_timer;
+  uint_fast16_t trim_queue_length_countdown = 0;
+  /// caching the total snap trim queue length across all PGs,
+  /// updated periodically by the tick_timer
+  uint64_t snap_trim_queue_total = 0;
 
   seastar::timer<seastar::lowres_clock> stats_timer;
   std::vector<ShardServices::shard_stats_t> shard_stats;
+  // collect per-shard stats and log reactor utilization; a member coroutine
+  // so its captures (this) live in the frame, since it runs as a detached
+  // gated task a capturing lambda coroutine would dangle (see report_osd_stats).
+  seastar::future<> report_osd_stats();
 
   std::vector<std::string> get_tracked_keys() const noexcept final;
   void handle_conf_change(const ConfigProxy& conf,
@@ -172,7 +176,7 @@ public:
   void print(std::ostream&) const;
 
   /// @return the seq id of the pg stats being sent
-  uint64_t send_pg_stats();
+  seastar::future<uint64_t> send_pg_stats();
 
   auto &get_shard_services() {
     return shard_services.local();
@@ -238,6 +242,10 @@ private:
   seastar::future<> handle_pg_pct(
     crimson::net::ConnectionRef conn,
     Ref<MOSDPGPCT> m);
+  template <class MessageRefT>
+  seastar::future<> handle_some_ec_messages(
+    crimson::net::ConnectionRef conn,
+    MessageRefT&& m);
 
   std::vector<DaemonHealthMetric> get_health_metrics();
 

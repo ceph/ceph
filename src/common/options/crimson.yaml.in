@@ -27,8 +27,35 @@ options:
   - startup
   min: 0
   max: 32
+- name: crimson_memory
+  type: size
+  level: advanced
+  default: 0
+  desc: Total memory to use for the seastar allocator per OSD.
+  long_desc: Total memory to use for the seastar allocator per OSD.
+             Maps to seastar's --memory flag. 0 means use seastar's default
+             (all available memory minus a reserve).
+  flags:
+  - startup
 
 # Reactor options:
+
+- name: crimson_reactor_backend
+  type: str
+  level: advanced
+  default:
+  enum_values:
+  - io_uring
+  - linux-aio
+  - epoll
+  desc: Select which Seastar's internal reactor implementation
+  long_desc: Controls which asynchronous I/O engine the Seastar reactor will use
+             during OSD startup. Different backends have different
+             performance characteristics and require different kernel capabilities.
+             Note, If none is non is selected, let seastar choose.
+
+  flags:
+  - startup
 
 - name: crimson_reactor_task_quota_ms
   type: float
@@ -88,6 +115,17 @@ options:
   desc: Let the seastar reactor poll continuously without sleeping at the expense of 100% cpu usage.
   flags:
   - startup
+
+- name: crimson_allow_pg_split
+  type: bool
+  level: advanced
+  default: true
+  desc: Allow Crimson pools to increase their PG count (split)
+  long_desc: When enabled, allows the monitor to increase pg_num for pools using
+             the crimson flag.
+  services:
+  - osd
+  - mon
 
 # Bluestore options:
 
@@ -149,11 +187,6 @@ options:
   type: uint
   level: dev
   desc: default logical address space reservation for seastore objects' data
-  default: 16777216
-- name: seastore_default_object_metadata_reservation
-  type: uint
-  level: dev
-  desc: default logical address space reservation for seastore objects' metadata
   default: 16777216
 # TODO: implement sub-extent checksum and deprecate this configuration.
 - name: seastore_full_integrity_check
@@ -246,6 +279,39 @@ options:
   - greedy
   - cost_benefit
   - benefit
+- name: seastore_segment_cleaner_gc_autotune
+  type: bool
+  level: advanced
+  desc: When the configured gc formula (cost_benefit or benefit) picks a segment
+        whose free-space fraction (1 - utilization) is at least
+        seastore_segment_cleaner_gc_autotune_ratio times smaller than the
+        lowest-utilization candidate, override the pick with the greedy choice.
+  long_desc: COST_BENEFIT and BENEFIT weight segment age, which is the right
+             call when age predicts dead-byte accumulation (journaling / LIFO
+             workloads). Under random-write at high alive_ratio dead bytes
+             spread uniformly across segments, age stops predicting deadness,
+             and the formula can pick a high-util old segment whose reclaim
+             frees several times less space than the lowest-util candidate.
+             When this option is enabled the cleaner detects the mis-selection
+             at runtime and overrides the formula's pick with the greedy
+             choice. Disable to honor the configured formula unconditionally.
+             Ignored when seastore_segment_cleaner_gc_formula = greedy.
+  default: true
+- name: seastore_segment_cleaner_gc_autotune_ratio
+  type: float
+  level: advanced
+  desc: Override threshold for the gc auto-tune. The configured formula's
+        pick is overridden with the greedy candidate when greedy's free
+        fraction is at least this ratio times the formula's pick's free
+        fraction.
+  long_desc: Higher is more conservative (override fires less often, the
+             configured formula's age weighting is preserved more
+             aggressively). Lower is more aggressive (override fires more
+             often, behaviour converges toward pure greedy). The default
+             (2.0) captures the random-write failure regime while staying
+             clear of normal-operation fluctuations.
+  default: 2.0
+  min: 1.0
 - name: seastore_data_delta_based_overwrite
   type: size
   level: dev
@@ -258,3 +324,10 @@ options:
         internal checksum feature without using sever CPU then enable if available,
         set to true to disable unconditionally.
   default: true
+- name: seastore_require_partition_count_match_reactor_count
+  type: bool
+  level: advanced
+  default: true
+  desc: disable osd shards changes upon restart.
+  flags:
+  - startup

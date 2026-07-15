@@ -166,6 +166,12 @@ class DaemonSubIdentity(DaemonIdentity):
             'legacy_container_name not valid for DaemonSubIdentity'
         )
 
+    def parent_identity(self) -> DaemonIdentity:
+        """Return a new DaemonIdentity object based on the current values of this
+        DaemonSubIdentity.
+        """
+        return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
+
     @classmethod
     def from_parent(
         cls, parent: 'DaemonIdentity', subcomponent: str

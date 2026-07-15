@@ -147,30 +147,21 @@ bool ScrubQueue::remove_entry_unlocked(spg_t pgid, scrub_level_t s_or_d)
 }
 
 
-void ScrubQueue::dump_scrubs(ceph::Formatter* f) const
+void ScrubQueue::dump_scrubs(ceph::Formatter& f) const
 {
-  ceph_assert(f != nullptr);
   const auto query_time = ceph_clock_now();
-  Formatter::ArraySection all_scrubs_section{*f, "scrubs"};
+  Formatter::ArraySection all_scrubs_section{f, "scrubs"};
   for_each_job(
       [&f, query_time](const Scrub::SchedEntry& e) {
-        Formatter::ObjectSection job_section{*f, "scrub"sv};
-	f->dump_stream("pgid") << e.pgid;
-	f->dump_stream("sched_time") << e.schedule.not_before;
-	f->dump_stream("orig_sched_time") << e.schedule.scheduled_at;
-	f->dump_bool(
-	    "forced",
-	    e.schedule.scheduled_at == PgScrubber::scrub_must_stamp());
-
-        f->dump_stream("level") << (e.level == scrub_level_t::shallow
-                                       ? "shallow"
-                                       : "deep");
-        f->dump_stream("urgency") << fmt::format("{}", e.urgency);
-        f->dump_bool("eligible", e.schedule.not_before <= query_time);
-        f->dump_stream("last_issue") << fmt::format("{}", e.last_issue);
+        Formatter::ObjectSection job_section{f, "scrub"sv};
+        e.dump(f);
+        f.dump_bool("eligible", e.schedule.not_before <= query_time);
+        f.dump_bool("queued", true);
+        f.dump_bool("active", false);  // not being scrubbed
       },
       std::numeric_limits<int>::max());
 }
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 // ScrubQueue - maintaining the 'blocked on a locked object' count

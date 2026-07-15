@@ -930,7 +930,7 @@ options:
   level: advanced
   desc: Messenger implementation to use for network communication
   fmt_desc: Transport type used by Async Messenger. Can be ``async+posix``,
-    ``async+dpdk`` or ``async+rdma``. Posix uses standard TCP/IP networking and is
+    ``async+dpdk``, ``async+rdma``, or ``async+smc``. Posix uses standard TCP/IP networking and is
     default. Other transports may be experimental and support may be limited.
   default: async+posix
   flags:
@@ -1602,7 +1602,7 @@ options:
     in `ceph status`.  This is also used in automated PG management, as the threshold
     at which some pools' pg_num may be shrunk in order to enable increasing the pg_num
     of others.
-  default: 250
+  default: 500
   flags:
   - runtime
   services:
@@ -2037,19 +2037,19 @@ options:
   see_also:
   - mon_debug_dump_transactions
   with_legacy: true
-- name: mon_debug_no_require_squid
+- name: mon_debug_no_require_tentacle
   type: bool
   level: dev
-  desc: Do not require the Squid feature for new Monitor clusters
+  desc: Do not require the Tentacle feature for new Monitor clusters
   default: false
   services:
   - mon
   flags:
   - cluster_create
-- name: mon_debug_no_require_tentacle
+- name: mon_debug_no_require_umbrella
   type: bool
   level: dev
-  desc: Do not require the Tentacle feature for new Monitor clusters
+  desc: Do not require the Umbrella feature for new Monitor clusters
   default: false
   services:
   - mon
@@ -2950,6 +2950,13 @@ options:
     MTU configuration issues when jumbo frames are in use.
   default: 2000
   with_legacy: true
+- name: osd_min_split_replica_read_size
+  type: uint
+  level: advanced
+  default: 0
+  fmt_desc: The minimum size (in bytes) of a read to a single replica. For split
+    reads, all reads will be at least this size before a client will split it
+    across multiple replicas. Set to 0 to disable read splitting for replica pools.
 # max number of parallel snap trims/pg
 - name: osd_pg_max_concurrent_snap_trims
   type: uint
@@ -3393,7 +3400,7 @@ options:
   with_legacy: true
 # to adjust various transactions that batch smaller items
 - name: osd_target_transaction_size
-  type: int
+  type: uint
   level: advanced
   default: 30
   with_legacy: true
@@ -3508,10 +3515,14 @@ options:
   with_legacy: true
 # rocksdb block cache shard bits, 4 bit -> 16 shards
 - name: rocksdb_cache_shard_bits
+  desc: Specifies the number of shards by designating the number of significant bits in hash keys.
+    4 bits -> 16 shards.
   type: int
   level: advanced
   default: 4
   with_legacy: true
+  flags:
+  - startup
 # 'lru' or 'clock'
 - name: rocksdb_cache_type
   type: str
@@ -4351,10 +4362,10 @@ options:
   flags:
   - runtime
   with_legacy: true
-- name: bluefs_check_volume_selector_on_umount
+- name: bluefs_check_volume_selector_on_mount
   type: bool
   level: dev
-  desc: Check validity of volume selector on umount
+  desc: Check validity of volume selector on mount/umount
   long_desc: Checks if volume selector did not diverge from the state it should be in.
     Reference is constructed from bluefs inode table. Asserts on inconsistency.
   default: false
@@ -4369,9 +4380,60 @@ options:
     Reference is constructed from bluefs inode table. Asserts on inconsistency. This is debug feature.
   default: false
   see_also:
-  - bluefs_check_volume_selector_on_umount
+  - bluefs_check_volume_selector_on_mount
   flags:
   - startup
+  with_legacy: true
+- name: bluefs_spillover_cleaner
+  type: bool
+  level: advanced
+  desc: Enable Background BlueFS Spillover cleaner thread
+  long_desc: Enables a background cleaner thread in BlueFS that periodically scans files
+    that spilled over to the slow device and attempts to migrate them back to the
+    BlueFS DB device
+  default: false
+  see_also:
+  - bluefs_spillover_idle_time
+  - bluefs_spillover_cleaner_work_ratio
+  flags:
+  - runtime
+  with_legacy: true
+- name: bluefs_spillover_idle_time
+  type: uint
+  level: advanced
+  desc: Idle time in seconds before the BlueFS spillover cleaner wakes
+    up for the next scan cycle.
+  long_desc: When no spillover files remain to migrate, the cleaner enters an idle
+    sleep state for this duration. Once the idle period expires, it wakes up, scans
+    for spillover files, and resumes migration if needed.
+  default: 1200
+  see_also:
+  - bluefs_spillover_cleaner
+  flags:
+  - runtime
+  with_legacy: true
+- name: bluefs_spillover_cleaner_work_ratio
+  type: float
+  level: advanced
+  desc: Fraction of time the BlueFS spillover cleaner spends performing work.
+  long_desc: Controls the rate of spillover migration work. After each migration
+    step, the cleaner targets to sleep proportionally to the time spent doing work
+    This reduces interference with foreground IO. For example, if a migration step
+    took 10 ms and the ratio is 0.1, the cleaner sleeps for ~90 ms before the next
+    step. This results in approximately 10% work time and 90% sleep time.
+  default: 0.1
+  flags:
+  - runtime
+  with_legacy: true
+- name: bluefs_debug_force_slow
+  type: bool
+  level: dev
+  desc: For testing. Force BlueFS to allocate files on slow device.
+  long_desc: When enabled, the RocksDBBlueFSVolumeSelector will ignore normal
+    placement policy and redirect allocations to slow device.
+  default: false
+  flags:
+  - runtime
   with_legacy: true
 - name: bluestore_bluefs
   type: bool
@@ -4514,6 +4576,18 @@ options:
   - bluestore_block_wal_size
   flags:
   - create
+  with_legacy: true
+- name: bluestore_use_ebd
+  type: bool
+  level: advanced
+  desc: EBD plugin used during mkfs is required for mounts.
+  long_desc: The flag has two effects, on mkfs and on mount.
+    If set for mkfs and EBD plugin did attach to the device then save plugin name to OSD metadata.
+    If set when mounting and plugin name is stored in OSD metadata then refuse to mount.
+    The flag has no meaning if the device has no associated EBD plugin.
+  default: true
+  see_also:
+  - osd_extblkdev_plugins
   with_legacy: true
 - name: bluestore_bdev_label_multi
   type: bool
@@ -4672,9 +4746,9 @@ options:
 - name: bluestore_prefer_deferred_size
   type: size
   level: advanced
-  desc: Writes smaller than this size will be written to the journal and then asynchronously
-    written to the device.  This can be beneficial when using rotational media where
-    seeks are expensive, and is helpful both with and without solid state journal/wal
+  desc: Writes smaller than this size will be written to the WAL and then asynchronously
+    written to the block (slow) device.  This can be beneficial when using rotational media where
+    seeks are expensive, and is helpful both with and without SSD WAL.
     devices.
   default: 0
   flags:
@@ -4693,7 +4767,7 @@ options:
 - name: bluestore_prefer_deferred_size_ssd
   type: size
   level: advanced
-  desc: Default bluestore_prefer_deferred_size for non-rotational (solid state) media
+  desc: Default bluestore_prefer_deferred_size for non-rotational (SSD) media
   default: 0
   see_also:
   - bluestore_prefer_deferred_size
@@ -4765,7 +4839,7 @@ options:
   desc: Default value of bluestore_compression_min_blob_size for rotational media
   fmt_desc: Default value of ``bluestore compression min blob size``
     for rotational media.
-  default: 8_K
+  default: 64_K
   see_also:
   - bluestore_compression_min_blob_size
   flags:
@@ -4838,6 +4912,35 @@ options:
   flags:
   - runtime
   with_legacy: true
+- name: bluestore_frag_runtime
+  type: bool
+  level: advanced
+  desc: Enable tracking of runtime object fragmentation during reads.
+  long_desc: When enabled, BlueStore measures runtime object fragmentation
+    by counting how many physical extents are accessed for a read operation.
+    Higher values indicate more fragmented object data and potential
+    performance impact. The collected metric reflects runtime access patterns
+    rather than static object layout.
+  default: false
+  flags:
+  - runtime
+  with_legacy: true
+  see_also:
+  - bluestore_frag_static
+- name: bluestore_frag_static
+  type: bool
+  level: advanced
+  desc: Enable tracking of static object fragmentation during scrub
+  long_desc: When enabled, BlueStore measures static object fragmentation during
+    scrub by counting the number of disjoint physical extents that make up object's
+    on-disk layout. The collection-level static fragmentation score is computed as
+    the sum of the fragmentation scores of objects visited during the scrub process.
+  default: false
+  flags:
+  - runtime
+  with_legacy: true
+  see_also:
+  - bluestore_frag_runtime
 # Specifies minimum expected amount of saved allocation units
 # per single blob to enable compressed blobs garbage collection
 - name: bluestore_gc_enable_blob_threshold
@@ -5029,6 +5132,17 @@ options:
   default: 0.04
   see_also:
   - bluestore_cache_size
+- name: bluestore_cache_meta_evict_limit
+  type: int
+  level: advanced
+  desc: Elements in onode cache shards are evicted when new element is inserted into the cache.
+    In rare cases of cluster inactivity cache can be reduced, but not evicted. Adjusting size at once
+    will cause stall first time cache shard is accessed. The setting limits how many onodes can get evicted in one go.
+    Any value is less than 2 it is treated as request to adjust immediately.
+  default: 10
+  see_also:
+  - bluestore_cache_meta_ratio
+  with_legacy: true
 - name: bluestore_cache_autotune
   type: bool
   level: dev
@@ -5039,6 +5153,18 @@ options:
   see_also:
   - bluestore_cache_size
   - bluestore_cache_meta_ratio
+- name: bluestore_cache_meta_evict_in_autotune
+  type: bool
+  level: advanced
+  desc: Controls eviction of onodes from cache shards as part of autotune.
+    When enabled (true), right after autotune memory allocation run onode cache tries to adapt.
+    Depending on `bluestore_cache_meta_evict_limit` either some or all excess onodes are evicted.
+    When disabled (false), cluster inactivity makes cache to keep its onode elements.
+  default: true
+  see_also:
+  - bluestore_cache_meta_evict_limit
+  - bluestore_cache_autotune
+  with_legacy: true
 - name: bluestore_cache_autotune_interval
   type: float
   level: dev
@@ -5334,6 +5460,34 @@ options:
   desc: Remove allocation info from RocksDB and store the info in a new allocation file
   default: true
   with_legacy: true
+  flags:
+    - startup
+- name: bluestore_allocation_recovery_threads
+  type: uint
+  level: basic
+  desc: Amount of threads for allocation recovery after OSD crash.
+  long_desc: The optimal value varies. For NVMe DBs may be as large as 8.
+    Value 0 selects legacy recovery.
+    Value 1 denotes new recovery but on single thread.
+  default: 0
+  with_legacy: false
+  flags:
+    - startup
+  see_also:
+    - bluestore_allocation_from_file
+- name: bluestore_debug_fast_recovery_compare_chance
+  type: float
+  level: dev
+  desc: For testing only. Compare legacy and multithread allocation recovery.
+  long_desc: Chance to perform compare between procedures.
+    Value in range <0..1>; defines chance to perform comparision between legacy
+    and multithreaded allocation recovery. 0 means never compare. 1 means always compare.
+  default: 0
+  with_legacy: false
+  flags:
+    - startup
+  see_also:
+    - bluestore_allocation_recovery_threads
 - name: bluestore_debug_inject_allocation_from_file_failure
   type: float
   level: dev
@@ -5660,6 +5814,14 @@ options:
   see_also:
   - bluestore_slow_ops_warn_lifetime
   - osd_op_complaint_time
+- name: bluestore_slow_scrub_ops_warn_threshold
+  type: uint
+  level: advanced
+  desc: Set the minimum number of BlueStore slow scrub ops before raising a health warning
+  default: 1
+  with_legacy: true
+  see_also:
+  - bluestore_slow_ops_warn_threshold
 - name: bluestore_fsck_error_on_no_per_pool_omap
   type: bool
   level: advanced
@@ -5690,6 +5852,12 @@ options:
   desc: Log a BlueStore operation if it is slower than this age (seconds)
   default: 5
   with_legacy: true
+- name: bluestore_log_scrub_op_age
+  type: float
+  level: advanced
+  desc: Log a BlueStore Scrub operation if it is slower than this age (seconds)
+  default: 5
+  with_legacy: true
 - name: bluestore_log_omap_iterator_age
   type: float
   level: advanced
@@ -5706,13 +5874,15 @@ options:
   type: str
   level: dev
   desc: Enforces specific hardware profile settings
-  long_desc: '''hdd'' enforces settings intended for BlueStore on a rotational
-    drive. ''ssd'' enforces settings intended for BlueStore on an SSD. ''default''
-    indicates that BlueStore is to use settings based on the detected hardware.'
+  long_desc: '''hybrid'' enforces osd settings applicable to hybrid
+    (AKA main=hdd, db/wal=ssd) disk setup.
+    ''ssd'' enforces osd settings applicable to all-flash disk setup.
+    ''default'' specifies automatic settings selection based on real
+    detected hardware.'
   default: default
   enum_values:
   - default
-  - hdd
+  - hybrid
   - ssd
   with_legacy: true
 - name: bluestore_allocator_lookup_policy
@@ -5865,6 +6035,15 @@ options:
   flags:
   - runtime
   with_legacy: true
+- name: bluestore_bluefs_warn_ratio
+  type: float
+  level: basic
+  desc: The ratio at which BlueFS usage relative to the main device raises a
+    health warning. Set to "1" to disable.
+  default: 0.06
+  with_legacy: false
+  flags:
+  - runtime
 # rocksdb options that will be used for omap(if omap_backend is rocksdb)
 - name: filestore_rocksdb_options
   type: str
@@ -6611,6 +6790,15 @@ options:
   desc: Enable / disable the Manager op tracker
   default: true
   with_legacy: true
+- name: mgr_map_cache_enabled
+  type: bool
+  level: dev
+  desc: Enable the manager's map cache for API calls
+  default: true
+  services:
+  - mgr
+  flags:
+  - runtime
 - name: mgr_num_op_tracker_shard
   type: uint
   level: advanced
@@ -6905,13 +7093,6 @@ options:
   services:
   - rgw
   - osd
-- name: mgr_ttl_cache_expire_seconds
-  type: uint
-  level: dev
-  desc: Set the Manager cache time to live in seconds; set to 0 to disable the cache.
-  default: 0
-  services:
-  - mgr
 - name: objectstore_debug_throw_on_failed_txc
   type: bool
   level: dev

@@ -11,6 +11,8 @@
 #include "os/Transaction.h"
 #include "osd/OSDMap.h"
 
+SET_SUBSYS(osd);
+
 using std::string;
 
 void OSDMeta::create(ceph::os::Transaction& t)
@@ -42,18 +44,18 @@ void OSDMeta::remove_inc_map(ceph::os::Transaction& t, epoch_t e)
 
 seastar::future<bufferlist> OSDMeta::load_map(epoch_t e)
 {
-  return store.read(coll,
+  return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::read>(
+                    store, coll,
                     osdmap_oid(e), 0, 0,
                     CEPH_OSD_OP_FLAG_FADVISE_WILLNEED).handle_error(
-    read_errorator::assert_all_func([e](const auto&) {
-      ceph_abort_msg(fmt::format("{} read gave enoent on {}",
-                                 __func__, osdmap_oid(e)));
-    }));
+    read_errorator::assert_all("{} read gave enoent on {}",
+                                   __func__, osdmap_oid(e)));
 }
 
 read_errorator::future<ceph::bufferlist> OSDMeta::load_inc_map(epoch_t e)
 {
-  return store.read(coll,
+  return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::read>(
+                    store, coll,
                     inc_osdmap_oid(e), 0, 0,
                     CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
 }
@@ -68,11 +70,16 @@ void OSDMeta::store_superblock(ceph::os::Transaction& t,
 
 OSDMeta::load_superblock_ret OSDMeta::load_superblock()
 {
-  return store.read(
-    coll, superblock_oid(), 0, 0
-  ).safe_then([] (bufferlist&& bl) {
+  LOG_PREFIX(OSDMeta::load_superblock);
+  DEBUG("");
+  return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::read>(
+    store,
+    coll, superblock_oid(), 0, 0, 0
+  ).safe_then([FNAME] (bufferlist&& bl) {
+    DEBUG("successfully read superblock");
     auto p = bl.cbegin();
     OSDSuperblock superblock;
+    DEBUG("decoding superblock bufferlist");
     decode(superblock, p);
     return seastar::make_ready_future<OSDSuperblock>(std::move(superblock));
   });
@@ -82,8 +89,9 @@ seastar::future<std::tuple<pg_pool_t,
 			   std::string,
 			   OSDMeta::ec_profile_t>>
 OSDMeta::load_final_pool_info(int64_t pool) {
-  return store.read(coll, final_pool_info_oid(pool),
-                     0, 0).safe_then([] (bufferlist&& bl) {
+  return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::read>(
+                     store, coll, final_pool_info_oid(pool),
+                     0, 0, 0).safe_then([] (bufferlist&& bl) {
     auto p = bl.cbegin();
     pg_pool_t pi;
     string name;

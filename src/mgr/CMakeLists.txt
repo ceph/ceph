@@ -14,6 +14,7 @@ if(WITH_MGR)
     ClusterState.cc
     DaemonHealthMetricCollector.cc
     DaemonKey.cc
+    DaemonPerfCounters.cc
     DaemonServer.cc
     DaemonState.cc
     Gil.cc
@@ -25,6 +26,7 @@ if(WITH_MGR)
     OSDPerfMetricCollector.cc
     MDSPerfMetricTypes.cc
     MDSPerfMetricCollector.cc
+    PerfCounterInstance.cc
     PyFormatter.cc
     PyUtil.cc
     PyModule.cc
@@ -32,7 +34,9 @@ if(WITH_MGR)
     PyModuleRunner.cc
     PyOSDMap.cc
     StandbyPyModules.cc
+    ThreadMonitor.cc
     mgr_commands.cc
+    MgrMapCache.cc
     MgrOpRequest.cc
     ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
     $<TARGET_OBJECTS:mgr_cap_obj>)

@@ -7,6 +7,7 @@
 #include "include/types.h"
 #include "common/hobject.h"
 #include "common/Formatter.h"
+#include "cls_cas_types.h"
 
 struct cls_cas_chunk_create_or_get_ref_op {
   enum {

@@ -122,8 +122,8 @@ rbd_cache_flush="rbd cache flush ${pool}/${image}"
 rbd_cache_invalidate="rbd cache invalidate ${pool}/${image}"
 
 rbd_watch_start ${image}
-${ceph_admin} help | fgrep "${rbd_cache_flush}"
-${ceph_admin} help | fgrep "${rbd_cache_invalidate}"
+${ceph_admin} help | grep -F "${rbd_cache_flush}"
+${ceph_admin} help | grep -F "${rbd_cache_invalidate}"
 rbd_watch_end ${image}
 
 # test rbd cache commands with disabled and enabled cache

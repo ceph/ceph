@@ -80,6 +80,8 @@ class ConfigNS(_StrEnum):
     USERS_AND_GROUPS = 'users_and_groups'
     JOIN_AUTHS = 'join_auths'
     TLS_CREDENTIALS = 'tls_creds'
+    RGW_CREDENTIALS = 'rgw_creds'
+    EXTERNAL_CEPH_CLUSTERS = 'ext_ceph_clusters'
 
 
 class LoginCategory(_StrEnum):
@@ -105,6 +107,13 @@ class LoginAccess(_StrEnum):
         return self
 
 
+class HostAccess(_StrEnum):
+    """Determines if a host should be allowed or denied access to a share."""
+
+    ALLOW = 'allow'
+    DENY = 'deny'
+
+
 class SMBClustering(_StrEnum):
     DEFAULT = 'default'
     ALWAYS = 'always'
@@ -114,6 +123,19 @@ class SMBClustering(_StrEnum):
 class ShowResults(_StrEnum):
     FULL = 'full'
     COLLAPSED = 'collapsed'
+
+
+class ClientSupportMode(_StrEnum):
+    """Determines if client-specific SMB features should be enabled.
+
+    - DEFAULT: Standard SMB behavior without client-specific optimizations
+    - MACOS: Enable macOS-specific features (AAPL extensions, fruit VFS, etc.)
+
+    Future values could include: WINDOWS_OPTIMIZED, LINUX_OPTIMIZED, etc.
+    """
+
+    DEFAULT = 'default'
+    MACOS = 'macos'
 
 
 class PasswordFilter(_StrEnum):
@@ -144,3 +166,28 @@ class TLSCredentialType(_StrEnum):
     CERT = 'cert'
     KEY = 'key'
     CA_CERT = 'ca-cert'
+
+
+class KeyBridgeScopeType(_StrEnum):
+    """Specify the type of a keybridge scope."""
+
+    MEM = 'mem'
+    KMIP = 'kmip'
+
+    def unique(self) -> bool:
+        """Return true if the scope is unique for a keybridge.
+        A unique scope can only appear once and has no additional qualifying
+        name(s).
+        """
+        return self in {self.MEM}
+
+
+class KeyBridgePeerPolicy(_StrEnum):
+    """Specify keybridge peer policy for validating access.
+    The policy bundles keybridge peer validation approaches into a single named
+    policy. Typically users *should not* be changing this. It's mainly for
+    debugging and hacking.
+    """
+
+    RESTRICTED = 'restricted'
+    UNRESTRICTED = 'unrestricted'

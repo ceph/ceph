@@ -34,9 +34,11 @@ class BaseObjectStore:
         self.cephx_lockbox_secret: str = ''
         self.objectstore: str = getattr(args, "objectstore", '')
         self.osd_mkfs_cmd: List[str] = []
+        self.osd_type: str = getattr(args, "osd_type", '')
         self.block_device_path: str = ''
         self.dmcrypt_key: str = encryption_utils.create_dmcrypt_key()
         self.with_tpm: int = int(getattr(self.args, 'with_tpm', False))
+        self.tpm2_pcrs: str = getattr(self.args, 'tpm2_pcrs', '7')
         self.method: str = ''
         self.osd_path: str = ''
         self.key: Optional[str] = None
@@ -50,6 +52,9 @@ class BaseObjectStore:
                 self.cephx_lockbox_secret = prepare_utils.create_key()
                 self.secrets['cephx_lockbox_secret'] = \
                     self.cephx_lockbox_secret
+        # If set, we skip mkfs-time discards by overriding bdev_enable_discard flag
+        # for the `ceph-osd --mkfs` command.
+        self.skip_mkfs_discard: bool = False
 
     def get_ptuuid(self, argument: str) -> str:
         uuid = disk.get_partuuid(argument)
@@ -107,7 +112,7 @@ class BaseObjectStore:
     def unlink_bs_symlinks(self) -> None:
         for link_name in ['block', 'block.db', 'block.wal']:
             link_path = os.path.join(self.osd_path, link_name)
-            if os.path.exists(link_path):
+            if os.path.lexists(link_path):
                 os.unlink(os.path.join(self.osd_path, link_name))
 
     def prepare_osd_req(self, tmpfs: bool = True) -> None:
@@ -139,7 +144,13 @@ class BaseObjectStore:
     def get_osd_path(self) -> str:
         return '/var/lib/ceph/osd/%s-%s/' % (conf.cluster, self.osd_id)
 
+    def get_default_entrypoint_cmd(self) -> str:
+        if self.osd_type == "crimson":
+            return "ceph-osd-crimson"
+        return "ceph-osd"
+    
     def build_osd_mkfs_cmd(self) -> List[str]:
+        base_mkfs_cmd = self.get_default_entrypoint_cmd()
         self.supplementary_command = [
             '--osd-data', self.osd_path,
             '--osd-uuid', self.osd_fsid,
@@ -147,13 +158,19 @@ class BaseObjectStore:
             '--setgroup', 'ceph'
         ]
         self.osd_mkfs_cmd = [
-            'ceph-osd',
+            base_mkfs_cmd,
             '--cluster', conf.cluster,
             '--osd-objectstore', self.objectstore,
             '--mkfs',
             '-i', self.osd_id,
             '--monmap', self.monmap,
         ]
+        # Skip mkfs discard if we have already formatted the device
+        # set bdev_enable_discard = false
+        if self.skip_mkfs_discard and self.objectstore == 'bluestore':
+            self.osd_mkfs_cmd.extend(['--bdev-enable-discard', 'false'])
+        if getattr(self.args, 'crush_device_class', None) == 'fcm' and self.objectstore == 'bluestore':
+            self.osd_mkfs_cmd.extend(['--set-keepcaps', 'true'])
         if self.cephx_secret is not None:
             self.osd_mkfs_cmd.extend(['--keyfile', '-'])
 
@@ -216,6 +233,7 @@ class BaseObjectStore:
         """
         Enrolls a device with TPM2 (Trusted Platform Module 2.0) using systemd-cryptenroll.
         This method creates a temporary file to store the dmcrypt key and uses it to enroll the device.
+        PCR selection follows `--tpm2-pcrs` on the ceph-volume CLI (`self.tpm2_pcrs`, default is "7").
 
         Args:
             device (str): The device path to be enrolled with TPM2.
@@ -229,7 +247,7 @@ class BaseObjectStore:
                 temp_file_name: str = temp_file.name.replace('/rootfs', '', 1)
                 cmd: List[str] = ['systemd-cryptenroll', '--tpm2-device=auto',
                                   device, '--unlock-key-file', temp_file_name,
-                                  '--tpm2-pcrs', '9+12', '--wipe-slot', 'tpm2']
+                                  '--tpm2-pcrs', self.tpm2_pcrs, '--wipe-slot', 'tpm2']
                 process.call(cmd, run_on_host=True, show_command=True)
 
     def add_label(self, key: str,

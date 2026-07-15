@@ -2,10 +2,10 @@
 
 ``create``
 ===========
-This subcommand wraps the two-step process to provision a new osd (calling
+This subcommand wraps the two-step process to provision a new OSD (calling
 ``prepare`` first and then ``activate``) into a single
 one. The reason to prefer ``prepare`` and then ``activate`` is to gradually
-introduce new OSDs into a cluster, and avoiding large amounts of data being
+introduce new OSDs into a cluster, avoiding large amounts of data being
 rebalanced.
 
 The single-call process unifies exactly what :ref:`ceph-volume-lvm-prepare` and

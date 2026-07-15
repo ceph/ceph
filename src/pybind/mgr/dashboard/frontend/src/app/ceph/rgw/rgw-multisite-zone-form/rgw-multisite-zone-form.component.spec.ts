@@ -6,7 +6,7 @@ import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
+
 import { SharedModule } from '~/app/shared/shared.module';
 import { RgwZone } from '../models/rgw-multisite';
 import { NO_ERRORS_SCHEMA } from '@angular/compiler';
@@ -28,7 +28,6 @@ describe('RgwMultisiteZoneFormComponent', () => {
         HttpClientTestingModule,
         ModalModule,
         InputModule,
-        ToastrModule.forRoot(),
         CheckboxModule,
         SelectModule
       ],
@@ -90,7 +89,10 @@ describe('RgwMultisiteZoneFormComponent', () => {
         is_master: true,
         endpoints: ['http://192.168.100.100:80'],
         access_key: 'zxcftyuuhgg',
-        secret_key: 'Qwsdcfgghuiioklpoozsd'
+        secret_key: 'Qwsdcfgghuiioklpoozsd',
+        info: {
+          tier_type: 'archive'
+        }
       }
     };
 

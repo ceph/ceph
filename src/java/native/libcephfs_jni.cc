@@ -29,6 +29,7 @@
 #include "ScopedLocalRef.h"
 #include "JniConstants.h"
 
+#include "include/ceph_fs.h" // for CEPH_XATTR_*
 #include "include/cephfs/libcephfs.h"
 #include "common/dout.h"
 

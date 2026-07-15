@@ -64,7 +64,7 @@ TEST(ErasureCodePlugin, factory)
   }
 }
 
-bufferptr create_bufferptr(uint64_t value) {
+bufferptr create_bufferptr(uint32_t value) {
   bufferlist bl;
   bl.append_zero(4096);
   memcpy(bl.c_str(), &value, sizeof(value));
@@ -116,7 +116,10 @@ TEST(ErasureCodePlugin, parity_delta_write) {
   erasure_code->encode_chunks(data, coding2);
 
   for (shard_id_t s(k); s < k + m; ++s) {
-    ASSERT_EQ(*(uint32_t*)coding[s].c_str(), *(uint32_t*)coding2[s].c_str());
+    uint32_t coding_buf, coding_buf2;
+    memcpy(&coding_buf, coding[s].c_str(), sizeof(uint32_t));
+    memcpy(&coding_buf2, coding2[s].c_str(), sizeof(uint32_t));
+    ASSERT_EQ(coding_buf, coding_buf2);
   }
 
   data[shard_id_t(4)] = create_bufferptr(4096);
@@ -133,7 +136,9 @@ TEST(ErasureCodePlugin, parity_delta_write) {
 
   seeds[3] = overwrite3;
   for (shard_id_t s(0); s < k; ++s) {
-    ASSERT_EQ(seeds[int(s)], *(uint32_t*)data[s].c_str());
+    uint32_t data_buf;
+    memcpy(&data_buf, data[s].c_str(), sizeof(uint32_t));
+    ASSERT_EQ(seeds[int(s)], data_buf);
   }
 }
 

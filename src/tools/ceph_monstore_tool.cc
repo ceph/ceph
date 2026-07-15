@@ -37,6 +37,7 @@
 #include "osd/OSDMap.h"
 #include "crush/CrushCompiler.h"
 #include "mon/CreatingPGs.h"
+#include "mon/mon_types.h" // for CEPH_MON_ONDISK_MAGIC
 
 namespace po = boost::program_options;
 

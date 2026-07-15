@@ -606,7 +606,7 @@ TEST_P(PluginTest, CRCEncodeDecodeSupport) {
       uint32_t decoded_crc =
           read_crc_from_bufferlist(out_bls[missing_shard_id]);
       uint32_t original_crc =
-          read_crc_from_bufferlist(hashes_bl, missing_shard_id.id * chunk_size);
+          read_crc_from_bufferlist(hashes_bl, missing_raw_shard_id.id * chunk_size);
 
       different = different | (decoded_crc != original_crc);
     }

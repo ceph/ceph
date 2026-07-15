@@ -4,7 +4,7 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ReactiveFormsModule } from '@angular/forms';
-import { ToastrModule } from 'ngx-toastr';
+
 import {
   CheckboxModule,
   ComboBoxModule,
@@ -28,7 +28,6 @@ describe('RgwStorageClassFormComponent', () => {
         HttpClientTestingModule,
         RouterTestingModule,
         ReactiveFormsModule,
-        ToastrModule.forRoot(),
         GridModule,
         InputModule,
         CoreModule,
@@ -124,6 +123,22 @@ describe('RgwStorageClassFormComponent', () => {
     component.goToListView();
     component.submitAction();
     expect(component).toBeTruthy();
+  });
+
+  it('should mark duplicate storage class names as invalid', () => {
+    component.existingStorageClasses = [
+      {
+        storage_class: 'storageClass1',
+        placement_target: 'placement1',
+        zonegroup_name: 'zonegroup1'
+      }
+    ];
+
+    const control = component.storageClassForm.get('storage_class');
+    control.setValue('storageClass1');
+    control.updateValueAndValidity();
+
+    expect(control.hasError('uniqueName')).toBe(true);
   });
 
   it('should set required validators for CLOUD_TIER fields', () => {

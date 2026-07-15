@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <ctype.h>
 
 /* Maximum number of symlinks to visit while resolving a path before returning
  * ELOOP. */
@@ -554,11 +555,11 @@ static int32_t proxy_config_source_validate(int32_t fd, struct stat *before,
 	return 1;
 }
 
-static int32_t proxy_config_destination_prepare(void)
+static int32_t proxy_config_destination_prepare(proxy_settings_t *settings)
 {
 	int32_t fd;
 
-	fd = openat(AT_FDCWD, ".", O_TMPFILE | O_WRONLY, 0600);
+	fd = open(settings->work_dir, O_TMPFILE | O_WRONLY, 0600);
 	if (fd < 0) {
 		return proxy_log(LOG_ERR, errno, "openat() failed");
 	}
@@ -587,15 +588,17 @@ static int32_t proxy_config_destination_write(int32_t fd, void *data,
 	return size;
 }
 
-static int32_t proxy_config_destination_commit(int32_t fd, const char *name)
+static int32_t proxy_config_destination_commit(proxy_settings_t *settings,
+					       int32_t fd, const char *path)
 {
-	char path[32];
+	char fd_path[32];
+	int32_t len;
 
 	if (fsync(fd) < 0) {
 		return proxy_log(LOG_ERR, errno, "fsync() failed");
 	}
 
-	if (linkat(fd, "", AT_FDCWD, name, AT_EMPTY_PATH) < 0) {
+	if (linkat(fd, "", AT_FDCWD, path, AT_EMPTY_PATH) < 0) {
 		if (errno == EEXIST) {
 			return 0;
 		}
@@ -605,8 +608,12 @@ static int32_t proxy_config_destination_commit(int32_t fd, const char *name)
 		 * filesystem. */
 	}
 
-	snprintf(path, sizeof(path), "/proc/self/fd/%d", fd);
-	if (linkat(AT_FDCWD, path, AT_FDCWD, name, AT_SYMLINK_FOLLOW) < 0) {
+	len = proxy_snprintf(fd_path, sizeof(fd_path), "/proc/self/fd/%d", fd);
+	if (len < 0) {
+		return len;
+	}
+
+	if (linkat(AT_FDCWD, fd_path, AT_FDCWD, path, AT_SYMLINK_FOLLOW) < 0) {
 		if (errno != EEXIST) {
 			return proxy_log(LOG_ERR, errno, "linkat() failed");
 		}
@@ -641,13 +648,19 @@ static int32_t proxy_config_transfer(void **ptr, void *data, int32_t idx)
 
 /* Copies and checksums a given configuration to a file and makes sure that it
  * has not been modified. */
-static int32_t proxy_config_prepare(const char *config, char *path,
+static int32_t proxy_config_prepare(proxy_settings_t *settings,
+				    const char *config, char *path,
 				    int32_t size)
 {
 	char hash[65];
 	proxy_config_t cfg;
 	struct stat before;
+	const char *name;
 	int32_t err;
+
+	if (settings->disable_copy) {
+		return proxy_snprintf(path, size, "%s", config);
+	}
 
 	cfg.size = 4096;
 	cfg.buffer = proxy_malloc(cfg.size);
@@ -662,7 +675,7 @@ static int32_t proxy_config_prepare(const char *config, char *path,
 		goto done_mem;
 	}
 
-	cfg.dst = proxy_config_destination_prepare();
+	cfg.dst = proxy_config_destination_prepare(settings);
 	if (cfg.dst < 0) {
 		err = cfg.dst;
 		goto done_src;
@@ -678,18 +691,33 @@ static int32_t proxy_config_prepare(const char *config, char *path,
 		goto done_dst;
 	}
 
-	err = snprintf(path, size, "ceph-%s.conf", hash);
+	err = proxy_snprintf(path, size, "%s/%s_%d", settings->work_dir,
+			     hash, cfg.total);
 	if (err < 0) {
-		err = proxy_log(LOG_ERR, errno, "snprintf() failed");
-		goto done_dst;
-	}
-	if (err >= size) {
-		err = proxy_log(LOG_ERR, ENOBUFS,
-				"Insufficient space to store the name");
 		goto done_dst;
 	}
 
-	err = proxy_config_destination_commit(cfg.dst, path);
+	if (mkdir(path, 0700) < 0) {
+		if (errno != EEXIST) {
+			err = proxy_log(LOG_ERR, errno,
+					"Failed to create a directory");
+			goto done_dst;
+		}
+	}
+
+	name = strrchr(config, '/');
+	if (name == NULL) {
+		name = config;
+	} else {
+		name++;
+	}
+
+	err = proxy_snprintf(path + err, size - err, "/%s", name);
+	if (err < 0) {
+		goto done_dst;
+	}
+
+	err = proxy_config_destination_commit(settings, cfg.dst, path);
 
 done_dst:
 	proxy_config_destination_close(cfg.dst);
@@ -770,7 +798,7 @@ static void proxy_instance_destroy(proxy_instance_t *instance)
 
 /* Create a new Ceph client instance with the provided id */
 static int32_t proxy_instance_create(proxy_instance_t **pinstance,
-				     const char *id)
+				     proxy_settings_t *settings, const char *id)
 {
 	struct ceph_mount_info *cmount;
 	proxy_instance_t *instance;
@@ -783,6 +811,7 @@ static int32_t proxy_instance_create(proxy_instance_t **pinstance,
 
 	list_init(&instance->siblings);
 	list_init(&instance->changes);
+	instance->settings = settings;
 	instance->cmount = NULL;
 	instance->inited = false;
 	instance->mounted = false;
@@ -820,40 +849,6 @@ static int32_t proxy_instance_release(proxy_instance_t *instance)
 	proxy_instance_destroy(instance);
 
 	return 0;
-}
-
-/* Assign a configuration file to the instance. */
-static int32_t proxy_instance_config(proxy_instance_t *instance,
-				     const char *config)
-{
-	char path[128], *ppath;
-	int32_t err;
-
-	if (instance->mounted) {
-		return proxy_log(LOG_ERR, EISCONN,
-				 "Cannot configure a mounted instance");
-	}
-
-	ppath = NULL;
-	if (config != NULL) {
-		err = proxy_config_prepare(config, path, sizeof(path));
-		if (err < 0) {
-			return err;
-		}
-		ppath = path;
-	}
-
-	err = proxy_instance_change_add(instance, "conf", ppath, NULL);
-	if (err < 0) {
-		return err;
-	}
-
-	err = ceph_conf_read_file(instance->cmount, ppath);
-	if (err < 0) {
-		proxy_instance_change_del(instance);
-	}
-
-	return err;
 }
 
 static int32_t proxy_instance_option_get(proxy_instance_t *instance,
@@ -904,6 +899,158 @@ static int32_t proxy_instance_option_set(proxy_instance_t *instance,
 	if (err < 0) {
 		proxy_log(LOG_ERR, -err,
 			  "Failed to configure a client instance");
+		proxy_instance_change_del(instance);
+	}
+
+	return err;
+}
+
+static int32_t proxy_instance_keyring_check(proxy_instance_t *instance,
+					    char *path, char **plist)
+{
+	char private[strlen(instance->settings->work_dir) + strlen(path) + 80];
+	struct stat st;
+	char *tmp;
+	int32_t len1, len2, err;
+
+	/* Remove any leading white-space characters. */
+	while (isspace(*path)) {
+		path++;
+	}
+
+	/* Remove any trailing white-space characters. */
+	len1 = strlen(path);
+	while ((len1 > 0) && isspace(path[len1 - 1])) {
+		len1--;
+	}
+	if (len1 == 0) {
+		return 0;
+	}
+	path[len1] = 0;
+
+	if (stat(path, &st) < 0) {
+		if ((errno == ENOENT) || (errno == ENOTDIR)) {
+			return 0;
+		}
+
+		return proxy_log(LOG_ERR, errno,
+				 "Failed to check keyring file (%s)", path);
+	}
+
+	err = proxy_config_prepare(instance->settings, path, private,
+				   sizeof(private));
+	if (err < 0) {
+		return err;
+	}
+
+	len2 = strlen(private) + 1;
+
+	/* Create/update the list of valid keyring entries separated by comma
+	 * (','). */
+	tmp = *plist;
+	if (tmp == NULL) {
+		len1 = 0;
+		tmp = proxy_malloc(len2);
+		if (tmp == NULL) {
+			return -ENOMEM;
+		}
+	} else {
+		len1 = strlen(tmp) + 1;
+		err = proxy_realloc((void **)&tmp, len1 + len2);
+		if (err < 0) {
+			return err;
+		}
+		tmp[len1 - 1] = ',';
+	}
+
+	memcpy(tmp + len1, private, len2);
+
+	*plist = tmp;
+
+	return 0;
+}
+
+static int32_t proxy_instance_keyring(proxy_instance_t *instance)
+{
+	char value[1024];
+	char *path, *next, *list;
+	int32_t err;
+
+	if (instance->settings->disable_copy) {
+		return 0;
+	}
+
+	err = proxy_instance_option_get(instance, "keyring", value,
+					sizeof(value));
+	if (err < 0) {
+		return err;
+	}
+
+	list = NULL;
+	path = value;
+	while ((next = strchr(path, ',')) != NULL) {
+		*next++ = 0;
+		err = proxy_instance_keyring_check(instance, path, &list);
+		if (err < 0) {
+			goto done;
+		}
+		path = next;
+	}
+
+	err = proxy_instance_keyring_check(instance, path, &list);
+	if (err < 0) {
+		goto done;
+	}
+
+	err = proxy_instance_option_set(instance, "keyring", list ?: "");
+
+done:
+	if (list != NULL) {
+		proxy_free(list);
+	}
+
+	if (err < 0) {
+		/* Remove the "keyring" option get in case of error */
+		proxy_instance_change_del(instance);
+	}
+
+	return err;
+}
+
+/* Assign a configuration file to the instance. */
+static int32_t proxy_instance_config(proxy_instance_t *instance,
+				     const char *config)
+{
+	char path[strlen(instance->settings->work_dir) + strlen(config) + 80];
+	char *ppath;
+	int32_t err;
+
+	if (instance->mounted) {
+		return proxy_log(LOG_ERR, EISCONN,
+				 "Cannot configure a mounted instance");
+	}
+
+	ppath = NULL;
+	if (config != NULL) {
+		err = proxy_config_prepare(instance->settings, config, path,
+					   sizeof(path));
+		if (err < 0) {
+			return err;
+		}
+		ppath = path;
+	}
+
+	err = proxy_instance_change_add(instance, "conf", ppath, NULL);
+	if (err < 0) {
+		return err;
+	}
+
+	err = ceph_conf_read_file(instance->cmount, ppath);
+	if (err >= 0) {
+		err = proxy_instance_keyring(instance);
+	}
+
+	if (err < 0) {
 		proxy_instance_change_del(instance);
 	}
 
@@ -1099,7 +1246,8 @@ static int32_t proxy_instance_unmount(proxy_instance_t **pinstance)
 	return 0;
 }
 
-int32_t proxy_mount_create(proxy_mount_t **pmount, const char *id)
+int32_t proxy_mount_create(proxy_mount_t **pmount, proxy_settings_t *settings,
+			   const char *id)
 {
 	proxy_mount_t *mount;
 	int32_t err;
@@ -1110,7 +1258,7 @@ int32_t proxy_mount_create(proxy_mount_t **pmount, const char *id)
 	}
 	mount->root = NULL;
 
-	err = proxy_instance_create(&mount->instance, id);
+	err = proxy_instance_create(&mount->instance, settings, id);
 	if (err < 0) {
 		proxy_free(mount);
 		return err;

@@ -1,5 +1,5 @@
-set(proxy_common_srcs proxy_link.c proxy_async.c proxy_log.c)
-set(libcephfsd_srcs libcephfsd.c proxy_manager.c proxy_mount.c proxy_helpers.c ${proxy_common_srcs})
+set(proxy_common_srcs proxy_helpers.c proxy_link.c proxy_async.c proxy_log.c)
+set(libcephfsd_srcs libcephfsd.c proxy_manager.c proxy_mount.c ${proxy_common_srcs})
 set(libcephfs_proxy_srcs libcephfs_proxy.c ${proxy_common_srcs})
 
 add_executable(libcephfsd ${libcephfsd_srcs})

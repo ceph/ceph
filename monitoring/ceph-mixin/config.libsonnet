@@ -14,7 +14,7 @@
     NVMeoFMaxGatewaysPerCluster: 32,
     NVMeoFHighGatewayCPU: 80,
     NVMeoFMaxSubsystemsPerGateway: 128,
-    NVMeoFMaxNamespaces: 2048,
+    NVMeoFMaxNamespaces: 4096,
     NVMeoFHighClientCount: 128,
     NVMeoFHostKeepAliveTimeoutTrackDurationHours: 24,
     NVMeoFHighHostCPU: 80,
@@ -22,5 +22,11 @@
     // Read/Write latency is defined in ms
     NVMeoFHighClientReadLatency: 10,
     NVMeoFHighClientWriteLatency: 20,
+    //
+    // Hardware temperature thresholds in Celsius
+    HWTempMotherboardWarning: 60,
+    HWTempDIMMWarning: 80,
+    HWTempProcessorWarning: 80,
+    HWTempNVMeWarning: 70,
   },
 }

@@ -94,6 +94,33 @@ Shaman
    for its `Web UI`_. But please note, shaman does not build the
    packages, it just offers information on the builds.
 
+ceph-perf-pull-requests
+-----------------------
+
+``ceph-perf-pull-requests`` runs CBT performance regression checks on dedicated
+``performance`` Jenkins agents. The job definition lives in `ceph-build`_ and
+generates two jobs from a single template: ``ceph-perf-classic`` and
+``ceph-perf-crimson``.
+
+A pull request can trigger a run with::
+
+    jenkins test classic perf
+    jenkins test crimson perf
+
+The ``performance`` label is also whitelisted for automatic runs. Each job:
+
+#. checks out ``ceph-main`` (``origin/main``) and the PR merge ref
+#. builds both trees (classic ``vstart-base`` or Crimson ``crimson-osd``)
+#. runs the checked-in ``radosbench_4K_read.yaml`` workload via ``run-cbt.sh``
+#. compares PR results against ``main`` with ``cbt/compare.py``
+#. publishes a GitHub check named ``perf-test-{classic,crimson}``
+
+The benchmark YAML is always taken from ``ceph-main`` so PR and baseline runs use
+the same workload definition. Teuthology-to-CBT translation is handled by
+``src/test/crimson/cbt/t2c.py`` in the Ceph tree (not patched at build time).
+
+.. _ceph-build: https://github.com/ceph/ceph-build
+
 As the following shows, `chacra`_ manages multiple projects whose metadata
 are stored in a database. These metadata are exposed via Shaman as a web
 service. `chacractl`_ is a utility to interact with the `chacra`_ service.

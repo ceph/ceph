@@ -12,8 +12,13 @@ export class RgwStorageClassService {
 
   constructor(private http: HttpClient) {}
 
-  removeStorageClass(placement_target: string, storage_class: string) {
+  removeStorageClass(placement_target: string, storage_class: string, zone_name: string = '') {
+    let params: any = {};
+    if (zone_name) {
+      params.zone_name = zone_name;
+    }
     return this.http.delete(`${this.url}/${placement_target}/${storage_class}`, {
+      params,
       observe: 'response'
     });
   }

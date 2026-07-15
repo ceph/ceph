@@ -6,7 +6,9 @@ from ceph_volume import terminal, decorators, conf, process
 from ceph_volume.util import system, disk
 from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.util import encryption as encryption_utils
-from ceph_volume.util.device import Device
+from ceph_volume.util import nvme as nvme_utils
+from ceph_volume.util.raw_osd_crypt_mappers import RawOsdCryptMappers
+from ceph_volume.api import lvm as lvm_api
 from ceph_volume.devices.lvm.common import rollback_osd
 from ceph_volume.devices.raw.list import direct_report
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
@@ -15,6 +17,7 @@ if TYPE_CHECKING:
     import argparse
 
 logger = logging.getLogger(__name__)
+mlogger = terminal.MultiLogger(__name__)
 
 
 class Raw(BaseObjectStore):
@@ -84,7 +87,7 @@ class Raw(BaseObjectStore):
 
     @decorators.needs_root
     def prepare(self) -> None:
-        self.osd_fsid = system.generate_uuid()
+        self.osd_fsid = self.osd_fsid or system.generate_uuid()
         crush_device_class = self.args.crush_device_class
         if self.encrypted and not self.with_tpm:
             self.dmcrypt_key = os.getenv('CEPH_VOLUME_DMCRYPT_SECRET', '')
@@ -98,6 +101,9 @@ class Raw(BaseObjectStore):
         self.osd_id = prepare_utils.create_id(
             self.osd_fsid, json.dumps(self.secrets), self.osd_id)
 
+        if self.precondition_block_device():
+            self.skip_mkfs_discard = True
+
         if self.encrypted:
             self.prepare_dmcrypt()
 
@@ -106,12 +112,49 @@ class Raw(BaseObjectStore):
         # prepare the osd filesystem
         self.osd_mkfs()
 
-    def _activate(self, osd_id: str, osd_fsid: str) -> None:
+    def precondition_block_device(self) -> bool:
+        """
+        Run a fast NVMe format on the main block device when applicable.
+        Returns True if the block device was formatted, False otherwise.
+        """
+        if not self.block_device_path:
+            return False
+        return nvme_utils.preformat(self.block_device_path)
+
+    def _activate(self) -> None:
+        mappers: Optional[RawOsdCryptMappers] = None
+        if RawOsdCryptMappers.backing_device_path(self.block_device_path):
+            mappers = RawOsdCryptMappers(
+                self.osd_id,
+                self.osd_fsid,
+                self.block_device_path,
+                self.db_device_path,
+                self.wal_device_path,
+                cluster_name=conf.cluster,
+                dmcrypt_secret=os.getenv('CEPH_VOLUME_DMCRYPT_SECRET') or None,
+                with_tpm=bool(self.with_tpm),
+            )
+        if mappers is not None and mappers.applies():
+            try:
+                mappers.refresh()
+            except RuntimeError as e:
+                mlogger.info(
+                    'Failed to refresh dmcrypt mappers for osd.%s uuid %s: %s (is the OSD already running?)',
+                    self.osd_id,
+                    self.osd_fsid,
+                    e,
+                )
+            (
+                self.block_device_path,
+                self.db_device_path,
+                self.wal_device_path,
+            ) = mappers.mapper_paths()
+
         # mount on tmpfs the osd directory
-        self.osd_path = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
+        self.osd_path = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, self.osd_id)
         if not system.path_is_mounted(self.osd_path):
             # mkdir -p and mount as tmpfs
-            prepare_utils.create_osd_path(osd_id, tmpfs=not self.args.no_tmpfs)
+            prepare_utils.create_osd_path(self.osd_id, tmpfs=not self.args.no_tmpfs)
 
         # XXX This needs to be removed once ceph-bluestore-tool can deal with
         # symlinks that exist in the osd dir
@@ -134,17 +177,17 @@ class Raw(BaseObjectStore):
         # always re-do the symlink regardless if it exists, so that the block,
         # block.wal, and block.db devices that may have changed can be mapped
         # correctly every time
-        prepare_utils.link_block(self.block_device_path, osd_id)
+        prepare_utils.link_block(self.block_device_path, self.osd_id)
 
         if self.db_device_path:
-            prepare_utils.link_db(self.db_device_path, osd_id, osd_fsid)
+            prepare_utils.link_db(self.db_device_path, self.osd_id, self.osd_fsid)
 
         if self.wal_device_path:
-            prepare_utils.link_wal(self.wal_device_path, osd_id, osd_fsid)
+            prepare_utils.link_wal(self.wal_device_path, self.osd_id, self.osd_fsid)
 
         system.chown(self.osd_path)
         terminal.success("ceph-volume raw activate "
-                         "successful for osd ID: %s" % osd_id)
+                         "successful for osd ID: %s" % self.osd_id)
 
     @decorators.needs_root
     def activate(self) -> None:
@@ -152,7 +195,9 @@ class Raw(BaseObjectStore):
 
         This function activates Ceph Object Storage Daemons (OSDs) on the system.
         It iterates over all block devices, checking if they have a LUKS2 signature and
-        are encrypted for Ceph. If a device's OSD fsid matches and it is enrolled with TPM2,
+        are encrypted for Ceph. LVs tagged by ``ceph-volume lvm prepare`` / ``lvm batch``
+        (``ceph.type`` in block/db/wal) are skipped so raw activation does not consume
+        LVM-backed OSDs. If a device's OSD fsid matches and it is enrolled with TPM2,
         the function pre-activates it. After collecting the relevant devices, it attempts to
         activate any OSDs found.
 
@@ -162,31 +207,38 @@ class Raw(BaseObjectStore):
         assert self.devices or self.osd_id or self.osd_fsid
 
         activated_any: bool = False
+        lvm_prepare_lv_paths = lvm_api.ceph_volume_lvm_prepare_lv_paths()
 
         for d in disk.lsblk_all(abspath=True):
             device: str = d.get('NAME', '')
+            if lvm_api.is_ceph_volume_lvm_prepared(device, lvm_prepare_lv_paths):
+                continue
             luks2 = encryption_utils.CephLuks2(device)
             if luks2.is_ceph_encrypted:
                 if luks2.is_tpm2_enrolled and self.osd_fsid == luks2.osd_fsid:
                     self.pre_activate_tpm2(device)
         found = direct_report(self.devices)
 
-        holders = disk.get_block_device_holders()
+        filter_osd_id = self.osd_id
+        filter_osd_fsid = self.osd_fsid
+
         for osd_uuid, meta in found.items():
             realpath_device = os.path.realpath(meta['device'])
-            parent_device = holders.get(realpath_device)
-            if parent_device and any('ceph.cluster_fsid' in lv.lv_tags for lv in Device(parent_device).lvs):
+            if lvm_api.is_ceph_volume_lvm_prepared(realpath_device,
+                                                   lvm_prepare_lv_paths):
                 continue
             osd_id = meta['osd_id']
-            if self.osd_id is not None and str(osd_id) != str(self.osd_id):
+            if filter_osd_id is not None and str(osd_id) != str(filter_osd_id):
                 continue
-            if self.osd_fsid is not None and osd_uuid != self.osd_fsid:
+            if filter_osd_fsid is not None and osd_uuid != filter_osd_fsid:
                 continue
+            self.osd_id = str(osd_id)
+            self.osd_fsid = str(osd_uuid)
             self.block_device_path = meta.get('device')
             self.db_device_path = meta.get('device_db', '')
             self.wal_device_path = meta.get('device_wal', '')
             logger.info(f'Activating osd.{osd_id} uuid {osd_uuid} cluster {meta["ceph_fsid"]}')
-            self._activate(osd_id, osd_uuid)
+            self._activate()
             activated_any = True
 
         if not activated_any:

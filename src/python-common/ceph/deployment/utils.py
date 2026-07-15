@@ -1,6 +1,6 @@
 import ipaddress
 import socket
-from typing import Tuple, Optional, Any
+from typing import Tuple, Optional, Any, List
 from urllib.parse import urlparse
 from ceph.deployment.hostspec import SpecValidationError
 from numbers import Number
@@ -129,19 +129,27 @@ def verify_numeric(field: Any, field_name: str) -> None:
             raise SpecValidationError(f"{field_name} must be a number")
 
 
-def verify_non_negative_int(field: Any, field_name: str) -> None:
+def verify_int(field: Any, field_name: str) -> None:
     verify_numeric(field, field_name)
     if field is not None:
         if not isinstance(field, int) or isinstance(field, bool):
             raise SpecValidationError(f"{field_name} must be an integer")
+
+
+def verify_non_negative_int(field: Any, field_name: str) -> None:
+    verify_numeric(field, field_name)
+    if field is not None:
+        verify_int(field, field_name)
         if field < 0:
             raise SpecValidationError(f"{field_name} can't be negative")
 
 
 def verify_positive_int(field: Any, field_name: str) -> None:
     verify_non_negative_int(field, field_name)
-    if field is not None and field <= 0:
-        raise SpecValidationError(f"{field_name} must be greater than zero")
+    if field is not None:
+        verify_int(field, field_name)
+        if field <= 0:
+            raise SpecValidationError(f"{field_name} must be greater than zero")
 
 
 def verify_non_negative_number(field: Any, field_name: str) -> None:
@@ -168,3 +176,24 @@ def verify_enum(field: Any, field_name: str, allowed: list) -> None:
         if field.lower() not in allowed_lower:
             raise SpecValidationError(
                            f'Invalid {field_name}. Valid values are: {", ".join(allowed)}')
+
+
+def validate_port(port: Optional[int], field_name: str = 'port') -> None:
+    if port is not None and not (1 <= port <= 65535):
+        raise SpecValidationError(
+            f'Invalid {field_name}: {port}. Must be between 1 and 65535.'
+        )
+
+
+def validate_unique_ports(ports: List[int]) -> None:
+    """Raise SpecValidationError if any port is used more than once"""
+    if len(ports) != len(set(ports)):
+        raise SpecValidationError(
+            'Invalid port: Duplicate ports are not allowed'
+        )
+
+
+def verify_non_empty_string(field: Any, field_name: str) -> None:
+    # isinstance first so we never call .strip() on None or non-str
+    if not isinstance(field, str) or not field.strip():
+        raise SpecValidationError(f"Invalid {field_name}: Must be a non-empty string.")

@@ -169,7 +169,6 @@ private:
   Context *m_on_finish;
 public:
   bool persist_on_flush;
-  BlockGuardCell *cell;
   C_Gather *extent_ops_appending;
   Context *on_ops_appending;
   C_Gather *extent_ops_persist;

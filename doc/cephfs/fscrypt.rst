@@ -94,7 +94,7 @@ are available in this mode.
 Finally, Client 3, is using an older version of CephFS client and does not have
 fscrypt feature present. In this mode, users have the same view as before, but
 are able to do some data operations to encrypted files. This mode is not
-recommend and not supported.
+recommended and not supported.
 
 .. figure:: cephfs_fscrypt_multiclient.svg
 

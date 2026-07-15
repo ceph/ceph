@@ -23,7 +23,7 @@ Synopsis
 Description
 ===========
 
-:program:`ceph-volume` is a single purpose command line tool to deploy logical
+:program:`ceph-volume` is a single-purpose command line tool to deploy logical
 volumes as OSDs, trying to maintain a similar API to ``ceph-disk`` when
 preparing, activating, and creating OSDs.
 
@@ -70,7 +70,7 @@ lvm
 .. program:: ceph-volume lvm
 
 By making use of LVM tags, the ``lvm`` sub-command is able to store and later
-re-discover and query devices associated with OSDs so that they can later
+re-discover and query devices associated with OSDs so that they can later be
 activated.
 
 Subcommands:
@@ -251,7 +251,7 @@ For encrypting an OSD, the ``--dmcrypt`` flag must be added when preparing
 create
 ^^^^^^
 
-Wraps the two-step process to provision a new osd (calling ``prepare`` first
+Wraps the two-step process to provision a new OSD (calling ``prepare`` first
 and then ``activate``) into a single one. The reason to prefer ``prepare`` and
 then ``activate`` is to gradually introduce new OSDs into a cluster, and
 avoiding large amounts of data being rebalanced.
@@ -419,7 +419,7 @@ case it is attached to the OSD replacing one of the source devices. Following
 replacement rules apply (in the order of precedence, stop on the first match):
 
     - if source list has DB volume - target device replaces it.
-    - if source list has WAL volume - target device replace it.
+    - if source list has WAL volume - target device replaces it.
     - if source list has slow volume only - operation is not permitted,
       requires explicit allocation via new-db/new-wal command.
 
@@ -560,10 +560,10 @@ Availability
 ============
 
 :program:`ceph-volume` is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to
-the documentation at http://docs.ceph.com/ for more information.
+the documentation at https://docs.ceph.com/ for more information.
 
 
 See also
 ========
 
-:doc:`ceph-osd <ceph-osd>`\(8),
+:doc:`ceph-osd <ceph-osd>`\(8)

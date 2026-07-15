@@ -1,15 +1,26 @@
-import time
-
-from .helper import DashboardTestCase
+from .test_mgr_module import MgrModuleTestCase
 
 
-class FeedbackTest(DashboardTestCase):
+class FeedbackTest(MgrModuleTestCase):
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls._ceph_cmd(['mgr', 'module', 'enable', 'feedback'])
-        time.sleep(10)
+        cls._ceph_cmd(['mgr', 'module', 'enable', 'feedback', '--force'], wait=3)
+        # Point the feedback module at an unreachable host so the test
+        # does not depend on tracker.ceph.com being available. Any
+        # create_issue call will fail fast with a ConnectionError
+        # (a RequestException subclass) which the dashboard controller
+        # is expected to surface as HTTP 400.
+        cls._ceph_cmd(['config', 'set', 'mgr',
+                       'mgr/feedback/tracker_url',
+                       'invalid.example.invalid'])
+        cls._get(
+            '/api/mgr/module',
+            retries=5,
+            wait_func=lambda:  # pylint: disable=unnecessary-lambda
+            MgrModuleTestCase.wait_until_rest_api_accessible(cls)
+        )
 
     def test_create_api_key(self):
         self._post('/api/feedback/api_key', {'api_key': 'testapikey'}, version='0.1')

@@ -144,15 +144,26 @@ function(do_build_boost root_dir version)
   if(WITH_BOOST_VALGRIND)
     list(APPEND b2 valgrind=on)
   endif()
+  set(b2_targets headers stage)
+  set(b2_install_targets install)
   if(WITH_ASAN)
     list(APPEND b2 context-impl=ucontext)
+    # build the library with the BOOST_USE_ASAN consumers get from Boost::context,
+    # so fiber_activation_record has one layout (else heap-buffer-overflow)
+    list(APPEND b2 define=BOOST_USE_ASAN)
+    # `context-impl` is declared in libs/context/build/Jamfile.v2; the headers/stage
+    # and install targets never load it, so b2 aborts with `unknown feature
+    # "<context-impl>"`. Name the context project as a target so its Jamfile loads
+    # the feature first.
+    list(PREPEND b2_targets libs/context/build)
+    list(PREPEND b2_install_targets libs/context/build)
   endif()
   set(build_command
-    ${b2} headers stage
+    ${b2} ${b2_targets}
     #"--buildid=ceph" # changes lib names--can omit for static
     ${boost_features})
   set(install_command
-    ${b2} install)
+    ${b2} ${b2_install_targets})
   if(EXISTS "${PROJECT_SOURCE_DIR}/src/boost/bootstrap.sh")
     check_boost_version("${PROJECT_SOURCE_DIR}/src/boost" ${version})
     set(source_dir
@@ -223,6 +234,9 @@ macro(build_boost version)
     endif()
   endforeach()
   set(Boost_BUILD_COMPONENTS ${components})
+  # Remove the `headers` from the list of components to build as
+  # `headers` is an interface only target we add later.
+  list(REMOVE_ITEM Boost_BUILD_COMPONENTS headers)
   unset(components)
 
   foreach(c ${Boost_BUILD_COMPONENTS})
@@ -251,10 +265,8 @@ macro(build_boost version)
       set_target_properties(Boost::${c} PROPERTIES
         INTERFACE_COMPILE_DEFINITIONS "BOOST_USE_VALGRIND")
     endif()
-    if((c MATCHES "context") AND (WITH_ASAN))
-      set_target_properties(Boost::${c} PROPERTIES
-        INTERFACE_COMPILE_DEFINITIONS "BOOST_USE_ASAN;BOOST_USE_UCONTEXT")
-    endif()
+    # ASan's BOOST_USE_ASAN/BOOST_USE_UCONTEXT are defined tree-wide in the
+    # top-level CMakeLists.txt, not per-target.
     list(APPEND Boost_LIBRARIES ${Boost_${upper_c}_LIBRARY})
   endforeach()
   foreach(c ${Boost_BUILD_COMPONENTS})
@@ -278,13 +290,18 @@ macro(build_boost version)
   endforeach()
 
   # for header-only libraries
-  add_library(Boost::boost INTERFACE IMPORTED)
-  set_target_properties(Boost::boost PROPERTIES
+  add_library(Boost::headers INTERFACE IMPORTED)
+  set_target_properties(Boost::headers PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIRS}")
-  add_dependencies(Boost::boost Boost)
+  add_dependencies(Boost::headers Boost)
   find_package_handle_standard_args(Boost DEFAULT_MSG
     Boost_INCLUDE_DIRS Boost_LIBRARIES)
   mark_as_advanced(Boost_LIBRARIES BOOST_INCLUDE_DIRS)
+
+  add_library(Boost::boost INTERFACE IMPORTED)
+  set_property(TARGET Boost::boost APPEND PROPERTY INTERFACE_LINK_LIBRARIES
+    Boost::headers)
+ 
 endmacro()
 
 function(maybe_add_boost_dep target)
@@ -298,7 +315,7 @@ function(maybe_add_boost_dep target)
     get_filename_component(ext ${src} EXT)
     # assuming all cxx source files include boost header(s)
     if(ext MATCHES ".cc|.cpp|.cxx")
-      add_dependencies(${target} Boost::boost)
+      add_dependencies(${target} Boost::headers)
       return()
     endif()
   endforeach()

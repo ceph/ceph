@@ -9,7 +9,7 @@ e.g. NFS), there are some consequences that application authors may
 benefit from knowing about.
 
 The following sections describe some areas where distributed file systems
-may have noticeably different performance behaviours compared with
+may have noticeably different performance behaviors compared with
 local file systems.
 
 
@@ -45,7 +45,7 @@ fragmentation enables CephFS to handle it, it is always going to be
 less efficient than splitting your files into more modest-sized directories.
 
 Even standard userspace tools can become quite slow when operating on very
-large directories. For example, the default behaviour of ``ls``
+large directories. For example, the default behavior of ``ls``
 is to give an alphabetically ordered result, but ``readdir`` system
 calls do not give an ordered result (this is true in general, not just
 with CephFS).  So when you ``ls`` on a million file directory, it is

@@ -10,6 +10,7 @@
 #include "rgw_http_client_types.h"
 
 #include <atomic>
+#include <boost/url.hpp>
 
 using param_pair_t = std::pair<std::string, std::string>;
 using param_vec_t = std::vector<param_pair_t>;
@@ -19,6 +20,87 @@ void rgw_http_client_cleanup();
 
 struct rgw_http_req_data;
 class RGWHTTPManager;
+
+/**
+ * RGWEndpoint - Represents an HTTP endpoint with additional metdata such as connection routing.
+ *
+ * Wraps boost::urls::url for proper URL manipulation (set_path, set_query,
+ * set_host) instead of raw string concatenation.
+ *
+ * Carries a CURLOPT_CONNECT_TO override for IP-level routing.
+ *
+ * Fields:
+ *  - endpoint_url_lookup_id: The initially configured endpoint URL (immutable).
+ *                 Used as a lookup key in RGWRESTConn to find the ResolvedEndpoint
+ *                 for health tracking (marking IPs as up/down).
+ *  - url:         boost::urls::url for the request URL (mutable via set_path, etc.).
+ *  - connect_to:  libcurl CONNECT_TO string (format: "host:port:addr:port").
+ */
+struct RGWEndpoint {
+private:
+  std::string endpoint_url_lookup_id;
+  boost::urls::url url;
+  std::string connect_to;
+
+public:
+  RGWEndpoint() = default;
+
+  RGWEndpoint(const char* u) : RGWEndpoint(std::string(u)) {}
+
+  RGWEndpoint(const std::string& u) : endpoint_url_lookup_id(u) {
+    auto r = boost::urls::parse_uri(u);
+    if (r.has_value()) {
+      url = r.value();
+    }
+  }
+
+  RGWEndpoint(const std::string& u, const std::string& c)
+    : endpoint_url_lookup_id(u), connect_to(c) {
+    auto r = boost::urls::parse_uri(u);
+    if (r.has_value()) {
+      url = r.value();
+    }
+  }
+
+  void set_url(const std::string& u) {
+    auto r = boost::urls::parse_uri(u);
+    if (r.has_value()) {
+      url = r.value();
+    }
+    if (endpoint_url_lookup_id.empty()) {
+      endpoint_url_lookup_id = u;
+    }
+  }
+
+  std::string get_url() const { return std::string(url.buffer()); }
+  const std::string& get_endpoint_url_lookup_id() const { return endpoint_url_lookup_id; }
+
+  void set_path(const std::string& path) { url.set_encoded_path(path); }
+  void set_query(const std::string& q) {
+    if (q.empty()) return;
+    // strip leading '?' - if present, boost::urls adds it automatically
+    url.set_encoded_query(q[0] == '?' ? q.substr(1) : q);
+  }
+  void set_host(const std::string& h) { url.set_host(h); }
+
+  void add_trailing_slash() {
+    auto path = std::string(url.encoded_path());
+    if (path.empty() || path.back() != '/') {
+      path += '/';
+      url.set_encoded_path(path);
+    }
+  }
+
+  void set_connect_to(const std::string& c) { connect_to = c; }
+  const std::string& get_connect_to() const { return connect_to; }
+
+  friend std::ostream& operator<<(std::ostream& os, const RGWEndpoint& ep) {
+    os << "RGWEndpoint: url=" << ep.url.buffer()
+       << " endpoint_url_lookup_id=" << (ep.endpoint_url_lookup_id.empty() ? "<empty>" : ep.endpoint_url_lookup_id)
+       << " connect_to=" << (ep.connect_to.empty() ? "<empty>" : ep.connect_to);
+    return os;
+  }
+};
 
 class RGWHTTPClient : public RGWIOProvider,
                       public NoDoutPrefix
@@ -47,13 +129,11 @@ class RGWHTTPClient : public RGWIOProvider,
 
   std::atomic<unsigned> stopped { 0 };
 
-
 protected:
   CephContext *cct;
 
   std::string method;
-  std::string url_orig;
-  std::string url;
+  RGWEndpoint endpoint;
 
   std::string protocol;
   std::string host;
@@ -116,7 +196,7 @@ public:
   virtual ~RGWHTTPClient();
   explicit RGWHTTPClient(CephContext *cct,
                          const std::string& _method,
-                         const std::string& _url);
+                         const RGWEndpoint& _endpoint);
 
   std::ostream& gen_prefix(std::ostream& out) const override;
 
@@ -170,12 +250,16 @@ public:
 
   int get_req_retcode();
 
-  void set_url(const std::string& _url) {
-    url = _url;
+  const RGWEndpoint& get_endpoint() const {
+    return endpoint;
   }
 
-  const std::string& get_url_orig() const {
-    return url_orig;
+  void set_endpoint(const RGWEndpoint& _endpoint) {
+    endpoint = _endpoint;
+  }
+
+  void set_url(const std::string& _url) {
+    endpoint.set_url(_url);
   }
 
   void set_method(const std::string& _method) {
@@ -212,9 +296,9 @@ public:
 
   RGWHTTPHeadersCollector(CephContext * const cct,
                           const std::string& method,
-                          const std::string& url,
+                          const RGWEndpoint& endpoint,
                           const header_spec_t &relevant_headers)
-    : RGWHTTPClient(cct, method, url),
+    : RGWHTTPClient(cct, method, endpoint),
       relevant_headers(relevant_headers) {
   }
 
@@ -244,21 +328,21 @@ class RGWHTTPTransceiver : public RGWHTTPHeadersCollector {
 public:
   RGWHTTPTransceiver(CephContext * const cct,
                      const std::string& method,
-                     const std::string& url,
+                     const RGWEndpoint& endpoint,
                      bufferlist * const read_bl,
                      const header_spec_t intercept_headers = {})
-    : RGWHTTPHeadersCollector(cct, method, url, intercept_headers),
+    : RGWHTTPHeadersCollector(cct, method, endpoint, intercept_headers),
       read_bl(read_bl),
       post_data_index(0) {
   }
 
   RGWHTTPTransceiver(CephContext * const cct,
                      const std::string& method,
-                     const std::string& url,
+                     const RGWEndpoint& endpoint,
                      bufferlist * const read_bl,
                      const bool verify_ssl,
                      const header_spec_t intercept_headers = {})
-    : RGWHTTPHeadersCollector(cct, method, url, intercept_headers),
+    : RGWHTTPHeadersCollector(cct, method, endpoint, intercept_headers),
       read_bl(read_bl),
       post_data_index(0) {
     set_verify_ssl(verify_ssl);
@@ -307,6 +391,8 @@ class RGWHTTPManager {
   ceph::shared_mutex reqs_lock = ceph::make_shared_mutex("RGWHTTPManager::reqs_lock");
   std::map<uint64_t, rgw_http_req_data *> reqs;
   std::list<rgw_http_req_data *> unregistered_reqs;
+  ceph::mutex reqs_change_state_lock =
+    ceph::make_mutex("RGWHTTPManager::reqs_change_state_lock");
   std::list<set_state> reqs_change_state;
   std::map<uint64_t, rgw_http_req_data *> complete_reqs;
   int64_t num_reqs = 0;

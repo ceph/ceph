@@ -1,3 +1,4 @@
+@use './src/styles/defaults' as *;
 @use '@carbon/styles/scss/theme' as *;
 @use '@carbon/styles/scss/spacing' as *;
 @use '@carbon/type';
@@ -10,9 +11,23 @@
   padding: $spacing-05 $spacing-05 $spacing-03;
   background-color: $layer-01;
   position: sticky;
-  top: 0;
   z-index: 2;
+  top: var(--header-height);
   display: block;
+}
+
+.task-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--cds-spacing-02);
+}
+
+.task-progress {
+  @include type.type-style('label-01');
+
+  color: var(--cds-text-secondary);
+  text-align: right;
 }
 
 .notification-timestamp {
@@ -70,6 +85,10 @@
   align-items: flex-start;
   position: relative;
 
+  > cd-icon {
+    margin-top: -$spacing-03;
+  }
+
   .notification-close {
     position: absolute;
     right: 0;
@@ -105,9 +124,15 @@
   border-bottom: 1px solid $border-subtle-01;
 }
 
-:host {
+.notification-area {
   display: block;
   height: 100%;
-  overflow-y: auto;
   background-color: $layer-01;
+}
+
+.empty-body {
+  max-block-size: var(--panel-height);
+  min-block-size: var(--panel-height);
+  max-inline-size: var(--panel-max-width);
+  min-inline-size: var(--panel-min-width);
 }

@@ -1,0 +1,7 @@
+@use '@carbon/layout';
+
+.requirements-list {
+  list-style-type: disc;
+  padding-left: var(--cds-spacing-05);
+  margin-left: layout.$spacing-02;
+}

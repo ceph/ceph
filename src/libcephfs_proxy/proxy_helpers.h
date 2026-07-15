@@ -371,4 +371,6 @@ int32_t proxy_hash(uint8_t *hash, size_t size,
 int32_t proxy_hash_hex(char *digest, size_t size,
 		       int32_t (*feed)(void **, void *, int32_t), void *data);
 
+int32_t proxy_snprintf(char *buffer, int32_t size, const char *fmt, ...);
+
 #endif

@@ -1176,6 +1176,55 @@ TEST_F(BlueFS_wal, wal_v2_check)
   fs.umount();
 }
 
+TEST_F(BlueFS_wal, wal_v2_check_split_header)
+{
+  // Check if wal v2 envelope header is properly located
+  // when FileWrite'r buffer is exhausted.
+  //
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_min_flush_size", "65536");
+  conf.SetVal("bluefs_wal_envelope_mode", "true");
+  conf.SetVal("bluefs_alloc_size", "8192");
+  conf.ApplyChanges();
+
+  Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
+  ASSERT_EQ(0, fs.mount());
+
+  bufferlist content;
+  many_small_writes("db.wal", "wal1.log", content, 4076 + 4077, 4076, 4077);
+  fs.umount();
+  fs.mount();
+  bufferlist read_content;
+  many_small_reads("db.wal", "wal1.log", read_content, 4076 + 4077, 4076, 4077);
+  ASSERT_EQ(content, read_content);
+  fs.umount();
+}
+
+TEST_F(BlueFS_wal, wal_v2_check_split_header_small_alloc)
+{
+  // Check if wal v2 envelope header is properly located
+  // when FileWrite'r buffer is exhausted.
+  // Case for single 4K page buffer.
+  //
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_min_flush_size", "65536");
+  conf.SetVal("bluefs_wal_envelope_mode", "true");
+  conf.SetVal("bluefs_alloc_size", "4096");
+  conf.ApplyChanges();
+
+  Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
+  ASSERT_EQ(0, fs.mount());
+
+  bufferlist content;
+  many_small_writes("db.wal", "wal1.log", content, 4076 + 4077, 4076, 4077);
+  fs.umount();
+  fs.mount();
+  bufferlist read_content;
+  many_small_reads("db.wal", "wal1.log", read_content, 4076 + 4077, 4076, 4077);
+  ASSERT_EQ(content, read_content);
+  fs.umount();
+}
+
 TEST_F(BlueFS_wal, wal_v2_check_feature)
 {
   SKIP_JENKINS();
@@ -1253,10 +1302,30 @@ TEST_F(BlueFS_wal, wal_v2_simulate_crash)
   ConfSaver conf(g_ceph_context->_conf);
   conf.SetVal("bluefs_min_flush_size", "65536");
   conf.SetVal("bluefs_wal_envelope_mode", "true");
+  conf.SetVal("bluefs_check_volume_selector_on_mount", "true");
   conf.ApplyChanges();
 
-  Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
+  uint64_t wal_size = 1048576 * 64;
+  uint64_t db_size = 1048576 * 128;
+  uint64_t slow_size = 1048576 * 256;
+  Create(slow_size, db_size, wal_size);
+
+  auto new_vselector = [&]() {
+    return
+      new RocksDBBlueFSVolumeSelector(
+        wal_size * 95 / 100,
+        db_size * 95 / 100,
+        slow_size * 95 / 100,
+        16777216 * 64, //rocks_opts.write_buffer_size * rocks_opts.max_write_buffer_number
+        1073741824,    //rocks_opts.max_bytes_for_level_base,
+        8,             //rocks_opts.max_bytes_for_level_multiplier,
+        true /*use some extra*/);
+    };
+
+  BlueFSVolumeSelector *vselector = new_vselector();
+  fs.set_volume_selector(vselector);
   ASSERT_EQ(0, fs.mount());
+
   std::string dir = "dir";
   std::string file = "wal.log";
   int r = fs.mkdir(dir);
@@ -1264,14 +1333,94 @@ TEST_F(BlueFS_wal, wal_v2_simulate_crash)
   BlueFS::FileWriter *writer;
   ASSERT_EQ(0, fs.open_for_write(dir, file, &writer, false));
   ASSERT_NE(nullptr, writer);
+
   bufferlist content;
   many_small_writes(writer, content, 100);
   delete writer; //close without orderly shutdown, simulate failure
+
   fs.umount();
+
+  vselector = new_vselector();
+  fs.set_volume_selector(vselector);
   fs.mount();
+
   bufferlist read_content;
   many_small_reads(dir, file, read_content, 100);
   ASSERT_EQ(content, read_content);
+
+  fs.umount();
+}
+
+TEST_F(BlueFS_wal, wal_v2_repro_74765)
+{
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_min_flush_size", "65536");
+  conf.SetVal("bluefs_wal_envelope_mode", "true");
+  conf.ApplyChanges();
+
+  uint64_t wal_size = 1048576 * 64;
+  uint64_t db_size = 1048576 * 128;
+  uint64_t slow_size = 1048576 * 256;
+  Create(slow_size, db_size, wal_size);
+
+  auto new_vselector = [&]() {
+    return
+      new RocksDBBlueFSVolumeSelector(
+        wal_size * 95 / 100,
+        db_size * 95 / 100,
+        slow_size * 95 / 100,
+        16777216 * 64, //rocks_opts.write_buffer_size * rocks_opts.max_write_buffer_number
+        1073741824,    //rocks_opts.max_bytes_for_level_base,
+        8,             //rocks_opts.max_bytes_for_level_multiplier,
+        true /*use some extra*/);
+    };
+
+  BlueFSVolumeSelector *vselector = new_vselector();
+  fs.set_volume_selector(vselector);
+  ASSERT_EQ(0, fs.mount());
+
+  std::string dir = "dir";
+  std::string file = "wal.log";
+  std::string file2 = "wal2.log";
+  int r = fs.mkdir(dir);
+  ASSERT_TRUE(r == 0 || r == -EEXIST);
+  BlueFS::FileWriter *writer;
+  ASSERT_EQ(0, fs.open_for_write(dir, file, &writer, false));
+  ASSERT_NE(nullptr, writer);
+
+  BlueFS::FileWriter* writer2;
+  ASSERT_EQ(0, fs.open_for_write(dir, file2, &writer2, false));
+  ASSERT_NE(nullptr, writer2);
+
+  bufferlist content;
+  many_small_writes(writer, content, 100);
+  delete writer; //close without orderly shutdown, simulate failure
+  bufferlist content2;
+  many_small_writes(writer2, content2, 100);
+  delete writer2; //close without orderly shutdown, simulate failure
+
+  fs.umount();
+
+  vselector = new_vselector();
+  fs.set_volume_selector(vselector);
+  fs.mount();
+
+  bufferlist read_content;
+  many_small_reads(dir, file, read_content, 100);
+  ASSERT_EQ(content, read_content);
+
+  bufferlist read_content2;
+  many_small_reads(dir, file2, read_content2, 100);
+  ASSERT_EQ(content2, read_content2);
+
+  ASSERT_EQ(0, fs.unlink(dir, file));
+
+  fs.umount();
+
+  vselector = new_vselector();
+  fs.set_volume_selector(vselector);
+  fs.mount();
+  ASSERT_EQ(0, fs.unlink(dir, file2));
   fs.umount();
 }
 
@@ -2360,6 +2509,156 @@ TEST(BlueFS, test_69481_truncate_asserts) {
   fs.close_writer(f);
 
   fs.umount();
+}
+
+TEST(FileWriter, get_flush_buffer) {
+  size_t block_size = 32;
+  BlueFS::FileRef file = ceph::make_ref<BlueFS::File>();
+  BlueFS::FileWriter fw(file, block_size);
+
+  bufferlist bl;
+
+  ASSERT_EQ(fw.get_flush_offset(), 0);
+  ASSERT_EQ(fw.get_pos(), 0);
+  ASSERT_EQ(fw.get_buffer_length(), 0);
+
+  // append and flush full page
+  bufferlist bl1;
+  bl1.append(std::string(block_size, 'a'));
+  bl = bl1;
+  fw.append(bl1);
+  ASSERT_EQ(fw.get_flush_buffer(g_ceph_context, block_size), bl);
+
+  ASSERT_EQ(fw.get_flush_offset(), block_size);
+  ASSERT_EQ(fw.get_pos(), block_size);
+  ASSERT_EQ(fw.get_buffer_length(), 0);
+
+  // append and flush full page once again
+  bufferlist bl2;
+  bl2.append(std::string(block_size, 'b'));
+  bl = bl2;
+  fw.append(bl2);
+  ASSERT_EQ(fw.get_flush_buffer(g_ceph_context, block_size * 2), bl);
+
+  ASSERT_EQ(fw.get_flush_offset(), block_size * 2);
+  ASSERT_EQ(fw.get_pos(), block_size * 2);
+  ASSERT_EQ(fw.get_buffer_length(), 0);
+
+  // append full page and flush it in two pieces
+  bufferlist bl3;
+  bl3.append(std::string(block_size, 'c'));
+  bl = bl3;
+
+  fw.append(bl3);
+  ASSERT_EQ(fw.get_flush_buffer(g_ceph_context, block_size * 2 + 1), bl);
+
+  ASSERT_EQ(fw.get_flush_offset(), block_size * 3); // ?????
+  ASSERT_EQ(fw.get_pos(), block_size * 2 + 1);
+  ASSERT_EQ(fw.get_buffer_length(), block_size - 1);
+
+  bl.clear();
+  ASSERT_EQ(fw.get_flush_buffer(g_ceph_context, block_size * 3), bl);
+
+  ASSERT_EQ(fw.get_flush_offset(), block_size * 3);
+  ASSERT_EQ(fw.get_pos(), block_size * 3);
+  ASSERT_EQ(fw.get_buffer_length(), 0);
+
+  // append half page, flush 1 byte,
+  // append the remaining half and flush till the end
+  bufferlist bl4;
+  bl4.append(std::string(block_size / 2, 'd'));
+  bl = bl4;
+  bl.append_zero(block_size / 2);
+
+  fw.append(bl4);
+  ASSERT_EQ(fw.get_flush_buffer(g_ceph_context, block_size * 3 + 1), bl);
+
+  ASSERT_EQ(fw.get_flush_offset(), block_size * 3);
+  ASSERT_EQ(fw.get_pos(), block_size * 3 + 1);
+  ASSERT_EQ(fw.get_buffer_length(), block_size /2  - 1);
+
+  bl4.append(std::string(block_size / 2, 'd'));
+  bl.clear();
+  bl.append(std::string(block_size, 'd'));
+
+  fw.append(bl4);
+  ASSERT_EQ(fw.get_flush_buffer(g_ceph_context, block_size * 4), bl);
+
+  ASSERT_EQ(fw.get_flush_offset(), block_size * 4);
+  ASSERT_EQ(fw.get_pos(), block_size * 4);
+  ASSERT_EQ(fw.get_buffer_length(), 0);
+
+  // append 10 bytes, flush 2 bytes,
+  // append 12 bytes, flush 2 bytes,
+  // flush 18 bytes
+  // append 12 bytes, flush 9 bytes
+  // flush 2 bytes
+  // flush 1 bytes
+
+  bufferlist bl5;
+  bl5.append(std::string(10, 'e'));
+  bl = bl5;
+  bl.append_zero(block_size - bl5.length());
+
+  fw.append(bl5);
+  ASSERT_EQ(fw.get_flush_buffer(g_ceph_context, block_size * 4 + 2), bl);
+
+  ASSERT_EQ(fw.get_flush_offset(), block_size * 4);
+  ASSERT_EQ(fw.get_pos(), block_size * 4 + 2);
+  ASSERT_EQ(fw.get_buffer_length(), 8);
+
+  bl5.append(std::string(12, 'f'));
+  bl.clear();
+  bl.append(std::string(10, 'e'));
+  bl.append(std::string(12, 'f'));
+  bl.append_zero(block_size - bl.length());
+
+  fw.append(bl5);
+  ASSERT_EQ(fw.get_flush_buffer(g_ceph_context, block_size * 4 + 4), bl);
+
+  ASSERT_EQ(fw.get_flush_offset(), block_size * 4);
+  ASSERT_EQ(fw.get_pos(), block_size * 4 + 4);
+  ASSERT_EQ(fw.get_buffer_length(), 18);
+
+  bl.clear();
+  bl.append(std::string(10, 'e'));
+  bl.append(std::string(12, 'f'));
+  bl.append_zero(block_size - bl.length());
+  ASSERT_EQ(fw.get_flush_buffer(g_ceph_context, block_size * 4 + 22), bl);
+
+  ASSERT_EQ(fw.get_flush_offset(), block_size * 4);
+  ASSERT_EQ(fw.get_pos(), block_size * 4 + 22);
+  ASSERT_EQ(fw.get_buffer_length(), 0);
+
+  bl5.append(std::string(12, 'g'));
+  fw.append(bl5);
+
+  bl.clear();
+  bl.append(std::string(10, 'e'));
+  bl.append(std::string(12, 'f'));
+  bl.append(std::string(10, 'g'));
+
+  ASSERT_EQ(fw.get_flush_buffer(g_ceph_context, block_size * 5 - 1), bl);
+
+  ASSERT_EQ(fw.get_flush_offset(), block_size * 5);
+  ASSERT_EQ(fw.get_pos(), block_size * 5 - 1);
+  ASSERT_EQ(fw.get_buffer_length(), 3);
+
+  bl.clear();
+  bl.append(std::string(2, 'g'));
+  bl.append_zero(block_size - 2);
+
+  ASSERT_EQ(fw.get_flush_buffer(g_ceph_context, block_size * 5 + 1), bl);
+
+  ASSERT_EQ(fw.get_flush_offset(), block_size * 5);
+  ASSERT_EQ(fw.get_pos(), block_size * 5 + 1);
+  ASSERT_EQ(fw.get_buffer_length(), 1);
+
+  ASSERT_EQ(fw.get_flush_buffer(g_ceph_context, block_size * 5 + 2), bl);
+
+  ASSERT_EQ(fw.get_flush_offset(), block_size * 5);
+  ASSERT_EQ(fw.get_pos(), block_size * 5 + 2);
+  ASSERT_EQ(fw.get_buffer_length(), 0);
 }
 
 TEST(bluefs_locked_extents_t, basics) {

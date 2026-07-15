@@ -93,7 +93,7 @@ options:
   level: advanced
   desc: Period in seconds from last beacon to monitor marking a  NVMeoF gateway as
     failed
-  default: 10
+  default: 7
   services:
   - mon
 - name: mon_nvmeofgw_skip_failovers_interval
@@ -125,6 +125,13 @@ options:
   level: advanced
   desc: Issue NVMEOF_GATEWAY_DELETING health warning after this amount of time has elapsed 
   default: 15_min
+  services:
+  - mon
+- name: mon_nvmeofgw_failback_delay
+  type: secs
+  level: advanced
+  desc: Period in seconds to delay HA failback of the gateway
+  default: 0
   services:
   - mon
 - name: mon_nvmeofgw_wrong_map_ignore_sec
@@ -634,6 +641,14 @@ options:
   default: true
   services:
   - mon
+- name: mon_warn_on_colocated_monitors
+  type: bool
+  level: advanced
+  desc: Issue MON_COLOCATED health warning if two or
+    more Monitors have the same IP address
+  default: false
+  services:
+  - mon
 - name: mon_stretch_cluster_recovery_ratio
   type: float
   level: advanced
@@ -668,6 +683,14 @@ options:
   - mon
   min: 2
   max: 4
+- name: mon_stretch_max_bucket_weight_delta
+  type: float
+  level: dev
+  desc: Max difference allowed among CRUSH bucket weights when in stretch mode.
+    The value is a percentage expressed as a real number between 0.0 and 1.0.
+  default: 0.1
+  services:
+  - mon
 - name: mon_clock_drift_allowed
   type: float
   level: advanced
@@ -1153,6 +1176,74 @@ options:
   flags:
   - no_mon_update
   with_legacy: true
+- name: mon_backup_path
+  type: str
+  level: advanced
+  desc: Path to Monitor database backups
+  fmt_desc: The Monitor's backup location.
+  default: /var/backups/ceph/mon/$cluster-$id
+  services:
+  - mon
+  flags:
+  - runtime
+- name: mon_backup_min_avail
+  type: int
+  level: advanced
+  desc: Only capture backups if at least this percentage of the target filesystem is free
+  default: 10
+  min: 0
+  max: 100
+  services:
+  - mon
+  flags:
+  - runtime
+- name: mon_backup_keep_last
+  type: uint
+  level: advanced
+  desc: Keep the last N backups
+  fmt_desc: Keep the last N backups of the Monitor database.
+  default: 6
+  services:
+  - mon
+  flags:
+  - runtime
+- name: mon_backup_keep_hourly
+  type: uint
+  level: advanced
+  desc: Number of hourly backups
+  default: 5
+  services:
+  - mon
+  flags:
+  - runtime
+- name: mon_backup_keep_daily
+  type: uint
+  level: advanced
+  desc: Number of daily backups
+  fmt_desc: Keep one backup per day, for the specified number of days.
+  default: 7
+  services:
+  - mon
+  flags:
+  - runtime
+- name: mon_backup_interval
+  type: secs
+  level: advanced
+  desc: Automatic backups every N seconds (0 disables)
+  default: 0
+  services:
+  - mon
+  flags:
+  - runtime
+- name: mon_backup_cleanup_interval
+  type: secs
+  level: advanced
+  desc: Trigger backup cleanup every N seconds (0 disables)
+  default: 0
+  services:
+  - mon
+  flags:
+  - runtime
 - name: mon_rocksdb_options
   type: str
   level: advanced
@@ -1415,7 +1506,7 @@ options:
   type: secs
   level: advanced
   desc: Period in seconds of nvmeof gateway beacon messages to monitor
-  default: 2
+  default: 1
   services:
   - mon
 - name: enable_availability_tracking

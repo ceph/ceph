@@ -113,7 +113,7 @@ export class ApiInterceptorService implements HttpInterceptor {
                 state: {
                   message: $localize`Sorry, you don’t have permission to view this page or resource.`,
                   header: $localize`Access Denied`,
-                  icon: 'fa fa-lock',
+                  icon: 'locked',
                   source: 'forbidden'
                 }
               });

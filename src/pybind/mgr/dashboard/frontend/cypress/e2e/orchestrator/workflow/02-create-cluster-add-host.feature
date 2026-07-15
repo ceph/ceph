@@ -6,8 +6,8 @@ Feature: Cluster expansion host addition
 
     Background: Cluster expansion wizard
         Given I am logged in
-        And I am on the "welcome" page
-        And I click on "Expand Cluster" button
+        And I am on the "onboarding" page
+        And I click on "Add Storage" button
 
     Scenario Outline: Add hosts
         Given I am on the "Add Hosts" section

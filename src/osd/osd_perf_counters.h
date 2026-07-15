@@ -257,6 +257,15 @@ enum {
   rs_getmissing_latency,
   rs_waitupthru_latency,
   rs_notrecovering_latency,
+  rs_process_log_stats_invalidated,
+  rs_pg_split_parent_stats_invalidated,
+  rs_pg_split_child_stats_invalidated,
+  rs_update_stats_invalidated,
+  rs_append_log_stats_invalidated,
+  rs_merge_log_stats_invalidated,
+  rs_pg_rebuild_duration,
+  rs_pg_rebuild_max_secs,
+  rs_pg_rebuild_min_secs,
   rs_last,
 };
 
@@ -276,8 +285,6 @@ enum {
   scrbcnt_chunks_busy,
   /// # waiting on object events
   scrbcnt_blocked,
-  /// # write blocked by the scrub
-  scrbcnt_write_blocked,
 
   scrbcnt_last,
 };

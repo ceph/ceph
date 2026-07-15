@@ -497,7 +497,8 @@ function test_run_mon() {
     run_osd $dir 2 || return 1
     create_rbd_pool || return 1
     ceph osd dump | grep "pool 1 'rbd'" || return 1
-    local size=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path mon.a) \
+    local mona=$(get_asok_path mon.a)
+    local size=$(CEPH_ARGS='' ceph --format=json daemon $mona \
         config get osd_pool_default_size)
     test "$size" = '{"osd_pool_default_size":"3"}' || return 1
 
@@ -507,14 +508,14 @@ function test_run_mon() {
     kill_daemons $dir || return 1
 
     run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
-    local size=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path mon.a) \
+    local size=$(CEPH_ARGS='' ceph --format=json daemon $mona \
         config get osd_pool_default_size)
     test "$size" = '{"osd_pool_default_size":"1"}' || return 1
     kill_daemons $dir || return 1
 
     CEPH_ARGS="$CEPH_ARGS --osd_pool_default_size=2" \
         run_mon $dir a || return 1
-    local size=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path mon.a) \
+    local size=$(CEPH_ARGS='' ceph --format=json daemon $mona \
         config get osd_pool_default_size)
     test "$size" = '{"osd_pool_default_size":"2"}' || return 1
     kill_daemons $dir || return 1
@@ -674,6 +675,106 @@ EOF
     fi
     wait_for_osd up $id || return 1
 
+}
+
+#######################################################################
+
+##
+# Create (prepare) and run (activate) a crimson osd by the name osd.**id**
+# with data in **dir**/**id**.
+#
+# The remaining arguments are passed verbatim to crimson-osd.
+#
+# Two mandatory arguments must be provided: --fsid and --mon-host
+# Instead of adding them to every call to run_crimson_osd, they can be
+# set in the CEPH_ARGS environment variable to be read implicitly by
+# every ceph command.
+#
+# Crimson standalone tests also require msgr2 and require setting either
+# crimson_cpu_num or crimson_cpu_set.
+#
+# @param dir path name of the environment
+# @param id osd identifier
+# @param ... can be any option valid for crimson-osd
+# @return 0 on success, 1 on error
+#
+function run_crimson_osd() {
+    local dir=$1
+    shift
+    local id=$1
+    shift
+    local osd_data=$dir/$id
+
+    local ceph_args="$CEPH_ARGS"
+    ceph_args+=" --osd-failsafe-full-ratio=.99"
+    ceph_args+=" --osd-journal-size=100"
+    ceph_args+=" --osd-scrub-load-threshold=2000"
+    ceph_args+=" --osd-data=$osd_data"
+    ceph_args+=" --osd-journal=${osd_data}/journal"
+    ceph_args+=" --chdir="
+    ceph_args+=$EXTRA_OPTS
+    ceph_args+=" --run-dir=$dir"
+    ceph_args+=" --admin-socket=$(get_asok_path)"
+    ceph_args+=" --log-file=$dir/\$name.log"
+    ceph_args+=" --pid-file=$dir/\$name.pid"
+    ceph_args+=" --osd-max-object-name-len=460"
+    ceph_args+=" --osd-max-object-namespace-len=64"
+    # Crimson requires msgr2
+    ceph_args+=" --ms-bind-msgr2=true"
+    ceph_args+=" --ms-bind-msgr1=false"
+    ceph_args+=" "
+    ceph_args+="$@"
+    mkdir -p $osd_data
+
+    # Find crimson-osd binary
+    local crimson_osd=""
+    if [ -f "./bin/crimson-osd" ]; then
+        crimson_osd="./bin/crimson-osd"
+    elif [ -f "$CEPH_ROOT/build/bin/crimson-osd" ]; then
+        crimson_osd="$CEPH_ROOT/build/bin/crimson-osd"
+    else
+        echo "ERROR: crimson-osd binary not found"
+        return 1
+    fi
+
+    # Enable crimson in the cluster
+    ceph config set global enable_experimental_unrecoverable_data_corrupting_features crimson || return 1
+    ceph osd set-allow-crimson --yes-i-really-mean-it || return 1
+
+    # Standalone tests do not set crimson_cpu_set/crimson_cpu_num (vstart.sh does).
+    # Without this, crimson-osd aborts in get_early_config.
+    ceph config set osd.$id crimson_cpu_num 1 || return 1
+
+    local uuid=`uuidgen`
+    echo "add crimson osd$id $uuid"
+    OSD_SECRET=$(ceph-authtool --gen-print-key)
+    echo "{\"cephx_secret\": \"$OSD_SECRET\"}" > $osd_data/new.json
+    ceph osd new $uuid -i $osd_data/new.json
+    rm $osd_data/new.json
+
+    # Use crimson-osd for mkfs (not ceph-osd!)
+    echo "Running crimson-osd mkfs..."
+    if ! $crimson_osd -i $id $ceph_args --mkfs --key $OSD_SECRET --osd-uuid $uuid 2>&1; then
+        echo "ERROR: crimson-osd --mkfs failed"
+        return 1
+    fi
+
+    local key_fn=$osd_data/keyring
+    cat > $key_fn<<EOF
+[osd.$id]
+key = $OSD_SECRET
+EOF
+    echo adding osd$id key to auth repository
+    ceph -i "$key_fn" auth add osd.$id osd "allow *" mon "allow profile osd" mgr "allow profile osd"
+
+    echo "start crimson osd.$id"
+    $crimson_osd -i $id $ceph_args &
+
+    # If noup is set, then can't wait for this osd
+    if ceph osd dump --format=json | jq '.flags_set[]' | grep -q '"noup"' ; then
+      return 0
+    fi
+    wait_for_osd up $id || return 1
 }
 
 function run_osd_filestore() {
@@ -905,7 +1006,8 @@ function test_activate_osd_after_mark_down() {
     run_mgr $dir x || return 1
 
     run_osd $dir 0 || return 1
-    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+    local osd0=$(get_asok_path osd.0)
+    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $osd0 \
         config get osd_max_backfills)
     echo "$backfills" | grep --quiet 'osd_max_backfills' || return 1
 
@@ -914,7 +1016,7 @@ function test_activate_osd_after_mark_down() {
     wait_for_osd down 0 || return 1
 
     activate_osd $dir 0 --osd-max-backfills 20 || return 1
-    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $osd0 \
         config get osd_max_backfills)
     test "$backfills" = '{"osd_max_backfills":"20"}' || return 1
 
@@ -929,13 +1031,14 @@ function test_activate_osd_skip_benchmark() {
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
 
+    local osd0=$(get_asok_path osd.0)
     # Skip the osd benchmark during first osd bring-up.
     run_osd $dir 0 --osd-op-queue=mclock_scheduler \
         --osd-mclock-skip-benchmark=true || return 1
     local max_iops_hdd_def=$(CEPH_ARGS='' ceph --format=json daemon \
-        $(get_asok_path osd.0) config get osd_mclock_max_capacity_iops_hdd)
+        $osd0 config get osd_mclock_max_capacity_iops_hdd)
     local max_iops_ssd_def=$(CEPH_ARGS='' ceph --format=json daemon \
-        $(get_asok_path osd.0) config get osd_mclock_max_capacity_iops_ssd)
+        $osd0 config get osd_mclock_max_capacity_iops_ssd)
 
     kill_daemons $dir TERM osd || return 1
     ceph osd down 0 || return 1
@@ -946,9 +1049,9 @@ function test_activate_osd_skip_benchmark() {
     activate_osd $dir 0 --osd-op-queue=mclock_scheduler \
         --osd-mclock-skip-benchmark=true || return 1
     local max_iops_hdd_after_boot=$(CEPH_ARGS='' ceph --format=json daemon \
-        $(get_asok_path osd.0) config get osd_mclock_max_capacity_iops_hdd)
+        $osd0 config get osd_mclock_max_capacity_iops_hdd)
     local max_iops_ssd_after_boot=$(CEPH_ARGS='' ceph --format=json daemon \
-        $(get_asok_path osd.0) config get osd_mclock_max_capacity_iops_ssd)
+        $osd0 config get osd_mclock_max_capacity_iops_ssd)
 
     test "$max_iops_hdd_def" = "$max_iops_hdd_after_boot" || return 1
     test "$max_iops_ssd_def" = "$max_iops_ssd_after_boot" || return 1
@@ -1117,8 +1220,9 @@ function get_config() {
     local id=$2
     local config=$3
 
+    local daemon_asok=$(get_asok_path $daemon.$id)
     CEPH_ARGS='' \
-        ceph --format json daemon $(get_asok_path $daemon.$id) \
+        ceph --format json daemon $daemon_asok \
         config get $config 2> /dev/null | \
         jq -r ".$config"
 }
@@ -1154,7 +1258,8 @@ function set_config() {
     local config=$3
     local value=$4
 
-    test $(env CEPH_ARGS='' ceph --format json daemon $(get_asok_path $daemon.$id) \
+    local daemon_asok=$(get_asok_path $daemon.$id)
+    test $(env CEPH_ARGS='' ceph --format json daemon $daemon_asok \
                config set $config $value 2> /dev/null | \
            jq 'has("success")') == true
 }
@@ -1570,8 +1675,9 @@ function test_is_clean() {
 #
 function is_pg_clean() {
     local pgid=$1
+    local timeout=${2:-$WAIT_FOR_CLEAN_TIMEOUT}
     local pg_state
-    pg_state=$(ceph pg $pgid query 2>/dev/null | jq -r ".state ")
+    pg_state=$(timeout $timeout ceph pg $pgid query 2>/dev/null | jq -r ".state ")
     [[ "$pg_state" == "active+clean"* ]]
 }
 
@@ -1707,7 +1813,7 @@ function wait_for_pg_clean() {
 
     while true ; do
         echo "#---------- $pgid loop $loop"
-        is_pg_clean $pg_id && break
+        is_pg_clean $pg_id $WAIT_FOR_CLEAN_TIMEOUT && break
         if (( $loop >= ${#delays[*]} )) ; then
             ceph report
             echo "PG $pg_id is not clean after $loop iterations"
@@ -1717,6 +1823,35 @@ function wait_for_pg_clean() {
         loop+=1
     done
     return 0
+}
+
+##
+# Wait for PG data to be available from pg dump
+# Usage: wait_for_pg_data <jq_expression> [timeout]
+# Example: wait_for_pg_data '.pg_stats[0].up[]' 30
+#
+# @param jq_expr jq expression to extract data from pg dump
+# @param timeout timeout in seconds (default: 30)
+# @return 0 on success, 1 on timeout
+#
+function wait_for_pg_data() {
+    local jq_expr="$1"
+    local timeout=${2:-30}
+    local count=0
+    
+    while true; do
+        local result=$(ceph pg dump pgs --format=json 2>/dev/null | jq -r "$jq_expr" 2>/dev/null)
+        if [ -n "$result" ] && [ "$result" != "null" ]; then
+            echo "$result"
+            return 0
+        fi
+        sleep 1
+        count=$((count + 1))
+        if [ $count -gt $timeout ]; then
+            echo "ERROR: Timeout waiting for PG data: $jq_expr" >&2
+            return 1
+        fi
+    done
 }
 
 ##
@@ -2498,7 +2633,8 @@ function inject_eio() {
     type=$(cat $dir/$osd_id/type)
     set_config osd $osd_id ${type}_debug_inject_read_err true || return 1
     local loop=0
-    while ( CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.$osd_id) \
+    local osd_asok=$(get_asok_path osd.$osd_id)
+    while ( CEPH_ARGS='' ceph --admin-daemon $osd_asok \
              inject${which}err $poolname $objname $shard_id | grep -q Invalid ); do
         loop=$(expr $loop + 1)
         if [ $loop = "10" ]; then

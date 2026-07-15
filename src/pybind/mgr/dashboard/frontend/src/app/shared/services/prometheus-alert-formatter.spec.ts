@@ -1,8 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
-import { ToastrModule } from 'ngx-toastr';
-
 import { configureTestBed, PrometheusHelper } from '~/testing/unit-test-helper';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';
@@ -17,7 +15,7 @@ describe('PrometheusAlertFormatter', () => {
   let prometheus: PrometheusHelper;
 
   configureTestBed({
-    imports: [ToastrModule.forRoot(), SharedModule, HttpClientTestingModule],
+    imports: [SharedModule, HttpClientTestingModule],
     providers: [PrometheusAlertFormatter]
   });
 
@@ -54,7 +52,12 @@ describe('PrometheusAlertFormatter', () => {
           description: 'Something is active',
           url: 'http://Something',
           fingerprint: 'Something',
-          severity: 'someSeverity'
+          labels: {
+            alertname: 'Something',
+            instance: 'someInstance',
+            job: 'someJob',
+            severity: 'someSeverity'
+          }
         } as PrometheusCustomAlert
       ]);
     });
@@ -69,7 +72,9 @@ describe('PrometheusAlertFormatter', () => {
           name: 'Something',
           description: 'Something is firing',
           url: 'http://Something',
-          severity: undefined
+          labels: {
+            alertname: 'Something'
+          }
         } as PrometheusCustomAlert
       ]);
     });
@@ -82,18 +87,36 @@ describe('PrometheusAlertFormatter', () => {
       description: 'Some alert is active',
       url: 'http://some-alert',
       fingerprint: '42',
-      severity: 'critical'
+      labels: {
+        alertname: 'Some alert',
+        instance: 'someInstance',
+        job: 'someJob',
+        severity: 'someSeverity'
+      }
     };
-    expect(service.convertAlertToNotification(alert)).toEqual(
-      new CdNotificationConfig(
-        NotificationType.error,
-        'Some alert (active)',
-        'Some alert is active <a href="http://some-alert" target="_blank">' +
-          '<svg cdsIcon="analytics" size="16" ></svg></a>',
-        undefined,
-        'Prometheus'
-      )
+
+    const expected = new CdNotificationConfig(
+      NotificationType.error,
+      'Some alert (active)',
+      'Some alert is active <a href="http://some-alert" target="_blank">' +
+        '<svg cdsIcon="analytics" size="16" ></svg></a>',
+      undefined,
+      'Prometheus'
     );
+
+    // formatter adds metadata
+    expected['prometheusAlert'] = {
+      alertName: 'Some alert',
+      status: 'active',
+      severity: 'someSeverity',
+      instance: 'someInstance',
+      job: 'someJob',
+      description: 'Some alert is active',
+      sourceUrl: 'http://some-alert',
+      fingerprint: '42'
+    };
+
+    expect(service.convertAlertToNotification(alert)).toEqual(expected);
   });
 
   it('converts warning alert into warning notification', () => {
@@ -103,17 +126,34 @@ describe('PrometheusAlertFormatter', () => {
       description: 'Warning alert is active',
       url: 'http://warning-alert',
       fingerprint: '43',
-      severity: 'warning'
+      labels: {
+        alertname: 'Warning alert',
+        instance: 'someInstance',
+        job: 'someJob',
+        severity: 'warning'
+      }
     };
-    expect(service.convertAlertToNotification(alert)).toEqual(
-      new CdNotificationConfig(
-        NotificationType.warning,
-        'Warning alert (active)',
-        'Warning alert is active <a href="http://warning-alert" target="_blank">' +
-          '<svg cdsIcon="analytics" size="16" ></svg></a>',
-        undefined,
-        'Prometheus'
-      )
+
+    const expected = new CdNotificationConfig(
+      NotificationType.warning,
+      'Warning alert (active)',
+      'Warning alert is active <a href="http://warning-alert" target="_blank">' +
+        '<svg cdsIcon="analytics" size="16" ></svg></a>',
+      undefined,
+      'Prometheus'
     );
+
+    expected['prometheusAlert'] = {
+      alertName: 'Warning alert',
+      status: 'active',
+      severity: 'warning',
+      instance: 'someInstance',
+      job: 'someJob',
+      description: 'Warning alert is active',
+      sourceUrl: 'http://warning-alert',
+      fingerprint: '43'
+    };
+
+    expect(service.convertAlertToNotification(alert)).toEqual(expected);
   });
 });

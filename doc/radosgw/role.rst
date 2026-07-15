@@ -1,3 +1,5 @@
+.. _radosgw-role:
+
 ======
  Role
 ======
@@ -17,7 +19,7 @@ Create a Role
 
 To create a role, run a command of the following form::
 
-	radosgw-admin role create --role-name={role-name} [--path=="{path to the role}"] [--assume-role-policy-doc={trust-policy-document}]
+	radosgw-admin role create --role-name={role-name} [--path="{path to the role}"] [--assume-role-policy-doc={trust-policy-document}]
 
 Request Parameters
 ~~~~~~~~~~~~~~~~~~
@@ -29,7 +31,7 @@ Request Parameters
 
 ``path``
 
-:Description: Path to the role. The default value is a slash(``/``).
+:Description: Path to the role. The default value is a slash (``/``).
 :Type: String
 
 ``assume-role-policy-doc``

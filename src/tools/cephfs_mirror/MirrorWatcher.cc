@@ -91,8 +91,10 @@ void MirrorWatcher::handle_rewatch_complete(int r) {
 
   if (r == -EBLOCKLISTED) {
     dout(0) << ": client blocklisted" <<dendl;
-    std::scoped_lock locker(m_lock);
-    m_blocklisted = true;
+    {
+      std::scoped_lock locker(m_lock);
+      m_blocklisted = true;
+    }
     m_elistener.set_blocklisted_ts();
   } else if (r == -ENOENT) {
     derr << ": mirroring object deleted" << dendl;

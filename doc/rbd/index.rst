@@ -1,3 +1,5 @@
+.. _ceph_block_device:
+
 ===================
  Ceph Block Device
 ===================

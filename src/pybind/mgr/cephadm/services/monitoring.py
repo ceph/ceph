@@ -2,7 +2,6 @@ import errno
 import logging
 import os
 from typing import List, Any, Tuple, Dict, Optional, cast, TYPE_CHECKING
-import ipaddress
 import time
 import requests
 
@@ -14,7 +13,12 @@ from cephadm.tlsobject_types import TLSCredentials
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import AlertManagerSpec, GrafanaSpec, ServiceSpec, \
     SNMPGatewaySpec, PrometheusSpec, MgmtGatewaySpec
-from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_urls
+from cephadm.services.cephadmservice import (
+    CephadmDaemonDeploySpec,
+    CephadmService,
+    get_dashboard_urls,
+    next_action_for_mgmt_stack_service,
+)
 from mgr_util import build_url, password_hash
 from ceph.deployment.utils import wrap_ipv6
 from .. import utils
@@ -69,8 +73,15 @@ class GrafanaService(CephadmService):
             if ip_to_bind_to:
                 daemon_spec.port_ips = {str(grafana_port): ip_to_bind_to}
                 grafana_ip = ip_to_bind_to
-                if ipaddress.ip_network(grafana_ip).version == 6:
-                    grafana_ip = f"[{grafana_ip}]"
+
+        if not grafana_ip:
+            # Grafana 11.1+ validates http_addr with net.ParseIP; hostnames such as
+            # localhost fail in grafana-apiserver. Use a literal address (bind all IPv4).
+            # Check if the primary manager or orchestrator is configured for IPv6
+            if self.mgr.get_mgr_ip().startswith('::') or ':' in self.mgr.get_mgr_ip():
+                grafana_ip = '::'
+            else:
+                grafana_ip = '0.0.0.0'
 
         domain = self.mgr.get_fqdn(daemon_spec.host)
         mgmt_gw_ips = []
@@ -108,14 +119,15 @@ class GrafanaService(CephadmService):
         # in case security is enabled we have to reconfig when prom user/pass changes
         prometheus_user, prometheus_password = mgr._get_prometheus_credentials()
         if security_enabled and prometheus_user and prometheus_password:
-            deps.append(f'cred:{utils.md5_hash(prometheus_user + prometheus_password)}')
+            deps.append(f'cred:{utils.config_hash(prometheus_user + prometheus_password)}')
 
         # adding a dependency for mgmt-gateway because the usage of url_prefix relies on its presence.
         # another dependency is added for oauth-proxy as Grafana login is delegated to this service when enabled.
         for service in ['prometheus', 'loki', 'mgmt-gateway', 'oauth2-proxy']:
             deps += [d.name() for d in mgr.cache.get_daemons_by_service(service)]
 
-        return sorted(deps)
+        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
+        return sorted(deps + parent_deps)
 
     def generate_prom_services(self, security_enabled: bool, mgmt_gw_enabled: bool) -> List[str]:
 
@@ -147,7 +159,7 @@ class GrafanaService(CephadmService):
     def get_grafana_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> TLSCredentials:
         host_ips = [self.mgr.inventory.get_addr(daemon_spec.host)]
         host_fqdns = [self.mgr.get_fqdn(daemon_spec.host), 'grafana_servers']
-        return self.get_certificates(daemon_spec, host_ips, host_fqdns)
+        return self.get_certificates(daemon_spec, ips=host_ips, fqdns=host_fqdns)
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
@@ -194,7 +206,7 @@ class GrafanaService(CephadmService):
                     dashboard = f.read()
                     config_file['files'][f'/etc/grafana/provisioning/dashboards/{file_name}'] = dashboard
 
-        return config_file, self.get_dependencies(self.mgr)
+        return config_file, self.get_dependencies(self.mgr, spec)
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
         # Use the least-created one as the active daemon
@@ -289,7 +301,7 @@ class AlertmanagerService(CephadmService):
     def get_alertmanager_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> TLSCredentials:
         host_ips = [self.mgr.inventory.get_addr(daemon_spec.host)]
         host_fqdns = [self.mgr.get_fqdn(daemon_spec.host), 'alertmanager_servers']
-        return self.get_certificates(daemon_spec, host_ips, host_fqdns)
+        return self.get_certificates(daemon_spec, ips=host_ips, fqdns=host_fqdns)
 
     @classmethod
     def get_dependencies(cls, mgr: "CephadmOrchestrator",
@@ -302,7 +314,7 @@ class AlertmanagerService(CephadmService):
         if security_enabled:
             alertmanager_user, alertmanager_password = mgr._get_alertmanager_credentials()
             if alertmanager_user and alertmanager_password:
-                alertmgr_cred_hash = f'cred:{utils.md5_hash(alertmanager_user + alertmanager_password)}'
+                alertmgr_cred_hash = f'cred:{utils.config_hash(alertmanager_user + alertmanager_password)}'
                 deps.append(alertmgr_cred_hash)
 
         if not mgmt_gw_enabled:
@@ -342,7 +354,7 @@ class AlertmanagerService(CephadmService):
                                      port=dd.ports[0], path='/alerts'))
 
         context = {
-            'security_enabled': security_enabled,
+            'enable_mtls': mgmt_gw_enabled,
             'dashboard_urls': dashboard_urls,
             'webhook_urls': webhook_urls,
             'snmp_gateway_urls': snmp_gateway_urls,
@@ -472,6 +484,23 @@ class AlertmanagerService(CephadmService):
             return HandleCommandResult(-errno.EBUSY, '', warn_message)
         return HandleCommandResult(0, warn_message, '')
 
+    def choose_next_action(
+        self,
+        scheduled_action: utils.Action,
+        daemon_type: Optional[str],
+        spec: Optional[ServiceSpec],
+        curr_deps: List[str],
+        last_deps: List[str],
+        daemon: Optional[DaemonDescription] = None,
+    ) -> utils.NextDaemonStep:
+        """Given the scheduled_action, service spec, daemon_type, and
+        current and previous dependency lists return the next action that
+        this service would prefer cephadm take.
+        """
+        return next_action_for_mgmt_stack_service(
+            scheduled_action, daemon_type, spec, curr_deps, last_deps
+        )
+
 
 @register_cephadm_service
 class PrometheusService(CephadmService):
@@ -495,7 +524,7 @@ class PrometheusService(CephadmService):
     def get_prometheus_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> TLSCredentials:
         host_ips = [self.mgr.inventory.get_addr(daemon_spec.host)]
         host_fqdns = [self.mgr.get_fqdn(daemon_spec.host), 'prometheus_servers']
-        return self.get_certificates(daemon_spec, host_ips, host_fqdns)
+        return self.get_certificates(daemon_spec, ips=host_ips, fqdns=host_fqdns)
 
     def get_service_discovery_cfg(self, security_enabled: bool, mgmt_gw_enabled: bool) -> Dict[str, List[str]]:
         """
@@ -561,6 +590,8 @@ class PrometheusService(CephadmService):
         retention_time = get_field_from_spec(spec, 'retention_time', '15d')
         retention_size = get_field_from_spec(spec, 'retention_size', '0')
         targets = get_field_from_spec(spec, 'targets', [])
+        remote_write_url = get_field_from_spec(spec, 'remote_write_url', '')
+        remote_write_allowed_metrics = get_field_from_spec(spec, 'remote_write_allowed_metrics', '')
 
         # build service discovery end-point
         security_enabled, mgmt_gw_enabled, oauth2_enabled = self.mgr._get_security_config()
@@ -586,6 +617,8 @@ class PrometheusService(CephadmService):
             'service_discovery_password': self.mgr.http_server.service_discovery.password,
             'service_discovery_cfg': self.get_service_discovery_cfg(security_enabled, mgmt_gw_enabled),
             'external_prometheus_targets': targets,
+            'remote_write_url': remote_write_url,
+            'remote_write_allowed_metrics': remote_write_allowed_metrics,
             'cluster_fsid': self.mgr._cluster_fsid,
             'clusters_credentials': cluster_credentials,
             'federate_path': federate_path
@@ -601,6 +634,28 @@ class PrometheusService(CephadmService):
         files = {
             'prometheus.yml': self.mgr.template.render('services/prometheus/prometheus.yml.j2', context)
         }
+
+        # check if the prometheus.yml already exists in the config-key store,
+        # if not we need to set the initial config-key with the default template content.
+        # If it already exists, we need not override user config changes.
+        r, outs, err = self.mgr.mon_command({
+            'prefix': 'config-key get',
+            'key': 'mgr/cephadm/services/prometheus/prometheus.yml'
+        })
+        if r == -errno.ENOENT:
+            loader = self.mgr.template.engine.env.loader
+            assert loader is not None
+
+            raw_template, _, _ = loader.get_source(
+                self.mgr.template.engine.env,
+                'services/prometheus/prometheus.yml.j2'
+            )
+            self.mgr.check_mon_command({
+                'prefix': 'config-key set',
+                'key': 'mgr/cephadm/services/prometheus/prometheus.yml',
+                'val': raw_template
+            })
+
         r: Dict[str, Any] = {
             'files': files,
             'retention_time': retention_time,
@@ -632,7 +687,7 @@ class PrometheusService(CephadmService):
 
         self.configure_alerts(r)
 
-        return r, self.get_dependencies(self.mgr)
+        return r, self.get_dependencies(self.mgr, spec=spec)
 
     @classmethod
     def get_dependencies(cls, mgr: "CephadmOrchestrator",
@@ -646,9 +701,9 @@ class PrometheusService(CephadmService):
             alertmanager_user, alertmanager_password = mgr._get_alertmanager_credentials()
             prometheus_user, prometheus_password = mgr._get_prometheus_credentials()
             if prometheus_user and prometheus_password:
-                deps.append(f'prom-cred:{utils.md5_hash(prometheus_user + prometheus_password)}')
+                deps.append(f'prom-cred:{utils.config_hash(prometheus_user + prometheus_password)}')
             if alertmanager_user and alertmanager_password:
-                deps.append(f'alert-cred:{utils.md5_hash(alertmanager_user + alertmanager_password)}')
+                deps.append(f'alert-cred:{utils.config_hash(alertmanager_user + alertmanager_password)}')
 
         # Adding other services as deps (with corresponding justification):
         # mgmt-gateway : url_prefix depends on the existence of mgmt-gateway
@@ -661,6 +716,12 @@ class PrometheusService(CephadmService):
         if not mgmt_gw_enabled:
             # Ceph mgrs are dependency because when mgmt-gateway is not enabled the service-discovery depends on mgrs ips
             deps += mgr.cache.get_daemons_by_types(['mgr'])
+
+        if spec:
+            prometheus_spec = cast(PrometheusSpec, spec)
+
+            deps.append(f'remote_write_url:{prometheus_spec.remote_write_url}')
+            deps.append(f'remote_write_metrics:{prometheus_spec.remote_write_allowed_metrics}')
 
         return sorted(deps)
 
@@ -757,6 +818,23 @@ class PrometheusService(CephadmService):
                 return '/federate'
         return '/prometheus/federate'
 
+    def choose_next_action(
+        self,
+        scheduled_action: utils.Action,
+        daemon_type: Optional[str],
+        spec: Optional[ServiceSpec],
+        curr_deps: List[str],
+        last_deps: List[str],
+        daemon: Optional[DaemonDescription] = None,
+    ) -> utils.NextDaemonStep:
+        """Given the scheduled_action, service spec, daemon_type, and
+        current and previous dependency lists return the next action that
+        this service would prefer cephadm take.
+        """
+        return next_action_for_mgmt_stack_service(
+            scheduled_action, daemon_type, spec, curr_deps, last_deps
+        )
+
 
 @register_cephadm_service
 class NodeExporterService(CephadmService):
@@ -807,6 +885,23 @@ class NodeExporterService(CephadmService):
         names = [f'{self.TYPE}.{d_id}' for d_id in daemon_ids]
         out = f'It is presumed safe to stop {names}'
         return HandleCommandResult(0, out, '')
+
+    def choose_next_action(
+        self,
+        scheduled_action: utils.Action,
+        daemon_type: Optional[str],
+        spec: Optional[ServiceSpec],
+        curr_deps: List[str],
+        last_deps: List[str],
+        daemon: Optional[DaemonDescription] = None,
+    ) -> utils.NextDaemonStep:
+        """Given the scheduled_action, service spec, daemon_type, and
+        current and previous dependency lists return the next action that
+        this service would prefer cephadm take.
+        """
+        return next_action_for_mgmt_stack_service(
+            scheduled_action, daemon_type, spec, curr_deps, last_deps
+        )
 
 
 @register_cephadm_service
