@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from ..services.nvmeof_top_cli import MAX_SESSION_TTL, Counter, \
-    NvmeofTopCollector, NVMeoFTopCPU, NVMeoFTopIO
+    NvmeofTopCollector, NVMeoFTopCPU, NVMeoFTopHostController, NVMeoFTopIO
 from ..tests import CLICommandTestMixin, CmdException
 
 
@@ -27,6 +27,15 @@ def fixture_io_collector():
     collector.get_overall_summary_data.return_value = []
     collector.get_gateway_summary_data.return_value = []
     collector.delay = 2.0
+    collector.timestamp = time.time()
+    return collector
+
+
+@pytest.fixture(name='hostcontroller_collector')
+def fixture_hostcontroller_collector():
+    collector = MagicMock()
+    collector.get_host_controller_data.return_value = []
+    collector.delay = 1.0
     collector.timestamp = time.time()
     return collector
 
@@ -168,6 +177,76 @@ class TestNVMeoFTopIOFormat:
     def test_invalid_sort_key(self, io_collector):
         tool = NVMeoFTopIO({**self.default_args, 'sort_by': 'BadKey'})
         tool.collector = io_collector
+        with pytest.raises(ValueError, match="Invalid sort key"):
+            tool.format_output()
+
+
+class TestNVMeoFTopHostControllerFormat:
+    default_args = {
+        'sort_by': 'Size',
+        'sort_descending': False,
+        'with_timestamp': False,
+        'no_header': False,
+        'nqn': 'nqn.2024-01.io.spdk:cnode1',
+        'host_nqn': 'nqn.2014-08.org.nvmexpress:uuid:host1',
+        'server_address': '',
+        'server_port': None,
+        'gw_group': '',
+        'period': 1,
+        'session_id': None,
+    }
+
+    def test_no_controller_data(self, hostcontroller_collector):
+        tool = NVMeoFTopHostController(self.default_args)
+        tool.collector = hostcontroller_collector
+        output = tool.format_output()
+        assert '<no IO statistics available>' in output
+
+    def test_headers_present(self, hostcontroller_collector):
+        tool = NVMeoFTopHostController(self.default_args)
+        tool.collector = hostcontroller_collector
+        output = tool.format_output()
+        assert 'Gateway' in output
+        assert 'rBDEV µs' in output
+        assert 'wTotal µs' in output
+
+    def test_no_header(self, hostcontroller_collector):
+        tool = NVMeoFTopHostController({**self.default_args, 'no_header': True})
+        tool.collector = hostcontroller_collector
+        output = tool.format_output()
+        assert 'Gateway' not in output
+
+    def test_controller_data(self, hostcontroller_collector):
+        hostcontroller_collector.get_host_controller_data.return_value = [
+            ('192.168.1.1:5500', '4k', 100, 50, 10.0, 20.0, 5.0, 35.0,
+             50, 10.0, 20.0, 5.0, 35.0),
+        ]
+        tool = NVMeoFTopHostController(self.default_args)
+        tool.collector = hostcontroller_collector
+        output = tool.format_output()
+        assert '192.168.1.1:5500' in output
+        assert '4k' in output
+
+    def test_controller_data_with_none_values(self, hostcontroller_collector):
+        hostcontroller_collector.get_host_controller_data.return_value = [
+            ('192.168.1.1:5500', '4k', 100, 50, None, None, None, None,
+             50, None, None, None, None),
+        ]
+        tool = NVMeoFTopHostController(self.default_args)
+        tool.collector = hostcontroller_collector
+        output = tool.format_output()
+        assert '-' in output
+
+    def test_with_timestamp(self, hostcontroller_collector):
+        tool = NVMeoFTopHostController({**self.default_args, 'with_timestamp': True})
+        tool.collector = hostcontroller_collector
+        output = tool.format_output()
+        assert 'delay:' in output
+        assert '1.00s' in output
+
+    def test_invalid_sort_key(self, hostcontroller_collector):
+        tool = NVMeoFTopHostController({**self.default_args, 'sort_by': 'BadKey'})
+        tool.collector = hostcontroller_collector
         with pytest.raises(ValueError, match="Invalid sort key"):
             tool.format_output()
 
