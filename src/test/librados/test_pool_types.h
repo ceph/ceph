@@ -144,7 +144,10 @@ class PoolTypeTestFixture : public ::testing::TestWithParam<PoolType> {
 
 using ClsTestFixture = PoolTypeTestFixture;
 
-// Base class for EC-only tests
+// Base class for EC-only tests.
+// The EC pool is created once per test suite (SetUpTestSuite / TearDownTestSuite).
+// Per-test isolation is achieved via per-test namespaces, matching the pattern
+// used by PoolTypeTestFixture.
 class ECOnlyTestFixture : public ::testing::Test {
  protected:
   static librados::Rados rados;
@@ -153,61 +156,12 @@ class ECOnlyTestFixture : public ::testing::Test {
   std::string pool_name;
   std::string nspace;
 
-  static std::string pool_name_prefix() {
-    return "ec_only_test_";
-  }
-
-  static void after_pool_create(const std::string& pool_name,
-                                librados::Rados& cluster) {
-  }
-
   static void cleanup_namespace(librados::Rados& cluster,
                                 librados::IoCtx& ioctx,
-                                const std::string& ns) {
-    ioctx.snap_set_read(librados::SNAP_HEAD);
-    ioctx.set_namespace(ns);
+                                const std::string& ns);
 
-    int tries = 20;
-    while (--tries) {
-      int got_enoent = 0;
-      for (librados::NObjectIterator it = ioctx.nobjects_begin();
-           it != ioctx.nobjects_end(); ++it) {
-        ioctx.locator_set_key(it->get_locator());
-        librados::ObjectWriteOperation op;
-        op.remove();
-        librados::AioCompletion* completion = cluster.aio_create_completion();
-        auto sg = make_scope_guard([&] { completion->release(); });
-        ASSERT_EQ(0, ioctx.aio_operate(it->get_oid(), completion, &op,
-                                       librados::OPERATION_IGNORE_CACHE));
-        completion->wait_for_complete();
-        if (completion->get_return_value() == -ENOENT) {
-          ++got_enoent;
-        } else {
-          ASSERT_EQ(0, completion->get_return_value());
-        }
-      }
-      if (!got_enoent) {
-        break;
-      }
-      sleep(1);
-    }
-  }
-
-  static void SetUpTestSuite() {
-    ASSERT_EQ("", connect_cluster_pp(rados));
-
-    static_pool_name = get_temp_pool_name(
-      pool_name_prefix() + pool_type_name(PoolType::FAST_EC) + "_");
-    ASSERT_EQ("", create_pool_by_type(static_pool_name, rados, PoolType::FAST_EC));
-    after_pool_create(static_pool_name, rados);
-  }
-
-  static void TearDownTestSuite() {
-    ASSERT_EQ(0, destroy_pool_by_type(static_pool_name, rados, PoolType::FAST_EC));
-    static_pool_name.clear();
-    rados.shutdown();
-  }
-
+  static void SetUpTestSuite();
+  static void TearDownTestSuite();
   void SetUp() override;
   void TearDown() override;
 };
