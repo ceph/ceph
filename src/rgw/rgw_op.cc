@@ -9509,7 +9509,7 @@ void RGWDeleteBucketPolicy::send_response()
     set_req_state_err(s, op_ret);
   }
   dump_errno(s);
-  end_header(s);
+  end_header(s, this);
 }
 
 int RGWDeleteBucketPolicy::verify_permission(optional_yield y)
@@ -10083,7 +10083,7 @@ void RGWDeleteBucketPublicAccessBlock::send_response()
 
   set_req_state_err(s, op_ret);
   dump_errno(s);
-  end_header(s);
+  end_header(s, this);
 }
 
 int RGWDeleteBucketPublicAccessBlock::verify_permission(optional_yield y)
