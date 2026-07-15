@@ -335,6 +335,7 @@ if(WITH_RADOSGW_NSFS)
   find_package(LMDB REQUIRED)
   add_compile_definitions(LMDB_SAFE_NO_CPP_UTILITIES)
   list(APPEND librgw_driver_srcs ${librgw_nsfs_srcs})
+  list(APPEND librgw_driver_standalone_srcs ${librgw_nsfs_srcs})
 endif()
 if(WITH_RADOSGW_D4N)
   list(APPEND librgw_driver_srcs ${librgw_d4n_srcs})
@@ -343,8 +344,11 @@ endif()
 if(WITH_RADOSGW_STANDALONE)
   find_package(LMDB REQUIRED)
   add_compile_definitions(LMDB_SAFE_NO_CPP_UTILITIES)
+  # POSIX/NSFS notification paths call RGWPubSubEndpoint; that source lives in
+  # librgw_rados_srcs for the normal build, so pull it into standalone explicitly.
   list(APPEND librgw_driver_standalone_srcs
     ${librgw_posix_srcs}
+    rgw_pubsub_push.cc
     driver/posix/rgw_standalone.cc
   )
 endif()
