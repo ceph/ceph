@@ -2072,7 +2072,10 @@ TEST_F(TestInternal, FlattenWhenOpenedSnap)
   ASSERT_EQ(0, snap_create(*clone_ictx, "clone_snap"));
 
   ASSERT_EQ(0, open_image(clone_name, "clone_snap", &snap_ictx));
-  ASSERT_NE(nullptr, snap_ictx->object_map);
+  // the snapshot still has a live parent overlap, so its object map is
+  // intentionally not loaded (it could go stale the moment the parent
+  // is flattened or removed, with no watch to ever refresh it)
+  ASSERT_EQ(nullptr, snap_ictx->object_map);
 
   bufferptr read_ptr(bl.length());
   bufferlist read_bl;
@@ -2091,6 +2094,10 @@ TEST_F(TestInternal, FlattenWhenOpenedSnap)
   // refresh() below is required, not redundant
   ASSERT_EQ(0, snap_ictx->state->refresh());
 
+  // flatten dropped the recorded parent overlap to zero, so it is now
+  // safe to load the object map
+  ASSERT_NE(nullptr, snap_ictx->object_map);
+
   ASSERT_EQ(TEST_IO_SIZE,
             api::Io<>::read(*snap_ictx, 0, read_bl.length(),
                             librbd::io::ReadResult{read_result}, 0));
@@ -2102,6 +2109,7 @@ TEST_F(TestInternal, FlattenWhenOpenedSnap)
     parent->close_image(reopened_snap_ictx);
   } BOOST_SCOPE_EXIT_END;
 
+  ASSERT_NE(nullptr, reopened_snap_ictx->object_map);
   ASSERT_EQ(TEST_IO_SIZE,
             api::Io<>::read(*reopened_snap_ictx, 0, read_bl.length(),
                             librbd::io::ReadResult{read_result}, 0));
