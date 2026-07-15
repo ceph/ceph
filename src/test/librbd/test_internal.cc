@@ -2073,7 +2073,10 @@ TEST_F(TestInternal, FlattenWhenOpenedSnap)
   ASSERT_EQ(0, snap_create(*clone_ictx, "clone_snap"));
 
   ASSERT_EQ(0, open_image(clone_name, "clone_snap", &snap_ictx));
-  ASSERT_EQ(object_map, snap_ictx->object_map != nullptr);
+  // the snapshot still has a live parent overlap, so its object map is
+  // intentionally not loaded (it could go stale the moment the parent
+  // is flattened or removed, with no watch to ever refresh it)
+  ASSERT_EQ(nullptr, snap_ictx->object_map);
 
   bufferptr read_ptr(bl.length());
   bufferlist read_bl;
@@ -2085,12 +2088,22 @@ TEST_F(TestInternal, FlattenWhenOpenedSnap)
                             librbd::io::ReadResult{read_result}, 0));
   ASSERT_TRUE(bl.contents_equal(read_bl));
 
+  // a refresh while the parent is still live must not load the object map
+  // either -- this exercises RefreshRequest, which SetSnapRequest's skip
+  // above doesn't cover
+  ASSERT_EQ(0, snap_ictx->state->refresh());
+  ASSERT_EQ(nullptr, snap_ictx->object_map);
+
   librbd::NoOpProgressContext no_op;
   ASSERT_EQ(0, clone_ictx->operations->flatten(no_op));
   // flatten's header-update notification only marks snap_ictx as needing
   // a refresh; it doesn't reload any state itself, so the explicit
   // refresh() below is required, not redundant
   ASSERT_EQ(0, snap_ictx->state->refresh());
+
+  // flatten dropped the recorded parent overlap to zero, so it is now
+  // safe to load the object map
+  ASSERT_EQ(object_map, snap_ictx->object_map != nullptr);
 
   ASSERT_EQ(TEST_IO_SIZE,
             api::Io<>::read(*snap_ictx, 0, read_bl.length(),
@@ -2103,6 +2116,7 @@ TEST_F(TestInternal, FlattenWhenOpenedSnap)
     parent->close_image(reopened_snap_ictx);
   } BOOST_SCOPE_EXIT_END;
 
+  ASSERT_EQ(object_map, reopened_snap_ictx->object_map != nullptr);
   ASSERT_EQ(TEST_IO_SIZE,
             api::Io<>::read(*reopened_snap_ictx, 0, read_bl.length(),
                             librbd::io::ReadResult{read_result}, 0));
