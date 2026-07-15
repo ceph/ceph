@@ -237,6 +237,31 @@ export interface MirrorStatusResponse {
   metrics?: MirrorStatusMetrics;
 }
 
+export type MirrorCheckpointStatus = 'created' | 'complete' | 'failed' | 'unknown';
+
+export interface MirrorCheckpoint {
+  snap_id: number;
+  snap_name: string;
+  status: MirrorCheckpointStatus;
+  created_at: string;
+  updated_at: string;
+  error_msg?: string;
+}
+
+export interface MirrorCheckpointListResponse {
+  dir_root: string;
+  checkpoints: MirrorCheckpoint[];
+}
+
+export interface MirrorCheckpointMutationResponse {
+  status: string;
+  message: string;
+  dir_root: string;
+  snap_id?: number;
+  snap_name?: string;
+  checkpoint_status?: string;
+}
+
 export interface DaemonOverviewInfo {
   mirrorPaths: number;
   failures: number;

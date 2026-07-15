@@ -333,6 +333,166 @@ class CephFSMirrorTest(ControllerTestCase):
         self.assertIn(error_message, response.get('detail', ''))
         mgr.remote.assert_called_once_with('mirroring', 'snapshot_mirror_ls', fs_name)
 
+    def test_list_checkpoints_success(self):
+        fs_name = 'test_fs'
+        path = '/volumes/g1/sv1'
+        expected_result = {
+            'dir_root': path,
+            'checkpoints': [{
+                'snap_id': 1,
+                'snap_name': 'snap1',
+                'status': 'created',
+                'created_at': '2024-01-01T00:00:00.000000+0000',
+                'updated_at': '2024-01-01T00:00:00.000000+0000',
+            }]
+        }
+        mock_output = json.dumps(expected_result)
+        mgr.remote = Mock(return_value=(0, mock_output, ''))
+
+        self._get(
+            f'/api/cephfs/mirror/{fs_name}/checkpoint?path={urllib.parse.quote(path)}'
+        )
+        self.assertStatus(200)
+        self.assertJsonBody(expected_result)
+        mgr.remote.assert_called_once_with(
+            'mirroring', 'snapshot_mirror_checkpoint_ls', fs_name, path)
+
+    def test_list_checkpoints_error(self):
+        fs_name = 'test_fs'
+        path = '/volumes/g1/sv1'
+        error_message = 'directory not mirrored'
+        mgr.remote = Mock(return_value=(1, '', error_message))
+
+        self._get(
+            f'/api/cephfs/mirror/{fs_name}/checkpoint?path={urllib.parse.quote(path)}'
+        )
+        self.assertStatus(400)
+        response = self.json_body()
+        self.assertIn('Failed to list checkpoints', response.get('detail', ''))
+        self.assertIn(error_message, response.get('detail', ''))
+        mgr.remote.assert_called_once_with(
+            'mirroring', 'snapshot_mirror_checkpoint_ls', fs_name, path)
+
+    def test_add_checkpoint_success(self):
+        fs_name = 'test_fs'
+        path = '/volumes/g1/sv1'
+        snap_name = 'snap1'
+        expected_result = {
+            'status': 'success',
+            'message': f'checkpoint added for snapshot {snap_name}',
+            'dir_root': path,
+            'snap_id': 1,
+            'snap_name': snap_name,
+            'checkpoint_status': 'created',
+        }
+        mock_output = json.dumps(expected_result)
+        mgr.remote = Mock(return_value=(0, mock_output, ''))
+
+        self._post(f'/api/cephfs/mirror/{fs_name}/checkpoint', {
+            'path': path,
+            'snap_name': snap_name,
+        })
+        self.assertStatus(200)
+        self.assertJsonBody(expected_result)
+        mgr.remote.assert_called_once_with(
+            'mirroring', 'snapshot_mirror_checkpoint_add', fs_name, path, snap_name)
+
+    def test_add_checkpoint_error(self):
+        fs_name = 'test_fs'
+        path = '/volumes/g1/sv1'
+        snap_name = 'snap1'
+        error_message = 'checkpoint already exists for snapshot'
+        mgr.remote = Mock(return_value=(1, '', error_message))
+
+        self._post(f'/api/cephfs/mirror/{fs_name}/checkpoint', {
+            'path': path,
+            'snap_name': snap_name,
+        })
+        self.assertStatus(400)
+        response = self.json_body()
+        self.assertIn('Failed to add checkpoint', response.get('detail', ''))
+        self.assertIn(error_message, response.get('detail', ''))
+        mgr.remote.assert_called_once_with(
+            'mirroring', 'snapshot_mirror_checkpoint_add', fs_name, path, snap_name)
+
+    def test_checkpoint_now_success(self):
+        fs_name = 'test_fs'
+        path = '/volumes/g1/sv1'
+        expected_result = {
+            'status': 'success',
+            'message': 'checkpoint created on latest snapshot',
+            'dir_root': path,
+            'snap_id': 2,
+            'snap_name': 'snap2',
+            'checkpoint_status': 'created',
+        }
+        mock_output = json.dumps(expected_result)
+        mgr.remote = Mock(return_value=(0, mock_output, ''))
+
+        self._post(f'/api/cephfs/mirror/{fs_name}/checkpoint/now', {
+            'path': path,
+        })
+        self.assertStatus(200)
+        self.assertJsonBody(expected_result)
+        mgr.remote.assert_called_once_with(
+            'mirroring', 'snapshot_mirror_checkpoint_now', fs_name, path)
+
+    def test_checkpoint_now_error(self):
+        fs_name = 'test_fs'
+        path = '/volumes/g1/sv1'
+        error_message = 'no snapshots found under /volumes/g1/sv1'
+        mgr.remote = Mock(return_value=(1, '', error_message))
+
+        self._post(f'/api/cephfs/mirror/{fs_name}/checkpoint/now', {
+            'path': path,
+        })
+        self.assertStatus(400)
+        response = self.json_body()
+        self.assertIn('Failed to create checkpoint on latest snapshot', response.get('detail', ''))
+        self.assertIn(error_message, response.get('detail', ''))
+        mgr.remote.assert_called_once_with(
+            'mirroring', 'snapshot_mirror_checkpoint_now', fs_name, path)
+
+    def test_remove_checkpoint_success(self):
+        fs_name = 'test_fs'
+        path = '/volumes/g1/sv1'
+        snap_name = 'snap1'
+        expected_result = {
+            'status': 'success',
+            'message': f'checkpoint removed for snapshot {snap_name}',
+            'dir_root': path,
+            'snap_name': snap_name,
+        }
+        mock_output = json.dumps(expected_result)
+        mgr.remote = Mock(return_value=(0, mock_output, ''))
+
+        self._delete(
+            f'/api/cephfs/mirror/{fs_name}/checkpoint?path={urllib.parse.quote(path)}'
+            f'&snap_name={snap_name}'
+        )
+        self.assertStatus(200)
+        self.assertJsonBody(expected_result)
+        mgr.remote.assert_called_once_with(
+            'mirroring', 'snapshot_mirror_checkpoint_remove', fs_name, path, snap_name)
+
+    def test_remove_checkpoint_error(self):
+        fs_name = 'test_fs'
+        path = '/volumes/g1/sv1'
+        snap_name = 'snap1'
+        error_message = 'checkpoint not found for snapshot'
+        mgr.remote = Mock(return_value=(1, '', error_message))
+
+        self._delete(
+            f'/api/cephfs/mirror/{fs_name}/checkpoint?path={urllib.parse.quote(path)}'
+            f'&snap_name={snap_name}'
+        )
+        self.assertStatus(400)
+        response = self.json_body()
+        self.assertIn('Failed to remove checkpoint', response.get('detail', ''))
+        self.assertIn(error_message, response.get('detail', ''))
+        mgr.remote.assert_called_once_with(
+            'mirroring', 'snapshot_mirror_checkpoint_remove', fs_name, path, snap_name)
+
     def test_mirror_status_success(self):
         fs_name = 'test_fs'
         peer_uuid = 'peer-uuid-123'

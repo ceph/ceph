@@ -3588,6 +3588,217 @@ paths:
       summary: Get peers
       tags:
       - CephfsMirror
+  /api/cephfs/mirror/{fs_name}/checkpoint:
+    delete:
+      parameters:
+      - description: File system name
+        in: path
+        name: fs_name
+        required: true
+        schema:
+          type: string
+      - description: Mirrored directory path
+        in: query
+        name: path
+        required: true
+        schema:
+          type: string
+      - description: Snapshot name
+        in: query
+        name: snap_name
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Remove a checkpoint from a snapshot
+      tags:
+      - CephfsMirror
+    get:
+      parameters:
+      - description: File system name
+        in: path
+        name: fs_name
+        required: true
+        schema:
+          type: string
+      - description: Mirrored directory path
+        in: query
+        name: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  checkpoints:
+                    description: Checkpoints for the directory
+                    items:
+                      properties:
+                        created_at:
+                          description: Checkpoint creation time
+                          type: string
+                        error_msg:
+                          description: Checkpoint error message
+                          type: string
+                        snap_id:
+                          description: Snapshot ID
+                          type: integer
+                        snap_name:
+                          description: Snapshot name
+                          type: string
+                        status:
+                          description: Checkpoint status
+                          type: string
+                        updated_at:
+                          description: Checkpoint last update time
+                          type: string
+                      required:
+                      - snap_id
+                      - snap_name
+                      - status
+                      - created_at
+                      - updated_at
+                      type: object
+                    type: array
+                  dir_root:
+                    description: Mirrored directory path
+                    type: string
+                required:
+                - dir_root
+                - checkpoints
+                type: object
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: List checkpoints for a mirrored directory
+      tags:
+      - CephfsMirror
+    post:
+      parameters:
+      - description: File system name
+        in: path
+        name: fs_name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                path:
+                  description: Mirrored directory path
+                  type: string
+                snap_name:
+                  description: Snapshot name
+                  type: string
+              required:
+              - path
+              - snap_name
+              type: object
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Add a checkpoint for a snapshot
+      tags:
+      - CephfsMirror
+  /api/cephfs/mirror/{fs_name}/checkpoint/now:
+    post:
+      parameters:
+      - description: File system name
+        in: path
+        name: fs_name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                path:
+                  description: Mirrored directory path
+                  type: string
+              required:
+              - path
+              type: object
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Create a checkpoint on the latest snapshot
+      tags:
+      - CephfsMirror
   /api/cephfs/mirror/{fs_name}/status:
     get:
       parameters:
