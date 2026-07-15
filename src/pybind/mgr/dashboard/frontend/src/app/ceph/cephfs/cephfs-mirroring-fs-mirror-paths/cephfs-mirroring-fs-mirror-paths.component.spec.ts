@@ -123,6 +123,12 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
   beforeEach(async () => {
     const cephfsServiceMock = {
       getMirrorStatus: jest.fn(),
+      listMirrorCheckpoints: jest.fn().mockReturnValue(
+        of({
+          dir_root: '',
+          checkpoints: []
+        })
+      ),
       removeMirrorDirectory: jest.fn().mockReturnValue(of({}))
     };
 
@@ -214,12 +220,13 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
     component.ngOnInit();
 
     expect(component.columns).toBeDefined();
-    expect(component.columns.length).toBe(5);
+    expect(component.columns.length).toBe(6);
     expect(component.columns[0].prop).toBe('path');
     expect(component.columns[1].prop).toBe('syncStatus');
     expect(component.columns[2].prop).toBe('snapshotCount');
-    expect(component.columns[3].prop).toBe('currentSyncSnapshot');
-    expect(component.columns[4].prop).toBe('lastSyncedSnapshot');
+    expect(component.columns[3].prop).toBe('checkpointCount');
+    expect(component.columns[4].prop).toBe('currentSyncSnapshot');
+    expect(component.columns[5].prop).toBe('lastSyncedSnapshot');
 
     // Verify fsName is fetched and data is loaded
     expect(component.fsName).toBe('test-fs');
@@ -270,7 +277,6 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
           statusLabel: 'replicated.'
         }
       ]);
-      expect(result[0].checkpointCount).toBe(2);
       expect(result[0].renamedSnapshotCount).toBe(1);
       expect(result[0].filesSynced).toBe(100);
       expect(result[0].totalFiles).toBe(200);
@@ -304,7 +310,6 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
           statusLabel: 'replicated.'
         }
       ]);
-      expect(result[1].checkpointCount).toBe(1);
       expect(result[1].filesSynced).toBe(50);
       expect(result[1].totalFiles).toBe(100);
       expect(result[1].totalBytes).toBe(2147483648);
@@ -344,7 +349,6 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       expect(result[0].snapshotCount).toBe(0);
       expect(result[0].pendingSnapshotCount).toBe(0);
       expect(result[0].snapshots).toEqual([]);
-      expect(result[0].checkpointCount).toBe(0);
       expect(result[0].syncProgress).toBe(0);
     });
   });
@@ -461,12 +465,24 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
   describe('loadMirrorPaths', () => {
     it('should load mirror paths successfully', () => {
       cephfsService.getMirrorStatus.mockReturnValue(of(mockMirrorStatusResponse));
+      cephfsService.listMirrorCheckpoints.mockImplementation((_, path: string) =>
+        of({
+          dir_root: path,
+          checkpoints:
+            path === '/path1'
+              ? [{ snap_id: 1, snap_name: 'snap1' }, { snap_id: 2, snap_name: 'snap2' }]
+              : [{ snap_id: 3, snap_name: 'snap3' }]
+        })
+      );
       component.fsName = 'test-fs';
 
       component.loadMirrorPaths();
 
       expect(cephfsService.getMirrorStatus).toHaveBeenCalledWith('test-fs');
+      expect(cephfsService.listMirrorCheckpoints).toHaveBeenCalledTimes(2);
       expect(component.mirrorPaths.length).toBe(2);
+      expect(component.mirrorPaths[0].checkpointCount).toBe(2);
+      expect(component.mirrorPaths[1].checkpointCount).toBe(1);
     });
 
     it('should set empty array on error', () => {

@@ -148,4 +148,49 @@ describe('CephfsService', () => {
     expect(req.request.method).toBe('DELETE');
     expect(req.request.body).toBeNull();
   });
+
+  it('should list mirror checkpoints for a path', () => {
+    const path = '/volumes/Group1/A1/subvol';
+    service.listMirrorCheckpoints('testfs', path).subscribe();
+    const req = httpTesting.expectOne(
+      (request) =>
+        request.url === 'api/cephfs/mirror/testfs/checkpoint' &&
+        request.params.get('path') === path
+    );
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should add mirror checkpoint without encoding request body fields', () => {
+    const path = '/volumes/Group1/A1/subvol';
+    service.addMirrorCheckpoint('testfs', path, 'snap1').subscribe();
+    const req = httpTesting.expectOne('api/cephfs/mirror/testfs/checkpoint');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({
+      path,
+      snap_name: 'snap1'
+    });
+  });
+
+  it('should create mirror checkpoint on latest snapshot', () => {
+    const path = '/volumes/Group1/A1/subvol';
+    service.createMirrorCheckpointNow('testfs', path).subscribe();
+    const req = httpTesting.expectOne('api/cephfs/mirror/testfs/checkpoint/now');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({
+      path
+    });
+  });
+
+  it('should remove mirror checkpoint using query parameters', () => {
+    const path = '/volumes/Group1/A1/subvol';
+    service.removeMirrorCheckpoint('testfs', path, 'snap1').subscribe();
+    const req = httpTesting.expectOne(
+      (request) =>
+        request.url === 'api/cephfs/mirror/testfs/checkpoint' &&
+        request.params.get('path') === path &&
+        request.params.get('snap_name') === 'snap1'
+    );
+    expect(req.request.method).toBe('DELETE');
+    expect(req.request.body).toBeNull();
+  });
 });

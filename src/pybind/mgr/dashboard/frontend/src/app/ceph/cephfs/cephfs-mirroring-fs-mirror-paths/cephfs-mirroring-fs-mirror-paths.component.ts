@@ -8,8 +8,8 @@ import {
   inject
 } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
-import { Subscription } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { forkJoin, of, Subscription } from 'rxjs';
+import { catchError, map, switchMap, tap } from 'rxjs/operators';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
@@ -166,6 +166,12 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
         flexGrow: 1.5
       },
       {
+        name: $localize`Checkpoints`,
+        prop: 'checkpointCount',
+        flexGrow: 1.5,
+        sortable: true
+      },
+      {
         name: $localize`Current sync snapshot`,
         prop: 'currentSyncSnapshot',
         flexGrow: 1.5,
@@ -239,22 +245,48 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
     }
 
     this.mirrorPathsSubscription?.unsubscribe();
-    this.mirrorPathsSubscription = this.cephfsService.getMirrorStatus(this.fsName).subscribe(
-      (data: MirrorStatusResponse) => {
-        this.mirrorPaths = this.parseMirrorStatus(data);
-        if (this.selectedPath) {
-          this.selectedPath =
-            this.mirrorPaths.find((mirrorPath) => mirrorPath.path === this.selectedPath?.path) ??
-            null;
-          this.sidePanelOpen = !!this.selectedPath;
+    this.mirrorPathsSubscription = this.cephfsService
+      .getMirrorStatus(this.fsName)
+      .pipe(
+        switchMap((data: MirrorStatusResponse) => {
+          const paths = this.parseMirrorStatus(data);
+          if (!paths.length) {
+            return of(paths);
+          }
+
+          return forkJoin(
+            paths.map((mirrorPath) =>
+              this.cephfsService.listMirrorCheckpoints(this.fsName, mirrorPath.path).pipe(
+                map((response) => response.checkpoints?.length ?? 0),
+                catchError(() => of(0))
+              )
+            )
+          ).pipe(
+            map((checkpointCounts) => {
+              paths.forEach((mirrorPath, index) => {
+                mirrorPath.checkpointCount = checkpointCounts[index];
+              });
+              return paths;
+            })
+          );
+        })
+      )
+      .subscribe(
+        (mirrorPaths) => {
+          this.mirrorPaths = mirrorPaths;
+          if (this.selectedPath) {
+            this.selectedPath =
+              this.mirrorPaths.find((mirrorPath) => mirrorPath.path === this.selectedPath?.path) ??
+              null;
+            this.sidePanelOpen = !!this.selectedPath;
+          }
+        },
+        (_) => {
+          this.mirrorPaths = [];
+          this.selectedPath = null;
+          this.sidePanelOpen = false;
         }
-      },
-      (_) => {
-        this.mirrorPaths = [];
-        this.selectedPath = null;
-        this.sidePanelOpen = false;
-      }
-    );
+      );
     this.subscriptions.add(this.mirrorPathsSubscription);
   }
 
@@ -363,7 +395,6 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
         (snapshot) => snapshot.status === 'in-progress' || snapshot.status === 'pending'
       ).length,
       snapshots,
-      checkpointCount: peerInfo.snaps_deleted ?? 0,
       renamedSnapshotCount: peerInfo.snaps_renamed ?? 0,
       syncProgress,
       filesSynced,
