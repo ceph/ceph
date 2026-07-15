@@ -76,3 +76,8 @@ default-filter = 'test(bucket_list::) | test(object_ops::) | test(copy::) | test
 
 [profile.all]
 default-filter = 'all()'
+
+# To skip per-test bucket cleanup (inspect disk/cache state after failure),
+# set S3TEST_NO_CLEANUP=1:
+#   S3TEST_NO_CLEANUP=1 cargo nextest run \
+#     -E 'test(versioning::test_foo)' --test-threads=1

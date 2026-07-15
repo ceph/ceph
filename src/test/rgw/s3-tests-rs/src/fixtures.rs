@@ -80,6 +80,10 @@ impl TestGuard {
 
 impl Drop for TestGuard {
     fn drop(&mut self) {
+        if std::env::var("S3TEST_NO_CLEANUP").is_ok() {
+            return;
+        }
+
         let has_buckets = CREATED_BUCKETS
             .lock()
             .map(|g| !g.is_empty())
