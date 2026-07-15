@@ -863,12 +863,14 @@ public:
   int remove_entry(const DoutPrefixProvider* dpp, std::string bname, cls_rgw_obj_key key) {
     using namespace LMDBSafe;
 
-    /* the bucket cache stores non-versioned objects with empty instance;
-     * the shared LC code (rgw_lc.cc) injects "null" as a RADOS convention
-     * — normalize here so the cache key matches regardless of backend */
+    /* normalize null-version instance: the cache may store entries with
+     * instance="" or instance="null" depending on the code path (fill_cache
+     * uses "null", delete_object uses "").  Try both so removal always
+     * matches regardless of which convention the caller uses. */
     if (key.instance == "null") {
       key.instance.clear();
     }
+    bool try_null_instance = key.instance.empty();
 
     ldpp_dout(dpp, 10) << "BucketCache: remove_entry bucket=" << bname
       << " key=" << key.name << " instance=" << key.instance << dendl;
@@ -886,6 +888,12 @@ public:
 	ldpp_dout(dpp, 10) << "BucketCache: lmdb del bucket=" << bname
 	  << " key=" << key.name << dendl;
         txn->del(b->dbi, concat_k);
+        if (try_null_instance) {
+          cls_rgw_obj_key null_key = key;
+          null_key.instance = "null";
+          auto null_concat_k = concat_key(null_key);
+          txn->del(b->dbi, null_concat_k);
+        }
         txn->commit();
       } catch (const std::exception& e) {
 	ldpp_dout(dpp, 0) << "BucketCache: remove_entry del failed for "
