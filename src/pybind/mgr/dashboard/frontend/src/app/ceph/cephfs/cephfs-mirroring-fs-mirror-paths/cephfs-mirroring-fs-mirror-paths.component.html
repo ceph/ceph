@@ -153,56 +153,152 @@
         <cds-tab heading="Snapshots"
                  i18n-heading>
           <div class="cds-p-4">
-            <div cdsGrid
-                 [narrow]="true"
-                 class="cds-mb-5 padding-inline-0">
-              <div cdsCol
-                   [columnNumbers]="{'lg': 4, 'md': 4, 'sm': 4}"
-                   class="border-subtle-inline-end cds-pr-4">
-                <div cdsStack="vertical"
-                     [gap]="1">
-                  <div class="cds--type-label-01"
-                       i18n>Total snapshots</div>
-                  <div class="cds--type-body-compact-01">
-                    <strong>{{ selectedPath.snapshotCount ?? 0 }}</strong>
-                  </div>
-                </div>
-              </div>
-              <div cdsCol
-                   [columnNumbers]="{'lg': 4, 'md': 4, 'sm': 4}"
-                   class="cds-pl-4">
-                <div cdsStack="vertical"
-                     [gap]="1">
-                  <div class="cds--type-label-01"
-                       i18n>Pending</div>
-                  <div class="cds--type-body-compact-01">
-                    <strong>{{ selectedPath.pendingSnapshotCount ?? 0 }}</strong>
-                  </div>
-                </div>
-              </div>
+            <div cdsStack="horizontal"
+                 [gap]="4"
+                 class="cds-mb-5 snapshots-summary align-items-center">
+              <span class="cds--type-body-compact-01">
+                <ng-container i18n>Total snapshots</ng-container>:
+                <strong>{{ selectedPath.snapshotCount ?? 0 }}</strong>
+              </span>
+              <span class="cds--type-body-compact-01">|</span>
+              <span class="cds--type-body-compact-01">
+                <ng-container i18n>Checkpoints</ng-container>:
+                <strong>{{ selectedPathCheckpointCount }}</strong>
+              </span>
+              <span class="cds--type-body-compact-01">|</span>
+              <span class="cds--type-body-compact-01">
+                <ng-container i18n>Pending</ng-container>:
+                <strong>{{ selectedPath.pendingSnapshotCount ?? 0 }}</strong>
+              </span>
+              @if (snapshotPanels.length) {
+                <button type="button"
+                        class="cds--link collapse-all-btn"
+                        (click)="collapseAllSnapshots()"
+                        i18n>
+                  Collapse all
+                </button>
+              }
             </div>
 
-            @if (selectedPath.snapshots?.length) {
-              @for (snapshot of selectedPath.snapshots; track snapshot.name) {
-                <div cdsStack="horizontal"
-                     [gap]="3"
-                     class="cds-pb-4">
-                  <cd-icon
-                    [type]="snapshot.icon"
-                    [ngClass]="['cds-mt-1', snapshot.iconClass]">
-                  </cd-icon>
-                  <div>
-                    <span class="cds--type-body-01">
-                      {{ snapshot.name }} {{ snapshot.statusLabel }}
-                    </span>
-                    @if (snapshot.eta) {
-                      <cds-tag class="cds-ml-2"
-                               type="magenta"
-                               size="sm">
-                        {{ snapshot.eta }}
-                      </cds-tag>
-                    }
+            @if (checkpointsLoading) {
+              <cds-inline-loading
+                [isActive]="true"
+                loadingText="Loading snapshots"
+                i18n-loadingText>
+              </cds-inline-loading>
+            } @else if (snapshotPanels.length) {
+              @for (snapshot of snapshotPanels; track snapshot.name) {
+                <div class="snapshot-entry cds-mb-4">
+                  <div cdsStack="horizontal"
+                       [gap]="3"
+                       class="snapshot-header"
+                       (click)="toggleSnapshotExpanded(snapshot.name)">
+                    <cd-icon
+                      [type]="snapshot.icon"
+                      [ngClass]="['cds-mt-1', snapshot.iconClass]">
+                    </cd-icon>
+                    <div cdsStack="horizontal"
+                         [gap]="2"
+                         class="align-items-center flex-wrap">
+                      <span class="cds--link">{{ snapshot.name }}</span>
+                      <span class="cds--type-body-01">{{ snapshot.statusLabel }}</span>
+                      @if (snapshot.eta && !snapshot.expanded) {
+                        <cds-tag type="magenta"
+                                 size="sm">
+                          {{ snapshot.eta }}
+                        </cds-tag>
+                      }
+                    </div>
                   </div>
+
+                  @if (snapshot.expanded) {
+                    <div class="snapshot-panel border-subtle cds-p-4 cds-mt-3">
+                      <div cdsStack="horizontal"
+                           [gap]="3"
+                           class="cds-mb-5 align-items-center justify-content-between flex-wrap">
+                        <span class="cds--type-heading-compact-02">{{ snapshot.name }}</span>
+                        <div cdsStack="horizontal"
+                             [gap]="2"
+                             class="align-items-center">
+                          @if (snapshot.eta) {
+                            <cds-tag type="magenta"
+                                     size="sm">
+                              {{ snapshot.eta }}
+                            </cds-tag>
+                          }
+                          @if (snapshot.hasCheckpoint) {
+                            <cds-tag class="tag-dark"
+                                     i18n>Checkpoint</cds-tag>
+                          }
+                        </div>
+                      </div>
+
+                      <div cdsGrid
+                           [narrow]="true"
+                           class="cds-mb-5 padding-inline-0">
+                        <div cdsCol
+                             [columnNumbers]="{'lg': 4, 'md': 4, 'sm': 4}">
+                          <div class="cds-mb-4">
+                            <div class="cds--type-label-01 cds-mb-2"
+                                 i18n>Status</div>
+                            <div class="cds--type-body-01">{{ snapshot.replicationStatusLabel }}</div>
+                          </div>
+                        </div>
+                        <div cdsCol
+                             [columnNumbers]="{'lg': 4, 'md': 4, 'sm': 4}">
+                          <div class="cds-mb-4">
+                            <div class="cds--type-label-01 cds-mb-2"
+                                 i18n>Created</div>
+                            <div class="cds--type-body-01">{{ formatScheduleDate(snapshot.createdAt) }}</div>
+                          </div>
+                        </div>
+                        <div cdsCol
+                             [columnNumbers]="{'lg': 4, 'md': 4, 'sm': 4}">
+                          <div class="cds-mb-4">
+                            <div class="cds--type-label-01 cds-mb-2"
+                                 i18n>Files synced</div>
+                            <div class="cds--type-body-01">
+                              {{ formatSnapshotFiles(snapshot.filesSynced, snapshot.totalFiles) }}
+                            </div>
+                          </div>
+                        </div>
+                        <div cdsCol
+                             [columnNumbers]="{'lg': 4, 'md': 4, 'sm': 4}">
+                          <div class="cds-mb-4">
+                            <div class="cds--type-label-01 cds-mb-2"
+                                 i18n>Size</div>
+                            <div class="cds--type-body-01">
+                              @if (snapshot.bytesSynced !== undefined && snapshot.totalBytes !== undefined) {
+                                {{ snapshot.bytesSynced | dimlessBinary }}/{{ snapshot.totalBytes | dimlessBinary }}
+                              } @else {
+                                -
+                              }
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <hr class="cds-m-0 cds-mb-4">
+
+                      @if (snapshot.hasCheckpoint) {
+                        <button type="button"
+                                cdsButton="ghost"
+                                size="sm"
+                                [disabled]="!canRemoveCheckpoint || checkpointActionInProgress === snapshot.name"
+                                (click)="removeCheckpointModal(snapshot); $event.stopPropagation()">
+                          <span i18n>Remove checkpoint</span>
+                        </button>
+                      } @else {
+                        <button type="button"
+                                cdsButton="ghost"
+                                size="sm"
+                                [disabled]="!canMarkCheckpoint || checkpointActionInProgress === snapshot.name"
+                                (click)="markAsCheckpoint(snapshot); $event.stopPropagation()">
+                          <span i18n>Mark as checkpoint</span>
+                        </button>
+                      }
+                    </div>
+                  }
                 </div>
               }
             } @else {

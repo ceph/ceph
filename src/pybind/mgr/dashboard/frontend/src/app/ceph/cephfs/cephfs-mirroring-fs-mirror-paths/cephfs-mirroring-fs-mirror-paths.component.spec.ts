@@ -129,6 +129,8 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
           checkpoints: []
         })
       ),
+      addMirrorCheckpoint: jest.fn().mockReturnValue(of({})),
+      removeMirrorCheckpoint: jest.fn().mockReturnValue(of({})),
       removeMirrorDirectory: jest.fn().mockReturnValue(of({}))
     };
 
@@ -267,14 +269,22 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
           eta: 'calculating...',
           icon: 'inProgress',
           iconClass: 'info',
-          statusLabel: 'replication in-progress'
+          statusLabel: 'replication in-progress',
+          filesSynced: 100,
+          totalFiles: 200,
+          bytesSynced: 1610612736,
+          totalBytes: 3221225472
         },
         {
           name: 'snap-last',
           status: 'replicated',
           icon: 'checkMarkOutline',
           iconClass: 'success',
-          statusLabel: 'replicated.'
+          statusLabel: 'replicated.',
+          filesSynced: undefined,
+          totalFiles: undefined,
+          bytesSynced: 0,
+          createdAt: '1583.101609s'
         }
       ]);
       expect(result[0].renamedSnapshotCount).toBe(1);
@@ -300,14 +310,22 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
           status: 'pending',
           icon: 'pendingFilled',
           iconClass: 'muted',
-          statusLabel: 'replication pending'
+          statusLabel: 'replication pending',
+          filesSynced: 50,
+          totalFiles: 100,
+          bytesSynced: 1073741824,
+          totalBytes: 2147483648
         },
         {
           name: 'snap-last-2',
           status: 'replicated',
           icon: 'checkMarkOutline',
           iconClass: 'success',
-          statusLabel: 'replicated.'
+          statusLabel: 'replicated.',
+          filesSynced: undefined,
+          totalFiles: undefined,
+          bytesSynced: 0,
+          createdAt: undefined
         }
       ]);
       expect(result[1].filesSynced).toBe(50);
@@ -524,19 +542,133 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
 
   describe('onPathClick', () => {
     it('should set selected path and open side panel', fakeAsync(() => {
+      const snapshotScheduleService = TestBed.inject(CephfsSnapshotScheduleService) as any;
+      snapshotScheduleService.getSnapshotSchedule.mockReturnValue(of([]));
+      cephfsService.getMirrorStatus.mockReturnValue(
+        of({
+          metrics: {
+            '/test': mockMirrorStatusResponse.metrics!['/path1']
+          }
+        })
+      );
+
       const mockPath = {
         path: '/test',
         syncStatus: 'syncing' as const,
         currentSyncSnapshot: 'snap1',
-        lastSyncedSnapshot: 'snap0'
+        lastSyncedSnapshot: 'snap0',
+        snapshots: []
       };
 
+      component.fsName = 'test-fs';
       component.onPathClick(mockPath as any);
       tick();
 
-      expect(component.selectedPath).toBe(mockPath);
+      expect(component.selectedPath?.path).toBe('/test');
       expect(component.sidePanelOpen).toBe(true);
+      expect(cephfsService.listMirrorCheckpoints).toHaveBeenCalledWith('test-fs', '/test');
     }));
+  });
+
+  describe('snapshot checkpoints', () => {
+    const mockSnapshots = [
+      {
+        name: 'snap-current',
+        status: 'in-progress' as const,
+        eta: '10s',
+        icon: 'inProgress' as const,
+        iconClass: 'info',
+        statusLabel: 'replication in-progress',
+        filesSynced: 100,
+        totalFiles: 200,
+        bytesSynced: 1024,
+        totalBytes: 2048
+      },
+      {
+        name: 'snap-last',
+        status: 'replicated' as const,
+        icon: 'checkMarkOutline' as const,
+        iconClass: 'success',
+        statusLabel: 'replicated.',
+        filesSynced: 50,
+        totalFiles: 50,
+        bytesSynced: 512,
+        totalBytes: 512
+      }
+    ];
+
+    beforeEach(() => {
+      component.selectedPath = {
+        path: '/path1',
+        snapshots: mockSnapshots
+      } as any;
+      component.fsName = 'test-fs';
+    });
+
+    it('should build snapshot panels with checkpoint metadata', () => {
+      component.pathCheckpoints = [
+        {
+          snap_id: 1,
+          snap_name: 'snap-last',
+          status: 'complete',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z'
+        }
+      ];
+
+      component.refreshSnapshotPanels();
+
+      expect(component.snapshotPanels.length).toBe(2);
+      expect(component.snapshotPanels[1].hasCheckpoint).toBe(true);
+      expect(component.snapshotPanels[0].hasCheckpoint).toBe(false);
+      expect(component.selectedPathCheckpointCount).toBe(1);
+    });
+
+    it('should toggle snapshot expansion', () => {
+      component.pathCheckpoints = [];
+      component.refreshSnapshotPanels();
+
+      component.toggleSnapshotExpanded('snap-current');
+
+      expect(component.snapshotPanels[0].expanded).toBe(true);
+      expect(component.expandedSnapshotNames.has('snap-current')).toBe(true);
+
+      component.collapseAllSnapshots();
+
+      expect(component.snapshotPanels[0].expanded).toBe(false);
+      expect(component.expandedSnapshotNames.size).toBe(0);
+    });
+
+    it('should mark snapshot as checkpoint', () => {
+      component.pathCheckpoints = [];
+      component.refreshSnapshotPanels();
+
+      component.markAsCheckpoint(component.snapshotPanels[0]);
+
+      expect(cephfsService.addMirrorCheckpoint).toHaveBeenCalledWith(
+        'test-fs',
+        '/path1',
+        'snap-current'
+      );
+    });
+
+    it('should open remove checkpoint modal', () => {
+      const modalService = TestBed.inject(ModalCdsService) as any;
+      component.pathCheckpoints = [
+        {
+          snap_id: 1,
+          snap_name: 'snap-last',
+          status: 'complete',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z'
+        }
+      ];
+      component.refreshSnapshotPanels();
+
+      component.removeCheckpointModal(component.snapshotPanels[1]);
+
+      expect(modalService.show).toHaveBeenCalled();
+    });
   });
 
   describe('closeSidePanel', () => {

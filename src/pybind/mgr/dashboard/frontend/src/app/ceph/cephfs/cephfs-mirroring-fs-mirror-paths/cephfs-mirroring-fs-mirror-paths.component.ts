@@ -20,7 +20,7 @@ import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { FormatterService } from '~/app/shared/services/formatter.service';
-import { MirrorDirStatus, MirrorStatusResponse } from '~/app/shared/models/cephfs.model';
+import { MirrorDirStatus, MirrorCheckpoint, MirrorStatusResponse } from '~/app/shared/models/cephfs.model';
 import { MirrorPathSchedule } from '~/app/shared/models/snapshot-schedule';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
@@ -36,6 +36,18 @@ interface SnapshotEntry {
   icon: keyof typeof ICON_TYPE;
   iconClass: string;
   statusLabel: string;
+  filesSynced?: number;
+  totalFiles?: number;
+  bytesSynced?: number;
+  totalBytes?: number;
+  createdAt?: string;
+}
+
+interface SnapshotPanelViewModel extends SnapshotEntry {
+  expanded: boolean;
+  hasCheckpoint: boolean;
+  checkpoint?: MirrorCheckpoint;
+  replicationStatusLabel: string;
 }
 
 interface MirrorPath {
@@ -130,6 +142,11 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
   schedulePolicies: MirrorPathSchedule[] = [];
   schedulePoliciesLoading = false;
   removingSchedule = '';
+  snapshotPanels: SnapshotPanelViewModel[] = [];
+  pathCheckpoints: MirrorCheckpoint[] = [];
+  checkpointsLoading = false;
+  checkpointActionInProgress = '';
+  expandedSnapshotNames = new Set<string>();
 
   private subscriptions = new Subscription();
   private mirrorPathsSubscription?: Subscription;
@@ -280,6 +297,9 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
               this.mirrorPaths.find((mirrorPath) => mirrorPath.path === this.selectedPath?.path) ??
               null;
             this.sidePanelOpen = !!this.selectedPath;
+            if (this.selectedPath) {
+              this.refreshSnapshotPanels();
+            }
           }
         },
         (_) => {
@@ -424,14 +444,22 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
           this.createSnapshotEntry({
             name: currentName,
             status: 'in-progress',
-            eta: currentSnap?.eta
+            eta: currentSnap?.eta,
+            filesSynced: currentSnap?.files?.sync_files,
+            totalFiles: currentSnap?.files?.total_files,
+            bytesSynced: this.parseByteValue(currentSnap?.bytes?.sync_bytes),
+            totalBytes: this.parseByteValue(currentSnap?.bytes?.total_bytes)
           })
         );
       } else if (currentName !== lastName) {
         snapshots.push(
           this.createSnapshotEntry({
             name: currentName,
-            status: syncStatus === 'failed' ? 'failed' : 'pending'
+            status: syncStatus === 'failed' ? 'failed' : 'pending',
+            filesSynced: currentSnap?.files?.sync_files,
+            totalFiles: currentSnap?.files?.total_files,
+            bytesSynced: this.parseByteValue(currentSnap?.bytes?.sync_bytes),
+            totalBytes: this.parseByteValue(currentSnap?.bytes?.total_bytes)
           })
         );
       }
@@ -441,7 +469,14 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
       snapshots.push(
         this.createSnapshotEntry({
           name: lastName,
-          status: 'replicated'
+          status: 'replicated',
+          filesSynced: lastSnap?.sync_files,
+          totalFiles: lastSnap?.sync_files,
+          bytesSynced: this.parseByteValue(
+            lastSnap?.sync_bytes != null ? String(lastSnap.sync_bytes) : undefined
+          ),
+          createdAt:
+            lastSnap?.sync_time_stamp != null ? String(lastSnap.sync_time_stamp) : undefined
         })
       );
     }
@@ -453,6 +488,11 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
     name: string;
     status: SnapshotReplicationStatus;
     eta?: string;
+    filesSynced?: number;
+    totalFiles?: number;
+    bytesSynced?: number;
+    totalBytes?: number;
+    createdAt?: string;
   }): SnapshotEntry {
     return {
       ...entry,
@@ -495,14 +535,30 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
     );
   }
 
+  get selectedPathCheckpointCount(): number {
+    return this.pathCheckpoints.length;
+  }
+
+  get canMarkCheckpoint(): boolean {
+    return !!this.permission?.create;
+  }
+
+  get canRemoveCheckpoint(): boolean {
+    return !!this.permission?.delete;
+  }
+
   onPathClick(path: MirrorPath): void {
     this.sidePanelOpen = false;
     this.selectedPath = null;
+    this.snapshotPanels = [];
+    this.pathCheckpoints = [];
+    this.expandedSnapshotNames.clear();
 
     setTimeout(() => {
       this.selectedPath = path;
       this.sidePanelOpen = true;
       this.loadSchedulePolicies(path.path);
+      this.loadPathCheckpoints(path.path);
       this.loadMirrorPaths();
     });
   }
@@ -513,6 +569,194 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
     this.schedulePolicies = [];
     this.schedulePoliciesLoading = false;
     this.removingSchedule = '';
+    this.snapshotPanels = [];
+    this.pathCheckpoints = [];
+    this.checkpointsLoading = false;
+    this.checkpointActionInProgress = '';
+    this.expandedSnapshotNames.clear();
+  }
+
+  loadPathCheckpoints(path: string): void {
+    if (!this.fsName || !path) {
+      this.pathCheckpoints = [];
+      this.refreshSnapshotPanels();
+      return;
+    }
+
+    this.checkpointsLoading = true;
+    this.subscriptions.add(
+      this.cephfsService.listMirrorCheckpoints(this.fsName, path).subscribe(
+        (response) => {
+          if (this.selectedPath?.path !== path) {
+            this.checkpointsLoading = false;
+            return;
+          }
+          this.pathCheckpoints = response.checkpoints ?? [];
+          if (this.selectedPath) {
+            this.selectedPath.checkpointCount = this.pathCheckpoints.length;
+          }
+          this.refreshSnapshotPanels();
+          this.checkpointsLoading = false;
+        },
+        () => {
+          if (this.selectedPath?.path === path) {
+            this.pathCheckpoints = [];
+            this.refreshSnapshotPanels();
+          }
+          this.checkpointsLoading = false;
+        }
+      )
+    );
+  }
+
+  refreshSnapshotPanels(): void {
+    if (!this.selectedPath) {
+      this.snapshotPanels = [];
+      return;
+    }
+
+    const checkpointByName = new Map(
+      this.pathCheckpoints.map((checkpoint) => [checkpoint.snap_name, checkpoint])
+    );
+    const snapshots = this.selectedPath.snapshots ?? [];
+    const seenNames = new Set<string>();
+
+    this.snapshotPanels = snapshots.map((snapshot) => {
+      seenNames.add(snapshot.name);
+      const checkpoint = checkpointByName.get(snapshot.name);
+      return this.buildSnapshotPanel(snapshot, checkpoint);
+    });
+
+    for (const checkpoint of this.pathCheckpoints) {
+      if (seenNames.has(checkpoint.snap_name)) {
+        continue;
+      }
+      seenNames.add(checkpoint.snap_name);
+      this.snapshotPanels.push(
+        this.buildSnapshotPanel(
+          this.createSnapshotEntry({
+            name: checkpoint.snap_name,
+            status: 'replicated',
+            createdAt: checkpoint.created_at
+          }),
+          checkpoint
+        )
+      );
+    }
+  }
+
+  private buildSnapshotPanel(
+    snapshot: SnapshotEntry,
+    checkpoint?: MirrorCheckpoint
+  ): SnapshotPanelViewModel {
+    return {
+      ...snapshot,
+      expanded: this.expandedSnapshotNames.has(snapshot.name),
+      hasCheckpoint: !!checkpoint,
+      checkpoint,
+      createdAt: checkpoint?.created_at ?? snapshot.createdAt,
+      replicationStatusLabel: this.replicationStatusLabel(snapshot.status)
+    };
+  }
+
+  toggleSnapshotExpanded(snapshotName: string): void {
+    if (this.expandedSnapshotNames.has(snapshotName)) {
+      this.expandedSnapshotNames.delete(snapshotName);
+    } else {
+      this.expandedSnapshotNames.add(snapshotName);
+    }
+    this.refreshSnapshotPanels();
+  }
+
+  collapseAllSnapshots(): void {
+    this.expandedSnapshotNames.clear();
+    this.refreshSnapshotPanels();
+  }
+
+  markAsCheckpoint(snapshot: SnapshotPanelViewModel): void {
+    if (!this.fsName || !this.selectedPath?.path || !this.canMarkCheckpoint) {
+      return;
+    }
+
+    const path = this.selectedPath.path;
+    const snapName = snapshot.name;
+    this.checkpointActionInProgress = snapName;
+    this.subscriptions.add(
+      this.taskWrapper
+        .wrapTaskAroundCall({
+          task: new FinishedTask('cephfs/mirroring/checkpoint/add', {
+            fsName: this.fsName,
+            path,
+            snapName
+          }),
+          call: this.cephfsService
+            .addMirrorCheckpoint(this.fsName, path, snapName)
+            .pipe(
+              tap(() => {
+                this.checkpointActionInProgress = '';
+                this.loadPathCheckpoints(path);
+                this.loadMirrorPaths();
+              })
+            )
+        })
+        .subscribe({
+          error: () => {
+            this.checkpointActionInProgress = '';
+          }
+        })
+    );
+  }
+
+  removeCheckpointModal(snapshot: SnapshotPanelViewModel): void {
+    if (!this.fsName || !this.selectedPath?.path || !this.canRemoveCheckpoint) {
+      return;
+    }
+
+    const path = this.selectedPath.path;
+    const snapName = snapshot.name;
+    this.cdsModalService.show(DeleteConfirmationModalComponent, {
+      impact: DeletionImpact.medium,
+      itemDescription: $localize`checkpoint`,
+      itemNames: [snapName],
+      actionDescription: 'remove',
+      submitActionObservable: () =>
+        this.taskWrapper
+          .wrapTaskAroundCall({
+            task: new FinishedTask('cephfs/mirroring/checkpoint/remove', {
+              fsName: this.fsName,
+              path,
+              snapName
+            }),
+            call: this.cephfsService.removeMirrorCheckpoint(this.fsName, path, snapName).pipe(
+              tap(() => {
+                this.loadPathCheckpoints(path);
+                this.loadMirrorPaths();
+              })
+            )
+          })
+    });
+  }
+
+  formatSnapshotFiles(filesSynced?: number, totalFiles?: number): string {
+    if (filesSynced === undefined || totalFiles === undefined) {
+      return '-';
+    }
+    return `${filesSynced}/${totalFiles}`;
+  }
+
+  private replicationStatusLabel(status: SnapshotReplicationStatus): string {
+    switch (status) {
+      case 'in-progress':
+        return $localize`In progress`;
+      case 'replicated':
+        return $localize`Replicated`;
+      case 'pending':
+        return $localize`Pending`;
+      case 'failed':
+        return $localize`Failed`;
+      default:
+        return '-';
+    }
   }
 
   loadSchedulePolicies(path: string): void {
