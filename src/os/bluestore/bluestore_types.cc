@@ -30,12 +30,12 @@ using ceph::Formatter;
 
 namespace bluestore_decode {
 
-thread_local bool tolerate_failures = false;
+thread_local bool throw_on_failure = false;
 
-[[noreturn]] void assert_fail(const char* assertion, const char* file,
+void assert_fail(const char* assertion, const char* file,
                               int line, const char* func)
 {
-  if (tolerate_failures) {
+  if (throw_on_failure) {
     throw ceph::buffer::malformed_input(
       std::string("decode assert failure: ") + assertion +
       " at " + file + ":" + std::to_string(line));
