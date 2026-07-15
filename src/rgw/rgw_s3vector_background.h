@@ -27,5 +27,9 @@ namespace rgw::s3vector {
   bool notify_session_create(const DoutPrefixProvider* dpp, const std::string& bucket_name);
   // notify manager for session deletion
   bool notify_session_delete(const DoutPrefixProvider* dpp, const std::string& bucket_name);
+  // get the driver from the manager, returns nullptr if manager is not initialized
+  rgw::sal::Driver* get_driver();
+  // get a long-lived dpp from the manager for use with SAL provider creation
+  const DoutPrefixProvider* get_dpp();
 }
 

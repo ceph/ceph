@@ -5,6 +5,7 @@
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
 #include "common/dout.h"
+#include "common/ceph_context.h"
 #include <arrow/type_fwd.h>
 #include <fmt/format.h>
 #include "lancedb.h"
@@ -16,6 +17,12 @@
 #include <set>
 #include "rgw_s3vector_background.h"
 #include "rgw_s3vector_filter.h"
+#include "rgw/rgw_sal.h"
+#include "rgw/rgw_op.h"
+
+#ifdef WITH_RADOSGW_LANCEDB
+#include "lancedb_rgw_store.h"
+#endif
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -77,37 +84,265 @@ namespace rgw::s3vector {
     return -EIO;
   }
 
+  // Create a LanceDB session with RGW SAL provider.
+  // Returns a new session on success, nullptr on failure.
+  LanceDBSession* create_sal_session(const DoutPrefixProvider* dpp,
+      rgw::sal::Driver* driver,
+      const void* options) {
+#ifdef WITH_RADOSGW_LANCEDB
+    if (!driver) {
+      ldpp_dout(dpp, 1) << "ERROR: SAL backend requires a valid driver" << dendl;
+      return nullptr;
+    }
+
+    LanceDBObjectStoreRegistry* registry = lancedb_registry_new();
+    if (!registry) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to create LanceDB registry" << dendl;
+      return nullptr;
+    }
+
+    LanceDBObjectStoreProvider* provider = rgw_lancedb_create_provider(driver, dpp);
+    if (!provider) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to create RGW LanceDB provider" << dendl;
+      lancedb_registry_free(registry);
+      return nullptr;
+    }
+
+    char* reg_error = nullptr;
+    if (lancedb_registry_insert_provider(registry, "rgw", provider, &reg_error) != LANCEDB_SUCCESS) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to insert provider: "
+                        << (reg_error ? reg_error : "unknown") << dendl;
+      if (reg_error)
+        lancedb_free_string(reg_error);
+      lancedb_registry_free(registry);
+      return nullptr;
+    }
+
+    LanceDBSession* session = lancedb_session_new_with_registry(
+        static_cast<const LanceDBSessionOptions*>(options), registry);
+    if (!session) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to create SAL session" << dendl;
+      lancedb_registry_free(registry);
+    }
+    return session;
+#else
+    ldpp_dout(dpp, 1) << "ERROR: no LanceDB SAL backend support" << dendl;
+    return nullptr;
+#endif
+  }
+
+  // Extract tenant from dpp if it's an RGWOp (REST handler path)
+  std::string get_tenant(DoutPrefixProvider* dpp) {
+    auto* op = dynamic_cast<RGWOp*>(dpp);
+    if (op && op->get_req_state()) {
+      return op->get_req_state()->bucket_tenant;
+    }
+    return {};
+  }
+
+  // Build SAL backend URI with optional tenant query param
+  std::string make_sal_uri(const std::string& bucket, const std::string& tenant) {
+    if (tenant.empty()) {
+      return fmt::format("rgw://{}/", bucket);
+    }
+    return fmt::format("rgw://{}/?tenant={}", bucket, tenant);
+  }
+
   // utility functions for connection creation and opening table
 
   LanceDBConnection* connect(DoutPrefixProvider* dpp, const std::string& vector_bucket_name) {
-    const auto dbname = fmt::format("/tmp/lancedb/{}", vector_bucket_name);
-    LanceDBConnectBuilder* builder = lancedb_connect(dbname.c_str());
-    LanceDBConnection* conn = lancedb_connect_builder_execute(builder);
-    if (!conn) {
-      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to connect to: " << dbname << dendl;
+    CephContext* cct = dpp->get_cct();
+    const auto& conf = cct->_conf;
+    const std::string backend_str = conf.get_val<std::string>("rgw_s3vector_backend");
+    BackendType backend_type;
+    if (int ret = get_backend_type(backend_str, backend_type); ret < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector unrecognized backend type: " << backend_str << dendl;
+      return nullptr;
+    }
+
+    std::string uri;
+    LanceDBConnectBuilder* builder = nullptr;
+
+    if (is_local_backend(backend_type)) {
+      // Local filesystem backend (default)
+      const std::string local_path = conf.get_val<std::string>("rgw_s3vector_local_path");
+      if (local_path.empty()) {
+        ldpp_dout(dpp, 1) << "ERROR: s3vector local backend requires "
+                          << "rgw_s3vector_local_path to be configured" << dendl;
+        return nullptr;
+      }
+      uri = fmt::format("{}/{}", local_path, vector_bucket_name);
+      builder = lancedb_connect(uri.c_str());
+      if (!builder) {
+        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to create connection builder for: " << uri << dendl;
+        return nullptr;
+      }
+      ldpp_dout(dpp, 10) << "INFO: s3vector connecting to local backend: " << uri << dendl;
+    } else if (is_sal_backend(backend_type)) {
+      // SAL backend requires a regular S3 bucket with the same name as the
+      // vector bucket to exist before vector operations.
+      rgw::sal::Driver* driver = rgw::s3vector::get_driver();
+      // TODO: disable cache for short-lived sessions once LanceDB supports it
+      // (currently 0 = default cache size, no way to disable)
+      LanceDBSession* session = create_sal_session(dpp, driver);
+      if (!session) {
+        return nullptr;
+      }
+
+      uri = make_sal_uri(vector_bucket_name, get_tenant(dpp));
+      builder = lancedb_connect(uri.c_str());
+      if (!builder) {
+        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to create connection builder for: " << uri << dendl;
+        lancedb_session_free(session);
+        return nullptr;
+      }
+
+      LanceDBConnectBuilder* new_builder = lancedb_connect_builder_session(builder, session);
+      if (!new_builder) {
+        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to attach session to connection builder" << dendl;
+        lancedb_connect_builder_free(builder);
+        lancedb_session_free(session);
+        return nullptr;
+      }
+      builder = new_builder;
+
+      ldpp_dout(dpp, 10) << "INFO: s3vector connecting to SAL backend: " << uri << dendl;
+    } else { // S3 backend
+
+      // Use vector bucket name directly as the S3 bucket name.
+      // A regular S3 bucket with the same name as the vector bucket must exist
+      // at the backend.
+      uri = fmt::format("s3://{}/", vector_bucket_name);
+      builder = lancedb_connect(uri.c_str());
+      if (!builder) {
+        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to create connection builder for: " << uri << dendl;
+        return nullptr;
+      }
+
+      const std::string s3_endpoint = conf.get_val<std::string>("rgw_s3vector_s3_endpoint");
+      const std::string s3_region = conf.get_val<std::string>("rgw_s3vector_s3_region");
+      const bool s3_allow_http = conf.get_val<bool>("rgw_s3vector_s3_allow_http");
+
+      // set storage options
+      auto set_storage_option = [&](const char* key, const char* value) -> bool {
+        LanceDBConnectBuilder* new_builder = lancedb_connect_builder_storage_option(builder, key, value);
+        if (!new_builder) {
+          ldpp_dout(dpp, 1) << "ERROR: s3vector failed to set storage option: " << key << dendl;
+          lancedb_connect_builder_free(builder);
+          builder = nullptr;
+          return false;
+        }
+        builder = new_builder;
+        return true;
+      };
+
+      if (!s3_endpoint.empty()) {
+        if (!set_storage_option("endpoint", s3_endpoint.c_str())) {
+          return nullptr;
+        }
+      }
+
+      if (!s3_region.empty()) {
+        if (!set_storage_option("aws_region", s3_region.c_str())) {
+          return nullptr;
+        }
+      }
+
+      // Use the S3 client user's credentials
+      auto* op = dynamic_cast<RGWOp*>(dpp);
+      if (op) {
+        auto* user = op->get_user();
+        if (user) {
+          const auto& keys = user->get_info().access_keys;
+          for (const auto& [id, ak] : keys) {
+            if (ak.active) {
+              if (!set_storage_option("aws_access_key_id", ak.id.c_str())) {
+                return nullptr;
+              }
+              if (!set_storage_option("aws_secret_access_key", ak.key.c_str())) {
+                return nullptr;
+              }
+              break;
+            }
+          }
+        }
+      }
+
+      if (s3_allow_http) {
+        if (!set_storage_option("allow_http", "true")) {
+          return nullptr;
+        }
+      }
+
+      ldpp_dout(dpp, 10) << "INFO: s3vector connecting to S3 backend: " << uri
+                         << " endpoint=" << s3_endpoint << " region=" << s3_region << dendl;
+    }
+
+    LanceDBConnection* conn = nullptr;
+    char* error_message = nullptr;
+    const auto rc = lancedb_connect_builder_execute(builder, &conn, &error_message);
+    if (rc != LANCEDB_SUCCESS) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to connect to: " << uri
+        << " error: " << (error_message ? error_message : "unknown") << dendl;
+      lancedb_free_string(error_message);
+      return nullptr;
     }
     return conn;
   }
 
-  LanceDBSessionConnHandle connect_with_session_handle(DoutPrefixProvider* dpp, const std::string& vector_bucket_name){
-    const auto dbname = fmt::format("/tmp/lancedb/{}", vector_bucket_name);
-    //get shared pointer to session for the bucket, if session doesn't exist, fallback to connect w/o session and trigger session creation for future connections
+  LanceDBSessionConnHandle connect_with_session_handle(DoutPrefixProvider* dpp, const std::string& vector_bucket_name) {
+    CephContext* cct = dpp->get_cct();
+    const auto& conf = cct->_conf;
+    const std::string backend_str = conf.get_val<std::string>("rgw_s3vector_backend");
+    BackendType backend_type;
+    if (int ret = get_backend_type(backend_str, backend_type); ret < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector unrecognized backend type: " << backend_str << dendl;
+      return {};
+    }
+
+    // Try to get session from pool
     auto session_sp = rgw::s3vector::get_session(dpp, vector_bucket_name);
     if (!session_sp) {
+      // Session not in pool - trigger async creation and fall back to connect without session
       rgw::s3vector::notify_session_create(dpp, vector_bucket_name);
       return LanceDBSessionConnHandle{
         .conn = connect(dpp, vector_bucket_name)
       };
     }
-    LanceDBConnectBuilder* builder = lancedb_connect(dbname.c_str());
-    builder = lancedb_connect_builder_session(builder, session_sp.get());
-    LanceDBConnection* conn = lancedb_connect_builder_execute(builder);
-    if (!conn) {
-      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to connect using session to: " << dbname << " falling back to connect without session" << dendl;
+
+    // Build URI based on backend type
+    std::string uri;
+    if (is_local_backend(backend_type)) {
+      const std::string local_path = conf.get_val<std::string>("rgw_s3vector_local_path");
+      uri = fmt::format("{}/{}", local_path, vector_bucket_name);
+    } else if (is_sal_backend(backend_type)) {
+      uri = make_sal_uri(vector_bucket_name, get_tenant(dpp));
+    } else {
+      uri = fmt::format("s3://{}/", vector_bucket_name);
+    }
+
+    LanceDBConnectBuilder* builder = lancedb_connect(uri.c_str());
+    if (!builder) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to create connection builder for: " << uri << dendl;
       return LanceDBSessionConnHandle{
         .conn = connect(dpp, vector_bucket_name)
-      }; // fallback to connect without session
+      };
     }
+
+    builder = lancedb_connect_builder_session(builder, session_sp.get());
+    LanceDBConnection* conn = nullptr;
+    char* error_message = nullptr;
+    const auto rc = lancedb_connect_builder_execute(builder, &conn, &error_message);
+    if (rc != LANCEDB_SUCCESS) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to connect using session to: " << uri
+        << " error: " << (error_message ? error_message : "unknown")
+        << " falling back to connect without session" << dendl;
+      lancedb_free_string(error_message);
+      return LanceDBSessionConnHandle{
+        .conn = connect(dpp, vector_bucket_name)
+      };
+    }
+
     return LanceDBSessionConnHandle{
       .session_keepalive = std::move(session_sp),
       .conn = conn

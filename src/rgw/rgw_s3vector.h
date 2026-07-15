@@ -9,6 +9,9 @@
 #include "include/encoding.h"
 #include "rgw_arn.h"
 #include "common/async/yield_context.h"
+#include <boost/algorithm/string/predicate.hpp>
+
+struct LanceDBSession;
 
 namespace ceph {
 class Formatter;
@@ -46,6 +49,49 @@ struct filterable_metadata_key_t {
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
 };
+
+// Backend type for S3 Vector storage
+enum class BackendType {
+  LOCAL, // Local filesystem storage (default)
+  SAL,   // RGW Storage Abstraction Layer (internal)
+  S3     // External S3-compatible object storage
+};
+
+// Convert string to backend type (case-insensitive)
+// Returns 0 on success, -EINVAL for unrecognized values
+inline int get_backend_type(const std::string& str, BackendType& type) {
+  if (boost::iequals(str, "local")) {
+    type = BackendType::LOCAL;
+    return 0;
+  }
+  if (boost::iequals(str, "sal")) {
+    type = BackendType::SAL;
+    return 0;
+  }
+  if (boost::iequals(str, "s3")) {
+    type = BackendType::S3;
+    return 0;
+  }
+  return -EINVAL;
+}
+
+// Helper functions to check backend type
+inline bool is_local_backend(BackendType type) {
+  return type == BackendType::LOCAL;
+}
+
+inline bool is_sal_backend(BackendType type) {
+  return type == BackendType::SAL;
+}
+
+inline bool is_s3_backend(BackendType type) {
+  return type == BackendType::S3;
+}
+
+// Create a LanceDB session with RGW SAL provider
+LanceDBSession* create_sal_session(const DoutPrefixProvider* dpp,
+    rgw::sal::Driver* driver,
+    const void* options = nullptr);
 
 /*
   {

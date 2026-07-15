@@ -158,6 +158,11 @@ list(APPEND librgw_common_srcs
   driver/immutable_config/store.cc
   driver/json_config/store.cc)
 
+if(WITH_RADOSGW_LANCEDB)
+  list(APPEND librgw_common_srcs
+    rgw_sal_wrapper.cc)
+endif()
+
 if(WITH_RADOSGW_RADOS)
   list(APPEND librgw_common_srcs
           services/svc_bi_rados.cc
@@ -414,6 +419,64 @@ if(WITH_RADOSGW_DAOS)
 endif()
 
 if(WITH_RADOSGW_LANCEDB)
+  include(ExternalProject)
+
+  # Both Rust crates share a Cargo workspace (src/rgw/Cargo.toml) with a
+  # single Cargo.lock, guaranteeing identical dependency versions.
+
+  # lancedb-c: upstream LanceDB C FFI bindings (git submodule)
+  set(LANCEDB_C_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lancedb-c")
+  set(LANCEDB_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/lancedb-c-prefix/src/lancedb-c-build")
+  if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(LANCEDB_RUST_TARGET_DIR "${LANCEDB_BUILD_DIR}/target/debug")
+  else()
+    set(LANCEDB_RUST_TARGET_DIR "${LANCEDB_BUILD_DIR}/target/release")
+  endif()
+
+  ExternalProject_Add(lancedb-c
+    SOURCE_DIR ${LANCEDB_C_SOURCE_DIR}
+    CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+               -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/lancedb-c-install
+    BUILD_ALWAYS OFF
+    BUILD_BYPRODUCTS ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/liblancedb.so
+    INSTALL_COMMAND ${CMAKE_COMMAND} -E copy
+                    ${LANCEDB_RUST_TARGET_DIR}/liblancedb.so
+                    ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/liblancedb.so
+                COMMAND ${CMAKE_COMMAND} -E copy
+                    ${LANCEDB_C_SOURCE_DIR}/include/lancedb.h
+                    ${CMAKE_BINARY_DIR}/src/include/lancedb.h
+  )
+
+  # lancedb-rgw-store: SAL backend for LanceDB
+  set(LANCEDB_RGW_STORE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lancedb-rgw-store")
+  set(LANCEDB_RGW_STORE_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/lancedb-rgw-store-prefix/src/lancedb-rgw-store-build")
+  if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(LANCEDB_RGW_STORE_TARGET_DIR "${LANCEDB_RGW_STORE_BUILD_DIR}/target/debug")
+    set(LANCEDB_RGW_STORE_CARGO_FLAG "")
+  else()
+    set(LANCEDB_RGW_STORE_TARGET_DIR "${LANCEDB_RGW_STORE_BUILD_DIR}/target/release")
+    set(LANCEDB_RGW_STORE_CARGO_FLAG "--release")
+  endif()
+
+  ExternalProject_Add(lancedb-rgw-store
+    SOURCE_DIR ${LANCEDB_RGW_STORE_SOURCE_DIR}
+    BINARY_DIR ${LANCEDB_RGW_STORE_BUILD_DIR}
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND ${CMAKE_COMMAND} -E env
+          CARGO_TARGET_DIR=${LANCEDB_RGW_STORE_BUILD_DIR}/target
+          cargo build ${LANCEDB_RGW_STORE_CARGO_FLAG}
+          --manifest-path ${LANCEDB_RGW_STORE_SOURCE_DIR}/Cargo.toml
+    BUILD_ALWAYS OFF
+    BUILD_BYPRODUCTS ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/liblancedb_rgw_store.so
+    INSTALL_COMMAND ${CMAKE_COMMAND} -E copy
+                    ${LANCEDB_RGW_STORE_TARGET_DIR}/liblancedb_rgw_store.so
+                    ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/liblancedb_rgw_store.so
+                COMMAND ${CMAKE_COMMAND} -E copy
+                    ${LANCEDB_RGW_STORE_SOURCE_DIR}/include/lancedb_rgw_store.h
+                    ${CMAKE_BINARY_DIR}/src/include/lancedb_rgw_store.h
+  )
+  add_dependencies(lancedb-rgw-store lancedb-c)
+
   # Create imported library target for liblancedb
   add_library(lancedb SHARED IMPORTED)
   set_target_properties(lancedb PROPERTIES
@@ -423,6 +486,24 @@ if(WITH_RADOSGW_LANCEDB)
   target_link_libraries(rgw_common PUBLIC lancedb)
   add_dependencies(rgw_common lancedb-c)
   install(FILES ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/liblancedb.so
+    DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+  # Create imported library target for liblancedb_rgw_store (SAL wrapper)
+  add_library(lancedb_rgw_store SHARED IMPORTED)
+  set_target_properties(lancedb_rgw_store PROPERTIES
+    IMPORTED_LOCATION ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/liblancedb_rgw_store.so
+    IMPORTED_NO_SONAME TRUE
+  )
+  # Note: Do NOT link rgw_common -> lancedb_rgw_store here because it creates
+  # a circular dependency (lancedb_rgw_store needs rgw_sal_wrapper symbols from
+  # rgw_common). Instead, link lancedb_rgw_store directly to executables
+  # after rgw_common so the linker can resolve all symbols.
+  target_include_directories(rgw_common PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/rgw
+    ${CMAKE_SOURCE_DIR}/src/rgw/lancedb-rgw-store/include
+  )
+  add_dependencies(rgw_common lancedb-rgw-store)
+  install(FILES ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/liblancedb_rgw_store.so
     DESTINATION ${CMAKE_INSTALL_LIBDIR})
 endif()
 
@@ -541,6 +622,10 @@ if(WITH_RADOSGW_ARROW_FLIGHT)
   # target_include_directories(radosgw PUBLIC Arrow::Arrow)
 endif(WITH_RADOSGW_ARROW_FLIGHT)
 
+if(WITH_RADOSGW_LANCEDB)
+  target_compile_definitions(rgw_common PUBLIC WITH_RADOSGW_LANCEDB)
+endif()
+
 target_compile_definitions(radosgw PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
 target_include_directories(radosgw
   PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
@@ -595,6 +680,10 @@ if(WITH_RADOSGW_FDB)
 
 endif(WITH_RADOSGW_FDB)
 
+if(WITH_RADOSGW_LANCEDB)
+  target_link_libraries(radosgw PRIVATE lancedb_rgw_store)
+endif()
+
 install(TARGETS radosgw DESTINATION bin)
 
 set(radosgw_admin_srcs
@@ -638,6 +727,10 @@ endif(WITH_RADOSGW_POSIX AND NOT WITH_RADOSGW_RADOS)
 if(WITH_RADOSGW_ARROW_FLIGHT)
   target_link_libraries(radosgw-admin ${ARROW_LIBRARIES} ${ARROW_FLIGHT_LIBRARIES})
 endif(WITH_RADOSGW_ARROW_FLIGHT)
+
+if(WITH_RADOSGW_LANCEDB)
+  target_link_libraries(radosgw-admin lancedb_rgw_store)
+endif()
 
 if(WITH_RADOSGW_RADOS)
 install(TARGETS radosgw-admin DESTINATION bin)

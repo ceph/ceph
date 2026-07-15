@@ -4860,3 +4860,57 @@ options:
   desc: When not empty, this value is returned as a response header Access-Control-Expose-Headers.
   services:
   - rgw
+# S3 Vector (LanceDB) backend configuration
+- name: rgw_s3vector_backend
+  type: str
+  level: advanced
+  desc: S3 Vector backend type
+  long_desc: Specifies the storage backend for S3 Vector (LanceDB). Use "local" for
+    local filesystem storage, "s3" for external S3-compatible object storage, or
+    "sal" for RGW's internal Storage Abstraction Layer (same Ceph cluster).
+  default: sal
+  enum_values:
+  - local
+  - s3
+  - sal
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_s3vector_local_path
+  type: str
+  level: advanced
+  desc: Local path for S3 Vector LanceDB storage
+  long_desc: The local filesystem path where LanceDB databases will be stored when
+    using the "local" backend. Each vector bucket will be created as a subdirectory.
+  default: /var/lib/ceph/radosgw/$cluster-$id/s3vector-lancedb
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_s3vector_s3_endpoint
+  type: str
+  level: advanced
+  desc: S3 endpoint URL for S3 Vector backend
+  long_desc: The S3-compatible endpoint URL (e.g., http://localhost:9000) to use
+    when rgw_s3vector_backend is set to "s3".
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_s3vector_s3_region
+  type: str
+  level: advanced
+  desc: AWS region for S3 Vector backend
+  long_desc: The AWS region to use for S3 storage when rgw_s3vector_backend is set to "s3".
+  default:
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_s3vector_s3_allow_http
+  type: bool
+  level: advanced
+  desc: Allow HTTP (non-HTTPS) S3 endpoints
+  long_desc: When set to true, allows connecting to S3 endpoints using HTTP instead of HTTPS.
+    This is useful for using a local S3-compatible services (e.g. point to the same RGW).
+  default: false
+  services:
+  - rgw
+  with_legacy: true
