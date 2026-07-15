@@ -16908,7 +16908,8 @@ uint32_t BlueStore::_do_write_small_with_maybe_blob_reuse(
 	  if (head_read) {
 	    bufferlist head_bl;
 	    int r = _do_read(c.get(), o, offset - head_pad - head_read, head_read,
-			     head_bl, 0);
+			     head_bl,
+			     CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
 	    ceph_assert(r >= 0 && r <= (int)head_read);
 	    size_t zlen = head_read - r;
 	    if (zlen) {
@@ -16922,7 +16923,8 @@ uint32_t BlueStore::_do_write_small_with_maybe_blob_reuse(
 	  if (tail_read) {
 	    bufferlist tail_bl;
 	    int r = _do_read(c.get(), o, offset + length + tail_pad, tail_read,
-			     tail_bl, 0);
+			     tail_bl,
+			     CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
 	    ceph_assert(r >= 0 && r <= (int)tail_read);
 	    size_t zlen = tail_read - r;
 	    if (zlen) {
