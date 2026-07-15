@@ -667,6 +667,7 @@ ostream& operator<<(ostream& out, const BlueStore::Buffer& b)
       << " " << BlueStore::Buffer::get_state_name(b.state)
       << BlueStore::Buffer::get_flag_name(" ", b.flags)
       << ")";
+  return out;
 }
 
 //pool_fsck_stats_t
