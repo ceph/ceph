@@ -245,3 +245,49 @@ TEST(LibCephFS, SnapMdMutate) {
   ceph_shutdown(cmount);
   ceph_shutdown(cmount2);
 }
+
+// Test that client #2 observes snap metadata removal made by client #1 even
+// when client #2 already cached the snapshot inode.
+TEST(LibCephFS, SnapMdMutateCachedRead) {
+  struct ceph_mount_info *cmount, *cmount2;
+
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_parse_env(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  ASSERT_EQ(ceph_create(&cmount2, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount2, NULL), 0);
+  ASSERT_EQ(ceph_conf_parse_env(cmount2, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount2, NULL), 0);
+
+  char dir_path[64];
+  char snap_name[64];
+  char snap_path[PATH_MAX];
+  sprintf(dir_path, "/dir0_%d-6", getpid());
+  sprintf(snap_name, "snap_%d_6", getpid());
+  sprintf(snap_path, "%s/.snap/%s", dir_path, snap_name);
+
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path, 0755));
+  struct snap_metadata snap_meta[] = {{"foo", "bar"}};
+  ASSERT_EQ(0, ceph_mksnap(cmount, dir_path, snap_name, 0755, snap_meta,
+                           std::size(snap_meta)));
+
+  struct snap_info info = {};
+  ASSERT_EQ(0, ceph_get_snap_info(cmount2, snap_path, &info));
+  ASSERT_EQ(info.nr_snap_metadata, 1);
+  ceph_free_snap_info_buffer(&info);
+
+  ASSERT_EQ(0, ceph_do_snap_md_op(cmount, snap_path, "foo", "",
+                                  CEPH_SNAP_MD_OP_REMOVE));
+
+  memset(&info, 0, sizeof(info));
+  ASSERT_EQ(0, ceph_get_snap_info(cmount2, snap_path, &info));
+  ASSERT_EQ(info.nr_snap_metadata, 0);
+  ceph_free_snap_info_buffer(&info);
+
+  ASSERT_EQ(0, ceph_rmsnap(cmount, dir_path, snap_name));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path));
+  ceph_shutdown(cmount);
+  ceph_shutdown(cmount2);
+}
