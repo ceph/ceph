@@ -41,15 +41,50 @@ export class MirroringPathUtils {
     return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
   }
 
+  /** Path is already mirrored, or nested under an existing mirror path. */
   static isPathTracked(path: string, trackedPaths: Set<string>): boolean {
     const normalized = MirroringPathUtils.normalizePath(path);
     if (!normalized || !trackedPaths.size) {
       return false;
     }
     for (const tracked of trackedPaths) {
-      if (MirroringPathUtils.pathsOverlap(normalized, tracked)) {
+      const trackedPath = MirroringPathUtils.normalizePath(tracked);
+      if (normalized === trackedPath || normalized.startsWith(`${trackedPath}/`)) {
         return true;
       }
+    }
+    return false;
+  }
+
+  /** Path cannot be mirrored because it overlaps an existing mirror path. */
+  static conflictsWithMirroredPath(path: string, trackedPaths: Set<string>): boolean {
+    const normalized = MirroringPathUtils.normalizePath(path);
+    if (!normalized || !trackedPaths.size) {
+      return false;
+    }
+    for (const tracked of trackedPaths) {
+      if (MirroringPathUtils.pathsOverlap(normalized, MirroringPathUtils.normalizePath(tracked))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static conflictsWithOtherRowSelection(
+    path: string,
+    otherPath: string,
+    options: { allowAncestor?: boolean } = {}
+  ): boolean {
+    const normalized = MirroringPathUtils.normalizePath(path);
+    const other = MirroringPathUtils.normalizePath(otherPath);
+    if (!normalized || !other) {
+      return false;
+    }
+    if (normalized === other || normalized.startsWith(`${other}/`)) {
+      return true;
+    }
+    if (!options.allowAncestor && other.startsWith(`${normalized}/`)) {
+      return true;
     }
     return false;
   }
