@@ -1717,3 +1717,445 @@ TEST(ECUtil, merge_shard_extent_maps_multi_stripe)
   ASSERT_EQ(1u, result.size());
   ASSERT_EQ((uint64_t)chunk_size * 4, result.at(0));
 }
+
+TEST(ECUtil, get_sparse_buffer_zero_not_force_allocated)
+{
+  int k = 2;
+  int m = 1;
+  int chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  // append_zero2() produces is_zero_fast() buffer_ptrs backed by raw_zeros.
+  bufferlist bl;
+  bl.append_zero2(chunk_size);
+  ASSERT_TRUE(bl.buffers().front().is_zero_fast());
+  sem.insert_in_shard(shard_id_t(0), 0, bl);
+
+  bufferlist out;
+  interval_set<uint64_t> iset;
+
+  // No force_alloc hint: zero-fast buffer must be skipped.
+  sem.get_sparse_buffer(shard_id_t(0), out, iset);
+
+  ASSERT_EQ(0u, out.length());
+  ASSERT_TRUE(iset.empty());
+}
+
+TEST(ECUtil, get_sparse_buffer_zero_force_allocated)
+{
+  int k = 2;
+  int m = 1;
+  int chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  // append_zero2() produces is_zero_fast() buffer_ptrs backed by raw_zeros.
+  bufferlist bl;
+  bl.append_zero2(chunk_size);
+  ASSERT_TRUE(bl.buffers().front().is_zero_fast());
+  sem.insert_in_shard(shard_id_t(0), 0, bl);
+
+  // Mark the whole first chunk as force-allocated in shard space.
+  interval_set<uint64_t> force_alloc;
+  force_alloc.insert(0, chunk_size);
+
+  bufferlist out;
+  interval_set<uint64_t> iset;
+
+  sem.get_sparse_buffer(shard_id_t(0), out, iset, &force_alloc);
+
+  // The zero-fast buffer must be included because it is force-allocated.
+  ASSERT_EQ((uint64_t)chunk_size, out.length());
+  ASSERT_EQ(1u, iset.num_intervals());
+  ASSERT_TRUE(iset.contains(0, chunk_size));
+}
+
+TEST(ECUtil, get_sparse_buffer_nonzero_always_kept)
+{
+  int k = 2;
+  int m = 1;
+  int chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  bufferlist bl;
+  bl.append_zero(chunk_size);
+  bl.c_str()[0] = 'X'; // make it non-zero
+  sem.insert_in_shard(shard_id_t(0), 0, bl);
+
+  bufferlist out;
+  interval_set<uint64_t> iset;
+
+  // Without force_alloc: non-zero block must be kept.
+  sem.get_sparse_buffer(shard_id_t(0), out, iset);
+
+  ASSERT_EQ((uint64_t)chunk_size, out.length());
+  ASSERT_TRUE(iset.contains(0, chunk_size));
+}
+
+TEST(ECUtil, get_sparse_buffer_mixed_force_alloc)
+{
+  int k = 2;
+  int m = 1;
+  int chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  // Build a bufferlist with two separate buffer_ptrs:
+  //   chunk 0: regular (non-zero-fast) buffer with a non-zero byte
+  //   chunk 1: zero-fast buffer via append_zero2()
+  bufferlist bl;
+  {
+    bufferlist nonzero;
+    nonzero.append_zero(chunk_size);
+    nonzero.c_str()[0] = 'X';
+    bl.append(nonzero);
+  }
+  bl.append_zero2(chunk_size); // produces an is_zero_fast() buffer_ptr
+
+  // Verify our setup: the second buffer_ptr must be zero-fast.
+  auto buf_iter = bl.buffers().begin();
+  ++buf_iter; // advance to the second buffer_ptr
+  ASSERT_TRUE(buf_iter->is_zero_fast());
+
+  sem.insert_in_shard(shard_id_t(0), 0, bl);
+
+  // Only the second chunk (offset chunk_size) is force-allocated.
+  interval_set<uint64_t> force_alloc;
+  force_alloc.insert(chunk_size, chunk_size);
+
+  bufferlist out;
+  interval_set<uint64_t> iset;
+  sem.get_sparse_buffer(shard_id_t(0), out, iset, &force_alloc);
+
+  // Both chunks must appear: chunk 0 because non-zero, chunk 1 because FAE.
+  ASSERT_EQ((uint64_t)chunk_size * 2, out.length());
+  ASSERT_TRUE(iset.contains(0, chunk_size));
+  ASSERT_TRUE(iset.contains(chunk_size, chunk_size));
+}
+
+TEST(ECUtil, get_sparse_buffer_absent_shard)
+{
+  int k = 2;
+  int m = 1;
+  int chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  // No data inserted for shard 0.
+  interval_set<uint64_t> force_alloc;
+  force_alloc.insert(0, chunk_size);
+
+  bufferlist out;
+  interval_set<uint64_t> iset;
+  sem.get_sparse_buffer(shard_id_t(0), out, iset, &force_alloc);
+
+  ASSERT_EQ(0u, out.length());
+  ASSERT_TRUE(iset.empty());
+}
+
+namespace {
+std::pair<interval_set<uint64_t>, bufferlist>
+recovery_push_data(ECUtil::shard_extent_map_t &sem,
+                   shard_id_t shard,
+                   const interval_set<uint64_t> *force_alloc_ptr)
+{
+  bufferlist data;
+  interval_set<uint64_t> data_included;
+  sem.get_sparse_buffer(shard, data, data_included, force_alloc_ptr);
+
+  if (force_alloc_ptr && !force_alloc_ptr->empty()) {
+    interval_set<uint64_t> missing_fae;
+    missing_fae.union_of(*force_alloc_ptr);
+    missing_fae.subtract(data_included);
+    for (auto [off, len] : missing_fae) {
+      data_included.insert(off, len);
+      data.append_zero(len);
+    }
+  }
+
+  return {data_included, data};
+}
+}
+
+TEST(ECUtil, subtask4_absent_shard_no_fae)
+{
+  int k = 2, m = 1, chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  auto [iset, data] = recovery_push_data(sem, shard_id_t(0), nullptr);
+  ASSERT_TRUE(iset.empty());
+  ASSERT_EQ(0u, data.length());
+}
+
+TEST(ECUtil, subtask4_absent_shard_full_fae)
+{
+  int k = 2, m = 1, chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  interval_set<uint64_t> force_alloc;
+  force_alloc.insert(0, (uint64_t)chunk_size);
+
+  auto [iset, data] = recovery_push_data(sem, shard_id_t(0), &force_alloc);
+
+  // The entire force-allocated range must appear in data_included.
+  ASSERT_TRUE(iset.contains(0, (uint64_t)chunk_size));
+  // The data buffer must be all zeros of matching length.
+  ASSERT_EQ((uint64_t)chunk_size, data.length());
+  ASSERT_EQ(data.length(), iset.size());
+  bufferlist expected;
+  expected.append_zero(chunk_size);
+  ASSERT_TRUE(data.contents_equal(expected));
+}
+
+TEST(ECUtil, subtask4_absent_shard_sparse_fae)
+{
+  int k = 2, m = 1, chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  interval_set<uint64_t> force_alloc;
+  force_alloc.insert(0, (uint64_t)chunk_size);
+  force_alloc.insert((uint64_t)(2 * chunk_size), (uint64_t)chunk_size);
+
+  auto [iset, data] = recovery_push_data(sem, shard_id_t(0), &force_alloc);
+
+  ASSERT_TRUE(iset.contains(0, (uint64_t)chunk_size));
+  ASSERT_TRUE(iset.contains((uint64_t)(2 * chunk_size), (uint64_t)chunk_size));
+  ASSERT_EQ(2u, iset.num_intervals());
+  ASSERT_EQ(data.length(), iset.size());
+  ASSERT_EQ((uint64_t)(2 * chunk_size), data.length());
+}
+
+TEST(ECUtil, subtask4_partial_data_plus_fae)
+{
+  int k = 2, m = 1, chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  // Insert non-zero real data at [0, chunk_size) for shard 0.
+  bufferlist real_data;
+  real_data.append(std::string(chunk_size, 'A'));
+  sem.insert_in_shard(shard_id_t(0), 0, real_data);
+
+  // FAE covers [0, chunk_size) AND [2*chunk_size, 3*chunk_size).
+  // get_sparse_buffer will already return [0, chunk_size) because it is
+  // non-zero.  The synthesiser must only add [2*chunk_size, 3*chunk_size).
+  interval_set<uint64_t> force_alloc;
+  force_alloc.insert(0, (uint64_t)chunk_size);
+  force_alloc.insert((uint64_t)(2 * chunk_size), (uint64_t)chunk_size);
+
+  auto [iset, data] = recovery_push_data(sem, shard_id_t(0), &force_alloc);
+
+  ASSERT_TRUE(iset.contains(0, (uint64_t)chunk_size));
+  ASSERT_TRUE(iset.contains((uint64_t)(2 * chunk_size), (uint64_t)chunk_size));
+  ASSERT_EQ(2u, iset.num_intervals());
+  ASSERT_EQ(data.length(), iset.size());
+  ASSERT_EQ((uint64_t)(2 * chunk_size), data.length());
+}
+
+TEST(ECUtil, subtask4_fae_fully_covered_by_data)
+{
+  int k = 2, m = 1, chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  // Insert non-zero real data at [0, chunk_size).
+  bufferlist real_data;
+  real_data.append(std::string(chunk_size, 'B'));
+  sem.insert_in_shard(shard_id_t(0), 0, real_data);
+
+  // FAE also covers exactly [0, chunk_size) — entirely inside returned data.
+  interval_set<uint64_t> force_alloc;
+  force_alloc.insert(0, (uint64_t)chunk_size);
+
+  auto [iset, data] = recovery_push_data(sem, shard_id_t(0), &force_alloc);
+
+  // Only one interval — no synthetic zeros added.
+  ASSERT_EQ(1u, iset.num_intervals());
+  ASSERT_TRUE(iset.contains(0, (uint64_t)chunk_size));
+  ASSERT_EQ((uint64_t)chunk_size, data.length());
+}
+
+TEST(ECUtil, ro_intervals_to_shard_intervals_empty)
+{
+  // Empty input always produces an empty result for any shard.
+  stripe_info_t sinfo(3, 2, 3 * 4096, vector<shard_id_t>(0));
+  interval_set<uint64_t> ro;
+  ASSERT_TRUE(sinfo.ro_intervals_to_shard_intervals(ro, shard_id_t(0)).empty());
+  ASSERT_TRUE(sinfo.ro_intervals_to_shard_intervals(ro, shard_id_t(1)).empty());
+  ASSERT_TRUE(sinfo.ro_intervals_to_shard_intervals(ro, shard_id_t(2)).empty());
+}
+
+TEST(ECUtil, ro_intervals_to_shard_intervals_single_chunk_shard0)
+{
+  // RO [0, 4096) lives entirely in shard 0 of stripe 0.
+  stripe_info_t sinfo(3, 2, 3 * 4096, vector<shard_id_t>(0));
+  const int chunk_size = 4096;
+
+  interval_set<uint64_t> ro;
+  ro.insert(0, chunk_size);
+
+  auto s0 = sinfo.ro_intervals_to_shard_intervals(ro, shard_id_t(0));
+  ASSERT_EQ(1u, s0.num_intervals());
+  ASSERT_TRUE(s0.contains(0, chunk_size));
+
+  auto s1 = sinfo.ro_intervals_to_shard_intervals(ro, shard_id_t(1));
+  ASSERT_TRUE(s1.empty());
+
+  auto s2 = sinfo.ro_intervals_to_shard_intervals(ro, shard_id_t(2));
+  ASSERT_TRUE(s2.empty());
+}
+
+TEST(ECUtil, ro_intervals_to_shard_intervals_single_chunk_shard1)
+{
+  // RO [4096, 8192) lives entirely in shard 1 of stripe 0.
+  stripe_info_t sinfo(3, 2, 3 * 4096, vector<shard_id_t>(0));
+  const int chunk_size = 4096;
+
+  interval_set<uint64_t> ro;
+  ro.insert(chunk_size, chunk_size);
+
+  auto s0 = sinfo.ro_intervals_to_shard_intervals(ro, shard_id_t(0));
+  ASSERT_TRUE(s0.empty());
+
+  auto s1 = sinfo.ro_intervals_to_shard_intervals(ro, shard_id_t(1));
+  ASSERT_EQ(1u, s1.num_intervals());
+  ASSERT_TRUE(s1.contains(0, chunk_size));
+
+  auto s2 = sinfo.ro_intervals_to_shard_intervals(ro, shard_id_t(2));
+  ASSERT_TRUE(s2.empty());
+}
+
+TEST(ECUtil, ro_intervals_to_shard_intervals_full_stripe)
+{
+  // RO [0, 12288) = one full stripe; each shard gets [0, 4096).
+  stripe_info_t sinfo(3, 2, 3 * 4096, vector<shard_id_t>(0));
+  const int chunk_size = 4096;
+  const int stripe_width = 3 * chunk_size;
+
+  interval_set<uint64_t> ro;
+  ro.insert(0, stripe_width);
+
+  for (int s = 0; s < 3; ++s) {
+    auto shard_iset = sinfo.ro_intervals_to_shard_intervals(ro, shard_id_t(s));
+    ASSERT_EQ(1u, shard_iset.num_intervals()) << "shard=" << s;
+    ASSERT_TRUE(shard_iset.contains(0, chunk_size)) << "shard=" << s;
+  }
+}
+
+TEST(ECUtil, ro_intervals_to_shard_intervals_multi_stripe)
+{
+  // RO [0, 24576) = two full stripes; each shard gets [0, 8192).
+  stripe_info_t sinfo(3, 2, 3 * 4096, vector<shard_id_t>(0));
+  const int chunk_size = 4096;
+  const int stripe_width = 3 * chunk_size;
+
+  interval_set<uint64_t> ro;
+  ro.insert(0, 2 * stripe_width);
+
+  for (int s = 0; s < 3; ++s) {
+    auto shard_iset = sinfo.ro_intervals_to_shard_intervals(ro, shard_id_t(s));
+    ASSERT_EQ(1u, shard_iset.num_intervals()) << "shard=" << s;
+    ASSERT_TRUE(shard_iset.contains(0, 2 * chunk_size)) << "shard=" << s;
+  }
+}
+
+TEST(ECUtil, ro_intervals_to_shard_intervals_partial_spanning_shards)
+{
+  // RO [2048, 10240) spans part of shard0, all of shard1, part of shard2.
+  // shard0: [2048, 4096) — len 2048
+  // shard1: [0,    4096) — len 4096
+  // shard2: [0,    2048) — len 2048
+  stripe_info_t sinfo(3, 2, 3 * 4096, vector<shard_id_t>(0));
+  const int chunk_size = 4096;
+
+  interval_set<uint64_t> ro;
+  ro.insert(2048, 8192); // [2048, 10240)
+
+  auto s0 = sinfo.ro_intervals_to_shard_intervals(ro, shard_id_t(0));
+  ASSERT_EQ(1u, s0.num_intervals());
+  ASSERT_TRUE(s0.contains(2048, 2048));
+
+  auto s1 = sinfo.ro_intervals_to_shard_intervals(ro, shard_id_t(1));
+  ASSERT_EQ(1u, s1.num_intervals());
+  ASSERT_TRUE(s1.contains(0, chunk_size));
+
+  auto s2 = sinfo.ro_intervals_to_shard_intervals(ro, shard_id_t(2));
+  ASSERT_EQ(1u, s2.num_intervals());
+  ASSERT_TRUE(s2.contains(0, 2048));
+}
+
+TEST(ECUtil, ro_intervals_to_shard_intervals_cross_stripe_boundary)
+{
+  // RO [8192, 16384) = last chunk of stripe 0 (shard2) + first chunk of stripe1 (shard0).
+  // shard1 has no bytes in this interval (stripe-0 chunk ends at 8192, stripe-1 starts at 16384).
+  //
+  // Detailed derivation:
+  //   shard0: start=ro_offset_to_shard_offset(8192,0) = full=0, offset_shard=2, raw(0)<2 → 4096
+  //           end  =ro_offset_to_shard_offset(16384,0)= full=4096, offset_shard=1, raw(0)<1 → 8192
+  //           → [4096, 8192)
+  //   shard1: start=ro_offset_to_shard_offset(8192,1) = full=0, offset_shard=2, raw(1)<2 → 4096
+  //           end  =ro_offset_to_shard_offset(16384,1)= full=4096, offset_shard=1, raw(1)==1 → 4096+0=4096
+  //           → empty (start == end)
+  //   shard2: start=ro_offset_to_shard_offset(8192,2) = full=0, offset_shard=2, raw(2)==2 → 0+0=0
+  //           end  =ro_offset_to_shard_offset(16384,2)= full=4096, offset_shard=1, raw(2)>1 → 4096
+  //           → [0, 4096)
+  stripe_info_t sinfo(3, 2, 3 * 4096, vector<shard_id_t>(0));
+  const int chunk_size = 4096;
+
+  interval_set<uint64_t> ro;
+  ro.insert(2 * chunk_size, 2 * chunk_size); // [8192, 16384)
+
+  auto s0 = sinfo.ro_intervals_to_shard_intervals(ro, shard_id_t(0));
+  ASSERT_EQ(1u, s0.num_intervals());
+  ASSERT_TRUE(s0.contains(chunk_size, chunk_size)); // [4096, 8192)
+
+  auto s1 = sinfo.ro_intervals_to_shard_intervals(ro, shard_id_t(1));
+  ASSERT_TRUE(s1.empty()); // shard 1 has no bytes in [8192, 16384)
+
+  auto s2 = sinfo.ro_intervals_to_shard_intervals(ro, shard_id_t(2));
+  ASSERT_EQ(1u, s2.num_intervals());
+  ASSERT_TRUE(s2.contains(0, chunk_size)); // [0, 4096)
+}
+
+TEST(ECUtil, ro_intervals_to_shard_intervals_parity_shard)
+{
+  // Parity shards (index >= k) must always return an empty interval_set.
+  stripe_info_t sinfo(3, 2, 3 * 4096, vector<shard_id_t>(0));
+  const int chunk_size = 4096;
+
+  interval_set<uint64_t> ro;
+  ro.insert(0, 3 * chunk_size);
+
+  // shards 3 and 4 are parity (raw_shards 3 and 4 >= k=3)
+  ASSERT_TRUE(sinfo.ro_intervals_to_shard_intervals(ro, shard_id_t(3)).empty());
+  ASSERT_TRUE(sinfo.ro_intervals_to_shard_intervals(ro, shard_id_t(4)).empty());
+}
+
+TEST(ECUtil, ro_intervals_to_shard_intervals_multiple_intervals)
+{
+  // Two disjoint RO intervals on shard 0:
+  //   [0, 4096)     → shard0 [0, 4096)
+  //   [12288, 16384) → shard0 [4096, 8192)
+  // Together they should produce [0, 8192) for shard 0.
+  stripe_info_t sinfo(3, 2, 3 * 4096, vector<shard_id_t>(0));
+  const int chunk_size = 4096;
+  const int stripe_width = 3 * chunk_size;
+
+  interval_set<uint64_t> ro;
+  ro.insert(0, chunk_size);
+  ro.insert(stripe_width, chunk_size);
+
+  auto s0 = sinfo.ro_intervals_to_shard_intervals(ro, shard_id_t(0));
+  // Both project to contiguous shard-space → merged into one interval.
+  ASSERT_EQ(1u, s0.num_intervals());
+  ASSERT_TRUE(s0.contains(0, 2 * chunk_size));
+
+  // shard 1 and 2 get nothing from either interval.
+  ASSERT_TRUE(sinfo.ro_intervals_to_shard_intervals(ro, shard_id_t(1)).empty());
+  ASSERT_TRUE(sinfo.ro_intervals_to_shard_intervals(ro, shard_id_t(2)).empty());
+}
