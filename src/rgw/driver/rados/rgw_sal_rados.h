@@ -707,8 +707,9 @@ class RadosObject : public StoreObject {
 };
 
 class RadosBucket : public StoreBucket {
-  private:
+  protected:
     RadosStore* store;
+  private:
     RGWAccessControlPolicy acls;
     std::string topics_oid() const;
 
@@ -826,23 +827,16 @@ class RadosBucket : public StoreBucket {
     friend class RadosUser;
 };
 
-class RadosVectorBucket : public StoreVectorBucket {
-  private:
-    RadosStore* store;
-
+class RadosVectorBucket : public RadosBucket {
   public:
     RadosVectorBucket(RadosStore *_st)
-      : store(_st) {}
-
+      : RadosBucket(_st) {}
     RadosVectorBucket(RadosStore *_st, const rgw_bucket& _b)
-      : StoreVectorBucket(_b),
-	store(_st) {}
-
+      : RadosBucket(_st, _b) {}
     RadosVectorBucket(RadosStore *_st, const RGWBucketInfo& _i)
-      : StoreVectorBucket(_i),
-	store(_st) {}
-
+      : RadosBucket(_st, _i) {}
     ~RadosVectorBucket() override = default;
+
     int remove(const DoutPrefixProvider* dpp, bool delete_children, optional_yield y) override;
     int create(const DoutPrefixProvider* dpp, const CreateParams& params,
                optional_yield y) override;
@@ -853,6 +847,11 @@ class RadosVectorBucket : public StoreVectorBucket {
     }
     int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime, optional_yield y) override;
     int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y) override;
+    int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) override { return 0; }
+    int set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy& acl, optional_yield y) override { return -ENOTSUP; }
+    int chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, const std::string& new_owner_name, optional_yield y) override { return -ENOTSUP; }
+    int sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y, RGWBucketEnt* ent) override;
+    int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& attrs, optional_yield y) override;
 
   private:
     int link(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y, bool update_entrypoint = true, RGWObjVersionTracker* objv = nullptr);

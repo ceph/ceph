@@ -3923,7 +3923,7 @@ static void filter_out_website(std::map<std::string, ceph::bufferlist>& add_attr
   }
 }
 
-static int select_bucket_placement(const DoutPrefixProvider* dpp,
+int select_bucket_placement(const DoutPrefixProvider* dpp,
                                    const RGWZoneGroup& zonegroup,
                                    const RGWUserInfo& user,
                                    rgw_placement_rule& rule)

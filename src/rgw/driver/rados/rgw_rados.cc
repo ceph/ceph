@@ -2645,13 +2645,16 @@ int RGWRados::create_vector_bucket(const DoutPrefixProvider* dpp,
                             const rgw_owner& owner,
                             const std::string& zonegroup_id,
                             const rgw_placement_rule& placement_rule,
+                            const RGWZonePlacementInfo* zone_placement,
                             const std::map<std::string, bufferlist>& attrs,
                             const std::optional<RGWQuotaInfo>& quota,
                             std::optional<ceph::real_time> creation_time,
+                            std::optional<rgw::BucketIndexType> index_type,
+                            std::optional<uint32_t> index_shards,
                             obj_version* pep_objv,
                             RGWBucketInfo& info)
 {
-  ldpp_dout(dpp, 20) << "s3vector --- RGWRados::create_vector_bucke called" << dendl;
+  ldpp_dout(dpp, 20) << "s3vector --- RGWRados::create_vector_bucket called" << dendl;
   int ret = 0;
 
   for (int i = 0; i < MAX_CREATE_RETRIES; i++) {
@@ -2669,6 +2672,15 @@ int RGWRados::create_vector_bucket(const DoutPrefixProvider* dpp,
     info.owner = owner;
     info.zonegroup = zonegroup_id;
     info.placement_rule = placement_rule;
+    info.flags |= BUCKET_DATASYNC_DISABLED;
+
+    if (zone_placement) {
+      if (!index_type) {
+        index_type = zone_placement->index_type;
+      }
+      init_default_bucket_layout(cct, info.layout, svc.zone->get_zone(),
+                                 index_type, index_shards);
+    }
 
     if (creation_time) {
       info.creation_time = *creation_time;
@@ -2677,6 +2689,13 @@ int RGWRados::create_vector_bucket(const DoutPrefixProvider* dpp,
     }
     if (quota) {
       info.quota = *quota;
+    }
+
+    if (zone_placement) {
+      ret = svc.bi->init_index(dpp, y, info, info.layout.current_index);
+      if (ret < 0) {
+        return ret;
+      }
     }
 
     constexpr bool exclusive = true;
