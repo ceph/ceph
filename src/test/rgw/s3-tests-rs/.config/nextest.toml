@@ -1,8 +1,26 @@
 # Nextest profiles for running test categories.
-# Usage: cargo nextest run -P <profile-name>
+# Usage: cargo nextest run -P <profile-name> --features fails_on_nsfs
 #
-# Profiles use default parallelism.  For serial execution (useful when
-# debugging a single-threaded vstart daemon), add --test-threads=1.
+# Parallelism model:
+#   S3 data-path tests use unique per-process bucket names and run in
+#   parallel by default.  IAM tests share a fixed entity namespace and
+#   must be serialized (test-group serial-iam).  Quota tests mutate a
+#   shared user and are also serialized (test-group serial-quota).
+#
+# To force serial execution: add --test-threads=1
+#
+# To skip per-test bucket cleanup (inspect disk/cache state after failure):
+#   S3TEST_NO_CLEANUP=1 cargo nextest run -E 'test(foo)' --test-threads=1
+
+# --- Test groups (serialization constraints) ---
+
+[test-groups.serial-iam]
+max-threads = 1
+
+[test-groups.serial-quota]
+max-threads = 1
+
+# --- Per-module profiles ---
 
 [profile.bucket-list]
 default-filter = 'test(bucket_list::)'
@@ -59,7 +77,11 @@ default-filter = 'test(signing::)'
 default-filter = 'test(stress::)'
 
 [profile.iam]
-default-filter = 'test(user_policy::) | test(role::) | test(oidc::) | test(sts::)'
+default-filter = 'test(user_policy::) | test(role::) | test(oidc::) | test(sts::) | test(group::) | test(user::)'
+
+[[profile.iam.overrides]]
+filter = 'test(user_policy::) | test(role::) | test(oidc::) | test(sts::) | test(group::) | test(user::)'
+test-group = 'serial-iam'
 
 [profile.role]
 default-filter = 'test(role::)'
@@ -70,14 +92,36 @@ default-filter = 'test(oidc::)'
 [profile.sts]
 default-filter = 'test(sts::)'
 
-# Composites
+# --- Composite profiles ---
+
+# Fast pre-commit gate: everything except lifecycle (slow), bucket_logging
+# (not implemented on posix/nsfs), and stress (ignored).
+#
+# TODO: parallel execution (test-threads > 1) exposes a CreateBucket
+# race in NSFS (status=0, http_status=404).  Serialized until fixed.
+[profile.baseline]
+test-threads = 1
+default-filter = 'all() & !test(lifecycle::) & !test(bucket_logging::) & !test(stress::)'
+
+[[profile.baseline.overrides]]
+filter = 'test(user_policy::) | test(role::) | test(oidc::) | test(sts::) | test(group::) | test(user::)'
+test-group = 'serial-iam'
+
+[[profile.baseline.overrides]]
+filter = 'test(quota::)'
+test-group = 'serial-quota'
+
 [profile.basic]
 default-filter = 'test(bucket_list::) | test(object_ops::) | test(copy::) | test(conditional::) | test(cors::) | test(acl::)'
 
+# Full suite with parallelism and serialization constraints.
 [profile.all]
 default-filter = 'all()'
 
-# To skip per-test bucket cleanup (inspect disk/cache state after failure),
-# set S3TEST_NO_CLEANUP=1:
-#   S3TEST_NO_CLEANUP=1 cargo nextest run \
-#     -E 'test(versioning::test_foo)' --test-threads=1
+[[profile.all.overrides]]
+filter = 'test(user_policy::) | test(role::) | test(oidc::) | test(sts::) | test(group::) | test(user::)'
+test-group = 'serial-iam'
+
+[[profile.all.overrides]]
+filter = 'test(quota::)'
+test-group = 'serial-quota'
