@@ -12501,6 +12501,18 @@ bool Server::build_snap_diff(
     }
   } before;
 
+  auto snapflush_pending = [&](CInode *in) -> bool {
+    if (!in->is_head() && !in->client_snap_caps.empty())
+      return true;
+    CInode *head = in->is_head() ? in : mdcache->get_inode(in->ino());
+    if (!head)
+      return true;
+    for (const auto& p : head->client_need_snapflush) {
+      if (p.first >= snapid_prev && p.first <= snapid && !p.second.empty())
+	return true;
+    }
+    return false;
+  };
 
   // rdlock filelock so pending snapflush completes before metadata is read.
   auto rdlock_file_start = [&](CInode *in) -> bool {
@@ -12614,8 +12626,42 @@ bool Server::build_snap_diff(
       }
     } else {
       if (snapid_prev >= dn->first && snapid <= dn->last) {
-	dout(20) << __func__ << " skipping unchanged " << dn->get_name() << " "
-	  << dn->first << "/" << dn->last << dendl;
+	if (!snapflush_pending(in)) {
+	  dout(20) << __func__ << " skipping unchanged " << dn->get_name() << " "
+	    << dn->first << "/" << dn->last << dendl;
+	  continue;
+	}
+	if (before.dn) {
+	  if (!insert_deleted(before)) {
+	    break;
+	  }
+	  before.reset();
+	}
+	CInode *head = in->is_head() ? in : mdcache->get_inode(in->ino());
+	if (!head) {
+	  dout(20) << __func__ << " skipping unchanged " << dn->get_name() << " "
+	    << dn->first << "/" << dn->last << dendl;
+	  continue;
+	}
+	unsigned res_mask = 0;
+	if (!rdlock_file_start(in))
+	  return false;
+	CInode *in_prev = mdcache->pick_inode_snap(head, snapid_prev);
+	CInode *in_snap = mdcache->pick_inode_snap(head, snapid);
+	EntryInfo prev_ei{dn, in_prev};
+	bool differs = prev_ei.meta_differs(in_snap, diff_mask, res_mask);
+	rdlock_file_finish(in);
+	if (differs) {
+	  dout(30) << __func__ << " attrs changed on unchanged span "
+	    << dn->get_name() << " " << dn->first << "/" << dn->last
+	    << " result mask: 0x" << std::hex << res_mask << std::dec << dendl;
+	  if (!add_result_cb(dn, in, true)) {
+	    break;
+	  }
+	  continue;
+	}
+	dout(20) << __func__ << " skipping unchanged after snapflush check "
+	  << dn->get_name() << " " << dn->first << "/" << dn->last << dendl;
 	continue;
       } else if (snapid_prev < dn->first && snapid > dn->last) {
 	dout(20) << __func__ << " skipping inner modification " << dn->get_name() << " "
