@@ -1934,10 +1934,24 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y,
 int VersionedDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
                                    fill_cache_cb_t &cb, uint32_t flags)
 {
-  /* Fill cur_version */
+  /* Fill cur_version — stat() may reset cur_version to null if the
+   * current version is a delete marker, so also resolve the symlink
+   * target name for the FLAG_CURRENT comparison below */
   stat(dpp, /*force=*/false);
 
-  int ret = for_each(dpp, [this, &cb, &dpp, &y](const char *name) {
+  std::string cur_version_name;
+  if (cur_version) {
+    cur_version_name = cur_version->get_name();
+  } else {
+    /* cur_version is null — likely a delete marker; read the symlink
+     * to determine which entry is current */
+    std::unique_ptr<Symlink> sl = std::make_unique<Symlink>(get_name(), this, ctx);
+    if (sl->stat(dpp) >= 0 && sl->exists()) {
+      cur_version_name = sl->get_target()->get_name();
+    }
+  }
+
+  int ret = for_each(dpp, [this, &cb, &dpp, &y, &cur_version_name](const char *name) {
     std::unique_ptr<FSEnt> ent;
 
     if (name[0] == '.') {
@@ -1953,8 +1967,8 @@ int VersionedDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield
 
     if (ent->get_type() != ObjectType::SYMLINK) {
       uint32_t fill_flags =
-          (cur_version &&
-           (ent->get_name() == cur_version->get_name())) ?
+          (!cur_version_name.empty() &&
+           (ent->get_name() == cur_version_name)) ?
         FSEnt::FLAG_CURRENT :
         FSEnt::FLAG_NONE;
 
@@ -3963,6 +3977,49 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
     key.instance.clear();
     driver->get_bucket_cache()->remove_entry(dpp, b->get_name(), key);
   }
+
+  /* after removing a versioned entry, the current version may have
+   * changed — if the symlink now points to a delete marker, update
+   * its cache entry to add FLAG_CURRENT so the LC can expire it */
+  if (!get_key().instance.empty() && ent->get_parent()) {
+    auto* vdir = dynamic_cast<VersionedDirectory*>(ent->get_parent());
+    if (vdir) {
+      std::unique_ptr<Symlink> sl =
+	std::make_unique<Symlink>(vdir->get_name(), vdir, driver->ctx());
+      if (sl->stat(dpp) >= 0 && sl->exists()) {
+	auto* target = sl->get_target();
+	std::string cur_name = target->get_name();
+	if (!cur_name.empty()) {
+	  std::unique_ptr<FSEnt> cur_ent;
+	  ret = vdir->get_ent(dpp, y, cur_name, std::string(), cur_ent);
+	  if (ret == 0) {
+	    cur_ent->stat(dpp);
+	    rgw_bucket_dir_entry bde{};
+	    rgw_obj_key cur_key = decode_obj_key(cur_name);
+	    cur_key.get_index_key(&bde.key);
+	    bde.flags = rgw_bucket_dir_entry::FLAG_VER
+	      | rgw_bucket_dir_entry::FLAG_CURRENT;
+	    bde.ver.pool = 1;
+	    bde.ver.epoch = 1;
+	    bde.exists = true;
+	    bde.meta.mtime = from_statx_timestamp(cur_ent->get_stx().stx_mtime);
+	    bde.meta.size = cur_ent->get_stx().stx_size;
+	    bde.meta.accounted_size = bde.meta.size;
+	    if (bde.meta.size == 0) {
+	      Attrs attrs;
+	      bufferlist bl;
+	      if (cur_ent->read_attrs(dpp, y, attrs) >= 0 &&
+		  ::rgw::sal::get_attr(attrs, RGW_POSIX_ATTR_VERSION, bl)) {
+		bde.flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
+	      }
+	    }
+	    driver->get_bucket_cache()->add_entry(dpp, b->get_name(), bde);
+	  }
+	}
+      }
+    }
+  }
+
   driver->get_quota_handler()->update_stats(b->get_owner(), b->get_key(),
                                             -1, 0, state.accounted_size);
   return 0;
