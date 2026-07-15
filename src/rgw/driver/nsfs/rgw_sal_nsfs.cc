@@ -1041,6 +1041,13 @@ int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cach
     bde.key.instance = ver_id;
     bde.flags = rgw_bucket_dir_entry::FLAG_VER |
                 rgw_bucket_dir_entry::FLAG_CURRENT;
+    std::string dm_xattr = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_DELETE_MARKER;
+    char dm_buf[8];
+    ssize_t dm_len = ::fgetxattr(get_fd(), dm_xattr.c_str(),
+                                 dm_buf, sizeof(dm_buf));
+    if (dm_len > 0) {
+      bde.flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
+    }
   }
 
   return cb(dpp, bde);
@@ -1742,6 +1749,12 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
             ssize_t xlen = ::fgetxattr(tfd, dm_xattr.c_str(), buf, sizeof(buf));
             if (xlen > 0) {
               bde.flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
+              /* a delete marker in .versions/ is current if no file
+               * exists at the top-level path for this key */
+              if (::faccessat(get_fd(), obj_name.c_str(),
+                              F_OK, AT_SYMLINK_NOFOLLOW) != 0) {
+                bde.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
+              }
             }
 
             Attrs attrs;
@@ -5750,6 +5763,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     dm_bde.meta.mtime = ceph::real_clock::now();
     dm_bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
     dm_bde.flags = rgw_bucket_dir_entry::FLAG_VER |
+                   rgw_bucket_dir_entry::FLAG_CURRENT |
                    rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
     bcache->add_entry(dpp, b->get_name(), dm_bde);
   }
