@@ -2188,6 +2188,36 @@ check_cluster "functional: buckets check unlinked (alias)"         0 "" -- \
 
 # ============================================================
 echo ""
+echo "=== '=' token normalization (empty '=' and short-flag '=') ==="
+# ============================================================
+# CLI11's tokenizer collapses "--name=" into a bare "--name" (missing value)
+# and captures "-i=value" as "=value"; normalize_cli11_tokens() recovers both
+# before parsing so '='-form values behave like the legacy parser.
+
+# int flag: "" fails strict_strtol (legacy exits 22; CLI11 conversion error)
+check "empty-= on int flag" 104 "Could not convert" bucket list --max-entries=
+# uid/bucket-id: legacy empty-value special cases win (loop sees original args)
+check "empty-= on --uid"       1 "no value for uid"       bucket list --uid=
+check "empty-= on -i"          1 "no value for uid"       bucket list -i=
+check "empty-= on --bucket-id" 1 "no value for bucket-id" bucket stats --bucket-id=
+# mid-line: "" is the value; the next word strays (the collapsed flag must not eat it)
+check "empty-= mid-line strays next word" 22 "unexpected argument: 'foo'" \
+  bucket list --bucket= foo
+# unknown flag: not rewritten (arity unknown), legacy rejects it
+check "empty-= on unknown flag" 22 "invalid flag --banana=" bucket list --banana=
+# glued short flag (no '='): not a rewrite case, legacy rejects it
+check "glued short flag rejected" 22 "invalid flag -ibanana" bucket list -ibanana
+# after a standalone "--" tokens are never rewritten (gdb-verified verbatim).
+# The 114 is a pre-existing CLI11 quirk: a KNOWN option token that ends the
+# line after the positional mark is re-dispatched by the PARENT app and
+# reports "missing value" via its hidden parent-level copy, whose display
+# name is empty (Option::get_name returns "" for hidden groups; P9 family).
+# Mid-line post-"--" tokens are inert (exit 0), known flags included.
+check "post--- token not rewritten" 114 "required TEXT missing" \
+  bucket list --bucket demo -- --bucket=
+
+# ============================================================
+echo ""
 echo "=== integration: bucket list and stats (cluster) ==="
 # ============================================================
 
@@ -2288,6 +2318,24 @@ if cluster_running; then
       # bucket stats: returns stats for the test bucket
       check_cluster "integration: bucket stats (named)" 0 "" -- \
         bucket stats --bucket "$_test_bucket"
+
+      # '=' normalization shapes that execute (cluster):
+      # string flag with empty '=': "" value like legacy, command runs
+      check_cluster "integration: empty-= on string flag runs" 0 "" -- \
+        bucket stats --bucket=
+      # empty-= must not eat a following flag
+      check_cluster "integration: empty-= then flag parses normally" 0 "" -- \
+        bucket list --bucket= --max-entries 7
+      # binary flag empty-= keeps its silent-set behavior (not rewritten)
+      check_cluster "integration: binary flag empty-= unchanged" 0 "" -- \
+        bucket list --bucket "$_test_bucket" --allow-unordered=
+      # -i=<uid>: CLI11 captures the value correctly (lists the user's bucket)
+      check_cluster "integration: -i=uid captures value" 0 "$_test_bucket" -- \
+        bucket list -i="$_test_uid"
+      # value position: a token after a value-taking flag is its value, even
+      # if it looks like a flag (both parsers consume it; handler then fails)
+      check_cluster "integration: flag value may look like a flag" 2 "" -- \
+        bucket stats --bucket --max-entries
       check_cluster "lifecycle: bucket list --allow-unordered" 0 "" -- \
         bucket list --allow-unordered --bucket "$_test_bucket"
       check_cluster "lifecycle: bucket list --format json" 0 "" -- \
