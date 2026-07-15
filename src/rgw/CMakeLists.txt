@@ -346,9 +346,11 @@ if(WITH_RADOSGW_STANDALONE)
   add_compile_definitions(LMDB_SAFE_NO_CPP_UTILITIES)
   # POSIX/NSFS notification paths call RGWPubSubEndpoint; that source lives in
   # librgw_rados_srcs for the normal build, so pull it into standalone explicitly.
+  # rgw_rest_user.cc (common) needs admin op implementations from rados/rgw_user.cc.
   list(APPEND librgw_driver_standalone_srcs
     ${librgw_posix_srcs}
     rgw_pubsub_push.cc
+    driver/rados/rgw_user.cc
     driver/posix/rgw_standalone.cc
   )
 endif()
@@ -499,6 +501,7 @@ if(WITH_RADOSGW_STANDALONE)
     legacy-option-headers
     global
     cls_rgw_client
+    keyring
     rt
     ICU::uc
     OATH::OATH
@@ -840,8 +843,9 @@ if(WITH_RADOSGW_RADOS)
 endif()
 
 if(WITH_RADOSGW_STANDALONE)
+  # driver/rados/rgw_user.cc is already in rgw_common_standalone (for
+  # rgw_rest_user.cc); only pull the remaining admin-only rados helpers here.
   list(APPEND rgw_standalone_admin_srcs
-    driver/rados/rgw_user.cc
     driver/rados/rgw_bucket.cc
     driver/rados/rgw_obj_manifest.cc)
 
