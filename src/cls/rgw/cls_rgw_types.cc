@@ -3,6 +3,8 @@
 
 #include "cls/rgw/cls_rgw_types.h"
 #include "common/ceph_json.h"
+#include "include/encoding_optional.h"
+#include "include/encoding_string.h"
 #include "include/utime.h"
 
 using std::list;

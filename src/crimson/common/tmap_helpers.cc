@@ -5,6 +5,7 @@
 
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "include/encoding_string.h"
 #include "include/rados.h"
 
 #include <map>

@@ -24,7 +24,6 @@
 #include "common/Formatter.h"
 #include "include/fs_types.h" // for inodeno_t
 #include "include/encoding.h"
-#include "mdstypes.h"
 
 class Context;
 class Objecter;

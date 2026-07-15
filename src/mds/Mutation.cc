@@ -601,6 +601,11 @@ void MDRequestImpl::_dump_op_descriptor(ostream& os) const
   }
 }
 
+MDPeerUpdate::~MDPeerUpdate() {
+  if (waiter)
+    waiter->complete(0);
+}
+
 void MDLockCache::attach_locks()
 {
   ceph_assert(!items_lock);

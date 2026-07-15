@@ -23,6 +23,7 @@
 #include "CInode.h"
 #include "Mutation.h"
 
+#include "MDSContext.h"
 #include "MDSMap.h"
 #include "MDSRank.h"
 #include "MDCache.h"
@@ -32,6 +33,8 @@
 #include "MDBalancer.h"
 #include "SnapClient.h"
 #include "SnapRealm.h"
+#include "cephfs_features.h" // for CEPHFS_FEATURE_REPLY_ENCODING
+
 #include "events/EMetaBlob.h"
 
 #include "common/bloom_filter.hpp"
@@ -39,11 +42,13 @@
 #include "common/likely.h"
 #include "include/Context.h"
 #include "common/Clock.h"
+#include "common/OnFinisher.h"
 
 #include "osdc/Objecter.h"
 
 #include "common/config.h"
 #include "include/ceph_assert.h"
+#include "include/cephfs/encoding.h"
 #include "include/compat.h"
 
 #include "messages/MClientReply.h" // for struct DirStat

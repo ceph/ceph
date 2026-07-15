@@ -48,6 +48,7 @@
 #include "Mutation.h"
 
 #include "include/ceph_fs.h"
+#include "include/cephfs/encoding.h"
 #include "include/filepath.h"
 #include "include/util.h"
 
@@ -79,6 +80,7 @@
 
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/OnFinisher.h"
 #include "common/perf_counters.h"
 #include "common/safe_io.h"
 

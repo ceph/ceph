@@ -9,6 +9,8 @@
 #include "common/ceph_json.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
+#include "include/byte_u_t.h"
+#include "include/si_u_t.h"
 #include "include/rbd_types.h" // for RBD_DIRECTORY
 #include "include/stringify.h"
 #include <fstream>

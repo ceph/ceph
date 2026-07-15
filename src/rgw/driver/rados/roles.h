@@ -19,6 +19,7 @@
 #include <string>
 #include "include/rados/librados_fwd.hpp"
 #include "include/encoding.h"
+#include "include/encoding_string.h"
 #include "rgw_sal_fwd.h"
 
 namespace ceph { class Formatter; }
@@ -69,11 +70,15 @@ struct resource_metadata {
   std::string role_id;
 
   void encode(bufferlist& bl) const {
+    using ceph::encode;
+
     ENCODE_START(1, 1, bl);
     encode(role_id, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
+    using ceph::decode;
+
     DECODE_START(1, bl);
     decode(role_id, bl);
     DECODE_FINISH(bl);

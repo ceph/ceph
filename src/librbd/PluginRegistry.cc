@@ -4,6 +4,7 @@
 #include "librbd/PluginRegistry.h"
 #include "include/Context.h"
 #include "common/dout.h"
+#include "common/PluginRegistry.h"
 #include "librbd/cache/ImageWriteback.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/plugin/Api.h"

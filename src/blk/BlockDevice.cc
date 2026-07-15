@@ -35,6 +35,7 @@
 #include "common/debug.h"
 #include "common/EventTrace.h"
 #include "common/errno.h"
+#include "include/byte_u_t.h"
 #include "include/compat.h"
 
 #define dout_context cct

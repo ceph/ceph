@@ -17,6 +17,7 @@
 #define CEPH_MOSDPGBACKFILLREMOVE_H
 
 #include "MOSDFastDispatchOp.h"
+#include "include/encoding_list.h"
 
 /*
  * instruct non-primary to remove some objects during backfill

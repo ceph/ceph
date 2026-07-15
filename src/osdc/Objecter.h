@@ -40,6 +40,14 @@
 #include "include/ceph_assert.h"
 #include "include/ceph_fs.h"
 #include "include/common_fwd.h"
+#include "include/Context.h"
+#include "include/encoding_flat_map.h"
+#include "include/encoding_flat_set.h"
+#include "include/encoding_list.h"
+#include "include/encoding_map.h"
+#include "include/encoding_set.h"
+#include "include/encoding_string_view.h"
+#include "include/encoding_vector.h"
 #include "include/expected.hpp"
 #include "include/types.h"
 #include "include/rados/rados_types.hpp"
@@ -60,13 +68,11 @@
 
 #include "mon/MonClient.h"
 
-#include "messages/MOSDOp.h"
 #include "msg/Dispatcher.h"
 
 #include "osd/OSDMap.h"
 #include "osd/error_code.h"
 
-class Context;
 class Messenger;
 class MonClient;
 class Message;
@@ -82,6 +88,8 @@ template<typename T>
 struct EnumerationContext;
 template<typename t>
 struct CB_EnumerateReply;
+
+namespace _mosdop { template<typename V> class MOSDOp; }
 
 inline constexpr std::size_t osdc_opvec_len = 2;
 using osdc_opvec = boost::container::small_vector<OSDOp, osdc_opvec_len>;

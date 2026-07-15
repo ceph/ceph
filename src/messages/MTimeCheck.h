@@ -20,6 +20,7 @@
 #include <map>
 
 #include "include/encoding.h"
+#include "include/encoding_map.h"
 #include "include/utime.h"
 #include "include/types.h" // for version_t
 #include "msg/Message.h"
@@ -39,8 +40,8 @@ public:
   version_t round = 0;
 
   utime_t timestamp;
-  map<entity_inst_t, double> skews;
-  map<entity_inst_t, double> latencies;
+  std::map<entity_inst_t, double> skews;
+  std::map<entity_inst_t, double> latencies;
 
   MTimeCheck() : Message{MSG_TIMECHECK, HEAD_VERSION} {}
   MTimeCheck(int op) :

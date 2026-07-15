@@ -13,16 +13,20 @@
  *
  */
 
+#include <iomanip> // for std::setprecision()
 #include <memory>
 #include <functional>
 
 #include "mclock_common.h"
 #include "debug.h"
 
+#include "common/Clock.h" // for ceph_clock_now()
+
 #ifdef WITH_CRIMSON
 #include "crimson/common/perf_counters_collection.h"
 #else
 #include "perf_counters_collection.h"
+#include "mon/MonClient.h"
 #endif
 
 #define dout_context cct

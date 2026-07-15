@@ -5,6 +5,7 @@
 
 #include <string>
 #include "include/encoding.h"
+#include "include/encoding_string.h"
 #include "common/ceph_time.h"
 #include "common/iso_8601.h"
 #include "common/ceph_json.h"

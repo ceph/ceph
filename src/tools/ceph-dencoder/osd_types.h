@@ -156,13 +156,25 @@ TYPE(MgrMap::ModuleOption)
 TYPE(MgrMap::ModuleInfo)
 TYPE(MgrMap::StandbyInfo)
 
-#include "mon/mon_types.h"
+#include "mon/MonitorDBStoreStats.h"
 TYPE(MonitorDBStoreStats)
+
+#include "mon/ScrubResult.h"
 TYPE(ScrubResult)
+
+#include "mon/mon_feature_t.h"
 TYPE(mon_feature_t)
+
+#include "mon/DataStats.h"
 TYPE_FEATUREFUL(DataStats)
+
+#include "mon/ProgressEvent.h"
 TYPE_FEATUREFUL(ProgressEvent)
+
+#include "mon/FeatureMap.h"
 TYPE(FeatureMap)
+
+#include "mon/PoolAvailability.h"
 TYPE(PoolAvailability)
 
 #include "mon/CreatingPGs.h"

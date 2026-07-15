@@ -539,6 +539,11 @@ set(libcommon_files
   include/filepath.cc
   include/invoke_date.cc
   include/object.cc
+  include/snapid.cc
+  include/sobject.cc
+  include/client_t.cc
+  include/errorcode32.cc
+  include/shard_id.cc
   include/types.cc
   include/utime.cc
   include/uuid.cc
@@ -546,16 +551,31 @@ set(libcommon_files
   common/frag.cc
   common/tracer.cc
   log/Log.cc
+  messages/MClientReply.cc
+  messages/MClientRequest.cc
+  messages/MClientSession.cc
+  messages/MClientSnap.cc
+  messages/MMonCommand.cc
+  messages/MMonCommandAck.cc
+  mon/DataStats.cc
   mon/MonCap.cc
   mon/MonClient.cc
   mon/MonMap.cc
   mon/MonSub.cc
+  mon/MonitorDBStoreStats.cc
+  mon/mon_feature_t.cc
   mon/error_code.cc
+  mon/FeatureMap.cc
+  mon/PoolAvailability.cc
+  mon/ProgressEvent.cc
+  mon/ScrubResult.cc
   mgr/DaemonHealthMetric.cc
   mgr/MgrClient.cc
   mon/MgrMap.cc
   mon/PGMap.cc
   mgr/ServiceMap.cc
+  mgr/OSDPerfMetricTypes.cc
+  mgr/MDSPerfMetricTypes.cc
   osd/ECMsgTypes.cc
   osd/HitSet.cc
   osd/OSDMap.cc
@@ -566,6 +586,7 @@ set(libcommon_files
   osd/OpRequest.cc
   osd/ClassHandler.cc
   osd/osd_op_util.cc
+  osd/osd_types.cc
   osdc/Striper.cc
   osdc/Objecter.cc
   osdc/error_code.cc

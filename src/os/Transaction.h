@@ -8,6 +8,8 @@
 #include "include/Context.h"
 #include "include/int_types.h"
 #include "include/buffer.h"
+#include "include/encoding_map.h"
+#include "include/encoding_set.h"
 
 #include "osd/osd_types.h"
 

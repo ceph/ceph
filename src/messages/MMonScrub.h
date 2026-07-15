@@ -15,7 +15,7 @@
 #define CEPH_MMONSCRUB_H
 
 #include "msg/Message.h"
-#include "mon/mon_types.h"
+#include "mon/ScrubResult.h"
 
 class MMonScrub : public Message {
 private:

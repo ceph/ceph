@@ -15,6 +15,7 @@ struct Cap;
 struct Inode;
 struct CapSnap;
 struct MetaRequest;
+class Context;
 
 struct MetaSession {
   mds_rank_t mds_num;

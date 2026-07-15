@@ -81,11 +81,7 @@ struct ClusterInfo {
   void decode(ceph::buffer::list::const_iterator &iter);
 };
 
-inline std::ostream& operator<<(std::ostream& out, const ClusterInfo &cluster_info) {
-  out << "{client_name=" << cluster_info.client_name << ", cluster_name="
-      << cluster_info.cluster_name << ", fs_name=" << cluster_info.fs_name << "}";
-  return out;
-}
+std::ostream& operator<<(std::ostream& out, const ClusterInfo &cluster_info);
 
 struct Peer {
   Peer() = default;
@@ -117,10 +113,7 @@ struct Peer {
 };
 
 typedef std::set<Peer> Peers;
-inline std::ostream& operator<<(std::ostream& out, const Peer &peer) {
-  out << "{uuid=" << peer.uuid << ", remote_cluster=" << peer.remote << "}";
-  return out;
-}
+std::ostream& operator<<(std::ostream& out, const Peer &peer);
 
 struct MirrorInfo {
   MirrorInfo() = default;
@@ -177,10 +170,7 @@ struct MirrorInfo {
   void decode(ceph::buffer::list::const_iterator &iter);
 };
 
-inline std::ostream& operator<<(std::ostream& out, const MirrorInfo &mirror_info) {
-  out << "{peers=" << mirror_info.peers << "}";
-  return out;
-}
+std::ostream& operator<<(std::ostream& out, const MirrorInfo &mirror_info);
 
 WRITE_CLASS_ENCODER(ClusterInfo)
 WRITE_CLASS_ENCODER(Peer)

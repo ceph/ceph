@@ -20,7 +20,6 @@
 #include "common/ceph_releases.h"
 #include "msg/Message.h"
 #include "mon/MonMap.h"
-#include "mon/mon_types.h"
 
 class MMonElection final : public Message {
 private:

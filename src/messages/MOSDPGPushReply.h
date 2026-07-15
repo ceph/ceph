@@ -17,6 +17,7 @@
 #define MOSDPGPUSHREPLY_H
 
 #include "MOSDFastDispatchOp.h"
+#include "include/encoding_vector.h"
 
 class MOSDPGPushReply : public MOSDFastDispatchOp {
 private:

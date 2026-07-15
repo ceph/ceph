@@ -7,6 +7,8 @@
 #include "rgw_zone.h"
 #include "rgw_sync_policy.h"
 
+#include "include/container_ios.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;

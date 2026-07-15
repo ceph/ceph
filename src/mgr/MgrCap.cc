@@ -23,6 +23,7 @@
 #include <boost/spirit/include/qi_uint.hpp>
 
 #include "MgrCap.h"
+#include "include/encoding_string.h"
 #include "include/stringify.h"
 #include "include/ipaddr.h"
 #include "common/debug.h"

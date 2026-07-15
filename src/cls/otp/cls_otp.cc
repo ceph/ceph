@@ -17,6 +17,7 @@
 
 #include <liboath/oath.h>
 
+#include "include/encoding_set.h"
 #include "objclass/objclass.h"
 
 #include "cls/otp/cls_otp_ops.h"

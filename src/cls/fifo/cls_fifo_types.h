@@ -30,7 +30,10 @@
 #include <fmt/ostream.h>
 #endif
 #include "include/buffer.h"
+#include "include/container_ios.h"
 #include "include/encoding.h"
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
 #include "include/types.h"
 
 #include "common/ceph_time.h"

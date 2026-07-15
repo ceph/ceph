@@ -20,12 +20,12 @@
 #include <time.h>
 #include <iterator>
 
-#include "crush/CrushWrapper.h"
-
+#include "include/byte_u_t.h"
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
 #include "include/stringify.h"
 
+#include "mon/DataStats.h"
 #include "mon/Monitor.h"
 #include "mon/MonMap.h"
 #include "mon/HealthMonitor.h"
@@ -39,6 +39,7 @@
 #include "common/debug.h"
 #include "common/Formatter.h"
 #include "common/prime.h"
+
 #include "crush/CrushWrapper.h"
 
 #define dout_subsys ceph_subsys_mon

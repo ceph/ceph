@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
 #include "msg/Message.h"
 
 class MConfig : public Message {

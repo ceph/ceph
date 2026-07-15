@@ -30,6 +30,7 @@
 #include "include/Context.h"
 
 #include "common/Finisher.h"
+#include "common/OnFinisher.h"
 #include "common/config.h"
 
 #define dout_subsys ceph_subsys_filer

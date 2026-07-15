@@ -33,6 +33,8 @@
 #include "common/ceph_crypto.h"
 #include "common/config.h"
 #include "common/errno.h"
+#include "common/hobject_fmt.h"
+#include "common/OnFinisher.h"
 #include "common/perf_counters.h"
 #include "common/scrub_types.h"
 #include "include/compat.h"
@@ -59,6 +61,7 @@
 #include "osd/scrubber/pg_scrubber.h"
 #include "ECInject.h"
 
+#include "BloomHitSet.h"
 #include "OSD.h"
 #include "OpRequest.h"
 #include "PG.h"
@@ -105,7 +108,6 @@ using ceph::bufferlist;
 using ceph::bufferptr;
 using ceph::Formatter;
 using ceph::decode;
-using ceph::decode_noclear;
 using ceph::encode;
 using ceph::encode_destructively;
 
