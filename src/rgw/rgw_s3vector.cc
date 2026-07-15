@@ -248,10 +248,25 @@ namespace rgw::s3vector {
         }
       }
 
-      // TODO: get credentials..
-      // for now, when credentials are not set, underlying LanceDB S3_ObjectStore
-      // provider falls back to the standard AWS credential provider chain
-      // (env vars, instance profile, ~/.aws/credentials, etc.)
+      // Use the S3 client user's credentials
+      auto* op = dynamic_cast<RGWOp*>(dpp);
+      if (op) {
+        auto* user = op->get_user();
+        if (user) {
+          const auto& keys = user->get_info().access_keys;
+          for (const auto& [id, ak] : keys) {
+            if (ak.active) {
+              if (!set_storage_option("aws_access_key_id", ak.id.c_str())) {
+                return nullptr;
+              }
+              if (!set_storage_option("aws_secret_access_key", ak.key.c_str())) {
+                return nullptr;
+              }
+              break;
+            }
+          }
+        }
+      }
 
       if (s3_allow_http) {
         if (!set_storage_option("allow_http", "true")) {
