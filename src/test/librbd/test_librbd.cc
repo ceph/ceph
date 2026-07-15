@@ -9187,6 +9187,74 @@ TEST_F(TestLibRBD, Flatten)
   ASSERT_PASSED(validate_object_map, clone_image);
 }
 
+TEST_F(TestLibRBD, FlattenWhenOpenedSnap)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_DEEP_FLATTEN |
+                  RBD_FEATURE_OBJECT_MAP);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string parent_name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, parent_name.c_str(), size, &order));
+
+  librbd::Image parent_image;
+  ASSERT_EQ(0, rbd.open(ioctx, parent_image, parent_name.c_str(), NULL));
+
+  bufferlist bl;
+  bl.append(std::string(4096, '1'));
+  ASSERT_EQ((ssize_t)bl.length(), parent_image.write(0, bl.length(), bl));
+
+  ASSERT_EQ(0, parent_image.snap_create("snap1"));
+  ASSERT_EQ(0, parent_image.snap_protect("snap1"));
+
+  uint64_t features;
+  ASSERT_EQ(0, parent_image.features(&features));
+
+  std::string clone_name = get_temp_image_name();
+  EXPECT_EQ(0, rbd.clone(ioctx, parent_name.c_str(), "snap1", ioctx,
+       clone_name.c_str(), features, &order));
+
+  librbd::Image clone_image;
+  ASSERT_EQ(0, rbd.open(ioctx, clone_image, clone_name.c_str(), NULL));
+  ASSERT_EQ(0, clone_image.snap_create("clone_snap"));
+
+  // keep a handle open at the clone's snapshot across the parent flatten
+  librbd::Image snap_image;
+  ASSERT_EQ(0, rbd.open(ioctx, snap_image, clone_name.c_str(), "clone_snap"));
+
+  bufferlist read_bl;
+  ASSERT_EQ((ssize_t)bl.length(), snap_image.read(0, bl.length(), read_bl));
+  ASSERT_TRUE(bl.contents_equal(read_bl));
+
+  ASSERT_EQ(0, clone_image.flatten());
+
+  // flatten's watch notification only marks snap_image as needing a
+  // refresh; force the actual reload via any call that checks for one
+  // (e.g. stat), the same way a real client would before its next
+  // operation on the image
+  librbd::image_info_t info;
+  ASSERT_EQ(0, snap_image.stat(info, sizeof(info)));
+
+  read_bl.clear();
+  ASSERT_EQ((ssize_t)bl.length(), snap_image.read(0, bl.length(), read_bl));
+  ASSERT_TRUE(bl.contents_equal(read_bl));
+
+  // a freshly opened handle at the same snapshot should also see the
+  // correct data
+  librbd::Image reopened_snap_image;
+  ASSERT_EQ(0, rbd.open(ioctx, reopened_snap_image, clone_name.c_str(),
+                        "clone_snap"));
+
+  read_bl.clear();
+  ASSERT_EQ((ssize_t)bl.length(),
+            reopened_snap_image.read(0, bl.length(), read_bl));
+  ASSERT_TRUE(bl.contents_equal(read_bl));
+}
+
 TEST_F(TestLibRBD, Sparsify)
 {
   rados_ioctx_t ioctx;
