@@ -447,10 +447,8 @@ def test_vector_buckets_deletion_with_buckets():
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     # and an s3 bucket with the same name
     _create_s3bucket(s3conn, bucket_name2)
-    # delete the s3 bucket
+    # delete the s3 bucket (helper empties and deletes it)
     _delete_s3_bucket_for_vector_bucket(bucket_name2)
-    result = s3conn.delete_bucket(Bucket=bucket_name2)
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 204
     # verify s3 bucket is not there
     pytest.raises(s3conn.exceptions.ClientError, s3conn.head_bucket, Bucket=bucket_name2)
     # verify vector bucket still exists (via get and list)

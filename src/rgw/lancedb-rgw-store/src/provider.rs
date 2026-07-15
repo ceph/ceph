@@ -92,12 +92,18 @@ impl lance_io::object_store::ObjectStoreProvider for RGWStoreProvider {
             format!("{}/", path)
         };
 
+        // Extract tenant from URL query param: rgw://bucket/?tenant=xxx
+        let tenant = base_path.query_pairs()
+            .find(|(k, _)| k == "tenant")
+            .map(|(_, v)| v.to_string())
+            .unwrap_or_default();
+
         // Create RGW ObjectStore with bucket and prefix
         // Note: The prefix is stored in RGWObjectStore but NOT used for path manipulation
         // as Lance uses base_path (provided below) directly for its I/O operations.
         //
         // We keep the prefix for debugging/logging and troubleshooting purposes.
-        let inner = Arc::new(unsafe { RGWObjectStore::new(self.driver, self.dpp, bucket, &prefix) });
+        let inner = Arc::new(unsafe { RGWObjectStore::new(self.driver, self.dpp, bucket, &tenant, &prefix) });
 
         let storage_options = StorageOptions::new(
             params.storage_options().cloned().unwrap_or_default(),

@@ -71,21 +71,23 @@ static inline optional_yield get_yield(RGWYieldContext* yield_ctx) {
 }
 
 static int load_bucket( rgw::sal::Driver* driver, const DoutPrefixProvider* dpp,
-        const char* bucket_name, std::unique_ptr<rgw::sal::Bucket>& bucket_out,
+        const RGWBucket* bucket, std::unique_ptr<rgw::sal::Bucket>& bucket_out,
         optional_yield y) {
-  if (!driver || !bucket_name) {
-    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: load_bucket: invalid args"
-                      << " driver=" << driver << " bucket=" << (bucket_name ? bucket_name : "null") << dendl;
+  if (!driver || !bucket || !bucket->name) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: load_bucket: invalid args" << dendl;
     return -EINVAL;
   }
 
   rgw_bucket bucket_id;
-  bucket_id.name = bucket_name;
+  bucket_id.name = bucket->name;
+  if (bucket->tenant) {
+    bucket_id.tenant = bucket->tenant;
+  }
 
   int ret = driver->load_bucket(dpp, bucket_id, &bucket_out, y);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: load_bucket failed for '"
-                      << bucket_name << "' ret=" << ret << dendl;
+                      << bucket->name << "' ret=" << ret << dendl;
     return ret;
   }
 
@@ -104,18 +106,18 @@ static inline rgw_obj_key make_obj_key(const RGWObject* obj) {
 extern "C" {
 
 int rgw_put_object( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
-      RGWYieldContext* yield_ctx, const char* bucket_name, const RGWObject* obj_id,
+      RGWYieldContext* yield_ctx, const RGWBucket* bucket_id, const RGWObject* obj_id,
       const uint8_t* data, size_t len) {
   auto* driver = get_driver(driver_ptr);
   auto* dpp = get_dpp(dpp_ptr);
   auto y = get_yield(yield_ctx);
 
-  if (!driver || !bucket_name || !obj_id || !obj_id->key || (!data && len > 0)) {
+  if (!driver || !bucket_id || !obj_id || !obj_id->key || (!data && len > 0)) {
     return -EINVAL;
   }
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int ret = load_bucket(driver, dpp, bucket_name, bucket, y);
+  int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
   if (ret < 0) {
     return ret;
   }
@@ -166,7 +168,7 @@ int rgw_put_object( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
 }
 
 int rgw_put_object_conditional( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
-      RGWYieldContext* yield_ctx, const char* bucket_name, const RGWObject* obj_id,
+      RGWYieldContext* yield_ctx, const RGWBucket* bucket_id, const RGWObject* obj_id,
       const uint8_t* data, size_t len,
       const char* if_match, const char* if_nomatch, int* canceled) {
   auto* driver = get_driver(driver_ptr);
@@ -175,12 +177,12 @@ int rgw_put_object_conditional( RGWSalDriver* driver_ptr, const RGWDoutPrefix* d
 
   if (canceled) *canceled = 0;
 
-  if (!driver || !bucket_name || !obj_id || !obj_id->key || (!data && len > 0)) {
+  if (!driver || !bucket_id || !obj_id || !obj_id->key || (!data && len > 0)) {
     return -EINVAL;
   }
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int ret = load_bucket(driver, dpp, bucket_name, bucket, y);
+  int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
   if (ret < 0) {
     return ret;
   }
@@ -235,13 +237,13 @@ int rgw_put_object_conditional( RGWSalDriver* driver_ptr, const RGWDoutPrefix* d
 // objects. Streaming reads via callback-based Rust FFI could be explored
 // in a follow-up.
 int rgw_get_object( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
-      RGWYieldContext* yield_ctx, const char* bucket_name, const RGWObject* obj_id,
+      RGWYieldContext* yield_ctx, const RGWBucket* bucket_id, const RGWObject* obj_id,
       uint64_t offset, uint64_t length, RGWBuffer* buffer) {
   auto* driver = get_driver(driver_ptr);
   auto* dpp = get_dpp(dpp_ptr);
   auto y = get_yield(yield_ctx);
 
-  if (!driver || !bucket_name || !obj_id || !obj_id->key || !buffer) {
+  if (!driver || !bucket_id || !obj_id || !obj_id->key || !buffer) {
     return -EINVAL;
   }
 
@@ -249,7 +251,7 @@ int rgw_get_object( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
   buffer->len = 0;
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int ret = load_bucket(driver, dpp, bucket_name, bucket, y);
+  int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
   if (ret < 0) {
     return ret;
   }
@@ -319,17 +321,17 @@ int rgw_get_object( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
 }
 
 int rgw_delete_object( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
-    RGWYieldContext* yield_ctx, const char* bucket_name, const RGWObject* obj_id) {
+    RGWYieldContext* yield_ctx, const RGWBucket* bucket_id, const RGWObject* obj_id) {
   auto* driver = get_driver(driver_ptr);
   auto* dpp = get_dpp(dpp_ptr);
   auto y = get_yield(yield_ctx);
 
-  if (!driver || !bucket_name || !obj_id || !obj_id->key) {
+  if (!driver || !bucket_id || !obj_id || !obj_id->key) {
     return -EINVAL;
   }
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int ret = load_bucket(driver, dpp, bucket_name, bucket, y);
+  int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
   if (ret < 0) {
     return ret;
   }
@@ -350,13 +352,13 @@ int rgw_delete_object( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
 }
 
 int rgw_head_object( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
-      RGWYieldContext* yield_ctx, const char* bucket_name, const RGWObject* obj_id,
+      RGWYieldContext* yield_ctx, const RGWBucket* bucket_id, const RGWObject* obj_id,
       RGWObjectMeta* meta) {
   auto* driver = get_driver(driver_ptr);
   auto* dpp = get_dpp(dpp_ptr);
   auto y = get_yield(yield_ctx);
 
-  if (!driver || !bucket_name || !obj_id || !obj_id->key || !meta) {
+  if (!driver || !bucket_id || !obj_id || !obj_id->key || !meta) {
     return -EINVAL;
   }
 
@@ -366,7 +368,7 @@ int rgw_head_object( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
   meta->last_modified = 0;
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int ret = load_bucket(driver, dpp, bucket_name, bucket, y);
+  int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
   if (ret < 0) {
     return ret;
   }
@@ -412,14 +414,14 @@ int rgw_head_object( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
 }
 
 int rgw_list_objects( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
-      RGWYieldContext* yield_ctx, const char* bucket_name, const char* prefix,
+      RGWYieldContext* yield_ctx, const RGWBucket* bucket_id, const char* prefix,
       const char* delimiter, const char* marker, uint32_t max_keys,
       RGWListResult* result) {
   auto* driver = get_driver(driver_ptr);
   auto* dpp = get_dpp(dpp_ptr);
   auto y = get_yield(yield_ctx);
 
-  if (!driver || !bucket_name || !result) {
+  if (!driver || !bucket_id || !result) {
     return -EINVAL;
   }
 
@@ -429,7 +431,7 @@ int rgw_list_objects( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
   result->next_marker = nullptr;
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int ret = load_bucket(driver, dpp, bucket_name, bucket, y);
+  int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
   if (ret < 0) {
     return ret;
   }
@@ -441,7 +443,7 @@ int rgw_list_objects( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
   params.list_versions = false;
   params.allow_unordered = false;
 
-  ldpp_dout(dpp, 10) << "rgw_list_objects: bucket=" << bucket_name
+  ldpp_dout(dpp, 10) << "rgw_list_objects: bucket=" << bucket_id->name
            << " prefix='" << params.prefix << "'"
            << " delimiter='" << params.delim << "'"
            << " marker='" << params.marker.name << "'"
@@ -511,25 +513,25 @@ int rgw_list_objects( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
 }
 
 int rgw_copy_object( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
-      RGWYieldContext* yield_ctx, const char* src_bucket_name, const RGWObject* src_obj_id,
-      const char* dst_bucket_name, const RGWObject* dst_obj_id) {
+      RGWYieldContext* yield_ctx, const RGWBucket* src_bucket_id, const RGWObject* src_obj_id,
+      const RGWBucket* dst_bucket_id, const RGWObject* dst_obj_id) {
   auto* driver = get_driver(driver_ptr);
   auto* dpp = get_dpp(dpp_ptr);
   auto y = get_yield(yield_ctx);
 
-  if (!driver || !src_bucket_name || !src_obj_id || !src_obj_id->key ||
-    !dst_bucket_name || !dst_obj_id || !dst_obj_id->key) {
+  if (!driver || !src_bucket_id || !src_obj_id || !src_obj_id->key ||
+    !dst_bucket_id || !dst_obj_id || !dst_obj_id->key) {
     return -EINVAL;
   }
 
   std::unique_ptr<rgw::sal::Bucket> src_bucket;
-  int ret = load_bucket(driver, dpp, src_bucket_name, src_bucket, y);
+  int ret = load_bucket(driver, dpp, src_bucket_id, src_bucket, y);
   if (ret < 0) {
     return ret;
   }
 
   std::unique_ptr<rgw::sal::Bucket> dst_bucket;
-  ret = load_bucket(driver, dpp, dst_bucket_name, dst_bucket, y);
+  ret = load_bucket(driver, dpp, dst_bucket_id, dst_bucket, y);
   if (ret < 0) {
     return ret;
   }
@@ -567,21 +569,21 @@ int rgw_copy_object( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
 }
 
 int rgw_copy_object_conditional( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
-      RGWYieldContext* yield_ctx, const char* src_bucket_name, const RGWObject* src_obj_id,
-      const char* dst_bucket_name, const RGWObject* dst_obj_id, const char* if_match,
+      RGWYieldContext* yield_ctx, const RGWBucket* src_bucket_id, const RGWObject* src_obj_id,
+      const RGWBucket* dst_bucket_id, const RGWObject* dst_obj_id, const char* if_match,
       const char* if_nomatch) {
   auto* driver = get_driver(driver_ptr);
   auto* dpp = get_dpp(dpp_ptr);
   auto y = get_yield(yield_ctx);
 
-  if (!driver || !src_bucket_name || !src_obj_id || !src_obj_id->key ||
-    !dst_bucket_name || !dst_obj_id || !dst_obj_id->key) {
+  if (!driver || !src_bucket_id || !src_obj_id || !src_obj_id->key ||
+    !dst_bucket_id || !dst_obj_id || !dst_obj_id->key) {
     return -EINVAL;
   }
 
   if (if_nomatch && std::string(if_nomatch) == "*") {
     std::unique_ptr<rgw::sal::Bucket> check_bucket;
-    int ret = load_bucket(driver, dpp, dst_bucket_name, check_bucket, y);
+    int ret = load_bucket(driver, dpp, dst_bucket_id, check_bucket, y);
     if (ret < 0) return ret;
 
     std::unique_ptr<rgw::sal::Object> check_obj =
@@ -595,11 +597,11 @@ int rgw_copy_object_conditional( RGWSalDriver* driver_ptr, const RGWDoutPrefix* 
   }
 
   std::unique_ptr<rgw::sal::Bucket> src_bucket;
-  int ret = load_bucket(driver, dpp, src_bucket_name, src_bucket, y);
+  int ret = load_bucket(driver, dpp, src_bucket_id, src_bucket, y);
   if (ret < 0) return ret;
 
   std::unique_ptr<rgw::sal::Bucket> dst_bucket;
-  ret = load_bucket(driver, dpp, dst_bucket_name, dst_bucket, y);
+  ret = load_bucket(driver, dpp, dst_bucket_id, dst_bucket, y);
   if (ret < 0) return ret;
 
   std::unique_ptr<rgw::sal::Object> src_obj =
@@ -636,13 +638,13 @@ int rgw_copy_object_conditional( RGWSalDriver* driver_ptr, const RGWDoutPrefix* 
 }
 
 int rgw_delete_objects( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
-      RGWYieldContext* yield_ctx, const char* bucket_name, const char* const* keys,
+      RGWYieldContext* yield_ctx, const RGWBucket* bucket_id, const char* const* keys,
       size_t count) {
   auto* driver = get_driver(driver_ptr);
   auto* dpp = get_dpp(dpp_ptr);
   auto y = get_yield(yield_ctx);
 
-  if (!driver || !bucket_name || (!keys && count > 0)) {
+  if (!driver || !bucket_id || (!keys && count > 0)) {
     return -EINVAL;
   }
 
@@ -651,7 +653,7 @@ int rgw_delete_objects( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
   }
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int ret = load_bucket(driver, dpp, bucket_name, bucket, y);
+  int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
   if (ret < 0) {
     return ret;
   }
@@ -690,13 +692,13 @@ int rgw_delete_objects( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
 }
 
 int rgw_init_multipart( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
-      RGWYieldContext* yield_ctx, const char* bucket_name, const RGWObject* obj_id,
+      RGWYieldContext* yield_ctx, const RGWBucket* bucket_id, const RGWObject* obj_id,
       RGWString* upload_id) {
   auto* driver = get_driver(driver_ptr);
   auto* dpp = get_dpp(dpp_ptr);
   auto y = get_yield(yield_ctx);
 
-  if (!driver || !bucket_name || !obj_id || !obj_id->key || !upload_id) {
+  if (!driver || !bucket_id || !obj_id || !obj_id->key || !upload_id) {
     return -EINVAL;
   }
 
@@ -704,7 +706,7 @@ int rgw_init_multipart( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
   upload_id->len = 0;
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int ret = load_bucket(driver, dpp, bucket_name, bucket, y);
+  int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
   if (ret < 0) {
     return ret;
   }
@@ -735,14 +737,14 @@ int rgw_init_multipart( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
 }
 
 int rgw_multipart_put_part( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
-      RGWYieldContext* yield_ctx, const char* bucket_name, const RGWObject* obj_id,
+      RGWYieldContext* yield_ctx, const RGWBucket* bucket_id, const RGWObject* obj_id,
       const char* upload_id, uint32_t part_num, const uint8_t* data,
       size_t len, RGWString* etag) {
   auto* driver = get_driver(driver_ptr);
   auto* dpp = get_dpp(dpp_ptr);
   auto y = get_yield(yield_ctx);
 
-  if (!driver || !bucket_name || !obj_id || !obj_id->key || !upload_id ||
+  if (!driver || !bucket_id || !obj_id || !obj_id->key || !upload_id ||
     !etag || (!data && len > 0)) {
     return -EINVAL;
   }
@@ -751,7 +753,7 @@ int rgw_multipart_put_part( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_p
   etag->len = 0;
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int ret = load_bucket(driver, dpp, bucket_name, bucket, y);
+  int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
   if (ret < 0) {
     return ret;
   }
@@ -822,19 +824,19 @@ int rgw_multipart_put_part( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_p
 }
 
 int rgw_multipart_complete( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
-      RGWYieldContext* yield_ctx, const char* bucket_name, const RGWObject* obj_id,
+      RGWYieldContext* yield_ctx, const RGWBucket* bucket_id, const RGWObject* obj_id,
       const char* upload_id, const char* const* etags, size_t count) {
   auto* driver = get_driver(driver_ptr);
   auto* dpp = get_dpp(dpp_ptr);
   auto y = get_yield(yield_ctx);
 
-  if (!driver || !bucket_name || !obj_id || !obj_id->key || !upload_id ||
+  if (!driver || !bucket_id || !obj_id || !obj_id->key || !upload_id ||
     (!etags && count > 0)) {
     return -EINVAL;
   }
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int ret = load_bucket(driver, dpp, bucket_name, bucket, y);
+  int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
   if (ret < 0) {
     return ret;
   }
@@ -872,18 +874,18 @@ int rgw_multipart_complete( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_p
 }
 
 int rgw_multipart_abort( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
-      RGWYieldContext* yield_ctx, const char* bucket_name, const RGWObject* obj_id,
+      RGWYieldContext* yield_ctx, const RGWBucket* bucket_id, const RGWObject* obj_id,
       const char* upload_id) {
   auto* driver = get_driver(driver_ptr);
   auto* dpp = get_dpp(dpp_ptr);
   auto y = get_yield(yield_ctx);
 
-  if (!driver || !bucket_name || !obj_id || !obj_id->key || !upload_id) {
+  if (!driver || !bucket_id || !obj_id || !obj_id->key || !upload_id) {
     return -EINVAL;
   }
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int ret = load_bucket(driver, dpp, bucket_name, bucket, y);
+  int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
   if (ret < 0) {
     return ret;
   }

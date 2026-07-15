@@ -49,6 +49,35 @@ impl Default for RGWString {
     }
 }
 
+/// Bucket identifier (name + optional tenant)
+#[repr(C)]
+pub struct RGWBucket {
+    pub name: *const c_char,
+    pub tenant: *const c_char,
+}
+
+impl RGWBucket {
+    pub fn from_name(name: *const c_char) -> Self {
+        Self {
+            name,
+            tenant: std::ptr::null(),
+        }
+    }
+
+    pub fn new(name: *const c_char, tenant: *const c_char) -> Self {
+        Self { name, tenant }
+    }
+}
+
+impl Default for RGWBucket {
+    fn default() -> Self {
+        Self {
+            name: std::ptr::null(),
+            tenant: std::ptr::null(),
+        }
+    }
+}
+
 /// Object identifier (key + optional version)
 #[repr(C)]
 pub struct RGWObject {
@@ -165,7 +194,7 @@ extern "C" {
         driver: *mut RGWSalDriver,
         dpp: *const RGWDoutPrefix,
         yield_ctx: *mut RGWYieldContext,
-        bucket: *const c_char,
+        bucket: *const RGWBucket,
         obj: *const RGWObject,
         data: *const u8,
         len: usize,
@@ -176,7 +205,7 @@ extern "C" {
         driver: *mut RGWSalDriver,
         dpp: *const RGWDoutPrefix,
         yield_ctx: *mut RGWYieldContext,
-        bucket: *const c_char,
+        bucket: *const RGWBucket,
         obj: *const RGWObject,
         data: *const u8,
         len: usize,
@@ -190,7 +219,7 @@ extern "C" {
         driver: *mut RGWSalDriver,
         dpp: *const RGWDoutPrefix,
         yield_ctx: *mut RGWYieldContext,
-        bucket: *const c_char,
+        bucket: *const RGWBucket,
         obj: *const RGWObject,
         offset: u64,
         length: u64,
@@ -202,7 +231,7 @@ extern "C" {
         driver: *mut RGWSalDriver,
         dpp: *const RGWDoutPrefix,
         yield_ctx: *mut RGWYieldContext,
-        bucket: *const c_char,
+        bucket: *const RGWBucket,
         obj: *const RGWObject,
     ) -> c_int;
 
@@ -211,7 +240,7 @@ extern "C" {
         driver: *mut RGWSalDriver,
         dpp: *const RGWDoutPrefix,
         yield_ctx: *mut RGWYieldContext,
-        bucket: *const c_char,
+        bucket: *const RGWBucket,
         obj: *const RGWObject,
         meta: *mut RGWObjectMeta,
     ) -> c_int;
@@ -221,7 +250,7 @@ extern "C" {
         driver: *mut RGWSalDriver,
         dpp: *const RGWDoutPrefix,
         yield_ctx: *mut RGWYieldContext,
-        bucket: *const c_char,
+        bucket: *const RGWBucket,
         prefix: *const c_char,
         delimiter: *const c_char,
         marker: *const c_char,
@@ -234,9 +263,9 @@ extern "C" {
         driver: *mut RGWSalDriver,
         dpp: *const RGWDoutPrefix,
         yield_ctx: *mut RGWYieldContext,
-        src_bucket: *const c_char,
+        src_bucket: *const RGWBucket,
         src_obj: *const RGWObject,
-        dst_bucket: *const c_char,
+        dst_bucket: *const RGWBucket,
         dst_obj: *const RGWObject,
     ) -> c_int;
 
@@ -245,9 +274,9 @@ extern "C" {
         driver: *mut RGWSalDriver,
         dpp: *const RGWDoutPrefix,
         yield_ctx: *mut RGWYieldContext,
-        src_bucket: *const c_char,
+        src_bucket: *const RGWBucket,
         src_obj: *const RGWObject,
-        dst_bucket: *const c_char,
+        dst_bucket: *const RGWBucket,
         dst_obj: *const RGWObject,
         if_match: *const c_char,
         if_nomatch: *const c_char,
@@ -262,7 +291,7 @@ extern "C" {
         driver: *mut RGWSalDriver,
         dpp: *const RGWDoutPrefix,
         yield_ctx: *mut RGWYieldContext,
-        bucket: *const c_char,
+        bucket: *const RGWBucket,
         obj: *const RGWObject,
         upload_id: *mut RGWString,
     ) -> c_int;
@@ -272,7 +301,7 @@ extern "C" {
         driver: *mut RGWSalDriver,
         dpp: *const RGWDoutPrefix,
         yield_ctx: *mut RGWYieldContext,
-        bucket: *const c_char,
+        bucket: *const RGWBucket,
         obj: *const RGWObject,
         upload_id: *const c_char,
         part_num: u32,
@@ -286,7 +315,7 @@ extern "C" {
         driver: *mut RGWSalDriver,
         dpp: *const RGWDoutPrefix,
         yield_ctx: *mut RGWYieldContext,
-        bucket: *const c_char,
+        bucket: *const RGWBucket,
         obj: *const RGWObject,
         upload_id: *const c_char,
         etags: *const *const c_char,
@@ -298,7 +327,7 @@ extern "C" {
         driver: *mut RGWSalDriver,
         dpp: *const RGWDoutPrefix,
         yield_ctx: *mut RGWYieldContext,
-        bucket: *const c_char,
+        bucket: *const RGWBucket,
         obj: *const RGWObject,
         upload_id: *const c_char,
     ) -> c_int;

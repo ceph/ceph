@@ -35,6 +35,14 @@ typedef struct RGWDoutPrefix RGWDoutPrefix;
 typedef struct RGWYieldContext RGWYieldContext;
 
 /**
+ * Bucket identifier (name + optional tenant)
+ */
+typedef struct RGWBucket {
+  const char* name;      /* Bucket name, null-terminated */
+  const char* tenant;    /* Tenant, null-terminated (NULL for default tenant) */
+} RGWBucket;
+
+/**
  * Object identifier (key + optional version)
  */
 typedef struct RGWObject {
@@ -125,7 +133,7 @@ typedef struct RGWListResult {
  * @return 0 on success, negative errno on failure
  */
 int rgw_put_object( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWYieldContext* yield_ctx,
-  const char* bucket, const RGWObject* obj, const uint8_t* data, size_t len);
+  const RGWBucket* bucket, const RGWObject* obj, const uint8_t* data, size_t len);
 
 /**
  * Write an object with conditional preconditions.
@@ -136,7 +144,7 @@ int rgw_put_object( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWYieldCont
  * @return 0 on success (check *canceled for precondition result), negative errno on failure
  */
 int rgw_put_object_conditional( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWYieldContext* yield_ctx,
-  const char* bucket, const RGWObject* obj, const uint8_t* data, size_t len,
+  const RGWBucket* bucket, const RGWObject* obj, const uint8_t* data, size_t len,
   const char* if_match, const char* if_nomatch, int* canceled);
 
 /**
@@ -147,7 +155,7 @@ int rgw_put_object_conditional( RGWSalDriver* driver, const RGWDoutPrefix* dpp, 
  * @return 0 on success, -ENOENT if object not found, negative errno on failure
  */
 int rgw_get_object( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWYieldContext* yield_ctx,
-  const char* bucket, const RGWObject* obj, uint64_t offset, uint64_t length,
+  const RGWBucket* bucket, const RGWObject* obj, uint64_t offset, uint64_t length,
   RGWBuffer* buffer);
 
 /**
@@ -158,7 +166,7 @@ int rgw_get_object( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWYieldCont
  * @return 0 on success, negative errno on failure
  */
 int rgw_delete_object( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWYieldContext* yield_ctx,
-  const char* bucket, const RGWObject* obj);
+  const RGWBucket* bucket, const RGWObject* obj);
 
 /**
  * Get object metadata without reading content.
@@ -168,7 +176,7 @@ int rgw_delete_object( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWYieldC
  * @return 0 on success, -ENOENT if object not found, negative errno on failure
  */
 int rgw_head_object( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWYieldContext* yield_ctx,
-  const char* bucket, const RGWObject* obj, RGWObjectMeta* meta);
+  const RGWBucket* bucket, const RGWObject* obj, RGWObjectMeta* meta);
 
 /**
  * List objects in a bucket by prefix, with optional delimiter for hierarchy.
@@ -178,7 +186,7 @@ int rgw_head_object( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWYieldCon
  * @return 0 on success, negative errno on failure
  */
 int rgw_list_objects( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWYieldContext* yield_ctx,
-  const char* bucket, const char* prefix, const char* delimiter, const char* marker,
+  const RGWBucket* bucket, const char* prefix, const char* delimiter, const char* marker,
   uint32_t max_keys, RGWListResult* result);
 
 /**
@@ -187,7 +195,7 @@ int rgw_list_objects( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWYieldCo
  * @return 0 on success, -ENOENT if source not found, negative errno on failure
  */
 int rgw_copy_object( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWYieldContext* yield_ctx,
-  const char* src_bucket, const RGWObject* src_obj, const char* dst_bucket,
+  const RGWBucket* src_bucket, const RGWObject* src_obj, const RGWBucket* dst_bucket,
   const RGWObject* dst_obj);
 
 /**
@@ -197,7 +205,7 @@ int rgw_copy_object( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWYieldCon
  *         negative errno on failure
  */
 int rgw_copy_object_conditional( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWYieldContext* yield_ctx,
-  const char* src_bucket, const RGWObject* src_obj, const char* dst_bucket,
+  const RGWBucket* src_bucket, const RGWObject* src_obj, const RGWBucket* dst_bucket,
   const RGWObject* dst_obj, const char* if_match, const char* if_nomatch);
 
 /**
@@ -208,7 +216,7 @@ int rgw_copy_object_conditional( RGWSalDriver* driver, const RGWDoutPrefix* dpp,
  * @return 0 on success, negative errno on failure
  */
 int rgw_delete_objects( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWYieldContext* yield_ctx,
-  const char* bucket, const char* const* keys, size_t count);
+  const RGWBucket* bucket, const char* const* keys, size_t count);
 
 /*==========================================================================
  * Multipart Upload Operations
@@ -228,7 +236,7 @@ int rgw_delete_objects( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWYield
  * @return 0 on success, negative errno on failure
  */
 int rgw_init_multipart( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWYieldContext* yield_ctx,
-  const char* bucket, const RGWObject* obj, RGWString* upload_id);
+  const RGWBucket* bucket, const RGWObject* obj, RGWString* upload_id);
 
 /**
  * Upload one part of a multipart upload.
@@ -238,7 +246,7 @@ int rgw_init_multipart( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWYield
  * @return 0 on success, negative errno on failure
  */
 int rgw_multipart_put_part( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWYieldContext* yield_ctx,
-  const char* bucket, const RGWObject* obj, const char* upload_id, uint32_t part_num,
+  const RGWBucket* bucket, const RGWObject* obj, const char* upload_id, uint32_t part_num,
   const uint8_t* data, size_t len, RGWString* etag);
 
 /**
@@ -247,7 +255,7 @@ int rgw_multipart_put_part( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWY
  * @return 0 on success, negative errno on failure
  */
 int rgw_multipart_complete( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWYieldContext* yield_ctx,
-  const char* bucket, const RGWObject* obj, const char* upload_id,
+  const RGWBucket* bucket, const RGWObject* obj, const char* upload_id,
   const char* const* etags, size_t count);
 
 /**
@@ -256,7 +264,7 @@ int rgw_multipart_complete( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWY
  * @return 0 on success, negative errno on failure
  */
 int rgw_multipart_abort( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWYieldContext* yield_ctx,
-  const char* bucket, const RGWObject* obj, const char* upload_id);
+  const RGWBucket* bucket, const RGWObject* obj, const char* upload_id);
 
 /**
  * Free a buffer allocated by rgw_get_object

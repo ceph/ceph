@@ -23,6 +23,7 @@ When making changes to this crate during development:
 
 ```bash
 # Option 1: Use ninja to rebuild and copy the library
+rm ceph/src/rgw/lancedb-rgw-store
 cd ceph/build
 ninja lancedb-rgw-store
 

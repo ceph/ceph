@@ -18,6 +18,7 @@
 #include "rgw_s3vector_background.h"
 #include "rgw_s3vector_filter.h"
 #include "rgw/rgw_sal.h"
+#include "rgw/rgw_op.h"
 
 #ifdef WITH_RADOSGW_LANCEDB
 #include "lancedb_rgw_store.h"
@@ -130,6 +131,23 @@ namespace rgw::s3vector {
 #endif
   }
 
+  // Extract tenant from dpp if it's an RGWOp (REST handler path)
+  std::string get_tenant(DoutPrefixProvider* dpp) {
+    auto* op = dynamic_cast<RGWOp*>(dpp);
+    if (op && op->get_req_state()) {
+      return op->get_req_state()->bucket_tenant;
+    }
+    return {};
+  }
+
+  // Build SAL backend URI with optional tenant query param
+  std::string make_sal_uri(const std::string& bucket, const std::string& tenant) {
+    if (tenant.empty()) {
+      return fmt::format("rgw://{}/", bucket);
+    }
+    return fmt::format("rgw://{}/?tenant={}", bucket, tenant);
+  }
+
   // utility functions for connection creation and opening table
 
   LanceDBConnection* connect(DoutPrefixProvider* dpp, const std::string& vector_bucket_name) {
@@ -171,7 +189,7 @@ namespace rgw::s3vector {
         return nullptr;
       }
 
-      uri = fmt::format("rgw://{}/", vector_bucket_name);
+      uri = make_sal_uri(vector_bucket_name, get_tenant(dpp));
       builder = lancedb_connect(uri.c_str());
       if (!builder) {
         ldpp_dout(dpp, 1) << "ERROR: s3vector failed to create connection builder for: " << uri << dendl;
@@ -283,7 +301,7 @@ namespace rgw::s3vector {
       const std::string local_path = conf.get_val<std::string>("rgw_s3vector_local_path");
       uri = fmt::format("{}/{}", local_path, vector_bucket_name);
     } else if (is_sal_backend(backend_type)) {
-      uri = fmt::format("rgw://{}/", vector_bucket_name);
+      uri = make_sal_uri(vector_bucket_name, get_tenant(dpp));
     } else {
       uri = fmt::format("s3://{}/", vector_bucket_name);
     }

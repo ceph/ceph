@@ -33,7 +33,6 @@ mod store;
 pub use provider::RGWStoreProvider;
 pub use store::RGWObjectStore;
 
-use std::os::raw::c_void;
 use std::sync::Arc;
 use ffi::{RGWSalDriver, RGWDoutPrefix};
 
