@@ -97,10 +97,8 @@ default-filter = 'test(sts::)'
 # Fast pre-commit gate: everything except lifecycle (slow), bucket_logging
 # (not implemented on posix/nsfs), and stress (ignored).
 #
-# TODO: parallel execution (test-threads > 1) exposes a CreateBucket
-# race in NSFS (status=0, http_status=404).  Serialized until fixed.
 [profile.baseline]
-test-threads = 1
+test-threads = 8
 default-filter = 'all() & !test(lifecycle::) & !test(bucket_logging::) & !test(stress::)'
 
 [[profile.baseline.overrides]]
