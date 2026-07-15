@@ -1,5 +1,7 @@
 import { And, Then, When } from 'cypress-cucumber-preprocessor/steps';
 
+const expandedRow = () => cy.get('[data-testid="datatable-row-detail"]');
+
 // When you are clicking on an action in the table actions dropdown button
 When('I click on {string} button from the table actions', (button: string) => {
   cy.get(`[aria-label="${button}"]`).click({ force: true });
@@ -38,9 +40,20 @@ When('I select a row {string}', (row: string) => {
 });
 
 When('I select a row {string} in the expanded row', (row: string) => {
-  cy.get('[data-testid="datatable-row-detail"]').within(() => {
+  expandedRow().within(() => {
     cy.get('.cds--search-input').first().clear().type(row);
-    cy.contains(`[cdstablerow] [cdstabledata]`, row).click();
+    cy.contains('[cdstablerow] [cdstabledata]', row).should('exist').click();
+  });
+});
+
+/**
+ * Waits for an expanded-row cd-table to finish loading before row search/selection.
+ */
+And('the table in the expanded row is ready', () => {
+  expandedRow().within(() => {
+    cy.get('cd-loading-panel').should('not.exist');
+    cy.get('cd-table').should('exist');
+    cy.get('.cds--search-input').should('be.visible');
   });
 });
 
@@ -62,7 +75,10 @@ Then('I should see a table in the expanded row', () => {
 });
 
 Then('I should not see a row with {string} in the expanded row', (row: string) => {
-  cy.get('[data-testid="datatable-row-detail"]').within(() => {
+  expandedRow().within(() => {
+    cy.get('cd-loading-panel').should('not.exist');
+    cy.get('cds-icon-button.toolbar-action').first().click();
+    cy.get('cd-loading-panel').should('not.exist');
     cy.get('.cds--search-input').first().clear().type(row);
     cy.contains(`[cdstablerow] [cdstabledata]`, row).should('not.exist');
   });

@@ -37,6 +37,7 @@ Feature: CephFS Snapshot Management
         Given I am on the "cephfs" page
         When I expand the row "test_cephfs"
         And I go to the "Snapshots" tab
+        And the table in the expanded row is ready
         And I click on "Create" button from the expanded row
         And enter "snapshotName" "test_snapshot" in the carbon modal
         And I click on "Create Snapshot" button
@@ -46,7 +47,9 @@ Feature: CephFS Snapshot Management
         Given I am on the "cephfs" page
         When I expand the row "test_cephfs"
         And I go to the "Snapshots" tab
-        And I select a row "test_snapshot" in the expanded row
+        And the table in the expanded row is ready
+        Then I should see a row with "test_snapshot" in the expanded row
+        When I select a row "test_snapshot" in the expanded row
         And I click on "Clone" button from the table actions in the expanded row
         And enter "cloneName" "test_clone" in the carbon modal
         And I click on "Create Clone" button
@@ -58,6 +61,7 @@ Feature: CephFS Snapshot Management
         Given I am on the "cephfs" page
         When I expand the row "test_cephfs"
         And I go to the "Subvolumes" tab
+        And the table in the expanded row is ready
         And I select a row "test_clone" in the expanded row
         And I click on "Remove" button from the table actions in the expanded row
         And I confirm the resource "test_clone"
@@ -69,7 +73,8 @@ Feature: CephFS Snapshot Management
         Given I am on the "cephfs" page
         When I expand the row "test_cephfs"
         And I go to the "Snapshots" tab
-        And I select a row "test_snapshot" in the expanded row
+        And the table in the expanded row is ready
+        When I select a row "test_snapshot" in the expanded row
         And I click on "Remove" button from the table actions in the expanded row
         And I confirm the resource "test_snapshot"
         And I click on "Remove Snapshot" button
