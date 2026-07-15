@@ -204,6 +204,8 @@ inline void BlueStore::Writer::_maybe_expand_blob(
 
 #define dout_context bstore->cct
 #define dout_subsys ceph_subsys_bluestore
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.w2 "
 
 //general levels:
 // 10 init, fundamental state changes (not present here)
