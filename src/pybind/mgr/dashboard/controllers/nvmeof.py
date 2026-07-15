@@ -30,7 +30,7 @@ NVME_SCHEMA = {
 
 try:
     from ..services.nvmeof_client import NVMeoFClient, convert_to_model, \
-        empty_response, handle_nvmeof_error, pick
+        empty_response, handle_nvmeof_error, namedtuple_to_dict, pick
 except ImportError as e:
     logger.error("Failed to import NVMeoFClient and related components: %s", e)
 else:
@@ -1833,11 +1833,11 @@ else:
                     hosts=list(ns.hosts)
                 ))
 
-            return model.NamespaceHostsList(
+            return namedtuple_to_dict(model.NamespaceHostsList(
                 status=ns_list.status,
                 error_message=ns_list.error_message,
                 namespaces=host_infos
-            )
+            ))
 
         @ReadPermission
         @Endpoint('GET', 'list_locations')
@@ -1897,11 +1897,11 @@ else:
                     namespace_count=count
                 ))
 
-            return model.NamespaceLocationsList(
+            return namedtuple_to_dict(model.NamespaceLocationsList(
                 status=ns_list.status,
                 error_message=ns_list.error_message,
                 locations=location_infos
-            )
+            ))
 
         @ReadPermission
         @Endpoint('PUT', '{nsid}/set_auto_resize')

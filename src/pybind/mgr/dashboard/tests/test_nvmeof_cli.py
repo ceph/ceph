@@ -1770,3 +1770,197 @@ class TestCliEmptyMessageForAllListCommands:
             assert '"hosts": []' in result.stdout
         finally:
             del NvmeofCLICommand.COMMANDS[test_cmd_hosts]
+
+
+class TestNamespaceListHosts:
+    def test_non_empty_hosts_renders_table(self):
+        from ..model.nvmeof import NamespaceHostsList
+
+        test_cmd = "nvmeof test namespace list_hosts non empty"
+
+        @NvmeofCLICommand(test_cmd, NamespaceHostsList)
+        def func(_):  # pylint: disable=unused-argument, unused-variable
+            return {
+                'status': 0,
+                'error_message': '',
+                'namespaces': [
+                    {
+                        'nqn': 'nqn.2001-07.com.ceph:1783923316687.group1',
+                        'nsid': 1,
+                        'hosts': [
+                            'nqn.2014-08.org.nvmexpress:uuid:8d78a673-8b0f-4228-ae7e-89f5fd5c3a74'
+                        ],
+                    }
+                ],
+            }
+
+        try:
+            result = NvmeofCLICommand.COMMANDS[test_cmd].call(MagicMock(), {})
+
+            assert isinstance(result, HandleCommandResult)
+            assert result.retval == 0
+            host_nqn = 'nqn.2014-08.org.nvmexpress:uuid:8d78a673-8b0f-4228-ae7e-89f5fd5c3a74'
+            assert host_nqn in result.stdout
+            assert '1' in result.stdout  # nsid
+        finally:
+            del NvmeofCLICommand.COMMANDS[test_cmd]
+
+    def test_empty_hosts_renders_empty_table(self):
+        from ..model.nvmeof import NamespaceHostsList
+
+        test_cmd = "nvmeof test namespace list_hosts empty"
+
+        @NvmeofCLICommand(test_cmd, NamespaceHostsList)
+        def func(_):  # pylint: disable=unused-argument, unused-variable
+            return {
+                'status': 0,
+                'error_message': '',
+                'namespaces': [
+                    {
+                        'nqn': 'nqn.2001-07.com.ceph:1783923316687.group1',
+                        'nsid': 2,
+                        'hosts': [],
+                    }
+                ],
+            }
+
+        try:
+            result = NvmeofCLICommand.COMMANDS[test_cmd].call(MagicMock(), {})
+
+            assert isinstance(result, HandleCommandResult)
+            assert result.retval == 0
+            assert 'None' in result.stdout
+            assert '2' in result.stdout  # nsid
+        finally:
+            del NvmeofCLICommand.COMMANDS[test_cmd]
+
+    def test_multiple_hosts_per_namespace(self):
+        from ..model.nvmeof import NamespaceHostsList
+
+        test_cmd = "nvmeof test namespace list_hosts multi"
+
+        @NvmeofCLICommand(test_cmd, NamespaceHostsList)
+        def func(_):  # pylint: disable=unused-argument, unused-variable
+            return {
+                'status': 0,
+                'error_message': '',
+                'namespaces': [
+                    {
+                        'nqn': 'nqn.2001-07.com.ceph:test',
+                        'nsid': 1,
+                        'hosts': [
+                            'nqn.2014-08.org.nvmexpress:uuid:host-aaa',
+                            'nqn.2014-08.org.nvmexpress:uuid:host-bbb',
+                        ],
+                    },
+                    {
+                        'nqn': 'nqn.2001-07.com.ceph:test',
+                        'nsid': 2,
+                        'hosts': [],
+                    },
+                ],
+            }
+
+        try:
+            result = NvmeofCLICommand.COMMANDS[test_cmd].call(MagicMock(), {})
+
+            assert isinstance(result, HandleCommandResult)
+            assert result.retval == 0
+            assert 'nqn.2014-08.org.nvmexpress:uuid:host-aaa' in result.stdout
+            assert 'nqn.2014-08.org.nvmexpress:uuid:host-bbb' in result.stdout
+            assert 'None' in result.stdout  # nsid 2 has no hosts
+        finally:
+            del NvmeofCLICommand.COMMANDS[test_cmd]
+
+
+class TestNamespaceListLocations:
+    def test_non_empty_locations_renders_table(self):
+        from ..model.nvmeof import NamespaceLocationsList
+
+        test_cmd = "nvmeof test namespace list_locations non empty"
+
+        @NvmeofCLICommand(test_cmd, NamespaceLocationsList)
+        def func(_):  # pylint: disable=unused-argument, unused-variable
+            return {
+                'status': 0,
+                'error_message': '',
+                'locations': [
+                    {
+                        'subsystem': 'nqn.2001-07.com.ceph:test',
+                        'load_balancing_group': 1,
+                        'location': 'india',
+                        'namespace_count': 2,
+                    }
+                ],
+            }
+
+        try:
+            result = NvmeofCLICommand.COMMANDS[test_cmd].call(MagicMock(), {})
+
+            assert isinstance(result, HandleCommandResult)
+            assert result.retval == 0
+            assert 'nqn.2001-07.com.ceph:test' in result.stdout
+            assert 'india' in result.stdout
+            assert '2' in result.stdout  # namespace_count
+        finally:
+            del NvmeofCLICommand.COMMANDS[test_cmd]
+
+    def test_empty_locations_renders_empty_table(self):
+        from ..model.nvmeof import NamespaceLocationsList
+
+        test_cmd = "nvmeof test namespace list_locations empty"
+
+        @NvmeofCLICommand(test_cmd, NamespaceLocationsList)
+        def func(_):  # pylint: disable=unused-argument, unused-variable
+            return {
+                'status': 0,
+                'error_message': '',
+                'locations': [],
+            }
+
+        try:
+            result = NvmeofCLICommand.COMMANDS[test_cmd].call(MagicMock(), {})
+
+            assert isinstance(result, HandleCommandResult)
+            assert result.retval == 0
+            assert result.stdout == ''
+        finally:
+            del NvmeofCLICommand.COMMANDS[test_cmd]
+
+    def test_multiple_locations_aggregated(self):
+        from ..model.nvmeof import NamespaceLocationsList
+
+        test_cmd = "nvmeof test namespace list_locations multi"
+
+        @NvmeofCLICommand(test_cmd, NamespaceLocationsList)
+        def func(_):  # pylint: disable=unused-argument, unused-variable
+            return {
+                'status': 0,
+                'error_message': '',
+                'locations': [
+                    {
+                        'subsystem': 'nqn.2001-07.com.ceph:test',
+                        'load_balancing_group': 1,
+                        'location': 'india',
+                        'namespace_count': 3,
+                    },
+                    {
+                        'subsystem': 'nqn.2001-07.com.ceph:test',
+                        'load_balancing_group': 2,
+                        'location': '<default>',
+                        'namespace_count': 1,
+                    },
+                ],
+            }
+
+        try:
+            result = NvmeofCLICommand.COMMANDS[test_cmd].call(MagicMock(), {})
+
+            assert isinstance(result, HandleCommandResult)
+            assert result.retval == 0
+            assert 'india' in result.stdout
+            assert '<default>' in result.stdout
+            assert '3' in result.stdout
+            assert '1' in result.stdout
+        finally:
+            del NvmeofCLICommand.COMMANDS[test_cmd]
