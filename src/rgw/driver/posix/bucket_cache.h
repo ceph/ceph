@@ -773,12 +773,18 @@ public:
               if (errc.code != std::errc{0}) {
                 break;
               }
+	      lsubdout(driver->ctx(), rgw, 10)
+		<< "BucketCache: notify lmdb put bucket=" << b->name
+		<< " key=" << bde.key.name << dendl;
               txn->put(b->dbi, concat_k, ser_data);
             }
               break;
             case EventType::REMOVE:
             {
               auto& ev_name = *ev.name;
+	      lsubdout(driver->ctx(), rgw, 10)
+		<< "BucketCache: notify lmdb del bucket=" << b->name
+		<< " key=" << ev_name << dendl;
               txn->del(b->dbi, ev_name);
             }
               break;
@@ -812,6 +818,9 @@ public:
   int add_entry(const DoutPrefixProvider* dpp, std::string bname, rgw_bucket_dir_entry bde) {
     using namespace LMDBSafe;
 
+    ldpp_dout(dpp, 10) << "BucketCache: add_entry bucket=" << bname
+      << " key=" << bde.key.name << dendl;
+
     GetBucketResult gbr = get_bucket(dpp, bname, BucketCache<D, B>::FLAG_LOCK);
     auto [b /* BucketCacheEntry */, flags] = gbr;
     if (b) {
@@ -837,6 +846,8 @@ public:
         if (errc.code != std::errc{0}) {
           return -EIO;
         }
+	ldpp_dout(dpp, 10) << "BucketCache: lmdb put bucket=" << bname
+	  << " key=" << bde.key.name << dendl;
         txn->put(b->dbi, concat_k, ser_data);
 
         txn->commit();
@@ -852,6 +863,16 @@ public:
   int remove_entry(const DoutPrefixProvider* dpp, std::string bname, cls_rgw_obj_key key) {
     using namespace LMDBSafe;
 
+    /* the bucket cache stores non-versioned objects with empty instance;
+     * the shared LC code (rgw_lc.cc) injects "null" as a RADOS convention
+     * — normalize here so the cache key matches regardless of backend */
+    if (key.instance == "null") {
+      key.instance.clear();
+    }
+
+    ldpp_dout(dpp, 10) << "BucketCache: remove_entry bucket=" << bname
+      << " key=" << key.name << " instance=" << key.instance << dendl;
+
     GetBucketResult gbr = get_bucket(dpp, bname, BucketCache<D, B>::FLAG_LOCK);
     auto [b /* BucketCacheEntry */, flags] = gbr;
     if (b) {
@@ -862,13 +883,18 @@ public:
       try {
         auto txn = b->env->getRWTransaction();
         auto concat_k = concat_key(key);
+	ldpp_dout(dpp, 10) << "BucketCache: lmdb del bucket=" << bname
+	  << " key=" << key.name << dendl;
         txn->del(b->dbi, concat_k);
         txn->commit();
       } catch (const std::exception& e) {
-	ldpp_dout(dpp, 2) << "BucketCache: remove_entry failed for "
-	  << bname << ": " << e.what() << dendl;
+	ldpp_dout(dpp, 0) << "BucketCache: remove_entry del failed for "
+	  << bname << " key=" << key.name << ": " << e.what() << dendl;
       }
-    } /* b */
+    } else {
+      ldpp_dout(dpp, 2) << "BucketCache: remove_entry bucket not cached: "
+	<< bname << dendl;
+    }
 
     return 0;
   } /* remove_entry */
