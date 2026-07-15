@@ -1727,7 +1727,40 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
         pop.soid = op.hoid;
         pop.version = op.recovery_info.oi.get_version_for_shard(pg_shard.shard);
 
-        op.returned_data->get_sparse_buffer(pg_shard.shard, pop.data, pop.data_included);
+        const interval_set<uint64_t> *force_alloc_ptr = nullptr;
+        interval_set<uint64_t> shard_fae;
+        if (op.obc && !sinfo.get_parity_shards().contains(pg_shard.shard)) {
+          const interval_set<uint64_t> ro_fae =
+            op.obc->obs.oi.force_allocated_extents.get_intervals();
+          if (!ro_fae.empty()) {
+            shard_fae = sinfo.ro_intervals_to_shard_intervals(ro_fae,
+                                                              pg_shard.shard);
+            force_alloc_ptr = &shard_fae;
+            dout(20) << __func__ << ": shard=" << pg_shard.shard
+                     << " force_alloc_shard=" << shard_fae << dendl;
+          }
+        }
+
+        op.returned_data->get_sparse_buffer(pg_shard.shard, pop.data,
+                                            pop.data_included, force_alloc_ptr);
+        ceph_assert(pop.data.length() == pop.data_included.size());
+
+        if (force_alloc_ptr && !force_alloc_ptr->empty()) {
+          interval_set<uint64_t> missing_fae;
+          missing_fae.union_of(*force_alloc_ptr);
+          interval_set<uint64_t> covered;
+          covered.intersection_of(missing_fae, pop.data_included);
+          missing_fae.subtract(covered);
+          if (!missing_fae.empty()) {
+            dout(20) << __func__ << ": shard=" << pg_shard.shard
+                     << " synthesising zeros for missing force-allocated extents "
+                     << missing_fae << dendl;
+            for (auto [off, len] : missing_fae) {
+              pop.data_included.insert(off, len);
+              pop.data.append_zero(len);
+            }
+          }
+        }
         ceph_assert(pop.data.length() == pop.data_included.size());
 
         dout(10) << __func__ << ": pop shard=" << pg_shard

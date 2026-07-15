@@ -858,6 +858,21 @@ public:
   void ro_size_to_zero_mask(
       uint64_t ro_size,
       ECUtil::shard_extent_set_t &shard_extent_set) const;
+
+  /**
+   * Project an interval_set in RO (object) address space onto a single
+   * shard's address space.
+   *
+   * Each RO interval [off, off+len) is mapped to the contiguous range
+   * [shard_start, shard_end) in the target shard's address space using
+   * ro_offset_to_shard_offset().  If the interval contains no bytes
+   * belonging to this shard (i.e. start == end) it is silently skipped.
+   *
+   * Parity shards are not in RO space; an empty set is returned for them.
+   */
+  interval_set<uint64_t> ro_intervals_to_shard_intervals(
+      const interval_set<uint64_t> &ro_intervals,
+      shard_id_t shard) const;
 };
 
 class shard_extent_map_t {
@@ -1092,7 +1107,8 @@ public:
   }
 
   template <typename IntervalSetT> requires is_interval_set_v<IntervalSetT>
-  void get_sparse_buffer(shard_id_t shard, bufferlist &bl_out, IntervalSetT &iset) {
+  void get_sparse_buffer(shard_id_t shard, bufferlist &bl_out, IntervalSetT &iset,
+                         const interval_set<uint64_t> *force_alloc_shard = nullptr) {
     ceph_assert(bl_out.length() == 0);
     if (!extent_maps.contains(shard)) {
       return;
@@ -1104,8 +1120,9 @@ public:
       auto bl_iter = bl.begin();
       for (const auto &bp : bl.buffers()) {
         uint64_t len = bp.length();
-        if (!bp.is_zero_fast()) {
-          iset.insert(off, bp.length());
+        if (!bp.is_zero_fast() ||
+            (force_alloc_shard && force_alloc_shard->intersects(off, len))) {
+          iset.insert(off, len);
           bl_out.append(bp);
         }
         off += len;
