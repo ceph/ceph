@@ -246,7 +246,7 @@ class SyntheticWorkload {
    const unsigned min_connections = 10;
    const unsigned max_in_flight = 64;
    const unsigned max_connections = 128;
-   const unsigned max_message_len = 1024 * 1024 * 4;
+   const unsigned max_message_len = 1024 * 1024;
    const uint64_t  servers, clients;
 
    SyntheticWorkload(int servers, int clients, int random_num,
