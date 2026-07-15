@@ -867,7 +867,7 @@ class CephFSSubvolume(RESTController):
             )
         subvolumes = json.loads(out)
 
-        if info:
+        if str_to_bool(info):
             for subvolume in subvolumes:
                 params['sub_name'] = subvolume['name']
                 error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolume_info', None,
@@ -878,10 +878,17 @@ class CephFSSubvolume(RESTController):
                 if error_code == -errno.EAGAIN:
                     pass
                 elif error_code != 0:
-                    raise DashboardException(
-                        f'Failed to get info for subvolume {subvolume["name"]}: {err}'
-                    )
-                if out:
+                    if _is_unmanaged_volume_entry(error_code, err):
+                        subvolume['info'] = _mirrored_subvolume_info()
+                        error_code, out, err = mgr.remote(
+                            'volumes', '_cmd_fs_subvolume_getpath', None, params)
+                        if error_code == 0:
+                            subvolume['info']['path'] = out
+                    else:
+                        raise DashboardException(
+                            f'Failed to get info for subvolume {subvolume["name"]}: {err}'
+                        )
+                elif out:
                     subvolume['info'] = json.loads(out)
         return subvolumes
 
@@ -893,6 +900,13 @@ class CephFSSubvolume(RESTController):
         error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolume_info', None,
                                           params)
         if error_code != 0:
+            if _is_unmanaged_volume_entry(error_code, err):
+                info = _mirrored_subvolume_info()
+                error_code, out, err = mgr.remote(
+                    'volumes', '_cmd_fs_subvolume_getpath', None, params)
+                if error_code == 0:
+                    info['path'] = out
+                return info
             raise DashboardException(
                 f'Failed to get info for subvolume {subvol_name}: {err}'
             )
@@ -1017,6 +1031,27 @@ class CephFSSubvolume(RESTController):
         return out
 
 
+def _is_unmanaged_volume_entry(error_code: int, err: str) -> bool:
+    return (
+        error_code in (-errno.EINVAL, -errno.ENODATA)
+        or 'getxattr' in (err or '').lower()
+    )
+
+
+def _mirrored_subvolume_info() -> Dict[str, Any]:
+    return {
+        'state': 'mirrored',
+        'bytes_pcent': 'undefined',
+    }
+
+
+def _mirrored_snapshot_info() -> Dict[str, Any]:
+    return {
+        'state': 'mirrored',
+        'has_pending_clones': 'no',
+    }
+
+
 @APIRouter('/cephfs/subvolume/group', Scope.CEPHFS)
 @APIDoc("Cephfs Subvolume Group Management API", "CephfsSubvolumeGroup")
 class CephFSSubvolumeGroups(RESTController):
@@ -1032,12 +1067,20 @@ class CephFSSubvolumeGroups(RESTController):
                 f'Error listing subvolume groups for {vol_name}')
         subvolume_groups = json.loads(out)
 
-        if info:
+        if str_to_bool(info):
             for group in subvolume_groups:
                 error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_info',
                                                   None, {'vol_name': vol_name,
                                                          'group_name': group['name']})
                 if error_code != 0:
+                    if _is_unmanaged_volume_entry(error_code, err):
+                        group['info'] = _mirrored_subvolume_info()
+                        error_code, out, err = mgr.remote(
+                            'volumes', '_cmd_fs_subvolumegroup_getpath',
+                            None, {'vol_name': vol_name, 'group_name': group['name']})
+                        if error_code == 0:
+                            group['info']['path'] = out
+                        continue
                     raise DashboardException(
                         f'Failed to get info for subvolume group {group["name"]}: {err}'
                     )
@@ -1058,6 +1101,14 @@ class CephFSSubvolumeGroups(RESTController):
         error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_info', None, {
             'vol_name': vol_name, 'group_name': group_name})
         if error_code != 0:
+            if _is_unmanaged_volume_entry(error_code, err):
+                group = _mirrored_subvolume_info()
+                error_code, out, err = mgr.remote(
+                    'volumes', '_cmd_fs_subvolumegroup_getpath',
+                    None, {'vol_name': vol_name, 'group_name': group_name})
+                if error_code == 0:
+                    group['path'] = out
+                return group
             raise DashboardException(
                 f'Failed to get info for subvolume group {group_name}: {err}'
 
@@ -1117,7 +1168,7 @@ class CephFSSubvolumeSnapshots(RESTController):
             )
         snapshots = json.loads(out)
 
-        if info:
+        if str_to_bool(info):
             for snapshot in snapshots:
                 params['snap_name'] = snapshot['name']
                 error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolume_snapshot_info',
@@ -1128,10 +1179,13 @@ class CephFSSubvolumeSnapshots(RESTController):
                 if error_code == -errno.EAGAIN:
                     pass
                 elif error_code != 0:
-                    raise DashboardException(
-                        f'Failed to get info for subvolume snapshot {snapshot["name"]}: {err}'
-                    )
-                if out:
+                    if _is_unmanaged_volume_entry(error_code, err):
+                        snapshot['info'] = _mirrored_snapshot_info()
+                    else:
+                        raise DashboardException(
+                            f'Failed to get info for subvolume snapshot {snapshot["name"]}: {err}'
+                        )
+                elif out:
                     snapshot['info'] = json.loads(out)
         return snapshots
 
@@ -1143,6 +1197,8 @@ class CephFSSubvolumeSnapshots(RESTController):
         error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolume_snapshot_info', None,
                                           params)
         if error_code != 0:
+            if _is_unmanaged_volume_entry(error_code, err):
+                return _mirrored_snapshot_info()
             raise DashboardException(
                 f'Failed to get info for subvolume snapshot {snap_name}: {err}'
             )
