@@ -664,10 +664,9 @@ ostream& operator<<(ostream& out, const BlueStore::Buffer& b)
 {
   out << "buffer(" << &b << " space " << b.space << " 0x" << std::hex
       << b.offset << "~" << b.length << std::dec
-      << " " << BlueStore::Buffer::get_state_name(b.state);
-  if (b.flags)
-    out << " " << BlueStore::Buffer::get_flag_name(b.flags);
-  return out << ")";
+      << " " << BlueStore::Buffer::get_state_name(b.state)
+      << BlueStore::Buffer::get_flag_name(" ", b.flags)
+      << ")";
 }
 
 //pool_fsck_stats_t

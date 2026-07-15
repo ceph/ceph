@@ -347,10 +347,10 @@ public:
       FLAG_NOCACHE = 1,  ///< trim when done WRITING (do not become CLEAN)
       // NOTE: fix operator<< when you define a second flag
     };
-    static const char *get_flag_name(int s) {
+    static std::string get_flag_name(const char* prefix, int s) {
       switch (s) {
-      case FLAG_NOCACHE: return "nocache";
-      default: return "???";
+      case FLAG_NOCACHE: return std::string(prefix) + "nocache";
+      default: return "";
       }
     }
 
