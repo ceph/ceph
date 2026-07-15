@@ -1512,7 +1512,7 @@ class RedmineLinkageCheck(BaseAuditCheck):
             
             if not main_trackers:
                 log.warning(f"Failed to find any main trackers for PR #{orig_pr} ({pr_url})")
-                irregularities.append(f"**Orphaned Main PR:** Could not find a Redmine tracker for `main` PR #{orig_pr}. Please create a ticket, set its 'Pull Request ID', populate the 'Backports' field, and ensure it is in the 'Pending Backport' state.")
+                irregularities.append(f"**Orphaned Main PR:** Could not find a Redmine tracker for `main` PR #{orig_pr}. Please create a ticket, set its 'Pull Request ID', populate the 'Backport' field, and ensure it is in the 'Pending Backport' state.")
                 continue
             
             for main_tracker in main_trackers:
@@ -1534,7 +1534,7 @@ class RedmineLinkageCheck(BaseAuditCheck):
     
                 if not bp_trackers:
                     log.warning(f"No backport trackers found for main tracker #{main_tracker.id} ({REDMINE_ENDPOINT}/issues/{main_tracker.id}) targeting base '{base}'")
-                    irregularities.append(f"**Missing Backport Tracker:** Main tracker [#{main_tracker.id}]({REDMINE_ENDPOINT}/issues/{main_tracker.id}) does not have a backport tracker for `{base}`. Please adjust the 'Backports' field on the main tracker appropriately and remove 'backport_processed' from 'Tags (freeform)'.")
+                    irregularities.append(f"**Missing Backport Tracker:** Main tracker [#{main_tracker.id}]({REDMINE_ENDPOINT}/issues/{main_tracker.id}) does not have a backport tracker for `{base}`. Please adjust the 'Backport' field on the main tracker appropriately and remove 'backport_processed' from 'Tags (freeform)'.")
                     continue
                 
                 for bp_tracker in bp_trackers:
