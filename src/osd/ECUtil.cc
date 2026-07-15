@@ -194,6 +194,28 @@ void ECUtil::stripe_info_t::ro_size_to_zero_mask(
   trim_shard_extent_set_for_ro_offset(ro_size, shard_extent_set);
 }
 
+interval_set<uint64_t>
+ECUtil::stripe_info_t::ro_intervals_to_shard_intervals(
+    const interval_set<uint64_t> &ro_intervals,
+    shard_id_t shard) const {
+  interval_set<uint64_t> result;
+
+  raw_shard_id_t raw_shard = get_raw_shard(shard);
+  if (int(raw_shard) >= int(k)) {
+    return result;
+  }
+
+  for (auto [ro_off, ro_len] : ro_intervals) {
+    uint64_t shard_start = ro_offset_to_shard_offset(ro_off, raw_shard);
+    uint64_t shard_end   = ro_offset_to_shard_offset(ro_off + ro_len, raw_shard);
+    if (shard_end > shard_start) {
+      result.union_insert(shard_start, shard_end - shard_start);
+    }
+  }
+
+  return result;
+}
+
 namespace ECUtil {
 void shard_extent_map_t::erase_after_ro_offset(uint64_t ro_offset) {
   /* Ignore the null case */
