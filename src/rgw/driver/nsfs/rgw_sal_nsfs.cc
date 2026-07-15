@@ -4039,6 +4039,10 @@ int NSFSObject::copy_object(const ACLOwner& owner,
               ::close(chk_fd);
             }
           }
+          ldpp_dout(dpp, 20) << "copy_file_data: ver_enabled="
+            << dest_ver_enabled << " cur_is_null=" << cur_is_null
+            << " will_demote=" << !(!dest_ver_enabled && cur_is_null)
+            << dendl;
           if (!(!dest_ver_enabled && cur_is_null)) {
             std::string cur_ver_id = cur_is_null
               ? NULL_VERSION_ID
@@ -5247,6 +5251,10 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     }
   }
 
+  ldpp_dout(dpp, 10) << "delete_obj: key=" << source->get_name()
+    << " versioned=" << versioned << " ver_enabled=" << ver_enabled
+    << " req_version_id=" << req_version_id << dendl;
+
   if (!versioned) {
     if (has_cond) {
       int ret = source->stat(dpp);
@@ -5319,6 +5327,9 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     ent = source->get_fsent();
 
     /* check if the requested version is the current */
+    ldpp_dout(dpp, 20) << "delete_obj: stat ret=" << ret
+      << " ent=" << (ent ? "yes" : "null")
+      << " req_version_id=" << req_version_id << dendl;
     if (ret == 0 && ent) {
       bool cur_match;
       if (req_version_id == NULL_VERSION_ID) {
@@ -5328,6 +5339,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
           chk_fd = ent->get_fd();
         }
         cur_match = (chk_fd >= 0 && is_null_version_fd(chk_fd));
+        ldpp_dout(dpp, 20) << "delete_obj: null version check is_null="
+          << cur_match << dendl;
       } else {
         std::string cur_ver_id = nsfs_version_id_from_statx(ent->get_stx());
         cur_match = (req_version_id == cur_ver_id);
