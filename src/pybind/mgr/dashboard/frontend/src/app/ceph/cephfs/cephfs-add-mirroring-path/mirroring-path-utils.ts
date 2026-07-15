@@ -1,7 +1,6 @@
 import { PathEntry } from './mirroring-path.model';
 
 export const FS_ROOT = '/';
-export const VOLUMES_ROOT = '/volumes';
 /** Internal select value representing the filesystem root path. */
 export const FS_ROOT_PATH_SENTINEL = '__fs_root__';
 
@@ -24,21 +23,15 @@ export class MirroringPathUtils {
     return `${normalizedParent}/${name}`;
   }
 
-  static buildPathFromSegments(
-    segments: string[],
-    browseFromFilesystemRoot = false
-  ): string {
+  static buildPathFromSegments(segments: string[]): string {
     const selected = segments.filter(Boolean);
     if (!selected.length) {
       return '';
     }
-    if (browseFromFilesystemRoot) {
-      if (selected.some((segment) => MirroringPathUtils.isRootSelection(segment))) {
-        return FS_ROOT;
-      }
-      return MirroringPathUtils.normalizePath(`/${selected.join('/')}`);
+    if (selected.some((segment) => MirroringPathUtils.isRootSelection(segment))) {
+      return FS_ROOT;
     }
-    return `${VOLUMES_ROOT}/${selected.join('/')}`;
+    return MirroringPathUtils.normalizePath(`/${selected.join('/')}`);
   }
 
   static formatLevelOption(option: string): string {
@@ -56,16 +49,12 @@ export class MirroringPathUtils {
     return entry.levels.some((level) => MirroringPathUtils.isRootSelection(level.selected));
   }
 
-  static buildPathFromLevels(
-    levels: PathEntry['levels'],
-    upToLevelIndex: number,
-    browseFromFilesystemRoot = false
-  ): string {
+  static buildPathFromLevels(levels: PathEntry['levels'], upToLevelIndex: number): string {
     const segments = levels
       .slice(0, upToLevelIndex)
       .map((level) => level.selected)
       .filter(Boolean);
-    return MirroringPathUtils.buildPathFromSegments(segments, browseFromFilesystemRoot);
+    return MirroringPathUtils.buildPathFromSegments(segments);
   }
 
   static getSelectedSegments(entry: PathEntry): string[] {

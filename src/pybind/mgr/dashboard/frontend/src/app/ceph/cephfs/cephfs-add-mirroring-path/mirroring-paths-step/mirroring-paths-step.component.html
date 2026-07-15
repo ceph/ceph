@@ -11,18 +11,8 @@
            i18n>About path selection</div>
       <div class="cds--type-body-compact-01"
            i18n>Selecting a higher level path includes all nested content. Select a deeper path for more precise mirroring.</div>
-      <div class="cds--type-body-compact-01"
-           i18n>By default, paths under /volumes are shown for subvolume mirroring. Enable the option below to browse other top-level directories.</div>
     </div>
   </cd-alert-panel>
-</div>
-
-<div class="cds-mb-5">
-  <cds-checkbox [checked]="browseFromFilesystemRoot"
-                (checkedChange)="onBrowseScopeChange($event)"
-                i18n>
-    Browse paths outside /volumes
-  </cds-checkbox>
 </div>
 
 @if (showRootWarning) {
