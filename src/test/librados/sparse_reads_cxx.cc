@@ -170,6 +170,15 @@ class ECSparseReadTest : public ECOnlyTestFixture, public SparseReadHelpers {
 protected:
   librados::IoCtx& get_ioctx() override { return ioctx; }
 
+  static void SetUpTestSuite() {
+    ECOnlyTestFixture::SetUpTestSuite();
+    // Enable zero-block allocation tracking on the shared EC pool so that
+    // FAE-related tests work without needing a per-request flag.
+    ASSERT_EQ("", set_pool_flags_pp(
+      static_pool_name, rados, pg_pool_t::FLAG_PRESERVE_ALLOCATION, true));
+    rados.wait_for_latest_osdmap();
+  }
+
   void SetUp() override {
     SKIP_IF_CRIMSON();
     ECOnlyTestFixture::SetUp();
