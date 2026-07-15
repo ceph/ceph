@@ -1694,6 +1694,10 @@ void MonmapMonitor::tick()
 epoch_t MonmapMonitor::bump_auth_epoch(epoch_t e)
 {
   ceph_assert(is_writeable());
+  if (unlikely(pending_map.auth_epoch == std::numeric_limits<epoch_t>::max())) {
+    dout(10) << __func__ << " repairing invalid auth_epoch " << pending_map.auth_epoch << " -> 0" << dendl;
+    pending_map.auth_epoch = 0;
+  }
   ceph_assert(e >= pending_map.auth_epoch);
   pending_map.auth_epoch = e;
   return e;
