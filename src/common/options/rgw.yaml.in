@@ -3954,6 +3954,7 @@ options:
   default: static
   enum_values:
   - static
+  - gradient2
   tags:
   - performance
   services:
@@ -3962,6 +3963,73 @@ options:
   - rgw_max_concurrent_requests
   - rgw_thread_pool_size
   with_legacy: true
+- name: rgw_min_concurrent_requests
+  type: int
+  level: basic
+  desc: Minium number of concurrent HTTP requests for dynamic concurrency limiters (e.g gradient2)
+  default: 20
+  tags:
+  - performance
+  services:
+  - rgw
+  see_also:
+  - rgw_frontends
+  - rgw_thread_pool_size
+- name: rgw_gradient2_smoothing
+  type: float
+  level: advanced
+  desc: Grandient2
+  default: 0.2
+  tags:
+  - performance
+  services:
+  - rgw
+  see_also:
+  - rgw_concurrency_limiter
+- name: rgw_gradient2_rtt_tolerance
+  type: float
+  level: advanced
+  desc: Grandient2
+  default: 1.5
+  tags:
+  - performance
+  services:
+  - rgw
+  see_also:
+  - rgw_concurrency_limiter
+- name: rgw_gradient2_long_window
+  type: int
+  level: advanced
+  desc: Grandient2
+  default: 600
+  tags:
+  - performance
+  services:
+  - rgw
+  see_also:
+  - rgw_concurrency_limiter
+- name: rgw_gradient2_estimate_growth
+  type: int
+  level: advanced
+  desc: Grandient2
+  default: 4
+  tags:
+  - performance
+  services:
+  - rgw
+  see_also:
+  - rgw_concurrency_limiter
+- name: rgw_gradient2_initial_concurrent_requests
+  type: int
+  level: advanced
+  desc: Grandient2
+  default: 32
+  tags:
+  - performance
+  services:
+  - rgw
+  see_also:
+  - rgw_concurrency_limiter
 - name: rgw_scheduler_type
   type: str
   level: advanced

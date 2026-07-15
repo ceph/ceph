@@ -88,8 +88,40 @@ TEST_P(ConcurrencyLimiterTest, LimitStaysBounded) {
   }
 }
 
+// Basisc Gradient2 behaviour: Contract on latency
+class Gradient2Test : public ::testing::Test {
+ protected:
+  const std::unique_ptr<CephContext> cct;
+  Gradient2 limiter;
+  Gradient2Test()
+      : cct(new CephContext(CEPH_ENTITY_TYPE_ANY)), limiter(cct.get()) {}
+
+  void feed(std::chrono::nanoseconds rtt, int count) {
+    for (int i = 0; i < count; i++) {
+      limiter.sample(ok(limiter.limit(), rtt));
+    }
+  }
+};
+
+TEST_F(Gradient2Test, ContractsWhenLatencyDegrades) {
+  feed(1ms, 200);
+  const int64_t settled = limiter.limit();
+
+  feed(50ms, 200);
+  EXPECT_LT(limiter.limit(), settled)
+      << "limit stayed at " << limiter.limit() << " after a 50x latency jump";
+}
+
+TEST_F(Gradient2Test, AccumulatesFractionalGrowth) {
+  const int64_t initial = limiter.limit();
+
+  feed(1ms, 2);
+  EXPECT_GT(limiter.limit(), initial)
+      << "fractional growth was discarded between samples";
+}
+
 INSTANTIATE_TEST_SUITE_P(Implementations, ConcurrencyLimiterTest,
-    ::testing::Values("static"),
+    ::testing::Values("static", "gradient2"),
     [](const ::testing::TestParamInfo<std::string_view>& info) {
       return std::string(info.param);
     });
