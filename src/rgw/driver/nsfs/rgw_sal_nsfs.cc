@@ -3300,8 +3300,13 @@ int NSFSBucket::list(const DoutPrefixProvider* dpp, ListParams& params,
   /* multipart namespace: incomplete uploads live in staging directories
    * that aren't in the LMDB cache — delegate to list_multiparts() and
    * format results using RADOS naming conventions so the LC processor
-   * can parse them via rgw_obj_key::parse_index_key() */
-  if (params.ns == mp_ns) {
+   * can parse them via rgw_obj_key::parse_index_key().
+   *
+   * Skip this when we ARE a shadow (staging) bucket (ns == mp_ns) —
+   * list_parts() uses shadow->list() to enumerate part files inside
+   * the staging directory, which must fall through to the normal
+   * LMDB/directory listing below. */
+  if (params.ns == mp_ns && ns != mp_ns) {
     std::vector<std::unique_ptr<MultipartUpload>> uploads;
     std::string marker;
     int ret = list_multiparts(dpp, "", marker, "",
