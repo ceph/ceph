@@ -119,14 +119,17 @@ def task(ctx, config):
 
         # Ensure the client key is generated with the desired cipher type
         keyring_path = f'/etc/ceph/ceph.client.{id_}.keyring'
-        log.info(f"Generating key for {entity} with key-type {key_type} at {keyring_path}")
-        remote.run(
-            args=[
-                'sudo', 'ceph', 'auth', 'rotate', entity,
-                f'--key-type={key_type}',
-                '-o', keyring_path
-            ]
-        )
+        try:
+            log.info(f"Generating key for {entity} with key-type {key_type} at {keyring_path}")
+            remote.run(
+                args=[
+                    'sudo', 'ceph', 'auth', 'rotate', entity,
+                    f'--key-type={key_type}',
+                    '-o', keyring_path
+                ]
+            )
+        except CommandFailedError as e:
+            log.warning(f"Failed to rotate key, maybe --key-type is unsupported: {e}")
 
         if client_config.get('debug', False):
             remote.run(args=["sudo", "bash", "-c", "echo 'module ceph +p' > /sys/kernel/debug/dynamic_debug/control"])
