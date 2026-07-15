@@ -39,6 +39,7 @@ using boost::none;
 
 using rgw::auth::Identity;
 using rgw::auth::Principal;
+using rgw::auth::PrincipalIdentity;
 
 using rgw::ARN;
 using rgw::IAM::Effect;
@@ -139,77 +140,6 @@ using rgw::IAM::organizationsAllValue;
 using rgw::IAM::allValue;
 
 using rgw::IAM::get_managed_policy;
-
-class FakeIdentity : public Identity {
-  const Principal id;
-public:
-
-  explicit FakeIdentity(Principal&& id) : id(std::move(id)) {}
-
-  ACLOwner get_aclowner() const override {
-    ceph_abort();
-    return {};
-  }
-
-  uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
-    ceph_abort();
-    return 0;
-  };
-
-  bool is_admin() const override {
-    ceph_abort();
-    return false;
-  }
-
-  bool is_owner_of(const rgw_owner& owner) const override {
-    ceph_abort();
-    return false;
-  }
-
-  bool is_root() const override {
-    ceph_abort();
-    return false;
-  }
-
-  virtual uint32_t get_perm_mask() const override {
-    ceph_abort();
-    return 0;
-  }
-
-  string get_acct_name() const override {
-    abort();
-    return string{};
-  }
-
-  string get_subuser() const override {
-    abort();
-    return string{};
-  }
-
-  const std::string& get_tenant() const override {
-    ceph_abort();
-    static std::string empty;
-    return empty;
-  }
-
-  const std::optional<RGWAccountInfo>& get_account() const override {
-    ceph_abort();
-    static std::optional<RGWAccountInfo> empty;
-    return empty;
-  }
-
-  void to_str(std::ostream& out) const override {
-    out << id;
-  }
-
-  bool is_identity(const Principal& p) const override {
-    return id.is_wildcard() || p.is_wildcard() || p == id;
-  }
-
-  uint32_t get_identity_type() const override {
-    return TYPE_RGW;
-  }
-};
 
 class PolicyTest : public ::testing::Test {
 protected:
@@ -323,10 +253,10 @@ TEST_F(PolicyTest, Eval2) {
   auto p  = Policy(cct.get(), &arbitrary_tenant, example2, true);
   Environment e;
 
-  auto trueacct = FakeIdentity(
+  auto trueacct = PrincipalIdentity(
     Principal::account("ACCOUNT-ID-WITHOUT-HYPHENS"));
 
-  auto notacct = FakeIdentity(
+  auto notacct = PrincipalIdentity(
     Principal::account("some-other-account"));
   for (auto i = 0ULL; i < s3All; ++i) {
     ARN arn1(Partition::aws, Service::s3,
@@ -741,11 +671,11 @@ TEST_F(PolicyTest, Eval7) {
   auto p  = Policy(cct.get(), &arbitrary_tenant, example7, true);
   Environment e;
 
-  auto subacct = FakeIdentity(
+  auto subacct = PrincipalIdentity(
     Principal::user(std::move(""), "A:subA"));
-  auto parentacct = FakeIdentity(
+  auto parentacct = PrincipalIdentity(
     Principal::user(std::move(""), "A"));
-  auto sub2acct = FakeIdentity(
+  auto sub2acct = PrincipalIdentity(
     Principal::user(std::move(""), "A:sub2A"));
 
   ARN arn1(Partition::aws, Service::s3,
@@ -1236,7 +1166,7 @@ TEST_F(IPPolicyTest, EvalIPAddress) {
   blocklistedIP.emplace("aws:SourceIp", "192.168.1.1");
   blocklistedIPv6.emplace("aws:SourceIp", "2001:0db8:85a3:0000:0000:8a2e:0370:7334");
 
-  auto trueacct = FakeIdentity(
+  auto trueacct = PrincipalIdentity(
     Principal::account("ACCOUNT-ID-WITHOUT-HYPHENS"));
   // Without an IP address in the environment then evaluation will always pass
   ARN arn1(Partition::aws, Service::s3,
