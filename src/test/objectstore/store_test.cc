@@ -11878,6 +11878,8 @@ TEST_P(CorruptedOnodesTest, CorruptedOnode_RegularPathStillCrashes)
   g_conf().apply_changes(nullptr);
   prepare_store();
 
+  // Persist the corruption, then fully tear down so no live store (threads,
+  // open RocksDB) is cloned across the death-test fork.
   mount();
   BlueStore* bs = dynamic_cast<BlueStore*>(store.get());
   ceph_assert(bs);
@@ -11885,15 +11887,19 @@ TEST_P(CorruptedOnodesTest, CorruptedOnode_RegularPathStillCrashes)
                             make_bad_onode_val(BadKind::version)));
   umount();
 
-  mount();                             // cold cache: read must decode
-  ch = store->open_collection(cid);
-  ghobject_t hoid(
-    hobject_t(sobject_t("my_special_object", CEPH_NOSNAP), "", 1, 222, ""));
-  hoid.hobj.set_hash(0x80000000);
-  bufferlist bl;
-  EXPECT_DEATH((void)store->read(ch, hoid, 0, 4, bl), "");
-  ch.reset();
-  umount();
+  // Child does its own clean mount; the cold read must decode the corrupt
+  // onode and abort via ceph_assert (no throwing_guard on the regular path).
+  EXPECT_DEATH({
+    mount();
+    auto ch2 = store->open_collection(cid);
+    ghobject_t hoid(
+      hobject_t(sobject_t("my_special_object", CEPH_NOSNAP), "", 1, 222, ""));
+    hoid.hobj.set_hash(0x80000000);
+    bufferlist bl;
+    (void)store->read(ch2, hoid, 0, 4, bl);
+    umount();
+  }, "");
+
   cleanup_store();
 }
 

@@ -9977,7 +9977,7 @@ void BlueStore::_fsck_foreach_shared_blob(
 
       OnodeRef o;
       try {
-        bluestore_decode::tolerant_guard g;
+        bluestore_decode::throwing_guard g;
         o.reset(Onode::create_decode(c, oid, it->key(), it->value(), false, segment_size != 0));
         o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
       } catch (const ceph::buffer::error& e) {
@@ -10140,7 +10140,7 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
   dout(10) << __func__ << "  " << oid << dendl;
   OnodeRef o;
   try {
-    bluestore_decode::tolerant_guard g;
+    bluestore_decode::throwing_guard g;
     o.reset(Onode::create_decode(c, oid, key, value, false, segment_size != 0));
     o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
   } catch (const ceph::buffer::error& e) {
@@ -11557,7 +11557,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair, bluestore_
 
   OnodeRef o;
   try {
-    bluestore_decode::tolerant_guard g;
+    bluestore_decode::throwing_guard g;
     o.reset(Onode::create_decode(c, oid, it->key(), it->value(), false, segment_size != 0));
     o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
   } catch (const ceph::buffer::error& e) {
@@ -21005,14 +21005,10 @@ int BlueStore::read_allocation_from_onodes(SimpleBitmap *sbmap, read_alloc_stats
       edecoder.reset(oid,
         &stats.actual_pool_vstatfs[oid.hobj.get_logical_pool()]);
       Onode dummy_on(cct);
-      try {
-        bluestore_decode::tolerant_guard g;
-        Onode::decode_raw(&dummy_on, it->value(), edecoder, segment_size != 0);
-      } catch (const ceph::buffer::error& e) {
-        derr << __func__ << " failed to decode onode "
-             << pretty_binary_string(okey) << ": " << e.what() << dendl;
-        continue;
-      }
+      Onode::decode_raw(&dummy_on,
+        it->value(),
+        edecoder,
+        segment_size != 0);
       ++stats.onode_count;
     } else {
       uint32_t offset;
@@ -21036,14 +21032,7 @@ int BlueStore::read_allocation_from_onodes(SimpleBitmap *sbmap, read_alloc_stats
              << " not from current oid: " << edecoder.get_oid() << dendl;
         continue;
       }
-      try {
-        bluestore_decode::tolerant_guard g;
-        edecoder.decode_some(it->value(), nullptr);
-      } catch (const ceph::buffer::error& e) {
-        derr << __func__ << " failed to decode extent shard "
-             << pretty_binary_string(key) << ": " << e.what() << dendl;
-        continue;
-      }
+      edecoder.decode_some(it->value(), nullptr);
       ++stats.shard_count;
     }
   }

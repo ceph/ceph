@@ -34,22 +34,18 @@
 
 // Decode-failure tolerance for BlueStore fsck/repair (tracker #77325).
 // Regular I/O keeps crashing on corrupt decode (coredump/backtrace);
-// fsck opts in via tolerant_guard, turning decode assert failures into
+// fsck opts in via throwing_guard, turning decode assert failures into
 // ceph::buffer::malformed_input which fsck catches.
 namespace bluestore_decode {
-extern thread_local bool tolerate_failures;
-struct tolerant_guard {
-  bool prev;
-  tolerant_guard()  : prev(tolerate_failures) { tolerate_failures = true; }
-  ~tolerant_guard() { tolerate_failures = prev; }
+extern thread_local bool throw_on_failure;
+struct throwing_guard {
+  throwing_guard()  { ceph_assert(!throw_on_failure); throw_on_failure = true; }
+  ~throwing_guard() { throw_on_failure = false; }
 };
-  [[noreturn]] void assert_fail(const char* assertion, const char* file,
-                                int line, const char* func);
+  void assert_fail(const char* assertion, const char* file,
+                   int line, const char* func);
 } // namespace bluestore_decode
 
-// Same shape as ceph_assert (include/ceph_assert.h): one predicate test,
-// cold [[noreturn]] call on failure. The thread-local is read only after
-// the predicate has already failed, so the success path is identical.
 #define ceph_assert_decode(expr)                                           \
   do {                                                                     \
     ((expr))                                                               \
