@@ -29,6 +29,8 @@
 #                       (for sideloaded file detection; off by default)
 #   --ramdisk           Mount tmpfs on data root and LMDB cache dirs
 #                       (eliminates I/O latency for test runs)
+#   --profile           Start without debug logging (no -d to vstart.sh)
+#                       for performance profiling; sets all debug to 0
 #   --foreground        Print the radosgw command instead of running it;
 #                       use this to start the daemon as root in another
 #                       terminal (LWE requires root for DMAPI handles)
@@ -48,6 +50,7 @@ VAULT=false
 LIFECYCLE=false
 INOTIFY=false
 RAMDISK=false
+PROFILE=false
 GPFS_ROOT=/mnt/rgw/nsfs
 DEBUG_RGW=20
 FOREGROUND=false
@@ -65,6 +68,7 @@ while [[ $# -gt 0 ]]; do
 		--with-lifecycle) LIFECYCLE=true; shift ;;
 		--with-inotify) INOTIFY=true; shift ;;
 		--ramdisk) RAMDISK=true; shift ;;
+		--profile) PROFILE=true; shift ;;
 		--gpfs-root)  GPFS_ROOT="$2"; shift 2 ;;
 		--debug-rgw)  DEBUG_RGW="$2"; shift 2 ;;
 		--foreground) FOREGROUND=true; shift ;;
@@ -132,6 +136,7 @@ if $RAMDISK; then
 	rm -rf "$RAMDISK_BASE"/{root,lmdb}
 	mkdir -p "$RAMDISK_BASE"/{root,lmdb}
 	RAMDISK_DIR="$BUILD_DIR/dev/rgw/$STORE"
+	mkdir -p "$RAMDISK_DIR"
 	for sub in root lmdb; do
 		rm -rf "$RAMDISK_DIR/$sub"
 		ln -sfn "$RAMDISK_BASE/$sub" "$RAMDISK_DIR/$sub"
@@ -202,8 +207,14 @@ if $VAULT; then
 	)
 fi
 
+VSTART_FLAGS=(-n -d)
+if $PROFILE; then
+	VSTART_FLAGS=(-n)
+	DEBUG_RGW=0
+fi
+
 MON=0 OSD=0 MDS=0 MGR=0 RGW=1 \
-	"$SRC_DIR/src/vstart.sh" -n -d \
+	"$SRC_DIR/src/vstart.sh" "${VSTART_FLAGS[@]}" \
 	--rgw_store "$STORE" \
 	"${VSTART_OPTS[@]}"
 
