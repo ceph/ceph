@@ -79,6 +79,36 @@ def _role_to_remote(rctx, role):
     return None
 
 
+@jinja2.pass_context
+def _openssl_content(rctx, cert):
+    """Return SSL certficate conents managed by 'openssl_keys' role."""
+    ctx = rctx["ctx"]
+    ssl_certificates = getattr(ctx, 'ssl_certificates', None)
+    if not ssl_certificates:
+        log.info("No ssl_certificates object in context")
+        return None
+    what = 'cert'
+    if cert.startswith('key@'):
+        what = 'key'
+        cert = cert[4:]
+    elif cert.startswith('cert@'):
+        cert = cert[5:]
+
+    cert_obj = ssl_certificates.get(cert)
+    if not cert_obj:
+        log.info("No cert matching %r found", cert)
+        return None
+    if what == 'cert':
+        cfn = cert_obj.certificate
+    elif what == 'key':
+        cfn = cert_obj.key
+    else:
+        raise ValueError('invalid cert object')
+    content = cert_obj.remote.read_file(cfn)
+    log.info("Read %d from %s %s", len(content), what, cert)
+    return content.decode()
+
+
 def _vip_vars(rctx):
     """For backwards compat with the vip.subst_vip function."""
     # Make it possible to replace subst_vip in vip.py.
@@ -106,6 +136,7 @@ def transform(ctx, config, target, **ctx_vars):
         loader = jinja2.BaseLoader()
         jenv = jinja2.Environment(loader=loader)
         jenv.filters["role_to_remote"] = _role_to_remote
+        jenv.filters["openssl_content"] = _openssl_content
         setattr(ctx, "_jinja_env", jenv)
     rctx = dict(
         ctx=ctx, config=config, cluster_name=config.get("cluster", "")

@@ -167,13 +167,7 @@ def configure_samba_client_container(ctx, config):
             "you must specify a role to discover container engine / pull image"
         )
     (remote,) = ctx.cluster.only(role).remotes.keys()
-    cengine = 'podman'
-    try:
-        log.info("Testing if podman is available")
-        remote.run(args=['sudo', cengine, '--help'])
-    except CommandFailedError:
-        log.info("Failed to find podman. Using docker")
-        cengine = 'docker'
+    cengine = _cengine(ctx, config, remote)
 
     remote.run(args=['sudo', cengine, 'pull', samba_client_image])
     samba_client_container_cmd = [
@@ -193,6 +187,17 @@ def configure_samba_client_container(ctx, config):
         setattr(ctx, 'samba_client_container_cmd', None)
 
 
+def _cengine(ctx, config, remote):
+    cengine = config.get('container_engine', 'podman')
+    try:
+        log.info("Testing if podman is available")
+        remote.run(args=['sudo', cengine, '--help'])
+    except CommandFailedError:
+        log.info("Failed to find podman. Using docker")
+        cengine = 'docker'
+    return cengine
+
+
 @contextlib.contextmanager
 def deploy_samba_ad_dc(ctx, config):
     role = config.get('role')
@@ -209,13 +214,7 @@ def deploy_samba_ad_dc(ctx, config):
         )
     (remote,) = ctx.cluster.only(role).remotes.keys()
     ip = remote.ssh.get_transport().getpeername()[0]
-    cengine = 'podman'
-    try:
-        log.info("Testing if podman is available")
-        remote.run(args=['sudo', cengine, '--help'])
-    except CommandFailedError:
-        log.info("Failed to find podman. Using docker")
-        cengine = 'docker'
+    cengine = _cengine(ctx, config, remote)
     remote.run(args=['sudo', cengine, 'pull', ad_dc_image])
     remote.run(args=['sudo', cengine, 'pull', samba_client_image])
     _disable_systemd_resolved(ctx, remote)
@@ -302,6 +301,184 @@ def deploy_samba_ad_dc(ctx, config):
         setattr(ctx, 'samba_client_container_cmd', None)
 
 
+@contextlib.contextmanager
+def deploy_kmip_container(ctx, config):
+    role = config.get('role')
+    image = config.get(
+        'image', 'quay.io/phlogistonjohn/pykmip:test'
+    )
+    if not role:
+        raise ConfigError(
+            "you must specify a role to allocate a host for the KMIP server"
+        )
+    (remote,) = ctx.cluster.only(role).remotes.keys()
+    ip = remote.ssh.get_transport().getpeername()[0]
+
+    cengine = _cengine(ctx, config, remote)
+    remote.run(args=['sudo', cengine, 'pull', image])
+
+    remote.run(
+        args=[
+            'sudo',
+            'rm',
+            '-rf',
+            '/var/lib/pykmip'
+        ]
+    )
+    remote.run(
+        args=[
+            'sudo',
+            'mkdir',
+            '-p',
+            '/var/lib/pykmip/tls',
+            '/var/lib/pykmip/data',
+            '/var/lib/pykmip/data/policy',
+        ]
+    )
+    _configure_kmip_server(
+        ctx,
+        config,
+        remote,
+        tls_dir='/var/lib/pykmip/tls',
+        data_dir='/var/lib/pykmip/data',
+        policy_dir='/var/lib/pykmip/data/policy',
+    )
+    remote.run(
+        args=[
+            'sudo',
+            cengine,
+            'run',
+            '-d',
+            '--name=kmip',
+            '--publish=5696:5696',
+            '--volume=/var/lib/pykmip/data:/var/lib/kmip:z',
+            '--volume=/var/lib/pykmip/tls:/etc/kmip/tls:ro,z',
+            image,
+        ]
+    )
+
+    # let the kmip server start. Sleep at least 1s since sleeping less than 1
+    # sec causes failures
+    time.sleep(1)
+
+    setattr(ctx, 'kmip_server_ip', ip)
+    try:
+        _init_kmip(ctx, config, remote, image, cengine=cengine)
+        yield
+    finally:
+        try:
+            remote.run(args=['sudo', cengine, 'stop', 'kmip'])
+        except CommandFailedError:
+            log.error("Failed to stop kmip container")
+        try:
+            remote.run(args=['sudo', cengine, 'rm', 'kmip'])
+        except CommandFailedError:
+            log.error("Failed to remove kmip container")
+        remote.run(
+            args=[
+                'sudo',
+                'rm',
+                '-rf',
+                '/var/lib/pykmip'
+            ]
+        )
+        setattr(ctx, 'kmip_server_ip', None)
+
+
+def _configure_kmip_server(
+    ctx,
+    config,
+    remote,
+    tls_dir=None,
+    data_dir=None,
+    policy_dir=None,
+    kmip_cert='kmip-server',
+    kmip_ca='kbroot',
+):
+    default_policy = {
+        "teuthology": {
+            "preset": {
+                "CERTIFICATE": {"GET": "ALLOW_ALL"},
+                "OPAQUE_DATA": {"GET": "ALLOW_ALL"},
+                "PRIVATE_KEY": {"GET": "ALLOW_ALL"},
+                "PUBLIC_KEY": {"GET": "ALLOW_ALL"},
+                "SECRET_DATA": {"GET": "ALLOW_ALL"},
+                "SPLIT_KEY": {"GET": "ALLOW_ALL"},
+                "SYMMETRIC_KEY": {
+                    "GET": "ALLOW_ALL",
+                    "LOCATE": "ALLOW_ALL",
+                },
+            }
+        }
+    }
+    ssl_certificates = getattr(ctx, 'ssl_certificates', None)
+    cert_name = config.get('cert_name', kmip_cert)
+    ca_name = config.get('ca_name', kmip_ca)
+    if tls_dir and ssl_certificates:
+        cert_obj = ssl_certificates[cert_name]
+        ca_obj = ssl_certificates[ca_name]
+        cert_path = f'{tls_dir}/kmip.crt'
+        key_path = f'{tls_dir}/kmip.key'
+        ca_path = f'{tls_dir}/ca.crt'
+        _cfg = [
+            (cert_obj, cert_obj.certificate, cert_path),
+            (cert_obj, cert_obj.key, key_path),
+            (ca_obj, ca_obj.certificate, ca_path),
+        ]
+        for _src, _srcpath, _dest in _cfg:
+            _content = _src.remote.read_file(_srcpath)
+            remote.write_file(path=_dest, data=_content, sudo=True)
+    if tls_dir and not ssl_certificates:
+        log.warning('tls_dir provided but no ssl_certificates found')
+    if policy_dir:
+        policy = config.get('policy_config', default_policy)
+        path = f'{policy_dir}/policy.json'
+        remote.write_file(
+            path=path,
+            data=json.dumps(policy),
+            sudo=True,
+        )
+
+
+def _init_kmip(ctx, config, remote, image, cengine=None):
+    if 'generate' not in config:
+        return
+    if not cengine:
+        cengine = _cengine(ctx, config)
+    ip = remote.ssh.get_transport().getpeername()[0]
+    for gsrc in config['generate']:
+        # symmetric is all we support right now
+        assert gsrc.get('what') == 'symmetric'
+        policy = gsrc.get('policy', 'teuthology')
+        bits = gsrc.get('bits', 256)
+        name = gsrc.get('name')
+        ktc_args = []
+        if policy:
+            ktc_args.append(f'--policy={policy}')
+        if name:
+            ktc_args.append(f'--name={name}')
+        ktc_args.append(f'--create-symmetric-key={bits}')
+        ktc_args.append('--get=.')  # for debugging
+
+        common_args = [
+            'sudo',
+            cengine,
+            'run',
+            '--rm',
+            '--net=host',
+            '--volume=/var/lib/pykmip/tls:/etc/kmip/tls',
+            '--entrypoint=python3',
+            image,
+            '/usr/local/bin/ktc.py',
+            '--tls-cert=/etc/kmip/tls/kmip.crt',
+            '--tls-key=/etc/kmip/tls/kmip.key',
+            '--tls-ca-cert=/etc/kmip/tls/ca.crt',
+            f'--host={ip}',
+            '--json',
+        ]
+        remote.run(args=(common_args + ktc_args))
+
+
 def _marks(marks_value):
     if not marks_value:
         return ''
@@ -349,6 +526,7 @@ def _workunit_commands(
 def workunit(ctx, config):
     """Workunit wrapper with special behaviors for smb."""
     from . import workunit
+    from teuthology import misc
 
     _config = copy.deepcopy(config)
     clients = _config.get('clients') or {}
@@ -375,6 +553,8 @@ def workunit(ctx, config):
     )
     _ssh_keys_config = config.get('ssh_keys', {})
     _config['enable_ssh_keys'] = _ssh_keys_config not in (False, None)
+    _config['testdir'] = misc.get_testdir(ctx)
+    _config['params'] = config.get('params')  # freeform test parameters
     log.info('Passing workunit config: %r', _config)
     with contextlib.ExitStack() as estack:
         if _config['enable_ssh_keys']:
@@ -415,6 +595,10 @@ def write_metadata_file(ctx, config, *, roles=None):
             _node_info(ctx, node, client_name=node)
             for node in config.get('clients')
         ]
+    if config.get('testdir'):
+        obj['testdir'] = config['testdir']
+    if config.get('params'):
+        obj['params'] = config['params']
     data = json.dumps(obj)
     log.debug('smb metadata: %r', obj)
 
