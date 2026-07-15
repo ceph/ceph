@@ -217,7 +217,9 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
   else if (cfg.store_name.compare("posix") == 0) {
     driver = newPOSIXDriver(cct);
 
-    if (driver->initialize(cct, dpp) < 0) {
+    if (static_cast<rgw::sal::POSIXDriver*>(driver)
+            ->set_run_lc_thread(use_lc_thread)
+            .initialize(cct, dpp) < 0) {
       delete driver;
       return nullptr;
     }
@@ -228,7 +230,9 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
   else if (cfg.store_name.compare("nsfs") == 0) {
     driver = newNSFSDriver(cct);
 
-    if (driver->initialize(cct, dpp) < 0) {
+    if (static_cast<rgw::sal::NSFSDriver*>(driver)
+            ->set_run_lc_thread(use_lc_thread)
+            .initialize(cct, dpp) < 0) {
       delete driver;
       return nullptr;
     }
