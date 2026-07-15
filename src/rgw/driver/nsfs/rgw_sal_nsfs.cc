@@ -2454,6 +2454,10 @@ int NSFSDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& own
     ret = statx(get_root_fd(), entry->d_name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
     if (ret < 0) {
       ret = errno;
+      if (ret == ENOENT) {
+	errno = 0;
+	continue;
+      }
       ldpp_dout(dpp, 0) << "ERROR: could not stat object " << entry->d_name << ": "
 	<< cpp_strerror(ret) << dendl;
       return -ret;
@@ -2471,6 +2475,13 @@ int NSFSDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& own
     }
     std::unique_ptr<Bucket> bucket;
     ret = load_bucket(dpp, rgw_bucket("", entry->d_name), &bucket, null_yield);
+    if (ret < 0) {
+      if (ret == -ENOENT) {
+	errno = 0;
+	continue;
+      }
+      return ret;
+    }
     if (bucket->get_owner() != owner) {
       continue;
     }
