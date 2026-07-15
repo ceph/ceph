@@ -2047,19 +2047,16 @@ int BlueFS::migrate_file(
 
   sync_metadata(false);
 
-  std::map<int, PExtentVector> releases;
+  std::vector<interval_set<uint64_t>> to_release(MAX_BDEV);
+
   for (const auto& old_ext : old_fnode_extents) {
     vselector->sub_usage(file_ref->vselector_hint, old_ext);
-    releases[old_ext.bdev].emplace_back(
+    to_release[old_ext.bdev].insert(
       old_ext.offset,
       old_ext.length);
-    if (is_shared_alloc(old_ext.bdev)) {
-      shared_alloc->bluefs_used -= old_ext.length;
-    }
   }
-  for (auto& [bdev, vec] : releases) {
-    alloc[bdev]->release(vec);
-  }
+
+  _release_pending_allocations(to_release);
 
   dout(10) << __func__
           << " done ino " << file_ref->fnode.ino
