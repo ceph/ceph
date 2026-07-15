@@ -122,15 +122,6 @@ bool get_json_value(const json_spirit::mObject& obj,
   return false;
 }
 
-double monotime_to_double(monotime t) {
-  return sec_duration(t.time_since_epoch()).count();
-}
-
-monotime monotime_from_double(double seconds) {
-  auto d = std::chrono::duration_cast<clock::duration>(sec_duration(seconds));
-  return monotime(d);
-}
-
 struct C_PersistSyncStatAio : Context {
   std::string dir_root;
 
@@ -543,13 +534,7 @@ void PeerReplayer::update_directory_last_sync_perf_counters(
             sync_stat.last_sync_duration ?
               static_cast<uint64_t>(*sync_stat.last_sync_duration) : 0);
 
-  utime_t t;
-  if (!clock::is_zero(sync_stat.last_synced)) {
-    t.set_from_double(monotime_to_double(sync_stat.last_synced));
-  } else {
-    t = utime_t();
-  }
-  perf->tset(l_cephfs_mirror_directory_last_sync_timestamp, t);
+  perf->tset(l_cephfs_mirror_directory_last_sync_timestamp, sync_stat.last_synced);
 
   perf->set(l_cephfs_mirror_directory_last_sync_bytes,
             sync_stat.last_sync_bytes ? *sync_stat.last_sync_bytes : 0);
@@ -837,7 +822,7 @@ void PeerReplayer::apply_persisted_dir_sync_stat(SnapSyncStat &sync_stat,
       sync_stat.last_sync_duration = v.get_real();
     }
     if (get_json_value(last_synced_snap, "sync_time_stamp", &v)) {
-      sync_stat.last_synced = monotime_from_double(v.get_real());
+      sync_stat.last_synced.set_from_double(v.get_real());
     }
     if (get_json_value(last_synced_snap, "sync_bytes", &v)) {
       sync_stat.last_sync_bytes = v.get_uint64();
@@ -1082,9 +1067,9 @@ void PeerReplayer::add_last_sync_metrics_to_persist(json_spirit::mObject &obj,
     if (sync_stat.last_sync_duration) {
       snap["sync_duration"] = json_spirit::mValue(*sync_stat.last_sync_duration);
     }
-    if (!clock::is_zero(sync_stat.last_synced)) {
+    if (!sync_stat.last_synced.is_zero()) {
       snap["sync_time_stamp"] =
-        json_spirit::mValue(monotime_to_double(sync_stat.last_synced));
+        json_spirit::mValue(static_cast<double>(sync_stat.last_synced));
     }
     if (sync_stat.last_sync_bytes) {
       snap["sync_bytes"] =
@@ -3829,7 +3814,12 @@ void PeerReplayer::dump_sync_stat(Formatter *f, const SnapSyncStat &sync_stat) {
     }
     if (sync_stat.last_sync_duration) {
       f->dump_string("sync_duration", format_time(*sync_stat.last_sync_duration));
-      f->dump_stream("sync_time_stamp") << sync_stat.last_synced;
+    }
+    if (!sync_stat.last_synced.is_zero()) {
+      std::ostringstream os;
+      os << std::fixed << std::setprecision(6)
+         << static_cast<double>(sync_stat.last_synced);
+      f->dump_string("sync_time_stamp", os.str() + "s");
     }
     if (sync_stat.last_sync_bytes) {
       f->dump_string("sync_bytes", format_bytes(*sync_stat.last_sync_bytes));

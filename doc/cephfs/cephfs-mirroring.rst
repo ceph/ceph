@@ -660,7 +660,7 @@ command parameter is of format ``filesystem-name@filesystem-id peer-uuid``::
                         "crawl_duration": "2s",
                         "datasync_queue_wait_duration": "1s",
                         "sync_duration": "33s",
-                        "sync_time_stamp": "274900.558797s",
+                        "sync_time_stamp": "1784150400.558797s",
                         "sync_bytes": "149.94 MiB",
                         "sync_files": 5000
                     },
@@ -752,9 +752,8 @@ Timestamp
 
 Field: ``sync_time_stamp``.
 
-Monotonic clock time in seconds (since daemon startup) when the snapshot sync finished,
-printed with sub-second precision and an ``s`` suffix (for example, ``274900.558797s``). This
-is not a wall-clock or epoch timestamp.
+Unix epoch time in seconds when the snapshot sync finished, printed with
+sub-second precision and an ``s`` suffix (for example, ``1784150400.558797s``).
 
 ``snaps_synced``, ``snaps_deleted``, and ``snaps_renamed`` are
 :ref:`per-session counters<cephfs_mirroring_sync_metric_fields>`: they count
@@ -923,7 +922,7 @@ E.g., adding a regular file for synchronization would result in failed status::
                         "crawl_duration": "2s",
                         "datasync_queue_wait_duration": "1s",
                         "sync_duration": "44s",
-                        "sync_time_stamp": "500900.600797s",
+                        "sync_time_stamp": "1784150733.600797s",
                         "sync_bytes": "149.94 MiB",
                         "sync_files": 5000
                     },
@@ -972,7 +971,7 @@ In the remote filesystem::
                         "crawl_duration": "2s",
                         "datasync_queue_wait_duration": "1s",
                         "sync_duration": "33s",
-                        "sync_time_stamp": "274900.558797s",
+                        "sync_time_stamp": "1784150400.558797s",
                         "sync_bytes": "149.94 MiB",
                         "sync_files": 5000
                     },
@@ -1227,7 +1226,7 @@ Counters are not updated on every file read or write. Behavior differs by field 
      - Durations in seconds; bytes are raw counts
    * - ``last_sync_timestamp``
      - ``last_synced_snap.sync_time_stamp``
-     - ``utime_t`` (seconds since epoch), not the monotonic string shown in admin JSON
+     - ``utime_t`` (seconds since epoch); same wall-clock value as admin JSON
    * - ``snaps_synced`` / ``snaps_deleted`` / ``snaps_renamed``
      - Same field names at directory level
      - Reset on daemon restart or directory reassignment (same as admin socket)
