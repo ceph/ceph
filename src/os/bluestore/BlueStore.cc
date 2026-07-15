@@ -1707,7 +1707,7 @@ void BlueStore::BufferSpace::_add_buffer(BufferCacheShard* cache,
                                          uint16_t cache_private, int level,
                                          Buffer *near)
 {
-  ldout(cache->cct, 20) << __func__ << "? " << b << dendl;
+  ldout(cache->cct, 20) << __func__ << "? " << *b << dendl;
   cache->_audit("_add_buffer start");
   ceph_assert(!b->set_item.is_linked());
   // illegal to provide both near and cache_private
@@ -1738,7 +1738,7 @@ void BlueStore::BufferSpace::_add_buffer(BufferCacheShard* cache,
     }
   }
   if (add_to_map) {
-    ldout(cache->cct, 20) << __func__ << " added " << b << dendl;
+    ldout(cache->cct, 20) << __func__ << " added " << *b << dendl;
     b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
     b->cache_private = cache_private;
     buffer_map.insert(*b);
@@ -1754,10 +1754,10 @@ void BlueStore::BufferSpace::__rm_buffer(BufferCacheShard* cache,
 {
   ceph_assert(b);
   cache->_audit("_rm_buffer start");
+  ldout(cache->cct, 20) << __func__ << " " << *b << dendl;
   if (!b->is_writing()) {
     cache->_rm(b);
   }
-  ldout(cache->cct, 20) << __func__ << " erasing " << b << dendl;
   __erase_from_map(b);
   cache->_audit("_rm_buffer end");
 }
