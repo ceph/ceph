@@ -982,13 +982,14 @@ MonMap::MonMap()
 
 seastar::future<> MonMap::build_initial(const crimson::common::ConfigProxy& conf, bool for_mkfs)
 {
-  /* an invalid epoch so the real monmap doesn't trigger rotation */
-  auth_epoch = std::numeric_limits<decltype(auth_epoch)>::max();
   if (for_mkfs) {
+    auth_epoch = 0;
     auth_service_cipher = CEPH_CRYPTO_AES256KRB5;
     auth_allowed_ciphers = {CEPH_CRYPTO_AES256KRB5};
     auth_preferred_cipher = CEPH_CRYPTO_AES256KRB5;
   } else {
+    /* an invalid epoch so the real monmap doesn't trigger rotation */
+    auth_epoch = std::numeric_limits<decltype(auth_epoch)>::max();
     /* wait for real monmap */
     auth_service_cipher = CEPH_CRYPTO_NONE;
     auth_allowed_ciphers = {CEPH_CRYPTO_NONE};
@@ -1083,13 +1084,14 @@ int MonMap::build_initial(CephContext *cct, bool for_mkfs, ostream& errout)
   lgeneric_dout(cct, 1) << __func__ << " for_mkfs: " << for_mkfs << dendl;
   const auto& conf = cct->_conf;
 
-  /* an invalid epoch so the real monmap doesn't trigger rotation */
-  auth_epoch = std::numeric_limits<decltype(auth_epoch)>::max();
   if (for_mkfs) {
+    auth_epoch = 0;
     auth_service_cipher = CEPH_CRYPTO_AES256KRB5;
     auth_allowed_ciphers = {CEPH_CRYPTO_AES256KRB5};
     auth_preferred_cipher = CEPH_CRYPTO_AES256KRB5;
   } else {
+    /* an invalid epoch so the real monmap doesn't trigger rotation */
+    auth_epoch = std::numeric_limits<decltype(auth_epoch)>::max();
     /* wait for real monmap */
     auth_service_cipher = CEPH_CRYPTO_NONE;
     auth_allowed_ciphers = {CEPH_CRYPTO_NONE};
