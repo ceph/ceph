@@ -205,6 +205,37 @@ describe('MirroringPathsStepComponent', () => {
     expect(component.getSubmitPaths().alreadyMirrored).toEqual(['/volumes/g1/sv1']);
   }));
 
+
+  it('should allow sibling subvolume paths across multiple rows', fakeAsync(() => {
+    mockLsDirTree();
+    cephfsServiceMock.listMirrorDirectories.mockReturnValue(of([]));
+
+    component.fsName = 'testfs';
+    component.fsId = 1;
+    component.ngOnInit();
+    tick();
+
+    component.onLevelChange(0, 0, 'g1');
+    tick();
+    component.onLevelChange(0, 1, 'sv1');
+    tick();
+
+    component.addPath();
+    tick();
+
+    expect(component.paths[1].levels[0].options).toEqual(['g1']);
+
+    component.onLevelChange(1, 0, 'g1');
+    tick();
+    expect(component.paths[1].levels[1].options).toEqual(['sv2']);
+    component.onLevelChange(1, 1, 'sv2');
+
+    expect(component.getSubmitPaths()).toEqual({
+      toAdd: ['/volumes/g1/sv1', '/volumes/g1/sv2'],
+      alreadyMirrored: []
+    });
+  }));
+
   it('should add tracked path locally after successful submit', fakeAsync(() => {
     mockLsDirTree();
 

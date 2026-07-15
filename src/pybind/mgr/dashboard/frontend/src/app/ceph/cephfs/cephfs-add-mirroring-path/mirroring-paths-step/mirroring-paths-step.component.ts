@@ -113,9 +113,9 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
       if (!path) {
         return;
       }
-      if (MirroringPathUtils.isPathTracked(path, this.trackedPaths)) {
+      if (MirroringPathUtils.conflictsWithMirroredPath(path, this.trackedPaths)) {
         alreadyMirrored.push(path);
-      } else if (this.isPathSelectable(path, pathIndex)) {
+      } else if (this.isPathSelectableForSubmit(path, pathIndex)) {
         toAdd.push(path);
       }
     });
@@ -235,11 +235,27 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
     }
 
     return !this.paths.some((entry, index) => {
-      if (index === pathIndex) {
+      if (index === pathIndex || !entry.fullPath) {
         return false;
       }
-      const selected = MirroringPathUtils.normalizePath(entry.fullPath);
-      return selected && MirroringPathUtils.pathsOverlap(normalized, selected);
+      return MirroringPathUtils.conflictsWithOtherRowSelection(normalized, entry.fullPath, {
+        allowAncestor: true
+      });
+    });
+  }
+
+  private isPathSelectableForSubmit(path: string, pathIndex: number): boolean {
+    if (!this.isPathSelectable(path, pathIndex)) {
+      return false;
+    }
+
+    return !this.paths.some((entry, index) => {
+      if (index === pathIndex || !entry.fullPath) {
+        return false;
+      }
+      return MirroringPathUtils.conflictsWithOtherRowSelection(path, entry.fullPath, {
+        allowAncestor: false
+      });
     });
   }
 

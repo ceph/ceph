@@ -17,6 +17,50 @@ describe('MirroringPathUtils', () => {
       expect(MirroringPathUtils.isPathTracked('/volumes/g1/sv1', tracked)).toBe(true);
       expect(MirroringPathUtils.isPathTracked('/volumes/g1/sv1/dir', tracked)).toBe(true);
       expect(MirroringPathUtils.isPathTracked('/volumes/g1/sv2', tracked)).toBe(false);
+      expect(MirroringPathUtils.isPathTracked('/volumes/g1', tracked)).toBe(false);
+    });
+  });
+
+  describe('conflictsWithMirroredPath', () => {
+    it('should detect ancestor and descendant conflicts with mirrored paths', () => {
+      const tracked = new Set(['/volumes/g1/sv1']);
+      expect(MirroringPathUtils.conflictsWithMirroredPath('/volumes/g1/sv1', tracked)).toBe(true);
+      expect(MirroringPathUtils.conflictsWithMirroredPath('/volumes/g1/sv1/dir', tracked)).toBe(true);
+      expect(MirroringPathUtils.conflictsWithMirroredPath('/volumes/g1', tracked)).toBe(true);
+      expect(MirroringPathUtils.conflictsWithMirroredPath('/volumes/g1/sv2', tracked)).toBe(false);
+    });
+  });
+
+  describe('conflictsWithOtherRowSelection', () => {
+    it('should allow ancestor navigation but block final ancestor selections', () => {
+      expect(
+        MirroringPathUtils.conflictsWithOtherRowSelection(
+          '/volumes/g1',
+          '/volumes/g1/sv1',
+          { allowAncestor: true }
+        )
+      ).toBe(false);
+      expect(
+        MirroringPathUtils.conflictsWithOtherRowSelection(
+          '/volumes/g1',
+          '/volumes/g1/sv1',
+          { allowAncestor: false }
+        )
+      ).toBe(true);
+      expect(
+        MirroringPathUtils.conflictsWithOtherRowSelection(
+          '/volumes/g1/sv2',
+          '/volumes/g1/sv1',
+          { allowAncestor: false }
+        )
+      ).toBe(false);
+      expect(
+        MirroringPathUtils.conflictsWithOtherRowSelection(
+          '/volumes/g1/sv1',
+          '/volumes/g1/sv1',
+          { allowAncestor: true }
+        )
+      ).toBe(true);
     });
   });
 
