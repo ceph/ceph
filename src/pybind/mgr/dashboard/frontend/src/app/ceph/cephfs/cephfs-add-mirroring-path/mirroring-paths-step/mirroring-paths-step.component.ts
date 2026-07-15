@@ -7,12 +7,7 @@ import { catchError, finalize, map, switchMap, take } from 'rxjs/operators';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { TearsheetStep } from '~/app/shared/models/tearsheet-step';
-import {
-  FS_ROOT,
-  FS_ROOT_PATH_SENTINEL,
-  MirroringPathUtils,
-  VOLUMES_ROOT
-} from '../mirroring-path-utils';
+import { FS_ROOT, FS_ROOT_PATH_SENTINEL, MirroringPathUtils } from '../mirroring-path-utils';
 import { createPathEntry, PathEntry } from '../mirroring-path.model';
 
 const LS_DEPTH = 1;
@@ -30,7 +25,6 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
   formGroup!: CdFormGroup;
   paths: PathEntry[] = [];
   loadingLevels: Record<string, true> = {};
-  browseFromFilesystemRoot = false;
   readonly formatLevelOption = MirroringPathUtils.formatLevelOption;
 
   private trackedPaths = new Set<string>();
@@ -71,20 +65,12 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
     return $localize`Select at least one path to continue.`;
   }
 
-  onBrowseScopeChange(enabled: boolean): void {
-    if (this.browseFromFilesystemRoot === enabled) {
-      return;
-    }
-    this.browseFromFilesystemRoot = enabled;
-    this.resetPaths();
-  }
-
   addPath(): void {
     if (!this.canAddAnotherPath) {
       return;
     }
     this.paths.push(createPathEntry());
-    this.loadLevelOptions(this.paths.length - 1, 0, this.getBrowseRoot());
+    this.loadLevelOptions(this.paths.length - 1, 0, FS_ROOT);
   }
 
   removePath(index: number): void {
@@ -115,8 +101,7 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
       ...entry,
       levels,
       fullPath: MirroringPathUtils.buildPathFromSegments(
-        levels.map((level) => level.selected).filter(Boolean),
-        this.browseFromFilesystemRoot
+        levels.map((level) => level.selected).filter(Boolean)
       )
     };
     this.paths[pathIndex] = updated;
@@ -126,7 +111,7 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
       return;
     }
 
-    if (this.browseFromFilesystemRoot && MirroringPathUtils.isRootSelection(selected)) {
+    if (MirroringPathUtils.isRootSelection(selected)) {
       this.paths[pathIndex] = {
         ...updated,
         fullPath: FS_ROOT,
@@ -210,7 +195,7 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
           trackedList.map(MirroringPathUtils.normalizePath).filter(Boolean)
         );
         if (fsId) {
-          this.loadLevelOptions(0, 0, this.getBrowseRoot());
+          this.loadLevelOptions(0, 0, FS_ROOT);
         }
       });
   }
@@ -227,18 +212,6 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
       }),
       catchError(() => of(0))
     );
-  }
-
-  private getBrowseRoot(): string {
-    return this.browseFromFilesystemRoot ? FS_ROOT : VOLUMES_ROOT;
-  }
-
-  private resetPaths(): void {
-    this.paths = [createPathEntry()];
-    if (this.fsId) {
-      this.loadLevelOptions(0, 0, this.getBrowseRoot());
-    }
-    this.syncFormValue();
   }
 
   private loadLevelOptions(pathIndex: number, levelIndex: number, parentPath: string): void {
@@ -273,11 +246,7 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
 
         if (
           levelIndex > 0 &&
-          MirroringPathUtils.buildPathFromLevels(
-            currentEntry.levels,
-            levelIndex,
-            this.browseFromFilesystemRoot
-          ) !== parentPath
+          MirroringPathUtils.buildPathFromLevels(currentEntry.levels, levelIndex) !== parentPath
         ) {
           return;
         }
@@ -290,7 +259,6 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
           .sort();
 
         if (
-          this.browseFromFilesystemRoot &&
           parentPath === FS_ROOT &&
           levelIndex === 0 &&
           this.isPathSelectable(FS_ROOT, pathIndex)
