@@ -100,6 +100,7 @@ Current Members
  * Joseph Mundackal <jmundackal@bloomberg.net>
  * Josh Durgin <jdurgin@redhat.com>
  * João Eduardo Luis <joao@clyso.com>
+ * Kyle Bader <kbader@ibm.com>
  * Laura Flores <lflores@ibm.com>
  * Mark Nelson <mark.nelson@clyso.com>
  * Matan Breizman <mbreizma@redhat.com>
