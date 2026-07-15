@@ -6,6 +6,7 @@ import { of } from 'rxjs';
 import { MirroringPathsStepComponent } from './mirroring-paths-step.component';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { createPathEntry } from '../mirroring-path.model';
+import { FS_ROOT_PATH_SENTINEL } from '../mirroring-path-utils';
 
 describe('MirroringPathsStepComponent', () => {
   let component: MirroringPathsStepComponent;
@@ -19,6 +20,12 @@ describe('MirroringPathsStepComponent', () => {
 
   function mockLsDirTree(): void {
     cephfsServiceMock.lsDir.mockImplementation((_id: number, path: string) => {
+      if (path === '/') {
+        return of([
+          { name: 'mirror', parent: '/' },
+          { name: 'volumes', parent: '/' }
+        ]);
+      }
       if (path === '/volumes') {
         return of([{ name: 'g1', parent: '/volumes' }]);
       }
@@ -234,6 +241,64 @@ describe('MirroringPathsStepComponent', () => {
       toAdd: ['/volumes/g1/sv1', '/volumes/g1/sv2'],
       alreadyMirrored: []
     });
+  }));
+
+  it('should list top-level directories when browsing outside /volumes', fakeAsync(() => {
+    mockLsDirTree();
+    cephfsServiceMock.listMirrorDirectories.mockReturnValue(of([]));
+
+    component.fsName = 'testfs';
+    component.fsId = 1;
+    component.ngOnInit();
+    tick();
+
+    component.onBrowseScopeChange(true);
+    tick();
+
+    expect(cephfsServiceMock.lsDir).toHaveBeenCalledWith(1, '/', 1);
+    expect(component.paths[0].levels[0].options).toEqual([
+      FS_ROOT_PATH_SENTINEL,
+      'mirror',
+      'volumes'
+    ]);
+
+    component.onLevelChange(0, 0, 'mirror');
+    expect(component.getSubmitPaths().toAdd).toEqual(['/mirror']);
+  }));
+
+  it('should reset paths when toggling browse scope', fakeAsync(() => {
+    mockLsDirTree();
+    component.fsName = 'testfs';
+    component.fsId = 1;
+    component.ngOnInit();
+    tick();
+
+    component.onLevelChange(0, 0, 'g1');
+    tick();
+    component.onLevelChange(0, 1, 'sv1');
+    expect(component.getSubmitPaths().toAdd).toEqual(['/volumes/g1/sv1']);
+
+    component.onBrowseScopeChange(true);
+    tick();
+
+    expect(component.paths.length).toBe(1);
+    expect(component.paths[0].fullPath).toBe('');
+    expect(component.getSubmitPaths().toAdd).toEqual([]);
+  }));
+
+  it('should show a warning when the filesystem root path is selected', fakeAsync(() => {
+    mockLsDirTree();
+    component.fsName = 'testfs';
+    component.fsId = 1;
+    component.ngOnInit();
+    tick();
+
+    component.onBrowseScopeChange(true);
+    tick();
+    component.onLevelChange(0, 0, FS_ROOT_PATH_SENTINEL);
+
+    expect(component.showRootWarning).toBe(true);
+    expect(component.canAddAnotherPath).toBe(false);
   }));
 
   it('should add tracked path locally after successful submit', fakeAsync(() => {

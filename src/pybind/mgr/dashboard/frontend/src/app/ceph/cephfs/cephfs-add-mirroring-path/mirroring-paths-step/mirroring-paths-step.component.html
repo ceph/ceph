@@ -11,9 +11,26 @@
            i18n>About path selection</div>
       <div class="cds--type-body-compact-01"
            i18n>Selecting a higher level path includes all nested content. Select a deeper path for more precise mirroring.</div>
+      <div class="cds--type-body-compact-01"
+           i18n>By default, paths under /volumes are shown for subvolume mirroring. Enable the option below to browse other top-level directories.</div>
     </div>
   </cd-alert-panel>
 </div>
+
+<div class="cds-mb-5">
+  <cds-checkbox [checked]="browseFromFilesystemRoot"
+                (checkedChange)="onBrowseScopeChange($event)"
+                i18n>
+    Browse paths outside /volumes
+  </cds-checkbox>
+</div>
+
+@if (showRootWarning) {
+  <cd-alert-panel type="warning"
+                  class="cds-mb-5">
+    <ng-container i18n>Mirroring the filesystem root (/) includes all directories. Choose a more specific path unless you intend to mirror the entire filesystem.</ng-container>
+  </cd-alert-panel>
+}
 
 @if (pathsError) {
   <cd-alert-panel type="error"
@@ -84,7 +101,7 @@
                   <option value=""
                           i18n>-- Select --</option>
                   @for (opt of level.options; track opt) {
-                    <option [value]="opt">{{ opt }}</option>
+                    <option [value]="opt">{{ formatLevelOption(opt) }}</option>
                   }
                 </cds-select>
               }
@@ -108,6 +125,7 @@
 
   <button cdsButton="tertiary"
           type="button"
+          [disabled]="!canAddAnotherPath"
           (click)="addPath()"
           i18n>
     Add another path

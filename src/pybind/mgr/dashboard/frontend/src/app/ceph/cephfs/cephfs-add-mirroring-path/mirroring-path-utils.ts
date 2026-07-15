@@ -1,6 +1,9 @@
 import { PathEntry } from './mirroring-path.model';
 
-const VOLUMES_ROOT = '/volumes';
+export const FS_ROOT = '/';
+export const VOLUMES_ROOT = '/volumes';
+/** Internal select value representing the filesystem root path. */
+export const FS_ROOT_PATH_SENTINEL = '__fs_root__';
 
 export class MirroringPathUtils {
   static normalizePath(path: string): string {
@@ -21,11 +24,48 @@ export class MirroringPathUtils {
     return `${normalizedParent}/${name}`;
   }
 
-  static buildPathFromSegments(segments: string[]): string {
-    if (!segments.length) {
+  static buildPathFromSegments(
+    segments: string[],
+    browseFromFilesystemRoot = false
+  ): string {
+    const selected = segments.filter(Boolean);
+    if (!selected.length) {
       return '';
     }
-    return `${VOLUMES_ROOT}/${segments.join('/')}`;
+    if (browseFromFilesystemRoot) {
+      if (selected.some((segment) => MirroringPathUtils.isRootSelection(segment))) {
+        return FS_ROOT;
+      }
+      return MirroringPathUtils.normalizePath(`/${selected.join('/')}`);
+    }
+    return `${VOLUMES_ROOT}/${selected.join('/')}`;
+  }
+
+  static formatLevelOption(option: string): string {
+    return MirroringPathUtils.isRootSelection(option) ? FS_ROOT : option;
+  }
+
+  static isRootSelection(value: string): boolean {
+    return value === FS_ROOT_PATH_SENTINEL || value === FS_ROOT;
+  }
+
+  static isRootPathEntry(entry: PathEntry): boolean {
+    if (MirroringPathUtils.normalizePath(entry.fullPath) === FS_ROOT) {
+      return true;
+    }
+    return entry.levels.some((level) => MirroringPathUtils.isRootSelection(level.selected));
+  }
+
+  static buildPathFromLevels(
+    levels: PathEntry['levels'],
+    upToLevelIndex: number,
+    browseFromFilesystemRoot = false
+  ): string {
+    const segments = levels
+      .slice(0, upToLevelIndex)
+      .map((level) => level.selected)
+      .filter(Boolean);
+    return MirroringPathUtils.buildPathFromSegments(segments, browseFromFilesystemRoot);
   }
 
   static getSelectedSegments(entry: PathEntry): string[] {
@@ -38,7 +78,13 @@ export class MirroringPathUtils {
     if (!left || !right) {
       return false;
     }
-    return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
+    if (left === right) {
+      return true;
+    }
+    if (left === FS_ROOT || right === FS_ROOT) {
+      return true;
+    }
+    return left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
   }
 
   /** Path is already mirrored, or nested under an existing mirror path. */

@@ -1,4 +1,8 @@
-import { MirroringPathUtils } from './mirroring-path-utils';
+import {
+  FS_ROOT,
+  FS_ROOT_PATH_SENTINEL,
+  MirroringPathUtils
+} from './mirroring-path-utils';
 import { PathEntry } from './mirroring-path.model';
 
 describe('MirroringPathUtils', () => {
@@ -8,6 +12,7 @@ describe('MirroringPathUtils', () => {
       expect(MirroringPathUtils.pathsOverlap('/volumes/g1/sv1/dir', '/volumes/g1/sv1')).toBe(true);
       expect(MirroringPathUtils.pathsOverlap('/volumes/g1/sv1', '/volumes/g1/sv1/dir')).toBe(true);
       expect(MirroringPathUtils.pathsOverlap('/volumes/g1/sv1', '/volumes/g2/sv1')).toBe(false);
+      expect(MirroringPathUtils.pathsOverlap('/', '/mirror')).toBe(true);
     });
   });
 
@@ -65,9 +70,26 @@ describe('MirroringPathUtils', () => {
   });
 
   describe('buildPathFromSegments', () => {
-    it('should build a path from selected segments', () => {
+    it('should build subvolume paths by default', () => {
       expect(MirroringPathUtils.buildPathFromSegments(['g1', 'sv1'])).toBe('/volumes/g1/sv1');
       expect(MirroringPathUtils.buildPathFromSegments([])).toBe('');
+    });
+
+    it('should build absolute paths when browsing from filesystem root', () => {
+      expect(MirroringPathUtils.buildPathFromSegments(['mirror'], true)).toBe('/mirror');
+      expect(MirroringPathUtils.buildPathFromSegments(['volumes', 'g1', 'sv1'], true)).toBe(
+        '/volumes/g1/sv1'
+      );
+      expect(MirroringPathUtils.buildPathFromSegments([FS_ROOT_PATH_SENTINEL], true)).toBe(
+        FS_ROOT
+      );
+    });
+  });
+
+  describe('formatLevelOption', () => {
+    it('should display the filesystem root sentinel as /', () => {
+      expect(MirroringPathUtils.formatLevelOption(FS_ROOT_PATH_SENTINEL)).toBe('/');
+      expect(MirroringPathUtils.formatLevelOption('mirror')).toBe('mirror');
     });
   });
 
