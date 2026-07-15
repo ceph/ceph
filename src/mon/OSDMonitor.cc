@@ -90,10 +90,14 @@
 #include "include/str_list.h"
 #include "include/str_map.h"
 #include "include/scope_guard.h"
+#include "include/variant_print.h"
 #include "perfglue/heap_profiler.h"
 
 #include "auth/cephx/CephxKeyServer.h"
 #include "osd/OSDCap.h"
+#include "osd/BloomHitSet.h"
+#include "osd/ExplicitHashHitSet.h"
+#include "osd/ExplicitObjectHitSet.h"
 
 #include "json_spirit/json_spirit_reader.h"
 
