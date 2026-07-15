@@ -27,6 +27,8 @@
 #                       uncomment lc_debug_interval in s3tests.conf
 #   --with-inotify      Enable inotify watcher on bucket directories
 #                       (for sideloaded file detection; off by default)
+#   --ramdisk           Mount tmpfs on data root and LMDB cache dirs
+#                       (eliminates I/O latency for test runs)
 #   --foreground        Print the radosgw command instead of running it;
 #                       use this to start the daemon as root in another
 #                       terminal (LWE requires root for DMAPI handles)
@@ -45,6 +47,7 @@ KAFKA=false
 VAULT=false
 LIFECYCLE=false
 INOTIFY=false
+RAMDISK=false
 GPFS_ROOT=/mnt/rgw/nsfs
 DEBUG_RGW=20
 FOREGROUND=false
@@ -61,6 +64,7 @@ while [[ $# -gt 0 ]]; do
 		--with-vault) VAULT=true; shift ;;
 		--with-lifecycle) LIFECYCLE=true; shift ;;
 		--with-inotify) INOTIFY=true; shift ;;
+		--ramdisk) RAMDISK=true; shift ;;
 		--gpfs-root)  GPFS_ROOT="$2"; shift 2 ;;
 		--debug-rgw)  DEBUG_RGW="$2"; shift 2 ;;
 		--foreground) FOREGROUND=true; shift ;;
@@ -118,6 +122,22 @@ fi
 
 echo "==> cleaning data dirs"
 rm -rf "$BUILD_DIR/dev/rgw/$STORE"/{lmdb,root,userdb}/* 2>/dev/null || true
+
+if $RAMDISK; then
+	RAMDISK_BASE="/dev/shm/rgw-ramdisk"
+	if ! mountpoint -q "$RAMDISK_BASE" 2>/dev/null; then
+		echo "error: $RAMDISK_BASE is not mounted (modprobe brd; mkfs.xfs /dev/ram0; mount /dev/ram0 $RAMDISK_BASE)" >&2
+		exit 1
+	fi
+	rm -rf "$RAMDISK_BASE"/{root,lmdb}
+	mkdir -p "$RAMDISK_BASE"/{root,lmdb}
+	RAMDISK_DIR="$BUILD_DIR/dev/rgw/$STORE"
+	for sub in root lmdb; do
+		rm -rf "$RAMDISK_DIR/$sub"
+		ln -sfn "$RAMDISK_BASE/$sub" "$RAMDISK_DIR/$sub"
+	done
+	echo "==> ramdisk: data on $RAMDISK_BASE/{root,lmdb}"
+fi
 
 if $GPFS; then
 	mkdir -p "$GPFS_ROOT"/{root,lmdb,userdb}
