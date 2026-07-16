@@ -390,10 +390,12 @@ class SMBService(CephService):
         logger.debug(
             'found smb pool in uri [pool=%r, ns=%r]: %r', pool, ns, uri
         )
-        # enhanced caps for smb pools to be used for ctdb mgmt
+        # enhanced caps for smb pools to be used for ctdb mgmt.
+        # scoped to this cluster's own namespace given cluster id acts as
+        # a namespace so that a cluster's samba containers can't read
+        # other clusters' config/join/user objects sharing the same pool.
         return [
-            # TODO - restrict this read access to the namespace too?
-            f'allow r pool={pool}',
+            f'allow r pool={pool} namespace={ns}',
             # the x perm is needed to lock the cluster meta object
             f'allow rwx pool={pool} namespace={ns} object_prefix cluster.meta.',
         ]
