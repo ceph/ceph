@@ -450,6 +450,14 @@ public:
 #else
   ceph::bufferlist
 #endif
+  /**
+   * Encode and drain pending outgoing messages into a single bufferlist
+   * for a batched socket write. Stops early when the accumulated number
+   * of buffer fragments reaches crimson_osd_max_send_buffers to prevent
+   * overflowing seastar's uint16_t packet fragment
+   * counter. Un-swept messages remain in the queue and are picked up
+   * by the next do_out_dispatch() iteration.
+   */
   sweep_out_pending_msgs_to_sent(
       bool require_keepalive,
       std::optional<utime_t> maybe_keepalive_ack,
