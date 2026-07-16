@@ -7,9 +7,12 @@
   // 88px from top
   inset-block-start: 88px;
 
-  // Fill remaining viewport height
-  block-size: calc(100vh - 88px);
-  max-block-size: calc(100vh - 88px);
+  // 64px bottom margin to match left/right; Carbon has no API for tearsheet insets
+  inset-block-end: 64px;
+
+  // Fill remaining viewport between top and bottom insets
+  block-size: calc(100vh - 88px - 64px);
+  max-block-size: calc(100vh - 88px - 64px);
 
   // 64px margins left & right
   inset-inline-start: 64px;
@@ -37,6 +40,7 @@
 
 .cds--modal-container.cds--modal-container--sm {
   inset-block-start: 88px;
+  inset-block-end: 64px;
   block-size: 50vh;
   max-block-size: 50vh;
   inset-inline-start: 35%;

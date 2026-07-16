@@ -7,12 +7,13 @@ import {
   ViewEncapsulation,
   inject
 } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { forkJoin, of, Subscription } from 'rxjs';
 import { catchError, map, switchMap, tap } from 'rxjs/operators';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
+import { CEPHFS_MIRRORING_URL } from '~/app/shared/constants/cephfs.constant';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 import { Icons, ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
@@ -20,10 +21,16 @@ import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { FormatterService } from '~/app/shared/services/formatter.service';
-import { MirrorDirStatus, MirrorCheckpoint, MirrorStatusResponse } from '~/app/shared/models/cephfs.model';
+import {
+  MirrorDirStatus,
+  MirrorCheckpoint,
+  MirrorStatusResponse
+} from '~/app/shared/models/cephfs.model';
 import { MirrorPathSchedule } from '~/app/shared/models/snapshot-schedule';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
 type SnapshotReplicationStatus = 'in-progress' | 'replicated' | 'pending' | 'failed';
@@ -126,9 +133,11 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
   private cephfsService = inject(CephfsService);
   private snapshotScheduleService = inject(CephfsSnapshotScheduleService);
   private route = inject(ActivatedRoute);
+  private router = inject(Router);
   private formatterService = inject(FormatterService);
   private authStorageService = inject(AuthStorageService);
   private cdsModalService = inject(ModalCdsService);
+  private notificationService = inject(NotificationService);
   private taskWrapper = inject(TaskWrapperService);
 
   columns: CdTableColumn[] = [];
@@ -207,6 +216,12 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
   initializeTableActions(): void {
     this.tableActions = [
       {
+        name: $localize`Add mirror path`,
+        permission: 'create',
+        icon: Icons.add,
+        click: () => this.openAddPath()
+      },
+      {
         name: $localize`Remove path`,
         permission: 'delete',
         icon: Icons.destroy,
@@ -220,10 +235,41 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
     this.selection = selection;
   }
 
+  openAddPath(): void {
+    if (!this.fsName) {
+      return;
+    }
+
+    this.subscriptions.add(
+      this.cephfsService.list().subscribe({
+        next: (filesystems: { id?: number; mdsmap?: { fs_name?: string } }[]) => {
+          const fsId = filesystems.find((fs) => fs.mdsmap?.fs_name === this.fsName)?.id ?? 0;
+          const encodedFsName = encodeURIComponent(this.fsName);
+          // Absolute URL avoids NG04006 when leaving /mirroring/:fsName for the list modal outlet
+          this.router.navigateByUrl(
+            `${CEPHFS_MIRRORING_URL}/(modal:add-path/${fsId}/${encodedFsName})`,
+            {
+              state: {
+                returnUrl: `${CEPHFS_MIRRORING_URL}/${encodedFsName}/mirror-paths`
+              }
+            }
+          );
+        },
+        error: () => {
+          this.notificationService.show(
+            NotificationType.error,
+            $localize`Error`,
+            $localize`Failed to load filesystems for adding a mirror path.`
+          );
+        }
+      })
+    );
+  }
+
   removePathModal(): void {
     const path = this.selection.first().path;
     this.cdsModalService.show(DeleteConfirmationModalComponent, {
-      impact: DeletionImpact.high,
+      impact: DeletionImpact.medium,
       itemDescription: $localize`mirror path`,
       itemNames: [path],
       actionDescription: 'remove',
@@ -288,8 +334,8 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
           );
         })
       )
-      .subscribe(
-        (mirrorPaths) => {
+      .subscribe({
+        next: (mirrorPaths) => {
           this.mirrorPaths = mirrorPaths;
           if (this.selectedPath) {
             this.selectedPath =
@@ -301,12 +347,12 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
             }
           }
         },
-        (_) => {
+        error: () => {
           this.mirrorPaths = [];
           this.selectedPath = null;
           this.sidePanelOpen = false;
         }
-      );
+      });
     this.subscriptions.add(this.mirrorPathsSubscription);
   }
 
@@ -584,8 +630,8 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
 
     this.checkpointsLoading = true;
     this.subscriptions.add(
-      this.cephfsService.listMirrorCheckpoints(this.fsName, path).subscribe(
-        (response) => {
+      this.cephfsService.listMirrorCheckpoints(this.fsName, path).subscribe({
+        next: (response) => {
           if (this.selectedPath?.path !== path) {
             this.checkpointsLoading = false;
             return;
@@ -597,14 +643,14 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
           this.refreshSnapshotPanels();
           this.checkpointsLoading = false;
         },
-        () => {
+        error: () => {
           if (this.selectedPath?.path === path) {
             this.pathCheckpoints = [];
             this.refreshSnapshotPanels();
           }
           this.checkpointsLoading = false;
         }
-      )
+      })
     );
   }
 
@@ -688,15 +734,13 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
             path,
             snapName
           }),
-          call: this.cephfsService
-            .addMirrorCheckpoint(this.fsName, path, snapName)
-            .pipe(
-              tap(() => {
-                this.checkpointActionInProgress = '';
-                this.loadPathCheckpoints(path);
-                this.loadMirrorPaths();
-              })
-            )
+          call: this.cephfsService.addMirrorCheckpoint(this.fsName, path, snapName).pipe(
+            tap(() => {
+              this.checkpointActionInProgress = '';
+              this.loadPathCheckpoints(path);
+              this.loadMirrorPaths();
+            })
+          )
         })
         .subscribe({
           error: () => {
@@ -719,20 +763,19 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
       itemNames: [snapName],
       actionDescription: 'remove',
       submitActionObservable: () =>
-        this.taskWrapper
-          .wrapTaskAroundCall({
-            task: new FinishedTask('cephfs/mirroring/checkpoint/remove', {
-              fsName: this.fsName,
-              path,
-              snapName
-            }),
-            call: this.cephfsService.removeMirrorCheckpoint(this.fsName, path, snapName).pipe(
-              tap(() => {
-                this.loadPathCheckpoints(path);
-                this.loadMirrorPaths();
-              })
-            )
-          })
+        this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask('cephfs/mirroring/checkpoint/remove', {
+            fsName: this.fsName,
+            path,
+            snapName
+          }),
+          call: this.cephfsService.removeMirrorCheckpoint(this.fsName, path, snapName).pipe(
+            tap(() => {
+              this.loadPathCheckpoints(path);
+              this.loadMirrorPaths();
+            })
+          )
+        })
     });
   }
 

@@ -2,7 +2,7 @@ declare const jest: any;
 
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
-import { ActivatedRoute, convertToParamMap } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
@@ -14,7 +14,9 @@ import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CephfsMirroringFsMirrorPathsComponent } from './cephfs-mirroring-fs-mirror-paths.component';
 import { HttpClientModule } from '@angular/common/http';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -25,6 +27,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
   let fixture: ComponentFixture<CephfsMirroringFsMirrorPathsComponent>;
   let cephfsService: any;
   let formatterService: any;
+  let notificationService: any;
 
   const mockMirrorStatusResponse: MirrorStatusResponse = {
     metrics: {
@@ -123,6 +126,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
   beforeEach(async () => {
     const cephfsServiceMock = {
       getMirrorStatus: jest.fn(),
+      list: jest.fn().mockReturnValue(of([{ id: 7, mdsmap: { fs_name: 'test-fs' } }])),
       listMirrorCheckpoints: jest.fn().mockReturnValue(
         of({
           dir_root: '',
@@ -197,6 +201,10 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
           useValue: { show: jest.fn() }
         },
         {
+          provide: NotificationService,
+          useValue: { show: jest.fn() }
+        },
+        {
           provide: TaskWrapperService,
           useValue: { wrapTaskAroundCall: jest.fn((args) => args.call) }
         }
@@ -207,6 +215,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
 
     cephfsService = TestBed.inject(CephfsService);
     formatterService = TestBed.inject(FormatterService);
+    notificationService = TestBed.inject(NotificationService);
 
     fixture = TestBed.createComponent(CephfsMirroringFsMirrorPathsComponent);
     component = fixture.componentInstance;
@@ -233,6 +242,53 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
     // Verify fsName is fetched and data is loaded
     expect(component.fsName).toBe('test-fs');
     expect(cephfsService.getMirrorStatus).toHaveBeenCalledWith('test-fs');
+    expect(component.tableActions).toHaveLength(2);
+    expect(component.tableActions[0].name).toBe('Add mirror path');
+    expect(component.tableActions[0].permission).toBe('create');
+    expect(component.tableActions[1].name).toBe('Remove path');
+    expect(component.tableActions[1].permission).toBe('delete');
+  });
+
+  it('should open add-path wizard for the current filesystem', () => {
+    const router = TestBed.inject(Router);
+    const navigateByUrlSpy = jest.spyOn(router, 'navigateByUrl').mockResolvedValue(true as any);
+    component.fsName = 'test-fs';
+
+    component.openAddPath();
+
+    expect(cephfsService.list).toHaveBeenCalled();
+    expect(navigateByUrlSpy).toHaveBeenCalledWith('/cephfs/mirroring/(modal:add-path/7/test-fs)', {
+      state: {
+        returnUrl: '/cephfs/mirroring/test-fs/mirror-paths'
+      }
+    });
+  });
+
+  it('should not open add-path wizard when fsName is missing', () => {
+    const router = TestBed.inject(Router);
+    const navigateByUrlSpy = jest.spyOn(router, 'navigateByUrl').mockResolvedValue(true as any);
+    component.fsName = '';
+
+    component.openAddPath();
+
+    expect(cephfsService.list).not.toHaveBeenCalled();
+    expect(navigateByUrlSpy).not.toHaveBeenCalled();
+  });
+
+  it('should notify when filesystem list fails while opening add-path wizard', () => {
+    const router = TestBed.inject(Router);
+    const navigateByUrlSpy = jest.spyOn(router, 'navigateByUrl').mockResolvedValue(true as any);
+    cephfsService.list.mockReturnValue(throwError(() => new Error('list failed')));
+    component.fsName = 'test-fs';
+
+    component.openAddPath();
+
+    expect(navigateByUrlSpy).not.toHaveBeenCalled();
+    expect(notificationService.show).toHaveBeenCalledWith(
+      NotificationType.error,
+      'Error',
+      'Failed to load filesystems for adding a mirror path.'
+    );
   });
 
   describe('parseMirrorStatus', () => {
@@ -488,7 +544,10 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
           dir_root: path,
           checkpoints:
             path === '/path1'
-              ? [{ snap_id: 1, snap_name: 'snap1' }, { snap_id: 2, snap_name: 'snap2' }]
+              ? [
+                  { snap_id: 1, snap_name: 'snap1' },
+                  { snap_id: 2, snap_name: 'snap2' }
+                ]
               : [{ snap_id: 3, snap_name: 'snap3' }]
         })
       );
@@ -1203,7 +1262,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
     });
   });
   describe('removePathModal', () => {
-    it('should open high-impact deletion modal for selected path', () => {
+    it('should open medium-impact deletion modal for selected path', () => {
       const modalService = TestBed.inject(ModalCdsService);
       component.selection = new CdTableSelection([{ path: '/path1' }]);
       component.fsName = 'test-fs';
@@ -1213,7 +1272,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       expect(modalService.show).toHaveBeenCalledWith(
         DeleteConfirmationModalComponent,
         expect.objectContaining({
-          impact: DeletionImpact.high,
+          impact: DeletionImpact.medium,
           itemNames: ['/path1'],
           actionDescription: 'remove'
         })

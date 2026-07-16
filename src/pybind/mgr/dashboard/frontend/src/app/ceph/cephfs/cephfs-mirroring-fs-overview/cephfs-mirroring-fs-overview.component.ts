@@ -112,7 +112,9 @@ export class CephfsMirroringFsOverviewComponent {
     peers: MirrorPeerList,
     status: MirrorStatusResponse | null
   ): MirroringFsOverviewData {
-    const sync = status ? MirroringSyncUtils.extractLatestSync(status) : { syncingPaths: 0, info: MirroringSyncUtils.emptySyncInfo() };
+    const sync = status
+      ? MirroringSyncUtils.extractLatestSync(status)
+      : { syncingPaths: 0, info: MirroringSyncUtils.emptySyncInfo() };
 
     return {
       fsName,

@@ -15,6 +15,7 @@ describe('CephfsAddMirroringPathComponent', () => {
   let component: CephfsAddMirroringPathComponent;
   let fixture: ComponentFixture<CephfsAddMirroringPathComponent>;
   let routerNavigateSpy: jest.Mock;
+  let routerNavigateByUrlSpy: jest.Mock;
 
   const cephfsServiceMock = {
     addMirrorDirectory: jest.fn()
@@ -35,6 +36,7 @@ describe('CephfsAddMirroringPathComponent', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     routerNavigateSpy = jest.fn();
+    routerNavigateByUrlSpy = jest.fn();
 
     await TestBed.configureTestingModule({
       declarations: [CephfsAddMirroringPathComponent],
@@ -49,7 +51,11 @@ describe('CephfsAddMirroringPathComponent', () => {
         },
         {
           provide: Router,
-          useValue: { navigate: routerNavigateSpy }
+          useValue: {
+            navigate: routerNavigateSpy,
+            navigateByUrl: routerNavigateByUrlSpy,
+            lastSuccessfulNavigation: null
+          }
         },
         { provide: CephfsService, useValue: cephfsServiceMock },
         { provide: CephfsSnapshotScheduleService, useValue: snapshotScheduleServiceMock },
@@ -231,6 +237,23 @@ describe('CephfsAddMirroringPathComponent', () => {
     );
   });
 
+  it('should return to returnUrl when closing tearsheet after opening from mirror paths', () => {
+    const router = TestBed.inject(Router) as any;
+    router.lastSuccessfulNavigation = {
+      extras: {
+        state: { returnUrl: '/cephfs/mirroring/testfs/mirror-paths' }
+      }
+    };
+
+    component.ngOnInit();
+    component.onCancel();
+
+    expect(routerNavigateByUrlSpy).toHaveBeenCalledWith('/cephfs/mirroring/testfs/mirror-paths', {
+      state: undefined
+    });
+    expect(routerNavigateSpy).not.toHaveBeenCalled();
+  });
+
   it('should decode encoded filesystem name from route params', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
@@ -246,7 +269,11 @@ describe('CephfsAddMirroringPathComponent', () => {
         },
         {
           provide: Router,
-          useValue: { navigate: routerNavigateSpy }
+          useValue: {
+            navigate: routerNavigateSpy,
+            navigateByUrl: routerNavigateByUrlSpy,
+            lastSuccessfulNavigation: null
+          }
         },
         { provide: CephfsService, useValue: cephfsServiceMock },
         { provide: CephfsSnapshotScheduleService, useValue: snapshotScheduleServiceMock },

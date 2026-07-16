@@ -36,9 +36,14 @@
 </div>
 
 @if (showRootWarning) {
-  <cd-alert-panel type="warning"
-                  class="cds-mb-5">
-    <ng-container i18n>Mirroring the filesystem root (/) includes all directories. Choose a more specific path unless you intend to mirror the entire filesystem.</ng-container>
+  <cd-alert-panel
+    type="warning"
+    class="cds-mb-5"
+  >
+    <ng-container i18n
+      >Mirroring the filesystem root (/) includes all directories. Choose a more specific path
+      unless you intend to mirror the entire filesystem.</ng-container
+    >
   </cd-alert-panel>
 }
 
