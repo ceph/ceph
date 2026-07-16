@@ -45,9 +45,7 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
   }
 
   get showRootWarning(): boolean {
-    return this.paths.some(
-      (entry) => MirroringPathUtils.normalizePath(entry.fullPath) === FS_ROOT
-    );
+    return this.paths.some((entry) => MirroringPathUtils.normalizePath(entry.fullPath) === FS_ROOT);
   }
 
   get canAddAnotherPath(): boolean {
@@ -115,9 +113,11 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
       this.paths[pathIndex] = {
         ...updated,
         fullPath: FS_ROOT,
-        levels: levels.slice(0, levelIndex + 1).map((level, index) =>
-          index === levelIndex ? { ...level, selected: FS_ROOT_PATH_SENTINEL } : level
-        )
+        levels: levels
+          .slice(0, levelIndex + 1)
+          .map((level, index) =>
+            index === levelIndex ? { ...level, selected: FS_ROOT_PATH_SENTINEL } : level
+          )
       };
       this.syncFormValue();
       return;

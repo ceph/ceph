@@ -7,7 +7,13 @@ import { Observable } from 'rxjs';
 import { cdEncode, cdEncodeNot } from '../decorators/cd-encode';
 import { CephfsDir, CephfsQuotas } from '../models/cephfs-directory-models';
 import { shareReplay } from 'rxjs/operators';
-import { Daemon, MirrorCheckpointListResponse, MirrorCheckpointMutationResponse, MirrorPeerList, MirrorStatusResponse } from '../models/cephfs.model';
+import {
+  Daemon,
+  MirrorCheckpointListResponse,
+  MirrorCheckpointMutationResponse,
+  MirrorPeerList,
+  MirrorStatusResponse
+} from '../models/cephfs.model';
 
 @cdEncode
 @Injectable({
@@ -213,18 +219,6 @@ export class CephfsService {
       {
         path,
         snap_name: snapName
-      }
-    );
-  }
-
-  createMirrorCheckpointNow(
-    @cdEncodeNot fsName: string,
-    @cdEncodeNot path: string
-  ): Observable<MirrorCheckpointMutationResponse> {
-    return this.http.post<MirrorCheckpointMutationResponse>(
-      `${this.baseURL}/mirror/${fsName}/checkpoint/now`,
-      {
-        path
       }
     );
   }

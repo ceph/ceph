@@ -11,7 +11,13 @@ import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
-import { Daemon, Filesystem, MirroringRow, MirrorStatusResponse, Peer } from '~/app/shared/models/cephfs.model';
+import {
+  Daemon,
+  Filesystem,
+  MirroringRow,
+  MirrorStatusResponse,
+  Peer
+} from '~/app/shared/models/cephfs.model';
 import { RelativeDatePipe } from '~/app/shared/pipes/relative-date.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { MirroringSyncUtils } from '../mirroring-sync-utils';
@@ -188,9 +194,7 @@ export class CephfsMirroringListComponent implements OnInit, OnDestroy {
     return {
       ...row,
       bytes_replicated: sync.info.bytesSynced,
-      last_sync: sync.info.syncedAt
-        ? this.relativeDatePipe.transform(sync.info.syncedAt)
-        : '-'
+      last_sync: sync.info.syncedAt ? this.relativeDatePipe.transform(sync.info.syncedAt) : '-'
     };
   }
 
