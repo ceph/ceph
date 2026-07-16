@@ -49,7 +49,10 @@ RADOS / OSD / Erasure Coding
   discard on mkfs now default, several spanning-blob/onode-cache-stall/
   reallocation-corruption fixes, and device-type-specific allocation
   policy.
-- mClock scheduler refactor.
+- mClock scheduler refactor. Default HDD OSD shard config changed as an
+  interim fix for inconsistent client/recovery throughput with multiple
+  shards: ``osd_op_num_shards_hdd`` 5 -> 1, ``osd_op_num_threads_per_shard_hdd``
+  1 -> 5 (`issue#66289 <https://tracker.ceph.com/issues/66289>`_).
 - Crimson/Seastore: continued heavy investment -- erasure coding support
   landed in Crimson (including recovery), PG splitting, a new 2Q cache
   replacement algorithm, broad coroutine conversions, and a long tail of
