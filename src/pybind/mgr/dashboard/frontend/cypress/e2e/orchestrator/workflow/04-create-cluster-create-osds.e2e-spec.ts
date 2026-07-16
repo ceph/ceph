@@ -16,7 +16,7 @@ describe('Add storage - create osds page', () => {
   });
 
   it('should check if title contains Create OSDs', () => {
-    cy.get('.title').should('contain.text', 'Create OSDs');
+    cy.get('.tearsheet-body .tearsheet-content h4').should('contain.text', 'Create OSDs');
   });
 
   describe('when Orchestrator is available', () => {

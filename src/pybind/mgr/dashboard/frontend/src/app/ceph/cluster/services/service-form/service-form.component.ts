@@ -735,7 +735,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
 
     if (this.editing) {
       this.action = this.actionLabels.EDIT;
-      this.disableForEditing(this.serviceType);
       this.cephServiceService
         .list(new HttpParams({ fromObject: { limit: -1, offset: 0 } }), this.serviceName)
         .observable.subscribe((response: CephServiceSpec[]) => {
@@ -743,6 +742,15 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           formKeys.forEach((keys) => {
             this.serviceForm.get(keys).setValue(response[0][keys]);
           });
+          // change is made because on editing mds service, a new service was created with mds.mds.service
+          // For non-prefixed services (mgr, mon, etc.), if service_id is empty,
+          // set it to the full service name
+          if (!response[0]['service_id'] && !this.isPrefixedNamedService) {
+            this.serviceForm.get('service_id').setValue(this.serviceName);
+          }
+
+          // Disable fields AFTER setting values to ensure the view updates properly
+          this.disableForEditing(this.serviceType);
           if (response[0].certificate) {
             this.currentCertificate = response[0].certificate;
           }
@@ -972,7 +980,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               }
               break;
             default:
-              this.serviceForm.get('service_id').setValue(this.serviceName);
+              // No special handling needed for other service types (mds, nfs, etc.)
+              // service_id is already correctly set from API response at line 749
+              break;
           }
         });
     }

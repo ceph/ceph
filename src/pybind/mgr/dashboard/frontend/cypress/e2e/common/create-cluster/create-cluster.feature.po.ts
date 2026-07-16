@@ -6,4 +6,5 @@ Given('I am on the {string} section', (page: string) => {
 
 Then('I should see a message {string}', () => {
   cy.get('cd-create-cluster').should('contain.text', 'Welcome to Ceph Dashboard');
+  cy.contains('Welcome to Ceph Dashboard').should('be.visible');
 });

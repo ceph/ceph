@@ -46,12 +46,12 @@ When('I select a row {string} in the expanded row', (row: string) => {
 
 Then('I should see a row with {string}', (row: string) => {
   cy.get('.cds--search-input').first().clear().type(row);
-  cy.contains(`[cdstablerow] [cdstabledata]`, row).should('exist');
+  cy.contains(`[cdstablerow]`, row).should('exist');
 });
 
 Then('I should not see a row with {string}', (row: string) => {
   cy.get('.cds--search-input').first().clear().type(row);
-  cy.contains(`[cdstablerow] [cdstabledata]`, row).should('not.exist');
+  cy.contains(`[cdstablerow]`, row).should('not.exist');
 });
 
 Then('I should see a table in the expanded row', () => {
