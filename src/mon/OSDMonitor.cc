@@ -4415,6 +4415,11 @@ void OSDMonitor::insert_new_removed_snap(int64_t pool, snapid_t s)
 
     // Pool is migrating or has finished migrating, need to
     // trim the snap on the target pool
+    if (pending_inc.in_new_removed_snaps(target_pool, s)) {
+      dout(10) << __func__ << " snap " << s << " already pending removal in target pool "
+               << target_pool << dendl;
+      return;
+    }
     pending_inc.new_removed_snaps[target_pool].insert(s);
 
     const pg_pool_t& target_pi = std::as_const(*this).get_pg_pool(target_pool);
