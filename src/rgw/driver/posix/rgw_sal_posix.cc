@@ -4095,7 +4095,49 @@ int POSIXObject::POSIXReadOp::get_attr(const DoutPrefixProvider* dpp, const char
 int POSIXObject::POSIXDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 					   optional_yield y, uint32_t flags)
 {
-  int ret = source->delete_object(dpp, y, flags, nullptr, nullptr);
+  int ret;
+  uint64_t orig_size = 0;
+  auto exists = source->check_exists(dpp);
+  if (exists) {
+    orig_size = source->get_size();
+  }
+
+  if (params.size_match.has_value() && exists) {
+    ldpp_dout(dpp, 10) << "POSIXObject::POSIXDeleteOp::delete_obj size_match: " << params.size_match.value() << ", size: " << orig_size << dendl;
+    if (orig_size != params.size_match) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+  }
+
+  if (!real_clock::is_zero(params.last_mod_time_match) && exists) {
+    timespec ctime = real_clock::to_timespec(source->get_mtime());
+    timespec last_mod_time = real_clock::to_timespec(params.last_mod_time_match);
+    if (!params.high_precision_time) {
+      ctime.tv_nsec = 0;
+      last_mod_time.tv_nsec = 0;
+    }
+
+    ldpp_dout(dpp, 10) << "POSIXObject::POSIXDeleteOp::delete_obj If-Match-Last-Modified-Time: " << params.last_mod_time_match
+                       << ", Last-Modified: " << ctime << ", with high_precision_time:" << params.high_precision_time << dendl;
+    if (ctime != last_mod_time) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+  }
+
+  if (params.if_match && strcmp(params.if_match, "*") != 0 && exists) {
+    auto it = source->get_attrs().find(RGW_ATTR_ETAG);
+    if (it == source->get_attrs().end()) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+    bufferlist& bl = it->second;
+    std::string if_match_str = rgw_string_unquote(params.if_match);
+    if (if_match_str.compare(0, bl.length(), bl.c_str(), bl.length()) != 0) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+  }
+  
+
+  ret = source->delete_object(dpp, y, flags, nullptr, nullptr);
   if (ret < 0) {
     return ret;
   }
