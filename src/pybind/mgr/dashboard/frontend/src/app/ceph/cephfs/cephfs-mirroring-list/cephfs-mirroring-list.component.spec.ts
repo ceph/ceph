@@ -6,6 +6,7 @@ import { of } from 'rxjs';
 import { CephfsMirroringListComponent } from './cephfs-mirroring-list.component';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { Daemon, MirroringRow } from '~/app/shared/models/cephfs.model';
+import { RelativeDatePipe } from '~/app/shared/pipes/relative-date.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
@@ -16,7 +17,8 @@ describe('CephfsMirroringListComponent', () => {
   let routerNavigateSpy: jest.Mock;
 
   const cephfsServiceMock = {
-    listDaemonStatus: jest.fn()
+    listDaemonStatus: jest.fn(),
+    getMirrorStatus: jest.fn()
   };
 
   const authStorageServiceMock = {
@@ -26,12 +28,14 @@ describe('CephfsMirroringListComponent', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     routerNavigateSpy = jest.fn();
+    cephfsServiceMock.getMirrorStatus.mockReturnValue(of({ metrics: {} }));
 
     await TestBed.configureTestingModule({
-      declarations: [CephfsMirroringListComponent],
+      declarations: [CephfsMirroringListComponent, RelativeDatePipe],
       providers: [
         { provide: CephfsService, useValue: cephfsServiceMock },
         { provide: AuthStorageService, useValue: authStorageServiceMock },
+        RelativeDatePipe,
         {
           provide: Router,
           useValue: {
@@ -53,8 +57,10 @@ describe('CephfsMirroringListComponent', () => {
     component.ngOnInit();
 
     expect(component.jumpInTiles.length).toBe(2);
-    expect(component.columns.length).toBe(6);
+    expect(component.columns.length).toBe(5);
     expect(component.columns[0].prop).toBe('local_fs_name');
+    expect(component.columns[2].prop).toBe('bytes_replicated');
+    expect(component.columns[3].prop).toBe('last_sync');
   });
 
   it('should load daemon status on ngOnInit', () => {
@@ -87,7 +93,7 @@ describe('CephfsMirroringListComponent', () => {
                   fs_name: 'fsA',
                   client_name: 'clientA'
                 },
-                uuid: '',
+                uuid: 'peer-uuid',
                 stats: undefined
               }
             ],
@@ -98,6 +104,25 @@ describe('CephfsMirroringListComponent', () => {
     ];
 
     cephfsServiceMock.listDaemonStatus.mockReturnValue(of(mockData));
+    cephfsServiceMock.getMirrorStatus.mockReturnValue(
+      of({
+        metrics: {
+          '/mirror': {
+            peer: {
+              'peer-uuid': {
+                state: 'idle',
+                last_synced_snap: {
+                  name: 'snap1',
+                  sync_bytes: '1.00 MiB',
+                  sync_time_stamp: '1s'
+                },
+                metrics_updated_at: 1_700_000_000
+              }
+            }
+          }
+        }
+      })
+    );
 
     let emitted: MirroringRow[] = [];
 
@@ -106,15 +131,21 @@ describe('CephfsMirroringListComponent', () => {
     component.loadDaemonStatus();
 
     expect(emitted.length).toBe(1);
-    expect(emitted[0]).toEqual({
-      remote_cluster_name: 'clusterA',
-      local_fs_name: 'fs1',
-      fs_name: 'fsA',
-      client_name: 'clientA',
-      directory_count: 3,
-      filesystem_id: 10,
-      id: '1-10'
-    });
+    expect(cephfsServiceMock.getMirrorStatus).toHaveBeenCalledWith('fs1', undefined, 'peer-uuid');
+    expect(emitted[0]).toEqual(
+      expect.objectContaining({
+        remote_cluster_name: 'clusterA',
+        local_fs_name: 'fs1',
+        fs_name: 'fsA',
+        client_name: 'clientA',
+        directory_count: 3,
+        filesystem_id: 10,
+        peer_uuid: 'peer-uuid',
+        id: '1-10',
+        bytes_replicated: '1.00 MiB',
+        last_sync: expect.any(String)
+      })
+    );
   });
 
   it('should handle empty peers and map "-" values', () => {
@@ -142,6 +173,7 @@ describe('CephfsMirroringListComponent', () => {
     component.loadDaemonStatus();
 
     expect(emitted.length).toBe(1);
+    expect(cephfsServiceMock.getMirrorStatus).not.toHaveBeenCalled();
     expect(emitted[0]).toEqual({
       remote_cluster_name: '-',
       local_fs_name: 'fs2',
@@ -150,7 +182,9 @@ describe('CephfsMirroringListComponent', () => {
       directory_count: 5,
       filesystem_id: 20,
       peerId: '-',
-      id: '2-20'
+      id: '2-20',
+      bytes_replicated: '-',
+      last_sync: '-'
     });
   });
 
