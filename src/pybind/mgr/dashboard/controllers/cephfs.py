@@ -131,6 +131,29 @@ MIRROR_STATUS_SCHEMA = {
     }, 'Snapshot mirror sync metrics grouped by mirrored directory path'),
 }
 
+CHECKPOINT_SCHEMA = {
+    'snap_id': (int, 'Snapshot ID'),
+    'snap_name': (str, 'Snapshot name'),
+    'status': (str, 'Checkpoint status'),
+    'created_at': (str, 'Checkpoint creation time'),
+    'updated_at': (str, 'Checkpoint last update time'),
+    'error_msg': (str, 'Checkpoint error message'),
+}
+
+CHECKPOINT_LIST_SCHEMA = {
+    'dir_root': (str, 'Mirrored directory path'),
+    'checkpoints': ([CHECKPOINT_SCHEMA], 'Checkpoints for the directory'),
+}
+
+CHECKPOINT_MUTATION_SCHEMA = {
+    'status': (str, 'Operation status'),
+    'message': (str, 'Status message'),
+    'dir_root': (str, 'Mirrored directory path'),
+    'snap_id': (int, 'Snapshot ID'),
+    'snap_name': (str, 'Snapshot name'),
+    'checkpoint_status': (str, 'Checkpoint status'),
+}
+
 
 # pylint: disable=R0904
 @APIRouter('/cephfs', Scope.CEPHFS)
@@ -1515,6 +1538,83 @@ class CephFSMirror(RESTController):
                 component='cephfs.mirror'
             )
         return json.loads(out) if out else []
+
+    @EndpointDoc("List checkpoints for a mirrored directory",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                     'path': (str, 'Mirrored directory path'),
+                 },
+                 responses={200: CHECKPOINT_LIST_SCHEMA})
+    @Endpoint('GET', path='/{fs_name}/checkpoint', query_params=['path'])
+    @ReadPermission
+    def list_checkpoints(self, fs_name: str, path: str):
+        error_code, out, err = mgr.remote(
+            'mirroring', 'snapshot_mirror_checkpoint_ls', fs_name, path)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to list checkpoints for {path}: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out) if out else {'dir_root': path, 'checkpoints': []}
+
+    @EndpointDoc("Add a checkpoint for a snapshot",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                     'path': (str, 'Mirrored directory path'),
+                     'snap_name': (str, 'Snapshot name'),
+                 },
+                 responses={200: CHECKPOINT_MUTATION_SCHEMA})
+    @Endpoint('POST', path='/{fs_name}/checkpoint')
+    @CreatePermission
+    def add_checkpoint(self, fs_name: str, path: str, snap_name: str):
+        error_code, out, err = mgr.remote(
+            'mirroring', 'snapshot_mirror_checkpoint_add', fs_name, path, snap_name)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to add checkpoint for snapshot {snap_name}: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out) if out else {}
+
+    @EndpointDoc("Create a checkpoint on the latest snapshot",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                     'path': (str, 'Mirrored directory path'),
+                 },
+                 responses={200: CHECKPOINT_MUTATION_SCHEMA})
+    @Endpoint('POST', path='/{fs_name}/checkpoint/now')
+    @CreatePermission
+    def checkpoint_now(self, fs_name: str, path: str):
+        error_code, out, err = mgr.remote(
+            'mirroring', 'snapshot_mirror_checkpoint_now', fs_name, path)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to create checkpoint on latest snapshot for {path}: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out) if out else {}
+
+    @EndpointDoc("Remove a checkpoint from a snapshot",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                     'path': (str, 'Mirrored directory path'),
+                     'snap_name': (str, 'Snapshot name'),
+                 })
+    @Endpoint('DELETE', path='/{fs_name}/checkpoint', query_params=['path', 'snap_name'])
+    @DeletePermission
+    def remove_checkpoint(self, fs_name: str, path: str, snap_name: str):
+        error_code, out, err = mgr.remote(
+            'mirroring', 'snapshot_mirror_checkpoint_remove', fs_name, path, snap_name)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to remove checkpoint for snapshot {snap_name}: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out) if out else {}
 
     @EndpointDoc("Get mirror daemon and peers information",
                  responses={200: DAEMON_STATUS_SCHEMA})

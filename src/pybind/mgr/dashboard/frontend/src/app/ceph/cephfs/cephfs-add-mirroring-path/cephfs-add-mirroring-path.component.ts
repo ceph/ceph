@@ -47,6 +47,7 @@ export class CephfsAddMirroringPathComponent implements OnInit {
     { label: $localize`Review`, invalid: false }
   ];
   isSubmitLoading = false;
+  private returnUrl: string | null = null;
 
   get schedulePath(): string {
     return this.pathsStep?.getSubmitPaths()?.toAdd?.[0] ?? '';
@@ -60,6 +61,10 @@ export class CephfsAddMirroringPathComponent implements OnInit {
     } catch {
       this.fsName = fsName;
     }
+    const navState = this.router.lastSuccessfulNavigation?.extras?.state as
+      | { returnUrl?: string }
+      | undefined;
+    this.returnUrl = navState?.returnUrl ?? (history.state?.['returnUrl'] as string) ?? null;
   }
 
   onSubmit(): void {
@@ -178,6 +183,12 @@ export class CephfsAddMirroringPathComponent implements OnInit {
   }
 
   private closeTearsheet(reload: boolean): void {
+    if (this.returnUrl) {
+      this.router.navigateByUrl(this.returnUrl, {
+        state: reload ? { reload: true } : undefined
+      });
+      return;
+    }
     this.router.navigate([CEPHFS_MIRRORING_URL, { outlets: { modal: null } }], {
       state: reload ? { reload: true } : undefined
     });

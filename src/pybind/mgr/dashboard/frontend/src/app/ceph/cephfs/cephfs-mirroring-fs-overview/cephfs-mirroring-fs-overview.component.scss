@@ -1,0 +1,5 @@
+// Carbon stack has no API for equal-width two-column detail columns.
+.cephfs-mirroring-fs-overview-destination-column {
+  flex: 1 1 0;
+  min-width: 0;
+}

@@ -334,6 +334,16 @@ export class TaskMessageService {
       this.commonOperations.remove,
       (metadata) => $localize`mirror path '${metadata.path}' from '${metadata.fsName}'`
     ),
+    'cephfs/mirroring/checkpoint/add': this.newTaskMessage(
+      this.commonOperations.create,
+      (metadata) =>
+        $localize`checkpoint for snapshot '${metadata.snapName}' on path '${metadata.path}'`
+    ),
+    'cephfs/mirroring/checkpoint/remove': this.newTaskMessage(
+      this.commonOperations.remove,
+      (metadata) =>
+        $localize`checkpoint for snapshot '${metadata.snapName}' on path '${metadata.path}'`
+    ),
     // RGW operations
     'rgw/bucket/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) => {
       return $localize`${metadata.bucket_names[0]}`;

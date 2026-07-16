@@ -1,6 +1,8 @@
 import { PathEntry } from './mirroring-path.model';
 
-const VOLUMES_ROOT = '/volumes';
+export const FS_ROOT = '/';
+/** Internal select value representing the filesystem root path. */
+export const FS_ROOT_PATH_SENTINEL = '__fs_root__';
 
 export class MirroringPathUtils {
   static normalizePath(path: string): string {
@@ -22,10 +24,37 @@ export class MirroringPathUtils {
   }
 
   static buildPathFromSegments(segments: string[]): string {
-    if (!segments.length) {
+    const selected = segments.filter(Boolean);
+    if (!selected.length) {
       return '';
     }
-    return `${VOLUMES_ROOT}/${segments.join('/')}`;
+    if (selected.some((segment) => MirroringPathUtils.isRootSelection(segment))) {
+      return FS_ROOT;
+    }
+    return MirroringPathUtils.normalizePath(`/${selected.join('/')}`);
+  }
+
+  static formatLevelOption(option: string): string {
+    return MirroringPathUtils.isRootSelection(option) ? FS_ROOT : option;
+  }
+
+  static isRootSelection(value: string): boolean {
+    return value === FS_ROOT_PATH_SENTINEL || value === FS_ROOT;
+  }
+
+  static isRootPathEntry(entry: PathEntry): boolean {
+    if (MirroringPathUtils.normalizePath(entry.fullPath) === FS_ROOT) {
+      return true;
+    }
+    return entry.levels.some((level) => MirroringPathUtils.isRootSelection(level.selected));
+  }
+
+  static buildPathFromLevels(levels: PathEntry['levels'], upToLevelIndex: number): string {
+    const segments = levels
+      .slice(0, upToLevelIndex)
+      .map((level) => level.selected)
+      .filter(Boolean);
+    return MirroringPathUtils.buildPathFromSegments(segments);
   }
 
   static getSelectedSegments(entry: PathEntry): string[] {
@@ -38,18 +67,59 @@ export class MirroringPathUtils {
     if (!left || !right) {
       return false;
     }
-    return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
+    if (left === right) {
+      return true;
+    }
+    if (left === FS_ROOT || right === FS_ROOT) {
+      return true;
+    }
+    return left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
   }
 
+  /** Path is already mirrored, or nested under an existing mirror path. */
   static isPathTracked(path: string, trackedPaths: Set<string>): boolean {
     const normalized = MirroringPathUtils.normalizePath(path);
     if (!normalized || !trackedPaths.size) {
       return false;
     }
     for (const tracked of trackedPaths) {
-      if (MirroringPathUtils.pathsOverlap(normalized, tracked)) {
+      const trackedPath = MirroringPathUtils.normalizePath(tracked);
+      if (normalized === trackedPath || normalized.startsWith(`${trackedPath}/`)) {
         return true;
       }
+    }
+    return false;
+  }
+
+  /** Path cannot be mirrored because it overlaps an existing mirror path. */
+  static conflictsWithMirroredPath(path: string, trackedPaths: Set<string>): boolean {
+    const normalized = MirroringPathUtils.normalizePath(path);
+    if (!normalized || !trackedPaths.size) {
+      return false;
+    }
+    for (const tracked of trackedPaths) {
+      if (MirroringPathUtils.pathsOverlap(normalized, MirroringPathUtils.normalizePath(tracked))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static conflictsWithOtherRowSelection(
+    path: string,
+    otherPath: string,
+    options: { allowAncestor?: boolean } = {}
+  ): boolean {
+    const normalized = MirroringPathUtils.normalizePath(path);
+    const other = MirroringPathUtils.normalizePath(otherPath);
+    if (!normalized || !other) {
+      return false;
+    }
+    if (normalized === other || normalized.startsWith(`${other}/`)) {
+      return true;
+    }
+    if (!options.allowAncestor && other.startsWith(`${normalized}/`)) {
+      return true;
     }
     return false;
   }

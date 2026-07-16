@@ -1,5 +1,5 @@
 import { Component, HostBinding, OnDestroy, OnInit } from '@angular/core';
-import { ActivatedRouteSnapshot, NavigationEnd, Router } from '@angular/router';
+import { ActivatedRouteSnapshot, NavigationEnd, Router, RoutesRecognized } from '@angular/router';
 
 import { Observable, Subscription } from 'rxjs';
 import { filter } from 'rxjs/operators';
@@ -82,7 +82,7 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
     this.updatePageHeaderFromRoute();
     this.subs.add(
       this.router.events
-        .pipe(filter((e) => e instanceof NavigationEnd))
+        .pipe(filter((e) => e instanceof NavigationEnd || e instanceof RoutesRecognized))
         .subscribe(() => this.updatePageHeaderFromRoute())
     );
   }
