@@ -1457,6 +1457,16 @@ class CephadmUpgrade:
 
             to_upgrade.append(d_entry)
 
+            # when fail_fs is set to true, we want all MDS daemons
+            # to be upgraded in parallel, so continuing here
+            # will allow the full list of MDS to be built for upgrade
+            if (
+                d.daemon_type == 'mds'
+                and self.upgrade_state
+                and self.upgrade_state.fail_fs
+            ):
+                    continue
+
             # ok-to-stop did not add peer names to known_ok_to_stop.
             # For osd/mds/mon we then stop scanning need_upgrade this pass.
             # This helps:
