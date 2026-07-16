@@ -107,7 +107,7 @@ struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
   PGTransactionUPtr t;
   const PGLog &pg_log;
 
-  static PGTransactionUPtr transate_transaction(
+  static PGTransactionUPtr translate_transaction(
     ceph::os::Transaction&& t,
     crimson::osd::ObjectContextRef &&obc)
   {
@@ -160,6 +160,7 @@ struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
 	break;
       case ceph::os::Transaction::OP_OMAP_CLEAR:
 	t_pg->omap_clear(i.get_oid(op->oid).hobj);
+	break;
       case ceph::os::Transaction::OP_OMAP_SETKEYS:
 	{
 	std::map<std::string, ceph::bufferlist> aset;
@@ -175,6 +176,12 @@ struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
 	}
 	break;
       case ceph::os::Transaction::OP_OMAP_RMKEYRANGE:
+	{
+	std::string first = i.decode_string();
+	std::string last = i.decode_string();
+	t_pg->omap_rmkeyrange(i.get_oid(op->oid).hobj, first, last);
+	}
+	break;
       case ceph::os::Transaction::OP_OMAP_SETHEADER:
 	{
 	ceph::bufferlist bl;
@@ -211,6 +218,7 @@ struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
 			  op->off,
 			  op->len,
 			  op->dest_off);
+	break;
       case ceph::os::Transaction::OP_CLONE:
 	t_pg->clone(i.get_oid(op->dest_oid).hobj, i.get_oid(op->oid).hobj);
         break;
@@ -240,7 +248,7 @@ struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
               const PGLog &pg_log,
        ECCommon::RMWPipeline& rmw_pipeline)
     : Op(rmw_pipeline),
-      t(transate_transaction(std::move(t), std::move(obc))),
+      t(translate_transaction(std::move(t), std::move(obc))),
       pg_log(pg_log) {
   }
 
