@@ -83,6 +83,15 @@ describe('NvmeofSubsystemsStepTwoComponent', () => {
     });
   });
 
+  describe('host type change events', () => {
+    it('should emit host type changes for parent step visibility', () => {
+      const emitSpy = spyOn(component.hostTypeChanged, 'emit');
+      form.get('hostType')?.setValue(component.HOST_TYPE.ALL);
+
+      expect(emitSpy).toHaveBeenCalledWith(component.HOST_TYPE.ALL);
+    });
+  });
+
   describe('custom NQN validator', () => {
     it('should mark invalid NQN format', () => {
       form.get('hostname')?.setValue('invalid-nqn');
