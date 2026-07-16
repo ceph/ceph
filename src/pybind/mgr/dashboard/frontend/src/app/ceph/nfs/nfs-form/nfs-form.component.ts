@@ -138,7 +138,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
         (params: { cluster_id: string; export_id: string; rgw_export_type?: string }) => {
           this.cluster_id = decodeURIComponent(params.cluster_id);
           this.export_id = decodeURIComponent(params.export_id);
-          if (params.rgw_export_type) {
+          if (params.rgw_export_type && this.storageBackend === SUPPORTED_FSAL.RGW) {
             this.nfsForm.get('rgw_export_type').setValue(params.rgw_export_type);
             if (params.rgw_export_type === RgwExportType.BUCKET) {
               this.setBucket();
@@ -186,11 +186,17 @@ export class NfsFormComponent extends CdForm implements OnInit {
     this.isDefaultSubvolumeGroup();
   }
 
-  async getSubVol() {
-    const fs_name = this.nfsForm.getValue('fsal').fs_name;
+  async getSubVol(fsName?: string) {
+    const fs_name = fsName ?? this.nfsForm.getRawValue()?.fsal?.fs_name;
     const subvolgrp = this.nfsForm.getValue('subvolume_group');
 
-    await this.setSubVolGrpPath();
+    if (!fs_name || !subvolgrp) {
+      return;
+    }
+
+    if (!this.isEdit) {
+      await this.setSubVolGrpPath();
+    }
 
     (subvolgrp === this.defaultSubVolGroup
       ? this.subvolService.get(fs_name)
@@ -422,12 +428,14 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
     this.nfsForm.patchValue({
       fsal: {
-        ...this.nfsForm.get('fsal').value,
+        ...this.nfsForm.getRawValue()?.fsal,
         fs_name: fsName
       },
-      subvolumeGroup,
+      subvolume_group: subvolumeGroup,
       subvolume
     });
+    this.setUpVolumeValidation();
+    this.getSubVol(fsName);
   }
 
   resolveClusters(clusters: string[]) {
@@ -725,7 +733,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
       if (control.pristine || !control.value) {
         return of({ required: true });
       }
-      const fsName = this.nfsForm.getValue('fsal').fs_name;
+      const fsName = this.nfsForm.getRawValue()?.fsal?.fs_name;
       return this.nfsService.lsDir(fsName, control.value).pipe(
         map((directory: Directory) =>
           directory.paths.includes(control.value) === requiredExistenceResult

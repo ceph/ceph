@@ -220,6 +220,29 @@ describe('NfsFormComponent', () => {
     });
   });
 
+  describe('edit mode CephFS subvolume fields', () => {
+    it('should populate subvolume group and subvolume from export path', () => {
+      component.isEdit = true;
+      spyOn(component['subvolgrpService'], 'get').and.returnValue(of([{ name: 'g1' }]));
+      spyOn(component['subvolService'], 'get').and.returnValue(of([{ name: 'sv1' }]));
+
+      component.resolveModel({
+        fsal: { name: 'CEPH', fs_name: 'testfs' },
+        path: '/volumes/g1/sv1',
+        protocols: [3, 4],
+        transports: ['TCP'],
+        clients: [],
+        squash: 'none'
+      });
+
+      expect(component.nfsForm.get('subvolume_group').value).toBe('g1');
+      expect(component.nfsForm.get('subvolume').value).toBe('sv1');
+      expect(component['subvolgrpService'].get).toHaveBeenCalledWith('testfs');
+      expect(component['subvolService'].get).toHaveBeenCalledWith('testfs', 'g1');
+      expect(component.allsubvols).toEqual([{ name: 'sv1' }]);
+    });
+  });
+
   describe('pathExistence', () => {
     beforeEach(() => {
       component['nfsService']['lsDir'] = jest.fn((): Observable<Directory> =>
