@@ -440,6 +440,22 @@ private:
     boost::optional<monotime> datasync_queue_wait_start_time; // until first pop; for in-progress display
   };
 
+  enum class DirSyncState {
+    Idle,
+    Syncing,
+    Failed,
+  };
+
+  static DirSyncState get_dir_sync_state(const SnapSyncStat &sync_stat) {
+    if (sync_stat.current_syncing_snap) {
+      return DirSyncState::Syncing;
+    }
+    if (sync_stat.failed) {
+      return DirSyncState::Failed;
+    }
+    return DirSyncState::Idle;
+  }
+
   void _inc_failed_count(const std::string &dir_root) {
     auto max_failures = g_ceph_context->_conf.get_val<uint64_t>(
     "cephfs_mirror_max_consecutive_failures_per_directory");
