@@ -10,8 +10,7 @@
   [columns]="columns"
   selectionType="single"
   columnMode="flex"
-  [hasDetails]="true"
-  (setExpandedRow)="setExpandedRow($event)"
+  [hasDetails]="false"
   (updateSelection)="updateSelection($event)"
   identifier="id"
   (fetchData)="getAccountsList($event)"
@@ -24,9 +23,4 @@
     [tableActions]="tableActions"
   >
   </cd-table-actions>
-  <cd-rgw-user-accounts-details
-    *cdTableDetail
-    [selection]="expandedRow"
-  >
-  </cd-rgw-user-accounts-details>
 </cd-table>
