@@ -270,6 +270,17 @@ export abstract class PageHelper {
     return cy.get('.cds--table-expand__button').first();
   }
 
+  getResourcePage(content?: string) {
+    this.waitDataTableToLoad();
+    if (content) {
+      return cy
+        .contains('[cdstablerow] [cdstabledata]', content)
+        .parent('[cdstablerow]')
+        .contains('[cdstabledata] a', new RegExp(`^${content}$`));
+    }
+    return cy.get('[cdstablerow] [cdstabledata] a').first();
+  }
+
   /**
    * Gets column headers of table
    */
