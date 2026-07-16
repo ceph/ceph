@@ -222,5 +222,20 @@ describe('NvmeofSubsystemsFormComponent', () => {
         gw_group: mockGroupName
       });
     });
+
+    it('should hide authentication step when host type is ALL', () => {
+      component.onHostTypeChanged(HOST_TYPE.ALL);
+
+      expect(component.showAuthStep).toBeFalsy();
+      expect(component.steps.some((step) => step.label === 'Authentication')).toBeFalsy();
+    });
+
+    it('should show authentication step when host type is SPECIFIC', () => {
+      component.onHostTypeChanged(HOST_TYPE.ALL);
+      component.onHostTypeChanged(HOST_TYPE.SPECIFIC);
+
+      expect(component.showAuthStep).toBeTruthy();
+      expect(component.steps.some((step) => step.label === 'Authentication')).toBeTruthy();
+    });
   });
 });
