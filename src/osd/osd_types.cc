@@ -4855,7 +4855,6 @@ struct DumpVisitor : public ObjectModDesc::Visitor {
     f->dump_unsigned("object_size", object_size);
     f->dump_stream("extents") << extents;
     f->dump_stream("shards") << shards;
-    f->dump_stream("snaps") << extents;
     f->close_section();
   }
 };
