@@ -1,5 +1,6 @@
 #include <common/perf_counters_collection.h>
 
+#include <fmt/format.h>
 #include "test/librados/test_cxx.h"
 #include "test/librados/testcase_cxx.h"
 #include "crimson_utils.h"
@@ -11,7 +12,18 @@ using namespace librados;
 using namespace cls;
 using namespace rados::cls;
 
-typedef RadosTestPP LibRadosSplitOpPP;
+class LibRadosSplitOpPP : public RadosTestPP {
+public:
+  static void SetUpTestCase() {
+    auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_case()->name());
+    pool_name_default = get_temp_pool_name(pool_prefix);
+    std::map<std::string, std::string> config = {{"rados_replica_read_policy", "default"}};
+    ASSERT_EQ("", connect_cluster_pp(s_cluster, config));
+    ASSERT_EQ("", create_pool_pp(pool_name_default, s_cluster, 3));
+    s_cluster.wait_for_latest_osdmap();
+  }
+};
+
 typedef RadosTestECPP LibRadosSplitOpECPP;
 
 // After a write is committed, it isn't necessarily true that the log is
