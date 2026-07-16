@@ -183,7 +183,7 @@ int NVMeofGwMap::cfg_delete_gw(
 		   /*prevent failover because blocklisting right now cause IO errors */
 		   dout(4) << "Delete GW: set skip-failovers for group " << gw_id
 				   << " group " << group_key << dendl;
-		   skip_failovers_for_group(group_key, 5);
+		   skip_failovers_for_group(group_key, DELAY_FAILOVERS_INTERVAL_SEC);
 		}
         state.availability = gw_availability_t::GW_DELETING;
         dout(4) << " Deleting  GW :"<< gw_id  << " in state  "
@@ -278,7 +278,7 @@ int NVMeofGwMap::cfg_admin_state_change(const NvmeGwId &gw_id,
         dout(4) << "GW-id set admin Disabled " << group_key
                 << " " << gw_id << dendl;
         if (st.availability == gw_availability_t::GW_AVAILABLE) {
-          skip_failovers_for_group(group_key, 5);
+          //skip_failovers_for_group(group_key, DELAY_FAILOVERS_INTERVAL_SEC);
           process_gw_map_gw_down(gw_id, group_key, propose_pending);
         }
         st.gw_admin_state = state;
