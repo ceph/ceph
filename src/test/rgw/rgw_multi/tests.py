@@ -540,7 +540,7 @@ def check_all_buckets_dont_exist(zone_conn, buckets):
         except:
             continue
 
-        log.critical('zone %s contains bucket %s', zone.zone, b)
+        log.critical('zone %s contains bucket %s', zone_conn.zone.name, b)
         return False
 
     return True
