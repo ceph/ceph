@@ -419,6 +419,37 @@ class OSD(Ceph):
         lv_path = ''
         encrypted = False
         osd_lv_data = osd_bluestore_data.get(self.identity.daemon_id, [])
+        if not osd_lv_data:
+            logger.info(
+                'No lv data found for OSD.%s, checking for raw OSD', self.identity.daemon_id
+            )
+            c_v_container = CephContainer(
+                ctx,
+                image=ctx.image,
+                privileged=True,
+                entrypoint='ceph-volume',
+                args=[
+                    'raw',
+                    'list',
+                    '--format',
+                    'json',
+                ],
+                volume_mounts=get_ceph_mounts_for_type(
+                    ctx, ctx.fsid, 'ceph-volume'
+                ),
+            )
+            out, err, ret = call(
+                ctx,
+                c_v_container.run_cmd(),
+                verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+            )
+            raw_list_data = json.loads(out)
+            for osd_data in raw_list_data.values():
+                if str(osd_data.get('osd_id', -1)) == str(self.identity.daemon_id):
+                    logger.info('Found data for osd.%s in raw list', str(self.identity.daemon_id))
+                    # misnomer since this isn't an LV, but it is the path
+                    # we need to pass to the bluestore tool
+                    lv_path = osd_data.get('device', None)
         if osd_lv_data:
             for dev in osd_lv_data:
                 if dev.get('type') == 'block':
