@@ -8,11 +8,11 @@
     [autoReload]="5000"
     [toolHeader]="true"
     [searchableObjects]="true"
-    [showInlineActions]="false"
+    [showInlineActions]="true"
     selectionType="single"
     (updateSelection)="updateSelection($event)"
-    (fetchData)="loadMirrorPaths()">
-
+    (fetchData)="loadMirrorPaths()"
+  >
     <cd-table-actions
       [permission]="permission"
       [selection]="selection"

@@ -2,7 +2,7 @@ declare const jest: any;
 
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
-import { ActivatedRoute, convertToParamMap } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
@@ -123,6 +123,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
   beforeEach(async () => {
     const cephfsServiceMock = {
       getMirrorStatus: jest.fn(),
+      list: jest.fn().mockReturnValue(of([{ id: 7, mdsmap: { fs_name: 'test-fs' } }])),
       listMirrorCheckpoints: jest.fn().mockReturnValue(
         of({
           dir_root: '',
@@ -233,6 +234,40 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
     // Verify fsName is fetched and data is loaded
     expect(component.fsName).toBe('test-fs');
     expect(cephfsService.getMirrorStatus).toHaveBeenCalledWith('test-fs');
+    expect(component.tableActions).toHaveLength(2);
+    expect(component.tableActions[0].name).toBe('Add mirror path');
+    expect(component.tableActions[0].permission).toBe('create');
+    expect(component.tableActions[1].name).toBe('Remove path');
+    expect(component.tableActions[1].permission).toBe('delete');
+  });
+
+  it('should open add-path wizard for the current filesystem', () => {
+    const router = TestBed.inject(Router);
+    const navigateByUrlSpy = jest.spyOn(router, 'navigateByUrl').mockResolvedValue(true as any);
+    component.fsName = 'test-fs';
+
+    component.openAddPath();
+
+    expect(cephfsService.list).toHaveBeenCalled();
+    expect(navigateByUrlSpy).toHaveBeenCalledWith(
+      '/cephfs/mirroring/(modal:add-path/7/test-fs)',
+      {
+        state: {
+          returnUrl: '/cephfs/mirroring/test-fs/mirror-paths'
+        }
+      }
+    );
+  });
+
+  it('should not open add-path wizard when fsName is missing', () => {
+    const router = TestBed.inject(Router);
+    const navigateByUrlSpy = jest.spyOn(router, 'navigateByUrl').mockResolvedValue(true as any);
+    component.fsName = '';
+
+    component.openAddPath();
+
+    expect(cephfsService.list).not.toHaveBeenCalled();
+    expect(navigateByUrlSpy).not.toHaveBeenCalled();
   });
 
   describe('parseMirrorStatus', () => {
@@ -1203,7 +1238,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
     });
   });
   describe('removePathModal', () => {
-    it('should open high-impact deletion modal for selected path', () => {
+    it('should open medium-impact deletion modal for selected path', () => {
       const modalService = TestBed.inject(ModalCdsService);
       component.selection = new CdTableSelection([{ path: '/path1' }]);
       component.fsName = 'test-fs';
@@ -1213,7 +1248,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       expect(modalService.show).toHaveBeenCalledWith(
         DeleteConfirmationModalComponent,
         expect.objectContaining({
-          impact: DeletionImpact.high,
+          impact: DeletionImpact.medium,
           itemNames: ['/path1'],
           actionDescription: 'remove'
         })

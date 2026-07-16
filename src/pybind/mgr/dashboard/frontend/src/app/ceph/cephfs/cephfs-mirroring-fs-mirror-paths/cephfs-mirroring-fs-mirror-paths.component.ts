@@ -7,12 +7,13 @@ import {
   ViewEncapsulation,
   inject
 } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { forkJoin, of, Subscription } from 'rxjs';
 import { catchError, map, switchMap, tap } from 'rxjs/operators';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
+import { CEPHFS_MIRRORING_URL } from '~/app/shared/constants/cephfs.constant';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 import { Icons, ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
@@ -126,6 +127,7 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
   private cephfsService = inject(CephfsService);
   private snapshotScheduleService = inject(CephfsSnapshotScheduleService);
   private route = inject(ActivatedRoute);
+  private router = inject(Router);
   private formatterService = inject(FormatterService);
   private authStorageService = inject(AuthStorageService);
   private cdsModalService = inject(ModalCdsService);
@@ -207,6 +209,12 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
   initializeTableActions(): void {
     this.tableActions = [
       {
+        name: $localize`Add mirror path`,
+        permission: 'create',
+        icon: Icons.add,
+        click: () => this.openAddPath()
+      },
+      {
         name: $localize`Remove path`,
         permission: 'delete',
         icon: Icons.destroy,
@@ -220,10 +228,35 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
     this.selection = selection;
   }
 
+  openAddPath(): void {
+    if (!this.fsName) {
+      return;
+    }
+
+    this.subscriptions.add(
+      this.cephfsService
+        .list()
+        .subscribe((filesystems: { id?: number; mdsmap?: { fs_name?: string } }[]) => {
+          const fsId =
+            filesystems.find((fs) => fs.mdsmap?.fs_name === this.fsName)?.id ?? 0;
+          const encodedFsName = encodeURIComponent(this.fsName);
+          // Absolute URL avoids NG04006 when leaving /mirroring/:fsName for the list modal outlet
+          this.router.navigateByUrl(
+            `${CEPHFS_MIRRORING_URL}/(modal:add-path/${fsId}/${encodedFsName})`,
+            {
+              state: {
+                returnUrl: `${CEPHFS_MIRRORING_URL}/${encodedFsName}/mirror-paths`
+              }
+            }
+          );
+        })
+    );
+  }
+
   removePathModal(): void {
     const path = this.selection.first().path;
     this.cdsModalService.show(DeleteConfirmationModalComponent, {
-      impact: DeletionImpact.high,
+      impact: DeletionImpact.medium,
       itemDescription: $localize`mirror path`,
       itemNames: [path],
       actionDescription: 'remove',
