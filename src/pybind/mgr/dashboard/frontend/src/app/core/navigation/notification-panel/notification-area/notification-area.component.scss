@@ -3,6 +3,13 @@
 @use '@carbon/styles/scss/spacing' as *;
 @use '@carbon/type';
 
+:host {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-block-size: 0;
+}
+
 .notification-section-heading {
   @include type.type-style('heading-compact-01');
 
@@ -12,7 +19,7 @@
   background-color: $layer-01;
   position: sticky;
   z-index: 2;
-  top: var(--header-height);
+  top: 0;
   display: block;
 }
 
@@ -46,6 +53,7 @@
   color: $text-primary;
   line-height: 1.25;
   display: block;
+  overflow-wrap: break-word;
 }
 
 .notification-message {
@@ -55,7 +63,11 @@
   margin: 0;
   line-height: 1.4;
   margin-top: -$spacing-01;
-  display: block;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: break-word;
 }
 
 .notification-empty {
@@ -125,14 +137,5 @@
 }
 
 .notification-area {
-  display: block;
-  height: 100%;
   background-color: $layer-01;
-}
-
-.empty-body {
-  max-block-size: var(--panel-height);
-  min-block-size: var(--panel-height);
-  max-inline-size: var(--panel-max-width);
-  min-inline-size: var(--panel-min-width);
 }
