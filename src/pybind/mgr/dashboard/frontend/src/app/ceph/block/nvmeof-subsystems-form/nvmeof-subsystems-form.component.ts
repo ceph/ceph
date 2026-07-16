@@ -102,10 +102,18 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
     this.rebuildSteps();
   }
 
+  onHostTypeChanged(hostType: string) {
+    this.setAuthStepVisibility(this.shouldShowAuthStep(hostType));
+  }
+
   private setAuthStepVisibility(nextShowAuth: boolean) {
     if (this.showAuthStep === nextShowAuth) return;
     this.showAuthStep = nextShowAuth;
     this.rebuildSteps();
+  }
+
+  private shouldShowAuthStep(hostType: string | null | undefined): boolean {
+    return (hostType ?? HOST_TYPE.SPECIFIC) === HOST_TYPE.SPECIFIC;
   }
 
   populateReviewData() {
@@ -125,7 +133,7 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
       this.stepTwoValue = step2;
     }
 
-    const nextShowAuth = (step2?.hostType ?? HOST_TYPE.SPECIFIC) === HOST_TYPE.SPECIFIC;
+    const nextShowAuth = this.shouldShowAuthStep(step2?.hostType);
 
     if (nextShowAuth !== this.showAuthStep) {
       this.setAuthStepVisibility(nextShowAuth);
