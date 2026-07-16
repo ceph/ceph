@@ -37,7 +37,7 @@ describe('when cluster creation is completed', () => {
     it('should add one more host', () => {
       hosts.navigateTo('add');
       hosts.add(hostnames[3]);
-      hosts.checkExist(hostnames[3], true);
+      hosts.checkExist(hostnames[3], true, true);
     });
 
     it('should check if monitoring stacks are running on the root host', { retries: 2 }, () => {
