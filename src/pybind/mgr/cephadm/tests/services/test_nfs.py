@@ -652,6 +652,56 @@ class TestNFS:
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert "Protocols = 3, 4;" in ganesha_conf
 
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_client_object_cache_default_disabled(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """Default: no CEPH block when client object cache is disabled and unset."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['test']))
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0',
+                                            service_name=nfs_spec.service_name(),
+                                            rank=0))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert 'CEPH {' not in ganesha_conf
+                assert "client_oc" not in ganesha_conf
+                assert "client_oc_size" not in ganesha_conf
+                assert "client_oc_max_dirty" not in ganesha_conf
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_client_object_cache_enabled(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """enable_client_object_cache settings are written into a CEPH block."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            nfs_spec = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['test']),
+                enable_client_object_cache=True,
+                client_object_cache_size='1MiB',
+                client_object_cache_max_dirty=0,
+            )
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0',
+                                            service_name=nfs_spec.service_name(),
+                                            rank=0))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert ganesha_conf.count('CEPH {') == 1
+                assert "client_oc = true;" in ganesha_conf
+                assert "client_oc_size = 1048576;" in ganesha_conf
+                assert "client_oc_max_dirty = 0;" in ganesha_conf
+
 
 def test_nfs_placement_count_per_host_rejected():
     spec = NFSServiceSpec(
@@ -908,5 +958,36 @@ def test_nfs_choose_next_action_detects_explicit_value_change():
         None,
         curr_deps=['tls_ktls: True'],
         last_deps=['tls_ktls: False'],
+    )
+    assert step.action is utils.Action.REDEPLOY
+
+
+def test_nfs_get_dependencies_client_object_cache(cephadm_module: CephadmOrchestrator):
+    """Object-cache fields are included in deps only when set."""
+    nfs_svc = service_registry.get_service('nfs')
+
+    default_spec = NFSServiceSpec(service_id='foo')
+    deps = nfs_svc.get_dependencies(cephadm_module, default_spec)
+    assert not any(d.startswith('enable_client_object_cache:') for d in deps)
+    assert not any(d.startswith('client_object_cache_size:') for d in deps)
+    assert not any(d.startswith('client_object_cache_max_dirty:') for d in deps)
+
+    oc_spec = NFSServiceSpec(
+        service_id='foo',
+        enable_client_object_cache=True,
+        client_object_cache_size='1MiB',
+        client_object_cache_max_dirty='512KiB',
+    )
+    deps = nfs_svc.get_dependencies(cephadm_module, oc_spec)
+    assert 'enable_client_object_cache: True' in deps
+    assert 'client_object_cache_size: 1MiB' in deps
+    assert 'client_object_cache_max_dirty: 512KiB' in deps
+
+    step = nfs_svc.choose_next_action(
+        utils.Action.NO_ACTION,
+        'nfs',
+        oc_spec,
+        curr_deps=deps,
+        last_deps=[],
     )
     assert step.action is utils.Action.REDEPLOY
