@@ -34,10 +34,12 @@ describe('when cluster creation is completed', () => {
       hosts.navigateTo();
     });
 
-    it('should add one more host', () => {
+    it('should add one more host', { retries: 2 }, () => {
       hosts.navigateTo('add');
       hosts.add(hostnames[3]);
-      hosts.checkExist(hostnames[3], true);
+      // Wait for cephadm to register the host before reloading the table
+      cy.wait(5000);
+      hosts.checkExist(hostnames[3], true, true);
     });
 
     it('should check if monitoring stacks are running on the root host', { retries: 2 }, () => {

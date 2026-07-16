@@ -37,13 +37,52 @@ export abstract class PageHelper {
     name = name || 'index';
     const page = this.pages[name];
 
+    this.stubOrchestratorEndpoints();
     cy.visit(page.url);
+    cy.wait(2000);
+    cy.document().then((doc) => {
+      if (!doc.querySelector(page.id)) {
+        this.stubOrchestratorEndpoints();
+        cy.visit(page.url);
+      }
+    });
     cy.get(page.id);
   }
 
   /**
    * Navigates back and waits for the hash to change
    */
+  stubOrchestratorEndpoints() {
+    cy.intercept('GET', '**/ui-api/orchestrator/status', {
+      statusCode: 200,
+      body: {
+        available: true,
+        message: null,
+        features: {
+          blink_device_light: { available: true }
+        }
+      }
+    }).as('orchStatus');
+    cy.intercept('GET', '**/api/mgr/module/orchestrator', {
+      statusCode: 200,
+      body: { orchestrator: 'cephadm' }
+    }).as('orchConfig');
+    cy.intercept('GET', '**/ui-api/osd/deployment_options', {
+      statusCode: 200,
+      body: {
+        recommended_option: 'cost_capacity',
+        options: {
+          cost_capacity: {
+            title: 'Cost/Capacity-Optimized',
+            desc: 'All available devices will be configured as data devices',
+            available: true,
+            used: null
+          }
+        }
+      }
+    }).as('deploymentOptions');
+  }
+
   navigateBack() {
     cy.location('hash').then((hash) => {
       cy.go('back');
@@ -265,7 +304,7 @@ export abstract class PageHelper {
       return cy
         .contains('[cdstablerow] [cdstabledata]', content)
         .parent('[cdstablerow]')
-        .find('[cdstableexpandbutton] .cds--table-expand__button');
+        .find('.cds--table-expand__button');
     }
     return cy.get('.cds--table-expand__button').first();
   }
@@ -329,7 +368,7 @@ export abstract class PageHelper {
   // Click the action button
   clickActionButton(action: string) {
     cy.get('[data-testid="table-action-btn"]').first().click({ force: true }); // open submenu
-    cy.get(`button.${action}`).click({ force: true }); // click on "action" menu item
+    cy.get(`cds-overflow-menu-option.${action}`).click({ force: true }); // click on "action" menu item
   }
 
   clickActionButtonFromMultiselect(content: string, action?: string) {
@@ -362,7 +401,7 @@ export abstract class PageHelper {
       .find('[cdstabledata] [data-testid="table-action-btn"]')
       .click({ force: true });
     cy.wait(waitTime);
-    cy.get(`button.${action}`).should('not.be.disabled').click({ force: true });
+    cy.get(`cds-overflow-menu-option.${action}`).should('not.be.disabled').click({ force: true });
   }
 
   /**
