@@ -346,7 +346,7 @@ nvme_command_ertr::future<int> NVMeBlockDevice::get_nsid(seastar::file f) {
 
 nvme_command_ertr::future<int> NVMeBlockDevice::pass_admin(
   nvme_admin_command_t& admin_cmd, seastar::file f) {
-  auto ret = co_await f.ioctl(NVME_IOCTL_ADMIN_CMD, nullptr
+  auto ret = co_await f.ioctl(NVME_IOCTL_ADMIN_CMD, &admin_cmd
   ).handle_exception(
     [](auto e)->nvme_command_ertr::future<int> {
     LOG_PREFIX(NVMeBlockDevice::pass_admin);
