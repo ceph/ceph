@@ -2190,12 +2190,44 @@ def build_branch(args):
 
         G.git.merge(tip.hexsha, '--no-ff', m=message)
 
-        if new_contributors:
-            # Check out the PR, add a commit adding to .githubmap
+        if new_contributors and base == 'main':
             log.info("adding new contributors to githubmap in merge commit")
-            with open(git_dir + "/.githubmap", "a") as f:
-                for c in new_contributors:
-                    f.write("%s %s\n" % (c, new_contributors[c]))
+            githubmap_path = os.path.join(git_dir, ".githubmap")
+
+            headers = []
+            entries = []
+
+            # Read existing file and separate headers from data entries
+            with open(githubmap_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("#"):
+                        headers.append(line + "\n")
+                    elif line:
+                        # Read it again because our last read of githubmap may be out-of-date
+                        entries.append(line + "\n")
+
+            # Format and append new contributors
+            for c in new_contributors:
+                new_line = f"{c} {new_contributors[c]}\n"
+                entries.append(new_line)
+
+            # Perform a stable, case-insensitive sort on the data entries.
+            # Empty/whitespace-only lines are pushed to the bottom of the block,
+            # while actual entries are sorted by their first word (the GitHub handle).
+            def sort_key(line):
+                # Sort actual lines first, case-insensitively by the handle (the first word)
+                handle = line.split()[0]
+                handle = "".join(char.lower() for char in handle if char.isalnum())
+                return handle
+
+            entries.sort(key=sort_key)
+
+            # Write back the preserved headers and sorted data entries
+            with open(githubmap_path, "w", encoding="utf-8") as f:
+                f.writelines(headers)
+                f.writelines(entries)
+
             G.index.add([".githubmap"])
             G.git.commit("--amend", "--no-edit")
 
