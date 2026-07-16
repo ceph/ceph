@@ -1580,6 +1580,8 @@ class CephadmUpgrade:
         assert target_digests is not None
         logger.info('Checking if osd/mds daemons are all upgraded')
         _, still_needing_upgrade, __, ___ = self._detect_need_upgrade(daemons_to_check, target_digests, target_image)
+        if still_needing_upgrade:
+            logger.info(f'{still_needing_upgrade} not upgraded')
 
         def _rotate_key(dspec: CephadmDaemonDeploySpec) -> bool:
             # attempts to rotate keyring. Returns boolean marking if rotation succeeded
