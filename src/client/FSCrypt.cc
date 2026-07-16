@@ -740,8 +740,11 @@ int FSCryptFNameDenc::get_encrypted_symlink_length(const int& plain_size) const
 {
    int padding_size = ctx->get_filename_padding_bytes();
    int padded_size = (plain_size + padding_size - 1) & ~ (padding_size - 1);
-   if (padded_size > PATH_MAX) {
-    padded_size = PATH_MAX;
+   // The usable symlink target length is maxed at PATH_MAX - 3. This is due
+   // to two bytes being used for defining length and then one byte used for
+   // nul character.
+   if (padded_size > PATH_MAX - 2) {
+    padded_size = PATH_MAX - 2;
   }
   return padded_size;
 }
@@ -830,13 +833,19 @@ struct fscrypt_slink_data {
 int FSCryptFNameDenc::get_encrypted_symlink(const std::string& plain, std::string *encrypted)
 {
   auto plain_size = plain.size();
+
+  fscrypt_slink_data slink_data;
+
+  if (plain_size > sizeof(slink_data.enc)) {
+    return -ENAMETOOLONG;
+  }
+
   auto symlink_padded_size = get_encrypted_symlink_length(plain_size);
 
   char orig[symlink_padded_size];
   memcpy(orig, plain.c_str(), plain_size);
   memset(orig + plain_size, 0, symlink_padded_size - plain_size);
 
-  fscrypt_slink_data slink_data;
   int r = encrypt(orig, symlink_padded_size,
                   slink_data.enc, sizeof(slink_data.enc));
 
