@@ -2051,6 +2051,7 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
   RGWGetObj_CB cb(this);
   RGWGetObj_Filter* filter = &cb;
   boost::optional<RGWGetObj_Decompress> decompress;
+  std::unique_ptr<RGWGetObj_Filter> decrypt;
 
   int64_t cur_ofs = start_ofs;
   int64_t cur_end = end_ofs;
@@ -2078,8 +2079,11 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
   op_ret = part->range_to_ofs(ent.meta.accounted_size, cur_ofs, cur_end);
   if (op_ret < 0)
     return op_ret;
+
+  auto part_attrs = part->get_attrs();
+  std::unique_ptr<BlockCrypt> block_crypt;
   bool need_decompress;
-  op_ret = rgw_compression_info_from_attrset(part->get_attrs(), need_decompress, cs_info);
+  op_ret = rgw_compression_info_from_attrset(part_attrs, need_decompress, cs_info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to decode compression info" << dendl;
     return -EIO;
@@ -2113,6 +2117,19 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
           << ", actual read size=" << ent.meta.size << dendl;
       return -EIO;
     }
+  }
+  
+  auto manifest_iter = part_attrs.find(RGW_ATTR_MANIFEST);
+  bufferlist* manifest_bl = (manifest_iter != part_attrs.end()) ? &manifest_iter->second : nullptr;
+  
+  op_ret = ::get_decrypt_filter(&decrypt, filter, s, part_attrs, manifest_bl, nullptr, false);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "ERROR: failed to prepare decryption for manifest part" << dendl;
+    return op_ret;
+  }
+  
+  if (decrypt != nullptr) {
+    filter = decrypt.get();
   }
 
   op_ret = rgw_policy_from_attrset(s, s->cct, part->get_attrs(), &obj_policy);

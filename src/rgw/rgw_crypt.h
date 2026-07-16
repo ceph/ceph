@@ -394,6 +394,12 @@ bool rgw_get_aead_decrypted_size(const DoutPrefixProvider* dpp,
                                  uint64_t encrypted_size,
                                  uint64_t* decrypted_size);
 
+/**
+ * Apply bucket-level encryption defaults to the request state.
+ * Reads RGW_ATTR_BUCKET_ENCRYPTION_POLICY and populates s->info.crypt_attribute_map.
+ */
+int get_encryption_defaults(req_state *s);
+
 static inline void set_attr(std::map<std::string, bufferlist>& attrs,
                             const char* key,
                             std::string_view value)
