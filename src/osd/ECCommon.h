@@ -729,7 +729,7 @@ struct ECCommon {
     // Set by on_change, forces first write in each interval to be
     // a full write to avoid PWLC spanning intervals. Fixes
     // https://tracker.ceph.com/issues/73891
-    bool first_write_in_interval;
+    bool first_write_in_interval = false;
 
     RMWPipeline(CephContext *cct,
                 ceph::ErasureCodeInterfaceRef ec_impl,
