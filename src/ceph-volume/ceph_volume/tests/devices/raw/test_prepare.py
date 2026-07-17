@@ -46,6 +46,7 @@ class TestPrepare(object):
         assert 'Path to bluestore block.db block device' in stdout
         assert 'Path to bluestore block.wal block device' in stdout
         assert 'Enable device encryption via dm-crypt' in stdout
+        assert 'Reuse an existing OSD fsid' in stdout
 
     @patch('ceph_volume.util.arg_validators.set_dmcrypt_no_workqueue', return_value=MagicMock())
     @patch('ceph_volume.util.arg_validators.ValidRawDevice.__call__')

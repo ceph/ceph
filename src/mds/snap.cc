@@ -15,9 +15,15 @@
 
 #include "snap.h"
 #include "common/Formatter.h"
+#include "common/debug.h"
 
 #include <ostream>
 #include <sstream>
+
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_mds
+#undef dout_prefix
+#define dout_prefix *_dout << "mds.snap "
 
 using namespace std;
 /*
@@ -63,6 +69,69 @@ void SnapInfo::dump(Formatter *f) const
     f->dump_string(key, value);
   }
   f->close_section();
+}
+
+/* Will metadata operation succeed?
+ *
+ * NOTE: Call this method before projecting the inode to check if snap metadata
+ * will be mutated successfully. This avoids un-projecting the inode and rolling
+ * back the transaction in case the mutation fails.
+ */
+bool SnapInfo::will_md_op_succeed(const string& key, const string& val,
+                                  const unsigned int op_flag) const {
+  if (op_flag == CEPH_SNAP_MD_OP_CREATE) {
+    // CREATE flags adds k-v pair if absent and updates if k-v is present.
+    if (metadata.count(key) == 0) {
+      dout(10) << __func__ << " snapshot metadata op will pass: create is "
+               << "being attempted with CREATE flag. op_flag=" << op_flag
+               << dendl;
+    } else if (metadata.count(key) > 0) {
+      dout(10) << __func__ << " snapshot metadata op will pass: update is "
+               << "being attempted with CREATE flag. op_flag=" << op_flag
+               << dendl;
+    }
+  } else if (op_flag == (CEPH_SNAP_MD_OP_CREATE | CEPH_SNAP_MD_OP_EXCL)) {
+    if (metadata.count(key) > 0) {
+      dout(10) << __func__ << " snapshot metadata op will fail: update would "
+               << "be attempted in with EXCL flag. op_flag=" << op_flag
+               << dendl;
+      return false;
+    }
+  } else if (op_flag == CEPH_SNAP_MD_OP_REMOVE) {
+    if (metadata.count(key) == 0) {
+      dout(10) << __func__ << " snapshot metadata op will fail: remove would "
+               << "be attempted for a non-existing key. op_flag=" << op_flag
+               << dendl;
+      return false;
+    }
+  } else {
+    // NOTE: in case of wrong mode/op_flag value, client code exits with
+    // appropriate error number instead of contacting MDS with wrong
+    // mode/op_flag value.
+    // NOTE: Aborting on receiving wrong flag (via ceph_assert() or otherwise)
+    // is to be avoided since a corrupted client can be used to deliberately
+    // crash MDS by sending wrong op_mode flag.
+    return false;
+  }
+
+  return true;
+}
+
+// Perform metadata operation indicated by op_flag.
+//
+// NOTE: to avoid unprojecting the inode and rolling back the transaction for
+// snap metadata mutation in case of failure, call this method only when success
+// is guaranteed. whether success is guaranted or not, can be found out by
+// will_md_op_succeed(), which is present here as well as in SnapRealm.cc.
+void SnapInfo::do_md_op(const string& key, const string& val,
+                        const unsigned int op_flag) {
+  if (op_flag == CEPH_SNAP_MD_OP_CREATE) {
+    metadata.insert_or_assign(key, val);
+  } else if (op_flag == (CEPH_SNAP_MD_OP_CREATE | CEPH_SNAP_MD_OP_EXCL)) {
+    metadata.emplace(key, val);
+  } else if (op_flag == CEPH_SNAP_MD_OP_REMOVE) {
+    metadata.erase(key);
+  }
 }
 
 std::list<SnapInfo> SnapInfo::generate_test_instances()

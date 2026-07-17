@@ -12,7 +12,7 @@ import {
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 
 import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
-import { CRUDTableComponent } from '~/app/shared/datatable/crud-table/crud-table.component';
+
 import { FeatureTogglesGuardService } from '~/app/shared/services/feature-toggles-guard.service';
 import { ModuleStatusGuardService } from '~/app/shared/services/module-status-guard.service';
 
@@ -37,7 +37,7 @@ import { DataTableModule } from '~/app/shared/datatable/datatable.module';
 import { RgwMultisiteRealmFormComponent } from './rgw-multisite-realm-form/rgw-multisite-realm-form.component';
 import { RgwMultisiteZonegroupFormComponent } from './rgw-multisite-zonegroup-form/rgw-multisite-zonegroup-form.component';
 import { RgwMultisiteZoneFormComponent } from './rgw-multisite-zone-form/rgw-multisite-zone-form.component';
-import { CrudFormComponent } from '~/app/shared/forms/crud-form/crud-form.component';
+
 import { RgwMultisiteZoneDeletionFormComponent } from './models/rgw-multisite-zone-deletion-form/rgw-multisite-zone-deletion-form.component';
 import { RgwMultisiteZonegroupDeletionFormComponent } from './models/rgw-multisite-zonegroup-deletion-form/rgw-multisite-zonegroup-deletion-form.component';
 import { RgwSystemUserComponent } from './rgw-system-user/rgw-system-user.component';
@@ -85,7 +85,8 @@ import {
   ToggletipModule,
   IconService,
   LayoutModule,
-  SkeletonModule
+  SkeletonModule,
+  TilesModule
 } from 'carbon-components-angular';
 import EditIcon from '@carbon/icons/es/edit/16';
 import ScalesIcon from '@carbon/icons/es/scales/20';
@@ -95,11 +96,15 @@ import ShareIcon from '@carbon/icons/es/share/16';
 import ViewIcon from '@carbon/icons/es/view/16';
 import PasswordIcon from '@carbon/icons/es/password/16';
 import ArrowDownIcon from '@carbon/icons/es/arrow--down/16';
+import ChevronDownIcon from '@carbon/icons/es/chevron--down/16';
+import ChevronUpIcon from '@carbon/icons/es/chevron--up/16';
 import ProgressBarRoundIcon from '@carbon/icons/es/progress-bar--round/32';
 import ToolsIcon from '@carbon/icons/es/tools/32';
-import ParentChild from '@carbon/icons/es/parent-child/20';
 import UserAccessLocked from '@carbon/icons/es/user--access-locked/16';
 
+import { ProductiveCardComponent } from '~/app/shared/components/productive-card/productive-card.component';
+import { TimePickerComponent } from '~/app/shared/components/time-picker/time-picker.component';
+import { AreaChartComponent } from '~/app/shared/components/area-chart/area-chart.component';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { RgwUserAccountsComponent } from './rgw-user-accounts/rgw-user-accounts.component';
 import { RgwUserAccountsFormComponent } from './rgw-user-accounts-form/rgw-user-accounts-form.component';
@@ -116,6 +121,9 @@ import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.
 import { RgwTopicFormComponent } from './rgw-topic-form/rgw-topic-form.component';
 import { RgwBucketNotificationListComponent } from './rgw-bucket-notification-list/rgw-bucket-notification-list.component';
 import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notification-form.component';
+import { ComponentsModule } from '~/app/shared/components/components.module';
+import { RgwAccountRolesListComponent } from './rgw-account-roles-list/rgw-account-roles-list.component';
+import { RgwAccountRoleFormComponent } from './rgw-account-role-form/rgw-account-role-form.component';
 
 @NgModule({
   imports: [
@@ -154,7 +162,12 @@ import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notifi
     RadioModule,
     SelectModule,
     LayoutModule,
-    SkeletonModule
+    SkeletonModule,
+    TilesModule,
+    ProductiveCardComponent,
+    TimePickerComponent,
+    AreaChartComponent,
+    ComponentsModule
   ],
   exports: [
     RgwDaemonDetailsComponent,
@@ -220,7 +233,9 @@ import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notifi
     RgwTopicDetailsComponent,
     RgwTopicFormComponent,
     RgwBucketNotificationListComponent,
-    RgwNotificationFormComponent
+    RgwNotificationFormComponent,
+    RgwAccountRolesListComponent,
+    RgwAccountRoleFormComponent
   ],
   providers: [TitleCasePipe]
 })
@@ -235,9 +250,10 @@ export class RgwModule {
       ViewIcon,
       PasswordIcon,
       ArrowDownIcon,
+      ChevronDownIcon,
+      ChevronUpIcon,
       ProgressBarRoundIcon,
       ToolsIcon,
-      ParentChild,
       UserAccessLocked
     ]);
   }
@@ -275,56 +291,16 @@ const routes: Routes = [
       {
         path: URLVerbs.CREATE,
         component: RgwUserAccountsFormComponent,
-        data: { breadcrumbs: ActionLabels.CREATE }
+        data: { breadcrumbs: $localize`Create account` }
       },
       {
         path: `${URLVerbs.EDIT}/:id`,
         component: RgwUserAccountsFormComponent,
-        data: { breadcrumbs: ActionLabels.EDIT }
+        data: { breadcrumbs: $localize`Edit account` }
       }
     ]
   },
-  {
-    path: 'roles',
-    data: {
-      breadcrumbs: 'Roles',
-      resource: 'api.rgw.roles@1.0',
-      tabs: [
-        {
-          name: 'Users',
-          url: '/rgw/user'
-        },
-        {
-          name: 'Accounts',
-          url: '/rgw/accounts'
-        },
-        {
-          name: 'Roles',
-          url: '/rgw/roles'
-        }
-      ]
-    },
-    children: [
-      {
-        path: '',
-        component: CRUDTableComponent
-      },
-      {
-        path: URLVerbs.CREATE,
-        component: CrudFormComponent,
-        data: {
-          breadcrumbs: ActionLabels.CREATE
-        }
-      },
-      {
-        path: URLVerbs.EDIT,
-        component: CrudFormComponent,
-        data: {
-          breadcrumbs: ActionLabels.EDIT
-        }
-      }
-    ]
-  },
+
   {
     path: 'bucket',
     data: { breadcrumbs: 'Buckets' },

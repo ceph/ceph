@@ -7,6 +7,7 @@
 #include "msg/async/crypto_onwire.h"
 #include "msg/async/compression_onwire.h"
 
+#include "crimson/common/config_proxy.h" // for local_conf()
 #include "crimson/common/gated.h"
 #include "crimson/net/Socket.h"
 

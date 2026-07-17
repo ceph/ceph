@@ -80,6 +80,7 @@ class ConfigNS(_StrEnum):
     USERS_AND_GROUPS = 'users_and_groups'
     JOIN_AUTHS = 'join_auths'
     TLS_CREDENTIALS = 'tls_creds'
+    RGW_CREDENTIALS = 'rgw_creds'
     EXTERNAL_CEPH_CLUSTERS = 'ext_ceph_clusters'
 
 
@@ -122,6 +123,19 @@ class SMBClustering(_StrEnum):
 class ShowResults(_StrEnum):
     FULL = 'full'
     COLLAPSED = 'collapsed'
+
+
+class ClientSupportMode(_StrEnum):
+    """Determines if client-specific SMB features should be enabled.
+
+    - DEFAULT: Standard SMB behavior without client-specific optimizations
+    - MACOS: Enable macOS-specific features (AAPL extensions, fruit VFS, etc.)
+
+    Future values could include: WINDOWS_OPTIMIZED, LINUX_OPTIMIZED, etc.
+    """
+
+    DEFAULT = 'default'
+    MACOS = 'macos'
 
 
 class PasswordFilter(_StrEnum):

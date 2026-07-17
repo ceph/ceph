@@ -8,7 +8,7 @@ import {
 } from '@angular/core/testing';
 
 import { CephfsSnapshotscheduleFormComponent } from './cephfs-snapshotschedule-form.component';
-import { ToastrModule } from 'ngx-toastr';
+
 import { SharedModule } from '~/app/shared/shared.module';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ReactiveFormsModule } from '@angular/forms';
@@ -34,7 +34,6 @@ describe('CephfsSnapshotscheduleFormComponent', () => {
     providers: [ModalService, { provide: 'fsName', useValue: 'test_fs' }],
     imports: [
       SharedModule,
-      ToastrModule.forRoot(),
       ReactiveFormsModule,
       HttpClientTestingModule,
       RouterTestingModule,

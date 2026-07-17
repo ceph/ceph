@@ -1042,17 +1042,17 @@ test_migration() {
     rbd snap create test1@snap2
     rbd clone test1@snap1 clone_v1 --rbd_default_clone_format=1
     rbd clone test1@snap2 clone_v2 --rbd_default_clone_format=2
-    rbd info clone_v1 | fgrep 'parent: rbd/test1@snap1'
-    rbd info clone_v2 | fgrep 'parent: rbd/test1@snap2'
+    rbd info clone_v1 | grep -F 'parent: rbd/test1@snap1'
+    rbd info clone_v2 | grep -F 'parent: rbd/test1@snap2'
     rbd info clone_v2 |grep 'op_features: clone-child'
     test "$(rbd export clone_v1 - | md5sum)" = "${md5sum}"
     test "$(rbd export clone_v2 - | md5sum)" = "${md5sum}"
     test "$(rbd children test1@snap1)" = "rbd/clone_v1"
     test "$(rbd children test1@snap2)" = "rbd/clone_v2"
     rbd migration prepare test1 rbd2/test2
-    rbd info clone_v1 | fgrep 'parent: rbd2/test2@snap1'
-    rbd info clone_v2 | fgrep 'parent: rbd2/test2@snap2'
-    rbd info clone_v2 | fgrep 'op_features: clone-child'
+    rbd info clone_v1 | grep -F 'parent: rbd2/test2@snap1'
+    rbd info clone_v2 | grep -F 'parent: rbd2/test2@snap2'
+    rbd info clone_v2 | grep -F 'op_features: clone-child'
     test "$(rbd children rbd2/test2@snap1)" = "rbd/clone_v1"
     test "$(rbd children rbd2/test2@snap2)" = "rbd/clone_v2"
     rbd migration execute test1
@@ -1061,9 +1061,9 @@ test_migration() {
     test "$(rbd export clone_v1 - | md5sum)" = "${md5sum}"
     test "$(rbd export clone_v2 - | md5sum)" = "${md5sum}"
     rbd migration prepare rbd2/test2 test1
-    rbd info clone_v1 | fgrep 'parent: rbd/test1@snap1'
-    rbd info clone_v2 | fgrep 'parent: rbd/test1@snap2'
-    rbd info clone_v2 | fgrep 'op_features: clone-child'
+    rbd info clone_v1 | grep -F 'parent: rbd/test1@snap1'
+    rbd info clone_v2 | grep -F 'parent: rbd/test1@snap2'
+    rbd info clone_v2 | grep -F 'op_features: clone-child'
     test "$(rbd children test1@snap1)" = "rbd/clone_v1"
     test "$(rbd children test1@snap2)" = "rbd/clone_v2"
     rbd migration execute test1
@@ -1185,7 +1185,7 @@ test_trash_purge_schedule() {
     rbd namespace create rbd2/ns1
 
     test "$(ceph rbd trash purge schedule list)" = "{}"
-    ceph rbd trash purge schedule status | fgrep '"scheduled": []'
+    ceph rbd trash purge schedule status | grep -F '"scheduled": []'
 
     expect_fail rbd trash purge schedule ls
     test "$(rbd trash purge schedule ls -R --format json)" = "[]"
@@ -1373,7 +1373,7 @@ test_trash_purge_schedule_staggering() {
 
     # Initial empty check
     test "$(ceph rbd trash purge schedule list)" = "{}"
-    ceph rbd trash purge schedule status | fgrep '"scheduled": []'
+    ceph rbd trash purge schedule status | grep -F '"scheduled": []'
 
     # Create 80 namespaces
     for i in {1..80}; do
@@ -1517,7 +1517,7 @@ test_mirror_snapshot_schedule() {
     rbd mirror pool peer add rbd2 cluster1
 
     test "$(ceph rbd mirror snapshot schedule list)" = "{}"
-    ceph rbd mirror snapshot schedule status | fgrep '"scheduled_images": []'
+    ceph rbd mirror snapshot schedule status | grep -F '"scheduled_images": []'
 
     expect_fail rbd mirror snapshot schedule ls
     test "$(rbd mirror snapshot schedule ls -R --format json)" = "[]"
@@ -1702,7 +1702,7 @@ test_mirror_snapshot_schedule_staggering() {
 
     # Initial empty check
     test "$(ceph rbd mirror snapshot schedule list)" = "{}"
-    ceph rbd mirror snapshot schedule status | fgrep '"scheduled_images": []'
+    ceph rbd mirror snapshot schedule status | grep -F '"scheduled_images": []'
 
     # Create 80 images
     for i in {1..80}; do
@@ -1969,9 +1969,9 @@ test_mirror_pool_peer_bootstrap_create() {
     test "$TOKEN_FSID" = "$(ceph fsid)"
     test "$TOKEN_KEY" = "$(ceph auth get-key client.$TOKEN_CLIENT_ID)"
     for addr in "${MON_ADDRS[@]}"; do
-        fgrep "$addr" <<< "$TOKEN_MON_HOST"
+        grep -F "$addr" <<< "$TOKEN_MON_HOST"
     done
-    expect_fail fgrep "$BAD_MON_ADDR" <<< "$TOKEN_MON_HOST"
+    expect_fail grep -F "$BAD_MON_ADDR" <<< "$TOKEN_MON_HOST"
 
     # check that the token does not change, including across pools
     test "$(rbd mirror pool peer bootstrap create \

@@ -42,15 +42,6 @@ template<> struct _full_key_type<KeyT::HOBJ> { using type = key_hobj_t; };
 template <KeyT type>
 using full_key_t = typename _full_key_type<type>::type;
 
-static laddr_t get_lba_hint(shard_t shard, pool_t pool, crush_hash_t crush) {
-  // FIXME: It is possible that PGs from different pools share the same prefix
-  // if the mask 0xFF is not long enough, result in unexpected transaction
-  // conflicts.
-  return laddr_t::from_raw_uint((uint64_t)(shard & 0xFF)<<56 |
-                                (uint64_t)(pool  & 0xFF)<<48 |
-                                (uint64_t)(crush       )<<16);
-}
-
 struct node_offset_packed_t {
   node_offset_t value;
 } __attribute__((packed));
@@ -415,6 +406,10 @@ bool is_valid_key(const Key& key);
  */
 class key_hobj_t {
  public:
+  // number of ns/oid comparisons this query key participated in during lookup.
+  // Only incremented under CRIMSON_DETAILED_SAMPLING; otherwise stays zero.
+  mutable uint64_t ncmp_str = 0;
+
   explicit key_hobj_t(const ghobject_t& _ghobj) {
     if (_ghobj.is_max()) {
       ghobj = _MAX_OID();
@@ -435,12 +430,51 @@ class key_hobj_t {
   pool_t pool() const {
     return ghobj.hobj.pool;
   }
+  pool_t logical_pool() const {
+    return ghobj.hobj.get_logical_pool();
+  }
   crush_hash_t crush() const {
     // Note: this is the reversed version of the object hash
     return ghobj.hobj.get_bitwise_key_u32();
   }
-  laddr_t get_hint() const {
-    return get_lba_hint(shard(), pool(), crush());
+  laddr_hint_t create_onode_hint(
+    extent_len_t block_size = laddr_t::UNIT_SIZE) const {
+    return laddr_hint_t::create_onode_hint(
+      shard(), pool(), crush(), block_size);
+  }
+  laddr_hint_t create_fresh_object_data_hint(
+    extent_len_t block_size) const {
+    return laddr_hint_t::create_fresh_object_data_hint(
+      shard(), pool(), crush(), block_size);
+  }
+  laddr_hint_t create_fresh_object_md_hint(
+    extent_len_t block_size) const {
+    return laddr_hint_t::create_fresh_object_md_hint(
+      shard(), pool(), crush(), block_size);
+  }
+  laddr_hint_t create_temp_object_data_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size) const {
+    return laddr_hint_t::create_temp_object_data_hint(
+      shard(), pool(), crush(), object_id, block_size);
+  }
+  laddr_hint_t create_temp_object_md_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size) const {
+    return laddr_hint_t::create_temp_object_md_hint(
+      shard(), pool(), crush(), object_id, block_size);
+  }
+  laddr_hint_t create_clone_object_data_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size) const {
+    return laddr_hint_t::create_clone_object_data_hint(
+      shard(), pool(), crush(), object_id, block_size);
+  }
+  laddr_hint_t create_clone_object_md_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size) const {
+    return laddr_hint_t::create_clone_object_md_hint(
+      shard(), pool(), crush(), object_id, block_size);
   }
   std::string_view nspace() const {
     // TODO(cross-node string dedup)
@@ -531,9 +565,46 @@ class key_view_t {
    */
   inline shard_t shard() const;
   inline pool_t pool() const;
+  inline pool_t logical_pool() const;
   inline crush_hash_t crush() const;
-  laddr_t get_hint() const {
-    return get_lba_hint(shard(), pool(), crush());
+  laddr_hint_t create_onode_hint(
+    extent_len_t block_size = laddr_t::UNIT_SIZE) const {
+    return laddr_hint_t::create_onode_hint(
+      shard(), pool(), crush(), block_size);
+  }
+  laddr_hint_t create_fresh_object_data_hint(
+    extent_len_t block_size) const {
+    return laddr_hint_t::create_fresh_object_data_hint(
+      shard(), pool(), crush(), block_size);
+  }
+  laddr_hint_t create_fresh_object_md_hint(
+    extent_len_t block_size) const {
+    return laddr_hint_t::create_fresh_object_md_hint(
+      shard(), pool(), crush(), block_size);
+  }
+  laddr_hint_t create_temp_object_data_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size) const {
+    return laddr_hint_t::create_temp_object_data_hint(
+      shard(), pool(), crush(), object_id, block_size);
+  }
+  laddr_hint_t create_temp_object_md_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size) const {
+    return laddr_hint_t::create_temp_object_md_hint(
+      shard(), pool(), crush(), object_id, block_size);
+  }
+  laddr_hint_t create_clone_object_data_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size) const {
+    return laddr_hint_t::create_clone_object_data_hint(
+      shard(), pool(), crush(), object_id, block_size);
+  }
+  laddr_hint_t create_clone_object_md_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size) const {
+    return laddr_hint_t::create_clone_object_md_hint(
+      shard(), pool(), crush(), object_id, block_size);
   }
   std::string_view nspace() const {
     // TODO(cross-node string dedup)
@@ -755,6 +826,14 @@ pool_t key_view_t::pool() const {
   return shard_pool_packed().pool();
 }
 
+pool_t key_view_t::logical_pool() const {
+  auto pool = shard_pool_packed().pool();
+  if (unlikely(hobject_t::is_temp_pool(pool))) {
+    return hobject_t::get_temp_pool(pool);
+  }
+  return pool;
+}
+
 crush_hash_t key_view_t::crush() const {
   return crush_packed().crush;
 }
@@ -845,6 +924,12 @@ auto operator<=>(const T& key, const shard_pool_crush_t& target) {
 
 template <IsFullKey T>
 auto operator<=>(const T& key, const ns_oid_view_t& target) {
+#ifdef CRIMSON_DETAILED_SAMPLING
+  // only key_hobj_t carries the counter
+  if constexpr (requires { key.ncmp_str; }) {
+    ++key.ncmp_str;
+  }
+#endif
   auto ret = key.nspace() <=> string_view_masked_t{target.nspace};
   if (ret != 0)
     return ret;

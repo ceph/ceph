@@ -19,15 +19,20 @@ releases:
   tentacle:
     target_eol: 2027-11-18
     releases:
-      - version: 20.2.0
-        released: 2025-11-18
-    releases:
+      - version: 20.2.2
+        released: 2026-06-16
       - version: 20.2.1
         released: 2026-04-06
+      - version: 20.2.0
+        released: 2025-11-18
 
   squid:
     target_eol: 2026-09-19
     releases:
+      - version: 19.2.5
+        released: 2026-07-14
+      - version: 19.2.4
+        released: 2026-06-01
       - version: 19.2.3
         released: 2025-07-28
       - version: 19.2.2

@@ -26,6 +26,10 @@ using std::set;
 
 namespace crimson::osd {
 
+static constexpr crimson::osd::scheduler::params_t backfill_throttle_params{
+  1, 0, 0, SchedulerClass::background_best_effort
+};
+
 void PGRecovery::start_pglogbased_recovery()
 {
   auto [op, fut] = pg->get_shard_services().start_operation<PglogBasedRecovery>(
@@ -83,15 +87,24 @@ PGRecovery::start_recovery_ops(
   ceph_assert(!pg->is_backfilling());
 
   if (!pg->get_peering_state().needs_recovery()) {
+    /* Clear PG_STATE_RECOVERING before posting recovery completion events
+     * to prevent race condition with DeferRecovery. 
+     * See https://tracker.ceph.com/issues/73314.
+     *
+     * This matches the Classic OSD approach in PrimaryLogPG::start_recovery_ops().
+     * When DeferRecovery arrives, it checks !state_test(PG_STATE_RECOVERING)
+     * and discards itself if the flag is already clear, preventing the crash
+     * that occurs when AllReplicasRecovered arrives at NotRecovering state. */
+    pg->get_peering_state().state_clear(PG_STATE_RECOVERING);
+    pg->get_peering_state().state_clear(PG_STATE_FORCED_RECOVERY);
+
     if (pg->get_peering_state().needs_backfill()) {
+      DEBUGDPP("recovery done, queuing backfill", *pg->get_dpp());
       request_backfill();
     } else {
+      DEBUGDPP("recovery done, no backfill", *pg->get_dpp());
       all_replicas_recovered();
     }
-    /* TODO: this is racy -- it's possible for a DeferRecovery
-     * event to be processed between this call and when the
-     * async RequestBackfill or AllReplicasRecovered events
-     * are processed --  see https://tracker.ceph.com/issues/71267 */
     pg->reset_pglog_based_recovery_op();
     co_return seastar::stop_iteration::yes;
   }
@@ -124,8 +137,8 @@ size_t PGRecovery::start_primary_recovery_ops(
   unsigned started = 0;
   int skipped = 0;
 
-  map<eversion_t, hobject_t>::const_iterator p =
-    missing.get_rmissing().lower_bound(eversion_t(0, pg->get_peering_state().get_pg_log().get_log().last_requested));
+  auto p = missing.get_rmissing().lower_bound(
+    eversion_t(0, pg->get_peering_state().get_pg_log().get_log().last_requested));
   while (started < max_to_start && p != missing.get_rmissing().end()) {
     // TODO: chain futures here to enable yielding to scheduler?
     hobject_t soid;
@@ -475,43 +488,92 @@ void PGRecovery::_committed_pushed_object(epoch_t epoch,
   }
 }
 
+PGRecovery::interruptible_future<>
+PGRecovery::do_request_replica_scan(
+  pg_shard_t target,
+  hobject_t begin,
+  hobject_t end)
+{
+  LOG_PREFIX(PGRecovery::do_request_replica_scan);
+  DEBUGDPP("target.osd={}", *pg->get_dpp(), target.osd);
+  try {
+    auto releaser = co_await get_backfill_throttle();
+    replica_scan_throttle_releasers.erase(target);
+    replica_scan_throttle_releasers.emplace(target, std::move(releaser));
+    std::ignore = pg->get_shard_services().send_to_osd(
+      target.osd,
+      crimson::make_message<MOSDPGScan>(
+        MOSDPGScan::OP_SCAN_GET_DIGEST,
+        pg->get_pg_whoami(),
+        pg->get_osdmap_epoch(),
+        pg->get_last_peering_reset(),
+        spg_t(pg->get_pgid().pgid, target.shard),
+        begin,
+        end),
+      pg->get_osdmap_epoch());
+  } catch (const crimson::common::interruption& e) {
+    DEBUGDPP("replica scan interrupted: {}", *pg->get_dpp(), e.what());
+    co_return;
+  } catch (...) {
+    ceph_abort_msg(fmt::format(
+      "got unexpected exception on backfill's replica scan for {}: {}",
+      pg->get_pgid(), std::current_exception()));
+  }
+}
+
 void PGRecovery::request_replica_scan(
   const pg_shard_t& target,
   const hobject_t& begin,
   const hobject_t& end)
 {
-  LOG_PREFIX(PGRecovery::request_replica_scan);
-  DEBUGDPP("target.osd={}", *pg->get_dpp(), target.osd);
-  auto msg = crimson::make_message<MOSDPGScan>(
-    MOSDPGScan::OP_SCAN_GET_DIGEST,
-    pg->get_pg_whoami(),
-    pg->get_osdmap_epoch(),
-    pg->get_last_peering_reset(),
-    spg_t(pg->get_pgid().pgid, target.shard),
-    begin,
-    end);
-  std::ignore = pg->get_shard_services().send_to_osd(
-    target.osd,
-    std::move(msg),
-    pg->get_osdmap_epoch());
+  std::ignore = do_request_replica_scan(target, begin, end);
+}
+
+PGRecovery::interruptible_future<>
+PGRecovery::do_request_primary_scan(hobject_t begin)
+{
+  LOG_PREFIX(PGRecovery::do_request_primary_scan);
+  DEBUGDPP("begin {}", *pg->get_dpp(), begin);
+  using crimson::common::local_conf;
+  try {
+    auto releaser = co_await get_backfill_throttle();
+    auto bi = co_await pg->get_recovery_backend()->scan_for_backfill_primary(
+      begin,
+      local_conf()->osd_backfill_scan_min,
+      local_conf()->osd_backfill_scan_max,
+      pg->get_peering_state().get_backfill_targets());
+    if (!backfill_state) {
+      // Backfill may finish (and tear down backfill_state) while this
+      // coroutine is suspended in scan_for_backfill_primary().
+      DEBUGDPP("primary scan result discarded, backfill finished",
+               *pg->get_dpp());
+      co_return;
+    }
+    using BackfillState = crimson::osd::BackfillState;
+    backfill_state->process_event(
+      BackfillState::PrimaryScanned{ std::move(bi) }.intrusive_from_this());
+    // releaser destroyed here as the coroutine frame unwinds
+  } catch (const crimson::common::interruption& e) {
+    DEBUGDPP("primary scan interrupted: {}", *pg->get_dpp(), e.what());
+    co_return;
+  } catch (...) {
+    ceph_abort_msg(fmt::format(
+      "got unexpected exception on backfill's primary scan for {}: {}",
+      pg->get_pgid(), std::current_exception()));
+  }
 }
 
 void PGRecovery::request_primary_scan(
   const hobject_t& begin)
 {
-  LOG_PREFIX(PGRecovery::request_primary_scan);
-  DEBUGDPP("begin {}", *pg->get_dpp(), begin);
-  using crimson::common::local_conf;
-  std::ignore = pg->get_recovery_backend()->scan_for_backfill_primary(
-    begin,
-    local_conf()->osd_backfill_scan_min,
-    local_conf()->osd_backfill_scan_max,
-    pg->get_peering_state().get_backfill_targets()
-  ).then_interruptible([this] (PrimaryBackfillInterval bi) {
-  using BackfillState = crimson::osd::BackfillState;
-    backfill_state->process_event(
-      BackfillState::PrimaryScanned{ std::move(bi) }.intrusive_from_this());
-  });
+  std::ignore = do_request_primary_scan(begin);
+}
+
+PGRecovery::interruptible_future<OperationThrottler::ThrottleReleaser>
+PGRecovery::get_backfill_throttle()
+{
+  return interruptor::make_interruptible(
+    pg->get_shard_services().get_throttle(backfill_throttle_params));
 }
 
 PGRecovery::interruptible_future<>
@@ -521,14 +583,9 @@ PGRecovery::recover_object_with_throttle(
 {
   LOG_PREFIX(PGRecovery::recover_object_with_throttle);
   DEBUGDPP("{} {}", *pg->get_dpp(), soid, need);
-  auto releaser = co_await interruptor::make_interruptible(
-    pg->get_shard_services().get_throttle(
-      crimson::osd::scheduler::params_t{
-	1, 0, 0, SchedulerClass::background_best_effort
-      }));
+  auto releaser = co_await get_backfill_throttle();
   DEBUGDPP("got throttle: {} {}", *pg->get_dpp(), soid, need);
   co_await pg->get_recovery_backend()->recover_object(soid, need);
-  co_return;
 }
 
 void PGRecovery::enqueue_push(
@@ -657,6 +714,7 @@ bool PGRecovery::budget_available() const
 
 void PGRecovery::on_pg_clean()
 {
+  replica_scan_throttle_releasers.clear();
   backfill_state.reset();
 }
 
@@ -688,7 +746,7 @@ void PGRecovery::request_backfill()
 void PGRecovery::all_replicas_recovered()
 {
   LOG_PREFIX(PGRecovery::all_replicas_recovered);
-  DEBUGDPP("", *pg->get_dpp());
+  DEBUGDPP("posting AllReplicasRecovered event", *pg->get_dpp());
   start_peering_event_operation_listener(PeeringState::AllReplicasRecovered());
 }
 
@@ -707,6 +765,10 @@ void PGRecovery::dispatch_backfill_event(
   LOG_PREFIX(PGRecovery::dispatch_backfill_event);
   DEBUGDPP("", *pg->get_dpp());
   assert(backfill_state);
+  if (auto* scanned =
+        dynamic_cast<const BackfillState::ReplicaScanned*>(evt.get())) {
+    replica_scan_throttle_releasers.erase(scanned->from);
+  }
   backfill_state->process_event(evt);
   // TODO: Do we need to worry about cases in which the pg has
   //       been through both backfill cancellations and backfill
@@ -719,6 +781,7 @@ void PGRecovery::on_activate_complete()
 {
   LOG_PREFIX(PGRecovery::on_activate_complete);
   DEBUGDPP("backfill_state={}", *pg->get_dpp(), fmt::ptr(backfill_state.get()));
+  replica_scan_throttle_releasers.clear();
   backfill_state.reset();
 }
 

@@ -356,7 +356,7 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
       }
     }
   }
-  uint64_t cgroup_limit;
+  uint64_t cgroup_limit = 0;
   if (get_cgroup_memory_limit(&cgroup_limit) == 0 &&
       cgroup_limit > 0) {
     (*m)["mem_cgroup_limit"] = std::to_string(cgroup_limit);

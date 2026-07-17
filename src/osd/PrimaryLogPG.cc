@@ -1697,7 +1697,9 @@ bool PrimaryLogPG::get_rw_locks(bool write_ordered, OpContext *ctx)
    * to get the second.
    */
   if (write_ordered && ctx->op->may_read()) {
-    if (ctx->op->may_read_data()) {
+    // In EC, reads can overtake writes unless the RWEXCL lock is held
+    if (ctx->op->may_read_data() ||
+        (pool.info.is_erasure() && ctx->op->may_read_data_for_ec())) {
       ctx->lock_type = RWState::RWEXCL;
     } else {
       ctx->lock_type = RWState::RWWRITE;
@@ -1981,24 +1983,24 @@ void PrimaryLogPG::do_request(
   }
 }
 
-/** do_op - do an op
- * pg lock will be held (if multithreaded)
- * osd_lock NOT held.
- */
-void PrimaryLogPG::do_op(OpRequestRef& op)
+bool PrimaryLogPG::should_use_coroutine(MOSDOp* m)
 {
-  FUNCTRACE(cct);
-  // NOTE: take a non-const pointer here; we must be careful not to
-  // change anything that will break other reads on m (operator<<).
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
-  ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
-  if (m->finish_decode()) {
-    op->reset_desc();   // for TrackedOp
-    m->clear_payload();
+  if (!pool.info.allows_ecoptimizations()) {
+    return false;
   }
 
-  dout(20) << __func__ << ": op " << *m << dendl;
+  for (const auto& osd_op : m->ops) {
+    if (osd_op.op.op == CEPH_OSD_OP_CALL) {
+      return true;
+    }
+  }
 
+  return false;
+}
+
+void PrimaryLogPG::do_op_impl(OpRequestRef op)
+{
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
   const hobject_t head = m->get_hobj().get_head();
 
   if (!info.pgid.pgid.contains(
@@ -2044,13 +2046,14 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
   // check for op with rwordered and rebalance or localize reads
   if (m->has_flag(CEPH_OSD_FLAGS_DIRECT_READ) && op->rwordered()) {
-    dout(4) << __func__ << ": rebelance or localized reads with rwordered not allowed "
+    dout(4) << __func__ << ": rebalance or localized reads with rwordered not allowed "
        << *m << dendl;
     osd->reply_op_error(op, -EINVAL);
     return;
   }
 
   if (m->get_flags() & CEPH_OSD_FLAG_EC_DIRECT_READ) {
+    // This means "is in acting set"
     if (is_primary() || is_nonprimary()) {
       op->set_ec_direct_read();
     } else {
@@ -2062,6 +2065,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
       op->may_read() &&
       !(op->may_write() || op->may_cache())) {
     // balanced reads; any replica will do
+    // This means "is in acting set"
     if (!(is_primary() || is_nonprimary())) {
       osd->handle_misdirected_op(this, op);
       return;
@@ -2223,6 +2227,14 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     } else {
       wait_for_unreadable_object(head, op);
     }
+    return;
+  }
+
+  // Missing direct read (EC version)
+  if (m->has_flag(CEPH_OSD_FLAG_EC_DIRECT_READ) &&
+      get_local_missing().is_missing(head)) {
+    dout(20) << __func__ << ": oid=" << head << " missing in direct read" << dendl;
+    osd->reply_op_error(op, -EAGAIN);
     return;
   }
 
@@ -2487,6 +2499,10 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
   OpContext *ctx = new OpContext(op, m->get_reqid(), &m->ops, obc, this);
 
+  if (coro_op_in_flight && op == active_coro_op) {
+    active_coro_ctx = ctx;
+  }
+
   if (m->has_flag(CEPH_OSD_FLAG_SKIPRWLOCKS)) {
     dout(20) << __func__ << ": skipping rw locks" << dendl;
   } else if (m->get_flags() & CEPH_OSD_FLAG_FLUSH) {
@@ -2563,6 +2579,75 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
   // force recovery of the oldest missing object if too many logs
   maybe_force_recovery();
+}
+
+/** do_op - do an op
+ * pg lock will be held (if multithreaded)
+ * osd_lock NOT held.
+ */
+void PrimaryLogPG::do_op(OpRequestRef& op)
+{
+  FUNCTRACE(cct);
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
+  ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
+  if (m->finish_decode()) {
+    op->reset_desc();
+    m->clear_payload();
+  }
+
+  if (coro_op_in_flight) {
+    dout(20) << __func__ << ": coroutine op in flight, queuing " << op << dendl;
+    waiting_for_coro_op.push_back(op);
+    return;
+  }
+
+  dout(20) << __func__ << ": op " << *m << dendl;
+
+  if (should_use_coroutine(m)) {
+    dout(20) << __func__ << ": spawning a coroutine for EC optimized CALL op" << dendl;
+    coro_op_in_flight = true;
+    active_coro_op = op;
+    OpRequest* op_raw = op.get();
+
+    // Spawn a coroutine to handle the message
+    auto resumer = std::make_unique<resume_token_t>(
+      [this, op_raw](yield_token_t& yield) {
+        op_raw->coro_handles.emplace(CoroHandles{ yield, *coro_resumer });
+        {
+          const OpRequestRef op_ref(op_raw);
+          do_op_impl(op_ref);
+        }
+
+        // Cleanup
+        coro_resumer = nullptr;
+        on_coroutine_complete();
+      });
+
+    coro_resumer = std::move(resumer);
+
+    // Startup the coroutine
+    (*coro_resumer)();
+  } else {
+    // Handle the message directly in the current thread
+    do_op_impl(op);
+  }
+}
+
+void PrimaryLogPG::on_coroutine_complete()
+{
+  ceph_assert(coro_op_in_flight);
+  coro_op_in_flight = false;
+  active_coro_op = nullptr;
+
+  if (active_coro_ctx) {
+    dout(20) << __func__ << ": Warning - OpContext not cleaned up normally" << dendl;
+    active_coro_ctx = nullptr;
+  }
+
+  if (!waiting_for_coro_op.empty()) {
+    dout(20) << __func__ << ": requeuing " << waiting_for_coro_op.size() << " ops" << dendl;
+    requeue_ops(waiting_for_coro_op);
+  }
 }
 
 PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
@@ -4431,6 +4516,11 @@ void PrimaryLogPG::close_op_ctx(OpContext *ctx) {
        ctx->on_finish.erase(p++)) {
     (*p)();
   }
+
+  if (ctx == active_coro_ctx) {
+    active_coro_ctx = nullptr;
+  }
+
   delete ctx;
 }
 
@@ -5876,6 +5966,8 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
 
   // read into a buffer
   int result = 0;
+  uint64_t bytes_read = 0;  // Track actual bytes read for statistics
+  
   if (trimmed_read && op.extent.length == 0) {
     // read size was trimmed to zero and it is expected to do nothing
     // a read operation of 0 bytes does *not* do nothing, this is why
@@ -5892,26 +5984,42 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
       maybe_crc = oi.data_digest;
 
     if (ctx->op->ec_direct_read()) {
-      result = pgbackend->objects_read_sync(
+      int r = pgbackend->objects_read_local(
         soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
-
-        dout(20) << " EC sync read for " << soid << " result=" << result << dendl;
+      if (r >= 0) {
+        bytes_read = r;
+        // Don't update op.extent.length - causes issues with recursive
+        // calls from operations like CHECKSUM
+      } else if (r == -EAGAIN) {
+        result = -EAGAIN;
+      } else {
+        result = r;
+      }
+      dout(20) << " EC local read for " << soid << " result=" << result << dendl;
+    } else if (ctx->op->ec_sync_read()) {
+      result = pgbackend->objects_read_sync(
+        soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata,
+        oi.size, ctx->op->coro_handles);
+      dout(20) << " EC sync read for " << soid << " result=" << result << dendl;
     } else {
-    ctx->pending_async_reads.push_back(
-      make_pair(
-        boost::make_tuple(op.extent.offset, op.extent.length, op.flags),
-        make_pair(&osd_op.outdata,
-		  new FillInVerifyExtent(&op.extent.length, &osd_op.rval,
-					 &osd_op.outdata, maybe_crc, oi.size,
-					 osd, soid, op.flags))));
-    dout(10) << " async_read noted for " << soid << dendl;
+      ctx->pending_async_reads.push_back(
+        make_pair(
+          boost::make_tuple(op.extent.offset, op.extent.length, op.flags),
+          make_pair(&osd_op.outdata,
+		    new FillInVerifyExtent(&op.extent.length, &osd_op.rval,
+					   &osd_op.outdata, maybe_crc, oi.size,
+					   osd, soid, op.flags))));
+      dout(10) << " async_read noted for " << soid << dendl;
 
-    ctx->op_finishers[ctx->current_osd_subop_num].reset(
+      ctx->op_finishers[ctx->current_osd_subop_num].reset(
       new ReadFinisher(osd_op));
+      // For async reads, op.extent.length will be updated by FillInVerifyExtent
+      bytes_read = op.extent.length;
     }
   } else {
     int r = pgbackend->objects_read_sync(
-      soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
+      soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata,
+      oi.size, ctx->op->coro_handles);
     // whole object?  can we verify the checksum?
     if (r >= 0 && op.extent.offset == 0 &&
         (uint64_t)r == oi.size && oi.is_data_digest()) {
@@ -5927,9 +6035,10 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     if (r == -EIO) {
       r = rep_repair_primary_object(soid, ctx);
     }
-    if (r >= 0)
+    if (r >= 0) {
       op.extent.length = r;
-    else if (r == -EAGAIN) {
+      bytes_read = r;
+    } else if (r == -EAGAIN) {
       result = -EAGAIN;
     } else {
       result = r;
@@ -5939,7 +6048,7 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
 	     << " bytes from obj " << soid << dendl;
   }
   if (result >= 0) {
-    ctx->delta_stats.num_rd_kb += shift_round_up(op.extent.length, 10);
+    ctx->delta_stats.num_rd_kb += shift_round_up(bytes_read, 10);
     ctx->delta_stats.num_rd++;
   }
   return result;
@@ -5953,6 +6062,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
   uint64_t size = oi.size;
   uint64_t offset = op.extent.offset;
   uint64_t length = op.extent.length;
+  uint64_t bytes_read = 0;  // Track actual bytes read for statistics
 
   // are we beyond truncate_size?
   if ((oi.truncate_seq < op.extent.truncate_seq) &&
@@ -5976,13 +6086,15 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
         make_pair(
           boost::make_tuple(offset, length, op.flags),
           make_pair(
-	    &osd_op.outdata,
-	    new ToSparseReadResult(&osd_op.rval, &osd_op.outdata, offset,
-				   &op.extent.length))));
+     &osd_op.outdata,
+     new ToSparseReadResult(&osd_op.rval, &osd_op.outdata, offset,
+  		   &op.extent.length))));
       dout(10) << " async_read (was sparse_read) noted for " << soid << dendl;
 
       ctx->op_finishers[ctx->current_osd_subop_num].reset(
         new ReadFinisher(osd_op));
+      // For async reads, op.extent.length will be updated by ToSparseReadResult
+      bytes_read = length;
     } else {
       dout(10) << " sparse read ended up empty for " << soid << dendl;
       map<uint64_t, uint64_t> extents;
@@ -5995,8 +6107,8 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
     map<uint64_t, uint64_t> m;
     auto [shard_offset, shard_length] = pgbackend->extent_to_shard_extent(offset, length);
     int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
-					      info.pgid.shard),
-			       shard_offset, shard_length, m);
+  			      info.pgid.shard),
+  	       shard_offset, shard_length, m);
     if (r < 0)  {
       return r;
     }
@@ -6023,13 +6135,18 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
           << " != expected 0x" << oi.data_digest
           << std::dec << " on " << soid;
         r = rep_repair_primary_object(soid, ctx);
-	if (r < 0) {
-	  return r;
-	}
+        if (r < 0) {
+          return r;
+        }
       }
     }
 
-    op.extent.length = r;
+    bytes_read = r;
+    // Only set op.extent.length for non-EC-direct-read to avoid issues
+    // with recursive calls from operations like CHECKSUM
+    if (!ctx->op->ec_direct_read()) {
+      op.extent.length = r;
+    }
 
     encode(m, osd_op.outdata); // re-encode since it might be modified
     ::encode_destructively(data_bl, osd_op.outdata);
@@ -6038,7 +6155,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
              << " bytes from object " << soid << dendl;
   }
 
-  ctx->delta_stats.num_rd_kb += shift_round_up(op.extent.length, 10);
+  ctx->delta_stats.num_rd_kb += shift_round_up(bytes_read, 10);
   ctx->delta_stats.num_rd++;
   return 0;
 }
@@ -6146,9 +6263,11 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_SYNC_READ:
-      if (pool.info.is_erasure()) {
+      if (pool.info.is_erasure() && !pool.info.allows_ecoptimizations()) {
 	result = -EOPNOTSUPP;
 	break;
+      } else if (pool.info.is_erasure() && pool.info.allows_ecoptimizations()) {
+        ctx->op->set_ec_sync_read();
       }
       // fall through
     case CEPH_OSD_OP_READ:
@@ -6559,6 +6678,15 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         }
       }
       break;
+
+    case CEPH_OSD_OP_GET_INTERNAL_VERSIONS: {
+      std::map<shard_id_t, eversion_t> out;
+      result = get_internal_versions(soid, &out);
+      if (result >= 0) {
+        encode(out, osd_op.outdata);
+      }
+    }
+    break;
 
     case CEPH_OSD_OP_LIST_WATCHERS:
       ++ctx->num_read;
@@ -7765,8 +7893,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	uint32_t num = 0;
 	bool truncated = false;
 	if (oi.is_omap()) {
-          const auto result = osd->store->omap_iterate(
-            ch, ghobject_t(soid),
+          const auto result = get_pgbackend()->omap_iterate(
+            ch, ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard),
             ObjectStore::omap_iter_seek_t{
               .seek_position = start_after,
               .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
@@ -7821,8 +7949,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	bufferlist bl;
 	if (oi.is_omap()) {
 	  using omap_iter_seek_t = ObjectStore::omap_iter_seek_t;
-	  const auto result = osd->store->omap_iterate(
-	    ch, ghobject_t(soid),
+	  const auto result = get_pgbackend()->omap_iterate(
+	    ch, ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard),
 	    // try to seek as many keys-at-once as possible for the sake of performance.
 	    // note complexity should be logarithmic, so seek(n/2) + seek(n/2) is worse
 	    // than just seek(n).
@@ -7866,7 +7994,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       ++ctx->num_read;
       {
-	osd->store->omap_get_header(ch, ghobject_t(soid), &osd_op.outdata);
+	get_pgbackend()->omap_get_header(ch,
+	  ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard),
+	  &osd_op.outdata, false);
 	ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
 	ctx->delta_stats.num_rd++;
       }
@@ -7887,7 +8017,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	tracepoint(osd, do_osd_op_pre_omapgetvalsbykeys, soid.oid.name.c_str(), soid.snap.val, list_entries(keys_to_get).c_str());
 	map<string, bufferlist> out;
 	if (oi.is_omap()) {
-	  osd->store->omap_get_values(ch, ghobject_t(soid), keys_to_get, &out);
+	  get_pgbackend()->omap_get_values(ch,
+	    ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard), keys_to_get, &out);
 	} // else return empty omap entries
 	encode(out, osd_op.outdata);
 	ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
@@ -7922,8 +8053,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	       i != assertions.end();
 	       ++i)
 	    to_get.insert(i->first);
-	  int r = osd->store->omap_get_values(ch, ghobject_t(soid),
-					      to_get, &out);
+	  int r = get_pgbackend()->omap_get_values(ch,
+	    ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard),
+	    to_get, &out);
 	  if (r < 0) {
 	    result = r;
 	    break;
@@ -8020,10 +8152,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       ++ctx->num_write;
       result = 0;
       {
-	maybe_create_new_object(ctx);
-	t->omap_setheader(soid, osd_op.indata);
-	ctx->clean_regions.mark_omap_dirty();
-	ctx->delta_stats.num_wr++;
+         maybe_create_new_object(ctx);
+         dout(20) << __func__ << ": omap_setheader soid=" << soid
+                 << " header_size=" << osd_op.indata.length() << dendl;
+         t->omap_setheader(soid, osd_op.indata);
+         ctx->clean_regions.mark_omap_dirty();
+         ctx->delta_stats.num_wr++;
       }
       obs.oi.set_flag(object_info_t::FLAG_OMAP);
       obs.oi.clear_omap_digest();
@@ -8043,6 +8177,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  break;
 	}
 	if (oi.is_omap()) {
+	  dout(20) << __func__ << ": omap_clear soid=" << soid
+	          << " (header will be cleared)" << dendl;
 	  t->omap_clear(soid);
 	  ctx->clean_regions.mark_omap_dirty();
 	  ctx->delta_stats.num_wr++;
@@ -8191,6 +8327,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    result = -EINVAL;
 	    break;
 	  }
+	  dout(20) << __func__ << " COPY_FROM operation starting on OSD "
+	           << osd->whoami << " dest=" << soid << " src=" << src
+	           << " src_version=" << src_version << dendl;
 	  CopyFromCallback *cb = new CopyFromCallback(ctx, osd_op);
 	  if (have_truncate)
 	    cb->set_truncate(truncate_seq, truncate_size);
@@ -8364,6 +8503,7 @@ inline int PrimaryLogPG::_delete_oid(
     oi.set_flag(object_info_t::FLAG_WHITEOUT);
     ctx->delta_stats.num_whiteouts++;
     t->create(soid);
+    ctx->use_replace_op = true;
     osd->logger->inc(l_osd_tier_whiteout);
     return 0;
   }
@@ -9053,10 +9193,15 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
   if (soid.snap == CEPH_NOSNAP)
     make_writeable(ctx);
 
-  finish_ctx(ctx,
-	     ctx->new_obs.exists ? pg_log_entry_t::MODIFY :
-	     pg_log_entry_t::DELETE,
-	     result);
+  int log_op_type;
+  if (ctx->use_replace_op) {
+    log_op_type = pg_log_entry_t::REPLACE;
+  } else {
+    log_op_type = ctx->new_obs.exists ? pg_log_entry_t::MODIFY :
+                  pg_log_entry_t::DELETE;
+  }
+
+  finish_ctx(ctx, log_op_type, result);
 
   return result;
 }
@@ -9397,8 +9542,9 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::const_iterator& bp,
 
 	dout(10) << __func__ << ": async_read noted for " << soid << dendl;
       } else {
-	result = pgbackend->objects_read_sync(
-	  oi.soid, cursor.data_offset, max_read, osd_op.op.flags, &bl);
+ result = pgbackend->objects_read_sync(
+   oi.soid, cursor.data_offset, max_read, osd_op.op.flags, &bl,
+   oi.size, ctx->op->coro_handles);
 	if (result < 0)
 	  return result;
       }
@@ -9414,46 +9560,78 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::const_iterator& bp,
 
   // omap
   uint32_t omap_keys = 0;
+  dout(20) << __func__ << " omap section start - cursor.omap_offset='" << cursor.omap_offset
+           << "' left=" << left << " cursor.omap_complete=" << cursor.omap_complete
+           << " supports_omap=" << pool.info.supports_omap()
+           << " is_omap=" << oi.is_omap() << dendl;
   if (!pool.info.supports_omap() || !oi.is_omap()) {
     cursor.omap_complete = true;
+    dout(20) << __func__ << " omap_complete set to true (pool doesn't support omap or object has no omap)" << dendl;
   } else {
     if (left > 0 && !cursor.omap_complete) {
       ceph_assert(cursor.data_complete);
       if (cursor.omap_offset.empty()) {
-	osd->store->omap_get_header(ch, ghobject_t(oi.soid),
-				    &reply_obj.omap_header);
+        dout(20) << __func__ << " reading omap header (cursor.omap_offset is empty)" << dendl;
+        int r = get_pgbackend()->omap_get_header(ch,
+          ghobject_t(oi.soid, ghobject_t::NO_GEN, whoami_shard().shard),
+          &reply_obj.omap_header, false);
+        if (r < 0) {
+          ceph_abort();
+        }
+        dout(20) << __func__ << " omap_get_header result=" << r
+                 << " header_length=" << reply_obj.omap_header.length() << dendl;
+      } else {
+        dout(20) << __func__ << " NOT reading omap header (cursor.omap_offset='"
+                 << cursor.omap_offset << "' is not empty)" << dendl;
       }
       bufferlist omap_data;
-      const auto result = osd->store->omap_iterate(
-        ch, ghobject_t(oi.soid),
+      dout(20) << __func__ << " calling omap_iterate with cursor.omap_offset='"
+               << cursor.omap_offset << "'" << dendl;
+      const auto result = get_pgbackend()->omap_iterate(
+        ch, ghobject_t(oi.soid, ghobject_t::NO_GEN, whoami_shard().shard),
         ObjectStore::omap_iter_seek_t{
           .seek_position = cursor.omap_offset,
           .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
         },
         [&omap_data, &omap_keys, &left, &cursor]
         (std::string_view key, std::string_view value) mutable {
-	  ++omap_keys;
-	  encode(key, omap_data);
-	  encode(value, omap_data);
-	  left -= key.length() + 4 + value.length() + 4;
-	  if (left <= 0) {
-	    cursor.omap_offset = key;
+          ++omap_keys;
+          encode(key, omap_data);
+          encode(value, omap_data);
+          left -= key.length() + 4 + value.length() + 4;
+          if (left <= 0) {
+            cursor.omap_offset = key;
             return ObjectStore::omap_iter_ret_t::STOP;
-	  }
+          }
           return ObjectStore::omap_iter_ret_t::NEXT;
         });
+      dout(20) << __func__ << " omap_iterate result=" << result << " omap_keys=" << omap_keys << dendl;
       if (result < 0) {
-	ceph_abort();
+        ceph_abort();
       } else if (const auto more = static_cast<bool>(result); !more) {
-	cursor.omap_complete = true;
-	dout(20) << " got omap" << dendl;
+        cursor.omap_complete = true;
+        dout(20) << __func__ << " omap_complete set to true (no more keys, omap_iterate returned !more)" << dendl;
+        dout(20) << " got omap" << dendl;
+      } else {
+        dout(20) << __func__ << " omap NOT complete (more keys available, stopped due to left=" << left << ")" << dendl;
       }
       if (omap_keys) {
-	encode(omap_keys, reply_obj.omap_data);
-	reply_obj.omap_data.claim_append(omap_data);
+        encode(omap_keys, reply_obj.omap_data);
+        reply_obj.omap_data.claim_append(omap_data);
+        dout(20) << __func__ << " encoded " << omap_keys << " omap keys, total omap_data length="
+                 << reply_obj.omap_data.length() << dendl;
+      } else {
+        dout(20) << __func__ << " no omap keys read in this iteration" << dendl;
       }
+    } else {
+      dout(20) << __func__ << " skipping omap read (left=" << left
+               << " cursor.omap_complete=" << cursor.omap_complete << ")" << dendl;
     }
   }
+
+  dout(20) << __func__ << " omap iteration summary: omap_keys_read="
+           << omap_keys << " cursor.omap_complete=" << cursor.omap_complete
+           << " cursor.omap_offset='" << cursor.omap_offset << "'" << dendl;
 
   if (cursor.is_complete()) {
     // include reqids only in the final step.  this is a bit fragile
@@ -10093,17 +10271,21 @@ void PrimaryLogPG::_write_copy_chunk(CopyOpRef cop, PGTransaction *t)
   if (pool.info.supports_omap()) {
     if (!cop->temp_cursor.omap_complete) {
       if (cop->omap_header.length()) {
-	t->omap_setheader(
-	  cop->results.temp_oid,
-	  cop->omap_header);
-	cop->omap_header.clear();
+        dout(20) << __func__ << " writing omap_header to transaction, length="
+                 << cop->omap_header.length() << " temp_oid=" << cop->results.temp_oid << dendl;
+        t->omap_setheader(
+          cop->results.temp_oid,
+          cop->omap_header);
+        cop->omap_header.clear();
       }
       if (cop->omap_data.length()) {
-	map<string,bufferlist> omap;
-	bufferlist::const_iterator p = cop->omap_data.begin();
-	decode(omap, p);
-	t->omap_setkeys(cop->results.temp_oid, omap);
-	cop->omap_data.clear();
+        map<string,bufferlist> omap;
+        bufferlist::const_iterator p = cop->omap_data.begin();
+        decode(omap, p);
+        dout(20) << __func__ << " writing omap_data to transaction, "
+                 << omap.size() << " keys, temp_oid=" << cop->results.temp_oid << dendl;
+        t->omap_setkeys(cop->results.temp_oid, omap);
+        cop->omap_data.clear();
       }
     }
   } else {
@@ -10122,6 +10304,7 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
   if (obs.exists) {
     dout(20) << __func__ << ": exists, removing" << dendl;
     ctx->op_t->remove(obs.oi.soid);
+    ctx->use_replace_op = true;
   } else {
     ctx->delta_stats.num_objects++;
     obs.exists = true;
@@ -10708,7 +10891,7 @@ int PrimaryLogPG::do_cdc(const object_info_t& oi,
    * As s result, we leave this as a future work.
    */
   int r = pgbackend->objects_read_sync(
-      oi.soid, 0, oi.size, 0, &bl);
+      oi.soid, 0, oi.size, 0, &bl, oi.size, std::nullopt);
   if (r < 0) {
     dout(0) << __func__ << " read fail " << oi.soid
             << " len: " << oi.size << " r: " << r << dendl;
@@ -13145,6 +13328,26 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
 {
   dout(10) << __func__ << dendl;
 
+  if (coro_resumer != nullptr) {
+    dout(20) << __func__ << ": Stopping active coroutine" << dendl;
+    if (active_coro_ctx) {
+      dout(20) << __func__ << ": Cleaning up orphaned OpContext from coroutine" << dendl;
+      // Remove from in_progress_async_reads if present
+      for (auto it = in_progress_async_reads.begin();
+          it != in_progress_async_reads.end(); ++it) {
+        if (it->second == active_coro_ctx) {
+          in_progress_async_reads.erase(it);
+          break;
+        }
+      }
+      // Close the context to release all resources
+      close_op_ctx(active_coro_ctx);
+      active_coro_ctx = nullptr;
+    }
+    coro_resumer = nullptr;
+    coro_op_in_flight = false;
+  }
+
   if (hit_set && hit_set->insert_count() == 0) {
     dout(20) << " discarding empty hit_set" << dendl;
     hit_set_clear();
@@ -13161,6 +13364,11 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
   requeue_ops(waiting_for_flush);
   requeue_ops(waiting_for_active);
   requeue_ops(waiting_for_readable);
+  requeue_ops(waiting_for_coro_op);
+  if (active_coro_op) {
+    requeue_op(active_coro_op);
+    active_coro_op = nullptr;
+  }
 
   vector<ceph_tid_t> tids;
   cancel_copy_ops(is_primary(), &tids);
@@ -13520,8 +13728,7 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
   int skipped = 0;
 
   PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
-  map<eversion_t, hobject_t>::const_iterator p =
-    missing.get_rmissing().lower_bound(eversion_t(0, recovery_state.get_pg_log().get_log().last_requested));
+  auto p = missing.get_rmissing().lower_bound(eversion_t(0, recovery_state.get_pg_log().get_log().last_requested));
   while (p != missing.get_rmissing().end()) {
     handle.reset_tp_timeout();
     hobject_t soid;
@@ -13830,7 +14037,7 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
 
     // oldest first!
     const pg_missing_t &m(pm->second);
-    for (map<eversion_t, hobject_t>::const_iterator p = m.get_rmissing().begin();
+    for (auto p = m.get_rmissing().begin();
 	 p != m.get_rmissing().end() && started < max;
 	   ++p) {
       handle.reset_tp_timeout();
@@ -16054,6 +16261,27 @@ int PrimaryLogPG::getattrs_maybe_cache(
   }
   tmp.swap(*out);
   return r;
+}
+
+int PrimaryLogPG::get_internal_versions(const hobject_t& soid,
+                                        std::map<shard_id_t, eversion_t>* out) {
+  ObjectContextRef obc = get_object_context(soid, false);
+
+  if (!obc || !obc->obs.exists) {
+    return -ENOENT;
+  }
+
+  if (is_primary() && pool.info.is_erasure()) {
+    for (unsigned int i = 0; i < pool.info.get_size(); ++i) {
+      (*out)[shard_id_t(i)] = obc->obs.oi.version;
+    }
+    for (const auto& [shard, version] : obc->obs.oi.shard_versions) {
+      out->at(shard) = version;
+    }
+  } else {
+    (*out)[pg_whoami.shard] = obc->obs.oi.version;
+  }
+  return 0;
 }
 
 bool PrimaryLogPG::check_failsafe_full() {

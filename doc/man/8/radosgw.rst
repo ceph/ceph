@@ -213,6 +213,15 @@ configures the number of seconds between log flushes, and the flush
 threshold specify how many entries can be kept before resorting to
 synchronous flush.
 
+.. warning:: All RGW instances and ``radosgw-admin`` commands must use the
+   same value for ``rgw_usage_max_shards``. If values differ between daemons
+   or between the cluster and the admin tool, usage log reads and trims
+   will target different objects than where data was written, causing
+   seemingly empty results or failed cleanup. Use
+   ``ceph config set global rgw_usage_max_shards <N>`` to enforce a
+   consistent value across the cluster. Alternatively, ``radosgw-admin``
+   supports the ``--rgw-usage-max-shards`` command-line parameter.
+
 
 Availability
 ============

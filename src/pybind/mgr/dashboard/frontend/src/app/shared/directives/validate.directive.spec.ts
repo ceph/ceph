@@ -13,8 +13,15 @@ import { ValidateDirective } from './validate.directive';
 // A test host component to simulate directive usage with a Reactive Form
 @Component({
   template: `
-    <form [formGroup]="form" (ngSubmit)="onSubmit()">
-      <input formControlName="testField" cdValidate #cdValidateRef="cdValidate" />
+    <form
+      [formGroup]="form"
+      (ngSubmit)="onSubmit()"
+    >
+      <input
+        formControlName="testField"
+        cdValidate
+        #cdValidateRef="cdValidate"
+      />
       <button type="submit">Submit</button>
     </form>
   `,

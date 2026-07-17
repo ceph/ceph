@@ -149,7 +149,14 @@ if 'BUILD_DOC' in os.environ or 'READTHEDOCS' in os.environ:
 elif check_sanity():
     ext_args = get_python_flags(['rados', 'rgw'])
     cython_constants = dict(BUILD_DOC=False)
-    include_path = [os.path.join(os.path.dirname(__file__), "..", "rados")]
+    # The processed .pyx is written to CYTHON_BUILD_DIR, away from the
+    # binding's own c_*.pxd, so add this source directory to include_path
+    # for cimports to resolve.
+    source_dir = os.path.dirname(os.path.abspath(__file__))
+    include_path = [
+        source_dir,
+        os.path.join(source_dir, "..", "rados"),
+    ]
     cythonize_args = dict(include_path=include_path)
 else:
     sys.exit(1)
@@ -186,9 +193,11 @@ else:
     # Process the template with cython_constants
     processed = Tempita.sub(template_content, **cython_constants)
 
-    # Write processed output to current working directory
-    # (which is the build directory when invoked by CMake)
-    output_pyx = "rgw_processed.pyx"
+    # Write the processed output to the build directory when invoked by
+    # CMake, which exports CYTHON_BUILD_DIR but runs setup.py from the
+    # source directory; fall back to the current working directory.
+    build_dir = os.environ.get("CYTHON_BUILD_DIR", os.getcwd())
+    output_pyx = os.path.join(build_dir, "rgw_processed.pyx")
 
     with open(output_pyx, 'w') as f:
         f.write(processed)
@@ -224,7 +233,6 @@ setup(
                 **ext_args
             )
         ],
-        build_dir=os.environ.get("CYTHON_BUILD_DIR", None),
         **cythonize_args
     ),
     classifiers=[

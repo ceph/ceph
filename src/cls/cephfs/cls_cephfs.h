@@ -14,6 +14,7 @@
  */
 
 #include "include/encoding.h"
+#include "cls_cephfs_types.h"
 
 /**
  * Value class for the xattr we'll use to accumulate

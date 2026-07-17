@@ -55,7 +55,7 @@ int cls_register_method(cls_handle_t hclass, const char *method,
   return (hmethod != NULL);
 }
 
-int cls_register_cxx_method(cls_handle_t hclass, const char *method,
+int detail::cls_register_cxx_method_impl(cls_handle_t hclass, const char *method,
                             int flags,
 			    cls_method_cxx_call_t class_call, cls_method_handle_t *handle)
 {

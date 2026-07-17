@@ -84,8 +84,8 @@ public:
     return _readv(rbm_addr, std::move(ptrs));
   }
 protected:
-  rbm_superblock_t super;
-  rbm_shard_info_t shard_info;
+  device_superblock_t super;
+  device_shard_info_t shard_info;
   uint32_t device_shard_nums = 0;
   store_index_t store_index = 0;
   bool shard_status = true;
@@ -126,7 +126,7 @@ public:
   secondary_device_set_t& get_secondary_devices() final {
     return super.config.secondary_devices;
   }
-  std::size_t get_available_size() const { return super.size; }
+  std::size_t get_available_size() const { return super.total_size; }
   extent_len_t get_block_size() const { return super.block_size; }
 
   read_ertr::future<uint32_t> get_shard_nums() final;
@@ -179,7 +179,7 @@ public:
 
   write_ertr::future<> write_rbm_superblock();
 
-  read_ertr::future<rbm_superblock_t> read_rbm_superblock(rbm_abs_addr addr);
+  read_ertr::future<device_superblock_t> read_rbm_superblock(rbm_abs_addr addr);
 
   using stat_device_ret =
     read_ertr::future<seastar::stat_data>;

@@ -3108,19 +3108,9 @@ void MDSRankDispatcher::handle_asok_command(
   } else if (command == "dump stray") {
     dout(10) << "dump_stray start" <<  dendl;
     // the context is a wrapper for formatter to be used while scanning stray dir
-    auto context = std::make_unique<MDCache::C_MDS_DumpStrayDirCtx>(mdcache, f,
-     [this,on_finish](int r) {
-      // completion callback, will be called when scan is done
-      dout(10) << "dump_stray done" <<  dendl;
-      bufferlist bl;
-      on_finish(r, "", bl);
-    });
+    auto ctx = new MDCache::C_MDS_DumpStrayDirCtx(mdcache, f, on_finish);
     std::lock_guard l(mds_lock);
-    r = mdcache->stray_status(std::move(context));
-    // since the scanning op can be async, we want to know it, for better semantics
-    if (r == -EAGAIN) {
-     dout(10) << "dump_stray wait" << dendl;
-    }
+    mdcache->stray_status(ctx);
     return;
   } else {
     r = -ENOSYS;

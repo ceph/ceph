@@ -7,6 +7,7 @@
 #include <memory>
 #include <string.h>
 
+#include <fmt/ostream.h>
 
 #include "include/buffer.h"
 
@@ -23,6 +24,16 @@
 namespace crimson::os::seastore {
 class LogicalChildNode;
 }
+
+namespace crimson::os::seastore::lba {
+struct LBALeafNode;
+}
+
+// declared ahead of the struct so the consteval {fmt} check sees it from
+// LBALeafNode's own inline logging methods.
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::lba::LBALeafNode> : fmt::ostream_formatter {};
+#endif
 
 namespace crimson::os::seastore::lba {
 
@@ -46,15 +57,15 @@ using lba_node_meta_le_t = fixed_kv_node_meta_le_t<laddr_le_t>;
  * Layout (4KiB):
  *   checksum   : ceph_le32[1]               4B
  *   size       : ceph_le32[1]               4B
- *   meta       : lba_node_meta_le_t[1]      20B
- *   keys       : laddr_le_t[CAPACITY]       (254*8)B
- *   values     : paddr_le_t[CAPACITY]       (254*8)B
- *                                           = 4092B
+ *   meta       : lba_node_meta_le_t[1]      36B
+ *   keys       : laddr_le_t[CAPACITY]       (168*16)B
+ *   values     : paddr_le_t[CAPACITY]       (168*8)B
+ *                                           = 4076B
 
  * TODO: make the above capacity calculation part of FixedKVNodeLayout
  * TODO: the above alignment probably isn't portable without further work
  */
-constexpr size_t INTERNAL_NODE_CAPACITY = 254;
+constexpr size_t INTERNAL_NODE_CAPACITY = 168;
 struct LBAInternalNode
   : FixedKVInternalNode<
       INTERNAL_NODE_CAPACITY,
@@ -89,15 +100,15 @@ using LBAInternalNodeRef = LBAInternalNode::Ref;
  * Layout (4KiB):
  *   checksum   : ceph_le32[1]                4B
  *   size       : ceph_le32[1]                4B
- *   meta       : lba_node_meta_le_t[1]       20B
- *   keys       : laddr_le_t[CAPACITY]        (140*8)B
- *   values     : lba_map_val_le_t[CAPACITY]  (140*21)B
- *                                            = 4088B
+ *   meta       : lba_node_meta_le_t[1]       36B
+ *   keys       : laddr_le_t[CAPACITY]        (106*16)B
+ *   values     : lba_map_val_le_t[CAPACITY]  (106*21)B
+ *                                            = 4077B
  *
  * TODO: update FixedKVNodeLayout to handle the above calculation
  * TODO: the above alignment probably isn't portable without further work
  */
-constexpr size_t LEAF_NODE_CAPACITY = 135;
+constexpr size_t LEAF_NODE_CAPACITY = 106;
 
 struct LBALeafNode
   : FixedKVLeafNode<
@@ -141,12 +152,31 @@ struct LBALeafNode
 
   void update(
     internal_const_iterator_t iter,
-    lba_map_val_t val) final;
+    lba_map_val_t val,
+    modification_t mod) final;
 
   internal_const_iterator_t insert(
     internal_const_iterator_t iter,
     laddr_t addr,
     lba_map_val_t val) final;
+
+  void replace(
+    internal_const_iterator_t iter,
+    laddr_t pivot,
+    lba_map_val_t val) {
+    LOG_PREFIX(FixedKVInternalNode::replace);
+    SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, old key {}, key {}",
+      this->pending_for_transaction,
+      iter.get_offset(),
+      iter.get_key(),
+      pivot);
+    this->on_modify();
+    return this->journal_replace(
+      iter,
+      pivot,
+      std::move(val),
+      maybe_get_delta_buffer());
+  }
 
   void remove(internal_const_iterator_t iter) final {
     LOG_PREFIX(LBALeafNode::remove);
@@ -314,11 +344,14 @@ struct LBALeafNode
           t, it->get_key(), pending_version);
         ceph_abort();
       }
-      if (is_valid_child_ptr(child) &&
-          (child->_is_mutable() || child->_is_pending_io())) {
-        // skip the ones that the pending version is also modifying
-        it++;
-        continue;
+      if (is_valid_child_ptr(child)) {
+        if ((child->_is_mutable() || child->_is_pending_io())) {
+          // skip the ones that the pending version is also modifying
+          it++;
+          continue;
+        } else {
+          assert(child->_is_exist_clean() || child->_is_exist_mutation_pending());
+        }
       }
       auto pending_key = it->get_key();
       auto stable_key = iter->get_key();
@@ -328,9 +361,7 @@ struct LBALeafNode
         assert(pending_end <= stable_end);
         if (pending_key != stable_key) {
           assert(v2.pladdr != v1.pladdr);
-          assert(!is_valid_child_ptr(child) ||
-                 !child->_is_exist_clean() ||
-                 !child->_is_exist_mutation_pending());
+          assert(is_valid_child_ptr(child));
         }
         if (v2.pladdr != v1.pladdr) {
           auto m_v2 = v2;
@@ -340,9 +371,7 @@ struct LBALeafNode
           m_v2.pladdr = paddr;
           SUBTRACET(seastore_lba, "merging to {}, paddr: {} -> {}",
             t, pending_version, m_v2.pladdr, paddr);
-          if (!is_valid_child_ptr(child) ||
-              (!child->_is_exist_clean() &&
-               !child->_is_exist_mutation_pending())) {
+          if (!is_valid_child_ptr(child)) {
             // exclude the mappings whose children are EXIST_CLEAN ones
             SUBTRACET(seastore_lba, "merging to {}, checksum: {} -> {}",
               t, pending_version, m_v2.checksum, v1.checksum);
@@ -381,7 +410,6 @@ struct LBALeafNode
   }
 
   void merge_content_to_pending_versions(Transaction &t) {
-    ceph_assert(is_rewrite_transaction(t.get_src()));
     this->for_each_copy_dest_set(t, [this, &t](auto &copy_dests) {
 #ifndef NDEBUG
       for (auto &copy_dest : copy_dests.dests_by_key) {
@@ -426,7 +454,13 @@ struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t, LBALeafNode> {
     assert(is_viewable());
     assert(is_indirect());
     assert(!is_end());
-    return iter.get_val().pladdr.get_laddr();
+    if (likely(!hobject_t::is_temp_pool(get_key().get_pool()))) {
+      return iter.get_val().pladdr.build_laddr(key);
+    } else {
+      auto k = key;
+      k.set_pool(hobject_t::POOL_TEMP_START - key.get_pool());
+      return iter.get_val().pladdr.build_laddr(k);
+    }
   }
   checksum_t get_checksum() const {
     assert(is_viewable());
@@ -441,6 +475,13 @@ struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t, LBALeafNode> {
     assert(is_viewable());
     assert(!is_end());
     return iter.get_val().refcount;
+  }
+
+  extent_types_t get_extent_type() const {
+    assert(is_viewable());
+    assert(!is_end());
+    assert(iter.get_val().type != extent_types_t::NONE);
+    return iter.get_val().type;
   }
 
   base_iertr::future<> refresh();
@@ -459,6 +500,5 @@ using LBACursorRef = boost::intrusive_ptr<LBACursor>;
 template <> struct fmt::formatter<crimson::os::seastore::lba::lba_node_meta_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::lba::lba_map_val_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::lba::LBAInternalNode> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<crimson::os::seastore::lba::LBALeafNode> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::lba::LBACursor> : fmt::ostream_formatter {};
 #endif

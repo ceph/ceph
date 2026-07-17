@@ -28,7 +28,7 @@
 #include "mon/mon_types.h"
 #include "mon/ConfigMap.h"
 #include "mgr/MDSPerfMetricTypes.h"
-#include "mgr/TTLCache.h"
+#include "mgr/MgrMapCache.h"
 
 #include "DaemonState.h"
 #include "ClusterState.h"
@@ -38,6 +38,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 
 class health_check_map_t;
 class DaemonServer;
@@ -66,7 +67,8 @@ class ActivePyModules
   LogChannelRef clog, audit_clog;
   Objecter &objecter;
   Finisher &finisher;
-  TTLCache<std::string, PyObject*> ttl_cache;
+  ThreadMonitor* m_thread_monitor = nullptr;
+  MgrMapCache<PyObject*> api_cache;
 public:
   Finisher cmd_finisher;
 private:
@@ -84,15 +86,18 @@ public:
     bool mon_provides_kv_sub,
     DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
     LogChannelRef clog_, LogChannelRef audit_clog_, Objecter &objecter_,
-    Finisher &f, DaemonServer &server, PyModuleRegistry &pmr);
+    Finisher &f, DaemonServer &server, PyModuleRegistry &pmr, ThreadMonitor *monitor = nullptr);
 
   ~ActivePyModules();
 
   // FIXME: wrap for send_command?
   MonClient &get_monc() {return monc;}
   Objecter  &get_objecter() {return objecter;}
-  PyObject *cacheable_get_python(const std::string &what);
-  PyObject *get_python(const std::string &what);
+  PyObject *cacheable_get_python(std::string_view what,
+    const bool get_mutable = false);
+  PyObject *get_python(std::string_view what,
+    const bool get_mutable = false);
+  int ceph_cache_map_erase(std::string_view what);
   PyObject *get_server_python(const std::string &hostname);
   PyObject *list_servers_python();
   PyObject *get_metadata_python(

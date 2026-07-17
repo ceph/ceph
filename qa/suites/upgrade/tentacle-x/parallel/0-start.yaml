@@ -53,7 +53,12 @@ overrides:
       - OSD_UPGRADE_FINISHED
       - filesystem is degraded
       - filesystem is offline
+      - pg .* is stuck peering
       - osds down
       - osd down
       - OBJECT_UNFOUND
       - PG_DEGRADED
+      - OSD_HOST_DOWN
+      - POOL_FULL
+      - pool full
+      - pool\(s\) full

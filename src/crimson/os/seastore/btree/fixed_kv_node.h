@@ -512,7 +512,6 @@ struct FixedKVInternalNode
   }
 
   void merge_content_to_pending_versions(Transaction &t) {
-    ceph_assert(is_rewrite_transaction(t.get_src()));
     this->for_each_copy_dest_set(t, [this, &t](auto &copy_dests) {
       this->merge_content_to(t, copy_dests.dests_by_key);
     });
@@ -730,7 +729,8 @@ struct FixedKVLeafNode
 
   virtual void update(
     internal_const_iterator_t iter,
-    VAL val) = 0;
+    VAL val,
+    modification_t mod) = 0;
   virtual internal_const_iterator_t insert(
     internal_const_iterator_t iter,
     NODE_KEY addr,

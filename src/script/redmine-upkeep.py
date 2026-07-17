@@ -1342,7 +1342,7 @@ h2. Update Payload
         log.info(f"Found 'Fixes:' tags for tracker(s) #{', '.join([str(x) for x in found_tracker_ids])} in commits.")
 
         tracker_links = "\n".join([f"* https://tracker.ceph.com/issues/{tid}" for tid in found_tracker_ids])
-        comment_body = f"""
+        comment_body = textwrap.dedent("""
             This is an automated message by src/script/redmine-upkeep.py.
 
             I found one or more `Fixes:` tags in the commit messages in
@@ -1354,13 +1354,12 @@ h2. Update Payload
             {tracker_links}
 
             Those tickets do not reference this merged Pull Request. If this Pull Request merge resolves any of those tickets, please update the "Pull Request ID" field on each ticket. A future run of this script will appropriately update them.
-        """
+        """).format(revrange=revrange, tracker_links=tracker_links)
         if GITHUB_ACTIONS:
-            comment_body += f"""
+            comment_body += textwrap.dedent(f"""
 
             Update Log: {GITHUB_ACTION_LOG}
-            """
-        comment_body = textwrap.dedent(comment_body)
+            """)
         log.debug(f"Leaving comment:\n{comment_body}")
 
         post_github_comment(self.session, pr_id, comment_body)

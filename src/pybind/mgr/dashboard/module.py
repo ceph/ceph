@@ -34,11 +34,10 @@ from mgr_util import ServerConfigException, build_url, \
 
 from . import mgr
 from .cli import DBCLICommand
-from .controllers import nvmeof  # noqa # pylint: disable=unused-import
-from .controllers import Router, json_error_page
+from .controllers import Router, json_error_page, nvmeof  # noqa # pylint: disable=unused-import
 from .grafana import push_local_dashboards
 from .services import nvmeof_cli, nvmeof_top_cli  # noqa # pylint: disable=unused-import
-from .services.auth import AuthManager, AuthManagerTool, JwtManager
+from .services.auth import AuthManager, AuthManagerTool, AuthType, JwtManager
 from .services.exception import dashboard_exception_handler
 from .services.nvmeof_top_cli import NvmeofTopCollector
 from .services.service import RgwServiceManager
@@ -210,6 +209,7 @@ class CherryPyConfig(object):
         self._url_prefix = prepare_url_prefix(self.get_module_option(  # type: ignore
             'url_prefix', default=''))
 
+        bind_addr = server_addr
         if server_addr in ['::', '0.0.0.0']:
             server_addr = self.get_mgr_ip()  # type: ignore
         base_url = build_url(
@@ -218,7 +218,7 @@ class CherryPyConfig(object):
             port=server_port,
         )
         uri = f'{base_url}{self.url_prefix}/'
-        return uri, (server_addr, server_port), ssl_info, config
+        return uri, (bind_addr, server_port), ssl_info, config
 
     def await_configuration(self):
         """
@@ -580,6 +580,22 @@ class Module(MgrModule, CherryPyConfig):
 
         return (-errno.EINVAL, '', 'Command not found \'{0}\''
                 .format(cmd['prefix']))
+
+    def disable_oauth2_sso(self) -> None:
+        """
+        Disable OAuth2 SSO if it is currently active.
+        Called remotely by cephadm when oauth2-proxy goes down.
+        """
+        if not self.get_module_option('sso_oauth2', False):
+            return
+        load_sso_db()
+        mgr.SSO_DB.protocol = AuthType.LOCAL
+        mgr.SSO_DB.save()
+        self.set_module_option('sso_oauth2', False)
+        self.log.warning(
+            'OAuth2 SSO has been automatically disabled because '
+            'oauth2-proxy is no longer running.'
+        )
 
     def notify(self, notify_type: NotifyType, notify_id):
         NotificationQueue.new_notification(str(notify_type), notify_id)

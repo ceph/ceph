@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RgwMultisiteSyncFlowModalComponent } from './rgw-multisite-sync-flow-modal.component';
-import { ToastrModule } from 'ngx-toastr';
+
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ReactiveFormsModule } from '@angular/forms';
@@ -29,7 +29,6 @@ describe('RgwMultisiteSyncFlowModalComponent', () => {
       declarations: [RgwMultisiteSyncFlowModalComponent],
       imports: [
         HttpClientTestingModule,
-        ToastrModule.forRoot(),
         PipesModule,
         ReactiveFormsModule,
         CommonModule,
@@ -51,7 +50,7 @@ describe('RgwMultisiteSyncFlowModalComponent', () => {
     }).compileComponents();
 
     fixture = TestBed.createComponent(RgwMultisiteSyncFlowModalComponent);
-    multisiteServiceMock = (TestBed.inject(RgwMultisiteService) as unknown) as MultisiteServiceMock;
+    multisiteServiceMock = TestBed.inject(RgwMultisiteService) as unknown as MultisiteServiceMock;
     component = fixture.componentInstance;
     component.groupType = FlowType.symmetrical;
     component.groupExpandedRow = { groupName: 'new', bucket: 'bucket1' };

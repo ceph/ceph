@@ -44,6 +44,10 @@ command:
 
    ceph features
 
+See :ref:`require_min_compat_client` for what the
+``set-require-min-compat-client`` command does and how to choose an
+appropriate release argument.
+
 Balancer Module
 ---------------
 

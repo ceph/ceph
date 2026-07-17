@@ -456,12 +456,14 @@ public:
   int store_oidc_provider(const DoutPrefixProvider* dpp,
                           optional_yield y,
                           const RGWOIDCProviderInfo& info,
-                          bool exclusive) override;
+                          bool exclusive,
+                          RGWObjVersionTracker* objv_tracker) override;
   int load_oidc_provider(const DoutPrefixProvider* dpp,
                          optional_yield y,
                          std::string_view tenant,
                          std::string_view url,
-                         RGWOIDCProviderInfo& info) override;
+                         RGWOIDCProviderInfo& info,
+                         RGWObjVersionTracker* objv_tracker) override;
   int delete_oidc_provider(const DoutPrefixProvider* dpp,
                            optional_yield y,
                            std::string_view tenant,
@@ -963,6 +965,8 @@ public:
   virtual jspan_context& get_trace() override { return next->get_trace(); }
 
   virtual std::unique_ptr<rgw::sal::Object> get_meta_obj() override;
+
+  virtual bool supports_crypt_part_salts() const override { return next->supports_crypt_part_salts(); }
 
   virtual int init(const DoutPrefixProvider* dpp, optional_yield y, ACLOwner& owner, rgw_placement_rule& dest_placement, rgw::sal::Attrs& attrs) override;
   virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,

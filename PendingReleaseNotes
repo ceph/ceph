@@ -1,23 +1,139 @@
+* CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
+  as not supporting runtime updates. Previously, the configuration schema indicated
+  this option could be changed at runtime, but changes had no effect on opened file
+  handlers in ceph-fuse or libcephfs clients because there is no logic to propagate
+  changes to open file handles.
+
+* RADOS: PG autoscaler allows overlapping roots. Each root receives a PG target based
+  on its OSDs, with OSDs shared across multiple roots contributing proportionally
+  less to each root's allocation.
+  
+* CephFS: CephFS snapshots metadata is now mutable. It is now possible to add,
+  update and remove existing key-value pairs that are part of a snapshot
+  metadata via libcephfs API ceph_do_snap_md_op().
+
+* librados/neorados: The C++ APIs for executing Ceph Class (CLS) methods
+  have undergone a breaking change to enforce compile-time type safety, replacing
+  legacy string-based parameters with strongly-typed ClsMethod structs. C++
+  developers must update their method calls to use these new structs, which ensure
+  read/write semantics are correctly applied.
+
+* RGW: S3 ListObjects and ListObjectVersions now support the
+  ``x-amz-optional-object-attributes: RestoreStatus`` request header to include
+  restore status in listing responses. Restore status is stored in the bucket
+  index, so only objects written or restored after this upgrade will populate
+  the field. Existing objects are unaffected.
+* RGW: New S3 Control APIs to apply PublicAccessBlock configuration to User Accounts.
 * ceph-volume: Raw BlueStore OSD preparation now pre-formats NVMe devices and
   skips the slower BlueStore discard phase,reducing mkfs time on
   very large namespaces.
+* RGW: Omap backing for the RGW Datalog is deprecated and support will be removed in a future version.
+  - The `rgw default data log backing` option is removed and it is no longer
+    possible to create clusters with an omap based datalog.
+  - `radosgw-admin datalog type` will only accept `--log_type=fifo`.
+
+* MGR: The default values of ``mon_target_pg_per_osd`` and ``mon_max_pg_per_osd``
+  have been increased from 100 and 250 to 200 and 500, respectively. These values
+  enhance the PG autoscaler's ability to calculate reasonable ``pg_num`` values
+  for pools under its control. These in turn increase parallelism and performance,
+  and improve the ``balancer`` module's ability to acheive uniform OSD utilization.
+
+  [This concomitant PR](https://github.com/ceph/ceph/pull/67694) ensures that
+  upgrades are not delayed or disrupted by PG splitting as a result of this change.
+
+  Clusters with effective ``bluestore_osd_memory_target`` values smaller than
+  the default 4GiB may wish to explicitly set the previous default values in
+  the central config store before upgrading. This will reduce the potential
+  for increased memory starvation. Clusters with SSDs split into more than two
+  OSDs may also wish to pin their current values in advance, or redeploy those
+  SSDs with at most two OSDs per.
+
 * RGW: Bucket Logging suppports creating log buckets in EC pools.
   Implicit logging object commits are now performed asynchronously.
+* RGW: radosgw-admin bucket list now supports pagination for versioned buckets by using
+  both --marker and --object-version options together (e.g., ``--marker=obj1 --object-version=abc123``).
+  This enables proper pagination through versioned bucket listings without duplicates or
+  infinite loops. For non-versioned buckets, use only --marker as before (backward compatible).
 * RGW: OpenSSL engine support is deprecated in favor of provider support.
   - Removed the `openssl_engine_opts` configuration option. OpenSSL engine configuration in string format is no longer supported.
   - Added the `openssl_conf` configuration option for loading specified providers as default providers.
     Configuration file syntax follows the OpenSSL standard (see https://github.com/openssl/openssl/blob/master/doc/man5/config.pod).
     If the default provider is required when also using custom providers,
     it must be explicitly loaded in the configuration file or code (see https://github.com/openssl/openssl/blob/master/README-PROVIDERS.md).
+* RGW: Fixed bucket notification events so the 'x_amz_request_id' in NotificationEvent now matches the 'x_amz_request_id' returned by the corresponding S3 operation.
+* RGW: The rgw_gc_max_deferred and rgw_gc_max_deferred_entries_size options have been removed, as they did not do anything.
+  - Updated the default for rgw_gc_max_queue_size to account for the extra space from removing rgw_gc_max_deferred_entries_size.
+* RGW: The default value of ``rgw_thread_pool_size`` has been reduced from 512 to 128.
+  Benchmarks showed that the lower thread count improves throughput and reduces latency
+  on NVMe and HDD based environments. Users with specific workload requirements can
+  tune this value; see also ``rgw_max_concurrent_requests``.
 
-* DASHBOARD: Removed the older landing page which was deprecated in Quincy.
-  Admins can no longer enable the older, deprecated landing page layout by
-  adjusting FEATURE_TOGGLE_DASHBOARD.
+
+* DASHBOARD: A new Overview landing page provides an at-a-glance cluster summary
+  with health status, capacity, performance metrics, and quick-access links. All the
+  previous legacy landing pages are removed.
 * DASHBOARD: RGW Service form updated to take input regarding QAT compression.
-  - QAT compression is an optional field which can be set to 'Hardware' or 'Software' by selecting options from provided dropdwon. If 'None' is selected, compression is removed altogether.
-* Monitoring: Added new Prometheus alerts for certificate management:
+  QAT compression is an optional field which can be set to 'Hardware' or 
+  'Software' by selecting options from provided dropdwon. If 'None' is selected,
+  compression is removed altogether.
+* DASHBOARD: NVMe-oF management workflows have been revamped with DH-HMAC-CHAP
+  in-band authentication support for both unidirectional (host-to-controller) and
+  bidirectional (mutual) authentication, namespace host masking, and an integrated
+  subsystem creation wizard that combines NQN setup, host addition, and
+  authentication configuration in a single guided flow. Subsystem HA is now enabled
+  by default. Gateway group creation and deletion are now supported directly from
+  the dashboard, including per-gateway node management. NVMe-oF performance and
+  overview Grafana dashboards are embedded directly in the Block > NVMe/TCP tab.
+* DASHBOARD: RGW Storage Classes now support Glacier and Local storage class
+  types with full create, list, edit, and delete operations.
+* DASHBOARD: RGW S3 Bucket Notifications are now fully manageable from the dashboard.
+  Notification destinations (topics) support full CRUD operations (create, list, edit, delete)
+  for configuring webhook endpoints, Kafka brokers, and AMQP queues. Bucket notification
+  configurations can be created, listed, edited, and deleted to define which S3 events
+  trigger notifications and which destination to use.
+* DASHBOARD: RGW User Accounts can now be linked to individual RGW users,
+  root account user functionality has been added, and the bucket form
+  differentiates account users from standalone RGW users.
+* DASHBOARD: RGW tiering now supports read-through configuration and bucket
+  tiering options in lifecycle policies.
+* DASHBOARD: RGW multisite setup improvements: the RGW module is now
+  auto-enabled on primary and secondary clusters during multisite automation,
+  FQDN endpoints are supported (not only IPs), and users can re-use existing
+  realm/zonegroup/zone configurations when setting up replication.
+* DASHBOARD: RGW archive zone configuration is now available from the dashboard.
+* DASHBOARD: SMB shares now support QoS rate limiting, including per-share
+  bandwidth limits and cluster-wide rate limiting configuration.
+* DASHBOARD: NFS export management has been enhanced with subvolume group and
+  subvolume selection in the edit export form, CephFS snapshot visibility
+  toggling per export, and IPv6 address support. NFS cluster and export listing
+  is now available.
+* DASHBOARD: CephFS volume creation now supports selecting existing pools for
+  metadata and data instead of always creating new ones.
+* DASHBOARD: Certificate management is now integrated into the dashboard.
+  Service detail views include a Certificate tab showing certificate status, and
+  the service create/edit modal supports certmgr-based certificate provisioning.
+  Certificate health alerts are surfaced in the dashboard and Prometheus.
+* DASHBOARD: The onboarding (cluster creation) wizard has been redesigned with
+  an updated layout and improved visual flow.
+* DASHBOARD: The dashboard UI has been modernized with the Carbon Design
+  System — including forms, modals, notifications, icons, performance charts,
+  and multi-cluster views.
+* DASHBOARD: Logging infrastructure has been migrated from Promtail to Grafana
+  Alloy.
+* DASHBOARD: Prometheus configuration now supports a remote write section for
+  forwarding metrics to external systems.
+* DASHBOARD: `ceph dashboard sso enable oauth2` checks for oauth2-proxy service for SSO enablement.  If the `oauth2-proxy` service goes down, cephadm will automatically disable Dashboard OAuth2 SSO.
+* Monitoring: New Grafana dashboards have been added for Application Overview,
+  CephFS, CephFS Subvolume, NVMe-oF (performance and overview), SMB Overview,
+  and RGW Bucket Notification. The Grafana dashboards naming convention has been
+  standardized. Grafana has been upgraded to version 12.3.1.
+* Monitoring: Added ``NVMeoFHostKeepAliveTimeout`` Prometheus alert that fires
+  when an NVMe-oF host keepalive times out.
+* Monitoring: Certificate management health checks now generate Prometheus
+  alerts and dashboard warnings for certificate expiration and errors.
   - CephCertificateError: Fires when a Ceph certificate has expired (critical severity).
   - CephCertificateWarning: Fires when a Ceph certificate is about to expire (warning severity).
+
 * CephFS: The `peer_add` command is deprecated in favor of the `peer_bootstrap` command.
 * RGW: For `radosgw-admin account rm`, the `--purge-data` option previously applied only
   to buckets and objects, but now deletes account users, roles, groups, and oidc-providers
@@ -26,6 +142,14 @@
   and the scrubbing process is delayed between each read in order to avoid monopolizing
   the I/O capacity of the OSD.
   The default stride size (``osd_deep_scrub_stride``) was 512 KBytes, and is now 4 MBytes.
+* RADOS: When an OSD is overloaded with queued snap-trim operations, no
+  regular (non-urgent) scrubs will be scheduled on that OSD. This is
+  determined by comparing the total snap-trim queue lengths for all PGs
+  for which the OSD is a primary against ``osd_scrub_queued_snaptrims_limit``,
+  which defaults to 500.
+  This restriction does not apply to operator-initiated scrubs, nor to repair scrubs.
+  It can be disabled by setting ``osd_scrub_queued_snaptrims_limit`` to 0.
+* RGW: Add SSE-KMS secrets cache
 
 * RADOS: Stretch mode can now be entered even if the two dividing buckets differ
   in weight by a small fraction (default 0.1). This is tunable via
@@ -61,17 +185,89 @@
   ``ceph fs snapshot mirror daemon status`` now shows the remote cluster's
   monitor addresses and cluster ID for each configured peer, making it easier
   to verify peer connectivity and troubleshoot mirroring issues.
+* CephFS Mirroring: The ``fs mirror peer status`` admin socket command reports
+  additional per-directory sync metrics (sync mode, throughput, crawl and
+  data-sync queue timing, bytes/files progress, and ETA). Output is grouped
+  under ``metrics/<mirrored-dir-path>/peer/<peer-uuid>``. For more information,
+  see https://tracker.ceph.com/issues/73453
+* CephFS Mirroring: Per-directory snapshot sync progress is exposed as labeled perf
+  counters in the ``cephfs_mirror_directory`` group (``counter dump`` on the mirror
+  daemon admin socket, exportable via ``ceph-exporter``). Counters mirror
+  ``fs mirror peer status`` fields (directory state, current sync, last sync, and
+  snap summary) and are labeled by peer UUID and mirrored directory path. See
+  https://tracker.ceph.com/issues/73457
+* CephFS Mirroring: The mirroring module provides ``ceph fs snapshot mirror status``,
+  a Ceph CLI command similar to the ``fs mirror peer status`` admin socket interface
+  for viewing per-directory snapshot sync metrics. The output layout matches
+  ``fs mirror peer status`` for core sync fields and additionally includes
+  ``metrics_updated_at`` (time of the last omap write). Optional filters by
+  mirrored directory path and peer UUID are supported. For more information,
+  see https://tracker.ceph.com/issues/76686
+* CephFS Mirroring: Introduced snapshot checkpoints feature that allows users to mark
+  specific snapshots as important milestones and track their replication status to remote
+  sites. Checkpoints automatically detect if a snapshot has already been synced and provide
+  visibility into disaster recovery readiness. The feature includes four new CLI commands:
+  ``ceph fs snapshot mirror checkpoint add`` to mark a snapshot,
+  ``ceph fs snapshot mirror checkpoint now`` to checkpoint the latest snapshot,
+  ``ceph fs snapshot mirror checkpoint ls`` to list all checkpoints with their status
+  (created/complete/failed), and ``ceph fs snapshot mirror checkpoint remove`` to remove
+  a checkpoint. Checkpoint metadata is persistent across daemon restarts. This feature is
+  useful for compliance auditing, application consistency verification, and SLA tracking.
+  For more information, see https://tracker.ceph.com/issues/73454
 * RBD: Mirror snapshot creation and trash purge schedules are now automatically
   staggered when no explicit "start-time" is specified. This reduces scheduling
   spikes and distributes work more evenly over time.
+* RBD: Introduced a new ``RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT`` policy for
+  ``rbd_lock_acquire()``. This is a low-level interface intended to allow
+  a peer to grab exclusive lock manually for short periods of time with other
+  peers pausing their activity and waiting for the lock to be released rather
+  than instantly aborting I/O and returning an error. It's possible to switch
+  from ``RBD_LOCK_MODE_EXCLUSIVE`` to ``RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT``
+  policy and vice versa even if the lock is already held.
+* RGW: In multisite deployments, zone endpoints configured in the zonegroup
+  (e.g. ``https://zone-a.example.com``) can now be resolved to all IP addresses
+  returned by DNS, with inter-zone traffic distributed across them using
+  round-robin and per-IP health tracking. This enables DNS-based service discovery
+  for inter-zone traffic without an external load balancer. This feature is disabled
+  by default: to opt in, set ``rgw_rest_conn_connect_to_resolved_ips = true``. The
+  per-IP retry-after-failure timeout is controlled by ``rgw_rest_conn_ip_fail_timeout_secs``
+  (default: 2 seconds). Deployments that work around libcurl's single-address behavior
+  by repeating the same endpoint multiple times in zone configuration should review that
+  setup before enabling, as round-robin distribution makes such duplication unnecessary.
 
 * OSD: A health warning is reported when BlueFS usage exceeds the
   configured ratio of the main OSD data device size. This warning is
   informational and can be muted with:
   ``ceph health mute BLUESTORE_BLUEFS_OVERSIZED``
+* MGR: The Manager now automatically increases ``mgr_stats_period`` when its
+  message queue is congested, reducing daemon reporting frequency to prevent
+  overload. The period recovers automatically once the queue clears. This
+  behavior is controlled by the new ``mgr_stats_period_autotune`` (default:
+  ``true``) and ``mgr_stats_period_autotune_queue_threshold`` (default: ``100``)
+  config options.
+* MGR: The Manager cache system has been redesigned from a TTL-based (time-to-live)
+  approach to an event-driven invalidation strategy. The cache now automatically
+  invalidates entries when underlying cluster maps are updated. The cache is enabled
+  by default. The previous `mgr_ttl_cache_expire_seconds` configuration option has
+  been removed and replaced with `mgr_map_cache_enabled` (default: true).
+* The ``last_degraded`` timestamp is added to the ``pg_stat_t`` structure to
+  track the initial point of redundancy loss when a PG enters an undersized or
+  degraded state. This timestamp is latched until the PG returns to a clean
+  state and a subsequent redundancy loss occurs. Used in conjunction with
+  ``last_clean``, the ``last_degraded`` timestamp enables the calculation of
+  data vulnerability and durability scores.
+* RBD: It's possible to specify source cluster's ``mon_host`` and ``key`` for
+  ``native`` format migration via the migration spec now.  This eliminates the
+  dependency on ``<cluster-name>.conf`` file in a known location which is
+  rather rigid and also challenging to disseminate in some environments.  The
+  key can be embedded in the migration spec or just referenced from there while
+  stored in the MON config-key store.
 
 >=20.0.0
 
+* Client: New config value osd_min_split_replica_read_size, which allows control
+  of the minimum size a read can be when a client breaks up the read into multiple
+  smaller reads across PG shards.
 * RADOS: The lead Monitor and stretch mode status are now displayed by `ceph status`.
   Related Tracker: https://tracker.ceph.com/issues/70406
 * RGW: The User Account feature introduced in Squid provides first-class support for
@@ -276,6 +472,7 @@
 * Dashboard: RGW Topics and Bucket Notification Management
 * Dashboard: RGW granular bucket replication
 * Dashboard: SMB monitoring and management
+* Dashboard: `ceph dashboard sso enable oauth2` checks for oauth2-proxy service for SSO enablement.  If the `oauth2-proxy` service goes down, cephadm will automatically disable Dashboard OAuth2 SSO.
 * Monitoring: New monitoring Dashboards for Application, NVMe, CephFS, and SMB Overview
 * RGW: Introduce the `rgw_usage_log_key_transition` configuration option to handle
   the co-existence of old and new usage log keys. This option is enabled by default
@@ -865,3 +1062,13 @@ can be configured using the `rgw` option `rgw_bucket_persistent_notif_num_shards
   https://docs.ceph.com/en/latest/radosgw/notifications/
 
 Relevant tracker: https://tracker.ceph.com/issues/71677
+
+* RGW: Multipart upload part heads are now tracked under a new
+  ``rgw.multipart`` category in bucket stats, separate from completed
+  objects (``rgw.main``). This makes ``radosgw-admin bucket stats``
+  and the ``X-RGW-Object-Count`` header on HEAD Bucket more accurate:
+  in-progress or abandoned multipart parts no longer inflate the
+  object count. Existing in-progress uploads retain the old category
+  until they complete or abort.
+
+  Relevant tracker: https://tracker.ceph.com/issues/77509

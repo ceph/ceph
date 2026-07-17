@@ -47,13 +47,18 @@ following command:
 
    ceph osd set-require-min-compat-client reef
 
-This command will fail if any pre-Reef clients or daemons are connected to
-the monitors. To see which client versions are in use, run the following
-command:
+Do not lower an already-higher value: that would prevent features that
+depend on a newer release from working.  This command will fail if any
+pre-Reef clients or daemons are connected to the Monitors. To see which
+client versions are in use, run the following command:
 
 .. prompt:: bash $
 
    ceph features
+
+See :ref:`require_min_compat_client` for what the
+``set-require-min-compat-client`` command does and how to choose an
+appropriate release argument.
 
 Balancer Module
 ---------------

@@ -475,7 +475,7 @@ int CrushTester::test(CephContext* cct)
   // make adjustments
   adjust_weights(weight);
 
-  if (output_choose_tries)
+  if (output_choose_tries || show_retry_exhaustion)
     crush.start_choose_profile();
   
   for (int r = min_rule; r < crush.get_max_rules() && r <= max_rule; r++) {
@@ -673,15 +673,42 @@ int CrushTester::test(CephContext* cct)
     }
   }
 
-  if (output_choose_tries) {
+  if (output_choose_tries || show_retry_exhaustion) {
     __u32 *v = 0;
     int n = crush.get_choose_profile(&v);
-    for (int i=0; i<n; i++) {
-      cout.setf(std::ios::right);
-      cout << std::setw(2)
-      << i << ": " << std::setw(9) << v[i];
-      cout.unsetf(std::ios::right);
-      cout << std::endl;
+    
+    if (output_choose_tries) {
+      for (int i=0; i<n; i++) {
+        cout.setf(std::ios::right);
+        cout << std::setw(2) << "tries "
+        << i+1 << ": " << std::setw(9) << v[i];
+        cout.unsetf(std::ios::right);
+        cout << std::endl;
+      }
+    }
+    
+    if (show_retry_exhaustion) {
+      // Check if the maximum retry count (n-1) has any hits
+      if (n > 0 && v[n-1] > 0) {
+        cerr << std::endl;
+        cerr << "WARNING: Retry exhaustion detected!" << std::endl;
+        cerr << "  " << v[n-1] << " PG(s) hit the maximum retry limit of " << (n) << std::endl;
+        cerr << "  This indicates CRUSH failed to find optimal placement for some PGs." << std::endl;
+        cerr << std::endl;
+      } else {
+        cout << std::endl;
+        cout << "No retry exhaustion detected (maximum tries needed: ";
+        // Find the actual maximum tries used
+        int max_tries_used = 1;
+        for (int i = n-1; i >= 0; i--) {
+          if (v[i] > 0) {
+            max_tries_used = i+1;
+            break;
+          }
+        }
+        cout << max_tries_used << " / " << (n) << ")" << std::endl;
+        cout << std::endl;
+      }
     }
 
     crush.stop_choose_profile();

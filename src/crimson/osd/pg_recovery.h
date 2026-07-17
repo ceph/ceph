@@ -105,9 +105,18 @@ private:
   friend class ReplicatedRecoveryBackend;
   friend class crimson::osd::UrgentRecovery;
 
+  interruptible_future<OperationThrottler::ThrottleReleaser>
+  get_backfill_throttle();
+
   interruptible_future<> recover_object_with_throttle(
     hobject_t soid,
     eversion_t need);
+
+  interruptible_future<> do_request_primary_scan(hobject_t begin);
+  interruptible_future<> do_request_replica_scan(
+    pg_shard_t target,
+    hobject_t begin,
+    hobject_t end);
 
   interruptible_future<> recover_object(
     const hobject_t &soid,
@@ -121,6 +130,8 @@ private:
   std::unique_ptr<crimson::osd::BackfillState> backfill_state;
   std::map<pg_shard_t,
            MURef<MOSDPGBackfillRemove>> backfill_drop_requests;
+  std::map<pg_shard_t,
+           OperationThrottler::ThrottleReleaser> replica_scan_throttle_releasers;
 
   template <class EventT>
   void start_backfill_recovery(

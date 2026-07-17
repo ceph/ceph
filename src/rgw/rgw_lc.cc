@@ -8,10 +8,12 @@
 #include <algorithm>
 #include <tuple>
 #include <functional>
+#include <atomic>
 
 #include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/optional.hpp>
 
 #include "include/scope_guard.h"
 #include "include/function2.hpp"
@@ -31,7 +33,10 @@
 #include "rgw_lc.h"
 #include "rgw_string.h"
 #include "rgw_sal.h"
+#include "rgw_multi_del.h"
 #include "rgw_multipart_meta_filter.h"
+#include "rgw_bucket_logging.h"
+#include "rgw_bucket_logging_types.h"
 
 #include "fmt/format.h"
 
@@ -43,6 +48,100 @@ constexpr int32_t hours_in_a_day = 24;
 constexpr int32_t secs_in_a_day = hours_in_a_day * 60 * 60;
 
 using namespace std;
+
+/*
+ * Batching accumulator for LC counter updates.
+ *
+ * obj_scanned is touched only by the producer thread (the listing loop),
+ * so it is non-atomic. All other staged counters are touched from worker
+ * coroutines via record_*() and must be atomic.
+ */
+struct LCBatchCounters {
+  PerfCounters* perf_counters;
+  uint64_t obj_scanned{0};
+  std::atomic<uint64_t> obj_completed{0};
+  std::atomic<uint64_t> obj_expired{0};
+  std::atomic<uint64_t> obj_noncur_expired{0};
+  std::atomic<uint64_t> obj_dm_expired{0};
+  std::atomic<uint64_t> obj_transitioned{0};
+  std::atomic<uint64_t> obj_mpu_aborted{0};
+  uint64_t flush_threshold;
+
+  LCBatchCounters(PerfCounters* pc, uint64_t threshold)
+    : perf_counters(pc), flush_threshold(threshold) {}
+
+  void increment_scanned() {
+    if (!perf_counters) return;
+    ++obj_scanned;
+  }
+
+  void decrement_pending() {
+    if (!perf_counters) return;
+    obj_completed.fetch_add(1, std::memory_order_relaxed);
+  }
+
+  void record_expired() {
+    if (!perf_counters) return;
+    obj_expired.fetch_add(1, std::memory_order_relaxed);
+  }
+
+  void record_noncur_expired() {
+    if (!perf_counters) return;
+    obj_noncur_expired.fetch_add(1, std::memory_order_relaxed);
+  }
+
+  void record_dm_expired() {
+    if (!perf_counters) return;
+    obj_dm_expired.fetch_add(1, std::memory_order_relaxed);
+  }
+
+  void record_transitioned() {
+    if (!perf_counters) return;
+    obj_transitioned.fetch_add(1, std::memory_order_relaxed);
+  }
+
+  void record_mpu_aborted() {
+    if (!perf_counters) return;
+    obj_mpu_aborted.fetch_add(1, std::memory_order_relaxed);
+  }
+
+  void flush_scanned() {
+    if (!perf_counters) return;
+    if (obj_scanned > 0) {
+      perf_counters->inc(l_rgw_lc_per_bucket_obj_scanned, obj_scanned);
+      perf_counters->inc(l_rgw_lc_per_bucket_obj_pending, obj_scanned);
+      obj_scanned = 0;
+    }
+  }
+
+  void flush_completed() {
+    if (!perf_counters) return;
+    uint64_t completed = obj_completed.exchange(0, std::memory_order_relaxed);
+    if (completed > 0) {
+      perf_counters->dec(l_rgw_lc_per_bucket_obj_pending, completed);
+    }
+  }
+
+  void flush_actions() {
+    if (!perf_counters) return;
+    uint64_t v;
+    if ((v = obj_expired.exchange(0, std::memory_order_relaxed)) > 0) {
+      perf_counters->inc(l_rgw_lc_per_bucket_obj_expired, v);
+    }
+    if ((v = obj_noncur_expired.exchange(0, std::memory_order_relaxed)) > 0) {
+      perf_counters->inc(l_rgw_lc_per_bucket_obj_noncur_expired, v);
+    }
+    if ((v = obj_dm_expired.exchange(0, std::memory_order_relaxed)) > 0) {
+      perf_counters->inc(l_rgw_lc_per_bucket_obj_dm_expired, v);
+    }
+    if ((v = obj_transitioned.exchange(0, std::memory_order_relaxed)) > 0) {
+      perf_counters->inc(l_rgw_lc_per_bucket_obj_transitioned, v);
+    }
+    if ((v = obj_mpu_aborted.exchange(0, std::memory_order_relaxed)) > 0) {
+      perf_counters->inc(l_rgw_lc_per_bucket_obj_mpu_aborted, v);
+    }
+  }
+};
 
 const char* LC_STATUS[] = {
       "UNINITIAL",
@@ -431,6 +530,9 @@ public:
         }
       }
       delay(dpp);
+      if (obj_iter == list_results.objs.end()) {
+        return false;
+      }
     }
 
     if (obj_iter->key.name == pre_obj.key.name) {
@@ -441,7 +543,7 @@ public:
 
     /* returning address of entry in objs */
     *obj = &(*obj_iter);
-    return obj_iter != list_results.objs.end();
+    return true;
   }
 
   rgw_bucket_dir_entry get_prev_obj() {
@@ -508,19 +610,22 @@ struct lc_op_ctx {
 
   std::unique_ptr<rgw::sal::Object> obj;
   const DoutPrefixProvider *dpp;
+  LCBatchCounters* batch_counters;
 
   std::unique_ptr<rgw::sal::PlacementTier> tier;
   const RGWObjTags* cached_tags{nullptr};
+  bool skip_update_olh{false};
 
   lc_op_ctx(op_env& env, rgw_bucket_dir_entry& o,
 	    boost::optional<std::string> next_key_name,
 	    uint64_t num_noncurrent,
 	    ceph::real_time effective_mtime,
-	    const DoutPrefixProvider *dpp)
+	    const DoutPrefixProvider *dpp,
+            LCBatchCounters* batch_counters)
     : cct(env.driver->ctx()), env(env), o(o), next_key_name(next_key_name),
       num_noncurrent(num_noncurrent), effective_mtime(effective_mtime),
       driver(env.driver), bucket(env.bucket), op(env.op), ol(env.ol),
-      dpp(dpp)
+      dpp(dpp), batch_counters(batch_counters)
     {
       obj = bucket->get_object(o.key);
       /* once bucket versioning is enabled, the non-current entries with
@@ -605,6 +710,41 @@ static void send_notification(const DoutPrefixProvider* dpp,
   }
 }
 
+// Op names used in records for LC-driven actions.
+static const std::string lifecycle_delete_object_op = "LIFECYCLE.DELETE.OBJECT";
+static const std::string lifecycle_delete_upload_op = "LIFECYCLE.DELETE.UPLOAD";
+
+// LC has no req_state, so the source bucket's owner stands in as the
+// identity for the log-bucket write permission check.
+static void send_log_record(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            rgw::sal::Driver* driver,
+                            rgw::sal::Object* obj,
+                            rgw::sal::Bucket* bucket,
+                            const std::string& etag,
+                            uint64_t size,
+                            const std::string& version_id,
+                            const std::string& op_name,
+                            rgw::bucketlogging::LoggingType logging_type) {
+  rgw::bucketlogging::record_input input;
+  input.bucket = bucket;
+  input.user_or_account = to_string(bucket->get_owner());
+  input.time = ceph::coarse_real_time::clock::now();
+  input.version_id = version_id;
+
+  const int ret = rgw::bucketlogging::log_record(
+      driver,
+      logging_type,
+      obj, input, op_name, etag, size, dpp, y,
+      /*async_completion=*/true,
+      /*log_source_bucket=*/false);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1) << "WARNING: bucket logging failed for lc object: "
+                      << obj->get_name() << " op: " << op_name
+                      << " ret: " << ret << dendl;
+  }
+}
+
 /* do all zones in the zone group process LC? */
 static bool zonegroup_lc_check(const DoutPrefixProvider *dpp, rgw::sal::Zone* zone)
 {
@@ -630,7 +770,8 @@ static bool zonegroup_lc_check(const DoutPrefixProvider *dpp, rgw::sal::Zone* zo
 static int remove_expired_obj(const DoutPrefixProvider* dpp,
                               optional_yield y, lc_op_ctx& oc,
                               bool remove_indeed,
-                              const rgw::notify::EventTypeList& event_types) {
+                              const rgw::notify::EventTypeList& event_types,
+                              boost::optional<const std::string&> log_op_name = boost::none) {
   int ret{0};
   auto& driver = oc.driver;
   auto& bucket_info = oc.bucket->get_info();
@@ -665,7 +806,8 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
   }
 
   auto have_notify = !event_types.empty();
-  if (have_notify) {
+  // etag is needed for both notifications and bucket-logging records
+  if (have_notify || log_op_name) {
     auto attrset = obj->get_attrs();
     auto iter = attrset.find(RGW_ATTR_ETAG);
     if (iter != attrset.end()) {
@@ -685,6 +827,9 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
 
   uint32_t flags = (!remove_indeed || !zonegroup_lc_check(dpp, oc.driver->get_zone()))
                    ? rgw::sal::FLAG_LOG_OP : 0;
+  if (remove_indeed && oc.skip_update_olh) {
+    flags |= rgw::sal::FLAG_SKIP_UPDATE_OLH;
+  }
   ret =  del_op->delete_obj(dpp, y, flags);
   if (ret < 0) {
     ldpp_dout(dpp, 1) <<
@@ -693,6 +838,11 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
     if (have_notify) {
       send_notification(dpp, y, driver, obj.get(), oc.bucket, etag, size,
 			version_id, event_types);
+    }
+    if (log_op_name) {
+      send_log_record(dpp, y, driver, obj.get(), oc.bucket, etag, size,
+                      version_id, *log_op_name,
+                      rgw::bucketlogging::LoggingType::Journal);
     }
   }
 
@@ -725,6 +875,17 @@ public:
 
   virtual int process(lc_op_ctx& oc, optional_yield y) {
     return 0;
+  }
+
+  /*
+   * True for actions that always hard-delete (remove_indeed=true).
+   * Used to route deletes through rgw::multi_delete::dispatch()
+   * so redundant OLH updates can be skipped. CurrentExpiration
+   * is excluded because on versioned buckets it creates a delete
+   * marker rather than hard-deleting.
+   */
+  virtual bool is_delete() const {
+    return false;
   }
 
   friend class LCOpRule;
@@ -770,8 +931,21 @@ public:
 
   void build();
   void update();
+
+  LCOpAction* evaluate(rgw_bucket_dir_entry& o,
+		       const DoutPrefixProvider *dpp,
+		       const RGWObjTags* cached_tags,
+		       optional_yield y);
+  int execute(LCOpAction& action,
+	      rgw_bucket_dir_entry& o,
+	      const DoutPrefixProvider *dpp,
+	      LCBatchCounters* batch_counters,
+	      const RGWObjTags* cached_tags,
+	      bool skip_update_olh,
+	      optional_yield y);
   int process(rgw_bucket_dir_entry& o, const DoutPrefixProvider *dpp,
-	      optional_yield y, const RGWObjTags* cached_tags = nullptr);
+              LCBatchCounters* batch_counters, optional_yield y,
+              const RGWObjTags* cached_tags = nullptr);
 }; /* LCOpRule */
 
 RGWLC::LCWorker::LCWorker(const DoutPrefixProvider* dpp, CephContext *cct,
@@ -789,7 +963,8 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 				       const multimap<string, lc_op>& prefix_map,
 				       ceph::async::spawn_throttle& workpool,
 				       boost::asio::yield_context yield,
-				       LCWorker* worker, time_t stop_at, bool once)
+				       LCWorker* worker, LCBatchCounters* batch_counters,
+				       time_t stop_at, bool once)
 {
   int ret;
   rgw::sal::Bucket::ListParams params_base;
@@ -807,7 +982,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
   params_base.ns = RGW_OBJ_NS_MULTIPART;
   params_base.access_list_filter = MultipartMetaFilter;
 
-  auto pf = [this, target] (optional_yield y, const lc_op& rule,
+  auto pf = [this, target, batch_counters] (optional_yield y, const lc_op& rule,
                             const rgw_bucket_dir_entry& obj) {
     int ret{0};
 
@@ -832,8 +1007,14 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
         const auto event_type = rgw::notify::ObjectExpirationAbortMPU;
         send_notification(this, y, driver, sal_obj.get(), target, etag, size,
                           obj.key.instance, {event_type});
+        send_log_record(this, y, driver, sal_obj.get(), target, etag, size,
+                        obj.key.instance, lifecycle_delete_upload_op,
+                        rgw::bucketlogging::LoggingType::Standard);
         if (perfcounter) {
           perfcounter->inc(l_rgw_lc_abort_mpu, 1);
+        }
+        if (batch_counters) {
+          batch_counters->record_mpu_aborted();
         }
       } else {
         if (ret == -ERR_NO_SUCH_UPLOAD) {
@@ -845,8 +1026,26 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
         }
       } /* abort failed */
     }   /* expired */
-		return ret;
+
+    return ret;
   };
+
+  /*
+   * mpu_count tracks total objects for the modulo flush pattern;
+   * obj_scanned resets on each flush so it can't be used for modulo.
+   */
+  uint64_t mpu_count = 0;
+  uint64_t batch_threshold = batch_counters->flush_threshold;
+
+  // Flush counters on all exit paths
+  auto flush_guard = make_scope_guard(
+    [batch_counters]
+      {
+        batch_counters->flush_scanned();
+        batch_counters->flush_completed();
+        batch_counters->flush_actions();
+      }
+    );
 
   std::map<std::string, std::vector<const lc_op*>> grouped_mp_ops;
   for (auto& prefix_entry : prefix_map) {
@@ -881,24 +1080,41 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 
       for (auto obj_iter = results.objs.begin(); obj_iter != results.objs.end(); ++obj_iter, ++offset) {
         const auto obj = *obj_iter;
-        for (auto* op : prefix_iter->second) {
-          workpool.spawn([pf, op, obj]
-                         (boost::asio::yield_context yield) mutable {
+        workpool.spawn([pf, ops = prefix_iter->second, obj, batch_counters]
+                       (boost::asio::yield_context yield) mutable {
+            for (auto* op : ops) {
               pf(yield, *op, obj);
-            });
+            }
+            batch_counters->decrement_pending();
+          });
+
+        batch_counters->increment_scanned();
+        mpu_count++;
+
+        /*
+         * Flush counters every batch_threshold multipart objects.
+         * Flush scanned first, then completed; obj_scanned is incremented
+         * synchronously above before any worker decrement, so
+         * obj_scanned >= obj_completed always holds at flush time.
+         */
+        if (batch_threshold > 0 && (mpu_count % batch_threshold) == 0) {
+          batch_counters->flush_scanned();
+          batch_counters->flush_completed();
+          batch_counters->flush_actions();
         }
-	if (going_down()) {
-	  return 0;
-	}
+
+        if (going_down()) {
+          return 0;
+        }
       } /* for objs */
 
       if ((offset % 100) == 0) {
-	if (worker_should_stop(stop_at, once)) {
-	  ldpp_dout(this, 5) << __func__ << " interval budget EXPIRED worker="
-			     << worker->ix << " bucket=" << target->get_name()
-			     << dendl;
-	  return 0;
-	}
+        if (worker_should_stop(stop_at, once)) {
+          ldpp_dout(this, 5) << __func__ << " interval budget EXPIRED worker="
+                             << worker->ix << " bucket=" << target->get_name()
+                             << dendl;
+          return 0;
+        }
       }
     } while(results.is_truncated);
   } /* for grouped_mp_ops */
@@ -911,6 +1127,36 @@ static int read_obj_tags(const DoutPrefixProvider *dpp, rgw::sal::Object* obj, b
   std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op();
 
   return rop->get_attr(dpp, RGW_ATTR_TAGS, tags_bl, y);
+}
+
+/*
+ * Fetch and decode object tags. Returns a pointer into buf on success,
+ * or nullptr if the object is a delete marker, has no tags, or on error.
+ */
+static const RGWObjTags* fetch_obj_tags(
+    const DoutPrefixProvider* dpp, rgw::sal::Bucket* bucket,
+    const rgw_bucket_dir_entry& obj,
+    boost::optional<RGWObjTags>& buf, optional_yield y)
+{
+  if (obj.is_delete_marker()) return nullptr;
+
+  rgw_obj_key key = obj.key;
+  if (key.instance.empty() && bucket->versioned() && !obj.is_current())
+    key.instance = "null";
+
+  bufferlist bl;
+  auto o = bucket->get_object(key);
+  if (read_obj_tags(dpp, o.get(), bl, y) != 0)
+    return nullptr;
+
+  try {
+    buf.emplace();
+    auto it = bl.cbegin();
+    buf->decode(it);
+    return &*buf;
+  } catch (buffer::error&) {
+    return nullptr;
+  }
 }
 
 static bool is_valid_op(const lc_op& op)
@@ -1098,11 +1344,15 @@ public:
       }
       ldpp_dout(oc.dpp, 2) << "DELETED: current is-dm "
 		       << oc.bucket << ":" << o.key << dendl;
+      if (oc.batch_counters) {
+        oc.batch_counters->record_dm_expired();
+      }
     } else {
       /* ! o.is_delete_marker() */
       r = remove_expired_obj(oc.dpp, y, oc, !oc.bucket->versioning_enabled(),
                              {rgw::notify::ObjectExpirationCurrent,
-                              rgw::notify::LifecycleExpirationDelete});
+                              rgw::notify::LifecycleExpirationDelete},
+                             lifecycle_delete_object_op);
       if (r < 0) {
 	ldpp_dout(oc.dpp, 0) << "ERROR: remove_expired_obj "
 			 << oc.bucket << ":" << o.key
@@ -1114,6 +1364,9 @@ public:
       }
       ldpp_dout(oc.dpp, 2) << "DELETED:" << oc.bucket << ":" << o.key
 		       << dendl;
+      if (oc.batch_counters) {
+        oc.batch_counters->record_expired();
+      }
     }
     return 0;
   }
@@ -1124,6 +1377,8 @@ protected:
 public:
   LCOpAction_NonCurrentExpiration(op_env& env)
     {}
+
+  bool is_delete() const override { return true; }
 
   bool check(lc_op_ctx& oc, ceph::real_time *exp_time, const DoutPrefixProvider *dpp, optional_yield y) override {
     auto& o = oc.o;
@@ -1154,7 +1409,8 @@ public:
     auto& o = oc.o;
     int r = remove_expired_obj(oc.dpp, y, oc, true,
                                {rgw::notify::LifecycleExpirationDelete,
-				rgw::notify::ObjectExpirationNoncurrent});
+				rgw::notify::ObjectExpirationNoncurrent},
+                               lifecycle_delete_object_op);
     if (r < 0) {
       ldpp_dout(oc.dpp, 0) << "ERROR: remove_expired_obj (non-current expiration) " 
 			   << oc.bucket << ":" << o.key
@@ -1166,6 +1422,9 @@ public:
     }
     ldpp_dout(oc.dpp, 2) << "DELETED:" << oc.bucket << ":" << o.key
 		     << " (non-current expiration)" << dendl;
+    if (oc.batch_counters) {
+      oc.batch_counters->record_noncur_expired();
+    }
     return 0;
   }
 };
@@ -1173,6 +1432,8 @@ public:
 class LCOpAction_DMExpiration : public LCOpAction {
 public:
   LCOpAction_DMExpiration(op_env& env) {}
+
+  bool is_delete() const override { return true; }
 
   bool check(lc_op_ctx& oc, ceph::real_time *exp_time, const DoutPrefixProvider *dpp, optional_yield y) override {
     auto& o = oc.o;
@@ -1211,6 +1472,9 @@ public:
     }
     ldpp_dout(oc.dpp, 2) << "DELETED:" << oc.bucket << ":" << o.key
 		     << " (delete marker expiration)" << dendl;
+    if (oc.batch_counters) {
+      oc.batch_counters->record_dm_expired();
+    }
     return 0;
   }
 };
@@ -1277,20 +1541,23 @@ public:
      */
     if (! oc.bucket->versioning_enabled()) {
       ret =
-	remove_expired_obj(oc.dpp, y, oc, true, {/* no delete notify expected */});
+	remove_expired_obj(oc.dpp, y, oc, true, {/* no delete notify expected */},
+                           lifecycle_delete_object_op);
       ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key
                             << ") not versioned flags: " << oc.o.flags << dendl;
     } else {
       /* versioned */
       if (oc.o.is_current() && !oc.o.is_delete_marker()) {
-        ret = remove_expired_obj(oc.dpp, y, oc, false, {/* no delete notify expected */});
+        ret = remove_expired_obj(oc.dpp, y, oc, false, {/* no delete notify expected */},
+                                 lifecycle_delete_object_op);
         ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key
                               << ") current & not delete_marker"
                               << " versioned_epoch:  " << oc.o.versioned_epoch
                               << "flags: " << oc.o.flags << dendl;
       } else {
         ret = remove_expired_obj(oc.dpp, y, oc, true,
-				 {/* no delete notify expected */});
+				 {/* no delete notify expected */},
+                                 lifecycle_delete_object_op);
         ldpp_dout(oc.dpp, 20)
             << "delete_tier_obj Object(key:" << oc.o.key << ") not current "
             << "versioned_epoch:  " << oc.o.versioned_epoch
@@ -1464,6 +1731,9 @@ public:
     ldpp_dout(oc.dpp, 2) << "TRANSITIONED:" << oc.bucket
 			 << ":" << o.key << " -> "
 			 << transition.storage_class << dendl;
+    if (oc.batch_counters) {
+      oc.batch_counters->record_transitioned();
+    }
     return 0;
   }
 };
@@ -1551,13 +1821,19 @@ void LCOpRule::update()
   effective_mtime = env.ol.get_prev_obj().meta.mtime;
 }
 
-int LCOpRule::process(rgw_bucket_dir_entry& o,
-		      const DoutPrefixProvider *dpp,
-		      optional_yield y,
-		      const RGWObjTags* cached_tags)
+/*
+ * evaluate() and execute() each construct a fresh lc_op_ctx. If a
+ * check() mutates ctx, those mutations are discarded before execute()
+ * runs — check() implementations must not stash state in ctx.
+ */
+LCOpAction* LCOpRule::evaluate(rgw_bucket_dir_entry& o,
+			       const DoutPrefixProvider *dpp,
+			       const RGWObjTags* cached_tags,
+			       optional_yield y)
 {
-  lc_op_ctx ctx(env, o, next_key_name, num_noncurrent, effective_mtime, dpp);
+  lc_op_ctx ctx(env, o, next_key_name, num_noncurrent, effective_mtime, dpp, nullptr);
   ctx.cached_tags = cached_tags;
+
   shared_ptr<LCOpAction> *selected = nullptr; // n.b., req'd by sharing
   real_time exp;
 
@@ -1572,45 +1848,70 @@ int LCOpRule::process(rgw_bucket_dir_entry& o,
     }
   }
 
-  if (selected &&
-      (*selected)->should_process()) {
-
-    /*
-     * Calling filter checks after action checks because
-     * all action checks (as they are implemented now) do
-     * not access the objects themselves, but return result
-     * from info from bucket index listing. The current tags filter
-     * check does access the objects, so we avoid unnecessary rados calls
-     * having filters check later in the process.
-     */
-
-    bool cont = false;
-    for (auto& f : filters) {
-      if (f->check(dpp, ctx, y)) {
-        cont = true;
-        break;
-      }
-    }
-
-    if (!cont) {
-      ldpp_dout(dpp, 20) << __func__ << "(): key=" << o.key
-			 << ": no rule match, skipping" << dendl;
-      return 0;
-    }
-
-    int r = (*selected)->process(ctx, y);
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: remove_expired_obj " 
-			<< env.bucket << ":" << o.key
-			<< " " << cpp_strerror(r) << dendl;
-      return r;
-    }
-    ldpp_dout(dpp, 20) << "processed:" << env.bucket << ":"
-		       << o.key << dendl;
+  if (!selected || !(*selected)->should_process()) {
+    return nullptr;
   }
 
-  return 0;
+  /*
+   * Calling filter checks after action checks because
+   * all action checks (as they are implemented now) do
+   * not access the objects themselves, but return result
+   * from info from bucket index listing. The current tags filter
+   * check does access the objects, so we avoid unnecessary rados calls
+   * having filters check later in the process.
+   */
+  bool cont = false;
+  for (auto& f : filters) {
+    if (f->check(dpp, ctx, y)) {
+      cont = true;
+      break;
+    }
+  }
 
+  if (!cont) {
+    ldpp_dout(dpp, 20) << __func__ << "(): key=" << o.key
+		       << ": no rule match, skipping" << dendl;
+    return nullptr;
+  }
+
+  return selected->get();
+}
+
+int LCOpRule::execute(LCOpAction& action,
+		      rgw_bucket_dir_entry& o,
+		      const DoutPrefixProvider *dpp,
+		      LCBatchCounters* batch_counters,
+		      const RGWObjTags* cached_tags,
+		      bool skip_update_olh,
+		      optional_yield y)
+{
+  lc_op_ctx ctx(env, o, next_key_name, num_noncurrent, effective_mtime, dpp, batch_counters);
+  ctx.cached_tags = cached_tags;
+  ctx.skip_update_olh = skip_update_olh;
+
+  int r = action.process(ctx, y);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: remove_expired_obj "
+		      << env.bucket << ":" << o.key
+		      << " " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  ldpp_dout(dpp, 20) << "processed:" << env.bucket << ":"
+		     << o.key << dendl;
+  return 0;
+}
+
+int LCOpRule::process(rgw_bucket_dir_entry& o,
+		      const DoutPrefixProvider *dpp,
+		      LCBatchCounters* batch_counters,
+		      optional_yield y,
+		      const RGWObjTags* cached_tags)
+{
+  auto* action = evaluate(o, dpp, cached_tags, y);
+  if (!action) {
+    return 0;
+  }
+  return execute(*action, o, dpp, batch_counters, cached_tags, false, y);
 }
 
 int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
@@ -1640,16 +1941,15 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
     return ret;
   }
 
-  // use a limited number of coroutines for concurrent processing
-  size_t limit = cct->_conf.get_val<int64_t>("rgw_lc_max_wp_worker");
-  auto workpool = ceph::async::spawn_throttle{yield, limit};
-  auto stack_guard = make_scope_guard(
-    [&workpool]
-      {
-	workpool.wait();
-      }
-    );
-
+  /*
+   * Validate the bucket before initializing per-bucket LC counters or
+   * spawning a workpool. Stamping start_time/end_time for stale index
+   * entries or buckets whose lifecycle configuration has been removed
+   * would make those skipped entries appear as completed LC runs in
+   * the metrics, and for a recreated same-name bucket would overwrite
+   * the visible run timestamps without any LC processing actually
+   * happening.
+   */
   if (bucket->get_marker() != bucket_marker) {
     ldpp_dout(this, 1) << "LC: deleting stale entry found for bucket="
 		       << bucket_tenant << ":" << bucket_name
@@ -1676,15 +1976,63 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
       return -1;
     }
 
+  /*
+   * Past this point the bucket is valid and we will actually process
+   * LC for it: create the workpool, set up per-bucket counters, and
+   * install the scope guards.
+   */
+  size_t limit = cct->_conf.get_val<int64_t>("rgw_lc_max_wp_worker");
+  auto workpool = ceph::async::spawn_throttle{yield, limit};
+
+  auto perf_counters = rgw::lc_counters::get(bucket->get_name(), bucket_tenant);
+  uint64_t batch_threshold = cct->_conf->rgw_lc_counters_batch_size;
+  LCBatchCounters batch_counters(perf_counters.get(), batch_threshold);
+
+  if (perf_counters) {
+    perf_counters->set(l_rgw_lc_per_bucket_start_time, ceph_clock_now().sec());
+    perf_counters->set(l_rgw_lc_per_bucket_end_time, 0);
+  }
+
+  /*
+   * total_objects_scanned tracks total objects for the modulo flush
+   * pattern; obj_scanned resets on each flush so it can't be used
+   * for modulo.
+   */
+  uint64_t total_objects_scanned = 0;
+
+  /*
+   * Flush counters after workers complete on all exit paths.
+   * flush_guard is declared first so it is destroyed last (after
+   * stack_guard waits for workers to finish).
+   */
+  auto flush_guard = make_scope_guard(
+    [&batch_counters, &perf_counters]
+      {
+        batch_counters.flush_scanned();
+        batch_counters.flush_completed();
+        batch_counters.flush_actions();
+        if (perf_counters) {
+          perf_counters->set(l_rgw_lc_per_bucket_end_time,
+                             ceph_clock_now().sec());
+        }
+      }
+    );
+  auto stack_guard = make_scope_guard(
+    [&workpool]
+      {
+        workpool.wait();
+      }
+    );
+
   /* fetch information for zone checks */
   rgw::sal::Zone* zone = driver->get_zone();
 
-  auto pf = [&bucket_name](const DoutPrefixProvider* dpp, optional_yield y,
+  auto pf = [&bucket_name, &batch_counters](const DoutPrefixProvider* dpp, optional_yield y,
                            LCOpRule& op_rule, rgw_bucket_dir_entry& o,
                            const RGWObjTags* cached_tags) {
     ldpp_dout(dpp, 20)
       << __func__ << "(): key=" << o.key << dendl;
-    int ret = op_rule.process(o, dpp, y, cached_tags);
+    int ret = op_rule.process(o, dpp, &batch_counters, y, cached_tags);
     if (ret < 0) {
       ldpp_dout(dpp, 20)
 	<< "ERROR: orule.process() returned ret=" << ret
@@ -1762,6 +2110,149 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
       rules.back().build(); // why can't ctor do it?
     }
 
+    /*
+     * Buffer versions of the same key so versioned deletes can
+     * skip redundant OLH updates via rgw::multi_delete::dispatch().
+     */
+    struct lc_obj_entry {
+      rgw_bucket_dir_entry obj;
+      std::vector<LCOpRule> rules;
+    };
+    std::vector<lc_obj_entry> key_group;
+
+    auto flush_key_group = [&] {
+      if (key_group.empty()) return;
+
+      if (!bucket->versioned() || key_group.size() == 1) {
+        /*
+         * Non-versioned or single version: spawn per-object.
+         */
+        for (auto& entry : key_group) {
+          // Spawn one coroutine per object to process all rules
+          workpool.spawn([&pf, &batch_counters, dpp=this,
+                          rules_copy=std::move(entry.rules),
+                          obj=std::move(entry.obj), bucket=bucket.get()]
+                         (boost::asio::yield_context yield) mutable {
+            // Fetch tags once per object if any rule needs them
+            boost::optional<RGWObjTags> cached_tags;
+            const RGWObjTags* cached_tags_ptr = nullptr;
+            if (std::any_of(rules_copy.begin(), rules_copy.end(),
+                    [](const LCOpRule& r) { return r.needs_tags(); }))
+              cached_tags_ptr = fetch_obj_tags(dpp, bucket, obj,
+                                               cached_tags, yield);
+
+            for (auto& rule : rules_copy) {
+              if (rule.needs_tags() &&
+                  !obj.is_delete_marker() &&
+                  cached_tags_ptr &&
+                  !has_all_tags(rule.get_op(), *cached_tags_ptr)) {
+                continue;
+              }
+              if (rule.needs_tags() &&
+                  !obj.is_delete_marker() &&
+                  !cached_tags_ptr) {
+                continue;
+              }
+              pf(dpp, yield, rule, obj, cached_tags_ptr);
+            }
+            batch_counters.decrement_pending();
+          });
+        }
+      } else {
+        /*
+         * Versioned with multiple versions: evaluate all entries,
+         * then pass hard deletes to rgw::multi_delete::dispatch()
+         * to skip redundant OLH updates.
+         */
+        workpool.spawn(
+            [dpp=this, group=std::move(key_group), bucket=bucket.get(),
+             &batch_counters]
+            (boost::asio::yield_context yield) mutable {
+
+              struct action_ref { LCOpAction* a; size_t ei, ri; };
+              struct tag_entry {
+                boost::optional<RGWObjTags> buf;
+                const RGWObjTags* ptr{nullptr};
+              };
+
+              std::vector<tag_entry> tags(group.size());
+              std::vector<action_ref> dels, non_dels;
+
+              for (size_t ei = 0; ei < group.size(); ++ei) {
+                auto& obj = group[ei].obj;
+                if (std::any_of(group[ei].rules.begin(),
+                        group[ei].rules.end(),
+                        [](const LCOpRule& r) { return r.needs_tags(); }))
+                  tags[ei].ptr = fetch_obj_tags(dpp, bucket, obj,
+                                                tags[ei].buf, yield);
+                bool has_del = false;
+                std::vector<action_ref> entry_non_dels;
+                entry_non_dels.reserve(group[ei].rules.size());
+                for (size_t ri = 0; ri < group[ei].rules.size(); ++ri) {
+                  auto& rule = group[ei].rules[ri];
+                  if (rule.needs_tags() &&
+                      !obj.is_delete_marker() &&
+                      tags[ei].ptr &&
+                      !has_all_tags(rule.get_op(), *tags[ei].ptr))
+                    continue;
+                  if (rule.needs_tags() &&
+                      !obj.is_delete_marker() &&
+                      !tags[ei].ptr)
+                    continue;
+                  auto* act = rule.evaluate(
+                      group[ei].obj, dpp, tags[ei].ptr, yield);
+                  if (!act) continue;
+                  if (act->is_delete()) {
+                    /*
+                     * S3 lifecycle conflict resolution gives hard deletes
+                     * precedence over transitions for the same version.
+                     * Suppress queued non-delete work once one matches.
+                     */
+                    dels.push_back({act, ei, ri});
+                    has_del = true;
+                    entry_non_dels.clear();
+                    break;
+                  }
+                  entry_non_dels.push_back({act, ei, ri});
+                }
+                if (!has_del) {
+                  non_dels.insert(non_dels.end(),
+                                  entry_non_dels.begin(),
+                                  entry_non_dels.end());
+                }
+              }
+
+              for (auto& r : non_dels)
+                group[r.ei].rules[r.ri].execute(
+                    *r.a, group[r.ei].obj, dpp,
+                    &batch_counters, tags[r.ei].ptr, false, yield);
+
+              std::vector<rgw::multi_delete::Item> items;
+              items.reserve(dels.size());
+              for (size_t i = 0; i < dels.size(); ++i)
+                items.push_back({group[dels[i].ei].obj.key, i});
+
+              /*
+               * max_aio=1: all versions share a bucket index shard,
+               * so parallel deletes would contend on that shard.
+               */
+              rgw::multi_delete::dispatch(
+                  items, true, 1, yield,
+                  [&](const rgw::multi_delete::Item& item,
+                      bool skip_olh, boost::asio::yield_context y) {
+                    auto& r = dels[item.index];
+                    group[r.ei].rules[r.ri].execute(
+                        *r.a, group[r.ei].obj, dpp,
+                        &batch_counters, tags[r.ei].ptr, skip_olh, y);
+                  });
+
+              for (size_t i = 0; i < group.size(); ++i)
+                batch_counters.decrement_pending();
+            });
+      }
+      key_group.clear();
+    };
+
     rgw_bucket_dir_entry* o{nullptr};
     for (auto offset = 0; ol.get_obj(this, yield, &o /* , fetch_barrier */); ++offset, ol.next()) {
       const auto obj = *o;
@@ -1771,71 +2262,46 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
         rule.update();
       }
 
-      // Spawn one coroutine per object to process all rules
-      workpool.spawn([&pf, dpp=this, rules_copy=rules, obj, bucket=bucket.get()]
-                     (boost::asio::yield_context yield) mutable {
-        // Check if any rule needs tags so we only fetch once per object
-        bool any_rule_needs_tags = std::any_of(rules_copy.begin(), rules_copy.end(),
-          [](const LCOpRule& r) { return r.needs_tags(); });
+      // flush on key change, or at 1000 versions to bound memory
+      if (!key_group.empty()
+          && (obj.key.name != key_group.front().obj.key.name
+              || key_group.size() >= 1000))
+        flush_key_group();
 
-        boost::optional<RGWObjTags> cached_tags;
-        const RGWObjTags* cached_tags_ptr = nullptr;
+      key_group.push_back({obj, rules});
 
-        if (any_rule_needs_tags && !obj.is_delete_marker()) {
-          bufferlist tags_bl;
+      total_objects_scanned++;
 
-          rgw_obj_key obj_key = obj.key;
-          if (obj_key.instance.empty() && bucket->versioned() && !obj.is_current()) {
-            obj_key.instance = "null";
-          }
+      batch_counters.increment_scanned();
 
-          auto temp_obj = bucket->get_object(obj_key);
-          std::unique_ptr<rgw::sal::Object::ReadOp> rop = temp_obj->get_read_op();
-          int ret = rop->get_attr(dpp, RGW_ATTR_TAGS, tags_bl, yield);
-          if (ret == 0) {
-            try {
-              cached_tags.emplace();
-              auto iter = tags_bl.cbegin();
-              cached_tags->decode(iter);
-              cached_tags_ptr = &*cached_tags;
-            } catch (buffer::error& err) {
-              ldpp_dout(dpp, 5) << "ERROR: decode tags for " << obj.key << dendl;
-            }
-          }
-        }
-
-        for (auto& rule : rules_copy) {
-          if (rule.needs_tags() &&
-              !obj.is_delete_marker() &&
-              cached_tags_ptr &&
-              !has_all_tags(rule.get_op(), *cached_tags_ptr)) {
-            continue;
-          }
-
-          if (rule.needs_tags() &&
-              !obj.is_delete_marker() &&
-              !cached_tags_ptr) {
-            continue;
-          }
-
-          pf(dpp, yield, rule, const_cast<rgw_bucket_dir_entry&>(obj),
-             cached_tags_ptr);
-        }
-      });
+      /*
+       * Flush counters every batch_threshold objects.
+       * Flush scanned first, then completed; obj_scanned is incremented
+       * synchronously above before any worker decrement, so
+       * obj_scanned >= obj_completed always holds at flush time.
+       */
+      if (batch_threshold > 0 && (total_objects_scanned % batch_threshold) == 0) {
+        batch_counters.flush_scanned();
+        batch_counters.flush_completed();
+        batch_counters.flush_actions();
+      }
 
       if ((offset % 100) == 0) {
 	if (worker_should_stop(stop_at, once)) {
 	  ldpp_dout(this, 5) << __func__ << " interval budget EXPIRED worker="
 			     << worker->ix << " bucket=" << bucket_name
 			     << dendl;
+	  flush_key_group();
 	  return 0;
 	}
       }
     }
+    flush_key_group();
   }
 
   ret = handle_multipart_expiration(bucket.get(), prefix_map, workpool,
-                                    yield, worker, stop_at, once);
+                                    yield, worker, &batch_counters, stop_at, once);
+
   return ret;
 }
 

@@ -204,13 +204,14 @@ CLS_INIT(refcount)
   cls_method_handle_t h_refcount_set;
   cls_method_handle_t h_refcount_read;
 
-  cls_register("refcount", &h_class);
+  using namespace cls::refcount;
+  cls_register(ClassId::name, &h_class);
+  ClassRegistrar<ClassId> cls(h_class);
 
-  /* refcount */
-  cls_register_cxx_method(h_class, "get", CLS_METHOD_RD | CLS_METHOD_WR, cls_rc_refcount_get, &h_refcount_get);
-  cls_register_cxx_method(h_class, "put", CLS_METHOD_RD | CLS_METHOD_WR, cls_rc_refcount_put, &h_refcount_put);
-  cls_register_cxx_method(h_class, "set", CLS_METHOD_RD | CLS_METHOD_WR, cls_rc_refcount_set, &h_refcount_set);
-  cls_register_cxx_method(h_class, "read", CLS_METHOD_RD, cls_rc_refcount_read, &h_refcount_read);
+  cls.register_cxx_method(method::get,  cls_rc_refcount_get,  &h_refcount_get);
+  cls.register_cxx_method(method::put,  cls_rc_refcount_put,  &h_refcount_put);
+  cls.register_cxx_method(method::set,  cls_rc_refcount_set,  &h_refcount_set);
+  cls.register_cxx_method(method::read, cls_rc_refcount_read, &h_refcount_read);
 
   return;
 }

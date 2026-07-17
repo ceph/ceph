@@ -1,105 +1,93 @@
-@if (isLoginActive){
-<div class="login-container-form">
+<div
+  class="container"
+  *ngIf="isLoginActive"
+>
+  <h1 class="cds--visually-hidden">Ceph login</h1>
   <form
-       [formGroup]="loginForm"
-       (ngSubmit)="login()"
-       novalidate>
-    <div
-       cdsGrid
-       [useCssGrid]="true"
-       [narrow]="true"
-       [fullWidth]="true">
-
+    name="loginForm"
+    (ngSubmit)="login()"
+    #loginForm="ngForm"
+    novalidate
+  >
+    <!-- Username -->
+    <div class="form-group has-feedback d-flex flex-column py-3">
+      <label
+        class="ps-3"
+        for="username"
+        i18n
+        >Username</label
+      >
+      <input
+        id="username"
+        name="username"
+        [(ngModel)]="model.username"
+        #username="ngModel"
+        type="text"
+        [attr.aria-invalid]="username.invalid"
+        aria-labelledby="username"
+        class="form-control ps-3"
+        required
+        autofocus
+      />
       <div
-      cdsCol
-      [columnNumbers]="{sm: 4, md: 8, lg: 8, xlg: 6}"
-      class="login-grid-column">
-
-        <div
-        cdsRow
-        class="form-heading">
-          <h1
-          class="sr-only"
-          i18n>
-              Ceph login
-          </h1>
-        </div>
-
-        <div
-        cdsRow
-        class="form-item input-box cds-mb-4">
-          <div class="ceph-input-block cds-mt-6 cds-mb-6 cds-pl-6 cds-pr-6 cds-pt-4 cds-pb-4">
-            <cds-label
-              for="username"
-              class="cds--label ceph-label cds-m-0"
-              i18n>
-              Username
-            </cds-label>
-            <input ibmText
-                   id="username"
-                   formControlName="username"
-                   type="text"
-                   class="ceph-input cds-pl-0"
-                   required
-                   autofocus>
-    @if (loginForm.controls['username'].invalid &&
-        (loginForm.controls['username'].touched || submitted)) {
-            <div
-            class="cds--form-requirement"
-            i18n>
-              Username is required
-            </div>
-    }
-          </div>
-        </div>
-
-        <div
-        cdsRow
-        class="form-item input-box cds-mb-4">
-          <div class="ceph-input-block cds-mt-6 cds-mb-6 cds-pl-6 cds-pr-6 cds-pt-4 cds-pb-4">
-            <cds-label
-            for="password"
-            class="cds--label ceph-label cds-m-0"
-            i18n>Password</cds-label>
-            <div class="pwd-wrapper">
-              <input ibmText
-                     id="password"
-                     formControlName="password"
-                     type="password"
-                     class="ceph-input cds-pl-0"
-                     required>
-              <cds-button
-              type="button"
-              cdPasswordButton="password"
-              class="pwd-toggle-btn cds-mr-2 cds-pr-4"
-              aria-label="toggle-password"></cds-button>
-            </div>
-    @if (loginForm.controls['password'].invalid &&
-        (loginForm.controls['password'].touched || submitted)) {
-            <div
-            class="cds--form-requirement"
-            i18n>
-              Password is required
-            </div>
-    }
-          </div>
-        </div>
-
-        <div
-        cdsRow
-        class="form-actions">
-          <cds-button
-          kind="primary"
-          type="submit"
-          class="ceph-submit-btn cds-pl-8 cds-pr-8 cds-pt-3 cds-pb-3"
-          (click)="login($event)"
-          i18n>
-            Log in
-          </cds-button>
-        </div>
-
+        class="invalid-feedback ps-3"
+        *ngIf="(loginForm.submitted || username.dirty) && username.invalid"
+        i18n
+      >
+        Username is required
       </div>
     </div>
+
+    <!-- Password -->
+    <div
+      class="form-group has-feedback"
+      id="password-div"
+    >
+      <div class="input-group d-flex flex-nowrap">
+        <div class="d-flex flex-column flex-grow-1 py-3">
+          <label
+            class="ps-3"
+            for="password"
+            i18n
+            >Password</label
+          >
+          <input
+            id="password"
+            name="password"
+            [(ngModel)]="model.password"
+            #password="ngModel"
+            type="password"
+            [attr.aria-invalid]="password.invalid"
+            aria-labelledby="password"
+            class="form-control ps-3"
+            required
+          />
+          <div
+            class="invalid-feedback ps-3"
+            *ngIf="(loginForm.submitted || password.dirty) && password.invalid"
+            i18n
+          >
+            Password is required
+          </div>
+        </div>
+        <span class="form-group-append">
+          <button
+            type="button"
+            class="btn btn-outline-light btn-password h-100 px-4"
+            cdPasswordButton="password"
+            aria-label="toggle-password"
+          ></button>
+        </span>
+      </div>
+    </div>
+
+    <input
+      type="submit"
+      class="btn btn-accent px-5 py-2"
+      [disabled]="loginForm.invalid"
+      value="Log in"
+      i18n-value
+    />
   </form>
 
 </div>

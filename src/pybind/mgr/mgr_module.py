@@ -11,6 +11,7 @@ from typing import (
     NamedTuple,
     no_type_check,
     Optional,
+    overload,
     Sequence,
     Set,
     TYPE_CHECKING,
@@ -618,8 +619,13 @@ def MgrModuleRecoverDB(func: Callable) -> Callable:
                 if retries > MAX_DBCLEANUP_RETRIES:
                     raise
                 self.log.debug("attempting reopen of database")
-                self.close_db()
-                self.open_db()
+                try:
+                    self.close_db()
+                    self.open_db()
+                except sqlite3.DatabaseError as e2:
+                    self.log.warning(
+                        f"reopen attempt {retries}/{MAX_DBCLEANUP_RETRIES} failed: {e2}"
+                    )
                 # allow retry of func(...)
     check.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
     return check
@@ -703,9 +709,8 @@ class MgrRootHandler(CPlusPlusHandler):
             "[mgr %(levelname)-4s %(name)s] %(message)s"
         ))
 
-    def emit(self, record: logging.LogRecord) -> None:
-        record.name = "mgr"
-        super().emit(record)
+    def set_module(self, module_inst: 'MgrModuleLoggingMixin') -> None:
+        self._module = module_inst
 
 
 class ClusterLogHandler(logging.Handler):
@@ -743,6 +748,7 @@ class FileHandler(logging.FileHandler):
 
 class MgrModuleLoggingMixin(object):
     module_name: str
+    _root_log_handler: Optional[MgrRootHandler] = None
 
     def _configure_logging(self,
                            mgr_level: str,
@@ -765,9 +771,20 @@ class MgrModuleLoggingMixin(object):
         self.log_to_cluster = log_to_cluster
 
         root = logging.getLogger()
-        if not any(isinstance(h, MgrRootHandler) for h in root.handlers):
-            root.addHandler(MgrRootHandler(self))
-            root.setLevel(logging.NOTSET)
+        root_handler = None
+        for handler in root.handlers:
+            if isinstance(handler, MgrRootHandler):
+                root_handler = handler
+                break
+        if root_handler is None:
+            root_handler = MgrRootHandler(self)
+            root.addHandler(root_handler)
+        else:
+            root_handler.set_module(self)
+        self._root_log_handler = root_handler
+        # Module loggers rely on handler thresholds, so keep root permissive
+        # and apply the mgr fallback threshold on MgrRootHandler itself.
+        root.setLevel(logging.NOTSET)
 
         self._module_logger.addHandler(self._mgr_log_handler)
         if log_to_file:
@@ -795,6 +812,8 @@ class MgrModuleLoggingMixin(object):
                        module_level: str,
                        cluster_level: str) -> None:
         self._cluster_log_handler.setLevel(cluster_level.upper())
+        if self._root_log_handler is not None:
+            self._root_log_handler.setLevel(self._ceph_log_level_to_python(mgr_level))
 
         module_level = module_level.upper() if module_level else ''
         if not self._module_level:
@@ -1171,6 +1190,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def have_enough_osds(self) -> bool:
         # wait until we have enough OSDs to allow the pool to be healthy
         ready = 0
+        self.log.debug("checking for enough OSDs")
+        self.log.debug(f'osds returned from osd_map: {self.get("osd_map")["osds"]}')
+        self.log.debug(f'osd_map: {self.get("osd_map")}')
         for osd in self.get("osd_map")["osds"]:
             if osd["up"] and osd["in"]:
                 ready += 1
@@ -1490,7 +1512,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             self._rados = None
 
     @API.expose
-    def get(self, data_name: str) -> Any:
+    def get(self, data_name: str, mutable: bool = False) -> Any:
         """
         Called by the plugin to fetch named cluster-wide objects from ceph-mgr.
 
@@ -1501,16 +1523,29 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                 pool_stats, pg_ready, osd_ping_times, mgr_map, mgr_ips,
                 modified_config_options, service_map, mds_metadata,
                 have_local_config_map, osd_pool_stats, pg_status.
+        :param bool mutable: If True, returns a mutable copy of the data that can
+                be modified safely. If False (default), returns read-only cached
+                data (in case cached enabled) for better performance and cache protection.
 
         Note:
             All these structures have their own JSON representations: experiment
             or look at the C++ ``dump()`` methods to learn about them.
         """
-        obj = self._ceph_get(data_name)
-        if isinstance(obj, bytes):
-            obj = json.loads(obj)
+        return self._ceph_get(data_name, mutable)
 
-        return obj
+    @API.expose
+    def erase(self, data_name: str) -> None:
+        """
+        Called by the plugin to erase cache entries for named
+        cluster-wide objects from ceph-mgr.
+        :param str data_name: Valid things to erase are osd_map, mon_map,
+                fs_map, pg_summary, io_rate, pg_dump, df, osd_stats,
+                health, mon_status, devices, pg_stats, pool_stats,
+                pg_ready, osd_ping_times, mgr_map, mgr_ips,
+                modified_config_options, service_map, mds_metadata,
+                have_local_config_map, osd_pool_stats, pg_status.
+        """
+        return self._ceph_erase(data_name)
 
     def _stattype_to_str(self, stattype: int) -> str:
 
@@ -1747,6 +1782,26 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return cast(List[ServerInfoT], self._ceph_get_server(None))
 
+    @overload
+    def get_metadata(self,
+                     svc_type: str,
+                     svc_id: str) -> Optional[Dict[str, str]]:
+        ...
+
+    @overload
+    def get_metadata(self,
+                     svc_type: str,
+                     svc_id: str,
+                     default: None) -> Optional[Dict[str, str]]:
+        ...
+
+    @overload
+    def get_metadata(self,
+                     svc_type: str,
+                     svc_id: str,
+                     default: Dict[str, str]) -> Dict[str, str]:
+        ...
+
     def get_metadata(self,
                      svc_type: str,
                      svc_id: str,
@@ -1756,12 +1811,14 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         ceph-mgr fetches metadata asynchronously, so are windows of time during
         addition/removal of services where the metadata is not available to
-        modules.  ``None`` is returned if no metadata is available.
+        modules.  ``None`` is returned if no metadata is available, unless
+        ``default`` is provided, in which case ``default`` is returned.
 
         :param str svc_type: service type (e.g., 'mds', 'osd', 'mon')
         :param str svc_id: service id. convert OSD integer IDs to strings when
             calling this
-        :rtype: dict, or None if no metadata found
+        :param default: value to return when no metadata is available
+        :rtype: dict, or None if no metadata found and no default given
         """
         metadata = self._ceph_get_metadata(svc_type, svc_id)
         if not metadata:

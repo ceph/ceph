@@ -106,6 +106,125 @@ class TestCephAdm(object):
         _attempt_bind.side_effect = os_error
         assert port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
 
+    def test_command_remove_file(self, cephadm_fs):
+        rm_path = '/tmp/cephadm-remove-file-test'
+        cephadm_fs.create_file(rm_path, contents='x')
+        with with_cephadm_ctx(
+            ['remove-file', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--path', rm_path]
+        ) as ctx:
+            assert _cephadm.command_remove_file(ctx) == 0
+        assert not cephadm_fs.exists(rm_path)
+
+    def test_command_remove_file_missing_ok(self, cephadm_fs):
+        missing = '/tmp/cephadm-remove-file-missing'
+        with with_cephadm_ctx(
+            ['remove-file', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--path', missing]
+        ) as ctx:
+            assert _cephadm.command_remove_file(ctx) == 0
+
+    def test_command_remove_file_refuses_directory(self, cephadm_fs):
+        dpath = '/tmp/cephadm-remove-file-isdir'
+        cephadm_fs.create_dir(dpath)
+        with with_cephadm_ctx(
+            ['remove-file', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--path', dpath]
+        ) as ctx:
+            with pytest.raises(_cephadm.Error, match='Can not remove non-regular file'):
+                _cephadm.command_remove_file(ctx)
+        assert cephadm_fs.exists(dpath)
+
+    def test_command_remove_file_refuses_symlink(self, cephadm_fs):
+        target = '/tmp/cephadm-remove-file-symtarget'
+        link = '/tmp/cephadm-remove-file-symlink'
+        cephadm_fs.create_file(target, contents='x')
+        cephadm_fs.create_symlink(link, target)
+        with with_cephadm_ctx(
+            ['remove-file', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--path', link]
+        ) as ctx:
+            with pytest.raises(_cephadm.Error, match='Can not remove non-regular file'):
+                _cephadm.command_remove_file(ctx)
+        assert cephadm_fs.exists(link)
+
+    def test_command_deploy_file(self, cephadm_fs):
+        import io
+        fsid = '00000000-0000-0000-0000-0000deadbeef'
+        dest = '/etc/ceph/kube.conf'
+        cephadm_fs.create_dir('/etc/ceph')
+        content = b'hello\xff'
+        stdin_mock = mock.Mock()
+        stdin_mock.buffer = io.BytesIO(content)
+        with mock.patch('sys.stdin', stdin_mock):
+            with with_cephadm_ctx(
+                ['deploy-file', '--fsid', fsid, '--path', dest, '--mode', '600']
+            ) as ctx:
+                assert _cephadm.command_deploy_file(ctx) == 0
+        assert cephadm_fs.exists(dest)
+        with open(dest, 'rb') as f:
+            assert f.read() == content
+
+    def test_command_deploy_file_rejects_relative_path(self, cephadm_fs):
+        import io
+        stdin_mock = mock.Mock()
+        stdin_mock.buffer = io.BytesIO(b'x')
+        with mock.patch('sys.stdin', stdin_mock):
+            with with_cephadm_ctx(
+                ['deploy-file', '--fsid', '00000000-0000-0000-0000-0000deadbeef',
+                 '--path', 'relative/path.conf']
+            ) as ctx:
+                with pytest.raises(_cephadm.Error, match='absolute path'):
+                    _cephadm.command_deploy_file(ctx)
+
+    def test_command_deploy_file_uid_gid_together(self, cephadm_fs):
+        import io
+        stdin_mock = mock.Mock()
+        stdin_mock.buffer = io.BytesIO(b'x')
+        with mock.patch('sys.stdin', stdin_mock):
+            with with_cephadm_ctx(
+                ['deploy-file', '--fsid', '00000000-0000-0000-0000-0000deadbeef',
+                 '--path', '/etc/ceph/a', '--uid', '0']
+            ) as ctx:
+                with pytest.raises(_cephadm.Error, match='together'):
+                    _cephadm.command_deploy_file(ctx)
+
+    def test_command_sysctl_dir_list(self, cephadm_fs, capsys):
+        from cephadmlib.constants import SYSCTL_DIR
+        cephadm_fs.create_dir(SYSCTL_DIR)
+        cephadm_fs.create_file(os.path.join(SYSCTL_DIR, 'c.conf'))
+        cephadm_fs.create_file(os.path.join(SYSCTL_DIR, 'a.conf'))
+        with with_cephadm_ctx(
+            ['_orch', 'sysctl-dir', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--list']
+        ) as ctx:
+            assert _cephadm.command_sysctl_dir(ctx) == 0
+        assert capsys.readouterr().out.splitlines() == ['a.conf', 'c.conf']
+
+    def test_command_sysctl_dir_list_missing_dir(self, cephadm_fs):
+        import shutil
+        from cephadmlib.constants import SYSCTL_DIR
+        # cephadm_fs already has /etc (e.g. from UNIT_DIR). Only sysctl.d must be absent.
+        if cephadm_fs.exists(SYSCTL_DIR):
+            shutil.rmtree(SYSCTL_DIR)
+        assert not cephadm_fs.exists(SYSCTL_DIR)
+        with with_cephadm_ctx(
+            ['_orch', 'sysctl-dir', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--list']
+        ) as ctx:
+            with pytest.raises(_cephadm.Error, match='Not a directory'):
+                _cephadm.command_sysctl_dir(ctx)
+
+    def test_command_sysctl_dir_apply_system(self, cephadm_fs):
+        with with_cephadm_ctx(
+            ['_orch', 'sysctl-dir', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--apply-system']
+        ) as ctx:
+            assert _cephadm.command_sysctl_dir(ctx) == 0
+
+    def test_command_sysctl_dir_apply_system_failure(self, cephadm_fs):
+        # Do not let with_cephadm_ctx re-patch cephadm.call back to success (exit 0).
+        with mock.patch('cephadm.call', return_value=('out', 'sysctl failed', 1)):
+            with with_cephadm_ctx(
+                ['_orch', 'sysctl-dir', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--apply-system'],
+                mock_cephadm_call_fn=False,
+            ) as ctx:
+                with pytest.raises(_cephadm.Error, match='sysctl --system failed'):
+                    _cephadm.command_sysctl_dir(ctx)
+
     @mock.patch('cephadm.socket.socket.bind')
     @mock.patch('cephadm.logger')
     def test_port_in_use_special_cases(self, _logger, _bind):
@@ -1616,6 +1735,74 @@ class TestMaintenance:
         assert retval.startswith('failed')
 
 
+class TestMaintenanceExitDisabledServices(object):
+    fsid = '00000000-0000-0000-0000-000000000001'
+
+    @staticmethod
+    def _nfs_daemon_entry(fsid: str):
+        from cephadmlib.daemon_identity import DaemonIdentity
+        from cephadmlib.listing import DaemonEntry
+
+        identity = DaemonIdentity.from_name(fsid, 'nfs.foo.host1')
+        return DaemonEntry(
+            identity=identity,
+            status={
+                'style': 'cephadm:v1',
+                'name': 'nfs.foo.host1',
+                'fsid': fsid,
+                'systemd_unit': identity.unit_name,
+            },
+            data_dir='/var/lib/ceph',
+        )
+
+    @mock.patch('cephadmlib.systemd.call')
+    def test_start_disabled_services_after_maintenance_exit(self, _call):
+        from cephadmlib.systemd import start_disabled_services_after_maintenance_exit
+
+        ctx = _cephadm.CephadmContext()
+        ctx.fsid = self.fsid
+        entry = self._nfs_daemon_entry(self.fsid)
+        nfs_unit = entry.identity.unit_name
+        with mock.patch('cephadmlib.systemd.daemons_matching', return_value=[entry]):
+            _call.return_value = '', '', 0
+            start_disabled_services_after_maintenance_exit(ctx)
+        _call.assert_any_call(
+            ctx, ['systemctl', 'start', nfs_unit],
+            verbosity=_cephadm.CallVerbosity.DEBUG)
+
+    @mock.patch('os.listdir', return_value=[])
+    @mock.patch('cephadmlib.systemd.daemons_matching')
+    @mock.patch('cephadmlib.systemd.call')
+    @mock.patch('cephadm.call')
+    @mock.patch('cephadm.logger')
+    @mock.patch('cephadm.systemd_target_state')
+    @mock.patch('cephadm.target_exists')
+    def test_exit_starts_disabled_services(
+            self, _target_exists, _target_state, _logger, _cephadm_call,
+            _systemd_call, _daemons_matching, _listdir):
+        entry = self._nfs_daemon_entry(TestMaintenance.fsid)
+        nfs_unit = entry.identity.unit_name
+
+        def _matching(ctx, fsid=None, daemon_type=None):
+            if daemon_type == 'nfs':
+                return [entry]
+            return []
+
+        _daemons_matching.side_effect = _matching
+        _cephadm_call.side_effect = [('', '', 0), ('', '', 0)]
+        _systemd_call.return_value = '', '', 0
+        _target_state.return_value = False
+        _target_exists.return_value = True
+        ctx: _cephadm.CephadmContext = _cephadm.cephadm_init_ctx(
+            ['host-maintenance', 'exit', '--fsid', TestMaintenance.fsid])
+        ctx.container_engine = mock_podman()
+        retval = _cephadm.change_maintenance_mode(ctx)
+        assert retval.startswith('success')
+        _systemd_call.assert_any_call(
+            ctx, ['systemctl', 'start', nfs_unit],
+            verbosity=_cephadm.CallVerbosity.DEBUG)
+
+
 class TestMonitoring(object):
     @mock.patch('cephadmlib.daemons.monitoring.call')
     def test_get_version_alertmanager(self, _call):
@@ -2282,10 +2469,11 @@ exec /usr/bin/docker run --rm --ipc=host --stop-signal=SIGTERM --ulimit nofile=1
 
 class TestCheckHost:
 
+    @mock.patch('cephadm.find_program', return_value='foo')
     @mock.patch('cephadm.find_executable', return_value='foo')
     @mock.patch('cephadm.check_time_sync', return_value=True)
     @mock.patch('cephadm.logger')
-    def test_container_engine(self, _logger, _find_executable, _check_time_sync):
+    def test_container_engine(self, _logger, _find_executable, _check_time_sync, _find_program):
         ctx = _cephadm.CephadmContext()
 
         ctx.container_engine = None

@@ -94,10 +94,10 @@ PG count, run the following command:
 
 The output will resemble the following::
 
-   POOL    SIZE  TARGET SIZE  RATE  RAW CAPACITY   RATIO  TARGET RATIO  EFFECTIVE RATIO BIAS PG_NUM  NEW PG_NUM  AUTOSCALE BULK
-   a     12900M                3.0        82431M  0.4695                                          8         128  warn      True
-   c         0                 3.0        82431M  0.0000        0.2000           0.9884  1.0      1          64  warn      True
-   b         0        953.6M   3.0        82431M  0.0347                                          8              warn      False
+   POOL    SIZE  TARGET SIZE  RATE  RAW CAPACITY   RATIO  FINAL RATIO  TARGET RATIO  EFFECTIVE RATIO BIAS PG_NUM  NEW PG_NUM  AUTOSCALE BULK
+   a     12900M                3.0        82431M  0.4695       0.2560                                          8         128  warn      True
+   c         0                 3.0        82431M  0.0000       0.1280        0.2000           0.9884  1.0      1          64  warn      True
+   b         0        953.6M   3.0        82431M  0.0347       0.0640                                          8              warn      False
 
 - **POOL** is the name of the pool. 
 
@@ -118,6 +118,11 @@ The output will resemble the following::
 - **RATIO** is the ratio of (1) the storage consumed by the pool to (2) the
   total raw storage capacity. In other words, RATIO is defined as 
   (SIZE * RATE) / RAW CAPACITY and may be thought of as a fullness percentage.
+
+- **FINAL RATIO** is the ratio of (1) the expected number of PGs allocated to the
+  pool to (2) the total target PG budget. FINAL RATIO is defined as
+  (FINAL_POOL_PG_TARGET * RATE) / TOTAL PG BUDGET where FINAL_POOL_PG_TARGET = NEW PG_NUM (if present)
+  or PG_NUM otherwise. FINAL RATIO may be thought of as the target utilization percentage.
 
 - **TARGET RATIO** (if present) is the ratio of the expected storage of this
   pool relative to the expected storage of all other pools
@@ -227,23 +232,93 @@ command:
 For all but the very smallest deployments a value of 200 is recommended.
 A value above 500 may result in excessive peering traffic and RAM usage.
 
-The autoscaler analyzes pools and adjusts on a per-subtree basis.  Because each
-pool might map to a different CRUSH rule, and each rule might distribute data
-across different and possibly overlapping sets of devices,
-Ceph will consider the utilization of each subtree of
-the CRUSH hierarchy independently. For example, a pool that maps to OSDs of class
-``ssd`` and a pool that maps to OSDs of class ``hdd`` will each have calculated PG
-counts that are determined by how many OSDs of these two different device types
-there are.
+.. _overlapping_crush_roots:
 
-If a pool uses OSDs under two or more CRUSH roots (for example, shadow trees
-with both ``ssd`` and ``hdd`` devices), the autoscaler issues a warning to the
-user in the manager log. The warning states the name of the pool and the set of
-roots that overlap each other. The autoscaler does not scale any pools with
-overlapping roots because this condition can cause problems with the scaling
-process. We recommend constraining each pool so that it belongs to only one
-root (that is, one device OSD class) to silence the warning and ensure successful
-scaling.
+Overlapping CRUSH Roots PG Budget
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When OSDs are distributed across multiple CRUSH roots, each root receives a PG target based
+on its OSDs, with OSDs shared across multiple roots contributing proportionally less to each
+root's allocation. The budget assigned to each root is:
+
+.. math::
+
+   \sum_{\text{OSD}_i \in R} \frac{\text{mon_target_pg_per_osd}}{|\text{roots}(\text{OSD}_i)|}
+
+This ensures that the total PG budget is distributed proportionally across all roots.
+
+Consider a cluster with the following topology:
+
+.. prompt:: bash #
+
+   mon_target_pg_per_osd = 300
+
+- **rootid -1**: Contains OSDs {0, 1, 2, 3}
+- **rootid -2**: Contains OSDs {0, 1}
+- **rootid -3**: Contains OSDs {2, 3}
+
+OSD membership:
+
+- **OSD 0**: Belongs to roots {-1, -2}
+- **OSD 1**: Belongs to roots {-1, -2}
+- **OSD 2**: Belongs to roots {-1, -3}
+- **OSD 3**: Belongs to roots {-1, -3}
+
+The PG target allocation for each root is calculated as follows:
+
+- Root -1: pg_target = 600 = (300 / 2 roots for OSD 0) + (300 / 2 roots for OSD 1) + (300 / 2 roots for OSD 2) + (300 / 2 roots for OSD 3)
+- Root -2: pg_target = 300 = (300 / 2 roots for OSD 0) + (300 / 2 roots for OSD 1)
+- Root -3: pg_target = 300 = (300 / 2 roots for OSD 2) + (300 / 2 roots for OSD 3)
+
+.. _allocation_algorithm:
+
+Allocation Algorithm
+~~~~~~~~~~~~~~~~~~~~
+
+The autoscaler sets each pool's ``final_pool_pg_target`` to be rounded to the
+nearest power of two while ensuring that the number of PGs to be placed on each OSD
+will not cause its PG replicas to exceed ``mon_target_pg_per_osd``. Pools with the same
+configuration values (``pg_target``, replication size, bias, bulk, autoscale enabled) are
+treated as a group and rounded in the same direction, even if a subset of them
+could be rounded up for better utilization. This is to prefer fairness over
+greed. The allocation algorithm performs four passess
+
+First pass (Non-autoscale pools): Non-autoscale pools
+are not rounded to a power of two but their ``pg_num_target`` is subtracted
+from the budget.
+
+Second pass (Non-bulk pools):  Non-bulk pools have target PGs calculated
+from their ``capacity_ratio = max(acutal data, or target size)``.
+
+Third pass (Bulk Pools): For all bulk pools with ``capacity_ratio > even_ratio``
+where ``even_ratio = pg_left / # bulk pools``, calculate target PGs from the ``capacity ratio``
+
+Fourth pass (Leftover Bulk Pools): Distribute remaining PGs to even pools
+where final_ratio = 1 / (# pools remaining)
+
+
+For example:
+
+.. prompt:: bash #
+
+   ceph config set global mon_target_pg_per_osd 250
+
+   ceph osd pool create data1
+   ceph osd pool create data2
+   ceph osd pool create data3
+
+   ceph osd pool set data1 target_size_ratio 0.4
+   ceph osd pool set data2 target_size_ratio 0.3
+   ceph osd pool set data3 target_size_ratio 0.3
+
+4 OSDs with replication size 3. There are a total of 1000 PGs. 0.4 * 1000 = 400. 400 / 3 = 133.33.
+Rounded to the nearest power of two, this becomes 128. Pool ``data1`` ``final_pool_pg_target = 128``.
+1000 - (128 * 3) =  616. Since ``data2`` and ``data3`` both have ``pg_target = 0.3 * 1000 = 300`` and
+the same (``pg_target``, replication size, bias, is bulk, is autoscale enabled), they are
+treated as a group. 616 / 2 / 3 = 102.677. They must both be rounded down to 64 since rounding up
+to 128 would exceed the budget. This algorithm prefers fairness over greed since if it were greedy,
+one pool could be allocated 128 PGs and the other 64 PGs, which would still meet the budget  (64 * 3 + 128 * 3 = 576 < 616)
+
 
 .. _managing_bulk_flagged_pools:
 

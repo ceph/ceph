@@ -4,6 +4,7 @@ import { PerformanceData } from '../models/performance-data';
 import { AllStoragetypesQueries } from '../enum/dashboard-promqls.enum';
 import { map } from 'rxjs/operators';
 import { Observable } from 'rxjs';
+import { ChartPoint } from '../models/area-chart-point';
 
 @Injectable({
   providedIn: 'root'
@@ -50,15 +51,15 @@ export class PerformanceCardService {
     };
   }
 
-  private toSeries(metric: [number, string][], label: string) {
+  toSeries(metric: [number, string][], label: string): ChartPoint[] {
     return metric.map(([ts, val]) => ({
       timestamp: new Date(ts * 1000),
       values: { [label]: Number(val) }
     }));
   }
 
-  private mergeSeries(...series: any[]) {
-    const map = new Map<number, any>();
+  mergeSeries(...series: ChartPoint[][]): ChartPoint[] {
+    const map = new Map<number, ChartPoint>();
 
     for (const items of series) {
       for (const item of items) {
@@ -75,6 +76,6 @@ export class PerformanceCardService {
       }
     }
 
-    return [...map.values()].sort((a, b) => a.timestamp - b.timestamp);
+    return [...map.values()].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
   }
 }

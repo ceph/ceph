@@ -42,6 +42,7 @@ tasks:
     - \(MON_DOWN\)
     - \(SLOW_OPS\)
     - slow request
+    - evicting unresponsive client
 - workunit:
     clients:
       all:

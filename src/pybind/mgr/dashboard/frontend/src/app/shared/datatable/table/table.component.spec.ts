@@ -134,8 +134,8 @@ describe('TableComponent', () => {
     ) => {
       component.search = search;
       _.forEach(changes, (change) => {
-        component.onSelectFilter(change.filter.column.name);
-        component.onChangeFilter(change.value || undefined);
+        component.onChangeFilter(change.value || undefined, change.filter);
+        component.onSubmitFilter();
       });
       expect(component.rows).toEqual(results);
       component.onClearSearch();
@@ -277,6 +277,57 @@ describe('TableComponent', () => {
       it('should remove filters', () => {
         expectColumnFiltered([{ filter: filterCustom, value: 'no' }], _.slice(component.data, 5));
       });
+    });
+  });
+
+  describe('test custom filtering', () => {
+    beforeEach(() => {
+      component.customFilter = true;
+      component.customFilters = [];
+      component.stagedCustomFilters = [];
+      spyOn(component.customFilterChange, 'emit');
+      spyOn(component, 'updateFilter');
+    });
+
+    it('should toggle popover and add an empty rule', () => {
+      component.toggleFilterPopover();
+
+      expect(component.openFilterPopover).toBe(true);
+      expect(component.stagedCustomFilters.length).toBe(1);
+      expect(component.stagedCustomFilters[0]).toEqual({ id: 0, key: '', value: '' });
+
+      // toggling again should close but not add a new rule
+      component.toggleFilterPopover();
+      expect(component.openFilterPopover).toBe(false);
+      expect(component.stagedCustomFilters.length).toBe(1);
+    });
+
+    it('should manually add new custom filters', () => {
+      component.addCustomFilter();
+      component.addCustomFilter();
+      expect(component.stagedCustomFilters.length).toBe(2);
+      expect(component.stagedCustomFilters[0]).toEqual({ id: 0, key: '', value: '' });
+      expect(component.stagedCustomFilters[1]).toEqual({ id: 1, key: '', value: '' });
+    });
+
+    it('should remove a filter by its id', () => {
+      component.addCustomFilter();
+      component.addCustomFilter();
+      component.addCustomFilter();
+
+      component.removeCustomFilter(1);
+      expect(component.stagedCustomFilters.length).toBe(2);
+      expect(component.stagedCustomFilters[0]).toEqual({ id: 0, key: '', value: '' });
+      expect(component.stagedCustomFilters[1]).toEqual({ id: 2, key: '', value: '' });
+    });
+
+    it('should emit custom filters on submit', () => {
+      component.addCustomFilter();
+      component.stagedCustomFilters[0] = { id: 0, key: 'foo', value: 'bar' };
+      component.onSubmitFilter();
+      expect(component.customFilterChange.emit).toHaveBeenCalledWith([
+        { id: 0, key: 'foo', value: 'bar' }
+      ]);
     });
   });
 

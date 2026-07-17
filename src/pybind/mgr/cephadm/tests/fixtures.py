@@ -133,6 +133,11 @@ def with_cephadm_module(module_options=None, store=None):
         m.event_loop = MockEventLoopThread()
         m.tkey = NamedTemporaryFile(prefix='test-cephadm-identity-')
 
+        # librados wait_for_latest_osdmap() returns int (0 = success).
+        # Tests use a MagicMock for rados unless configured.
+        # OSD deploy compares ret < 0.
+        m.rados.wait_for_latest_osdmap.return_value = 0
+
         yield m
 
 

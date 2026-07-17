@@ -19,6 +19,7 @@
 #include "arch/probe.h"
 #include "arch/intel.h"
 #include "arch/arm.h"
+#include "arch/riscv.h"
 #include "common/ceph_context.h"
 #include "compressor/CompressionPlugin.h"
 #include "ZlibCompressor.h"
@@ -46,6 +47,11 @@ public:
     if (cct->_conf->compressor_zlib_isal) {
       ceph_arch_probe();
       isal = (ceph_arch_aarch64_pmull && ceph_arch_neon);
+    }
+#elif defined(HAVE_RISCV_RVV)
+    if (cct->_conf->compressor_zlib_isal) {
+      ceph_arch_probe();
+      isal = ceph_arch_riscv_rvv;
     }
 #endif
     if (compressor == 0 || has_isal != isal) {

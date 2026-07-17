@@ -155,16 +155,20 @@ be on the four HDDs, and each HDD should have a 50GB logical volume
 
 Sizing
 ======
-When using a :ref:`mixed spinning-and-solid-drive setup
-<bluestore-mixed-device-config>`, it is important to make a large enough
-``block.db`` logical volume for BlueStore. The logical volumes associated with
-``block.db`` should have logical volumes that are *as large as possible*.
+When deploying :ref:`hybrid HDD and SSD OSDs
+<bluestore-mixed-device-config>`, it is important to provision a large enough
+``block.db`` logical volume for BlueStore.
 
-It is generally recommended that the size of ``block.db`` be somewhere between
-1% and 4% of the size of ``block``. For RGW workloads, it is recommended that
+We recommend when offloading WAL+DB to a faster device that
+the size of ``block.db`` be at least 2.5% of the size
+of the larger but slower ``block`` device.
+
+When running a release older than Squid, RocksDB compression is not enabled,
+and larger offload shares were recommended.
+For RGW workloads, we recommended that
 the ``block.db`` be at least 4% of the ``block`` size, because RGW makes heavy
 use of ``block.db`` to store metadata (in particular, omap keys). For example,
-if the ``block`` size is 1TB, then ``block.db`` should have a size of at least
+if the ``block`` size is 1TB, then ``block.db`` would have a size of at least
 40GB. For RBD workloads, however, ``block.db`` usually needs no more than 1% to
 2% of the ``block`` size.
 
@@ -173,7 +177,9 @@ only those specific partition / logical volume sizes that correspond to sums of
 L0, L0+L1, L1+L2, and so on--that is, given default settings, sizes of roughly
 3GB, 30GB, 300GB, and so on. Most deployments do not substantially benefit from
 sizing that accommodates L3 and higher, though DB compaction can be facilitated
-by doubling these figures to 6GB, 60GB, and 600GB.
+by doubling these figures to 6GB, 60GB, and 600GB. OSDs created before Pacific
+will benefit from using ``ceph-bluestore-tool`` to convert RocksDB to use
+sharding.
 
 Improvements in Nautilus 14.2.12, Octopus 15.2.6, and subsequent releases allow
 for better utilization of arbitrarily-sized DB devices. Moreover, the Pacific
@@ -220,7 +226,7 @@ different configuration option to determine the default memory budget:
 ``bluestore_cache_size_hdd`` if the primary device is an HDD, or
 ``bluestore_cache_size_ssd`` if the primary device is an SSD.
 
-BlueStore and the rest of the Ceph OSD daemon make every effort to work within
+BlueStore and the other subsystems within the OSD make every effort to work within
 this memory budget. Note that in addition to the configured cache size, there
 is also memory consumed by the OSD itself. There is additional utilization due
 to memory fragmentation and other allocator overhead. 

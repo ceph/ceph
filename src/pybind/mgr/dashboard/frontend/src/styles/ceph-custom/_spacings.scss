@@ -21,6 +21,14 @@
   padding-left: 0;
 }
 
+.cds-pl-7 {
+  padding-left: layout.$spacing-07;
+}
+
+.cds-pr-7 {
+  padding-right: layout.$spacing-07;
+}
+
 .cds-pt-2px {
   padding-top: 2px;
 }
@@ -47,6 +55,10 @@
 
 .cds-pb-6 {
   padding-bottom: layout.$spacing-06;
+ }
+  
+.cds-pt-5 {
+  padding-top: layout.$spacing-05;
 }
 
 .cds-pr-4 {

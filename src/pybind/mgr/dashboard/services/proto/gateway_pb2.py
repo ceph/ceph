@@ -20,7 +20,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=b'Z)github.com/ceph/ceph-nvmeof/lib/go/nvmeof',
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n&dashboard/services/proto/gateway.proto\"\x84\x06\n\x11namespace_add_req\x12\x15\n\rrbd_pool_name\x18\x01 \x01(\t\x12\x16\n\x0erbd_image_name\x18\x02 \x01(\t\x12\x15\n\rsubsystem_nqn\x18\x03 \x01(\t\x12\x11\n\x04nsid\x18\x04 \x01(\rH\x00\x88\x01\x01\x12\x12\n\nblock_size\x18\x05 \x01(\r\x12\x11\n\x04uuid\x18\x06 \x01(\tH\x01\x88\x01\x01\x12\x15\n\x08\x61nagrpid\x18\x07 \x01(\x05H\x02\x88\x01\x01\x12\x19\n\x0c\x63reate_image\x18\x08 \x01(\x08H\x03\x88\x01\x01\x12\x11\n\x04size\x18\t \x01(\x04H\x04\x88\x01\x01\x12\x12\n\x05\x66orce\x18\n \x01(\x08H\x05\x88\x01\x01\x12\x1c\n\x0fno_auto_visible\x18\x0b \x01(\x08H\x06\x88\x01\x01\x12\x18\n\x0btrash_image\x18\x0c \x01(\x08H\x07\x88\x01\x01\x12 \n\x13\x64isable_auto_resize\x18\r \x01(\x08H\x08\x88\x01\x01\x12\x16\n\tread_only\x18\x0e \x01(\x08H\t\x88\x01\x01\x12\x1f\n\x12rbd_data_pool_name\x18\x0f \x01(\tH\n\x88\x01\x01\x12\x15\n\x08location\x18\x10 \x01(\tH\x0b\x88\x01\x01\x12!\n\x14rados_namespace_name\x18\x11 \x01(\tH\x0c\x88\x01\x01\x12-\n\x12\x65ncryption_entries\x18\x12 \x03(\x0b\x32\x11.encryption_entry\x12\x37\n\x14\x65ncryption_algorithm\x18\x13 \x01(\x0e\x32\x14.EncryptionAlgorithmH\r\x88\x01\x01\x42\x07\n\x05_nsidB\x07\n\x05_uuidB\x0b\n\t_anagrpidB\x0f\n\r_create_imageB\x07\n\x05_sizeB\x08\n\x06_forceB\x12\n\x10_no_auto_visibleB\x0e\n\x0c_trash_imageB\x16\n\x14_disable_auto_resizeB\x0c\n\n_read_onlyB\x15\n\x13_rbd_data_pool_nameB\x0b\n\t_locationB\x17\n\x15_rados_namespace_nameB\x17\n\x15_encryption_algorithm\"{\n\x14namespace_resize_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x1a\n\rOBSOLETE_uuid\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x10\n\x08new_size\x18\x04 \x01(\x04\x42\x10\n\x0e_OBSOLETE_uuid\"o\n\x1anamespace_get_io_stats_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x1a\n\rOBSOLETE_uuid\x18\x03 \x01(\tH\x00\x88\x01\x01\x42\x10\n\x0e_OBSOLETE_uuid\"h\n\x1clist_namespaces_io_stats_req\x12\x1a\n\rsubsystem_nqn\x18\x01 \x01(\tH\x00\x88\x01\x01\x12\x11\n\x04nsid\x18\x02 \x01(\rH\x01\x88\x01\x01\x42\x10\n\x0e_subsystem_nqnB\x07\n\x05_nsid\"\xee\x02\n\x15namespace_set_qos_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x1a\n\rOBSOLETE_uuid\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x1e\n\x11rw_ios_per_second\x18\x04 \x01(\x04H\x01\x88\x01\x01\x12!\n\x14rw_mbytes_per_second\x18\x05 \x01(\x04H\x02\x88\x01\x01\x12 \n\x13r_mbytes_per_second\x18\x06 \x01(\x04H\x03\x88\x01\x01\x12 \n\x13w_mbytes_per_second\x18\x07 \x01(\x04H\x04\x88\x01\x01\x12\x12\n\x05\x66orce\x18\x08 \x01(\x08H\x05\x88\x01\x01\x42\x10\n\x0e_OBSOLETE_uuidB\x14\n\x12_rw_ios_per_secondB\x17\n\x15_rw_mbytes_per_secondB\x16\n\x14_r_mbytes_per_secondB\x16\n\x14_w_mbytes_per_secondB\x08\n\x06_force\"\xbe\x01\n)namespace_change_load_balancing_group_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x1a\n\rOBSOLETE_uuid\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x10\n\x08\x61nagrpid\x18\x04 \x01(\x05\x12\x1a\n\rauto_lb_logic\x18\x05 \x01(\x08H\x01\x88\x01\x01\x42\x10\n\x0e_OBSOLETE_uuidB\x10\n\x0e_auto_lb_logic\"z\n\x1fnamespace_change_visibility_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x14\n\x0c\x61uto_visible\x18\x03 \x01(\x08\x12\x12\n\x05\x66orce\x18\x04 \x01(\x08H\x00\x88\x01\x01\x42\x08\n\x06_force\"h\n\x1dnamespace_change_location_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x15\n\x08location\x18\x03 \x01(\tH\x00\x88\x01\x01\x42\x0b\n\t_location\"]\n!namespace_set_rbd_trash_image_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x13\n\x0btrash_image\x18\x03 \x01(\x08\"Y\n\x1dnamespace_set_auto_resize_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x13\n\x0b\x61uto_resize\x18\x03 \x01(\x08\"\x8f\x01\n\x14namespace_delete_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x1a\n\rOBSOLETE_uuid\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x16\n\ti_am_sure\x18\x04 \x01(\x08H\x01\x88\x01\x01\x42\x10\n\x0e_OBSOLETE_uuidB\x0c\n\n_i_am_sure\"m\n\x16namespace_add_host_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x10\n\x08host_nqn\x18\x03 \x01(\t\x12\x12\n\x05\x66orce\x18\x04 \x01(\x08H\x00\x88\x01\x01\x42\x08\n\x06_force\"R\n\x19namespace_delete_host_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x10\n\x08host_nqn\x18\x03 \x01(\t\"\xf5\x02\n\x14\x63reate_subsystem_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x15\n\rserial_number\x18\x02 \x01(\t\x12\x1b\n\x0emax_namespaces\x18\x03 \x01(\rH\x00\x88\x01\x01\x12\x11\n\tenable_ha\x18\x04 \x01(\x08\x12\x1c\n\x0fno_group_append\x18\x05 \x01(\x08H\x01\x88\x01\x01\x12\x17\n\ndhchap_key\x18\x06 \x01(\tH\x02\x88\x01\x01\x12\x1a\n\rkey_encrypted\x18\x07 \x01(\x08H\x03\x88\x01\x01\x12\x14\n\x0cnetwork_mask\x18\x08 \x03(\t\x12\x1d\n\x10secure_listeners\x18\t \x01(\x08H\x04\x88\x01\x01\x12\x11\n\x04port\x18\n \x01(\rH\x05\x88\x01\x01\x42\x11\n\x0f_max_namespacesB\x12\n\x10_no_group_appendB\r\n\x0b_dhchap_keyB\x10\n\x0e_key_encryptedB\x13\n\x11_secure_listenersB\x07\n\x05_port\"q\n\x14\x64\x65lete_subsystem_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x12\n\x05\x66orce\x18\x02 \x01(\x08H\x00\x88\x01\x01\x12\x16\n\ti_am_sure\x18\x03 \x01(\x08H\x01\x88\x01\x01\x42\x08\n\x06_forceB\x0c\n\n_i_am_sure\"Y\n\x18\x63hange_subsystem_key_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x17\n\ndhchap_key\x18\x02 \x01(\tH\x00\x88\x01\x01\x42\r\n\x0b_dhchap_key\"H\n\x19\x61\x64\x64_subsystem_network_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x14\n\x0cnetwork_mask\x18\x02 \x01(\t\"H\n\x19\x64\x65l_subsystem_network_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x14\n\x0cnetwork_mask\x18\x02 \x01(\t\"C\n\x14kmip_server_endpoint\x12\x0f\n\x07\x61\x64\x64ress\x18\x01 \x01(\t\x12\x11\n\x04port\x18\x02 \x01(\rH\x00\x88\x01\x01\x42\x07\n\x05_port\"e\n\x18kmip_server_endpoint_cli\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x13\n\x0bserver_name\x18\x02 \x01(\t\x12\x0f\n\x07\x61\x64\x64ress\x18\x03 \x01(\t\x12\x0c\n\x04port\x18\x04 \x01(\r\"u\n\x1d\x61\x64\x64_kmip_server_endpoints_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x13\n\x0bserver_name\x18\x02 \x01(\t\x12(\n\tendpoints\x18\x03 \x03(\x0b\x32\x15.kmip_server_endpoint\"u\n\x1d\x64\x65l_kmip_server_endpoints_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x13\n\x0bserver_name\x18\x02 \x01(\t\x12(\n\tendpoints\x18\x03 \x03(\x0b\x32\x15.kmip_server_endpoint\"x\n\x1elist_kmip_server_endpoints_req\x12\x1a\n\rsubsystem_nqn\x18\x01 \x01(\tH\x00\x88\x01\x01\x12\x18\n\x0bserver_name\x18\x02 \x01(\tH\x01\x88\x01\x01\x42\x10\n\x0e_subsystem_nqnB\x0e\n\x0c_server_name\"q\n\x1akmip_server_endpoints_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12,\n\tendpoints\x18\x03 \x03(\x0b\x32\x19.kmip_server_endpoint_cli\"`\n\x13list_namespaces_req\x12\x11\n\tsubsystem\x18\x01 \x01(\t\x12\x11\n\x04nsid\x18\x02 \x01(\rH\x00\x88\x01\x01\x12\x11\n\x04uuid\x18\x03 \x01(\tH\x01\x88\x01\x01\x42\x07\n\x05_nsidB\x07\n\x05_uuid\"\xc3\x02\n\x0c\x61\x64\x64_host_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x10\n\x08host_nqn\x18\x02 \x01(\t\x12\x10\n\x03psk\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x17\n\ndhchap_key\x18\x04 \x01(\tH\x01\x88\x01\x01\x12\x1a\n\rpsk_encrypted\x18\x05 \x01(\x08H\x02\x88\x01\x01\x12\x1a\n\rkey_encrypted\x18\x06 \x01(\x08H\x03\x88\x01\x01\x12\x1d\n\x10\x64hchap_ctrlr_key\x18\x07 \x01(\tH\x04\x88\x01\x01\x12 \n\x13\x63trlr_key_encrypted\x18\x08 \x01(\x08H\x05\x88\x01\x01\x42\x06\n\x04_pskB\r\n\x0b_dhchap_keyB\x10\n\x0e_psk_encryptedB\x10\n\x0e_key_encryptedB\x13\n\x11_dhchap_ctrlr_keyB\x16\n\x14_ctrlr_key_encrypted\"\x9a\x01\n\x13\x63hange_host_key_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x10\n\x08host_nqn\x18\x02 \x01(\t\x12\x17\n\ndhchap_key\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x1d\n\x10\x64hchap_ctrlr_key\x18\x04 \x01(\tH\x01\x88\x01\x01\x42\r\n\x0b_dhchap_keyB\x13\n\x11_dhchap_ctrlr_key\"i\n get_connection_io_statistics_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x10\n\x08host_nqn\x18\x02 \x01(\t\x12\x12\n\x05reset\x18\x03 \x01(\x08H\x00\x88\x01\x01\x42\x08\n\x06_reset\"X\n\x0fremove_host_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x10\n\x08host_nqn\x18\x02 \x01(\t\x12\x12\n\x05\x66orce\x18\x03 \x01(\x08H\x00\x88\x01\x01\x42\x08\n\x06_force\"O\n\x0elist_hosts_req\x12\x11\n\tsubsystem\x18\x01 \x01(\t\x12\x19\n\x0c\x63lear_alerts\x18\x02 \x01(\x08H\x00\x88\x01\x01\x42\x0f\n\r_clear_alerts\"U\n\x14list_connections_req\x12\x11\n\tsubsystem\x18\x01 \x01(\t\x12\x19\n\x0c\x63lear_alerts\x18\x02 \x01(\x08H\x00\x88\x01\x01\x42\x0f\n\r_clear_alerts\"\x89\x02\n\x13\x63reate_listener_req\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12\x11\n\thost_name\x18\x02 \x01(\t\x12\x0e\n\x06traddr\x18\x03 \x01(\t\x12#\n\x06\x61\x64rfam\x18\x05 \x01(\x0e\x32\x0e.AddressFamilyH\x00\x88\x01\x01\x12\x14\n\x07trsvcid\x18\x06 \x01(\rH\x01\x88\x01\x01\x12\x13\n\x06secure\x18\x07 \x01(\x08H\x02\x88\x01\x01\x12\x1d\n\x10verify_host_name\x18\x08 \x01(\x08H\x03\x88\x01\x01\x12\x12\n\x05\x66orce\x18\t \x01(\x08H\x04\x88\x01\x01\x42\t\n\x07_adrfamB\n\n\x08_trsvcidB\t\n\x07_secureB\x13\n\x11_verify_host_nameB\x08\n\x06_force\"\xb5\x01\n\x13\x64\x65lete_listener_req\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12\x11\n\thost_name\x18\x02 \x01(\t\x12\x0e\n\x06traddr\x18\x03 \x01(\t\x12#\n\x06\x61\x64rfam\x18\x05 \x01(\x0e\x32\x0e.AddressFamilyH\x00\x88\x01\x01\x12\x14\n\x07trsvcid\x18\x06 \x01(\rH\x01\x88\x01\x01\x12\x12\n\x05\x66orce\x18\x07 \x01(\x08H\x02\x88\x01\x01\x42\t\n\x07_adrfamB\n\n\x08_trsvcidB\x08\n\x06_force\"\'\n\x12list_listeners_req\x12\x11\n\tsubsystem\x18\x01 \x01(\t\"q\n\x13list_subsystems_req\x12\x1a\n\rsubsystem_nqn\x18\x01 \x01(\tH\x00\x88\x01\x01\x12\x1a\n\rserial_number\x18\x02 \x01(\tH\x01\x88\x01\x01\x42\x10\n\x0e_subsystem_nqnB\x10\n\x0e_serial_number\"\x14\n\x12get_subsystems_req\"U\n%get_spdk_nvmf_log_flags_and_level_req\x12\x1a\n\rall_log_flags\x18\x01 \x01(\x08H\x00\x88\x01\x01\x42\x10\n\x0e_all_log_flags\"5\n\x1a\x64isable_spdk_nvmf_logs_req\x12\x17\n\x0f\x65xtra_log_flags\x18\x01 \x03(\t\"\x97\x01\n\x16set_spdk_nvmf_logs_req\x12!\n\tlog_level\x18\x01 \x01(\x0e\x32\t.LogLevelH\x00\x88\x01\x01\x12#\n\x0bprint_level\x18\x02 \x01(\x0e\x32\t.LogLevelH\x01\x88\x01\x01\x12\x17\n\x0f\x65xtra_log_flags\x18\x03 \x03(\tB\x0c\n\n_log_levelB\x0e\n\x0c_print_level\"@\n\x14get_gateway_info_req\x12\x18\n\x0b\x63li_version\x18\x01 \x01(\tH\x00\x88\x01\x01\x42\x0e\n\x0c_cli_version\"\x1b\n\x19get_gateway_log_level_req\";\n\x19set_gateway_log_level_req\x12\x1e\n\tlog_level\x18\x01 \x01(\x0e\x32\x0b.GwLogLevel\"8\n\x1fshow_gateway_listeners_info_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\"\x17\n\x15get_gateway_stats_req\"\x16\n\x14get_thread_stats_req\"0\n\x1dset_gateway_io_stats_mode_req\x12\x0f\n\x07\x65nabled\x18\x01 \x01(\x08\"<\n\x0f\x61na_group_state\x12\x0e\n\x06grp_id\x18\x01 \x01(\r\x12\x19\n\x05state\x18\x02 \x01(\x0e\x32\n.ana_state\"?\n\x0enqn_ana_states\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12 \n\x06states\x18\x02 \x03(\x0b\x32\x10.ana_group_state\"+\n\x08\x61na_info\x12\x1f\n\x06states\x18\x01 \x03(\x0b\x32\x0f.nqn_ana_states\"3\n\nreq_status\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\"C\n\rsubsys_status\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x0b\n\x03nqn\x18\x03 \x01(\t\"B\n\x0bnsid_status\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x0c\n\x04nsid\x18\x03 \x01(\r\"1\n\x0fsubsystems_info\x12\x1e\n\nsubsystems\x18\x01 \x03(\x0b\x32\n.subsystem\"\xc2\x03\n\tsubsystem\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12\x0f\n\x07subtype\x18\x02 \x01(\t\x12)\n\x10listen_addresses\x18\x03 \x03(\x0b\x32\x0f.listen_address\x12\x14\n\x05hosts\x18\x04 \x03(\x0b\x32\x05.host\x12\x16\n\x0e\x61llow_any_host\x18\x05 \x01(\x08\x12\x1a\n\rserial_number\x18\x06 \x01(\tH\x00\x88\x01\x01\x12\x19\n\x0cmodel_number\x18\x07 \x01(\tH\x01\x88\x01\x01\x12\x1b\n\x0emax_namespaces\x18\x08 \x01(\rH\x02\x88\x01\x01\x12\x17\n\nmin_cntlid\x18\t \x01(\rH\x03\x88\x01\x01\x12\x17\n\nmax_cntlid\x18\n \x01(\rH\x04\x88\x01\x01\x12\x1e\n\nnamespaces\x18\x0b \x03(\x0b\x32\n.namespace\x12\x1b\n\x0ehas_dhchap_key\x18\x0c \x01(\x08H\x05\x88\x01\x01\x12\x14\n\x0cnetwork_mask\x18\r \x03(\tB\x10\n\x0e_serial_numberB\x0f\n\r_model_numberB\x11\n\x0f_max_namespacesB\r\n\x0b_min_cntlidB\r\n\x0b_max_cntlidB\x11\n\x0f_has_dhchap_key\"\x97\x01\n\x0elisten_address\x12\x0e\n\x06trtype\x18\x01 \x01(\t\x12\x0e\n\x06\x61\x64rfam\x18\x02 \x01(\t\x12\x0e\n\x06traddr\x18\x03 \x01(\t\x12\x0f\n\x07trsvcid\x18\x04 \x01(\t\x12\x16\n\ttransport\x18\x05 \x01(\tH\x00\x88\x01\x01\x12\x13\n\x06secure\x18\x06 \x01(\x08H\x01\x88\x01\x01\x42\x0c\n\n_transportB\t\n\x07_secure\"\x84\x02\n\tnamespace\x12\x0c\n\x04nsid\x18\x01 \x01(\r\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x16\n\tbdev_name\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x12\n\x05nguid\x18\x04 \x01(\tH\x01\x88\x01\x01\x12\x11\n\x04uuid\x18\x05 \x01(\tH\x02\x88\x01\x01\x12\x15\n\x08\x61nagrpid\x18\x06 \x01(\rH\x03\x88\x01\x01\x12\x12\n\x05nonce\x18\x07 \x01(\tH\x04\x88\x01\x01\x12\x19\n\x0c\x61uto_visible\x18\x08 \x01(\x08H\x05\x88\x01\x01\x12\r\n\x05hosts\x18\t \x03(\tB\x0c\n\n_bdev_nameB\x08\n\x06_nguidB\x07\n\x05_uuidB\x0b\n\t_anagrpidB\x08\n\x06_nonceB\x0f\n\r_auto_visible\"`\n\x13subsystems_info_cli\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\"\n\nsubsystems\x18\x03 \x03(\x0b\x32\x0e.subsystem_cli\"\xf6\x02\n\rsubsystem_cli\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12\x11\n\tenable_ha\x18\x02 \x01(\x08\x12\x15\n\rserial_number\x18\x03 \x01(\t\x12\x14\n\x0cmodel_number\x18\x04 \x01(\t\x12\x12\n\nmin_cntlid\x18\x05 \x01(\r\x12\x12\n\nmax_cntlid\x18\x06 \x01(\r\x12\x17\n\x0fnamespace_count\x18\x07 \x01(\r\x12\x0f\n\x07subtype\x18\x08 \x01(\t\x12\x16\n\x0emax_namespaces\x18\t \x01(\r\x12\x1b\n\x0ehas_dhchap_key\x18\n \x01(\x08H\x00\x88\x01\x01\x12\x1b\n\x0e\x61llow_any_host\x18\x0b \x01(\x08H\x01\x88\x01\x01\x12 \n\x13\x63reated_without_key\x18\x0c \x01(\x08H\x02\x88\x01\x01\x12\x14\n\x0cnetwork_mask\x18\r \x03(\tB\x11\n\x0f_has_dhchap_keyB\x11\n\x0f_allow_any_hostB\x16\n\x14_created_without_key\"\xbb\x05\n\x0cgateway_info\x12\x13\n\x0b\x63li_version\x18\x01 \x01(\t\x12\x0f\n\x07version\x18\x02 \x01(\t\x12\x0c\n\x04name\x18\x03 \x01(\t\x12\r\n\x05group\x18\x04 \x01(\t\x12\x0c\n\x04\x61\x64\x64r\x18\x05 \x01(\t\x12\x0c\n\x04port\x18\x06 \x01(\t\x12\x13\n\x0b\x62ool_status\x18\x07 \x01(\x08\x12\x0e\n\x06status\x18\x08 \x01(\x05\x12\x15\n\rerror_message\x18\t \x01(\t\x12\x19\n\x0cspdk_version\x18\n \x01(\tH\x00\x88\x01\x01\x12\x1c\n\x14load_balancing_group\x18\x0b \x01(\r\x12\x10\n\x08hostname\x18\x0c \x01(\t\x12\x1b\n\x0emax_subsystems\x18\r \x01(\rH\x01\x88\x01\x01\x12\x1b\n\x0emax_namespaces\x18\x0e \x01(\rH\x02\x88\x01\x01\x12$\n\x17max_hosts_per_subsystem\x18\x0f \x01(\rH\x03\x88\x01\x01\x12)\n\x1cmax_namespaces_per_subsystem\x18\x10 \x01(\rH\x04\x88\x01\x01\x12\x16\n\tmax_hosts\x18\x11 \x01(\rH\x05\x88\x01\x01\x12(\n\x1bgateway_initialization_over\x18\x12 \x01(\x08H\x06\x88\x01\x01\x12\x1d\n\x10io_stats_enabled\x18\x13 \x01(\x08H\x07\x88\x01\x01\x12\x15\n\x08location\x18\x14 \x01(\tH\x08\x88\x01\x01\x42\x0f\n\r_spdk_versionB\x11\n\x0f_max_subsystemsB\x11\n\x0f_max_namespacesB\x1a\n\x18_max_hosts_per_subsystemB\x1f\n\x1d_max_namespaces_per_subsystemB\x0c\n\n_max_hostsB\x1e\n\x1c_gateway_initialization_overB\x13\n\x11_io_stats_enabledB\x0b\n\t_location\"E\n\x0b\x63li_version\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x0f\n\x07version\x18\x03 \x01(\t\"D\n\ngw_version\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x0f\n\x07version\x18\x03 \x01(\t\"+\n\x19poll_group_transport_info\x12\x0e\n\x06trtype\x18\x01 \x01(\t\"\xe5\x01\n\x0fpoll_group_info\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x14\n\x0c\x61\x64min_qpairs\x18\x02 \x01(\r\x12\x11\n\tio_qpairs\x18\x03 \x01(\r\x12\x1c\n\x14\x63urrent_admin_qpairs\x18\x04 \x01(\r\x12\x19\n\x11\x63urrent_io_qpairs\x18\x05 \x01(\r\x12\x17\n\x0fpending_bdev_io\x18\x06 \x01(\x04\x12\x19\n\x11\x63ompleted_nvme_io\x18\x07 \x01(\x04\x12.\n\ntransports\x18\x08 \x03(\x0b\x32\x1a.poll_group_transport_info\"u\n\x12gateway_stats_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x11\n\ttick_rate\x18\x03 \x01(\x04\x12%\n\x0bpoll_groups\x18\x04 \x03(\x0b\x32\x10.poll_group_info\"q\n\x11thread_stats_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\"\n\x07threads\x18\x03 \x03(\x0b\x32\x11.spdk_thread_info\x12\x11\n\ttick_rate\x18\x04 \x01(\x04\"<\n\x10spdk_thread_info\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0c\n\x04\x62usy\x18\x02 \x01(\x04\x12\x0c\n\x04idle\x18\x03 \x01(\x04\"\xd3\x01\n\rlistener_info\x12\x11\n\thost_name\x18\x01 \x01(\t\x12\x0e\n\x06trtype\x18\x02 \x01(\t\x12\x1e\n\x06\x61\x64rfam\x18\x03 \x01(\x0e\x32\x0e.AddressFamily\x12\x0e\n\x06traddr\x18\x04 \x01(\t\x12\x0f\n\x07trsvcid\x18\x05 \x01(\r\x12\x13\n\x06secure\x18\x06 \x01(\x08H\x00\x88\x01\x01\x12\x13\n\x06\x61\x63tive\x18\x07 \x01(\x08H\x01\x88\x01\x01\x12\x13\n\x06manual\x18\x08 \x01(\x08H\x02\x88\x01\x01\x42\t\n\x07_secureB\t\n\x07_activeB\t\n\x07_manual\"Z\n\x0elisteners_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12!\n\tlisteners\x18\x03 \x03(\x0b\x32\x0e.listener_info\"^\n\x15gateway_listener_info\x12 \n\x08listener\x18\x01 \x01(\x0b\x32\x0e.listener_info\x12#\n\tlb_states\x18\x02 \x03(\x0b\x32\x10.ana_group_state\"m\n\x16gateway_listeners_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12,\n\x0cgw_listeners\x18\x03 \x03(\x0b\x32\x16.gateway_listener_info\"\x9b\x02\n\x04host\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12\x14\n\x07use_psk\x18\x02 \x01(\x08H\x00\x88\x01\x01\x12\x17\n\nuse_dhchap\x18\x03 \x01(\x08H\x01\x88\x01\x01\x12\x32\n%disconnected_due_to_keepalive_timeout\x18\x04 \x01(\x08H\x02\x88\x01\x01\x12\x41\n\x18\x64hchap_controller_origin\x18\x05 \x01(\x0e\x32\x1a.DHCHAPControllerKeyOriginH\x03\x88\x01\x01\x42\n\n\x08_use_pskB\r\n\x0b_use_dhchapB(\n&_disconnected_due_to_keepalive_timeoutB\x1b\n\x19_dhchap_controller_origin\"7\n\rlatency_stats\x12\x0b\n\x03min\x18\x01 \x01(\x04\x12\x0b\n\x03max\x18\x02 \x01(\x04\x12\x0c\n\x04mean\x18\x03 \x01(\x04\"\x98\x01\n\rlatency_group\x12\x10\n\x08io_count\x18\x01 \x01(\x04\x12\x1d\n\x05total\x18\x02 \x01(\x0b\x32\x0e.latency_stats\x12\x1c\n\x04\x62\x64\x65v\x18\x03 \x01(\x0b\x32\x0e.latency_stats\x12\x1b\n\x03net\x18\x04 \x01(\x0b\x32\x0e.latency_stats\x12\x1b\n\x03qos\x18\x05 \x01(\x0b\x32\x0e.latency_stats\"X\n\x0b\x62ucket_info\x12\x0c\n\x04size\x18\x01 \x01(\r\x12\x1c\n\x04read\x18\x02 \x01(\x0b\x32\x0e.latency_group\x12\x1d\n\x05write\x18\x03 \x01(\x0b\x32\x0e.latency_group\"\xb7\x01\n\x18\x63onnection_io_statistics\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x15\n\rsubsystem_nqn\x18\x03 \x01(\t\x12\x10\n\x08host_nqn\x18\x04 \x01(\t\x12\x1a\n\rtotal_num_ios\x18\x05 \x01(\x04H\x00\x88\x01\x01\x12\x1d\n\x07\x62uckets\x18\x06 \x03(\x0b\x32\x0c.bucket_infoB\x10\n\x0e_total_num_ios\"x\n\nhosts_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x16\n\x0e\x61llow_any_host\x18\x03 \x01(\x08\x12\x15\n\rsubsystem_nqn\x18\x04 \x01(\t\x12\x14\n\x05hosts\x18\x05 \x03(\x0b\x32\x05.host\"\xf8\x03\n\nconnection\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12\x0e\n\x06traddr\x18\x02 \x01(\t\x12\x0f\n\x07trsvcid\x18\x03 \x01(\r\x12\x0e\n\x06trtype\x18\x04 \x01(\t\x12\x1e\n\x06\x61\x64rfam\x18\x05 \x01(\x0e\x32\x0e.AddressFamily\x12\x11\n\tconnected\x18\x06 \x01(\x08\x12\x14\n\x0cqpairs_count\x18\x07 \x01(\x05\x12\x15\n\rcontroller_id\x18\x08 \x01(\x05\x12\x13\n\x06secure\x18\t \x01(\x08H\x00\x88\x01\x01\x12\x14\n\x07use_psk\x18\n \x01(\x08H\x01\x88\x01\x01\x12\x17\n\nuse_dhchap\x18\x0b \x01(\x08H\x02\x88\x01\x01\x12\x16\n\tsubsystem\x18\x0c \x01(\tH\x03\x88\x01\x01\x12\x32\n%disconnected_due_to_keepalive_timeout\x18\r \x01(\x08H\x04\x88\x01\x01\x12\x41\n\x18\x64hchap_controller_origin\x18\x0e \x01(\x0e\x32\x1a.DHCHAPControllerKeyOriginH\x05\x88\x01\x01\x42\t\n\x07_secureB\n\n\x08_use_pskB\r\n\x0b_use_dhchapB\x0c\n\n_subsystemB(\n&_disconnected_due_to_keepalive_timeoutB\x1b\n\x19_dhchap_controller_origin\"r\n\x10\x63onnections_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x15\n\rsubsystem_nqn\x18\x03 \x01(\t\x12 \n\x0b\x63onnections\x18\x04 \x03(\x0b\x32\x0b.connection\"\xd8\x07\n\rnamespace_cli\x12\x0c\n\x04nsid\x18\x01 \x01(\r\x12\x11\n\tbdev_name\x18\x02 \x01(\t\x12\x16\n\x0erbd_image_name\x18\x03 \x01(\t\x12\x15\n\rrbd_pool_name\x18\x04 \x01(\t\x12\x1c\n\x14load_balancing_group\x18\x05 \x01(\r\x12\x12\n\nblock_size\x18\x06 \x01(\r\x12\x16\n\x0erbd_image_size\x18\x07 \x01(\x04\x12\x0c\n\x04uuid\x18\x08 \x01(\t\x12\x19\n\x11rw_ios_per_second\x18\t \x01(\x04\x12\x1c\n\x14rw_mbytes_per_second\x18\n \x01(\x04\x12\x1b\n\x13r_mbytes_per_second\x18\x0b \x01(\x04\x12\x1b\n\x13w_mbytes_per_second\x18\x0c \x01(\x04\x12\x14\n\x0c\x61uto_visible\x18\r \x01(\x08\x12\r\n\x05hosts\x18\x0e \x03(\t\x12\x1d\n\x10ns_subsystem_nqn\x18\x0f \x01(\tH\x00\x88\x01\x01\x12\x18\n\x0btrash_image\x18\x10 \x01(\x08H\x01\x88\x01\x01\x12 \n\x13\x64isable_auto_resize\x18\x11 \x01(\x08H\x02\x88\x01\x01\x12\x16\n\tread_only\x18\x12 \x01(\x08H\x03\x88\x01\x01\x12\x19\n\x0c\x63luster_name\x18\x13 \x01(\tH\x04\x88\x01\x01\x12,\n\x1f\x63onfigured_load_balancing_group\x18\x14 \x01(\rH\x05\x88\x01\x01\x12\x1d\n\x10image_was_shrunk\x18\x15 \x01(\x08H\x06\x88\x01\x01\x12\x1f\n\x12rbd_data_pool_name\x18\x16 \x01(\tH\x07\x88\x01\x01\x12\x15\n\x08location\x18\x17 \x01(\tH\x08\x88\x01\x01\x12!\n\x14rados_namespace_name\x18\x18 \x01(\tH\t\x88\x01\x01\x12\x37\n\x14\x65ncryption_algorithm\x18\x19 \x01(\x0e\x32\x14.EncryptionAlgorithmH\n\x88\x01\x01\x12-\n\x12\x65ncryption_entries\x18\x1a \x03(\x0b\x32\x11.encryption_entryB\x13\n\x11_ns_subsystem_nqnB\x0e\n\x0c_trash_imageB\x16\n\x14_disable_auto_resizeB\x0c\n\n_read_onlyB\x0f\n\r_cluster_nameB\"\n _configured_load_balancing_groupB\x13\n\x11_image_was_shrunkB\x15\n\x13_rbd_data_pool_nameB\x0b\n\t_locationB\x17\n\x15_rados_namespace_nameB\x17\n\x15_encryption_algorithm\"s\n\x0fnamespaces_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x15\n\rsubsystem_nqn\x18\x03 \x01(\t\x12\"\n\nnamespaces\x18\x04 \x03(\x0b\x32\x0e.namespace_cli\"1\n\x12namespace_io_error\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\r\"\x91\x01\n\x1dlist_namespaces_io_stats_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x11\n\ttick_rate\x18\x03 \x01(\x04\x12\r\n\x05ticks\x18\x04 \x01(\x04\x12\'\n\nnamespaces\x18\x05 \x03(\x0b\x32\x13.bdev_io_stats_info\"\xf7\x04\n\x12\x62\x64\x65v_io_stats_info\x12\x11\n\tbdev_name\x18\x01 \x01(\t\x12\x12\n\nbytes_read\x18\x02 \x01(\x04\x12\x14\n\x0cnum_read_ops\x18\x03 \x01(\x04\x12\x15\n\rbytes_written\x18\x04 \x01(\x04\x12\x15\n\rnum_write_ops\x18\x05 \x01(\x04\x12\x16\n\x0e\x62ytes_unmapped\x18\x06 \x01(\x04\x12\x15\n\rnum_unmap_ops\x18\x07 \x01(\x04\x12\x14\n\x0c\x62ytes_copied\x18\x08 \x01(\x04\x12\x14\n\x0cnum_copy_ops\x18\t \x01(\x04\x12\x1a\n\x12read_latency_ticks\x18\n \x01(\x04\x12\x1e\n\x16max_read_latency_ticks\x18\x0b \x01(\x04\x12\x1e\n\x16min_read_latency_ticks\x18\x0c \x01(\x04\x12\x1b\n\x13write_latency_ticks\x18\r \x01(\x04\x12\x1f\n\x17max_write_latency_ticks\x18\x0e \x01(\x04\x12\x1f\n\x17min_write_latency_ticks\x18\x0f \x01(\x04\x12\x1b\n\x13unmap_latency_ticks\x18\x10 \x01(\x04\x12\x1f\n\x17max_unmap_latency_ticks\x18\x11 \x01(\x04\x12\x1f\n\x17min_unmap_latency_ticks\x18\x12 \x01(\x04\x12\x1a\n\x12\x63opy_latency_ticks\x18\x13 \x01(\x04\x12\x1e\n\x16max_copy_latency_ticks\x18\x14 \x01(\x04\x12\x1e\n\x16min_copy_latency_ticks\x18\x15 \x01(\x04\x12%\n\x08io_error\x18\x16 \x03(\x0b\x32\x13.namespace_io_error\"\xda\x05\n\x17namespace_io_stats_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x15\n\rsubsystem_nqn\x18\x03 \x01(\t\x12\x0c\n\x04nsid\x18\x04 \x01(\r\x12\x11\n\x04uuid\x18\x05 \x01(\tH\x00\x88\x01\x01\x12\x11\n\tbdev_name\x18\x06 \x01(\t\x12\x11\n\ttick_rate\x18\x07 \x01(\x04\x12\r\n\x05ticks\x18\x08 \x01(\x04\x12\x12\n\nbytes_read\x18\t \x01(\x04\x12\x14\n\x0cnum_read_ops\x18\n \x01(\x04\x12\x15\n\rbytes_written\x18\x0b \x01(\x04\x12\x15\n\rnum_write_ops\x18\x0c \x01(\x04\x12\x16\n\x0e\x62ytes_unmapped\x18\r \x01(\x04\x12\x15\n\rnum_unmap_ops\x18\x0e \x01(\x04\x12\x1a\n\x12read_latency_ticks\x18\x0f \x01(\x04\x12\x1e\n\x16max_read_latency_ticks\x18\x10 \x01(\x04\x12\x1e\n\x16min_read_latency_ticks\x18\x11 \x01(\x04\x12\x1b\n\x13write_latency_ticks\x18\x12 \x01(\x04\x12\x1f\n\x17max_write_latency_ticks\x18\x13 \x01(\x04\x12\x1f\n\x17min_write_latency_ticks\x18\x14 \x01(\x04\x12\x1b\n\x13unmap_latency_ticks\x18\x15 \x01(\x04\x12\x1f\n\x17max_unmap_latency_ticks\x18\x16 \x01(\x04\x12\x1f\n\x17min_unmap_latency_ticks\x18\x17 \x01(\x04\x12\x1a\n\x12\x63opy_latency_ticks\x18\x18 \x01(\x04\x12\x1e\n\x16max_copy_latency_ticks\x18\x19 \x01(\x04\x12\x1e\n\x16min_copy_latency_ticks\x18\x1a \x01(\x04\x12%\n\x08io_error\x18\x1b \x03(\x0b\x32\x13.namespace_io_errorB\x07\n\x05_uuid\"3\n\x12spdk_log_flag_info\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0f\n\x07\x65nabled\x18\x02 \x01(\x08\"\xba\x01\n\"spdk_nvmf_log_flags_and_level_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12+\n\x0envmf_log_flags\x18\x03 \x03(\x0b\x32\x13.spdk_log_flag_info\x12\x1c\n\tlog_level\x18\x04 \x01(\x0e\x32\t.LogLevel\x12\"\n\x0flog_print_level\x18\x05 \x01(\x0e\x32\t.LogLevel\"_\n\x16gateway_log_level_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x1e\n\tlog_level\x18\x03 \x01(\x0e\x32\x0b.GwLogLevel\"E\n\x10\x65ncryption_entry\x12!\n\x06\x66ormat\x18\x01 \x01(\x0e\x32\x11.EncryptionFormat\x12\x0e\n\x06key_id\x18\x02 \x01(\t*#\n\rAddressFamily\x12\x08\n\x04ipv4\x10\x00\x12\x08\n\x04ipv6\x10\x01*C\n\x08LogLevel\x12\t\n\x05\x45RROR\x10\x00\x12\x0b\n\x07WARNING\x10\x01\x12\n\n\x06NOTICE\x10\x02\x12\x08\n\x04INFO\x10\x03\x12\t\n\x05\x44\x45\x42UG\x10\x04*S\n\nGwLogLevel\x12\n\n\x06notset\x10\x00\x12\t\n\x05\x64\x65\x62ug\x10\n\x12\x08\n\x04info\x10\x14\x12\x0b\n\x07warning\x10\x1e\x12\t\n\x05\x65rror\x10(\x12\x0c\n\x08\x63ritical\x10\x32*2\n\x10\x45ncryptionFormat\x12\x08\n\x04none\x10\x00\x12\t\n\x05luks1\x10\x01\x12\t\n\x05luks2\x10\x02*?\n\x13\x45ncryptionAlgorithm\x12\x10\n\x0cno_algorithm\x10\x00\x12\n\n\x06\x61\x65s128\x10\x01\x12\n\n\x06\x61\x65s256\x10\x02*R\n\x19\x44HCHAPControllerKeyOrigin\x12\n\n\x06no_key\x10\x00\x12\x11\n\rhost_specific\x10\x01\x12\x16\n\x12subsystem_implicit\x10\x02*J\n\tana_state\x12\t\n\x05UNSET\x10\x00\x12\r\n\tOPTIMIZED\x10\x01\x12\x11\n\rNON_OPTIMIZED\x10\x02\x12\x10\n\x0cINACCESSIBLE\x10\x03\x32\xe1\x17\n\x07Gateway\x12\x33\n\rnamespace_add\x12\x12.namespace_add_req\x1a\x0c.nsid_status\"\x00\x12;\n\x10\x63reate_subsystem\x12\x15.create_subsystem_req\x1a\x0e.subsys_status\"\x00\x12\x38\n\x10\x64\x65lete_subsystem\x12\x15.delete_subsystem_req\x1a\x0b.req_status\"\x00\x12@\n\x14\x63hange_subsystem_key\x12\x19.change_subsystem_key_req\x1a\x0b.req_status\"\x00\x12\x42\n\x15\x61\x64\x64_subsystem_network\x12\x1a.add_subsystem_network_req\x1a\x0b.req_status\"\x00\x12\x42\n\x15\x64\x65l_subsystem_network\x12\x1a.del_subsystem_network_req\x1a\x0b.req_status\"\x00\x12J\n\x19\x61\x64\x64_kmip_server_endpoints\x12\x1e.add_kmip_server_endpoints_req\x1a\x0b.req_status\"\x00\x12J\n\x19\x64\x65l_kmip_server_endpoints\x12\x1e.del_kmip_server_endpoints_req\x1a\x0b.req_status\"\x00\x12\\\n\x1alist_kmip_server_endpoints\x12\x1f.list_kmip_server_endpoints_req\x1a\x1b.kmip_server_endpoints_info\"\x00\x12;\n\x0flist_namespaces\x12\x14.list_namespaces_req\x1a\x10.namespaces_info\"\x00\x12\x38\n\x10namespace_resize\x12\x15.namespace_resize_req\x1a\x0b.req_status\"\x00\x12Q\n\x16namespace_get_io_stats\x12\x1b.namespace_get_io_stats_req\x1a\x18.namespace_io_stats_info\"\x00\x12[\n\x18list_namespaces_io_stats\x12\x1d.list_namespaces_io_stats_req\x1a\x1e.list_namespaces_io_stats_info\"\x00\x12\x41\n\x18namespace_set_qos_limits\x12\x16.namespace_set_qos_req\x1a\x0b.req_status\"\x00\x12\x62\n%namespace_change_load_balancing_group\x12*.namespace_change_load_balancing_group_req\x1a\x0b.req_status\"\x00\x12N\n\x1bnamespace_change_visibility\x12 .namespace_change_visibility_req\x1a\x0b.req_status\"\x00\x12J\n\x19namespace_change_location\x12\x1e.namespace_change_location_req\x1a\x0b.req_status\"\x00\x12R\n\x1dnamespace_set_rbd_trash_image\x12\".namespace_set_rbd_trash_image_req\x1a\x0b.req_status\"\x00\x12J\n\x19namespace_set_auto_resize\x12\x1e.namespace_set_auto_resize_req\x1a\x0b.req_status\"\x00\x12\x38\n\x10namespace_delete\x12\x15.namespace_delete_req\x1a\x0b.req_status\"\x00\x12<\n\x12namespace_add_host\x12\x17.namespace_add_host_req\x1a\x0b.req_status\"\x00\x12\x42\n\x15namespace_delete_host\x12\x1a.namespace_delete_host_req\x1a\x0b.req_status\"\x00\x12(\n\x08\x61\x64\x64_host\x12\r.add_host_req\x1a\x0b.req_status\"\x00\x12.\n\x0bremove_host\x12\x10.remove_host_req\x1a\x0b.req_status\"\x00\x12\x36\n\x0f\x63hange_host_key\x12\x14.change_host_key_req\x1a\x0b.req_status\"\x00\x12,\n\nlist_hosts\x12\x0f.list_hosts_req\x1a\x0b.hosts_info\"\x00\x12>\n\x10list_connections\x12\x15.list_connections_req\x1a\x11.connections_info\"\x00\x12^\n\x1cget_connection_io_statistics\x12!.get_connection_io_statistics_req\x1a\x19.connection_io_statistics\"\x00\x12\x36\n\x0f\x63reate_listener\x12\x14.create_listener_req\x1a\x0b.req_status\"\x00\x12\x36\n\x0f\x64\x65lete_listener\x12\x14.delete_listener_req\x1a\x0b.req_status\"\x00\x12\x38\n\x0elist_listeners\x12\x13.list_listeners_req\x1a\x0f.listeners_info\"\x00\x12?\n\x0flist_subsystems\x12\x14.list_subsystems_req\x1a\x14.subsystems_info_cli\"\x00\x12\x39\n\x0eget_subsystems\x12\x13.get_subsystems_req\x1a\x10.subsystems_info\"\x00\x12)\n\rset_ana_state\x12\t.ana_info\x1a\x0b.req_status\"\x00\x12r\n!get_spdk_nvmf_log_flags_and_level\x12&.get_spdk_nvmf_log_flags_and_level_req\x1a#.spdk_nvmf_log_flags_and_level_info\"\x00\x12\x44\n\x16\x64isable_spdk_nvmf_logs\x12\x1b.disable_spdk_nvmf_logs_req\x1a\x0b.req_status\"\x00\x12<\n\x12set_spdk_nvmf_logs\x12\x17.set_spdk_nvmf_logs_req\x1a\x0b.req_status\"\x00\x12:\n\x10get_gateway_info\x12\x15.get_gateway_info_req\x1a\r.gateway_info\"\x00\x12N\n\x15get_gateway_log_level\x12\x1a.get_gateway_log_level_req\x1a\x17.gateway_log_level_info\"\x00\x12\x42\n\x15set_gateway_log_level\x12\x1a.set_gateway_log_level_req\x1a\x0b.req_status\"\x00\x12Z\n\x1bshow_gateway_listeners_info\x12 .show_gateway_listeners_info_req\x1a\x17.gateway_listeners_info\"\x00\x12\x42\n\x11get_gateway_stats\x12\x16.get_gateway_stats_req\x1a\x13.gateway_stats_info\"\x00\x12?\n\x10get_thread_stats\x12\x15.get_thread_stats_req\x1a\x12.thread_stats_info\"\x00\x12J\n\x19set_gateway_io_stats_mode\x12\x1e.set_gateway_io_stats_mode_req\x1a\x0b.req_status\"\x00\x42+Z)github.com/ceph/ceph-nvmeof/lib/go/nvmeofb\x06proto3'
+  serialized_pb=b'\n&dashboard/services/proto/gateway.proto\"\x84\x06\n\x11namespace_add_req\x12\x15\n\rrbd_pool_name\x18\x01 \x01(\t\x12\x16\n\x0erbd_image_name\x18\x02 \x01(\t\x12\x15\n\rsubsystem_nqn\x18\x03 \x01(\t\x12\x11\n\x04nsid\x18\x04 \x01(\rH\x00\x88\x01\x01\x12\x12\n\nblock_size\x18\x05 \x01(\r\x12\x11\n\x04uuid\x18\x06 \x01(\tH\x01\x88\x01\x01\x12\x15\n\x08\x61nagrpid\x18\x07 \x01(\x05H\x02\x88\x01\x01\x12\x19\n\x0c\x63reate_image\x18\x08 \x01(\x08H\x03\x88\x01\x01\x12\x11\n\x04size\x18\t \x01(\x04H\x04\x88\x01\x01\x12\x12\n\x05\x66orce\x18\n \x01(\x08H\x05\x88\x01\x01\x12\x1c\n\x0fno_auto_visible\x18\x0b \x01(\x08H\x06\x88\x01\x01\x12\x18\n\x0btrash_image\x18\x0c \x01(\x08H\x07\x88\x01\x01\x12 \n\x13\x64isable_auto_resize\x18\r \x01(\x08H\x08\x88\x01\x01\x12\x16\n\tread_only\x18\x0e \x01(\x08H\t\x88\x01\x01\x12\x1f\n\x12rbd_data_pool_name\x18\x0f \x01(\tH\n\x88\x01\x01\x12\x15\n\x08location\x18\x10 \x01(\tH\x0b\x88\x01\x01\x12!\n\x14rados_namespace_name\x18\x11 \x01(\tH\x0c\x88\x01\x01\x12-\n\x12\x65ncryption_entries\x18\x12 \x03(\x0b\x32\x11.encryption_entry\x12\x37\n\x14\x65ncryption_algorithm\x18\x13 \x01(\x0e\x32\x14.EncryptionAlgorithmH\r\x88\x01\x01\x42\x07\n\x05_nsidB\x07\n\x05_uuidB\x0b\n\t_anagrpidB\x0f\n\r_create_imageB\x07\n\x05_sizeB\x08\n\x06_forceB\x12\n\x10_no_auto_visibleB\x0e\n\x0c_trash_imageB\x16\n\x14_disable_auto_resizeB\x0c\n\n_read_onlyB\x15\n\x13_rbd_data_pool_nameB\x0b\n\t_locationB\x17\n\x15_rados_namespace_nameB\x17\n\x15_encryption_algorithm\"{\n\x14namespace_resize_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x1a\n\rOBSOLETE_uuid\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x10\n\x08new_size\x18\x04 \x01(\x04\x42\x10\n\x0e_OBSOLETE_uuid\"o\n\x1anamespace_get_io_stats_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x1a\n\rOBSOLETE_uuid\x18\x03 \x01(\tH\x00\x88\x01\x01\x42\x10\n\x0e_OBSOLETE_uuid\"h\n\x1clist_namespaces_io_stats_req\x12\x1a\n\rsubsystem_nqn\x18\x01 \x01(\tH\x00\x88\x01\x01\x12\x11\n\x04nsid\x18\x02 \x01(\rH\x01\x88\x01\x01\x42\x10\n\x0e_subsystem_nqnB\x07\n\x05_nsid\"\xee\x02\n\x15namespace_set_qos_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x1a\n\rOBSOLETE_uuid\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x1e\n\x11rw_ios_per_second\x18\x04 \x01(\x04H\x01\x88\x01\x01\x12!\n\x14rw_mbytes_per_second\x18\x05 \x01(\x04H\x02\x88\x01\x01\x12 \n\x13r_mbytes_per_second\x18\x06 \x01(\x04H\x03\x88\x01\x01\x12 \n\x13w_mbytes_per_second\x18\x07 \x01(\x04H\x04\x88\x01\x01\x12\x12\n\x05\x66orce\x18\x08 \x01(\x08H\x05\x88\x01\x01\x42\x10\n\x0e_OBSOLETE_uuidB\x14\n\x12_rw_ios_per_secondB\x17\n\x15_rw_mbytes_per_secondB\x16\n\x14_r_mbytes_per_secondB\x16\n\x14_w_mbytes_per_secondB\x08\n\x06_force\"\xbe\x01\n)namespace_change_load_balancing_group_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x1a\n\rOBSOLETE_uuid\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x10\n\x08\x61nagrpid\x18\x04 \x01(\x05\x12\x1a\n\rauto_lb_logic\x18\x05 \x01(\x08H\x01\x88\x01\x01\x42\x10\n\x0e_OBSOLETE_uuidB\x10\n\x0e_auto_lb_logic\"z\n\x1fnamespace_change_visibility_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x14\n\x0c\x61uto_visible\x18\x03 \x01(\x08\x12\x12\n\x05\x66orce\x18\x04 \x01(\x08H\x00\x88\x01\x01\x42\x08\n\x06_force\"h\n\x1dnamespace_change_location_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x15\n\x08location\x18\x03 \x01(\tH\x00\x88\x01\x01\x42\x0b\n\t_location\"]\n!namespace_set_rbd_trash_image_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x13\n\x0btrash_image\x18\x03 \x01(\x08\"Y\n\x1dnamespace_set_auto_resize_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x13\n\x0b\x61uto_resize\x18\x03 \x01(\x08\"\x8f\x01\n\x14namespace_delete_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x1a\n\rOBSOLETE_uuid\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x16\n\ti_am_sure\x18\x04 \x01(\x08H\x01\x88\x01\x01\x42\x10\n\x0e_OBSOLETE_uuidB\x0c\n\n_i_am_sure\"m\n\x16namespace_add_host_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x10\n\x08host_nqn\x18\x03 \x01(\t\x12\x12\n\x05\x66orce\x18\x04 \x01(\x08H\x00\x88\x01\x01\x42\x08\n\x06_force\"R\n\x19namespace_delete_host_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x10\n\x08host_nqn\x18\x03 \x01(\t\"\xf5\x02\n\x14\x63reate_subsystem_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x15\n\rserial_number\x18\x02 \x01(\t\x12\x1b\n\x0emax_namespaces\x18\x03 \x01(\rH\x00\x88\x01\x01\x12\x11\n\tenable_ha\x18\x04 \x01(\x08\x12\x1c\n\x0fno_group_append\x18\x05 \x01(\x08H\x01\x88\x01\x01\x12\x17\n\ndhchap_key\x18\x06 \x01(\tH\x02\x88\x01\x01\x12\x1a\n\rkey_encrypted\x18\x07 \x01(\x08H\x03\x88\x01\x01\x12\x14\n\x0cnetwork_mask\x18\x08 \x03(\t\x12\x1d\n\x10secure_listeners\x18\t \x01(\x08H\x04\x88\x01\x01\x12\x11\n\x04port\x18\n \x01(\rH\x05\x88\x01\x01\x42\x11\n\x0f_max_namespacesB\x12\n\x10_no_group_appendB\r\n\x0b_dhchap_keyB\x10\n\x0e_key_encryptedB\x13\n\x11_secure_listenersB\x07\n\x05_port\"q\n\x14\x64\x65lete_subsystem_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x12\n\x05\x66orce\x18\x02 \x01(\x08H\x00\x88\x01\x01\x12\x16\n\ti_am_sure\x18\x03 \x01(\x08H\x01\x88\x01\x01\x42\x08\n\x06_forceB\x0c\n\n_i_am_sure\"Y\n\x18\x63hange_subsystem_key_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x17\n\ndhchap_key\x18\x02 \x01(\tH\x00\x88\x01\x01\x42\r\n\x0b_dhchap_key\"H\n\x19\x61\x64\x64_subsystem_network_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x14\n\x0cnetwork_mask\x18\x02 \x01(\t\"H\n\x19\x64\x65l_subsystem_network_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x14\n\x0cnetwork_mask\x18\x02 \x01(\t\"/\n\x16gw_refresh_network_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\"b\n\x19gw_refresh_network_status\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\r\n\x05\x61\x64\x64\x65\x64\x18\x03 \x03(\t\x12\x0f\n\x07removed\x18\x04 \x03(\t\"C\n\x14kmip_server_endpoint\x12\x0f\n\x07\x61\x64\x64ress\x18\x01 \x01(\t\x12\x11\n\x04port\x18\x02 \x01(\rH\x00\x88\x01\x01\x42\x07\n\x05_port\"e\n\x18kmip_server_endpoint_cli\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x13\n\x0bserver_name\x18\x02 \x01(\t\x12\x0f\n\x07\x61\x64\x64ress\x18\x03 \x01(\t\x12\x0c\n\x04port\x18\x04 \x01(\r\"u\n\x1d\x61\x64\x64_kmip_server_endpoints_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x13\n\x0bserver_name\x18\x02 \x01(\t\x12(\n\tendpoints\x18\x03 \x03(\x0b\x32\x15.kmip_server_endpoint\"u\n\x1d\x64\x65l_kmip_server_endpoints_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x13\n\x0bserver_name\x18\x02 \x01(\t\x12(\n\tendpoints\x18\x03 \x03(\x0b\x32\x15.kmip_server_endpoint\"x\n\x1elist_kmip_server_endpoints_req\x12\x1a\n\rsubsystem_nqn\x18\x01 \x01(\tH\x00\x88\x01\x01\x12\x18\n\x0bserver_name\x18\x02 \x01(\tH\x01\x88\x01\x01\x42\x10\n\x0e_subsystem_nqnB\x0e\n\x0c_server_name\"q\n\x1akmip_server_endpoints_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12,\n\tendpoints\x18\x03 \x03(\x0b\x32\x19.kmip_server_endpoint_cli\"`\n\x13list_namespaces_req\x12\x11\n\tsubsystem\x18\x01 \x01(\t\x12\x11\n\x04nsid\x18\x02 \x01(\rH\x00\x88\x01\x01\x12\x11\n\x04uuid\x18\x03 \x01(\tH\x01\x88\x01\x01\x42\x07\n\x05_nsidB\x07\n\x05_uuid\"\xc3\x02\n\x0c\x61\x64\x64_host_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x10\n\x08host_nqn\x18\x02 \x01(\t\x12\x10\n\x03psk\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x17\n\ndhchap_key\x18\x04 \x01(\tH\x01\x88\x01\x01\x12\x1a\n\rpsk_encrypted\x18\x05 \x01(\x08H\x02\x88\x01\x01\x12\x1a\n\rkey_encrypted\x18\x06 \x01(\x08H\x03\x88\x01\x01\x12\x1d\n\x10\x64hchap_ctrlr_key\x18\x07 \x01(\tH\x04\x88\x01\x01\x12 \n\x13\x63trlr_key_encrypted\x18\x08 \x01(\x08H\x05\x88\x01\x01\x42\x06\n\x04_pskB\r\n\x0b_dhchap_keyB\x10\n\x0e_psk_encryptedB\x10\n\x0e_key_encryptedB\x13\n\x11_dhchap_ctrlr_keyB\x16\n\x14_ctrlr_key_encrypted\"\x9a\x01\n\x13\x63hange_host_key_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x10\n\x08host_nqn\x18\x02 \x01(\t\x12\x17\n\ndhchap_key\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x1d\n\x10\x64hchap_ctrlr_key\x18\x04 \x01(\tH\x01\x88\x01\x01\x42\r\n\x0b_dhchap_keyB\x13\n\x11_dhchap_ctrlr_key\"i\n get_connection_io_statistics_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x10\n\x08host_nqn\x18\x02 \x01(\t\x12\x12\n\x05reset\x18\x03 \x01(\x08H\x00\x88\x01\x01\x42\x08\n\x06_reset\"\x8c\x01\n\x0fremove_host_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x10\n\x08host_nqn\x18\x02 \x01(\t\x12\x12\n\x05\x66orce\x18\x03 \x01(\x08H\x00\x88\x01\x01\x12\x1d\n\x10keep_connections\x18\x04 \x01(\x08H\x01\x88\x01\x01\x42\x08\n\x06_forceB\x13\n\x11_keep_connections\"F\n\x1bset_keep_host_connected_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x10\n\x08host_nqn\x18\x02 \x01(\t\"O\n\x0elist_hosts_req\x12\x11\n\tsubsystem\x18\x01 \x01(\t\x12\x19\n\x0c\x63lear_alerts\x18\x02 \x01(\x08H\x00\x88\x01\x01\x42\x0f\n\r_clear_alerts\"U\n\x14list_connections_req\x12\x11\n\tsubsystem\x18\x01 \x01(\t\x12\x19\n\x0c\x63lear_alerts\x18\x02 \x01(\x08H\x00\x88\x01\x01\x42\x0f\n\r_clear_alerts\"\x89\x02\n\x13\x63reate_listener_req\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12\x11\n\thost_name\x18\x02 \x01(\t\x12\x0e\n\x06traddr\x18\x03 \x01(\t\x12#\n\x06\x61\x64rfam\x18\x05 \x01(\x0e\x32\x0e.AddressFamilyH\x00\x88\x01\x01\x12\x14\n\x07trsvcid\x18\x06 \x01(\rH\x01\x88\x01\x01\x12\x13\n\x06secure\x18\x07 \x01(\x08H\x02\x88\x01\x01\x12\x1d\n\x10verify_host_name\x18\x08 \x01(\x08H\x03\x88\x01\x01\x12\x12\n\x05\x66orce\x18\t \x01(\x08H\x04\x88\x01\x01\x42\t\n\x07_adrfamB\n\n\x08_trsvcidB\t\n\x07_secureB\x13\n\x11_verify_host_nameB\x08\n\x06_force\"\xb5\x01\n\x13\x64\x65lete_listener_req\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12\x11\n\thost_name\x18\x02 \x01(\t\x12\x0e\n\x06traddr\x18\x03 \x01(\t\x12#\n\x06\x61\x64rfam\x18\x05 \x01(\x0e\x32\x0e.AddressFamilyH\x00\x88\x01\x01\x12\x14\n\x07trsvcid\x18\x06 \x01(\rH\x01\x88\x01\x01\x12\x12\n\x05\x66orce\x18\x07 \x01(\x08H\x02\x88\x01\x01\x42\t\n\x07_adrfamB\n\n\x08_trsvcidB\x08\n\x06_force\"\'\n\x12list_listeners_req\x12\x11\n\tsubsystem\x18\x01 \x01(\t\"q\n\x13list_subsystems_req\x12\x1a\n\rsubsystem_nqn\x18\x01 \x01(\tH\x00\x88\x01\x01\x12\x1a\n\rserial_number\x18\x02 \x01(\tH\x01\x88\x01\x01\x42\x10\n\x0e_subsystem_nqnB\x10\n\x0e_serial_number\"\x14\n\x12get_subsystems_req\"U\n%get_spdk_nvmf_log_flags_and_level_req\x12\x1a\n\rall_log_flags\x18\x01 \x01(\x08H\x00\x88\x01\x01\x42\x10\n\x0e_all_log_flags\"5\n\x1a\x64isable_spdk_nvmf_logs_req\x12\x17\n\x0f\x65xtra_log_flags\x18\x01 \x03(\t\"\x97\x01\n\x16set_spdk_nvmf_logs_req\x12!\n\tlog_level\x18\x01 \x01(\x0e\x32\t.LogLevelH\x00\x88\x01\x01\x12#\n\x0bprint_level\x18\x02 \x01(\x0e\x32\t.LogLevelH\x01\x88\x01\x01\x12\x17\n\x0f\x65xtra_log_flags\x18\x03 \x03(\tB\x0c\n\n_log_levelB\x0e\n\x0c_print_level\"@\n\x14get_gateway_info_req\x12\x18\n\x0b\x63li_version\x18\x01 \x01(\tH\x00\x88\x01\x01\x42\x0e\n\x0c_cli_version\"\x1b\n\x19get_gateway_log_level_req\";\n\x19set_gateway_log_level_req\x12\x1e\n\tlog_level\x18\x01 \x01(\x0e\x32\x0b.GwLogLevel\"8\n\x1fshow_gateway_listeners_info_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\"\x17\n\x15get_gateway_stats_req\"\x16\n\x14get_thread_stats_req\"0\n\x1dset_gateway_io_stats_mode_req\x12\x0f\n\x07\x65nabled\x18\x01 \x01(\x08\"<\n\x0f\x61na_group_state\x12\x0e\n\x06grp_id\x18\x01 \x01(\r\x12\x19\n\x05state\x18\x02 \x01(\x0e\x32\n.ana_state\"?\n\x0enqn_ana_states\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12 \n\x06states\x18\x02 \x03(\x0b\x32\x10.ana_group_state\"+\n\x08\x61na_info\x12\x1f\n\x06states\x18\x01 \x03(\x0b\x32\x0f.nqn_ana_states\"3\n\nreq_status\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\"C\n\rsubsys_status\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x0b\n\x03nqn\x18\x03 \x01(\t\"B\n\x0bnsid_status\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x0c\n\x04nsid\x18\x03 \x01(\r\"1\n\x0fsubsystems_info\x12\x1e\n\nsubsystems\x18\x01 \x03(\x0b\x32\n.subsystem\"\xc2\x03\n\tsubsystem\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12\x0f\n\x07subtype\x18\x02 \x01(\t\x12)\n\x10listen_addresses\x18\x03 \x03(\x0b\x32\x0f.listen_address\x12\x14\n\x05hosts\x18\x04 \x03(\x0b\x32\x05.host\x12\x16\n\x0e\x61llow_any_host\x18\x05 \x01(\x08\x12\x1a\n\rserial_number\x18\x06 \x01(\tH\x00\x88\x01\x01\x12\x19\n\x0cmodel_number\x18\x07 \x01(\tH\x01\x88\x01\x01\x12\x1b\n\x0emax_namespaces\x18\x08 \x01(\rH\x02\x88\x01\x01\x12\x17\n\nmin_cntlid\x18\t \x01(\rH\x03\x88\x01\x01\x12\x17\n\nmax_cntlid\x18\n \x01(\rH\x04\x88\x01\x01\x12\x1e\n\nnamespaces\x18\x0b \x03(\x0b\x32\n.namespace\x12\x1b\n\x0ehas_dhchap_key\x18\x0c \x01(\x08H\x05\x88\x01\x01\x12\x14\n\x0cnetwork_mask\x18\r \x03(\tB\x10\n\x0e_serial_numberB\x0f\n\r_model_numberB\x11\n\x0f_max_namespacesB\r\n\x0b_min_cntlidB\r\n\x0b_max_cntlidB\x11\n\x0f_has_dhchap_key\"\x97\x01\n\x0elisten_address\x12\x0e\n\x06trtype\x18\x01 \x01(\t\x12\x0e\n\x06\x61\x64rfam\x18\x02 \x01(\t\x12\x0e\n\x06traddr\x18\x03 \x01(\t\x12\x0f\n\x07trsvcid\x18\x04 \x01(\t\x12\x16\n\ttransport\x18\x05 \x01(\tH\x00\x88\x01\x01\x12\x13\n\x06secure\x18\x06 \x01(\x08H\x01\x88\x01\x01\x42\x0c\n\n_transportB\t\n\x07_secure\"\xc0\x02\n\tnamespace\x12\x0c\n\x04nsid\x18\x01 \x01(\r\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x16\n\tbdev_name\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x12\n\x05nguid\x18\x04 \x01(\tH\x01\x88\x01\x01\x12\x11\n\x04uuid\x18\x05 \x01(\tH\x02\x88\x01\x01\x12\x15\n\x08\x61nagrpid\x18\x06 \x01(\rH\x03\x88\x01\x01\x12\x12\n\x05nonce\x18\x07 \x01(\tH\x04\x88\x01\x01\x12\x19\n\x0c\x61uto_visible\x18\x08 \x01(\x08H\x05\x88\x01\x01\x12\r\n\x05hosts\x18\t \x03(\t\x12!\n\x14rados_namespace_name\x18\n \x01(\tH\x06\x88\x01\x01\x42\x0c\n\n_bdev_nameB\x08\n\x06_nguidB\x07\n\x05_uuidB\x0b\n\t_anagrpidB\x08\n\x06_nonceB\x0f\n\r_auto_visibleB\x17\n\x15_rados_namespace_name\"`\n\x13subsystems_info_cli\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\"\n\nsubsystems\x18\x03 \x03(\x0b\x32\x0e.subsystem_cli\"\xf6\x02\n\rsubsystem_cli\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12\x11\n\tenable_ha\x18\x02 \x01(\x08\x12\x15\n\rserial_number\x18\x03 \x01(\t\x12\x14\n\x0cmodel_number\x18\x04 \x01(\t\x12\x12\n\nmin_cntlid\x18\x05 \x01(\r\x12\x12\n\nmax_cntlid\x18\x06 \x01(\r\x12\x17\n\x0fnamespace_count\x18\x07 \x01(\r\x12\x0f\n\x07subtype\x18\x08 \x01(\t\x12\x16\n\x0emax_namespaces\x18\t \x01(\r\x12\x1b\n\x0ehas_dhchap_key\x18\n \x01(\x08H\x00\x88\x01\x01\x12\x1b\n\x0e\x61llow_any_host\x18\x0b \x01(\x08H\x01\x88\x01\x01\x12 \n\x13\x63reated_without_key\x18\x0c \x01(\x08H\x02\x88\x01\x01\x12\x14\n\x0cnetwork_mask\x18\r \x03(\tB\x11\n\x0f_has_dhchap_keyB\x11\n\x0f_allow_any_hostB\x16\n\x14_created_without_key\"\xbb\x05\n\x0cgateway_info\x12\x13\n\x0b\x63li_version\x18\x01 \x01(\t\x12\x0f\n\x07version\x18\x02 \x01(\t\x12\x0c\n\x04name\x18\x03 \x01(\t\x12\r\n\x05group\x18\x04 \x01(\t\x12\x0c\n\x04\x61\x64\x64r\x18\x05 \x01(\t\x12\x0c\n\x04port\x18\x06 \x01(\t\x12\x13\n\x0b\x62ool_status\x18\x07 \x01(\x08\x12\x0e\n\x06status\x18\x08 \x01(\x05\x12\x15\n\rerror_message\x18\t \x01(\t\x12\x19\n\x0cspdk_version\x18\n \x01(\tH\x00\x88\x01\x01\x12\x1c\n\x14load_balancing_group\x18\x0b \x01(\r\x12\x10\n\x08hostname\x18\x0c \x01(\t\x12\x1b\n\x0emax_subsystems\x18\r \x01(\rH\x01\x88\x01\x01\x12\x1b\n\x0emax_namespaces\x18\x0e \x01(\rH\x02\x88\x01\x01\x12$\n\x17max_hosts_per_subsystem\x18\x0f \x01(\rH\x03\x88\x01\x01\x12)\n\x1cmax_namespaces_per_subsystem\x18\x10 \x01(\rH\x04\x88\x01\x01\x12\x16\n\tmax_hosts\x18\x11 \x01(\rH\x05\x88\x01\x01\x12(\n\x1bgateway_initialization_over\x18\x12 \x01(\x08H\x06\x88\x01\x01\x12\x1d\n\x10io_stats_enabled\x18\x13 \x01(\x08H\x07\x88\x01\x01\x12\x15\n\x08location\x18\x14 \x01(\tH\x08\x88\x01\x01\x42\x0f\n\r_spdk_versionB\x11\n\x0f_max_subsystemsB\x11\n\x0f_max_namespacesB\x1a\n\x18_max_hosts_per_subsystemB\x1f\n\x1d_max_namespaces_per_subsystemB\x0c\n\n_max_hostsB\x1e\n\x1c_gateway_initialization_overB\x13\n\x11_io_stats_enabledB\x0b\n\t_location\"E\n\x0b\x63li_version\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x0f\n\x07version\x18\x03 \x01(\t\"D\n\ngw_version\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x0f\n\x07version\x18\x03 \x01(\t\"+\n\x19poll_group_transport_info\x12\x0e\n\x06trtype\x18\x01 \x01(\t\"\xe5\x01\n\x0fpoll_group_info\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x14\n\x0c\x61\x64min_qpairs\x18\x02 \x01(\r\x12\x11\n\tio_qpairs\x18\x03 \x01(\r\x12\x1c\n\x14\x63urrent_admin_qpairs\x18\x04 \x01(\r\x12\x19\n\x11\x63urrent_io_qpairs\x18\x05 \x01(\r\x12\x17\n\x0fpending_bdev_io\x18\x06 \x01(\x04\x12\x19\n\x11\x63ompleted_nvme_io\x18\x07 \x01(\x04\x12.\n\ntransports\x18\x08 \x03(\x0b\x32\x1a.poll_group_transport_info\"u\n\x12gateway_stats_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x11\n\ttick_rate\x18\x03 \x01(\x04\x12%\n\x0bpoll_groups\x18\x04 \x03(\x0b\x32\x10.poll_group_info\"q\n\x11thread_stats_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\"\n\x07threads\x18\x03 \x03(\x0b\x32\x11.spdk_thread_info\x12\x11\n\ttick_rate\x18\x04 \x01(\x04\"<\n\x10spdk_thread_info\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0c\n\x04\x62usy\x18\x02 \x01(\x04\x12\x0c\n\x04idle\x18\x03 \x01(\x04\"\xd3\x01\n\rlistener_info\x12\x11\n\thost_name\x18\x01 \x01(\t\x12\x0e\n\x06trtype\x18\x02 \x01(\t\x12\x1e\n\x06\x61\x64rfam\x18\x03 \x01(\x0e\x32\x0e.AddressFamily\x12\x0e\n\x06traddr\x18\x04 \x01(\t\x12\x0f\n\x07trsvcid\x18\x05 \x01(\r\x12\x13\n\x06secure\x18\x06 \x01(\x08H\x00\x88\x01\x01\x12\x13\n\x06\x61\x63tive\x18\x07 \x01(\x08H\x01\x88\x01\x01\x12\x13\n\x06manual\x18\x08 \x01(\x08H\x02\x88\x01\x01\x42\t\n\x07_secureB\t\n\x07_activeB\t\n\x07_manual\"Z\n\x0elisteners_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12!\n\tlisteners\x18\x03 \x03(\x0b\x32\x0e.listener_info\"^\n\x15gateway_listener_info\x12 \n\x08listener\x18\x01 \x01(\x0b\x32\x0e.listener_info\x12#\n\tlb_states\x18\x02 \x03(\x0b\x32\x10.ana_group_state\"m\n\x16gateway_listeners_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12,\n\x0cgw_listeners\x18\x03 \x03(\x0b\x32\x16.gateway_listener_info\"\x9b\x02\n\x04host\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12\x14\n\x07use_psk\x18\x02 \x01(\x08H\x00\x88\x01\x01\x12\x17\n\nuse_dhchap\x18\x03 \x01(\x08H\x01\x88\x01\x01\x12\x32\n%disconnected_due_to_keepalive_timeout\x18\x04 \x01(\x08H\x02\x88\x01\x01\x12\x41\n\x18\x64hchap_controller_origin\x18\x05 \x01(\x0e\x32\x1a.DHCHAPControllerKeyOriginH\x03\x88\x01\x01\x42\n\n\x08_use_pskB\r\n\x0b_use_dhchapB(\n&_disconnected_due_to_keepalive_timeoutB\x1b\n\x19_dhchap_controller_origin\"7\n\rlatency_stats\x12\x0b\n\x03min\x18\x01 \x01(\x04\x12\x0b\n\x03max\x18\x02 \x01(\x04\x12\x0c\n\x04mean\x18\x03 \x01(\x04\"\x98\x01\n\rlatency_group\x12\x10\n\x08io_count\x18\x01 \x01(\x04\x12\x1d\n\x05total\x18\x02 \x01(\x0b\x32\x0e.latency_stats\x12\x1c\n\x04\x62\x64\x65v\x18\x03 \x01(\x0b\x32\x0e.latency_stats\x12\x1b\n\x03net\x18\x04 \x01(\x0b\x32\x0e.latency_stats\x12\x1b\n\x03qos\x18\x05 \x01(\x0b\x32\x0e.latency_stats\"X\n\x0b\x62ucket_info\x12\x0c\n\x04size\x18\x01 \x01(\r\x12\x1c\n\x04read\x18\x02 \x01(\x0b\x32\x0e.latency_group\x12\x1d\n\x05write\x18\x03 \x01(\x0b\x32\x0e.latency_group\"\xb7\x01\n\x18\x63onnection_io_statistics\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x15\n\rsubsystem_nqn\x18\x03 \x01(\t\x12\x10\n\x08host_nqn\x18\x04 \x01(\t\x12\x1a\n\rtotal_num_ios\x18\x05 \x01(\x04H\x00\x88\x01\x01\x12\x1d\n\x07\x62uckets\x18\x06 \x03(\x0b\x32\x0c.bucket_infoB\x10\n\x0e_total_num_ios\"x\n\nhosts_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x16\n\x0e\x61llow_any_host\x18\x03 \x01(\x08\x12\x15\n\rsubsystem_nqn\x18\x04 \x01(\t\x12\x14\n\x05hosts\x18\x05 \x03(\x0b\x32\x05.host\"\xa4\x04\n\nconnection\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12\x0e\n\x06traddr\x18\x02 \x01(\t\x12\x0f\n\x07trsvcid\x18\x03 \x01(\r\x12\x0e\n\x06trtype\x18\x04 \x01(\t\x12\x1e\n\x06\x61\x64rfam\x18\x05 \x01(\x0e\x32\x0e.AddressFamily\x12\x11\n\tconnected\x18\x06 \x01(\x08\x12\x14\n\x0cqpairs_count\x18\x07 \x01(\x05\x12\x15\n\rcontroller_id\x18\x08 \x01(\x05\x12\x13\n\x06secure\x18\t \x01(\x08H\x00\x88\x01\x01\x12\x14\n\x07use_psk\x18\n \x01(\x08H\x01\x88\x01\x01\x12\x17\n\nuse_dhchap\x18\x0b \x01(\x08H\x02\x88\x01\x01\x12\x16\n\tsubsystem\x18\x0c \x01(\tH\x03\x88\x01\x01\x12\x32\n%disconnected_due_to_keepalive_timeout\x18\r \x01(\x08H\x04\x88\x01\x01\x12\x41\n\x18\x64hchap_controller_origin\x18\x0e \x01(\x0e\x32\x1a.DHCHAPControllerKeyOriginH\x05\x88\x01\x01\x12\x19\n\x0chost_deleted\x18\x0f \x01(\x08H\x06\x88\x01\x01\x42\t\n\x07_secureB\n\n\x08_use_pskB\r\n\x0b_use_dhchapB\x0c\n\n_subsystemB(\n&_disconnected_due_to_keepalive_timeoutB\x1b\n\x19_dhchap_controller_originB\x0f\n\r_host_deleted\"r\n\x10\x63onnections_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x15\n\rsubsystem_nqn\x18\x03 \x01(\t\x12 \n\x0b\x63onnections\x18\x04 \x03(\x0b\x32\x0b.connection\"\xd8\x07\n\rnamespace_cli\x12\x0c\n\x04nsid\x18\x01 \x01(\r\x12\x11\n\tbdev_name\x18\x02 \x01(\t\x12\x16\n\x0erbd_image_name\x18\x03 \x01(\t\x12\x15\n\rrbd_pool_name\x18\x04 \x01(\t\x12\x1c\n\x14load_balancing_group\x18\x05 \x01(\r\x12\x12\n\nblock_size\x18\x06 \x01(\r\x12\x16\n\x0erbd_image_size\x18\x07 \x01(\x04\x12\x0c\n\x04uuid\x18\x08 \x01(\t\x12\x19\n\x11rw_ios_per_second\x18\t \x01(\x04\x12\x1c\n\x14rw_mbytes_per_second\x18\n \x01(\x04\x12\x1b\n\x13r_mbytes_per_second\x18\x0b \x01(\x04\x12\x1b\n\x13w_mbytes_per_second\x18\x0c \x01(\x04\x12\x14\n\x0c\x61uto_visible\x18\r \x01(\x08\x12\r\n\x05hosts\x18\x0e \x03(\t\x12\x1d\n\x10ns_subsystem_nqn\x18\x0f \x01(\tH\x00\x88\x01\x01\x12\x18\n\x0btrash_image\x18\x10 \x01(\x08H\x01\x88\x01\x01\x12 \n\x13\x64isable_auto_resize\x18\x11 \x01(\x08H\x02\x88\x01\x01\x12\x16\n\tread_only\x18\x12 \x01(\x08H\x03\x88\x01\x01\x12\x19\n\x0c\x63luster_name\x18\x13 \x01(\tH\x04\x88\x01\x01\x12,\n\x1f\x63onfigured_load_balancing_group\x18\x14 \x01(\rH\x05\x88\x01\x01\x12\x1d\n\x10image_was_shrunk\x18\x15 \x01(\x08H\x06\x88\x01\x01\x12\x1f\n\x12rbd_data_pool_name\x18\x16 \x01(\tH\x07\x88\x01\x01\x12\x15\n\x08location\x18\x17 \x01(\tH\x08\x88\x01\x01\x12!\n\x14rados_namespace_name\x18\x18 \x01(\tH\t\x88\x01\x01\x12\x37\n\x14\x65ncryption_algorithm\x18\x19 \x01(\x0e\x32\x14.EncryptionAlgorithmH\n\x88\x01\x01\x12-\n\x12\x65ncryption_entries\x18\x1a \x03(\x0b\x32\x11.encryption_entryB\x13\n\x11_ns_subsystem_nqnB\x0e\n\x0c_trash_imageB\x16\n\x14_disable_auto_resizeB\x0c\n\n_read_onlyB\x0f\n\r_cluster_nameB\"\n _configured_load_balancing_groupB\x13\n\x11_image_was_shrunkB\x15\n\x13_rbd_data_pool_nameB\x0b\n\t_locationB\x17\n\x15_rados_namespace_nameB\x17\n\x15_encryption_algorithm\"s\n\x0fnamespaces_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x15\n\rsubsystem_nqn\x18\x03 \x01(\t\x12\"\n\nnamespaces\x18\x04 \x03(\x0b\x32\x0e.namespace_cli\"1\n\x12namespace_io_error\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\r\"\x91\x01\n\x1dlist_namespaces_io_stats_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x11\n\ttick_rate\x18\x03 \x01(\x04\x12\r\n\x05ticks\x18\x04 \x01(\x04\x12\'\n\nnamespaces\x18\x05 \x03(\x0b\x32\x13.bdev_io_stats_info\"\xf7\x04\n\x12\x62\x64\x65v_io_stats_info\x12\x11\n\tbdev_name\x18\x01 \x01(\t\x12\x12\n\nbytes_read\x18\x02 \x01(\x04\x12\x14\n\x0cnum_read_ops\x18\x03 \x01(\x04\x12\x15\n\rbytes_written\x18\x04 \x01(\x04\x12\x15\n\rnum_write_ops\x18\x05 \x01(\x04\x12\x16\n\x0e\x62ytes_unmapped\x18\x06 \x01(\x04\x12\x15\n\rnum_unmap_ops\x18\x07 \x01(\x04\x12\x14\n\x0c\x62ytes_copied\x18\x08 \x01(\x04\x12\x14\n\x0cnum_copy_ops\x18\t \x01(\x04\x12\x1a\n\x12read_latency_ticks\x18\n \x01(\x04\x12\x1e\n\x16max_read_latency_ticks\x18\x0b \x01(\x04\x12\x1e\n\x16min_read_latency_ticks\x18\x0c \x01(\x04\x12\x1b\n\x13write_latency_ticks\x18\r \x01(\x04\x12\x1f\n\x17max_write_latency_ticks\x18\x0e \x01(\x04\x12\x1f\n\x17min_write_latency_ticks\x18\x0f \x01(\x04\x12\x1b\n\x13unmap_latency_ticks\x18\x10 \x01(\x04\x12\x1f\n\x17max_unmap_latency_ticks\x18\x11 \x01(\x04\x12\x1f\n\x17min_unmap_latency_ticks\x18\x12 \x01(\x04\x12\x1a\n\x12\x63opy_latency_ticks\x18\x13 \x01(\x04\x12\x1e\n\x16max_copy_latency_ticks\x18\x14 \x01(\x04\x12\x1e\n\x16min_copy_latency_ticks\x18\x15 \x01(\x04\x12%\n\x08io_error\x18\x16 \x03(\x0b\x32\x13.namespace_io_error\"\xda\x05\n\x17namespace_io_stats_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x15\n\rsubsystem_nqn\x18\x03 \x01(\t\x12\x0c\n\x04nsid\x18\x04 \x01(\r\x12\x11\n\x04uuid\x18\x05 \x01(\tH\x00\x88\x01\x01\x12\x11\n\tbdev_name\x18\x06 \x01(\t\x12\x11\n\ttick_rate\x18\x07 \x01(\x04\x12\r\n\x05ticks\x18\x08 \x01(\x04\x12\x12\n\nbytes_read\x18\t \x01(\x04\x12\x14\n\x0cnum_read_ops\x18\n \x01(\x04\x12\x15\n\rbytes_written\x18\x0b \x01(\x04\x12\x15\n\rnum_write_ops\x18\x0c \x01(\x04\x12\x16\n\x0e\x62ytes_unmapped\x18\r \x01(\x04\x12\x15\n\rnum_unmap_ops\x18\x0e \x01(\x04\x12\x1a\n\x12read_latency_ticks\x18\x0f \x01(\x04\x12\x1e\n\x16max_read_latency_ticks\x18\x10 \x01(\x04\x12\x1e\n\x16min_read_latency_ticks\x18\x11 \x01(\x04\x12\x1b\n\x13write_latency_ticks\x18\x12 \x01(\x04\x12\x1f\n\x17max_write_latency_ticks\x18\x13 \x01(\x04\x12\x1f\n\x17min_write_latency_ticks\x18\x14 \x01(\x04\x12\x1b\n\x13unmap_latency_ticks\x18\x15 \x01(\x04\x12\x1f\n\x17max_unmap_latency_ticks\x18\x16 \x01(\x04\x12\x1f\n\x17min_unmap_latency_ticks\x18\x17 \x01(\x04\x12\x1a\n\x12\x63opy_latency_ticks\x18\x18 \x01(\x04\x12\x1e\n\x16max_copy_latency_ticks\x18\x19 \x01(\x04\x12\x1e\n\x16min_copy_latency_ticks\x18\x1a \x01(\x04\x12%\n\x08io_error\x18\x1b \x03(\x0b\x32\x13.namespace_io_errorB\x07\n\x05_uuid\"3\n\x12spdk_log_flag_info\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0f\n\x07\x65nabled\x18\x02 \x01(\x08\"\xba\x01\n\"spdk_nvmf_log_flags_and_level_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12+\n\x0envmf_log_flags\x18\x03 \x03(\x0b\x32\x13.spdk_log_flag_info\x12\x1c\n\tlog_level\x18\x04 \x01(\x0e\x32\t.LogLevel\x12\"\n\x0flog_print_level\x18\x05 \x01(\x0e\x32\t.LogLevel\"_\n\x16gateway_log_level_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x1e\n\tlog_level\x18\x03 \x01(\x0e\x32\x0b.GwLogLevel\"E\n\x10\x65ncryption_entry\x12!\n\x06\x66ormat\x18\x01 \x01(\x0e\x32\x11.EncryptionFormat\x12\x0e\n\x06key_id\x18\x02 \x01(\t*#\n\rAddressFamily\x12\x08\n\x04ipv4\x10\x00\x12\x08\n\x04ipv6\x10\x01*C\n\x08LogLevel\x12\t\n\x05\x45RROR\x10\x00\x12\x0b\n\x07WARNING\x10\x01\x12\n\n\x06NOTICE\x10\x02\x12\x08\n\x04INFO\x10\x03\x12\t\n\x05\x44\x45\x42UG\x10\x04*S\n\nGwLogLevel\x12\n\n\x06notset\x10\x00\x12\t\n\x05\x64\x65\x62ug\x10\n\x12\x08\n\x04info\x10\x14\x12\x0b\n\x07warning\x10\x1e\x12\t\n\x05\x65rror\x10(\x12\x0c\n\x08\x63ritical\x10\x32*2\n\x10\x45ncryptionFormat\x12\x08\n\x04none\x10\x00\x12\t\n\x05luks1\x10\x01\x12\t\n\x05luks2\x10\x02*?\n\x13\x45ncryptionAlgorithm\x12\x10\n\x0cno_algorithm\x10\x00\x12\n\n\x06\x61\x65s128\x10\x01\x12\n\n\x06\x61\x65s256\x10\x02*R\n\x19\x44HCHAPControllerKeyOrigin\x12\n\n\x06no_key\x10\x00\x12\x11\n\rhost_specific\x10\x01\x12\x16\n\x12subsystem_implicit\x10\x02*J\n\tana_state\x12\t\n\x05UNSET\x10\x00\x12\r\n\tOPTIMIZED\x10\x01\x12\x11\n\rNON_OPTIMIZED\x10\x02\x12\x10\n\x0cINACCESSIBLE\x10\x03\x32\xf6\x18\n\x07Gateway\x12\x33\n\rnamespace_add\x12\x12.namespace_add_req\x1a\x0c.nsid_status\"\x00\x12;\n\x10\x63reate_subsystem\x12\x15.create_subsystem_req\x1a\x0e.subsys_status\"\x00\x12\x38\n\x10\x64\x65lete_subsystem\x12\x15.delete_subsystem_req\x1a\x0b.req_status\"\x00\x12@\n\x14\x63hange_subsystem_key\x12\x19.change_subsystem_key_req\x1a\x0b.req_status\"\x00\x12\x42\n\x15\x61\x64\x64_subsystem_network\x12\x1a.add_subsystem_network_req\x1a\x0b.req_status\"\x00\x12\x42\n\x15\x64\x65l_subsystem_network\x12\x1a.del_subsystem_network_req\x1a\x0b.req_status\"\x00\x12K\n\x12gw_refresh_network\x12\x17.gw_refresh_network_req\x1a\x1a.gw_refresh_network_status\"\x00\x12J\n\x19\x61\x64\x64_kmip_server_endpoints\x12\x1e.add_kmip_server_endpoints_req\x1a\x0b.req_status\"\x00\x12J\n\x19\x64\x65l_kmip_server_endpoints\x12\x1e.del_kmip_server_endpoints_req\x1a\x0b.req_status\"\x00\x12\\\n\x1alist_kmip_server_endpoints\x12\x1f.list_kmip_server_endpoints_req\x1a\x1b.kmip_server_endpoints_info\"\x00\x12;\n\x0flist_namespaces\x12\x14.list_namespaces_req\x1a\x10.namespaces_info\"\x00\x12\x38\n\x10namespace_resize\x12\x15.namespace_resize_req\x1a\x0b.req_status\"\x00\x12Q\n\x16namespace_get_io_stats\x12\x1b.namespace_get_io_stats_req\x1a\x18.namespace_io_stats_info\"\x00\x12[\n\x18list_namespaces_io_stats\x12\x1d.list_namespaces_io_stats_req\x1a\x1e.list_namespaces_io_stats_info\"\x00\x12\x41\n\x18namespace_set_qos_limits\x12\x16.namespace_set_qos_req\x1a\x0b.req_status\"\x00\x12\x62\n%namespace_change_load_balancing_group\x12*.namespace_change_load_balancing_group_req\x1a\x0b.req_status\"\x00\x12N\n\x1bnamespace_change_visibility\x12 .namespace_change_visibility_req\x1a\x0b.req_status\"\x00\x12J\n\x19namespace_change_location\x12\x1e.namespace_change_location_req\x1a\x0b.req_status\"\x00\x12R\n\x1dnamespace_set_rbd_trash_image\x12\".namespace_set_rbd_trash_image_req\x1a\x0b.req_status\"\x00\x12J\n\x19namespace_set_auto_resize\x12\x1e.namespace_set_auto_resize_req\x1a\x0b.req_status\"\x00\x12\x38\n\x10namespace_delete\x12\x15.namespace_delete_req\x1a\x0b.req_status\"\x00\x12<\n\x12namespace_add_host\x12\x17.namespace_add_host_req\x1a\x0b.req_status\"\x00\x12\x42\n\x15namespace_delete_host\x12\x1a.namespace_delete_host_req\x1a\x0b.req_status\"\x00\x12(\n\x08\x61\x64\x64_host\x12\r.add_host_req\x1a\x0b.req_status\"\x00\x12.\n\x0bremove_host\x12\x10.remove_host_req\x1a\x0b.req_status\"\x00\x12\x46\n\x17set_keep_host_connected\x12\x1c.set_keep_host_connected_req\x1a\x0b.req_status\"\x00\x12\x36\n\x0f\x63hange_host_key\x12\x14.change_host_key_req\x1a\x0b.req_status\"\x00\x12,\n\nlist_hosts\x12\x0f.list_hosts_req\x1a\x0b.hosts_info\"\x00\x12>\n\x10list_connections\x12\x15.list_connections_req\x1a\x11.connections_info\"\x00\x12^\n\x1cget_connection_io_statistics\x12!.get_connection_io_statistics_req\x1a\x19.connection_io_statistics\"\x00\x12\x36\n\x0f\x63reate_listener\x12\x14.create_listener_req\x1a\x0b.req_status\"\x00\x12\x36\n\x0f\x64\x65lete_listener\x12\x14.delete_listener_req\x1a\x0b.req_status\"\x00\x12\x38\n\x0elist_listeners\x12\x13.list_listeners_req\x1a\x0f.listeners_info\"\x00\x12?\n\x0flist_subsystems\x12\x14.list_subsystems_req\x1a\x14.subsystems_info_cli\"\x00\x12\x39\n\x0eget_subsystems\x12\x13.get_subsystems_req\x1a\x10.subsystems_info\"\x00\x12)\n\rset_ana_state\x12\t.ana_info\x1a\x0b.req_status\"\x00\x12r\n!get_spdk_nvmf_log_flags_and_level\x12&.get_spdk_nvmf_log_flags_and_level_req\x1a#.spdk_nvmf_log_flags_and_level_info\"\x00\x12\x44\n\x16\x64isable_spdk_nvmf_logs\x12\x1b.disable_spdk_nvmf_logs_req\x1a\x0b.req_status\"\x00\x12<\n\x12set_spdk_nvmf_logs\x12\x17.set_spdk_nvmf_logs_req\x1a\x0b.req_status\"\x00\x12:\n\x10get_gateway_info\x12\x15.get_gateway_info_req\x1a\r.gateway_info\"\x00\x12N\n\x15get_gateway_log_level\x12\x1a.get_gateway_log_level_req\x1a\x17.gateway_log_level_info\"\x00\x12\x42\n\x15set_gateway_log_level\x12\x1a.set_gateway_log_level_req\x1a\x0b.req_status\"\x00\x12Z\n\x1bshow_gateway_listeners_info\x12 .show_gateway_listeners_info_req\x1a\x17.gateway_listeners_info\"\x00\x12\x42\n\x11get_gateway_stats\x12\x16.get_gateway_stats_req\x1a\x13.gateway_stats_info\"\x00\x12?\n\x10get_thread_stats\x12\x15.get_thread_stats_req\x1a\x12.thread_stats_info\"\x00\x12J\n\x19set_gateway_io_stats_mode\x12\x1e.set_gateway_io_stats_mode_req\x1a\x0b.req_status\"\x00\x42+Z)github.com/ceph/ceph-nvmeof/lib/go/nvmeofb\x06proto3'
 )
 
 _ADDRESSFAMILY = _descriptor.EnumDescriptor(
@@ -43,8 +43,8 @@ _ADDRESSFAMILY = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=14328,
-  serialized_end=14363,
+  serialized_start=14706,
+  serialized_end=14741,
 )
 _sym_db.RegisterEnumDescriptor(_ADDRESSFAMILY)
 
@@ -84,8 +84,8 @@ _LOGLEVEL = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=14365,
-  serialized_end=14432,
+  serialized_start=14743,
+  serialized_end=14810,
 )
 _sym_db.RegisterEnumDescriptor(_LOGLEVEL)
 
@@ -130,8 +130,8 @@ _GWLOGLEVEL = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=14434,
-  serialized_end=14517,
+  serialized_start=14812,
+  serialized_end=14895,
 )
 _sym_db.RegisterEnumDescriptor(_GWLOGLEVEL)
 
@@ -161,8 +161,8 @@ _ENCRYPTIONFORMAT = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=14519,
-  serialized_end=14569,
+  serialized_start=14897,
+  serialized_end=14947,
 )
 _sym_db.RegisterEnumDescriptor(_ENCRYPTIONFORMAT)
 
@@ -192,8 +192,8 @@ _ENCRYPTIONALGORITHM = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=14571,
-  serialized_end=14634,
+  serialized_start=14949,
+  serialized_end=15012,
 )
 _sym_db.RegisterEnumDescriptor(_ENCRYPTIONALGORITHM)
 
@@ -223,8 +223,8 @@ _DHCHAPCONTROLLERKEYORIGIN = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=14636,
-  serialized_end=14718,
+  serialized_start=15014,
+  serialized_end=15096,
 )
 _sym_db.RegisterEnumDescriptor(_DHCHAPCONTROLLERKEYORIGIN)
 
@@ -259,8 +259,8 @@ _ANA_STATE = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=14720,
-  serialized_end=14794,
+  serialized_start=15098,
+  serialized_end=15172,
 )
 _sym_db.RegisterEnumDescriptor(_ANA_STATE)
 
@@ -1532,6 +1532,91 @@ _DEL_SUBSYSTEM_NETWORK_REQ = _descriptor.Descriptor(
 )
 
 
+_GW_REFRESH_NETWORK_REQ = _descriptor.Descriptor(
+  name='gw_refresh_network_req',
+  full_name='gw_refresh_network_req',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='subsystem_nqn', full_name='gw_refresh_network_req.subsystem_nqn', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=3210,
+  serialized_end=3257,
+)
+
+
+_GW_REFRESH_NETWORK_STATUS = _descriptor.Descriptor(
+  name='gw_refresh_network_status',
+  full_name='gw_refresh_network_status',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='status', full_name='gw_refresh_network_status.status', index=0,
+      number=1, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='error_message', full_name='gw_refresh_network_status.error_message', index=1,
+      number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='added', full_name='gw_refresh_network_status.added', index=2,
+      number=3, type=9, cpp_type=9, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='removed', full_name='gw_refresh_network_status.removed', index=3,
+      number=4, type=9, cpp_type=9, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=3259,
+  serialized_end=3357,
+)
+
+
 _KMIP_SERVER_ENDPOINT = _descriptor.Descriptor(
   name='kmip_server_endpoint',
   full_name='kmip_server_endpoint',
@@ -1571,8 +1656,8 @@ _KMIP_SERVER_ENDPOINT = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=3210,
-  serialized_end=3277,
+  serialized_start=3359,
+  serialized_end=3426,
 )
 
 
@@ -1624,8 +1709,8 @@ _KMIP_SERVER_ENDPOINT_CLI = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=3279,
-  serialized_end=3380,
+  serialized_start=3428,
+  serialized_end=3529,
 )
 
 
@@ -1670,8 +1755,8 @@ _ADD_KMIP_SERVER_ENDPOINTS_REQ = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=3382,
-  serialized_end=3499,
+  serialized_start=3531,
+  serialized_end=3648,
 )
 
 
@@ -1716,8 +1801,8 @@ _DEL_KMIP_SERVER_ENDPOINTS_REQ = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=3501,
-  serialized_end=3618,
+  serialized_start=3650,
+  serialized_end=3767,
 )
 
 
@@ -1765,8 +1850,8 @@ _LIST_KMIP_SERVER_ENDPOINTS_REQ = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=3620,
-  serialized_end=3740,
+  serialized_start=3769,
+  serialized_end=3889,
 )
 
 
@@ -1811,8 +1896,8 @@ _KMIP_SERVER_ENDPOINTS_INFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=3742,
-  serialized_end=3855,
+  serialized_start=3891,
+  serialized_end=4004,
 )
 
 
@@ -1867,8 +1952,8 @@ _LIST_NAMESPACES_REQ = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=3857,
-  serialized_end=3953,
+  serialized_start=4006,
+  serialized_end=4102,
 )
 
 
@@ -1978,8 +2063,8 @@ _ADD_HOST_REQ = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=3956,
-  serialized_end=4279,
+  serialized_start=4105,
+  serialized_end=4428,
 )
 
 
@@ -2041,8 +2126,8 @@ _CHANGE_HOST_KEY_REQ = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=4282,
-  serialized_end=4436,
+  serialized_start=4431,
+  serialized_end=4585,
 )
 
 
@@ -2092,8 +2177,8 @@ _GET_CONNECTION_IO_STATISTICS_REQ = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=4438,
-  serialized_end=4543,
+  serialized_start=4587,
+  serialized_end=4692,
 )
 
 
@@ -2126,6 +2211,13 @@ _REMOVE_HOST_REQ = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='keep_connections', full_name='remove_host_req.keep_connections', index=3,
+      number=4, type=8, cpp_type=7, label=1,
+      has_default_value=False, default_value=False,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
   ],
   extensions=[
   ],
@@ -2142,9 +2234,53 @@ _REMOVE_HOST_REQ = _descriptor.Descriptor(
       index=0, containing_type=None,
       create_key=_descriptor._internal_create_key,
     fields=[]),
+    _descriptor.OneofDescriptor(
+      name='_keep_connections', full_name='remove_host_req._keep_connections',
+      index=1, containing_type=None,
+      create_key=_descriptor._internal_create_key,
+    fields=[]),
   ],
-  serialized_start=4545,
-  serialized_end=4633,
+  serialized_start=4695,
+  serialized_end=4835,
+)
+
+
+_SET_KEEP_HOST_CONNECTED_REQ = _descriptor.Descriptor(
+  name='set_keep_host_connected_req',
+  full_name='set_keep_host_connected_req',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='subsystem_nqn', full_name='set_keep_host_connected_req.subsystem_nqn', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='host_nqn', full_name='set_keep_host_connected_req.host_nqn', index=1,
+      number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=4837,
+  serialized_end=4907,
 )
 
 
@@ -2187,8 +2323,8 @@ _LIST_HOSTS_REQ = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=4635,
-  serialized_end=4714,
+  serialized_start=4909,
+  serialized_end=4988,
 )
 
 
@@ -2231,8 +2367,8 @@ _LIST_CONNECTIONS_REQ = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=4716,
-  serialized_end=4801,
+  serialized_start=4990,
+  serialized_end=5075,
 )
 
 
@@ -2337,8 +2473,8 @@ _CREATE_LISTENER_REQ = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=4804,
-  serialized_end=5069,
+  serialized_start=5078,
+  serialized_end=5343,
 )
 
 
@@ -2419,8 +2555,8 @@ _DELETE_LISTENER_REQ = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=5072,
-  serialized_end=5253,
+  serialized_start=5346,
+  serialized_end=5527,
 )
 
 
@@ -2451,8 +2587,8 @@ _LIST_LISTENERS_REQ = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=5255,
-  serialized_end=5294,
+  serialized_start=5529,
+  serialized_end=5568,
 )
 
 
@@ -2500,8 +2636,8 @@ _LIST_SUBSYSTEMS_REQ = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=5296,
-  serialized_end=5409,
+  serialized_start=5570,
+  serialized_end=5683,
 )
 
 
@@ -2525,8 +2661,8 @@ _GET_SUBSYSTEMS_REQ = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=5411,
-  serialized_end=5431,
+  serialized_start=5685,
+  serialized_end=5705,
 )
 
 
@@ -2562,8 +2698,8 @@ _GET_SPDK_NVMF_LOG_FLAGS_AND_LEVEL_REQ = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=5433,
-  serialized_end=5518,
+  serialized_start=5707,
+  serialized_end=5792,
 )
 
 
@@ -2594,8 +2730,8 @@ _DISABLE_SPDK_NVMF_LOGS_REQ = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=5520,
-  serialized_end=5573,
+  serialized_start=5794,
+  serialized_end=5847,
 )
 
 
@@ -2650,8 +2786,8 @@ _SET_SPDK_NVMF_LOGS_REQ = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=5576,
-  serialized_end=5727,
+  serialized_start=5850,
+  serialized_end=6001,
 )
 
 
@@ -2687,8 +2823,8 @@ _GET_GATEWAY_INFO_REQ = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=5729,
-  serialized_end=5793,
+  serialized_start=6003,
+  serialized_end=6067,
 )
 
 
@@ -2712,8 +2848,8 @@ _GET_GATEWAY_LOG_LEVEL_REQ = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=5795,
-  serialized_end=5822,
+  serialized_start=6069,
+  serialized_end=6096,
 )
 
 
@@ -2744,8 +2880,8 @@ _SET_GATEWAY_LOG_LEVEL_REQ = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=5824,
-  serialized_end=5883,
+  serialized_start=6098,
+  serialized_end=6157,
 )
 
 
@@ -2776,8 +2912,8 @@ _SHOW_GATEWAY_LISTENERS_INFO_REQ = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=5885,
-  serialized_end=5941,
+  serialized_start=6159,
+  serialized_end=6215,
 )
 
 
@@ -2801,8 +2937,8 @@ _GET_GATEWAY_STATS_REQ = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=5943,
-  serialized_end=5966,
+  serialized_start=6217,
+  serialized_end=6240,
 )
 
 
@@ -2826,8 +2962,8 @@ _GET_THREAD_STATS_REQ = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=5968,
-  serialized_end=5990,
+  serialized_start=6242,
+  serialized_end=6264,
 )
 
 
@@ -2858,8 +2994,8 @@ _SET_GATEWAY_IO_STATS_MODE_REQ = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=5992,
-  serialized_end=6040,
+  serialized_start=6266,
+  serialized_end=6314,
 )
 
 
@@ -2897,8 +3033,8 @@ _ANA_GROUP_STATE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=6042,
-  serialized_end=6102,
+  serialized_start=6316,
+  serialized_end=6376,
 )
 
 
@@ -2936,8 +3072,8 @@ _NQN_ANA_STATES = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=6104,
-  serialized_end=6167,
+  serialized_start=6378,
+  serialized_end=6441,
 )
 
 
@@ -2968,8 +3104,8 @@ _ANA_INFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=6169,
-  serialized_end=6212,
+  serialized_start=6443,
+  serialized_end=6486,
 )
 
 
@@ -3007,8 +3143,8 @@ _REQ_STATUS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=6214,
-  serialized_end=6265,
+  serialized_start=6488,
+  serialized_end=6539,
 )
 
 
@@ -3053,8 +3189,8 @@ _SUBSYS_STATUS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=6267,
-  serialized_end=6334,
+  serialized_start=6541,
+  serialized_end=6608,
 )
 
 
@@ -3099,8 +3235,8 @@ _NSID_STATUS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=6336,
-  serialized_end=6402,
+  serialized_start=6610,
+  serialized_end=6676,
 )
 
 
@@ -3131,8 +3267,8 @@ _SUBSYSTEMS_INFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=6404,
-  serialized_end=6453,
+  serialized_start=6678,
+  serialized_end=6727,
 )
 
 
@@ -3277,8 +3413,8 @@ _SUBSYSTEM = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=6456,
-  serialized_end=6906,
+  serialized_start=6730,
+  serialized_end=7180,
 )
 
 
@@ -3354,8 +3490,8 @@ _LISTEN_ADDRESS = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=6909,
-  serialized_end=7060,
+  serialized_start=7183,
+  serialized_end=7334,
 )
 
 
@@ -3430,6 +3566,13 @@ _NAMESPACE = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='rados_namespace_name', full_name='namespace.rados_namespace_name', index=9,
+      number=10, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
   ],
   extensions=[
   ],
@@ -3471,9 +3614,14 @@ _NAMESPACE = _descriptor.Descriptor(
       index=5, containing_type=None,
       create_key=_descriptor._internal_create_key,
     fields=[]),
+    _descriptor.OneofDescriptor(
+      name='_rados_namespace_name', full_name='namespace._rados_namespace_name',
+      index=6, containing_type=None,
+      create_key=_descriptor._internal_create_key,
+    fields=[]),
   ],
-  serialized_start=7063,
-  serialized_end=7323,
+  serialized_start=7337,
+  serialized_end=7657,
 )
 
 
@@ -3518,8 +3666,8 @@ _SUBSYSTEMS_INFO_CLI = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=7325,
-  serialized_end=7421,
+  serialized_start=7659,
+  serialized_end=7755,
 )
 
 
@@ -3649,8 +3797,8 @@ _SUBSYSTEM_CLI = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=7424,
-  serialized_end=7798,
+  serialized_start=7758,
+  serialized_end=8132,
 )
 
 
@@ -3859,8 +4007,8 @@ _GATEWAY_INFO = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=7801,
-  serialized_end=8500,
+  serialized_start=8135,
+  serialized_end=8834,
 )
 
 
@@ -3905,8 +4053,8 @@ _CLI_VERSION = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=8502,
-  serialized_end=8571,
+  serialized_start=8836,
+  serialized_end=8905,
 )
 
 
@@ -3951,8 +4099,8 @@ _GW_VERSION = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=8573,
-  serialized_end=8641,
+  serialized_start=8907,
+  serialized_end=8975,
 )
 
 
@@ -3983,8 +4131,8 @@ _POLL_GROUP_TRANSPORT_INFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=8643,
-  serialized_end=8686,
+  serialized_start=8977,
+  serialized_end=9020,
 )
 
 
@@ -4064,8 +4212,8 @@ _POLL_GROUP_INFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=8689,
-  serialized_end=8918,
+  serialized_start=9023,
+  serialized_end=9252,
 )
 
 
@@ -4117,8 +4265,8 @@ _GATEWAY_STATS_INFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=8920,
-  serialized_end=9037,
+  serialized_start=9254,
+  serialized_end=9371,
 )
 
 
@@ -4170,8 +4318,8 @@ _THREAD_STATS_INFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=9039,
-  serialized_end=9152,
+  serialized_start=9373,
+  serialized_end=9486,
 )
 
 
@@ -4216,8 +4364,8 @@ _SPDK_THREAD_INFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=9154,
-  serialized_end=9214,
+  serialized_start=9488,
+  serialized_end=9548,
 )
 
 
@@ -4312,8 +4460,8 @@ _LISTENER_INFO = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=9217,
-  serialized_end=9428,
+  serialized_start=9551,
+  serialized_end=9762,
 )
 
 
@@ -4358,8 +4506,8 @@ _LISTENERS_INFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=9430,
-  serialized_end=9520,
+  serialized_start=9764,
+  serialized_end=9854,
 )
 
 
@@ -4397,8 +4545,8 @@ _GATEWAY_LISTENER_INFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=9522,
-  serialized_end=9616,
+  serialized_start=9856,
+  serialized_end=9950,
 )
 
 
@@ -4443,8 +4591,8 @@ _GATEWAY_LISTENERS_INFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=9618,
-  serialized_end=9727,
+  serialized_start=9952,
+  serialized_end=10061,
 )
 
 
@@ -4523,8 +4671,8 @@ _HOST = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=9730,
-  serialized_end=10013,
+  serialized_start=10064,
+  serialized_end=10347,
 )
 
 
@@ -4569,8 +4717,8 @@ _LATENCY_STATS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=10015,
-  serialized_end=10070,
+  serialized_start=10349,
+  serialized_end=10404,
 )
 
 
@@ -4629,8 +4777,8 @@ _LATENCY_GROUP = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=10073,
-  serialized_end=10225,
+  serialized_start=10407,
+  serialized_end=10559,
 )
 
 
@@ -4675,8 +4823,8 @@ _BUCKET_INFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=10227,
-  serialized_end=10315,
+  serialized_start=10561,
+  serialized_end=10649,
 )
 
 
@@ -4747,8 +4895,8 @@ _CONNECTION_IO_STATISTICS = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=10318,
-  serialized_end=10501,
+  serialized_start=10652,
+  serialized_end=10835,
 )
 
 
@@ -4807,8 +4955,8 @@ _HOSTS_INFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=10503,
-  serialized_end=10623,
+  serialized_start=10837,
+  serialized_end=10957,
 )
 
 
@@ -4918,6 +5066,13 @@ _CONNECTION = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='host_deleted', full_name='connection.host_deleted', index=14,
+      number=15, type=8, cpp_type=7, label=1,
+      has_default_value=False, default_value=False,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
   ],
   extensions=[
   ],
@@ -4959,9 +5114,14 @@ _CONNECTION = _descriptor.Descriptor(
       index=5, containing_type=None,
       create_key=_descriptor._internal_create_key,
     fields=[]),
+    _descriptor.OneofDescriptor(
+      name='_host_deleted', full_name='connection._host_deleted',
+      index=6, containing_type=None,
+      create_key=_descriptor._internal_create_key,
+    fields=[]),
   ],
-  serialized_start=10626,
-  serialized_end=11130,
+  serialized_start=10960,
+  serialized_end=11508,
 )
 
 
@@ -5013,8 +5173,8 @@ _CONNECTIONS_INFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=11132,
-  serialized_end=11246,
+  serialized_start=11510,
+  serialized_end=11624,
 )
 
 
@@ -5275,8 +5435,8 @@ _NAMESPACE_CLI = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=11249,
-  serialized_end=12233,
+  serialized_start=11627,
+  serialized_end=12611,
 )
 
 
@@ -5328,8 +5488,8 @@ _NAMESPACES_INFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=12235,
-  serialized_end=12350,
+  serialized_start=12613,
+  serialized_end=12728,
 )
 
 
@@ -5367,8 +5527,8 @@ _NAMESPACE_IO_ERROR = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=12352,
-  serialized_end=12401,
+  serialized_start=12730,
+  serialized_end=12779,
 )
 
 
@@ -5427,8 +5587,8 @@ _LIST_NAMESPACES_IO_STATS_INFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=12404,
-  serialized_end=12549,
+  serialized_start=12782,
+  serialized_end=12927,
 )
 
 
@@ -5606,8 +5766,8 @@ _BDEV_IO_STATS_INFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=12552,
-  serialized_end=13183,
+  serialized_start=12930,
+  serialized_end=13561,
 )
 
 
@@ -5825,8 +5985,8 @@ _NAMESPACE_IO_STATS_INFO = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=13186,
-  serialized_end=13916,
+  serialized_start=13564,
+  serialized_end=14294,
 )
 
 
@@ -5864,8 +6024,8 @@ _SPDK_LOG_FLAG_INFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=13918,
-  serialized_end=13969,
+  serialized_start=14296,
+  serialized_end=14347,
 )
 
 
@@ -5924,8 +6084,8 @@ _SPDK_NVMF_LOG_FLAGS_AND_LEVEL_INFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=13972,
-  serialized_end=14158,
+  serialized_start=14350,
+  serialized_end=14536,
 )
 
 
@@ -5970,8 +6130,8 @@ _GATEWAY_LOG_LEVEL_INFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=14160,
-  serialized_end=14255,
+  serialized_start=14538,
+  serialized_end=14633,
 )
 
 
@@ -6009,8 +6169,8 @@ _ENCRYPTION_ENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=14257,
-  serialized_end=14326,
+  serialized_start=14635,
+  serialized_end=14704,
 )
 
 _NAMESPACE_ADD_REQ.fields_by_name['encryption_entries'].message_type = _ENCRYPTION_ENTRY
@@ -6183,6 +6343,9 @@ _GET_CONNECTION_IO_STATISTICS_REQ.fields_by_name['reset'].containing_oneof = _GE
 _REMOVE_HOST_REQ.oneofs_by_name['_force'].fields.append(
   _REMOVE_HOST_REQ.fields_by_name['force'])
 _REMOVE_HOST_REQ.fields_by_name['force'].containing_oneof = _REMOVE_HOST_REQ.oneofs_by_name['_force']
+_REMOVE_HOST_REQ.oneofs_by_name['_keep_connections'].fields.append(
+  _REMOVE_HOST_REQ.fields_by_name['keep_connections'])
+_REMOVE_HOST_REQ.fields_by_name['keep_connections'].containing_oneof = _REMOVE_HOST_REQ.oneofs_by_name['_keep_connections']
 _LIST_HOSTS_REQ.oneofs_by_name['_clear_alerts'].fields.append(
   _LIST_HOSTS_REQ.fields_by_name['clear_alerts'])
 _LIST_HOSTS_REQ.fields_by_name['clear_alerts'].containing_oneof = _LIST_HOSTS_REQ.oneofs_by_name['_clear_alerts']
@@ -6285,6 +6448,9 @@ _NAMESPACE.fields_by_name['nonce'].containing_oneof = _NAMESPACE.oneofs_by_name[
 _NAMESPACE.oneofs_by_name['_auto_visible'].fields.append(
   _NAMESPACE.fields_by_name['auto_visible'])
 _NAMESPACE.fields_by_name['auto_visible'].containing_oneof = _NAMESPACE.oneofs_by_name['_auto_visible']
+_NAMESPACE.oneofs_by_name['_rados_namespace_name'].fields.append(
+  _NAMESPACE.fields_by_name['rados_namespace_name'])
+_NAMESPACE.fields_by_name['rados_namespace_name'].containing_oneof = _NAMESPACE.oneofs_by_name['_rados_namespace_name']
 _SUBSYSTEMS_INFO_CLI.fields_by_name['subsystems'].message_type = _SUBSYSTEM_CLI
 _SUBSYSTEM_CLI.oneofs_by_name['_has_dhchap_key'].fields.append(
   _SUBSYSTEM_CLI.fields_by_name['has_dhchap_key'])
@@ -6383,6 +6549,9 @@ _CONNECTION.fields_by_name['disconnected_due_to_keepalive_timeout'].containing_o
 _CONNECTION.oneofs_by_name['_dhchap_controller_origin'].fields.append(
   _CONNECTION.fields_by_name['dhchap_controller_origin'])
 _CONNECTION.fields_by_name['dhchap_controller_origin'].containing_oneof = _CONNECTION.oneofs_by_name['_dhchap_controller_origin']
+_CONNECTION.oneofs_by_name['_host_deleted'].fields.append(
+  _CONNECTION.fields_by_name['host_deleted'])
+_CONNECTION.fields_by_name['host_deleted'].containing_oneof = _CONNECTION.oneofs_by_name['_host_deleted']
 _CONNECTIONS_INFO.fields_by_name['connections'].message_type = _CONNECTION
 _NAMESPACE_CLI.fields_by_name['encryption_algorithm'].enum_type = _ENCRYPTIONALGORITHM
 _NAMESPACE_CLI.fields_by_name['encryption_entries'].message_type = _ENCRYPTION_ENTRY
@@ -6449,6 +6618,8 @@ DESCRIPTOR.message_types_by_name['delete_subsystem_req'] = _DELETE_SUBSYSTEM_REQ
 DESCRIPTOR.message_types_by_name['change_subsystem_key_req'] = _CHANGE_SUBSYSTEM_KEY_REQ
 DESCRIPTOR.message_types_by_name['add_subsystem_network_req'] = _ADD_SUBSYSTEM_NETWORK_REQ
 DESCRIPTOR.message_types_by_name['del_subsystem_network_req'] = _DEL_SUBSYSTEM_NETWORK_REQ
+DESCRIPTOR.message_types_by_name['gw_refresh_network_req'] = _GW_REFRESH_NETWORK_REQ
+DESCRIPTOR.message_types_by_name['gw_refresh_network_status'] = _GW_REFRESH_NETWORK_STATUS
 DESCRIPTOR.message_types_by_name['kmip_server_endpoint'] = _KMIP_SERVER_ENDPOINT
 DESCRIPTOR.message_types_by_name['kmip_server_endpoint_cli'] = _KMIP_SERVER_ENDPOINT_CLI
 DESCRIPTOR.message_types_by_name['add_kmip_server_endpoints_req'] = _ADD_KMIP_SERVER_ENDPOINTS_REQ
@@ -6460,6 +6631,7 @@ DESCRIPTOR.message_types_by_name['add_host_req'] = _ADD_HOST_REQ
 DESCRIPTOR.message_types_by_name['change_host_key_req'] = _CHANGE_HOST_KEY_REQ
 DESCRIPTOR.message_types_by_name['get_connection_io_statistics_req'] = _GET_CONNECTION_IO_STATISTICS_REQ
 DESCRIPTOR.message_types_by_name['remove_host_req'] = _REMOVE_HOST_REQ
+DESCRIPTOR.message_types_by_name['set_keep_host_connected_req'] = _SET_KEEP_HOST_CONNECTED_REQ
 DESCRIPTOR.message_types_by_name['list_hosts_req'] = _LIST_HOSTS_REQ
 DESCRIPTOR.message_types_by_name['list_connections_req'] = _LIST_CONNECTIONS_REQ
 DESCRIPTOR.message_types_by_name['create_listener_req'] = _CREATE_LISTENER_REQ
@@ -6654,6 +6826,20 @@ del_subsystem_network_req = _reflection.GeneratedProtocolMessageType('del_subsys
   })
 _sym_db.RegisterMessage(del_subsystem_network_req)
 
+gw_refresh_network_req = _reflection.GeneratedProtocolMessageType('gw_refresh_network_req', (_message.Message,), {
+  'DESCRIPTOR' : _GW_REFRESH_NETWORK_REQ,
+  '__module__' : 'dashboard.services.proto.gateway_pb2'
+  # @@protoc_insertion_point(class_scope:gw_refresh_network_req)
+  })
+_sym_db.RegisterMessage(gw_refresh_network_req)
+
+gw_refresh_network_status = _reflection.GeneratedProtocolMessageType('gw_refresh_network_status', (_message.Message,), {
+  'DESCRIPTOR' : _GW_REFRESH_NETWORK_STATUS,
+  '__module__' : 'dashboard.services.proto.gateway_pb2'
+  # @@protoc_insertion_point(class_scope:gw_refresh_network_status)
+  })
+_sym_db.RegisterMessage(gw_refresh_network_status)
+
 kmip_server_endpoint = _reflection.GeneratedProtocolMessageType('kmip_server_endpoint', (_message.Message,), {
   'DESCRIPTOR' : _KMIP_SERVER_ENDPOINT,
   '__module__' : 'dashboard.services.proto.gateway_pb2'
@@ -6730,6 +6916,13 @@ remove_host_req = _reflection.GeneratedProtocolMessageType('remove_host_req', (_
   # @@protoc_insertion_point(class_scope:remove_host_req)
   })
 _sym_db.RegisterMessage(remove_host_req)
+
+set_keep_host_connected_req = _reflection.GeneratedProtocolMessageType('set_keep_host_connected_req', (_message.Message,), {
+  'DESCRIPTOR' : _SET_KEEP_HOST_CONNECTED_REQ,
+  '__module__' : 'dashboard.services.proto.gateway_pb2'
+  # @@protoc_insertion_point(class_scope:set_keep_host_connected_req)
+  })
+_sym_db.RegisterMessage(set_keep_host_connected_req)
 
 list_hosts_req = _reflection.GeneratedProtocolMessageType('list_hosts_req', (_message.Message,), {
   'DESCRIPTOR' : _LIST_HOSTS_REQ,
@@ -7154,8 +7347,8 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   index=0,
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_start=14797,
-  serialized_end=17838,
+  serialized_start=15175,
+  serialized_end=18365,
   methods=[
   _descriptor.MethodDescriptor(
     name='namespace_add',
@@ -7218,9 +7411,19 @@ _GATEWAY = _descriptor.ServiceDescriptor(
     create_key=_descriptor._internal_create_key,
   ),
   _descriptor.MethodDescriptor(
+    name='gw_refresh_network',
+    full_name='Gateway.gw_refresh_network',
+    index=6,
+    containing_service=None,
+    input_type=_GW_REFRESH_NETWORK_REQ,
+    output_type=_GW_REFRESH_NETWORK_STATUS,
+    serialized_options=None,
+    create_key=_descriptor._internal_create_key,
+  ),
+  _descriptor.MethodDescriptor(
     name='add_kmip_server_endpoints',
     full_name='Gateway.add_kmip_server_endpoints',
-    index=6,
+    index=7,
     containing_service=None,
     input_type=_ADD_KMIP_SERVER_ENDPOINTS_REQ,
     output_type=_REQ_STATUS,
@@ -7230,7 +7433,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='del_kmip_server_endpoints',
     full_name='Gateway.del_kmip_server_endpoints',
-    index=7,
+    index=8,
     containing_service=None,
     input_type=_DEL_KMIP_SERVER_ENDPOINTS_REQ,
     output_type=_REQ_STATUS,
@@ -7240,7 +7443,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='list_kmip_server_endpoints',
     full_name='Gateway.list_kmip_server_endpoints',
-    index=8,
+    index=9,
     containing_service=None,
     input_type=_LIST_KMIP_SERVER_ENDPOINTS_REQ,
     output_type=_KMIP_SERVER_ENDPOINTS_INFO,
@@ -7250,7 +7453,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='list_namespaces',
     full_name='Gateway.list_namespaces',
-    index=9,
+    index=10,
     containing_service=None,
     input_type=_LIST_NAMESPACES_REQ,
     output_type=_NAMESPACES_INFO,
@@ -7260,7 +7463,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='namespace_resize',
     full_name='Gateway.namespace_resize',
-    index=10,
+    index=11,
     containing_service=None,
     input_type=_NAMESPACE_RESIZE_REQ,
     output_type=_REQ_STATUS,
@@ -7270,7 +7473,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='namespace_get_io_stats',
     full_name='Gateway.namespace_get_io_stats',
-    index=11,
+    index=12,
     containing_service=None,
     input_type=_NAMESPACE_GET_IO_STATS_REQ,
     output_type=_NAMESPACE_IO_STATS_INFO,
@@ -7280,7 +7483,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='list_namespaces_io_stats',
     full_name='Gateway.list_namespaces_io_stats',
-    index=12,
+    index=13,
     containing_service=None,
     input_type=_LIST_NAMESPACES_IO_STATS_REQ,
     output_type=_LIST_NAMESPACES_IO_STATS_INFO,
@@ -7290,7 +7493,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='namespace_set_qos_limits',
     full_name='Gateway.namespace_set_qos_limits',
-    index=13,
+    index=14,
     containing_service=None,
     input_type=_NAMESPACE_SET_QOS_REQ,
     output_type=_REQ_STATUS,
@@ -7300,7 +7503,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='namespace_change_load_balancing_group',
     full_name='Gateway.namespace_change_load_balancing_group',
-    index=14,
+    index=15,
     containing_service=None,
     input_type=_NAMESPACE_CHANGE_LOAD_BALANCING_GROUP_REQ,
     output_type=_REQ_STATUS,
@@ -7310,7 +7513,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='namespace_change_visibility',
     full_name='Gateway.namespace_change_visibility',
-    index=15,
+    index=16,
     containing_service=None,
     input_type=_NAMESPACE_CHANGE_VISIBILITY_REQ,
     output_type=_REQ_STATUS,
@@ -7320,7 +7523,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='namespace_change_location',
     full_name='Gateway.namespace_change_location',
-    index=16,
+    index=17,
     containing_service=None,
     input_type=_NAMESPACE_CHANGE_LOCATION_REQ,
     output_type=_REQ_STATUS,
@@ -7330,7 +7533,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='namespace_set_rbd_trash_image',
     full_name='Gateway.namespace_set_rbd_trash_image',
-    index=17,
+    index=18,
     containing_service=None,
     input_type=_NAMESPACE_SET_RBD_TRASH_IMAGE_REQ,
     output_type=_REQ_STATUS,
@@ -7340,7 +7543,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='namespace_set_auto_resize',
     full_name='Gateway.namespace_set_auto_resize',
-    index=18,
+    index=19,
     containing_service=None,
     input_type=_NAMESPACE_SET_AUTO_RESIZE_REQ,
     output_type=_REQ_STATUS,
@@ -7350,7 +7553,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='namespace_delete',
     full_name='Gateway.namespace_delete',
-    index=19,
+    index=20,
     containing_service=None,
     input_type=_NAMESPACE_DELETE_REQ,
     output_type=_REQ_STATUS,
@@ -7360,7 +7563,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='namespace_add_host',
     full_name='Gateway.namespace_add_host',
-    index=20,
+    index=21,
     containing_service=None,
     input_type=_NAMESPACE_ADD_HOST_REQ,
     output_type=_REQ_STATUS,
@@ -7370,7 +7573,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='namespace_delete_host',
     full_name='Gateway.namespace_delete_host',
-    index=21,
+    index=22,
     containing_service=None,
     input_type=_NAMESPACE_DELETE_HOST_REQ,
     output_type=_REQ_STATUS,
@@ -7380,7 +7583,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='add_host',
     full_name='Gateway.add_host',
-    index=22,
+    index=23,
     containing_service=None,
     input_type=_ADD_HOST_REQ,
     output_type=_REQ_STATUS,
@@ -7390,7 +7593,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='remove_host',
     full_name='Gateway.remove_host',
-    index=23,
+    index=24,
     containing_service=None,
     input_type=_REMOVE_HOST_REQ,
     output_type=_REQ_STATUS,
@@ -7398,9 +7601,19 @@ _GATEWAY = _descriptor.ServiceDescriptor(
     create_key=_descriptor._internal_create_key,
   ),
   _descriptor.MethodDescriptor(
+    name='set_keep_host_connected',
+    full_name='Gateway.set_keep_host_connected',
+    index=25,
+    containing_service=None,
+    input_type=_SET_KEEP_HOST_CONNECTED_REQ,
+    output_type=_REQ_STATUS,
+    serialized_options=None,
+    create_key=_descriptor._internal_create_key,
+  ),
+  _descriptor.MethodDescriptor(
     name='change_host_key',
     full_name='Gateway.change_host_key',
-    index=24,
+    index=26,
     containing_service=None,
     input_type=_CHANGE_HOST_KEY_REQ,
     output_type=_REQ_STATUS,
@@ -7410,7 +7623,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='list_hosts',
     full_name='Gateway.list_hosts',
-    index=25,
+    index=27,
     containing_service=None,
     input_type=_LIST_HOSTS_REQ,
     output_type=_HOSTS_INFO,
@@ -7420,7 +7633,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='list_connections',
     full_name='Gateway.list_connections',
-    index=26,
+    index=28,
     containing_service=None,
     input_type=_LIST_CONNECTIONS_REQ,
     output_type=_CONNECTIONS_INFO,
@@ -7430,7 +7643,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='get_connection_io_statistics',
     full_name='Gateway.get_connection_io_statistics',
-    index=27,
+    index=29,
     containing_service=None,
     input_type=_GET_CONNECTION_IO_STATISTICS_REQ,
     output_type=_CONNECTION_IO_STATISTICS,
@@ -7440,7 +7653,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='create_listener',
     full_name='Gateway.create_listener',
-    index=28,
+    index=30,
     containing_service=None,
     input_type=_CREATE_LISTENER_REQ,
     output_type=_REQ_STATUS,
@@ -7450,7 +7663,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='delete_listener',
     full_name='Gateway.delete_listener',
-    index=29,
+    index=31,
     containing_service=None,
     input_type=_DELETE_LISTENER_REQ,
     output_type=_REQ_STATUS,
@@ -7460,7 +7673,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='list_listeners',
     full_name='Gateway.list_listeners',
-    index=30,
+    index=32,
     containing_service=None,
     input_type=_LIST_LISTENERS_REQ,
     output_type=_LISTENERS_INFO,
@@ -7470,7 +7683,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='list_subsystems',
     full_name='Gateway.list_subsystems',
-    index=31,
+    index=33,
     containing_service=None,
     input_type=_LIST_SUBSYSTEMS_REQ,
     output_type=_SUBSYSTEMS_INFO_CLI,
@@ -7480,7 +7693,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='get_subsystems',
     full_name='Gateway.get_subsystems',
-    index=32,
+    index=34,
     containing_service=None,
     input_type=_GET_SUBSYSTEMS_REQ,
     output_type=_SUBSYSTEMS_INFO,
@@ -7490,7 +7703,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='set_ana_state',
     full_name='Gateway.set_ana_state',
-    index=33,
+    index=35,
     containing_service=None,
     input_type=_ANA_INFO,
     output_type=_REQ_STATUS,
@@ -7500,7 +7713,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='get_spdk_nvmf_log_flags_and_level',
     full_name='Gateway.get_spdk_nvmf_log_flags_and_level',
-    index=34,
+    index=36,
     containing_service=None,
     input_type=_GET_SPDK_NVMF_LOG_FLAGS_AND_LEVEL_REQ,
     output_type=_SPDK_NVMF_LOG_FLAGS_AND_LEVEL_INFO,
@@ -7510,7 +7723,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='disable_spdk_nvmf_logs',
     full_name='Gateway.disable_spdk_nvmf_logs',
-    index=35,
+    index=37,
     containing_service=None,
     input_type=_DISABLE_SPDK_NVMF_LOGS_REQ,
     output_type=_REQ_STATUS,
@@ -7520,7 +7733,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='set_spdk_nvmf_logs',
     full_name='Gateway.set_spdk_nvmf_logs',
-    index=36,
+    index=38,
     containing_service=None,
     input_type=_SET_SPDK_NVMF_LOGS_REQ,
     output_type=_REQ_STATUS,
@@ -7530,7 +7743,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='get_gateway_info',
     full_name='Gateway.get_gateway_info',
-    index=37,
+    index=39,
     containing_service=None,
     input_type=_GET_GATEWAY_INFO_REQ,
     output_type=_GATEWAY_INFO,
@@ -7540,7 +7753,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='get_gateway_log_level',
     full_name='Gateway.get_gateway_log_level',
-    index=38,
+    index=40,
     containing_service=None,
     input_type=_GET_GATEWAY_LOG_LEVEL_REQ,
     output_type=_GATEWAY_LOG_LEVEL_INFO,
@@ -7550,7 +7763,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='set_gateway_log_level',
     full_name='Gateway.set_gateway_log_level',
-    index=39,
+    index=41,
     containing_service=None,
     input_type=_SET_GATEWAY_LOG_LEVEL_REQ,
     output_type=_REQ_STATUS,
@@ -7560,7 +7773,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='show_gateway_listeners_info',
     full_name='Gateway.show_gateway_listeners_info',
-    index=40,
+    index=42,
     containing_service=None,
     input_type=_SHOW_GATEWAY_LISTENERS_INFO_REQ,
     output_type=_GATEWAY_LISTENERS_INFO,
@@ -7570,7 +7783,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='get_gateway_stats',
     full_name='Gateway.get_gateway_stats',
-    index=41,
+    index=43,
     containing_service=None,
     input_type=_GET_GATEWAY_STATS_REQ,
     output_type=_GATEWAY_STATS_INFO,
@@ -7580,7 +7793,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='get_thread_stats',
     full_name='Gateway.get_thread_stats',
-    index=42,
+    index=44,
     containing_service=None,
     input_type=_GET_THREAD_STATS_REQ,
     output_type=_THREAD_STATS_INFO,
@@ -7590,7 +7803,7 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='set_gateway_io_stats_mode',
     full_name='Gateway.set_gateway_io_stats_mode',
-    index=43,
+    index=45,
     containing_service=None,
     input_type=_SET_GATEWAY_IO_STATS_MODE_REQ,
     output_type=_REQ_STATUS,

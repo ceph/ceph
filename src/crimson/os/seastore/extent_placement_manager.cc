@@ -699,6 +699,30 @@ ExtentPlacementManager::BackgroundProcess::run_until_halt()
 }
 
 seastar::future<>
+ExtentPlacementManager::BackgroundProcess::run_cleaner_until_done()
+{
+  LOG_PREFIX(BackgroundProcess::run_cleaner_until_done);
+  ceph_assert(state == state_t::HALT);
+  assert(!is_running());
+  INFO("started...");
+  return seastar::do_until(
+    [this] {
+      return !main_cleaner->should_clean_space();
+    },
+    [this] {
+      return main_cleaner->clean_space(
+      ).handle_error(
+        crimson::ct_error::assert_all(
+          "run_cleaner_until_done encountered error in clean_space"
+        )
+      );
+    }
+  ).finally([FNAME] {
+    INFO("finished");
+  });
+}
+
+seastar::future<>
 ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
     io_usage_t usage)
 {
@@ -731,8 +755,14 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
     ++stats.io_blocked_count;
     stats.io_blocked_sum += stats.io_blocking_num;
 
-    blocking_io = seastar::promise<>();
     auto begin_time = seastar::lowres_system_clock::now();
+    // IO blocked -> needs cleaner -> cleaner sleeping -> nothing runs -> deadlock.
+    // Kick the background so it can free space and call maybe_wake_blocked_io().
+    auto arm_blocking_io_and_wake = [this] {
+      blocking_io = seastar::promise<>();
+      do_wake_background();
+    };
+    arm_blocking_io_and_wake();
     // we just blocked this IO, now wait until
     // maybe_wake_blocked_io will set value to blocking_io
     do {
@@ -760,7 +790,7 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
           if (!res.cleaner_result.is_successful()) {
           ++stats.io_retried_blocked_count_clean;
         }
-        blocking_io = seastar::promise<>();
+        arm_blocking_io_and_wake();
       }
     } while (blocking_io);
   }
@@ -777,6 +807,11 @@ ExtentPlacementManager::BackgroundProcess::maybe_wake_blocked_io()
     DEBUG("");
     blocking_io->set_value();
     blocking_io = std::nullopt;
+    // Remember that we just woke a blocked IO; run() yields once on
+    // this edge so the woken continuation has a chance to retry the
+    // reservation before the cleaner spins another cycle and consumes
+    // the projected_avail headroom we just freed.
+    pending_user_io_wake = true;
   }
 }
 
@@ -788,11 +823,30 @@ ExtentPlacementManager::BackgroundProcess::run()
     if (background_should_run()) {
       log_state("run(background)");
       co_await do_background_cycle();
+      // Edge-triggered: yield only when a blocked IO was actually woken, so the
+      // resumed continuation retries try_reserve_io() before the next cycle runs.
+      if (pending_user_io_wake) {
+        pending_user_io_wake = false;
+        co_await seastar::yield();
+      }
+      // Adaptive threshold hook: each cleaner has its own state and floor.
+      if (main_cleaner) {
+        main_cleaner->maybe_adjust_thresholds();
+      }
+      if (cold_cleaner) {
+        cold_cleaner->maybe_adjust_thresholds();
+      }
     } else {
       log_state("run(block)");
       assert(!blocking_background);
       blocking_background = seastar::promise<>();
       co_await blocking_background->get_future();
+      // After waking (typically because arm_blocking_io_and_wake() kicked us),
+      // give any blocked user IO a chance to proceed. Without this call the
+      // loop would go straight back to sleep if background_should_run() is
+      // still false, but the space condition (should_block_io) may already be
+      // satisfied, leaving blocked IO stuck with no future trigger to re-check.
+      maybe_wake_blocked_io();
     }
   }
   log_state("run(exit)");
@@ -977,9 +1031,9 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
               main_cleaner_should_fast_evict());
         return main_cleaner->clean_space(
         ).handle_error(
-          crimson::ct_error::assert_all{
+          crimson::ct_error::assert_all(
             "do_background_cycle encountered invalid error in main clean_space"
-          }
+          )
         ).finally([this, main_cold_usage, FNAME] {
           DEBUG("finished clean main");
           abort_cold_usage(main_cold_usage, true);
@@ -997,9 +1051,9 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
               should_clean_cold_for_main);
         return cold_cleaner->clean_space(
         ).handle_error(
-          crimson::ct_error::assert_all{
+          crimson::ct_error::assert_all(
             "do_background_cycle encountered invalid error in cold clean_space"
-          }
+          )
         ).finally([FNAME] {
           DEBUG("finished clean cold");
         });
@@ -1163,8 +1217,8 @@ RandomBlockOolWriter::do_write(
         return info.rbm->write(info.offset, info.bp
         ).handle_error(
           alloc_write_ertr::pass_further{},
-          crimson::ct_error::assert_all{
-            "Invalid error when writing record"}
+          crimson::ct_error::assert_all(
+            "Invalid error when writing record")
         );
       });
     })

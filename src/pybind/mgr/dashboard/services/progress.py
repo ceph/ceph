@@ -45,11 +45,27 @@ def _progress_event_to_dashboard_task_common(event, task):
             })
             return
 
+    refs = event.get('refs', {})
+
+    if isinstance(refs, dict):
+        metadata = refs
+    elif isinstance(refs, (list, tuple)):
+        if all(isinstance(i, (list, tuple)) and len(i) == 2 for i in refs):
+            metadata = dict(refs)
+        else:
+            metadata = {"raw_refs": refs}
+    elif isinstance(refs, str):
+        metadata = {"raw_refs": refs}
+    elif refs is None:
+        metadata = {}
+    else:
+        metadata = {"raw_refs": refs}
+
     task.update({
         # we're prepending the "progress/" prefix to tag tasks that come
         # from the progress module
         'name': "progress/{}".format(event['message']),
-        'metadata': dict(event.get('refs', {})),
+        'metadata': metadata,
         'begin_time': datetime.fromtimestamp(
             event["started_at"], tz=timezone.utc).isoformat(),
     })

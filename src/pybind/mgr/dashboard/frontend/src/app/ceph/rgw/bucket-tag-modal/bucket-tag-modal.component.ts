@@ -22,7 +22,10 @@ export class BucketTagModalComponent extends BaseModal {
   currentKeyTags: string[];
   storedKey: string;
 
-  constructor(private formBuilder: CdFormBuilder, public actionLabels: ActionLabelsI18n) {
+  constructor(
+    private formBuilder: CdFormBuilder,
+    public actionLabels: ActionLabelsI18n
+  ) {
     super();
     this.createForm();
   }

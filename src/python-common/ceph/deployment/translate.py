@@ -140,7 +140,8 @@ class to_ceph_volume(object):
         for i in range(len(cmds)):
             if self.spec.osd_type:
                 osd_type_str = getattr(self.spec.osd_type, 'value', self.spec.osd_type)
-                cmds[i] += " --osd-type {}".format(osd_type_str)
+                if osd_type_str != 'classic':
+                    cmds[i] += " --osd-type {}".format(osd_type_str)
 
             if self.spec.encrypted:
                 cmds[i] += " --dmcrypt"

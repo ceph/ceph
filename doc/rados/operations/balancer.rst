@@ -39,6 +39,22 @@ combines the upmap balancer with the read balancer so that both writes
 and reads are optimized. ``read`` mode can be used when only read optimization
 is desired. For more details, see :ref:`read_balancer`.
 
+Limitation: count-based balancing vs. size-based balancing
+----------------------------------------------------------
+
+Ceph's built-in balancer optimizes only by **PG shard count**, not by the
+actual size of the data stored in each PG.
+
+This can result in clusters whose OSDs are balanced by PG shard count,
+but very imbalanced by stored Bytes.
+At the pool level, this can cause a pool's ``%USED`` (from ``ceph df``)
+to be much higher than the cluster's ``%RAW USED``, because the
+pool's fullest OSD (which determines the pool's available space) may be
+disproportionately loaded with large PGs.
+
+Size-aware community balancers exist (for example,
+`jj-balancer <https://github.com/TheJJ/ceph-balancer>`_).
+
 Throttling
 ----------
 
@@ -63,9 +79,22 @@ at the potential cost of greater impact on client operations.
 There is a separate setting ``upmap_max_deviation`` for how uniform the
 distribution of PGs must be for the module to consider the cluster adequately
 balanced.  At the time of writing (June 2025), this value defaults to ``5``,
-which means that if a given OSD's PG replicas vary by five or fewer above or
-below the cluster's average, it will be considered sufficiently balanced.
+which means that if a given OSD's PG shard count deviates by five or fewer
+from its weight-proportional target, it will be considered sufficiently
+balanced.
 
+More precisely, the balancer computes a per-OSD target shard count as::
+
+   target = osd_weight * (total_shards / total_weight)
+
+where ``osd_weight`` is the OSD's CRUSH weight times its reweight
+(the ``REWEIGHT`` value from ``ceph osd df``), ``total_shards`` is
+``pool_size * pg_num`` summed over all balanced pools,
+and ``total_weight`` is the sum of those per-OSD weights.
+The deviation is then ``actual_shard_count - target``.
+If no OSD's absolute deviation exceeds
+``upmap_max_deviation``, the balancer considers the distribution
+sufficiently balanced and makes no changes.
 
 This value of PG replicas/shards (as distinct from logical PGs) is reported
 by the ``ceph osd df`` command under the ``PGS`` column and the variance

@@ -8390,426 +8390,169 @@ CLS_INIT(rbd)
   cls_method_handle_t h_assert_snapc_seq;
   cls_method_handle_t h_sparsify;
 
-  cls_register("rbd", &h_class);
-  cls_register_cxx_method(h_class, "create",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  create, &h_create);
-  cls_register_cxx_method(h_class, "get_features",
-			  CLS_METHOD_RD,
-			  get_features, &h_get_features);
-  cls_register_cxx_method(h_class, "set_features",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  set_features, &h_set_features);
-  cls_register_cxx_method(h_class, "get_size",
-			  CLS_METHOD_RD,
-			  get_size, &h_get_size);
-  cls_register_cxx_method(h_class, "set_size",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  set_size, &h_set_size);
-  cls_register_cxx_method(h_class, "get_snapcontext",
-			  CLS_METHOD_RD,
-			  get_snapcontext, &h_get_snapcontext);
-  cls_register_cxx_method(h_class, "get_object_prefix",
-			  CLS_METHOD_RD,
-			  get_object_prefix, &h_get_object_prefix);
-  cls_register_cxx_method(h_class, "get_data_pool", CLS_METHOD_RD,
-                          get_data_pool, &h_get_data_pool);
-  cls_register_cxx_method(h_class, "get_snapshot_name",
-			  CLS_METHOD_RD,
-			  get_snapshot_name, &h_get_snapshot_name);
-  cls_register_cxx_method(h_class, "get_snapshot_timestamp",
-			  CLS_METHOD_RD,
-			  get_snapshot_timestamp, &h_get_snapshot_timestamp);
-  cls_register_cxx_method(h_class, "snapshot_get",
-                          CLS_METHOD_RD,
-                          snapshot_get, &h_snapshot_get);
-  cls_register_cxx_method(h_class, "snapshot_add",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  snapshot_add, &h_snapshot_add);
-  cls_register_cxx_method(h_class, "snapshot_remove",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  snapshot_remove, &h_snapshot_remove);
-  cls_register_cxx_method(h_class, "snapshot_rename",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  snapshot_rename, &h_snapshot_rename);
-  cls_register_cxx_method(h_class, "snapshot_trash_add",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          snapshot_trash_add, &h_snapshot_trash_add);
-  cls_register_cxx_method(h_class, "get_all_features",
-			  CLS_METHOD_RD,
-			  get_all_features, &h_get_all_features);
+  using namespace cls::rbd;
+  cls_register(ClassId::name, &h_class);
+
+  ClassRegistrar<ClassId> cls(h_class);
+  
+
+  cls.register_cxx_method(method::create, create, &h_create);
+  cls.register_cxx_method(method::get_features, get_features, &h_get_features);
+  cls.register_cxx_method(method::set_features, set_features, &h_set_features);
+  cls.register_cxx_method(method::get_size, get_size, &h_get_size);
+  cls.register_cxx_method(method::set_size, set_size, &h_set_size);
+  cls.register_cxx_method(method::get_snapcontext, get_snapcontext, &h_get_snapcontext);
+  cls.register_cxx_method(method::get_object_prefix, get_object_prefix, &h_get_object_prefix);
+  cls.register_cxx_method(method::get_data_pool, get_data_pool, &h_get_data_pool);
+  cls.register_cxx_method(method::get_snapshot_name, get_snapshot_name, &h_get_snapshot_name);
+  cls.register_cxx_method(method::get_snapshot_timestamp, get_snapshot_timestamp, &h_get_snapshot_timestamp);
+  cls.register_cxx_method(method::snapshot_get, snapshot_get, &h_snapshot_get);
+  cls.register_cxx_method(method::snapshot_add, snapshot_add, &h_snapshot_add);
+  cls.register_cxx_method(method::snapshot_remove, snapshot_remove, &h_snapshot_remove);
+  cls.register_cxx_method(method::snapshot_rename, snapshot_rename, &h_snapshot_rename);
+  cls.register_cxx_method(method::snapshot_trash_add, snapshot_trash_add, &h_snapshot_trash_add);
+  cls.register_cxx_method(method::get_all_features, get_all_features, &h_get_all_features);
 
   // NOTE: deprecate v1 parent APIs after mimic EOLed
-  cls_register_cxx_method(h_class, "get_parent",
-			  CLS_METHOD_RD,
-			  get_parent, &h_get_parent);
-  cls_register_cxx_method(h_class, "set_parent",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  set_parent, &h_set_parent);
-  cls_register_cxx_method(h_class, "remove_parent",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  remove_parent, &h_remove_parent);
+  cls.register_cxx_method(method::get_parent, get_parent, &h_get_parent);
+  cls.register_cxx_method(method::set_parent, set_parent, &h_set_parent);
+  cls.register_cxx_method(method::remove_parent, remove_parent, &h_remove_parent);
 
-  cls_register_cxx_method(h_class, "parent_get",
-                          CLS_METHOD_RD, parent_get, &h_parent_get);
-  cls_register_cxx_method(h_class, "parent_overlap_get",
-                          CLS_METHOD_RD, parent_overlap_get,
-                          &h_parent_overlap_get);
-  cls_register_cxx_method(h_class, "parent_attach",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          parent_attach, &h_parent_attach);
-  cls_register_cxx_method(h_class, "parent_detach",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          parent_detach, &h_parent_detach);
+  // Parent/Layering (V2 APIs)
+  cls.register_cxx_method(method::parent_get, parent_get, &h_parent_get);
+  cls.register_cxx_method(method::parent_overlap_get, parent_overlap_get, &h_parent_overlap_get);
+  cls.register_cxx_method(method::parent_attach, parent_attach, &h_parent_attach);
+  cls.register_cxx_method(method::parent_detach, parent_detach, &h_parent_detach);
 
-  cls_register_cxx_method(h_class, "set_protection_status",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  set_protection_status, &h_set_protection_status);
-  cls_register_cxx_method(h_class, "get_protection_status",
-			  CLS_METHOD_RD,
-			  get_protection_status, &h_get_protection_status);
-  cls_register_cxx_method(h_class, "get_stripe_unit_count",
-			  CLS_METHOD_RD,
-			  get_stripe_unit_count, &h_get_stripe_unit_count);
-  cls_register_cxx_method(h_class, "set_stripe_unit_count",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  set_stripe_unit_count, &h_set_stripe_unit_count);
-  cls_register_cxx_method(h_class, "get_create_timestamp",
-                          CLS_METHOD_RD,
-                          get_create_timestamp, &h_get_create_timestamp);
-  cls_register_cxx_method(h_class, "get_access_timestamp",
-                          CLS_METHOD_RD,
-                          get_access_timestamp, &h_get_access_timestamp);
-  cls_register_cxx_method(h_class, "get_modify_timestamp",
-                          CLS_METHOD_RD,
-                          get_modify_timestamp, &h_get_modify_timestamp);
-  cls_register_cxx_method(h_class, "get_flags",
-                          CLS_METHOD_RD,
-                          get_flags, &h_get_flags);
-  cls_register_cxx_method(h_class, "set_flags",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          set_flags, &h_set_flags);
-  cls_register_cxx_method(h_class, "op_features_get", CLS_METHOD_RD,
-                          op_features_get, &h_op_features_get);
-  cls_register_cxx_method(h_class, "op_features_set",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          op_features_set, &h_op_features_set);
-  cls_register_cxx_method(h_class, "metadata_list",
-                          CLS_METHOD_RD,
-			  metadata_list, &h_metadata_list);
-  cls_register_cxx_method(h_class, "metadata_set",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-			  metadata_set, &h_metadata_set);
-  cls_register_cxx_method(h_class, "metadata_remove",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-			  metadata_remove, &h_metadata_remove);
-  cls_register_cxx_method(h_class, "metadata_get",
-                          CLS_METHOD_RD,
-			  metadata_get, &h_metadata_get);
-  cls_register_cxx_method(h_class, "snapshot_get_limit",
-			  CLS_METHOD_RD,
-			  snapshot_get_limit, &h_snapshot_get_limit);
-  cls_register_cxx_method(h_class, "snapshot_set_limit",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  snapshot_set_limit, &h_snapshot_set_limit);
-  cls_register_cxx_method(h_class, "child_attach",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          child_attach, &h_child_attach);
-  cls_register_cxx_method(h_class, "child_detach",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          child_detach, &h_child_detach);
-  cls_register_cxx_method(h_class, "children_list",
-                          CLS_METHOD_RD,
-                          children_list, &h_children_list);
-  cls_register_cxx_method(h_class, "migration_set",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          migration_set, &h_migration_set);
-  cls_register_cxx_method(h_class, "migration_set_state",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          migration_set_state, &h_migration_set_state);
-  cls_register_cxx_method(h_class, "migration_get",
-                          CLS_METHOD_RD,
-                          migration_get, &h_migration_get);
-  cls_register_cxx_method(h_class, "migration_remove",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          migration_remove, &h_migration_remove);
+  cls.register_cxx_method(method::set_protection_status, set_protection_status, &h_set_protection_status);
+  cls.register_cxx_method(method::get_protection_status, get_protection_status, &h_get_protection_status);
+  cls.register_cxx_method(method::get_stripe_unit_count, get_stripe_unit_count, &h_get_stripe_unit_count);
+  cls.register_cxx_method(method::set_stripe_unit_count, set_stripe_unit_count, &h_set_stripe_unit_count);
+  cls.register_cxx_method(method::get_create_timestamp, get_create_timestamp, &h_get_create_timestamp);
+  cls.register_cxx_method(method::get_access_timestamp, get_access_timestamp, &h_get_access_timestamp);
+  cls.register_cxx_method(method::get_modify_timestamp, get_modify_timestamp, &h_get_modify_timestamp);
+  cls.register_cxx_method(method::get_flags, get_flags, &h_get_flags);
+  cls.register_cxx_method(method::set_flags, set_flags, &h_set_flags);
+  cls.register_cxx_method(method::op_features_get, op_features_get, &h_op_features_get);
+  cls.register_cxx_method(method::op_features_set, op_features_set, &h_op_features_set);
+  cls.register_cxx_method(method::metadata_list, metadata_list, &h_metadata_list);
+  cls.register_cxx_method(method::metadata_set, metadata_set, &h_metadata_set);
+  cls.register_cxx_method(method::metadata_remove, metadata_remove, &h_metadata_remove);
+  cls.register_cxx_method(method::metadata_get, metadata_get, &h_metadata_get);
+  cls.register_cxx_method(method::snapshot_get_limit, snapshot_get_limit, &h_snapshot_get_limit);
+  cls.register_cxx_method(method::snapshot_set_limit, snapshot_set_limit, &h_snapshot_set_limit);
+  cls.register_cxx_method(method::child_attach, child_attach, &h_child_attach);
+  cls.register_cxx_method(method::child_detach, child_detach, &h_child_detach);
+  cls.register_cxx_method(method::children_list, children_list, &h_children_list);
+  cls.register_cxx_method(method::migration_set, migration_set, &h_migration_set);
+  cls.register_cxx_method(method::migration_set_state, migration_set_state, &h_migration_set_state);
+  cls.register_cxx_method(method::migration_get, migration_get, &h_migration_get);
+  cls.register_cxx_method(method::migration_remove, migration_remove, &h_migration_remove);
 
-  cls_register_cxx_method(h_class, "set_modify_timestamp",
-	            	  CLS_METHOD_RD | CLS_METHOD_WR,
-                          set_modify_timestamp, &h_set_modify_timestamp);
+  cls.register_cxx_method(method::set_modify_timestamp, set_modify_timestamp, &h_set_modify_timestamp);
 
-  cls_register_cxx_method(h_class, "set_access_timestamp",
-	            	  CLS_METHOD_RD | CLS_METHOD_WR,
-                          set_access_timestamp, &h_set_access_timestamp);
+  cls.register_cxx_method(method::set_access_timestamp, set_access_timestamp, &h_set_access_timestamp);
 
-  /* methods for the rbd_children object */
-  cls_register_cxx_method(h_class, "add_child",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  add_child, &h_add_child);
-  cls_register_cxx_method(h_class, "remove_child",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  remove_child, &h_remove_child);
-  cls_register_cxx_method(h_class, "get_children",
-			  CLS_METHOD_RD,
-			  get_children, &h_get_children);
+  cls.register_cxx_method(method::add_child, add_child, &h_add_child);
+  cls.register_cxx_method(method::remove_child, remove_child, &h_remove_child);
+  cls.register_cxx_method(method::get_children, get_children, &h_get_children);
 
   /* methods for the rbd_id.$image_name objects */
-  cls_register_cxx_method(h_class, "get_id",
-			  CLS_METHOD_RD,
-			  get_id, &h_get_id);
-  cls_register_cxx_method(h_class, "set_id",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  set_id, &h_set_id);
+  cls.register_cxx_method(method::get_id, get_id, &h_get_id);
+  cls.register_cxx_method(method::set_id, set_id, &h_set_id);
 
   /* methods for the rbd_directory object */
-  cls_register_cxx_method(h_class, "dir_get_id",
-			  CLS_METHOD_RD,
-			  dir_get_id, &h_dir_get_id);
-  cls_register_cxx_method(h_class, "dir_get_name",
-			  CLS_METHOD_RD,
-			  dir_get_name, &h_dir_get_name);
-  cls_register_cxx_method(h_class, "dir_list",
-			  CLS_METHOD_RD,
-			  dir_list, &h_dir_list);
-  cls_register_cxx_method(h_class, "dir_add_image",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  dir_add_image, &h_dir_add_image);
-  cls_register_cxx_method(h_class, "dir_remove_image",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  dir_remove_image, &h_dir_remove_image);
-  cls_register_cxx_method(h_class, "dir_rename_image",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  dir_rename_image, &h_dir_rename_image);
-  cls_register_cxx_method(h_class, "dir_state_assert", CLS_METHOD_RD,
-                          dir_state_assert, &h_dir_state_assert);
-  cls_register_cxx_method(h_class, "dir_state_set",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-                          dir_state_set, &h_dir_state_set);
+  cls.register_cxx_method(method::dir_get_id, dir_get_id, &h_dir_get_id);
+  cls.register_cxx_method(method::dir_get_name, dir_get_name, &h_dir_get_name);
+  cls.register_cxx_method(method::dir_list, dir_list, &h_dir_list);
+  cls.register_cxx_method(method::dir_add_image, dir_add_image, &h_dir_add_image);
+  cls.register_cxx_method(method::dir_remove_image, dir_remove_image, &h_dir_remove_image);
+  cls.register_cxx_method(method::dir_rename_image, dir_rename_image, &h_dir_rename_image);
+  cls.register_cxx_method(method::dir_state_assert, dir_state_assert, &h_dir_state_assert);
+  cls.register_cxx_method(method::dir_state_set, dir_state_set, &h_dir_state_set);
 
   /* methods for the rbd_object_map.$image_id object */
-  cls_register_cxx_method(h_class, "object_map_load",
-                          CLS_METHOD_RD,
-			  object_map_load, &h_object_map_load);
-  cls_register_cxx_method(h_class, "object_map_save",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-			  object_map_save, &h_object_map_save);
-  cls_register_cxx_method(h_class, "object_map_resize",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-			  object_map_resize, &h_object_map_resize);
-  cls_register_cxx_method(h_class, "object_map_update",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-			  object_map_update, &h_object_map_update);
-  cls_register_cxx_method(h_class, "object_map_snap_add",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-			  object_map_snap_add, &h_object_map_snap_add);
-  cls_register_cxx_method(h_class, "object_map_snap_remove",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-			  object_map_snap_remove, &h_object_map_snap_remove);
+  cls.register_cxx_method(method::object_map_load, object_map_load, &h_object_map_load);
+  cls.register_cxx_method(method::object_map_save, object_map_save, &h_object_map_save);
+  cls.register_cxx_method(method::object_map_resize, object_map_resize, &h_object_map_resize);
+  cls.register_cxx_method(method::object_map_update, object_map_update, &h_object_map_update);
+  cls.register_cxx_method(method::object_map_snap_add, object_map_snap_add, &h_object_map_snap_add);
+  cls.register_cxx_method(method::object_map_snap_remove, object_map_snap_remove, &h_object_map_snap_remove);
 
  /* methods for the old format */
-  cls_register_cxx_method(h_class, "snap_list",
-			  CLS_METHOD_RD,
-			  old_snapshots_list, &h_old_snapshots_list);
-  cls_register_cxx_method(h_class, "snap_add",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  old_snapshot_add, &h_old_snapshot_add);
-  cls_register_cxx_method(h_class, "snap_remove",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  old_snapshot_remove, &h_old_snapshot_remove);
-  cls_register_cxx_method(h_class, "snap_rename",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  old_snapshot_rename, &h_old_snapshot_rename);
+  cls.register_cxx_method(method::snap_list, old_snapshots_list, &h_old_snapshots_list);
+  cls.register_cxx_method(method::snap_add, old_snapshot_add, &h_old_snapshot_add);
+  cls.register_cxx_method(method::snap_remove, old_snapshot_remove, &h_old_snapshot_remove);
+  cls.register_cxx_method(method::snap_rename, old_snapshot_rename, &h_old_snapshot_rename);
 
   /* methods for the rbd_mirroring object */
-  cls_register_cxx_method(h_class, "mirror_uuid_get", CLS_METHOD_RD,
-                          mirror_uuid_get, &h_mirror_uuid_get);
-  cls_register_cxx_method(h_class, "mirror_uuid_set",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          mirror_uuid_set, &h_mirror_uuid_set);
-  cls_register_cxx_method(h_class, "mirror_mode_get", CLS_METHOD_RD,
-                          mirror_mode_get, &h_mirror_mode_get);
-  cls_register_cxx_method(h_class, "mirror_mode_set",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          mirror_mode_set, &h_mirror_mode_set);
-  cls_register_cxx_method(h_class, "mirror_remote_namespace_get",
-                          CLS_METHOD_RD, mirror_remote_namespace_get,
-                          &h_mirror_remote_namespace_get);
-  cls_register_cxx_method(h_class, "mirror_remote_namespace_set",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          mirror_remote_namespace_set,
-                          &h_mirror_remote_namespace_set);
-  cls_register_cxx_method(h_class, "mirror_peer_ping",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          mirror_peer_ping, &h_mirror_peer_ping);
-  cls_register_cxx_method(h_class, "mirror_peer_list", CLS_METHOD_RD,
-                          mirror_peer_list, &h_mirror_peer_list);
-  cls_register_cxx_method(h_class, "mirror_peer_add",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          mirror_peer_add, &h_mirror_peer_add);
-  cls_register_cxx_method(h_class, "mirror_peer_remove",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          mirror_peer_remove, &h_mirror_peer_remove);
-  cls_register_cxx_method(h_class, "mirror_peer_set_client",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          mirror_peer_set_client, &h_mirror_peer_set_client);
-  cls_register_cxx_method(h_class, "mirror_peer_set_cluster",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          mirror_peer_set_cluster, &h_mirror_peer_set_cluster);
-  cls_register_cxx_method(h_class, "mirror_peer_set_direction",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          mirror_peer_set_direction,
-                          &h_mirror_peer_set_direction);
-  cls_register_cxx_method(h_class, "mirror_image_list", CLS_METHOD_RD,
-                          mirror_image_list, &h_mirror_image_list);
-  cls_register_cxx_method(h_class, "mirror_image_get_image_id", CLS_METHOD_RD,
-                          mirror_image_get_image_id,
-                          &h_mirror_image_get_image_id);
-  cls_register_cxx_method(h_class, "mirror_image_get", CLS_METHOD_RD,
-                          mirror_image_get, &h_mirror_image_get);
-  cls_register_cxx_method(h_class, "mirror_image_set",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          mirror_image_set, &h_mirror_image_set);
-  cls_register_cxx_method(h_class, "mirror_image_remove",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          mirror_image_remove, &h_mirror_image_remove);
-  cls_register_cxx_method(h_class, "mirror_image_status_set",
-                          CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PROMOTE,
-                          mirror_image_status_set, &h_mirror_image_status_set);
-  cls_register_cxx_method(h_class, "mirror_image_status_remove",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          mirror_image_status_remove,
-			  &h_mirror_image_status_remove);
-  cls_register_cxx_method(h_class, "mirror_image_status_get", CLS_METHOD_RD,
-                          mirror_image_status_get, &h_mirror_image_status_get);
-  cls_register_cxx_method(h_class, "mirror_image_status_list", CLS_METHOD_RD,
-                          mirror_image_status_list,
-			  &h_mirror_image_status_list);
-  cls_register_cxx_method(h_class, "mirror_image_status_get_summary",
-			  CLS_METHOD_RD, mirror_image_status_get_summary,
-			  &h_mirror_image_status_get_summary);
-  cls_register_cxx_method(h_class, "mirror_image_status_remove_down",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          mirror_image_status_remove_down,
-			  &h_mirror_image_status_remove_down);
-  cls_register_cxx_method(h_class, "mirror_image_instance_get", CLS_METHOD_RD,
-                          mirror_image_instance_get,
-                          &h_mirror_image_instance_get);
-  cls_register_cxx_method(h_class, "mirror_image_instance_list", CLS_METHOD_RD,
-                          mirror_image_instance_list,
-                          &h_mirror_image_instance_list);
-  cls_register_cxx_method(h_class, "mirror_instances_list", CLS_METHOD_RD,
-                          mirror_instances_list, &h_mirror_instances_list);
-  cls_register_cxx_method(h_class, "mirror_instances_add",
-                          CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PROMOTE,
-                          mirror_instances_add, &h_mirror_instances_add);
-  cls_register_cxx_method(h_class, "mirror_instances_remove",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          mirror_instances_remove,
-                          &h_mirror_instances_remove);
-  cls_register_cxx_method(h_class, "mirror_image_map_list",
-                          CLS_METHOD_RD, mirror_image_map_list,
-                          &h_mirror_image_map_list);
-  cls_register_cxx_method(h_class, "mirror_image_map_update",
-                          CLS_METHOD_WR, mirror_image_map_update,
-                          &h_mirror_image_map_update);
-  cls_register_cxx_method(h_class, "mirror_image_map_remove",
-                          CLS_METHOD_WR, mirror_image_map_remove,
-                          &h_mirror_image_map_remove);
-  cls_register_cxx_method(h_class, "mirror_image_snapshot_unlink_peer",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          mirror_image_snapshot_unlink_peer,
-                          &h_mirror_image_snapshot_unlink_peer);
-  cls_register_cxx_method(h_class, "mirror_image_snapshot_set_copy_progress",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          mirror_image_snapshot_set_copy_progress,
-                          &h_mirror_image_snapshot_set_copy_progress);
+  cls.register_cxx_method(method::mirror_uuid_get, mirror_uuid_get, &h_mirror_uuid_get);
+  cls.register_cxx_method(method::mirror_uuid_set, mirror_uuid_set, &h_mirror_uuid_set);
+  cls.register_cxx_method(method::mirror_mode_get, mirror_mode_get, &h_mirror_mode_get);
+  cls.register_cxx_method(method::mirror_mode_set, mirror_mode_set, &h_mirror_mode_set);
+  cls.register_cxx_method(method::mirror_remote_namespace_get, mirror_remote_namespace_get, &h_mirror_remote_namespace_get);
+  cls.register_cxx_method(method::mirror_remote_namespace_set, mirror_remote_namespace_set, &h_mirror_remote_namespace_set);
+  cls.register_cxx_method(method::mirror_peer_ping, mirror_peer_ping, &h_mirror_peer_ping);
+  cls.register_cxx_method(method::mirror_peer_list, mirror_peer_list, &h_mirror_peer_list);
+  cls.register_cxx_method(method::mirror_peer_add, mirror_peer_add, &h_mirror_peer_add);
+  cls.register_cxx_method(method::mirror_peer_remove, mirror_peer_remove, &h_mirror_peer_remove);
+  cls.register_cxx_method(method::mirror_peer_set_client, mirror_peer_set_client, &h_mirror_peer_set_client);
+  cls.register_cxx_method(method::mirror_peer_set_cluster, mirror_peer_set_cluster, &h_mirror_peer_set_cluster);
+  cls.register_cxx_method(method::mirror_peer_set_direction, mirror_peer_set_direction, &h_mirror_peer_set_direction);
+  cls.register_cxx_method(method::mirror_image_list, mirror_image_list, &h_mirror_image_list);
+  cls.register_cxx_method(method::mirror_image_get_image_id, mirror_image_get_image_id, &h_mirror_image_get_image_id);
+  cls.register_cxx_method(method::mirror_image_get, mirror_image_get, &h_mirror_image_get);
+  cls.register_cxx_method(method::mirror_image_set, mirror_image_set, &h_mirror_image_set);
+  cls.register_cxx_method(method::mirror_image_remove, mirror_image_remove, &h_mirror_image_remove);
+  cls.register_cxx_method(method::mirror_image_status_set, mirror_image_status_set, &h_mirror_image_status_set);
+  cls.register_cxx_method(method::mirror_image_status_remove, mirror_image_status_remove, &h_mirror_image_status_remove);
+  cls.register_cxx_method(method::mirror_image_status_get, mirror_image_status_get, &h_mirror_image_status_get);
+  cls.register_cxx_method(method::mirror_image_status_list, mirror_image_status_list, &h_mirror_image_status_list);
+  cls.register_cxx_method(method::mirror_image_status_get_summary, mirror_image_status_get_summary, &h_mirror_image_status_get_summary);
+  cls.register_cxx_method(method::mirror_image_status_remove_down, mirror_image_status_remove_down, &h_mirror_image_status_remove_down);
+  cls.register_cxx_method(method::mirror_image_instance_get, mirror_image_instance_get, &h_mirror_image_instance_get);
+  cls.register_cxx_method(method::mirror_image_instance_list, mirror_image_instance_list, &h_mirror_image_instance_list);
+  cls.register_cxx_method(method::mirror_instances_list, mirror_instances_list, &h_mirror_instances_list);
+  cls.register_cxx_method(method::mirror_instances_add, mirror_instances_add, &h_mirror_instances_add);
+  cls.register_cxx_method(method::mirror_instances_remove, mirror_instances_remove, &h_mirror_instances_remove);
+  cls.register_cxx_method(method::mirror_image_map_list, mirror_image_map_list, &h_mirror_image_map_list);
+  cls.register_cxx_method(method::mirror_image_map_update, mirror_image_map_update, &h_mirror_image_map_update);
+  cls.register_cxx_method(method::mirror_image_map_remove, mirror_image_map_remove, &h_mirror_image_map_remove);
+  cls.register_cxx_method(method::mirror_image_snapshot_unlink_peer, mirror_image_snapshot_unlink_peer, &h_mirror_image_snapshot_unlink_peer);
+  cls.register_cxx_method(method::mirror_image_snapshot_set_copy_progress, mirror_image_snapshot_set_copy_progress, &h_mirror_image_snapshot_set_copy_progress);
 
   /* methods for the groups feature */
-  cls_register_cxx_method(h_class, "group_dir_list",
-			  CLS_METHOD_RD,
-			  group_dir_list, &h_group_dir_list);
-  cls_register_cxx_method(h_class, "group_dir_add",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  group_dir_add, &h_group_dir_add);
-  cls_register_cxx_method(h_class, "group_dir_remove",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  group_dir_remove, &h_group_dir_remove);
-  cls_register_cxx_method(h_class, "group_dir_rename",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          group_dir_rename, &h_group_dir_rename);
-  cls_register_cxx_method(h_class, "group_image_remove",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  group_image_remove, &h_group_image_remove);
-  cls_register_cxx_method(h_class, "group_image_list",
-			  CLS_METHOD_RD,
-			  group_image_list, &h_group_image_list);
-  cls_register_cxx_method(h_class, "group_image_set",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  group_image_set, &h_group_image_set);
-  cls_register_cxx_method(h_class, "image_group_add",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  image_group_add, &h_image_group_add);
-  cls_register_cxx_method(h_class, "image_group_remove",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  image_group_remove, &h_image_group_remove);
-  cls_register_cxx_method(h_class, "image_group_get",
-			  CLS_METHOD_RD,
-			  image_group_get, &h_image_group_get);
-  cls_register_cxx_method(h_class, "group_snap_set",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  group_snap_set, &h_group_snap_set);
-  cls_register_cxx_method(h_class, "group_snap_remove",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  group_snap_remove, &h_group_snap_remove);
-  cls_register_cxx_method(h_class, "group_snap_get_by_id",
-			  CLS_METHOD_RD,
-			  group_snap_get_by_id, &h_group_snap_get_by_id);
-  cls_register_cxx_method(h_class, "group_snap_list",
-			  CLS_METHOD_RD,
-			  group_snap_list, &h_group_snap_list);
-  cls_register_cxx_method(h_class, "group_snap_list_order",
-			  CLS_METHOD_RD,
-			  group_snap_list_order, &h_group_snap_list_order);
+  cls.register_cxx_method(method::group_dir_list, group_dir_list, &h_group_dir_list);
+  cls.register_cxx_method(method::group_dir_add, group_dir_add, &h_group_dir_add);
+  cls.register_cxx_method(method::group_dir_remove, group_dir_remove, &h_group_dir_remove);
+  cls.register_cxx_method(method::group_dir_rename, group_dir_rename, &h_group_dir_rename);
+  cls.register_cxx_method(method::group_image_remove, group_image_remove, &h_group_image_remove);
+  cls.register_cxx_method(method::group_image_list, group_image_list, &h_group_image_list);
+  cls.register_cxx_method(method::group_image_set, group_image_set, &h_group_image_set);
+  cls.register_cxx_method(method::image_group_add, image_group_add, &h_image_group_add);
+  cls.register_cxx_method(method::image_group_remove, image_group_remove, &h_image_group_remove);
+  cls.register_cxx_method(method::image_group_get, image_group_get, &h_image_group_get);
+  cls.register_cxx_method(method::group_snap_set, group_snap_set, &h_group_snap_set);
+  cls.register_cxx_method(method::group_snap_remove, group_snap_remove, &h_group_snap_remove);
+  cls.register_cxx_method(method::group_snap_get_by_id, group_snap_get_by_id, &h_group_snap_get_by_id);
+  cls.register_cxx_method(method::group_snap_list, group_snap_list, &h_group_snap_list);
+  cls.register_cxx_method(method::group_snap_list_order, group_snap_list_order, &h_group_snap_list_order);
 
   /* rbd_trash object methods */
-  cls_register_cxx_method(h_class, "trash_add",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          trash_add, &h_trash_add);
-  cls_register_cxx_method(h_class, "trash_remove",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          trash_remove, &h_trash_remove);
-  cls_register_cxx_method(h_class, "trash_list",
-                          CLS_METHOD_RD,
-                          trash_list, &h_trash_list);
-  cls_register_cxx_method(h_class, "trash_get",
-                          CLS_METHOD_RD,
-                          trash_get, &h_trash_get);
-  cls_register_cxx_method(h_class, "trash_state_set",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          trash_state_set, &h_trash_state_set);
+  cls.register_cxx_method(method::trash_add, trash_add, &h_trash_add);
+  cls.register_cxx_method(method::trash_remove, trash_remove, &h_trash_remove);
+  cls.register_cxx_method(method::trash_list, trash_list, &h_trash_list);
+  cls.register_cxx_method(method::trash_get, trash_get, &h_trash_get);
+  cls.register_cxx_method(method::trash_state_set, trash_state_set, &h_trash_state_set);
 
   /* rbd_namespace object methods */
-  cls_register_cxx_method(h_class, "namespace_add",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          namespace_add, &h_namespace_add);
-  cls_register_cxx_method(h_class, "namespace_remove",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          namespace_remove, &h_namespace_remove);
-  cls_register_cxx_method(h_class, "namespace_list", CLS_METHOD_RD,
-                          namespace_list, &h_namespace_list);
+  cls.register_cxx_method(method::namespace_add, namespace_add, &h_namespace_add);
+  cls.register_cxx_method(method::namespace_remove, namespace_remove, &h_namespace_remove);
+  cls.register_cxx_method(method::namespace_list, namespace_list, &h_namespace_list);
 
   /* data object methods */
-  cls_register_cxx_method(h_class, "copyup",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  copyup, &h_copyup);
-  cls_register_cxx_method(h_class, "sparse_copyup",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  sparse_copyup, &h_sparse_copyup);
-  cls_register_cxx_method(h_class, "assert_snapc_seq",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          assert_snapc_seq,
-                          &h_assert_snapc_seq);
-  cls_register_cxx_method(h_class, "sparsify",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  sparsify, &h_sparsify);
+  cls.register_cxx_method(method::copyup, copyup, &h_copyup);
+  cls.register_cxx_method(method::sparse_copyup, sparse_copyup, &h_sparse_copyup);
+  cls.register_cxx_method(method::assert_snapc_seq, assert_snapc_seq, &h_assert_snapc_seq);
+  cls.register_cxx_method(method::sparsify, sparsify, &h_sparsify);
 }

@@ -47,6 +47,23 @@ enum class op_type_t : uint8_t {
     MAX
 };
 
+enum class txn_stage_t : uint8_t {
+    COLLOCK_WAIT = 0,  // waiting on the collection ordering_lock
+    COLLOCK_HOLD,      // collection ordering_lock held (acquire -> release at prepare_record)
+    THROTTLER_WAIT,    // waiting for a throttler slot
+    BUILD,             // building the transaction (_do_transaction_step loop)
+    BUILD_GET_ONODE,   // onode_manager get/get_or_create calls within BUILD
+    SUBMIT_TOTAL,      // the whole submit_transaction (pipeline + journal write)
+    // Sub-phases of submit_transaction:
+    SUBMIT_RESERVE,        // enter(reserve_projected_usage) + epm reserve_projected_usage
+    SUBMIT_OOL_WRITE,      // write_delayed + write_preallocated OOL extents (device I/O)
+    SUBMIT_LBA_UPDATE,     // update_lba_mappings
+    SUBMIT_PREPARE_ENTER,  // enter(prepare) pipeline stage (global OrderedExclusive wait)
+    SUBMIT_PREPARE_RECORD, // prepare_record (record encoding)
+    SUBMIT_JOURNAL,        // journal->submit_record -- POST-lock (not part of the hold)
+    MAX
+};
+
 class SeastoreCollection final : public FuturizedCollection {
 public:
   template <typename... T>
@@ -190,6 +207,7 @@ public:
   // only exposed to SeaStore
   public:
     base_ertr::future<> umount();
+    seastar::future<> do_gc();
     // init managers and mount transaction_manager
     seastar::future<> mount_managers();
 
@@ -243,7 +261,11 @@ public:
       TransactionRef transaction;
 
       ceph::os::Transaction::iterator iter;
-      std::chrono::steady_clock::time_point begin_timestamp = std::chrono::steady_clock::now();
+      seastar::lowres_clock::time_point begin_timestamp = seastar::lowres_clock::now();
+
+      seastar::lowres_clock::duration build_time{0};
+      seastar::lowres_clock::duration get_onode_time{0};
+      seastar::lowres_clock::duration submit_time{0};
 
       void reset_preserve_handle(TransactionManager &tm) {
         tm.reset_transaction_preserve_handle(*transaction);
@@ -265,7 +287,7 @@ public:
       op_type_t op_type,
       cache_hint_t cache_hint_flags,
       F &&f) const {
-      auto begin_time = std::chrono::steady_clock::now();
+      auto begin_time = seastar::lowres_clock::now();
       return seastar::do_with(
         oid, Ret{}, std::forward<F>(f),
         [this, ch, src, op_type, begin_time, tname, cache_hint_flags
@@ -295,7 +317,7 @@ public:
           });
         }).safe_then([&ret, op_type, begin_time, this] {
           const_cast<Shard*>(this)->add_latency_sample(op_type,
-                     std::chrono::steady_clock::now() - begin_time);
+                     seastar::lowres_clock::now() - begin_time);
           return seastar::make_ready_future<Ret>(ret);
         });
       });
@@ -359,6 +381,10 @@ public:
       internal_context_t &ctx,
       Onode &onode,
       Onode &d_onode);
+    tm_ret _maybe_copy_on_write(
+      internal_context_t &ctx,
+      Onode &onode,
+      ObjectDataHandler &handler);
     tm_ret _rename(
       internal_context_t &ctx,
       OnodeRef &onode,
@@ -401,6 +427,11 @@ public:
     tm_ret _split_collection(
       internal_context_t &ctx,
       const coll_t& cid, int bits);
+    tm_ret _merge_collection(
+      internal_context_t &ctx,
+      coll_t cid,
+      coll_t dest_cid,
+      int bits);
     tm_ret _remove_collection(
       internal_context_t &ctx,
       const coll_t& cid);
@@ -409,9 +440,61 @@ public:
 
     static constexpr auto LAT_MAX = static_cast<std::size_t>(op_type_t::MAX);
 
+    // Histogram bucket upper bounds in milliseconds (1ms–100ms).
+    // Ops above 100ms land in the last bucket as overflow. The smallest
+    // bucket is 1ms: sub-ms latencies are below lowres_clock resolution
+    // (~task_quota) and cannot be resolved, so no finer buckets are kept.
+    static constexpr std::array<double, 12> lat_hist_bounds_ms = {
+      1,
+      1.5, 2, 3,
+      5,
+      7.5, 10,
+      15, 20,
+      30, 50,
+      100
+    };
+
+    // Buckets for the per-transaction conflict/replay distribution.
+    static constexpr std::size_t REPLAY_BUCKETS = 16;
+
+    static constexpr auto STAGE_MAX = static_cast<std::size_t>(txn_stage_t::MAX);
+    // Upper bounds (milliseconds) for the per-stage do_transaction latency
+    // histograms. Smallest bucket is 1ms; sub-ms is below lowres_clock
+    // resolution (~task_quota) and cannot be resolved.
+    static constexpr std::array<double, 12> STAGE_LAT_BUCKETS_MS = {
+      1, 1.5, 2, 3, 5, 7.5,
+      10, 15, 20, 30, 50, 100
+    };
+
+    static constexpr double TAIL_SLOW_MS = 5;        // 5 ms
+    static constexpr double TAIL_VERY_SLOW_MS = 10;  // 10 ms
+
     struct {
       std::array<seastar::metrics::histogram, LAT_MAX> op_lat;
+      seastar::metrics::histogram conflict_replays;
+      std::array<seastar::metrics::histogram, STAGE_MAX> stage_lat;
+      uint64_t onode_lookups = 0;      // tree lookups
+      uint64_t onode_lookup_nodes = 0; // nodes searched (~depth/lookup)
+      uint64_t onode_str_cmp_count = 0;// ns/oid memcmp calls
+      uint64_t onode_inserts = 0;
+      uint64_t onode_updates = 0;
+      uint64_t onode_erases = 0;
+      int64_t  onode_extents_delta = 0;
+
+      // same metrics collected two more times for high tail txns.
+      std::array<seastar::metrics::histogram, STAGE_MAX> stage_lat_slow;
+      std::array<seastar::metrics::histogram, STAGE_MAX> stage_lat_very_slow;
     } stats;
+
+    void add_onode_tree_sample(const Transaction::tree_stats_t& ts) {
+      stats.onode_lookups        += ts.lookup_count;
+      stats.onode_lookup_nodes   += ts.nodes_visited;
+      stats.onode_str_cmp_count  += ts.string_cmp_count;
+      stats.onode_inserts        += ts.num_inserts;
+      stats.onode_updates        += ts.num_updates;
+      stats.onode_erases         += ts.num_erases;
+      stats.onode_extents_delta  += ts.extents_num_delta;
+    }
 
     seastar::metrics::histogram& get_latency(
       op_type_t op_type) {
@@ -420,10 +503,62 @@ public:
     }
 
     void add_latency_sample(op_type_t op_type,
-        std::chrono::steady_clock::duration dur) {
+        seastar::lowres_clock::duration dur) {
       seastar::metrics::histogram& lat = get_latency(op_type);
+      auto ms = std::chrono::duration_cast<
+        std::chrono::duration<double, std::milli>>(dur).count();
       lat.sample_count++;
-      lat.sample_sum += std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
+      lat.sample_sum += ms;
+      bool found = false;
+      for (auto& b : lat.buckets) {
+        if (ms <= b.upper_bound) {
+          ++b.count;
+          found = true;
+          break;
+        }
+      }
+      if (!found && !lat.buckets.empty()) {
+        ++lat.buckets.back().count;
+      }
+    }
+
+    // Record how many times a just-completed transaction was conflicted/replayed.
+    // Called only from the do_transaction_no_callbacks() completion path.
+    void add_conflict_replay_sample(std::size_t num_replays) {
+      auto& hist = stats.conflict_replays;
+      if (hist.buckets.empty()) {
+        // register_metrics() did not run (store inactive); nothing to record.
+        return;
+      }
+      std::size_t idx = num_replays < REPLAY_BUCKETS ?
+        num_replays : REPLAY_BUCKETS - 1;
+      ++hist.buckets[idx].count;
+      ++hist.sample_count;
+      hist.sample_sum += num_replays;
+    }
+
+    // Record the latency of one do_transaction stage (milliseconds). Buckets are
+    // non-cumulative (bucket = first upper_bound >= value); values above the top
+    // bound aren't bucketed but still land in sample_count/sample_sum.
+    void add_stage_latency_sample(
+        std::array<seastar::metrics::histogram, STAGE_MAX>& arr,
+        txn_stage_t stage,
+        seastar::lowres_clock::duration dur) {
+      auto& hist = arr[static_cast<std::size_t>(stage)];
+      if (hist.buckets.empty()) {
+        // register_metrics() did not run (store inactive); nothing to record.
+        return;
+      }
+      auto ms = std::chrono::duration_cast<
+        std::chrono::duration<double, std::milli>>(dur).count();
+      for (auto& b : hist.buckets) {
+        if (ms <= b.upper_bound) {
+          ++b.count;
+          break;
+        }
+      }
+      ++hist.sample_count;
+      hist.sample_sum += ms;
     }
 
     /*
@@ -433,14 +568,6 @@ public:
     omap_root_t get_omap_root(omap_type_t type, Onode& onode) const {
       return onode.get_root(type).get(
         onode.get_metadata_hint(device->get_block_size()));
-    }
-
-    omap_root_t rename_omap_root(
-      omap_type_t type,
-      Onode& onode,
-      Onode& d_onode) const {
-      return onode.get_root(type).get(
-        d_onode.get_metadata_hint(device->get_block_size()));
     }
 
     omaptree_get_value_ret omaptree_get_value(
@@ -585,6 +712,12 @@ public:
     return shard_stores.local().mshard_stores[0]->get_fsid();
   }
 
+  uint64_t get_max_object_size() const override final {
+    return std::min<uint64_t>(
+      crimson::common::local_conf()->osd_max_object_size,
+      crimson::common::get_conf<uint64_t>("seastore_default_max_object_size"));
+  }
+
   seastar::future<> write_meta(const std::string& key, const std::string& value) override;
 
   seastar::future<std::tuple<int, std::string>> read_meta(const std::string& key) override;
@@ -592,6 +725,8 @@ public:
   seastar::future<std::vector<coll_core_t>> list_collections() override;
 
   seastar::future<std::string> get_default_device_class() final;
+
+  seastar::future<> do_gc() override;
 
   BackendStore get_backend_store(store_index_t store_index) override {
     assert(!shard_stores.local().mshard_stores.empty());
@@ -614,6 +749,7 @@ public:
     assert(shard_store.get_status() == true);
     return shard_store;
   }
+
   static col_obj_ranges_t
   get_objs_range(CollectionRef ch, unsigned bits);
 

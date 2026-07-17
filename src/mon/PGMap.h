@@ -24,19 +24,18 @@
 
 #include "include/buffer.h"
 #include "include/ceph_fs.h" // for ceph_statfs
-#include "common/debug.h" // for cmdmap_t
-#include "common/cmdparse.h"
+#include "common/cmdparse.h" // for cmdmap_t
 #include "common/Formatter.h"
 #include "osd/osd_types.h"
 #include "include/mempool.h"
-#include "mon/health_check.h"
-#include <sstream>
 #include "mon/mon_types.h"
 
 #include <cstdint>
 #include <iosfwd>
 #include <map>
+#include <optional>
 #include <set>
+#include <sstream>
 #include <string>
 
 struct health_check_map_t;
@@ -376,6 +375,7 @@ public:
                              const utime_t ts,
                              const int64_t pool,
                              const pool_stat_t& old_pool_sum);
+  std::vector<std::pair<int32_t, osd_stat_t>> get_sorted_osd_stats() const;
 
  public:
 

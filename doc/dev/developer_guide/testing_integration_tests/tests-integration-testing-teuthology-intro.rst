@@ -110,9 +110,6 @@ integration tests for all the Ceph components.
   * - **Component**
     - **Function**
 
-  * - `ceph-deploy <https://github.com/ceph/ceph/tree/master/qa/suites/ceph-deploy>`_
-    - install a Ceph cluster with ``ceph-deploy`` (`ceph-deploy man page`_)
-
   * - `dummy <https://github.com/ceph/ceph/tree/master/qa/suites/dummy>`_
     - get a machine, do nothing and return success (commonly used to verify
       that the integration testing infrastructure works as expected)
@@ -300,12 +297,12 @@ yaml facets, followed by an expression in curly braces (``{}``) consisting of
 a list of yaml facets in order of concatenation. For instance the
 test description::
 
-  ceph-deploy/basic/{distros/rocky_10.0.yaml tasks/ceph-deploy.yaml}
+  foo/basic/{distros/rocky_10.0.yaml tasks/ceph.yaml}
 
 signifies the concatenation of two files:
 
-* ceph-deploy/basic/distros/rocky_10.0.yaml
-* ceph-deploy/basic/tasks/ceph-deploy.yaml
+* foo/basic/distros/rocky_10.0.yaml
+* foo/basic/tasks/ceph.yaml
 
 How tests are built from directories
 ------------------------------------
@@ -329,62 +326,57 @@ The convolution operator, implemented as a (typically empty) file called ``%``,
 tells teuthology to construct a test matrix from YAML facets found in
 subdirectories below the directory containing the operator.
 
-For example, the `ceph-deploy suite
-<https://github.com/ceph/ceph/tree/master/qa/suites/ceph-deploy/>`_ is
-defined by the ``suites/ceph-deploy/`` tree, which consists of the files and
-subdirectories in the following structure
+For example, a hypothetical ``foo`` suite is defined by the ``qa/suites/foo``
+tree, which consists of the files and subdirectories in the following structure
 
 .. code-block:: none
 
-  qa/suites/ceph-deploy
+  qa/suites/foo
   ├── %
   ├── distros
   │   ├── rocky_10.0.yaml
   │   └── ubuntu_24.04.yaml
   └── tasks
-      └── ceph-deploy.yaml
+      └── ceph.yaml
 
 This is interpreted as a 2x1 matrix consisting of two tests:
 
-1. ceph-deploy/basic/{distros/rocky_10.0.yaml tasks/ceph-deploy.yaml}
-2. ceph-deploy/basic/{distros/ubuntu_24.04.yaml tasks/ceph-deploy.yaml}
+1. ``foo/{distros/rocky_10.0.yaml tasks/ceph.yaml}``
+2. ``foo/{distros/ubuntu_24.04.yaml tasks/ceph.yaml}``
 
-i.e. the concatenation of rocky_10.0.yaml and ceph-deploy.yaml and
-the concatenation of ubuntu_24.04.yaml and ceph-deploy.yaml, respectively.
-In human terms, this means that the task found in ``ceph-deploy.yaml`` is
-intended to run on both Rocky Linux 10.0 and Ubuntu 24.04 LTS.
+i.e. the concatenation of ``rocky_10.0.yaml`` and ``ceph.yaml`` and the
+concatenation of ``ubuntu_24.04.yaml`` and ``ceph.yaml``, respectively. In
+human terms, this means that the task found in ``ceph.yaml`` is intended to run
+on both Rocky Linux 10.0 and Ubuntu 24.04 LTS.
 
-Without the file percent, the ``ceph-deploy`` tree would be interpreted as
+Without the file percent, the ``foo`` tree would be interpreted as
 three standalone tests:
 
-* ceph-deploy/basic/distros/rocky_10.0.yaml
-* ceph-deploy/basic/distros/ubuntu_24.04.yaml
-* ceph-deploy/basic/tasks/ceph-deploy.yaml
+* foo/distros/rocky_10.0.yaml
+* foo/distros/ubuntu_24.04.yaml
+* foo/tasks/ceph.yaml
 
 (which would of course be wrong in this case).
 
-Referring to the `ceph/qa sub-directory`_, you will notice that the
-``rocky_10.0.yaml`` and ``ubuntu_24.04.yaml`` files in the
-``suites/ceph-deploy/basic/distros/`` directory are implemented as symlinks.
-By using symlinks instead of copying, a single file can appear in multiple
-suites. This eases the maintenance of the test framework as a whole.
+You will notice that symlinks are sometimes used in QA suites. By using
+symlinks instead of copying, a single file can appear in multiple suites. This
+eases the maintenance of the test framework as a whole.
 
-All the tests generated from the ``suites/ceph-deploy/`` directory tree
-(also known as the "ceph-deploy suite") can be run with
+All the tests generated from the ``suites/foo/`` directory tree
+(which would be referred to as the "foo suite") can be run with
 
 .. prompt:: bash $
 
-   teuthology-suite --machine-type smithi --suite ceph-deploy
+   teuthology-suite --machine-type smithi --suite foo
 
-An individual test from the `ceph-deploy suite`_ can be run by adding the
-``--filter`` option
+An individual test would be run by adding the ``--filter`` option:
 
 .. prompt:: bash $
 
    teuthology-suite \
       --machine-type smithi \
-      --suite ceph-deploy/basic \
-      --filter 'ceph-deploy/basic/{distros/ubuntu_24.04.yaml tasks/ceph-deploy.yaml}'
+      --suite foo \
+      --filter 'foo/{distros/ubuntu_24.04.yaml tasks/ceph.yaml}'
 
 .. note:: To run a standalone test like the one in `Reading a standalone
    test`_, ``--suite`` alone is sufficient. If you want to run a single
@@ -673,4 +665,3 @@ test will be first.
 .. _teuthology repository: https://github.com/ceph/teuthology
 .. _teuthology framework: https://github.com/ceph/teuthology
 .. _teuthology-describe usecases: https://gist.github.com/jdurgin/09711d5923b583f60afc
-.. _ceph-deploy man page: ../../../../man/8/ceph-deploy

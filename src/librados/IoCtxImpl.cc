@@ -666,8 +666,12 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
   Context *oncommit = new C_SafeCond(mylock, cond, &done, &r);
 
   int op = o->ops[0].op.op;
-  ldout(client->cct, 10) << ceph_osd_op_name(op) << " oid=" << oid
-			 << " nspace=" << oloc.nspace << dendl;
+  ldout(client->cct, 10) << ceph_osd_op_name(op) << " oid=" << oid;
+  if (!oloc.nspace.empty()) {
+    *_dout << " nspace=" << oloc.nspace;
+  }
+  *_dout << dendl;
+
   Objecter::Op *objecter_op = objecter->prepare_mutate_op(
     oid, oloc,
     *o, snapc, ut,
@@ -720,7 +724,11 @@ int librados::IoCtxImpl::operate_read(const object_t& oid,
   Context *onack = new C_SafeCond(mylock, cond, &done, &r);
 
   int op = o->ops[0].op.op;
-  ldout(client->cct, 10) << ceph_osd_op_name(op) << " oid=" << oid << " nspace=" << oloc.nspace << dendl;
+  ldout(client->cct, 10) << ceph_osd_op_name(op) << " oid=" << oid;
+  if (!oloc.nspace.empty()) {
+    *_dout << " nspace=" << oloc.nspace;
+  }
+  *_dout << dendl;
   Objecter::Op *objecter_op = objecter->prepare_read_op(
     oid, oloc,
     *o, snap_seq, pbl,

@@ -58,6 +58,8 @@ instances or all radosgw-admin options can be put into the ``[global]`` or the
 .. confval:: rgw_account_default_quota_max_objects
 .. confval:: rgw_account_default_quota_max_size
 .. confval:: rgw_verify_ssl
+.. confval:: rgw_rest_conn_connect_to_resolved_ips
+.. confval:: rgw_rest_conn_ip_fail_timeout_secs
 .. confval:: rgw_max_chunk_size
 .. confval:: rgw_multi_obj_del_max_aio
 
@@ -233,6 +235,7 @@ Server-side Encryption Settings
 ===============================
 
 .. confval:: rgw_crypt_s3_kms_backend
+.. confval:: rgw_crypt_sse_algorithm
 
 Barbican Settings
 =================
@@ -270,6 +273,16 @@ SSE-S3 Settings
 .. confval:: rgw_crypt_sse_s3_vault_ssl_clientcert
 .. confval:: rgw_crypt_sse_s3_vault_ssl_clientkey
 
+KMS Secrets Cache Settings
+==========================
+
+.. confval:: rgw_crypt_s3_kms_cache_enabled
+.. confval:: rgw_crypt_s3_kms_cache_max_size
+.. confval:: rgw_crypt_s3_kms_cache_positive_ttl
+.. confval:: rgw_crypt_s3_kms_cache_transient_error_ttl
+.. confval:: rgw_crypt_s3_kms_cache_negative_ttl
+
+.. _Encryption: ../encryption
 
 QoS Settings
 ============
@@ -365,3 +378,16 @@ Cloud Restore feature currently enables the restoration of objects transitioned 
 .. confval:: rgw_restore_processor_period
 
 These values can be tuned based upon your specific workload to further increase the aggressiveness of restore processing. 
+
+Global CORS
+===========
+
+Configuration options that allows administrators to define a global CORS policy applied at the gateway level, affecting all buckets served by RGW.
+Previously, CORS (Cross-Origin Resource Sharing) support in RGW is limited to per-bucket configuration using the Get/PutBucketCors API, following the standard AWS S3 behavior.
+While this suffices for most use cases, it becomes a blocker when using browser-based tools that require interaction with gateway-wide resources, such as listing all buckets accessible to a user.
+These configuration options are necessary to enable CORS-based access for tools like S3 Browser, which need to list and create buckets across the gateway from a browser client.
+
+.. confval:: rgw_gcors_allow_origins
+.. confval:: rgw_gcors_allow_headers
+.. confval:: rgw_gcors_allow_methods
+.. confval:: rgw_gcors_expose_headers

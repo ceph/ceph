@@ -16,7 +16,7 @@ from typing import Any, cast, Dict, List, Optional, Set, Union
 
 from cephadmlib.call_wrappers import call, call_throws, CallVerbosity
 from cephadmlib.context import CephadmContext
-from cephadmlib.data_utils import bytes_to_human
+from ceph.utils import bytes_to_human
 from cephadmlib.exe_utils import find_executable
 from cephadmlib.file_utils import read_file
 from cephadmlib.net_utils import get_fqdn, get_ipv4_address, get_ipv6_address
@@ -849,20 +849,76 @@ class HostFacts:
 def list_networks(ctx):
     # type: (CephadmContext) -> Dict[str,Dict[str, Set[str]]]
 
-    # sadly, 18.04's iproute2 4.15.0-2ubun doesn't support the -j flag,
-    # so we'll need to use a regex to parse 'ip' command output.
-    #
-    # out, _, _ = call_throws(['ip', '-j', 'route', 'ls'])
-    # j = json.loads(out)
-    # for x in j:
-    res = _list_ipv4_networks(ctx)
-    res.update(_list_ipv6_networks(ctx))
+    # Main route tables use text ``ip route ls`` (regex parsers). BGP supplements
+    # use ``ip -j route ls proto bgp`` on supported platforms (iproute2 >= 4.18).
+    allow_lo = getattr(ctx, 'allow_lo_routes', False)
+    allow_bgp = getattr(ctx, 'allow_bgp_routes', False)
+    res = _list_ipv4_networks(
+        ctx, allow_lo_routes=allow_lo, allow_bgp_routes=allow_bgp
+    )
+    res.update(
+        _list_ipv6_networks(
+            ctx, allow_lo_routes=allow_lo, allow_bgp_routes=allow_bgp
+        )
+    )
     return res
+
+
+def list_rdma(ctx: CephadmContext) -> List[Dict[str, str]]:
+    """List RDMA devices by parsing 'rdma link show' output.
+    Returns a list of dicts with keys: link, state, physical_state, netdev.
+    Returns empty list if rdma tool is not installed or command fails.
+    """
+    execstr: Optional[str] = find_executable('rdma')
+    if not execstr:
+        logger.error("'rdma' command not found, no RDMA devices listed")
+        return []
+    try:
+        out, _, _ = call_throws(
+            ctx,
+            [execstr, 'link', 'show'],
+            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+        )
+    except Exception as e:
+        logger.error('rdma link show failed: %s', e)
+        return []
+    # Format: link <name> state <state> physical_state <phys> netdev <netdev>
+    pattern = re.compile(
+        r'link\s+(\S+)\s+state\s+(\S+)\s+physical_state\s+(\S+)\s+netdev\s+'
+        r'(\S+)'
+    )
+    result: List[Dict[str, str]] = []
+    for line in out.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        m = pattern.search(line)
+        if m:
+            result.append(
+                {
+                    'link': m.group(1),
+                    'state': m.group(2),
+                    'physical_state': m.group(3),
+                    'netdev': m.group(4),
+                }
+            )
+        else:
+            logger.debug(
+                "Skipped RDMA device '%s', as pattern did not match", line
+            )
+    return result
 
 
 def _list_ipv4_networks(
     ctx: CephadmContext,
+    allow_lo_routes: bool = False,
+    allow_bgp_routes: bool = False,
 ) -> Dict[str, Dict[str, Set[str]]]:
+    """IPv4 networks from ``ip route ls`` (and optional ``proto bgp`` supplement).
+
+    When *allow_lo_routes* is false, routes on ``lo`` are ignored by the parsers.
+    When true, ``_parse_ipv4_lo_route`` supplements the base table.
+    """
     execstr: Optional[str] = find_executable('ip')
     if not execstr:
         raise FileNotFoundError("unable to find 'ip' command")
@@ -871,10 +927,24 @@ def _list_ipv4_networks(
         [execstr, 'route', 'ls'],
         verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
     )
-    return _parse_ipv4_route(out)
+    res = _parse_ipv4_route(out, allow_lo_routes)
+    if allow_lo_routes:
+        _merge_ipv4_network_dicts(res, _parse_ipv4_lo_route(out))
+    if allow_bgp_routes:
+        bgp_out, _, _ = call_throws(
+            ctx,
+            [execstr, '-j', 'route', 'ls', 'proto', 'bgp'],
+            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+        )
+        _merge_ipv4_network_dicts(
+            res, _parse_ipv4_bgp_route(bgp_out, allow_lo_routes)
+        )
+    return res
 
 
-def _parse_ipv4_route(out: str) -> Dict[str, Dict[str, Set[str]]]:
+def _parse_ipv4_route(
+    out: str, allow_lo_routes: bool = False
+) -> Dict[str, Dict[str, Set[str]]]:
     r = {}  # type: Dict[str, Dict[str, Set[str]]]
     p = re.compile(
         r'^(\S+) (?:via \S+)? ?dev (\S+) (.*)scope link (.*)src (\S+)'
@@ -886,8 +956,13 @@ def _parse_ipv4_route(out: str) -> Dict[str, Dict[str, Set[str]]]:
         net = m[0][0]
         if '/' not in net:  # aggregate /32 mask for single host sub-networks
             net += '/32'
-        iface = m[0][1]
+        # Strip iproute2 ``@`` suffix (e.g. ``brx.0@eno1`` → ``brx.0``).
+        iface = m[0][1].split('@')[0]
+        if iface == 'lo' and not allow_lo_routes:
+            continue
         ip = m[0][4]
+        if _is_ipv4_loopback(net):
+            continue
         if net not in r:
             r[net] = {}
         if iface not in r[net]:
@@ -896,9 +971,167 @@ def _parse_ipv4_route(out: str) -> Dict[str, Dict[str, Set[str]]]:
     return r
 
 
+def _parse_ipv4_lo_route(out: str) -> Dict[str, Dict[str, Set[str]]]:
+    """``lo`` /32 without ``src``, and ``scope host`` + ``src`` (e.g. dummy /32)."""
+    r = {}  # type: Dict[str, Dict[str, Set[str]]]
+    p_lo_no_src = re.compile(
+        r'^(\S+) (?:via \S+)? ?dev (lo(?:@\S+)?) (.*)scope (?:link|host)\s*(?!src\b).*$'
+    )
+    p_host_src = re.compile(
+        r'^(\S+) (?:via \S+)? ?dev (\S+) (.*)scope host (.*)src (\S+)'
+    )
+
+    def put(net: str, iface: str, ip: str) -> None:
+        if _is_ipv4_loopback(net):
+            return
+        if net not in r:
+            r[net] = {}
+        if iface not in r[net]:
+            r[net][iface] = set()
+        r[net][iface].add(ip)
+
+    for line in out.splitlines():
+        m = p_lo_no_src.findall(line)
+        if not m:
+            continue
+        net = m[0][0]
+        if '/' not in net:
+            net += '/32'
+        iface = m[0][1].split('@')[0]
+        try:
+            n = ipaddress.ip_network(net, strict=False)
+        except ValueError:
+            continue
+        if n.prefixlen != 32:
+            continue
+        put(net, iface, str(n.network_address))
+
+    for line in out.splitlines():
+        m = p_host_src.findall(line)
+        if not m:
+            continue
+        net = m[0][0]
+        if '/' not in net:
+            net += '/32'
+        iface = m[0][1].split('@')[0]
+        ip = m[0][4]
+        put(net, iface, ip)
+
+    return r
+
+
+def _route_iface_name(dev: str) -> str:
+    """Strip iproute2 ``child@parent`` interface suffix."""
+    return dev.split('@')[0]
+
+
+def _route_dst_to_network(dst: str, version: int) -> str:
+    if '/' in dst:
+        return dst
+    return f'{dst}/{"32" if version == 4 else "128"}'
+
+
+def _parse_bgp_routes_json(
+    out: str,
+    version: int,
+    allow_lo_routes: bool = False,
+) -> Dict[str, Dict[str, Set[str]]]:
+    """Parse JSON from ``ip -j route ls proto bgp`` (or ``ip -6 -j route ls proto bgp``)."""
+    r: Dict[str, Dict[str, Set[str]]] = {}
+    try:
+        routes = json.loads(out)
+    except (json.JSONDecodeError, TypeError):
+        logger.debug('failed to parse ip -j route output as JSON')
+        return r
+    if not isinstance(routes, list):
+        return r
+
+    is_v4 = version == 4
+    host_plen = 32 if is_v4 else 128
+    is_loopback_net = _is_ipv4_loopback if is_v4 else _is_ipv6_loopback
+
+    def put(net: str, iface: str, ip: str) -> None:
+        if is_loopback_net(net):
+            return
+        if net not in r:
+            r[net] = {}
+        if iface not in r[net]:
+            r[net][iface] = set()
+        r[net][iface].add(ip)
+
+    for route in routes:
+        if not isinstance(route, dict):
+            continue
+        dst = route.get('dst')
+        if not dst or dst == 'default':
+            continue
+
+        net = _route_dst_to_network(dst, version)
+        nexthops = route.get('nexthops')
+        prefsrc = route.get('prefsrc')
+
+        if nexthops and prefsrc:
+            for nh in nexthops:
+                if not isinstance(nh, dict):
+                    continue
+                dev = nh.get('dev')
+                if not dev:
+                    continue
+                iface = _route_iface_name(dev)
+                if iface == 'lo' and not allow_lo_routes:
+                    continue
+                put(net, iface, prefsrc)
+            continue
+
+        dev = route.get('dev', '')
+        iface = _route_iface_name(dev) if dev else ''
+
+        if iface == 'lo' and not prefsrc:
+            if not allow_lo_routes:
+                continue
+            try:
+                n = ipaddress.ip_network(net, strict=False)
+            except ValueError:
+                continue
+            if n.prefixlen != host_plen:
+                continue
+            put(net, 'lo', str(n.network_address))
+            continue
+
+        if prefsrc and iface:
+            if iface == 'lo' and not allow_lo_routes:
+                continue
+            put(net, iface, prefsrc)
+
+    return r
+
+
+def _parse_ipv4_bgp_route(
+    out: str, allow_lo_routes: bool = False
+) -> Dict[str, Dict[str, Set[str]]]:
+    """Parse JSON from ``ip -j route ls proto bgp``."""
+    return _parse_bgp_routes_json(out, 4, allow_lo_routes)
+
+
+def _parse_ipv6_bgp_route(
+    out: str, allow_lo_routes: bool = False
+) -> Dict[str, Dict[str, Set[str]]]:
+    """Parse JSON from ``ip -6 -j route ls proto bgp``."""
+    return _parse_bgp_routes_json(out, 6, allow_lo_routes)
+
+
 def _list_ipv6_networks(
     ctx: CephadmContext,
+    allow_lo_routes: bool = False,
+    allow_bgp_routes: bool = False,
 ) -> Dict[str, Dict[str, Set[str]]]:
+    """IPv6 networks from ``ip -6 route`` and ``ip -6 addr``.
+
+    When *allow_lo_routes* is false, routes on ``lo`` are ignored so loopback globals
+    are not listed. When *allow_bgp_routes* is true, ``ip -6 route ls proto bgp``
+    is merged into the same shape as the main table (respecting *allow_lo_routes*
+    for ``lo`` BGP paths).
+    """
     execstr: Optional[str] = find_executable('ip')
     if not execstr:
         raise FileNotFoundError("unable to find 'ip' command")
@@ -912,11 +1145,23 @@ def _list_ipv6_networks(
         [execstr, '-6', 'addr', 'ls'],
         verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
     )
-    return _parse_ipv6_route(routes, ips)
+    res = _parse_ipv6_route(routes, ips, allow_lo_routes)
+    if allow_bgp_routes:
+        bgp_out, _, _ = call_throws(
+            ctx,
+            [execstr, '-6', '-j', 'route', 'ls', 'proto', 'bgp'],
+            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+        )
+        _merge_ipv4_network_dicts(
+            res, _parse_ipv6_bgp_route(bgp_out, allow_lo_routes)
+        )
+    return res
 
 
 def _parse_ipv6_route(
-    routes: str, ips: str
+    routes: str,
+    ips: str,
+    allow_lo_routes: bool = False,
 ) -> Dict[str, Dict[str, Set[str]]]:
     r = {}  # type: Dict[str, Dict[str, Set[str]]]
     route_p = re.compile(
@@ -931,8 +1176,10 @@ def _parse_ipv6_route(
         net = m[0][0]
         if '/' not in net:  # aggregate /128 mask for single host sub-networks
             net += '/128'
-        iface = m[0][1]
-        if iface == 'lo':  # skip loopback devices
+        iface = m[0][1].split('@')[0]
+        if iface == 'lo' and not allow_lo_routes:
+            continue
+        if _is_ipv6_loopback(net):
             continue
         if net not in r:
             r[net] = {}
@@ -960,3 +1207,44 @@ def _parse_ipv6_route(
             r[net[0]][iface].add(ip)
 
     return r
+
+
+_IPV4_LOOPBACK_SPACE = ipaddress.ip_network('127.0.0.0/8')
+_IPV6_LOOPBACK_HOST = ipaddress.ip_network('::1/128')
+
+
+def _is_ipv4_loopback(net_s: str) -> bool:
+    """True if *net_s* is an IPv4 prefix wholly within host loopback 127.0.0.0/8."""
+    try:
+        n = ipaddress.ip_network(net_s, strict=False)
+    except ValueError:
+        return False
+    return (
+        n.version == 4
+        and n.network_address in _IPV4_LOOPBACK_SPACE
+        and n.broadcast_address in _IPV4_LOOPBACK_SPACE
+    )
+
+
+def _is_ipv6_loopback(net_s: str) -> bool:
+    """True if *net_s* is exactly the host loopback prefix ::1/128."""
+    try:
+        n = ipaddress.ip_network(net_s, strict=False)
+    except ValueError:
+        return False
+    if n.version != 6:
+        return False
+    return n == _IPV6_LOOPBACK_HOST
+
+
+def _merge_ipv4_network_dicts(
+    dst: Dict[str, Dict[str, Set[str]]], add: Dict[str, Dict[str, Set[str]]]
+) -> None:
+    """Merge *add* into *dst* (nested sets)."""
+    for net, ifaces in add.items():
+        if net not in dst:
+            dst[net] = {}
+        for iface, ips in ifaces.items():
+            if iface not in dst[net]:
+                dst[net][iface] = set()
+            dst[net][iface].update(ips)

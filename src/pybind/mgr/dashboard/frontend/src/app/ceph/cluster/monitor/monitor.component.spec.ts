@@ -74,31 +74,31 @@ describe('MonitorComponent', () => {
 
     expect(getMonitorSpy).toHaveBeenCalled();
 
-    expect(component.inQuorum.columns[3].comparator(undefined, undefined)).toBe(0);
-    expect(component.inQuorum.columns[3].comparator(null, null)).toBe(0);
-    expect(component.inQuorum.columns[3].comparator([], [])).toBe(0);
+    expect(component.quorum.columns[4].comparator(undefined, undefined)).toBe(0);
+    expect(component.quorum.columns[4].comparator(null, null)).toBe(0);
+    expect(component.quorum.columns[4].comparator([], [])).toBe(0);
     expect(
-      component.inQuorum.columns[3].comparator(
-        component.inQuorum.data[0].cdOpenSessions,
-        component.inQuorum.data[3].cdOpenSessions
+      component.quorum.columns[4].comparator(
+        component.quorum.data[0].cdOpenSessions,
+        component.quorum.data[3].cdOpenSessions
       )
     ).toBe(0);
     expect(
-      component.inQuorum.columns[3].comparator(
-        component.inQuorum.data[0].cdOpenSessions,
-        component.inQuorum.data[1].cdOpenSessions
+      component.quorum.columns[4].comparator(
+        component.quorum.data[0].cdOpenSessions,
+        component.quorum.data[1].cdOpenSessions
       )
     ).toBe(1);
     expect(
-      component.inQuorum.columns[3].comparator(
-        component.inQuorum.data[1].cdOpenSessions,
-        component.inQuorum.data[0].cdOpenSessions
+      component.quorum.columns[4].comparator(
+        component.quorum.data[1].cdOpenSessions,
+        component.quorum.data[0].cdOpenSessions
       )
     ).toBe(-1);
     expect(
-      component.inQuorum.columns[3].comparator(
-        component.inQuorum.data[2].cdOpenSessions,
-        component.inQuorum.data[1].cdOpenSessions
+      component.quorum.columns[4].comparator(
+        component.quorum.data[2].cdOpenSessions,
+        component.quorum.data[1].cdOpenSessions
       )
     ).toBe(1);
   });

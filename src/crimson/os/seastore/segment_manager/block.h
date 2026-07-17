@@ -220,8 +220,8 @@ private:
 
   std::string device_path;
   std::unique_ptr<SegmentStateTracker> tracker;
-  block_shard_info_t shard_info;
-  block_sm_superblock_t superblock;
+  device_shard_info_t shard_info;
+  device_superblock_t superblock;
   seastar::file device;
 
   void set_device_id(device_id_t id) {
@@ -260,7 +260,8 @@ private:
 
   uint32_t device_shard_nums = 0;
   store_index_t store_index = 0;
-  bool store_active = true;
+  bool shard_status = true;
+
   class MultiShardDevices {
     public:
       std::vector<std::unique_ptr<BlockSegmentManager>> mshard_devices;

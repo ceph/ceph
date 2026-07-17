@@ -3791,6 +3791,15 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
 void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
 {
   InodeRef in(dn->inode);
+  // Keep the dentry alive for the duration of this function.
+  // Without the O_DIRECTORY dentry pin (PR #60909), a directory dentry can
+  // remain at ref=1 while its inode->dir is still active. When trim_cache()
+  // evicts it, Dentry::unlink() calls put() for the dir pin, dropping ref
+  // to 0 and freeing the dentry while we still need it for detach/lru_remove.
+  // The DentryRef guard prevents use-after-free regardless of pin state.
+  // See: https://tracker.ceph.com/issues/74625
+  DentryRef dnref(dn);
+
   ldout(cct, 15) << "unlink dir " << dn->dir->parent_inode << " '" << dn->name << "' dn " << dn
 		 << " inode " << dn->inode << dendl;
 
@@ -3800,6 +3809,7 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
     dec_dentry_nr();
     ldout(cct, 20) << "unlink  inode " << in << " parents now " << in->dentries << dendl;
   }
+  ceph_assert(dn->ref > 1);
 
   if (keepdentry) {
     dn->lease_mds = -1;
@@ -4677,6 +4687,11 @@ void Client::_flush_range(Inode *in, int64_t offset, uint64_t size)
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
   if (!in->oset.dirty_or_tx) {
     ldout(cct, 10) << " nothing to flush" << dendl;
+    return;
+  }
+
+  if (size == 0) {
+    ldout(cct, 10) << "zero size flush is not supported by OSD" << dendl;
     return;
   }
 
@@ -7351,7 +7366,7 @@ void Client::abort_conn()
 #if defined(__linux__)
 int Client::fscrypt_dummy_encryption() {
     // get add key
-    char key[FSCRYPT_KEY_IDENTIFIER_SIZE];
+    char key[FSCRYPT_MAX_KEY_SIZE];
     memset(key, 0, sizeof(key));
 
     char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
@@ -11554,6 +11569,20 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl,
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
+  ldout(cct, 10) << __func__ << " " << f->inode.get() << " " << offset << "~"
+                 << size << dendl;
+
+  if ((f->mode & CEPH_FILE_MODE_RD) == 0 && !read_for_write)
+    return -EBADF;
+
+  // zero bytes read is not supported by osd
+  if (size == 0) {
+    if (onfinish) {
+      onfinish->complete(0);
+    }
+    return 0;
+  }
+
   int want, have = 0;
   bool movepos = false;
   std::unique_ptr<Context> iofinish = nullptr;
@@ -11565,10 +11594,6 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl,
   utime_t start = mono_clock_now();
   CRF_iofinish *crf_iofinish = nullptr;
 
-  ldout(cct, 10) << __func__ << " " << *in << " " << offset << "~" << size << dendl;
-
-  if ((f->mode & CEPH_FILE_MODE_RD) == 0 && !read_for_write)
-    return -EBADF;
   //bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
 
   if (offset < 0) {
@@ -11686,18 +11711,6 @@ retry:
     // branch below but in a non-blocking fashion. The code in _read_sync
     // is duplicated and modified and exists in
     // C_Read_Sync_NonBlocking::finish().
-
-    // trim read based on file size?
-    if (size == 0) {
-      // zero byte read requested -- therefore just release managed
-      // pointers and complete the C_Read_Finisher immediately with 0 bytes
-      Context *iof = iofinish.release();
-      crf.release();
-      iof->complete(0);
-
-      // Signal async completion
-      return 0;
-    }
 
     C_Read_Sync_NonBlocking *crsa =
       new C_Read_Sync_NonBlocking(this, iofinish.release(), f, in, f->pos,
@@ -11966,6 +11979,10 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 		       bool *checkeof)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+  if (len == 0) {
+    // zero byte read is not supported by OSD
+    return 0;
+  }
 
   Inode *in = f->inode.get();
 
@@ -14236,6 +14253,56 @@ int Client::rmsnap(const char *relpath, const char *name, const UserPerm& perms,
   }
   auto snapdir = open_snapdir(in.get());
   return _rmdir(snapdir.get(), name, perms, check_perms);
+}
+
+int Client::do_snap_md_op(const char* path, const string& md_key,
+                          const string& md_val, const unsigned int op_flag,
+                          const UserPerm &perms)
+{
+  if (op_flag != CEPH_SNAP_MD_OP_CREATE &&
+      op_flag != (CEPH_SNAP_MD_OP_CREATE | CEPH_SNAP_MD_OP_EXCL) &&
+      op_flag != CEPH_SNAP_MD_OP_REMOVE) {
+    return -EINVAL;
+  }
+
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
+  std::scoped_lock l(client_lock);
+
+  walk_dentry_result wdr;
+  if (int rc = path_walk(cwd, filepath(path), &wdr, perms, {}); rc < 0) {
+    return rc;
+  }
+
+  if (wdr.target->snapid == CEPH_NOSNAP) {
+    return -EINVAL;
+  }
+
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SNAP_METADATA);
+  req->set_filepath(wdr.getpath());
+  req->set_inode(wdr.diri);
+  req->set_dentry(wdr.dn);
+  req->dentry_drop = CEPH_CAP_FILE_SHARED;
+  req->dentry_unless = CEPH_CAP_FILE_EXCL;
+
+  bufferlist bl;
+  encode(md_key, bl);
+  encode(md_val, bl);
+  encode(op_flag, bl);
+  req->set_data(bl);
+
+  ldout(cct, 10) << __func__ << ": making request" << dendl;
+  int res = make_request(req, perms, &wdr.target);
+  ldout(cct, 10) << __func__ << ": result is " << res << dendl;
+
+  trim_cache();
+
+  ldout(cct, 8) << __func__ << "(" << wdr.getpath() << ", " << perms
+                << ") = " << res << dendl;
+
+  return res;
 }
 
 // =============================

@@ -119,10 +119,14 @@ def test_nfsganesha_container_mounts():
             good_nfs_json(),
         )
         cmounts = nfsg._get_container_mounts("/var/tmp")
-        assert len(cmounts) == 3
+        assert len(cmounts) == 4
         assert cmounts["/var/tmp/config"] == "/etc/ceph/ceph.conf:z"
         assert cmounts["/var/tmp/keyring"] == "/etc/ceph/keyring:z"
         assert cmounts["/var/tmp/etc/ganesha"] == "/etc/ganesha:z"
+        assert (
+            cmounts["/var/tmp/ganesha-entrypoint.sh"]
+            == "/usr/local/scripts/ganesha-entrypoint.sh"
+        )
 
     with with_cephadm_ctx([]) as ctx:
         nfsg = _cephadm.NFSGanesha(
@@ -132,7 +136,7 @@ def test_nfsganesha_container_mounts():
             nfs_json(pool=True, files=True, rgw=True),
         )
         cmounts = nfsg._get_container_mounts("/var/tmp")
-        assert len(cmounts) == 4
+        assert len(cmounts) == 5
         assert cmounts["/var/tmp/config"] == "/etc/ceph/ceph.conf:z"
         assert cmounts["/var/tmp/keyring"] == "/etc/ceph/keyring:z"
         assert cmounts["/var/tmp/etc/ganesha"] == "/etc/ganesha:z"
@@ -212,6 +216,52 @@ def test_nfsganesha_get_daemon_args():
         assert args == ["-F", "-L", "STDERR"]
 
 
+@pytest.mark.parametrize(
+    'conf,expected',
+    [
+        ('Protocols = 3, 4;', True),
+        ('Protocols = 4, 3;', True),
+        ('Protocols = 4;', False),
+        ('Protocols = 4, nfsrdma, rpcrdma;', False),
+        ('', True),
+    ],
+)
+def test_nfsv3_enabled_in_ganesha_conf(conf, expected):
+    assert _cephadm.NFSGanesha.nfsv3_enabled_in_ganesha_conf(conf) is expected
+
+
+def test_nfsganesha_entrypoint_script_nfsv3():
+    script = _cephadm.NFSGanesha.ganesha_entrypoint_script(nfsv3=True)
+    assert 'rpcbind' in script
+    assert 'exec /usr/bin/ganesha.nfsd "$@"' in script
+
+
+def test_nfsganesha_entrypoint_script_v4_only():
+    script = _cephadm.NFSGanesha.ganesha_entrypoint_script(nfsv3=False)
+    assert 'rpcbind' not in script
+    assert 'exec /usr/bin/ganesha.nfsd "$@"' in script
+
+
+def test_nfsganesha_entrypoint_script_from_conf():
+    conf_v3 = '\n'.join(
+        [
+            'NFS_CORE_PARAM {',
+            '        Protocols = 3, 4;',
+            '}',
+        ]
+    )
+    script = _cephadm.NFSGanesha.ganesha_entrypoint_script(
+        nfsv3=_cephadm.NFSGanesha.nfsv3_enabled_in_ganesha_conf(conf_v3),
+    )
+    assert 'rpcbind' in script
+
+    conf_v4 = 'NFS_CORE_PARAM { Protocols = 4; }'
+    script = _cephadm.NFSGanesha.ganesha_entrypoint_script(
+        nfsv3=_cephadm.NFSGanesha.nfsv3_enabled_in_ganesha_conf(conf_v4),
+    )
+    assert 'rpcbind' not in script
+
+
 @mock.patch("cephadm.logger")
 def test_nfsganesha_create_daemon_dirs(_logger, cephadm_fs):
     with with_cephadm_ctx([]) as ctx:
@@ -225,7 +275,24 @@ def test_nfsganesha_create_daemon_dirs(_logger, cephadm_fs):
             nfsg.create_daemon_dirs("/var/tmp", 45, 54)
         cephadm_fs.create_dir("/var/tmp")
         nfsg.create_daemon_dirs("/var/tmp", 45, 54)
-        # TODO: make assertions about the dirs created
+        with open("/var/tmp/ganesha-entrypoint.sh") as f:
+            assert 'rpcbind' in f.read()
+
+        nfsg_v4 = _cephadm.NFSGanesha(
+            ctx,
+            SAMPLE_UUID,
+            "fred",
+            {
+                'pool': 'party',
+                'files': {
+                    'ganesha.conf': 'NFS_CORE_PARAM { Protocols = 4; }',
+                    'idmap.conf': '',
+                },
+            },
+        )
+        nfsg_v4.create_daemon_dirs("/var/tmp", 45, 54)
+        with open("/var/tmp/ganesha-entrypoint.sh") as f:
+            assert 'rpcbind' not in f.read()
 
 
 @mock.patch("cephadm.logger")

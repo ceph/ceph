@@ -378,7 +378,7 @@ TEST_F(seastar_test_suite_t, handle_error)
 	  1
 	).handle_error_interruptible(
 	  base_iertr::pass_further{},
-	  ct_error::assert_all{"crash on eio"}
+	  ct_error::assert_all("crash on eio")
 	).si_then([](auto) {
 	  return base_iertr::now();
 	});

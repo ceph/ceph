@@ -142,6 +142,8 @@ static const actpair actpairs[] =
  { "s3:ReplicateObject", s3ReplicateObject },
  { "s3:ReplicateTags", s3ReplicateTags },
  { "s3:GetObjectVersionForReplication", s3GetObjectVersionForReplication },
+ { "s3:PutAccountPublicAccessBlock", s3PutAccountPublicAccessBlock },
+ { "s3:GetAccountPublicAccessBlock", s3GetAccountPublicAccessBlock },
  { "s3-object-lambda:GetObject", s3objectlambdaGetObject },
  { "s3-object-lambda:ListBucket", s3objectlambdaListBucket },
  { "iam:PutUserPolicy", iamPutUserPolicy },
@@ -875,7 +877,8 @@ bool Condition::eval(const Environment& env) const {
   std::vector<std::string> runtime_vals;
   auto i = env.find(key);
   if (op == TokenID::Null) {
-    return i == env.end() ? true : false;
+    const std::string value = (i == env.end() ? "true" : "false");
+    return typed_any(std::equal_to<bool>{}, as_bool, value, vals);
   }
 
   if (i == env.end()) {
@@ -1508,6 +1511,12 @@ const char* action_bit_string(uint64_t action) {
 
   case s3GetObjectVersionForReplication:
     return "s3:GetObjectVersionForReplication";
+
+  case s3PutAccountPublicAccessBlock:
+    return "s3:PutAccountPublicAccessBlock";
+
+  case s3GetAccountPublicAccessBlock:
+    return "s3:GetAccountPublicAccessBlock";
 
   case s3objectlambdaGetObject:
     return "s3-object-lambda:GetObject";

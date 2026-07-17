@@ -109,6 +109,7 @@ ScrubReserveRange::ifut<> ScrubReserveRange::run(PG &pg)
 {
   LOG_PREFIX(ScrubReserveRange::run);
   DEBUGDPP("", pg);
+  DEBUGDPP("waiting for pg background_process_lock", pg);
   return pg.background_process_lock.lock(
   ).then_interruptible([FNAME, this, &pg] {
     DEBUGDPP("pg_background_io_mutex locked", pg);
@@ -130,8 +131,9 @@ ScrubReserveRange::ifut<> ScrubReserveRange::run(PG &pg)
       return scrubber.machine.process_event(
 	scrub::ScrubContext::reserve_range_complete_t{p->version});
     }
-  }).finally([&pg, this] {
+  }).finally([FNAME, &pg, this] {
     if (!blocked_set) {
+      DEBUGDPP("releasing pg background_process_lock (reserve not set)", pg);
       pg.background_process_lock.unlock();
     }
   });

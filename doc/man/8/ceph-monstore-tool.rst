@@ -40,8 +40,8 @@ Commands
 :command:`get osdmap [-- options]`
     Get osdmap (version VER if specified) (default: last committed).
 
-:command:`get msdmap [-- options]`
-    Get msdmap (version VER if specified) (default: last committed).
+:command:`get mdsmap [-- options]`
+    Get mdsmap (version VER if specified) (default: last committed).
 
 :command:`get mgr [-- options]`
     Get mgrmap (version VER if specified) (default: last committed).
@@ -61,14 +61,14 @@ Commands
 :command:`dump-paxos [-- options]`
     Dump Paxos transactions  (-- -- help for more info).
 
-:command:`dump-trace FILE  [-- options]`
+:command:`dump-trace FILE [-- options]`
     Dump contents of trace file FILE (-- --help for more info).
 
-:command:`replay-trace FILE  [-- options]`
+:command:`replay-trace FILE [-- options]`
     Replay trace from FILE (-- --help for more info).
 
 :command:`random-gen [-- options]`
-    Add randomly genererated ops to the store (-- --help for more info).
+    Add randomly generated ops to the store (-- --help for more info).
 
 :command:`rewrite-crush [-- options]`
     Add a rewrite commit to the store

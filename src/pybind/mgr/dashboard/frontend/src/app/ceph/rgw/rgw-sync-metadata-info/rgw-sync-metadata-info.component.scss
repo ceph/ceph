@@ -1,12 +1,41 @@
 @use './src/styles/vendor/variables' as vv;
 
-ul {
-  align-items: center;
+.sync-info {
   display: flex;
   flex-direction: column;
-  list-style-type: none;
+  align-items: center;
+
+  &__status {
+    display: flex;
+    align-items: center;
+    gap: var(--cds-spacing-02);
+  }
+
+  &__last-synced {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
 }
 
 .toggleTipBtn {
   flex-direction: column;
+}
+
+.toggletip-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cds-spacing-04);
+
+  &__item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--cds-spacing-01);
+  }
+}
+
+.sync-status-link {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
 }

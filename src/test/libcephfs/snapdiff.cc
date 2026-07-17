@@ -2142,7 +2142,12 @@ TEST(LibCephFS, SnapDiffChangedBlockWithCustomObjectSize)
 }
 
 TEST(LibCephFS, SnapDiffDeletionRecreation) {
+#ifdef _WIN32
+  // Windows client is ~8x slower per file op; 1<<15 exceeds the test timeout
+  int bulk_count = 1 << 12;
+#else
   int bulk_count = 1 << 15;
+#endif
   TestMount test_mount("/SnapdiffDeletionRecreation");
 
   ASSERT_EQ(0, test_mount.mkdir("bulk"));

@@ -1080,7 +1080,6 @@ PROTO_CALL(ceph_ll_is_encrypted,
 	),
 	PROTO_ANS(
 		PROTO_VER(v0,
-			uint32_t policy;
 		)
 	)
 );

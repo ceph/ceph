@@ -10,10 +10,11 @@ from mgr_module import HandleCommandResult
 
 from ..cli import DBCLICommand
 from ..controllers import EndpointDoc
-from ..model.nvmeof import CliFieldTransformer, CliFlags, CliHeader
+from ..exceptions import DashboardException
+from ..model.nvmeof import CliEmptyMessage, CliFieldTransformer, CliFlags, CliHeader
 from ..services.nvmeof_cli import AnnotatedDataTextOutputFormatter, \
     NvmeofCLICommand, convert_from_bytes, convert_to_bytes, \
-    format_host_updates
+    format_host_updates, resolve_nvmeof_server_address
 from ..tests import CLICommandTestMixin
 
 
@@ -116,13 +117,7 @@ class TestNvmeofCLICommand:
         result = NvmeofCLICommand.COMMANDS[sample_command].call(MagicMock(), {})
         assert isinstance(result, HandleCommandResult)
         assert result.retval == 0
-        assert result.stdout == (
-            "++\n"
-            "||\n"
-            "++\n"
-            "\n"
-            "++"
-        )
+        assert result.stdout == ''
         assert result.stderr == ''
         base_call_return_none_mock.assert_called_once()
 
@@ -787,13 +782,7 @@ class TestNvmeofCLICommandSuccessMessage:
         )
         assert res.retval == 0
         assert res.stderr == ""
-        assert res.stdout == (
-            "++\n"
-            "||\n"
-            "++\n"
-            "\n"
-            "++"
-        )
+        assert res.stdout == ''
 
         del NvmeofCLICommand.COMMANDS[test_cmd]
         assert test_cmd not in NvmeofCLICommand.COMMANDS
@@ -1295,3 +1284,489 @@ class TestFormatHostUpdates:
             template_item="H {host_nqn} {nqn}",
         )
         assert out == "H h1 nqn.test\nW nqn.test"
+
+
+class TestResolveNvmeofServerAddress:
+    def test_resolve_returns_server_address_when_set(self):
+        assert resolve_nvmeof_server_address(
+            server_address="10.0.0.1",
+            traddr=None,
+            require=False,
+        ) == "10.0.0.1"
+
+    def test_resolve_uses_traddr_fallback_when_server_address_missing(self):
+        assert resolve_nvmeof_server_address(
+            server_address=None,
+            traddr="10.0.0.2",
+            require=False,
+        ) == "10.0.0.2"
+
+    def test_resolve_strips_whitespace_and_treats_empty_as_none(self):
+        assert resolve_nvmeof_server_address(
+            server_address="  ",
+            traddr=" 10.0.0.2 ",
+            require=False,
+        ) == "10.0.0.2"
+
+    def test_resolve_rejects_both_server_address_and_traddr(self):
+        with pytest.raises(DashboardException) as excinfo:
+            resolve_nvmeof_server_address(
+                server_address="10.0.0.1",
+                traddr="10.0.0.2",
+                require=False,
+            )
+
+        err = excinfo.value
+        assert err.status == 400
+        assert err.code == "server_address_and_traddr_mutually_exclusive"
+
+    def test_resolve_require_true_rejects_missing(self):
+        with pytest.raises(DashboardException) as excinfo:
+            resolve_nvmeof_server_address(
+                server_address=None,
+                traddr=None,
+                require=True,
+            )
+
+        err = excinfo.value
+        assert err.status == 400
+        assert err.code == "missing_server_address"
+
+    def test_resolve_require_false_allows_missing(self):
+        assert resolve_nvmeof_server_address(
+            server_address=None,
+            traddr=None,
+            require=False,
+        ) is None
+
+
+class TestCliEmptyMessage:
+    def test_empty_list_with_message_returns_custom_text(self):
+        test_cmd = "nvmeof test empty list message"
+
+        class Item(NamedTuple):
+            name: str
+
+        class TestModel(NamedTuple):
+            status: int
+            error_message: str
+            items: Annotated[List[Item], CliFlags.EXCLUSIVE_LIST, CliEmptyMessage("No items found")]
+
+        @NvmeofCLICommand(test_cmd, TestModel)
+        def func(_):  # pylint: disable=unused-argument, unused-variable
+            return {'status': 0, 'error_message': '', 'items': []}
+        try:
+            result = NvmeofCLICommand.COMMANDS[test_cmd].call(MagicMock(), {})
+
+            assert isinstance(result, HandleCommandResult)
+            assert result.retval == 0
+            assert result.stdout == "No items found"
+            assert result.stderr == ''
+        finally:
+            del NvmeofCLICommand.COMMANDS[test_cmd]
+
+    def test_empty_list_with_template_substitution(self):
+        test_cmd = "nvmeof test empty list template"
+
+        class Item(NamedTuple):
+            name: str
+
+        class TestModel(NamedTuple):
+            status: int
+            error_message: str
+            items: Annotated[List[Item], CliFlags.EXCLUSIVE_LIST,
+                             CliEmptyMessage("No items for {context}")]
+            context: Annotated[str, CliFlags.DROP] = ""
+
+        @NvmeofCLICommand(test_cmd, TestModel)
+        def func(_):  # pylint: disable=unused-argument, unused-variable
+            return {'status': 0, 'error_message': '', 'items': [], 'context': 'test-subsystem'}
+        try:
+            result = NvmeofCLICommand.COMMANDS[test_cmd].call(MagicMock(), {})
+
+            assert isinstance(result, HandleCommandResult)
+            assert result.retval == 0
+            assert result.stdout == "No items for test-subsystem"
+            assert result.stderr == ''
+        finally:
+            del NvmeofCLICommand.COMMANDS[test_cmd]
+
+    def test_non_empty_list_returns_table(self):
+        test_cmd = "nvmeof test non empty list"
+
+        class Item(NamedTuple):
+            name: str
+            value: int
+
+        class TestModel(NamedTuple):
+            status: int
+            error_message: str
+            items: Annotated[List[Item], CliFlags.EXCLUSIVE_LIST, CliEmptyMessage("No items found")]
+
+        @NvmeofCLICommand(test_cmd, TestModel)
+        def func(_):  # pylint: disable=unused-argument, unused-variable
+            return {
+                'status': 0,
+                'error_message': '',
+                'items': [{'name': 'item1', 'value': 10}, {'name': 'item2', 'value': 20}]
+            }
+        try:
+            result = NvmeofCLICommand.COMMANDS[test_cmd].call(MagicMock(), {})
+
+            assert isinstance(result, HandleCommandResult)
+            assert result.retval == 0
+            assert 'Name' in result.stdout
+            assert 'Value' in result.stdout
+            assert 'item1' in result.stdout
+            assert 'item2' in result.stdout
+            assert result.stderr == ''
+        finally:
+            del NvmeofCLICommand.COMMANDS[test_cmd]
+
+    def test_empty_message_with_missing_template_var_fallback(self):
+        test_cmd = "nvmeof test missing template var"
+
+        class Item(NamedTuple):
+            name: str
+
+        class TestModel(NamedTuple):
+            status: int
+            error_message: str
+            items: Annotated[List[Item], CliFlags.EXCLUSIVE_LIST,
+                             CliEmptyMessage("No items for {missing_field}")]
+
+        @NvmeofCLICommand(test_cmd, TestModel)
+        def func(_):  # pylint: disable=unused-argument, unused-variable
+            return {'status': 0, 'error_message': '', 'items': []}
+        try:
+            result = NvmeofCLICommand.COMMANDS[test_cmd].call(MagicMock(), {})
+
+            assert isinstance(result, HandleCommandResult)
+            assert result.retval == 0
+            assert "No items for {missing_field}" in result.stdout
+            assert result.stderr == ''
+        finally:
+            del NvmeofCLICommand.COMMANDS[test_cmd]
+
+    def test_empty_message_json_format_returns_empty_list(self):
+        test_cmd = "nvmeof test empty json"
+
+        class Item(NamedTuple):
+            name: str
+
+        class TestModel(NamedTuple):
+            status: int
+            error_message: str
+            items: Annotated[List[Item], CliFlags.EXCLUSIVE_LIST, CliEmptyMessage("No items found")]
+
+        @NvmeofCLICommand(test_cmd, TestModel)
+        def func(_):  # pylint: disable=unused-argument, unused-variable
+            return {'status': 0, 'error_message': '', 'items': []}
+        try:
+            result = NvmeofCLICommand.COMMANDS[test_cmd].call(MagicMock(), {'format': 'json'})
+
+            assert isinstance(result, HandleCommandResult)
+            assert result.retval == 0
+            data = json.loads(result.stdout)
+            assert data == {'status': 0, 'error_message': '', 'items': []}
+            assert result.stderr == ''
+        finally:
+            del NvmeofCLICommand.COMMANDS[test_cmd]
+
+    def test_empty_message_yaml_format_returns_empty_list(self):
+        test_cmd = "nvmeof test empty yaml"
+
+        class Item(NamedTuple):
+            name: str
+
+        class TestModel(NamedTuple):
+            status: int
+            error_message: str
+            items: Annotated[List[Item], CliFlags.EXCLUSIVE_LIST, CliEmptyMessage("No items found")]
+
+        @NvmeofCLICommand(test_cmd, TestModel)
+        def func(_):  # pylint: disable=unused-argument, unused-variable
+            return {'status': 0, 'error_message': '', 'items': []}
+
+        try:
+            result = NvmeofCLICommand.COMMANDS[test_cmd].call(MagicMock(), {'format': 'yaml'})
+
+            assert isinstance(result, HandleCommandResult)
+            assert result.retval == 0
+            assert 'items: []' in result.stdout
+            assert result.stderr == ''
+        finally:
+            del NvmeofCLICommand.COMMANDS[test_cmd]
+
+    def test_multiple_template_variables(self):
+        test_cmd = "nvmeof test multiple vars"
+
+        class Item(NamedTuple):
+            name: str
+
+        class TestModel(NamedTuple):
+            status: int
+            error_message: str
+            items: Annotated[List[Item], CliFlags.EXCLUSIVE_LIST,
+                             CliEmptyMessage("No {item_type} for {subsystem} in {location}")]
+            item_type: Annotated[str, CliFlags.DROP] = ""
+            subsystem: Annotated[str, CliFlags.DROP] = ""
+            location: Annotated[str, CliFlags.DROP] = ""
+
+        @NvmeofCLICommand(test_cmd, TestModel)
+        def func(_):  # pylint: disable=unused-argument, unused-variable
+            return {
+                'status': 0,
+                'error_message': '',
+                'items': [],
+                'item_type': 'listeners',
+                'subsystem': 'nqn.test',
+                'location': 'gateway1'
+            }
+        try:
+            result = NvmeofCLICommand.COMMANDS[test_cmd].call(MagicMock(), {})
+
+            assert isinstance(result, HandleCommandResult)
+            assert result.retval == 0
+            assert result.stdout == "No listeners for nqn.test in gateway1"
+            assert result.stderr == ''
+        finally:
+            del NvmeofCLICommand.COMMANDS[test_cmd]
+
+    def test_empty_message_with_special_characters(self):
+        test_cmd = "nvmeof test special chars"
+
+        class Item(NamedTuple):
+            name: str
+
+        class TestModel(NamedTuple):
+            status: int
+            error_message: str
+            items: Annotated[List[Item], CliFlags.EXCLUSIVE_LIST,
+                             CliEmptyMessage("No items found! (subsystem: {nqn})")]
+            nqn: Annotated[str, CliFlags.DROP] = ""
+
+        @NvmeofCLICommand(test_cmd, TestModel)
+        def func(_):  # pylint: disable=unused-argument, unused-variable
+            return {
+                'status': 0,
+                'error_message': '',
+                'items': [],
+                'nqn': 'test-nqn'
+            }
+
+        try:
+            result = NvmeofCLICommand.COMMANDS[test_cmd].call(MagicMock(), {})
+            assert isinstance(result, HandleCommandResult)
+            assert result.retval == 0
+            assert "No items found! (subsystem: test-nqn)" in result.stdout
+        finally:
+            del NvmeofCLICommand.COMMANDS[test_cmd]
+
+
+class TestCliEmptyMessageForAllListCommands:
+    def test_subsystem_list_empty_message(self):
+        from ..model.nvmeof import SubsystemList
+
+        test_cmd = "nvmeof test subsystem list empty"
+
+        @NvmeofCLICommand(test_cmd, SubsystemList)
+        def func(_):  # pylint: disable=unused-argument, unused-variable
+            return {'status': 0, 'error_message': '', 'subsystems': []}
+        try:
+            result = NvmeofCLICommand.COMMANDS[test_cmd].call(MagicMock(), {})
+
+            assert isinstance(result, HandleCommandResult)
+            assert result.retval == 0
+            assert result.stdout == "No subsystems"
+            assert result.stderr == ''
+        finally:
+            del NvmeofCLICommand.COMMANDS[test_cmd]
+
+    def test_subsystem_list_non_empty_returns_table(self):
+        from ..model.nvmeof import SubsystemList
+
+        test_cmd = "nvmeof test subsystem list non empty"
+
+        @NvmeofCLICommand(test_cmd, SubsystemList)
+        def func(_):  # pylint: disable=unused-argument, unused-variable
+            return {
+                'status': 0,
+                'error_message': '',
+                'subsystems': [{
+                    'nqn': 'nqn.2016-06.io.spdk:cnode1',
+                    'enable_ha': True,
+                    'serial_number': 'SPDK00000000000001',
+                    'model_number': 'SPDK bdev Controller',
+                    'min_cntlid': 1,
+                    'max_cntlid': 65519,
+                    'namespace_count': 0,
+                    'subtype': 'NVMe',
+                    'max_namespaces': 256,
+                    'has_dhchap_key': False,
+                    'allow_any_host': False,
+                    'created_without_key': False,
+                    'network_mask': []
+                }]
+            }
+        try:
+            result = NvmeofCLICommand.COMMANDS[test_cmd].call(MagicMock(), {})
+
+            assert isinstance(result, HandleCommandResult)
+            assert result.retval == 0
+            assert 'nqn.2016-06.io.spdk:cnode1' in result.stdout
+            assert 'SPDK00000000000001' in result.stdout
+        finally:
+            del NvmeofCLICommand.COMMANDS[test_cmd]
+
+    def test_connection_list_empty_message_with_subsystem(self):
+        from ..model.nvmeof import ConnectionList
+
+        test_cmd = "nvmeof test connection list empty"
+
+        @NvmeofCLICommand(test_cmd, ConnectionList)
+        def func(_):  # pylint: disable=unused-argument, unused-variable
+            return {
+                'status': 0,
+                'error_message': '',
+                'subsystem_nqn': 'nqn.2016-06.io.spdk:cnode1',
+                'connections': []
+            }
+        try:
+            result = NvmeofCLICommand.COMMANDS[test_cmd].call(MagicMock(), {})
+
+            assert isinstance(result, HandleCommandResult)
+            assert result.retval == 0
+            assert result.stdout == "No connections for nqn.2016-06.io.spdk:cnode1"
+            assert result.stderr == ''
+        finally:
+            del NvmeofCLICommand.COMMANDS[test_cmd]
+
+    def test_connection_list_non_empty_returns_table(self):
+        from ..model.nvmeof import ConnectionList
+
+        test_cmd = "nvmeof test connection list non empty"
+
+        @NvmeofCLICommand(test_cmd, ConnectionList)
+        def func(_):  # pylint: disable=unused-argument, unused-variable
+            return {
+                'status': 0,
+                'error_message': '',
+                'subsystem_nqn': 'nqn.2016-06.io.spdk:cnode1',
+                'connections': [{
+                    'nqn': 'nqn.2014-08.org.nvmexpress:uuid:12345',
+                    'traddr': '192.168.1.100',
+                    'trsvcid': 4420,
+                    'trtype': 'TCP',
+                    'adrfam': 0,
+                    'connected': True,
+                    'qpairs_count': 2,
+                    'controller_id': 1,
+                    'use_psk': False,
+                    'use_dhchap': False,
+                    'dhchap_controller_origin': None,
+                    'subsystem': 'nqn.2016-06.io.spdk:cnode1',
+                    'disconnected_due_to_keepalive_timeout': False
+                }]
+            }
+        try:
+            result = NvmeofCLICommand.COMMANDS[test_cmd].call(MagicMock(), {})
+
+            assert isinstance(result, HandleCommandResult)
+            assert result.retval == 0
+            assert 'nqn.2014-08.org.nvmexpress:uuid:12345' in result.stdout
+            assert '192.168.1.100' in result.stdout
+        finally:
+            del NvmeofCLICommand.COMMANDS[test_cmd]
+
+    def test_hosts_info_empty_message_with_subsystem(self):
+        from ..model.nvmeof import HostsInfo
+
+        test_cmd = "nvmeof test hosts info empty"
+
+        @NvmeofCLICommand(test_cmd, HostsInfo)
+        def func(_):  # pylint: disable=unused-argument, unused-variable
+            return {
+                'status': 0,
+                'error_message': '',
+                'allow_any_host': False,
+                'subsystem_nqn': 'nqn.2016-06.io.spdk:cnode1',
+                'hosts': []
+            }
+        try:
+            result = NvmeofCLICommand.COMMANDS[test_cmd].call(MagicMock(), {})
+
+            assert isinstance(result, HandleCommandResult)
+            assert result.retval == 0
+            assert result.stdout == "No hosts are allowed to access nqn.2016-06.io.spdk:cnode1"
+            assert result.stderr == ''
+        finally:
+            del NvmeofCLICommand.COMMANDS[test_cmd]
+
+    def test_hosts_info_non_empty_returns_table(self):
+        from ..model.nvmeof import HostsInfo
+
+        test_cmd = "nvmeof test hosts info non empty"
+
+        @NvmeofCLICommand(test_cmd, HostsInfo)
+        def func(_):  # pylint: disable=unused-argument, unused-variable
+            return {
+                'status': 0,
+                'error_message': '',
+                'allow_any_host': False,
+                'subsystem_nqn': 'nqn.2016-06.io.spdk:cnode1',
+                'hosts': [{
+                    'nqn': 'nqn.2014-08.org.nvmexpress:uuid:host1',
+                    'use_psk': False,
+                    'use_dhchap': True,
+                    'dhchap_controller_origin': 'controller',
+                    'disconnected_due_to_keepalive_timeout': False
+                }]
+            }
+        try:
+            result = NvmeofCLICommand.COMMANDS[test_cmd].call(MagicMock(), {})
+
+            assert isinstance(result, HandleCommandResult)
+            assert result.retval == 0
+            assert 'nqn.2014-08.org.nvmexpress:uuid:host1' in result.stdout
+        finally:
+            del NvmeofCLICommand.COMMANDS[test_cmd]
+
+    def test_all_empty_messages_work_with_json_format(self):
+        from ..model.nvmeof import ConnectionList, HostsInfo, SubsystemList
+
+        test_cmd_subsys = "nvmeof test subsystem json"
+
+        @NvmeofCLICommand(test_cmd_subsys, SubsystemList)
+        def func_subsys(_):  # pylint: disable=unused-argument, unused-variable
+            return {'status': 0, 'error_message': '', 'subsystems': []}
+        try:
+            result = NvmeofCLICommand.COMMANDS[test_cmd_subsys].call(
+                MagicMock(), {'format': 'json'})
+            assert '"subsystems": []' in result.stdout
+        finally:
+            del NvmeofCLICommand.COMMANDS[test_cmd_subsys]
+
+        test_cmd_conn = "nvmeof test connection json"
+
+        @NvmeofCLICommand(test_cmd_conn, ConnectionList)
+        def func_conn(_):  # pylint: disable=unused-argument, unused-variable
+            return {'status': 0, 'error_message': '',
+                    'subsystem_nqn': 'test', 'connections': []}
+        try:
+            result = NvmeofCLICommand.COMMANDS[test_cmd_conn].call(MagicMock(), {'format': 'json'})
+            assert '"connections": []' in result.stdout
+        finally:
+            del NvmeofCLICommand.COMMANDS[test_cmd_conn]
+
+        test_cmd_hosts = "nvmeof test hosts json"
+
+        @NvmeofCLICommand(test_cmd_hosts, HostsInfo)
+        def func_hosts(_):  # pylint: disable=unused-argument, unused-variable
+            return {'status': 0, 'error_message': '', 'allow_any_host': False,
+                    'subsystem_nqn': 'test', 'hosts': []}
+        try:
+            result = NvmeofCLICommand.COMMANDS[test_cmd_hosts].call(MagicMock(), {'format': 'json'})
+            assert '"hosts": []' in result.stdout
+        finally:
+            del NvmeofCLICommand.COMMANDS[test_cmd_hosts]

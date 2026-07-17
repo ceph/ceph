@@ -26,7 +26,7 @@ class NodeProxy(CephService):
         if not self.mgr.http_server.agent:
             raise OrchestratorError('Cannot deploy node-proxy before creating cephadm endpoint')
 
-        super().register_for_certificates(daemon_spec)
+        super().prepare_certificates(daemon_spec)
         keyring = self.get_keyring_with_caps(self.get_auth_entity(daemon_id, host=host), [])
         daemon_spec.keyring = keyring
         self.mgr.node_proxy_cache.update_keyring(host, keyring)
@@ -68,6 +68,7 @@ class NodeProxy(CephService):
             'root_cert.pem': self.mgr.cert_mgr.get_root_ca(),
             'listener.crt': tls_pair.cert,
             'listener.key': tls_pair.key,
+            'system': {'vendor': self.mgr.hw_monitoring_vendor},
         }
         config = {'node-proxy.json': json.dumps(cfg)}
 

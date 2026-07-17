@@ -138,7 +138,8 @@ describe('CrushNodeSelectionService', () => {
     it('should override automatic selections', () => {
       assert.formFieldValues(get.nodeByName('default'), 'osd-rack', '');
       assert.valuesOnRootChange('ssd-host', 'osd', 'ssd');
-      assert.valuesOnRootChange('mix-host', 'osd-rack', '');
+      // After selecting 'ssd-host', switching to 'mix-host' keeps valid device 'ssd'
+      assert.valuesOnRootChange('mix-host', 'osd-rack', 'ssd');
     });
 
     it('should not override manual selections if possible', () => {

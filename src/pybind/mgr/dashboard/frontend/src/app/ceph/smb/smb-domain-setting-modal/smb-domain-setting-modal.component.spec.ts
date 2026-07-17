@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { SmbDomainSettingModalComponent } from './smb-domain-setting-modal.component';
 import { SharedModule } from '~/app/shared/shared.module';
-import { ToastrModule } from 'ngx-toastr';
+
 import { ReactiveFormsModule } from '@angular/forms';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -22,7 +22,6 @@ describe('SmbDomainSettingModalComponent', () => {
       declarations: [SmbDomainSettingModalComponent],
       imports: [
         SharedModule,
-        ToastrModule.forRoot(),
         ReactiveFormsModule,
         HttpClientTestingModule,
         RouterTestingModule,

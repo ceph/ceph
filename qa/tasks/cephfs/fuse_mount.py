@@ -432,7 +432,7 @@ class FuseMountBase(CephFSMountBase):
         return ""
 
     def find_admin_socket(self):
-        pyscript = """
+        pyscript = r"""
 import glob
 import re
 import os
@@ -449,7 +449,7 @@ def _find_admin_socket(client_name):
             return files[0]
 
         for f in files:
-                pid = re.match(".*\.(\d+)\.asok$", f).group(1)
+                pid = re.match(r".*\.(\d+)\.asok$", f).group(1)
                 if os.path.exists("/proc/{{0}}".format(pid)):
                     with open("/proc/{{0}}/cmdline".format(pid), 'r') as proc_f:
                         contents = proc_f.read()

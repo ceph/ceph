@@ -1,3 +1,39 @@
 .tc_clearSelections {
   text-decoration: none;
 }
+
+.osd-devices-selection-row {
+  .cd-form-label,
+  .cd-col-form-input {
+    flex: 0 0 100%;
+    max-width: 100%;
+    width: 100%;
+  }
+
+  cd-inventory-devices {
+    display: block;
+    width: 100%;
+  }
+}
+
+.device-filter-form {
+  margin-bottom: 1rem;
+}
+
+.filter-dropdown-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.filter-dropdown {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.selection-summary {
+  .selection-capacity {
+    text-align: center;
+  }
+}

@@ -5,10 +5,11 @@ import string
 from typing import List, Dict, Any, Tuple, cast, Optional, TYPE_CHECKING
 
 from ceph.deployment.service_spec import ServiceSpec, IngressSpec, MonitorCertSource
+from ceph.deployment.utils import is_ipv6
 from mgr_util import build_url
 from cephadm import utils
-from orchestrator import OrchestratorError, DaemonDescription
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService
+from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService, CephadmService
 from .service_registry import register_cephadm_service
 from cephadm.tlsobject_types import TLSCredentials
 from cephadm.schedule import get_placement_hosts
@@ -117,16 +118,13 @@ class IngressService(CephService):
         assert ingress_spec.backend_service
         daemons = mgr.cache.get_daemons_by_service(ingress_spec.backend_service)
         deps = [d.name() for d in daemons]
-        for attr in ['ssl_cert', 'ssl_key']:
-            ssl_cert_key = getattr(ingress_spec, attr, None)
-            if ssl_cert_key:
-                assert isinstance(ssl_cert_key, str)
-                deps.append(f'ssl-cert-key:{str(utils.md5_hash(ssl_cert_key))}')
         backend_spec = mgr.spec_store[ingress_spec.backend_service].spec
         if backend_spec.service_type == 'nfs':
             hosts = get_placement_hosts(spec, mgr.cache.get_schedulable_hosts(), mgr.cache.get_draining_hosts())
             deps.append(f'placement_hosts:{",".join(sorted(h.hostname for h in hosts))}')
-        return sorted(deps)
+
+        parent_deps = CephadmService.get_dependencies(mgr, spec)
+        return sorted(deps + parent_deps)
 
     def haproxy_generate_config(
             self,
@@ -271,10 +269,11 @@ class IngressService(CephService):
                 'frontend_port': frontend_port,
                 'monitor_port': spec.monitor_port,
                 'default_server_opts': server_opts,
-                'health_check_interval': spec.health_check_interval or '2s',
+                'health_check_interval': spec.health_check_interval or ('30s' if backend_spec.service_type == 'nfs' else '2s'),
                 'v4v6_flag': v4v6_flag,
                 'monitor_ssl_file': monitor_ssl_file,
                 'peer_hosts': peer_hosts,
+                'is_ipv6': is_ipv6(ip)
             }
         )
         config_files = {
@@ -328,6 +327,56 @@ class IngressService(CephService):
         daemon_spec.final_config, daemon_spec.deps = self.keepalived_generate_config(daemon_spec)
 
         return daemon_spec
+
+    @staticmethod
+    def _ingress_keepalived_required_count(
+        mgr: "CephadmOrchestrator",
+        ispec: IngressSpec,
+    ) -> int:
+        """
+        get keepalived slot count from ingress placement only
+        """
+        return ispec.placement.get_target_count(mgr.cache.get_schedulable_hosts())
+
+    @staticmethod
+    def keepalived_should_auto_start(
+        mgr: "CephadmOrchestrator",
+        dd: DaemonDescription,
+        spec: ServiceSpec,
+    ) -> bool:
+        """
+        Whether a stopped keepalived unit should be started by the serve loop.
+        Does not auto-start while more keepalived daemons exist than the placement target
+        """
+        ispec = cast(IngressSpec, spec)
+        ingress_daemons = mgr.cache.get_daemons_by_service(ispec.service_name())
+        keepalived_total = len(
+            [d for d in ingress_daemons if d.daemon_type == 'keepalived']
+        )
+        required = IngressService._ingress_keepalived_required_count(mgr, ispec)
+        if keepalived_total > required:
+            return False
+        if ispec.keepalive_only:
+            if not ispec.backend_service:
+                return False
+            for d in mgr.cache.get_daemons_by_service(ispec.backend_service):
+                if d.hostname != dd.hostname:
+                    continue
+                if d.status in (
+                    DaemonDescriptionStatus.running,
+                    DaemonDescriptionStatus.starting,
+                ):
+                    return True
+            return False
+        for d in mgr.cache.get_daemons_by_service(spec.service_name()):
+            if d.daemon_type != 'haproxy' or d.hostname != dd.hostname:
+                continue
+            if d.status in (
+                DaemonDescriptionStatus.running,
+                DaemonDescriptionStatus.starting,
+            ):
+                return True
+        return False
 
     @staticmethod
     def get_keepalived_dependencies(mgr: "CephadmOrchestrator", spec: Optional[ServiceSpec]) -> List[str]:
@@ -556,14 +605,30 @@ class IngressService(CephService):
         spec: Optional[ServiceSpec],
         curr_deps: List[str],
         last_deps: List[str],
-    ) -> utils.Action:
+        daemon: Optional[DaemonDescription] = None,
+    ) -> utils.NextDaemonStep:
         """Given the scheduled_action, service spec, daemon_type, and
         current and previous dependency lists return the next action that
         this service would prefer cephadm take.
         """
-        action = super().choose_next_action(
+        step = super().choose_next_action(
             scheduled_action, daemon_type, spec, curr_deps, last_deps
         )
+        action = step.action
+        # keepalived is not systemd-enabled; when stopped, redeploy rewrites
+        # the unit and container so the serve loop can start the daemon again.
+        if (
+            daemon_type == 'keepalived'
+            and action is utils.Action.RECONFIG
+            and daemon is not None
+            and daemon.status == DaemonDescriptionStatus.stopped
+        ):
+            logger.debug(
+                'Redeploy wanted %s: keepalived deps changed (daemon stopped)',
+                spec.service_name() if spec else daemon_type,
+            )
+            return utils.NextDaemonStep(utils.Action.REDEPLOY)
+
         if (
             action is not utils.Action.REDEPLOY
             and daemon_type == 'haproxy'
@@ -571,13 +636,26 @@ class IngressService(CephService):
             and hasattr(spec, 'backend_service')
         ):
             backend_spec = self.mgr.spec_store[spec.backend_service].spec
-            if (
-                backend_spec.service_type == 'nfs'
-                and self.has_placement_changed(last_deps, spec)
-            ):
-                logger.debug(
-                    'Redeploy wanted %s: placement has changed',
-                    spec.service_name(),
-                )
-                action = utils.Action.REDEPLOY
-        return action
+            if backend_spec.service_type == 'nfs':
+                if self.has_placement_changed(last_deps, spec):
+                    logger.debug(
+                        'Redeploy wanted %s: placement has changed',
+                        spec.service_name(),
+                    )
+                    return utils.NextDaemonStep(utils.Action.REDEPLOY)
+                sym_diff = set(curr_deps).symmetric_difference(last_deps)
+                if sym_diff and all(
+                    s.startswith(f'nfs.{backend_spec.service_id}')
+                    for s in sym_diff
+                ):
+                    logger.debug(
+                        'Reconfigure HAProxy with SIGHUP due to change in NFS backend '
+                        '(%s)',
+                        spec.service_name(),
+                    )
+                    return utils.NextDaemonStep(
+                        utils.Action.RECONFIG,
+                        skip_restart_for_reconfig=True,
+                        send_signal_to_daemon='SIGHUP',
+                    )
+        return step

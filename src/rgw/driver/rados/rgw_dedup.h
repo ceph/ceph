@@ -18,6 +18,7 @@
 #include "rgw_dedup_utils.h"
 #include "rgw_dedup_table.h"
 #include "rgw_dedup_cluster.h"
+#include "rgw_dedup_filter.h"
 #include "rgw_realm_reloader.h"
 #include <string>
 #include <unordered_map>
@@ -98,16 +99,9 @@ namespace rgw::dedup {
     };
 
     inline uint64_t __calc_deduped_bytes(uint16_t num_parts, uint64_t size_bytes);
-    inline bool should_split_head(uint64_t head_size, uint64_t obj_size);
-    int get_tail_ioctx(const disk_record_t *p_rec,
-                       const RGWObjManifest &manifest,
-                       const std::string &tail_name,
-                       md5_stats_t *p_stats /*IN-OUT*/,
-                       librados::IoCtx *p_ioctx /*OUT*/,
-                       std::string *p_oid /*OUT*/);
+    inline bool should_split_head(const RGWObjManifest &manifest);
     void remove_created_tail_object(const disk_record_t *p_rec,
                                     const RGWObjManifest &manifest,
-                                    const std::string &tail_name,
                                     md5_stats_t *p_stats /*IN-OUT*/);
     void run();
     int  setup(struct dedup_epoch_t*);
@@ -201,7 +195,6 @@ namespace rgw::dedup {
     int split_head_object(disk_record_t *p_src_rec,     // IN/OUT PARAM
                           RGWObjManifest &src_manifest, // IN/OUT PARAM
                           const disk_record_t *p_tgt_rec,
-                          std::string *p_tail_name /*OUT*/,
                           md5_stats_t *p_stats /* IN-OUT */);
 
     int add_obj_attrs_to_record(disk_record_t         *p_rec,
@@ -221,7 +214,6 @@ namespace rgw::dedup {
                                    RGWObjManifest &src_manifest,
                                    const RGWObjManifest &tgt_manifest,
                                    const dedup_table_t::value_t *p_src_val,
-                                   std::string *p_tail_name /*OUT*/,
                                    md5_stats_t *p_stats /* IN-OUT */);
     int try_deduping_record(dedup_table_t   *p_table,
                             disk_record_t   *p_rec,
@@ -244,7 +236,6 @@ namespace rgw::dedup {
                      const RGWObjManifest         &src_manifest,
                      const RGWObjManifest         &tgt_manifest,
                      md5_stats_t                  *p_stats,
-                     const std::string            &tail_name,
                      const dedup_table_t::value_t *p_src_val);
 #endif
     int  remove_slabs(unsigned worker_id, unsigned md5_shard, uint32_t slab_count);
@@ -266,9 +257,10 @@ namespace rgw::dedup {
     uint64_t d_all_buckets_obj_size    = 0;
 
     uint32_t d_min_obj_size_for_dedup = (64ULL * 1024);
-    uint32_t d_max_obj_size_for_split = (16ULL * 1024 * 1024);
+    bool     d_split_head             = true;
     uint32_t d_head_object_size       = (4ULL * 1024 * 1024);
     control_t d_ctl;
+    dedup_filter_t d_filter;
     uint64_t d_watch_handle = 0;
     DedupWatcher d_watcher_ctx;
 

@@ -13,7 +13,7 @@ import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
 import { SharedModule } from '~/app/shared/shared.module';
-import { ToastrModule } from 'ngx-toastr';
+
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { VERSION_PREFIX } from '~/app/shared/constants/app.constants';
@@ -91,7 +91,7 @@ describe('RgwOverviewDashboardComponent', () => {
           useValue: { params: { subscribe: (fn: Function) => fn(params) } }
         }
       ],
-      imports: [HttpClientTestingModule, SharedModule, ToastrModule.forRoot(), CommonModule]
+      imports: [HttpClientTestingModule, SharedModule, CommonModule]
     }).compileComponents();
     fixture = TestBed.createComponent(RgwOverviewDashboardComponent);
     component = fixture.componentInstance;
@@ -119,8 +119,9 @@ describe('RgwOverviewDashboardComponent', () => {
   });
 
   it('should render all cards', () => {
-    const dashboardCards = fixture.debugElement.nativeElement.querySelectorAll('cd-card');
-    expect(dashboardCards.length).toBe(5);
+    const productiveCards =
+      fixture.debugElement.nativeElement.querySelectorAll('cd-productive-card');
+    expect(productiveCards.length).toBe(3);
   });
 
   it('should get data for Realms', () => {
@@ -136,6 +137,62 @@ describe('RgwOverviewDashboardComponent', () => {
   it('should get data for Zones', () => {
     expect(listZonesSpy).toHaveBeenCalled();
     expect(component.rgwZoneCount).toEqual(4);
+  });
+
+  it('should transform prometheus data to chart format', () => {
+    const mockResults: Record<string, [number, string][]> = {
+      RGW_REQUEST_PER_SECOND: [
+        [1700000000, '10'],
+        [1700000060, '20']
+      ],
+      AVG_GET_LATENCY: [
+        [1700000000, '1.5'],
+        [1700000060, '2.0']
+      ],
+      AVG_PUT_LATENCY: [
+        [1700000000, '3.0'],
+        [1700000060, '4.0']
+      ],
+      GET_BANDWIDTH: [
+        [1700000000, '1024'],
+        [1700000060, '2048']
+      ],
+      PUT_BANDWIDTH: [
+        [1700000000, '512'],
+        [1700000060, '768']
+      ]
+    };
+
+    const perfService = component['performanceCardService'];
+    component['getPrometheusData'] = function (_selectedTime: any) {
+      this.queriesResults = mockResults;
+      this.requestsChartData = perfService.toSeries(
+        mockResults.RGW_REQUEST_PER_SECOND,
+        'Requests/sec'
+      );
+      this.latencyChartData = perfService.mergeSeries(
+        perfService.toSeries(mockResults.AVG_GET_LATENCY, 'GET'),
+        perfService.toSeries(mockResults.AVG_PUT_LATENCY, 'PUT')
+      );
+      this.bandwidthChartData = perfService.mergeSeries(
+        perfService.toSeries(mockResults.GET_BANDWIDTH, 'GET'),
+        perfService.toSeries(mockResults.PUT_BANDWIDTH, 'PUT')
+      );
+    };
+
+    component['getPrometheusData']({});
+
+    expect(component.requestsChartData.length).toBe(2);
+    expect(component.requestsChartData[0].values['Requests/sec']).toBe(10);
+    expect(component.requestsChartData[0].timestamp).toEqual(new Date(1700000000 * 1000));
+
+    expect(component.latencyChartData.length).toBe(2);
+    expect(component.latencyChartData[0].values['GET']).toBe(1.5);
+    expect(component.latencyChartData[0].values['PUT']).toBe(3.0);
+
+    expect(component.bandwidthChartData.length).toBe(2);
+    expect(component.bandwidthChartData[0].values['GET']).toBe(1024);
+    expect(component.bandwidthChartData[0].values['PUT']).toBe(512);
   });
 
   it('should set component properties from services using combineLatest', fakeAsync(() => {

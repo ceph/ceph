@@ -90,8 +90,10 @@ Administration
     Health messages <health-messages>
     Upgrading old file systems <upgrading>
     CephFS Top Utility <cephfs-top>
+    cephfs-tool <cephfs-tool>
     Scheduled Snapshots <snap-schedule>
     CephFS Snapshot Mirroring <cephfs-mirroring>
+    CephFS Snapshot Mirroring Checkpoints <cephfs-mirroring-checkpoints>
     Purge Queue <purge-queue>
 
 .. raw:: html

@@ -1,6 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-
 import { OverviewStorageCardComponent } from './overview-storage-card.component';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 

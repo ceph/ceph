@@ -5,7 +5,6 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
 import { RoleService } from '~/app/shared/api/role.service';
@@ -37,7 +36,6 @@ describe('RoleFormComponent', () => {
       RouterTestingModule.withRoutes(routes),
       HttpClientTestingModule,
       ReactiveFormsModule,
-      ToastrModule.forRoot(),
       SharedModule
     ],
     declarations: [RoleFormComponent, FakeComponent]

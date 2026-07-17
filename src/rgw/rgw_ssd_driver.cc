@@ -1,4 +1,7 @@
 #include <boost/asio/system_executor.hpp>
+
+#include <boost/container/small_vector.hpp>
+
 #include "common/async/completion.h"
 #include "common/errno.h"
 #include "common/async/blocked_completion.h"
@@ -403,7 +406,7 @@ int SSDDriver::put(const DoutPrefixProvider* dpp, const std::string& key, const 
 
 int SSDDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs, optional_yield y)
 {
-    char buffer[len];
+    boost::container::small_vector<char, 1024> buffer(len);
     std::string location = create_dirs_get_filepath_from_key(dpp, partition_info.location, key);
     ldpp_dout(dpp, 20) << __func__ << "(): location=" << location << dendl;
     FILE *cache_file = nullptr;
@@ -418,7 +421,7 @@ int SSDDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t 
 
     fseek(cache_file, offset, SEEK_SET);
 
-    nbytes = fread(buffer, 1, len, cache_file);
+    nbytes = fread(buffer.data(), 1, len, cache_file);
     if (nbytes != len) {
         fclose(cache_file);
         ldpp_dout(dpp, 0) << "ERROR: get::io_read: fread has returned error: nbytes!=len, nbytes=" << nbytes << ", len=" << len << dendl;
@@ -431,7 +434,7 @@ int SSDDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t 
         return -errno;
     }
 
-    bl.append(buffer, len);
+    bl.append(buffer.data(), len);
 
     r = get_attrs(dpp, key, attrs, y);
     if (r < 0) {

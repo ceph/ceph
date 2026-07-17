@@ -31,14 +31,15 @@ repository. Python Sphinx renders the source into HTML and manpages.
 
 Viewing Old Ceph Documentation
 ==============================
-The https://docs.ceph.com link displays the documentation for the latest
-release by default (for example, if "Reef" is the most recent release, then by
-default https://docs.ceph.com displays the documentation for Reef), but you can
-view the documentation for older releases of Ceph (for example, ``quincy``) by
-replacing the release name in the url (for example, ``reef`` in
-`https://docs.ceph.com/en/reef/ <https://docs.ceph.com/en/reef>`_) with the
+The https://docs.ceph.com site displays the latest documentation by default,
+i.e. ``main``. This may include changes that have not yet been incorporated
+in any release. To view the documentation for older releases of Ceph (for
+example, ``quincy``) by replacing the release name in the URL (for
+example, ``reef`` in `https://docs.ceph.com/en/reef/ <https://docs.ceph.com/en/reef>`_) with the
 branch name you prefer (for example, ``quincy``, to create a URL that reads
 `https://docs.ceph.com/en/quincy/ <https://docs.ceph.com/en/quincy/>`_).
+
+Alternately, a version chooser is presented at the lower right of the browser window.
 
 .. _making_contributions:
 
@@ -46,9 +47,14 @@ Making Contributions
 ====================
 
 Making a documentation contribution involves the same basic procedure as making
-a code contribution, with one exception: you must build documentation source
-instead of compiling program source. This sequence (the sequence of building
-the documentation source) includes the following steps:
+a code contribution. Corrections of spelling or grammar, improvements to
+wording, and addition / correction of modest amounts of material to existing
+pages do not require a local docs build. For such contributions, you may
+skip the Build the Source section below.
+
+When adding or rearranging entire sections, or altering the underpinnings of
+the documentation site, you are encouraged to perform a local build
+of the documentation source. This sequence includes the following steps:
 
 #. `Get the Source`_
 #. `Select a Branch`_
@@ -62,8 +68,8 @@ the documentation source) includes the following steps:
 Get the Source
 --------------
 
-The source of the Ceph documentation is a collection of ReStructured Text files
-that are in the Ceph repository in the ``ceph/doc`` directory. For details
+The source of Ceph documentation is a collection of ReStructured Text files
+in the Ceph repository within the ``doc`` directory. For details
 on GitHub and Ceph, see :ref:`Get Involved`.
 
 Use the `Fork and Pull`_ approach to make documentation contributions. To do
@@ -109,9 +115,9 @@ this, you must:
 #. Fork the Ceph project. See https://github.com/ceph/ceph.
 
 #. Clone your fork of the Ceph project to your local host. This creates what is
-   known as a "local working copy".
+   known as a local working copy.
 
-The Ceph documentation is organized by component:
+Ceph documentation is organized by component:
 
 - **Ceph Storage Cluster:** The Ceph Storage Cluster documentation is
   in the ``doc/rados`` directory.
@@ -143,26 +149,7 @@ The Ceph documentation is organized by component:
 Select a Branch
 ---------------
 
-When you make small changes to the documentation, such as fixing typographical
-errors or clarifying explanations, use the ``main`` branch (default). You
-should also use the ``main`` branch when making contributions to features that
-are in the current release. ``main`` is the most commonly used branch.
-
-.. prompt:: bash $
-
-    git checkout main
-
-When you make changes to documentation that affect an upcoming release, use
-the ``next`` branch. ``next`` is the second most commonly used branch.
-
-.. prompt:: bash $
-
-    git checkout next
-
-When you are making substantial contributions such as new features that are not
-yet in the current release; if your contribution is related to an issue with a
-tracker ID; or, if you want to see your documentation rendered on the Ceph.com
-website before it gets merged into the ``main`` branch, you should create a
+When you make changes to the documentation, create a new and unique
 branch. To distinguish branches that include only documentation updates, we
 prepend them with ``wip-doc`` by convention, following the form
 ``wip-doc-{your-branch-name}``. If the branch relates to an issue filed in
@@ -178,7 +165,7 @@ http://tracker.ceph.com/issues/4000.
    a configuration option should also include a documentation commit that
    describes the changes.
 
-Before you create your branch name, ensure that it doesn't already exist in the
+Before you create your branch, ensure that it doesn't already exist in the
 local or remote repository.
 
 .. prompt:: bash $
@@ -229,7 +216,18 @@ You must also remove any reference to a deleted document from other documents.
 Build the Source
 ----------------
 
-To build the documentation, navigate to the ``ceph`` repository directory:
+This is not necessary for modest documentation pull requests, but is encouraged
+for sweeping changes across many pages, or to the underpinnings of how the
+documentation site is built. Alternately, one may watch the GitHub page for a
+PR, as PR checks will compile a new, provisional site build that may be viewed
+before merging or reviewing. Note that once a link to the provisional build
+appears in the PR update messages, it may still take some time, as long as an hour,
+for the built site to render with the new changes. To view the rendered site,
+click the "three dots" icon then "View Details" for the ReadTheDocs check under
+``GitHub Status Checks``.  If the build is not yet finished, the ReadTheDocs job
+status/build log will be shown.
+
+If you choose to build the documentation, navigate to the ``ceph`` repository directory:
 
 
 .. prompt:: bash $
@@ -434,15 +432,26 @@ Commit the Change
 
 Ceph documentation commits are simple, but follow a strict convention:
 
-- A commit SHOULD have 1 file per commit (it simplifies rollback). You MAY
-  commit multiple files with related changes. Unrelated changes SHOULD NOT
-  be put into the same commit.
-- A commit MUST have a comment.
+- When ready for merging, a PR SHOULD have a single commit. This may be
+  acheived by amending an initial commit and force-pushing, or by adding
+  additional commits then squashing. You MAY commit multiple files with
+  related changes. Unrelated changes SHOULD NOT be put into the same commit
+  or PR.
+- A commit MUST have a comment, which should match the PR title.
+- Both PR titles and commit titles should be imperatives, for example
+  ``doc/rados: Fix a typo in foo.rst`` instead of ``doc/rados: Fixed a typo in foo.rst``.
 - A commit comment MUST be prepended with ``doc:``. (strict)
+- A documentation commit message SHOULD begin with the highest subdirectory that
+  comprises all files changed. For example, if multiple files under ``doc/rados`` are
+  changed, the appropriate title is of the form ``doc/rados: Update xxx``.
+  When changing a single file, it is good practice to call out that file, for
+  example ``doc/rados: Fixed a typo in foo.rst``. When a PR touches files
+  at the top level, a title that begins only with ``doc:`` is reasonable.
 - The comment summary MUST be one line only. (strict)
 - Additional comments MAY follow a blank line after the summary,
-  but should be terse.
-- A commit MAY include ``Fixes: https://tracker.ceph.com/issues/{bug number}``.
+  but should be concise.
+- A commit MUST include ``Fixes: https://tracker.ceph.com/issues/{bug number}`` if
+  it addresses an open tracker issue.
 - Commits MUST include ``Signed-off-by: Firstname Lastname <email>``. (strict)
 
 .. tip:: Follow the foregoing convention particularly where it says
@@ -451,27 +460,26 @@ Ceph documentation commits are simple, but follow a strict convention:
 
 The following is a common commit comment (preferred)::
 
-    doc: Fixes a spelling error and a broken hyperlink.
+    doc: Fix a spelling error and a broken hyperlink
 
     Signed-off-by: John Doe <john.doe@gmail.com>
 
 
 The following comment includes a reference to a bug. ::
 
-    doc: Fixes a spelling error and a broken hyperlink.
+    doc: Fix a spelling error and a broken hyperlink
 
     Fixes: https://tracker.ceph.com/issues/1234
 
     Signed-off-by: John Doe <john.doe@gmail.com>
 
 
-The following comment includes a terse sentence following the comment summary.
+The following comment includes a concise sentence following the comment summary.
 There is a carriage return between the summary line and the description::
 
-    doc: Added mon setting to monitor config reference
+    doc/mon: Add new config option mon_blurfl to monitor config reference
 
-    Describes 'mon setting', which is a new setting added
-    to config_opts.h.
+    Describes 'mon_blurfl', which is a new config option
 
     Signed-off-by: John Doe <john.doe@gmail.com>
 
@@ -487,7 +495,8 @@ An easy way to manage your documentation commits is to use visual tools for
 ``git``. For example, ``gitk`` provides a graphical interface for viewing the
 repository history, and ``git-gui`` provides a graphical interface for viewing
 your uncommitted changes, staging them for commit, committing the changes and
-pushing them to your forked Ceph repository.
+pushing them to your forked Ceph repository. Note that these are entirely
+optional, you may stick with old-school CLI commands.
 
 
 For Debian/Ubuntu, execute:
@@ -533,13 +542,15 @@ Otherwise:
 Make a Pull Request
 -------------------
 
-As noted earlier, you can make documentation contributions using the `Fork and
+As noted earlier, make documentation contributions using the `Fork and
 Pull`_ approach.
 
 
 Squash Extraneous Commits
 -------------------------
-Each pull request ought to be associated with only a single commit. If you have
+Each pull request that is ready to merge should feature a single commit, or
+at most one commit for source code (anything under the ``src`` directory) and
+one for docs. If you have
 made more than one commit to the feature branch that you are working in, you
 will need to "squash" the multiple commits. "Squashing" is the colloquial term
 for a particular kind of "interactive rebase". Squashing can be done in a great
@@ -842,8 +853,9 @@ Headings
 Text Body
 ---------
 
-As a general rule, we prefer text to wrap at column 80 so that it is legible in
-a command line interface without leading or trailing white space. Where
+We prefer text in ``.rst`` files to wrap at column 80 so that it is legible in
+a command line interface without leading or trailing white space. This also
+cultivates clear PR reviews and edits. Where
 possible, we prefer to maintain this convention with text, lists, literal text
 (exceptions allowed), tables, and ``ditaa`` graphics.
 
@@ -984,6 +996,34 @@ preferred formulations:
 #. For more information, see `docs.ceph.com <docs.ceph.com>`_.
 
 #. See `docs.ceph.com <docs.ceph.com>`_.
+
+
+Conventions
+~~~~~~~~~~~
+
+The below are conventions that we try to maintain within the Ceph documentation.
+You may find deviations from these conventions within the documentation. If so,
+please ensure that you are looking at the latest files in the ``main`` branch.
+Corrections may be entered as a PR or by asking in #ceph-doc in the Ceph
+Slack workspace.
+
+* While the Ceph project is worldwide, we maintain the documentation in North
+  American English.
+* It is common in the community to refer to Ceph Monitor daemons as _mons_,
+  we prefer _Monitors_ in the documentation.
+* Similarly _mgrs_ are Managers
+* The plural of MDS is awkward; the best we've come up with is MDSes.
+* When writing a command example that the reader would enter as-is, preface with text like
+  _To recombinate the zoplex levels, run the following command:_
+* When writing a command example into which the reader should interpolate
+  RADOS pool names, host names, etc., preface with text like _To recombinate the
+  zoplex levels for a single pool, run a command of the following form:_
+* Numbers greater than one hundred may be written with digits, for example `1024`.
+* Numbers smaller than one hundred should be spelled out unless they are literals
+  to be included in option settings or commands.
+
+
+
 
 
 Quirks of ReStructured Text

@@ -12,7 +12,10 @@ from ..context_getters import (
 )
 from ..daemon_form import register as register_daemon_form
 from ..daemon_identity import DaemonIdentity
-from ..constants import DEFAULT_IMAGE
+from ..constants import (
+    DEFAULT_IMAGE,
+    DATA_DIR_MODE,
+)
 from ..context import CephadmContext
 from ..deployment_utils import to_deployment_container
 from ..exceptions import Error
@@ -49,7 +52,10 @@ class Ceph(ContainerDaemonForm):
     @classmethod
     def for_daemon_type(cls, daemon_type: str) -> bool:
         # TODO: figure out a way to un-special-case osd
-        return daemon_type in cls._daemons and daemon_type != 'osd'
+        return daemon_type in cls._daemons and daemon_type not in (
+            'osd',
+            'crash',
+        )
 
     def __init__(self, ctx: CephadmContext, ident: DaemonIdentity) -> None:
         self.ctx = ctx
@@ -197,6 +203,20 @@ class Ceph(ContainerDaemonForm):
         )
         mounts.update(cm)
 
+        if self.identity.daemon_type == 'rgw':
+            config_json = fetch_configs(ctx) or {}
+            d3n_cache = config_json.get('d3n_cache')
+
+            if d3n_cache:
+                if not isinstance(d3n_cache, dict):
+                    raise Error(
+                        f'Invalid d3n_cache config: expected dict got {type(d3n_cache).__name__}'
+                    )
+
+                cache_path = d3n_cache.get('cache_path')
+                if cache_path and isinstance(cache_path, str):
+                    mounts[cache_path] = f'{cache_path}:z'
+
     def setup_qat_args(self, ctx: CephadmContext, args: List[str]) -> None:
         try:
             out, _, _ = call_throws(ctx, ['ls', '-1', '/dev/vfio/devices'])
@@ -340,6 +360,35 @@ class OSD(Ceph):
         ):
             return '/usr/bin/ceph-osd-crimson'
         return '/usr/bin/ceph-osd'
+
+
+@register_daemon_form
+class Crash(Ceph):
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return daemon_type == 'crash'
+
+    def __init__(
+        self,
+        ctx: CephadmContext,
+        ident: DaemonIdentity,
+    ) -> None:
+        super().__init__(ctx, ident)
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'Ceph':
+        (uid, gid) = extract_uid_gid(ctx)
+        data_dir_base = f'{ctx.data_dir}/{ident.fsid}'
+        makedirs(
+            os.path.join(data_dir_base, 'crash'), uid, gid, DATA_DIR_MODE
+        )
+        makedirs(
+            os.path.join(data_dir_base, 'crash', 'posted'),
+            uid,
+            gid,
+            DATA_DIR_MODE,
+        )
+        return cls(ctx, ident)
 
 
 @register_daemon_form
@@ -551,13 +600,13 @@ def get_ceph_mounts_for_type(
                 mounts[cephadm_binary] = '/usr/sbin/cephadm'
                 mounts[
                     ceph_folder + '/src/ceph-volume/ceph_volume'
-                ] = '/usr/lib/python3.9/site-packages/ceph_volume'
+                ] = '/usr/lib/python3.12/site-packages/ceph_volume'
                 mounts[
                     ceph_folder + '/src/pybind/mgr'
                 ] = '/usr/share/ceph/mgr'
                 mounts[
                     ceph_folder + '/src/python-common/ceph'
-                ] = '/usr/lib/python3.9/site-packages/ceph'
+                ] = '/usr/lib/python3.12/site-packages/ceph'
                 mounts[
                     ceph_folder + '/monitoring/ceph-mixin/dashboards_out'
                 ] = '/etc/grafana/dashboards/ceph-dashboard'

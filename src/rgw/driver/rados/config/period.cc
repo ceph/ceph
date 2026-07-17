@@ -148,8 +148,6 @@ int RadosConfigStore::create_period(const DoutPrefixProvider* dpp,
     return r;
   }
 
-  // non const RGWPeriod
-  (void) this->update_latest_epoch(dpp, y, info.get_id(), info.get_epoch());
   return 0;
 }
 

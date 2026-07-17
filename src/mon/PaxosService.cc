@@ -17,6 +17,7 @@
 #include "Paxos.h"
 #include "common/Clock.h"
 #include "common/config.h"
+#include "common/debug.h"
 #include "include/stringify.h"
 #include "include/ceph_assert.h"
 #include "messages/PaxosServiceMessage.h"

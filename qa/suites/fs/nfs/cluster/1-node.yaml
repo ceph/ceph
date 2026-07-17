@@ -11,6 +11,7 @@ roles:
 tasks:
 - install:
 - cephadm:
+    skip_dashboard: true
 - cephadm.shell:
     host.a:
       - ceph orch apply mds a

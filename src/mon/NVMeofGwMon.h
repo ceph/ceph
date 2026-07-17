@@ -18,6 +18,8 @@
 #include "PaxosService.h"
 #include "NVMeofGwMap.h"
 
+struct Subscription;
+
 struct LastBeacon {
   NvmeGwId gw_id;
   NvmeGroupKey group_key;

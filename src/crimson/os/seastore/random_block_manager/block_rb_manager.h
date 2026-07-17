@@ -37,9 +37,10 @@ public:
   /*
    * Ondisk layout (TODO)
    *
-   * ---------------------------------------------------------------------------
-   * | rbm_superblock_t | metadatas |        ...      |    data blocks    |
-   * ---------------------------------------------------------------------------
+   * -------------------------------------------------------------------------------
+   * | 23B magic | 37B null padding | DENC-encoded superblock header | data blocks |
+   * |           |                  | header (device_superblock_t)   |             |
+   * -------------------------------------------------------------------------------
    */
 
   read_ertr::future<> read(paddr_t addr, bufferptr &buffer) override;

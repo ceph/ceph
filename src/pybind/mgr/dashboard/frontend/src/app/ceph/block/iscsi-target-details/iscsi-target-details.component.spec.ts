@@ -190,7 +190,7 @@ describe('IscsiTargetDetailsComponent', () => {
     });
     expect(component.nodes[0].label).toEqual(component.labelTpl);
     expect(component.nodes[0].labelContext).toEqual({
-      cdIcon: 'fa fa-lg fa fa-bullseye',
+      cdIcon: '24 target',
       name: 'iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw'
     });
     expect(component.nodes).toHaveLength(1);

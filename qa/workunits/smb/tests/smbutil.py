@@ -1,5 +1,6 @@
 import base64
 import contextlib
+import os
 import pathlib
 import time
 
@@ -88,6 +89,10 @@ class SMBTestConf:
         # ideally we check that this is *our* ip or name, but we'll just wing
         # it for now until we really need to check
         return self.clients()[0]
+
+    @property
+    def testdir(self):
+        return self._data.get('testdir') or os.path.expanduser('~/cephtest')
 
 
 @contextlib.contextmanager
@@ -190,7 +195,7 @@ def get_share_by_id(smb_cfg, cluster_id, share_id):
     return None
 
 
-def apply_share_config(smb_cfg, share):
+def apply_share_config(smb_cfg, share, immediate=False):
     """Apply share configuration via the apply command."""
     jres = cephutil.cephadm_shell_cmd(
         smb_cfg,
@@ -209,5 +214,6 @@ def apply_share_config(smb_cfg, share):
     assert resources_ret['resource_type'] == 'ceph.smb.share'
     # sleep to ensure the settings got applied in smbd
     # TODO: make this more dynamic somehow
-    time.sleep(60)
+    if not immediate:
+        time.sleep(60)
     return resources_ret

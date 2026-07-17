@@ -152,6 +152,18 @@ public:
   }
 
   int get_nodeid() const final { return whoami; }
+
+  /// iterate over all PGs, summing their snap trim queue lengths
+  uint64_t calc_snap_trim_queue_total();
+  uint64_t get_snap_trim_queue_total() const {
+    // the cached value, calculated by calc_snap_trim_queue_total()
+    return snap_trim_queue_total;
+  }
+
+  // not atomic: both write (tick_without_osd_lock) and read (initiate_scrub,
+  // called from the same timer callback) are on the same thread
+  uint64_t snap_trim_queue_total{0};
+
 private:
   OSDMapRef osdmap;
 
@@ -1240,6 +1252,7 @@ class OSD : public Dispatcher,
   // Tick timer for those stuff that do not need osd_lock
   ceph::mutex tick_timer_lock = ceph::make_mutex("OSD::tick_timer_lock");
   SafeTimer tick_timer_without_osd_lock;
+  uint_fast16_t trim_queue_length_countdown = 0;
   std::string gss_ktfile_client{};
 
 public:

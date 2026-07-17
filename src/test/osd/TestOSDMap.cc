@@ -10,6 +10,7 @@
 #include "common/common_init.h"
 #include "common/ceph_argparse.h"
 #include "common/ceph_json.h"
+#include "crush/CrushWrapper.h"
 #include "include/stringify.h"
 
 #include <iostream>
@@ -1839,6 +1840,166 @@ TEST_F(OSDMapTest, BUG_40104) {
     auto latency = mono_clock::now() - start;
     std::cout << "clean_pg_upmaps (~" << big_pg_num
               << " pg_upmap_items) latency:" << timespan_str(latency)
+              << std::endl;
+  }
+}
+
+TEST_F(OSDMapTest, TryDropRemapOverfullBothOverfull) {
+  // https://tracker.ceph.com/issues/63137
+  //
+  // try_drop_remap_overfull must not drop a [um_from -> osd] pair when
+  // um_from is itself overfull: the drop returns the PG to an OSD that
+  // already carries too many PGs, providing no net improvement.
+  //
+  // Setup (size=1, 12 PGs, 3 OSDs, target=4 each):
+  //   pg_upmap:       pg0..pg6 -> osd.0 (7 PGs), pg7..pg11 -> osd.1 (5 PGs)
+  //   pg_upmap_items: pg6: [osd.0 -> osd.1]
+  //   pgs_by_osd:     osd.0=6 (+2), osd.1=6 (+2), osd.2=0 (-4)
+  //
+  // Dropping pg6's entry would return it to osd.0, raising osd.0's deviation
+  // from +2 to +3 while lowering osd.1's from +2 to +1 -- a net wash that
+  // leaves one OSD worse off.
+  set_up_map(3, true);
+
+  OSDMap::Incremental pool_inc(osdmap.get_epoch() + 1);
+  pool_inc.new_pool_max = osdmap.get_pool_max();
+  pg_pool_t empty;
+  int64_t pool_id = ++pool_inc.new_pool_max;
+  pg_pool_t *p = pool_inc.get_new_pool(pool_id, &empty);
+  p->size = 1;
+  p->min_size = 1;
+  p->set_pg_num(12);
+  p->set_pgp_num(12);
+  p->type = pg_pool_t::TYPE_REPLICATED;
+  p->crush_rule = 0;
+  p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+  pool_inc.new_pool_names[pool_id] = "testpool";
+  osdmap.apply_incremental(pool_inc);
+
+  // Force placement via pg_upmap: pg0..pg6 -> osd.0, pg7..pg11 -> osd.1
+  {
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    for (int i = 0; i <= 6; ++i) {
+      pg_t pg = osdmap.raw_pg_to_pg(pg_t(i, pool_id));
+      inc.new_pg_upmap[pg] = mempool::osdmap::vector<int32_t>{0};
+    }
+    for (int i = 7; i <= 11; ++i) {
+      pg_t pg = osdmap.raw_pg_to_pg(pg_t(i, pool_id));
+      inc.new_pg_upmap[pg] = mempool::osdmap::vector<int32_t>{1};
+    }
+    osdmap.apply_incremental(inc);
+  }
+
+  // Add pg_upmap_items pg6: [osd.0 -> osd.1]
+  // pgs_by_osd after all upmaps: osd.0=6 (+2), osd.1=6 (+2), osd.2=0 (-4)
+  pg_t pg6 = osdmap.raw_pg_to_pg(pg_t(6, pool_id));
+  {
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.new_pg_upmap_items[pg6] =
+      mempool::osdmap::vector<pair<int32_t,int32_t>>{{0, 1}};
+    osdmap.apply_incremental(inc);
+  }
+
+  // Verify pg6 acts from osd.1 before the balancer runs
+  {
+    vector<int> up;
+    int up_primary;
+    osdmap.pg_to_up_acting_osds(pg6, &up, &up_primary, nullptr, nullptr);
+    ASSERT_EQ(up[0], 1);
+  }
+
+  set<int64_t> only_pools = {pool_id};
+  OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+  osdmap.calc_pg_upmaps(g_ceph_context, 1, 100, only_pools, &pending_inc);
+
+  OSDMap newmap;
+  newmap.deepish_copy_from(osdmap);
+  newmap.apply_incremental(pending_inc);
+
+  // pg6 must still act from osd.1: returning it to osd.0 would not improve
+  // the distribution (osd.0 deviation would rise from +2 to +3).
+  {
+    vector<int> up;
+    int up_primary;
+    newmap.pg_to_up_acting_osds(pg6, &up, &up_primary, nullptr, nullptr);
+    ASSERT_EQ(up[0], 1);
+  }
+}
+
+TEST_F(OSDMapTest, BUG_63137_calc_pg_upmaps_perf) {
+  // https://tracker.ceph.com/issues/63137
+  //
+  // try_drop_remap_overfull used to call test_change (full stddev recompute
+  // over all OSDs) for every incoming pg_upmap_items pair that cannot improve
+  // distribution.  With R incoming pairs per cohort OSD, that is O(n_cohort*R)
+  // wasted test_change calls.
+  //
+  // Setup (size=1, n_osds=600, pg_num=6000, target=10 per OSD):
+  //   cohort OSDs 0..499: 12 PGs each (deviation +2)
+  //   sink   OSDs 500..599: 0 PGs each (deviation -10)
+  //
+  //   pg_upmap:       pg(i*12+j) -> osd.i   for i in 0..499, j in 0..11
+  //   pg_upmap_items: pg(i*12+k) [osd.i -> osd.(i+k)%500]   k in 1..R
+  //
+  // After all upmaps each cohort OSD has (12-R) natural + R incoming = 12 PGs.
+  // When processing overfull osd.i, there are R incoming ring pairs with
+  // um_from also at deviation +2. Old code tried dropping each and paid
+  // test_change; new code skips them with the um_from overload check.
+  const int n_cohort = 500;
+  const int n_sink = 100;
+  const int n_osds = n_cohort + n_sink;
+  const int pgs_per_cohort = 12;
+  const int total_pgs = n_cohort * pgs_per_cohort;
+  const int R = 5;
+
+  set_up_map(n_osds, true);
+
+  int pool_id;
+  {
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    pending_inc.new_pool_max = osdmap.get_pool_max();
+    pool_id = ++pending_inc.new_pool_max;
+    pg_pool_t empty;
+    auto p = pending_inc.get_new_pool(pool_id, &empty);
+    p->size = 1;
+    p->min_size = 1;
+    p->set_pg_num(total_pgs);
+    p->set_pgp_num(total_pgs);
+    p->type = pg_pool_t::TYPE_REPLICATED;
+    p->crush_rule = 0;
+    p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+    pending_inc.new_pool_names[pool_id] = "perf_pool";
+    osdmap.apply_incremental(pending_inc);
+    ASSERT_TRUE(osdmap.have_pg_pool(pool_id));
+  }
+
+  // pg_upmap: assign all PGs for cohort OSD i to osd.i
+  // pg_upmap_items ring: pg(i*12+k) [osd.i -> osd.(i+k)%n_cohort]
+  {
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    for (int i = 0; i < n_cohort; ++i) {
+      for (int j = 0; j < pgs_per_cohort; ++j) {
+        pg_t pg = osdmap.raw_pg_to_pg(pg_t(i * pgs_per_cohort + j, pool_id));
+        inc.new_pg_upmap[pg] = mempool::osdmap::vector<int32_t>{i};
+      }
+      for (int k = 1; k <= R; ++k) {
+        pg_t pg = osdmap.raw_pg_to_pg(pg_t(i * pgs_per_cohort + k, pool_id));
+        int um_to = (i + k) % n_cohort;
+        inc.new_pg_upmap_items[pg] =
+          mempool::osdmap::vector<pair<int32_t,int32_t>>{{i, um_to}};
+      }
+    }
+    osdmap.apply_incremental(inc);
+  }
+
+  {
+    set<int64_t> only_pools = {pool_id};
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    auto start = mono_clock::now();
+    osdmap.calc_pg_upmaps(g_ceph_context, 1, 10000, only_pools, &pending_inc);
+    auto latency = mono_clock::now() - start;
+    std::cout << "calc_pg_upmaps (63137 scenario, n_cohort=" << n_cohort
+              << " R=" << R << ") latency: " << timespan_str(latency)
               << std::endl;
   }
 }

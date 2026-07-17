@@ -3,10 +3,10 @@ import { PageHelper } from '../page-helper.po';
 export class UrlsCollection extends PageHelper {
   pages = {
     // Cluster expansion
-    welcome: { url: '#/add-storage?welcome=true', id: 'cd-create-cluster' },
+    onboarding: { url: '#/add-storage?welcome=true', id: 'cd-create-cluster' },
 
     // Landing page
-    overview: { url: '#/overview', id: 'cd-dashboard' },
+    overview: { url: '#/overview', id: 'cd-overview' },
 
     // Hosts
     hosts: { url: '#/hosts', id: 'cd-hosts' },

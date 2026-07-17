@@ -41,6 +41,7 @@ export class AreaChartComponent implements OnChanges {
   @Input() rawData!: ChartPoint[];
   @Input() chartKey = '';
   @Input() decimals = DECIMAL;
+  @Input() axisDecimals?: number = 1;
   @Input() customOptions?: Partial<AreaChartOptions>;
   @Input() legendEnabled = true;
   @Input() subHeading = '';
@@ -150,9 +151,9 @@ export class AreaChartComponent implements OnChanges {
           ticks: {
             // Only return numeric part of the formatted string (exclude units)
             formatter: (tick: number | Date): string => {
-              const raw = this.formatValueForChart(tick, labels, divisor);
+              const raw = this.formatValueForChart(tick, labels, divisor, this.axisDecimals);
               const num = parseFloat(raw);
-              return num.toString();
+              return Number.isNaN(num) ? '' : num.toString();
             }
           }
         }
@@ -161,7 +162,7 @@ export class AreaChartComponent implements OnChanges {
         enabled: true,
         showTotal: false,
         valueFormatter: (value: number): string =>
-          (this.formatValueForChart(value, labels, divisor) || value).toString(),
+          (this.formatValueForChart(value, labels, divisor, this.decimals) || value).toString(),
         customHTML: (data, defaultHTML) => this.formatChartTooltip(defaultHTML, data)
       },
       points: {
@@ -204,7 +205,12 @@ export class AreaChartComponent implements OnChanges {
   }
 
   // Uses number formatter service to convert chart value based on unit and divisor.
-  private formatValueForChart(input: number | Date, labels: string[], divisor: number): string {
+  private formatValueForChart(
+    input: number | Date,
+    labels: string[],
+    divisor: number,
+    decimals: number
+  ): string {
     if (typeof input !== 'number') return '';
     return this.numberFormatter.formatFromTo(
       input,
@@ -212,7 +218,7 @@ export class AreaChartComponent implements OnChanges {
       this.chartDisplayUnit,
       divisor,
       labels,
-      this.decimals
+      decimals
     );
   }
 }

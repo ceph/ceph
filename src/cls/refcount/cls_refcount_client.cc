@@ -11,6 +11,7 @@ using std::list;
 using std::string;
 
 using ceph::bufferlist;
+using namespace cls::refcount;
 
 void cls_refcount_get(librados::ObjectWriteOperation& op, const string& tag, bool implicit_ref)
 {
@@ -19,7 +20,7 @@ void cls_refcount_get(librados::ObjectWriteOperation& op, const string& tag, boo
   call.tag = tag;
   call.implicit_ref = implicit_ref;
   encode(call, in);
-  op.exec("refcount", "get", in);
+  op.exec(method::get, in);
 }
 
 void cls_refcount_put(librados::ObjectWriteOperation& op, const string& tag, bool implicit_ref)
@@ -29,7 +30,7 @@ void cls_refcount_put(librados::ObjectWriteOperation& op, const string& tag, boo
   call.tag = tag;
   call.implicit_ref = implicit_ref;
   encode(call, in);
-  op.exec("refcount", "put", in);
+  op.exec(method::put, in);
 }
 
 void cls_refcount_set(librados::ObjectWriteOperation& op, list<string>& refs)
@@ -38,7 +39,7 @@ void cls_refcount_set(librados::ObjectWriteOperation& op, list<string>& refs)
   cls_refcount_set_op call;
   call.refs = refs;
   encode(call, in);
-  op.exec("refcount", "set", in);
+  op.exec(method::set, in);
 }
 
 int cls_refcount_read(librados::IoCtx& io_ctx, string& oid, list<string> *refs, bool implicit_ref)
@@ -47,7 +48,7 @@ int cls_refcount_read(librados::IoCtx& io_ctx, string& oid, list<string> *refs, 
   cls_refcount_read_op call;
   call.implicit_ref = implicit_ref;
   encode(call, in);
-  int r = io_ctx.exec(oid, "refcount", "read", in, out);
+  int r = io_ctx.exec(oid, method::read, in, out);
   if (r < 0)
     return r;
 

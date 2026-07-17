@@ -113,8 +113,7 @@ void ScrubJob::set_both_targets_queued()
 
 void ScrubJob::adjust_shallow_schedule(
     utime_t last_scrub,
-    const Scrub::sched_conf_t& app_conf,
-    utime_t scrub_clock_now)
+    const Scrub::sched_conf_t& app_conf)
 {
   dout(10) << fmt::format(
 		  "at entry: shallow target:{}, conf:{}, last-stamp:{:s}",
@@ -129,7 +128,8 @@ void ScrubJob::adjust_shallow_schedule(
 
     // add a random delay to the proposed scheduled time
     adj_target += app_conf.shallow_interval;
-    double r = rand() / (double)RAND_MAX;
+    std::uniform_real_distribution<double> dist{0.0, 1.0};
+    double r = dist(random_gen);
     adj_target +=
 	app_conf.shallow_interval * app_conf.interval_randomize_ratio * r;
 
@@ -159,8 +159,8 @@ double ScrubJob::guaranteed_offset(
   if (s_or_d == scrub_level_t::deep) {
     // use the sdv of the deep scrub distribution, times 3 (3-sigma...)
     const double sdv = app_conf.deep_interval * app_conf.deep_randomize_ratio;
-  // note: the '+10.0' is there just to guarantee inequality if '._ratio' is 0
-    return app_conf.deep_interval + abs(3 * sdv) + 10.0;
+    // note: the '+10.0' is there just to guarantee inequality if '._ratio' is 0
+    return app_conf.deep_interval + std::abs(3 * sdv) + 10.0;
   }
 
   // shallow scrub
@@ -250,8 +250,7 @@ utime_t ScrubJob::get_sched_time() const
 
 void ScrubJob::adjust_deep_schedule(
     utime_t last_deep,
-    const Scrub::sched_conf_t& app_conf,
-    utime_t scrub_clock_now)
+    const Scrub::sched_conf_t& app_conf)
 {
   dout(10) << fmt::format(
 		  "at entry: deep target:{}, conf:{}, last-stamp:{:s}",
@@ -376,7 +375,7 @@ bool ScrubJob::observes_noscrub_flags(urgency_t urgency)
 
 bool ScrubJob::observes_allowed_hours(urgency_t urgency)
 {
-  return urgency < urgency_t::operator_requested;
+  return urgency < urgency_t::repairing;
 }
 
 bool ScrubJob::observes_extended_sleep(urgency_t urgency)
@@ -387,6 +386,11 @@ bool ScrubJob::observes_extended_sleep(urgency_t urgency)
 bool ScrubJob::observes_load_limit(urgency_t urgency)
 {
   return urgency < urgency_t::after_repair;
+}
+
+bool ScrubJob::observes_trims_load(urgency_t urgency)
+{
+  return urgency < urgency_t::repairing;
 }
 
 bool ScrubJob::requires_reservation(urgency_t urgency)

@@ -369,7 +369,7 @@ public:
     auto ep = take_exception_from_future();
 
     // Any assert_* handler we have:
-    // assert_failure, assert_all and assert_all_func_t
+    // assert_failure, assert_all, and assert_all_func_t
     // are expected to return void since we actually abort in them.
     // This is why we need a way to diffreciate between them and between
     // non-aborting error handlers (e.g handle) - for that we use the dedicated
@@ -938,25 +938,17 @@ public:
     return std::move(fut);
   }
 
-  class assert_all {
-    const char* const msg = nullptr;
-  public:
-    assert_all(const char* msg)
-      : msg(msg) {
-    }
-    assert_all() = default;
-
-    template <class ErrorT, EnableIf<ErrorT>...>
-    no_touch_error_marker operator()(ErrorT&& raw_error) {
-      using decayed_t = std::decay_t<ErrorT>;
-      static_assert(contains_once_v<decayed_t>,
-                    "discarding disallowed ErrorT");
-      decayed_t::error_t::handle([this] (auto&& error_v) {
-        ceph_abort_msgf("%s: %s", msg ? msg : "", error_v.message().c_str());
-      })(std::forward<ErrorT>(raw_error));
-      return no_touch_error_marker{};
-    }
-  };
+  template <typename... Args>
+  static auto assert_all(fmt::format_string<Args...> fmt_str, Args&&... args) {
+    // Extract string_view before the lambda: the consteval format-string check
+    // already ran at the call site; re-passing fmt_str into fmt::format()
+    // inside a lambda would re-trigger the consteval constructor at runtime.
+    fmt::string_view sv = fmt_str;
+    return assert_all_func(
+      [sv, ...captured = std::forward<Args>(args)](const auto&) mutable {
+        ceph_abort_msg(fmt::vformat(sv, fmt::make_format_args(captured...)));
+      });
+  }
 
   template <typename Func>
   class assert_all_func_t {
@@ -1304,23 +1296,15 @@ namespace ct_error {
     }
   };
 
-  class assert_all {
-    const char* const msg = nullptr;
-  public:
-    assert_all(const char* msg)
-      : msg(msg) {
-    }
-    assert_all() = default;
-
-    template <class ErrorT>
-    no_touch_error_marker operator()(ErrorT&& raw_error) {
-      using decayed_t = std::decay_t<ErrorT>;
-      decayed_t::error_t::handle([this] (auto&& error_v) {
-        ceph_abort_msgf("%s: %s", msg ? msg : "", error_v.message().c_str());
-      })(std::forward<ErrorT>(raw_error));
+  template <typename... Args>
+  static auto assert_all(fmt::format_string<Args...> fmt_str, Args&&... args) {
+    fmt::string_view sv = fmt_str;
+    return [sv, ...captured = std::forward<Args>(args)](auto&&) mutable
+        -> no_touch_error_marker {
+      ceph_abort_msg(fmt::vformat(sv, fmt::make_format_args(captured...)));
       return no_touch_error_marker{};
-    }
-  };
+    };
+  }
 
   template <class ErrorFunc>
   static decltype(auto) all_same_way(ErrorFunc&& error_func) {

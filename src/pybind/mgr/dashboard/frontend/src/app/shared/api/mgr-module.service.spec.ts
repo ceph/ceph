@@ -7,7 +7,7 @@ import { MgrModuleService } from './mgr-module.service';
 import { CdTableSelection } from '../models/cd-table-selection';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { MgrModuleListComponent } from '~/app/ceph/cluster/mgr-modules/mgr-module-list/mgr-module-list.component';
-import { ToastrModule } from 'ngx-toastr';
+
 import { SharedModule } from '../shared.module';
 import { BlockUIService } from 'ng-block-ui';
 import { SummaryService } from '../services/summary.service';
@@ -19,7 +19,7 @@ describe('MgrModuleService', () => {
 
   configureTestBed({
     declarations: [MgrModuleListComponent],
-    imports: [HttpClientTestingModule, SharedModule, ToastrModule.forRoot()],
+    imports: [HttpClientTestingModule, SharedModule],
     providers: [MgrModuleService]
   });
 
@@ -61,6 +61,21 @@ describe('MgrModuleService', () => {
     service.enable('foo').subscribe();
     const req = httpTesting.expectOne('api/mgr/module/foo/enable');
     expect(req.request.method).toBe('POST');
+    expect(req.request.body).toBeNull();
+  });
+
+  it('should call enable with force for whitelisted modules', () => {
+    service.enable('feedback').subscribe();
+    const req = httpTesting.expectOne('api/mgr/module/feedback/enable');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ force: true });
+  });
+
+  it('should call enable with explicit force', () => {
+    service.enable('foo', true).subscribe();
+    const req = httpTesting.expectOne('api/mgr/module/foo/enable');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ force: true });
   });
 
   it('should call disable', () => {
@@ -106,7 +121,7 @@ describe('MgrModuleService', () => {
       tick(service.REFRESH_INTERVAL);
       tick(service.REFRESH_INTERVAL);
       tick(service.REFRESH_INTERVAL);
-      expect(service.enable).toHaveBeenCalledWith('foo');
+      expect(service.enable).toHaveBeenCalledWith('foo', false);
       expect(service.list).toHaveBeenCalledTimes(2);
       expect(notificationService.suspendToasties).toHaveBeenCalledTimes(2);
       expect(blockUIService.start).toHaveBeenCalled();

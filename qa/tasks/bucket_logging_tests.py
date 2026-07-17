@@ -41,12 +41,30 @@ def download(ctx, config):
                     ],
                 )
 
+        # Journal mode requires the boto3 LoggingType extension 
+        if client_config.get('logging_type') == 'Journal':
+            ctx.cluster.only(client).run(
+                args=['mkdir', '-p', '/home/ubuntu/.aws/models/s3/2006-03-01/']
+                )
+            (remote,) = ctx.cluster.only(client).remotes.keys()
+            remote_file = '/home/ubuntu/.aws/models/s3/2006-03-01/service-2.sdk-extras.json'
+            local_file = '{tdir}/ceph/examples/rgw/boto3/service-2.sdk-extras.json'.format(tdir=testdir)
+            remote.run(args=['cp', local_file, remote_file])
+
     try:
         yield
     finally:
         log.info('Removing bucket-logging-tests...')
         testdir = teuthology.get_testdir(ctx)
-        for client in config:
+        for client, client_config in config.items():
+            if client_config.get('logging_type') == 'Journal':
+                ctx.cluster.only(client).run(
+                    args=['rm', '-rf', '/home/ubuntu/.aws/models/s3/2006-03-01/service-2.sdk-extras.json']
+                    )
+                ctx.cluster.only(client).run(
+                    args=['cd', '/home/ubuntu/', run.Raw('&&'),
+                          'rmdir', '-p', '.aws/models/s3/2006-03-01/']
+                    )
             ctx.cluster.only(client).run(
                 args=[
                     'rm',
@@ -186,6 +204,10 @@ def run_tests(ctx, config):
         args = ['cd', '{tdir}/ceph/src/test/rgw/bucket_logging/'.format(tdir=testdir), run.Raw('&&'),
             'BUCKET_LOGGING_TESTS_CONF=./bucket-logging-tests.{client}.conf'.format(client=client),
             'tox', '--', '-v', '-m', ' or '.join(attr)]
+
+        logging_type = client_config.get('logging_type')
+        if logging_type:
+            args.extend(['--logging-type', logging_type])
 
         toxvenv_sh(ctx, remote, args, label="bucket logging tests against rgw")
 

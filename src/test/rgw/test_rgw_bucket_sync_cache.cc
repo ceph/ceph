@@ -12,71 +12,182 @@
  * Foundation.  See file COPYING.
  */
 
-#include "rgw_bucket_sync_cache.h"
+#include <common/ceph_time.h>
 #include <gtest/gtest.h>
+
+#include "rgw_bucket_sync_cache.h"
 
 using namespace rgw::bucket_sync;
 
-// helper function to construct rgw_bucket_shard
-static rgw_bucket_shard make_key(const std::string& tenant,
-                                 const std::string& bucket, int shard)
+using Shard = ShardState;
+using Gen = GenState;
+
+namespace {
+/// Create a key suitable for a given cache
+///
+/// \tparam State One of `Shard` or `Gen`.
+///
+/// \param[in] tenant Owning tenant
+/// \param[in] bucket Bucket name
+/// \param[in] shard Bucket shard, ignored if `State` is `Gen`.
+///
+/// \return A key for the given bucket
+template <typename State>
+auto make_key(const std::string& tenant, const std::string& bucket, int shard) =
+    delete;
+
+template <>
+auto
+make_key<Shard>(const std::string& tenant, const std::string& bucket, int shard)
 {
   auto key = rgw_bucket_key{tenant, bucket};
   return rgw_bucket_shard{std::move(key), shard};
 }
 
-TEST(BucketSyncCache, ReturnCachedPinned)
+template <>
+auto
+make_key<Gen>(
+    const std::string& tenant,
+    const std::string& bucket,
+    // Dummy parameter for overload
+    int)
 {
-  auto cache = Cache::create(0);
-  const auto key = make_key("", "1", 0);
+  auto key = rgw_bucket_key{tenant, bucket};
+  rgw_bucket b{std::move(key)};
+  return b.get_key();
+}
+
+/// Stick an integer into a state
+///
+/// \tparam State One of `Shard` or `Gen`.
+///
+/// \param[inout] state State to modify
+/// \param[in] value Value to store
+template <typename State>
+void mutate(State&, unsigned int value) = delete;
+
+template <>
+void
+mutate<Shard>(ShardState& state, unsigned int value)
+{
+  state.counter = value;
+}
+
+template <>
+void
+mutate<Gen>(GenState& state, unsigned int value)
+{
+  state.last_future_generation_recovery = ceph::coarse_mono_time{
+      ceph::timespan{value}};
+}
+
+/// Retrieve an integer from a state
+///
+/// \note Intended only for values stored with `mutate`, anything else
+/// will be truncated to the capacity of an `unsigned int`.
+///
+/// \tparam State One of `Shard` or `Gen`.
+///
+/// \param[in] state State to modify
+///
+/// \return The integer previously stored in the state
+template <typename State>
+unsigned int extract(const State&) = delete;
+
+template <>
+unsigned int
+extract<Shard>(const Shard& state)
+{
+  return static_cast<unsigned int>(state.counter);
+}
+
+template <>
+unsigned int
+extract<Gen>(const Gen& state)
+{
+  return static_cast<unsigned int>(
+      state.last_future_generation_recovery.time_since_epoch().count());
+}
+} // namespace
+
+template <typename State>
+void
+ReturnCachedPinned()
+{
+  auto cache = Cache<State>::create(0);
+  const auto key = make_key<State>("", "1", 0);
   auto h1 = cache->get(key, std::nullopt); // pin
-  h1->counter = 1;
+  mutate(*h1, 1);
   auto h2 = cache->get(key, std::nullopt);
-  EXPECT_EQ(1, h2->counter);
+  EXPECT_EQ(1, extract(*h2));
 }
 
-TEST(BucketSyncCache, ReturnNewUnpinned)
+TEST(BucketShardSyncCache, ReturnCachedPinned) { ReturnCachedPinned<Shard>(); }
+
+TEST(BucketGenSyncCache, ReturnCachedPinned) { ReturnCachedPinned<Gen>(); }
+
+template <typename State>
+void
+ReturnNewUnpinned()
 {
-  auto cache = Cache::create(0);
-  const auto key = make_key("", "1", 0);
-  cache->get(key, std::nullopt)->counter = 1; // pin+unpin
-  EXPECT_EQ(0, cache->get(key, std::nullopt)->counter);
+  auto cache = Cache<State>::create(0);
+  const auto key = make_key<State>("", "1", 0);
+  mutate(*cache->get(key, std::nullopt), 1); // pin+unpin
+  EXPECT_EQ(0, extract(*cache->get(key, std::nullopt)));
 }
 
-TEST(BucketSyncCache, DistinctTenant)
+TEST(BucketShardSyncCache, ReturnNewUnpinned) { ReturnNewUnpinned<Shard>(); }
+
+TEST(BucketGenSyncCache, ReturnNewUnpinned) { ReturnNewUnpinned<Gen>(); }
+
+template <typename State>
+void
+DistinctTenant()
 {
-  auto cache = Cache::create(2);
-  const auto key1 = make_key("a", "bucket", 0);
-  const auto key2 = make_key("b", "bucket", 0);
+  auto cache = Cache<State>::create(2);
+  const auto key1 = make_key<State>("a", "bucket", 0);
+  const auto key2 = make_key<State>("b", "bucket", 0);
+  mutate(*cache->get(key1, std::nullopt), 1);
+  EXPECT_EQ(0, extract(*cache->get(key2, std::nullopt)));
+}
+
+TEST(BucketShardSyncCache, DistinctTenant) { DistinctTenant<Shard>(); }
+
+TEST(BucketGenSyncCache, DistinctTenant) { DistinctTenant<Gen>(); }
+
+TEST(BucketShardSyncCache, DistinctShards)
+{
+  auto cache = ShardCache::create(2);
+  const auto key1 = make_key<Shard>("", "bucket", 0);
+  const auto key2 = make_key<Shard>("", "bucket", 1);
   cache->get(key1, std::nullopt)->counter = 1;
   EXPECT_EQ(0, cache->get(key2, std::nullopt)->counter);
 }
 
-TEST(BucketSyncCache, DistinctShards)
+template <typename State>
+void
+DistinctGen()
 {
-  auto cache = Cache::create(2);
-  const auto key1 = make_key("", "bucket", 0);
-  const auto key2 = make_key("", "bucket", 1);
-  cache->get(key1, std::nullopt)->counter = 1;
-  EXPECT_EQ(0, cache->get(key2, std::nullopt)->counter);
-}
-
-TEST(BucketSyncCache, DistinctGen)
-{
-  auto cache = Cache::create(2);
-  const auto key = make_key("", "bucket", 0);
+  auto cache = Cache<State>::create(2);
+  const auto key = make_key<State>("", "bucket", 0);
   std::optional<uint64_t> gen1; // empty
   std::optional<uint64_t> gen2 = 5;
-  cache->get(key, gen1)->counter = 1;
-  EXPECT_EQ(0, cache->get(key, gen2)->counter);
+  mutate(*cache->get(key, gen1), 1);
+  EXPECT_EQ(0, extract(*cache->get(key, gen2)));
 }
 
-TEST(BucketSyncCache, DontEvictPinned)
-{
-  auto cache = Cache::create(0);
+TEST(BucketShardSyncCache, DistinctGen) { DistinctGen<Shard>(); }
 
-  const auto key1 = make_key("", "1", 0);
-  const auto key2 = make_key("", "2", 0);
+TEST(BucketGenSyncCache, DistinctGen) { DistinctGen<Gen>(); }
+
+template <typename State>
+void
+DontEvictPinned()
+{
+  auto cache = Cache<State>::create(0);
+
+  const auto key1 = make_key<State>("", "1", 0);
+  const auto key2 = make_key<State>("", "2", 0);
 
   auto h1 = cache->get(key1, std::nullopt);
   EXPECT_EQ(key1, h1->key.first);
@@ -85,46 +196,64 @@ TEST(BucketSyncCache, DontEvictPinned)
   EXPECT_EQ(key1, h1->key.first); // h1 unchanged
 }
 
-TEST(BucketSyncCache, HandleLifetime)
-{
-  const auto key = make_key("", "1", 0);
+TEST(BucketShardSyncCache, DontEvictPinned) { DontEvictPinned<Shard>(); }
 
-  Handle h; // test that handles keep the cache referenced
+TEST(BucketGenSyncCache, DontEvictPinned) { DontEvictPinned<Gen>(); }
+
+template <typename State>
+void
+HandleLifetime()
+{
+  const auto key = make_key<State>("", "1", 0);
+
+  Handle<State> h; // test that handles keep the cache referenced
   {
-    auto cache = Cache::create(0);
+    auto cache = Cache<State>::create(0);
     h = cache->get(key, std::nullopt);
   }
   EXPECT_EQ(key, h->key.first);
 }
 
-TEST(BucketSyncCache, TargetSize)
-{
-  auto cache = Cache::create(2);
+TEST(BucketShardSyncCache, HandleLifetime) { HandleLifetime<Shard>(); }
 
-  const auto key1 = make_key("", "1", 0);
-  const auto key2 = make_key("", "2", 0);
-  const auto key3 = make_key("", "3", 0);
+TEST(BucketGenSyncCache, HandleLifetime) { HandleLifetime<Gen>(); }
+
+template <typename State>
+void
+TargetSize()
+{
+  auto cache = Cache<State>::create(2);
+
+  const auto key1 = make_key<State>("", "1", 0);
+  const auto key2 = make_key<State>("", "2", 0);
+  const auto key3 = make_key<State>("", "3", 0);
 
   // fill cache up to target_size=2
-  cache->get(key1, std::nullopt)->counter = 1;
-  cache->get(key2, std::nullopt)->counter = 2;
+  mutate(*cache->get(key1, std::nullopt), 1);
+  mutate(*cache->get(key2, std::nullopt), 2);
   // test that each unpinned entry is still cached
-  EXPECT_EQ(1, cache->get(key1, std::nullopt)->counter);
-  EXPECT_EQ(2, cache->get(key2, std::nullopt)->counter);
+  EXPECT_EQ(1, extract(*cache->get(key1, std::nullopt)));
+  EXPECT_EQ(2, extract(*cache->get(key2, std::nullopt)));
   // overflow the cache and recycle key1
-  cache->get(key3, std::nullopt)->counter = 3;
+  mutate(*cache->get(key3, std::nullopt), 3);
   // test that the oldest entry was recycled
-  EXPECT_EQ(0, cache->get(key1, std::nullopt)->counter);
+  EXPECT_EQ(0, extract(*cache->get(key1, std::nullopt)));
 }
 
-TEST(BucketSyncCache, HandleMoveAssignEmpty)
+TEST(BucketShardSyncCache, TargetSize) { TargetSize<Shard>(); }
+
+TEST(BucketGenSyncCache, TargetSize) { TargetSize<Gen>(); }
+
+template <typename State>
+void
+HandleMoveAssignEmpty()
 {
-  auto cache = Cache::create(0);
+  auto cache = Cache<State>::create(0);
 
-  const auto key1 = make_key("", "1", 0);
-  const auto key2 = make_key("", "2", 0);
+  const auto key1 = make_key<State>("", "1", 0);
+  const auto key2 = make_key<State>("", "2", 0);
 
-  Handle j1;
+  Handle<State> j1;
   {
     auto h1 = cache->get(key1, std::nullopt);
     j1 = std::move(h1); // assign over empty handle
@@ -134,32 +263,56 @@ TEST(BucketSyncCache, HandleMoveAssignEmpty)
   EXPECT_EQ(key1, j1->key.first); // j1 stays pinned
 }
 
-TEST(BucketSyncCache, HandleMoveAssignExisting)
+TEST(BucketShardSyncCache, HandleMoveAssignEmpty)
 {
-  const auto key1 = make_key("", "1", 0);
-  const auto key2 = make_key("", "2", 0);
+  HandleMoveAssignEmpty<Shard>();
+}
 
-  Handle h1;
+TEST(BucketGenSyncCache, HandleMoveAssignEmpty)
+{
+  HandleMoveAssignEmpty<Gen>();
+}
+
+template <typename State>
+void
+HandleMoveAssignExisting()
+{
+  const auto key1 = make_key<State>("", "1", 0);
+  const auto key2 = make_key<State>("", "2", 0);
+
+  Handle<State> h1;
   {
-    auto cache1 = Cache::create(0);
+    auto cache1 = Cache<State>::create(0);
     h1 = cache1->get(key1, std::nullopt);
-  } // j1 has the last ref to cache1
+  } // h1 has the last ref to cache1
   {
-    auto cache2 = Cache::create(0);
+    auto cache2 = Cache<State>::create(0);
     auto h2 = cache2->get(key2, std::nullopt);
     h1 = std::move(h2); // assign over existing handle
   }
   EXPECT_EQ(key2, h1->key.first);
 }
 
-TEST(BucketSyncCache, HandleCopyAssignEmpty)
+TEST(BucketShardSyncCache, HandleMoveAssignExisting)
 {
-  auto cache = Cache::create(0);
+  HandleMoveAssignExisting<Shard>();
+}
 
-  const auto key1 = make_key("", "1", 0);
-  const auto key2 = make_key("", "2", 0);
+TEST(BucketGenSyncCache, HandleMoveAssignExisting)
+{
+  HandleMoveAssignExisting<Gen>();
+}
 
-  Handle j1;
+template <typename State>
+void
+HandleCopyAssignEmpty()
+{
+  auto cache = Cache<State>::create(0);
+
+  const auto key1 = make_key<State>("", "1", 0);
+  const auto key2 = make_key<State>("", "2", 0);
+
+  Handle<State> j1;
   {
     auto h1 = cache->get(key1, std::nullopt);
     j1 = h1; // assign over empty handle
@@ -169,21 +322,43 @@ TEST(BucketSyncCache, HandleCopyAssignEmpty)
   EXPECT_EQ(key1, j1->key.first); // j1 stays pinned
 }
 
-TEST(BucketSyncCache, HandleCopyAssignExisting)
+TEST(BucketShardSyncCache, HandleCopyAssignEmpty)
 {
-  const auto key1 = make_key("", "1", 0);
-  const auto key2 = make_key("", "2", 0);
+  HandleCopyAssignEmpty<Shard>();
+}
 
-  Handle h1;
+TEST(BucketGenSyncCache, HandleCopyAssignEmpty)
+{
+  HandleCopyAssignEmpty<Gen>();
+}
+
+template <typename State>
+void
+HandleCopyAssignExisting()
+{
+  const auto key1 = make_key<State>("", "1", 0);
+  const auto key2 = make_key<State>("", "2", 0);
+
+  Handle<State> h1;
   {
-    auto cache1 = Cache::create(0);
+    auto cache1 = Cache<State>::create(0);
     h1 = cache1->get(key1, std::nullopt);
-  } // j1 has the last ref to cache1
+  } // h1 has the last ref to cache1
   {
-    auto cache2 = Cache::create(0);
+    auto cache2 = Cache<State>::create(0);
     auto h2 = cache2->get(key2, std::nullopt);
     h1 = h2; // assign over existing handle
     EXPECT_EQ(&*h1, &*h2);
   }
   EXPECT_EQ(key2, h1->key.first);
+}
+
+TEST(BucketShardSyncCache, HandleCopyAssignExisting)
+{
+  HandleCopyAssignExisting<Shard>();
+}
+
+TEST(BucketGenSyncCache, HandleCopyAssignExisting)
+{
+  HandleCopyAssignExisting<Gen>();
 }

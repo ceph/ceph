@@ -44,19 +44,66 @@ Create a volume by running a command of the following form:
 
 .. prompt:: bash #
 
-   ceph fs volume create <vol_name> [placement] [--data-pool <data-pool-name>] [--meta-pool <metadata-pool-name>]
+   ceph fs volume create <vol_name>
 
 This creates a CephFS file system and its data and metadata pools. Alternately,
-if the data pool and/or metadata pool needed for creating a CephFS volume
-already exist, these pool names can be passed to this command so that the
-volume is created using these existing pools. This command can also deploy MDS
-daemons for the filesystem using a Ceph Manager orchestrator module (for
-example Rook). See :doc:`/mgr/orchestrator`.
+if the data pool and/or metadata pool for the new CephFS volume
+already exist, these pool names can be passed to the ``ceph fs`` command so that the
+volume is created using these existing pools.
 
+MDS services for the new CephFS filesystem (volume) may be deployed using the
+orchestrator. See :doc:`/mgr/orchestrator`.
+
+When using the cephadm orchestrator, an example service spec might look
+like the following, which assumes that the new volume is named ``zac`` and
+the orchestrator label ``zacmds`` has been asigned to at least two appropriate
+cluster nodes:
+
+.. prompt:: bash # auto
+
+   # cat <<EOF >/tmp/mds.zac.spec
+   service_type: mds
+   service_id: zac
+   service_name: mds.zac
+   placement:
+     count: 2
+     label: zacmds
+   EOF
+   # ceph orch apply -i /tmp/mds.zac.spec --dry-run
+   # echo validate the placement then run
+   # ceph orch apply -i /tmp/mds.zac.spec
+
+See also :ref:`orchestrator-cli-cephfs` for more information information
+regarding placement.
+
+When the cluster is running Ceph Tentacle (20.2.0) or later, one may condense these
+commands, placing and deploying MDS daemons for the filesystem using a Ceph Manager
+orchestrator module (cephadm or Rook). See :doc:`/mgr/orchestrator`.
 ``<vol_name>`` is the volume name (an arbitrary string). ``[placement]`` is an
 optional string that specifies the :ref:`orchestrator-cli-placement-spec` for
-the MDS. See also :ref:`orchestrator-cli-cephfs` for more examples on
+the MDS. See also :ref:`orchestrator-cli-cephfs` for more examples of
 placement.
+
+.. prompt:: bash #
+
+   ceph fs volume create <vol_name> [placement] [--data-pool <data-pool-name>] [--meta-pool <metadata-pool-name>]
+
+With either command form, the metadata pool must currently be replicated,
+and we recommend placing it, via an appropriate CRUSH rule, on SSD OSDs.
+The metadata pool may easily share SSD OSDs with other pools, as it
+stores relatively little data. That said, for this purpose, more but smaller
+OSDs are better than fewer but larger. Say you have four 7.6 TiB NVMe SSDs total: you
+will gain performance by splitting each into 3 or 4 OSDs.
+
+The first data pool may be erasure-coded, but we also recommend that it be
+replicated and placed on SSDs, which will often be the same OSDs as above. Then
+one or more additional data pools may be attached and client data directed
+to them via :doc:`/cephfs/file-layouts`.  The advantage of this strategy is
+that backtrace information is always stored in the first data pool, and
+provisioning that on faster media will greatly speed repair and other operations.
+As with the metadata pool, this will not consume much capacity and does not
+require dedicated OSDs. These additional data pools often are deployed with erasure
+coding and/or on cost-effective media such as HDDs or coarse-IU QLC SSDs.
 
 .. note:: Specifying placement via a YAML file is not supported through the
           volume interface.

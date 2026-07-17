@@ -10,6 +10,7 @@ import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
 import { FeatureTogglesGuardService } from '~/app/shared/services/feature-toggles-guard.service';
 import { ModuleStatusGuardService } from '~/app/shared/services/module-status-guard.service';
 import { SharedModule } from '~/app/shared/shared.module';
+import { TextLabelListComponent } from '~/app/shared/components/text-label-list/text-label-list.component';
 import { IscsiSettingComponent } from './iscsi-setting/iscsi-setting.component';
 import { IscsiTabsComponent } from './iscsi-tabs/iscsi-tabs.component';
 import { IscsiTargetDetailsComponent } from './iscsi-target-details/iscsi-target-details.component';
@@ -61,10 +62,13 @@ import {
   CheckboxModule,
   ComboBoxModule,
   DatePickerModule,
+  FileUploaderModule,
   GridModule,
   IconModule,
   IconService,
+  InlineLoadingModule,
   InputModule,
+  LoadingModule,
   ModalModule,
   NumberModule,
   RadioModule,
@@ -93,8 +97,9 @@ import Datastore from '@carbon/icons/es/datastore/16';
 import { NvmeofGatewaySubsystemComponent } from './nvmeof-gateway-subsystem/nvmeof-gateway-subsystem.component';
 import { NvmeofNamespaceExpandModalComponent } from './nvmeof-namespace-expand-modal/nvmeof-namespace-expand-modal.component';
 import { NvmeGatewayViewComponent } from './nvme-gateway-view/nvme-gateway-view.component';
+// import { ProductiveCardComponent } from '~/app/shared/components/productive-card/productive-card.component';
 import { NvmeGatewayViewBreadcrumbResolver } from './nvme-gateway-view/nvme-gateway-view-breadcrumb.resolver';
-import { NvmeofGatewayNodeMode } from '~/app/shared/enum/nvmeof.enum';
+import { NvmeofGatewayNodeMode } from '~/app/shared/models/nvmeof';
 import { NvmeofGatewayNodeAddModalComponent } from './nvmeof-gateway-node/nvmeof-gateway-node-add-modal/nvmeof-gateway-node-add-modal.component';
 import { NvmeofSubsystemNamespacesListComponent } from './nvmeof-subsystem-namespaces-list/nvmeof-subsystem-namespaces-list.component';
 import { NvmeofSubsystemOverviewComponent } from './nvmeof-subsystem-overview/nvmeof-subsystem-overview.component';
@@ -102,6 +107,10 @@ import { NvmeSubsystemViewBreadcrumbResolver } from './nvme-subsystem-view/nvme-
 import { NvmeSubsystemViewComponent } from './nvme-subsystem-view/nvme-subsystem-view.component';
 import { NvmeofSubsystemPerformanceComponent } from './nvmeof-subsystem-performance/nvmeof-subsystem-performance.component';
 import { NvmeofTabsComponent } from './nvmeof-tabs/nvmeof-tabs.component';
+import { NvmeofGatewayGroupDeleteGuardModalComponent } from './nvmeof-gateway-group/nvmeof-gateway-group-delete-guard-modal.component';
+import { NvmeofSetupCardsComponent } from './nvmeof-setup-cards/nvmeof-setup-cards.component';
+import { NvmeofGatewayGroupFilterComponent } from './nvmeof-gateway-group-filter/nvmeof-gateway-group-filter.component';
+import { NvmeofEditAuthenticationComponent } from './nvmeof-edit-authentication/nvmeof-edit-authentication.component';
 
 @NgModule({
   imports: [
@@ -121,12 +130,15 @@ import { NvmeofTabsComponent } from './nvmeof-tabs/nvmeof-tabs.component';
     ButtonModule,
     GridModule,
     IconModule,
+    InlineLoadingModule,
+    LoadingModule,
     CheckboxModule,
     RadioModule,
     SelectModule,
     NumberModule,
     ModalModule,
     DatePickerModule,
+    FileUploaderModule,
     ComboBoxModule,
     TabsModule,
     TagModule,
@@ -135,7 +147,10 @@ import { NvmeofTabsComponent } from './nvmeof-tabs/nvmeof-tabs.component';
     ContainedListModule,
     SideNavModule,
     LayoutModule,
-    ThemeModule
+    ThemeModule,
+    NvmeofSetupCardsComponent,
+    NvmeofGatewayGroupFilterComponent,
+    TextLabelListComponent
   ],
   declarations: [
     RbdListComponent,
@@ -188,7 +203,9 @@ import { NvmeofTabsComponent } from './nvmeof-tabs/nvmeof-tabs.component';
     NvmeofSubsystemsStepFourComponent,
     NvmeofSubsystemOverviewComponent,
     NvmeofSubsystemPerformanceComponent,
-    NvmeofTabsComponent
+    NvmeofTabsComponent,
+    NvmeofGatewayGroupDeleteGuardModalComponent,
+    NvmeofEditAuthenticationComponent
   ],
 
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]
@@ -329,6 +346,7 @@ const routes: Routes = [
   {
     path: 'nvmeof',
     canActivate: [ModuleStatusGuardService],
+    component: NvmeofTabsComponent,
     data: {
       breadcrumbs: true,
       text: 'NVMe/TCP',
@@ -360,7 +378,18 @@ const routes: Routes = [
               breadcrumbs: ActionLabels.CREATE,
               pageHeader: {
                 title: $localize`Create Gateway Group`,
-                description: $localize`A logical group of gateways that hosts will connect to.`
+                description: $localize`A logical group of NVMe gateways that hosts connect to for load-balanced access.`
+              }
+            }
+          },
+          {
+            path: `${URLVerbs.EDIT}/:name`,
+            component: NvmeofGroupFormComponent,
+            data: {
+              breadcrumbs: ActionLabels.EDIT,
+              pageHeader: {
+                title: $localize`Edit Gateway Group`,
+                description: $localize`Modify gateway group configuration.`
               }
             }
           },
@@ -373,7 +402,7 @@ const routes: Routes = [
               {
                 path: 'nodes',
                 component: NvmeofGatewayNodeComponent,
-                data: { breadcrumbs: $localize`Gateway nodes`, mode: NvmeofGatewayNodeMode.DETAILS }
+                data: { breadcrumbs: $localize`Overview`, mode: NvmeofGatewayNodeMode.DETAILS }
               },
               {
                 path: 'subsystems',

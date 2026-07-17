@@ -217,6 +217,10 @@ if [[ ${CI_CONTAINER} == "true" ]] ; then
     if [[ "${fromtag}" != "${default_fromtag}" ]] ; then
         branch_repo_tag=${repopath}:${BRANCH}-${fromtag}
         sha1_repo_tag=${repopath}:${CEPH_SHA1}-${fromtag}
+        if [[ ${FLAVOR} == "debug" ]]; then
+            branch_repo_tag=${branch_repo_tag}-${FLAVOR}
+            sha1_repo_tag=${sha1_repo_tag}-${FLAVOR}
+        fi
     fi
 
     if [[ "${ARCH}" == "arm64" ]] ; then

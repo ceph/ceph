@@ -58,13 +58,22 @@ RDMAConnectedSocketImpl::RDMAConnectedSocketImpl(CephContext *cct, std::shared_p
     active(false), pending(false)
 {
   if (!cct->_conf->ms_async_rdma_cm) {
+    // Create the per-connection notify eventfd before the queue pair.  Under fd
+    // pressure eventfd() can fail (-1); doing it first means a failure leaves no
+    // queue pair to leak.  The two failure states are kept distinct on purpose so
+    // the accept/connect paths can return an honest errno: eventfd failure ->
+    // fd() < 0 && qp == nullptr; queue pair failure -> fd() >= 0 && qp == nullptr.
+    notify_fd = eventfd(0, EFD_CLOEXEC|EFD_NONBLOCK);
+    if (notify_fd < 0) {
+      lderr(cct) << __func__ << " failed to create eventfd: " << cpp_strerror(errno) << dendl;
+      return;
+    }
     qp = ib->create_queue_pair(cct, dispatcher->get_tx_cq(), dispatcher->get_rx_cq(), IBV_QPT_RC, NULL);
     if (!qp) {
       lderr(cct) << __func__ << " queue pair create failed" << dendl;
       return;
     }
     local_qpn = qp->get_local_qp_number();
-    notify_fd = eventfd(0, EFD_CLOEXEC|EFD_NONBLOCK);
     dispatcher->register_qp(qp, this);
     dispatcher->perf_logger->inc(l_msgr_rdma_created_queue_pair);
     dispatcher->perf_logger->inc(l_msgr_rdma_active_queue_pair);
@@ -76,7 +85,8 @@ RDMAConnectedSocketImpl::~RDMAConnectedSocketImpl()
   ldout(cct, 20) << __func__ << " destruct." << dendl;
   cleanup();
   worker->remove_pending_conn(this);
-  dispatcher->schedule_qp_destroy(local_qpn);
+  if (qp)  // null on construction-failure paths; local_qpn 0 is unregistered
+    dispatcher->schedule_qp_destroy(local_qpn);
 
   for (unsigned i=0; i < wc.size(); ++i) {
     dispatcher->post_chunk_to_pool(reinterpret_cast<Chunk*>(wc[i].wr_id));

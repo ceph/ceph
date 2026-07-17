@@ -64,6 +64,14 @@ if [ -e CMakeCache.txt ]; then
     CEPH_ROOT=$(get_cmake_variable ceph_SOURCE_DIR)
     CEPH_BUILD_DIR=`pwd`
     [ -z "$MGR_PYTHON_PATH" ] && MGR_PYTHON_PATH=$CEPH_ROOT/src/pybind/mgr
+
+    # Point the sanitizers at the in-tree suppression files so vstart daemons
+    # ignore the same still-reachable third-party leaks AddCephTest.cmake suppresses for
+    # unittests. Without this `ceph-mon --mkfs` aborts on LeakSanitizer.
+    if [ "$(get_cmake_variable WITH_ASAN)" = "ON" ]; then
+        [ -z "$ASAN_OPTIONS" ] && export ASAN_OPTIONS="suppressions=$CEPH_ROOT/qa/asan.supp,detect_odr_violation=0"
+        [ -z "$LSAN_OPTIONS" ] && export LSAN_OPTIONS="suppressions=$CEPH_ROOT/qa/lsan.supp,print_suppressions=0"
+    fi
 fi
 
 # use CEPH_BUILD_ROOT to vstart from a 'make install'
@@ -813,7 +821,6 @@ prepare_conf() {
         pid file = $CEPH_OUT_DIR/\$name.pid
         heartbeat file = $CEPH_OUT_DIR/\$name.heartbeat
 "
-    local extblkdev_conf=""
 
     local mgr_modules="iostat nfs"
     if $with_mgr_dashboard; then
@@ -864,7 +871,6 @@ prepare_conf() {
         enable experimental unrecoverable data corrupting features = *
         osd_crush_chooseleaf_type = 0
         debug asok assert abort = true
-        $(format_conf "${extblkdev_conf}")
         $(format_conf "${msgr_conf}")
         $(format_conf "${extra_conf}")
         $AUTOSCALER_OPTS
@@ -925,10 +931,6 @@ EOF
                [ ${#bluestore_wal_devs[@]} -gt 0 ]; then
                 # when use physical disk, not create file for db/wal
                 BLUESTORE_OPTS=""
-            else
-                # vstart's default file-backed OSDs are not suitable for
-                # extblkdev plugins that probe hardware capabilities.
-                extblkdev_conf="osd_extblkdev_plugins ="
             fi
         fi
         if [ "$io_uring_enabled" -eq 1 ]; then
@@ -1163,6 +1165,7 @@ start_mon() {
 [mon.$f]
         host = $HOSTNAME
         mon data = $CEPH_DEV_DIR/mon.$f
+        mon backup path = $CEPH_DEV_DIR/mon.$f-backup
 EOF
             count=$(($count + 2))
         done
@@ -1479,6 +1482,19 @@ EOF
     fi
 }
 
+create_fs_volume() {
+    local name=$1
+    if [ "$CEPH_NUM_MGR" -gt 0 ]; then
+        ceph_adm fs volume create ${name}
+    else
+        local meta_pool="cephfs.${name}.meta"
+        local data_pool="cephfs.${name}.data"
+        ceph_adm osd pool create "$meta_pool"
+        ceph_adm osd pool create "$data_pool" --bulk
+        ceph_adm fs new ${name} "$meta_pool" "$data_pool"
+    fi
+}
+
 start_mds() {
     local mds=0
     for name in a b c d e f g h i j k l m n o p
@@ -1529,12 +1545,15 @@ EOF
                 ceph_adm fs flag set enable_multiple true --yes-i-really-mean-it
             fi
 
-	    # wait for volume module to load
-	    while ! ceph_adm fs volume ls ; do sleep 1 ; done
+            if [ "$CEPH_NUM_MGR" -gt 0 ]; then
+                # wait for volume module to load
+                while ! ceph_adm fs volume ls ; do sleep 1 ; done
+            fi
+
             local fs=0
             for name in a b c d e f g h i j k l m n o p
             do
-                ceph_adm fs volume create ${name}
+                create_fs_volume ${name}
                 ceph_adm fs authorize ${name} "client.fs_${name}" / rwp >> "$keyring_fn"
                 fs=$(($fs + 1))
                 [ $fs -eq $CEPH_NUM_FS ] && break
@@ -1588,6 +1607,7 @@ start_ganesha() {
             Enable_RQUOTA = false;
             Protocols = 4;
             NFS_Port = $port;
+            allow_set_io_flusher_fail = true;
         }
 
         MDCACHE {
@@ -1595,20 +1615,20 @@ start_ganesha() {
         }
 
         NFSv4 {
-           RecoveryBackend = rados_cluster;
+           RecoveryBackend = "\"rados_cluster\"";
            Minor_Versions = 1, 2;
         }
 
         RADOS_KV {
-           pool = '$pool_name';
-           namespace = $namespace;
-           UserId = $test_user;
+           pool = "\"$pool_name\"";
+           namespace = "\"$namespace\"";
+           UserId = "\"$test_user\"";
            nodeid = $name;
         }
 
         RADOS_URLS {
-	   Userid = $test_user;
-	   watch_url = '$url';
+	   Userid = "\"$test_user\"";
+	   watch_url = "\"$url\"";
         }
 
 	%url $url" > "$ganesha_dir/ganesha-$name.conf"

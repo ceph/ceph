@@ -71,6 +71,9 @@ service Gateway {
 	// Delete a subsystem network
 	rpc del_subsystem_network(del_subsystem_network_req) returns(req_status) {}
 
+	// Refresh auto-listeners for all network masks configured on the given subsystem on this gateway
+	rpc gw_refresh_network(gw_refresh_network_req) returns(gw_refresh_network_status) {}
+
 	// Add KMIP server endpoints
 	rpc add_kmip_server_endpoints(add_kmip_server_endpoints_req) returns(req_status) {}
 
@@ -124,6 +127,9 @@ service Gateway {
 
 	// Removes a host from a subsystem
 	rpc remove_host(remove_host_req) returns (req_status) {}
+
+	// Set keep host connected flag
+	rpc set_keep_host_connected(set_keep_host_connected_req) returns (req_status) {}
 
 	// Changes a host inband authentication keys
 	rpc change_host_key(change_host_key_req) returns (req_status) {}
@@ -326,6 +332,17 @@ message del_subsystem_network_req {
 	string network_mask = 2;
 }
 
+message gw_refresh_network_req {
+	string subsystem_nqn = 1;
+}
+
+message gw_refresh_network_status {
+	int32 status = 1;
+	string error_message = 2;
+	repeated string added = 3;
+	repeated string removed = 4;
+}
+
 message kmip_server_endpoint {
 	string address = 1;
 	optional uint32 port = 2;
@@ -395,6 +412,12 @@ message remove_host_req {
 	string subsystem_nqn = 1;
 	string host_nqn = 2;
 	optional bool force = 3;
+	optional bool keep_connections = 4;
+}
+
+message set_keep_host_connected_req {
+	string subsystem_nqn = 1;
+	string host_nqn = 2;
 }
 
 message list_hosts_req {
@@ -567,6 +590,7 @@ message namespace {
 	optional string nonce = 7;
 	optional bool auto_visible = 8;
 	repeated string hosts = 9;
+	optional string rados_namespace_name = 10;
 }
 
 message subsystems_info_cli {
@@ -749,6 +773,7 @@ message connection {
 	optional string subsystem = 12;
 	optional bool disconnected_due_to_keepalive_timeout = 13;
 	optional DHCHAPControllerKeyOrigin dhchap_controller_origin = 14;
+	optional bool host_deleted = 15;
 }
 
 message connections_info {

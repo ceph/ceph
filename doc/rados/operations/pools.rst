@@ -459,6 +459,11 @@ You may set values for the following keys:
 
    .. versionadded:: 20.2.0
 
+.. describe:: supports_omap
+
+    :Description: Determines whether omap operations can be performed on a pool. On for replicated and erasure-coded pools with EC optimizations enabled (excluding Crimson pools), off for all other erasure-coded pools.
+    :Type: Boolean
+
 .. describe:: hashpspool
 
    :Description: Sets or unsets the ``HASHPSPOOL`` flag on a given pool.
@@ -770,6 +775,8 @@ Managing pools that are flagged with ``--bulk``
 ===============================================
 See :ref:`managing_bulk_flagged_pools`.
 
+.. _setting_values_for_a_stretch_pool:
+
 Setting values for a stretch pool
 =================================
 To set values for a stretch pool, run a command of the following form:
@@ -844,8 +851,6 @@ Here are the breakdowns of the arguments:
    
       :Type: Flag
       :Required: No.
-
-.. _setting_values_for_a_stretch_pool:
 
 Unsetting values for a stretch pool
 ===================================

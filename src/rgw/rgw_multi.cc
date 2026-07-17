@@ -100,5 +100,6 @@ void RGWUploadPartInfo::dump(Formatter *f) const
   utime_t ut(modified);
   encode_json("modified", ut, f);
   encode_json("past_prefixes", past_prefixes, f);
+  encode_json("crypt_salt", crypt_salt, f);
 }
 

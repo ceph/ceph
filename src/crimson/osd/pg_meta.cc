@@ -61,9 +61,9 @@ seastar::future<epoch_t> PGMeta::get_epoch()
         return seastar::make_ready_future<epoch_t>(*epoch);
       }
     },
-    FuturizedStore::Shard::read_errorator::assert_all{
+    FuturizedStore::Shard::read_errorator::assert_all(
       "PGMeta::get_epoch: unable to read pgmeta"
-    });
+    ));
   });
 }
 
@@ -112,7 +112,7 @@ seastar::future<std::tuple<pg_info_t, PastIntervals>> PGMeta::load()
     return seastar::make_ready_future<std::tuple<pg_info_t, PastIntervals>>(
       std::make_tuple(std::move(info), std::move(past_intervals)));
   },
-  FuturizedStore::Shard::read_errorator::assert_all{
+  FuturizedStore::Shard::read_errorator::assert_all(
     "PGMeta::load: unable to read pgmeta"
-  });
+  ));
 }
