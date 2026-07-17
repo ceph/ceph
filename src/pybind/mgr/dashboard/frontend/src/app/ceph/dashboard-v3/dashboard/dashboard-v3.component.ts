@@ -43,8 +43,12 @@ import {
 @Component({
   selector: 'cd-dashboard-v3',
   templateUrl: './dashboard-v3.component.html',
+<<<<<<< HEAD
   styleUrls: ['./dashboard-v3.component.scss'],
   standalone: false
+=======
+  styleUrls: ['./dashboard-v3.component.scss']
+>>>>>>> 781278cd500 (mgr/dashboard: fix backport issues from PR #68052)
 })
 export class DashboardV3Component extends PrometheusListHelper implements OnInit, OnDestroy {
   telemetryURL = 'https://telemetry-public.ceph.com/';
