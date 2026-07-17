@@ -160,6 +160,7 @@ Build / Packaging / QA Infrastructure
 - Ubuntu 24.04 (Noble) and Rocky Linux 10 added as supported distros
   across build and QA; CMake bumped to require 3.22.1 and gained
   CMake-4 support; C++ standard raised to C++23.
+- The Ceph container's base OS image has changed to ``rockylinux:10``.
 
 Changelog
 ---------
