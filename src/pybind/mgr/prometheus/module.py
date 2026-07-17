@@ -2211,6 +2211,9 @@ class Module(MgrModule, OrchestratorClientMixin):
         if not self.orch_is_available():
             return
 
+        if not self.get_module_option_ex('cephadm', 'hw_monitoring', False):
+            return
+
         try:
             report = raise_if_exception(self.node_proxy_fullreport())
         except Exception as e:
