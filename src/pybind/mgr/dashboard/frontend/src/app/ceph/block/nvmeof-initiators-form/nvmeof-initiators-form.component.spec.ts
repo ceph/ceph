@@ -141,15 +141,24 @@ describe('NvmeofInitiatorsFormComponent', () => {
       component.subsystemNQN = subsystemNQN;
       component.group = 'test-group';
 
-      const payload: any = {
-        hostType: HOST_TYPE.SPECIFIC,
-        addedHosts: []
-      };
+      const emptyHostPayloads: any[] = [
+        { hostType: HOST_TYPE.SPECIFIC, addedHosts: [] },
+        { hostType: HOST_TYPE.SPECIFIC, hostDchapKeyList: [] },
+        { hostType: HOST_TYPE.SPECIFIC, addedHosts: [], hostDchapKeyList: [] },
+        { hostType: HOST_TYPE.SPECIFIC }
+      ];
 
-      component.onSubmit(payload);
+      emptyHostPayloads.forEach((payload) => {
+        (nvmeofService.addSubsystemInitiators as jasmine.Spy).calls.reset();
+        (nvmeofService.removeInitiators as jasmine.Spy).calls.reset();
+        component.isSubmitLoading = false;
 
-      expect(nvmeofService.addSubsystemInitiators).not.toHaveBeenCalled();
-      expect(component.isSubmitLoading).toBe(false);
+        component.onSubmit(payload);
+
+        expect(nvmeofService.addSubsystemInitiators).not.toHaveBeenCalled();
+        expect(nvmeofService.removeInitiators).not.toHaveBeenCalled();
+        expect(component.isSubmitLoading).toBe(false);
+      });
     });
 
     it('should remove wildcard host before adding specific hosts', () => {
