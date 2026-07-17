@@ -11,6 +11,7 @@
 #include <boost/algorithm/string.hpp>
 
 #include "rgw_swift_auth.h"
+#include "rgw_swift_digest_helpers.h"
 #include "rgw_rest.h"
 
 #include "common/ceph_crypto.h"
@@ -257,6 +258,11 @@ class TempURLSignature {
 };
 
 std::unique_ptr<TempURLEngine::SignatureHelper> TempURLEngine::SignatureHelper::get_sig_helper(std::string_view x) {
+  // Get reference to the shared digest helper map
+  const auto& tempurl_digest_helpers =
+    rgw::auth::swift::get_digest_helper_map<TempURLEngine::SignatureHelper,
+                                             TempURLSignature::SignatureHelper_x>();
+
   size_t pos = x.find(':');
   if (pos == x.npos || pos <= 0) {
     switch(x.length()) {
@@ -270,12 +276,10 @@ std::unique_ptr<TempURLEngine::SignatureHelper> TempURLEngine::SignatureHelper::
     return std::make_unique<TempURLSignature::BadSignatureHelper>();
   }
   std::string_view type { x.substr(0,pos) };
-  if (type == "sha1") {
-    return std::make_unique<TempURLSignature::SignatureHelper_x<ceph::crypto::HMACSHA1,rgw::auth::swift::SignatureFlavor::NAMED_BASE64>>();
-  } else if (type == "sha256") {
-    return std::make_unique<TempURLSignature::SignatureHelper_x<ceph::crypto::HMACSHA256,rgw::auth::swift::SignatureFlavor::NAMED_BASE64>>();
-  } else if (type == "sha512") {
-    return std::make_unique<TempURLSignature::SignatureHelper_x<ceph::crypto::HMACSHA512,rgw::auth::swift::SignatureFlavor::NAMED_BASE64>>();
+  // Look up the digest algorithm in the map
+  auto it = tempurl_digest_helpers.find(type);
+  if (it != tempurl_digest_helpers.end()) {
+    return it->second();
   }
   return std::make_unique<TempURLSignature::BadSignatureHelper>();
 };
