@@ -246,18 +246,16 @@ struct select final
 {
  std::string begin_key, end_key;
 
- public:
- // We'll eventually need a way to get settings into the base library from the binding layer; there 
- // are a few ways we could do it, this is one I'm mulling over; do not use this right now.
  mutable struct {
   int stride = 0; // "unlimited"
 
-  // Some parts of the documentation claim FDB_STREAMING_MODE_ITERATOR is the default, other parts 
-  // don't... examples tend to use FDB_STREAMING_MODE_WANT_ALL, but they operate on fairly small amounts 
-  // of data. It's pretty hard to understand what the Right Thing(TM) to do is, the sure the answer may 
-  // evolve as I learn more, but for now this setting at least means it's "plumbed through" (this 
-  // particular mode starts with small batches and then grows to larger increments as more data is sent), 
-  // even though this isn't really used at the moment:
+  bool reverse_order = false;	// should we return results in reverse order?
+
+  // Some parts of the documentation claim FDB_STREAMING_MODE_ITERATOR is the default, other parts
+  // don't... examples tend to use FDB_STREAMING_MODE_WANT_ALL, but they operate on fairly small amounts
+  // of data. It's pretty hard to understand what the Right Thing(TM) to do is, the sure the answer may
+  // evolve as I learn more; this particular mode starts with small batches and then grows to larger
+  // increments as more data is sent and seems to be generally well-behaved:
   FDBStreamingMode streaming_mode = FDB_STREAMING_MODE_ITERATOR; 
 
  } options;
@@ -744,7 +742,9 @@ inline bool retry_after_error(ceph::libfdb::transaction_handle& txn, const fdb_e
 }
 
 // Convert FDBKey array into something useful:
-inline std::vector<ceph::libfdb::select> as_select_seq(const FDBKey* const xs, const int n)
+inline std::vector<ceph::libfdb::select> as_select_seq(const FDBKey* const xs,
+                                                       const int n,
+                                                       const ceph::libfdb::select& parent)
 {
  std::vector<ceph::libfdb::select> out;
 
@@ -757,10 +757,13 @@ inline std::vector<ceph::libfdb::select> as_select_seq(const FDBKey* const xs, c
     const auto& fst = std::ranges::begin(dyad)[0];
     const auto& snd = std::ranges::begin(dyad)[1];
 
-    out.push_back({ 
+    ceph::libfdb::select split { 
       { (const char *)fst.key, static_cast<std::string::size_type>(fst.key_length) }, 
       { (const char *)snd.key, static_cast<std::string::size_type>(snd.key_length) }
-    });
+    };
+
+    split.options = parent.options;
+    out.push_back(std::move(split));
  }
 
  return out;
@@ -774,12 +777,11 @@ inline future_value get_range_future_from_transaction(ceph::libfdb::transaction&
   const auto& begin_key  = selection.begin_key;
   const auto& end_key    = selection.end_key;
 
-  // Hook for getting settings into here through the selector:
-  const auto& streaming_mode = selection.options.streaming_mode;
+  const auto& options    = selection.options;
 
   // The documentation makes this stuff about as clear as mud... read VERY carefully
   // when you fiddle with these:
-  int begin_or_eq = (1 == iteration) ? 0 : 1;
+  const int begin_or_eq = (not options.reverse_order and 1 < iteration) ? 1 : 0;
   const int begin_offset = 1;
   const int end_or_eq = 0;
   const int end_offset = 1;
@@ -798,18 +800,18 @@ inline future_value get_range_future_from_transaction(ceph::libfdb::transaction&
                       end_offset,                                               // end offset (a shift AFTER end is matched)
 
                       // How should results be grouped/chunked:
-                      0,                                                        // limit (0 == unlimited)
+                      options.stride,                                           // limit (0 == unlimited)
                       0,                                                        // target bytes (0 == unlimited)
-                      streaming_mode,                                           // streaming mode (e.g.: FDB_STREAMING_MODE_WANT_ALL)
+                      options.streaming_mode,                                   // streaming mode (e.g.: FDB_STREAMING_MODE_WANT_ALL)
                       iteration,                                                // iteration # (produced side effect)
 
                       // Other options:
                       0,                                                        // 0 unless this IS a snapshot read
-                      0                                                         // reverse: should items come in reverse order?
+                      options.reverse_order                                     // should items come in reverse order?
                     ));
 }
 
-inline std::vector<ceph::libfdb::select> locate_split_points(
+inline std::vector<ceph::libfdb::select> plan_split_ranges(
           ceph::libfdb::database_handle dbh, 
           ceph::libfdb::select selector, 
           const std::int64_t remote_chunk_size)
@@ -836,7 +838,7 @@ inline std::vector<ceph::libfdb::select> locate_split_points(
                    }));
 
     if (not should_retry) {
-      return as_select_seq(keys, nkeys);
+      return as_select_seq(keys, nkeys, selector);
     }
  }
 
@@ -868,7 +870,9 @@ inline std::generator<std::span<const FDBKeyValue>> generate_FDB_pairs(transacti
     if (more_available) {
       // Make the first part of the range for the new search equal to the last one from the old search:
       const auto& last_key = result.back();
-      key_range.begin_key = std::string_view((const char *)last_key.key, last_key.key_length);
+      auto& cursor = key_range.options.reverse_order ? key_range.end_key : key_range.begin_key;
+
+      cursor = std::string_view((const char *)last_key.key, last_key.key_length);
      }
 
     co_yield result;

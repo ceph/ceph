@@ -21,6 +21,21 @@ namespace lfdb = ceph::libfdb;
 using namespace std::string_literals;
 ```
 
+## Running Tests And Benchmarks
+
+From the build directory, run the libfdb tests with:
+
+```sh
+./bin/unittest_fdb
+./bin/unittest_fdb_ceph
+```
+
+Benchmarks are hidden from default test runs. Run all libfdb benchmarks with:
+
+```sh
+./bin/unittest_fdb_ceph "[benchmark]"
+```
+
 ## General Recipes
 
 ```cpp
@@ -167,6 +182,32 @@ std::map<std::string, std::string> people;
 
 std::ranges::copy(lfdb::pair_generator(dbh, lfdb::select { "person/" }),
                   std::inserter(people, std::end(people)));
+```
+
+To get results in reverse order, set the reverse_order property in the selector:
+
+```cpp
+auto people = lfdb::select { "person/" };
+people.options.reverse_order = true;
+
+for (const auto& [key, value] : lfdb::pair_generator(dbh, people)) {
+  /* process results from high keys to low keys */
+}
+```
+
+While block_generator() provides a way to get blocks of results, it also has different
+request behavior than pair_generator(); it may therefore be useful to group pair_generator()'s
+output into chunks. One way to do that is with a chunk_view:
+
+```cpp
+// Stream groups of 100:
+auto keys = lfdb::pair_generator(dbh, lfdb::select { "key_" });
+
+for (const auto& chunk : keys | std::views::chunk(100)) {
+  for (const auto& [key, value] : chunk) {
+    // ...
+  }
+}
 ```
 
 ## Block Generator
