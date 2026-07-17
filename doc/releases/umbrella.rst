@@ -109,9 +109,6 @@ Dashboard
 - CephFS mirroring wizard/entity management UI.
 - OAuth2 SSO support (config UI + backend prerequisites).
 - Angular upgraded to v19.
-- Fixed a dashboard bind-address regression (from a CherryPy-isolation
-  refactor) that broke the management gateway whenever its VIP wasn't
-  on the same interface as ``mon_ip``.
 
 cephadm / Orchestrator
 -----------------------
@@ -160,9 +157,9 @@ ceph-volume
 Build / Packaging / QA Infrastructure
 ---------------------------------------
 
-- Rocky Linux 9 and 10 support added across build and QA; CMake bumped
-  to require 3.22.1 and gained CMake-4 support; C++ standard raised to
-  C++23.
+- Ubuntu 24.04 (Noble) and Rocky Linux 10 added as supported distros
+  across build and QA; CMake bumped to require 3.22.1 and gained
+  CMake-4 support; C++ standard raised to C++23.
 
 Changelog
 ---------
