@@ -988,8 +988,7 @@ void ReplicatedBackend::_do_push(OpRequestRef op)
   vector<PushReplyOp> replies;
   ObjectStore::Transaction t{get_parent()->min_peer_features()};
   if (get_parent()->check_failsafe_full()) {
-    dout(10) << __func__ << " Out of space (failsafe) processing push request." << dendl;
-    ceph_abort();
+    ceph_abort_msg("Out of space (failsafe) processing push request");
   }
   for (vector<PushOp>::const_iterator i = m->pushes.begin();
        i != m->pushes.end();
@@ -1067,8 +1066,7 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
 
   vector<PullOp> replies(1);
   if (get_parent()->check_failsafe_full()) {
-    dout(10) << __func__ << " Out of space (failsafe) processing pull response (push)." << dendl;
-    ceph_abort();
+    ceph_abort_msg("Out of space (failsafe) processing pull response (push).");
   }
 
   ObjectStore::Transaction t{get_parent()->min_peer_features()};
