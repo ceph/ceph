@@ -27,7 +27,7 @@ export class NotificationSidebarPageHelper extends PageHelper {
 
   open() {
     this.getNotificationIcon().click({ force: true });
-    this.getPanel().should('exist');
+    this.getSidebar().should('exist');
     this.getSidebar().should('exist');
   }
 

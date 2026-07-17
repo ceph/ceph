@@ -1,10 +1,10 @@
 import { OSDsPageHelper } from '../cluster/osds.po';
-import { DashboardPageHelper } from '../ui/dashboard.po';
+import { OverviewPagehelper } from '../ui/overview.po';
 import { ManagerModulesPageHelper } from '../cluster/mgr-modules.po';
 
 describe('OSDs page', () => {
   const osds = new OSDsPageHelper();
-  const overview = new DashboardPageHelper();
+  const overview = new OverviewPagehelper();
   const mgrmodules = new ManagerModulesPageHelper();
 
   before(() => {
