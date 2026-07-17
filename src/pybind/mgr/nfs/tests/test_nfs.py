@@ -6,7 +6,6 @@ from typing import Optional, Tuple, Iterator, List, Any
 from contextlib import contextmanager
 from unittest import mock
 from unittest.mock import MagicMock
-import mgr_util
 from mgr_module import MgrModule, NFS_POOL_NAME
 
 from rados import ObjectNotFound
@@ -15,7 +14,6 @@ from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec
 from ceph.utils import with_units_to_int, bytes_to_human
 from nfs import Module
 from nfs.export import ExportMgr, normalize_path
-from nfs.utils import cephfs_client_for_mgr
 from nfs.ganesha_conf import GaneshaConfParser, Export
 from nfs.qos_conf import (
     RawBlock,
@@ -357,7 +355,8 @@ QOS_BLOCK {
                 mock.patch('nfs.ganesha_conf.check_fs', return_value=True), \
                 mock.patch('nfs.export.ExportMgr._create_user_key',
                            return_value='thekeyforclientabc'), \
-                mock.patch('nfs.export.ExportMgr.cephfs_path_is_dir'):
+                mock.patch('nfs.export.ExportMgr.validate_cephfs_path'), \
+                mock.patch('nfs.export.ExportMgr._check_earmark'):
 
             rados.open_ioctx.return_value.__enter__.return_value = self.io_mock
             rados.open_ioctx.return_value.__exit__ = mock.Mock(return_value=None)
@@ -1859,28 +1858,75 @@ def test_ganesha_validate_access_type():
         _validate_access_type("any")
 
 
-class TestCephfsClientForMgr:
-    @pytest.fixture(autouse=True)
-    def clear_cephfs_client_cache(self):
-        cephfs_client_for_mgr.cache_clear()
-        yield
-        cephfs_client_for_mgr.cache_clear()
-
-    def test_cephfs_client_for_mgr_returns_same_instance(self):
+class TestExportMgrCephfsClient:
+    def test_get_cephfs_client_returns_same_instance(self):
         mgr = MagicMock()
-        with mock.patch('nfs.utils.CephfsClient') as mock_cephfs_cls:
+        export_mgr = ExportMgr(mgr, export_ls={})
+        with mock.patch('nfs.export.CephfsClient') as mock_cephfs_cls:
             mock_cephfs_cls.return_value = MagicMock()
-            first = cephfs_client_for_mgr(mgr)
-            second = cephfs_client_for_mgr(mgr)
+            first = export_mgr._get_cephfs_client()
+            second = export_mgr._get_cephfs_client()
             assert first is second
             mock_cephfs_cls.assert_called_once_with(mgr)
 
-    def test_multiple_earmark_resolvers_share_cached_cephfs_client(self):
+    def test_cephfs_export_uses_shared_client_for_earmark(self):
         mgr = MagicMock()
-        with mock.patch('nfs.utils.CephfsClient') as mock_cephfs_cls:
-            mock_cephfs_cls.return_value = MagicMock()
-            cached = cephfs_client_for_mgr(mgr)
-            r1 = mgr_util.CephFSEarmarkResolver(mgr=mgr, client=cached)
-            r2 = mgr_util.CephFSEarmarkResolver(mgr=mgr, client=cephfs_client_for_mgr(mgr))
-            assert r1._cephfs_client is r2._cephfs_client
-            mock_cephfs_cls.assert_called_once_with(mgr)
+        export_mgr = ExportMgr(mgr, export_ls={})
+        shared_client = MagicMock()
+        export_dict = {
+            'pseudo': '/foo',
+            'path': '/volumes/group/subvol',
+            'fsal': {
+                'name': 'CEPH',
+                'fs_name': 'cephfs',
+                'cmount_path': '/',
+            },
+        }
+        with mock.patch.object(export_mgr, '_get_cephfs_client',
+                               return_value=shared_client), \
+                mock.patch.object(export_mgr, 'validate_cephfs_path'), \
+                mock.patch('nfs.export.check_fs', return_value=True), \
+                mock.patch('nfs.export.get_nfs_spec_for_cluster',
+                           return_value=None), \
+                mock.patch('nfs.export.CephFSEarmarkResolver') as mock_resolver_cls, \
+                mock.patch.object(export_mgr, '_ensure_cephfs_export_user'), \
+                mock.patch('nfs.export.Export.from_dict') as mock_from_dict:
+            mock_export = MagicMock()
+            mock_export.fsal.name = 'CEPH'
+            mock_from_dict.return_value = mock_export
+            mock_resolver = MagicMock()
+            mock_resolver.get_earmark.return_value = None
+            mock_resolver_cls.return_value = mock_resolver
+
+            export_mgr.create_export_from_dict('cluster1', 1, export_dict)
+
+            mock_resolver_cls.assert_called_once_with(
+                mgr, client=shared_client)
+            mock_resolver.get_earmark.assert_called_once_with(
+                '/volumes/group/subvol', 'cephfs')
+            mock_resolver.set_earmark.assert_called_once()
+
+    def test_rgw_export_skips_earmark(self):
+        mgr = MagicMock()
+        export_mgr = ExportMgr(mgr, export_ls={})
+        export_dict = {
+            'pseudo': '/rgw',
+            'path': 'bucket',
+            'fsal': {
+                'name': 'RGW',
+                'user_id': 'nfs.foo.bucket',
+            },
+        }
+        with mock.patch.object(export_mgr, '_check_earmark') as mock_check, \
+                mock.patch.object(export_mgr, '_get_cephfs_client') as mock_client, \
+                mock.patch('nfs.export.get_nfs_spec_for_cluster',
+                           return_value=None), \
+                mock.patch('nfs.export.Export.from_dict') as mock_from_dict:
+            mock_export = MagicMock()
+            mock_export.fsal.name = 'RGW'
+            mock_from_dict.return_value = mock_export
+
+            export_mgr.create_export_from_dict('cluster1', 1, export_dict)
+
+            mock_check.assert_not_called()
+            mock_client.assert_not_called()

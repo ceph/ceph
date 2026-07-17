@@ -9,11 +9,9 @@ from mgr_module import MgrModule, Option, CLICheckNonemptyFileInput
 import object_format
 import orchestrator
 from orchestrator.module import IngressType
-from mgr_util import CephFSEarmarkResolver
-
 from .export import ExportMgr, AppliedExportResults
 from .cluster import NFSCluster
-from .utils import available_clusters, cephfs_client_for_mgr
+from .utils import available_clusters
 from .qos_conf import QOSType, QOSBandwidthControl, UserQoSType, QOSOpsControl
 
 log = logging.getLogger(__name__)
@@ -51,8 +49,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     ) -> Dict[str, Any]:
         """Create a CephFS export"""
         self.export_mgr.skip_notify_nfs_server = skip_notify_nfs_server
-        earmark_resolver = CephFSEarmarkResolver(
-            self, client=cephfs_client_for_mgr(self))
         return self.export_mgr.create_export(
             fsal_type='cephfs',
             fs_name=fsname,
@@ -66,7 +62,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             xprtsec=xprtsec,
             cmount_path=cmount_path,
             transports=transports,
-            earmark_resolver=earmark_resolver
         )
 
     @NFSCLICommand('nfs export create rgw', perm='rw')
@@ -147,11 +142,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                               inbuf: str,
                               skip_notify_nfs_server: bool = False) -> AppliedExportResults:
         """Create or update an export by `-i <json_or_ganesha_export_file>`"""
-        earmark_resolver = CephFSEarmarkResolver(
-            self, client=cephfs_client_for_mgr(self))
         self.export_mgr.skip_notify_nfs_server = skip_notify_nfs_server
-        return self.export_mgr.apply_export(cluster_id, export_config=inbuf,
-                                            earmark_resolver=earmark_resolver)
+        return self.export_mgr.apply_export(cluster_id, export_config=inbuf)
 
     @NFSCLICommand('nfs cluster create', perm='rw')
     @object_format.EmptyResponder()
@@ -269,10 +261,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def export_apply(self, cluster_id: str, export_config: str) -> AppliedExportResults:
         """Create or update an export by `export_config` which can be json string or ganesha export specification"""
-        earmark_resolver = CephFSEarmarkResolver(
-            self, client=cephfs_client_for_mgr(self))
-        return self.export_mgr.apply_export(cluster_id, export_config=export_config,
-                                            earmark_resolver=earmark_resolver)
+        return self.export_mgr.apply_export(cluster_id, export_config=export_config)
 
     def export_ls(self, cluster_id: Optional[str] = None, detailed: bool = False) -> List[Dict[Any, Any]]:
         if not (cluster_id):

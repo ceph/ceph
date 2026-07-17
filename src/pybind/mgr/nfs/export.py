@@ -504,8 +504,7 @@ class ExportMgr:
 
     # This method is used by the dashboard module (../dashboard/controllers/nfs.py)
     # Do not change interface without updating the Dashboard code
-    def apply_export(self, cluster_id: str, export_config: str,
-                     earmark_resolver: Optional[CephFSEarmarkResolver] = None) -> AppliedExportResults:
+    def apply_export(self, cluster_id: str, export_config: str) -> AppliedExportResults:
         try:
             exports = self._read_export_config(cluster_id, export_config)
         except Exception as e:
@@ -514,7 +513,7 @@ class ExportMgr:
 
         aeresults = AppliedExportResults()
         for export in exports:
-            changed_export = self._change_export(cluster_id, export, earmark_resolver)
+            changed_export = self._change_export(cluster_id, export)
             # This will help figure out which export blocks in conf/json file
             # are problematic.
             if changed_export.get("state", "") == "error":
@@ -543,10 +542,9 @@ class ExportMgr:
             return j  # j is already a list object
         return [j]  # return a single object list, with j as the only item
 
-    def _change_export(self, cluster_id: str, export: Dict,
-                       earmark_resolver: Optional[CephFSEarmarkResolver] = None) -> Dict[str, Any]:
+    def _change_export(self, cluster_id: str, export: Dict) -> Dict[str, Any]:
         try:
-            return self._apply_export(cluster_id, export, earmark_resolver)
+            return self._apply_export(cluster_id, export)
         except NotImplementedError:
             # in theory, the NotImplementedError here may be raised by a hook back to
             # an orchestration module. If the orchestration module supports it the NFS
@@ -622,8 +620,10 @@ class ExportMgr:
         log.info(f"Export user created is {json_res[0]['entity']}")
         return json_res[0]['key']
 
-    def _check_earmark(self, earmark_resolver: CephFSEarmarkResolver, path: str,
-                       fs_name: str) -> None:
+    def _check_earmark(self, path: str, fs_name: str) -> None:
+        """Apply NFS earmark for a CephFS path. Not used for RGW exports."""
+        earmark_resolver = CephFSEarmarkResolver(
+            self.mgr, client=self._get_cephfs_client())
         earmark = earmark_resolver.get_earmark(
             path,
             fs_name,
@@ -647,8 +647,7 @@ class ExportMgr:
     def create_export_from_dict(self,
                                 cluster_id: str,
                                 ex_id: int,
-                                ex_dict: Dict[str, Any],
-                                earmark_resolver: Optional[CephFSEarmarkResolver] = None
+                                ex_dict: Dict[str, Any]
                                 ) -> Export:
         pseudo_path = ex_dict.get("pseudo")
         if not pseudo_path:
@@ -674,8 +673,7 @@ class ExportMgr:
             self.validate_cephfs_path(fs_name, path)
 
             # Check if earmark is set for the path, given path is of subvolume
-            if earmark_resolver:
-                self._check_earmark(earmark_resolver, path, fs_name)
+            self._check_earmark(path, fs_name)
 
             if fsal["cmount_path"] != "/":
                 _validate_cmount_path(fsal["cmount_path"], path)  # type: ignore
@@ -717,8 +715,7 @@ class ExportMgr:
                              sectype: Optional[List[str]] = None,
                              xprtsec: Optional[str] = None,
                              cmount_path: Optional[str] = "/",
-                             transports: Optional[List[str]] = None,
-                             earmark_resolver: Optional[CephFSEarmarkResolver] = None
+                             transports: Optional[List[str]] = None
                              ) -> Dict[str, Any]:
 
         self.validate_cephfs_path(fs_name, path)
@@ -750,8 +747,7 @@ class ExportMgr:
             export = self.create_export_from_dict(
                 cluster_id,
                 self._gen_export_id(cluster_id),
-                export_dict,
-                earmark_resolver
+                export_dict
             )
             log.debug("creating cephfs export %s", export)
             self._ensure_cephfs_export_user(export)
@@ -824,8 +820,7 @@ class ExportMgr:
     def _apply_export(
             self,
             cluster_id: str,
-            new_export_dict: Dict,
-            earmark_resolver: Optional[CephFSEarmarkResolver] = None
+            new_export_dict: Dict
     ) -> Dict[str, str]:
         for k in ['path', 'pseudo']:
             if k not in new_export_dict:
@@ -869,8 +864,7 @@ class ExportMgr:
         new_export = self.create_export_from_dict(
             cluster_id,
             new_export_dict.get('export_id', self._gen_export_id(cluster_id)),
-            new_export_dict,
-            earmark_resolver
+            new_export_dict
         )
 
         if not old_export:
