@@ -97,6 +97,7 @@ TEST(IoSequence, NoReadWhileWholeObjectWriteInFlight) {
           case OpType::WriteTruncate2:
           case OpType::FailedWriteTruncate:
           case OpType::FailedWriteTruncate2:
+          case OpType::ZeroAndTruncate:
             in_flight[primary] = true;
             break;
           case OpType::Read:
@@ -112,6 +113,9 @@ TEST(IoSequence, NoReadWhileWholeObjectWriteInFlight) {
           case OpType::Write2:
           case OpType::Write3:
           case OpType::Append:
+          case OpType::Zero:
+          case OpType::Zero2:
+          case OpType::WriteAndZero:
           case OpType::FailedWrite:
           case OpType::FailedWrite2:
           case OpType::FailedWrite3:

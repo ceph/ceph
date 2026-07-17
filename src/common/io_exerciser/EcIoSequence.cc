@@ -51,6 +51,16 @@ std::unique_ptr<IoSequence> EcIoSequence::generate_sequence(
     case Sequence::SEQUENCE_SEQ16:
       [[fallthrough]];
     case Sequence::SEQUENCE_SEQ17:
+      [[fallthrough]];
+    case Sequence::SEQUENCE_SEQ18:
+      [[fallthrough]];
+    case Sequence::SEQUENCE_SEQ20:
+      [[fallthrough]];
+    case Sequence::SEQUENCE_SEQ21:
+      [[fallthrough]];
+    case Sequence::SEQUENCE_SEQ22:
+      [[fallthrough]];
+    case Sequence::SEQUENCE_SEQ23:
       return std::make_unique<ReadInjectSequence>(obj_size_range, seed,
                                                   sequence, km, mappinglayers, check_consistency);
     case Sequence::SEQUENCE_SEQ10:
@@ -410,7 +420,7 @@ ceph::io_exerciser::Seq19::Seq19(
 }
 
 Sequence ceph::io_exerciser::Seq19::get_id() const {
-  return Sequence::SEQUENCE_SEQ18;
+  return Sequence::SEQUENCE_SEQ19;
 }
 
 std::string ceph::io_exerciser::Seq19::get_name() const {
