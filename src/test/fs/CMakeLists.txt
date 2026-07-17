@@ -1,3 +1,12 @@
+# mold does not implement --copy-dt-needed-entries and exits with a fatal
+# error when passed the flag; it also does not exhibit the BFD linker
+# behavior the flag works around (see src/test/libcephfs/CMakeLists.txt)
+if(USING_MOLD_LINKER)
+  set(copy_dt_needed_entries "")
+else()
+  set(copy_dt_needed_entries "-Wl,--copy-dt-needed-entries")
+endif()
+
 if(${WITH_CEPHFS})
   # unittest_mds_types
   add_executable(unittest_mds_types
@@ -14,7 +23,7 @@ if(${WITH_CEPHFS})
       cephfs
   )
   if(NOT WIN32)
-    target_link_options(ceph_test_trim_caps PRIVATE -Wl,--copy-dt-needed-entries)
+    target_link_options(ceph_test_trim_caps PRIVATE ${copy_dt_needed_entries})
   endif()
   install(TARGETS ceph_test_trim_caps DESTINATION ${CMAKE_INSTALL_BINDIR})
 
@@ -26,7 +35,7 @@ if(${WITH_CEPHFS})
       cephfs
   )
   if(NOT WIN32)
-    target_link_options(ceph_test_ino_release_cb PRIVATE -Wl,--copy-dt-needed-entries)
+    target_link_options(ceph_test_ino_release_cb PRIVATE ${copy_dt_needed_entries})
   endif()
   install(TARGETS ceph_test_ino_release_cb DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif(${WITH_CEPHFS})

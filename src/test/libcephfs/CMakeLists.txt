@@ -15,6 +15,15 @@
 # make the linker behave in traditional manner where library dependencies are
 # assumed to be available. It seems like a linker bug and I have no explanation
 # for why it only affects a few test executables.
+#
+# mold does not implement --copy-dt-needed-entries and exits with a fatal
+# error when passed the flag; it also does not exhibit the BFD linker
+# behavior described above, so the workaround is skipped there.
+if(USING_MOLD_LINKER)
+  set(copy_dt_needed_entries "")
+else()
+  set(copy_dt_needed_entries "-Wl,--copy-dt-needed-entries")
+endif()
 
 if(WITH_LIBCEPHFS)
   add_executable(ceph_test_libcephfs
@@ -39,7 +48,7 @@ if(WITH_LIBCEPHFS)
     ${CMAKE_DL_LIBS}
     )
   if(NOT WIN32)
-    target_link_options(ceph_test_libcephfs PRIVATE -Wl,--copy-dt-needed-entries)
+    target_link_options(ceph_test_libcephfs PRIVATE ${copy_dt_needed_entries})
   endif()
   install(TARGETS ceph_test_libcephfs
     DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -56,7 +65,7 @@ if(WITH_LIBCEPHFS)
     ${CMAKE_DL_LIBS}
     )
   if(NOT WIN32)
-    target_link_options(ceph_test_libcephfs_snapdiff PRIVATE -Wl,--copy-dt-needed-entries)
+    target_link_options(ceph_test_libcephfs_snapdiff PRIVATE ${copy_dt_needed_entries})
   endif()
   install(TARGETS ceph_test_libcephfs_snapdiff
     DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -73,7 +82,7 @@ if(WITH_LIBCEPHFS)
     ${CMAKE_DL_LIBS}
     )
   if(NOT WIN32)
-    target_link_options(ceph_test_libcephfs_suidsgid PRIVATE -Wl,--copy-dt-needed-entries)
+    target_link_options(ceph_test_libcephfs_suidsgid PRIVATE ${copy_dt_needed_entries})
   endif()
   install(TARGETS ceph_test_libcephfs_suidsgid
     DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -90,7 +99,7 @@ if(WITH_LIBCEPHFS)
     ${CMAKE_DL_LIBS}
     )
   if(NOT WIN32)
-    target_link_options(ceph_test_libcephfs_vxattr PRIVATE -Wl,--copy-dt-needed-entries)
+    target_link_options(ceph_test_libcephfs_vxattr PRIVATE ${copy_dt_needed_entries})
   endif()
   install(TARGETS ceph_test_libcephfs_vxattr
     DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -107,7 +116,7 @@ if(WITH_LIBCEPHFS)
     ${CMAKE_DL_LIBS}
     )
   if(NOT WIN32)
-    target_link_options(ceph_test_libcephfs_newops PRIVATE -Wl,--copy-dt-needed-entries)
+    target_link_options(ceph_test_libcephfs_newops PRIVATE ${copy_dt_needed_entries})
   endif()
   install(TARGETS ceph_test_libcephfs_newops
     DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -125,7 +134,7 @@ if(WITH_LIBCEPHFS)
       ${CMAKE_DL_LIBS}
     )
     if(NOT WIN32)
-      target_link_options(ceph_test_libcephfs_reclaim PRIVATE -Wl,--copy-dt-needed-entries)
+      target_link_options(ceph_test_libcephfs_reclaim PRIVATE ${copy_dt_needed_entries})
     endif()
     install(TARGETS ceph_test_libcephfs_reclaim
       DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -142,7 +151,7 @@ if(WITH_LIBCEPHFS)
     ${CMAKE_DL_LIBS}
   )
   if(NOT WIN32)
-    target_link_options(ceph_test_libcephfs_lazyio PRIVATE -Wl,--copy-dt-needed-entries)
+    target_link_options(ceph_test_libcephfs_lazyio PRIVATE ${copy_dt_needed_entries})
   endif()
   install(TARGETS ceph_test_libcephfs_lazyio
     DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -159,7 +168,7 @@ if(WITH_LIBCEPHFS)
     ${CMAKE_DL_LIBS}
   )
   if(NOT WIN32)
-    target_link_options(ceph_test_libcephfs_access PRIVATE -Wl,--copy-dt-needed-entries)
+    target_link_options(ceph_test_libcephfs_access PRIVATE ${copy_dt_needed_entries})
   endif()
   install(TARGETS ceph_test_libcephfs_access
     DESTINATION ${CMAKE_INSTALL_BINDIR})
