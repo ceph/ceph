@@ -234,6 +234,10 @@ void RadosIo::applyIoOp(IoOp& op) {
     case OpType::FailedWrite2:
       [[fallthrough]];
     case OpType::FailedWrite3:
+      [[fallthrough]];
+    case OpType::Zero:
+      [[fallthrough]];
+    case OpType::Zero2:
       applyReadWriteOp(op);
       break;
     case OpType::TruncateWrite:
@@ -243,6 +247,42 @@ void RadosIo::applyIoOp(IoOp& op) {
     case OpType::TruncateWrite3:
       applyTruncateWriteOp(op);
       break;
+    case OpType::WriteAndZero: {
+      start_io();
+      WriteAndZeroOp& wzOp = static_cast<WriteAndZeroOp&>(op);
+      auto write_op_info = std::make_shared<AsyncOpInfo<1>>(
+          std::array<uint64_t, 1>{wzOp.write_offset},
+          std::array<uint64_t, 1>{wzOp.write_length});
+      write_op_info->bufferlist[0] =
+          db->generate_data(wzOp.write_offset, wzOp.write_length);
+      librados::ObjectWriteOperation wop;
+      wop.write(wzOp.write_offset * block_size, write_op_info->bufferlist[0]);
+      wop.zero(wzOp.zero_offset * block_size, wzOp.zero_length * block_size);
+      auto writeandzero_cb = [this](boost::system::error_code ec, version_t ver) {
+        ceph_assert(ec == boost::system::errc::success);
+        finish_io();
+      };
+      librados::async_operate(asio.get_executor(), io, primary_oid,
+                              std::move(wop), 0, nullptr, writeandzero_cb);
+      num_io++;
+      break;
+    }
+    case OpType::ZeroAndTruncate: {
+      start_io();
+      ZeroAndTruncateOp& ztOp = static_cast<ZeroAndTruncateOp&>(op);
+      auto op_info = std::make_shared<AsyncOpInfo<0>>();
+      librados::ObjectWriteOperation wop;
+      wop.zero(ztOp.zero_offset * block_size, ztOp.zero_length * block_size);
+      wop.truncate(ztOp.truncate_size * block_size);
+      auto zeroandtruncate_cb = [this](boost::system::error_code ec, version_t ver) {
+        ceph_assert(ec == boost::system::errc::success);
+        finish_io();
+      };
+      librados::async_operate(asio.get_executor(), io, primary_oid,
+                              std::move(wop), 0, nullptr, zeroandtruncate_cb);
+      num_io++;
+      break;
+    }
     case OpType::InjectReadError:
       [[fallthrough]];
     case OpType::InjectWriteError:
@@ -300,6 +340,24 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
     }
     librados::async_operate(asio.get_executor(), io, primary_oid,
                             std::move(rop), flags, nullptr, read_cb);
+    num_io++;
+  };
+
+  auto applyZeroOp = [this]<OpType opType, int N>(
+                         ReadWriteOp<opType, N> zeroOp) {
+    auto op_info =
+        std::make_shared<AsyncOpInfo<N>>(zeroOp.offset, zeroOp.length);
+    librados::ObjectWriteOperation wop;
+    for (int i = 0; i < N; i++) {
+      wop.zero(zeroOp.offset[i] * block_size,
+               zeroOp.length[i] * block_size);
+    }
+    auto zero_cb = [this](boost::system::error_code ec, version_t ver) {
+      ceph_assert(ec == boost::system::errc::success);
+      finish_io();
+    };
+    librados::async_operate(asio.get_executor(), io, primary_oid,
+                            std::move(wop), 0, nullptr, zero_cb);
     num_io++;
   };
 
@@ -407,6 +465,18 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
       applyFailedWriteOp(writeOp);
       break;
     }
+    case OpType::Zero: {
+      start_io();
+      ZeroOp& zeroOp = static_cast<ZeroOp&>(op);
+      applyZeroOp(zeroOp);
+      break;
+    }
+    case OpType::Zero2: {
+      start_io();
+      DoubleZeroOp& zeroOp = static_cast<DoubleZeroOp&>(op);
+      applyZeroOp(zeroOp);
+      break;
+    }
 
     default:
       ceph_abort_msg(
@@ -421,10 +491,10 @@ void RadosIo::applyTruncateWriteOp(IoOp& op) {
     auto op_info =
         std::make_shared<AsyncOpInfo<N>>(truncWriteOp.offset, truncWriteOp.length);
     librados::ObjectWriteOperation wop;
-    
+
     // First, add the truncate operation
     wop.truncate(truncWriteOp.size * block_size);
-    
+
     // Then, add the write operations
     for (int i = 0; i < N; i++) {
       op_info->bufferlist[i] =
@@ -432,7 +502,7 @@ void RadosIo::applyTruncateWriteOp(IoOp& op) {
       wop.write(truncWriteOp.offset[i] * block_size,
                 op_info->bufferlist[i]);
     }
-    
+
     auto write_cb = [this](boost::system::error_code ec, version_t ver) {
       ceph_assert(ec == boost::system::errc::success);
       finish_io();

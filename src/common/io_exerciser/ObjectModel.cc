@@ -95,6 +95,35 @@ void ObjectModel::applyIoOp(IoOp& op) {
         num_io++;
       };
 
+  auto verify_zero_and_record =
+      [&primary_contents = primary_contents,
+       &primary_created = primary_created,
+       &num_io = num_io,
+       &reads = reads,
+       &writes = writes]<OpType opType, int N>(ReadWriteOp<opType, N> writeOp) {
+        ceph_assert(primary_created);
+        for (int i = 0; i < N; i++) {
+          // Not allowed: write overlapping with parallel read or write
+          ceph_assert(!reads.intersects(writeOp.offset[i], writeOp.length[i]));
+          ceph_assert(!writes.intersects(writeOp.offset[i], writeOp.length[i]));
+          writes.union_insert(writeOp.offset[i], writeOp.length[i]);
+          uint64_t zero_end = writeOp.offset[i] + writeOp.length[i];
+          if (writeOp.offset[i] >= primary_contents.size()) {
+            // Zero starts beyond current object end: no-op on the OSD.
+            // (ZERO->TRUNCATE munge fires but offset >= oi.size -> no-op)
+          } else if (zero_end >= primary_contents.size()) {
+            // PrimaryLogPG munges ZERO -> TRUNCATE when the zero range
+            // covers to/past the end of the object.  Mirror that here.
+            primary_contents.resize(writeOp.offset[i]);
+          } else {
+            std::fill(std::next(primary_contents.begin(), writeOp.offset[i]),
+                      std::next(primary_contents.begin(), zero_end),
+                      0);
+          }
+        }
+        num_io++;
+      };
+
   auto verify_failed_write_and_record =
       [&primary_contents = primary_contents,
        &primary_created = primary_created,
@@ -314,6 +343,66 @@ void ObjectModel::applyIoOp(IoOp& op) {
       ceph_assert(primary_created);
       TripleWriteOp& writeOp = static_cast<TripleWriteOp&>(op);
       verify_failed_write_and_record(writeOp);
+    } break;
+    case OpType::Zero: {
+      ceph_assert(primary_created);
+      ZeroOp& zeroOp = static_cast<ZeroOp&>(op);
+      verify_zero_and_record(zeroOp);
+    } break;
+    case OpType::Zero2: {
+      ceph_assert(primary_created);
+      DoubleZeroOp& zeroOp = static_cast<DoubleZeroOp&>(op);
+      verify_zero_and_record(zeroOp);
+    } break;
+    case OpType::WriteAndZero: {
+      ceph_assert(primary_created);
+      WriteAndZeroOp& wzOp = static_cast<WriteAndZeroOp&>(op);
+      // Check and record both ranges
+      ceph_assert(!reads.intersects(wzOp.write_offset, wzOp.write_length));
+      ceph_assert(!writes.intersects(wzOp.write_offset, wzOp.write_length));
+      ceph_assert(!reads.intersects(wzOp.zero_offset, wzOp.zero_length));
+      ceph_assert(!writes.intersects(wzOp.zero_offset, wzOp.zero_length));
+      writes.union_insert(wzOp.write_offset, wzOp.write_length);
+      writes.union_insert(wzOp.zero_offset, wzOp.zero_length);
+      uint64_t write_end = wzOp.write_offset + wzOp.write_length;
+      uint64_t zero_end = wzOp.zero_offset + wzOp.zero_length;
+      // The write sub-op may expand the object.
+      if (write_end > primary_contents.size()) {
+        primary_contents.resize(write_end);
+      }
+      std::generate(std::execution::seq,
+                    std::next(primary_contents.begin(), wzOp.write_offset),
+                    std::next(primary_contents.begin(), write_end),
+                    generate_random);
+      if (wzOp.zero_offset >= primary_contents.size()) {
+        // Zero starts beyond current object end: no-op on the OSD.
+      } else if (zero_end >= primary_contents.size()) {
+        primary_contents.resize(wzOp.zero_offset);
+      } else {
+        std::fill(std::next(primary_contents.begin(), wzOp.zero_offset),
+                  std::next(primary_contents.begin(), zero_end),
+                  0);
+      }
+      num_io++;
+    } break;
+    case OpType::ZeroAndTruncate: {
+      ceph_assert(primary_created);
+      ZeroAndTruncateOp& ztOp = static_cast<ZeroAndTruncateOp&>(op);
+      // Check and record zero range
+      ceph_assert(!reads.intersects(ztOp.zero_offset, ztOp.zero_length));
+      ceph_assert(!writes.intersects(ztOp.zero_offset, ztOp.zero_length));
+      writes.union_insert(ztOp.zero_offset, ztOp.zero_length);
+      uint64_t zero_end = ztOp.zero_offset + ztOp.zero_length;
+      if (zero_end > primary_contents.size()) {
+        primary_contents.resize(zero_end);
+      }
+      // Apply zero semantics to zero range
+      std::fill(std::next(primary_contents.begin(), ztOp.zero_offset),
+                std::next(primary_contents.begin(), zero_end),
+                0);
+      // Truncate
+      primary_contents.resize(ztOp.truncate_size);
+      num_io++;
     } break;
     default:
       break;
