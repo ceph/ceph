@@ -1470,6 +1470,12 @@ void PeerReplayer::initialize_checkpoints(const std::string &dir_root) {
 
   dout(10) << ": remote_highest_snap_id=" << remote_highest_snap_id << dendl;
 
+  // Already-COMPLETE checkpoints (oldest first). Do not include checkpoints
+  // promoted to COMPLETE in this pass so a newly added checkpoint is not
+  // immediately pruned before the user can observe it.
+  std::vector<std::pair<uint64_t, std::string>> already_complete;
+  size_t newly_complete = 0;
+
   // Iterate through local snapshots and mark checkpoints as COMPLETE
   // if their snap_id is <= remote_highest_snap_id
   for (const auto &[snap_id, snap_name] : local_snap_map) {
@@ -1507,8 +1513,57 @@ void PeerReplayer::initialize_checkpoints(const std::string &dir_root) {
       } else {
         dout(10) << ": successfully marked checkpoint as COMPLETE for snap_id=" << snap_id
                  << " snap_name=" << snap_name << dendl;
+        ++newly_complete;
       }
+    } else if (info.status == CheckpointStatus::COMPLETE) {
+      already_complete.emplace_back(snap_id, snap_name);
     }
+  }
+
+  prune_old_synced_checkpoints(dir_root, already_complete, newly_complete);
+}
+
+void PeerReplayer::prune_old_synced_checkpoints(
+    const std::string &dir_root,
+    const std::vector<std::pair<uint64_t, std::string>> &already_complete,
+    size_t newly_complete) {
+  auto keep_count = g_ceph_context->_conf.get_val<uint64_t>(
+    "cephfs_mirror_checkpoint_keep_count");
+
+  size_t total_complete = already_complete.size() + newly_complete;
+  if (total_complete <= keep_count || already_complete.empty()) {
+    dout(20) << ": nothing to prune, already_complete=" << already_complete.size()
+             << " newly_complete=" << newly_complete
+             << " keep_count=" << keep_count << dendl;
+    return;
+  }
+
+  size_t to_remove = std::min(already_complete.size(),
+                              total_complete - keep_count);
+  dout(5) << ": pruning " << to_remove << " old COMPLETE checkpoint(s) under "
+          << dir_root << " (already_complete=" << already_complete.size()
+          << " newly_complete=" << newly_complete
+          << " keep_count=" << keep_count << ")" << dendl;
+
+  for (size_t i = 0; i < to_remove; ++i) {
+    const auto &[snap_id, snap_name] = already_complete[i];
+    auto snap_path = snapshot_path(m_cct, dir_root, snap_name);
+    std::map<std::string, std::string> snap_metadata;
+    int r = read_snap_metadata(m_local_mount, snap_path, &snap_metadata);
+    if (r < 0) {
+      derr << ": failed to read snap metadata for prune snap_id=" << snap_id
+           << " snap_name=" << snap_name << ": " << cpp_strerror(r) << dendl;
+      continue;
+    }
+    r = remove_checkpoint_metadata(m_local_mount, snap_path, snap_metadata);
+    if (r < 0) {
+      derr << ": failed to prune checkpoint for snap_id=" << snap_id
+           << " snap_name=" << snap_name << " dir_root=" << dir_root
+           << ": " << cpp_strerror(r) << dendl;
+      continue;
+    }
+    dout(10) << ": pruned COMPLETE checkpoint snap_id=" << snap_id
+             << " snap_name=" << snap_name << dendl;
   }
 }
 
