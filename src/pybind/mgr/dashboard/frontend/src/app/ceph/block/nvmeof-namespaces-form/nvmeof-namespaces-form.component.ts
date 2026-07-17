@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Params, Router } from '@angular/router';
 import {
@@ -10,6 +10,7 @@ import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import {
+  RadosNamespace,
   NvmeofSubsystem,
   NvmeofSubsystemInitiator,
   NvmeofSubsystemNamespace
@@ -48,6 +49,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
   subsystems: NvmeofSubsystem[] | null = null;
   rbdPools: Array<Pool> = null;
   rbdImages: any[] = [];
+  radosNamespaces: RadosNamespace[] | null = null;
   initiatorCandidates: { content: string; selected: boolean }[] = [];
 
   nsid: string;
@@ -67,13 +69,14 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     private rbdService: RbdService,
     private router: Router,
     private route: ActivatedRoute,
+    private cdr: ChangeDetectorRef,
     public formatterService: FormatterService,
     public dimlessBinaryPipe: DimlessBinaryPipe
   ) {
     this.permission = this.authStorageService.getPermissions().nvmeof;
     this.poolPermission = this.authStorageService.getPermissions().pool;
     this.resource = $localize`Namespace`;
-    this.pageURL = 'block/nvmeof/gateways';
+    this.pageURL = 'block/nvmeof/namespaces';
   }
 
   init() {
@@ -83,13 +86,15 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     this.description = $localize`Namespaces define the storage volumes that subsystems present to hosts.`;
 
     this.route.params.subscribe((params: Params) => {
-      this.subsystemNQN = params['subsystem_nqn'];
+      if (params['subsystem_nqn']) {
+        this.subsystemNQN = params['subsystem_nqn'];
+      }
       this.nsid = params['nsid'];
       if (params['group']) {
         this.group = params['group'];
       }
       if (this.subsystemNQN && this.group) {
-        this.pageURL = `block/nvmeof/subsystems/${this.subsystemNQN}/${this.group}`;
+        this.pageURL = `block/nvmeof/subsystems/${this.subsystemNQN}/namespaces`;
         this.action = this.actionLabels.ADD;
         this.title = this.action + ' ' + this.resource;
         this.description = $localize`Create a new namespace associated with this subsystem.`;
@@ -117,15 +122,18 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     });
     if (this.group) {
       this.fetchUsedImages();
-      this.nvmeofService.listSubsystems(this.group).subscribe((subsystems: NvmeofSubsystem[]) => {
-        this.subsystems = subsystems;
-        if (this.subsystemNQN) {
-          const selectedSubsystem = this.subsystems.find((s) => s.nqn === this.subsystemNQN);
-          if (selectedSubsystem) {
-            this.nsForm.get('subsystem').setValue(selectedSubsystem.nqn);
+      this.nvmeofService
+        .listSubsystems(this.group)
+        .subscribe((res: NvmeofSubsystem[] | NvmeofSubsystem) => {
+          this.subsystems = Array.isArray(res) ? res : [res];
+          this.cdr.detectChanges();
+          if (this.subsystemNQN) {
+            const selectedSubsystem = this.subsystems.find((s) => s.nqn === this.subsystemNQN);
+            if (selectedSubsystem) {
+              this.nsForm.get('subsystem').setValue(selectedSubsystem.nqn);
+            }
           }
-        }
-      });
+        });
     }
   }
 
@@ -140,17 +148,46 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     }
   }
 
-  // Stores all RBD images fetched for the selected pool
+  // Stores all RBD images fetched for the selected pool + RADOS namespace.
   private allRbdImages: { name: string; size: number }[] = [];
-  // Maps pool name to a Set of used image names for O(1) lookup
+  // Maps "pool:radosNamespace" composite key to used image names.
   private usedRbdImages: Map<string, Set<string>> = new Map();
 
   onPoolChange(): void {
     const pool = this.nsForm.getValue('pool');
     if (!pool) return;
 
+    this.radosNamespaces = null;
+    this.nsForm.get('rados_namespace').setValue(null, { emitEvent: false });
+
+    this.rbdService.listNamespaces(pool).subscribe({
+      next: (namespaces) => {
+        this.radosNamespaces = namespaces as RadosNamespace[];
+      },
+      error: () => {
+        this.radosNamespaces = [];
+      }
+    });
+
+    this.fetchImagesForCurrentSelection(pool, null);
+  }
+
+  private onRadosNamespaceChange(): void {
+    const pool = this.nsForm.getValue('pool');
+    if (!pool) return;
+
+    const radosNs = this.nsForm.getValue('rados_namespace') as string | null;
+    this.fetchImagesForCurrentSelection(pool, radosNs);
+  }
+
+  private fetchImagesForCurrentSelection(pool: string, radosNs: string | null): void {
+    const params: Record<string, string> = { pool_name: pool, offset: '0', limit: '-1' };
+    if (radosNs) {
+      params['namespace'] = radosNs;
+    }
+
     this.rbdService
-      .list({ pool_name: pool, offset: '0', limit: '-1' })
+      .list(params)
       .subscribe((pools: { pool_name: string; value: { name: string; size: number }[] }[]) => {
         const selectedPool = pools.find((p) => p.pool_name === pool);
         this.allRbdImages = selectedPool?.value ?? [];
@@ -172,12 +209,13 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     this.nvmeofService.listNamespaces(this.group).subscribe((response: any) => {
       const namespaces: NvmeofSubsystemNamespace[] = Array.isArray(response)
         ? response
-        : response?.namespaces ?? [];
+        : (response?.namespaces ?? []);
       this.usedRbdImages = namespaces.reduce((map, ns) => {
-        if (!map.has(ns.rbd_pool_name)) {
-          map.set(ns.rbd_pool_name, new Set<string>());
+        const key = this.usedImagesKey(ns.rbd_pool_name, ns.rados_namespace_name ?? '');
+        if (!map.has(key)) {
+          map.set(key, new Set<string>());
         }
-        map.get(ns.rbd_pool_name)!.add(ns.rbd_image_name);
+        map.get(key)!.add(ns.rbd_image_name);
         return map;
       }, new Map<string, Set<string>>());
       this.filterImages();
@@ -213,10 +251,15 @@ export class NvmeofNamespacesFormComponent implements OnInit {
       this.rbdImages = [];
       return;
     }
-    const usedInPool = this.usedRbdImages.get(pool);
-    this.rbdImages = usedInPool
-      ? this.allRbdImages.filter((img) => !usedInPool.has(img.name))
+    const radosNs = (this.nsForm.getValue('rados_namespace') as string | null) ?? '';
+    const usedInScope = this.usedRbdImages.get(this.usedImagesKey(pool, radosNs));
+    this.rbdImages = usedInScope
+      ? this.allRbdImages.filter((img) => !usedInScope.has(img.name))
       : [...this.allRbdImages];
+  }
+
+  private usedImagesKey(pool: string, radosNs: string): string {
+    return `${pool}\x00${radosNs}`;
   }
 
   createForm() {
@@ -224,6 +267,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
       pool: new UntypedFormControl('', {
         validators: [Validators.required]
       }),
+      rados_namespace: new UntypedFormControl(null),
       subsystem: new UntypedFormControl('', {
         validators: [Validators.required]
       }),
@@ -243,13 +287,17 @@ export class NvmeofNamespacesFormComponent implements OnInit {
           return /^[^@/]+$/.test(value) ? null : { rbdImageName: true };
         })
       ]),
-      namespace_size: new UntypedFormControl(null), // UI only - not sent to backend
+      namespace_size: new UntypedFormControl(512), // Block size in bytes; default 512
       host_access: new UntypedFormControl('all'), // UI only - determines visibility
       initiators: new UntypedFormControl([]) // UI only - selected hosts
     });
 
     this.nsForm.get('pool').valueChanges.subscribe(() => {
       this.onPoolChange();
+    });
+
+    this.nsForm.get('rados_namespace').valueChanges.subscribe(() => {
+      this.onRadosNamespaceChange();
     });
 
     this.nsForm.get('nsCount').valueChanges.subscribe((count: number) => {
@@ -300,9 +348,12 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     return Math.random().toString(36).substring(2);
   }
 
-  private normalizeImageSizeInput(value: string): string {
-    const input = (value || '').trim();
+  private normalizeImageSizeInput(value: string | number): string {
+    const input = String(value ?? '').trim();
     if (!input) {
+      return input;
+    }
+    if (typeof value === 'number') {
       return input;
     }
     // Accept plain numeric values as GiB (e.g. "45" => "45GiB").
@@ -315,11 +366,14 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     noAutoVisible: boolean
   ): Observable<HttpResponse<Object>>[] {
     const pool = this.nsForm.getValue('pool');
+    const radosNs = this.nsForm.getValue('rados_namespace') as string | null;
     const requests: Observable<HttpResponse<Object>>[] = [];
     const creationMode = this.nsForm.getValue('rbd_image_creation');
     const isGatewayProvisioned = creationMode === 'gateway_provisioned';
 
     const loopCount = isGatewayProvisioned ? nsCount : 1;
+
+    const blockSize = this.nsForm.getValue('namespace_size');
 
     for (let i = 1; i <= loopCount; i++) {
       const request: NamespaceCreateRequest = {
@@ -329,16 +383,28 @@ export class NvmeofNamespacesFormComponent implements OnInit {
         no_auto_visible: noAutoVisible
       };
 
+      if (radosNs) {
+        request.rados_namespace = radosNs;
+      }
+      if (blockSize) {
+        request.block_size = blockSize;
+      }
+
       if (isGatewayProvisioned) {
-        request.rbd_image_name = `nvme_${pool}_${this.group}_${this.randomString()}`;
+        const rbdImageName = this.nsForm.getValue('rbd_image_name');
+        if (rbdImageName) {
+          request.rbd_image_name = loopCount > 1 ? `${rbdImageName}-${i}` : rbdImageName;
+        } else {
+          request.rbd_image_name = `nvme_${pool}_${this.group}_${this.randomString()}`;
+        }
         if (rbdImageSize) {
           request['rbd_image_size'] = rbdImageSize;
         }
-      }
-
-      const rbdImageName = this.nsForm.getValue('rbd_image_name');
-      if (rbdImageName) {
-        request['rbd_image_name'] = rbdImageName;
+      } else {
+        const rbdImageName = this.nsForm.getValue('rbd_image_name');
+        if (rbdImageName) {
+          request['rbd_image_name'] = rbdImageName;
+        }
       }
 
       const subsystemNQN = this.nsForm.getValue('subsystem') || this.subsystemNQN;
