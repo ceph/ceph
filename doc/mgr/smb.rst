@@ -1567,14 +1567,122 @@ fsid
 mon_host
     String. The ``mon_host`` string (as sourced from a ceph.conf file)
 cephfs_user
-    Object. Fields:
+    Optional object. Required if the cluster will host CephFS-backed shares.
+    Fields:
 
     name
-        String. A ceph user name indicating the cephx user that will
+        String. A Ceph user name indicating the CephX user that will
         access the CephFS volume(s) on the external cluster
     key
-        String. The Base64 encoded key value corresponding to the cephx
+        String. The Base64 encoded key value corresponding to the CephX
         user name provided
+rgw_user
+    Optional object. Required if the cluster will host RGW-backed shares.
+    Fields:
+
+    name
+        String. A Ceph user name indicating the CephX user that will
+        access the RGW bucket(s) on the external cluster
+    key
+        String. The Base64 encoded key value corresponding to the CephX
+        user name provided
+
+.. note::
+   At least one of ``cephfs_user`` or ``rgw_user`` must be configured.
+   Configure only the user(s) needed for your share types:
+
+   - CephFS-only clusters: Configure only ``cephfs_user``
+   - RGW-only clusters: Configure only ``rgw_user``
+   - Mixed clusters: Configure both ``cephfs_user`` and ``rgw_user``
+
+Examples
+~~~~~~~~
+
+External cluster with CephFS support only:
+
+.. code-block:: yaml
+
+    resource_type: ceph.smb.ext.cluster
+    external_ceph_cluster_id: external-cephfs
+    cluster:
+      fsid: "12345678-1234-1234-1234-123456789abc"
+      mon_host: "10.0.1.10:6789,10.0.1.11:6789"
+      cephfs_user:
+        name: "client.external-cephfs"
+        key: "AQC1234567890abcdefghijklmnopqrstuvwxyz=="
+
+External cluster with RGW support only:
+
+.. code-block:: yaml
+
+    resource_type: ceph.smb.ext.cluster
+    external_ceph_cluster_id: external-rgw
+    cluster:
+      fsid: "12345678-1234-1234-1234-123456789abc"
+      mon_host: "10.0.1.10:6789,10.0.1.11:6789"
+      rgw_user:
+        name: "client.external-rgw"
+        key: "AQD9876543210zyxwvutsrqponmlkjihgfedcba=="
+
+External cluster with both CephFS and RGW support:
+
+.. code-block:: yaml
+
+    resource_type: ceph.smb.ext.cluster
+    external_ceph_cluster_id: external-mixed
+    cluster:
+      fsid: "12345678-1234-1234-1234-123456789abc"
+      mon_host: "10.0.1.10:6789,10.0.1.11:6789"
+      cephfs_user:
+        name: "client.external-cephfs"
+        key: "AQC1234567890abcdefghijklmnopqrstuvwxyz=="
+      rgw_user:
+        name: "client.external-rgw"
+        key: "AQD9876543210zyxwvutsrqponmlkjihgfedcba=="
+
+
+.. important::
+   **RGW Shares on External Clusters Require Manual Credentials**
+
+   When creating RGW shares on external clusters, you **must** manually define
+   RGW credentials using the ``ceph.smb.rgw.credential`` resource. Unlike local
+   clusters where credentials can be auto-fetched, external clusters cannot
+   automatically retrieve S3 access keys.
+
+   Example configuration with manual RGW credentials:
+
+   .. code-block:: yaml
+
+       resources:
+         # Define the external cluster with rgw_user
+         - resource_type: ceph.smb.ext.cluster
+           external_ceph_cluster_id: external-rgw
+           cluster:
+             fsid: "12345678-1234-1234-1234-123456789abc"
+             mon_host: "10.0.1.10:6789,10.0.1.11:6789"
+             rgw_user:
+               name: "client.external-rgw"
+               key: "AQD9876543210zyxwvutsrqponmlkjihgfedcba=="
+
+         # Define RGW credentials manually (REQUIRED for external clusters)
+         - resource_type: ceph.smb.rgw.credential
+           rgw_credential_id: my-s3-creds
+           user_id: s3-user
+           access_key_id: AKIAIOSFODNN7EXAMPLE
+           secret_access_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+
+         # RGW share referencing the manual credentials
+         - resource_type: ceph.smb.share
+           cluster_id: my-cluster
+           share_id: s3-share
+           name: "S3 Share"
+           rgw:
+             bucket: my-bucket
+             credential_ref: my-s3-creds
+
+   The ``rgw_user`` in the external cluster definition provides the CephX
+   credentials for accessing the RGW service, while the ``ceph.smb.rgw.credential``
+   resource provides the S3 access key and secret key for bucket operations.
 
 
 A Declarative Configuration Example
