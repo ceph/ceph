@@ -398,6 +398,7 @@ subsystem_cache_expiration = 5
 force_tls = False
 # This is a development flag, do not change it
 max_message_length_in_mb = 4
+degrade_namespace_on_kmip_error = True
 
 [gateway-logs]
 log_level = INFO

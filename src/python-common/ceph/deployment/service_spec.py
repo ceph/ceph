@@ -1452,6 +1452,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  subsystem_cache_expiration: Optional[int] = 5,
                  force_tls: Optional[bool] = False,
                  max_message_length_in_mb: Optional[int] = 4,
+                 degrade_namespace_on_kmip_error: Optional[bool] = True,
                  server_key: Optional[str] = None,
                  server_cert: Optional[str] = None,
                  client_key: Optional[str] = None,
@@ -1597,6 +1598,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.force_tls = force_tls
         #: ``max_message_length_in_mb`` max protobuf message length, in mb
         self.max_message_length_in_mb = max_message_length_in_mb
+        #: ``degrade_namespace_on_kmip_error`` on a KMIP key error in update, create a degraded ns
+        self.degrade_namespace_on_kmip_error = degrade_namespace_on_kmip_error
         #: ``allowed_consecutive_spdk_ping_failures`` # of ping failures before aborting gateway
         self.allowed_consecutive_spdk_ping_failures = allowed_consecutive_spdk_ping_failures
         #: ``spdk_ping_interval_in_seconds`` sleep interval in seconds between SPDK pings
@@ -1814,6 +1817,7 @@ class NvmeofServiceSpec(ServiceSpec):
                                    "Subsystem cache expiration period")
         verify_boolean(self.force_tls, "Force TLS")
         verify_positive_int(self.max_message_length_in_mb, "Max protocol message length")
+        verify_boolean(self.degrade_namespace_on_kmip_error, "Degrade namespace on KMIP error")
         verify_non_negative_number(self.monitor_timeout, "Monitor timeout")
         verify_non_negative_int(self.port, "Port")
         verify_non_negative_int(self.discovery_port, "Discovery port")
