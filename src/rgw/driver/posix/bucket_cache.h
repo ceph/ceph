@@ -268,6 +268,9 @@ using fill_cache_cb_t =
   const fu2::unique_function<int(const DoutPrefixProvider* dpp,
     rgw_bucket_dir_entry&) const>;
 
+/* fill_cache return flags (non-negative rc) */
+static constexpr int FILL_CACHE_FLAG_FIXUP_CURRENT = 0x0001;
+
 using list_bucket_each_t =
   const fu2::unique_function<bool(const rgw_bucket_dir_entry&) const>;
 
@@ -607,6 +610,102 @@ public:
 #endif
 	  return 0;
 	});
+
+      /* fixup FLAG_CURRENT for orphaned delete markers: iterate LMDB
+       * entries in key order (contiguous by object name).  For each
+       * key group, if no entry has FLAG_CURRENT, find the newest
+       * delete marker and add FLAG_CURRENT to it.
+       *
+       * Only needed for backends that don't track current version
+       * via symlink (e.g. NSFS with .versions/ directory). */
+      if (rc & FILL_CACHE_FLAG_FIXUP_CURRENT) {
+        auto cursor = txn->getCursor(bucket->dbi);
+        LMDBSafe::MDBOutVal ckey, cdata;
+        if (cursor.get(ckey, cdata, MDB_FIRST) == 0) {
+          std::string prev_name;
+          bool group_has_current = false;
+          std::string best_dm_concat_k;
+          std::string best_dm_data;
+          std::string best_dm_instance;
+
+          auto flush_group = [&]() {
+            if (!group_has_current && !best_dm_concat_k.empty()) {
+              /* rewrite the newest DM entry with FLAG_CURRENT added */
+              rgw_bucket_dir_entry bde{};
+              std::string ser_v{best_dm_data};
+              zpp::bits::in in_v(ser_v);
+              struct timespec ts;
+              auto errc = in_v(
+                bde.key.name, bde.key.instance,
+                bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
+                bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
+                bde.meta.owner_display_name, bde.meta.accounted_size,
+                bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
+                bde.flags);
+              if (errc.code == std::errc{0}) {
+                bde.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
+                std::string new_data;
+                zpp::bits::out out(new_data);
+                (void)out(bde.key.name, bde.key.instance,
+                    bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
+                    bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
+                    bde.meta.owner_display_name, bde.meta.accounted_size,
+                    bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
+                    bde.flags);
+                txn->put(bucket->dbi, best_dm_concat_k, new_data);
+              }
+            }
+          };
+
+          do {
+            std::string_view svk = ckey.get<std::string_view>();
+            std::string_view svv = cdata.get<std::string_view>();
+            /* extract object name (before first '\0') */
+            auto nul = svk.find('\0');
+            std::string name(svk.substr(0, nul));
+            std::string instance(nul != std::string_view::npos
+                                 ? svk.substr(nul + 1) : "");
+
+            if (name != prev_name) {
+              flush_group();
+              prev_name = name;
+              group_has_current = false;
+              best_dm_concat_k.clear();
+              best_dm_data.clear();
+              best_dm_instance.clear();
+            }
+
+            /* deserialize just the flags (last field) — quick check */
+            rgw_bucket_dir_entry bde{};
+            std::string ser_v{svv};
+            zpp::bits::in in_v(ser_v);
+            struct timespec ts;
+            auto errc = in_v(
+              bde.key.name, bde.key.instance,
+              bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
+              bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
+              bde.meta.owner_display_name, bde.meta.accounted_size,
+              bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
+              bde.flags);
+            if (errc.code != std::errc{0}) {
+              continue;
+            }
+
+            if (bde.flags & rgw_bucket_dir_entry::FLAG_CURRENT) {
+              group_has_current = true;
+            } else if ((bde.flags & rgw_bucket_dir_entry::FLAG_DELETE_MARKER) &&
+                       (bde.flags & rgw_bucket_dir_entry::FLAG_VER)) {
+              /* candidate orphaned DM — keep if newest */
+              if (best_dm_instance.empty() || instance > best_dm_instance) {
+                best_dm_concat_k = std::string(svk);
+                best_dm_data = std::string(svv);
+                best_dm_instance = instance;
+              }
+            }
+          } while (cursor.get(ckey, cdata, MDB_NEXT) == 0);
+          flush_group();
+        }
+      } /* FILL_CACHE_FLAG_FIXUP_CURRENT */
 
       txn->commit();
       bucket->flags |= BucketCacheEntry<D, B>::FLAG_FILLED;

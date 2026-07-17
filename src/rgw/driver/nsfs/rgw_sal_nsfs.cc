@@ -1749,12 +1749,9 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
             ssize_t xlen = ::fgetxattr(tfd, dm_xattr.c_str(), buf, sizeof(buf));
             if (xlen > 0) {
               bde.flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
-              /* a delete marker in .versions/ is current if no file
-               * exists at the top-level path for this key */
-              if (::faccessat(get_fd(), obj_name.c_str(),
-                              F_OK, AT_SYMLINK_NOFOLLOW) != 0) {
-                bde.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
-              }
+              /* FLAG_CURRENT for orphaned DMs (no top-level file) is
+               * resolved by a fixup pass over LMDB after fill_cache
+               * completes — see bucket_cache.h fixup_current_flags() */
             }
 
             Attrs attrs;
@@ -3315,7 +3312,14 @@ int NSFSBucket::fill_cache(const DoutPrefixProvider* dpp, optional_yield y,
   if (get_info().versioned()) {
     flags |= nsfs::FSEnt::FLAG_LIST_VERSIONS;
   }
-  return dir->fill_cache(dpp, y, cb, flags);
+  int ret = dir->fill_cache(dpp, y, cb, flags);
+  if (ret < 0) {
+    return ret;
+  }
+  if (get_info().versioned()) {
+    ret |= file::listing::FILL_CACHE_FLAG_FIXUP_CURRENT;
+  }
+  return ret;
 }
 
 int NSFSBucket::list(const DoutPrefixProvider* dpp, ListParams& params,
