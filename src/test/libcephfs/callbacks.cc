@@ -3,6 +3,8 @@
 #include <include/fs_types.h>
 #include <mds/mdstypes.h>
 #include <include/cephfs/libcephfs.h>
+#include <include/ceph_fs.h>
+#include <gtest/gtest.h>
 
 #define MAX_CEPH_FILES	1000
 #define DIRNAME		"ino_release_cb"
@@ -16,8 +18,7 @@ static void cb(void *hdl, vinodeno_t vino)
 	cb_done = true;
 }
 
-int main(int argc, char *argv[])
-{
+TEST(LibCephFS, InoReleaseCb) {
 	inodeno_t inos[MAX_CEPH_FILES];
 	struct ceph_mount_info *cmount = NULL;
 
@@ -32,7 +33,6 @@ int main(int argc, char *argv[])
 	ret = ceph_chdir(cmount, DIRNAME);
 	assert(ret >= 0);
 
-	/* Create a bunch of files, get their inode numbers and close them */
 	int i;
 	for (i = 0; i < MAX_CEPH_FILES; ++i) {
 		int fd;
@@ -50,7 +50,6 @@ int main(int argc, char *argv[])
 		ceph_close(cmount, fd);
 	}
 
-	/* Remount */
 	ceph_unmount(cmount);
 	ceph_release(cmount);
 	ceph_create(&cmount, "admin");
@@ -68,7 +67,6 @@ int main(int argc, char *argv[])
 	Inode	*inodes[MAX_CEPH_FILES];
 
 	for (i = 0; i < MAX_CEPH_FILES; ++i) {
-		/* We can stop if we got a callback */
 		if (cb_done)
 			break;
 
@@ -80,5 +78,5 @@ int main(int argc, char *argv[])
 	assert(cb_done);
 	ceph_unmount(cmount);
 	ceph_release(cmount);
-	return 0;
+
 }
