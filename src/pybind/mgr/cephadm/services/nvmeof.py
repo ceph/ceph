@@ -126,6 +126,7 @@ class NvmeofService(CephService):
         map_discovery_addr = spec.discovery_addr_map.get(daemon_spec.host) if spec.discovery_addr_map else None
         keyring = self.get_keyring_with_caps(self.get_auth_entity(nvmeof_gw_id),
                                              ['mon', 'profile rbd',
+                                              'mgr', 'allow command "service dump"',
                                               'osd', 'profile rbd'])
 
         super().prepare_certificates(daemon_spec)
