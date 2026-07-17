@@ -16325,21 +16325,6 @@ void PrimaryLogPG::pool_migration_request_target_reservation() {
 
   pool_migration_reservation_tid = tid;
 
-  {
-    PrimaryLogPGRef pgref = this;
-    ceph_tid_t this_tid = tid;
-    std::lock_guard timer_lock(osd->recovery_request_lock);
-    osd->recovery_request_timer.add_event_after(
-      30.0,
-      bless_context(new LambdaContext([pgref, this_tid](int) {
-        if (!pgref->pool_migration_reservations_granted_source &&
-            pgref->pool_migration_reservation_tid == this_tid) {
-          pgref->pool_migration_reservation_tid = 0;
-          pgref->queue_recovery();
-        }
-      })));
-  }
-
   dout(20) << __func__ << " sending reservation request to pg " << pool_migration_target_pg
            << " watermark=" << pool_migration_watermark
            << " bytes=" << num_bytes
