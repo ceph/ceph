@@ -285,6 +285,8 @@ static void promote_version(int parent_fd, const std::string& leaf,
                             const DoutPrefixProvider* dpp,
                             FSStrategy* fs_strategy)
 {
+  ldpp_dout(dpp, 10) << "promote_version: enter leaf=" << leaf
+    << " parent_fd=" << parent_fd << dendl;
   for (int attempt = 0; attempt < NSFS_VERSION_RETRIES; ++attempt) {
     /* bail if a current version already exists */
     struct statx cur_stx;
@@ -299,10 +301,12 @@ static void promote_version(int parent_fd, const std::string& leaf,
     int vfd = ::openat(parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
                        O_RDONLY | O_DIRECTORY);
     if (vfd < 0) {
+      ldpp_dout(dpp, 10) << "promote_version: " << leaf
+        << " .versions/ not found (errno=" << errno << ")" << dendl;
       return;
     }
 
-    /* find newest version entry for this key */
+    /* find newest non-delete-marker version entry for this key */
     uint64_t max_mtime = 0;
     std::string max_name;
     DIR* vdir = fdopendir(dup(vfd));
@@ -320,6 +324,21 @@ static void promote_version(int parent_fd, const std::string& leaf,
         nsfs_version_info vi;
         if (!nsfs_parse_version_id(vid, vi)) {
           continue;
+        }
+        /* skip delete markers — they don't get promoted to the
+         * top-level path in NSFS */
+        {
+          int chk_fd = ::openat(vfd, de->d_name, O_RDONLY);
+          if (chk_fd >= 0) {
+            char buf[8];
+            std::string dm_x = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_DELETE_MARKER;
+            bool is_dm = (::fgetxattr(chk_fd, dm_x.c_str(),
+                                      buf, sizeof(buf)) > 0);
+            ::close(chk_fd);
+            if (is_dm) {
+              continue;
+            }
+          }
         }
         uint64_t entry_mtime;
         if (vid == NULL_VERSION_ID) {
@@ -349,25 +368,11 @@ static void promote_version(int parent_fd, const std::string& leaf,
     ldpp_dout(dpp, 10) << "promote_version: " << leaf
       << " candidate=" << max_name << dendl;
 
-    /* stat the candidate and check if it's a delete marker */
     struct statx cand_stx;
     if (statx(vfd, max_name.c_str(), AT_SYMLINK_NOFOLLOW,
               STATX_ALL, &cand_stx) < 0) {
       ::close(vfd);
       return;
-    }
-    {
-      int chk_fd = ::openat(vfd, max_name.c_str(), O_RDONLY);
-      if (chk_fd >= 0) {
-        char buf[8];
-        std::string dm_x = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_DELETE_MARKER;
-        if (::fgetxattr(chk_fd, dm_x.c_str(), buf, sizeof(buf)) > 0) {
-          ::close(chk_fd);
-          ::close(vfd);
-          return;
-        }
-        ::close(chk_fd);
-      }
     }
 
     /* CAS link: .versions/candidate → current path */
@@ -5374,21 +5379,27 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         ldpp_dout(dpp, 10) << "delete_obj: deleting current version "
           << req_version_id << dendl;
         result.version_id = req_version_id;
-        /* capture parent fd and leaf name before delete_object
-         * invalidates the ent/dir_chain */
+        /* resolve the object's parent directory and leaf name in the
+         * bucket hierarchy (not .versions/) for promote_version */
         int promote_fd = -1;
         std::string promote_leaf;
-        nsfs::Directory* parent = ent->get_parent();
-        if (parent) {
-          int pfd = parent->get_fd();
-          if (pfd < 0) {
-            parent->open(dpp);
-            pfd = parent->get_fd();
+        {
+          std::string fname = source->get_fname(/*use_version=*/false);
+          std::vector<std::unique_ptr<nsfs::Directory>> prom_chain;
+          nsfs::Directory* prom_dir = nullptr;
+          int r = nsfs::resolve_path(dpp, b->get_dir(), fname,
+              /*create_dirs=*/false, source->driver->ctx(),
+              prom_chain, prom_dir, promote_leaf);
+          if (r == 0 && prom_dir) {
+            int pfd = prom_dir->get_fd();
+            if (pfd < 0) {
+              prom_dir->open(dpp);
+              pfd = prom_dir->get_fd();
+            }
+            if (pfd >= 0) {
+              promote_fd = ::dup(pfd);
+            }
           }
-          if (pfd >= 0) {
-            promote_fd = ::dup(pfd);
-          }
-          promote_leaf = ent->get_name();
         }
         ret = source->delete_object(dpp, y, flags, nullptr, nullptr);
         if (ret < 0) {
@@ -5542,6 +5553,44 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
           cache_key.instance = req_version_id;
           source->driver->get_bucket_cache()->remove_entry(
             dpp, b->get_name(), cache_key);
+        }
+        /* if we deleted a DM from .versions/ and no current file
+         * exists, promote the newest non-DM version */
+        if (is_dm && parent_fd >= 0) {
+          promote_version(parent_fd, leaf_name, dpp,
+                          source->driver->get_fs_strategy());
+          /* update cache for the promoted version */
+          struct statx pstx;
+          if (statx(parent_fd, leaf_name.c_str(),
+                    AT_SYMLINK_NOFOLLOW, STATX_ALL, &pstx) == 0) {
+            bool promoted_is_null = false;
+            {
+              int chk = ::openat(parent_fd, leaf_name.c_str(), O_RDONLY);
+              if (chk >= 0) {
+                promoted_is_null = is_null_version_fd(chk);
+                ::close(chk);
+              }
+            }
+            std::string promoted_ver = promoted_is_null
+              ? NULL_VERSION_ID
+              : nsfs_version_id_from_statx(pstx);
+            rgw_bucket_dir_entry bde{};
+            bde.key.name = source->get_key().get_index_key_name();
+            bde.key.instance = promoted_ver;
+            bde.ver.pool = 1;
+            bde.ver.epoch = 1;
+            bde.exists = true;
+            bde.meta.category = RGWObjCategory::Main;
+            bde.meta.size = pstx.stx_size;
+            bde.meta.accounted_size = pstx.stx_size;
+            bde.meta.mtime = from_statx_timestamp(pstx.stx_mtime);
+            bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
+            bde.meta.etag = synthesize_etag(pstx);
+            bde.flags = rgw_bucket_dir_entry::FLAG_VER |
+                        rgw_bucket_dir_entry::FLAG_CURRENT;
+            source->driver->get_bucket_cache()->add_entry(
+              dpp, b->get_name(), bde);
+          }
         }
         return 0;
       }
