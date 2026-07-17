@@ -4,10 +4,17 @@
 #include "Checkpoint.h"
 #include "Utils.h"
 
+#include "common/debug.h"
+#include "common/errno.h"
 #include "common/strtol.h"
 
 #include <cstdio>
 #include <vector>
+
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_cephfs_mirror
+#undef dout_prefix
+#define dout_prefix *_dout << "cephfs::mirror::Checkpoint " << __func__
 
 namespace cephfs {
 namespace mirror {
@@ -28,6 +35,17 @@ std::map<std::string, std::string> decode_snap_metadata(snap_metadata *md,
     metadata.emplace(md[i].key, md[i].value);
   }
   return metadata;
+}
+
+int remove_snap_metadata_key(MountRef mnt, const std::string &snap_path,
+                             const std::string &key) {
+  int r = ceph_do_snap_md_op(mnt, snap_path.c_str(), key.c_str(), "",
+                             CEPH_SNAP_MD_OP_REMOVE);
+  if (r < 0) {
+    derr << ": failed to remove checkpoint metadata key=" << key
+         << " snap_path=" << snap_path << ": " << cpp_strerror(r) << dendl;
+  }
+  return r;
 }
 
 } // anonymous namespace
@@ -163,6 +181,42 @@ int write_checkpoint_metadata(CephContext *cct, MountRef mnt,
     }
   }
 
+  return 0;
+}
+
+std::set<std::string> present_checkpoint_metadata_keys(
+    const std::map<std::string, std::string> &snap_metadata) {
+  std::set<std::string> keys;
+  for (const auto &key : CHECKPOINT_METADATA_KEY_LIST) {
+    if (snap_metadata.count(key)) {
+      keys.insert(key);
+    }
+  }
+  return keys;
+}
+
+int remove_checkpoint_metadata(MountRef mnt, const std::string &snap_path,
+                               const std::set<std::string> &metadata_keys) {
+  // Delete the status key last. has_checkpoint() looks it up, so a failed
+  // removal of an earlier key leaves the checkpoint visible and a later prune
+  // can retry instead of leaving the remaining keys in place with no status.
+  bool remove_status = metadata_keys.count(CHECKPOINT_STATUS_KEY) != 0;
+  for (const auto &key : CHECKPOINT_METADATA_KEY_LIST) {
+    if (key == CHECKPOINT_STATUS_KEY || !metadata_keys.count(key)) {
+      continue;
+    }
+    int r = remove_snap_metadata_key(mnt, snap_path, key);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  if (remove_status) {
+    int r = remove_snap_metadata_key(mnt, snap_path, CHECKPOINT_STATUS_KEY);
+    if (r < 0) {
+      return r;
+    }
+  }
   return 0;
 }
 
