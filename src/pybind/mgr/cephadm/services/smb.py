@@ -258,6 +258,7 @@ class SMBService(CephService):
                 smb_spec, daemon_spec.daemon_id, ceph_users
             )
         )
+
         config_blobs['metrics_image'] = (
             self.mgr.container_image_samba_metrics
         )
@@ -422,6 +423,8 @@ class SMBService(CephService):
     def _ceph_config_and_keyring_for(
         self, smb_spec: SMBSpec, daemon_id: str, ceph_users: List[str]
     ) -> Dict[str, str]:
+        # Generate local cluster config/keyring for SMB service access to RADOS
+        # This is needed even for external clusters (for config store access)
         ackc = self._allow_config_key_command(smb_spec.cluster_id)
         wanted_caps = ['mon', f'allow r, {ackc}']
         osd_caps = self._expand_osd_caps(smb_spec)
@@ -430,9 +433,13 @@ class SMBService(CephService):
             wanted_caps.append(osd_caps)
         entity = self.get_auth_entity(daemon_id)
         keyring = self.get_keyring_with_caps(entity, wanted_caps)
-        # add additional data-path users to the ceph keyring
-        for ceph_user in ceph_users:
-            keyring += self._key_for_user(ceph_user)
+
+        # For local clusters, add data-path users to the keyring
+        # For external clusters, skip adding ceph_users (they're in exo.ceph.keyring)
+        if not smb_spec.ceph_cluster_configs:
+            for ceph_user in ceph_users:
+                keyring += self._key_for_user(ceph_user)
+
         return {
             'config': self.mgr.get_minimal_ceph_conf(),
             'keyring': keyring,
