@@ -4236,6 +4236,13 @@ int NSFSObject::copy_object(const ACLOwner& owner,
       dem_bde.exists = true;
       dem_bde.meta.category = RGWObjCategory::Main;
       dem_bde.flags = rgw_bucket_dir_entry::FLAG_VER;
+      {
+        ACLOwner acl_owner;
+        if (decode_acl_owner(dobj->get_attrs(), acl_owner) >= 0) {
+          dem_bde.meta.owner = to_string(acl_owner.id);
+          dem_bde.meta.owner_display_name = acl_owner.display_name;
+        }
+      }
       bcache->add_entry(dpp, db->get_name(), dem_bde);
     }
 
@@ -4253,6 +4260,13 @@ int NSFSObject::copy_object(const ACLOwner& owner,
     new_bde.meta.etag = synthesize_etag(new_stx);
     new_bde.flags = rgw_bucket_dir_entry::FLAG_VER |
                     rgw_bucket_dir_entry::FLAG_CURRENT;
+    {
+      ACLOwner acl_owner;
+      if (decode_acl_owner(dobj->get_attrs(), acl_owner) >= 0) {
+        new_bde.meta.owner = to_string(acl_owner.id);
+        new_bde.meta.owner_display_name = acl_owner.display_name;
+      }
+    }
     bcache->add_entry(dpp, db->get_name(), new_bde);
   }
 
@@ -5451,6 +5465,19 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
             bde.meta.etag = synthesize_etag(pstx);
             bde.flags = rgw_bucket_dir_entry::FLAG_VER |
                         rgw_bucket_dir_entry::FLAG_CURRENT;
+            {
+              int afd = ::openat(promote_fd, promote_leaf.c_str(), O_RDONLY);
+              if (afd >= 0) {
+                Attrs pattrs;
+                get_x_attrs(null_yield, dpp, afd, pattrs, promote_leaf);
+                ACLOwner acl_owner;
+                if (decode_acl_owner(pattrs, acl_owner) >= 0) {
+                  bde.meta.owner = to_string(acl_owner.id);
+                  bde.meta.owner_display_name = acl_owner.display_name;
+                }
+                ::close(afd);
+              }
+            }
             source->driver->get_bucket_cache()->add_entry(
               dpp, b->get_name(), bde);
           }
@@ -5598,6 +5625,19 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
             bde.meta.etag = synthesize_etag(pstx);
             bde.flags = rgw_bucket_dir_entry::FLAG_VER |
                         rgw_bucket_dir_entry::FLAG_CURRENT;
+            {
+              int afd = ::openat(parent_fd, leaf_name.c_str(), O_RDONLY);
+              if (afd >= 0) {
+                Attrs pattrs;
+                get_x_attrs(null_yield, dpp, afd, pattrs, leaf_name);
+                ACLOwner acl_owner;
+                if (decode_acl_owner(pattrs, acl_owner) >= 0) {
+                  bde.meta.owner = to_string(acl_owner.id);
+                  bde.meta.owner_display_name = acl_owner.display_name;
+                }
+                ::close(afd);
+              }
+            }
             source->driver->get_bucket_cache()->add_entry(
               dpp, b->get_name(), bde);
           }
@@ -5797,6 +5837,14 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     std::string vid_xattr = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_VERSION_ID;
     ::fsetxattr(dm_fd, vid_xattr.c_str(),
                 dm_ver_id.c_str(), dm_ver_id.size(), 0);
+
+    /* copy ACL from the source object so the DM has owner info */
+    bufferlist acl_bl;
+    if (rgw::sal::get_attr(source->get_attrs(), RGW_ATTR_ACL, acl_bl)) {
+      std::string acl_xattr = make_xattr_name(RGW_ATTR_ACL);
+      ::fsetxattr(dm_fd, acl_xattr.c_str(),
+                  acl_bl.c_str(), acl_bl.length(), 0);
+    }
     ::close(dm_fd);
 
     /* rename to final name */
@@ -5833,6 +5881,13 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     dem_bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
     dem_bde.meta.etag = synthesize_etag(ent->get_stx());
     dem_bde.flags = rgw_bucket_dir_entry::FLAG_VER;
+    {
+      ACLOwner acl_owner;
+      if (decode_acl_owner(source->get_attrs(), acl_owner) >= 0) {
+        dem_bde.meta.owner = to_string(acl_owner.id);
+        dem_bde.meta.owner_display_name = acl_owner.display_name;
+      }
+    }
     bcache->add_entry(dpp, b->get_name(), dem_bde);
   }
 
@@ -5852,6 +5907,13 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     dm_bde.flags = rgw_bucket_dir_entry::FLAG_VER |
                    rgw_bucket_dir_entry::FLAG_CURRENT |
                    rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
+    {
+      ACLOwner acl_owner;
+      if (decode_acl_owner(source->get_attrs(), acl_owner) >= 0) {
+        dm_bde.meta.owner = to_string(acl_owner.id);
+        dm_bde.meta.owner_display_name = acl_owner.display_name;
+      }
+    }
     bcache->add_entry(dpp, b->get_name(), dm_bde);
   }
 
@@ -6437,6 +6499,13 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
         dem_bde.exists = true;
         dem_bde.meta.category = RGWObjCategory::Main;
         dem_bde.flags = rgw_bucket_dir_entry::FLAG_VER;
+        {
+          ACLOwner acl_owner;
+          if (decode_acl_owner(target_obj->get_attrs(), acl_owner) >= 0) {
+            dem_bde.meta.owner = to_string(acl_owner.id);
+            dem_bde.meta.owner_display_name = acl_owner.display_name;
+          }
+        }
         bcache->add_entry(dpp, pb->get_name(), dem_bde);
       }
 
@@ -6454,6 +6523,13 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
       new_bde.meta.etag = synthesize_etag(new_stx);
       new_bde.flags = rgw_bucket_dir_entry::FLAG_VER |
                       rgw_bucket_dir_entry::FLAG_CURRENT;
+      {
+        ACLOwner acl_owner;
+        if (decode_acl_owner(target_obj->get_attrs(), acl_owner) >= 0) {
+          new_bde.meta.owner = to_string(acl_owner.id);
+          new_bde.meta.owner_display_name = acl_owner.display_name;
+        }
+      }
       bcache->add_entry(dpp, pb->get_name(), new_bde);
     }
   }
