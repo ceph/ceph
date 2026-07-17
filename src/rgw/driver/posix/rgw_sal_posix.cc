@@ -112,9 +112,8 @@ static inline std::string gen_rand_instance_name()
 #if 0
   gen_rand_alphanumeric_no_underscore(driver->ctx(), buf, OBJ_INSTANCE_LEN);
 #else
-  static uint64_t last_id = UINT64_MAX;
-  snprintf(buf, OBJ_INSTANCE_LEN, "%lx", last_id);
-  last_id--;
+  static std::atomic<uint64_t> last_id{UINT64_MAX};
+  snprintf(buf, OBJ_INSTANCE_LEN, "%lx", last_id.fetch_sub(1));
 #endif
 
   return buf;
