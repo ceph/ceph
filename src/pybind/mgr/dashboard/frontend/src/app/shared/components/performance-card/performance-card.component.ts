@@ -103,7 +103,7 @@ export class PerformanceCardComponent implements OnInit, OnDestroy {
     }
 
     this.chartSub = this.performanceCardService
-      .getChartData(time)
+      .getChartData(time, this.selectedStorageType)
       .pipe(takeUntil(this.destroy$))
       .subscribe((data) => {
         this.chartDataSignal.set(data);

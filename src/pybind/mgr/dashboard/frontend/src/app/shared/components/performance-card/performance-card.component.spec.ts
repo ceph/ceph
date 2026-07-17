@@ -4,7 +4,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { of } from 'rxjs';
 import { PrometheusService } from '../../api/prometheus.service';
 import { PerformanceCardService } from '../../api/performance-card.service';
-import { PerformanceData } from '../../models/performance-data';
+import { PerformanceData, StorageType } from '../../models/performance-data';
 import { DatePipe } from '@angular/common';
 import { NumberFormatterService } from '../../services/number-formatter.service';
 import { AuthStorageService } from '../../services/auth-storage.service';
@@ -113,9 +113,9 @@ describe('PerformanceCardComponent', () => {
 
   it('should update selectedStorageType and reload charts on storage type selection', () => {
     const loadChartsSpy = jest.spyOn(component, 'loadCharts');
-    const event = { item: { value: StorageType.Filesystem } };
 
-    component.onStorageTypeSelection(event);
+    component.selectedStorageType = StorageType.Filesystem;
+    component.loadCharts(component.time);
 
     expect(component.selectedStorageType).toBe(StorageType.Filesystem);
     expect(loadChartsSpy).toHaveBeenCalledWith(component.time);

@@ -9,7 +9,6 @@ import { provideCharts, withDefaultRegisterables, BaseChartDirective } from 'ng2
 import { SharedModule } from '~/app/shared/shared.module';
 import { DashboardV3Module } from '../dashboard-v3/dashboard-v3.module';
 import { CephSharedModule } from '../shared/ceph-shared.module';
-import { FeedbackComponent } from '../shared/feedback/feedback.component';
 import { DashboardComponent } from './dashboard/dashboard.component';
 import { HealthPieComponent } from './health-pie/health-pie.component';
 import { HealthComponent } from './health/health.component';
@@ -48,8 +47,7 @@ import { OverviewComponent } from '../overview/overview.component';
     MdsDashboardSummaryPipe,
     HealthPieComponent,
     InfoCardComponent,
-    InfoGroupComponent,
-    FeedbackComponent
+    InfoGroupComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())]
 })
