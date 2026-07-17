@@ -157,6 +157,17 @@ async fn test_versioning_obj_create_read_remove_head() {
     for v in list_resp.versions() {
         assert!(!v.is_latest().unwrap_or(true));
     }
+    // all entries should have owner populated
+    for v in list_resp.versions() {
+        let owner = v.owner().expect("version should have owner");
+        assert!(!owner.id().unwrap_or_default().is_empty(),
+                "version owner ID should not be empty");
+    }
+    for dm in list_resp.delete_markers() {
+        let owner = dm.owner().expect("delete marker should have owner");
+        assert!(!owner.id().unwrap_or_default().is_empty(),
+                "delete marker owner ID should not be empty");
+    }
 }
 
 #[tokio::test]
