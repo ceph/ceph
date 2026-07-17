@@ -2359,7 +2359,7 @@ bool pg_pool_t::stretch_set_can_peer(const set<int>& want, const OSDMap& osdmap,
     }
     int ancestor = crush->get_parent_of_type(osdid, barrier_id,
 					     crush_rule);
-    ancestors.insert(ancestor);
+    ancestors.insert(crush->get_non_shadow_id(ancestor));
   }
   if (ancestors.size() < barrier_count) {
     if (out) {

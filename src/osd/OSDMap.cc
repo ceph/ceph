@@ -364,6 +364,76 @@ bool OSDMap::containing_subtree_is_down(CephContext *cct, int id, int subtree_ty
   }
 }
 
+void OSDMap::get_stretch_zones(const pg_pool_t& pool,
+                               map<int, set<int>>* zone_osds) const
+{
+  set<int> rule_roots;
+  crush->find_takes_by_rule(pool.crush_rule, &rule_roots);
+  for (int root : rule_roots) {
+    vector<int> zones;
+    // A device-class rule takes a shadow root, whose zones are shadow buckets
+    crush->get_children_of_type(root, pool.peering_crush_bucket_barrier, &zones,
+                                false);
+    for (int zone : zones) {
+      vector<int> osds;
+      crush->get_children_of_type(zone, 0, &osds);
+      // A zone with no OSDs the rule can use cannot hold any of the pool
+      if (!osds.empty()) {
+        (*zone_osds)[zone].insert(osds.begin(), osds.end());
+      }
+    }
+  }
+}
+
+bool OSDMap::at_least_one_zone_has_min_size(const pg_pool_t& pool,
+                                        const vector<int>& acting) const
+{
+  map<int, set<int>> zones;
+  get_stretch_zones(pool, &zones);
+  for (const auto& [zone, zone_osd_set] : zones) {
+    unsigned zone_acting = 0;
+    for (int osd : acting) {
+      if (osd != CRUSH_ITEM_NONE && zone_osd_set.find(osd) != zone_osd_set.end()) {
+        ++zone_acting;
+      }
+    }
+
+    if (zone_acting >= pool.min_size) {
+      return true;
+    }
+  }
+  return false;
+}                                      
+
+unsigned OSDMap::stretch_ec_num_acting_below_min_size(const pg_pool_t& pool,
+                                        const vector<int>& acting) const
+{
+  if(!pool.is_erasure() || !pool.is_stretch_pool() || pool.peering_crush_bucket_count == 0) {
+    return 0;
+  }
+
+  map<int, set<int>> zones;
+  get_stretch_zones(pool, &zones);
+  int deficit = 0;
+  for (const auto& [zone, zone_osd_set] : zones) {
+    if (pool.peering_crush_mandatory_member != CRUSH_ITEM_NONE &&
+        crush->get_non_shadow_id(zone) != (int)pool.peering_crush_mandatory_member) {
+      continue;
+    }
+    unsigned zone_acting = 0;
+    for (int osd : acting) {
+      if (osd != CRUSH_ITEM_NONE && zone_osd_set.find(osd) != zone_osd_set.end()) {
+        ++zone_acting;
+      }
+    }
+
+    if (zone_acting < pool.min_size) {
+      deficit += (pool.min_size - zone_acting);
+    }
+  }
+  return deficit;
+}
+
 bool OSDMap::subtree_type_is_down(
   CephContext *cct,
   int id,

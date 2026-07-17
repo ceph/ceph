@@ -466,6 +466,12 @@ public:
     }
   }
   int split_id_class(int i, int *idout, int *classout) const;
+  /// the bucket that device class shadow bucket @p i stands for, else @p i
+  int get_non_shadow_id(int i) const {
+    int class_id;
+    split_id_class(i, &i, &class_id);
+    return i;
+  }
 
   bool class_exists(const std::string& name) const {
     return class_rname.count(name);
