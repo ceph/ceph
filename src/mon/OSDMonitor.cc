@@ -1305,14 +1305,29 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc,
       // this mirrors PG::start_peering_interval()
       pg_t pgid = i.first;
 
+      const pg_pool_t *pool = nextmap.get_pg_pool(pgid.pool());
       // this is a bit imprecise, but sufficient?
       struct min_size_predicate_t : public IsPGRecoverablePredicate {
-	const pg_pool_t *pi;
-	bool operator()(const set<pg_shard_t> &have) const {
-	  return have.size() >= pi->min_size;
-	}
-	explicit min_size_predicate_t(const pg_pool_t *i) : pi(i) {}
-      } min_size_predicate(nextmap.get_pg_pool(pgid.pool()));
+        const pg_pool_t *pi;
+        bool operator()(const set<pg_shard_t> &have) const {
+          return pi && have.size() >= pi->min_size;
+        }
+        explicit min_size_predicate_t(const pg_pool_t *i) : pi(i) {}
+      } min_size_predicate(pool);
+      struct stretch_ec_min_size_predicate_t : public IsPGRecoverablePredicate {
+        const pg_pool_t *pi;
+        const OSDMap *osdmap;
+        
+        bool operator()(const set<pg_shard_t> &have) const {
+          vector<int> acting;
+          for (const auto& shard : have) {
+            acting.push_back(shard.osd);
+          }
+          return pi && osdmap->at_least_one_zone_has_min_size(*pi, acting);
+        }
+        explicit stretch_ec_min_size_predicate_t(const pg_pool_t *i, const OSDMap *m)
+          : pi(i), osdmap(m) {}
+      } stretch_ec_min_size_predicate(pool, &nextmap);
 
       vector<int> up, acting;
       int up_primary, acting_primary;
@@ -1336,6 +1351,9 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc,
 		 << dendl;
      } else {
 	std::stringstream debug;
+	const auto& recoverable_predicate = (pool->is_erasure() && pool->is_stretch_pool())
+	  ? static_cast<const IsPGRecoverablePredicate&>(stretch_ec_min_size_predicate)
+	  : static_cast<const IsPGRecoverablePredicate&>(min_size_predicate);
 	if (PastIntervals::check_new_interval(
 	      i.second.acting_primary, acting_primary,
 	      i.second.acting, acting,
@@ -1346,7 +1364,7 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc,
 	      &nextmap,
 	      &osdmap,
 	      pgid,
-	      min_size_predicate,
+	      recoverable_predicate,
 	      &i.second.past_intervals,
 	      &debug)) {
 	  epoch_t e = inc.epoch;
@@ -1517,8 +1535,15 @@ void OSDMonitor::prime_pg_temp(
   if (acting.empty())
     return;  // if previously empty now we can be no worse off
   const pg_pool_t *pool = next.get_pg_pool(pgid.pool());
-  if (pool && acting.size() < pool->min_size)
-    return;  // can be no worse off than before
+  if (pool) {
+    if (pool->is_erasure() && 
+      pool->is_stretch_pool() && 
+      pool->peering_crush_bucket_count > 1 && 
+      next.stretch_ec_num_acting_below_min_size(*pool, acting) > 0)
+        return;  // can be no worse off than before
+    if (acting.size() < pool->min_size)
+      return;  // can be no worse off than before
+  }
 
   if (next_up == next_acting) {
     acting.clear();
@@ -9814,9 +9839,7 @@ int OSDMonitor::prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
   p.peering_crush_bucket_barrier = static_cast<uint32_t>(bucket_barrier);
   p.crush_rule = static_cast<__u8>(crush_rule);
   p.size = static_cast<__u8>(pool_size);
-  if (p.is_replicated()) {
-    p.min_size = static_cast<__u8>(pool_min_size);
-  }
+  p.min_size = static_cast<__u8>(pool_min_size);
   p.last_change = pending_inc.epoch;
   pending_inc.new_pools[pool] = p;
   ss << "pool " << pool_name << " stretch values are set successfully";
@@ -16462,7 +16485,9 @@ void OSDMonitor::trigger_degraded_stretch_mode(const set<int>& dead_buckets,
       pg_pool_t& newp = *pending_inc.get_new_pool(pgi.first, &pgi.second);
       newp.peering_crush_bucket_count = new_site_count;
       newp.peering_crush_mandatory_member = remaining_site;
-      newp.min_size = pgi.second.min_size / 2; // only support 2 zones now
+      if(newp.is_replicated()) {
+        newp.min_size = pgi.second.min_size / new_site_count;
+      }
       newp.set_last_force_op_resend(pending_inc.epoch);
     }
   }
@@ -16568,7 +16593,9 @@ void OSDMonitor::trigger_healthy_stretch_mode()
       pg_pool_t& newp = *pending_inc.get_new_pool(pgi.first, &pgi.second);
       newp.peering_crush_bucket_count = osdmap.stretch_bucket_count;
       newp.peering_crush_mandatory_member = CRUSH_ITEM_NONE;
-      newp.min_size = g_conf().get_val<uint64_t>("mon_stretch_pool_min_size");
+      if (newp.is_replicated()) {
+        newp.min_size = pgi.second.min_size * osdmap.stretch_bucket_count;
+      }
       newp.set_last_force_op_resend(pending_inc.epoch);
     }
   }

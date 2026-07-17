@@ -1171,10 +1171,23 @@ unsigned PeeringState::get_recovery_priority()
     ret = OSD_RECOVERY_PRIORITY_FORCED;
   } else {
     // XXX: This priority boost isn't so much about inactive, but about data-at-risk
-    if (is_degraded() && info.stats.avail_no_missing.size() < pool.info.min_size) {
-      base = OSD_RECOVERY_INACTIVE_PRIORITY_BASE;
-      // inactive: no. of replicas < min_size, highest priority since it blocks IO
-      ret = base + (pool.info.min_size - info.stats.avail_no_missing.size());
+    if (is_degraded()) {
+      unsigned num_avail_no_missing_below_min_size = 0;
+      if (pool.info.is_erasure() && pool.info.is_stretch_pool()) {
+        vector<int> avail_osds;
+        for (auto& s : info.stats.avail_no_missing) {
+          avail_osds.push_back(s.osd);
+        }
+        num_avail_no_missing_below_min_size = get_osdmap()->stretch_ec_num_acting_below_min_size(pool.info, avail_osds);
+      }  
+      if (num_avail_no_missing_below_min_size) {
+        base = OSD_RECOVERY_INACTIVE_PRIORITY_BASE;
+        ret = base + num_avail_no_missing_below_min_size;
+      } else if(info.stats.avail_no_missing.size() < pool.info.min_size) {
+        base = OSD_RECOVERY_INACTIVE_PRIORITY_BASE;
+        // inactive: no. of replicas < min_size, highest priority since it blocks IO
+        ret = base + (pool.info.min_size - info.stats.avail_no_missing.size());
+      }
     }
 
     int64_t pool_recovery_priority = 0;
@@ -1195,7 +1208,15 @@ unsigned PeeringState::get_backfill_priority()
   if (state & PG_STATE_FORCED_BACKFILL) {
     ret = OSD_BACKFILL_PRIORITY_FORCED;
   } else {
-    if (actingset.size() < pool.info.min_size) {
+    unsigned num_acting_below_min_size = 0;
+    if (pool.info.is_erasure() && pool.info.is_stretch_pool()) {
+      num_acting_below_min_size = get_osdmap()->stretch_ec_num_acting_below_min_size(pool.info, acting);
+    } 
+    if (num_acting_below_min_size) {
+      base = OSD_BACKFILL_INACTIVE_PRIORITY_BASE;
+      // inactive: no. of replicas < min_size, highest priority since it blocks IO
+      ret = base + num_acting_below_min_size;
+    } else if (actingset.size() < pool.info.min_size) {
       base = OSD_BACKFILL_INACTIVE_PRIORITY_BASE;
       // inactive: no. of replicas < min_size, highest priority since it blocks IO
       ret = base + (pool.info.min_size - actingset.size());
@@ -2566,6 +2587,7 @@ void PeeringState::choose_async_recovery_ec(
     ceph_assert(want_acting_size > 0);
     if ((want_acting_size > pool.info.min_size) &&
         pool.info.stretch_set_can_peer(candidate_want, *osdmap, NULL) &&
+        (osdmap->stretch_ec_num_acting_below_min_size(pool.info, candidate_want) == 0) &&
 	      recoverable(candidate_want)) {
       want->swap(candidate_want);
       async_recovery->insert(cur_shard);
@@ -8128,7 +8150,10 @@ boost::statechart::result PeeringState::Incomplete::react(const AdvMap &advmap) 
   // Reset if min_size turn smaller than previous value, pg might now be able to go active
   if (!advmap.osdmap->have_pg_pool(poolnum) ||
       advmap.lastmap->get_pools().find(poolnum)->second.min_size >
-      advmap.osdmap->get_pools().find(poolnum)->second.min_size) {
+      advmap.osdmap->get_pools().find(poolnum)->second.min_size ||
+      (advmap.osdmap->get_pools().find(poolnum)->second.is_stretch_pool() &&
+       advmap.lastmap->get_pools().find(poolnum)->second.peering_crush_bucket_count >
+       advmap.osdmap->get_pools().find(poolnum)->second.peering_crush_bucket_count)) {
     post_event(advmap);
     return transit< Reset >();
   }
