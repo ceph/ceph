@@ -195,6 +195,13 @@ paths:
         name: pool_name
         schema:
           type: string
+      - allowEmptyValue: true
+        description: Optional RBD namespace. If provided, list images only from this
+          namespace within the selected pool(s).
+        in: query
+        name: namespace
+        schema:
+          type: string
       - default: 0
         description: offset
         in: query
