@@ -1,5 +1,5 @@
 import { Component, Input, OnInit, ViewEncapsulation } from '@angular/core';
-import { ICON_TYPE, Icons, IconSize } from '../../enum/icons.enum';
+import { ICON_TYPE, IconSize } from '../../enum/icons.enum';
 
 @Component({
   selector: 'cd-icon',

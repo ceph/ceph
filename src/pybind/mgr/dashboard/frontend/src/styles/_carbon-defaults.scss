@@ -5,6 +5,7 @@
 );
 @use '@carbon/layout';
 @use '@carbon/colors';
+@use '@carbon/styles/scss/utilities/text-truncate' as textTruncate;
 @use './src/styles/vendor/variables' as vv;
 @use './themes/default';
 @use '@carbon/styles/scss/compat/themes' as compat;

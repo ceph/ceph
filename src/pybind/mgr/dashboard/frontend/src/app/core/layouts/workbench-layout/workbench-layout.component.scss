@@ -6,10 +6,10 @@
 }
 
 .container-fluid {
+  background-color: var(--cds-background);
   overflow: auto;
   padding-bottom: var(--cds-spacing-09);
   padding-top: var(--cds-spacing-09);
-  background-color: var(--cds-background);
 
   &:has(.tearsheet--full) {
     overflow: hidden;

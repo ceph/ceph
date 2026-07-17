@@ -5,27 +5,27 @@
 
 :host {
   flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
   min-block-size: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .notification-section-heading {
   @include type.type-style('heading-compact-01');
+  background-color: $layer-01;
+  color: $text-primary;
+  display: block;
 
   margin: 0;
-  color: $text-primary;
   padding: $spacing-05 $spacing-05 $spacing-03;
-  background-color: $layer-01;
   position: sticky;
-  z-index: 2;
   top: 0;
-  display: block;
+  z-index: 2;
 }
 
 .task-row {
-  display: flex;
   align-items: center;
+  display: flex;
   justify-content: space-between;
   margin-top: var(--cds-spacing-02);
 }
@@ -41,49 +41,50 @@
   @include type.type-style('label-01');
 
   color: $text-secondary;
+  display: block;
   line-height: 1;
   margin-top: 0;
-  display: block;
 }
 
 .notification-title {
   @include type.type-style('body-short-01');
+  color: $text-primary;
+  display: block;
+  line-height: 1.25;
 
   margin: 0;
-  color: $text-primary;
-  line-height: 1.25;
-  display: block;
   overflow-wrap: break-word;
 }
 
 .notification-message {
   @include type.type-style('body-short-01');
 
+  /* stylelint-disable property-no-vendor-prefix, value-no-vendor-prefix */
+  -webkit-box-orient: vertical;
   color: $text-helper;
-  margin: 0;
-  line-height: 1.4;
-  margin-top: -$spacing-01;
   display: -webkit-box;
   -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  /* stylelint-enable property-no-vendor-prefix, value-no-vendor-prefix */
+  line-height: 1.4;
+  margin: 0;
+  margin-top: -$spacing-01;
   overflow: hidden;
   overflow-wrap: break-word;
 }
 
 .notification-empty {
+  @include type.type-style('body-short-01');
+  color: $text-secondary;
   margin: 0;
   padding: $spacing-05;
-  color: $text-secondary;
   text-align: center;
-
-  @include type.type-style('body-short-01');
 }
 
 .notification-wrapper {
+  background-color: $layer-01;
   padding: 0 $spacing-05;
   position: relative;
   z-index: 1;
-  background-color: $layer-01;
 
   &:last-child {
     padding-bottom: $spacing-05;
@@ -91,10 +92,10 @@
 }
 
 .notification-item {
+  align-items: flex-start;
   display: flex;
   gap: $spacing-05;
   padding: $spacing-03 0;
-  align-items: flex-start;
   position: relative;
 
   > cd-icon {
@@ -102,13 +103,13 @@
   }
 
   .notification-close {
+    color: $text-helper;
+    min-height: 0;
+    opacity: 0;
+    padding: $spacing-02;
     position: absolute;
     right: 0;
     top: $spacing-03;
-    padding: $spacing-02;
-    min-height: 0;
-    color: $text-helper;
-    opacity: 0;
     transition: opacity 0.2s ease-in-out;
 
     &:hover {
@@ -124,11 +125,11 @@
 }
 
 .notification-content {
-  flex: 1;
-  min-width: 0;
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: $spacing-02;
+  min-width: 0;
   padding-right: $spacing-06;
 }
 
