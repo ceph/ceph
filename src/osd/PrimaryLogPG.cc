@@ -2936,6 +2936,11 @@ void PrimaryLogPG::record_write_error(OpRequestRef op, const hobject_t &soid,
       ldpp_dout(pg, 20) << "finished " << __func__ << " r=" << r << dendl;
       auto m = op->get_req<MOSDOp>();
       MOSDOpReply *reply = orig_reply.detach();
+      if (!reply) {
+        reply = new MOSDOpReply(m, r, pg->get_osdmap_epoch(),
+                                CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK,
+                                !m->has_flag(CEPH_OSD_FLAG_RETURNVEC));
+      }
       ldpp_dout(pg, 10) << " sending commit on " << *m << " " << reply << dendl;
       pg->osd->send_message_osd_client(reply, m->get_connection());
     }
