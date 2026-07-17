@@ -249,12 +249,33 @@
               </div>
             }
           }
+
+          <div
+            cdsRow
+            class="cds-mt-6"
+          >
+            <button
+              cdsButton="tertiary"
+              [size]="'md'"
+              type="button"
+              (click)="addClientEntry()"
+              i18n
+            >
+              <svg
+                cdsIcon="add"
+                size="16"
+                class="cds--btn__icon"
+              ></svg>
+              Add Client Entry
+            </button>
+          </div>
         </div>
 
         <div cdsRow>
           <cd-form-button-panel
             (submitActionEvent)="forceUpdate ? openCriticalConfirmModal() : submit()"
             [form]="configForm"
+            [disabled]="configForm.invalid"
             [submitText]="actionLabels.UPDATE"
             wrappingClass="text-right form-button"
           ></cd-form-button-panel>
@@ -264,8 +285,12 @@
   </form>
 </ng-container>
 
+<!-- Reusable template for configuration fields -->
 <ng-template
-  #validationErrors
+  #configFieldTemplate
+  let-controlName="controlName"
+  let-label="label"
+  let-id="id"
   let-control="control"
 >
   @if (control?.invalid && (control.dirty || control.touched)) {

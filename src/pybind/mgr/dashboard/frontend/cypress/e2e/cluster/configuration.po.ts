@@ -19,7 +19,7 @@ export class ConfigurationPageHelper extends PageHelper {
    */
   configClear(name: string) {
     this.navigateTo();
-    const valList = ['global', 'mon', 'mgr', 'osd', 'mds', 'client']; // Editable values
+    const valList = ['global', 'mon', 'mgr', 'osd', 'mds']; // Editable values (client moved to separate section)
     this.getFirstTableCell(name).click();
     cy.contains('button', 'Edit').click();
     this.waitForEditForm(name);
