@@ -27,6 +27,10 @@ using TruncateOp = ceph::io_exerciser::TruncateOp;
 using SingleTruncateWriteOp = ceph::io_exerciser::SingleTruncateWriteOp;
 using DoubleTruncateWriteOp = ceph::io_exerciser::DoubleTruncateWriteOp;
 using TripleTruncateWriteOp = ceph::io_exerciser::TripleTruncateWriteOp;
+using ZeroOp = ceph::io_exerciser::ZeroOp;
+using DoubleZeroOp = ceph::io_exerciser::DoubleZeroOp;
+using WriteAndZeroOp = ceph::io_exerciser::WriteAndZeroOp;
+using ZeroAndTruncateOp = ceph::io_exerciser::ZeroAndTruncateOp;
 
 namespace {
 std::string value_to_string(uint64_t v) {
@@ -181,6 +185,10 @@ std::string ceph::io_exerciser::ReadWriteOp<opType, numIOs>::to_string(
       [[fallthrough]];
     case OpType::FailedWrite3:
       return fmt::format("FailedWrite{} ({})", numIOs, offset_length_desc);
+    case OpType::Zero:
+      [[fallthrough]];
+    case OpType::Zero2:
+      return fmt::format("Zero{} ({})", numIOs, offset_length_desc);
     default:
       ceph_abort_msg(
           fmt::format("Unsupported op type by ReadWriteOp ({})", opType));
@@ -351,6 +359,76 @@ std::unique_ptr<TripleTruncateWriteOp> TripleTruncateWriteOp::generate(
 template class ceph::io_exerciser::TruncateWriteOp<OpType::TruncateWrite, 1>;
 template class ceph::io_exerciser::TruncateWriteOp<OpType::TruncateWrite2, 2>;
 template class ceph::io_exerciser::TruncateWriteOp<OpType::TruncateWrite3, 3>;
+
+ZeroOp::ZeroOp(uint64_t offset, uint64_t length)
+    : ReadWriteOp<OpType::Zero, 1>({offset}, {length}) {}
+
+std::unique_ptr<ZeroOp> ZeroOp::generate(uint64_t offset, uint64_t length) {
+  return std::make_unique<ZeroOp>(offset, length);
+}
+
+DoubleZeroOp::DoubleZeroOp(uint64_t offset1, uint64_t length1,
+                            uint64_t offset2, uint64_t length2)
+    : ReadWriteOp<OpType::Zero2, 2>({offset1, offset2}, {length1, length2}) {}
+
+std::unique_ptr<DoubleZeroOp> DoubleZeroOp::generate(uint64_t offset1,
+                                                      uint64_t length1,
+                                                      uint64_t offset2,
+                                                      uint64_t length2) {
+  return std::make_unique<DoubleZeroOp>(offset1, length1, offset2, length2);
+}
+
+WriteAndZeroOp::WriteAndZeroOp(uint64_t write_offset, uint64_t write_length,
+                                uint64_t zero_offset, uint64_t zero_length)
+    : TestOp<OpType::WriteAndZero>(),
+      write_offset(write_offset),
+      write_length(write_length),
+      zero_offset(zero_offset),
+      zero_length(zero_length) {
+  // write and zero ranges must not overlap
+  if (write_offset < zero_offset) {
+    ceph_assert(write_offset + write_length <= zero_offset);
+  } else {
+    ceph_assert(zero_offset + zero_length <= write_offset);
+  }
+}
+
+std::unique_ptr<WriteAndZeroOp> WriteAndZeroOp::generate(uint64_t write_offset,
+                                                          uint64_t write_length,
+                                                          uint64_t zero_offset,
+                                                          uint64_t zero_length) {
+  return std::make_unique<WriteAndZeroOp>(write_offset, write_length,
+                                          zero_offset, zero_length);
+}
+
+std::string WriteAndZeroOp::to_string(uint64_t block_size) const {
+  return fmt::format(
+      "WriteAndZero (write_offset={},write_length={},zero_offset={},zero_length={})",
+      value_to_string(write_offset * block_size),
+      value_to_string(write_length * block_size),
+      value_to_string(zero_offset * block_size),
+      value_to_string(zero_length * block_size));
+}
+
+ZeroAndTruncateOp::ZeroAndTruncateOp(uint64_t zero_offset, uint64_t zero_length,
+                                      uint64_t truncate_size)
+    : TestOp<OpType::ZeroAndTruncate>(),
+      zero_offset(zero_offset),
+      zero_length(zero_length),
+      truncate_size(truncate_size) {}
+
+std::unique_ptr<ZeroAndTruncateOp> ZeroAndTruncateOp::generate(
+    uint64_t zero_offset, uint64_t zero_length, uint64_t truncate_size) {
+  return std::make_unique<ZeroAndTruncateOp>(zero_offset, zero_length, truncate_size);
+}
+
+std::string ZeroAndTruncateOp::to_string(uint64_t block_size) const {
+  return fmt::format(
+      "ZeroAndTruncate (zero_offset={},zero_length={},truncate_size={})",
+      value_to_string(zero_offset * block_size),
+      value_to_string(zero_length * block_size),
+      value_to_string(truncate_size * block_size));
+}
 
 SingleFailedWriteOp::SingleFailedWriteOp(uint64_t offset, uint64_t length)
     : ReadWriteOp<OpType::FailedWrite, 1>({offset}, {length}) {}

@@ -57,6 +57,10 @@ using TripleTruncateWriteOp = ceph::io_exerciser::TripleTruncateWriteOp;
 using SingleFailedWriteOp = ceph::io_exerciser::SingleFailedWriteOp;
 using DoubleFailedWriteOp = ceph::io_exerciser::DoubleFailedWriteOp;
 using TripleFailedWriteOp = ceph::io_exerciser::TripleFailedWriteOp;
+using ZeroOp = ceph::io_exerciser::ZeroOp;
+using DoubleZeroOp = ceph::io_exerciser::DoubleZeroOp;
+using WriteAndZeroOp = ceph::io_exerciser::WriteAndZeroOp;
+using ZeroAndTruncateOp = ceph::io_exerciser::ZeroAndTruncateOp;
 
 using GenerationType = ceph::io_exerciser::data_generation::GenerationType;
 
@@ -177,6 +181,10 @@ constexpr std::string_view usage[] = {
     "\t\t write3|failedwrite3 <off> <len> <off> <len> <off> <len>",
     "\t\t append",
     "\t\t truncate",
+    "\t\t zero <off> <len>",
+    "\t\t zero2 <off> <len> <off> <len>",
+    "\t\t writeandzero <write_off> <write_len> <zero_off> <zero_len>",
+    "\t\t zeroandtruncate <zero_off> <zero_len> <truncate_size>",
     "\t\t injecterror <io_type> <shard> <type> <good_count> <fail_count>",
     "\t\t clearinject <io_type> <shard> <type>",
     "\t\t sleep",
@@ -1490,6 +1498,28 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
       uint64_t length3 = get_numeric_token();
       ioop = TripleTruncateWriteOp::generate(size, offset1, length1, offset2, length2,
                                              offset3, length3);
+    } else if (op == "zero") {
+      uint64_t offset = get_numeric_token();
+      uint64_t length = get_numeric_token();
+      ioop = ZeroOp::generate(offset, length);
+    } else if (op == "zero2") {
+      uint64_t offset1 = get_numeric_token();
+      uint64_t length1 = get_numeric_token();
+      uint64_t offset2 = get_numeric_token();
+      uint64_t length2 = get_numeric_token();
+      ioop = DoubleZeroOp::generate(offset1, length1, offset2, length2);
+    } else if (op == "writeandzero") {
+      uint64_t write_offset = get_numeric_token();
+      uint64_t write_length = get_numeric_token();
+      uint64_t zero_offset = get_numeric_token();
+      uint64_t zero_length = get_numeric_token();
+      ioop = WriteAndZeroOp::generate(write_offset, write_length,
+                                       zero_offset, zero_length);
+    } else if (op == "zeroandtruncate") {
+      uint64_t zero_offset = get_numeric_token();
+      uint64_t zero_length = get_numeric_token();
+      uint64_t truncate_size = get_numeric_token();
+      ioop = ZeroAndTruncateOp::generate(zero_offset, zero_length, truncate_size);
     } else if (op == "failedwrite") {
       uint64_t offset = get_numeric_token();
       uint64_t length = get_numeric_token();
