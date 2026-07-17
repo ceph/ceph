@@ -82,6 +82,11 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
         prop: 'rbd_pool_name'
       },
       {
+        name: $localize`RADOS Namespace`,
+        prop: 'rados_namespace_name',
+        flexGrow: 1
+      },
+      {
         name: $localize`Image`,
         prop: 'rbd_image_name'
       },
@@ -160,7 +165,7 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
     );
     this.nvmeofStateService.refresh$
       .pipe(takeUntil(this.destroy$))
-      .subscribe(() => this.fetchData());
+      .subscribe(() => this.listNamespaces());
   }
 
   private normalizeAndDedup(
@@ -242,10 +247,6 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
   listNamespaces() {
     this.setTableLoading(true);
     this.namespaceSubject.next();
-  }
-
-  fetchData() {
-    this.listNamespaces();
   }
 
   private setTableLoading(loading: boolean): void {
