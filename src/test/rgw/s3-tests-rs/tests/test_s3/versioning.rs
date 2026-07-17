@@ -98,6 +98,21 @@ async fn test_versioning_obj_create_read_remove_head() {
     let (mut version_ids, mut contents) =
         create_multiple_versions(&client, &bucket_name, key, 5).await;
 
+    // verify IsLatest: only the newest version should be current
+    let list_resp = client
+        .list_object_versions()
+        .bucket(&bucket_name)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(list_resp.versions().len(), 5);
+    assert!(list_resp.versions()[0].is_latest().unwrap_or(false));
+    assert_eq!(list_resp.versions()[0].version_id().unwrap_or_default(),
+               version_ids.last().unwrap());
+    for v in &list_resp.versions()[1..] {
+        assert!(!v.is_latest().unwrap_or(true));
+    }
+
     let removed_vid = version_ids.pop().unwrap();
     contents.pop();
 
@@ -137,6 +152,11 @@ async fn test_versioning_obj_create_read_remove_head() {
         .unwrap();
     assert_eq!(list_resp.versions().len(), version_ids.len());
     assert_eq!(list_resp.delete_markers().len(), 1);
+    assert!(list_resp.delete_markers()[0].is_latest().unwrap_or(false));
+    // remaining versions should not be IsLatest
+    for v in list_resp.versions() {
+        assert!(!v.is_latest().unwrap_or(true));
+    }
 }
 
 #[tokio::test]
@@ -162,6 +182,41 @@ async fn test_versioning_stack_delete_markers() {
         .unwrap();
     assert_eq!(resp.versions().len(), 1);
     assert_eq!(resp.delete_markers().len(), 3);
+}
+
+#[tokio::test]
+async fn test_versioning_stacked_delete_markers_is_latest() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+    check_configure_versioning_retry(&client, &bucket_name, "Enabled", "Enabled").await;
+
+    let key = "myobj";
+    create_multiple_versions(&client, &bucket_name, key, 1).await;
+
+    // stack 3 delete markers
+    client.delete_object().bucket(&bucket_name).key(key).send().await.unwrap();
+    client.delete_object().bucket(&bucket_name).key(key).send().await.unwrap();
+    client.delete_object().bucket(&bucket_name).key(key).send().await.unwrap();
+
+    let resp = client
+        .list_object_versions()
+        .bucket(&bucket_name)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp.versions().len(), 1);
+    assert_eq!(resp.delete_markers().len(), 3);
+
+    // exactly one delete marker should have IsLatest=true
+    let latest_count = resp.delete_markers().iter()
+        .filter(|dm| dm.is_latest().unwrap_or(false))
+        .count();
+    assert_eq!(latest_count, 1, "expected exactly 1 IsLatest delete marker, got {latest_count}");
+
+    // the version should NOT be IsLatest (it's non-current)
+    assert!(!resp.versions()[0].is_latest().unwrap_or(true));
 }
 
 #[tokio::test]
