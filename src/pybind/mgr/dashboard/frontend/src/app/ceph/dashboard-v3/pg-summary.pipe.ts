@@ -3,8 +3,12 @@ import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
 import { PgStateCount } from '~/app/shared/models/health.interface';
 
 @Pipe({
+<<<<<<< HEAD
   name: 'pgSummary',
   standalone: false
+=======
+  name: 'pgSummary'
+>>>>>>> 781278cd500 (mgr/dashboard: fix backport issues from PR #68052)
 })
 export class PgSummaryPipe implements PipeTransform {
   constructor(private pgCategoryService: PgCategoryService) {}

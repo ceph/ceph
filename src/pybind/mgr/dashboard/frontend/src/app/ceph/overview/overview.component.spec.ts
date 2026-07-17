@@ -256,7 +256,7 @@ describe('OverviewComponent', () => {
     mockRefreshIntervalService.intervalData$.complete();
   });
 
-  it('storageCardVm$ should emit storage view model with mapped fields', fakeAsync((done) => {
+  it('storageCardVm$ should emit storage view model with mapped fields', fakeAsync(() => {
     const mockData: HealthSnapshotMap = {
       fsid: 'fsid-storage',
       health: { status: 'HEALTH_OK', checks: {} },
@@ -308,7 +308,6 @@ describe('OverviewComponent', () => {
       expect(mockOverviewStorageService.mapStorageChartData).toHaveBeenCalled();
 
       sub.unsubscribe();
-      done();
     });
 
     tick(0);
