@@ -12699,19 +12699,17 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
   if ((f->mode & CEPH_FILE_MODE_WR) == 0)
     return -EBADF;
 
+  bool is_append = false;
   // use/adjust fd pos?
   if (offset < 0) {
     lock_fh_pos(f);
-    /*
-     * FIXME: this is racy in that we may block _after_ this point waiting for caps, and size may
-     * change out from under us.
-     */
     if (f->flags & O_APPEND) {
       auto r = _lseek(f, 0, SEEK_END);
       if (r < 0) {
         unlock_fh_pos(f);
         return r;
       }
+      is_append = true;
     }
     offset = f->pos;
     fpos = offset+size;
@@ -12747,6 +12745,47 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
   int r = get_caps(f, CEPH_CAP_FILE_WR|CEPH_CAP_AUTH_SHARED, want, &have, endoff);
   if (r < 0)
     return r;
+
+  /*
+   * For O_APPEND writes we may have waited for Fwx exclusive caps
+   * while the previous Fwx holder (another client) extended the
+   * file.  in->size has been updated via the cap grant message from
+   * the MDS, but offset is still the old EOF.  Re-read in->size
+   * here (no extra MDS round-trip needed) and adjust offset to the
+   * true EOF.  Since we hold Fwx, no other client can change the
+   * file.
+   */
+  if (is_append) {
+    if (in->size != (uint64_t)offset) {
+      ldout(cct, 10) << "O_APPEND: adjusting offset " << offset
+                     << " -> " << in->size << dendl;
+      offset = in->size;
+      fpos = offset + size;
+      endoff = offset + size;
+
+      /*
+       * get_caps() validated the old endoff against
+       * max_size; adjusting offset forward may have
+       * shifted the write range beyond the granted
+       * max_size.  Re-check and truncate if necessary.
+       */
+      if (endoff > in->max_size) {
+        if ((uint64_t)offset >= in->max_size) {
+          put_cap_ref(in, CEPH_CAP_FILE_WR);
+          put_cap_ref(in, CEPH_CAP_AUTH_SHARED);
+          return -EFBIG;
+        }
+        size = in->max_size - offset;
+        fpos = offset + size;
+        endoff = offset + size;
+        bl.splice(size, bl.length() - size);
+        ldout(cct, 10)
+          << "O_APPEND: endoff exceeds max_size ("
+          << in->max_size << "), truncated write to "
+          << size << dendl;
+      }
+    }
+  }
 
   put_cap_ref(in, CEPH_CAP_AUTH_SHARED);
   if (size > 0) {
