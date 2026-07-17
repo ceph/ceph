@@ -92,6 +92,10 @@ function(do_build_boost root_dir version)
   else()
     message(SEND_ERROR "unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
   endif()
+  # b2 invokes the compiler directly, so the launcher (ccache/sccache) cmake
+  # uses for the rest of the build has to be spliced into the toolset command
+  set(boost_cxx_command ${CMAKE_CXX_COMPILER_LAUNCHER} ${CMAKE_CXX_COMPILER})
+  list(JOIN boost_cxx_command " " boost_cxx_command)
 
   # prepare the project-config.jam for boost
   set(bjam <SOURCE_DIR>/b2)
@@ -112,10 +116,13 @@ function(do_build_boost root_dir version)
   set(user_config ${CMAKE_BINARY_DIR}/user-config.jam)
   # edit the user-config.jam so b2 will be able to use the specified
   # toolset and python
+  # the command must stay unquoted: b2 then treats it as a list of tokens
+  # (launcher + compiler) and its existence check passes on the compiler,
+  # whereas a quoted "launcher compiler" string is stat()ed as one path
   file(WRITE ${user_config}
     "using ${toolset}"
     " : "
-    " : ${CMAKE_CXX_COMPILER}"
+    " : ${boost_cxx_command}"
     " : <compileflags>-fPIC <compileflags>-w <compileflags>-Wno-everything"
     " ;\n")
   if(with_python_version)
