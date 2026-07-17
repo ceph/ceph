@@ -19,7 +19,14 @@
           class="cd-overview-item"
           [columnNumbers]="columns | overviewGridColumnNumbers"
         >
-          <span class="cds--type-label-01 cd-overview-label cds-mb-3">{{ field.label }}</span>
+          <span class="cds--type-label-01 cd-overview-label cds-mb-3"
+            >{{ field.label }}
+            @if (field.helperText) {
+              <cd-helper class="text-pre-wrap">
+                <span>{{ field.helperText }}</span>
+              </cd-helper>
+            }
+          </span>
 
           @if (field.type === 'status') {
             @let statusMeta = field.status | overviewStatus;
@@ -37,6 +44,21 @@
                 <span class="cds--type-body-compact-01">{{ field.emptyText ?? '-' }}</span>
               }
             </div>
+          } @else if (
+            field.type === 'password' &&
+            field.value !== undefined &&
+            field.value !== null &&
+            field.value !== ''
+          ) {
+            <cds-password-label>
+              <input
+                cdsPassword
+                type="password"
+                [theme]="'light'"
+                [value]="field.value"
+                readonly
+              />
+            </cds-password-label>
           } @else {
             <span class="cds--type-body-compact-01 cd-overview-value">
               {{ field.value | empty: field.emptyText }}

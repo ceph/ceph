@@ -2,6 +2,7 @@ import { Component, NgZone, OnInit, ViewChild } from '@angular/core';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import {
@@ -38,11 +39,11 @@ const BASE_URL = 'rgw/storage-class';
 })
 export class RgwStorageClassListComponent extends ListWithDetails implements OnInit {
   @ViewChild('table', { static: true })
-  table: TableComponent;
-  columns: CdTableColumn[];
+  table!: TableComponent;
+  columns: CdTableColumn[] = [];
   selection = new CdTableSelection();
   permission: Permission;
-  tableActions: CdTableAction[];
+  tableActions: CdTableAction[] = [];
   storageClassList: StorageClass[] = [];
 
   constructor(
@@ -71,6 +72,7 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
       {
         name: $localize`Name`,
         prop: 'storage_class',
+        cellTransformation: CellTemplate.routerLink,
         flexGrow: 2
       },
       {
@@ -132,9 +134,10 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
     this.setTableRefreshTimeout();
     return new Promise((resolve, reject) => {
       this.rgwZonegroupService.getAllZonegroupsInfo().subscribe(
-        (data: ZoneGroupDetails) => {
+        (data: object) => {
+          const zonegroupData = data as ZoneGroupDetails;
           this.storageClassList = [];
-          const tierObj = BucketTieringUtils.filterAndMapTierTargets(data);
+          const tierObj = BucketTieringUtils.filterAndMapTierTargets(zonegroupData);
           const tierConfig = tierObj.map((tier) => ({
             ...tier,
             tier_type: this.mapTierTypeDisplay(tier.tier_type),
@@ -173,6 +176,9 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
       const storageClass = item?.storage_class;
       const uniqueId = `${zone_group}-${storageClass}-${index}`;
       item.uniqueId = uniqueId;
+      item.cdLink = `/${BASE_URL}/${encodeURIComponent(item.zonegroup_name)}/${encodeURIComponent(
+        item.placement_target
+      )}/${encodeURIComponent(item.storage_class)}/overview`;
     });
     return tierConfig;
   }
@@ -191,8 +197,11 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         // For local storage classes, delete from both zone and zonegroup
         const deleteObservable$ = isLocalStorageClass
           ? this.rgwZoneService.getAllZonesInfo().pipe(
-              switchMap((data: AllZonesResponse) => {
-                const zoneInfo = BucketTieringUtils.getZoneInfoHelper(data.zones, selectedItem);
+              switchMap((data: object) => {
+                const zoneInfo = BucketTieringUtils.getZoneInfoHelper(
+                  (data as AllZonesResponse).zones,
+                  selectedItem
+                );
                 return this.rgwStorageClassService.removeStorageClass(
                   placementTarget,
                   storageClass,

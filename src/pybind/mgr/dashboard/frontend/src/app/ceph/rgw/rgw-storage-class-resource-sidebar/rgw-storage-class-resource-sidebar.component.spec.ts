@@ -1,14 +1,14 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { RgwStorageClassDetailsComponent } from './rgw-storage-class-details.component';
+import { RgwStorageClassResourceSidebarComponent } from './rgw-storage-class-resource-sidebar.component';
 import { StorageClassDetails } from '../models/rgw-storage-class.model';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { SharedModule } from '~/app/shared/shared.module';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-describe('RgwStorageClassDetailsComponent', () => {
-  let component: RgwStorageClassDetailsComponent;
-  let fixture: ComponentFixture<RgwStorageClassDetailsComponent>;
+describe('RgwStorageClassResourceSidebarComponent', () => {
+  let component: RgwStorageClassResourceSidebarComponent;
+  let fixture: ComponentFixture<RgwStorageClassResourceSidebarComponent>;
 
   const mockSelection: StorageClassDetails = {
     storage_class: 'TestStorageClass',
@@ -32,10 +32,10 @@ describe('RgwStorageClassDetailsComponent', () => {
         HttpClientTestingModule,
         RouterTestingModule
       ],
-      declarations: [RgwStorageClassDetailsComponent]
+      declarations: [RgwStorageClassResourceSidebarComponent]
     }).compileComponents();
 
-    fixture = TestBed.createComponent(RgwStorageClassDetailsComponent);
+    fixture = TestBed.createComponent(RgwStorageClassResourceSidebarComponent);
     component = fixture.componentInstance;
     component.selection = mockSelection;
 
