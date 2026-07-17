@@ -220,6 +220,65 @@ async fn test_versioning_stacked_delete_markers_is_latest() {
 }
 
 #[tokio::test]
+async fn test_versioning_delete_marker_removal_promotes() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+    check_configure_versioning_retry(&client, &bucket_name, "Enabled", "Enabled").await;
+
+    let key = "myobj";
+    // create a version
+    client
+        .put_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .body(ByteStream::from_static(b"hello"))
+        .send()
+        .await
+        .unwrap();
+
+    // delete without versionId → creates a delete marker
+    let del_resp = client
+        .delete_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .send()
+        .await
+        .unwrap();
+    let dm_version_id = del_resp.version_id().unwrap().to_string();
+    assert!(del_resp.delete_marker().unwrap_or(false));
+
+    // GET should now return 404
+    let result = client.get_object().bucket(&bucket_name).key(key).send().await;
+    assert_s3_err!(result, 404, "NoSuchKey");
+
+    // delete the DM by versionId → should promote the real version
+    client
+        .delete_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .version_id(&dm_version_id)
+        .send()
+        .await
+        .unwrap();
+
+    // the real version should now be accessible again
+    let resp = client.get_object().bucket(&bucket_name).key(key).send().await.unwrap();
+    assert_eq!(get_body(resp).await, "hello");
+
+    // list-versions: 1 version, 0 delete markers
+    let list_resp = client
+        .list_object_versions()
+        .bucket(&bucket_name)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(list_resp.versions().len(), 1);
+    assert!(list_resp.delete_markers().is_empty());
+    assert!(list_resp.versions()[0].is_latest().unwrap_or(false));
+}
+
+#[tokio::test]
 #[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_versioning_obj_plain_null_version_removal() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
