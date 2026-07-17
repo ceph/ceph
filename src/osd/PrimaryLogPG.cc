@@ -10110,7 +10110,7 @@ void PrimaryLogPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
     if (cop->results.snaps.empty()) {
       dout(10) << __func__ << " no more snaps for " << oid << dendl;
       if (cop->flags & CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION) {
-        dout(10) << __func__ << " updataing snapset for trimmed clone " << oid << dendl;
+        dout(10) << __func__ << " updating snapset for trimmed clone " << oid << dendl;
         // Clone needs to be trimmed by updating the snapset in the head object
         hobject_t hoid = oid.get_head();
         ObjectContextRef head_obc = get_object_context(hoid, false);
@@ -10122,12 +10122,14 @@ void PrimaryLogPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
 
           ctx->register_on_finish(
               [this, cop, hoid]() {
-                ObjectContextRef& cobc = cop->obc;
-                CopyCallbackResults results(-ENOENT, &cop->results);
-                cop->cb->complete(results);
-                copy_ops.erase(cobc->obs.oi.soid);
-                cobc->stop_block();
-                kick_object_context_blocked(cobc);
+                if (cop->obc) {
+                  ObjectContextRef& cobc = cop->obc;
+                  CopyCallbackResults results(-ENOENT, &cop->results);
+                  cop->cb->complete(results);
+                  copy_ops.erase(cobc->obs.oi.soid);
+                  cobc->stop_block();
+                  kick_object_context_blocked(cobc);
+                }
               });
           ctx->at_version = get_next_version();
           if (cop->results.started_temp_obj) {
