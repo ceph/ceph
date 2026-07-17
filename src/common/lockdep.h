@@ -19,7 +19,7 @@
 
 #ifdef CEPH_DEBUG_MUTEX
 
-extern bool g_lockdep;
+__attribute__((visibility("default"))) extern bool g_lockdep;
 
 extern void lockdep_register_ceph_context(CephContext *cct);
 extern void lockdep_unregister_ceph_context(CephContext *cct);
