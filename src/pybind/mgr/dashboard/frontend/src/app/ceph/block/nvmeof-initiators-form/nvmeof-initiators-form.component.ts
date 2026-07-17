@@ -128,6 +128,11 @@ export class NvmeofInitiatorsFormComponent implements OnInit {
           : addedHosts.map((host_nqn: string) => ({ host_nqn, dhchap_key: '' }))
         : [];
 
+    if (payload.hostType === HOST_TYPE.SPECIFIC && !hosts.length) {
+      this.isSubmitLoading = false;
+      return;
+    }
+
     const request: SubsystemInitiatorRequest = {
       allow_all: payload.hostType === HOST_TYPE.ALL,
       hosts,
