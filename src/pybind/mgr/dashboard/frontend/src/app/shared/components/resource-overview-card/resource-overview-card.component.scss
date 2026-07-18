@@ -15,10 +15,6 @@
   column-gap: layout.$spacing-05;
 }
 
-.cd-overview-heading {
-  padding-inline-start: layout.$spacing-06;
-}
-
 .cd-overview-item {
   min-width: 0;
 }
@@ -58,4 +54,8 @@
 
 .cd-status-text--info {
   color: var(--cds-support-info);
+}
+
+:host ::ng-deep .cd-overview-grid.cds--css-grid {
+  padding-inline: 0;
 }
