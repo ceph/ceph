@@ -593,6 +593,43 @@ TransactionManager::update_lba_mappings(
   });
 }
 
+seastar::future<TransactionManager::mutated_extents_locker>
+TransactionManager::lock_mutated_nodes(
+  Transaction &t)
+{
+  mutated_extents_set_t mutated_extents;
+  LOG_PREFIX(TransactionManager::lock_mutated_nodes);
+  t.for_each_mutated_extent(
+    [&mutated_extents](auto &extent) {
+      if (!is_root_type(extent.get_type())) {
+        std::ignore = mutated_extents.emplace(&extent);
+      }
+  });
+  if (unlikely(mutated_extents.empty())) {
+    co_return mutated_extents_locker();
+  }
+  std::vector<std::unique_lock<seastar::shared_mutex>> unique_locks;
+  std::vector<std::shared_lock<seastar::shared_mutex>> shared_locks;
+  if (auto &e = *mutated_extents.begin();
+      should_use_no_conflict_publish(t, e->get_type())) {
+    for (auto &ext : mutated_extents) {
+      assert(should_use_no_conflict_publish(t, ext->get_type()));
+      TRACET("locking {}", t, *ext);
+      auto lock = co_await seastar::get_unique_lock(ext->commit_lock);
+      unique_locks.emplace_back(std::move(lock));
+    }
+  } else {
+    for (auto &ext : mutated_extents) {
+      assert(!should_use_no_conflict_publish(t, ext->get_type()));
+      TRACET("shared locking {}", t, *ext);
+      auto lock = co_await seastar::get_shared_lock(ext->commit_lock);
+      shared_locks.emplace_back(std::move(lock));
+    }
+  }
+  co_return mutated_extents_locker(
+    std::move(mutated_extents), std::move(unique_locks), std::move(shared_locks));
+}
+
 TransactionManager::submit_transaction_direct_ret
 TransactionManager::do_submit_transaction(
   Transaction &tref,
@@ -619,6 +656,18 @@ TransactionManager::do_submit_transaction(
   tref.get_phase_durations().lba_update +=
     std::chrono::steady_clock::now() - lba_start;
 
+  // TODO: For now, we lock mutated extents after delayed ool writes
+  // and lba mappings updating, this is ok because:
+  // 1. at present, only lba/backref nodes might be modified by
+  //    no_conflict trans;
+  // 2. only ool lba/backref extents' persistence needs to be sync'd
+  //
+  // In the future, when no_conflict transactions may also modify
+  // logical extents, we should add something like "lock_logical_mutated_extents"
+  // and invoke it before writing ool extents.
+  auto locker = co_await trans_intr::make_interruptible(
+    lock_mutated_nodes(tref));
+
   auto num_extents = allocated_extents.size();
   SUBTRACET(seastore_t, "process {} allocated extents", tref, num_extents);
   ool_start = std::chrono::steady_clock::now();
@@ -631,12 +680,16 @@ TransactionManager::do_submit_transaction(
   co_await trans_intr::make_interruptible(
     tref.get_handle().enter(write_pipeline.prepare)
   );
+
+  // For conflicting transactions, we can release the lock
+  // now. Because other transactions accessing the same
+  // extents as the current one would be invalidated later
+  // in Cache::prepare_record()
+  locker.release_shared_lock();
+
   tref.get_phase_durations().prepare_enter +=
     std::chrono::steady_clock::now() - prepare_enter_start;
 
-  while (tref.need_wait_visibility) {
-    co_await trans_intr::make_interruptible(seastar::yield());
-  }
   if (trim_alloc_to && *trim_alloc_to != JOURNAL_SEQ_NULL) {
     SUBTRACET(seastore_t, "trim backref_bufs to {}", tref, *trim_alloc_to);
     cache->trim_backref_bufs(*trim_alloc_to);
@@ -662,7 +715,7 @@ TransactionManager::do_submit_transaction(
     std::move(record),
     tref.get_handle(),
     tref.get_src(),
-    [this, FNAME, &tref](record_locator_t submit_result) {
+    [&locker, this, FNAME, &tref](record_locator_t submit_result) {
     SUBDEBUGT(seastore_t, "committed with {}", tref, submit_result);
     auto start_seq = submit_result.write_result.start_seq;
     journal->get_trimmer().set_journal_head(start_seq);
@@ -670,6 +723,7 @@ TransactionManager::do_submit_transaction(
       tref,
       submit_result.record_block_base,
       start_seq);
+    locker.release_lock();
     journal->get_trimmer().update_journal_tails(
       cache->get_oldest_dirty_from().value_or(start_seq),
       cache->get_oldest_backref_dirty_from().value_or(start_seq));
