@@ -1257,7 +1257,7 @@ public:
     TCachedExtentRef<T> ext;
     if (original_bptr.has_value()) {
       // shallow copy the buffer from original extent
-      auto nbp = ceph::bufferptr(buffer::create_page_aligned(remap_length));
+      auto nbp = create_extent_ptr_rand(remap_length);
       original_bptr->copy_out(remap_offset, remap_length, nbp.c_str());
       // ExtentPlacementManager::alloc_new_extent will make a new
       // (relative/temp) paddr, so make extent directly

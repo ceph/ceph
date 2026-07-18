@@ -3132,6 +3132,38 @@ TEST(BufferHash, all) {
   }
 }
 
+TEST(BufferList, append_buffer_seeds_carriage) {
+  // append_buffer() seeds the append carriage with a caller-supplied raw so
+  // that subsequent append()/encode() land in place inside it rather than
+  // allocating a fresh buffer.
+  const unsigned cap = 4096;
+  bufferlist bl;
+  bl.append_buffer(ceph::buffer::create_page_aligned(cap));
+
+  // Seeded but logically empty: full capacity available in the tail.
+  EXPECT_EQ(0u, bl.length());
+  EXPECT_EQ(cap, bl.get_append_buffer_unused_tail_length());
+  ASSERT_EQ(1u, bl.get_num_buffers());
+  const char* base = bl.front().c_str();
+
+  // Appends land in place: same backing buffer, no new allocation.
+  const std::string payload(100, 'x');
+  bl.append(payload.data(), payload.size());
+  EXPECT_EQ(payload.size(), bl.length());
+  EXPECT_EQ(cap - payload.size(), bl.get_append_buffer_unused_tail_length());
+  ASSERT_EQ(1u, bl.get_num_buffers());
+  EXPECT_EQ(base, bl.front().c_str());
+  EXPECT_EQ(0, memcmp(bl.front().c_str(), payload.data(), payload.size()));
+}
+
+TEST(BufferListDeathTest, append_buffer_requires_empty) {
+  // Precondition: the list must be empty; seeding a non-empty list would drop
+  // the existing carriage and corrupt append accounting.
+  bufferlist bl;
+  bl.append("not empty");
+  EXPECT_DEATH(bl.append_buffer(ceph::buffer::create_page_aligned(4096)), "");
+}
+
 /*
  * Local Variables:
  * compile-command: "cd .. ; make unittest_bufferlist && 

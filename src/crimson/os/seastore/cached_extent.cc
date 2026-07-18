@@ -336,8 +336,12 @@ ceph::bufferptr BufferSpace::to_full_ptr(extent_len_t length)
   auto& [i_off, i_buf] = *it;
   assert(i_off == 0);
   if (!i_buf.is_contiguous()) {
-    // Allocate page aligned ptr, also see create_extent_ptr_*()
-    i_buf.rebuild();
+    // Rebuild into a single page-aligned (DMA-capable under SPDK) buffer;
+    // also see create_extent_ptr_rand().
+    bufferlist new_bl;
+    new_bl.append(ceph::bufferptr(alloc_dma_or_page_aligned(length)));
+    i_buf.begin().copy(length, new_bl.c_str());
+    i_buf = std::move(new_bl);
   }
   assert(i_buf.get_num_buffers() == 1);
   ceph::bufferptr ptr(i_buf.front());

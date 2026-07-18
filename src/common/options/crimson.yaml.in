@@ -342,3 +342,27 @@ options:
   desc: disable osd shards changes upon restart.
   flags:
   - startup
+
+- name: seastore_spdk_transport_id
+  type: str
+  level: advanced
+  desc: SPDK NVMe transport id for the seastore device
+  long_desc: When set (e.g. "0000:01:00.0" or "trtype:PCIe traddr:0000:01:00.0"),
+    seastore drives the device over SPDK's userspace polled NVMe driver instead
+    of the kernel/io_uring path. The device must be bound to vfio-pci and
+    hugepages configured. Not supported for zoned (ZBD/ZNS) devices. Requires a
+    build with WITH_SPDK. Empty (default) uses the kernel path.
+  flags:
+  - startup
+
+- name: seastore_spdk_iova_mode
+  type: str
+  level: advanced
+  desc: IOVA mode for the SPDK/DPDK environment ("va", "pa", or empty)
+  long_desc: Controls DPDK's DMA addressing mode. Empty (default) lets DPDK
+    auto-detect - virtual-address (VA) when an IOMMU is present (the vfio-pci
+    production setup), physical-address (PA) otherwise. Force "va" in
+    unprivileged environments without an IOMMU that do no device DMA (e.g. an
+    NVMe-oF/TCP initiator). Only consulted when seastore_spdk_transport_id is set.
+  flags:
+  - startup

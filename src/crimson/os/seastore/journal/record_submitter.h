@@ -50,6 +50,12 @@ public:
   using open_ret = open_ertr::future<journal_seq_t>;
   virtual open_ret open(bool is_mkfs) = 0;
 
+  // DMA-passthrough buffer for encoding a record group's metadata in place
+  // (length = record_group_size_t::get_mdlength()), or nullptr to encode into
+  // the heap as before (default / non-SPDK).
+  virtual ceph::unique_leakable_ptr<ceph::buffer::raw>
+  alloc_record_md_buffer(extent_len_t mdlength) { return nullptr; }
+
 };
 
 /**
@@ -169,7 +175,8 @@ public:
   };
   encode_ret_t encode_batch(
       const journal_seq_t& committed_to,
-      segment_nonce_t segment_nonce);
+      segment_nonce_t segment_nonce,
+      ceph::unique_leakable_ptr<ceph::buffer::raw> md_buffer = nullptr);
 
   // Set the write result and reset for reuse
   using maybe_result_t = std::optional<extent_len_t>;
@@ -186,7 +193,8 @@ public:
       record_group_t&&,
       extent_len_t block_size,
       const journal_seq_t& committed_to,
-      segment_nonce_t segment_nonce);
+      segment_nonce_t segment_nonce,
+      ceph::unique_leakable_ptr<ceph::buffer::raw> md_buffer = nullptr);
 
 private:
   record_group_size_t get_encoded_length_after(

@@ -2405,3 +2405,40 @@ INSTANTIATE_TEST_SUITE_P(
       integrity_check_t::NONFULL_CHECK)
   )
 );
+
+#include "crimson/os/seastore/block_io_driver.h"
+#include "crimson/os/seastore/segment_manager/zbd.h"
+
+TEST(transaction_manager_test, spdk_zbd_negative_test) {
+  seastar_test_suite_t::seastar_env.run([] {
+    auto& conf = crimson::common::local_conf();
+    conf.set_val("seastore_spdk_transport_id", "0000:01:00.0").get();
+
+    EXPECT_THROW(
+      make_block_io_driver("some_path", device_type_t::ZBD),
+      std::invalid_argument
+    );
+
+    auto zbd_manager = std::make_unique<segment_manager::zbd::ZBDSegmentManager>("some_path");
+
+    return zbd_manager->mount().handle_error(
+      [](const crimson::ct_error::input_output_error& e) {
+        return seastar::now();
+      },
+      crimson::ct_error::assert_all("Unexpected error in ZBD mount test")
+    ).then([zbd_manager = std::move(zbd_manager)]() mutable {
+      device_config_t config;
+      return zbd_manager->mkfs(config).handle_error(
+        [](const crimson::ct_error::input_output_error& e) {
+          return seastar::now();
+        },
+        crimson::ct_error::assert_all("Unexpected error in ZBD mkfs test")
+      );
+    }).then([] {
+      auto& conf = crimson::common::local_conf();
+      conf.set_val("seastore_spdk_transport_id", "").get();
+      return seastar::now();
+    });
+  });
+}
+

@@ -52,23 +52,25 @@ open_ertr::future<> NVMeBlockDevice::open(
   const std::string &in_path,
   seastar::open_flags mode) {
   LOG_PREFIX(NVMeBlockDevice::open);
-  auto file = co_await seastar::open_file_dma(in_path, mode);
-  device = std::move(file);
-  // Get SSD's features from identify_controller and namespace command.
-  // Do identify_controller first, and then identify_namespace.
-  auto id_ctr_data = co_await identify_controller(device);
-  if (id_ctr_data) {
-    // TODO: enable multi-stream if the nvme device supports
-    auto id_controller_data = *id_ctr_data;
-    awupf = id_controller_data.awupf + 1;
-    auto id_ns_data = co_await identify_namespace(device);
-    if (id_ns_data) {
-      auto id_namespace_data = *id_ns_data;
+  driver = make_nvme_io_driver(in_path);
+  co_await driver->open(in_path, mode
+  ).handle_error(
+    open_ertr::pass_further{},
+    crimson::ct_error::assert_all("Invalid error in NVMeBlockDevice::open"));
+  // Combine the raw identify-derived capabilities with this device's superblock
+  // block size (the on-disk logical block size) to compute the write
+  // granularity / alignment / atomic-write-unit, exactly as before. The math
+  // stays here because it depends on super.block_size, which the driver does
+  // not own.
+  const auto &caps = driver->get_caps();
+  if (caps.ctrl_identified) {
+    awupf = caps.awupf;
+    if (caps.ns_identified) {
       atomic_write_unit = awupf * super.block_size;
-      if (id_namespace_data.nsfeat.opterf == 1){
+      if (caps.opterf) {
 	// NPWG and NPWA is 0'based value
-	write_granularity = super.block_size * (id_namespace_data.npwg + 1);
-	write_alignment = super.block_size * (id_namespace_data.npwa + 1);
+	write_granularity = super.block_size * (caps.npwg + 1);
+	write_alignment = super.block_size * (caps.npwa + 1);
       }
     } else {
       DEBUG("identify_namespace failed.\
@@ -78,18 +80,10 @@ open_ertr::future<> NVMeBlockDevice::open(
     DEBUG("identify_controller failed.\
       Proceeding to open the device normally without adding device-specific information.");
   }
-  co_return co_await open_for_io(in_path, mode);
-}
-
-open_ertr::future<> NVMeBlockDevice::open_for_io(
-  const std::string& in_path,
-  seastar::open_flags mode) {
-  io_device.resize(stream_id_count);
-  for (auto &target_device : io_device) {
-    auto file = co_await seastar::open_file_dma(in_path, mode);
-    assert(io_device.size() > stream_index_to_open);
-    target_device = std::move(file);
-  }
+  // PI is activated on the driver once the superblock that records it is
+  // available: in try_enable_end_to_end_protection() during mkfs, and in
+  // mount() after read_rbm_superblock. super is not yet loaded here on the
+  // mount path, so there is nothing to push at open() time.
 }
 
 NVMeBlockDevice::mount_ret NVMeBlockDevice::mount()
@@ -106,8 +100,30 @@ NVMeBlockDevice::mount_ret NVMeBlockDevice::mount()
     });
   });
 
+  // Superblocks are loaded now: activate PI on each shard's driver if the
+  // device was formatted with end-to-end data protection, so subsequent I/O
+  // uses the PI command path.
+  co_await shard_devices.invoke_on_all([](auto &local_device) {
+    for (auto& mshard_device : local_device.mshard_devices) {
+      if (mshard_device->is_end_to_end_data_protection()) {
+        mshard_device->driver->set_protection_info(
+          true, mshard_device->super.nvme_block_size);
+      }
+    }
+    return seastar::now();
+  });
+
   if (is_end_to_end_data_protection()) {
-    auto id_ns_data = co_await identify_namespace(device);
+    // Validate the attached device actually supports the PI the superblock
+    // expects. A throwaway driver performs the identify.
+    auto io_driver = make_nvme_io_driver(device_path);
+    co_await io_driver->open(device_path,
+      seastar::open_flags::rw | seastar::open_flags::dsync
+    ).handle_error(crimson::ct_error::assert_all(
+      "Invalid error open in NVMeBlockDevice::mount PI-validate"));
+    auto id_ns_data = co_await io_driver->identify_namespace();
+    co_await io_driver->close().handle_error(crimson::ct_error::assert_all(
+      "Invalid error close in NVMeBlockDevice::mount PI-validate"));
     assert(id_ns_data);
     auto id_namespace_data = *id_ns_data;
     if (id_namespace_data.dps.protection_type !=
@@ -117,7 +133,7 @@ NVMeBlockDevice::mount_ret NVMeBlockDevice::mount()
 	the functionality. Please check the device.");
       ceph_abort();
     }
-    if (id_namespace_data.lbaf[id_namespace_data.flbas.lba_index].ms != 
+    if (id_namespace_data.lbaf[id_namespace_data.flbas.lba_index].ms !=
 	nvme_identify_namespace_data_t::METASIZE_FOR_CHECKSUM_OFFLOAD) {
       ERROR("seastore was formated with end-to-end-data-protection \
 	but the formatted device meta size is wrong. Please check the device.");
@@ -131,94 +147,23 @@ write_ertr::future<> NVMeBlockDevice::write(
   bufferptr bptr,
   uint16_t stream) {
   LOG_PREFIX(NVMeBlockDevice::write);
-  DEBUG("block: write offset {} len {}",
-      offset,
-      bptr.length());
-  auto length = bptr.length();
-
-  assert((length % super.block_size) == 0);
-  uint16_t supported_stream = stream;
-  if (stream >= stream_id_count) {
-    supported_stream = WRITE_LIFE_NOT_SET;
-  }
-  if (is_end_to_end_data_protection()) {
-    co_await nvme_write(offset, bptr.length(), bptr.c_str());
-    co_return;
-  }
-  auto ret = co_await io_device[supported_stream].dma_write(
-    offset, bptr.c_str(), length).handle_exception(
-    [FNAME](auto e) -> write_ertr::future<size_t> {
-    ERROR("write: dma_write got error{}", e);
-    return crimson::ct_error::input_output_error::make();
-  });
-  if (ret != length) {
-    ERROR("write: dma_write got error with not proper length");
-    co_await write_ertr::future<>(
-      crimson::ct_error::input_output_error::make());
-  }
+  DEBUG("block: write offset {} len {}", offset, bptr.length());
+  assert((bptr.length() % super.block_size) == 0);
+  // bptr is a by-value parameter: co_await (rather than returning the future)
+  // keeps it alive in this coroutine frame for the duration of the driver call.
+  co_await driver->write(get_device_id(), offset, bptr, stream);
 }
 
 read_ertr::future<> NVMeBlockDevice::read(
   uint64_t offset,
   bufferptr &bptr) {
-  LOG_PREFIX(NVMeBlockDevice::read);
-  DEBUG("block: read offset {} len {}",
-      offset,
-      bptr.length());
-  auto length = bptr.length();
-  if (length == 0) {
-    co_return;
-  }
-  assert((length % super.block_size) == 0);
-
-  if (is_end_to_end_data_protection()) {
-    co_await nvme_read(offset, length, bptr.c_str());
-    co_return;
-  }
-  auto ret = co_await device.dma_read(offset, bptr.c_str(), length
-  ).handle_exception(
-    [FNAME](auto e) -> read_ertr::future<size_t> {
-    ERROR("read: dma_read got error{}", e);
-    return crimson::ct_error::input_output_error::make();
-  });
-  if (ret != length) {
-    ERROR("read: dma_read got error with not proper length");
-    co_await read_ertr::future<>(
-      crimson::ct_error::input_output_error::make());
-  }
+  return driver->read(get_device_id(), offset, bptr.length(), bptr);
 }
 
 read_ertr::future<> NVMeBlockDevice::_readv(
   uint64_t offset,
   std::vector<bufferptr> ptrs) {
-  LOG_PREFIX(NVMeBlockDevice::_readv);
-  DEBUG("block: read offset {}, {} buffers", offset, ptrs.size());
-  if (ptrs.size() == 0) {
-    return read_ertr::now();
-  }
-
-  if (is_end_to_end_data_protection()) {
-    return nvme_readv(offset, std::move(ptrs));
-  }
-  std::vector<iovec> iov;
-  size_t length = 0;
-  for (auto &ptr : ptrs) {
-    length += ptr.length();
-    assert((ptr.length() % super.block_size) == 0);
-    iov.emplace_back(ptr.c_str(), ptr.length());
-  }
-  return device.dma_read(offset, std::move(iov)
-  ).handle_exception(
-    [FNAME](auto e) -> read_ertr::future<size_t> {
-      ERROR("read: dma_read got error{}", e);
-      return crimson::ct_error::input_output_error::make();
-    }).then([length, FNAME](auto result) -> read_ertr::future<> {
-      if (result != length) {
-        ERROR("read: dma_read got error with not proper length");
-        return crimson::ct_error::input_output_error::make();
-      }
-      return read_ertr::now();
-    });
+  return driver->readv(get_device_id(), offset, std::move(ptrs));
 }
 
 write_ertr::future<> NVMeBlockDevice::writev(
@@ -226,151 +171,29 @@ write_ertr::future<> NVMeBlockDevice::writev(
   ceph::bufferlist bl,
   uint16_t stream) {
   LOG_PREFIX(NVMeBlockDevice::writev);
-  DEBUG("block: write offset {} len {}",
-    offset,
-    bl.length());
-
-  uint16_t supported_stream = stream;
-  if (stream >= stream_id_count) {
-    supported_stream = WRITE_LIFE_NOT_SET;
-  }
-  if (is_end_to_end_data_protection()) {
-    co_await nvme_write(offset, bl.length(), bl.c_str());
-    co_return;
-  }
-  bl.rebuild_aligned(super.block_size);
-  auto iovs = bl.prepare_iovs();
-  auto has_error = seastar::make_lw_shared<bool>(false);
-  co_await seastar::coroutine::parallel_for_each(
-    iovs,
-    [this, supported_stream, offset, has_error, FNAME](auto& p)
-  {
-    auto off = offset + p.offset;
-    auto len = p.length;
-    auto& iov = p.iov;
-    return io_device[supported_stream].dma_write(off, std::move(iov)
-    ).handle_exception(
-      [this, off, len, has_error, FNAME](auto e) -> seastar::future<size_t>
-    {
-      ERROR("{} poffset={}~{} dma_write got error -- {}",
-	device_id_printer_t{get_device_id()}, off, len, e);
-      *has_error = true;
-      return seastar::make_ready_future<size_t>(0);
-    }).then([this, off, len, has_error, FNAME](size_t written) {
-      if (written != len) {
-	ERROR("{} poffset={}~{} dma_write len={} inconsistent",
-	  device_id_printer_t{get_device_id()}, off, len, written);
-	*has_error = true;
-      }
-      return seastar::now();
-    });
-  });
-  if (*has_error) {
-    co_await write_ertr::future<>(
-      crimson::ct_error::input_output_error::make());
-  }
+  DEBUG("block: write offset {} len {}", offset, bl.length());
+  // bl is a by-value parameter: co_await keeps it (and the iovecs the driver
+  // builds from it) alive for the duration of the driver call.
+  co_await driver->writev(
+    get_device_id(), offset, std::move(bl), super.block_size, stream);
 }
 
 Device::close_ertr::future<> NVMeBlockDevice::close() {
   LOG_PREFIX(NVMeBlockDevice::close);
   DEBUG("close");
-  stream_index_to_open = WRITE_LIFE_NOT_SET;
-  co_await device.close();
-  for (auto& target_device : io_device) {
-    co_await target_device.close();
+  if (!driver) {
+    return close_ertr::now();
   }
-}
-
-seastar::future<std::optional<nvme_identify_controller_data_t>>
-NVMeBlockDevice::identify_controller(seastar::file f) {
-
-  nvme_admin_command_t admin_command;
-  nvme_identify_controller_data_t data;
-  admin_command.common.opcode = nvme_admin_command_t::OPCODE_IDENTIFY;
-  admin_command.common.addr = (uint64_t)&data;
-  admin_command.common.data_len = sizeof(data);
-  admin_command.identify.cns = nvme_identify_command_t::CNS_CONTROLLER;
-  auto ret = co_await pass_admin(admin_command, f
-  ).handle_error(crimson::ct_error::input_output_error::handle([] {
-    return seastar::make_ready_future<int>(-1);
-  }));
-  if (ret < 0) {
-    co_return std::nullopt;
-  }
-  co_return std::move(data);
+  return driver->close();
 }
 
 discard_ertr::future<> NVMeBlockDevice::discard(uint64_t offset, uint64_t len) {
-  co_return co_await device.discard(offset, len);
-}
-
-seastar::future<std::optional<nvme_identify_namespace_data_t>>
-NVMeBlockDevice::identify_namespace(seastar::file f) {
-
-  auto nsid = co_await get_nsid(f
-  ).handle_error(crimson::ct_error::input_output_error::handle([] {
-    return seastar::make_ready_future<int>(-1);
-  }));
-  if (nsid < 0) {
-    co_return std::nullopt;
-  }
-  namespace_id = nsid;
-  nvme_admin_command_t admin_command;
-  nvme_identify_namespace_data_t data;
-  admin_command.common.opcode = nvme_admin_command_t::OPCODE_IDENTIFY;
-  admin_command.common.addr = (uint64_t)&data;
-  admin_command.common.data_len = sizeof(data);
-  admin_command.common.nsid = nsid;
-  admin_command.identify.cns = nvme_identify_command_t::CNS_NAMESPACE;
-
-  auto ret = co_await pass_admin(admin_command, f
-  ).handle_error(crimson::ct_error::input_output_error::handle([] {
-    return seastar::make_ready_future<int>(-1);
-  }));
-  if (ret < 0) {
-    co_return std::nullopt;
-  }
-  co_return std::move(data);
-}
-
-nvme_command_ertr::future<int> NVMeBlockDevice::get_nsid(seastar::file f) {
-  auto ret = co_await f.ioctl(NVME_IOCTL_ID, nullptr
-  ).handle_exception(
-    [](auto e)->nvme_command_ertr::future<int> {
-    LOG_PREFIX(NVMeBlockDevice::get_nsid);
-    ERROR("pass_admin: ioctl failed {}", e);
-    return crimson::ct_error::input_output_error::make();
-  });
-  co_return ret;
-}
-
-nvme_command_ertr::future<int> NVMeBlockDevice::pass_admin(
-  nvme_admin_command_t& admin_cmd, seastar::file f) {
-  auto ret = co_await f.ioctl(NVME_IOCTL_ADMIN_CMD, nullptr
-  ).handle_exception(
-    [](auto e)->nvme_command_ertr::future<int> {
-    LOG_PREFIX(NVMeBlockDevice::pass_admin);
-    ERROR("pass_admin: ioctl failed {}", e);
-    return crimson::ct_error::input_output_error::make();
-  });
-  co_return ret;
-}
-
-nvme_command_ertr::future<int> NVMeBlockDevice::pass_through_io(
-  nvme_io_command_t& io_cmd) {
-  auto ret = co_await device.ioctl(NVME_IOCTL_IO_CMD, &io_cmd
-  ).handle_exception(
-    [](auto e)->nvme_command_ertr::future<int> {
-    LOG_PREFIX(NVMeBlockDevice::pass_through_io);
-    ERROR("pass_through_io: ioctl failed {}", e);
-    return crimson::ct_error::input_output_error::make();
-  });
-  co_return ret;
+  return driver->discard(offset, len);
 }
 
 nvme_command_ertr::future<> NVMeBlockDevice::try_enable_end_to_end_protection() {
   LOG_PREFIX(NVMeBlockDevice::try_enable_end_to_end_protection);
-  auto id_ns_data = co_await identify_namespace(device);
+  auto id_ns_data = co_await driver->identify_namespace();
   if (!id_ns_data) {
     INFO("the device does not support end to end data protection,\
       mkfs() will be done without this functionality.");
@@ -384,7 +207,7 @@ nvme_command_ertr::future<> NVMeBlockDevice::try_enable_end_to_end_protection() 
   }
   int lba_format_index = -1;
   for (int i = 0; i < id_namespace_data.nlbaf; i++) {
-    // TODO: enable other types of end to end data protection 
+    // TODO: enable other types of end to end data protection
     // Note that the nvme device will generate crc if the namespace
     // is formatted with meta size 8
     // The nvme device can provide other types of data protections.
@@ -402,101 +225,35 @@ nvme_command_ertr::future<> NVMeBlockDevice::try_enable_end_to_end_protection() 
     co_return;
   }
 
-  auto nsid = co_await get_nsid(device);
+  auto nsid = driver->get_namespace_id();
   nvme_admin_command_t cmd;
   cmd.common.opcode = nvme_admin_command_t::OPCODE_FORMAT_NVM;
   cmd.common.nsid = nsid;
   // TODO: configure other protect information types (2 or 3) see above
   cmd.format.pi = nvme_format_nvm_command_t::PROTECT_INFORMATION_TYPE_2;
   cmd.format.lbaf = lba_format_index;
-  auto ret = co_await pass_admin(cmd, device);
+  auto ret = co_await driver->pass_admin(cmd);
   if (ret != 0) {
     ERROR(
       "formt nvm command to use end-to-end-protection fails : {}", ret);
     ceph_abort();
   }
 
-  id_ns_data = co_await identify_namespace(device);
+  id_ns_data = co_await driver->identify_namespace();
   assert(id_ns_data);
   id_namespace_data = *id_ns_data;
   ceph_assert(id_namespace_data.dps.protection_type ==
      nvme_format_nvm_command_t::PROTECT_INFORMATION_TYPE_2);
   super.set_end_to_end_data_protection();
+  // Activate PI on the driver so the superblock write that follows in
+  // do_primary_mkfs() uses the PI command path.
+  driver->set_protection_info(true, super.nvme_block_size);
 }
 
 nvme_command_ertr::future<> NVMeBlockDevice::initialize_nvme_features() {
   if (!crimson::common::get_conf<bool>("seastore_disable_end_to_end_data_protection")) {
     co_await try_enable_end_to_end_protection();
   }
-}
-
-write_ertr::future<> NVMeBlockDevice::nvme_write(
-  uint64_t offset, size_t len, void *buffer_ptr) {
-  nvme_io_command_t cmd;
-  cmd.common.opcode = nvme_io_command_t::OPCODE_WRITE;
-  cmd.common.nsid = namespace_id;
-  cmd.common.data_len = len;
-  // To perform checksum offload, we need to set PRACT to 1 and PRCHK to 4
-  // according to NVMe spec.
-  cmd.rw.prinfo_pract = nvme_rw_command_t::PROTECT_INFORMATION_ACTION_ENABLE;
-  cmd.rw.prinfo_prchk = nvme_rw_command_t::PROTECT_INFORMATION_CHECK_GUARD;
-  cmd.common.addr = (__u64)(uintptr_t)buffer_ptr;
-  ceph_assert(super.nvme_block_size > 0);
-  auto lba_shift = ffsll(super.nvme_block_size) - 1;
-  cmd.rw.s_lba = offset >> lba_shift;
-  cmd.rw.nlb = (len >> lba_shift) - 1;
-  auto ret = co_await pass_through_io(cmd);
-  if (ret != 0) {
-    LOG_PREFIX(NVMeBlockDevice::nvme_write);
-    ERROR("write nvm command with checksum offload fails : {}", ret);
-    ceph_abort();
-  }
-}
-
-read_ertr::future<> NVMeBlockDevice::nvme_read(
-  uint64_t offset, size_t len, void *buffer_ptr) {
-
-  nvme_io_command_t cmd;
-  cmd.common.opcode = nvme_io_command_t::OPCODE_READ;
-  cmd.common.nsid = namespace_id;
-  cmd.common.data_len = len;
-  cmd.rw.prinfo_pract = nvme_rw_command_t::PROTECT_INFORMATION_ACTION_ENABLE;
-  cmd.rw.prinfo_prchk = nvme_rw_command_t::PROTECT_INFORMATION_CHECK_GUARD;
-  cmd.common.addr = (__u64)(uintptr_t)buffer_ptr;
-  ceph_assert(super.nvme_block_size > 0);
-  auto lba_shift = ffsll(super.nvme_block_size) - 1;
-  cmd.rw.s_lba = offset >> lba_shift;
-  cmd.rw.nlb = (len >> lba_shift) - 1;
-  auto ret = co_await pass_through_io(cmd);
-  if (ret != 0) {
-    LOG_PREFIX(NVMeBlockDevice::nvme_read);
-    ERROR("read nvm command with checksum offload fails : {}", ret);
-    ceph_abort();
-  }
-}
-
-read_ertr::future<> NVMeBlockDevice::nvme_readv(
-  uint64_t offset, std::vector<bufferptr> ptrs) {
-  struct io_t {
-    uint64_t offset = 0;
-    bufferptr ptr;
-  };
-  std::vector<io_t> iov;
-  size_t off = 0;
-  for (auto &ptr : ptrs) {
-    auto len = ptr.length();
-    iov.emplace_back(offset + off, std::move(ptr));
-    off += len;
-  }
-  return seastar::do_with(
-    std::move(iov),
-    [this](auto &iov) {
-    return read_ertr::parallel_for_each(
-      iov,
-      [this](auto &io) {
-      return nvme_read(io.offset, io.ptr.length(), io.ptr.c_str());
-    });
-  });
 }
 
 }

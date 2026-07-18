@@ -3002,10 +3002,15 @@ ceph::bufferlist encode_record(
   const journal_seq_t& committed_to,
   segment_nonce_t current_segment_nonce);
 
+// md_buffer, when non-null, must be a DMA-capable buffer of exactly the group's
+// aligned metadata length (get_mdlength()); the JOURNAL metadata is encoded in
+// place into it so the SPDK writev path passes it through with zero copy. When
+// null (default / non-SPDK), metadata is encoded into the heap as before.
 ceph::bufferlist encode_records(
   record_group_t& record_group,
   const journal_seq_t& committed_to,
-  segment_nonce_t current_segment_nonce);
+  segment_nonce_t current_segment_nonce,
+  ceph::unique_leakable_ptr<ceph::buffer::raw> md_buffer = nullptr);
 
 std::optional<record_group_header_t>
 try_decode_records_header(

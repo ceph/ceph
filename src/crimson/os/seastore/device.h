@@ -353,6 +353,20 @@ public:
     return false;
   }
 
+  virtual ceph::unique_leakable_ptr<ceph::buffer::raw> alloc_io_buffer(
+    size_t len) {
+    return ceph::buffer::create_page_aligned(len);
+  }
+
+  // Allocate a DMA-passthrough buffer of `len` for encoding journal record
+  // metadata in place (zero coalescing copy on the SPDK writev path), or
+  // nullptr when the device gains nothing and the caller should encode into
+  // the heap as before. Default: not supported.
+  virtual ceph::unique_leakable_ptr<ceph::buffer::raw> alloc_journal_md_buffer(
+    size_t len) {
+    return nullptr;
+  }
+
   using close_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
   virtual close_ertr::future<> close() = 0;
@@ -374,7 +388,7 @@ public:
     size_t len
   ) {
     auto ptrref = std::make_unique<ceph::bufferptr>(
-      buffer::create_page_aligned(len));
+      alloc_io_buffer(len));
     return read(addr, len, *ptrref
     ).safe_then([ptrref=std::move(ptrref)]() mutable {
       return read_ertr::make_ready_future<bufferptr>(std::move(*ptrref));

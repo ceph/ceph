@@ -104,7 +104,7 @@ write_ertr::future<> RBMDevice::write_rbm_superblock()
 
   bufferlist bl;
   encode(super, bl);
-  auto bp = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
+  auto bp = bufferptr(alloc_io_buffer(super.block_size));
   bp.zero();
   // magic at offset 0, followed by 37 bytes of null padding (just zeroed)
   std::memcpy(bp.c_str(),
@@ -121,7 +121,7 @@ read_ertr::future<device_superblock_t> RBMDevice::read_rbm_superblock(
 {
   LOG_PREFIX(RBMDevice::read_rbm_superblock);
   assert(super.block_size > 0);
-  auto bptr = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
+  auto bptr = bufferptr(alloc_io_buffer(super.block_size));
   co_await read(addr, bptr);
 
   // verify magic at offset 0

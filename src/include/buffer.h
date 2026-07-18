@@ -1099,6 +1099,20 @@ struct error_code;
 
     void reserve(size_t prealloc);
 
+    // Seed the append buffer (carriage) with a caller-supplied raw so that
+    // subsequent append()/encode() calls land in place inside it instead of
+    // allocating. Lets callers encode directly into DMA-capable memory.
+    // Precondition: the list is empty -- otherwise this would silently drop the
+    // existing carriage and corrupt append accounting.
+    void append_buffer(ceph::unique_leakable_ptr<raw> r) {
+      ceph_assert(_num == 0);
+      auto p = ptr_node::create(std::move(r));
+      p->set_length(0);   // unused, so far.
+      _carriage = p.get();
+      _buffers.push_back(*p.release());
+      _num += 1;
+    }
+
     [[deprecated("in favor of operator=(list&&)")]] void claim(list& bl) {
       *this = std::move(bl);
     }

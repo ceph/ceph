@@ -1,10 +1,12 @@
 set(crimson_seastore_srcs
   cached_extent.cc
+  seastore_dma_alloc.cc
   lba_mapping.cc
   seastore_types.cc
   segment_manager.cc
   segment_manager/ephemeral.cc
   segment_manager/block.cc
+  block_io_driver.cc
   transaction_interruptor.cc
   transaction_manager.cc
   cache.cc
@@ -44,6 +46,7 @@ set(crimson_seastore_srcs
   random_block_manager.cc
   random_block_manager/block_rb_manager.cc
   random_block_manager/rbm_device.cc
+  random_block_manager/nvme_io_driver.cc
   random_block_manager/nvme_block_device.cc
   random_block_manager/avlallocator.cc
   journal/segmented_journal.cc
@@ -67,6 +70,16 @@ if(WITH_ZNS)
     segment_manager/zbd.cc)
 endif()
 
+# Per-shard SPDK NVMe engine and the SPDK block/RBM I/O drivers
+# (SPDKBlockIODriver / SPDKNVMeIODriver). Guarded by WITH_SPDK so the
+# default io_uring build pulls in no SPDK code.
+if(WITH_SPDK)
+  list(APPEND crimson_seastore_srcs
+    spdk_nvme_io.cc
+    spdk_block_io_driver.cc
+    random_block_manager/spdk_nvme_io_driver.cc)
+endif()
+
 add_library(crimson-seastore STATIC
   ${crimson_seastore_srcs})
 
@@ -75,6 +88,10 @@ target_link_libraries(crimson-seastore
 if(WITH_ZNS)
   target_link_libraries(crimson-seastore
     Linux::ZNS)
+endif()
+if(WITH_SPDK)
+  target_link_libraries(crimson-seastore
+    spdk::spdk)
 endif()
 
 set_target_properties(crimson-seastore PROPERTIES

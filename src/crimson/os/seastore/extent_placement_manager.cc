@@ -1195,7 +1195,7 @@ RandomBlockOolWriter::do_write(
       for (auto &b : w.mergeable_bps) {
 	len += b.length();
       }
-      w.bp = ceph::bufferptr(ceph::buffer::create_page_aligned(len));
+      w.bp = create_extent_ptr_rand(len);
       extent_len_t cursor = 0;
       for (auto &b : w.mergeable_bps) {
 	w.bp.copy_in(cursor, b.length(), b.c_str());
