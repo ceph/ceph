@@ -165,7 +165,10 @@ int main() { std::stable_sort((int *)0, (int*)0); }
 cmake_pop_check_state()
 
 set(version_script_source "v1 { }; v2 { } v1;")
-file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/version_script.txt "${version_script_source}")
+file(CONFIGURE
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/version_script.txt
+  CONTENT "${version_script_source}"
+  @ONLY)
 cmake_push_check_state(RESET)
 set(CMAKE_REQUIRED_FLAGS "-Werror -Wl,--version-script=${CMAKE_CURRENT_BINARY_DIR}/version_script.txt")
 check_c_source_compiles("
