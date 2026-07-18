@@ -75,9 +75,27 @@ if(MINGW)
   link_directories(${MINGW_LINK_DIRECTORIES})
 endif()
 
+# WITH_MOLD=ON requires mold and fails the configure without it.
+# WITH_MOLD=AUTO uses mold only when it is installed and the compiler
+# supports -fuse-ld=mold (GCC >= 12), silently falling back to the
+# default linker otherwise, so packaging can enable it unconditionally.
 option(WITH_MOLD "Use the Mold linker" OFF)
-if(WITH_MOLD)
+if(WITH_MOLD STREQUAL "AUTO")
+  find_program(_mold_path mold)
+  if(_mold_path)
+    include(CheckLinkerFlag)
+    check_linker_flag(CXX "-fuse-ld=mold" HAVE_FUSE_LD_MOLD)
+    if(NOT HAVE_FUSE_LD_MOLD)
+      set(_mold_path "")
+    endif()
+  endif()
+  if(NOT _mold_path)
+    message(STATUS "WITH_MOLD=AUTO: mold not usable here, using the default linker")
+  endif()
+elseif(WITH_MOLD)
   find_program(_mold_path mold REQUIRED)
+endif()
+if(WITH_MOLD AND _mold_path)
   message(STATUS "Mold linker: ${_mold_path}")
   set(CMAKE_LINKER ${_mold_path} CACHE FILEPATH "Linker" FORCE)
   set(MOLD_FUSE_LD_FLAG "-fuse-ld=mold" CACHE INTERNAL "")
