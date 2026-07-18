@@ -64,7 +64,7 @@ TEST_CASE("test the tester") {
  SECTION("check write and cleanup") {
   janitor j;
 
-  j.drop_all_keys();
+  j.drop_key_prefix("VEAL");
 
   // Check that there are no keys:
   std::string s;
@@ -77,7 +77,7 @@ TEST_CASE("test the tester") {
   lfdb::get(j, make_key(2, "VEAL"), s);   
   REQUIRE(make_value(2) == s);
 
-  j.drop_all_keys();
+  j.drop_key_prefix("VEAL");
  }
 }
 
@@ -113,7 +113,8 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
 
  const char *msg = "Hello, World!";
 
- auto dbh = lfdb::create_database();
+ janitor j;
+ auto dbh = j.dbh();
 
  // ceph::buffer::list -> span<uint8_t> -> std::string
  {
@@ -140,12 +141,13 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
  ceph::buffer::list o;
  ceph::libfdb::from::convert(x, o);
 
- lfdb::set(lfdb::make_transaction(dbh), "key", n, lfdb::commit_after_op::commit);
- lfdb::get(lfdb::make_transaction(dbh), "key", o);
+ const auto key = test_key("key");
+ lfdb::set(lfdb::make_transaction(dbh), key, n, lfdb::commit_after_op::commit);
+ lfdb::get(lfdb::make_transaction(dbh), key, o);
  
  REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
 
- lfdb::erase(dbh, "key");
+ lfdb::erase(dbh, key);
  }
 
  SECTION("buffer::list direct and const conversion paths match")
@@ -227,13 +229,14 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
  {
    ceph::buffer::list in;
 
-   lfdb::set(dbh, "empty-buffer-list", in);
+   const auto key = test_key("empty-buffer-list");
+   lfdb::set(dbh, key, in);
 
    ceph::buffer::list out;
-   REQUIRE(lfdb::get(dbh, "empty-buffer-list", out));
+   REQUIRE(lfdb::get(dbh, key, out));
    CHECK(0 == out.length());
 
-   lfdb::erase(dbh, "empty-buffer-list");
+   lfdb::erase(dbh, key);
  }
 
  SECTION("buffer::list with embedded nulls round trips through public set/get")
@@ -243,13 +246,14 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
    ceph::buffer::list in;
    in.append(data, sizeof(data));
 
-   lfdb::set(dbh, "embedded-null-buffer-list", in);
+   const auto key = test_key("embedded-null-buffer-list");
+   lfdb::set(dbh, key, in);
 
    ceph::buffer::list out;
-   REQUIRE(lfdb::get(dbh, "embedded-null-buffer-list", out));
+   REQUIRE(lfdb::get(dbh, key, out));
    REQUIRE_THAT(in, Catch::Matchers::RangeEquals(out));
 
-   lfdb::erase(dbh, "embedded-null-buffer-list");
+   lfdb::erase(dbh, key);
  }
 
  SECTION("buffer::list get replaces existing output")
@@ -260,12 +264,13 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
    ceph::buffer::list out;
    out.append("old-value");
 
-   lfdb::set(dbh, "replace-buffer-list-output", in);
+   const auto key = test_key("replace-buffer-list-output");
+   lfdb::set(dbh, key, in);
 
-   REQUIRE(lfdb::get(dbh, "replace-buffer-list-output", out));
+   REQUIRE(lfdb::get(dbh, key, out));
    REQUIRE_THAT(in, Catch::Matchers::RangeEquals(out));
 
-   lfdb::erase(dbh, "replace-buffer-list-output");
+   lfdb::erase(dbh, key);
  }
 
  SECTION("buffer::list (and buffer::list key) -> buffer::list")
@@ -276,12 +281,13 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
    ceph::buffer::list o;
    o.append(n);
  
-   lfdb::set(lfdb::make_transaction(dbh), "key", n, lfdb::commit_after_op::commit);
-   lfdb::get(lfdb::make_transaction(dbh), "key", o);
+   const auto key = test_key("key");
+   lfdb::set(lfdb::make_transaction(dbh), key, n, lfdb::commit_after_op::commit);
+   lfdb::get(lfdb::make_transaction(dbh), key, o);
  
    REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
 
-    lfdb::erase(dbh, "key");
+    lfdb::erase(dbh, key);
   }
 
  SECTION("buffer::ptr")
@@ -290,10 +296,11 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
     ceph::buffer::ptr p(ceph::buffer::claim_char(in.length(), const_cast<char *>(in.data())));
     CHECK(in == string_view(p.c_str(), p.length()));
 
-    lfdb::set(dbh, "key", p);
+    const auto key = test_key("key");
+    lfdb::set(dbh, key, p);
 
     std::string o;
-    lfdb::get(dbh, "key", o);
+    lfdb::get(dbh, key, o);
 
     CHECK(in == o);
  }
@@ -326,9 +333,10 @@ auto tier_generator(ceph::libfdb::database_handle dbh, ceph::libfdb::select sele
 
                       [dbh](const ceph::libfdb::select& selector) mutable {
                         AssocT out;
+                        auto txn = ceph::libfdb::make_transaction(dbh);
 
                         // ...my libstdc++ lacks std::from_range overloads; the Hard Way(TM) it is:
-                        for(auto&& kvp : ceph::libfdb::pair_generator(dbh, selector)) {
+                        for(auto&& kvp : ceph::libfdb::pair_generator(txn, selector)) {
                           out.emplace(kvp);
                         }
 
@@ -361,17 +369,90 @@ exceed the FoundationDB five-second transaction limit: */
  
     populate_monotonic(j, nkeys);
 
-    SECTION("forward") {
-      auto selector = lfdb::select { "key_" };
-
+    struct collected_blocks
+    {
+      std::vector<std::pair<std::string, std::string>> entries;
+      size_t nblocks = 0;
       size_t total = 0;
-      for(const auto& block : lfdb::block_generator(j, selector)) {
-        total += block.size();
+    };
+
+    auto collect_blocks = [&j](lfdb::select selector) {
+      collected_blocks out;
+      const auto requested_read_limit = ceph::libfdb::detail::read_limit(selector.options);
+
+      std::ranges::for_each(lfdb::block_generator<std::string, ordered_block>(j, selector), [&](const auto& block) {
+        ++out.nblocks;
+        out.total += block.size();
+
+        if (0 < requested_read_limit) {
+          CHECK(block.size() <= static_cast<size_t>(requested_read_limit));
+        }
+
+        std::ranges::copy(block, std::back_inserter(out.entries));
+      });
+
+      return out;
+    };
+
+    auto check_paged = [nkeys](const collected_blocks& blocks, const lfdb::select& selector) {
+      if (ceph::libfdb::detail::read_limit(selector.options) < static_cast<int>(nkeys)) {
+        CHECK(1 < blocks.nblocks);
       }
+    };
+
+    auto check_reverse = [nkeys](const auto& out) {
+      CAPTURE(nkeys);
+      CAPTURE(out.size());
+      REQUIRE(nkeys == out.size());
+
+      if (0 < nkeys) {
+        CAPTURE(out.front().first);
+        CAPTURE(out.back().first);
+        CHECK(make_key(nkeys - 1) == out.front().first);
+        CHECK(make_key(0) == out.back().first);
+        CHECK(std::ranges::is_sorted(out, std::ranges::greater {},
+                                     &std::pair<std::string, std::string>::first));
+      }
+    };
+
+    SECTION("forward") {
+      auto selector = lfdb::select { make_key_prefix() };
+      auto blocks = collect_blocks(selector);
 
       CAPTURE(nkeys);
-      CAPTURE(total);
-      CHECK(nkeys == total);
+      CAPTURE(blocks.total);
+      CHECK(nkeys == blocks.total);
+    }
+
+    SECTION("forward, paged") {
+      auto selector = lfdb::select { make_key_prefix() };
+      ceph::libfdb::detail::read_limit(selector.options, 5);
+      auto blocks = collect_blocks(selector);
+
+      CAPTURE(nkeys);
+      CAPTURE(blocks.total);
+      CAPTURE(blocks.nblocks);
+      CHECK(nkeys == blocks.total);
+      check_paged(blocks, selector);
+    }
+
+    SECTION("reverse") {
+      auto selector = lfdb::select { make_key_prefix() };
+      selector.options.reverse_order = true;
+      auto blocks = collect_blocks(selector);
+
+      check_reverse(blocks.entries);
+    }
+
+    SECTION("reverse, paged") {
+      auto selector = lfdb::select { make_key_prefix() };
+      selector.options.reverse_order = true;
+      ceph::libfdb::detail::read_limit(selector.options, 5);
+      auto blocks = collect_blocks(selector);
+
+      CAPTURE(blocks.nblocks);
+      check_reverse(blocks.entries);
+      check_paged(blocks, selector);
     }
 
     SECTION("reverse") {
@@ -380,7 +461,7 @@ exceed the FoundationDB five-second transaction limit: */
 
       std::vector<std::pair<std::string, std::string>> out;
 
-      for(const auto& block : lfdb::block_generator<ordered_block>(j, selector)) {
+      for(const auto& block : lfdb::block_generator<std::string, ordered_block>(j, selector)) {
         std::ranges::copy(block, std::back_inserter(out));
       }
 
@@ -410,12 +491,12 @@ TEST_CASE("generators", "[.benchmark][benchmark]") {
 
     populate_monotonic(j, nkeys);
 
-    auto selector = lfdb::select { "key_" };
+    auto selector = lfdb::select { make_key_prefix() };
 
     size_t total = 0;
     meter.measure([&j, &selector, &total] {
       total = 0;
-      for(const auto& block : lfdb::block_generator(j, selector)) {
+      for (const auto& block : lfdb::block_generator(j, selector)) {
         total += block.size();
       }
     });
@@ -433,7 +514,7 @@ TEST_CASE("read path benchmarks", "[.benchmark][benchmark]") {
   janitor dbh;
   populate_monotonic(dbh, nkeys);
 
-  const auto selector = lfdb::select { "key_" };
+  const auto selector = lfdb::select { make_key_prefix() };
 
   // Track enough work to prevent the benchmarked reads from being optimized away:
   struct {
@@ -456,6 +537,12 @@ TEST_CASE("read path benchmarks", "[.benchmark][benchmark]") {
       bytes += value.size();
     }
 
+    // "raw" is not the greatest name, but I mean actual fdb_c types:
+    void add_raw(const FDBKeyValue& kv)
+    {
+      ++total;
+      bytes += kv.value_length;
+    }
   } read_tally;
 
   auto mark_failure = [&read_tally](const std::exception& e) {
@@ -467,11 +554,17 @@ TEST_CASE("read path benchmarks", "[.benchmark][benchmark]") {
     read_tally.add(kv.second);
   };
 
+  auto add_raw_pairs = [&read_tally](std::span<const FDBKeyValue> raw_pairs) {
+    std::ranges::for_each(raw_pairs, [&read_tally](const FDBKeyValue& kv) {
+      read_tally.add_raw(kv);
+    });
+  };
+
   auto key_indices = [nkeys] {
     return std::views::iota(0u, static_cast<unsigned>(nkeys));
   };
 
-  auto expected_bytes = [&] {
+  auto expected_decoded_bytes = [&] {
     size_t bytes = 0;
 
     std::ranges::for_each(key_indices(), [&bytes](const auto n) {
@@ -481,8 +574,18 @@ TEST_CASE("read path benchmarks", "[.benchmark][benchmark]") {
     return bytes;
   }();
 
-  auto require_expected = [nkeys, expected_bytes](const auto& tally) {
-    if(not tally.ok) {
+  auto expected_encoded_bytes = [&] {
+    size_t bytes = 0;
+
+    std::ranges::for_each(key_indices(), [&bytes](const auto n) {
+      bytes += ceph::libfdb::to::convert(make_value(n)).size();
+    });
+
+    return bytes;
+  }();
+
+  auto require_expected = [nkeys](const auto& tally, const size_t expected_bytes) {
+    if (not tally.ok) {
       WARN(tally.error);
       return;
     }
@@ -498,19 +601,19 @@ TEST_CASE("read path benchmarks", "[.benchmark][benchmark]") {
       try {
         auto txn = lfdb::make_transaction(dbh);
 
-        for(const auto n : key_indices()) {
+        for (const auto n : key_indices()) {
           std::string out;
 
           if (lfdb::get(txn, make_key(n), out, lfdb::commit_after_op::no_commit)) {
             read_tally.add(out);
           }
         }
-      } catch(const ceph::libfdb::libfdb_exception& e) {
+      } catch (const ceph::libfdb::libfdb_exception& e) {
         mark_failure(e);
       }
     });
 
-    require_expected(read_tally);
+    require_expected(read_tally, expected_decoded_bytes);
   };
 
   BENCHMARK_ADVANCED("single-key get, implicit transaction per key")(Catch::Benchmark::Chronometer meter) {
@@ -518,19 +621,35 @@ TEST_CASE("read path benchmarks", "[.benchmark][benchmark]") {
       read_tally.reset();
 
       try {
-        for(const auto n : key_indices()) {
+        for (const auto n : key_indices()) {
           std::string out;
 
           if (lfdb::get(dbh, make_key(n), out)) {
             read_tally.add(out);
           }
         }
-      } catch(const ceph::libfdb::libfdb_exception& e) {
+      } catch (const ceph::libfdb::libfdb_exception& e) {
         mark_failure(e);
       }
     });
 
-    require_expected(read_tally);
+    require_expected(read_tally, expected_decoded_bytes);
+  };
+
+  BENCHMARK_ADVANCED("raw FDB pair windows read all")(Catch::Benchmark::Chronometer meter) {
+    meter.measure([&] {
+      read_tally.reset();
+
+      try {
+        auto txn = lfdb::make_transaction(dbh);
+        std::ranges::for_each(ceph::libfdb::detail::generate_FDB_pairs(*txn, selector),
+                              add_raw_pairs);
+      } catch (const ceph::libfdb::libfdb_exception& e) {
+        mark_failure(e);
+      }
+    });
+
+    require_expected(read_tally, expected_encoded_bytes);
   };
 
   BENCHMARK_ADVANCED("pair generator read all")(Catch::Benchmark::Chronometer meter) {
@@ -538,13 +657,14 @@ TEST_CASE("read path benchmarks", "[.benchmark][benchmark]") {
       read_tally.reset();
 
       try {
-        std::ranges::for_each(lfdb::pair_generator(dbh, selector), add_kv);
-      } catch(const ceph::libfdb::libfdb_exception& e) {
+        auto txn = lfdb::make_transaction(dbh);
+        std::ranges::for_each(lfdb::pair_generator(txn, selector), add_kv);
+      } catch (const ceph::libfdb::libfdb_exception& e) {
         mark_failure(e);
       }
     });
 
-    require_expected(read_tally);
+    require_expected(read_tally, expected_decoded_bytes);
   };
 
   BENCHMARK_ADVANCED("block generator read all")(Catch::Benchmark::Chronometer meter) {
@@ -555,12 +675,12 @@ TEST_CASE("read path benchmarks", "[.benchmark][benchmark]") {
         std::ranges::for_each(lfdb::block_generator(dbh, selector), [&](const auto& block) {
           std::ranges::for_each(block, add_kv);
         });
-      } catch(const ceph::libfdb::libfdb_exception& e) {
+      } catch (const ceph::libfdb::libfdb_exception& e) {
         mark_failure(e);
       }
     });
 
-    require_expected(read_tally);
+    require_expected(read_tally, expected_decoded_bytes);
   };
 }
 
@@ -576,10 +696,10 @@ using std::for_each;
 // not want to run ALL combinations if you're short on time:
 auto N = GENERATE(0, 1, 256, 4'096); // 250'000, 1'000'000);
 
-unsigned stride = 512;
+unsigned block_size = 512;
 
 fmt::println("N = {}", N);
-fmt::println("stride = {}", stride);
+fmt::println("block size = {}", block_size);
 
 // For casual use, these simply get intolerably slow at higher values:
 const bool run_slow_baselines = (N <= 256);
@@ -588,17 +708,17 @@ std::vector<std::pair<std::string, std::string>> inputs;
 inputs.reserve(N);
 
 // Sadly, my version of libstdc++ lacks std::from_range_t:
-for(auto n : views::iota(0, N)) {
+for (auto n : views::iota(0, N)) {
  inputs.emplace_back(std::make_pair<std::string, std::string>(make_key(n), make_value(n)));
 }
 
-if(run_slow_baselines) {
+if (run_slow_baselines) {
  BENCHMARK_ADVANCED("write simple records-- implicit transaction per key")(Catch::Benchmark::Chronometer meter) {
   janitor j;
 
-  meter.measure([&j, &inputs, stride] {
+  meter.measure([&j, &inputs, block_size] {
    // Notice that here we are passing around the database handle, winding up making a new one per-operation:
-   for(auto block : inputs | views::chunk(stride)) {
+   for (auto block : inputs | views::chunk(block_size)) {
     std::for_each(std::begin(block), std::end(block), [&j](const auto& kv) mutable {
       lfdb::set(j, kv.first, kv.second);
     });
@@ -610,14 +730,14 @@ if(run_slow_baselines) {
 BENCHMARK_ADVANCED("write simple records-- one transaction per block")(Catch::Benchmark::Chronometer meter) {
  janitor j;
 
- meter.measure([&j, &inputs, stride] {
+ meter.measure([&j, &inputs, block_size] {
   // Shared-transaction:
-  for(auto block : inputs | views::chunk(stride)) {
+  for (auto block : inputs | views::chunk(block_size)) {
    auto txn = lfdb::make_transaction(j);
    std::for_each(std::begin(block), std::end(block), [&txn](const auto& kv) mutable {
      lfdb::set(txn, kv.first, kv.second);
    });
-   if(false == lfdb::commit(txn)) {
+   if (false == lfdb::commit(txn)) {
      throw std::runtime_error("unable to commit transaction");
    }
   }
@@ -627,8 +747,8 @@ BENCHMARK_ADVANCED("write simple records-- one transaction per block")(Catch::Be
 BENCHMARK_ADVANCED("write simple records-- range set, one transaction per block")(Catch::Benchmark::Chronometer meter) {
  janitor j;
 
- meter.measure([&j, &inputs, stride] {
-  for(auto block : inputs | views::chunk(stride)) {
+ meter.measure([&j, &inputs, block_size] {
+  for (auto block : inputs | views::chunk(block_size)) {
    lfdb::set(j, std::begin(block), std::end(block));
   }
  });
@@ -639,8 +759,8 @@ BENCHMARK_ADVANCED("write simple records-- range set, one transaction per block"
 BENCHMARK_ADVANCED("write simple records-- parallel, one transaction per block")(Catch::Benchmark::Chronometer meter) {
  janitor j;
 
- meter.measure([&j, &inputs, stride] {
-  auto blocks = inputs | views::chunk(stride);
+ meter.measure([&j, &inputs, block_size] {
+  auto blocks = inputs | views::chunk(block_size);
 
   std::for_each(std::execution::par, std::begin(blocks), std::end(blocks),
                 [&j](const auto& block) mutable {
@@ -650,7 +770,7 @@ BENCHMARK_ADVANCED("write simple records-- parallel, one transaction per block")
                     lfdb::set(txn, kv.first, kv.second);
                   });
 
-                  if(false == lfdb::commit(txn)) {
+                  if (false == lfdb::commit(txn)) {
                     throw std::runtime_error("unable to commit transaction");
                   }
                 });
