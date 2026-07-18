@@ -1,6 +1,7 @@
 # utf8proc is a dependency of the arrow submodule
 
 function(build_utf8proc)
+  list(APPEND utf8proc_CMAKE_ARGS ${CEPH_EXTERNAL_PROJECT_CMAKE_ARGS})
   # only build static version
   list(APPEND utf8proc_CMAKE_ARGS -DBUILD_SHARED_LIBS=OFF)
 

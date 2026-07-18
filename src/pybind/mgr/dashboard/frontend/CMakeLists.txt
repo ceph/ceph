@@ -20,9 +20,11 @@ function(add_npm_command)
   add_custom_command(
     OUTPUT "${NC_OUTPUT}"
     COMMAND ${command}
+    COMMAND ${CMAKE_COMMAND} -E touch "${NC_OUTPUT}"
     DEPENDS ${NC_DEPENDS}
     WORKING_DIRECTORY "${NC_WORKING_DIRECTORY}"
-    COMMENT ${NC_COMMENT})
+    COMMENT ${NC_COMMENT}
+    VERBATIM)
   set_property(DIRECTORY APPEND
     PROPERTY ADDITIONAL_MAKE_CLEAN_FILES "${NC_OUTPUT}")
 endfunction(add_npm_command)
@@ -40,19 +42,25 @@ function(add_npm_options)
       npm config set ${key} ${value} --userconfig ${NC_NODEENV_DIR}/.npmrc &&
       deactivate)
   endforeach()
-  set(npm_config_python ${MGR_PYTHON_EXECUTABLE})
-  add_custom_target(${NC_TARGET}
+  set(npm_config_file ${NC_NODEENV_DIR}/.npmrc)
+  add_custom_command(
+    OUTPUT ${npm_config_file}
     ${commands}
     DEPENDS ${NC_NODEENV_DIR}/bin/npm
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    COMMENT "dashboard npm options are being configured"
+    VERBATIM)
+  add_custom_target(${NC_TARGET}
+    DEPENDS ${npm_config_file})
 endfunction(add_npm_options)
+
+set(node_modules_stamp
+  ${CMAKE_CURRENT_BINARY_DIR}/node_modules.stamp)
+set(dashboard_frontend_deps ${node_modules_stamp})
 
 if(WITH_SYSTEM_NPM)
   set(mgr-dashboard-nodeenv-dir )
   set(nodeenv "")
-  add_custom_target(mgr-dashboard-frontend-deps
-    DEPENDS node_modules
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 else(WITH_SYSTEM_NPM)
   set(mgr-dashboard-nodeenv-dir ${CMAKE_CURRENT_BINARY_DIR}/node-env)
   set(nodeenv NODEENV)
@@ -75,7 +83,8 @@ else(WITH_SYSTEM_NPM)
     # uid 1000 and running the unpack in a id-mapped namespace (container)
     # that lets tar set the uid to a "bad" uid outside the namespace
     COMMAND bash -c 'chown -R `id -u`:`id -g` ${mgr-dashboard-nodeenv-dir}/src'
-    COMMAND mkdir -p ${npm-cache-dir}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${npm-cache-dir}
+    DEPENDS ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "dashboard nodeenv is being installed")
   if(DEFINED ENV{NPM_REGISTRY})
@@ -86,15 +95,17 @@ else(WITH_SYSTEM_NPM)
     TARGET mgr-dashboard-nodeenv
     OPTION cache=${npm-cache-dir}
     ${npm_registry_opts})
-  add_custom_target(mgr-dashboard-frontend-deps
-    DEPENDS node_modules mgr-dashboard-nodeenv
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+  list(APPEND dashboard_frontend_deps mgr-dashboard-nodeenv)
 endif(WITH_SYSTEM_NPM)
 
+add_custom_target(mgr-dashboard-frontend-deps
+  DEPENDS ${dashboard_frontend_deps}
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_npm_command(
-  OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/node_modules"
-  COMMAND CYPRESS_CACHE_FOLDER=${CMAKE_SOURCE_DIR}/build/src/pybind/mgr/dashboard/cypress NG_CLI_ANALYTICS=false IBM_TELEMETRY_DISABLED=true npm ci -f ${mgr-dashboard-userconfig}
-  DEPENDS package.json
+  OUTPUT ${node_modules_stamp}
+  COMMAND CYPRESS_CACHE_FOLDER=${CMAKE_BINARY_DIR}/src/pybind/mgr/dashboard/cypress NG_CLI_ANALYTICS=false IBM_TELEMETRY_DISABLED=true npm ci -f ${mgr-dashboard-userconfig}
+  DEPENDS package.json package-lock.json
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   COMMENT "dashboard frontend dependencies are being installed"
   ${nodeenv})
@@ -104,19 +115,20 @@ file(
   GLOB_RECURSE frontend_src
   RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
   src/*.ts
-  src/*.html)
+  src/*.html
+  src/*.scss
+  src/*.css
+  src/*.svg
+  src/*.json
+  src/*.xlf)
 
 # these files are generated during build
 list(REMOVE_ITEM frontend_src
   src/environments/environment.prod.ts
   src/environments/environment.ts)
 
-execute_process(
-    COMMAND bash -c "jq -r .config.locale ${CMAKE_CURRENT_SOURCE_DIR}/package.json"
-    OUTPUT_VARIABLE default_lang
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
-
 set(frontend_dist_dir "${CMAKE_CURRENT_BINARY_DIR}/dist")
+set(frontend_dist_stamp "${frontend_dist_dir}/.ceph-built")
 set(npm_args "--output-path ${frontend_dist_dir}")
 if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
   string(APPEND npm_args " --configuration=production --progress=false")
@@ -125,24 +137,39 @@ else()
 endif()
 
 add_npm_command(
-  OUTPUT "${frontend_dist_dir}"
+  OUTPUT ${frontend_dist_stamp}
   COMMAND DASHBOARD_FRONTEND_LANGS="${DASHBOARD_FRONTEND_LANGS}" npm run build:localize -- ${npm_args}
-  DEPENDS ${frontend_src} node_modules
+  DEPENDS
+    ${frontend_src}
+    ${node_modules_stamp}
+    .browserslistrc
+    angular.json
+    babel.config.js
+    cd.js
+    ngcc.config.js
+    package.json
+    tsconfig.app.json
+    tsconfig.json
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   COMMENT "dashboard frontend is being created"
   ${nodeenv})
+
+set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES
+  "${CMAKE_CURRENT_SOURCE_DIR}/node_modules"
+  "${frontend_dist_dir}")
 
 add_custom_command(
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/package.json
   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/package.json
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
     ${CMAKE_CURRENT_SOURCE_DIR}/package.json
-    ${CMAKE_CURRENT_BINARY_DIR}/package.json)
+    ${CMAKE_CURRENT_BINARY_DIR}/package.json
+  VERBATIM)
 
 add_custom_target(mgr-dashboard-frontend-build
   ALL
   DEPENDS
-    ${frontend_dist_dir}
+    ${frontend_dist_stamp}
     ${CMAKE_CURRENT_BINARY_DIR}/package.json
     mgr-dashboard-frontend-deps
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})

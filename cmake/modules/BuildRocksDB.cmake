@@ -1,5 +1,6 @@
 function(build_rocksdb)
   set(rocksdb_CMAKE_ARGS -DCMAKE_POSITION_INDEPENDENT_CODE=ON)
+  list(APPEND rocksdb_CMAKE_ARGS ${CEPH_EXTERNAL_PROJECT_CMAKE_ARGS})
   list(APPEND rocksdb_CMAKE_ARGS -DWITH_GFLAGS=OFF)
 
   # cmake doesn't properly handle arguments containing ";", such as
