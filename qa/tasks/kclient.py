@@ -2,6 +2,7 @@
 Mount/unmount a ``kernel`` client.
 """
 import contextlib
+from io import StringIO
 import logging
 
 from teuthology.misc import deep_merge
@@ -68,6 +69,8 @@ def task(ctx, config):
         raise ValueError(f"Invalid config object: {config} ({config.__class__})")
     log.info(f"config is {config}")
 
+    cluster = config.setdefault('cluster', 'ceph')
+
     clients = list(misc.get_clients(ctx=ctx, roles=client_roles))
 
     test_dir = misc.get_testdir(ctx)
@@ -105,29 +108,26 @@ def task(ctx, config):
 
         mounts[id_] = kernel_mount
 
+        ceph_manager = ctx.managers[cluster]
+
         key_type = client_config.get('key_type', 'aes')
         if key_type == 'aes':
             log.info("Configuring cluster to allow insecure 'aes' cipher for kclient...")
             try:
-                remote.run(args=['sudo', 'ceph', 'health', 'mute', 'AUTH_INSECURE_CLIENT_KEY_TYPE', '--sticky'])
-                remote.run(args=['sudo', 'ceph', 'health', 'mute', 'AUTH_INSECURE_KEYS_ALLOWED', '--sticky'])
-                remote.run(args=['sudo', 'ceph', 'health', 'mute', 'AUTH_INSECURE_KEYS_CREATABLE', '--sticky'])
-                remote.run(args=['sudo', 'ceph', 'mon', 'set', 'auth_allowed_ciphers', 'aes,aes256k'])
-                remote.run(args=['sudo', 'ceph', 'config', 'set', 'mon', 'mon_auth_allow_insecure_key', 'true'])
+                ceph_manager.ceph('health mute AUTH_INSECURE_CLIENT_KEY_TYPE --sticky')
+                ceph_manager.ceph('health mute AUTH_INSECURE_KEYS_ALLOWED --sticky')
+                ceph_manager.ceph('health mute AUTH_INSECURE_KEYS_CREATABLE --sticky')
+                ceph_manager.ceph('mon set auth_allowed_ciphers aes,aes256k')
+                ceph_manager.ceph('config set mon mon_auth_allow_insecure_key true')
             except CommandFailedError as e:
                 log.warning(f"Failed to set cluster configs for legacy aes key: {e}")
 
         # Ensure the client key is generated with the desired cipher type
-        keyring_path = f'/etc/ceph/ceph.client.{id_}.keyring'
+        keyring_path = kernel_mount.get_keyring_path()
         try:
             log.info(f"Generating key for {entity} with key-type {key_type} at {keyring_path}")
-            remote.run(
-                args=[
-                    'sudo', 'ceph', 'auth', 'rotate', entity,
-                    f'--key-type={key_type}',
-                    '-o', keyring_path
-                ]
-            )
+            p = ceph_manager.ceph(f'auth rotate {entity} --key-type={key_type}', stdout=StringIO())
+            remote.write_file(keyring_path, p.stdout.getvalue())
         except CommandFailedError as e:
             log.warning(f"Failed to rotate key, maybe --key-type is unsupported: {e}")
 
