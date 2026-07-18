@@ -12,12 +12,22 @@ export class BucketsPageHelper extends PageHelper {
   pages = pages;
 
   columnIndex = {
-    name: 2,
-    owner: 3
+    name: 1,
+    owner: 2
   };
 
   versioningStateEnabled = 'Enabled';
   versioningStateSuspended = 'Suspended';
+
+  /**
+   * OVERRIDE: Returns a specific table cell by column index and content.
+   */
+  getTableCell(columnIndex: number, content: string) {
+    return cy.contains(
+      `tbody tr [cdstabledata]:nth-child(${columnIndex})`,
+      new RegExp(`^\\s*${content}\\s*$`)
+    );
+  }
 
   private selectOwner(owner: string) {
     return this.selectOption('owner', owner);
@@ -25,6 +35,13 @@ export class BucketsPageHelper extends PageHelper {
 
   private selectLockMode(lockMode: string) {
     return this.selectOption('lock_mode', lockMode);
+  }
+
+  private getOverviewValueByLabel(label: string) {
+    return cy
+      .contains('.cd-overview-item .cd-overview-label', new RegExp(`^\\s*${label}\\s*$`))
+      .closest('.cd-overview-item')
+      .find('.cd-overview-value');
   }
 
   @PageHelper.restrictTo(pages.create.url)
@@ -72,15 +89,17 @@ export class BucketsPageHelper extends PageHelper {
         });
 
       // wait to be back on buckets page with table visible and click
-      this.getExpandCollapseElement(name).click();
-
-      // check its details table for edited owner field
-      cy.get('[data-testid="rgw-bucket-details"]').first().as('bucketDataTable');
+      this.getResourcePage(name).click();
 
       // Check versioning enabled:
-      cy.get('@bucketDataTable').find('tr').its(0).find('td').last().as('versioningValueCell');
+      this.getOverviewValueByLabel('Versioning').should(
+        'contain.text',
+        this.versioningStateEnabled
+      );
 
-      return cy.get('@versioningValueCell').should('have.text', this.versioningStateEnabled);
+      // Return to bucket list so callers can use getDataTables()
+      this.navigateTo();
+      return;
     }
     // Enable versioning
     cy.get('input[name=versioning]').should('not.be.checked');
@@ -98,25 +117,31 @@ export class BucketsPageHelper extends PageHelper {
       });
 
     // wait to be back on buckets page with table visible and click
-    this.getExpandCollapseElement(name).click();
+    this.getResourcePage(name).click();
 
     // Check versioning enabled:
-    cy.get('[data-testid="rgw-bucket-details"]').first().as('bucketDataTable');
-    cy.get('@bucketDataTable').find('tr').its(0).find('td').last().as('versioningValueCell');
+    this.getOverviewValueByLabel('Versioning').should('contain.text', this.versioningStateEnabled);
 
-    cy.get('@versioningValueCell').should('have.text', this.versioningStateEnabled);
+    // Navigate back to bucket list before editing again:
+    this.navigateTo();
 
     // Disable versioning:
     this.navigateEdit(name, false, true, null);
-
+    cy.get('input[name=versioning]').should('be.checked');
     cy.get('label[for=versioning_input]').click();
     cy.get('input[name=versioning]').should('not.be.checked');
     cy.contains('button', 'Edit Bucket').wait(WAIT_TIMER).click();
 
     // Check versioning suspended:
-    this.getExpandCollapseElement(name).click();
+    this.getResourcePage(name).click();
 
-    return cy.get('@versioningValueCell').should('have.text', this.versioningStateSuspended);
+    this.getOverviewValueByLabel('Versioning').should(
+      'contain.text',
+      this.versioningStateSuspended
+    );
+
+    // Return to bucket list so callers can use getDataTables()
+    this.navigateTo();
   }
 
   testInvalidCreate() {

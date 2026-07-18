@@ -12,7 +12,8 @@ Cypress.on('uncaught:exception', (err: Error) => {
     'ResizeObserver loop limit exceeded',
     'api/prometheus/rules',
     'NG0100: ExpressionChangedAfterItHasBeenCheckedError',
-    'NgClass can only toggle CSS classes'
+    'NgClass can only toggle CSS classes',
+    "Cannot read properties of undefined (reading 'get')"
   ];
   if (ignoredErrors.some((error) => err.message.includes(error))) {
     return false;

@@ -18,7 +18,6 @@ import { ModuleStatusGuardService } from '~/app/shared/services/module-status-gu
 
 import { SharedModule } from '~/app/shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
-import { RgwBucketDetailsComponent } from './rgw-bucket-details/rgw-bucket-details.component';
 import { RgwBucketFormComponent } from './rgw-bucket-form/rgw-bucket-form.component';
 import { RgwBucketListComponent } from './rgw-bucket-list/rgw-bucket-list.component';
 import { RgwConfigModalComponent } from './rgw-config-modal/rgw-config-modal.component';
@@ -86,7 +85,8 @@ import {
   IconService,
   LayoutModule,
   SkeletonModule,
-  TilesModule
+  TilesModule,
+  ContentSwitcherModule
 } from 'carbon-components-angular';
 import EditIcon from '@carbon/icons/es/edit/16';
 import ScalesIcon from '@carbon/icons/es/scales/20';
@@ -129,6 +129,10 @@ import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notifi
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { RgwAccountRolesListComponent } from './rgw-account-roles-list/rgw-account-roles-list.component';
 import { RgwAccountRoleFormComponent } from './rgw-account-role-form/rgw-account-role-form.component';
+import { RgwBucketResourceSidebarComponent } from './rgw-bucket-resource-sidebar/rgw-bucket-resource-sidebar.component';
+import { RgwBucketResourcePageComponent } from './rgw-bucket-resource-page/rgw-bucket-resource-page.component';
+import { RgwBucketResourceBreadcrumbResolver } from './rgw-bucket-resource-page/rgw-bucket-resource-breadcrumb.resolver';
+import { RgwBucketTagsTableComponent } from './rgw-bucket-tags-table/rgw-bucket-tags-table.component';
 
 @NgModule({
   imports: [
@@ -172,13 +176,13 @@ import { RgwAccountRoleFormComponent } from './rgw-account-role-form/rgw-account
     ProductiveCardComponent,
     TimePickerComponent,
     AreaChartComponent,
-    ComponentsModule
+    ComponentsModule,
+    ContentSwitcherModule
   ],
   exports: [
     RgwDaemonDetailsComponent,
     RgwBucketFormComponent,
     RgwBucketListComponent,
-    RgwBucketDetailsComponent,
     RgwUserListComponent,
     RgwUserDetailsComponent,
     RgwStorageClassListComponent
@@ -189,7 +193,6 @@ import { RgwAccountRoleFormComponent } from './rgw-account-role-form/rgw-account
     RgwDaemonDetailsComponent,
     RgwBucketFormComponent,
     RgwBucketListComponent,
-    RgwBucketDetailsComponent,
     RgwUserListComponent,
     RgwUserDetailsComponent,
     RgwUserFormComponent,
@@ -241,7 +244,10 @@ import { RgwAccountRoleFormComponent } from './rgw-account-role-form/rgw-account
     RgwBucketNotificationListComponent,
     RgwNotificationFormComponent,
     RgwAccountRolesListComponent,
-    RgwAccountRoleFormComponent
+    RgwAccountRoleFormComponent,
+    RgwBucketResourceSidebarComponent,
+    RgwBucketResourcePageComponent,
+    RgwBucketTagsTableComponent
   ],
   providers: [TitleCasePipe]
 })
@@ -333,6 +339,34 @@ const routes: Routes = [
     data: { breadcrumbs: 'Buckets' },
     children: [
       { path: '', component: RgwBucketListComponent },
+      {
+        path: ':bid/:owner',
+        component: RgwBucketResourceSidebarComponent,
+        data: { breadcrumbs: RgwBucketResourceBreadcrumbResolver },
+        children: [
+          { path: '', redirectTo: 'configuration', pathMatch: 'full' },
+          {
+            path: 'configuration',
+            component: RgwBucketResourcePageComponent,
+            data: { breadcrumbs: 'Configuration', section: 'configuration' }
+          },
+          {
+            path: 'permissions',
+            component: RgwBucketResourcePageComponent,
+            data: { breadcrumbs: 'Permissions', section: 'permissions' }
+          },
+          {
+            path: 'data-management',
+            component: RgwBucketResourcePageComponent,
+            data: { breadcrumbs: 'Data management', section: 'data-management' }
+          },
+          {
+            path: 'notifications',
+            component: RgwBucketResourcePageComponent,
+            data: { breadcrumbs: 'Notifications', section: 'notifications' }
+          }
+        ]
+      },
       {
         path: URLVerbs.CREATE,
         component: RgwBucketFormComponent,

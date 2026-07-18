@@ -12,11 +12,6 @@
 
 .cd-overview-grid {
   row-gap: layout.$spacing-05;
-  column-gap: layout.$spacing-05;
-}
-
-.cd-overview-heading {
-  padding-inline-start: layout.$spacing-06;
 }
 
 .cd-overview-item {
@@ -58,4 +53,8 @@
 
 .cd-status-text--info {
   color: var(--cds-support-info);
+}
+
+.cd-overview-grid.cds--css-grid {
+  padding-inline: 0;
 }

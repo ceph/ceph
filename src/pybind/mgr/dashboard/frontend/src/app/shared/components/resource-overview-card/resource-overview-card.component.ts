@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, ViewEncapsulation } from '@angular/core';
 
 export type OverviewValue = string | number | boolean | null | undefined;
 
@@ -21,6 +21,7 @@ export interface OverviewField {
   selector: 'cd-resource-overview-card',
   templateUrl: './resource-overview-card.component.html',
   styleUrls: ['./resource-overview-card.component.scss'],
+  encapsulation: ViewEncapsulation.None,
   standalone: false
 })
 export class OverviewComponent {

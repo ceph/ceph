@@ -1,4 +1,7 @@
-<legend i18n>
+<legend
+  i18n
+  *ngIf="showHeading"
+>
   Tiering Configuration
   <cd-help-text>
     Configure a bucket tiering rule to automatically transition objects between storage classes
