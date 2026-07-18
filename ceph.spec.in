@@ -1846,6 +1846,7 @@ cmake .. \
     -DWITH_JAEGER:BOOL=OFF \
 %endif
     -DWITH_GRAFANA:BOOL=ON \
+    -DWITH_MOLD=AUTO \
 %if %{with sccache}
     -DWITH_SCCACHE=ON \
 %endif
