@@ -1113,6 +1113,11 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
 	       << pending_map.created_gws[group_key][gw_id].availability
 	       << dendl;
       if (pending_map.created_gws[group_key][gw_id].availability ==
+          gw_availability_t::GW_UNAVAILABLE) {
+        pending_map.created_gws[group_key][gw_id].availability =
+          gw_availability_t::GW_CREATED; // prevent sending empty map to this GW after restart
+      }
+      if (pending_map.created_gws[group_key][gw_id].availability ==
 	  gw_availability_t::GW_AVAILABLE) {
 	dout(1) << " Warning :GW marked as Available in the NVmeofGwMon "
 		<< "database, performed full startup - Apply it but don't allow failover!"
@@ -1146,11 +1151,9 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
 	   false) &&
 	  (avail == gw_availability_t::GW_AVAILABLE ||
 	   avail == gw_availability_t::GW_UNAVAILABLE )) {
-	ack_map.created_gws[group_key][gw_id] =
-	  pending_map.created_gws[group_key][gw_id];
 	ack_map.epoch = get_ack_map_epoch(true, group_key);
-	dout(1) << " Force gw to exit: first beacon in state " << avail
-		<< " GW " << gw_id << dendl;
+	dout(1) << "Send empty map. Force gw to exit: first beacon in state "
+		<< avail << " GW " << gw_id << dendl;
 	auto msg = make_message<MNVMeofGwMap>(ack_map);
 	mon.send_reply(op, msg.detach());
 	goto false_return;
