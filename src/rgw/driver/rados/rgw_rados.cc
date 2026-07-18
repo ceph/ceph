@@ -38,6 +38,7 @@
 #include "rgw_cr_rest.h"
 #include "rgw_crypt.h"
 #include "rgw_datalog.h"
+#include "rgw_op.h"
 #include "rgw_putobj_processor.h"
 #include "rgw_lc_tier.h"
 #include "rgw_restore.h"
@@ -4002,6 +4003,8 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, c
   attrset.erase(RGW_ATTR_ID_TAG);
   attrset.erase(RGW_ATTR_TAIL_TAG);
   attrset.erase(RGW_ATTR_STORAGE_CLASS);
+  attrset.erase(RGW_ATTR_SHARE_MANIFEST);
+  attrset.erase(RGW_ATTR_BLAKE3);
 
   ACLOwner owner;
   if (auto i = attrset.find(RGW_ATTR_ACL); i != attrset.end()) {
@@ -4893,6 +4896,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   if (!keep_tags) {
     attrs.erase(RGW_ATTR_TAGS);
   }
+  attrs.erase(RGW_ATTR_SHARE_MANIFEST);
+  attrs.erase(RGW_ATTR_BLAKE3);
 
   if (copy_if_newer) {
     uint64_t pg_ver = 0;
@@ -5303,6 +5308,8 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
 
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
     attrs.erase(RGW_ATTR_TAIL_TAG);
+    attrs.erase(RGW_ATTR_SHARE_MANIFEST);
+    attrs.erase(RGW_ATTR_BLAKE3);
     // Data is rewritten as a single stream; drop stale multipart boundaries
     attrs.erase(RGW_ATTR_CRYPT_PARTS);
     attrs.erase(RGW_ATTR_CRYPT_PART_NUMS);
@@ -5344,6 +5351,8 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
   if (!copy_itself) {
     aio = rgw::make_throttle(cct->_conf->rgw_max_copy_obj_concurrent_io, y);
     attrs.erase(RGW_ATTR_TAIL_TAG);
+    attrs.erase(RGW_ATTR_SHARE_MANIFEST);
+    attrs.erase(RGW_ATTR_BLAKE3);
     manifest = *amanifest;
     const rgw_bucket_placement& tail_placement = manifest.get_tail_placement();
     if (tail_placement.bucket.name.empty()) {
@@ -5558,6 +5567,10 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                                 : (src_accounted_size ? src_accounted_size : ofs);
   }
 
+  if (dp_factory) {
+    accounted_size = dp_factory->get_accounted_size(accounted_size);
+  }
+
   const req_context rctx{dpp, y, nullptr};
   return aoproc.complete(accounted_size, etag, mtime, set_mtime, attrs,
 			    rgw::cksum::no_cksum, delete_at,
@@ -5593,6 +5606,68 @@ int fixup_manifest_to_parts_len(const DoutPrefixProvider *dpp, rgw::sal::Attrs &
 
   return 0;
 }
+
+/*
+ * DataProcessorFactory for lifecycle transitions.
+ *
+ * Thin subclass of RGWRecompressDPF that supplies a pre-fetched
+ * decrypt key and zone compression config. The encrypt key is
+ * built fresh at set_writer() time so AEAD modes get a new salt
+ * (avoids GCM nonce reuse on re-encrypted plaintext).
+ */
+class RGWTransitionDPF : public RGWRecompressDPF {
+  RGWObjectCtx& obj_ctx;
+  rgw_obj& obj;
+  std::string dest_compression;
+  bool compress_encrypted_enabled;
+
+  /* pre-fetched by transition_obj() and passed to constructor */
+  std::unique_ptr<BlockCrypt> prefetched_decrypt;
+
+protected:
+  int get_decrypt_crypt(const DoutPrefixProvider* dpp,
+                        optional_yield y,
+                        const rgw::sal::Attrs& src_attrs,
+                        std::unique_ptr<BlockCrypt>* crypt) override
+  {
+    *crypt = std::move(prefetched_decrypt);
+    return 0;
+  }
+
+  int get_encrypt_crypt(const DoutPrefixProvider* dpp,
+                        optional_yield y,
+                        rgw::sal::Attrs& dest_attrs,
+                        std::unique_ptr<BlockCrypt>* crypt) override
+  {
+    return rgw_prepare_reencrypt_object(dpp, cct, dest_attrs,
+                                        obj.bucket.bucket_id,
+                                        obj.key.name, y, crypt);
+  }
+
+  const std::string& get_dest_compression() override { return dest_compression; }
+
+  bool supports_compress_encrypted() override {
+    return compress_encrypted_enabled;
+  }
+
+  void mark_compressed() override { obj_ctx.set_compressed(obj); }
+
+public:
+  RGWTransitionDPF(CephContext* cct_,
+                   uint64_t& obj_size,
+                   const rgw::sal::Attrs& src_attrs,
+                   RGWObjectCtx& obj_ctx_,
+                   rgw_obj& obj_,
+                   const std::string& dest_compression_,
+                   bool compress_encrypted,
+                   std::unique_ptr<BlockCrypt> decrypt)
+    : RGWRecompressDPF(cct_, obj_size, src_attrs),
+      obj_ctx(obj_ctx_), obj(obj_),
+      dest_compression(dest_compression_),
+      compress_encrypted_enabled(compress_encrypted),
+      prefetched_decrypt(std::move(decrypt))
+  {}
+};
 
 int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
                              RGWBucketInfo& bucket_info,
@@ -5639,10 +5714,114 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
   }
   attrs.erase(RGW_ATTR_ID_TAG);
   attrs.erase(RGW_ATTR_TAIL_TAG);
+  attrs.erase(RGW_ATTR_SHARE_MANIFEST);
+  attrs.erase(RGW_ATTR_BLAKE3);
 
   ACLOwner owner;
   if (auto i = attrs.find(RGW_ATTR_ACL); i != attrs.end()) {
     (void) decode_policy(dpp, i->second, &owner);
+  }
+
+  rgw::sal::DataProcessorFactory* dp_factory = nullptr;
+  std::optional<RGWTransitionDPF> transition_dpf;
+
+  const auto& compression_type =
+      svc.zone->get_zone_params().get_compression_type(placement_rule);
+
+  bool src_compressed = false;
+  RGWCompressionInfo cs_info;
+  ret = rgw_compression_info_from_attrset(attrs, src_compressed, cs_info);
+  if (ret < 0)
+    return ret;
+
+  /*
+   * Determine the effective destination compression. If the source
+   * is encrypted and the zonegroup doesn't support compress_encrypted,
+   * force "none" to avoid incompatible layouts.
+   */
+  std::string dest_compression = compression_type;
+  bool is_encrypted = attrs.count(RGW_ATTR_CRYPT_MODE);
+  if (is_encrypted &&
+      !svc.zone->get_zonegroup().supports(
+          rgw::zone_features::compress_encrypted)) {
+    dest_compression = "none";
+  }
+
+  /*
+   * Skip when the source already matches the destination config.
+   * "random" never matches because the stored codec is concrete
+   * (e.g. "zlib") while the config string stays "random".
+   */
+  bool already_matches =
+      dest_compression != "random" &&
+      ((!src_compressed && dest_compression == "none") ||
+       (src_compressed && cs_info.compression_type == dest_compression));
+
+  bool need_recompress = !already_matches;
+
+  /*
+   * Retrieve the decryption key when the source is encrypted
+   * and compression needs to change. The re-encryption path will
+   * fetch the same key again from the backend (after regenerating
+   * the GCM salt for AEAD modes) — a second KMS/SSE-S3 round-trip
+   * per transitioned object.
+   */
+  std::unique_ptr<BlockCrypt> decrypt_crypt;
+
+  if (obj_size == 0) {
+    ldpp_dout(dpp, 20) << __func__ << " " << obj
+        << " is empty, skipping recompression" << dendl;
+    need_recompress = false;
+  }
+
+  if (need_recompress && is_encrypted) {
+    ret = rgw_prepare_decrypt_object(
+        dpp, cct, attrs,
+        bucket_info.bucket.bucket_id, obj.key.name,
+        y, &decrypt_crypt);
+    if (ret == -ENOTSUP) {
+      ldpp_dout(dpp, 10) << __func__ << " cannot decrypt "
+          << obj << ", copying as-is" << dendl;
+    } else if (ret < 0) {
+      return ret;
+    }
+
+    if (!decrypt_crypt) {
+      if (src_compressed && !svc.zone->get_zonegroup().supports(
+              rgw::zone_features::compress_encrypted)) {
+        ldpp_dout(dpp, 0) << "ERROR: " << obj
+            << " is encrypted+compressed but cannot decrypt;"
+            " refusing to copy incompatible layout when"
+            " compress_encrypted is disabled" << dendl;
+        return -ENOTSUP;
+      }
+      ldpp_dout(dpp, 10) << __func__ << " " << obj
+          << " encrypted but cannot decrypt, copying as-is" << dendl;
+      need_recompress = false;
+    } else {
+      ldpp_dout(dpp, 10) << __func__ << " re-encrypting "
+          << obj << " for recompression" << dendl;
+    }
+  }
+
+  bool compress_encrypted = svc.zone->get_zonegroup().supports(
+      rgw::zone_features::compress_encrypted);
+
+  if (need_recompress) {
+    transition_dpf.emplace(cct, obj_size, attrs,
+                           obj_ctx, obj,
+                           dest_compression,
+                           compress_encrypted,
+                           std::move(decrypt_crypt));
+    dp_factory = &*transition_dpf;
+  } else if (!is_encrypted) {
+    ldpp_dout(dpp, 20) << __func__
+        << " compression already matches dest config ("
+        << dest_compression << "), skipping" << dendl;
+  } else {
+    ldpp_dout(dpp, 20) << __func__
+        << " encrypted, compression already matches, copying as-is"
+        << dendl;
   }
 
   ret = copy_obj_data(obj_ctx,
@@ -5658,7 +5837,7 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
                       olh_epoch,
                       real_time(),
                       nullptr /* petag */,
-                      nullptr, /* dp_factory */
+                      dp_factory,
                       dpp,
                       y,
                       0, /* src_accounted_size: unknown here, keep ofs-based size */

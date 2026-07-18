@@ -313,11 +313,11 @@ template <typename AssocT = boost::container::flat_map<std::string, std::string>
 auto tier_generator(ceph::libfdb::database_handle dbh, ceph::libfdb::select selector)
 -> std::generator<AssocT>
 {
- auto split_points = locate_split_points(dbh, selector);
+ auto split_ranges = plan_split_ranges(dbh, selector);
 
  const unsigned local_max_block = 2*2024; // vis-a-vis remote request max
 
- std::transform_reduce(std::begin(split_points), std::end(split_points),
+ std::transform_reduce(std::begin(split_ranges), std::end(split_ranges),
                       AssocT(),
 
                       [](auto&& lhs, auto&& rhs) {
@@ -339,8 +339,18 @@ auto tier_generator(ceph::libfdb::database_handle dbh, ceph::libfdb::select sele
 
 } // namespace ceph::libfdb
 
+struct ordered_block final : std::vector<std::pair<std::string, std::string>>
+{
+  using std::vector<std::pair<std::string, std::string>>::vector;
 
-TEST_CASE("generators", "[fdb][rgw]") {
+  void emplace(std::pair<std::string, std::string>&& value)
+  {
+    emplace_back(std::move(value));
+  }
+};
+
+
+TEST_CASE("block_generator", "[fdb][rgw]") {
 
 /* This is a generator for large queries that are pretty much expected to 
 exceed the FoundationDB five-second transaction limit: */
@@ -351,7 +361,7 @@ exceed the FoundationDB five-second transaction limit: */
  
     populate_monotonic(j, nkeys);
 
-    SECTION("retrieve all") {
+    SECTION("forward") {
       auto selector = lfdb::select { "key_" };
 
       size_t total = 0;
@@ -359,12 +369,38 @@ exceed the FoundationDB five-second transaction limit: */
         total += block.size();
       }
 
+      CAPTURE(nkeys);
+      CAPTURE(total);
       CHECK(nkeys == total);
+    }
+
+    SECTION("reverse") {
+      auto selector = lfdb::select { "key_" };
+      selector.options.reverse_order = true;
+
+      std::vector<std::pair<std::string, std::string>> out;
+
+      for(const auto& block : lfdb::block_generator<ordered_block>(j, selector)) {
+        std::ranges::copy(block, std::back_inserter(out));
+      }
+
+      CAPTURE(nkeys);
+      CAPTURE(out.size());
+      REQUIRE(nkeys == out.size());
+
+      if(0 < nkeys) {
+        CAPTURE(out.front().first);
+        CAPTURE(out.back().first);
+        CHECK(make_key(nkeys - 1) == out.front().first);
+        CHECK(make_key(0) == out.back().first);
+        CHECK(std::ranges::is_sorted(out, std::ranges::greater {},
+                                     &std::pair<std::string, std::string>::first));
+      }
     }
   }
 }
 
-TEST_CASE("generators", "[benchmark]") {
+TEST_CASE("generators", "[.benchmark][benchmark]") {
    const size_t nkeys = GENERATE(0, 1, 1'000); // 5'000, 10'000, 50'000, 250'000, 1'000'000);
 
    fmt::println("generator benchmark, nkeys = {}", nkeys);
@@ -388,10 +424,150 @@ TEST_CASE("generators", "[benchmark]") {
   };
 }
 
+TEST_CASE("read path benchmarks", "[.benchmark][benchmark]") {
+  const size_t nkeys = GENERATE(0, 1, 100, 1'000, 10'000); // 250'000, 500'000, 1'000'000
+
+  fmt::println("read path benchmark, nkeys = {}", nkeys);
+
+  // Set up bulk data for all of the different test reads.
+  janitor dbh;
+  populate_monotonic(dbh, nkeys);
+
+  const auto selector = lfdb::select { "key_" };
+
+  // Track enough work to prevent the benchmarked reads from being optimized away:
+  struct {
+    size_t total = 0;
+    size_t bytes = 0;
+    bool ok = true;
+    std::string error;
+
+    void reset()
+    {
+      total = 0;
+      bytes = 0;
+      ok = true;
+      error.clear();
+    }
+
+    void add(std::string_view value)
+    {
+      ++total;
+      bytes += value.size();
+    }
+
+  } read_tally;
+
+  auto mark_failure = [&read_tally](const std::exception& e) {
+    read_tally.ok = false;
+    read_tally.error = e.what();
+  };
+
+  auto add_kv = [&read_tally](const auto& kv) {
+    read_tally.add(kv.second);
+  };
+
+  auto key_indices = [nkeys] {
+    return std::views::iota(0u, static_cast<unsigned>(nkeys));
+  };
+
+  auto expected_bytes = [&] {
+    size_t bytes = 0;
+
+    std::ranges::for_each(key_indices(), [&bytes](const auto n) {
+      bytes += make_value(n).size();
+    });
+
+    return bytes;
+  }();
+
+  auto require_expected = [nkeys, expected_bytes](const auto& tally) {
+    if(not tally.ok) {
+      WARN(tally.error);
+      return;
+    }
+
+    REQUIRE(nkeys == tally.total);
+    REQUIRE(expected_bytes == tally.bytes);
+  };
+
+  BENCHMARK_ADVANCED("single-key get, one shared transaction")(Catch::Benchmark::Chronometer meter) {
+    meter.measure([&] {
+      read_tally.reset();
+
+      try {
+        auto txn = lfdb::make_transaction(dbh);
+
+        for(const auto n : key_indices()) {
+          std::string out;
+
+          if (lfdb::get(txn, make_key(n), out, lfdb::commit_after_op::no_commit)) {
+            read_tally.add(out);
+          }
+        }
+      } catch(const ceph::libfdb::libfdb_exception& e) {
+        mark_failure(e);
+      }
+    });
+
+    require_expected(read_tally);
+  };
+
+  BENCHMARK_ADVANCED("single-key get, implicit transaction per key")(Catch::Benchmark::Chronometer meter) {
+    meter.measure([&] {
+      read_tally.reset();
+
+      try {
+        for(const auto n : key_indices()) {
+          std::string out;
+
+          if (lfdb::get(dbh, make_key(n), out)) {
+            read_tally.add(out);
+          }
+        }
+      } catch(const ceph::libfdb::libfdb_exception& e) {
+        mark_failure(e);
+      }
+    });
+
+    require_expected(read_tally);
+  };
+
+  BENCHMARK_ADVANCED("pair generator read all")(Catch::Benchmark::Chronometer meter) {
+    meter.measure([&] {
+      read_tally.reset();
+
+      try {
+        std::ranges::for_each(lfdb::pair_generator(dbh, selector), add_kv);
+      } catch(const ceph::libfdb::libfdb_exception& e) {
+        mark_failure(e);
+      }
+    });
+
+    require_expected(read_tally);
+  };
+
+  BENCHMARK_ADVANCED("block generator read all")(Catch::Benchmark::Chronometer meter) {
+    meter.measure([&] {
+      read_tally.reset();
+
+      try {
+        std::ranges::for_each(lfdb::block_generator(dbh, selector), [&](const auto& block) {
+          std::ranges::for_each(block, add_kv);
+        });
+      } catch(const ceph::libfdb::libfdb_exception& e) {
+        mark_failure(e);
+      }
+    });
+
+    require_expected(read_tally);
+  };
+}
+
 // Note that these are disabled for regular test runs. Use
 //      unittest_fdb_ceph "simple benchmarks"
 // ...to run:
-TEST_CASE("simple benchmarks", "[benchmark]") {
+TEST_CASE("simple benchmarks", "[.benchmark][benchmark]") {
 
 using namespace std::ranges;
 using std::for_each;

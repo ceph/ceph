@@ -1523,6 +1523,66 @@ TEST(TestRGWCrypto, verify_PartLocation_no_manifest)
 }
 
 
+/*
+ * Verify the encrypt → decrypt filter pipeline produces
+ * identical plaintext. Full helper create() tests require
+ * SAL mocks and are deferred to integration testing.
+ */
+TEST(TestRGWCrypto, verify_transition_encrypt_decrypt_roundtrip)
+{
+  const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
+
+  // test both block-aligned and non-aligned sizes
+  for (size_t test_size : {8192, 7777}) {
+    uint8_t key[32];
+    for (size_t i = 0; i < sizeof(key); i++)
+      key[i] = i * 3 + 7;
+
+    std::vector<uint8_t> plaintext(test_size);
+    for (size_t i = 0; i < test_size; i++)
+      plaintext[i] = (i * 7 + 13) & 0xff;
+
+    // encrypt
+    ut_put_sink put_sink;
+    {
+      auto cbc = AES_256_CBC_create(&no_dpp, g_ceph_context, key, 32);
+      ASSERT_NE(cbc.get(), nullptr);
+      RGWPutObj_BlockEncrypt encrypt(&no_dpp, g_ceph_context, &put_sink,
+                                     std::move(cbc), null_yield);
+      bufferlist bl;
+      bl.append((char*)plaintext.data(), test_size);
+      ASSERT_EQ(encrypt.process(std::move(bl), 0), 0);
+      ASSERT_EQ(encrypt.process({}, test_size), 0);
+    }
+    std::string ciphertext = put_sink.get_sink();
+
+    // decrypt with a different key instance (same bytes)
+    ut_get_sink get_sink;
+    {
+      auto cbc = AES_256_CBC_create(&no_dpp, g_ceph_context, key, 32);
+      ASSERT_NE(cbc.get(), nullptr);
+      RGWGetObj_Filter* filter = &get_sink;
+      RGWGetObj_BlockDecrypt decrypt(&no_dpp, g_ceph_context, filter,
+                                     std::move(cbc),
+                                     std::vector<size_t>{}, null_yield);
+      filter = &decrypt;
+
+      off_t ofs = 0;
+      off_t end = test_size - 1;
+      filter->fixup_range(ofs, end);
+
+      bufferlist enc_bl;
+      enc_bl.append(ciphertext.data(), ciphertext.size());
+      ASSERT_EQ(filter->handle_data(enc_bl, ofs, enc_bl.length()), 0);
+      ASSERT_EQ(filter->flush(), 0);
+    }
+
+    std::string result = get_sink.get_sink();
+    ASSERT_EQ(result.size(), test_size);
+    ASSERT_EQ(memcmp(result.data(), plaintext.data(), test_size), 0);
+  }
+}
+
 int main(int argc, char **argv) {
   auto args = argv_to_vec(argc, argv);
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
