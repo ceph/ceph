@@ -361,7 +361,7 @@ def set_dmcrypt_key(osd_id: str,
         if 'access denied' in error.lower() or 'permission denied' in error.lower():
             msg += (f'. The entity {name} lacks "config-key set" caps on this key. '
                     'Pass a sufficiently privileged --name/--keyring, or use the '
-                    'two-phase flow (--no-cleanup / --cleanup-only) and store the '
+                    'two-phase flow (--key-store external) and store the '
                     'key with a privileged client instead.')
         raise RuntimeError(msg)
 
