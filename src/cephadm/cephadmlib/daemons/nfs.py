@@ -57,7 +57,7 @@ class NFSGanesha(ContainerDaemonForm):
         self.image = image
 
         # config-json options
-        self.pool = dict_get(config_json, 'pool', require=True)
+        self.pool = dict_get(config_json, 'pool')
         self.namespace = dict_get(config_json, 'namespace')
         self.userid = dict_get(config_json, 'userid')
         self.extra_args = dict_get(config_json, 'extra_args', [])
@@ -166,20 +166,28 @@ class NFSGanesha(ContainerDaemonForm):
         if not self.image:
             raise Error('invalid image: %s' % self.image)
 
-        # check for the required files
-        if self.required_files:
-            for fname in self.required_files:
-                if fname not in self.files:
-                    raise Error(
-                        'required file missing from config-json: %s' % fname
-                    )
-
         # check for an RGW config
         if self.rgw:
             if not self.rgw.get('keyring'):
                 raise Error('RGW keyring is missing')
             if not self.rgw.get('user'):
                 raise Error('RGW user is missing')
+
+    def validate_deployment_config(self):
+        # type: () -> None
+        """Validate the config-json fields required to deploy the daemon.
+
+        These are checked separately from validate() because an NFSGanesha
+        object is also built without any config-json, e.g. when
+        `cephadm shell --name nfs.<id>` only needs the container mounts.
+        """
+        if not self.pool:
+            raise Error('pool missing from config-json')
+        for fname in self.required_files:
+            if fname not in self.files:
+                raise Error(
+                    'required file missing from config-json: %s' % fname
+                )
 
     def get_daemon_name(self):
         # type: () -> str
@@ -237,6 +245,8 @@ set -e
         """Create files under the container data dir"""
         if not os.path.isdir(data_dir):
             raise OSError('data_dir is not a directory: %s' % (data_dir))
+
+        self.validate_deployment_config()
 
         logger.info('Creating ganesha config...')
 
