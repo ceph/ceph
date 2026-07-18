@@ -1047,6 +1047,10 @@ void PeeringState::clear_primary_state()
 
   clear_recovery_state();
 
+  rebuild_start_time = utime_t();
+  rebuild_base_recovered = 0;
+  rebuild_had_redundancy_loss = false;
+
   pg_committed_to = eversion_t();
   missing_loc.clear();
   pl->clear_primary_state();
@@ -4409,6 +4413,95 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
       info.stats.last_undegraded = now;
     if ((info.stats.state & PG_STATE_UNDERSIZED) == 0)
       info.stats.last_fullsized = now;
+
+    /**
+     * The following block is an interim solution to aggregate PG rebuild stats
+     * into a set of perf counters. The counterss are set based on the following
+     * existing pg_stat_t fields:
+     *  - last_clean, last_change
+     *  - num_objects_degraded, num_objects_misplaced, num_objects_recovered
+     *
+     * The PG rebuild stats are aggregated into the following recoverystate
+     * perf counters:
+     *  - rs_pg_rebuild_duration: rebuild duration LONGRUNAVG time counter
+     *  - rs_pg_rebuild_max_secs: maximum rebuild duration (secs)
+     *  - rs_pg_rebuild_min_secs: minimum rebuild duration (secs)
+     *
+     * Workflow:
+     *  1. Only the acting primary OSD of the PG executes the logic to
+     *     determine the rebuild stats.
+     *  2. The logic uses rebuild_start_time as a per-PG in-memory latch that
+     *     captures the failure entry point. When a PG is considered vulnerable,
+     *     rebuild_start_time latches info.stats.last_change as the start time,
+     *     provided last_change > last_clean, which ensures only genuine new
+     *     failures after the prior clean interval are tracked.
+     *  3. On recovery, the rebuild duration is computed as
+     *     (now - rebuild_start_time) and is only recorded if delta
+     *     num_objects_recovered > 0 or the PG had confirmed redundancy loss
+     *     at latch time, filtering out spurious state transitions. The latch
+     *     is cleared after each recorded event.
+     *
+     * last_degraded is intentionally not used in the interim solution to
+     * retain compatibility with older Ceph releases where this field doesn't
+     * exist and requires encoding changes. The interim solution is a
+     * close approximation of the PG rebuild time.
+     *
+     * A future simplification can replace the latch with a direct
+     * (last_clean - last_degraded) calculation once last_degraded is
+     * consistently available.
+     */
+    if (is_primary()) {
+      const int64_t num_degraded  = info.stats.stats.sum.num_objects_degraded;
+      const int64_t num_misplaced = info.stats.stats.sum.num_objects_misplaced;
+      const int64_t num_recovered = info.stats.stats.sum.num_objects_recovered;
+      const bool is_vulnerable =
+        (info.stats.state & (PG_STATE_DEGRADED | PG_STATE_UNDERSIZED)) ||
+        num_degraded > 0 || num_misplaced > 0;
+
+      if (is_vulnerable) {
+        // Latch the failure entry point on the first publish after a new
+        // failure; last_change captures when the state transition occurred.
+        if (rebuild_start_time == utime_t()) {
+          const bool new_failure =
+            info.stats.last_clean == utime_t() ||
+            info.stats.last_change > info.stats.last_clean;
+          if (new_failure) {
+            rebuild_start_time = info.stats.last_change;
+            rebuild_base_recovered = num_recovered;
+            rebuild_had_redundancy_loss =
+              (num_degraded > 0 || num_misplaced > 0);
+            psdout(15) << "rebuild-stats: latched failure start for "
+                       << info.pgid << " at " << rebuild_start_time << dendl;
+          }
+        }
+      } else if (rebuild_start_time != utime_t()) {
+        // PG recovered — record rebuild time if this was a genuine event.
+        const int64_t delta_recovered = num_recovered - rebuild_base_recovered;
+        const utime_t rebuild_dur  = now - rebuild_start_time;
+
+        if (rebuild_dur.to_msec() > 0 &&
+            (delta_recovered > 0 || rebuild_had_redundancy_loss)) {
+          PerfCounters &perf = pl->get_peering_perf();
+          perf.tinc(rs_pg_rebuild_duration, rebuild_dur);
+
+          const uint64_t rebuild_secs = (uint64_t)rebuild_dur.sec();
+          if (rebuild_secs > perf.get(rs_pg_rebuild_max_secs)) {
+            perf.set(rs_pg_rebuild_max_secs, rebuild_secs);
+          }
+          const uint64_t cur_min = perf.get(rs_pg_rebuild_min_secs);
+          if (cur_min == 0 || rebuild_secs < cur_min) {
+            perf.set(rs_pg_rebuild_min_secs, rebuild_secs);
+          }
+          psdout(15) << "rebuild-stats: recorded rebuild for " << info.pgid
+                     << " duration=" << rebuild_dur
+                     << " delta_recovered=" << delta_recovered << dendl;
+        }
+        // reset for the next event
+        rebuild_start_time = utime_t();
+        rebuild_base_recovered = 0;
+        rebuild_had_redundancy_loss = false;
+      }
+    }
 
     psdout(15) << "publish_stats_to_osd " << pre_publish.reported_epoch
 	       << ":" << pre_publish.reported_seq << dendl;
