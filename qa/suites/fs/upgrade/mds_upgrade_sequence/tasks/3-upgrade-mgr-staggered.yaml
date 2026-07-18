@@ -3,6 +3,7 @@ teuthology:
             if not yaml.teuthology.variables.fail_fs then reject() end
 upgrade-tasks:
   sequential:
+    - sequential: [ignore-auth-warn-cephadm]
     - cephadm.shell:
         env: [sha1]
         host.a:

@@ -18,6 +18,7 @@ overrides:
 
 tasks:
 - print: "*** upgrading, no cephfs present"
+- sequential: [ignore-auth-warn-pkg]
 - exec:
     mon.a:
     - ceph fs dump

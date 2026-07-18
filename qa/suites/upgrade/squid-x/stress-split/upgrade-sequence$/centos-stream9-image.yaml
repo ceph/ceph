@@ -1,4 +1,3 @@
-
 first-half-sequence:
 - cephadm.shell:
     env: [sha1]
