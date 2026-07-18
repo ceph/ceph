@@ -140,6 +140,33 @@ class TestBaseObjectStore:
                           '--setuser', 'ceph',
                           '--setgroup', 'ceph']
 
+    @patch('ceph_volume.conf.cluster', 'ceph')
+    def test_build_osd_mkfs_cmd_fcm_crush_device_class_sets_keepcaps(self, factory):
+        bo = BaseObjectStore(factory(crush_device_class='fcm'))
+        bo.osd_path = '/var/lib/ceph/osd/ceph-123/'
+        bo.osd_fsid = 'abcd-1234'
+        bo.objectstore = 'bluestore'
+        bo.osd_id = '123'
+        bo.monmap = '/etc/ceph/ceph.monmap'
+        bo.osd_type = 'classic'
+        result = bo.build_osd_mkfs_cmd()
+
+        assert result == ['ceph-osd',
+                          '--cluster',
+                          'ceph',
+                          '--osd-objectstore',
+                          'bluestore',
+                          '--mkfs', '-i', '123',
+                          '--monmap',
+                          '/etc/ceph/ceph.monmap',
+                          '--set-keepcaps', 'true',
+                          '--keyfile', '-',
+                          '--osd-data',
+                          '/var/lib/ceph/osd/ceph-123/',
+                          '--osd-uuid', 'abcd-1234',
+                          '--setuser', 'ceph',
+                          '--setgroup', 'ceph']
+
     def test_osd_mkfs_ok(self, monkeypatch, fake_call, objectstore):
         args = objectstore(dmcrypt=False)
         bo = BaseObjectStore(args)
