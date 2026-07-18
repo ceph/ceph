@@ -2433,6 +2433,30 @@ void ceph_free_snap_info_buffer(struct snap_info *snap_info);
 int ceph_get_perf_counters(struct ceph_mount_info *cmount, char **perf_dump);
 
 int ceph_fcopyfile(struct ceph_mount_info *cmount, const char *spath, const char *dpath, mode_t mode);
+
+/**
+ * Copy a range of data from one file to another, using server-side copy
+ * offload (CEPH_OSD_OP_COPY_FROM2) for efficient full-object copies,
+ * falling back to manual read/write for partial objects or when the OSD
+ * does not support copy-from2.
+ *
+ * Similar in semantics to the Linux copy_file_range(2) syscall.
+ *
+ * On success, *src_off and *dst_off are updated to the byte after the
+ * last byte copied.
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param src_fd source file descriptor (must be opened for reading).
+ * @param src_off pointer to source offset, updated on successful return.
+ * @param dst_fd destination file descriptor (must be opened for writing).
+ * @param dst_off pointer to destination offset, updated on successful return.
+ * @param len number of bytes to copy.
+ * @param flags copy flags (currently reserved, must be 0).
+ * @return number of bytes copied on success, or a negative error code on failure.
+ */
+int ceph_copy_file_range(struct ceph_mount_info *cmount, int src_fd, int64_t *src_off,
+                         int dst_fd, int64_t *dst_off, size_t len, unsigned int flags);
+
 #ifdef __cplusplus
 }
 #endif

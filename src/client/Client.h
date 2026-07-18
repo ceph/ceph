@@ -396,6 +396,10 @@ public:
 #endif
   int fcopyfile(const char *sname, const char *dname, UserPerm& perms, mode_t mode);
 
+  int copy_file_range(int src_fd, int64_t src_off,
+                      int dst_fd, int64_t dst_off,
+                      size_t len, unsigned int flags);
+
   int mds_command(
     const std::string &mds_spec,
     const std::vector<std::string>& cmd,
@@ -2328,6 +2332,7 @@ private:
 
   bool   mount_aborted = false;
   bool   blocklisted = false;
+  bool   have_copy_from2 = true;
 
   std::unordered_map<vinodeno_t, Inode*> inode_map;
   std::unordered_map<ino_t, vinodeno_t> faked_ino_map;
