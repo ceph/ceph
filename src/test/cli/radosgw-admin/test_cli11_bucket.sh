@@ -2196,7 +2196,8 @@ echo "=== '=' token normalization (empty '=' and short-flag '=') ==="
 
 # int flag: "" fails strict_strtol (legacy exits 22; CLI11 conversion error)
 check "empty-= on int flag" 104 "Could not convert" bucket list --max-entries=
-# uid/bucket-id: legacy empty-value special cases win (loop sees original args)
+# uid/bucket-id: rewritten to explicit "" values, then rejected by the CLI11-side
+# per-value empty checks (same message and exit code as legacy's special cases)
 check "empty-= on --uid"       1 "no value for uid"       bucket list --uid=
 check "empty-= on -i"          1 "no value for uid"       bucket list -i=
 check "empty-= on --bucket-id" 1 "no value for bucket-id" bucket stats --bucket-id=
@@ -2205,7 +2206,10 @@ check "empty-= mid-line strays next word" 22 "unexpected argument: 'foo'" \
   bucket list --bucket= foo
 # unknown flag: not rewritten (arity unknown), legacy rejects it
 check "empty-= on unknown flag" 22 "invalid flag --banana=" bucket list --banana=
-# glued short flag (no '='): not a rewrite case, legacy rejects it
+# glued short flag (i.e. -Xvalue, no '='): CLI11 accepts it as "-i banana"
+# (mentor decision: supported, and stays supported once legacy is gone); today
+# the transitional legacy loop still rejects the original token with its
+# unknown-flag error
 check "glued short flag rejected" 22 "invalid flag -ibanana" bucket list -ibanana
 # after a standalone "--" tokens are never rewritten (gdb-verified verbatim).
 # The 114 is a pre-existing CLI11 quirk: a KNOWN option token that ends the
@@ -2215,6 +2219,51 @@ check "glued short flag rejected" 22 "invalid flag -ibanana" bucket list -ibanan
 # Mid-line post-"--" tokens are inert (exit 0), known flags included.
 check "post--- token not rewritten" 114 "required TEXT missing" \
   bucket list --bucket demo -- --bucket=
+
+# ============================================================
+echo ""
+echo "=== empty-value checks (CLI11-side) and glued short flags ==="
+# ============================================================
+# Legacy's empty-value special cases for -i/--uid and --bucket-id run as
+# CLI11 per-value checks (same message and exit code; the legacy loop still
+# backstops lines CLI11 never sees). The '='-forms are covered above; these
+# are the space forms, where CLI11 consumes the empty token as the value.
+
+check "empty space-form -i"          1 "no value for uid"       bucket list -i ""
+check "empty space-form --uid"       1 "no value for uid"       bucket list --uid ""
+# uid emptiness is judged after tenant$user parsing, like legacy: an empty
+# user-id part rejects even when a tenant is present
+check "parse-empty uid: -i '\$'"     1 "no value for uid"       bucket list -i '$'
+check "parse-empty uid: -i 'tenant\$'" 1 "no value for uid"     bucket list -i 'tenant$'
+check "empty space-form --bucket-id" 1 "no value for bucket-id" bucket stats --bucket-id ""
+# the check rides every copy of the option: pre-command tokens are collected
+# by the hidden root/ancestor copies, not the leaf's
+check "empty --bucket-id before command (root copy)" 1 "no value for bucket-id" \
+  --bucket-id "" bucket stats
+check "empty --bucket-id mid-tree (bucket copy)"     1 "no value for bucket-id" \
+  bucket --bucket-id "" stats
+# the check runs per occurrence, like legacy's loop: an empty value errors
+# whether or not another occurrence supplies a valid one
+check "empty -i then valid -i" 1 "no value for uid" bucket list -i "" -i slides
+check "valid -i then empty -i" 1 "no value for uid" bucket list -i slides -i ""
+
+# glued short values (i.e. -Xvalue): CLI11 accepts them natively (mentor
+# decision: supported, and they keep working once legacy is gone); the
+# rejections below all come from the transitional legacy loop, which scans
+# the original tokens.
+# "-ibanana" above covers -i; -b and -o are the other CLI11-owned shorts
+# that take values
+check "glued short -b rejected" 22 "invalid flag -bdemo" bucket stats -bdemo
+check "glued short -o rejected" 22 "invalid flag -oxyz"  bucket object shard -oxyz
+# unknown short glued: same loop error (ownership makes no difference here)
+check "unknown glued short rejected" 22 "invalid flag -xfoo" bucket list -xfoo
+# left-to-right: the first glued token is the one reported by the loop's scan
+check "first glued token wins"  22 "invalid flag -ibanana" bucket list -ibanana -bdemo
+# flag position is what matters, not position relative to the command words
+check "glued short before command rejected" 22 "invalid flag -ibanana" -ibanana bucket list
+# help wins: CLI11 parses the glued token natively and help returns before
+# the legacy loop runs
+check "glued short + --cli11-help wins" 0 "" bucket list -ibanana --cli11-help
 
 # ============================================================
 echo ""
@@ -2240,6 +2289,11 @@ check_cluster "integration: bucket stats (all)"  0 "" -- \
 # bucket stats for a nonexistent bucket
 check_cluster "integration: bucket stats nonexistent" 2 "" -- \
   bucket stats --bucket nonexistent_cli11_test_xyz
+
+# a glued-short-looking token in value position is a value, never rejected
+# (both parsers consume it: it's a bucket named "-ibanana", which doesn't exist)
+check_cluster "integration: glued token in value position is a value" 2 "" -- \
+  bucket stats --bucket -ibanana
 
 # bucket check with no args runs index check — always succeeds (even with 0 buckets)
 check_cluster "integration: bucket check (all)"  0 "" -- \
