@@ -14,8 +14,8 @@ Bucket listing must enumerate it efficiently across potentially billions of obje
 
 In RGW, RADOS head objects serve this purpose. Every S3 object has a corresponding head object that holds its identity, attributes, and a manifest pointing to data chunks.
 
-For small objects, the data itself is inlined into the head object.
-For larger objects, multipart uploads, storage-class placement, versioning (OLH), POSIX, and cloud tiering — the head object acts as a pure metadata pointer, a redirection layer to data stored elsewhere.
+For small objects, the data itself is inlined into the head object.\
+For multipart uploads, storage-class placement, versioning (OLH), and cloud tiering — the head object acts as a pure metadata pointer, a redirection layer to data stored elsewhere.
 
 In effect, RGW is already using head objects as a de facto KV system, but implemented with full RADOS objects carrying all their associated overhead.
 
@@ -45,10 +45,12 @@ Object Lifecycle Head objects add complexity beyond the extra RADOS object itsel
 **3. Server-Side Copy and dedup.**
 Multiple S3 objects cannot share a head object.
 A server-side copy or deduplication must create a full independent head object even when the data is identical.
+- Data inlined in the head-object (up to 4MB) is duplicated and copied by server-side copy.
+- Dedup moves the inline data from the head object into a new tail-object to allow full data deduplication.
 
 **4. Key rename.**
-Renaming an S3 object requires copying the entire object and deleting the original — there is no in-place rename.
-Especially costly when applications like Apache rename entire directory trees.
+Renaming an S3 object requires copying the entire object and deleting the original — there is no in-place rename.\
+Especially costly when applications like Apache Spark/Hadoop rename entire directory trees.
 
 **5. Backend lock-in.**
 The storage tier must implement the full RADOS object model (xattrs, omap).
@@ -59,19 +61,17 @@ Every RADOS head object carries metadata (xattrs, omap) replicated across all K+
 - 6 copies in a 4+2 scheme.
 - 11 copies in 8+3.
 
-This far exceeds what metadata protection requires.
+This far exceeds what metadata protection requires.\
+Furthermore, Delete operations must remove rados objects on **all** K+M EC members.
 
 **7. Bucket listing.**
-Head objects scattered across RADOS cannot be listed efficiently.
+Head objects scattered across RADOS cannot be listed efficiently.\
 This is why the bucket-index exists as a separate structure — duplicating metadata to enable listing, at the cost of dual updates and consistency issues.
 
-**8. Head objects for POSIX.**
-The RGW-POSIX driver needs head objects for metadata — conceptually similar to KV entries, but implemented as expensive RADOS objects with additional cost on EC pools.
-
-**9. Storage-class placement.**
+**8. Storage-class placement.**
 When data is placed in a non-default storage class pool, the head object must still reside in the default pool — acting purely as a KV-style pointer at full RADOS object cost.
 
-**10. Delete overhead.**
+**9. Delete overhead.**
 Deleting an S3 object requires two non-atomic operations on separate systems:
 - Removing the bucket-index entry.
 - Deleting the head object:
@@ -86,6 +86,7 @@ See [Delete](#delete) for detailed analysis.
 
 **R1 — Decouple S3 Object Identity from Storage-Tier Naming.**
 S3 identity (bucket_id, object_name, version_id) lives exclusively in the KV key.
+
 The data store has no concept of S3 names — it stores opaque blobs addressed by `(blob_id, offset, length)`.
 Chunk pointers in the KV value are the sole link between S3 identity and physical storage.
 
@@ -98,13 +99,13 @@ The storage tier becomes a dumb blob store:
 Zero knowledge of S3 and/or RGW. RGW manages its own metadata in the KV store.
 
 **R3 — KV Semantics.**
-Each S3 object (bucket + name + version) maps to exactly one KV entry.
-A key with a live value means the object exists.
-Delete removes or invalidates the entry, making it immediately inaccessible.
+- Each S3 object (bucket + name + version) maps to exactly one KV entry in the S3 KV namespace.
+- A key with a live value means the object exists.
+- Delete removes or invalidates the entry, making it immediately inaccessible.
 
 **R4 — Bucket Listing.**
-KV range scans replace the bucket-index.
-Each entry returns listing attributes directly from the KV value — no data-tier access.
+- KV range scans replace the bucket-index.
+- Each entry returns listing attributes directly from the KV value — no data-tier access.
 
 **R5 — KV Value: Core Requirements.**
 The KV value must always contain:
@@ -126,8 +127,9 @@ The KV value must always contain:
 **R6 — Caching Delegated to KV Store.**
 No local RGW cache for object KV entries.
 The KV store's own distributed cache serves hot entries from memory.
+
 Local RGW caching is limited to:
-- Bucket metadata.
+- Metadata for Bucket/Realms/Zones/etc
 - Mapping tables.
 - Data headers of large objects.
 
@@ -146,16 +148,14 @@ A KV-based design separates them cleanly.
 
 Deleting one S3 object requires:
 - Updating the bucket-index entry.
-- Deleting the head object.
+- Deleting **all** head objects.
 
-Two non-atomic operations on separate systems.
+Two non-atomic operations on separate systems.\
+A crash between the bucket-index update and the head-object delete can leave the system in inconsistent state.
 
-For large or multipart objects, tail data objects must also be deleted.
 On EC pools, each RADOS object deletion fans out across all K+M members (6 OSDs for 4+2, 11 for 8+3).
-Background garbage collection must then process orphaned data objects on the storage tier — equally expensive on EC.
 
-A crash between the bucket-index update and the head-object delete can leave orphaned data or dangling references.
-The `radosgw-admin orphans` tools exist to find and clean these, but they are expensive and unreliable.
+When RADOS objects are stored on HDD, the delete must wait for all members to complete on slow HDD.
 
 ### KV Delete Benefits
 
@@ -164,18 +164,17 @@ The bucket-index is eliminated.
 A single KV mutation (delete or invalidate) makes the object inaccessible.
 No second operation on a separate system.
 
-**Always on fast storage.**
-The KV store resides on SSD/NVMe.
-Delete never touches slow HDD — important when data is stored on HDD.
-
 **No EC fan-out for metadata.**
 A KV delete does not fan out across K+M members.
 The EC cost is deferred entirely to async data cleanup.
 
+**Always on fast storage.**
+The KV store resides on SSD/NVMe.
+Delete never touches slow HDD — important when data is stored on HDD.
+
 **Faster than RADOS object delete.**
 Even on the same hardware, a KV delete is a lightweight metadata operation compared to the full transaction overhead of deleting a RADOS object.
 
-**Comparison with `placement-inline-data=false`.**
 PR #48711 added a new concept (`inline-data=false`) to avoid the delete penalty inline — empty head objects on a fast tier with replica×3.
 But even with this change, GC still needs to delete K+M members on the storage tier, which can degrade system performance under heavy delete load.
 
@@ -193,7 +192,7 @@ Because the delete-log can be written in the same transaction as the KV mutation
 
 ## Bucket Listing
 
-The bucket-index exists in the current model because head objects scattered across RADOS cannot be enumerated efficiently.
+The bucket-index exists in the current model because head objects scattered across RADOS (based on CRUSH hashing) cannot be enumerated efficiently.
 
 It duplicates metadata to enable listing, at the cost of:
 - Dual updates on every PUT/DELETE (bucket-index + head object).
@@ -226,6 +225,43 @@ Its functions — listing, metadata lookup, bucket stats — are absorbed by the
 
 ---
 
+## KV Access API
+
+RGW accesses the KV store through a DB-agnostic API.\
+The API defines the operations RGW requires — Each DB backend maps these operations to its native primitives.\
+Differences in capability are absorbed by the implementation.
+
+This is an early-stage API definition. It will be refined as the design matures and implementation begins.
+
+**Basic operations:**
+
+- `Get(key)` → value, or not-found.
+- `Put(key, value)` — write or overwrite.
+- `Delete(key)` — remove the entry.
+
+**Range operations:**
+
+- `RangeScan(start, end, limit)` → ordered list of KV pairs. Used for bucket listing.
+- `RangeDelete(start, end)` — delete all entries in the range. Used for bucket deletion, prefix cleanup.
+
+**Conditional operations:**
+
+- `PutIfNotExists(key, value)` — write only if the key does not exist. Used in migration, multipart completion.
+- `CompareAndSwap(key, expected_value, new_value)` — write only if the current value matches. Used for stats counters on DBs without blind atomic adds.
+
+**Transactions:**
+
+- `BeginTransaction()` → transaction handle.
+- Within a transaction: any combination of Get, Put, Delete, RangeScan, conditional operations.
+- `Commit()` — atomically apply all mutations, or fail if conflicts are detected.
+- `Abort()` — discard all mutations.
+
+Transactions enable atomic multi-key operations: object write + delete-log entry + stats update in a single commit.
+
+Transaction scope is always within a single cluster — cross-cluster atomicity is handled by RGW-level coordination (see Key Sharding).
+
+---
+
 ## KV Schema
 
 ### Key Format
@@ -241,7 +277,7 @@ Its functions — listing, metadata lookup, bucket stats — are absorbed by the
 
 Key size: average ~256 bytes. Absolute max ~1040 bytes (1024-byte S3 name limit + 16 bytes for bucket_id and version_id, plus prefix).
 
-Bucket metadata (name-to-id mapping, ACLs, policies, quota, versioning, lifecycle) is stored under separate prefixes in the same KV store.
+Bucket/Realm/Zone metadata (name-to-id mapping, ACLs, policies, quota, versioning, lifecycle) is stored under separate prefixes in the same KV store.
 
 ### Value Structure
 
@@ -259,7 +295,6 @@ Target size is ~1KB. Smaller values are accepted as-is. Larger values are split 
 
 - content_disposition, cache_control.
 - User metadata (x-amz-meta-*) — up to 2KB per S3 limits.
-- Tags — up to 10 tags per object.
 - Object ACL overrides, checksum values, object lock.
 
 User attributes are prioritized over read-path metadata for space in the value.
@@ -273,9 +308,15 @@ When user attributes push the value beyond ~2KB, they spill to the extended valu
 
 To keep values compact, attributes are compressed using various techniques (e.g., binary mapping of repeated strings to short IDs, enum encoding of fixed-vocabulary fields).
 
-### Delete Marker
+### AWS S3 Object Tags
 
-On delete, the live value is replaced with a minimal delete marker containing:
+- Object-Tags are stored in a separate child KV (under the same shard) referenced from the S3-Object parent KV
+- All Tags are stored together in a single KV
+- AWS supports a maximum of 10 tags per object each with an aggregated size of 5,120 bytes
+
+### S3 Delete Reference
+
+On delete, we keep the original Key while replacing the live Value with a minimal delete reference containing:
 - A delete flag.
 - A timestamp.
 - The ref_tag of the deleted object.
@@ -283,7 +324,7 @@ On delete, the live value is replaced with a minimal delete marker containing:
 The ref_tag is retained so background cleanup can verify data ownership before freeing storage.
 All other attributes are discarded.
 
-RGW reads the entry, sees the delete marker, and returns 404.
+RGW reads the entry, sees the delete reference, and returns 404.
 
 ### Extended Value
 
@@ -310,24 +351,26 @@ POSIX systems, for example, cannot prepend headers to existing files and would u
 2. Read the KV entry.
 3. Return all S3-visible attributes from the value.
 
-Single KV read. No data-tier access.
+Single KV read. No data-tier access. Should be faster than the current model.\
+The assumption here is that KV-Get is faster than Rados Read with its heavy stack.
 
 ### GET (Full Object)
 
 1. Translate bucket name to bucket_id (local cache).
 2. Read the KV entry.
 3. Read data chunks from the storage tier using the chunk pointers.
-4. The first chunk includes the data header — extract ref_tag (verify against KV value), manifest, compression info.
-5. Decompress/decrypt and stream to client.
+5. Read extended-attributes if needed.
+6. Extract ref_tag (verify against KV value), manifest, compression info.
+7. Decompress/decrypt and stream to client.
 
-The KV read is a new cost compared to the current model, where metadata is piggybacked on the data read.
+The KV read is a new cost compared to the current model, where metadata is piggybacked on the data read.\
 This is mitigated by the KV store's distributed cache serving hot entries from memory.
 
 ### GET (Byte-Range)
 
 1. Read the KV entry.
 2. If read-path metadata is in the KV value (common case): use it directly to locate the target chunk.
-3. If not (large compressed multipart): read the data header from chunk 0, or use a locally cached copy.
+3. If not (large compressed multipart): read the extended attributes, or use a locally cached copy.
 4. Read and decompress/decrypt the target byte range.
 
 ### PUT
@@ -337,46 +380,48 @@ This is mitigated by the KV store's distributed cache serving hot entries from m
    - New object or overwriting a delete marker: write the new value.
    - Overwriting a live object: record old data references in the delete-log, then write the new value.
 
+This is cheaper than the current model since no bucket-index update is needed.
+
 ### DELETE
 
 1. Read the KV entry to get chunk pointers and ref_tag.
 2. Record old data references in the delete-log.
-3. Replace the value with a delete marker, or remove the entry.
+3. Replace the value with a delete reference, or remove the entry.
 4. Return success.
 
 Data cleanup happens asynchronously via the delete-log.
+This is cheaper than the current model since no bucket-index update is needed.
 
 ### LIST (ListObjectsV2)
 
 1. Translate bucket name to bucket_id (local cache).
 2. Range scan on the bucket_id prefix.
-3. Filter out delete markers.
+3. Filter out delete references.
 4. Return up to 1000 keys with listing attributes from the KV values.
 
 Pagination uses the last returned key as the continuation marker.
+
+Should be cheaper than the current model with its excessive sharding and OMAP overhead.
 
 ---
 
 ## Caching
 
 ### What RGW Caches Locally
-
+Locally cached metadata — created and removed, but never modified in place:
 - **Bucket name → bucket_id mapping** — small, stable, fully cached.
 - **Bucket metadata** — ACLs, policies, quota, versioning, lifecycle rules.
+- **Realm/Zone metadata**
 - **Attribute mapping tables** — binary mappings for repeated strings. Small, append-only, fully cached.
-- **Data headers of large objects** — for objects whose read-path metadata overflows the KV value. Cached after first access, validated against ref_tag on every use.
+- **Read-path metadata** — for objects whose read-path metadata overflows the KV value. Cached after first access, validated against ref_tag on every use.
 
 ### What the KV Store Caches
 
-Object KV entries are not cached locally on RGW servers.
+Object KV entries are not cached locally on RGW servers.\
 The KV store's own distributed cache serves frequently accessed entries from memory.
 
 Keeping values small maximizes cache efficiency — more entries fit in the same amount of memory.
 
-### ref_tag Validation
-
-The ref_tag in the KV value is compared against the ref_tag in the data header on every data read.
-A mismatch indicates a consistency problem. This is a safety net, not a cache mechanism.
 
 ---
 
@@ -384,7 +429,7 @@ A mismatch indicates a consistency problem. This is a safety net, not a cache me
 
 ### Why 1KB is the Target
 
-For a typical single-part object with no user metadata and no tags, the KV value contains:
+For a typical single-part object with no user metadata, the KV value contains:
 
 - Listing attributes — etag, last_modified, size, storage_class, owner, content_type, checksum_algorithm.
 - RGW internal fields — state/flags, ref_tag, chunk pointer(s).
@@ -393,7 +438,7 @@ For a typical single-part object with no user metadata and no tags, the KV value
 With compact binary encoding, this fits comfortably under 1KB — including common user attributes.
 The vast majority of objects in a large-scale system are single-part without unusually large user metadata — the 1KB target covers the common case.
 
-Objects with very large user metadata (approaching the 2KB S3 limit) or many tags can push the value beyond 1KB, up to ~2KB.
+Objects with very large user metadata (approaching the 2KB S3 limit) can push the value beyond 1KB, up to ~4KB.
 This is acceptable — user attributes are prioritized for space in the value.
 
 ### Why Read-Path Metadata Can Grow Large
@@ -408,14 +453,15 @@ Server-side encryption adds per-chunk metadata: key references, initialization v
 For multipart objects with many parts, encryption metadata grows proportionally.
 
 **Manifest.**
-The manifest maps logical byte ranges to physical chunk locations.
-For very large multipart objects with hundreds or thousands of parts, the manifest alone can grow to hundreds of KB — potentially up to ~1MB in extreme cases.
+The manifest maps logical byte ranges to physical chunk locations.\
+When chunks have equal size (except the last one) they can be summarized with a simple formula, but compression means that each and every chunk has different size so we need to list them all.\
+For very large multipart objects with hundreds or thousands of parts, the manifest alone can grow to tens of KB — potentially up to multiple MB in extreme cases.
 
 ### The Case for Extended Values
 
 This is why the extended value mechanism exists.
 
-For the common case (single-part, small multipart), everything fits in the KV entry.
+For the common case (single-part, small multipart, multipart with fixed chunk size), everything fits in the KV entry.\
 For large compressed/encrypted multipart objects, the manifest and block table spill to the extended value — keeping the core KV entry small and the KV store's cache efficient.
 
 The 8KB hard upper limit for the KV value is worth testing to determine the practical impact on cache efficiency and listing bandwidth.
@@ -469,9 +515,10 @@ The hash distributes objects uniformly across a fixed number of shards, breaking
 
 This is a locality vs. distribution tradeoff.
 
-Hashing exists to break locality — to take concentrated load on a local range and spread it uniformly across the system. But locality is exactly what makes range operations efficient.
+Hashing exists to break locality — to take concentrated load on a local range and spread it uniformly across the system.\
+But locality is exactly what makes range operations efficient.
 
-Every benefit of hashing is a consequence of breaking locality.
+Every benefit of hashing is a consequence of breaking locality.\
 Every cost is also a consequence of breaking locality.
 
 ### Pros
@@ -480,11 +527,15 @@ Every cost is also a consequence of breaking locality.
 
 This is the primary reason to consider hashing.
 
-When RGW scales beyond a single KV cluster to a fleet of independent KV clusters, there is no KV-store mechanism to balance data across clusters. Without hashing, bucket data is contiguous — buckets land on specific clusters and grow unevenly, creating imbalance over time.
+When RGW scales beyond a single KV cluster to a fleet of independent KV clusters, there is no KV-store mechanism to balance data across clusters.\
+Without hashing, bucket data is contiguous — buckets land on specific clusters and grow unevenly, creating imbalance over time.
 
-The only fix would be RGW acting as a cross-cluster data balancer: detecting skew, migrating data between clusters. That is a massive engineering and operational burden.
+The only fix would be RGW acting as a cross-cluster data balancer: detecting skew, migrating data between clusters.\
+That is a massive engineering and operational burden.
 
-With hashing, shards distribute objects uniformly. Assigning equal numbers of shards to each cluster produces a balanced fleet by construction. Adding a new cluster means reassigning some shards — no data-level rebalancing within existing clusters.
+With hashing, shards distribute objects uniformly.\
+Assigning equal numbers of shards to each cluster produces a balanced fleet by construction.\
+Adding a new cluster means reassigning some shards — no data-level rebalancing within existing clusters.
 
 **Secondary benefits within a single cluster.**
 
@@ -549,15 +600,24 @@ FDB caches per KV entry, so hashing does not cause cache waste there.
 
 Hashing is a fleet-level concern, not a single-cluster optimization.
 
-Within a single cluster, the KV store's own auto-sharding handles distribution. The costs of hashing — degraded listings, lost range operations, cache waste, disabled hibernation, pinned mapping tables — outweigh the secondary benefits.
+Within a single cluster, the KV store's own auto-sharding handles distribution.\
+The costs of hashing — degraded listings, lost range operations, cache waste, disabled hibernation, pinned mapping tables — outweigh the secondary benefits.
 
-For deployments that require a fleet of independent KV clusters, hashing becomes necessary because no KV-store mechanism exists to balance across clusters. The secondary benefits — balanced activity, less rebalancing, predictable performance — partially offset the costs, but do not eliminate them.
+For deployments that require a fleet of independent KV clusters, hashing becomes necessary because no KV-store mechanism exists to balance across clusters.\
+The secondary benefits — balanced activity, less rebalancing, predictable performance — partially offset the costs, but do not eliminate them.
 
 ### Fleet Scaling
 
-Every KV store has a single-cluster capacity ceiling. FDB clusters hold approximately 64 billion KV entries (potentially 128 billion). TiKV clusters can scale to approximately 1 trillion KV entries (potentially more). These are large numbers, but production systems may eventually outgrow them.
+Every KV store has a single-cluster capacity ceiling.\
+FDB clusters hold approximately 64 billion KV entries (potentially 128 billion).\
+TiKV clusters can scale to approximately 1 trillion KV entries (potentially more).
 
-When a single cluster is no longer sufficient, the system must scale out to a fleet of independent KV clusters. There is no cross-cluster balancing built into any KV store — the fleet management is RGW's responsibility.
+These are large numbers, but **some** production systems may eventually outgrow them.
+- The KV store design allocates one extra KV per object to store S3 Object Tags (when present) which can double the KV count
+- Object Annotations allow up to 1000 Annotations per Object, and since we use a standalone KV for each Annotation we can have an effective 1 Trillion KV on a system with a mere 1 Billion S3-Objects.
+
+When a single cluster is no longer sufficient, the system must scale out to a fleet of independent KV clusters.\
+There is no cross-cluster balancing built into any KV store — the fleet management is RGW's responsibility.
 
 Hashing is the simplest method to support a fleet. The shard prefix distributes data uniformly across clusters, and shard migration provides the growth path.
 
@@ -567,15 +627,24 @@ However, hashing is not the only option. Three strategies exist, each with diffe
 
 `shard_id = hash(bucket_id + object_name)`.
 
-Objects within a bucket are scattered across all shards and all clusters. Works for any workload — fleet balance is guaranteed by the hash. Pays the full locality cost: merge-sort listings, degraded range operations, pinned mapping tables, cross-cluster coordination for multi-key operations.
+Objects within a bucket are scattered across all shards and all clusters.\
+Works for any workload — fleet balance is guaranteed by the hash.\
+Pays the full locality cost:
+- merge-sort listings
+- degraded range operations
+- pinned mapping tables
+- cross-cluster coordination for multi-key operations
 
 The simplest strategy. The most expensive in day-to-day operation.
 
 **Strategy 2 — RGW as fleet rebalancer (no hashing).**
 
-Keys remain ordered. No shard prefix. RGW detects imbalance across clusters and migrates data ranges to restore balance.
+- Keys remain ordered
+- No shard prefix
+- RGW detects imbalance across clusters and migrates data ranges to restore balance
 
-This requires RGW to build and operate a cross-cluster data balancer — detecting skew, selecting ranges to move, coordinating live migration, handling failures. A massive engineering and operational burden. Unattractive.
+This requires RGW to build and operate a cross-cluster data balancer — detecting skew, selecting ranges to move, coordinating live migration, handling failures.\
+A massive engineering and operational burden. Unattractive.
 
 **Strategy 3 — Bucket-level hashing with fleet-friendly buckets.**
 
@@ -589,9 +658,13 @@ Viable for controlled environments where customers can design their bucket layou
 
 ### Cross-Cluster Coordination Cost
 
-On a single cluster, any set of KV mutations can be committed in one transaction. On a fleet, mutations landing on different clusters cannot share a transaction — no KV store supports cross-cluster transactions.
+On a single cluster, any set of KV mutations can be committed in one transaction.\
+On a fleet, mutations landing on different clusters cannot share a transaction — no KV store supports cross-cluster transactions.
 
-Operations where the source and destination keys hash to different shards require RGW-level coordination: two separate transactions, crash recovery logic, and potential inconsistency windows.
+Operations where the source and destination keys hash to different shards require RGW-level coordination:
+- two separate transactions
+- crash recovery logic
+- and potential inconsistency windows.
 
 This is another reason to minimize the number of shards to the absolute minimum needed for fleet balance. Fewer shards means fewer cross-cluster operations. Growing from 2 shards to 4 is far less disruptive than jumping to 128.
 
@@ -599,11 +672,20 @@ With bucket-level hashing, most operations stay within a single bucket and there
 
 ### Key Naming and Transaction Locality
 
-Smart key naming minimizes cross-cluster operations by ensuring that logically related KV entries hash to the same shard.
+Hashing-aware key schemes minimize cross-cluster operations by ensuring that logically related KV entries hash to the same shard.\
+This maximizes single-cluster transactions.\
+Only operations involving two distinct object identities require cross-cluster coordination.
 
-Since `shard_id = hash(bucket_id + object_name)` and `version_id` is excluded from the hash, all versions of the same object — same bucket, same name, different versions — get the same `shard_id` and land on the same cluster.
+**Design principle:**\
+A KV entry logically tied to a specific object should derive its shard from the parent KV.\
+The child KV should **logically** be\
+`<prefix> <shard_id> <bucket_id> <object_name>::<child-suffix>`\
+This way it will always follow the same shard as the parent KV
 
-The following entries all share the same shard as the object they belong to:
+We can replace the `<object_name>` (up to 1024 Bytes long) on child KV with an 8-byte `<parent-object-id>` which must be stored in the parent KV and used to construct the child KV.\
+Alternatively, we can use a 32-64 byte cryptographic hash as an `<parent-object-id>` saving the need to query the parent KV before accessing the child KV
+
+### Entries Sharing the Parent Shard:
 
 **All versions of an object.**
 
@@ -627,7 +709,13 @@ When an object is overwritten or deleted, the old chunk pointers must be recorde
 
 **Object tags, ACLs, and lock metadata.**
 
-S3 supports per-object tags (up to 10 key-value pairs), per-object ACL overrides, and object lock settings (retention period, legal hold). These are typically stored inline in the KV value. If they ever spill to separate KV entries — due to size or access pattern optimization — deriving the shard from the same `(bucket_id + object_name)` keeps them co-located. PutObjectTagging or PutObjectLockConfiguration updates are transactional with the object's metadata.
+S3 supports per-object tags (up to 10 key-value pairs) and per-object ACL overrides (up to 100 grants)\
+These are typically stored inline in the KV value.\
+If they ever spill to separate KV entries — due to size or access pattern optimization — deriving the shard from the same `(bucket_id + object_name)` keeps them co-located.\
+PutObjectTagging or PutObjectAcl are transactional with the object's metadata.
+
+- Object-Tags are probably best kept in a standalone child KV since they are individually mutable
+- ACL can be stored inside the parent KV or spillover to extended-metadata since they are overwritten together
 
 **Per-shard stats counters.**
 
@@ -641,7 +729,6 @@ If each shard maintains its own stats keys on the same cluster, the object write
 
 - **Cross-bucket operations** — any operation touching objects in different buckets may land on different clusters.
 
-**Design principle:** every KV entry logically tied to a specific object should derive its shard from `hash(bucket_id + object_name)`. This maximizes single-cluster transactions. Only operations involving two distinct object identities require cross-cluster coordination — and minimizing shard count minimizes the probability that two objects land on different clusters.
 
 ### Logical Hashing Epoch
 
