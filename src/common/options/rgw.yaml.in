@@ -4858,10 +4858,10 @@ options:
   type: size
   level: advanced
   desc: Index cache size for each vector bucket session
-  long_desc: Sets the index cache size in bytes for newly created vector bucket
-    sessions. Existing vector bucket sessions retain their current cache size.
-    A value of `0` preserves LanceDB default behavior. The current LanceDB
-    default is 6 GiB.
+  long_desc: Sets the index cache size in bytes for each newly created vector
+    bucket session. Non-zero values override the session cache size. A value
+    of `0` preserves LanceDB default behavior. The current LanceDB default is
+    6 GiB.
   fmt_desc: The per-session index cache size in bytes. Set to `0` to use the
     LanceDB default of 6 GiB.
   default: 0
@@ -4872,12 +4872,26 @@ options:
   type: size
   level: advanced
   desc: Metadata cache size for each vector bucket session
-  long_desc: Sets the metadata cache size in bytes for newly created vector
-    bucket sessions. Existing vector bucket sessions retain their current cache
-    size. A value of `0` preserves LanceDB default behavior. The current
-    LanceDB default is 1 GiB.
+  long_desc: Sets the metadata cache size in bytes for each newly created vector
+    bucket session. Non-zero values override the session cache size. A value
+    of `0` preserves LanceDB default behavior. The current LanceDB default is
+    1 GiB.
   fmt_desc: The per-session metadata cache size in bytes. Set to `0` to use
     the LanceDB default of 1 GiB.
+  default: 0
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_s3vector_session_inactive_timeout
+  type: uint
+  level: advanced
+  desc: Inactivity timeout in seconds for each vector bucket session
+  long_desc: Sets the inactivity timeout in seconds for each vector bucket
+    session. Sessions inactive longer than this timeout are evicted by the
+    background manager. A value of `0` uses the default timeout of 3600
+    seconds.
+  fmt_desc: The inactivity timeout in seconds for each vector bucket session.
+    Set to `0` to use the default timeout of 3600 seconds.
   default: 0
   services:
   - rgw

@@ -3,6 +3,8 @@
 
 #include <cerrno>
 #include <memory>
+#include <algorithm>
+#include <atomic>
 #include <boost/functional/hash.hpp>
 #include <boost/lockfree/queue.hpp>
 #include <boost/asio/basic_waitable_timer.hpp>
@@ -65,8 +67,17 @@ private:
     }
   };
   using SessionPtr = std::shared_ptr<LanceDBSession>;
+  struct SessionEntry {
+    SessionPtr session;
+    std::atomic<int64_t> last_used;
+    SessionEntry(SessionPtr session)
+      : session(std::move(session)),
+        last_used(ceph::coarse_real_clock::now().time_since_epoch().count())
+    {
+    }
+  };
   mutable ceph::shared_mutex sessions_mutex = ceph::make_shared_mutex("s3vector::Manager::sessions_mutex");
-  std::unordered_map<std::string, SessionPtr> sessions;
+  std::unordered_map<std::string, SessionEntry> sessions;
   std::unordered_map<table_name_t, ceph::coarse_real_time, boost::hash<table_name_t>> tables;
   MessageQueue messages;
   static constexpr auto idle_sleep = std::chrono::milliseconds(1000); // 1s
@@ -133,6 +144,33 @@ private:
     }
   }
 
+  std::chrono::seconds get_session_inactive_timeout() const {
+    const auto configured_timeout = cct->_conf.get_val<uint64_t>(
+      "rgw_s3vector_session_inactive_timeout");
+    return std::chrono::seconds(configured_timeout == 0 ? 3600 : configured_timeout);
+  }
+
+  std::chrono::seconds get_session_cleanup_interval() const {
+    const auto half_timeout = get_session_inactive_timeout() / 2;
+    return std::max(std::chrono::seconds(1), half_timeout); // cleanup interval is max of 1s and half of the inactive timeout
+  }
+
+  void remove_inactive_sessions() {
+    const auto now = ceph::coarse_real_clock::now();
+    const auto timeout = get_session_inactive_timeout();
+    std::unique_lock l(sessions_mutex);
+    for (auto it = sessions.begin(); it != sessions.end(); ) {
+      const auto count = it->second.last_used.load();
+      const auto last_used = ceph::coarse_real_time(ceph::coarse_real_clock::duration(count));
+      if (now - last_used > timeout) {
+        ldpp_dout(this, 20) << "INFO: removing inactive session for bucket: " << it->first << dendl;
+        it = sessions.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+
   // processing of a specific table
   int process_table(const table_name_t& table_name, boost::asio::yield_context yield) {
     // TODO: check if processing is needed based on unindexed rows stats and skip if not needed
@@ -148,6 +186,7 @@ private:
   // process all work items for tables and sessions
   void process_messages(boost::asio::yield_context yield) {
     ldpp_dout(this, 5) << "INFO: manager started. starting to process messages for background table and session operations" << dendl;
+    auto last_session_cleanup = ceph::coarse_real_clock::now();
     while (!shutdown) {
       std::vector<table_name_t> tables_to_process;
       const auto message_count = messages.consume_all([&tables_to_process, this](auto message) {
@@ -194,7 +233,8 @@ private:
                     "rgw_s3vector_session_metadata_cache_size");
                 LanceDBSession* session = lancedb_session_new(&options);
                 if (session) {
-                  sessions[table_name.first] = SessionPtr(session, LanceDBSessionDeleter());
+                  // assignment won't work here because SessionEntry is not copyable or movable due to atomic member
+                  sessions.try_emplace(table_name.first, SessionPtr(session, LanceDBSessionDeleter()));
                   ldpp_dout(this, 20) << "INFO: created session for bucket: " << table_name.first << dendl;
                 }
                 else {
@@ -240,6 +280,13 @@ private:
       if (!tables_to_process.empty()) {
         // wait for all pending work to finish
         tw.async_wait(yield);
+      }
+
+      const auto now = ceph::coarse_real_clock::now();
+      if (now - last_session_cleanup >= get_session_cleanup_interval()) {
+        ldpp_dout(this, 20) << "INFO: starting session cleanup..." <<  dendl;
+        remove_inactive_sessions();
+        last_session_cleanup = now;
       }
 
       if (message_count == 0) {
@@ -340,7 +387,8 @@ public:
     if (it == sessions.end()) {
       return nullptr;
     }
-    return it->second;
+    it->second.last_used.store(ceph::coarse_real_clock::now().time_since_epoch().count());
+    return it->second.session;
   }
 
   int delete_session(const std::string& bucket_name) {
@@ -360,7 +408,7 @@ public:
       if (it == sessions.end()) {
         return -ENOENT;
       }
-      session = it->second;
+      session = it->second.session;
     }
 
     char* error_message = nullptr;
@@ -386,7 +434,7 @@ public:
       if (it == sessions.end()) {
         return -ENOENT;
       }
-      session = it->second;
+      session = it->second.session;
     }
 
     char* error_message = nullptr;
