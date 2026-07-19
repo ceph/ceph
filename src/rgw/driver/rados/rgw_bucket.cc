@@ -10,6 +10,7 @@
 #include "rgw_bucket.h"
 #include "rgw_op.h"
 #include "rgw_bucket_sync.h"
+#include "rgw_s3vector_background.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_bucket.h"
@@ -2000,6 +2001,194 @@ int RGWBucketAdminOp::set_quota(rgw::sal::Driver* driver, RGWBucketAdminOpState&
   return bucket.set_quota(op_state, dpp, y);
 }
 
+namespace {
+// These helpers are specific to the vector bucket admin-op implementation in
+// this file, so keep them file-local even though they share a logical
+// namespace.
+namespace vector_bucket_admin {
+
+void dump_vector_session_cache_stats(const char* name,
+                                     const LanceDBSessionCacheStats& stats,
+                                     Formatter *formatter)
+{
+  formatter->open_object_section(name);
+  encode_json("hits", stats.hits, formatter);
+  encode_json("misses", stats.misses, formatter);
+  encode_json("num_entries", stats.num_entries, formatter);
+  encode_json("size_bytes", stats.size_bytes, formatter);
+  formatter->close_section();
+}
+
+int load_vector_bucket_admin(rgw::sal::Driver* driver,
+                             RGWVectorBucketAdminOpState& op_state,
+                             optional_yield y,
+                             const DoutPrefixProvider *dpp)
+{
+  if (!op_state.has_bucket()) {
+    return -EINVAL;
+  }
+
+  if (op_state.get_bucket()) {
+    return 0;
+  }
+
+  std::unique_ptr<rgw::sal::VectorBucket> bucket;
+  const rgw_bucket bucket_id(op_state.get_tenant(), op_state.get_bucket_name());
+  int ret = driver->load_vector_bucket(dpp, bucket_id, &bucket, y);
+  if (ret == -ENOENT) {
+    return -ERR_NO_SUCH_BUCKET;
+  }
+  if (ret < 0) {
+    return ret;
+  }
+
+  op_state.set_bucket(std::move(bucket));
+  return 0;
+}
+
+} // namespace vector_bucket_admin
+} // anonymous namespace
+
+int RGWVectorBucketAdminOp::info(rgw::sal::Driver* driver,
+                                 RGWVectorBucketAdminOpState& op_state,
+                                 RGWFormatterFlusher& flusher,
+                                 optional_yield y,
+                                 const DoutPrefixProvider *dpp)
+{
+  if (!op_state.will_fetch_session()) {
+    return -EINVAL;
+  }
+
+  Formatter *formatter = flusher.get_formatter();
+  flusher.start(0);
+
+  if (op_state.has_bucket()) {
+    int ret = vector_bucket_admin::load_vector_bucket_admin(driver, op_state,
+                                                            y, dpp);
+    if (ret < 0) {
+      return ret;
+    }
+
+    LanceDBSessionCacheStats index_cache_stats{};
+    LanceDBSessionCacheStats metadata_cache_stats{};
+    bool session_active = false;
+
+    ret = rgw::s3vector::get_index_cache_stats(dpp, op_state.get_bucket_name(),
+                                               index_cache_stats);
+    if (ret == -ENOENT) {
+      ret = 0;
+    } else if (ret < 0) {
+      return ret;
+    } else {
+      ret = rgw::s3vector::get_metadata_cache_stats(dpp, op_state.get_bucket_name(),
+                                                    metadata_cache_stats);
+      if (ret < 0) {
+        return ret;
+      }
+      session_active = true;
+    }
+
+    formatter->open_object_section("");
+    encode_json("vectorbucket", op_state.get_bucket_name(), formatter);
+    formatter->open_object_section("session");
+    encode_json("active", session_active, formatter);
+    if (session_active) {
+      vector_bucket_admin::dump_vector_session_cache_stats(
+          "index_cache", index_cache_stats, formatter);
+      vector_bucket_admin::dump_vector_session_cache_stats(
+          "metadata_cache", metadata_cache_stats, formatter);
+    }
+    formatter->close_section();
+    formatter->close_section();
+    flusher.flush();
+    return 0;
+  }
+
+  if (!op_state.is_user_op()) {
+    return -EINVAL;
+  }
+
+  auto user = driver->get_user(op_state.get_user_id());
+  int ret = user->load_user(dpp, y);
+  if (ret == -ENOENT) {
+    return -ERR_NO_SUCH_USER;
+  }
+  if (ret < 0) {
+    return ret;
+  }
+
+  rgw::sal::BucketList listing;
+  ret = driver->list_vector_buckets(dpp, user->get_id(), op_state.get_tenant(),
+                                    op_state.marker, "", op_state.max_entries,
+                                    listing, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  formatter->open_object_section("");
+  encode_json("uid", op_state.get_user_id().to_str(), formatter);
+  if (!listing.next_marker.empty()) {
+    encode_json("marker", op_state.marker, formatter);
+    encode_json("next_marker", listing.next_marker, formatter);
+  }
+  formatter->open_array_section("sessions");
+  for (const auto& bucket : listing.buckets) {
+    LanceDBSessionCacheStats index_cache_stats{};
+    LanceDBSessionCacheStats metadata_cache_stats{};
+
+    ret = rgw::s3vector::get_index_cache_stats(dpp, bucket.bucket.name,
+                                               index_cache_stats);
+    if (ret == -ENOENT) {
+      continue;
+    }
+    if (ret < 0) {
+      return ret;
+    }
+
+    ret = rgw::s3vector::get_metadata_cache_stats(dpp, bucket.bucket.name,
+                                                  metadata_cache_stats);
+    if (ret < 0) {
+      return ret;
+    }
+
+    formatter->open_object_section("");
+    encode_json("vectorbucket", bucket.bucket.name, formatter);
+    vector_bucket_admin::dump_vector_session_cache_stats(
+        "index_cache", index_cache_stats, formatter);
+    vector_bucket_admin::dump_vector_session_cache_stats(
+        "metadata_cache", metadata_cache_stats, formatter);
+    formatter->close_section();
+  }
+  formatter->close_section();
+  formatter->close_section();
+  flusher.flush();
+
+  return 0;
+}
+
+int RGWVectorBucketAdminOp::remove_session(rgw::sal::Driver* driver,
+                                           RGWVectorBucketAdminOpState& op_state,
+                                           const DoutPrefixProvider *dpp,
+                                           optional_yield y)
+{
+  if (!op_state.will_fetch_session() || !op_state.has_bucket() ||
+      op_state.is_user_op()) {
+    return -EINVAL;
+  }
+
+  int ret = vector_bucket_admin::load_vector_bucket_admin(driver, op_state,
+                                                          y, dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = rgw::s3vector::delete_session(dpp, op_state.get_bucket_name());
+  if (ret == -ENOENT) {
+    return 0;
+  }
+  return ret;
+}
+
 inline auto split_tenant(const std::string& bucket_name){
   auto p = bucket_name.find('/');
   if(p != std::string::npos) {
@@ -3881,4 +4070,3 @@ void RGWBucketEntryPoint::decode_json(JSONObj *obj) {
     JSONDecoder::decode_json("old_bucket_info", old_bucket_info, obj);
   }
 }
-
