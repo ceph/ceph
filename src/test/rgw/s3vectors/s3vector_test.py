@@ -5,11 +5,17 @@ import threading
 import subprocess
 import os
 import string
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, timedelta, timezone
 import pytest
 import boto3
 import json
+from botocore.auth import HmacV1Auth
 from botocore.config import Config
+from botocore.credentials import Credentials
+from botocore.awsrequest import AWSRequest
 
 from . import(
     configfile,
@@ -107,6 +113,78 @@ def connection2(service_name='s3vectors'):
     return client
 
 
+_vector_bucket_caps_granted = False
+
+
+def _ensure_vector_bucket_caps():
+    # Admin REST requests are S3-authenticated, but these operations also
+    # require the buckets capability.
+    global _vector_bucket_caps_granted
+    if _vector_bucket_caps_granted:
+        return
+    access_key = get_access_key()
+    body, result = admin(['user', 'info', '--access-key', access_key])
+    assert result == 0, 'failed to look up the S3Vector test user'
+    info = json.loads(body)
+    uid = info['user_id']
+    tenant = info.get('tenant', '')
+    if tenant:
+        uid = tenant + '$' + uid
+    _, result = admin(['caps', 'add', '--uid', uid, '--caps', 'buckets=*'])
+    assert result == 0, 'failed to add buckets=* capability'
+    _vector_bucket_caps_granted = True
+
+
+def _vector_bucket_admin_url():
+    hostname = get_config_host()
+    port_no = get_config_port()
+    scheme = 'https' if port_no in (443, 8443) else 'http'
+    return f'{scheme}://{hostname}:{port_no}/admin/vectorbucket'
+
+
+def vector_bucket_admin_rest(method, params):
+    # boto3 has no modelled client for RGW admin operations. Sign the request
+    # using the same S3 credentials used by the S3Vector client.
+    _ensure_vector_bucket_caps()
+    url = f'{_vector_bucket_admin_url()}?{urllib.parse.urlencode(params)}'
+    creds = Credentials(get_access_key(), get_secret_key())
+    aws_req = AWSRequest(method=method, url=url)
+    HmacV1Auth(creds).add_auth(aws_req)
+    request = urllib.request.Request(url, method=method,
+                                     headers=dict(aws_req.headers))
+    try:
+        response = urllib.request.urlopen(request, timeout=120)
+        return response.read().decode('utf-8'), 0
+    except urllib.error.HTTPError as error:
+        return error.read().decode('utf-8', errors='replace'), 1
+
+
+def get_test_user_id():
+    body, result = admin(['user', 'info', '--access-key', get_access_key()])
+    assert result == 0, 'failed to look up the S3Vector test user'
+    info = json.loads(body)
+    uid = info['user_id']
+    tenant = info.get('tenant', '')
+    return tenant + '$' + uid if tenant else uid
+
+
+def get_vector_bucket_session(bucket_name):
+    body, result = vector_bucket_admin_rest(
+        'GET', {'vectorbucket': bucket_name, 'session': 'true'})
+    assert result == 0, body
+    return json.loads(body)
+
+
+def wait_for_vector_bucket_session(bucket_name, active):
+    # Session creation is handled asynchronously by the S3Vector manager.
+    for _ in range(40):
+        session = get_vector_bucket_session(bucket_name)
+        if session['session']['active'] == active:
+            return session
+        time.sleep(0.5)
+    pytest.fail(f'vector bucket session for {bucket_name} did not become active={active}')
+
+
 def another_user(tenant=None):
     access_key = str(time.time())
     secret_key = str(time.time())
@@ -136,6 +214,89 @@ def another_user(tenant=None):
 #################
 # s3vectors tests
 #################
+
+@pytest.mark.vector_bucket_test
+def test_vector_bucket_session_admin():
+    conn = connection()
+    index_cache_size = 1024 * 1024
+    metadata_cache_size = 2 * 1024 * 1024
+    assert set_rgw_config_option(
+        'rgw_s3vector_session_index_cache_size', index_cache_size)[1] == 0
+    assert set_rgw_config_option(
+        'rgw_s3vector_session_metadata_cache_size', metadata_cache_size)[1] == 0
+
+    bucket_name = gen_bucket_name()
+    second_bucket_name = gen_bucket_name()
+    try:
+        # Cache settings are read only when a new vector bucket session is
+        # created, so configure them before creating either bucket.
+        assert conn.create_vector_bucket(
+            vectorBucketName=bucket_name)['ResponseMetadata']['HTTPStatusCode'] == 200
+        session = wait_for_vector_bucket_session(bucket_name, True)
+        assert session['vectorbucket'] == bucket_name
+        # A bucket-scoped session query reports the two LanceDB cache stat
+        # objects once the asynchronous session creation completes.
+        for cache_name in ('index_cache', 'metadata_cache'):
+            assert set(session['session'][cache_name]) == {
+                'hits', 'misses', 'num_entries', 'size_bytes'}
+
+        assert conn.create_vector_bucket(
+            vectorBucketName=second_bucket_name)['ResponseMetadata']['HTTPStatusCode'] == 200
+        wait_for_vector_bucket_session(second_bucket_name, True)
+        # A user-scoped query lists active vector bucket sessions and accepts
+        # the usual admin listing pagination parameter.
+        body, result = vector_bucket_admin_rest(
+            'GET', {'uid': get_test_user_id(), 'session': 'true', 'max-entries': '1'})
+        assert result == 0, body
+        sessions = json.loads(body)['sessions']
+        assert len(sessions) <= 1
+        assert all('vectorbucket' in item for item in sessions)
+
+        # Deletion is idempotent: it removes an active session, then accepts a
+        # repeated request after the bucket becomes inactive.
+        body, result = vector_bucket_admin_rest(
+            'DELETE', {'vectorbucket': bucket_name, 'session': 'true'})
+        assert result == 0, body
+        assert wait_for_vector_bucket_session(bucket_name, False)['session']['active'] is False
+        _, result = vector_bucket_admin_rest(
+            'DELETE', {'vectorbucket': bucket_name, 'session': 'true'})
+        assert result == 0
+
+        # Session operations require an explicit true session selector.
+        _, result = vector_bucket_admin_rest('GET', {'vectorbucket': bucket_name})
+        assert result == 1
+        _, result = vector_bucket_admin_rest(
+            'GET', {'vectorbucket': bucket_name, 'session': 'false'})
+        assert result == 1
+    finally:
+        _delete_all_vector_buckets(conn)
+        assert set_rgw_config_option(
+            'rgw_s3vector_session_index_cache_size', 0)[1] == 0
+        assert set_rgw_config_option(
+            'rgw_s3vector_session_metadata_cache_size', 0)[1] == 0
+
+
+def test_vector_bucket_session_inactivity():
+    conn = connection()
+    bucket_name = gen_bucket_name()
+
+    # A four-second timeout gives the manager a two-second cleanup interval.
+    assert set_rgw_config_option(
+        'rgw_s3vector_session_inactive_timeout', 4)[1] == 0
+
+    try:
+        assert conn.create_vector_bucket(
+            vectorBucketName=bucket_name)['ResponseMetadata']['HTTPStatusCode'] == 200
+        wait_for_vector_bucket_session(bucket_name, True)
+
+        # Wait for the four-second timeout and its two-second cleanup interval.
+        time.sleep(7)
+        assert get_vector_bucket_session(bucket_name)['session']['active'] is False
+    finally:
+        _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+        assert set_rgw_config_option(
+            'rgw_s3vector_session_inactive_timeout', 0)[1] == 0
+
 
 def _delete_all_vector_buckets(conn):
     result = conn.list_vector_buckets()
@@ -2426,4 +2587,3 @@ def test_query_vectors_post_filter_topk():
     # cleanup
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
     set_rgw_config_option('rgw_s3vector_topk_post_filter_factor', 1)
-
