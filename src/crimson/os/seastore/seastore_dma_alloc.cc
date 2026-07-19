@@ -15,11 +15,8 @@ ceph::unique_leakable_ptr<ceph::buffer::raw> alloc_dma_or_page_aligned(
   size_t len)
 {
 #ifdef HAVE_SPDK
-  // seastore_spdk_transport_id is a startup option, so resolve it once.
-  static const bool spdk_active =
-    !crimson::common::local_conf().get_val<std::string>(
-      "seastore_spdk_transport_id").empty();
-  if (spdk_active) {
+  if (!crimson::common::local_conf().get_val<std::string>(
+        "seastore_spdk_transport_id").empty()) {
     return create_spdk_dma(len);
   }
 #endif
