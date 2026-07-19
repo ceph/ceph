@@ -4854,6 +4854,34 @@ options:
   min: 1
   max: 10
   with_legacy: true
+- name: rgw_s3vector_session_index_cache_size
+  type: size
+  level: advanced
+  desc: Index cache size for each vector bucket session
+  long_desc: Sets the index cache size in bytes for newly created vector bucket
+    sessions. Existing vector bucket sessions retain their current cache size.
+    A value of `0` preserves LanceDB default behavior. The current LanceDB
+    default is 6 GiB.
+  fmt_desc: The per-session index cache size in bytes. Set to `0` to use the
+    LanceDB default of 6 GiB.
+  default: 0
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_s3vector_session_metadata_cache_size
+  type: size
+  level: advanced
+  desc: Metadata cache size for each vector bucket session
+  long_desc: Sets the metadata cache size in bytes for newly created vector
+    bucket sessions. Existing vector bucket sessions retain their current cache
+    size. A value of `0` preserves LanceDB default behavior. The current
+    LanceDB default is 1 GiB.
+  fmt_desc: The per-session metadata cache size in bytes. Set to `0` to use
+    the LanceDB default of 1 GiB.
+  default: 0
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_usage_log_key_transition
   type: bool
   level: advanced
