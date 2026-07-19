@@ -1373,6 +1373,30 @@ class TestCephadm(object):
                     assert saved.data_devices.paths[0].crush_device_class == 'ssd'
                     mock_apply.assert_called_once()
 
+    def test_create_osd_default_spec_preserves_extra_container_args(self, cephadm_module):
+        with mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}')):
+            with mock.patch("cephadm.module.CephadmOrchestrator.apply") as mock_apply:
+                with with_host(cephadm_module, 'test'):
+                    dg = DriveGroupSpec(
+                        placement=PlacementSpec(host_pattern='test'),
+                        data_devices=DeviceSelection(paths=['/dev/sdb']),
+                        service_id='default',
+                        extra_container_args=['--memory', '32g', '--quiet'],
+                        extra_entrypoint_args=['--verbose'],
+                    )
+                    cephadm_module.create_osd_default_spec(dg)
+                    saved = cephadm_module.spec_store.all_specs['osd.default']
+                    # extra_container_args and extra_entrypoint_args are converted to ArgumentSpec objects
+                    container_args = []
+                    for arg in saved.extra_container_args:
+                        container_args.extend(arg.to_args())
+                    assert container_args == ['--memory', '32g', '--quiet']
+                    entrypoint_args = []
+                    for arg in saved.extra_entrypoint_args:
+                        entrypoint_args.extend(arg.to_args())
+                    assert entrypoint_args == ['--verbose']
+                    mock_apply.assert_called_once()
+
     def test_create_osds_skips_default_spec_when_osd_default_exists(self, cephadm_module):
         with mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}')):
             with mock.patch.object(CephadmOrchestrator, 'validate_device', return_value=''):
