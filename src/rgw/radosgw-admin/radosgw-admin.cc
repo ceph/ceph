@@ -3600,16 +3600,27 @@ void init_realm_param(CephContext *cct, string& var, std::optional<string>& opt_
 // all commands sharing an ancestor. If two commands register the same name with
 // different targets, the first registration wins on shared ancestors — the
 // second command's ancestor registration is silently skipped.
+// An optional per-value check is attached to every copy (whichever copy sits at
+// the token's position is the one that collects the value), so flag-specific
+// validations fire no matter where the flag appears on the command line.
 template <typename T>
 CLI::Option* add_multilevel_option(CLI::App* cmd, const std::string& name, T& var,
-                               std::string_view desc = {}) {
+                               std::string_view desc = {},
+                               const std::function<void(std::string)>& check = {}) {
   const std::string primary = name.substr(0, name.find(','));
   for (CLI::App* p = cmd->get_parent(); p; p = p->get_parent()) {
     if (!p->get_option_no_throw(primary)) {
-      p->add_option(name, var)->group("")->take_last();
+      auto* opt = p->add_option(name, var)->group("")->take_last();
+      if (check) {
+        opt->each(check);
+      }
     }
   }
-  return cmd->add_option(name, var, std::string(desc))->take_last();
+  auto* opt = cmd->add_option(name, var, std::string(desc))->take_last();
+  if (check) {
+    opt->each(check);
+  }
+  return opt;
 }
 
 // Multilevel strict base-10 integer option (sibling of add_multilevel_option):
@@ -4268,7 +4279,16 @@ int main(int argc, const char **argv)
     // root and declared once here instead of on every command. Matches the legacy parser,
     // where --tenant and -i/--uid are handled globally for any command.
     app.add_option("--tenant", tenant, std::string(tenant_desc))->take_last();
-    app.add_option("--uid,-i",  uid_str, "user id")->take_last();
+    // Legacy exits immediately when -i/--uid resolves to an empty user
+    // ("no value for uid", e.g. -i "" or -i '$'); run the same check on
+    // each captured value.
+    app.add_option("--uid,-i",  uid_str, "user id")->take_last()
+        ->each([](const std::string& value) {
+          if (rgw_user(value).empty()) {
+            cerr << "no value for uid" << std::endl;
+            throw CLI::RuntimeError(1);
+          }
+        });
 
     // Ceph's globals are stripped by rgw_global_init() before CLI11 runs, so document
     // them in the footer (descriptions from generic_usage(), common/ceph_argparse.cc).
@@ -4434,6 +4454,15 @@ int main(int argc, const char **argv)
       constexpr std::string_view new_name_desc    = "for bucket link: optional new name";
       constexpr std::string_view obj_ver_desc     = "object version";
 
+      // Legacy exits immediately on an empty --bucket-id value; every
+      // registration below attaches this check.
+      const auto reject_empty_bucket_id = [](const std::string& value) {
+        if (value.empty()) {
+          cerr << "no value for bucket-id" << std::endl;
+          throw CLI::RuntimeError(1);
+        }
+      };
+
       auto* bucket_cmd    = app.add_subcommand("bucket", "Manage buckets");
       bucket_cmd->alias("buckets");
       auto* bucket_list   = bucket_cmd->add_subcommand("list",   "list buckets (specify --allow-unordered for faster, unsorted listing)");
@@ -4480,7 +4509,7 @@ int main(int argc, const char **argv)
 
       // bucket list options
       add_multilevel_option(bucket_list, "--bucket,-b",       bucket_name,    bucket_desc);
-      add_multilevel_option(bucket_list, "--bucket-id",       bucket_id,      bucket_id_desc)->ignore_underscore();
+      add_multilevel_option(bucket_list, "--bucket-id",       bucket_id,      bucket_id_desc, reject_empty_bucket_id)->ignore_underscore();
       add_multilevel_option(bucket_list, "--format",          format,         format_desc);
       // strict base-10 parsing (including overflow checks); sets max_entries_specified
       // to mirror the legacy argparse behavior
@@ -4493,7 +4522,7 @@ int main(int argc, const char **argv)
 
       // bucket stats options
       add_multilevel_option(bucket_stats, "--bucket,-b",          bucket_name,        bucket_desc);
-      add_multilevel_option(bucket_stats, "--bucket-id",          bucket_id,          bucket_id_desc)->ignore_underscore();
+      add_multilevel_option(bucket_stats, "--bucket-id",          bucket_id,          bucket_id_desc, reject_empty_bucket_id)->ignore_underscore();
       add_multilevel_option(bucket_stats, "--format",             format,             format_desc);
       // strict base-10 parsing (including overflow checks); sets max_entries_specified
       // to mirror the legacy argparse behavior
@@ -4505,7 +4534,7 @@ int main(int argc, const char **argv)
 
       // bucket link options
       add_multilevel_option(bucket_link, "--bucket,-b",       bucket_name,     bucket_desc)->option_text("<bucket> REQUIRED");
-      add_multilevel_option(bucket_link, "--bucket-id",       bucket_id,       bucket_id_desc)->ignore_underscore();
+      add_multilevel_option(bucket_link, "--bucket-id",       bucket_id,       bucket_id_desc, reject_empty_bucket_id)->ignore_underscore();
       add_multilevel_option(bucket_link, "--bucket-new-name", new_bucket_name, new_name_desc)->ignore_underscore();
 
       // bucket unlink options
@@ -4542,7 +4571,7 @@ int main(int argc, const char **argv)
 
       // bucket layout options
       add_multilevel_option(bucket_layout, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
-      add_multilevel_option(bucket_layout, "--bucket-id", bucket_id,   bucket_id_desc)->ignore_underscore();
+      add_multilevel_option(bucket_layout, "--bucket-id", bucket_id,   bucket_id_desc, reject_empty_bucket_id)->ignore_underscore();
       add_multilevel_option(bucket_layout, "--format",    format,      format_desc);
 
       // bucket chown options
@@ -4556,21 +4585,21 @@ int main(int argc, const char **argv)
 
       // bucket logging flush options
       add_multilevel_option(bucket_logging_flush, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
-      add_multilevel_option(bucket_logging_flush, "--bucket-id", bucket_id,   bucket_id_desc)->ignore_underscore();
+      add_multilevel_option(bucket_logging_flush, "--bucket-id", bucket_id,   bucket_id_desc, reject_empty_bucket_id)->ignore_underscore();
 
       // bucket logging info options
       add_multilevel_option(bucket_logging_info, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
-      add_multilevel_option(bucket_logging_info, "--bucket-id", bucket_id,   bucket_id_desc)->ignore_underscore();
+      add_multilevel_option(bucket_logging_info, "--bucket-id", bucket_id,   bucket_id_desc, reject_empty_bucket_id)->ignore_underscore();
       add_multilevel_option(bucket_logging_info, "--format",    format,      format_desc);
 
       // bucket logging list options
       add_multilevel_option(bucket_logging_list, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
-      add_multilevel_option(bucket_logging_list, "--bucket-id", bucket_id,   bucket_id_desc)->ignore_underscore();
+      add_multilevel_option(bucket_logging_list, "--bucket-id", bucket_id,   bucket_id_desc, reject_empty_bucket_id)->ignore_underscore();
       add_multilevel_option(bucket_logging_list, "--format",    format,      format_desc);
 
       // bucket rewrite options
       add_multilevel_option(bucket_rewrite, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
-      add_multilevel_option(bucket_rewrite, "--bucket-id", bucket_id,   bucket_id_desc)->ignore_underscore();
+      add_multilevel_option(bucket_rewrite, "--bucket-id", bucket_id,   bucket_id_desc, reject_empty_bucket_id)->ignore_underscore();
       add_multilevel_option(bucket_rewrite, "--format",    format,      format_desc);
       add_multilevel_option(bucket_rewrite, "--start-date,--start-time", start_date,
                             "start date in the format yyyy-mm-dd")->ignore_underscore();
@@ -4595,7 +4624,7 @@ int main(int argc, const char **argv)
 
       // bucket set-min-shards options
       add_multilevel_option(bucket_set_min_shards, "--bucket,-b",  bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
-      add_multilevel_option(bucket_set_min_shards, "--bucket-id",  bucket_id,   bucket_id_desc)->ignore_underscore();
+      add_multilevel_option(bucket_set_min_shards, "--bucket-id",  bucket_id,   bucket_id_desc, reject_empty_bucket_id)->ignore_underscore();
       // Track whether --num-shards was provided, so the handler can
       // distinguish an omitted option from an explicit value of 0.
       add_multilevel_strict_int(bucket_set_min_shards, "--num-shards", num_shards,  "minimum number of shards to set")
@@ -4628,7 +4657,7 @@ int main(int argc, const char **argv)
 
       // bucket resync encrypted multipart options
       add_multilevel_option(bucket_resync_encrypted_multipart, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
-      add_multilevel_option(bucket_resync_encrypted_multipart, "--bucket-id",  bucket_id,  bucket_id_desc)->ignore_underscore();
+      add_multilevel_option(bucket_resync_encrypted_multipart, "--bucket-id",  bucket_id,  bucket_id_desc, reject_empty_bucket_id)->ignore_underscore();
       add_multilevel_option(bucket_resync_encrypted_multipart, "--marker",     marker,     marker_desc);
       add_multilevel_binary_flag(bucket_resync_encrypted_multipart, "--yes-i-really-mean-it", yes_i_really_mean_it, "required for certain operations")->ignore_underscore();
       add_multilevel_option(bucket_resync_encrypted_multipart, "--format",     format,     format_desc);
