@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include "lancedb.h"
 #include "include/encoding.h"
 #include "rgw_arn.h"
 #include "common/async/yield_context.h"
@@ -22,6 +23,8 @@ class Driver;
 }
 
 namespace rgw::s3vector {
+
+int lancedb_error_to_errno(LanceDBError err);
 
 enum class DistanceMetric {
   UNKNOWN,
@@ -519,4 +522,3 @@ int delete_vectors(const delete_vectors_t& configuration, DoutPrefixProvider* dp
 int query_vectors(const query_vectors_t& configuration, std::optional<JSONParser>& filter, DoutPrefixProvider* dpp, optional_yield y, query_vectors_reply_t& reply, std::vector<validation_error_t>& errors);
 
 }
-

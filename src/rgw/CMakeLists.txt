@@ -207,6 +207,7 @@ if(WITH_RADOSGW_RADOS)
           driver/rados/rgw_rest_bucket.cc
           driver/rados/rgw_rest_log.cc
           driver/rados/rgw_rest_realm.cc
+          driver/rados/rgw_rest_vector_bucket.cc
           driver/rados/rgw_rest_user.cc
           driver/rados/rgw_sal_rados.cc
           driver/rados/rgw_service.cc
@@ -463,6 +464,7 @@ if(WITH_RADOSGW_RADOS)
 	  driver/rados/rgw_rest_bucket.cc
           driver/rados/rgw_rest_log.cc
           driver/rados/rgw_rest_realm.cc
+          driver/rados/rgw_rest_vector_bucket.cc
 	  rgw_period_pusher.cc
   )
 endif()

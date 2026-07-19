@@ -434,6 +434,52 @@ public:
   static int sync_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg = NULL);
 };
 
+struct RGWVectorBucketAdminOpState {
+  rgw_user uid;
+  std::string bucket_name;
+  std::string marker;
+  uint32_t max_entries{1000};
+  bool fetch_session{false};
+  std::unique_ptr<rgw::sal::VectorBucket> bucket;
+
+  void set_user_id(const rgw_user& user_id) {
+    if (!user_id.empty()) {
+      uid = user_id;
+    }
+  }
+  void set_tenant(const std::string& tenant_str) {
+    uid.tenant = tenant_str;
+  }
+  void set_bucket_name(const std::string& bucket_str) {
+    bucket_name = bucket_str;
+  }
+  void set_fetch_session(bool value) {
+    fetch_session = value;
+  }
+  void set_bucket(std::unique_ptr<rgw::sal::VectorBucket> value) {
+    bucket = std::move(value);
+  }
+
+  rgw_user& get_user_id() { return uid; }
+  const rgw_user& get_user_id() const { return uid; }
+  std::string& get_tenant() { return uid.tenant; }
+  const std::string& get_bucket_name() const { return bucket_name; }
+  bool will_fetch_session() const { return fetch_session; }
+  bool is_user_op() const { return !uid.empty(); }
+  bool has_bucket() const { return !bucket_name.empty(); }
+  rgw::sal::VectorBucket* get_bucket() { return bucket.get(); }
+};
+
+class RGWVectorBucketAdminOp {
+public:
+  static int info(rgw::sal::Driver* driver, RGWVectorBucketAdminOpState& op_state,
+                  RGWFormatterFlusher& flusher, optional_yield y,
+                  const DoutPrefixProvider *dpp);
+  static int remove_session(rgw::sal::Driver* driver,
+                            RGWVectorBucketAdminOpState& op_state,
+                            const DoutPrefixProvider *dpp, optional_yield y);
+};
+
 struct rgw_ep_info {
   RGWBucketEntryPoint &ep;
   std::map<std::string, buffer::list>& attrs;
@@ -758,4 +804,3 @@ private:
 
 bool rgw_find_bucket_by_id(const DoutPrefixProvider *dpp, CephContext *cct, rgw::sal::Driver* driver, const std::string& marker,
                            const std::string& bucket_id, rgw_bucket* bucket_out);
-

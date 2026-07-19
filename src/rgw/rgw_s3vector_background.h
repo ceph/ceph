@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "lancedb.h"
+
 #include <memory>
 #include <string>
 
@@ -10,7 +12,6 @@ namespace rgw::sal {
   class Driver;
 }
 class DoutPrefixProvider;
-struct LanceDBSession;
 
 namespace rgw::s3vector {
   bool init(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver);
@@ -27,5 +28,10 @@ namespace rgw::s3vector {
   bool notify_session_create(const DoutPrefixProvider* dpp, const std::string& bucket_name);
   // notify manager for session deletion
   bool notify_session_delete(const DoutPrefixProvider* dpp, const std::string& bucket_name);
+  // delete one session immediately by bucket name
+  int delete_session(const DoutPrefixProvider* dpp, const std::string& bucket_name);
+  // get index cache stats for a session by bucket name
+  int get_index_cache_stats(const DoutPrefixProvider* dpp, const std::string& bucket_name, LanceDBSessionCacheStats& out_stats);
+  // get metadata cache stats for a session by bucket name
+  int get_metadata_cache_stats(const DoutPrefixProvider* dpp, const std::string& bucket_name, LanceDBSessionCacheStats& out_stats);
 }
-
