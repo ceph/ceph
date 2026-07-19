@@ -187,7 +187,8 @@ if(WITH_RADOSGW_LANCEDB)
     rgw_rest_vector_bucket.cc
     rgw_s3vector.cc
     rgw_s3vector_filter.cc
-    rgw_s3vector_background.cc)
+    rgw_s3vector_background.cc
+    rgw_vector_bucket_admin.cc)
 endif()
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
