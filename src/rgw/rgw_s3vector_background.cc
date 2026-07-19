@@ -182,8 +182,22 @@ private:
             {
               ldpp_dout(this, 20) << "INFO: received session create message for bucket: " << table_name.first << dendl;
               std::unique_lock l(sessions_mutex);
-              if (sessions.find(table_name.first) != sessions.end()) {
-                ldpp_dout(this, 20) << "INFO: session already exists for bucket: " << table_name.first << dendl;
+              if (sessions.find(table_name.first) == sessions.end()) {
+                LanceDBSessionOptions options{};
+                options.index_cache_bytes =
+                  cct->_conf.get_val<Option::size_t>(
+                    "rgw_s3vector_session_index_cache_size");
+                options.metadata_cache_bytes =
+                  cct->_conf.get_val<Option::size_t>(
+                    "rgw_s3vector_session_metadata_cache_size");
+                LanceDBSession* session = lancedb_session_new(&options);
+                if (session) {
+                  sessions[table_name.first] = SessionPtr(session, LanceDBSessionDeleter());
+                  ldpp_dout(this, 20) << "INFO: created session for bucket: " << table_name.first << dendl;
+                }
+                else {
+                  ldpp_dout(this, 1) << "ERROR: failed to create session for bucket: " << table_name.first << dendl;
+                }
                 return;
               }
 
