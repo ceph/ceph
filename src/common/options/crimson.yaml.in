@@ -340,7 +340,12 @@ options:
     seastore drives the device over SPDK's userspace polled NVMe driver instead
     of the kernel/io_uring path. The device must be bound to vfio-pci and
     hugepages configured. Not supported for zoned (ZBD/ZNS) devices. Requires a
-    build with WITH_SPDK. Empty (default) uses the kernel path.
+    build with WITH_SPDK. Empty (default) uses the kernel path. Reactor shards
+    driving an SPDK device stay in poll mode (the completion poller never
+    agrees to enter the reactor's idle interrupt mode), so completions are
+    always reaped by polling and no kernel interrupt handling is relied upon;
+    such shards do not sleep when idle. The transport id format matches the
+    "spdk:" prefix accepted by bluestore_block_path.
   flags:
   - startup
 

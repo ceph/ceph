@@ -1,3 +1,11 @@
+* Crimson/SeaStore: New SPDK userspace polled NVMe I/O path. Setting
+  ``seastore_spdk_transport_id`` drives a SeaStore device over SPDK's
+  userspace polled NVMe driver (local PCIe, NVMe-oF TCP, or vfio-user)
+  instead of the kernel/io_uring path; ``seastore_spdk_iova_mode`` tunes the
+  DPDK IOVA mode. Requires a build with ``WITH_SPDK``; the default (kernel)
+  path is unchanged. Not supported for zoned (ZBD/ZNS) devices. Reactor
+  shards driving an SPDK device stay in poll mode and do not sleep when idle.
+
 * RADOS: PG autoscaler allows overlapping roots. Each root receives a PG target based
   on its OSDs, with OSDs shared across multiple roots contributing proportionally
   less to each root's allocation.
