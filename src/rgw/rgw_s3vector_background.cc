@@ -21,6 +21,7 @@
 #include <unordered_map>
 #include "rgw_sal.h"
 #include "lancedb.h"
+#include "rgw_s3vector.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -41,6 +42,11 @@ public:
           table_name(bucket_name, index_name), type(_type) {}
       const table_name_t table_name;
       const Op type;
+    };
+
+    enum class LanceDBSessionCacheType {
+      INDEX_CACHE,
+      METADATA_CACHE
     };
 
 private:
@@ -385,6 +391,53 @@ public:
     it->second.last_used.store(ceph::coarse_real_clock::now().time_since_epoch().count());
     return it->second.session;
   }
+
+   int delete_session(const std::string& bucket_name) {
+    std::unique_lock l(sessions_mutex);
+    if (sessions.erase(bucket_name) == 0) {
+      return -ENOENT;
+    }
+    return 0;
+  }
+
+  int get_session_cache_stats(const std::string& bucket_name, LanceDBSessionCacheType cache_type, LanceDBSessionCacheStats& out_stats) const {
+    SessionPtr session;
+    {
+      std::shared_lock l(sessions_mutex);
+      auto it = sessions.find(bucket_name);
+      if (it == sessions.end()) {
+        return -ENOENT;
+      }
+      session = it->second.session;
+    }
+
+    char* error_message = nullptr;
+    LanceDBError result;
+    if (cache_type == LanceDBSessionCacheType::INDEX_CACHE) {
+      result = lancedb_session_index_cache_stats(session.get(), &out_stats, &error_message);
+    } else if (cache_type == LanceDBSessionCacheType::METADATA_CACHE) {
+      result = lancedb_session_metadata_cache_stats(session.get(), &out_stats, &error_message);
+    } else {
+      return -EINVAL; // invalid cache type
+    }
+
+    if (error_message) {
+      ldpp_dout(this, 1) << "ERROR: failed to get cache stats for bucket "
+                         << bucket_name << ": " << error_message << dendl;
+      lancedb_free_string(error_message);
+    }
+    return lancedb_error_to_errno(result);
+  }
+
+  int get_index_cache_stats(const std::string& bucket_name,
+                            LanceDBSessionCacheStats& out_stats) const {
+    return get_session_cache_stats(bucket_name, LanceDBSessionCacheType::INDEX_CACHE, out_stats);
+  }
+
+  int get_metadata_cache_stats(const std::string& bucket_name,
+                               LanceDBSessionCacheStats& out_stats) const {
+    return get_session_cache_stats(bucket_name, LanceDBSessionCacheType::METADATA_CACHE, out_stats);
+  }
   
   Manager(CephContext* _cct, rgw::sal::Driver* _driver) :
     cct(_cct),
@@ -458,6 +511,32 @@ bool notify_session_delete(const DoutPrefixProvider* dpp, const std::string& buc
     return false;
   }
   return s_manager->notify_session(dpp, bucket_name, Manager::message_t::Op::SESSION_DELETE);
+}
+
+int delete_session(const DoutPrefixProvider* dpp, const std::string& bucket_name) {
+  if (!s_manager) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to delete s3vectors session: manager is not initialized" << dendl;
+    return -EIO;
+  }
+  return s_manager->delete_session(bucket_name);
+}
+
+int get_index_cache_stats(const DoutPrefixProvider* dpp, const std::string& bucket_name,
+                          LanceDBSessionCacheStats& out_stats) {
+  if (!s_manager) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to get s3vectors index cache stats: manager is not initialized" << dendl;
+    return -EIO;
+  }
+  return s_manager->get_index_cache_stats(bucket_name, out_stats);
+}
+
+int get_metadata_cache_stats(const DoutPrefixProvider* dpp, const std::string& bucket_name,
+                             LanceDBSessionCacheStats& out_stats) {
+  if (!s_manager) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to get s3vectors metadata cache stats: manager is not initialized" << dendl;
+    return -EIO;
+  }
+  return s_manager->get_metadata_cache_stats(bucket_name, out_stats);
 }
 
 } // namespace rgw::s3vector
