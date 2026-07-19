@@ -324,14 +324,14 @@ bool LogNode::expect_overflow(const std::string &key,
   size_t ksize = key.size();
   if (can_ow) { 
     int gap = ow_gap_from_last_entry(key.size(), vsize);
-    uint64_t remain = capacity() - get_last_pos() - reserved_len;
     if (gap >= 0) {
       gap += static_cast<uint64_t>(gap);
     } else {
       uint64_t d = static_cast<uint64_t>(-gap);
       gap -= d;
     }
-    return remain < get_entry_size(ksize, vsize);
+    return get_last_pos() + reserved_len + get_entry_size(ksize, vsize)
+           > capacity();
   } else if (get_size() + reserved_size + 1 > d_bitmap_t::MAX_ENTRY) {
     return true;
   } else if (is_ow_key(key) && !can_ow) {
