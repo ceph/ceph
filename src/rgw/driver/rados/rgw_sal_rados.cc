@@ -59,6 +59,7 @@
 #include "rgw_rest_ratelimit.h"
 #include "rgw_rest_realm.h"
 #include "rgw_rest_user.h"
+#include "rgw_rest_vector_bucket.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
 #include "rgw_service.h"
@@ -2765,6 +2766,7 @@ void RadosStore::register_admin_apis(RGWRESTMgr* mgr)
 {
   mgr->register_resource("user", new RGWRESTMgr_User);
   mgr->register_resource("bucket", new RGWRESTMgr_Bucket);
+  mgr->register_resource("vectorbucket", new RGWRESTMgr_VectorBucket);
   /*Registering resource for /admin/metadata */
   mgr->register_resource("metadata", new RGWRESTMgr_Metadata);
   mgr->register_resource("log", new RGWRESTMgr_Log);
