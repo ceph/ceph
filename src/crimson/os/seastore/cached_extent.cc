@@ -131,9 +131,13 @@ CachedExtent::is_viewable_by_trans(Transaction &t) {
     return std::make_pair(true, viewable_state_t::pending);
   }
 
-  // shared by multiple transactions
-  assert(t.is_in_read_set(this));
-  assert(is_stable_ready());
+  // shared by multiple transactions.
+  // Lazy-read transactions don't register covered types in the read_set,
+  // and may (in a narrow two-commit race) observe a successor node whose
+  // journal write is still in flight -- both are safe for content reads,
+  // see Transaction::is_lazy_read().
+  assert(t.is_in_read_set(this) || t.skips_read_set(get_type()));
+  assert(is_stable_ready() || t.is_lazy_read());
 
   auto cmp = trans_spec_view_t::cmp_t();
   if (mutation_pending_extents.find(trans_id, cmp) !=

@@ -248,13 +248,23 @@ struct BtreeCursor
   // current transaction in the long term.
   bool is_viewable() const;
 
+  /**
+   * check_viewable
+   *
+   * Guard before structural use of the cursor (traversing the parent
+   * leaf's children[]): for lazy-read transactions a stale cursor throws
+   * the standard conflict interruption (surfacing eagain); otherwise
+   * staleness is a bug and asserts.
+   */
+  void check_viewable() const;
+
   bool is_end() const {
-    assert(is_viewable());
+    check_viewable();
     return iter == parent->end();
   }
 
   extent_len_t get_length() const {
-    assert(is_viewable());
+    check_viewable();
     assert(!is_end());
     return iter.get_val().len;
   }

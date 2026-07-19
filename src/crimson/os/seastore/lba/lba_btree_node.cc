@@ -96,12 +96,22 @@ base_iertr::future<> LBACursor::refresh()
 
   if (!parent->is_valid()) {
     ctx.trans.cursor_stats.num_refresh_invalid_parent++;
+    if (ctx.trans.is_lazy_read()) {
+      ctx.cache.account_lazy_read_cursor_refresh();
+    }
     SUBTRACET(
       seastore_lba,
       "cursor {} parent is invalid, re-search from scratch",
        ctx.trans, *this);
     lba::LBABtree::iterator it = co_await btree.lower_bound(
       ctx, this->get_laddr());
+    if (ctx.trans.is_lazy_read() &&
+        unlikely(it.is_end() || this->get_laddr() != it.get_key())) {
+      // Per-object op ordering above SeaStore should make it impossible
+      // for this cursor's mapping to vanish mid-read; if it does anyway,
+      // retry via eagain rather than corrupt or crash.
+      ctx.cache.throw_lazy_read_stale(ctx.trans, *parent);
+    }
     assert(this->get_laddr() == it.get_key());
     iter = LBALeafNode::iterator(
       it.get_leaf_node().get(),

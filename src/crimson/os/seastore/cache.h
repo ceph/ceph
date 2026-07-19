@@ -7,6 +7,7 @@
 
 #include "include/buffer.h"
 
+#include "crimson/common/config_proxy.h"
 #include "crimson/common/errorator.h"
 #include "crimson/common/errorator-utils.h"
 #include "crimson/os/seastore/backref_entry.h"
@@ -103,7 +104,8 @@ class SegmentProvider;
  * - TRACE: DEBUG details
  * - seastore_t logs
  */
-class Cache : public ExtentTransViewRetriever {
+class Cache : public ExtentTransViewRetriever,
+              private md_config_obs_t {
 public:
   Cache(ExtentPlacementManager &epm, store_index_t store_index);
   ~Cache();
@@ -120,6 +122,11 @@ public:
 
     ++(get_by_src(stats.trans_created_by_src, src));
 
+    const bool lazy_read =
+      !is_weak &&
+      src == Transaction::src_t::READ &&
+      lazy_read_enabled;
+
     auto ret = boost::intrusive_ptr(new Transaction(
       get_dummy_ordering_handle(),
       is_weak,
@@ -128,10 +135,11 @@ public:
         return on_transaction_destruct(t);
       },
       ++next_id,
-      cache_hint)
+      cache_hint,
+      lazy_read)
     );
-    SUBDEBUGT(seastore_t, "created name={}, source={}, is_weak={}",
-              *ret, name, src, is_weak);
+    SUBDEBUGT(seastore_t, "created name={}, source={}, is_weak={}, lazy_read={}",
+              *ret, name, src, is_weak, lazy_read);
     assert(!is_weak || src == Transaction::src_t::READ);
     return ret;
   }
@@ -505,11 +513,38 @@ public:
     return ext;
   }
 
+  /**
+   * Precondition: t.is_lazy_read().  Marks 't' conflicted (if not already)
+   * and throws the standard transaction-conflict interruption, which
+   * with_trans_intr converts to crimson::ct_error::eagain so the enclosing
+   * repeat_eagain loop retries the op with a fresh transaction.
+   */
+  [[noreturn]] void throw_lazy_read_stale(Transaction& t, CachedExtent& stale);
+
+  /**
+   * maybe_throw_lazy_read_stale
+   *
+   * Throws iff 't' is a lazy-read transaction and 'extent' has been
+   * invalidated by a concurrent commit.  See the note on the ETVR
+   * declaration: a check is only valid within a single continuation.
+   */
+  void maybe_throw_lazy_read_stale(Transaction& t, CachedExtent& extent) final {
+    if (unlikely(t.is_lazy_read() && !extent.is_valid())) {
+      throw_lazy_read_stale(t, extent);
+    }
+  }
+
+  /// count a cursor refresh performed on behalf of a lazy-read transaction
+  void account_lazy_read_cursor_refresh() {
+    ++stats.lazy_read_cursor_refreshes;
+  }
+
   get_extent_iertr::future<> maybe_wait_accessible(
     Transaction &t,
     CachedExtent &extent) final {
     // as of now, only lba tree nodes can go in here,
     // so it must be fully loaded.
+    maybe_throw_lazy_read_stale(t, extent);
     assert(extent.is_valid());
     assert(extent.is_fully_loaded());
     const auto t_src = t.get_src();
@@ -521,6 +556,19 @@ public:
       // stable from trans-view
       bool needs_touch = false, needs_step_2 = false;
       assert(!extent.is_pending_in_trans(t.get_trans_id()));
+      if (t.skips_read_set(ext_type)) {
+	// lazy-read: no registration; keep access stats and pinboard
+	// promotion (per-access instead of per-transaction touch)
+	++stats.lazy_read_skipped_registrations;
+	if (extent.is_stable_dirty()) {
+	  ++access_stats.cache_dirty;
+	  ++stats.access.cache_dirty;
+	} else {
+	  ++access_stats.cache_lru;
+	  ++stats.access.cache_lru;
+	}
+	needs_touch = true;
+      } else {
       auto ret = t.maybe_add_to_read_set(&extent);
       if (ret.added) {
 	if (extent.is_stable_dirty()) {
@@ -548,12 +596,15 @@ public:
       // step 2 maybe reordered after wait_io(),
       // always try step 2 if paddr unknown
       needs_step_2 = !ret.is_paddr_known;
+      }
 
       auto target_extent = CachedExtentRef(&extent);
       return trans_intr::make_interruptible(
 	extent.wait_io()
       ).then_interruptible([target_extent, needs_touch,
 			    needs_step_2, &t, this, t_src] {
+	// the extent may have been invalidated during wait_io
+	maybe_throw_lazy_read_stale(t, *target_extent);
 	if (needs_step_2) {
 	  t.maybe_add_to_read_set_step_2(target_extent.get());
 	}
@@ -575,6 +626,7 @@ public:
   CachedExtentRef get_extent_viewable_by_trans_sync(
     Transaction &t,
     CachedExtentRef extent) final {
+    maybe_throw_lazy_read_stale(t, *extent);
     assert(extent->is_valid());
 
     CachedExtent* p_extent = nullptr;
@@ -612,6 +664,7 @@ public:
     Transaction &t,
     CachedExtentRef extent) final
   {
+    maybe_throw_lazy_read_stale(t, *extent);
     assert(extent->is_valid());
 
     const auto t_src = t.get_src();
@@ -642,6 +695,20 @@ public:
       } else {
         // stable from trans-view
         assert(!p_extent->is_pending_in_trans(t.get_trans_id()));
+        if (t.skips_read_set(ext_type)) {
+          // lazy-read: no registration; keep access stats and pinboard
+          // promotion (per-access instead of per-transaction touch)
+          ++stats.lazy_read_skipped_registrations;
+          if (p_extent->is_stable_dirty()) {
+            ++access_stats.cache_dirty;
+            ++stats.access.cache_dirty;
+          } else {
+            assert(p_extent->is_stable_clean());
+            ++access_stats.cache_lru;
+            ++stats.access.cache_lru;
+          }
+          needs_touch = true;
+        } else {
         auto ret = t.maybe_add_to_read_set(p_extent);
         if (ret.added) {
           if (p_extent->is_stable_dirty()) {
@@ -671,6 +738,7 @@ public:
         // step 2 maybe reordered after wait_io(),
         // always try step 2 if paddr unknown
         needs_step_2 = !ret.is_paddr_known;
+        }
       }
     } else {
       assert(!extent->is_pending_io() || extent->is_exist_clean());
@@ -696,6 +764,8 @@ public:
       p_extent->wait_io()
     ).then_interruptible([target_extent, needs_touch, needs_step_2, &t, this, t_src] {
       auto p_extent = target_extent.get();
+      // the extent may have been invalidated during wait_io
+      maybe_throw_lazy_read_stale(t, *p_extent);
       if (needs_step_2) {
 	t.maybe_add_to_read_set_step_2(p_extent);
       }
@@ -1734,6 +1804,20 @@ private:
   // when delta-based overwrite is enabled, RANDOM_BLOCK data extents may be
   // mutated in place, leaving their LBA-leaf crc stale; see _read_extent().
   const bool delta_based_overwrite_enabled;
+  bool lazy_read_enabled;
+
+  // md_config_obs_t
+  std::vector<std::string> get_tracked_keys() const noexcept final {
+    return {"seastore_lazy_read_conflict_detection"};
+  }
+  void handle_conf_change(
+    const ConfigProxy& conf,
+    const std::set<std::string>& changed) final {
+    if (changed.count("seastore_lazy_read_conflict_detection")) {
+      lazy_read_enabled =
+        conf.get_val<bool>("seastore_lazy_read_conflict_detection");
+    }
+  }
   RootBlockRef root;               ///< ref to current root
   ExtentIndex extents_index;             ///< set of live extents
 
@@ -1874,6 +1958,11 @@ private:
 
     std::array<uint64_t, NUM_SRC_COMB> trans_conflicts_by_srcs;
     counter_by_src_t<uint64_t> trans_conflicts_by_unknown;
+
+    // lazy-read conflict detection (seastore_lazy_read_conflict_detection)
+    uint64_t lazy_read_stale_retries = 0;        // eagain thrown on stale access
+    uint64_t lazy_read_skipped_registrations = 0; // read-set registrations avoided
+    uint64_t lazy_read_cursor_refreshes = 0;      // cursor refreshes by lazy readers
 
     rewrite_stats_t trim_rewrites;
     rewrite_stats_t reclaim_rewrites;

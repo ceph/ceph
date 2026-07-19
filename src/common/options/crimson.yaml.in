@@ -207,6 +207,13 @@ options:
         non-full integrity check means the integrity check might be skipped
         during extent remapping for better performance, disable with caution
   default: false
+- name: seastore_lazy_read_conflict_detection
+  type: bool
+  level: dev
+  desc: READ transactions skip read-set registration for LBA/backref btree
+        nodes and detect staleness lazily at access time, retrying via eagain
+        instead of restarting on every concurrent commit
+  default: true
 # TODO: seastore_max_data_allocation_size should be dropped once the sub-extent
 #       read/checksum is implemented.
 - name: seastore_max_data_allocation_size

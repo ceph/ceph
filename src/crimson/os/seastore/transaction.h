@@ -187,6 +187,11 @@ public:
     if (is_weak()) {
       return {false, true /* meaningless */};
     }
+    if (skips_read_set(ref->get_type())) {
+      // lazy-read conflict detection: covered types are not registered,
+      // staleness is detected at access time instead
+      return {false, true /* meaningless */};
+    }
     if (ref->get_paddr().is_absolute()) {
       // paddr is known
       bool added = do_add_to_read_set(ref);
@@ -207,6 +212,9 @@ public:
 
   void add_to_read_set(CachedExtentRef ref) {
     if (is_weak()) {
+      return;
+    }
+    if (skips_read_set(ref->get_type())) {
       return;
     }
 
@@ -477,6 +485,27 @@ public:
     return weak;
   }
 
+  /**
+   * is_lazy_read
+   *
+   * True for READ transactions running with lazy conflict detection
+   * (seastore_lazy_read_conflict_detection): extents of the covered types
+   * (see skips_read_set) are not registered in the read_set, so concurrent
+   * commits do not eagerly conflict this transaction.  Staleness is instead
+   * detected at access time (each time the transaction actually uses one
+   * of these extents. See Cache::maybe_throw_lazy_read_stale) and
+   * surfaces as eagain via the standard conflict machinery.
+   */
+  bool is_lazy_read() const {
+    return lazy_read;
+  }
+
+  /// True if extents of this type are not registered in the read_set
+  /// under lazy-read conflict detection.
+  bool skips_read_set(extent_types_t type) const {
+    return lazy_read && is_lba_backref_node(type);
+  }
+
   void test_set_conflict() {
     conflicted = true;
   }
@@ -514,14 +543,18 @@ public:
     src_t src,
     on_destruct_func_t&& f,
     transaction_id_t trans_id,
-    cache_hint_t cache_hint
+    cache_hint_t cache_hint,
+    bool lazy_read
   ) : weak(weak),
+      lazy_read(lazy_read),
       handle(std::move(handle)),
       on_destruct(std::move(f)),
       src(src),
       trans_id(trans_id),
       cache_hint(cache_hint)
-  {}
+  {
+    assert(!lazy_read || (src == src_t::READ && !weak));
+  }
 
   void invalidate_clear_write_set() {
     for (auto &&i: write_set) {
@@ -790,14 +823,25 @@ private:
     return true;
   }
 
+  /**
+   * Note: Step 2 of read_set registration inserts the read_item (created by
+   * step 1) into the paddr-keyed read_set.  read_set requires absolute
+   * addresses. Thus runs after wait_io() has
+   * resolved the extent's address to an absolute paddr.
+   */
   void maybe_add_to_read_set_step_2(CachedExtentRef ref) {
-    // paddr must be known for read_set
-    assert(ref->is_stable_ready());
     ceph_assert(ref->get_paddr().is_absolute());
     if (is_weak()) {
       return;
     }
-    auto [exists, it] = lookup_trans_from_read_extent(ref);
+    if (skips_read_set(ref->get_type())) {
+      // step 1 never ran for covered types; also avoids touching an
+      // extent that may have been invalidated during wait_io
+      return;
+    }
+    // paddr must be known for read_set
+    assert(ref->is_stable_ready());
+    const auto [exists, it] = lookup_trans_from_read_extent(ref);
     // step 1 must be complete
     assert(exists);
     // step 2 may be reordered after wait_io(),
@@ -814,7 +858,9 @@ private:
   }
 
   bool do_add_to_read_set(CachedExtentRef ref) {
+    // our callers should have already checked these conditions:
     assert(!is_weak());
+    assert(!skips_read_set(ref->get_type()));
     assert(ref->is_stable());
     // paddr must be known for read_set
     assert(ref->get_paddr().is_absolute()
@@ -849,6 +895,14 @@ private:
    * consistentency allowing operations using to avoid maintaining a read_set.
    */
   const bool weak;
+
+  /**
+   * If set (READ transactions only, gated by
+   * seastore_lazy_read_conflict_detection), LBA/backref btree node extents
+   * are not registered in the read_set; staleness is detected lazily at
+   * access time instead of eagerly at the writer's commit.
+   */
+  const bool lazy_read;
 
   RootBlockRef root;        ///< ref to root if read or written by transaction
 
@@ -962,7 +1016,8 @@ inline TransactionRef make_test_transaction() {
     Transaction::src_t::MUTATE,
     [](Transaction&) {},
     ++next_id,
-    CACHE_HINT_TOUCH)
+    CACHE_HINT_TOUCH,
+    false)
   );
 }
 /**
