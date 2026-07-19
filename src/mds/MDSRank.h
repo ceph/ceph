@@ -396,6 +396,7 @@ class MDSRank {
 
     std::string get_path(inodeno_t ino);
     uint64_t get_inode_rbytes(inodeno_t ino);
+    int get_filer_flags();
 
     // Reference to global MDS::mds_lock, so that users of MDSRank don't
     // carry around references to the outer MDS, and we can substitute

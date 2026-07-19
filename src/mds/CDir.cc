@@ -1775,6 +1775,7 @@ void CDir::_omap_fetch(std::set<string> *keys, MDSContext *c)
     fin->ret3 = -ECANCELED;
   }
 
+  mdcache->mds->objecter->add_global_op_flags(mdcache->mds->get_filer_flags());
   mdcache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0,
 			     new C_OnFinisher(fin, mdcache->mds->finisher));
 }
@@ -1795,6 +1796,7 @@ void CDir::_omap_fetch_more(version_t omap_version, bufferlist& hdrbl,
 		   &fin->omap_more,
 		   &fin->more,
 		   &fin->ret);
+  mdcache->mds->objecter->add_global_op_flags(mdcache->mds->get_filer_flags());
   mdcache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0,
 			     new C_OnFinisher(fin, mdcache->mds->finisher));
 }
