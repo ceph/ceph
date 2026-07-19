@@ -2,6 +2,8 @@
 Upgrading Ceph
 ==============
 
+.. _cephadm-upgrade:
+
 Cephadm can safely upgrade Ceph from one point release to the next.  For
 example, you can upgrade from v15.2.0 (the first Octopus release) to the next
 point release, v15.2.1.
@@ -59,6 +61,100 @@ The automated upgrade process follows Ceph best practices.  For example:
    If autoscaling was already off before the upgrade, cephadm does not change
    it unless you have set ``pg_autoscale_during_upgrade`` to ``true`` (opt-in
    to turn autoscaling on for the duration of the upgrade).
+
+
+Upgrade image pre-distribution
+==============================
+
+On clusters with many hosts and large container images, pulling the target
+image from a registry on each host during the upgrade can add significant
+time. This is especially noticeable during MDS upgrades when CephFS may
+already be offline while a host still downloads the image.
+
+When enabled, cephadm pre-distributes the target image to in-scope hosts
+**before any daemon is upgraded**. Configure this with a single option,
+``mgr/cephadm/upgrade_image_mirror_method``:
+
+``''`` / ``none`` (default)
+  Disabled. Upgrade behaves as before (per-host pull on demand during
+  daemon upgrade).
+
+``registry``
+  Pull in parallel on each in-scope host from the cluster registry (Harbor,
+  Quay, etc.). Use this when every node already has registry connectivity.
+  No tar, HTTP server, or seed-host disk space is required. Target image
+  digests and Ceph version are learned from those parallel pulls, so there
+  is no extra serial "first pull" on a single host before the batch.
+
+``local_http``
+  Pull once on a seed host, save to a gzip-compressed tar archive, serve it
+  briefly over HTTP on the cluster network, and load it in parallel on
+  worker hosts. Use this when only one or a few nodes can reach the registry
+  (telco, air-gapped, or bandwidth-constrained setups).
+
+Enable pre-distribution by selecting a method:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/cephadm/upgrade_image_mirror_method registry
+   # or
+   ceph config set mgr mgr/cephadm/upgrade_image_mirror_method local_http
+
+Disable again (either form):
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/cephadm/upgrade_image_mirror_method none
+   # or clear to empty
+   ceph config set mgr mgr/cephadm/upgrade_image_mirror_method ''
+
+Optional tuning (both ``registry`` and ``local_http``):
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/cephadm/upgrade_image_mirror_max_parallel 8
+
+``local_http`` port and firewall
+--------------------------------
+
+When ``upgrade_image_mirror_method`` is ``local_http``, the seed host briefly
+runs a short-lived HTTP server that serves the image tar to other in-scope
+hosts over the cluster / public host network.
+
+Default TCP port: ``8766``
+
+Override if needed:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/cephadm/upgrade_image_mirror_port 8766
+
+This port is used **only** for the ``local_http`` method (ignored for
+``registry``). The listener exists only for the duration of the image
+pre-distribution phase and is torn down afterward.
+
+Operators who manage host firewalls manually (``nftables``, ``iptables``,
+or similar) must allow inbound TCP ``8766`` (or the configured
+``upgrade_image_mirror_port``) on the seed host from the other Ceph hosts
+before starting an upgrade that uses ``local_http``. Example ``iptables``
+rule (adjust interface, source CIDR, and port as needed):
+
+.. prompt:: bash #
+
+   sudo iptables -A INPUT -i {iface} -p tcp -s {cluster-cidr} --dport 8766 -j ACCEPT
+
+.. note::
+
+   Cephadm does **not** currently open port ``8766`` automatically via its
+   ``firewalld`` integration. If ``firewalld`` is enabled on the seed host,
+   either open the port yourself for the upgrade window, or use the
+   ``registry`` method (no extra host port). Automatic open/close during
+   the mirror phase may be added in a follow-up.
+
+For ``local_http``, the seed host is the first online ``_admin`` host in
+upgrade scope, or the active mgr host if no ``_admin`` host is in scope.
+Hosts that already have the target image are skipped. If pre-distribution
+fails on any host, the upgrade is paused before any daemon is upgraded.
 
 
 Starting the Upgrade

@@ -54,6 +54,7 @@ EXPECTED = [
     ('sysctl', True, ssh_py),
     ('touch', True, ssh_py),
     ('true', True, ssh_py),
+    ('bash', True, 'upgrade.py'),
     # variable executables
     ('self.mgr.cephadm_binary_path', False, serve_py),
     ('/usr/libexec/cephadm_invoker.py', True, ssh_py),

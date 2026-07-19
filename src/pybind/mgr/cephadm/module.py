@@ -436,6 +436,33 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             desc='Maximum number of OSD daemons upgraded in parallel.'
         ),
         Option(
+            'upgrade_image_mirror_method',
+            type='str',
+            default='',
+            enum_allowed=['', 'none', 'registry', 'local_http'],
+            desc='Pre-distribute the upgrade target image to in-scope hosts before '
+                 'any daemon is upgraded. Empty or "none" (default): disabled. '
+                 '"registry": pull in parallel on each in-scope host from the '
+                 'cluster registry (requires registry reachability from hosts; '
+                 'digests/version learned from those pulls). '
+                 '"local_http": pull once on a seed host, save to a gzip-compressed '
+                 'tar, and fan out over HTTP on the cluster network.',
+        ),
+        Option(
+            'upgrade_image_mirror_max_parallel',
+            type='int',
+            default=8,
+            desc='Maximum number of hosts loading (local_http) or pulling (registry) '
+                 'the upgrade image in parallel.',
+        ),
+        Option(
+            'upgrade_image_mirror_port',
+            type='int',
+            default=8766,
+            desc='TCP port for the short-lived HTTP server on the image mirror seed '
+                 'host (local_http method only; ignored for registry).',
+        ),
+        Option(
             'pg_autoscale_during_upgrade',
             type='bool',
             default=False,
@@ -652,6 +679,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.apply_spec_fails: List[Tuple[str, str]] = []
             self.max_osd_draining_count = 10
             self.max_parallel_osd_upgrades = 16
+            self.upgrade_image_mirror_method = ''
+            self.upgrade_image_mirror_max_parallel = 8
+            self.upgrade_image_mirror_port = 8766
             self.device_enhanced_scan = False
             self.inventory_list_all = False
             self.cgroups_split = True
