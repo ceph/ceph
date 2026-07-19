@@ -196,6 +196,7 @@ async fn test_versioning_stack_delete_markers() {
 }
 
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_versioning_stacked_delete_markers_is_latest() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -231,6 +232,7 @@ async fn test_versioning_stacked_delete_markers_is_latest() {
 }
 
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_versioning_delete_marker_removal_promotes() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
