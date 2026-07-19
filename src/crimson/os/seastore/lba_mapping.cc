@@ -46,7 +46,7 @@ get_child_ret_t<LBALeafNode, LogicalChildNode>
 LBAMapping::get_logical_extent(Transaction &t) const
 {
   assert(is_linked_direct());
-  ceph_assert(direct_cursor->is_viewable());
+  direct_cursor->check_viewable();
   ceph_assert(direct_cursor->ctx.trans.get_trans_id()
 	      == t.get_trans_id());
   assert(!direct_cursor->is_end());
@@ -60,7 +60,7 @@ LBAMapping::get_logical_extent(Transaction &t) const
 
 bool LBAMapping::is_stable() const {
   assert(is_linked_direct());
-  ceph_assert(direct_cursor->is_viewable());
+  direct_cursor->check_viewable();
   assert(!direct_cursor->is_end());
   auto leaf = direct_cursor->parent->cast<LBALeafNode>();
   return leaf->is_child_stable(
@@ -71,7 +71,7 @@ bool LBAMapping::is_stable() const {
 
 bool LBAMapping::is_data_stable() const {
   assert(is_linked_direct());
-  ceph_assert(direct_cursor->is_viewable());
+  direct_cursor->check_viewable();
   assert(!direct_cursor->is_end());
   auto leaf = direct_cursor->parent->cast<LBALeafNode>();
   return leaf->is_child_data_stable(
@@ -91,6 +91,14 @@ base_iertr::future<LBAMapping> LBAMapping::next()
     ctx,
     std::move(mapping),
     [ctx](auto &btree, auto &mapping) mutable {
+    return seastar::futurize_invoke([ctx, &mapping] {
+      // lazy readers: the refresh above ran continuations ago; repair
+      // once here, make_partial_iter's guard remains the backstop
+      if (ctx.trans.is_lazy_read() && !mapping.is_viewable()) {
+	return mapping.co_refresh();
+      }
+      return base_iertr::now();
+    }).si_then([ctx, &btree, &mapping] {
     auto &cursor = mapping.get_effective_cursor();
     auto iter = btree.make_partial_iter(ctx, cursor);
     return iter.next(ctx).si_then([ctx, &mapping](auto iter) {
@@ -99,6 +107,7 @@ base_iertr::future<LBAMapping> LBAMapping::next()
       } else {
 	mapping = LBAMapping::create_direct(iter.get_cursor(ctx));
       }
+    });
     });
   });
   co_return mapping;
@@ -144,7 +153,7 @@ base_iertr::future<> LBAMapping::co_refresh()
 
 bool LBAMapping::is_initial_pending() const {
   assert(is_linked_direct());
-  ceph_assert(direct_cursor->is_viewable());
+  direct_cursor->check_viewable();
   assert(!direct_cursor->is_end());
   auto leaf = direct_cursor->parent->cast<LBALeafNode>();
   return leaf->is_child_initial_pending(
