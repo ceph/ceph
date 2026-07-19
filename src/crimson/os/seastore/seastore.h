@@ -72,6 +72,7 @@ public:
   struct batch_entry_t {
     ceph::os::Transaction txn;
     seastar::promise<> pr;
+    bool batchable = true;
   };
   std::deque<batch_entry_t> pending_txns;
   bool collection_in_flight = false;

@@ -1725,6 +1725,24 @@ void SeaStore::Shard::transaction_dump(ceph::os::Transaction &t) {
   ERROR("{}", str.str());
 }
 
+// Whether a client txn may be merged with others into one seastore batch
+// (build_next_batch). Default is yes, specific op patterns opt out and run solo.
+
+// Bathced pg-log trim (OP_OMAP_RMKEYS / OP_OMAP_RMKEYRANGE)
+static bool txn_is_batchable(ceph::os::Transaction& t)
+{
+  using ceph::os::Transaction;
+  auto i = t.begin();
+  while (i.have_op()) {
+    auto op = i.decode_op();
+    if (op->op == Transaction::OP_OMAP_RMKEYS ||
+        op->op == Transaction::OP_OMAP_RMKEYRANGE) {
+      return false;
+    }
+  }
+  return true;
+}
+
 seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
   CollectionRef _ch,
   ceph::os::Transaction&& _t)
@@ -1736,6 +1754,7 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
   auto& coll = static_cast<SeastoreCollection&>(*_ch);
   auto& entry = coll.pending_txns.emplace_back();
   entry.txn = std::move(_t);
+  entry.batchable = txn_is_batchable(entry.txn);
   auto fut = entry.pr.get_future();
   DEBUG("enqueue cid={} queue_depth={} in_flight={}",
         coll.get_cid(), coll.pending_txns.size(), coll.collection_in_flight);
@@ -1754,6 +1773,12 @@ ceph::os::Transaction SeaStore::Shard::build_next_batch(
   ceph::os::Transaction merged;
   bool first = true;
   while (!coll.pending_txns.empty()) {
+    const bool no_batch = !coll.pending_txns.front().batchable;
+    if (no_batch && !first) {
+      // Mid-batch: seal what we have and leave this txn to run as its own
+      // next batch (it will be `first` there and take the solo path below).
+      break;
+    }
     auto e = std::move(coll.pending_txns.front());
     coll.pending_txns.pop_front();
     if (first) {
@@ -1763,6 +1788,9 @@ ceph::os::Transaction SeaStore::Shard::build_next_batch(
       merged.append(e.txn);
     }
     pending_txns_promises.push_back(std::move(e.pr));
+    if (no_batch) {
+      break;
+    }
   }
   return merged;
 }
