@@ -1579,10 +1579,21 @@ TransactionManager::demote_region(
   auto cursor = co_await lba_manager->upper_bound_right(
     t, start
   ).handle_error_interruptible(
+    crimson::ct_error::enoent::handle([](auto) {
+      // It's possible that there has been no lba mappings left
+      // when demoting a region, for example, a temp recovering
+      // object may have been renamed, which makes the lba mappings
+      // in its own region moved.
+      return seastar::make_ready_future<LBACursorRef>();
+    }),
     demote_region_iertr::pass_further{},
     crimson::ct_error::assert_all("unexpected enoent"));
-  auto it = co_await resolve_cursor_to_mapping(t, std::move(cursor));
   demote_region_res_t ret{0, 0, false};
+  if (!cursor) {
+    ret.complete = true;
+    co_return ret;
+  }
+  auto it = co_await resolve_cursor_to_mapping(t, std::move(cursor));
   std::vector<CachedExtentRef> extents;
   while ((ret.demoted_size + ret.evicted_size) < max_proceed_size) {
     if (it.is_end() || it.get_key().get_object_prefix() != prefix) {
