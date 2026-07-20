@@ -50,10 +50,8 @@ uint32_t ceph_crc32c_riscv(uint32_t crc, unsigned char const *buf, unsigned len)
         ".option push\n\t"
         ".option arch, +v, +zvbc, +zbc, +zbb\n\t"
 
-        "addi   sp, sp, -128\n\t"
-        "sd     ra, 120(sp)\n\t"
-        "sd     gp, 112(sp)\n\t"
-        "sd     tp, 104(sp)\n\t"
+	"addi   sp, sp, -112\n\t"
+        "sd     ra, 104(sp)\n\t"
         "sd     s0, 96(sp)\n\t"
         "sd     s1, 88(sp)\n\t"
         "sd     s2, 80(sp)\n\t"
@@ -115,10 +113,10 @@ uint32_t ceph_crc32c_riscv(uint32_t crc, unsigned char const *buf, unsigned len)
         "ld     ra, 8(a0)\n\t"
         "clmulh t4, a3, s4\n\t"
         "clmulh t6, a3, s6\n\t"
-        "ld     gp, 16(a0)\n\t"
+        "ld     a1, 16(a0)\n\t"
         "clmul  t1, a4, s1\n\t"
         "clmul  t3, a4, s3\n\t"
-        "ld     tp, 24(a0)\n\t"
+        "ld     a2, 24(a0)\n\t"
         "clmul  t5, a4, s5\n\t"
         "clmul  a7, a4, s7\n\t"
         "ld     s8, 32(a0)\n\t"
@@ -179,11 +177,11 @@ uint32_t ceph_crc32c_riscv(uint32_t crc, unsigned char const *buf, unsigned len)
         "xor    t6, t6, s7\n\t"
 
         "xor    s0, t1, a5\n\t"
-        "xor    s2, t3, gp\n\t"
+        "xor    s2, t3, a1\n\t"
         "xor    s4, t5, s8\n\t"
         "xor    s6, a7, s10\n\t"
         "xor    s1, t0, ra\n\t"
-        "xor    s3, t2, tp\n\t"
+        "xor    s3, t2, a2\n\t"
         "xor    s5, t4, s9\n\t"
         "xor    s7, t6, s11\n\t"
 
@@ -257,9 +255,7 @@ uint32_t ceph_crc32c_riscv(uint32_t crc, unsigned char const *buf, unsigned len)
 
         "bne    sp, t6, 3b\n\t"
 
-        "ld     ra, 120(sp)\n\t"
-        "ld     gp, 112(sp)\n\t"
-        "ld     tp, 104(sp)\n\t"
+	"ld     ra, 104(sp)\n\t"
         "ld     s0, 96(sp)\n\t"
         "ld     s1, 88(sp)\n\t"
         "ld     s2, 80(sp)\n\t"
@@ -272,7 +268,7 @@ uint32_t ceph_crc32c_riscv(uint32_t crc, unsigned char const *buf, unsigned len)
         "ld     s9, 24(sp)\n\t"
         "ld     s10, 16(sp)\n\t"
         "ld     s11, 8(sp)\n\t"
-        "addi   sp, sp, 128\n\t"
+	"addi   sp, sp, 112\n\t"
 
         // 128bit -> 64bit Folding & Barrett Reduction
         "mv     t2, %[const_low]\n\t"
