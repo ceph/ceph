@@ -124,7 +124,16 @@ RUN --mount=type=secret,id=prerelease_creds set -ex && \
         source /run/secrets/prerelease_creds; \
         REPO_URL="https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/rpm-${CEPH_REF}/${EL_VER}/" ;\
     fi && \
-    rpm -Uvh "$REPO_URL/noarch/ceph-release-1-${IS_RELEASE}.${EL_VER}.noarch.rpm" ; \
+    # Trim trailing slashes
+    REPO_URL="${REPO_URL%/}" && \
+    if [[ "$REPO_URL" == */pulp/content/* ]] ; then \
+        # Pulp nests packages under noarch/Packages/<first-letter>/
+        CEPH_RELEASE_RPM="$REPO_URL/noarch/Packages/c/ceph-release-1-${IS_RELEASE}.${EL_VER}.noarch.rpm" ; \
+    else \
+        # chacra serves packages flat under noarch/
+        CEPH_RELEASE_RPM="$REPO_URL/noarch/ceph-release-1-${IS_RELEASE}.${EL_VER}.noarch.rpm" ; \
+    fi && \
+    rpm -Uvh "$CEPH_RELEASE_RPM" ; \
     if [[ "$IS_RELEASE" == 1 ]] ; then \
         sed -i "s;http://download.ceph.com/;https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/;" /etc/yum.repos.d/ceph.repo ; \
         dnf clean expire-cache ; \
