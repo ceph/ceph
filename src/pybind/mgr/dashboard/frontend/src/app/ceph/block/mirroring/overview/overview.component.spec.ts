@@ -82,7 +82,8 @@ describe('OverviewComponent', () => {
   });
 
   describe('site name edit button visibility', () => {
-    const editButton = () => fixture.debugElement.query(By.css('cds-icon-button'));
+    const editButton = () =>
+      fixture.debugElement.query(By.css('[data-testid="site-name-edit-btn"]'));
 
     it('should show the edit button when user has update permission', () => {
       component.permission = new Permission(['read', 'update']);
