@@ -23,7 +23,6 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, expectItemTasks, Mocks } from '~/testing/unit-test-helper';
 import { Pool } from '../pool';
-import { PoolDetailsComponent } from '../pool-details/pool-details.component';
 import { PoolListComponent } from './pool-list.component';
 
 describe('PoolListComponent', () => {
@@ -45,7 +44,7 @@ describe('PoolListComponent', () => {
   };
 
   configureTestBed({
-    declarations: [PoolListComponent, PoolDetailsComponent, RbdConfigurationListComponent],
+    declarations: [PoolListComponent, RbdConfigurationListComponent],
     imports: [
       BrowserAnimationsModule,
       SharedModule,
@@ -279,26 +278,6 @@ describe('PoolListComponent', () => {
       testMethod('8 active+clean+scrubbing+nonMappedState', 'pg-unknown');
       testMethod('8 ', 'pg-unknown');
       testMethod('', 'pg-unknown');
-    });
-  });
-
-  describe('custom row comparators', () => {
-    const expectCorrectComparator = (statsAttribute: string) => {
-      const mockPool = (v: number) => ({ stats: { [statsAttribute]: { latest: v } } });
-      const columnDefinition = _.find(
-        component.columns,
-        (column) => column.prop === `stats.${statsAttribute}.rates`
-      );
-      expect(columnDefinition.comparator(undefined, undefined, mockPool(2), mockPool(1))).toBe(1);
-      expect(columnDefinition.comparator(undefined, undefined, mockPool(1), mockPool(2))).toBe(-1);
-    };
-
-    it('compares read bytes correctly', () => {
-      expectCorrectComparator('rd_bytes');
-    });
-
-    it('compares write bytes correctly', () => {
-      expectCorrectComparator('wr_bytes');
     });
   });
 

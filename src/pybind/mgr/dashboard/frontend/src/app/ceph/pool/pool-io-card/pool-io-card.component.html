@@ -1,0 +1,103 @@
+<cds-tile class="pool-overview-card cds-mt-6">
+  <div class="pool-overview-panels">
+    <section class="pool-detail-panel">
+      <h4
+        class="cds--type-heading-02"
+        i18n
+      >
+        Read
+      </h4>
+      <p
+        class="cds--type-body-compact-01 pool-detail-panel__subtitle"
+        i18n
+      >
+        Read performance and activity
+      </p>
+
+      <div class="pool-detail-row">
+        <span
+          class="cds--type-label-01"
+          i18n
+          >Read Throughput</span
+        >
+        <span class="cds--type-heading-03">{{ overviewModel.readThroughput | empty }}</span>
+      </div>
+
+      <div class="pool-detail-row cds-mt-5">
+        <span
+          class="cds--type-label-01"
+          i18n
+          >Read Ops</span
+        >
+        <span class="cds--type-heading-03">{{ overviewModel.readOps | empty }}</span>
+      </div>
+
+      <div class="pool-detail-chart cds-mt-5">
+        @if (overviewModel.readOpsChartData?.length) {
+          <cd-area-chart
+            chartTitle="Read Ops"
+            i18n-chartTitle
+            chartKey="readOps"
+            dataUnit=""
+            [rawData]="overviewModel.readOpsChartData"
+            [legendEnabled]="false"
+            [height]="'180px'"
+          >
+          </cd-area-chart>
+        } @else {
+          <span class="cds--type-body-compact-01">-</span>
+        }
+      </div>
+    </section>
+
+    <section class="pool-detail-panel">
+      <h4
+        class="cds--type-heading-02"
+        i18n
+      >
+        Write
+      </h4>
+      <p
+        class="cds--type-body-compact-01 pool-detail-panel__subtitle"
+        i18n
+      >
+        Write performance and activity
+      </p>
+
+      <div class="pool-detail-row">
+        <span
+          class="cds--type-label-01"
+          i18n
+          >Write Throughput</span
+        >
+        <span class="cds--type-heading-03">{{ overviewModel.writeThroughput | empty }}</span>
+      </div>
+
+      <div class="pool-detail-row cds-mt-5">
+        <span
+          class="cds--type-label-01"
+          i18n
+          >Write Ops</span
+        >
+        <span class="cds--type-heading-03">{{ overviewModel.writeOps | empty }}</span>
+      </div>
+
+      <div class="pool-detail-chart cds-mt-5">
+        @if (overviewModel.writeOpsChartData?.length) {
+          <cd-area-chart
+            chartTitle="Write Ops"
+            i18n-chartTitle
+            chartKey="writeOps"
+            dataUnit=""
+            [rawData]="overviewModel.writeOpsChartData"
+            [legendEnabled]="false"
+            [height]="'180px'"
+          >
+          </cd-area-chart>
+        } @else {
+          <span class="cds--type-body-compact-01">-</span>
+        }
+      </div>
+    </section>
+  </div>
+</cds-tile>

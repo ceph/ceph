@@ -22,12 +22,11 @@ import { ErasureCodeProfile } from '~/app/shared/models/erasure-code-profile';
 import { ExecutingTask } from '~/app/shared/models/executing-task';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Permissions } from '~/app/shared/models/permissions';
-import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
-import { Pool, PoolType } from '../pool';
+import { mapPoolApplications, Pool, PoolType } from '../pool';
 import { PoolStat, PoolStats } from '../pool-stat';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
@@ -46,23 +45,24 @@ const BASE_URL = 'pool';
 })
 export class PoolListComponent extends ListWithDetails implements OnInit {
   @ViewChild(TableComponent)
-  table: TableComponent;
-  @ViewChild('poolUsageTpl', { static: true })
-  poolUsageTpl: TemplateRef<any>;
+  table!: TableComponent;
+  @ViewChild('poolNameTpl', { static: true })
+  poolNameTpl!: TemplateRef<any>;
 
   @ViewChild('poolConfigurationSourceTpl')
-  poolConfigurationSourceTpl: TemplateRef<any>;
+  poolConfigurationSourceTpl!: TemplateRef<any>;
 
-  pools: Pool[];
-  columns: CdTableColumn[];
+  pools: Pool[] = [];
+  columns: CdTableColumn[] = [];
   selection = new CdTableSelection();
   executingTasks: ExecutingTask[] = [];
   permissions: Permissions;
-  tableActions: CdTableAction[];
+  tableActions: CdTableAction[] = [];
   tableStatus = new TableStatusViewCache();
   cacheTiers: any[] = [];
   monAllowPoolDelete = false;
-  ecProfileList: ErasureCodeProfile[];
+  ecProfileList: ErasureCodeProfile[] = [];
+  viewUrl = '/pool/view';
 
   constructor(
     private poolService: PoolService,
@@ -72,7 +72,6 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
     public taskListService: TaskListService,
     private modalService: ModalCdsService,
     private pgCategoryService: PgCategoryService,
-    private dimlessPipe: DimlessPipe,
     private urlBuilder: URLBuilderService,
     private configurationService: ConfigurationService,
     public actionLabels: ActionLabelsI18n
@@ -125,14 +124,12 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
   }
 
   ngOnInit() {
-    const compare = (prop: string, pool1: Pool, pool2: Pool) =>
-      _.get(pool1, prop) > _.get(pool2, prop) ? 1 : -1;
     this.columns = [
       {
         prop: 'pool_name',
         name: $localize`Name`,
         flexGrow: 2,
-        cellTransformation: CellTemplate.executing
+        cellTemplate: this.poolNameTpl
       },
       {
         prop: 'data_protection',
@@ -159,48 +156,6 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
         cellClass: ({ row, column, value }): any => {
           return this.getPgStatusCellClass(row, column, value);
         }
-      },
-      {
-        prop: 'crush_rule',
-        name: $localize`Crush Ruleset`,
-        isHidden: true,
-        flexGrow: 2
-      },
-      {
-        name: $localize`Usage`,
-        prop: 'usage',
-        cellTemplate: this.poolUsageTpl,
-        flexGrow: 1.2
-      },
-      {
-        prop: 'stats.rd_bytes.rates',
-        name: $localize`Read bytes`,
-        comparator: (_valueA: any, _valueB: any, rowA: Pool, rowB: Pool) =>
-          compare('stats.rd_bytes.latest', rowA, rowB),
-        cellTransformation: CellTemplate.sparkline,
-        flexGrow: 1.5
-      },
-      {
-        prop: 'stats.wr_bytes.rates',
-        name: $localize`Write bytes`,
-        comparator: (_valueA: any, _valueB: any, rowA: Pool, rowB: Pool) =>
-          compare('stats.wr_bytes.latest', rowA, rowB),
-        cellTransformation: CellTemplate.sparkline,
-        flexGrow: 1.5
-      },
-      {
-        prop: 'stats.rd.rate',
-        name: $localize`Read ops`,
-        flexGrow: 1,
-        pipe: this.dimlessPipe,
-        cellTransformation: CellTemplate.perSecond
-      },
-      {
-        prop: 'stats.wr.rate',
-        name: $localize`Write ops`,
-        flexGrow: 1,
-        pipe: this.dimlessPipe,
-        cellTransformation: CellTemplate.perSecond
       }
     ];
 
@@ -212,7 +167,7 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
             return this.poolService.getList();
           })
         ),
-      undefined,
+      (resp: any) => resp,
       (pools) => {
         this.pools = this.transformPoolsData(pools);
         this.tableStatus = new TableStatusViewCache();
@@ -274,20 +229,15 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
       'wr'
     ];
     const emptyStat: PoolStat = { latest: 0, rate: 0, rates: [] };
-    const applicationLabels: Record<string, string> = {
-      cephfs: $localize`File system`,
-      rbd: $localize`Block`,
-      rgw: $localize`Object`
-    };
 
     _.forEach(pools, (pool: Pool) => {
       pool['pg_status'] = this.transformPgStatus(pool['pg_status']);
       const stats: PoolStats = {};
       _.forEach(requiredStats, (stat) => {
-        stats[stat] = pool.stats && pool.stats[stat] ? pool.stats[stat] : emptyStat;
+        stats[stat] = pool.stats?.[stat] ? pool.stats[stat] : emptyStat;
       });
       pool['stats'] = stats;
-      pool['usage'] = stats.percent_used.latest;
+      pool['usage'] = stats.percent_used?.latest ?? 0;
 
       if (
         !pool.cdExecuting &&
@@ -297,7 +247,10 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
       }
 
       ['rd_bytes', 'wr_bytes'].forEach((stat) => {
-        pool.stats[stat].rates = pool.stats[stat].rates.map((point: any) => point[1]);
+        const statData = pool.stats?.[stat] || emptyStat;
+        statData.rates = statData.rates.map((point: any) => point[1]);
+        const poolStats = pool.stats || (pool.stats = {} as PoolStats);
+        poolStats[stat] = statData;
       });
       pool.cdIsBinary = true;
 
@@ -309,9 +262,7 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
         pool['data_protection'] = `replica: ×${pool['size']}`;
       }
 
-      pool['application_metadata'] = (pool.application_metadata || []).map(
-        (application: string) => applicationLabels[application] || application
-      );
+      pool['application_metadata'] = mapPoolApplications(pool.application_metadata || []);
     });
 
     return pools;

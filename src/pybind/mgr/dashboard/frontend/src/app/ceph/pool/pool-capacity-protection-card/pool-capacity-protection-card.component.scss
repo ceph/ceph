@@ -1,0 +1,44 @@
+@use '@carbon/layout';
+@use '../pool-resource-overview-card' as pool-resource-overview-card;
+
+@include pool-resource-overview-card.base();
+
+.pool-detail-panel__usage-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: layout.$spacing-03;
+  margin-bottom: layout.$spacing-03;
+}
+
+.pool-detail-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: layout.$spacing-04;
+}
+
+.pool-detail-panel:last-child .pool-detail-stats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pool-detail-panel:last-child .pool-detail-stats.pool-detail-stats--triple {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.pool-detail-stat-box {
+  // border: 1px solid var(--cds-border-subtle-01);
+  padding: layout.$spacing-04;
+  display: flex;
+  flex-direction: column;
+  gap: layout.$spacing-02;
+  min-height: 5.5rem;
+}
+
+.pool-detail-divider {
+  border: 0;
+  border-top: 1px solid var(--cds-border-subtle-01);
+}
+
+.pool-detail-panel cd-usage-bar {
+  display: block;
+}

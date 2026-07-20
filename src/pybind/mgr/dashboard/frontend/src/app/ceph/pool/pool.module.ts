@@ -6,14 +6,19 @@ import { RouterModule, Routes } from '@angular/router';
 import { NgbNavModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 
 import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
+import { AreaChartComponent } from '~/app/shared/components/area-chart/area-chart.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { BlockModule } from '../block/block.module';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { CrushRuleFormModalComponent } from './crush-rule-form-modal/crush-rule-form-modal.component';
 import { ErasureCodeProfileFormModalComponent } from './erasure-code-profile-form/erasure-code-profile-form-modal.component';
-import { PoolDetailsComponent } from './pool-details/pool-details.component';
+import { PoolResourceSidebarComponent } from './pool-resource-sidebar/pool-resource-sidebar.component';
+import { PoolResourceBreadcrumbResolver } from './pool-resource-page/pool-resource-breadcrumb.resolver';
+import { PoolResourcePageComponent } from './pool-resource-page/pool-resource-page.component';
 import { PoolFormComponent } from './pool-form/pool-form.component';
 import { PoolListComponent } from './pool-list/pool-list.component';
+import { PoolCapacityProtectionCardComponent } from './pool-capacity-protection-card/pool-capacity-protection-card.component';
+import { PoolIoCardComponent } from './pool-io-card/pool-io-card.component';
 import {
   IconModule,
   InputModule,
@@ -33,7 +38,8 @@ import {
   ModalModule,
   ButtonModule,
   GridModule,
-  DropdownModule
+  MenuButtonModule,
+  ContextMenuModule
 } from 'carbon-components-angular';
 import HelpIcon from '@carbon/icons/es/help/16';
 import UnlockedIcon from '@carbon/icons/es/unlocked/16';
@@ -77,7 +83,9 @@ import UserAccessLocked from '@carbon/icons/es/user--access-locked/16';
     ModalModule,
     ButtonModule,
     GridModule,
-    DropdownModule
+    MenuButtonModule,
+    ContextMenuModule,
+    AreaChartComponent
   ],
   exports: [PoolListComponent, PoolFormComponent],
   declarations: [
@@ -85,7 +93,10 @@ import UserAccessLocked from '@carbon/icons/es/user--access-locked/16';
     PoolFormComponent,
     ErasureCodeProfileFormModalComponent,
     CrushRuleFormModalComponent,
-    PoolDetailsComponent
+    PoolResourceSidebarComponent,
+    PoolResourcePageComponent,
+    PoolCapacityProtectionCardComponent,
+    PoolIoCardComponent
   ]
 })
 export class PoolModule {
@@ -113,6 +124,34 @@ export class PoolModule {
 
 const routes: Routes = [
   { path: '', component: PoolListComponent },
+  {
+    path: 'view/:name',
+    component: PoolResourceSidebarComponent,
+    data: { breadcrumbs: PoolResourceBreadcrumbResolver },
+    children: [
+      { path: '', redirectTo: 'overview', pathMatch: 'full' },
+      {
+        path: 'overview',
+        component: PoolResourcePageComponent,
+        data: { breadcrumbs: 'Overview', section: 'overview' }
+      },
+      {
+        path: 'advanced-properties',
+        component: PoolResourcePageComponent,
+        data: { breadcrumbs: 'Advanced Properties', section: 'advanced-properties' }
+      },
+      {
+        path: 'performance',
+        component: PoolResourcePageComponent,
+        data: { breadcrumbs: 'Performance', section: 'performance' }
+      },
+      {
+        path: 'configuration',
+        component: PoolResourcePageComponent,
+        data: { breadcrumbs: 'Configuration', section: 'configuration' }
+      }
+    ]
+  },
   {
     path: URLVerbs.CREATE,
     component: PoolFormComponent,

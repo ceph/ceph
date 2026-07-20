@@ -1,0 +1,82 @@
+@if (poolName) {
+  @switch (section) {
+    @case ('overview') {
+      <cd-resource-overview-card
+        title="Pool details"
+        [columns]="4"
+        [fields]="poolOverviewFields"
+        i18n-title
+      >
+      </cd-resource-overview-card>
+
+      <cd-pool-capacity-protection-card [overviewModel]="overviewModel">
+      </cd-pool-capacity-protection-card>
+
+      <cd-pool-io-card [overviewModel]="overviewModel"> </cd-pool-io-card>
+    }
+    @case ('advanced-properties') {
+      <cd-table-key-value
+        [renderObjects]="true"
+        [data]="poolDetails"
+        [autoReload]="false"
+      >
+      </cd-table-key-value>
+    }
+    @case ('performance') {
+      <cd-grafana
+        i18n-title
+        title="Pool details"
+        [grafanaPath]="'ceph-pool-details?var-pool_name=' + poolName"
+        [type]="'metrics'"
+        uid="-xyV8KCiz"
+        grafanaStyle="three"
+      >
+      </cd-grafana>
+    }
+    @case ('configuration') {
+      <section class="pool-resource-section cds-mb-6">
+        <h2
+          class="pool-resource-section__title cds--type-heading-03"
+          i18n
+        >
+          Block Configuration
+        </h2>
+        <p
+          class="pool-resource-section__description cds--type-body-compact-01"
+          i18n
+        >
+          View the current block settings and defaults configured for this pool.
+        </p>
+        <cd-rbd-configuration-table [data]="selectedPoolConfiguration"></cd-rbd-configuration-table>
+      </section>
+
+      <section class="pool-resource-section cds-mb-6">
+        <h2
+          class="pool-resource-section__title cds--type-heading-03"
+          i18n
+        >
+          Cache-Tiers Details
+        </h2>
+        <p
+          class="pool-resource-section__description cds--type-body-compact-01"
+          i18n
+        >
+          View cache tier relationships and settings associated with this pool.
+        </p>
+        <cd-table
+          [data]="cacheTiers"
+          [columns]="cacheTierColumns"
+          [autoSave]="false"
+          columnMode="flex"
+        >
+        </cd-table>
+      </section>
+    }
+  }
+} @else {
+  <cd-alert-panel
+    type="error"
+    i18n
+    >No pool name found.</cd-alert-panel
+  >
+}
