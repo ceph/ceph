@@ -25,7 +25,6 @@ public:
 
 private:
   ImageCtx *m_image_ctx;
-
 };
 
 } // namespace exclusive_lock

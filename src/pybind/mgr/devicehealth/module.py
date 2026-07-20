@@ -4,13 +4,15 @@ Device health monitoring
 
 import errno
 import json
-from mgr_module import MgrModule, CommandResult, MgrModuleRecoverDB, CLIRequiresDB, CLICommand, CLIReadCommand, Option, MgrDBNotReady
+from mgr_module import MgrModule, CommandResult, MgrModuleRecoverDB, CLIRequiresDB, Option, MgrDBNotReady
 import operator
 import rados
 import re
 from threading import Event
 from datetime import datetime, timedelta, timezone
 from typing import cast, Any, Dict, List, Optional, Sequence, Tuple, TYPE_CHECKING, Union
+
+from .cli import DevicehealthCLICommand
 
 TIME_FORMAT = '%Y%m%d-%H%M%S'
 
@@ -48,6 +50,7 @@ def get_nvme_wear_level(data: Dict[Any, Any]) -> Optional[float]:
 
 
 class Module(MgrModule):
+    CLICommand = DevicehealthCLICommand
 
     # latest (if db does not exist)
     SCHEMA = [
@@ -173,7 +176,7 @@ class Module(MgrModule):
             return False
         return parts[0] in ('osd', 'mon')
 
-    @CLIReadCommand('device query-daemon-health-metrics')
+    @DevicehealthCLICommand.Read('device query-daemon-health-metrics')
     def do_query_daemon_health_metrics(self, who: str) -> Tuple[int, str, str]:
         '''
         Get device health metrics for a given daemon
@@ -189,7 +192,7 @@ class Module(MgrModule):
         return result.wait()
 
     @CLIRequiresDB
-    @CLIReadCommand('device scrape-daemon-health-metrics')
+    @DevicehealthCLICommand.Read('device scrape-daemon-health-metrics')
     @MgrModuleRecoverDB
     def do_scrape_daemon_health_metrics(self, who: str) -> Tuple[int, str, str]:
         '''
@@ -201,7 +204,7 @@ class Module(MgrModule):
         return self.scrape_daemon(daemon_type, daemon_id)
 
     @CLIRequiresDB
-    @CLIReadCommand('device scrape-health-metrics')
+    @DevicehealthCLICommand.Read('device scrape-health-metrics')
     @MgrModuleRecoverDB
     def do_scrape_health_metrics(self, devid: Optional[str] = None) -> Tuple[int, str, str]:
         '''
@@ -213,7 +216,7 @@ class Module(MgrModule):
             return self.scrape_device(devid)
 
     @CLIRequiresDB
-    @CLIReadCommand('device get-health-metrics')
+    @DevicehealthCLICommand.Read('device get-health-metrics')
     @MgrModuleRecoverDB
     def do_get_health_metrics(self, devid: str, sample: Optional[str] = None) -> Tuple[int, str, str]:
         '''
@@ -222,7 +225,7 @@ class Module(MgrModule):
         return self.show_device_metrics(devid, sample)
 
     @CLIRequiresDB
-    @CLICommand('device check-health')
+    @DevicehealthCLICommand('device check-health')
     @MgrModuleRecoverDB
     def do_check_health(self) -> Tuple[int, str, str]:
         '''
@@ -230,7 +233,7 @@ class Module(MgrModule):
         '''
         return self.check_health()
 
-    @CLICommand('device monitoring on')
+    @DevicehealthCLICommand('device monitoring on')
     def do_monitoring_on(self) -> Tuple[int, str, str]:
         '''
         Enable device health monitoring
@@ -239,7 +242,7 @@ class Module(MgrModule):
         self.event.set()
         return 0, '', ''
 
-    @CLICommand('device monitoring off')
+    @DevicehealthCLICommand('device monitoring off')
     def do_monitoring_off(self) -> Tuple[int, str, str]:
         '''
         Disable device health monitoring
@@ -249,7 +252,7 @@ class Module(MgrModule):
         return 0, '', ''
 
     @CLIRequiresDB
-    @CLIReadCommand('device predict-life-expectancy')
+    @DevicehealthCLICommand.Read('device predict-life-expectancy')
     @MgrModuleRecoverDB
     def do_predict_life_expectancy(self, devid: str) -> Tuple[int, str, str]:
         '''

@@ -1,5 +1,6 @@
 <cds-overflow-menu [customTrigger]="customTrigger"
-                   [flip]="true">
+                   [flip]="true"
+                   description="">
   <li class="cds--overflow-menu-options__option mb-2">
     <button routerLink="/user-management"
             class="cds--overflow-menu-options__btn"
@@ -16,7 +17,7 @@
 <ng-template #customTrigger>
   <svg cdsIcon="settings"
        size="20"
-       title="user"
+       title="Settings"
        *ngIf="userPermission.read"></svg>
   <span i18n
         class="d-md-none">Dashboard Settings</span>

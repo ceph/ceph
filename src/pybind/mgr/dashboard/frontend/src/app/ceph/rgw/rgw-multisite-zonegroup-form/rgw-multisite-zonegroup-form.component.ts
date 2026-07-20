@@ -73,7 +73,7 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
           Validators.required,
           CdValidators.custom('uniqueName', (zonegroupName: string) => {
             return (
-              this.action === 'create' &&
+              this.action === this.actionLabels.CREATE &&
               this.zonegroupNames &&
               this.zonegroupNames.indexOf(zonegroupName) !== -1
             );
@@ -134,7 +134,10 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
       return zone['name'];
     });
     this.allZoneNames = _.difference(this.allZoneNames, allZonegroupZonesNames);
-    if (this.action === 'create' && this.defaultsInfo['defaultRealmName'] !== null) {
+    if (
+      this.action === this.actionLabels.CREATE &&
+      this.defaultsInfo['defaultRealmName'] !== null
+    ) {
       this.multisiteZonegroupForm
         .get('selectedRealm')
         .setValue(this.defaultsInfo['defaultRealmName']);
@@ -142,7 +145,7 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
         this.multisiteZonegroupForm.get('master_zonegroup').disable();
       }
     }
-    if (this.action === 'edit') {
+    if (this.action === this.actionLabels.EDIT) {
       this.multisiteZonegroupForm.get('zonegroupName').setValue(this.info.data.name);
       this.multisiteZonegroupForm.get('selectedRealm').setValue(this.info.data.parent);
       this.multisiteZonegroupForm.get('default_zonegroup').setValue(this.info.data.is_default);
@@ -197,7 +200,7 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
 
   submit() {
     const values = this.multisiteZonegroupForm.getRawValue();
-    if (this.action === 'create') {
+    if (this.action === this.actionLabels.CREATE) {
       this.realm = new RgwRealm();
       this.realm.name = values['selectedRealm'];
       this.zonegroup = new RgwZonegroup();
@@ -217,7 +220,7 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
             this.multisiteZonegroupForm.setErrors({ cdSubmitButton: true });
           }
         );
-    } else if (this.action === 'edit') {
+    } else if (this.action === this.actionLabels.EDIT) {
       this.removedZones = _.difference(this.zgZoneNames, this.zonegroupZoneNames);
       const masterZoneName = this.info.data.zones.filter(
         (zone: any) => zone.id === this.info.data.master_zone

@@ -1,0 +1,21 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - CEPHADM_STRAY_DAEMON
+      - CEPHADM_FAILED_DAEMON
+      - CEPHADM_AGENT_DOWN
+    log-only-match:
+      - CEPHADM_
+
+tasks:
+- cephadm.shell:
+    env: [sha1]
+    mon.a:
+      # print status before upgrade
+      - ceph health detail
+      - ceph orch ps
+      - ceph -s
+      # upgrade
+      - ceph config set mon mon_warn_on_insecure_global_id_reclaim false --force
+      - ceph config set mon mon_warn_on_insecure_global_id_reclaim_allowed false --force
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1

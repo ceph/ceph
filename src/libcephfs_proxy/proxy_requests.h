@@ -38,11 +38,25 @@
 		__ptr;                      \
 	})
 
-#define CEPH_DATA(_name, _data, _data_count)       \
-	proxy_##_name##_##_data##_t _data;         \
+#define PROTO_VERSION_SIZE_EXPAND(_data, _ver) \
+	field_size(__typeof__(_data), v##_ver)
+
+#define PROTO_VERSION_SIZE(_data, _ver) PROTO_VERSION_SIZE_EXPAND(_data, _ver)
+
+#define PROTO_VERSION(_neg, _data, _ver) \
+	do { \
+		if ((_neg)->v2.protocol >= (_ver)) { \
+			_data##_iov[0].iov_len = PROTO_VERSION_SIZE(_data, \
+								    _ver); \
+		} \
+	} while (false)
+
+#define CEPH_DATA(_name, _data, _data_count)         \
+	proxy_##_name##_##_data##_t _data;           \
 	struct iovec _data##_iov[(_data_count) + 1]; \
-	int32_t _data##_count = 0;                 \
-	CEPH_BUFF_ADD(_data, &_data, sizeof(_data))
+	int32_t _data##_count = 0;                   \
+	CEPH_BUFF_ADD(_data, &_data,                 \
+		      PROTO_VERSION_SIZE(_data, PROXY_PROTOCOL_V0))
 
 #define CEPH_REQ(_name, _req, _req_count, _ans, _ans_count) \
 	CEPH_DATA(_name, _req, _req_count);                 \
@@ -127,195 +141,853 @@ enum {
 	LIBCEPHFSD_CBK_TOTAL_OPS
 };
 
-#define CEPH_TYPE_REQ(_name, _fields...)                           \
-	struct _proxy_##_name##_req;                               \
-	typedef struct _proxy_##_name##_req proxy_##_name##_req_t; \
-	struct _proxy_##_name##_req {                              \
-		_fields                                            \
-	}
+typedef union {
+	uint64_t ptr;
+	struct {
+		uint32_t uid;
+		uint32_t gid;
+	};
+} embedded_perms_t;
 
-#define CEPH_TYPE_ANS(_name, _fields...)                           \
-	struct _proxy_##_name##_ans;                               \
-	typedef struct _proxy_##_name##_ans proxy_##_name##_ans_t; \
-	struct _proxy_##_name##_ans {                              \
-		_fields                                            \
-	}
+#define PROTO_REQ(_fields...) _fields
+#define PROTO_ANS(_fields...) _fields
+#define PROTO_CBK(_fields...) _fields
 
-#define CEPH_TYPE_CBK(_name, _fields...)                           \
-	struct _proxy_##_name##_cbk;                               \
-	typedef struct _proxy_##_name##_cbk proxy_##_name##_cbk_t; \
-	struct _proxy_##_name##_cbk {                              \
-		_fields                                            \
-	}
+#define PROTO_VER(_name, _fields) _fields, _name
 
-#define FIELDS(_fields...) _fields
-#define REQ(_fields...) FIELDS(proxy_link_req_t header; _fields)
-#define REQ_CMOUNT(_fields...) REQ(uint64_t cmount; _fields)
-#define ANS(_fields...) FIELDS(proxy_link_ans_t header; _fields)
-#define ANS_CMOUNT(_fields...) ANS(uint64_t cmount; _fields)
-#define CBK(_fields...) FIELDS(proxy_link_req_t header; _fields)
+#define PROTO_STRUCT(_name, _fields) \
+	struct { \
+		_fields \
+	} _name;
 
-#define CEPH_TYPE(_name, _req, _ans) \
-	CEPH_TYPE_REQ(_name, _req);  \
-	CEPH_TYPE_ANS(_name, _ans)
+#define PROTO_VOID(_a...)
 
-/* Declaration of types used to transder requests and answers. */
+#define PROTO_STRUCT_COND_SELECT(_a, _b, _c, _d...) _c
 
-CEPH_TYPE(ceph_version, REQ(),
-	  ANS(int32_t major; int32_t minor; int32_t patch; int16_t text;));
+/* This macro outputs a version structure only if the "name" is present.
+ * Otherwise it returns empty.
+ *
+ * Following this macro call, it's expected to find the normal arguments for
+ * a PROTO_STRUCT() macro.
+ *
+ * Example: PROTO_STRUCT_COND(name)(name, fields) */
+#define PROTO_STRUCT_COND(_name...) \
+	PROTO_STRUCT_COND_SELECT(, ## _name, PROTO_STRUCT, PROTO_VOID)
 
-CEPH_TYPE(ceph_userperm_new, REQ(uint32_t uid; uint32_t gid; uint32_t groups;),
-	  ANS(uint64_t userperm;));
+/* These macros are prepared to create up to 4 version structures. If more are
+ * needed, just create a PROTO_BUILD_5 similar to PROTO_BUILD_4 and call it
+ * from PROTO_TYPE.
+ *
+ * The last version of the structure is also declared as an anonymous
+ * substructure to make access to the fields safer and cleaner.
+ *
+ * This approach is needed to be able to define full structures for each
+ * protocol version (i.e. v1 structure also contains all fields from v0), but
+ * without having to explicitly write them in the protocol definitions. This
+ * prevents a lot of copy&paste, it's less error prone, and makes the protocol
+ * extensions cleaner. */
+#define PROTO_BUILD_1(_fields, _name) \
+	PROTO_STRUCT_COND(_name)(_name, _fields) \
+	PROTO_STRUCT(,_fields)
 
-CEPH_TYPE(ceph_userperm_destroy, REQ(uint64_t userperm;), ANS());
+#define PROTO_BUILD_2(_fields, _name, _more...) \
+	PROTO_STRUCT_COND(_name)(_name, _fields) \
+	PROTO_BUILD_1(_fields _more,)
 
-CEPH_TYPE(ceph_create, REQ(int16_t id;), ANS_CMOUNT());
+#define PROTO_BUILD_3(_fields, _name, _more...) \
+	PROTO_STRUCT_COND(_name)(_name, _fields) \
+	PROTO_BUILD_2(_fields _more,)
 
-CEPH_TYPE(ceph_release, REQ_CMOUNT(), ANS());
+#define PROTO_BUILD_4(_fields, _name, _more...) \
+	PROTO_STRUCT_COND(_name)(_name, _fields) \
+	PROTO_BUILD_3(_fields _more,)
 
-CEPH_TYPE(ceph_conf_read_file, REQ_CMOUNT(uint16_t path;), ANS());
+#define PROTO_TYPE(_name, _fields...) \
+	typedef union { PROTO_BUILD_4(_fields) } _name
 
-CEPH_TYPE(ceph_conf_get, REQ_CMOUNT(uint32_t size; uint16_t option;),
-	  ANS(uint16_t value;));
+#define PROTO_CALL(_name, _req, _ans) \
+	PROTO_TYPE(proxy_##_name##_req_t, proxy_link_req_t header; _req); \
+	PROTO_TYPE(proxy_##_name##_ans_t, proxy_link_ans_t header; _ans)
 
-CEPH_TYPE(ceph_conf_set, REQ_CMOUNT(uint16_t option; uint16_t value;), ANS());
+#define PROTO_NOTIFY(_name, _cbk) \
+	PROTO_TYPE(proxy_##_name##_cbk_t, proxy_link_req_t header; _cbk)
 
-CEPH_TYPE(ceph_init, REQ_CMOUNT(), ANS());
+/* Declaration of types used to transfer requests and answers. */
 
-CEPH_TYPE(ceph_select_filesystem, REQ_CMOUNT(uint16_t fs;), ANS());
+PROTO_CALL(ceph_version,
+	PROTO_REQ(
+		PROTO_VER(v0,
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+			int32_t major;
+			int32_t minor;
+			int32_t patch;
+			int16_t text;
+		)
+	)
+);
 
-CEPH_TYPE(ceph_mount, REQ_CMOUNT(uint16_t root;), ANS());
+PROTO_CALL(ceph_userperm_new,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint32_t uid;
+			uint32_t gid;
+			uint32_t groups;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+			uint64_t userperm;
+		)
+	)
+);
 
-CEPH_TYPE(ceph_unmount, REQ_CMOUNT(), ANS());
+PROTO_CALL(ceph_userperm_destroy,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t userperm;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_statfs, REQ_CMOUNT(uint64_t inode;), ANS());
+PROTO_CALL(ceph_create,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			int16_t id;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+			uint64_t cmount;
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_lookup,
-	  REQ_CMOUNT(uint64_t userperm; uint64_t parent; uint32_t want;
-		     uint32_t flags; uint16_t name;),
-	  ANS(uint64_t inode;));
+PROTO_CALL(ceph_release,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_lookup_inode, REQ_CMOUNT(struct inodeno_t ino;),
-	  ANS(uint64_t inode;));
+PROTO_CALL(ceph_conf_read_file,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint16_t path;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_lookup_root, REQ_CMOUNT(), ANS(uint64_t inode;));
+PROTO_CALL(ceph_conf_get,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint32_t size;
+			uint16_t option;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+			uint16_t value;
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_put, REQ_CMOUNT(uint64_t inode;), ANS());
+PROTO_CALL(ceph_conf_set,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint16_t option;
+			uint16_t value;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_walk,
-	  REQ_CMOUNT(uint64_t userperm; uint32_t want; uint32_t flags;
-		     uint16_t path;),
-	  ANS(uint64_t inode;));
+PROTO_CALL(ceph_init,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
 
-CEPH_TYPE(ceph_chdir, REQ_CMOUNT(uint16_t path;), ANS());
+PROTO_CALL(ceph_select_filesystem,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint16_t fs;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
 
-CEPH_TYPE(ceph_getcwd, REQ_CMOUNT(), ANS(uint16_t path;));
+PROTO_CALL(ceph_mount,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint16_t root;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
 
-CEPH_TYPE(ceph_readdir, REQ_CMOUNT(uint64_t dir;), ANS(bool eod;));
+PROTO_CALL(ceph_unmount,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
 
-CEPH_TYPE(ceph_rewinddir, REQ_CMOUNT(uint64_t dir;), ANS());
+PROTO_CALL(ceph_ll_statfs,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint64_t inode;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_open,
-	  REQ_CMOUNT(uint64_t userperm; uint64_t inode; int32_t flags;),
-	  ANS(uint64_t fh;));
+PROTO_CALL(ceph_ll_lookup,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			embedded_perms_t userperm;
+			uint64_t parent;
+			uint32_t want;
+			uint32_t flags;
+			uint16_t name;
+		),
+		PROTO_VER(v1,
+			uint32_t ngroups;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+			uint64_t inode;
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_create,
-	  REQ_CMOUNT(uint64_t userperm; uint64_t parent; mode_t mode;
-		     int32_t oflags; uint32_t want; uint32_t flags;
-		     uint16_t name;),
-	  ANS(uint64_t inode; uint64_t fh;));
+PROTO_CALL(ceph_ll_lookup_inode,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			struct inodeno_t ino;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+			uint64_t inode;
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_mknod,
-	  REQ_CMOUNT(uint64_t userperm; uint64_t parent; mode_t mode;
-		     dev_t rdev; uint32_t want; uint32_t flags; uint16_t name;),
-	  ANS(uint64_t inode;));
+PROTO_CALL(ceph_ll_lookup_root,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+			uint64_t inode;
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_close, REQ_CMOUNT(uint64_t fh;), ANS());
+PROTO_CALL(ceph_ll_put,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint64_t inode;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_rename,
-	  REQ_CMOUNT(uint64_t userperm; uint64_t old_parent;
-		     uint64_t new_parent; uint16_t old_name;
-		     uint16_t new_name;),
-	  ANS());
+PROTO_CALL(ceph_ll_walk,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			embedded_perms_t userperm;
+			uint32_t want;
+			uint32_t flags;
+			uint16_t path;
+		),
+		PROTO_VER(v1,
+			uint32_t ngroups;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+			uint64_t inode;
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_lseek, REQ_CMOUNT(uint64_t fh; off_t offset; int32_t whence;),
-	  ANS(off_t offset;));
+PROTO_CALL(ceph_chdir,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint16_t path;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_read, REQ_CMOUNT(uint64_t fh; int64_t offset; uint64_t len;),
-	  ANS());
+PROTO_CALL(ceph_getcwd,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+			uint16_t path;
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_write, REQ_CMOUNT(uint64_t fh; int64_t offset; uint64_t len;),
-	  ANS());
+PROTO_CALL(ceph_readdir,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint64_t dir;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+			bool eod;
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_link,
-	  REQ_CMOUNT(uint64_t userperm; uint64_t inode; uint64_t parent;
-		     uint16_t name;),
-	  ANS());
+PROTO_CALL(ceph_rewinddir,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint64_t dir;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_unlink,
-	  REQ_CMOUNT(uint64_t userperm; uint64_t parent; uint16_t name;),
-	  ANS());
+PROTO_CALL(ceph_ll_open,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			embedded_perms_t userperm;
+			uint64_t inode;
+			int32_t flags;
+		),
+		PROTO_VER(v1,
+			uint32_t ngroups;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+			uint64_t fh;
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_getattr,
-	  REQ_CMOUNT(uint64_t userperm; uint64_t inode; uint32_t want;
-		     uint32_t flags;),
-	  ANS());
+PROTO_CALL(ceph_ll_create,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			embedded_perms_t userperm;
+			uint64_t parent;
+			mode_t mode;
+			int32_t oflags;
+			uint32_t want;
+			uint32_t flags;
+			uint16_t name;
+		),
+		PROTO_VER(v1,
+			uint32_t ngroups;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+			uint64_t inode;
+			uint64_t fh;
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_setattr,
-	  REQ_CMOUNT(uint64_t userperm; uint64_t inode; int32_t mask;), ANS());
+PROTO_CALL(ceph_ll_mknod,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			embedded_perms_t userperm;
+			uint64_t parent;
+			mode_t mode;
+			dev_t rdev;
+			uint32_t want;
+			uint32_t flags;
+			uint16_t name;
+		),
+		PROTO_VER(v1,
+			uint32_t ngroups;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+			uint64_t inode;
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_fallocate,
-	  REQ_CMOUNT(uint64_t fh; int64_t offset; int64_t length;
-		     int32_t mode;),
-	  ANS());
+PROTO_CALL(ceph_ll_close,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint64_t fh;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_fsync, REQ_CMOUNT(uint64_t fh; int32_t dataonly;), ANS());
+PROTO_CALL(ceph_ll_rename,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			embedded_perms_t userperm;
+			uint64_t old_parent;
+			uint64_t new_parent;
+			uint16_t old_name;
+			uint16_t new_name;
+		),
+		PROTO_VER(v1,
+			uint32_t ngroups;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_listxattr,
-	  REQ_CMOUNT(uint64_t userperm; uint64_t inode; size_t size;),
-	  ANS(size_t size;));
+PROTO_CALL(ceph_ll_lseek,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint64_t fh;
+			off_t offset;
+			int32_t whence;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+			off_t offset;
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_getxattr,
-	  REQ_CMOUNT(uint64_t userperm; uint64_t inode; size_t size;
-		     uint16_t name;),
-	  ANS());
+PROTO_CALL(ceph_ll_read,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint64_t fh;
+			int64_t offset;
+			uint64_t len;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_setxattr,
-	  REQ_CMOUNT(uint64_t userperm; uint64_t inode; size_t size;
-		     int32_t flags; uint16_t name;),
-	  ANS());
+PROTO_CALL(ceph_ll_write,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint64_t fh;
+			int64_t offset;
+			uint64_t len;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_removexattr,
-	  REQ_CMOUNT(uint64_t userperm; uint64_t inode; uint16_t name;), ANS());
+PROTO_CALL(ceph_ll_link,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			embedded_perms_t userperm;
+			uint64_t inode;
+			uint64_t parent;
+			uint16_t name;
+		),
+		PROTO_VER(v1,
+			uint32_t ngroups;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_readlink,
-	  REQ_CMOUNT(uint64_t userperm; uint64_t inode; size_t size;), ANS());
+PROTO_CALL(ceph_ll_unlink,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			embedded_perms_t userperm;
+			uint64_t parent;
+			uint16_t name;
+		),
+		PROTO_VER(v1,
+			uint32_t ngroups;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_symlink,
-	  REQ_CMOUNT(uint64_t userperm; uint64_t parent; uint32_t want;
-		     uint32_t flags; uint16_t name; uint16_t target;),
-	  ANS(uint64_t inode;));
+PROTO_CALL(ceph_ll_getattr,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			embedded_perms_t userperm;
+			uint64_t inode;
+			uint32_t want;
+			uint32_t flags;
+		),
+		PROTO_VER(v1,
+			uint32_t ngroups;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_opendir, REQ_CMOUNT(uint64_t userperm; uint64_t inode;),
-	  ANS(uint64_t dir;));
+PROTO_CALL(ceph_ll_setattr,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			embedded_perms_t userperm;
+			uint64_t inode;
+			int32_t mask;
+		),
+		PROTO_VER(v1,
+			uint32_t ngroups;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_mkdir,
-	  REQ_CMOUNT(uint64_t userperm; uint64_t parent; mode_t mode;
-		     uint32_t want; uint32_t flags; uint16_t name;),
-	  ANS(uint64_t inode;));
+PROTO_CALL(ceph_ll_fallocate,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint64_t fh;
+			int64_t offset;
+			int64_t length;
+			int32_t mode;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_rmdir,
-	  REQ_CMOUNT(uint64_t userperm; uint64_t parent; uint16_t name;),
-	  ANS());
+PROTO_CALL(ceph_ll_fsync,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint64_t fh;
+			int32_t dataonly;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_releasedir, REQ_CMOUNT(uint64_t dir;), ANS());
+PROTO_CALL(ceph_ll_listxattr,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			embedded_perms_t userperm;
+			uint64_t inode;
+			size_t size;
+		),
+		PROTO_VER(v1,
+			uint32_t ngroups;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+			size_t size;
+		)
+	)
+);
 
-CEPH_TYPE(ceph_mount_perms, REQ_CMOUNT(), ANS(uint64_t userperm;));
+PROTO_CALL(ceph_ll_getxattr,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			embedded_perms_t userperm;
+			uint64_t inode;
+			size_t size;
+			uint16_t name;
+		),
+		PROTO_VER(v1,
+			uint32_t ngroups;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
 
-CEPH_TYPE(ceph_ll_nonblocking_readv_writev,
-	  REQ_CMOUNT(uint64_t info; uint64_t fh; int64_t off; uint64_t size;
-		     bool write; bool fsync; bool syncdataonly;),
-	  ANS(int64_t res;));
+PROTO_CALL(ceph_ll_setxattr,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			embedded_perms_t userperm;
+			uint64_t inode;
+			size_t size;
+			int32_t flags;
+			uint16_t name;
+		),
+		PROTO_VER(v1,
+			uint32_t ngroups;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
+
+PROTO_CALL(ceph_ll_removexattr,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			embedded_perms_t userperm;
+			uint64_t inode;
+			uint16_t name;
+		),
+		PROTO_VER(v1,
+			uint32_t ngroups;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
+
+PROTO_CALL(ceph_ll_readlink,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			embedded_perms_t userperm;
+			uint64_t inode;
+			size_t size;
+		),
+		PROTO_VER(v1,
+			uint32_t ngroups;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
+
+PROTO_CALL(ceph_ll_symlink,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			embedded_perms_t userperm;
+			uint64_t parent;
+			uint32_t want;
+			uint32_t flags;
+			uint16_t name;
+			uint16_t target;
+		),
+		PROTO_VER(v1,
+			uint32_t ngroups;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+			uint64_t inode;
+		)
+	)
+);
+
+PROTO_CALL(ceph_ll_opendir,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			embedded_perms_t userperm;
+			uint64_t inode;
+		),
+		PROTO_VER(v1,
+			uint32_t ngroups;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+			uint64_t dir;
+		)
+	)
+);
+
+PROTO_CALL(ceph_ll_mkdir,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			embedded_perms_t userperm;
+			uint64_t parent;
+			mode_t mode;
+			uint32_t want;
+			uint32_t flags;
+			uint16_t name;
+		),
+		PROTO_VER(v1,
+			uint32_t ngroups;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+			uint64_t inode;
+		)
+	)
+);
+
+PROTO_CALL(ceph_ll_rmdir,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			embedded_perms_t userperm;
+			uint64_t parent;
+			uint16_t name;
+		),
+		PROTO_VER(v1,
+			uint32_t ngroups;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
+
+PROTO_CALL(ceph_ll_releasedir,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint64_t dir;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
+
+PROTO_CALL(ceph_mount_perms,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+			uint64_t userperm;
+		)
+	)
+);
+
+PROTO_CALL(ceph_ll_nonblocking_readv_writev,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint64_t info;
+			uint64_t fh;
+			int64_t off;
+			uint64_t size;
+			bool write;
+			bool fsync;
+			bool syncdataonly;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+			int64_t res;
+		)
+	)
+);
 
 typedef union _proxy_req {
 	proxy_link_req_t header;
@@ -370,8 +1042,14 @@ typedef union _proxy_req {
 	proxy_ceph_ll_nonblocking_readv_writev_req_t ll_nonblocking_rw;
 } proxy_req_t;
 
-CEPH_TYPE_CBK(ceph_ll_nonblocking_readv_writev,
-	      CBK(uint64_t info; int64_t res;));
+PROTO_NOTIFY(ceph_ll_nonblocking_readv_writev,
+	PROTO_CBK(
+		PROTO_VER(v0,
+			uint64_t info;
+			int64_t res;
+		)
+	)
+);
 
 typedef union _proxy_cbk {
 	proxy_link_req_t header;

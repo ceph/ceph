@@ -12,7 +12,7 @@ import _ from 'lodash';
 import { forkJoin, Observable, of } from 'rxjs';
 import { catchError, debounceTime, distinctUntilChanged, map, mergeMap } from 'rxjs/operators';
 
-import { SUPPORTED_FSAL } from '~/app/ceph/nfs/models/nfs.fsal';
+import { RGW_USER_EXPORT_PATH, SUPPORTED_FSAL } from '~/app/ceph/nfs/models/nfs.fsal';
 import { Directory, NfsService } from '~/app/shared/api/nfs.service';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { RgwSiteService } from '~/app/shared/api/rgw-site.service';
@@ -188,6 +188,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
   async getSubVol() {
     const fs_name = this.nfsForm.getValue('fsal').fs_name;
     const subvolgrp = this.nfsForm.getValue('subvolume_group');
+
     await this.setSubVolGrpPath();
 
     (subvolgrp === this.defaultSubVolGroup
@@ -264,7 +265,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
     const subVolumeControl = this.nfsForm.get('subvolume');
 
     // SubVolume is required if SubVolume Group is "_nogroup".
-    if (subvolumeGroup == this.defaultSubVolGroup) {
+    if (subvolumeGroup === DEFAULT_SUBVOLUME_GROUP) {
       subVolumeControl?.setValidators([Validators.required]);
     } else {
       subVolumeControl?.clearValidators();
@@ -401,6 +402,31 @@ export class NfsFormComponent extends CdForm implements OnInit {
     this.nfsForm.patchValue(res);
     this.setPathValidation();
     this.clients = res.clients;
+
+    if (this.isEdit) {
+      if (res?.fsal?.name === SUPPORTED_FSAL.CEPH && res?.path) {
+        this.getSubVolGrp(res.fsal.fs_name);
+        this.resolveCephfsPath(res.path, res.fsal.fs_name);
+      }
+    }
+  }
+
+  // Setting up Subvolumegroup and Subvolume for CephFS paths on Edit.
+  resolveCephfsPath(path: string, fsName: string) {
+    if (!path?.startsWith('/volumes/')) return;
+
+    const splitPath = path.split('/');
+    const subvolumeGroup = splitPath[2] ?? null;
+    const subvolume = splitPath[3] ?? null;
+
+    this.nfsForm.patchValue({
+      fsal: {
+        ...this.nfsForm.get('fsal').value,
+        fs_name: fsName
+      },
+      subvolumeGroup,
+      subvolume
+    });
   }
 
   resolveClusters(clusters: string[]) {
@@ -616,8 +642,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
   }
 
   private buildRequest() {
-    const requestModel: any = _.cloneDeep(this.nfsForm.value);
-    requestModel.fsal = this.nfsForm.get('fsal').value;
+    const requestModel: any = _.cloneDeep(this.nfsForm.getRawValue());
     if (this.isEdit) {
       requestModel.export_id = _.parseInt(this.export_id);
       requestModel.path = this.nfsForm.get('path').value;
@@ -631,7 +656,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
       if (requestModel.rgw_export_type === 'bucket') {
         delete requestModel.fsal.user_id;
       } else {
-        requestModel.path = '';
+        requestModel.path = RGW_USER_EXPORT_PATH;
       }
     } else {
       delete requestModel.fsal.user_id;

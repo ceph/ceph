@@ -369,6 +369,25 @@ inline bool str_has_cntrl(const char* s) {
   return str_has_cntrl(_s);
 }
 
+// remove any aws-chunked entries from the comma-separated list
+static std::string content_encoding_without_aws_chunked(std::string_view value)
+{
+  std::string result;
+  result.reserve(value.size());
+
+  for (std::string_view part : ceph::split(value, ", ")) {
+    if (part == "aws-chunked") {
+      continue;
+    }
+    if (!result.empty()) {
+      result += ", ";
+    }
+    result += part;
+  }
+
+  return result;
+}
+
 int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 					      off_t bl_len)
 {
@@ -652,7 +671,20 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
             --len;
             s.resize(len);
           }
-          response_attrs[aiter->second] = s;
+
+          if (aiter->first == RGW_ATTR_CONTENT_ENC) {
+            // Amazon S3 stores the resulting object without the aws-chunked
+            // value in the content-encoding header. If aws-chunked is the only
+            // value that you pass in the content-encoding header, S3 considers
+            // the content-encoding header empty and does not return this header
+            // when your retrieve the object.
+            std::string encoding = content_encoding_without_aws_chunked(s);
+            if (!encoding.empty()) {
+              response_attrs[aiter->second] = std::move(encoding);
+            }
+          } else {
+            response_attrs[aiter->second] = std::move(s);
+          }
         }
       } else if (iter->first.compare(RGW_ATTR_CONTENT_TYPE) == 0) {
         /* Special handling for content_type. */
@@ -3712,6 +3744,9 @@ void RGWRestoreObj_ObjStore_S3::send_response()
 int RGWDeleteObj_ObjStore_S3::get_params(optional_yield y)
 {
   const char *if_unmod = s->info.env->get("HTTP_X_AMZ_DELETE_IF_UNMODIFIED_SINCE");
+  const char *if_last_mod_time_match = s->info.env->get("HTTP_X_AMZ_IF_MATCH_LAST_MODIFIED_TIME");
+  const char *if_size_match = s->info.env->get("HTTP_X_AMZ_IF_MATCH_SIZE");
+  if_match = s->info.env->get("HTTP_IF_MATCH");
 
   if (s->system_request) {
     s->info.args.get_bool(RGW_SYS_PARAM_PREFIX "no-precondition-error", &no_precondition_error, false);
@@ -3726,6 +3761,25 @@ int RGWDeleteObj_ObjStore_S3::get_params(optional_yield y)
       return -EINVAL;
     }
     unmod_since = utime_t(epoch, nsec).to_real_time();
+  }
+
+  if (if_last_mod_time_match) {
+    std::string if_last_mod_match_decoded = url_decode(if_last_mod_time_match);
+    int r = parse_time(if_last_mod_match_decoded.c_str(), &last_mod_time_match);
+    if (r < 0) {
+      ldpp_dout(this, 10) << "failed to parse time: " << if_last_mod_match_decoded << dendl;
+      return r;
+    }
+  }
+
+  if(if_size_match) {
+    string err;
+    long long size_tmp = strict_strtoll(if_size_match, 10, &err);
+    if (!err.empty()) {
+      ldpp_dout(s, 10) << "bad size: " << if_size_match << ": " << err << dendl;
+      return -EINVAL;
+    }
+    size_match = uint64_t(size_tmp);
   }
 
   const char *bypass_gov_header = s->info.env->get("HTTP_X_AMZ_BYPASS_GOVERNANCE_RETENTION");
@@ -4571,6 +4625,9 @@ int RGWCompleteMultipart_ObjStore_S3::get_params(optional_yield y)
   if (ret < 0) {
     return ret;
   }
+
+  if_match = s->info.env->get("HTTP_IF_MATCH");
+  if_nomatch = s->info.env->get("HTTP_IF_NONE_MATCH");
 
   map_qs_metadata(s, true);
 
@@ -6186,7 +6243,18 @@ AWSSignerV4::prepare(const DoutPrefixProvider *dpp,
   if (opt_content) {
     content_hash = rgw::auth::s3::calc_v4_payload_hash(opt_content->to_str());
     extra_headers["x-amz-content-sha256"] = content_hash;
-
+  } else {
+    // check if the header was already set (e.g. from a forwarded request)
+    const char* existing_hash = info.env->get("HTTP_X_AMZ_CONTENT_SHA256");
+    if (existing_hash) {
+      // use existing header value
+      extra_headers["x-amz-content-sha256"] = existing_hash;
+    } else {
+    /* Some S3-compatible services require x-amz-content-sha256 header to always
+     * be present and included in the signature, even for unsigned payload.
+     * AWS S3 specification states that this header is required for all requests. */
+    extra_headers["x-amz-content-sha256"] = AWS4_UNSIGNED_PAYLOAD_HASH;
+    }
   }
 
   /* craft canonical headers */

@@ -73,26 +73,31 @@ namespace neorados {
 
 Object::Object() {
   static_assert(impl_size >= sizeof(object_t));
+  static_assert(alignof(decltype(impl)) >= alignof(object_t));
   new (&impl) object_t();
 }
 
 Object::Object(const char* s) {
   static_assert(impl_size >= sizeof(object_t));
+  static_assert(alignof(decltype(impl)) >= alignof(object_t));
   new (&impl) object_t(s);
 }
 
 Object::Object(std::string_view s) {
   static_assert(impl_size >= sizeof(object_t));
+  static_assert(alignof(decltype(impl)) >= alignof(object_t));
   new (&impl) object_t(s);
 }
 
 Object::Object(std::string&& s) {
   static_assert(impl_size >= sizeof(object_t));
+  static_assert(alignof(decltype(impl)) >= alignof(object_t));
   new (&impl) object_t(std::move(s));
 }
 
 Object::Object(const std::string& s) {
   static_assert(impl_size >= sizeof(object_t));
+  static_assert(alignof(decltype(impl)) >= alignof(object_t));
   new (&impl) object_t(s);
 }
 
@@ -102,6 +107,7 @@ Object::~Object() {
 
 Object::Object(const Object& o) {
   static_assert(impl_size >= sizeof(object_t));
+  static_assert(alignof(decltype(impl)) >= alignof(object_t));
   new (&impl) object_t(*reinterpret_cast<const object_t*>(&o.impl));
 }
 Object& Object::operator =(const Object& o) {
@@ -111,6 +117,7 @@ Object& Object::operator =(const Object& o) {
 }
 Object::Object(Object&& o) {
   static_assert(impl_size >= sizeof(object_t));
+  static_assert(alignof(decltype(impl)) >= alignof(object_t));
   new (&impl) object_t(std::move(*reinterpret_cast<object_t*>(&o.impl)));
 }
 Object& Object::operator =(Object&& o) {
@@ -164,6 +171,7 @@ struct IOContextImpl {
 
 IOContext::IOContext() {
   static_assert(impl_size >= sizeof(IOContextImpl));
+  static_assert(alignof(decltype(impl)) >= alignof(IOContextImpl));
   new (&impl) IOContextImpl();
 }
 
@@ -184,6 +192,7 @@ IOContext::~IOContext() {
 
 IOContext::IOContext(const IOContext& rhs) {
   static_assert(impl_size >= sizeof(IOContextImpl));
+  static_assert(alignof(decltype(impl)) >= alignof(IOContextImpl));
   new (&impl) IOContextImpl(*reinterpret_cast<const IOContextImpl*>(&rhs.impl));
 }
 
@@ -195,6 +204,7 @@ IOContext& IOContext::operator =(const IOContext& rhs) {
 
 IOContext::IOContext(IOContext&& rhs) {
   static_assert(impl_size >= sizeof(IOContextImpl));
+  static_assert(alignof(decltype(impl)) >= alignof(IOContextImpl));
   new (&impl) IOContextImpl(
     std::move(*reinterpret_cast<IOContextImpl*>(&rhs.impl)));
 }
@@ -413,6 +423,7 @@ struct OpImpl {
 
 Op::Op() {
   static_assert(Op::impl_size >= sizeof(OpImpl));
+  static_assert(alignof(decltype(impl)) >= alignof(OpImpl));
   new (&impl) OpImpl;
 }
 
@@ -839,7 +850,11 @@ void RADOS::Builder::build_(asio::io_context& ioctx,
   if (no_mon_conf)
     flags |= CINIT_FLAG_NO_MON_CONFIG;
 
-  CephContext *cct = common_preinit(ci, env, flags);
+  boost::intrusive_ptr<CephContext> cct
+  {
+    common_preinit(ci, env, flags),
+    false //< So the intrusive_ptr adopts the reference we already have
+  };
   if (cluster)
     cct->_conf->cluster = *cluster;
 
@@ -875,7 +890,7 @@ void RADOS::Builder::build_(asio::io_context& ioctx,
   }
 
   if (!no_mon_conf) {
-    MonClient mc_bootstrap(cct, ioctx);
+    MonClient mc_bootstrap(cct.get(), ioctx);
     // TODO This function should return an error code.
     auto err = mc_bootstrap.get_monmap_and_config();
     if (err < 0) {
@@ -888,21 +903,22 @@ void RADOS::Builder::build_(asio::io_context& ioctx,
   if (!cct->_log->is_started()) {
     cct->_log->start();
   }
-  common_init_finish(cct);
+  common_init_finish(cct.get());
 
-  RADOS::make_with_cct(cct, ioctx, std::move(c));
+  RADOS::make_with_cct(std::move(cct), ioctx, std::move(c));
 }
 
-void RADOS::make_with_cct_(CephContext* cct,
+void RADOS::make_with_cct_(boost::intrusive_ptr<CephContext> cct,
 			   asio::io_context& ioctx,
 			   BuildComp c) {
   try {
-    auto r = new detail::NeoClient{std::make_unique<detail::RADOS>(ioctx, cct)};
-    r->objecter->wait_for_osd_map(
-      [c = std::move(c), r = std::unique_ptr<detail::Client>(r)]() mutable {
-	asio::dispatch(asio::append(std::move(c), bs::error_code{},
-				    RADOS{std::move(r)}));
-      });
+    auto r = std::make_shared<detail::NeoClient>(
+      std::make_unique<detail::RADOS>(ioctx, std::move(cct)));
+    r->objecter->wait_for_osd_map([c = std::move(c),
+                                   r = std::move(r)]() mutable {
+      asio::dispatch(
+          asio::append(std::move(c), bs::error_code{}, RADOS{std::move(r)}));
+    });
   } catch (const bs::system_error& err) {
     asio::post(ioctx.get_executor(),
 	       asio::append(std::move(c), err.code(), RADOS{nullptr}));
@@ -910,13 +926,16 @@ void RADOS::make_with_cct_(CephContext* cct,
 }
 
 RADOS RADOS::make_with_librados(librados::Rados& rados) {
-  return RADOS{std::make_unique<detail::RadosClient>(rados.client)};
+  return RADOS{std::make_shared<detail::RadosClient>(rados.client)};
 }
 
 RADOS::RADOS() = default;
 
-RADOS::RADOS(std::unique_ptr<detail::Client> impl)
+RADOS::RADOS(std::shared_ptr<detail::Client> impl)
   : impl(std::move(impl)) {}
+
+RADOS::RADOS(const RADOS&) = default;
+RADOS& RADOS::operator =(const RADOS&) = default;
 
 RADOS::RADOS(RADOS&&) = default;
 RADOS& RADOS::operator =(RADOS&&) = default;
@@ -934,7 +953,8 @@ asio::io_context& RADOS::get_io_context() {
 void RADOS::execute_(Object o, IOContext _ioc, ReadOp _op,
 		     cb::list* bl,
 		     ReadOp::Completion c, version_t* objver,
-		     const blkin_trace_info *trace_info) {
+		     const blkin_trace_info *trace_info,
+		     std::uint64_t subsystem) {
   if (_op.size() == 0) {
     asio::dispatch(asio::append(std::move(c), bs::error_code{}));
     return;
@@ -953,14 +973,16 @@ void RADOS::execute_(Object o, IOContext _ioc, ReadOp _op,
   trace.event("init");
   impl->objecter->read(
     *oid, ioc->oloc, std::move(op->op), ioc->snap_seq, bl, flags,
-    std::move(c), objver, nullptr /* data_offset */, 0 /* features */, &trace);
+    std::move(c), objver, nullptr /* data_offset */, 0 /* features */, &trace,
+    subsystem);
 
   trace.event("submitted");
 }
 
 void RADOS::execute_(Object o, IOContext _ioc, WriteOp _op,
 		     WriteOp::Completion c, version_t* objver,
-		     const blkin_trace_info *trace_info) {
+		     const blkin_trace_info *trace_info,
+		     std::uint64_t subsystem) {
   if (_op.size() == 0) {
     asio::dispatch(asio::append(std::move(c), bs::error_code{}));
     return;
@@ -985,7 +1007,7 @@ void RADOS::execute_(Object o, IOContext _ioc, WriteOp _op,
   impl->objecter->mutate(
     *oid, ioc->oloc, std::move(op->op), ioc->snapc,
     mtime, flags,
-    std::move(c), objver, osd_reqid_t{}, &trace);
+    std::move(c), objver, osd_reqid_t{}, &trace, subsystem);
   trace.event("submitted");
 }
 
@@ -1009,7 +1031,8 @@ void RADOS::lookup_pool_(std::string name, LookupPoolComp c)
 	    return osdmap.lookup_pg_pool_name(name);
 	  });
 	if (ret < 0)
-	  asio::dispatch(asio::append(std::move(c), osdc_errc::pool_dne,
+	  asio::dispatch(asio::append(std::move(c),
+				      make_error_code(osdc_errc::pool_dne),
 				      std::int64_t(0)));
 	else
 	  asio::dispatch(asio::append(std::move(c), bs::error_code{}, ret));
@@ -1113,7 +1136,7 @@ bool RADOS::get_self_managed_snaps_mode(std::int64_t pool) const {
   return impl->objecter->with_osdmap([pool](const OSDMap& osdmap) {
     const auto pgpool = osdmap.get_pg_pool(pool);
     if (!pgpool) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     return pgpool->is_unmanaged_snaps_mode();
   });
@@ -1123,11 +1146,11 @@ bool RADOS::get_self_managed_snaps_mode(std::string_view pool) const {
   return impl->objecter->with_osdmap([pool](const OSDMap& osdmap) {
     int64_t poolid = osdmap.lookup_pg_pool_name(pool);
     if (poolid < 0) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     const auto pgpool = osdmap.get_pg_pool(poolid);
     if (!pgpool) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     return pgpool->is_unmanaged_snaps_mode();
   });
@@ -1151,11 +1174,11 @@ std::vector<std::uint64_t> RADOS::list_snaps(std::string_view pool) const {
   return impl->objecter->with_osdmap([pool](const OSDMap& osdmap) {
     int64_t poolid = osdmap.lookup_pg_pool_name(pool);
     if (poolid < 0) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     const auto pgpool = osdmap.get_pg_pool(poolid);
     if (!pgpool) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     std::vector<std::uint64_t> snaps;
     for (const auto& [snapid, snapinfo] : pgpool->snaps) {
@@ -1169,12 +1192,12 @@ std::uint64_t RADOS::lookup_snap(std::int64_t pool, std::string_view snap) const
   return impl->objecter->with_osdmap([pool, snap](const OSDMap& osdmap) {
     const auto pgpool = osdmap.get_pg_pool(pool);
     if (!pgpool) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     for (const auto& [id, snapinfo] : pgpool->snaps) {
       if (snapinfo.name == snap) return id;
     }
-    throw bs::system_error(bs::error_code(errc::snap_dne));
+    throw bs::system_error(errc::snap_dne);
   });
 }
 
@@ -1182,16 +1205,16 @@ std::uint64_t RADOS::lookup_snap(std::string_view pool, std::string_view snap) c
   return impl->objecter->with_osdmap([pool, snap](const OSDMap& osdmap) {
     int64_t poolid = osdmap.lookup_pg_pool_name(pool);
     if (poolid < 0) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     const auto pgpool = osdmap.get_pg_pool(poolid);
     if (!pgpool) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     for (const auto& [id, snapinfo] : pgpool->snaps) {
       if (snapinfo.name == snap) return id;
     }
-    throw bs::system_error(bs::error_code(errc::snap_dne));
+    throw bs::system_error(errc::snap_dne);
   });
 }
 
@@ -1199,10 +1222,10 @@ std::string RADOS::get_snap_name(std::int64_t pool, std::uint64_t snap) const {
   return impl->objecter->with_osdmap([pool, snap](const OSDMap& osdmap) {
     const auto pgpool = osdmap.get_pg_pool(pool);
     if (!pgpool) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     if (auto i = pgpool->snaps.find(snap); i == pgpool->snaps.cend()) {
-      throw bs::system_error(bs::error_code(errc::snap_dne));
+      throw bs::system_error(errc::snap_dne);
     } else {
       return i->second.name;
     }
@@ -1213,14 +1236,14 @@ std::string RADOS::get_snap_name(std::string_view pool,
   return impl->objecter->with_osdmap([pool, snap](const OSDMap& osdmap) {
     int64_t poolid = osdmap.lookup_pg_pool_name(pool);
     if (poolid < 0) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     const auto pgpool = osdmap.get_pg_pool(poolid);
     if (!pgpool) {
       throw bs::system_error(bs::error_code(errc::pool_dne));
     }
     if (auto i = pgpool->snaps.find(snap); i == pgpool->snaps.cend()) {
-      throw bs::system_error(bs::error_code(errc::snap_dne));
+      throw bs::system_error(errc::snap_dne);
     } else {
       return i->second.name;
     }
@@ -1232,10 +1255,10 @@ ceph::real_time RADOS::get_snap_timestamp(std::int64_t pool,
   return impl->objecter->with_osdmap([pool, snap](const OSDMap& osdmap) {
     const auto pgpool = osdmap.get_pg_pool(pool);
     if (!pgpool) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     if (auto i = pgpool->snaps.find(snap); i == pgpool->snaps.cend()) {
-      throw bs::system_error(bs::error_code(errc::snap_dne));
+      throw bs::system_error(errc::snap_dne);
     } else {
       return i->second.stamp.to_real_time();
     }
@@ -1246,14 +1269,14 @@ ceph::real_time RADOS::get_snap_timestamp(std::string_view pool,
   return impl->objecter->with_osdmap([pool, snap](const OSDMap& osdmap) {
     int64_t poolid = osdmap.lookup_pg_pool_name(pool);
     if (poolid < 0) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     const auto pgpool = osdmap.get_pg_pool(poolid);
     if (!pgpool) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     if (auto i = pgpool->snaps.find(snap); i == pgpool->snaps.cend()) {
-      throw bs::system_error(bs::error_code(errc::snap_dne));
+      throw bs::system_error(errc::snap_dne);
     } else {
       return i->second.stamp.to_real_time();
     }
@@ -1373,7 +1396,7 @@ class Notifier : public async::service_list_base_hook {
   };
 
   asio::io_context::executor_type ex;
-  Objecter::LingerOp* linger_op;
+  boost::intrusive_ptr<Objecter::LingerOp> linger_op;
   // Zero for unbounded. I would not recommend this.
   const uint32_t capacity;
 
@@ -1382,22 +1405,37 @@ class Notifier : public async::service_list_base_hook {
   std::deque<id_and_handler> handlers;
   std::mutex m;
   uint64_t next_id = 0;
+  std::shared_ptr<detail::Client> neoref;
 
   void service_shutdown() {
-    if (linger_op) {
-      linger_op->put();
-    }
+    // Ensure neorados object and operation live to the end of the
+    // function.
+    auto localop = std::move(linger_op);
+    [[maybe_unused]] auto localneo = std::move(neoref);
     std::unique_lock l(m);
     handlers.clear();
+    l.unlock();
+    if (localop) {
+      // We are being taken down and will execute no more
+      // handlers. Call `linger_cancel` to clean up properly in
+      // Objecter. (It doesn't call out to the OSD or anything.)
+      //
+      // Removal and decrement are guarded by `linger_op->canceled`
+      // so there's no risk of an underflow.
+      localop->objecter->linger_cancel(localop.get());
+    }
+    // The Notifier object is freed by the `linger_cancel` above.
   }
 
 public:
 
-  Notifier(asio::io_context::executor_type ex, Objecter::LingerOp* linger_op,
-	   uint32_t capacity)
-    : ex(ex), linger_op(linger_op), capacity(capacity),
+  Notifier(asio::io_context::executor_type ex,
+	   boost::intrusive_ptr<Objecter::LingerOp> linger_op,
+	   uint32_t capacity, std::shared_ptr<detail::Client> neoref)
+    : ex(ex), linger_op(std::move(linger_op)), capacity(capacity),
       svc(asio::use_service<async::service<Notifier>>(
-	    asio::query(ex, boost::asio::execution::context))) {
+	    asio::query(ex, boost::asio::execution::context))),
+      neoref(std::move(neoref)) {
     // register for service_shutdown() notifications
     svc.add(*this);
   }
@@ -1458,7 +1496,9 @@ public:
     } else if (capacity && notifications.size() >= capacity) {
       // We are allowed one over, so the client knows where in the
       // sequence of notifications we started losing data.
-      notifications.push({errc::notification_overflow, {}});
+      if (notifications.size() == capacity) {
+        notifications.push({errc::notification_overflow, {}});
+      }
     } else {
       notifications.push({{},
 			  Notification{
@@ -1509,12 +1549,12 @@ void RADOS::watch_(Object o, IOContext _ioc,
   auto e = asio::prefer(get_executor(),
 			asio::execution::outstanding_work.tracked);
   impl->objecter->linger_watch(
-    linger_op, op, ioc->snapc, ceph::real_clock::now(), bl,
+    linger_op.get(), op, ioc->snapc, ceph::real_clock::now(), bl,
     asio::bind_executor(
       std::move(e),
       [c = std::move(c), cookie, linger_op](bs::error_code e, cb::list) mutable {
 	if (e) {
-	  linger_op->objecter->linger_cancel(linger_op);
+	  linger_op->objecter->linger_cancel(linger_op.get());
 	  cookie = 0;
 	}
 	asio::dispatch(asio::append(std::move(c), e, cookie));
@@ -1534,7 +1574,7 @@ void RADOS::watch_(Object o, IOContext _ioc, WatchComp c,
   uint64_t cookie = linger_op->get_cookie();
   // Shared pointer to avoid a potential race condition
   linger_op->user_data.emplace<std::shared_ptr<Notifier>>(
-    std::make_shared<Notifier>(get_executor(), linger_op, queue_size));
+    std::make_shared<Notifier>(get_executor(), linger_op, queue_size, impl));
   auto& n = ceph::any_cast<std::shared_ptr<Notifier>&>(
     linger_op->user_data);
   linger_op->handle = std::ref(*n);
@@ -1543,13 +1583,13 @@ void RADOS::watch_(Object o, IOContext _ioc, WatchComp c,
   auto e = asio::prefer(get_executor(),
 			asio::execution::outstanding_work.tracked);
   impl->objecter->linger_watch(
-    linger_op, op, ioc->snapc, ceph::real_clock::now(), bl,
+    linger_op.get(), op, ioc->snapc, ceph::real_clock::now(), bl,
     asio::bind_executor(
       std::move(e),
       [c = std::move(c), cookie, linger_op](bs::error_code e, cb::list) mutable {
 	if (e) {
 	  linger_op->user_data.reset();
-	  linger_op->objecter->linger_cancel(linger_op);
+	  linger_op->objecter->linger_cancel(linger_op.get());
 	  cookie = 0;
 	}
 	asio::dispatch(asio::append(std::move(c), e, cookie));
@@ -1557,8 +1597,8 @@ void RADOS::watch_(Object o, IOContext _ioc, WatchComp c,
 }
 
 void RADOS::next_notification_(uint64_t cookie, NextNotificationComp c) {
-  Objecter::LingerOp* linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
-  if (!impl->objecter->is_valid_watch(linger_op)) {
+  boost::intrusive_ptr linger_op = impl->objecter->linger_by_cookie(cookie);
+  if (!linger_op) {
     dispatch(asio::append(std::move(c),
 			  bs::error_code(ENOTCONN, bs::generic_category()),
 			  Notification{}));
@@ -1575,7 +1615,7 @@ void RADOS::next_notification_(uint64_t cookie, NextNotificationComp c) {
       n->add_handler(id, std::move(c));
     } catch (const std::bad_any_cast&) {
       dispatch(asio::append(std::move(c),
-			    bs::error_code(errc::polled_callback_watch),
+			    make_error_code(errc::polled_callback_watch),
 			    Notification{}));
     }
 }
@@ -1598,9 +1638,9 @@ void RADOS::notify_ack_(Object o, IOContext _ioc,
 
 tl::expected<ceph::timespan, bs::error_code> RADOS::check_watch(uint64_t cookie)
 {
-  auto linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
-  if (impl->objecter->is_valid_watch(linger_op)) {
-    return impl->objecter->linger_check(linger_op);
+  boost::intrusive_ptr linger_op = impl->objecter->linger_by_cookie(cookie);
+  if (linger_op) {
+    return impl->objecter->linger_check(linger_op.get());
   } else {
     return tl::unexpected(bs::error_code(ENOTCONN, bs::generic_category()));
   }
@@ -1611,7 +1651,12 @@ void RADOS::unwatch_(uint64_t cookie, IOContext _ioc,
 {
   auto ioc = reinterpret_cast<const IOContextImpl*>(&_ioc.impl);
 
-  Objecter::LingerOp *linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
+  boost::intrusive_ptr linger_op = impl->objecter->linger_by_cookie(cookie);
+  if (!linger_op) {
+    dispatch(asio::append(std::move(c),
+			  bs::error_code(ENOTCONN, bs::generic_category())));
+    return;
+  }
 
   ObjectOperation op;
   op.watch(cookie, CEPH_OSD_WATCH_OP_UNWATCH);
@@ -1624,7 +1669,7 @@ void RADOS::unwatch_(uint64_t cookie, IOContext _ioc,
 			   [objecter = impl->objecter,
 			    linger_op, c = std::move(c)]
 			   (bs::error_code ec) mutable {
-			     objecter->linger_cancel(linger_op);
+			     objecter->linger_cancel(linger_op.get());
 			     asio::dispatch(asio::append(std::move(c), ec));
 			   }));
 }
@@ -1640,20 +1685,21 @@ struct NotifyHandler : std::enable_shared_from_this<NotifyHandler> {
   asio::io_context& ioc;
   asio::strand<asio::io_context::executor_type> strand;
   Objecter* objecter;
-  Objecter::LingerOp* op;
+  boost::intrusive_ptr<Objecter::LingerOp> op;
   RADOS::NotifyComp c;
 
   bool acked = false;
   bool finished = false;
   bs::error_code res;
   bufferlist rbl;
+  bool cleaned = false;
 
   NotifyHandler(asio::io_context& ioc,
 		Objecter* objecter,
-		Objecter::LingerOp* op,
+		boost::intrusive_ptr<Objecter::LingerOp> op,
 		RADOS::NotifyComp c)
     : ioc(ioc), strand(asio::make_strand(ioc)),
-      objecter(objecter), op(op), c(std::move(c)) {}
+      objecter(objecter), op(std::move(op)), c(std::move(c)) {}
 
   // Use bind or a lambda to pass this in.
   void handle_ack(bs::error_code ec,
@@ -1681,18 +1727,27 @@ struct NotifyHandler : std::enable_shared_from_this<NotifyHandler> {
 
   // Should be called from strand.
   void maybe_cleanup(bs::error_code ec) {
+    if (cleaned) {
+      return;
+    }
     if (!res && ec)
       res = ec;
     if ((acked && finished) || res) {
-      objecter->linger_cancel(op);
+      cleaned = true;
+      objecter->linger_cancel(op.get());
       ceph_assert(c);
       bc::flat_map<std::pair<uint64_t, uint64_t>, buffer::list> reply_map;
       bc::flat_set<std::pair<uint64_t, uint64_t>> missed_set;
-      auto p = rbl.cbegin();
-      decode(reply_map, p);
-      decode(missed_set, p);
-      asio::dispatch(asio::append(std::move(c), res, std::move(reply_map),
-				  std::move(missed_set)));
+      if (rbl.length() > 0) try {
+          auto p = rbl.cbegin();
+          decode(reply_map, p);
+          decode(missed_set, p);
+      } catch (const std::exception&) {
+        // Swallowing the decode error.
+      }
+      asio::dispatch(
+          asio::append(
+              std::move(c), res, std::move(reply_map), std::move(missed_set)));
     }
   }
 };
@@ -1726,7 +1781,7 @@ void RADOS::notify_(Object o, IOContext _ioc, bufferlist bl,
     bl, &inbl);
 
   impl->objecter->linger_notify(
-    linger_op, rd, ioc->snap_seq, inbl,
+    linger_op.get(), rd, ioc->snap_seq, inbl,
     asio::bind_executor(
       e,
       [cb](bs::error_code ec, ceph::bufferlist bl) mutable {
@@ -1738,16 +1793,19 @@ void RADOS::notify_(Object o, IOContext _ioc, bufferlist bl,
 
 Cursor::Cursor() {
   static_assert(impl_size >= sizeof(hobject_t));
+  static_assert(alignof(decltype(impl)) >= alignof(hobject_t));
   new (&impl) hobject_t();
 };
 
 Cursor::Cursor(end_magic_t) {
   static_assert(impl_size >= sizeof(hobject_t));
+  static_assert(alignof(decltype(impl)) >= alignof(hobject_t));
   new (&impl) hobject_t(hobject_t::get_max());
 }
 
 Cursor::Cursor(void* p) {
   static_assert(impl_size >= sizeof(hobject_t));
+  static_assert(alignof(decltype(impl)) >= alignof(hobject_t));
   new (&impl) hobject_t(std::move(*reinterpret_cast<hobject_t*>(p)));
 }
 
@@ -1763,11 +1821,13 @@ Cursor Cursor::end() {
 
 Cursor::Cursor(const Cursor& rhs) {
   static_assert(impl_size >= sizeof(hobject_t));
+  static_assert(alignof(decltype(impl)) >= alignof(hobject_t));
   new (&impl) hobject_t(*reinterpret_cast<const hobject_t*>(&rhs.impl));
 }
 
 Cursor& Cursor::operator =(const Cursor& rhs) {
   static_assert(impl_size >= sizeof(hobject_t));
+  static_assert(alignof(decltype(impl)) >= alignof(hobject_t));
   reinterpret_cast<hobject_t*>(&impl)->~hobject_t();
   new (&impl) hobject_t(*reinterpret_cast<const hobject_t*>(&rhs.impl));
   return *this;
@@ -1775,11 +1835,13 @@ Cursor& Cursor::operator =(const Cursor& rhs) {
 
 Cursor::Cursor(Cursor&& rhs) {
   static_assert(impl_size >= sizeof(hobject_t));
+  static_assert(alignof(decltype(impl)) >= alignof(hobject_t));
   new (&impl) hobject_t(std::move(*reinterpret_cast<hobject_t*>(&rhs.impl)));
 }
 
 Cursor& Cursor::operator =(Cursor&& rhs) {
   static_assert(impl_size >= sizeof(hobject_t));
+  static_assert(alignof(decltype(impl)) >= alignof(hobject_t));
   reinterpret_cast<hobject_t*>(&impl)->~hobject_t();
   new (&impl) hobject_t(std::move(*reinterpret_cast<hobject_t*>(&rhs.impl)));
   return *this;
@@ -1955,6 +2017,17 @@ void RADOS::mon_command_(std::vector<std::string> command,
 
 uint64_t RADOS::instance_id() const {
   return impl->get_instance_id();
+}
+
+uint64_t RADOS::new_subsystem() const
+{
+  return impl->objecter->unique_subsystem_id();
+}
+
+void RADOS::cancel_subsystem(uint64_t subsystem) const
+{
+  impl->objecter->subsystem_cancel(subsystem,
+				   asio::error::operation_aborted);
 }
 
 #pragma GCC diagnostic push

@@ -20,6 +20,7 @@
 #include "common/Finisher.h"
 #include "common/Timer.h"
 #include "common/LogClient.h"
+#include "common/ceph_time.h"
 
 #include "mon/MonClient.h"
 #include "osdc/Objecter.h"
@@ -47,8 +48,14 @@ private:
               last_map_time; // used to panic on disconnect
   std::chrono::time_point<std::chrono::steady_clock>
                 reset_timestamp; // used to bypass some validations
+  std::chrono::time_point<std::chrono::steady_clock>
+                start_time; // used to panic on connect
 
   bool first_beacon = true;
+  bool set_group_id = false;
+  uint64_t beacon_sequence = 0;
+  BeaconSubsystems prev_beacon_subsystems;
+  bool cluster_beacon_diff_included = 0;  // track cluster features for beacon encoding
   // init gw ssl opts
   void init_gw_ssl_opts();
 
@@ -66,11 +73,18 @@ protected:
   ceph::mutex beacon_lock = ceph::make_mutex("NVMeofGw::beacon_lock");
   SafeTimer timer;
 
+  // Timer state for exact frequency timing
+  ceph::mono_clock::time_point next_tick_time;
+
   int orig_argc;
   const char **orig_argv;
 
   void send_config_beacon(); 
   void send_beacon();
+
+  // Timer management for exact frequency
+  void schedule_next_tick();
+  void log_tick_execution_duration(const ceph::mono_clock::time_point& start_time);
  
 public:
   NVMeofGwMonitorClient(int argc, const char **argv);
@@ -96,6 +110,8 @@ public:
   void disconnect_panic();
 
   void handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> m);
+
+  void connect_panic();
 };
 
 #endif

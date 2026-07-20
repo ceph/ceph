@@ -69,6 +69,14 @@ UadkAccel ZlibCompressor::uadk_accel;
 ZlibCompressor::ZlibCompressor(CephContext *cct, bool isal)
   : Compressor(COMP_ALG_ZLIB, "zlib"), isal_enabled(isal), cct(cct)
 {
+
+#if !(__x86_64__ && defined(HAVE_NASM_X64_AVX2)) || defined(__aarch64__)
+  if (isal_enabled) {
+    derr << "WARN: ISA-L enabled (compressor_zlib_isal=true) but not supported"
+         << dendl;
+  }
+#endif
+
 #ifdef HAVE_QATZIP
   if (cct->_conf->qat_compressor_enabled && qat_accel.init("zlib"))
     qat_enabled = true;

@@ -110,19 +110,27 @@ def verify_numeric(field: Any, field_name: str) -> None:
             raise SpecValidationError(f"{field_name} must be a number")
 
 
-def verify_non_negative_int(field: Any, field_name: str) -> None:
+def verify_int(field: Any, field_name: str) -> None:
     verify_numeric(field, field_name)
     if field is not None:
         if not isinstance(field, int) or isinstance(field, bool):
             raise SpecValidationError(f"{field_name} must be an integer")
+
+
+def verify_non_negative_int(field: Any, field_name: str) -> None:
+    verify_numeric(field, field_name)
+    if field is not None:
+        verify_int(field, field_name)
         if field < 0:
             raise SpecValidationError(f"{field_name} can't be negative")
 
 
 def verify_positive_int(field: Any, field_name: str) -> None:
     verify_non_negative_int(field, field_name)
-    if field is not None and field <= 0:
-        raise SpecValidationError(f"{field_name} must be greater than zero")
+    if field is not None:
+        verify_int(field, field_name)
+        if field <= 0:
+            raise SpecValidationError(f"{field_name} must be greater than zero")
 
 
 def verify_non_negative_number(field: Any, field_name: str) -> None:

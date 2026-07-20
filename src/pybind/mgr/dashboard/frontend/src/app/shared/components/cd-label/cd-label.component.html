@@ -1,12 +1,12 @@
-<span *ngIf="!key; else key_value"
-      class="badge badge-{{value}}"
-      ngClass="{{value | colorClassFromText}}"
-      [ngbTooltip]="tooltipText">
+<cds-tag *ngIf="!key; else key_value"
+         class="tags-{{value}}"
+         ngClass="{{value | colorClassFromText}}"
+         [ngbTooltip]="tooltipText">
   {{ value }}
-</span>
+</cds-tag>
 
 <ng-template #key_value>
-  <span class="badge badge-background-primary badge-{{key}}-{{value}}">
+  <cds-tag class="tag-background-primary badge-{{key}}-{{value}}">
         {{ key }}: {{ value }}
-  </span>
+  </cds-tag>
 </ng-template>

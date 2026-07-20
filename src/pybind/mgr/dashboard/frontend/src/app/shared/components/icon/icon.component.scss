@@ -1,0 +1,59 @@
+@use '@carbon/styles/scss/theme';
+
+.success-icon {
+  color: theme.$support-success;
+}
+
+.danger-icon {
+  color: theme.$support-error !important;
+}
+
+//@TODO: this naming needs to be changed
+// Do this after converting Icons enum to const
+.infoCircle-icon {
+  color: theme.$support-info;
+}
+
+.warning-icon {
+  fill: theme.$support-caution-major !important;
+}
+
+.warningAltFilled-icon {
+  fill: theme.$support-caution-major !important;
+}
+
+.error-icon {
+  fill: var(--cds-text-error) !important;
+}
+
+.info-icon {
+  fill: theme.$support-info !important;
+}
+
+.deploy-icon {
+  fill: theme.$layer-selected-disabled !important;
+}
+
+.notificationNew-icon circle {
+  fill: theme.$support-error !important;
+}
+
+.emptySearch-icon {
+  fill: theme.$layer-selected-disabled !important;
+}
+
+.warningAlt-icon {
+  fill: theme.$support-caution-major !important;
+}
+
+.checkMarkOutline-icon {
+  fill: theme.$support-success !important;
+}
+
+.inProgress-icon {
+  fill: theme.$support-info !important;
+}
+
+.arrowDown-icon {
+  fill: theme.$support-error !important;
+}

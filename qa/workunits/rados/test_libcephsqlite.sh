@@ -20,7 +20,7 @@ function sqlite {
   # We're doing job control gymnastics here to make sure that sqlite3 is the
   # main process (i.e. the process group leader) in the background, not a bash
   # function or job pipeline.
-  sqlite3 -cmd '.output /dev/null' -cmd '.load libcephsqlite.so' -cmd 'pragma journal_mode = PERSIST' -cmd ".open file:///$pool:$ns/baz.db?vfs=ceph" -cmd '.output stdout' <<<"$a" &
+  sqlite3 -cmd '.bail on' -cmd '.output /dev/null' -cmd '.load libcephsqlite.so' -cmd 'pragma journal_mode = PERSIST' -cmd ".open file:///$pool:$ns/baz.db?vfs=ceph" -cmd '.output stdout' <<<"$a" &
   if [ "$background" != b ]; then
     wait
   fi
@@ -71,7 +71,7 @@ striper rm baz.db
 date
 sqlite b <<EOF
 CREATE TABLE foo (a BLOB);
-INSERT INTO foo VALUES ("start");
+INSERT INTO foo (a) VALUES (RANDOMBLOB(1<<20));
 WITH RECURSIVE c(x) AS
   (
    VALUES(1)
@@ -104,7 +104,7 @@ striper rm baz.db
 date
 sqlite b <<EOF
 CREATE TABLE foo (a BLOB);
-INSERT INTO foo VALUES ("start");
+INSERT INTO foo (a) VALUES (RANDOMBLOB(1<<20));
 WITH RECURSIVE c(x) AS
   (
    VALUES(1)

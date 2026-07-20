@@ -1,0 +1,107 @@
+@let storageCard = (storageCardVm$ | async);
+@let health = (healthCardVm$ | async);
+<div cdsGrid
+     [fullWidth]="true"
+     [narrow]="true"
+     class="cds-mt-6 cds-mb-6 overview">
+  <div cdsRow
+       class="cds-mb-5">
+    <div cdsCol
+         [columnNumbers]="{lg: 11}">
+      <cd-overview-health-card
+          [vm]="health"
+          (viewIncidents)="toggleHealthPanel()"
+          (viewPGStates)="togglePGStatesPanel()"
+          (activeSectionChange)="activeHealthTab = $event"
+        ></cd-overview-health-card>
+    </div>
+    <div cdsCol
+         class="overview-pr-0"
+         [columnNumbers]="{lg: 5}">
+      <cd-overview-alerts-card [compact]="!activeHealthTab"></cd-overview-alerts-card>
+    </div>
+  </div>
+  <div cdsRow
+       class="cds-mb-5">
+    <div cdsCol
+         class="overview-pr-0"
+         [columnNumbers]="{lg: 16}">
+      <cd-overview-storage-card
+        [totalCapacity]="storageCard?.totalCapacity"
+        [usedCapacity]="storageCard?.usedCapacity"
+        [consumptionTrendData]="storageCard?.consumptionTrendData ?? []"
+        [averageDailyConsumption]="storageCard?.averageDailyConsumption ?? ''"
+        [estimatedTimeUntilFull]="storageCard?.estimatedTimeUntilFull ?? ''"
+        [breakdownData]="storageCard?.breakdownData ?? []"
+        [isBreakdownLoaded]="storageCard?.isBreakdownLoaded ?? false"
+        [threshold]="storageCard?.threshold">
+      </cd-overview-storage-card>
+    </div>
+  </div>
+  <div cdsRow>
+    <div cdsCol
+         class="overview-pr-0"
+         [columnNumbers]="{ lg: 16 }">
+      <cd-performance-card></cd-performance-card>
+    </div>
+  </div>
+</div>
+@if (isHealthPanelOpen && health?.incidents > 0) {
+  <cd-side-panel
+    [headerText]="'Health incidents ('+ health?.incidents +')'"
+    [expanded]="isHealthPanelOpen"
+    size="md"
+    (closed)="toggleHealthPanel()">
+    <div panel-header-description
+         class="cds--type-body-01">
+      <span i18n>Health incidents are Ceph health checks warnings indicating conditions that require attention and remain until resolved.</span>
+    </div>
+    <div class="panel-content">
+      @for (check of health?.checks; track check.name) {
+      <div>
+        <div class="overview-check-header">
+          <cd-icon [type]="check?.icon"></cd-icon>
+          <span class="cds--type-body-compact-01 overview-check-name">
+            {{ check?.name }}
+          </span>
+        </div>
+        <p class="cds--type-body-compact-01 overview-check-description">{{ check?.description }}</p>
+      </div>
+      }
+    </div>
+  </cd-side-panel>
+}
+@if (isPGStatePanelOpen) {
+  <cd-side-panel
+    [headerText]="'Placement groups  ('+ health?.pgs?.total +')'"
+    [expanded]="isPGStatePanelOpen"
+    size="md"
+    (closed)="togglePGStatesPanel()">
+    <div panel-header-description
+         class="cds--type-body-01">
+      <span i18n>
+        Placement groups are how Ceph groups and distributes data across storage devices to manage replication, recovery, and performance.
+      </span>
+    </div>
+    <div class="panel-content">
+      <div
+        class="overview-pg-side-panel-rw cds-mb-4"
+        cdsStack="horizontal"
+        gap="4">
+        @for (data of health?.pgs?.io; track $index ; let isLast = $last) {
+        <div
+          class="overview-pg-side-panel-rw-item"
+          [class.overview-pg-side-panel-rw-item--border]="!isLast">
+          <p class="cds--type-label-01 cds-mb-2">{{data.label}}</p>
+          <p class="cds--type-heading-03 cds-mb-0">{{data.value | dimlessBinary }} / s</p>
+        </div>
+        }
+      </div>
+      <cd-table
+         [data]="health?.pgs?.states"
+         [columns]="tableColumns"
+         size="xs">
+      </cd-table>
+    </div>
+  </cd-side-panel>
+}

@@ -21,7 +21,7 @@ from ceph.deployment.service_spec import (
     RGWSpec,
     ServiceSpec,
 )
-from ceph.deployment.utils import is_ipv6, unwrap_ipv6
+from ceph.deployment.utils import is_ipv6, unwrap_ipv6, wrap_ipv6
 from mgr_util import build_url, merge_dicts
 from orchestrator import (
     OrchestratorError,
@@ -96,8 +96,10 @@ def get_dashboard_endpoints(svc: 'CephadmService') -> Tuple[List[str], Optional[
             if not port:
                 continue
             assert dd.hostname is not None
+            # fqdn may already be a name or numeric address; ensure IPv6
+            # literals are bracketed.
             addr = svc.mgr.get_fqdn(dd.hostname)
-            dashboard_endpoints.append(f'{addr}:{port}')
+            dashboard_endpoints.append(f'{wrap_ipv6(addr)}:{port}')
 
     return dashboard_endpoints, protocol
 

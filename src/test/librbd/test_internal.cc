@@ -1113,6 +1113,464 @@ TEST_F(TestInternal, DiscardCopyup)
   }
 }
 
+TEST_F(TestInternal, SparseReadParent)
+{
+  // https://tracker.ceph.com/issues/72727
+  SKIP_IF_CRIMSON();
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  // all reads should go to the OSDs
+  auto cct = reinterpret_cast<CephContext*>(_rados.cct());
+  REQUIRE(!cct->_conf.get_val<bool>("rbd_cache") ||
+          cct->_conf.get_val<std::string>("rbd_cache_policy") == "writearound");
+  REQUIRE(!cct->_conf.get_val<bool>("rbd_parent_cache_enabled"));
+  REQUIRE(!is_rbd_pwl_enabled(cct));
+
+  // clone should remain empty for the entire duration of the test
+  REQUIRE(!cct->_conf.get_val<bool>("rbd_clone_copy_on_read"));
+
+  uint64_t features;
+  ASSERT_TRUE(::get_features(&features));
+
+  std::string parent_name = get_temp_image_name();
+  int order = 15;
+  ASSERT_EQ(0, m_rbd.create2(m_ioctx, parent_name.c_str(), 4096 * 16, features,
+                             &order));
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(parent_name, &ictx));
+  ASSERT_EQ(0, ictx->operations->metadata_set(
+      "conf_rbd_sparse_read_threshold_bytes", "4096"));
+
+  bool sparse_read_supported = is_sparse_read_supported(
+      ictx->data_ctx, ictx->get_object_name(10));
+
+  bufferlist bl1;
+  bl1.append(std::string(4096, '1'));
+  ASSERT_EQ(4096, api::Io<>::write(*ictx, 4096 * 10, 4096, std::move(bl1), 0));
+  bufferlist bl2;
+  bl2.append(std::string(4096 * 2, '2'));
+  ASSERT_EQ(4096 * 2, api::Io<>::write(*ictx, 4096 * 12, 4096 * 2,
+                                       std::move(bl2), 0));
+
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, snap_protect(*ictx, "snap1"));
+
+  std::string clone_name = get_temp_image_name();
+  ASSERT_EQ(0, librbd::clone(m_ioctx, parent_name.c_str(), "snap1", m_ioctx,
+			     clone_name.c_str(), features, &order, 0, 0));
+
+  close_image(ictx);
+  ASSERT_EQ(0, open_image(clone_name, &ictx));
+
+  std::vector<std::pair<uint64_t, uint64_t>> read_m;
+  bufferlist read_bl;
+  librbd::io::ReadResult sparse_read_result{&read_m, &read_bl};
+
+  // 0. read entire clone at once
+  {
+    std::vector<std::pair<uint64_t, uint64_t>> expected_m;
+    bufferlist expected_bl;
+    if (sparse_read_supported) {
+      expected_m = {{4096 * 10, 4096}, {4096 * 12, 4096 * 2}};
+      expected_bl.append(std::string(4096, '1'));
+      expected_bl.append(std::string(4096 * 2, '2'));
+    } else {
+      expected_m = {{4096 * 8, 4096 * 6}};
+      expected_bl.append(std::string(4096 * 2, '\0'));
+      expected_bl.append(std::string(4096, '1'));
+      expected_bl.append(std::string(4096, '\0'));
+      expected_bl.append(std::string(4096 * 2, '2'));
+    }
+
+    ASSERT_EQ(4096 * 16,
+              api::Io<>::read(*ictx, 0, 4096 * 16,
+                              librbd::io::ReadResult{sparse_read_result}, 0));
+    ASSERT_EQ(expected_m, read_m);
+    ASSERT_TRUE(expected_bl.contents_equal(read_bl));
+  }
+
+  // 1. parent object DNE
+  {
+    std::vector<std::pair<uint64_t, uint64_t>> expected_m;
+    bufferlist expected_bl;
+
+    ASSERT_EQ(4096 * 6,
+              api::Io<>::read(*ictx, 4096, 4096 * 6,
+                              librbd::io::ReadResult{sparse_read_result}, 0));
+    ASSERT_EQ(expected_m, read_m);
+    ASSERT_TRUE(expected_bl.contents_equal(read_bl));
+  }
+
+  // 2. parent object has two extents
+  {
+    std::vector<std::pair<uint64_t, uint64_t>> expected_m;
+    bufferlist expected_bl;
+    if (sparse_read_supported) {
+      expected_m = {{4096 * 10, 4096}, {4096 * 12, 4096 * 2}};
+      expected_bl.append(std::string(4096, '1'));
+      expected_bl.append(std::string(4096 * 2, '2'));
+    } else {
+      expected_m = {{4096 * 9, 4096 * 5}};
+      expected_bl.append(std::string(4096, '\0'));
+      expected_bl.append(std::string(4096, '1'));
+      expected_bl.append(std::string(4096, '\0'));
+      expected_bl.append(std::string(4096 * 2, '2'));
+    }
+
+    ASSERT_EQ(4096 * 6,
+              api::Io<>::read(*ictx, 4096 * 9, 4096 * 6,
+                              librbd::io::ReadResult{sparse_read_result}, 0));
+    ASSERT_EQ(expected_m, read_m);
+    ASSERT_TRUE(expected_bl.contents_equal(read_bl));
+  }
+
+  // 3. parent object has two extents but the second extent is
+  //    partially beyond parent overlap
+  ASSERT_EQ(0, librbd::cls_client::set_size(&m_ioctx, ictx->header_oid,
+                                            4096 * 13));
+  ASSERT_EQ(0, librbd::cls_client::set_size(&m_ioctx, ictx->header_oid,
+                                            4096 * 16));
+  ASSERT_EQ(0, ictx->state->refresh());
+  {
+    std::vector<std::pair<uint64_t, uint64_t>> expected_m;
+    bufferlist expected_bl;
+    if (sparse_read_supported) {
+      expected_m = {{4096 * 10, 4096}, {4096 * 12, 4096}};
+      expected_bl.append(std::string(4096, '1'));
+      expected_bl.append(std::string(4096, '2'));
+    } else {
+      expected_m = {{4096 * 9, 4096 * 4}};
+      expected_bl.append(std::string(4096, '\0'));
+      expected_bl.append(std::string(4096, '1'));
+      expected_bl.append(std::string(4096, '\0'));
+      expected_bl.append(std::string(4096, '2'));
+    }
+
+    ASSERT_EQ(4096 * 6,
+              api::Io<>::read(*ictx, 4096 * 9, 4096 * 6,
+                              librbd::io::ReadResult{sparse_read_result}, 0));
+    ASSERT_EQ(expected_m, read_m);
+    ASSERT_TRUE(expected_bl.contents_equal(read_bl));
+  }
+
+  // 4. parent object has two extents but the second extent is
+  //    completely beyond parent overlap
+  ASSERT_EQ(0, librbd::cls_client::set_size(&m_ioctx, ictx->header_oid,
+                                            4096 * 12));
+  ASSERT_EQ(0, librbd::cls_client::set_size(&m_ioctx, ictx->header_oid,
+                                            4096 * 16));
+  ASSERT_EQ(0, ictx->state->refresh());
+  {
+    std::vector<std::pair<uint64_t, uint64_t>> expected_m;
+    bufferlist expected_bl;
+    if (sparse_read_supported) {
+      expected_m = {{4096 * 10, 4096}};
+      expected_bl.append(std::string(4096, '1'));
+    } else {
+      expected_m = {{4096 * 9, 4096 * 3}};
+      expected_bl.append(std::string(4096, '\0'));
+      expected_bl.append(std::string(4096, '1'));
+      expected_bl.append(std::string(4096, '\0'));
+    }
+
+    ASSERT_EQ(4096 * 6,
+              api::Io<>::read(*ictx, 4096 * 9, 4096 * 6,
+                              librbd::io::ReadResult{sparse_read_result}, 0));
+    ASSERT_EQ(expected_m, read_m);
+    ASSERT_TRUE(expected_bl.contents_equal(read_bl));
+  }
+
+  // 5. parent object has two extents but both extents are beyond
+  //    parent overlap
+  ASSERT_EQ(0, librbd::cls_client::set_size(&m_ioctx, ictx->header_oid,
+                                            4096 * 10));
+  ASSERT_EQ(0, librbd::cls_client::set_size(&m_ioctx, ictx->header_oid,
+                                            4096 * 16));
+  ASSERT_EQ(0, ictx->state->refresh());
+  {
+    std::vector<std::pair<uint64_t, uint64_t>> expected_m;
+    bufferlist expected_bl;
+    if (!sparse_read_supported) {
+      expected_m = {{4096 * 9, 4096}};
+      expected_bl.append(std::string(4096, '\0'));
+    }
+
+    ASSERT_EQ(4096 * 6,
+              api::Io<>::read(*ictx, 4096 * 9, 4096 * 6,
+                              librbd::io::ReadResult{sparse_read_result}, 0));
+    ASSERT_EQ(expected_m, read_m);
+    ASSERT_TRUE(expected_bl.contents_equal(read_bl));
+  }
+
+  // 6. parent object is beyond parent overlap
+  ASSERT_EQ(0, librbd::cls_client::set_size(&m_ioctx, ictx->header_oid,
+                                            4096 * 8));
+  ASSERT_EQ(0, librbd::cls_client::set_size(&m_ioctx, ictx->header_oid,
+                                            4096 * 16));
+  ASSERT_EQ(0, ictx->state->refresh());
+  {
+    std::vector<std::pair<uint64_t, uint64_t>> expected_m;
+    bufferlist expected_bl;
+
+    ASSERT_EQ(4096 * 6,
+              api::Io<>::read(*ictx, 4096 * 9, 4096 * 6,
+                              librbd::io::ReadResult{sparse_read_result}, 0));
+    ASSERT_EQ(expected_m, read_m);
+    ASSERT_TRUE(expected_bl.contents_equal(read_bl));
+  }
+}
+
+TEST_F(TestInternal, SparseReadParentMultipleObjectExtents)
+{
+  // https://tracker.ceph.com/issues/72727
+  SKIP_IF_CRIMSON();
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_STRIPINGV2);
+
+  // all reads should go to the OSDs
+  auto cct = reinterpret_cast<CephContext*>(_rados.cct());
+  REQUIRE(!cct->_conf.get_val<bool>("rbd_cache") ||
+          cct->_conf.get_val<std::string>("rbd_cache_policy") == "writearound");
+  REQUIRE(!cct->_conf.get_val<bool>("rbd_parent_cache_enabled"));
+  REQUIRE(!is_rbd_pwl_enabled(cct));
+
+  // clone should remain empty for the entire duration of the test
+  REQUIRE(!cct->_conf.get_val<bool>("rbd_clone_copy_on_read"));
+
+  uint64_t features;
+  ASSERT_TRUE(::get_features(&features));
+
+  std::string parent_name = get_temp_image_name();
+  int order = 17;
+  ASSERT_EQ(0, m_rbd.create2(m_ioctx, parent_name.c_str(), 4096 * 64, features,
+                             &order));
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(parent_name, &ictx));
+  ASSERT_EQ(0, ictx->operations->metadata_set(
+      "conf_rbd_sparse_read_threshold_bytes", "4096"));
+
+  bool sparse_read_supported = is_sparse_read_supported(
+      ictx->data_ctx, ictx->get_object_name(10));
+
+  // parent obj1: ... .1 1. .2 .. 33 3. .. 4
+  // clone obj0:  ... 1. .. 3. 4
+  // clone obj1:  ... .1 .2 33
+
+  bufferlist bl1;
+  bl1.append(std::string(4096 * 2, '1'));
+  ASSERT_EQ(4096 * 2, api::Io<>::write(*ictx, 4096 * 39, 4096 * 2,
+                                       std::move(bl1), 0));
+  bufferlist bl2;
+  bl2.append(std::string(4096, '2'));
+  ASSERT_EQ(4096, api::Io<>::write(*ictx, 4096 * 43, 4096, std::move(bl2), 0));
+  bufferlist bl3;
+  bl3.append(std::string(4096 * 3, '3'));
+  ASSERT_EQ(4096 * 3, api::Io<>::write(*ictx, 4096 * 46, 4096 * 3,
+                                       std::move(bl3), 0));
+  bufferlist bl4;
+  bl4.append(std::string(4096, '4'));
+  ASSERT_EQ(4096, api::Io<>::write(*ictx, 4096 * 52, 4096, std::move(bl4), 0));
+
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, snap_protect(*ictx, "snap1"));
+
+  std::string mid_clone_name = get_temp_image_name();
+  ASSERT_EQ(0, librbd::clone(m_ioctx, parent_name.c_str(), "snap1", m_ioctx,
+			     mid_clone_name.c_str(), features, &order, 0, 0));
+
+  close_image(ictx);
+  ASSERT_EQ(0, open_image(mid_clone_name, &ictx));
+
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, snap_protect(*ictx, "snap1"));
+
+  std::string top_clone_name = get_temp_image_name();
+  ASSERT_EQ(0, librbd::clone(m_ioctx, mid_clone_name.c_str(), "snap1", m_ioctx,
+			     top_clone_name.c_str(), features, &order,
+                             4096 * 2, 2));
+
+  close_image(ictx);
+  ASSERT_EQ(0, open_image(top_clone_name, &ictx));
+
+  std::vector<std::pair<uint64_t, uint64_t>> expected_m;
+  bufferlist expected_bl;
+  if (sparse_read_supported) {
+    expected_m = {{4096 * 39, 4096}, {4096 * 40, 4096},
+                  {4096 * 43, 4096}, {4096 * 46, 4096 * 2},
+                  {4096 * 48, 4096}, {4096 * 52, 4096}};
+    expected_bl.append(std::string(4096 * 2, '1'));
+    expected_bl.append(std::string(4096, '2'));
+    expected_bl.append(std::string(4096 * 3, '3'));
+    expected_bl.append(std::string(4096, '4'));
+  } else {
+    expected_m = {{4096 * 32, 4096 * 2}, {4096 * 34, 4096 * 2},
+                  {4096 * 36, 4096 * 2}, {4096 * 38, 4096 * 2},
+                  {4096 * 40, 4096 * 2}, {4096 * 42, 4096 * 2},
+                  {4096 * 44, 4096 * 2}, {4096 * 46, 4096 * 2},
+                  {4096 * 48, 4096 * 2}, {4096 * 50, 4096 * 2},
+                  {4096 * 52, 4096}};
+    expected_bl.append(std::string(4096 * 7, '\0'));
+    expected_bl.append(std::string(4096 * 2, '1'));
+    expected_bl.append(std::string(4096 * 2, '\0'));
+    expected_bl.append(std::string(4096, '2'));
+    expected_bl.append(std::string(4096 * 2, '\0'));
+    expected_bl.append(std::string(4096 * 3, '3'));
+    expected_bl.append(std::string(4096 * 3, '\0'));
+    expected_bl.append(std::string(4096, '4'));
+  }
+
+  std::vector<std::pair<uint64_t, uint64_t>> read_m;
+  bufferlist read_bl;
+  ASSERT_EQ(4096 * 64,
+            api::Io<>::read(*ictx, 0, 4096 * 64,
+                            librbd::io::ReadResult{&read_m, &read_bl}, 0));
+  ASSERT_EQ(expected_m, read_m);
+  ASSERT_TRUE(expected_bl.contents_equal(read_bl));
+}
+
+TEST_F(TestInternal, SparseReadParentImportOnlyMigration)
+{
+  // https://tracker.ceph.com/issues/72727
+  SKIP_IF_CRIMSON();
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  // all reads should go to the OSDs
+  auto cct = reinterpret_cast<CephContext*>(_rados.cct());
+  REQUIRE(!cct->_conf.get_val<bool>("rbd_cache") ||
+          cct->_conf.get_val<std::string>("rbd_cache_policy") == "writearound");
+  REQUIRE(!cct->_conf.get_val<bool>("rbd_parent_cache_enabled"));
+  REQUIRE(!is_rbd_pwl_enabled(cct));
+
+  // clone should remain empty for the entire duration of the test
+  REQUIRE(!cct->_conf.get_val<bool>("rbd_clone_copy_on_read"));
+
+  uint64_t features;
+  ASSERT_TRUE(::get_features(&features));
+
+  std::string parent_name = get_temp_image_name();
+  int order = 22;
+  ASSERT_EQ(0, m_rbd.create2(m_ioctx, parent_name.c_str(), 32 << 20, features,
+                             &order));
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(parent_name, &ictx));
+  ASSERT_EQ(0, ictx->operations->metadata_set(
+      "conf_rbd_sparse_read_threshold_bytes", "4096"));
+
+  bool sparse_read_supported = is_sparse_read_supported(
+      ictx->data_ctx, ictx->get_object_name(10));
+
+  bufferlist bl1;
+  bl1.append(std::string((4 << 20) + (4 << 10), '1'));
+  ASSERT_EQ((4 << 20) + (4 << 10),
+            api::Io<>::write(*ictx, 4 << 20, (4 << 20) + (4 << 10),
+                             std::move(bl1), 0));
+  bufferlist bl2;
+  bl2.append(std::string(16 << 10, '2'));
+  ASSERT_EQ(16 << 10, api::Io<>::write(*ictx, 10 << 20, 16 << 10,
+                                       std::move(bl2), 0));
+  bufferlist bl3;
+  bl3.append(std::string(24 << 10, '3'));
+  ASSERT_EQ(24 << 10, api::Io<>::write(*ictx, (12 << 20) - (4 << 10), 24 << 10,
+                                       std::move(bl3), 0));
+  bufferlist bl4;
+  bl4.append(std::string(8 << 10, '4'));
+  ASSERT_EQ(8 << 10, api::Io<>::write(*ictx, (24 << 20) - (8 << 10), 8 << 10,
+                                      std::move(bl4), 0));
+  bufferlist bl5;
+  bl5.append(std::string(4 << 10, '5'));
+  ASSERT_EQ(4 << 10, api::Io<>::write(*ictx, 25 << 20, 4 << 10,
+                                      std::move(bl5), 0));
+  bufferlist bl6;
+  bl6.append(std::string(12 << 10, '6'));
+  ASSERT_EQ(12 << 10, api::Io<>::write(*ictx, 27 << 20, 12 << 10,
+                                       std::move(bl6), 0));
+
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, snap_protect(*ictx, "snap1"));
+
+  std::string clone_name = get_temp_image_name();
+  ASSERT_EQ(0, librbd::clone(m_ioctx, parent_name.c_str(), "snap1", m_ioctx,
+			     clone_name.c_str(), features, &order, 0, 0));
+
+  close_image(ictx);
+  ASSERT_EQ(0, open_image(clone_name, &ictx));
+
+  std::vector<std::pair<uint64_t, uint64_t>> read_m;
+  bufferlist read_bl;
+  librbd::io::ReadResult sparse_read_result{&read_m, &read_bl};
+
+  std::vector<std::pair<uint64_t, uint64_t>> expected_m;
+  bufferlist expected_bl;
+  if (sparse_read_supported) {
+    expected_m = {{4 << 20, 4 << 20}, {8 << 20, 4 << 10},
+                  {10 << 20, 16 << 10}, {(12 << 20) - (4 << 10), 4 << 10},
+                  {12 << 20, 20 << 10}, {(24 << 20) - (8 << 10), 8 << 10},
+                  {25 << 20, 4 << 10}, {27 << 20, 12 << 10}};
+    expected_bl.append(std::string((4 << 20) + (4 << 10), '1'));
+    expected_bl.append(std::string(16 << 10, '2'));
+    expected_bl.append(std::string(24 << 10, '3'));
+    expected_bl.append(std::string(8 << 10, '4'));
+    expected_bl.append(std::string(4 << 10, '5'));
+    expected_bl.append(std::string(12 << 10, '6'));
+  } else {
+    expected_m = {{4 << 20, 4 << 20}, {8 << 20, 4 << 20},
+                  {12 << 20, 20 << 10}, {20 << 20, 4 << 20},
+                  {24 << 20, (3 << 20) + (12 << 10)}};
+    expected_bl.append(std::string((4 << 20) + (4 << 10), '1'));
+    expected_bl.append(std::string((2 << 20) - (4 << 10), '\0'));
+    expected_bl.append(std::string(16 << 10, '2'));
+    expected_bl.append(std::string((2 << 20) - (20 << 10), '\0'));
+    expected_bl.append(std::string(24 << 10, '3'));
+    expected_bl.append(std::string((4 << 20) - (8 << 10), '\0'));
+    expected_bl.append(std::string(8 << 10, '4'));
+    expected_bl.append(std::string(1 << 20, '\0'));
+    expected_bl.append(std::string(4 << 10, '5'));
+    expected_bl.append(std::string((2 << 20) - (4 << 10), '\0'));
+    expected_bl.append(std::string(12 << 10, '6'));
+  }
+
+  ASSERT_EQ(32 << 20,
+            api::Io<>::read(*ictx, 0, 32 << 20,
+                            librbd::io::ReadResult{sparse_read_result}, 0));
+  ASSERT_EQ(expected_m, read_m);
+  ASSERT_TRUE(expected_bl.contents_equal(read_bl));
+
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, snap_protect(*ictx, "snap1"));
+
+  std::string dst_name = get_temp_image_name();
+  std::string source_spec = R"({)"
+      R"("type": "native", )"
+      R"("pool_name": ")" + m_ioctx.get_pool_name() + R"(", )"
+      R"("image_name": ")" + clone_name + R"(", )"
+      R"("snap_name": "snap1"})";
+  librbd::ImageOptions dst_opts;
+  dst_opts.set(RBD_IMAGE_OPTION_FEATURES, features);
+  ASSERT_EQ(0, api::Migration<>::prepare_import(source_spec.c_str(), m_ioctx,
+                                                dst_name.c_str(), dst_opts));
+
+  close_image(ictx);
+  ASSERT_EQ(0, open_image(dst_name, &ictx));
+
+  ASSERT_EQ(32 << 20,
+            api::Io<>::read(*ictx, 0, 32 << 20,
+                            librbd::io::ReadResult{sparse_read_result}, 0));
+  ASSERT_EQ(expected_m, read_m);
+  ASSERT_TRUE(expected_bl.contents_equal(read_bl));
+
+  librbd::NoOpProgressContext no_op;
+  ASSERT_EQ(0, api::Migration<>::execute(m_ioctx, dst_name.c_str(), no_op));
+  ASSERT_EQ(0, api::Migration<>::commit(m_ioctx, dst_name.c_str(), no_op));
+
+  ASSERT_EQ(32 << 20,
+            api::Io<>::read(*ictx, 0, 32 << 20,
+                            librbd::io::ReadResult{sparse_read_result}, 0));
+  ASSERT_EQ(expected_m, read_m);
+  ASSERT_TRUE(expected_bl.contents_equal(read_bl));
+}
+
 TEST_F(TestInternal, ImageOptions) {
   rbd_image_options_t opts1 = NULL, opts2 = NULL;
   uint64_t uint64_val1 = 10, uint64_val2 = 0;

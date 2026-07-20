@@ -26,7 +26,6 @@
 #include "mon/MonClient.h"
 #include "include/ceph_features.h"
 #include "common/config.h"
-#include "extblkdev/ExtBlkDevPlugin.h"
 
 #include "mon/MonMap.h"
 
@@ -113,6 +112,7 @@ static void usage()
        << "  --debug_osd <N>   set debug level (e.g. 10)\n"
        << "  --get-device-fsid PATH\n"
        << "                    get OSD fsid for the given block device\n"
+       << "  --run-benchmark   run a throughput benchmark test against the OSD and dump the result\n"
        << std::endl;
   generic_server_usage();
 }
@@ -151,6 +151,7 @@ int main(int argc, const char **argv)
   bool get_cluster_fsid = false;
   bool get_journal_fsid = false;
   bool get_device_fsid = false;
+  bool run_benchmark = false;
   string device_path;
   std::string dump_pg_log;
   std::string osdspec_affinity;
@@ -190,6 +191,8 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &device_path,
 				     "--get-device-fsid", (char*)NULL)) {
       get_device_fsid = true;
+    } else if (ceph_argparse_flag(args, i, "--run-benchmark", (char*)NULL)) {
+      run_benchmark = true;
     } else {
       ++i;
     }
@@ -380,6 +383,23 @@ int main(int argc, const char **argv)
   if (mkkey) {
     forker.exit(0);
   }
+  // Run a benchmark if specified
+  if (run_benchmark) {
+    store->mount();
+    tl::expected<std::string, int> res =
+      OSD::run_osd_bench(g_ceph_context, store.get());
+    if (!res.has_value()) {
+      int ret = res.error();
+      derr << TEXT_RED << " ** ERROR: error running benchmark: "
+           << cpp_strerror(ret) << TEXT_NORMAL << dendl;
+      cerr << " ** ERROR: error running benchmark: "
+           << cpp_strerror(ret) << std::endl;
+      forker.exit(ret);
+    }
+    cout << res.value() << std::endl;
+    store->umount();
+    forker.exit(0);
+  }
   if (mkjournal) {
     common_init_finish(g_ceph_context);
     int err = store->mkjournal();
@@ -467,14 +487,6 @@ flushjournal_out:
       forker.exit(1);
     }
     forker.exit(0);
-  }
-  
-  {
-    int r = extblkdev::preload(g_ceph_context);
-    if (r < 0) {
-      derr << "Failed preloading extblkdev plugins, error code: " << r << dendl;
-      forker.exit(1);
-    }
   }
 
   string magic;

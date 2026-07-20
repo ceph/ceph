@@ -28,6 +28,15 @@ log = logging.getLogger(__name__)
 def get_pykmip_dir(ctx):
     return '{tdir}/pykmip'.format(tdir=teuthology.get_testdir(ctx))
 
+def get_pykmip_env(ctx):
+    return get_pykmip_dir(ctx) + '/.pykmipenv'
+
+def get_pykmip_log(ctx):
+    return teuthology.get_archive_dir(ctx) + '/pykmip.log'
+
+def get_pykmip_conf(ctx):
+    return teuthology.get_archive_dir(ctx) + '/pykmip.conf'
+
 def run_in_pykmip_dir(ctx, client, args, **kwargs):
     (remote,) = [client] if isinstance(client,Remote) else ctx.cluster.only(client).remotes.keys()
     return remote.run(
@@ -37,7 +46,7 @@ def run_in_pykmip_dir(ctx, client, args, **kwargs):
 
 def run_in_pykmip_venv(ctx, client, args, **kwargs):
     return run_in_pykmip_dir(ctx, client,
-        args = ['.', '.pykmipenv/bin/activate',
+        args = ['.', get_pykmip_env(ctx) + '/bin/activate',
                          run.Raw('&&')
                         ] + args, **kwargs)
 
@@ -89,8 +98,6 @@ openssl-devel [platform:redhat]
 libopenssl-devel [platform:suse]
 libsqlite3-dev [platform:dpkg]
 sqlite-devel [platform:rpm]
-python-dev [platform:dpkg]
-python-devel [(platform:redhat platform:base-py2)]
 python3-dev [platform:dpkg]
 python3-devel [(platform:redhat platform:base-py3) platform:suse]
 python3 [platform:suse]
@@ -146,8 +153,9 @@ def setup_venv(ctx, config):
     """
     assert isinstance(config, dict)
     log.info('Setting up virtualenv for pykmip...')
+    pykmipenv = get_pykmip_env(ctx)
     for (client, _) in config.items():
-        run_in_pykmip_dir(ctx, client, ['python3', '-m', 'venv', '.pykmipenv'])
+        run_in_pykmip_dir(ctx, client, ['python3', '-m', 'venv', pykmipenv])
         run_in_pykmip_venv(ctx, client, ['pip', 'install', '--upgrade', 'pip'])
         run_in_pykmip_venv(ctx, client, ['pip', 'install', 'pytz', '-e', get_pykmip_dir(ctx)])
     yield
@@ -184,9 +192,9 @@ auth_suite=TLS1.2
 policy_path={confdir}
 enable_tls_client_auth=False
 tls_cipher_suites=
-    TLS_RSA_WITH_AES_128_CBC_SHA256
-    TLS_RSA_WITH_AES_256_CBC_SHA256
-    TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384
+    AES128-SHA256
+    AES256-SHA256
+    ECDHE-RSA-AES256-SHA384
 logging_level=DEBUG
 database_path={confdir}/pykmip.sqlite
 [client]
@@ -243,12 +251,10 @@ def create_pykmip_conf(ctx, cclient, cconfig):
         serverkey=serverkey,
         servercert=servercert
     )
-    fd, local_temp_path = tempfile.mkstemp(suffix='.conf',
-                                           prefix='pykmip')
-    os.write(fd, kmip_conf.encode())
-    os.close(fd)
-    remote.put_file(local_temp_path, pykmipdir+'/pykmip.conf')
-    os.remove(local_temp_path)
+    log.debug("Using pykmip.conf:")
+    log.debug(kmip_conf)
+    remote.write_file(get_pykmip_conf(ctx), kmip_conf)
+
 
 @contextlib.contextmanager
 def configure_pykmip(ctx, config):
@@ -287,7 +293,10 @@ def run_pykmip(ctx, config):
         ctx.daemons = DaemonGroup()
     log.info('Running pykmip...')
 
-    pykmipdir = get_pykmip_dir(ctx)
+    pykmip_dir = get_pykmip_dir(ctx)
+    pykmip_log = get_pykmip_log(ctx)
+    pykmip_conf = get_pykmip_conf(ctx)
+    pykmip_server = get_pykmip_env(ctx) + '/bin/pykmip-server'
 
     for (client, _) in config.items():
         (remote,) = ctx.cluster.only(client).remotes.keys()
@@ -296,19 +305,18 @@ def run_pykmip(ctx, config):
         # start the public endpoint
         client_public_with_id = 'pykmip.public' + '.' + client_id
 
-        run_cmd = 'cd ' + pykmipdir + ' && ' + \
-                  '. .pykmipenv/bin/activate && ' + \
-                  'HOME={}'.format(pykmipdir) + ' && ' + \
-                  'exec pykmip-server -f pykmip.conf -l ' + \
-                  pykmipdir + '/pykmip.log & { read; kill %1; }'
+
+        run_cmd = [
+            pykmip_server, '-f', pykmip_conf, '-l', pykmip_log,
+                run.Raw('& { read; kill %1; }')]
 
         ctx.daemons.add_daemon(
             remote, 'pykmip', client_public_with_id,
             cluster=cluster_name,
-            args=['bash', '-c', run_cmd],
+            args=run_cmd,
             logger=log.getChild(client),
             stdin=run.PIPE,
-            cwd=pykmipdir,
+            cwd=pykmip_dir,
             wait=False,
             check_status=False,
         )
@@ -321,6 +329,9 @@ def run_pykmip(ctx, config):
         log.info('Stopping PyKMIP instance')
         ctx.daemons.get_daemon('pykmip', client_public_with_id,
                                cluster_name).stop()
+        for (client, _) in config.items():
+            (remote,) = ctx.cluster.only(client).remotes.keys()
+            remote.sh(f"ls {pykmip_log}* | xargs gzip -5 --")
 
 make_keys_template = """
 from kmip.pie import client
@@ -361,8 +372,8 @@ def create_secrets(ctx, config):
     """
     assert isinstance(config, dict)
 
-    pykmipdir = get_pykmip_dir(ctx)
-    pykmip_conf_path = pykmipdir + '/pykmip.conf'
+    pykmip_conf_path = get_pykmip_conf(ctx)
+    pykmip_python = get_pykmip_env(ctx) + '/bin/python3'
     my_output = BytesIO()
     for (client,cconf) in config.items():
         (remote,) = ctx.cluster.only(client).remotes.keys()
@@ -373,8 +384,7 @@ def create_secrets(ctx, config):
                 .replace("{replace-with-secrets}",secrets_json) \
                 .replace("{replace-with-config-file-path}",pykmip_conf_path)
             my_output.truncate()
-            remote.run(args=[run.Raw('. cephtest/pykmip/.pykmipenv/bin/activate;' \
-                + 'python')], stdin=make_keys, stdout = my_output)
+            remote.run(args=[pykmip_python], stdin=make_keys, stdout=my_output)
             ctx.pykmip.keys[client] = json.loads(my_output.getvalue().decode())
     try:
         yield

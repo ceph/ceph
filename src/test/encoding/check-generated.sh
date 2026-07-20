@@ -53,7 +53,7 @@ test_selected_type() {
             echo "**** $type test $n dump_json check failed ****"
             echo "   ceph-dencoder type $type select_test $n dump_json > $tmp1"
             echo "   ceph-dencoder type $type select_test $n encode decode dump_json > $tmp2"
-            diff $tmp1 $tmp2
+            diff -au $tmp1 $tmp2
             failed=$(($failed + 1))
         fi
 
@@ -61,7 +61,7 @@ test_selected_type() {
             echo "**** $type test $n copy dump_json check failed ****"
             echo "   ceph-dencoder type $type select_test $n dump_json > $tmp1"
             echo "   ceph-dencoder type $type select_test $n copy dump_json > $tmp2"
-            diff $tmp1 $tmp2
+            diff -au $tmp1 $tmp2
             failed=$(($failed + 1))
         fi
 
@@ -69,7 +69,7 @@ test_selected_type() {
             echo "**** $type test $n copy_ctor dump_json check failed ****"
             echo "   ceph-dencoder type $type select_test $n dump_json > $tmp1"
             echo "   ceph-dencoder type $type select_test $n copy_ctor dump_json > $tmp2"
-            diff $tmp1 $tmp2
+            diff -au $tmp1 $tmp2
             failed=$(($failed + 1))
         fi
 
@@ -82,7 +82,7 @@ test_selected_type() {
                 echo "**** $type test $n binary reencode check failed ****"
                 echo "   ceph-dencoder type $type select_test $n encode export $tmp1"
                 echo "   ceph-dencoder type $type select_test $n encode decode encode export $tmp2"
-                diff <(hexdump -C $tmp1) <(hexdump -C $tmp2)
+                diff -au <(hexdump -C $tmp1) <(hexdump -C $tmp2)
                 failed=$(($failed + 1))
             fi
         fi

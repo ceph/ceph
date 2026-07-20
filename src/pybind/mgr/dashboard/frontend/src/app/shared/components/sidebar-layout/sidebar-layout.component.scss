@@ -1,0 +1,39 @@
+@use './src/styles/vendor/variables' as vv;
+@use '@carbon/colors';
+@use '@carbon/layout';
+
+.sidebar-layout-container {
+  background-color: var(--cds-background);
+  min-height: calc(100vh - (vv.$navbar-height + layout.rem(55px)));
+  padding-right: var(--cds-spacing-07);
+}
+
+.sidebar-layout-shell {
+  height: 100vh;
+  position: relative;
+  transform: translate(0);
+}
+
+.sidebar-layout-nav {
+  background-color: var(--cds-layer-03);
+}
+
+.sidebar-layout-main {
+  margin-left: layout.rem(272px);
+
+  .cds--table-toolbar {
+    background-color: var(--cds-layer-03);
+  }
+
+  .cds--data-table tbody {
+    background-color: var(--cds-layer-03);
+  }
+
+  .cds--pagination {
+    background-color: var(--cds-layer-03);
+  }
+}
+
+.sidebar-header {
+  padding-left: var(--cds-spacing-05);
+}

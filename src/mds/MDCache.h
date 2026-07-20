@@ -22,6 +22,7 @@
 
 #include "common/DecayCounter.h"
 #include "common/MemoryModel.h"
+#include "common/admin_finisher.h"
 #include "include/common_fwd.h"
 #include "include/types.h"
 #include "include/filepath.h"
@@ -38,6 +39,7 @@
 #include "OpenFileTable.h"
 #include "MDSContext.h"
 #include "Mutation.h"
+#include "LogSegmentRef.h"
 
 class EMetaBlob;
 class MCacheExpire;
@@ -452,7 +454,7 @@ class MDCache {
 				snapid_t follows=CEPH_NOSNAP);
 
   // peers
-  void add_uncommitted_leader(metareqid_t reqid, LogSegment *ls, std::set<mds_rank_t> &peers, bool safe=false) {
+  void add_uncommitted_leader(metareqid_t reqid, LogSegmentRef const& ls, std::set<mds_rank_t> &peers, bool safe=false) {
     uncommitted_leaders[reqid].ls = ls;
     uncommitted_leaders[reqid].peers = peers;
     uncommitted_leaders[reqid].safe = safe;
@@ -470,7 +472,7 @@ class MDCache {
   void committed_leader_peer(metareqid_t r, mds_rank_t from);
   void finish_committed_leaders();
 
-  void add_uncommitted_peer(metareqid_t reqid, LogSegment*, mds_rank_t, MDPeerUpdate *su=nullptr);
+  void add_uncommitted_peer(metareqid_t reqid, LogSegmentRef const& , mds_rank_t, MDPeerUpdate *su=nullptr);
   void wait_for_uncommitted_peer(metareqid_t reqid, MDSContext *c) {
     uncommitted_peers.at(reqid).waiters.push_back(c);
   }
@@ -642,33 +644,42 @@ private:
    */
   class C_MDS_DumpStrayDirCtx : public MDSInternalContext {
   public:
-  void finish(int r) override {
-    ceph_assert(on_finish);
-    MDSContext::finish(r);
-    on_finish(r);
-  }
-  Formatter* get_formatter() const {
-    ceph_assert(dump_formatter);
-    return dump_formatter;
-  }
-  void begin_dump() {
-    if(!started) {
-      started = true;
-      get_formatter()->open_array_section("strays");
+    void finish(int r) override {
+      ceph_assert(on_finish);
+      bufferlist bl;
+      on_finish(r, "", bl);
     }
-  }
-  void end_dump() {
-    if(started) {
-      get_formatter()->close_section();
+
+    Formatter* get_formatter() const {
+      ceph_assert(dump_formatter);
+      return dump_formatter;
     }
-  }
-  C_MDS_DumpStrayDirCtx(MDCache *c, Formatter* f, std::function<void(int)>&& ext_on_finish) : 
-   MDSInternalContext(c->mds), cache(c), dump_formatter(f), on_finish(std::move(ext_on_finish)) {}
+
+    void begin_dump() {
+      if(!started) {
+        started = true;
+        get_formatter()->open_array_section("strays");
+      }
+    }
+
+    void end_dump() {
+      if(started) {
+        get_formatter()->close_section();
+      }
+    }
+
+    C_MDS_DumpStrayDirCtx(MDCache *c, Formatter* f, asok_finisher ext_on_finish) : 
+      MDSInternalContext(c->mds),
+      cache(c),
+      dump_formatter(f),
+      on_finish(ext_on_finish) {
+    }
+
   private:
-  MDCache *cache;
-  Formatter* dump_formatter;
-  std::function<void(int)> on_finish;
-  bool started = false;
+    MDCache *cache;
+    Formatter* dump_formatter;
+    asok_finisher on_finish;
+    bool started = false;
   };
 
   MDRequestRef lock_path(LockPathConfig config, std::function<void(MDRequestRef const& mdr)> on_locked = {});
@@ -787,7 +798,7 @@ private:
   std::pair<bool, uint64_t> trim(uint64_t count=0);
 
   bool trim_non_auth_subtree(CDir *directory);
-  void standby_trim_segment(LogSegment *ls);
+  void standby_trim_segment(LogSegmentRef const& ls);
   void try_trim_non_auth_subtree(CDir *dir);
   bool can_trim_non_auth_dirfrag(CDir *dir) {
     return my_ambiguous_imports.count((dir)->dirfrag()) == 0 &&
@@ -902,20 +913,20 @@ private:
   }
 
   // truncate
-  void truncate_inode(CInode *in, LogSegment *ls);
-  void _truncate_inode(CInode *in, LogSegment *ls);
-  void truncate_inode_finish(CInode *in, LogSegment *ls);
-  void truncate_inode_write_finish(CInode *in, LogSegment *ls,
+  void truncate_inode(CInode *in, LogSegmentRef const& ls);
+  void _truncate_inode(CInode *in, LogSegmentRef const& ls);
+  void truncate_inode_finish(CInode *in, LogSegmentRef const& ls);
+  void truncate_inode_write_finish(CInode *in, LogSegmentRef const& ls,
                                    uint32_t block_size);
   void truncate_inode_logged(CInode *in, MutationRef& mut);
 
-  void add_recovered_truncate(CInode *in, LogSegment *ls);
-  void remove_recovered_truncate(CInode *in, LogSegment *ls);
+  void add_recovered_truncate(CInode *in, LogSegmentRef const& ls);
+  void remove_recovered_truncate(CInode *in, LogSegmentRef const& ls);
   void start_recovered_truncates();
 
   // purge unsafe inodes
   void start_purge_inodes();
-  void purge_inodes(const interval_set<inodeno_t>& i, LogSegment *ls);
+  void purge_inodes(const interval_set<inodeno_t>& i, LogSegmentRef const& ls);
 
   CDir *get_auth_container(CDir *in);
   CDir *get_export_container(CDir *dir);
@@ -1102,7 +1113,7 @@ private:
   void dump_tree(CInode *in, const int cur_depth, const int max_depth, Formatter *f);
 
   void cache_status(Formatter *f);
-  int stray_status(std::unique_ptr<C_MDS_DumpStrayDirCtx> ctx);
+  void stray_status(C_MDS_DumpStrayDirCtx *ctx);
 
   void dump_resolve_status(Formatter *f) const;
   void dump_rejoin_status(Formatter *f) const;
@@ -1207,7 +1218,7 @@ private:
   struct uleader {
     uleader() {}
     std::set<mds_rank_t> peers;
-    LogSegment *ls = nullptr;
+    LogSegmentRef ls = nullptr;
     std::vector<MDSContext*> waiters;
     bool safe = false;
     bool committing = false;
@@ -1217,7 +1228,7 @@ private:
   struct upeer {
     upeer() {}
     mds_rank_t leader;
-    LogSegment *ls = nullptr;
+    LogSegmentRef ls = nullptr;
     MDPeerUpdate *su = nullptr;
     std::vector<MDSContext*> waiters;
   };
@@ -1313,7 +1324,7 @@ private:
   void handle_open_ino(const cref_t<MMDSOpenIno> &m, int err=0);
   void handle_open_ino_reply(const cref_t<MMDSOpenInoReply> &m);
 
-  int scan_stray_dir(dirfrag_t next=dirfrag_t(), std::unique_ptr<C_MDS_DumpStrayDirCtx> ctx = nullptr);
+  int scan_stray_dir(dirfrag_t next=dirfrag_t(), C_MDS_DumpStrayDirCtx *ctx = nullptr);
   // -- replicas --
   void handle_discover(const cref_t<MDiscover> &dis);
   void handle_discover_reply(const cref_t<MDiscoverReply> &m);
@@ -1440,7 +1451,7 @@ private:
     ufragment() {}
     int bits = 0;
     bool committed = false;
-    LogSegment *ls = nullptr;
+    LogSegmentRef ls = nullptr;
     std::vector<MDSContext*> waiters;
     frag_vec_t old_frags;
     bufferlist rollback;
@@ -1539,7 +1550,7 @@ private:
   void handle_fragment_notify_ack(const cref_t<MMDSFragmentNotifyAck> &m);
 
   void add_uncommitted_fragment(dirfrag_t basedirfrag, int bits, const frag_vec_t& old_frag,
-				LogSegment *ls, bufferlist *rollback=NULL);
+				LogSegmentRef const& ls, bufferlist *rollback=NULL);
   void finish_uncommitted_fragment(dirfrag_t basedirfrag, int op);
   void rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& old_frags);
 

@@ -375,6 +375,16 @@ export class TaskMessageService {
       this.iscsiTarget(metadata)
     ),
     // nvmeof
+    'nvmeof/gateway/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.nvmeofGateway(metadata)
+    ),
+    'nvmeof/gateway/node/add': this.newTaskMessage(this.commonOperations.add, (metadata) =>
+      this.nvmeofGatewayNode(metadata)
+    ),
+    'nvmeof/gateway-node/delete': this.newTaskMessage(
+      this.commonOperations.remove,
+      (metadata) => $localize`gateway node '${metadata.hostname}'`
+    ),
     'nvmeof/subsystem/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.nvmeofSubsystem(metadata)
     ),
@@ -383,6 +393,9 @@ export class TaskMessageService {
     ),
     'nvmeof/listener/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.nvmeofListener(metadata)
+    ),
+    'nvmeof/listener/add': this.newTaskMessage(this.commonOperations.add, (metadata) =>
+      this.nvmeofListenerPlural(metadata)
     ),
     'nvmeof/listener/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.nvmeofListener(metadata)
@@ -399,6 +412,9 @@ export class TaskMessageService {
     'nvmeof/initiator/add': this.newTaskMessage(this.commonOperations.add, (metadata) =>
       this.nvmeofInitiator(metadata)
     ),
+    'nvmeof/initiator/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.nvmeofInitiator(metadata)
+    ),
     'nvmeof/initiator/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
       this.nvmeofInitiator(metadata)
     ),
@@ -410,8 +426,8 @@ export class TaskMessageService {
     'nfs/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.nfs(metadata)
     ),
-    'rgw/topic/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
-      this.topic(metadata)
+    'rgw/destination/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.destination(metadata)
     ),
     // Grafana tasks
     'grafana/dashboards/update': this.newTaskMessage(
@@ -458,6 +474,10 @@ export class TaskMessageService {
     ),
     'cephfs/subvolume/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
       this.subvolume(metadata)
+    ),
+    'cephfs/subvolume/snapshot_visibility/set': this.newTaskMessage(
+      this.commonOperations.update,
+      (metadata) => $localize`subvolume snapshot visibility for '${metadata.subVolumeName}'`
     ),
     'cephfs/subvolume/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
       this.subvolume(metadata)
@@ -583,9 +603,19 @@ export class TaskMessageService {
   nvmeofSubsystem(metadata: any) {
     return $localize`subsystem '${metadata.nqn}'`;
   }
+  nvmeofGateway(metadata: any) {
+    return $localize`Gateway group '${metadata.group}'`;
+  }
 
+  nvmeofGatewayNode(metadata: any) {
+    return $localize`hosts to gateway group '${metadata.group_name}'`;
+  }
   nvmeofListener(metadata: any) {
-    return $localize`listener '${metadata.host_name} for subsystem ${metadata.nqn}`;
+    return $localize`listener '${metadata.host_name}' for subsystem ${metadata.nqn}`;
+  }
+
+  nvmeofListenerPlural(metadata: { count: number; nqn: string }) {
+    return $localize`${this.pluralize('listener', metadata.count)} to subsystem ${metadata.nqn}`;
   }
 
   nvmeofNamespace(metadata: { nqn: string; nsCount?: number; nsid?: string }) {
@@ -624,8 +654,8 @@ export class TaskMessageService {
     return $localize`SMB users and groups access resource '${metadata.usersGroupsId}'`;
   }
 
-  topic(metadata: any) {
-    return $localize`Topic  '${metadata.name}'`;
+  destination(metadata: any) {
+    return $localize`Notification destination  '${metadata.name}'`;
   }
   notification(metadata: any) {
     return $localize`Notification  '${metadata.name}'`;
@@ -635,7 +665,7 @@ export class TaskMessageService {
   }
 
   rgwStorageClass(metadata: any) {
-    return $localize`Tiering Storage Class  '${metadata.storage_class}'`;
+    return $localize`Storage Class  '${metadata.storage_class}'`;
   }
 
   crudMessage(metadata: any) {

@@ -374,6 +374,8 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
     transport_type = "rdma";
   else if (type.find("dpdk") != std::string::npos)
     transport_type = "dpdk";
+  else if (type.find("smc") != std::string::npos)
+    transport_type = "smc";
 
   auto single = &cct->lookup_or_create_singleton_object<StackSingleton>(
     "AsyncMessenger::NetworkStack::" + transport_type, true, cct);
@@ -481,6 +483,7 @@ int AsyncMessenger::shutdown()
 {
   ldout(cct,10) << __func__ << " " << get_myaddrs() << dendl;
 
+  stack->drain();
   // done!  clean up.
   for (auto &&p : processors)
     p->stop();
@@ -493,7 +496,7 @@ int AsyncMessenger::shutdown()
   stop_cond.notify_all();
   stopped = true;
   lock.unlock();
-  stack->drain();
+
   return 0;
 }
 

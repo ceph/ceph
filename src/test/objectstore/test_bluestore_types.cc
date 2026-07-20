@@ -1236,6 +1236,102 @@ TEST(ExtentMap, compress_extent_map) {
   ASSERT_EQ(6u, em.extent_map.size());
 }
 
+TEST(ExtentMap, reshard_failure) {
+  BlueStore store(g_ceph_context, "", 4096);
+  BlueStore::OnodeCacheShard* oc =
+    BlueStore::OnodeCacheShard::create(g_ceph_context, "lru", NULL);
+  BlueStore::BufferCacheShard* bc =
+    BlueStore::BufferCacheShard::create(&store, "lru", NULL);
+
+  auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
+  BlueStore::Onode onode(coll.get(), ghobject_t(), "");
+  // csum block size = 1K, full blob length covered with csum
+  size_t csum_order = 12;
+  int csum_type = Checksummer::CSUM_CRC32C;
+
+  auto make_blob = [&](uint64_t o1,
+    uint64_t l1,
+    uint64_t o2,
+    uint64_t l2,
+    uint64_t o3,
+    uint64_t l3,
+    uint64_t o4,
+    uint64_t l4) {
+      BlueStore::BlobRef b1(coll->new_blob());
+      b1->dirty_blob().allocated_test(bluestore_pextent_t(o1, l1));
+      b1->dirty_blob().allocated_test(bluestore_pextent_t(o2, l2));
+      b1->dirty_blob().allocated_test(bluestore_pextent_t(o3, l3));
+      b1->dirty_blob().allocated_test(bluestore_pextent_t(o4, l4));
+      b1->dirty_blob().init_csum(csum_type, csum_order, l1 + l2 + l3 + l4);
+      return b1;
+    };
+  {
+    // [0(0x2000)~0x1000, 0x1000(0x4000)~0x2000, 0x3000(0x7000)~0x3000, 0xa000(0xb000)~0x4000]
+    // (note: offsets above are in the following format: blob_offset(lba))
+    uint64_t o1 = 0x2000;
+    uint64_t l1 = 0x1000;
+    uint64_t o2 = 0x4000;
+    uint64_t l2 = 0x2000;
+    uint64_t o3 = 0x7000;
+    uint64_t l3 = 0x3000;
+    uint64_t o4 = 0xb000;
+    uint64_t l4 = 0x4000;
+
+    size_t blob_len = l1 + l2 + l3 + l4;
+
+    BlueStore::ExtentMap& em = onode.extent_map;
+    BlueStore::BlobRef lb = make_blob(o1, l1, o2, l2, o3, l3, o4, l4);
+    BlueStore::BlobRef rb = make_blob(o1 + blob_len, l1,
+                                      o2 + blob_len, l2,
+                                      o3 + blob_len, l3,
+                                      o4 + blob_len, l4);
+
+    size_t expected_spanning_blobs = 0;
+    size_t expected_extents = 4;
+    em.set_lextent(coll, 0, 0, blob_len, lb, nullptr);
+    em.set_lextent(coll, blob_len, 0, blob_len, rb, nullptr);
+
+    // make blob unsplittable which causes
+    // reshard() to make it spanning.
+    // Relevant extent must be splitted anyway but this didn't happen
+    // in the original reshard() implementaion.
+    if(1) {
+      lb->dirty_blob().set_flag(bluestore_blob_t::FLAG_HAS_UNUSED);
+      ASSERT_FALSE(lb->can_split());
+      expected_spanning_blobs = 1;
+    }
+    em.request_reshard(0, blob_len * 2);
+
+    BlueStore::ExtentMap::ReshardPlan rp;
+    rp.new_shard_info.emplace_back(0, 0);
+    // shard before 3rd blob in the first extent
+    rp.new_shard_info.emplace_back(l1 + l2, 0);
+    // and shard before 3rd blob in the second extent
+    rp.new_shard_info.emplace_back(blob_len + l1 + l2, 0);
+    rp.shard_index_begin = 0;
+    rp.shard_index_end = 2;
+    rp.spanning_scan_begin = 0; // doesn't matter
+    rp.spanning_scan_end =  0; // doesn't matter
+
+    em.reshard_action(rp, nullptr, nullptr);
+    
+    ASSERT_EQ(em.shards.size(), 3);
+    ASSERT_EQ(em.spanning_blob_map.size(), expected_spanning_blobs);
+    EXPECT_EQ(em.extent_map.size(), expected_extents);
+    if (false) {
+      // make sure hat encode_some detects that extent spans over shard boundary
+      bufferlist bl;
+      size_t prev_shard = 0;
+      for (auto& s : em.shards) {
+        if (s.shard_info->offset > 0) {
+          em.encode_some(prev_shard, s.shard_info->offset, bl, nullptr, true, true);
+          prev_shard = s.shard_info->offset;
+        }
+      }
+    }
+  }
+}
+
 class BlueStoreFixture :
   virtual public ::testing::Test,
   virtual public ::testing::WithParamInterface<std::vector<int>>

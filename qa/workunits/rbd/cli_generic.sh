@@ -1711,7 +1711,6 @@ test_tasks_recovery() {
        ceph rbd task add flatten rbd2/clone1 && break
        sleep 10
     done
-    test "$(ceph rbd task list)" != "[]"
 
     for i in {1..12}; do
         rbd info rbd2/clone1 | grep 'parent: ' || break

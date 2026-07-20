@@ -1,6 +1,6 @@
 import json
 import logging
-from asyncio import gather
+from asyncio import gather, to_thread
 from threading import Lock
 from typing import List, Dict, Any, Set, Tuple, cast, Optional, TYPE_CHECKING
 
@@ -31,7 +31,12 @@ logger = logging.getLogger(__name__)
 class OSDService(CephService):
     TYPE = 'osd'
 
-    def create_from_spec(self, drive_group: DriveGroupSpec) -> str:
+    def create_from_spec(self, drive_group: DriveGroupSpec, force_apply: bool = False) -> str:
+        """
+        :param force_apply: If True, do not check osdspec_needs_apply(). Used by
+            'ceph orch daemon add osd' where the requested devices are not reflected
+            in inventory timestamps (and the check only compares timestamps, not spec content).
+        """
         logger.debug(f"Processing DriveGroup {drive_group}")
         osd_id_claims = OsdIdClaims(self.mgr)
         if osd_id_claims.get():
@@ -40,7 +45,7 @@ class OSDService(CephService):
 
         async def create_from_spec_one(host: str, drive_selection: DriveSelection) -> Optional[str]:
             # skip this host if there has been no change in inventory
-            if not self.mgr.cache.osdspec_needs_apply(host, drive_group):
+            if not force_apply and not self.mgr.cache.osdspec_needs_apply(host, drive_group):
                 self.mgr.log.debug("skipping apply of %s on %s (no change)" % (
                     host, drive_group))
                 return None
@@ -72,14 +77,18 @@ class OSDService(CephService):
             self.mgr.cache.save_host(host)
             return ret_msg
 
-        async def all_hosts() -> List[Optional[str]]:
+        async def all_hosts() -> List[str]:
             futures = [create_from_spec_one(h, ds)
                        for h, ds in self.prepare_drivegroup(drive_group)]
-            return await gather(*futures)
+            results = await gather(*futures, return_exceptions=True)
+            for result in results:
+                if isinstance(result, Exception):
+                    self.mgr.log.error(f'Failed to create OSD: {result}')
+            return [result for result in results if isinstance(result, str)]
 
         with self.mgr.async_timeout_handler('cephadm deploy (osd daemon)'):
             ret = self.mgr.wait_async(all_hosts())
-        return ", ".join(filter(None, ret))
+        return ", ".join(ret)
 
     async def create_single_host(self,
                                  drive_group: DriveGroupSpec,
@@ -106,6 +115,17 @@ class OSDService(CephService):
         if replace_osd_ids is None:
             replace_osd_ids = OsdIdClaims(self.mgr).filtered_by_host(host)
             assert replace_osd_ids is not None
+
+        # ceph-volume registers new OSDs with the monitor before returning.
+        # the mgr's view of the osd map can briefly lag, so get_osd_uuid_map()
+        # would miss the new id and we would skip deploying the cephadm
+        # daemon (misleading "Created no osd(s)" while the osd exists but is still down).
+        # wait_for_latest_osdmap() is synchronous:
+        # We need to run it in a thread pool so we do not block the cephadm asyncio event loop.
+        ret = await to_thread(self.mgr.rados.wait_for_latest_osdmap)
+        if ret < 0:
+            raise OrchestratorError(
+                'wait_for_latest_osdmap failed with %d' % ret)
 
         # check result: lvm
         osds_elems: dict = await CephadmServe(self.mgr)._run_cephadm_json(
@@ -397,6 +417,15 @@ class OSDService(CephService):
         if not is_failed_deploy:
             super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
 
+    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+        config, parent_deps = super().generate_config(daemon_spec)
+        if daemon_spec.service_name in self.mgr.spec_store:
+            svc_spec = cast(DriveGroupSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+
+            if hasattr(svc_spec, 'objectstore') and svc_spec.objectstore:
+                config['objectstore'] = svc_spec.objectstore
+        return config, parent_deps
+
 
 class OsdIdClaims(object):
     """
@@ -617,6 +646,13 @@ class NotFoundError(Exception):
 
 class OSD:
 
+    # fields we may add when converting to json so the orchestrator module
+    # can display them, but should not be passed back into the init function
+    display_only_fields = [
+        'pg_count',
+        'drain_status'
+    ]
+
     def __init__(self,
                  osd_id: int,
                  remove_util: RemoveUtil,
@@ -776,6 +812,21 @@ class OSD:
     def pg_count_str(self) -> str:
         return 'n/a' if self.get_pg_count() < 0 else str(self.get_pg_count())
 
+    def _get_display_only_fields(self) -> Dict[str, Any]:
+        _display_only_fields = {
+            'pg_count': self.pg_count_str(),
+            'drain_status': self.drain_status_human(),
+        }
+        # verify we're setting the expected set of fields here. This should cause
+        # failures in some of our teuthology tests if what we set here and what we have
+        # explicitly listed as being a display only field in the class attr differ
+        if sorted(list(_display_only_fields.keys())) != sorted(self.display_only_fields):
+            raise OrchestratorError(
+                f'Expected display specific fields {self.display_only_fields} '
+                f'to be set but instead got {list(_display_only_fields.keys())}'
+            )
+        return _display_only_fields
+
     def to_json(self) -> dict:
         out: Dict[str, Any] = dict()
         out['osd_id'] = self.osd_id
@@ -790,6 +841,7 @@ class OSD:
         out['zap'] = self.zap
         out['hostname'] = self.hostname  # type: ignore
         out['original_weight'] = self.original_weight
+        out.update(self._get_display_only_fields())
 
         for k in ['drain_started_at', 'drain_stopped_at', 'drain_done_at', 'process_started_at']:
             if getattr(self, k):
@@ -806,6 +858,11 @@ class OSD:
             if inp.get(date_field):
                 inp.update({date_field: str_to_datetime(inp.get(date_field, ''))})
         inp.update({'remove_util': rm_util})
+
+        if getattr(cls, 'display_only_fields', None):
+            for attr in cls.display_only_fields:
+                inp.pop(attr, None)
+
         if 'nodename' in inp:
             hostname = inp.pop('nodename')
             inp['hostname'] = hostname
@@ -988,6 +1045,10 @@ class OSDRemovalQueue(object):
     def all_osds(self) -> List["OSD"]:
         with self.lock:
             return [osd for osd in self.osds]
+
+    def all_osds_status_json(self) -> List[Dict[str, Any]]:
+        with self.lock:
+            return [osd.to_json() for osd in self.osds]
 
     def _not_in_cluster(self) -> List["OSD"]:
         return [osd for osd in self.osds if not osd.exists]

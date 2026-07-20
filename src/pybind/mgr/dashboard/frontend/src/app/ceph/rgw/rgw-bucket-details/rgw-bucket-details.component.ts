@@ -4,6 +4,7 @@ import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 
 import * as xml2js from 'xml2js';
 import { RgwRateLimitConfig } from '../models/rgw-rate-limit';
+import { RgwBucketReplication } from '../models/rgw-bucket-replication';
 
 @Component({
   selector: 'cd-rgw-bucket-details',
@@ -22,6 +23,8 @@ export class RgwBucketDetailsComponent implements OnChanges {
   lifecycleFormat: 'json' | 'xml' = 'json';
   aclPermissions: Record<string, string[]> = {};
   replicationStatus = $localize`Disabled`;
+  hasSyncPolicyOnly = false;
+  replicationData: RgwBucketReplication;
   bucketRateLimit: RgwRateLimitConfig;
 
   constructor(private rgwBucketService: RgwBucketService, private cd: ChangeDetectorRef) {}
@@ -77,8 +80,26 @@ export class RgwBucketDetailsComponent implements OnChanges {
 
   extraxtDetailsfromResponse() {
     this.aclPermissions = this.parseXmlAcl(this.selection.acl, this.selection.owner);
-    if (this.selection.replication?.['Rule']?.['Status']) {
-      this.replicationStatus = this.selection.replication?.['Rule']?.['Status'];
+
+    this.replicationData = {
+      sync_policy_active: this.selection.replication?.sync_policy_active === true,
+      replication_rules_configured:
+        this.selection.replication?.replication_rules_configured === true,
+      policy: this.selection.replication?.policy || {}
+    };
+
+    this.hasSyncPolicyOnly =
+      this.replicationData.sync_policy_active && !this.replicationData.replication_rules_configured;
+
+    if (this.replicationData.sync_policy_active) {
+      this.replicationStatus = $localize`Enabled`;
+    } else if (
+      this.replicationData.replication_rules_configured &&
+      this.replicationData.policy['Rule']?.['Status']
+    ) {
+      this.replicationStatus = this.replicationData.policy['Rule']['Status'];
+    } else {
+      this.replicationStatus = $localize`Disabled`;
     }
     this.rgwBucketService.getBucketRateLimit(this.selection.bid).subscribe((resp: any) => {
       if (resp && resp.bucket_ratelimit !== undefined) {

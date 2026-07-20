@@ -1,5 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { of } from 'rxjs';
 
 import { CephfsSubvolumeFormComponent } from './cephfs-subvolume-form.component';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
@@ -9,6 +10,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { FormHelper, configureTestBed } from '~/testing/unit-test-helper';
 import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
+import { ConfigurationService } from '~/app/shared/api/configuration.service';
 import { CheckboxModule, InputModule, ModalModule, SelectModule } from 'carbon-components-angular';
 
 describe('CephfsSubvolumeFormComponent', () => {
@@ -41,8 +43,15 @@ describe('CephfsSubvolumeFormComponent', () => {
     component.pools = [];
     component.ngOnInit();
     formHelper = new FormHelper(component.subvolumeForm);
-    createSubVolumeSpy = spyOn(TestBed.inject(CephfsSubvolumeService), 'create').and.stub();
-    editSubVolumeSpy = spyOn(TestBed.inject(CephfsSubvolumeService), 'update').and.stub();
+    const subvolumeService = TestBed.inject(CephfsSubvolumeService);
+    createSubVolumeSpy = spyOn(subvolumeService, 'create').and.returnValue(of({ status: 200 }));
+    editSubVolumeSpy = spyOn(subvolumeService, 'update').and.returnValue(of({ status: 200 }));
+    spyOn(subvolumeService, 'setSnapshotVisibility').and.returnValue(of({ status: 200 }));
+    spyOn(subvolumeService, 'info').and.returnValue(
+      of({ bytes_quota: 'infinite', uid: 0, gid: 0, pool_namespace: false, mode: 755 } as any)
+    );
+    spyOn(subvolumeService, 'getSnapshotVisibility').and.returnValue(of('1'));
+    spyOn(TestBed.inject(ConfigurationService), 'filter').and.returnValue(of([]));
     fixture.detectChanges();
   });
 

@@ -17,3 +17,9 @@ export const STEP_TITLES_SINGLE_CLUSTER = [
   StepTitles.CreateZone,
   StepTitles.Review
 ];
+
+export const STEP_TITLES_EXISTING_REALM = [
+  StepTitles.CreateRealmAndZonegroup,
+  StepTitles.SelectCluster,
+  StepTitles.Review
+];

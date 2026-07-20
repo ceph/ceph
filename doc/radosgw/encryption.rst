@@ -41,8 +41,8 @@ This is implemented in S3 according to the `Amazon SSE-KMS`_ specification.
 In principle, any key management service could be used here.  Currently
 integration with `Barbican`_, `Vault`_, and `KMIP`_ are implemented.
 
-See `OpenStack Barbican Integration`_, `HashiCorp Vault Integration`_,
-and `KMIP Integration`_.
+See :ref:`radosgw-barbican`, :ref:`radosgw-vault`,
+and :ref:`radosgw-kmip`.
 
 SSE-S3
 ======
@@ -57,7 +57,7 @@ This is implemented in S3 according to the `Amazon SSE-S3`_ specification.
 In principle, any key management service could be used here.  Currently
 only integration with `Vault`_, is implemented.
 
-See `HashiCorp Vault Integration`_.
+See :ref:`radosgw-vault`.
 
 Bucket Encryption APIs
 ======================
@@ -91,6 +91,3 @@ The configuration expects a base64-encoded 256 bit key. For example::
 .. _PutBucketEncryption: https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketEncryption.html
 .. _GetBucketEncryption: https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketEncryption.html
 .. _DeleteBucketEncryption: https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketEncryption.html
-.. _OpenStack Barbican Integration: ../barbican
-.. _HashiCorp Vault Integration: ../vault
-.. _KMIP Integration: ../kmip

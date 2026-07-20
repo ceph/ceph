@@ -2533,8 +2533,10 @@ int POSIXBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-int POSIXBucket::chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y)
-{
+int POSIXBucket::chown(const DoutPrefixProvider* dpp,
+                       const rgw_owner& new_owner,
+                       const std::string& new_owner_name,
+                       optional_yield y) {
   /* TODO map user to UID/GID, and change it */
   return 0;
 }
@@ -3740,7 +3742,9 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
 				    std::string& tag, ACLOwner& owner,
 				    uint64_t olh_epoch,
 				    rgw::sal::Object* target_obj,
-				    prefix_map_t& processed_prefixes)
+				    prefix_map_t& processed_prefixes,
+            const char *if_match,
+            const char *if_nomatch)
 {
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
   char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];

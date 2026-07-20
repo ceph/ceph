@@ -11,15 +11,16 @@ import warnings
 from typing import Dict, Optional
 from urllib import parse
 
-from mgr_module import CLIWriteCommand, HandleCommandResult
+from mgr_module import HandleCommandResult
 
 from .. import mgr
 # Saml2 and OAuth2 needed to be recognized by .__subclasses__()
 # pylint: disable=unused-import
+from ..cli import DBCLICommand
 from ..services.auth import AuthType, BaseAuth, OAuth2, Saml2  # noqa
 from ..tools import prepare_url_prefix
 
-logger = logging.getLogger('sso')
+logger = logging.getLogger(__name__)
 
 try:
     jmespath = importlib.import_module('jmespath')
@@ -94,7 +95,7 @@ def load_sso_db():
     mgr.SSO_DB = SsoDB.load()  # type: ignore
 
 
-@CLIWriteCommand("dashboard sso enable oauth2")
+@DBCLICommand.Write("dashboard sso enable oauth2")
 def enable_sso(_, roles_path: Optional[str] = None):
     mgr.SSO_DB.protocol = AuthType.OAUTH2
     if jmespath and roles_path:

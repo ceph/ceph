@@ -101,7 +101,8 @@ export class RgwMultisiteImportComponent implements OnInit {
       ]),
       hosts: new FormControl([]),
       count: new FormControl(null, [CdValidators.number(false)]),
-      unmanaged: new FormControl(false)
+      unmanaged: new FormControl(false),
+      archive_zone: new FormControl(false)
     });
   }
 
@@ -110,6 +111,7 @@ export class RgwMultisiteImportComponent implements OnInit {
     const placementSpec: object = {
       placement: {}
     };
+    const tier_type: string = values['archive_zone'] ? 'archive' : '';
     if (!values['unmanaged']) {
       switch (values['placement']) {
         case 'hosts':
@@ -130,7 +132,8 @@ export class RgwMultisiteImportComponent implements OnInit {
         values['realmToken'],
         values['zoneName'],
         values['rgw_frontend_port'],
-        placementSpec
+        placementSpec,
+        tier_type
       )
       .subscribe(
         () => {

@@ -87,7 +87,10 @@
           <div class="cd-col-form-input">
             <span *ngFor="let service of configForm.getValue('services')"
                   class="form-component-badge">
-              <span class="badge badge-dark">{{ service }}</span>
+              <cds-tag [size]="'md'"
+                       class="tag-dark">
+                {{ service }}
+              </cds-tag>
             </span>
           </div>
         </div>

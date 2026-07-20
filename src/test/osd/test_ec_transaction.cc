@@ -57,8 +57,6 @@ TEST(ectransaction, two_writes_separated_append)
     0,
     std::nullopt,
     std::nullopt,
-    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr,
     0);
 
   generic_derr << "plan " << plan << dendl;
@@ -95,8 +93,6 @@ TEST(ectransaction, two_writes_separated_misaligned_overwrite)
     oi.size,
     oi,
     std::nullopt,
-    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr,
     0);
 
   generic_derr << "plan " << plan << dendl;
@@ -135,8 +131,6 @@ TEST(ectransaction, partial_write)
     0,
     oi,
     std::nullopt,
-    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr,
     0);
 
   generic_derr << "plan " << plan << dendl;
@@ -177,8 +171,6 @@ TEST(ectransaction, overlapping_write_non_aligned)
     8,
     oi,
     std::nullopt,
-    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr,
     0);
 
   generic_derr << "plan " << plan << dendl;
@@ -220,8 +212,6 @@ TEST(ectransaction, test_appending_write_non_aligned)
     8,
     oi,
     std::nullopt,
-    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr,
     0);
 
   generic_derr << "plan " << plan << dendl;
@@ -263,8 +253,6 @@ TEST(ectransaction, append_with_large_hole)
     4096,
     oi,
     std::nullopt,
-    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr,
     0);
 
   generic_derr << "plan " << plan << dendl;
@@ -306,8 +294,6 @@ TEST(ectransaction, test_append_not_page_aligned_with_large_hole)
     EC_ALIGN_SIZE,
     oi,
     std::nullopt,
-    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr,
     0);
 
   generic_derr << "plan " << plan << dendl;
@@ -351,8 +337,6 @@ TEST(ectransaction, test_overwrite_with_missing)
     42*(EC_ALIGN_SIZE / 4),
     oi,
     std::nullopt,
-    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr,
     0);
 
   generic_derr << "plan " << plan << dendl;
@@ -392,8 +376,6 @@ TEST(ectransaction, truncate_to_bigger_without_write)
     4096,
     std::nullopt,
     std::nullopt,
-    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr,
     0);
 
   generic_derr << "plan " << plan << dendl;
@@ -423,8 +405,6 @@ TEST(ectransaction, truncate_to_smalelr_without_write) {
     16*EC_ALIGN_SIZE,
     std::nullopt,
     std::nullopt,
-    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr,
     0);
 
   generic_derr << "plan " << plan << dendl;
@@ -470,8 +450,6 @@ TEST(ectransaction, delete_and_write_misaligned) {
     16*EC_ALIGN_SIZE,
     std::nullopt,
     std::nullopt,
-    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr,
     0);
 
   generic_derr << "plan " << plan << dendl;
@@ -485,5 +463,44 @@ TEST(ectransaction, delete_and_write_misaligned) {
   ref_write[shard_id_t(0)].insert(0, 2*EC_ALIGN_SIZE);
   ref_write[shard_id_t(1)].insert(0, 2*EC_ALIGN_SIZE);
   ref_write[shard_id_t(2)].insert(0, 2*EC_ALIGN_SIZE);
+  ASSERT_EQ(ref_write, plan.will_write);
+}
+
+TEST(ectransaction, truncate_to_stripe) {
+  hobject_t h;
+  PGTransaction::ObjectOperation op;
+  uint64_t new_size = 2 * EC_ALIGN_SIZE;
+
+  // We have a 4k write quite a way after the current limit of a 4k object
+  op.truncate.emplace(new_size, new_size);
+
+  pg_pool_t pool;
+  pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+  ECUtil::stripe_info_t sinfo(2, 1, 2 * EC_ALIGN_SIZE, &pool, std::vector<shard_id_t>(0));
+  object_info_t oi;
+  oi.size = new_size;
+  shard_id_set shards;
+  shards.insert_range(shard_id_t(0), 3);
+
+  ECTransaction::WritePlanObj plan(
+    h,
+    op,
+    sinfo,
+    shards,
+    shards,
+    false,
+    16*EC_ALIGN_SIZE,
+    std::nullopt,
+    std::nullopt,
+    0);
+
+  generic_derr << "plan " << plan << dendl;
+
+  /* We are going to delete the object before writing it.  Best not write anything
+   * from the old object... */
+  ASSERT_FALSE(plan.to_read);
+
+  // Truncating to a whole shard - no writes needed.
+  ECUtil::shard_extent_set_t ref_write(sinfo.get_k_plus_m());
   ASSERT_EQ(ref_write, plan.will_write);
 }

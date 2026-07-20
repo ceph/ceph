@@ -37,19 +37,24 @@
     <div cdsCol="{md:5}">
       <div class="d-flex flex-row-reverse gap-3">
         <ng-container *ngFor="let action of tableActions">
-          <button type="button"
-                  [cdsButton]="action.buttonKind"
-                  [title]="action.name"
-                  (click)="action.click($event)"
-                  [disabled]="action.disable()"
-                  [attr.aria-label]="action.name"
-                  [attr.data-testid]="action.name"
-                  [preserveFragment]="action.preserveFragment ? '' : null">
+        @if (!action.visible || action.visible(selection)) {
+          <button
+            type="button"
+            [cdsButton]="action.buttonKind"
+            [title]="action.name"
+            (click)="action.click($event)"
+            [disabled]="action.disable()"
+            [attr.aria-label]="action.name"
+            [attr.data-testid]="action.name"
+            [preserveFragment]="action.preserveFragment ? '' : null">
             <span i18n>{{ action.name }}</span>
-            <svg class="cds--btn__icon"
-                 [cdsIcon]="action.icon"
-                 size="16"></svg>
+            <svg
+              class="cds--btn__icon"
+              [cdsIcon]="action.icon"
+              size="16">
+            </svg>
           </button>
+        }
         </ng-container>
       </div>
     </div>

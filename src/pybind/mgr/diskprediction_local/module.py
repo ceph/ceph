@@ -7,6 +7,8 @@ from threading import Event
 import time
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 from mgr_module import CommandResult, MgrModule, Option
+
+from .cli import DiskpredictionLocalCLICommand
 # Importing scipy early appears to avoid a future deadlock when
 # we try to do
 #
@@ -23,6 +25,7 @@ TIME_WEEK = TIME_DAYS * 7
 
 
 class Module(MgrModule):
+    CLICommand = DiskpredictionLocalCLICommand
     MODULE_OPTIONS = [
         Option(name='sleep_interval',
                default=600),

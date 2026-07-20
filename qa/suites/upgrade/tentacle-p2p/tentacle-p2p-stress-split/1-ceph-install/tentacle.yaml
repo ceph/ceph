@@ -1,0 +1,21 @@
+meta:
+- desc: |
+   install ceph/tentacle v20.2.0
+   Overall upgrade path is - tentacle-latest.point -1 => tentacle-latest
+tasks:
+- install:
+    tag: v20.2.0
+    exclude_packages: ['librados3']
+    extra_packages: ['librados2']
+- print: "**** done install tentacle v20.2.0"
+- ceph:
+- exec:
+    osd.0:
+      - ceph osd require-osd-release tentacle
+      - ceph osd set-require-min-compat-client tentacle
+- print: "**** done ceph"
+overrides:
+  ceph:
+    conf:
+      mon:
+        mon warn on osd down out interval zero: false

@@ -1,13 +1,14 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 
 import { ToastrModule } from 'ngx-toastr';
-import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 
 import { SharedModule } from '~/app/shared/shared.module';
 import { NvmeofListenersFormComponent } from './nvmeof-listeners-form.component';
+import { ActivatedRoute } from '@angular/router';
+import { of } from 'rxjs';
 
 describe('NvmeofListenersFormComponent', () => {
   let component: NvmeofListenersFormComponent;
@@ -16,20 +17,26 @@ describe('NvmeofListenersFormComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       declarations: [NvmeofListenersFormComponent],
-      providers: [NgbActiveModal],
-      imports: [
-        HttpClientTestingModule,
-        NgbTypeaheadModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        SharedModule,
-        ToastrModule.forRoot()
-      ]
+      providers: [
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            params: of({ subsystem_nqn: 'nqn.2001-07.com.ceph:1' }),
+            queryParams: of({ group: 'group1' }),
+            snapshot: { params: { subsystem_nqn: 'nqn.2001-07.com.ceph:1' } },
+            parent: {
+              snapshot: { params: { subsystem_nqn: 'nqn.2001-07.com.ceph:1' } },
+              params: of({ subsystem_nqn: 'nqn.2001-07.com.ceph:1' })
+            }
+          }
+        }
+      ],
+      imports: [HttpClientTestingModule, RouterTestingModule, SharedModule, ToastrModule.forRoot()],
+      schemas: [CUSTOM_ELEMENTS_SCHEMA]
     }).compileComponents();
 
     fixture = TestBed.createComponent(NvmeofListenersFormComponent);
     component = fixture.componentInstance;
-    component.ngOnInit();
     fixture.detectChanges();
   });
 

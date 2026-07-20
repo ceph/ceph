@@ -19,9 +19,6 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 export class MultiClusterFormComponent implements OnInit, OnDestroy {
   @Output()
   submitAction = new EventEmitter();
-  readonly endpoints = /^((https?:\/\/)|(www.))(?:([a-zA-Z]+)|(\d+\.\d+.\d+.\d+)):\d{2,5}\/?$/;
-  readonly ipv4Rgx = /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/i;
-  readonly ipv6Rgx = /^(?:[a-f0-9]{1,4}:){7}[a-f0-9]{1,4}$/i;
   clusterApiUrlCmd = 'ceph mgr services';
   remoteClusterForm: CdFormGroup;
   connectionVerified: boolean;
@@ -102,17 +99,7 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
       ),
       remoteClusterUrl: new FormControl(null, {
         validators: [
-          CdValidators.custom('endpoint', (value: string) => {
-            if (_.isEmpty(value)) {
-              return false;
-            } else {
-              return (
-                !this.endpoints.test(value) &&
-                !this.ipv4Rgx.test(value) &&
-                !this.ipv6Rgx.test(value)
-              );
-            }
-          }),
+          CdValidators.url,
           CdValidators.custom('hubUrlCheck', (remoteClusterUrl: string) => {
             return this.action === 'connect' && remoteClusterUrl?.includes(this.hubUrl);
           }),

@@ -1,5 +1,17 @@
+* ceph-volume: Raw BlueStore OSD preparation now pre-formats NVMe devices and
+  skips the slower BlueStore discard phase,reducing mkfs time on
+  very large namespaces.
+* MGR: The Manager now automatically increases ``mgr_stats_period`` when its
+  message queue is congested, reducing daemon reporting frequency to prevent
+  overload. The period recovers automatically once the queue clears. This
+  behavior is controlled by the new ``mgr_stats_period_autotune`` (default:
+  ``true``) and ``mgr_stats_period_autotune_queue_threshold`` (default: ``100``)
+  config options.
+
 >=20.0.0
 
+* RGW: Bucket Logging suppports creating log buckets in EC pools.
+  Implicit logging object commits are now performed asynchronously.
 * RADOS: leader monitor and stretch mode status are now included in the `ceph status` output.
   Related Tracker: https://tracker.ceph.com/issues/70406
 * RGW: The User Account feature introduced in Squid provides first-class support for
@@ -23,6 +35,9 @@
 * RGW: Added support for S3 GetObjectAttributes.
 * RGW: Added BEAST frontend option 'so_reuseport' which facilitates running multiple
         RGW instances on the same host by sharing a single TCP port.
+* RGW: Bucket resharding now does most of its processing before it starts to block
+  write operations. This should significantly reduce the client-visible impact
+  of resharding on large buckets.
 
 * RBD: All Python APIs that produce timestamps now return "aware" `datetime`
   objects instead of "naive" ones (i.e. those including time zone information
@@ -147,6 +162,14 @@
   allowed.  `rbd trash mv` command now behaves the same way as `rbd rm` in this
   scenario.
 
+* CephFS: If the subvolume name passed to the command `ceph fs subvolume info`
+  is a clone, the output now will also contain a "source" field that tells user
+  the name of source snapshot along with the name of volume, subvolume group and
+  subvolume in which the source snapshot is located. For clones created with
+  Tentacle or earlier release, the value of this field will be 'N/A'. Regular
+  subvolumes don't have a source subvolume and therefore the output for them
+  won't contain a "source" field regardless of the release.
+
 * RGW: Replication policies now validate permissions using `s3:ReplicateObject`,
   `s3:ReplicateDelete`, and `s3:ReplicateTags` for destination buckets. For source
   buckets, both `s3:GetObjectVersionForReplication` and `s3:GetObject(Version)`
@@ -158,9 +181,11 @@
   users to view the availability score for each pool in a cluster. A pool is considered 
   unavailable if any PG in the pool is not in active state or if there are unfound 
   objects. Otherwise the pool is considered available. The score is updated every 
-  5 seconds. The feature is on by default. A new config option ``enable_availability_tracking``
-  can be used to turn off the feature if required. Another command is added to clear the 
-  availability status for a specific pool, ``ceph osd pool clear-availability-status <pool-name>``. 
+  one second by default. This interval can be changed using the new config option
+  ``pool_availability_update_interval.``. The feature is off by default. A new config option 
+  ``enable_availability_tracking`` can be used to turn on the feature if required. 
+  Another command is added to clear the availability status for a specific pool, 
+  ``ceph osd pool clear-availability-status <pool-name>``. 
   This feature is in tech preview. 
   Related trackers:
    - https://tracker.ceph.com/issues/67777
@@ -185,6 +210,40 @@
   "repair scrub" would be allowed to start on an OSD that is performing a
   recovery. In this Ceph version, operator-initiated scrubs and repair-scrubs
   are never blocked by a repair being performed.
+
+* Dashboard: NVMe/TCP Gateway group support
+* Dashboard: NVMe/TCP multiple namespaces support
+* Dashboard: Multi-cluster support
+* Dashboard: Management Gateway and oAuth2 integration with dashboard
+* Dashboard: RGW multi-site automation & sync Policies
+* Dashboard: RGW Tiering, Rate Limting and Account management
+* Dashboard: RGW bucket Lifecycles and ACLs
+* Dashboard: RGW Topics and Bucket Notification Management
+* Dashboard: RGW granular bucket replication
+* Dashboard: SMB monitoring and management
+* Monitoring: New monitoring Dashboards for Application, NVMe, CephFS, and SMB Overview
+* Dashboard: Introduces a command `ceph dashboard set-rgw-hostname <daemon> <hostname>`
+  to set custom dns names for each gateways. Once set dashboard will pick up that 
+  address for the selected gateway. And a config can be unset by
+  `ceph dashboard unset-rgw-hostname <daemon>`. 
+  With this dashboard no longer relies on `rgw_dns_name`.
+* Dashboard: Added support for QAT compression in RGW service form. Users can select 'Hardware' or 'Software' for QAT compression . If 'None' is selected, compression is removed altogether.
+
+* NVMe-oF: A new Ceph Manager module, `nvmeof`, is now available. When enabled, it provisions the
+  dedicated `.nvmeof` RADOS Block Device (RBD) pool required for NVMe-oF integration,
+  simplifying initial setup and ensuring the pool is created consistently across deployments.
+  
+* MGR: A new command, `ceph osd ok-to-upgrade`, has been added that allows
+  users and orchestration tools to determine a safe set of OSDs within a CRUSH
+  bucket to upgrade simultaneously without impacting data availability. To help
+  converge to a safe set, a new config option
+  ``mgr_osd_upgrade_check_convergence_factor`` is introduced. This option can be
+  modified (if necessary) to help converge to an optimal set. Higher values
+  maximize the set of OSDs to upgrade at the cost of longer command response
+  times. Conversely, a lower value improves the command response time but
+  results in a non-optimal or smaller set of OSDs which impacts the overall time
+  to upgrade all OSDs in the cluster. For more details see tracker:
+  https://tracker.ceph.com/issues/73031.
 
 >=19.2.1
 

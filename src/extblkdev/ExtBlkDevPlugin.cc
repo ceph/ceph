@@ -183,6 +183,17 @@ namespace ceph {
     // preload set of extblkdev plugins defined in config
     int preload(CephContext *cct)
     {
+      static bool preload_executed = false;
+      static int preload_result = -1;
+      if (preload_executed) {
+        auto registry = cct->get_plugin_registry();
+        std::lock_guard l(registry->lock);
+        dout(10) << "plugins preload done, extblkdev plugins ="
+          << registry->plugins["extblkdev"].size()
+          << " previous_result = " << preload_result << dendl;
+        return preload_result;
+      }
+      preload_executed = true;
       const auto& conf = cct->_conf;
       string plugins = conf.get_val<std::string>("osd_extblkdev_plugins");
       dout(10) << "starting preload of extblkdev plugins: " << plugins << dendl;
@@ -198,8 +209,9 @@ namespace ceph {
 	  int rc = registry->load("extblkdev", std::string("ebd_") + plg);
 	  if (rc) {
 	    derr << __func__ << " failed preloading extblkdev plugin: " << plg << dendl;
+            preload_result = rc;
 	    return rc;
-	  }else{
+	  } else {
 	    dout(10) << "successful load of extblkdev plugin: " << plg << dendl;
 	  }
 	}
@@ -208,10 +220,13 @@ namespace ceph {
       // if we are still running as root, we do not need to trim capabilities
       // as we are intended to use the privileges
       if (geteuid() == 0) {
+        preload_result = 0;
 	return 0;
       }
-      return limit_caps(cct);
+      preload_result = limit_caps(cct);
+      return preload_result;
 #else
+      preload_result = 0;
       return 0;
 #endif
     }

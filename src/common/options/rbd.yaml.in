@@ -514,12 +514,12 @@ options:
   type: str
   level: advanced
   desc: default internal format for handling clones
-  long_desc: This sets the internal format for tracking cloned images. The setting
-    of '1' requires attaching to protected snapshots that cannot be removed until
-    the clone is removed/flattened. The setting of '2' will allow clones to be attached
+  long_desc: This sets the internal format for tracking cloned images. The value
+    of ``1`` requires attaching to protected snapshots that cannot be removed until
+    the clone is removed or flattened. The value of ``2`` will allow clones to be attached
     to any snapshot and permits removing in-use parent snapshots but requires Mimic
-    or later clients. The default setting of 'auto' will use the v2 format if the
-    cluster is configured to require mimic or later clients.
+    or later clients. The default value of ``auto`` will use the v2 format if the
+    cluster is configured to require Mimic or later clients.
   default: auto
   services:
   - rbd

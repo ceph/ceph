@@ -3896,6 +3896,7 @@ bool OSDMonitor::preprocess_alive(MonOpRequestRef op)
   return false;
 
  ignore:
+  mon.no_reply(op);
   return true;
 }
 
@@ -4141,9 +4142,11 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
     // change?
     //  NOTE: we assume that this will clear pg_primary, so consider
     //        an existing pg_primary field to imply a change
+    std::vector<int> acting_set;
+    osdmap.pg_to_acting_osds(p->first, acting_set);
     if (p->second.size() &&
 	(osdmap.pg_temp->count(p->first) == 0 ||
-	 osdmap.pg_temp->get(p->first) != p->second ||
+	 acting_set != p->second ||
 	 osdmap.primary_temp->count(p->first)))
       return false;
   }
@@ -8388,12 +8391,13 @@ int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
   }
   if (enable) {
     ErasureCodeInterfaceRef erasure_code;
-    unsigned int k, m;
+    unsigned int k, m, chunk_size;
     stringstream tmp;
     int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &tmp);
     if (err == 0) {
       k = erasure_code->get_data_chunk_count();
       m = erasure_code->get_coding_chunk_count();
+      chunk_size = erasure_code->get_chunk_size(p.get_stripe_width());
     } else {
       if (ss) {
         *ss << "get_erasure_code failed: " << tmp.str();
@@ -8404,6 +8408,13 @@ int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
         ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED) == 0) {
       if (ss) {
         *ss << "ec optimizations not currently supported for pool profile.";
+      }
+      return -EINVAL;
+    }
+
+    if ((chunk_size % 4096) != 0) {
+      if (ss) {
+        *ss << "stripe_unit must be divisible by 4096 to enable ec optimizations";
       }
       return -EINVAL;
     }
@@ -8912,7 +8923,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EINVAL;
     }
     bool was_enabled = p.allows_ecoptimizations();
-    int r = enable_pool_ec_optimizations(p, nullptr, enable);
+    int r = enable_pool_ec_optimizations(p, &ss, enable);
     if (r != 0) {
       return r;
     }
@@ -12572,6 +12583,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	goto reply_no_propose;
       }
     }
+    // Optimized EC does not cope with pg temp with a mismatched size.
+    pending_inc.new_pg_temp[pgid].resize(osdmap.get_pg_size(pgid), CRUSH_ITEM_NONE);
     goto update;
   } else if (prefix == "osd pg-upmap" ||
              prefix == "osd rm-pg-upmap" ||
@@ -14444,33 +14457,59 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       ss << "availability tracking is disabled; you can enable it by setting the config option enable_availability_tracking";
       err = -EOPNOTSUPP;
       goto reply_no_propose;
-    }
-    TextTable tbl;
-    tbl.define_column("POOL", TextTable::LEFT, TextTable::LEFT);
-    tbl.define_column("UPTIME", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("DOWNTIME", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("NUMFAILURES", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("MTBF", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("MTTR", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("SCORE", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("AVAILABLE", TextTable::LEFT, TextTable::RIGHT);
+    }  
+    
     std::map<uint64_t, PoolAvailability> pool_availability = mon.mgrstatmon()->get_pool_availability();
-    for (const auto& i : pool_availability) {
-      const auto& p = i.second;
-      double mtbf = p.num_failures > 0 ? (p.uptime / p.num_failures) : 0;
-      double mttr = p.num_failures > 0 ? (p.downtime / p.num_failures) : 0;
-      double score = mtbf > 0 ? mtbf / (mtbf +  mttr): 1.0;
-      tbl << p.pool_name;
-      tbl << timespan_str(make_timespan(p.uptime));
-      tbl << timespan_str(make_timespan(p.downtime));
-      tbl << p.num_failures;
-      tbl << timespan_str(make_timespan(mtbf));
-      tbl << timespan_str(make_timespan(mttr));
-      tbl << score;
-      tbl << p.is_avail;
-      tbl << TextTable::endrow;
+
+    if (f) {
+      f->open_array_section("pools");
+      for (const auto& i : pool_availability) {
+        const auto& p = i.second;
+        double mtbf = p.num_failures > 0 ? (p.uptime / p.num_failures) : 0;
+        double mttr = p.num_failures > 0 ? (p.downtime / p.num_failures) : 0;
+        double score = mtbf > 0 ? mtbf / (mtbf +  mttr): 1.0;
+
+        f->open_object_section("pool");
+        f->dump_string("pool", p.pool_name);
+        f->dump_unsigned("uptime",    p.uptime);
+        f->dump_unsigned("downtime",  p.downtime);
+        f->dump_float("mtbf",      mtbf);
+        f->dump_float("mttr",      mttr);
+        f->dump_unsigned("num_failures", p.num_failures);
+        f->dump_float("score", score);
+        f->dump_bool("available", p.is_avail);
+        f->close_section(); 
+      }
+      f->close_section(); 
+      f->flush(rdata);
+    } else {
+      TextTable tbl;
+      tbl.define_column("POOL", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("UPTIME", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("DOWNTIME", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("NUMFAILURES", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("MTBF", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("MTTR", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("SCORE", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("AVAILABLE", TextTable::LEFT, TextTable::RIGHT);
+
+      for (const auto& i : pool_availability) {
+        const auto& p = i.second;
+        double mtbf = p.num_failures > 0 ? (p.uptime / p.num_failures) : 0;
+        double mttr = p.num_failures > 0 ? (p.downtime / p.num_failures) : 0;
+        double score = mtbf > 0 ? mtbf / (mtbf +  mttr): 1.0;
+        tbl << p.pool_name;
+        tbl << timespan_str(make_timespan(p.uptime));
+        tbl << timespan_str(make_timespan(p.downtime));
+        tbl << p.num_failures;
+        tbl << timespan_str(make_timespan(mtbf));
+        tbl << timespan_str(make_timespan(mttr));
+        tbl << score;
+        tbl << p.is_avail;
+        tbl << TextTable::endrow;
+      }
+      rdata.append(stringify(tbl));
     }
-    rdata.append(stringify(tbl));
   } else if (prefix == "osd force-create-pg") {
     pg_t pgid;
     string pgidstr;
@@ -15231,6 +15270,26 @@ int OSDMonitor::_prepare_remove_pool(
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
   }
+
+  // remove any crush rules for this pool
+  const pg_pool_t *pi = osdmap.get_pg_pool(pool);
+  if (pi->is_erasure() && newcrush.rule_exists(pi->get_crush_rule())) {
+    int ruleno = pi->get_crush_rule();
+    ceph_assert(ruleno >= 0);
+
+    auto rule_in_use = false;
+    for (const auto &_pool : osdmap.pools) {
+      if (_pool.second.get_crush_rule() == ruleno && pool != _pool.first)
+        rule_in_use = true;
+    }
+    if (!rule_in_use) {
+      dout(10) << __func__ << " removing crush rule for pool " << pool << dendl;
+      newcrush.remove_rule(ruleno);
+      pending_inc.crush.clear();
+      newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
+    }
+  }
+
   return 0;
 }
 
@@ -15471,23 +15530,26 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
     return;
   }
   __u8 new_rule = static_cast<__u8>(new_crush_rule_result);
-
-  int weight1 = crush.get_item_weight(subtrees[0]);
-  int weight2 = crush.get_item_weight(subtrees[1]);
-  if (weight1 != weight2) {
-    // TODO: I'm really not sure this is a good idea?
-    ss << "the 2 " << dividing_bucket
-       << "instances in the cluster have differing weights "
-       << weight1 << " and " << weight2
-       <<" but stretch mode currently requires they be the same!";
-    *errcode = -EINVAL;
-    ceph_assert(!commit || (weight1 == weight2));
-    return;
-  }
   if (bucket_count != 2) {
     ss << "currently we only support 2-site stretch clusters!";
     *errcode = -EINVAL;
     ceph_assert(!commit || bucket_count == 2);
+    return;
+  }
+  double stretch_max_weight_delta = g_conf().get_val<double>("mon_stretch_max_bucket_weight_delta");
+  int weight1 = crush.get_item_weight(subtrees[0]);
+  int weight2 = crush.get_item_weight(subtrees[1]);
+  bool exceeds_threshold = abs(weight1 - weight2) >
+      (stretch_max_weight_delta * std::min(weight1, weight2));
+  if (exceeds_threshold) {
+    ss << "the 2 " << dividing_bucket
+       << "instances in the cluster have differing weights "
+       << weight1 << " and " << weight2
+       << " but stretch mode currently" 
+       <<" requires the difference to be no greater than "
+       << stretch_max_weight_delta * 100 << "%";
+    *errcode = -EINVAL;
+    ceph_assert(!commit || !exceeds_threshold);
     return;
   }
   // TODO: check CRUSH rules for pools so that we are appropriately divided

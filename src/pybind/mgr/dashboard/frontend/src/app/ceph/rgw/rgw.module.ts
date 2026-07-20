@@ -83,8 +83,9 @@ import {
   TooltipModule,
   ComboBoxModule,
   ToggletipModule,
+  IconService,
   LayoutModule,
-  IconService
+  SkeletonModule
 } from 'carbon-components-angular';
 import EditIcon from '@carbon/icons/es/edit/16';
 import ScalesIcon from '@carbon/icons/es/scales/20';
@@ -152,7 +153,8 @@ import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notifi
     ToggletipModule,
     RadioModule,
     SelectModule,
-    LayoutModule
+    LayoutModule,
+    SkeletonModule
   ],
   exports: [
     RgwDaemonDetailsComponent,
@@ -387,8 +389,8 @@ const routes: Routes = [
     ]
   },
   {
-    path: 'tiering',
-    data: { breadcrumbs: 'Tiering' },
+    path: 'storage-class',
+    data: { breadcrumbs: 'Storage class' },
     children: [
       { path: '', component: RgwStorageClassListComponent },
       {
@@ -436,8 +438,8 @@ const routes: Routes = [
     children: [{ path: '', component: RgwConfigurationPageComponent }]
   },
   {
-    path: 'topic',
-    data: { breadcrumbs: 'Topic' },
+    path: 'destination',
+    data: { breadcrumbs: 'Notification destination' },
     children: [
       { path: '', component: RgwTopicListComponent },
       {

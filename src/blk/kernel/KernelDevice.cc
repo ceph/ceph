@@ -292,12 +292,6 @@ int KernelDevice::open(const string& p)
       support_discard = blkdev_buffered.support_discard();
       optimal_io_size = blkdev_buffered.get_optimal_io_size();
       this->devname = devname;
-      // check if any extended block device plugin recognizes this device
-      // detect_vdo has moved into the VDO plugin
-      int rc = extblkdev::detect_device(cct, devname, ebd_impl);
-      if (rc != 0) {
-	dout(20) << __func__ << " no plugin volume maps to " << devname << dendl;
-      }
     }
   }
 
@@ -475,6 +469,22 @@ int KernelDevice::get_ebd_state(ExtBlkDevState &state) const
   return -ENOENT;
 }
 
+int KernelDevice::detect_ebd(std::string& id)
+{
+  // check if any extended block device plugin recognizes this device
+  // detect_vdo has moved into the VDO plugin
+  if (!ebd_impl) {
+    int rc = extblkdev::detect_device(cct, devname, ebd_impl);
+    if (rc != 0) {
+      dout(20) << __func__ << " no plugin volume maps to " << devname << dendl;
+    }
+  }
+  if (ebd_impl) {
+    return ebd_impl->get_plugin_id(id);
+  }
+  return -ENOENT;
+}
+
 int KernelDevice::choose_fd(bool buffered, int write_hint) const
 {
 #if defined(F_SET_FILE_RW_HINT)
@@ -581,6 +591,11 @@ void KernelDevice::_discard_update_threads(bool discard_stop)
 
   uint64_t oldcount = discard_threads.size();
   uint64_t newcount = cct->_conf.get_val<uint64_t>("bdev_async_discard_threads");
+  if (newcount == 0) {
+    //backward compatibility mode to make sure legacy "bdev_async_discard" is
+    // taken into account if set.
+    newcount = cct->_conf.get_val<bool>("bdev_async_discard") ? 1 : 0;
+  }
   if (!cct->_conf.get_val<bool>("bdev_enable_discard") || !support_discard || discard_stop) {
     newcount = 0;
   }
@@ -592,12 +607,12 @@ void KernelDevice::_discard_update_threads(bool discard_stop)
     for(uint64_t i = oldcount; i < newcount; i++)
     {
       // All threads created with the same name
-      discard_threads.emplace_back(new DiscardThread(this, i));
+      discard_threads.emplace_back(new DiscardThread(this));
       discard_threads.back()->create("bstore_discard");
     }
   // Decrease? Signal threads after telling them to stop
   } else if (newcount < oldcount) {
-    std::vector<std::shared_ptr<DiscardThread>> discard_threads_to_stop;
+    std::vector<DiscardThread*> discard_threads_to_stop;
     dout(10) << __func__ << " stopping " << (oldcount - newcount) << " existing discard threads" << dendl;
 
     // Signal the last threads to quit, and stop tracking them
@@ -608,8 +623,9 @@ void KernelDevice::_discard_update_threads(bool discard_stop)
     discard_cond.notify_all();
     discard_threads.resize(newcount);
     l.unlock();
-    for (auto &t : discard_threads_to_stop) {
+    for (auto t : discard_threads_to_stop) {
       t->join();
+      delete t;
     }
   }
   logger->set(l_blk_kernel_discard_threads, discard_threads.size());
@@ -779,19 +795,15 @@ void KernelDevice::swap_discard_queued(interval_set<uint64_t>& other)
   discard_queued.swap(other);
 }
 
-void KernelDevice::_discard_thread(uint64_t tid)
+void KernelDevice::_discard_thread(DiscardThread* thr)
 {
-  dout(10) << __func__ << " thread " << tid << " start" << dendl;
+  dout(10) << __func__ << " thread " << thr << " start" << dendl;
 
   // Thread-local list of processing discards
   interval_set<uint64_t> discard_processing;
 
   std::unique_lock l(discard_lock);
   discard_cond.notify_all();
-
-  // Keeps the shared pointer around until erased from the vector
-  // and until we leave this function
-  auto thr = discard_threads[tid];
 
   while (true) {
     ceph_assert(discard_processing.empty());
@@ -843,7 +855,7 @@ void KernelDevice::_discard_thread(uint64_t tid)
     }
   }
 
-  dout(10) << __func__ << " thread " << tid << " finish" << dendl;
+  dout(10) << __func__ << " thread " << thr << " finish" << dendl;
 }
 
 // this is private and is expected that the caller checks that discard
@@ -880,6 +892,14 @@ bool KernelDevice::try_discard(interval_set<uint64_t> &to_release, bool async)
     }
   }
   return false;
+}
+
+void KernelDevice::collect_alerts(osd_alert_list_t& alerts, const std::string& device_name)
+{
+  BlockDevice::collect_alerts(alerts, device_name);
+  if (ebd_impl) {
+    ebd_impl->collect_alerts(alerts);
+  }
 }
 
 void KernelDevice::_aio_log_start(
@@ -1579,6 +1599,7 @@ std::vector<std::string> KernelDevice::get_tracked_keys()
 {
   return {
     "bdev_async_discard_threads"s,
+    "bdev_async_discard"s,
     "bdev_enable_discard"s
   };
 }
@@ -1586,7 +1607,8 @@ std::vector<std::string> KernelDevice::get_tracked_keys()
 void KernelDevice::handle_conf_change(const ConfigProxy& conf,
 			     const std::set <std::string> &changed)
 {
-  if (changed.count("bdev_async_discard_threads") || changed.count("bdev_enable_discard")) {
+  if (changed.count("bdev_async_discard_threads") || changed.count("bdev_async_discard") ||
+      changed.count("bdev_enable_discard")) {
     _discard_update_threads();
   }
 }

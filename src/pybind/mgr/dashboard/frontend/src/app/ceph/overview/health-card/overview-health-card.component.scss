@@ -1,0 +1,140 @@
+.overview-health-card {
+  &-header {
+    align-items: end;
+    display: flex;
+  }
+  // CSS for status text, modifier names match icons name
+  &-status--success {
+    color: var(--cds-support-success);
+  }
+
+  &-status--warningAltFilled {
+    color: var(--cds-support-caution-major);
+  }
+
+  &-status--error {
+    color: var(--cds-text-error);
+  }
+
+  &-secondary-text {
+    color: var(--cds-text-secondary);
+  }
+
+  &-bold {
+    font-weight: 700 !important;
+  }
+
+  &-tab {
+    display: flex;
+  }
+
+  &-tab-selected {
+    border-block-end: 2px solid var(--cds-border-interactive) !important;
+
+    .cds--definition-term {
+      border-block-end: 0 !important;
+      color: var(--cds-text-primary) !important;
+    }
+  }
+
+  &-tab-content {
+    padding: var(--cds-spacing-04) 0;
+  }
+
+  &-tab-content-item {
+    border-right: 1px solid var(--cds-border-subtle);
+    max-block-size: fit-content;
+  }
+
+  &-tab-content-item-row {
+    display: flex;
+    justify-content: space-between;
+  }
+
+  &-resiliency-tab-content {
+    display: flex;
+  }
+
+  &-resiliency-chart {
+    flex-grow: 1;
+    flex-shrink: 0;
+  }
+
+  &-resiliency-chart-text {
+    margin-left: var(--cds-spacing-04);
+    width: 13rem;
+  }
+
+  &-icon-and-text {
+    align-items: center;
+    display: inline-flex;
+    gap: var(--cds-spacing-03);
+  }
+
+  &-hardware-sections {
+    box-sizing: border-box;
+    column-gap: var(--cds-spacing-03);
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-top: var(--cds-spacing-03);
+    padding-right: var(--cds-spacing-06);
+    width: 100%;
+  }
+
+  &-hardware-section {
+    border-right: 1px solid var(--cds-border-subtle);
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: var(--cds-spacing-03);
+    min-width: 0;
+    padding-inline-end: var(--cds-spacing-03);
+  }
+
+  &-hardware-section:last-child {
+    /* stylelint-disable-next-line declaration-property-value-disallowed-list */
+    border-right: none;
+    padding-inline-end: 0;
+  }
+
+  &-hardware-row {
+    align-items: center;
+    display: flex;
+    gap: var(--cds-spacing-03);
+    justify-content: space-between;
+    min-width: 0;
+  }
+
+  &-hardware-status {
+    align-items: center;
+    display: inline-flex;
+    flex-shrink: 0;
+    gap: var(--cds-spacing-03);
+  }
+
+  // Overrides
+  .clipboard-btn {
+    padding: var(--cds-spacing-02);
+  }
+
+  .cds--btn--icon-only {
+    padding: var(--cds-spacing-01);
+  }
+
+  .cds--link.cds--link--inline {
+    text-decoration: none;
+  }
+
+  .cds--skeleton__placeholder {
+    margin-bottom: var(--cds-spacing-03);
+  }
+
+  .cds--definition-term {
+    border-block-end: 1px dotted var(--cds-link-primary);
+    color: var(--cds-link-primary);
+  }
+
+  &-icon-and-text cd-icon svg {
+    display: block;
+  }
+}

@@ -5,7 +5,13 @@ import enum
 from collections import OrderedDict
 from contextlib import contextmanager
 from functools import wraps
-from ipaddress import ip_network, ip_address, ip_interface
+from ipaddress import (
+    IPv4Network,
+    IPv6Network,
+    ip_address,
+    ip_interface,
+    ip_network,
+)
 from typing import (
     Any,
     Callable,
@@ -27,8 +33,9 @@ import yaml
 from ceph.deployment.hostspec import HostSpec, SpecValidationError, assert_valid_host
 from ceph.deployment.utils import unwrap_ipv6, valid_addr, verify_non_negative_int
 from ceph.deployment.utils import verify_positive_int, verify_non_negative_number
-from ceph.deployment.utils import verify_boolean, verify_enum
+from ceph.deployment.utils import verify_boolean, verify_enum, verify_int
 from ceph.utils import is_hex
+from ceph.smb import constants as smbconst
 
 ServiceSpecT = TypeVar('ServiceSpecT', bound='ServiceSpec')
 FuncT = TypeVar('FuncT', bound=Callable)
@@ -43,6 +50,19 @@ def handle_type_error(method: FuncT) -> FuncT:
             error_msg = '{}: {}'.format(cls.__name__, e)
             raise SpecValidationError(error_msg)
     return cast(FuncT, inner)
+
+
+class YamlLiteralString(str):
+    """
+    Class used as marker for yaml representer to properly format
+    multi-line strings for yaml export
+    """
+    @staticmethod
+    def represent_as_literal(dumper: 'yaml.SafeDumper', data: str) -> Any:
+        return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='|')
+
+
+yaml.add_representer(YamlLiteralString, YamlLiteralString.represent_as_literal)
 
 
 class HostPlacementSpec(NamedTuple):
@@ -859,6 +879,14 @@ class ServiceSpec(object):
         sub_cls: Any = cls._cls(service_type)
         return object.__new__(sub_cls)
 
+    def __getnewargs__(self) -> tuple[str]:
+        """
+        Pickle will pass the return of this function to __new__ upon
+        unpickle.  We need to ensure it gets service_type in order
+        to get the right subtype.
+        """
+        return (self.service_type,)
+
     def __init__(self,
                  service_type: str,
                  service_id: Optional[str] = None,
@@ -1125,7 +1153,15 @@ class ServiceSpec(object):
 
     @staticmethod
     def yaml_representer(dumper: 'yaml.SafeDumper', data: 'ServiceSpec') -> Any:
-        return dumper.represent_dict(cast(Mapping, data.to_json().items()))
+        json_data = data.to_json()
+        spec = json_data.get('spec', {})
+
+        # Marking multi-line strings with the YamlLiteralString class
+        for key, value in spec.items():
+            if isinstance(value, str) and '\n' in value:
+                spec[key] = YamlLiteralString(value)
+
+        return dumper.represent_dict(cast(Mapping, json_data.items()))
 
 
 yaml.add_representer(ServiceSpec, ServiceSpec.yaml_representer)
@@ -1385,6 +1421,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  max_gws_in_grp: Optional[int] = 16,
                  max_ns_to_change_lb_grp: Optional[int] = 8,
                  abort_on_errors: Optional[bool] = True,
+                 abort_on_update_error: Optional[bool] = True,
                  omap_file_ignore_unlock_errors: Optional[bool] = False,
                  omap_file_lock_on_read: Optional[bool] = True,
                  omap_file_lock_duration: Optional[int] = 20,
@@ -1405,14 +1442,17 @@ class NvmeofServiceSpec(ServiceSpec):
                  allowed_consecutive_spdk_ping_failures: Optional[int] = 1,
                  spdk_ping_interval_in_seconds: Optional[float] = 2.0,
                  ping_spdk_under_lock: Optional[bool] = False,
-                 max_hosts_per_namespace: Optional[int] = 8,
+                 max_hosts_per_namespace: Optional[int] = 16,
                  max_namespaces_with_netmask: Optional[int] = 1000,
                  max_subsystems: Optional[int] = 128,
                  max_hosts: Optional[int] = 2048,
-                 max_namespaces: Optional[int] = 2048,
-                 max_namespaces_per_subsystem: Optional[int] = 256,
+                 max_namespaces: Optional[int] = 4096,
+                 max_namespaces_per_subsystem: Optional[int] = 512,
                  max_hosts_per_subsystem: Optional[int] = 128,
                  subsystem_cache_expiration: Optional[int] = 5,
+                 force_tls: Optional[bool] = False,
+                 max_message_length_in_mb: Optional[int] = 4,
+                 degrade_namespace_on_kmip_error: Optional[bool] = True,
                  server_key: Optional[str] = None,
                  server_cert: Optional[str] = None,
                  client_key: Optional[str] = None,
@@ -1433,7 +1473,8 @@ class NvmeofServiceSpec(ServiceSpec):
                  transports: Optional[str] = 'tcp',
                  transport_tcp_options: Optional[Dict[str, int]] =
                  {"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7},
-                 enable_dsa_acceleration: bool = True,
+                 enable_dsa_acceleration: bool = False,
+                 rbd_with_crc32c: bool = True,
                  tgt_cmd_extra_args: Optional[str] = None,
                  iobuf_options: Optional[Dict[str, int]] = None,
                  qos_timeslice_in_usecs: Optional[int] = 0,
@@ -1441,6 +1482,8 @@ class NvmeofServiceSpec(ServiceSpec):
                  discovery_addr: Optional[str] = None,
                  discovery_addr_map: Optional[Dict[str, str]] = None,
                  discovery_port: Optional[int] = None,
+                 discovery_bind_retries_limit: Optional[int] = 10,
+                 discovery_bind_sleep_interval: Optional[float] = 0.5,
                  abort_discovery_on_errors: Optional[bool] = True,
                  log_level: Optional[str] = 'INFO',
                  log_files_enabled: Optional[bool] = True,
@@ -1453,6 +1496,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  monitor_timeout: Optional[float] = 1.0,
                  enable_monitor_client: bool = True,
                  monitor_client_log_file_dir: Optional[str] = '',
+                 kmip_cert_dir: Optional[str] = './certs/kmip/{server_name}',
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
@@ -1520,6 +1564,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.verify_listener_ip = verify_listener_ip
         #: ``abort_on_errors`` abort gateway in case of errors
         self.abort_on_errors = abort_on_errors
+        #: ``abort_on_update_error`` abort gateway in case of an error during update
+        self.abort_on_update_error = abort_on_update_error
         #: ``omap_file_ignore_unlock_errors`` ignore errors when unlocking the OMAP file
         self.omap_file_ignore_unlock_errors = omap_file_ignore_unlock_errors
         #: ``omap_file_lock_on_read`` lock omap when reading its content
@@ -1548,6 +1594,12 @@ class NvmeofServiceSpec(ServiceSpec):
         self.max_hosts_per_subsystem = max_hosts_per_subsystem
         #: ``subsystem_cache_expiration`` number of seconds before subsystems cache expires
         self.subsystem_cache_expiration = subsystem_cache_expiration
+        #: ``force_tls`` force using TLS when adding hosts and listeners
+        self.force_tls = force_tls
+        #: ``max_message_length_in_mb`` max protobuf message length, in mb
+        self.max_message_length_in_mb = max_message_length_in_mb
+        #: ``degrade_namespace_on_kmip_error`` on a KMIP key error in update, create a degraded ns
+        self.degrade_namespace_on_kmip_error = degrade_namespace_on_kmip_error
         #: ``allowed_consecutive_spdk_ping_failures`` # of ping failures before aborting gateway
         self.allowed_consecutive_spdk_ping_failures = allowed_consecutive_spdk_ping_failures
         #: ``spdk_ping_interval_in_seconds`` sleep interval in seconds between SPDK pings
@@ -1608,6 +1660,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.transport_tcp_options: Optional[Dict[str, int]] = transport_tcp_options
         #: ``enable_dsa_acceleration`` enable  dsa acceleration
         self.enable_dsa_acceleration = enable_dsa_acceleration
+        #: ``rbd_with_crc32c`` enable RBD CRC32C checksum reuse optimization
+        self.rbd_with_crc32c = rbd_with_crc32c
         #: ``tgt_cmd_extra_args`` extra arguments for the nvmf_tgt process
         self.tgt_cmd_extra_args = tgt_cmd_extra_args
         #: List of extra arguments for SPDK iobuf in the form opt=value
@@ -1622,6 +1676,10 @@ class NvmeofServiceSpec(ServiceSpec):
         self.discovery_addr_map = discovery_addr_map
         #: ``discovery_port`` port of the discovery service
         self.discovery_port = discovery_port or 8009
+        #: ``discovery_bind_retries_limit`` how many times to keep trying bind the discovery port
+        self.discovery_bind_retries_limit = discovery_bind_retries_limit
+        #: ``discovery_bind_sleep_interval`` seconds to wait between each bind attempt
+        self.discovery_bind_sleep_interval = discovery_bind_sleep_interval
         #: ``abort_discovery_on_errors`` abort discovery service in case of errors
         self.abort_discovery_on_errors = abort_discovery_on_errors
         #: ``log_level`` the nvmeof gateway log level
@@ -1646,6 +1704,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.enable_monitor_client = enable_monitor_client
         #: ``monitor_client_log_file_dir`` the monitor client log output file file directory
         self.monitor_client_log_file_dir = monitor_client_log_file_dir
+        #: ``kmip_cert_dir`` directory for KMIP servers keys and certificates
+        self.kmip_cert_dir = kmip_cert_dir
 
     def get_port_start(self) -> List[int]:
         return [self.port, 4420, self.discovery_port, self.prometheus_port]
@@ -1734,6 +1794,7 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_non_negative_int(self.max_ns_to_change_lb_grp,
                                 "Max namespaces to change load balancing group")
         verify_boolean(self.abort_on_errors, "Abort gateway on errors")
+        verify_boolean(self.abort_on_update_error, "Abort gateway on an update error")
         verify_boolean(self.omap_file_ignore_unlock_errors, "Ignore OMAP file unlock errors")
         verify_boolean(self.omap_file_lock_on_read, "Lock OMAP on read")
         verify_non_negative_int(self.omap_file_lock_duration, "OMAP file lock duration")
@@ -1754,9 +1815,15 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_positive_int(self.max_hosts_per_subsystem, "Max hosts per subsystem")
         verify_non_negative_number(self.subsystem_cache_expiration,
                                    "Subsystem cache expiration period")
+        verify_boolean(self.force_tls, "Force TLS")
+        verify_positive_int(self.max_message_length_in_mb, "Max protocol message length")
+        verify_boolean(self.degrade_namespace_on_kmip_error, "Degrade namespace on KMIP error")
         verify_non_negative_number(self.monitor_timeout, "Monitor timeout")
         verify_non_negative_int(self.port, "Port")
         verify_non_negative_int(self.discovery_port, "Discovery port")
+        verify_int(self.discovery_bind_retries_limit, "Discovery port bind retries limit")
+        verify_non_negative_number(self.discovery_bind_sleep_interval,
+                                   "Sleep between discovery port bind retries")
         verify_boolean(self.abort_discovery_on_errors, "Abort discovery service on errors")
         verify_non_negative_int(self.prometheus_port, "Prometheus port")
         verify_non_negative_int(self.prometheus_stats_interval, "Prometheus stats interval")
@@ -1770,6 +1837,8 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_boolean(self.log_files_rotation_enabled, "Log files rotation enabled")
         verify_boolean(self.verbose_log_messages, "Verbose log messages")
         verify_boolean(self.enable_monitor_client, "Enable monitor client")
+        verify_boolean(self.enable_dsa_acceleration, "Enable DSA acceleration")
+        verify_boolean(self.rbd_with_crc32c, "Enable RBD CRC32C checksum reuse")
         verify_positive_int(self.spdk_mem_size, "SPDK memory size")
         verify_positive_int(self.spdk_huge_pages, "SPDK huge pages count")
         if self.spdk_mem_size and self.spdk_huge_pages:
@@ -3168,10 +3237,121 @@ class SMBClusterPublicIPSpec:
         return out
 
 
+class SMBClusterBindIPSpec:
+    """Control what IPs the SMB services will listen on, not including
+    dynamic IPs that are managed by CTDB.
+    """
+    def __init__(
+        self,
+        # single address
+        address: Optional[str] = None,
+        # >1 address specified as a network
+        network: Optional[str] = None,
+    ) -> None:
+        self.address = address
+        self.network = network
+        self._networks: List[Union[IPv4Network, IPv6Network]] = []
+        self.validate()
+
+    def validate(self) -> None:
+        if self.address and self.network:
+            raise SpecValidationError('only one of address or network may be given')
+        if not (self.address or self.network):
+            raise SpecValidationError('one of address or network is required')
+        if self.address:
+            # verify that address is an address
+            try:
+                ip_address(self.address)
+            except ValueError as err:
+                raise SpecValidationError(
+                    f'Cannot parse address {self.address}'
+                ) from err
+        # but we internallly store a list of networks
+        # this is slight bit of YAGNI violation, but I actually plan on
+        # adding IP ranges soon.
+        addr = self.network if self.network else self.address
+        try:
+            assert addr
+            self._networks = [ip_network(addr)]
+        except ValueError as err:
+            raise SpecValidationError(
+                f'Cannot parse network address {addr}'
+            ) from err
+
+    def as_networks(self) -> List[Union[IPv4Network, IPv6Network]]:
+        """Return a list of one or more IPv4 or IPv6 network objects."""
+        if not self._networks:
+            self.validate()
+        return self._networks
+
+    def as_network_strs(self) -> List[str]:
+        """Return a list of strings containing one or more network (<ip>/<mask>
+        style) values.
+        """
+        return [str(n) for n in self.as_networks()]
+
+    def __eq__(self, other: Any) -> bool:
+        try:
+            return (
+                other.address == self.address
+                and other.network == self.network
+            )
+        except AttributeError:
+            return NotImplemented
+
+    def __repr__(self) -> str:
+        if self.address:
+            return f'SMBClusterBindIPSpec(address={self.address!r})'
+        if self.network:
+            return f'SMBClusterBindIPSpec(network={self.network!r})'
+        raise ValueError('SMBClusterBindIPSpec missing address or network value')
+
+    def to_simplified(self) -> Dict[str, Any]:
+        """Return a serializable representation of SMBClusterBindIPSpec."""
+        if self.address:
+            return {'address': self.address}
+        if self.network:
+            return {'network': self.network}
+        raise ValueError('SMBClusterBindIPSpec missing address or network value')
+
+    def to_json(self) -> Dict[str, Any]:
+        """Return a JSON-compatible dict."""
+        return self.to_simplified()
+
+    @classmethod
+    def from_json(cls, spec: Dict[str, Any]) -> 'SMBClusterBindIPSpec':
+        """Convert value from a JSON-compatible dict."""
+        return cls(**spec)
+
+    @classmethod
+    def convert_list(
+        cls, arg: Optional[List[Any]]
+    ) -> Optional[List['SMBClusterBindIPSpec']]:
+        """Convert a list of values into a list of SMBClusterBindIPSpec objects.
+        Ignores None inputs returning None.
+        """
+        if arg is None:
+            return None
+        assert isinstance(arg, list)
+        out = []
+        for value in arg:
+            if isinstance(value, cls):
+                out.append(value)
+            elif hasattr(value, 'to_json'):
+                out.append(cls.from_json(value.to_json()))
+            elif isinstance(value, dict):
+                out.append(cls.from_json(value))
+            else:
+                raise SpecValidationError(
+                    f"Unknown type for SMBClusterBindIPSpec: {type(value)}"
+                )
+        return out
+
+
 class SMBSpec(ServiceSpec):
     service_type = 'smb'
-    _valid_features = {'domain', 'clustered', 'cephfs-proxy'}
-    _valid_service_names = {'smb', 'smbmetrics', 'ctdb'}
+    _valid_features = smbconst.FEATURES
+    _valid_service_names = smbconst.SERVICES
     _default_cluster_meta_obj = 'cluster.meta.json'
     _default_cluster_lock_obj = 'cluster.meta.lock'
 
@@ -3230,6 +3410,11 @@ class SMBSpec(ServiceSpec):
         # custom_ports - A mapping of services to ports. If a service is
         # not listed the default port will be used.
         custom_ports: Optional[Dict[str, int]] = None,
+        bind_addrs: Optional[List[SMBClusterBindIPSpec]] = None,
+        # === remote control server ===
+        remote_control_ssl_cert: Optional[str] = None,
+        remote_control_ssl_key: Optional[str] = None,
+        remote_control_ca_cert: Optional[str] = None,
         # --- genearal tweaks ---
         extra_container_args: Optional[GeneralArgList] = None,
         extra_entrypoint_args: Optional[GeneralArgList] = None,
@@ -3263,6 +3448,10 @@ class SMBSpec(ServiceSpec):
             cluster_public_addrs
         )
         self.custom_ports = custom_ports
+        self.bind_addrs = SMBClusterBindIPSpec.convert_list(bind_addrs)
+        self.remote_control_ssl_cert = remote_control_ssl_cert
+        self.remote_control_ssl_key = remote_control_ssl_key
+        self.remote_control_ca_cert = remote_control_ca_cert
         self.validate()
 
     def validate(self) -> None:
@@ -3276,23 +3465,24 @@ class SMBSpec(ServiceSpec):
                 raise ValueError(
                     f'invalid feature flags: {", ".join(invalid)}'
                 )
-        if 'clustered' in self.features and not self.cluster_meta_uri:
+        _clustered = smbconst.CLUSTERED
+        if _clustered in self.features and not self.cluster_meta_uri:
             # derive a cluster meta uri from config uri by default (if possible)
             self.cluster_meta_uri = self._derive_cluster_uri(
                 self.config_uri,
                 self._default_cluster_meta_obj,
             )
-        if 'clustered' not in self.features and self.cluster_meta_uri:
+        if _clustered not in self.features and self.cluster_meta_uri:
             raise ValueError(
                 'cluster meta uri unsupported when "clustered" feature not set'
             )
-        if 'clustered' in self.features and not self.cluster_lock_uri:
+        if _clustered in self.features and not self.cluster_lock_uri:
             # derive a cluster meta uri from config uri by default (if possible)
             self.cluster_lock_uri = self._derive_cluster_uri(
                 self.config_uri,
                 self._default_cluster_lock_obj,
             )
-        if 'clustered' not in self.features and self.cluster_lock_uri:
+        if _clustered not in self.features and self.cluster_lock_uri:
             raise ValueError(
                 'cluster lock uri unsupported when "clustered" feature not set'
             )
@@ -3311,11 +3501,7 @@ class SMBSpec(ServiceSpec):
         return uri
 
     def _default_ports(self) -> Dict[str, int]:
-        return {
-            'smb': 445,
-            'smbmetrics': 9922,
-            'ctdb': 4379,
-        }
+        return dict(smbconst.DEFAULT_PORTS)
 
     def service_ports(self) -> Dict[str, int]:
         ports = self._default_ports()
@@ -3324,17 +3510,26 @@ class SMBSpec(ServiceSpec):
         return ports
 
     def metrics_exporter_port(self) -> int:
-        return self.service_ports()['smbmetrics']
+        return self.service_ports()[smbconst.SMBMETRICS]
 
     def get_port_start(self) -> List[int]:
         _ports = self.service_ports()
-        ports = [_ports['smb'], _ports['smbmetrics']]
-        if 'clustered' in self.features:
-            ports.append(_ports['ctdb'])
+        ports = [_ports[smbconst.SMB], _ports[smbconst.SMBMETRICS]]
+        if smbconst.CLUSTERED in self.features:
+            ports.append(_ports[smbconst.CTDB])
         return ports
 
     def strict_cluster_ip_specs(self) -> List[Dict[str, Any]]:
         return [s.to_strict() for s in (self.cluster_public_addrs or [])]
+
+    def bind_networks(self) -> List[str]:
+        """Return a list of all networks (as an addr/mask) that this service is
+        permitted to bind to.
+        """
+        out = []
+        for ba in self.bind_addrs or []:
+            out.extend(ba.as_network_strs())
+        return out
 
     def to_json(self) -> "OrderedDict[str, Any]":
         obj = super().to_json()
@@ -3343,6 +3538,8 @@ class SMBSpec(ServiceSpec):
             spec['cluster_public_addrs'] = [
                 a.to_json() for a in spec['cluster_public_addrs']
             ]
+        if spec and spec.get('bind_addrs'):
+            spec['bind_addrs'] = [a.to_json() for a in spec['bind_addrs']]
         return obj
 
 

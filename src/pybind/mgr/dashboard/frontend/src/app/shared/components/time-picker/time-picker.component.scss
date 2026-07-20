@@ -1,0 +1,17 @@
+.timepicker {
+  &-dropdown {
+    align-items: flex-end;
+    display: flex;
+    justify-content: flex-end;
+
+    .cds--label {
+      padding-right: var(--cds-spacing-03);
+    }
+
+    ::ng-deep .cds--dropdown {
+      flex: 0 0 40%;
+      min-width: 170px;
+      width: 100% !important;
+    }
+  }
+}

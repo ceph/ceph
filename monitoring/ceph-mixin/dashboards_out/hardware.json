@@ -1,0 +1,2490 @@
+{
+   "__inputs": [ ],
+   "__requires": [ ],
+   "annotations": {
+      "list": [
+         {
+            "builtIn": 1,
+            "datasource": "-- Grafana --",
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "showIn": 0,
+            "tags": [ ],
+            "type": "dashboard"
+         }
+      ]
+   },
+   "description": "Comprehensive hardware monitoring with temperatures, fans, storage, and firmware from node-proxy",
+   "editable": false,
+   "gnetId": null,
+   "graphTooltip": 0,
+   "hideControls": false,
+   "id": null,
+   "links": [
+      {
+         "asDropdown": true,
+         "icon": "external link",
+         "includeVars": true,
+         "keepTime": true,
+         "tags": [ ],
+         "targetBlank": false,
+         "title": "Ceph Hardware - Overview",
+         "tooltip": "",
+         "type": "dashboards",
+         "url": ""
+      }
+   ],
+   "panels": [
+      {
+         "collapse": true,
+         "collapsed": true,
+         "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 0
+         },
+         "id": 2,
+         "panels": [
+            {
+               "colors": null,
+               "datasource": "$datasource",
+               "description": "Overall hardware health across all hosts",
+               "fieldConfig": {
+                  "defaults": {
+                     "mappings": [
+                        {
+                           "options": {
+                              "0": {
+                                 "color": "green",
+                                 "index": 0,
+                                 "text": "OK"
+                              }
+                           },
+                           "type": "value"
+                        },
+                        {
+                           "options": {
+                              "from": 1,
+                              "result": {
+                                 "color": "semi-dark-red",
+                                 "index": 1,
+                                 "text": "NOT OK"
+                              },
+                              "to": 999
+                           },
+                           "type": "range"
+                        }
+                     ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           },
+                           {
+                              "color": "red",
+                              "value": 1
+                           }
+                        ]
+                     }
+                  }
+               },
+               "gridPos": {
+                  "h": 4,
+                  "w": 4,
+                  "x": 0,
+                  "y": 1
+               },
+               "id": 3,
+               "links": [ ],
+               "options": {
+                  "colorMode": "background_solid",
+                  "graphMode": "none",
+                  "justifyMode": "auto",
+                  "orientation": "horizontal",
+                  "reduceOptions": {
+                     "calcs": [
+                        "lastNotNull"
+                     ],
+                     "fields": "",
+                     "values": false
+                  },
+                  "textMode": "auto"
+               },
+               "pluginVersion": "9.1.3",
+               "targets": [
+                  {
+                     "expr": "max(ceph_hardware_health)",
+                     "format": "time_series",
+                     "intervalFactor": 1,
+                     "legendFormat": "Health",
+                     "refId": "A"
+                  }
+               ],
+               "title": "Health",
+               "transparent": false,
+               "type": "stat"
+            },
+            {
+               "datasource": "$datasource",
+               "description": "Highest CPU temperature across all hosts",
+               "fieldConfig": {
+                  "defaults": {
+                     "links": [ ],
+                     "mappings": [ ],
+                     "max": 100,
+                     "min": 0,
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           },
+                           {
+                              "color": "#EAB839",
+                              "value": 75
+                           },
+                           {
+                              "color": "red",
+                              "value": 85
+                           }
+                        ]
+                     },
+                     "unit": "celsius"
+                  }
+               },
+               "gridPos": {
+                  "h": 4,
+                  "w": 3,
+                  "x": 4,
+                  "y": 1
+               },
+               "id": 4,
+               "interval": "1m",
+               "links": [ ],
+               "maxDataPoints": 100,
+               "options": {
+                  "reduceOptions": {
+                     "calcs": [
+                        "lastNotNull"
+                     ],
+                     "fields": "",
+                     "values": false
+                  },
+                  "showThresholdLabels": false,
+                  "showThresholdMarkers": true
+               },
+               "pluginVersion": "9.1.3",
+               "targets": [
+                  {
+                     "expr": "max(ceph_hardware_temperature_celsius{sensor_name=~\".*CPU_TEMP\"})",
+                     "format": "time_series",
+                     "intervalFactor": 1,
+                     "legendFormat": "CPU",
+                     "refId": "A"
+                  }
+               ],
+               "title": "CPU Temp",
+               "transparent": false,
+               "type": "gauge"
+            },
+            {
+               "datasource": "$datasource",
+               "description": "",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "palette-classic"
+                     },
+                     "custom": {
+                        "hideFrom": {
+                           "legend": false,
+                           "tooltip": false,
+                           "viz": false
+                        }
+                     },
+                     "mappings": [ ]
+                  },
+                  "overrides": [ ]
+               },
+               "gridPos": {
+                  "h": 8,
+                  "w": 3,
+                  "x": 7,
+                  "y": 1
+               },
+               "id": 5,
+               "options": {
+                  "displayLabels": [
+                     "name",
+                     "value"
+                  ],
+                  "legend": {
+                     "calcs": [ ],
+                     "displayMode": "table",
+                     "placement": "bottom",
+                     "showLegend": true,
+                     "values": [ ]
+                  },
+                  "pieType": "donut",
+                  "reduceOptions": { },
+                  "tooltip": { }
+               },
+               "targets": [
+                  {
+                     "expr": "count by(version) (ceph_hardware_firmware_info{component=~\".*BMC.*\"})",
+                     "format": "time_series",
+                     "intervalFactor": 1,
+                     "legendFormat": "{{version}}",
+                     "refId": "A"
+                  }
+               ],
+               "title": "BMC Versions",
+               "type": "piechart"
+            },
+            {
+               "datasource": "$datasource",
+               "description": "",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "palette-classic"
+                     },
+                     "custom": {
+                        "hideFrom": {
+                           "legend": false,
+                           "tooltip": false,
+                           "viz": false
+                        }
+                     },
+                     "mappings": [ ]
+                  },
+                  "overrides": [ ]
+               },
+               "gridPos": {
+                  "h": 8,
+                  "w": 3,
+                  "x": 10,
+                  "y": 1
+               },
+               "id": 6,
+               "options": {
+                  "displayLabels": [
+                     "name",
+                     "value"
+                  ],
+                  "legend": {
+                     "calcs": [ ],
+                     "displayMode": "table",
+                     "placement": "bottom",
+                     "showLegend": true,
+                     "values": [ ]
+                  },
+                  "pieType": "donut",
+                  "reduceOptions": { },
+                  "tooltip": { }
+               },
+               "targets": [
+                  {
+                     "expr": "count by(version) (ceph_hardware_firmware_info{component=~\".*BIOS.*\"})",
+                     "format": "time_series",
+                     "intervalFactor": 1,
+                     "legendFormat": "{{version}}",
+                     "refId": "A"
+                  }
+               ],
+               "title": "BIOS Versions",
+               "type": "piechart"
+            },
+            {
+               "datasource": "$datasource",
+               "description": "",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "palette-classic"
+                     },
+                     "custom": {
+                        "hideFrom": {
+                           "legend": false,
+                           "tooltip": false,
+                           "viz": false
+                        }
+                     },
+                     "mappings": [ ]
+                  },
+                  "overrides": [ ]
+               },
+               "gridPos": {
+                  "h": 8,
+                  "w": 6,
+                  "x": 13,
+                  "y": 1
+               },
+               "id": 7,
+               "options": {
+                  "displayLabels": [
+                     "value"
+                  ],
+                  "legend": {
+                     "calcs": [ ],
+                     "displayMode": "table",
+                     "placement": "right",
+                     "showLegend": true,
+                     "values": [ ]
+                  },
+                  "pieType": "donut",
+                  "reduceOptions": { },
+                  "tooltip": { }
+               },
+               "targets": [
+                  {
+                     "expr": "count by(model) (ceph_hardware_storage_capacity_bytes)",
+                     "format": "time_series",
+                     "intervalFactor": 1,
+                     "legendFormat": "{{model}}",
+                     "refId": "A"
+                  }
+               ],
+               "title": "Drive Types",
+               "type": "piechart"
+            },
+            {
+               "datasource": "$datasource",
+               "description": "",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "palette-classic"
+                     },
+                     "custom": {
+                        "hideFrom": {
+                           "legend": false,
+                           "tooltip": false,
+                           "viz": false
+                        }
+                     },
+                     "mappings": [ ]
+                  },
+                  "overrides": [ ]
+               },
+               "gridPos": {
+                  "h": 8,
+                  "w": 5,
+                  "x": 19,
+                  "y": 1
+               },
+               "id": 8,
+               "options": {
+                  "displayLabels": [
+                     "value"
+                  ],
+                  "legend": {
+                     "calcs": [ ],
+                     "displayMode": "table",
+                     "placement": "right",
+                     "showLegend": true,
+                     "values": [ ]
+                  },
+                  "pieType": "donut",
+                  "reduceOptions": { },
+                  "tooltip": { }
+               },
+               "targets": [
+                  {
+                     "expr": "count by(firmware_version) (ceph_hardware_storage_capacity_bytes{firmware_version!=\"unknown\"})",
+                     "format": "time_series",
+                     "instant": true,
+                     "intervalFactor": 1,
+                     "legendFormat": "{{firmware_version}}",
+                     "refId": "A"
+                  }
+               ],
+               "title": "Drive Firmware",
+               "type": "piechart"
+            },
+            {
+               "colors": null,
+               "datasource": "$datasource",
+               "description": "Total hosts with hardware monitoring",
+               "fieldConfig": {
+                  "defaults": {
+                     "decimals": 0,
+                     "links": [ ],
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "short"
+                  }
+               },
+               "gridPos": {
+                  "h": 4,
+                  "w": 2,
+                  "x": 0,
+                  "y": 5
+               },
+               "id": 9,
+               "links": [ ],
+               "options": {
+                  "colorMode": "none",
+                  "graphMode": "none",
+                  "justifyMode": "auto",
+                  "orientation": "horizontal",
+                  "reduceOptions": {
+                     "calcs": [
+                        "lastNotNull"
+                     ],
+                     "fields": "",
+                     "values": false
+                  },
+                  "textMode": "auto"
+               },
+               "pluginVersion": "9.1.3",
+               "targets": [
+                  {
+                     "expr": "count(count by(hostname) (ceph_hardware_health))",
+                     "format": "time_series",
+                     "intervalFactor": 1,
+                     "legendFormat": "Hosts",
+                     "refId": "A"
+                  }
+               ],
+               "title": "Hosts",
+               "transparent": false,
+               "type": "stat"
+            },
+            {
+               "colors": null,
+               "datasource": "$datasource",
+               "description": "Total storage drives detected",
+               "fieldConfig": {
+                  "defaults": {
+                     "decimals": 0,
+                     "links": [ ],
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "short"
+                  }
+               },
+               "gridPos": {
+                  "h": 4,
+                  "w": 2,
+                  "x": 2,
+                  "y": 5
+               },
+               "id": 10,
+               "links": [ ],
+               "options": {
+                  "colorMode": "none",
+                  "graphMode": "none",
+                  "justifyMode": "auto",
+                  "orientation": "horizontal",
+                  "reduceOptions": {
+                     "calcs": [
+                        "lastNotNull"
+                     ],
+                     "fields": "",
+                     "values": false
+                  },
+                  "textMode": "auto"
+               },
+               "pluginVersion": "9.1.3",
+               "targets": [
+                  {
+                     "expr": "count(ceph_hardware_storage_capacity_bytes)",
+                     "format": "time_series",
+                     "intervalFactor": 1,
+                     "legendFormat": "Drives",
+                     "refId": "A"
+                  }
+               ],
+               "title": "Drives",
+               "transparent": false,
+               "type": "stat"
+            },
+            {
+               "datasource": "$datasource",
+               "description": "Highest NVMe drive temperature across all hosts",
+               "fieldConfig": {
+                  "defaults": {
+                     "links": [ ],
+                     "mappings": [ ],
+                     "max": 85,
+                     "min": 0,
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           },
+                           {
+                              "color": "yellow",
+                              "value": 75
+                           },
+                           {
+                              "color": "red",
+                              "value": 80
+                           }
+                        ]
+                     },
+                     "unit": "celsius"
+                  }
+               },
+               "gridPos": {
+                  "h": 4,
+                  "w": 3,
+                  "x": 4,
+                  "y": 5
+               },
+               "id": 11,
+               "interval": "1m",
+               "links": [ ],
+               "maxDataPoints": 100,
+               "options": {
+                  "reduceOptions": {
+                     "calcs": [
+                        "lastNotNull"
+                     ],
+                     "fields": "",
+                     "values": false
+                  },
+                  "showThresholdLabels": false,
+                  "showThresholdMarkers": true
+               },
+               "pluginVersion": "9.1.3",
+               "targets": [
+                  {
+                     "expr": "max(ceph_hardware_temperature_celsius{sensor_name=~\"NVME.*_TEMP\"})",
+                     "format": "time_series",
+                     "intervalFactor": 1,
+                     "legendFormat": "NVMe",
+                     "refId": "A"
+                  }
+               ],
+               "title": "NVMe Temp",
+               "transparent": false,
+               "type": "gauge"
+            }
+         ],
+         "repeat": null,
+         "repeatIteration": null,
+         "repeatRowId": null,
+         "showTitle": true,
+         "title": "Overview",
+         "titleSize": "h6",
+         "type": "row"
+      },
+      {
+         "collapse": true,
+         "collapsed": true,
+         "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 1
+         },
+         "id": 12,
+         "panels": [
+            {
+               "colors": null,
+               "datasource": "$datasource",
+               "description": "Power supply health status",
+               "fieldConfig": {
+                  "defaults": {
+                     "mappings": [
+                        {
+                           "options": {
+                              "0": {
+                                 "color": "green",
+                                 "index": 0,
+                                 "text": "OK"
+                              }
+                           },
+                           "type": "value"
+                        },
+                        {
+                           "options": {
+                              "from": 1,
+                              "result": {
+                                 "color": "red",
+                                 "index": 1,
+                                 "text": "NOT OK"
+                              },
+                              "to": 9999
+                           },
+                           "type": "range"
+                        }
+                     ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           },
+                           {
+                              "color": "red",
+                              "value": 1
+                           }
+                        ]
+                     }
+                  }
+               },
+               "gridPos": {
+                  "h": 3,
+                  "w": 2,
+                  "x": 0,
+                  "y": 2
+               },
+               "id": 13,
+               "links": [ ],
+               "options": {
+                  "colorMode": "background_solid",
+                  "graphMode": "none",
+                  "justifyMode": "auto",
+                  "orientation": "horizontal",
+                  "reduceOptions": {
+                     "calcs": [
+                        "lastNotNull"
+                     ],
+                     "fields": "",
+                     "values": false
+                  },
+                  "textMode": "auto"
+               },
+               "pluginVersion": "9.1.3",
+               "targets": [
+                  {
+                     "expr": "max(ceph_hardware_health{hostname=~\"$hostname\",category=\"power\"})",
+                     "format": "time_series",
+                     "intervalFactor": 1,
+                     "legendFormat": "Power",
+                     "refId": "A"
+                  }
+               ],
+               "title": "Power",
+               "transparent": false,
+               "type": "stat"
+            },
+            {
+               "colors": null,
+               "datasource": "$datasource",
+               "description": "Highest motherboard temperature",
+               "fieldConfig": {
+                  "defaults": {
+                     "decimals": 0,
+                     "links": [ ],
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           },
+                           {
+                              "color": "#EAB839",
+                              "value": 70
+                           },
+                           {
+                              "color": "red",
+                              "value": 80
+                           }
+                        ]
+                     },
+                     "unit": "celsius"
+                  }
+               },
+               "gridPos": {
+                  "h": 4,
+                  "w": 3,
+                  "x": 2,
+                  "y": 2
+               },
+               "id": 14,
+               "links": [ ],
+               "options": {
+                  "colorMode": "none",
+                  "graphMode": "area",
+                  "justifyMode": "auto",
+                  "orientation": "horizontal",
+                  "reduceOptions": {
+                     "calcs": [
+                        "lastNotNull"
+                     ],
+                     "fields": "",
+                     "values": false
+                  },
+                  "textMode": "auto"
+               },
+               "pluginVersion": "9.1.3",
+               "targets": [
+                  {
+                     "expr": "max(ceph_hardware_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\".*MB_TEMP.*\"})",
+                     "format": "time_series",
+                     "intervalFactor": 1,
+                     "legendFormat": "Motherboard",
+                     "refId": "A"
+                  }
+               ],
+               "title": "MB Temperature (max)",
+               "transparent": false,
+               "type": "stat"
+            },
+            {
+               "colors": null,
+               "datasource": "$datasource",
+               "description": "Average CPU temperature",
+               "fieldConfig": {
+                  "defaults": {
+                     "decimals": 0,
+                     "links": [ ],
+                     "mappings": [ ],
+                     "max": 85,
+                     "min": 0,
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           },
+                           {
+                              "color": "#EAB839",
+                              "value": 80
+                           },
+                           {
+                              "color": "semi-dark-red",
+                              "value": 90
+                           }
+                        ]
+                     },
+                     "unit": "celsius"
+                  }
+               },
+               "gridPos": {
+                  "h": 4,
+                  "w": 3,
+                  "x": 5,
+                  "y": 2
+               },
+               "id": 15,
+               "links": [ ],
+               "options": {
+                  "colorMode": "none",
+                  "graphMode": "area",
+                  "justifyMode": "auto",
+                  "orientation": "horizontal",
+                  "reduceOptions": {
+                     "calcs": [
+                        "lastNotNull"
+                     ],
+                     "fields": "",
+                     "values": false
+                  },
+                  "textMode": "auto"
+               },
+               "pluginVersion": "9.1.3",
+               "targets": [
+                  {
+                     "expr": "avg(ceph_hardware_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\".*CPU_TEMP\"})",
+                     "format": "time_series",
+                     "intervalFactor": 1,
+                     "legendFormat": "CPU",
+                     "refId": "A"
+                  }
+               ],
+               "title": "CPU Temperature",
+               "transparent": false,
+               "type": "stat"
+            },
+            {
+               "colors": null,
+               "datasource": "$datasource",
+               "description": "Highest DIMM temperature",
+               "fieldConfig": {
+                  "defaults": {
+                     "decimals": 0,
+                     "links": [ ],
+                     "mappings": [ ],
+                     "max": 88,
+                     "min": 0,
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           },
+                           {
+                              "color": "yellow",
+                              "value": 70
+                           },
+                           {
+                              "color": "semi-dark-red",
+                              "value": 80
+                           }
+                        ]
+                     },
+                     "unit": "celsius"
+                  }
+               },
+               "gridPos": {
+                  "h": 4,
+                  "w": 3,
+                  "x": 8,
+                  "y": 2
+               },
+               "id": 16,
+               "links": [ ],
+               "options": {
+                  "colorMode": "none",
+                  "graphMode": "area",
+                  "justifyMode": "auto",
+                  "orientation": "horizontal",
+                  "reduceOptions": {
+                     "calcs": [
+                        "lastNotNull"
+                     ],
+                     "fields": "",
+                     "values": false
+                  },
+                  "textMode": "auto"
+               },
+               "pluginVersion": "9.1.3",
+               "targets": [
+                  {
+                     "expr": "max(ceph_hardware_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\".*DIMM.*_TEMP\"})",
+                     "format": "time_series",
+                     "intervalFactor": 1,
+                     "legendFormat": "DIMM",
+                     "refId": "A"
+                  }
+               ],
+               "title": "DIMM Temperature (max)",
+               "transparent": false,
+               "type": "stat"
+            },
+            {
+               "colors": null,
+               "datasource": "$datasource",
+               "description": "Number of PSU fans detected",
+               "fieldConfig": {
+                  "defaults": {
+                     "decimals": 0,
+                     "links": [ ],
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "short"
+                  }
+               },
+               "gridPos": {
+                  "h": 4,
+                  "w": 3,
+                  "x": 11,
+                  "y": 2
+               },
+               "id": 17,
+               "links": [ ],
+               "options": {
+                  "colorMode": "none",
+                  "graphMode": "none",
+                  "justifyMode": "auto",
+                  "orientation": "horizontal",
+                  "reduceOptions": {
+                     "calcs": [
+                        "lastNotNull"
+                     ],
+                     "fields": "",
+                     "values": false
+                  },
+                  "textMode": "auto"
+               },
+               "pluginVersion": "9.1.3",
+               "targets": [
+                  {
+                     "expr": "count(ceph_hardware_fan_rpm{hostname=~\"$hostname\", fan_name=~\"PSU.*\"})",
+                     "format": "time_series",
+                     "intervalFactor": 1,
+                     "legendFormat": "PSU Fans",
+                     "refId": "A"
+                  }
+               ],
+               "title": "PSU Fans",
+               "transparent": false,
+               "type": "stat"
+            },
+            {
+               "colors": null,
+               "datasource": "$datasource",
+               "description": "Average power supply temperature",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "fixedColor": "blue",
+                        "mode": "fixed"
+                     },
+                     "decimals": 0,
+                     "links": [ ],
+                     "mappings": [ ],
+                     "max": 100,
+                     "min": 0,
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           },
+                           {
+                              "color": "yellow",
+                              "value": 80
+                           },
+                           {
+                              "color": "semi-dark-red",
+                              "value": 90
+                           }
+                        ]
+                     },
+                     "unit": "celsius"
+                  }
+               },
+               "gridPos": {
+                  "h": 4,
+                  "w": 3,
+                  "x": 14,
+                  "y": 2
+               },
+               "id": 18,
+               "links": [ ],
+               "options": {
+                  "colorMode": "none",
+                  "graphMode": "area",
+                  "justifyMode": "auto",
+                  "orientation": "horizontal",
+                  "reduceOptions": {
+                     "calcs": [
+                        "lastNotNull"
+                     ],
+                     "fields": "",
+                     "values": false
+                  },
+                  "textMode": "auto"
+               },
+               "pluginVersion": "9.1.3",
+               "targets": [
+                  {
+                     "expr": "avg(ceph_hardware_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\"PSU.*_TEMP.*\"})",
+                     "format": "time_series",
+                     "intervalFactor": 1,
+                     "legendFormat": "PSU",
+                     "refId": "A"
+                  }
+               ],
+               "title": "AVG PSU Temperature",
+               "transparent": false,
+               "type": "stat"
+            },
+            {
+               "colors": null,
+               "datasource": "$datasource",
+               "description": "Number of NVMe drives detected",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "fixedColor": "blue",
+                        "mode": "thresholds"
+                     },
+                     "decimals": 0,
+                     "links": [ ],
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           },
+                           {
+                              "color": "#EAB839",
+                              "value": 70
+                           },
+                           {
+                              "color": "semi-dark-red",
+                              "value": 78
+                           }
+                        ]
+                     },
+                     "unit": "short"
+                  }
+               },
+               "gridPos": {
+                  "h": 4,
+                  "w": 3,
+                  "x": 17,
+                  "y": 2
+               },
+               "id": 19,
+               "links": [ ],
+               "options": {
+                  "colorMode": "none",
+                  "graphMode": "none",
+                  "justifyMode": "auto",
+                  "orientation": "horizontal",
+                  "reduceOptions": {
+                     "calcs": [
+                        "lastNotNull"
+                     ],
+                     "fields": "",
+                     "values": false
+                  },
+                  "textMode": "auto"
+               },
+               "pluginVersion": "9.1.3",
+               "targets": [
+                  {
+                     "expr": "count(ceph_hardware_storage_capacity_bytes{hostname=~\"$hostname\", protocol=\"NVMe\"})",
+                     "format": "time_series",
+                     "intervalFactor": 1,
+                     "legendFormat": "NVMe",
+                     "refId": "A"
+                  }
+               ],
+               "title": "NVMe Drives",
+               "transparent": false,
+               "type": "stat"
+            },
+            {
+               "colors": null,
+               "datasource": "$datasource",
+               "description": "Highest NVMe drive temperature",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "fixedColor": "blue",
+                        "mode": "thresholds"
+                     },
+                     "decimals": 0,
+                     "links": [ ],
+                     "mappings": [ ],
+                     "max": 85,
+                     "min": 0,
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           },
+                           {
+                              "color": "#EAB839",
+                              "value": 70
+                           },
+                           {
+                              "color": "semi-dark-red",
+                              "value": 78
+                           }
+                        ]
+                     },
+                     "unit": "celsius"
+                  }
+               },
+               "gridPos": {
+                  "h": 4,
+                  "w": 3,
+                  "x": 20,
+                  "y": 2
+               },
+               "id": 20,
+               "links": [ ],
+               "options": {
+                  "colorMode": "none",
+                  "graphMode": "area",
+                  "justifyMode": "auto",
+                  "orientation": "horizontal",
+                  "reduceOptions": {
+                     "calcs": [
+                        "lastNotNull"
+                     ],
+                     "fields": "",
+                     "values": false
+                  },
+                  "textMode": "auto"
+               },
+               "pluginVersion": "9.1.3",
+               "targets": [
+                  {
+                     "expr": "max(ceph_hardware_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\"NVME.*\"})",
+                     "format": "time_series",
+                     "intervalFactor": 1,
+                     "legendFormat": "NVMe",
+                     "refId": "A"
+                  }
+               ],
+               "title": "NVMe Temperature (max)",
+               "transparent": false,
+               "type": "stat"
+            },
+            {
+               "colors": null,
+               "datasource": "$datasource",
+               "description": "Network adapter health status",
+               "fieldConfig": {
+                  "defaults": {
+                     "mappings": [
+                        {
+                           "options": {
+                              "0": {
+                                 "color": "green",
+                                 "index": 0,
+                                 "text": "OK"
+                              }
+                           },
+                           "type": "value"
+                        },
+                        {
+                           "options": {
+                              "from": 1,
+                              "result": {
+                                 "color": "red",
+                                 "index": 1,
+                                 "text": "NOT OK"
+                              },
+                              "to": 9999
+                           },
+                           "type": "range"
+                        }
+                     ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           },
+                           {
+                              "color": "red",
+                              "value": 1
+                           }
+                        ]
+                     }
+                  }
+               },
+               "gridPos": {
+                  "h": 3,
+                  "w": 2,
+                  "x": 0,
+                  "y": 5
+               },
+               "id": 21,
+               "links": [ ],
+               "options": {
+                  "colorMode": "background_solid",
+                  "graphMode": "none",
+                  "justifyMode": "auto",
+                  "orientation": "horizontal",
+                  "reduceOptions": {
+                     "calcs": [
+                        "lastNotNull"
+                     ],
+                     "fields": "",
+                     "values": false
+                  },
+                  "textMode": "auto"
+               },
+               "pluginVersion": "9.1.3",
+               "targets": [
+                  {
+                     "expr": "max(ceph_hardware_health{hostname=~\"$hostname\",category=\"network\"})",
+                     "format": "time_series",
+                     "intervalFactor": 1,
+                     "legendFormat": "Network",
+                     "refId": "A"
+                  }
+               ],
+               "title": "Network",
+               "transparent": false,
+               "type": "stat"
+            },
+            {
+               "colors": null,
+               "datasource": "$datasource",
+               "description": "Cooling fans health status",
+               "fieldConfig": {
+                  "defaults": {
+                     "mappings": [
+                        {
+                           "options": {
+                              "0": {
+                                 "color": "green",
+                                 "index": 0,
+                                 "text": "OK"
+                              }
+                           },
+                           "type": "value"
+                        },
+                        {
+                           "options": {
+                              "from": 1,
+                              "result": {
+                                 "color": "red",
+                                 "index": 1,
+                                 "text": "NOT OK"
+                              },
+                              "to": 9999
+                           },
+                           "type": "range"
+                        }
+                     ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           },
+                           {
+                              "color": "red",
+                              "value": 1
+                           }
+                        ]
+                     }
+                  }
+               },
+               "gridPos": {
+                  "h": 3,
+                  "w": 2,
+                  "x": 0,
+                  "y": 8
+               },
+               "id": 22,
+               "links": [ ],
+               "options": {
+                  "colorMode": "background_solid",
+                  "graphMode": "none",
+                  "justifyMode": "auto",
+                  "orientation": "horizontal",
+                  "reduceOptions": {
+                     "calcs": [
+                        "lastNotNull"
+                     ],
+                     "fields": "",
+                     "values": false
+                  },
+                  "textMode": "auto"
+               },
+               "pluginVersion": "9.1.3",
+               "targets": [
+                  {
+                     "expr": "max(ceph_hardware_health{hostname=~\"$hostname\",category=\"fans\"})",
+                     "format": "time_series",
+                     "intervalFactor": 1,
+                     "legendFormat": "Cooling",
+                     "refId": "A"
+                  }
+               ],
+               "title": "Cooling",
+               "transparent": false,
+               "type": "stat"
+            },
+            {
+               "colors": null,
+               "datasource": "$datasource",
+               "description": "Storage drives health status",
+               "fieldConfig": {
+                  "defaults": {
+                     "mappings": [
+                        {
+                           "options": {
+                              "0": {
+                                 "color": "green",
+                                 "index": 0,
+                                 "text": "OK"
+                              }
+                           },
+                           "type": "value"
+                        },
+                        {
+                           "options": {
+                              "from": 1,
+                              "result": {
+                                 "color": "red",
+                                 "index": 1,
+                                 "text": "NOT OK"
+                              },
+                              "to": 9999
+                           },
+                           "type": "range"
+                        }
+                     ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           },
+                           {
+                              "color": "red",
+                              "value": 1
+                           }
+                        ]
+                     }
+                  }
+               },
+               "gridPos": {
+                  "h": 3,
+                  "w": 2,
+                  "x": 0,
+                  "y": 11
+               },
+               "id": 23,
+               "links": [ ],
+               "options": {
+                  "colorMode": "background_solid",
+                  "graphMode": "none",
+                  "justifyMode": "auto",
+                  "orientation": "horizontal",
+                  "reduceOptions": {
+                     "calcs": [
+                        "lastNotNull"
+                     ],
+                     "fields": "",
+                     "values": false
+                  },
+                  "textMode": "auto"
+               },
+               "pluginVersion": "9.1.3",
+               "targets": [
+                  {
+                     "expr": "max(ceph_hardware_health{hostname=~\"$hostname\",category=\"storage\"})",
+                     "format": "time_series",
+                     "intervalFactor": 1,
+                     "legendFormat": "Drives",
+                     "refId": "A"
+                  }
+               ],
+               "title": "Drives",
+               "transparent": false,
+               "type": "stat"
+            },
+            {
+               "columns": [ ],
+               "datasource": "$datasource",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "align": "auto",
+                        "cellOptions": {
+                           "type": "auto"
+                        },
+                        "filterable": false,
+                        "inspect": false
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green",
+                              "value": null
+                           }
+                        ]
+                     }
+                  },
+                  "overrides": [ ]
+               },
+               "gridPos": {
+                  "h": 8,
+                  "w": 11,
+                  "x": 2,
+                  "y": 6
+               },
+               "id": 24,
+               "links": [ ],
+               "options": {
+                  "footer": {
+                     "show": false
+                  },
+                  "showHeader": true
+               },
+               "pluginVersion": "9.1.3",
+               "styles": [ ],
+               "targets": [
+                  {
+                     "expr": "ceph_hardware_storage_capacity_bytes{hostname=~\"$hostname\"}",
+                     "format": "table",
+                     "instant": true,
+                     "intervalFactor": 1,
+                     "legendFormat": "",
+                     "refId": "A"
+                  }
+               ],
+               "timeFrom": null,
+               "timeShift": null,
+               "title": "Device List",
+               "transformations": [
+                  {
+                     "id": "organize",
+                     "options": {
+                        "excludeByName": {
+                           "Time": true,
+                           "Value": true,
+                           "__name__": true,
+                           "cluster": true,
+                           "hostname": true,
+                           "instance": true,
+                           "job": true
+                        },
+                        "renameByName": {
+                           "device": "Device Name",
+                           "model": "Drive Model",
+                           "protocol": "Protocol"
+                        }
+                     }
+                  }
+               ],
+               "type": "table"
+            },
+            {
+               "columns": [ ],
+               "datasource": "$datasource",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "align": "auto",
+                        "cellOptions": {
+                           "type": "auto"
+                        },
+                        "filterable": false,
+                        "inspect": false
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green",
+                              "value": null
+                           }
+                        ]
+                     }
+                  },
+                  "overrides": [ ]
+               },
+               "gridPos": {
+                  "h": 8,
+                  "w": 11,
+                  "x": 13,
+                  "y": 6
+               },
+               "id": 25,
+               "links": [ ],
+               "options": {
+                  "footer": {
+                     "show": false
+                  },
+                  "showHeader": true
+               },
+               "pluginVersion": "9.1.3",
+               "styles": [ ],
+               "targets": [
+                  {
+                     "expr": "ceph_hardware_firmware_info{hostname=~\"$hostname\"}",
+                     "format": "table",
+                     "instant": true,
+                     "intervalFactor": 1,
+                     "legendFormat": "",
+                     "refId": "A"
+                  }
+               ],
+               "timeFrom": null,
+               "timeShift": null,
+               "title": "Platform Firmware",
+               "transformations": [
+                  {
+                     "id": "organize",
+                     "options": {
+                        "excludeByName": {
+                           "Time": true,
+                           "Value": true,
+                           "__name__": true,
+                           "cluster": true,
+                           "hostname": true,
+                           "instance": true,
+                           "job": true
+                        },
+                        "renameByName": {
+                           "component": "Component",
+                           "version": "Version"
+                        }
+                     }
+                  }
+               ],
+               "type": "table"
+            }
+         ],
+         "repeat": null,
+         "repeatIteration": null,
+         "repeatRowId": null,
+         "showTitle": true,
+         "title": "Host Overview: $hostname",
+         "titleSize": "h6",
+         "type": "row"
+      },
+      {
+         "collapse": true,
+         "collapsed": true,
+         "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 2
+         },
+         "id": 26,
+         "panels": [
+            {
+               "colors": null,
+               "datasource": "$datasource",
+               "description": "",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "fixedColor": "blue",
+                        "mode": "fixed"
+                     },
+                     "decimals": 0,
+                     "links": [ ],
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "locale"
+                  }
+               },
+               "gridPos": {
+                  "h": 5,
+                  "w": 4,
+                  "x": 0,
+                  "y": 3
+               },
+               "id": 27,
+               "links": [ ],
+               "maxPerRow": 6,
+               "options": {
+                  "colorMode": "none",
+                  "graphMode": "area",
+                  "justifyMode": "auto",
+                  "orientation": "horizontal",
+                  "reduceOptions": {
+                     "calcs": [
+                        "lastNotNull"
+                     ],
+                     "fields": "",
+                     "values": false
+                  },
+                  "textMode": "auto"
+               },
+               "pluginVersion": "9.1.3",
+               "repeat": "fan_speeds",
+               "repeatDirection": "h",
+               "targets": [
+                  {
+                     "expr": "ceph_hardware_fan_rpm{hostname=~\"$hostname\",fan_name=~\"$fan_speeds\"}",
+                     "format": "time_series",
+                     "intervalFactor": 1,
+                     "legendFormat": "{{fan_name}}",
+                     "refId": "A"
+                  }
+               ],
+               "title": "FAN: $fan_speeds (RPM)",
+               "transparent": false,
+               "type": "stat"
+            },
+            {
+               "colors": null,
+               "datasource": "$datasource",
+               "description": "",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "fixedColor": "blue",
+                        "mode": "fixed"
+                     },
+                     "decimals": 0,
+                     "links": [ ],
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "locale"
+                  }
+               },
+               "gridPos": {
+                  "h": 5,
+                  "w": 4,
+                  "x": 0,
+                  "y": 8
+               },
+               "id": 28,
+               "links": [ ],
+               "options": {
+                  "colorMode": "none",
+                  "graphMode": "area",
+                  "justifyMode": "auto",
+                  "orientation": "horizontal",
+                  "reduceOptions": {
+                     "calcs": [
+                        "lastNotNull"
+                     ],
+                     "fields": "",
+                     "values": false
+                  },
+                  "textMode": "auto"
+               },
+               "pluginVersion": "9.1.3",
+               "targets": [
+                  {
+                     "expr": "ceph_hardware_fan_rpm{hostname=~\"$hostname\",fan_name=~\"PSU1.*\"}",
+                     "format": "time_series",
+                     "intervalFactor": 1,
+                     "legendFormat": "{{fan_name}}",
+                     "refId": "A"
+                  }
+               ],
+               "title": "PSU1 Fan Speed (RPM)",
+               "transparent": false,
+               "type": "stat"
+            },
+            {
+               "colors": null,
+               "datasource": "$datasource",
+               "description": "",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "fixedColor": "blue",
+                        "mode": "fixed"
+                     },
+                     "decimals": 0,
+                     "links": [ ],
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "locale"
+                  }
+               },
+               "gridPos": {
+                  "h": 5,
+                  "w": 4,
+                  "x": 4,
+                  "y": 8
+               },
+               "id": 29,
+               "links": [ ],
+               "options": {
+                  "colorMode": "none",
+                  "graphMode": "area",
+                  "justifyMode": "auto",
+                  "orientation": "horizontal",
+                  "reduceOptions": {
+                     "calcs": [
+                        "lastNotNull"
+                     ],
+                     "fields": "",
+                     "values": false
+                  },
+                  "textMode": "auto"
+               },
+               "pluginVersion": "9.1.3",
+               "targets": [
+                  {
+                     "expr": "ceph_hardware_fan_rpm{hostname=~\"$hostname\",fan_name=~\"PSU2.*\"}",
+                     "format": "time_series",
+                     "intervalFactor": 1,
+                     "legendFormat": "{{fan_name}}",
+                     "refId": "A"
+                  }
+               ],
+               "title": "PSU2 Fan Speed (RPM)",
+               "transparent": false,
+               "type": "stat"
+            }
+         ],
+         "repeat": null,
+         "repeatIteration": null,
+         "repeatRowId": null,
+         "showTitle": true,
+         "title": "FAN Speeds: $hostname",
+         "titleSize": "h6",
+         "type": "row"
+      },
+      {
+         "collapse": true,
+         "collapsed": true,
+         "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 3
+         },
+         "id": 30,
+         "panels": [
+            {
+               "aliasColors": { },
+               "bars": false,
+               "dashLength": 10,
+               "dashes": false,
+               "datasource": "$datasource",
+               "fill": 1,
+               "fillGradient": 0,
+               "gridPos": {
+                  "h": 8,
+                  "w": 12,
+                  "x": 0,
+                  "y": 4
+               },
+               "id": 31,
+               "legend": {
+                  "alignAsTable": false,
+                  "avg": false,
+                  "current": false,
+                  "max": false,
+                  "min": false,
+                  "rightSide": false,
+                  "show": true,
+                  "sideWidth": null,
+                  "total": false,
+                  "values": false
+               },
+               "lines": true,
+               "linewidth": 1,
+               "links": [ ],
+               "nullPointMode": "null",
+               "percentage": false,
+               "pointradius": 5,
+               "points": false,
+               "renderer": "flot",
+               "repeat": null,
+               "seriesOverrides": [
+                  {
+                     "alias": "Critical",
+                     "color": "dark-red",
+                     "dashes": true,
+                     "fill": 0
+                  }
+               ],
+               "spaceLength": 10,
+               "stack": false,
+               "steppedLine": false,
+               "targets": [
+                  {
+                     "expr": "ceph_hardware_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\".*CPU_TEMP\"}",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "{{sensor_name}}",
+                     "refId": "A"
+                  },
+                  {
+                     "expr": "vector(100)",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "Critical",
+                     "refId": "B"
+                  }
+               ],
+               "thresholds": [ ],
+               "timeFrom": null,
+               "timeShift": null,
+               "title": "CPU Temperature",
+               "tooltip": {
+                  "shared": true,
+                  "sort": 0,
+                  "value_type": "individual"
+               },
+               "type": "graph",
+               "xaxis": {
+                  "buckets": null,
+                  "mode": "time",
+                  "name": null,
+                  "show": true,
+                  "values": [ ]
+               },
+               "yaxes": [
+                  {
+                     "min": 0
+                  },
+                  { }
+               ]
+            },
+            {
+               "aliasColors": { },
+               "bars": false,
+               "dashLength": 10,
+               "dashes": false,
+               "datasource": "$datasource",
+               "fill": 1,
+               "fillGradient": 0,
+               "gridPos": {
+                  "h": 8,
+                  "w": 12,
+                  "x": 12,
+                  "y": 4
+               },
+               "id": 32,
+               "legend": {
+                  "alignAsTable": false,
+                  "avg": false,
+                  "current": false,
+                  "max": false,
+                  "min": false,
+                  "rightSide": false,
+                  "show": true,
+                  "sideWidth": null,
+                  "total": false,
+                  "values": false
+               },
+               "lines": true,
+               "linewidth": 1,
+               "links": [ ],
+               "nullPointMode": "null",
+               "percentage": false,
+               "pointradius": 5,
+               "points": false,
+               "renderer": "flot",
+               "repeat": null,
+               "seriesOverrides": [
+                  {
+                     "alias": "Critical",
+                     "color": "dark-red",
+                     "dashes": true,
+                     "fill": 0
+                  }
+               ],
+               "spaceLength": 10,
+               "stack": false,
+               "steppedLine": false,
+               "targets": [
+                  {
+                     "expr": "ceph_hardware_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\".*DIMM.*_TEMP\"}",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "{{sensor_name}}",
+                     "refId": "A"
+                  },
+                  {
+                     "expr": "vector(88)",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "Critical",
+                     "refId": "B"
+                  }
+               ],
+               "thresholds": [ ],
+               "timeFrom": null,
+               "timeShift": null,
+               "title": "DIMM Temperatures",
+               "tooltip": {
+                  "shared": true,
+                  "sort": 0,
+                  "value_type": "individual"
+               },
+               "type": "graph",
+               "xaxis": {
+                  "buckets": null,
+                  "mode": "time",
+                  "name": null,
+                  "show": true,
+                  "values": [ ]
+               },
+               "yaxes": [
+                  {
+                     "min": 0
+                  },
+                  { }
+               ]
+            },
+            {
+               "aliasColors": { },
+               "bars": false,
+               "dashLength": 10,
+               "dashes": false,
+               "datasource": "$datasource",
+               "fill": 1,
+               "fillGradient": 0,
+               "gridPos": {
+                  "h": 8,
+                  "w": 12,
+                  "x": 0,
+                  "y": 12
+               },
+               "id": 33,
+               "legend": {
+                  "alignAsTable": false,
+                  "avg": false,
+                  "current": false,
+                  "max": false,
+                  "min": false,
+                  "rightSide": false,
+                  "show": true,
+                  "sideWidth": null,
+                  "total": false,
+                  "values": false
+               },
+               "lines": true,
+               "linewidth": 1,
+               "links": [ ],
+               "nullPointMode": "null",
+               "percentage": false,
+               "pointradius": 5,
+               "points": false,
+               "renderer": "flot",
+               "repeat": null,
+               "seriesOverrides": [
+                  {
+                     "alias": "Critical",
+                     "color": "dark-red",
+                     "dashes": true,
+                     "fill": 0
+                  }
+               ],
+               "spaceLength": 10,
+               "stack": false,
+               "steppedLine": false,
+               "targets": [
+                  {
+                     "expr": "ceph_hardware_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\".*MB_TEMP.*\"}",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "{{sensor_name}}",
+                     "refId": "A"
+                  },
+                  {
+                     "expr": "vector(85)",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "Critical",
+                     "refId": "B"
+                  }
+               ],
+               "thresholds": [ ],
+               "timeFrom": null,
+               "timeShift": null,
+               "title": "Motherboard Temperatures",
+               "tooltip": {
+                  "shared": true,
+                  "sort": 0,
+                  "value_type": "individual"
+               },
+               "type": "graph",
+               "xaxis": {
+                  "buckets": null,
+                  "mode": "time",
+                  "name": null,
+                  "show": true,
+                  "values": [ ]
+               },
+               "yaxes": [
+                  {
+                     "min": 0
+                  },
+                  { }
+               ]
+            },
+            {
+               "aliasColors": { },
+               "bars": false,
+               "dashLength": 10,
+               "dashes": false,
+               "datasource": "$datasource",
+               "fill": 1,
+               "fillGradient": 0,
+               "gridPos": {
+                  "h": 8,
+                  "w": 12,
+                  "x": 12,
+                  "y": 12
+               },
+               "id": 34,
+               "legend": {
+                  "alignAsTable": false,
+                  "avg": false,
+                  "current": false,
+                  "max": false,
+                  "min": false,
+                  "rightSide": false,
+                  "show": true,
+                  "sideWidth": null,
+                  "total": false,
+                  "values": false
+               },
+               "lines": true,
+               "linewidth": 1,
+               "links": [ ],
+               "nullPointMode": "null",
+               "percentage": false,
+               "pointradius": 5,
+               "points": false,
+               "renderer": "flot",
+               "repeat": null,
+               "seriesOverrides": [
+                  {
+                     "alias": "Critical",
+                     "color": "dark-red",
+                     "dashes": true,
+                     "fill": 0
+                  }
+               ],
+               "spaceLength": 10,
+               "stack": false,
+               "steppedLine": false,
+               "targets": [
+                  {
+                     "expr": "ceph_hardware_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\"NVME.*_TEMP\"}",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "{{sensor_name}}",
+                     "refId": "A"
+                  },
+                  {
+                     "expr": "vector(85)",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "Critical",
+                     "refId": "B"
+                  }
+               ],
+               "thresholds": [ ],
+               "timeFrom": null,
+               "timeShift": null,
+               "title": "NVMe Temperatures",
+               "tooltip": {
+                  "shared": true,
+                  "sort": 0,
+                  "value_type": "individual"
+               },
+               "type": "graph",
+               "xaxis": {
+                  "buckets": null,
+                  "mode": "time",
+                  "name": null,
+                  "show": true,
+                  "values": [ ]
+               },
+               "yaxes": [
+                  {
+                     "min": 0
+                  },
+                  { }
+               ]
+            },
+            {
+               "aliasColors": { },
+               "bars": false,
+               "dashLength": 10,
+               "dashes": false,
+               "datasource": "$datasource",
+               "fill": 1,
+               "fillGradient": 0,
+               "gridPos": {
+                  "h": 8,
+                  "w": 12,
+                  "x": 0,
+                  "y": 20
+               },
+               "id": 35,
+               "legend": {
+                  "alignAsTable": false,
+                  "avg": false,
+                  "current": false,
+                  "max": false,
+                  "min": false,
+                  "rightSide": false,
+                  "show": true,
+                  "sideWidth": null,
+                  "total": false,
+                  "values": false
+               },
+               "lines": true,
+               "linewidth": 1,
+               "links": [ ],
+               "nullPointMode": "null",
+               "percentage": false,
+               "pointradius": 5,
+               "points": false,
+               "renderer": "flot",
+               "repeat": null,
+               "seriesOverrides": [
+                  {
+                     "alias": "Critical",
+                     "color": "dark-red",
+                     "dashes": true,
+                     "fill": 0
+                  }
+               ],
+               "spaceLength": 10,
+               "stack": false,
+               "steppedLine": false,
+               "targets": [
+                  {
+                     "expr": "ceph_hardware_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\"PSU.*_TEMP.*\"}",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "{{sensor_name}}",
+                     "refId": "A"
+                  },
+                  {
+                     "expr": "vector(65)",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "Critical",
+                     "refId": "B"
+                  }
+               ],
+               "thresholds": [ ],
+               "timeFrom": null,
+               "timeShift": null,
+               "title": "PSU Temperatures",
+               "tooltip": {
+                  "shared": true,
+                  "sort": 0,
+                  "value_type": "individual"
+               },
+               "type": "graph",
+               "xaxis": {
+                  "buckets": null,
+                  "mode": "time",
+                  "name": null,
+                  "show": true,
+                  "values": [ ]
+               },
+               "yaxes": [
+                  {
+                     "min": 0
+                  },
+                  { }
+               ]
+            }
+         ],
+         "repeat": null,
+         "repeatIteration": null,
+         "repeatRowId": null,
+         "showTitle": true,
+         "title": "Temperature History: $hostname",
+         "titleSize": "h6",
+         "type": "row"
+      },
+      {
+         "collapse": true,
+         "collapsed": true,
+         "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 4
+         },
+         "id": 36,
+         "panels": [
+            {
+               "aliasColors": { },
+               "bars": false,
+               "dashLength": 10,
+               "dashes": false,
+               "datasource": "$datasource",
+               "description": "AVG across both PSUs",
+               "fill": 1,
+               "fillGradient": 0,
+               "gridPos": {
+                  "h": 8,
+                  "w": 12,
+                  "x": 0,
+                  "y": 5
+               },
+               "id": 37,
+               "legend": {
+                  "alignAsTable": false,
+                  "avg": false,
+                  "current": false,
+                  "max": false,
+                  "min": false,
+                  "rightSide": false,
+                  "show": true,
+                  "sideWidth": null,
+                  "total": false,
+                  "values": false
+               },
+               "lines": true,
+               "linewidth": 1,
+               "links": [ ],
+               "nullPointMode": "null",
+               "percentage": false,
+               "pointradius": 5,
+               "points": false,
+               "renderer": "flot",
+               "repeat": null,
+               "seriesOverrides": [ ],
+               "spaceLength": 10,
+               "stack": false,
+               "steppedLine": false,
+               "targets": [
+                  {
+                     "expr": "avg(ceph_hardware_fan_rpm{hostname=~\"$hostname\", fan_name=~\"PSU.*\"})",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "PSU Fans",
+                     "refId": "A"
+                  }
+               ],
+               "thresholds": [ ],
+               "timeFrom": null,
+               "timeShift": null,
+               "title": "AVG PSU Fan Speed",
+               "tooltip": {
+                  "shared": true,
+                  "sort": 0,
+                  "value_type": "individual"
+               },
+               "type": "graph",
+               "xaxis": {
+                  "buckets": null,
+                  "mode": "time",
+                  "name": null,
+                  "show": true,
+                  "values": [ ]
+               },
+               "yaxes": [
+                  {
+                     "format": "locale",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": null,
+                     "show": true
+                  },
+                  {
+                     "format": "locale",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": null,
+                     "show": true
+                  }
+               ]
+            },
+            {
+               "aliasColors": { },
+               "bars": false,
+               "dashLength": 10,
+               "dashes": false,
+               "datasource": "$datasource",
+               "fill": 1,
+               "fillGradient": 0,
+               "gridPos": {
+                  "h": 8,
+                  "w": 12,
+                  "x": 12,
+                  "y": 5
+               },
+               "id": 38,
+               "legend": {
+                  "alignAsTable": false,
+                  "avg": false,
+                  "current": false,
+                  "max": false,
+                  "min": false,
+                  "rightSide": false,
+                  "show": true,
+                  "sideWidth": null,
+                  "total": false,
+                  "values": false
+               },
+               "lines": true,
+               "linewidth": 1,
+               "links": [ ],
+               "nullPointMode": "null",
+               "percentage": false,
+               "pointradius": 5,
+               "points": false,
+               "renderer": "flot",
+               "repeat": null,
+               "seriesOverrides": [ ],
+               "spaceLength": 10,
+               "stack": false,
+               "steppedLine": false,
+               "targets": [
+                  {
+                     "expr": "avg(ceph_hardware_fan_rpm{hostname=~\"$hostname\", fan_name!~\"PSU.*\"})",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "System Fans",
+                     "refId": "A"
+                  }
+               ],
+               "thresholds": [ ],
+               "timeFrom": null,
+               "timeShift": null,
+               "title": "AVG Cooling Fan RPMs",
+               "tooltip": {
+                  "shared": true,
+                  "sort": 0,
+                  "value_type": "individual"
+               },
+               "type": "graph",
+               "xaxis": {
+                  "buckets": null,
+                  "mode": "time",
+                  "name": null,
+                  "show": true,
+                  "values": [ ]
+               },
+               "yaxes": [
+                  {
+                     "format": "locale",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": null,
+                     "show": true
+                  },
+                  {
+                     "format": "locale",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": null,
+                     "show": true
+                  }
+               ]
+            }
+         ],
+         "repeat": null,
+         "repeatIteration": null,
+         "repeatRowId": null,
+         "showTitle": true,
+         "title": "FAN Speed History: $hostname",
+         "titleSize": "h6",
+         "type": "row"
+      }
+   ],
+   "refresh": "10s",
+   "rows": [ ],
+   "schemaVersion": 22,
+   "style": "dark",
+   "tags": [
+      "ceph-mixin"
+   ],
+   "templating": {
+      "list": [
+         {
+            "current": {
+               "text": "default",
+               "value": "default"
+            },
+            "hide": 0,
+            "label": "Data Source",
+            "name": "datasource",
+            "options": [ ],
+            "query": "prometheus",
+            "refresh": 1,
+            "regex": "",
+            "type": "datasource"
+         },
+         {
+            "allValue": null,
+            "current": { },
+            "datasource": "$datasource",
+            "hide": 0,
+            "includeAll": false,
+            "label": "cluster",
+            "multi": false,
+            "name": "cluster",
+            "options": [ ],
+            "query": "label_values(ceph_health_status, cluster)",
+            "refresh": 1,
+            "regex": "(.*)",
+            "sort": 1,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+         },
+         {
+            "allValue": null,
+            "current": { },
+            "datasource": "$datasource",
+            "hide": 0,
+            "includeAll": false,
+            "label": "Host",
+            "multi": false,
+            "name": "hostname",
+            "options": [ ],
+            "query": "label_values(ceph_hardware_health, hostname)",
+            "refresh": 1,
+            "regex": "",
+            "sort": 1,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+         },
+         {
+            "allValue": "",
+            "current": { },
+            "datasource": "$datasource",
+            "hide": 2,
+            "includeAll": true,
+            "label": "",
+            "multi": true,
+            "name": "fan_speeds",
+            "options": [ ],
+            "query": "label_values(ceph_hardware_fan_rpm{hostname=~\"$hostname\"},fan_name)",
+            "refresh": 1,
+            "regex": "/.*TACH_OUT/",
+            "sort": 0,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+         }
+      ]
+   },
+   "time": {
+      "from": "now-1h",
+      "to": "now"
+   },
+   "timepicker": {
+      "refresh_intervals": [
+         "5s",
+         "10s",
+         "30s",
+         "1m",
+         "5m",
+         "15m",
+         "30m",
+         "1h",
+         "2h",
+         "1d"
+      ],
+      "time_options": [
+         "5m",
+         "15m",
+         "1h",
+         "6h",
+         "12h",
+         "24h",
+         "2d",
+         "7d",
+         "30d"
+      ]
+   },
+   "timezone": "",
+   "title": "Ceph Hardware - Overview",
+   "uid": "hardware001",
+   "version": 0
+}

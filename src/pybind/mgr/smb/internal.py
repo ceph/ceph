@@ -206,6 +206,23 @@ class UsersAndGroupsEntry(CommonResourceEntry):
         return self.get_resource_type(resources.UsersAndGroups)
 
 
+class TLSCredentialEntry(CommonResourceEntry):
+    """TLSCredentialEntry resource getter/setter for the smb internal data
+    store(s).
+    """
+
+    namespace = ConfigNS.TLS_CREDENTIALS
+    _for_resource = resources.TLSCredential
+
+    @classmethod
+    def to_key(cls, resource: SMBResource) -> ResourceKey:
+        assert isinstance(resource, cls._for_resource)
+        return ResourceIDKey(resource.tls_credential_id)
+
+    def get_tls_credential(self) -> resources.TLSCredential:
+        return self.get_resource_type(resources.TLSCredential)
+
+
 def _map_resource_entry(
     resource: Union[SMBResource, Type[SMBResource]]
 ) -> Type[ResourceEntry]:
@@ -217,6 +234,7 @@ def _map_resource_entry(
         resources.RemovedShare: ShareEntry,
         resources.JoinAuth: JoinAuthEntry,
         resources.UsersAndGroups: UsersAndGroupsEntry,
+        resources.TLSCredential: TLSCredentialEntry,
     }
     try:
         return _map[rcls]

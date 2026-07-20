@@ -176,35 +176,36 @@ tests:
       values: '100 100 100 100 100 160'
     - series: 'ceph_osd_numpg{ceph_daemon="osd.3",instance="ceph:9283",job="ceph",cluster="mycluster"}'
       values: '100 100 100 100 100 160'
-    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.0",ceph_version="ceph version 17.0.0-189-g3558fd72
-        (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
-        hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",public_addr="172.20.0.2",cluster="mycluster"}'
+    - series: 'ceph_osd_metadata{ceph_daemon="osd.0",device_class="hdd",hostname="ceph",instance="ceph:9283",job="ceph",cluster="mycluster"}'
       values: '1 1 1 1 1 1'
-    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.1",ceph_version="ceph version 17.0.0-189-g3558fd72
-        (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
-        hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",public_addr="172.20.0.2",cluster="mycluster"}'
+    - series: 'ceph_osd_metadata{ceph_daemon="osd.1",device_class="hdd",hostname="ceph",instance="ceph:9283",job="ceph",cluster="mycluster"}'
       values: '1 1 1 1 1 1'
-    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.2",ceph_version="ceph version 17.0.0-189-g3558fd72
-        (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
-        hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",public_addr="172.20.0.2",cluster="mycluster"}'
+    - series: 'ceph_osd_metadata{ceph_daemon="osd.2",device_class="hdd",hostname="ceph",instance="ceph:9283",job="ceph",cluster="mycluster"}'
       values: '1 1 1 1 1 1'
-    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.3",ceph_version="ceph version 17.0.0-189-g3558fd72
-        (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
-        hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",public_addr="172.20.0.2",cluster="mycluster"}'
+    - series: 'ceph_osd_metadata{ceph_daemon="osd.3",device_class="hdd",hostname="ceph",instance="ceph:9283",job="ceph",cluster="mycluster"}'
       values: '1 1 1 1 1 1'
    promql_expr_test:
      - expr: |
          abs(
            (
-             (ceph_osd_numpg > 0) - on (job) group_left avg(ceph_osd_numpg > 0)
-             by (job)
-           ) / on (job) group_left avg(ceph_osd_numpg > 0) by (job)
-         ) * on(ceph_daemon) group_left(hostname) ceph_osd_metadata > 0.30
-
+             (
+               (ceph_osd_numpg > 0)
+               * on (cluster, job, ceph_daemon) group_left(hostname, device_class) ceph_osd_metadata
+             )
+             - on (cluster, job, device_class) group_left avg(
+                (ceph_osd_numpg > 0)
+                * on (cluster, job, ceph_daemon) group_left(hostname, device_class) ceph_osd_metadata
+              ) by (cluster, job, device_class)
+           )
+           / on (cluster, job, device_class) group_left avg(
+              (ceph_osd_numpg > 0)
+              * on (cluster, job, ceph_daemon) group_left(hostname, device_class) ceph_osd_metadata
+           ) by (cluster, job, device_class)
+          ) > 0.30
        eval_time: 5m
        exp_samples:
-         - labels: '{ceph_daemon="osd.1", hostname="ceph", instance="ceph:9283",job="ceph",cluster="mycluster"}'
-           value: 6E-01
+        - labels: '{ceph_daemon="osd.1", hostname="ceph", device_class="hdd", instance="ceph:9283", job="ceph", cluster="mycluster"}'
+          value: 0.60
    alert_rule_test:
      - eval_time: 10m
        alertname: CephPGImbalance
@@ -212,15 +213,16 @@ tests:
        - exp_labels:
            ceph_daemon: osd.1
            hostname: ceph
+           device_class: hdd
            instance: ceph:9283
            job: ceph
+           cluster: mycluster
            oid: 1.3.6.1.4.1.50495.1.2.1.4.5
            severity: warning
-           cluster: mycluster
            type: ceph_default
          exp_annotations:
            summary: PGs are not balanced across OSDs on cluster mycluster
-           description: "OSD osd.1 on ceph deviates by more than 30% from average PG count."
+           description: "OSD osd.1 on ceph deviates by more than 30% from average PG count in the device class hdd."
 
  # pgs inactive
  - interval: 1m
@@ -505,80 +507,83 @@ tests:
            summary: Host filesystem free space is getting low on cluster mycluster
            description: "Mountpoint /rootfs on node-1.unittests.com will be full in less than 5 days based on the 48 hour trailing fill rate."
 
- # MTU Mismatch
+# MTU Mismatch
  - interval: 1m
    input_series:
-    - series: 'node_network_mtu_bytes{device="eth0",instance="node-exporter",job="node-exporter",cluster="mycluster"}'
+    - series: 'node_network_mtu_bytes{device="eth0",instance="node1",job="node-exporter",cluster="mycluster"}'
       values: '1500 1500 1500 1500 1500'
-    - series: 'node_network_mtu_bytes{device="eth1",instance="node-exporter",job="node-exporter",cluster="mycluster"}'
+    - series: 'node_network_mtu_bytes{device="eth1",instance="node1",job="node-exporter",cluster="mycluster"}'
       values: '1500 1500 1500 1500 1500'
-    - series: 'node_network_mtu_bytes{device="eth2",instance="node-exporter",job="node-exporter",cluster="mycluster"}'
+    - series: 'node_network_mtu_bytes{device="eth2",instance="node1",job="node-exporter",cluster="mycluster"}'
       values: '1500 1500 1500 1500 1500'
-    - series: 'node_network_mtu_bytes{device="eth3",instance="node-exporter",job="node-exporter",cluster="mycluster"}'
+    - series: 'node_network_mtu_bytes{device="eth3",instance="node1",job="node-exporter",cluster="mycluster"}'
       values: '1500 1500 1500 1500 1500'
-    - series: 'node_network_mtu_bytes{device="eth4",instance="node-exporter",job="node-exporter",cluster="mycluster"}'
+
+    - series: 'node_network_mtu_bytes{device="eth4",instance="node1",job="node-exporter",cluster="mycluster"}'
+      values: '1500 1500 1500 1500 1500'
+    - series: 'node_network_mtu_bytes{device="eth4",instance="node2",job="node-exporter",cluster="mycluster"}'
       values: '9000 9000 9000 9000 9000'
-    - series: 'node_network_mtu_bytes{device="eth4",instance="hostname1",job="node-exporter",cluster="mycluster"}'
-      values: '2200 2200 2200 2200 2200'
-    - series: 'node_network_mtu_bytes{device="eth4",instance="hostname2",job="node-exporter",cluster="mycluster"}'
-      values: '2400 2400 2400 2400 2400'
-    - series: 'node_network_up{device="eth0",instance="node-exporter",job="node-exporter",cluster="mycluster"}'
-      values: '0 0 0 0 0'
-    - series: 'node_network_up{device="eth1",instance="node-exporter",job="node-exporter",cluster="mycluster"}'
-      values: '0 0 0 0 0'
-    - series: 'node_network_up{device="eth2",instance="node-exporter",job="node-exporter",cluster="mycluster"}'
+    - series: 'node_network_mtu_bytes{device="eth4",instance="node3",job="node-exporter",cluster="mycluster"}'
+      values: '9000 9000 9000 9000 9000'
+
+    - series: 'node_network_up{device="eth0",instance="node1",job="node-exporter",cluster="mycluster"}'
       values: '1 1 1 1 1'
-    - series: 'node_network_up{device="eth3",instance="node-exporter",job="node-exporter",cluster="mycluster"}'
+    - series: 'node_network_up{device="eth1",instance="node1",job="node-exporter",cluster="mycluster"}'
       values: '1 1 1 1 1'
-    - series: 'node_network_up{device="eth4",instance="node-exporter",job="node-exporter",cluster="mycluster"}'
+    - series: 'node_network_up{device="eth2",instance="node1",job="node-exporter",cluster="mycluster"}'
       values: '1 1 1 1 1'
-    - series: 'node_network_up{device="eth4",instance="hostname1",job="node-exporter",cluster="mycluster"}'
+    - series: 'node_network_up{device="eth3",instance="node1",job="node-exporter",cluster="mycluster"}'
       values: '1 1 1 1 1'
-    - series: 'node_network_up{device="eth4",instance="hostname2",job="node-exporter",cluster="mycluster"}'
-      values: '0 0 0 0 0'
+    - series: 'node_network_up{device="eth4",instance="node1",job="node-exporter",cluster="mycluster"}'
+      values: '1 1 1 1 1'
+    - series: 'node_network_up{device="eth4",instance="node2",job="node-exporter",cluster="mycluster"}'
+      values: '1 1 1 1 1'
+    - series: 'node_network_up{device="eth4",instance="node3",job="node-exporter",cluster="mycluster"}'
+      values: '1 1 1 1 1'
    promql_expr_test:
      - expr: |
-          node_network_mtu_bytes * (node_network_up{device!="lo"} > 0) ==
-            scalar(
-              max by (cluster,device) (node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)) !=
-                quantile by (cluster,device) (.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))
-            )
-          or
-          node_network_mtu_bytes * (node_network_up{device!="lo"} > 0) ==
-            scalar(
-              min by (cluster,device) (node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)) !=
-                quantile by (cluster,device) (.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))
-            )
+         node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)
+         != on (cluster, device) group_left
+          quantile by (cluster, device) (
+            0.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)
+          )
        eval_time: 1m
        exp_samples:
-         - labels: '{device="eth4", instance="node-exporter", job="node-exporter", cluster="mycluster"}'
-           value: 9000
-         - labels: '{device="eth4", instance="hostname1", job="node-exporter", cluster="mycluster"}'
-           value: 2200
+         - labels: '{device="eth4",instance="node1",job="node-exporter",cluster="mycluster"}'
+           value: 1500
    alert_rule_test:
      - eval_time: 1m
        alertname: CephNodeInconsistentMTU
        exp_alerts:
        - exp_labels:
            device: eth4
-           instance: hostname1
+           instance: node1
            job: node-exporter
            severity: warning
            type: ceph_default
            cluster: "mycluster"
          exp_annotations:
-           summary: MTU settings across Ceph hosts are inconsistent on cluster mycluster
-           description: "Node hostname1 has a different MTU size (2200) than the median of devices named eth4."
-       - exp_labels:
-           device: eth4
-           instance: node-exporter
-           job: node-exporter
-           severity: warning
-           type: ceph_default
-           cluster: "mycluster"
-         exp_annotations:
-           summary: MTU settings across Ceph hosts are inconsistent on cluster mycluster
-           description: "Node node-exporter has a different MTU size (9000) than the median of devices named eth4."
+           summary: "Node node1 has inconsistent MTU settings in cluster mycluster"
+           description: "Network interface eth4 on node node1 has MTU 1500 which differs from the cluster median."
+           impact: |
+             - May cause packet fragmentation or packet drops
+             - Risk of degraded cluster communication and performance
+             - Potential instability in services relying on consistent networking (e.g., Ceph, Kubernetes)
+           fix: |
+             - Check the MTU of interface `eth4` on node `node1`:
+               ip link show eth4
+
+             - Find the median MTU value across the cluster by running this PromQL query in Prometheus:
+               quantile by (cluster, device) (0.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))
+
+             - Standardize MTU across all nodes to match the median (commonly 1500 or 9000):
+               ip link set dev eth4 mtu <median-value>
+
+             - Make MTU setting persistent:
+               - RHEL/CentOS: edit `/etc/sysconfig/network-scripts/ifcfg-<device>`
+               - Debian/Ubuntu: edit `/etc/netplan/*.yaml` and apply with `netplan apply`
+
+             - Restart the affected interface or node if required.
 
  # pool full, data series has 6 but using topk(5) so to ensure the
  # results are working as expected
@@ -2082,156 +2087,440 @@ tests:
            summary: "The replication network usage on cluster mycluster has been increased over 80% in the last 30 minutes. Review the number of images being replicated. This alert will be cleaned automatically after 30 minutes"
            description: "Detected a heavy increase in bandwidth for rbd replications (over 80%) in the last 30 min. This might not be a problem, but it is good to review the number of images being replicated simultaneously"
 
- - interval: 30s
+ # Power supply degraded
+ - interval: 1m
    input_series:
-    - series: 'ceph_health_detail{name="HARDWARE_STORAGE", cluster="mycluster"}'
-      values: '1+0x40'
+    - series: 'ceph_hardware_health{category="power",component="PSU0",hostname="node1",cluster="mycluster"}'
+      values: '1 1 1 1 1 1 1 1 1'
    promql_expr_test:
-     - expr: ceph_health_detail{name="HARDWARE_STORAGE"} > 0
+     - expr: ceph_hardware_health{category="power"} == 1
        eval_time: 2m
        exp_samples:
-         - labels: '{__name__="ceph_health_detail", name="HARDWARE_STORAGE", cluster="mycluster"}'
+         - labels: 'ceph_hardware_health{category="power",component="PSU0",hostname="node1",cluster="mycluster"}'
            value: 1
    alert_rule_test:
     - eval_time: 1m
-      alertname: HardwareStorageError
+      alertname: PowerSupplyDegraded
     - eval_time: 5m
-      alertname: HardwareStorageError
+      alertname: PowerSupplyDegraded
       exp_alerts:
       - exp_labels:
-          name: HARDWARE_STORAGE
-          severity: critical
+          category: power
+          component: PSU0
+          hostname: node1
+          severity: warning
           cluster: mycluster
           type: ceph_default
-          oid: 1.3.6.1.4.1.50495.1.2.1.13.1
         exp_annotations:
-          summary: Storage devices error(s) detected on cluster mycluster
-          description: "Some storage devices are in error. Check `ceph health detail`."
- - interval: 30s
+          summary: "Power supply PSU0 degraded on node1 on cluster mycluster"
+          description: "PSU PSU0 is in a degraded state on node1."
+ # Power supply failed
+ - interval: 1m
    input_series:
-    - series: 'ceph_health_detail{name="HARDWARE_MEMORY", cluster="mycluster"}'
-      values: '1+0x40'
+    - series: 'ceph_hardware_health{category="power",component="PSU1",hostname="node2",cluster="mycluster"}'
+      values: '2 2 2 2 2 2 2 2 2'
    promql_expr_test:
-     - expr: ceph_health_detail{name="HARDWARE_MEMORY"} > 0
+     - expr: ceph_hardware_health{category="power"} == 2
        eval_time: 2m
        exp_samples:
-         - labels: '{__name__="ceph_health_detail", name="HARDWARE_MEMORY", cluster="mycluster"}'
-           value: 1
+         - labels: 'ceph_hardware_health{category="power",component="PSU1",hostname="node2",cluster="mycluster"}'
+           value: 2
    alert_rule_test:
     - eval_time: 1m
-      alertname: HardwareMemoryError
+      alertname: PowerSupplyFailed
     - eval_time: 5m
-      alertname: HardwareMemoryError
+      alertname: PowerSupplyFailed
       exp_alerts:
       - exp_labels:
-          name: HARDWARE_MEMORY
-          severity: critical
-          cluster: mycluster
-          type: ceph_default
-          oid: 1.3.6.1.4.1.50495.1.2.1.13.2
-        exp_annotations:
-          summary: DIMM error(s) detected on cluster mycluster
-          description: "DIMM error(s) detected. Check `ceph health detail`."
- - interval: 30s
-   input_series:
-    - series: 'ceph_health_detail{name="HARDWARE_PROCESSOR", cluster="mycluster"}'
-      values: '1+0x40'
-   promql_expr_test:
-     - expr: ceph_health_detail{name="HARDWARE_PROCESSOR"} > 0
-       eval_time: 2m
-       exp_samples:
-         - labels: '{__name__="ceph_health_detail", name="HARDWARE_PROCESSOR", cluster="mycluster"}'
-           value: 1
-   alert_rule_test:
-    - eval_time: 1m
-      alertname: HardwareProcessorError
-    - eval_time: 5m
-      alertname: HardwareProcessorError
-      exp_alerts:
-      - exp_labels:
-          name: HARDWARE_PROCESSOR
-          severity: critical
-          cluster: mycluster
-          type: ceph_default
-          oid: 1.3.6.1.4.1.50495.1.2.1.13.3
-        exp_annotations:
-          summary: Processor error(s) detected on cluster mycluster
-          description: "Processor error(s) detected. Check `ceph health detail`."
- - interval: 30s
-   input_series:
-    - series: 'ceph_health_detail{name="HARDWARE_NETWORK", cluster="mycluster"}'
-      values: '1+0x40'
-   promql_expr_test:
-     - expr: ceph_health_detail{name="HARDWARE_NETWORK"} > 0
-       eval_time: 2m
-       exp_samples:
-         - labels: '{__name__="ceph_health_detail", name="HARDWARE_NETWORK", cluster="mycluster"}'
-           value: 1
-   alert_rule_test:
-    - eval_time: 1m
-      alertname: HardwareNetworkError
-    - eval_time: 5m
-      alertname: HardwareNetworkError
-      exp_alerts:
-      - exp_labels:
-          name: HARDWARE_NETWORK
-          severity: critical
-          cluster: mycluster
-          type: ceph_default
-          oid: 1.3.6.1.4.1.50495.1.2.1.13.4
-        exp_annotations:
-          summary: Network error(s) detected on cluster mycluster
-          description: "Network error(s) detected. Check `ceph health detail`."
- - interval: 30s
-   input_series:
-    - series: 'ceph_health_detail{name="HARDWARE_POWER", cluster="mycluster"}'
-      values: '1+0x40'
-   promql_expr_test:
-     - expr: ceph_health_detail{name="HARDWARE_POWER"} > 0
-       eval_time: 2m
-       exp_samples:
-         - labels: '{__name__="ceph_health_detail", name="HARDWARE_POWER", cluster="mycluster"}'
-           value: 1
-   alert_rule_test:
-    - eval_time: 1m
-      alertname: HardwarePowerError
-    - eval_time: 5m
-      alertname: HardwarePowerError
-      exp_alerts:
-      - exp_labels:
-          name: HARDWARE_POWER
+          category: power
+          component: PSU1
+          hostname: node2
           severity: critical
           cluster: mycluster
           type: ceph_default
           oid: 1.3.6.1.4.1.50495.1.2.1.13.5
         exp_annotations:
-          summary: Power supply error(s) detected on cluster mycluster
-          description: "Power supply error(s) detected. Check `ceph health detail`."
- - interval: 30s
+          summary: "Power supply PSU1 failed on node2 on cluster mycluster"
+          description: "PSU fault detected on node2. PSU PSU1 has failed."
+ # Cooling degraded
+ - interval: 1m
    input_series:
-    - series: 'ceph_health_detail{name="HARDWARE_FANS", cluster="mycluster"}'
-      values: '1+0x40'
+    - series: 'ceph_hardware_health{category="fans",component="FAN0",hostname="node1",cluster="mycluster"}'
+      values: '1 1 1 1 1 1 1 1 1'
    promql_expr_test:
-     - expr: ceph_health_detail{name="HARDWARE_FANS"} > 0
+     - expr: ceph_hardware_health{category="fans"} == 1
        eval_time: 2m
        exp_samples:
-         - labels: '{__name__="ceph_health_detail", name="HARDWARE_FANS", cluster="mycluster"}'
+         - labels: 'ceph_hardware_health{category="fans",component="FAN0",hostname="node1",cluster="mycluster"}'
            value: 1
    alert_rule_test:
     - eval_time: 1m
-      alertname: HardwareFanError
+      alertname: CoolingDegraded
     - eval_time: 5m
-      alertname: HardwareFanError
+      alertname: CoolingDegraded
       exp_alerts:
       - exp_labels:
-          name: HARDWARE_FANS
+          category: fans
+          component: FAN0
+          hostname: node1
+          severity: warning
+          cluster: mycluster
+          type: ceph_default
+        exp_annotations:
+          summary: "Fan FAN0 degraded on node1 on cluster mycluster"
+          description: "Fan module FAN0 is in a degraded state on node1."
+ # Cooling failed
+ - interval: 1m
+   input_series:
+    - series: 'ceph_hardware_health{category="fans",component="FAN1",hostname="node2",cluster="mycluster"}'
+      values: '2 2 2 2 2 2 2 2 2'
+   promql_expr_test:
+     - expr: ceph_hardware_health{category="fans"} == 2
+       eval_time: 2m
+       exp_samples:
+         - labels: 'ceph_hardware_health{category="fans",component="FAN1",hostname="node2",cluster="mycluster"}'
+           value: 2
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CoolingFailed
+    - eval_time: 5m
+      alertname: CoolingFailed
+      exp_alerts:
+      - exp_labels:
+          category: fans
+          component: FAN1
+          hostname: node2
           severity: critical
           cluster: mycluster
           type: ceph_default
           oid: 1.3.6.1.4.1.50495.1.2.1.13.6
         exp_annotations:
-          summary: Fan error(s) detected on cluster mycluster
-          description: "Fan error(s) detected. Check `ceph health detail`."
+          summary: "Fan FAN1 failed on node2 on cluster mycluster"
+          description: "A cooling fault has been detected on node2. A cooling FAN within the enclosure has failed."
+ # NVMe drive degraded
+ - interval: 1m
+   input_series:
+    - series: 'ceph_hardware_health{category="storage",component="nvme0n1",hostname="node1",cluster="mycluster"}'
+      values: '1 1 1 1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: ceph_hardware_health{category="storage"} == 1
+       eval_time: 2m
+       exp_samples:
+         - labels: 'ceph_hardware_health{category="storage",component="nvme0n1",hostname="node1",cluster="mycluster"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: NVMeDriveDegraded
+    - eval_time: 5m
+      alertname: NVMeDriveDegraded
+      exp_alerts:
+      - exp_labels:
+          category: storage
+          component: nvme0n1
+          hostname: node1
+          severity: warning
+          cluster: mycluster
+          type: ceph_default
+        exp_annotations:
+          summary: "Storage device nvme0n1 degraded on node1 on cluster mycluster"
+          description: "Storage device nvme0n1 is in a degraded state on node1."
+ # NVMe drive failed
+ - interval: 1m
+   input_series:
+    - series: 'ceph_hardware_health{category="storage",component="nvme1n1",hostname="node2",cluster="mycluster"}'
+      values: '2 2 2 2 2 2 2 2 2'
+   promql_expr_test:
+     - expr: ceph_hardware_health{category="storage"} == 2
+       eval_time: 2m
+       exp_samples:
+         - labels: 'ceph_hardware_health{category="storage",component="nvme1n1",hostname="node2",cluster="mycluster"}'
+           value: 2
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: NVMeDriveFailed
+    - eval_time: 5m
+      alertname: NVMeDriveFailed
+      exp_alerts:
+      - exp_labels:
+          category: storage
+          component: nvme1n1
+          hostname: node2
+          severity: critical
+          cluster: mycluster
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.13.1
+        exp_annotations:
+          summary: "Storage device nvme1n1 failed on node2 on cluster mycluster"
+          description: "A drive fault has been detected on node2. Storage device nvme1n1 has failed."
+ # Memory degraded
+ - interval: 1m
+   input_series:
+    - series: 'ceph_hardware_health{category="memory",component="DIMM_A0",hostname="node1",cluster="mycluster"}'
+      values: '1 1 1 1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: ceph_hardware_health{category="memory"} == 1
+       eval_time: 2m
+       exp_samples:
+         - labels: 'ceph_hardware_health{category="memory",component="DIMM_A0",hostname="node1",cluster="mycluster"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: MemoryDegraded
+    - eval_time: 5m
+      alertname: MemoryDegraded
+      exp_alerts:
+      - exp_labels:
+          category: memory
+          component: DIMM_A0
+          hostname: node1
+          severity: warning
+          cluster: mycluster
+          type: ceph_default
+        exp_annotations:
+          summary: "Memory module DIMM_A0 degraded on node1 on cluster mycluster"
+          description: "Memory module DIMM_A0 is in a degraded state on node1."
+ # Memory failed
+ - interval: 1m
+   input_series:
+    - series: 'ceph_hardware_health{category="memory",component="DIMM_B0",hostname="node2",cluster="mycluster"}'
+      values: '2 2 2 2 2 2 2 2 2'
+   promql_expr_test:
+     - expr: ceph_hardware_health{category="memory"} == 2
+       eval_time: 2m
+       exp_samples:
+         - labels: 'ceph_hardware_health{category="memory",component="DIMM_B0",hostname="node2",cluster="mycluster"}'
+           value: 2
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: MemoryFailed
+    - eval_time: 5m
+      alertname: MemoryFailed
+      exp_alerts:
+      - exp_labels:
+          category: memory
+          component: DIMM_B0
+          hostname: node2
+          severity: critical
+          cluster: mycluster
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.13.2
+        exp_annotations:
+          summary: "Memory module DIMM_B0 failed on node2 on cluster mycluster"
+          description: "A memory fault has been detected on node2. Memory module DIMM_B0 has failed."
+ # Processor degraded
+ - interval: 1m
+   input_series:
+    - series: 'ceph_hardware_health{category="processors",component="CPU0",hostname="node1",cluster="mycluster"}'
+      values: '1 1 1 1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: ceph_hardware_health{category="processors"} == 1
+       eval_time: 2m
+       exp_samples:
+         - labels: 'ceph_hardware_health{category="processors",component="CPU0",hostname="node1",cluster="mycluster"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: ProcessorDegraded
+    - eval_time: 5m
+      alertname: ProcessorDegraded
+      exp_alerts:
+      - exp_labels:
+          category: processors
+          component: CPU0
+          hostname: node1
+          severity: warning
+          cluster: mycluster
+          type: ceph_default
+        exp_annotations:
+          summary: "Processor CPU0 degraded on node1 on cluster mycluster"
+          description: "Processor CPU0 is in a degraded state on node1."
+ # Processor failed
+ - interval: 1m
+   input_series:
+    - series: 'ceph_hardware_health{category="processors",component="CPU1",hostname="node2",cluster="mycluster"}'
+      values: '2 2 2 2 2 2 2 2 2'
+   promql_expr_test:
+     - expr: ceph_hardware_health{category="processors"} == 2
+       eval_time: 2m
+       exp_samples:
+         - labels: 'ceph_hardware_health{category="processors",component="CPU1",hostname="node2",cluster="mycluster"}'
+           value: 2
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: ProcessorFailed
+    - eval_time: 5m
+      alertname: ProcessorFailed
+      exp_alerts:
+      - exp_labels:
+          category: processors
+          component: CPU1
+          hostname: node2
+          severity: critical
+          cluster: mycluster
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.13.3
+        exp_annotations:
+          summary: "Processor CPU1 failed on node2 on cluster mycluster"
+          description: "A processor fault has been detected on node2. Processor CPU1 has failed."
+ # Network degraded
+ - interval: 1m
+   input_series:
+    - series: 'ceph_hardware_health{category="network",component="eth0",hostname="node1",cluster="mycluster"}'
+      values: '1 1 1 1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: ceph_hardware_health{category="network"} == 1
+       eval_time: 2m
+       exp_samples:
+         - labels: 'ceph_hardware_health{category="network",component="eth0",hostname="node1",cluster="mycluster"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: NetworkDegraded
+    - eval_time: 5m
+      alertname: NetworkDegraded
+      exp_alerts:
+      - exp_labels:
+          category: network
+          component: eth0
+          hostname: node1
+          severity: warning
+          cluster: mycluster
+          type: ceph_default
+        exp_annotations:
+          summary: "Network interface eth0 degraded on node1 on cluster mycluster"
+          description: "Network interface eth0 is in a degraded state on node1."
+ # Network failed
+ - interval: 1m
+   input_series:
+    - series: 'ceph_hardware_health{category="network",component="eth1",hostname="node2",cluster="mycluster"}'
+      values: '2 2 2 2 2 2 2 2 2'
+   promql_expr_test:
+     - expr: ceph_hardware_health{category="network"} == 2
+       eval_time: 2m
+       exp_samples:
+         - labels: 'ceph_hardware_health{category="network",component="eth1",hostname="node2",cluster="mycluster"}'
+           value: 2
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: NetworkFailed
+    - eval_time: 5m
+      alertname: NetworkFailed
+      exp_alerts:
+      - exp_labels:
+          category: network
+          component: eth1
+          hostname: node2
+          severity: critical
+          cluster: mycluster
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.13.4
+        exp_annotations:
+          summary: "Network interface eth1 failed on node2 on cluster mycluster"
+          description: "A network fault has been detected on node2. Network interface eth1 has failed."
+ # Motherboard temperature high
+ - interval: 1m
+   input_series:
+    - series: 'ceph_hardware_temperature_celsius{sensor_name="MB_TEMP1",hostname="node1",cluster="mycluster"}'
+      values: '65 65 65 65 65 65 65 65 65'
+   promql_expr_test:
+     - expr: ceph_hardware_temperature_celsius{sensor_name=~".*MB_TEMP.*"} > 60
+       eval_time: 2m
+       exp_samples:
+         - labels: 'ceph_hardware_temperature_celsius{sensor_name="MB_TEMP1",hostname="node1",cluster="mycluster"}'
+           value: 65
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: MotherboardTemperatureHigh
+    - eval_time: 5m
+      alertname: MotherboardTemperatureHigh
+      exp_alerts:
+      - exp_labels:
+          sensor_name: MB_TEMP1
+          hostname: node1
+          severity: warning
+          cluster: mycluster
+          type: ceph_default
+        exp_annotations:
+          summary: "Motherboard sensor MB_TEMP1 above 60°C on node1 on cluster mycluster"
+          description: "Prolonged high temperatures could lead to platform instability. Investigate cooling issues and hot-spots in the server room/hall."
+ # DIMM temperature high
+ - interval: 1m
+   input_series:
+    - series: 'ceph_hardware_temperature_celsius{sensor_name="DIMM_A0_TEMP",hostname="node1",cluster="mycluster"}'
+      values: '85 85 85 85 85 85 85 85 85'
+   promql_expr_test:
+     - expr: ceph_hardware_temperature_celsius{sensor_name=~".*DIMM.*_TEMP"} > 80
+       eval_time: 2m
+       exp_samples:
+         - labels: 'ceph_hardware_temperature_celsius{sensor_name="DIMM_A0_TEMP",hostname="node1",cluster="mycluster"}'
+           value: 85
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: DIMMTemperatureHigh
+    - eval_time: 5m
+      alertname: DIMMTemperatureHigh
+      exp_alerts:
+      - exp_labels:
+          sensor_name: DIMM_A0_TEMP
+          hostname: node1
+          severity: warning
+          cluster: mycluster
+          type: ceph_default
+        exp_annotations:
+          summary: "DIMM sensor DIMM_A0_TEMP above 80°C on node1 on cluster mycluster"
+          description: "Prolonged high temperatures could lead to platform instability. Investigate cooling issues and hot-spots in the server room/hall."
+ # Processor temperature high
+ - interval: 1m
+   input_series:
+    - series: 'ceph_hardware_temperature_celsius{sensor_name="CPU_TEMP",hostname="node1",cluster="mycluster"}'
+      values: '85 85 85 85 85 85 85 85 85'
+   promql_expr_test:
+     - expr: ceph_hardware_temperature_celsius{sensor_name=~".*CPU_TEMP"} > 80
+       eval_time: 2m
+       exp_samples:
+         - labels: 'ceph_hardware_temperature_celsius{sensor_name="CPU_TEMP",hostname="node1",cluster="mycluster"}'
+           value: 85
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: ProcessorTemperatureHigh
+    - eval_time: 5m
+      alertname: ProcessorTemperatureHigh
+      exp_alerts:
+      - exp_labels:
+          sensor_name: CPU_TEMP
+          hostname: node1
+          severity: warning
+          cluster: mycluster
+          type: ceph_default
+        exp_annotations:
+          summary: "CPU sensor CPU_TEMP above 80°C on node1 on cluster mycluster"
+          description: "Prolonged high temperatures could lead to platform instability. Investigate cooling issues and hot-spots in the server room/hall."
+ # NVMe temperature high
+ - interval: 1m
+   input_series:
+    - series: 'ceph_hardware_temperature_celsius{sensor_name="NVME0_TEMP",hostname="node1",cluster="mycluster"}'
+      values: '75 75 75 75 75 75 75 75 75'
+   promql_expr_test:
+     - expr: ceph_hardware_temperature_celsius{sensor_name=~"NVME.*_TEMP"} > 70
+       eval_time: 2m
+       exp_samples:
+         - labels: 'ceph_hardware_temperature_celsius{sensor_name="NVME0_TEMP",hostname="node1",cluster="mycluster"}'
+           value: 75
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: NVMeTemperatureHigh
+    - eval_time: 5m
+      alertname: NVMeTemperatureHigh
+      exp_alerts:
+      - exp_labels:
+          sensor_name: NVME0_TEMP
+          hostname: node1
+          severity: warning
+          cluster: mycluster
+          type: ceph_default
+        exp_annotations:
+          summary: "NVMe sensor NVME0_TEMP above 70°C on node1 on cluster mycluster"
+          description: "An NVMe temperature sensor is indicating a potential cooling problem. NVMe may power down if the temperature continues to rise."
 
 # nvmeof Tests
  # NVMeoFSubsystemNamespaceLimit
@@ -2845,33 +3134,33 @@ tests:
  - interval: 1m
    input_series:
     - series: 'ceph_nvmeof_subsystem_namespace_count{instance="node-1:10008",nqn="nqn1",cluster="mycluster"}'
-      values: '200+0x10'
+      values: '400+0x10'
     - series: 'ceph_nvmeof_subsystem_namespace_count{instance="node-1:10008",nqn="nqn2",cluster="mycluster"}'
-      values: '200+0x10'
+      values: '400+0x10'
     - series: 'ceph_nvmeof_subsystem_namespace_count{instance="node-1:10008",nqn="nqn3",cluster="mycluster"}'
-      values: '200+0x10'
+      values: '400+0x10'
     - series: 'ceph_nvmeof_subsystem_namespace_count{instance="node-1:10008",nqn="nqn4",cluster="mycluster"}'
-      values: '200+0x10'
+      values: '400+0x10'
     - series: 'ceph_nvmeof_subsystem_namespace_count{instance="node-1:10008",nqn="nqn5",cluster="mycluster"}'
-      values: '200+0x10'
+      values: '400+0x10'
     - series: 'ceph_nvmeof_subsystem_namespace_count{instance="node-1:10008",nqn="nqn6",cluster="mycluster"}'
-      values: '200+0x10'
+      values: '400+0x10'
     - series: 'ceph_nvmeof_subsystem_namespace_count{instance="node-1:10008",nqn="nqn7",cluster="mycluster"}'
-      values: '200+0x10'
+      values: '400+0x10'
     - series: 'ceph_nvmeof_subsystem_namespace_count{instance="node-1:10008",nqn="nqn8",cluster="mycluster"}'
-      values: '200+0x10'
+      values: '400+0x10'
     - series: 'ceph_nvmeof_subsystem_namespace_count{instance="node-1:10008",nqn="nqn9",cluster="mycluster"}'
-      values: '200+0x10'
+      values: '400+0x10'
     - series: 'ceph_nvmeof_subsystem_namespace_count{instance="node-1:10008",nqn="nqn10",cluster="mycluster"}'
-      values: '200+0x10'
+      values: '400+0x10'
     - series: 'ceph_nvmeof_subsystem_namespace_count{instance="node-1:10008",nqn="nqn11",cluster="mycluster"}'
-      values: '200+0x10'
+      values: '400+0x10'
    promql_expr_test:
-     - expr: sum by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_namespace_count,"gateway_host","$1","instance","(.*):.*")) > 2048
+     - expr: sum by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_namespace_count,"gateway_host","$1","instance","(.*):.*")) > 4096
        eval_time: 1m
        exp_samples:
          - labels: '{gateway_host="node-1", cluster="mycluster"}'
-           value: 2200
+           value: 4400
    alert_rule_test:
     - eval_time: 5m
       alertname: NVMeoFTooManyNamespaces
@@ -2883,7 +3172,7 @@ tests:
           type: ceph_default
         exp_annotations:
           summary: "The number of namespaces defined to the NVMeoF gateway reached or exceeded supported values on cluster mycluster"
-          description: "NVMeoF gateway node-1 has reached or exceeded the supported maximum of 2048 namespaces. Current count: 2200."
+          description: "NVMeoF gateway node-1 has reached or exceeded the supported maximum of 4096 namespaces. Current count: 4400."
 
  # NVMeoFVersionMismatch
  - interval: 1m

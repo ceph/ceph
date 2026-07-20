@@ -230,11 +230,6 @@ describe('OsdFormComponent', () => {
       expect(label.innerHTML).not.toContain('Recommended');
     });
 
-    it('should display form', () => {
-      fixtureHelper.expectElementVisible('cd-alert-panel', false);
-      fixtureHelper.expectElementVisible('.card-body form', true);
-    });
-
     describe('without data devices selected', () => {
       it('should disable preview button', () => {
         component.simpleDeployment = false;

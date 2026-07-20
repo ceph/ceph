@@ -595,7 +595,7 @@ public:
       sc->env->async_rados, sc->env->driver,
       { sc->env->svc->zone->get_zone_params().log_pool,
 	RGWDataSyncStatusManager::sync_status_oid(sc->source_zone) },
-      string(lock_name), lock_duration, caller, &sc->lcc);
+      string(lock_name), lock_duration, caller, &sc->lcc, sc->env->counters);
   }
 
   int operate(const DoutPrefixProvider *dpp) override {
@@ -2335,7 +2335,7 @@ public:
     lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, driver,
                                             rgw_raw_obj(pool, status_oid),
                                             lock_name, lock_duration, this,
-					    &sc->lcc));
+					    &sc->lcc, sync_env->counters));
     lease_stack.reset(spawn(lease_cr.get(), false));
   }
 };
@@ -4033,6 +4033,11 @@ struct bucket_list_result {
 
   bucket_list_result() : max_keys(0), is_truncated(false) {}
 
+  void reset_entries() {
+    entries.clear();
+    is_truncated = false;
+  }
+
   void decode_json(JSONObj *obj) {
     JSONDecoder::decode_json("Name", name, obj);
     JSONDecoder::decode_json("Prefix", prefix, obj);
@@ -4056,7 +4061,9 @@ public:
   RGWListRemoteBucketCR(RGWDataSyncCtx *_sc, const rgw_bucket_shard& bs,
                         rgw_obj_key& _marker_position, bucket_list_result *_result)
     : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env), bs(bs),
-      marker_position(_marker_position), result(_result) {}
+      marker_position(_marker_position), result(_result) {
+        result->reset_entries();
+      }
 
   int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
@@ -4499,12 +4506,14 @@ public:
         yield call(sync_env->error_logger->log_error_cr(dpp, sc->conn->get_remote_id(), "data", error_ss.str(), -retcode, string("failed to sync object") + cpp_strerror(-sync_status)));
       }
 done:
+      tn->log(20, SSTR("before marker tracker finish sync_status=" << sync_status << " retcode=" << retcode));
       if (sync_status == 0) {
         /* update marker */
         set_status() << "calling marker_tracker->finish(" << entry_marker << ")";
         yield call(marker_tracker->finish(entry_marker));
         sync_status = retcode;
       }
+      tn->log(20, SSTR("sync_status=" << sync_status << " retcode=" << retcode));
       if (sync_status < 0) {
         return set_cr_error(sync_status);
       }
@@ -4633,14 +4642,20 @@ int RGWBucketFullSyncCR::operate(const DoutPrefixProvider *dpp)
 
       yield call(new RGWListRemoteBucketCR(sc, bs, list_marker, &list_result));
       if (retcode < 0 && retcode != -ENOENT) {
+        tn->log(5, SSTR("failed bucket listing retcode=" << retcode));
         set_status("failed bucket listing, going down");
         drain_all();
         yield spawn(marker_tracker.flush(), true);
         return set_cr_error(retcode);
       }
+
+      tn->log(20, SSTR("listed bucket for full sync list_result.entries.size=" <<
+        list_result.entries.size() << " is_truncated=" << list_result.is_truncated)
+      );
       if (list_result.entries.size() > 0) {
         tn->set_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
       }
+
       entries_iter = list_result.entries.begin();
       for (; entries_iter != list_result.entries.end(); ++entries_iter) {
         if (lease_cr && !lease_cr->is_locked()) {
@@ -4652,6 +4667,18 @@ int RGWBucketFullSyncCR::operate(const DoutPrefixProvider *dpp)
             return set_cr_error(retcode);
           }
           return set_cr_error(-ECANCELED);
+        }
+        // for testing purpose to slow down the execution pace of the this loop
+        if (cct->_conf->rgw_inject_delay_sec > 0) {
+          if (std::string_view(cct->_conf->rgw_inject_delay_pattern) ==
+              "delay_bucket_full_sync_loop") {
+            yield {
+              utime_t dur;
+              dur.set_from_double(cct->_conf->rgw_inject_delay_sec);
+              tn->log(0, SSTR("injecting a delay of " << dur << "s"));
+              wait(dur);
+            }
+          }
         }
         tn->log(20, SSTR("[full sync] syncing object: "
             << bucket_shard_str{bs} << "/" << entries_iter->key));
@@ -4686,6 +4713,8 @@ int RGWBucketFullSyncCR::operate(const DoutPrefixProvider *dpp)
       }
     } while (list_result.is_truncated && sync_result == 0);
     set_status("done iterating over all objects");
+    tn->log(20, SSTR("done iterating over all objects sync_result=" << sync_result <<
+      " list_result.is_truncated=" << list_result.is_truncated));
 
     /* wait for all operations to complete */
     drain_all_cb([&](uint64_t stack_id, int ret) {
@@ -5844,7 +5873,7 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
 
         if (!bucket_lease_cr) {
           bucket_lease_cr.reset(new RGWContinuousLeaseCR(env->async_rados, env->driver, status_obj,
-                lock_name, lock_duration, this, &sc->lcc));
+                lock_name, lock_duration, this, &sc->lcc, env->counters));
           yield spawn(bucket_lease_cr.get(), false);
           while (!bucket_lease_cr->is_locked()) {
             if (bucket_lease_cr->is_done()) {
@@ -5912,7 +5941,7 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
         // different shards from duplicating the init and full sync
         if (!bucket_lease_cr) {
           bucket_lease_cr.reset(new RGWContinuousLeaseCR(env->async_rados, env->driver, status_obj,
-							 lock_name, lock_duration, this, &sc->lcc));
+							 lock_name, lock_duration, this, &sc->lcc, env->counters));
           yield spawn(bucket_lease_cr.get(), false);
           while (!bucket_lease_cr->is_locked()) {
             if (bucket_lease_cr->is_done()) {

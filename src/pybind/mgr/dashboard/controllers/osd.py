@@ -24,7 +24,7 @@ from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
 from ._version import APIVersion
 from .orchestrator import raise_if_no_orchestrator
 
-logger = logging.getLogger('controllers.osd')
+logger = logging.getLogger(__name__)
 
 SAFE_TO_DESTROY_SCHEMA = {
     "safe_to_destroy": ([str], "Is OSD safe to destroy?"),

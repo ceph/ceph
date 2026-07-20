@@ -2,6 +2,7 @@ import logging
 import os
 
 from typing import Dict, List, Optional, Tuple, Union
+from pathlib import Path
 
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
 from ..container_types import CephContainer
@@ -81,6 +82,8 @@ class CephNvmeof(ContainerDaemonForm):
         mounts[log_dir] = '/var/log/ceph:z'
         if mtls_dir:
             mounts[mtls_dir] = '/src/mtls:z'
+        if Path('/etc/kmip').is_dir():
+            mounts['/etc/kmip'] = '/src/certs/kmip:z'
         return mounts
 
     def _get_huge_pages_mounts(self, files: Dict[str, str]) -> Dict[str, str]:
@@ -201,6 +204,21 @@ class CephNvmeof(ContainerDaemonForm):
 
         # populate files from the config-json
         populate_files(data_dir, self.files, uid, gid)
+
+        # create /dev/dsa if DSA acceleration is enabled and the device doesn't exist
+        if (
+            'enable_dsa_acceleration' in self.files
+            and self.files['enable_dsa_acceleration'] == 'True'
+        ):
+            if not os.path.exists('/dev/dsa'):
+                try:
+                    # create a /dev/dsa as a directory to avoid podman start failure
+                    os.mkdir('/dev/dsa', mode=0o755)
+                    logger.info(
+                        'Created /dev/dsa directory, device file was not found'
+                    )
+                except Exception:
+                    logger.exception('Failed to create /dev/dsa')
 
     @staticmethod
     def configfs_mount_umount(data_dir, mount=True):

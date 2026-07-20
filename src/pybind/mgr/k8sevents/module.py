@@ -33,6 +33,8 @@ import logging
 import tempfile
 import threading
 
+from .cli import K8SeventsCLICommand
+
 from urllib.parse import urlparse
 from datetime import tzinfo, datetime, timedelta
    
@@ -1012,6 +1014,7 @@ class CephConfigWatcher(BaseThread):
 
 
 class Module(MgrModule):
+    CLICommand = K8SeventsCLICommand
     COMMANDS = [
         {
             "cmd": "k8sevents status",

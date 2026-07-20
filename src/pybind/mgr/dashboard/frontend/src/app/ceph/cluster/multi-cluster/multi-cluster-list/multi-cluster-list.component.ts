@@ -132,12 +132,12 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
         prop: 'cluster_connection_status',
         name: $localize`Connection`,
         flexGrow: 2,
-        cellTransformation: CellTemplate.badge,
+        cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
           map: {
-            1: { value: 'DISCONNECTED', class: 'badge-danger' },
-            0: { value: 'CONNECTED', class: 'badge-success' },
-            2: { value: 'CHECKING..', class: 'badge-info' }
+            1: { value: 'DISCONNECTED', class: 'tag-danger' },
+            0: { value: 'CONNECTED', class: 'tag-success' },
+            2: { value: 'CHECKING..', class: 'tag-info' }
           }
         }
       },

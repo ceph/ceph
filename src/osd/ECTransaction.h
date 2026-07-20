@@ -18,6 +18,7 @@
 #include "ECUtil.h"
 #include "erasure-code/ErasureCodeInterface.h"
 #include "os/Transaction.h"
+#include "OSDMap.h"
 #include "PGTransaction.h"
 
 namespace ECTransaction {
@@ -26,8 +27,6 @@ class WritePlanObj {
   const hobject_t hoid;
   std::optional<ECUtil::shard_extent_set_t> to_read;
   ECUtil::shard_extent_set_t will_write;
-  const ECUtil::HashInfoRef hinfo;
-  const ECUtil::HashInfoRef shinfo;
   const uint64_t orig_size;
   const uint64_t projected_size;
   bool invalidates_cache;
@@ -43,16 +42,12 @@ class WritePlanObj {
       uint64_t orig_size,
       const std::optional<object_info_t> &oi,
       const std::optional<object_info_t> &soi,
-      const ECUtil::HashInfoRef &&hinfo,
-      const ECUtil::HashInfoRef &&shinfo,
-      const unsigned pdw_write_mode);
+      unsigned pdw_write_mode);
 
   void print(std::ostream &os) const {
     os << "{hoid: " << hoid
        << " to_read: " << to_read
        << " will_write: " << will_write
-       << " hinfo: " << hinfo
-       << " shinfo: " << shinfo
        << " orig_size: " << orig_size
        << " projected_size: " << projected_size
        << " invalidates_cache: " << invalidates_cache
@@ -111,9 +106,8 @@ class Generate {
   void truncate();
   void overlay_writes();
   void appends_and_clone_ranges();
-  void written_and_present_shards();
+  void written_shards();
   void attr_updates();
-  void handle_deletes();
 
  public:
   Generate(PGTransaction &t,
@@ -126,7 +120,8 @@ class Generate {
     const hobject_t &oid, PGTransaction::ObjectOperation &op,
     WritePlanObj &plan,
     DoutPrefixProvider *dpp,
-    pg_log_entry_t *entry);
+    pg_log_entry_t *entry,
+    bool &first_write_in_interval);
 };
 
 void generate_transactions(
@@ -142,6 +137,7 @@ void generate_transactions(
     std::set<hobject_t> *temp_added,
     std::set<hobject_t> *temp_removed,
     DoutPrefixProvider *dpp,
-    const OSDMapRef &osdmap
+    const OSDMapRef &osdmap,
+    bool &first_write_in_interval
   );
 }

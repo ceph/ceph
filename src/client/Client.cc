@@ -1993,6 +1993,7 @@ void Client::dump_mds_sessions(Formatter *f, bool cap_dump)
 
 void Client::dump_mds_requests(Formatter *f)
 {
+  f->open_array_section("requests");
   for (map<ceph_tid_t, MetaRequest*>::iterator p = mds_requests.begin();
        p != mds_requests.end();
        ++p) {
@@ -2000,6 +2001,7 @@ void Client::dump_mds_requests(Formatter *f)
     p->second->dump(f);
     f->close_section();
   }
+  f->close_section();
 }
 
 int Client::verify_reply_trace(int r, MetaSession *session,
@@ -3771,7 +3773,9 @@ void Client::put_cap_ref(Inode *in, int cap)
 	  p.second.dirty_data = 0;
 	signal_context_list(in->waitfor_commit);
 	ldout(cct, 5) << __func__ << " dropped last FILE_BUFFER ref on " << *in << dendl;
-	++put_nref;
+        if (!in->is_write_delegated()) {
+          ++put_nref;
+        }
 
 	if (!in->cap_snaps.empty()) {
 	  flush_snaps(in);
@@ -6088,11 +6092,12 @@ int Client::mds_check_access(std::string& path, const UserPerm& perms, int mask)
     path = path.substr(1);
   }
 
+  std::string_view fs_name = mdsmap->get_fs_name();
   for (auto& s: cap_auths) {
-    ldout(cct, 20) << __func__ << " auth match path " << s.match.path << " r: " << s.readable
-                   << " w: " << s.writeable << dendl;
+    ldout(cct, 20) << __func__ << " auth match fsname " << s.match.fs_name << " auth match path "
+                   << s.match.path << " r: " << s.readable << " w: " << s.writeable << dendl;
     ldout(cct, 20) << " match.uid " << s.match.uid << dendl;
-    if (s.match.match(path, perms.uid(), perms.gid(), &gid_list)) {
+    if (s.match.match(fs_name, path, perms.uid(), perms.gid(), &gid_list)) {
       ldout(cct, 20) << " is matched" << dendl;
       // always follow the last auth caps' permision
       root_squash_perms = true;
@@ -7518,6 +7523,11 @@ int Client::_lookup(const InodeRef& dir, const std::string& name, std::string& a
   mask &= CEPH_CAP_ANY_SHARED | CEPH_STAT_RSTAT;
   std::string dname = name;
 
+  if (!dir->is_dir()) {
+    r = -ENOTDIR;
+    goto done;
+  }
+
   if (dname == ".."sv) {
     if (dir->dentries.empty()) {
       MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPPARENT);
@@ -7541,11 +7551,6 @@ int Client::_lookup(const InodeRef& dir, const std::string& name, std::string& a
 
   if (dname == "."sv) {
     *target = dir;
-    goto done;
-  }
-
-  if (!dir->is_dir()) {
-    r = -ENOTDIR;
     goto done;
   }
 
@@ -7723,6 +7728,11 @@ int Client::path_walk(InodeRef dirinode, const filepath& origpath, walk_dentry_r
     ldout(cct, 10) << " " << i << " " << *diri << " " << dname << dendl;
     ldout(cct, 20) << "  (path is " << path << ")" << dendl;
     InodeRef next;
+    if (!diri.get()->is_dir()) {
+      ldout(cct, 20) << diri.get() << " is not a dir inode, name " << dname.c_str() << dendl;
+      rc = -ENOTDIR;
+      goto out;
+    }
     if (should_check_perms()) {
       int r = may_lookup(diri.get(), perms);
       if (r < 0) {
@@ -9158,6 +9168,43 @@ int Client::flock(int fd, int operation, uint64_t owner)
   return _flock(f, operation, owner);
 }
 
+int Client::getlk(int fd, struct flock *fl, uint64_t owner)
+{
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
+  tout(cct) << __func__ << std::endl;
+  tout(cct) << fd << std::endl;
+  tout(cct) << owner << std::endl;
+
+  std::scoped_lock lock(client_lock);
+  Fh *fh = get_filehandle(fd);
+  if (!fh)
+    return -EBADF;
+
+  return _getlk(fh, fl, owner);
+}
+
+int Client::setlk(int fd, struct flock *fl, uint64_t owner, int sleep)
+{
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
+  tout(cct) << __func__ << std::endl;
+  tout(cct) << fd << std::endl;
+  tout(cct) << owner << std::endl;
+  tout(cct) << sleep << std::endl;
+
+  std::scoped_lock lock(client_lock);
+  Fh *fh = get_filehandle(fd);
+  if (!fh)
+    return -EBADF;
+
+  return _setlk(fh, fl, owner, sleep);
+}
+
 int Client::opendir(const char *relpath, dir_result_t **dirpp, const UserPerm& perms)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
@@ -9461,25 +9508,22 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
 						  dirp->offset, dentry_off_lt());
 
   string dn_name;
-  while (true) {
+  for (unsigned idx = pd - dir->readdir_cache.begin();
+       idx < dir->readdir_cache.size();
+       ++idx) {
     int mask = caps;
     if (!dirp->inode->is_complete_and_ordered())
       return -EAGAIN;
-    if (pd == dir->readdir_cache.end())
-      break;
-    Dentry *dn = *pd;
+    Dentry *dn = dir->readdir_cache[idx];
     if (dn->inode == NULL) {
       ldout(cct, 15) << " skipping null '" << dn->name << "'" << dendl;
-      ++pd;
       continue;
     }
     if (dn->cap_shared_gen != dir->parent_inode->shared_gen) {
       ldout(cct, 15) << " skipping mismatch shared gen '" << dn->name << "'" << dendl;
-      ++pd;
       continue;
     }
 
-    int idx = pd - dir->readdir_cache.begin();
     if (dn->inode->is_dir() && cct->_conf->client_dirsize_rbytes) {
       mask |= CEPH_STAT_RSTAT;
     }
@@ -9493,9 +9537,8 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
       return -EAGAIN;
     }
     
-    // the content of readdir_cache may change after _getattr(), so pd may be invalid iterator    
-    pd = dir->readdir_cache.begin() + idx;
-    if (pd >= dir->readdir_cache.end() || *pd != dn)
+    // the content of readdir_cache may change after _getattr()
+    if (idx >= dir->readdir_cache.size() || dir->readdir_cache[idx] != dn)
       return -EAGAIN;
 
     struct ceph_statx stx;
@@ -9505,8 +9548,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
     uint64_t next_off = dn->offset + 1;
     auto dname = _unwrap_name(*diri, dn->name, dn->alternate_name);
     fill_dirent(&de, dname.c_str(), stx.stx_mode, stx.stx_ino, next_off);
-    ++pd;
-    if (pd == dir->readdir_cache.end())
+    if (idx + 1 == dir->readdir_cache.size())
       next_off = dir_result_t::END;
 
     Inode *in = NULL;
@@ -9517,6 +9559,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
 
     dn_name = dn->name; // fill in name while we have lock
 
+    // the content of readdir_cache may change after unlocking
     client_lock.unlock();
     r = cb(p, &de, &stx, next_off, in);  // _next_ offset
     client_lock.lock();
@@ -11475,7 +11518,9 @@ int Client::write(int fd, const char *buf, loff_t size, loff_t offset)
 #endif
   /* We can't return bytes written larger than INT_MAX, clamp size to that */
   size = std::min(size, (loff_t)INT_MAX);
-  int r = _write(fh, offset, size, buf, NULL, false);
+  bufferlist bl;
+  bl.append(buf, size);
+  int r = _write(fh, offset, size, std::move(bl));
   ldout(cct, 3) << "write(" << fd << ", \"...\", " << size << ", " << offset << ") = " << r << dendl;
   return r;
 }
@@ -11500,7 +11545,7 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
     if(iovcnt < 0) {
       return -EINVAL;
     }
-    loff_t totallen = 0;
+    size_t totallen = 0;
     for (int i = 0; i < iovcnt; i++) {
         totallen += iov[i].iov_len;
     }
@@ -11510,12 +11555,29 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
      * 32-bit signed integers. Clamp the I/O sizes in those functions so that
      * we don't do I/Os larger than the values we can return.
      */
+    bufferlist data;
     if (clamp_to_int) {
-      totallen = std::min(totallen, (loff_t)INT_MAX);
+      totallen = std::min(totallen, (size_t)INT_MAX);
+      size_t total_appended = 0;
+      for (int i = 0; i < iovcnt; i++) {
+        if (iov[i].iov_len > 0) {
+          if (total_appended + iov[i].iov_len >= totallen) {
+            data.append((const char *)iov[i].iov_base, totallen - total_appended);
+            break;
+          } else {
+            data.append((const char *)iov[i].iov_base, iov[i].iov_len);
+            total_appended += iov[i].iov_len;
+          }
+        }
+      }
+    } else {
+      for (int i = 0; i < iovcnt; i++) {
+        data.append((const char *)iov[i].iov_base, iov[i].iov_len);
+      }
     }
 
     if (write) {
-        int64_t w = _write(fh, offset, totallen, NULL, iov, iovcnt, onfinish, do_fsync, syncdataonly);
+        int64_t w = _write(fh, offset, totallen, std::move(data), onfinish, do_fsync, syncdataonly);
         ldout(cct, 3) << "pwritev(" << fh << ", \"...\", " << totallen << ", " << offset << ") = " << w << dendl;
         return w;
     } else {
@@ -11699,9 +11761,8 @@ bool Client::C_Write_Finisher::try_complete()
   return false;
 }
 
-int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
-	                const struct iovec *iov, int iovcnt, Context *onfinish,
-	                bool do_fsync, bool syncdataonly)
+int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
+	               Context *onfinish, bool do_fsync, bool syncdataonly)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
@@ -11769,19 +11830,6 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     if (r < 0)
       return r;
     ceph_assert(in->inline_version > 0);
-  }
-
-  // copy into fresh buffer (since our write may be resub, async)
-  bufferlist bl;
-  if (buf) {
-    if (size > 0)
-      bl.append(buf, size);
-  } else if (iov){
-    for (int i = 0; i < iovcnt; i++) {
-      if (iov[i].iov_len > 0) {
-        bl.append((const char *)iov[i].iov_base, iov[i].iov_len);
-      }
-    }
   }
 
   int want, have;
@@ -12322,7 +12370,7 @@ int Client::_fsync(Inode *in, bool syncdataonly)
     ldout(cct, 15) << "got " << r << " from flush writeback" << dendl;
   } else {
     // FIXME: this can starve
-    while (in->cap_refs[CEPH_CAP_FILE_BUFFER] > 0) {
+    while (!in->is_last_cap_ref(CEPH_CAP_FILE_BUFFER)) {
       ldout(cct, 10) << "ino " << in->ino << " has " << in->cap_refs[CEPH_CAP_FILE_BUFFER]
 		     << " uncommitted, waiting" << dendl;
       wait_on_context_list(in->waitfor_commit);
@@ -12521,20 +12569,18 @@ int Client::getcwd(string& dir, const UserPerm& perms)
   return _getcwd(dir, perms);
 }
 
-int Client::statfs(const char *path, struct statvfs *stbuf,
+int Client::_statfs(Inode *in, struct statvfs *stbuf,
 		   const UserPerm& perms)
 {
-  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
-  if (!mref_reader.is_state_satisfied())
-    return -ENOTCONN;
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
+  ldout(cct, 10) << __func__ << dendl;
   tout(cct) << __func__ << std::endl;
   unsigned long int total_files_on_fs;
 
   ceph_statfs stats;
   C_SaferCond cond;
 
-  std::unique_lock lock(client_lock);
   const vector<int64_t> &data_pools = mdsmap->get_data_pools();
   if (data_pools.size() == 1) {
     objecter->get_fs_stats(stats, data_pools[0], &cond);
@@ -12542,12 +12588,17 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
     objecter->get_fs_stats(stats, std::optional<int64_t>(), &cond);
   }
 
-  lock.unlock();
+  client_lock.unlock();
   int rval = cond.wait();
-  lock.lock();
+  client_lock.lock();
 
-  ceph_assert(root);
-  total_files_on_fs = root->rstat.rfiles + root->rstat.rsubdirs;
+  ceph_assert(in);
+  // Usually quota_root will == root_ancestor, but if the mount root has no
+  // quota but we can see a parent of it that does have a quota, we'll
+  // respect that one instead.
+  InodeRef quota_root = in->quota.is_enabled() ? in : get_quota_root(in, perms);
+
+  total_files_on_fs = quota_root->rstat.rfiles + quota_root->rstat.rsubdirs;
 
   if (rval < 0) {
     ldout(cct, 1) << "underlying call to statfs returned error: "
@@ -12574,12 +12625,6 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
   stbuf->f_fsid = -1;       // ??
   stbuf->f_flag = 0;        // ??
   stbuf->f_namemax = NAME_MAX;
-
-  // Usually quota_root will == root_ancestor, but if the mount root has no
-  // quota but we can see a parent of it that does have a quota, we'll
-  // respect that one instead.
-  ceph_assert(root != nullptr);
-  InodeRef quota_root = root->quota.is_enabled(QUOTA_MAX_BYTES) ? root : get_quota_root(root.get(), perms, QUOTA_MAX_BYTES);
 
   // get_quota_root should always give us something if client quotas are
   // enabled
@@ -12965,10 +13010,29 @@ int Client::get_snap_info(const char *path, const UserPerm &perms, SnapInfo *sna
 
 int Client::ll_statfs(Inode *in, struct statvfs *stbuf, const UserPerm& perms)
 {
-  /* Since the only thing this does is wrap a call to statfs, and
-     statfs takes a lock, it doesn't seem we have a need to split it
-     out. */
-  return statfs(0, stbuf, perms);
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
+  std::unique_lock cl(client_lock);
+  return _statfs(in, stbuf, perms);
+}
+
+int Client::statfs(const char *path, struct statvfs *stbuf, const UserPerm& perms)
+{
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
+  std::unique_lock cl(client_lock);
+
+  walk_dentry_result wdr;
+  if (int rc = path_walk(cwd, filepath(path), &wdr, perms, {}); rc < 0) {
+    return rc;
+  }
+
+  auto in = wdr.target.get();
+  return _statfs(in, stbuf, perms);
 }
 
 void Client::_ll_register_callbacks(struct ceph_client_callback_args *args)
@@ -16144,7 +16208,9 @@ int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
   tout(cct) << off << std::endl;
   tout(cct) << len << std::endl;
 
-  int r = _write(fh, off, len, data, NULL, 0);
+  bufferlist bl;
+  bl.append(data, len);
+  int r = _write(fh, off, len, std::move(bl));
   ldout(cct, 3) << "ll_write " << fh << " " << off << "~" << len << " = " << r
 		<< dendl;
   return r;
@@ -16162,7 +16228,7 @@ int64_t Client::ll_writev(struct Fh *fh, const struct iovec *iov, int iovcnt, in
     ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
     return -EBADF;
   }
-  return _preadv_pwritev_locked(fh, iov, iovcnt, off, true, false);
+  return _preadv_pwritev_locked(fh, iov, iovcnt, off, true, true);
 }
 
 int64_t Client::ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int64_t off)
@@ -16177,7 +16243,7 @@ int64_t Client::ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int
     ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
     return -EBADF;
   }
-  return _preadv_pwritev_locked(fh, iov, iovcnt, off, false, false);
+  return _preadv_pwritev_locked(fh, iov, iovcnt, off, false, true);
 }
 
 int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,

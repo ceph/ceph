@@ -150,6 +150,8 @@ static inline constexpr ScrubCounterSet io_counters_replicated{
   .successful_elapsed = l_osd_scrub_rppool_successful_elapsed,
   .failed_cnt = l_osd_scrub_rppool_failed,
   .failed_elapsed = l_osd_scrub_rppool_failed_elapsed,
+  .write_intersects = l_osd_scrub_rppool_write_intersects,
+  .write_blocked = l_osd_scrub_rppool_write_blocked,
   // replica-reservation-related:
   .rsv_successful_cnt = l_osd_scrub_rppool_reserv_success,
   .rsv_successful_elapsed = l_osd_scrub_rppool_reserv_successful_elapsed,
@@ -175,6 +177,8 @@ static inline constexpr ScrubCounterSet io_counters_ec{
   .successful_elapsed = l_osd_scrub_ec_successful_elapsed,
   .failed_cnt = l_osd_scrub_ec_failed,
   .failed_elapsed = l_osd_scrub_ec_failed_elapsed,
+  .write_intersects = l_osd_scrub_ec_write_intersects,
+  .write_blocked = l_osd_scrub_ec_write_blocked,
   // replica-reservation-related:
   .rsv_successful_cnt = l_osd_scrub_ec_reserv_success,
   .rsv_successful_elapsed = l_osd_scrub_ec_reserv_successful_elapsed,
@@ -335,6 +339,9 @@ class PgScrubber : public ScrubPgIF,
   scrub_level_t scrub_requested(
       scrub_level_t scrub_level,
       scrub_type_t scrub_type) final;
+
+  void on_operator_abort_scrub(
+      ceph::Formatter* f) final;
 
   /**
    * let the scrubber know that a recovery operation has completed.
@@ -512,6 +519,17 @@ class PgScrubber : public ScrubPgIF,
 
   void on_mid_scrub_abort(Scrub::delay_cause_t issue) final;
 
+  /**
+   *  an auxiliary used by on_mid_scrub_abort()
+   *  If the target has operator-initiated urgency (either 'must_repair' -
+   *  operator-requested repair or 'operator_requested' - operator-requested
+   *  scrub) - downgrade it to regular periodic.
+   *  \retval true: the urgency was downgraded
+   */
+  bool downgrade_on_operator_abort(
+    Scrub::SchedTarget& targ,
+    utime_t scrub_clock_now);
+
   ScrubMachineListener::MsgAndEpoch prep_replica_map_msg(
     Scrub::PreemptionNoted was_preempted) final;
 
@@ -571,8 +589,6 @@ class PgScrubber : public ScrubPgIF,
   std::string_view registration_state() const;
 
   virtual void _scrub_clear_state() {}
-
-  utime_t m_scrub_reg_stamp;		///< stamp we registered for
 
   /// the sub-object that manages this PG's scheduling parameters.
   /// An Optional instead of a regular member, as we wish to directly

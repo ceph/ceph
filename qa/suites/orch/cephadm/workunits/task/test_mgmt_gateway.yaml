@@ -29,9 +29,7 @@ tasks:
         ceph orch apply alertmanager
         ceph orch apply prometheus
         sleep 240
-        # generate SSL certificate
-        openssl req -x509 -newkey rsa:4096 -keyout /tmp/key.pem -out /tmp/cert.pem -sha256 -days 30 -nodes -subj "/CN=*"
-        # Generate a mgmt.spec template
+        # Deploy mgmt-gatway with SSL enabled on port 9876 to avoid port conflicts
         cat << EOT > /tmp/mgmt.spec
         service_type: mgmt-gateway
         service_id: foo
@@ -39,19 +37,10 @@ tasks:
           hosts:
             - ${HOSTNAME}
         spec:
-          ssl_protocols:
-            - TLSv1.2
-            - TLSv1.3
-          ssl_ciphers:
-            - AES128-SHA
-            - AES256-SHA
+          ssl: true
+          port: 9876
           enable_health_check_endpoint: True
         EOT
-        # Add generated certificates to spec file
-        echo "  ssl_cert: |" >> /tmp/mgmt.spec
-        while read LINE; do echo $LINE | sed -e "s/^/    /"; done < /tmp/cert.pem >> /tmp/mgmt.spec
-        echo "  ssl_key: |" >> /tmp/mgmt.spec
-        while read LINE; do echo $LINE | sed -e "s/^/    /"; done < /tmp/key.pem >> /tmp/mgmt.spec
         # Apply spec
         ceph orch apply -i /tmp/mgmt.spec
 - cephadm.wait_for_service:
@@ -91,11 +80,13 @@ tasks:
         MGMT_GTW_HOST=$(ceph orch ps --daemon-type mgmt-gateway -f json | jq -e '.[]' | jq -r '.hostname')
         MGMT_GTW_IP=$(ceph orch host ls -f json | jq -r --arg MGMT_GTW_HOST "$MGMT_GTW_HOST" '.[] | select(.hostname==$MGMT_GTW_HOST) | .addr')
 
+        MGMT_GTW_PORT=9876
+
         # check mgmt-gateway health
-        curl -k -s https://${MGMT_GTW_IP}/health
+        curl -k -s https://${MGMT_GTW_IP}:${MGMT_GTW_PORT}/health
         curl -k -s https://${MGMT_GTW_IP}:29443/health
 
         # wait for monitoring services
-        wait_for_service "Grafana" "https://${MGMT_GTW_IP}/grafana/api/health" '.database == "ok"' || exit 1
-        wait_for_service "Prometheus" "https://${MGMT_GTW_IP}/prometheus/api/v1/status/config" '.status == "success"' || exit 1
-        wait_for_service "Alertmanager" "https://${MGMT_GTW_IP}/alertmanager/api/v2/status" '.cluster.status == "ready"' || exit 1
+        wait_for_service "Grafana" "https://${MGMT_GTW_IP}:${MGMT_GTW_PORT}/grafana/api/health" '.database == "ok"' || exit 1
+        wait_for_service "Prometheus" "https://${MGMT_GTW_IP}:${MGMT_GTW_PORT}/prometheus/api/v1/status/config" '.status == "success"' || exit 1
+        wait_for_service "Alertmanager" "https://${MGMT_GTW_IP}:${MGMT_GTW_PORT}/alertmanager/api/v2/status" '.cluster.status == "ready"' || exit 1

@@ -3,17 +3,22 @@ overrides:
     log-ignorelist:  
       # general ignorelist
       - OSD_DOWN
+      - osds down
       - OSD_HOST_DOWN
       - OSD_ROOT_DOWN
       - PG_DEGRADED
       # nvmeof daemon thrashing
       - CEPHADM_FAILED_DAEMON
       - NVMEOF_SINGLE_GATEWAY
+      - have only 1 nvmeof gateway
+      - has 1 gateway
       - NVMEOF_GATEWAY_DOWN
       - are in unavailable state
       - is unavailable
       - is in error state
       - failed cephadm daemon
+      - CEPHADM_STRAY_DAEMON
+      - CEPHADM_DAEMON_PLACE_FAIL
 
 tasks:
 - nvmeof.thrash:

@@ -1,7 +1,7 @@
 import { PageHelper } from '../page-helper.po';
 
 export class DashboardPageHelper extends PageHelper {
-  pages = { index: { url: '#/dashboard', id: 'cd-dashboard' } };
+  pages = { index: { url: '#/overview', id: 'cd-dashboard' } };
 
   infoGroupTitle(index: number) {
     return cy.get('[data-testid=group-title]').its(index).text();

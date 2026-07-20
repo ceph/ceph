@@ -33,6 +33,35 @@ options:
   services:
   - mgr
   - common
+- name: mgr_stats_period_autotune
+  type: bool
+  level: basic
+  desc: Automatically adjust mgr_stats_period based on Manager message queue depth
+  long_desc: When enabled, the Manager monitors its incoming message queue and automatically
+    increases mgr_stats_period when the queue backs up beyond the configured threshold,
+    reducing daemon reporting frequency to prevent Manager overload. The period is
+    gradually decreased back to the original value when the queue depth recovers.
+    This prevents performance degradation during high cluster activity without requiring
+    manual intervention. When disabled, mgr_stats_period remains at the manually
+    configured value.
+  default: true
+  services:
+  - mgr
+  see_also:
+  - mgr_stats_period
+- name: mgr_stats_period_autotune_queue_threshold
+  type: int
+  level: advanced
+  desc: Message queue depth that triggers automatic increase of mgr_stats_period
+  long_desc: When mgr_stats_period_autotune is enabled, the Manager will increase
+    the stats reporting period if the incoming message queue exceeds this threshold.
+    Higher values make the system less sensitive to temporary queue spikes but may
+    allow longer periods of Manager overload.
+  default: 100
+  services:
+  - mgr
+  see_also:
+  - mgr_stats_period
 - name: mgr_client_bytes
   type: size
   level: dev
@@ -145,6 +174,19 @@ options:
   - mgr_module_path
   flags:
   - startup
+- name: mgr_subinterpreter_modules
+  type: str
+  level: advanced
+  desc: List of manager modules to load in independent subinterpreters
+  long_desc: A comma delimited list of module names. This list is read by manager
+    when it starts. By default, manager loads each module into the main interpreter.
+    Modules in this list will instead be loaded into independent subinterpreters.
+    Specifying '*' will cause all modules to be run in independent subinterpreters.
+  default: @mgr_subinterpreter_modules@
+  services:
+  - mgr
+  flags:
+  - startup
 - name: mgr_initial_modules
   type: str
   level: basic
@@ -153,13 +195,48 @@ options:
     first started after installation, to populate the list of enabled manager modules.  Subsequent
     updates are done using the 'mgr module [enable|disable]' commands.  List may be
     comma or space separated.
-  default: iostat nfs
+  default: iostat nfs nvmeof
   services:
   - mon
   - common
   flags:
   - no_mon_update
   - cluster_create
+- name: mgr_module_load_delay
+  type: millisecs
+  level: dev
+  default: 0
+  desc: Number of milliseconds for Manager modules to delay loading. For testing purposes only.
+  long_desc: Number of milliseconds for Manager modules to delay loading. For testing purposes only.
+  see_also:
+  - mgr_module_load_delay_name
+  flags:
+  - runtime
+  services:
+  - mgr
+- name: mgr_module_load_delay_name
+  type: str
+  level: dev
+  desc: Specify which Manager module is to delay loading by mgr_module_load_delay milliseconds. For testing purposes only.
+  long_desc: Specify which Manager module is to delay loading by mgr_module_load_delay milliseconds. For testing purposes only.
+  see_also:
+  - mgr_module_load_delay
+  flags:
+  - runtime
+  services:
+  - mgr
+- name: mgr_module_load_expiration
+  type: millisecs
+  level: dev
+  default: 20000
+  desc: Maximum number of milliseconds the active mgr is allowed to load the mgr modules before declaring availability.
+  long_desc: Maximum number of milliseconds the active mgr is allowed to load the mgr modules. If any modules are still
+    uninitialized after the expiration is exceeded, the mgr proceeds to declare availability, but a health error will be
+    issued indicating which modules didn't load in time.
+  flags:
+  - runtime
+  services:
+  - mgr
 - name: cephadm_path
   type: str
   level: advanced
@@ -377,3 +454,27 @@ options:
   services:
   - mgr
   with_legacy: true
+- name: mgr_osd_upgrade_check_convergence_factor
+  type: float
+  level: advanced
+  desc: The factor used to converge to a subset of OSDs within a CRUSH bucket
+    that can be upgraded without affecting immediate data availability.
+  fmt_desc: The factor used in calculations to converge to a subset of OSDs that
+    can be safely upgraded simultaneously. Each iteration of the calculation
+    uses this factor until a safe subset is found. The smaller the factor, the
+    lower the number of iterations needed to find a safe set. But the number of
+    OSDs found may not be optimal. Conversely, with a larger factor, a higher
+    number of iterations and time would be consumed to find a safe set. The
+    number of OSDs found in this case would be closer to optimal.
+  default: 0.8
+  min: 0.1
+  max: 0.9
+  services:
+  - mgr
+- name: mgr_test_metadata_error
+  type: bool
+  level: dev
+  desc: Used for simulating errors during operations involving metadata.
+  default: false
+  services:
+  - mgr

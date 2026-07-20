@@ -53,8 +53,14 @@ function TEST_availablity_score() {
 
     ceph -s 
     ceph health | grep HEALTH_OK || return 1
-    ceph osd pool availability-status
-    AVAILABILITY_STATUS=$(ceph osd pool availability-status | grep -w "foo")
+    # enable feature
+    ceph config set mon enable_availability_tracking true
+
+    # Retry up to 5 times for the pool to show up in availability-status
+    AVAILABILITY_STATUS="$(wait_for_pool_availability_status foo 5 1)" || {
+      echo "Failed: availability status not reported for pool foo after enabling (5 retries)"
+      return 1
+    }
     SCORE=$(echo "$AVAILABILITY_STATUS" | awk '{print $7}')
     IS_AVAILABLE=$(echo "$AVAILABILITY_STATUS" | awk '{print $8}')
     UPTIME_DURATION=$(echo "$AVAILABILITY_STATUS" | awk '{print $2}')
@@ -82,7 +88,11 @@ function TEST_availablity_score() {
 
     # enable feature and check is score updated when it was off
     ceph config set mon enable_availability_tracking true 
-    AVAILABILITY_STATUS=$(ceph osd pool availability-status | grep -w "foo")
+    # Retry up to 5 times for the pool to show up in availability-status
+    AVAILABILITY_STATUS="$(wait_for_pool_availability_status foo 5 1)" || {
+      echo "Failed: availability status not reported for pool foo after enabling (5 retries)"
+      return 1
+    }
     UPTIME_DURATION=$(echo "$AVAILABILITY_STATUS" | awk '{print $2}')
     NEW_UPTIME_SECONDS=$(( ${UPTIME_DURATION%[sm]} * (${UPTIME_DURATION: -1} == "m" ? 60 : 1) ))
     if [ "$NEW_UPTIME_SECONDS" -gt $((UPTIME_SECONDS + 120)) ]; then
@@ -147,6 +157,16 @@ function TEST_availablity_score() {
   
     echo "TEST PASSED"
     return 0
+}
+
+function wait_for_pool_availability_status() {
+    local pool="$1"
+
+    for _ in {1..5}; do
+        ceph osd pool availability-status | grep -w "$pool" && return 0
+        sleep 1
+    done
+    return 1
 }
 
 main availability "$@"

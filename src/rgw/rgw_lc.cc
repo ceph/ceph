@@ -432,10 +432,18 @@ public:
   }
 
   boost::optional<std::string> next_key_name() {
-    if (obj_iter == list_results.objs.end() ||
-	(obj_iter + 1) == list_results.objs.end()) {
-      /* this should have been called after get_obj() was called, so this should
-       * only happen if is_truncated is false */
+    if (obj_iter == list_results.objs.end()) {
+      return boost::none;
+    }
+    if ((obj_iter + 1) == list_results.objs.end()) {
+      /* At the last object in the current page */
+      if (list_results.is_truncated) {
+        /* More pages exist. Cannot determine if next object has same name
+         * without fetching next page. Return current object name to indicate
+         * uncertainty and prevent incorrect DM deletion at page boundaries. */
+        return obj_iter->key.name;
+      }
+      /* No more pages, definitively no next object */
       return boost::none;
     }
 
@@ -623,10 +631,15 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
   auto obj = oc.bucket->get_object(obj_key);
   ret = obj->load_obj_state(dpp, null_yield, true);
   if (ret < 0) {
-    ldpp_dout(oc.dpp, 0) <<
-      fmt::format("ERROR: get_obj_state() failed in {} for object k={} error r={}",
-		  __func__, oc.o.key.to_string(), ret) << dendl;
-    return ret;
+    /* for delete markers, we expect load_obj_state() to "fail"
+     * with -ENOENT */
+    if (! (o.is_delete_marker() &&
+	   (ret == -ENOENT))) {
+      ldpp_dout(oc.dpp, 0) <<
+	fmt::format("ERROR: get_obj_state() failed in {} for object k={} error r={}",
+		    __func__, oc.o.key.to_string(), ret) << dendl;
+      return ret;
+    }
   }
 
   auto have_notify = !event_types.empty();
@@ -1142,8 +1155,8 @@ public:
 
       ldpp_dout(dpp, 7) << __func__ << "(): dm-check DELE: key=" << o.key
                         << " " << oc.wq->thr_name() << dendl;
-      *exp_time = real_clock::now();
-      return true;
+
+      // go on to compare mtime, size, etc
     }
 
     auto& mtime = o.meta.mtime;
@@ -1280,13 +1293,14 @@ public:
 			<< oc.wq->thr_name() << dendl;
       return false;
     }
+    /* don't remove the delete marker if that would expose a non-current
+     * version as current */
     if (oc.next_has_same_name(o.key.name)) {
       ldpp_dout(dpp, 20) << __func__ << "(): key=" << o.key
-			<< ": next is same object, skipping "
+			<< ": dm expiration would expose a non-current version, skipping "
 			<< oc.wq->thr_name() << dendl;
       return false;
     }
-
     *exp_time = real_clock::now();
 
     return true;

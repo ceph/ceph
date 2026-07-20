@@ -13,6 +13,7 @@
 #include "include/utime_fmt.h"
 #include "messages/MOSDRepScrubMap.h"
 #include "osd/ECUtil.h"
+#include "osd/ECUtilL.h"
 #include "osd/OSD.h"
 #include "osd/PG.h"
 #include "osd/PrimaryLogPG.h"
@@ -98,9 +99,29 @@ ScrubBackend::ScrubBackend(ScrubBeListener& scrubber,
 }
 
 uint64_t ScrubBackend::logical_to_ondisk_size(uint64_t logical_size,
-                                 shard_id_t shard_id) const
+                                 shard_id_t shard_id,
+                                 bool hinfo_present,
+                                 uint64_t expected_size) const
 {
-  return m_pg.logical_to_ondisk_size(logical_size, shard_id);
+  uint64_t ondisk_size = m_pg.logical_to_ondisk_size(logical_size, shard_id, false);
+
+  if (!hinfo_present || ondisk_size == expected_size) {
+    return ondisk_size;
+  }
+
+  // This object does not match the expected size, but hinfo is present. In this
+  // case there are valid reasons for the shard to be *either* size when using
+  // optimised EC. The following function checks the expected size from legacy
+  // EC.
+  uint64_t legacy_ondisk_size = m_pg.logical_to_ondisk_size(logical_size, shard_id, true);
+  if (expected_size == legacy_ondisk_size) {
+    return legacy_ondisk_size;
+  }
+
+  // If this return is reached, then the size is corrupt and what we return
+  // here is relevant to the error message only.  Return the non-legacy value
+  // as it might be more useful in debug.
+  return ondisk_size;
 }
 
 void ScrubBackend::update_repair_status(bool should_repair)
@@ -664,7 +685,7 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
   }
 
   if (m_pg.get_is_hinfo_required()) {
-    auto k = smap_obj.attrs.find(ECUtil::get_hinfo_key());
+    auto k = smap_obj.attrs.find(ECLegacy::ECUtilL::get_hinfo_key());
     if (dup_error_cond(err,
                        false,
                        (k == smap_obj.attrs.end()),
@@ -673,7 +694,7 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
                        "candidate had a missing hinfo key"sv,
                        errstream)) {
       const bufferlist& hk_bl = k->second;
-      ECUtil::HashInfo hi;
+      ECLegacy::ECUtilL::HashInfo hi;
       try {
         auto bliter = hk_bl.cbegin();
         decode(hi, bliter);
@@ -731,7 +752,9 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
     }
   }
 
-  uint64_t ondisk_size = logical_to_ondisk_size(oi.size, srd.shard);
+  uint64_t ondisk_size = logical_to_ondisk_size(oi.size, srd.shard,
+    smap_obj.attrs.contains(ECUtil::get_hinfo_key()),
+    smap_obj.size);
   if (test_error_cond(smap_obj.size != ondisk_size, shard_info,
                       &shard_info_wrapper::set_obj_size_info_mismatch)) {
 
@@ -905,18 +928,15 @@ void ScrubBackend::inconsistents(const hobject_t& ho,
                                  auth_and_obj_errs_t&& auth_n_errs,
                                  stringstream& errstream)
 {
-  auto& object_errors = auth_n_errs.object_errors;
-  auto& auth_list = auth_n_errs.auth_list;
-
-  this_chunk->cur_inconsistent.insert(object_errors.begin(),
-                                      object_errors.end());  // merge?
+  this_chunk->cur_inconsistent.insert(auth_n_errs.object_errors.begin(),
+                                      auth_n_errs.object_errors.end());
 
   dout(15) << fmt::format(
                 "{}: object errors #: {}  auth list #: {}  cur_missing #: {}  "
                 "cur_incon #: {}",
                 __func__,
-                object_errors.size(),
-                auth_list.size(),
+                auth_n_errs.object_errors.size(),
+                auth_n_errs.auth_list.size(),
                 this_chunk->cur_missing.size(),
                 this_chunk->cur_inconsistent.size())
            << dendl;
@@ -944,8 +964,7 @@ void ScrubBackend::inconsistents(const hobject_t& ho,
 
   if (!this_chunk->cur_inconsistent.empty() ||
       !this_chunk->cur_missing.empty()) {
-
-    this_chunk->authoritative[ho] = auth_list;
+    this_chunk->authoritative[ho] = std::move(auth_n_errs.auth_list);
 
   } else if (!this_chunk->fix_digest && m_is_replicated) {
 
@@ -1310,11 +1329,11 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
     if (!shard_result.has_hinfo_missing() &&
         !shard_result.has_hinfo_corrupted()) {
 
-      auto can_hi = candidate.attrs.find(ECUtil::get_hinfo_key());
+      auto can_hi = candidate.attrs.find(ECLegacy::ECUtilL::get_hinfo_key());
       ceph_assert(can_hi != candidate.attrs.end());
       const bufferlist& can_bl = can_hi->second;
 
-      auto auth_hi = auth.attrs.find(ECUtil::get_hinfo_key());
+      auto auth_hi = auth.attrs.find(ECLegacy::ECUtilL::get_hinfo_key());
       ceph_assert(auth_hi != auth.attrs.end());
       const bufferlist& auth_bl = auth_hi->second;
 
@@ -1330,7 +1349,9 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
   // ------------------------------------------------------------------------
 
   // sizes:
-  uint64_t oi_size = logical_to_ondisk_size(auth_oi.size, shard.shard);
+  uint64_t oi_size = logical_to_ondisk_size(auth_oi.size, shard.shard,
+  candidate.attrs.contains(ECUtil::get_hinfo_key()),
+  candidate.size);
   if (oi_size != candidate.size) {
     fmt::format_to(std::back_inserter(out),
                    "{}size {} != size {} from auth oi {}",
@@ -1512,12 +1533,17 @@ void ScrubBackend::scrub_snapshot_metadata(ScrubMap& map, const pg_shard_t &srd)
     }
 
     if (oi) {
-      if (logical_to_ondisk_size(oi->size, srd.shard) != p->second.size) {
+      bool has_hinfo = p->second.attrs.contains(
+        ECLegacy::ECUtilL::get_hinfo_key());
+      if (logical_to_ondisk_size(oi->size, srd.shard, has_hinfo, p->second.size)
+          != p->second.size) {
         clog.error() << m_mode_desc << " " << m_pg_id << " " << soid
                       << " : on disk size (" << p->second.size
                       << ") does not match object info size (" << oi->size
                       << ") adjusted for ondisk to ("
-                      << logical_to_ondisk_size(oi->size, srd.shard) << ")";
+                      << logical_to_ondisk_size(oi->size, srd.shard,
+                                                has_hinfo, p->second.size)
+                      << ")";
         soid_error.set_size_mismatch();
         this_chunk->m_error_counts.shallow_errors++;
       }

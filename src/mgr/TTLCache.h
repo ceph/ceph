@@ -64,6 +64,14 @@ template <class Key, class Value> class Cache {
   }
   int size() { return content.size(); }
 
+  //return the keys vector
+  std::vector<Key> keys() {
+    std::vector<Key> keys;
+    for (auto const& [k, v] : content) {
+      keys.push_back(k);
+    }
+    return keys;
+  }
   ~Cache(){};
 };
 
@@ -111,12 +119,16 @@ class TTLCache<Key, PyObject*> : public TTLCacheBase<Key, PyObject*> {
  public:
   TTLCache(uint16_t ttl_ = 0, uint16_t size = UINT16_MAX, float spread = 0.25)
       : TTLCacheBase<Key, PyObject*>(ttl_, size, spread) {}
-  ~TTLCache(){};
+  ~TTLCache(){ clear(); };
+  void insert(Key key, PyObject* value);
   PyObject* get(Key key);
   void erase(Key key);
-
+  void clear();
+  PyObject* get_value(Key key, bool count_hit = true);
  private:
   using ttl_base = TTLCacheBase<Key, PyObject*>;
+  using value_type = std::pair<PyObject*, ttl_time_point>;
+  using cache = Cache<Key, value_type>;
 };
 
 #include "TTLCache.cc"

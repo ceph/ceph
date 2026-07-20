@@ -2,7 +2,9 @@
 import json
 import os
 import tempfile
+import time
 from datetime import datetime
+from typing import NamedTuple, Optional
 
 import requests
 
@@ -10,9 +12,19 @@ from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
 from ..services import ceph_service
+from ..services.orchestrator import OrchClient
 from ..services.settings import SettingsService
 from ..settings import Options, Settings
+from ..tools import str_to_bool
 from . import APIDoc, APIRouter, BaseController, Endpoint, RESTController, Router, UIRouter
+
+
+class Credentials(NamedTuple):
+    user: str
+    password: str
+    ca_cert_file: Optional[str]
+    cert_file: Optional[str]
+    pkey_file: Optional[str]
 
 
 @Router('/api/prometheus_receiver', secure=False)
@@ -31,12 +43,47 @@ class PrometheusReceiver(BaseController):
 
 class PrometheusRESTController(RESTController):
 
+    # Cache for credentials for 1-minute
+    _credentials_cache = {}
+    _cache_timestamp = {}
+
     def close_unlink_files(self, files):
         # type (List[str])
         valid_entries = [f for f in files if f is not None]
         for f in valid_entries:
             f.close()
             os.unlink(f.name)
+
+    def _is_cache_valid(self, module_name):
+        """Check if cached credentials are still valid (1 minute)"""
+        if module_name not in self._cache_timestamp:
+            return False
+        current_time = time.time()
+        return ((current_time - self._cache_timestamp[module_name])
+                < Settings.PROM_ALERT_CREDENTIAL_CACHE_TTL)
+
+    def _get_cached_credentials(self, module_name):
+        """
+        Get cached credentials if they exist and are valid
+        Clears the cached credentials if invalid
+        """
+        if self._is_cache_valid(module_name):
+            return self._credentials_cache.get(module_name)
+        old_creds = self._credentials_cache.get(module_name)
+        if old_creds:
+            self.close_unlink_files([
+                old_creds.ca_cert_file,
+                old_creds.cert_file,
+                old_creds.pkey_file
+            ])
+            self._credentials_cache.pop(module_name, None)
+            self._cache_timestamp.pop(module_name, None)
+        return None
+
+    def _cache_credentials(self, module_name, credentials):
+        """Cache credentials with current timestamp"""
+        self._credentials_cache[module_name] = credentials
+        self._cache_timestamp[module_name] = time.time()
 
     def prometheus_proxy(self, method, path, params=None, payload=None):
         # type (str, str, dict, dict)
@@ -47,7 +94,6 @@ class PrometheusRESTController(RESTController):
                                method, path, 'Prometheus', params, payload,
                                user=user, password=password, verify=verify,
                                cert=cert)
-        self.close_unlink_files([ca_cert_file, cert_file, key_file])
         return response
 
     def alert_proxy(self, method, path, params=None, payload=None):
@@ -59,11 +105,20 @@ class PrometheusRESTController(RESTController):
                                method, path, 'Alertmanager', params, payload,
                                user=user, password=password, verify=verify,
                                cert=cert, is_alertmanager=True)
-        self.close_unlink_files([ca_cert_file, cert_file, key_file])
         return response
 
     def get_access_info(self, module_name):
-        # type (str, str, str, str, str)
+        """
+        Fetches credentials and certificate files for Prometheus/Alertmanager API access.
+        Cases handled:
+        - If secure_monitoring_stack and/or mgmt_gateway enabled:
+                fetch credentials (user, password, certs).
+        - If oauth2-proxy enabled: fetch credentials,
+                but only certs are used (user/password ignored).
+        - If not cephadm backend: returns credentials with all fields as None.
+        Returns:
+            Credentials namedtuple with user, password, ca_cert_file, cert_file, pkey_file.
+        """
 
         def write_to_tmp_file(content):
             # type (str)
@@ -72,29 +127,53 @@ class PrometheusRESTController(RESTController):
             tmp_file = tempfile.NamedTemporaryFile(delete=False)
             tmp_file.write(content.encode('utf-8'))
             tmp_file.flush()  # tmp_file must not be gc'ed
+            tmp_file.close()
             return tmp_file
 
+        orch_backend = mgr.get_module_option_ex('orchestrator', 'orchestrator')
+        is_cephadm = orch_backend == 'cephadm'
+
         if module_name not in ['prometheus', 'alertmanager']:
-            raise DashboardException(f'Invalid module name {module_name}', component='prometheus')
+            raise DashboardException(f'Invalid module name {module_name}',
+                                     coFalsemponent='prometheus')
+
         user = None
         password = None
         cert_file = None
         pkey_file = None
         ca_cert_file = None
-        orch_backend = mgr.get_module_option_ex('orchestrator', 'orchestrator')
-        if orch_backend == 'cephadm':
-            cmd = {'prefix': f'orch {module_name} get-credentials'}
-            ret, out, _ = mgr.mon_command(cmd)
-            if ret == 0 and out is not None:
-                access_info = json.loads(out)
-                if access_info:
-                    user = access_info['user']
-                    password = access_info['password']
-                    ca_cert_file = write_to_tmp_file(access_info['certificate'])
-                    cert_file = write_to_tmp_file(mgr.get_localized_store("crt"))
-                    pkey_file = write_to_tmp_file(mgr.get_localized_store("key"))
 
-        return user, password, ca_cert_file, cert_file, pkey_file
+        if not is_cephadm:
+            return Credentials(user, password, ca_cert_file, cert_file, pkey_file)
+
+        cached_creds = self._get_cached_credentials(module_name)
+        if cached_creds:
+            return cached_creds
+        orch_client = OrchClient.instance()
+        security_config = orch_client.monitoring.get_security_config()
+        if not security_config.get('security_enabled', False):
+            return Credentials(user, password, ca_cert_file, cert_file, pkey_file)
+
+        if orch_client.available():
+            if module_name == 'prometheus':
+                access_info = orch_client.monitoring.get_prometheus_access_info()
+            elif module_name == 'alertmanager':
+                access_info = orch_client.monitoring.get_alertmanager_access_info()
+            else:
+                access_info = None
+            if access_info:
+                user = access_info.get('user')
+                password = access_info.get('password')
+                ca_cert_file = write_to_tmp_file(access_info.get('certificate'))
+                cert_file = write_to_tmp_file(mgr.get_localized_store("crt"))
+                pkey_file = write_to_tmp_file(mgr.get_localized_store("key"))
+                # Cache the credentials
+                self._cache_credentials(
+                    module_name,
+                    Credentials(user, password, ca_cert_file, cert_file, pkey_file)
+                )
+
+        return Credentials(user, password, ca_cert_file, cert_file, pkey_file)
 
     def _get_api_url(self, host, version='v1'):
         return f'{host.rstrip("/")}/api/{version}'
@@ -173,7 +252,13 @@ class Prometheus(PrometheusRESTController):
         return self.alert_proxy('DELETE', '/silence/' + s_id) if s_id else None
 
     @RESTController.Collection(method='GET', path='/alertgroup')
-    def get_alertgroup(self, **params):
+    def get_alertgroup(self, cluster_filter=False, **params):
+        if str_to_bool(cluster_filter):
+            try:
+                fsid = mgr.get('config')['fsid']
+            except KeyError:
+                raise DashboardException("Cluster fsid not found", component='prometheus')
+            return self.alert_proxy('GET', f'/alerts/groups?filter=cluster={fsid}', params)
         return self.alert_proxy('GET', '/alerts/groups', params)
 
     @RESTController.Collection(method='GET', path='/prometheus_query_data')

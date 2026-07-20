@@ -168,6 +168,8 @@ enum osd_counter_idx_t {
   l_osd_scrub_rppool_successful_elapsed, ///< time to complete a successful scrub
   l_osd_scrub_rppool_failed, ///< failed scrubs count
   l_osd_scrub_rppool_failed_elapsed, ///< time from start to failure
+  l_osd_scrub_rppool_write_intersects, ///< client write op intersects chunk range
+  l_osd_scrub_rppool_write_blocked, ///< write op did not preempt the scrub
 
   // ----   scrub reservation process - replicated pools
 
@@ -194,6 +196,8 @@ enum osd_counter_idx_t {
   l_osd_scrub_ec_successful_elapsed, ///< time to complete a successful scrub
   l_osd_scrub_ec_failed, ///< failed scrubs count
   l_osd_scrub_ec_failed_elapsed, ///< time from start to failure
+  l_osd_scrub_ec_write_intersects, ///< client write op intersects chunk range
+  l_osd_scrub_ec_write_blocked, ///< write op did not preempt the scrub
 
   // ----   scrub reservation process - EC
 
@@ -251,6 +255,10 @@ enum {
   rs_getmissing_latency,
   rs_waitupthru_latency,
   rs_notrecovering_latency,
+  rs_stats_invalidated,
+  rs_pg_rebuild_duration,
+  rs_pg_rebuild_max_secs,
+  rs_pg_rebuild_min_secs,
   rs_last,
 };
 

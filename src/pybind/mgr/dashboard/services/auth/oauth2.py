@@ -18,7 +18,7 @@ try:
 except ModuleNotFoundError:
     logging.error("Module 'jmespath' is not installed.")
 
-logger = logging.getLogger('services.oauth2')
+logger = logging.getLogger(__name__)
 
 
 class OAuth2(SSOAuth):

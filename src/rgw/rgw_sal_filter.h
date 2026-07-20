@@ -599,8 +599,10 @@ public:
                        RGWBucketEnt* ent) override;
   int check_bucket_shards(const DoutPrefixProvider* dpp,
                           uint64_t num_objs, optional_yield y) override;
-  virtual int chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner,
-		    optional_yield y) override;
+  virtual int chown(const DoutPrefixProvider* dpp,
+                    const rgw_owner& new_owner,
+                    const std::string& new_owner_name,
+                    optional_yield y) override;
   virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive,
 		       ceph::real_time mtime, optional_yield y) override;
   virtual const rgw_owner& get_owner() const override;
@@ -695,14 +697,14 @@ public:
       RGWObjVersionTracker* objv_tracker) override {
     return next->remove_logging_object_name(prefix, y, dpp, objv_tracker);
   }
-  int commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp, const std::string& prefix, std::string* last_committed) override {
-    return next->commit_logging_object(obj_name, y, dpp, prefix, last_committed);
+  int commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp, const std::string& prefix, std::string* last_committed, bool async) override {
+    return next->commit_logging_object(obj_name, y, dpp, prefix, last_committed, async);
   }
-  int remove_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) override {
-    return next->remove_logging_object(obj_name, y, dpp);
+  int remove_logging_object(const std::string& obj_name, const std::string& prefix, optional_yield y, const DoutPrefixProvider *dpp) override {
+    return next->remove_logging_object(obj_name, prefix, y, dpp);
   }
-  int write_logging_object(const std::string& obj_name, const std::string& record, optional_yield y, const DoutPrefixProvider *dpp, bool async_completion) override {
-    return next->write_logging_object(obj_name, record, y, dpp, async_completion);
+  int write_logging_object(const std::string& obj_name, const std::string& record, const std::string& prefix, optional_yield y, const DoutPrefixProvider *dpp, bool async_completion) override {
+    return next->write_logging_object(obj_name, record, prefix, y, dpp, async_completion);
   }
 
   virtual rgw_bucket& get_key() override { return next->get_key(); }
@@ -789,6 +791,7 @@ public:
   virtual bool is_prefetch_data() override { return next->is_prefetch_data(); }
   virtual void set_compressed() override { return next->set_compressed(); }
   virtual bool is_compressed() override { return next->is_compressed(); }
+  virtual bool is_delete_marker() override { return next->is_delete_marker(); }
   bool is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,
                          const ceph::real_time& obj_mtime) override {
     return next->is_sync_completed(dpp, y, obj_mtime);
@@ -863,7 +866,6 @@ public:
   virtual std::string get_hash_source(void) override { return next->get_hash_source(); };
   virtual void set_hash_source(std::string s) override { return next->set_hash_source(s); };
   virtual std::string get_oid(void) const override { return next->get_oid(); };
-  virtual bool get_delete_marker(void) override { return next->get_delete_marker(); };
   virtual bool get_in_extra_data(void) override { return next->get_in_extra_data(); };
   virtual bool exists(void) override { return next->exists(); };
   virtual void set_in_extra_data(bool i) override { return next->set_in_extra_data(i); };
@@ -976,7 +978,9 @@ public:
 		       std::string& tag, ACLOwner& owner,
 		       uint64_t olh_epoch,
 		       rgw::sal::Object* target_obj,
-		       prefix_map_t& processed_prefixes) override;
+		       prefix_map_t& processed_prefixes,
+           const char *if_match = nullptr,
+           const char *if_nomatch = nullptr) override;
   virtual int cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
                                      CephContext *cct, optional_yield y,
                                      const rgw_obj& obj,

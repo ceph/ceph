@@ -22,13 +22,6 @@ from ..access_control import LocalAuthenticator, UserDoesNotExist
 if TYPE_CHECKING:
     from dashboard.services.sso import SsoDB
 
-cherrypy.config.update({
-    'response.headers.server': 'Ceph-Dashboard',
-    'response.headers.content-security-policy': "frame-ancestors 'self';",
-    'response.headers.x-content-type-options': 'nosniff',
-    'response.headers.strict-transport-security': 'max-age=63072000; includeSubDomains; preload'
-})
-
 
 class AuthType(str, Enum):
     LOCAL = 'local'
@@ -113,7 +106,7 @@ class JwtManager(object):
 
     @classmethod
     def init(cls):
-        cls.logger = logging.getLogger('jwt')  # type: ignore
+        cls.logger = logging.getLogger(__name__)  # type: ignore
         # generate a new secret if it does not exist
         secret = mgr.get_store('jwt_secret')
         if secret is None:
@@ -309,7 +302,7 @@ class AuthManagerTool(cherrypy.Tool):
     def __init__(self):
         super(AuthManagerTool, self).__init__(
             'before_handler', self._check_authentication, priority=20)
-        self.logger = logging.getLogger('auth')
+        self.logger = logging.getLogger(__name__)
 
     def _check_authentication(self):
         JwtManager.reset_user()

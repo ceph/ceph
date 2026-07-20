@@ -5,6 +5,7 @@ import json
 from io import StringIO
 from teuthology import misc as teuthology
 from teuthology import contextutil
+from teuthology.exceptions import CommandCrashedError
 from teuthology.orchestra import run
 
 
@@ -68,7 +69,17 @@ def task(ctx, config):
         with contextutil.safe_while(sleep=1, tries=15) as proceed:
             while proceed():
                 remote.run(args=['lsblk'], stdout=StringIO())
-                p = remote.run(args=['sudo', 'nvme', 'list', '-o', 'json'], stdout=StringIO())
+                try:
+                    p = remote.run(
+                        args=['sudo', 'nvme', 'list', '-o', 'json'],
+                        stdout=StringIO(),
+                    )
+                except CommandCrashedError:
+                    log.warning(
+                        'nvme list -o json command failed, retrying...'
+                    )
+                    continue
+
                 new_devs = []
                 # `nvme list -o json` will return one of the following output:
                 '''{

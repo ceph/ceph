@@ -33,12 +33,12 @@ export class MultiClusterService {
   }
 
   startClusterTokenStatusPolling() {
-    this.checkAndStartTimer();
+    return this.checkAndStartTimer();
   }
 
   private checkAndStartTimer() {
     this.checkTokenStatus().subscribe(this.getClusterTokenStatusObserver());
-    this.timerService
+    return this.timerService
       .get(() => this.checkTokenStatus(), this.TOKEN_CHECK_INTERVAL)
       .subscribe(this.getClusterTokenStatusObserver());
   }
@@ -186,14 +186,9 @@ export class MultiClusterService {
     this.refresh();
     this.refreshTokenStatus();
     this.summaryService.refresh();
-    if (currentRoute.includes('dashboard')) {
-      this.router.navigateByUrl('/pool', { skipLocationChange: true }).then(() => {
-        this.router.navigate([currentRoute]);
-      });
-    } else {
-      this.router.navigateByUrl('/', { skipLocationChange: true }).then(() => {
-        this.router.navigate([currentRoute]);
-      });
-    }
+    this.router.navigate([currentRoute], {
+      onSameUrlNavigation: 'reload',
+      skipLocationChange: false
+    });
   }
 }

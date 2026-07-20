@@ -21,6 +21,7 @@
 #include "common/random_string.h"
 #include "common/utf8.h"
 
+#include "rgw_arn.h"
 #include "rgw_oidc_provider.h"
 #include "rgw_quota.h"
 #include "rgw_role.h"
@@ -99,6 +100,12 @@ bool validate_name(std::string_view name, std::string* err_msg)
     return false;
   }
   return true;
+}
+
+ARN root_arn(std::string id)
+{
+  const std::string region; // empty
+  return {Partition::aws, Service::iam, region, std::move(id), "root"};
 }
 
 

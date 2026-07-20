@@ -1,48 +1,94 @@
 <cd-nvmeof-tabs></cd-nvmeof-tabs>
 
-<div class="pb-3"
-     cdsCol
-     [columnNumbers]="{md: 4}">
-  <cds-combo-box
-      type="single"
-      label="Selected Gateway Group"
-      i18n-label
-      [placeholder]="gwGroupPlaceholder"
-      [items]="gwGroups"
-      (selected)="onGroupSelection($event)"
-      (clear)="onGroupClear()"
-      [disabled]="gwGroupsEmpty">
-    <cds-dropdown-list></cds-dropdown-list>
-  </cds-combo-box>
-</div>
-
-<legend i18n>
-  Subsystems
-  <cd-help-text>
-    A subsystem provides access control to which hosts can access the namespaces within the subsystem.
-  </cd-help-text>
-</legend>
-<cd-table [data]="subsystems"
-          columnMode="flex"
-          (fetchData)="getSubsystems()"
-          [columns]="subsystemsColumns"
-          selectionType="single"
-          [hasDetails]="true"
-          (setExpandedRow)="setExpandedRow($event)"
-          (updateSelection)="updateSelection($event)">
-
-  <div class="table-actions">
-    <cd-table-actions [permission]="permissions.nvmeof"
-                      [selection]="selection"
-                      class="btn-group"
-                      [tableActions]="tableActions">
-    </cd-table-actions>
+<div cdsGrid
+     [useCssGrid]="true"
+     [narrow]="true"
+     [fullWidth]="true">
+<div cdsCol
+     [columnNumbers]="{sm: 4, md: 8}">
+  <div class="pb-3 form-item"
+       cdsRow>
+    <cds-combo-box
+        type="single"
+        label="Selected Gateway Group"
+        i18n-label
+        [placeholder]="gwGroupPlaceholder"
+        [items]="gwGroups"
+        (selected)="onGroupSelection($event)"
+        (clear)="onGroupClear()"
+        [disabled]="gwGroupsEmpty">
+      <cds-dropdown-list></cds-dropdown-list>
+    </cds-combo-box>
   </div>
+</div>
+</div>
+<ng-container *ngIf="subsystems$ | async as subsystems">
+  <cd-table #table
+            [data]="subsystems"
+            [columns]="subsystemsColumns"
+            columnMode="flex"
+            selectionType="single"
+            (updateSelection)="updateSelection($event)"
+            (fetchData)="fetchData()"
+            emptyStateTitle="No subsystems created"
+            i18n-emptyStateTitle
+            emptyStateMessage="Subsystems group NVMe namespaces and manage host access. Create a subsystem to start mapping NVMe volumes to hosts."
+            i18n-emptyStateMessage>
 
-  <cd-nvmeof-subsystems-details *cdTableDetail
-                                [selection]="expandedRow"
-                                [permissions]="permissions"
-                                [group]="group">
-  </cd-nvmeof-subsystems-details>
-</cd-table>
+    <div class="table-actions">
+      <cd-table-actions [permission]="permissions.nvmeof"
+                        [selection]="selection"
+                        class="btn-group"
+                        [tableActions]="tableActions">
+      </cd-table-actions>
+    </div>
+
+    <cd-nvmeof-subsystems-details *cdTableDetail
+                                  [selection]="expandedRow"
+                                  [permissions]="permissions"
+                                  [group]="expandedRow?.gw_group">
+    </cd-nvmeof-subsystems-details>
+  </cd-table>
+</ng-container>
+
+<ng-template #customTableItemTemplate
+             let-value="data.value"
+             let-row="data.row">
+  <a cdsLink
+     [routerLink]="['/block/nvmeof/subsystems', value]"
+     [queryParams]="{ group: row.gw_group }"
+     (click)="$event.stopPropagation()">
+    {{ value }}
+  </a>
+</ng-template>
+
+<ng-template #authenticationTpl
+             let-row="data.row">
+  <div [cdsStack]="'horizontal'"
+       gap="4">
+  @if (row.auth === authType.NO_AUTH) {
+    <cd-icon type="warning"></cd-icon>
+  } @else {
+    <cd-icon type="success"></cd-icon>
+  }
+  <span class="cds-ml-3">{{ row.auth }}</span>
+  </div>
+</ng-template>
+
+<ng-template #encryptionTpl
+             let-row="data.row">
+  <div [cdsStack]="'horizontal'"
+       gap="4">
+  @if (row.enable_ha) {
+    <cd-icon type="success"></cd-icon>
+    <span class="cds-ml-3"
+          i18n>Enabled</span>
+  } @else {
+    <cd-icon type="error"></cd-icon>
+    <span class="cds-ml-3"
+          i18n>Disabled</span>
+  }
+  </div>
+</ng-template>
+
 <router-outlet name="modal"></router-outlet>

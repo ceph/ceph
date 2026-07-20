@@ -16,7 +16,7 @@ try:
 except ImportError:
     pass  # For typing only
 
-logger = logging.getLogger('ceph_service')
+logger = logging.getLogger(__name__)
 
 
 class SendCommandError(rados.Error):
@@ -289,10 +289,10 @@ class CephService(object):
         return tokens_info
 
     @classmethod
-    def import_realm_token(cls, realm_token, zone_name, port, placement_spec):
+    def import_realm_token(cls, realm_token, zone_name, port, placement_spec, tier_type=None):
         tokens_info = mgr.remote('rgw', 'import_realm_token', zone_name=zone_name,
                                  realm_token=realm_token, port=port, placement=placement_spec,
-                                 start_radosgw=True)
+                                 tier_type=tier_type, start_radosgw=True)
         return tokens_info
 
     @classmethod

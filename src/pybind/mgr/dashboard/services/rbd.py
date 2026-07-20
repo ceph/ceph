@@ -16,7 +16,7 @@ from ._paginate import ListPaginator
 from .ceph_service import CephService
 
 try:
-    from typing import List, Optional
+    from typing import Dict, List, Optional
 except ImportError:
     pass  # For typing only
 
@@ -236,6 +236,7 @@ class RbdConfiguration(object):
         """
         Removes an option by name. Will not raise an error, if the option hasn't been found.
         :type option_name str
+
         """
         def _remove(ioctx):
             try:
@@ -267,7 +268,6 @@ class RbdConfiguration(object):
 
 class RbdService(object):
     _rbd_inst = rbd.RBD()
-
     # set of image features that can be enable on existing images
     ALLOW_ENABLE_FEATURES = {"exclusive-lock", "object-map", "fast-diff", "journaling"}
 
@@ -289,7 +289,10 @@ class RbdService(object):
         prev_snap = None
         total_used_size = 0
         for _, size, name in snaps:
-            image.set_snap(name)
+            try:
+                image.set_snap(name)
+            except rbd.ImageNotFound:
+                continue
             du_callb = DUCallback()
             image.diff_iterate(0, size, prev_snap, du_callb,
                                whole_object=whole_object)
@@ -315,11 +318,38 @@ class RbdService(object):
                 stat['mirror_mode'] = 'journal'
             elif mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
                 stat['mirror_mode'] = 'snapshot'
-                schedule_status = json.loads(_rbd_support_remote(
-                    'mirror_snapshot_schedule_status')[1])
-                for scheduled_image in schedule_status['scheduled_images']:
-                    if scheduled_image['image'] == get_image_spec(pool_name, namespace, image_name):
-                        stat['schedule_info'] = scheduled_image
+                image_schedule_spec = get_image_spec(pool_name, namespace, image_name)
+                image_schedule_info = RbdMirroringService.get_snapshot_schedule_info(
+                    image_schedule_spec)
+
+                if image_schedule_info and len(image_schedule_info) > 0:
+                    schedule = image_schedule_info[0]
+                    schedule['inherited'] = None
+                    stat['schedule_info'] = schedule
+                else:
+                    image_schedule_time = RbdMirroringService.get_schedule_time_for_image(
+                        image_schedule_spec)
+
+                    pool_schedule_spec = f"{pool_name}/"
+                    pool_interval = RbdMirroringService.get_schedule_interval(
+                        pool_schedule_spec)
+
+                    if pool_interval:
+                        stat['schedule_info'] = {
+                            'name': pool_schedule_spec,
+                            'schedule_interval': pool_interval,
+                            'schedule_time': image_schedule_time,
+                            'inherited': 'pool'
+                        }
+                    else:
+                        cluster_interval = RbdMirroringService.get_schedule_interval('')
+                        if cluster_interval:
+                            stat['schedule_info'] = {
+                                'name': '',
+                                'schedule_interval': cluster_interval,
+                                'schedule_time': image_schedule_time,
+                                'inherited': 'cluster'
+                            }
 
             stat['name'] = image_name
 
@@ -346,8 +376,7 @@ class RbdService(object):
             del stat['parent_pool']
             del stat['parent_name']
 
-            stat['timestamp'] = "{}Z".format(img.create_timestamp()
-                                             .isoformat())
+            stat['timestamp'] = img.create_timestamp().isoformat()
 
             stat['stripe_count'] = img.stripe_count()
             stat['stripe_unit'] = img.stripe_unit()
@@ -370,8 +399,7 @@ class RbdService(object):
                 if mirror_mode:
                     snap['mirror_mode'] = mirror_mode
 
-                snap['timestamp'] = "{}Z".format(
-                    img.get_snap_timestamp(snap['id']).isoformat())
+                snap['timestamp'] = img.get_snap_timestamp(snap['id']).isoformat()
 
                 snap['is_protected'] = None
                 if snap['namespace'] == rbd.RBD_SNAP_NAMESPACE_TYPE_USER:
@@ -389,10 +417,7 @@ class RbdService(object):
                 stat['snapshots'].append(snap)
 
             # disk usage
-            img_flags = img.flags()
-            if not omit_usage and 'fast-diff' in stat['features_name'] and \
-                    not rbd.RBD_FLAG_FAST_DIFF_INVALID & img_flags and \
-                    mirror_mode != rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
+            if not omit_usage and 'fast-diff' in stat['features_name']:
                 snaps = [(s['id'], s['size'], s['name'])
                          for s in stat['snapshots']]
                 snaps.sort(key=lambda s: s[0])
@@ -471,8 +496,8 @@ class RbdService(object):
             img['unique_id'] = img_spec
             img['pool_name'] = pool_name
             img['namespace'] = namespace
-            img['deletion_time'] = "{}Z".format(img['deletion_time'].isoformat())
-            img['deferment_end_time'] = "{}Z".format(img['deferment_end_time'].isoformat())
+            img['deletion_time'] = img['deletion_time'].isoformat()
+            img['deferment_end_time'] = img['deferment_end_time'].isoformat()
             return img
         raise rbd.ImageNotFound('No image {} in status `REMOVING` found.'.format(img_spec),
                                 errno=errno.ENOENT)
@@ -696,6 +721,15 @@ class RbdService(object):
         rbd_inst = cls._rbd_inst
         return rbd_call(pool_name, namespace, rbd_inst.trash_move, image_name, delay)
 
+    @classmethod
+    def validate_namespace(cls, ioctx, namespace):
+        namespaces = cls._rbd_inst.namespace_list(ioctx)
+        if namespace and namespace not in namespaces:
+            raise DashboardException(
+                msg='Namespace not found',
+                code='namespace_not_found',
+                component='rbd')
+
 
 class RbdSnapshotService(object):
 
@@ -757,6 +791,119 @@ class RbdMirroringService:
     @classmethod
     def snapshot_schedule_remove(cls, image_spec: str):
         _rbd_support_remote('mirror_snapshot_schedule_remove', image_spec)
+
+    @classmethod
+    def snapshot_schedule_list(cls, image_spec: str = ''):
+        return _rbd_support_remote('mirror_snapshot_schedule_list', image_spec)
+
+    @classmethod
+    def snapshot_schedule_status(cls, image_spec: str = ''):
+        return _rbd_support_remote('mirror_snapshot_schedule_status', image_spec)
+
+    @classmethod
+    def get_snapshot_schedule_info(cls, image_spec: str = ''):
+        """
+        Retrieve snapshot schedule information by merging schedule list and status.
+
+        Args:
+            image_spec (str, optional): Specification of an RBD image. If empty,
+                retrieves all schedule information.
+                Format: "<pool_name>/<namespace_name>/<image_name>".
+
+        Returns:
+            Optional[List[Dict[str, Any]]]: A list of merged schedule information
+            dictionaries if found, otherwise None.
+        """
+        schedule_info: List[Dict] = []
+
+        # schedule list and status provide the schedule interval
+        # and schedule timestamp respectively.
+        schedule_list_raw = cls.snapshot_schedule_list(image_spec)
+        schedule_status_raw = cls.snapshot_schedule_status(image_spec)
+
+        try:
+            schedule_list = json.loads(
+                schedule_list_raw[1]) if schedule_list_raw and schedule_list_raw[1] else {}
+            schedule_status = json.loads(
+                schedule_status_raw[1]) if schedule_status_raw and schedule_status_raw[1] else {}
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+        if not schedule_list or not schedule_status:
+            return None
+
+        scheduled_images = schedule_status.get("scheduled_images", [])
+
+        for _, schedule in schedule_list.items():
+            name = schedule.get("name")
+            if not name:
+                continue
+
+            # find status entry for this schedule
+            # by matching with the image name
+            image = next((
+                sched_image for sched_image in scheduled_images
+                if sched_image.get("image") == name), None)
+            if not image:
+                continue
+
+            # eventually we are merging both the list and status entries
+            # all the needed info are fetched above and here we are just mapping
+            # it to the dictionary so that in one function we get
+            # the schedule related information.
+            merged = {
+                "name": name,
+                "schedule_interval": schedule.get("schedule", []),
+                "schedule_time": image.get("schedule_time")
+            }
+            schedule_info.append(merged)
+
+        return schedule_info if schedule_info else None
+
+    @classmethod
+    def get_schedule_time_for_image(cls, image_spec: str):
+        """Get the scheduled time for a specific image from schedule status."""
+        schedule_status_raw = cls.snapshot_schedule_status('')
+        try:
+            schedule_status = json.loads(
+                schedule_status_raw[1]) if schedule_status_raw and schedule_status_raw[1] else {}
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+        scheduled_images = schedule_status.get("scheduled_images", [])
+        for img in scheduled_images:
+            if img.get("image") == image_spec:
+                return img.get("schedule_time")
+        return None
+
+    @classmethod
+    def get_schedule_interval(cls, schedule_spec: str):
+        """Get just the schedule interval for a given spec (pool or cluster)."""
+        schedule_list_raw = cls.snapshot_schedule_list('')
+        try:
+            schedule_list = json.loads(
+                schedule_list_raw[1]) if schedule_list_raw and schedule_list_raw[1] else {}
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+        if not schedule_list:
+            return None
+
+        for _, schedule in schedule_list.items():
+            name = schedule.get("name")
+            if name and name == schedule_spec:
+                return schedule.get("schedule", [])
+        return None
+
+    @classmethod
+    def get_cluster_schedule(cls):
+        """Get cluster-level schedule with inherited flag set."""
+        cluster_schedule_info = cls.get_snapshot_schedule_info('')
+        if cluster_schedule_info and len(cluster_schedule_info) > 0:
+            schedule = cluster_schedule_info[0]
+            schedule['inherited'] = 'cluster'
+            return schedule
+        return None
 
 
 class RbdImageMetadataService(object):

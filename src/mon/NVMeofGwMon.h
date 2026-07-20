@@ -39,7 +39,7 @@ class NVMeofGwMon: public PaxosService,
   NVMeofGwMap map;  //NVMeGWMap
   NVMeofGwMap pending_map;
   std::map<LastBeacon, ceph::coarse_mono_clock::time_point> last_beacon;
-  ceph::coarse_mono_clock::time_point last_tick;
+  ceph::coarse_mono_clock::time_point last_beacon_check;
 
 public:
   NVMeofGwMon(Monitor &mn, Paxos &p, const std::string& service_name)
@@ -99,6 +99,17 @@ private:
   epoch_t get_ack_map_epoch(bool gw_created, const NvmeGroupKey& group_key);
   void recreate_gw_epoch();
   void restore_pending_map_info(NVMeofGwMap & tmp_map);
+  void cleanup_pending_map();
+  void get_gw_listeners(ceph::Formatter *f, std::pair<std::string, std::string>& group_key);
+  void check_beacon_timeout(ceph::coarse_mono_clock::time_point now,
+       bool &propose_pending);
+
+  int apply_beacon(const NvmeGwId &gw_id, int gw_version,
+             const NvmeGroupKey& group_key, void *msg,
+			 const BeaconSubsystems& sub, gw_availability_t &avail, bool &propose_pending);
+  void do_send_map_ack(MonOpRequestRef op, bool gw_created, bool gw_propose,
+       uint64_t stored_sequence, bool is_correct_sequence,
+       const NvmeGroupKey& group_key, const NvmeGwId &gw_id);
 };
 
 #endif /* MON_NVMEGWMONITOR_H_ */

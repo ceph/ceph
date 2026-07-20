@@ -1,6 +1,3 @@
-# see http://tracker.ceph.com/issues/20360 and http://tracker.ceph.com/issues/18126
-os_type: centos
-
 overrides:
   install:
     ceph:
@@ -32,5 +29,6 @@ overrides:
       mon: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
       osd: [--tool=memcheck]
       mds: [--tool=memcheck]
+    stop-daemons-timeout: 1200
 # https://tracker.ceph.com/issues/38621
 #      mgr: [--tool=memcheck]

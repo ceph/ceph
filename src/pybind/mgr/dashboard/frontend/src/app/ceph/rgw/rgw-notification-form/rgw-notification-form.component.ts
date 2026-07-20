@@ -109,7 +109,6 @@ export class RgwNotificationFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit() {
-    this.editing = !!this.selectedNotification;
     this.s3KeyFilterValue = Object.values(s3KeyFilter);
     this.filterSettings.s3Key.options = this.s3KeyFilterValue;
     this.createNotificationForm();

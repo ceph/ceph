@@ -3,7 +3,9 @@ import {
   TierTarget,
   TIER_TYPE,
   ZoneGroup,
-  ZoneGroupDetails
+  ZoneGroupDetails,
+  StorageClassDetails,
+  Zone
 } from '../models/rgw-storage-class.model';
 
 export class BucketTieringUtils {
@@ -45,6 +47,7 @@ export class BucketTieringUtils {
       allow_read_through: val.allow_read_through,
       restore_storage_class: val.restore_storage_class,
       read_through_restore_days: val.read_through_restore_days,
+      acls: val.s3.acl_mappings,
       ...val.s3
     };
 
@@ -59,5 +62,31 @@ export class BucketTieringUtils {
       };
     }
     return cloudProps;
+  }
+
+  static getZoneInfoHelper(zones: Zone[], selectedStorageClass: Partial<StorageClassDetails>) {
+    if (zones && zones.length > 0 && selectedStorageClass) {
+      const zoneFound = zones.find((zone) =>
+        zone.placement_pools.some(
+          (placement) =>
+            placement.key === selectedStorageClass?.placement_target &&
+            placement.val.storage_classes[selectedStorageClass?.storage_class]
+        )
+      );
+
+      if (zoneFound) {
+        const placement = zoneFound.placement_pools.find(
+          (p) =>
+            p.key === selectedStorageClass?.placement_target &&
+            p.val.storage_classes[selectedStorageClass?.storage_class]
+        );
+        const storageClassEntry =
+          placement?.val.storage_classes[selectedStorageClass?.storage_class];
+        if (storageClassEntry) {
+          return { zone_name: zoneFound.name, data_pool: storageClassEntry.data_pool };
+        }
+      }
+    }
+    return { zone_name: '', data_pool: '' };
   }
 }

@@ -93,8 +93,8 @@ export class StartCaseBreadcrumbsResolver extends BreadcrumbsResolver {
 }
 
 const routes: Routes = [
-  // Dashboard
-  { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
+  // Overview
+  { path: '', redirectTo: 'overview', pathMatch: 'full' },
   { path: 'api-docs', component: ApiDocsComponent },
   {
     path: '',
@@ -102,21 +102,20 @@ const routes: Routes = [
     canActivate: [AuthGuardService, ChangePasswordGuardService],
     canActivateChild: [AuthGuardService, ChangePasswordGuardService],
     children: [
-      { path: 'dashboard', component: DashboardComponent },
+      { path: 'overview', component: DashboardComponent },
       { path: 'error', component: ErrorComponent },
 
       // Cluster
       {
-        path: 'expand-cluster',
+        path: 'add-storage',
         component: CreateClusterComponent,
         canActivate: [ModuleStatusGuardService],
         data: {
           moduleStatusGuardConfig: {
             uiApiPath: 'orchestrator',
-            redirectTo: 'dashboard',
+            redirectTo: 'overview',
             backend: 'cephadm'
-          },
-          breadcrumbs: 'Cluster/Expand Cluster'
+          }
         }
       },
       {
@@ -288,7 +287,7 @@ const routes: Routes = [
           },
           {
             path: 'alerts',
-            data: { breadcrumbs: 'Alerts' },
+            data: { breadcrumbs: 'Alert Rules' },
             component: RulesListComponent
           },
           {

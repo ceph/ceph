@@ -94,33 +94,57 @@ inline boost::system::error_condition make_error_condition(errc e) noexcept {
 #pragma GCC diagnostic pop
 #pragma clang diagnostic pop
 
-inline int from_exception(std::exception_ptr eptr) {
+[[nodiscard]]
+inline int from_exception(std::exception_ptr eptr, std::string* what = nullptr)
+{
   if (!eptr) [[likely]] {
     return 0;
   }
   try {
     std::rethrow_exception(eptr);
   } catch (const boost::system::system_error& e) {
+    if (what)
+      *what = e.what();
     return from_error_code(e.code());
   } catch (const std::system_error& e) {
+    if (what)
+      *what = e.what();
     return from_error_code(e.code());
-  } catch (const std::invalid_argument&) {
+  } catch (const std::invalid_argument& e) {
+    if (what)
+      *what = e.what();
     return -EINVAL;
-  } catch (const std::domain_error&) {
+  } catch (const std::domain_error& e) {
+    if (what)
+      *what = e.what();
     return -EDOM;
-  } catch (const std::length_error&) {
+  } catch (const std::length_error& e) {
+    if (what)
+      *what = e.what();
     return -ERANGE;
-  } catch (const std::out_of_range&) {
+  } catch (const std::out_of_range& e) {
+    if (what)
+      *what = e.what();
     return -ERANGE;
-  } catch (const std::range_error&) {
+  } catch (const std::range_error& e) {
+    if (what)
+      *what = e.what();
     return -ERANGE;
-  } catch (const std::overflow_error&) {
+  } catch (const std::overflow_error& e) {
+    if (what)
+      *what = e.what();
     return -EOVERFLOW;
-  } catch (const std::underflow_error&) {
+  } catch (const std::underflow_error& e) {
+    if (what)
+      *what = e.what();
     return -EOVERFLOW;
-  } catch (const std::bad_alloc&) {
+  } catch (const std::bad_alloc& e) {
+    if (what)
+      *what = e.what();
     return -ENOMEM;
   } catch (const std::regex_error& e) {
+    if (what)
+      *what = e.what();
     using namespace std::regex_constants;
     switch (e.code()) {
     case error_space:
@@ -134,28 +158,53 @@ inline int from_exception(std::exception_ptr eptr) {
 #ifdef __has_include
 #  if __has_include(<format>)
   } catch (const std::format_error& e) {
+    if (what)
+      *what = e.what();
     return -EINVAL;
 #  endif
 #endif
   } catch (const fmt::format_error& e) {
+    if (what)
+      *what = e.what();
     return -EINVAL;
-  } catch (const std::bad_typeid&) {
+  } catch (const std::bad_typeid& e) {
+    if (what)
+      *what = e.what();
     return -EFAULT;
-  } catch (const std::bad_cast&) {
+  } catch (const std::bad_cast& e) {
+    if (what)
+      *what = e.what();
     return -EFAULT;
-  } catch (const std::bad_optional_access&) {
+  } catch (const std::bad_optional_access& e) {
+    if (what)
+      *what = e.what();
     return -EFAULT;
-  } catch (const std::bad_weak_ptr&) {
+  } catch (const std::bad_weak_ptr& e) {
+    if (what)
+      *what = e.what();
     return -EFAULT;
-  } catch (const std::bad_function_call&) {
+  } catch (const std::bad_function_call& e) {
+    if (what)
+      *what = e.what();
     return -EFAULT;
-  } catch (const std::bad_exception&) {
+  } catch (const std::bad_exception& e) {
+    if (what)
+      *what = e.what();
     return -EFAULT;
-  } catch (const std::bad_variant_access&) {
+  } catch (const std::bad_variant_access& e) {
+    if (what)
+      *what = e.what();
     return -EFAULT;
+  } catch (const std::exception& e) {
+    if (what)
+      *what = e.what();
+    return -EIO;
   } catch (...) {
+    if (what)
+      *what = "Unknown exception";
     return -EIO;
   }
+  return -EIO;
 }
 }
 

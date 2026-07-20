@@ -885,9 +885,11 @@ int FilterBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
   return next->check_bucket_shards(dpp, num_objs, y);
 }
 
-int FilterBucket::chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y)
-{
-  return next->chown(dpp, new_owner, y);
+int FilterBucket::chown(const DoutPrefixProvider* dpp,
+                        const rgw_owner& new_owner,
+                        const std::string& new_owner_name,
+                        optional_yield y) {
+  return next->chown(dpp, new_owner, new_owner_name, y);
 }
 
 int FilterBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive,
@@ -1332,7 +1334,9 @@ int FilterMultipartUpload::complete(const DoutPrefixProvider *dpp,
 				    std::string& tag, ACLOwner& owner,
 				    uint64_t olh_epoch,
 				    rgw::sal::Object* target_obj,
-				    prefix_map_t& processed_prefixes)
+				    prefix_map_t& processed_prefixes,
+            const char *if_match,
+            const char *if_nomatch)
 {
   return next->complete(dpp, y, cct, part_etags, remove_objs, accounted_size,
 			compressed, cs_info, ofs, tag, owner, olh_epoch,

@@ -54,7 +54,7 @@ class TestPrometheus(MgrTestCase):
         self._assign_ports("prometheus", "server_port")
         self._load_module("prometheus")
 
-        base_uri = self._get_uri("prometheus")
+        base_uri = self._get_uri("prometheus").rstrip("/")
 
         # This is a very simple smoke test to check that the module can
         # give us a 200 response to requests.  We're not testing that
@@ -72,8 +72,8 @@ class TestPrometheus(MgrTestCase):
             if r.status_code != 200:
                 failures.append(url)
 
-            log.info("{0}: {1} ({2} bytes)".format(
-                url, r.status_code, len(r.content)
+            log.info("{0}: {1} ({2} bytes)- Content: {3}".format(
+                url, r.status_code, len(r.content), r.text[:500]
             ))
 
         self.assertListEqual(failures, [])

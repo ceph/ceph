@@ -22,7 +22,7 @@ case $(distro_id) in
 	ubuntu|debian|devuan|softiron)
 		install git g++ libsnappy-dev zlib1g-dev libbz2-dev libradospp-dev cmake
 		;;
-	centos|fedora|rhel)
+	centos|fedora|rhel|rocky)
         case $(distro_id) in
             rhel)
                 # RHEL needs CRB repo for snappy-devel

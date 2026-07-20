@@ -42,6 +42,26 @@ class TestNoWorkqueue:
             encryption.set_dmcrypt_no_workqueue()
 
 
+class TestBypassWorkqueue:
+    def setup_method(self):
+        encryption.conf.dmcrypt_no_workqueue = None
+
+    @patch('ceph_volume.util.encryption.BackingDeviceRotation.is_rotational', return_value=False)
+    def test_bypass_workqueue_non_rotational_no_workqueue_set(self, m_is_rotational):
+        encryption.conf.dmcrypt_no_workqueue = True
+        assert encryption.bypass_workqueue('/dev/nvme0n1') is True
+
+    @patch('ceph_volume.util.encryption.BackingDeviceRotation.is_rotational', return_value=True)
+    def test_bypass_workqueue_rotational_no_workqueue_set(self, m_is_rotational):
+        encryption.conf.dmcrypt_no_workqueue = True
+        assert encryption.bypass_workqueue('/dev/sda') is False
+
+    @patch('ceph_volume.util.encryption.BackingDeviceRotation.is_rotational', return_value=False)
+    def test_bypass_workqueue_non_rotational_no_workqueue_not_set(self, m_is_rotational):
+        encryption.conf.dmcrypt_no_workqueue = None
+        assert not encryption.bypass_workqueue('/dev/nvme0n1')
+
+
 class TestGetKeySize(object):
     def test_get_size_from_conf_default(self, conf_ceph_stub):
         conf_ceph_stub('''
@@ -86,6 +106,20 @@ class TestStatus(object):
         assert encryption.status('/dev/sdc1') == {}
 
 
+class TestDmsetupRemove(object):
+
+    def test_mapper_exists(self, fake_run, fake_filesystem):
+        mapper_name = 'ceph-fsid-nvme2n2-block-dmcrypt'
+        fake_filesystem.create_file('/dev/mapper/%s' % mapper_name)
+        encryption.dmsetup_remove(mapper_name)
+        arguments = fake_run.calls[0]['args'][0]
+        assert arguments == ['dmsetup', 'remove', mapper_name]
+
+    def test_mapper_does_not_exist(self, fake_run):
+        encryption.dmsetup_remove('ceph-fsid-missing-block-dmcrypt')
+        assert fake_run.calls == []
+
+
 class TestDmcryptClose(object):
 
     def test_mapper_exists(self, fake_run, fake_filesystem):
@@ -123,6 +157,23 @@ class TestLuksFormat(object):
             '/dev/foo'
         ]
         encryption.luks_format('abcd', '/dev/foo')
+        assert m_call.call_args[0][0] == expected
+
+    @patch('ceph_volume.util.encryption.process.call')
+    def test_luks_format_with_extra_option(self, m_call, conf_ceph_stub):
+        conf_ceph_stub('[global]\nfsid=abcd')
+        expected = [
+            'cryptsetup',
+            '--batch-mode',
+            '--key-size',
+            '512',
+            '--key-file',
+            '-',
+            'luksFormat',
+            '--fake-custom-opt1',
+            '/dev/foo'
+        ]
+        encryption.luks_format('abcd', '/dev/foo', '--fake-custom-opt1')
         assert m_call.call_args[0][0] == expected
 
     @patch('ceph_volume.util.encryption.process.call')
@@ -177,6 +228,25 @@ class TestLuksOpen(object):
             '/dev/bar'
         ]
         encryption.luks_open('abcd', '/dev/foo', '/dev/bar')
+        assert m_call.call_args[0][0] == expected
+
+    @patch('ceph_volume.util.encryption.bypass_workqueue', return_value=False)
+    @patch('ceph_volume.util.encryption.process.call')
+    def test_luks_format_with_extra_option(self, m_call, m_bypass_workqueue, conf_ceph_stub):
+        conf_ceph_stub('[global]\nfsid=abcd')
+        expected = [
+            'cryptsetup',
+            '--key-size',
+            '512',
+            '--key-file',
+            '-',
+            '--allow-discards',
+            'luksOpen',
+            '--fake-custom-opt1',
+            '/dev/foo',
+            '/dev/bar'
+        ]
+        encryption.luks_open('abcd', '/dev/foo', '/dev/bar', options='--fake-custom-opt1')
         assert m_call.call_args[0][0] == expected
 
     @patch('ceph_volume.util.encryption.bypass_workqueue', return_value=False)

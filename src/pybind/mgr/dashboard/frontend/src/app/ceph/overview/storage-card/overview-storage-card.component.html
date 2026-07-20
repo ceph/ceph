@@ -1,0 +1,129 @@
+<cd-productive-card class="overview-storage-card">
+  <!-- STORAGE CARD HEADER -->
+  <ng-template #header>
+    <h2 class="cds--type-heading-compact-02"
+        i18n>Storage overview</h2>
+  </ng-template>
+  <!-- CAPACITY USAGE TEXT -->
+  <div class="overview-storage-card-usage-text">
+    @if( usedRaw !== null && totalRaw !== null && usedRawUnit && totalRawUnit) {
+    <h5>
+      <span
+        class="cds--type-heading-05"
+        i18n>{{usedRaw}}&nbsp;</span>
+      <span
+        class="cds--type-body-02"
+        i18n>{{usedRawUnit}} of {{totalRaw}} {{totalRawUnit}} used</span>
+      <cds-tooltip
+        class="cds-ml-3 cds-mr-3"
+        [caret]="true"
+        description="Shows raw used and total capacity. Raw capacity includes all physical storage before replication or overhead."
+        i18n-description
+      >
+      <cd-icon type="help"></cd-icon>
+    </cds-tooltip>
+    @if(threshold === 'high') {
+    <cds-tag size="md">
+      <div cdsTagIcon>
+        <cd-icon
+          type="warningAltFilled"
+          useDefault="true"></cd-icon>
+      </div>
+      <span i18n>High storage usage</span>
+    </cds-tag>
+   }
+   @else if(threshold === 'critical') {
+    <cds-tag
+      type="red"
+      size="md">
+      <div cdsTagIcon>
+        <cd-icon
+          type="warningAltFilled"
+          useDefault="true"></cd-icon>
+      </div>
+      <span i18n>Capacity critically low</span>
+    </cds-tag>
+    }
+    </h5>
+    }
+    @else {
+    <cds-skeleton-text
+      [lines]="1"
+      [minLineWidth]="400"
+      [maxLineWidth]="400">
+    </cds-skeleton-text>
+    }
+  </div>
+  <!-- CAPACITY BREAKDOWN CHART -->
+  @if(isBreakdownLoaded) {
+  <ibm-meter-chart
+    [options]="options"
+    [data]="breakdownData"
+    class="overview-storage-card-chart"></ibm-meter-chart>
+  } @else {
+  <cds-skeleton-text
+    [lines]="1"
+    [minLineWidth]="1200"
+    [maxLineWidth]="1200">
+  </cds-skeleton-text>
+}
+  <!-- DATA CONSUMPTION TREND -->
+  @if(consumptionTrendData.length) {
+  <div cdsRow
+       class="align-items-center cds-ml-2 cds-mt-6">
+    <div cdsCol
+         [columnNumbers]="{ lg: 14, md: 10, sm: 16 }">
+      <cd-area-chart chartTitle="Consumption trend"
+                     [chartKey]="'Consumption trend'"
+                     [dataUnit]="'B'"
+                     [legendEnabled]="false"
+                     [rawData]="consumptionTrendData"
+                     [subHeading]="'Shows last 7 days of storage consumption trends based on recent usage'"
+                     [height]="'200px'"
+                     [decimals]="2"
+                     [chartType]="'area'">
+      </cd-area-chart>
+    </div>
+    <div cdsCol
+         [columnNumbers]="{ lg: 2, md: 8, sm: 8 }">
+      <div cdsStack="vertical"
+           gap="4">
+        <div cdsStack="vertical"
+             gap="1">
+          <span class="cds--type-heading-03">{{ estimatedTimeUntilFull }}</span>
+          <div class="consumption-stats-wrapper">
+            <cds-tooltip-definition
+              [autoAlign]="true"
+              [highContrast]="true"
+              [openOnHover]="false"
+              [dropShadow]="true"
+              [caret]="true"
+              description="Based on recent average consumption. Actual time until full may vary based on changes in consumption patterns."
+              i18n-description
+              i18n>
+              Estimated time until full
+            </cds-tooltip-definition>
+          </div>
+        </div>
+        <div cdsStack="vertical"
+             gap="1">
+          <span class="cds--type-heading-03">{{ averageDailyConsumption }}</span>
+          <div class="consumption-stats-wrapper">
+            <cds-tooltip-definition
+              [autoAlign]="true"
+              [highContrast]="true"
+              [openOnHover]="false"
+              [dropShadow]="true"
+              [caret]="true"
+              description="Based on the average daily consumption over the last 7 days"
+              i18n-description
+              i18n>
+              Average consumption
+            </cds-tooltip-definition>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  }
+</cd-productive-card>

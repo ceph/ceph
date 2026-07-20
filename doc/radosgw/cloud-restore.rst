@@ -195,6 +195,9 @@ Example 1:
 This will restore the object ``doc1.rtf`` at an optional version,
 for the duration of 10 days.
 
+.. note:: The restoration period of these temporary copies can be updated by reissuing the request with a new period.
+
+
 Example 2:
 
 .. prompt:: bash $

@@ -1,3 +1,4 @@
+import errno
 import logging
 import os
 import re
@@ -5,12 +6,21 @@ import stat
 import time
 import json
 from ceph_volume import process, allow_loop_devices
-from ceph_volume.api import lvm
 from ceph_volume.util.system import get_file_contents
 from typing import Dict, List, Any, Union, Optional
 
 
 logger = logging.getLogger(__name__)
+
+_ONE_GIB = 1024 * 1024 * 1024
+BLUESTORE_BDEV_LABEL_OFFSETS = (
+    0,
+    _ONE_GIB,
+    10 * _ONE_GIB,
+    100 * _ONE_GIB,
+    1000 * _ONE_GIB,
+)
+BLUESTORE_BDEV_LABEL_SIGNATURE = b'bluestore block device'
 
 
 # The blkid CLI tool has some oddities which prevents having one common call
@@ -141,13 +151,14 @@ def remove_partition(device):
     # in the output of `udevadm info --query=property`.
     # Probably not ideal and not the best fix but this allows to get around that issue.
     # The idea is to make it retry multiple times before actually failing.
-    for i in range(10):
-        udev_info = udevadm_property(device.path)
-        partition_number = udev_info.get('ID_PART_ENTRY_NUMBER')
+    partition_number = None
+    for _ in range(10):
+        udev_data = UdevData(device.path)
+        partition_number = udev_data.environment.get("ID_PART_ENTRY_NUMBER", None)
         if partition_number:
             break
         time.sleep(0.2)
-    if not partition_number:
+    if partition_number is None:
         raise RuntimeError('Unable to detect the partition number for device: %s' % device.path)
 
     process.run(
@@ -161,6 +172,14 @@ def _stat_is_device(stat_obj):
     functions can call ``os.stat`` once and interpret that result several times
     """
     return stat.S_ISBLK(stat_obj)
+
+
+def path_is_block_device(path: str) -> bool:
+    """True if ``path`` exists and is a block device (follows symlinks)."""
+    try:
+        return _stat_is_device(os.stat(path).st_mode)
+    except OSError:
+        return False
 
 
 def _lsblk_parser(line):
@@ -198,47 +217,6 @@ def device_family(device):
     return devices
 
 
-def udevadm_property(device, properties=[]):
-    """
-    Query udevadm for information about device properties.
-    Optionally pass a list of properties to return. A requested property might
-    not be returned if not present.
-
-    Expected output format::
-        # udevadm info --query=property --name=/dev/sda                                  :(
-        DEVNAME=/dev/sda
-        DEVTYPE=disk
-        ID_ATA=1
-        ID_BUS=ata
-        ID_MODEL=SK_hynix_SC311_SATA_512GB
-        ID_PART_TABLE_TYPE=gpt
-        ID_PART_TABLE_UUID=c8f91d57-b26c-4de1-8884-0c9541da288c
-        ID_PATH=pci-0000:00:17.0-ata-3
-        ID_PATH_TAG=pci-0000_00_17_0-ata-3
-        ID_REVISION=70000P10
-        ID_SERIAL=SK_hynix_SC311_SATA_512GB_MS83N71801150416A
-        TAGS=:systemd:
-        USEC_INITIALIZED=16117769
-        ...
-    """
-    out = _udevadm_info(device)
-    ret = {}
-    for line in out:
-        p, v = line.split('=', 1)
-        if not properties or p in properties:
-            ret[p] = v
-    return ret
-
-
-def _udevadm_info(device):
-    """
-    Call udevadm and return the output
-    """
-    cmd = ['udevadm', 'info', '--query=property', device]
-    out, _err, _rc = process.call(cmd)
-    return out
-
-
 def lsblk(device, columns=None, abspath=False):
     result = []
     if not os.path.isdir(device):
@@ -250,6 +228,114 @@ def lsblk(device, columns=None, abspath=False):
         return {}
 
     return result[0]
+
+
+class BackingDeviceRotation(object):
+    # Typical ceph-volume stacks are a few dm/LVM layers (eg: crypt over LV over disk).
+    # 32 leaves headroom for multipath/MD without unbounded sysfs recursion if slaves/
+    # forms a cycle or an unexpectedly deep mapper chain.
+    _SYSFS_SLAVES_WALK_MAX_DEPTH = 32
+
+    @staticmethod
+    def _kname_from_path(device: str) -> str:
+        if not device:
+            return ''
+        try:
+            return os.path.basename(os.path.realpath(device))
+        except OSError:
+            return ''
+
+    @staticmethod
+    def _kname_for_sysfs_walk(kname: str) -> str:
+        if not kname:
+            return ''
+        if os.path.isdir(os.path.join('/sys/block', kname)):
+            return kname
+        try:
+            parent = get_partitions().get(kname)
+        except OSError as exc:
+            logger.debug('failed to resolve partition parent for %s: %s', kname, exc)
+            parent = None
+        if parent:
+            return parent
+        return kname
+
+    @staticmethod
+    def _walk_sysfs_leaf_blocks(k: str, depth: int, found: set, seen: set) -> None:
+        k = BackingDeviceRotation._kname_for_sysfs_walk(k)
+        if not k or k in seen:
+            return
+        if depth >= BackingDeviceRotation._SYSFS_SLAVES_WALK_MAX_DEPTH:
+            logger.warning(
+                'sysfs slaves walk exceeded max depth %s at %s',
+                BackingDeviceRotation._SYSFS_SLAVES_WALK_MAX_DEPTH,
+                k,
+            )
+            return
+        seen.add(k)
+        sys_block = os.path.join('/sys/block', k)
+        if not os.path.isdir(sys_block):
+            return
+        slaves_dir = os.path.join(sys_block, 'slaves')
+        slave_names: List[str] = []
+        if os.path.isdir(slaves_dir):
+            try:
+                slave_names = os.listdir(slaves_dir)
+            except OSError as exc:
+                logger.debug(
+                    'failed to list sysfs slaves for %s: %s', slaves_dir, exc)
+                return
+        if not slave_names:
+            found.add(k)
+            return
+        for sn in slave_names:
+            BackingDeviceRotation._walk_sysfs_leaf_blocks(
+                sn,
+                depth + 1,
+                found,
+                seen,
+            )
+
+    @staticmethod
+    def _sysfs_leaf_block_knames(kname: str) -> List[str]:
+        found = set()
+        seen = set()
+        BackingDeviceRotation._walk_sysfs_leaf_blocks(kname, 0, found, seen)
+        return sorted(found)
+
+    @staticmethod
+    def _leaf_block_is_rotational(kname: str) -> bool:
+        kname = BackingDeviceRotation._kname_for_sysfs_walk(kname)
+        dev_path = os.path.join('/dev', kname)
+        if os.path.exists(dev_path):
+            try:
+                udev_data = UdevData(dev_path)
+                env = udev_data.environment
+                if env.get('ID_SSD') == '1':
+                    return False
+                rpm = env.get('ID_ATA_ROTATION_RATE_RPM', '')
+                if rpm.isdigit():
+                    return int(rpm) > 0
+            except (RuntimeError, OSError, ValueError) as exc:
+                logger.debug(
+                    'failed to read udev rotational hints for %s: %s',
+                    dev_path, exc)
+
+        sys_block = os.path.join('/sys/block', kname)
+        rota = get_file_contents(
+            os.path.join(sys_block, 'queue/rotational'), '1')
+        return rota == '1'
+
+    @staticmethod
+    def is_rotational(device: str) -> bool:
+        kname = BackingDeviceRotation._kname_from_path(device)
+        walk_root = BackingDeviceRotation._kname_for_sysfs_walk(kname)
+        leaves = BackingDeviceRotation._sysfs_leaf_block_knames(walk_root)
+        if not leaves:
+            return True
+        return any(
+            BackingDeviceRotation._leaf_block_is_rotational(leaf) for leaf in leaves)
+
 
 def lsblk_all(device: str = '',
               columns: Optional[List[str]] = None,
@@ -756,6 +842,16 @@ def get_block_devs_sysfs(_sys_block_path: str = '/sys/block', _sys_dev_block_pat
         name = kname = pname = os.path.join("/dev", dev)
         if not os.path.exists(name):
             continue
+        # Exclude any CDROM devices (ex: IPMI devices)
+        # The linux kernel reports these as SCSI device type 5 under /sys/block/<dev>/device/type
+        # and they appear as /dev/sr* (ex: /dev/sr0)
+        # These are not physical disks and are not valid OSD targets, so skip them.
+        if get_file_contents(os.path.join(_sys_block_path, dev, 'device/type'), '').strip() == '5':
+            continue
+        # Skip kernel RAM disks (/dev/ram*); these are not valid OSD targets.
+        # Only matches 'ram' + digits (ram0, ram1, etc.).
+        if dev.startswith('ram') and dev[3:].isdigit():
+            continue
         type_: str = 'disk'
         holders: List[str] = os.listdir(os.path.join(_sys_block_path, dev, 'holders'))
         if holder_inner_loop():
@@ -777,6 +873,10 @@ def get_block_devs_sysfs(_sys_block_path: str = '/sys/block', _sys_dev_block_pat
     # Next, look for devices that _are_ partitions
     partitions: Dict[str, str] = get_partitions()
     for partition in partitions.keys():
+        # Skip partitions that belong to kernel RAM disks (/dev/ram*).
+        parent = partitions[partition]
+        if parent.startswith('ram') and parent[3:].isdigit():
+            continue
         name = kname = os.path.join("/dev", partition)
         result.append([name, kname, "part", partitions[partition]])
     return sorted(result, key=lambda x: x[0])
@@ -828,7 +928,22 @@ def get_devices(_sys_block_path='/sys/block', device=''):
     for block in block_devs:
         metadata: Dict[str, Any] = {}
         if block[2] == 'lvm':
-            block[1] = UdevData(block[1]).slashed_path
+            try:
+                udev_data = UdevData(block[1])
+            except RuntimeError as exc:
+                logger.debug(
+                    'get_devices(): skipping LVM device %s: %s', block[1], exc)
+                continue
+            if udev_data.is_internal_lv:
+                logger.debug(
+                    'get_devices(): skipping internal LVM LV %s', block[1])
+                continue
+            block[1] = udev_data.preferred_block_path
+            if not path_is_block_device(block[1]):
+                logger.debug(
+                    'get_devices(): skipping LVM device without accessible node %s',
+                    block[1])
+                continue
         devname = os.path.basename(block[0])
         diskname = block[1]
         if block[2] not in block_types:
@@ -840,11 +955,6 @@ def get_devices(_sys_block_path='/sys/block', device=''):
         # If the device is ceph rbd it gets excluded
         if is_ceph_rbd(diskname):
             continue
-
-        # If the mapper device is a logical volume it gets excluded
-        if is_mapper_device(diskname):
-            if lvm.get_device_lvs(diskname):
-                continue
 
         # all facts that have no defaults
         # (<name>, <path relative to _sys_block_path>)
@@ -907,28 +1017,53 @@ def get_devices(_sys_block_path='/sys/block', device=''):
         metadata['parent'] = block[3]
 
         # some facts from udevadm
-        p = udevadm_property(sysdir)
-        metadata['id_bus'] = p.get('ID_BUS', '')
+        udev_data = UdevData(sysdir)
+        metadata['id_bus'] = udev_data.environment.get("ID_BUS", "")
 
         device_facts[diskname] = metadata
     return device_facts
 
-def has_bluestore_label(device_path):
-    isBluestore = False
-    bluestoreDiskSignature = 'bluestore block device' # 22 bytes long
-
-    # throws OSError on failure
+def has_bluestore_label(device_path: str) -> bool:
     logger.info("opening device {} to check for BlueStore label".format(device_path))
+    sig_len = len(BLUESTORE_BDEV_LABEL_SIGNATURE)
     try:
         with open(device_path, "rb") as fd:
-            # read first 22 bytes looking for bluestore disk signature
-            signature = fd.read(22)
-            if signature.decode('ascii', 'replace') == bluestoreDiskSignature:
-                isBluestore = True
+            for position in BLUESTORE_BDEV_LABEL_OFFSETS:
+                try:
+                    fd.seek(position)
+                except OSError as exc:
+                    err = exc.errno
+                    if err is None or err not in (
+                        errno.EINVAL,
+                        errno.ESPIPE,
+                        errno.ENOTTY,
+                    ):
+                        raise
+                    if position != 0:
+                        continue
+                signature = fd.read(sig_len)
+                if signature == BLUESTORE_BDEV_LABEL_SIGNATURE:
+                    return True
     except IsADirectoryError:
         logger.info(f'{device_path} is a directory, skipping.')
 
-    return isBluestore
+    return False
+
+def has_seastore_label(device_path: str) -> bool:
+    is_seastore = False
+    seastore_disk_signature = b'seastore block device\n'  # 23 bytes including newline
+
+    try:
+        with open(device_path, "rb") as fd:
+            signature = fd.read(len(seastore_disk_signature))
+            if signature == seastore_disk_signature:
+                is_seastore = True
+    except IsADirectoryError:
+        print(f'{device_path} is a directory, skipping.')
+    except Exception as e:
+        print(f'Error reading {device_path}: {e}')
+
+    return is_seastore
 
 def get_lvm_mappers(sys_block_path: str = '/sys/block') -> List[str]:
     """
@@ -1371,9 +1506,18 @@ class UdevData:
             raise RuntimeError(f'{path} not found.')
         self.path: str = path
         self.realpath: str = os.path.realpath(self.path)
-        self.stats: os.stat_result = os.stat(self.realpath)
-        self.major: int = os.major(self.stats.st_rdev)
-        self.minor: int = os.minor(self.stats.st_rdev)
+
+        if path.startswith("/sys/block/") and os.path.isdir(path):
+            dev_file = os.path.join(path, "dev")
+            if not os.path.exists(dev_file):
+                raise RuntimeError(f"{dev_file} not found.")
+            with open(dev_file) as f:
+                self.major, self.minor = map(int, f.read().strip().split(":"))
+        else:
+            self.stats: os.stat_result = os.stat(self.realpath)
+            self.major: int = os.major(self.stats.st_rdev)
+            self.minor: int = os.minor(self.stats.st_rdev)
+
         self.udev_data_path: str = f'/run/udev/data/b{self.major}:{self.minor}'
         self.symlinks: List[str] = []
         self.id: str = ''
@@ -1387,7 +1531,7 @@ class UdevData:
 
         with open(self.udev_data_path, 'r') as f:
             content: str = f.read().strip()
-            self.raw_data: List[str] = content.split('\n')
+            self.raw_data: List[str] = content.split('\n') if content else []
 
         for line in self.raw_data:
             data_type, data = line.split(':', 1)
@@ -1424,6 +1568,16 @@ class UdevData:
         return self.environment.get('DM_UUID', '').startswith('LVM')
 
     @property
+    def is_internal_lv(self) -> bool:
+        lv_name = self.environment.get('DM_LV_NAME', '')
+        if not lv_name:
+            return False
+        for marker in ('_rmeta_', '_rimage_', '_rtmeta_', '_rtimage_'):
+            if marker in lv_name:
+                return True
+        return bool(self.environment.get('DM_LV_LAYER', ''))
+
+    @property
     def slashed_path(self) -> str:
         """Get the LVM path structured with slashes.
 
@@ -1451,3 +1605,25 @@ class UdevData:
             name: str = self.environment.get('DM_NAME', '')
             result = f'/dev/mapper/{name}'
         return result
+
+    @property
+    def preferred_block_path(self) -> str:
+        """Return a device path that exists for typical open(2) / blkid usage.
+
+        `slashed_path` (/dev/vg/lv) is only present when udev/LVM created those
+        nodes; many environments (e.g. containers) only provide
+        `dashed_path` (/dev/mapper/name).
+
+        Returns:
+            str: For non-LVM, `path`. For LVM, `slashed_path` if it is a block
+                 device, else `dashed_path` if it is a block device, else `path`.
+        """
+        if not self.is_lvm:
+            return self.path
+        slashed: str = self.slashed_path
+        if path_is_block_device(slashed):
+            return slashed
+        dashed: str = self.dashed_path
+        if path_is_block_device(dashed):
+            return dashed
+        return self.path

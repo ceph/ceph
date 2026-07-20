@@ -2298,7 +2298,7 @@ class CephManager:
         """
         with self.lock:
             if self.pools:
-                return random.sample(self.pools.keys(), 1)[0]
+                return random.sample(list(self.pools.keys()), 1)[0]
 
     def get_pool_pg_num(self, pool_name):
         """
@@ -2485,6 +2485,14 @@ class CephManager:
         j = json.loads('\n'.join(out.split('\n')[1:]))
         return next((p['stats'] for p in j['pools'] if p['name'] == name),
                     None)
+
+    def get_cluster_df_stats(self):
+        """
+        Get the cluster df stats
+        """
+        out = self.raw_cluster_cmd('df', '--format=json')
+        j = json.loads('\n'.join(out.split('\n')[1:]))
+        return j['stats']
 
     def get_pgids_to_force(self, backfill):
         """

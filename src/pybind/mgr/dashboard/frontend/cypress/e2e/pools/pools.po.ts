@@ -19,16 +19,17 @@ export class PoolPageHelper extends PageHelper {
 
     this.isPowerOf2(placement_groups);
 
-    this.selectOption('poolType', 'replicated');
+    this.selectRadioOption('pool-type-select', 'replicated');
 
-    this.expectSelectOption('pgAutoscaleMode', 'on');
-    this.selectOption('pgAutoscaleMode', 'off'); // To show pgNum field
-    cy.get('input[name=pgNum]').clear().type(`${placement_groups}`);
+    this.expectSelectOption('pgAutoscaleMode', 'on', true);
+    this.selectOption('pgAutoscaleMode', 'off', true); // To show pgNum field
+    cy.get('[data-testid="pgNum"]').clear().type(`${placement_groups}`);
     this.setApplications(apps);
     if (mirroring) {
-      cy.get('#rbdMirroring').check({ force: true });
+      cy.get('[data-testid="rbd-mirroring-check"] input[type="checkbox"]').check({ force: true });
     }
     cy.get('cd-submit-button').click();
+    this.navigateBack();
   }
 
   edit_pool_pg(name: string, new_pg: number, wait = true, mirroring = false) {
@@ -36,7 +37,7 @@ export class PoolPageHelper extends PageHelper {
     this.navigateEdit(name);
 
     if (mirroring) {
-      cy.get('#rbdMirroring').should('be.checked');
+      cy.get('[data-testid="rbd-mirroring-check"] input[type="checkbox"]').should('be.checked');
     }
 
     cy.get('input[name=pgNum]').clear().type(`${new_pg}`);
@@ -68,8 +69,14 @@ export class PoolPageHelper extends PageHelper {
     if (!apps || apps.length === 0) {
       return;
     }
-    cy.get('.float-start.me-2.select-menu-edit').click();
-    cy.get('.popover-body').should('be.visible');
-    apps.forEach((app) => cy.get('.select-menu-item-content').contains(app).click());
+    cy.get('cds-combo-box[id="applications"] input.cds--text-input').click({ force: true });
+    cy.get('.cds--list-box__menu.cds--multi-select').should('be.visible');
+    apps.forEach((app) => {
+      cy.get('.cds--list-box__menu.cds--multi-select .cds--checkbox-label')
+        .contains('.cds--checkbox-label-text', app, { matchCase: false })
+        .parent()
+        .click({ force: true });
+    });
+    cy.get('body').type('{esc}');
   }
 }

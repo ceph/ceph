@@ -11,7 +11,9 @@ import rbd
 import traceback
 from typing import cast, Any, Callable, Optional, Tuple, TypeVar
 
-from mgr_module import CLIReadCommand, CLIWriteCommand, MgrModule, Option
+from .cli import RBDSupportCLICommand
+
+from mgr_module import MgrModule, Option
 from threading import Thread, Event
 
 from .common import NotAuthorizedError
@@ -73,6 +75,7 @@ def with_latest_osdmap(func: FuncT) -> FuncT:
 
 
 class Module(MgrModule):
+    CLICommand = RBDSupportCLICommand
     MODULE_OPTIONS = [
         Option(name=MirrorSnapshotScheduleHandler.MODULE_OPTION_NAME),
         Option(name=MirrorSnapshotScheduleHandler.MODULE_OPTION_NAME_MAX_CONCURRENT_SNAP_CREATE,
@@ -136,7 +139,7 @@ class Module(MgrModule):
         # shut down client and deregister it from MgrMap
         super().shutdown()
 
-    @CLIWriteCommand('rbd mirror snapshot schedule add')
+    @RBDSupportCLICommand.Write('rbd mirror snapshot schedule add')
     @with_latest_osdmap
     def mirror_snapshot_schedule_add(self,
                                      level_spec: str,
@@ -148,7 +151,7 @@ class Module(MgrModule):
         spec = LevelSpec.from_name(self, level_spec, namespace_validator, image_validator)
         return self.mirror_snapshot_schedule.add_schedule(spec, interval, start_time)
 
-    @CLIWriteCommand('rbd mirror snapshot schedule remove')
+    @RBDSupportCLICommand.Write('rbd mirror snapshot schedule remove')
     @with_latest_osdmap
     def mirror_snapshot_schedule_remove(self,
                                         level_spec: str,
@@ -160,7 +163,7 @@ class Module(MgrModule):
         spec = LevelSpec.from_name(self, level_spec, namespace_validator, image_validator)
         return self.mirror_snapshot_schedule.remove_schedule(spec, interval, start_time)
 
-    @CLIReadCommand('rbd mirror snapshot schedule list')
+    @RBDSupportCLICommand.Read('rbd mirror snapshot schedule list')
     @with_latest_osdmap
     def mirror_snapshot_schedule_list(self,
                                       level_spec: str = '') -> Tuple[int, str, str]:
@@ -170,7 +173,7 @@ class Module(MgrModule):
         spec = LevelSpec.from_name(self, level_spec, namespace_validator, image_validator)
         return self.mirror_snapshot_schedule.list(spec)
 
-    @CLIReadCommand('rbd mirror snapshot schedule status')
+    @RBDSupportCLICommand.Read('rbd mirror snapshot schedule status')
     @with_latest_osdmap
     def mirror_snapshot_schedule_status(self,
                                         level_spec: str = '') -> Tuple[int, str, str]:
@@ -180,7 +183,7 @@ class Module(MgrModule):
         spec = LevelSpec.from_name(self, level_spec, namespace_validator, image_validator)
         return self.mirror_snapshot_schedule.status(spec)
 
-    @CLIReadCommand('rbd perf image stats')
+    @RBDSupportCLICommand.Read('rbd perf image stats')
     @with_latest_osdmap
     def perf_image_stats(self,
                          pool_spec: Optional[str] = None,
@@ -192,7 +195,7 @@ class Module(MgrModule):
             sort_by_name = sort_by.name if sort_by else OSD_PERF_QUERY_COUNTERS[0]
             return self.perf.get_perf_stats(pool_spec, sort_by_name)
 
-    @CLIReadCommand('rbd perf image counters')
+    @RBDSupportCLICommand.Read('rbd perf image counters')
     @with_latest_osdmap
     def perf_image_counters(self,
                             pool_spec: Optional[str] = None,
@@ -204,7 +207,7 @@ class Module(MgrModule):
             sort_by_name = sort_by.name if sort_by else OSD_PERF_QUERY_COUNTERS[0]
             return self.perf.get_perf_counters(pool_spec, sort_by_name)
 
-    @CLIWriteCommand('rbd task add flatten')
+    @RBDSupportCLICommand.Write('rbd task add flatten')
     @with_latest_osdmap
     def task_add_flatten(self, image_spec: str) -> Tuple[int, str, str]:
         """
@@ -213,7 +216,7 @@ class Module(MgrModule):
         with self.task.lock:
             return self.task.queue_flatten(image_spec)
 
-    @CLIWriteCommand('rbd task add remove')
+    @RBDSupportCLICommand.Write('rbd task add remove')
     @with_latest_osdmap
     def task_add_remove(self, image_spec: str) -> Tuple[int, str, str]:
         """
@@ -222,7 +225,7 @@ class Module(MgrModule):
         with self.task.lock:
             return self.task.queue_remove(image_spec)
 
-    @CLIWriteCommand('rbd task add trash remove')
+    @RBDSupportCLICommand.Write('rbd task add trash remove')
     @with_latest_osdmap
     def task_add_trash_remove(self, image_id_spec: str) -> Tuple[int, str, str]:
         """
@@ -231,7 +234,7 @@ class Module(MgrModule):
         with self.task.lock:
             return self.task.queue_trash_remove(image_id_spec)
 
-    @CLIWriteCommand('rbd task add migration execute')
+    @RBDSupportCLICommand.Write('rbd task add migration execute')
     @with_latest_osdmap
     def task_add_migration_execute(self, image_spec: str) -> Tuple[int, str, str]:
         """
@@ -240,7 +243,7 @@ class Module(MgrModule):
         with self.task.lock:
             return self.task.queue_migration_execute(image_spec)
 
-    @CLIWriteCommand('rbd task add migration commit')
+    @RBDSupportCLICommand.Write('rbd task add migration commit')
     @with_latest_osdmap
     def task_add_migration_commit(self, image_spec: str) -> Tuple[int, str, str]:
         """
@@ -249,7 +252,7 @@ class Module(MgrModule):
         with self.task.lock:
             return self.task.queue_migration_commit(image_spec)
 
-    @CLIWriteCommand('rbd task add migration abort')
+    @RBDSupportCLICommand.Write('rbd task add migration abort')
     @with_latest_osdmap
     def task_add_migration_abort(self, image_spec: str) -> Tuple[int, str, str]:
         """
@@ -258,7 +261,7 @@ class Module(MgrModule):
         with self.task.lock:
             return self.task.queue_migration_abort(image_spec)
 
-    @CLIWriteCommand('rbd task cancel')
+    @RBDSupportCLICommand.Write('rbd task cancel')
     @with_latest_osdmap
     def task_cancel(self, task_id: str) -> Tuple[int, str, str]:
         """
@@ -267,7 +270,7 @@ class Module(MgrModule):
         with self.task.lock:
             return self.task.task_cancel(task_id)
 
-    @CLIReadCommand('rbd task list')
+    @RBDSupportCLICommand.Read('rbd task list')
     @with_latest_osdmap
     def task_list(self, task_id: Optional[str] = None) -> Tuple[int, str, str]:
         """
@@ -276,7 +279,7 @@ class Module(MgrModule):
         with self.task.lock:
             return self.task.task_list(task_id)
 
-    @CLIWriteCommand('rbd trash purge schedule add')
+    @RBDSupportCLICommand.Write('rbd trash purge schedule add')
     @with_latest_osdmap
     def trash_purge_schedule_add(self,
                                  level_spec: str,
@@ -288,7 +291,7 @@ class Module(MgrModule):
         spec = LevelSpec.from_name(self, level_spec, allow_image_level=False)
         return self.trash_purge_schedule.add_schedule(spec, interval, start_time)
 
-    @CLIWriteCommand('rbd trash purge schedule remove')
+    @RBDSupportCLICommand.Write('rbd trash purge schedule remove')
     @with_latest_osdmap
     def trash_purge_schedule_remove(self,
                                     level_spec: str,
@@ -300,7 +303,7 @@ class Module(MgrModule):
         spec = LevelSpec.from_name(self, level_spec, allow_image_level=False)
         return self.trash_purge_schedule.remove_schedule(spec, interval, start_time)
 
-    @CLIReadCommand('rbd trash purge schedule list')
+    @RBDSupportCLICommand.Read('rbd trash purge schedule list')
     @with_latest_osdmap
     def trash_purge_schedule_list(self,
                                   level_spec: str = '') -> Tuple[int, str, str]:
@@ -310,7 +313,7 @@ class Module(MgrModule):
         spec = LevelSpec.from_name(self, level_spec, allow_image_level=False)
         return self.trash_purge_schedule.list(spec)
 
-    @CLIReadCommand('rbd trash purge schedule status')
+    @RBDSupportCLICommand.Read('rbd trash purge schedule status')
     @with_latest_osdmap
     def trash_purge_schedule_status(self,
                                     level_spec: str = '') -> Tuple[int, str, str]:

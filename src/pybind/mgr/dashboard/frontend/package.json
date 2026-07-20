@@ -52,7 +52,8 @@
     "@angular/platform-browser-dynamic": "18.2.11",
     "@angular/router": "18.2.11",
     "@carbon/icons": "11.63.0",
-    "@carbon/styles": "1.57.0",
+    "@carbon/styles": "1.83.0",
+    "@carbon/charts-angular": "1.23.9",
     "@ibm/plex": "6.4.0",
     "@ng-bootstrap/ng-bootstrap": "17.0.1",
     "@ngx-formly/bootstrap": "6.1.1",
@@ -68,7 +69,7 @@
     "file-saver": "2.0.2",
     "fork-awesome": "1.1.7",
     "js-yaml": "4.1.0",
-    "lodash": "4.17.21",
+    "lodash": "4.18.1",
     "moment": "2.29.4",
     "ng-block-ui": "4.0.1",
     "ng-click-outside": "9.0.1",
@@ -78,7 +79,7 @@
     "rxjs": "6.6.3",
     "simplebar-angular": "3.2.6",
     "stream-browserify": "3.0.0",
-    "swagger-ui": "4.12.0",
+    "swagger-ui": "5.3.1",
     "timers-browserify": "2.0.12",
     "tslib": "2.3.1",
     "xml2js": "0.6.2",
@@ -107,7 +108,7 @@
     "@types/lodash": "4.14.161",
     "@types/node": "18.17.12",
     "@types/swagger-ui": "3.52.0",
-    "@types/validator": "13.12.2",
+    "@types/validator": "13.15.4",
     "@types/xml2js": "0.4.14",
     "@typescript-eslint/eslint-plugin": "8.14.0",
     "@typescript-eslint/parser": "8.14.0",
@@ -140,7 +141,7 @@
     "table": "6.8.0",
     "ts-node": "9.0.0",
     "typescript": "5.4.5",
-    "validator": "13.12.0"
+    "validator": "13.15.20"
   },
   "cypress-cucumber-preprocessor": {
     "stepDefinitions": "cypress/e2e/common"

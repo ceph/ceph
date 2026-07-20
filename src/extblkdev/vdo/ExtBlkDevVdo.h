@@ -47,6 +47,10 @@ public:
   virtual const std::string& get_devname() const {return name;}
   virtual int get_state(ceph::ExtBlkDevState& state);
   virtual int collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm);
+  int get_plugin_id(std::string& id_str) override {
+    id_str = "vdo";
+    return 0;
+  };
 };
 
 #endif

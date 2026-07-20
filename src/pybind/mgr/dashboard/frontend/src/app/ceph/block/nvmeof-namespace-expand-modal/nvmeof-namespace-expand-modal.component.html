@@ -1,0 +1,64 @@
+<cds-modal size="sm"
+           [open]="true"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h4 cdsModalHeaderLabel
+        class="cds--type-label-01"
+        i18n>Namespace</h4>
+    <h3 cdsModalHeaderHeading
+        class="cds--type-heading-03"
+        i18n>Expand namespace</h3>
+  </cds-modal-header>
+
+  <section cdsModalContent>
+    <div class="cds--type-body-01 cds-mb-3"
+         i18n>
+      Increase the NVMe namespace storage capacity by resizing the backing image.
+    </div>
+
+    <div class="cds--type-body-01 cds-mb-5">
+      <div class="cds-mb-3">
+        <svg [cdsIcon]="icons.datastore"
+             size="16"
+             class="cds-mr-3"></svg>
+        <strong><span i18n>namespace</span>-{{ nsid }}</strong>
+      </div>
+      <div class="cds--type-helper-text-01 cds-mb-1">
+        <span i18n>Image:</span> {{ imageName }}
+      </div>
+      <div class="cds--type-helper-text-01">
+        <span i18n>Current size:</span> {{ currentBytes | dimlessBinary }}
+      </div>
+    </div>
+
+    <form name="nsForm"
+          #formDir="ngForm"
+          [formGroup]="nsForm"
+          novalidate>
+      <div class="form-item">
+        <cds-number label="Enter the new size of the namespace image (GiB)"
+                    i18n-label
+                    [formControlName]="'image_size'"
+                    [invalid]="nsForm.controls['image_size'].invalid && (nsForm.controls['image_size'].dirty || nsForm.controls['image_size'].touched)"
+                    [invalidText]="sizeErrorRef"
+                    [min]="minSize"
+                    required
+                    modal-primary-focus></cds-number>
+        <ng-template #sizeErrorRef>
+          <ng-container *ngTemplateOutlet="validationErrors; context: { control: nsForm.get('image_size') }"></ng-container>
+        </ng-template>
+      </div>
+    </form>
+
+    <ng-template #validationErrors
+                 let-control="control">
+    @for (err of control.errors | keyvalue; track err.key) {
+      <span class="invalid-feedback">{{ INVALID_TEXTS[err.key] }}</span>
+    }
+    </ng-template>
+  </section>
+
+  <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                        [submitText]="expandText"
+                        [modalForm]="true"></cd-form-button-panel>
+</cds-modal>

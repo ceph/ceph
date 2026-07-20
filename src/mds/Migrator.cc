@@ -3309,7 +3309,7 @@ void Migrator::dump_export_states(Formatter *f)
 }
 
 void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
-				   mds_rank_t oldauth, LogSegment *ls,
+				   mds_rank_t oldauth, LogSegmentRef const& ls,
 				   map<CInode*, map<client_t,Capability::Export> >& peer_exports,
 				   list<ScatterLock*>& updated_scatterlocks)
 { 
@@ -3483,7 +3483,7 @@ void Migrator::decode_import_dir(bufferlist::const_iterator& blp,
 				mds_rank_t oldauth,
 				CDir *import_root,
 				EImportStart *le,
-				LogSegment *ls,
+				LogSegmentRef const& ls,
 				map<CInode*,map<client_t,Capability::Export> >& peer_exports,
 				list<ScatterLock*>& updated_scatterlocks, int &num_imported)
 {

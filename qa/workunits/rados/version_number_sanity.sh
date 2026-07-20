@@ -10,7 +10,7 @@ debian|ubuntu)
     dpkg-query --show ceph-common
     PKG_NAME_AND_VERSION=$(dpkg-query --show ceph-common)
     ;;
-centos|fedora|rhel|opensuse*|suse|sles)
+centos|fedora|rhel|rocky|opensuse*|suse|sles)
     RPMDEB='RPM'
     rpm -q ceph
     PKG_NAME_AND_VERSION=$(rpm -q ceph)

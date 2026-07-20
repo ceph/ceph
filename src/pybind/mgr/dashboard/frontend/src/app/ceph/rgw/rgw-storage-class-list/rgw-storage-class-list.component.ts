@@ -1,10 +1,11 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, NgZone, OnInit, ViewChild } from '@angular/core';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import {
+  AllZonesResponse,
   StorageClass,
   TIER_TYPE,
   TIER_TYPE_DISPLAY,
@@ -14,6 +15,7 @@ import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
+import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -23,8 +25,10 @@ import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Permission } from '~/app/shared/models/permissions';
 import { BucketTieringUtils } from '../utils/rgw-bucket-tiering';
 import { Router } from '@angular/router';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
+import { finalize, switchMap } from 'rxjs/operators';
 
-const BASE_URL = 'rgw/tiering';
+const BASE_URL = 'rgw/storage-class';
 @Component({
   selector: 'cd-rgw-storage-class-list',
   templateUrl: './rgw-storage-class-list.component.html',
@@ -32,6 +36,8 @@ const BASE_URL = 'rgw/tiering';
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
 export class RgwStorageClassListComponent extends ListWithDetails implements OnInit {
+  @ViewChild('table', { static: true })
+  table: TableComponent;
   columns: CdTableColumn[];
   selection = new CdTableSelection();
   permission: Permission;
@@ -40,13 +46,15 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
 
   constructor(
     private rgwZonegroupService: RgwZonegroupService,
+    private rgwZoneService: RgwZoneService,
     public actionLabels: ActionLabelsI18n,
     private cdsModalService: ModalCdsService,
     private taskWrapper: TaskWrapperService,
     private authStorageService: AuthStorageService,
     private rgwStorageClassService: RgwStorageClassService,
     private router: Router,
-    private urlBuilder: URLBuilderService
+    private urlBuilder: URLBuilderService,
+    protected ngZone: NgZone
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().rgw;
@@ -60,7 +68,7 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         isHidden: true
       },
       {
-        name: $localize`Storage Class`,
+        name: $localize`Name`,
         prop: 'storage_class',
         flexGrow: 2
       },
@@ -70,13 +78,8 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         flexGrow: 2
       },
       {
-        name: $localize`Zone Group`,
+        name: $localize`Zonegroup`,
         prop: 'zonegroup_name',
-        flexGrow: 2
-      },
-      {
-        name: $localize`Placement Target`,
-        prop: 'placement_target',
         flexGrow: 2
       },
       {
@@ -90,11 +93,16 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         flexGrow: 2
       }
     ];
-    const getStorageUri = () =>
-      this.selection.first() &&
-      `${encodeURI(this.selection.first().zonegroup_name)}/${encodeURI(
-        this.selection.first().placement_target
-      )}/${encodeURI(this.selection.first().storage_class)}`;
+    const getStorageUri = () => {
+      const selection = this.selection.first();
+      if (!selection) return '';
+
+      let url = `${encodeURIComponent(selection.zonegroup_name)}/${encodeURIComponent(
+        selection.placement_target
+      )}/${encodeURIComponent(selection.storage_class)}`;
+
+      return url;
+    };
     this.tableActions = [
       {
         name: this.actionLabels.CREATE,
@@ -107,7 +115,7 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         name: this.actionLabels.EDIT,
         permission: 'update',
         icon: Icons.edit,
-        routerLink: () => [`/rgw/tiering/edit/${getStorageUri()}`]
+        routerLink: () => [`/${BASE_URL}/edit/${getStorageUri()}`]
       },
       {
         name: this.actionLabels.REMOVE,
@@ -116,9 +124,11 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         click: () => this.removeStorageClassModal()
       }
     ];
+    this.setTableRefreshTimeout();
   }
 
   loadStorageClass(): Promise<void> {
+    this.setTableRefreshTimeout();
     return new Promise((resolve, reject) => {
       this.rgwZonegroupService.getAllZonegroupsInfo().subscribe(
         (data: ZoneGroupDetails) => {
@@ -126,7 +136,10 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
           const tierObj = BucketTieringUtils.filterAndMapTierTargets(data);
           const tierConfig = tierObj.map((tier) => ({
             ...tier,
-            tier_type: this.mapTierTypeDisplay(tier.tier_type)
+            tier_type: this.mapTierTypeDisplay(tier.tier_type),
+            storageClass: tier.storage_class,
+            placementTarget: tier.placement_target,
+            tierType: this.mapTierTypeDisplay(tier.tier_type)
           }));
 
           this.transformTierData(tierConfig);
@@ -164,28 +177,44 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
   }
 
   removeStorageClassModal() {
-    const storage_class = this.selection.first().storage_class;
-    const placement_target = this.selection.first().placement_target;
+    const selectedItem = this.selection.first();
+    const { storageClass, placementTarget, tierType } = selectedItem;
+    const isLocalStorageClass =
+      tierType?.toLowerCase() === TIER_TYPE.LOCAL || tierType === TIER_TYPE_DISPLAY.LOCAL;
+
     this.cdsModalService.show(DeleteConfirmationModalComponent, {
-      itemDescription: $localize`Tiering Storage Class`,
-      itemNames: [storage_class],
+      itemDescription: $localize`Storage class`,
+      itemNames: [storageClass],
       actionDescription: 'remove',
-      submitActionObservable: () =>
-        this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask('rgw/zonegroup/storage-class', {
-            placement_target: placement_target,
-            storage_class: storage_class
-          }),
-          call: this.rgwStorageClassService.removeStorageClass(placement_target, storage_class)
-        })
+      submitActionObservable: () => {
+        // For local storage classes, delete from both zone and zonegroup
+        const deleteObservable$ = isLocalStorageClass
+          ? this.rgwZoneService.getAllZonesInfo().pipe(
+              switchMap((data: AllZonesResponse) => {
+                const zoneInfo = BucketTieringUtils.getZoneInfoHelper(data.zones, selectedItem);
+                return this.rgwStorageClassService.removeStorageClass(
+                  placementTarget,
+                  storageClass,
+                  zoneInfo.zone_name || ''
+                );
+              })
+            )
+          : this.rgwStorageClassService.removeStorageClass(placementTarget, storageClass);
+
+        return this.taskWrapper
+          .wrapTaskAroundCall({
+            task: new FinishedTask('rgw/zonegroup/storage-class', {
+              placementTarget,
+              storageClass
+            }),
+            call: deleteObservable$
+          })
+          .pipe(finalize(() => this.table.refreshBtn()));
+      }
     });
   }
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
-  }
-
-  setExpandedRow(expandedRow: any) {
-    super.setExpandedRow(expandedRow);
   }
 }

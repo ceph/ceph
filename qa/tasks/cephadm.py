@@ -25,7 +25,7 @@ from teuthology import packaging
 from teuthology.orchestra import run
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.config import config as teuth_config
-from teuthology.exceptions import ConfigError, CommandFailedError
+from teuthology.exceptions import ConfigError, CommandFailedError, MaxWhileTries
 from textwrap import dedent
 from tasks.cephfs.filesystem import MDSCluster, Filesystem
 from tasks.daemonwatchdog import DaemonWatchdog
@@ -282,6 +282,7 @@ def _fetch_cephadm_from_rpm(ctx):
 def _fetch_cephadm_from_github(ctx, config, ref):
     ref = config.get('cephadm_branch', ref)
     git_url = config.get('cephadm_git_url', teuth_config.get_ceph_git_url())
+    file_path = config.get('cephadm_file_path', 'src/cephadm/cephadm')
     log.info('Downloading cephadm (repo %s ref %s)...' % (git_url, ref))
     if git_url.startswith('https://github.com/'):
         # git archive doesn't like https:// URLs, which we use with github.
@@ -290,7 +291,7 @@ def _fetch_cephadm_from_github(ctx, config, ref):
         ctx.cluster.run(
             args=[
                 'curl', '--silent',
-                'https://raw.githubusercontent.com/' + rest + '/' + ref + '/src/cephadm/cephadm',
+                f'https://raw.githubusercontent.com/{rest}/{ref}/{file_path}',
                 run.Raw('>'),
                 ctx.cephadm,
                 run.Raw('&&'),
@@ -305,7 +306,7 @@ def _fetch_cephadm_from_github(ctx, config, ref):
                 run.Raw('&&'),
                 'cd', 'testrepo',
                 run.Raw('&&'),
-                'git', 'show', f'{ref}:src/cephadm/cephadm',
+                'git', 'show', f'{ref}:{file_path}',
                 run.Raw('>'),
                 ctx.cephadm,
                 run.Raw('&&'),
@@ -462,15 +463,15 @@ def ceph_log(ctx, config):
             """
             args = [
                 'sudo',
-                'egrep', pattern,
+                'grep', '-E', pattern,
                 '/var/log/ceph/{fsid}/ceph.log'.format(
                     fsid=fsid),
             ]
             if only_match:
-                args.extend([run.Raw('|'), 'egrep', '|'.join(only_match)])
+                args.extend([run.Raw('|'), 'grep', '-E', '|'.join(only_match)])
             if excludes:
                 for exclude in excludes:
-                    args.extend([run.Raw('|'), 'egrep', '-v', exclude])
+                    args.extend([run.Raw('|'), 'grep', '-E', '-v', exclude])
             args.extend([
                 run.Raw('|'), 'head', '-n', '1',
             ])
@@ -873,11 +874,40 @@ def ceph_bootstrap(ctx, config):
                 'ceph', 'orch', 'host', 'add',
                 remote.shortname
             ])
-            r = _shell(ctx, cluster_name, bootstrap_remote,
-                       ['ceph', 'orch', 'host', 'ls', '--format=json'],
-                       stdout=StringIO())
-            hosts = [node['hostname'] for node in json.loads(r.stdout.getvalue())]
-            assert remote.shortname in hosts
+            try:
+                with contextutil.safe_while(sleep=5, tries=10) as proceed:
+                    while proceed():
+                        # check host has been added
+                        r = _shell(ctx, cluster_name, bootstrap_remote,
+                                   ['ceph', 'orch', 'host', 'ls', '--format=json'],
+                                   stdout=StringIO())
+                        hosts = [node['hostname'] for node in json.loads(r.stdout.getvalue())]
+                        # check host has been given config-key store entry
+                        r = _shell(ctx, cluster_name, bootstrap_remote,
+                                   ['ceph', 'config-key', 'ls'],
+                                   stdout=StringIO())
+                        key_entries = r.stdout.getvalue()
+                        # check host has been added to config-key inventory entry
+                        r = _shell(ctx, cluster_name, bootstrap_remote,
+                                   ['ceph', 'config-key', 'get', 'mgr/cephadm/inventory'],
+                                   stdout=StringIO())
+                        stored_inventory = json.loads(r.stdout.getvalue())
+                        if (
+                            remote.shortname in hosts
+                            and  remote.shortname in key_entries
+                            and remote.shortname in stored_inventory
+                        ):
+                            break
+                        else:
+                            log.info(
+                                f'Host add for {remote.shortname} incomplete\n'
+                                f'Host in host ls: {str(remote.shortname in hosts)}\n'
+                                f'Host got config-key entry: {str(remote.shortname in key_entries)}\n'
+                                f'Host in cephadm inventory config-key entry: {str(remote.shortname in stored_inventory)}\n'
+                            )
+            except MaxWhileTries as e:
+                log.error(f'Hit timeout while adding host {remote.shortname}: {str(e)}')
+                raise e
 
         yield
 
@@ -1173,6 +1203,28 @@ def ceph_osds(ctx, config):
             cur += 1
 
         if cur == 0:
+            for remote, devs in devs_by_remote.items():
+                for dev in devs:
+                    log.info(f'Zapping device {dev} on {remote.shortname} before OSD deployment')
+                    remote.run(
+                        args=[
+                            'sudo',
+                            ctx.cephadm,
+                            '--image', ctx.ceph[cluster_name].image,
+                            'ceph-volume',
+                            '-c', '/etc/ceph/{}.conf'.format(cluster_name),
+                            '-k', '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
+                            '--fsid', ctx.ceph[cluster_name].fsid,
+                            '--', 'lvm', 'zap', dev
+                        ],
+                        check_status=False,
+                     )
+                    remote.run(args=['sudo', 'wipefs', '--all', dev], check_status=False)
+                    remote.run(
+                        args=['sudo', 'dd', 'if=/dev/zero', f'of={dev}', 'bs=1M', 'count=10', 'conv=fsync'],
+                        check_status=False,
+                    )
+            _shell(ctx, cluster_name, remote, ['ceph', 'orch', 'device', 'ls', '--refresh'])
             osd_cmd = ['ceph', 'orch', 'apply', 'osd', '--all-available-devices']
             if raw:
                 osd_cmd.extend(['--method', 'raw'])
@@ -1633,14 +1685,15 @@ def apply(ctx, config):
 
 
 
-def _orch_ls(ctx, cluster_name):
+def _orch_ls(ctx, cluster_name, refresh=False):
+    args = ['ceph', 'orch', 'ls', '-f', 'json']
+    if refresh:
+        args += ['--refresh']
     r = _shell(
         ctx=ctx,
         cluster_name=cluster_name,
         remote=ctx.ceph[cluster_name].bootstrap_remote,
-        args=[
-            'ceph', 'orch', 'ls', '-f', 'json',
-        ],
+        args=args,
         stdout=StringIO(),
     )
     return json.loads(r.stdout.getvalue())
@@ -1654,11 +1707,13 @@ def wait_for_service(ctx, config):
         - cephadm.wait_for_service:
             service: rgw.foo
             timeout: 60    # defaults to 300
+            refresh: True  # defaults to False
 
     """
     cluster_name = config.get('cluster', 'ceph')
     timeout = config.get('timeout', 300)
     service = config.get('service')
+    refresh = config.get('refresh', False)
     assert service
 
     log.info(
@@ -1666,7 +1721,7 @@ def wait_for_service(ctx, config):
     )
     with contextutil.safe_while(sleep=1, tries=timeout) as proceed:
         while proceed():
-            j = _orch_ls(ctx, cluster_name)
+            j = _orch_ls(ctx, cluster_name, refresh)
             svc = None
             for s in j:
                 if s['service_name'] == service:

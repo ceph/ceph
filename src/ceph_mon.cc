@@ -899,14 +899,15 @@ int main(int argc, const char **argv)
   msgr->wait();
   mgr_msgr->wait();
 
-  store.close();
-
   unregister_async_signal_handler(SIGHUP, handle_mon_signal);
   unregister_async_signal_handler(SIGINT, handle_mon_signal);
   unregister_async_signal_handler(SIGTERM, handle_mon_signal);
   shutdown_async_signal_handler();
 
+  // Destroy the Monitor (and its iterators) before closing the store.
   delete mon;
+  store.close();
+
   delete msgr;
   delete mgr_msgr;
 

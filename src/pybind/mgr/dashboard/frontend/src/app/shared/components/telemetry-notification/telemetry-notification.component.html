@@ -4,9 +4,13 @@
                 size="slim"
                 [type]="notificationSeverity"
                 [dismissible]="notificationSeverity !== 'danger'"
+                [actionName]="'Configure Telemetry'"
+                (action)="onConfigure()"
                 (dismissed)="onDismissed()">
-  <div i18n>The Ceph community needs your help to continue improving: please
-    <a routerLink="/telemetry"
-       class="btn activate-button alert-link activate-text">Activate</a> the
-  <a href="https://docs.ceph.com/en/latest/mgr/telemetry/">Telemetry</a> module.</div>
+  <span i18n>Activate
+    <a href="https://docs.ceph.com/en/latest/mgr/telemetry/"
+       target="_blank"
+       rel="noopener"> Telemetry
+    </a>: The Ceph community welcomes your support in enhancing our efforts. Please activate the telemetry module.
+  </span>
 </cd-alert-panel>

@@ -24,7 +24,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 14,
+  "id": 34,
   "links": [],
   "panels": [
     {
@@ -56,7 +56,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": 0
               }
             ]
           },
@@ -88,7 +89,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "11.6.0",
+      "pluginVersion": "12.3.1",
       "targets": [
         {
           "datasource": {
@@ -96,7 +97,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(ceph_osd_stat_bytes{cluster=~\"$cluster\"})",
+          "expr": "sum(ceph_osd_stat_bytes{cluster=~\"$cluster|\"})",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -121,7 +122,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": 0
               }
             ]
           },
@@ -153,7 +155,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "11.6.0",
+      "pluginVersion": "12.3.1",
       "targets": [
         {
           "datasource": {
@@ -161,7 +163,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(ceph_pool_wr{cluster=~\"$cluster\",}[$__rate_interval]) *\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster\",name=~\"$pool\"})",
+          "expr": "sum(rate(ceph_pool_wr{cluster=~\"$cluster|\",}[$__rate_interval]) *\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster|\",name=~\"$pool\"})",
           "legendFormat": "Write",
           "range": true,
           "refId": "A"
@@ -172,7 +174,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(ceph_pool_rd{cluster=~\"$cluster\",}[$__rate_interval]) *\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster\",name=~\"$pool\"})",
+          "expr": "sum(rate(ceph_pool_rd{cluster=~\"$cluster|\",}[$__rate_interval]) *\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster|\",name=~\"$pool\"})",
           "hide": false,
           "legendFormat": "Read",
           "range": true,
@@ -210,11 +212,12 @@
           "firing": true,
           "noData": false,
           "normal": false,
-          "pending": true
+          "pending": true,
+          "recovering": true
         },
         "viewMode": "list"
       },
-      "pluginVersion": "11.6.0",
+      "pluginVersion": "12.3.1",
       "title": "Application Alerts",
       "type": "alertlist"
     },
@@ -234,7 +237,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": 0
               }
             ]
           },
@@ -273,7 +277,7 @@
         "sizing": "auto",
         "valueMode": "color"
       },
-      "pluginVersion": "11.6.0",
+      "pluginVersion": "12.3.1",
       "targets": [
         {
           "datasource": {
@@ -282,7 +286,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by (application) (ceph_pool_stored{cluster=~\"$cluster\",} *\n  on(pool_id) group_left(instance, name, application) ceph_pool_metadata{cluster=~\"$cluster\",application=~\"(.*Block.*)|(.*Filesystem.*)|(.*Object.*)\"})",
+          "expr": "sum by (application) (ceph_pool_bytes_used{cluster=~\"$cluster|\",} *\n  on(pool_id) group_left(instance, name, application) ceph_pool_metadata{cluster=~\"$cluster|\",application=~\"(.*Block.*)|(.*Filesystem.*)|(.*Object.*)\"})",
           "format": "time_series",
           "instant": true,
           "legendFormat": "__auto",
@@ -309,7 +313,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": 0
               }
             ]
           },
@@ -341,7 +346,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "11.6.0",
+      "pluginVersion": "12.3.1",
       "targets": [
         {
           "datasource": {
@@ -349,7 +354,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(ceph_pool_wr_bytes{cluster=~\"$cluster\",}[$__rate_interval]) *\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster\", application=~\"$application\", name=~\"$pool\"})",
+          "expr": "sum(rate(ceph_pool_wr_bytes{cluster=~\"$cluster|\",}[$__rate_interval]) *\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster|\", application=~\"$application\", name=~\"$pool\"})",
           "legendFormat": "Write",
           "range": true,
           "refId": "A"
@@ -360,7 +365,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(ceph_pool_rd_bytes{cluster=~\"$cluster\",}[$__rate_interval]) *\n  on(pool_id) group_left(name) ceph_pool_metadata{cluster=~\"$cluster\",application=~\"$application\", name=~\"$pool\"})",
+          "expr": "sum(rate(ceph_pool_rd_bytes{cluster=~\"$cluster|\",}[$__rate_interval]) *\n  on(pool_id) group_left(name) ceph_pool_metadata{cluster=~\"$cluster|\",application=~\"$application\", name=~\"$pool\"})",
           "hide": false,
           "legendFormat": "Read",
           "range": true,
@@ -384,6 +389,9 @@
               "type": "auto"
             },
             "filterable": true,
+            "footer": {
+              "reducers": []
+            },
             "inspect": false
           },
           "mappings": [],
@@ -391,7 +399,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": 0
               },
               {
                 "color": "red",
@@ -509,7 +518,7 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "Stored"
+                "value": "Used"
               },
               {
                 "id": "unit",
@@ -552,6 +561,22 @@
                 "value": "bytes"
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #A"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "displayName",
+                "value": "Raw used"
+              }
+            ]
           }
         ]
       },
@@ -564,15 +589,7 @@
       "id": 50,
       "options": {
         "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "enablePagination": false,
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": false
-        },
+        "enablePagination": false,
         "frameIndex": 1,
         "showHeader": true,
         "sortBy": [
@@ -582,14 +599,14 @@
           }
         ]
       },
-      "pluginVersion": "11.6.0",
+      "pluginVersion": "12.3.1",
       "targets": [
         {
           "datasource": {
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(ceph_pool_quota_bytes{cluster=~\"$cluster\",}*\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\",application=~\"$application\", name=~\"$pool\"}\n   - \n   (ceph_pool_stored{cluster=~\"$cluster\",}  *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\",application=~\"$application\", name=~\"$pool\"})) > 0 \n  or\n  \n(ceph_pool_max_avail{cluster=~\"$cluster\",} *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\",application=~\"$application\", name=~\"$pool\"})",
+          "expr": "(ceph_pool_quota_bytes{cluster=~\"$cluster|\",}*\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster|\",application=~\"$application\", name=~\"$pool\"}\n   - \n   (ceph_pool_stored{cluster=~\"$cluster|\",}  *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster|\",application=~\"$application\", name=~\"$pool\"})) > 0 \n  or\n  \n(ceph_pool_max_avail{cluster=~\"$cluster|\",} *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster|\",application=~\"$application\", name=~\"$pool\"})",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -602,7 +619,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(ceph_pool_stored{cluster=~\"$cluster\",} *on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\",name=~\"$pool\"})\n  /\n  (((ceph_pool_quota_bytes{cluster=~\"$cluster\"} > 0) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\", name=~\"$pool\", application=~\"$application\"}) or \n((ceph_pool_max_avail{cluster=~\"$cluster\"} \n+\nceph_pool_stored{cluster=~\"$cluster\", }) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\",name=~\"$pool\", application=~\"$application\"}))",
+          "expr": "(ceph_pool_stored{cluster=~\"$cluster|\",} *on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster|\",name=~\"$pool\"})\n  /\n  (((ceph_pool_quota_bytes{cluster=~\"$cluster|\"} > 0) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster|\", name=~\"$pool\", application=~\"$application\"}) or \n((ceph_pool_max_avail{cluster=~\"$cluster|\"} \n+\nceph_pool_stored{cluster=~\"$cluster|\", }) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster|\",name=~\"$pool\", application=~\"$application\"}))",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -615,7 +632,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "rate(ceph_pool_rd{cluster=~\"$cluster\", }[$__rate_interval]) *\n  on(pool_id) group_left(name) ceph_pool_metadata{cluster=~\"$cluster\", application=~\"$application\", name=~\"$pool\"}\n  + rate(ceph_pool_wr{cluster=~\"$cluster\", }[$__rate_interval]) *\n  on(pool_id) group_left(name) ceph_pool_metadata{cluster=~\"$cluster\", application=~\"$application\", name=~\"$pool\"}\n",
+          "expr": "rate(ceph_pool_rd{cluster=~\"$cluster|\", }[$__rate_interval]) *\n  on(pool_id) group_left(name) ceph_pool_metadata{cluster=~\"$cluster|\", application=~\"$application\", name=~\"$pool\"}\n  + rate(ceph_pool_wr{cluster=~\"$cluster|\", }[$__rate_interval]) *\n  on(pool_id) group_left(name) ceph_pool_metadata{cluster=~\"$cluster|\", application=~\"$application\", name=~\"$pool\"}\n",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -628,7 +645,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "rate(ceph_pool_rd_bytes{cluster=~\"$cluster\", }[$__rate_interval]) *\n  on(pool_id) group_left(name) ceph_pool_metadata{cluster=~\"$cluster\", application=~\"$application\", name=~\"$pool\"} +\n  rate(ceph_pool_wr_bytes{cluster=~\"$cluster\", }[$__rate_interval]) *\n  on(pool_id) group_left(name) ceph_pool_metadata{cluster=~\"$cluster\", application=~\"$application\", name=~\"$pool\"}\n",
+          "expr": "rate(ceph_pool_rd_bytes{cluster=~\"$cluster|\", }[$__rate_interval]) *\n  on(pool_id) group_left(name) ceph_pool_metadata{cluster=~\"$cluster|\", application=~\"$application\", name=~\"$pool\"} +\n  rate(ceph_pool_wr_bytes{cluster=~\"$cluster|\", }[$__rate_interval]) *\n  on(pool_id) group_left(name) ceph_pool_metadata{cluster=~\"$cluster|\", application=~\"$application\", name=~\"$pool\"}\n",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -641,7 +658,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "ceph_pool_metadata{cluster=~\"$cluster\", application=~\"$application\", name=~\"$pool\"}",
+          "expr": "ceph_pool_metadata{cluster=~\"$cluster|\", application=~\"$application\", name=~\"$pool\"}",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -654,12 +671,12 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "ceph_pool_stored{cluster=~\"$cluster\", } * on(pool_id) group_left ceph_pool_metadata{cluster=~\"$cluster\", application=~\"$application\", name=~\"$pool\"}",
+          "expr": "ceph_pool_stored{cluster=~\"$cluster|\", } * on(pool_id) group_left ceph_pool_metadata{cluster=~\"$cluster|\", application=~\"$application\", name=~\"$pool\"}",
           "format": "table",
           "hide": false,
           "instant": true,
           "intervalFactor": 1,
-          "legendFormat": "J",
+          "legendFormat": "__auto",
           "refId": "J"
         },
         {
@@ -669,7 +686,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "ceph_pool_quota_bytes{cluster=~\"$cluster\",} *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\", application=~\"$application\",name=~\"$pool\"}",
+          "expr": "ceph_pool_quota_bytes{cluster=~\"$cluster|\",} *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster|\", application=~\"$application\",name=~\"$pool\"}",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -684,13 +701,26 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "((ceph_pool_quota_bytes{cluster=~\"$cluster\"}) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\", application=~\"$application\", name=~\"$pool\"})",
+          "expr": "((ceph_pool_quota_bytes{cluster=~\"$cluster|\"}) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster|\", application=~\"$application\", name=~\"$pool\"})",
           "format": "table",
           "hide": false,
           "instant": true,
           "legendFormat": "N",
           "range": false,
           "refId": "N"
+        },
+        {
+          "datasource": {
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "ceph_pool_bytes_used{cluster=~\"$cluster|\", } * on(pool_id) group_left ceph_pool_metadata{cluster=~\"$cluster|\", application=~\"$application\", name=~\"$pool\"}",
+          "format": "table",
+          "hide": false,
+          "instant": true,
+          "intervalFactor": 1,
+          "legendFormat": "__auto",
+          "refId": "A"
         }
       ],
       "title": "Pool Overview",
@@ -704,7 +734,7 @@
           "options": {
             "excludeByName": {
               "Time": true,
-              "Value #A": true,
+              "Value #A": false,
               "Value #B": false,
               "Value #C": true,
               "Value #D": false,
@@ -722,28 +752,25 @@
             "includeByName": {},
             "indexByName": {
               "Time": 0,
-              "Value #A": 20,
-              "Value #B": 10,
-              "Value #C": 21,
-              "Value #D": 12,
-              "Value #E": 22,
-              "Value #G": 13,
-              "Value #H": 14,
-              "Value #I": 18,
-              "Value #J": 8,
-              "Value #K": 19,
+              "Value #A": 7,
+              "Value #B": 11,
+              "Value #D": 13,
+              "Value #G": 14,
+              "Value #H": 15,
+              "Value #I": 19,
+              "Value #J": 9,
               "Value #M": 6,
-              "Value #N": 11,
-              "__name__": 15,
+              "Value #N": 12,
+              "__name__": 16,
               "application": 4,
               "cluster": 1,
-              "compression_mode": 16,
+              "compression_mode": 17,
               "description": 5,
-              "instance": 7,
+              "instance": 8,
               "job": 2,
               "name": 3,
-              "pool_id": 9,
-              "type": 17
+              "pool_id": 10,
+              "type": 18
             },
             "renameByName": {
               "Value #B": "",
@@ -799,6 +826,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -813,7 +841,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": 0
               }
             ]
           },
@@ -845,7 +874,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.6.0",
+      "pluginVersion": "12.3.1",
       "targets": [
         {
           "datasource": {
@@ -853,7 +882,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "ceph_pool_stored{cluster=~\"$cluster\",} *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\",name=~\"$pool\"}",
+          "expr": "ceph_pool_bytes_used{cluster=~\"$cluster|\",} *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster|\",name=~\"$pool\"}",
           "legendFormat": "{{name}}",
           "range": true,
           "refId": "A"
@@ -896,6 +925,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -910,7 +940,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": 0
               },
               {
                 "color": "red",
@@ -946,7 +977,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.6.0",
+      "pluginVersion": "12.3.1",
       "targets": [
         {
           "datasource": {
@@ -954,7 +985,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "rate(ceph_pool_wr{cluster=~\"$cluster\",}[$__rate_interval]) *\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster\",name=~\"$pool\"}",
+          "expr": "rate(ceph_pool_wr{cluster=~\"$cluster|\",}[$__rate_interval]) *\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster|\",name=~\"$pool\"}",
           "legendFormat": "{{name}} - Writes",
           "range": true,
           "refId": "A"
@@ -965,7 +996,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "rate(ceph_pool_rd{cluster=~\"$cluster\",}[$__rate_interval]) *\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster\",name=~\"$pool\"}",
+          "expr": "rate(ceph_pool_rd{cluster=~\"$cluster|\",}[$__rate_interval]) *\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster|\",name=~\"$pool\"}",
           "hide": false,
           "legendFormat": "{{name}} - Reads",
           "range": true,
@@ -1009,6 +1040,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1023,7 +1055,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": 0
               },
               {
                 "color": "red",
@@ -1059,7 +1092,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.6.0",
+      "pluginVersion": "12.3.1",
       "targets": [
         {
           "datasource": {
@@ -1067,7 +1100,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "rate(ceph_pool_wr_bytes{cluster=~\"$cluster\",}[$__rate_interval]) *\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster\", name=~\"$pool\"}",
+          "expr": "rate(ceph_pool_wr_bytes{cluster=~\"$cluster|\",}[$__rate_interval]) *\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster|\", name=~\"$pool\"}",
           "legendFormat": "{{name}} - Writes",
           "range": true,
           "refId": "A"
@@ -1078,7 +1111,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "rate(ceph_pool_rd_bytes{cluster=~\"$cluster\",}[$__rate_interval]) *\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster\", name=~\"$pool\"}",
+          "expr": "rate(ceph_pool_rd_bytes{cluster=~\"$cluster|\",}[$__rate_interval]) *\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster|\", name=~\"$pool\"}",
           "hide": false,
           "legendFormat": "{{name}} - Reads",
           "range": true,
@@ -1122,6 +1155,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1136,7 +1170,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": 0
               },
               {
                 "color": "red",
@@ -1172,7 +1207,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.6.0",
+      "pluginVersion": "12.3.1",
       "targets": [
         {
           "datasource": {
@@ -1180,7 +1215,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "ceph_pool_objects{cluster=~\"$cluster\",} *\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster\", name=~\"$pool\"}\n",
+          "expr": "ceph_pool_objects{cluster=~\"$cluster|\",} *\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster|\", name=~\"$pool\"}\n",
           "legendFormat": "{{name}}",
           "range": true,
           "refId": "A"
@@ -1192,7 +1227,7 @@
   ],
   "preload": false,
   "refresh": "30s",
-  "schemaVersion": 41,
+  "schemaVersion": 42,
   "tags": [],
   "templating": {
     "list": [
@@ -1281,5 +1316,5 @@
   "timezone": "",
   "title": "Ceph - Application Overview",
   "uid": "92LBIaJIz2",
-  "version": 1
+  "version": 5
 }

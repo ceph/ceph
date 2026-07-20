@@ -5,15 +5,20 @@ set -x
 export PATH=/root/bin:$PATH
 mkdir /root/bin
 
-export CEPHADM_IMAGE='quay.ceph.io/ceph-ci/ceph:main'
+export CEPHADM_IMAGE='quay.ceph.io/ceph-ci/ceph:tentacle'
 
 CEPHADM="/root/bin/cephadm"
 CEPHADM_SRC="/mnt/{{ ceph_dev_folder }}/src/cephadm/cephadm"
 
-cp $CEPHADM_SRC $CEPHADM
+ln -s $CEPHADM_SRC $CEPHADM
 
 mkdir -p /etc/ceph
-mon_ip=$(ifconfig eth0  | grep 'inet ' | awk '{ print $2}')
+if [ "$(grep -oE '[0-9]+' /etc/fedora-release)" -lt 41 ]; then
+  # for fedora <41 compatibility
+  mon_ip=$(ifconfig eth0 | grep 'inet ' | awk '{ print $2 }')
+else
+  mon_ip=$(ip -4 addr show ens3 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
+fi
 
 bootstrap_extra_options='--allow-fqdn-hostname --dashboard-password-noupdate'
 

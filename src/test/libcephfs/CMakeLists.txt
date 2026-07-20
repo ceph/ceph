@@ -24,6 +24,7 @@ if(WITH_LIBCEPHFS)
     multiclient.cc
     flock.cc
     recordlock.cc
+    recordlock_hl.cc
     acl.cc
     main.cc
     deleg.cc

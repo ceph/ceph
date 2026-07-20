@@ -1044,8 +1044,12 @@ public:
 
     void dump(ceph::Formatter* f) const;
 
-    bool encode_some(uint32_t offset, uint32_t length, ceph::buffer::list& bl,
-		     unsigned *pn);
+    bool encode_some(
+      uint32_t offset, uint32_t length, ceph::buffer::list& bl, unsigned *pn,
+      bool complain_extent_overlap, //verification; in debug mode assert if extents overlap
+      bool complain_shard_spanning  //verification; in debug mode assert if extent spans shards;
+                                    //must be used only on encode after reshard
+    );
 
     class ExtentDecoder {
       uint64_t pos = 0;
@@ -1102,8 +1106,28 @@ public:
       return p->second;
     }
 
-    void update(KeyValueDB::Transaction t, bool force);
+    void update(
+      KeyValueDB::Transaction t,
+      bool just_after_reshard //true to indicate that update should now respect shard boundaries
+    );                        //as no further resharding will be done
     decltype(BlueStore::Blob::id) allocate_spanning_blob_id();
+
+    struct ReshardPlan {
+      std::vector<bluestore_onode_t::shard_info> new_shard_info;
+      unsigned shard_index_begin;
+      unsigned shard_index_end;
+      uint32_t spanning_scan_begin;
+      uint32_t spanning_scan_end;
+    };
+
+    ReshardPlan reshard_decision(uint32_t segment_size);
+
+    void reshard_action(
+      ReshardPlan& plan,
+      KeyValueDB *db,
+      KeyValueDB::Transaction t);
+
+
     void reshard(
       KeyValueDB *db,
       KeyValueDB::Transaction t,
@@ -2369,6 +2393,8 @@ private:
   std::string freelist_type;
   FreelistManager *fm = nullptr;
 
+  std::string ebd_health_alert; ///< used to report ExtBlkDev plugin problem up the health chain
+
   Allocator *alloc = nullptr;   ///< allocator consumed by BlueStore
   bluefs_shared_alloc_context_t shared_alloc; ///< consumed by BlueFS (may be == alloc)
 
@@ -2455,6 +2481,7 @@ private:
 		"not enough bits for min_alloc_size");
   bool elastic_shared_blobs = false; ///< use smart ExtentMap::dup to reduce shared blob count
   bool use_write_v2 = false; ///< use new write path
+  bool debug_extent_map_encode_check = false;
 
   enum {
     // Please preserve the order since it's DB persistent
@@ -2535,6 +2562,8 @@ private:
   class SocketHook;
   friend class SocketHook;
   AdminSocketHook* asok_hook = nullptr;
+
+  bool use_last_allocator_lookup_position = true;
 
   struct MempoolThread : public Thread {
   public:
@@ -2793,6 +2822,7 @@ private:
   void _set_finisher_num();
   void _set_per_pool_omap();
   void _update_osd_memory_options();
+  void _update_allocator_lookup_policy();
 
   int _open_bdev(bool create);
   // Verifies if disk space is enough for reserved + min bluefs
@@ -4414,197 +4444,4 @@ private:
   fsck_interval misreferenced_extents;
 
 };
-
-class RocksDBBlueFSVolumeSelector : public BlueFSVolumeSelector
-{
-  template <class T, size_t MaxX, size_t MaxY>
-  class matrix_2d {
-    T values[MaxX][MaxY];
-  public:
-    matrix_2d() {
-      clear();
-    }
-    T& at(size_t x, size_t y) {
-      ceph_assert(x < MaxX);
-      ceph_assert(y < MaxY);
-
-      return values[x][y];
-    }
-    size_t get_max_x() const {
-      return MaxX;
-    }
-    size_t get_max_y() const {
-      return MaxY;
-    }
-    void clear() {
-      memset(values, 0, sizeof(values));
-    }
-  };
-
-  enum {
-    // use 0/nullptr as unset indication
-    LEVEL_FIRST = 1,
-    LEVEL_LOG = LEVEL_FIRST, // BlueFS log
-    LEVEL_WAL,
-    LEVEL_DB,
-    LEVEL_SLOW,
-    LEVEL_MAX
-  };
-  // add +1 row for per-level actual (taken from file size) total
-  // add +1 column for corresponding per-device totals
-  typedef matrix_2d<std::atomic<uint64_t>, BlueFS::MAX_BDEV + 1, LEVEL_MAX - LEVEL_FIRST + 1> per_level_per_dev_usage_t;
-
-  per_level_per_dev_usage_t per_level_per_dev_usage;
-  // file count per level, add +1 to keep total file count
-  std::atomic<uint64_t> per_level_files[LEVEL_MAX - LEVEL_FIRST + 1] = { 0 };
-
-  // Note: maximum per-device totals below might be smaller than corresponding
-  // perf counters by up to a single alloc unit (1M) due to superblock extent.
-  // The later is not accounted here.
-  per_level_per_dev_usage_t per_level_per_dev_max;
-
-  uint64_t l_totals[LEVEL_MAX - LEVEL_FIRST];
-  uint64_t db_avail4slow = 0;
-  uint64_t level0_size = 0;
-  uint64_t level_base = 0;
-  uint64_t level_multiplier = 0;
-  size_t extra_level = 0;
-  enum {
-    OLD_POLICY,
-    USE_SOME_EXTRA
-  };
-
-public:
-  RocksDBBlueFSVolumeSelector(
-    uint64_t _wal_total,
-    uint64_t _db_total,
-    uint64_t _slow_total,
-    uint64_t _level0_size,
-    uint64_t _level_base,
-    uint64_t _level_multiplier,
-    double reserved_factor,
-    uint64_t reserved,
-    bool new_pol)
-  {
-    l_totals[LEVEL_LOG - LEVEL_FIRST] = 0; // not used at the moment
-    l_totals[LEVEL_WAL - LEVEL_FIRST] = _wal_total;
-    l_totals[LEVEL_DB - LEVEL_FIRST] = _db_total;
-    l_totals[LEVEL_SLOW - LEVEL_FIRST] = _slow_total;
-
-    if (!new_pol) {
-      return;
-    }
-    // Calculating how much extra space is available at DB volume.
-    // Depending on the presence of explicit reserved size specification it might be either
-    // * DB volume size - reserved
-    // or
-    // * DB volume size - sum_max_level_size(0, L-1) - max_level_size(L) * reserved_factor
-    if (!reserved) {
-      level0_size = _level0_size;
-      level_base = _level_base;
-      level_multiplier = _level_multiplier;
-      uint64_t prev_levels = _level0_size;
-      uint64_t cur_level = _level_base;
-      uint64_t cur_threshold = prev_levels + cur_level;
-      extra_level = 1;
-      do {
-	uint64_t next_level = cur_level * _level_multiplier;
-        uint64_t next_threshold = prev_levels + cur_level + next_level;
-        ++extra_level;
-        if (_db_total <= next_threshold) {
-	  cur_threshold *= reserved_factor;
-          db_avail4slow = cur_threshold < _db_total ? _db_total - cur_threshold : 0;
-          break;
-        } else {
-          prev_levels += cur_level;
-          cur_level = next_level;
-          cur_threshold = next_threshold;
-        }
-      } while (true);
-    } else {
-      db_avail4slow = reserved < _db_total ? _db_total - reserved : 0;
-      extra_level = 0;
-    }
-  }
-
-  void* get_hint_for_log() const override {
-    return  reinterpret_cast<void*>(LEVEL_LOG);
-  }
-  void* get_hint_by_dir(std::string_view dirname) const override;
-
-  void add_usage(void* hint, const bluefs_extent_t& extent) override {
-    if (hint == nullptr)
-      return;
-    size_t pos = (size_t)hint - LEVEL_FIRST;
-    auto& cur = per_level_per_dev_usage.at(extent.bdev, pos);
-    auto& max = per_level_per_dev_max.at(extent.bdev, pos);
-    uint64_t v = cur.fetch_add(extent.length) + extent.length;
-    while (v > max) {
-      max.exchange(v);
-    }
-    {
-      //update per-device totals
-      auto& cur = per_level_per_dev_usage.at(extent.bdev, LEVEL_MAX - LEVEL_FIRST);
-      auto& max = per_level_per_dev_max.at(extent.bdev, LEVEL_MAX - LEVEL_FIRST);
-      uint64_t v = cur.fetch_add(extent.length) + extent.length;
-      while (v > max) {
-	max.exchange(v);
-      }
-    }
-  }
-  void sub_usage(void* hint, const bluefs_extent_t& extent) override {
-    if (hint == nullptr)
-      return;
-    size_t pos = (size_t)hint - LEVEL_FIRST;
-    auto& cur = per_level_per_dev_usage.at(extent.bdev, pos);
-    ceph_assert(cur >= extent.length);
-    cur -= extent.length;
-
-    //update per-device totals
-    auto& cur2 = per_level_per_dev_usage.at(extent.bdev, LEVEL_MAX - LEVEL_FIRST);
-    ceph_assert(cur2 >= extent.length);
-    cur2 -= extent.length;
-  }
-  void add_usage(void* hint, uint64_t size_more, bool upd_files) override {
-    if (hint == nullptr)
-      return;
-    size_t pos = (size_t)hint - LEVEL_FIRST;
-    //update per-level actual totals
-    auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
-    auto& max = per_level_per_dev_max.at(BlueFS::MAX_BDEV, pos);
-    uint64_t v = cur.fetch_add(size_more) + size_more;
-    while (v > max) {
-      max.exchange(v);
-    }
-    if (upd_files) {
-      ++per_level_files[pos];
-      ++per_level_files[LEVEL_MAX - LEVEL_FIRST];
-    }
-  }
-  void sub_usage(void* hint, uint64_t size_less, bool upd_files) override {
-    if (hint == nullptr)
-      return;
-    size_t pos = (size_t)hint - LEVEL_FIRST;
-    //update per-level actual totals
-    auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
-    ceph_assert(cur >= size_less);
-    cur -= size_less;
-    if (upd_files) {
-      ceph_assert(per_level_files[pos] > 0);
-      --per_level_files[pos];
-      ceph_assert(per_level_files[LEVEL_MAX - LEVEL_FIRST] > 0);
-      --per_level_files[LEVEL_MAX - LEVEL_FIRST];
-    }
-  }
-
-  uint8_t select_prefer_bdev(void* h) override;
-  void get_paths(
-    const std::string& base,
-    BlueFSVolumeSelector::paths& res) const override;
-
-  void dump(std::ostream& sout) override;
-  BlueFSVolumeSelector* clone_empty() const override;
-  bool compare(BlueFSVolumeSelector* other) override;
-};
-
 #endif

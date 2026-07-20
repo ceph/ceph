@@ -12,35 +12,50 @@ import sys
 
 
 CONTAINERS = {
-    'centos-8': {
-        'name': 'cephadm-build-test:centos8-py36',
-        'base_image': 'quay.io/centos/centos:stream8',
-        'script': 'dnf install -y python36',
-    },
     'centos-9': {
         'name': 'cephadm-build-test:centos9-py3',
         'base_image': 'quay.io/centos/centos:stream9',
         'script': 'dnf install -y python3',
     },
-    'centos-8-plusdeps': {
-        'name': 'cephadm-build-test:centos8-py36-deps',
-        'base_image': 'quay.io/centos/centos:stream8',
-        'script': 'dnf install -y python36 python3-jinja2 python3-pyyaml',
+    'centos-10': {
+        'name': 'cephadm-build-test:centos10-py3',
+        'base_image': 'quay.io/centos/centos:stream10',
+        'script': 'dnf install -y python3',
     },
     'centos-9-plusdeps': {
         'name': 'cephadm-build-test:centos9-py3-deps',
         'base_image': 'quay.io/centos/centos:stream9',
         'script': 'dnf install -y python3 python3-jinja2 python3-pyyaml',
     },
+    'centos-10-plusdeps': {
+        'name': 'cephadm-build-test:centos10-py3-deps',
+        'base_image': 'quay.io/centos/centos:stream10',
+        'script': 'dnf install -y python3 python3-jinja2 python3-pyyaml',
+    },
     'ubuntu-20.04': {
         'name': 'cephadm-build-test:ubuntu-20-04-py3',
-        'base_image': 'quay.io/library/ubuntu:20.04',
+        'base_image': 'docker.io/library/ubuntu:20.04',
         'script': 'apt update && apt install -y python3-venv',
     },
     'ubuntu-22.04': {
         'name': 'cephadm-build-test:ubuntu-22-04-py3',
-        'base_image': 'quay.io/library/ubuntu:22.04',
+        'base_image': 'docker.io/library/ubuntu:22.04',
         'script': 'apt update && apt install -y python3-venv',
+    },
+    'ubuntu-24.04': {
+        'name': 'cephadm-build-test:ubuntu-24-04-py3',
+        'base_image': 'docker.io/library/ubuntu:24.04',
+        'script': 'apt update && apt install -y python3-venv',
+    },
+    'ubuntu-22.04-plusdeps': {
+        'name': 'cephadm-build-test:ubuntu-22-04-py3-deps',
+        'base_image': 'docker.io/library/ubuntu:22.04',
+        'script': 'apt update && apt install -y python3-jinja2 python3-yaml python3-markupsafe',
+    },
+    'ubuntu-24.04-plusdeps': {
+        'name': 'cephadm-build-test:ubuntu-24-04-py3-deps',
+        'base_image': 'docker.io/library/ubuntu:24.04',
+        'script': 'apt update && apt install -y python3-jinja2 python3-yaml python3-markupsafe',
     },
 }
 
@@ -95,10 +110,11 @@ def source_dir():
 @pytest.mark.parametrize(
     'env',
     [
-        'centos-8',
         'centos-9',
+        'centos-10',
         'ubuntu-20.04',
         'ubuntu-22.04',
+        'ubuntu-24.04',
     ],
 )
 def test_cephadm_build(env, source_dir, tmp_path):
@@ -128,8 +144,8 @@ def test_cephadm_build(env, source_dir, tmp_path):
     assert all('requirements_entry' in v for v in data['bundled_packages'])
     assert 'zip_root_entries' in data
     zre = data['zip_root_entries']
-    assert any(e.startswith('Jinja2') for e in zre)
-    assert any(e.startswith('MarkupSafe') for e in zre)
+    assert any(_dist_info(e, 'Jinja2') for e in zre)
+    assert any(_dist_info(e, 'MarkupSafe') for e in zre)
     assert any(e.startswith('jinja2') for e in zre)
     assert any(e.startswith('markupsafe') for e in zre)
     assert any(e.startswith('cephadmlib') for e in zre)
@@ -139,8 +155,8 @@ def test_cephadm_build(env, source_dir, tmp_path):
 @pytest.mark.parametrize(
     'env',
     [
-        'centos-8-plusdeps',
         'centos-9-plusdeps',
+        'centos-10-plusdeps',
         'centos-9',
     ],
 )
@@ -155,11 +171,6 @@ def test_cephadm_build_from_rpms(env, source_dir, tmp_path):
         assert res.returncode != 0
         return
     binary = tmp_path / 'cephadm'
-    if 'centos-8' in env and sys.version_info[:2] >= (3, 10):
-        # The version of markupsafe in centos 8 is incompatible with
-        # python>=3.10 due to changes in the stdlib therefore we can't execute
-        # the cephadm binary, so we quit the test early.
-        return
     assert binary.is_file()
     res = subprocess.run(
         [sys.executable, str(binary), 'version'],
@@ -184,9 +195,66 @@ def test_cephadm_build_from_rpms(env, source_dir, tmp_path):
     assert all('requirements_entry' in v for v in data['bundled_packages'])
     assert 'zip_root_entries' in data
     zre = data['zip_root_entries']
-    assert any(e.startswith('Jinja2') for e in zre)
-    assert any(e.startswith('MarkupSafe') for e in zre)
+    assert any(_dist_info(e, 'Jinja2') for e in zre)
+    assert any(_dist_info(e, 'MarkupSafe') for e in zre)
     assert any(e.startswith('jinja2') for e in zre)
     assert any(e.startswith('markupsafe') for e in zre)
     assert any(e.startswith('cephadmlib') for e in zre)
     assert any(e.startswith('_cephadmmeta') for e in zre)
+
+
+@pytest.mark.parametrize(
+    'env',
+    [
+        'ubuntu-22.04-plusdeps',
+        'ubuntu-24.04-plusdeps',
+        'ubuntu-22.04',
+    ],
+)
+def test_cephadm_build_from_debs(env, source_dir, tmp_path):
+    res = build_in(
+        env,
+        source_dir,
+        tmp_path,
+        ['-Bdeb', '-SCEPH_GIT_VER=0', '-SCEPH_GIT_NICE_VER=foobar'],
+    )
+    if 'plusdeps' not in env:
+        assert res.returncode != 0
+        return
+    binary = tmp_path / 'cephadm'
+    assert binary.is_file()
+    res = subprocess.run(
+        [sys.executable, str(binary), 'version'],
+        stdout=subprocess.PIPE,
+    )
+    out = res.stdout.decode('utf8')
+    assert 'version' in out
+    assert 'foobar' in out
+    assert res.returncode == 0
+    res = subprocess.run(
+        [sys.executable, str(binary), 'version', '--verbose'],
+        stdout=subprocess.PIPE,
+    )
+    data = json.loads(res.stdout)
+    assert isinstance(data, dict)
+    assert 'bundled_packages' in data
+    assert all(v['package_source'] == 'deb' for v in data['bundled_packages'])
+    assert all(
+        v['name'] in ('Jinja2', 'MarkupSafe', 'PyYAML')
+        for v in data['bundled_packages']
+    )
+    assert all('requirements_entry' in v for v in data['bundled_packages'])
+    assert 'zip_root_entries' in data
+    zre = data['zip_root_entries']
+    assert any(_dist_info(e, 'Jinja2') for e in zre)
+    assert any(_dist_info(e, 'MarkupSafe') for e in zre)
+    assert any(e.startswith('jinja2') for e in zre)
+    assert any(e.startswith('markupsafe') for e in zre)
+    assert any(e.startswith('cephadmlib') for e in zre)
+    assert any(e.startswith('_cephadmmeta') for e in zre)
+
+
+def _dist_info(entry, name):
+    return (
+        entry.startswith(name) or entry.startswith(name.lower())
+    ) and (entry.endswith('.dist-info') or entry.endswith('.egg-info'))

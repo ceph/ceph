@@ -1,0 +1,18 @@
+.auth-radio {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+}
+
+.text-helper {
+  color: var(--cds-text-helper);
+}
+
+.step-3-heading {
+  display: flex;
+  justify-content: space-between;
+}
+
+.step-3-form-item {
+  max-inline-size: 30rem;
+}

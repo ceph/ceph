@@ -251,7 +251,7 @@ public:
     return parent->is_waiter_for(getmask(mask));
   }
   bool has_any_waiter() const {
-    return is_waiter_for(std::numeric_limits<uint64_t>::max());
+    return is_waiter_for(WAIT_ALL);
   }
 
   bool is_cached() const {

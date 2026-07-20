@@ -48,10 +48,10 @@ from ceph.deployment.service_spec import (
     TunedProfileSpec,
 )
 from ceph.deployment.drive_group import DriveGroupSpec
-from ceph.deployment.hostspec import HostSpec, SpecValidationError
+from ceph.deployment.hostspec import HostSpec
 from ceph.utils import datetime_to_str, str_to_datetime
 
-from mgr_module import MgrModule, CLICommand, HandleCommandResult
+from mgr_module import MgrModule, HandleCommandResult
 
 
 logger = logging.getLogger(__name__)
@@ -74,7 +74,7 @@ class OrchestratorError(Exception):
                  errno: int = -errno.EINVAL,
                  event_kind_subject: Optional[Tuple[str, str]] = None) -> None:
         super(Exception, self).__init__(msg)
-        self.errno = errno
+        self.errno = abs(errno)
         # See OrchestratorEvent.subject
         self.event_subject = event_kind_subject
 
@@ -104,30 +104,6 @@ def set_exception_subject(kind: str, subject: str, overwrite: bool = False) -> I
         raise
 
 
-def handle_exception(prefix: str, perm: str, func: FuncT) -> FuncT:
-    @wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
-        try:
-            return func(*args, **kwargs)
-        except (OrchestratorError, SpecValidationError) as e:
-            # Do not print Traceback for expected errors.
-            return HandleCommandResult(e.errno, stderr=str(e))
-        except ImportError as e:
-            return HandleCommandResult(-errno.ENOENT, stderr=str(e))
-        except NotImplementedError:
-            msg = 'This Orchestrator does not support `{}`'.format(prefix)
-            return HandleCommandResult(-errno.ENOENT, stderr=msg)
-
-    # misuse lambda to copy `wrapper`
-    wrapper_copy = lambda *l_args, **l_kwargs: wrapper(*l_args, **l_kwargs)  # noqa: E731
-    wrapper_copy._prefix = prefix  # type: ignore
-    wrapper_copy._cli_command = CLICommand(prefix, perm)  # type: ignore
-    wrapper_copy._cli_command.store_func_metadata(func)  # type: ignore
-    wrapper_copy._cli_command.func = wrapper_copy  # type: ignore
-
-    return cast(FuncT, wrapper_copy)
-
-
 def handle_orch_error(f: Callable[..., T]) -> Callable[..., 'OrchResult[T]']:
     """
     Decorator to make Orchestrator methods return
@@ -146,47 +122,6 @@ def handle_orch_error(f: Callable[..., T]) -> Callable[..., 'OrchResult[T]']:
             return OrchResult(None, exception=e)
 
     return cast(Callable[..., OrchResult[T]], wrapper)
-
-
-class InnerCliCommandCallable(Protocol):
-    def __call__(self, prefix: str) -> Callable[[FuncT], FuncT]:
-        ...
-
-
-def _cli_command(perm: str) -> InnerCliCommandCallable:
-    def inner_cli_command(prefix: str) -> Callable[[FuncT], FuncT]:
-        return lambda func: handle_exception(prefix, perm, func)
-    return inner_cli_command
-
-
-_cli_read_command = _cli_command('r')
-_cli_write_command = _cli_command('rw')
-
-
-class CLICommandMeta(type):
-    """
-    This is a workaround for the use of a global variable CLICommand.COMMANDS which
-    prevents modules from importing any other module.
-
-    We make use of CLICommand, except for the use of the global variable.
-    """
-    def __init__(cls, name: str, bases: Any, dct: Any) -> None:
-        super(CLICommandMeta, cls).__init__(name, bases, dct)
-        dispatch: Dict[str, CLICommand] = {}
-        for v in dct.values():
-            try:
-                dispatch[v._prefix] = v._cli_command
-            except AttributeError:
-                pass
-
-        def handle_command(self: Any, inbuf: Optional[str], cmd: dict) -> Any:
-            if cmd['prefix'] not in dispatch:
-                return self.handle_command(inbuf, cmd)
-
-            return dispatch[cmd['prefix']].call(self, cmd, inbuf)
-
-        cls.COMMANDS = [cmd.dump_cmd() for cmd in dispatch.values()]
-        cls.handle_command = handle_command
 
 
 class OrchResult(Generic[T]):
@@ -243,6 +178,25 @@ def raise_if_exception(c: OrchResult[T]) -> T:
         raise e
     assert c.result is not None, 'OrchResult should either have an exception or a result'
     return c.result
+
+
+def completion_to_result(c: OrchResult[T]) -> HandleCommandResult:
+    """
+    Converts an OrchResult to a HandleCommandResult,
+    preserving output and error codes.
+    """
+    if c.serialized_exception is None:
+        assert c.result is not None, "OrchResult should either have result or an exception"
+        return HandleCommandResult(stdout=c.result_str())
+
+    try:
+        e = pickle.loads(c.serialized_exception)
+    except (KeyError, AttributeError):
+        return HandleCommandResult(stderr=c.exception_str, retval=errno.EIO)
+    if isinstance(e, OrchestratorError):
+        return HandleCommandResult(stderr=str(e), retval=-e.errno)
+
+    raise e
 
 
 def _hide_in_features(f: FuncT) -> FuncT:
@@ -414,9 +368,17 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def node_proxy_firmware(self, hostname: Optional[str] = None) -> OrchResult[Dict[str, Any]]:
+        """
+        Return node-proxy firmware report
+
+        :param hostname: hostname
+        """
+        raise NotImplementedError()
+
     def node_proxy_firmwares(self, hostname: Optional[str] = None) -> OrchResult[Dict[str, Any]]:
         """
-        Return node-proxy firmwares report
+        Return node-proxy firmware report (deprecated alias)
 
         :param hostname: hostname
         """
@@ -497,7 +459,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def host_ok_to_stop(self, hostname: str) -> OrchResult:
+    def host_ok_to_stop(self, hostname: str) -> OrchResult[str]:
         """
         Check if the specified host can be safely stopped without reducing availability
 
@@ -505,13 +467,13 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def enter_host_maintenance(self, hostname: str, force: bool = False, yes_i_really_mean_it: bool = False) -> OrchResult:
+    def enter_host_maintenance(self, hostname: str, force: bool = False, yes_i_really_mean_it: bool = False) -> OrchResult[str]:
         """
         Place a host in maintenance, stopping daemons and disabling it's systemd target
         """
         raise NotImplementedError()
 
-    def exit_host_maintenance(self, hostname: str, force: bool = False, offline: bool = False) -> OrchResult:
+    def exit_host_maintenance(self, hostname: str, force: bool = False, offline: bool = False) -> OrchResult[str]:
         """
         Return a host from maintenance, restarting the clusters systemd target
         """

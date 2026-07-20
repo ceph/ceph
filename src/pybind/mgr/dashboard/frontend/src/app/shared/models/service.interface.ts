@@ -7,6 +7,13 @@ export interface CephServiceStatus {
   created: Date;
 }
 
+export enum DaemonAction {
+  START = 'start',
+  STOP = 'stop',
+  RESTART = 'restart',
+  REDEPLOY = 'redeploy'
+}
+
 // This will become handy when creating arbitrary services
 export interface CephServiceSpec {
   service_name: string;
@@ -17,6 +24,9 @@ export interface CephServiceSpec {
   spec: CephServiceAdditionalSpec;
   placement: CephServicePlacement;
 }
+
+// Type for service spec update payload (excludes read-only status field)
+export type CephServiceSpecUpdate = Omit<CephServiceSpec, 'status'>;
 
 export interface CephServiceAdditionalSpec {
   backend_service: string;
@@ -62,6 +72,7 @@ export interface CephServiceAdditionalSpec {
   client_secret: string;
   oidc_issuer_url: string;
   enable_auth: boolean;
+  qat: QatSepcs;
 }
 
 export interface CephServicePlacement {
@@ -69,4 +80,14 @@ export interface CephServicePlacement {
   placement?: string;
   hosts?: string[];
   label?: string | string[];
+}
+
+export interface QatSepcs {
+  [key: string]: string;
+}
+
+export enum QatOptions {
+  hw = 'hw',
+  sw = 'sw',
+  none = 'none'
 }

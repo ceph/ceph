@@ -6,8 +6,9 @@ from ceph_volume.api import lvm
 from ceph_volume.util import disk
 from ceph_volume.util import device
 from ceph_volume.util.constants import ceph_disk_guids
-from ceph_volume import conf, configuration, objectstore
-from ceph_volume.objectstore.rawbluestore import RawBlueStore
+from ceph_volume import conf, configuration
+from ceph_volume.objectstore.baseobjectstore import BaseObjectStore
+from ceph_volume.objectstore.raw import Raw
 from typing import Any, Dict, List, Optional, Callable
 
 
@@ -39,15 +40,15 @@ class Factory(object):
 def factory() -> Callable[..., argparse.Namespace]:
     return argparse.Namespace
 
-def objectstore_bluestore_factory(**kw):
-    o = objectstore.bluestore.BlueStore([])
+def objectstore_factory(**kw):
+    o = BaseObjectStore([])
     for k, v in kw.items():
         setattr(o, k, v)
     return o
 
 @pytest.fixture
-def objectstore_bluestore():
-    return objectstore_bluestore_factory
+def objectstore():
+    return objectstore_factory
 
 
 @pytest.fixture
@@ -288,7 +289,6 @@ def disable_kernel_queries(monkeypatch):
     This speeds up calls to Device and Disk
     '''
     monkeypatch.setattr("ceph_volume.util.device.disk.get_devices", lambda device='': {})
-    monkeypatch.setattr("ceph_volume.util.disk.udevadm_property", lambda *a, **kw: {})
 
 
 @pytest.fixture(params=[
@@ -356,9 +356,15 @@ def patch_bluestore_label():
         yield p
 
 @pytest.fixture
-def device_info(monkeypatch, patch_bluestore_label):
-    def apply(devices=None, lsblk=None, lv=None, blkid=None, udevadm=None,
-              has_bluestore_label=False):
+def patch_udevdata(monkeypatch):
+    fake_udevdata = MagicMock()
+    fake_udevdata.environment = {k:k for k in ['ID_VENDOR', 'ID_MODEL', 'ID_SCSI_SERIAL']}
+    monkeypatch.setattr("ceph_volume.util.disk.UdevData", lambda path: fake_udevdata)
+    yield
+
+@pytest.fixture
+def device_info(monkeypatch, patch_bluestore_label, patch_udevdata):
+    def apply(devices=None, lsblk=None, lv=None, blkid=None):
         if devices:
             for dev in devices.keys():
                 devices[dev]['device_nodes'] = [os.path.basename(dev)]
@@ -366,7 +372,6 @@ def device_info(monkeypatch, patch_bluestore_label):
             devices = {}
         lsblk = lsblk if lsblk else {}
         blkid = blkid if blkid else {}
-        udevadm = udevadm if udevadm else {}
         lv = Factory(**lv) if lv else None
         monkeypatch.setattr("ceph_volume.sys_info.devices", {})
         monkeypatch.setattr("ceph_volume.util.device.disk.get_devices", lambda device='': devices)
@@ -377,7 +382,6 @@ def device_info(monkeypatch, patch_bluestore_label):
                                 lambda path: [lv])
         monkeypatch.setattr("ceph_volume.util.device.disk.lsblk", lambda path: lsblk)
         monkeypatch.setattr("ceph_volume.util.device.disk.blkid", lambda path: blkid)
-        monkeypatch.setattr("ceph_volume.util.disk.udevadm_property", lambda *a, **kw: udevadm)
     return apply
 
 @pytest.fixture(params=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.999, 1.0])
@@ -386,12 +390,23 @@ def data_allocate_fraction(request):
 
 @pytest.fixture
 def fake_filesystem(fs):
-
+    fs.create_dir('/dev')
     fs.create_dir('/sys/block/sda/slaves')
     fs.create_dir('/sys/block/sda/queue')
     fs.create_dir('/sys/block/rbd0')
     fs.create_dir('/var/log/ceph')
     fs.create_dir('/tmp/osdpath')
+    fs.create_file('/sys/block/sda/dev', contents='8:0')
+    fs.create_dir('/run/udev/data')
+    fs.create_file('/run/udev/data/b8:0', contents="""
+P:8:0
+E:DEVNAME=/dev/sda
+E:DEVTYPE=disk
+E:ID_MODEL=
+E:ID_SERIAL=
+E:ID_VENDOR=
+""".strip())
+
     yield fs
 
 @pytest.fixture
@@ -510,11 +525,11 @@ raw_direct_report_data = {
 
 @pytest.fixture
 def mock_lvm_direct_report(monkeypatch):
-    monkeypatch.setattr('ceph_volume.objectstore.lvmbluestore.direct_report', lambda: lvm_direct_report_data)
+    monkeypatch.setattr('ceph_volume.objectstore.lvm.direct_report', lambda: lvm_direct_report_data)
 
 @pytest.fixture
 def mock_raw_direct_report(monkeypatch):
-    monkeypatch.setattr('ceph_volume.objectstore.rawbluestore.direct_report', lambda x: raw_direct_report_data)
+    monkeypatch.setattr('ceph_volume.objectstore.raw.direct_report', lambda x: raw_direct_report_data)
 
 @pytest.fixture
 def fake_lsblk_all(monkeypatch: Any) -> Callable:
@@ -527,8 +542,8 @@ def fake_lsblk_all(monkeypatch: Any) -> Callable:
     return apply
 
 @pytest.fixture
-def rawbluestore(factory: type[Factory]) -> RawBlueStore:
+def rawbluestore(factory: type[Factory]) -> Raw:
     args = factory(devices=['/dev/foo'])
-    with patch('ceph_volume.objectstore.rawbluestore.prepare_utils.create_key', Mock(return_value=['AQCee6ZkzhOrJRAAZWSvNC3KdXOpC2w8ly4AZQ=='])):
-        r = RawBlueStore(args)  # type: ignore
+    with patch('ceph_volume.objectstore.raw.prepare_utils.create_key', Mock(return_value=['AQCee6ZkzhOrJRAAZWSvNC3KdXOpC2w8ly4AZQ=='])):
+        r = Raw(args)  # type: ignore
         return r

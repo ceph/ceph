@@ -26,7 +26,7 @@ import {
   Endpoint
 } from '~/app/shared/models/topic.model';
 
-const BASE_URL = 'rgw/topic';
+const BASE_URL = 'rgw/destination';
 @Component({
   selector: 'cd-rgw-topic-form',
   templateUrl: './rgw-topic-form.component.html',
@@ -65,9 +65,9 @@ export class RgwTopicFormComponent extends CdForm implements OnInit, AfterViewCh
     private route: ActivatedRoute
   ) {
     super();
-    this.editing = this.router.url.startsWith(`/rgw/topic/${URLVerbs.EDIT}`);
+    this.editing = this.router.url.startsWith(`/${BASE_URL}/${URLVerbs.EDIT}`);
     this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
-    this.resource = $localize`topic`;
+    this.resource = $localize`notification destination`;
   }
 
   ngAfterViewChecked(): void {
@@ -397,8 +397,8 @@ export class RgwTopicFormComponent extends CdForm implements OnInit, AfterViewCh
       return this.topicForm.setErrors({ cdSubmitButton: true });
     }
     const notificationTitle = this.editing
-      ? $localize`Topic updated successfully`
-      : $localize`Topic created successfully`;
+      ? $localize`Notification destination updated successfully`
+      : $localize`Notification destination created successfully`;
     const formValue = this.topicForm.getRawValue();
     const topicPolicy = this.getTopicPolicy();
     const payload = this.generatePayload(formValue, topicPolicy);

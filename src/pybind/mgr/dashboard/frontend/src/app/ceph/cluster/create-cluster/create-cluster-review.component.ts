@@ -23,7 +23,7 @@ export class CreateClusterReviewComponent implements OnInit {
   services: Array<CephServiceSpec> = [];
   totalCPUs = 0;
   totalMemory = 0;
-  deploymentDescText: string;
+  deploymentDescText: string = '-';
   isSimpleDeployment = true;
 
   constructor(

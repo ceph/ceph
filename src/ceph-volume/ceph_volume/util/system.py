@@ -122,7 +122,7 @@ def get_file_contents(path, default=''):
         return contents
     try:
         with open(path, 'r') as open_file:
-            contents = open_file.read().strip()
+            contents = open_file.read().strip() or default
     except Exception:
         logger.exception('Failed to read contents from: %s' % path)
 

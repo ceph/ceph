@@ -32,6 +32,7 @@
 npm-debug.log
 testem.log
 /typings
+/.nx
 
 # e2e
 /cypress/screenshots

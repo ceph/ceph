@@ -26,6 +26,7 @@ public:
 
   ExclusiveLock(ImageCtxT &image_ctx);
 
+  bool accept_request(exclusive_lock::OperationRequestType request_type) const;
   bool accept_request(exclusive_lock::OperationRequestType request_type,
                       int *ret_val) const;
   bool accept_ops() const;

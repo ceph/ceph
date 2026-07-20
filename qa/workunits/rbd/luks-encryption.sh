@@ -267,6 +267,9 @@ function test_migration_clone() {
   truncate -s 0 /tmp/cmpdata
   truncate -s 32M /tmp/cmpdata
 
+  # FIXME: https://tracker.ceph.com/issues/67402
+  rbd config image set testimg rbd_sparse_read_threshold_bytes 1
+
   rbd encryption format testimg $format /tmp/passphrase
   LIBRBD_DEV=$(_sudo rbd -p rbd map testimg -t nbd -o encryption-passphrase-file=/tmp/passphrase)
   xfs_io -c 'pwrite -S 0xaa -W 4M 1M' $LIBRBD_DEV /tmp/cmpdata
@@ -284,9 +287,6 @@ function test_migration_clone() {
   xfs_io -c 'pwrite -S 0xbb -W 19M 1M' $LIBRBD_DEV /tmp/cmpdata
   xfs_io -c 'pwrite -S 0xbb -W 28M 1M' $LIBRBD_DEV /tmp/cmpdata
   _sudo rbd device unmap -t nbd $LIBRBD_DEV
-
-  # FIXME: https://tracker.ceph.com/issues/67402
-  rbd config image set testimg1 rbd_sparse_read_threshold_bytes 1
 
   # live migrate a native clone image (removes testimg1)
   rbd migration prepare testimg1 testimg2

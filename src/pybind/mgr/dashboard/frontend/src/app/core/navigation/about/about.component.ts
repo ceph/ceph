@@ -1,9 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { BaseModal } from 'carbon-components-angular';
 import { detect } from 'detect-browser';
 import { Subscription } from 'rxjs';
-
 import { UserService } from '~/app/shared/api/user.service';
 import { AppConstants, USER, VERSION_PREFIX } from '~/app/shared/constants/app.constants';
 import { LocalStorage } from '~/app/shared/enum/local-storage-enum';
@@ -16,7 +14,7 @@ import { SummaryService } from '~/app/shared/services/summary.service';
   templateUrl: './about.component.html',
   styleUrls: ['./about.component.scss']
 })
-export class AboutComponent implements OnInit, OnDestroy {
+export class AboutComponent extends BaseModal implements OnInit, OnDestroy {
   modalVariables: any;
   versionNumber: string;
   versionHash: string;
@@ -28,11 +26,11 @@ export class AboutComponent implements OnInit, OnDestroy {
   copyright: string;
 
   constructor(
-    public activeModal: NgbActiveModal,
     private summaryService: SummaryService,
     private userService: UserService,
     private authStorageService: AuthStorageService
   ) {
+    super();
     this.userPermission = this.authStorageService.getPermissions().user;
   }
 

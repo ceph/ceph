@@ -296,8 +296,8 @@ public:
 					eversion_t previous_version) {});
     }
 
-    mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
-      auto divergent = pg_log_t::rewind_from_head(newhead);
+    mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead, bool *dirty_log = nullptr) {
+      auto divergent = pg_log_t::rewind_from_head(newhead, dirty_log);
       index();
       reset_rollback_info_trimmed_to_riter();
       return divergent;
@@ -1045,6 +1045,7 @@ public:
   void proc_replica_log(pg_info_t &oinfo,
 			const pg_log_t &olog,
 			pg_missing_t& omissing, pg_shard_t from,
+			const pg_shard_t &to,
 			bool ec_optimizations_enabled) const;
 
   void set_missing_may_contain_deletes() {
@@ -1096,6 +1097,7 @@ protected:
     missing_type &missing,               ///< [in,out] missing to adjust, use
     LogEntryHandler *rollbacker,         ///< [in] optional rollbacker object
     bool ec_optimizations_enabled,       ///< [in] relax asserts for allow_ec_optimzations pools
+    shard_id_t orig_shard,               ///< [in] Which shard has orig_entries
     const DoutPrefixProvider *dpp        ///< [in] logging provider
     ) {
     ldpp_dout(dpp, 20) << __func__ << ": merging hoid " << hoid
@@ -1113,6 +1115,7 @@ protected:
     mempool::osd_pglog::list<pg_log_entry_t> entries;
     eversion_t last;
     bool seen_non_error = false;
+    std::optional<eversion_t> prior_version_opt;
     for (auto i = orig_entries.begin();
 	 i != orig_entries.end();
 	 ++i) {
@@ -1145,11 +1148,20 @@ protected:
 	}
       }
       if (i->is_error()) {
-	ldpp_dout(dpp, 20) << __func__ << ": ignoring " << *i << dendl;
+        ldpp_dout(dpp, 20) << __func__ << ": ignoring " << *i << dendl;
+      } else if (!i->written_shards.empty() && !i->written_shards.contains(orig_shard)) {
+        ldpp_dout(dpp, 20) << __func__ << ": ignoring partial write " << *i << dendl;
+        last = i->version;
+        if (!prior_version_opt) {
+          prior_version_opt = i->prior_version;
+        }
       } else {
-	ldpp_dout(dpp, 20) << __func__ << ": keeping " << *i << dendl;
-	entries.push_back(*i);
-	last = i->version;
+        ldpp_dout(dpp, 20) << __func__ << ": keeping " << *i << dendl;
+        if (!prior_version_opt) {
+          prior_version_opt = i->prior_version;
+        }
+        entries.push_back(*i);
+        last = i->version;
       }
     }
     if (entries.empty()) {
@@ -1157,7 +1169,8 @@ protected:
       return;
     }
 
-    const eversion_t prior_version = entries.begin()->prior_version;
+    ceph_assert(prior_version_opt);
+    const eversion_t prior_version = *prior_version_opt;
     const eversion_t first_divergent_update = entries.begin()->version;
     const eversion_t last_divergent_update = entries.rbegin()->version;
     const bool object_not_in_store =
@@ -1184,9 +1197,11 @@ protected:
       if (objiter->second->is_update() ||
 	  (missing.may_include_deletes && objiter->second->is_delete())) {
 	if (ec_optimizations_enabled) {
-	  // relax the assert for partial writes - missing may be newer than the
-	  // most recent log entry
-	  ceph_assert(missing.is_missing(hoid) &&
+	  // relax the assert for partial writes. The log may not contain any
+	  // updates for this object, in which case the object will not be in
+	  // the missing list. If it is in the missing list, then the need version
+	  // had better be higher or equal to the log version
+	  ceph_assert(!missing.is_missing(hoid) ||
 		      missing.get_items().at(hoid).need >= objiter->second->version);
 	} else {
 	  ceph_assert(missing.is_missing(hoid) &&
@@ -1323,6 +1338,7 @@ protected:
     missing_type &omissing,              ///< [in,out] missing to adjust, use
     LogEntryHandler *rollbacker,         ///< [in] optional rollbacker object
     bool ec_optimizations_enabled,       ///< [in] relax asserts for allow_ec_optimzations pools
+    shard_id_t orig_shard,               ///< [in] Which shard is this (for detecting partial writes)
     const DoutPrefixProvider *dpp        ///< [in] logging provider
     ) {
     std::map<hobject_t, mempool::osd_pglog::list<pg_log_entry_t> > split;
@@ -1337,6 +1353,7 @@ protected:
 	omissing,
 	rollbacker,
 	ec_optimizations_enabled,
+	orig_shard,
 	dpp);
     }
   }
@@ -1361,6 +1378,7 @@ protected:
       missing,
       rollbacker,
       false, // not allow_ec_optimizations pool
+      shard_id_t(0), // Test doesn't care about this value.
       this);
   }
 
@@ -1373,7 +1391,8 @@ public:
                             LogEntryHandler *rollbacker,
                             bool &dirty_info,
                             bool &dirty_big_info,
-			    bool ec_optimizations_enabled);
+			    bool ec_optimizations_enabled,
+			    const pg_shard_t &shard);
 
   void merge_log(pg_info_t &oinfo,
 		 pg_log_t&& olog,
@@ -1404,11 +1423,7 @@ public:
       invalidate_stats = invalidate_stats || !p->is_error();
       if (log) {
 	ldpp_dout(dpp, 20) << "update missing, append " << *p << dendl;
-        // Skip the log entry if it is a partial write that did not involve
-        // this shard
-        if (!pool.is_nonprimary_shard(shard) || p->is_written_shard(shard)) {
-	  log->add(*p);
-	}
+	log->add(*p);
       }
       if (p->soid <= last_backfill &&
 	  !p->is_error()) {
@@ -1716,10 +1731,18 @@ public:
 	      if (debug_verify_stored_missing) {
 		auto miter = missing.get_items().find(i->soid);
 		ceph_assert(miter != missing.get_items().end());
-		ceph_assert(miter->second.need == i->version);
 		// the 'have' version is reset if an object is deleted,
 		// then created again
-		ceph_assert(miter->second.have == oi.version || miter->second.have == eversion_t());
+		if (ec_optimizations_enabled) {
+		  // non-primary shards in an optimized pool may not have updates
+		  // because of partial writes, which may result in oi.version being
+		  // less than have
+		  ceph_assert(miter->second.need >= i->version);
+		  ceph_assert(miter->second.have >= oi.version || miter->second.have == eversion_t());
+		} else {
+		  ceph_assert(miter->second.need == i->version);
+		  ceph_assert(miter->second.have == oi.version || miter->second.have == eversion_t());
+		}
 		checked.insert(i->soid);
 	      } else {
 		missing.add(i->soid, i->version, oi.version, i->is_delete());

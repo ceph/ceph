@@ -202,7 +202,6 @@ PyObject *ActivePyModules::cacheable_get_python(const std::string &what)
   PyObject *obj = get_python(what);
   if(ttl_seconds && ttl_cache.is_cacheable(what)) {
     ttl_cache.insert(what, obj);
-    Py_INCREF(obj);
   }
   update_cache_metrics();
   return obj;
@@ -538,6 +537,14 @@ void ActivePyModules::start_one(PyModuleRef py_module)
   // Send all python calls down a Finisher to avoid blocking
   // C++ code, and avoid any potential lock cycles.
   finisher.queue(new LambdaContext([this, active_module, name](int) {
+    // Delay loading in testing scenarios
+    auto delay = g_conf().get_val<std::chrono::milliseconds>("mgr_module_load_delay");
+    std::string delayed_module = g_conf().get_val<std::string>("mgr_module_load_delay_name");
+    if ((name == delayed_module) && (delay > std::chrono::milliseconds{0})) {
+      dout(4) << "Delaying load time for module '" << name
+              << "' by " << delay << "..." << dendl;
+      std::this_thread::sleep_for(delay);
+    }
     int r = active_module->load(this);
     std::lock_guard l(lock);
     pending_modules.erase(name);
@@ -553,6 +560,12 @@ void ActivePyModules::start_one(PyModuleRef py_module)
       dout(4) << "Starting active module " << name <<" finisher thread "
         << active_module->get_fin_thread_name() << dendl;
       active_module->finisher.start();
+    }
+
+    // Signal when we're finally done starting up modules
+    if (pending_modules.empty() && recheck_modules_start) {
+      finisher.queue(recheck_modules_start);
+      recheck_modules_start = nullptr;
     }
   }));
 }
@@ -623,18 +636,20 @@ bool ActivePyModules::get_store(const std::string &module_name,
   }
 }
 
-PyObject *ActivePyModules::dispatch_remote(
+std::optional<std::vector<std::byte>> ActivePyModules::dispatch_remote(
     const std::string &other_module,
     const std::string &method,
-    PyObject *args,
-    PyObject *kwargs,
+    std::span<std::byte const> pickled_args,
+    std::span<std::byte const> pickled_kwargs,
     std::string *err)
 {
   auto mod_iter = modules.find(other_module);
   ceph_assert(mod_iter != modules.end());
 
-  return mod_iter->second->dispatch_remote(method, args, kwargs, err);
+  return mod_iter->second->dispatch_remote(
+    method, pickled_args, pickled_kwargs, err);
 }
+
 
 bool ActivePyModules::get_config(const std::string &module_name,
     const std::string &key, std::string *val) const
@@ -1248,8 +1263,10 @@ PyObject* ActivePyModules::get_perf_schema_python(
 		<< dendl;
 	  }
 	}
-	f.close_section();  // close 'counters'
-	f.close_section();  // close 'counter object' section
+	if (!prev_key_name.empty()) {
+	  f.close_section();  // close 'counters'
+	  f.close_section();  // close 'counter object' section
+	}
       });
     }
   } else {
@@ -1758,4 +1775,14 @@ PyObject* ActivePyModules::get_daemon_health_metrics()
       }
       return f.get();
   });
+}
+
+void ActivePyModules::check_all_modules_started(Context *modules_start_complete) {
+  std::lock_guard l(lock);
+  if (pending_modules.empty()) {
+    // Modules are already done starting, signal completion right away
+    finisher.queue(modules_start_complete);
+  } else {
+    recheck_modules_start = modules_start_complete; // signal that we need to check again later
+  }
 }

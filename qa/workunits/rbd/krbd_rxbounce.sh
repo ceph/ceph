@@ -34,11 +34,15 @@ g++ -xc++ -o racereads - -lpthread <<EOF
 const int object_size = $OBJECT_SIZE;
 const int num_objects = $NUM_OBJECTS;
 const int read_len = $OP_SIZE;
-const int num_reads = 1024;
 
-int main() {
-  int fd = open("$DEV", O_DIRECT | O_RDONLY);
+int main(int argc, char** argv) {
+  assert(argc == 3);
+
+  int fd = open(argv[1], O_DIRECT | O_RDONLY);
   assert(fd >= 0);
+
+  int num_reads = atoi(argv[2]);
+  assert(num_reads > 0);
 
   void *buf;
   int r = posix_memalign(&buf, 512, read_len);
@@ -47,7 +51,7 @@ int main() {
   std::vector<std::thread> threads;
   for (int i = 0; i < num_objects; i++) {
     threads.emplace_back(
-        [fd, buf, read_off = static_cast<off_t>(i) * object_size]() {
+        [fd, num_reads, buf, read_off = static_cast<off_t>(i) * object_size]() {
           for (int i = 0; i < num_reads; i++) {
             auto len = pread(fd, buf, read_len, read_off);
             assert(len == read_len);
@@ -63,38 +67,38 @@ EOF
 
 DEV=$(sudo rbd map -o ms_mode=legacy img)
 sudo dmesg -C
-./racereads
+./racereads $DEV 100000
 [[ $(dmesg | grep -c 'libceph: osd.* bad crc/signature') -gt 100 ]]
 sudo rbd unmap $DEV
 
 DEV=$(sudo rbd map -o ms_mode=legacy,rxbounce img)
 sudo dmesg -C
-./racereads
+./racereads $DEV 100000
 [[ $(dmesg | grep -c 'libceph: osd.* bad crc/signature') -eq 0 ]]
 sudo rbd unmap $DEV
 
 DEV=$(sudo rbd map -o ms_mode=crc img)
 sudo dmesg -C
-./racereads
+./racereads $DEV 10000
 [[ $(dmesg | grep -c 'libceph: osd.* integrity error') -gt 100 ]]
 sudo rbd unmap $DEV
 
 DEV=$(sudo rbd map -o ms_mode=crc,rxbounce img)
 sudo dmesg -C
-./racereads
+./racereads $DEV 10000
 [[ $(dmesg | grep -c 'libceph: osd.* integrity error') -eq 0 ]]
 sudo rbd unmap $DEV
 
 # rxbounce is a no-op for secure mode
 DEV=$(sudo rbd map -o ms_mode=secure img)
 sudo dmesg -C
-./racereads
+./racereads $DEV 10000
 [[ $(dmesg | grep -c 'libceph: osd.* integrity error') -eq 0 ]]
 sudo rbd unmap $DEV
 
 DEV=$(sudo rbd map -o ms_mode=secure,rxbounce img)
 sudo dmesg -C
-./racereads
+./racereads $DEV 10000
 [[ $(dmesg | grep -c 'libceph: osd.* integrity error') -eq 0 ]]
 sudo rbd unmap $DEV
 

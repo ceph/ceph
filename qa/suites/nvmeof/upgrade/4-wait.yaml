@@ -1,0 +1,15 @@
+tasks:
+- cephadm.shell:
+    env: [sha1]
+    mon.a:
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; ceph health detail ; sleep 30 ; done
+      - ceph config get mgr mgr/cephadm/container_image_nvmeof
+      - sleep 60
+      # print status after upgrade
+      - ceph orch ps
+      - ceph orch ps | grep "nvmeof" || exit 1
+      - ceph orch ps | grep "nvmeof" | grep "running" || exit 1
+      - ceph versions
+      - ceph orch upgrade status
+      - ceph health detail
+      - ceph versions | jq -e '.overall | length == 1'

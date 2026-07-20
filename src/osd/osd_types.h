@@ -3060,6 +3060,7 @@ struct pg_info_t {
 
   std::map<shard_id_t,std::pair<eversion_t, eversion_t>>
     partial_writes_last_complete; ///< last_complete for shards not modified by a partial write
+  epoch_t partial_writes_last_complete_epoch; ///< epoch when pwlc was last updated
 
   pg_stat_t stats;
 
@@ -3078,6 +3079,7 @@ struct pg_info_t {
       l.last_backfill == r.last_backfill &&
       l.purged_snaps == r.purged_snaps &&
       l.partial_writes_last_complete == r.partial_writes_last_complete &&
+      l.partial_writes_last_complete_epoch == r.partial_writes_last_complete_epoch &&
       l.stats == r.stats &&
       l.history == r.history &&
       l.hit_set == r.hit_set;
@@ -3087,7 +3089,8 @@ struct pg_info_t {
     : last_epoch_started(0),
       last_interval_started(0),
       last_user_version(0),
-      last_backfill(hobject_t::get_max())
+      last_backfill(hobject_t::get_max()),
+      partial_writes_last_complete_epoch(0)
   { }
   // cppcheck-suppress noExplicitConstructor
   pg_info_t(spg_t p)
@@ -3095,7 +3098,8 @@ struct pg_info_t {
       last_epoch_started(0),
       last_interval_started(0),
       last_user_version(0),
-      last_backfill(hobject_t::get_max())
+      last_backfill(hobject_t::get_max()),
+      partial_writes_last_complete_epoch(0)
   { }
   
   void set_last_backfill(hobject_t pos) {
@@ -3155,6 +3159,7 @@ struct pg_fast_info_t {
   eversion_t last_complete;
   version_t last_user_version;
   std::map<shard_id_t,std::pair<eversion_t,eversion_t>> partial_writes_last_complete;
+  epoch_t partial_writes_last_complete_epoch;
   struct { // pg_stat_t stats
     eversion_t version;
     version_t reported_seq;
@@ -3185,6 +3190,7 @@ struct pg_fast_info_t {
     last_complete = info.last_complete;
     last_user_version = info.last_user_version;
     partial_writes_last_complete = info.partial_writes_last_complete;
+    partial_writes_last_complete_epoch = info.partial_writes_last_complete_epoch;
     stats.version = info.stats.version;
     stats.reported_seq = info.stats.reported_seq;
     stats.last_fresh = info.stats.last_fresh;
@@ -3212,6 +3218,7 @@ struct pg_fast_info_t {
     info->last_complete = last_complete;
     info->last_user_version = last_user_version;
     info->partial_writes_last_complete = partial_writes_last_complete;
+    info->partial_writes_last_complete_epoch = partial_writes_last_complete_epoch;
     info->stats.version = stats.version;
     info->stats.reported_seq = stats.reported_seq;
     info->stats.last_fresh = stats.last_fresh;
@@ -3235,7 +3242,7 @@ struct pg_fast_info_t {
   }
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(last_update, bl);
     encode(last_complete, bl);
     encode(last_user_version, bl);
@@ -3258,10 +3265,11 @@ struct pg_fast_info_t {
     encode(stats.stats.sum.num_wr_kb, bl);
     encode(stats.stats.sum.num_objects_dirty, bl);
     encode(partial_writes_last_complete, bl);
+    encode(partial_writes_last_complete_epoch, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator& p) {
-    DECODE_START(2, p);
+    DECODE_START(3, p);
     decode(last_update, p);
     decode(last_complete, p);
     decode(last_user_version, p);
@@ -3285,6 +3293,8 @@ struct pg_fast_info_t {
     decode(stats.stats.sum.num_objects_dirty, p);
     if (struct_v >= 2)
       decode(partial_writes_last_complete, p);
+    if (struct_v >= 3)
+      decode(partial_writes_last_complete_epoch, p);
     DECODE_FINISH(p);
   }
   void dump(ceph::Formatter *f) const {
@@ -3301,6 +3311,7 @@ struct pg_fast_info_t {
       f->close_section();
     }
     f->close_section();
+    f->dump_stream("partial_writes_last_complete_epoch") << partial_writes_last_complete_epoch;
     f->open_object_section("stats");
     f->dump_stream("version") << stats.version;
     f->dump_unsigned("reported_seq", stats.reported_seq);
@@ -4497,7 +4508,6 @@ struct pg_log_entry_t {
   ObjectCleanRegions clean_regions;
 
   shard_id_set written_shards; // EC partial writes do not update every shard
-  shard_id_set present_shards; // EC partial writes need to know set of present shards
 
   pg_log_entry_t()
    : user_version(0), return_code(0), op(0),
@@ -4571,9 +4581,6 @@ struct pg_log_entry_t {
   /// EC partial writes: test if a shard was written
   bool is_written_shard(const shard_id_t shard) const {
     return written_shards.empty() || written_shards.contains(shard);
-  }
-  bool is_present_shard(const shard_id_t shard) const {
-    return present_shards.empty() || present_shards.contains(shard);
   }
 
   void encode_with_checksum(ceph::buffer::list& bl) const;
@@ -4738,7 +4745,7 @@ public:
       std::move(childdups));
     }
 
-  mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
+  mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead, bool *dirty_log = nullptr) {
     ceph_assert(newhead >= tail);
 
     mempool::osd_pglog::list<pg_log_entry_t>::iterator p = log.end();
@@ -4768,11 +4775,19 @@ public:
     }
     head = newhead;
 
-    if (can_rollback_to > newhead)
+    if (can_rollback_to > newhead) {
       can_rollback_to = newhead;
+      if (dirty_log) {
+	*dirty_log = true;
+      }
+    }
 
-    if (rollback_info_trimmed_to > newhead)
+    if (rollback_info_trimmed_to > newhead) {
       rollback_info_trimmed_to = newhead;
+      if (dirty_log) {
+	*dirty_log = true;
+      }
+    }
 
     return divergent;
   }
@@ -4968,7 +4983,7 @@ class pg_missing_const_i {
 public:
   virtual const std::map<hobject_t, pg_missing_item> &
     get_items() const = 0;
-  virtual const std::map<version_t, hobject_t> &get_rmissing() const = 0;
+  virtual const std::multimap<eversion_t, hobject_t> &get_rmissing() const = 0;
   virtual bool get_may_include_deletes() const = 0;
   virtual unsigned int num_missing() const = 0;
   virtual bool have_missing() const = 0;
@@ -5014,8 +5029,57 @@ template <bool TrackChanges>
 class pg_missing_set : public pg_missing_const_i {
   using item = pg_missing_item;
   std::map<hobject_t, item> missing;  // oid -> (need v, have v)
-  std::map<version_t, hobject_t> rmissing;  // v -> oid
+  /**
+   * rmissing
+   *
+   * Reverse mapping from pg_missing_item::need -> object
+   *
+   * This mapping uses eversion_t as a key because although the log
+   * and missing sets may not contain two entries with the same version,
+   * this doesn't hold *during* the log merge process because
+   * the order of divergent entries may not match the order of the
+   * corresponding entries in the authoritiative log.
+   *
+   * See https://tracker.ceph.com/issues/74306
+   */
+  std::multimap<eversion_t, hobject_t> rmissing;  // v -> oid
   ChangeTracker<TrackChanges> tracker;
+private:
+  // Private wrapper functions for rmissing manipulation
+  // These ensure rmissing can only be modified through controlled interfaces
+  
+  // Erase a version mapping, returns count of erased elements (0 or 1)
+  size_t rmissing_erase(const eversion_t& version, const hobject_t& oid) {
+    auto range = rmissing.equal_range(version);
+    for (auto it = range.first; it != range.second; ++it) {
+      if (it->second == oid) {
+        rmissing.erase(it);
+        return 1;
+      }
+    }
+    // If we get here, the (version, oid) pair wasn't found
+    return 0;
+  }
+
+  // Insert a version-to-object mapping while allowing distinct objects to
+  // legitimately share the same version. The same object still may not be
+  // inserted twice for that version.
+  void rmissing_insert(
+      const eversion_t& version,
+      const hobject_t& object) {
+    auto it = rmissing.lower_bound(version);
+
+    if (it != rmissing.end() && it->first == version) {
+      auto range = rmissing.equal_range(version);
+      for (auto check_it = range.first; check_it != range.second; ++check_it) {
+        if (check_it->second == object) {
+          return; // Entry already exists.
+        }
+      }
+    }
+
+    rmissing.insert(it, {version, object});
+  }
 
 public:
   pg_missing_set() = default;
@@ -5034,7 +5098,7 @@ public:
   const std::map<hobject_t, item> &get_items() const override {
     return missing;
   }
-  const std::map<version_t, hobject_t> &get_rmissing() const override {
+  const std::multimap<eversion_t, hobject_t> &get_rmissing() const override {
     return rmissing;
   }
   bool get_may_include_deletes() const override {
@@ -5102,7 +5166,8 @@ public:
     if (e.prior_version == eversion_t() || e.is_clone()) {
       // new object.
       if (is_missing_divergent_item) {  // use iterator
-        rmissing.erase(missing_it->second.need.version);
+        auto erased = rmissing_erase(missing_it->second.need, e.soid);
+        ceph_assert(erased == 1);  // Should always erase exactly one entry
         // .have = nil
         missing_it->second = item(e.version, eversion_t(), e.is_delete());
         missing_it->second.clean_regions.mark_fully_dirty();
@@ -5117,7 +5182,8 @@ public:
       }
     } else if (is_missing_divergent_item) {
       // already missing (prior).
-      rmissing.erase((missing_it->second).need.version);
+      auto erased = rmissing_erase((missing_it->second).need, e.soid);
+      ceph_assert(erased == 1);  // Should always erase exactly one entry
       missing_it->second.need = e.version;  // leave .have unchanged.
       missing_it->second.set_delete(e.is_delete());
       if (e.is_lost_revert())
@@ -5137,7 +5203,7 @@ public:
         missing[e.soid].clean_regions = e.clean_regions;
     }
     if (!skipped) {
-      rmissing[e.version.version] = e.soid;
+      rmissing_insert(e.version, e.soid);
       tracker.changed(e.soid);
     }
   }
@@ -5145,7 +5211,8 @@ public:
   void revise_need(hobject_t oid, eversion_t need, bool is_delete) {
     auto p = missing.find(oid);
     if (p != missing.end()) {
-      rmissing.erase((p->second).need.version);
+      auto erased = rmissing_erase((p->second).need, oid);
+      ceph_assert(erased == 1);  // Should always erase exactly one entry
       p->second.need = need;          // do not adjust .have
       p->second.set_delete(is_delete);
       p->second.clean_regions.mark_fully_dirty();
@@ -5153,8 +5220,7 @@ public:
       missing[oid] = item(need, eversion_t(), is_delete);
       missing[oid].clean_regions.mark_fully_dirty();
     }
-    rmissing[need.version] = oid;
-
+    rmissing_insert(need, oid);
     tracker.changed(oid);
   }
 
@@ -5177,12 +5243,12 @@ public:
   void add(const hobject_t& oid, eversion_t need, eversion_t have,
 	   bool is_delete) {
     missing[oid] = item(need, have, is_delete, true);
-    rmissing[need.version] = oid;
+    rmissing_insert(need, oid);
     tracker.changed(oid);
   }
 
   void add(const hobject_t& oid, pg_missing_item&& item) {
-    rmissing[item.need.version] = oid;
+    rmissing_insert(item.need, oid);
     missing.insert({oid, std::move(item)});
     tracker.changed(oid);
   }
@@ -5195,7 +5261,8 @@ public:
 
   void rm(std::map<hobject_t, item>::const_iterator m) {
     tracker.changed(m->first);
-    rmissing.erase(m->second.need.version);
+    auto erased = rmissing_erase(m->second.need, m->first);
+    ceph_assert(erased == 1);  // Should always erase exactly one entry
     missing.erase(m);
   }
 
@@ -5208,7 +5275,8 @@ public:
 
   void got(std::map<hobject_t, item>::const_iterator m) {
     tracker.changed(m->first);
-    rmissing.erase(m->second.need.version);
+    auto erased = rmissing_erase(m->second.need, m->first);
+    ceph_assert(erased == 1);  // Should always erase exactly one entry
     missing.erase(m);
   }
 
@@ -5276,8 +5344,9 @@ public:
     for (std::map<hobject_t,item>::iterator it =
 	   missing.begin();
 	 it != missing.end();
-	 ++it)
-      rmissing[it->second.need.version] = it->first;
+	 ++it) {
+      rmissing_insert(it->second.need, it->first);
+    }
     for (auto const &i: missing)
       tracker.changed(i.first);
   }

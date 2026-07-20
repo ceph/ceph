@@ -312,6 +312,13 @@ target_include_directories(unittest_rgw_url
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(unittest_rgw_url ${rgw_libs})
 
+# unittest_rgw_sync_trace
+add_executable(unittest_rgw_sync_trace test_rgw_sync_trace.cc)
+add_ceph_unittest(unittest_rgw_sync_trace)
+target_include_directories(unittest_rgw_sync_trace
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_sync_trace)
+
 add_executable(ceph_test_rgw_gc_log test_rgw_gc_log.cc $<TARGET_OBJECTS:unit-main>)
 target_include_directories(ceph_test_rgw_gc_log
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
@@ -321,6 +328,17 @@ install(TARGETS ceph_test_rgw_gc_log DESTINATION ${CMAKE_INSTALL_BINDIR})
 add_executable(unittest_rgw_shard_io test_rgw_shard_io.cc)
 add_ceph_unittest(unittest_rgw_shard_io)
 target_link_libraries(unittest_rgw_shard_io ${rgw_libs} unit-main ${UNITTEST_LIBS})
+
+# unittest_rgw_object_ctx
+add_executable(unittest_rgw_object_ctx test_rgw_object_ctx.cc)
+add_ceph_unittest(unittest_rgw_object_ctx)
+target_include_directories(unittest_rgw_object_ctx
+  SYSTEM PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/rgw
+    ${CMAKE_SOURCE_DIR}/src/rgw/driver/rados
+    ${CMAKE_SOURCE_DIR}/src/s3select/rapidjson/include
+)
+target_link_libraries(unittest_rgw_object_ctx ${rgw_libs})
 
 add_ceph_test(test-ceph-diff-sorted.sh
   ${CMAKE_CURRENT_SOURCE_DIR}/test-ceph-diff-sorted.sh)
@@ -387,3 +405,7 @@ target_link_libraries(ceph_test_datalog
   ${UNITTEST_LIBS}
   ${rgw_libs})
 install(TARGETS ceph_test_datalog DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+add_executable(unittest_rgw_tag test_rgw_tag.cc)
+add_ceph_unittest(unittest_rgw_tag)
+target_link_libraries(unittest_rgw_tag ${rgw_libs} ${UNITTEST_LIBS})

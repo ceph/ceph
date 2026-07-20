@@ -465,6 +465,8 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
       return -ENOENT;
     }
 
+    s->env.emplace("s3:prefix", object->get_name());
+
     if (verify_bucket_permission(dpp, s, bucket->get_key(), s->user_acl,
                                  bucket_policy, policy, s->iam_identity_policies,
                                  s->session_policies, rgw::IAM::s3ListBucket)) {
@@ -879,8 +881,7 @@ static void rgw_add_grant_to_iam_environment(rgw::IAM::Environment& e, req_state
   }
 }
 
-void rgw_build_iam_environment(rgw::sal::Driver* driver,
-	                              req_state* s)
+void rgw_build_iam_environment(req_state* s)
 {
   const auto& m = s->info.env->get_map();
   auto t = ceph::real_clock::now();
@@ -1043,6 +1044,16 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
       } 
     } else if (restore_status == rgw::sal::RGWRestoreStatus::CloudRestored) {
       // corresponds to CLOUD_RESTORED
+      if (!read_through) { //update expiry date iff its temp restored copy
+        op_ret = driver->get_rgwrestore()->update_cloud_restore_exp_date(s->bucket.get(),
+                                              		      s->object.get(), days, dpp, y);
+
+        if (op_ret < 0) {
+	        ldpp_dout(dpp, 20) << "Updating expiry-date of restored object " << s->object->get_key() << " failed - " << op_ret << dendl;
+          s->err.message = "failed to update expiry-date of the restored object";
+          return op_ret;
+        }
+      }
       return static_cast<int>(rgw::sal::RGWRestoreStatus::CloudRestored);
     } else { // first time restore or previous restore failed.
       // Restore the object.
@@ -4101,9 +4112,9 @@ int RGWPutObj::init_processing(optional_yield y) {
 
   // reject public canned acls
   if (s->bucket_access_conf && s->bucket_access_conf->block_public_acls() &&
-      (s->canned_acl.compare("public-read") ||
-       s->canned_acl.compare("public-read-write") ||
-       s->canned_acl.compare("authenticated-read"))) {
+      (s->canned_acl == "public-read" ||
+       s->canned_acl == "public-read-write" ||
+       s->canned_acl == "authenticated-read")) {
     return -EACCES;
   }
 
@@ -5659,10 +5670,13 @@ void RGWDeleteObj::execute(optional_yield y)
       del_op->params.bucket_owner = s->bucket_owner.id;
       del_op->params.versioning_status = s->bucket->get_info().versioning_status();
       del_op->params.unmod_since = unmod_since;
+      del_op->params.last_mod_time_match = last_mod_time_match;
       del_op->params.high_precision_time = s->system_request;
       del_op->params.olh_epoch = epoch;
       del_op->params.marker_version_id = version_id;
       del_op->params.null_verid = null_verid;
+      del_op->params.size_match = size_match;
+      del_op->params.if_match = if_match;
 
       op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
       if (op_ret >= 0) {
@@ -5729,6 +5743,9 @@ bool RGWCopyObj::parse_copy_location(const std::string_view& url_src,
     params_str = url_src.substr(pos + 1);
   }
 
+  if (name_str.empty()) {
+    return false;
+  }
   if (name_str[0] == '/') // trim leading slash
     name_str.remove_prefix(1);
 
@@ -7180,7 +7197,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   op_ret =
     upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size,
                      compressed, cs_info, ofs, s->req_id, s->owner, olh_epoch,
-                     s->object.get(), processed_prefixes);
+                     s->object.get(), processed_prefixes, if_match, if_nomatch);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: upload complete failed ret=" << op_ret << dendl;
     return;
@@ -7521,8 +7538,11 @@ void RGWDeleteMultiObj::write_ops_log_entry(rgw_log_entry& entry) const {
   entry.delete_multi_obj_meta.objects = std::move(ops_log_entries);
 }
 
-void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_yield y)
+void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object, optional_yield y, const bool skip_olh_obj_update)
 {
+  const string& key = object.get_key();
+  const string& instance = object.get_version_id();
+  rgw_obj_key o(key, instance);
   // add the object key to the dout prefix so we can trace concurrent calls
   struct ObjectPrefix : public DoutPrefixPipe {
     const rgw_obj_key& o;
@@ -7605,12 +7625,16 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   del_op->params.obj_owner = s->owner;
   del_op->params.bucket_owner = s->bucket_owner.id;
   del_op->params.marker_version_id = version_id;
+  del_op->params.last_mod_time_match = object.get_last_mod_time();
+  del_op->params.if_match = object.get_if_match();
+  del_op->params.size_match = object.get_size_match();
 
-  op_ret = del_op->delete_obj(dpp, y, rgw::sal::FLAG_LOG_OP);
+  op_ret = del_op->delete_obj(dpp, y,
+                              rgw::sal::FLAG_LOG_OP | (skip_olh_obj_update ? rgw::sal::FLAG_SKIP_UPDATE_OLH : 0));
   if (op_ret == -ENOENT) {
     op_ret = 0;
   }
-      
+
   if (auto ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Any, obj.get(), s, canonical_name(), etag, obj_size, this, y, true, false); ret < 0) {
     // don't reply with an error in case of failed delete logging
     ldpp_dout(this, 5) << "WARNING: multi DELETE operation ignores bucket logging failure: " << ret << dendl;
@@ -7626,6 +7650,70 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   }
   
   send_partial_response(o, del_op->result.delete_marker, del_op->result.version_id, op_ret);
+}
+
+void RGWDeleteMultiObj::handle_versioned_objects(const std::vector<RGWMultiDelObject>& objects,
+                                                 uint32_t max_aio,
+                                                 boost::asio::yield_context yield)
+{
+  auto group = ceph::async::spawn_throttle{yield, max_aio};
+  std::map<std::string, std::vector<RGWMultiDelObject>> grouped_objects;
+
+  // group objects by their keys
+  for (const auto& object : objects) {
+    const std::string& key = object.get_key();
+    grouped_objects[key].push_back(object);
+  }
+
+  // for each group of objects, handle all but the last object and skip update_olh
+  for (const auto& [_, objects] : grouped_objects) {
+    for (size_t i = 0; i + 1 < objects.size(); ++i) { // skip the last element
+      group.spawn([this, &objects, i] (boost::asio::yield_context yield) {
+        handle_individual_object(objects[i], yield, true /* skip_olh_obj_update */);
+      });
+
+      rgw_flush_formatter(s, s->formatter);
+    }
+  }
+  group.wait();
+
+  // Now handle the last object of each group with update_olh
+  for (const auto& [_, objects] : grouped_objects) {
+    const auto& object = objects.back();
+    group.spawn([this, &object] (boost::asio::yield_context yield) {
+      handle_individual_object(object, yield);
+    });
+
+    rgw_flush_formatter(s, s->formatter);
+  }
+  group.wait();
+}
+
+void RGWDeleteMultiObj::handle_non_versioned_objects(const std::vector<RGWMultiDelObject>& objects,
+                                                     uint32_t max_aio,
+                                                     boost::asio::yield_context yield)
+{
+  auto group = ceph::async::spawn_throttle{yield, max_aio};
+
+  for (const auto& object : objects) {
+    group.spawn([this, &object] (boost::asio::yield_context yield) {
+                  handle_individual_object(object, yield);
+                });
+
+    rgw_flush_formatter(s, s->formatter);
+  }
+  group.wait();
+}
+
+void RGWDeleteMultiObj::handle_objects(const std::vector<RGWMultiDelObject>& objects,
+                                       uint32_t max_aio,
+                                       boost::asio::yield_context yield)
+{
+  if (bucket->versioned()) {
+    handle_versioned_objects(objects, max_aio, yield);
+  } else {
+    handle_non_versioned_objects(objects, max_aio, yield);
+  }
 }
 
 void RGWDeleteMultiObj::execute(optional_yield y)
@@ -7678,8 +7766,9 @@ void RGWDeleteMultiObj::execute(optional_yield y)
 
   if (s->bucket->get_info().mfa_enabled()) {
     bool has_versioned = false;
-    for (auto i : multi_delete->objects) {
-      if (!i.instance.empty()) {
+    for (auto object : multi_delete->objects) {
+      const string& instance = object.get_version_id();
+      if (instance.empty()) {
         has_versioned = true;
         break;
       }
@@ -7695,16 +7784,24 @@ void RGWDeleteMultiObj::execute(optional_yield y)
 
   // process up to max_aio object deletes in parallel
   const uint32_t max_aio = std::max<uint32_t>(1, s->cct->_conf->rgw_multi_obj_del_max_aio);
-  auto group = ceph::async::spawn_throttle{y, max_aio};
 
-  for (const auto& key : multi_delete->objects) {
-    group.spawn([this, &key] (boost::asio::yield_context yield) {
-                  handle_individual_object(key, yield);
-                });
+  // if we're not already running in a coroutine, spawn one
+  if (!y) {
+    auto& objects = multi_delete->objects;
 
-    rgw_flush_formatter(s, s->formatter);
+    boost::asio::io_context context;
+    boost::asio::spawn(context,
+        [this, &objects, max_aio] (boost::asio::yield_context yield) {
+          handle_objects(objects, max_aio, yield);
+        },
+        [] (std::exception_ptr eptr) {
+          if (eptr) std::rethrow_exception(eptr);
+        });
+    context.run();
+  } else {
+    // use the existing coroutine's yield context
+    handle_objects(multi_delete->objects, max_aio, y.get_yield_context());
   }
-  group.wait();
 
   /*  set the return code to zero, errors at this point will be
   dumped to the response */
@@ -8615,7 +8712,7 @@ int RGWHandler::do_init_permissions(const DoutPrefixProvider *dpp, optional_yiel
     return ret==-ENODATA ? -EACCES : ret;
   }
 
-  rgw_build_iam_environment(driver, s);
+  rgw_build_iam_environment(s);
   return ret;
 }
 

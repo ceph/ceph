@@ -417,9 +417,10 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
   const Filesystem* fsp;
   if (std::holds_alternative<Filesystem*>(fsv)) {
     fsp = std::get<Filesystem*>(fsv);
-  } else if (std::holds_alternative<fs_cluster_id_t>(fsv)) {
+  } else {
+    ceph_assert(std::holds_alternative<fs_cluster_id_t>(fsv));
     fsp = &fsmap.get_filesystem(std::get<fs_cluster_id_t>(fsv));
-  } else ceph_assert(0);
+  }
 
   {
     std::string interr;

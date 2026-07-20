@@ -293,10 +293,11 @@ public:
   }
 
   uint64_t be_get_ondisk_size(uint64_t logical_size,
-                              shard_id_t shard_id) const final {
+                              shard_id_t shard_id,
+                              bool object_is_legacy_ec) const final {
     if (is_optimized())
     {
-      return optimized.be_get_ondisk_size(logical_size, shard_id);
+      return optimized.be_get_ondisk_size(logical_size, shard_id, object_is_legacy_ec);
     }
     return legacy.be_get_ondisk_size(logical_size);
   }
@@ -366,10 +367,7 @@ public:
     return false;
   }
   bool get_is_hinfo_required() const final {
-    if (is_optimized()) {
-      return optimized.get_is_hinfo_required();
-    }
-    return true;
+    return !is_optimized();
   }
   bool get_is_ec_optimized() const final {
     return is_optimized();

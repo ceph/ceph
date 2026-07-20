@@ -1451,6 +1451,54 @@ COMMAND("nvme-gw show"
    " show nvmeof gateways within (pool, group)",
    "mon", "r")
 
+COMMAND("nvme-gw listeners"
+	" name=pool,type=CephString"
+	" name=group,type=CephString",
+	" show all nvmeof gateways listeners within (pool, group)",
+	"mon", "r")
+
+COMMAND("nvme-gw enable"
+   " name=id,type=CephString"
+   " name=pool,type=CephString"
+   " name=group,type=CephString",
+   "administratively enables nvmeof gateway id for (pool, group)",
+   "mgr", "rw")
+
+COMMAND("nvme-gw disable"
+   " name=id,type=CephString"
+   " name=pool,type=CephString"
+   " name=group,type=CephString",
+   "administratively disables nvmeof gateway id for (pool, group)",
+   "mgr", "rw")
+
+COMMAND("nvme-gw set-location"
+   " name=id,type=CephString"
+   " name=pool,type=CephString"
+   " name=group,type=CephString"
+   " name=location,type=CephString",
+   "set location for nvmeof gateway id for (pool, group)",
+   "mgr", "rw")
+
+COMMAND("nvme-gw disaster-set"
+     " name=pool,type=CephString"
+     " name=group,type=CephString"
+     " name=location,type=CephString",
+     " set location to Disaster state",
+     "mgr", "rw")
+
+COMMAND("nvme-gw disaster-clear"
+    " name=pool,type=CephString"
+    " name=group,type=CephString"
+    " name=location,type=CephString",
+    " set location to clear Disaster state - failbacks allowed for recovered location",
+    "mgr", "rw")
+
+COMMAND("nvme-gw set"
+    " name=var,type=CephChoices,strings=beacon-diff"
+    " name=val,type=CephString ",
+    "config nvme-gw",
+    "mgr", "rw")
+
 // these are tell commands that were implemented as CLI commands in
 // the broken pre-octopus way that we want to allow to work when a
 // monitor has upgraded to octopus+ but the monmap min_mon_release is
@@ -1523,7 +1571,15 @@ COMMAND_WITH_FLAG("dump_historic_ops",
             "show recent ops",
             "mon", "r",
             FLAG(TELL))
+COMMAND_WITH_FLAG("dump_historic_ops_by_duration",
+            "show recent ops sorted by duration",
+            "mon", "r",
+            FLAG(TELL))
 COMMAND_WITH_FLAG("dump_historic_slow_ops",
             "show recent slow ops",
+            "mon", "r",
+            FLAG(TELL))
+COMMAND_WITH_FLAG("dump_ops_in_flight",
+            "show the ops currently in flight",
             "mon", "r",
             FLAG(TELL))

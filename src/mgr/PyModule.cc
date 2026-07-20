@@ -21,6 +21,7 @@
 
 #include "include/stringify.h"
 #include "common/BackTrace.h"
+#include "common/split.h"
 #include "global/signal_handler.h"
 
 #include "common/debug.h"
@@ -152,6 +153,48 @@ std::string peek_pyerror()
   PyErr_Restore(ptype, pvalue, ptraceback);
 
   return exc_msg;
+}
+
+std::span<std::byte const> py_bytes_as_span(PyObject *bytes)
+{
+  assert(bytes);
+  assert(PyBytes_CheckExact(bytes));
+  Py_ssize_t length;
+  char *buf;
+  int r = PyBytes_AsStringAndSize(
+    bytes, &buf, &length);
+  assert(r == 0);
+  return std::span<std::byte const>((const std::byte*)buf, size_t(length));
+}
+
+PyObject *py_bytes_from_span(std::span<std::byte const> s)
+{
+  auto ret = PyBytes_FromStringAndSize(
+    reinterpret_cast<const char*>(s.data()), s.size_bytes());
+  assert(ret);
+  return ret;
+}
+
+std::vector<std::byte> py_bytes_as_vec(PyObject *bytes)
+{
+  assert(bytes);
+  assert(PyBytes_CheckExact(bytes));
+  Py_ssize_t length;
+  char *buf;
+  int r = PyBytes_AsStringAndSize(
+    bytes, &buf, &length);
+  assert(r == 0);
+  return std::vector<std::byte>{
+    reinterpret_cast<const std::byte*>(buf),
+    reinterpret_cast<const std::byte*>(buf) + size_t(length)};
+}
+
+PyObject *py_bytes_from_vec(const std::vector<std::byte> &s)
+{
+  auto ret = PyBytes_FromStringAndSize(
+    reinterpret_cast<const char *>(s.data()), s.size());
+  assert(ret);
+  return ret;
 }
 
 
@@ -291,8 +334,23 @@ int PyModule::load(PyThreadState *pMainThreadState)
 {
   ceph_assert(pMainThreadState != nullptr);
 
-  // Configure sub-interpreter
-  {
+  const auto subinterpreter_modules_opt = g_conf().get_val<std::string>(
+    "mgr_subinterpreter_modules"
+  );
+  auto subinterpreter_modules = ceph::split(subinterpreter_modules_opt);
+  use_main_interpreter = std::count(
+    subinterpreter_modules.begin(), subinterpreter_modules.end(), "*"
+  ) == 0 && std::count(
+    subinterpreter_modules.begin(), subinterpreter_modules.end(), module_name
+  ) == 0;
+
+  if (use_main_interpreter) {
+    // Use main interpreter
+    derr << "Loading module " << module_name << " in main interpreter" << dendl;
+    pMyThreadState.set(pMainThreadState);
+  } else {
+    // Configure sub-interpreter
+    derr << "Loading module " << module_name << " in sub-interpreter" << dendl;
     SafeThreadState sts(pMainThreadState);
     Gil gil(sts);
 
@@ -304,11 +362,19 @@ int PyModule::load(PyThreadState *pMainThreadState)
       pMyThreadState.set(thread_state);
     }
   }
+
   // Environment is all good, import the external module
   {
     Gil gil(pMyThreadState);
 
     int r;
+
+    pPickleModule = PyImport_ImportModuleNoBlock("pickle");
+    if (!pPickleModule) {
+      derr << "Unable to load pickle" << dendl;
+      return -EINVAL;
+    }
+
     r = load_subclass_of("MgrModule", &pClass);
     if (r) {
       derr << "Class not found in module '" << module_name << "'" << dendl;
@@ -707,6 +773,10 @@ PyModule::~PyModule()
     Gil gil(pMyThreadState, true);
     Py_XDECREF(pClass);
     Py_XDECREF(pStandbyClass);
+    Py_XDECREF(pPickleModule);
+    if (use_main_interpreter) {
+      Py_EndInterpreter(pMyThreadState.ts);
+    }
   }
 }
 

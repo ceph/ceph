@@ -196,14 +196,6 @@ endif()
 
 include(CheckCCompilerFlag)
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
-  CHECK_C_COMPILER_FLAG("-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2" HAS_FORTIFY_SOURCE)
-  if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
-    if(HAS_FORTIFY_SOURCE)
-      add_definitions(
-        -U_FORTIFY_SOURCE
-        -D_FORTIFY_SOURCE=2)
-    endif()
-  endif()
     CHECK_C_COMPILER_FLAG(-fstack-protector-strong HAS_STACK_PROTECT)
     if (HAS_STACK_PROTECT)
       add_compile_options(-fstack-protector-strong)
@@ -239,6 +231,12 @@ if(HAVE_INTEL)
       HAVE_NASM_X64_AVX2
       HAVE_NASM_X64_AVX512)
   endif()
+endif()
+
+# Set WITH_EC_ISA_PLUGIN early so it's available when processing common/options
+# This must be set before add_subdirectory(common) is called
+if(HAVE_NASM_X64_AVX2 OR HAVE_ARMV8_SIMD)
+  set(WITH_EC_ISA_PLUGIN TRUE CACHE BOOL "")
 endif()
 
 # require c++20
@@ -442,6 +440,7 @@ set(libcommon_files
   global/global_context.cc
   xxHash/xxhash.c
   common/error_code.cc
+  common/frag.cc
   common/tracer.cc
   log/Log.cc
   mon/MonCap.cc
@@ -1002,6 +1001,7 @@ if(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT)
     ${nvmeof_monitor_grpc_hdrs}
     ceph_nvmeof_monitor_client.cc
     nvmeof/NVMeofGwClient.cc
+    nvmeof/NVMeofGwUtils.cc
     nvmeof/NVMeofGwMonitorGroupClient.cc
     nvmeof/NVMeofGwMonitorClient.cc)
   add_executable(ceph-nvmeof-monitor-client ${ceph_nvmeof_monitor_client_srcs})

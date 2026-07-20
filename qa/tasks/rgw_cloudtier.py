@@ -54,8 +54,6 @@ class RGWCloudTier(Task):
         clients = self.config.keys() # http://tracker.ceph.com/issues/20417
         for client in clients:
             client_config = self.config.get(client)
-            if client_config is None:
-                client_config = {}
 
             if client_config is not None:
                 log.info('client %s - cloudtier config is -----------------%s ', client, client_config)
@@ -118,13 +116,14 @@ class RGWCloudTier(Task):
 
                 log.info('Finished Configuring rgw cloudtier ...')
                 
-                cluster_name, daemon_type, client_id = teuthology.split_role(client)
-                client_with_id = daemon_type + '.' + client_id
-                self.ctx.daemons.get_daemon('rgw', client_with_id, cluster_name).restart()
-                log.info('restarted rgw daemon ...')
+        for client in clients:
+            cluster_name, daemon_type, client_id = teuthology.split_role(client)
+            client_with_id = daemon_type + '.' + client_id
+            self.ctx.daemons.get_daemon('rgw', client_with_id, cluster_name).restart()
+            log.info('restarted rgw daemon ...')
 
-                (remote,) = self.ctx.cluster.only(client).remotes.keys()
-                wait_for_radosgw(endpoint.url(), remote)
+            (remote,) = self.ctx.cluster.only(client).remotes.keys()
+            wait_for_radosgw(endpoint.url(), remote)
                 
 
 task = RGWCloudTier

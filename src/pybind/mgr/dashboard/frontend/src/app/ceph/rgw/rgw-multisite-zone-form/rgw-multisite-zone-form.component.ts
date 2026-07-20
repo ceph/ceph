@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Inject, OnInit, Optional } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
 import { NgbActiveModal, NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
@@ -12,24 +12,20 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { RgwRealm, RgwZone, RgwZonegroup, SystemKey } from '../models/rgw-multisite';
-import { ModalService } from '~/app/shared/services/modal.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { CdForm } from '~/app/shared/forms/cd-form';
+import { ComboBoxItem } from '~/app/shared/models/combo-box.model';
 
 @Component({
   selector: 'cd-rgw-multisite-zone-form',
   templateUrl: './rgw-multisite-zone-form.component.html',
   styleUrls: ['./rgw-multisite-zone-form.component.scss']
 })
-export class RgwMultisiteZoneFormComponent implements OnInit {
-  action: string;
-  info: any;
+export class RgwMultisiteZoneFormComponent extends CdForm implements OnInit {
   multisiteZoneForm: CdFormGroup;
-  editing = false;
-  resource: string;
   realm: RgwRealm;
   zonegroup: RgwZonegroup;
   zone: RgwZone;
-  defaultsInfo: string[] = [];
-  multisiteInfo: object[] = [];
   zonegroupList: RgwZonegroup[] = [];
   zoneList: RgwZone[] = [];
   zoneNames: string[];
@@ -46,12 +42,17 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
   syncStatusTimedOut: boolean = false;
   bsModalRef: NgbModalRef;
   createSystemUser: boolean = false;
-  master_zone_of_master_zonegroup: RgwZone;
+  master_zone_name: string;
   masterZoneUser: any;
   access_key: any;
   master_zonegroup_of_realm: RgwZonegroup;
   compressionTypes = ['lz4', 'zlib', 'snappy'];
   userListReady: boolean = false;
+  SecretKeyText =
+    'To see or copy your S3 secret key, go to Object Gateway > Users and click on your user name. In Keys, click Show. View the secret key by clicking Show and copy the key by clicking Copy to Clipboard';
+  AccessKeyText =
+    'To see or copy your S3 access key, go to Object Gateway > Users and click on your user name. In Keys, click Show. View the access key by clicking Show and copy the key by clicking Copy to Clipboard';
+  syncFromZonesOptions: ComboBoxItem[] = [];
 
   constructor(
     public activeModal: NgbActiveModal,
@@ -61,11 +62,14 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
     public rgwZoneGroupService: RgwZonegroupService,
     public notificationService: NotificationService,
     public rgwUserService: RgwUserService,
-    public modalService: ModalService
+    public modalService: ModalCdsService,
+    @Optional() @Inject('resource') public resource: string,
+    @Optional() @Inject('defaultsInfo') public defaultsInfo: string[],
+    @Optional() @Inject('multisiteInfo') public multisiteInfo: object[],
+    @Optional() @Inject('action') public action: string,
+    @Optional() @Inject('info') public info: any
   ) {
-    this.action = this.editing
-      ? this.actionLabels.EDIT + this.resource
-      : this.actionLabels.CREATE + this.resource;
+    super();
     this.createForm();
   }
 
@@ -76,13 +80,16 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
           Validators.required,
           CdValidators.custom('uniqueName', (zoneName: string) => {
             return (
-              this.action === 'create' && this.zoneNames && this.zoneNames.indexOf(zoneName) !== -1
+              this.action === this.actionLabels.CREATE &&
+              this.zoneNames &&
+              this.zoneNames.indexOf(zoneName) !== -1
             );
           })
         ]
       }),
       default_zone: new UntypedFormControl(false),
       master_zone: new UntypedFormControl(false),
+      archive_zone: new UntypedFormControl(false),
       selectedZonegroup: new UntypedFormControl(null),
       zone_endpoints: new UntypedFormControl(null, {
         validators: [CdValidators.url, Validators.required]
@@ -95,22 +102,45 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
       placementDataExtraPool: new UntypedFormControl(null),
       storageClass: new UntypedFormControl(null),
       storageDataPool: new UntypedFormControl(null),
-      storageCompression: new UntypedFormControl(null)
+      storageCompression: new UntypedFormControl(null),
+      sync_from_zones: new UntypedFormControl(null),
+      sync_from_all: new UntypedFormControl(true)
     });
   }
 
   onZoneGroupChange(zonegroupName: string) {
+    this.syncFromZonesOptions = [];
+
     let zg = new RgwZonegroup();
     zg.name = zonegroupName;
+
     this.rgwZoneGroupService.get(zg).subscribe((zonegroup: RgwZonegroup) => {
+      const syncFromZones = this.info?.data?.info?.sync_from || [];
+
+      this.syncFromZonesOptions = zonegroup.zones
+        .filter((zone) => zone.name !== this.multisiteZoneForm.getValue('zoneName'))
+        .map((zone) => ({
+          name: zone.name,
+          content: zone.name,
+          selected: syncFromZones.includes(zone.name)
+        }));
+
+      this.multisiteZoneForm
+        .get('sync_from_zones')
+        .setValue(this.syncFromZonesOptions.filter((opt) => opt.selected));
+
       if (_.isEmpty(zonegroup.master_zone)) {
         this.multisiteZoneForm.get('master_zone').setValue(true);
         this.multisiteZoneForm.get('master_zone').disable();
         this.disableMaster = false;
-      } else if (!_.isEmpty(zonegroup.master_zone) && this.action === 'create') {
+      } else if (!_.isEmpty(zonegroup.master_zone) && this.action === this.actionLabels.CREATE) {
         this.multisiteZoneForm.get('master_zone').setValue(false);
         this.multisiteZoneForm.get('master_zone').disable();
         this.disableMaster = true;
+      }
+      const masterZone = this.zoneList.find((zone) => zone.id === zonegroup.master_zone);
+      if (masterZone) {
+        this.master_zone_name = masterZone.name;
       }
     });
     if (
@@ -123,6 +153,7 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.createForm();
     this.zonegroupList =
       this.multisiteInfo[1] !== undefined && this.multisiteInfo[1].hasOwnProperty('zonegroups')
         ? this.multisiteInfo[1]['zonegroups']
@@ -134,7 +165,7 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
     this.zoneNames = this.zoneList.map((zone) => {
       return zone['name'];
     });
-    if (this.action === 'create') {
+    if (this.action === this.actionLabels.CREATE) {
       if (this.defaultsInfo['defaultZonegroupName'] !== undefined) {
         this.multisiteZoneForm
           .get('selectedZonegroup')
@@ -142,7 +173,7 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
         this.onZoneGroupChange(this.defaultsInfo['defaultZonegroupName']);
       }
     }
-    if (this.action === 'edit') {
+    if (this.action === this.actionLabels.EDIT) {
       this.placementTargets =
         this.info.data?.parent || this.info.parent
           ? (this.info.data?.parentNode || this.info.parent.data)?.placement_targets
@@ -157,6 +188,11 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
       this.multisiteZoneForm.get('zone_endpoints').setValue(this.info.data.endpoints.toString());
       this.multisiteZoneForm.get('access_key').setValue(this.info.data.access_key);
       this.multisiteZoneForm.get('secret_key').setValue(this.info.data.secret_key);
+      this.multisiteZoneForm
+        .get('archive_zone')
+        .setValue(this.info.data.info.tier_type === 'archive');
+      this.onArchiveZoneChange(this.info.data.info.tier_type === 'archive');
+      this.multisiteZoneForm.get('sync_from_all').setValue(this.info.data.info.sync_from_all);
       this.multisiteZoneForm
         .get('placementTarget')
         .setValue((this.info.data?.parentNode || this.info.parent.data)?.default_placement);
@@ -199,17 +235,12 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
               key,
               value
             }));
-            let placementDataPool = storageClasses['STANDARD']
-              ? storageClasses['STANDARD']['data_pool']
-              : '';
             let placementIndexPool = plc_pool.val.index_pool;
             let placementDataExtraPool = plc_pool.val.data_extra_pool;
-            this.poolList.push({ poolname: placementDataPool });
             this.poolList.push({ poolname: placementIndexPool });
             this.poolList.push({ poolname: placementDataExtraPool });
             this.multisiteZoneForm.get('storageClass').setValue(this.storageClassList[0]['key']);
             this.getStorageClassData(this.storageClassList[0]['key']);
-            this.multisiteZoneForm.get('placementDataPool').setValue(placementDataPool);
             this.multisiteZoneForm.get('placementIndexPool').setValue(placementIndexPool);
             this.multisiteZoneForm.get('placementDataExtraPool').setValue(placementDataExtraPool);
           }
@@ -220,10 +251,10 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
 
   getStorageClassData(storageClass: string) {
     let storageClassSelected = this.storageClassList.find((sc) => sc['key'] === storageClass);
-    this.poolList.push({ poolname: storageClassSelected['value']['data_pool'] });
-    this.multisiteZoneForm
-      .get('storageDataPool')
-      .setValue(storageClassSelected['value']['data_pool']);
+    let dataPoolName = storageClassSelected['value']['data_pool'];
+    this.poolList.push({ poolname: dataPoolName });
+    this.multisiteZoneForm.get('storageDataPool').setValue(dataPoolName);
+    this.multisiteZoneForm.get('placementDataPool').setValue(dataPoolName);
     this.multisiteZoneForm
       .get('storageCompression')
       .setValue(storageClassSelected['value']['compression_type']);
@@ -231,7 +262,7 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
 
   submit() {
     const values = this.multisiteZoneForm.getRawValue();
-    if (this.action === 'create') {
+    if (this.action === this.actionLabels.CREATE) {
       this.zonegroup = new RgwZonegroup();
       this.zonegroup.name = values['selectedZonegroup'];
       this.zone = new RgwZone();
@@ -240,6 +271,11 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
       this.zone.system_key = new SystemKey();
       this.zone.system_key.access_key = values['access_key'];
       this.zone.system_key.secret_key = values['secret_key'];
+      this.zone.tier_type = values['archive_zone'] ? 'archive' : '';
+      this.zone.sync_from = values['sync_from_zones']
+        ? values['sync_from_zones'].map((zone: RgwZone) => zone.name).join(',')
+        : '';
+      this.zone.sync_from_all = values['sync_from_all'];
       this.rgwZoneService
         .create(
           this.zone,
@@ -254,13 +290,13 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
               NotificationType.success,
               $localize`Zone: '${values['zoneName']}' created successfully`
             );
-            this.activeModal.close();
+            this.closeModal();
           },
           () => {
             this.multisiteZoneForm.setErrors({ cdSubmitButton: true });
           }
         );
-    } else if (this.action === 'edit') {
+    } else if (this.action === this.actionLabels.EDIT) {
       this.zonegroup = new RgwZonegroup();
       this.zonegroup.name = values['selectedZonegroup'];
       this.zone = new RgwZone();
@@ -269,6 +305,11 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
       this.zone.system_key = new SystemKey();
       this.zone.system_key.access_key = values['access_key'];
       this.zone.system_key.secret_key = values['secret_key'];
+      this.zone.tier_type = values['archive_zone'] ? 'archive' : '';
+      this.zone.sync_from = values['sync_from_zones']
+        ? values['sync_from_zones'].map((zone: RgwZone) => zone.name).join(',')
+        : '';
+      this.zone.sync_from_all = values['sync_from_all'];
       this.rgwZoneService
         .update(
           this.zone,
@@ -291,12 +332,29 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
               NotificationType.success,
               $localize`Zone: '${values['zoneName']}' updated successfully`
             );
-            this.activeModal.close();
+            this.closeModal();
           },
           () => {
             this.multisiteZoneForm.setErrors({ cdSubmitButton: true });
           }
         );
+    }
+  }
+
+  onArchiveZoneChange(isArchiveZone: boolean) {
+    if (isArchiveZone) {
+      this.multisiteZoneForm.get('sync_from_all').setValue(false);
+      this.multisiteZoneForm.get('sync_from_all').disable();
+      this.syncFromZonesOptions = this.syncFromZonesOptions.map((zone) => ({
+        ...zone,
+        selected: zone.name === this.master_zone_name
+      }));
+      this.multisiteZoneForm
+        .get('sync_from_zones')
+        .setValue(this.syncFromZonesOptions.filter((opt) => opt.selected));
+    } else {
+      this.multisiteZoneForm.get('sync_from_all').enable();
+      this.multisiteZoneForm.get('sync_from_all').setValue(true);
     }
   }
 }

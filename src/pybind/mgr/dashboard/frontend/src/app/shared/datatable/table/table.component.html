@@ -220,8 +220,24 @@
           class="no-data"
           cdstabledata
           [attr.colspan]="visibleColumns.length + 2">
-        <span class="d-flex justify-content-center align-items-center"
-              i18n>No data to display</span>
+        <div class="empty-state cds-ml-3"
+             cdsStack="vertical"
+             gap="11">
+          <div></div>
+          <div cdsStack="vertical"
+               gap="1">
+            <div>
+              <img src="{{ emptyStateImage }}"
+                   alt="No data available" />
+            </div>
+            <legend class="cds--type-body-compact-02">
+              <ng-container>{{ emptyStateTitle }}</ng-container>
+              <cd-help-text class="cds--type-label-01">
+                {{ emptyStateMessage }}
+              </cd-help-text>
+            </legend>
+          </div>
+        </div>
       </td>
     </tr>
   </tbody>
@@ -229,11 +245,20 @@
 
 <ng-template #rowDetailTpl
              let-row="data">
-  <div *ngIf="row[identifier] === expanded?.[identifier]"
-       (mouseenter)="onRowDetailHover($event)"
-       data-testid="datatable-row-detail">
+  @if (row[identifier] === expanded?.[identifier] && !scrollable) {
+  <div
+    (mouseenter)="onRowDetailHover($event)"
+    data-testid="datatable-row-detail">
     <ng-template [ngTemplateOutlet]="rowDetail.template"></ng-template>
   </div>
+  } @else if (row[identifier] === expanded?.[identifier] && scrollable) {
+  <div
+    (mouseenter)="onRowDetailHover($event)"
+    data-testid="datatable-row-detail"
+    class="scrollable-expanded-row">
+    <ng-template [ngTemplateOutlet]="rowDetail.template"></ng-template>
+  </div>
+  }
 </ng-template>
 
 <ng-template #defaultValueTpl
@@ -312,21 +337,29 @@
   <span *ngIf="row.cdExecuting"
         [ngClass]="column?.customTemplateConfig?.executingClass ? column?.customTemplateConfig.executingClass : 'text-muted italic'">({{ row.cdExecuting }})</span>
 </ng-template>
-
 <ng-template #classAddingTpl
              let-value="data.value">
-  <span class="{{ value | pipeFunction:useCustomClass:this }}">{{ value }}</span>
+  <span *ngIf="value">
+    <span *ngIf="!(value=='active')||(value=='expired')||(value=='pending')">
+      {{ value }}
+    </span>
+    <cds-tag *ngIf="(value==='active')||(value=== 'expired')||(value=== 'pending')"
+             class="{{ value | pipeFunction:useCustomClass:this }}">
+       {{value}}
+    </cds-tag>
+  </span>
 </ng-template>
 
-<ng-template #badgeTpl
+<ng-template #tagTpl
              let-column="data.column"
              let-value="data.value">
   <span *ngFor="let item of (value | array); last as last">
-    <span class="badge"
-          [ngClass]="(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.class) ? column.customTemplateConfig.map[item].class : (column?.customTemplateConfig?.class ? column.customTemplateConfig.class : 'badge-primary')"
-          *ngIf="(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.value) ? column.customTemplateConfig.map[item].value : column?.customTemplateConfig?.prefix ? column.customTemplateConfig.prefix + item : item">
-      {{ (column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.value) ? column.customTemplateConfig.map[item].value : column?.customTemplateConfig?.prefix ? column.customTemplateConfig.prefix + item : item }}
-    </span>
+    <cds-tag [size]="'md'"
+             class="table-tag"
+             [class]="(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.class) ? column.customTemplateConfig.map[item].class : (column?.customTemplateConfig?.class ? column.customTemplateConfig.class : 'tags-primary')"
+             *ngIf="(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.value) ? column.customTemplateConfig.map[item].value : column?.customTemplateConfig?.prefix ? column.customTemplateConfig.prefix + item : item">
+      {{(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.value) ? column.customTemplateConfig.map[item].value : column?.customTemplateConfig?.prefix ? column.customTemplateConfig.prefix + item : item }}
+    </cds-tag>
     <span *ngIf="!last">&nbsp;</span>
   </span>
 </ng-template>
@@ -341,13 +374,13 @@
              let-column="data.column"
              let-value="data.value">
   <span *ngFor="let item of (value | array);">
-    <span
+    <cds-tag
       i18n
       i18n-ngbTooltip
       class="{{(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.class) ? column.customTemplateConfig.map[item].class : ''}}"
       ngbTooltip="{{(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.tooltip) ? column.customTemplateConfig.map[item].tooltip : ''}}">
       {{value}}
-    </span>
+  </cds-tag>
   </span>
 </ng-template>
 
@@ -380,23 +413,20 @@
 
 <ng-template #pathTpl
              let-value="data.value">
-  <span data-toggle="tooltip"
-        [title]="value"
-        class="font-monospace">{{ value | path }}
-    <cd-copy-2-clipboard-button *ngIf="value"
-                                [source]="value"
-                                [byId]="false"
-                                [showIconOnly]="true">
-    </cd-copy-2-clipboard-button>
-  </span>
+  <cd-copy-2-clipboard-button *ngIf="value"
+                              [source]="value"
+                              [byId]="false"
+                              size="lg"
+                              text="{{ value | path }}">
+  </cd-copy-2-clipboard-button>
 </ng-template>
 
 <ng-template #copyTpl
              let-value="data.value">
-  <span class="font-monospace">{{value}}</span>
   <cd-copy-2-clipboard-button *ngIf="value"
                               [source]="value"
                               [byId]="false"
-                              [showIconOnly]="true">
+                              [size]="lg"
+                              [text]="value">
   </cd-copy-2-clipboard-button>
 </ng-template>

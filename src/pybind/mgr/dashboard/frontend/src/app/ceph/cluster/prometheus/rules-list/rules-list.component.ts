@@ -1,6 +1,7 @@
-import { Component, Inject, OnInit } from '@angular/core';
+import { Component, Inject, OnInit, OnDestroy } from '@angular/core';
 
 import _ from 'lodash';
+import { Subscription } from 'rxjs';
 
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
@@ -16,10 +17,11 @@ import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.s
   templateUrl: './rules-list.component.html',
   styleUrls: ['./rules-list.component.scss']
 })
-export class RulesListComponent extends PrometheusListHelper implements OnInit {
+export class RulesListComponent extends PrometheusListHelper implements OnInit, OnDestroy {
   columns: CdTableColumn[];
   declare expandedRow: PrometheusRule;
   selection = new CdTableSelection();
+  rules: PrometheusRule[] = [];
 
   /**
    * Hide active alerts in details of alerting rules as they are already shown
@@ -27,6 +29,7 @@ export class RulesListComponent extends PrometheusListHelper implements OnInit {
    * always supposed to be 'alerting'.
    */
   hideKeys = ['alerts', 'type'];
+  rulesSubscription: Subscription;
 
   constructor(
     public prometheusAlertService: PrometheusAlertService,
@@ -37,17 +40,21 @@ export class RulesListComponent extends PrometheusListHelper implements OnInit {
 
   ngOnInit() {
     super.ngOnInit();
+    this.prometheusAlertService.getRules();
+    this.rulesSubscription = this.prometheusAlertService.rules$.subscribe((rules) => {
+      this.rules = rules;
+    });
     this.columns = [
       { prop: 'name', name: $localize`Name`, cellClass: 'fw-bold', flexGrow: 2 },
       {
         prop: 'labels.severity',
         name: $localize`Severity`,
         flexGrow: 1,
-        cellTransformation: CellTemplate.badge,
+        cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
           map: {
-            critical: { class: 'badge-danger' },
-            warning: { class: 'badge-warning' }
+            critical: { class: 'tag-danger' },
+            warning: { class: 'tag-warning' }
           }
         }
       },
@@ -55,7 +62,7 @@ export class RulesListComponent extends PrometheusListHelper implements OnInit {
         prop: 'group',
         name: $localize`Group`,
         flexGrow: 1,
-        cellTransformation: CellTemplate.badge
+        cellTransformation: CellTemplate.tag
       },
       { prop: 'duration', name: $localize`Duration`, pipe: new DurationPipe(), flexGrow: 1 },
       { prop: 'query', name: $localize`Query`, isHidden: true, flexGrow: 1 },
@@ -65,5 +72,9 @@ export class RulesListComponent extends PrometheusListHelper implements OnInit {
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
+  }
+
+  ngOnDestroy() {
+    this.rulesSubscription.unsubscribe();
   }
 }

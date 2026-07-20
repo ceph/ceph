@@ -8,7 +8,7 @@
                   class="align-items-center"
                   actionName="Enable"
                   (action)="enableRgwModule()">
-      In order to access the import/export/Setup Multi-site Replication feature, the rgw module must be enabled.
+      In order to access the import/export feature, the rgw module must be enabled.
   </cd-alert-panel>
   <cd-alert-panel   *ngIf="restartGatewayMessage"
                     type="warning"
@@ -18,37 +18,28 @@
        routerLink="/services">
        Cluster->Services</a>
   </cd-alert-panel>
-  <cd-table-actions class="btn-group mb-4 me-2"
-                    [permission]="permissions.rgw"
-                    [selection]="selection"
-                    [tableActions]="multisiteReplicationActions">
-  </cd-table-actions>
-  <cd-table-actions *ngIf="showMigrateAndReplicationActions"
-                    class="btn-group mb-4 me-2 secondary"
-                    [permission]="permissions.rgw"
-                    [btnColor]="'light'"
-                    [selection]="selection"
-                    [tableActions]="migrateTableAction">
-  </cd-table-actions>
-  <cd-table-actions *ngIf="!showMigrateAndReplicationActions"
-                    class="btn-group mb-4 me-2"
-                    [permission]="permissions.rgw"
-                    [selection]="selection"
-                    [tableActions]="createTableActions"
-                    [primaryDropDown]="true">
-  </cd-table-actions>
-  <cd-table-actions class="btn-group mb-4 me-2"
-                    [permission]="permissions.rgw"
-                    [btnColor]="'light'"
-                    [selection]="selection"
-                    [tableActions]="importAction">
-  </cd-table-actions>
-  <cd-table-actions class="btn-group mb-4 me-2"
-                    [permission]="permissions.rgw"
-                    [btnColor]="'light'"
-                    [selection]="selection"
-                    [tableActions]="exportAction">
-  </cd-table-actions>
+  <div [cdsStack]="'horizontal'"
+       [gap]="4">
+    <cd-table-actions class="btn-group"
+                      [permission]="permissions.rgw"
+                      [selection]="selection"
+                      [tableActions]="multisiteReplicationActions">
+    </cd-table-actions>
+    <cd-table-actions *ngIf="showMigrateAndReplicationActions"
+                      class="btn-group"
+                      [permission]="permissions.rgw"
+                      [selection]="selection"
+                      [tableActions]="migrateTableAction">
+    </cd-table-actions>
+    <cd-table-actions class="btn-group multisite-actions"
+                      [permission]="permissions.rgw"
+                      [selection]="selection"
+                      [tableActions]="createTableActions"
+                      dropDownOnly="Actions"
+                      [dropDownOnlyBtnColor]="'tertiary'"
+                      [dropDownOnlyOffset]="{ x: 45, y: 0 }">
+    </cd-table-actions>
+  </div>
 </div>
 <div class="card">
   <div class="card-header"
@@ -89,16 +80,20 @@
                 <i [ngClass]="node?.data?.icon"></i>
                 {{ node?.data?.name }}
               </span>
-              <span class="badge badge-success me-2"
-                    *ngIf="node?.data?.is_default">
-                  default
-              </span>
-              <span class="badge badge-warning me-2"
-                    *ngIf="node?.data?.is_master"> master </span>
-              <span class="badge badge-warning me-2"
-                    *ngIf="node?.data?.secondary_zone">
-                secondary-zone
-              </span>
+              <cds-tag class="tag-success me-2"
+                       *ngIf="node?.data?.is_default">
+                    default
+              </cds-tag>
+              <cds-tag class="tag-warning me-2"
+                       *ngIf="node?.data?.is_master"> master </cds-tag>
+              <cds-tag class="tag-warning me-2"
+                       *ngIf="node?.data?.secondary_zone">
+                  secondary-zone
+              </cds-tag>
+              <cds-tag class="tag-info me-2"
+                       *ngIf="node?.data?.tier_type === 'archive'">
+                  archive
+              </cds-tag>
             </div>
             <div class="btn-group align-inline-btns"
                  [ngStyle]="{'visibility': activeNodeId === node?.data?.id ? 'visible' : 'hidden'}"

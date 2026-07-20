@@ -1005,6 +1005,21 @@ int AsioFrontend::init_ssl()
     }
   }
 
+  std::optional<string> ciphersuites = conf->get_val("ssl_ciphersuites");
+  if (ciphersuites) {
+    if (!cert) {
+      lderr(ctx()) << "no ssl_certificate configured for ssl_ciphersuites" << dendl;
+      return -EINVAL;
+    }
+
+    int r = SSL_CTX_set_ciphersuites(ssl_context->native_handle(), ciphersuites->c_str());
+    if (r == 0) {
+      lderr(ctx()) << "no cipher could be selected from ssl_ciphersuites: "
+                   << *ciphersuites << dendl;
+      return -EINVAL;
+    }
+  }
+
   auto ports = config.equal_range("ssl_port");
   auto endpoints = config.equal_range("ssl_endpoint");
 
@@ -1125,7 +1140,7 @@ void AsioFrontend::on_accept(Listener& l, tcp::socket stream)
         auto c = connections.add(*conn);
         // wrap the tcp stream in an ssl stream
         boost::asio::ssl::stream<tcp::socket&> stream{conn->socket, *ssl_context};
-        auto timeout = timeout_timer{context.get_executor(), request_timeout, conn};
+        auto timeout = timeout_timer{yield.get_executor(), request_timeout, conn};
         // do ssl handshake
         boost::system::error_code ec;
         timeout.start();
@@ -1158,7 +1173,7 @@ void AsioFrontend::on_accept(Listener& l, tcp::socket stream)
       [this, s=std::move(stream)] (boost::asio::yield_context yield) mutable {
         auto conn = boost::intrusive_ptr{new Connection(std::move(s))};
         auto c = connections.add(*conn);
-        auto timeout = timeout_timer{context.get_executor(), request_timeout, conn};
+        auto timeout = timeout_timer{yield.get_executor(), request_timeout, conn};
         boost::system::error_code ec;
         handle_connection(context, env, conn->socket, timeout, header_limit,
                           conn->buffer, false, pause_mutex, scheduler.get(),

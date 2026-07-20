@@ -22,7 +22,8 @@ import { BehaviorSubject, Observable, of, Subject, Subscription } from 'rxjs';
 
 import { TableStatus } from '~/app/shared/classes/table-status';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { Icons, IconSize, EMPTY_STATE_IMAGE } from '~/app/shared/enum/icons.enum';
+
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableColumnFilter } from '~/app/shared/models/cd-table-column-filter';
 import { CdTableColumnFiltersChange } from '~/app/shared/models/cd-table-column-filters-change';
@@ -61,8 +62,8 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   executingTpl: TemplateRef<any>;
   @ViewChild('classAddingTpl', { static: true })
   classAddingTpl: TemplateRef<any>;
-  @ViewChild('badgeTpl', { static: true })
-  badgeTpl: TemplateRef<any>;
+  @ViewChild('tagTpl', { static: true })
+  tagTpl: TemplateRef<any>;
   @ViewChild('mapTpl', { static: true })
   mapTpl: TemplateRef<any>;
   @ViewChild('truncateTpl', { static: true })
@@ -206,6 +207,28 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   theme: string;
 
   /**
+   * Use to make the expandable row scrollable with max-height
+   */
+  @Input()
+  scrollable: boolean = true;
+
+  /**
+   * Title to be displayed when there is no data
+   */
+  @Input()
+  emptyStateTitle: string = $localize`No data available`;
+  /**
+   * Helper text to be displayed when there is no data
+   */
+  @Input()
+  emptyStateMessage: string = $localize`There are currently no records to display.`;
+  /**
+   * Illustration image to be displayed when there is no data
+   */
+  @Input()
+  emptyStateImage: string = EMPTY_STATE_IMAGE.default;
+
+  /**
    * Should be a function to update the input data if undefined nothing will be triggered
    *
    * Sometimes it's useful to only define fetchData once.
@@ -333,6 +356,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   }
 
   icons = Icons;
+  iconSize = IconSize;
   cellTemplates: {
     [key: string]: TemplateRef<any>;
   } = {};
@@ -376,6 +400,8 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       return filter.value !== undefined;
     });
   }
+  private previousRows = new Map<string | number, TableItem[]>();
+  private debouncedSearch = this.reloadData.bind(this);
 
   constructor(
     // private ngZone: NgZone,
@@ -442,43 +468,59 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       .subscribe({
         next: (values) => {
           const datasets: TableItem[][] = values.map((val) => {
-            return this.tableColumns.map((column: CdTableColumn, colIndex: number) => {
+            const rowId = val?.id ?? val?.[this.identifier];
+            const prevRow = this.previousRows.get(rowId);
+
+            const newRow: TableItem[] = this.tableColumns.map((column, colIndex) => {
               const rowValue = _.get(val, column?.prop);
 
               const pipeTransform = () =>
                 column?.prop ? column.pipe.transform(rowValue) : column.pipe.transform(val);
 
-              let tableItem = new TableItem({
-                selected: val,
-                data: {
-                  value: column.pipe ? pipeTransform() : rowValue,
-                  row: val,
-                  column: { ...column, ...val }
-                }
-              });
+              let existingCell: TableItem | undefined = prevRow?.[colIndex];
+              const oldValue = existingCell?.data?.value;
 
-              if (colIndex === 0) {
-                tableItem.data = { ...tableItem.data, row: val };
+              const newValue = column.pipe ? pipeTransform() : rowValue;
 
-                if (this.hasDetails) {
-                  tableItem.expandedData = val;
-                  tableItem.expandedTemplate = this.rowDetailTpl;
+              if (existingCell && !_.isEqual(oldValue, newValue)) {
+                // here i am updating value in place
+                existingCell.data.value = newValue;
+                existingCell.data.row = val;
+                existingCell.data.column = { ...column, ...val };
+
+                if (colIndex === 0 && this.hasDetails) {
+                  existingCell.expandedData = val;
+                  existingCell.expandedTemplate = this.rowDetailTpl;
                 }
               }
 
-              if (column.cellClass && _.isFunction(column.cellClass)) {
-                this.model.header[colIndex].className = column.cellClass({
-                  row: val,
-                  column,
-                  value: rowValue
-                });
-              }
-
-              tableItem.template = column.cellTemplate || this.defaultValueTpl;
-              return tableItem;
+              return (
+                existingCell ??
+                new TableItem({
+                  selected: val,
+                  data: {
+                    value: newValue,
+                    row: val,
+                    column: { ...column, ...val }
+                  },
+                  template: column.cellTemplate || this.defaultValueTpl,
+                  ...(colIndex === 0 && this.hasDetails
+                    ? { expandedData: val, expandedTemplate: this.rowDetailTpl }
+                    : {})
+                })
+              );
             });
+
+            this.previousRows.set(rowId, newRow);
+            return newRow;
           });
-          if (!_.isEqual(this.model.data, datasets)) {
+          // Only update  the data if actual row content changed
+          const prevRaw = this.model.data.map((row) => row?.[0]?.data?.row);
+          const newRaw = values;
+
+          const dataChanged = !_.isEqual(prevRaw, newRaw);
+
+          if (dataChanged || this.model.data.length !== datasets.length) {
             this.model.data = datasets;
           }
         }
@@ -516,7 +558,13 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     // debounce reloadData method so that search doesn't run api requests
     // for every keystroke
     if (this.serverSide) {
-      this.reloadData = _.debounce(this.reloadData, 1000);
+      this.reloadData = _.throttle(this.reloadData.bind(this), 1000, {
+        leading: true,
+        trailing: false
+      });
+      this.debouncedSearch = _.debounce(this.reloadData.bind(this), 1000);
+    } else {
+      this.debouncedSearch = this.reloadData.bind(this);
     }
 
     // ngx-datatable triggers calculations each time mouse enters a row,
@@ -562,9 +610,9 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     // this method was triggered by ngOnChanges().
     if (this.fetchData.observers.length > 0) {
       this.loadingIndicator = true;
-      const loadingSubscription = this.fetchData.subscribe(() => {
-        this.loadingIndicator = false;
-        this.cdRef.detectChanges();
+      const loadingSubscription = this.fetchData.subscribe({
+        next: () => this.cdRef.detectChanges(),
+        complete: () => (this.loadingIndicator = false)
       });
       this._subscriptions.add(loadingSubscription);
     }
@@ -799,7 +847,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     this.cellTemplates.perSecond = this.perSecondTpl;
     this.cellTemplates.executing = this.executingTpl;
     this.cellTemplates.classAdding = this.classAddingTpl;
-    this.cellTemplates.badge = this.badgeTpl;
+    this.cellTemplates.tag = this.tagTpl;
     this.cellTemplates.map = this.mapTpl;
     this.cellTemplates.truncate = this.truncateTpl;
     this.cellTemplates.timeAgo = this.timeAgoTpl;
@@ -860,7 +908,8 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       });
       context.pageInfo.offset = this.userConfig.offset;
       context.pageInfo.limit = this.userConfig.limit;
-      context.search = this.userConfig.search;
+      if (this.serverSide) context.search = this.search;
+      else context.search = this.userConfig.search;
       if (this.userConfig.sorts?.length) {
         const sort = this.userConfig.sorts[0];
         context.sort = `${sort.dir === 'desc' ? '-' : '+'}${sort.prop}`;
@@ -882,6 +931,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     this.userConfig.limit = this.model.pageLength;
 
     if (this.serverSide) {
+      this.loadingIndicator = true;
       this.reloadData();
       return;
     }
@@ -978,15 +1028,23 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
         }
       }
     });
-    if (newSelected.size === 0) return;
+
     const newSelectedArray = Array.from(newSelected.values());
 
-    newSelectedArray?.forEach?.((selection: any) => {
+    if (newSelectedArray.length === 0) {
+      this.selection.selected = [];
+      this.updateSelection.emit(_.clone(this.selection));
+      return;
+    }
+
+    newSelectedArray.forEach((selection: any) => {
       const rowIndex = this.model.data.findIndex(
         (row: TableItem[]) =>
           _.get(row, [0, 'selected', this.identifier]) === selection[this.identifier]
       );
-      rowIndex > -1 && this.model.selectRow(rowIndex, true);
+      if (rowIndex > -1) {
+        this.model.selectRow(rowIndex, true);
+      }
     });
 
     if (
@@ -998,11 +1056,9 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
     this.selection.selected = newSelectedArray;
 
-    if (this.updateSelectionOnRefresh === 'never') {
-      return;
+    if (this.updateSelectionOnRefresh !== 'never') {
+      this.updateSelection.emit(_.clone(this.selection));
     }
-
-    this.updateSelection.emit(_.clone(this.selection));
   }
 
   updateExpanded() {
@@ -1023,7 +1079,12 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   _toggleSelection(rowIndex: number, isSelected: boolean) {
     const selectedData = _.get(this.model.data?.[rowIndex], [0, 'selected']);
     if (isSelected) {
-      this.selection.selected = [...this.selection.selected, selectedData];
+      const alreadySelected = this.selection.selected.some(
+        (s) => s[this.identifier] === selectedData[this.identifier]
+      );
+      if (!alreadySelected) {
+        this.selection.selected = [...this.selection.selected, selectedData];
+      }
     } else {
       this.selection.selected = this.selection.selected.filter(
         (s) => s[this.identifier] !== selectedData[this.identifier]
@@ -1032,14 +1093,15 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   }
 
   onSelect(selectedRowIndex: number) {
-    const selectedData = _.get(this.model.data?.[selectedRowIndex], [0, 'selected']);
     if (this.selectionType === 'single') {
       this.model.selectAll(false);
-      this.selection.selected = [selectedData];
+      this.selection.selected = [_.get(this.model.data?.[selectedRowIndex], [0, 'selected'])];
+      this.model.selectRow(selectedRowIndex, true);
     } else {
-      this.selection.selected = [...this.selection.selected, selectedData];
+      const isSelected = this.model.rowsSelected[selectedRowIndex] ?? false;
+      this._toggleSelection(selectedRowIndex, !isSelected);
+      this.model.selectRow(selectedRowIndex, !isSelected);
     }
-    this.model.selectRow(selectedRowIndex, true);
     this.updateSelection.emit(this.selection);
   }
 
@@ -1203,7 +1265,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
         this.userConfig.limit = this.limit;
         this.userConfig.search = this.search;
         this.updating = false;
-        this.reloadData();
+        this.debouncedSearch();
       }
       this.rows = this.data;
     } else {

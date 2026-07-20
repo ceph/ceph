@@ -8,6 +8,7 @@
 #include "crimson/common/log.h"
 #include "crimson/osd/scrub/scrub_validator.h"
 #include "osd/ECUtil.h"
+#include "osd/ECUtilL.h"
 
 SET_SUBSYS(osd);
 
@@ -31,7 +32,7 @@ struct shard_evaluation_t {
 
   std::optional<object_info_t> object_info;
   std::optional<SnapSet> snapset;
-  std::optional<ECUtil::HashInfo> hinfo;
+  std::optional<ECLegacy::ECUtilL::HashInfo> hinfo;
 
   size_t omap_keys{0};
   size_t omap_bytes{0};
@@ -132,11 +133,11 @@ shard_evaluation_t evaluate_object_shard(
   }
 
   if (policy.is_ec()) {
-    auto xiter = obj.attrs.find(ECUtil::get_hinfo_key());
+    auto xiter = obj.attrs.find(ECLegacy::ECUtilL::get_hinfo_key());
     if (xiter == obj.attrs.end()) {
       ret.shard_info.set_hinfo_missing();
     } else {
-      ret.hinfo = ECUtil::HashInfo{};
+      ret.hinfo = ECLegacy::ECUtilL::HashInfo{};
       try {
 	auto bliter = xiter->second.cbegin();
 	decode(*(ret.hinfo), bliter);
@@ -210,10 +211,10 @@ librados::obj_err_t compare_candidate_to_authoritative(
   }
 
   if (policy.is_ec()) {
-    auto aiter = auth_si.attrs.find(ECUtil::get_hinfo_key());
+    auto aiter = auth_si.attrs.find(ECLegacy::ECUtilL::get_hinfo_key());
     ceph_assert(aiter != auth_si.attrs.end());
 
-    auto citer = cand_si.attrs.find(ECUtil::get_hinfo_key());
+    auto citer = cand_si.attrs.find(ECLegacy::ECUtilL::get_hinfo_key());
     if (citer == cand_si.attrs.end() ||
 	!aiter->second.contents_equal(citer->second)) {
       ret.errors |= obj_err_t::HINFO_INCONSISTENCY;
@@ -226,7 +227,7 @@ librados::obj_err_t compare_candidate_to_authoritative(
 
   auto is_sys_attr = [&policy](const auto &str) {
     return str == OI_ATTR || str == SS_ATTR ||
-      (policy.is_ec() && str == ECUtil::get_hinfo_key());
+      (policy.is_ec() && str == ECLegacy::ECUtilL::get_hinfo_key());
   };
   for (auto aiter = auth_si.attrs.begin(); aiter != auth_si.attrs.end(); ++aiter) {
     if (is_sys_attr(aiter->first)) continue;

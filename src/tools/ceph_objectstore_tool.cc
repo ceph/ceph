@@ -38,7 +38,7 @@
 #include "osd/PGLog.h"
 #include "osd/OSD.h"
 #include "osd/PG.h"
-#include "osd/ECUtil.h"
+#include "osd/ECUtilL.h"
 
 #include "json_spirit/json_spirit_value.h"
 #include "json_spirit/json_spirit_reader.h"
@@ -2899,9 +2899,9 @@ int print_obj_info(ObjectStore *store, coll_t coll, ghobject_t &ghobj, Formatter
     }
   }
   bufferlist hattr;
-  gr = store->getattr(ch, ghobj, ECUtil::get_hinfo_key(), hattr);
+  gr = store->getattr(ch, ghobj, ECLegacy::ECUtilL::get_hinfo_key(), hattr);
   if (gr == 0) {
-    ECUtil::HashInfo hinfo;
+    ECLegacy::ECUtilL::HashInfo hinfo;
     auto hp = hattr.cbegin();
     try {
       decode(hinfo, hp);
@@ -3999,6 +3999,7 @@ int main(int argc, char **argv)
     op == "get-inc-osdmap" ||
     objcmd == "get-bytes" ||
     objcmd == "get-attrs" ||
+    objcmd == "get-attr" ||
     objcmd == "get-omap" ||
     objcmd == "get-omaphdr" ||
     objcmd == "list-attrs" ||

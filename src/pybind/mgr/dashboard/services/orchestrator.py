@@ -12,7 +12,7 @@ from orchestrator import DaemonDescription, DeviceLightLoc, HostSpec, \
 from .. import mgr
 from ._paginate import ListPaginator
 
-logger = logging.getLogger('orchestrator')
+logger = logging.getLogger(__name__)
 
 
 # pylint: disable=abstract-method
@@ -164,8 +164,9 @@ class OsdManager(ResourceManager):
 
 class DaemonManager(ResourceManager):
     @wait_api_result
-    def action(self, daemon_name='', action='', image=None):
-        return self.api.daemon_action(daemon_name=daemon_name, action=action, image=image)
+    def action(self, daemon_name='', action='', image=None, force=False):
+        return self.api.daemon_action(daemon_name=daemon_name, action=action, image=image,
+                                      force=force)
 
 
 class UpgradeManager(ResourceManager):
@@ -222,6 +223,24 @@ class CertStoreManager(ResourceManager):
                                            no_exception_when_missing=ignore_missing_exception)
 
 
+class MonitoringManager(ResourceManager):
+
+    @wait_api_result
+    def get_prometheus_access_info(self) -> Dict[str, str]:
+        """Get Prometheus access information"""
+        return self.api.get_prometheus_access_info()
+
+    @wait_api_result
+    def get_alertmanager_access_info(self) -> Dict[str, str]:
+        """Get Alertmanager access information"""
+        return self.api.get_alertmanager_access_info()
+
+    @wait_api_result
+    def get_security_config(self) -> Dict[str, str]:
+        """Get security config information"""
+        return self.api.get_security_config()
+
+
 class OrchClient(object):
 
     _instance = None
@@ -244,6 +263,7 @@ class OrchClient(object):
         self.upgrades = UpgradeManager(self.api)
         self.hardware = HardwareManager(self.api)
         self.cert_store = CertStoreManager(self.api)
+        self.monitoring = MonitoringManager(self.api)
 
     def available(self, features: Optional[List[str]] = None) -> bool:
         available = self.status()['available']

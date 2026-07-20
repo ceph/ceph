@@ -260,7 +260,7 @@ available options.
 
 * The ``--ssh-user *<user>*`` option makes it possible to designate which SSH
   user cephadm will use to connect to hosts. The associated SSH key will be
-  added to ``/home/*<user>*/.ssh/authorized_keys``. The user that you
+  added to ``~*<user>*/.ssh/authorized_keys``. The user that you
   designate with this option must have passwordless sudo access.
 
 * If you are using a container image from a registry that requires

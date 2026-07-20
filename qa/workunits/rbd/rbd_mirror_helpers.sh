@@ -442,10 +442,9 @@ stop_mirror()
 
     local pid
     pid=$(cat $(daemon_pid_file "${cluster}") 2>/dev/null) || :
-    if [ -n "${pid}" ]
-    then
+    if [ -n "${pid}" ]; then
         kill ${sig} ${pid}
-        for s in 1 2 4 8 16 32; do
+        for s in 0 1 2 4 8 16 32; do
             sleep $s
             ps auxww | awk -v pid=${pid} '$2 == pid {print; exit 1}' && break
         done
@@ -510,12 +509,16 @@ all_admin_daemons()
 
 status()
 {
-    local cluster daemon image_pool image_ns image
+    local cluster image_pool image_ns image
 
     for cluster in ${CLUSTER1} ${CLUSTER2}
     do
         echo "${cluster} status"
-        CEPH_ARGS='' ceph --cluster ${cluster} -s
+        # if "ceph -s" fails, assume that the cluster is broken or
+        # unavailable and skip gathering details for it
+        CEPH_ARGS='' ceph --cluster ${cluster} -s || continue
+
+        echo "${cluster} service status"
         CEPH_ARGS='' ceph --cluster ${cluster} service dump
         CEPH_ARGS='' ceph --cluster ${cluster} service status
         echo
@@ -581,7 +584,7 @@ status()
                 continue
             fi
 
-            echo "${daemon} rbd-mirror process in ps output:"
+            echo "${cluster} rbd-mirror process in ps output:"
             if ps auxww |
                 awk -v pid=${pid} 'NR == 1 {print} $2 == pid {print; exit 1}'
             then
@@ -795,6 +798,34 @@ get_newest_mirror_snapshot()
         ${log} || true
 }
 
+get_newest_complete_mirror_snapshot_id()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local -n _snap_id=$4
+
+    _snap_id=$(rbd --cluster ${cluster} snap list --all ${pool}/${image} --format xml | \
+        xmlstarlet sel -t -v "(//snapshots/snapshot[namespace/complete='true']/id)[last()]")
+}
+
+wait_for_non_primary_snap_present()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local primary_snap_id=$4
+    local s
+
+    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32; do
+        sleep ${s}
+        rbd --cluster ${cluster} snap list --all ${pool}/${image} --format xml | \
+            xmlstarlet sel -t -c "//snapshots/snapshot/namespace[primary_snap_id='${primary_snap_id}']" && return 0
+    done
+
+    return 1
+}
+
 wait_for_snapshot_sync_complete()
 {
     local local_cluster=$1
@@ -806,7 +837,6 @@ wait_for_snapshot_sync_complete()
     local status_log=${TEMPDIR}/$(mkfname ${cluster}-${remote_pool}-${image}.status)
     local local_status_log=${TEMPDIR}/$(mkfname ${local_cluster}-${local_pool}-${image}.status)
 
-    mirror_image_snapshot "${cluster}" "${remote_pool}" "${image}"
     get_newest_mirror_snapshot "${cluster}" "${remote_pool}" "${image}" "${status_log}"
     local snapshot_id=$(xmlstarlet sel -t -v "//snapshot/id" < ${status_log})
 
@@ -836,12 +866,12 @@ wait_for_replay_complete()
     if [ "${RBD_MIRROR_MODE}" = "journal" ]; then
         wait_for_journal_replay_complete ${local_cluster} ${cluster} ${local_pool} ${remote_pool} ${image}
     elif [ "${RBD_MIRROR_MODE}" = "snapshot" ]; then
+        mirror_image_snapshot "${cluster}" "${remote_pool}" "${image}"
         wait_for_snapshot_sync_complete ${local_cluster} ${cluster} ${local_pool} ${remote_pool} ${image}
     else
         return 1
     fi
 }
-
 
 test_status_in_pool_dir()
 {

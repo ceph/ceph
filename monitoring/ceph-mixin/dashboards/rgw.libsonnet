@@ -72,19 +72,6 @@ local g = import 'grafonnet/grafana.libsonnet';
     .addTemplate(
       $.addClusterTemplate()
     )
-
-    .addTemplate(
-      $.addTemplateSchema(
-        'rgw_servers',
-        '$datasource',
-        'label_values(ceph_rgw_metadata{%(matchers)s}, ceph_daemon)' % $.matchers(),
-        1,
-        true,
-        1,
-        null,
-        'rgw.(.*)'
-      )
-    )
     .addPanels([
       RgwSyncOverviewPanel(
         'Replication (throughput) from Source Zone',
@@ -157,7 +144,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       .addTargets(
         [
           $.addTargetSchema(
-            expr='rate(ceph_rgw_sync_delta_sync_delta[$__rate_interval])',
+            expr='rate(ceph_rgw_sync_delta_sync_delta{%(matchers)s}[$__rate_interval])',
             datasource='$datasource',
             instant=false,
             legendFormat='{{instance_id}} - {{shard_id}}',
@@ -701,6 +688,46 @@ local g = import 'grafonnet/grafana.libsonnet';
           transform: 'negative-Y',
         },
       ]),
+      $.addRowSchema(false,
+                     true,
+                     'RGW Overview - Bucket Notification') +
+      {
+        gridPos: { x: 0, y: 27, w: 24, h: 1 },
+      },
+      RgwOverviewPanel(
+        'Pending Notifications by Topic',
+        'Shows the number of pending notifications in each Object topic queue, indicating how many messages are waiting to be delivered',
+        '',
+        'short',
+        |||
+          (
+           ceph_rgw_topic_persistent_topic_len
+          )
+        |||,
+        '{{topic}}',
+        0,
+        28,
+        12,
+        8
+      )
+      + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'list', placement: 'right', showLegend: true, sortDesc: true } } },
+      RgwOverviewPanel(
+        'Pending Notifications Size by Topic',
+        'Shows the total size of pending notifications stored per Object topic, reflecting how much data is waiting to be delivered.',
+        'bytes',
+        'short',
+        |||
+          (
+           ceph_rgw_topic_persistent_topic_size
+          )
+        |||,
+        '{{topic}}',
+        12,
+        28,
+        12,
+        8
+      )
+      + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'list', placement: 'right', showLegend: true, sortDesc: true } } },
     ]),
   'radosgw-detail.json':
     local RgwDetailsPanel(aliasColors,

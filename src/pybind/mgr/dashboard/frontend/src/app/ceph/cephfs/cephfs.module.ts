@@ -46,8 +46,10 @@ import {
   NumberModule,
   PlaceholderModule,
   SelectModule,
+  TagModule,
   TimePickerModule,
-  TreeviewModule
+  TreeviewModule,
+  TabsModule
 } from 'carbon-components-angular';
 
 import AddIcon from '@carbon/icons/es/add/32';
@@ -84,7 +86,9 @@ import Trash from '@carbon/icons/es/trash-can/32';
     LayoutModule,
     ComboBoxModule,
     IconModule,
-    BaseChartDirective
+    BaseChartDirective,
+    TabsModule,
+    TagModule
   ],
   declarations: [
     CephfsDetailComponent,

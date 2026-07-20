@@ -150,7 +150,7 @@ class BlockDevice {
 public:
   CephContext* cct;
   typedef void (*aio_callback_t)(void *handle, void *aio);
-  void collect_alerts(osd_alert_list_t& alerts, const std::string& device_name);
+  virtual void collect_alerts(osd_alert_list_t& alerts, const std::string& device_name);
 
 private:
   ceph::mutex ioc_reap_lock = ceph::make_mutex("BlockDevice::ioc_reap_lock");
@@ -246,6 +246,9 @@ public:
 
   /// hook to provide utilization of thinly-provisioned device
   virtual int get_ebd_state(ExtBlkDevState &state) const {
+    return -ENOENT;
+  }
+  virtual int detect_ebd(std::string& id) {
     return -ENOENT;
   }
 

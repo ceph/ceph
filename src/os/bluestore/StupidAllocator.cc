@@ -67,56 +67,56 @@ int64_t StupidAllocator::allocate_int(
 
   auto p = free[0].begin();
 
-  if (!hint)
+  if (hint < 0)
     hint = last_alloc;
 
   // search up (from hint)
-  if (hint) {
-    for (bin = orig_bin; bin < (int)free.size(); ++bin) {
-      p = free[bin].lower_bound(hint);
-      while (p != free[bin].end()) {
-	if (p.get_len() >= want_size) {
-	  goto found;
-	}
-	++p;
+  for (bin = orig_bin; bin < (int)free.size(); ++bin) {
+    p = free[bin].lower_bound(hint);
+    while (p != free[bin].end()) {
+      if (p.get_len() >= want_size) {
+        goto found;
       }
+      ++p;
     }
   }
 
   // search up (from origin, and skip searched extents by hint)
-  for (bin = orig_bin; bin < (int)free.size(); ++bin) {
-    p = free[bin].begin();
-    auto end = hint ? free[bin].lower_bound(hint) : free[bin].end();
-    while (p != end) {
-      if (p.get_len() >= want_size) {
-	goto found;
+  if (hint) {
+    for (bin = orig_bin; bin < (int)free.size(); ++bin) {
+      p = free[bin].begin();
+      auto end = free[bin].lower_bound(hint);
+      while (p != end) {
+        if (p.get_len() >= want_size) {
+	  goto found;
+        }
+        ++p;
       }
-      ++p;
     }
   }
 
   // search down (hint)
-  if (hint) {
-    for (bin = orig_bin; bin >= 0; --bin) {
-      p = free[bin].lower_bound(hint);
-      while (p != free[bin].end()) {
-	if (p.get_len() >= alloc_unit) {
-	  goto found;
-	}
-	++p;
+  for (bin = orig_bin; bin >= 0; --bin) {
+    p = free[bin].lower_bound(hint);
+    while (p != free[bin].end()) {
+      if (p.get_len() >= alloc_unit) {
+        goto found;
       }
+      ++p;
     }
   }
 
   // search down (from origin, and skip searched extents by hint)
-  for (bin = orig_bin; bin >= 0; --bin) {
-    p = free[bin].begin();
-    auto end = hint ? free[bin].lower_bound(hint) : free[bin].end();
-    while (p != end) {
-      if (p.get_len() >= alloc_unit) {
-	goto found;
+  if (hint) {
+    for (bin = orig_bin; bin >= 0; --bin) {
+      p = free[bin].begin();
+      auto end = free[bin].lower_bound(hint);
+      while (p != end) {
+        if (p.get_len() >= alloc_unit) {
+	  goto found;
+        }
+        ++p;
       }
-      ++p;
     }
   }
 

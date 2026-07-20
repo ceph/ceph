@@ -32,31 +32,29 @@ def download(ctx, config):
     assert isinstance(config, dict)
     log.info('Downloading s3-tests...')
     testdir = teuthology.get_testdir(ctx)
+    s3tests_branch = ctx.config.get('suite_branch') or ctx.config.get('branch')
+    s3tests_repo = ctx.config.get('suite_repo') or teuth_config.get_ceph_qa_suite_git_url()
+    s3tests_sha1 = ctx.config.get('suite_sha1')
+    if not s3tests_branch:
+        raise ValueError(
+            "Could not determine what branch to use for ceph suite.")
     for (client, client_config) in config.items():
-        s3tests_branch = client_config.get('force-branch', None)
-        if not s3tests_branch:
-            raise ValueError(
-                "Could not determine what branch to use for s3-tests. Please add 'force-branch: {s3-tests branch name}' to the .yaml config for this s3tests task.")
-
         log.info("Using branch '%s' for s3tests", s3tests_branch)
-        sha1 = client_config.get('sha1')
-        git_remote = client_config.get('git_remote', teuth_config.ceph_git_base_url)
         ctx.cluster.only(client).run(
             args=[
-                'git', 'clone',
-                '-b', s3tests_branch,
-                git_remote + 's3-tests.git',
-                '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client),
+                'git', 'clone', '-b', s3tests_branch,
+                s3tests_repo, '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client),
                 ],
             )
-        if sha1 is not None:
+        if s3tests_sha1 is not None:
             ctx.cluster.only(client).run(
                 args=[
                     'cd', '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client),
                     run.Raw('&&'),
-                    'git', 'reset', '--hard', sha1,
+                    'git', 'reset', '--hard', s3tests_sha1,
                     ],
                 )
+
         if client_config.get('boto3_extensions'):
             ctx.cluster.only(client).run(
                     args=['mkdir',
@@ -372,6 +370,10 @@ def configure(ctx, config):
         if rgw_restore_debug_interval:
             s3tests_conf['s3 main']['rgw_restore_debug_interval'] = rgw_restore_debug_interval
 
+        rgw_restore_processor_period = properties.get('rgw_restore_processor_period')
+        if rgw_restore_processor_period:
+            s3tests_conf['s3 main']['rgw_restore_processor_period'] = rgw_restore_processor_period
+
         if ctx.rgw_cloudtier is not None:
             log.info(' ctx.rgw_cloudtier config  is %s ...', ctx.rgw_cloudtier.config)
             client_rgw_config = ctx.rgw_cloudtier.config.get(client)
@@ -453,7 +455,7 @@ def run_tests(ctx, config):
         client_config = client_config or {}
         (remote,) = ctx.cluster.only(client).remotes.keys()
         args = [
-            'cd', '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client), run.Raw('&&'),
+            'cd', '{tdir}/s3-tests-{client}/src/test/rgw/s3-tests'.format(tdir=testdir, client=client), run.Raw('&&'),
             'S3TEST_CONF={tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client),
             'BOTO_CONFIG={tdir}/boto-{client}.cfg'.format(tdir=testdir, client=client)
             ]

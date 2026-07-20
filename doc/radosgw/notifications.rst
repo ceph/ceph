@@ -1,3 +1,5 @@
+.. _radosgw-notifications:
+
 ====================
 Bucket Notifications
 ====================
@@ -210,6 +212,9 @@ updating, use the name of an existing topic and different endpoint values).
    [&Attributes.entry.16.key=user-name&Attributes.entry.16.value=<user-name-string>]
    [&Attributes.entry.17.key=password&Attributes.entry.17.value=<password-string>]
    [&Attributes.entry.18.key=kafka-brokers&Attributes.entry.18.value=<kafka-broker-list>]
+   [&Attributes.entry.19.key=ssl-certificate-location&Attributes.entry.19.value=<file path>]
+   [&Attributes.entry.20.key=ssl-key-location&Attributes.entry.20.value=<file path>]
+   [&Attributes.entry.21.key=ssl-key-password&Attributes.entry.21.value=<password-string>]
 
 Request parameters:
 
@@ -317,7 +322,6 @@ Request parameters:
    for ``user``/``password``.
  - ``mechanism``: May be provided together with ``user``/``password``
    (default: ``PLAIN``). The supported SASL mechanisms are:
->>>>>>> f5efad4a37d (doc/radosgw: Small fixes and improvements in notifications.rst, part 1)
 
   - PLAIN
   - SCRAM-SHA-256
@@ -334,9 +338,23 @@ Request parameters:
   - ``broker``: Messages are considered "delivered" if acked by the broker. (This
     is the default.)
 
- - ``kafka-brokers``: A command-separated list of ``host:port`` of Kafka brokers:
-   these brokers (may contain a broker which is defined in Kafka URI) will be
-   added to Kafka URI to support sending notifcations to a Kafka cluster.
+ - kafka-brokers: A command-separated list of host:port of kafka brokers. These brokers (may contain a broker which is defined in kafka uri) will be added to kafka uri to support sending notifcations to a kafka cluster.
+ - ``ssl-certificate-location``: The path to a PEM-encoded client certificate
+   file to present to the Kafka broker for mutual TLS (mTLS) authentication.
+   This enables certificate-based client identity and must be used together
+   with ``ssl-key-location`` and ``use-ssl=true``. Specifying only one of
+   ``ssl-certificate-location`` or ``ssl-key-location`` will cause the
+   connection to fail.
+ - ``ssl-key-location``: The path to a PEM-encoded private key file
+   corresponding to the client certificate specified in
+   ``ssl-certificate-location``.
+ - ``ssl-key-password``: The password for the client private key, if the key
+   file is encrypted. This is optional and only required when the private key
+   is password-protected.
+
+   The same security considerations in place for this parameter as
+   for ``user``/``password``: it should be provided over HTTPS or
+   ``rgw_allow_notification_secrets_in_cleartext`` must be set to "true".
 
 .. note::
 
@@ -614,6 +632,12 @@ Valid AttributeName that can be passed:
   - kafka-ack-level: No end2end acknowledgement is required. Messages may persist in the
     broker before being delivered to their final destinations. 
   - kafka-brokers: Set endpoint with broker(s) as a comma-separated list of host or host:port (default port 9092).
+  - ``ssl-certificate-location``: Path to a PEM-encoded client certificate for mTLS
+    authentication to the Kafka broker. Must be provided together with
+    ``ssl-key-location``; specifying only one will cause the connection to fail.
+  - ``ssl-key-location``: Path to a PEM-encoded private key corresponding to the
+    client certificate. Must be provided together with ``ssl-certificate-location``.
+  - ``ssl-key-password``: Password for an encrypted private key (optional).
 
 Notifications
 ~~~~~~~~~~~~~

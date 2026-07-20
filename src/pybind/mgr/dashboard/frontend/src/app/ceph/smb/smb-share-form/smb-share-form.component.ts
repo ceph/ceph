@@ -174,16 +174,21 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
       const subvolGroup = this.smbShareForm.getValue('subvolume_group') || ''; // Default to empty if not present
       const subvol = this.smbShareForm.getValue('subvolume');
 
-      this.subvolService
-        .info(fsName, subvol, subvolGroup)
-        .pipe(map((data: any) => data['path']))
-        .subscribe(
-          (path: string) => {
-            this.updatePath(path);
-            resolve();
-          },
-          (error: any) => reject(error)
-        );
+      if (subvol) {
+        this.subvolService
+          .info(fsName, subvol, subvolGroup)
+          .pipe(map((data: any) => data['path']))
+          .subscribe(
+            (path: string) => {
+              this.updatePath(path);
+              resolve();
+            },
+            (error: any) => reject(error)
+          );
+      } else {
+        this.updatePath(`/volumes/${subvolGroup}/`);
+        resolve();
+      }
     });
   }
 

@@ -1,0 +1,57 @@
+@use './src/styles/vendor/variables' as vv;
+@use '@carbon/layout';
+@use '@carbon/styles/scss/theme';
+
+:host ::ng-deep cds-panel {
+  &[panel-size='sm'] .cds--header-panel--expanded {
+    inline-size: 20rem;
+  }
+
+  &[panel-size='md'] .cds--header-panel--expanded {
+    inline-size: 30rem;
+  }
+
+  &[panel-size='lg'] .cds--header-panel--expanded {
+    inline-size: 40rem;
+  }
+
+  &[panel-size='xl'] .cds--header-panel--expanded {
+    inline-size: 60rem;
+  }
+
+  &[panel-size='2xl'] .cds--header-panel--expanded {
+    inline-size: 80rem;
+  }
+
+  .cds--header-panel--expanded {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    max-inline-size: 100%;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: layout.$spacing-05 layout.$spacing-05 0 layout.$spacing-05;
+  }
+
+  .panel-content {
+    overflow-x: hidden;
+    padding: 0 layout.$spacing-05 0 layout.$spacing-05;
+  }
+
+  .panel-footer {
+    border-top: 1px solid theme.$border-subtle-02;
+    display: flex;
+    justify-content: flex-end;
+  }
+}
+
+.overlay {
+  background-color: vv.$side-panel-overlay-bg;
+  bottom: 0;
+  left: 0;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 1000;
+}

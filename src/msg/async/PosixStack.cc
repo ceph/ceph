@@ -335,7 +335,7 @@ int PosixWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, C
   return 0;
 }
 
-PosixNetworkStack::PosixNetworkStack(CephContext *c)
-    : NetworkStack(c)
+PosixNetworkStack::PosixNetworkStack(CephContext *c, bool try_smc)
+    : NetworkStack(c), try_smc(try_smc)
 {
 }

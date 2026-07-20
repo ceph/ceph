@@ -1,6 +1,8 @@
 import logging
 from typing import List, Any, Tuple, Dict, cast, Optional, TYPE_CHECKING
 
+from ceph.deployment.utils import wrap_ipv6
+
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import MgmtGatewaySpec, GrafanaSpec, ServiceSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_endpoints
@@ -26,12 +28,14 @@ class MgmtGatewayService(CephadmService):
         return daemon_spec
 
     def get_service_endpoints(self, service_name: str) -> List[str]:
+        # return host:port strings for every daemon of the given service
+        # wrap IPv6 addresses in square brackets so a port can be added later
         srv_entries = []
         for dd in self.mgr.cache.get_daemons_by_service(service_name):
             assert dd.hostname is not None
             addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
             port = dd.ports[0] if dd.ports else None
-            srv_entries.append(f'{addr}:{port}')
+            srv_entries.append(f'{wrap_ipv6(addr)}:{port}')
         return srv_entries
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
@@ -83,11 +87,14 @@ class MgmtGatewayService(CephadmService):
         return self.mgr.cert_mgr.generate_cert(host_fqdn, ip)
 
     def get_service_discovery_endpoints(self) -> List[str]:
+        # the mgmt gateway uses this internally when generating its nginx
+        # configuration and the URL prefixes that we publish to the world.
+        # A literal IPv6 address needs to be wrapped in brackets.
         sd_endpoints = []
         for dd in self.mgr.cache.get_daemons_by_service('mgr'):
             assert dd.hostname is not None
             addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
-            sd_endpoints.append(f"{addr}:{self.mgr.service_discovery_port}")
+            sd_endpoints.append(f"{wrap_ipv6(addr)}:{self.mgr.service_discovery_port}")
         return sd_endpoints
 
     @classmethod

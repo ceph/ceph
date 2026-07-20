@@ -12,6 +12,7 @@
  */
 #ifndef MON_NVMEOFGWSERIALIZE_H_
 #define MON_NVMEOFGWSERIALIZE_H_
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -83,6 +84,22 @@ inline std::ostream& operator<<(
   return os;
 }
 
+inline std::ostream& operator<<(
+  std::ostream& os, const  gw_admin_state_t value) {
+  switch (value) {
+
+  case gw_admin_state_t:: GW_ADMIN_ENABLED:
+    os << "ADMIN_ENABLED";
+    break;
+  case gw_admin_state_t:: GW_ADMIN_DISABLED:
+    os << "ADMIN_DISABLED";
+    break;
+  default:
+    os << "Invalid " << (int)value << " ";
+  }
+  return os;
+}
+
 inline std::ostream& operator<<(std::ostream& os, const SmState value) {
   os << "SM_STATE [ ";
   for (auto& state_itr: value ) {
@@ -106,7 +123,8 @@ inline std::ostream& operator<<(std::ostream& os, const BeaconListener value) {
 }
 
 inline std::ostream& operator<<(std::ostream& os, const BeaconSubsystem value) {
-  os << "BeaconSubsystem( nqn:" << value.nqn << ", listeners [ ";
+  os << "BeaconSubsystem( nqn:" << value.nqn << " descr "
+     << (uint32_t)value.change_descriptor << ", listeners [ ";
   for (const auto& list: value.listeners) os << list << " ";
   os << "] namespaces [ ";
   for (const auto& ns: value.namespaces) os << ns << " ";
@@ -123,7 +141,10 @@ inline std::ostream& operator<<(
   std::ostream& os, const NvmeGwClientState value) {
   os <<  "NvmeGwState { group id: " << value.group_id
      << " gw_map_epoch " <<  value.gw_map_epoch
-     << " availablilty "<< value.availability
+     << " availablilty " << value.availability
+     << " sequence " << value.last_beacon_seq_number
+     << " sequence-ooo " << value.last_beacon_seq_ooo
+     << " map_features " << value.map_features
      << " GwSubsystems: [ ";
   for (const auto& sub: value.subsystems) {
     os << sub.second << " ";
@@ -183,7 +204,8 @@ inline std::ostream& print_gw_created_t(
     os << " " << state_itr.first <<": " << state_itr.second << ",";
   }
   os << "]\n"<< MODULE_PREFFIX << " entity-addr : " << value.addr_vect
-     << " availability " << value.availability
+     << " availability " << value.availability << " location " << value.location
+     << " admin state " << value.gw_admin_state
      << " full-startup " << value.performed_full_startup  << " ]";
 
   return os;
@@ -223,12 +245,27 @@ inline std::ostream& operator<<(std::ostream& os, const NvmeGwMonStates value) {
   return os;
 }
 
+inline std::ostream& operator<<(std::ostream& os, const LocationStates value) {
+  if(value.size()) os << "\n" << MODULE_PREFFIX;;
+
+  for (auto &locations : value) {
+    os  <<  "location " << locations.first  << " recovering state "
+        << locations.second.failbacks_in_process;
+    os  << "\n"<< MODULE_PREFFIX;
+  }
+  return os;
+}
+
 inline std::ostream& operator<<(std::ostream& os, const NVMeofGwMap value) {
   os <<  "\n" <<  MODULE_PREFFIX << "== NVMeofGwMap [ Created_gws: epoch "
-     << value.epoch;
+     << value.epoch  << " features " << value.published_features;
   for (auto& group_gws: value.gw_epoch) {
     os <<  "\n" <<  MODULE_PREFFIX  << "{ " << group_gws.first
        << " } -> GW epoch: " << group_gws.second << " }";
+  }
+  for (auto& group_gws: value.disaster_locations) {
+    os <<  "\n" <<  MODULE_PREFFIX  << "{ " << group_gws.first
+       << " } -> disaster-locations: " << group_gws.second << " }";
   }
   for (auto& group_gws: value.created_gws) {
    os <<  "\n" <<  MODULE_PREFFIX  << "{ " << group_gws.first
@@ -236,6 +273,10 @@ inline std::ostream& operator<<(std::ostream& os, const NVMeofGwMap value) {
   }
   return os;
 }
+
+inline void encode_beacon_change_descriptors(const BeaconSubsystems& sub, ceph::bufferlist &bl);
+inline void decode_beacon_change_descriptors(BeaconSubsystems& subs, ceph::buffer::list::const_iterator &bl);
+
 
 inline void encode(const ana_state_t& st,  ceph::bufferlist &bl) {
   ENCODE_START(1, 1, bl);
@@ -273,7 +314,7 @@ inline void encode(
   for (const auto& sub: subsystems) {
     encode(sub.second.nqn, bl);
     if (version == 1) {
-      dout(20) << "encode ana_state vector version1 = " << version << dendl;
+      dout(20) << "encode ana_state vector version1 = " << (int)version << dendl;
       /* Version 1 requires exactly 16 entries */
       ana_state_t filled(sub.second.ana_state);
       filled.resize(
@@ -283,7 +324,7 @@ inline void encode(
 	  0));
       encode(filled, bl);
     } else {
-      dout(20) << "encode ana_state vector version2 = " << version << dendl;
+      dout(20) << "encode ana_state vector version2 = " << (int)version << dendl;
       encode(sub.second.ana_state, bl);
     }
   }
@@ -307,23 +348,37 @@ inline  void decode(
 }
 
 inline void encode(const NvmeGwClientState& state,  ceph::bufferlist &bl, uint64_t features) {
-  ENCODE_START(1, 1, bl);
+  static const uint8_t version = 2;
+  static const uint8_t cversion = 1;
+  ENCODE_START(version, cversion, bl);
   encode(state.group_id, bl);
   encode(state.gw_map_epoch, bl);
   encode (state.subsystems, bl, features);
   encode((uint32_t)state.availability, bl);
+  encode((uint64_t)state.last_beacon_seq_number, bl);
+  encode((uint8_t)state.last_beacon_seq_ooo, bl);
+  encode((uint64_t)state.map_features, bl);
   ENCODE_FINISH(bl);
 }
 
 inline  void decode(
   NvmeGwClientState& state,  ceph::bufferlist::const_iterator& bl) {
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   decode(state.group_id, bl);
   decode(state.gw_map_epoch, bl);
   decode(state.subsystems, bl);
   uint32_t avail;
+  uint64_t last_beacon_seq_number;
   decode(avail, bl);
   state.availability = (gw_availability_t)avail;
+  if (struct_v >= 2) {
+    decode(last_beacon_seq_number, bl);
+    state.last_beacon_seq_number = last_beacon_seq_number;
+    uint8_t last_beacon_seq_ooo;
+    decode(last_beacon_seq_ooo, bl);
+    state.last_beacon_seq_ooo = (bool)last_beacon_seq_ooo;
+    decode(state.map_features, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -417,6 +472,7 @@ inline void encode(const NvmeAnaNonceMap& nonce_map,  ceph::bufferlist &bl,
   uint64_t features) {
   ENCODE_START(1, 1, bl);
   encode((uint32_t)nonce_map.size(), bl);
+  dout(20) << "encode nonce map  size " << nonce_map.size() << dendl;
   for (auto& ana_group_nonces : nonce_map) {
     // ana group id
     encode(ana_group_nonces.first, bl);
@@ -457,10 +513,12 @@ inline void encode(const NvmeGwMonStates& gws,  ceph::bufferlist &bl,
     version = 3;
   }
   ENCODE_START(version, version, bl);
+  dout(20) << "encode NvmeGwMonStates. struct_v: " << (int)version << dendl;
   encode ((uint32_t)gws.size(), bl); // number of gws in the group
   for (auto& gw : gws) {
     encode(gw.first, bl);// GW_id
     encode(gw.second.ana_grp_id, bl); // GW owns this group-id
+    dout(20) << "encode gw-id " << gw.first << dendl;
     if (version >= 2) {
       encode((uint32_t)gw.second.sm_state.size(), bl);
       for (auto &state_it:gw.second.sm_state) {
@@ -470,6 +528,8 @@ inline void encode(const NvmeGwMonStates& gws,  ceph::bufferlist &bl,
       encode((uint32_t)gw.second.availability, bl);
       encode((uint16_t)gw.second.performed_full_startup, bl);
       encode((uint16_t)gw.second.last_gw_map_epoch_valid, bl);
+      dout(20) << "encode availability " << gw.second.availability
+               << " startup " << (int)gw.second.performed_full_startup << dendl;
       encode(gw.second.subsystems, bl);
 
       encode((uint32_t)gw.second.blocklist_data.size(), bl);
@@ -487,7 +547,7 @@ inline void encode(const NvmeGwMonStates& gws,  ceph::bufferlist &bl,
       encode((uint32_t)gw.second.availability, bl);
       encode((uint16_t)gw.second.performed_full_startup, bl);
       encode((uint16_t)gw.second.last_gw_map_epoch_valid, bl);
-      encode(gw.second.subsystems, bl); // TODO reuse but put features - encode version
+      encode(gw.second.subsystems, bl);
       Blocklist_data bl_data[MAX_SUPPORTED_ANA_GROUPS];
       for (auto &blklst_itr: gw.second.blocklist_data) {
         bl_data[blklst_itr.first].osd_epoch   = blklst_itr.second.osd_epoch;
@@ -512,7 +572,7 @@ inline void decode(
   NvmeGwMonStates& gws, ceph::buffer::list::const_iterator &bl) {
   gws.clear();
   uint32_t num_created_gws;
-  DECODE_START(3, bl);
+  DECODE_START(4, bl);
   dout(20) << "decode NvmeGwMonStates. struct_v: " << struct_v << dendl;
   decode(num_created_gws, bl);
   dout(20) << "decode NvmeGwMonStates. num gws  " << num_created_gws << dendl;
@@ -589,8 +649,8 @@ inline void decode(
       dout(20) << "decode addr_vect and beacon_index" << dendl;
       gw_created.addr_vect.decode(bl);
       decode(gw_created.beacon_index, bl);
+      dout(20) << "decoded beacon_index " << gw_created.beacon_index << dendl;
     }
-
     gws[gw_name] = gw_created;
   }
   if (struct_v == 1) {  //Fix allocations of states and blocklist_data
@@ -638,6 +698,15 @@ inline void decode(std::map<NvmeGroupKey, epoch_t>& gw_epoch,
   DECODE_FINISH(bl);
 }
 
+inline void encode(const LocationState &locationstate, ceph::bufferlist &bl) {
+  encode(locationstate.failbacks_in_process, bl);
+}
+
+inline void decode(LocationState &locationstate,
+                  ceph::buffer::list::const_iterator &bl) {
+  decode(locationstate.failbacks_in_process, bl);
+}
+
 inline void encode(
   const std::map<NvmeGroupKey, NvmeGwMonStates>& created_gws,
   ceph::bufferlist &bl, uint64_t features) {
@@ -652,6 +721,41 @@ inline void encode(
     encode(gws, bl, features); // encode group gws
   }
   ENCODE_FINISH(bl);
+}
+
+inline void encode_gws_beacon_diff_additions(
+  const std::map<NvmeGroupKey, NvmeGwMonStates>& created_gws,
+  ceph::bufferlist &bl, uint64_t features) {
+  ENCODE_START(1, 1, bl);
+  for (auto& group_gws: created_gws) {
+    auto& gws = group_gws.second;
+    for (auto& gw : gws) {
+      encode((uint8_t)gw.second.gw_admin_state, bl);
+      dout(10) << "encode location " << gw.second.location << " admin state " << (int)gw.second.gw_admin_state << dendl;
+      encode(gw.second.location, bl);
+      encode_beacon_change_descriptors(gw.second.subsystems, bl);
+    }
+  }
+  ENCODE_FINISH(bl);
+}
+
+inline void decode_gws_beacon_diff_additions(
+  std::map<NvmeGroupKey, NvmeGwMonStates>& created_gws,
+  ceph::buffer::list::const_iterator &bl) {
+  DECODE_START(1, bl);
+  for (auto& group_gws: created_gws) {
+    auto& gws = group_gws.second;
+    for (auto& gw : gws) {
+      dout(20) << "decode admin state and location" << dendl;
+      uint8_t admin_state;
+      decode(admin_state, bl);
+      gw.second.gw_admin_state = (gw_admin_state_t)admin_state;
+      decode(gw.second.location, bl);
+      dout(20) << "decoded location " << gw.second.location << " admin state " << (int)gw.second.gw_admin_state <<  dendl;
+      decode_beacon_change_descriptors(gw.second.subsystems, bl);
+    }
+  }
+  DECODE_FINISH(bl);
 }
 
 inline void decode(
@@ -824,8 +928,12 @@ inline void decode(BeaconListener& ls, ceph::buffer::list::const_iterator &bl) {
 }
 
 inline void encode(const BeaconSubsystem& sub,  ceph::bufferlist &bl) {
-  ENCODE_START(1, 1, bl);
+  uint8_t version = 1;
+
+  ENCODE_START(version, version, bl);
   encode(sub.nqn, bl);
+  dout(20) << "encode BeaconSubsystems " << sub.nqn
+           << " version " << (int)version << dendl;
   encode((uint32_t)sub.listeners.size(), bl);
   for (const auto& ls: sub.listeners)
     encode(ls, bl);
@@ -835,13 +943,36 @@ inline void encode(const BeaconSubsystem& sub,  ceph::bufferlist &bl) {
   ENCODE_FINISH(bl);
 }
 
+
+
+inline void encode_beacon_change_descriptors(const BeaconSubsystems& subs, ceph::bufferlist &bl) {
+  ENCODE_START(1, 1, bl);
+  for (auto &sub_it:subs) {
+    encode((uint32_t)sub_it.change_descriptor, bl);
+    dout(20) << "encode change_descriptor " << (uint32_t)sub_it.change_descriptor <<  dendl;
+  }
+  ENCODE_FINISH(bl);
+}
+
+inline void decode_beacon_change_descriptors(BeaconSubsystems& subs, ceph::buffer::list::const_iterator &bl) {
+  DECODE_START(1, bl);
+  for (auto &sub_it:subs) {
+    uint32_t change_desc;
+    decode(change_desc, bl);
+    sub_it.change_descriptor = static_cast<subsystem_change_t>(change_desc);
+    dout(20) << "decode change_descriptor " << change_desc <<  dendl;
+  }
+  DECODE_FINISH(bl);
+}
+
 inline void decode(BeaconSubsystem& sub, ceph::buffer::list::const_iterator &bl) {
   DECODE_START(1, bl);
-  dout(20) << "decode BeaconSubsystems " << dendl;
   decode(sub.nqn, bl);
+  dout(20) << "decode BeaconSubsystems " << sub.nqn << dendl;
   uint32_t s;
   sub.listeners.clear();
   decode(s, bl);
+  dout(20) << "decode Nlisteners " << s << dendl;
   for (uint32_t i = 0; i < s; i++) {
     BeaconListener ls;
     decode(ls, bl);

@@ -1,0 +1,21 @@
+os_type: rocky
+os_version: "9.6"
+teuthology:
+  postmerge:
+    - |
+      if yaml.os_type == 'rocky' then
+        local pexec_tasks = yaml_load([[
+        - pexec:
+            all:
+            # for https://tracker.ceph.com/issues/73823
+            - sudo dnf remove nvme-cli -y
+            - sudo dnf install nvmetcli nvme-cli -y
+        ]])
+        
+        -- Ensure the tasks array exists before attempting to merge
+        if yaml.tasks == nil then
+          yaml.tasks = py_list()
+        end
+        
+        deep_merge(yaml.tasks, pexec_tasks)
+      end

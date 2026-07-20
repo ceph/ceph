@@ -69,7 +69,7 @@ function run_binaries () {
 
 pushd $DESTDIR
 case $(distro_id) in
-    centos|fedora|rhel|opensuse*|suse|sles)
+    centos|fedora|rhel|rocky|opensuse*|suse|sles)
         install gcc-c++ make libradospp-devel librados-devel;;
     ubuntu)
         install gcc-11 g++-11 make libradospp-dev librados-dev

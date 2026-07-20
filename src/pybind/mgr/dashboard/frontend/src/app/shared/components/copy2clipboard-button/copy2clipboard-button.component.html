@@ -1,17 +1,15 @@
-<i [ngClass]="[icons.clipboard, icons.large]"
-   (click)="onClick()"
-   class="text-primary ms-2"
-   title="Copy to Clipboard"
-   *ngIf="showIconOnly; else withButtonTpl"></i>
 
-<ng-template #withButtonTpl>
-
-  <cds-icon-button kind="tertiary"
-                   size="md"
-                   title="Copy to Clipboard"
-                   (click)="onClick()">
-    <svg cdsIcon="copy"
-         size="32"
-         class="cds--btn__icon"></svg>
-  </cds-icon-button>
-</ng-template>
+<button cdsButton="ghost"
+        class="clipboard-btn"
+        [ngClass]="{'clipboard-btn-with-text': text}"
+        [size]="size"
+        description="Copy to Clipboard"
+        i18n-description
+        (click)="onClick()">
+  @if(text) {
+  <span data-toggle="tooltip"
+        [title]="text"
+        class="cds--type-mono">{{text}}</span>
+  }
+  <cd-icon type="copy"></cd-icon>
+</button>

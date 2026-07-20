@@ -73,7 +73,7 @@
 
       <!-- Domain Settings -->
       <div class="form-item"
-           *ngIf="this.smbForm.get('auth_mode').value === 'active-directory'">
+           *ngIf="this.smbForm.get('auth_mode').value === AUTHMODE.ActiveDirectory">
         <div cdsCol
              [columnNumbers]="{ md: 12 }"
              class="d-flex">
@@ -130,7 +130,7 @@
                     *ngFor="let _ of joinSources.controls; index as i">
         <div
           cdsRow
-          *ngIf="this.smbForm.get('auth_mode').value === 'user' && usersGroups$ | async as usersGroups"
+          *ngIf="this.smbForm.get('auth_mode').value === AUTHMODE.User && usersGroups$ | async as usersGroups"
           class="form-item form-item-append"
         >
           <div
@@ -180,7 +180,7 @@
       </ng-container>
 
       <div class="form-item"
-           *ngIf="this.smbForm.get('auth_mode').value === 'user'">
+           *ngIf="this.smbForm.get('auth_mode').value === AUTHMODE.User">
         <button cdsButton="tertiary"
                 type="button"
                 (click)="addUserGroupSetting()"
@@ -212,7 +212,6 @@
           <div class="form-item">
             <cds-select
               label="Placement"
-              for="placement"
               formControlName="placement"
               id="placement"
             >
@@ -286,62 +285,64 @@
         </div>
 
         <!-- Custom DNS -->
-        <ng-container formArrayName="custom_dns"
-                      *ngFor="let _ of custom_dns.controls; index as i">
-          <div cdsRow
-               class="form-item form-item-append">
-            <div cdsCol
-                 [columnNumbers]="{ lg: 14 }">
-              <cds-text-label
-                for="custom_dns"
-                i18n
-              >DNS
-              <input cdsText
-                     [formControlName]="i"
-                     placeholder="192.168.76.204"/>
-              </cds-text-label>
-            </div>
-            <div
-              cdsCol
-              [columnNumbers]="{ lg: 1 }"
-              class="item-action-btn spacing"
-            >
-              <cds-icon-button
-                kind="danger"
-                size="sm"
-                (click)="removeCustomDNS(i)"
+        @if (this.smbForm.get('auth_mode').value === AUTHMODE.ActiveDirectory) {
+          <ng-container formArrayName="custom_dns"
+                        *ngFor="let _ of custom_dns.controls; index as i">
+            <div cdsRow
+                 class="form-item form-item-append">
+              <div cdsCol
+                   [columnNumbers]="{ lg: 14 }">
+                <cds-text-label
+                  for="custom_dns"
+                  i18n
+                >DNS
+                <input cdsText
+                       [formControlName]="i"
+                       placeholder="192.168.76.204"/>
+                </cds-text-label>
+              </div>
+              <div
+                cdsCol
+                [columnNumbers]="{ lg: 1 }"
+                class="item-action-btn spacing"
               >
-                <svg
-                  cdsIcon="trash-can"
-                  size="32"
-                  class="cds--btn__icon"
+                <cds-icon-button
+                  kind="danger"
+                  size="sm"
+                  (click)="removeCustomDNS(i)"
                 >
-                </svg>
-              </cds-icon-button>
+                  <svg
+                    cdsIcon="trash-can"
+                    size="32"
+                    class="cds--btn__icon"
+                  >
+                  </svg>
+                </cds-icon-button>
+              </div>
             </div>
-          </div>
-        </ng-container>
+          </ng-container>
 
-        <div class="form-item">
-          <button cdsButton="tertiary"
-                  type="button"
-                  (click)="addCustomDns()"
-                  i18n>
-            Add custom DNS
-            <svg
-              cdsIcon="add"
-              size="32"
-              class="cds--btn__icon"
-              icon></svg>
-          </button>
-          <cd-helper i18n>One or more IP Addresses that will be
-            applied to the Samba containers to override
-            the default DNS resolver(s). This option is
-            intended to be used when the host Ceph node
-            is not configured to resolve DNS entries within
-            AD domain(s).
-          </cd-helper>
-        </div>
+          <div class="form-item">
+            <button cdsButton="tertiary"
+                    type="button"
+                    (click)="addCustomDns()"
+                    i18n>
+              Add custom DNS
+              <svg
+                cdsIcon="add"
+                size="32"
+                class="cds--btn__icon"
+                icon></svg>
+            </button>
+            <cd-helper i18n>One or more IP Addresses that will be
+              applied to the Samba containers to override
+              the default DNS resolver(s). This option is
+              intended to be used when the host Ceph node
+              is not configured to resolve DNS entries within
+              AD domain(s).
+            </cd-helper>
+          </div>
+        }
 
         <!-- Clustering -->
         <div class="form-item">
@@ -358,6 +359,11 @@
           </cds-select>
         </div>
 
+        <div
+          *ngIf="(this.smbForm.get('count').value > 1 && this.smbForm.get('clustering').value.toLowerCase() == CLUSTERING.Default) || this.smbForm.get('clustering').value.toLowerCase() == CLUSTERING.Always"
+          class="form-item"
+        >
+
         <!-- Public addrs -->
         <ng-container formArrayName="public_addrs"
                       *ngFor="let _ of public_addrs.controls; index as i">
@@ -368,12 +374,12 @@
               <div cdsCol
                    [columnNumbers]="{ lg: 7 }">
                 <cds-text-label
-                  for="public_addrs"
+                  for="address"
                   i18n
                   helperText="This address will be assigned to one of the host's network devices and managed automatically."
                   i18n-helperText
                   cdrequiredField
-                  [invalid]="smbForm?.controls['public_addrs']?.controls[i].controls.address.invalid && smbForm?.controls['public_addrs']?.controls[i].controls.address.dirty"
+                  [invalid]="smbForm?.controls['public_addrs']?.controls[i]?.controls?.address?.invalid && smbForm?.controls['public_addrs']?.controls[i]?.controls?.address?.dirty"
                   [invalidText]="addressError"
                 >Address
                   <input
@@ -381,7 +387,7 @@
                     type="text"
                     formControlName="address"
                     placeholder="192.168.4.51/24"
-                    [invalid]="smbForm?.controls['public_addrs'].controls[i].controls.address.invalid && smbForm?.controls['public_addrs']?.controls[i].controls.address.dirty"
+                    [invalid]="smbForm?.controls['public_addrs'].controls[i].controls?.address?.invalid && smbForm?.controls['public_addrs']?.controls[i]?.controls?.address?.dirty"
                   />
                 </cds-text-label>
                 <ng-template #addressError>
@@ -396,7 +402,7 @@
               <div cdsCol
                    [columnNumbers]="{ lg: 7 }">
                 <cds-text-label
-                  for="public_addrs"
+                  for="destination"
                   i18n
                   helperText="Defines where the system will assign the managed IPs. Each string value must be a network address."
                   i18n-helperText
@@ -426,10 +432,6 @@
             </div>
           </ng-container>
         </ng-container>
-        <div
-          *ngIf="(this.smbForm.get('count').value > 1 && this.smbForm.get('clustering').value.toLowerCase() == CLUSTERING.Default) || this.smbForm.get('clustering').value.toLowerCase() == CLUSTERING.Always"
-          class="form-item"
-        >
           <button cdsButton="tertiary"
                   type="button"
                   (click)="addPublicAddrs()"

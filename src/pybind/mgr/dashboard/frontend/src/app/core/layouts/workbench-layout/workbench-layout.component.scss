@@ -1,16 +1,25 @@
 @use './src/styles/vendor/variables' as vv;
 
-.dashboard {
+.overview {
   background-color: vv.$body-bg-alt;
   margin: 0;
   padding: 0;
-  padding-bottom: 48px;
 }
 
 .container-fluid {
   overflow: auto;
-  padding-bottom: 100px;
-  padding-top: 48px;
+  padding-bottom: var(--cds-spacing-09);
+  padding-top: var(--cds-spacing-09);
+
+  &:has(.tearsheet--full) {
+    overflow: hidden;
+    padding-left: 0;
+    padding-right: 0;
+
+    .breadcrumbs--padding {
+      padding-left: var(--cds-spacing-07);
+    }
+  }
 }
 
 .rgw-dashboard {

@@ -27,7 +27,7 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
-import { Pool } from '../pool';
+import { Pool, PoolType } from '../pool';
 import { PoolStat, PoolStats } from '../pool-stat';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
@@ -128,18 +128,18 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
       {
         prop: 'data_protection',
         name: $localize`Data Protection`,
-        cellTransformation: CellTemplate.badge,
+        cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
-          class: 'badge-background-gray'
+          class: 'tag-background-gray'
         },
         flexGrow: 1.3
       },
       {
         prop: 'application_metadata',
         name: $localize`Applications`,
-        cellTransformation: CellTemplate.badge,
+        cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
-          class: 'badge-background-primary'
+          class: 'tag-background-primary'
         },
         flexGrow: 1.5
       },
@@ -265,6 +265,11 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
       'wr'
     ];
     const emptyStat: PoolStat = { latest: 0, rate: 0, rates: [] };
+    const applicationLabels: Record<string, string> = {
+      cephfs: $localize`File system`,
+      rbd: $localize`Block`,
+      rgw: $localize`Object`
+    };
 
     _.forEach(pools, (pool: Pool) => {
       pool['pg_status'] = this.transformPgStatus(pool['pg_status']);
@@ -287,13 +292,17 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
       });
       pool.cdIsBinary = true;
 
-      if (pool['type'] === 'erasure') {
+      if (pool['type'] === PoolType.ERASURE) {
         const erasureCodeProfile = pool['erasure_code_profile'];
         pool['data_protection'] = this.getErasureCodeProfile(erasureCodeProfile);
       }
-      if (pool['type'] === 'replicated') {
+      if (pool['type'] === PoolType.REPLICATED) {
         pool['data_protection'] = `replica: ×${pool['size']}`;
       }
+
+      pool['application_metadata'] = (pool.application_metadata || []).map(
+        (application: string) => applicationLabels[application] || application
+      );
     });
 
     return pools;

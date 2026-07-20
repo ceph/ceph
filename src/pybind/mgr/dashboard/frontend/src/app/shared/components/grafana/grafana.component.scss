@@ -1,3 +1,5 @@
+@use '@carbon/layout';
+
 .grafana {
   height: 600px;
   width: 100%;
@@ -5,7 +7,7 @@
 }
 
 .grafana_one {
-  height: 400px;
+  height: layout.rem(450px);
 }
 
 .grafana_two {
@@ -18,6 +20,10 @@
 
 .grafana_four {
   height: 1160px;
+}
+
+.grafana_five {
+  height: layout.rem(1600px);
 }
 
 .timepicker {

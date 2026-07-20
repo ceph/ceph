@@ -10,12 +10,15 @@
           #formDir="ngForm"
           [formGroup]="form"
           novalidate>
-      <cd-alert-panel *ngIf="!deploymentOptions?.recommended_option"
+      <cd-alert-panel *ngIf="availDevices?.length === 0"
                       type="warning"
                       class="mx-3"
                       i18n>
-        No devices(HDD, SSD or NVME) were found. Creation of OSDs will remain
-        disabled until devices are added.
+        <div cdsStack="vertical"
+             [gap]="2">
+          <span class="cds--type-heading-compact-01">No eligible devices found for OSD creation.</span>
+          <span class="cds--type-body-compact-01">Physical disks may be present, but none meet the requirements (unused, unformatted, and not already configured by Ceph).</span>
+        </div>
       </cd-alert-panel>
       <div class="accordion">
         <div class="accordion-item">

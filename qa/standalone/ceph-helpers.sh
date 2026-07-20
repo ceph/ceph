@@ -1948,7 +1948,7 @@ function test_pg_scrub() {
     wait_for_clean || return 1
     pg_scrub 1.0 || return 1
     kill_daemons $dir KILL osd || return 1
-    ! TIMEOUT=2 pg_scrub 1.0 || return 1
+    ! WAIT_FOR_CLEAN_TIMEOUT=10 TIMEOUT=2 pg_scrub 1.0 || return 1
     teardown $dir || return 1
 }
 
@@ -2255,10 +2255,9 @@ function flush_pg_stats()
     ids=`ceph osd ls`
     seqs=''
     for osd in $ids; do
-	    seq=`ceph tell osd.$osd flush_pg_stats`
-	    if test -z "$seq"
-	    then
-		continue
+        seq=$(timeout $timeout ceph tell osd.$osd flush_pg_stats 2>/dev/null) || true
+	    if test -z "$seq"; then
+		    continue
 	    fi
 	    seqs="$seqs $osd-$seq"
     done

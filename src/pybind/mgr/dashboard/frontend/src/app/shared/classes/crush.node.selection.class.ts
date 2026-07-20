@@ -4,8 +4,9 @@ import _ from 'lodash';
 
 import { CrushNode } from '../models/crush-node';
 import { CrushFailureDomains } from '../models/erasure-code-profile';
+import { CdForm } from '../forms/cd-form';
 
-export class CrushNodeSelectionClass {
+export class CrushNodeSelectionClass extends CdForm {
   private nodes: CrushNode[] = [];
   private idTree: { [id: number]: CrushNode } = {};
   private allDevices: string[] = [];
@@ -139,7 +140,13 @@ export class CrushNodeSelectionClass {
       this.idTree[node.id] = node;
     });
     this.buckets = _.sortBy(
-      nodes.filter((n) => n.children),
+      nodes
+        .filter((n: CrushNode) => n.children)
+        .map((bucket: CrushNode) => ({
+          ...bucket,
+          content: bucket.name,
+          selected: bucket.type === 'root'
+        })),
       'name'
     );
     this.controls = {
@@ -188,7 +195,7 @@ export class CrushNodeSelectionClass {
   }
 
   private getIncludedCustomValue(control: AbstractControl, includedIn: string[]) {
-    return control.dirty && includedIn.includes(control.value) ? control.value : '';
+    return includedIn.includes(control.value) ? control.value : '';
   }
 
   private setMostCommonDomain(failureControl: AbstractControl): string {

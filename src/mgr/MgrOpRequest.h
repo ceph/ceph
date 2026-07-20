@@ -52,7 +52,6 @@ protected:
 
 public:
   ~MgrOpRequest() override {
-    request->put();
   }
 
   template<class T>

@@ -24,6 +24,30 @@
 
 #include "Gil.h"
 
+static void assert_gil()
+{
+  /* Using PyGILState_Check() isn't appropriate:
+   *
+   * https://docs.python.org/3/c-api/init.html#c.PyGILState_Check
+   *
+   * "Only if it has had its thread state initialized via PyGILState_Ensure()
+   * will it return 1."
+   *
+   * We got away with it for a while due to:
+   *
+   * "Note: If the current Python process has ever created a subinterpreter,
+   * this function will always return 1."
+   *
+   * Instead, use PyThreadState_Get() and use ts->thread_id to confirm that it's
+   * the right thread (ts->thread_id isn't necessarily stable, and may need to
+   * change in the future).  Once we no longer need to support python versions
+   * prior to 3.13, this can be PyThreadState_GetUnchecked().
+   */
+  auto *ts = PyThreadState_Get();
+  ceph_assert(ts != nullptr);
+  ceph_assert(ts->thread_id == PyThread_get_thread_ident());
+}
+
 SafeThreadState::SafeThreadState(PyThreadState *ts_)
     : ts(ts_)
 {
@@ -33,10 +57,6 @@ SafeThreadState::SafeThreadState(PyThreadState *ts_)
 
 Gil::Gil(SafeThreadState &ts, bool new_thread) : pThreadState(ts)
 {
-  // Acquire the GIL, set the current thread state
-  PyEval_RestoreThread(pThreadState.ts);
-  dout(25) << "GIL acquired for thread state " << pThreadState.ts << dendl;
-
   //
   // If called from a separate OS thread (i.e. a thread not created
   // by Python, that does't already have a python thread state that
@@ -57,29 +77,34 @@ Gil::Gil(SafeThreadState &ts, bool new_thread) : pThreadState(ts)
   //
   if (new_thread) {
     pNewThreadState = PyThreadState_New(pThreadState.ts->interp);
-    PyThreadState_Swap(pNewThreadState);
+    PyEval_RestoreThread(pNewThreadState);
     dout(20) << "Switched to new thread state " << pNewThreadState << dendl;
   } else {
+    // Acquire the GIL, set the current thread state
+    PyEval_RestoreThread(pThreadState.ts);
+    dout(25) << "GIL acquired for thread state " << pThreadState.ts << dendl;
     ceph_assert(pthread_self() == pThreadState.thread);
   }
+  assert_gil();
 }
 
 Gil::~Gil()
 {
+  // Release the GIL, reset the thread state to NULL
   if (pNewThreadState != nullptr) {
     dout(20) << "Destroying new thread state " << pNewThreadState << dendl;
-    PyThreadState_Swap(pThreadState.ts);
     PyThreadState_Clear(pNewThreadState);
+    PyEval_SaveThread();
     PyThreadState_Delete(pNewThreadState);
+  } else {
+    PyEval_SaveThread();
   }
-  // Release the GIL, reset the thread state to NULL
-  PyEval_SaveThread();
   dout(25) << "GIL released for thread state " << pThreadState.ts << dendl;
 }
 
 without_gil_t::without_gil_t()
 {
-  assert(PyGILState_Check());
+  assert_gil();
   release_gil();
 }
 

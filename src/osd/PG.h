@@ -1412,8 +1412,9 @@ public:
  }
 
  uint64_t logical_to_ondisk_size(uint64_t logical_size,
-                                 shard_id_t shard_id) const final {
-   return get_pgbackend()->be_get_ondisk_size(logical_size, shard_id_t(shard_id));
+                                 shard_id_t shard_id,
+                                 bool object_is_legacy_ec) const final {
+   return get_pgbackend()->be_get_ondisk_size(logical_size, shard_id_t(shard_id), object_is_legacy_ec);
  }
 };
 

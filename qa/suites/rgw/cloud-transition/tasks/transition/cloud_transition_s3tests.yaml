@@ -11,6 +11,7 @@ tasks:
     #client.3:
       #port: 8003
 - rgw-cloudtier:
+    client.1:
     client.0:
       # cloudtier storage class params
       # retain_head_object = false
