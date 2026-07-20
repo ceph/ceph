@@ -52,6 +52,10 @@ public:
     // total encoded data size
     virtual size_t get_size_bytes() const = 0;
 
+    // returns list of ops within txc,
+    //  depending on the param it could be either short(false) or verbose(true)
+    virtual std::string get_summary_string(bool) const {return std::string();}
+
     /// Set Keys
     void set(
       const std::string &prefix,                      ///< [in] Prefix for keys, or CF name

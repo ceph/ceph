@@ -5870,6 +5870,12 @@ options:
   desc: Log a collection list operation if it is slower than this age (seconds)
   default: 1_min
   with_legacy: true
+- name: bluestore_log_op_verbose_kv_txc
+  type: bool
+  level: advanced
+  desc: Enable verbose dump of slow KV transaction(s)
+  default: false
+  with_legacy: true
 - name: bluestore_debug_enforce_settings
   type: str
   level: dev
