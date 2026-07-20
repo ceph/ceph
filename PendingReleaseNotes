@@ -49,6 +49,12 @@
     If the default provider is required when also using custom providers,
     it must be explicitly loaded in the configuration file or code (see https://github.com/openssl/openssl/blob/master/README-PROVIDERS.md).
 * RGW: Fixed bucket notification events so the 'x_amz_request_id' in NotificationEvent now matches the 'x_amz_request_id' returned by the corresponding S3 operation.
+* RGW: The rgw_gc_max_deferred and rgw_gc_max_deferred_entries_size options have been removed, as they did not do anything.
+  - Updated the default for rgw_gc_max_queue_size to account for the extra space from removing rgw_gc_max_deferred_entries_size.
+* RGW: The default value of ``rgw_thread_pool_size`` has been reduced from 512 to 128.
+  Benchmarks showed that the lower thread count improves throughput and reduces latency
+  on NVMe and HDD based environments. Users with specific workload requirements can
+  tune this value; see also ``rgw_max_concurrent_requests``.
 
 
 * DASHBOARD: A new Overview landing page provides an at-a-glance cluster summary
