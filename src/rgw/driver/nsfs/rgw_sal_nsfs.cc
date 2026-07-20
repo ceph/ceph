@@ -306,7 +306,7 @@ static void promote_version(int parent_fd, const std::string& leaf,
       return;
     }
 
-    /* find newest non-delete-marker version entry for this key */
+    /* find newest version entry for this key (including delete markers) */
     uint64_t max_mtime = 0;
     std::string max_name;
     DIR* vdir = fdopendir(dup(vfd));
@@ -324,21 +324,6 @@ static void promote_version(int parent_fd, const std::string& leaf,
         nsfs_version_info vi;
         if (!nsfs_parse_version_id(vid, vi)) {
           continue;
-        }
-        /* skip delete markers — they don't get promoted to the
-         * top-level path in NSFS */
-        {
-          int chk_fd = ::openat(vfd, de->d_name, O_RDONLY);
-          if (chk_fd >= 0) {
-            char buf[8];
-            std::string dm_x = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_DELETE_MARKER;
-            bool is_dm = (::fgetxattr(chk_fd, dm_x.c_str(),
-                                      buf, sizeof(buf)) > 0);
-            ::close(chk_fd);
-            if (is_dm) {
-              continue;
-            }
-          }
         }
         uint64_t entry_mtime;
         if (vid == NULL_VERSION_ID) {
@@ -5458,6 +5443,11 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
             {
               int afd = ::openat(promote_fd, promote_leaf.c_str(), O_RDONLY);
               if (afd >= 0) {
+                char dm_buf[8];
+                std::string dm_x = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_DELETE_MARKER;
+                if (::fgetxattr(afd, dm_x.c_str(), dm_buf, sizeof(dm_buf)) > 0) {
+                  bde.flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
+                }
                 Attrs pattrs;
                 get_x_attrs(null_yield, dpp, afd, pattrs, promote_leaf);
                 ACLOwner acl_owner;
@@ -5618,6 +5608,11 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
             {
               int afd = ::openat(parent_fd, leaf_name.c_str(), O_RDONLY);
               if (afd >= 0) {
+                char dm_buf[8];
+                std::string dm_x = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_DELETE_MARKER;
+                if (::fgetxattr(afd, dm_x.c_str(), dm_buf, sizeof(dm_buf)) > 0) {
+                  bde.flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
+                }
                 Attrs pattrs;
                 get_x_attrs(null_yield, dpp, afd, pattrs, leaf_name);
                 ACLOwner acl_owner;
