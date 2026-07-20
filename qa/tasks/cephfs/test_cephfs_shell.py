@@ -6,7 +6,7 @@ will update the environment without hassles of typing the path correctly.
 """
 from io import StringIO
 from os import path
-import crypt
+import hashlib
 import logging
 from tempfile import mkstemp as tempfile_mkstemp
 import math
@@ -410,7 +410,7 @@ class TestGetAndPut(TestCephFSShell):
         Test that get passes with target name
         """
         s = 'C' * 1024
-        s_hash = crypt.crypt(s, '.A')
+        s_hash = hashlib.sha256(s.encode()).hexdigest()
         o = self.get_cephfs_shell_cmd_output("put - dump4", stdin=s)
         log.info("cephfs-shell output:\n{}".format(o))
 
@@ -424,7 +424,7 @@ class TestGetAndPut(TestCephFSShell):
         # NOTE: cwd=None because we want to run it at CWD, not at cephfs mntpt.
         o = self.mount_a.run_shell('cat dump4', cwd=None).stdout.getvalue(). \
             strip()
-        o_hash = crypt.crypt(o, '.A')
+        o_hash = hashlib.sha256(o.encode()).hexdigest()
 
         # s_hash must be equal to o_hash
         log.info("s_hash:{}".format(s_hash))
@@ -475,7 +475,7 @@ class TestGetAndPut(TestCephFSShell):
         Test that get passes with target name
         """
         s = 'E' * 1024
-        s_hash = crypt.crypt(s, '.A')
+        s_hash = hashlib.sha256(s.encode()).hexdigest()
         o = self.get_cephfs_shell_cmd_output("put - dump6", stdin=s)
         log.info("cephfs-shell output:\n{}".format(o))
 
@@ -485,7 +485,7 @@ class TestGetAndPut(TestCephFSShell):
 
         # get dump6 - should pass
         o = self.get_cephfs_shell_cmd_output("get dump6 -")
-        o_hash = crypt.crypt(o, '.A')
+        o_hash = hashlib.sha256(o.encode()).hexdigest()
         log.info("cephfs-shell output:\n{}".format(o))
 
         # s_hash must be equal to o_hash
