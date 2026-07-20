@@ -159,6 +159,7 @@ void PGBackendTestFixture::setup_ec_pool()
 
     shard_listener->set_store(store.get(), chs[i]);
     shard_listener->set_event_loop(event_loop.get());
+    shard_listener->set_osd(this);
 
     auto shard_lru = std::make_unique<ECExtentCache::LRU>(1024 * 1024 * 100);
     auto shard_ec_switch = std::make_unique<ECSwitch>(
@@ -294,6 +295,7 @@ void PGBackendTestFixture::setup_replicated_pool()
 
     replica_listener->set_store(store.get(), chs[i]);
     replica_listener->set_event_loop(event_loop.get());
+    replica_listener->set_osd(this);
 
     auto replica_backend = std::make_unique<ReplicatedBackend>(
       replica_listener.get(), colls[i], chs[i], store.get(), cct);
@@ -367,7 +369,7 @@ int PGBackendTestFixture::do_transaction_and_complete(
     }
   });
 
-  ceph_tid_t tid = next_tid++;
+  ceph_tid_t tid = get_tid();
   osd_reqid_t reqid(entity_name_t::OSD(0), 0, tid);
 
   PGBackend* primary_backend = get_primary_backend();
