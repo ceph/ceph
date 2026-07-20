@@ -1575,6 +1575,7 @@ protected:
   std::string version_id;
   ceph::real_time unmod_since; /* if unmodified since */
   ceph::real_time last_mod_time_match; /* if modified time match */
+  bool last_mod_time_match_precise{false};
   std::optional<uint64_t> size_match; /* if size match */
   const char *if_match{nullptr}; /* if etag match */
   bool no_precondition_error;

@@ -378,6 +378,9 @@
 /* Backend POSIX for Rados Gateway */
 #cmakedefine WITH_RADOSGW_POSIX
 
+/* Backend NSFS for Rados Gateway */
+#cmakedefine WITH_RADOSGW_NSFS
+
 /* Backend RADOS for Rados Gateway */
 #cmakedefine WITH_RADOSGW_RADOS
 

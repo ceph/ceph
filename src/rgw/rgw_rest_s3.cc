@@ -3862,6 +3862,9 @@ int RGWDeleteObj_ObjStore_S3::get_params(optional_yield y)
       ldpp_dout(this, 10) << "failed to parse time: " << if_last_mod_match_decoded << dendl;
       return r;
     }
+    auto ns = last_mod_time_match.time_since_epoch() %
+              std::chrono::seconds(1);
+    last_mod_time_match_precise = (ns != decltype(ns)::zero());
   }
 
   if(if_size_match) {
@@ -4002,6 +4005,8 @@ void RGWCopyObj_ObjStore_S3::send_partial_response(off_t ofs)
     if (op_ret)
     set_req_state_err(s, op_ret);
     dump_errno(s);
+
+    dump_header_if_nonempty(s, "x-amz-version-id", version_id);
 
     for (auto &it : crypt_http_responses)
       dump_header(s, it.first, it.second);

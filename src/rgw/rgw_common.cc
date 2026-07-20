@@ -1283,7 +1283,6 @@ bool verify_user_permission(const DoutPrefixProvider* dpp,
   }
 
   if (mandatory_policy) {
-    // no policies, and policy is mandatory
     ldpp_dout(dpp, 20) << "no policies for a policy mandatory op " << op << dendl;
     return false;
   }
@@ -3230,8 +3229,9 @@ rgw_global_init(const std::map<std::string,std::string> *defaults,
   const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
 
   if ((config_store == "dbstore") ||
-      (config_store == "posix") || 
-      (config_store == "motr") || 
+      (config_store == "posix") ||
+      (config_store == "nsfs") ||
+      (config_store == "motr") ||
       (config_store == "daos")) {
     // These stores don't use the mon
     flags |= CINIT_FLAG_NO_MON_CONFIG;

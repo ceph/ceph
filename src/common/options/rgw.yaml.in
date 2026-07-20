@@ -4257,6 +4257,7 @@ options:
   - motr
   - daos
   - posix
+  - nsfs
 - name: rgw_config_store
   type: str
   level: advanced
@@ -4398,6 +4399,13 @@ options:
   default: 100
   services:
   - rgw
+- name: rgw_posix_cache_max_users
+  type: uint
+  level: advanced
+  desc: experimental Maximum number of users to maintain in the in-memory user info cache
+  default: 1000
+  services:
+  - rgw
 - name: rgw_posix_cache_lanes
   type: int
   level: advanced
@@ -4417,6 +4425,142 @@ options:
   level: advanced
   desc: experimental Number of lmdb partitions in the ordered listing cache
   default: 3
+  services:
+  - rgw
+- name: rgw_posix_inotify
+  type: bool
+  level: advanced
+  desc: Enable inotify watcher on bucket directories for sideloaded file detection
+  long_desc: When enabled, the bucket cache uses inotify to detect files created
+    or removed outside radosgw (sideloading).  Disable when no external filesystem
+    changes are expected; this avoids redundant inotify processing of radosgw's own
+    operations.
+  default: false
+  services:
+  - rgw
+- name: rgw_nsfs_base_path
+  type: str
+  level: advanced
+  desc: Option to set base path for NSFS Driver
+  long_desc: Base path for the NSFS driver.  All operations are relative to this path.
+    Defaults to /tmp/rgw_nsfs_driver
+  default: /tmp/rgw_nsfs_driver
+  services:
+  - rgw
+- name: rgw_nsfs_userdb_dir
+  type: str
+  level: advanced
+  desc: path for the directory for storing the User db
+  default: /var/lib/ceph/radosgw
+  services:
+  - rgw
+- name: rgw_nsfs_database_root
+  type: str
+  level: advanced
+  desc: Path to parent of NSFS Driver LMDB bucket listing cache
+  long_desc: Parent directory of LMDB bucket listing cache databases.
+  default: /var/lib/ceph/radosgw
+  services:
+  - rgw
+- name: rgw_nsfs_cache_max_buckets
+  type: int
+  level: advanced
+  desc: Number of buckets to maintain in the ordered listing cache
+  default: 100
+  services:
+  - rgw
+- name: rgw_nsfs_cache_max_users
+  type: uint
+  level: advanced
+  desc: Maximum number of users to maintain in the in-memory user info cache
+  default: 1000
+  services:
+  - rgw
+- name: rgw_nsfs_cache_lanes
+  type: int
+  level: advanced
+  desc: Number of lanes in cache LRU
+  default: 3
+  services:
+  - rgw
+- name: rgw_nsfs_cache_partitions
+  type: int
+  level: advanced
+  desc: Number of partitions in cache AVL
+  default: 3
+  services:
+  - rgw
+- name: rgw_nsfs_cache_lmdb_count
+  type: int
+  level: advanced
+  desc: Number of lmdb partitions in the ordered listing cache
+  default: 3
+  services:
+  - rgw
+- name: rgw_nsfs_inotify
+  type: bool
+  level: advanced
+  desc: Enable inotify watcher on bucket directories for sideloaded file detection
+  long_desc: When enabled, the bucket cache uses inotify to detect files created
+    or removed outside radosgw (sideloading).  Disable when no external filesystem
+    changes are expected; this avoids redundant inotify processing of radosgw's own
+    operations.
+  default: false
+  services:
+  - rgw
+- name: rgw_nsfs_gpfs_lib_path
+  type: str
+  level: advanced
+  desc: Path to libgpfs.so for GPFS-accelerated operations
+  long_desc: If the library is found at this path, the NSFS driver uses
+    GPFS-native atomic link/unlink operations instead of POSIX emulation.
+  default: /usr/lpp/mmfs/lib/libgpfs.so
+  services:
+  - rgw
+- name: rgw_nsfs_gpfs_clone_files
+  type: bool
+  level: advanced
+  desc: Use GPFS clone_snap+clone_copy for CopyObject (experimental)
+  long_desc: >
+    When enabled and GPFS clone symbols are available, CopyObject uses
+    gpfs_clone_snap + gpfs_clone_copy to produce a CoW copy with data
+    at rest.  The clone child gets its own inode and independent xattrs.
+    Clone parents are immutable and managed by cleanup_clone(); a future
+    GPFS auto-gc extension for orphaned clone parents would make this
+    fully production-ready.  Falls back to copy_file_range/read+write
+    when disabled or when clone operations fail.
+  default: false
+  services:
+  - rgw
+- name: rgw_nsfs_gpfs_lwe_locking
+  type: bool
+  level: advanced
+  desc: Use GPFS LWE for cluster-wide version locking (experimental)
+  long_desc: >
+    When enabled, versioned object operations (PUT, DELETE with version
+    demote/promote) use GPFS Lightweight Event (LWE) exclusive rights
+    for locking instead of Linux OFD locks.  LWE rights are coordinated
+    by the GPFS token manager across all nodes mounting the filesystem,
+    which is required for correctness when multiple RGW gateways share
+    a GPFS filesystem.  OFD locks only serialize within a single kernel.
+    Requires libdmapi.so for DMAPI handle conversion.  Falls back to
+    OFD locks when disabled, when LWE/DMAPI symbols are unavailable,
+    or when LWE operations fail at runtime.
+  default: false
+  services:
+  - rgw
+- name: rgw_nsfs_gpfs_batch_xattrs
+  type: bool
+  level: advanced
+  desc: Use gpfs_fcntl for batch xattr operations (experimental)
+  long_desc: >
+    When enabled, xattr read/write operations use gpfs_fcntl to pack
+    multiple xattr operations into a single kernel call instead of
+    individual fgetxattr/fsetxattr syscalls.  Reduces syscall count
+    from O(N) to O(1) per object for metadata-heavy operations like
+    PUT, GET, and listing.  Falls back to POSIX xattr calls when
+    disabled or when gpfs_fcntl is unavailable.
+  default: false
   services:
   - rgw
 - name: rgw_luarocks_location

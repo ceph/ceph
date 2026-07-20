@@ -179,3 +179,7 @@ user_token=<access token for a user, with attribute Department=[Engineering, Mar
 thumbprint=<obtained from x509 certificate>
 
 KC_REALM=<name of the realm>
+
+#following section is added by kafka-vstart.sh for notification testing
+#[kafka]
+#broker = localhost:9092

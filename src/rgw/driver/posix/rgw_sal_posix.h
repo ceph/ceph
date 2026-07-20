@@ -18,10 +18,12 @@
 #include "rgw_sal_filter.h"
 #include "rgw_sal_store.h"
 #include "rgw_quota.h"
+#include "include/encoding.h"
 #include <cstdint>
 #include <memory>
 #include "common/dout.h"
 #include "bucket_cache.h"
+#include "user_cache.h"
 #include "posixDB.h"
 
 class RGWLC;
@@ -31,7 +33,11 @@ namespace rgw { namespace sal {
 class POSIXDriver;
 class POSIXBucket;
 class POSIXObject;
+
 using DeleteResult = rgw::sal::Object::DeleteOp::Result;
+
+namespace posix {
+
 using BucketCache = file::listing::BucketCache<POSIXDriver, POSIXBucket>;
 
 /* integration w/bucket listing cache */
@@ -104,6 +110,7 @@ protected:
   std::string fname;
   Directory* parent;
   int fd{-1};
+  bool need_fsync{false};
   bool exist{false};
   struct statx stx;
   bool stat_done{false};
@@ -281,6 +288,7 @@ public:
   virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children, DeleteResult* result) override;
   virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
   std::unique_ptr<File> get_part_file(int partnum);
+  const std::map<std::string, int64_t>& get_parts() const { return parts; }
   virtual std::unique_ptr<FSEnt> clone_base() override {
     return std::make_unique<MPDirectory>(*this);
   }
@@ -356,6 +364,8 @@ public:
 };
 
 std::string get_key_fname(rgw_obj_key& key, bool use_version);
+
+} // namespace posix
 
 class POSIXZoneGroup : public StoreZoneGroup {
   POSIXDriver* store;
@@ -477,19 +487,19 @@ public:
 };
 
 class POSIXDriver : public StoreDriver {
-protected:	
+protected:
   CephContext *cct;
   std::unique_ptr<rgw::store::POSIXUserDB> userDB;
-  std::unique_ptr<rgw::store::POSIXAccountDB> accountDB;
   POSIXZone zone;
-  std::unique_ptr<BucketCache> bucket_cache;
+  std::unique_ptr<posix::BucketCache> bucket_cache;
+  UserCache user_cache;
   std::string base_path;
-  std::unique_ptr<Directory> root_dir;
+  std::unique_ptr<posix::Directory> root_dir;
   int root_fd;
   RGWSyncModuleInstanceRef sync_module;
   RGWQuotaHandler* quota_handler{nullptr};
   RGWLC* lc{nullptr};
-  bool use_lc_thread;
+  bool use_lc_thread{false};
 
 public:
   POSIXDriver(CephContext *_cct) : StoreDriver(), cct(_cct), zone(this)
@@ -498,9 +508,8 @@ public:
     const auto& db_path = g_conf().get_val<std::string>("rgw_posix_userdb_dir");
     const auto& db_name = g_conf().get_val<std::string>("dbstore_db_name_prefix") + "-" + tenant;
     auto db_full_path = std::filesystem::path(db_path) / db_name;
-    
+
     userDB = std::make_unique<rgw::store::POSIXUserDB>(db_full_path.string(), cct);
-    accountDB = std::make_unique<rgw::store::POSIXAccountDB>(db_full_path.string(), cct);
   }
   virtual ~POSIXDriver() { }
 
@@ -584,25 +593,25 @@ public:
   virtual int count_account_roles(const DoutPrefixProvider* dpp,
 				  optional_yield y,
 				  std::string_view account_id,
-				  uint32_t& count) override { return -ENOTSUP; }
+				  uint32_t& count) override;
   virtual int list_account_roles(const DoutPrefixProvider* dpp,
 				 optional_yield y,
 				 std::string_view account_id,
 				 std::string_view path_prefix,
 				 std::string_view marker,
 				 uint32_t max_items,
-				 RoleList& listing) override { return -ENOTSUP; }
+				 RoleList& listing) override;
 
   virtual int load_account_user_by_name(const DoutPrefixProvider* dpp,
 					optional_yield y,
 					std::string_view account_id,
 					std::string_view tenant,
 					std::string_view username,
-					std::unique_ptr<User>* user) override { return -ENOTSUP; }
+					std::unique_ptr<User>* user) override;
   virtual int count_account_users(const DoutPrefixProvider* dpp,
 				  optional_yield y,
 				  std::string_view account_id,
-				  uint32_t& count) override { return -ENOTSUP; }
+				  uint32_t& count) override;
   virtual int list_account_users(const DoutPrefixProvider* dpp,
 				 optional_yield y,
 				 std::string_view account_id,
@@ -610,44 +619,44 @@ public:
 				 std::string_view path_prefix,
 				 std::string_view marker,
 				 uint32_t max_items,
-				 UserList& listing) override { return -ENOTSUP; }
+				 UserList& listing) override;
 
   virtual int load_group_by_id(const DoutPrefixProvider* dpp,
 			       optional_yield y,
 			       std::string_view id,
 			       RGWGroupInfo& info, Attrs& attrs,
-			       RGWObjVersionTracker& objv) override { return -ENOTSUP; }
+			       RGWObjVersionTracker& objv) override;
   virtual int load_group_by_name(const DoutPrefixProvider* dpp,
 				 optional_yield y,
 				 std::string_view account_id,
 				 std::string_view name,
 				 RGWGroupInfo& info, Attrs& attrs,
-				 RGWObjVersionTracker& objv) override { return -ENOTSUP; }
+				 RGWObjVersionTracker& objv) override;
   virtual int store_group(const DoutPrefixProvider* dpp, optional_yield y,
 			  const RGWGroupInfo& info, const Attrs& attrs,
 			  RGWObjVersionTracker& objv, bool exclusive,
-			  const RGWGroupInfo* old_info) override { return -ENOTSUP; }
+			  const RGWGroupInfo* old_info) override;
   virtual int remove_group(const DoutPrefixProvider* dpp, optional_yield y,
 			   const RGWGroupInfo& info,
-			   RGWObjVersionTracker& objv) override { return -ENOTSUP; }
+			   RGWObjVersionTracker& objv) override;
   virtual int list_group_users(const DoutPrefixProvider* dpp,
 			       optional_yield y,
 			       std::string_view tenant,
 			       std::string_view id,
 			       std::string_view marker,
 			       uint32_t max_items,
-			       UserList& listing) override { return -ENOTSUP; }
+			       UserList& listing) override;
   virtual int count_account_groups(const DoutPrefixProvider* dpp,
 				   optional_yield y,
 				   std::string_view account_id,
-				   uint32_t& count) override { return -ENOTSUP; }
+				   uint32_t& count) override;
   virtual int list_account_groups(const DoutPrefixProvider* dpp,
 				  optional_yield y,
 				  std::string_view account_id,
 				  std::string_view path_prefix,
 				  std::string_view marker,
 				  uint32_t max_items,
-				  GroupList& listing) override { return -ENOTSUP; }
+				  GroupList& listing) override;
 
   virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
   virtual std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i)  override;
@@ -681,12 +690,41 @@ public:
       std::string& _user_tenant,
       std::string& _req_id,
       optional_yield y) override;
+  int read_topic_v2(const std::string& topic_name,
+		    const std::string& tenant,
+		    rgw_pubsub_topic& topic,
+		    RGWObjVersionTracker* objv_tracker,
+		    optional_yield y,
+		    const DoutPrefixProvider* dpp) override;
+  int write_topic_v2(const rgw_pubsub_topic& topic, bool exclusive,
+		     RGWObjVersionTracker& objv_tracker,
+		     optional_yield y,
+		     const DoutPrefixProvider* dpp) override;
+  int remove_topic_v2(const std::string& topic_name,
+		      const std::string& tenant,
+		      RGWObjVersionTracker& objv_tracker,
+		      optional_yield y,
+		      const DoutPrefixProvider* dpp) override;
+  int update_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+				  const std::string& bucket_key,
+				  bool add_mapping,
+				  optional_yield y,
+				  const DoutPrefixProvider* dpp) override;
+  int get_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+			       std::set<std::string>& bucket_keys,
+			       optional_yield y,
+			       const DoutPrefixProvider* dpp) override;
+  int remove_bucket_mapping_from_topics(
+      const rgw_pubsub_bucket_topics& bucket_topics,
+      const std::string& bucket_key,
+      optional_yield y,
+      const DoutPrefixProvider* dpp) override;
   virtual int list_account_topics(const DoutPrefixProvider* dpp,
 				  optional_yield y,
 				  std::string_view account_id,
 				  std::string_view marker,
 				  uint32_t max_items,
-				  TopicList& listing) override { return -ENOTSUP; }
+				  TopicList& listing) override;
 
   virtual int add_persistent_topic(const DoutPrefixProvider* dpp,
 				   optional_yield y,
@@ -745,26 +783,26 @@ public:
 			 const std::string& path_prefix,
 			 const std::string& marker,
 			 uint32_t max_items,
-			 RoleList& listing) override { return 0; }
+			 RoleList& listing) override;
   virtual int store_oidc_provider(const DoutPrefixProvider* dpp,
                                   optional_yield y,
                                   const RGWOIDCProviderInfo& info,
                                   bool exclusive,
-                                  RGWObjVersionTracker* objv_tracker) override { return -ENOTSUP; }
+                                  RGWObjVersionTracker* objv_tracker) override;
   virtual int load_oidc_provider(const DoutPrefixProvider* dpp,
                                  optional_yield y,
                                  std::string_view tenant,
                                  std::string_view url,
                                  RGWOIDCProviderInfo& info,
-                                 RGWObjVersionTracker* objv_tracker) override { return -ENOTSUP; }
+                                 RGWObjVersionTracker* objv_tracker) override;
   virtual int delete_oidc_provider(const DoutPrefixProvider* dpp,
 				   optional_yield y,
 				   std::string_view tenant,
-				   std::string_view url) override { return -ENOTSUP; }
+				   std::string_view url) override;
   virtual int get_oidc_providers(const DoutPrefixProvider* dpp,
 				 optional_yield y,
 				 std::string_view tenant,
-				 std::vector<RGWOIDCProviderInfo>& providers) override { return 0; }
+				 std::vector<RGWOIDCProviderInfo>& providers) override;
   virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				optional_yield y,
 				rgw::sal::Object* obj,
@@ -782,22 +820,23 @@ public:
 				const std::string& unique_tag) override;
 
   virtual const std::string& get_compression_type(const rgw_placement_rule& rule) override;
-  virtual bool valid_placement(const rgw_placement_rule& rule) override { return true; } 
+  virtual bool valid_placement(const rgw_placement_rule& rule) override { return true; }
 
   virtual void finalize(void) override;
 
   virtual CephContext* ctx(void) override { return userDB->ctx(); }
 
-  virtual void register_admin_apis(RGWRESTMgr* mgr) override {}
+  virtual void register_admin_apis(RGWRESTMgr* mgr) override;
 
   /* Internal APIs */
   int get_root_fd() { return root_dir->get_fd(); }
   rgw::store::POSIXUserDB* get_user_db() { return userDB.get(); }
-  Directory* get_root_dir() { return root_dir.get(); }
+  posix::Directory* get_root_dir() { return root_dir.get(); }
   const std::string& get_base_path() const { return base_path; }
-  BucketCache* get_bucket_cache() { return bucket_cache.get(); }
+  posix::BucketCache* get_bucket_cache() { return bucket_cache.get(); }
+  UserCache& get_user_cache() { return user_cache; }
 
-  /* called by BucketCache layer when a new object is discovered
+  /* called by posix::BucketCache layer when a new object is discovered
    * by inotify or similar */
   int mint_listing_entry(
     const std::string& bucket, rgw_bucket_dir_entry& bde /* OUT */);
@@ -807,21 +846,47 @@ public:
 
 class POSIXNotification : public StoreNotification {
 protected:
+  POSIXDriver* driver;
+  rgw::sal::Bucket* bucket = nullptr;
+  std::string user_id;
+  std::string user_tenant;
+  std::string req_id;
+  rgw_pubsub_bucket_topics bucket_topics;
+  std::vector<rgw_pubsub_topic_filter> matched;
+  RGWObjTags* obj_tags_ptr = nullptr;
+  KeyValueMap x_meta_map;
+  friend class POSIXDriver;
 public:
- POSIXNotification(Object* _obj,
+ POSIXNotification(POSIXDriver* _driver,
+		   Object* _obj,
 		   Object* _src_obj,
 		   const rgw::notify::EventTypeList& _types)
-		   : StoreNotification(_obj, _src_obj, _types) {}
+		   : StoreNotification(_obj, _src_obj, _types),
+		     driver(_driver) {}
+ POSIXNotification(POSIXDriver* _driver,
+		   Object* _obj,
+		   Object* _src_obj,
+		   const rgw::notify::EventTypeList& _types,
+		   rgw::sal::Bucket* _bucket,
+		   std::string _user_id,
+		   std::string _user_tenant,
+		   std::string _req_id)
+		   : StoreNotification(_obj, _src_obj, _types),
+		     driver(_driver), bucket(_bucket),
+		     user_id(std::move(_user_id)),
+		     user_tenant(std::move(_user_tenant)),
+		     req_id(std::move(_req_id)) {}
  ~POSIXNotification() = default;
 
- virtual int publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags = nullptr) override { return 0; }
+ virtual int publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags = nullptr) override;
  virtual int publish_commit(const DoutPrefixProvider* dpp, uint64_t size,
-			   const ceph::real_time& mtime, const std::string& etag, const std::string& version) override { return 0; }
+			   const ceph::real_time& mtime, const std::string& etag, const std::string& version) override;
 };
 
 class POSIXUser : public StoreUser {
 private:
   POSIXDriver* driver;
+  int load_user_from_cache_or_db(const DoutPrefixProvider* dpp, bool& cache_hit);
 
 public:
   POSIXUser(POSIXDriver* _driver) :
@@ -852,7 +917,7 @@ public:
                          const DoutPrefixProvider* dpp, optional_yield y) override;
   int list_groups(const DoutPrefixProvider* dpp, optional_yield y,
                   std::string_view marker, uint32_t max_items,
-                  GroupList& listing) override { return -ENOTSUP; }
+                  GroupList& listing) override;
 };
 
 class POSIXBucket : public StoreBucket {
@@ -860,18 +925,18 @@ private:
   POSIXDriver* driver;
   RGWAccessControlPolicy acls;
   std::optional<std::string> ns{std::nullopt};
-  std::unique_ptr<Directory> dir;
+  std::unique_ptr<posix::Directory> dir;
 
 public:
-  POSIXBucket(POSIXDriver *_dr, Directory* _p_dir, const rgw_bucket& _b, std::optional<std::string> _ns = std::nullopt)
+  POSIXBucket(POSIXDriver *_dr, posix::Directory* _p_dir, const rgw_bucket& _b, std::optional<std::string> _ns = std::nullopt)
     : StoreBucket(_b),
     driver(_dr),
     acls(),
     ns(_ns),
-    dir(std::make_unique<Directory>(get_fname(), _p_dir, _dr->ctx()))
+    dir(std::make_unique<posix::Directory>(get_fname(), _p_dir, _dr->ctx()))
     { }
 
-  POSIXBucket(POSIXDriver *_dr, std::unique_ptr<Directory> _this_dir, const rgw_bucket& _b, std::optional<std::string> _ns = std::nullopt)
+  POSIXBucket(POSIXDriver *_dr, std::unique_ptr<posix::Directory> _this_dir, const rgw_bucket& _b, std::optional<std::string> _ns = std::nullopt)
     : StoreBucket(_b),
     driver(_dr),
     acls(),
@@ -879,12 +944,12 @@ public:
     dir(std::move(_this_dir))
     { }
 
-  POSIXBucket(POSIXDriver *_dr, Directory* _p_dir, const RGWBucketInfo& _i)
+  POSIXBucket(POSIXDriver *_dr, posix::Directory* _p_dir, const RGWBucketInfo& _i)
     : StoreBucket(_i),
     driver(_dr),
     acls(),
     ns(),
-    dir(std::make_unique<Directory>(get_fname(), _p_dir, _dr->ctx()))
+    dir(std::make_unique<posix::Directory>(get_fname(), _p_dir, _dr->ctx()))
     { }
 
   POSIXBucket(const POSIXBucket& _b) :
@@ -971,7 +1036,7 @@ public:
 
   /* Internal APIs */
   int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed);
-  Directory* get_dir() { return dir.get(); }
+  posix::Directory* get_dir() { return dir.get(); }
   int get_dir_fd(const DoutPrefixProvider *dpp) { dir->open(dpp); return dir->get_fd(); }
   /* TODO dang Escape the bucket name for file use */
   std::string get_fname();
@@ -979,41 +1044,29 @@ public:
   int rename(const DoutPrefixProvider* dpp, optional_yield y, Object* target_obj);
 
   /* enumerate all entries by callback, in any order */
-  int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb);
-  
+  int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, posix::fill_cache_cb_t& cb);
+
+  static MDB_cmp_func* lmdb_cmp() { return nullptr; }
+
 private:
   int write_attrs(const DoutPrefixProvider *dpp, optional_yield y);
 }; /* POSIXBucket */
 
-struct POSIXManifest {
-  int64_t  multipart_part_count{-1};
-
-  void encode(bufferlist &bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(multipart_part_count, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator &bl) {
-    DECODE_START(1, bl);
-    decode(multipart_part_count, bl);
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(POSIXManifest);
 
 class POSIXObject : public StoreObject {
 public:
 private:
   POSIXDriver* driver;
   RGWAccessControlPolicy acls;
-  std::unique_ptr<FSEnt> ent;
-  std::map<std::string, int64_t> parts;
+  std::unique_ptr<posix::FSEnt> ent;
   DeleteResult del_result;
+  std::map<std::string, int64_t> parts;
+  std::unique_ptr<rgw::sal::Bucket> pinned_bucket;
 
 public:
   struct POSIXReadOp : ReadOp {
     POSIXObject* source;
+    int64_t part_ofs{0};
 
     POSIXReadOp(POSIXObject* _source) :
       source(_source) {}
@@ -1056,6 +1109,11 @@ public:
   {}
 
   virtual ~POSIXObject() { close(); }
+
+  void pin_bucket(std::unique_ptr<rgw::sal::Bucket> b) {
+    pinned_bucket = std::move(b);
+    set_bucket(pinned_bucket.get());
+  }
 
   virtual int delete_object(const DoutPrefixProvider* dpp,
 			    optional_yield y,
@@ -1144,7 +1202,7 @@ public:
     return std::unique_ptr<Object>(new POSIXObject(*this));
   }
 
-  FSEnt* get_fsent() { return ent.get(); }
+  posix::FSEnt* get_fsent() { return ent.get(); }
   int open(const DoutPrefixProvider *dpp, bool create = false, bool temp_file = false);
   int close();
   int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
@@ -1156,10 +1214,10 @@ public:
   int get_owner(const DoutPrefixProvider *dpp, optional_yield y, std::unique_ptr<User> *owner);
   int copy(const DoutPrefixProvider *dpp, optional_yield y, POSIXBucket *sb,
            POSIXBucket *db, POSIXObject *dobj);
-  int fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb);
+  int fill_cache(const DoutPrefixProvider *dpp, optional_yield y, posix::fill_cache_cb_t& cb);
   int set_cur_version(const DoutPrefixProvider *dpp);
   int stat(const DoutPrefixProvider *dpp);
-  int make_ent(ObjectType type);
+  int make_ent(posix::ObjectType type);
   bool versioned() { return bucket->versioned(); }
   DeleteResult get_result() {return del_result;}
 
@@ -1205,8 +1263,12 @@ struct POSIXMPObj {
     int mid_pos = meta.rfind('.', end_pos - 1); // <key>.<upload_id>
     if (mid_pos < 0)
       return false;
+    std::string _upload_id = meta.substr(mid_pos + 1, end_pos - mid_pos - 1);
+    if (!_upload_id.starts_with("2~")) {
+      return false;
+    }
     oid = meta.substr(0, mid_pos);
-    upload_id = meta.substr(mid_pos + 1, end_pos - mid_pos - 1);
+    upload_id = std::move(_upload_id);
     init(oid, upload_id, _owner);
     return true;
   }
@@ -1239,25 +1301,30 @@ WRITE_CLASS_ENCODER(POSIXMPObj)
 
 struct POSIXUploadPartInfo {
   uint32_t num{0};
+  uint64_t size{0};
   std::string etag;
   ceph::real_time mtime;
   std::optional<rgw::cksum::Cksum> cksum;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(num, bl);
     encode(etag, bl);
     encode(mtime, bl);
     encode(cksum, bl);
+    encode(size, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 1, 1, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 1, 1, bl);
     decode(num, bl);
     decode(etag, bl);
     decode(mtime, bl);
     if (struct_v > 1) {
       decode(cksum, bl);
+    }
+    if (struct_v > 2) {
+      decode(size, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -1270,7 +1337,7 @@ class POSIXMultipartPart : public StoreMultipartPart {
 protected:
   POSIXUploadPartInfo info;
   POSIXMultipartUpload* upload;
-  std::unique_ptr<File> part_file;
+  std::unique_ptr<posix::File> part_file;
 
 public:
   POSIXMultipartPart(POSIXMultipartUpload* _upload) :
@@ -1400,8 +1467,8 @@ private:
   const ACLOwner& owner;
   const rgw_placement_rule *ptail_placement_rule;
   uint64_t part_num;
-  std::unique_ptr<Directory> upload_dir;
-  std::unique_ptr<File> part_file;
+  std::unique_ptr<posix::Directory> upload_dir;
+  std::unique_ptr<posix::File> part_file;
 
 public:
   POSIXMultipartWriter(const DoutPrefixProvider *dpp,
@@ -1418,7 +1485,7 @@ public:
     ptail_placement_rule(_ptail_placement_rule),
     part_num(_part_num),
     upload_dir(_shadow_bucket->get_dir()->clone()),
-    part_file(std::make_unique<File>(get_key_fname(_key, false), upload_dir.get(), _driver->ctx()))
+    part_file(std::make_unique<posix::File>(posix::get_key_fname(_key, false), upload_dir.get(), _driver->ctx()))
   { upload_dir->open(dpp); }
   virtual ~POSIXMultipartWriter() = default;
 

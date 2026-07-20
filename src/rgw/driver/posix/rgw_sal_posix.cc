@@ -14,8 +14,13 @@
  */
 
 #include "rgw_sal_posix.h"
+#include "rgw_rest_user.h"
+#include "rgw_pubsub_push.h"
+#include "rgw_pubsub.h"
+#include "rgw_s3_filter.h"
 #include <dirent.h>
 #include <sys/stat.h>
+#include <fcntl.h>
 #include <sys/xattr.h>
 #include <unistd.h>
 #include <cstdint>
@@ -28,51 +33,56 @@
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
 
+template <typename T>
+static bool decode_raw_attr(rgw::sal::Attrs& attrs, const char* name, T& val) {
+  auto it = attrs.find(name);
+  if (it == attrs.end()) {
+    return false;
+  }
+  bufferlist bl = it->second;
+  try {
+    auto it = bl.cbegin();
+    decode(val, it);
+  } catch (buffer::error&) {
+    return false;
+  }
+  return true;
+}
+
+template <typename T>
+static void encode_attr(rgw::sal::Attrs& attrs, const char* name, const T& val) {
+  bufferlist bl;
+  encode(val, bl);
+  attrs[name] = std::move(bl);
+}
+
 namespace rgw { namespace sal {
+
+using namespace posix;
 
 const int64_t READ_SIZE = 128 * 1024;
 const std::string ATTR_PREFIX = "user.X-RGW-";
 #define RGW_POSIX_ATTR_BUCKET_INFO "POSIX-Bucket-Info"
 #define RGW_POSIX_ATTR_MPUPLOAD "POSIX-Multipart-Upload"
-#define RGW_POSIX_ATTR_OWNER "POSIX-Owner"
 #define RGW_POSIX_ATTR_OBJECT_TYPE "POSIX-Object-Type"
-#define RGW_POSIX_ATTR_MANIFEST "POSIX-Manifest"
 #define RGW_POSIX_ATTR_VERSION "POSIX-version"
+#define RGW_POSIX_ATTR_MULTIPART_PART_COUNT "POSIX-Multipart-Part-Count"
+#define RGW_POSIX_ATTR_MULTIPART_TOTAL_SIZE "POSIX-Multipart-Total-Size"
 const std::string mp_ns = "multipart";
 const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
 
-struct POSIXOwner {
-  rgw_user user;
-  std::string display_name;
+/*
+ * Object ownership is stored in RGW_ATTR_ACL (the standard ACL policy
+ * attribute written by the generic RGW layer), matching the rados driver.
+ * Earlier code maintained a separate "POSIX-Owner" xattr with a
+ * POSIXOwner struct that only held rgw_user — this could not represent
+ * account-owned objects (STS role sessions, account root users) and
+ * crashed with std::bad_variant_access.  Removed in favour of the
+ * generic ACLOwner which carries the full rgw_owner variant.
+ */
 
-  POSIXOwner() {}
-
-  POSIXOwner(const rgw_user& _u, const std::string& _n) :
-    user(_u),
-    display_name(_n)
-    {}
-
-  void encode(bufferlist &bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(user, bl);
-    encode(display_name, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator &bl) {
-    DECODE_START(1, bl);
-    decode(user, bl);
-    decode(display_name, bl);
-    DECODE_FINISH(bl);
-  }
-  friend inline std::ostream &operator<<(std::ostream &out,
-                                         const POSIXOwner &o) {
-    out << o.user << ":" << o.display_name;
-    return out;
-  }
-};
-WRITE_CLASS_ENCODER(POSIXOwner);
+namespace posix {
 
 std::string get_key_fname(rgw_obj_key& key, bool use_version)
 {
@@ -92,6 +102,8 @@ std::string get_key_fname(rgw_obj_key& key, bool use_version)
   return fname;
 }
 
+} // namespace posix
+
 static inline std::string gen_rand_instance_name()
 {
   enum { OBJ_INSTANCE_LEN = 32 };
@@ -100,9 +112,8 @@ static inline std::string gen_rand_instance_name()
 #if 0
   gen_rand_alphanumeric_no_underscore(driver->ctx(), buf, OBJ_INSTANCE_LEN);
 #else
-  static uint64_t last_id = UINT64_MAX;
-  snprintf(buf, OBJ_INSTANCE_LEN, "%lx", last_id);
-  last_id--;
+  static std::atomic<uint64_t> last_id{UINT64_MAX};
+  snprintf(buf, OBJ_INSTANCE_LEN, "%lx", last_id.fetch_sub(1));
 #endif
 
   return buf;
@@ -147,6 +158,7 @@ static bool decode_attr(Attrs &attrs, const char *name, F &f) {
   return true;
 }
 
+
 static inline rgw_obj_key decode_obj_key(const char* fname)
 {
   std::string dname, oname, ns; // XXX ns is unused?
@@ -161,13 +173,21 @@ static inline rgw_obj_key decode_obj_key(const std::string& fname)
   return decode_obj_key(fname.c_str());
 }
 
-int decode_owner(Attrs& attrs, POSIXOwner& owner)
+/* Extract object owner from the standard RGW_ATTR_ACL attribute */
+static int decode_acl_owner(Attrs& attrs, ACLOwner& owner)
 {
-  bufferlist bl;
-  if (!decode_attr(attrs, RGW_POSIX_ATTR_OWNER, owner)) {
+  auto i = attrs.find(RGW_ATTR_ACL);
+  if (i == attrs.end()) {
     return -EINVAL;
   }
-
+  RGWAccessControlPolicy policy;
+  try {
+    auto bp = i->second.cbegin();
+    policy.decode(bp);
+  } catch (const buffer::error&) {
+    return -EIO;
+  }
+  owner = policy.get_owner();
   return 0;
 }
 
@@ -181,6 +201,27 @@ static inline int copy_dir_fd(int old_fd)
 {
   return openat(old_fd, ".", O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
 }
+
+/* RAII guard for OFD (Open File Description) locks.  OFD locks are
+ * per-open-file-description rather than per-process, so they work
+ * correctly across threads that open independent fds to the same
+ * inode.  Used to serialise xattr writes against concurrent readers
+ * on the same directory or file. */
+struct OFDLockGuard {
+  int fd;
+  OFDLockGuard(int _fd, short type) : fd(_fd) {
+    struct flock fl{};
+    fl.l_type = type;
+    fl.l_whence = SEEK_SET;
+    fcntl(fd, F_OFD_SETLKW, &fl);
+  }
+  ~OFDLockGuard() {
+    struct flock fl{};
+    fl.l_type = F_UNLCK;
+    fl.l_whence = SEEK_SET;
+    fcntl(fd, F_OFD_SETLK, &fl);
+  }
+};
 
 static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
 		       Attrs& attrs, const std::string& display)
@@ -223,7 +264,7 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
       ldpp_dout(dpp, 0) << "ERROR: could not get attribute " << keyptr << " for " << display << ": " << cpp_strerror(ret) << dendl;
       return -ret;
     } else if (vallen == 0) {
-      /* No attribute value for this name */
+      attrs.emplace(std::move(key), bufferlist{});
       buflen -= keylen;
       keyptr += keylen;
       continue;
@@ -307,6 +348,7 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not open bucket " << dname
                       << " for listing: " << cpp_strerror(ret) << dendl;
+    ::close(dir_fd);
     return -ret;
   }
 
@@ -325,6 +367,7 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
     std::string_view d_name = entry->d_name;
     bool is_mp = d_name.starts_with("." + mp_ns);
     if (!is_mp && !delete_children) {
+      closedir(dir);
       return -ENOTEMPTY;
     }
 
@@ -333,6 +376,7 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
       ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not stat object " << entry->d_name
                         << ": " << cpp_strerror(ret) << dendl;
+      closedir(dir);
       return -ret;
     }
 
@@ -340,6 +384,7 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
       /* Recurse */
       ret = delete_directory(dir_fd, entry->d_name, true, dpp);
       if (ret < 0) {
+        closedir(dir);
         return ret;
       }
 
@@ -352,6 +397,7 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
       ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not remove file " << entry->d_name
                         << ": " << cpp_strerror(ret) << dendl;
+      closedir(dir);
       return -ret;
     }
   }
@@ -369,6 +415,8 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
 
   return 0;
 }
+
+namespace posix {
 
 int FSEnt::stat(const DoutPrefixProvider* dpp, bool force)
 {
@@ -402,12 +450,23 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
     return ret;
   }
 
+  OFDLockGuard lock(fd, F_WRLCK);
+  need_fsync = true;
+
   /* Set the type */
   bufferlist type_bl;
   ObjectType type{get_type()};
   type.encode(type_bl);
   attrs[RGW_POSIX_ATTR_OBJECT_TYPE] = type_bl;
 
+  /* Snapshot old xattrs so we can remove genuinely stale ones after
+   * writing — covered by the OFD write lock above. */
+  Attrs old_attrs;
+  int old_ret = get_x_attrs(y, dpp, fd, old_attrs, get_name());
+
+  /* Write new values first — fsetxattr overwrites in place, so
+   * readers always see either the old or the new value, never
+   * ENODATA for an attr that is being updated. */
   if (extra_attrs) {
     for (auto &it : *extra_attrs) {
       ret = write_x_attr(dpp, y, fd, it.first, it.second, get_name());
@@ -424,6 +483,17 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
     }
   }
 
+  /* Now remove xattrs that are on disk but genuinely gone from the
+   * new attrs (not just about to be rewritten). */
+  if (old_ret >= 0) {
+    for (auto& it : old_attrs) {
+      if (attrs.find(it.first) == attrs.end() &&
+          (!extra_attrs || extra_attrs->find(it.first) == extra_attrs->end())) {
+        remove_x_attr(dpp, y, fd, it.first, get_name());
+      }
+    }
+  }
+
   return 0;
 }
 
@@ -434,6 +504,7 @@ int FSEnt::read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& at
     return ret;
   }
 
+  OFDLockGuard lock(get_fd(), F_RDLCK);
   return get_x_attrs(y, dpp, get_fd(), attrs, get_name());
 }
 
@@ -479,14 +550,14 @@ int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cach
   if (ret < 0)
     return ret;
 
-  POSIXOwner o;
-  ret = decode_owner(attrs, o);
+  ACLOwner acl_owner;
+  ret = decode_acl_owner(attrs, acl_owner);
   if (ret < 0) {
     bde.meta.owner = "unknown";
     bde.meta.owner_display_name = "unknown";
   } else {
-    bde.meta.owner = o.user.to_str();
-    bde.meta.owner_display_name = o.display_name;
+    bde.meta.owner = to_string(acl_owner.id);
+    bde.meta.owner_display_name = acl_owner.display_name;
   }
   bde.meta.category = RGWObjCategory::Main;
   bde.meta.size = stx.stx_size;
@@ -526,6 +597,7 @@ int File::create(const DoutPrefixProvider *dpp, bool* existed, bool temp_file)
     }
 
   fd = ret;
+  need_fsync = true;
 
   return 0;
 }
@@ -555,12 +627,15 @@ int File::close()
     return 0;
   }
 
-  int ret = ::fsync(fd);
-  if(ret < 0) {
-    return ret;
+  if (need_fsync) {
+    int ret = ::fsync(fd);
+    if (ret < 0) {
+      return ret;
+    }
+    need_fsync = false;
   }
 
-  ret = ::close(fd);
+  int ret = ::close(fd);
   if(ret < 0) {
     return ret;
   }
@@ -589,6 +664,7 @@ int File::stat(const DoutPrefixProvider* dpp, bool force)
 int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
 		       optional_yield y)
 {
+  need_fsync = true;
   int64_t left = bl.length();
   char* curp = bl.c_str();
   ssize_t ret;
@@ -1069,13 +1145,13 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
     Attrs attrs;
 
     tmpfd = openat(get_fd(), name.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
-    if (tmpfd > 0) {
+    if (tmpfd >= 0) {
       ret = get_x_attrs(y, dpp, tmpfd, attrs, name);
       if (ret >= 0) {
         decode_attr(attrs, RGW_POSIX_ATTR_OBJECT_TYPE, type);
       }
+      ::close(tmpfd);
     }
-    ::close(tmpfd);
     switch (type.type) {
     case ObjectType::VERSIONED:
       nent = std::make_unique<VersionedDirectory>(name, this, instance, nstx, ctx);
@@ -1422,7 +1498,7 @@ int VersionedDirectory::create(const DoutPrefixProvider* dpp, bool* existed, boo
     /* Want to create an actual versioned object */
     rgw_obj_key key = decode_obj_key(get_name());
     key.instance = instance_id;
-    std::unique_ptr<FSEnt> file = 
+    std::unique_ptr<FSEnt> file =
         std::make_unique<File>(get_key_fname(key, /*use_version=*/true), this, ctx);
     ret = add_file(dpp, std::move(file), existed, temp_file);
     if (ret < 0) {
@@ -1711,8 +1787,8 @@ int VersionedDirectory::add_delete_marker(const DoutPrefixProvider* dpp,
   }
 
   bufferlist owner_bl;
-  if (rgw::sal::get_attr(v_attrs, RGW_POSIX_ATTR_OWNER, owner_bl)) {
-    attrs[RGW_POSIX_ATTR_OWNER] = std::move(owner_bl);
+  if (rgw::sal::get_attr(v_attrs, RGW_ATTR_ACL, owner_bl)) {
+    attrs[RGW_ATTR_ACL] = std::move(owner_bl);
   }
 
   buffer::list bl;
@@ -1857,10 +1933,24 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y,
 int VersionedDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
                                    fill_cache_cb_t &cb, uint32_t flags)
 {
-  /* Fill cur_version */
+  /* Fill cur_version — stat() may reset cur_version to null if the
+   * current version is a delete marker, so also resolve the symlink
+   * target name for the FLAG_CURRENT comparison below */
   stat(dpp, /*force=*/false);
 
-  int ret = for_each(dpp, [this, &cb, &dpp, &y](const char *name) {
+  std::string cur_version_name;
+  if (cur_version) {
+    cur_version_name = cur_version->get_name();
+  } else {
+    /* cur_version is null — likely a delete marker; read the symlink
+     * to determine which entry is current */
+    std::unique_ptr<Symlink> sl = std::make_unique<Symlink>(get_name(), this, ctx);
+    if (sl->stat(dpp) >= 0 && sl->exists()) {
+      cur_version_name = sl->get_target()->get_name();
+    }
+  }
+
+  int ret = for_each(dpp, [this, &cb, &dpp, &y, &cur_version_name](const char *name) {
     std::unique_ptr<FSEnt> ent;
 
     if (name[0] == '.') {
@@ -1876,8 +1966,8 @@ int VersionedDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield
 
     if (ent->get_type() != ObjectType::SYMLINK) {
       uint32_t fill_flags =
-          (cur_version &&
-           (ent->get_name() == cur_version->get_name())) ?
+          (!cur_version_name.empty() &&
+           (ent->get_name() == cur_version_name)) ?
         FSEnt::FLAG_CURRENT :
         FSEnt::FLAG_NONE;
 
@@ -1946,6 +2036,8 @@ int VersionedDirectory::remove_symlink(const DoutPrefixProvider *dpp, optional_y
 
   return 0;
 }
+
+} // namespace posix
 
 bool POSIXZoneGroup::placement_target_exists(std::string& target) const {
   return !!group->placement_targets.count(target);
@@ -2057,7 +2149,11 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
       g_conf().get_val<int64_t>("rgw_posix_cache_max_buckets"),
       g_conf().get_val<int64_t>("rgw_posix_cache_lanes"),
       g_conf().get_val<int64_t>("rgw_posix_cache_partitions"),
-      g_conf().get_val<int64_t>("rgw_posix_cache_lmdb_count")));
+      g_conf().get_val<int64_t>("rgw_posix_cache_lmdb_count"),
+      g_conf().get_val<bool>("rgw_posix_inotify")));
+
+  /* user info cache */
+  user_cache.set_max_size(dpp, g_conf().get_val<uint64_t>("rgw_posix_cache_max_users"));
 
   root_dir = std::make_unique<Directory>(base_path, nullptr, ctx());
   ret = root_dir->open(dpp);
@@ -2079,7 +2175,7 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   lc = new RGWLC();
   lc->initialize(cct, this);
 
-  if (use_lc_thread) { 
+  if (use_lc_thread) {
     ret = userDB->createLCTables(dpp);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "Failed to create LC tables, ret=" << ret << dendl;
@@ -2091,12 +2187,17 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   ldpp_dout(dpp, 20) << "root_fd: " << root_dir->get_fd() << dendl;
   quota_handler = RGWQuotaHandler::generate_handler(dpp, this, true);
 
+  if (!RGWPubSubEndpoint::init_all(cct)) {
+    ldpp_dout(dpp, 1) << "WARNING: failed to init notification endpoints" << dendl;
+  }
+
   ldpp_dout(dpp, 20) << "SUCCESS" << dendl;
   return 0;
 }
 
 void POSIXDriver::finalize()
 {
+  RGWPubSubEndpoint::shutdown_all();
   RGWQuotaHandler::free_handler(quota_handler);
 }
 
@@ -2107,6 +2208,17 @@ std::unique_ptr<User> POSIXDriver::get_user(const rgw_user &u)
 
 int POSIXDriver::get_user_by_access_key(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y, std::unique_ptr<User>* user)
 {
+  {
+    UserCacheEntry ce;
+    if (user_cache.lookup_user_by_access_key(dpp, key, ce)) {
+      auto u = new POSIXUser(this, ce.info);
+      u->get_attrs() = ce.attrs;
+      u->get_version_tracker() = ce.objv_tracker;
+      user->reset(u);
+      return 0;
+    }
+  }
+
   RGWUserInfo uinfo;
   rgw::sal::Attrs attrs;
   RGWObjVersionTracker objv_tracker;
@@ -2125,6 +2237,8 @@ int POSIXDriver::get_user_by_access_key(const DoutPrefixProvider* dpp, const std
   u->get_attrs() = std::move(attrs);
   u->get_version_tracker() = objv_tracker;
   user->reset(u);
+
+  user_cache.insert_user(dpp, {uinfo, u->get_attrs(), objv_tracker});
   return 0;
 }
 
@@ -2149,6 +2263,8 @@ int POSIXDriver::get_user_by_email(const DoutPrefixProvider* dpp, const std::str
   u->get_attrs() = std::move(attrs);
   u->get_version_tracker() = objv_tracker;
   user->reset(u);
+
+  user_cache.insert_user(dpp, {uinfo, u->get_attrs(), objv_tracker});
   return 0;
 }
 
@@ -2167,7 +2283,7 @@ int POSIXDriver::load_account_by_id(const DoutPrefixProvider* dpp,
 {
   RGWObjVersionTracker objv_tracker;
 
-  int ret = accountDB->get_account(dpp, std::string("account_id"), std::string(id), info, &attrs,
+  int ret = userDB->get_account(dpp, std::string("account_id"), std::string(id), info, &attrs,
       &objv_tracker);
 
   if (ret < 0)
@@ -2187,7 +2303,7 @@ int POSIXDriver::load_account_by_name(const DoutPrefixProvider* dpp,
 {
   RGWObjVersionTracker objv_tracker;
 
-  int ret = accountDB->get_account(dpp, std::string("name"), std::string(name), info, &attrs,
+  int ret = userDB->get_account(dpp, std::string("name"), std::string(name), info, &attrs,
       &objv_tracker);
 
   if (ret < 0)
@@ -2206,7 +2322,7 @@ int POSIXDriver::load_account_by_email(const DoutPrefixProvider* dpp,
 {
   RGWObjVersionTracker objv_tracker;
 
-  int ret = accountDB->get_account(dpp, std::string("email"), std::string(email), info, &attrs,
+  int ret = userDB->get_account(dpp, std::string("email"), std::string(email), info, &attrs,
       &objv_tracker);
 
   if (ret < 0)
@@ -2223,7 +2339,7 @@ int POSIXDriver::store_account(const DoutPrefixProvider* dpp,
 			  const Attrs& attrs,
 			  RGWObjVersionTracker& objv)
 {
-  int ret = accountDB->store_account(dpp, info, exclusive, &attrs, &objv);
+  int ret = userDB->store_account(dpp, info, exclusive, &attrs, &objv);
 
   if (ret < 0)
     return ret;
@@ -2236,7 +2352,7 @@ int POSIXDriver::delete_account(const DoutPrefixProvider* dpp,
 			     const RGWAccountInfo& info,
 			     RGWObjVersionTracker& objv)
 {
-  int ret = accountDB->remove_account(dpp, info, &objv);
+  int ret = userDB->remove_account(dpp, info, &objv);
 
   if (ret < 0)
     return ret;
@@ -2342,7 +2458,10 @@ std::unique_ptr<Writer> POSIXDriver::get_atomic_writer(const DoutPrefixProvider 
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag)
 {
-
+  if (_head_obj->get_bucket()->get_info().versioning_enabled() &&
+      !_head_obj->have_instance()) {
+    _head_obj->gen_rand_obj_instance_name();
+  }
   return std::make_unique<POSIXAtomicWriter>(dpp, y, _head_obj, this, owner, ptail_placement_rule, olh_epoch, unique_tag);
 }
 
@@ -2356,7 +2475,13 @@ std::unique_ptr<Notification> POSIXDriver::get_notification(rgw::sal::Object* ob
 			      const std::string* object_name)
 {
   rgw::notify::EventTypeList event_types = {event_type};
-  return std::make_unique<POSIXNotification>(obj, src_obj, event_types);
+  auto notif = std::make_unique<POSIXNotification>(this, obj, src_obj, event_types,
+      s->bucket.get(),
+      to_string(s->owner.id),
+      s->owner.id.index() == 0 ? std::get<rgw_user>(s->owner.id).tenant : "",
+      s->req_id);
+  notif->x_meta_map = s->info.x_meta_map;
+  return notif;
 }
 
 std::unique_ptr<Notification> POSIXDriver::get_notification(
@@ -2369,7 +2494,8 @@ std::unique_ptr<Notification> POSIXDriver::get_notification(
     std::string& _user_tenant,
     std::string& _req_id,
     optional_yield y) {
-  return std::make_unique<POSIXNotification>(obj, src_obj, event_types);
+  return std::make_unique<POSIXNotification>(this, obj, src_obj, event_types,
+      _bucket, _user_id, _user_tenant, _req_id);
 }
 
 // TODO: marker and other params
@@ -2419,6 +2545,10 @@ int POSIXDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& ow
     ret = statx(get_root_fd(), entry->d_name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
     if (ret < 0) {
       ret = errno;
+      if (ret == ENOENT) {
+	errno = 0;
+	continue;
+      }
       ldpp_dout(dpp, 0) << "ERROR: could not stat object " << entry->d_name << ": "
 	<< cpp_strerror(ret) << dendl;
       return -ret;
@@ -2436,6 +2566,13 @@ int POSIXDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& ow
     }
     std::unique_ptr<Bucket> bucket;
     ret = load_bucket(dpp, rgw_bucket("", entry->d_name), &bucket, null_yield);
+    if (ret < 0) {
+      if (ret == -ENOENT) {
+	errno = 0;
+	continue;
+      }
+      return ret;
+    }
     if (bucket->get_owner() != owner) {
       continue;
     }
@@ -2467,8 +2604,16 @@ int POSIXBucket::create(const DoutPrefixProvider* dpp,
 {
   info.owner = params.owner;
 
-  info.bucket.marker = params.marker;
-  info.bucket.bucket_id = params.bucket_id;
+  if (params.marker.empty()) {
+    char buf[17];
+    gen_rand_alphanumeric(driver->ctx(), buf, sizeof(buf) - 1);
+    buf[16] = '\0';
+    info.bucket.marker = info.bucket.name + "." + buf;
+    info.bucket.bucket_id = info.bucket.marker;
+  } else {
+    info.bucket.marker = params.marker;
+    info.bucket.bucket_id = params.bucket_id;
+  }
 
   info.zonegroup = params.zonegroup_id;
   info.placement_rule = params.placement_rule;
@@ -2503,10 +2648,34 @@ int POSIXBucket::create(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+int POSIXUser::load_user_from_cache_or_db(const DoutPrefixProvider* dpp, bool& cache_hit)
+{
+  cache_hit = false;
+  UserCacheEntry ce;
+  if (driver->get_user_cache().lookup_user_by_uid(dpp, this->get_id().id, ce)) {
+    this->get_info() = std::move(ce.info);
+    this->get_attrs() = std::move(ce.attrs);
+    this->get_version_tracker() = std::move(ce.objv_tracker);
+    cache_hit = true;
+    return 0;
+  }
+
+  int ret = driver->get_user_db()->get_user(dpp, std::string("user_id"), this->get_id().id, this->get_info(), &(this->get_attrs()),
+        &(this->get_version_tracker()));
+  if (ret == 0) {
+    driver->get_user_cache().insert_user(dpp, {this->get_info(), this->get_attrs(), this->get_version_tracker()});
+  }
+  return ret;
+}
+
 int POSIXUser::read_attrs(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return driver->get_user_db()->get_user(dpp, std::string("user_id"), this->get_id().id, this->get_info(), &(this->get_attrs()),
-        &(this->get_version_tracker()));
+  bool cache_hit;
+  int ret = load_user_from_cache_or_db(dpp, cache_hit);
+  if (cache_hit) {
+    ldpp_dout(dpp, 21) << "UserCache: read_attrs: cache hit for uid=" << this->get_id().id << dendl;
+  }
+  return ret;
 }
 
 int POSIXUser::merge_and_store_attrs(const DoutPrefixProvider* dpp,
@@ -2516,24 +2685,59 @@ int POSIXUser::merge_and_store_attrs(const DoutPrefixProvider* dpp,
   for(auto& it : new_attrs) {
 	attrs[it.first] = it.second;
   }
+  this->get_attrs() = std::move(attrs);
 
   return store_user(dpp, y, false);
 }
 
 int POSIXUser::load_user(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return driver->get_user_db()->get_user(dpp, std::string("user_id"), this->get_id().id, this->get_info(), &(this->get_attrs()),
-           &(this->get_version_tracker()));
+  bool cache_hit;
+  int ret = load_user_from_cache_or_db(dpp, cache_hit);
+  if (cache_hit) {
+    ldpp_dout(dpp, 21) << "UserCache: load_user: cache hit for uid=" << this->get_id().id << dendl;
+  }
+  return ret;
 }
 
 int POSIXUser::store_user(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info)
 {
-  return driver->get_user_db()->store_user(dpp, this->get_info(), exclusive, &(this->get_attrs()), &(this->get_version_tracker()), old_info);
+  int ret = driver->get_user_db()->store_user(dpp, this->get_info(), exclusive, &(this->get_attrs()), &(this->get_version_tracker()), old_info);
+  if (ret == 0) {
+    driver->get_user_cache().invalidate_user(dpp, this->get_id().id);
+    driver->get_user_cache().insert_user(dpp, {this->get_info(), this->get_attrs(), this->get_version_tracker()});
+  }
+  return ret;
 }
 
 int POSIXUser::remove_user(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return driver->get_user_db()->remove_user(dpp, this->get_info(), &(this->get_version_tracker()));
+  int ret = driver->get_user_db()->remove_user(dpp, this->get_info(), &(this->get_version_tracker()));
+  if (ret == 0) {
+    driver->get_user_cache().invalidate_user(dpp, this->get_id().id);
+  } else {
+    ldpp_dout(dpp, 0) << "ERROR: failed to remove user uid=" << this->get_id().id << " ret=" << ret << dendl;
+  }
+  return ret;
+}
+
+int POSIXUser::list_groups(const DoutPrefixProvider* dpp, optional_yield y,
+                           std::string_view marker, uint32_t max_items,
+                           GroupList& listing)
+{
+  std::vector<RGWGroupInfo> groups;
+  int ret = driver->get_user_db()->list_user_groups(dpp,
+      get_id().id, std::string(marker), max_items + 1, groups);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (groups.size() > max_items) {
+    listing.next_marker = groups[max_items].name;
+    groups.resize(max_items);
+  }
+  listing.groups = std::move(groups);
+  return 0;
 }
 
 int POSIXUser::verify_mfa(const std::string& mfa_str, bool* verified, const DoutPrefixProvider *dpp, optional_yield y)
@@ -2599,20 +2803,485 @@ std::unique_ptr<RGWRole> POSIXDriver::get_role(std::string name,
     std::string max_session_duration_str,
     std::multimap<std::string,std::string> tags)
 {
-  RGWRole* p = nullptr;
-  return std::unique_ptr<RGWRole>(p);
+  return std::make_unique<DBStoreRole>(
+      get_user_db(), std::move(name), std::move(tenant),
+      std::move(account_id), std::move(path), std::move(trust_policy),
+      std::move(description), std::move(max_session_duration_str),
+      std::move(tags));
 }
 
 std::unique_ptr<RGWRole> POSIXDriver::get_role(std::string id)
 {
-  RGWRole* p = nullptr;
-  return std::unique_ptr<RGWRole>(p);
+  return std::make_unique<DBStoreRole>(get_user_db(), std::move(id));
 }
 
 std::unique_ptr<RGWRole> POSIXDriver::get_role(const RGWRoleInfo& info)
 {
-  RGWRole* p = nullptr;
-  return std::unique_ptr<RGWRole>(p);
+  return std::make_unique<DBStoreRole>(get_user_db(), info);
+}
+
+int POSIXDriver::count_account_roles(const DoutPrefixProvider* dpp,
+				     optional_yield y,
+				     std::string_view account_id,
+				     uint32_t& count)
+{
+  return get_user_db()->count_account_roles(dpp,
+      std::string(account_id), count);
+}
+
+int POSIXDriver::list_account_roles(const DoutPrefixProvider* dpp,
+				    optional_yield y,
+				    std::string_view account_id,
+				    std::string_view path_prefix,
+				    std::string_view marker,
+				    uint32_t max_items,
+				    RoleList& listing)
+{
+  std::vector<RGWRoleInfo> roles;
+  int ret = get_user_db()->list_roles(dpp, "account",
+      "", std::string(account_id),
+      std::string(path_prefix), std::string(marker),
+      max_items + 1, roles);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (roles.size() > max_items) {
+    listing.next_marker = roles[max_items].name;
+    roles.resize(max_items);
+  }
+  listing.roles = std::move(roles);
+  return 0;
+}
+
+int POSIXDriver::list_roles(const DoutPrefixProvider *dpp,
+			    optional_yield y,
+			    const std::string& tenant,
+			    const std::string& path_prefix,
+			    const std::string& marker,
+			    uint32_t max_items,
+			    RoleList& listing)
+{
+  std::vector<RGWRoleInfo> roles;
+  int ret = get_user_db()->list_roles(dpp, "tenant",
+      tenant, "",
+      path_prefix, marker,
+      max_items + 1, roles);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (roles.size() > max_items) {
+    listing.next_marker = roles[max_items].name;
+    roles.resize(max_items);
+  }
+  listing.roles = std::move(roles);
+  return 0;
+}
+
+int POSIXDriver::load_account_user_by_name(const DoutPrefixProvider* dpp,
+					   optional_yield y,
+					   std::string_view account_id,
+					   std::string_view tenant,
+					   std::string_view username,
+					   std::unique_ptr<User>* user)
+{
+  RGWUserInfo uinfo;
+  int ret = get_user_db()->get_account_user_by_name(dpp,
+      std::string(account_id), std::string(username), uinfo);
+  if (ret < 0) {
+    return ret;
+  }
+  if (user) {
+    *user = get_user(uinfo.user_id);
+    (*user)->get_info() = uinfo;
+    ret = (*user)->load_user(dpp, y);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+  return 0;
+}
+
+int POSIXDriver::count_account_users(const DoutPrefixProvider* dpp,
+				     optional_yield y,
+				     std::string_view account_id,
+				     uint32_t& count)
+{
+  return get_user_db()->count_account_users(dpp,
+      std::string(account_id), count);
+}
+
+int POSIXDriver::list_account_users(const DoutPrefixProvider* dpp,
+				    optional_yield y,
+				    std::string_view account_id,
+				    std::string_view tenant,
+				    std::string_view path_prefix,
+				    std::string_view marker,
+				    uint32_t max_items,
+				    UserList& listing)
+{
+  std::vector<RGWUserInfo> users;
+  int ret = get_user_db()->list_account_users(dpp,
+      std::string(account_id), std::string(marker),
+      max_items + 1, users);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (!path_prefix.empty()) {
+    std::string pp(path_prefix);
+    users.erase(
+        std::remove_if(users.begin(), users.end(),
+            [&pp](const RGWUserInfo& u) {
+              return u.path.substr(0, pp.size()) != pp;
+            }),
+        users.end());
+  }
+
+  if (users.size() > max_items) {
+    listing.next_marker = users[max_items].display_name;
+    users.resize(max_items);
+  }
+  listing.users = std::move(users);
+  return 0;
+}
+
+int POSIXDriver::load_group_by_id(const DoutPrefixProvider* dpp,
+				  optional_yield y, std::string_view id,
+				  RGWGroupInfo& info, Attrs& attrs,
+				  RGWObjVersionTracker& objv)
+{
+  info.id = std::string(id);
+  return get_user_db()->get_group(dpp, "group_id", info, attrs);
+}
+
+int POSIXDriver::load_group_by_name(const DoutPrefixProvider* dpp,
+				    optional_yield y,
+				    std::string_view account_id,
+				    std::string_view name,
+				    RGWGroupInfo& info, Attrs& attrs,
+				    RGWObjVersionTracker& objv)
+{
+  info.account_id = std::string(account_id);
+  info.name = std::string(name);
+  return get_user_db()->get_group(dpp, "name", info, attrs);
+}
+
+int POSIXDriver::store_group(const DoutPrefixProvider* dpp, optional_yield y,
+			     const RGWGroupInfo& info, const Attrs& attrs,
+			     RGWObjVersionTracker& objv, bool exclusive,
+			     const RGWGroupInfo* old_info)
+{
+  return get_user_db()->store_group(dpp, info, attrs, exclusive);
+}
+
+int POSIXDriver::remove_group(const DoutPrefixProvider* dpp, optional_yield y,
+			      const RGWGroupInfo& info,
+			      RGWObjVersionTracker& objv)
+{
+  return get_user_db()->remove_group(dpp, info);
+}
+
+int POSIXDriver::list_group_users(const DoutPrefixProvider* dpp,
+				  optional_yield y,
+				  std::string_view tenant,
+				  std::string_view id,
+				  std::string_view marker,
+				  uint32_t max_items,
+				  UserList& listing)
+{
+  std::vector<std::string> user_ids;
+  int ret = get_user_db()->list_group_users(dpp,
+      std::string(id), std::string(marker), max_items + 1, user_ids);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (user_ids.size() > max_items) {
+    listing.next_marker = user_ids[max_items];
+    user_ids.resize(max_items);
+  }
+
+  for (auto& uid : user_ids) {
+    RGWUserInfo uinfo;
+    uinfo.user_id.id = uid;
+    ret = get_user_db()->get_user(dpp, std::string("user_id"), uid,
+                                  uinfo, nullptr, nullptr);
+    if (ret < 0) {
+      continue;
+    }
+    listing.users.push_back(std::move(uinfo));
+  }
+  return 0;
+}
+
+int POSIXDriver::count_account_groups(const DoutPrefixProvider* dpp,
+				      optional_yield y,
+				      std::string_view account_id,
+				      uint32_t& count)
+{
+  return get_user_db()->count_account_groups(dpp,
+      std::string(account_id), count);
+}
+
+int POSIXDriver::list_account_groups(const DoutPrefixProvider* dpp,
+				     optional_yield y,
+				     std::string_view account_id,
+				     std::string_view path_prefix,
+				     std::string_view marker,
+				     uint32_t max_items,
+				     GroupList& listing)
+{
+  std::vector<RGWGroupInfo> groups;
+  int ret = get_user_db()->list_account_groups(dpp,
+      std::string(account_id), std::string(path_prefix),
+      std::string(marker), max_items + 1, groups);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (groups.size() > max_items) {
+    listing.next_marker = groups[max_items].name;
+    groups.resize(max_items);
+  }
+  listing.groups = std::move(groups);
+  return 0;
+}
+
+int POSIXDriver::store_oidc_provider(const DoutPrefixProvider* dpp,
+				     optional_yield y,
+				     const RGWOIDCProviderInfo& info,
+				     bool exclusive,
+				     RGWObjVersionTracker* objv_tracker)
+{
+  return get_user_db()->store_oidc_provider(dpp, info, exclusive);
+}
+
+int POSIXDriver::load_oidc_provider(const DoutPrefixProvider* dpp,
+				    optional_yield y,
+				    std::string_view tenant,
+				    std::string_view url,
+				    RGWOIDCProviderInfo& info,
+				    RGWObjVersionTracker* objv_tracker)
+{
+  return get_user_db()->load_oidc_provider(dpp,
+      std::string(tenant), std::string(url), info);
+}
+
+int POSIXDriver::delete_oidc_provider(const DoutPrefixProvider* dpp,
+				      optional_yield y,
+				      std::string_view tenant,
+				      std::string_view url)
+{
+  return get_user_db()->delete_oidc_provider(dpp,
+      std::string(tenant), std::string(url));
+}
+
+int POSIXDriver::get_oidc_providers(const DoutPrefixProvider* dpp,
+				    optional_yield y,
+				    std::string_view tenant,
+				    std::vector<RGWOIDCProviderInfo>& providers)
+{
+  return get_user_db()->list_oidc_providers(dpp,
+      std::string(tenant), providers);
+}
+
+/* --- Notification publish methods --- */
+
+int POSIXNotification::publish_reserve(const DoutPrefixProvider *dpp,
+				       RGWObjTags* obj_tags)
+{
+  obj_tags_ptr = obj_tags;
+
+  if (!bucket) {
+    return 0;
+  }
+
+  int ret = get_bucket_notifications(dpp, bucket, bucket_topics);
+  if (ret < 0) {
+    return ret;
+  }
+
+  const std::string obj_name = obj ? obj->get_name() : "";
+
+  for (auto& [name, filter] : bucket_topics.topics) {
+    bool event_match = false;
+    for (auto req_type : event_types) {
+      for (auto cfg_type : filter.events) {
+	if (static_cast<uint64_t>(req_type) & static_cast<uint64_t>(cfg_type)) {
+	  event_match = true;
+	  break;
+	}
+      }
+      if (event_match) break;
+    }
+    if (!event_match) continue;
+
+    if (!match(filter.s3_filter.key_filter, obj_name)) {
+      continue;
+    }
+
+    if (!filter.s3_filter.metadata_filter.kv.empty()) {
+      if (!match(filter.s3_filter.metadata_filter, x_meta_map)) {
+	continue;
+      }
+    }
+
+    if (!filter.s3_filter.tag_filter.kv.empty()) {
+      KeyMultiValueMap tags;
+      if (obj_tags) {
+	tags = obj_tags->get_tags();
+      }
+      if (!match(filter.s3_filter.tag_filter, tags)) {
+	continue;
+      }
+    }
+
+    matched.push_back(filter);
+  }
+
+  return 0;
+}
+
+int POSIXNotification::publish_commit(const DoutPrefixProvider* dpp,
+				      uint64_t size,
+				      const ceph::real_time& mtime,
+				      const std::string& etag,
+				      const std::string& version)
+{
+  if (matched.empty()) {
+    return 0;
+  }
+
+  for (auto& filter : matched) {
+    const auto& dest = filter.topic.dest;
+    if (dest.push_endpoint.empty()) {
+      continue;
+    }
+
+    rgw_pubsub_s3_event event;
+    event.eventTime = mtime;
+    event.eventName = rgw::notify::to_string(event_types.front());
+    event.userIdentity = user_id;
+    event.x_amz_request_id = req_id;
+    event.configurationId = filter.s3_id;
+    if (bucket) {
+      event.bucket_name = bucket->get_name();
+      event.bucket_ownerIdentity = to_string(bucket->get_owner());
+      event.bucket_id = bucket->get_bucket_id();
+    }
+    if (obj) {
+      event.object_key = obj->get_name();
+    }
+    event.object_size = size;
+    event.object_etag = etag;
+    event.object_versionId = version;
+
+    try {
+      RGWHTTPArgs args(dest.push_endpoint_args, dpp);
+      auto endpoint = RGWPubSubEndpoint::create(
+	  dest.push_endpoint, filter.topic.name, args,
+	  dpp->get_cct());
+      int r = endpoint->send(dpp, event, null_yield);
+      if (r < 0) {
+	ldpp_dout(dpp, 1) << "ERROR: notification endpoint send failed: "
+			  << dest.push_endpoint << " ret=" << r << dendl;
+      }
+    } catch (const RGWPubSubEndpoint::configuration_error& e) {
+      ldpp_dout(dpp, 1) << "ERROR: notification endpoint config error: "
+			<< e.what() << dendl;
+    }
+  }
+
+  return 0;
+}
+
+/* --- Topic SAL methods --- */
+
+int POSIXDriver::read_topic_v2(const std::string& topic_name,
+			       const std::string& tenant,
+			       rgw_pubsub_topic& topic,
+			       RGWObjVersionTracker* objv_tracker,
+			       optional_yield y,
+			       const DoutPrefixProvider* dpp)
+{
+  obj_version objv;
+  int ret = get_user_db()->load_topic(dpp, topic_name, tenant, topic, objv);
+  if (!ret && objv_tracker) {
+    objv_tracker->read_version = objv;
+  }
+  return ret;
+}
+
+int POSIXDriver::write_topic_v2(const rgw_pubsub_topic& topic, bool exclusive,
+				RGWObjVersionTracker& objv_tracker,
+				optional_yield y,
+				const DoutPrefixProvider* dpp)
+{
+  return get_user_db()->store_topic(dpp, topic, exclusive, objv_tracker.write_version);
+}
+
+int POSIXDriver::remove_topic_v2(const std::string& topic_name,
+				 const std::string& tenant,
+				 RGWObjVersionTracker& objv_tracker,
+				 optional_yield y,
+				 const DoutPrefixProvider* dpp)
+{
+  return get_user_db()->remove_topic(dpp, topic_name, tenant);
+}
+
+int POSIXDriver::update_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+					     const std::string& bucket_key,
+					     bool add_mapping,
+					     optional_yield y,
+					     const DoutPrefixProvider* dpp)
+{
+  if (add_mapping) {
+    return get_user_db()->add_bucket_topic_mapping(dpp, topic.name, bucket_key);
+  } else {
+    return get_user_db()->remove_bucket_topic_mapping(dpp, topic.name, bucket_key);
+  }
+}
+
+int POSIXDriver::get_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+					  std::set<std::string>& bucket_keys,
+					  optional_yield y,
+					  const DoutPrefixProvider* dpp)
+{
+  return get_user_db()->get_bucket_topic_mapping(dpp, topic.name, bucket_keys);
+}
+
+int POSIXDriver::remove_bucket_mapping_from_topics(
+    const rgw_pubsub_bucket_topics& bucket_topics,
+    const std::string& bucket_key,
+    optional_yield y,
+    const DoutPrefixProvider* dpp)
+{
+  return get_user_db()->remove_bucket_from_topic_mappings(dpp, bucket_key);
+}
+
+int POSIXDriver::list_account_topics(const DoutPrefixProvider* dpp,
+				     optional_yield y,
+				     std::string_view account_id,
+				     std::string_view marker,
+				     uint32_t max_items,
+				     TopicList& listing)
+{
+  rgw_owner owner = rgw_account_id(std::string(account_id));
+  std::vector<rgw_pubsub_topic> topics;
+  int ret = get_user_db()->list_topics(dpp, "owner", owner,
+      std::string(marker), max_items, topics);
+  if (ret) {
+    return ret;
+  }
+  for (auto& t : topics) {
+    listing.topics.push_back(std::move(t.name));
+  }
+  if (!listing.topics.empty()) {
+    listing.next_marker = listing.topics.back();
+  }
+  return 0;
 }
 
 struct meta_list_handle {
@@ -2734,6 +3403,41 @@ int POSIXBucket::fill_cache(const DoutPrefixProvider* dpp, optional_yield y,
 int POSIXBucket::list(const DoutPrefixProvider* dpp, ListParams& params,
 		    int max, ListResults& results, optional_yield y)
 {
+  /* multipart namespace: incomplete uploads live in staging directories
+   * that aren't in the LMDB cache — delegate to list_multiparts() and
+   * format results using RADOS naming conventions so the LC processor
+   * can parse them via rgw_obj_key::parse_index_key().
+   *
+   * Skip this when we ARE a shadow (staging) bucket (ns == mp_ns) —
+   * list_parts() uses shadow->list() to enumerate part files inside
+   * the staging directory, which must fall through to the normal
+   * LMDB/directory listing below. */
+  if (params.ns == mp_ns && ns != mp_ns) {
+    std::vector<std::unique_ptr<MultipartUpload>> uploads;
+    std::string marker;
+    int ret = list_multiparts(dpp, "", marker, "",
+			      max, uploads, nullptr,
+			      &results.is_truncated, y);
+    if (ret < 0)
+      return ret;
+    for (auto& upload : uploads) {
+      const auto& obj_name = upload->get_key();
+      if (!params.prefix.empty() &&
+	  !obj_name.starts_with(params.prefix)) {
+	continue;
+      }
+      rgw_bucket_dir_entry bde{};
+      bde.key.name = fmt::format("_{}_{}",
+				 mp_ns,
+				 upload->get_meta());
+      bde.meta.mtime = upload->get_mtime();
+      bde.meta.category = RGWObjCategory::MultiMeta;
+      bde.exists = true;
+      results.objs.push_back(std::move(bde));
+    }
+    return 0;
+  }
+
 int count{0};
 bool in_prefix{false};
 // Names in the cache are in OID format
@@ -3061,20 +3765,10 @@ int POSIXBucket::write_attrs(const DoutPrefixProvider* dpp, optional_yield y)
     return ret;
   }
 
-  // Bucket info is stored as an attribute, but not in attrs[]
   bufferlist bl;
   encode(info, bl);
-  Attrs orig_attrs, extra_attrs;
+  Attrs extra_attrs;
   extra_attrs[RGW_POSIX_ATTR_BUCKET_INFO] = bl;
-
-  ret = dir->read_attrs(dpp, y, orig_attrs);
-
-  for (auto attr : orig_attrs) {
-    if (auto found = attrs.find(attr.first); found == attrs.end()) {
-      /* Attribute needs to be erased */
-      remove_x_attr(dpp, y, dir->get_fd(), attr.first, get_name());
-    }
-  }
 
   return dir->write_attrs(dpp, y, attrs, &extra_attrs);
 }
@@ -3189,11 +3883,23 @@ int POSIXBucket::list_multiparts(const DoutPrefixProvider *dpp,
 
     d_name.remove_prefix(mp_pre.size());
 
+    /* d_name is the URL-encoded meta string (oid.upload_id) from
+     * the staging directory name — decode it so from_meta() can
+     * parse out the object key and upload_id */
+    std::string decoded_meta = url_decode(std::string(d_name));
+
+    /* use the staging directory's mtime as the upload creation time */
+    struct statx stx;
+    if (statx(dir->get_fd(), name, AT_SYMLINK_NOFOLLOW, STATX_MTIME, &stx) < 0) {
+      return 0;
+    }
+    auto mtime = from_statx_timestamp(stx.stx_mtime);
+
     ACLOwner owner;
     std::unique_ptr<MultipartUpload> upload =
         std::make_unique<POSIXMultipartUpload>(
-            driver, this, std::string(d_name), std::nullopt, owner,
-            real_clock::now());
+            driver, this, decoded_meta, std::nullopt, owner,
+            mtime);
     rgw_placement_rule* rule{nullptr};
     int ret = upload->get_info(dpp, y, &rule, nullptr);
     if (ret < 0)
@@ -3274,14 +3980,56 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
   cls_rgw_obj_key key;
   get_key().get_index_key(&key);
 
-  /* XXXX we should get bucket cache once, ne? hint:  operate functor */
   driver->get_bucket_cache()->remove_entry(dpp, b->get_name(), key);
 
   if (!key.instance.empty() && !ent->exists()) {
-    /* Remove the non-versiond key as well */
+    /* Remove the non-versioned key as well */
     key.instance.clear();
     driver->get_bucket_cache()->remove_entry(dpp, b->get_name(), key);
   }
+
+  /* after removing a versioned entry, the current version may have
+   * changed — if the symlink now points to a delete marker, update
+   * its cache entry to add FLAG_CURRENT so the LC can expire it */
+  if (!get_key().instance.empty() && ent->get_parent()) {
+    auto* vdir = dynamic_cast<VersionedDirectory*>(ent->get_parent());
+    if (vdir) {
+      std::unique_ptr<Symlink> sl =
+	std::make_unique<Symlink>(vdir->get_name(), vdir, driver->ctx());
+      if (sl->stat(dpp) >= 0 && sl->exists()) {
+	auto* target = sl->get_target();
+	std::string cur_name = target->get_name();
+	if (!cur_name.empty()) {
+	  std::unique_ptr<FSEnt> cur_ent;
+	  ret = vdir->get_ent(dpp, y, cur_name, std::string(), cur_ent);
+	  if (ret == 0) {
+	    cur_ent->stat(dpp);
+	    rgw_bucket_dir_entry bde{};
+	    rgw_obj_key cur_key = decode_obj_key(cur_name);
+	    cur_key.get_index_key(&bde.key);
+	    bde.flags = rgw_bucket_dir_entry::FLAG_VER
+	      | rgw_bucket_dir_entry::FLAG_CURRENT;
+	    bde.ver.pool = 1;
+	    bde.ver.epoch = 1;
+	    bde.exists = true;
+	    bde.meta.mtime = from_statx_timestamp(cur_ent->get_stx().stx_mtime);
+	    bde.meta.size = cur_ent->get_stx().stx_size;
+	    bde.meta.accounted_size = bde.meta.size;
+	    if (bde.meta.size == 0) {
+	      Attrs attrs;
+	      bufferlist bl;
+	      if (cur_ent->read_attrs(dpp, y, attrs) >= 0 &&
+		  ::rgw::sal::get_attr(attrs, RGW_POSIX_ATTR_VERSION, bl)) {
+		bde.flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
+	      }
+	    }
+	    driver->get_bucket_cache()->add_entry(dpp, b->get_name(), bde);
+	  }
+	}
+      }
+    }
+  }
+
   driver->get_quota_handler()->update_stats(b->get_owner(), b->get_key(),
                                             -1, 0, state.accounted_size);
   return 0;
@@ -3327,6 +4075,10 @@ int POSIXObject::copy_object(const ACLOwner& owner,
                       << dendl;
     return -EINVAL;
   }
+  if (db->get_info().versioning_enabled() &&
+      !dest_object->have_instance()) {
+    dest_object->gen_rand_obj_instance_name();
+  }
   bool has_instance = !get_key().instance.empty();
 
   // Source must exist, and we need to know if it's a shadow obj
@@ -3335,6 +4087,30 @@ int POSIXObject::copy_object(const ACLOwner& owner,
     ldpp_dout(dpp, 0) << "ERROR: could not stat object " << get_name() << ": "
                       << cpp_strerror(ret) << dendl;
     return -ret;
+  }
+
+  /* check copy-source preconditions against the source object */
+  if (if_match) {
+    std::string if_match_str = rgw_string_unquote(if_match);
+    bufferlist etag_bl;
+    if (get_attr(RGW_ATTR_ETAG, etag_bl) &&
+	if_match_str.compare(0, etag_bl.length(), etag_bl.c_str(), etag_bl.length()) != 0) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+  }
+  if (if_nomatch) {
+    std::string if_nomatch_str = rgw_string_unquote(if_nomatch);
+    bufferlist etag_bl;
+    if (get_attr(RGW_ATTR_ETAG, etag_bl) &&
+	if_nomatch_str.compare(0, etag_bl.length(), etag_bl.c_str(), etag_bl.length()) == 0) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+  }
+  if (mod_ptr && state.mtime <= *mod_ptr) {
+    return -ERR_PRECONDITION_FAILED;
+  }
+  if (unmod_ptr && state.mtime > *unmod_ptr) {
+    return -ERR_PRECONDITION_FAILED;
   }
 
   if (!get_key().instance.empty() && !has_instance) {
@@ -3406,10 +4182,6 @@ int POSIXObject::copy_object(const ACLOwner& owner,
   if (rgw::sal::get_attr(src_attrs, RGW_POSIX_ATTR_MPUPLOAD, mpu)) {
     attrs[RGW_POSIX_ATTR_MPUPLOAD] = mpu;
   }
-  bufferlist ownerbl;
-  if (rgw::sal::get_attr(src_attrs, RGW_POSIX_ATTR_OWNER, ownerbl)) {
-    attrs[RGW_POSIX_ATTR_OWNER] = ownerbl;
-  }
   bufferlist pot;
   if (rgw::sal::get_attr(src_attrs, RGW_POSIX_ATTR_OBJECT_TYPE, pot)) {
     attrs[RGW_POSIX_ATTR_OBJECT_TYPE] = pot;
@@ -3422,7 +4194,59 @@ int POSIXObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 			    bool* truncated, list_parts_each_t&& each_func,
 			    optional_yield y)
 {
-  return -EOPNOTSUPP;
+  if (ent->get_type() != ObjectType::MULTIPART) {
+    return 0;
+  }
+
+  uint16_t pc = 0;
+  if (!decode_raw_attr(state.attrset, RGW_POSIX_ATTR_MULTIPART_PART_COUNT, pc) || pc == 0) {
+    return 0;
+  }
+
+  auto* mpdir = static_cast<posix::MPDirectory*>(ent.get());
+  int start = marker + 1;
+  int end = std::min((int)pc, marker + max_parts);
+  int count = 0;
+
+  for (int pn = start; pn <= end; ++pn) {
+    auto part_file = mpdir->get_part_file(pn);
+    int ret = part_file->open(dpp);
+    if (ret < 0) {
+      continue;
+    }
+
+    Object::Part obj_part;
+    obj_part.part_number = pn;
+
+    Attrs part_attrs;
+    ret = part_file->read_attrs(dpp, y, part_attrs);
+    if (ret == 0) {
+      POSIXUploadPartInfo info;
+      if (decode_raw_attr(part_attrs, RGW_POSIX_ATTR_MPUPLOAD, info)) {
+        obj_part.part_size = info.size;
+        if (info.cksum) {
+          obj_part.cksum = *info.cksum;
+        }
+      }
+    }
+
+    if (obj_part.part_size == 0) {
+      ret = part_file->stat(dpp);
+      if (ret == 0) {
+        obj_part.part_size = part_file->get_size();
+      }
+    }
+
+    ret = each_func(obj_part);
+    if (ret < 0) {
+      return ret;
+    }
+    ++count;
+  }
+
+  *next_marker = marker + count;
+  *truncated = (*next_marker < (int)pc);
+  return 0;
 }
 
 bool POSIXObject::is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,
@@ -3591,7 +4415,7 @@ int POSIXObject::restore_obj_from_cloud(Bucket* bucket,
           std::optional<uint64_t> days,
           bool& in_progress,
 	  uint64_t& size,
-          const DoutPrefixProvider* dpp, 
+          const DoutPrefixProvider* dpp,
           optional_yield y)
 {
   return -ERR_NOT_IMPLEMENTED;
@@ -3663,11 +4487,21 @@ int POSIXObject::get_cur_version(const DoutPrefixProvider* dpp, rgw_obj_key& key
 
 int POSIXObject::set_cur_version(const DoutPrefixProvider *dpp)
 {
+  if (!ent) {
+    int ret = open(dpp, true, false);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+  if (ent->get_type() != ObjectType::VERSIONED) {
+    return -EINVAL;
+  }
   VersionedDirectory* vdir = static_cast<VersionedDirectory*>(ent.get());
   std::unique_ptr<FSEnt> child;
   int ret = vdir->get_ent(dpp, null_yield, get_fname(true), std::string(), child);
-  if (ret < 0)
+  if (ret < 0) {
     return ret;
+  }
 
   ret = vdir->set_cur_version_ent(dpp, child.get());
   return ret;
@@ -3742,15 +4576,19 @@ int POSIXObject::make_ent(ObjectType type)
 
 int POSIXObject::get_owner(const DoutPrefixProvider *dpp, optional_yield y, std::unique_ptr<User> *owner)
 {
-  POSIXOwner o;
-  int ret = decode_owner(get_attrs(), o);
+  ACLOwner acl_owner;
+  int ret = decode_acl_owner(get_attrs(), acl_owner);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__
-        << ": No " RGW_POSIX_ATTR_OWNER " attr" << dendl;
+        << ": No " RGW_ATTR_ACL " attr" << dendl;
     return ret;
   }
 
-  *owner = driver->get_user(o.user);
+  if (const auto* u = std::get_if<rgw_user>(&acl_owner.id)) {
+    *owner = driver->get_user(*u);
+  } else {
+    *owner = driver->get_user(rgw_user(std::get<rgw_account_id>(acl_owner.id)));
+  }
   (*owner)->load_user(dpp, y);
   return 0;
 }
@@ -3803,7 +4641,7 @@ int POSIXObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y)
   int ret = ent->link_temp_file(dpp, y, temp_fname);
   if (ret < 0)
     return ret;
- 
+
   POSIXBucket *b = static_cast<POSIXBucket *>(get_bucket());
   if (!b) {
     ldpp_dout(dpp, 0) << "ERROR: could not get bucket for " << get_name()
@@ -3885,17 +4723,39 @@ int POSIXObject::POSIXReadOp::prepare(optional_yield y, const DoutPrefixProvider
     return -EINVAL;
   }
 
-  buffer::list manifest_bl;
-  if (source->get_attr(RGW_POSIX_ATTR_MANIFEST, manifest_bl)) {
-    POSIXManifest manifest;
-    auto iter = manifest_bl.cbegin();
-    try {
-      manifest.decode(iter);
-      if (manifest.multipart_part_count > 0) {
-        params.parts_count = manifest.multipart_part_count;
+  {
+    uint16_t pc = 0;
+    if (decode_raw_attr(source->get_attrs(), RGW_POSIX_ATTR_MULTIPART_PART_COUNT, pc) && pc > 0) {
+      params.parts_count = pc;
+    }
+  }
+
+  if (params.part_num) {
+    int pn = *params.part_num;
+    if (source->ent->get_type() != ObjectType::MULTIPART) {
+      if (pn == 1) {
+        params.parts_count = 1;
+      } else {
+        return -ERR_INVALID_PART;
       }
-    } catch (buffer::error& err) {
-      // pass
+    } else {
+      auto* mpdir = static_cast<posix::MPDirectory*>(source->ent.get());
+      const auto& pmap = mpdir->get_parts();
+      std::string pname = MP_OBJ_PART_PFX + fmt::format("{:0>5}", pn);
+      auto it = pmap.find(pname);
+      if (it == pmap.end()) {
+        return -ERR_INVALID_PART;
+      }
+      int64_t ofs = 0;
+      for (int i = 1; i < pn; ++i) {
+        std::string prev = MP_OBJ_PART_PFX + fmt::format("{:0>5}", i);
+        auto pit = pmap.find(prev);
+        if (pit != pmap.end()) {
+          ofs += pit->second;
+        }
+      }
+      part_ofs = ofs;
+      source->set_obj_size(it->second);
     }
   }
 
@@ -3968,7 +4828,7 @@ int POSIXObject::POSIXReadOp::prepare(optional_yield y, const DoutPrefixProvider
 int POSIXObject::POSIXReadOp::read(int64_t ofs, int64_t end, bufferlist& bl,
 				     optional_yield y, const DoutPrefixProvider* dpp)
 {
-  return source->read(ofs, end + 1, bl, dpp, y);
+  return source->read(ofs + part_ofs, end + 1, bl, dpp, y);
 }
 
 int POSIXObject::generate_attrs(const DoutPrefixProvider* dpp, optional_yield y)
@@ -4043,7 +4903,8 @@ int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
 					int64_t end, RGWGetDataCB* cb, optional_yield y)
 {
   int64_t left;
-  int64_t cur_ofs = ofs;
+  int64_t cur_ofs = ofs + part_ofs;
+  end += part_ofs;
 
   if (end < 0)
     left = 0;
@@ -4095,6 +4956,50 @@ int POSIXObject::POSIXReadOp::get_attr(const DoutPrefixProvider* dpp, const char
 int POSIXObject::POSIXDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 					   optional_yield y, uint32_t flags)
 {
+  bool has_cond = params.if_match ||
+    !real_clock::is_zero(params.last_mod_time_match) ||
+    params.size_match.has_value();
+
+  if (has_cond) {
+    int ret = source->stat(dpp);
+    if (ret == -ENOENT) {
+      return 0;
+    }
+    if (ret < 0) {
+      return ret;
+    }
+
+    if (params.if_match && strcmp(params.if_match, "*") != 0) {
+      auto it = source->get_attrs().find(RGW_ATTR_ETAG);
+      if (it == source->get_attrs().end()) {
+        return -ERR_PRECONDITION_FAILED;
+      }
+      bufferlist& bl = it->second;
+      std::string if_match_str = rgw_string_unquote(params.if_match);
+      if (if_match_str.compare(0, bl.length(), bl.c_str(), bl.length()) != 0) {
+        return -ERR_PRECONDITION_FAILED;
+      }
+    }
+
+    if (!real_clock::is_zero(params.last_mod_time_match)) {
+      if (params.last_mod_time_match_precise) {
+        if (params.last_mod_time_match != source->get_mtime()) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      } else {
+        if (real_clock::to_time_t(params.last_mod_time_match) !=
+            real_clock::to_time_t(source->get_mtime())) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      }
+    }
+
+    if (params.size_match.has_value()) {
+      if (*params.size_match != source->get_size()) {
+        return -ERR_PRECONDITION_FAILED;
+      }
+    }
+  }
   int ret = source->delete_object(dpp, y, flags, nullptr, nullptr);
   if (ret < 0) {
     return ret;
@@ -4182,14 +5087,15 @@ std::unique_ptr<rgw::sal::Object> POSIXMultipartUpload::get_meta_obj()
   load(nullptr);
 
   if (!shadow) {
-    // This upload doesn't exist, but the API doesn't check this until it calls
-    // on the *serializer*. So make a fake object in the parent bucket that
-    // doesn't exist.  Put it in the MP namespace just in case.
     meta_obj = bucket->get_object(rgw_obj_key(get_meta(), std::string(), mp_ns));
+  } else {
+    meta_obj = shadow->get_object(rgw_obj_key(get_meta(), std::string()));
   }
-  meta_obj = shadow->get_object(rgw_obj_key(get_meta(), std::string()));
 
   auto posix_meta_obj = static_cast<POSIXObject*>(meta_obj.get());
+  if (shadow) {
+    posix_meta_obj->pin_bucket(shadow->clone());
+  }
   rgw::sal::Attrs attrs;
   if (obj_retention) {
     buffer::list obj_retention_bl;
@@ -4276,7 +5182,14 @@ int POSIXMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext 
 
   ret = shadow->list(dpp, params, num_parts + 1, results, y);
   if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: list_parts: shadow->list failed ret="
+      << ret << " upload=" << get_upload_id() << dendl;
     return ret;
+  }
+  if (results.objs.empty()) {
+    ldpp_dout(dpp, 0) << "WARNING: list_parts: 0 results for upload="
+      << get_upload_id() << " shadow=" << shadow->get_name()
+      << " marker=" << params.marker.name << dendl;
   }
   for (rgw_bucket_dir_entry& ent : results.objs) {
     std::unique_ptr<MultipartPart> part = std::make_unique<POSIXMultipartPart>(this);
@@ -4315,6 +5228,7 @@ int POSIXMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
     return ret;
   }
 
+  driver->get_bucket_cache()->invalidate_bucket(dpp, shadow->get_name(), true);
   shadow->remove(dpp, true, y);
 
   return 0;
@@ -4333,6 +5247,10 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
             const char *if_match,
             const char *if_nomatch)
 {
+  if (bucket->get_info().versioning_enabled() &&
+      !target_obj->have_instance()) {
+    target_obj->gen_rand_obj_instance_name();
+  }
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
   // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
@@ -4453,17 +5371,59 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
   }
 
   {
-    POSIXManifest manifest;
-    manifest.multipart_part_count = total_parts;
-    buffer::list manifest_bl;
-    manifest.encode(manifest_bl);
-    attrs[RGW_POSIX_ATTR_MANIFEST] = std::move(manifest_bl);
+    uint16_t pc = total_parts;
+    encode_attr(attrs, RGW_POSIX_ATTR_MULTIPART_PART_COUNT, pc);
+    encode_attr(attrs, RGW_POSIX_ATTR_MULTIPART_TOTAL_SIZE, accounted_size);
 
     ret = shadow->merge_and_store_attrs(dpp, attrs, y);
     if (ret < 0) {
       return ret;
     }
   }
+
+  /* conditional write checks against existing target object */
+  if (if_match || if_nomatch) {
+    POSIXObject *tobj = static_cast<POSIXObject*>(target_obj);
+    bool target_exists = tobj->check_exists(dpp);
+
+    if (if_match) {
+      if (strcmp(if_match, "*") == 0) {
+        if (!target_exists) {
+          return -ENOENT;
+        }
+      } else {
+        if (!target_exists) {
+          return -ENOENT;
+        }
+        bufferlist bl;
+        if (!get_attr(tobj->get_attrs(), RGW_ATTR_ETAG, bl)) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+        std::string if_match_str = rgw_string_unquote(if_match);
+        if (if_match_str != bl.to_str()) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      }
+    }
+    if (if_nomatch) {
+      if (strcmp(if_nomatch, "*") == 0) {
+        if (target_exists) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      } else if (target_exists) {
+        bufferlist bl;
+        if (get_attr(tobj->get_attrs(), RGW_ATTR_ETAG, bl)) {
+          std::string if_nomatch_str = rgw_string_unquote(if_nomatch);
+          if (if_nomatch_str == bl.to_str()) {
+            return -ERR_PRECONDITION_FAILED;
+          }
+        }
+      }
+    }
+  }
+
+  // save shadow name before rename changes info.bucket.name
+  std::string shadow_cache_name = shadow->get_name();
 
   // Rename to target_obj
   ret = shadow->rename(dpp, y, target_obj);
@@ -4481,6 +5441,10 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
       return ret;
     }
   }
+
+  // remove staging directory listing cache entry (frees LMDB DBI slot)
+  driver->get_bucket_cache()->invalidate_bucket(dpp, shadow_cache_name, true);
+
   return 0;
 }
 
@@ -4631,6 +5595,7 @@ int POSIXMultipartWriter::complete(
   }
 
   info.num = part_num;
+  info.size = accounted_size;
   info.etag = etag;
   info.cksum = cksum;
   info.mtime = set_mtime;
@@ -4696,46 +5661,40 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
 
   if (if_match) {
     if (strcmp(if_match, "*") == 0) {
-      // test the object is existing
       if (!exists) {
-	return -ERR_PRECONDITION_FAILED;
+	return -ENOENT;
       }
     } else {
+      if (!exists) {
+	return -ENOENT;
+      }
       bufferlist bl;
       if (!get_attr(obj->get_attrs(), RGW_ATTR_ETAG, bl)) {
         return -ERR_PRECONDITION_FAILED;
       }
-      if (strncmp(if_match, bl.c_str(), bl.length()) != 0) {
+      std::string if_match_str = rgw_string_unquote(if_match);
+      if (if_match_str.compare(0, bl.length(), bl.c_str(), bl.length()) != 0) {
         return -ERR_PRECONDITION_FAILED;
       }
     }
   }
   if (if_nomatch) {
     if (strcmp(if_nomatch, "*") == 0) {
-      // test the object is not existing
-      if (!exists) {
+      if (exists) {
 	return -ERR_PRECONDITION_FAILED;
       }
     } else {
       bufferlist bl;
-      if (!get_attr(obj->get_attrs(), RGW_ATTR_ETAG, bl)) {
-        return -ERR_PRECONDITION_FAILED;
-      }
-      if (strncmp(if_nomatch, bl.c_str(), bl.length()) == 0) {
-        return -ERR_PRECONDITION_FAILED;
+      if (get_attr(obj->get_attrs(), RGW_ATTR_ETAG, bl)) {
+        std::string if_nomatch_str = rgw_string_unquote(if_nomatch);
+        if (if_nomatch_str.compare(0, bl.length(), bl.c_str(), bl.length()) == 0) {
+          return -ERR_PRECONDITION_FAILED;
+        }
       }
     }
   }
 
-  bufferlist owner_bl;
-  std::unique_ptr<User> user;
-  user = driver->get_user(std::get<rgw_user>(owner.id));
-  user->load_user(rctx.dpp, rctx.y);
-  POSIXOwner po{std::get<rgw_user>(owner.id), user->get_display_name()};
-  encode(po, owner_bl);
-  attrs[RGW_POSIX_ATTR_OWNER] = owner_bl;
-
-  bufferlist type_bl;
+  /* owner is already in attrs[RGW_ATTR_ACL] from the generic layer */
 
   obj->set_attrs(attrs);
   ret = obj->write_attrs(rctx.dpp, rctx.y);
@@ -4812,6 +5771,13 @@ std::unique_ptr<LCSerializer> POSIXLifecycle::get_serializer(const std::string& 
                                                              const std::string& cookie)
 {
   return std::make_unique<LCPOSIXSerializer>(driver, oid, lock_name, cookie);
+
+}
+
+void POSIXDriver::register_admin_apis(RGWRESTMgr* mgr)
+{
+  mgr->register_resource("user", new RGWRESTMgr_User);
+  /* TODO: register "bucket" once rgw_rest_bucket is decoupled from rados */
 }
 
 } } // namespace rgw::sal
@@ -4825,7 +5791,7 @@ rgw::sal::Driver* newPOSIXDriver(CephContext *cct)
   int ret = -1;
   const static std::string tenant = "default_ns";
   if ((ret = driver->get_user_db()->Initialize("", -1)) < 0) {
-    ldout(cct, 0) << "User DB initialization failed for tenant("<<tenant<<")" << dendl;
+    ldout(cct, 0) << "DB initialization failed for tenant("<<tenant<<")" << dendl;
     return nullptr;
   }
 
