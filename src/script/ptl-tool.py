@@ -69,6 +69,8 @@ except ImportError:
 
 try:
     import requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
 except ImportError:
     MISSING_DEPS.append("requests")
 
@@ -1927,6 +1929,14 @@ def build_branch(args):
     merge_branch_name = args.merge_branch_name
 
     session = requests.Session()
+    retries = Retry(
+        total=3,
+        backoff_factor=1,
+        status_forcelist=[500, 502, 503, 504],
+        raise_on_status=False
+    )
+    session.mount("https://", HTTPAdapter(max_retries=retries))
+    session.mount("http://", HTTPAdapter(max_retries=retries))
 
     if label:
         # Check the label format
