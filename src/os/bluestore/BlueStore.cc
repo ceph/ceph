@@ -18347,10 +18347,18 @@ int BlueStore::_do_remove(
     nogen.hobj.snap = CEPH_NOSNAP;
   OnodeRef h = c->get_onode(nogen, false);
 
-  if (!h || !h->exists) {
-    return 0;
+  if (h && h->exists) {
+    return _maybe_unshare_on_remove(txc, c, h, std::move(maybe_unshared_blobs));
   }
+  return 0;
+}
 
+int BlueStore::_maybe_unshare_on_remove(
+  TransContext *txc,
+  CollectionRef& c,
+  OnodeRef& h,
+  std::set<SharedBlob*>&& maybe_unshared_blobs)
+{
   //Populate the extent map structure from DB; required for shared blob processing below.
   h->extent_map.fault_range(db, 0, h->onode.size);
   // Set maybe_unshared_blobs contains those shared blobs that have all nref=1.
@@ -18363,33 +18371,29 @@ int BlueStore::_do_remove(
   // that is not yet loaded! We must have had inspected it to even check nrefs.
   dout(20) << __func__ << " checking for unshareable blobs on " << h
 	   << " " << h->oid << dendl;
-  map<SharedBlob*,bluestore_extent_ref_map_t> expect;
+  map<const Blob*, bluestore_extent_ref_map_t> expect;
   for (auto& e : h->extent_map.extent_map) {
-    const bluestore_blob_t& b = e.blob->get_blob();
-    SharedBlob *sb = e.blob->get_shared_blob().get();
-    if (b.is_shared() &&
-	sb->loaded &&
-	maybe_unshared_blobs.count(sb)) {
-      if (b.is_compressed()) {
-	expect[sb].get(0, b.get_ondisk_size());
-      } else {
-	// todo: it seems to be an overkill to go through map()
-	b.map(e.blob_offset, e.length, [&](uint64_t off, uint64_t len) {
-	    expect[sb].get(off, len);
-	    return 0;
-	  });
+    const Blob* B = e.blob.get();
+    const bluestore_blob_t& b = B->get_blob();
+    SharedBlob *sb = B->get_shared_blob().get();
+    if (b.is_shared() && sb->loaded && maybe_unshared_blobs.count(sb)) {
+      for (const auto& e: b.get_extents()) {
+        if (e.is_valid()) {
+          expect[B].get(e.offset, e.length);
+        }
       }
+      maybe_unshared_blobs.erase(sb);
     }
   }
 
   // expect has now refs set exactly as .head is using it
   vector<SharedBlob*> unshared_blobs;
-  unshared_blobs.reserve(maybe_unshared_blobs.size());
-  for (auto& p : expect) {
-    dout(20) << " ? " << *p.first << " vs " << p.second << dendl;
-    if (p.first->persistent->ref_map == p.second) {
+  unshared_blobs.reserve(expect.size());
+  for (const auto& [B, expect_refs] : expect) {
+    SharedBlob* sb = B->get_shared_blob().get();
+    dout(20) << __func__ << " ? " << *sb << " vs " << expect_refs << dendl;
+    if (sb->persistent->ref_map == expect_refs) {
       // yup, .head is only one that is using the shared blob now
-      SharedBlob *sb = p.first;
       dout(20) << __func__ << "  unsharing " << *sb << dendl;
       unshared_blobs.push_back(sb);
       txc->unshare_blob(sb);
