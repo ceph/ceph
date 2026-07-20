@@ -17,7 +17,7 @@ from orchestrator import OrchestratorError, DaemonDescription
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
 
-LAST_MIGRATION = 9
+LAST_MIGRATION = 10
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +128,11 @@ class Migrations:
             logger.info('Running migration 8 -> 9')
             if self.migrate_8_9():
                 self.set(9)
+
+        if self.mgr.migration_current == 9:
+            logger.info('Running migration 9 -> 10')
+            if self.migrate_9_10():
+                self.set(10)
 
     def migrate_0_1(self) -> bool:
         """
@@ -559,6 +564,54 @@ class Migrations:
         if nfs_services:
             self.mgr.set_store('nfs_services_with_old_nodeid', ','.join(nfs_services))
         self.mgr.remove_health_warning('CEPHADM_MIGRATION_FAILURE')
+        return True
+
+    def migrate_9_10(self) -> bool:
+        """
+        Migration 9 -> 10
+        Normalize persisted service spec placement host patterns to lowercase.
+        Specs stored by older versions may contain uppercase host_pattern values
+        (e.g. 'MYHOST-[0-2]'). This patches the stored JSON directly rather
+        than going through spec_store.save(), which would set _needs_configuration
+        and emit a spurious 'service was created' event for every affected spec.
+        The in-memory spec is already correct (HostPattern.__init__ lowercases
+        fnmatch patterns on load).
+        """
+        from cephadm.inventory import SPEC_STORE_PREFIX
+        for spec in self.mgr.spec_store.all_specs.values():
+            if not spec.placement.host_pattern or not spec.placement.host_pattern.pattern:
+                continue
+            name = spec.service_name()
+            store_key = SPEC_STORE_PREFIX + name
+            raw = self.mgr.get_store(store_key)
+            if not raw:
+                continue
+            stored_data = json.loads(raw)
+            hp = stored_data.get('spec', {}).get('placement', {}).get('host_pattern')
+            if isinstance(hp, str):
+                stored_pattern = hp
+            elif isinstance(hp, dict):
+                if hp.get('pattern_type') == 'regex':
+                    continue
+                stored_pattern = hp.get('pattern', '')
+            else:
+                continue
+            normalized = stored_pattern.lower()
+            if stored_pattern == normalized:
+                continue
+            if isinstance(hp, str):
+                stored_data['spec']['placement']['host_pattern'] = normalized
+            else:
+                stored_data['spec']['placement']['host_pattern']['pattern'] = normalized
+            logger.info(
+                f'Normalizing host_pattern for {name} '
+                f'to lowercase: \'{stored_pattern}\' -> \'{normalized}\''
+            )
+            # Update only the persisted JSON; the in-memory ServiceSpec is
+            # already normalized by HostPattern.__init__ during spec_store.load().
+            # Using set_store() directly avoids triggering _needs_configuration
+            # and a spurious 'service was created' event via SpecStore.save().
+            self.mgr.set_store(store_key, json.dumps(stored_data, sort_keys=True))
         return True
 
 

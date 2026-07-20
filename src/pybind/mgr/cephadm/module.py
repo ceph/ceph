@@ -143,13 +143,15 @@ def host_exists(hostname_position: int = 1) -> Callable:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             this = args[0]  # self object
-            hostname = args[hostname_position]
+            hostname = args[hostname_position].lower()
             if hostname not in this.cache.get_hosts():
                 candidates = ','.join([h for h in this.cache.get_hosts() if h.startswith(hostname)])
                 help_msg = f"Did you mean {candidates}?" if candidates else ""
                 raise OrchestratorError(
                     f"Cannot find host '{hostname}' in the inventory. {help_msg}")
 
+            args = list(args)  # type: ignore
+            args[hostname_position] = hostname
             return func(*args, **kwargs)
         return wrapper
     return inner
@@ -1178,6 +1180,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.offline_watcher.set_hosts(list(set([h for h in hosts_to_watch if h is not None])))
 
     def offline_hosts_remove(self, host: str) -> None:
+        host = host.lower()
         if host in self.offline_hosts:
             self.offline_hosts.remove(host)
             self._invalidate_all_host_metadata_and_kick_serve(host)
@@ -2354,6 +2357,8 @@ Then run the following:
         :param force: bypass running daemons check
         :param offline: remove offline host
         """
+        original_host = host
+        host = host.lower()
 
         # check if host is offline
         host_offline = host in self.offline_hosts
@@ -2384,7 +2389,7 @@ Then run the following:
                 raise OrchestratorValidationError("Not allowed to remove %s from cluster. "
                                                   "The following daemons are running in the host:"
                                                   "\n%s\nPlease run 'ceph orch host drain %s' to remove daemons from host" % (
-                                                      host, daemons_table, host))
+                                                      host, daemons_table, original_host))
 
         # check, if there we're removing the last _admin host
         if not force:
@@ -2449,6 +2454,7 @@ Then run the following:
 
     @handle_orch_error
     def update_host_addr(self, host: str, addr: str) -> str:
+        host = host.lower()
         self._check_valid_addr(host, addr)
         self.inventory.set_addr(host, addr)
         self.ssh.reset_con(host)
@@ -2476,12 +2482,13 @@ Then run the following:
           - skip async: manager reads from cache.
         """
         if hostname:
-            return [self.cache.get_facts(hostname)]
+            return [self.cache.get_facts(hostname.lower())]
 
         return [self.cache.get_facts(hostname) for hostname in self.cache.get_hosts()]
 
     @handle_orch_error
     def add_host_label(self, host: str, label: str) -> str:
+        host = host.lower()
         self.inventory.add_label(host, label)
         self.log.info('Added label %s to host %s' % (label, host))
         self._kick_serve_loop()
@@ -2489,6 +2496,7 @@ Then run the following:
 
     @handle_orch_error
     def remove_host_label(self, host: str, label: str, force: bool = False) -> str:
+        host = host.lower()
         # if we remove the _admin label from the only host that has it we could end up
         # removing the only instance of the config and keyring and cause issues
         if not force and label == SpecialHostLabels.ADMIN:
@@ -2548,6 +2556,7 @@ Then run the following:
 
     @handle_orch_error
     def host_ok_to_stop(self, hostname: str) -> str:
+        hostname = hostname.lower()
         if hostname not in self.cache.get_hosts():
             raise OrchestratorError(f'Cannot find host "{hostname}"', errno=errno.EINVAL)
 
@@ -3339,9 +3348,10 @@ Then run the following:
             str: output from the zap command
         """
 
+        host = host.lower()
         self.log.info('Zap device %s:%s' % (host, path))
 
-        if host not in self.inventory.keys():
+        if host not in self.inventory:
             raise OrchestratorError(
                 f"Host '{host}' is not a member of the cluster")
 
@@ -4805,6 +4815,7 @@ Then run the following:
                        clear: bool = False,
                        yes_i_really_mean_it: bool = False) -> Any:
         output: str = ''
+        hostname = hostname.lower()
 
         self.ceph_volume.lvm_list.get_data(hostname=hostname)
 
@@ -4812,7 +4823,7 @@ Then run the following:
             output = self.ceph_volume.clear_replace_header(hostname, device)
         else:
             osds_to_zap: List[str] = []
-            if hostname not in list(self.inventory.keys()):
+            if hostname not in self.inventory:
                 raise OrchestratorError(f'{hostname} invalid host.')
 
             if device not in self.ceph_volume.lvm_list.all_devices():
