@@ -1,4 +1,11 @@
 * DASHBOARD: Added support for RGW zonegroup hostnames and wildcard certificates for virtual-host-style bucket access
+* RADOS: PG autoscaler allows overlapping roots. Each root receives a PG target based
+  on its OSDs, with OSDs shared across multiple roots contributing proportionally
+  less to each root's allocation.
+  
+* CephFS: CephFS snapshots metadata is now mutable. It is now possible to add,
+  update and remove existing key-value pairs that are part of a snapshot
+  metadata via libcephfs API ceph_do_snap_md_op().
 
 * librados/neorados: The C++ APIs for executing Ceph Class (CLS) methods
   have undergone a breaking change to enforce compile-time type safety, replacing
@@ -173,6 +180,35 @@
   ``ceph fs snapshot mirror daemon status`` now shows the remote cluster's
   monitor addresses and cluster ID for each configured peer, making it easier
   to verify peer connectivity and troubleshoot mirroring issues.
+* CephFS Mirroring: The ``fs mirror peer status`` admin socket command reports
+  additional per-directory sync metrics (sync mode, throughput, crawl and
+  data-sync queue timing, bytes/files progress, and ETA). Output is grouped
+  under ``metrics/<mirrored-dir-path>/peer/<peer-uuid>``. For more information,
+  see https://tracker.ceph.com/issues/73453
+* CephFS Mirroring: Per-directory snapshot sync progress is exposed as labeled perf
+  counters in the ``cephfs_mirror_directory`` group (``counter dump`` on the mirror
+  daemon admin socket, exportable via ``ceph-exporter``). Counters mirror
+  ``fs mirror peer status`` fields (directory state, current sync, last sync, and
+  snap summary) and are labeled by peer UUID and mirrored directory path. See
+  https://tracker.ceph.com/issues/73457
+* CephFS Mirroring: The mirroring module provides ``ceph fs snapshot mirror status``,
+  a Ceph CLI command similar to the ``fs mirror peer status`` admin socket interface
+  for viewing per-directory snapshot sync metrics. The output layout matches
+  ``fs mirror peer status`` for core sync fields and additionally includes
+  ``metrics_updated_at`` (time of the last omap write). Optional filters by
+  mirrored directory path and peer UUID are supported. For more information,
+  see https://tracker.ceph.com/issues/76686
+* CephFS Mirroring: Introduced snapshot checkpoints feature that allows users to mark
+  specific snapshots as important milestones and track their replication status to remote
+  sites. Checkpoints automatically detect if a snapshot has already been synced and provide
+  visibility into disaster recovery readiness. The feature includes four new CLI commands:
+  ``ceph fs snapshot mirror checkpoint add`` to mark a snapshot,
+  ``ceph fs snapshot mirror checkpoint now`` to checkpoint the latest snapshot,
+  ``ceph fs snapshot mirror checkpoint ls`` to list all checkpoints with their status
+  (created/complete/failed), and ``ceph fs snapshot mirror checkpoint remove`` to remove
+  a checkpoint. Checkpoint metadata is persistent across daemon restarts. This feature is
+  useful for compliance auditing, application consistency verification, and SLA tracking.
+  For more information, see https://tracker.ceph.com/issues/73454
 * RBD: Mirror snapshot creation and trash purge schedules are now automatically
   staggered when no explicit "start-time" is specified. This reduces scheduling
   spikes and distributes work more evenly over time.

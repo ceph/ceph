@@ -862,6 +862,22 @@ int ceph_mksnap(struct ceph_mount_info *cmount, const char *path, const char *na
 int ceph_rmsnap(struct ceph_mount_info *cmount, const char *path, const char *name);
 
 /**
+ * Add, update or remove snapshot metadata.
+ *
+ * @param cmount the ceph mount handle to use for making the directory.
+ * @param path the path of the snapshot. This must be either an absolute
+ *        path or a path relative to CWD.
+ * @param mds_key key for the key-value pair in snapshot metadata.
+ * @param mds_val value for the key-value pair in snapshot metadata.
+ * @param op_flag unsigned integer to indicate whether metadata op is create,
+ *        update or remove.
+ * @returns 0 on success or a negative return value on error.
+ */
+int ceph_do_snap_md_op(struct ceph_mount_info* cmount, const char* path,
+                       const char* md_key, const char* md_val,
+                       const unsigned int op_flag);
+
+/**
  * Create multiple directories at once.
  *
  * @param cmount the ceph mount handle to use for making the directories.
