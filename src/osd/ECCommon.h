@@ -209,7 +209,7 @@ struct ECCommon {
     std::optional<std::map<std::string, ceph::buffer::list, std::less<>>> attrs;
     std::optional<ceph::buffer::list> omap_header;
     std::optional<std::map<std::string, ceph::buffer::list>> omap_entries;
-    bool omap_complete;
+    bool omap_complete = false;
     ECUtil::shard_extent_map_t buffers_read;
     ECUtil::shard_extent_set_t processed_read_requests;
     shard_id_set zero_length_reads;
