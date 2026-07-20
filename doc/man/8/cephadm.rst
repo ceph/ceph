@@ -95,7 +95,7 @@ Synopsis
 | **cephadm** **deploy-file** [-h] [--fsid FSID] --path PATH [--mode MODE]
 |                          [--uid UID] [--gid GID]
 
-| **cephadm** **prepare-host**
+| **cephadm** **prepare-host** [-h] [--expect-hostname EXPECT_HOSTNAME]
 
 | **cephadm** **prepare-host-sudo-hardening** [-h] [--ssh-user SSH_USER]
 |                                          [--ssh-pub-key SSH_PUB_KEY]
@@ -129,7 +129,7 @@ Description
 
 It provides commands to investigate and modify the state of the current host.
 
-:program:`cephadm` is not required on all hosts, but useful when investigating a particular
+:program:`cephadm` is not required on all hosts, but it is useful when investigating a particular
 daemon.
 
 Options
@@ -142,27 +142,27 @@ Options
 
 .. option:: --docker
 
-   use docker instead of podman (default: False)
+   use docker instead of podman (default: ``False``)
 
 .. option:: --data-dir DATA_DIR
 
-   base directory for daemon data (default: /var/lib/ceph)
+   base directory for daemon data (default: ``/var/lib/ceph``)
 
 .. option:: --log-dir LOG_DIR
 
-   base directory for daemon logs (default: /var/log/ceph)
+   base directory for daemon logs (default: ``/var/log/ceph``)
 
 .. option:: --logrotate-dir LOGROTATE_DIR
 
-   location of logrotate configuration files (default: /etc/logrotate.d)
+   location of logrotate configuration files (default: ``/etc/logrotate.d``)
 
 .. option:: --unit-dir UNIT_DIR
 
-   base directory for systemd units (default: /etc/systemd/system)
+   base directory for systemd units (default: ``/etc/systemd/system``)
 
 .. option:: --verbose, -v
 
-   Show debug-level log messages (default: False)
+   Show debug-level log messages (default: ``False``)
 
 .. option:: --timeout TIMEOUT
 
@@ -170,11 +170,11 @@ Options
 
 .. option:: --retry RETRY
 
-   max number of retries (default: 10)
+   max number of retries (default: ``10``)
 
 .. option:: --no-container-init
 
-   do not run podman/docker with `--init` (default: False)
+   do not run podman/docker with ``--init`` (default: ``False``)
 
 
 Commands
@@ -183,12 +183,12 @@ Commands
 add-repo
 --------
 
-configure local package repository to also include the ceph repository.
+Configure local package repository to also include the Ceph repository.
 
 Arguments:
 
-* [--release RELEASE]       use latest version of a named release (e.g., octopus)
-* [--version VERSION]       use specific upstream version (x.y.z)
+* [--release RELEASE]       use latest version of a named release (e.g., ``octopus``)
+* [--version VERSION]       use specific upstream version (``x.y.z``)
 * [--dev DEV]               use specified bleeding edge build from git branch or tag
 * [--dev-commit DEV_COMMIT] use specified bleeding edge build from git commit
 * [--gpg-url GPG_URL]       specify alternative GPG key location
@@ -202,8 +202,8 @@ Adopt a daemon deployed with a different deployment tool.
 
 Arguments:
 
-* [--name NAME, -n NAME]       daemon name (type.id)
-* [--style STYLE]              deployment style (legacy, ...)
+* [--name NAME, -n NAME]       daemon name (``type.id``) (required)
+* [--style STYLE]              deployment style (``legacy``, ...) (required)
 * [--cluster CLUSTER]          cluster name
 * [--legacy-dir LEGACY_DIR]    base directory for legacy daemon data
 * [--config-json CONFIG_JSON]  Additional configuration information in JSON format
@@ -215,25 +215,28 @@ Configuration:
 When starting the shell, cephadm looks for configuration in the following order.
 Only the first values found are used:
 
-1. An explicit, user provided path to a config file (``-c/--config`` option)
-2. Config file for daemon specified with ``--name`` parameter (``/var/lib/ceph/<fsid>/<daemon-name>/config``)
+1. An explicit, user-provided path to a config file (``-c/--config`` option)
+2. Config file for daemon specified with ``--name``
+   parameter (``/var/lib/ceph/<fsid>/<daemon-name>/config``)
 3. ``/var/lib/ceph/<fsid>/config/ceph.conf`` if it exists
-4. The config file for a ``mon`` daemon (``/var/lib/ceph/<fsid>/mon.<mon-id>/config``) if it exists
+4. The config file for a ``mon`` daemon (``/var/lib/ceph/<fsid>/mon.<mon-id>/config``)
+   if it exists
 5. Finally: fallback to the default file ``/etc/ceph/ceph.conf``
 
 
 bootstrap
 ---------
 
-Bootstrap a cluster on the local host. It deploys a MON and a MGR and then also automatically
-deploys the monitoring stack on this host (see --skip-monitoring-stack) and calls
-``ceph orch host add $(hostname)`` (see --skip-ssh).
+Bootstrap a cluster on the local host. It deploys a Monitor and a Manager and
+then also automatically deploys the monitoring stack on this host
+(see ``--skip-monitoring-stack``) and calls ``ceph orch host add $(hostname)``
+(see ``--skip-ssh``).
 
 Arguments:
 
-* [--config CONFIG, -c CONFIG]    ceph conf file to incorporate
+* [--config CONFIG, -c CONFIG]    ``ceph.conf`` file to incorporate
 * [--mon-id MON_ID]               mon id (default: local hostname)
-* [--mon-addrv MON_ADDRV]         mon IPs (e.g., [v2:localipaddr:3300,v1:localipaddr:6789])
+* [--mon-addrv MON_ADDRV]         mon IPs (e.g., ``[v2:localipaddr:3300,v1:localipaddr:6789]``)
 * [--mon-ip MON_IP]               mon IP
 * [--mgr-id MGR_ID]               mgr id (default: randomly generated)
 * [--fsid FSID]                   cluster FSID
@@ -243,7 +246,7 @@ Arguments:
 * [--output-keyring OUTPUT_KEYRING] location to write keyring file with new cluster admin and mon keys
 * [--output-config OUTPUT_CONFIG] location to write conf file to connect to new cluster
 * [--output-pub-ssh-key OUTPUT_PUB_SSH_KEY] location to write the cluster's public SSH key
-* [--skip-ssh                     skip setup of ssh key on local host
+* [--skip-ssh]                    skip setup of SSH key on local host
 * [--initial-dashboard-user INITIAL_DASHBOARD_USER] Initial user for the dashboard
 * [--initial-dashboard-password INITIAL_DASHBOARD_PASSWORD] Initial password for the initial dashboard user
 * [--ssl-dashboard-port SSL_DASHBOARD_PORT] Port number used to connect with dashboard using SSL
@@ -252,7 +255,7 @@ Arguments:
 * [--ssh-config SSH_CONFIG] SSH config
 * [--ssh-private-key SSH_PRIVATE_KEY] SSH private key
 * [--ssh-public-key SSH_PUBLIC_KEY] SSH public key
-* [--ssh-user SSH_USER]           set user for SSHing to cluster hosts, passwordless sudo will be needed for non-root users'
+* [--ssh-user SSH_USER]           set user for SSHing to cluster hosts, passwordless sudo will be needed for non-root users
 * [--skip-mon-network]            set mon public_network based on bootstrap mon ip
 * [--skip-dashboard]              do not enable the Ceph Dashboard
 * [--dashboard-password-noupdate] stop forced dashboard password change
@@ -264,7 +267,7 @@ Arguments:
 * [--allow-fqdn-hostname]         allow hostname that is fully-qualified (contains ".")
 * [--skip-prepare-host]           Do not prepare host
 * [--orphan-initial-daemons]      Set mon and mgr service to unmanaged and do not create the crash service
-* [--skip-monitoring-stack]       Do not automatically provision monitoring stack] (prometheus, grafana, alertmanager, node-exporter)
+* [--skip-monitoring-stack]       Do not automatically provision monitoring stack (prometheus, grafana, alertmanager, node-exporter)
 * [--apply-spec APPLY_SPEC]       Apply cluster spec after bootstrap (copy ssh key, add hosts and apply services)
 * [--registry-url REGISTRY_URL]   url of custom registry to login to. e.g. docker.io, quay.io
 * [--registry-username REGISTRY_USERNAME] username of account to login to on custom registry
@@ -280,20 +283,21 @@ Run ceph-volume inside a container::
     cephadm ceph-volume inventory
 
 Positional arguments:
-* [command]               command
+
+* [command]               :doc:`ceph-volume <ceph-volume>`\(8) command to run (required)
 
 Arguments:
 
 * [--fsid FSID]                    cluster FSID
-* [--config-json CONFIG_JSON]      JSON file with config and (client.bootstrap-osd) key
-* [--config CONFIG, -c CONFIG]     ceph conf file
-* [--keyring KEYRING, -k KEYRING]  ceph.keyring to pass through to the container
+* [--config-json CONFIG_JSON]      JSON file with config and (``client.bootstrap-osd``) key
+* [--config CONFIG, -c CONFIG]     ``ceph.conf`` file
+* [--keyring KEYRING, -k KEYRING]  ``ceph.keyring`` file to pass through to the container
 
 
 check-host
 ----------
 
-check host configuration to be suitable for a Ceph cluster.
+Check that the host configuration is suitable for a Ceph cluster.
 
 Arguments:
 
@@ -308,7 +312,7 @@ Remove a regular file on the local host. Missing paths are ignored.
 Arguments:
 
 * [--fsid FSID]   cluster FSID
-* --path PATH     absolute path of the file to remove (required)
+* [--path PATH]   absolute path of the file to remove (required)
 
 
 deploy-file
@@ -320,10 +324,10 @@ Write or replace a file on the local host. The **entire file body** is read from
 Arguments:
 
 * [--fsid FSID]   cluster FSID
-* --path PATH     absolute destination path for the file (required)
+* [--path PATH]   absolute destination path for the file (required)
 * [--mode MODE]   octal file mode (for example ``644`` or ``0644``)
-* [--uid UID]    numeric owner user id (**must** be given together with ``--gid``)
-* [--gid GID]    numeric owner group id (**must** be given together with ``--uid``)
+* [--uid UID]     numeric owner user id (**must** be given together with ``--gid``)
+* [--gid GID]     numeric owner group id (**must** be given together with ``--uid``)
 
 
 deploy
@@ -335,15 +339,15 @@ deploy a daemon on the local host. Used by the orchestrator CLI::
 
 Arguments:
 
-* [--name NAME]               daemon name (type.id)
-* [--fsid FSID]               cluster FSID
+* [--name NAME]               daemon name (``type.id``) (required)
+* [--fsid FSID]               cluster FSID (required)
 * [--config CONFIG, -c CONFIG] config file for new daemon
 * [--config-json CONFIG_JSON] Additional configuration information in JSON format
 * [--keyring KEYRING]         keyring for new daemon
 * [--key KEY]                 key for new daemon
-* [--osd-fsid OSD_FSID]       OSD uuid, if creating an OSD container
+* [--osd-fsid OSD_FSID]       OSD UUID, if creating an OSD container
 * [--skip-firewalld]          Do not configure firewalld
-* [--tcp-ports                List of tcp ports to open in the host firewall
+* [--tcp-ports TCP_PORTS]     List of TCP ports to open in the host firewall
 * [--reconfig]                Reconfigure a previously deployed daemon
 * [--allow-ptrace]            Allow SYS_PTRACE on daemon container
 
@@ -356,17 +360,19 @@ Run an interactive shell inside a running daemon container::
     cephadm enter --name mgr.myhost.ysubfo
 
 Positional arguments:
+
 * [command]               command
 
 Arguments:
 
 * [--fsid FSID]           cluster FSID
-* [--name NAME, -n NAME]  daemon name (type.id)
+* [--name NAME, -n NAME]  daemon name (``type.id``) (required)
+
 
 install
 -------
 
-install ceph package(s)
+Install Ceph package(s).
 
 Positional arguments:
 
@@ -381,20 +387,23 @@ the image to inspect with ``--image``::
 
     cephadm --image IMAGE_NAME inspect-image
 
+
 list-networks
 -------------
 
-list IP networks
+List IP networks.
+
 
 list-rdma
 ---------
 
-list RDMA devices and their netdev interfaces
+List RDMA devices and their netdev interfaces.
+
 
 ls
 --
 
-list daemon instances known to cephadm on **this** host::
+List daemon instances known to cephadm on **this** host::
 
     $ cephadm ls
     [
@@ -420,10 +429,11 @@ Arguments:
 * [--no-detail]             Do not include daemon status
 * [--legacy-dir LEGACY_DIR] Base directory for legacy daemon data
 
+
 logs
 ----
 
-print journald logs for a daemon container::
+Print journald logs for a daemon container::
 
     cephadm logs --name mgr.myhost.ysubfo
 
@@ -431,11 +441,10 @@ This is similar to::
 
     journalctl -u mgr.myhost.ysubfo
 
-Can also specify additional journal arguments::
+Additional journal arguments can be specified::
 
     cephadm logs --name mgr.myhost.ysubfo -- -n 20 # last 20 lines
     cephadm logs --name mgr.myhost.ysubfo -- -f # follow the log
-
 
 Positional arguments:
 
@@ -444,13 +453,13 @@ Positional arguments:
 Arguments:
 
 * [--fsid FSID]           cluster FSID
-* [--name NAME, -n NAME]  daemon name (type.id)
+* [--name NAME, -n NAME]  daemon name (``type.id``) (required)
 
 
 prepare-host
 ------------
 
-prepare a host for cephadm use
+Prepare a host for cephadm use.
 
 Arguments:
 
@@ -503,14 +512,15 @@ Arguments:
 pull
 ----
 
-Pull the ceph image::
+Pull the Ceph image::
 
     cephadm pull
+
 
 registry-login
 --------------
 
-Give cephadm login information for an authenticated registry (url, username and password).
+Give cephadm login information for an authenticated registry (URL, username and password).
 Cephadm will attempt to log the calling host into that registry::
 
       cephadm registry-login --registry-url [REGISTRY_URL] --registry-username [USERNAME]
@@ -547,21 +557,22 @@ and turn it in with command::
 
 Arguments:
 
-* [--registry-url REGISTRY_URL]   url of registry to login to. e.g. docker.io, quay.io
+* [--registry-url REGISTRY_URL]   URL of registry to login to. e.g. docker.io, quay.io
 * [--registry-username REGISTRY_USERNAME] username of account to login to on registry
 * [--registry-password REGISTRY_PASSWORD] password of account to login to on registry
 * [--registry-json REGISTRY_JSON] JSON file containing login info for custom registry
 * [--fsid FSID]                   cluster FSID
 
+
 rm-daemon
 ---------
 
-Remove a specific daemon instance
+Remove a specific daemon instance.
 
 Arguments:
 
-* [--name NAME, -n NAME]  daemon name (type.id)
-* [--fsid FSID]           cluster FSID
+* [--name NAME, -n NAME]  daemon name (``type.id``) (required)
+* [--fsid FSID]           cluster FSID (required)
 * [--force]               proceed, even though this may destroy valuable data
 * [--force-delete-data]   delete valuable daemon data instead of making a backup
 
@@ -569,27 +580,29 @@ Arguments:
 rm-cluster
 ----------
 
-remove all daemons for a cluster
+Remove all daemons for a cluster.
 
 Arguments:
 
-* [--fsid FSID]  cluster FSID
+* [--fsid FSID]  cluster FSID (required)
 * [--force]      proceed, even though this may destroy valuable data
+
 
 rm-repo
 -------
 
-remove package repository configuration
+Remove package repository configuration.
+
 
 run
 ---
 
-run a ceph daemon, in a container, in the foreground
+Run a Ceph daemon, in a container, in the foreground.
 
 Arguments:
 
-* [--name NAME, -n NAME]  daemon name (type.id)
-* [--fsid FSID]           cluster FSID
+* [--name NAME, -n NAME]  daemon name (``type.id``) (required)
+* [--fsid FSID]           cluster FSID (required)
 
 
 shell
@@ -611,10 +624,10 @@ Positional arguments:
 Arguments:
 
 * [--fsid FSID]                   cluster FSID
-* [--name NAME, -n NAME]          daemon name (type.id)
-* [--config CONFIG, -c CONFIG]    ceph.conf to pass through to the container
-* [--keyring KEYRING, -k KEYRING] ceph.keyring to pass through to the container
-* [--mount MOUNT, -m MOUNT]       mount a file or directory under /mnt in the container
+* [--name NAME, -n NAME]          daemon name (``type.id``)
+* [--config CONFIG, -c CONFIG]    ``ceph.conf`` file to pass through to the container
+* [--keyring KEYRING, -k KEYRING] ``ceph.keyring`` file to pass through to the container
+* [--mount MOUNT, -m MOUNT]       mount a file or directory under ``/mnt`` in the container
 * [--env ENV, -e ENV]             set environment variable
 
 
@@ -625,40 +638,42 @@ Operate on the daemon's systemd unit.
 
 Positional arguments:
 
-* [command]               systemd command (start, stop, restart, enable, disable, ...)
+* [command]               systemd command (``start``, ``stop``, ``restart``, ``enable``, ``disable``, ...) (required)
 
 Arguments:
 
 * [--fsid FSID]           cluster FSID
-* [--name NAME, -n NAME]  daemon name (type.id)
+* [--name NAME, -n NAME]  daemon name (``type.id``) (required)
 
 
 list-images
 -----------
 
-List the default container images for all services in ini format. The output can be modified with custom images and passed to --config flag during bootstrap.
+List the default container images for all services in ini format. The output
+can be modified with custom images and passed to ``--config`` flag
+during bootstrap.
 
 
 update-osd-service
 ------------------
 
-Update the OSD service for specific OSDs
+Update the OSD service for specific OSDs.
 
 Arguments:
 
 * [--fsid FSID]                 cluster FSID
-* --osd-ids OSD_IDS             Comma-separated OSD IDs
-* --service-name SERVICE_NAME   OSD service name
+* [--osd-ids OSD_IDS]           Comma-separated OSD IDs (required)
+* [--service-name SERVICE_NAME] OSD service name (required)
 
 
 Availability
 ============
 
 :program:`cephadm` is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to
-the documentation at http://docs.ceph.com/ for more information.
+the documentation at https://docs.ceph.com/ for more information.
 
 
 See also
 ========
 
-:doc:`ceph-volume <ceph-volume>`\(8),
+:doc:`ceph-volume <ceph-volume>`\(8)
