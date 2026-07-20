@@ -19,6 +19,23 @@
   - The `rgw default data log backing` option is removed and it is no longer
     possible to create clusters with an omap based datalog.
   - `radosgw-admin datalog type` will only accept `--log_type=fifo`.
+
+* MGR: The default values of ``mon_target_pg_per_osd`` and ``mon_max_pg_per_osd``
+  have been increased from 100 and 250 to 200 and 500, respectively. These values
+  enhance the PG autoscaler's ability to calculate reasonable ``pg_num`` values
+  for pools under its control. These in turn increase parallelism and performance,
+  and improve the ``balancer`` module's ability to acheive uniform OSD utilization.
+
+  [This concomitant PR](https://github.com/ceph/ceph/pull/67694) ensures that
+  upgrades are not delayed or disrupted by PG splitting as a result of this change.
+
+  Clusters with effective ``bluestore_osd_memory_target`` values smaller than
+  the default 4GiB may wish to explicitly set the previous default values in
+  the central config store before upgrading. This will reduce the potential
+  for increased memory starvation. Clusters with SSDs split into more than two
+  OSDs may also wish to pin their current values in advance, or redeploy those
+  SSDs with at most two OSDs per.
+
 * RGW: Bucket Logging suppports creating log buckets in EC pools.
   Implicit logging object commits are now performed asynchronously.
 * RGW: radosgw-admin bucket list now supports pagination for versioned buckets by using
