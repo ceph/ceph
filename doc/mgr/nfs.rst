@@ -389,7 +389,7 @@ Example ``ceph nfs cluster create`` input file:
 
 
 Enable QoS bandwidth control for an NFS Ganesha cluster
-----------------------------------------------------
+-------------------------------------------------------
 
 .. code:: bash
 
@@ -467,7 +467,7 @@ For example::
     $ ceph nfs cluster qos disable bandwidth_control nfs_clust
 
 Enable QoS IOPS control for NFS Ganesha cluster
-----------------------------------------------
+-----------------------------------------------
 
 .. code:: bash
 
@@ -503,7 +503,7 @@ For example::
    with the required parameters as well.
 
 Disable QoS IOPS control for NFS Ganesha cluster
------------------------------------------------
+------------------------------------------------
 
 .. code:: bash
 
