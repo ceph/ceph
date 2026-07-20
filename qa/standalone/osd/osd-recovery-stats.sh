@@ -716,6 +716,87 @@ function TEST_recovery_last_degraded_undersized() {
     kill_daemons $dir || return 1
 }
 
+# Verify that the rebuild perf counters on the primary OSD increment after a
+# real EC shard recovery.  Kill one non-primary OSD so the PG goes degraded,
+# then let recovery run to completion.  After the PG is clean again:
+#   - pg_rebuild_duration.avgcount must be >= 1
+#   - pg_rebuild_duration.sum must be > 0 (real time elapsed)
+function TEST_rebuild_perf_ec_increments() {
+    local dir=$1
+    local OSDS=4
+    local ecpoolname=ectest
+
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd --osd-mclock-skip-benchmark=true || return 1
+    done
+
+    ceph osd erasure-code-profile set ecprofile \
+        plugin=jerasure technique=reed_sol_van k=2 m=1 \
+        crush-failure-domain=osd || return 1
+    ceph osd pool create $ecpoolname 1 1 erasure ecprofile || return 1
+    ceph osd pool set $ecpoolname min_size 2 || return 1
+    wait_for_clean || return 1
+
+    # Write a few objects so the PG has data that must be recovered.
+    for i in $(seq 1 5)
+    do
+      rados -p $ecpoolname put obj$i /etc/hostname || return 1
+    done
+    wait_for_clean || return 1
+
+    local primary
+    primary=$(get_primary $ecpoolname obj1)
+    local replica
+    replica=$(get_not_primary $ecpoolname obj1)
+
+    # Pause recovery so the PG stays degraded long enough for the latch to
+    # fire inside prepare_stats_for_publish before recovery completes.
+    ceph osd set norecover || return 1
+
+    # Kill one non-primary OSD so the PG becomes degraded.
+    kill $(cat $dir/osd.${replica}.pid)
+    ceph osd down osd.${replica} || return 1
+    ceph osd out osd.${replica} || return 1
+
+    # Release the hold and wait for full recovery.
+    ceph osd unset norecover || return 1
+    wait_for_clean || return 1
+
+    # flush_pg_stats triggers publish_stats_to_osd on every OSD, which calls
+    # prepare_stats_for_publish and commits the rebuild counters.
+    flush_pg_stats || return 1
+
+    # The primary may be the same OSD we started with (we only killed a
+    # replica), but re-query in case CRUSH remapped the primary shard.
+    primary=$(get_primary $ecpoolname obj1)
+
+    local dump
+    dump=$(CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) \
+           perf dump) || return 1
+
+    local rebuild_avgcount
+    rebuild_avgcount=$(jq '.recoverystate_perf.pg_rebuild_duration.avgcount' \
+      <<< "$dump")
+    test "$rebuild_avgcount" -ge 1 || {
+      echo "FAIL: expected pg_rebuild_duration.avgcount>=1, got $rebuild_avgcount"
+      return 1
+    }
+
+    echo "$dump" | \
+      jq -e '.recoverystate_perf.pg_rebuild_duration.sum > 0' > /dev/null || {
+      local rebuild_sum
+      rebuild_sum=$(jq '.recoverystate_perf.pg_rebuild_duration.sum' <<< "$dump")
+      echo "FAIL: expected pg_rebuild_duration.sum>0, got $rebuild_sum"
+      return 1
+    }
+
+    delete_pool $ecpoolname
+    kill_daemons $dir || return 1
+}
+
 main osd-recovery-stats "$@"
 
 # Local Variables:

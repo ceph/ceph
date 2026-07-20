@@ -1579,6 +1579,17 @@ public:
   bool backfill_reserved = false;
   bool backfill_reserving = false;
 
+  /**
+   * Per-PG latch state for rebuild time tracking. Cleared after each
+   * completed rebuild event is recorded in the perf counters.
+   * The state is also cleared in clear_primary_state() so that an interval
+   * change or role transition (primary -> replica) does not carry a stale
+   * start time or baseline recovered count into a future interval.
+   */
+  utime_t rebuild_start_time;
+  int64_t rebuild_base_recovered = 0;
+  bool rebuild_had_redundancy_loss = false;
+
   PeeringMachine machine;
 
   void update_osdmap_ref(OSDMapRef newmap) {
@@ -1678,6 +1689,17 @@ public:
       pool.info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
       return  pri > 0 ? pri : cct->_conf->osd_recovery_op_priority;
     }
+  }
+
+  // Accessors for the per-PG rebuild latch state.
+  utime_t get_rebuild_start_time() const {
+    return rebuild_start_time;
+  }
+  int64_t get_rebuild_base_recovered() const {
+    return rebuild_base_recovered;
+  }
+  bool get_rebuild_had_redundancy_loss() const {
+    return rebuild_had_redundancy_loss;
   }
 
 private:
