@@ -42,21 +42,26 @@ Object Lifecycle Head objects add complexity beyond the extra RADOS object itsel
 - Copying data into new objects on version changes.
 - Lack of atomicity across OLH, head object, and bucket-index updates.
 
-**3. Server-Side Copy and dedup.**
+**3. PG-level write serialization.**
+- RADOS allows a single transaction per PG at a time.
+- All writes to objects in the same PG are serialized — unrelated S3 objects that happen to share a PG block each other.
+- RGW objects have no internal dependency, but RADOS forces them to wait.
+
+**4. Server-Side Copy and dedup.**
 Multiple S3 objects cannot share a head object.
 A server-side copy or deduplication must create a full independent head object even when the data is identical.
 - Data inlined in the head-object (up to 4MB) is duplicated and copied by server-side copy.
 - Dedup moves the inline data from the head object into a new tail-object to allow full data deduplication.
 
-**4. Key rename.**
+**5. Key rename.**
 Renaming an S3 object requires copying the entire object and deleting the original — there is no in-place rename.\
 Especially costly when applications like Apache Spark/Hadoop rename entire directory trees.
 
-**5. Backend lock-in.**
+**6. Backend lock-in.**
 The storage tier must implement the full RADOS object model (xattrs, omap).
 RGW cannot use a simpler blob store without reimplementing that model.
 
-**6. EC metadata amplification.**
+**7. EC metadata amplification.**
 Every RADOS head object carries metadata (xattrs, omap) replicated across all K+M EC members.
 - 6 copies in a 4+2 scheme.
 - 11 copies in 8+3.
@@ -64,14 +69,14 @@ Every RADOS head object carries metadata (xattrs, omap) replicated across all K+
 This far exceeds what metadata protection requires.\
 Furthermore, Delete operations must remove rados objects on **all** K+M EC members.
 
-**7. Bucket listing.**
+**8. Bucket listing.**
 Head objects scattered across RADOS cannot be listed efficiently.\
 This is why the bucket-index exists as a separate structure — duplicating metadata to enable listing, at the cost of dual updates and consistency issues.
 
-**8. Storage-class placement.**
+**9. Storage-class placement.**
 When data is placed in a non-default storage class pool, the head object must still reside in the default pool — acting purely as a KV-style pointer at full RADOS object cost.
 
-**9. Delete overhead.**
+**10. Delete overhead.**
 Deleting an S3 object requires two non-atomic operations on separate systems:
 - Removing the bucket-index entry.
 - Deleting the head object:
@@ -103,11 +108,16 @@ Zero knowledge of S3 and/or RGW. RGW manages its own metadata in the KV store.
 - A key with a live value means the object exists.
 - Delete removes or invalidates the entry, making it immediately inaccessible.
 
-**R4 — Bucket Listing.**
+**R4 — Per-Key Write Concurrency.**
+Unrelated writes proceed concurrently, with contention only on actual key conflicts.
+
+No placement-group or shard-level serialization — the KV store must not force unrelated objects to wait on each other.
+
+**R5 — Bucket Listing.**
 - KV range scans replace the bucket-index.
 - Each entry returns listing attributes directly from the KV value — no data-tier access.
 
-**R5 — KV Value: Core Requirements.**
+**R6 — KV Value: Core Requirements.**
 The KV value must always contain:
 - All listing attributes (key, last_modified, etag, size, storage_class, owner, checksum_algorithm).
 - Routing info for the first data chunk.
@@ -115,16 +125,16 @@ The KV value must always contain:
 
 > *Stretch goals — desirable but may be overridden by KV system constraints or value size limits:*
 >
-> **R5.1 — KV Value Contains the Full S3 API Surface.**
+> **R6.1 — KV Value Contains the Full S3 API Surface.**
 > Aim to store all user-visible S3 attributes (user metadata, tags, ACLs, object lock) in the KV value.
 > Objects with very large user attributes may spill to an external location.
 > Whether to always keep all user attributes in a single KV entry or allow spillover is an open design question.
 >
-> **R5.2 — KV Value Contains Full Routing Info.**
+> **R6.2 — KV Value Contains Full Routing Info.**
 > Aim to store the complete manifest, compression, and encryption metadata in the KV value, so that data access requires no secondary metadata lookup.
 > When these do not fit (e.g., large compressed multipart objects), RGW falls back to reading them from the data header or spillover storage.
 
-**R6 — Caching Delegated to KV Store.**
+**R7 — Caching Delegated to KV Store.**
 No local RGW cache for object KV entries.
 The KV store's own distributed cache serves hot entries from memory.
 
@@ -258,7 +268,8 @@ This is an early-stage API definition. It will be refined as the design matures 
 
 Transactions enable atomic multi-key operations: object write + delete-log entry + stats update in a single commit.
 
-Transaction scope is always within a single cluster — cross-cluster atomicity is handled by RGW-level coordination (see Key Sharding).
+Transaction scope is always within a single cluster — cross-cluster atomicity is handled by RGW-level coordination 
+(see [Key Sharding](#key-sharding))
 
 ---
 
@@ -290,6 +301,28 @@ Target size is ~1KB. Smaller values are accepted as-is. Larger values are split 
 - Listing attributes — etag, last_modified, size, storage_class, owner, checksum_algorithm, content_type, content_encoding, content_language.
 - RGW internal fields — state/flags, ref_tag, size_physical, chunk pointers. Each chunk pointer is a `(blob_id, offset, length)` tuple — no S3 names on the storage tier. Multiple S3 objects may share a blob_id (packing).
 - Routing info for spillover metadata, when present.
+
+<a id="ref_tag">**ref_tag**</a> — an existing RGW concept carried forward with an expanded role.
+
+A unique-per-bucket identifier generated by RGW before writing the KV entry.\
+It uniquely identifies a specific write/instance of an S3 object — necessary because S3 allows overwriting the same key with different data.
+
+In the current model, ref_tag is a deterministically generated string combining the gateway instance ID, a high-resolution epoch timestamp, and a randomly generated modifier.\
+It also serves as the RADOS object name for tail objects — the fixed short names for the 4MB child stripes of a parent head object.
+
+In the KV model, this role generalizes to compact identity for all child KV entries (tags, multipart state, extended value entries) — logically equivalent, applied to KV children instead of RADOS children.
+
+Two generation strategies:
+
+- **Counter** — 64-bit value from a per-shard `atomic_inc()` counter, prefixed with the originating shard_id.\
+  Compact.\
+  Shard-split-safe: the originating shard_id is baked into the ref_tag permanently, so migrated objects never collide with new objects on the destination shard.\
+  During resharding, the original shard's counter KV must be migrated first.
+
+- **Hash** — 256-bit cryptographic hash of\
+`(S3_name + high_resolution_epoch_timestamp + rgw_id)`.\
+  Stateless — no coordination, no counter to maintain or migrate.\
+  Naturally shard-safe.
 
 **User-visible attributes** (in the KV entry when they fit):
 
@@ -682,8 +715,10 @@ The child KV should **logically** be\
 `<prefix> <shard_id> <bucket_id> <object_name>::<child-suffix>`\
 This way it will always follow the same shard as the parent KV
 
-We can replace the `<object_name>` (up to 1024 Bytes long) on child KV with an 8-byte `<parent-object-id>` which must be stored in the parent KV and used to construct the child KV.\
-Alternatively, we can use a 32-64 byte cryptographic hash as an `<parent-object-id>` saving the need to query the parent KV before accessing the child KV
+The <object_name> (up to 1024 bytes long) in child KV keys could be replaced by the parent's ref_tag — a compact unique identifier already stored in the parent KV value 
+  (see [ref_tag](#ref_tag))
+
+
 
 ### Entries Sharing the Parent Shard:
 
