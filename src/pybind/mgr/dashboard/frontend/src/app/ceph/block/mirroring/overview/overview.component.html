@@ -23,25 +23,27 @@
             [attr.disabled]="!editing ? true : null"
             cdsText
           />
-          <cds-icon-button
-            kind="ghost"
-            size="md"
-            (click)="updateSiteName()"
-            [title]="editing ? 'Save' : 'Edit'"
-          >
-            <svg
-              [cdsIcon]="icons.edit"
-              [size]="icons.size32"
-              class="cds--btn__icon"
-              *ngIf="!editing"
-            ></svg>
-            <svg
-              [cdsIcon]="icons.check"
-              [size]="icons.size32"
-              class="cds--btn__icon"
-              *ngIf="editing"
-            ></svg>
-          </cds-icon-button>
+          @if (permission.update) {
+            <cds-icon-button
+              kind="ghost"
+              size="md"
+              (click)="updateSiteName()"
+              [title]="editing ? 'Save' : 'Edit'"
+            >
+              <svg
+                [cdsIcon]="icons.edit"
+                [size]="icons.size32"
+                class="cds--btn__icon"
+                *ngIf="!editing"
+              ></svg>
+              <svg
+                [cdsIcon]="icons.check"
+                [size]="icons.size32"
+                class="cds--btn__icon"
+                *ngIf="editing"
+              ></svg>
+            </cds-icon-button>
+          }
           <cd-copy-2-clipboard-button
             [source]="siteName"
             [byId]="false"
