@@ -304,7 +304,7 @@
                 -- No realm available --
               </option>
             }
-            @for (realm of realmList; track realm) {
+            @for (realm of realmList; track realm.name) {
               <option [value]="realm.name">
                 {{ realm.name }}
               </option>
@@ -327,7 +327,7 @@
             formControlName="zonegroup_name"
             label="Zonegroup"
           >
-            @for (zonegroup of zonegroupList; track zonegroup) {
+            @for (zonegroup of filteredZonegroupList; track zonegroup.name) {
               <option [value]="zonegroup.name">
                 {{ zonegroup.name }}
               </option>
@@ -341,13 +341,24 @@
             formControlName="zone_name"
             label="Zone"
           >
-            @for (zone of zoneList; track zone) {
+            @for (zone of filteredZoneList; track zone.name) {
               <option [value]="zone.name">
                 {{ zone.name }}
               </option>
             }
           </cds-select>
         </div>
+
+        @if (editing && showRgwRealmChangedInfo) {
+          <cd-alert-panel
+            type="info"
+            spacingClass="mb-3"
+            i18n
+          >
+            The RGW daemons for this service must be restarted to apply the updated realm,
+            zonegroup, or zone configuration.
+          </cd-alert-panel>
+        }
       }
 
       <!-- unmanaged -->
