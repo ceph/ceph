@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from textwrap import dedent
 
 from teuthology.contextutil import safe_while
-from teuthology.misc import get_file, write_file
+from teuthology.misc import get_file, write_file, get_testdir
 from teuthology.orchestra import run
 from teuthology.orchestra.run import Raw
 from teuthology.exceptions import CommandFailedError, ConnectionLostError
@@ -95,6 +95,10 @@ class CephFSMountBase(object):
         self.test_files = ['a', 'b', 'c']
 
         self.background_procs = []
+
+    def __del__(self):
+        self.rm_pybind_test_files()
+        super().__del__()
 
     # This will cleanup the stale netnses, which are from the
     # last failed test cases.
@@ -928,6 +932,68 @@ class CephFSMountBase(object):
                                 check_status=False)
         self._verify(proc, retval, errmsgs)
         return proc
+
+    def rm_pybind_test_files(self):
+        if not hasattr(self, 'pybind_test_files') or \
+           not self.pybind_test_files:
+            return
+
+        self.client_remote.run(f'rm --verbose --force {self.pybind_test_files}')
+        self.PYBIND_TEST_FILE_PATH = ''
+
+    def fetch_pybind_test_files(self):
+        '''
+        Fetch files for CephFS Pybind unit tests from the Teuthology Worker Node
+        to the given testing node.
+        '''
+        # dont fetch files again if they have been fetched already.
+        if hasattr(self, 'pybind_test_files') and \
+            self.pybind_test_files:
+            return
+
+        TEST_FILE_NAMES = ('assertions.py', 'test_cephfs.py')
+        REMOTE_TEST_DIR_PATH = get_testdir(self.ctx)
+        # TWN = teuthology worker node
+        dirname = os.path.dirname
+        TWN_CEPH_REPO_ROOT = dirname(dirname(dirname(dirname(__file__))))
+        TWN_PYBIND_TEST_DIR_PATH = os.path.join(TWN_CEPH_REPO_ROOT,
+                                                'src/test/pybind')
+
+        for name in TEST_FILE_NAMES:
+            log.info(f'running put_file() for file "{name}"...')
+
+            twn_file_path = os.path.join(TWN_PYBIND_TEST_DIR_PATH, name)
+            remote_file_path = os.path.join(REMOTE_TEST_DIR_PATH, name)
+
+            self.client_remote.put_file(twn_file_path, remote_file_path)
+
+            self.pybind_test_files = ' ' + remote_file_path
+            if 'test_cephfs.py' in remote_file_path:
+                self.PYBIND_TEST_FILE_PATH = remote_file_path
+
+    def run_pybind_test(self, TEST_CLASS_NAME=None, TEST_FUNC_NAME=None):
+        '''
+        Run CephFS Pybind unit tests using pytest command. Test files should be
+        copied (from src/test/pybind) to client's remote machine beforehand.
+        '''
+        self.fetch_pybind_test_files()
+
+        if TEST_CLASS_NAME and TEST_FUNC_NAME:
+            FILTER_STR = f'{TEST_CLASS_NAME} and {TEST_FUNC_NAME}'
+        elif TEST_CLASS_NAME and not TEST_FUNC_NAME:
+            FILTER_STR = TEST_CLASS_NAME
+        elif not TEST_CLASS_NAME and TEST_FUNC_NAME:
+            FILTER_STR = TEST_FUNC_NAME
+        else:
+            FILTER_STR = ''
+
+        if FILTER_STR:
+            pytest_cmd = (f'pytest --verbose -k "{FILTER_STR}" '
+                          f'{self.PYBIND_TEST_FILE_PATH}')
+        else:
+            pytest_cmd = f'pytest --verbose {self.PYBIND_TEST_FILE_PATH}'
+
+        self.run_shell(args=pytest_cmd)
 
     def open_for_reading(self, basename):
         """
