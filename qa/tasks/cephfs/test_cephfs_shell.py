@@ -1186,3 +1186,103 @@ class TestShellOpts(TestCephFSShell):
         final_editor_val = self.extract_set_editor_output(final_editor_val)
 
         self.assertEqual(self.editor_val, final_editor_val)
+
+
+class TestCopyFileRange(TestCephFSShell):
+    """
+    Tests for the copy_file_range command which leverages server-side
+    copy offload (COPY2) for object-aligned ranges.
+    """
+
+    def test_copy_full_file(self):
+        """
+        Copy an entire file from src to dst.
+        """
+        data = 'A' * 1024
+        self.run_cephfs_shell_cmd("put - src_file", stdin=data)
+        err = self.get_cephfs_shell_cmd_error("put - src_file2",
+                                               stdin="test")
+        log.info(f"put test error output: {err}")
+
+        output = self.get_cephfs_shell_cmd_output(
+            "copy_file_range src_file dst_file")
+        self.assertIn("Copied 1024 bytes", output)
+
+        # Verify content
+        dst_data = self.get_cephfs_shell_cmd_output("cat dst_file")
+        self.assertEqual(data, dst_data)
+
+        self.run_cephfs_shell_cmd("rm src_file dst_file")
+
+    def test_copy_with_src_offset(self):
+        """
+        Copy with explicit source offset.
+        """
+        data = '0123456789abcdef'
+        self.run_cephfs_shell_cmd("put - src_file", stdin=data)
+
+        output = self.get_cephfs_shell_cmd_output(
+            "copy_file_range -s 5 src_file dst_file")
+        self.assertIn("Copied 11 bytes", output)
+
+        dst_data = self.get_cephfs_shell_cmd_output("cat dst_file")
+        self.assertEqual(data[5:], dst_data)
+
+        self.run_cephfs_shell_cmd("rm src_file dst_file")
+
+    def test_copy_with_length(self):
+        """
+        Copy a specific byte range.
+        """
+        data = '0123456789abcdef'
+        self.run_cephfs_shell_cmd("put - src_file", stdin=data)
+
+        output = self.get_cephfs_shell_cmd_output(
+            "copy_file_range -s 2 -l 5 src_file dst_file")
+        self.assertIn("Copied 5 bytes", output)
+
+        dst_data = self.get_cephfs_shell_cmd_output("cat dst_file")
+        self.assertEqual(data[2:7], dst_data)
+
+        self.run_cephfs_shell_cmd("rm src_file dst_file")
+
+    def test_copy_with_dst_offset(self):
+        """
+        Copy into destination at a specific offset.
+        """
+        dst_initial = 'X' * 20
+        src_data = 'hello world'
+        self.run_cephfs_shell_cmd("put - dst_file", stdin=dst_initial)
+        self.run_cephfs_shell_cmd("put - src_file", stdin=src_data)
+
+        output = self.get_cephfs_shell_cmd_output(
+            "copy_file_range -d 5 src_file dst_file")
+        self.assertIn("Copied 11 bytes", output)
+
+        dst_data = self.get_cephfs_shell_cmd_output("cat dst_file")
+        self.assertEqual(dst_data[:5], 'X' * 5)
+        self.assertEqual(dst_data[5:16], src_data)
+        self.assertEqual(dst_data[16:], 'X' * 4)
+
+        self.run_cephfs_shell_cmd("rm src_file dst_file")
+
+    def test_copy_missing_src(self):
+        """
+        Copy from a non-existent source should fail.
+        """
+        self.negtest_cephfs_shell_cmd(
+            cmd="copy_file_range no_such_file dst_file",
+            errmsg="does not exist")
+
+    def test_copy_zero_length(self):
+        """
+        Copy zero bytes should succeed as a no-op.
+        """
+        data = 'some data'
+        self.run_cephfs_shell_cmd("put - src_file", stdin=data)
+
+        output = self.get_cephfs_shell_cmd_output(
+            "copy_file_range -l 0 src_file dst_file")
+        self.assertIn("Copied 0 bytes", output)
+
+        self.run_cephfs_shell_cmd("rm src_file dst_file")
