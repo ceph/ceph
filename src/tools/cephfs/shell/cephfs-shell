@@ -799,6 +799,91 @@ class CephFSShell(Cmd):
 
         return 0
 
+    def complete_copy_file_range(self, text, line, begidx, endidx):
+        """
+        auto complete of file name.
+        """
+        return self.complete_filenames(text, line, begidx, endidx)
+
+    copy_file_range_parser = argparse.ArgumentParser(
+        description='Copy a byte range from one file to another, using '
+                    'server-side copy offload (COPY2) when possible.')
+    copy_file_range_parser.add_argument('src_path', type=str, action=path_to_bytes,
+                                        help='Source file path.')
+    copy_file_range_parser.add_argument('dst_path', type=str, action=path_to_bytes,
+                                        help='Destination file path.')
+    copy_file_range_parser.add_argument('-s', '--src-offset', type=int, default=0,
+                                        help='Source file offset (default: 0).')
+    copy_file_range_parser.add_argument('-d', '--dst-offset', type=int, default=0,
+                                        help='Destination file offset (default: 0).')
+    copy_file_range_parser.add_argument('-l', '--length', type=int, default=-1,
+                                        help='Number of bytes to copy (default: '
+                                             'entire source file from src_offset).')
+    copy_file_range_parser.add_argument('--flags', type=int, default=0,
+                                        help='Copy flags (reserved, default: 0).')
+
+    @with_argparser(copy_file_range_parser)
+    def do_copy_file_range(self, args):
+        """
+        Copy a byte range from one file to another using copy_file_range.
+        Uses server-side copy offload (COPY2) for object-aligned ranges,
+        which is significantly faster than read+write for large files.
+        """
+        # Validate source exists
+        if not is_file_exists(args.src_path):
+            set_exit_code_msg(errno.ENOENT,
+                              f"error: source file "
+                              f"'{args.src_path.decode('utf-8')}' "
+                              f"does not exist")
+            return
+
+        # Determine length if not specified
+        length = args.length
+        if length < 0:
+            try:
+                st = cephfs.stat(args.src_path)
+                length = st.st_size - args.src_offset
+                if length <= 0:
+                    set_exit_code_msg(errno.EINVAL,
+                                      f"error: src_offset "
+                                      f"({args.src_offset}) >= file size "
+                                      f"({st.st_size})")
+                    return
+            except libcephfs.Error as e:
+                set_exit_code_msg(msg=e)
+                return
+
+        # Open source file
+        try:
+            src_fd = cephfs.open(args.src_path, os.O_RDONLY, 0)
+        except libcephfs.Error as e:
+            set_exit_code_msg(msg=e)
+            return
+
+        # Open destination file (create if not exists, otherwise open for writing)
+        dst_flags = os.O_WRONLY | os.O_CREAT
+        try:
+            dst_fd = cephfs.open(args.dst_path, dst_flags, 0o666)
+        except libcephfs.Error as e:
+            cephfs.close(src_fd)
+            set_exit_code_msg(msg=e)
+            return
+
+        try:
+            copied, new_src_off, new_dst_off = cephfs.copy_file_range(
+                src_fd, dst_fd, length,
+                src_offset=args.src_offset,
+                dst_offset=args.dst_offset,
+                flags=args.flags)
+            poutput(f"Copied {copied} bytes "
+                    f"(src: {args.src_offset} -> {new_src_off}, "
+                    f"dst: {args.dst_offset} -> {new_dst_off})")
+        except libcephfs.Error as e:
+            set_exit_code_msg(msg=e)
+        finally:
+            cephfs.close(src_fd)
+            cephfs.close(dst_fd)
+
     def complete_ln(self, text, line, begidx, endidx):
         """
         auto complete of file name.
