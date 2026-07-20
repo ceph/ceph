@@ -112,14 +112,16 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.export_mgr.delete_export(cluster_id=cluster_id, pseudo_path=pseudo_path)
 
     @NFSCLICommand('nfs export delete', perm='rw')
-    @object_format.EmptyResponder()
+    @object_format.ErrorResponseHandler()
     def _cmd_nfs_export_delete(self,
                                cluster_id: str,
                                pseudo_path: str,
-                               skip_notify_nfs_server: bool = False) -> None:
+                               skip_notify_nfs_server: bool = False) -> Tuple[int, str, str]:
         """Delete a cephfs export (DEPRECATED)"""
         self.export_mgr.skip_notify_nfs_server = skip_notify_nfs_server
-        return self.export_mgr.delete_export(cluster_id=cluster_id, pseudo_path=pseudo_path)
+        self.export_mgr.delete_export(cluster_id=cluster_id, pseudo_path=pseudo_path)
+        return 0, "", ("`nfs export delete` is deprecated and will be removed "
+                       "in a future release, please `nfs export rm` instead.")
 
     @NFSCLICommand('nfs export ls', perm='r')
     @object_format.Responder()
@@ -230,10 +232,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.nfs.delete_nfs_cluster(cluster_id=cluster_id)
 
     @NFSCLICommand('nfs cluster delete', perm='rw')
-    @object_format.EmptyResponder()
-    def _cmd_nfs_cluster_delete(self, cluster_id: str) -> None:
+    @object_format.ErrorResponseHandler()
+    def _cmd_nfs_cluster_delete(self, cluster_id: str) -> Tuple[int, str, str]:
         """Removes an NFS Cluster (DEPRECATED)"""
-        return self.nfs.delete_nfs_cluster(cluster_id=cluster_id)
+        self.nfs.delete_nfs_cluster(cluster_id=cluster_id)
+        return 0, "", ("`nfs cluster delete` is deprecated and will be removed "
+                       "in a future release, please `nfs cluster rm` instead.")
 
     @NFSCLICommand('nfs cluster ls', perm='r')
     @object_format.Responder()

@@ -495,6 +495,9 @@
   to upgrade all OSDs in the cluster. For more details see tracker:
   https://tracker.ceph.com/issues/73031.
 
+* NFS: cluster/export delete commands now throw a deprecation warning when
+       used and will be removed in V release. 
+
 >=19.2.1
 
 * CephFS: The `fs subvolume create` command now allows tagging subvolumes through option
