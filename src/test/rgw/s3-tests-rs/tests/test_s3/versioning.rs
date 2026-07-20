@@ -292,6 +292,46 @@ async fn test_versioning_stacked_dm_removal_promotes_dm() {
 
 #[tokio::test]
 #[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+async fn test_versioning_stacked_dm_is_latest_cold_cache() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+    check_configure_versioning_retry(&client, &bucket_name, "Enabled", "Enabled").await;
+
+    let key = "myobj";
+    create_objects(&client, &bucket_name, &[key]).await;
+
+    // stack 3 delete markers
+    client.delete_object().bucket(&bucket_name).key(key).send().await.unwrap();
+    client.delete_object().bucket(&bucket_name).key(key).send().await.unwrap();
+    client.delete_object().bucket(&bucket_name).key(key).send().await.unwrap();
+
+    // warm-cache listing — should be correct via surgical updates
+    let warm = client.list_object_versions().bucket(&bucket_name).send().await.unwrap();
+    let warm_latest = warm.delete_markers().iter()
+        .filter(|dm| dm.is_latest().unwrap_or(false)).count();
+    assert_eq!(warm_latest, 1, "warm cache: expected 1 IsLatest DM, got {warm_latest}");
+    assert!(!warm.versions()[0].is_latest().unwrap_or(true),
+        "warm cache: version should not be IsLatest");
+
+    // invalidate driver cache → forces cold refill on next list
+    let hint_resp = s3_tests_rs::admin::driver_hint(
+        "invalidate-cache", &[("bucket", &bucket_name)]).await;
+    assert_eq!(hint_resp.status, 200,
+        "driver hint failed: {} {}", hint_resp.status, hint_resp.body);
+
+    // cold-cache listing — exercises fill_cache + LMDB fixup pass
+    let cold = client.list_object_versions().bucket(&bucket_name).send().await.unwrap();
+    let cold_latest = cold.delete_markers().iter()
+        .filter(|dm| dm.is_latest().unwrap_or(false)).count();
+    assert_eq!(cold_latest, 1, "cold cache: expected 1 IsLatest DM, got {cold_latest}");
+    assert!(!cold.versions()[0].is_latest().unwrap_or(true),
+        "cold cache: version should not be IsLatest");
+}
+
+#[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_versioning_delete_marker_removal_promotes() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
