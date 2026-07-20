@@ -401,6 +401,53 @@ class TestApplyOAuth2Proxy:
         ) in res.stderr
         mock_apply_misc.assert_not_called()
 
+    def test_cli_args_propagated_to_spec(self, mock_apply_misc):
+        mock_apply_misc.return_value = HandleCommandResult(retval=0, stdout="Success")
+
+        res = self.m._apply_oauth2_proxy(
+            provider_display_name="My OIDC Provider",
+            oidc_issuer_url="https://idp.example.com",
+            client_id="oauth-client",
+            client_secret="oauth-secret",
+        )
+
+        assert res.retval == 0
+        mock_apply_misc.assert_called_once()
+        spec = mock_apply_misc.call_args[0][0][0]
+        assert spec.provider_display_name == "My OIDC Provider"
+        assert spec.oidc_issuer_url == "https://idp.example.com"
+        assert spec.client_id == "oauth-client"
+        assert spec.client_secret == "oauth-secret"
+
+    def test_cli_args_with_https_address(self, mock_apply_misc):
+        mock_apply_misc.return_value = HandleCommandResult(retval=0, stdout="Success")
+
+        res = self.m._apply_oauth2_proxy(
+            provider_display_name="My OIDC Provider",
+            oidc_issuer_url="https://idp.example.com",
+            client_id="oauth-client",
+            client_secret="oauth-secret",
+            https_address="gateway.example.com:443",
+        )
+
+        assert res.retval == 0
+        spec = mock_apply_misc.call_args[0][0][0]
+        assert spec.https_address == "gateway.example.com:443"
+        assert spec.provider_display_name == "My OIDC Provider"
+        assert spec.oidc_issuer_url == "https://idp.example.com"
+        assert spec.client_id == "oauth-client"
+        assert spec.client_secret == "oauth-secret"
+
+    def test_partial_cli_args_raises_error(self, mock_apply_misc):
+        res = self.m._apply_oauth2_proxy(
+            provider_display_name="My OIDC Provider",
+            client_id="oauth-client",
+        )
+
+        assert res.retval != 0
+        assert 'Missing required fields for oauth2-proxy' in res.stderr
+        mock_apply_misc.assert_not_called()
+
 
 @mock.patch("orchestrator.module.OrchestratorCli._apply_misc")
 class TestApplyOAuth2ProxyYaml:

@@ -2185,6 +2185,10 @@ Usage:
     @OrchestratorCLICommand.Write('orch apply oauth2-proxy')
     def _apply_oauth2_proxy(self,
                             https_address: Optional[str] = None,
+                            provider_display_name: Optional[str] = None,
+                            oidc_issuer_url: Optional[str] = None,
+                            client_id: Optional[str] = None,
+                            client_secret: Optional[str] = None,
                             placement: Optional[str] = None,
                             unmanaged: bool = False,
                             dry_run: bool = False,
@@ -2199,6 +2203,10 @@ Usage:
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
             https_address=https_address,
+            provider_display_name=provider_display_name,
+            oidc_issuer_url=oidc_issuer_url,
+            client_id=client_id,
+            client_secret=client_secret,
         )
         spec.preview_only = dry_run
 
