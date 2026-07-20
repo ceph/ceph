@@ -858,10 +858,10 @@
         {
           alert: 'NVMeoFMultipleNamespacesOfRBDImage',
           'for': '1m',
-          expr: 'count by(pool_name, rbd_name) (count by(bdev_name, pool_name, rbd_name) (ceph_nvmeof_bdev_metadata and on (bdev_name) ceph_nvmeof_subsystem_namespace_metadata)) > 1',
+          expr: 'count by(pool_name, rbd_name, rados_namespace_name) (count by(bdev_name, pool_name, rbd_name, rados_namespace_name) (ceph_nvmeof_bdev_metadata * on (bdev_name, instance, cluster) group_left(rados_namespace_name) ceph_nvmeof_subsystem_namespace_metadata)) > 1',
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
-            summary: 'RBD image {{ $labels.pool_name }}/{{ $labels.rbd_name }} cannot be reused for multiple NVMeoF namespace ',
+            summary: 'RBD image {{ $labels.pool_name }}/{{ if $labels.rados_namespace_name }}{{ $labels.rados_namespace_name }}/{{ end }}{{ $labels.rbd_name }} cannot be reused for multiple NVMeoF namespaces',
             description: 'Each NVMeoF namespace must have a unique RBD pool and image, across all different gateway groups.',
           },
         },

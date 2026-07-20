@@ -207,6 +207,35 @@ class NamespaceList(NamedTuple):
     namespaces: Annotated[List[Namespace], CliFlags.EXCLUSIVE_LIST]
 
 
+class NamespaceHostInfo(NamedTuple):
+    nqn: Annotated[str, CliHeader("NQN")]
+    nsid: Annotated[int, CliHeader("NSID")]
+    hosts: Annotated[
+        List[str],
+        CliHeader("Hosts"),
+        CliFieldTransformer(lambda v: "\n".join(v) if v else "None")
+    ]
+
+
+class NamespaceHostsList(NamedTuple):
+    status: int
+    error_message: str
+    namespaces: Annotated[List[NamespaceHostInfo], CliFlags.EXCLUSIVE_LIST]
+
+
+class NamespaceLocationInfo(NamedTuple):
+    subsystem: Annotated[str, CliHeader("Subsystem")]
+    load_balancing_group: Annotated[int, CliHeader("Load Balancing Group")]
+    location: Annotated[str, CliHeader("Location")]
+    namespace_count: Annotated[int, CliHeader("Count")]
+
+
+class NamespaceLocationsList(NamedTuple):
+    status: int
+    error_message: str
+    locations: Annotated[List[NamespaceLocationInfo], CliFlags.EXCLUSIVE_LIST]
+
+
 class NamespaceIOStats(NamedTuple):
     status: Annotated[int, CliFlags.DROP]
     error_message: Annotated[str, CliFlags.DROP]
@@ -292,6 +321,19 @@ class GatewayStatsInfo(NamedTuple):
     poll_groups: Annotated[List[PollGroupInfo], CliFlags.EXCLUSIVE_LIST]
 
 
+class SpdkThreadInfo(NamedTuple):
+    name: str
+    busy: int
+    idle: int
+
+
+class ThreadStatsInfo(NamedTuple):
+    status: int
+    error_message: str
+    tick_rate: int
+    threads: Annotated[List[SpdkThreadInfo], CliFlags.EXCLUSIVE_LIST]
+
+
 class AnaState(Enum):
     UNSET = 0
     OPTIMIZED = 1
@@ -325,6 +367,13 @@ class GatewayListenersInfo(NamedTuple):
 class RequestStatus(NamedTuple):
     status: Annotated[int, CliFlags.EXCLUSIVE_RESULT]
     error_message: str
+
+
+class GwRefreshNetworkStatus(NamedTuple):
+    status: int
+    error_message: str
+    added: List[str]
+    removed: List[str]
 
 
 class ListenAdress(NamedTuple):

@@ -12916,6 +12916,63 @@ paths:
       summary: Set NVMeoF gateway log levels
       tags:
       - NVMe-oF Gateway
+  /api/nvmeof/gateway/refresh_network:
+    put:
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                gw_group:
+                  description: NVMeoF gateway group
+                  type: string
+                nqn:
+                  description: NVMeoF subsystem NQN
+                  type: string
+                server_address:
+                  description: NVMeoF gateway address
+                  type: string
+                traddr:
+                  description: NVMeoF gateway address (deprecated)
+                  type: string
+              required:
+              - nqn
+              type: object
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                type: object
+          description: Resource updated.
+        '202':
+          content:
+            application/json:
+              schema:
+                type: object
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Re-evaluate subsystem network masks and update auto-listeners for this
+        gateway
+      tags:
+      - NVMe-oF Gateway
   /api/nvmeof/gateway/stats:
     get:
       parameters:
@@ -12959,6 +13016,51 @@ paths:
       security:
       - jwt: []
       summary: Get NVMeoF statistics for the gateway
+      tags:
+      - NVMe-oF Gateway
+  /api/nvmeof/gateway/thread_stats:
+    get:
+      parameters:
+      - allowEmptyValue: true
+        description: NVMeoF gateway group
+        in: query
+        name: gw_group
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: NVMeoF gateway address
+        in: query
+        name: server_address
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: NVMeoF gateway address (deprecated)
+        in: query
+        name: traddr
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Get NVMeoF thread statistics for the gateway
       tags:
       - NVMe-oF Gateway
   /api/nvmeof/gateway/version:
@@ -13177,6 +13279,18 @@ paths:
   /api/nvmeof/subsystem:
     get:
       parameters:
+      - allowEmptyValue: true
+        description: NVMeoF subsystem NQN to filter by
+        in: query
+        name: nqn
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: Serial number to filter by
+        in: query
+        name: serial_number
+        schema:
+          type: string
       - allowEmptyValue: true
         description: NVMeoF gateway group
         in: query
@@ -13599,6 +13713,12 @@ paths:
         required: true
         schema:
           type: string
+      - default: false
+        description: Delete the host even if it used in a namespace netmask
+        in: query
+        name: force
+        schema:
+          type: boolean
       - allowEmptyValue: true
         description: NVMeoF gateway group
         in: query
@@ -13980,6 +14100,10 @@ paths:
                   default: 0
                   description: NVMeoF address family (0 - IPv4, 1 - IPv6)
                   type: integer
+                force:
+                  default: false
+                  description: Allow contradiction in security with existing listeners
+                  type: boolean
                 gw_group:
                   description: NVMeoF gateway group
                   type: string
@@ -14075,6 +14199,8 @@ paths:
         schema:
           type: integer
       - default: false
+        description: Delete listener even if there are active connections or host
+          name doesn't match
         in: query
         name: force
         schema:
@@ -14137,6 +14263,12 @@ paths:
         description: NVMeoF Namespace ID to filter by
         in: query
         name: nsid
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: NVMeoF Namespace UUID to filter by
+        in: query
+        name: uuid
         schema:
           type: string
       - allowEmptyValue: true
@@ -14240,7 +14372,7 @@ paths:
                   description: Namespace will be visible only for the allowed hosts
                   type: boolean
                 nsid:
-                  description: Create RBD image
+                  description: Namespace ID
                   type: string
                 rados_namespace:
                   description: RADOS namespace name
@@ -14275,6 +14407,9 @@ paths:
                   default: false
                   description: Trash the RBD image when namespace is removed
                   type: boolean
+                uuid:
+                  description: UUID
+                  type: string
               required:
               - rbd_image_name
               type: object
@@ -14309,6 +14444,132 @@ paths:
       security:
       - jwt: []
       summary: Create a new NVMeoF namespace.
+      tags:
+      - NVMe-oF Subsystem Namespace
+  /api/nvmeof/subsystem/{nqn}/namespace/list_hosts:
+    get:
+      parameters:
+      - allowEmptyValue: true
+        description: NVMeoF subsystem NQN
+        in: path
+        name: nqn
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: NVMeoF Namespace ID to filter by
+        in: query
+        name: nsid
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: NVMeoF Namespace UUID to filter by
+        in: query
+        name: uuid
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: NVMeoF gateway group
+        in: query
+        name: gw_group
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: NVMeoF gateway address
+        in: query
+        name: server_address
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: NVMeoF gateway address (deprecated)
+        in: query
+        name: traddr
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: List all NVMeoF namespaces with their allowed hosts
+      tags:
+      - NVMe-oF Subsystem Namespace
+  /api/nvmeof/subsystem/{nqn}/namespace/list_locations:
+    get:
+      parameters:
+      - allowEmptyValue: true
+        description: NVMeoF subsystem NQN
+        in: path
+        name: nqn
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: NVMeoF Namespace ID to filter by
+        in: query
+        name: nsid
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: NVMeoF Namespace UUID to filter by
+        in: query
+        name: uuid
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: NVMeoF gateway group
+        in: query
+        name: gw_group
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: NVMeoF gateway address
+        in: query
+        name: server_address
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: NVMeoF gateway address (deprecated)
+        in: query
+        name: traddr
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: List namespace distribution per site locations
       tags:
       - NVMe-oF Subsystem Namespace
   /api/nvmeof/subsystem/{nqn}/namespace/{nsid}:
@@ -14652,6 +14913,74 @@ paths:
       security:
       - jwt: []
       summary: set the load balancing group for specified NVMeoF namespace
+      tags:
+      - NVMe-oF Subsystem Namespace
+  /api/nvmeof/subsystem/{nqn}/namespace/{nsid}/change_location:
+    put:
+      parameters:
+      - description: NVMeoF subsystem NQN
+        in: path
+        name: nqn
+        required: true
+        schema:
+          type: string
+      - description: NVMeoF Namespace ID
+        in: path
+        name: nsid
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                gw_group:
+                  description: NVMeoF gateway group
+                  type: string
+                location:
+                  description: Gateway location for namespace
+                  type: string
+                server_address:
+                  description: NVMeoF gateway address
+                  type: string
+                traddr:
+                  description: NVMeoF gateway address (deprecated)
+                  type: string
+              required:
+              - location
+              type: object
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                type: object
+          description: Resource updated.
+        '202':
+          content:
+            application/json:
+              schema:
+                type: object
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Change the location of the specified NVMeoF namespace
       tags:
       - NVMe-oF Subsystem Namespace
   /api/nvmeof/subsystem/{nqn}/namespace/{nsid}/change_visibility:
