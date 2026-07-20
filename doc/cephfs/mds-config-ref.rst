@@ -18,6 +18,9 @@
 .. confval:: mds_scatter_nudge_interval
 .. confval:: mds_client_prealloc_inos
 .. confval:: mds_early_reply
+.. confval:: mds_group_commit_enable
+.. confval:: mds_group_commit_max_entries
+.. confval:: mds_group_commit_max_interval
 .. confval:: mds_default_dir_hash
 .. confval:: mds_log_skip_corrupt_events
 .. confval:: mds_bal_sample_interval

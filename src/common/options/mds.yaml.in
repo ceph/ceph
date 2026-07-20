@@ -518,6 +518,36 @@ options:
   services:
   - mds
   with_legacy: true
+- name: mds_group_commit_enable
+  type: bool
+  level: advanced
+  desc: Batch multiple safe-reply journal entries into a single flush.
+    Only beneficial when journal latency is high (HDD or remote pool).
+    On NVMe journal the timer overhead may outweigh the batching benefit.
+  default: false
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_group_commit_max_entries
+  type: size
+  level: advanced
+  desc: Maximum safe-reply operations to accumulate before flushing the journal
+  default: 8
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_group_commit_max_interval
+  type: float
+  level: advanced
+  desc: Maximum time in seconds to wait before flushing batched safe-reply
+    journal entries. Set to 0 for adaptive mode (auto-tuning based on workload).
+  default: 0
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_replay_unsafe_with_closed_session
   type: bool
   level: advanced
