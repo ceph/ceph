@@ -3,16 +3,18 @@
   [flip]="true"
   description=""
 >
-  <li class="cds--overflow-menu-options__option mb-2">
-    <button
-      routerLink="/user-management"
-      class="cds--overflow-menu-options__btn"
-      type="button"
-      i18n
-    >
-      User management
-    </button>
-  </li>
+  @if (userPermission.create || userPermission.update || userPermission.delete) {
+    <li class="cds--overflow-menu-options__option mb-2">
+      <button
+        routerLink="/user-management"
+        class="cds--overflow-menu-options__btn"
+        type="button"
+        i18n
+      >
+        User management
+      </button>
+    </li>
+  }
   @if (configOptPermission.read) {
     <li class="cds--overflow-menu-options__option mb-2">
       <button
@@ -28,7 +30,12 @@
 </cds-overflow-menu>
 
 <ng-template #customTrigger>
-  @if (userPermission.read || configOptPermission.read) {
+  @if (
+    userPermission.create ||
+    userPermission.update ||
+    userPermission.delete ||
+    configOptPermission.read
+  ) {
     <svg
       cdsIcon="settings"
       size="20"
