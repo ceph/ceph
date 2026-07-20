@@ -41,6 +41,7 @@
 #include "MetricsHandler.h"
 #include "cephfs_features.h"
 #include "MDSContext.h"
+#include "QuarantineManager.h"
 
 #include "messages/MClientReconnect.h"
 #include "messages/MClientReply.h"
@@ -3495,19 +3496,59 @@ bool Server::check_access(const MDRequestRef& mdr, CInode *in, unsigned mask)
 {
   if (mdr->session) {
     std::string_view fs_name = mds->mdsmap->get_fs_name();
+    bool check_qtine = in->is_under_quarantine()
+                       && mdr->session->info.has_feature(CEPHFS_FEATURE_QUARANTINE);
     int r = mdr->session->check_access(
       fs_name, in, mask,
       mdr->client_request->get_caller_uid(),
       mdr->client_request->get_caller_gid(),
       &mdr->client_request->get_caller_gid_list(),
       mdr->client_request->head.args.setattr.uid,
-      mdr->client_request->head.args.setattr.gid);
+      mdr->client_request->head.args.setattr.gid,
+      check_qtine);
     if (r < 0) {
       respond_to_request(mdr, r);
       return false;
     }
   }
   return true;
+}
+
+/**
+ * Block client requests from non-quarantine-aware clients when the target
+ * inode is under quarantine. Adds a waiter on the subvolume root inode so
+ * the request will be retried when quarantine is lifted.
+ *
+ * Returns true if the request was blocked (caller should return nullptr).
+ */
+bool Server::check_quarantine_block(const MDRequestRef& mdr, CInode *in)
+{
+  if (!mdr->client_request || !mdr->session)
+    return false;
+
+  if (mdr->session->info.has_feature(CEPHFS_FEATURE_QUARANTINE))
+    return false;
+
+  if (!in->is_under_quarantine())
+    return false;
+
+  auto snaprealm = in->find_snaprealm();
+  while (snaprealm) {
+    inodeno_t subvol_ino = snaprealm->get_subvolume_ino();
+    auto *subvol_in = mdcache->get_inode(subvol_ino);
+    if (subvol_in &&
+        (subvol_in->is_being_quarantined() || subvol_in->has_quarantined())) {
+      dout(10) << __func__ << " blocking request from old client "
+               << mdr->get_client() << " on quarantined inode " << *in
+               << " (subvol root " << subvol_ino << ")" << dendl;
+      subvol_in->add_waiter(CInode::WAIT_QUARANTINE,
+                            new C_MDS_RetryRequest(mdcache, mdr));
+      return true;
+    }
+    snaprealm = snaprealm->parent;
+  }
+
+  return false;
 }
 
 /**
@@ -3875,6 +3916,9 @@ CInode* Server::rdlock_path_pin_ref(const MDRequestRef& mdr,
   CInode *ref = mdr->in[0];
   dout(10) << "ref is " << *ref << dendl;
 
+  if (check_quarantine_block(mdr, ref))
+    return nullptr;
+
   if (want_auth) {
     // auth_pin?
     //   do NOT proceed if freezing, as cap release may defer in that case, and
@@ -3969,6 +4013,9 @@ CDentry* Server::rdlock_path_xlock_dentry(const MDRequestRef& mdr,
   CDentry *dn = mdr->dn[0].back();
   CDir *dir = dn->get_dir();
   CInode *diri = dir->get_inode();
+
+  if (check_quarantine_block(mdr, diri))
+    return nullptr;
 
   if (!mdr->reqid.name.is_mds()) {
     if (diri->is_system() && !diri->is_root() &&
@@ -4071,6 +4118,10 @@ Server::rdlock_two_paths_xlock_destdn(const MDRequestRef& mdr, bool xlock_srcdn)
   CDir *srcdir = srcdn->get_dir();
   CDentry *destdn = mdr->dn[0].back();
   CDir *destdir = destdn->get_dir();
+
+  if (check_quarantine_block(mdr, srcdir->get_inode()) ||
+      check_quarantine_block(mdr, destdir->get_inode()))
+    return std::make_pair(nullptr, nullptr);
 
   if (!mdr->reqid.name.is_mds()) {
     if ((srcdir->get_inode()->is_system() && !srcdir->get_inode()->is_root()) ||
@@ -4406,6 +4457,9 @@ void Server::handle_client_lookup_ino(const MDRequestRef& mdr,
     return;
   }
 
+  if (check_quarantine_block(mdr, in))
+    return;
+
   // check for nothing (not read or write); this still applies the
   // path check.
   if (!check_access(mdr, in, 0))
@@ -4505,6 +4559,9 @@ void Server::_lookup_snap_ino(const MDRequestRef& mdr)
   }
 
   if (in) {
+    if (!check_access(mdr, in, MAY_READ))
+      return;
+
     dout(10) << "reply to lookup_snap_ino " << *in << dendl;
     mdr->snapid = vino.snapid;
     mdr->tracei = in;
@@ -5312,6 +5369,46 @@ public:
       get_mds()->locker->share_inode_max_size(in);
   }
 };
+
+
+class C_MDS_quarantine_inode_update_finish : public C_MDS_inode_update_finish {
+  QtineMgr qtine_mgr;
+  inodeno_t qtine_root_ino;
+  public:
+  C_MDS_quarantine_inode_update_finish(Server *s, const MDRequestRef& r, CInode *i, QtineMgr qm, inodeno_t ino) :
+    C_MDS_inode_update_finish(s, r, i), qtine_mgr(qm), qtine_root_ino(ino) { }
+
+  void finish(int r) override {
+    C_MDS_inode_update_finish::finish(r);
+
+    auto mds = get_mds();
+
+    dout(20) << " C_MDS_quarantine_inode_update_finish" << dendl;
+    if (auto *root = mds->mdcache->get_inode(qtine_root_ino); root) {
+      root->clear_being_quarantined();
+    }
+    // caps should have been revoked by now
+    // so we declare the inode as quarantined
+    qtine_mgr->work_done();
+    dout(20) << __PRETTY_FUNCTION__ << " PUT" << dendl;
+    qtine_mgr->put();
+  }
+};
+
+void Server::journal_quarantine_inode(MDRequestRef const& mdr, CInode *cur, unsigned qtine_op, QtineMgr qtine_mgr)
+{
+  // log + wait
+  std::string op_str = (qtine_op == QUARANTINE_ADD ? "add" : "del");
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, ("quarantine flag " + op_str));
+  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY);
+  mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
+
+  journal_and_reply(mdr, cur, 0, le,
+                    new C_MDS_quarantine_inode_update_finish(this, mdr, cur,
+                                                             qtine_mgr,
+                                                             mdr->qtine_root_ino));
+}
 
 void Server::handle_client_file_setlock(const MDRequestRef& mdr)
 {
@@ -6242,6 +6339,7 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
   string name(req->get_path2());
   bufferlist bl = req->get_data();
   string value (bl.c_str(), bl.length());
+
   dout(10) << "handle_client_setvxattr " << name
            << " val " << value.length()
            << " bytes on " << *cur
@@ -6851,8 +6949,8 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY);
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
 
-  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur,
-								   false, false, adjust_realm));
+  auto* c = new C_MDS_inode_update_finish(this, mdr, cur, false, false, adjust_realm);
+  journal_and_reply(mdr, cur, 0, le, c);
   return;
 }
 

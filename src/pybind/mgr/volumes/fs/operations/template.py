@@ -79,6 +79,8 @@ class SubvolumeOpType(Enum):
     ENCTAG_GET            = 'enctag-get'
     ENCTAG_SET            = 'enctag-set'
     ENCTAG_CLEAR          = 'enctag-clear'
+    QUARANTINE_ENABLE     = 'quarantine-enable'
+    QUARANTINE_DISABLE    = 'quarantine-disable'
 
 class SubvolumeTemplate(object):
     VERSION = None # type: int

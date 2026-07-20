@@ -485,14 +485,58 @@ private:
 };
 
 template<template<typename> class Allocator>
+class quarantine_md_t {
+public:
+  static constexpr int STRUCT_V = 1;
+  static constexpr int COMPAT_V = 1;
+
+  bool enabled = true;
+  uint64_t quarantined_at_sec = 0;
+  uint32_t quarantined_at_nsec = 0;
+
+  quarantine_md_t() = default;
+
+  void encode(ceph::buffer::list& bl, uint64_t features) const {
+    ENCODE_START(STRUCT_V, COMPAT_V, bl);
+    ceph::encode(enabled, bl);
+    ceph::encode(quarantined_at_sec, bl);
+    ceph::encode(quarantined_at_nsec, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& p) {
+    DECODE_START(STRUCT_V, p);
+    ceph::decode(enabled, p);
+    ceph::decode(quarantined_at_sec, p);
+    ceph::decode(quarantined_at_nsec, p);
+    DECODE_FINISH(p);
+  }
+
+  void set_timestamp(utime_t t) {
+    quarantined_at_sec = t.sec();
+    quarantined_at_nsec = t.nsec();
+  }
+  utime_t get_timestamp() const {
+    return utime_t(quarantined_at_sec, quarantined_at_nsec);
+  }
+
+  void print(std::ostream& os) const {
+    os << "quarantine_md_t(enabled=" << enabled
+       << " at=" << utime_t(quarantined_at_sec, quarantined_at_nsec) << ")";
+  }
+  void dump(ceph::Formatter* f) const;
+};
+
+template<template<typename> class Allocator>
 struct optmetadata_server_t {
   using opts = std::variant<
     unknown_md_t<Allocator>,
-    charmap_md_t<Allocator>
+    charmap_md_t<Allocator>,
+    quarantine_md_t<Allocator>
   >;
   enum kind_t : uint64_t {
     UNKNOWN,
     CHARMAP,
+    QUARANTINE,
     _MAX
   };
 };
@@ -501,11 +545,13 @@ template<template<typename> class Allocator>
 struct optmetadata_client_t {
   using opts = std::variant<
     unknown_md_t<Allocator>,
-    charmap_md_t<Allocator>
+    charmap_md_t<Allocator>,
+    quarantine_md_t<Allocator>
   >;
   enum kind_t : uint64_t {
     UNKNOWN,
     CHARMAP,
+    QUARANTINE,
     _MAX
   };
 };
@@ -862,6 +908,22 @@ struct inode_t {
   }
   void del_charmap() {
     optmetadata.del_opt(optmetadata_singleton_server_t::kind_t::CHARMAP);
+  }
+
+  bool has_quarantined() const {
+    if (!optmetadata.has_opt(optmetadata_singleton_server_t::kind_t::QUARANTINE))
+      return false;
+    auto& opt = optmetadata.get_opt(optmetadata_singleton_server_t::kind_t::QUARANTINE);
+    return opt.template get_meta< quarantine_md_t >().enabled;
+  }
+
+  auto& set_quarantine() {
+    auto& opt = optmetadata.get_or_create_opt(optmetadata_singleton_server_t::kind_t::QUARANTINE);
+    return opt.template get_meta< quarantine_md_t >();
+  }
+
+  void del_quarantine() {
+    optmetadata.del_opt(optmetadata_singleton_server_t::kind_t::QUARANTINE);
   }
 
   void encode(ceph::buffer::list &bl, uint64_t features) const;
@@ -1268,4 +1330,9 @@ inline void decode(inode_t<Allocator> &c, ::ceph::buffer::list::const_iterator &
   c.decode(p);
 }
 
+enum {
+  QUARANTINE_NONE = 0,
+  QUARANTINE_ADD  = 1,
+  QUARANTINE_DEL  = 2
+};
 #endif

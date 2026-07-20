@@ -334,6 +334,22 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'rw'
         },
         {
+            'cmd': 'fs subvolume quarantine enable '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Enable quarantine on a subvolume (blocks normal client access)",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolume quarantine disable '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Disable quarantine on a subvolume (restores client access)",
+            'perm': 'rw'
+        },
+        {
             'cmd': 'fs quiesce '
                    'name=vol_name,type=CephString '
                    'name=members,type=CephString,n=N,req=false '
@@ -973,6 +989,20 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.vc.clear_enctag(vol_name=cmd['vol_name'],
                                       sub_name=cmd['sub_name'],
                                       group_name=cmd.get('group_name', None))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_quarantine_enable(self, inbuf, cmd):
+        return self.vc.quarantine_subvolume(vol_name=cmd['vol_name'],
+                                            sub_name=cmd['sub_name'],
+                                            group_name=cmd.get('group_name', None),
+                                            enable=True)
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_quarantine_disable(self, inbuf, cmd):
+        return self.vc.quarantine_subvolume(vol_name=cmd['vol_name'],
+                                            sub_name=cmd['sub_name'],
+                                            group_name=cmd.get('group_name', None),
+                                            enable=False)
 
     @mgr_cmd_wrap
     def _cmd_fs_quiesce(self, inbuf, cmd):

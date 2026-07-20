@@ -68,6 +68,7 @@ class Session;
 class Migrator;
 
 class Session;
+class QuarantineTracker;
 
 class ESubtreeMap;
 
@@ -614,6 +615,9 @@ private:
       mdr = _mdr;
     }
     void finish(int r) override {
+      if (quarantine && cache && mdr) {
+        cache->schedule_quarantine_cleanup(mdr);
+      }
       if (finisher) {
         finisher->complete(r);
         finisher = nullptr;
@@ -623,6 +627,9 @@ private:
     MDCache *cache;
     MDRequestRef mdr;
     Context* finisher = nullptr;
+    bool quarantine = false;
+    unsigned qtine_op = 0;
+    inodeno_t qtine_root_ino;
   };
   MDRequestRef quiesce_path(filepath p, C_MDS_QuiescePath* c, Formatter *f = nullptr, std::chrono::milliseconds delay = 0ms);
   MDRequestRef get_quiesce_inode_op(CInode* in) {
@@ -1154,6 +1161,17 @@ private:
 
   void uninline_data_work(MDRequestRef mdr);
 
+  void quarantine_dir_auth(const MDRequestRef& mdr);
+  void quarantine_work(const MDRequestRef& mdr);
+  void quarantine_inode(MDRequestRef const& mdr);
+  void start_quarantine_inode_work(CInode *qtine_root_in, unsigned qtine_op, QtineMgrRef qtine_mgr);
+  bool start_revoke_caps_for_inode(CInode *in, inodeno_t qtine_root_ino, unsigned qtine_op);
+  void schedule_quarantine_cleanup(const MDRequestRef& mdr);
+  void start_quarantine_cap_revocation(CInode *root, unsigned qtine_op,
+                                       Context *on_finish = nullptr);
+  void handle_quarantine_policy_update(CInode *root, bool was_quarantined,
+                                       bool is_quarantined);
+
   // my leader
   MDSRank *mds;
 
@@ -1622,6 +1640,7 @@ private:
   DecayCounter quiesce_counter;
   uint64_t quiesce_threshold;
   std::chrono::milliseconds quiesce_sleep;
+
 };
 
 /**

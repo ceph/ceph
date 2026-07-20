@@ -82,6 +82,7 @@ using namespace std::literals::string_view_literals;
 #include "messages/MFSMapUser.h"
 #include "messages/MMDSMap.h"
 #include "messages/MOSDMap.h"
+#include "messages/MQuarantineDisable.h"
 
 #include "mds/flock.h"
 #include "mds/fscrypt.h"
@@ -120,6 +121,8 @@ using namespace std::literals::string_view_literals;
 #include "include/stat.h"
 
 #include "include/cephfs/ceph_ll_client.h"
+
+#include "auth/KeyRing.h"
 
 #if HAVE_GETGROUPLIST
 #include <grp.h>
@@ -3255,6 +3258,9 @@ Dispatcher::dispatch_result_t Client::ms_dispatch2(const MessageRef &m)
   case CEPH_MSG_CLIENT_QUOTA:
     handle_quota(ref_cast<MClientQuota>(m));
     break;
+  case CEPH_MSG_CLIENT_QUARANTINE_DISABLE:
+    handle_quarantine_disable(ref_cast<MQuarantineDisable>(m));
+    break;
 
   default:
     return Dispatcher::UNHANDLED();
@@ -3928,6 +3934,17 @@ int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
     return r;
 
   while (1) {
+    // For quarantine access check, we need the absolute path (including mount
+    // root prefix) because the client's caps use absolute filesystem paths.
+    // Using relative path would fail for clients mounted at subdirectories.
+    std::string path;
+    if (!make_absolute_path_string(fh->inode, path)) {
+      in->make_path_string(path);  // fallback to relative path
+    }
+    if (in->is_under_quarantine() && !has_qtine_auth_caps(path)) {
+      return -EACCES;
+    }
+
     int file_wanted = in->caps_file_wanted();
     if ((file_wanted & need) != need) {
       ldout(cct, 10) << "get_caps " << *in << " need " << ccap_string(need)
@@ -4003,7 +4020,7 @@ int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
 	  return 0;
 	}
       }
-      ldout(cct, 10) << "waiting for caps " << *in << " need " << ccap_string(need) << " want " << ccap_string(want) << dendl;
+      ldout(cct, 10) << "waiting for caps " << *in << " have " << ccap_string(have) << " need " << ccap_string(need) << " want " << ccap_string(want) << dendl;
       waitfor_caps = true;
     }
 
@@ -4017,9 +4034,12 @@ int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
       return -EROFS;
 
     if (in->flags & I_CAP_DROPPED) {
+      ldout(cct, 10) << "  I_CAP_DROPPED" << dendl;
       int mds_wanted = in->caps_mds_wanted();
       if ((mds_wanted & need) != need) {
+        ldout(cct, 10) << "  renewing caps" << dendl;
 	int ret = _renew_caps(in);
+        ldout(cct, 10) << "  renew caps returned " << ret << dendl;
 	if (ret < 0)
 	  return ret;
 	continue;
@@ -4028,10 +4048,13 @@ int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
 	in->flags &= ~I_CAP_DROPPED;
     }
 
-    if (waitfor_caps)
+    if (waitfor_caps) {
+      ldout(cct, 10) << "  waitfor_caps" << dendl;
       wait_on_context_list(in->waitfor_caps);
-    else if (waitfor_commit)
+    } else if (waitfor_commit) {
+      ldout(cct, 10) << "  waitfor_commit" << dendl;
       wait_on_context_list(in->waitfor_commit);
+    }
   }
 }
 
@@ -5651,6 +5674,21 @@ void Client::handle_quota(const MConstRef<MClientQuota>& m)
   }
 }
 
+void Client::handle_quarantine_disable(const MConstRef<MQuarantineDisable>& m)
+{
+  std::scoped_lock cl(client_lock);
+  vinodeno_t vino(m->ino, CEPH_NOSNAP);
+  if (auto it = inode_map.find(vino); it != inode_map.end()) {
+    ldout(cct, 20) << __func__ << " disabling quarantine for inode " << m->ino << dendl;
+    Inode *in = it->second;
+    in->qtine_errno = 0;
+    in->del_quarantine();
+    signal_caps_inode(in);
+  } else {
+    ldout(cct, 20) << __func__ << " inode " << m->ino << " not found; skipping quarantine disable" << dendl;
+  }
+}
+
 void Client::handle_caps(const MConstRef<MClientCaps>& m)
 {
   mds_rank_t mds = mds_rank_t(m->get_source().num());
@@ -6144,6 +6182,11 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
     check = true;
   }
 
+  if (new_caps != CEPH_CAP_PIN && in->is_under_quarantine()) {
+    if (m->oserrno == 0) {
+      in->del_quarantine();
+    }
+  }
 
   // update caps
   auto revoked = cap->issued & ~new_caps;
@@ -6151,6 +6194,10 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
     ldout(cct, 10) << "  revocation of " << ccap_string(revoked) << dendl;
     cap->issued = new_caps;
     cap->implemented |= new_caps;
+
+    if (m->oserrno == -EQUARANTINED) {
+      in->set_quarantine();
+    }
 
     // recall delegations if we're losing caps necessary for them
     if (revoked & ceph_deleg_caps_for_type(CEPH_DELEGATION_RD))
@@ -6203,7 +6250,8 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
     check_caps(in, flags);
 
   // wake up waiters
-  if (new_caps) {
+  if (new_caps || in->is_under_quarantine()) {
+    in->qtine_errno = m->get_errno();
     ldout(cct, 10) << __func__ << " calling signal_caps_inode" << dendl;
     signal_caps_inode(in);
   }
@@ -7065,8 +7113,35 @@ int Client::mount(const std::string &mount_root, const UserPerm& perms,
   ldout(cct, 3) << "op: int fd;" << dendl;
   */
 
+  load_auth_caps();
   mref_writer.update_state(CLIENT_MOUNTED);
   return 0;
+}
+
+// called in mount()
+void Client::load_auth_caps()
+{
+  auto& auth_keys = monclient->keyring->get_keys();
+  EntityName client_name;
+  client_name.set_name(entity_name_t::CLIENT(whoami.v));
+
+  if (auth_keys.find(client_name) != auth_keys.end()) {
+    auto& bl = auth_keys[client_name].caps["mds"];
+    has_mds_auth_caps = mds_auth_caps.parse(bl.c_str(), nullptr);
+  }
+}
+
+bool Client::has_qtine_auth_caps(const std::string_view path)
+{
+  if (has_mds_auth_caps) {
+    return mds_auth_caps.quarantine_access_in_caps(mdsmap->get_fs_name(), path);
+  }
+  auto& auth_keys = monclient->keyring->get_keys();
+  EntityName client_name;
+  client_name.set_name(entity_name_t::CLIENT(whoami.v));
+  // is there's no cephx key then we have "all" caps
+  auto& caps = auth_keys[client_name].caps;
+  return (caps.find("key") == caps.end());
 }
 
 // UNMOUNT
@@ -8323,6 +8398,18 @@ int Client::_readlink(const InodeRef& diri, const char* relpath, char *buf, size
 
 int Client::_getattr(const InodeRef& in, int mask, const UserPerm& perms, bool force)
 {
+  {
+    // For quarantine access check, we need the absolute path (including mount
+    // root prefix) because the client's caps use absolute filesystem paths.
+    std::string path;
+    if (!make_absolute_path_string(in, path)) {
+      in->make_path_string(path);  // fallback to relative path
+    }
+    if (in->is_under_quarantine() && !has_qtine_auth_caps(path)) {
+      return -EACCES;
+    }
+  }
+
   bool yes = in->caps_issued_mask(mask, true);
 
   ldout(cct, 10) << __func__ << " mask " << ccap_string(mask) << " issued=" << yes << dendl;
@@ -8405,8 +8492,9 @@ bool Client::make_absolute_path_string(const InodeRef& in, std::string& path)
     return false;
   }
 
-  // Make sure this function returns path with single leading '/'
-  if (path.length() && path[0] == '/' && path[1] == '/')
+  // Joining mount_root "/" with a relative inode path produces "//...".
+  // Normalize that case without touching the plain root path "/".
+  if (path.size() > 1 && path[0] == '/' && path[1] == '/')
     path = path.substr(1);
 
   return true;

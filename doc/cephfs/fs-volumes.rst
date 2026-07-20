@@ -1403,6 +1403,216 @@ outputs:
 .. note:: A ``charmap`` can only be removed when a subvolumegroup or subvolume is empty.
 
 
+Subvolume Quarantine
+--------------------
+
+Subvolume quarantine allows administrators to block client access to a
+subvolume while still allowing authorized recovery clients to read and write
+data. This is useful during security incidents (for example, ransomware
+attacks) or when a subvolume needs to be isolated for investigation.
+
+When quarantine is enabled on a subvolume:
+
+- Normal clients lose all capabilities except ``PIN``.
+- Recovery clients with special quarantine auth caps (``rwq`` or ``rwQ``) keep
+  full access and can perform data recovery operations.
+- The quarantine state is persistent — it survives MDS restarts.
+- In multi-MDS setups, quarantine is coordinated across all MDS ranks
+  through the standard policylock replication mechanism.
+
+How normal clients react depends on whether they advertise the
+``CEPHFS_FEATURE_QUARANTINE`` session feature (see below).
+
+Client Quarantine Awareness
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+During session setup, each CephFS client advertises a set of feature bits to
+the MDS. Quarantine behavior for normal (non-recovery) clients depends on
+whether the client has ``CEPHFS_FEATURE_QUARANTINE`` (feature bit 24, name
+``quarantine``).
+
+- **Quarantine-aware clients** (``ceph-fuse`` / libcephfs in this release):
+  understand cap revocation with ``-EQUARANTINED`` and return ``-EACCES`` to
+  applications immediately. They also handle ``MQuarantineDisable`` when
+  quarantine is lifted.
+
+- **Quarantine-unaware clients** (old clients that do not support quarantine yet,
+  such as older ``ceph-fuse`` and the kernel client): do not advertise
+  ``CEPHFS_FEATURE_QUARANTINE``. The MDS blocks their metadata requests and
+  revokes caps to ``PIN`` only; applications **hang** until quarantine is
+  disabled rather than receiving an immediate error.
+
+Recovery clients always need both quarantine-aware client software **and**
+``q``/``Q`` MDS auth caps.
+
+Client Behavior Matrix
+~~~~~~~~~~~~~~~~~~~~~~
+
+The table below summarizes behavior for normal (non-recovery) clients while a
+subvolume is quarantined:
+
+.. list-table:: Quarantine client behavior
+   :widths: 30 35 35
+   :header-rows: 1
+
+   * - Operation
+     - Quarantine-aware client (``CEPHFS_FEATURE_QUARANTINE``)
+     - Quarantine-unaware client (no ``quarantine`` feature)
+   * - Read / write data
+     - ``-EACCES`` immediately
+     - Blocks (waits for caps)
+   * - Metadata (``stat``, ``ls``, ``lookup``, etc.)
+     - ``-EACCES`` immediately
+     - Blocks (MDS waits on quarantine lift)
+   * - Create / unlink / rename
+     - ``-EACCES`` immediately
+     - Blocks
+   * - Mount at quarantined subvolume path
+     - Fails with error
+     - Fails (mount does not succeed)
+   * - Mount at filesystem root, access quarantined path
+     - ``-EACCES`` on access
+     - Blocks on access
+   * - After ``quarantine disable``
+     - Access resumes immediately
+     - Blocked operations resume and complete
+   * - Recovery client (``q``/``Q`` caps)
+     - Full access with ``rwq``/``rwQ`` caps
+     - Requires quarantine-aware client + ``rwq``/``rwQ`` caps
+
+.. note::
+
+   Old clients that do not support quarantine yet must not be relied on to fail
+   fast. A blocked ``ls`` or ``stat`` does not return an error code; the
+   process waits until quarantine is disabled. Plan incident-response workflows
+   accordingly.
+
+Enabling Quarantine
+~~~~~~~~~~~~~~~~~~~
+
+To enable quarantine on a subvolume:
+
+.. prompt:: bash #
+
+    ceph fs subvolume quarantine enable <vol_name> <sub_name> [--group_name=<group_name>]
+
+For example:
+
+.. prompt:: bash #
+
+    ceph fs subvolume quarantine enable cephfs mysubvol
+
+After this command completes, normal clients have their caps revoked to
+``PIN`` only. Quarantine-aware clients (``ceph-fuse`` with
+``CEPHFS_FEATURE_QUARANTINE``) return ``-EACCES`` on subsequent access.
+Old clients that do not support quarantine yet (such as the kernel client)
+block until quarantine is disabled. See the client behavior matrix above.
+
+Disabling Quarantine
+~~~~~~~~~~~~~~~~~~~~
+
+To disable quarantine and restore normal access:
+
+.. prompt:: bash #
+
+    ceph fs subvolume quarantine disable <vol_name> <sub_name> [--group_name=<group_name>]
+
+For example:
+
+.. prompt:: bash #
+
+    ceph fs subvolume quarantine disable cephfs mysubvol
+
+After this command completes, normal clients can access files again.
+Quarantine-aware clients receive an ``MQuarantineDisable`` notification.
+Quarantine-unaware clients are unblocked when the MDS re-issues caps and
+retries their pending requests. In both cases, I/O and metadata operations
+resume without requiring a remount.
+
+Recovery Client Access
+~~~~~~~~~~~~~~~~~~~~~~
+
+Recovery clients need special MDS auth caps with the ``q`` or ``Q`` flag to
+access quarantined subvolumes:
+
+- ``q`` flag: allows access to a specific quarantined path.
+- ``Q`` flag: allows access to all quarantined paths (admin/recovery use).
+
+To create a recovery client that can access a specific quarantined subvolume:
+
+.. prompt:: bash #
+
+    ceph auth get-or-create client.recovery \
+        mon 'allow r' \
+        mds 'allow rwq fsname=<vol_name> path=<subvol_root_path>' \
+        osd 'allow rw tag cephfs data=<vol_name>'
+
+For example, to create a recovery client for a subvolume at
+``/volumes/_nogroup/mysubvol``:
+
+.. prompt:: bash #
+
+    ceph auth get-or-create client.recovery \
+        mon 'allow r' \
+        mds 'allow rwq fsname=cephfs path=/volumes/_nogroup/mysubvol' \
+        osd 'allow rw tag cephfs data=cephfs'
+
+To create an admin-level recovery client that can access all quarantined
+subvolumes:
+
+.. prompt:: bash #
+
+    ceph auth get-or-create client.recovery_admin \
+        mon 'allow r' \
+        mds 'allow rwQ fsname=<vol_name>' \
+        osd 'allow rw tag cephfs data=<vol_name>'
+
+The recovery client can then mount the subvolume using ``ceph-fuse`` and
+perform data recovery while normal clients remain blocked/disallowed.
+Recovery access requires a quarantine-aware client; old clients that do not
+support quarantine yet (such as the kernel client) will block rather than
+provide recovery access.
+
+.. note:: In the future, the ``ceph fs subvolume authorize`` command may be
+   enhanced to create client keyrings with quarantine access (``q`` flag)
+   directly.
+
+What Gets Blocked/Disallowed
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For normal (non-recovery) clients, all data and metadata operations inside the
+quarantined subvolume are denied. The denial mechanism depends on client type
+(see the behavior matrix):
+
+- **Quarantine-aware clients:** operations fail immediately with ``-EACCES``.
+- **Old clients that do not support quarantine yet:** operations block; no
+  directory listing or attribute data is returned while blocked.
+
+This applies to all files and directories within the subvolume, including
+snapshot data under ``.snap``. Recovery clients with ``rwq``/``rwQ`` caps are
+exempt.
+
+.. note:: Quarantine operates at the subvolume level. You cannot quarantine
+   individual files or directories within a subvolume. The subvolume must
+   be a proper subvolume root (a snaprealm boundary).
+
+Multi-MDS
+~~~~~~~~~
+
+Quarantine works with multiple active MDS daemons. When quarantine is enabled,
+the MDS that is authoritative for the subvolume root inode journals the state
+change. Other MDS ranks that serve parts of the subvolume learn about the
+quarantine through policylock replication and revoke caps from their clients.
+
+Subtree migration is blocked while a subvolume is under quarantine to prevent
+exported subtrees from moving to a rank that does not yet know the quarantine
+state.
+
+If an MDS rank does not have the subvolume root inode in its cache, it fails
+closed: all capability checks treat the subvolume as quarantined until the
+authoritative state is available.
+
+
 Subvolume Quiesce
 -----------------
 

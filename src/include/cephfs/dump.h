@@ -114,6 +114,12 @@ void unknown_md_t<Allocator>::dump(ceph::Formatter* f) const {
   f->dump_bool("length", payload.size());
 }
 
+template<template<typename> class Allocator>
+void quarantine_md_t<Allocator>::dump(ceph::Formatter* f) const {
+  f->dump_bool("enabled", enabled);
+  f->dump_stream("quarantined_at") << utime_t(quarantined_at_sec, quarantined_at_nsec);
+}
+
 template<typename M, template<typename> class Allocator>
 void optmetadata_singleton<M, Allocator>::dump(ceph::Formatter* f) const {
   f->dump_int("kind", u64kind);

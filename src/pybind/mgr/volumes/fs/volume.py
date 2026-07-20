@@ -21,7 +21,7 @@ from .operations.group import open_group, create_group, remove_group, \
     open_group_unique, set_group_attrs
 from .operations.volume import create_volume, delete_volume, rename_volume, \
     list_volumes, open_volume, get_pool_names, get_pool_ids, \
-    get_pending_subvol_deletions_count, get_all_pending_clones_count
+    get_pending_subvol_deletions_count, get_all_pending_clones_count, get_mds_map
 from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
     create_clone, open_subvol_in_group, open_subvol_in_vol
 
@@ -797,6 +797,55 @@ class VolumeClient(CephfsClient["Module"]):
             log.error(f"EncryptionTag error occurred: {ee}")
             ret = ee.to_tuple()  # type: ignore
         return ret
+
+    ### subvolume quarantine
+
+    def quarantine_subvolume(self, **kwargs):
+        """
+        Enable or disable quarantine on a subvolume by sending command to MDS.
+        Quarantine blocks normal client access while allowing recovery clients
+        with 'rwq' capabilities to access the data.
+
+        The subvolume root path is constructed directly from the volume spec
+        without opening the subvolume via CephFS, because the mgr's CephFS
+        client does not have quarantine access and would be blocked.
+        """
+        ret        = 0, "", ""
+        volname    = kwargs['vol_name']
+        subvolname = kwargs['sub_name']
+        groupname  = kwargs['group_name']
+        cmd_prefix = "quarantine enable" if kwargs['enable'] else "quarantine disable"
+
+        try:
+            group_name = groupname if groupname else "_nogroup"
+            path = "{base_dir}/{group}/{subvol}".format(
+                base_dir=self.volspec.base_dir,
+                group=group_name,
+                subvol=subvolname)
+            log.info("Sending %s for subvolume root path %s", cmd_prefix, path)
+
+            mds_map = get_mds_map(self.mgr, volname)
+            if mds_map is None:
+                raise VolumeException(-errno.ENOENT, f"Volume '{volname}' not found")
+
+            ret = self._send_quarantine_command(mds_map, cmd_prefix, path)
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def _send_quarantine_command(self, mds_map, cmd_prefix, path):
+        """
+        Send quarantine command to any active MDS. The MDS will forward the
+        request to the authoritative rank via rdlock_path_pin_ref() if needed.
+        """
+        for rank_name, gid in sorted(mds_map.get('up', {}).items()):
+            info = mds_map['info'].get(f"gid_{gid}")
+            if info and info['state'] in ('up:active', 'up:clientreplay'):
+                cmd_dict = {"prefix": cmd_prefix, "path": path}
+                log.debug("Sending %s to MDS gid %s (%s)", cmd_prefix, gid, rank_name)
+                return self.mgr.tell_command("mds", str(gid), cmd_dict)
+
+        raise VolumeException(-errno.ENOENT, "No active MDS found")
 
     ### subvolume snapshot
 
