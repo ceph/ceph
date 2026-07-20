@@ -183,6 +183,17 @@
   than instantly aborting I/O and returning an error. It's possible to switch
   from ``RBD_LOCK_MODE_EXCLUSIVE`` to ``RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT``
   policy and vice versa even if the lock is already held.
+* RGW: In multisite deployments, zone endpoints configured in the zonegroup
+  (e.g. ``https://zone-a.example.com``) can now be resolved to all IP addresses
+  returned by DNS, with inter-zone traffic distributed across them using
+  round-robin and per-IP health tracking. This enables DNS-based service discovery
+  for inter-zone traffic without an external load balancer. This feature is disabled
+  by default: to opt in, set ``rgw_rest_conn_connect_to_resolved_ips = true``. The
+  per-IP retry-after-failure timeout is controlled by ``rgw_rest_conn_ip_fail_timeout_secs``
+  (default: 2 seconds). Deployments that work around libcurl's single-address behavior
+  by repeating the same endpoint multiple times in zone configuration should review that
+  setup before enabling, as round-robin distribution makes such duplication unnecessary.
+
 * OSD: A health warning is reported when BlueFS usage exceeds the
   configured ratio of the main OSD data device size. This warning is
   informational and can be muted with:
