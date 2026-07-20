@@ -1397,9 +1397,9 @@ class RgwMultisiteAutomation:
         try:
             rgw_multisite_instance = RgwMultisite()
             self.update_progress(
-                f"Initializing multi-site configuration || Creating realm: {realm}, \
-                    zonegroup: {zg}, and zone: {zone} along \
-                        with system user: {username}"
+                f"Initializing multi-site configuration || Creating realm: "
+                f"{realm}, zonegroup: {zg}, and zone: {zone} along "
+                f"with system user: {username}"
             )
             rgw_multisite_instance.create_realm(realm_name=realm, default=True)
             rgw_multisite_instance.create_zonegroup(realm_name=realm, zonegroup_name=zg,
@@ -1497,9 +1497,9 @@ class RgwMultisiteAutomation:
 
             self.progress_done += 1
             self.update_progress(
-                f"Verifying system user and completing replication setup on \
-                    cluster {cluster_fsid} || Ensuring presence of user '{username}' \
-                        and assigning necessary RGW credentials"
+                f"Verifying system user and completing replication setup on "
+                f"cluster {cluster_fsid} || Ensuring presence of user "
+                f"'{username}' and assigning necessary RGW credentials"
             )
 
             self._verify_user_and_daemons(cluster_url, cluster_token, realm_name,
@@ -2693,6 +2693,50 @@ class RgwMultisite:
             raise DashboardException(error, http_status_code=500, component='rgw')
         return user_list
 
+    def get_realm_from_daemon(self, daemon_name: Optional[str] = None) -> Optional[str]:
+        """Extract realm_name from daemon if daemon_name is provided."""
+        if not daemon_name:
+            return None
+        try:
+            daemons = _get_daemons()
+            return daemons[daemon_name].realm_name
+        except (KeyError, AttributeError):
+            # If daemon not found or has no realm_name, return None
+            return None
+
+    def get_zonegroup_from_daemon(self, daemon_name: Optional[str] = None) -> Optional[str]:
+        """Extract zonegroup_name from daemon if daemon_name is provided."""
+        if not daemon_name:
+            return None
+        try:
+            daemons = _get_daemons()
+            return daemons[daemon_name].zonegroup_name
+        except (KeyError, AttributeError):
+            # If daemon not found or has no zonegroup_name, return None
+            return None
+
+    def _add_realm_zonegroup_args(
+            self, cmd: List[str], daemon_name: Optional[str] = None,
+            explicit_zonegroup: str = '') -> None:
+        """
+        Add --rgw-realm and --rgw-zonegroup arguments to a radosgw-admin command.
+
+        Args:
+            cmd: The command list to append arguments to
+            daemon_name: The daemon name to extract realm/zonegroup from
+            explicit_zonegroup: If provided, use this instead of daemon's zonegroup
+        """
+        realm_name = self.get_realm_from_daemon(daemon_name)
+        if realm_name:
+            cmd += ['--rgw-realm', realm_name]
+
+        if explicit_zonegroup:
+            zonegroup_name: Optional[str] = explicit_zonegroup
+        else:
+            zonegroup_name = self.get_zonegroup_from_daemon(daemon_name)
+        if zonegroup_name:
+            cmd += ['--rgw-zonegroup', zonegroup_name]
+
     def get_multisite_status(self):
         is_multisite_configured = True
         rgw_realm_list = self.list_realms()
@@ -2808,12 +2852,20 @@ class RgwMultisite:
 
         return ''
 
-    def get_sync_policy(self, bucket_name: str = '', zonegroup_name: str = ''):
+    def get_sync_policy(self, bucket_name: str = '',
+                        zonegroup_name: str = '',
+                        daemon_name: Optional[str] = None):
         rgw_sync_policy_cmd = ['sync', 'policy', 'get']
         if bucket_name:
             rgw_sync_policy_cmd += ['--bucket', bucket_name]
-        if zonegroup_name:
-            rgw_sync_policy_cmd += ['--rgw-zonegroup', zonegroup_name]
+        # Use daemon's realm and zonegroup when daemon_name is provided
+        realm_name = self.get_realm_from_daemon(daemon_name)
+        if realm_name:
+            rgw_sync_policy_cmd += ['--rgw-realm', realm_name]
+        # Using daemon's zonegroup if no explicit zonegroup provided
+        target_zonegroup = zonegroup_name or self.get_zonegroup_from_daemon(daemon_name)
+        if target_zonegroup:
+            rgw_sync_policy_cmd += ['--rgw-zonegroup', target_zonegroup]
         try:
             exit_code, out, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
             if exit_code > 0:
@@ -2824,12 +2876,11 @@ class RgwMultisite:
             raise DashboardException(error, http_status_code=500, component='rgw')
 
     def get_sync_policy_group(self, group_id: str, bucket_name: str = '',
-                              zonegroup_name: str = ''):
+                              zonegroup_name: str = '', daemon_name: Optional[str] = None):
         rgw_sync_policy_cmd = ['sync', 'group', 'get', '--group-id', group_id]
         if bucket_name:
             rgw_sync_policy_cmd += ['--bucket', bucket_name]
-        if zonegroup_name:
-            rgw_sync_policy_cmd += ['--rgw-zonegroup', zonegroup_name]
+        self._add_realm_zonegroup_args(rgw_sync_policy_cmd, daemon_name, zonegroup_name)
         try:
             exit_code, out, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
             if exit_code > 0:
@@ -2840,11 +2891,12 @@ class RgwMultisite:
             raise DashboardException(error, http_status_code=500, component='rgw')
 
     def create_sync_policy_group(self, group_id: str, status: str, bucket_name: str = '',
-                                 update_period=False):
+                                 update_period=False, daemon_name: Optional[str] = None):
         rgw_sync_policy_cmd = ['sync', 'group', 'create', '--group-id', group_id,
                                '--status', SyncStatus[status].value]
         if bucket_name:
             rgw_sync_policy_cmd += ['--bucket', bucket_name]
+        self._add_realm_zonegroup_args(rgw_sync_policy_cmd, daemon_name)
         try:
             exit_code, _, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
             if exit_code > 0:
@@ -2853,14 +2905,16 @@ class RgwMultisite:
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
         if not bucket_name and update_period:
-            self.update_period()
+            realm_name = self.get_realm_from_daemon(daemon_name)
+            self.update_period(realm_name=realm_name)
 
     def update_sync_policy_group(self, group_id: str, status: str, bucket_name: str = '',
-                                 update_period=False):
+                                 update_period=False, daemon_name: Optional[str] = None):
         rgw_sync_policy_cmd = ['sync', 'group', 'modify', '--group-id', group_id,
                                '--status', SyncStatus[status].value]
         if bucket_name:
             rgw_sync_policy_cmd += ['--bucket', bucket_name]
+        self._add_realm_zonegroup_args(rgw_sync_policy_cmd, daemon_name)
         try:
             exit_code, _, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
             if exit_code > 0:
@@ -2869,12 +2923,16 @@ class RgwMultisite:
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
         if not bucket_name and update_period:
-            self.update_period()
+            realm_name = self.get_realm_from_daemon(daemon_name)
+            self.update_period(realm_name=realm_name)
 
-    def remove_sync_policy_group(self, group_id: str, bucket_name='', update_period=False):
+    def remove_sync_policy_group(self, group_id: str, bucket_name='',
+                                 update_period=False,
+                                 daemon_name: Optional[str] = None):
         rgw_sync_policy_cmd = ['sync', 'group', 'remove', '--group-id', group_id]
         if bucket_name:
             rgw_sync_policy_cmd += ['--bucket', bucket_name]
+        self._add_realm_zonegroup_args(rgw_sync_policy_cmd, daemon_name)
         try:
             exit_code, _, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
             if exit_code > 0:
@@ -2883,18 +2941,20 @@ class RgwMultisite:
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
         if not bucket_name and update_period:
-            self.update_period()
+            realm_name = self.get_realm_from_daemon(daemon_name)
+            self.update_period(realm_name=realm_name)
 
     def create_sync_flow(self, group_id: str, flow_id: str, flow_type: str,
                          zones: Optional[Dict[str, List]] = None, bucket_name: str = '',
                          source_zone: Optional[str] = None,
                          destination_zone: Optional[str] = None,
-                         update_period=False):
+                         update_period=False, daemon_name: Optional[str] = None):
         rgw_sync_policy_cmd = ['sync', 'group', 'flow', 'create', '--group-id', group_id,
                                '--flow-id', flow_id, '--flow-type', SyncFlowTypes[flow_type].value]
 
         if bucket_name:
             rgw_sync_policy_cmd += ['--bucket', bucket_name]
+        self._add_realm_zonegroup_args(rgw_sync_policy_cmd, daemon_name)
 
         if SyncFlowTypes[flow_type].value == 'directional':
 
@@ -2928,15 +2988,18 @@ class RgwMultisite:
                         raise DashboardException(error, http_status_code=500, component='rgw')
 
                 if len(zones['removed']) > 0:
-                    self.remove_sync_flow(group_id, flow_id, flow_type, source_zone,
-                                          destination_zone, zones['removed'], bucket_name)
+                    self.remove_sync_flow(
+                        group_id, flow_id, flow_type, source_zone,
+                        destination_zone, zones['removed'], bucket_name,
+                        daemon_name=daemon_name)
         if not bucket_name and update_period:
-            self.update_period()
+            realm_name = self.get_realm_from_daemon(daemon_name)
+            self.update_period(realm_name=realm_name)
 
     def remove_sync_flow(self, group_id: str, flow_id: str, flow_type: str,
                          source_zone='', destination_zone='',
                          zones: Optional[List[str]] = None, bucket_name: str = '',
-                         update_period=False):
+                         update_period=False, daemon_name: Optional[str] = None):
         rgw_sync_policy_cmd = ['sync', 'group', 'flow', 'remove', '--group-id', group_id,
                                '--flow-id', flow_id, '--flow-type', SyncFlowTypes[flow_type].value]
 
@@ -2948,6 +3011,7 @@ class RgwMultisite:
 
         if bucket_name:
             rgw_sync_policy_cmd += ['--bucket', bucket_name]
+        self._add_realm_zonegroup_args(rgw_sync_policy_cmd, daemon_name)
 
         logger.info("Removing sync flow! %s", rgw_sync_policy_cmd)
         try:
@@ -2958,7 +3022,8 @@ class RgwMultisite:
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
         if not bucket_name and update_period:
-            self.update_period()
+            realm_name = self.get_realm_from_daemon(daemon_name)
+            self.update_period(realm_name=realm_name)
 
     def create_sync_pipe(self, group_id: str, pipe_id: str,
                          source_zones: Dict[str, Any],
@@ -2967,7 +3032,7 @@ class RgwMultisite:
                          destination_bucket: str = '',
                          bucket_name: str = '',
                          update_period=False,
-                         user: str = '', mode: str = ''):
+                         user: str = '', mode: str = '', daemon_name: Optional[str] = None):
 
         if source_zones['added'] or destination_zones['added']:
             rgw_sync_policy_cmd = ['sync', 'group', 'pipe', 'create',
@@ -2975,6 +3040,7 @@ class RgwMultisite:
 
             if bucket_name:
                 rgw_sync_policy_cmd += ['--bucket', bucket_name]
+            self._add_realm_zonegroup_args(rgw_sync_policy_cmd, daemon_name)
 
             rgw_sync_policy_cmd += ['--source-bucket', source_bucket]
 
@@ -3001,24 +3067,26 @@ class RgwMultisite:
             except SubprocessError as error:
                 raise DashboardException(error, http_status_code=500, component='rgw')
             if not bucket_name and update_period:
-                self.update_period()
+                realm_name = self.get_realm_from_daemon(daemon_name)
+                self.update_period(realm_name=realm_name)
 
         if ((source_zones['removed'] and '*' not in source_zones['added'])
                 or (destination_zones['removed'] and '*' not in destination_zones['added'])):
             self.remove_sync_pipe(group_id, pipe_id, source_zones['removed'],
                                   destination_zones['removed'],
-                                  bucket_name, True)
+                                  bucket_name, True, daemon_name=daemon_name)
 
     def remove_sync_pipe(self, group_id: str, pipe_id: str,
                          source_zones: Optional[List[str]] = None,
                          destination_zones: Optional[List[str]] = None,
                          bucket_name: str = '',
-                         update_period=False):
+                         update_period=False, daemon_name: Optional[str] = None):
         rgw_sync_policy_cmd = ['sync', 'group', 'pipe', 'remove',
                                '--group-id', group_id, '--pipe-id', pipe_id]
 
         if bucket_name:
             rgw_sync_policy_cmd += ['--bucket', bucket_name]
+        self._add_realm_zonegroup_args(rgw_sync_policy_cmd, daemon_name)
 
         if source_zones:
             rgw_sync_policy_cmd += ['--source-zones', ','.join(source_zones)]
@@ -3035,7 +3103,8 @@ class RgwMultisite:
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
         if not bucket_name and update_period:
-            self.update_period()
+            realm_name = self.get_realm_from_daemon(daemon_name)
+            self.update_period(realm_name=realm_name)
 
     def create_dashboard_admin_sync_group(self, zonegroup_name: str = ''):
 
@@ -3098,9 +3167,9 @@ class RgwTopicmanagement:
     def push_endpoint_password(push_endpoint: str) -> str:
         parsed = urlparse(push_endpoint)
         if parsed.username and parsed.password:
-            netloc = f"{parsed.username}:****@{parsed.hostname}"
+            netloc = f"{parsed.username}: ****@{parsed.hostname}"
             if parsed.port:
-                netloc += f":{parsed.port}"
+                netloc += f": {parsed.port}"
             parsed = parsed._replace(netloc=netloc)
             return urlunparse(parsed)
         return push_endpoint
