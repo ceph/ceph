@@ -1,3 +1,9 @@
+import os
+import sys
+
+if 'UNITTEST' in os.environ:
+    import tests  # noqa
+
 import ceph_module  # noqa
 
 from typing import (
@@ -20,7 +26,6 @@ from typing import (
     cast,
 )
 if TYPE_CHECKING:
-    import sys
     if sys.version_info >= (3, 8):
         from typing import Literal
     else:
@@ -41,7 +46,6 @@ import rados
 import re
 import socket
 import sqlite3
-import sys
 import time
 from ceph_argparse import CephArgtype
 from mgr_util import profile_method
