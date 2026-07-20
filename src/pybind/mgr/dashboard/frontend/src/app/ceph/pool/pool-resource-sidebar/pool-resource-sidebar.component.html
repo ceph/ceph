@@ -1,0 +1,52 @@
+<cd-sidebar-layout
+  class="pool-details-layout"
+  [title]="poolName"
+  [items]="sidebarItems"
+>
+  @if (poolDataProtection || poolApplications.length || getVisiblePoolActions().length) {
+    <div
+      sidebar-header-extra
+      class="pool-header-extra cds-mb-3"
+    >
+      <div class="pool-header-tags">
+        @if (poolDataProtection) {
+          <cds-tag
+            class="cds-mr-2"
+            type="blue"
+            >{{ poolDataProtection | empty }}</cds-tag
+          >
+        }
+        @for (app of poolApplications; track app) {
+          <cds-tag
+            class="cds-mr-2"
+            type="blue"
+            >{{ app }}</cds-tag
+          >
+        }
+      </div>
+
+      @if (getVisiblePoolActions().length) {
+        <div class="pool-header-actions">
+          <cds-menu-button
+            kind="tertiary"
+            size="lg"
+            menuId="pool-actions-menu"
+            menuAlignment="bottom-end"
+            label="Actions"
+            i18n-label
+          >
+            @for (action of getVisiblePoolActions(); track action.name) {
+              <cds-menu-item
+                label="{{ action.name }}"
+                [disabled]="isPoolActionDisabled(action)"
+                (click)="runPoolAction(action)"
+                title="{{ action.name }}"
+              >
+              </cds-menu-item>
+            }
+          </cds-menu-button>
+        </div>
+      }
+    </div>
+  }
+</cd-sidebar-layout>
