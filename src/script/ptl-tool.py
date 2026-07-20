@@ -2256,8 +2256,10 @@ def build_branch(args):
     if args.push_ci or (not args.no_push_ci and do_qa):
         if not args.dry_run:
             G.git.push(CI_REMOTE_URL, branch) # for shaman
+            log.info("Pushed branch %s to %s (git push %s %s)" % (branch, CI_REMOTE_URL, CI_REMOTE_URL, branch))
             if created_branch and not args.no_tag:
                 G.git.push(CI_REMOTE_URL, tag.name) # for archival
+                log.info("Pushed tag %s to %s (git push %s %s)" % (tag.name, CI_REMOTE_URL, CI_REMOTE_URL, tag.name))
         else:
             log.info("[DRY RUN] Would push branch %s to %s" % (branch, CI_REMOTE_URL))
             if created_branch and not args.no_tag:
