@@ -233,6 +233,65 @@ async fn test_versioning_stacked_delete_markers_is_latest() {
 
 #[tokio::test]
 #[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
+async fn test_versioning_stacked_dm_removal_promotes_dm() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+    check_configure_versioning_retry(&client, &bucket_name, "Enabled", "Enabled").await;
+
+    let key = "myobj";
+    // create a real version
+    client
+        .put_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .body(ByteStream::from_static(b"hello"))
+        .send()
+        .await
+        .unwrap();
+
+    // stack 2 delete markers
+    let dm1 = client.delete_object().bucket(&bucket_name).key(key).send().await.unwrap();
+    let dm1_vid = dm1.version_id().unwrap().to_string();
+    let dm2 = client.delete_object().bucket(&bucket_name).key(key).send().await.unwrap();
+    let dm2_vid = dm2.version_id().unwrap().to_string();
+
+    // remove the newest DM (dm2) by versionId
+    client
+        .delete_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .version_id(&dm2_vid)
+        .send()
+        .await
+        .unwrap();
+
+    // list-versions: 1 version + 1 remaining DM (dm1)
+    let resp = client
+        .list_object_versions()
+        .bucket(&bucket_name)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.versions().len(), 1, "expected 1 version");
+    assert_eq!(resp.delete_markers().len(), 1, "expected 1 delete marker");
+
+    // dm1 should be IsLatest (it's newer than the real version)
+    assert!(
+        resp.delete_markers()[0].is_latest().unwrap_or(false),
+        "remaining DM should be IsLatest"
+    );
+    assert_eq!(resp.delete_markers()[0].version_id().unwrap(), dm1_vid);
+
+    // the real version should NOT be IsLatest
+    assert!(
+        !resp.versions()[0].is_latest().unwrap_or(true),
+        "real version should not be IsLatest when a newer DM exists"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_versioning_delete_marker_removal_promotes() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
