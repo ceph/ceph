@@ -1,21 +1,24 @@
 use aws_sdk_s3::primitives::ByteStream;
 use serial_test::serial;
-use s3_tests_rs::client::get_client;
+use s3_tests_rs::client::get_quota_client;
 use s3_tests_rs::config::get_config;
 use s3_tests_rs::fixtures::{get_new_bucket, TestGuard};
 use s3_tests_rs::assert_s3_err;
 
 use super::admin;
 
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: user quota load_stats is a stub")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: user quota load_stats is a stub")]
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[serial]
 #[tokio::test]
 async fn test_user_quota_max_objects() {
     let _guard = TestGuard::setup();
     let cfg = get_config();
-    let client = get_client();
+    let client = get_quota_client();
+    let uid = &cfg.quota_user_id;
+    admin::disable_user_quota(uid).await;
     let bucket_name = get_new_bucket(Some(&client)).await;
-    let uid = &cfg.main_user_id;
 
     admin::set_user_quota(uid, -1, 2, true).await;
 
@@ -40,15 +43,17 @@ async fn test_user_quota_max_objects() {
     admin::disable_user_quota(uid).await;
 }
 
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: user quota load_stats is a stub")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: user quota load_stats is a stub")]
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[serial]
 #[tokio::test]
 async fn test_user_quota_max_size() {
     let _guard = TestGuard::setup();
     let cfg = get_config();
-    let client = get_client();
+    let client = get_quota_client();
     let bucket_name = get_new_bucket(Some(&client)).await;
-    let uid = &cfg.main_user_id;
+    let uid = &cfg.quota_user_id;
 
     // 1MB max — large enough that residual stats from prior tests
     // won't trip the limit, but small enough to test enforcement
@@ -72,15 +77,17 @@ async fn test_user_quota_max_size() {
     admin::disable_user_quota(uid).await;
 }
 
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: user quota load_stats is a stub")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: user quota load_stats is a stub")]
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[serial]
 #[tokio::test]
 async fn test_user_quota_disabled() {
     let _guard = TestGuard::setup();
     let cfg = get_config();
-    let client = get_client();
+    let client = get_quota_client();
     let bucket_name = get_new_bucket(Some(&client)).await;
-    let uid = &cfg.main_user_id;
+    let uid = &cfg.quota_user_id;
 
     // set restrictive quota but keep it disabled
     admin::set_user_quota(uid, 1, 1, false).await;
@@ -99,13 +106,15 @@ async fn test_user_quota_disabled() {
     admin::disable_user_quota(uid).await;
 }
 
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: user quota load_stats is a stub")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: user quota load_stats is a stub")]
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[serial]
 #[tokio::test]
 async fn test_user_quota_get_set_roundtrip() {
     let _guard = TestGuard::setup();
     let cfg = get_config();
-    let uid = &cfg.main_user_id;
+    let uid = &cfg.quota_user_id;
 
     admin::set_user_quota(uid, 1048576, 100, true).await;
     let (max_size, max_objects, enabled) = admin::get_user_quota(uid).await;
@@ -118,16 +127,18 @@ async fn test_user_quota_get_set_roundtrip() {
     assert!(!enabled);
 }
 
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: user quota load_stats is a stub")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: user quota load_stats is a stub")]
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[serial]
 #[tokio::test]
 async fn test_user_quota_across_buckets() {
     let _guard = TestGuard::setup();
     let cfg = get_config();
-    let client = get_client();
+    let client = get_quota_client();
     let bucket1 = get_new_bucket(Some(&client)).await;
     let bucket2 = get_new_bucket(Some(&client)).await;
-    let uid = &cfg.main_user_id;
+    let uid = &cfg.quota_user_id;
 
     admin::set_user_quota(uid, -1, 3, true).await;
 
