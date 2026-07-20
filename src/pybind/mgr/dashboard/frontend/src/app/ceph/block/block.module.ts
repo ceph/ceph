@@ -111,6 +111,7 @@ import { NvmeofGatewayGroupDeleteGuardModalComponent } from './nvmeof-gateway-gr
 import { NvmeofSetupCardsComponent } from './nvmeof-setup-cards/nvmeof-setup-cards.component';
 import { NvmeofGatewayGroupFilterComponent } from './nvmeof-gateway-group-filter/nvmeof-gateway-group-filter.component';
 import { NvmeofEditAuthenticationComponent } from './nvmeof-edit-authentication/nvmeof-edit-authentication.component';
+import { PerformanceCardComponent } from '~/app/shared/components/performance-card/performance-card.component';
 
 @NgModule({
   imports: [
@@ -123,6 +124,7 @@ import { NvmeofEditAuthenticationComponent } from './nvmeof-edit-authentication/
     NgbTooltipModule,
     PipesModule,
     SharedModule,
+    PerformanceCardComponent,
     RouterModule,
     TreeviewModule,
     UIShellModule,

@@ -1,0 +1,18 @@
+.rbd-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  row-gap: var(--cds-spacing-06);
+  column-gap: var(--cds-spacing-07);
+
+  &__item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--cds-spacing-02);
+  }
+}
+
+.mirroring-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cds-spacing-03);
+}
