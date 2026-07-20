@@ -2212,6 +2212,80 @@ def test_query_vectors_post_filtering():
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
 
 
+    result = conn.create_index(
+        vectorBucketName=bucket_name,
+        indexName=index_name,
+        dataType='float32',
+        dimension=dimension,
+        distanceMetric='euclidean'
+    )
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = [
+        {'key':'v0', 'data':generate_data(dimension, 0)},
+        {'key':'v1', 'data':generate_data(dimension, 1)}
+    ]
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+@pytest.mark.vector_test
+def test_vector_bucket_policy_baseline():
+    owner = connection()
+    other = another_user()
+    bucket_name = gen_bucket_name()
+    index_name = 'test-index'
+
+    _setup_vector_bucket_with_index(owner, bucket_name, index_name)
+    
+    result = other.get_vectors(
+            vectorBucketName=bucket_name, 
+            indexName=index_name,
+            keys=['v0'])
+
+    status = result['ResponseMetadata']['HTTPStatusCode']
+    print(result['ResponseMetadata'])
+    assert status in (200, 403, 404)
+
+    #cleanup
+    _ = owner.delete_vector_bucket(vectorBucketName=bucket_name)
+
+@pytest.mark.vector_test
+def test_put_get_delete_vector_bucket_policy():
+    owner = connection()
+    bucket_name = gen_bucket_name()
+    index_name = "test-index"
+
+    _setup_vector_bucket_with_index(owner, bucket_name, index_name)
+
+    bucket_arn = result['vectorBucketArn']
+    policy = json.dumps({
+        "Version": "2012-10-17",
+        "Statement": [{"Effect": "Allow", "Principal": "*",
+                       "Action": "s3vectors:GetVectors",
+                       "Resource": bucket_arn}]
+    })
+
+    result = owner.put_vector_bucket_policy(
+        vectorBucketName=bucket_name, policy=policy)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    
+    #get
+    result = owner.get_vector_bucket_policy(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    returned_policy = json.loads(result['policy'])
+    assert returned_policy['version'] == '2012-10-17'
+
+    #delete
+    result = owner.delete_vector_bucket_policy(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # post delete get must fail
+    with pytest.raises(owner.exceptions.ClientError) as err_info:
+        owner.get_vector_bucket_policy(vectorBucketName=bucket_name)
+    assert err_info.value.response['Error']['Code'] == 'NoSuchBucketPolicy'
+
+    #cleanup
+    owner.delete_vector_bucket(vectorBucketName=bucket_name)
 @pytest.mark.vector_test
 def test_query_vectors_filter_nonfilterable():
     """Test that filtering on non-filterable keys is rejected."""
