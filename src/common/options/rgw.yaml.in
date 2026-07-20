@@ -2983,6 +2983,13 @@ options:
   - rgw
   - rgw
   min: 30
+- name: rgw_driver_debug_apis
+  type: bool
+  level: dev
+  desc: Enable driver-level debug admin APIs (e.g., driver hint endpoint)
+  default: false
+  services:
+  - rgw
 - name: rgw_debug_inject_latency_bi_unlink
   type: uint
   level: dev

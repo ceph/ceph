@@ -15,6 +15,7 @@
 
 #include "rgw_sal_posix.h"
 #include "rgw_rest_user.h"
+#include "rgw_rest_driver_hint.h"
 #include "rgw_pubsub_push.h"
 #include "rgw_pubsub.h"
 #include "rgw_s3_filter.h"
@@ -5777,7 +5778,24 @@ std::unique_ptr<LCSerializer> POSIXLifecycle::get_serializer(const std::string& 
 void POSIXDriver::register_admin_apis(RGWRESTMgr* mgr)
 {
   mgr->register_resource("user", new RGWRESTMgr_User);
-  /* TODO: register "bucket" once rgw_rest_bucket is decoupled from rados */
+  auto* driver_mgr = new RGWRESTMgr;
+  driver_mgr->register_resource("hint", new RGWRESTMgr_Driver_Hint);
+  mgr->register_resource("driver", driver_mgr);
+}
+
+int POSIXDriver::driver_hint(const DoutPrefixProvider* dpp,
+                              const std::string& hint,
+                              const std::map<std::string, std::string>& params)
+{
+  ldpp_dout(dpp, 10) << "POSIXDriver::driver_hint: " << hint << dendl;
+  if (hint == "invalidate-cache") {
+    auto it = params.find("bucket");
+    if (it == params.end()) {
+      return -EINVAL;
+    }
+    return get_bucket_cache()->invalidate_bucket(dpp, it->second);
+  }
+  return -ENOTSUP;
 }
 
 } } // namespace rgw::sal

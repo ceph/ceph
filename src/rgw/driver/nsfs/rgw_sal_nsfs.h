@@ -733,6 +733,9 @@ public:
   virtual CephContext* ctx(void) override { return userDB->ctx(); }
 
   virtual void register_admin_apis(RGWRESTMgr* mgr) override;
+  int driver_hint(const DoutPrefixProvider* dpp,
+                  const std::string& hint,
+                  const std::map<std::string, std::string>& params) override;
 
   /* Internal APIs */
   int get_root_fd() { return root_dir->get_fd(); }
