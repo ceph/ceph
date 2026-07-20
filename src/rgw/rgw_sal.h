@@ -730,6 +730,16 @@ class Driver {
 
     /** Register admin APIs unique to this driver */
     virtual void register_admin_apis(RGWRESTMgr* mgr) = 0;
+
+    /** Send a driver-level hint with optional parameters.
+     *  Hints are string-keyed, extensible commands for debug, testing,
+     *  and administrative operations that don't warrant dedicated SAL
+     *  methods.  Returns 0 on success, -ENOTSUP if unrecognized. */
+    virtual int driver_hint(const DoutPrefixProvider* dpp,
+                            const std::string& hint,
+                            const std::map<std::string, std::string>& params) {
+      return -ENOTSUP;
+    }
 }; // class Driver
 
 

@@ -2166,7 +2166,8 @@ bool RGWUserCaps::is_valid_cap_type(const string& tp)
                                     "user-info-without-keys",
                                     "ratelimit",
                                     "accounts",
-                                    "dedup"};
+                                    "dedup",
+                                    "driver-hint"};
 
   for (unsigned int i = 0; i < sizeof(cap_type) / sizeof(char *); ++i) {
     if (tp.compare(cap_type[i]) == 0) {
