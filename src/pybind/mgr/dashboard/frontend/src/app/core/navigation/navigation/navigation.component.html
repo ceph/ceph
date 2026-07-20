@@ -58,8 +58,13 @@
         <cd-dashboard-help></cd-dashboard-help>
       </div>
       <div
-        class="cds--btn cds--btn--icon-only cds--header__action"
-        *ngIf="permissions.user.read"
+        class="cds--btn cds--btn--icon-only cds--header__action tc_administration"
+        *ngIf="
+          permissions.user.create ||
+          permissions.user.update ||
+          permissions.user.delete ||
+          permissions.configOpt.read
+        "
       >
         <cd-administration></cd-administration>
       </div>

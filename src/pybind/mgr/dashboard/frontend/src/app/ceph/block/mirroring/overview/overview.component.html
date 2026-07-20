@@ -29,18 +29,19 @@
             (click)="updateSiteName()"
             [title]="editing ? 'Save' : 'Edit'"
           >
-            <svg
-              [cdsIcon]="icons.edit"
-              [size]="icons.size32"
-              class="cds--btn__icon"
-              *ngIf="!editing"
-            ></svg>
-            <svg
-              [cdsIcon]="icons.check"
-              [size]="icons.size32"
-              class="cds--btn__icon"
-              *ngIf="editing"
-            ></svg>
+            @if (!editing) {
+              <svg
+                [cdsIcon]="icons.edit"
+                [size]="icons.size32"
+                class="cds--btn__icon"
+              ></svg>
+            } @else {
+              <svg
+                [cdsIcon]="icons.check"
+                [size]="icons.size32"
+                class="cds--btn__icon"
+              ></svg>
+            }
           </cds-icon-button>
           <cd-copy-2-clipboard-button
             [source]="siteName"
