@@ -2122,19 +2122,16 @@ int BlueFS::migrate_file(
 
   sync_metadata(false);
 
-  std::map<int, PExtentVector> releases;
+  std::vector<interval_set<uint64_t>> to_release(MAX_BDEV);
+
   for (const auto& old_ext : old_fnode_extents) {
     vselector->sub_usage(file_ref->vselector_hint, old_ext);
-    releases[old_ext.bdev].emplace_back(
+    to_release[old_ext.bdev].insert(
       old_ext.offset,
       old_ext.length);
-    if (is_shared_alloc(old_ext.bdev)) {
-      shared_alloc->bluefs_used -= old_ext.length;
-    }
   }
-  for (auto& [bdev, vec] : releases) {
-    alloc[bdev]->release(vec);
-  }
+
+  _release_pending_allocations(to_release);
 
   dout(10) << __func__
           << " done ino " << file_ref->fnode.ino
@@ -5583,7 +5580,9 @@ void *BlueFS::SpilloverCleanerThread::entry() {
 BlueFS::SpillOverCleanerAction BlueFS::RebalanceToDB::advance(BlueFS *fs)
 {
   if (idx >= pending.size()) {
+    last_scan_time = ceph_clock_now();
     pending.clear();
+    skipped.clear();
     idx = 0;
     std::unique_lock nl(fs->nodes.lock);
     for (auto& [dir, dir_ref] : fs->nodes.dir_map) {
@@ -5600,7 +5599,7 @@ BlueFS::SpillOverCleanerAction BlueFS::RebalanceToDB::advance(BlueFS *fs)
           });
 
         if (has_slow)
-          pending.push_back({dir + "/" + fname,file_ref});
+          pending.push_back({dir + "/" + fname, file_ref});
       }
     }
     if (pending.empty()) {
@@ -5608,6 +5607,13 @@ BlueFS::SpillOverCleanerAction BlueFS::RebalanceToDB::advance(BlueFS *fs)
     }
   }
   auto& [path, file] = pending[idx++];
+  int writers = file->num_writers.load(std::memory_order_relaxed);
+  // MANIFEST is excluded from this check because
+  // RocksDB keeps a writer open to it permanently.
+  if (writers > 0 && !path.ends_with("/MANIFEST")) {
+    skipped.push_back({path, writers});
+    return SpillOverCleanerAction::CONTINUE;
+  }
   int r = fs->migrate_file(
     fs->cct,
     file,
@@ -5672,6 +5678,15 @@ void BlueFS::RebalanceToDB::dump_plan(Formatter* f)
     f->dump_string("file", path);
   }
   f->close_section();
+  f->open_array_section("active_files");
+  for (const auto& [path, writers] : skipped) {
+    f->dump_string(
+      "file",
+      path + " num_writers=" + std::to_string(writers));
+  }
+  f->close_section();
+  f->dump_stream("last_scan_time")
+    << last_scan_time;
 }
 
 // ===============================================
