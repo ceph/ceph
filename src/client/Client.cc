@@ -19241,9 +19241,37 @@ int Client::fcopyfile(const char *spath, const char *dpath, UserPerm& perms, mod
   return 0;
 }
 
+int Client::ll_copy_file_range(Fh *src_fh, int64_t src_off,
+                                Fh *dst_fh, int64_t dst_off,
+                                size_t len, unsigned int flags)
+{
+  return _copy_file_range(src_fh, src_off, dst_fh, dst_off, len, flags);
+}
+
 int Client::copy_file_range(int src_fd, int64_t src_off,
                              int dst_fd, int64_t dst_off,
                              size_t len, unsigned int flags)
+{
+  /* Resolve fds to Fh* under client_lock, then release it before
+   * calling _copy_file_range() which manages the lock internally
+   * (needs to release/reacquire around cv.wait). */
+  Fh *src_fh = nullptr;
+  Fh *dst_fh = nullptr;
+  {
+    std::unique_lock lock(client_lock);
+    src_fh = get_filehandle(src_fd);
+    if (!src_fh)
+      return -EBADF;
+    dst_fh = get_filehandle(dst_fd);
+    if (!dst_fh)
+      return -EBADF;
+  }
+  return _copy_file_range(src_fh, src_off, dst_fh, dst_off, len, flags);
+}
+
+int Client::_copy_file_range(Fh *src_fh, int64_t src_off,
+                              Fh *dst_fh, int64_t dst_off,
+                              size_t len, unsigned int flags)
 {
   (void)flags;
 
@@ -19257,13 +19285,6 @@ int Client::copy_file_range(int src_fd, int64_t src_off,
   tout(cct) << src_off << std::endl;
   tout(cct) << dst_off << std::endl;
   tout(cct) << len << std::endl;
-
-  Fh *src_fh = get_filehandle(src_fd);
-  if (!src_fh)
-    return -EBADF;
-  Fh *dst_fh = get_filehandle(dst_fd);
-  if (!dst_fh)
-    return -EBADF;
 
   Inode *src_in = src_fh->inode.get();
   Inode *dst_in = dst_fh->inode.get();

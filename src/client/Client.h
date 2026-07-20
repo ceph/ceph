@@ -400,6 +400,10 @@ public:
                       int dst_fd, int64_t dst_off,
                       size_t len, unsigned int flags);
 
+  int ll_copy_file_range(Fh *src_fh, int64_t src_off,
+                         Fh *dst_fh, int64_t dst_off,
+                         size_t len, unsigned int flags);
+
   int mds_command(
     const std::string &mds_spec,
     const std::vector<std::string>& cmd,
@@ -2172,6 +2176,9 @@ private:
   int _sync_fs();
   int clear_suid_sgid(Inode *in, const UserPerm& perms, bool defer=false);
   int _fallocate(Fh *fh, int mode, int64_t offset, int64_t length);
+  int _copy_file_range(Fh *src_fh, int64_t src_off,
+                        Fh *dst_fh, int64_t dst_off,
+                        size_t len, unsigned int flags);
   int _getlk(Fh *fh, struct flock *fl, uint64_t owner);
   int _setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep);
   int _flock(Fh *fh, int cmd, uint64_t owner);
