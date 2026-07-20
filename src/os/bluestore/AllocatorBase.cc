@@ -102,7 +102,7 @@ public:
       f->close_section();
     } else if (command == "bluestore allocator score " + name) {
       f->open_object_section("fragmentation_score");
-      f->dump_float("fragmentation_rating", alloc->get_fragmentation_score());
+      f->dump_float("fragmentation_score", alloc->get_fragmentation_score());
       f->close_section();
     } else if (command == "bluestore allocator fragmentation " + name) {
       f->open_object_section("fragmentation");
