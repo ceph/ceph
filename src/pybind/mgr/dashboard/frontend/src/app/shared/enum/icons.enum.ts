@@ -177,7 +177,8 @@ export const ICON_TYPE = {
   locked: 'locked',
   cloudMonitoring: 'cloud--monitoring',
   trash: 'trash-can',
-  temperature: 'temperature'
+  temperature: 'temperature',
+  left: 'arrow--left'
 } as const;
 
 export const EMPTY_STATE_IMAGE = {
