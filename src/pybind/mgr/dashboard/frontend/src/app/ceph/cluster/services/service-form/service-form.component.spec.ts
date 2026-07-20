@@ -1,5 +1,5 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -11,6 +11,10 @@ import { of } from 'rxjs';
 
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { PaginateObservable } from '~/app/shared/api/paginate.model';
+import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
+import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
+import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
+import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FormHelper, Mocks } from '~/testing/unit-test-helper';
@@ -877,6 +881,245 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
           enable_auth: false
         });
       });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // RGW multisite filtering and subscription behaviour
+  // ---------------------------------------------------------------------------
+  describe('RGW multisite filtering', () => {
+    // Shared multisite fixture data
+    const realmA = { id: 'r1', name: 'realm-a' };
+    const realmB = { id: 'r2', name: 'realm-b' };
+    const zgA1 = { id: 'zg1', name: 'zg-a1', realm_id: 'r1', zones: [{ name: 'zone-a1' }] };
+    const zgA2 = { id: 'zg2', name: 'zg-a2', realm_id: 'r1', zones: [{ name: 'zone-a2' }] };
+    const zgB1 = { id: 'zg3', name: 'zg-b1', realm_id: 'r2', zones: [{ name: 'zone-b1' }] };
+    const zoneA1 = { id: 'z1', name: 'zone-a1' };
+    const zoneA2 = { id: 'z2', name: 'zone-a2' };
+    const zoneB1 = { id: 'z3', name: 'zone-b1' };
+
+    const realmsInfo = {
+      realms: [realmA, realmB],
+      default_realm: 'r1'
+    };
+    const zonegroupsInfo = {
+      zonegroups: [zgA1, zgA2, zgB1],
+      default_zonegroup: 'zg1'
+    };
+    const zonesInfo = {
+      zones: [zoneA1, zoneA2, zoneB1],
+      default_zone: 'z1'
+    };
+
+    let rgwRealmService: RgwRealmService;
+    let rgwZonegroupService: RgwZonegroupService;
+    let rgwZoneService: RgwZoneService;
+    let rgwMultisiteService: RgwMultisiteService;
+
+    beforeEach(() => {
+      rgwRealmService = TestBed.inject(RgwRealmService);
+      rgwZonegroupService = TestBed.inject(RgwZonegroupService);
+      rgwZoneService = TestBed.inject(RgwZoneService);
+      rgwMultisiteService = TestBed.inject(RgwMultisiteService);
+
+      spyOn(rgwRealmService, 'getAllRealmsInfo').and.returnValue(of(realmsInfo));
+      spyOn(rgwZonegroupService, 'getAllZonegroupsInfo').and.returnValue(of(zonegroupsInfo));
+      spyOn(rgwZoneService, 'getAllZonesInfo').and.returnValue(of(zonesInfo));
+      spyOn(rgwMultisiteService, 'getRgwModuleStatus').and.returnValue(of(false));
+    });
+
+    describe('create mode – initial filtering', () => {
+      beforeEach(fakeAsync(() => {
+        formHelper.setValue('service_type', 'rgw');
+        component.setRgwFields();
+        tick();
+      }));
+
+      it('should populate filteredZonegroupList with all zonegroups when no realm is selected', () => {
+        // Default realm-a is selected; its two zonegroups should appear.
+        expect(component.filteredZonegroupList.length).toBe(2);
+        expect(component.filteredZonegroupList.map((zg) => zg.name)).toEqual(
+          jasmine.arrayContaining(['zg-a1', 'zg-a2'])
+        );
+      });
+
+      it('should populate filteredZoneList based on the default zonegroup', () => {
+        // Default zonegroup is zg-a1 which has zone-a1.
+        expect(component.filteredZoneList.length).toBe(1);
+        expect(component.filteredZoneList[0].name).toBe('zone-a1');
+      });
+    });
+
+    describe('realm change cascades zonegroup and zone lists', () => {
+      beforeEach(fakeAsync(() => {
+        formHelper.setValue('service_type', 'rgw');
+        component.setRgwFields();
+        tick();
+      }));
+
+      it('switching realm filters zonegroups to the new realm', fakeAsync(() => {
+        form.get('realm_name').setValue('realm-b');
+        tick();
+
+        expect(component.filteredZonegroupList.length).toBe(1);
+        expect(component.filteredZonegroupList[0].name).toBe('zg-b1');
+      }));
+
+      it('switching realm auto-cascades zonegroup then zone for the new realm', fakeAsync(() => {
+        form.get('realm_name').setValue('realm-b');
+        tick();
+
+        // The subscription chain (realm → zonegroup → zone) resolves within the same
+        // tick: realm-b's only zonegroup (zg-b1) is auto-selected, then its first zone
+        // (zone-b1) is auto-selected.  zone_name should be non-null and point to
+        // the first zone of the new realm's first zonegroup.
+        expect(form.get('zone_name').value).toBe('zone-b1');
+      }));
+
+      it('switching realm then zonegroup populates zones for the new zonegroup', fakeAsync(() => {
+        form.get('realm_name').setValue('realm-b');
+        tick();
+
+        // The first zonegroup of realm-b (zg-b1) is auto-selected by the subscription.
+        tick();
+        expect(component.filteredZoneList.length).toBe(1);
+        expect(component.filteredZoneList[0].name).toBe('zone-b1');
+      }));
+    });
+
+    describe('zonegroup change cascades zone list', () => {
+      beforeEach(fakeAsync(() => {
+        formHelper.setValue('service_type', 'rgw');
+        component.setRgwFields();
+        tick();
+      }));
+
+      it('switching zonegroup within the same realm updates filteredZoneList', fakeAsync(() => {
+        form.get('zonegroup_name').setValue('zg-a2');
+        tick();
+
+        expect(component.filteredZoneList.length).toBe(1);
+        expect(component.filteredZoneList[0].name).toBe('zone-a2');
+      }));
+
+      it('auto-selects the first zone of the new zonegroup', fakeAsync(() => {
+        form.get('zonegroup_name').setValue('zg-a2');
+        tick();
+
+        expect(form.get('zone_name').value).toBe('zone-a2');
+      }));
+    });
+
+    describe('edit mode – initial population from spec', () => {
+      beforeEach(fakeAsync(() => {
+        component.editing = true;
+        component.setRgwFields('realm-a', 'zg-a2', 'zone-a2');
+        tick();
+      }));
+
+      it('should set filteredZonegroupList to realm-a zonegroups', () => {
+        expect(component.filteredZonegroupList.map((zg) => zg.name)).toEqual(
+          jasmine.arrayContaining(['zg-a1', 'zg-a2'])
+        );
+      });
+
+      it('should set filteredZoneList based on the spec zonegroup', () => {
+        expect(component.filteredZoneList.length).toBe(1);
+        expect(component.filteredZoneList[0].name).toBe('zone-a2');
+      });
+
+      it('should not show the realm-changed banner immediately after loading', () => {
+        expect(component.showRgwRealmChangedInfo).toBe(false);
+      });
+    });
+
+    describe('edit mode – realm-changed banner (showRgwRealmChangedInfo)', () => {
+      beforeEach(fakeAsync(() => {
+        component.editing = true;
+        component.setRgwFields('realm-a', 'zg-a1', 'zone-a1');
+        tick();
+        // Banner must be false right after initial load.
+        expect(component.showRgwRealmChangedInfo).toBe(false);
+      }));
+
+      it('shows the banner when the realm is changed', fakeAsync(() => {
+        form.get('realm_name').setValue('realm-b');
+        tick();
+        form.get('zonegroup_name').setValue('zg-b1');
+        tick();
+        form.get('zone_name').setValue('zone-b1');
+        tick();
+
+        expect(component.showRgwRealmChangedInfo).toBe(true);
+      }));
+
+      it('shows the banner when only the zonegroup is changed', fakeAsync(() => {
+        form.get('zonegroup_name').setValue('zg-a2');
+        tick();
+        form.get('zone_name').setValue('zone-a2');
+        tick();
+
+        expect(component.showRgwRealmChangedInfo).toBe(true);
+      }));
+
+      it('shows the banner when only the zone is changed', fakeAsync(() => {
+        // Add a second zone to zg-a1 so there is something to switch to
+        component.filteredZoneList = [
+          { id: 'z1', name: 'zone-a1' } as any,
+          { id: 'z4', name: 'zone-a1-extra' } as any
+        ];
+        form.get('zone_name').setValue('zone-a1-extra');
+        tick();
+
+        expect(component.showRgwRealmChangedInfo).toBe(true);
+      }));
+
+      it('hides the banner when reverted back to original values', fakeAsync(() => {
+        // Change then revert
+        form.get('zonegroup_name').setValue('zg-a2');
+        tick();
+        form.get('zonegroup_name').setValue('zg-a1');
+        tick();
+        form.get('zone_name').setValue('zone-a1');
+        tick();
+
+        expect(component.showRgwRealmChangedInfo).toBe(false);
+      }));
+    });
+
+    describe('no-realm scenario – filteredZoneList falls back to all zones', () => {
+      const noRealmZonegroupsInfo = {
+        zonegroups: [{ id: 'zg0', name: 'default', realm_id: null, zones: [] }],
+        default_zonegroup: 'zg0'
+      };
+      const noRealmZonesInfo = {
+        zones: [{ id: 'z0', name: 'default' }],
+        default_zone: 'z0'
+      };
+
+      beforeEach(fakeAsync(() => {
+        (rgwZonegroupService.getAllZonegroupsInfo as jasmine.Spy).and.returnValue(
+          of(noRealmZonegroupsInfo)
+        );
+        (rgwZoneService.getAllZonesInfo as jasmine.Spy).and.returnValue(of(noRealmZonesInfo));
+        (rgwRealmService.getAllRealmsInfo as jasmine.Spy).and.returnValue(
+          of({ realms: [], default_realm: null })
+        );
+
+        component.setRgwFields();
+        tick();
+      }));
+
+      it('should show realm creation form when no realms exist', () => {
+        expect(component.showRealmCreationForm).toBe(true);
+      });
+
+      it('should fall back to all zones when the zonegroup has no zones list', fakeAsync(() => {
+        form.get('zonegroup_name').setValue('default');
+        tick();
+
+        expect(component.filteredZoneList.length).toBeGreaterThan(0);
+      }));
     });
   });
 });
