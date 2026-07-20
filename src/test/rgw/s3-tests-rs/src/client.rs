@@ -135,6 +135,13 @@ pub fn get_alt_client() -> S3Client {
     build_s3_client(&cfg.alt_access_key, &cfg.alt_secret_key)
 }
 
+pub fn get_quota_client() -> S3Client {
+    let cfg = get_config();
+    assert!(!cfg.quota_access_key.is_empty(),
+        "quota tests require [s3 quota] section in s3tests.conf");
+    build_s3_client(&cfg.quota_access_key, &cfg.quota_secret_key)
+}
+
 pub fn get_tenant_client() -> S3Client {
     let cfg = get_config();
     build_s3_client(&cfg.tenant_access_key, &cfg.tenant_secret_key)

@@ -2,7 +2,7 @@ use aws_sdk_s3::error::ProvideErrorMetadata;
 use aws_sdk_s3::Client as S3Client;
 use chrono::{DateTime, Utc};
 
-use crate::client::{get_alt_client, get_client, get_tenant_client};
+use crate::client::{get_alt_client, get_client, get_quota_client, get_tenant_client};
 use crate::config::get_config;
 
 const NUKE_BATCH_SIZE: i32 = 1000;
@@ -235,28 +235,32 @@ pub async fn nuke_prefixed_buckets(client: &S3Client, prefix: &str) {
     while set.join_next().await.is_some() {}
 }
 
-pub async fn setup() {
-    let cfg = get_config();
+async fn nuke_all_prefixed(prefix: &str) {
     let client = get_client();
     let alt_client = get_alt_client();
     let tenant_client = get_tenant_client();
-    let prefix = cfg.bucket_prefix.clone();
-    tokio::join!(
-        nuke_prefixed_buckets(&client, &prefix),
-        nuke_prefixed_buckets(&alt_client, &prefix),
-        nuke_prefixed_buckets(&tenant_client, &prefix),
-    );
+    let cfg = get_config();
+    let has_quota = !cfg.quota_access_key.is_empty();
+
+    let main_f = nuke_prefixed_buckets(&client, prefix);
+    let alt_f = nuke_prefixed_buckets(&alt_client, prefix);
+    let tenant_f = nuke_prefixed_buckets(&tenant_client, prefix);
+
+    if has_quota {
+        let quota_client = get_quota_client();
+        let quota_f = nuke_prefixed_buckets(&quota_client, prefix);
+        tokio::join!(main_f, alt_f, tenant_f, quota_f);
+    } else {
+        tokio::join!(main_f, alt_f, tenant_f);
+    }
+}
+
+pub async fn setup() {
+    let cfg = get_config();
+    nuke_all_prefixed(&cfg.bucket_prefix).await;
 }
 
 pub async fn teardown() {
     let cfg = get_config();
-    let client = get_client();
-    let alt_client = get_alt_client();
-    let tenant_client = get_tenant_client();
-    let prefix = cfg.bucket_prefix.clone();
-    tokio::join!(
-        nuke_prefixed_buckets(&client, &prefix),
-        nuke_prefixed_buckets(&alt_client, &prefix),
-        nuke_prefixed_buckets(&tenant_client, &prefix),
-    );
+    nuke_all_prefixed(&cfg.bucket_prefix).await;
 }

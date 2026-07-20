@@ -52,6 +52,13 @@ pub struct S3TestConfig {
     pub alt_user_id: String,
     pub alt_email: String,
 
+    // s3 quota (optional — only needed for quota tests)
+    pub quota_access_key: String,
+    pub quota_secret_key: String,
+    pub quota_display_name: String,
+    pub quota_user_id: String,
+    pub quota_email: String,
+
     // s3 tenant
     pub tenant_access_key: String,
     pub tenant_secret_key: String,
@@ -238,6 +245,12 @@ fn load_config() -> Result<S3TestConfig, String> {
         alt_display_name: get_str(&ini, "s3 alt", "display_name")?,
         alt_user_id: get_str(&ini, "s3 alt", "user_id")?,
         alt_email: get_str(&ini, "s3 alt", "email")?,
+
+        quota_access_key: get_str_or(&ini, "s3 quota", "access_key", ""),
+        quota_secret_key: get_str_or(&ini, "s3 quota", "secret_key", ""),
+        quota_display_name: get_str_or(&ini, "s3 quota", "display_name", ""),
+        quota_user_id: get_str_or(&ini, "s3 quota", "user_id", ""),
+        quota_email: get_str_or(&ini, "s3 quota", "email", ""),
 
         tenant_access_key: get_str(&ini, "s3 tenant", "access_key")?,
         tenant_secret_key: get_str(&ini, "s3 tenant", "secret_key")?,

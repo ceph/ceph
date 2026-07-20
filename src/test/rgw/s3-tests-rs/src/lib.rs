@@ -1,3 +1,4 @@
+pub mod admin;
 pub mod cleanup;
 pub mod client;
 pub mod config;

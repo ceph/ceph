@@ -126,6 +126,15 @@ email = tenanteduser@example.com
 # tenant name
 tenant = testx
 
+# dedicated user for quota tests — isolated from the main user so
+# quota enforcement doesn't interfere with concurrent S3 tests
+[s3 quota]
+display_name = Quota Tester
+user_id = quotauser
+email = quota@example.com
+access_key = QUOTAACCESSKEY01234Q
+secret_key = quotasecretkey0123456789abcdefghijklm
+
 #following section needs to be added for all sts-tests
 [iam]
 #used for iam operations in sts-tests
