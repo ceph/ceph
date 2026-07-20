@@ -1003,3 +1003,14 @@
    fun:__libc_start_main@@GLIBC_2.34
    fun:(below main)
 }
+{
+   librdkafka GSSAPI credential leak in libgssapi_krb5
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:gss_acquire_cred_from
+   fun:gss_acquire_cred
+   ...
+   fun:sasl_client_start
+   ...
+}
