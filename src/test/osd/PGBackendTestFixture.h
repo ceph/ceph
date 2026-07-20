@@ -117,6 +117,10 @@ protected:
   std::unique_ptr<NoDoutPrefix> dpp;
 
 public:
+  ceph_tid_t get_tid() {
+    return next_tid++;
+  }
+
   explicit PGBackendTestFixture(PoolType type = EC) : pool_type(type)
   {
     std::random_device rd;
