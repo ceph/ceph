@@ -1986,7 +1986,7 @@ do_rgw_create_users()
         --access-key ABCDEFGHIJKLMNOPQRST \
         --secret abcdefghijklmnopqrstuvwxyzabcdefghijklmn \
         --display-name youruseridhere \
-        --email s3@example.com --caps="roles=*;user-policy=*;oidc-provider=*;users=*;buckets=*" -c $conf_fn > /dev/null
+        --email s3@example.com --caps="roles=*;user-policy=*;oidc-provider=*;users=*;buckets=*;driver-hint=*" -c $conf_fn > /dev/null
     $CEPH_BIN/radosgw-admin user create \
         --uid 56789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234 \
         --access-key NOPQRSTUVWXYZABCDEFG \
@@ -2000,6 +2000,15 @@ do_rgw_create_users()
         --secret opqrstuvwxyzabcdefghijklmnopqrstuvwxyzab \
         --display-name tenanteduser \
         --email tenanteduser@example.com -c $conf_fn > /dev/null
+
+    # dedicated user for quota tests — isolated from testid so quota
+    # enforcement doesn't interfere with concurrent S3 tests
+    $CEPH_BIN/radosgw-admin user create \
+        --uid quotauser \
+        --access-key QUOTAACCESSKEY01234Q \
+        --secret quotasecretkey0123456789abcdefghijklm \
+        --display-name 'Quota Tester' \
+        --email quota@example.com -c $conf_fn > /dev/null
 
     # create accounts/users for iam s3tests (all backends)
     a1_akey='AAAAAAAAAAAAAAAAAAaa'
