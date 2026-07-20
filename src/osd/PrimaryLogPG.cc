@@ -15682,6 +15682,7 @@ void PrimaryLogPG::handle_pool_migration_quiesce_complete()
   pool_migration_quiesce_reason = PoolMigrationQuiesceReason::NONE;
   pool_migration_quiesce_error_code = 0;
   pool_migration_quiesce_last_started_reset = false;
+  pool_migration_clones_in_flight.clear();
 
   if (reason == PoolMigrationQuiesceReason::RETRY_NEEDED) {
     // Retryable error - request new reservation and resume
@@ -15700,6 +15701,9 @@ void PrimaryLogPG::handle_pool_migration_quiesce_complete()
       dout(10) << __func__ << " signaling error " << cpp_strerror(error_code) << dendl;
       stop_pool_migration_error(error_code);
     }
+  } else if (reason == PoolMigrationQuiesceReason::SUSPEND_NEEDED) {
+    dout(10) << __func__ << " drain complete, completing suspension" << dendl;
+    on_pool_migration_source_suspended();
   }
 }
 
@@ -15786,10 +15790,9 @@ bool PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
 
       // Clean up recovering state for pending deletes
       auto i = recovering.find(pending_oid);
-      if (i != recovering.end()) {
-        recovering.erase(i);
-        finish_recovery_op(pending_oid);
-      }
+      ceph_assert(i != recovering.end());
+      recovering.erase(i);
+      finish_recovery_op(pending_oid);
       dout(20) << __func__ << " flushed pending delete for " << pending_oid << dendl;
     }
   } else {
@@ -16216,36 +16219,28 @@ void PrimaryLogPG::on_pool_migration_source_suspended()
            << " pending_deletes=" << pool_migration_source_delete_pending_lock.size()
            << dendl;
 
-  // Clean up any pending delete operations
+  // Pending-delete objects blocked waiting for a write lock have no submitted
+  // callback, so finish_recovery_op must be called here to balance the
+  // start_recovery_op from when the delete phase began.
   while (!pool_migration_source_delete_pending_lock.empty()) {
     hobject_t pending_oid = *pool_migration_source_delete_pending_lock.begin();
     pool_migration_source_delete_pending_lock.erase(pool_migration_source_delete_pending_lock.begin());
-
     auto i = recovering.find(pending_oid);
-    if (i != recovering.end()) {
-      recovering.erase(i);
-      finish_recovery_op(pending_oid);
-    }
-    dout(20) << __func__ << " cleaned up pending delete for " << pending_oid << dendl;
+    ceph_assert(i != recovering.end());
+    recovering.erase(i);
+    finish_recovery_op(pending_oid);
+    dout(20) << __func__ << " flushed pending delete for " << pending_oid << dendl;
   }
 
-  // Clean up any in-flight migrations
-  while (!pool_migrations_in_flight.empty()) {
-    hobject_t migration_oid = *pool_migrations_in_flight.begin();
-    pool_migrations_in_flight.erase(pool_migrations_in_flight.begin());
-
-    auto i = recovering.find(migration_oid);
-    if (i != recovering.end()) {
-      recovering.erase(i);
-      finish_recovery_op(migration_oid);
-    }
-    dout(20) << __func__ << " cleaned up in-flight migration for " << migration_oid << dendl;
+  if (!pool_migrations_in_flight.empty()) {
+    // If there are still in-flight migrations, let the quiesce process handle it.
+    // Once that completes, it will return here to finish suspending.
+    dout(10) << __func__ << " waiting for " << pool_migrations_in_flight.size()
+             << " in-flight migrations to drain" << dendl;
+    pool_migration_quiesce_reason = PoolMigrationQuiesceReason::SUSPEND_NEEDED;
+    return;
   }
 
-  // Clear clone tracking
-  pool_migration_clones_in_flight.clear();
-
-  // Call parent implementation to clear PG state
   PG::on_pool_migration_source_suspended();
 }
 

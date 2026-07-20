@@ -1217,9 +1217,10 @@ protected:
 
   /// Reason for quiescing pool migration operations
   enum class PoolMigrationQuiesceReason {
-    NONE,         // Not quiescing
-    FATAL_ERROR,  // Fatal error (ENOENT, EIO, etc.) - stop migration
-    RETRY_NEEDED  // Retryable error (EBUSY) - retry after drain
+    NONE,           // Not quiescing
+    FATAL_ERROR,    // Fatal error (ENOENT, EIO, etc.) - stop migration
+    RETRY_NEEDED,   // Retryable error (EBUSY) - retry after drain
+    SUSPEND_NEEDED  // Suspension requested - drain any in-flight migrations first
   };
   /// Current quiesce state for pool migration
   PoolMigrationQuiesceReason pool_migration_quiesce_reason = PoolMigrationQuiesceReason::NONE;
