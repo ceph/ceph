@@ -108,8 +108,12 @@ export class ApiInterceptorService implements HttpInterceptor {
               this.authStorageService.remove();
               this.router.navigate(['/login']);
               break;
-            case 403:
-              if (!request.url.startsWith('ui-api/')) {
+            case 403: {
+              const UNSCOPED_UI_APIS = [
+                'ui-api/prometheus/prometheus-api-host',
+                'ui-api/prometheus/alertmanager-api-host'
+              ];
+              if (!UNSCOPED_UI_APIS.some((path) => request.url.startsWith(path))) {
                 this.router.navigate(['error'], {
                   state: {
                     message: $localize`Sorry, you don't have permission to view this page or resource.`,
@@ -120,6 +124,7 @@ export class ApiInterceptorService implements HttpInterceptor {
                 });
               }
               break;
+            }
             default:
               timeoutId = this.prepareNotification(resp);
           }
