@@ -239,6 +239,7 @@ CompatSet OSD::get_osd_compat_set() {
   CompatSet compat =  get_osd_initial_compat_set();
   //Any features here can be set in code, but not in initial superblock
   compat.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
+  compat.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_FULLMAP_CHECKPOINTS);
   return compat;
 }
 
@@ -1443,7 +1444,7 @@ MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
              << dendl;
     since = m->cluster_osdmap_trim_lower_bound;
     if (bufferlist bl;
-        get_map_and_adjust_counters(bl, max, max_bytes, [&] { return get_map_bl(since, bl);})) {
+        get_map_and_adjust_counters(bl, max, max_bytes, [&] { return get_or_build_map_bl(since, bl);})) {
       m->maps[since] = std::move(bl);
       ++since;
     } else {
@@ -1459,7 +1460,7 @@ MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
     } else {
       dout(10) << __func__ << " missing incremental map " << e << dendl;
       if (bufferlist bl;
-          get_map_and_adjust_counters(bl, max, max_bytes, [&] { return get_map_bl(e, bl);})) {
+          get_map_and_adjust_counters(bl, max, max_bytes, [&] { return get_or_build_map_bl(e, bl);})) {
         m->maps[e] = std::move(bl);
       } else {
         derr << __func__ << " also missing full map " << e << dendl;
@@ -1479,7 +1480,7 @@ MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
   bufferlist bl;
   if (get_inc_map_bl(m->newest_map, bl)) {
     m->incremental_maps[m->newest_map] = std::move(bl);
-  } else if (get_map_bl(m->newest_map, bl)) {
+  } else if (get_or_build_map_bl(m->newest_map, bl)) {
     m->maps[m->newest_map] = std::move(bl);
   } else {
     derr << __func__ << " unable to load latest map " << m->newest_map
@@ -1532,6 +1533,11 @@ bool OSDService::_get_map_bl(epoch_t e, bufferlist& bl)
 bool OSDService::get_inc_map_bl(epoch_t e, bufferlist& bl)
 {
   std::lock_guard l(map_cache_lock);
+  return _get_inc_map_bl(e, bl);
+}
+
+bool OSDService::_get_inc_map_bl(epoch_t e, bufferlist& bl)
+{
   bool found = map_bl_inc_cache.lookup(e, &bl);
   if (found) {
     logger->inc(l_osd_map_bl_cache_hit);
@@ -1591,6 +1597,96 @@ OSDMapRef OSDService::_add_map(OSDMap *o)
   return l;
 }
 
+OSDMapRef OSDService::_rebuild_map_from_incrementals(epoch_t epoch)
+{
+  epoch_t floor = 0;
+  {
+    const auto stored_maps = get_superblock().get_maps();
+    for (auto i = stored_maps.begin(); i != stored_maps.end(); ++i) {
+      if (i.get_start() <= epoch && epoch < i.get_start() + i.get_len()) {
+	floor = i.get_start();
+	break;
+      }
+    }
+  }
+  if (floor == 0) {
+    dout(10) << __func__ << " epoch " << epoch
+	     << " is not in the stored map range" << dendl;
+    return OSDMapRef();
+  }
+
+  OSDMapRef base;
+  epoch_t base_epoch = 0;
+  for (epoch_t e = epoch - 1; e >= floor; --e) {
+    if (OSDMapRef m = map_cache.lookup(e)) {
+      base = std::move(m);
+      base_epoch = e;
+      break;
+    }
+    bufferlist fbl;
+    if (_get_map_bl(e, fbl) && fbl.length() > 0) {
+      OSDMap *o = new OSDMap;
+      o->decode(fbl);
+      base = _add_map(o);
+      base_epoch = e;
+      break;
+    }
+  }
+  if (!base) {
+    derr << __func__ << " no full map found at or below epoch " << epoch
+	 << " (floor " << floor << ")" << dendl;
+    return OSDMapRef();
+  }
+
+  OSDMapRef cur = std::move(base);
+  for (epoch_t e = base_epoch + 1; e <= epoch; ++e) {
+    if (OSDMapRef m = map_cache.lookup(e)) {
+      cur = std::move(m);
+      continue;
+    }
+    bufferlist ibl;
+    if (!_get_inc_map_bl(e, ibl) || ibl.length() == 0) {
+      derr << __func__ << " missing incremental map " << e
+	   << " while rebuilding epoch " << epoch << dendl;
+      return OSDMapRef();
+    }
+    OSDMap::Incremental inc;
+    auto p = ibl.cbegin();
+    inc.decode(p);
+    auto o = std::make_unique<OSDMap>();
+    o->deepish_copy_from(*cur);
+    if (o->apply_incremental(inc) < 0) {
+      derr << __func__ << " failed to apply incremental map " << e
+	   << " while rebuilding epoch " << epoch << dendl;
+      return OSDMapRef();
+    }
+    cur = _add_map(o.release());
+  }
+  dout(10) << __func__ << " rebuilt epoch " << epoch
+	   << " from full map " << base_epoch
+	   << " + " << (epoch - base_epoch) << " incrementals" << dendl;
+  logger->inc(l_osd_map_rebuilt);
+  return cur;
+}
+
+bool OSDService::get_or_build_map_bl(epoch_t e, bufferlist& bl)
+{
+  std::lock_guard l(map_cache_lock);
+  if (_get_map_bl(e, bl)) {
+    return true;
+  }
+  OSDMapRef m = map_cache.lookup(e);
+  if (!m) {
+    m = _rebuild_map_from_incrementals(e);
+  }
+  if (!m) {
+    return false;
+  }
+  m->encode(bl, m->get_encoding_features() | CEPH_FEATURE_RESERVED);
+  _add_map_bl(e, bl);
+  return true;
+}
+
 OSDMapRef OSDService::try_get_map(epoch_t epoch)
 {
   std::lock_guard l(map_cache_lock);
@@ -1615,9 +1711,12 @@ OSDMapRef OSDService::try_get_map(epoch_t epoch)
     dout(20) << "get_map " << epoch << " - loading and decoding " << map << dendl;
     bufferlist bl;
     if (!_get_map_bl(epoch, bl) || bl.length() == 0) {
-      derr << "failed to load OSD map for epoch " << epoch << ", got " << bl.length() << " bytes" << dendl;
       delete map;
-      return OSDMapRef();
+      OSDMapRef rebuilt = _rebuild_map_from_incrementals(epoch);
+      if (!rebuilt) {
+	derr << "failed to load OSD map for epoch " << epoch << dendl;
+      }
+      return rebuilt;
     }
     map->decode(bl);
   } else {
@@ -3792,6 +3891,9 @@ int OSD::init()
   }
 
   startup_time = ceph::mono_clock::now();
+
+  maybe_disable_fullmap_checkpoints();
+  service.publish_superblock(superblock);
 
   // load up "current" osdmap
   assert_warn(!get_osdmap());
@@ -8131,9 +8233,101 @@ void OSD::osdmap_subscribe(version_t epoch, bool force_request)
   }
 }
 
+bool OSD::is_full_map_checkpoint_epoch(epoch_t e) const
+{
+  int64_t interval =
+    cct->_conf.get_val<int64_t>("osd_map_full_checkpoint_interval");
+  return interval <= 0 || e % interval == 0;
+}
+
+epoch_t OSD::clamp_trim_to_full_map(epoch_t min)
+{
+  for (epoch_t e = min; e > superblock.get_oldest_map(); --e) {
+    if (store->exists(service.meta_ch, get_osdmap_pobject_name(e))) {
+      return e;
+    }
+  }
+  return superblock.get_oldest_map();
+}
+
+void OSD::maybe_disable_fullmap_checkpoints()
+{
+  if (!superblock.compat_features.incompat.contains(
+	CEPH_OSD_FEATURE_INCOMPAT_FULLMAP_CHECKPOINTS)) {
+    return;
+  }
+  if (cct->_conf.get_val<int64_t>("osd_map_full_checkpoint_interval") > 0) {
+    return;
+  }
+  dout(1) << __func__ << " osd_map_full_checkpoint_interval is 0, backfilling"
+	  << " missing full maps" << dendl;
+  unsigned nwritten = 0;
+  const auto stored_maps = superblock.get_maps();
+  for (auto i = stored_maps.begin(); i != stored_maps.end(); ++i) {
+    OSDMap cur;
+    ObjectStore::Transaction t;
+    for (epoch_t e = i.get_start(); e < i.get_start() + i.get_len(); ++e) {
+      if (store->exists(service.meta_ch, get_osdmap_pobject_name(e))) {
+	continue;
+      }
+      if (cur.get_epoch() != e - 1) {
+	bufferlist bl;
+	if (store->read(service.meta_ch,
+			get_osdmap_pobject_name(e - 1), 0, 0, bl) < 0 ||
+	    bl.length() == 0) {
+	  derr << __func__ << " no full map at epoch " << (e - 1)
+	       << ", leaving FULLMAP_CHECKPOINTS feature set" << dendl;
+	  return;
+	}
+	auto p = bl.cbegin();
+	cur.decode(p);
+      }
+      bufferlist ibl;
+      if (store->read(service.meta_ch,
+		      get_inc_osdmap_pobject_name(e), 0, 0, ibl) < 0 ||
+	  ibl.length() == 0) {
+	derr << __func__ << " missing incremental map " << e
+	     << ", leaving FULLMAP_CHECKPOINTS feature set" << dendl;
+	return;
+      }
+      OSDMap::Incremental inc;
+      auto p = ibl.cbegin();
+      inc.decode(p);
+      if (cur.apply_incremental(inc) < 0) {
+	derr << __func__ << " failed to apply incremental map " << e
+	     << ", leaving FULLMAP_CHECKPOINTS feature set" << dendl;
+	return;
+      }
+      bufferlist fbl;
+      cur.encode(fbl, cur.get_encoding_features() | CEPH_FEATURE_RESERVED);
+      t.write(coll_t::meta(), get_osdmap_pobject_name(e), 0,
+	      fbl.length(), fbl);
+      nwritten++;
+      if (t.get_num_ops() >= cct->_conf->osd_target_transaction_size) {
+	int r = store->queue_transaction(service.meta_ch,
+					 t.claim_and_reset(), nullptr);
+	ceph_assert(r == 0);
+      }
+    }
+    if (t.get_num_ops() > 0) {
+      int r = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
+      ceph_assert(r == 0);
+    }
+  }
+  superblock.compat_features.incompat.remove(
+    CEPH_OSD_FEATURE_INCOMPAT_FULLMAP_CHECKPOINTS);
+  ObjectStore::Transaction t;
+  write_superblock(cct, superblock, t);
+  int r = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
+  ceph_assert(r == 0);
+  dout(1) << __func__ << " backfilled " << nwritten << " full maps, cleared"
+	  << " FULLMAP_CHECKPOINTS feature" << dendl;
+}
+
 void OSD::trim_maps(epoch_t oldest)
 {
   epoch_t min = std::min(oldest, service.map_cache.cached_key_lower_bound());
+  min = clamp_trim_to_full_map(min);
   dout(20) <<  __func__ << ": min=" << min << " oldest_map="
            << superblock.get_oldest_map() << dendl;
   if (min <= superblock.get_oldest_map())
@@ -8209,6 +8403,43 @@ int OSD::trim_stale_maps()
   }
 
   return num_removed;
+}
+
+int OSD::build_full_map_from_store(ObjectStore& store,
+				   epoch_t e,
+				   OSDMap* out)
+{
+  if (e == 0 || !out) {
+    return -EINVAL;
+  }
+  auto ch = store.open_collection(coll_t::meta());
+  if (!ch) {
+    return -ENOENT;
+  }
+  epoch_t base = e;
+  bufferlist fbl;
+  while (store.read(ch, get_osdmap_pobject_name(base), 0, 0, fbl) < 0 ||
+	 fbl.length() == 0) {
+    fbl.clear();
+    if (--base == 0) {
+      return -ENOENT;
+    }
+  }
+  out->decode(fbl);
+  for (epoch_t i = base + 1; i <= e; ++i) {
+    bufferlist ibl;
+    if (store.read(ch, get_inc_osdmap_pobject_name(i), 0, 0, ibl) < 0 ||
+	ibl.length() == 0) {
+      return -ENOENT;
+    }
+    OSDMap::Incremental inc;
+    auto p = ibl.cbegin();
+    inc.decode(p);
+    if (out->apply_incremental(inc) < 0) {
+      return -EINVAL;
+    }
+  }
+  return 0;
 }
 
 void OSD::handle_osd_map(MOSDMap *m)
@@ -8370,6 +8601,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
       ghobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::meta(), fulloid, 0, bl.length(), bl);
+      logger->inc(l_osd_full_map_stored);
       added_maps[e] = add_map(o);
       got_full_map(e);
       continue;
@@ -8440,8 +8672,17 @@ void OSD::handle_osd_map(MOSDMap *m)
       got_full_map(e);
       purged_snaps[e] = o->get_new_purged_snaps();
 
-      ghobject_t fulloid = get_osdmap_pobject_name(e);
-      t.write(coll_t::meta(), fulloid, 0, fbl.length(), fbl);
+      if (is_full_map_checkpoint_epoch(e)) {
+	ghobject_t fulloid = get_osdmap_pobject_name(e);
+	t.write(coll_t::meta(), fulloid, 0, fbl.length(), fbl);
+	logger->inc(l_osd_full_map_stored);
+      } else if (!superblock.compat_features.incompat.contains(
+		   CEPH_OSD_FEATURE_INCOMPAT_FULLMAP_CHECKPOINTS)) {
+	dout(5) << __func__ << " enabling FULLMAP_CHECKPOINTS superblock"
+		<< " feature" << dendl;
+	superblock.compat_features.incompat.insert(
+	  CEPH_OSD_FEATURE_INCOMPAT_FULLMAP_CHECKPOINTS);
+      }
       added_maps[e] = add_map(o);
       continue;
     }

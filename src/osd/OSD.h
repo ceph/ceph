@@ -707,6 +707,7 @@ public:
     return _add_map(o);
   }
   OSDMapRef _add_map(OSDMap *o);
+  OSDMapRef _rebuild_map_from_incrementals(epoch_t e);
 
   void _add_map_bl(epoch_t e, ceph::buffer::list& bl);
   bool get_map_bl(epoch_t e, ceph::buffer::list& bl) {
@@ -714,9 +715,11 @@ public:
     return _get_map_bl(e, bl);
   }
   bool _get_map_bl(epoch_t e, ceph::buffer::list& bl);
+  bool get_or_build_map_bl(epoch_t e, ceph::buffer::list& bl);
 
   void _add_map_inc_bl(epoch_t e, ceph::buffer::list& bl);
   bool get_inc_map_bl(epoch_t e, ceph::buffer::list& bl);
+  bool _get_inc_map_bl(epoch_t e, ceph::buffer::list& bl);
 
   /// identify split child pgids over a osdmap interval
   void identify_splits_and_merges(
@@ -1338,6 +1341,10 @@ public:
     return ghobject_t(hobject_t(sobject_t(object_t(foo), 0)));
   }
 
+  static int build_full_map_from_store(ObjectStore& store,
+				       epoch_t e,
+				       OSDMap* out);
+
   static ghobject_t make_snapmapper_oid() {
     return ghobject_t(hobject_t(
       sobject_t(
@@ -1904,6 +1911,9 @@ protected:
                                        epoch_t current_added_map_epoch);
   void _committed_osd_maps(epoch_t first, epoch_t last, class MOSDMap *m);
   void trim_maps(epoch_t oldest);
+  bool is_full_map_checkpoint_epoch(epoch_t e) const;
+  epoch_t clamp_trim_to_full_map(epoch_t min);
+  void maybe_disable_fullmap_checkpoints();
   void note_down_osd(int osd);
   void note_up_osd(int osd);
   friend struct C_OnMapCommit;
