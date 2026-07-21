@@ -18,6 +18,8 @@ async fn test_user_quota_max_objects() {
     let client = get_quota_client();
     let uid = &cfg.quota_user_id;
     admin::disable_user_quota(uid).await;
+    s3_tests_rs::admin::driver_hint(
+        "invalidate-quota-cache", &[("uid", uid)]).await;
     let bucket_name = get_new_bucket(Some(&client)).await;
 
     admin::set_user_quota(uid, -1, 2, true).await;
