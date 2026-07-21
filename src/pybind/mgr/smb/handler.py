@@ -881,21 +881,35 @@ class _ClusterConf:
             str
         ] = []  # passed to cephadm service spec
         ceph_cluster = ''  # empty string means local cluster
+
+        has_cephfs_shares = any(
+            s.cephfs is not None for s in change_group.shares
+        )
+        has_rgw_shares = any(s.rgw is not None for s in change_group.shares)
+
         if extcc:
             log.debug('external ceph cluster')
             resolver = ExoResolver(change_group.cluster)
             ceph_cluster = 'exo'
-            cephx_entity = checked(extcc.cluster).cephfs_user.name
-            cephfs_entity = cephx_entity
-            cephadm_data_entities = [cephx_entity]
+
+            # Handle CephFS user if available and needed
+            if has_cephfs_shares:
+                if not extcc.cluster or not extcc.cluster.cephfs_user:
+                    raise ValueError(
+                        'External cluster must have cephfs_user configured for CephFS shares'
+                    )
+
+                cephx_entity = extcc.cluster.cephfs_user.name
+                cephfs_entity = cephx_entity
+            # Handle RGW user if available and needed
+            if has_rgw_shares:
+                if not extcc.cluster or not extcc.cluster.rgw_user:
+                    raise ValueError(
+                        'External cluster must have rgw_user configured for RGW shares'
+                    )
+                log.debug('external ceph cluster with RGW shares')
+                rgw_entity = extcc.cluster.rgw_user.name
         elif change_group.shares:
-            # Check if we have any CephFS shares that need CephX auth
-            has_cephfs_shares = any(
-                s.cephfs is not None for s in change_group.shares
-            )
-            has_rgw_shares = any(
-                s.rgw is not None for s in change_group.shares
-            )
             if has_cephfs_shares:
                 log.debug('local ceph cluster with CephFS shares')
                 cephfs_entity = _cephx_data_entity(change_group.cluster)
@@ -1190,10 +1204,28 @@ def _generate_config(conf: _ClusterConf) -> Dict[str, Any]:
             '',
         )
         if rgw_entity:
-            cluster_global_opts[
-                'ceph_rgw:config_file'
-            ] = '/etc/ceph/ceph.conf'
-            cluster_global_opts['ceph_rgw:keyring_file'] = '/etc/ceph/keyring'
+            # Check if this is an external cluster
+            is_external_cluster = any(
+                share.ceph_cluster == 'exo'
+                for share in conf.shares
+                if share.resource.rgw
+            )
+
+            if is_external_cluster:
+                cluster_global_opts[
+                    'ceph_rgw:config_file'
+                ] = '/etc/ceph/exo.ceph.conf'
+                cluster_global_opts[
+                    'ceph_rgw:keyring_file'
+                ] = '/etc/ceph/exo.ceph.keyring'
+            else:
+                cluster_global_opts[
+                    'ceph_rgw:config_file'
+                ] = '/etc/ceph/ceph.conf'
+                cluster_global_opts[
+                    'ceph_rgw:keyring_file'
+                ] = '/etc/ceph/keyring'
+
             cluster_global_opts['ceph_rgw:id'] = cephx_stripped_entity(
                 rgw_entity
             )
@@ -1350,13 +1382,28 @@ def _generate_smb_service_spec(
     ceph_cluster_configs = None
     if ext_ceph_cluster:
         exo = checked(ext_ceph_cluster.cluster)
+
+        rgw_user = None
+        rgw_key = None
+        cephfs_user = None
+        cephfs_key = None
+
+        if exo.rgw_user:
+            rgw_user = exo.rgw_user.name
+            rgw_key = exo.rgw_user.key
+        if exo.cephfs_user:
+            cephfs_user = exo.cephfs_user.name
+            cephfs_key = exo.cephfs_user.key
+
         ceph_cluster_configs = [
             SMBExternalCephCluster(
                 alias='exo',
                 fsid=exo.fsid,
                 mon_host=exo.mon_host,
-                user=exo.cephfs_user.name,
-                key=exo.cephfs_user.key,
+                user=cephfs_user,
+                key=cephfs_key,
+                rgw_user=rgw_user,
+                rgw_key=rgw_key,
             )
         ]
     return SMBSpec(
