@@ -52,12 +52,14 @@ export class OSDsPageHelper extends PageHelper {
   checkStatus(id: number, status: string[]) {
     this.searchTable(id.toString());
     cy.wait(5 * 1000);
-    cy.get(`[cdstabledata]:nth-child(${this.columnIndex.status}) cds-tag`).should(($ele) => {
-      const allStatus = $ele.toArray().map((v) => v.innerText);
-      for (const s of status) {
-        expect(allStatus).to.include(s);
+    cy.get(`[cdstablerow] [cdstabledata]:nth-child(${this.columnIndex.status}) cds-tag`).should(
+      ($ele) => {
+        const allStatus = $ele.toArray().map((v) => v.innerText);
+        for (const s of status) {
+          expect(allStatus).to.include(s);
+        }
       }
-    });
+    );
   }
 
   @PageHelper.restrictTo(pages.index.url)

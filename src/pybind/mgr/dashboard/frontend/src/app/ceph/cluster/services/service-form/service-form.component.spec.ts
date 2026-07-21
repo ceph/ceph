@@ -845,25 +845,53 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         component.editing = true;
       });
 
-      it('should check whether edit field is correctly loaded', () => {
-        const paginate_obs = new PaginateObservable<any>(of({}));
+      it('should check whether edit field is correctly loaded', (done) => {
+        const mockService = {
+          service_type: 'mds',
+          service_id: 'test',
+          unmanaged: false,
+          placement: {}
+        };
+        const paginate_obs = new PaginateObservable<any>(of([mockService]));
         const cephServiceSpy = spyOn(cephServiceService, 'list').and.returnValue(paginate_obs);
         component.ngOnInit();
         expect(cephServiceSpy).toBeCalledTimes(2);
         expect(component.action).toBe('Edit');
-        const serviceType = fixture.componentInstance.serviceForm.get('service_type');
-        const serviceId = fixture.componentInstance.serviceForm.get('service_id');
-        expect(serviceType.disabled).toBeTruthy();
-        expect(serviceId.disabled).toBeTruthy();
+
+        // Wait for async observable to complete before checking disabled state
+        setTimeout(() => {
+          const serviceType = fixture.componentInstance.serviceForm.get('service_type');
+          const serviceId = fixture.componentInstance.serviceForm.get('service_id');
+          expect(serviceType.disabled).toBeTruthy();
+          expect(serviceId.disabled).toBeTruthy();
+          done();
+        }, 0);
       });
 
-      it('should not edit groups for nvmeof service', () => {
+      it('should not edit groups for nvmeof service', (done) => {
+        const mockService = {
+          service_type: 'nvmeof',
+          service_id: 'default',
+          unmanaged: false,
+          placement: {},
+          spec: {
+            group: 'default'
+          }
+        };
+        const paginate_obs = new PaginateObservable<any>(of([mockService]));
+        spyOn(cephServiceService, 'list').and.returnValue(paginate_obs);
+
         component.serviceType = 'nvmeof';
         formHelper.setValue('service_type', 'nvmeof');
         component.ngOnInit();
-        fixture.detectChanges();
-        const groupId = fixture.debugElement.query(By.css('#group')).nativeElement;
-        expect(groupId.disabled).toBeTruthy();
+
+        // Wait for async observable to complete before checking disabled state
+        setTimeout(() => {
+          fixture.detectChanges();
+          const groupId = fixture.debugElement.query(By.css('#group')).nativeElement;
+          expect(groupId.disabled).toBeTruthy();
+          done();
+        }, 0);
       });
 
       it('should update nvmeof service to disable mTLS', () => {

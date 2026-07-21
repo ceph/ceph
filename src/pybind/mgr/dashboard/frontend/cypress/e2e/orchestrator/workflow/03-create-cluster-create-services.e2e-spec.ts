@@ -21,7 +21,7 @@ describe('Create cluster create services page', () => {
   });
 
   it('should check if title contains Create Services', () => {
-    cy.get('.title').should('contain.text', 'Create Services');
+    cy.get('.tearsheet-body .tearsheet-content h4').should('contain.text', 'Create Services');
   });
 
   describe('when Orchestrator is available', () => {
