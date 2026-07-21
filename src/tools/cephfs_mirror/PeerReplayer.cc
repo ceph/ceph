@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include <stack>
+#include <vector>
 #include <fcntl.h>
 #include <algorithm>
 #include <sys/time.h>
@@ -800,14 +801,37 @@ void PeerReplayer::remove_directory(string_view dir_root, bool purging) {
   }
 }
 
+void PeerReplayer::remove_persisted_dir_sync_stats() {
+  std::vector<std::string> dir_roots;
+  {
+    std::scoped_lock locker(m_lock);
+    dir_roots.reserve(m_snap_sync_stats.size());
+    for (const auto &[dir_root, _] : m_snap_sync_stats) {
+      dir_roots.push_back(dir_root);
+    }
+  }
+
+  for (const auto &dir_root : dir_roots) {
+    remove_persisted_dir_sync_stat(dir_root);
+  }
+}
+
+std::string PeerReplayer::sync_stat_omap_prefix(const Filesystem &filesystem) {
+  return CEPHFS_MIRROR_SYNC_STAT_OMAP_PREFIX + "/" + filesystem.fs_name + "/";
+}
+
+std::string PeerReplayer::sync_stat_omap_prefix(const Filesystem &filesystem,
+                                                const Peer &peer) {
+  return sync_stat_omap_prefix(filesystem) + peer.uuid + "/";
+}
+
 std::string PeerReplayer::peer_sync_stat_omap_key(std::string_view dir_root) const {
   // dir_root is usually absolute (e.g. "/d0"); avoid ".../uuid//d0" from an extra slash.
   std::string d(dir_root);
   while (!d.empty() && d.front() == '/') {
     d.erase(0, 1);
   }
-  return PEER_SYNC_STAT_KEY_PREFIX + "/" + m_filesystem.fs_name + "/" + m_peer.uuid
-         + "/" + d;
+  return sync_stat_omap_prefix(m_filesystem, m_peer) + d;
 }
 
 void PeerReplayer::apply_persisted_dir_sync_stat(SnapSyncStat &sync_stat,

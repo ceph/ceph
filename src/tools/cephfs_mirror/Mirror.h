@@ -121,7 +121,8 @@ private:
   void handle_enable_mirroring(const Filesystem &filesystem, const Peers &peers, int r);
 
   // mirror disable callback
-  void disable_mirroring(const Filesystem &filesystem, Context *on_finish);
+  void disable_mirroring(const Filesystem &filesystem, Context *on_finish,
+                         bool purge_persisted_sync_stats=false);
   void handle_disable_mirroring(const Filesystem &filesystem, int r);
 
   // peer update callback

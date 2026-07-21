@@ -30,10 +30,12 @@ public:
   ~FSMirror();
 
   void init(Context *on_finish);
-  void shutdown(Context *on_finish);
+  void shutdown(Context *on_finish, bool purge_persisted_sync_stats=false);
 
   void add_peer(const Peer &peer);
   void remove_peer(const Peer &peer);
+
+  void remove_persisted_dir_sync_stats();
 
   bool is_stopping() {
     std::scoped_lock locker(m_lock);
@@ -160,6 +162,7 @@ private:
 
   int m_retval = 0;
   bool m_stopping = false;
+  bool m_purge_persisted_sync_stats_on_shutdown = false;
   bool m_init_failed = false;
   Context *m_on_init_finish = nullptr;
   Context *m_on_shutdown_finish = nullptr;
@@ -190,6 +193,8 @@ private:
 
   void handle_acquire_directory(std::string_view dir_path);
   void handle_release_directory(std::string_view dir_path, bool purging);
+
+  void remove_persisted_sync_stats_by_prefix(std::string_view prefix);
 };
 
 } // namespace mirror
