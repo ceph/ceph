@@ -35,6 +35,8 @@
 #include "test/osd/MockMessenger.h"
 #include "osd/OpRequest.h"
 
+class PGBackendTestFixture;
+
 // MockPGBackendListener - mock PGBackend::Listener and ECListener for multi-instance testing.
 class MockPGBackendListener : public PGBackend::Listener, public ECListener {
 public:
@@ -64,6 +66,7 @@ public:
   MockMessenger *messenger = nullptr;
   OpTracker *op_tracker = nullptr;
   PerfCounters *perf_logger = nullptr;
+  PGBackendTestFixture *osd = nullptr;
 
   // Recovery callback tracking
   struct RecoveryCallbackTracker {
@@ -120,6 +123,10 @@ public:
   
   void set_messenger(MockMessenger *m) {
     messenger = m;
+  }
+
+  void set_osd(PGBackendTestFixture *f) {
+    osd = f;
   }
 
   // Debugging
@@ -688,9 +695,7 @@ public:
     return perf_logger;
   }
 
-  ceph_tid_t get_tid() override {
-    return 0;
-  }
+  ceph_tid_t get_tid() override;
 
   OstreamTemp clog_error() override {
     return OstreamTemp(CLOG_ERROR, nullptr);

@@ -117,6 +117,10 @@ protected:
   std::unique_ptr<NoDoutPrefix> dpp;
 
 public:
+  ceph_tid_t get_tid() {
+    return next_tid++;
+  }
+
   explicit PGBackendTestFixture(PoolType type = EC) : pool_type(type)
   {
     std::random_device rd;
@@ -372,7 +376,8 @@ public:
     const object_stat_sum_t& delta_stats,
     const eversion_t& at_version,
     std::vector<pg_log_entry_t> log_entries,
-    std::function<void(int)> on_write_complete = nullptr);
+    std::function<void(int)> on_write_complete = nullptr,
+    bool run = true);
   
   virtual int create_and_write(
     const std::string& obj_name,
@@ -384,7 +389,40 @@ public:
     const std::string& obj_name,
     uint64_t offset,
     const std::string& data,
-    uint64_t object_size);
+    uint64_t object_size,
+    bool run = true);
+
+  /**
+   * Write operation with optional truncate and multiple writes in a single transaction.
+   *
+   * @param obj_name Name of the object
+   * @param object_size Current size of the object
+   * @param truncate_size Optional truncate size (nullopt means no truncate)
+   * @param writes Vector of {offset, data} pairs to write
+   * @param run If true (default) call run_until_idle
+   * @return Result code (0 on success, negative on error)
+   */
+  int write(
+    const std::string& obj_name,
+    uint64_t object_size,
+    std::optional<uint64_t> truncate_size,
+    const std::vector<std::pair<uint64_t, std::string>>& writes,
+    bool run = true);
+
+  /**
+   * Create a snapshot of an existing object (head → snap=1).
+   *
+   * @param obj_name  Name of the already-written head object
+   * @param snap_size Size of the object at snapshot time
+   */
+  int create_snapshot(
+    const std::string& obj_name,
+    uint64_t snap_size);
+
+  int rollback(
+    const std::string& obj_name,
+    uint64_t snap_size,
+    bool run = true);
 
   int read_object(
     const std::string& obj_name,
@@ -406,6 +444,22 @@ public:
    * @param offset Offset to read from (default: 0)
    * @param context_msg Optional context message to append to assertion messages
    */
+  /**
+   * Visualize data miscompare with hex+ASCII dump and line compression.
+   *
+   * @param obj_name Name of the object being compared
+   * @param expected_buf Expected data buffer
+   * @param read_buf Actual read data buffer
+   * @param size Size of both buffers
+   * @param phase Description of when the comparison occurred (e.g., "After shard 1 failure")
+   */
+  void visualize_miscompare(
+    const std::string& obj_name,
+    const char* expected_buf,
+    const char* read_buf,
+    size_t size,
+    const std::string& phase);
+
   void verify_object(
     const std::string& obj_name,
     const std::string& expected_data,
