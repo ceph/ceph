@@ -5,7 +5,7 @@ tasks:
     max_seconds: 600
     max_in_flight: 64
     objects: 1024
-    size: 16384
+    object_size: 16384
     ec_pool: true
     fast_read: true
     op_weights:
