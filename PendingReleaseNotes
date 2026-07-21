@@ -7,6 +7,11 @@
   behavior is controlled by the new ``mgr_stats_period_autotune`` (default:
   ``true``) and ``mgr_stats_period_autotune_queue_threshold`` (default: ``100``)
   config options.
+>=20.0.2
+
+* RGW: For `radosgw-admin account rm`, the `--purge-data` option previously applied only
+  to buckets and objects, but now deletes account users, roles, groups, and oidc-providers
+  too instead of failing with ENOTEMPTY.
 
 >=20.0.0
 
