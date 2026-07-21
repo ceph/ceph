@@ -34,6 +34,9 @@ export class PrometheusAlertService {
   private warningSubject = new BehaviorSubject<number>(0);
   readonly warningAlerts$ = this.warningSubject.asObservable();
 
+  private pgAlertsSubject = new BehaviorSubject<number>(0);
+  readonly pgAlerts$ = this.pgAlertsSubject.asObservable();
+
   constructor(
     private alertFormatter: PrometheusAlertFormatter,
     private prometheusService: PrometheusService
@@ -117,9 +120,16 @@ export class PrometheusAlertService {
       0
     );
 
+    const activePgAlerts = alerts.filter(
+      (alert) =>
+        alert.status.state === AlertState.ACTIVE &&
+        alert.labels.alertname?.startsWith('CephPG')
+    ).length;
+
     this.totalSubject.next(this.activeAlerts);
     this.criticalSubject.next(this.activeCriticalAlerts);
     this.warningSubject.next(this.activeWarningAlerts);
+    this.pgAlertsSubject.next(activePgAlerts);
 
     this.alerts = alerts
       .reverse()
