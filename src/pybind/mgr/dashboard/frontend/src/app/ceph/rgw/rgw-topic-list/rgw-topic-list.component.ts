@@ -14,13 +14,14 @@ import { RgwTopicService } from '~/app/shared/api/rgw-topic.service';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { Topic } from '~/app/shared/models/topic.model';
 import { BehaviorSubject, Observable, of, Subscriber } from 'rxjs';
-import { catchError, shareReplay, switchMap } from 'rxjs/operators';
+import { catchError, map, shareReplay, switchMap } from 'rxjs/operators';
 
 const BASE_URL = 'rgw/destination';
 @Component({
@@ -32,16 +33,16 @@ const BASE_URL = 'rgw/destination';
 })
 export class RgwTopicListComponent extends ListWithDetails implements OnInit {
   @ViewChild('table', { static: true })
-  table: TableComponent;
-  columns: CdTableColumn[];
+  table!: TableComponent;
+  columns!: CdTableColumn[];
   permission: Permission;
-  tableActions: CdTableAction[];
-  context: CdTableFetchDataContext;
-  errorMessage: string;
+  tableActions!: CdTableAction[];
+  context!: CdTableFetchDataContext;
+  errorMessage!: string;
   selection: CdTableSelection = new CdTableSelection();
   topicsSubject = new BehaviorSubject<Topic[]>([]);
   topics$ = this.topicsSubject.asObservable();
-  name: string;
+  name!: string;
   constructor(
     private authStorageService: AuthStorageService,
     public actionLabels: ActionLabelsI18n,
@@ -60,7 +61,8 @@ export class RgwTopicListComponent extends ListWithDetails implements OnInit {
       {
         name: $localize`Name`,
         prop: 'name',
-        flexGrow: 2
+        flexGrow: 2,
+        cellTransformation: CellTemplate.routerLink
       },
       {
         name: $localize`Owner`,
@@ -79,7 +81,7 @@ export class RgwTopicListComponent extends ListWithDetails implements OnInit {
       }
     ];
 
-    const getBucketUri = () =>
+    const getTopicUri = () =>
       this.selection.first() && `${encodeURIComponent(this.selection.first().key)}`;
     const addAction: CdTableAction = {
       permission: 'create',
@@ -92,7 +94,7 @@ export class RgwTopicListComponent extends ListWithDetails implements OnInit {
     const editAction: CdTableAction = {
       permission: 'update',
       icon: Icons.edit,
-      routerLink: () => this.urlBuilder.getEdit(getBucketUri()),
+      routerLink: () => this.urlBuilder.getEdit(getTopicUri()),
       name: this.actionLabels.EDIT
     };
 
@@ -111,9 +113,15 @@ export class RgwTopicListComponent extends ListWithDetails implements OnInit {
         this.rgwTopicService.listTopic().pipe(
           catchError(() => {
             this.context.error();
-            return of(null);
+            return of([]);
           })
         )
+      ),
+      map((topics: Topic[]) =>
+        topics.map((topic: Topic) => ({
+          ...topic,
+          cdLink: `/rgw/destination/${encodeURIComponent(topic.key)}/overview`
+        }))
       ),
       shareReplay(1)
     );
