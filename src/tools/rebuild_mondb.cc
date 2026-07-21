@@ -298,26 +298,41 @@ int update_osdmap(ObjectStore& fs, OSDSuperblock& sb, MonitorDBStore& ms)
       bufferlist bl;
       int nread = fs.read(ch, oid, 0, 0, bl);
       if (nread <= 0) {
-        cerr << "missing " << oid << std::endl;
-        return -EINVAL;
-      }
-      t->put(prefix, ms.combine_strings("full", e), bl);
-
-      auto p = bl.cbegin();
-      osdmap.decode(p);
-      if (osdmap.have_crc()) {
+        bl.clear();
+        if (osdmap.get_epoch() != e &&
+            OSD::build_full_map_from_store(fs, e, &osdmap) < 0) {
+          cerr << "missing " << oid << std::endl;
+          return -EINVAL;
+        }
+        if (!features) {
+          features = osdmap.get_encoding_features() | CEPH_FEATURE_RESERVED;
+        }
+        osdmap.encode(bl, features);
         if (have_crc && osdmap.get_crc() != crc) {
-          cerr << "mismatched full/inc crc: "
+          cerr << "mismatched rebuilt full crc: "
                << osdmap.get_crc() << " != " << crc << std::endl;
           return -EINVAL;
         }
-        uint32_t saved_crc = osdmap.get_crc();
-        bufferlist fbl;
-        osdmap.encode(fbl, features);
-        if (osdmap.get_crc() != saved_crc) {
-          cerr << "mismatched full crc: "
-               << saved_crc << " != " << osdmap.get_crc() << std::endl;
-          return -EINVAL;
+        t->put(prefix, ms.combine_strings("full", e), bl);
+      } else {
+        t->put(prefix, ms.combine_strings("full", e), bl);
+
+        auto p = bl.cbegin();
+        osdmap.decode(p);
+        if (osdmap.have_crc()) {
+          if (have_crc && osdmap.get_crc() != crc) {
+            cerr << "mismatched full/inc crc: "
+                 << osdmap.get_crc() << " != " << crc << std::endl;
+            return -EINVAL;
+          }
+          uint32_t saved_crc = osdmap.get_crc();
+          bufferlist fbl;
+          osdmap.encode(fbl, features);
+          if (osdmap.get_crc() != saved_crc) {
+            cerr << "mismatched full crc: "
+                 << saved_crc << " != " << osdmap.get_crc() << std::endl;
+            return -EINVAL;
+          }
         }
       }
     }
