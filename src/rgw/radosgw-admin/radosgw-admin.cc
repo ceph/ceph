@@ -3816,14 +3816,12 @@ void warn_duplicates(CLI::App* root) {
 // Only options registered on the root that take a value are rewritten (binary
 // flags keep their optional-value handling; unknown flags can't be arity-
 // checked, so they pass through untouched). A token in value position (right
-// after a value-taking flag) is never rewritten. Tokens after a standalone
-// `--` are positionals and are never rewritten. Returns the full token list;
+// after a value-taking flag) is never rewritten. Returns the full token list;
 // the caller owns it and points argv at it.
 std::vector<std::string> normalize_cli11_tokens(
     const CLI::App& app, const std::vector<const char*>& argv) {
   std::vector<std::string> tokens;
   tokens.reserve(argv.size() * 2);
-  bool past_double_dash = false;
   bool pending_value = false;  // previous token was a flag awaiting its value
   for (const char* arg : argv) {
     std::string_view token(arg);
@@ -3837,63 +3835,55 @@ std::vector<std::string> normalize_cli11_tokens(
       continue;
     }
 
-    // Standalone "--": positional territory from here on (a "--" in value
-    // position was already consumed above, matching both parsers).
-    if (token == "--") {
-      past_double_dash = true;
+    // Legacy accepts '_' in long option names. Rewrite recognized option
+    // names to their registered dash form before the other normalization
+    // rules run, leaving unknown options untouched for legacy parsing.
+    if (token.size() >= 3 && token.starts_with("--") &&
+        token.find('_') != token.npos) {
+      size_t name_len = std::min(token.find('='), token.size());
+      std::string_view name_part = token.substr(0, name_len);
+      if (name_part.find('_') != name_part.npos) {
+        std::string dash_name;
+        dash_name.reserve(name_len);
+        for (char c : name_part) {
+          dash_name.push_back(c == '_' ? '-' : c);
+        }
+        if (app.get_option_no_throw(dash_name) != nullptr) {
+          rewritten = std::move(dash_name);
+          rewritten.append(token.substr(name_len));
+          token = rewritten;
+        }
+      }
     }
-
-    if (!past_double_dash) {
-      // Legacy accepts '_' in long option names. Rewrite recognized option
-      // names to their registered dash form before the other normalization
-      // rules run, leaving unknown options untouched for legacy parsing.
-      if (token.size() >= 3 && token.starts_with("--") &&
-          token.find('_') != token.npos) {
-        size_t name_len = std::min(token.find('='), token.size());
-        std::string_view name_part = token.substr(0, name_len);
-        if (name_part.find('_') != name_part.npos) {
-          std::string dash_name;
-          dash_name.reserve(name_len);
-          for (char c : name_part) {
-            dash_name.push_back(c == '_' ? '-' : c);
-          }
-          if (app.get_option_no_throw(dash_name) != nullptr) {
-            rewritten = std::move(dash_name);
-            rewritten.append(token.substr(name_len));
-            token = rewritten;
-          }
-        }
+    // long flag, empty '=' form: exactly "--name="
+    if (token.size() >= 4 && token.starts_with("--") &&
+        token.find('=') == token.size() - 1) {
+      std::string flag_name(token.substr(0, token.size() - 1));
+      const CLI::Option* option = app.get_option_no_throw(flag_name);
+      if (option != nullptr && option->get_expected_min() >= 1) {
+        tokens.push_back(std::move(flag_name));  // "--name"
+        tokens.emplace_back();                   // explicit "" value
+        continue;
       }
-      // long flag, empty '=' form: exactly "--name="
-      if (token.size() >= 4 && token.starts_with("--") &&
-          token.find('=') == token.size() - 1) {
-        std::string flag_name(token.substr(0, token.size() - 1));
-        const CLI::Option* option = app.get_option_no_throw(flag_name);
-        if (option != nullptr && option->get_expected_min() >= 1) {
-          tokens.push_back(std::move(flag_name));  // "--name"
-          tokens.emplace_back();                   // explicit "" value
-          continue;
-        }
+    }
+    // short flag with glued '=': "-X=value" (value possibly empty)
+    if (token.size() >= 3 && token[0] == '-' && token[1] != '-' &&
+        token[2] == '=') {
+      std::string flag_name(token.substr(0, 2));
+      const CLI::Option* option = app.get_option_no_throw(flag_name);
+      if (option != nullptr && option->get_expected_min() >= 1) {
+        tokens.push_back(std::move(flag_name));  // "-X"
+        tokens.emplace_back(token.substr(3));    // "value"
+        continue;
       }
-      // short flag with glued '=': "-X=value" (value possibly empty)
-      if (token.size() >= 3 && token[0] == '-' && token[1] != '-' &&
-          token[2] == '=') {
-        std::string flag_name(token.substr(0, 2));
-        const CLI::Option* option = app.get_option_no_throw(flag_name);
-        if (option != nullptr && option->get_expected_min() >= 1) {
-          tokens.push_back(std::move(flag_name));  // "-X"
-          tokens.emplace_back(token.substr(3));    // "value"
-          continue;
-        }
-      }
-      // plain known value-taking flag: its value arrives as the NEXT token
-      if (token.size() >= 2 && token[0] == '-' &&
-          token.find('=') == token.npos) {
-        const CLI::Option* option =
-            app.get_option_no_throw(std::string(token));
-        if (option != nullptr && option->get_expected_min() >= 1) {
-          pending_value = true;
-        }
+    }
+    // plain known value-taking flag: its value arrives as the NEXT token
+    if (token.size() >= 2 && token[0] == '-' &&
+        token.find('=') == token.npos) {
+      const CLI::Option* option =
+          app.get_option_no_throw(std::string(token));
+      if (option != nullptr && option->get_expected_min() >= 1) {
+        pending_value = true;
       }
     }
     tokens.emplace_back(token);

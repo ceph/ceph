@@ -2269,14 +2269,6 @@ check "empty-= on unknown flag" 22 "invalid flag --banana=" bucket list --banana
 # the transitional legacy loop still rejects the original token with its
 # unknown-flag error
 check "glued short flag rejected" 22 "invalid flag -ibanana" bucket list -ibanana
-# after a standalone "--" tokens are never rewritten (gdb-verified verbatim).
-# The 114 is a pre-existing CLI11 quirk: a KNOWN option token that ends the
-# line after the positional mark is re-dispatched by the PARENT app and
-# reports "missing value" via its hidden parent-level copy, whose display
-# name is empty (Option::get_name returns "" for hidden groups; P9 family).
-# Mid-line post-"--" tokens are inert (exit 0), known flags included.
-check "post--- token not rewritten" 114 "required TEXT missing" \
-  bucket list --bucket demo -- --bucket=
 
 # ============================================================
 echo ""
