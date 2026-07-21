@@ -1416,7 +1416,8 @@ protected:
 
   void scan_range_migration(
     int min, int max, PoolMigrationInterval *pmi,
-    HBHandle *handle
+    HBHandle *handle,
+    hobject_t start
     );
 
   /// Update a hash range to reflect changes since the last scan
