@@ -102,6 +102,7 @@ INDICATIONS = [
     re.compile(r"(Acked-by: .+ <[\w@.-]+>)", re.IGNORECASE),
     re.compile(r"(Tested-by: .+ <[\w@.-]+>)", re.IGNORECASE),
 ]
+SCRIPT_VERSION = "2026.07.21"  # bump on every functional change to this file
 REDMINE_CUSTOM_FIELD_ID_PULL_REQUEST_ID = 21
 REDMINE_CUSTOM_FIELD_ID_RELEASE = 16
 REDMINE_CUSTOM_FIELD_ID_SHAMAN_BUILD = 26
@@ -2312,6 +2313,7 @@ def main():
     argv = sys.argv[1:]
 
     group = parser.add_argument_group('General Options')
+    group.add_argument('--version', action='version', version=f'%(prog)s {SCRIPT_VERSION}')
     group.add_argument('--debug', dest='debug', action='store_true', help='turn debugging on')
     group.add_argument('--dry-run', dest='dry_run', action='store_true', help='print actions without modifying remote state')
     group.add_argument('--examples', dest='examples', action='store_true', help='show extended examples and usage')
