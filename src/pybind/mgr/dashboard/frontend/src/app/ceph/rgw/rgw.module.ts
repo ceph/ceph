@@ -120,7 +120,9 @@ import { RgwRateLimitComponent } from './rgw-rate-limit/rgw-rate-limit.component
 import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-limit-details.component';
 import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
 import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component';
-import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.component';
+import { RgwTopicResourceSidebarComponent } from './rgw-topic-resource-sidebar/rgw-topic-resource-sidebar.component';
+import { RgwTopicResourcePageComponent } from './rgw-topic-resource-page/rgw-topic-resource-page.component';
+import { RgwTopicResourceBreadcrumbResolver } from './rgw-topic-resource-page/rgw-topic-resource-breadcrumb.resolver';
 import { RgwTopicFormComponent } from './rgw-topic-form/rgw-topic-form.component';
 import { RgwBucketNotificationListComponent } from './rgw-bucket-notification-list/rgw-bucket-notification-list.component';
 import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notification-form.component';
@@ -233,7 +235,8 @@ import { RgwAccountRoleFormComponent } from './rgw-account-role-form/rgw-account
     RgwBucketLifecycleListComponent,
     RgwRateLimitDetailsComponent,
     RgwTopicListComponent,
-    RgwTopicDetailsComponent,
+    RgwTopicResourceSidebarComponent,
+    RgwTopicResourcePageComponent,
     RgwTopicFormComponent,
     RgwBucketNotificationListComponent,
     RgwNotificationFormComponent,
@@ -451,6 +454,29 @@ const routes: Routes = [
         path: `${URLVerbs.EDIT}/:name`,
         component: RgwTopicFormComponent,
         data: { breadcrumbs: ActionLabels.EDIT }
+      },
+      {
+        path: ':name',
+        component: RgwTopicResourceSidebarComponent,
+        data: { breadcrumbs: RgwTopicResourceBreadcrumbResolver },
+        children: [
+          { path: '', redirectTo: 'overview', pathMatch: 'full' },
+          {
+            path: 'overview',
+            component: RgwTopicResourcePageComponent,
+            data: { breadcrumbs: 'Overview', section: 'overview' }
+          },
+          {
+            path: 'policies',
+            component: RgwTopicResourcePageComponent,
+            data: { breadcrumbs: 'Policies', section: 'policies' }
+          },
+          {
+            path: 'subscribed-buckets',
+            component: RgwTopicResourcePageComponent,
+            data: { breadcrumbs: 'Subscribed buckets', section: 'subscribed-buckets' }
+          }
+        ]
       }
     ]
   }
