@@ -333,6 +333,64 @@ check "list: --object-version missing value" 114 "--object-version: 1 required T
 
 # ============================================================
 echo ""
+echo "=== flags: underscore vs dash spelling (normalize_cli11_tokens rewrite) ==="
+# ============================================================
+# Legacy accepts '_' as well as '-' in long option names. CLI11 only knows
+# the dash form, so normalize_cli11_tokens() rewrites a recognized flag's
+# NAME to dashes before parsing. Each pair below proves the underscore
+# spelling now behaves identically to the dash spelling, in both the space
+# form (value is the next token) and the '=' form (value glued on).
+
+# space form: value reaches CLI11's own strict-int check either way
+check "list: --max-entries space form (dash)"       104 "Could not convert: --max-entries = banana" \
+  bucket list --max-entries banana
+check "list: --max_entries space form (underscore)" 104 "Could not convert: --max-entries = banana" \
+  bucket list --max_entries banana
+
+# '=' form
+check "list: --max-entries= form (dash)"       104 "Could not convert: --max-entries = banana" \
+  bucket list --max-entries=banana
+check "list: --max_entries= form (underscore)" 104 "Could not convert: --max-entries = banana" \
+  bucket list --max_entries=banana
+
+# a value that itself looks like a flag (starts with --, contains '_') must
+# never be touched by the rewrite: only the flag NAME is rewritten, never
+# the value. --bucket has no underscore in its own name, so nothing here
+# is rewritten; the literal value is used as the bucket name.
+check "list: --bucket=--hello_world (glued value untouched)" 2 \
+  "ERROR: could not init bucket: (2) No such file or directory" \
+  bucket list --bucket=--hello_world
+check "list: --bucket --hello_world (space-form value untouched)" 2 \
+  "ERROR: could not init bucket: (2) No such file or directory" \
+  bucket list --bucket --hello_world
+check "list: -b=--hello_world (short flag, glued value untouched)" 2 \
+  "ERROR: could not init bucket: (2) No such file or directory" \
+  bucket list -b=--hello_world
+
+# --bucket-id/--bucket_id: the flag NAME is rewritten (underscore -> dash),
+# but the flag-like glued/space-form VALUE is still passed through as-is.
+check "list: --bucket-id=--hello_world (dash, glued value untouched)" 0 '"demo"' \
+  bucket list --bucket-id=--hello_world
+check "list: --bucket_id=--hello_world (underscore, glued value untouched)" 0 '"demo"' \
+  bucket list --bucket_id=--hello_world
+check "list: --bucket-id --hello_world (dash, space-form value untouched)" 0 '"demo"' \
+  bucket list --bucket-id --hello_world
+check "list: --bucket_id --hello_world (underscore, space-form value untouched)" 0 '"demo"' \
+  bucket list --bucket_id --hello_world
+
+# unknown flag keeps the user's own spelling (not rewritten, not recognized)
+check "list: unrecognized underscore flag: value strands" 22 \
+  "ERROR: unexpected argument: '1'" \
+  bucket list --banana_flag 1
+
+# valueless (binary) flag: underscore and dash spellings both succeed
+check_cluster "rm: --purge-objects (dash)"       0 "" -- \
+  bucket rm --bucket=cli11-no-such-bucket --purge-objects
+check_cluster "rm: --purge_objects (underscore)" 0 "" -- \
+  bucket rm --bucket=cli11-no-such-bucket --purge_objects
+
+# ============================================================
+echo ""
 echo "=== bucket stats ==="
 # ============================================================
 
