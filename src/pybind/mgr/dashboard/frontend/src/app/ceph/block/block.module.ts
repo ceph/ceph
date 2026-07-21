@@ -25,8 +25,10 @@ import { OverviewComponent as RbdMirroringComponent } from './mirroring/overview
 import { PoolEditModeModalComponent } from './mirroring/pool-edit-mode-modal/pool-edit-mode-modal.component';
 import { RbdConfigurationFormComponent } from './rbd-configuration-form/rbd-configuration-form.component';
 import { RbdConfigurationListComponent } from './rbd-configuration-list/rbd-configuration-list.component';
-import { RbdDetailsComponent } from './rbd-details/rbd-details.component';
 import { RbdFormComponent } from './rbd-form/rbd-form.component';
+import { RbdImageResourceBreadcrumbResolver } from './rbd-image-resource-page/rbd-image-resource-breadcrumb.resolver';
+import { RbdImageResourcePageComponent } from './rbd-image-resource-page/rbd-image-resource-page.component';
+import { RbdImageResourceSidebarComponent } from './rbd-image-resource-sidebar/rbd-image-resource-sidebar.component';
 import { RbdListComponent } from './rbd-list/rbd-list.component';
 import { RbdNamespaceFormModalComponent } from './rbd-namespace-form/rbd-namespace-form-modal.component';
 import { RbdNamespaceListComponent } from './rbd-namespace-list/rbd-namespace-list.component';
@@ -158,8 +160,9 @@ import { NvmeofEditAuthenticationComponent } from './nvmeof-edit-authentication/
     IscsiSettingComponent,
     IscsiTabsComponent,
     IscsiTargetListComponent,
-    RbdDetailsComponent,
     RbdFormComponent,
+    RbdImageResourceSidebarComponent,
+    RbdImageResourcePageComponent,
     RbdNamespaceFormModalComponent,
     RbdNamespaceListComponent,
     RbdSnapshotListComponent,
@@ -288,6 +291,34 @@ const routes: Routes = [
         path: `${URLVerbs.COPY}/:image_spec/:snap`,
         component: RbdFormComponent,
         data: { breadcrumbs: ActionLabels.COPY }
+      },
+      {
+        path: ':image_spec',
+        component: RbdImageResourceSidebarComponent,
+        data: { breadcrumbs: RbdImageResourceBreadcrumbResolver },
+        children: [
+          { path: '', redirectTo: 'overview', pathMatch: 'full' },
+          {
+            path: 'overview',
+            component: RbdImageResourcePageComponent,
+            data: { breadcrumbs: 'Overview', section: 'overview' }
+          },
+          {
+            path: 'snapshots',
+            component: RbdImageResourcePageComponent,
+            data: { breadcrumbs: 'Snapshots', section: 'snapshots' }
+          },
+          {
+            path: 'configuration',
+            component: RbdImageResourcePageComponent,
+            data: { breadcrumbs: 'Configuration', section: 'configuration' }
+          },
+          {
+            path: 'performance',
+            component: RbdImageResourcePageComponent,
+            data: { breadcrumbs: 'Performance', section: 'performance' }
+          }
+        ]
       }
     ]
   },

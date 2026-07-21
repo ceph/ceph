@@ -407,6 +407,12 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         image.mirror_mode = scheduling;
         scheduling = [];
       }
+
+      image.cdLink = `/block/rbd/${new ImageSpec(
+        image.pool_name,
+        image.namespace,
+        image.name
+      ).toStringEncoded()}/overview`;
     });
 
     if (images.length > 0) {
