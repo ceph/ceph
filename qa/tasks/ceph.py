@@ -20,6 +20,7 @@ import re
 import socket
 import yaml
 
+from json import dumps
 from paramiko import SSHException
 from tasks.ceph_manager import CephManager, write_conf, get_valgrind_args
 from tarfile import ReadError
@@ -713,7 +714,7 @@ def cluster(ctx, config):
     data_dir = '{tdir}/{cluster}.data'.format(tdir=testdir, cluster=cluster_name)
     log.info('Creating ceph cluster %s...', cluster_name)
     log.info('config %s', config)
-    log.info('ctx.config %s', ctx.config)
+    log.info('ctx.config %s', dumps(ctx.config, indent=4))
     run.wait(
         ctx.cluster.run(
             args=[
