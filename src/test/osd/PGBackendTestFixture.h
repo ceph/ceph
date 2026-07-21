@@ -386,6 +386,21 @@ public:
     const std::string& data,
     uint64_t object_size);
 
+  /**
+   * Write operation with optional truncate and multiple writes in a single transaction.
+   *
+   * @param obj_name Name of the object
+   * @param object_size Current size of the object
+   * @param truncate_size Optional truncate size (nullopt means no truncate)
+   * @param writes Vector of {offset, data} pairs to write
+   * @return Result code (0 on success, negative on error)
+   */
+  int write(
+    const std::string& obj_name,
+    uint64_t object_size,
+    std::optional<uint64_t> truncate_size,
+    const std::vector<std::pair<uint64_t, std::string>>& writes);
+
   int read_object(
     const std::string& obj_name,
     uint64_t offset,

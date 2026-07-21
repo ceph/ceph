@@ -606,6 +606,98 @@ int PGBackendTestFixture::write(
   return result;
 }
 
+int PGBackendTestFixture::write(
+  const std::string& obj_name,
+  uint64_t object_size,
+  std::optional<uint64_t> truncate_size,
+  const std::vector<std::pair<uint64_t, std::string>>& writes)
+{
+  hobject_t hoid = make_test_object(obj_name);
+  PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
+
+  ObjectContextRef obc = get_or_create_obc(hoid, true, object_size);
+  pg_t->obc_map[hoid] = obc;
+
+  // Track outstanding write
+  outstanding_writes[hoid]++;
+
+  // Apply truncate if specified
+  if (truncate_size.has_value()) {
+    pg_t->truncate(hoid, truncate_size.value());
+  }
+
+  // Apply all writes
+  uint64_t new_size = truncate_size.value_or(object_size);
+  for (const auto& [offset, data] : writes) {
+    bufferlist bl;
+    bl.append(data);
+    pg_t->write(hoid, offset, bl.length(), bl);
+    new_size = std::max(new_size, offset + bl.length());
+  }
+
+  object_stat_sum_t delta_stats;
+  if (new_size > object_size) {
+    delta_stats.num_bytes = new_size - object_size;
+  } else if (new_size < object_size) {
+    delta_stats.num_bytes = -(int64_t)(object_size - new_size);
+  } else {
+    delta_stats.num_bytes = 0;
+  }
+
+  // Prior version comes from the object's current version
+  eversion_t prior_version = obc->obs.oi.version;
+  eversion_t at_version = get_next_version();
+
+  // Build the NEW OI
+  object_info_t new_oi = obc->obs.oi;
+  new_oi.version = at_version;
+  new_oi.prior_version = prior_version;
+  new_oi.size = new_size;
+
+  // Encode new OI into PGTransaction
+  {
+    bufferlist oi_bl;
+    new_oi.encode(oi_bl,
+      osdmap->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+    pg_t->setattr(hoid, OI_ATTR, oi_bl);
+  }
+
+  // Update OBC obs to new state BEFORE submitting
+  obc->obs.oi = new_oi;
+
+  std::vector<pg_log_entry_t> log_entries;
+  pg_log_entry_t entry;
+  entry.op = pg_log_entry_t::MODIFY;
+  entry.soid = hoid;
+  entry.version = at_version;
+  entry.prior_version = prior_version;
+  log_entries.push_back(entry);
+
+  // Create completion lambda for write-specific cleanup
+  auto write_complete = [this, hoid, obc, prior_version, object_size](int r) {
+    // Decrement outstanding writes counter
+    if (outstanding_writes[hoid] > 0) {
+      outstanding_writes[hoid]--;
+      if (outstanding_writes[hoid] == 0) {
+        outstanding_writes.erase(hoid);
+      }
+    }
+
+    if (r != 0 && r != -EINPROGRESS) {
+      // Roll back OBC on failure
+      obc->obs.oi.version = prior_version;
+      obc->obs.oi.size = object_size;
+      obc->attr_cache.clear();
+      outstanding_writes.erase(hoid);
+    }
+  };
+
+  int result = do_transaction_and_complete(
+    hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries), write_complete);
+
+  return result;
+}
+
 int PGBackendTestFixture::read_object(
   const std::string& obj_name,
   uint64_t offset,

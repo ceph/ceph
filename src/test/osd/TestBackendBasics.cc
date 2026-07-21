@@ -385,6 +385,247 @@ TEST_P(TestBackendBasics, DirectRead) {
 }
 
 // ---------------------------------------------------------------------------
+// TestBackendBasics: TruncateAndWrite
+// ---------------------------------------------------------------------------
+
+/**
+ * TruncateAndWrite - test truncate to 0 followed by writes in a single transaction.
+ *
+ * This test verifies the behavior described in the failing test_ec_transaction test
+ * "truncate_then_write_one_shard" at a higher level using the full backend.
+ *
+ * The test:
+ * 1. Creates a 20k object
+ * 2. In one transaction, truncates to 0, then writes at:
+ *    - chunk_size~chunk_size (e.g., 4k~4k for k=4,m=2,su=4k)
+ *    - (chunk_size * (k+1))~chunk_size (e.g., 20k~4k)
+ * 3. Reads back and verifies the resulting 16k object
+ *
+ * This exercises the EC transaction planning logic for truncate+write operations
+ * and ensures data integrity across the operation.
+ */
+TEST_P(TestBackendBasics, TruncateAndWrite) {
+  const auto& param = GetParam().write_read;
+  const auto& backend_config = GetParam().backend;
+
+  // Skip test for non-EC backends - truncate behavior is different
+  if (backend_config.pool_type != EC) {
+    GTEST_SKIP() << "TruncateAndWrite test only applies to EC backends";
+  }
+
+  std::string obj_name = "test_truncate_write_" + backend_config.label + "_" + param.label;
+
+  // Step 1: Create a 20k object
+  const size_t initial_size = (2 * k + 1) * stripe_unit;
+  std::string initial_data(initial_size, 'X');
+  
+  int result = create_and_write(obj_name, initial_data);
+  EXPECT_EQ(result, 0) << param.label << " initial write should complete successfully";
+  verify_object(obj_name, initial_data, 0, initial_size);
+
+  // Step 2: In one transaction, truncate to 0 and write at two offsets
+  uint64_t first_write_offset = stripe_unit;
+  uint64_t second_write_offset = stripe_unit * (k + 1);
+  uint64_t final_size = second_write_offset + stripe_unit;
+  
+  result = write(
+    obj_name,
+    initial_size,
+    0,  // truncate to 0
+    {
+      {first_write_offset, std::string(stripe_unit, 'A')},
+      {second_write_offset, std::string(stripe_unit, 'B')}
+    }
+  );
+  
+  EXPECT_EQ(result, 0) << param.label << " truncate+write transaction should complete successfully";
+  
+  // Step 3: Build expected data and verify
+  std::string expected_data(final_size, '\0');
+  for (size_t i = first_write_offset; i < first_write_offset + stripe_unit; i++) {
+    expected_data[i] = 'A';
+  }
+  for (size_t i = second_write_offset; i < second_write_offset + stripe_unit; i++) {
+    expected_data[i] = 'B';
+  }
+  
+  verify_object(obj_name, expected_data, 0, final_size);
+  
+  // Clean up
+  auto* primary_listener = get_primary_listener();
+  if (primary_listener) {
+    primary_listener->sent_messages.clear();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TestBackendBasics: TruncateToChunkSizeAndWrite
+// ---------------------------------------------------------------------------
+
+/**
+ * TruncateToChunkSizeAndWrite - test truncate to chunk_size followed by writes in a single transaction.
+ *
+ * This is a variant of TruncateAndWrite that truncates to chunk_size (4k) instead of 0.
+ * This tests a different code path in the EC transaction planning logic.
+ *
+ * The test:
+ * 1. Creates a (2*k+1)*chunk_size object (e.g., 36k for k=4)
+ * 2. In one transaction, truncates to chunk_size (4k), then writes at:
+ *    - chunk_size~chunk_size (e.g., 4k~4k for k=4,m=2,su=4k)
+ *    - (chunk_size * (k+1))~chunk_size (e.g., 20k~4k)
+ * 3. Reads back and verifies the resulting object
+ *
+ * Expected result is an object with:
+ * - [0, chunk_size): original data (preserved by truncate to 4k)
+ * - [chunk_size, 2*chunk_size): 'A' characters (first write)
+ * - [2*chunk_size, (k+1)*chunk_size): zeros (sparse region)
+ * - [(k+1)*chunk_size, (k+2)*chunk_size): 'B' characters (second write)
+ */
+TEST_P(TestBackendBasics, TruncateToChunkSizeAndWrite) {
+  const auto& param = GetParam().write_read;
+  const auto& backend_config = GetParam().backend;
+
+  // Skip test for non-EC backends - truncate behavior is different
+  if (backend_config.pool_type != EC) {
+    GTEST_SKIP() << "TruncateToChunkSizeAndWrite test only applies to EC backends";
+  }
+
+  std::string obj_name = "test_truncate4k_write_" + backend_config.label + "_" + param.label;
+
+  // Step 1: Create object which will be shrunk
+  const size_t initial_size = (2 * k + 1) * stripe_unit;
+  std::string initial_data(initial_size, 'X');
+  
+  int result = create_and_write(obj_name, initial_data);
+  EXPECT_EQ(result, 0) << param.label << " initial write should complete successfully";
+  verify_object(obj_name, initial_data, 0, initial_size);
+
+  // Step 2: In one transaction, truncate to chunk_size and write at two offsets
+  uint64_t first_write_offset = stripe_unit;
+  uint64_t second_write_offset = stripe_unit * (k + 1);
+  uint64_t final_size = second_write_offset + stripe_unit;
+  
+  result = write(
+    obj_name,
+    initial_size,
+    stripe_unit,  // truncate to chunk_size (4k)
+    {
+      {first_write_offset, std::string(stripe_unit, 'A')},
+      {second_write_offset, std::string(stripe_unit, 'B')}
+    }
+  );
+  
+  EXPECT_EQ(result, 0) << param.label << " truncate+write transaction should complete successfully";
+  
+  // Step 3: Build expected data and verify
+  std::string expected_data(final_size, '\0');
+  // Preserved region [0, chunk_size) with original 'X' data
+  for (size_t i = 0; i < stripe_unit; i++) {
+    expected_data[i] = 'X';
+  }
+  // 'A' region at [chunk_size, 2*chunk_size)
+  for (size_t i = first_write_offset; i < first_write_offset + stripe_unit; i++) {
+    expected_data[i] = 'A';
+  }
+  // 'B' region at [(k+1)*chunk_size, (k+2)*chunk_size)
+  for (size_t i = second_write_offset; i < second_write_offset + stripe_unit; i++) {
+    expected_data[i] = 'B';
+  }
+  
+  verify_object(obj_name, expected_data, 0, final_size);
+  
+  // Clean up
+  auto* primary_listener = get_primary_listener();
+  if (primary_listener) {
+    primary_listener->sent_messages.clear();
+  }
+}
+
+
+// ---------------------------------------------------------------------------
+// TestBackendBasics: TruncateToChunkSizeAndWrite
+// ---------------------------------------------------------------------------
+
+/**
+ * TruncateToChunkSizeAndWrite - test truncate to chunk_size followed by writes in a single transaction.
+ *
+ * This is a variant of TruncateAndWrite that truncates to chunk_size (4k) instead of 0.
+ * This tests a different code path in the EC transaction planning logic.
+ *
+ * The test:
+ * 1. Creates a 20k object
+ * 2. In one transaction, truncates to chunk_size (4k), then writes at:
+ *    - chunk_size~chunk_size (e.g., 4k~4k for k=4,m=2,su=4k)
+ *    - (chunk_size * (k+1))~chunk_size (e.g., 20k~4k)
+ * 3. Reads back and verifies the resulting object
+ *
+ * Expected result is an object with:
+ * - [0, chunk_size): original data (preserved by truncate to 4k)
+ * - [chunk_size, 2*chunk_size): 'A' characters (first write)
+ * - [2*chunk_size, (k+1)*chunk_size): zeros (sparse region)
+ * - [(k+1)*chunk_size, (k+2)*chunk_size): 'B' characters (second write)
+ */
+TEST_P(TestBackendBasics, TruncateToChunkSizeAndWriteToSameSize) {
+  const auto& param = GetParam().write_read;
+  const auto& backend_config = GetParam().backend;
+
+  // Skip test for non-EC backends - truncate behavior is different
+  if (backend_config.pool_type != EC) {
+    GTEST_SKIP() << "TruncateToChunkSizeAndWrite test only applies to EC backends";
+  }
+
+  std::string obj_name = "test_truncate4k_write_" + backend_config.label + "_" + param.label;
+
+  // Step 1: Create object which will be shrunk
+  const size_t initial_size = (k + 2) * stripe_unit;
+  std::string initial_data(initial_size, 'X');
+  
+  int result = create_and_write(obj_name, initial_data);
+  EXPECT_EQ(result, 0) << param.label << " initial write should complete successfully";
+  verify_object(obj_name, initial_data, 0, initial_size);
+
+  // Step 2: In one transaction, truncate to chunk_size and write at two offsets
+  uint64_t first_write_offset = stripe_unit;
+  uint64_t second_write_offset = stripe_unit * (k + 1);
+  uint64_t final_size = second_write_offset + stripe_unit;
+  
+  result = write(
+    obj_name,
+    initial_size,
+    stripe_unit,  // truncate to chunk_size (4k)
+    {
+      {first_write_offset, std::string(stripe_unit, 'A')},
+      {second_write_offset, std::string(stripe_unit, 'B')}
+    }
+  );
+  
+  EXPECT_EQ(result, 0) << param.label << " truncate+write transaction should complete successfully";
+  
+  // Step 3: Build expected data and verify
+  std::string expected_data(final_size, '\0');
+  // Preserved region [0, chunk_size) with original 'X' data
+  for (size_t i = 0; i < stripe_unit; i++) {
+    expected_data[i] = 'X';
+  }
+  // 'A' region at [chunk_size, 2*chunk_size)
+  for (size_t i = first_write_offset; i < first_write_offset + stripe_unit; i++) {
+    expected_data[i] = 'A';
+  }
+  // 'B' region at [(k+1)*chunk_size, (k+2)*chunk_size)
+  for (size_t i = second_write_offset; i < second_write_offset + stripe_unit; i++) {
+    expected_data[i] = 'B';
+  }
+  
+  verify_object(obj_name, expected_data, 0, final_size);
+  
+  // Clean up
+  auto* primary_listener = get_primary_listener();
+  if (primary_listener) {
+    primary_listener->sent_messages.clear();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Backend configurations and size parameters
 // ---------------------------------------------------------------------------
 
