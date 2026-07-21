@@ -36,6 +36,14 @@
       </p>
     }
   }
+  @if (occurrences > 1) {
+    <span
+      class="cd-notification-item__occurrences cds--type-label-01"
+      i18n
+    >
+      Occurrences: {{ occurrences }}
+    </span>
+  }
 </div>
 <!-- RIGHT SECTION -->
 <div class="cd-notification-item__right">
