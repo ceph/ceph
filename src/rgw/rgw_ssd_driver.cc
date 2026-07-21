@@ -186,9 +186,14 @@ int SSDDriver::initialize(const DoutPrefixProvider* dpp)
     aio_init(&ainit);
     #endif
 
-    efs::space_info space = efs::space(partition_info.location);
     //currently partition_info.size is unused
-    this->free_space = space.available;
+	try {
+	  efs::space_info space = efs::space(partition_info.location);
+	  this->free_space = space.available;
+	} catch (const efs::filesystem_error& e) {
+	  ldpp_dout(dpp, 0) << "initialize::: ERROR initializing the cache storage space info: " << e.what() << dendl;
+	  //return -EINVAL; Should return error from here?
+	}
 
     return 0;
 }
