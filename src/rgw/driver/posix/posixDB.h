@@ -146,6 +146,7 @@ class POSIXUserDB : public SQLiteDB {
     virtual int ListAllBuckets(const DoutPrefixProvider *dpp, DBOpParams *params) override { return 0; }
     virtual int ListAllUsers(const DoutPrefixProvider *dpp, DBOpParams *params) override { return 0; }
     virtual int ListAllObjects(const DoutPrefixProvider *dpp, DBOpParams *params) override { return 0; }
+
 };
 
 } } // namespace rgw::store

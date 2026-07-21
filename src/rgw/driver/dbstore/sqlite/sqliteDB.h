@@ -52,6 +52,7 @@ class SQLiteDB : public DB, virtual public DBOp {
     int createGroupUsersTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createAccessKeysTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createTopicTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int createBucketStatsTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createBucketTopicMappingTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createBucketTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createUserTable(const DoutPrefixProvider *dpp, DBOpParams *params);
@@ -140,6 +141,54 @@ class SQLGetAccount : public SQLiteDB, public GetAccountOp {
         sqlite3_finalize(name_stmt);
       if (email_stmt)
         sqlite3_finalize(email_stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLWriteBucketStats : public SQLiteDB, public WriteBucketStatsOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+
+  public:
+    SQLWriteBucketStats(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLWriteBucketStats() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLReadOwnerStats : public SQLiteDB, public ReadOwnerStatsOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+
+  public:
+    SQLReadOwnerStats(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLReadOwnerStats() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLDeleteBucketStats : public SQLiteDB, public DeleteBucketStatsOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+
+  public:
+    SQLDeleteBucketStats(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLDeleteBucketStats() {
+      if (stmt)
+        sqlite3_finalize(stmt);
     }
     int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
     int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);

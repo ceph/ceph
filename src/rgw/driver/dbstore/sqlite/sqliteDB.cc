@@ -188,6 +188,9 @@ int SQLiteDB::InitPrepareParams(const DoutPrefixProvider *dpp,
   if (params->quota_table.empty()) {
     params->quota_table = getQuotaTable();
   }
+  if (params->bucket_stats_table.empty()) {
+    params->bucket_stats_table = getBucketStatsTable();
+  }
   if (params->lc_entry_table.empty()) {
     params->lc_entry_table = getLCEntryTable();
   }
@@ -205,6 +208,7 @@ int SQLiteDB::InitPrepareParams(const DoutPrefixProvider *dpp,
   p_params.user_table = params->user_table;
   p_params.bucket_table = params->bucket_table;
   p_params.quota_table = params->quota_table;
+  p_params.bucket_stats_table = params->bucket_stats_table;
   p_params.lc_entry_table = params->lc_entry_table;
   p_params.lc_head_table = params->lc_head_table;
 
@@ -918,6 +922,9 @@ int SQLiteDB::InitializeDBOps(const DoutPrefixProvider *dpp)
   dbops.InsertAccount = make_shared<SQLInsertAccount>(&this->db, this->getDBname(), cct);
   dbops.RemoveAccount = make_shared<SQLRemoveAccount>(&this->db, this->getDBname(), cct);
   dbops.GetAccount = make_shared<SQLGetAccount>(&this->db, this->getDBname(), cct);
+  dbops.WriteBucketStats = make_shared<SQLWriteBucketStats>(&this->db, this->getDBname(), cct);
+  dbops.ReadOwnerStats = make_shared<SQLReadOwnerStats>(&this->db, this->getDBname(), cct);
+  dbops.DeleteBucketStats = make_shared<SQLDeleteBucketStats>(&this->db, this->getDBname(), cct);
   dbops.InsertRole = make_shared<SQLInsertRole>(&this->db, this->getDBname(), cct);
   dbops.RemoveRole = make_shared<SQLRemoveRole>(&this->db, this->getDBname(), cct);
   dbops.GetRole = make_shared<SQLGetRole>(&this->db, this->getDBname(), cct);
@@ -1123,6 +1130,10 @@ int SQLiteDB::createTables(const DoutPrefixProvider *dpp)
     goto out;
 
   if ((cq = createQuotaTable(dpp, &params)))
+    goto out;
+
+  params.bucket_stats_table = getBucketStatsTable();
+  if (createBucketStatsTable(dpp, &params))
     goto out;
 
   ret = 0;
@@ -1362,6 +1373,30 @@ int SQLiteDB::createQuotaTable(const DoutPrefixProvider *dpp, DBOpParams *params
     ldpp_dout(dpp, 0)<<"CreateQuotaTable failed " << dendl;
 
   ldpp_dout(dpp, 20)<<"CreateQuotaTable succeeded " << dendl;
+
+  return ret;
+}
+
+int SQLiteDB::createBucketStatsTable(const DoutPrefixProvider *dpp, DBOpParams *params)
+{
+  int ret = -1;
+  string schema;
+
+  schema = CreateTableSchema("BucketStats", params);
+
+  ret = exec(dpp, schema.c_str(), NULL);
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"CreateBucketStatsTable failed " << dendl;
+    return ret;
+  }
+
+  /* create index on OwnerID for aggregate queries */
+  string idx = fmt::format(
+    "CREATE INDEX IF NOT EXISTS idx_bucket_stats_owner ON '{}' (OwnerID);",
+    params->bucket_stats_table);
+  (void)exec(dpp, idx.c_str(), NULL);
+
+  ldpp_dout(dpp, 20)<<"CreateBucketStatsTable succeeded " << dendl;
 
   return ret;
 }
@@ -1781,6 +1816,153 @@ int SQLGetAccount::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *par
 out:
   return ret;
 }
+
+/* --- BucketStats ops --- */
+
+static int list_owner_stats(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *stmt) {
+  if (!stmt)
+    return -1;
+
+  op.bucket_stats.stats.size = sqlite3_column_int64(stmt, 0);
+  op.bucket_stats.stats.size_rounded = sqlite3_column_int64(stmt, 1);
+  op.bucket_stats.stats.num_objects = sqlite3_column_int64(stmt, 2);
+
+  return 0;
+}
+
+int SQLWriteBucketStats::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (!*sdb) {
+    ldpp_dout(dpp, 0)<<"In SQLWriteBucketStats - no db" << dendl;
+    goto out;
+  }
+
+  InitPrepareParams(dpp, p_params, params);
+
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareWriteBucketStats");
+out:
+  return ret;
+}
+
+int SQLWriteBucketStats::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket_stats.bucket_name, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket_stats.bucket_name.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket_stats.owner_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket_stats.owner_id.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket_stats.size, sdb);
+  SQL_BIND_INT(dpp, stmt, index, params->op.bucket_stats.size, sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket_stats.size_rounded, sdb);
+  SQL_BIND_INT(dpp, stmt, index, params->op.bucket_stats.size_rounded, sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket_stats.num_objects, sdb);
+  SQL_BIND_INT(dpp, stmt, index, params->op.bucket_stats.num_objects, sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket_stats.last_updated, sdb);
+  SQL_BIND_INT(dpp, stmt, index, params->op.bucket_stats.last_updated, sdb);
+
+out:
+  return rc;
+}
+
+int SQLWriteBucketStats::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLReadOwnerStats::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (!*sdb) {
+    ldpp_dout(dpp, 0)<<"In SQLReadOwnerStats - no db" << dendl;
+    goto out;
+  }
+
+  InitPrepareParams(dpp, p_params, params);
+
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareReadOwnerStats");
+out:
+  return ret;
+}
+
+int SQLReadOwnerStats::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket_stats.owner_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket_stats.owner_id.c_str(), sdb);
+
+out:
+  return rc;
+}
+
+int SQLReadOwnerStats::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, list_owner_stats);
+out:
+  return ret;
+}
+
+int SQLDeleteBucketStats::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (!*sdb) {
+    ldpp_dout(dpp, 0)<<"In SQLDeleteBucketStats - no db" << dendl;
+    goto out;
+  }
+
+  InitPrepareParams(dpp, p_params, params);
+
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareDeleteBucketStats");
+out:
+  return ret;
+}
+
+int SQLDeleteBucketStats::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket_stats.bucket_name, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket_stats.bucket_name.c_str(), sdb);
+
+out:
+  return rc;
+}
+
+int SQLDeleteBucketStats::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+/* --- Role ops --- */
 
 int SQLInsertRole::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
 {

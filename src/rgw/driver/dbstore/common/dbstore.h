@@ -63,6 +63,16 @@ struct DBOpTopicInfo {
   std::vector<std::string> bucket_list;
 };
 
+struct DBOpBucketStatsInfo {
+  std::string bucket_name;
+  std::string owner_id;
+  uint64_t size = 0;
+  uint64_t size_rounded = 0;
+  uint64_t num_objects = 0;
+  uint64_t last_updated = 0;
+  RGWStorageStats stats; // for read_owner_stats output
+};
+
 struct DBOpUserInfo {
   RGWUserInfo uinfo = {};
   obj_version user_version;
@@ -161,6 +171,7 @@ struct DBOpInfo {
    *
    * XXX: Swift keys and subuser not supported for now */
   DBOpAccountInfo account;
+  DBOpBucketStatsInfo bucket_stats;
   DBOpRoleInfo role;
   DBOpOIDCProviderInfo oidc;
   DBOpGroupInfo group;
@@ -198,6 +209,7 @@ struct DBOpParams {
   std::string object_trigger;
   std::string object_view;
   std::string quota_table;
+  std::string bucket_stats_table;
   std::string lc_head_table;
   std::string lc_entry_table;
   std::string obj;
@@ -272,6 +284,15 @@ struct DBOpTopicPrepareInfo {
   static constexpr const char* opaque_data = ":topic_opaque_data";
   static constexpr const char* policy_text = ":topic_policy_text";
   static constexpr const char* bucket_name = ":topic_bucket_name";
+};
+
+struct DBOpBucketStatsPrepareInfo {
+  static constexpr const char* bucket_name = ":bs_bucket_name";
+  static constexpr const char* owner_id = ":bs_owner_id";
+  static constexpr const char* size = ":bs_size";
+  static constexpr const char* size_rounded = ":bs_size_rounded";
+  static constexpr const char* num_objects = ":bs_num_objects";
+  static constexpr const char* last_updated = ":bs_last_updated";
 };
 
 struct DBOpUserPrepareInfo {
@@ -421,6 +442,7 @@ struct DBOpLCHeadPrepareInfo {
 
 struct DBOpPrepareInfo {
   DBOpAccountPrepareInfo account;
+  DBOpBucketStatsPrepareInfo bucket_stats;
   DBOpRolePrepareInfo role;
   DBOpOIDCProviderPrepareInfo oidc;
   DBOpGroupPrepareInfo group;
@@ -457,6 +479,7 @@ struct DBOpPrepareParams {
   std::string object_trigger;
   std::string object_view;
   std::string quota_table;
+  std::string bucket_stats_table;
   std::string lc_head_table;
   std::string lc_entry_table;
 };
@@ -465,6 +488,9 @@ struct DBOps {
   std::shared_ptr<class InsertAccountOp> InsertAccount;
   std::shared_ptr<class RemoveAccountOp> RemoveAccount;
   std::shared_ptr<class GetAccountOp> GetAccount;
+  std::shared_ptr<class WriteBucketStatsOp> WriteBucketStats;
+  std::shared_ptr<class ReadOwnerStatsOp> ReadOwnerStats;
+  std::shared_ptr<class DeleteBucketStatsOp> DeleteBucketStats;
   std::shared_ptr<class InsertRoleOp> InsertRole;
   std::shared_ptr<class RemoveRoleOp> RemoveRole;
   std::shared_ptr<class GetRoleOp> GetRole;
@@ -873,6 +899,16 @@ class DBOp {
       Enabled Boolean ,		\
       CheckOnRaw Boolean \n);";
 
+    static constexpr std::string_view CreateBucketStatsTableQ =
+      "CREATE TABLE IF NOT EXISTS '{}' ( \
+      BucketName TEXT NOT NULL, \
+      OwnerID TEXT NOT NULL, \
+      Size INTEGER DEFAULT 0, \
+      SizeRounded INTEGER DEFAULT 0, \
+      NumObjects INTEGER DEFAULT 0, \
+      LastUpdated INTEGER DEFAULT 0, \
+      PRIMARY KEY (BucketName) \n);";
+
     static constexpr std::string_view CreateLCEntryTableQ =
       "CREATE TABLE IF NOT EXISTS '{}' ( \
       LCIndex  TEXT NOT NULL , \
@@ -951,6 +987,9 @@ class DBOp {
       if (!type.compare("Quota"))
         return fmt::format(CreateQuotaTableQ,
             params->quota_table);
+      if (!type.compare("BucketStats"))
+        return fmt::format(CreateBucketStatsTableQ,
+            params->bucket_stats_table);
       if (!type.compare("LCHead"))
         return fmt::format(CreateLCHeadTableQ,
             params->lc_head_table);
@@ -1042,6 +1081,58 @@ class GetAccountOp: virtual public DBOp {
         return fmt::format(Query, params.account_table,
             params.op.account.account_id);
       }
+    }
+};
+
+class WriteBucketStatsOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "INSERT OR REPLACE INTO '{}' \
+                          (BucketName, OwnerID, Size, SizeRounded, \
+                           NumObjects, LastUpdated) \
+                          VALUES ({}, {}, {}, {}, {}, {});";
+
+  public:
+    virtual ~WriteBucketStatsOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.bucket_stats_table,
+          params.op.bucket_stats.bucket_name,
+          params.op.bucket_stats.owner_id,
+          params.op.bucket_stats.size,
+          params.op.bucket_stats.size_rounded,
+          params.op.bucket_stats.num_objects,
+          params.op.bucket_stats.last_updated);
+    }
+};
+
+class ReadOwnerStatsOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "SELECT \
+                          COALESCE(SUM(Size), 0), \
+                          COALESCE(SUM(SizeRounded), 0), \
+                          COALESCE(SUM(NumObjects), 0) \
+                          from '{}' where OwnerID = {}";
+
+  public:
+    virtual ~ReadOwnerStatsOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.bucket_stats_table,
+          params.op.bucket_stats.owner_id);
+    }
+};
+
+class DeleteBucketStatsOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query =
+      "DELETE from '{}' where BucketName = {}";
+
+  public:
+    virtual ~DeleteBucketStatsOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.bucket_stats_table,
+          params.op.bucket_stats.bucket_name);
     }
 };
 
@@ -2420,6 +2511,7 @@ class DB {
     const std::string user_table;
     const std::string bucket_table;
     const std::string quota_table;
+    const std::string bucket_stats_table;
     const std::string lc_head_table;
     const std::string lc_entry_table;
     static std::map<std::string, class ObjectOp*> objectmap;
@@ -2450,6 +2542,7 @@ class DB {
     user_table(table_name_prefix + "_user_table"),
     bucket_table(table_name_prefix + "_bucket_table"),
     quota_table(table_name_prefix + "_quota_table"),
+    bucket_stats_table(table_name_prefix + "_bucket_stats_table"),
     lc_head_table(table_name_prefix + "_lc_head_table"),
     lc_entry_table(table_name_prefix + "_lc_entry_table"),
     cct(_cct),
@@ -2470,6 +2563,7 @@ class DB {
     user_table(db_name+"_user_table"),
     bucket_table(db_name+"_bucket_table"),
     quota_table(db_name+"_quota_table"),
+    bucket_stats_table(db_name+"_bucket_stats_table"),
     lc_head_table(db_name+"_lc_head_table"),
     lc_entry_table(db_name+"_lc_entry_table"),
     cct(_cct),
@@ -2490,6 +2584,7 @@ class DB {
     const std::string getUserTable() { return user_table; }
     const std::string getBucketTable() { return bucket_table; }
     const std::string getQuotaTable() { return quota_table; }
+    const std::string getBucketStatsTable() { return bucket_stats_table; }
     const std::string getLCHeadTable() { return lc_head_table; }
     const std::string getLCEntryTable() { return lc_entry_table; }
     const std::string getObjectTable(std::string bucket) {

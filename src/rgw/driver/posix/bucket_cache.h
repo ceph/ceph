@@ -1006,6 +1006,74 @@ public:
     return 0;
   } /* remove_entry */
 
+  /* get aggregate stats for a cached bucket from LMDB.
+   * if the bucket is not yet cached, fill it first. */
+  int get_cached_stats(const DoutPrefixProvider* dpp,
+                       const std::string& bucket_name,
+                       B* sal_bucket,
+                       uint64_t& num_objects,
+                       uint64_t& total_size,
+                       uint64_t& total_size_rounded,
+                       optional_yield y) {
+    using namespace LMDBSafe;
+
+    GetBucketResult gbr = get_bucket(dpp, bucket_name,
+                                     FLAG_CREATE | FLAG_LOCK);
+    auto [b, flags] = gbr;
+    if (!b) {
+      return -ENOENT;
+    }
+    auto unref_guard =
+      make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
+    unique_lock ulk{b->mtx, std::adopt_lock};
+
+    if (!(b->flags & BucketCacheEntry<D, B>::FLAG_FILLED)) {
+      int rc = fill(dpp, b, sal_bucket, FLAG_NONE, y);
+      if (rc < 0) {
+        return rc;
+      }
+    }
+
+    num_objects = 0;
+    total_size = 0;
+    total_size_rounded = 0;
+
+    try {
+      auto txn = b->env->getROTransaction();
+      auto cursor = txn->getCursor(b->dbi);
+      MDBOutVal ckey, cdata;
+
+      if (cursor.get(ckey, cdata, MDB_FIRST) == 0) {
+        do {
+          std::string_view svv = cdata.get<std::string_view>();
+          std::string ser_v{svv};
+          zpp::bits::in in_v(ser_v);
+          rgw_bucket_dir_entry bde{};
+          struct timespec ts;
+          auto errc = in_v(
+            bde.key.name, bde.key.instance,
+            bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
+            bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
+            bde.meta.owner_display_name, bde.meta.accounted_size,
+            bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
+            bde.flags);
+          if (errc.code != std::errc{0}) {
+            continue;
+          }
+          num_objects++;
+          total_size += bde.meta.size;
+          total_size_rounded += bde.meta.accounted_size;
+        } while (cursor.get(ckey, cdata, MDB_NEXT) == 0);
+      }
+    } catch (const LMDBSafe::LMDBError& e) {
+      ldpp_dout(dpp, 0) << "BucketCache: get_cached_stats LMDB error for "
+        << bucket_name << ": " << e.what() << dendl;
+      return -EIO;
+    }
+
+    return 0;
+  } /* get_cached_stats */
+
   /* invalidate a bucket's listing cache.
    *
    * recycle=false (default): clear the LMDB data but keep the DBI
