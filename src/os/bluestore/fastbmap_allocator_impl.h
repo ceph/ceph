@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <mutex>
 #include <string_view>
+#include <utility>
 
 typedef uint64_t slot_t;
 
@@ -72,6 +73,76 @@ inline size_t find_next_set_bit(slot_t slot_val, size_t start_pos)
   return start_pos;
 }
 
+// -----------------------------------------------------------------------
+// L0 bit-range primitives, shared by the free-extent walk (see
+// AllocatorLevel01Loose::get_free_extents_internal) and by any level of
+// the allocator doing the same "index -> range of children" arithmetic
+// (e.g. AllocatorLevel02's L2 -> L1 indexing).
+// -----------------------------------------------------------------------
+
+// Intersection of [lo, hi) with [bound_lo, bound_hi).
+inline std::pair<uint64_t, uint64_t> intersect(
+  uint64_t lo, uint64_t hi, uint64_t bound_lo, uint64_t bound_hi)
+{
+  return { std::max(lo, bound_lo), std::min(hi, bound_hi) };
+}
+
+// L0 bit position where L0 word (slot) 'word_idx' begins.
+inline uint64_t l0_word_start(uint64_t word_idx)
+{
+  return word_idx * bits_per_slot;
+}
+
+// [start, end) of L0 bits covered by slotset 'l1_idx'.
+inline std::pair<uint64_t, uint64_t> slotset_l0_range(uint64_t l1_idx)
+{
+  uint64_t start = l1_idx * bits_per_slotset;
+  return { start, start + bits_per_slotset };
+}
+
+// L1 slotset index containing L0 bit position 'pos'. Inverse of
+// slotset_l0_range()'s start.
+inline uint64_t l0_bit_to_l1_idx(uint64_t pos)
+{
+  return pos / bits_per_slotset;
+}
+
+// Index of the first L0 word (slot) belonging to slotset 'l1_idx'.
+inline uint64_t slotset_first_slot(uint64_t l1_idx)
+{
+  return l1_idx * slots_per_slotset;
+}
+
+// [start, end) of L0 bits covered by word 'slot_num' within slotset 'l1_idx'.
+inline std::pair<uint64_t, uint64_t> slot_l0_range(
+  uint64_t l1_idx, uint64_t slot_num)
+{
+  uint64_t start = l0_word_start(slotset_first_slot(l1_idx) + slot_num);
+  return { start, start + bits_per_slot };
+}
+
+// Tracks a free run being accumulated while walking a bitmap. extend()
+// covers both "open" (run was empty) and "extend" (run was already open) --
+// callers never need to open without possibly extending.
+struct FreeRun {
+  uint64_t off = 0;
+  uint64_t len = 0;
+
+  bool is_open() const { return len > 0; }
+
+  void extend(uint64_t pos, uint64_t add_len) {
+    if (!is_open()) {
+      off = pos;
+    }
+    len += add_len;
+  }
+
+  std::pair<uint64_t, uint64_t> close() {
+    std::pair<uint64_t, uint64_t> run{off, len};
+    len = 0;
+    return run;
+  }
+};
 
 class AllocatorLevel
 {
@@ -549,6 +620,22 @@ public:
 
   static inline ssize_t count_0s(slot_t slot_val, size_t start_pos);
   static inline ssize_t count_1s(slot_t slot_val, size_t start_pos);
+
+  // Which l1[] word holds the packed 2-bit entry for slotset 'l1_idx', and
+  // its bit shift within that word.
+  static inline std::pair<size_t, size_t> l1_split(uint64_t l1_idx)
+  {
+    return { l1_idx / L1_ENTRIES_PER_SLOT,
+             (l1_idx % L1_ENTRIES_PER_SLOT) * L1_ENTRY_WIDTH };
+  }
+
+  // Decoded L1 summary for slotset 'l1_idx': one of L1_ENTRY_FULL /
+  // L1_ENTRY_PARTIAL / L1_ENTRY_NOT_USED / L1_ENTRY_FREE.
+  inline slot_t l1_entry_at(uint64_t l1_idx) const
+  {
+    auto [word, shift] = l1_split(l1_idx);
+    return (l1[word] >> shift) & L1_ENTRY_MASK;
+  }
   void foreach_internal(std::function<void(uint64_t offset, uint64_t length)> notify);
 
   // Range- and count-bounded counterpart to foreach_internal(). Enumerates free
