@@ -253,7 +253,7 @@ class TestMirroring(CephFSTestCase):
             vafter = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_FS][0]
             self.assertGreater(vafter["counters"]["mirroring_peers"], vbefore["counters"]["mirroring_peers"])
 
-    def peer_remove(self, fs_name, fs_id, peer_spec):
+    def peer_remove(self, fs_name, fs_id, peer_spec, verify_dircount=True):
         res = self.mirror_daemon_command(f'counter dump for fs: {fs_name}', 'counter', 'dump')
         vbefore = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_FS][0]
 
@@ -261,9 +261,10 @@ class TestMirroring(CephFSTestCase):
         self.run_ceph_cmd("fs", "snapshot", "mirror", "peer_remove", fs_name, peer_uuid)
         time.sleep(10)
         # verify via asok
-        res = self.mirror_daemon_command(f'mirror status for fs: {fs_name}',
-                                         'fs', 'mirror', 'status', f'{fs_name}@{fs_id}')
-        self.assertTrue(res['peers'] == {} and res['snap_dirs']['dir_count'] == 0)
+        if verify_dircount:
+            res = self.mirror_daemon_command(f'mirror status for fs: {fs_name}',
+                                             'fs', 'mirror', 'status', f'{fs_name}@{fs_id}')
+            self.assertTrue(res['peers'] == {} and res['snap_dirs']['dir_count'] == 0)
 
         res = self.mirror_daemon_command(f'counter dump for fs: {fs_name}', 'counter', 'dump')
         vafter = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_FS][0]
@@ -799,6 +800,56 @@ class TestMirroring(CephFSTestCase):
             if peer_spec == remote_peer_spec:
                 return peer_uuid
         return None
+
+    def sync_stat_omap_key(self, fs_name, peer_uuid, dir_path):
+        dir_rel = dir_path.lstrip('/')
+        return f'sync_stat/{fs_name}/{peer_uuid}/{dir_rel}'
+
+    def list_sync_stat_omap_keys(self, fs_name, peer_uuid=None):
+        p = self.mount_a.client_remote.run(
+            args=['rados', '-p', self.fs.metadata_pool_name,
+                  'listomapvals', 'cephfs_mirror'],
+            stdout=StringIO(), stderr=StringIO(), timeout=30,
+            check_status=True, label='list sync stat omap keys')
+        p.wait()
+        prefix = f'sync_stat/{fs_name}/'
+        if peer_uuid:
+            prefix = f'{prefix}{peer_uuid}/'
+        keys = []
+        for line in p.stdout.getvalue().splitlines():
+            stripped = line.strip()
+            if stripped.startswith(prefix):
+                keys.append(stripped)
+        return keys
+
+    @retry_assert(timeout=60, interval=2)
+    def wait_sync_stat_omap_key(self, fs_name, peer_uuid, dir_path):
+        expected = self.sync_stat_omap_key(fs_name, peer_uuid, dir_path)
+        keys = self.list_sync_stat_omap_keys(fs_name, peer_uuid)
+        self.assertIn(expected, keys, msg=f'expected omap key {expected}, got {keys}')
+
+    @retry_assert(timeout=60, interval=2)
+    def assert_sync_stat_omap_keys_removed(self, fs_name, peer_uuid=None):
+        keys = self.list_sync_stat_omap_keys(fs_name, peer_uuid)
+        self.assertEqual(keys, [], msg=f'stale sync stat omap keys: {keys}')
+
+    def setup_sync_stat_omap(self, dir_name='sync_stat_omap_dir'):
+        self.setup_mount_b(mds_perm='rw')
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        peer_spec = "client.mirror_remote@ceph"
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec,
+                      self.secondary_fs_name)
+        self.mount_a.run_shell(['mkdir', dir_name])
+        self.mount_a.create_n_files(f'{dir_name}/file', 10, sync=True)
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+        snap_name = 'snap0'
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/{snap_name}'])
+        self.check_peer_status_idle(self.primary_fs_name, self.primary_fs_id,
+                                    peer_spec, f'/{dir_name}', snap_name, 1)
+        peer_uuid = self.get_peer_uuid(peer_spec)
+        self.wait_sync_stat_omap_key(
+            self.primary_fs_name, peer_uuid, f'/{dir_name}')
+        return peer_spec, peer_uuid, f'/{dir_name}'
 
     def get_daemon_admin_socket(self):
         """overloaded by teuthology override (fs/mirror/clients/mirror.yaml)"""
@@ -3051,6 +3102,25 @@ class TestMirroring(CephFSTestCase):
         res = self.mgr_mirror_status(self.primary_fs_name)
         self.assertEqual(res, {'metrics': {}})
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_cephfs_mirror_sync_stat_omap_removed_on_peer_remove(self):
+        """peer_remove purges persisted sync-stat omap entries for the peer."""
+        peer_spec, peer_uuid, _dir_path = self.setup_sync_stat_omap(
+            dir_name='sync_stat_omap_peer_remove')
+        self.peer_remove(self.primary_fs_name, self.primary_fs_id, peer_spec, False)
+        self.assert_sync_stat_omap_keys_removed(
+            self.primary_fs_name, peer_uuid)
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_cephfs_mirror_sync_stat_omap_removed_on_disable(self):
+        """mirror disable purges persisted sync-stat omap entries."""
+        _peer_spec, peer_uuid, _dir_path = self.setup_sync_stat_omap(
+            dir_name='sync_stat_omap_disable')
+        keys_before = self.list_sync_stat_omap_keys(
+            self.primary_fs_name, peer_uuid)
+        self.assertTrue(keys_before)
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.assert_sync_stat_omap_keys_removed(self.primary_fs_name)
 
     def test_mgr_snapshot_mirror_status_errors(self):
         """Mgr status returns expected errors for invalid inputs."""
