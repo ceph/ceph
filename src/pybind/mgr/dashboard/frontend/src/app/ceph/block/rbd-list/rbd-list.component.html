@@ -11,12 +11,11 @@
   [count]="count"
   forceIdentifier="true"
   selectionType="single"
-  [hasDetails]="true"
+  [hasDetails]="false"
   [status]="tableStatus"
   [maxLimit]="25"
   [autoReload]="-1"
   (fetchData)="taskListService.fetch($event)"
-  (setExpandedRow)="setExpandedRow($event)"
   (updateSelection)="updateSelection($event)"
 >
   <cd-table-actions
@@ -26,11 +25,6 @@
     [tableActions]="tableActions"
   >
   </cd-table-actions>
-  <cd-rbd-details
-    *cdTableDetail
-    [selection]="expandedRow"
-  >
-  </cd-rbd-details>
 </cd-table>
 
 <ng-template
@@ -138,7 +132,16 @@
 >
   <cds-inline-loading *ngIf="row.cdExecuting"></cds-inline-loading>
   <span [ngClass]="column?.customTemplateConfig?.valueClass">
-    {{ value }}
+    <a
+      *ngIf="row?.cdLink; else plainValue"
+      [routerLink]="[row.cdLink]"
+      [queryParams]="row.cdParams"
+    >
+      {{ value }}
+    </a>
+    <ng-template #plainValue>
+      {{ value }}
+    </ng-template>
   </span>
   <span
     *ngIf="row.cdExecuting"

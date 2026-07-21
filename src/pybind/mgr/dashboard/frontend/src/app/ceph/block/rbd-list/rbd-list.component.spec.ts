@@ -16,7 +16,6 @@ import { TaskListService } from '~/app/shared/services/task-list.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, expectItemTasks, PermissionHelper } from '~/testing/unit-test-helper';
 import { RbdConfigurationListComponent } from '../rbd-configuration-list/rbd-configuration-list.component';
-import { RbdDetailsComponent } from '../rbd-details/rbd-details.component';
 import { RbdSnapshotListComponent } from '../rbd-snapshot-list/rbd-snapshot-list.component';
 import { RbdTabsComponent } from '../rbd-tabs/rbd-tabs.component';
 import { RbdListComponent } from './rbd-list.component';
@@ -44,7 +43,6 @@ describe('RbdListComponent', () => {
     ],
     declarations: [
       RbdListComponent,
-      RbdDetailsComponent,
       RbdSnapshotListComponent,
       RbdConfigurationListComponent,
       RbdTabsComponent
