@@ -47,21 +47,31 @@ Object Lifecycle Head objects add complexity beyond the extra RADOS object itsel
 - All writes to objects in the same PG are serialized — unrelated S3 objects that happen to share a PG block each other.
 - RGW objects have no internal dependency, but RADOS forces them to wait.
 
-**4. Server-Side Copy and dedup.**
+**4. No cross-OSD atomicity.**
+RADOS transactions are scoped to a single PG. Objects mapped to different PGs (via CRUSH) cannot share a transaction. Every S3 mutation touches at least two RADOS objects — the head object and the bucket-index entry — which are on different PGs. There is no way to update them atomically.
+
+- **PUT** — writes the head object and updates the bucket-index entry in two separate operations. A crash between them leaves the bucket-index inconsistent with the actual object state.
+- **DELETE** — removes the bucket-index entry and deletes the head object separately. A crash can leave an orphaned head object (invisible but consuming storage) or a dangling bucket-index entry (pointing to nothing).
+- **Versioning** — the worst case. OLH, head object, and bucket-index are three separate RADOS objects, potentially on three different OSDs. Updating the version pointer, writing the new head, and updating the index are three non-atomic steps.
+- **CompleteMultipartUpload** — writes the final head object, updates the bucket-index, and cleans up multipart part objects. Multiple non-atomic operations across different PGs.
+
+A KV store eliminates this problem. The bucket-index is gone — all related entries (`:O:`, `:V:`, `:M:`, stats, delete-log) share the same shard and can be committed in a single transaction.
+
+**5. Server-Side Copy and dedup.**
 Multiple S3 objects cannot share a head object.
 A server-side copy or deduplication must create a full independent head object even when the data is identical.
 - Data inlined in the head-object (up to 4MB) is duplicated and copied by server-side copy.
 - Dedup moves the inline data from the head object into a new tail-object to allow full data deduplication.
 
-**5. Key rename.**
+**6. Key rename.**
 Renaming an S3 object requires copying the entire object and deleting the original — there is no in-place rename.\
 Especially costly when applications like Apache Spark/Hadoop rename entire directory trees.
 
-**6. Backend lock-in.**
+**7. Backend lock-in.**
 The storage tier must implement the full RADOS object model (xattrs, omap).
 RGW cannot use a simpler blob store without reimplementing that model.
 
-**7. EC metadata amplification.**
+**8. EC metadata amplification.**
 Every RADOS head object carries metadata (xattrs, omap) replicated across all K+M EC members.
 - 6 copies in a 4+2 scheme.
 - 11 copies in 8+3.
@@ -69,14 +79,14 @@ Every RADOS head object carries metadata (xattrs, omap) replicated across all K+
 This far exceeds what metadata protection requires.\
 Furthermore, Delete operations must remove rados objects on **all** K+M EC members.
 
-**8. Bucket listing.**
+**9. Bucket listing.**
 Head objects scattered across RADOS cannot be listed efficiently.\
 This is why the bucket-index exists as a separate structure — duplicating metadata to enable listing, at the cost of dual updates and consistency issues.
 
-**9. Storage-class placement.**
+**10. Storage-class placement.**
 When data is placed in a non-default storage class pool, the head object must still reside in the default pool — acting purely as a KV-style pointer at full RADOS object cost.
 
-**10. Delete overhead.**
+**11. Delete overhead.**
 Deleting an S3 object requires two non-atomic operations on separate systems:
 - Removing the bucket-index entry.
 - Deleting the head object:
@@ -277,16 +287,56 @@ Transaction scope is always within a single cluster — cross-cluster atomicity 
 
 ### Key Format
 
+Four key namespaces separate current objects, old versions, child entries, and multipart uploads:
+
+**Current object (`:O:`):**
+
 ```
-<prefix> <bucket_id> <object_name> <version_id>
+<prefix> <shard_id> <bucket_id> :O: <object_name>
 ```
+
+**Old versions and delete markers (`:V:`):**
+
+```
+<prefix> <shard_id> <bucket_id> :V: <object_name> <version_id>
+```
+
+**Child entries (`:C:`):**
+
+```
+<prefix> <shard_id> <bucket_id> :C: <ref_tag> :: <type> <identifier>
+```
+
+Child type prefixes: `A` (annotation), `T` (tags), `E` (extended value), `L` (ACL).
+
+**Multipart uploads (`:M:`):**
+
+```
+<prefix> <shard_id> <bucket_id> :M: <object_name> <upload_id>
+```
+
+Multipart upload entries are transient — they exist only between `CreateMultipartUpload` and `CompleteMultipartUpload`/`AbortMultipartUpload`. A dedicated namespace keyed by object_name (not ref_tag) is required because `ListMultipartUploads` is a bucket-wide API that lists all active uploads sorted by object key with prefix/delimiter filtering — a range scan on `:M:` satisfies this directly.
+
+**Field definitions:**
 
 - **prefix** — a short namespace identifier distinguishing object entries from bucket metadata, stats, and other KV schemas sharing the same store.
+- **shard_id** — always present. When sharding is not enabled (epoch 0), `shard_id = 1`.
 - **bucket_id** — binary bucket identifier. All objects in a bucket share the same prefix.
 - **object_name** — the S3 object key, stored as raw bytes. Preserves natural lexicographic ordering.
-- **version_id** — binary value using a descending scheme. The latest version sorts first, so a non-versioned GET reads the first key without scanning.
+- **version_id** — binary value using a descending scheme. The latest version sorts first.
+- **ref_tag** — compact unique identifier from the parent `:O:` entry (see [ref_tag](#ref_tag)).
 
-Key size: average ~256 bytes. Absolute max ~1040 bytes (1024-byte S3 name limit + 16 bytes for bucket_id and version_id, plus prefix).
+Key size: average ~256 bytes. Absolute max ~1040 bytes (1024-byte S3 name limit + 16 bytes for bucket_id and version_id, plus prefix and shard_id).
+
+**Listing behavior:**
+
+ListObjectsV2 scans `:O:` only — one entry per object key, no children, no old versions.
+
+ListObjectVersions scans `:O:` and `:V:`, merge-sorts by object name. All versions of the same object appear together, latest first.
+
+ListMultipartUploads scans `:M:` only — one entry per active upload, sorted by object key then upload initiation time. Supports prefix/delimiter filtering directly on the object key.
+
+Child entries under `:C:` are never encountered during bucket listing.
 
 Bucket/Realm/Zone metadata (name-to-id mapping, ACLs, policies, quota, versioning, lifecycle) is stored under separate prefixes in the same KV store.
 
@@ -304,25 +354,20 @@ Target size is ~1KB. Smaller values are accepted as-is. Larger values are split 
 
 <a id="ref_tag">**ref_tag**</a> — an existing RGW concept carried forward with an expanded role.
 
-A unique-per-bucket identifier generated by RGW before writing the KV entry.\
+A globally unique identifier generated by RGW before writing the KV entry.\
 It uniquely identifies a specific write/instance of an S3 object — necessary because S3 allows overwriting the same key with different data.
 
 In the current model, ref_tag is a deterministically generated string combining the gateway instance ID, a high-resolution epoch timestamp, and a randomly generated modifier.\
 It also serves as the RADOS object name for tail objects — the fixed short names for the 4MB child stripes of a parent head object.
 
-In the KV model, this role generalizes to compact identity for all child KV entries (tags, multipart state, extended value entries) — logically equivalent, applied to KV children instead of RADOS children.
+In the KV model, this role generalizes to compact identity for all child KV entries under the `:C:` namespace (annotations, tags, extended value entries) — logically equivalent, applied to KV children instead of RADOS children.
 
-Two generation strategies:
+**Generation — 12-byte binary:** `<rgw_id (4B)><seq_id (8B)>`
 
-- **Counter** — 64-bit value from a per-shard `atomic_inc()` counter, prefixed with the originating shard_id.\
-  Compact.\
-  Shard-split-safe: the originating shard_id is baked into the ref_tag permanently, so migrated objects never collide with new objects on the destination shard.\
-  During resharding, the original shard's counter KV must be migrated first.
+- **rgw_id (32 bits)** — allocated from a single global `atomic_inc()` counter in the KV store at RGW boot. Each restart gets a new ID.
+- **seq_id (64 bits)** — in-memory counter starting at 0 on each boot. Incremented per write.
 
-- **Hash** — 256-bit cryptographic hash of\
-`(S3_name + high_resolution_epoch_timestamp + rgw_id)`.\
-  Stateless — no coordination, no counter to maintain or migrate.\
-  Naturally shard-safe.
+Globally unique by construction — each `(rgw_id, seq_id)` pair appears exactly once. No per-shard state, no coordination between RGW instances, no cryptographic hash, no state to migrate during resharding. Compact enough to keep child `:C:` keys short.
 
 **User-visible attributes** (in the KV entry when they fit):
 
@@ -343,8 +388,8 @@ To keep values compact, attributes are compressed using various techniques (e.g.
 
 ### AWS S3 Object Tags
 
-- Object-Tags are stored in a separate child KV (under the same shard) referenced from the S3-Object parent KV
-- All Tags are stored together in a single KV
+- Object-Tags are stored in a separate child KV under `:C:<ref_tag>::T`, co-located on the same shard as the parent `:O:` entry.
+- All Tags are stored together in a single KV entry.
 - AWS supports a maximum of 10 tags per object each with an aggregated size of 5,120 bytes
 
 ### S3 Delete Reference
@@ -532,16 +577,16 @@ This is a concrete benefit of application-level sharding — discussed further i
 
 ## Key Sharding
 
-The base key format places all objects in a bucket in a contiguous range:
+With a single shard (`shard_id = 1`, epoch 0), all objects in a bucket form a contiguous range:
 
 ```
-<prefix> <bucket_id> <object_name> <version_id>
+<prefix> 1 <bucket_id> :O: <object_name>
 ```
 
-An alternative is to prepend a shard identifier — a cryptographic hash of `(bucket_id + object_name)`:
+With multiple shards, the `shard_id` is a cryptographic hash of `(bucket_id + object_name)`:
 
 ```
-<prefix> <shard_id> <bucket_id> <object_name> <version_id>
+<prefix> <shard_id> <bucket_id> :O: <object_name>
 ```
 
 The hash distributes objects uniformly across a fixed number of shards, breaking the contiguous bucket range into N disjoint ranges scattered across the key space.
@@ -710,21 +755,19 @@ This maximizes single-cluster transactions.\
 Only operations involving two distinct object identities require cross-cluster coordination.
 
 **Design principle:**\
-A KV entry logically tied to a specific object should derive its shard from the parent KV.\
-The child KV should **logically** be\
-`<prefix> <shard_id> <bucket_id> <object_name>::<child-suffix>`\
-This way it will always follow the same shard as the parent KV
+A KV entry logically tied to a specific object should derive its shard from the parent `:O:` entry.\
+Child entries use the `:C:` namespace with the parent's ref_tag:
 
-The <object_name> (up to 1024 bytes long) in child KV keys could be replaced by the parent's ref_tag — a compact unique identifier already stored in the parent KV value 
-  (see [ref_tag](#ref_tag))
+`<prefix> <shard_id> <bucket_id> :C: <ref_tag> :: <type> <identifier>`
 
+The ref_tag replaces the full object_name (up to 1024 bytes) with a compact identifier (see [ref_tag](#ref_tag)). All children of an object share the same ref_tag and therefore the same shard — enabling local transactions.
 
 
 ### Entries Sharing the Parent Shard:
 
 **All versions of an object.**
 
-Every version — current, prior, and delete markers — shares the same `(bucket_id, object_name)` and therefore the same shard. Creating a new version and invalidating the old one is a single local transaction. This eliminates the need for OLH (Object Lifecycle Head) as a separate coordination object.
+The current version lives under `:O:`, old versions and delete markers under `:V:`. All share the same `(bucket_id, object_name)` and therefore the same shard. Creating a new version (writing to `:O:` and moving the old entry to `:V:`) is a single local transaction. This eliminates the need for OLH (Object Lifecycle Head) as a separate coordination object.
 
 **Delete markers.**
 
@@ -732,7 +775,7 @@ In S3 versioned buckets, deleting an object creates a delete marker — a lightw
 
 **Multipart upload state.**
 
-Upload metadata (upload_id, part list) and the final committed object all relate to the same target `(bucket_id, object_name)`. If multipart state keys derive their shard from the target object's identity, all multipart operations — initiate, upload parts, complete, abort — are local. CompleteMultipartUpload (commit parts + write final object + clean up part entries) is a single transaction.
+Multipart uploads use the `:M:` namespace keyed by `(bucket_id, object_name, upload_id)`. The object_name ensures multipart entries hash to the same shard as the target `:O:` entry. All multipart operations — initiate, upload parts, complete, abort — are shard-local. CompleteMultipartUpload (write `:O:` entry + delete all `:M:` entries for the upload) is a single transaction.
 
 **Extended value / spillover entries.**
 
@@ -749,8 +792,8 @@ These are typically stored inline in the KV value.\
 If they ever spill to separate KV entries — due to size or access pattern optimization — deriving the shard from the same `(bucket_id + object_name)` keeps them co-located.\
 PutObjectTagging or PutObjectAcl are transactional with the object's metadata.
 
-- Object-Tags are probably best kept in a standalone child KV since they are individually mutable
-- ACL can be stored inside the parent KV or spillover to extended-metadata since they are overwritten together
+- Object-Tags are stored in a standalone child KV (`:C:<ref_tag>::T`) since they are individually mutable.
+- ACL can be stored inside the parent `:O:` entry or spillover to extended-metadata since they are overwritten together.
 
 **Per-shard stats counters.**
 
