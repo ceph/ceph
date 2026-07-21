@@ -346,7 +346,8 @@ public:
     const object_stat_sum_t& delta_stats,
     const eversion_t& at_version,
     std::vector<pg_log_entry_t> log_entries,
-    std::function<void(int)> on_write_complete = nullptr);
+    std::function<void(int)> on_write_complete = nullptr,
+    bool run = true);
   
   // Helper functions that perform the actual write logic
   // Must be called within event loop context on the primary OSD
@@ -376,7 +377,8 @@ public:
     const std::string& obj_name,
     uint64_t offset,
     const std::string& data,
-    uint64_t object_size);
+    uint64_t object_size,
+    bool run = true);
 
   /**
    * Write operation with optional truncate and multiple writes in a single transaction.
@@ -385,13 +387,30 @@ public:
    * @param object_size Current size of the object
    * @param truncate_size Optional truncate size (nullopt means no truncate)
    * @param writes Vector of {offset, data} pairs to write
+   * @param run If true (default) call run_until_idle
    * @return Result code (0 on success, negative on error)
    */
   int write(
     const std::string& obj_name,
     uint64_t object_size,
     std::optional<uint64_t> truncate_size,
-    const std::vector<std::pair<uint64_t, std::string>>& writes);
+    const std::vector<std::pair<uint64_t, std::string>>& writes,
+    bool run = true);
+
+  /**
+   * Create a snapshot of an existing object (head → snap=1).
+   *
+   * @param obj_name  Name of the already-written head object
+   * @param snap_size Size of the object at snapshot time
+   */
+  int create_snapshot(
+    const std::string& obj_name,
+    uint64_t snap_size);
+
+  int rollback(
+    const std::string& obj_name,
+    uint64_t snap_size,
+    bool run = true);
 
   int read_object(
     const std::string& obj_name,
