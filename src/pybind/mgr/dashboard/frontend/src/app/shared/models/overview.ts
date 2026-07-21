@@ -210,8 +210,8 @@ export const SEVERITY = {
 
 export const ACTIVE_CLEAN_CHART_OPTIONS: GaugeChartOptions = {
   resizable: true,
-  height: '100px',
-  width: '100px',
+  height: '130px',
+  width: '130px',
   gauge: { type: 'full' },
   toolbar: {
     enabled: false

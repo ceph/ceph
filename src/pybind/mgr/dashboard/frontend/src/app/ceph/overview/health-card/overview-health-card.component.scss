@@ -51,6 +51,11 @@
     justify-content: space-between;
   }
 
+  &-resiliency-btn {
+    gap: var(--cds-spacing-05);
+    padding-inline: var(--cds-spacing-05);
+  }
+
   &-resiliency-tab-content {
     display: flex;
   }
@@ -61,6 +66,7 @@
   }
 
   &-resiliency-chart-text {
+    width: 15rem;
     margin-left: var(--cds-spacing-04);
     width: 13rem;
   }
