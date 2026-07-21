@@ -1,16 +1,22 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Input, Output, ViewEncapsulation } from '@angular/core';
+import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { RouterModule } from '@angular/router';
 import { LayoutModule, LayerModule, LinkModule, TilesModule } from 'carbon-components-angular';
-import { ProductiveCardComponent } from '~/app/shared/components/productive-card/productive-card.component';
+import { ComponentsModule } from '~/app/shared/components/components.module';
 import { SetupStepCardComponent } from '~/app/shared/components/setup-step-card/setup-step-card.component';
+
+interface SetupCardConfig {
+  title: string;
+  description: string;
+  successMessage: string;
+  infoMessage: string;
+}
 
 @Component({
   selector: 'cd-nvmeof-setup-cards',
   templateUrl: './nvmeof-setup-cards.component.html',
   styleUrls: ['./nvmeof-setup-cards.component.scss'],
   standalone: true,
-  encapsulation: ViewEncapsulation.None,
   imports: [
     CommonModule,
     RouterModule,
@@ -18,7 +24,7 @@ import { SetupStepCardComponent } from '~/app/shared/components/setup-step-card/
     LayerModule,
     TilesModule,
     LinkModule,
-    ProductiveCardComponent,
+    ComponentsModule,
     SetupStepCardComponent
   ]
 })
@@ -29,24 +35,29 @@ export class NvmeofSetupCardsComponent {
   @Input() isAllConfigured = false;
   @Output() viewStatus = new EventEmitter<void>();
 
-  readonly cards = {
+  cards: Record<'gateway' | 'subsystem' | 'namespace', SetupCardConfig> = {
     gateway: {
-      title: $localize`Create Gateway groups`,
-      description: $localize`Group NVMe gateway nodes to enable high availability and load balancing for storage targets.`,
+      title: $localize`Gateway Group`,
+      description: $localize`Group your NVMe gateway nodes together to provide high availability and load distribution for your storage targets.`,
       successMessage: $localize`Gateway group configured successfully.`,
       infoMessage: $localize`No gateway groups configured for this cluster yet.`
     },
     subsystem: {
       title: $localize`Create Subsystems`,
-      description: $localize`Define storage targets by creating NVMe subsystems and configuring security, listeners, and host access.`,
+      description: $localize`Create NVMe subsystems that define storage targets. Configure security, listeners, and host access permissions.`,
       successMessage: $localize`Subsystem configured successfully.`,
       infoMessage: $localize`No subsystem configured for this cluster yet.`
     },
     namespace: {
       title: $localize`Create Namespaces`,
-      description: $localize`Create storage namespaces backed by Ceph block images. This completes your NVMe over Fabrics setup.`,
+      description: $localize`Create storage namespaces backed by Ceph block images. Map existing volumes or create new ones for your applications.`,
       successMessage: $localize`Namespaces mapped successfully.`,
-      infoMessage: $localize`No namespace allocated or mapped yet.`
+      infoMessage: $localize`No namespace available or mapped yet.`
     }
   };
+
+  onViewStatus(event: Event): void {
+    event.preventDefault();
+    this.viewStatus.emit();
+  }
 }

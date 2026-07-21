@@ -1,0 +1,115 @@
+<div cdsStack="horizontal"
+     gap="5"
+     class="nvmeof-overview-cards__row">
+  @for (card of overviewCards; track card.id) {
+    <div class="nvmeof-overview-cards__col">
+    <cd-productive-card>
+      <ng-template #header>
+        <h2 class="cds--type-heading-compact-02">{{ card.title }}</h2>
+        @if (card.id === 'alerts') {
+          <span class="nvmeof-alerts-card__scope"
+                [cdsStack]="'horizontal'"
+                gap="2">
+            <span>{{ alertsScopeLabel }}</span>
+            <svg cdsIcon="chevron--down"
+                 size="16"></svg>
+          </span>
+        }
+      </ng-template>
+
+      <ng-container [ngSwitch]="card.id">
+        <div *ngSwitchCase="'resources'"
+             cdsStack="vertical"
+             gap="0"
+             class="nvmeof-resources-status">
+          @for (row of resourceRows; track row.key; let last = $last) {
+            <div cdsStack="horizontal"
+                 gap="3"
+                 class="nvmeof-resources-status__item"
+                 [class.nvmeof-resources-status__item--last]="last">
+            <span class="cds--type-label-01">{{ row.label }}</span>
+            <div [cdsStack]="'horizontal'"
+                 gap="3">
+              <cd-icon type="success"></cd-icon>
+              @if (row.tab) {
+                <a cdsLink
+                   class="cds--type-body-compact-01"
+                   [routerLink]="[baseRoute, row.tab]"
+                   queryParamsHandling="preserve">{{ stats[row.key] }}</a>
+              } @else {
+                <span class="cds--type-body-compact-01">{{ stats[row.key] }}</span>
+              }
+            </div>
+            </div>
+          }
+        </div>
+
+        <ng-container *ngSwitchCase="'alerts'">
+          @if (alerts$ | async; as alertVM) {
+            <div [cdsStack]="'horizontal'" gap="2">
+              <span class="cds--type-heading-07">{{ alertVM.total }}</span>
+              <cd-icon [type]="alertVM.total === 0 ? 'success' : alertVM.critical > 0 ? 'error' : 'warning'"></cd-icon>
+            </div>
+            <p class="cds--type-label-01 cds-mt-1 cds-mb-4">
+              {{ alertVM.total > 0 ? 'Need attention' : 'No active alerts' }}
+            </p>
+            @if (alertVM.total > 0) {
+              <div class="cds-mt-4">
+                @for (entry of alertVM.byCategory | keyvalue; track entry.key) {
+                  <div cdsStack="horizontal"
+                       gap="3"
+                       class="nvmeof-alerts-card__category-row">
+                    <span class="cds--type-label-01">{{ entry.key | titlecase }}</span>
+                    <a cdsLink
+                       class="cds--type-body-compact-01"
+                       [routerLink]="alertsRoute"
+                       [queryParams]="alertQueryParams('all', entry.key)">{{ entry.value }}</a>
+                  </div>
+                }
+              </div>
+            }
+          }
+        </ng-container>
+
+        <ng-container *ngSwitchCase="'throughput'">
+          @if (throughput$ | async; as throughput) {
+            <p class="cds--type-heading-05 cds-mb-1">
+              {{ throughput.combined | number:'1.2-2' }} MB/s
+            </p>
+            <p class="cds--type-label-01 cds-mb-5"
+               i18n>combined R/W</p>
+            @for (row of throughputRows; track row.key) {
+              <p class="nvmeof-throughput__metric cds-mb-2">
+                {{ row.label }}: <strong>{{ throughput[row.key] | number:'1.2-2' }} MB/s</strong>
+              </p>
+            }
+          }
+          <p class="cds--type-label-01 cds-mt-5">
+            <span i18n>Active connections</span>: {{ stats.activeConnections }}
+          </p>
+        </ng-container>
+      </ng-container>
+
+      <ng-template #footer>
+        @if (card.id === 'alerts') {
+          <a cdsLink
+             [routerLink]="alertsRoute"
+             [queryParams]="alertQueryParams('all')"
+             i18n>View alerts</a>
+        }
+        @if (card.id === 'throughput') {
+          <a cdsLink
+             [cdsStack]="'horizontal'"
+             gap="2"
+             [routerLink]="[baseRoute, detailedInfoTab]"
+             queryParamsHandling="preserve">
+            <span i18n>View detailed information</span>
+            <svg cdsIcon="arrow--right"
+                 size="16"></svg>
+          </a>
+        }
+      </ng-template>
+    </cd-productive-card>
+    </div>
+  }
+</div>
