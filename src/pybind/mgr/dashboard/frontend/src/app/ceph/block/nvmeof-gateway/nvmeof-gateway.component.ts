@@ -100,7 +100,7 @@ export class NvmeofGatewayComponent implements OnInit, OnDestroy {
           .pipe(catchError(() => of([] as AlertmanagerAlert[])));
       }),
       map((alerts: AlertmanagerAlert[]) => {
-        const nvmeAlerts = alerts.filter(isNvmeofAlert);
+        const nvmeAlerts = alerts.filter((alert) => this.isNvmeofCardAlert(alert));
         const critical = nvmeAlerts.filter(
           (a) => a.labels.severity === 'critical' && a.status.state === 'active'
         ).length;
@@ -203,6 +203,23 @@ export class NvmeofGatewayComponent implements OnInit, OnDestroy {
 
   public get Tabs(): typeof TABS {
     return TABS;
+  }
+
+  /**
+   * Keep NVMe-oF card matching strict without changing shared alert filters.
+   */
+  private isNvmeofCardAlert(alert: AlertmanagerAlert): boolean {
+    if (!isNvmeofAlert(alert)) {
+      return false;
+    }
+
+    const job = alert.labels?.job?.toLowerCase();
+    if (job === 'nvme' || job === 'nvmeof') {
+      return true;
+    }
+
+    const alertName = alert.labels?.alertname?.toLowerCase() ?? '';
+    return alertName.includes('nvme');
   }
 
   readonly alertQueryParams = nvmeofAlertQueryParams;

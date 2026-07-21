@@ -13,8 +13,8 @@ import { TabsModule } from 'carbon-components-angular';
 
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { PerformanceCardService } from '~/app/shared/api/performance-card.service';
-import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
+import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { NvmeofStateService } from '../nvmeof-state.service';
 import { NvmeofTabsComponent } from './nvmeof-tabs.component';
@@ -44,7 +44,7 @@ describe('NvmeofTabsComponent', () => {
   let nvmeofServiceSpy: any;
   let nvmeofService: NvmeofService;
   let performanceCardService: PerformanceCardService;
-  let prometheusService: PrometheusService;
+  let prometheusAlertService: PrometheusAlertService;
   let queryParams$: BehaviorSubject<any>;
   let refresh$: Subject<void>;
   let routerEvents$: Subject<RouterEvent>;
@@ -75,14 +75,22 @@ describe('NvmeofTabsComponent', () => {
         {
           provide: PerformanceCardService,
           useValue: {
+            getNvmeofResourceStats: jest.fn().mockReturnValue(
+              of({
+                gatewayGroups: 1,
+                subsystems: 1,
+                namespaces: 2,
+                hosts: 1,
+                activeConnections: 0
+              })
+            ),
             getNvmeofThroughput: jest.fn().mockReturnValue(of({ reads: 0, writes: 0, combined: 0 }))
           }
         },
         {
-          provide: PrometheusService,
+          provide: PrometheusAlertService,
           useValue: {
-            isAlertmanagerUsable: jest.fn().mockReturnValue(of(false)),
-            getAlerts: jest.fn().mockReturnValue(of([]))
+            fetchGroupedAlerts: jest.fn().mockReturnValue(of([]))
           }
         },
         { provide: ActivatedRoute, useValue: { queryParams: queryParams$.asObservable() } },
@@ -95,7 +103,7 @@ describe('NvmeofTabsComponent', () => {
     router = TestBed.inject(Router);
     nvmeofService = TestBed.inject(NvmeofService);
     performanceCardService = TestBed.inject(PerformanceCardService);
-    prometheusService = TestBed.inject(PrometheusService);
+    prometheusAlertService = TestBed.inject(PrometheusAlertService);
     routerEvents$ = new Subject<RouterEvent>();
     jest.spyOn(router, 'events', 'get').mockReturnValue(routerEvents$.asObservable());
   });
@@ -443,7 +451,7 @@ describe('NvmeofTabsComponent', () => {
     });
   });
 
-  describe('loadResourceStats – gatewayGroupsDown', () => {
+  describe('loadResourceStats', () => {
     it('should load stats when gateway groups response is indexable object with numeric keys', fakeAsync(() => {
       const indexedResponse = {
         0: [makeGroup('default', 1, 1)],
@@ -460,7 +468,6 @@ describe('NvmeofTabsComponent', () => {
       tick();
 
       expect(stats.gatewayGroups).toBe(1);
-      expect(stats.gatewayGroupsDown).toBe(0);
       expect(stats.hasData).toBe(true);
     }));
 
@@ -475,53 +482,19 @@ describe('NvmeofTabsComponent', () => {
       tick();
 
       expect(stats.gatewayGroups).toBe(1);
-      expect(stats.gatewayGroupsDown).toBe(0);
       expect(stats.hasData).toBe(true);
     }));
 
-    it('should set gatewayGroupsDown to 0 when all gateways are running', fakeAsync(() => {
-      jest
-        .spyOn(nvmeofService, 'listGatewayGroups')
-        .mockReturnValue(of([[makeGroup('default', 1, 1), makeGroup('default1', 2, 2)]]));
-
-      component.loadResourceStats();
-      let stats: any;
-      component.nvmeof$.subscribe((s) => (stats = s));
-      tick();
-
-      expect(stats.gatewayGroups).toBe(2);
-      expect(stats.gatewayGroupsDown).toBe(0);
-    }));
-
-    it('should count groups with at least one down gateway in gatewayGroupsDown', fakeAsync(() => {
-      jest
-        .spyOn(nvmeofService, 'listGatewayGroups')
-        .mockReturnValue(of([[makeGroup('default', 0, 1), makeGroup('default1', 1, 2)]]));
-
-      component.loadResourceStats();
-      let stats: any;
-      component.nvmeof$.subscribe((s) => (stats = s));
-      tick();
-
-      expect(stats.gatewayGroups).toBe(2);
-      expect(stats.gatewayGroupsDown).toBe(2);
-    }));
-
-    it('should count only the groups that have errors', fakeAsync(() => {
-      jest
-        .spyOn(nvmeofService, 'listGatewayGroups')
-        .mockReturnValue(of([[makeGroup('default', 1, 1), makeGroup('default1', 0, 1)]]));
-
-      component.loadResourceStats();
-      let stats: any;
-      component.nvmeof$.subscribe((s) => (stats = s));
-      tick();
-
-      expect(stats.gatewayGroups).toBe(2);
-      expect(stats.gatewayGroupsDown).toBe(1);
-    }));
-
     it('should return null when no gateway groups exist', fakeAsync(() => {
+      jest.spyOn(performanceCardService, 'getNvmeofResourceStats').mockReturnValue(
+        of({
+          gatewayGroups: 0,
+          subsystems: 0,
+          namespaces: 0,
+          hosts: 0,
+          activeConnections: 0
+        })
+      );
       jest.spyOn(nvmeofService, 'listGatewayGroups').mockReturnValue(of([[]]));
 
       component.loadResourceStats();
@@ -550,8 +523,8 @@ describe('NvmeofTabsComponent', () => {
   });
 
   describe('loadAlerts', () => {
-    it('should return zero counts when alertmanager is not usable', fakeAsync(() => {
-      jest.spyOn(prometheusService, 'isAlertmanagerUsable').mockReturnValue(of(false));
+    it('should return zero counts when there are no alert groups', fakeAsync(() => {
+      jest.spyOn(prometheusAlertService, 'fetchGroupedAlerts').mockReturnValue(of([]));
 
       component.loadAlerts();
       let alerts: any;
@@ -565,31 +538,42 @@ describe('NvmeofTabsComponent', () => {
     }));
 
     it('should count active nvmeof critical and warning alerts', fakeAsync(() => {
-      const mockAlerts = [
+      const mockGroups = [
         {
-          labels: { alertname: 'NVMeoFHighGatewayCPU', category: 'gateway', severity: 'critical' },
-          status: { state: 'active' }
-        },
-        {
-          labels: {
-            alertname: 'NVMeoFInterfaceDuplex',
-            category: 'listener',
-            severity: 'warning'
-          },
-          status: { state: 'active' }
-        },
-        {
-          labels: { alertname: 'NVMeoFMissingListener', category: 'listener', severity: 'warning' },
-          status: { state: 'suppressed' }
-        },
-        {
-          labels: { alertname: 'CephDaemonCrash', severity: 'critical' },
-          status: { state: 'active' }
+          alerts: [
+            {
+              labels: {
+                alertname: 'NVMeoFHighGatewayCPU',
+                category: 'gateway',
+                severity: 'critical'
+              },
+              status: { state: 'active' }
+            },
+            {
+              labels: {
+                alertname: 'NVMeoFInterfaceDuplex',
+                category: 'listener',
+                severity: 'warning'
+              },
+              status: { state: 'active' }
+            },
+            {
+              labels: {
+                alertname: 'NVMeoFMissingListener',
+                category: 'listener',
+                severity: 'warning'
+              },
+              status: { state: 'suppressed' }
+            },
+            {
+              labels: { alertname: 'CephDaemonCrash', severity: 'critical' },
+              status: { state: 'active' }
+            }
+          ]
         }
       ];
 
-      jest.spyOn(prometheusService, 'isAlertmanagerUsable').mockReturnValue(of(true));
-      jest.spyOn(prometheusService, 'getAlerts').mockReturnValue(of(mockAlerts as any));
+      jest.spyOn(prometheusAlertService, 'fetchGroupedAlerts').mockReturnValue(of(mockGroups as any));
 
       component.loadAlerts();
       let alerts: any;
@@ -604,15 +588,18 @@ describe('NvmeofTabsComponent', () => {
     }));
 
     it('should match nvmeof alerts by prometheus job label', fakeAsync(() => {
-      const mockAlerts = [
+      const mockGroups = [
         {
-          labels: { job: 'nvmeof', severity: 'warning', alertname: 'SomeAlert' },
-          status: { state: 'active' }
+          alerts: [
+            {
+              labels: { job: 'nvmeof', severity: 'warning', alertname: 'SomeAlert' },
+              status: { state: 'active' }
+            }
+          ]
         }
       ];
 
-      jest.spyOn(prometheusService, 'isAlertmanagerUsable').mockReturnValue(of(true));
-      jest.spyOn(prometheusService, 'getAlerts').mockReturnValue(of(mockAlerts as any));
+      jest.spyOn(prometheusAlertService, 'fetchGroupedAlerts').mockReturnValue(of(mockGroups as any));
 
       component.loadAlerts();
       let alerts: any;
@@ -625,15 +612,18 @@ describe('NvmeofTabsComponent', () => {
     }));
 
     it('should not match alerts by alertname when nvme labels are absent', fakeAsync(() => {
-      const mockAlerts = [
+      const mockGroups = [
         {
-          labels: { alertname: 'NVMeofInterfaceDuplex', severity: 'warning' },
-          status: { state: 'active' }
+          alerts: [
+            {
+              labels: { alertname: 'NVMeofInterfaceDuplex', severity: 'warning' },
+              status: { state: 'active' }
+            }
+          ]
         }
       ];
 
-      jest.spyOn(prometheusService, 'isAlertmanagerUsable').mockReturnValue(of(true));
-      jest.spyOn(prometheusService, 'getAlerts').mockReturnValue(of(mockAlerts as any));
+      jest.spyOn(prometheusAlertService, 'fetchGroupedAlerts').mockReturnValue(of(mockGroups as any));
 
       component.loadAlerts();
       let alerts: any;
@@ -645,20 +635,69 @@ describe('NvmeofTabsComponent', () => {
       expect(alerts.total).toBe(0);
     }));
 
-    it('should not count inactive nvmeof alerts', fakeAsync(() => {
-      const mockAlerts = [
+    it('should not count non-nvme alerts that only match nvme categories', fakeAsync(() => {
+      const mockGroups = [
         {
-          labels: { alertname: 'NVMeoFHighGatewayCPU', category: 'gateway', severity: 'critical' },
-          status: { state: 'inactive' }
-        },
-        {
-          labels: { alertname: 'NVMeoFInterfaceDuplex', category: 'listener', severity: 'warning' },
-          status: { state: 'pending' }
+          alerts: [
+            {
+              labels: {
+                alertname: 'SomeGatewayAlert',
+                category: 'gateway',
+                severity: 'critical'
+              },
+              status: { state: 'active' }
+            },
+            {
+              labels: {
+                alertname: 'NVMeoFInterfaceDuplex',
+                category: 'listener',
+                severity: 'warning'
+              },
+              status: { state: 'active' }
+            }
+          ]
         }
       ];
 
-      jest.spyOn(prometheusService, 'isAlertmanagerUsable').mockReturnValue(of(true));
-      jest.spyOn(prometheusService, 'getAlerts').mockReturnValue(of(mockAlerts as any));
+      jest.spyOn(prometheusAlertService, 'fetchGroupedAlerts').mockReturnValue(of(mockGroups as any));
+
+      component.loadAlerts();
+      let alerts: any;
+      component.nvmeofAlerts$.subscribe((a) => (alerts = a));
+      tick(0);
+      discardPeriodicTasks();
+
+      expect(alerts.critical).toBe(0);
+      expect(alerts.warning).toBe(1);
+      expect(alerts.total).toBe(1);
+      expect(alerts.byCategory).toEqual({ listener: 1 });
+    }));
+
+    it('should not count inactive nvmeof alerts', fakeAsync(() => {
+      const mockGroups = [
+        {
+          alerts: [
+            {
+              labels: {
+                alertname: 'NVMeoFHighGatewayCPU',
+                category: 'gateway',
+                severity: 'critical'
+              },
+              status: { state: 'inactive' }
+            },
+            {
+              labels: {
+                alertname: 'NVMeoFInterfaceDuplex',
+                category: 'listener',
+                severity: 'warning'
+              },
+              status: { state: 'pending' }
+            }
+          ]
+        }
+      ];
+
+      jest.spyOn(prometheusAlertService, 'fetchGroupedAlerts').mockReturnValue(of(mockGroups as any));
 
       component.loadAlerts();
       let alerts: any;

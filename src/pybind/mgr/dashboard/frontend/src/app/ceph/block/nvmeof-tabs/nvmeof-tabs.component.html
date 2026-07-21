@@ -22,22 +22,10 @@
                         i18n>Gateway groups</span>
                   <div [cdsStack]="'horizontal'"
                        gap="3">
-                    @if (stats.gatewayGroups - stats.gatewayGroupsDown > 0) {
-                    <span [ngClass]="stats.gatewayGroupsDown > 0 ? 'cds-mr-3' : ''">
-                      <cd-icon type="success"></cd-icon>
-                      <a cdsLink
-                         class="cds--type-body-compact-01 cds-ml-3"
-                         (click)="onSelected(Tabs.gateways)">{{ stats.gatewayGroups - stats.gatewayGroupsDown }}</a>
-                    </span>
-                    }
-                    @if (stats.gatewayGroupsDown > 0) {
-                    <span>
-                      <cd-icon type="error"></cd-icon>
-                      <a cdsLink
-                         class="cds--type-body-compact-01 cds-ml-3"
-                         (click)="onSelected(Tabs.gateways)">{{ stats.gatewayGroupsDown }}</a>
-                    </span>
-                    }
+                    <cd-icon type="success"></cd-icon>
+                    <a cdsLink
+                       class="cds--type-body-compact-01"
+                       (click)="onSelected(Tabs.gateways)">{{ stats.gatewayGroups }}</a>
                   </div>
                 </div>
                 <div class="nvmeof-resources-status__item">

@@ -5,6 +5,7 @@ import {
   catchError,
   filter,
   map,
+  mergeMap,
   shareReplay,
   startWith,
   switchMap,
@@ -14,14 +15,15 @@ import {
 
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import {
+  NvmeofResourceStats,
   NvmeofThroughput,
   PerformanceCardService
 } from '~/app/shared/api/performance-card.service';
-import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { NvmeofSubsystem, NvmeofSubsystemNamespace } from '~/app/shared/models/nvmeof';
-import { AlertmanagerAlert } from '~/app/shared/models/prometheus-alerts';
+import { AlertmanagerAlert, GroupAlertmanagerAlert } from '~/app/shared/models/prometheus-alerts';
 import { isNvmeofAlert, nvmeofAlertQueryParams } from '~/app/shared/helpers/nvmeof-alert.helper';
+import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import { NvmeofStateService } from '../nvmeof-state.service';
 
 const NVMEOF_PATH = 'block/nvmeof';
@@ -36,7 +38,6 @@ const DEFAULT_ALERTS: NvmeAlerts = {
 
 export interface ResourceStats {
   gatewayGroups: number;
-  gatewayGroupsDown: number;
   subsystems: number;
   namespaces: number;
   hosts: number;
@@ -96,7 +97,7 @@ export class NvmeofTabsComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private nvmeofService: NvmeofService,
     private performanceCardService: PerformanceCardService,
-    private prometheusService: PrometheusService,
+    private prometheusAlertService: PrometheusAlertService,
     private nvmeofStateService: NvmeofStateService
   ) {}
 
@@ -117,60 +118,18 @@ export class NvmeofTabsComponent implements OnInit, OnDestroy {
   }
 
   loadResourceStats(): void {
-    this.nvmeof$ = this.nvmeofService.listGatewayGroups().pipe(
-      switchMap((gatewayGroups: CephServiceSpec[][]) => {
-        const firstItem = (gatewayGroups as any)?.[0];
-        const rawGroups: CephServiceSpec[] = Array.isArray(firstItem)
-          ? (firstItem as CephServiceSpec[])
-          : Array.isArray(gatewayGroups)
-          ? ((gatewayGroups as unknown) as CephServiceSpec[])
-          : [];
-        const groups = rawGroups.filter((g: CephServiceSpec) => g?.spec?.group);
-        if (groups.length === 0) {
-          return of(null);
+    this.nvmeof$ = this.performanceCardService.getNvmeofResourceStats().pipe(
+      mergeMap((stats: NvmeofResourceStats) => {
+        if (stats.gatewayGroups > 0) {
+          return of({
+            ...stats,
+            hasData: true
+          } as ResourceStats);
         }
-        const hostsSet = new Set<string>();
-        groups.forEach((group: CephServiceSpec) => {
-          (group.placement?.hosts ?? []).forEach((h: string) => hostsSet.add(h));
-        });
-        const subsystemCalls = groups.map((group: CephServiceSpec) =>
-          this.nvmeofService.listSubsystems(group.spec.group).pipe(catchError(() => of([])))
-        );
-        const namespaceCalls = groups.map((group: CephServiceSpec) =>
-          this.nvmeofService.listNamespaces(group.spec.group).pipe(catchError(() => of([])))
-        );
-        const gatewayGroupsDown = groups.filter(
-          (g: CephServiceSpec) => (g.status?.running ?? 0) < (g.status?.size ?? 0)
-        ).length;
-        return forkJoin([forkJoin(subsystemCalls), forkJoin(namespaceCalls)]).pipe(
-          map(([subsystemsPerGroup]: [any[], any[]]) => {
-            const allSubs: NvmeofSubsystem[] = (subsystemsPerGroup as NvmeofSubsystem[][]).flat();
-            const totalNamespaces = allSubs.reduce((sum, s) => sum + (s.namespace_count || 0), 0);
-            const activeConnections = allSubs.reduce((s, sub) => s + (sub.initiator_count || 0), 0);
-            return {
-              gatewayGroups: groups.length,
-              gatewayGroupsDown,
-              subsystems: allSubs.length,
-              namespaces: totalNamespaces,
-              hosts: hostsSet.size,
-              activeConnections,
-              hasData: true
-            } as ResourceStats;
-          }),
-          catchError(() =>
-            of({
-              gatewayGroups: groups.length,
-              gatewayGroupsDown,
-              subsystems: 0,
-              namespaces: 0,
-              hosts: hostsSet.size,
-              activeConnections: 0,
-              hasData: true
-            } as ResourceStats)
-          )
-        );
+
+        return this.loadResourceStatsFromNvmeofApi();
       }),
-      catchError(() => of(null)),
+      catchError(() => this.loadResourceStatsFromNvmeofApi()),
       tap((stats) => {
         this.cachedResourceStats = stats?.hasData ? stats : null;
       }),
@@ -194,30 +153,8 @@ export class NvmeofTabsComponent implements OnInit, OnDestroy {
 
   loadAlerts(): void {
     this.nvmeofAlerts$ = timer(0, ALERT_POLL_INTERVAL).pipe(
-      switchMap(() => this.prometheusService.isAlertmanagerUsable()),
-      switchMap((usable) => {
-        if (!usable) return of([] as AlertmanagerAlert[]);
-        return this.prometheusService
-          .getAlerts(true)
-          .pipe(catchError(() => of([] as AlertmanagerAlert[])));
-      }),
-      map((alerts: AlertmanagerAlert[]) => {
-        const nvmeAlerts = alerts.filter(isNvmeofAlert);
-        const critical = nvmeAlerts.filter(
-          (a) => a.labels.severity === 'critical' && a.status.state === 'active'
-        ).length;
-        const warning = nvmeAlerts.filter(
-          (a) => a.labels.severity === 'warning' && a.status.state === 'active'
-        ).length;
-        const byCategory: Record<string, number> = {};
-        nvmeAlerts
-          .filter((a) => a.status.state === 'active' && a.labels.category)
-          .forEach((a) => {
-            const cat = a.labels.category!;
-            byCategory[cat] = (byCategory[cat] ?? 0) + 1;
-          });
-        return { critical, warning, total: critical + warning, byCategory };
-      }),
+      switchMap(() => this.prometheusAlertService.fetchGroupedAlerts(true)),
+      map((alertGroups) => this.toNvmeofAlerts(alertGroups)),
       catchError(() => of(DEFAULT_ALERTS)),
       tap((alerts) => {
         this.cachedAlerts = alerts;
@@ -370,6 +307,7 @@ export class NvmeofTabsComponent implements OnInit, OnDestroy {
   dismissOnboarding(): void {
     this.dismissed = true;
     this.showSetupCards = false;
+    this.refreshOverviewCards();
   }
 
   onSelected(tab: TABS) {
@@ -381,6 +319,100 @@ export class NvmeofTabsComponent implements OnInit, OnDestroy {
 
   public get Tabs(): typeof TABS {
     return TABS;
+  }
+
+  private loadResourceStatsFromNvmeofApi(): Observable<ResourceStats | null> {
+    return this.nvmeofService.listGatewayGroups().pipe(
+      switchMap((gatewayGroups: CephServiceSpec[][]) => {
+        const firstItem = (gatewayGroups as any)?.[0];
+        const rawGroups: CephServiceSpec[] = Array.isArray(firstItem)
+          ? (firstItem as CephServiceSpec[])
+          : Array.isArray(gatewayGroups)
+          ? ((gatewayGroups as unknown) as CephServiceSpec[])
+          : [];
+        const groups = rawGroups.filter((g: CephServiceSpec) => g?.spec?.group);
+        if (groups.length === 0) {
+          return of(null);
+        }
+
+        const hostsSet = new Set<string>();
+        groups.forEach((group: CephServiceSpec) => {
+          (group.placement?.hosts ?? []).forEach((h: string) => hostsSet.add(h));
+        });
+
+        const subsystemCalls = groups.map((group: CephServiceSpec) =>
+          this.nvmeofService.listSubsystems(group.spec.group).pipe(catchError(() => of([])))
+        );
+
+        return forkJoin(subsystemCalls).pipe(
+          map((subsystemsPerGroup) => {
+            const allSubs: NvmeofSubsystem[] = (subsystemsPerGroup as NvmeofSubsystem[][]).flat();
+            const totalNamespaces = allSubs.reduce((sum, s) => sum + (s.namespace_count || 0), 0);
+            const activeConnections = allSubs.reduce((s, sub) => s + (sub.initiator_count || 0), 0);
+
+            return {
+              gatewayGroups: groups.length,
+              subsystems: allSubs.length,
+              namespaces: totalNamespaces,
+              hosts: hostsSet.size,
+              activeConnections,
+              hasData: true
+            } as ResourceStats;
+          }),
+          catchError(() =>
+            of({
+              gatewayGroups: groups.length,
+              subsystems: 0,
+              namespaces: 0,
+              hosts: hostsSet.size,
+              activeConnections: 0,
+              hasData: true
+            } as ResourceStats)
+          )
+        );
+      }),
+      catchError(() => of(null))
+    );
+  }
+
+  private toNvmeofAlerts(alertGroups: GroupAlertmanagerAlert[]): NvmeAlerts {
+    const groupedAlerts = alertGroups.flatMap((group) => group.alerts ?? []);
+    return this.summarizeNvmeofAlerts(groupedAlerts);
+  }
+
+  private summarizeNvmeofAlerts(alerts: AlertmanagerAlert[]): NvmeAlerts {
+    const nvmeAlerts = alerts.filter(
+      (alert) => this.isNvmeofCardAlert(alert) && alert.status?.state === 'active'
+    );
+    const critical = nvmeAlerts.filter((alert) => alert.labels?.severity === 'critical').length;
+    const warning = nvmeAlerts.filter((alert) => alert.labels?.severity === 'warning').length;
+    const byCategory: Record<string, number> = {};
+
+    nvmeAlerts.forEach((alert) => {
+      const category = alert.labels?.category;
+      if (category) {
+        byCategory[category] = (byCategory[category] ?? 0) + 1;
+      }
+    });
+
+    return { critical, warning, total: critical + warning, byCategory };
+  }
+
+  /**
+   * Keep NVMe-oF card matching strict without changing shared alert filters.
+   */
+  private isNvmeofCardAlert(alert: AlertmanagerAlert): boolean {
+    if (!isNvmeofAlert(alert)) {
+      return false;
+    }
+
+    const job = alert.labels?.job?.toLowerCase();
+    if (job === 'nvme' || job === 'nvmeof') {
+      return true;
+    }
+
+    const alertName = alert.labels?.alertname?.toLowerCase() ?? '';
+    return alertName.includes('nvme');
   }
 
   readonly alertQueryParams = nvmeofAlertQueryParams;

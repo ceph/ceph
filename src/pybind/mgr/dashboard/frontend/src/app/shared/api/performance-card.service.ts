@@ -1,15 +1,27 @@
 import { inject, Injectable } from '@angular/core';
 import { PrometheusService } from './prometheus.service';
 import { PerformanceData } from '../models/performance-data';
-import { AllStoragetypesQueries, NvmeofPromqls } from '../enum/dashboard-promqls.enum';
+import {
+  AllStoragetypesQueries,
+  NvmeofPromqls,
+  NvmeofResourcePromqls
+} from '../enum/dashboard-promqls.enum';
 import { map } from 'rxjs/operators';
-import { Observable } from 'rxjs';
+import { forkJoin, Observable } from 'rxjs';
 import { ChartPoint } from '../models/area-chart-point';
 
 export interface NvmeofThroughput {
   reads: number;
   writes: number;
   combined: number;
+}
+
+export interface NvmeofResourceStats {
+  gatewayGroups: number;
+  subsystems: number;
+  namespaces: number;
+  hosts: number;
+  activeConnections: number;
 }
 
 const BYTES_PER_MB = 1024 * 1024;
@@ -26,6 +38,25 @@ export class PerformanceCardService {
     return this.prometheusService
       .getRangeQueriesData(time, NvmeofPromqls, true)
       .pipe(map((raw) => this.convertNvmeofThroughput(raw)));
+  }
+
+  getNvmeofResourceStats(): Observable<NvmeofResourceStats> {
+    const queries = NvmeofResourcePromqls;
+    return forkJoin({
+      gatewayGroups: this.prometheusService.getGaugeQueryData(queries.NVMEOF_GATEWAY_GROUPS),
+      subsystems: this.prometheusService.getGaugeQueryData(queries.NVMEOF_SUBSYSTEMS),
+      namespaces: this.prometheusService.getGaugeQueryData(queries.NVMEOF_NAMESPACES),
+      hosts: this.prometheusService.getGaugeQueryData(queries.NVMEOF_HOSTS),
+      activeConnections: this.prometheusService.getGaugeQueryData(queries.NVMEOF_ACTIVE_CONNECTIONS)
+    }).pipe(
+      map((raw) => ({
+        gatewayGroups: this.toGaugeValue(raw.gatewayGroups),
+        subsystems: this.toGaugeValue(raw.subsystems),
+        namespaces: this.toGaugeValue(raw.namespaces),
+        hosts: this.toGaugeValue(raw.hosts),
+        activeConnections: this.toGaugeValue(raw.activeConnections)
+      }))
+    );
   }
 
   convertNvmeofThroughput(raw: Record<string, [number, string][]>): NvmeofThroughput {
@@ -103,11 +134,20 @@ export class PerformanceCardService {
             values: { ...item.values }
           });
         } else {
-          Object.assign(map.get(time).values, item.values);
+          const existingPoint = map.get(time);
+          if (existingPoint) {
+            Object.assign(existingPoint.values, item.values);
+          }
         }
       }
     }
 
     return [...map.values()].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+  }
+
+  private toGaugeValue(metric: { result?: Array<{ value?: [number, string] }> }): number {
+    const rawValue = metric?.result?.[0]?.value?.[1];
+    const parsed = Number(rawValue);
+    return Number.isFinite(parsed) ? parsed : 0;
   }
 }

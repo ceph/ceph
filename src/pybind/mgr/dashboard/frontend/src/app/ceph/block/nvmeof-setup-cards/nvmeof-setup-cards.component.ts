@@ -27,4 +27,9 @@ export class NvmeofSetupCardsComponent {
   @Input() hasNamespaces = false;
   @Input() isAllConfigured = false;
   @Output() viewStatus = new EventEmitter<void>();
+
+  onViewStatus(event: Event): void {
+    event.preventDefault();
+    this.viewStatus.emit();
+  }
 }

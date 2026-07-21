@@ -96,7 +96,8 @@
   @if (isAllConfigured) {
   <div class="nvmeof-setup-cards__completion">
     <a cdsLink
-       (click)="viewStatus.emit()"
+       href=""
+       (click)="onViewStatus($event)"
        i18n>Configuration complete. View status →</a>
   </div>
   }
