@@ -8046,7 +8046,8 @@ vector<DaemonHealthMetric> OSD::get_health_metrics()
                                  [](std::pair<uint64_t, int> p1, std::pair<uint64_t, int> p2) {
                                    return p1.second < p2.second;
                                  });
-          if (osdmap->get_pools().find(slow_pool_it->first) != osdmap->get_pools().end()) {
+          if (slow_pool_it != slow_op_pools.end() &&
+              osdmap->get_pools().find(slow_pool_it->first) != osdmap->get_pools().end()) {
             string pool_name = osdmap->get_pool_name(slow_pool_it->first);
             ss << "] most affected pool [ '"
                << pool_name
