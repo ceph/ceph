@@ -13,7 +13,7 @@ pip install boto3
 radosgw-admin user create --uid=test3 --display-name=test3 --access-key=test3 --secret-key=test3 2>/dev/null
 
 # run test
-#$mydir/bin/python3 $mydir/test_rgw_d4n.py
+$mydir/bin/python3 $mydir/test_rgw_d4n.py
 
 deactivate
 echo OK.
