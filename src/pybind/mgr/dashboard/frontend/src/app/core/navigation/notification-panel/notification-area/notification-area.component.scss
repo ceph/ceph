@@ -59,6 +59,18 @@ cd-notification-area {
   &:last-child {
     padding-bottom: var(--cds-spacing-05);
   }
+
+  > .border-subtle-bottom {
+    margin: 0 calc(-1 * var(--cds-spacing-05));
+  }
+
+  &:has(.notification-item--clickable) {
+    cursor: pointer;
+
+    &:hover {
+      background-color: var(--cds-layer-hover);
+    }
+  }
 }
 
 .notification-item {

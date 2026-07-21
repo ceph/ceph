@@ -84,6 +84,11 @@ cd-notification-item {
   width: 1rem;
 }
 
+.cd-notification-item__occurrences {
+  color: var(--cds-text-secondary);
+  margin: 0;
+}
+
 .cd-notification-item__chevron svg {
   fill: var(--cds-icon-secondary);
 }
