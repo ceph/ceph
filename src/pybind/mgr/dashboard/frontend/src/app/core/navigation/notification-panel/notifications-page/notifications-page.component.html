@@ -74,6 +74,7 @@
             [timestamp]="notification.timestamp"
             [message]="notification.displayPreview"
             [notificationId]="notification.id"
+            [occurrences]="notification.occurrences"
             [showChevron]="true"
             [showUnread]="!readMap()[notification.id]"
           >
@@ -91,6 +92,12 @@
             i18n
           >
             No notifications available
+          </p>
+          <p
+            class="cds-mt-3 cds--type-helper-text-01"
+            i18n
+          >
+            Notifications are stored locally and cleared on browser reset.
           </p>
         </div>
       }
@@ -110,7 +117,10 @@
         </div>
         <div class="notifications-page__detail-body cds-mt-5">
           @if (selected.occurrences > 1) {
-            <p class="notifications-page__occurrences cds--type-label-01" i18n>
+            <p
+              class="notifications-page__occurrences cds--type-label-01"
+              i18n
+            >
               Occurrences: {{ selected.occurrences }}
             </p>
           }

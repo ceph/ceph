@@ -48,6 +48,7 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
 
   private sub: Subscription;
   private interval: number;
+  private _pendingId: string | null = null;
 
   constructor(
     private notificationService: NotificationService,
@@ -81,15 +82,15 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
         )
       );
 
-      const id = this.route.snapshot.queryParams['id'];
-      if (id && !this.selectedNotificationID()) {
-        const match = notifications.find((n) => n.id === id);
-        if (match) {
-          this.selectedNotificationID.set(id);
-          this.notificationService.markAsRead(id);
-        }
-      }
+      this._tryPreselect(notifications);
     });
+
+    this.sub.add(
+      this.route.queryParams.subscribe((params) => {
+        this._pendingId = params['id'] || null;
+        this._tryPreselect(this.notificationService.getNotificationsSnapshot());
+      })
+    );
   }
 
   ngOnDestroy(): void {
@@ -129,6 +130,16 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
   onNotificationDeleted(notificationId: string): void {
     if (this.selectedNotificationID() === notificationId) {
       this.selectedNotificationID.set(null);
+    }
+  }
+
+  private _tryPreselect(notifications: CdNotification[]): void {
+    if (!this._pendingId || this.selectedNotificationID()) return;
+    const match = notifications.find((n) => n.id === this._pendingId);
+    if (match) {
+      this.selectedNotificationID.set(this._pendingId);
+      this.notificationService.markAsRead(this._pendingId);
+      this._pendingId = null;
     }
   }
 

@@ -9,7 +9,6 @@ import {
 } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SharedModule } from '~/app/shared/shared.module';
-import { CdNotification, CdNotificationConfig } from '~/app/shared/models/cd-notification';
 
 @Component({
   template: `
