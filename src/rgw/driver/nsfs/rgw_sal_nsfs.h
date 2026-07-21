@@ -480,7 +480,7 @@ public:
 			 const rgw_owner& owner,
 			 RGWStorageStats& stats,
 			 ceph::real_time& last_synced,
-			 ceph::real_time& last_updated) override { return 0; }
+			 ceph::real_time& last_updated) override;
   virtual int load_stats_async(const DoutPrefixProvider* dpp,
 			       const rgw_owner& owner,
 			       boost::intrusive_ptr<ReadStatsCB> cb) override { return -ENOTSUP; }

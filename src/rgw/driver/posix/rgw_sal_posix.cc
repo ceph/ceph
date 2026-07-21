@@ -3724,6 +3724,43 @@ int POSIXBucket::read_stats_async(const DoutPrefixProvider *dpp,
 int POSIXBucket::sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
                                   RGWBucketEnt* ent)
 {
+  uint64_t num_objects = 0, total_size = 0, total_size_rounded = 0;
+  int ret = driver->get_bucket_cache()->get_cached_stats(
+    dpp, get_name(), this, num_objects, total_size, total_size_rounded, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "sync_owner_stats: get_cached_stats failed for "
+      << get_name() << " ret=" << ret << dendl;
+    return ret;
+  }
+
+  std::string owner_id = to_string(get_owner());
+  DBOpParams params = {};
+  params.bucket_stats_table = driver->get_user_db()->getBucketStatsTable();
+  params.op.bucket_stats.bucket_name = get_name();
+  params.op.bucket_stats.owner_id = owner_id;
+  params.op.bucket_stats.size = total_size;
+  params.op.bucket_stats.size_rounded = total_size_rounded;
+  params.op.bucket_stats.num_objects = num_objects;
+  params.op.bucket_stats.last_updated = ceph::coarse_real_clock::to_time_t(
+    ceph::coarse_real_clock::now());
+
+  auto db_op = driver->get_user_db()->dbops.WriteBucketStats;
+  ret = db_op->Execute(dpp, &params);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "sync_owner_stats: WriteBucketStats failed for "
+      << get_name() << " ret=" << ret << dendl;
+    return ret;
+  }
+
+  if (ent) {
+    ent->bucket = get_key();
+    ent->size = total_size;
+    ent->size_rounded = total_size_rounded;
+    ent->count = num_objects;
+  }
+
+  ldpp_dout(dpp, 20) << "sync_owner_stats: " << get_name()
+    << " objects=" << num_objects << " size=" << total_size << dendl;
   return 0;
 }
 
@@ -5783,6 +5820,35 @@ void POSIXDriver::register_admin_apis(RGWRESTMgr* mgr)
   mgr->register_resource("driver", driver_mgr);
 }
 
+int POSIXDriver::load_stats(const DoutPrefixProvider* dpp,
+                             optional_yield y,
+                             const rgw_owner& owner,
+                             RGWStorageStats& stats,
+                             ceph::real_time& last_synced,
+                             ceph::real_time& last_updated)
+{
+  std::string owner_id = to_string(owner);
+  DBOpParams params = {};
+  params.bucket_stats_table = get_user_db()->getBucketStatsTable();
+  params.op.bucket_stats.owner_id = owner_id;
+
+  auto db_op = get_user_db()->dbops.ReadOwnerStats;
+  int ret = db_op->Execute(dpp, &params);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "load_stats: ReadOwnerStats failed for "
+      << owner_id << " ret=" << ret << dendl;
+    return ret;
+  }
+
+  stats = params.op.bucket_stats.stats;
+  last_synced = ceph::real_time();
+  last_updated = ceph::real_time();
+
+  ldpp_dout(dpp, 20) << "load_stats: owner=" << owner_id
+    << " objects=" << stats.num_objects << " size=" << stats.size << dendl;
+  return 0;
+}
+
 int POSIXDriver::driver_hint(const DoutPrefixProvider* dpp,
                               const std::string& hint,
                               const std::map<std::string, std::string>& params)
@@ -5794,6 +5860,17 @@ int POSIXDriver::driver_hint(const DoutPrefixProvider* dpp,
       return -EINVAL;
     }
     return get_bucket_cache()->invalidate_bucket(dpp, it->second);
+  }
+  if (hint == "invalidate-quota-cache") {
+    auto it = params.find("uid");
+    if (it == params.end()) {
+      return -EINVAL;
+    }
+    rgw_user user(it->second);
+    get_quota_handler()->invalidate_cached_owner_stats(user);
+    ldpp_dout(dpp, 10) << "invalidate-quota-cache: evicted for "
+      << it->second << dendl;
+    return 0;
   }
   return -ENOTSUP;
 }
