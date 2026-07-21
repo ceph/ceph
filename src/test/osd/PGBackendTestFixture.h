@@ -80,7 +80,7 @@ protected:
   /// Keyed by hobject_t, values are shared_ptr so the same OBC is reused
   /// across sequential operations on the same object. This is critical for
   /// EC attr_cache continuity.
-  std::map<hobject_t, ObjectContextRef> object_contexts;
+  std::map<int, std::map<hobject_t, ObjectContextRef>> object_contexts;
   
   /// Track outstanding writes per object. When this reaches 0, we can safely
   /// clear attr_cache (as there are no in-flight writes that might have stale
@@ -285,61 +285,7 @@ public:
     obc->ssc = nullptr;
     return obc;
   }
-  
-  /// Get an existing OBC or create a new one.
-  /// Unlike make_object_context(), this method reuses OBCs for the same
-  /// object across operations, which is essential for attr_cache continuity
-  /// in EC pools.
-  /// @param primary_shard The shard ID to read attributes from (for EC pools)
-  ObjectContextRef get_or_create_obc(
-    const hobject_t& hoid,
-    bool exists = false,
-    uint64_t size = 0,
-    int primary_shard = 0)
-  {
-    auto it = object_contexts.find(hoid);
-    ObjectContextRef obc;
-
-    if (it != object_contexts.end()) {
-      obc = it->second;
-    } else {
-      obc = make_object_context(hoid, exists, size);
-      object_contexts[hoid] = obc;
-    }
-
-    // If the object exists and this is an EC pool, populate attr_cache with
-    // ALL attributes from disk if not already populated. This matches production
-    // behavior where the OBC is loaded with all xattrs from the object store.
-    // In EC, attributes are stored per-shard, so we must read from the specified shard.
-    if (exists && pool_type == EC && store && !chs.empty() && obc->attr_cache.empty()) {
-      auto writes_it = outstanding_writes.find(hoid);
-      bool has_outstanding_writes = (writes_it != outstanding_writes.end() && writes_it->second > 0);
-
-      // Cannot read from disk if there are outstanding writes - test bug
-      ceph_assert(!has_outstanding_writes);
-
-      // For EC pools, attributes are stored with the shard ID in the ghobject_t
-      ceph_assert(primary_shard >= 0 && primary_shard < (int)chs.size());
-      ObjectStore::CollectionHandle ch = chs[primary_shard];
-      if (ch) {
-        ghobject_t ghoid(hoid, ghobject_t::NO_GEN, shard_id_t(primary_shard));
-        std::map<std::string, ceph::buffer::ptr, std::less<>> attrs;
-        int r = store->getattrs(ch, ghoid, attrs);
-
-        if (r >= 0) {
-          // Successfully read all attributes from disk - populate the cache
-          for (auto& [key, value_ptr] : attrs) {
-            bufferlist bl;
-            bl.append(value_ptr);
-            obc->attr_cache[key] = std::move(bl);
-          }
-        }
-      }
-    }
-
-    return obc;
-  }
-  
+    
   /**
    * Set the next version number for auto-generation.
    * This can be used by tests after rollback to set the version to a specific value.
@@ -359,12 +305,36 @@ public:
   }
   
   /**
-   * Read ObjectInfo from the store for an existing object.
-   * Returns an ObjectContext with the decoded ObjectInfo, or a new
-   * ObjectContext with default values if the object doesn't exist.
+   * Set an object context for the given object.
+   * This encapsulates access to the per-OSD object_contexts map.
+   * Must be called within event loop context.
+   *
+   * @param hoid The object to set context for
+   * @param obc The object context to cache
+   */
+  void set_object_context(
+    const hobject_t& hoid,
+    ObjectContextRef obc);
+
+  /**
+   * Clear all object contexts for the current OSD.
+   * This encapsulates access to the per-OSD object_contexts map.
+   * Must be called within event loop context.
+   */
+  void clear_object_contexts();
+
+  /**
+   * Get or create an object context for the given object.
+   * This matches PrimaryLogPG::get_object_context behavior.
+   *
+   * @param hoid The object to get context for
+   * @param can_create If true, create a new OBC if object doesn't exist
+   * @param attrs Optional attributes to use instead of reading from disk
    */
   ObjectContextRef get_object_context(
-    const hobject_t& hoid);
+    const hobject_t& hoid,
+    bool can_create,
+    const std::map<std::string, ceph::buffer::list, std::less<>> *attrs = nullptr);
   
   int do_transaction_and_complete(
     const hobject_t& hoid,
@@ -373,6 +343,24 @@ public:
     const eversion_t& at_version,
     std::vector<pg_log_entry_t> log_entries,
     std::function<void(int)> on_write_complete = nullptr);
+  
+  // Helper functions that perform the actual write logic
+  // Must be called within event loop context on the primary OSD
+  int do_create_and_write_impl(
+    const std::string& obj_name,
+    const std::string& data);
+  
+  int do_write_impl(
+    const std::string& obj_name,
+    uint64_t offset,
+    const std::string& data,
+    uint64_t object_size);
+  
+  int do_write_attribute_impl(
+    const std::string& obj_name,
+    const std::string& attr_name,
+    const std::string& attr_value,
+    bool force_all_shards);
   
   virtual int create_and_write(
     const std::string& obj_name,
@@ -466,13 +454,6 @@ public:
   virtual void update_osdmap(
     std::shared_ptr<OSDMap> new_osdmap,
     std::optional<pg_shard_t> new_primary = std::nullopt);
-
-  /**
-   * Clear attr_cache for all objects.
-   * Called on on_change() to invalidate cached attributes that might be stale
-   * after a peering event or OSDMap change.
-   */
-  void clear_all_attr_caches();
 
   /**
    * Write attributes to an object with control over first_write_in_interval.

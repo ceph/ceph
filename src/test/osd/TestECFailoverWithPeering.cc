@@ -279,6 +279,64 @@ TEST_P(TestECFailoverWithPeering, RecoveryWithPeering) {
     << "on_activate_complete should have been called during peering";
 }
 
+TEST_P(TestECFailoverWithPeering, ZeroSizeObjectWithAttributesRecovery) {
+  //  ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
+  
+  const std::string obj_name = "test_primary_failover";
+  const std::string test_data;
+  
+  create_and_write(obj_name, test_data);
+  
+  // Mark OSD 0 (the initial primary) as down
+  // PeeringState will automatically determine the new primary
+  mark_osd_down(0);
+  
+  write_attribute(obj_name, "key", "value", false);
+  
+  // Determine the actual new primary from the OSDMap
+  int new_primary_shard = get_primary_shard_from_osdmap();
+  ASSERT_GE(new_primary_shard, 0) << "Should have a valid new primary after failover";
+  
+  // For an optimized EC pool (k=4, m=2), the new primary should be a coding shard (>= k)
+  // For a non-optimized pool, it would be shard 1
+  const pg_pool_t& pool = get_pool();
+  if (pool.allows_ecoptimizations()) {
+    ASSERT_GE(new_primary_shard, k)
+      << "New primary should be a coding shard (>= k) for optimized pool";
+  } else {
+    ASSERT_EQ(new_primary_shard, 1)
+      << "New primary should be shard 1 for non-optimized pool";
+  }
+  
+  ASSERT_TRUE(get_peering_listener(new_primary_shard)->backend_listener->pgb_is_primary())
+    << "Shard " << new_primary_shard << " should be new primary";
+  
+  ASSERT_FALSE(get_peering_listener(0)->backend_listener->pgb_is_primary())
+    << "Failed shard should not be primary";
+  
+  std::string state = get_state_name(new_primary_shard);
+  ASSERT_TRUE(state.find("Active") != std::string::npos)
+    << "New primary should be Active after failover, got: " << state;
+  
+  // Verify the PG reached Active state
+  ASSERT_TRUE(get_peering_state(new_primary_shard)->is_active())
+    << "New primary should be in Active state";
+  
+  mark_osd_up(0);
+  
+  run_recovery_and_verify_callbacks(obj_name, 0, test_data);
+  
+  // Verify that the attribute was recovered on shard 0
+  hobject_t hoid = make_test_object(obj_name);
+  ghobject_t ghoid = ghobject_t(hoid, ghobject_t::NO_GEN, shard_id_t(0));
+  
+  ceph::buffer::ptr attr_value;
+  int r = store->getattr(chs[0], ghoid, "key", attr_value);
+  ASSERT_GE(r, 0) << "Attribute 'key' should exist on recovered shard 0";
+  ASSERT_EQ(std::string(attr_value.c_str(), attr_value.length()), "value")
+    << "Attribute 'key' should have value 'value' after recovery";
+}
+
 // ---------------------------------------------------------------------------
 // EC backend configurations for parameterized tests
 // ---------------------------------------------------------------------------

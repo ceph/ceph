@@ -396,7 +396,9 @@ int PGBackendTestFixture::do_transaction_and_complete(
   return completion_result;
 }
 
-int PGBackendTestFixture::create_and_write(
+// Helper function that performs the actual write logic
+// Must be called within event loop context on the primary OSD
+int PGBackendTestFixture::do_create_and_write_impl(
   const std::string& obj_name,
   const std::string& data)
 {
@@ -408,7 +410,7 @@ int PGBackendTestFixture::create_and_write(
   pg_t->create(hoid);
 
   // Use persistent OBC so attr_cache is maintained across operations
-  ObjectContextRef obc = get_or_create_obc(hoid, false, 0);
+  ObjectContextRef obc = get_object_context(hoid, true);
   pg_t->obc_map[hoid] = obc;
 
   // Note: We do NOT pre-seed attr_cache here. For a new object, attr_cache
@@ -420,7 +422,11 @@ int PGBackendTestFixture::create_and_write(
 
   bufferlist bl;
   bl.append(data);
-  pg_t->write(hoid, 0, bl.length(), bl);
+  
+  // Only perform write if data is non-empty (PGTransaction requires len > 0)
+  if (bl.length() > 0) {
+    pg_t->write(hoid, 0, bl.length(), bl);
+  }
 
   object_stat_sum_t delta_stats;
   delta_stats.num_objects = 1;
@@ -497,31 +503,115 @@ int PGBackendTestFixture::create_and_write(
   return result;
 }
 
-ObjectContextRef PGBackendTestFixture::get_object_context(
-  const hobject_t& hoid)
+// Public interface that schedules the write on the primary OSD
+int PGBackendTestFixture::create_and_write(
+  const std::string& obj_name,
+  const std::string& data)
 {
-  PGBackend* primary_backend = get_primary_backend();
+  // Get the primary OSD from the OSDMap
+  int primary_osd = osdmap->get_pg_acting_primary(pgid);
+  ceph_assert(primary_osd >= 0);
+  
+  int result = -1;
+  event_loop->schedule_transaction(primary_osd, [this, &result, obj_name, data]() {
+    result = do_create_and_write_impl(obj_name, data);
+  });
+  event_loop->run_until_idle();
+  
+  return result;
+}
+
+void PGBackendTestFixture::set_object_context(
+  const hobject_t& hoid,
+  ObjectContextRef obc)
+{
+  int osd = event_loop->get_current_executing_osd();
+  ceph_assert(osd != -1);
+  object_contexts[osd][hoid] = obc;
+}
+
+void PGBackendTestFixture::clear_object_contexts()
+{
+  int osd = event_loop->get_current_executing_osd();
+  ceph_assert(osd != -1);
+  object_contexts[osd].clear();
+}
+
+ObjectContextRef PGBackendTestFixture::get_object_context(
+  const hobject_t& hoid,
+  bool can_create,
+  const std::map<std::string, ceph::buffer::list, std::less<>> *attrs)
+{
+  int osd = event_loop->get_current_executing_osd();
+  ceph_assert(osd != -1);
+  
+  // Check cache first (matches PrimaryLogPG::get_object_context line 11968)
+  auto it = object_contexts[osd].find(hoid);
+  if (it != object_contexts[osd].end()) {
+    return it->second;
+  }
+
+  // Check disk for object info (matches PrimaryLogPG lines 11977-11982)
+  bufferlist bv;
+  if (attrs) {
+    auto it_oi = attrs->find(OI_ATTR);
+    ceph_assert(it_oi != attrs->end());
+    bv = it_oi->second;
+  } else {
+    PGBackend* primary_backend = get_primary_backend();
+    int r = primary_backend->objects_get_attr(hoid, OI_ATTR, &bv);
+    
+    if (r < 0) {
+      if (!can_create) {
+        // Object doesn't exist and can't create (matches PrimaryLogPG lines 11985-11989)
+        return ObjectContextRef();
+      }
+      
+      // Create new object context (matches PrimaryLogPG lines 11992-12004)
+      object_info_t oi(hoid);
+      ObjectContextRef obc = std::make_shared<ObjectContext>();
+      obc->obs.oi = oi;
+      obc->obs.exists = false;
+      obc->ssc = nullptr;
+      set_object_context(hoid, obc);
+      return obc;
+    }
+  }
+
+  // Decode object_info (matches PrimaryLogPG lines 12008-12015)
+  object_info_t oi;
+  try {
+    bufferlist::const_iterator bliter = bv.begin();
+    decode(oi, bliter);
+  } catch (...) {
+    return ObjectContextRef();
+  }
+  
+  // Create OBC and populate from disk (matches PrimaryLogPG lines 12019-12022)
   ObjectContextRef obc = std::make_shared<ObjectContext>();
-  obc->obs.oi = object_info_t(hoid);
-  obc->obs.exists = false;
+  obc->obs.oi = oi;
+  obc->obs.exists = true;
   obc->ssc = nullptr;
   
-  // Try to read the ObjectInfo from the store
-  ghobject_t ghoid(hoid, ghobject_t::NO_GEN, primary_backend->get_parent()->whoami_shard().shard);
-  ceph::buffer::ptr value_ptr;
-  int r = store->getattr(ch, ghoid, OI_ATTR, value_ptr);
-  ceph_assert(r >= 0 && value_ptr.length() > 0);
-
-  bufferlist bl;
-  bl.append(value_ptr);
-  auto p = bl.cbegin();
-  obc->obs.oi.decode(p);
-  obc->obs.exists = true;
+  // For EC pools, load all attributes (matches PrimaryLogPG lines 12031-12040)
+  if (pool_type == EC) {
+    if (attrs) {
+      obc->attr_cache = *attrs;
+    } else {
+      PGBackend* primary_backend = get_primary_backend();
+      int r = primary_backend->objects_get_attrs(hoid, &obc->attr_cache);
+      ceph_assert(r == 0);
+    }
+  }
+  
+  // Cache the OBC (matches PrimaryLogPG line 12019 lookup_or_create)
+  set_object_context(hoid, obc);
   
   return obc;
 }
 
-int PGBackendTestFixture::write(
+// Helper function for write implementation
+int PGBackendTestFixture::do_write_impl(
   const std::string& obj_name,
   uint64_t offset,
   const std::string& data,
@@ -530,7 +620,7 @@ int PGBackendTestFixture::write(
   hobject_t hoid = make_test_object(obj_name);
   PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
 
-  ObjectContextRef obc = get_or_create_obc(hoid, true, object_size);
+  ObjectContextRef obc = get_object_context(hoid, false);
   pg_t->obc_map[hoid] = obc;
 
   // Track outstanding write
@@ -603,6 +693,26 @@ int PGBackendTestFixture::write(
   int result = do_transaction_and_complete(
     hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries), write_complete);
 
+  return result;
+}
+
+// Public interface that schedules the write on the primary OSD
+int PGBackendTestFixture::write(
+  const std::string& obj_name,
+  uint64_t offset,
+  const std::string& data,
+  uint64_t object_size)
+{
+  // Get the primary OSD from the OSDMap
+  int primary_osd = osdmap->get_pg_acting_primary(pgid);
+  ceph_assert(primary_osd >= 0);
+  
+  int result = -1;
+  event_loop->schedule_transaction(primary_osd, [this, &result, obj_name, offset, data, object_size]() {
+    result = do_write_impl(obj_name, offset, data, object_size);
+  });
+  event_loop->run_until_idle();
+  
   return result;
 }
 
@@ -765,12 +875,7 @@ void PGBackendTestFixture::update_osdmap(
     }
   }
 
-  // Step 3: Clear all attr_caches before on_change()
-  // The cached OI attributes may be stale after a peering event.
-  // Also drop any stale outstanding write tracking: once we enter a new
-  // interval, blocked/in-flight writes from the previous interval should no
-  // longer prevent OBC reloading for rollback/recovery verification.
-  clear_all_attr_caches();
+  // Step 3: Clear outstanding writes. FIXME: This belongs in the pg
   outstanding_writes.clear();
 
   // Step 4: Schedule on_change() calls as event loop actions
@@ -778,8 +883,9 @@ void PGBackendTestFixture::update_osdmap(
   for (auto& [instance, be] : backends) {
     if (be) {
       PGBackend* backend_ptr = be.get();
-      event_loop->schedule_peering_event(instance, [backend_ptr]() {
+      event_loop->schedule_peering_event(instance, [this, backend_ptr]() {
         backend_ptr->on_change();
+        clear_object_contexts();
       });
     }
   }
@@ -796,19 +902,8 @@ void PGBackendTestFixture::cleanup_data_dir()
   }
 }
 
-void PGBackendTestFixture::clear_all_attr_caches()
-{
-  // Clear attr_cache for all objects. This is called on on_change() to
-  // invalidate cached attributes that might be stale after a peering event.
-  for (auto& [hoid, obc] : object_contexts) {
-    if (obc) {
-      obc->attr_cache.clear();
-    }
-  }
-}
-
-
-int PGBackendTestFixture::write_attribute(
+// Helper function for write_attribute implementation
+int PGBackendTestFixture::do_write_attribute_impl(
   const std::string& obj_name,
   const std::string& attr_name,
   const std::string& attr_value,
@@ -817,7 +912,7 @@ int PGBackendTestFixture::write_attribute(
   hobject_t hoid = make_test_object(obj_name);
   PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
   
-  ObjectContextRef obc = get_or_create_obc(hoid, true, 0);
+  ObjectContextRef obc = get_object_context(hoid, false);
   pg_t->obc_map[hoid] = obc;
   
   outstanding_writes[hoid]++;
@@ -878,6 +973,26 @@ int PGBackendTestFixture::write_attribute(
   
   int result = do_transaction_and_complete(
     hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries), write_complete);
+  
+  return result;
+}
+
+// Public interface that schedules the write on the primary OSD
+int PGBackendTestFixture::write_attribute(
+  const std::string& obj_name,
+  const std::string& attr_name,
+  const std::string& attr_value,
+  bool force_all_shards)
+{
+  // Get the primary OSD from the OSDMap
+  int primary_osd = osdmap->get_pg_acting_primary(pgid);
+  ceph_assert(primary_osd >= 0);
+  
+  int result = -1;
+  event_loop->schedule_transaction(primary_osd, [this, &result, obj_name, attr_name, attr_value, force_all_shards]() {
+    result = do_write_attribute_impl(obj_name, attr_name, attr_value, force_all_shards);
+  });
+  event_loop->run_until_idle();
   
   return result;
 }
