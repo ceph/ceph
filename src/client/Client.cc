@@ -13299,8 +13299,19 @@ int Client::_fsync(Inode *in, bool syncdataonly)
     _flush(in, object_cacher_completion.get());
     ldout(cct, 15) << "using return-valued form of _fsync" << dendl;
   }
-  
+  bool mds_flush = false;
   if (!syncdataonly && in->dirty_caps) {
+    if (cct->_conf->client_fsync_to_rados &&
+        in->inline_version == CEPH_INLINE_NONE &&
+        !(in->dirty_caps & ~CEPH_CAP_FILE_WR & ~CEPH_CAP_FILE_EXCL)) {
+      // we don't need to sync to the MDS when we we can recover
+      // everything via Filer::probe()
+      mds_flush = false;
+    } else {
+      mds_flush = true;
+    }
+  }
+  if (mds_flush) {
     check_caps(in, CHECK_CAPS_NODELAY|CHECK_CAPS_SYNCHRONOUS);
     if (in->flushing_caps)
       flush_tid = last_flush_tid;

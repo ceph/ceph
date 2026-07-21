@@ -117,3 +117,13 @@ performance in some multi-client workloads, because completing an fsync does not
 mean that a different client will be able to see the update results -- instead,
 the other client attempting to access the file will initiate a separate MDS
 commit that it must wait for.)
+
+
+Development todo:
+- Track when we do a write that matches or extends in->size, so that we can do
+an mds fsync if we extend file size without writing to it.
+- is it okay that we don't fsync after somebody sets the
+  CEPH_SETATTR_FSCRYPT_FILE field?
+- is it okay that we don't fsync after somebody sets atime? I didn't think we
+  maintained atime at all, wild.
+- probably I should just track more explicitly on what dirtied the cap
