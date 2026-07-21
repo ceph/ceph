@@ -22,6 +22,7 @@ describe('NotificationsPageComponent', () => {
   let readMapSubject: BehaviorSubject<Record<string, boolean>>;
   let notificationService: any;
   let mockLocation: any;
+  let queryParamsSubject: BehaviorSubject<any>;
 
   const createMockNotificationService = () => {
     dataSourceSubject = new BehaviorSubject<CdNotification[]>([]);
@@ -50,7 +51,8 @@ describe('NotificationsPageComponent', () => {
           readMapSubject.next(updated);
           localStorage.setItem('cdNotificationsRead', JSON.stringify(updated));
         }
-      })
+      }),
+      getNotificationsSnapshot: () => dataSourceSubject.getValue()
     };
   };
 
@@ -118,6 +120,7 @@ describe('NotificationsPageComponent', () => {
     mockLocation = { back: jasmine.createSpy('back') };
     const mockNotificationService = createMockNotificationService();
     notificationService = mockNotificationService;
+    queryParamsSubject = new BehaviorSubject<any>({});
 
     localStorage.removeItem('cdNotificationsRead');
 
@@ -130,7 +133,13 @@ describe('NotificationsPageComponent', () => {
         { provide: PrometheusNotificationService, useValue: mockPrometheusNotificationService },
         { provide: AuthStorageService, useValue: mockAuthStorageService },
         { provide: Location, useValue: mockLocation },
-        { provide: ActivatedRoute, useValue: { snapshot: { queryParams: {} } } }
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: { queryParams: {} },
+            queryParams: queryParamsSubject.asObservable()
+          }
+        }
       ],
       schemas: [CUSTOM_ELEMENTS_SCHEMA]
     }).compileComponents();
@@ -310,13 +319,8 @@ describe('NotificationsPageComponent', () => {
   });
 
   describe('query param pre-selection', () => {
-    it('should pre-select notification from id query param', async () => {
-      const route = TestBed.inject(ActivatedRoute);
-      (route.snapshot.queryParams as any) = { id: '2' };
-
-      fixture = TestBed.createComponent(NotificationsPageComponent);
-      component = fixture.componentInstance;
-      dataSourceSubject.next(mockNotifications);
+    it('should pre-select notification from id query param', () => {
+      queryParamsSubject.next({ id: '2' });
       fixture.detectChanges();
 
       expect(component.selectedNotificationID()).toBe('2');
@@ -324,25 +328,16 @@ describe('NotificationsPageComponent', () => {
     });
 
     it('should not pre-select if id does not match any notification', () => {
-      const route = TestBed.inject(ActivatedRoute);
-      (route.snapshot.queryParams as any) = { id: 'nonexistent' };
-
-      fixture = TestBed.createComponent(NotificationsPageComponent);
-      component = fixture.componentInstance;
-      dataSourceSubject.next(mockNotifications);
+      queryParamsSubject.next({ id: 'nonexistent' });
       fixture.detectChanges();
 
       expect(component.selectedNotificationID()).toBeNull();
     });
 
     it('should not override manual selection on subsequent data emissions', () => {
-      const route = TestBed.inject(ActivatedRoute);
-      (route.snapshot.queryParams as any) = { id: '2' };
-
-      fixture = TestBed.createComponent(NotificationsPageComponent);
-      component = fixture.componentInstance;
-      dataSourceSubject.next(mockNotifications);
+      queryParamsSubject.next({ id: '2' });
       fixture.detectChanges();
+      expect(component.selectedNotificationID()).toBe('2');
 
       component.onNotificationSelect(component.notifications()[0]);
       expect(component.selectedNotificationID()).toBe('1');
@@ -350,6 +345,17 @@ describe('NotificationsPageComponent', () => {
       dataSourceSubject.next(mockNotifications);
       fixture.detectChanges();
       expect(component.selectedNotificationID()).toBe('1');
+    });
+
+    it('should pre-select when navigating from toast view more link', () => {
+      dataSourceSubject.next(mockNotifications);
+      fixture.detectChanges();
+
+      queryParamsSubject.next({ id: '3' });
+      fixture.detectChanges();
+
+      expect(component.selectedNotificationID()).toBe('3');
+      expect(notificationService.markAsRead).toHaveBeenCalledWith('3');
     });
   });
 

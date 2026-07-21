@@ -3,7 +3,8 @@ import {
   OnInit,
   AfterViewChecked,
   HostListener,
-  ElementRef
+  ElementRef,
+  ChangeDetectionStrategy
 } from '@angular/core';
 import { animate, style, transition, trigger } from '@angular/animations';
 import { Router } from '@angular/router';
@@ -15,6 +16,7 @@ import { NotificationService } from '../../services/notification.service';
   selector: 'cd-toast',
   templateUrl: './notification-toast.component.html',
   styleUrls: ['./notification-toast.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   animations: [
     trigger('toastAnimation', [
       transition(
@@ -39,6 +41,7 @@ import { NotificationService } from '../../services/notification.service';
 })
 export class ToastComponent implements OnInit, AfterViewChecked {
   activeToasts$: Observable<ToastContent[]>;
+  private toastsDirty = false;
 
   constructor(
     private notificationService: NotificationService,
@@ -48,15 +51,22 @@ export class ToastComponent implements OnInit, AfterViewChecked {
 
   ngOnInit() {
     this.activeToasts$ = this.notificationService.activeToasts$;
+    this.notificationService.activeToasts$.subscribe(() => {
+      this.toastsDirty = true;
+    });
   }
 
   ngAfterViewChecked() {
+    if (!this.toastsDirty) return;
+    this.toastsDirty = false;
+
     const toasts = this.el.nativeElement.querySelectorAll('cds-toast');
     toasts.forEach((toast: HTMLElement) => {
       const subtitle = toast.querySelector('.cds--toast-notification__subtitle');
       const viewMore = toast.querySelector('.toast-view-more') as HTMLElement;
       if (!subtitle || !viewMore) return;
-      const isTruncated = subtitle.scrollHeight > subtitle.clientHeight;
+      const textEl = subtitle.querySelector('.toast-message') || subtitle;
+      const isTruncated = textEl.scrollHeight > textEl.clientHeight;
       viewMore.style.display = isTruncated ? '' : 'none';
     });
   }
