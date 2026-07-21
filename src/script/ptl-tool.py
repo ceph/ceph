@@ -356,7 +356,11 @@ class AuditReport:
                     payload['event'] = 'COMMENT'
 
                 endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/pulls/{pr}/reviews"
-                session.post(endpoint, auth=GithubBearerAuth(), json=payload)
+                r = session.post(endpoint, auth=GithubBearerAuth(), json=payload)
+                if r.status_code in (200, 201):
+                    log.info(f"Successfully posted consolidated review to PR #{pr}")
+                else:
+                    log.error(f"Failed to post consolidated review to PR #{pr}: {r.status_code} {r.text}")
 
 class GithubBearerAuth(requests.auth.AuthBase):
     def __call__(self, r):
@@ -1954,6 +1958,14 @@ def build_branch(args):
     if args.create_qa or args.update_qa or args.audit or args.final_merge or args.qe_label:
         log.info("connecting to %s", REDMINE_ENDPOINT)
         R = Redmine(REDMINE_ENDPOINT, username=REDMINE_USER, key=REDMINE_API_KEY)
+        try:
+            R.user.get('current')
+        except (redminelib.exceptions.AuthError, redminelib.exceptions.ForbiddenError) as e:
+            raise SystemExit(
+                f"Redmine authentication failed against {REDMINE_ENDPOINT}: {e}\n"
+                "Check that ~/.redmine_key (or PTL_TOOL_REDMINE_API_KEY) contains a valid, "
+                "unexpired API key. Failing now, before any PRs are merged or branches pushed."
+            )
         log.debug("connected")
 
     prs = args.prs
