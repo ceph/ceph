@@ -356,7 +356,11 @@ class AuditReport:
                     payload['event'] = 'COMMENT'
 
                 endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/pulls/{pr}/reviews"
-                session.post(endpoint, auth=GithubBearerAuth(), json=payload)
+                r = session.post(endpoint, auth=GithubBearerAuth(), json=payload)
+                if r.status_code in (200, 201):
+                    log.info(f"Successfully posted consolidated review to PR #{pr}")
+                else:
+                    log.error(f"Failed to post consolidated review to PR #{pr}: {r.status_code} {r.text}")
 
 class GithubBearerAuth(requests.auth.AuthBase):
     def __call__(self, r):
@@ -398,6 +402,22 @@ def get_pr_tracker_string(session, pr, response=None):
     title = response["title"].strip().replace('|', '&#124;')
     pr_link = f'"PR #{pr}":{response["html_url"]}'
     return f'| {pr_link} | {author} | {labels_str} | {title} |'
+
+def verify_redmine_auth(R):
+    """
+    Makes a cheap authenticated call to confirm the configured Redmine API key
+    actually works. Raises SystemExit with an actionable message if it doesn't,
+    so callers can bail out before merging PRs or pushing branches rather than
+    discovering a bad key only when manage_qa_tracker() tries to use it.
+    """
+    try:
+        R.user.get('current')
+    except (redminelib.exceptions.AuthError, redminelib.exceptions.ForbiddenError) as e:
+        raise SystemExit(
+            f"Redmine authentication failed against {REDMINE_ENDPOINT}: {e}\n"
+            "Check that ~/.redmine_key (or PTL_TOOL_REDMINE_API_KEY) contains a valid, "
+            "unexpired API key. Failing now, before any PRs are merged or branches pushed."
+        )
 
 def get(session, url, params=None, paging=True):
     if params is None:
@@ -1958,6 +1978,7 @@ def build_branch(args):
     if args.create_qa or args.update_qa or args.audit or args.final_merge or args.qe_label:
         log.info("connecting to %s", REDMINE_ENDPOINT)
         R = Redmine(REDMINE_ENDPOINT, username=REDMINE_USER, key=REDMINE_API_KEY)
+        verify_redmine_auth(R)
         log.debug("connected")
 
     prs = args.prs
