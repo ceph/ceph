@@ -784,12 +784,12 @@ public:
   virtual const std::string& get_compression_type(const rgw_placement_rule& rule) override;
   virtual bool valid_placement(const rgw_placement_rule& rule) override { return true; } 
   int load_vector_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
-                            std::unique_ptr<VectorBucket>* bucket, optional_yield y) override { return -ENOTSUP; }
+                            std::unique_ptr<VectorBucket>* bucket, optional_yield y) override;
   int list_vector_buckets(const DoutPrefixProvider* dpp,
 			     const rgw_owner& owner, const std::string& tenant,
 			     const std::string& marker, const std::string& end_marker,
 			     uint64_t max, BucketList& buckets,
-			     optional_yield y) override { return -ENOTSUP; }
+			     optional_yield y) override;
 
   virtual void finalize(void) override;
 
@@ -1008,6 +1008,75 @@ struct POSIXManifest {
   }
 };
 WRITE_CLASS_ENCODER(POSIXManifest);
+
+/* S3Vectors - class POSIXVectorBucket */
+class POSIXVectorBucket : public StoreVectorBucket {
+private:
+  POSIXDriver* driver;
+  std::optional<std::string> ns{std::nullopt};
+  std::unique_ptr<Directory> dir;
+
+public:
+  POSIXVectorBucket(POSIXDriver *_dr, Directory* _p_dir, const rgw_bucket& _b, std::optional<std::string> _ns = std::nullopt)
+    : StoreVectorBucket(_b),
+    driver(_dr),
+    ns(_ns),
+    dir(std::make_unique<Directory>(get_fname(), _p_dir, _dr->ctx()))
+    { }
+
+  POSIXVectorBucket(POSIXDriver *_dr, std::unique_ptr<Directory> _this_dir, const rgw_bucket& _b, std::optional<std::string> _ns = std::nullopt)
+    : StoreVectorBucket(_b),
+    driver(_dr),
+    ns(_ns),
+    dir(std::move(_this_dir))
+    { }
+
+  POSIXVectorBucket(POSIXDriver *_dr, Directory* _p_dir, const RGWBucketInfo& _i)
+    : StoreVectorBucket(_i),
+    driver(_dr),
+    ns(),
+    dir(std::make_unique<Directory>(get_fname(), _p_dir, _dr->ctx()))
+    { }
+
+  POSIXVectorBucket(const POSIXVectorBucket& _b) :
+    StoreVectorBucket(_b),
+    driver(_b.driver),
+    ns(_b.ns)
+    {
+      dir = _b.dir->clone_dir();
+    }
+
+  virtual ~POSIXVectorBucket() { }
+
+  virtual int remove(const DoutPrefixProvider* dpp, bool delete_children,
+		     optional_yield y) override;
+  virtual int create(const DoutPrefixProvider* dpp,
+		     const CreateParams& params,
+		     optional_yield y) override;
+  virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) override;
+  virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive,
+                       ceph::real_time mtime, optional_yield y) override;
+  virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override;
+  virtual int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y) override;
+  virtual std::unique_ptr<VectorBucket> clone() override {
+    return std::make_unique<POSIXVectorBucket>(*this);
+  }
+
+  /* Internal APIs */
+  int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed);
+  Directory* get_dir() { return dir.get(); }
+  int get_dir_fd(const DoutPrefixProvider *dpp) { dir->open(dpp); return dir->get_fd(); }
+  /* TODO dang Escape the bucket name for file use */
+  std::string get_fname();
+  std::optional<std::string> get_ns() { return ns; }
+  int rename(const DoutPrefixProvider* dpp, optional_yield y, Object* target_obj);
+
+  /* enumerate all entries by callback, in any order */
+  int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb);
+
+private:
+  int write_attrs(const DoutPrefixProvider *dpp, optional_yield y);
+}; /* S3Vectors - class POSIXVectorBucket */
 
 class POSIXObject : public StoreObject {
 public:
