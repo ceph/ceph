@@ -45,6 +45,25 @@ repository and execute the following::
 See :ref:`install-storage-cluster-build` to install a build in user space and `Ceph README.md`_
 doc for more details on build.
 
+.. tip:: When Ceph builds the bundled Boost (the default, i.e.
+   ``WITH_SYSTEM_BOOST=OFF``), every out-of-source build directory otherwise
+   re-downloads, re-extracts, and rebuilds Boost from scratch.
+   ``-DWITH_BOOST_CACHE=<dir>`` lets several build directories share that work.
+
+   It points at a shared, version-partitioned Boost **source** cache. The tarball
+   is downloaded and extracted there once (into ``<dir>/boost_<version>/``) and
+   reused read-only by every build directory needing that Boost version, so the
+   ``download`` step disappears from those builds entirely. Boost is then built
+   **out of the source tree**: all variant-specific artifacts (objects, staged
+   and installed libraries) go under the build directory's own
+   ``boost-artifacts/`` and ``boost/`` — the shared cache stays pristine::
+
+       ./do_cmake.sh -DWITH_BOOST_CACHE=$HOME/.cache/ceph/boost
+
+   .. note:: The first configure against an empty ``WITH_BOOST_CACHE`` populates
+      it (download, extract, build the ``b2`` engine) under a lock, so
+      concurrent cold configures are serialized safely. Use an absolute path.
+
 Build Ceph Packages
 ===================
 
