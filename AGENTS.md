@@ -1,6 +1,6 @@
 # Ceph
 
-C++23, CMake, Python for management.
+C++ (check CMakeLists.txt for version if relevant), CMake, Python for management.
 
 ## Build
 
