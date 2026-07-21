@@ -32,6 +32,7 @@
             i18n-placeholder
             id="username"
             formControlName="username"
+            maxlength="256"
             [invalid]="!userForm.controls.username.valid && userForm.controls.username.dirty"
             autofocus
             ngbTooltip="White spaces at the beginning and end will be trimmed"
@@ -42,6 +43,9 @@
         <ng-template #usernameError>
           <span *ngIf="userForm.showError('username', formDir, 'required')">
             <ng-container i18n> This field is required. </ng-container>
+          </span>
+          <span *ngIf="userForm.showError('username', formDir, 'maxlength')">
+            <ng-container i18n> Username must not exceed 256 characters. </ng-container>
           </span>
           <span *ngIf="userForm.showError('username', formDir, 'notUnique')">
             <ng-container i18n> The username already exists. </ng-container>
