@@ -369,6 +369,7 @@
                 size="sm"
                 class="overview-health-card-resiliency-btn"
                 [routerLink]="['/monitoring/active-alerts']"
+                [queryParams]="{ search: 'CephPG' }"
               >
                 <span i18n>View alerts ({{ pgAlertCount }})</span>
                 <cd-icon type="arrowRight"></cd-icon>
@@ -396,7 +397,7 @@
             <div class="overview-health-card-resiliency-chart-text">
               <p
                 i18n
-                class="cds--type-helper-text-01 overview-health-card-secondary-text cds-mt-2"
+                class="cds--type-helper-text-01 overview-health-card-secondary-text cds-mt-2 cds-mb-3"
               >
                 <em>Data resiliency</em> reflects data availability and replication (% of placement
                 groups that are active and clean).
@@ -418,10 +419,7 @@
                   let isLast = $last
                 ) {
                   @if (item.count) {
-                    <p
-                      [class.cds-mb-2]="!isLast"
-                      [class.cds-mb-0]="isLast"
-                    >
+                    <p class="cds-mb-0">
                       <span class="cds--type-label-01 cds-mr-1">{{ item?.state }}:</span>
                       <span class="cds--type-label-01 overview-health-card-bold"
                         >{{ item.count }} %</span

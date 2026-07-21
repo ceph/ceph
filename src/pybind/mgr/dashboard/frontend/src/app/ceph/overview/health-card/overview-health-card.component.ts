@@ -32,6 +32,7 @@ import {
   HardwareCardVM,
   buildHardwareCardVM
 } from '~/app/shared/models/overview';
+import { AlertState } from '~/app/shared/models/prometheus-alerts';
 import { HardwareService } from '~/app/shared/api/hardware.service';
 import { HealthService } from '~/app/shared/api/health.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
@@ -39,6 +40,8 @@ import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.s
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { GaugeChartComponent } from '@carbon/charts-angular';
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
+
+const PG_ALERT_PREFIX = 'CephPG';
 
 type OverviewHealthData = {
   summary: Summary;
@@ -148,7 +151,16 @@ export class OverviewHealthCardComponent {
     shareReplay({ bufferSize: 1, refCount: true })
   );
 
-  readonly pgAlertCount$ = this.prometheusAlertService.pgAlerts$.pipe(startWith(0));
+  readonly pgAlertCount$ = this.prometheusAlertService.totalAlerts$.pipe(
+    map(
+      () =>
+        this.prometheusAlertService.alerts.filter(
+          (a) =>
+            a.status.state === AlertState.ACTIVE && a.labels.alertname?.startsWith(PG_ALERT_PREFIX)
+        ).length
+    ),
+    startWith(0)
+  );
 
   readonly telemetryEnabled$: Observable<boolean> = this.healthService.getTelemetryStatus().pipe(
     map((enabled: any) => !!enabled),
