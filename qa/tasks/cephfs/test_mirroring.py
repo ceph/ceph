@@ -950,6 +950,13 @@ class TestMirroring(CephFSTestCase):
         for snap_name in snap_names:
             self.check_checkpoint_status(fs_name, dir_path, snap_name, expected_status)
 
+    @retry_assert(timeout=120, interval=5)
+    def check_checkpoint_list_snap_names(self, fs_name, dir_path, expected_names):
+        res = self.checkpoint_list(fs_name, dir_path)
+        names = [cp['snap_name'] for cp in res['checkpoints']]
+        self.assertEqual(sorted(names), sorted(expected_names),
+                         f'expected checkpoints {expected_names}, got {names}')
+
     def setup_mount_b(self, mds_perm):
         log.debug('reconfigure client auth caps')
         self.get_ceph_cmd_result(
@@ -1397,6 +1404,111 @@ class TestMirroring(CephFSTestCase):
         self.start_mirror_daemon()
         self.check_checkpoint_statuses(
             self.primary_fs_name, dir_path, checkpoint_snaps, 'complete')
+
+        self._teardown_mirroring(dir_path, peer_spec)
+
+    def test_checkpoint_auto_prune_old_complete(self):
+        """Old COMPLETE checkpoints are pruned down to keep_count on initialize.
+
+        Sync more than keep_count COMPLETE checkpoints first (prune does not run
+        on the sync path). Restarting the mirror daemon re-acquires the directory
+        and runs initialize_checkpoints(), which prunes the oldest already-COMPLETE
+        checkpoints. Snapshots themselves must remain.
+
+        Also verifies that updating cephfs_mirror_checkpoint_keep_count is honored
+        by the daemon (override below; restored via addCleanup).
+        """
+        keep_count = 3
+        dir_path = '/cp_prune'
+        dir_name = dir_path.lstrip('/')
+        peer_spec = "client.mirror_remote@ceph"
+        snap_names = [f'snap{i}' for i in range(keep_count + 2)]
+        expected_kept = snap_names[-keep_count:]
+        expected_pruned = snap_names[:-keep_count]
+
+        # Override keep_count so this test also covers config update pickup
+        self.config_set('client.mirror', 'cephfs_mirror_checkpoint_keep_count',
+                        keep_count)
+        self.addCleanup(self.config_rm, 'client.mirror',
+                        'cephfs_mirror_checkpoint_keep_count')
+
+        self._setup_mirrored_directory(dir_path, peer_spec=peer_spec, mount_b=True)
+
+        for snap_name in snap_names:
+            self._add_checkpoint_snapshot(dir_path, snap_name)
+
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, dir_path, snap_names[-1], len(snap_names))
+        self.check_checkpoint_statuses(
+            self.primary_fs_name, dir_path, snap_names, 'complete')
+
+        res = self.checkpoint_list(self.primary_fs_name, dir_path)
+        self.assertEqual(len(res['checkpoints']), len(snap_names))
+
+        # Re-acquire directories so initialize_checkpoints() prunes already-COMPLETE
+        self.restart_mirror_daemon()
+
+        self.check_checkpoint_list_snap_names(
+            self.primary_fs_name, dir_path, expected_kept)
+        self.check_checkpoint_statuses(
+            self.primary_fs_name, dir_path, expected_kept, 'complete')
+        for snap_name in expected_pruned:
+            self.assert_checkpoint_not_listed(
+                self.primary_fs_name, dir_path, snap_name)
+
+        # Prune removes checkpoint metadata only; snapshots remain
+        snap_list = self.mount_a.ls(path=f'{dir_name}/.snap')
+        for snap_name in snap_names:
+            self.assertIn(snap_name, snap_list)
+
+        self._teardown_mirroring(dir_path, peer_spec)
+
+    def test_checkpoint_auto_prune_on_checkpoint_add(self):
+        """checkpoint add triggers initialize_checkpoints() and prunes old COMPLETE.
+
+        After more than the default keep_count COMPLETE checkpoints exist, adding
+        a checkpoint on a newly synced snapshot sends an acquire notify. The new
+        checkpoint is marked COMPLETE in that pass (so it is not pruned), while
+        older already-COMPLETE checkpoints are removed down to the default
+        cephfs_mirror_checkpoint_keep_count (10).
+        """
+        keep_count = 10  # default cephfs_mirror_checkpoint_keep_count
+        dir_path = '/cp_prune_add'
+        dir_name = dir_path.lstrip('/')
+        peer_spec = "client.mirror_remote@ceph"
+        existing = [f'snap{i}' for i in range(keep_count + 2)]
+        new_snap = f'snap{len(existing)}'
+        # already-COMPLETE after prune: newest (keep_count - 1), plus the new one
+        expected_kept = existing[-(keep_count - 1):] + [new_snap]
+        expected_pruned = existing[:-(keep_count - 1)]
+
+        self._setup_mirrored_directory(dir_path, peer_spec=peer_spec, mount_b=True)
+
+        for snap_name in existing:
+            self._add_checkpoint_snapshot(dir_path, snap_name)
+
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, dir_path, existing[-1], len(existing))
+        self.check_checkpoint_statuses(
+            self.primary_fs_name, dir_path, existing, 'complete')
+
+        # Sync one more snapshot, then checkpoint it to trigger initialize/prune
+        self.mount_a.run_shell(["mkdir", f"{dir_name}/.snap/{new_snap}"])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, dir_path, new_snap, len(existing) + 1)
+        self.checkpoint_add(self.primary_fs_name, dir_path, new_snap)
+
+        self.check_checkpoint_list_snap_names(
+            self.primary_fs_name, dir_path, expected_kept)
+        self.check_checkpoint_statuses(
+            self.primary_fs_name, dir_path, expected_kept, 'complete')
+        for snap_name in expected_pruned:
+            self.assert_checkpoint_not_listed(
+                self.primary_fs_name, dir_path, snap_name)
+
+        snap_list = self.mount_a.ls(path=f'{dir_name}/.snap')
+        for snap_name in existing + [new_snap]:
+            self.assertIn(snap_name, snap_list)
 
         self._teardown_mirroring(dir_path, peer_spec)
 
