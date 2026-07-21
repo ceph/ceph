@@ -3827,6 +3827,7 @@ std::vector<std::string> normalize_cli11_tokens(
   bool pending_value = false;  // previous token was a flag awaiting its value
   for (const char* arg : argv) {
     std::string_view token(arg);
+    std::string rewritten;  // backing storage when the token below is rewritten
 
     // Value position: both parsers consume the next token as the flag's value
     // whatever it looks like (even "--" or "-islides"), so emit it untouched.
@@ -3843,8 +3844,28 @@ std::vector<std::string> normalize_cli11_tokens(
     }
 
     if (!past_double_dash) {
+      // Legacy accepts '_' in long option names. Rewrite recognized option
+      // names to their registered dash form before the other normalization
+      // rules run, leaving unknown options untouched for legacy parsing.
+      if (token.size() >= 3 && token.starts_with("--") &&
+          token.find('_') != token.npos) {
+        size_t name_len = std::min(token.find('='), token.size());
+        std::string_view name_part = token.substr(0, name_len);
+        if (name_part.find('_') != name_part.npos) {
+          std::string dash_name;
+          dash_name.reserve(name_len);
+          for (char c : name_part) {
+            dash_name.push_back(c == '_' ? '-' : c);
+          }
+          if (app.get_option_no_throw(dash_name) != nullptr) {
+            rewritten = std::move(dash_name);
+            rewritten.append(token.substr(name_len));
+            token = rewritten;
+          }
+        }
+      }
       // long flag, empty '=' form: exactly "--name="
-      if (token.size() >= 4 && token.substr(0, 2) == "--" &&
+      if (token.size() >= 4 && token.starts_with("--") &&
           token.find('=') == token.size() - 1) {
         std::string flag_name(token.substr(0, token.size() - 1));
         const CLI::Option* option = app.get_option_no_throw(flag_name);
@@ -4509,33 +4530,31 @@ int main(int argc, const char **argv)
 
       // bucket list options
       add_multilevel_option(bucket_list, "--bucket,-b",       bucket_name,    bucket_desc);
-      add_multilevel_option(bucket_list, "--bucket-id",       bucket_id,      bucket_id_desc, reject_empty_bucket_id)->ignore_underscore();
+      add_multilevel_option(bucket_list, "--bucket-id",       bucket_id,      bucket_id_desc, reject_empty_bucket_id);
       add_multilevel_option(bucket_list, "--format",          format,         format_desc);
       // strict base-10 parsing (including overflow checks); sets max_entries_specified
       // to mirror the legacy argparse behavior
       add_multilevel_strict_int(bucket_list, "--max-entries",     max_entries,    max_entries_desc)
-          ->ignore_underscore()
           ->each([&max_entries_specified](const std::string&) { max_entries_specified = true; });
       add_multilevel_option(bucket_list, "--marker",          marker,         marker_desc);
-      add_multilevel_option(bucket_list, "--object-version",  object_version, obj_ver_desc)->ignore_underscore();
-      add_multilevel_binary_flag(bucket_list,   "--allow-unordered", allow_unordered, "allow unordered bucket listing")->ignore_underscore();
+      add_multilevel_option(bucket_list, "--object-version",  object_version, obj_ver_desc);
+      add_multilevel_binary_flag(bucket_list,   "--allow-unordered", allow_unordered, "allow unordered bucket listing");
 
       // bucket stats options
       add_multilevel_option(bucket_stats, "--bucket,-b",          bucket_name,        bucket_desc);
-      add_multilevel_option(bucket_stats, "--bucket-id",          bucket_id,          bucket_id_desc, reject_empty_bucket_id)->ignore_underscore();
+      add_multilevel_option(bucket_stats, "--bucket-id",          bucket_id,          bucket_id_desc, reject_empty_bucket_id);
       add_multilevel_option(bucket_stats, "--format",             format,             format_desc);
       // strict base-10 parsing (including overflow checks); sets max_entries_specified
       // to mirror the legacy argparse behavior
       add_multilevel_strict_int(bucket_stats, "--max-entries",        max_entries,        max_entries_desc)
-          ->ignore_underscore()
           ->each([&max_entries_specified](const std::string&) { max_entries_specified = true; });
       add_multilevel_option(bucket_stats, "--marker",             marker,             marker_desc);
-      add_multilevel_binary_flag(bucket_stats,   "--show-restore-stats", show_restore_stats, "if the flag is in present it will show restores stats in the bucket stats command")->ignore_underscore();
+      add_multilevel_binary_flag(bucket_stats,   "--show-restore-stats", show_restore_stats, "if the flag is in present it will show restores stats in the bucket stats command");
 
       // bucket link options
       add_multilevel_option(bucket_link, "--bucket,-b",       bucket_name,     bucket_desc)->option_text("<bucket> REQUIRED");
-      add_multilevel_option(bucket_link, "--bucket-id",       bucket_id,       bucket_id_desc, reject_empty_bucket_id)->ignore_underscore();
-      add_multilevel_option(bucket_link, "--bucket-new-name", new_bucket_name, new_name_desc)->ignore_underscore();
+      add_multilevel_option(bucket_link, "--bucket-id",       bucket_id,       bucket_id_desc, reject_empty_bucket_id);
+      add_multilevel_option(bucket_link, "--bucket-new-name", new_bucket_name, new_name_desc);
 
       // bucket unlink options
       add_multilevel_option(bucket_unlink, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
@@ -4543,93 +4562,89 @@ int main(int argc, const char **argv)
       // bucket check options
       add_multilevel_option(bucket_check, "--bucket,-b", bucket_name, bucket_desc);
       add_multilevel_binary_flag(bucket_check, "--fix",               fix,                    "besides checking bucket index, will also fix it");
-      add_multilevel_binary_flag(bucket_check, "--remove-bad",             remove_bad,             "remove bad objects")->ignore_underscore();
-      add_multilevel_binary_flag(bucket_check, "--check-head-obj-locator", check_head_obj_locator, "check the locator of head objects")->ignore_underscore();
-      add_multilevel_binary_flag(bucket_check, "--check-objects",          check_objects,          "besides checking bucket index, will also check objects")->ignore_underscore();
-      add_multilevel_strict_int(bucket_check, "--max-concurrent-ios",     max_concurrent_ios,     "maximum concurrent ios for bucket operations (default: 32)")->ignore_underscore();
+      add_multilevel_binary_flag(bucket_check, "--remove-bad",             remove_bad,             "remove bad objects");
+      add_multilevel_binary_flag(bucket_check, "--check-head-obj-locator", check_head_obj_locator, "check the locator of head objects");
+      add_multilevel_binary_flag(bucket_check, "--check-objects",          check_objects,          "besides checking bucket index, will also check objects");
+      add_multilevel_strict_int(bucket_check, "--max-concurrent-ios",     max_concurrent_ios,     "maximum concurrent ios for bucket operations (default: 32)");
 
       // bucket check olh options
       add_multilevel_option(bucket_check_olh, "--bucket,-b",         bucket_name,        bucket_desc);
       add_multilevel_binary_flag(bucket_check_olh, "--fix",          fix,                "besides checking, will also fix it");
-      add_multilevel_strict_int(bucket_check_olh, "--max-concurrent-ios",max_concurrent_ios, "maximum concurrent ios for bucket operations (default: 32)")->ignore_underscore();
-      add_multilevel_binary_flag(bucket_check_olh, "--dump-keys",     dump_keys,     "output all checked keys")->ignore_underscore();
-      add_multilevel_binary_flag(bucket_check_olh, "--hide-progress", hide_progress, "suppress per-shard progress output")->ignore_underscore();
+      add_multilevel_strict_int(bucket_check_olh, "--max-concurrent-ios",max_concurrent_ios, "maximum concurrent ios for bucket operations (default: 32)");
+      add_multilevel_binary_flag(bucket_check_olh, "--dump-keys",     dump_keys,     "output all checked keys");
+      add_multilevel_binary_flag(bucket_check_olh, "--hide-progress", hide_progress, "suppress per-shard progress output");
 
       // bucket check unlinked options
       add_multilevel_option(bucket_check_unlinked, "--bucket,-b",         bucket_name,        bucket_desc);
       add_multilevel_binary_flag(bucket_check_unlinked, "--fix",          fix,                "besides checking, will also fix it");
-      add_multilevel_strict_int(bucket_check_unlinked, "--max-concurrent-ios",max_concurrent_ios, "maximum concurrent ios for bucket operations (default: 32)")->ignore_underscore();
-      add_multilevel_binary_flag(bucket_check_unlinked, "--dump-keys",     dump_keys,     "output all checked keys")->ignore_underscore();
-      add_multilevel_binary_flag(bucket_check_unlinked, "--hide-progress", hide_progress, "suppress per-shard progress output")->ignore_underscore();
+      add_multilevel_strict_int(bucket_check_unlinked, "--max-concurrent-ios",max_concurrent_ios, "maximum concurrent ios for bucket operations (default: 32)");
+      add_multilevel_binary_flag(bucket_check_unlinked, "--dump-keys",     dump_keys,     "output all checked keys");
+      add_multilevel_binary_flag(bucket_check_unlinked, "--hide-progress", hide_progress, "suppress per-shard progress output");
 
       // bucket rm options
       add_multilevel_option(bucket_rm, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
-      add_multilevel_binary_flag(bucket_rm, "--purge-objects",        delete_child_objects, "remove a bucket's objects before deleting it")->ignore_underscore();
-      add_multilevel_binary_flag(bucket_rm, "--bypass-gc",            bypass_gc,            "when specified with bucket deletion, triggers object deletions by not involving GC")->ignore_underscore();
-      add_multilevel_binary_flag(bucket_rm, "--inconsistent-index",   inconsistent_index,   "when specified with bucket deletion and bypass-gc set to true, ignores bucket index consistency")->ignore_underscore();
-      add_multilevel_binary_flag(bucket_rm, "--yes-i-really-mean-it", yes_i_really_mean_it, "required for certain operations")->ignore_underscore();
+      add_multilevel_binary_flag(bucket_rm, "--purge-objects",        delete_child_objects, "remove a bucket's objects before deleting it");
+      add_multilevel_binary_flag(bucket_rm, "--bypass-gc",            bypass_gc,            "when specified with bucket deletion, triggers object deletions by not involving GC");
+      add_multilevel_binary_flag(bucket_rm, "--inconsistent-index",   inconsistent_index,   "when specified with bucket deletion and bypass-gc set to true, ignores bucket index consistency");
+      add_multilevel_binary_flag(bucket_rm, "--yes-i-really-mean-it", yes_i_really_mean_it, "required for certain operations");
 
       // bucket layout options
       add_multilevel_option(bucket_layout, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
-      add_multilevel_option(bucket_layout, "--bucket-id", bucket_id,   bucket_id_desc, reject_empty_bucket_id)->ignore_underscore();
+      add_multilevel_option(bucket_layout, "--bucket-id", bucket_id,   bucket_id_desc, reject_empty_bucket_id);
       add_multilevel_option(bucket_layout, "--format",    format,      format_desc);
 
       // bucket chown options
       add_multilevel_option(bucket_chown, "--bucket,-b",       bucket_name,     bucket_desc)->option_text("<bucket> REQUIRED");
       add_multilevel_option(bucket_chown, "--marker",          marker,          marker_desc);
-      add_multilevel_option(bucket_chown, "--bucket-new-name", new_bucket_name, new_name_desc)->ignore_underscore();
+      add_multilevel_option(bucket_chown, "--bucket-new-name", new_bucket_name, new_name_desc);
 
       // bucket limit check options
       add_multilevel_binary_flag(bucket_limit_check, "--warnings-only", warnings_only,
-                                 "list only buckets nearing or over the current max objects per shard value")->ignore_underscore();
+                                 "list only buckets nearing or over the current max objects per shard value");
 
       // bucket logging flush options
       add_multilevel_option(bucket_logging_flush, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
-      add_multilevel_option(bucket_logging_flush, "--bucket-id", bucket_id,   bucket_id_desc, reject_empty_bucket_id)->ignore_underscore();
+      add_multilevel_option(bucket_logging_flush, "--bucket-id", bucket_id,   bucket_id_desc, reject_empty_bucket_id);
 
       // bucket logging info options
       add_multilevel_option(bucket_logging_info, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
-      add_multilevel_option(bucket_logging_info, "--bucket-id", bucket_id,   bucket_id_desc, reject_empty_bucket_id)->ignore_underscore();
+      add_multilevel_option(bucket_logging_info, "--bucket-id", bucket_id,   bucket_id_desc, reject_empty_bucket_id);
       add_multilevel_option(bucket_logging_info, "--format",    format,      format_desc);
 
       // bucket logging list options
       add_multilevel_option(bucket_logging_list, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
-      add_multilevel_option(bucket_logging_list, "--bucket-id", bucket_id,   bucket_id_desc, reject_empty_bucket_id)->ignore_underscore();
+      add_multilevel_option(bucket_logging_list, "--bucket-id", bucket_id,   bucket_id_desc, reject_empty_bucket_id);
       add_multilevel_option(bucket_logging_list, "--format",    format,      format_desc);
 
       // bucket rewrite options
       add_multilevel_option(bucket_rewrite, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
-      add_multilevel_option(bucket_rewrite, "--bucket-id", bucket_id,   bucket_id_desc, reject_empty_bucket_id)->ignore_underscore();
+      add_multilevel_option(bucket_rewrite, "--bucket-id", bucket_id,   bucket_id_desc, reject_empty_bucket_id);
       add_multilevel_option(bucket_rewrite, "--format",    format,      format_desc);
       add_multilevel_option(bucket_rewrite, "--start-date,--start-time", start_date,
-                            "start date in the format yyyy-mm-dd")->ignore_underscore();
+                            "start date in the format yyyy-mm-dd");
       add_multilevel_option(bucket_rewrite, "--end-date,--end-time",     end_date,
-                            "end date in the format yyyy-mm-dd")->ignore_underscore();
+                            "end date in the format yyyy-mm-dd");
       // The size flags use atoll() in ->each (runs only when the flag is given) to match the
       // legacy parse loop exactly: malformed input becomes 0 instead of being rejected, and an
       // absent flag leaves the default untouched. Binding directly to the uint64_t would parse
       // strictly and reject inputs like --min-rewrite-size=abc.
       add_multilevel_option(bucket_rewrite, "--min-rewrite-size", min_rw_val,
                             "min object size for bucket rewrite (default 4M)")
-          ->ignore_underscore()
           ->each([&min_rewrite_size](const std::string& v) { min_rewrite_size = (uint64_t)atoll(v.c_str()); });
       add_multilevel_option(bucket_rewrite, "--max-rewrite-size", max_rw_val,
                             "max object size for bucket rewrite (default ULLONG_MAX)")
-          ->ignore_underscore()
           ->each([&max_rewrite_size](const std::string& v) { max_rewrite_size = (uint64_t)atoll(v.c_str()); });
       add_multilevel_option(bucket_rewrite, "--min-rewrite-stripe-size", min_rw_stripe_val,
                             "min stripe size for object rewrite (default 0)")
-          ->ignore_underscore()
           ->each([&min_rewrite_stripe_size](const std::string& v) { min_rewrite_stripe_size = (uint64_t)atoll(v.c_str()); });
 
       // bucket set-min-shards options
       add_multilevel_option(bucket_set_min_shards, "--bucket,-b",  bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
-      add_multilevel_option(bucket_set_min_shards, "--bucket-id",  bucket_id,   bucket_id_desc, reject_empty_bucket_id)->ignore_underscore();
+      add_multilevel_option(bucket_set_min_shards, "--bucket-id",  bucket_id,   bucket_id_desc, reject_empty_bucket_id);
       // Track whether --num-shards was provided, so the handler can
       // distinguish an omitted option from an explicit value of 0.
       add_multilevel_strict_int(bucket_set_min_shards, "--num-shards", num_shards,  "minimum number of shards to set")
           ->option_text("<num-shards> REQUIRED")
-          ->ignore_underscore()
           ->each([&num_shards_specified](const std::string&) { num_shards_specified = true; });
 
       // bucket object shard options
@@ -4637,17 +4652,14 @@ int main(int argc, const char **argv)
           ->option_text("<object> REQUIRED");
       add_multilevel_strict_int(bucket_object_shard, "--num-shards", num_shards, "number of shards")
           ->option_text("<num-shards> REQUIRED")
-          ->ignore_underscore()
           ->each([&num_shards_specified](const std::string&) { num_shards_specified = true; });
       add_multilevel_option(bucket_object_shard, "--format",     format, format_desc);
 
       // bucket shard objects options
       add_multilevel_strict_int(bucket_shard_objects, "--num-shards", num_shards, "number of shards")
           ->option_text("<num-shards> REQUIRED")
-          ->ignore_underscore()
           ->each([&num_shards_specified](const std::string&) { num_shards_specified = true; });
       add_multilevel_strict_int(bucket_shard_objects, "--shard-id", shard_id, "shard id")
-          ->ignore_underscore()
           ->each([&specified_shard_id](const std::string&) { specified_shard_id = true; });
       // opt_prefix is a std::optional; bind a string sink and set it via ->each so it
       // stays unset (handler defaults to "obj") when --prefix is not given.
@@ -4657,9 +4669,9 @@ int main(int argc, const char **argv)
 
       // bucket resync encrypted multipart options
       add_multilevel_option(bucket_resync_encrypted_multipart, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
-      add_multilevel_option(bucket_resync_encrypted_multipart, "--bucket-id",  bucket_id,  bucket_id_desc, reject_empty_bucket_id)->ignore_underscore();
+      add_multilevel_option(bucket_resync_encrypted_multipart, "--bucket-id",  bucket_id,  bucket_id_desc, reject_empty_bucket_id);
       add_multilevel_option(bucket_resync_encrypted_multipart, "--marker",     marker,     marker_desc);
-      add_multilevel_binary_flag(bucket_resync_encrypted_multipart, "--yes-i-really-mean-it", yes_i_really_mean_it, "required for certain operations")->ignore_underscore();
+      add_multilevel_binary_flag(bucket_resync_encrypted_multipart, "--yes-i-really-mean-it", yes_i_really_mean_it, "required for certain operations");
       add_multilevel_option(bucket_resync_encrypted_multipart, "--format",     format,     format_desc);
 
       // bucket radoslist / bucket rados list options (shared by both entry points).
@@ -4671,15 +4683,14 @@ int main(int argc, const char **argv)
            &bucket_desc](CLI::App* cmd) {
         add_multilevel_option(cmd, "--bucket,-b", bucket_name, bucket_desc);
         add_multilevel_strict_int(cmd, "--max-concurrent-ios", max_concurrent_ios,
-                              "maximum concurrent ios for bucket operations (default: 32)")->ignore_underscore();
+                              "maximum concurrent ios for bucket operations (default: 32)");
         add_multilevel_strict_int(cmd, "--orphan-stale-secs", orphan_stale_secs,
-                              "num of seconds to wait before declaring an object to be an orphan (default: 86400)")->ignore_underscore();
+                              "num of seconds to wait before declaring an object to be an orphan (default: 86400)");
         add_multilevel_option(cmd, "--rgw-obj-fs", rgw_obj_fs_val,
                               "the field separator that will separate the rados object name from the rgw object name; "
                               "additionally rados objects for incomplete multipart uploads will not be output")
-            ->ignore_underscore()
             ->each([&rgw_obj_fs](const std::string& v) { rgw_obj_fs = v; });
-        add_multilevel_binary_flag(cmd, "--yes-i-really-mean-it", yes_i_really_mean_it, "required for certain operations")->ignore_underscore();
+        add_multilevel_binary_flag(cmd, "--yes-i-really-mean-it", yes_i_really_mean_it, "required for certain operations");
       };
       register_radoslist_opts(bucket_radoslist);
       register_radoslist_opts(bucket_rados_list);
