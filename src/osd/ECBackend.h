@@ -456,4 +456,9 @@ public:
     const std::map<std::string, std::optional<std::string>>& removed_ranges,
     const std::string_view key
   );
+
+  static void remove_keys_in_ranges(
+    const std::map<std::string, std::optional<std::string>>& removed_ranges,
+    std::map<std::string, ceph::buffer::list>* out
+  );
 };
