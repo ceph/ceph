@@ -384,6 +384,98 @@ TEST_P(TestBackendBasics, DirectRead) {
   }
 }
 
+TEST_P(TestBackendBasics, TruncateGrowWithSuspendedReads)
+{
+  const auto& backend_config = GetParam().backend;
+
+  if (backend_config.pool_type != EC) {
+    GTEST_SKIP() << "DelayedShardWrite test only applies to EC backends";
+  }
+
+  const uint64_t chunk_size = stripe_unit;
+  const uint64_t stripe_width = get_stripe_width();
+
+  std::string obj = "delayed_x_" + backend_config.label;
+
+  uint64_t object_size = stripe_width * 2;
+  {
+    std::string data(object_size, 'A');
+    ASSERT_EQ(0, create_and_write(obj, data));
+  }
+
+  {
+    auto new_osdmap = std::make_shared<OSDMap>();
+    new_osdmap->deepish_copy_from(*osdmap);
+    new_osdmap->inc_epoch();
+    update_osdmap(new_osdmap);
+  }
+
+  event_loop->suspend_to_osd(0);
+
+  {
+    std::string data(chunk_size, 'B');
+    ASSERT_EQ(-EINPROGRESS, write(obj, stripe_width - chunk_size, data, object_size));
+  }
+
+  {
+    ASSERT_EQ(-EINPROGRESS, write(obj, object_size, stripe_width,
+      {{stripe_width * 3 - chunk_size, std::string(chunk_size, 'C')}}));
+    object_size = stripe_width * 3;
+  }
+
+  {
+    std::string data(chunk_size, 'D');
+    ASSERT_EQ(-EINPROGRESS, write(obj, stripe_width * 3 - chunk_size, data, object_size));
+  }
+
+  event_loop->unsuspend_to_osd(0);
+  event_loop->run_until_idle();
+}
+
+// Emulate a rollback operation. We use multiple objects here in an attempt
+// to prov
+TEST_P(TestBackendBasics, RollbackInvalidateRealistic)
+{
+  const auto& backend_config = GetParam().backend;
+
+  if (backend_config.pool_type != EC) {
+    GTEST_SKIP() << "Test only applies to EC backends";
+  }
+
+  const uint64_t stripe_width = get_stripe_width();
+  const uint64_t chunk_size = stripe_unit;
+
+  std::string obj_a = "rollback_a_" + backend_config.label;
+  std::string obj_b = "rollback_b_" + backend_config.label;
+
+  ASSERT_EQ(0, create_and_write(obj_a, std::string(stripe_width, 'A')));
+  ASSERT_EQ(0, create_and_write(obj_b, std::string(stripe_width, 'B')));
+  
+  // Create snap=1 for obj_a so rollback() has a source object to clone from.
+  ASSERT_EQ(0, create_snapshot(obj_a, stripe_width));
+
+  // Flush extent cache.
+  {
+    auto new_osdmap = std::make_shared<OSDMap>();
+    new_osdmap->deepish_copy_from(*osdmap);
+    new_osdmap->inc_epoch();
+    update_osdmap(new_osdmap);
+  }
+
+  // obj_b write first — its reads block waiting_ops.
+  write(obj_b, 0, std::string(chunk_size, 'W'), stripe_width, false);
+
+  // Rollback obj_a — queued behind obj_b, can't be processed yet.
+  rollback(obj_a, stripe_width, false);
+
+  // Partial write on obj_a — queued behind the rollback.
+  write(obj_a, 0, std::string(chunk_size, 'R'), stripe_width, false);
+
+  // Drain: obj_b completes → rollback invalidation fires (bug: growth
+  // hole lost) → obj_a's write reads survive → send_reads(0) → assert.
+  event_loop->run_until_idle();
+}
+
 // ---------------------------------------------------------------------------
 // TestBackendBasics: TruncateAndWrite
 // ---------------------------------------------------------------------------
