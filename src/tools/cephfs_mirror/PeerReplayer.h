@@ -44,6 +44,10 @@ public:
   // remove a directory from queue
   void remove_directory(std::string_view dir_root, bool purging = false);
 
+  static std::string sync_stat_omap_prefix(const Filesystem &filesystem);
+  static std::string sync_stat_omap_prefix(const Filesystem &filesystem,
+                                           const Peer &peer);
+
   // admin socket helpers
   void peer_status(Formatter *f);
 
@@ -55,7 +59,6 @@ private:
 
   inline static const std::string SERVICE_DAEMON_FAILED_DIR_COUNT_KEY = "failure_count";
   inline static const std::string SERVICE_DAEMON_RECOVERED_DIR_COUNT_KEY = "recovery_count";
-  inline static const std::string PEER_SYNC_STAT_KEY_PREFIX = "sync_stat";
 
   using Snapshot = std::pair<std::string, uint64_t>;
 
