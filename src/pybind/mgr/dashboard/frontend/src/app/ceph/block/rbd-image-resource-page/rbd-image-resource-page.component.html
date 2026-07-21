@@ -1,0 +1,50 @@
+@if (selection && selection.source !== 'REMOVING') {
+  @switch (section) {
+    @case ('overview') {
+      <cd-resource-overview-card
+        i18n-title
+        title="Image details"
+        [columns]="4"
+        [fields]="overviewFields"
+      >
+      </cd-resource-overview-card>
+    }
+    @case ('snapshots') {
+      <cd-rbd-snapshot-list
+        [snapshots]="selection.snapshots"
+        [featuresName]="selection.features_name"
+        [poolName]="selection.pool_name"
+        [primary]="selection.primary"
+        [namespace]="selection.namespace"
+        [mirroring]="selection.mirror_mode"
+        [rbdName]="selection.name"
+      ></cd-rbd-snapshot-list>
+    }
+    @case ('configuration') {
+      <cd-rbd-configuration-table [data]="selection['configuration']"></cd-rbd-configuration-table>
+    }
+    @case ('performance') {
+      <cd-grafana
+        i18n-title
+        title="RBD details"
+        [grafanaPath]="rbdDashboardUrl"
+        [type]="'metrics'"
+        uid="YhCYGcuZz"
+        grafanaStyle="one"
+      >
+      </cd-grafana>
+    }
+  }
+} @else if (selection && selection.source === 'REMOVING') {
+  <cd-alert-panel
+    type="warning"
+    i18n
+    >Information can not be displayed for RBD in status 'Removing'.</cd-alert-panel
+  >
+} @else if (notFound) {
+  <cd-alert-panel
+    type="error"
+    i18n
+    >No RBD image found.</cd-alert-panel
+  >
+}
