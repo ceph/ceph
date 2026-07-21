@@ -358,11 +358,14 @@ Each omap value includes metadata fields written by ``cephfs-mirror``:
   persist cadence and Manager caching (``snapshot_mirror_metrics_cache_enabled``
   and ``snapshot_mirror_metrics_cache_ttl``).
 
-Omap entries are removed when a directory is removed from mirroring. All metric
-fields are written to omap; on daemon restart only ``last_synced_snap`` metadata
-is loaded back. Per-session counters (``snaps_synced``, ``snaps_deleted``,
-``snaps_renamed``) are persisted but not loaded and therefore start at zero each
-session.
+Omap entries for a directory are removed when that directory is removed from
+mirroring. Entries for a peer (all of its directories) are removed when the peer
+is removed, and all entries for a file system are removed when mirroring is
+disabled for that file system. Internal blocklist/failure restarts of a mirror
+instance preserve omap so sync can resume. All metric fields are written to
+omap; on daemon restart only ``last_synced_snap`` metadata is loaded back.
+Per-session counters (``snaps_synced``, ``snaps_deleted``, ``snaps_renamed``)
+are persisted but not loaded and therefore start at zero each session.
 
 See :ref:`Directory snapshot sync metrics<cephfs_mirroring_mgr_snapshot_status>`
 and :ref:`Snapshot sync metric fields<cephfs_mirroring_sync_metric_fields>` in
