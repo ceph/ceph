@@ -646,3 +646,17 @@ options:
   - mds_client
   flags:
   - runtime
+- name: client_fsync_to_rados
+  type: bool
+  level: dev
+  desc: Do not necessarily flush caps to the MDS on every fsync
+  long_desc: When performing an fsync, the client will not flush to the mds
+    if the only dirty caps are size, mtime, ctime, change_attr. The first 3 can
+    be reasonably recovered by probing in case the client crashes; we ignore
+    change_attr and hope for the best.
+  default: false
+  services:
+  - mds_client
+  with_legacy: true
+  flags:
+  - runtime
