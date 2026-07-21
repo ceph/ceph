@@ -15,6 +15,7 @@ import { HealthService } from '~/app/shared/api/health.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { HardwareNameMapping } from '~/app/shared/enum/hardware.enum';
+import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 
 const MOCK_HW_SUMMARY = {
   total: {
@@ -93,6 +94,7 @@ describe('OverviewHealthCardComponent', () => {
         { provide: MgrModuleService, useValue: mockMgrModuleService },
         { provide: HardwareService, useValue: mockHardwareService },
         { provide: HealthService, useValue: mockHealthService },
+        { provide: PrometheusAlertService, useValue: { totalAlerts$: of(0), alerts: [] } },
         provideRouter([])
       ]
     }).compileComponents();
@@ -250,6 +252,7 @@ describe('OverviewHealthCardComponent (all healthy)', () => {
         },
         { provide: HardwareService, useValue: { getSummary: jest.fn(() => of(healthyMock)) } },
         { provide: HealthService, useValue: { getTelemetryStatus: jest.fn(() => of(false)) } },
+        { provide: PrometheusAlertService, useValue: { totalAlerts$: of(0), alerts: [] } },
         provideRouter([])
       ]
     }).compileComponents();
@@ -326,6 +329,7 @@ describe('OverviewHealthCardComponent (warn only)', () => {
         },
         { provide: HardwareService, useValue: { getSummary: jest.fn(() => of(warnMock)) } },
         { provide: HealthService, useValue: { getTelemetryStatus: jest.fn(() => of(false)) } },
+        { provide: PrometheusAlertService, useValue: { totalAlerts$: of(0), alerts: [] } },
         provideRouter([])
       ]
     }).compileComponents();
@@ -387,6 +391,7 @@ describe('OverviewHealthCardComponent (hw disabled)', () => {
         },
         { provide: HardwareService, useValue: { getSummary: jest.fn(() => of(null)) } },
         { provide: HealthService, useValue: { getTelemetryStatus: jest.fn(() => of(false)) } },
+        { provide: PrometheusAlertService, useValue: { totalAlerts$: of(0), alerts: [] } },
         provideRouter([])
       ]
     }).compileComponents();
@@ -441,6 +446,7 @@ describe('OverviewHealthCardComponent (no permissions)', () => {
         { provide: MgrModuleService, useValue: { getConfig: jest.fn(() => of({})) } },
         { provide: HardwareService, useValue: { getSummary: jest.fn(() => of(null)) } },
         { provide: HealthService, useValue: { getTelemetryStatus: jest.fn(() => of(false)) } },
+        { provide: PrometheusAlertService, useValue: { totalAlerts$: of(0), alerts: [] } },
         provideRouter([])
       ]
     }).compileComponents();
