@@ -194,10 +194,10 @@ void ECExtentCache::Object::invalidate(const OpRef &invalidating_op) {
   reading_ops.clear();
 
   /* Current size should reflect the actual size of the object, which was set
-   * by the previous write. We are going to replay all the writes now, so set
-   * the projected size to that of this op.
+   * by the previous write. We are going to replay all the writes now, that will
+   * track the projected size in the replay.
    */
-  projected_size = invalidating_op->projected_size;
+  projected_size = current_size;
 
   // Invalidate cache has been honoured, so no need to repeat.
   invalidating_op->invalidates_cache = false;
@@ -205,7 +205,7 @@ void ECExtentCache::Object::invalidate(const OpRef &invalidating_op) {
 
   cache_invalidate_expected = false;
 
-  // We now need to reply all outstanding ops to regenerate the read
+  // We now need to replay all outstanding ops to regenerate the read
   for (auto &op : pg.waiting_ops) {
     if (op->object.oid == oid) {
       op->read_done = false;
