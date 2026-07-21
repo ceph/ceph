@@ -292,8 +292,8 @@
             [invalid]="
               serviceForm.controls.realm_name.invalid && serviceForm.controls.realm_name.dirty
             "
-            [invalidText]="authModeError"
-            helperText="Active-directory authentication for domain member servers and User authentication for Stand-alone servers configuration."
+            [invalidText]="realmNameError"
+            helperText="Select the realm to associate with this gateway. Leave this field blank for a single-site deployment."
             i18n-helperText
           >
             @if (realmList.length === 0) {
@@ -310,7 +310,7 @@
               </option>
             }
           </cds-select>
-          <ng-template #authModeError>
+          <ng-template #realmNameError>
             @if (serviceForm.showError('realm_name', frm, 'required')) {
               <span
                 class="invalid-feedback"
@@ -979,7 +979,7 @@
             id="snmp_version"
             label="Version"
             cdRequiredField="Version"
-            helperText="Active-directory authentication for domain member servers and User authentication for Stand-alone servers configuration."
+            helperText="Select the SNMP protocol version for the monitoring gateway."
             i18n-helperText
             [invalid]="
               serviceForm.controls.snmp_version.invalid && serviceForm.controls.snmp_version.dirty
