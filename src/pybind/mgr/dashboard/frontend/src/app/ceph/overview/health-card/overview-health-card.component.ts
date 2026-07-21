@@ -38,6 +38,7 @@ import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { GaugeChartComponent } from '@carbon/charts-angular';
+import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 
 type OverviewHealthData = {
   summary: Summary;
@@ -81,6 +82,7 @@ export class OverviewHealthCardComponent {
   private readonly mgrModuleService = inject(MgrModuleService);
   private readonly refreshIntervalService = inject(RefreshIntervalService);
   private readonly authStorageService = inject(AuthStorageService);
+  private readonly prometheusAlertService = inject(PrometheusAlertService);
 
   @Input({ required: true }) vm!: HealthCardVM;
   @Output() viewIncidents = new EventEmitter<void>();
@@ -145,6 +147,8 @@ export class OverviewHealthCardComponent {
     map((hw) => buildHardwareCardVM(hw)),
     shareReplay({ bufferSize: 1, refCount: true })
   );
+
+  readonly pgAlertCount$ = this.prometheusAlertService.pgAlerts$.pipe(startWith(0));
 
   readonly telemetryEnabled$: Observable<boolean> = this.healthService.getTelemetryStatus().pipe(
     map((enabled: any) => !!enabled),

@@ -2,6 +2,7 @@
 @let hwEnabled = enabled$ | async;
 @let hwData = hardwareData$ | async;
 @let telemetryEnabled = telemetryEnabled$ | async;
+@let pgAlertCount = pgAlertCount$ | async;
 
 @let colorClass = 'overview-health-card-status--' + vm?.clusterHealth?.icon;
 
@@ -357,19 +358,33 @@
           <p class="overview-health-card-secondary-text cds--type-label-01">
             {{ vm?.resiliencyHealth?.description }}
           </p>
-          <button
-            cdsButton="tertiary"
-            size="sm"
-            type="button"
-            (click)="onViewPGStatesClick()"
+          <div
+            cdsStack="horizontal"
+            [gap]="4"
+            class="cds-mt-4"
           >
-            <span
-              i18n
-              class="cds-ml-3"
-              >See all PGs states</span
+            @if (pgAlertCount > 0) {
+              <a
+                cdsButton="primary"
+                size="sm"
+                class="overview-health-card-resiliency-btn"
+                [routerLink]="['/monitoring/active-alerts']"
+              >
+                <span i18n>View alerts ({{ pgAlertCount }})</span>
+                <cd-icon type="arrowRight"></cd-icon>
+              </a>
+            }
+            <button
+              cdsButton="tertiary"
+              size="sm"
+              class="overview-health-card-resiliency-btn"
+              type="button"
+              (click)="onViewPGStatesClick()"
             >
-            <cd-icon type="arrowUpRight"></cd-icon>
-          </button>
+              <span i18n>See all PGs states</span>
+              <cd-icon type="arrowUpRight"></cd-icon>
+            </button>
+          </div>
         </div>
         @if (vm?.pgs?.activeCleanChartData && vm?.pgs?.activeCleanChartOptions) {
           <div class="overview-health-card-tab-content-item-row">
@@ -381,7 +396,7 @@
             <div class="overview-health-card-resiliency-chart-text">
               <p
                 i18n
-                class="cds--type-helper-text-01 overview-health-card-secondary-text"
+                class="cds--type-helper-text-01 overview-health-card-secondary-text cds-mt-2"
               >
                 <em>Data resiliency</em> reflects data availability and replication (% of placement
                 groups that are active and clean).
@@ -404,8 +419,8 @@
                 ) {
                   @if (item.count) {
                     <p
+                      [class.cds-mb-2]="!isLast"
                       [class.cds-mb-0]="isLast"
-                      class="cds-mb-2"
                     >
                       <span class="cds--type-label-01 cds-mr-1">{{ item?.state }}:</span>
                       <span class="cds--type-label-01 overview-health-card-bold"
