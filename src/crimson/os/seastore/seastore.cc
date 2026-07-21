@@ -1772,16 +1772,18 @@ ceph::os::Transaction SeaStore::Shard::build_next_batch(
 {
   ceph::os::Transaction merged;
   bool first = true;
+  uint64_t batch_features = 0;
   while (!coll.pending_txns.empty()) {
     const bool no_batch = !coll.pending_txns.front().batchable;
-    if (no_batch && !first) {
-      // Mid-batch: seal what we have and leave this txn to run as its own
-      // next batch (it will be `first` there and take the solo path below).
+    if (!first &&
+        (no_batch || coll.pending_txns.front().txn.get_data_features() != batch_features)) {
+      // Batch boundary: seal what we have so far in the batch
       break;
     }
     auto e = std::move(coll.pending_txns.front());
     coll.pending_txns.pop_front();
     if (first) {
+      batch_features = e.txn.get_data_features();
       merged = std::move(e.txn);
       first = false;
     } else {
@@ -1789,6 +1791,7 @@ ceph::os::Transaction SeaStore::Shard::build_next_batch(
     }
     pending_txns_promises.push_back(std::move(e.pr));
     if (no_batch) {
+      // no_batch runs solo (never is appended)
       break;
     }
   }
