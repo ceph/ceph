@@ -15,6 +15,8 @@ export interface OverviewField {
   status?: 'success' | 'warning' | 'danger' | 'info-circle';
   /* Fallback text shown when the value is empty. */
   emptyText?: string;
+  /* Optional route path to redirect to when the value is clicked. */
+  path?: string;
 }
 
 @Component({
