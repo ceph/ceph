@@ -51,9 +51,6 @@ as written by the client.
 ----------------------------------
 The file size is inferred from the on-disk RADOS objects. As long as the
 application actually writes data out to the logical EOF, we will set it correctly.
-Happily, any truncate or setattr which changes the size of the file is always
-directed synchronously to the MDS, so if we skip synchronizing the size of a file
-it is always recoverable.
 
 The mtime and ctime are also inferred from the RADOS-level mtime of the underlying
 objects. Unfortunately, these times are NOT the same as the in-memory values
@@ -82,6 +79,9 @@ accurate size and a reasonable facsimile of the genuine mtime, and Ganesha as an
 informed user can enable the config option. This is very straightforward:
 in Client::_fsync(), we update the block which invokes check_caps() to simply
 skip over if those are the only dirty caps.
+Annoyingly, a client can extend file size via setattr without immediately
+updating the MDS if it has sufficient caps, so we will need to detect that case
+and do a real fsync if we hit it.
 
 There are some available further enhancements:
 1) we can generate the mtime stamp upfront when doing a write(), and send that
