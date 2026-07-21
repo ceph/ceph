@@ -37,6 +37,8 @@ public:
 
   virtual void update_stats(const rgw_owner& bucket_owner, rgw_bucket& bucket, int obj_delta, uint64_t added_bytes, uint64_t removed_bytes) = 0;
 
+  virtual void invalidate_cached_owner_stats(const rgw_owner& owner) {}
+
   static RGWQuotaHandler *generate_handler(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, bool quota_threads);
   static void free_handler(RGWQuotaHandler *handler);
 };

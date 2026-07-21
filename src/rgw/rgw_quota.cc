@@ -88,6 +88,7 @@ public:
   int get_stats(const rgw_owner& owner, const rgw_bucket& bucket, RGWStorageStats& stats, optional_yield y,
                 const DoutPrefixProvider* dpp);
   void adjust_stats(const rgw_owner& owner, rgw_bucket& bucket, int objs_delta, uint64_t added_bytes, uint64_t removed_bytes);
+  void invalidate(const T& key) { stats_map.erase(key); }
 
   void set_stats(const rgw_owner& owner, const rgw_bucket& bucket, RGWQuotaCacheStats& qs, const RGWStorageStats& stats);
   int async_refresh(const rgw_owner& owner, const rgw_bucket& bucket, RGWQuotaCacheStats& qs);
@@ -980,6 +981,10 @@ public:
   void update_stats(const rgw_owner& owner, rgw_bucket& bucket, int obj_delta, uint64_t added_bytes, uint64_t removed_bytes) override {
     bucket_stats_cache.adjust_stats(owner, bucket, obj_delta, added_bytes, removed_bytes);
     owner_stats_cache.adjust_stats(owner, bucket, obj_delta, added_bytes, removed_bytes);
+  }
+
+  void invalidate_cached_owner_stats(const rgw_owner& owner) override {
+    owner_stats_cache.invalidate(owner);
   }
 }; // class RGWQuotaHandlerImpl
 
