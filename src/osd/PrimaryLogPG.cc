@@ -13612,7 +13612,8 @@ void PrimaryLogPG::_on_activate_committed(HBHandle *handle)
       cct->_conf->osd_backfill_scan_min,
       cct->_conf->osd_backfill_scan_max,
       &pool_migration_info,
-      handle);
+      handle,
+      hobject_t());
     pool_migration_info.trim();
     update_migration_watermark(earliest_pool_migration());
     //If there are no missing objects pool_migration_info is returning the same
@@ -15122,7 +15123,7 @@ void PrimaryLogPG::update_range(
              << is_old << ". is_empty: " << is_empty << ". at_end: " << at_end << dendl;
     pmi->clear();
     pmi->version = info.last_update;
-    scan_range_migration(local_min, local_max, pmi, handle);
+    scan_range_migration(local_min, local_max, pmi, handle, pool_migration_watermark);
   }
 
   if (pmi->version >= projected_last_update) {
@@ -15296,14 +15297,15 @@ void PrimaryLogPG::scan_range_replica(
  */
 void PrimaryLogPG::scan_range_migration(
   int min, int max, PoolMigrationInterval *pmi,
-  HBHandle *handle)
+  HBHandle *handle,
+  hobject_t start)
 {
   ceph_assert(is_locked());
-  dout(10) << __func__ << ": scanning from " << pool_migration_watermark << dendl;
+  dout(10) << __func__ << ": scanning from " << start << " watermark is " << pool_migration_watermark << dendl;
 
   vector<hobject_t> ls;
   ls.reserve(max);
-  int r = pgbackend->objects_list_partial(pool_migration_watermark, min, max, &ls, &pmi->end);
+  int r = pgbackend->objects_list_partial(start, min, max, &ls, &pmi->end);
   ceph_assert(r >= 0);
   dout(10) << __func__ << " got " << ls.size() << " items, next " << pmi->end << dendl;
   dout(20) << ls << dendl;
