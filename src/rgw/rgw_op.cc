@@ -31,7 +31,7 @@
 #include "rgw_cksum.h"
 #include "rgw_cksum_digest.h"
 #include "rgw_common.h"
-#include "common/split.h"
+#include "include/str_lib.h"
 #include "rgw_tracer.h"
 
 #include "rgw_zone.h"
@@ -1990,15 +1990,13 @@ int RGWOp::read_global_cors()
  * */
 static void get_cors_response_headers(const DoutPrefixProvider *dpp, RGWCORSRule *rule, const char *req_hdrs, string& hdrs, string& exp_hdrs, unsigned *max_age) {
   if (req_hdrs) {
-    list<string> hl;
-    get_str_list(req_hdrs, hl);
-    for(list<string>::iterator it = hl.begin(); it != hl.end(); ++it) {
-      if (!rule->is_header_allowed((*it).c_str(), (*it).length())) {
-        ldpp_dout(dpp, 5) << "Header " << (*it) << " is not registered in this rule" << dendl;
+    for (const auto header : ceph::split(req_hdrs)) {
+      if (!rule->is_header_allowed(header.data(), header.length())) {
+        ldpp_dout(dpp, 5) << "Header " << header << " is not registered in this rule" << dendl;
       } else {
-        ldpp_dout(dpp, 20) << "Header " << (*it) << " is registered in this rule" << dendl;
+        ldpp_dout(dpp, 20) << "Header " << header << " is registered in this rule" << dendl;
         if (hdrs.length() > 0) hdrs.append(",");
-        hdrs.append((*it));
+        hdrs.append(header);
       }
     }
   }
@@ -6786,7 +6784,7 @@ uint16_t RGWGetObjAttrs::recognize_attrs(const std::string& hdr, uint16_t deflt)
 {
   auto attrs{deflt};
   auto sa = ceph::split(hdr, ",");
-  for (auto& k : sa) {
+  for (const auto k : sa) {
     if (boost::iequals(k, "etag")) {
       attrs |= as_flag(ReqAttributes::Etag);
     }

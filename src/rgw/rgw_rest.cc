@@ -10,9 +10,8 @@
 #include "ceph_ver.h"
 #include "common/HTMLFormatter.h"
 #include "common/XMLFormatter.h"
-#include "common/split.h"
 #include "common/utf8.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "rgw_common.h"
 #include "rgw_zone.h"
 #include "rgw_auth_s3.h"
@@ -147,19 +146,17 @@ void rgw_rest_init(CephContext *cct, const rgw::sal::ZoneGroup& zone_group)
     generic_attrs_map[http2rgw.http_header] = http2rgw.rgw_attr;
   }
 
-  list<string> extended_http_attrs;
-  get_str_list(cct->_conf->rgw_extended_http_attrs, extended_http_attrs);
-
-  list<string>::iterator iter;
-  for (iter = extended_http_attrs.begin(); iter != extended_http_attrs.end(); ++iter) {
+  for (const auto attr_view :
+       ceph::split(cct->_conf->rgw_extended_http_attrs)) {
+    const std::string attr { attr_view };
     string rgw_attr = RGW_ATTR_PREFIX;
     // bidirectional mimics the '-' -> '_' behavior
-    lowercase_dash_transform(*iter, std::back_inserter(rgw_attr), true);
+    lowercase_dash_transform(attr, std::back_inserter(rgw_attr), true);
 
-    rgw_to_http_attrs[rgw_attr] = camelcase_dash_http_attr(*iter);
+    rgw_to_http_attrs[rgw_attr] = camelcase_dash_http_attr(attr);
 
     string http_header = "HTTP_";
-    uppercase_dash_transform(*iter, std::back_inserter(http_header));
+    uppercase_dash_transform(attr, std::back_inserter(http_header));
 
     generic_attrs_map[http_header] = rgw_attr;
   }
@@ -168,10 +165,10 @@ void rgw_rest_init(CephContext *cct, const rgw::sal::ZoneGroup& zone_group)
     http_status_names[h->code] = h->name;
   }
 
-  std::list<std::string> rgw_dns_names;
   std::string rgw_dns_names_str = cct->_conf->rgw_dns_name;
-  get_str_list(rgw_dns_names_str, ", ", rgw_dns_names);
-  hostnames_set.insert(rgw_dns_names.begin(), rgw_dns_names.end());
+  for (const auto name : ceph::split(rgw_dns_names_str, ", ")) {
+    hostnames_set.emplace(name);
+  }
 
   std::list<std::string> names;
   zone_group.get_hostnames(names);
@@ -1984,10 +1981,10 @@ RGWRESTMgr* RGWRESTMgr::get_resource_mgr(req_state* const s,
 
 void RGWREST::register_x_headers(const string& s_headers)
 {
-  std::vector<std::string> hdrs = get_str_vec(s_headers);
-  for (auto& hdr : hdrs) {
+  for (const auto header : ceph::split(s_headers)) {
+    std::string hdr { header };
     boost::algorithm::to_upper(hdr); // XXX
-    (void) x_headers.insert(hdr);
+    (void) x_headers.insert(std::move(hdr));
   }
 }
 
@@ -2007,19 +2004,17 @@ int rgw_rest_transform_s3_vhost_style(req_state* s)
   // S3 API.
   // Map the listing of rgw_enable_apis in REVERSE order, so that items near
   // the front of the list have a higher number assigned (and -1 for items not in the list).
-  const auto apis = ceph::split(g_conf()->rgw_enable_apis);
-  int api_priority_s3 = -1;
-  int api_priority_s3website = -1;
-  auto api_s3website_priority_rawpos = std::find(apis.begin(), apis.end(), "s3website");
-  auto api_s3_priority_rawpos = std::find(apis.begin(), apis.end(), "s3");
-  if (api_s3_priority_rawpos != apis.end()) {
-    api_priority_s3 = std::distance(api_s3_priority_rawpos, apis.end());
-  }
-  if (api_s3website_priority_rawpos != apis.end()) {
-    api_priority_s3website = std::distance(api_s3website_priority_rawpos, apis.end());
-  }
+  const auto apis = ceph::split(g_conf()->rgw_enable_apis, ";,= \t\n");
+  const auto priority_of = [&apis](std::string_view api) {
+    const auto pos = std::ranges::find(apis, api);
+    return pos == std::end(apis)
+      ? -1
+      : std::ranges::distance(pos, std::end(apis));
+  };
+  const auto api_priority_s3 = priority_of("s3");
+  const auto api_priority_s3website = priority_of("s3website");
   ldpp_dout(s, 10) << "rgw api priority: s3=" << api_priority_s3 << " s3website=" << api_priority_s3website << dendl;
-  bool s3website_enabled = api_priority_s3website >= 0;
+  const bool s3website_enabled = api_priority_s3website >= 0;
 
   req_info& info = s->info;
   if (info.host.size()) {

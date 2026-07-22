@@ -29,6 +29,7 @@
 #include "crush/CrushWrapper.h"
 
 #include "include/ceph_assert.h"
+#include "include/str_lib.h"
 #include "include/stringify.h"
 
 #define dout_subsys ceph_subsys_mon
@@ -1282,10 +1283,9 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       }
       pending_map.auth_service_cipher = c;
     } else if (name == "auth_allowed_ciphers") {
-      std::vector<std::string> v;
+      const auto v = ceph::split_strings(value, ", ");
       std::vector<int> ciphers;
-      get_str_vec(value, ", ", v);
-      for (auto& cipher : v) {
+      for (const auto& cipher : v) {
         int c = CryptoManager::get_key_type(cipher);
         if (c < 0) {
           err = -EINVAL;

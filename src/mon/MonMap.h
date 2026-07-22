@@ -28,6 +28,7 @@
 #include "mon/mon_types.h" // for mon_feature_t
 
 #include <iosfwd>
+#include <list>
 #include <map>
 #include <set>
 #include <string>
