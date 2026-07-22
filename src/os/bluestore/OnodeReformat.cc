@@ -20,23 +20,22 @@
 
 bool OnodeReformatEngine::validate(OnodeReformatContext& ctx)
 {
-  auto& rctx = ctx.rctx;
-  ceph_assert(rctx.store.cct);
+  ceph_assert(ctx.store.cct);
   bool will_reformat = false;
-  auto min_alloc_size = rctx.store.get_min_alloc_size();
-  if (rctx.op_flags & CEPH_OSD_OP_FLAG_SCRUB) {
+  auto min_alloc_size = ctx.store.get_min_alloc_size();
+  if (ctx.op_flags & CEPH_OSD_OP_FLAG_SCRUB) {
     // for the sake of simplicity do not apply data reformatting to reads
     // unaligned at the beginning. Having unaligned tail is OK.
-    will_reformat = p2nphase(rctx.offset, min_alloc_size) == 0;
+    will_reformat = p2nphase(ctx.offset, min_alloc_size) == 0;
     if (!will_reformat) {
-      ldout(rctx.store.cct, 15) << "reformat '" << args << "'"
+      ldout(ctx.store.cct, 15) << "reformat '" << args << "'"
 	<< " skipped due to unaligned read bounds "
-	<< p2nphase(rctx.offset, min_alloc_size) << " "
-	<< p2nphase(rctx.offset + rctx.length, min_alloc_size)
+	<< p2nphase(ctx.offset, min_alloc_size) << " "
+	<< p2nphase(ctx.offset + ctx.length, min_alloc_size)
 	<< dendl;
     }
     else {
-      ldout(rctx.store.cct, 15) << "reformat '" << args << "'"
+      ldout(ctx.store.cct, 15) << "reformat '" << args << "'"
 	<< " enabled "
 	<< dendl;
     }
@@ -53,22 +52,20 @@ bool OnodeReformatEngine::validate(OnodeReformatContext& ctx)
 bool OnodeReformatRecompressEngine::execute(OnodeReformatContext& ctx,
   PerfCounters& logger)
 {
-  auto& rctx = ctx.rctx;
-  ceph_assert(rctx.store.cct);
-  BlueStore::Collection* c =
-    static_cast<BlueStore::Collection*>(rctx.ch.get());
+  ceph_assert(ctx.store.cct);
+  auto* c = static_cast<BlueStore::Collection*>(ctx.ch.get());
   ceph_assert(c);
 
   const auto& span_stat = ctx.get_span_stats();
   auto& wctx = ctx.get_write_context();
-  auto min_alloc_size = rctx.store.get_min_alloc_size();
+  auto min_alloc_size = ctx.store.get_min_alloc_size();
   bool will_do = wctx.compress && span_stat.allocated > 0;
   if (will_do) {
     uint64_t need = 0;
-    auto bl_it = rctx.bl.begin();
-    uint64_t offs = rctx.offset;
+    auto bl_it = ctx.bl.begin();
+    uint64_t offs = ctx.offset;
     uint64_t old_allocated = span_stat.allocated + span_stat.allocated_compressed;
-    while (bl_it != rctx.bl.end()) {
+    while (bl_it != ctx.bl.end()) {
 
       BlueStore::BlobRef blob = c->new_blob();
       bufferlist from_bl;
@@ -89,13 +86,13 @@ bool OnodeReformatRecompressEngine::execute(OnodeReformatContext& ctx,
 	  // don't set wi.compress_len and wi.compressed as this is redundant
 	  // at this point, to be assigned in _do_alloc_write if needed.
 	}
-	ldout(rctx.store.cct, 20) << " reformat: " << " precompress : 0x"
+	ldout(ctx.store.cct, 20) << " reformat: " << " precompress : 0x"
 	  << std::hex << offs << "~" << l << "->" << res_len
 	  << std::dec << " " << *blob
 	  << dendl;
       } else {
 	bl_it += l;
-	ldout(rctx.store.cct, 20) << " reformat: " << " precompress : 0x"
+	ldout(ctx.store.cct, 20) << " reformat: " << " precompress : 0x"
 	  << std::hex << offs << "~" << l << "-> remaining tail"
 	  << dendl;
       }
@@ -111,7 +108,7 @@ bool OnodeReformatRecompressEngine::execute(OnodeReformatContext& ctx,
     // enforce recompression or not. In the latter case they can be chosen
     // for different engine optimization(s) or be rejected prior to writing out.
     wctx.precompressed = true;
-    ldout(rctx.store.cct, 10) << " reformat:'" << args << "'"
+    ldout(ctx.store.cct, 10) << " reformat:'" << args << "'"
       << " need 0x"
       << std::hex << need << " vs. old_allocated 0x" << old_allocated << std::dec
       << " apply: " << will_do
@@ -133,17 +130,15 @@ bool OnodeReformatRecompressEngine::execute(OnodeReformatContext& ctx,
 bool OnodeReformatDefragmentEngine::execute(OnodeReformatContext& ctx,
   PerfCounters& logger)
 {
-  auto& rctx = ctx.rctx;
-  ceph_assert(rctx.store.cct);
-  BlueStore::Collection* c =
-    static_cast<BlueStore::Collection*>(rctx.ch.get());
+  ceph_assert(ctx.store.cct);
+  auto *c = static_cast<BlueStore::Collection*>(ctx.ch.get());
   ceph_assert(c);
 
-  auto min_alloc_size = rctx.store.get_min_alloc_size();
+  auto min_alloc_size = ctx.store.get_min_alloc_size();
 
   bool will_do = false;
   const auto& span_stat = ctx.get_span_stats();
-  auto need = p2roundup(rctx.length, min_alloc_size);
+  auto need = p2roundup(ctx.length, min_alloc_size);
   size_t frags = 0;
   int64_t allocated = 0;
   if (span_stat.frags > 1) {
@@ -158,7 +153,7 @@ bool OnodeReformatDefragmentEngine::execute(OnodeReformatContext& ctx,
       logger.inc(l_bluestore_reformat_defragment_omitted);
     }
   }
-  ldout(rctx.store.cct, 10) << " reformat:'" << args << "'"
+  ldout(ctx.store.cct, 10) << " reformat:'" << args << "'"
     << " preallocated: 0x" << std::hex << allocated << std::dec
     << " old frags:" << span_stat.frags
     << " new frags:" << frags
@@ -173,9 +168,9 @@ bool OnodeReformatDefragmentEngine::execute(OnodeReformatContext& ctx,
 #undef dout_prefix
 #define dout_prefix *_dout << "OnodeReformatContext "
 
-OnodeReformatContext::OnodeReformatContext(BlueStore::read_context_t& _rctx,
+OnodeReformatContext::OnodeReformatContext(const BlueStore::read_context_t& _ctx,
 					   const reformat_engines_t& _engines)
-  : rctx(_rctx)
+  : read_context_t(_ctx)
 {
   // Choose the engines that should be offered to execution
   for (size_t i = 0; i < _engines.size(); i++) {
@@ -195,8 +190,8 @@ bool OnodeReformatContext::maybe_allocate(size_t need, size_t min_alloc_size,
   if (prealloc_slicer) {
     return false; // repetitive assignments aren't allowed
   }
-  ceph_assert(rctx.store.cct);
-  alloc = rctx.store.get_allocator();
+  ceph_assert(store.cct);
+  alloc = store.get_allocator();
   ceph_assert(alloc);
 
   PExtentVector alloc_vector;
@@ -205,10 +200,10 @@ bool OnodeReformatContext::maybe_allocate(size_t need, size_t min_alloc_size,
   auto allocated = alloc->allocate(
     need, min_alloc_size, need,
     0, &alloc_vector);
-  rctx.store.log_latency("allocator@_prepare_reformat",
+  store.log_latency("allocator@_prepare_reformat",
     l_bluestore_allocator_lat,
     mono_clock::now() - start,
-    rctx.store.cct->_conf->bluestore_log_op_age);
+    store.cct->_conf->bluestore_log_op_age);
   bool will_do = acceptor(allocated, alloc_vector.size());
   if (will_do) {
     prealloc_slicer = &wctx.prealloc_slicer;
