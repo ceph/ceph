@@ -76,7 +76,7 @@ export class NotificationSidebarPageHelper extends PageHelper {
   }
 
   getKebabMenu() {
-    return cy.get('.notifications-page__header-menu cds-overflow-menu');
+    return cy.get('cds-overflow-menu.notifications-page__header-menu');
   }
 
   getKebabMenuItems() {
