@@ -33,10 +33,8 @@ seastar::future<> CrushLocation::update_from_conf()
 void CrushLocation::_parse(const std::string& s)
 {
   std::multimap<std::string, std::string> new_crush_location;
-  std::vector<std::string> lvec;
-  get_str_vec(s, ";, \t", lvec);
-  int r = CrushWrapper::parse_loc_multimap(lvec, &new_crush_location);
-  if (r < 0) {
+  if (CrushWrapper::parse_loc_multimap(ceph::split_strings(s, ";, \t"),
+                                       &new_crush_location) < 0) {
     logger().error("CrushWrapper::parse_loc_multimap error, keeping original\
       crush_location {}", *this);
     return;
