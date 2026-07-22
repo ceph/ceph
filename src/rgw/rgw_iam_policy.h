@@ -525,7 +525,7 @@ struct Condition {
   }
 
   template<typename F, typename X>
-  static bool typed_any(F&& f, X& x, const std::string& c,
+  static bool typed_any(F&& f, X&& x, const std::string& c,
                         const std::vector<std::string>& v) {
     auto xc = std::forward<X>(x)(c);
     if (!xc) {
@@ -546,7 +546,7 @@ struct Condition {
   }
 
   template<typename F, typename X>
-  static bool typed_none(F&& f, X& x, const std::string& c,
+  static bool typed_none(F&& f, X&& x, const std::string& c,
                          const std::vector<std::string>& v) {
     auto xc = std::forward<X>(x)(c);
     if (!xc) {
