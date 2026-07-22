@@ -172,6 +172,10 @@ HTTP
 
 Kafka
 ~~~~~
+
+Supported broker versions: Kafka 3.9 and Kafka 4.x. Both Zookeeper-based
+(3.x) and KRaft (4.x) brokers are supported.
+
 After recovering from a broker failure, a persistent topic will try
 to resend all notifications in batches. If the topic is configured on
 the broker with a segment size smaller than our default (1MB), sending

@@ -59,6 +59,33 @@ After running `vstart.sh`, Zookeeper, and Kafka services you're ready to run the
 
         BNTESTS_CONF=bntests.conf python -m pytest -s /path/to/ceph/src/test/rgw/bucket_notification/test_bn.py -v -m 'kafka_test'
 
+------------------------------
+Kafka 4.x setup (KRaft mode)
+------------------------------
+
+Kafka 4.0 removed Zookeeper. The broker uses its own KRaft consensus,
+so there is no separate Zookeeper process to start.
+
+First-time setup (per Kafka installation), format the storage::
+
+        KAFKA_CLUSTER_ID=$(bin/kafka-storage.sh random-uuid)
+        bin/kafka-storage.sh format -t $KAFKA_CLUSTER_ID -c config/server.properties --standalone
+
+The ``--standalone`` flag is required for single-node test setups.
+
+Then start the broker::
+
+        bin/kafka-server-start.sh config/server.properties
+
+For security tests, the same ``server.properties`` edits in the section
+below apply. The KRaft controller listener (e.g. ``CONTROLLER://:9097``)
+must remain in the ``listeners`` line on a port outside the 9092-9096
+range, since those are reserved by the security listeners. Do not set
+``controller.quorum.voters``; the ``--standalone`` flag passed to
+``kafka-storage.sh format`` writes the voter set into the bootstrap
+metadata automatically, and Kafka 4.1.1+ rejects the combination of
+``--standalone`` with an explicit ``controller.quorum.voters``.
+
 --------------------
 Kafka Security Tests
 --------------------

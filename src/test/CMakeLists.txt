@@ -85,7 +85,13 @@ if(WITH_RADOSGW)
     list(APPEND rgw_libs amqp_mock)
   endif()
   if(WITH_RADOSGW_KAFKA_ENDPOINT)
-    list(APPEND rgw_libs kafka_stub)
+    # kafka_stub provides fake rd_kafka_* symbols for tests; needed
+    # whenever we link against a dynamic system librdkafka (either
+    # opted-in via WITH_SYSTEM_RDKAFKA, or as a fallback when the
+    # bundled submodule is not checked out).
+    if(WITH_SYSTEM_RDKAFKA OR NOT EXISTS "${CMAKE_SOURCE_DIR}/src/librdkafka/CMakeLists.txt")
+      list(APPEND rgw_libs kafka_stub)
+    endif()
   endif()
   add_subdirectory(rgw)
 endif(WITH_RADOSGW)
