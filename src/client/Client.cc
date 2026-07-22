@@ -12235,7 +12235,8 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, int iovcnt,
                                   onfinish, blp);
 }
 
-int64_t Client::_write_success(Fh *f, utime_t start, uint64_t fpos,
+int64_t Client::_write_success(Fh *f, utime_t start, utime_t op_mtime,
+                               uint64_t fpos,
                                int64_t request_offset, uint64_t request_size,
                                int64_t offset, uint64_t size, Inode *in,
                                bool encrypted)
@@ -12283,7 +12284,7 @@ int64_t Client::_write_success(Fh *f, utime_t start, uint64_t fpos,
   }
 
   // mtime
-  in->mtime = in->ctime = ceph_clock_now();
+  in->mtime = in->ctime = op_mtime;
   in->change_attr++;
   in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 
@@ -12311,7 +12312,8 @@ void Client::C_Write_Finisher::finish_io(int r)
       }
     }
 
-    r = clnt->_write_success(f, start, fpos, req_ofs, req_size, offset, size, in, encrypted);
+    r = clnt->_write_success(f, start, op_mtime, fpos, req_ofs, req_size,
+                             offset, size, in, encrypted);
   }
 
   iofinished = true;
@@ -12391,15 +12393,17 @@ bool Client::C_Write_Finisher::try_complete()
 
 Client::WriteEncMgr::WriteEncMgr(Client *clnt,
                                  Fh *f, int64_t offset, uint64_t size,
+                                 const utime_t& w_mtime,
                                  bufferlist& bl,
                                  bool async) : clnt(clnt), whoami(clnt->whoami),
-                                                   cct(clnt->cct),
+                                               cct(clnt->cct),
 #if defined(__linux__)
-						   fscrypt(clnt->fscrypt.get()),
+                                               fscrypt(clnt->fscrypt.get()),
 #endif
-     						   f(f), in(f->inode.get()),
-                                                   offset(offset), size(size), bl(bl),
-                                                   async(async)
+                                               f(f), in(f->inode.get()),
+                                               offset(offset), size(size),
+                                               mtime(w_mtime), bl(bl),
+                                               async(async)
 {
 #if defined(__linux__)
   denc = fscrypt->get_fdata_denc(in->fscrypt_ctx, &in->fscrypt_key_validator);
@@ -12656,7 +12660,7 @@ int Client::WriteEncMgr_Buffered::do_write()
   // async, caching, non-blocking.
   r = clnt->objectcacher->file_write(&in->oset, &in->layout,
                                      in->snaprealm->get_snap_context(),
-                                     offset, size, *pbl, ceph::real_clock::now(),
+                                     offset, size, *pbl, mtime.to_real_time(),
                                      0, iofinish,
                                      !async
                                      ? clnt->objectcacher->CFG_block_writes_upfront()
@@ -12671,7 +12675,7 @@ int Client::WriteEncMgr_NotBuffered::do_write()
   clnt->get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
   clnt->filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
-                           offset, size, *pbl, ceph::real_clock::now(), 0,
+                           offset, size, *pbl, mtime.to_real_time(), 0,
                            in->truncate_size, in->truncate_seq,
                            iofinish);
 
@@ -12741,6 +12745,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
 
   // time it.
   utime_t start = mono_clock_now();
+  utime_t op_mtime = ceph_clock_now();
 
   if (in->inline_version == 0) {
     int r = _getattr(in, CEPH_STAT_CAP_INLINE_DATA, f->actor_perms, true);
@@ -12778,11 +12783,11 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
 
   if (buffered_write) {
     enc_mgr = ceph::make_ref<WriteEncMgr_Buffered>(this, f,
-						   offset, size, bl,
+						   offset, size, op_mtime, bl,
 						   !!onfinish);
   } else {
     enc_mgr = ceph::make_ref<WriteEncMgr_NotBuffered>(this, f,
-						      offset, size, bl,
+						      offset, size, op_mtime, bl,
 						      !!onfinish);
   }
 
@@ -12839,7 +12844,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
                         cct->_conf->client_oc &&
                           (have & (CEPH_CAP_FILE_BUFFER |
                                  CEPH_CAP_FILE_LAZYIO)),
-                        f, in, fpos,
+                        op_mtime, f, in, fpos,
                         request_offset, request_size,
                         offset, size,
                         do_fsync, syncdataonly, enc_mgr->encrypted()));
@@ -12959,7 +12964,8 @@ success:
 
   // do not get here if non-blocking caller (onfinish != nullptr)
   ldout(cct, 10) << " _write_filer_succeess" << dendl;
-  r = _write_success(f, start, fpos, request_offset, request_size, enc_mgr->get_ofs(), enc_mgr->get_size(), in, enc_mgr->encrypted());
+  r = _write_success(f, start, op_mtime, fpos, request_offset, request_size,
+                     enc_mgr->get_ofs(), enc_mgr->get_size(), in, enc_mgr->encrypted());
 
   if (r >= 0 && do_fsync) {
     int64_t r1;
