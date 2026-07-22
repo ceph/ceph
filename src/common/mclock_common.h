@@ -234,6 +234,29 @@ private:
   // currently active profile, will be overridden from config on startup
   // and upon config change
   profile_t current_profile = BALANCED;
+
+  /**
+   * scheduler_max_starve_time / scheduler_max_starve_time_ssd
+   *
+   * Upper bound (secs) on how long the mClock managed queue may go unserviced
+   * while high_priority drain keeps being refilled, before yielding it one
+   * forced dequeue attempt. Without this, a sustained stream of high_priority
+   * traffic can starve the various mClock managed classes.
+   *
+   * Device-specific starve times: A HDD's own natural service time is multi-
+   * millisecond, and so the default 250ms bound is a modest multiple of that.
+   * See 'osd_mclock_max_starve_time_hdd' for more details. Flash devices
+   * complete a normal op much faster (sub millisecond), so the bound is
+   * tightened to a much shorter window of 50ms. This has been validated by
+   * real hardware testing and stays as an internal constant.
+   *
+   * But validation is not done on HDD test hardware and therefore it's exposed
+   * as a config option mentioned above with a default of 250ms and bound to
+   * [100ms, 500ms] rather than hardcode it. Thus is to allow an operator some
+   * flexibility in case a given HDD fleet needs a different value.
+   */
+  double scheduler_max_starve_time = 0.0;
+  static constexpr double scheduler_max_starve_time_ssd = 0.05; // 50 msec
 public:
   MclockConfig(CephContext *cct, ClientRegistry& creg,
                uint32_t num_shards, bool is_rotational, int shard_id,
@@ -259,6 +282,7 @@ public:
                           utime_t time_queued);
   double get_cost_per_io() const;
   double get_capacity_per_shard() const;
+  double get_scheduler_max_starve_time() const;
   void handle_conf_change(const ConfigProxy& conf,
 			  const std::set<std::string> &changed) final;
   std::vector<std::string> get_tracked_keys() const noexcept final {
@@ -277,7 +301,8 @@ public:
       "osd_mclock_max_capacity_iops_ssd"s,
       "osd_mclock_max_sequential_bandwidth_hdd"s,
       "osd_mclock_max_sequential_bandwidth_ssd"s,
-      "osd_mclock_profile"s
+      "osd_mclock_profile"s,
+      "osd_mclock_max_starve_time_hdd"s
     };
   }
   uint32_t calc_scaled_cost(int item_cost);

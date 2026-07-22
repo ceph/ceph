@@ -200,6 +200,44 @@ void mClockScheduler::enqueue_high(unsigned priority,
 
 WorkItem mClockScheduler::dequeue()
 {
+  if (!high_priority.empty() && mclock_queue_is_starved()) {
+    // The mclock-managed queue has pending work that has gone unserviced
+    // for at least high_priority_max_starve_time because high_priority
+    // keeps being refilled. Give it one guaranteed try so classes like
+    // background_best_effort (e.g. scrub, backfill etc.) make forward
+    // progress instead of being starved indefinitely -- see tracker 69078.
+    auto fmt_prio = [this](priority_t p) -> std::string {
+      return (p == immediate_class_priority) ? "MAX" : std::to_string(p);
+    };
+    dout(10) << __func__ << " mclock queue starved for at least "
+             << mclock_conf.get_scheduler_max_starve_time()
+             << "s behind high_priority backlog (priority queues: "
+             << high_priority.size();
+    for (const auto& [prio, queue] : high_priority) {
+      *_dout << ", priority " << fmt_prio(prio) << ": " << queue.size();
+    }
+    *_dout << "), forcing a dequeue attempt" << dendl;
+
+    mclock_queue_t::PullReq result = scheduler.pull_request();
+    if (result.is_retn()) {
+      auto &retn = result.get_retn();
+
+      scheduler_op_type_t op_type = scheduler_op_type_t::unknown;
+      utime_t time_queued = utime_t();
+      if (retn.request) {
+        op_type = get_scheduler_op_type(*retn.request);
+        time_queued = retn.request->get_time_queued();
+      }
+      mclock_conf.put_mclock_counter(retn.client, op_type, time_queued);
+      last_mclock_service_time = crimson::dmclock::get_time();
+
+      return std::move(*retn.request);
+    }
+    // Nothing was actually ready as per mclock's own reservation/limit tags
+    // -- fall through and serve high_priority as usual; the starvation check
+    // will retry on the next call.
+  }
+
   if (!high_priority.empty()) {
     auto iter = high_priority.begin();
     // invariant: high_priority entries are never empty
@@ -241,6 +279,7 @@ WorkItem mClockScheduler::dequeue()
         time_queued = retn.request->get_time_queued();
       }
       mclock_conf.put_mclock_counter(retn.client, op_type, time_queued);
+      last_mclock_service_time = crimson::dmclock::get_time();
 
       return std::move(*retn.request);
     }
