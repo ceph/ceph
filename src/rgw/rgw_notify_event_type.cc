@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "rgw_notify_event_type.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 
 namespace rgw::notify {
 
