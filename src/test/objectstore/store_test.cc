@@ -11832,6 +11832,7 @@ TEST_P(CorruptedOnodesTest, Fsck_TolerateCorruptedOnodes)
   // deterministic onode encoding: segment_size==0 => FLAG_DEBUG_FORCE_V2
   SetVal(g_conf(), "bluestore_debug_onode_segmentation_random", "false");
   SetVal(g_conf(), "bluestore_onode_segment_size", "0");
+  SetVal(g_conf(), "bluestore_fsck_quick_fix_threads", "2");
   g_conf().apply_changes(nullptr);
   prepare_store();
 
@@ -11856,13 +11857,6 @@ TEST_P(CorruptedOnodesTest, Fsck_TolerateCorruptedOnodes)
                               make_bad_onode_val(kinds[i])));
   }
   umount();
-
-  // Deliverable: all four corrupt onodes are detected and fsck returns
-  // instead of aborting on the decode assert. Report-only in this change —
-  // the onodes are not removed (physical removal would orphan their blocks:
-  // the extent map is undecodable, so reclamation is the -EIO follow-up,
-  // tracker #77325), so fsck keeps reporting them rather than reaching a
-  // clean store.
   ASSERT_GE(store->fsck(false), 4);    // all four reported, no abort()
   cleanup_store();
 }
@@ -11877,7 +11871,6 @@ TEST_P(CorruptedOnodesTest, CorruptedOnode_RegularPathStillCrashes)
   SetVal(g_conf(), "bluestore_onode_segment_size", "0");
   g_conf().apply_changes(nullptr);
   prepare_store();
-
   // Persist the corruption, then fully tear down so no live store (threads,
   // open RocksDB) is cloned across the death-test fork.
   mount();
@@ -11886,7 +11879,6 @@ TEST_P(CorruptedOnodesTest, CorruptedOnode_RegularPathStillCrashes)
   ASSERT_TRUE(corrupt_onode(bs, "my_special_object",
                             make_bad_onode_val(BadKind::version)));
   umount();
-
   // Child does its own clean mount; the cold read must decode the corrupt
   // onode and abort via ceph_assert (no throwing_guard on the regular path).
   EXPECT_DEATH({
@@ -11899,7 +11891,77 @@ TEST_P(CorruptedOnodesTest, CorruptedOnode_RegularPathStillCrashes)
     (void)store->read(ch2, hoid, 0, 4, bl);
     umount();
   }, "");
+  cleanup_store();
+}
 
+
+TEST_P(CorruptedOnodesTest, Fsck_CreateDecodeThrow_DoesNotLeakOnode)
+{
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
+  prepare_store(); mount();
+  BlueStore* bs = dynamic_cast<BlueStore*>(store.get()); ceph_assert(bs);
+  // spanning-blob corruption throws INSIDE create_decode, before the raw
+  // Onode* reaches the OnodeRef -> exercises the unique_ptr<Onode> unwind.
+  ASSERT_TRUE(corrupt_onode(bs, "my_special_object",
+                            make_bad_onode_val(BadKind::spanning_id)));
+  umount();
+  auto onodes = []{ return int64_t(mempool::bluestore_cache_onode::allocated_items()); };
+  store->fsck(false);
+  int64_t before = onodes();
+  for (int i = 0; i < 20; ++i) EXPECT_GT(store->fsck(false), 0);
+  EXPECT_EQ(before, onodes());
+  cleanup_store();
+}
+
+TEST_P(CorruptedOnodesTest, Fsck_ExtentDecodeThrow_DoesNotLeakExtent)
+{
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
+  prepare_store(); mount();
+  BlueStore* bs = dynamic_cast<BlueStore*>(store.get()); ceph_assert(bs);
+  // extent-map corruption throws in decode_some while an Extent is pending
+  // in ExtentDecoderFull -> exercises the pending_extent unwind.
+  ASSERT_TRUE(corrupt_onode(bs, "my_special_object",
+                            make_bad_onode_val(BadKind::version)));
+  umount();
+  auto extents = []{ return int64_t(mempool::bluestore_extent::allocated_items()); };
+  store->fsck(false);
+  int64_t before = extents();
+  for (int i = 0; i < 20; ++i) EXPECT_GT(store->fsck(false), 0);
+  EXPECT_EQ(before, extents());
+  cleanup_store();
+}
+
+TEST_P(CorruptedOnodesTest, Fsck_ToleratesCorruptionDuringAllocationRecovery)
+{
+  SetVal(g_conf(), "bluestore_allocation_recovery_threads", "0"); // single-threaded
+  g_conf().apply_changes(nullptr);
+  prepare_store(); mount();
+  auto* bs = dynamic_cast<BlueStore*>(store.get()); ceph_assert(bs);
+  ASSERT_TRUE(corrupt_onode(bs, "my_special_object",
+                            make_bad_onode_val(BadKind::version)));
+  umount();
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "1");
+  g_conf().apply_changes(nullptr);
+  EXPECT_GT(store->fsck(false), 0);
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
+  g_conf().apply_changes(nullptr);
+  cleanup_store();
+}
+
+TEST_P(CorruptedOnodesTest, Fsck_ToleratesCorruptionDuringAllocationRecoveryMT)
+{
+  SetVal(g_conf(), "bluestore_allocation_recovery_threads", "4"); // multi-threaded
+  g_conf().apply_changes(nullptr);
+  prepare_store(); mount();
+  auto* bs = dynamic_cast<BlueStore*>(store.get()); ceph_assert(bs);
+  ASSERT_TRUE(corrupt_onode(bs, "my_special_object",
+                            make_bad_onode_val(BadKind::version)));
+  umount();
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "1");
+  g_conf().apply_changes(nullptr);
+  EXPECT_GT(store->fsck(false), 0);
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
+  g_conf().apply_changes(nullptr);
   cleanup_store();
 }
 

@@ -20984,6 +20984,11 @@ int BlueStore::read_allocation_from_onodes(SimpleBitmap *sbmap, read_alloc_stats
                                 sb_info,
                                 min_alloc_size_order);
 
+  // Tolerate corrupt onodes only under read-only fsck: the rebuilt allocation
+  // is never destaged there, so skipping one can't wrongly free its blocks.
+  // Read-write (mount/repair) re-throws and stays fatal.
+  bool current_onode_valid = false;
+
   // iterate over all ONodes stored in RocksDB
   for (it->lower_bound(string()); it->valid(); it->next(), kv_count++) {
     // trace an even after every million processed objects (typically every 5-10 seconds)
@@ -21004,12 +21009,24 @@ int BlueStore::read_allocation_from_onodes(SimpleBitmap *sbmap, read_alloc_stats
       }
       edecoder.reset(oid,
         &stats.actual_pool_vstatfs[oid.hobj.get_logical_pool()]);
-      Onode dummy_on(cct);
-      Onode::decode_raw(&dummy_on,
-        it->value(),
-        edecoder,
-        segment_size != 0);
-      ++stats.onode_count;
+      current_onode_valid = false;
+      try {
+        bluestore_decode::throwing_guard g(db_was_opened_read_only);
+        Onode dummy_on(cct);
+        Onode::decode_raw(&dummy_on,
+          it->value(),
+          edecoder,
+          segment_size != 0);
+        current_onode_valid = true;
+        ++stats.onode_count;
+      } catch (const ceph::buffer::error& e) {
+        if (!db_was_opened_read_only) {
+          throw;
+        }
+        derr << __func__ << " skipping undecodable onode "
+             << pretty_binary_string(key) << ": " << e.what() << dendl;
+        continue;
+      }
     } else {
       uint32_t offset;
       int r = get_key_extent_shard(key, &okey, &offset);
@@ -21026,14 +21043,24 @@ int BlueStore::read_allocation_from_onodes(SimpleBitmap *sbmap, read_alloc_stats
              << dendl;
         return -EIO;
       }
-      if (oid != edecoder.get_oid()) {
+      if (!current_onode_valid || oid != edecoder.get_oid()) {
         derr << __func__ << " shard " << pretty_binary_string(okey)
              << " oid: " << oid
-             << " not from current oid: " << edecoder.get_oid() << dendl;
+             << " without a valid current onode" << dendl;
         continue;
       }
-      edecoder.decode_some(it->value(), nullptr);
-      ++stats.shard_count;
+      try {
+        bluestore_decode::throwing_guard g(db_was_opened_read_only);
+        edecoder.decode_some(it->value(), nullptr);
+        ++stats.shard_count;
+      } catch (const ceph::buffer::error& e) {
+        if (!db_was_opened_read_only) {
+          throw;
+        }
+        derr << __func__ << " skipping undecodable extent shard "
+             << pretty_binary_string(key) << ": " << e.what() << dendl;
+        continue;
+      }
     }
   }
   return 0;
