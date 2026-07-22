@@ -278,7 +278,6 @@ class BlueStore : public ObjectStore,
 		  public md_config_obs_t {
   // -----------------------------------------------------
   // types
-
 public:
   struct WriteContext;
   // config observer
@@ -2121,7 +2120,6 @@ public:
     }
   private:
     state_t state = STATE_PREPARE;
-
   };
 
   class BlueStoreThrottle {
@@ -3017,7 +3015,7 @@ private:
   void _txc_add_transaction(TransContext *txc, Transaction *t);
   void _txc_exec_reformat_write(Collection* c, OnodeRef o,
                                 uint64_t offset, size_t length,
-			        const bufferlist& bl,
+                                const bufferlist& bl,
                                 WriteContext& wctx);
   void _txc_calc_cost(TransContext *txc);
   void _txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t);
@@ -3414,14 +3412,14 @@ private:
     int read_cache_policy,
     ready_regions_t& ready_regions,
     blobs2read_t& blobs2read,
-    span_stat_t* span_stat);
+    span_stat_t* span_stat = nullptr);
 
 
   int _prepare_read_ioc(
     blobs2read_t& blobs2read,
     std::vector<ceph::buffer::list>* compressed_blob_bls,
     IOContext* ioc,
-    span_stat_t* span_stat);
+    span_stat_t* span_stat = nullptr);
 
   int _generate_read_result_bl(
     OnodeRef& o,
@@ -4022,7 +4020,7 @@ private:
 		OnodeRef& o,
 		uint64_t offset, uint64_t length,
 		const ceph::buffer::list& bl,
-                WriteContext& wctx);
+		WriteContext& wctx);
   void _do_write_data(TransContext *txc,
                       CollectionRef& c,
                       OnodeRef& o,

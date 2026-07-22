@@ -9696,8 +9696,8 @@ int BlueStore::_mount()
 
   dout(1) << __func__
           << " v2 = " << use_write_v2
-	  << " segment_size = " << segment_size
-	  << " esb = " << elastic_shared_blobs
+          << " segment_size = " << segment_size
+          << " esb = " << elastic_shared_blobs
           << dendl;
   int r = _open_db_and_around(false);
   if (r < 0) {
@@ -12928,7 +12928,7 @@ void BlueStore::_maybe_do_reformat_onode(OnodeReformatContext& reformat_ctx,
 }
 
 int BlueStore::read(
-  CollectionHandle &ch,
+  CollectionHandle &c_,
   const ghobject_t& oid,
   uint64_t offset,
   size_t length,
@@ -12936,7 +12936,7 @@ int BlueStore::read(
   uint32_t op_flags)
 {
   auto start = mono_clock::now();
-  Collection *c = static_cast<Collection *>(ch.get());
+  Collection *c = static_cast<Collection *>(c_.get());
   const coll_t &cid = c->get_cid();
   dout(15) << __func__ << " " << cid << " " << oid
 	   << " 0x" << std::hex << offset << "~" << length
@@ -12944,9 +12944,9 @@ int BlueStore::read(
 	   << std::dec << dendl;
   if (!c->exists)
     return -ENOENT;
+
   bl.clear();
   int r;
-
   {
     read_context_t read_ctx(*this, offset, length, bl, op_flags);
     // we need a shared lock to access
@@ -12999,9 +12999,9 @@ int BlueStore::read(
     r = -EIO;
     derr << __func__ << " " << c->cid << " " << oid << " INJECT EIO" << dendl;
   } else if (oid.hobj.pool > 0 &&  /* FIXME, see #23029 */
-    cct->_conf->bluestore_debug_random_read_err &&
-    (rand() % (int)(cct->_conf->bluestore_debug_random_read_err *
-      100.0)) == 0) {
+	     cct->_conf->bluestore_debug_random_read_err &&
+	     (rand() % (int)(cct->_conf->bluestore_debug_random_read_err *
+			     100.0)) == 0) {
     dout(0) << __func__ << ": inject random EIO" << dendl;
     r = -EIO;
   }
@@ -13063,8 +13063,8 @@ void BlueStore::_read_cache(
           pc->first == pos) {
         l = pc->second.length();
         ready_regions[pos] = std::move(pc->second);
-	span_stat.cached += l;
-	dout(30) << __func__ << "    use cache 0x" << std::hex << pos << ": 0x"
+        span_stat.cached += l;
+        dout(30) << __func__ << "    use cache 0x" << std::hex << pos << ": 0x"
                  << pos << "~" << l << std::dec << dendl;
         ++pc;
       } else {
@@ -13126,7 +13126,7 @@ int BlueStore::_prepare_read_ioc(
   span_stat_t& span_stat = res_span_stat ? *res_span_stat : dummy_span_stat;
   interval_set<uint64_t> pintervals; // need to accumulate pextents in this set
                                      // to get them sorted by offset and merged
-				     // into larger intervals if possible.
+                                     // into larger intervals if possible.
   for (auto& p : blobs2read) {
     const BlobRef& bptr = p.first;
     regions2read_t& r2r = p.second;
@@ -13839,10 +13839,9 @@ int BlueStore::_do_readv(
   for (auto p = m.begin(); p != m.end(); p++, i++) {
     raw_results.push_back({});
     _read_cache(o, p.get_start(), p.get_len(), read_cache_policy,
-                std::get<0>(raw_results[i]), std::get<2>(raw_results[i]),
-		nullptr);
-    r = _prepare_read_ioc(std::get<2>(raw_results[i]), &std::get<1>(raw_results[i]),
-                          &ioc, nullptr);
+                std::get<0>(raw_results[i]), std::get<2>(raw_results[i]));
+    r = _prepare_read_ioc(std::get<2>(raw_results[i]), &std::get<1>(raw_results[i]), &ioc);
+    // we always issue aio for reading, so errors other than EIO are not allowed
     if (r < 0)
       return r;
     if (cct->_conf->bluestore_frag_runtime) {
@@ -16291,12 +16290,12 @@ void BlueStore::_txc_exec(TransContext* txc, ThreadPool::TPHandle* handle)
   auto tstart = mono_clock::now();
 
   if (!throttle.try_start_transaction(
-    *db,
-    *txc,
-    tstart)) {
+	*db,
+	*txc,
+	tstart)) {
     // ensure we do not block here because of deferred writes
     dout(10) << __func__ << " failed get throttle_deferred_bytes, aggressive"
-      << dendl;
+	     << dendl;
     ++deferred_aggressive;
     deferred_try_submit();
     {
@@ -16989,11 +16988,11 @@ uint32_t BlueStore::_do_write_small_with_maybe_blob_reuse(
           if (!g_conf()->bluestore_debug_omit_block_device_write) {
             if (b_len < prefer_deferred_size) {
               dout(20) << __func__ << " deferring small 0x" << std::hex
-                       << b_len << std::dec << " unused write via deferred" << dendl;
+		       << b_len << std::dec << " unused write via deferred" << dendl;
               bluestore_deferred_op_t *op = _get_deferred_op(txc, bl.length());
               op->op = bluestore_deferred_op_t::OP_WRITE;
               b->get_blob().map(
-                b_off, b_len,
+		b_off, b_len,
                 [&](uint64_t offset, uint64_t length) {
                   op->extents.emplace_back(bluestore_pextent_t(offset, length));
                   return 0;
@@ -17002,8 +17001,9 @@ uint32_t BlueStore::_do_write_small_with_maybe_blob_reuse(
             } else {
               b->get_blob().map_bl(
                 b_off, bl,
-                [&](uint64_t offset, bufferlist& t) {
-                  bdev->aio_write(offset, t, &txc->ioc, wctx->buffered);
+		[&](uint64_t offset, bufferlist& t) {
+                  bdev->aio_write(offset, t,
+				  &txc->ioc, wctx->buffered);
               });
             }
           }
@@ -17671,12 +17671,12 @@ int BlueStore::_do_alloc_write(
 
       if (r == 0 && rejected) {
 	dout(20) << __func__ << std::hex << "  0x" << wi.blob_length
-	  << " compressed to 0x" << compressed_len << " -> 0x" << result_len
-	  << " with " << wctx->compressor->get_type()
-	  << ", which is more than required 0x" << want_len_raw
-	  << " -> 0x" << want_len
-	  << ", leaving uncompressed"
-	  << std::dec << dendl;
+		 << " compressed to 0x" << compressed_len << " -> 0x" << result_len
+		 << " with " << wctx->compressor->get_type()
+		 << ", which is more than required 0x" << want_len_raw
+		 << " -> 0x" << want_len
+		 << ", leaving uncompressed"
+		 << std::dec << dendl;
 	logger->inc(l_bluestore_compress_rejected_count);
       }
 
@@ -17743,10 +17743,9 @@ int BlueStore::_do_alloc_write(
 
   dout(20) << __func__ << std::hex << " need=0x" << need << " data=0x" << data_size
 	   << " prealloc " << pextents << dendl;
-
-  int64_t prealloc_left = allocated + preallocated;
   auto prealloc_pos = pextents.begin();
   ceph_assert(prealloc_pos != pextents.end());
+  int64_t prealloc_left = allocated + preallocated;
 
   for (auto& wi : wctx->writes) {
     bluestore_blob_t& dblob = wi.b->dirty_blob();
@@ -18294,6 +18293,7 @@ int BlueStore::_do_write_v2(
   if (length == 0) {
     return 0;
   }
+
   if (bl.length() != length) {
     bl.splice(length, bl.length() - length);
   }
