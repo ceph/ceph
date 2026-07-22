@@ -39,8 +39,19 @@
 namespace bluestore_decode {
 extern thread_local bool throw_on_failure;
 struct throwing_guard {
-  throwing_guard()  { ceph_assert(!throw_on_failure); throw_on_failure = true; }
-  ~throwing_guard() { throw_on_failure = false; }
+  explicit throwing_guard(bool enable = true) : active(enable) {
+    if (active) {
+      ceph_assert(!throw_on_failure);
+      throw_on_failure = true;
+    }
+  }
+  ~throwing_guard() {
+    if (active) {
+      throw_on_failure = false;
+    }
+  }
+private:
+  bool active;
 };
   void assert_fail(const char* assertion, const char* file,
                    int line, const char* func);
@@ -182,6 +193,7 @@ struct denc_traits<PExtentVector> {
     unsigned num;
     denc_varint(num, p);
     v.clear();
+    ceph_assert_decode(num <= unsigned(p.get_end() - p.get_pos())); 
     v.resize(num);
     for (unsigned i=0; i<num; ++i) {
       denc(v[i], p);
@@ -510,6 +522,7 @@ struct bluestore_blob_use_tracker_t {
         num_au = 0;
         denc_varint(total_bytes, p);
       } else {
+        ceph_assert_decode(_num_au <= size_t(p.get_end() - p.get_pos()));
         allocate(_num_au);
         for (size_t i = 0; i < _num_au; ++i) {
 	  denc_varint(bytes_per_au[i], p);

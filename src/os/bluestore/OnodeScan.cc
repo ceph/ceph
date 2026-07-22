@@ -241,6 +241,9 @@ class BlueStore::OnodeScanMT {
     uint64_t count_interval = 100'000;
     Decoder_AllocationsAndStatFS edecoder(store, stats, *sbmap,
                                           store.min_alloc_size_order);
+    // Same read-only gating as read_allocation_from_onodes: tolerate a corrupt
+    // onode only when the rebuilt allocation won't be committed.
+    bool current_onode_valid = false;
     it->lower_bound(start_key);
     // skip to first key that is beginning of Onode
     while (it->valid() && is_extent_shard_key(it->key())) {
@@ -270,25 +273,64 @@ class BlueStore::OnodeScanMT {
         }
         edecoder.reset(oid,
                        &stats.actual_pool_vstatfs[oid.hobj.get_logical_pool()]);
-        Onode dummy_on(cct);
-        Onode::decode_raw(&dummy_on, it->value(), edecoder, store.segment_size != 0);
-        ++stats.onode_count;
+        current_onode_valid = false;
+        try {
+          bluestore_decode::throwing_guard g(store.db_was_opened_read_only);
+          Onode dummy_on(cct);
+          Onode::decode_raw(
+            &dummy_on,
+            it->value(),
+            edecoder,
+            store.segment_size != 0);
+          current_onode_valid = true;
+          ++stats.onode_count;
+        } catch (const ceph::buffer::error& e) {
+          if (!store.db_was_opened_read_only) {
+            throw;
+          }
+          derr << __func__ << " skipping undecodable onode "
+              << pretty_binary_string(key) << ": " << e.what() << dendl;
+          continue;
+        }
       } else {
         edecoder.reset_new_shard();
         uint32_t offset;
-        get_key_extent_shard(key, &okey, &offset);
-        int r = get_key_object(okey, &oid);
+        int r = get_key_extent_shard(key, &okey, &offset);
         if (r != 0) {
           derr << __func__
-               << " failed to decode onode key= " << pretty_binary_string(okey)
-               << " from extent key= " << pretty_binary_string(key) << dendl;
+              << " failed to decode extent shard key= " << pretty_binary_string(key) << dendl;
           continue;
         }
-        if (oid != edecoder.get_oid()) {
+        r = get_key_object(okey, &oid);
+        if (r != 0) {
+          derr << __func__
+              << " failed to decode onode key= "
+              << pretty_binary_string(okey)
+              << " from extent key= "
+              << pretty_binary_string(key) << dendl;
           continue;
         }
-        edecoder.decode_some(it->value(), nullptr);
-        ++stats.shard_count;
+        if (!current_onode_valid || oid != edecoder.get_oid()) {
+          derr << __func__ << " skipping extent shard "
+              << pretty_binary_string(key)
+              << " without a valid current onode" << dendl;
+          continue;
+        }
+        try {
+          bluestore_decode::throwing_guard g(
+            store.db_was_opened_read_only);
+          edecoder.decode_some(it->value(), nullptr);
+          ++stats.shard_count;
+        } catch (const ceph::buffer::error& e) {
+          if (!store.db_was_opened_read_only) {
+            throw;
+          }
+          derr << __func__
+              << " skipping undecodable extent shard "
+              << pretty_binary_string(key) << ": "
+              << e.what() << dendl;
+          continue;
+        }
       }
     }
     report_progress(0, kv_count - last_completed);

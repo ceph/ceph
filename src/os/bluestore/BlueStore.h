@@ -1113,7 +1113,7 @@ public:
     void encode_spanning_blobs(ceph::buffer::list::contiguous_appender& p);
     BlobRef& get_spanning_blob(int id) {
       auto p = spanning_blob_map.find(id);
-      ceph_assert_decode(p != spanning_blob_map.end());   // was ceph_assert —> decoded blob id
+      ceph_assert_decode(p != spanning_blob_map.end());
       return p->second;
     }
 
