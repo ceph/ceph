@@ -45,9 +45,16 @@ protected:
   bool checksum_mode{false};
   std::map<std::string, std::string> crypt_http_responses;
   int override_range_hdr(const rgw::auth::StrategyRegistry& auth_registry, optional_yield y);
+#ifdef WITH_RADOSGW_CUOBJ
+  bool rdma_active = false;
+  std::string rdma_descriptor;
+  void* rdma_buf = nullptr;
+  size_t rdma_buf_offset = 0;
+#endif
 public:
   RGWGetObj_ObjStore_S3() {}
-  ~RGWGetObj_ObjStore_S3() override {}
+  ~RGWGetObj_ObjStore_S3() override;
+
 
   int verify_requester(const rgw::auth::StrategyRegistry& auth_registry, optional_yield y) override;
   int get_params(optional_yield y) override;
@@ -260,6 +267,9 @@ public:
 class RGWPutObj_ObjStore_S3 : public RGWPutObj_ObjStore {
 private:
   std::map<std::string, std::string> crypt_http_responses;
+#ifdef WITH_RADOSGW_CUOBJ
+  bool rdma_active = false;
+#endif
 
 public:
   RGWPutObj_ObjStore_S3() {}

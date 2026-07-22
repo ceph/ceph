@@ -4558,6 +4558,55 @@ options:
   flags:
   - startup
   with_legacy: true
+# cuObject RDMA server options
+- name: rgw_cuobj_enabled
+  type: bool
+  level: advanced
+  desc: Enable cuObject S3 RDMA server support for PUT/GET operations
+  default: false
+  services:
+  - rgw
+  flags:
+  - startup
+- name: rgw_cuobj_rdma_ip
+  type: str
+  level: advanced
+  desc: IP address of the RDMA-capable network interface
+  default:
+  services:
+  - rgw
+  flags:
+  - startup
+- name: rgw_cuobj_rdma_port
+  type: uint
+  level: advanced
+  desc: Port for cuObject RDMA connections
+  default: 20886
+  services:
+  - rgw
+  flags:
+  - startup
+- name: rgw_cuobj_buffer_size
+  type: size
+  level: advanced
+  desc: Size of each pre-registered RDMA buffer
+  default: 8_M
+  services:
+  - rgw
+- name: rgw_cuobj_buffer_count
+  type: uint
+  level: advanced
+  desc: Number of pre-registered RDMA buffers in the pool
+  default: 128
+  services:
+  - rgw
+- name: rgw_cuobj_num_dcis
+  type: uint
+  level: advanced
+  desc: Number of Dynamic Connection Interfaces for RDMA
+  default: 128
+  services:
+  - rgw
 - name: rgw_topic_persistency_time_to_live
   type: uint
   level: advanced

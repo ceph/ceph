@@ -75,6 +75,9 @@
 #ifdef WITH_RADOSGW_DBSTORE
 #include "rgw_sal_dbstore.h"
 #endif
+#ifdef WITH_RADOSGW_CUOBJ
+#include "rgw_cuobj.h"
+#endif
 #include "rgw_lua_background.h"
 #include "services/svc_zone.h"
 
@@ -440,6 +443,16 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
   ratelimiter.reset(new ActiveRateLimiter{dpp->get_cct()});
   ratelimiter->start();
 
+#ifdef WITH_RADOSGW_CUOBJ
+  if (g_conf().get_val<bool>("rgw_cuobj_enabled")) {
+    int cuobj_r = RGWCuObjServer::init(dpp->get_cct());
+    if (cuobj_r < 0) {
+      derr << "WARNING: cuObj RDMA server init failed: " << cuobj_r
+           << " (RDMA acceleration disabled)" << dendl;
+    }
+  }
+#endif
+
   // initialize RGWProcessEnv
   env.rest = &rest;
   env.auth_registry = rgw::auth::StrategyRegistry::create(
@@ -681,6 +694,10 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
   }
 
   finalize_async_signals(); // callback
+
+#ifdef WITH_RADOSGW_CUOBJ
+  RGWCuObjServer::shutdown();
+#endif
 
   rgw_tools_cleanup();
   rgw_shutdown_resolver();
