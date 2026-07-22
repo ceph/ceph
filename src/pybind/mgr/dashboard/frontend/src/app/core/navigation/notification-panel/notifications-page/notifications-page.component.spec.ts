@@ -347,6 +347,17 @@ describe('NotificationsPageComponent', () => {
       expect(component.selectedNotificationID()).toBe('1');
     });
 
+    it('should re-select when query params change while a notification is already selected', () => {
+      queryParamsSubject.next({ id: '1' });
+      fixture.detectChanges();
+      expect(component.selectedNotificationID()).toBe('1');
+
+      queryParamsSubject.next({ id: '2' });
+      fixture.detectChanges();
+      expect(component.selectedNotificationID()).toBe('2');
+      expect(notificationService.markAsRead).toHaveBeenCalledWith('2');
+    });
+
     it('should pre-select when navigating from toast view more link', () => {
       dataSourceSubject.next(mockNotifications);
       fixture.detectChanges();
