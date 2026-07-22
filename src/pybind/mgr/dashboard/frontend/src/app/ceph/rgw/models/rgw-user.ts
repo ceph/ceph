@@ -1,11 +1,11 @@
-interface Key {
+export interface Key {
   access_key: string;
   active: boolean;
   secret_key: string;
   user: string;
 }
 
-interface SwiftKey {
+export interface SwiftKey {
   active: boolean;
   secret_key: string;
   user: string;
@@ -21,7 +21,7 @@ interface Subuser {
   permissions: string;
 }
 
-interface BucketQuota {
+export interface BucketQuota {
   check_on_raw: boolean;
   enabled: boolean;
   max_objects: number;
@@ -29,7 +29,7 @@ interface BucketQuota {
   max_size_kb: number;
 }
 
-interface UserQuota {
+export interface UserQuota {
   check_on_raw: boolean;
   enabled: boolean;
   max_objects: number;
@@ -78,3 +78,20 @@ export interface RgwUser {
   user_id: string;
   user_quota: UserQuota;
 }
+
+export interface KeyRow {
+  id: number;
+  type: 'S3' | 'Swift';
+  username: string;
+  ref: Key | SwiftKey;
+}
+
+export type ExtendedRgwUser = RgwUser & {
+  account?: { id?: string; name?: string; tenant?: string };
+  managed_user_policies?: string[];
+};
+
+export const RGW_MAX_BUCKETS_MAP: Record<string, string> = {
+  '-1': $localize`Disabled`,
+  '0': $localize`Unlimited`
+};
