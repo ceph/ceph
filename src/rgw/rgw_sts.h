@@ -3,9 +3,16 @@
 
 #pragma once
 
+#include <string_view>
+
 #include "rgw_role.h"
 #include "rgw_auth.h"
 #include "rgw_web_idp.h"
+
+namespace rgw::sts {
+struct sts_aead_key;
+class StsKeyring;
+}
 
 namespace STS {
 
@@ -189,6 +196,25 @@ struct SessionToken {
 };
 WRITE_CLASS_ENCODER(SessionToken)
 
+class KeyringCache;
+
+/*
+ * seal a token body under the keyring's sealing key. the "v2." envelope holds
+ * the key id, a random salt, the ciphertext and the GCM tag, base64 encoded
+ */
+int seal_session_token(const DoutPrefixProvider* dpp, CephContext* cct,
+                       const rgw::sts::sts_aead_key& key,
+                       bufferlist plaintext, std::string& out);
+
+// verify and open a "v2." token against the keyring
+int unseal_session_token(const DoutPrefixProvider* dpp,
+                         const rgw::sts::StsKeyring& keyring,
+                         std::string_view token, bufferlist& plaintext);
+
+int decode_session_token(const DoutPrefixProvider* dpp, CephContext* cct,
+                         KeyringCache* keyring_cache,
+                         std::string_view session_token, SessionToken& token);
+
 class Credentials {
   static constexpr int MAX_ACCESS_KEY_LEN = 20;
   static constexpr int MAX_SECRET_KEY_LEN = 40;
@@ -199,6 +225,7 @@ class Credentials {
 public:
   int generateCredentials(const DoutPrefixProvider *dpp,
                           CephContext* cct,
+                          KeyringCache* keyring_cache,
                           const uint64_t& duration,
                           const boost::optional<std::string>& policy,
                           const boost::optional<std::string>& roleId,
@@ -235,14 +262,17 @@ using AssumeRoleWithWebIdentityResponse = struct AssumeRoleWithWebIdentityRespon
 class STSService {
   CephContext* cct;
   rgw::sal::Driver* driver;
+  KeyringCache* keyring_cache = nullptr;
   rgw_user user_id;
   std::unique_ptr<rgw::sal::RGWRole> role;
   rgw::auth::Identity* identity;
 public:
   STSService() = default;
-  STSService(CephContext* cct, rgw::sal::Driver* driver, rgw_user user_id,
+  STSService(CephContext* cct, rgw::sal::Driver* driver,
+	     KeyringCache* keyring_cache, rgw_user user_id,
 	     rgw::auth::Identity* identity)
-    : cct(cct), driver(driver), user_id(user_id), identity(identity) {}
+    : cct(cct), driver(driver), keyring_cache(keyring_cache),
+      user_id(user_id), identity(identity) {}
   std::tuple<int, rgw::sal::RGWRole*> getRoleInfo(const DoutPrefixProvider *dpp, const std::string& arn, optional_yield y);
   AssumeRoleResponse assumeRole(const DoutPrefixProvider *dpp, AssumeRoleRequest& req, optional_yield y);
   GetSessionTokenResponse getSessionToken(const DoutPrefixProvider *dpp, GetSessionTokenRequest& req);

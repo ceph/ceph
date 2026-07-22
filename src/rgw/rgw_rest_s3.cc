@@ -38,6 +38,7 @@
 
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
+#include "rgw_process_env.h"
 #include "rgw_rest_s3control.h"
 #include "rgw_rest_s3website.h"
 #include "rgw_rest_pubsub.h"
@@ -7311,61 +7312,6 @@ rgw::auth::s3::STSEngine::get_creds_info(const STS::SessionToken& token) const n
   };
 }
 
-int
-rgw::auth::s3::STSEngine::get_session_token(const DoutPrefixProvider* dpp, const std::string_view& session_token,
-                                            STS::SessionToken& token) const
-{
-  string decodedSessionToken;
-  try {
-    decodedSessionToken = rgw::from_base64(session_token);
-  } catch (...) {
-    ldpp_dout(dpp, 0) << "ERROR: Invalid session token, not base64 encoded." << dendl;
-    return -EINVAL;
-  }
-
-  auto* cryptohandler = cct->get_crypto_handler(CEPH_CRYPTO_AES);
-  if (! cryptohandler) {
-    return -EINVAL;
-  }
-  string secret_s = cct->_conf->rgw_sts_key;
-  if (secret_s.empty()) {
-    ldpp_dout(dpp, 1) << "ERROR: rgw sts key not set" << dendl;
-    return -EINVAL;
-  }
-  buffer::ptr secret(secret_s.c_str(), secret_s.length());
-  int ret = 0;
-  if (ret = cryptohandler->validate_secret(secret); ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: Invalid secret key" << dendl;
-    return -EINVAL;
-  }
-  string error;
-  std::unique_ptr<CryptoKeyHandler> keyhandler(cryptohandler->get_key_handler(secret, error));
-  if (! keyhandler) {
-    return -EINVAL;
-  }
-  error.clear();
-
-  string decrypted_str;
-  buffer::list en_input, dec_output;
-  en_input = buffer::list::static_from_string(decodedSessionToken);
-
-  ret = keyhandler->decrypt(en_input, dec_output, &error);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: Decryption failed: " << error << dendl;
-    return -EPERM;
-  } else {
-    try {
-      dec_output.append('\0');
-      auto iter = dec_output.cbegin();
-      decode(token, iter);
-    } catch (const buffer::error& e) {
-      ldpp_dout(dpp, 0) << "ERROR: decode SessionToken failed: " << error << dendl;
-      return -EINVAL;
-    }
-  }
-  return 0;
-}
-
 rgw::auth::Engine::result_t
 rgw::auth::s3::STSEngine::authenticate(
   const DoutPrefixProvider* dpp,
@@ -7385,7 +7331,7 @@ rgw::auth::s3::STSEngine::authenticate(
   }
 
   STS::SessionToken token;
-  if (int ret = get_session_token(dpp, session_token, token); ret < 0) {
+  if (int ret = STS::decode_session_token(dpp, cct, s->penv.sts_keyring.get(), session_token, token); ret < 0) {
     return result_t::reject(ret);
   }
   //Authentication

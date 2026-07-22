@@ -22,7 +22,13 @@
 
 #include "gtest/gtest.h"
 
+#include "common/ceph_argparse.h"
+#include "common/dout.h"
+#include "global/global_init.h"
+#include "include/buffer.h"
+
 #include "rgw_b64.h"
+#include "rgw_sts.h"
 #include "rgw_sts_keyring.h"
 
 namespace {
@@ -260,4 +266,121 @@ TEST(sts_keyring, trim_drops_the_oldest_keeping_the_sealing_key)
   EXPECT_EQ(3u, removed.size());
   EXPECT_EQ(2u, keyring.size());
   EXPECT_EQ(seal, keyring.sealing_key().id);
+}
+
+TEST(sts_seal, round_trips)
+{
+  StsKeyring keyring;
+  std::string error;
+  ASSERT_EQ(0, StsKeyring::parse(make_sts_keyring(3), keyring, error));
+  const NoDoutPrefix dpp(g_ceph_context, ceph_subsys_rgw);
+
+  const std::string body = "a session token body";
+  bufferlist plaintext;
+  plaintext.append(body);
+
+  std::string token;
+  ASSERT_EQ(0, STS::seal_session_token(&dpp, g_ceph_context,
+                                       keyring.sealing_key(), plaintext, token));
+  EXPECT_EQ(0u, token.rfind("v2.", 0));
+
+  bufferlist opened;
+  ASSERT_EQ(0, STS::unseal_session_token(&dpp, keyring, token, opened));
+  EXPECT_EQ(body, opened.to_str());
+}
+
+TEST(sts_seal, verifies_tokens_sealed_under_an_older_key)
+{
+  StsKeyring keyring;
+  std::string error;
+  ASSERT_EQ(0, StsKeyring::parse(make_sts_keyring(1), keyring, error));
+  const NoDoutPrefix dpp(g_ceph_context, ceph_subsys_rgw);
+
+  const std::string body = "older key body";
+  bufferlist plaintext;
+  plaintext.append(body);
+  std::string token;
+  ASSERT_EQ(0, STS::seal_session_token(&dpp, g_ceph_context,
+                                       keyring.sealing_key(), plaintext, token));
+
+  // rotate: a new key seals, the old one stays only to verify
+  ASSERT_EQ(0, keyring.prepend(make_raw_key(5), error));
+  ASSERT_NE(keyring.sealing_key().id, keyring.entries().back().id);
+
+  bufferlist opened;
+  ASSERT_EQ(0, STS::unseal_session_token(&dpp, keyring, token, opened));
+  EXPECT_EQ(body, opened.to_str());
+}
+
+TEST(sts_seal, rejects_a_tampered_tag)
+{
+  StsKeyring keyring;
+  std::string error;
+  ASSERT_EQ(0, StsKeyring::parse(make_sts_keyring(1), keyring, error));
+  const NoDoutPrefix dpp(g_ceph_context, ceph_subsys_rgw);
+
+  bufferlist plaintext;
+  plaintext.append(std::string("payload"));
+  std::string token;
+  ASSERT_EQ(0, STS::seal_session_token(&dpp, g_ceph_context,
+                                       keyring.sealing_key(), plaintext, token));
+
+  std::string envelope = rgw::from_base64(token.substr(3));
+  envelope[envelope.size() - 1] ^= 0x01;
+  const std::string tampered = "v2." + rgw::to_base64(envelope);
+
+  bufferlist opened;
+  EXPECT_EQ(-EPERM, STS::unseal_session_token(&dpp, keyring, tampered, opened));
+}
+
+TEST(sts_seal, rejects_an_unknown_key_id)
+{
+  StsKeyring sealer;
+  StsKeyring other;
+  std::string error;
+  ASSERT_EQ(0, StsKeyring::parse(make_sts_keyring(1), sealer, error));
+  ASSERT_EQ(0, other.prepend(make_raw_key(7), error));
+  const NoDoutPrefix dpp(g_ceph_context, ceph_subsys_rgw);
+
+  bufferlist plaintext;
+  plaintext.append(std::string("payload"));
+  std::string token;
+  ASSERT_EQ(0, STS::seal_session_token(&dpp, g_ceph_context,
+                                       sealer.sealing_key(), plaintext, token));
+
+  bufferlist opened;
+  EXPECT_EQ(-EPERM, STS::unseal_session_token(&dpp, other, token, opened));
+}
+
+TEST(sts_seal, rejects_a_truncated_envelope)
+{
+  StsKeyring keyring;
+  std::string error;
+  ASSERT_EQ(0, StsKeyring::parse(make_sts_keyring(1), keyring, error));
+  const NoDoutPrefix dpp(g_ceph_context, ceph_subsys_rgw);
+
+  bufferlist plaintext;
+  plaintext.append(std::string("payload"));
+  std::string token;
+  ASSERT_EQ(0, STS::seal_session_token(&dpp, g_ceph_context,
+                                       keyring.sealing_key(), plaintext, token));
+
+  std::string envelope = rgw::from_base64(token.substr(3));
+  envelope.resize(envelope.size() / 2);
+  const std::string truncated = "v2." + rgw::to_base64(envelope);
+
+  bufferlist opened;
+  EXPECT_EQ(-EINVAL, STS::unseal_session_token(&dpp, keyring, truncated, opened));
+}
+
+int main(int argc, char** argv)
+{
+  auto args = argv_to_vec(argc, argv);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+                         CODE_ENVIRONMENT_UTILITY,
+                         CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  common_init_finish(g_ceph_context);
+
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }
