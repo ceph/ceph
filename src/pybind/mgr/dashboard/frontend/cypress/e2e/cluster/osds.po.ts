@@ -33,10 +33,9 @@ export class OSDsPageHelper extends PageHelper {
     // drive group is automatically stored in the cluster wizard without any
     // explicit OSD-form submit.
     cy.get('cd-osd-devices-selection-groups[name="Primary"]').within(() => {
-      cy.get('cds-select[data-testid="device-filter-human_readable_type"] select').select(
-        deviceType,
-        { force: true }
-      );
+      cy.get(
+        'cds-select[data-testid="device-filter-human_readable_type"] select'
+      ).select(deviceType, { force: true });
       if (hostname) {
         cy.get('cds-select[data-testid="device-filter-hostname"] select').then(($sel) => {
           if ($sel.find(`option[value="${hostname}"]`).length > 0) {
@@ -59,14 +58,14 @@ export class OSDsPageHelper extends PageHelper {
   checkStatus(id: number, status: string[]) {
     this.searchTable(id.toString());
     cy.wait(10 * 1000);
-    cy.get(`[cdstablerow] [cdstabledata]:nth-child(${this.columnIndex.status}) cds-tag`, { timeout: 30000 }).should(
-      ($ele) => {
-        const allStatus = $ele.toArray().map((v) => v.innerText);
-        for (const s of status) {
-          expect(allStatus).to.include(s);
-        }
+    cy.get(`[cdstablerow] [cdstabledata]:nth-child(${this.columnIndex.status}) cds-tag`, {
+      timeout: 30000
+    }).should(($ele) => {
+      const allStatus = $ele.toArray().map((v) => v.innerText);
+      for (const s of status) {
+        expect(allStatus).to.include(s);
       }
-    );
+    });
   }
 
   @PageHelper.restrictTo(pages.index.url)
