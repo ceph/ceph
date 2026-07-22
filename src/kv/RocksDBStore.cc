@@ -38,7 +38,7 @@
 #include "include/common_fwd.h"
 #include "include/container_ios.h"
 #include "include/scope_guard.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "include/stringify.h"
 #include "include/str_map.h"
 #include "include/utime.h"
@@ -537,8 +537,7 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
   // std::stoull does throw, we may as well just catch everything here.
   try {
     if (kv_options.count("db_paths")) {
-      list<string> paths;
-      get_str_list(kv_options["db_paths"], "; \t", paths);
+      const auto paths = ceph::split_strings(kv_options["db_paths"], "; \t");
       for (auto& p : paths) {
 	size_t pos = p.find(',');
 	if (pos == std::string::npos) {
