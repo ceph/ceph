@@ -30,26 +30,12 @@
 #include <type_traits>
 #include <system_error>
 
-/* This module is for converting internal types "owned" by FoundationDB. They've initially been implemented in 
-a conversion namespace with overloads, which is the same way that user conversions work, but especially with Concepts
-this technique doesn't have to be used-- it is likely possible to avoid default construction and possible extra copies.
-Since I'm building a prototype right now, it's more important to me on this pass to make things understandable and
-clear, because past experience informs me that it's better to have a clear understanding of what the goals of "to"
-and "from" versions actually are in relationship to user-level types than to have every nanosecond of performance
-be available on day one.
+/* This module is the conversion boundary between C++ values and the byte buffers used by FoundationDB. Most of
+the serialization work is delegated to zpp_bits, but this layer has two jobs: it gives libfdb's gadgets a place
+to live (abstracting array/span behavior, callback outputs, error translation, etc.), and it provides a clean point
+for future features-- a good example would be caller-owned memory, which we currently don't support but certainly
+could. It also provides a fixed point where another serialization library could be swapped in. */
 
-The target of "to" conversions is not a USER type, but rather the FUNCTIONS provided inside of libfdb-- users
-should NOT see the output of these or have to handle them outside of tests or edge-cases (and even then, I doubt it's
-needed, though I won't work hard to stop it). 
-
-I'm hoping that later down the line I can sit and spend more time with this-- it would be nice, for example, if we could
-use memory provided by the caller.
-
-Additionally, this mechanism is mostly obviated by forwarding the work to zpp_bits, but keeping it here provides an additional
-hook "ahead" of that library, and indeed eliminates any actual dependency on it-- we use it to smooth out a few areas where
-zpp_bits is designed for serialization ONLY rather than also playing nice with some conversions, especially those where the
-input and output sizes of an array may not match.
-*/
 namespace ceph::libfdb::to {
 
 inline auto convert(const auto& from, std::vector<std::uint8_t>& out_data) -> std::span<const std::uint8_t>
@@ -93,9 +79,9 @@ inline void convert(const std::span<const std::uint8_t>& from, auto& to)
 }
 
 template <std::invocable<const char *, size_t> OutputFunction>
-inline void convert(const std::span<const std::uint8_t>& in, OutputFunction& fn)
+inline void convert(const std::span<const std::uint8_t>& in, OutputFunction& write_output_fn)
 {
- fn((const char *)in.data(), in.size()); 
+ write_output_fn((const char *)in.data(), in.size());
 }
 
 } // namespace ceph::libfdb::from

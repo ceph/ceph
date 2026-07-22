@@ -175,13 +175,43 @@ auto medieval_people = lfdb::select { "person/charlemagne", "person/saladin/" };
 
 ## Pair Generator
 
-```cpp
-/* Use pair_generator() for ordinary range scans where processing one key/value
- * pair at a time is natural. */
-std::map<std::string, std::string> people;
+`pair_generator()` reads a range through a transaction supplied by the caller.
+Use it when the query is expected to fit within one transaction and/or you want
+control over the transaction's lifetime and options.
 
-std::ranges::copy(lfdb::pair_generator(dbh, lfdb::select { "person/" }),
-                  std::inserter(people, std::end(people)));
+```cpp
+auto txn = lfdb::make_transaction(dbh);
+
+for (const auto& [key, value] : lfdb::pair_generator(txn, lfdb::select { "person/" })) {
+  fmt::println("{}: {}", key, value);
+}
+```
+
+To get results in reverse order, set the reverse_order property in the selector:
+
+```cpp
+auto people = lfdb::select { "person/" };
+people.options.reverse_order = true;
+auto txn = lfdb::make_transaction(dbh);
+
+for (const auto& [key, value] : lfdb::pair_generator(txn, people)) {
+  /* process results from high keys to low keys */
+}
+```
+
+It may be useful to group pair_generator()'s output into discrete groups of N items. One way to do that is
+with a chunk_view:
+
+```cpp
+// Stream groups of 100:
+auto txn = lfdb::make_transaction(dbh);
+auto keys = lfdb::pair_generator(txn, lfdb::select { "key_" });
+
+for (const auto& chunk : keys | std::views::chunk(100)) {
+  for (const auto& [key, value] : chunk) {
+    // ...
+  }
+}
 ```
 
 To get results in reverse order, set the reverse_order property in the selector:
@@ -212,15 +242,18 @@ for (const auto& chunk : keys | std::views::chunk(100)) {
 
 ## Block Generator
 
-For very large prefix scans, use the same one-argument selector with
-`block_generator()`. This lets libfdb plan and read the range in blocks while
-the call site still names the logical key family directly.
+`block_generator()` is useful for reads that may become very large. Given a database
+handle, it internally manages transactions for each planned block/window. Use it for very
+large scans where a single transaction may get too old or where block-at-a-time
+processing is preferable.
 
 ```cpp
 /* Use block_generator() for large range scans where split planning and
  * block-at-a-time processing are useful. */
 for (auto&& block : lfdb::block_generator(dbh, lfdb::select { "object/metadata/" })) {
-  /* process block */
+  for (const auto& [key, value] : block) {
+    fmt::println("{}: {}", key, value);
+  }
 }
 ```
 
