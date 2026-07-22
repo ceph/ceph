@@ -52,8 +52,7 @@ rgw_bi_log_entry decode_entry(const fifo::entry& raw)
 // must survive encode-push-list-decode intact.
 CORO_TEST_F(BilogFIFO, PushListRoundtrip, NeoRadosTest)
 {
-  const std::vector<std::string> shard_oids{"blt.rt.0"};
-  auto store = std::make_shared<RGWBILogFIFO>(rados(), pool(), shard_oids);
+  auto store = std::make_shared<RGWBILogFIFO>(rados(), pool(), "blt-rt", 0, 1);
 
   rgw_bi_log_entry entry;
   entry.object   = "myobject";
@@ -82,8 +81,7 @@ CORO_TEST_F(BilogFIFO, PushListRoundtrip, NeoRadosTest)
 // other's shard.
 CORO_TEST_F(BilogFIFO, MultiShard, NeoRadosTest)
 {
-  const std::vector<std::string> shard_oids{"blt.ms.0", "blt.ms.1"};
-  auto store = std::make_shared<RGWBILogFIFO>(rados(), pool(), shard_oids);
+  auto store = std::make_shared<RGWBILogFIFO>(rados(), pool(), "blt-ms", 0, 2);
 
   rgw_bi_log_entry e0, e1;
   e0.object = "obj-s0";  e0.tag = "t0";  e0.op = CLS_RGW_OP_ADD;
@@ -107,8 +105,7 @@ CORO_TEST_F(BilogFIFO, MultiShard, NeoRadosTest)
 // marker, then verify only the 3rd entry survives.
 CORO_TEST_F(BilogFIFO, Trim, NeoRadosTest)
 {
-  const std::vector<std::string> shard_oids{"blt.trim.0"};
-  auto store = std::make_shared<RGWBILogFIFO>(rados(), pool(), shard_oids);
+  auto store = std::make_shared<RGWBILogFIFO>(rados(), pool(), "blt-trim", 0, 1);
 
   for (int i = 0; i < 3; ++i) {
     rgw_bi_log_entry e;
@@ -134,8 +131,7 @@ CORO_TEST_F(BilogFIFO, Trim, NeoRadosTest)
 // marker; should yield exactly entries 2 and 3.
 CORO_TEST_F(BilogFIFO, ListFromMarker, NeoRadosTest)
 {
-  const std::vector<std::string> shard_oids{"blt.lm.0"};
-  auto store = std::make_shared<RGWBILogFIFO>(rados(), pool(), shard_oids);
+  auto store = std::make_shared<RGWBILogFIFO>(rados(), pool(), "blt-lm", 0, 1);
 
   for (int i = 0; i < 3; ++i) {
     rgw_bi_log_entry e;
@@ -158,8 +154,7 @@ CORO_TEST_F(BilogFIFO, ListFromMarker, NeoRadosTest)
 // trim exclusive=true: the entry at the trim marker should NOT be removed.
 CORO_TEST_F(BilogFIFO, TrimExclusive, NeoRadosTest)
 {
-  const std::vector<std::string> shard_oids{"blt.trimex.0"};
-  auto store = std::make_shared<RGWBILogFIFO>(rados(), pool(), shard_oids);
+  auto store = std::make_shared<RGWBILogFIFO>(rados(), pool(), "blt-trimex", 0, 1);
 
   for (int i = 0; i < 3; ++i) {
     rgw_bi_log_entry e;
@@ -189,8 +184,7 @@ CORO_TEST_F(BilogFIFO, TrimExclusive, NeoRadosTest)
 // and verify all fields match.
 CORO_TEST_F(BilogBatch, RoundTripYield, NeoRadosTest)
 {
-  const std::vector<std::string> shard_oids{"blt.batch.rt.0"};
-  auto store = std::make_shared<RGWBILogFIFO>(rados(), pool(), shard_oids);
+  auto store = std::make_shared<RGWBILogFIFO>(rados(), pool(), "blt-batch-rt", 0, 1);
 
   {
     RGWBILogUpdateBatch batch(dpp(), rados(), store);
@@ -228,8 +222,7 @@ CORO_TEST_F(BilogBatch, RoundTripYield, NeoRadosTest)
 // delete_marker=true and CLS_RGW_OP_LINK_OLH otherwise.
 CORO_TEST_F(BilogBatch, OLHDeleteMarker, NeoRadosTest)
 {
-  const std::vector<std::string> shard_oids{"blt.olh.dm.0"};
-  auto store = std::make_shared<RGWBILogFIFO>(rados(), pool(), shard_oids);
+  auto store = std::make_shared<RGWBILogFIFO>(rados(), pool(), "blt-olh-dm", 0, 1);
 
   {
     RGWBILogUpdateBatch batch(dpp(), rados(), store);
@@ -261,8 +254,7 @@ CORO_TEST_F(BilogBatch, OLHDeleteMarker, NeoRadosTest)
 
 CORO_TEST_F(BilogBatch, OLHLink, NeoRadosTest)
 {
-  const std::vector<std::string> shard_oids{"blt.olh.lnk.0"};
-  auto store = std::make_shared<RGWBILogFIFO>(rados(), pool(), shard_oids);
+  auto store = std::make_shared<RGWBILogFIFO>(rados(), pool(), "blt-olh-lnk", 0, 1);
 
   {
     RGWBILogUpdateBatch batch(dpp(), rados(), store);
