@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-#include "include/str_list.h"
+#include "include/str_lib.h"
 
 class SimpleCmd {
 public:
@@ -85,11 +85,9 @@ public:
 
   void add_commands(std::vector<Def>& cmds) {
     for (auto& cmd : cmds) {
-      std::vector<std::string> words;
-      get_str_vec(cmd.cmd, " ", words);
-
       auto node = &cmd_root;
-      for (auto& word : words) {
+      for (const auto word_view : ceph::split(cmd.cmd, " ")) {
+        const std::string word { word_view };
         auto norm = normalize_alias(word);
         auto parent = node;
 

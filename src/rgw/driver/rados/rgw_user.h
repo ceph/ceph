@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <list>
 #include <string>
 #include <boost/algorithm/string.hpp>
 #include "include/ceph_assert.h"
