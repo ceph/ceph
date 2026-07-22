@@ -445,7 +445,11 @@ void PyModuleRegistry::get_health_checks(health_check_map_t *checks)
       if (!active_modules->module_exists(name)) {
         if (failed_modules.find(name) == failed_modules.end() &&
             dependency_modules.find(name) == dependency_modules.end()) {
-          failed_modules[name] = "Not found or unloadable";
+          std::string error_msg = active_modules->get_module_load_error(name);
+          if (error_msg.empty()) {
+            error_msg = "Not found or unloadable";
+          }
+          failed_modules[name] = error_msg;
         }
       }
     }
