@@ -334,6 +334,14 @@ export class TaskMessageService {
       this.commonOperations.remove,
       (metadata) => $localize`mirror path '${metadata.path}' from '${metadata.fsName}'`
     ),
+    'cephfs/mirroring/disable': this.newTaskMessage(
+      new TaskMessageOperation(
+        $localize`Disabling`,
+        $localize`disable`,
+        $localize`Successfully disabled`
+      ),
+      (metadata) => $localize`mirroring for '${metadata.fsName}'`
+    ),
     // RGW operations
     'rgw/bucket/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) => {
       return $localize`${metadata.bucket_names[0]}`;

@@ -55,8 +55,7 @@ const DEBOUNCE_TIMER = 300;
 })
 export class CephfsSnapshotscheduleFormComponent
   extends CdForm
-  implements OnInit, OnChanges, TearsheetStep
-{
+  implements OnInit, OnChanges, TearsheetStep {
   @Input() embedded = false;
   @Input() hideDirectory = false;
 

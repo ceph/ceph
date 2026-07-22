@@ -138,6 +138,12 @@ export class CephfsService {
     });
   }
 
+  disableMirror(@cdEncodeNot fsName: string): Observable<any> {
+    return this.http.post(`${this.baseURL}/mirror/disable`, {
+      fs_name: fsName
+    });
+  }
+
   createBootstrapToken(fsName: string, clientName: string, siteName: string): Observable<any> {
     return this.http.post(`${this.baseURL}/mirror/token`, {
       fs_name: fsName,

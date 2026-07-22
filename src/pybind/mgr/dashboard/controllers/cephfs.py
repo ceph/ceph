@@ -1407,6 +1407,23 @@ class CephFSMirror(RESTController):
             )
         return json.loads(out) if out else {}
 
+    @EndpointDoc("Disable mirroring for a filesystem",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                 },
+                 responses={200: {}})
+    @RESTController.Collection('POST', path='/disable', status=200)
+    @DeletePermission
+    def disable(self, fs_name: str):
+        error_code, out, err = mgr.remote('mirroring', 'snapshot_mirror_disable', fs_name)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to disable Cephfs mirroring: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out) if out else {}
+
     @EndpointDoc("Create bootstrap token",
                  parameters={
                      'fs_name': (str, 'File system name'),

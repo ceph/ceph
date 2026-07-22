@@ -1,18 +1,40 @@
-import { Component, inject, OnDestroy, OnInit, ViewChild, ViewEncapsulation } from '@angular/core';
+import {
+  Component,
+  inject,
+  OnDestroy,
+  OnInit,
+  TemplateRef,
+  ViewChild,
+  ViewEncapsulation
+} from '@angular/core';
 import { NavigationEnd, Router } from '@angular/router';
-import { Subject, of } from 'rxjs';
+import { Observable, Subject, Subscriber, of } from 'rxjs';
 import { catchError, filter, map, switchMap, takeUntil } from 'rxjs/operators';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { CEPHFS_MIRRORING_URL } from '~/app/shared/constants/cephfs.constant';
+import { MirroringSyncStatus } from '~/app/shared/enum/cephfs-mirroring-sync-status.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
-import { Daemon, Filesystem, MirroringRow, Peer } from '~/app/shared/models/cephfs.model';
+import {
+  CONFIRM_DISABLE,
+  CONFIRM_DISABLE_MESSAGE,
+  Daemon,
+  Filesystem,
+  hasPendingReplication,
+  MirroringRow,
+  Peer
+} from '~/app/shared/models/cephfs.model';
+import { FinishedTask } from '~/app/shared/models/finished-task';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { MirroringJumpInTile } from './cephfs-mirroring-list.model';
 
 @Component({
@@ -24,9 +46,13 @@ import { MirroringJumpInTile } from './cephfs-mirroring-list.model';
 })
 export class CephfsMirroringListComponent implements OnInit, OnDestroy {
   @ViewChild('table', { static: true }) table: TableComponent;
+  @ViewChild('disableMirroringTpl', { static: true })
+  disableMirroringTpl: TemplateRef<any>;
 
   private cephfsService = inject(CephfsService);
   private authStorageService = inject(AuthStorageService);
+  private modalService = inject(ModalCdsService);
+  private taskWrapper = inject(TaskWrapperService);
   private router = inject(Router);
 
   columns: CdTableColumn[];
@@ -36,6 +62,7 @@ export class CephfsMirroringListComponent implements OnInit, OnDestroy {
   permission = this.authStorageService.getPermissions().cephfsMirror;
   isPrepareModalOpen = false;
   jumpInTiles: MirroringJumpInTile[] = [];
+  MirroringSyncStatus = MirroringSyncStatus;
 
   private subject$ = new Subject<void>();
   private destroy$ = new Subject<void>();
@@ -73,6 +100,14 @@ export class CephfsMirroringListComponent implements OnInit, OnDestroy {
         icon: Icons.add,
         click: () => this.openAddPath(),
         disable: (selection: CdTableSelection) => !selection.hasSingleSelection
+      },
+      {
+        name: $localize`Disable mirroring`,
+        permission: 'delete',
+        icon: Icons.destroy,
+        click: () => this.disableMirroringModal(),
+        disable: (selection: CdTableSelection) => !selection.hasSingleSelection,
+        canBePrimary: () => false
       }
     ];
     this.previousUrl = this.router.url;
@@ -143,6 +178,60 @@ export class CephfsMirroringListComponent implements OnInit, OnDestroy {
     ]);
   }
 
+  disableMirroringModal(): void {
+    const row = this.selection.first() as MirroringRow;
+    const fsName = row.local_fs_name;
+    const peerUuid = row.peer_uuid;
+
+    const status$ = peerUuid
+      ? this.cephfsService
+          .getMirrorStatus(fsName, undefined, peerUuid)
+          .pipe(catchError(() => of(null)))
+      : of(null);
+
+    status$.subscribe((status) => {
+      const pendingReplication = hasPendingReplication(status, peerUuid);
+
+      this.openDisableMirroringModal(row, fsName, pendingReplication);
+    });
+  }
+
+  private openDisableMirroringModal(
+    row: MirroringRow,
+    fsName: string,
+    hasPendingReplicationFlag: boolean
+  ): void {
+    this.modalService.show(DeleteConfirmationModalComponent, {
+      impact: DeletionImpact.high,
+      itemDescription: $localize`mirroring`,
+      itemNames: [fsName],
+      actionDescription: $localize`disable`,
+      bodyTemplate: this.disableMirroringTpl,
+      bodyContext: {
+        row,
+        confirmHeading: CONFIRM_DISABLE + fsName,
+        deletionMessage: CONFIRM_DISABLE_MESSAGE,
+        hasPendingReplication: hasPendingReplicationFlag
+      },
+      submitText: $localize`Disable`,
+      submitActionObservable: () =>
+        new Observable((observer: Subscriber<any>) => {
+          this.taskWrapper
+            .wrapTaskAroundCall({
+              task: new FinishedTask('cephfs/mirroring/disable', { fsName }),
+              call: this.cephfsService.disableMirror(fsName)
+            })
+            .subscribe({
+              error: (resp) => observer.error(resp),
+              complete: () => {
+                this.loadDaemonStatus();
+                observer.complete();
+              }
+            });
+        })
+    });
+  }
+
   private buildJumpInTiles(): MirroringJumpInTile[] {
     return [
       {
@@ -184,6 +273,9 @@ export class CephfsMirroringListComponent implements OnInit, OnDestroy {
   }
 
   private peerToRow(daemon: Daemon, fs: Filesystem, peer: Peer): MirroringRow {
+    const failureCount = peer.stats?.failure_count ?? 0;
+    const recoveryCount = peer.stats?.recovery_count ?? 0;
+
     return {
       remote_cluster_name: peer.remote?.cluster_name ?? '-',
       local_fs_name: fs.name,
@@ -191,6 +283,11 @@ export class CephfsMirroringListComponent implements OnInit, OnDestroy {
       client_name: peer.remote?.client_name ?? '-',
       directory_count: fs.directory_count ?? 0,
       filesystem_id: fs.filesystem_id,
+      peer_uuid: peer.uuid,
+      failure_count: failureCount,
+      recovery_count: recoveryCount,
+      sync_status: failureCount > 0 ? MirroringSyncStatus.ERROR : MirroringSyncStatus.SYNCING,
+      sync_status_label: failureCount > 0 ? $localize`Error` : $localize`Syncing`,
       id: `${daemon.daemon_id}-${fs.filesystem_id}`
     };
   }
@@ -204,6 +301,10 @@ export class CephfsMirroringListComponent implements OnInit, OnDestroy {
       directory_count: fs.directory_count ?? 0,
       filesystem_id: fs.filesystem_id,
       peerId: '-',
+      failure_count: 0,
+      recovery_count: 0,
+      sync_status: MirroringSyncStatus.NONE,
+      sync_status_label: '-',
       id: `${daemon.daemon_id}-${fs.filesystem_id}`
     };
   }

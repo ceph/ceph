@@ -1,3 +1,5 @@
+import { MirroringSyncStatus } from '../enum/cephfs-mirroring-sync-status.enum';
+
 export interface MountData {
   clusterFSID: string;
   fsName: string;
@@ -52,6 +54,11 @@ export interface MirroringRow {
   directory_count: number;
   filesystem_id?: number;
   peerId?: string;
+  peer_uuid?: string;
+  failure_count?: number;
+  recovery_count?: number;
+  sync_status?: MirroringSyncStatus;
+  sync_status_label?: string;
   id?: string;
 }
 
@@ -237,6 +244,19 @@ export interface MirrorStatusResponse {
   metrics?: MirrorStatusMetrics;
 }
 
+export function hasPendingReplication(
+  status: MirrorStatusResponse | null | undefined,
+  peerUuid?: string
+): boolean {
+  if (!status?.metrics || !peerUuid) {
+    return false;
+  }
+  return Object.values(status.metrics).some((dirMetric) => {
+    const metric = dirMetric?.peer?.[peerUuid];
+    return metric?.state === MirroringSyncStatus.SYNCING || !!metric?.current_syncing_snap;
+  });
+}
+
 export interface DaemonOverviewInfo {
   mirrorPaths: number;
   failures: number;
@@ -286,6 +306,9 @@ export interface BootstrapTokenResponse {
   token?: string;
   data?: string;
 }
+
+export const CONFIRM_DISABLE = $localize`Confirm disable mirroring for `;
+export const CONFIRM_DISABLE_MESSAGE = $localize`Replication to the destination cluster will stop for this filesystem. Existing replicated data will remain available unless deleted but will no longer stay synchronized.`;
 
 export const CLIENT_PREFIX = 'client.';
 export const MAX_TYPEAHEAD_SUGGESTIONS = 10;
