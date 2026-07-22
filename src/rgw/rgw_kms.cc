@@ -1003,10 +1003,8 @@ std::string config_to_engine_and_parms(CephContext *cct,
     EngineParmMap& secret_engine_parms)
 {
   std::ostringstream oss;
-  std::vector<std::string> secret_engine_v;
+  auto secret_engine_v = ceph::split_strings(secret_engine_str, " ");
   std::string secret_engine;
-
-  get_str_vec(secret_engine_str, " ", secret_engine_v);
 
   cct->_conf.early_expand_meta(secret_engine_str, &oss);
   auto meta_errors {oss.str()};

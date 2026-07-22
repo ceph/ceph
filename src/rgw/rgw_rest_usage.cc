@@ -6,7 +6,7 @@
 #include "rgw_rest_usage.h"
 #include "rgw_sal.h"
 
-#include "include/str_list.h"
+#include "include/str_lib.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -58,11 +58,8 @@ void RGWOp_Usage_Get::execute(optional_yield y) {
   RESTArgs::get_string(s, "categories", cat_str, &cat_str);
 
   if (!cat_str.empty()) {
-    list<string> cat_list;
-    list<string>::iterator iter;
-    get_str_list(cat_str, cat_list);
-    for (iter = cat_list.begin(); iter != cat_list.end(); ++iter) {
-      categories[*iter] = true;
+    for (const auto category : ceph::split(cat_str)) {
+      categories[std::string { category }] = true;
     }
   }
 
@@ -129,5 +126,3 @@ RGWOp *RGWHandler_Usage::op_delete()
 {
   return new RGWOp_Usage_Delete;
 }
-
-

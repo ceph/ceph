@@ -23,7 +23,7 @@
 #include "common/debug.h"
 #include "global/global_init.h"
 #include "include/ceph_assert.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 
 #include "rgw_token.h"
 #include "rgw_b64.h"
