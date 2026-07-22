@@ -8,95 +8,46 @@
 #include <memory>
 #include "BlueStore.h"
 
-class OnodeReformatAction {
+class OnodeReformatEngine {
 protected:
-public:
-  virtual ~OnodeReformatAction() {}
-  virtual bool call(OnodeReformatContext* ctx, std::string_view) = 0;
-};
-
-class OnodeReformatBasicValidateAction : public OnodeReformatAction {
-  uint64_t offset;
-  size_t length;
-  uint32_t op_flags;
-  uint64_t min_alloc_size;
-public:
-  OnodeReformatBasicValidateAction(
-    uint64_t offset,
-    size_t length,
-    uint32_t op_flags,
-    uint64_t mas) :
-    offset(offset),
-    length(length),
-    op_flags(op_flags),
-    min_alloc_size(mas) {
-  }
-  bool call(OnodeReformatContext* ctx, std::string_view args);
-};
-
-class OnodeReformatRecompressAction : public OnodeReformatAction {
-  BlueStore::Collection* c;
-  uint64_t offset;
-  size_t length;
-  bufferlist& bl;
-  uint64_t min_alloc_size;
-public:
-  OnodeReformatRecompressAction(
-    BlueStore::Collection* c,
-    uint64_t offset,
-    size_t length,
-    bufferlist& bl,
-    uint64_t mas) :
-    c(c),
-    offset(offset),
-    length(length),
-    bl(bl),
-    min_alloc_size(mas) {
-    ceph_assert(c);
-  }
-  bool call(OnodeReformatContext* ctx, std::string_view args);
-};
-
-class OnodeReformatDefragmentAction : public OnodeReformatAction {
-  uint64_t offset;
-  size_t length;
-  uint64_t min_alloc_size;
-public:
-  OnodeReformatDefragmentAction(
-    uint64_t offset,
-    size_t length,
-    uint64_t mas) :
-    offset(offset),
-    length(length),
-    min_alloc_size(mas) {
-  }
-  bool call(OnodeReformatContext* ctx, std::string_view args);
-};
-
-struct OnodeReformatEngine {
-  bool enabled = false;
   std::string args;
-  std::unique_ptr<OnodeReformatAction> validate;
-  std::unique_ptr<OnodeReformatAction> execute;
-  OnodeReformatEngine() {}
-  OnodeReformatEngine(OnodeReformatAction* _validate,
-    OnodeReformatAction* _execute) :
-    validate(_validate), execute(_execute) {
+public:
+  OnodeReformatEngine(std::string_view args) {
   }
+  virtual ~OnodeReformatEngine() {}
+  virtual bool validate(OnodeReformatContext& ctx);
+  virtual bool execute(OnodeReformatContext& ctx,
+    PerfCounters& _logger, BlueStore::Collection*, BlueStore::OnodeRef&) = 0;
+};
+
+class OnodeReformatRecompressEngine : public OnodeReformatEngine {
+  BlueStore::Collection* c;
+public:
+  OnodeReformatRecompressEngine(std::string_view args)
+    : OnodeReformatEngine(args)
+  {
+  }
+  bool execute(OnodeReformatContext& ctx,
+    PerfCounters& _logger, BlueStore::Collection*, BlueStore::OnodeRef&) override;
+};
+
+class OnodeReformatDefragmentEngine : public OnodeReformatEngine {
+  BlueStore::Collection* c;
+public:
+  OnodeReformatDefragmentEngine(std::string_view args)
+    : OnodeReformatEngine(args)
+  {
+  }
+  bool execute(OnodeReformatContext& ctx,
+    PerfCounters& _logger, BlueStore::Collection*, BlueStore::OnodeRef&) override;
 };
 
 class OnodeReformatContext {
-public:
-  enum {
-    // This is effectively an engine priority, i.e. the order engines are called in.
-    RECOMPRESS_ENGINE = 0,
-    DEFRAGMENT_ENGINE = 1,
-    MAX_ENGINES
-  };
+
 private:
 
   size_t enabled_engines_count = 0;
-  std::array<OnodeReformatEngine, OnodeReformatContext::MAX_ENGINES> engines;
+  reformat_engines_t engines;
 
   bool to_be_applied = false;
   BlueStore::WriteContext wctx;
@@ -104,15 +55,12 @@ private:
   Allocator* alloc = nullptr;
   PExtentVectorSlicer* prealloc_slicer = nullptr; // pointer to the one from wctx if configured
 public:
-  BlueStore* store = nullptr;
-  PerfCounters* logger = nullptr;
+  BlueStore::read_context_t rctx;
 
-  OnodeReformatContext(BlueStore* store, PerfCounters* _logger);
+  OnodeReformatContext(BlueStore::read_context_t& _rctx,
+    const reformat_engines_t& _engines);
   ~OnodeReformatContext();
 
-  void add_engine(int pri,
-    OnodeReformatAction* _validate,
-    OnodeReformatAction* _execute);
   bool maybe_allocate(size_t need, size_t min_alloc_size,
     std::function<bool(int64_t, size_t)> acceptor);
 
@@ -126,8 +74,8 @@ public:
     return span_stat;
   }
 
-  void maybe_enable_engine(int pri, std::string_view args);
-  void exec_engines();
+  void exec_engines(PerfCounters& _logger,
+    BlueStore::Collection* c, BlueStore::OnodeRef& o);
   void clear();
 };
 
