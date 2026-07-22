@@ -16,11 +16,13 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission, Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ToastrModule } from 'ngx-toastr';
 
 describe('RgwMultisiteDetailsComponent', () => {
   let component: RgwMultisiteDetailsComponent;
   let fixture: ComponentFixture<RgwMultisiteDetailsComponent>;
   let debugElement: DebugElement;
+  let modalService: ModalCdsService;
 
   configureTestBed({
     declarations: [RgwMultisiteDetailsComponent],
@@ -38,6 +40,7 @@ describe('RgwMultisiteDetailsComponent', () => {
     fixture = TestBed.createComponent(RgwMultisiteDetailsComponent);
     component = fixture.componentInstance;
     debugElement = fixture.debugElement;
+    modalService = TestBed.inject(ModalCdsService);
     fixture.detectChanges();
   });
 
@@ -128,7 +131,12 @@ describe('RgwMultisiteDetailsComponent', () => {
       tableActionsComponent.dropDownOnly = 'Actions';
       tableActionsComponent.dropDownOnlyBtnColor = 'tertiary';
       tableActionsComponent.tableActions = [
-        { permission: 'create', icon: Icons.add, name: 'Create Realm', click: () => undefined }
+        {
+          permission: 'create',
+          icon: Icons.add,
+          name: 'Create Realm',
+          click: (): void => undefined
+        }
       ];
       tableActionsComponent.selection = new CdTableSelection();
       tableActionsComponent.disabled = disabled;
