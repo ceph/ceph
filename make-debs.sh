@@ -18,7 +18,12 @@ set -xe
 
 . /etc/os-release
 base=${1:-/tmp/release}
-releasedir=$base/$ID/WORKDIR
+if echo "${CEPH_EXTRA_CMAKE_ARGS}" | grep -q "CMAKE_BUILD_TYPE=Debug"; then
+    flavor_suffix=debug
+else
+    flavor_suffix=default
+fi
+releasedir=$base/$ID-$VERSION_CODENAME-$flavor_suffix/WORKDIR
 rm -fr $(dirname $releasedir)
 
 # git describe provides a version that is
