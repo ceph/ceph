@@ -3891,6 +3891,22 @@ std::vector<std::string> normalize_cli11_tokens(
   return tokens;
 }
 
+// Maps CLI11 parse error exit codes to the corresponding legacy exit codes.
+// Only the numeric exit code is remapped; the error message is left unchanged.
+int to_legacy_exit_code(const CLI::ParseError& e) {
+  switch (e.get_exit_code()) {
+    case static_cast<int>(CLI::ExitCodes::ConversionError):  // CLI11: 104 - option value failed conversion
+      return EINVAL;
+
+    case static_cast<int>(CLI::ExitCodes::RequiredError):     // CLI11: 106 - required subcommand not provided
+    case static_cast<int>(CLI::ExitCodes::ArgumentMismatch):  // CLI11: 114 - option missing its argument
+      return 1;
+
+    default:
+      return e.get_exit_code();
+  }
+}
+
 // This has an uncaught exception. Even if the exception is caught, the program
 // would need to be terminated, so the warning is simply suppressed.
 // coverity[root_function:SUPPRESS]
@@ -5555,18 +5571,15 @@ int main(int argc, const char **argv)
       }
       try {
         app.parse(static_cast<int>(parse_argv.size()), parse_argv.data());
-      } catch (const CLI::RuntimeError& e) {
-        // If --cli11-help was requested, a callback may have thrown RuntimeError
-        // because required options were missing. Show help instead of the error.
+      } catch (const CLI::ParseError& e) {
         if (show_cli11_help) {
           cout << app.help();
           return 0;
         }
-        warn_wrong_position_and_unrelated_option(&app);  // RuntimeError exits before reaching the success-path calls below
+        warn_wrong_position_and_unrelated_option(&app);
         warn_duplicates(&app);
-        return e.get_exit_code();
-      } catch (const CLI::ParseError& e) {
-        return app.exit(e);
+        app.exit(e);                    // prints CLI11's own message
+        return to_legacy_exit_code(e);  // remaps just the exit code
       }
 
       // Handles --cli11-help when parse succeeded (no subcommand, or all args provided).
@@ -5588,7 +5601,7 @@ int main(int argc, const char **argv)
         for (const auto& arg : app.remaining(true)) {
           if (!arg.empty() && arg[0] != '-') {
             cerr << "ERROR: unexpected argument: '" << arg << "'" << std::endl;
-            return EINVAL;
+            return 1;
           }
         }
       }

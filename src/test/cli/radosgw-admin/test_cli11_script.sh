@@ -177,9 +177,9 @@ check "put: missing both"             22 "$ERR_CTX_MISSING" \
   script put
 
 # missing option value
-check "put: --context missing value" 114 "$ERR_CTX_VALUE" \
+check "put: --context missing value" 1 "$ERR_CTX_VALUE" \
   script put --context
-check "put: --infile missing value"  114 "$ERR_INFILE_VALUE" \
+check "put: --infile missing value"  1 "$ERR_INFILE_VALUE" \
   script put --infile
 
 # flag before subcommand (1 warning)
@@ -237,11 +237,11 @@ check_warns "put: 4 warnings + background+tenant error"  22 "ERROR: cannot speci
   --context background --infile /dev/null --tenant foo script put --context background --infile /dev/null --tenant bar
 
 # stray positional args
-check "put: stray after flags"           22 "ERROR: unexpected argument: 'strayarg'" \
+check "put: stray after flags"           1 "ERROR: unexpected argument: 'strayarg'" \
   script put --context prerequest --infile /dev/null strayarg
-check "put: stray before script"         22 "ERROR: unexpected argument: 'foo'" \
+check "put: stray before script"         1 "ERROR: unexpected argument: 'foo'" \
   foo script put --context prerequest --infile /dev/null
-check "put: stray between script and put" 22 "ERROR: unexpected argument: 'extra'" \
+check "put: stray between script and put" 1 "ERROR: unexpected argument: 'extra'" \
   script extra put --context prerequest --infile /dev/null
 
 # unrecognized flag
@@ -258,7 +258,7 @@ check "get: missing --context"        22 "$ERR_CTX_MISSING" \
   script get
 
 # missing option value
-check "get: --context missing value" 114 "$ERR_CTX_VALUE" \
+check "get: --context missing value" 1 "$ERR_CTX_VALUE" \
   script get --context
 
 # flag before subcommand (1 warning)
@@ -288,11 +288,11 @@ check_warns "get: duplicate --context cross level"  0 "" "$WARN_CTX_POS" "$WARN_
   --context prerequest script get --context background
 
 # stray positional args
-check "get: stray after flags"           22 "ERROR: unexpected argument: 'strayarg'" \
+check "get: stray after flags"           1 "ERROR: unexpected argument: 'strayarg'" \
   script get --context prerequest strayarg
-check "get: stray before script"         22 "ERROR: unexpected argument: 'foo'" \
+check "get: stray before script"         1 "ERROR: unexpected argument: 'foo'" \
   foo script get --context prerequest
-check "get: stray between script and get" 22 "ERROR: unexpected argument: 'extra'" \
+check "get: stray between script and get" 1 "ERROR: unexpected argument: 'extra'" \
   script extra get --context prerequest
 
 # unrecognized flag
@@ -314,7 +314,7 @@ check "rm: missing --context"         22 "$ERR_CTX_MISSING" \
   script rm
 
 # missing option value
-check "rm: --context missing value"  114 "$ERR_CTX_VALUE" \
+check "rm: --context missing value"  1 "$ERR_CTX_VALUE" \
   script rm --context
 
 # flag before subcommand (1 warning)
@@ -342,11 +342,11 @@ check_warns "rm: duplicate --tenant cross level"   0 "" "$WARN_TENANT_DUP" -- \
   --tenant foo script rm --context prerequest --tenant bar
 
 # stray positional args
-check "rm: stray after flags"           22 "ERROR: unexpected argument: 'strayarg'" \
+check "rm: stray after flags"           1 "ERROR: unexpected argument: 'strayarg'" \
   script rm --context prerequest strayarg
-check "rm: stray before script"         22 "ERROR: unexpected argument: 'foo'" \
+check "rm: stray before script"         1 "ERROR: unexpected argument: 'foo'" \
   foo script rm --context prerequest
-check "rm: stray between script and rm" 22 "ERROR: unexpected argument: 'extra'" \
+check "rm: stray between script and rm" 1 "ERROR: unexpected argument: 'extra'" \
   script extra rm --context prerequest
 
 # unrecognized flag
@@ -363,7 +363,7 @@ check "remove: missing --context"         22 "$ERR_CTX_MISSING" \
   script remove
 
 # missing option value
-check "remove: --context missing value"  114 "$ERR_CTX_VALUE" \
+check "remove: --context missing value"  1 "$ERR_CTX_VALUE" \
   script remove --context
 
 # flag before subcommand (1 warning)
@@ -391,11 +391,11 @@ check_warns "remove: duplicate --tenant cross level"   0 "" "$WARN_TENANT_DUP" -
   --tenant foo script remove --context prerequest --tenant bar
 
 # stray positional args
-check "remove: stray after flags"              22 "ERROR: unexpected argument: 'strayarg'" \
+check "remove: stray after flags"              1 "ERROR: unexpected argument: 'strayarg'" \
   script remove --context prerequest strayarg
-check "remove: stray before script"            22 "ERROR: unexpected argument: 'foo'" \
+check "remove: stray before script"            1 "ERROR: unexpected argument: 'foo'" \
   foo script remove --context prerequest
-check "remove: stray between script and remove" 22 "ERROR: unexpected argument: 'extra'" \
+check "remove: stray between script and remove" 1 "ERROR: unexpected argument: 'extra'" \
   script extra remove --context prerequest
 
 # unrecognized flag
@@ -506,9 +506,9 @@ echo ""
 echo "=== CLI11 rejection ==="
 # ============================================================
 
-check "bare script"         106 "$ERR_SUBCOMMAND" script
-check "unknown subcommand"  106 "$ERR_SUBCOMMAND" script banana
-check "reversed put script" 106 "$ERR_SUBCOMMAND" put script
+check "bare script"         1 "$ERR_SUBCOMMAND" script
+check "unknown subcommand"  1 "$ERR_SUBCOMMAND" script banana
+check "reversed put script" 1 "$ERR_SUBCOMMAND" put script
 
 # ============================================================
 echo ""

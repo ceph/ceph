@@ -252,9 +252,9 @@ check_help_content() {
 echo "=== bucket (bare) ==="
 # ============================================================
 
-check "bare bucket"          106 "$ERR_SUBCOMMAND" bucket
-check "bare buckets (alias)" 106 "$ERR_SUBCOMMAND" buckets
-check "unknown subcommand"   106 "$ERR_SUBCOMMAND" bucket banana
+check "bare bucket"          1 "$ERR_SUBCOMMAND" bucket
+check "bare buckets (alias)" 1 "$ERR_SUBCOMMAND" buckets
+check "unknown subcommand"   1 "$ERR_SUBCOMMAND" bucket banana
 
 # ============================================================
 echo ""
@@ -262,7 +262,7 @@ echo "=== buckets alias (non-list commands) ==="
 # ============================================================
 
 # no-cluster: alias works for all subcommands, not just list
-check "buckets stats: stray arg"    22 "ERROR: unexpected argument: 'strayarg'" \
+check "buckets stats: stray arg"    1 "ERROR: unexpected argument: 'strayarg'" \
   buckets stats strayarg
 # legacy: missing --bucket is not validated up front; rm silently exits 0,
 # link/unlink fail in the op layer (cluster needed)
@@ -272,19 +272,19 @@ check_cluster "buckets link: missing --bucket" 22 "$ERR_FETCH_BUCKET" -- \
   buckets link --uid testuser
 check_cluster "buckets unlink: missing --bucket" 22 "$ERR_EINVAL" -- \
   buckets unlink --uid testuser
-check "buckets check: stray arg"    22 "ERROR: unexpected argument: 'strayarg'" \
+check "buckets check: stray arg"    1 "ERROR: unexpected argument: 'strayarg'" \
   buckets check strayarg
 check "buckets list: unrecognized flag"    22 "ERROR: invalid flag --fakeflag" \
   buckets list --fakeflag
-check "buckets link: stray after flags"    22 "ERROR: unexpected argument: 'strayarg'" \
+check "buckets link: stray after flags"    1 "ERROR: unexpected argument: 'strayarg'" \
   buckets link --bucket mybucket --uid testuser strayarg
 check "buckets link: unrecognized flag"    22 "ERROR: invalid flag --fakeflag" \
   buckets link --bucket mybucket --uid testuser --fakeflag
-check "buckets unlink: stray after flags"  22 "ERROR: unexpected argument: 'strayarg'" \
+check "buckets unlink: stray after flags"  1 "ERROR: unexpected argument: 'strayarg'" \
   buckets unlink --bucket mybucket --uid testuser strayarg
 check "buckets unlink: unrecognized flag"  22 "ERROR: invalid flag --fakeflag" \
   buckets unlink --bucket mybucket --uid testuser --fakeflag
-check "buckets rm: stray after flags"      22 "ERROR: unexpected argument: 'strayarg'" \
+check "buckets rm: stray after flags"      1 "ERROR: unexpected argument: 'strayarg'" \
   buckets rm --bucket mybucket strayarg
 check "buckets rm: unrecognized flag"      22 "ERROR: invalid flag --fakeflag" \
   buckets rm --bucket mybucket --fakeflag
@@ -297,11 +297,11 @@ echo "=== bucket list ==="
 # ============================================================
 
 # stray positional args
-check "list: stray after flags"              22 "ERROR: unexpected argument: 'strayarg'" \
+check "list: stray after flags"              1 "ERROR: unexpected argument: 'strayarg'" \
   bucket list strayarg
-check "list: stray before bucket"            22 "ERROR: unexpected argument: 'foo'" \
+check "list: stray before bucket"            1 "ERROR: unexpected argument: 'foo'" \
   foo bucket list
-check "list: stray between bucket and list"  22 "ERROR: unexpected argument: 'extra'" \
+check "list: stray between bucket and list"  1 "ERROR: unexpected argument: 'extra'" \
   bucket extra list
 
 # unrecognized flag
@@ -312,23 +312,23 @@ check "list: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
 # Pure wrong-position (no error) tests are in check_warns below.
 
 # missing option value
-check "list: --bucket missing value"         114 "--bucket: 1 required TEXT missing" \
+check "list: --bucket missing value"         1 "--bucket: 1 required TEXT missing" \
   bucket list --bucket
-check "list: --uid missing value"            114 "--uid: 1 required TEXT missing" \
+check "list: --uid missing value"            1 "--uid: 1 required TEXT missing" \
   bucket list --uid
-check "list: --bucket-id missing value"      114 "--bucket-id: 1 required TEXT missing" \
+check "list: --bucket-id missing value"      1 "--bucket-id: 1 required TEXT missing" \
   bucket list --bucket-id
-check "list: --format missing value"         114 "--format: 1 required TEXT missing" \
+check "list: --format missing value"         1 "--format: 1 required TEXT missing" \
   bucket list --format
-check "list: --max-entries missing value"    114 "--max-entries: 1 required INT missing" \
+check "list: --max-entries missing value"    1 "--max-entries: 1 required INT missing" \
   bucket list --max-entries
 # out-of-int-range value rejected by the strict base-10 setter (strict_strtol's
 # int range check), same shape as CLI11's own overflow rejection
-check "list: --max-entries out of int range" 104 "Could not convert: --max-entries = 5000000000" \
+check "list: --max-entries out of int range" 22 "Could not convert: --max-entries = 5000000000" \
   bucket list --max-entries 5000000000
-check "list: --marker missing value"         114 "--marker: 1 required TEXT missing" \
+check "list: --marker missing value"         1 "--marker: 1 required TEXT missing" \
   bucket list --marker
-check "list: --object-version missing value" 114 "--object-version: 1 required TEXT missing" \
+check "list: --object-version missing value" 1 "--object-version: 1 required TEXT missing" \
   bucket list --object-version
 
 # ============================================================
@@ -342,15 +342,15 @@ echo "=== flags: underscore vs dash spelling (normalize_cli11_tokens rewrite) ==
 # form (value is the next token) and the '=' form (value glued on).
 
 # space form: value reaches CLI11's own strict-int check either way
-check "list: --max-entries space form (dash)"       104 "Could not convert: --max-entries = banana" \
+check "list: --max-entries space form (dash)"       22 "Could not convert: --max-entries = banana" \
   bucket list --max-entries banana
-check "list: --max_entries space form (underscore)" 104 "Could not convert: --max-entries = banana" \
+check "list: --max_entries space form (underscore)" 22 "Could not convert: --max-entries = banana" \
   bucket list --max_entries banana
 
 # '=' form
-check "list: --max-entries= form (dash)"       104 "Could not convert: --max-entries = banana" \
+check "list: --max-entries= form (dash)"       22 "Could not convert: --max-entries = banana" \
   bucket list --max-entries=banana
-check "list: --max_entries= form (underscore)" 104 "Could not convert: --max-entries = banana" \
+check "list: --max_entries= form (underscore)" 22 "Could not convert: --max-entries = banana" \
   bucket list --max_entries=banana
 
 # a value that itself looks like a flag (starts with --, contains '_') must
@@ -379,7 +379,7 @@ check "list: --bucket_id --hello_world (underscore, space-form value untouched)"
   bucket list --bucket_id --hello_world
 
 # unknown flag keeps the user's own spelling (not rewritten, not recognized)
-check "list: unrecognized underscore flag: value strands" 22 \
+check "list: unrecognized underscore flag: value strands" 1 \
   "ERROR: unexpected argument: '1'" \
   bucket list --banana_flag 1
 
@@ -394,25 +394,25 @@ echo ""
 echo "=== bucket stats ==="
 # ============================================================
 
-check "stats: stray after flags"             22 "ERROR: unexpected argument: 'strayarg'" \
+check "stats: stray after flags"             1 "ERROR: unexpected argument: 'strayarg'" \
   bucket stats strayarg
-check "stats: stray before bucket"           22 "ERROR: unexpected argument: 'foo'" \
+check "stats: stray before bucket"           1 "ERROR: unexpected argument: 'foo'" \
   foo bucket stats
-check "stats: stray between bucket and stats" 22 "ERROR: unexpected argument: 'extra'" \
+check "stats: stray between bucket and stats" 1 "ERROR: unexpected argument: 'extra'" \
   bucket extra stats
 
 check "stats: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
   bucket stats --fakeflag
 
-check "stats: --bucket missing value"      114 "--bucket: 1 required TEXT missing" \
+check "stats: --bucket missing value"      1 "--bucket: 1 required TEXT missing" \
   bucket stats --bucket
-check "stats: --bucket-id missing value"   114 "--bucket-id: 1 required TEXT missing" \
+check "stats: --bucket-id missing value"   1 "--bucket-id: 1 required TEXT missing" \
   bucket stats --bucket-id
-check "stats: --format missing value"      114 "--format: 1 required TEXT missing" \
+check "stats: --format missing value"      1 "--format: 1 required TEXT missing" \
   bucket stats --format
-check "stats: --max-entries missing value" 114 "--max-entries: 1 required INT missing" \
+check "stats: --max-entries missing value" 1 "--max-entries: 1 required INT missing" \
   bucket stats --max-entries
-check "stats: --marker missing value"      114 "--marker: 1 required TEXT missing" \
+check "stats: --marker missing value"      1 "--marker: 1 required TEXT missing" \
   bucket stats --marker
 
 # ============================================================
@@ -420,23 +420,23 @@ echo ""
 echo "=== bucket layout ==="
 # ============================================================
 
-check "layout: stray after flags"              22 "ERROR: unexpected argument: 'strayarg'" \
+check "layout: stray after flags"              1 "ERROR: unexpected argument: 'strayarg'" \
   bucket layout strayarg
-check "layout: stray before bucket"            22 "ERROR: unexpected argument: 'foo'" \
+check "layout: stray before bucket"            1 "ERROR: unexpected argument: 'foo'" \
   foo bucket layout
-check "layout: stray between bucket and layout" 22 "ERROR: unexpected argument: 'extra'" \
+check "layout: stray between bucket and layout" 1 "ERROR: unexpected argument: 'extra'" \
   bucket extra layout
 
 check "layout: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
   bucket layout --fakeflag
 
-check "layout: --bucket missing value"    114 "--bucket: 1 required TEXT missing" \
+check "layout: --bucket missing value"    1 "--bucket: 1 required TEXT missing" \
   bucket layout --bucket
-check "layout: --bucket-id missing value" 114 "--bucket-id: 1 required TEXT missing" \
+check "layout: --bucket-id missing value" 1 "--bucket-id: 1 required TEXT missing" \
   bucket layout --bucket-id
-check "layout: --tenant missing value"    114 "--tenant: 1 required TEXT missing" \
+check "layout: --tenant missing value"    1 "--tenant: 1 required TEXT missing" \
   bucket layout --tenant
-check "layout: --format missing value"    114 "--format: 1 required TEXT missing" \
+check "layout: --format missing value"    1 "--format: 1 required TEXT missing" \
   bucket layout --format
 
 # handler-level (cluster): bucket_name.empty() is checked inside the action,
@@ -474,26 +474,26 @@ echo "=== bucket chown ==="
 # ============================================================
 
 # stray positional args
-check "chown: stray after flags"               22 "ERROR: unexpected argument: 'strayarg'" \
+check "chown: stray after flags"               1 "ERROR: unexpected argument: 'strayarg'" \
   bucket chown strayarg
-check "chown: stray before bucket"             22 "ERROR: unexpected argument: 'foo'" \
+check "chown: stray before bucket"             1 "ERROR: unexpected argument: 'foo'" \
   foo bucket chown
-check "chown: stray between bucket and chown"  22 "ERROR: unexpected argument: 'extra'" \
+check "chown: stray between bucket and chown"  1 "ERROR: unexpected argument: 'extra'" \
   bucket extra chown
 
 check "chown: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
   bucket chown --fakeflag
 
 # missing option value
-check "chown: --bucket missing value"          114 "--bucket: 1 required TEXT missing" \
+check "chown: --bucket missing value"          1 "--bucket: 1 required TEXT missing" \
   bucket chown --bucket
-check "chown: --uid missing value"             114 "--uid: 1 required TEXT missing" \
+check "chown: --uid missing value"             1 "--uid: 1 required TEXT missing" \
   bucket chown --uid
-check "chown: --marker missing value"          114 "--marker: 1 required TEXT missing" \
+check "chown: --marker missing value"          1 "--marker: 1 required TEXT missing" \
   bucket chown --marker
-check "chown: --tenant missing value"          114 "--tenant: 1 required TEXT missing" \
+check "chown: --tenant missing value"          1 "--tenant: 1 required TEXT missing" \
   bucket chown --tenant
-check "chown: --bucket-new-name missing value" 114 "--bucket-new-name: 1 required TEXT missing" \
+check "chown: --bucket-new-name missing value" 1 "--bucket-new-name: 1 required TEXT missing" \
   bucket chown --bucket-new-name
 
 # --bucket-id is NOT a chown option (the handler never read it); the flag is
@@ -536,16 +536,16 @@ echo "=== bucket limit check ==="
 # ============================================================
 
 # 'bucket limit' is an internal node: it requires the 'check' subcommand
-check "limit (incomplete command)" 106 "$ERR_SUBCOMMAND" \
+check "limit (incomplete command)" 1 "$ERR_SUBCOMMAND" \
   bucket limit
 
-check "limit check: stray after" 22 "ERROR: unexpected argument: 'strayarg'" \
+check "limit check: stray after" 1 "ERROR: unexpected argument: 'strayarg'" \
   bucket limit check strayarg
 
 check "limit check: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
   bucket limit check --fakeflag
 
-check "limit check: --uid missing value" 114 "--uid: 1 required TEXT missing" \
+check "limit check: --uid missing value" 1 "--uid: 1 required TEXT missing" \
   bucket limit check --uid
 
 # handler-level (cluster): no --uid iterates all users; all paths exit 0
@@ -573,19 +573,19 @@ echo "=== bucket logging (info/list/flush) ==="
 
 # 'bucket logging' is an internal node (require_subcommand): both an incomplete
 # command and an unknown subcommand report "A subcommand is required", exit 106
-check "logging (incomplete command)" 106 "$ERR_SUBCOMMAND" \
+check "logging (incomplete command)" 1 "$ERR_SUBCOMMAND" \
   bucket logging
-check "logging: unknown subcommand"  106 "$ERR_SUBCOMMAND" \
+check "logging: unknown subcommand"  1 "$ERR_SUBCOMMAND" \
   bucket logging banana
 
 # stray positional args
-check "logging info: stray after"   22 "ERROR: unexpected argument: 'strayarg'" \
+check "logging info: stray after"   1 "ERROR: unexpected argument: 'strayarg'" \
   bucket logging info strayarg
-check "logging list: stray after"   22 "ERROR: unexpected argument: 'strayarg'" \
+check "logging list: stray after"   1 "ERROR: unexpected argument: 'strayarg'" \
   bucket logging list strayarg
-check "logging flush: stray after"  22 "ERROR: unexpected argument: 'strayarg'" \
+check "logging flush: stray after"  1 "ERROR: unexpected argument: 'strayarg'" \
   bucket logging flush strayarg
-check "logging info: stray before"  22 "ERROR: unexpected argument: 'foo'" \
+check "logging info: stray before"  1 "ERROR: unexpected argument: 'foo'" \
   foo bucket logging info
 
 # unrecognized flag
@@ -597,17 +597,17 @@ check "logging flush: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
   bucket logging flush --fakeflag
 
 # missing option value (flush has no --format)
-check "logging info: --bucket missing value"    114 "--bucket: 1 required TEXT missing" \
+check "logging info: --bucket missing value"    1 "--bucket: 1 required TEXT missing" \
   bucket logging info --bucket
-check "logging info: --bucket-id missing value" 114 "--bucket-id: 1 required TEXT missing" \
+check "logging info: --bucket-id missing value" 1 "--bucket-id: 1 required TEXT missing" \
   bucket logging info --bucket-id
-check "logging info: --tenant missing value"    114 "--tenant: 1 required TEXT missing" \
+check "logging info: --tenant missing value"    1 "--tenant: 1 required TEXT missing" \
   bucket logging info --tenant
-check "logging info: --format missing value"    114 "--format: 1 required TEXT missing" \
+check "logging info: --format missing value"    1 "--format: 1 required TEXT missing" \
   bucket logging info --format
-check "logging list: --format missing value"    114 "--format: 1 required TEXT missing" \
+check "logging list: --format missing value"    1 "--format: 1 required TEXT missing" \
   bucket logging list --format
-check "logging flush: --bucket missing value"   114 "--bucket: 1 required TEXT missing" \
+check "logging flush: --bucket missing value"   1 "--bucket: 1 required TEXT missing" \
   bucket logging flush --bucket
 
 # handler-level (cluster): bucket_name.empty() is checked inside the action;
@@ -649,11 +649,11 @@ echo "=== bucket rewrite ==="
 # ============================================================
 
 # stray positional args
-check "rewrite: stray after flags"               22 "ERROR: unexpected argument: 'strayarg'" \
+check "rewrite: stray after flags"               1 "ERROR: unexpected argument: 'strayarg'" \
   bucket rewrite strayarg
-check "rewrite: stray before bucket"             22 "ERROR: unexpected argument: 'foo'" \
+check "rewrite: stray before bucket"             1 "ERROR: unexpected argument: 'foo'" \
   foo bucket rewrite
-check "rewrite: stray between bucket and rewrite" 22 "ERROR: unexpected argument: 'extra'" \
+check "rewrite: stray between bucket and rewrite" 1 "ERROR: unexpected argument: 'extra'" \
   bucket extra rewrite
 
 check "rewrite: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
@@ -662,27 +662,27 @@ check "rewrite: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
 # missing option value (parse-level, exit 114). The size flags are bound to a
 # string sink (legacy atoll compat) so they behave like any other TEXT option
 # here; the date flags report the canonical name even when the alias is used.
-check "rewrite: --bucket missing value"                114 "--bucket: 1 required TEXT missing" \
+check "rewrite: --bucket missing value"                1 "--bucket: 1 required TEXT missing" \
   bucket rewrite --bucket
-check "rewrite: --bucket-id missing value"             114 "--bucket-id: 1 required TEXT missing" \
+check "rewrite: --bucket-id missing value"             1 "--bucket-id: 1 required TEXT missing" \
   bucket rewrite --bucket-id
-check "rewrite: --tenant missing value"                114 "--tenant: 1 required TEXT missing" \
+check "rewrite: --tenant missing value"                1 "--tenant: 1 required TEXT missing" \
   bucket rewrite --tenant
-check "rewrite: --format missing value"                114 "--format: 1 required TEXT missing" \
+check "rewrite: --format missing value"                1 "--format: 1 required TEXT missing" \
   bucket rewrite --format
-check "rewrite: --start-date missing value"            114 "--start-date: 1 required TEXT missing" \
+check "rewrite: --start-date missing value"            1 "--start-date: 1 required TEXT missing" \
   bucket rewrite --start-date
-check "rewrite: --start-time missing value (alias)"    114 "--start-date: 1 required TEXT missing" \
+check "rewrite: --start-time missing value (alias)"    1 "--start-date: 1 required TEXT missing" \
   bucket rewrite --start-time
-check "rewrite: --end-date missing value"              114 "--end-date: 1 required TEXT missing" \
+check "rewrite: --end-date missing value"              1 "--end-date: 1 required TEXT missing" \
   bucket rewrite --end-date
-check "rewrite: --end-time missing value (alias)"      114 "--end-date: 1 required TEXT missing" \
+check "rewrite: --end-time missing value (alias)"      1 "--end-date: 1 required TEXT missing" \
   bucket rewrite --end-time
-check "rewrite: --min-rewrite-size missing value"        114 "--min-rewrite-size: 1 required TEXT missing" \
+check "rewrite: --min-rewrite-size missing value"        1 "--min-rewrite-size: 1 required TEXT missing" \
   bucket rewrite --min-rewrite-size
-check "rewrite: --max-rewrite-size missing value"        114 "--max-rewrite-size: 1 required TEXT missing" \
+check "rewrite: --max-rewrite-size missing value"        1 "--max-rewrite-size: 1 required TEXT missing" \
   bucket rewrite --max-rewrite-size
-check "rewrite: --min-rewrite-stripe-size missing value" 114 "--min-rewrite-stripe-size: 1 required TEXT missing" \
+check "rewrite: --min-rewrite-stripe-size missing value" 1 "--min-rewrite-stripe-size: 1 required TEXT missing" \
   bucket rewrite --min-rewrite-stripe-size
 
 # handler-level (cluster): bucket_name.empty() is checked inside the action;
@@ -752,11 +752,11 @@ echo "=== bucket set-min-shards ==="
 # ============================================================
 
 # stray positional args
-check "set-min-shards: stray after flags"            22 "ERROR: unexpected argument: 'strayarg'" \
+check "set-min-shards: stray after flags"            1 "ERROR: unexpected argument: 'strayarg'" \
   bucket set-min-shards strayarg
-check "set-min-shards: stray before bucket"          22 "ERROR: unexpected argument: 'foo'" \
+check "set-min-shards: stray before bucket"          1 "ERROR: unexpected argument: 'foo'" \
   foo bucket set-min-shards
-check "set-min-shards: stray between bucket and leaf" 22 "ERROR: unexpected argument: 'extra'" \
+check "set-min-shards: stray between bucket and leaf" 1 "ERROR: unexpected argument: 'extra'" \
   bucket extra set-min-shards
 
 check "set-min-shards: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
@@ -771,17 +771,17 @@ check_warns "set-min-shards: unrelated --max-entries 5 swallowed+warned (space f
   bucket set-min-shards --max-entries 5
 
 # missing option value (parse-level, exit 114)
-check "set-min-shards: --bucket missing value"     114 "--bucket: 1 required TEXT missing" \
+check "set-min-shards: --bucket missing value"     1 "--bucket: 1 required TEXT missing" \
   bucket set-min-shards --bucket
-check "set-min-shards: --bucket-id missing value"  114 "--bucket-id: 1 required TEXT missing" \
+check "set-min-shards: --bucket-id missing value"  1 "--bucket-id: 1 required TEXT missing" \
   bucket set-min-shards --bucket-id
-check "set-min-shards: --tenant missing value"     114 "--tenant: 1 required TEXT missing" \
+check "set-min-shards: --tenant missing value"     1 "--tenant: 1 required TEXT missing" \
   bucket set-min-shards --tenant
-check "set-min-shards: --num-shards missing value" 114 "--num-shards: 1 required INT missing" \
+check "set-min-shards: --num-shards missing value" 1 "--num-shards: 1 required INT missing" \
   bucket set-min-shards --num-shards
 # --num-shards is a strict CLI11 integer; a non-numeric value is rejected at
 # parse (exit 104), where legacy would emit its own strict_strtol error
-check "set-min-shards: --num-shards non-integer"   104 "Could not convert: --num-shards = abc" \
+check "set-min-shards: --num-shards non-integer"   22 "Could not convert: --num-shards = abc" \
   bucket set-min-shards --num-shards abc
 
 # handler-level (cluster): validations live inside cli11_action and run after
@@ -850,19 +850,19 @@ echo "=== bucket object shard ==="
 # ============================================================
 
 # stray positional args
-check "object shard: stray after flags"              22 "ERROR: unexpected argument: 'stray'" \
+check "object shard: stray after flags"              1 "ERROR: unexpected argument: 'stray'" \
   bucket object shard stray
-check "object shard: stray before bucket"            22 "ERROR: unexpected argument: 'foo'" \
+check "object shard: stray before bucket"            1 "ERROR: unexpected argument: 'foo'" \
   foo bucket object shard
-check "object shard: stray between object and shard" 22 "ERROR: unexpected argument: 'extra'" \
+check "object shard: stray between object and shard" 1 "ERROR: unexpected argument: 'extra'" \
   bucket object extra shard
-check "object shard: stray word after leaf (banana)"  22 "ERROR: unexpected argument: 'banana'" \
+check "object shard: stray word after leaf (banana)"  1 "ERROR: unexpected argument: 'banana'" \
   bucket object shard banana
 
 # unknown subcommand under the 'object' node: require_subcommand fires (exit 106)
-check "object: unknown subcommand (banana)"           106 "A subcommand is required" \
+check "object: unknown subcommand (banana)"           1 "A subcommand is required" \
   bucket object banana
-check "object: no subcommand"                         106 "A subcommand is required" \
+check "object: no subcommand"                         1 "A subcommand is required" \
   bucket object
 
 check "object shard: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
@@ -875,19 +875,19 @@ check_warns "object shard: unrelated --max-entries 5 swallowed+warned (space for
   bucket object shard --object foo --num-shards 11 --max-entries 5
 
 # missing option value (parse-level, exit 114)
-check "object shard: --object missing value"     114 "--object: 1 required TEXT missing" \
+check "object shard: --object missing value"     1 "--object: 1 required TEXT missing" \
   bucket object shard --object
-check "object shard: --num-shards missing value" 114 "--num-shards: 1 required INT missing" \
+check "object shard: --num-shards missing value" 1 "--num-shards: 1 required INT missing" \
   bucket object shard --num-shards
 # --num-shards is a strict CLI11 integer; a non-numeric value is rejected at parse (exit 104)
-check "object shard: --num-shards non-integer"   104 "Could not convert: --num-shards = abc" \
+check "object shard: --num-shards non-integer"   22 "Could not convert: --num-shards = abc" \
   bucket object shard --object foo --num-shards abc
 
 # strict base-10 parsing, faithful to legacy strict_strtol: a leading 0 does not
 # switch to octal ("010" = 10, "08" = 8) and hex is rejected. CLI11's default
 # integer binding would auto-detect the base (010 -> 8, 0x10 -> 16, 08 -> error).
 # Object "bar" maps to shard 8 of 10 and shard 4 of 8 (probe-verified).
-check "object shard: --num-shards hex rejected" 104 "Could not convert: --num-shards = 0x10" \
+check "object shard: --num-shards hex rejected" 22 "Could not convert: --num-shards = 0x10" \
   bucket object shard --object bar --num-shards 0x10
 check_cluster "object shard: --num-shards 010 parses as decimal 10" 0 '"shard": 8' -- \
   bucket object shard --object bar --num-shards 010
@@ -949,19 +949,19 @@ echo "=== bucket shard objects ==="
 # ============================================================
 
 # stray positional args
-check "shard objects: stray after flags"               22 "ERROR: unexpected argument: 'stray'" \
+check "shard objects: stray after flags"               1 "ERROR: unexpected argument: 'stray'" \
   bucket shard objects stray
-check "shard objects: stray before bucket"             22 "ERROR: unexpected argument: 'foo'" \
+check "shard objects: stray before bucket"             1 "ERROR: unexpected argument: 'foo'" \
   foo bucket shard objects
-check "shard objects: stray between shard and objects" 22 "ERROR: unexpected argument: 'extra'" \
+check "shard objects: stray between shard and objects" 1 "ERROR: unexpected argument: 'extra'" \
   bucket shard extra objects
-check "shard objects: stray word after leaf (banana)"  22 "ERROR: unexpected argument: 'banana'" \
+check "shard objects: stray word after leaf (banana)"  1 "ERROR: unexpected argument: 'banana'" \
   bucket shard objects banana
 
 # unknown subcommand under the 'shard' node: require_subcommand fires (exit 106)
-check "shard: unknown subcommand (banana)"             106 "A subcommand is required" \
+check "shard: unknown subcommand (banana)"             1 "A subcommand is required" \
   bucket shard banana
-check "shard: no subcommand"                           106 "A subcommand is required" \
+check "shard: no subcommand"                           1 "A subcommand is required" \
   bucket shard
 
 check "shard objects: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
@@ -973,17 +973,17 @@ check_warns "shard objects: unrelated --max-entries 5 swallowed+warned (space fo
   bucket shard objects --num-shards 4 --max-entries 5
 
 # missing option value (parse-level, exit 114)
-check "shard objects: --num-shards missing value" 114 "--num-shards: 1 required INT missing" \
+check "shard objects: --num-shards missing value" 1 "--num-shards: 1 required INT missing" \
   bucket shard objects --num-shards
-check "shard objects: --shard-id missing value"   114 "--shard-id: 1 required INT missing" \
+check "shard objects: --shard-id missing value"   1 "--shard-id: 1 required INT missing" \
   bucket shard objects --shard-id
-check "shard objects: --prefix missing value"     114 "--prefix: 1 required TEXT missing" \
+check "shard objects: --prefix missing value"     1 "--prefix: 1 required TEXT missing" \
   bucket shard objects --prefix
 # --num-shards / --shard-id are strict CLI11 integers; a non-numeric value is
 # rejected at parse (exit 104)
-check "shard objects: --num-shards non-integer"   104 "Could not convert: --num-shards = abc" \
+check "shard objects: --num-shards non-integer"   22 "Could not convert: --num-shards = abc" \
   bucket shard objects --num-shards abc
-check "shard objects: --shard-id non-integer"     104 "Could not convert: --shard-id = abc" \
+check "shard objects: --shard-id non-integer"     22 "Could not convert: --shard-id = abc" \
   bucket shard objects --shard-id abc --num-shards 4
 
 # handler-level (cluster): validations live inside cli11_action and run after
@@ -1033,21 +1033,21 @@ echo "=== bucket resync encrypted multipart ==="
 # ============================================================
 
 # stray positional args
-check "resync: stray after leaf (banana)"          22 "ERROR: unexpected argument: 'banana'" \
+check "resync: stray after leaf (banana)"          1 "ERROR: unexpected argument: 'banana'" \
   bucket resync encrypted multipart banana
-check "resync: stray before bucket"                22 "ERROR: unexpected argument: 'foo'" \
+check "resync: stray before bucket"                1 "ERROR: unexpected argument: 'foo'" \
   foo bucket resync encrypted multipart
-check "resync: stray between resync and encrypted"  22 "ERROR: unexpected argument: 'x'" \
+check "resync: stray between resync and encrypted"  1 "ERROR: unexpected argument: 'x'" \
   bucket resync x encrypted multipart
-check "resync: stray between encrypted and multipart" 22 "ERROR: unexpected argument: 'x'" \
+check "resync: stray between encrypted and multipart" 1 "ERROR: unexpected argument: 'x'" \
   bucket resync encrypted x multipart
 
 # unknown subcommand under the resync / encrypted nodes (require_subcommand -> 106)
-check "resync: unknown subcommand (banana)"           106 "A subcommand is required" \
+check "resync: unknown subcommand (banana)"           1 "A subcommand is required" \
   bucket resync banana
-check "resync encrypted: unknown subcommand (banana)" 106 "A subcommand is required" \
+check "resync encrypted: unknown subcommand (banana)" 1 "A subcommand is required" \
   bucket resync encrypted banana
-check "resync: no subcommand"                         106 "A subcommand is required" \
+check "resync: no subcommand"                         1 "A subcommand is required" \
   bucket resync
 
 check "resync: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
@@ -1058,13 +1058,13 @@ check_warns "resync: unrelated --max-entries 5 swallowed+warned (space form)" 2 
   bucket resync encrypted multipart --bucket cli11chk --max-entries 5 --yes-i-really-mean-it
 
 # missing option value (parse-level, exit 114)
-check "resync: --bucket missing value"    114 "--bucket: 1 required TEXT missing" \
+check "resync: --bucket missing value"    1 "--bucket: 1 required TEXT missing" \
   bucket resync encrypted multipart --bucket
-check "resync: --bucket-id missing value" 114 "--bucket-id: 1 required TEXT missing" \
+check "resync: --bucket-id missing value" 1 "--bucket-id: 1 required TEXT missing" \
   bucket resync encrypted multipart --bucket-id
-check "resync: --tenant missing value"    114 "--tenant: 1 required TEXT missing" \
+check "resync: --tenant missing value"    1 "--tenant: 1 required TEXT missing" \
   bucket resync encrypted multipart --tenant
-check "resync: --marker missing value"    114 "--marker: 1 required TEXT missing" \
+check "resync: --marker missing value"    1 "--marker: 1 required TEXT missing" \
   bucket resync encrypted multipart --marker
 
 # handler-level (cluster). empty bucket -> EINVAL (exit 22). Real-bucket EPERM and
@@ -1127,9 +1127,9 @@ echo "=== bucket radoslist (+ 'bucket rados list' alias) ==="
 # the rados-list block after it confirms the alias path is wired identically.
 
 # stray positional args
-check "radoslist: stray after leaf (banana)" 22 "ERROR: unexpected argument: 'banana'" \
+check "radoslist: stray after leaf (banana)" 1 "ERROR: unexpected argument: 'banana'" \
   bucket radoslist banana
-check "radoslist: stray before bucket"       22 "ERROR: unexpected argument: 'foo'" \
+check "radoslist: stray before bucket"       1 "ERROR: unexpected argument: 'foo'" \
   foo bucket radoslist
 
 check "radoslist: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
@@ -1140,32 +1140,32 @@ check_warns "radoslist: unrelated --max-entries 5 swallowed+warned (space form)"
   bucket radoslist --bucket cli11chk --max-entries 5
 
 # missing option value (parse-level, exit 114)
-check "radoslist: --bucket missing value"            114 "--bucket: 1 required TEXT missing" \
+check "radoslist: --bucket missing value"            1 "--bucket: 1 required TEXT missing" \
   bucket radoslist --bucket
-check "radoslist: --tenant missing value"            114 "--tenant: 1 required TEXT missing" \
+check "radoslist: --tenant missing value"            1 "--tenant: 1 required TEXT missing" \
   bucket radoslist --tenant
-check "radoslist: --max-concurrent-ios missing value" 114 "--max-concurrent-ios: 1 required INT missing" \
+check "radoslist: --max-concurrent-ios missing value" 1 "--max-concurrent-ios: 1 required INT missing" \
   bucket radoslist --max-concurrent-ios
-check "radoslist: --orphan-stale-secs missing value" 114 "--orphan-stale-secs: 1 required UINT missing" \
+check "radoslist: --orphan-stale-secs missing value" 1 "--orphan-stale-secs: 1 required UINT missing" \
   bucket radoslist --orphan-stale-secs
-check "radoslist: --rgw-obj-fs missing value"        114 "--rgw-obj-fs: 1 required TEXT missing" \
+check "radoslist: --rgw-obj-fs missing value"        1 "--rgw-obj-fs: 1 required TEXT missing" \
   bucket radoslist --rgw-obj-fs
 # --max-concurrent-ios (int) / --orphan-stale-secs (uint) are strict CLI11 numbers;
 # a non-numeric value is rejected at parse (exit 104)
-check "radoslist: --max-concurrent-ios non-integer" 104 "Could not convert: --max-concurrent-ios = abc" \
+check "radoslist: --max-concurrent-ios non-integer" 22 "Could not convert: --max-concurrent-ios = abc" \
   bucket radoslist --max-concurrent-ios abc
-check "radoslist: --orphan-stale-secs non-integer"  104 "Could not convert: --orphan-stale-secs = abc" \
+check "radoslist: --orphan-stale-secs non-integer"  22 "Could not convert: --orphan-stale-secs = abc" \
   bucket radoslist --orphan-stale-secs abc
 # a negative value wraps into the uint64, matching legacy (uint64_t)strict_strtoll
 check_cluster "radoslist: --orphan-stale-secs -5 accepted (wraps like legacy)" 0 "" -- \
   bucket radoslist --bucket cli11chk --orphan-stale-secs -5
 # strict base-10 on the uint64 branch too: hex rejected, "08" accepted as 8
 # (CLI11's default binding would accept 0x10 as 16 and reject 08 as bad octal)
-check "radoslist: --orphan-stale-secs hex rejected" 104 "Could not convert: --orphan-stale-secs = 0x10" \
+check "radoslist: --orphan-stale-secs hex rejected" 22 "Could not convert: --orphan-stale-secs = 0x10" \
   bucket radoslist --orphan-stale-secs 0x10
 check_cluster "radoslist: --orphan-stale-secs 08 accepted as 8" 0 "" -- \
   bucket radoslist --bucket cli11chk --orphan-stale-secs 08
-check "radoslist: --orphan-stale-secs out of range" 104 "Could not convert: --orphan-stale-secs = 99999999999999999999" \
+check "radoslist: --orphan-stale-secs out of range" 22 "Could not convert: --orphan-stale-secs = 99999999999999999999" \
   bucket radoslist --orphan-stale-secs 99999999999999999999
 
 # cluster: readonly command, lists rados objects backing the bucket (exit 0).
@@ -1216,17 +1216,17 @@ check_warns "radoslist: --bucket + --max-concurrent-ios + --orphan-stale-secs be
 
 # ---- 'bucket rados list' alias: same command via the rados node ----
 # stray + nesting under the 'rados' node
-check "rados list: stray after leaf (banana)" 22 "ERROR: unexpected argument: 'banana'" \
+check "rados list: stray after leaf (banana)" 1 "ERROR: unexpected argument: 'banana'" \
   bucket rados list banana
-check "rados list: stray between rados and list" 22 "ERROR: unexpected argument: 'extra'" \
+check "rados list: stray between rados and list" 1 "ERROR: unexpected argument: 'extra'" \
   bucket rados extra list
 # unknown subcommand under the 'rados' node (require_subcommand -> 106)
-check "rados: unknown subcommand (banana)" 106 "A subcommand is required" \
+check "rados: unknown subcommand (banana)" 1 "A subcommand is required" \
   bucket rados banana
-check "rados: no subcommand"               106 "A subcommand is required" \
+check "rados: no subcommand"               1 "A subcommand is required" \
   bucket rados
 # parse error + warn parity with the radoslist entry point
-check "rados list: --max-concurrent-ios non-integer" 104 "Could not convert: --max-concurrent-ios = abc" \
+check "rados list: --max-concurrent-ios non-integer" 22 "Could not convert: --max-concurrent-ios = abc" \
   bucket rados list --max-concurrent-ios abc
 check_warns "rados list: --bucket before subcommand"  0 "" "$WARN_BUCKET_POS" -- \
   bucket --bucket cli11chk rados list
@@ -1259,24 +1259,24 @@ check_warns "link: --bucket + --uid before bucket (1 warn; --uid global, fails o
   --bucket mybucket --uid testuser bucket link
 
 # stray positional args
-check "link: stray after flags"              22 "ERROR: unexpected argument: 'strayarg'" \
+check "link: stray after flags"              1 "ERROR: unexpected argument: 'strayarg'" \
   bucket link --bucket mybucket --uid testuser strayarg
-check "link: stray before bucket"            22 "ERROR: unexpected argument: 'foo'" \
+check "link: stray before bucket"            1 "ERROR: unexpected argument: 'foo'" \
   foo bucket link --bucket mybucket --uid testuser
-check "link: stray between bucket and link"  22 "ERROR: unexpected argument: 'extra'" \
+check "link: stray between bucket and link"  1 "ERROR: unexpected argument: 'extra'" \
   bucket extra link --bucket mybucket --uid testuser
 
 # unrecognized flag
 check "link: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
   bucket link --bucket mybucket --uid testuser --fakeflag
 
-check "link: --bucket missing value"          114 "--bucket: 1 required TEXT missing" \
+check "link: --bucket missing value"          1 "--bucket: 1 required TEXT missing" \
   bucket link --bucket
-check "link: --uid missing value"             114 "--uid: 1 required TEXT missing" \
+check "link: --uid missing value"             1 "--uid: 1 required TEXT missing" \
   bucket link --uid
-check "link: --bucket-id missing value"       114 "--bucket-id: 1 required TEXT missing" \
+check "link: --bucket-id missing value"       1 "--bucket-id: 1 required TEXT missing" \
   bucket link --bucket-id
-check "link: --bucket-new-name missing value" 114 "--bucket-new-name: 1 required TEXT missing" \
+check "link: --bucket-new-name missing value" 1 "--bucket-new-name: 1 required TEXT missing" \
   bucket link --bucket-new-name
 
 # ============================================================
@@ -1298,19 +1298,19 @@ check_warns "unlink: --bucket before bucket, missing --uid"   22 "$ERR_EINVAL" "
 check_warns "unlink: --uid before bucket, missing --bucket"   22 "$ERR_EINVAL" -- \
   --uid testuser bucket unlink
 
-check "unlink: stray after flags"              22 "ERROR: unexpected argument: 'strayarg'" \
+check "unlink: stray after flags"              1 "ERROR: unexpected argument: 'strayarg'" \
   bucket unlink --bucket mybucket --uid testuser strayarg
-check "unlink: stray before bucket"            22 "ERROR: unexpected argument: 'foo'" \
+check "unlink: stray before bucket"            1 "ERROR: unexpected argument: 'foo'" \
   foo bucket unlink --bucket mybucket --uid testuser
-check "unlink: stray between bucket and unlink" 22 "ERROR: unexpected argument: 'extra'" \
+check "unlink: stray between bucket and unlink" 1 "ERROR: unexpected argument: 'extra'" \
   bucket extra unlink --bucket mybucket --uid testuser
 
 check "unlink: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
   bucket unlink --bucket mybucket --uid testuser --fakeflag
 
-check "unlink: --bucket missing value" 114 "--bucket: 1 required TEXT missing" \
+check "unlink: --bucket missing value" 1 "--bucket: 1 required TEXT missing" \
   bucket unlink --bucket
-check "unlink: --uid missing value"    114 "--uid: 1 required TEXT missing" \
+check "unlink: --uid missing value"    1 "--uid: 1 required TEXT missing" \
   bucket unlink --uid
 
 # ============================================================
@@ -1326,17 +1326,17 @@ check_warns "rm: --purge-objects before bucket, missing --bucket (warns, silent 
   "$WARN_PURGE_POS" -- \
   --purge-objects bucket rm
 
-check "rm: stray after flags"              22 "ERROR: unexpected argument: 'strayarg'" \
+check "rm: stray after flags"              1 "ERROR: unexpected argument: 'strayarg'" \
   bucket rm --bucket mybucket strayarg
-check "rm: stray before bucket"            22 "ERROR: unexpected argument: 'foo'" \
+check "rm: stray before bucket"            1 "ERROR: unexpected argument: 'foo'" \
   foo bucket rm --bucket mybucket
-check "rm: stray between bucket and rm"    22 "ERROR: unexpected argument: 'extra'" \
+check "rm: stray between bucket and rm"    1 "ERROR: unexpected argument: 'extra'" \
   bucket extra rm --bucket mybucket
 
 check "rm: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
   bucket rm --bucket mybucket --fakeflag
 
-check "rm: --bucket missing value" 114 "--bucket: 1 required TEXT missing" \
+check "rm: --bucket missing value" 1 "--bucket: 1 required TEXT missing" \
   bucket rm --bucket
 
 # --inconsistent-index without --yes-i-really-mean-it is caught in cli11_action (needs cluster)
@@ -1350,15 +1350,15 @@ echo "=== bucket rm (remove alias) ==="
 
 check_cluster "remove: missing --bucket (silent exit 0)" 0 "" -- \
   bucket remove
-check "remove: stray after flags"   22 "ERROR: unexpected argument: 'strayarg'" \
+check "remove: stray after flags"   1 "ERROR: unexpected argument: 'strayarg'" \
   bucket remove --bucket mybucket strayarg
-check "remove: stray before bucket"             22 "ERROR: unexpected argument: 'foo'" \
+check "remove: stray before bucket"             1 "ERROR: unexpected argument: 'foo'" \
   foo bucket remove --bucket mybucket
-check "remove: stray between bucket and remove" 22 "ERROR: unexpected argument: 'extra'" \
+check "remove: stray between bucket and remove" 1 "ERROR: unexpected argument: 'extra'" \
   bucket extra remove --bucket mybucket
 check "remove: unrecognized flag"   22 "ERROR: invalid flag --fakeflag" \
   bucket remove --bucket mybucket --fakeflag
-check "remove: --bucket missing value" 114 "--bucket: 1 required TEXT missing" \
+check "remove: --bucket missing value" 1 "--bucket: 1 required TEXT missing" \
   bucket remove --bucket
 
 # ============================================================
@@ -1366,19 +1366,19 @@ echo ""
 echo "=== bucket check ==="
 # ============================================================
 
-check "check: stray after flags"              22 "ERROR: unexpected argument: 'strayarg'" \
+check "check: stray after flags"              1 "ERROR: unexpected argument: 'strayarg'" \
   bucket check strayarg
-check "check: stray before bucket"            22 "ERROR: unexpected argument: 'foo'" \
+check "check: stray before bucket"            1 "ERROR: unexpected argument: 'foo'" \
   foo bucket check
-check "check: stray between bucket and check" 22 "ERROR: unexpected argument: 'extra'" \
+check "check: stray between bucket and check" 1 "ERROR: unexpected argument: 'extra'" \
   bucket extra check
 
 check "check: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
   bucket check --fakeflag
 
-check "check: --bucket missing value" 114 "--bucket: 1 required TEXT missing" \
+check "check: --bucket missing value" 1 "--bucket: 1 required TEXT missing" \
   bucket check --bucket
-check "check: --max-concurrent-ios missing value" 114 "--max-concurrent-ios: 1 required INT missing" \
+check "check: --max-concurrent-ios missing value" 1 "--max-concurrent-ios: 1 required INT missing" \
   bucket check --max-concurrent-ios
 
 # --check-head-obj-locator without --bucket is caught in cli11_action (needs cluster)
@@ -1390,20 +1390,20 @@ echo ""
 echo "=== bucket check olh ==="
 # ============================================================
 
-check "check olh: stray after flags"               22 "ERROR: unexpected argument: 'strayarg'" \
+check "check olh: stray after flags"               1 "ERROR: unexpected argument: 'strayarg'" \
   bucket check olh strayarg
-check "check olh: stray before bucket"             22 "ERROR: unexpected argument: 'foo'" \
+check "check olh: stray before bucket"             1 "ERROR: unexpected argument: 'foo'" \
   foo bucket check olh
-check "check olh: stray between bucket and check"  22 "ERROR: unexpected argument: 'extra'" \
+check "check olh: stray between bucket and check"  1 "ERROR: unexpected argument: 'extra'" \
   bucket extra check olh
-check "check olh: stray between check and olh"     22 "ERROR: unexpected argument: 'extra'" \
+check "check olh: stray between check and olh"     1 "ERROR: unexpected argument: 'extra'" \
   bucket check extra olh
 
 check "check olh: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
   bucket check olh --fakeflag
-check "check olh: --max-concurrent-ios missing value" 114 "--max-concurrent-ios: 1 required INT missing" \
+check "check olh: --max-concurrent-ios missing value" 1 "--max-concurrent-ios: 1 required INT missing" \
   bucket check olh --max-concurrent-ios
-check "check olh: --bucket missing value"             114 "--bucket: 1 required TEXT missing" \
+check "check olh: --bucket missing value"             1 "--bucket: 1 required TEXT missing" \
   bucket check olh --bucket
 
 # ============================================================
@@ -1411,20 +1411,20 @@ echo ""
 echo "=== bucket check unlinked ==="
 # ============================================================
 
-check "check unlinked: stray after flags"                22 "ERROR: unexpected argument: 'strayarg'" \
+check "check unlinked: stray after flags"                1 "ERROR: unexpected argument: 'strayarg'" \
   bucket check unlinked strayarg
-check "check unlinked: stray before bucket"              22 "ERROR: unexpected argument: 'foo'" \
+check "check unlinked: stray before bucket"              1 "ERROR: unexpected argument: 'foo'" \
   foo bucket check unlinked
-check "check unlinked: stray between bucket and check"   22 "ERROR: unexpected argument: 'extra'" \
+check "check unlinked: stray between bucket and check"   1 "ERROR: unexpected argument: 'extra'" \
   bucket extra check unlinked
-check "check unlinked: stray between check and unlinked" 22 "ERROR: unexpected argument: 'extra'" \
+check "check unlinked: stray between check and unlinked" 1 "ERROR: unexpected argument: 'extra'" \
   bucket check extra unlinked
 
 check "check unlinked: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
   bucket check unlinked --fakeflag
-check "check unlinked: --max-concurrent-ios missing value" 114 "--max-concurrent-ios: 1 required INT missing" \
+check "check unlinked: --max-concurrent-ios missing value" 1 "--max-concurrent-ios: 1 required INT missing" \
   bucket check unlinked --max-concurrent-ios
-check "check unlinked: --bucket missing value"             114 "--bucket: 1 required TEXT missing" \
+check "check unlinked: --bucket missing value"             1 "--bucket: 1 required TEXT missing" \
   bucket check unlinked --bucket
 
 # ============================================================
@@ -2253,14 +2253,14 @@ echo "=== '=' token normalization (empty '=' and short-flag '=') ==="
 # before parsing so '='-form values behave like the legacy parser.
 
 # int flag: "" fails strict_strtol (legacy exits 22; CLI11 conversion error)
-check "empty-= on int flag" 104 "Could not convert" bucket list --max-entries=
+check "empty-= on int flag" 22 "Could not convert" bucket list --max-entries=
 # uid/bucket-id: rewritten to explicit "" values, then rejected by the CLI11-side
 # per-value empty checks (same message and exit code as legacy's special cases)
 check "empty-= on --uid"       1 "no value for uid"       bucket list --uid=
 check "empty-= on -i"          1 "no value for uid"       bucket list -i=
 check "empty-= on --bucket-id" 1 "no value for bucket-id" bucket stats --bucket-id=
 # mid-line: "" is the value; the next word strays (the collapsed flag must not eat it)
-check "empty-= mid-line strays next word" 22 "unexpected argument: 'foo'" \
+check "empty-= mid-line strays next word" 1 "unexpected argument: 'foo'" \
   bucket list --bucket= foo
 # unknown flag: not rewritten (arity unknown), legacy rejects it
 check "empty-= on unknown flag" 22 "invalid flag --banana=" bucket list --banana=
