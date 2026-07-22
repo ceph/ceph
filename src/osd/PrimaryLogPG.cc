@@ -15979,6 +15979,19 @@ uint64_t PrimaryLogPG::recover_pool_migration(
         return ops;
       }
 
+      // All objects have migrated. The source PG must now be empty
+      hobject_t pg_end = info.pgid.pgid.get_hobj_end(pool.info.get_pg_num());
+      vector<hobject_t> remaining;
+      int r = pgbackend->objects_list_range(hobject_t(), pg_end, &remaining);
+      ceph_assert(r >= 0);
+      if (!remaining.empty()) {
+        derr << __func__ << " pg " << info.pgid
+             << " pool migration complete but PG is not empty."
+             << " remaining=" << remaining
+             << dendl;
+        ceph_abort_msg("pool migration finished with objects in the source PG");
+      }
+
       if (pool_migration_target_pg.has_value()) {
         pool_migration_release_target_reservation();
       }
