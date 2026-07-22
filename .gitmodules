@@ -85,3 +85,6 @@
 [submodule "src/lss"]
 	path = src/lss
 	url = https://chromium.googlesource.com/linux-syscall-support
+[submodule "src/uadk"]
+	path = src/uadk
+	url = https://github.com/ceph/uadk.git
