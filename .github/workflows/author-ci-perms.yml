@@ -1,0 +1,70 @@
+name: Check PR Author Permissions
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check-permissions:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Check permissions, label, and comment
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const author = pr.user.login;
+            const issueNumber = pr.number;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Fetch the user's permission level for this repository
+            const response = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner,
+              repo,
+              username: author,
+            });
+
+            const permission = response.data.permission;
+            if (permission === 'none') {
+              const currentLabels = pr.labels.map(label => label.name);
+
+              // 1. Revoke approval on new pushes/updates by removing 'ci-approved'
+              if (currentLabels.includes('ci-approved')) {
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner,
+                    repo,
+                    issue_number: issueNumber,
+                    name: 'ci-approved',
+                  });
+                } catch (error) {
+                  console.log('Failed to remove ci-approved label:', error);
+                }
+              }
+
+              // 2. Attach 'needs-ci-approval' label if not already present
+              if (!currentLabels.includes('needs-ci-approval')) {
+                await github.rest.issues.addLabels({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  labels: ['needs-ci-approval'],
+                });
+              }
+
+              // 3. Post notification comment on initial PR creation
+              if (context.payload.action === 'opened') {
+                const commentBody = `Thank you for your contribution. Since you are not a member of the [Ceph organization](https://github.com/ceph) yet, our CI will not automatically run. Any member of the Ceph organization may comment "ok - to - test" (without the dashes) to allow the Jenkins CI jobs to run.`;
+
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  body: commentBody,
+                });
+              }
+            }
