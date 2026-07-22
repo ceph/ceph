@@ -16,7 +16,7 @@
  */
 
 #include "include/str_map.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 
 #include <boost/algorithm/string.hpp>
 
