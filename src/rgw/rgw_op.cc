@@ -93,6 +93,10 @@
 #include "driver/d4n/rgw_sal_d4n.h"
 #endif
 
+#ifdef WITH_RADOSGW_CUOBJ
+#include "rgw_cuobj.h"
+#endif
+
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
 #define TRACEPOINT_PROBE_DYNAMIC_LINKAGE
@@ -4979,57 +4983,133 @@ void RGWPutObj::execute(optional_yield y)
       filter = &*cksum_filter;
     }
   } /* !append */
-  tracepoint(rgw_op, before_data_transfer, s->req_id.c_str());
-  do {
-    bufferlist data;
-    if (fst > lst)
-      break;
-    if (copy_source.empty()) {
-      len = get_data(data);
-    } else {
-      off_t cur_lst = min<off_t>(fst + s->cct->_conf->rgw_max_chunk_size - 1, lst);
-      op_ret = get_data(fst, cur_lst, data);
-      if (op_ret < 0)
+
+#ifdef WITH_RADOSGW_CUOBJ
+  std::string rdma_descr;
+  bool rdma_put = false;
+  auto* cuobj_srv = RGWCuObjServer::get_instance();
+  if (cuobj_srv && cuobj_srv->is_available() && copy_source.empty()) {
+    auto rdma_token = s->info.env->get_optional("HTTP_X_AMZ_RDMA_TOKEN");
+    if (rdma_token) {
+      rdma_descr = *rdma_token;
+      rdma_put = true;
+    }
+  }
+
+  if (rdma_put) {
+    size_t total = RGWCuObjServer::parse_rdma_descriptor_size(rdma_descr);
+    if (total == 0) {
+      ldpp_dout(this, 0) << "rgw_cuobj: ERROR: failed to parse size from RDMA descriptor" << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+    ldpp_dout(this, 20) << "rgw_cuobj: RDMA PUT size=" << total
+                        << " from descriptor" << dendl;
+    auto* rbuf = cuobj_srv->acquire_buffer(total);
+    if (!rbuf) {
+      ldpp_dout(this, 0) << "rgw_cuobj: ERROR: no RDMA buffer available for "
+                         << total << " bytes" << dendl;
+      op_ret = -ERR_SERVICE_UNAVAILABLE;
+      return;
+    }
+
+    ssize_t rdma_ret = cuobj_srv->rdma_read_from_client(s->object->get_name(), rbuf, 0, total, rdma_descr);
+    if (rdma_ret < 0) {
+      cuobj_srv->release_buffer(rbuf);
+      ldpp_dout(this, 0) << "rgw_cuobj: ERROR: RDMA read failed: " << rdma_ret << dendl;
+      op_ret = -EIO;
+      return;
+    }
+
+    tracepoint(rgw_op, before_data_transfer, s->req_id.c_str());
+    uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
+    uint64_t data_ofs = 0;
+    uint64_t rdma_total = static_cast<uint64_t>(rdma_ret);
+    while (data_ofs < rdma_total) {
+      size_t clen = std::min(chunk_size, rdma_total - data_ofs);
+      bufferlist data;
+      data.append(static_cast<char*>(rbuf->ptr) + data_ofs, clen);
+
+      if (need_calc_md5) {
+        hash.Update(reinterpret_cast<const unsigned char*>(data.c_str()), data.length());
+      }
+
+      op_ret = filter->process(std::move(data), ofs);
+      if (op_ret < 0) {
+        cuobj_srv->release_buffer(rbuf);
+        ldpp_dout(this, 0) << "rgw_cuobj: ERROR: filter->process() returned ret=" << op_ret << dendl;
         return;
-      len = data.length();
-      s->content_length += len;
-      fst += len;
+      }
+      ofs += clen;
+      data_ofs += clen;
     }
-    if (len < 0) {
-      op_ret = len;
-      ldpp_dout(this, 20) << "get_data() returned ret=" << op_ret << dendl;
-      return;
-    } else if (len == 0) {
-      break;
-    }
+    tracepoint(rgw_op, after_data_transfer, s->req_id.c_str(), ofs);
 
-    if (need_calc_md5) {
-      hash.Update((const unsigned char *)data.c_str(), data.length());
-    }
-
-    op_ret = filter->process(std::move(data), ofs);
+    op_ret = filter->process({}, ofs);
+    cuobj_srv->release_buffer(rbuf);
     if (op_ret < 0) {
-      ldpp_dout(this, 20) << "processor->process() returned ret="
-          << op_ret << dendl;
+      ldpp_dout(this, 0) << "rgw_cuobj: ERROR: filter->process() returned ret=" << op_ret << dendl;
+      return;
+    }
+    s->obj_size = ofs;
+    s->rdma_bytes_transferred = ofs;
+    s->object->set_obj_size(ofs);
+  }
+  else
+#endif
+  {
+    tracepoint(rgw_op, before_data_transfer, s->req_id.c_str());
+    do {
+      bufferlist data;
+      if (fst > lst)
+        break;
+      if (copy_source.empty()) {
+        len = get_data(data);
+      } else {
+        off_t cur_lst = min<off_t>(fst + s->cct->_conf->rgw_max_chunk_size - 1, lst);
+        op_ret = get_data(fst, cur_lst, data);
+        if (op_ret < 0)
+          return;
+        len = data.length();
+        s->content_length += len;
+        fst += len;
+      }
+      if (len < 0) {
+        op_ret = len;
+        ldpp_dout(this, 20) << "get_data() returned ret=" << op_ret << dendl;
+        return;
+      } else if (len == 0) {
+        break;
+      }
+
+      if (need_calc_md5) {
+        hash.Update((const unsigned char *)data.c_str(), data.length());
+      }
+
+      op_ret = filter->process(std::move(data), ofs);
+      if (op_ret < 0) {
+        ldpp_dout(this, 20) << "processor->process() returned ret="
+            << op_ret << dendl;
+        return;
+      }
+
+      ofs += len;
+    } while (len > 0);
+    tracepoint(rgw_op, after_data_transfer, s->req_id.c_str(), ofs);
+
+    // flush any data in filters
+    op_ret = filter->process({}, ofs);
+    if (op_ret < 0) {
       return;
     }
 
-    ofs += len;
-  } while (len > 0);
-  tracepoint(rgw_op, after_data_transfer, s->req_id.c_str(), ofs);
-
-  // flush any data in filters
-  op_ret = filter->process({}, ofs);
-  if (op_ret < 0) {
-    return;
+    if (!chunked_upload && ofs != s->content_length) {
+      op_ret = -ERR_REQUEST_TIMEOUT;
+      return;
+    }
+    s->obj_size = ofs;
+    s->object->set_obj_size(ofs);
   }
-
-  if (!chunked_upload && ofs != s->content_length) {
-    op_ret = -ERR_REQUEST_TIMEOUT;
-    return;
-  }
-  s->obj_size = ofs;
-  s->object->set_obj_size(ofs);
 
   /* For AEAD modes, ensure ORIGINAL_SIZE is set now that final size is known.
    * This handles cases where size was unknown at encryption setup:

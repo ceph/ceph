@@ -293,6 +293,10 @@ if(WITH_RADOSGW_D4N)
         driver/d4n/rgw_sal_d4n.cc)
 endif()
 
+if(WITH_RADOSGW_CUOBJ)
+  list(APPEND librgw_common_srcs rgw_cuobj.cc)
+endif()
+
 add_library(rgw_common STATIC ${librgw_common_srcs})
 
 include(CheckCXXCompilerFlag)
@@ -373,6 +377,10 @@ endif()
 if(WITH_JAEGER)
   add_dependencies(rgw_common jaeger_base)
   target_link_libraries(rgw_common PUBLIC jaeger_base)
+endif()
+
+if(WITH_RADOSGW_CUOBJ)
+  target_link_libraries(rgw_common PRIVATE ${CUOBJSERVER_LIBRARY})
 endif()
 
 if(WITH_RADOSGW_RADOS)

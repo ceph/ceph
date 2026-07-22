@@ -662,8 +662,8 @@ int rgw_log_op(RGWREST* const rest, req_state *s, const RGWOp* op, OpsLogSink *o
   entry.object_owner = s->object_acl.get_owner().id;
   entry.bucket_owner = s->bucket_owner.id;
 
-  uint64_t bytes_sent = ACCOUNTING_IO(s)->get_bytes_sent();
-  uint64_t bytes_received = ACCOUNTING_IO(s)->get_bytes_received();
+  uint64_t bytes_sent = ACCOUNTING_IO(s)->get_bytes_sent() + s->rdma_bytes_transferred;
+  uint64_t bytes_received = ACCOUNTING_IO(s)->get_bytes_received() + s->rdma_bytes_transferred;
 
   entry.time = s->time;
   entry.total_time = s->time_elapsed();
