@@ -41,6 +41,7 @@ import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
 import { MonitorService } from '~/app/shared/api/monitor.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { Permissions } from '~/app/shared/models/permissions';
+import { FROM_STORAGE_CLASS } from './../../rgw/models/rgw-storage-class.model';
 
 interface FormFieldDescription {
   externalFieldName: string;
@@ -125,6 +126,8 @@ export class PoolFormComponent extends CdForm implements OnInit {
   isApplicationsSelected = true;
   msrCrush: boolean = false;
   isStretchMode: boolean = false;
+  private fromStorageClass: boolean = false;
+  private previousPath: string = '';
 
   readonly DEFAULT_REPLICATED_MIN_SIZE = 1;
   readonly DEFAULT_REPLICATED_MAX_SIZE = 3;
@@ -155,6 +158,9 @@ export class PoolFormComponent extends CdForm implements OnInit {
     this.resource = $localize`pool`;
     this.authenticate();
     this.createForm();
+    const nav = this.router.getCurrentNavigation();
+    this.fromStorageClass = nav?.extras?.state?.['from'] === FROM_STORAGE_CLASS;
+    this.previousPath = nav?.extras?.state?.['returnUrl'] || '/pool';
   }
 
   authenticate() {
@@ -1148,8 +1154,16 @@ export class PoolFormComponent extends CdForm implements OnInit {
           }
           this.form.setErrors({ cdSubmitButton: true });
         },
-        complete: () => this.router.navigate(['/pool'])
+        complete: () => this.navigateAfterPoolForm()
       });
+  }
+
+  navigateAfterPoolForm(): void {
+    if (this.fromStorageClass) {
+      this.router.navigate([this.previousPath]);
+    } else {
+      this.router.navigate(['/pool']);
+    }
   }
 
   appSelection(events: SelectOption[]) {
