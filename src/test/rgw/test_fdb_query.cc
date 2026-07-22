@@ -18,6 +18,7 @@
 #include <catch2/benchmark/catch_benchmark.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
 
+#include "common/container_concepts.h"
 #include "rgw/fdb/fdb.h"
 
 #include <algorithm>
@@ -176,7 +177,7 @@ void check_disjoint(std::string_view law,
  const auto rhs_keys = sampled_keys_in(rhs);
 
  CHECK(std::ranges::none_of(lhs_keys, [&rhs_keys](const auto& key) {
-  return std::ranges::contains(rhs_keys, key);
+  return ceph::util::contains(rhs_keys, key);
  }));
 }
 
