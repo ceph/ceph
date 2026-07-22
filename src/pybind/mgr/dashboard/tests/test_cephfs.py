@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import errno
 import json
 from collections import defaultdict
 
@@ -8,8 +9,26 @@ except ImportError:
     from unittest.mock import Mock, patch
 
 from .. import mgr
-from ..controllers.cephfs import CephFS, CephFSMirror, CephFSMirrorStatus
+from ..controllers.cephfs import (
+    CephFS,
+    CephFSMirror,
+    CephFSMirrorStatus,
+    CephFSSubvolume,
+    CephFSSubvolumeGroups,
+    CephFSSubvolumeSnapshots,
+    _mirrored_snapshot_info,
+    _mirrored_subvolume_info,
+)
 from ..tests import ControllerTestCase
+
+
+UNMANAGED_VOLUME_ERROR = (-errno.EINVAL, '', 'failed to getxattr on subvolume metadata')
+VOL_NAME = 'test_fs'
+SUBVOL_NAME = 'sv1'
+GROUP_NAME = 'g1'
+SNAP_NAME = 'snap1'
+SUBVOL_PATH = '/volumes/_nogroup/sv1'
+GROUP_PATH = '/volumes/g1'
 
 
 class MetaDataMock(object):
@@ -341,6 +360,139 @@ class CephFSMirrorTest(ControllerTestCase):
         self.assertIn(error_message, response.get('detail', ''))
         mgr.remote.assert_called_once_with(
             'mirroring', 'snapshot_mirror_status', fs_name, None, None)
+
+
+class CephFSMirroredVolumeFallbackTest(ControllerTestCase):
+
+    @classmethod
+    def setup_server(cls):
+        cls.setup_controllers([
+            CephFSSubvolume,
+            CephFSSubvolumeGroups,
+            CephFSSubvolumeSnapshots,
+        ])
+
+    def test_subvolume_list_mirrored_fallback(self):
+        def remote_side_effect(module, cmd, *_args, **_kwargs):
+            self.assertEqual(module, 'volumes')
+            if cmd == '_cmd_fs_subvolume_ls':
+                return (0, json.dumps([{'name': SUBVOL_NAME}]), '')
+            if cmd == '_cmd_fs_subvolume_info':
+                return UNMANAGED_VOLUME_ERROR
+            if cmd == '_cmd_fs_subvolume_getpath':
+                return (0, SUBVOL_PATH, '')
+            self.fail(f'unexpected volumes command: {cmd}')
+
+        mgr.remote = Mock(side_effect=remote_side_effect)
+
+        self._get(f'/api/cephfs/subvolume/{VOL_NAME}')
+        self.assertStatus(200)
+        self.assertJsonBody([{
+            'name': SUBVOL_NAME,
+            'info': {
+                **_mirrored_subvolume_info(),
+                'path': SUBVOL_PATH,
+            },
+        }])
+
+    def test_subvolume_info_mirrored_fallback(self):
+        def remote_side_effect(module, cmd, *_args, **_kwargs):
+            self.assertEqual(module, 'volumes')
+            if cmd == '_cmd_fs_subvolume_info':
+                return UNMANAGED_VOLUME_ERROR
+            if cmd == '_cmd_fs_subvolume_getpath':
+                return (0, SUBVOL_PATH, '')
+            self.fail(f'unexpected volumes command: {cmd}')
+
+        mgr.remote = Mock(side_effect=remote_side_effect)
+
+        self._get(
+            f'/api/cephfs/subvolume/{VOL_NAME}/info'
+            f'?subvol_name={SUBVOL_NAME}'
+        )
+        self.assertStatus(200)
+        self.assertJsonBody({
+            **_mirrored_subvolume_info(),
+            'path': SUBVOL_PATH,
+        })
+
+    def test_subvolume_group_list_mirrored_fallback(self):
+        def remote_side_effect(module, cmd, *_args, **_kwargs):
+            self.assertEqual(module, 'volumes')
+            if cmd == '_cmd_fs_subvolumegroup_ls':
+                return (0, json.dumps([{'name': GROUP_NAME}]), '')
+            if cmd == '_cmd_fs_subvolumegroup_info':
+                return UNMANAGED_VOLUME_ERROR
+            if cmd == '_cmd_fs_subvolumegroup_getpath':
+                return (0, GROUP_PATH, '')
+            self.fail(f'unexpected volumes command: {cmd}')
+
+        mgr.remote = Mock(side_effect=remote_side_effect)
+
+        self._get(f'/api/cephfs/subvolume/group/{VOL_NAME}')
+        self.assertStatus(200)
+        self.assertJsonBody([{
+            'name': GROUP_NAME,
+            'info': {
+                **_mirrored_subvolume_info(),
+                'path': GROUP_PATH,
+            },
+        }])
+
+    def test_subvolume_group_info_mirrored_fallback(self):
+        def remote_side_effect(module, cmd, *_args, **_kwargs):
+            self.assertEqual(module, 'volumes')
+            if cmd == '_cmd_fs_subvolumegroup_info':
+                return UNMANAGED_VOLUME_ERROR
+            if cmd == '_cmd_fs_subvolumegroup_getpath':
+                return (0, GROUP_PATH, '')
+            self.fail(f'unexpected volumes command: {cmd}')
+
+        mgr.remote = Mock(side_effect=remote_side_effect)
+
+        self._get(
+            f'/api/cephfs/subvolume/group/{VOL_NAME}/info'
+            f'?group_name={GROUP_NAME}'
+        )
+        self.assertStatus(200)
+        self.assertJsonBody({
+            **_mirrored_subvolume_info(),
+            'path': GROUP_PATH,
+        })
+
+    def test_subvolume_snapshot_list_mirrored_fallback(self):
+        def remote_side_effect(module, cmd, *_args, **_kwargs):
+            self.assertEqual(module, 'volumes')
+            if cmd == '_cmd_fs_subvolume_snapshot_ls':
+                return (0, json.dumps([{'name': SNAP_NAME}]), '')
+            if cmd == '_cmd_fs_subvolume_snapshot_info':
+                return UNMANAGED_VOLUME_ERROR
+            self.fail(f'unexpected volumes command: {cmd}')
+
+        mgr.remote = Mock(side_effect=remote_side_effect)
+
+        self._get(f'/api/cephfs/subvolume/snapshot/{VOL_NAME}/{SUBVOL_NAME}')
+        self.assertStatus(200)
+        self.assertJsonBody([{
+            'name': SNAP_NAME,
+            'info': _mirrored_snapshot_info(),
+        }])
+
+    def test_subvolume_snapshot_info_mirrored_fallback(self):
+        mgr.remote = Mock(return_value=UNMANAGED_VOLUME_ERROR)
+
+        self._get(
+            f'/api/cephfs/subvolume/snapshot/{VOL_NAME}/{SUBVOL_NAME}/info'
+            f'?snap_name={SNAP_NAME}'
+        )
+        self.assertStatus(200)
+        self.assertJsonBody(_mirrored_snapshot_info())
+        mgr.remote.assert_called_once_with(
+            'volumes', '_cmd_fs_subvolume_snapshot_info', None, {
+                'vol_name': VOL_NAME,
+                'sub_name': SUBVOL_NAME,
+                'snap_name': SNAP_NAME,
+            })
 
 
 class CephFSMirrorStatusTest(ControllerTestCase):
