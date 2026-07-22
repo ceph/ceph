@@ -174,7 +174,8 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
     LayerModule,
     LayoutModule,
     TilesModule,
-    ThemeModule
+    ThemeModule,
+    ProductiveCardComponent
   ],
   declarations: [
     SparklineComponent,
@@ -223,8 +224,7 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
     DetailsCardComponent,
     SidePanelComponent,
     SidebarLayoutComponent,
-    ToastComponent,
-    ProductiveCardComponent
+    ToastComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
