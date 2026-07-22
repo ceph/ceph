@@ -68,6 +68,7 @@ static std::string generate_random_string(int length = 20) {
 
 static int (*do_ceph_mount)(struct ceph_mount_info *cmount, const char *root) = ceph_mount;
 static std::string dir_prefix = std::string("/");
+static bool is_encrypted = false;
 
 void libcephfs_test_set_mount_call(int (*mount_call)(struct ceph_mount_info *cmount, const char *root))
 {
@@ -77,6 +78,11 @@ void libcephfs_test_set_mount_call(int (*mount_call)(struct ceph_mount_info *cmo
 void libcephfs_test_set_dir_prefix(std::string (prefix))
 {
   dir_prefix = prefix;
+}
+
+void libcephfs_test_set_is_encrypted(bool encrypted)
+{
+  is_encrypted = encrypted;
 }
 
 TEST(LibCephFS, OpenEmptyComponent) {
@@ -5163,4 +5169,42 @@ TEST(LibCephFS, ZeroSizeBufferAsyncReadFsync) {
   ASSERT_EQ(0, ceph_unmount(cmount));
   ceph_release(cmount);
   ceph_userperm_destroy(perms);
+}
+
+TEST(LibCephFS, SymlinkLongTarget) {
+  pid_t mypid = getpid();
+
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(do_ceph_mount(cmount, "/"), 0);
+
+  char dir_name[128];
+  char dir_path[256];
+  sprintf(dir_name, "dir_%d", mypid);
+  sprintf(dir_path, "/%s", dir_name);
+  ASSERT_EQ(ceph_mkdir(cmount, dir_path, 0777), 0);
+
+
+  int max_path = PATH_MAX - 1;
+
+  if(is_encrypted) {
+    max_path = PATH_MAX - 3;
+  }
+
+  char rel_file_path[PATH_MAX];
+  memset(rel_file_path, 'b', max_path);
+  rel_file_path[max_path] = '\0';
+
+  char link_path[PATH_MAX];
+  char rel_link_path[1024];
+  sprintf(rel_link_path, "./linkfile_%d", mypid);
+  sprintf(link_path, "%s/%s", dir_path, rel_link_path);
+  ASSERT_EQ(0, ceph_symlink(cmount, rel_file_path, link_path));
+
+  ASSERT_EQ(0, ceph_chdir(cmount, dir_path));
+  ASSERT_EQ(0, ceph_unlink(cmount, link_path));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path));
+  ceph_shutdown(cmount);
 }
