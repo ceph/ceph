@@ -17,7 +17,7 @@ public:
   virtual ~OnodeReformatEngine() {}
   virtual bool validate(OnodeReformatContext& ctx);
   virtual bool execute(OnodeReformatContext& ctx,
-    PerfCounters& _logger, BlueStore::Collection*, BlueStore::OnodeRef&) = 0;
+    PerfCounters& _logger) = 0;
 };
 
 class OnodeReformatRecompressEngine : public OnodeReformatEngine {
@@ -28,7 +28,7 @@ public:
   {
   }
   bool execute(OnodeReformatContext& ctx,
-    PerfCounters& _logger, BlueStore::Collection*, BlueStore::OnodeRef&) override;
+    PerfCounters& _logger) override;
 };
 
 class OnodeReformatDefragmentEngine : public OnodeReformatEngine {
@@ -39,7 +39,7 @@ public:
   {
   }
   bool execute(OnodeReformatContext& ctx,
-    PerfCounters& _logger, BlueStore::Collection*, BlueStore::OnodeRef&) override;
+    PerfCounters& _logger) override;
 };
 
 class OnodeReformatContext {
@@ -74,8 +74,7 @@ public:
     return span_stat;
   }
 
-  void exec_engines(PerfCounters& _logger,
-    BlueStore::Collection* c, BlueStore::OnodeRef& o);
+  void exec_engines(PerfCounters& _logger);
   void clear();
 };
 
