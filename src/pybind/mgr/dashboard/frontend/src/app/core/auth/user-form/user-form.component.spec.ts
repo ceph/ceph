@@ -211,6 +211,7 @@ describe('UserFormComponent', () => {
     beforeEach(() => {
       spyOn(userService, 'get').and.callFake(() => of(user));
       spyOn(TestBed.inject(RoleService), 'list').and.callFake(() => of(roles));
+      spyOn(TestBed.inject(AuthStorageService), 'getUsername').and.returnValue(user.username);
       setUrl('/user-management/users/edit/user1');
       spyOn(TestBed.inject(SettingsService), 'getStandardSettings').and.callFake(() =>
         of({
@@ -255,8 +256,19 @@ describe('UserFormComponent', () => {
       expect(form.get('confirmpassword').valid).toBeTruthy();
     });
 
+    it('should disable administrator role for current user', () => {
+      const administratorRole = component.allRoles.find((role) => role.name === 'administrator');
+      expect(administratorRole.disabled).toBeTruthy();
+      expect(component.disableRolesClearButton()).toBeTruthy();
+    });
+
+    it('should restore roles when clear is triggered for current user with protected admin role', () => {
+      formHelper.setValue('roles', []);
+      component.onRolesClear();
+      expect(form.getValue('roles')).toContain('administrator');
+    });
+
     it('should alert if user is removing needed role permission', () => {
-      spyOn(TestBed.inject(AuthStorageService), 'getUsername').and.callFake(() => user.username);
       let modalBodyTpl = null;
       spyOn(modalService, 'show').and.callFake((_content, initialState) => {
         modalBodyTpl = initialState.bodyTpl;
@@ -267,7 +279,6 @@ describe('UserFormComponent', () => {
     });
 
     it('should logout if current user roles have been changed', () => {
-      spyOn(TestBed.inject(AuthStorageService), 'getUsername').and.callFake(() => user.username);
       formHelper.setValue('roles', ['user-manager']);
       component.submit();
       const userReq = httpTesting.expectOne(`api/user/${user.username}`);
@@ -278,7 +289,6 @@ describe('UserFormComponent', () => {
     });
 
     it('should submit', () => {
-      spyOn(TestBed.inject(AuthStorageService), 'getUsername').and.callFake(() => user.username);
       component.submit();
       const userReq = httpTesting.expectOne(`api/user/${user.username}`);
       expect(userReq.request.method).toBe('PUT');

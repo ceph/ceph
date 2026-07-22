@@ -229,6 +229,7 @@
       <div
         class="form-item"
         *ngIf="allRoles"
+        [class.roles-clear-disabled]="isAdminRoleProtected"
       >
         <cds-combo-box
           label="Roles"
@@ -245,10 +246,12 @@
           [cdRequiredField]="!isSSO ? 'Roles' : ''"
           [invalid]="!userForm.controls.roles.valid && userForm.controls.roles.dirty"
           [invalidText]="rolesError"
+          (clear)="onRolesClear()"
           i18n
         >
           <cds-dropdown-list></cds-dropdown-list>
         </cds-combo-box>
+
         <ng-template #rolesError>
           <span
             class="invalid-feedback"
