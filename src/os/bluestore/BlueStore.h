@@ -1824,16 +1824,22 @@ public:
 
   struct read_context_t {
     BlueStore& store;
+    CollectionHandle ch;
+    OnodeRef o;
     uint64_t offset;
     size_t length;
     bufferlist& bl;
     uint32_t op_flags;
     read_context_t(BlueStore& _store,
+        CollectionHandle _ch,
+        OnodeRef _o,
         uint64_t _offset,
         size_t _length,
         bufferlist& _bl,
         uint32_t _op_flags) :
       store(_store),
+      ch(_ch),
+      o(_o),
       offset(_offset),
       length(_length),
       bl(_bl),
@@ -1842,6 +1848,8 @@ public:
     }
     read_context_t(const read_context_t& other) :
       store(other.store),
+      ch(other.ch),
+      o(other.o),
       offset(other.offset),
       length(other.length),
       bl(other.bl),

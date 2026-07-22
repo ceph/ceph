@@ -12910,7 +12910,7 @@ void BlueStore::_maybe_do_reformat_onode(OnodeReformatContext& reformat_ctx,
     _dump_onode<25>(cct, *o);
 
     ceph_assert(logger);
-    reformat_ctx.exec_engines(*logger, c, o);
+    reformat_ctx.exec_engines(*logger);
     if (reformat_ctx.is_applied()) {
       _txc_exec_reformat_write(c, o, offset, length, bl, wctx);
     }
@@ -12948,17 +12948,12 @@ int BlueStore::read(
   bl.clear();
   int r;
   {
-    read_context_t read_ctx(*this, offset, length, bl, op_flags);
-    // we need a shared lock to access
-    // reformat_engines from collection
+    // we need a shared lock to accesss
+    // reformat_engines from collection for validation,
+    // but once we want to apply reformatting we need
+    // unique lock
     std::shared_lock slock(c->lock);
-    OnodeReformatContext reformat_ctx(read_ctx, c->reformat_engines);
-
     std::unique_lock ulock(c->lock, std::defer_lock);
-    if (reformat_ctx.is_enabled()) {
-      slock.unlock();
-      ulock.lock();
-    }
 
     auto start1 = mono_clock::now();
     OnodeRef o = c->get_onode(oid, false);
@@ -12967,7 +12962,17 @@ int BlueStore::read(
       mono_clock::now() - start1,
       cct->_conf->bluestore_log_op_age,
       "", l_bluestore_slow_read_onode_meta_count);
-    if (o && o->exists) {
+
+    read_context_t read_ctx(*this, c_, o, offset, length, bl, op_flags);
+    OnodeReformatContext reformat_ctx(read_ctx, c->reformat_engines);
+    if (o && o->exists && reformat_ctx.is_enabled()) {
+      slock.unlock();
+      ulock.lock();
+    }
+
+    // either collection or onode could be removed while switching locks above,
+    // hence checking once again
+    if (c->exists && o && o->exists) {
       if (offset == length && offset == 0)
 	length = o->onode.size;
 

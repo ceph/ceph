@@ -51,10 +51,12 @@ bool OnodeReformatEngine::validate(OnodeReformatContext& ctx)
 #define dout_prefix *_dout << "OnodeReformatRecompress "
 
 bool OnodeReformatRecompressEngine::execute(OnodeReformatContext& ctx,
-  PerfCounters& logger, BlueStore::Collection* c, BlueStore::OnodeRef& o)
+  PerfCounters& logger)
 {
   auto& rctx = ctx.rctx;
   ceph_assert(rctx.store.cct);
+  BlueStore::Collection* c =
+    static_cast<BlueStore::Collection*>(rctx.ch.get());
   ceph_assert(c);
 
   const auto& span_stat = ctx.get_span_stats();
@@ -129,10 +131,14 @@ bool OnodeReformatRecompressEngine::execute(OnodeReformatContext& ctx,
 #define dout_prefix *_dout << "OnodeReformatDefragment "
 
 bool OnodeReformatDefragmentEngine::execute(OnodeReformatContext& ctx,
-  PerfCounters& logger, BlueStore::Collection* c, BlueStore::OnodeRef& o)
+  PerfCounters& logger)
 {
   auto& rctx = ctx.rctx;
   ceph_assert(rctx.store.cct);
+  BlueStore::Collection* c =
+    static_cast<BlueStore::Collection*>(rctx.ch.get());
+  ceph_assert(c);
+
   auto min_alloc_size = rctx.store.get_min_alloc_size();
 
   bool will_do = false;
@@ -214,12 +220,12 @@ bool OnodeReformatContext::maybe_allocate(size_t need, size_t min_alloc_size,
 }
 
 void OnodeReformatContext::exec_engines(
-  PerfCounters& logger, BlueStore::Collection* c, BlueStore::OnodeRef& o)
+  PerfCounters& logger)
 {
   // Enumerate all the validated engines and try to execute them
   // in their priority order until the first success indicated
   for (auto& e : engines) {
-    if (e.get() && e->execute(*this, logger, c, o)) {
+    if (e.get() && e->execute(*this, logger)) {
       to_be_applied = true;
       break;
     }
