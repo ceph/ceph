@@ -664,6 +664,11 @@ int rgw_log_op(RGWREST* const rest, req_state *s, const RGWOp* op, OpsLogSink *o
 
   uint64_t bytes_sent = ACCOUNTING_IO(s)->get_bytes_sent();
   uint64_t bytes_received = ACCOUNTING_IO(s)->get_bytes_received();
+  if (s->op_type == RGW_OP_GET_OBJ) {
+    bytes_sent += s->rdma_bytes_transferred;
+  } else if (s->op_type == RGW_OP_PUT_OBJ) {
+    bytes_received += s->rdma_bytes_transferred;
+  }
 
   entry.time = s->time;
   entry.total_time = s->time_elapsed();

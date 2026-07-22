@@ -4763,6 +4763,120 @@ options:
   flags:
   - startup
   with_legacy: true
+# cuObject RDMA server options
+- name: rgw_cuobj_enabled
+  type: bool
+  level: advanced
+  desc: Enable cuObject S3 RDMA server support for PUT/GET operations
+  fmt_desc: |
+    Enable cuObject RDMA transfers for S3 PUT and GET requests. Requires
+    a build with ``WITH_RADOSGW_CUOBJ=ON`` and an RDMA interface address. See
+    :ref:`radosgw-s3rdma` for prerequisites and deployment instructions.
+  default: false
+  services:
+  - rgw
+  flags:
+  - startup
+- name: rgw_cuobj_rdma_ip
+  type: str
+  level: advanced
+  desc: IP address of the RDMA-capable network interface
+  fmt_desc: |
+    Local RDMA interface address used by cuObject. This must be set
+    when :confval:`rgw_cuobj_enabled` is enabled.
+    See :ref:`radosgw-s3rdma`.
+  default:
+  services:
+  - rgw
+  flags:
+  - startup
+- name: rgw_cuobj_rdma_port
+  type: uint
+  level: advanced
+  desc: Port for cuObject RDMA connections
+  fmt_desc: |
+    Port used by the cuObject RDMA server, separate from the HTTP
+    frontend port. See :ref:`radosgw-s3rdma` for deployment instructions.
+  default: 20886
+  services:
+  - rgw
+  flags:
+  - startup
+- name: rgw_cuobj_buffer_size
+  type: size
+  level: advanced
+  desc: Maximum RDMA transfer size and size of each pre-registered buffer
+  long_desc: Each RDMA PUT payload (including a multipart upload part) or GET
+    response must fit in one buffer. Requests requiring more than this size
+    return HTTP 503 ServiceUnavailable. Buffers are allocated at startup;
+    changing this option requires restarting the RGW daemon.
+  fmt_desc: |
+    Size of each registered buffer and the maximum RDMA PUT payload
+    or GET response size. Each multipart upload part or GET range must fit in
+    one buffer. See :ref:`radosgw-s3rdma` and
+    :ref:`radosgw-cuobj-buffer-limits` for memory sizing and transfer limits.
+  default: 8_M
+  services:
+  - rgw
+  flags:
+  - startup
+  see_also:
+  - rgw_cuobj_buffer_count
+- name: rgw_cuobj_buffer_count
+  type: uint
+  level: advanced
+  desc: Number of pre-registered RDMA buffers in the pool
+  long_desc: Number of registered buffers shared by RDMA PUT and GET requests.
+    The pool consumes rgw_cuobj_buffer_size multiplied by rgw_cuobj_buffer_count
+    bytes per RGW daemon, plus overhead. Increasing the count allows more
+    simultaneous transfers but does not raise the transfer-size limit.
+    Changing this option requires restarting the RGW daemon.
+  fmt_desc: |
+    Number of registered buffers shared by RDMA PUT and GET requests.
+    The pool consumes this count multiplied by :confval:`rgw_cuobj_buffer_size`
+    bytes per daemon, plus overhead. See :ref:`radosgw-s3rdma` and
+    :ref:`radosgw-cuobj-buffer-limits` for memory sizing and transfer limits.
+  default: 128
+  services:
+  - rgw
+  flags:
+  - startup
+  see_also:
+  - rgw_cuobj_buffer_size
+  - rgw_thread_pool_size
+- name: rgw_cuobj_num_dcis
+  type: uint
+  level: advanced
+  desc: Number of Dynamic Connection Interfaces for RDMA
+  fmt_desc: |
+    Number of Dynamic Connection Interfaces configured in the cuObject
+    library at startup. This is separate from the number of RGW buffers. See
+    :ref:`radosgw-s3rdma` for deployment instructions.
+  default: 128
+  services:
+  - rgw
+  flags:
+  - startup
+  see_also:
+  - rgw_thread_pool_size
+- name: rgw_cuobj_log_level
+  type: str
+  level: advanced
+  desc: Verbosity of cuObject RDMA library messages on stderr (off, error, info, debug)
+  fmt_desc: |
+    Verbosity of cuObject library messages on standard error. RGW's own
+    cuObject messages use ``debug_rgw`` separately.
+    See :ref:`radosgw-s3rdma` for logging and deployment instructions.
+  default: error
+  services:
+  - rgw
+  enum_values:
+  - 'off'
+  - error
+  - info
+  - debug
+  flags:
+  - startup
 - name: rgw_topic_persistency_time_to_live
   type: uint
   level: advanced

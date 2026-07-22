@@ -608,6 +608,11 @@ else()
   set(WITH_RADOSGW_LANCEDB_DEFAULT OFF)
 endif()
 option(WITH_RADOSGW_LANCEDB "Enable lancedb support in RADOS Gateway" ${WITH_RADOSGW_LANCEDB_DEFAULT})
+# See doc/radosgw/s3rdma.rst for build and runtime requirements.
+option(WITH_RADOSGW_CUOBJ "cuObject RDMA support for RADOS Gateway" OFF)
+if(WITH_RADOSGW_CUOBJ)
+  find_library(CUOBJSERVER_LIBRARY cuobjserver REQUIRED)
+endif()
 
 option(WITH_SYSTEM_ARROW "Use system-provided arrow" OFF)
 option(WITH_SYSTEM_UTF8PROC "Use system-provided utf8proc" OFF)
