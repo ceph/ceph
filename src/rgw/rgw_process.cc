@@ -319,7 +319,8 @@ int process_request(const RGWProcessEnv& penv,
 		    rgw::dmclock::Scheduler *scheduler,
                     string* user,
                     ceph::coarse_real_clock::duration* latency,
-                    int* http_ret)
+                    int* http_ret,
+                    uint64_t* rdma_bytes)
 {
   int ret = client_io->init(g_ceph_context);
   rgw::sal::Driver* driver = penv.driver;
@@ -529,6 +530,9 @@ done:
 
   if (http_ret != nullptr) {
     *http_ret = s->err.http_ret;
+  }
+  if (rdma_bytes != nullptr) {
+    *rdma_bytes = s->rdma_bytes_transferred;
   }
   int op_ret = 0;
 
