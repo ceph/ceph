@@ -11078,7 +11078,7 @@ void BlueStore::_fsck_check_objects(
           uint64_t offset = 0;
           do {
             uint64_t l = std::min(uint64_t(o->onode.size - offset), max_read_block);
-            int r = _do_basic_read(c.get(), o, offset, l, bl,
+            int r = _do_read(c.get(), o, offset, l, bl,
               CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
             if (r < 0) {
               ++errors;
@@ -13016,6 +13016,7 @@ int BlueStore::read(
   bufferlist& bl,
   uint32_t op_flags)
 {
+  auto start = mono_clock::now();
   Collection *c = static_cast<Collection *>(ch.get());
   const coll_t &cid = c->get_cid();
   dout(15) << __func__ << " " << cid << " " << oid
@@ -13024,22 +13025,14 @@ int BlueStore::read(
 	   << std::dec << dendl;
   if (!c->exists)
     return -ENOENT;
-  return _do_read(c, oid, offset, length, bl, op_flags);
-}
-
-int BlueStore::_do_read(Collection* c,
-			const ghobject_t& oid,
-			uint64_t offset,
-			size_t length,
-			bufferlist& bl,
-			uint32_t op_flags)
-{
+  bl.clear();
   int r;
-  auto start = mono_clock::now();
+
   {
     read_context_t read_ctx(*this, offset, length, bl, op_flags);
-    std::shared_lock slock(c->lock); // we need a shared lock to access
-                                     // reformat_engines from collection
+    // we need a shared lock to access
+    // reformat_engines from collection
+    std::shared_lock slock(c->lock);
     OnodeReformatContext reformat_ctx(read_ctx, c->reformat_engines);
 
     std::unique_lock ulock(c->lock, std::defer_lock);
@@ -13059,7 +13052,7 @@ int BlueStore::_do_read(Collection* c,
       if (offset == length && offset == 0)
 	length = o->onode.size;
 
-      r = _do_basic_read(c, o, offset, length, bl, op_flags, 0,
+      r = _do_read(c, o, offset, length, bl, op_flags, 0,
 	reformat_ctx.is_enabled() ? &reformat_ctx.access_span_stats() : nullptr);
       if (r == -EIO) {
 	logger->inc(l_bluestore_read_eio);
@@ -13076,7 +13069,7 @@ int BlueStore::_do_read(Collection* c,
 	  cct->_conf->bluestore_log_op_age);
       }
       if (r >= 0) {
-        _maybe_do_reformat_onode(reformat_ctx, c, o, offset, length, bl, op_flags);
+	_maybe_do_reformat_onode(reformat_ctx, c, o, offset, length, bl, op_flags);
       }
     } else {
       r = -ENOENT;
@@ -13087,15 +13080,15 @@ int BlueStore::_do_read(Collection* c,
     r = -EIO;
     derr << __func__ << " " << c->cid << " " << oid << " INJECT EIO" << dendl;
   } else if (oid.hobj.pool > 0 &&  /* FIXME, see #23029 */
-	     cct->_conf->bluestore_debug_random_read_err &&
-	     (rand() % (int)(cct->_conf->bluestore_debug_random_read_err *
-			     100.0)) == 0) {
+    cct->_conf->bluestore_debug_random_read_err &&
+    (rand() % (int)(cct->_conf->bluestore_debug_random_read_err *
+      100.0)) == 0) {
     dout(0) << __func__ << ": inject random EIO" << dendl;
     r = -EIO;
   }
   dout(10) << __func__ << " " << c->cid << " " << oid
-	   << " 0x" << std::hex << offset << "~" << length << std::dec
-	   << " = " << r << dendl;
+    << " 0x" << std::hex << offset << "~" << length << std::dec
+    << " = " << r << dendl;
   return r;
 }
 
@@ -13451,7 +13444,7 @@ void BlueStore::_measure_static_frag(
   logger->tinc_with_max(l_bluestore_static_frag_lat, finish - start);
 }
 
-int BlueStore::_do_basic_read(
+int BlueStore::_do_read(
   Collection *c,
   OnodeRef& o,
   uint64_t offset,
@@ -13583,7 +13576,7 @@ int BlueStore::_do_basic_read(
     if (retry_count >= cct->_conf->bluestore_retry_disk_reads) {
       return -EIO;
     }
-    return _do_basic_read(c, o, offset, length, bl, op_flags, retry_count + 1);
+    return _do_read(c, o, offset, length, bl, op_flags, retry_count + 1);
   }
   r = bl.length();
   if (retry_count) {
@@ -13604,7 +13597,7 @@ void inline BlueStore::_do_read_and_pad(
   uint32_t length,
   ceph::buffer::list& bl)
 {
-  int r = _do_basic_read(c, o, offset, length, bl, 0);
+  int r = _do_read(c, o, offset, length, bl, 0);
   ceph_assert(r >= 0 && r <= (int)length);
   size_t zlen = length - r;
   if (zlen > 0) {
@@ -17134,7 +17127,7 @@ uint32_t BlueStore::_do_write_small_with_maybe_blob_reuse(
 		   << " and tail 0x" << tail_read << std::dec << dendl;
 	  if (head_read) {
 	    bufferlist head_bl;
-	    int r = _do_basic_read(c.get(), o, offset - head_pad - head_read, head_read,
+	    int r = _do_read(c.get(), o, offset - head_pad - head_read, head_read,
 			     head_bl, 0);
 	    ceph_assert(r >= 0 && r <= (int)head_read);
 	    size_t zlen = head_read - r;
@@ -17148,7 +17141,7 @@ uint32_t BlueStore::_do_write_small_with_maybe_blob_reuse(
 	  }
 	  if (tail_read) {
 	    bufferlist tail_bl;
-	    int r = _do_basic_read(c.get(), o, offset + length + tail_pad, tail_read,
+	    int r = _do_read(c.get(), o, offset + length + tail_pad, tail_read,
 			     tail_bl, 0);
 	    ceph_assert(r >= 0 && r <= (int)tail_read);
 	    size_t zlen = tail_read - r;
@@ -17396,7 +17389,7 @@ void BlueStore::_do_write_big_apply_deferred(
   dout(20) << __func__ << "  reading head 0x" << std::hex << dctx.head_read
     << " and tail 0x" << dctx.tail_read << std::dec << dendl;
   if (dctx.head_read) {
-    int r = _do_basic_read(c.get(), o,
+    int r = _do_read(c.get(), o,
       dctx.off - dctx.head_read,
       dctx.head_read,
       bl,
@@ -17413,7 +17406,7 @@ void BlueStore::_do_write_big_apply_deferred(
 
   if (dctx.tail_read) {
     bufferlist tail_bl;
-    int r = _do_basic_read(c.get(), o,
+    int r = _do_read(c.get(), o,
       dctx.off + dctx.used, dctx.tail_read,
       tail_bl, 0);
     ceph_assert(r >= 0 && r <= (int)dctx.tail_read);
@@ -18233,7 +18226,7 @@ int BlueStore::_do_gc(
     dout(20) << __func__ << " processing " << std::hex
             << offset << "~" << length << std::dec
 	    << dendl;
-    int r = _do_basic_read(c.get(), o, offset, length, bl, 0);
+    int r = _do_read(c.get(), o, offset, length, bl, 0);
     ceph_assert(r == (int)length);
 
     _do_write_data(txc, c, o, offset, length, bl, &wctx_gc);
@@ -19137,7 +19130,7 @@ int BlueStore::_clone(TransContext *txc,
     _do_clone_range(txc, c, oldo, newo, 0, oldo->onode.size, 0);
   } else {
     bufferlist bl;
-    r = _do_basic_read(c.get(), oldo, 0, oldo->onode.size, bl, 0);
+    r = _do_read(c.get(), oldo, 0, oldo->onode.size, bl, 0);
     if (r < 0)
       goto out;
     WriteContext wctx;
@@ -19260,7 +19253,7 @@ int BlueStore::_clone_range(TransContext *txc,
       _do_clone_range(txc, c, oldo, newo, srcoff, length, dstoff);
     } else {
       bufferlist bl;
-      r = _do_basic_read(c.get(), oldo, srcoff, length, bl, 0);
+      r = _do_read(c.get(), oldo, srcoff, length, bl, 0);
       if (r < 0)
 	goto out;
       WriteContext wctx;
