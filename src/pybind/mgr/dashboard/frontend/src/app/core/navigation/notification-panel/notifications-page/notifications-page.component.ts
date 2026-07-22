@@ -89,7 +89,7 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
     this.sub.add(
       this.route.queryParams.subscribe((params) => {
         this._pendingId = params['id'] || null;
-        this._tryPreselect(this.notificationService.getNotificationsSnapshot());
+        this._tryPreselect(this.notificationService.getNotificationsSnapshot(), true);
       })
     );
   }
@@ -134,8 +134,8 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
     }
   }
 
-  private _tryPreselect(notifications: CdNotification[]): void {
-    if (!this._pendingId || this.selectedNotificationID()) return;
+  private _tryPreselect(notifications: CdNotification[], force = false): void {
+    if (!this._pendingId || (!force && this.selectedNotificationID())) return;
     const match = notifications.find((n) => n.id === this._pendingId);
     if (match) {
       this.selectedNotificationID.set(this._pendingId);
