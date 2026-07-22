@@ -225,6 +225,17 @@ TEST_F(mClockSchedulerTest, TestHighPriorityQueueEnqueueDequeue) {
 TEST_F(mClockSchedulerTest, TestAllQueuesEnqueueDequeue) {
   ASSERT_TRUE(q.empty());
 
+  // Prime last_mclock_service_time with a real, recent timestamp before
+  // the priority-ordering assertions below. last_mclock_service_time
+  // starts at TimeZero (treated as already-expired), so without this, the
+  // very first dequeue() from a queue with both high_priority and the
+  // mclock queue populated would force an mclock-queue pull ahead of
+  // high_priority, which is not what this test is checking -- that
+  // behavior gets its own dedicated tests below.
+  q.enqueue(create_item(0, client1, SchedulerClass::client));
+  get_item(q.dequeue());
+  ASSERT_TRUE(q.empty());
+
   // Insert ops into the mClock queue
   for (unsigned i = 100; i < 102; ++i) {
     q.enqueue(create_item(i, client1, SchedulerClass::client));
@@ -293,4 +304,118 @@ TEST_F(mClockSchedulerTest, TestSlowDequeue) {
     ASSERT_TRUE(wqi);
   }
   ASSERT_TRUE(q.empty());
+}
+
+// Tests for tracker 69078's starvation-bound fix: dequeue() forces one
+// mclock-managed-queue pull once it has gone unserviced for at least
+// mclock_conf's scheduler_max_starve_time while high_priority keeps
+// refilling. The fixture is non-rotational (SSD/NVMe), so the bound is
+// the fixed internal constant (50ms);
+TEST_F(mClockSchedulerTest, TestNoForcedYieldBeforeThreshold) {
+  ASSERT_TRUE(q.empty());
+
+  // Set up last_mclock_service_time (see TestAllQueuesEnqueueDequeue).
+  q.enqueue(create_item(0, client1, SchedulerClass::client));
+  get_item(q.dequeue());
+  ASSERT_TRUE(q.empty());
+
+  q.enqueue(create_item(1, client1, SchedulerClass::background_best_effort));
+  q.enqueue(create_high_prio_item(200, 200, client2, SchedulerClass::immediate));
+
+  // Well under the 50ms SSD/NVMe threshold -- ordinary priority order
+  // (high_priority before the mclock queue) is unaffected, confirming
+  // the fix is a no-op in the common, not-yet-starved case.
+  auto r = get_item(q.dequeue());
+  ASSERT_EQ(200u, r.get_map_epoch());
+}
+
+TEST_F(mClockSchedulerTest, TestStarvationForcesYield) {
+  ASSERT_TRUE(q.empty());
+
+  // Set up last_mclock_service_time.
+  q.enqueue(create_item(0, client1, SchedulerClass::client));
+  get_item(q.dequeue());
+  ASSERT_TRUE(q.empty());
+
+  // One item sits pending in the mclock-managed queue throughout.
+  q.enqueue(create_item(1, client1, SchedulerClass::background_best_effort));
+
+  // Keep high_priority continuously refilled for longer than the 50ms
+  // SSD/NVMe threshold, without calling dequeue() in between -- mirrors
+  // a sustained immediate-class backlog (e.g. EC subop traffic under
+  // heavy client I/O) that would otherwise starve the mclock queue
+  // indefinitely.
+  for (unsigned i = 0; i < 60; ++i) {
+    q.enqueue(create_high_prio_item(100 + i, 100 + i, client2,
+                                    SchedulerClass::immediate));
+  }
+  std::this_thread::sleep_for(60ms);
+
+  // high_priority still has pending items at this point -- the next
+  // dequeue() should force-pull the mclock-queue item instead of
+  // continuing to drain high_priority.
+  ASSERT_FALSE(q.empty());
+  auto r = get_item(q.dequeue());
+  ASSERT_EQ(1u, r.get_map_epoch());
+
+  // high_priority items are still there afterward -- confirms this was
+  // a forced yield, not high_priority having drained naturally.
+  ASSERT_FALSE(q.empty());
+}
+
+TEST(mClockSchedulerHDDTest, TestStarveTimeLiveReconfig) {
+  // Rotational path: osd_mclock_max_starve_time_hdd is read at
+  // construction (MclockConfig::set_from_config(), called from its own
+  // constructor) and re-read live via the existing handle_conf_change()
+  // observer on any subsequent config change -- the same path every
+  // other mclock scheduler option already uses. Uses a standalone
+  // scheduler instance (not the shared fixture, which is fixed
+  // non-rotational) so it can exercise the HDD-specific option.
+  g_ceph_context->_conf.rm_val("osd_mclock_max_starve_time_hdd");
+  g_ceph_context->_conf.apply_changes(nullptr);
+
+  mClockScheduler q(g_ceph_context, /*whoami=*/0, /*num_shards=*/1,
+                     /*shard_id=*/0, /*is_rotational=*/true,
+                     /*cutoff_priority=*/12,
+                     2ms, 2ms, 1ms, /*init_perfcounter=*/true);
+  uint64_t client1 = 1001;
+  uint64_t client2 = 9999;
+
+  q.enqueue(create_item(0, client1, SchedulerClass::client));
+  get_item(q.dequeue());
+  ASSERT_TRUE(q.empty());
+
+  q.enqueue(create_item(1, client1, SchedulerClass::background_best_effort));
+
+  // At the 250ms default, ~150ms of continuous high_priority refill is
+  // not enough to force a yield -- confirms the option's initial,
+  // construction-time value.
+  for (unsigned i = 0; i < 150; ++i) {
+    q.enqueue(create_high_prio_item(100 + i, 100 + i, client2,
+                                     SchedulerClass::immediate));
+  }
+  std::this_thread::sleep_for(150ms);
+  auto r = get_item(q.dequeue());
+  ASSERT_NE(1u, r.get_map_epoch());
+
+  // Live-reconfigure to the 100ms floor without rebuilding the
+  // scheduler.
+  g_ceph_context->_conf.set_val("osd_mclock_max_starve_time_hdd", "0.1");
+  g_ceph_context->_conf.apply_changes(nullptr);
+
+  // Continue refilling high_priority under the new, shorter threshold --
+  // this time the forced yield should engage well before 250ms, proving
+  // the live reconfiguration actually took effect rather than the
+  // unmodified default.
+  for (unsigned i = 0; i < 150; ++i) {
+    q.enqueue(create_high_prio_item(300 + i, 300 + i, client2,
+                                     SchedulerClass::immediate));
+  }
+  std::this_thread::sleep_for(150ms);
+  ASSERT_FALSE(q.empty());
+  r = get_item(q.dequeue());
+  ASSERT_EQ(1u, r.get_map_epoch());
+
+  g_ceph_context->_conf.rm_val("osd_mclock_max_starve_time_hdd");
+  g_ceph_context->_conf.apply_changes(nullptr);
 }
