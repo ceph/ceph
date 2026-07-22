@@ -42,7 +42,7 @@ public:
     PerfCounters& _logger) override;
 };
 
-class OnodeReformatContext {
+class OnodeReformatContext : public BlueStore::read_context_t {
 
 private:
 
@@ -55,9 +55,8 @@ private:
   Allocator* alloc = nullptr;
   PExtentVectorSlicer* prealloc_slicer = nullptr; // pointer to the one from wctx if configured
 public:
-  BlueStore::read_context_t rctx;
 
-  OnodeReformatContext(BlueStore::read_context_t& _rctx,
+  OnodeReformatContext(const BlueStore::read_context_t& _rctx,
     const reformat_engines_t& _engines);
   ~OnodeReformatContext();
 
