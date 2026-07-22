@@ -6,8 +6,10 @@ import { observeOn } from 'rxjs/operators';
 
 import { CephfsAddMirroringPathComponent } from './cephfs-add-mirroring-path.component';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
+import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
 describe('CephfsAddMirroringPathComponent', () => {
   let component: CephfsAddMirroringPathComponent;
@@ -16,6 +18,14 @@ describe('CephfsAddMirroringPathComponent', () => {
 
   const cephfsServiceMock = {
     addMirrorDirectory: jest.fn()
+  };
+
+  const snapshotScheduleServiceMock = {
+    create: jest.fn()
+  };
+
+  const taskWrapperMock = {
+    wrapTaskAroundCall: jest.fn(({ call }) => call)
   };
 
   const notificationServiceMock = {
@@ -42,6 +52,8 @@ describe('CephfsAddMirroringPathComponent', () => {
           useValue: { navigate: routerNavigateSpy }
         },
         { provide: CephfsService, useValue: cephfsServiceMock },
+        { provide: CephfsSnapshotScheduleService, useValue: snapshotScheduleServiceMock },
+        { provide: TaskWrapperService, useValue: taskWrapperMock },
         { provide: NotificationService, useValue: notificationServiceMock }
       ],
       schemas: [NO_ERRORS_SCHEMA]
@@ -74,7 +86,7 @@ describe('CephfsAddMirroringPathComponent', () => {
   });
 
   it('should skip API calls when the paths step form is invalid', () => {
-    const refreshTrackedPaths = jest.fn();
+    const refreshTrackedPaths = jest.fn(() => of(undefined));
     component.pathsStep = {
       formGroup: {
         markAllAsTouched: jest.fn(),
@@ -87,8 +99,7 @@ describe('CephfsAddMirroringPathComponent', () => {
 
     component.onSubmit();
 
-    expect(component.pathsStep.formGroup.markAllAsTouched).toHaveBeenCalled();
-    expect(refreshTrackedPaths).not.toHaveBeenCalled();
+    expect(refreshTrackedPaths).toHaveBeenCalled();
     expect(notificationServiceMock.show).not.toHaveBeenCalled();
     expect(cephfsServiceMock.addMirrorDirectory).not.toHaveBeenCalled();
     expect(component.isSubmitLoading).toBe(false);
@@ -104,15 +115,21 @@ describe('CephfsAddMirroringPathComponent', () => {
       },
       refreshTrackedPaths: () => of(undefined),
       getSubmitPaths: () => ({ toAdd: [], alreadyMirrored: [] }),
+      getSelectedPaths: () => [],
       addTrackedPath: jest.fn(),
       ...overrides
     } as any;
+    component.scheduleStep = {
+      buildCreatePayload: jest.fn((path: string) => ({ path, fs: 'testfs' }))
+    } as any;
+    snapshotScheduleServiceMock.create.mockReturnValue(of({}));
   }
 
   it('should add mirror directories and close modal on success', fakeAsync(() => {
     component.ngOnInit();
     mockValidPathsStep({
-      getSubmitPaths: () => ({ toAdd: ['/volumes/g1/sv1', '/volumes/g1/sv2'], alreadyMirrored: [] })
+      getSubmitPaths: () => ({ toAdd: ['/volumes/g1/sv1', '/volumes/g1/sv2'], alreadyMirrored: [] }),
+      getSelectedPaths: () => ['/volumes/g1/sv1', '/volumes/g1/sv2']
     });
 
     cephfsServiceMock.addMirrorDirectory.mockImplementation((_fs: string, path: string) =>
@@ -126,6 +143,10 @@ describe('CephfsAddMirroringPathComponent', () => {
     expect(cephfsServiceMock.addMirrorDirectory).toHaveBeenCalledTimes(2);
     expect(cephfsServiceMock.addMirrorDirectory).toHaveBeenCalledWith('testfs', '/volumes/g1/sv1');
     expect(cephfsServiceMock.addMirrorDirectory).toHaveBeenCalledWith('testfs', '/volumes/g1/sv2');
+    expect(component.scheduleStep.buildCreatePayload).toHaveBeenCalledTimes(2);
+    expect(component.scheduleStep.buildCreatePayload).toHaveBeenCalledWith('/volumes/g1/sv1');
+    expect(component.scheduleStep.buildCreatePayload).toHaveBeenCalledWith('/volumes/g1/sv2');
+    expect(snapshotScheduleServiceMock.create).toHaveBeenCalledTimes(2);
     expect(
       notificationServiceMock.show.mock.calls.filter(([type]) => type === NotificationType.success)
         .length
@@ -147,7 +168,8 @@ describe('CephfsAddMirroringPathComponent', () => {
       getSubmitPaths: () => ({
         toAdd: ['/volumes/g1/sv1', '/volumes/g1/sv2'],
         alreadyMirrored: []
-      })
+      }),
+      getSelectedPaths: () => ['/volumes/g1/sv1', '/volumes/g1/sv2']
     });
 
     cephfsServiceMock.addMirrorDirectory.mockImplementation((_fs: string, path: string) =>
@@ -179,7 +201,8 @@ describe('CephfsAddMirroringPathComponent', () => {
       getSubmitPaths: () => ({
         toAdd: ['/volumes/g1/sv1', '/volumes/g1/sv2'],
         alreadyMirrored: []
-      })
+      }),
+      getSelectedPaths: () => ['/volumes/g1/sv1', '/volumes/g1/sv2']
     });
 
     cephfsServiceMock.addMirrorDirectory.mockImplementation((_fs: string, path: string) =>
@@ -204,6 +227,51 @@ describe('CephfsAddMirroringPathComponent', () => {
       ['/cephfs/mirroring', { outlets: { modal: null } }],
       { state: { reload: true } }
     );
+  }));
+
+  it('should create snapshot schedules for already mirrored paths without adding mirror paths', fakeAsync(() => {
+    component.ngOnInit();
+    mockValidPathsStep({
+      getSubmitPaths: () => ({
+        toAdd: [],
+        alreadyMirrored: ['/volumes/g1/sv1']
+      }),
+      getSelectedPaths: () => ['/volumes/g1/sv1']
+    });
+
+    component.onSubmit();
+    tick();
+    flush();
+
+    expect(cephfsServiceMock.addMirrorDirectory).not.toHaveBeenCalled();
+    expect(snapshotScheduleServiceMock.create).toHaveBeenCalledTimes(1);
+    expect(snapshotScheduleServiceMock.create).toHaveBeenCalledWith({
+      path: '/volumes/g1/sv1',
+      fs: 'testfs'
+    });
+    expect(routerNavigateSpy).toHaveBeenCalledWith(
+      ['/cephfs/mirroring', { outlets: { modal: null } }],
+      { state: { reload: true } }
+    );
+  }));
+
+  it('should create snapshot schedules for multiple already mirrored paths', fakeAsync(() => {
+    component.ngOnInit();
+    mockValidPathsStep({
+      getSubmitPaths: () => ({
+        toAdd: [],
+        alreadyMirrored: ['/volumes/g1/sv1', '/volumes/g1/sv2']
+      }),
+      getSelectedPaths: () => ['/volumes/g1/sv1', '/volumes/g1/sv2']
+    });
+
+    component.onSubmit();
+    tick();
+    flush();
+
+    expect(snapshotScheduleServiceMock.create).toHaveBeenCalledTimes(2);
+    expect(component.scheduleStep.buildCreatePayload).toHaveBeenCalledWith('/volumes/g1/sv1');
+    expect(component.scheduleStep.buildCreatePayload).toHaveBeenCalledWith('/volumes/g1/sv2');
   }));
 
   it('should close modal outlet on cancel without reload', () => {
@@ -234,6 +302,8 @@ describe('CephfsAddMirroringPathComponent', () => {
           useValue: { navigate: routerNavigateSpy }
         },
         { provide: CephfsService, useValue: cephfsServiceMock },
+        { provide: CephfsSnapshotScheduleService, useValue: snapshotScheduleServiceMock },
+        { provide: TaskWrapperService, useValue: taskWrapperMock },
         { provide: NotificationService, useValue: notificationServiceMock }
       ],
       schemas: [NO_ERRORS_SCHEMA]

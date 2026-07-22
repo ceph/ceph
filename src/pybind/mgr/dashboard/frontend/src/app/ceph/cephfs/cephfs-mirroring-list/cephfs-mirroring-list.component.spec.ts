@@ -20,7 +20,7 @@ describe('CephfsMirroringListComponent', () => {
   };
 
   const authStorageServiceMock = {
-    getPermissions: jest.fn().mockReturnValue({ cephfs: {} as Permission })
+    getPermissions: jest.fn().mockReturnValue({ cephfsMirror: {} as Permission })
   };
 
   beforeEach(async () => {
