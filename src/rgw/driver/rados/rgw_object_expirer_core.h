@@ -26,7 +26,7 @@
 
 #include "include/common_fwd.h"
 #include "include/utime.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 
 #include "rgw_sal_rados.h"
 

@@ -10,7 +10,7 @@
 #include <string_view>
 
 #include "common/ceph_crypto.h"
-#include "common/split.h"
+#include "include/str_lib.h"
 #include "common/Formatter.h"
 #include "common/utf8.h"
 #include "common/ceph_json.h"
