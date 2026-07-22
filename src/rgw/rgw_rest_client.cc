@@ -8,7 +8,6 @@
 #include "rgw_http_errors.h"
 
 #include "common/strtol.h"
-#include "include/str_list.h"
 #include "rgw_crypt_sanitize.h"
 
 #define dout_context g_ceph_context
