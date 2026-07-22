@@ -397,81 +397,13 @@
                   id="erasureProfile"
                   i18n-helperText
                 >
-                </svg>
-              </cds-icon-button>
-            </cds-tooltip>
-            } @else {
-            <cds-icon-button
-              kind="danger"
-              size="md"
-              (click)="deleteErasureCodeProfile()"
-            >
-              <svg
-                cdsIcon="trash-can"
-                size="32"
-                class="cds--btn__icon"
-              >
-              </svg>
-            </cds-icon-button>
-            }
-          </div>
-          }
-        </div>
-        }
-
-        <div
-          class="form-item"
-          cdsRow
-        >
-          <div
-            cdsCol
-          >
-            @if (data.erasureInfo) {
-            <span
-              class="form-text text-muted"
-              id="ecp-info-block"
-            >
-              <cds-tabs
-                [type]="'contained'"
-                [followFocus]="true"
-                [isNavigation]="false"
-                [cacheActive]="true"
-              >
-                <cds-tab
-                  heading="Profile"
-                  i18n-heading
-                  [tabContent]="profilTpl"
-                >
-                </cds-tab>
-                <cds-tab
-                  heading="Used by pools"
-                  i18n-heading
-                  [tabContent]="usedPoolTpl"
-                >
-                </cds-tab>
-              </cds-tabs>
-              <ng-template #profilTpl>
-                <cd-table-key-value
-                  [renderObjects]="true"
-                  [hideKeys]="['name']"
-                  [data]="getEcpProfileDetails()"
-                  [preserveOrder]="true"
-                  [autoReload]="false"
-                >
-                </cd-table-key-value>
-              </ng-template>
-              <ng-template #usedPoolTpl>
-                <ng-template #ecpIsNotUsed>
-                  <span i18n>
-                    Profile is not in use.
-                  </span>
-                </ng-template>
-                @if (ecpUsage) {
-                <ul>
-                  @for (pool of ecpUsage; track pool) {
-                  <li>
-                    {{ pool }}
-                  </li>
+                  @if (!ecProfiles) {
+                    <option
+                      value=""
+                      i18n
+                    >
+                      Loading...
+                    </option>
                   }
                   @if (ecProfiles && ecProfiles.length === 0) {
                     <option
@@ -604,7 +536,8 @@
                     <cd-table-key-value
                       [renderObjects]="true"
                       [hideKeys]="['name']"
-                      [data]="selectedEcp"
+                      [data]="getEcpProfileDetails()"
+                      [preserveOrder]="true"
                       [autoReload]="false"
                     >
                     </cd-table-key-value>
