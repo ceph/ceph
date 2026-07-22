@@ -245,6 +245,10 @@ void mClockScheduler::set_osd_capacity_params_from_config()
           << ", osd_bandwidth_capacity_per_shard "
           << osd_bandwidth_capacity_per_shard << " bytes/second"
           << dendl;
+
+  scheduler_max_starve_time = is_rotational
+    ? cct->_conf.get_val<double>("osd_mclock_max_starve_time_hdd")
+    : scheduler_max_starve_time_ssd;
 }
 
 /**
@@ -512,6 +516,37 @@ void mClockScheduler::enqueue_high(unsigned priority,
 
 WorkItem mClockScheduler::dequeue()
 {
+  if (!high_priority.empty() && mclock_queue_is_starved()) {
+    // The mclock-managed queue has pending work that has gone unserviced
+    // for at least high_priority_max_starve_time because high_priority
+    // keeps being refilled. Give it one guaranteed try so classes like
+    // background_best_effort (e.g. scrub, backfill etc.) make forward
+    // progress instead of being starved indefinitely -- see tracker 69078.
+    auto fmt_prio = [this](priority_t p) -> std::string {
+      return (p == immediate_class_priority) ? "MAX" : std::to_string(p);
+    };
+    dout(10) << __func__ << " mclock queue starved for at least "
+             << scheduler_max_starve_time
+             << "s behind high_priority backlog (priority queues: "
+             << high_priority.size();
+    for (const auto& [prio, queue] : high_priority) {
+      *_dout << ", priority " << fmt_prio(prio) << ": " << queue.size();
+    }
+    *_dout << "), forcing a dequeue attempt" << dendl;
+
+    mclock_queue_t::PullReq result = scheduler.pull_request();
+    if (result.is_retn()) {
+      auto &retn = result.get_retn();
+      _put_mclock_counter(retn.client);
+      last_mclock_service_time = crimson::dmclock::get_time();
+
+      return std::move(*retn.request);
+    }
+    // Nothing was actually ready as per mclock's own reservation/limit tags
+    // -- fall through and serve high_priority as usual; the starvation check
+    // will retry on the next call.
+  }
+
   if (!high_priority.empty()) {
     auto iter = high_priority.begin();
     // invariant: high_priority entries are never empty
@@ -543,6 +578,7 @@ WorkItem mClockScheduler::dequeue()
 
       auto &retn = result.get_retn();
       _put_mclock_counter(retn.client);
+      last_mclock_service_time = crimson::dmclock::get_time();
       return std::move(*retn.request);
     }
   }
@@ -572,6 +608,7 @@ const char** mClockScheduler::get_tracked_conf_keys() const
     "osd_mclock_max_sequential_bandwidth_hdd",
     "osd_mclock_max_sequential_bandwidth_ssd",
     "osd_mclock_profile",
+    "osd_mclock_max_starve_time_hdd",
     NULL
   };
   return KEYS;
@@ -592,6 +629,9 @@ void mClockScheduler::handle_conf_change(
     set_osd_capacity_params_from_config();
     client_registry.update_from_config(
       conf, osd_bandwidth_capacity_per_shard);
+  }
+  if (changed.count("osd_mclock_max_starve_time_hdd")) {
+    set_osd_capacity_params_from_config();
   }
   if (changed.count("osd_mclock_profile")) {
     set_config_defaults_from_profile();

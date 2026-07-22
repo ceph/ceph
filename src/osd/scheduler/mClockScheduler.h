@@ -153,6 +153,29 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
    */
   double osd_bandwidth_capacity_per_shard;
 
+  /**
+   * scheduler_max_starve_time / scheduler_max_starve_time_ssd
+   *
+   * Upper bound (secs) on how long the mClock managed queue may go unserviced
+   * while high_priority drain keeps being refilled, before yielding it one
+   * forced dequeue attempt. Without this, a sustained stream of high_priority
+   * traffic can starve the various mClock managed classes.
+   *
+   * Device-specific starve times: A HDD's own natural service time is multi-
+   * millisecond, and so the default 250ms bound is a modest multiple of that.
+   * See 'osd_mclock_max_starve_time_hdd' for more details. Flash devices
+   * complete a normal op much faster (sub millisecond), so the bound is
+   * tightened to a much shorter window of 50ms. This has been validated by
+   * real hardware testing and stays as an internal constant.
+   *
+   * But validation is not done on HDD test hardware and therefore it's exposed
+   * as a config option mentioned above with a default of 250ms and bound to
+   * [100ms, 500ms] rather than hardcode it. Thus is to allow an operator some
+   * flexibility in case a given HDD fleet needs a different value.
+   */
+  double scheduler_max_starve_time = 0.0;
+  static constexpr double scheduler_max_starve_time_ssd = 0.05; // 50 msec
+
   class ClientRegistry {
     std::array<
       crimson::dmclock::ClientInfo,
@@ -202,6 +225,23 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
    */
   SubQueue high_priority;
   priority_t immediate_class_priority = std::numeric_limits<priority_t>::max();
+
+  /**
+   * last_mclock_service_time
+   *
+   * Time (per crimson::dmclock::get_time()) at which an item was last
+   * successfully pulled from the mclock-managed queue (scheduler).
+   * TimeZero means "never" and is treated as already-expired.
+   */
+  crimson::dmclock::Time last_mclock_service_time = crimson::dmclock::TimeZero;
+
+  /// True if the mclock-managed queue has pending work that has gone
+  /// unserviced for at least high_priority_max_starve_time.
+  bool mclock_queue_is_starved() const {
+    return !scheduler.empty() &&
+      (crimson::dmclock::get_time() - last_mclock_service_time) >=
+        scheduler_max_starve_time;
+  }
 
   static scheduler_id_t get_scheduler_id(const OpSchedulerItem &item) {
     return scheduler_id_t{
