@@ -184,7 +184,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
     );
   }
 
-  onNotificationSelected(event) {
+  onNotificationSelected(event: Event) {
     event.stopPropagation();
     const currentState = this.notificationService.getPanelState();
     this.notificationService.setPanelState(!currentState);
