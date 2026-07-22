@@ -20,7 +20,7 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "include/compat.h"
 #include "common/Cycles.h"
 #include "common/deleter.h"
