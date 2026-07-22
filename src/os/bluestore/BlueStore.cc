@@ -12857,31 +12857,34 @@ int BlueStore::set_collection_opts(
   if (c->pool_opts.get(pool_opts_t::COMPRESSION_REQUIRED_RATIO, &dval)) {
     c->compression_req_ratio = dval;
   }
+  _update_reformat_engines(c);
   return 0;
 }
 
-void BlueStore::_maybe_need_reformat_onode(OnodeReformatContext& reformat_ctx,
-  Collection* c)
+void BlueStore::_update_reformat_engines(Collection* c)
 {
   std::string opt_reformat;
   c->pool_opts.get(pool_opts_t::DEEP_SCRUB_REFORMAT, &opt_reformat);
   boost::char_separator<char> sep(";,"); // Delimiters are semicolon and comma
   boost::tokenizer<boost::char_separator<char>> tokens(opt_reformat, sep);
-
+  reformat_engines_t new_engines;
   for (const auto& t : tokens) {
-    std::string_view sv(t);
-    sv.remove_prefix(std::min(sv.find_first_not_of(" \t\n\r\f\v"), sv.size()));
-    int pri = -1;
-    if (sv.starts_with("recompress")) {
-      pri = OnodeReformatContext::RECOMPRESS_ENGINE;
-    } else if (sv.starts_with("defragment")) {
-      pri = OnodeReformatContext::DEFRAGMENT_ENGINE;
+    std::string_view args(t);
+    args.remove_prefix(
+      std::min(args.find_first_not_of(" \t\n\r\f\v"), args.size()));
+    int e = -1;
+    OnodeReformatEngine* engine = nullptr;
+    if (args.starts_with("recompress")) {
+      e = RECOMPRESS_ENGINE;
+      engine = new OnodeReformatRecompressEngine(args);
+    } else if (args.starts_with("defragment")) {
+      e = DEFRAGMENT_ENGINE;
+      engine = new OnodeReformatDefragmentEngine(args);
     }
-    ceph_assert(pri < OnodeReformatContext::MAX_ENGINES);
-    if (pri >= 0) {
-      reformat_ctx.maybe_enable_engine(pri, sv);
-    }
+    ceph_assert(e < MAX_REFORMAT_ENGINES);
+    new_engines[e].reset(engine);
   }
+  std::swap(c->reformat_engines, new_engines);
 }
 
 void BlueStore::_maybe_do_reformat_onode(OnodeReformatContext& reformat_ctx,
@@ -12906,7 +12909,8 @@ void BlueStore::_maybe_do_reformat_onode(OnodeReformatContext& reformat_ctx,
     dout(25) << __func__ << " span stat {" << span_stat << "}" << dendl;
     _dump_onode<25>(cct, *o);
 
-    reformat_ctx.exec_engines();
+    ceph_assert(logger);
+    reformat_ctx.exec_engines(*logger, c, o);
     if (reformat_ctx.is_applied()) {
       _txc_exec_reformat_write(c, o, offset, length, bl, wctx);
     }
@@ -12939,23 +12943,7 @@ int BlueStore::read(
 	   << std::dec << dendl;
   if (!c->exists)
     return -ENOENT;
-
-  OnodeReformatContext reformat_ctx(this, logger); // don't want to add new getter
-                                                   // for BlueStore::logger,
-						   // hence pass it from here
-  reformat_ctx.add_engine(
-    OnodeReformatContext::RECOMPRESS_ENGINE,
-    new OnodeReformatBasicValidateAction(
-      offset, length, op_flags, min_alloc_size),
-    new OnodeReformatRecompressAction(
-      c, offset, length, bl, min_alloc_size));
-  reformat_ctx.add_engine(
-    OnodeReformatContext::DEFRAGMENT_ENGINE,
-    new OnodeReformatBasicValidateAction(
-      offset, length, op_flags, min_alloc_size),
-    new OnodeReformatDefragmentAction(
-      offset, length, min_alloc_size));
-  return _do_read(c, oid, offset, length, bl, op_flags, reformat_ctx);
+  return _do_read(c, oid, offset, length, bl, op_flags);
 }
 
 int BlueStore::_do_read(Collection* c,
@@ -12963,19 +12951,20 @@ int BlueStore::_do_read(Collection* c,
 			uint64_t offset,
 			size_t length,
 			bufferlist& bl,
-			uint32_t op_flags,
-			OnodeReformatContext& reformat_ctx)
+			uint32_t op_flags)
 {
   int r;
   auto start = mono_clock::now();
-  _maybe_need_reformat_onode(reformat_ctx, c);
   {
-    std::shared_lock slock(c->lock, std::defer_lock);
+    read_context_t read_ctx(*this, offset, length, bl, op_flags);
+    std::shared_lock slock(c->lock); // we need a shared lock to access
+                                     // reformat_engines from collection
+    OnodeReformatContext reformat_ctx(read_ctx, c->reformat_engines);
+
     std::unique_lock ulock(c->lock, std::defer_lock);
     if (reformat_ctx.is_enabled()) {
+      slock.unlock();
       ulock.lock();
-    } else {
-      slock.lock();
     }
 
     auto start1 = mono_clock::now();

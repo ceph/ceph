@@ -73,6 +73,9 @@ class FreelistManager;
 class BlueStoreRepairer;
 class SimpleBitmap;
 class OnodeReformatContext;
+class OnodeReformatEngine;
+using reformat_engines_t =
+  std::array<std::shared_ptr<OnodeReformatEngine>, MAX_REFORMAT_ENGINES>;
 
 //#define DEBUG_CACHE
 //#define DEBUG_DEFERRED
@@ -1759,6 +1762,7 @@ public:
     std::optional<int64_t> comp_min_blob_size;
     std::optional<int64_t> comp_max_blob_size;
     std::optional<double> compression_req_ratio;
+    reformat_engines_t reformat_engines;
 
     ContextQueue *commit_queue;
     std::unique_ptr<Estimator> estimator;
@@ -1817,6 +1821,34 @@ public:
     void flush_all_but_last();
 
     Collection(BlueStore *ns, OnodeCacheShard *oc, BufferCacheShard *bc, coll_t c);
+  };
+
+  struct read_context_t {
+    BlueStore& store;
+    uint64_t offset;
+    size_t length;
+    bufferlist& bl;
+    uint32_t op_flags;
+    read_context_t(BlueStore& _store,
+        uint64_t _offset,
+        size_t _length,
+        bufferlist& _bl,
+        uint32_t _op_flags) :
+      store(_store),
+      offset(_offset),
+      length(_length),
+      bl(_bl),
+      op_flags(_op_flags)
+    {
+    }
+    read_context_t(const read_context_t& other) :
+      store(other.store),
+      offset(other.offset),
+      length(other.length),
+      bl(other.bl),
+      op_flags(other.op_flags)
+    {
+    }
   };
 
   struct volatile_statfs{
@@ -3412,8 +3444,7 @@ private:
     uint64_t offset,
     size_t len,
     ceph::buffer::list& bl,
-    uint32_t op_flags,
-    OnodeReformatContext& reformat_ctx);
+    uint32_t op_flags);
 
   int _do_basic_read(
     Collection *c,
@@ -3958,8 +3989,7 @@ private:
     OnodeRef& o,
     WriteContext *wctx);
 
-  void _maybe_need_reformat_onode(OnodeReformatContext& ctx,
-    Collection* c);
+  void _update_reformat_engines(Collection* c);
   void _maybe_do_reformat_onode(OnodeReformatContext& ctx,
     Collection* c,
     OnodeRef& o,
