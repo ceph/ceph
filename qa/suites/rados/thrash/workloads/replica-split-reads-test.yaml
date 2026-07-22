@@ -3,6 +3,11 @@ overrides:
     crush_tunables: jewel
     log-ignorelist:
       - \(POOL_APP_NOT_ENABLED\)
+    conf:
+      client:
+        debug objecter: 20
+        debug rados: 20
+        debug ms: 1
 tasks:
 - rados:
     clients: [client.0]
