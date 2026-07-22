@@ -46,7 +46,7 @@
   "dependencies": {
     "@angular/animations": "19.2.25",
     "@angular/common": "19.2.25",
-    "@angular/compiler": "19.2.25",
+    "@angular/compiler": "20.3.25",
     "@angular/core": "19.2.25",
     "@angular/forms": "19.2.25",
     "@angular/localize": "19.2.25",
