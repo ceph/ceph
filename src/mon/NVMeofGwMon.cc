@@ -452,6 +452,8 @@ bool NVMeofGwMon::nvme_gw_show_command(ceph::Formatter* f, bufferlist &rdata, co
   f->dump_unsigned("epoch", map.epoch);
   f->dump_string("pool", pool);
   f->dump_string("group", group);
+  f->dump_bool("beacon_diff_enabled",
+               map.published_features & NVMeofGwMap::FLAG_BEACONDIFF);
   if (HAVE_FEATURE(mon.get_quorum_con_features(), NVMEOFHA)) {
     f->dump_string("features", "LB");
     if (map.created_gws[group_key].size()) {
@@ -505,13 +507,26 @@ bool NVMeofGwMon::nvme_gw_show_command(ceph::Formatter* f, bufferlist &rdata, co
       f->open_object_section("stat");
       f->dump_string("gw-id", gw_id);
       f->dump_unsigned("anagrp-id",state.ana_grp_id+1);
+      f->dump_string("location", state.location);
+      bool cleanup_in_process;
+      bool is_disaster = map.is_location_in_disaster
+	             (group_key, state.location, cleanup_in_process);
+      if (is_disaster) {
+        std::string disaster_state = (cleanup_in_process) ? "Disaster-cleanup":
+	                              "Disaster";
+        f->dump_string("disaster state", disaster_state);
+      }
+      std::string admin_state = (state.gw_admin_state ==
+	    gw_admin_state_t::GW_ADMIN_ENABLED) ? "ENABLED" : "DISABLED";
+      f->dump_string("admin state", admin_state);
       f->dump_unsigned("num-namespaces", num_ns[state.ana_grp_id+1]);
       f->dump_unsigned("performed-full-startup", state.performed_full_startup);
       std::stringstream  sstrm1;
       sstrm1 << state.availability;
       f->dump_string("Availability", sstrm1.str());
       uint32_t num_listeners = 0;
-      if (state.availability == gw_availability_t::GW_AVAILABLE) {
+      if ((state.availability == gw_availability_t::GW_AVAILABLE) ||
+          (state.availability == gw_availability_t::GW_CREATED)) {
         for (auto &subs: state.subsystems) {
           num_listeners += subs.listeners.size();
         }
