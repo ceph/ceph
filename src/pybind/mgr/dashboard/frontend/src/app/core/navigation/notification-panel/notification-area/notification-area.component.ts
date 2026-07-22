@@ -98,8 +98,10 @@ export class NotificationAreaComponent implements OnInit, OnDestroy {
 
   navigateToNotification(notification: CdNotification) {
     this.notificationService.togglePanel(false);
+    const isAlreadyOnPage = this.router.url.startsWith('/notifications');
     this.router.navigate(['/notifications'], {
-      queryParams: { id: notification.id }
+      queryParams: { id: notification.id },
+      replaceUrl: isAlreadyOnPage
     });
   }
 
