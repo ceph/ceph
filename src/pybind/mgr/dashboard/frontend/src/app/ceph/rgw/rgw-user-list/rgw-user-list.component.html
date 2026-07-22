@@ -7,8 +7,6 @@
   [columns]="columns"
   columnMode="flex"
   selectionType="single"
-  [hasDetails]="true"
-  (setExpandedRow)="setExpandedRow($event)"
   (updateSelection)="updateSelection($event)"
   identifier="uid"
   (fetchData)="getUserList($event)"
@@ -21,11 +19,6 @@
     [tableActions]="tableActions"
   >
   </cd-table-actions>
-  <cd-rgw-user-details
-    *cdTableDetail
-    [selection]="expandedRow"
-  >
-  </cd-rgw-user-details>
 </cd-table>
 
 <ng-template
@@ -69,8 +62,14 @@
   #usernameTpl
   let-row="data.row"
 >
-  <div cdsRow>
-    <span i18n>{{ row.uid }}</span>
+  <div class="username-cell">
+    <a
+      cdsLink
+      [routerLink]="[viewUrl, row.uid | encodeUri, 'overview']"
+      (click)="$event.stopPropagation()"
+    >
+      {{ row.uid }}
+    </a>
     @if (row.type === 'root') {
       <cds-tooltip
         [description]="'Account root user'"

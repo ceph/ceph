@@ -1,0 +1,115 @@
+@if (user) {
+  @switch (section) {
+    @case ('overview') {
+      <cd-resource-overview-card
+        title="User details"
+        [columns]="4"
+        [fields]="overviewFields"
+        i18n-title
+      >
+      </cd-resource-overview-card>
+
+      @if (keys.length) {
+        <div class="cds-mt-6 cds-mb-6">
+          <h2
+            class="cds--type-heading-03"
+            i18n
+          >
+            Keys
+          </h2>
+          <p
+            class="cds--type-body-compact-01"
+            i18n
+          >
+            View the user key details, including access and secret keys.
+          </p>
+          <cd-table
+            [data]="keys"
+            [columns]="keysColumns"
+            columnMode="flex"
+            forceIdentifier="true"
+          >
+          </cd-table>
+        </div>
+      }
+
+      @if (user.user_quota) {
+        <section class="cds-mt-6 cds-mb-6">
+          <h2
+            class="cds--type-heading-03"
+            i18n
+          >
+            User Quota
+          </h2>
+          <p
+            class="cds--type-body-compact-01"
+            i18n
+          >
+            View the user quota details, including maximum object and size.
+          </p>
+          <cd-table-key-value [data]="userQuota"></cd-table-key-value>
+        </section>
+      }
+
+      @if (user.bucket_quota) {
+        <section class="cds-mb-6">
+          <h2
+            class="cds--type-heading-03"
+            i18n
+          >
+            Bucket Quota
+          </h2>
+          <p
+            class="cds--type-body-compact-01"
+            i18n
+          >
+            View the bucket quota details, including maximum object and size.
+          </p>
+          <cd-table-key-value [data]="bucketQuota"></cd-table-key-value>
+        </section>
+      }
+
+      @if (user.user_ratelimit) {
+        <h2
+          class="user-resource-section__title cds--type-heading-03"
+          i18n
+        >
+          User Rate Limit
+        </h2>
+        <p
+          class="user-resource-section__description cds--type-body-compact-01"
+          i18n
+        >
+          View the user rate limit details.
+        </p>
+        <cd-rgw-rate-limit-details
+          [rateLimitConfig]="user.user_ratelimit"
+          [type]="'user'"
+          [showHeading]="false"
+        >
+        </cd-rgw-rate-limit-details>
+      }
+    }
+  }
+} @else if (notFound) {
+  <cd-alert-panel
+    type="error"
+    i18n
+    >No user found.</cd-alert-panel
+  >
+}
+
+<ng-template
+  #viewKeyTpl
+  let-row="data.row"
+>
+  <a
+    cdsLink
+    tabindex="0"
+    (click)="showKeyModal(row); $event.stopPropagation()"
+    (keydown.enter)="showKeyModal(row); $event.stopPropagation()"
+    i18n
+  >
+    Show
+  </a>
+</ng-template>
