@@ -32,7 +32,7 @@ import {
   HardwareCardVM,
   buildHardwareCardVM
 } from '~/app/shared/models/overview';
-import { AlertState } from '~/app/shared/models/prometheus-alerts';
+import { AlertmanagerAlert, AlertState } from '~/app/shared/models/prometheus-alerts';
 import { HardwareService } from '~/app/shared/api/hardware.service';
 import { HealthService } from '~/app/shared/api/health.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
@@ -155,8 +155,9 @@ export class OverviewHealthCardComponent {
     map(
       () =>
         this.prometheusAlertService.alerts.filter(
-          (a) =>
-            a.status.state === AlertState.ACTIVE && a.labels.alertname?.startsWith(PG_ALERT_PREFIX)
+          (alert: AlertmanagerAlert) =>
+            alert.status.state === AlertState.ACTIVE &&
+            alert.labels.alertname?.startsWith(PG_ALERT_PREFIX)
         ).length
     ),
     startWith(0)
