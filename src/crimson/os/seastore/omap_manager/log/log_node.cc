@@ -323,15 +323,10 @@ bool LogNode::expect_overflow(const std::string &key,
   size_t vsize, bool can_ow) {
   size_t ksize = key.size();
   if (can_ow) { 
-    int gap = ow_gap_from_last_entry(key.size(), vsize);
-    if (gap >= 0) {
-      gap += static_cast<uint64_t>(gap);
-    } else {
-      uint64_t d = static_cast<uint64_t>(-gap);
-      gap -= d;
-    }
-    return get_last_pos() + reserved_len + get_entry_size(ksize, vsize)
-           > capacity();
+    // Reserve only the additional space required by the overwrite.
+    int gap = ow_gap_from_last_entry(ksize, vsize);
+    return gap > 0 &&
+      free_space() < static_cast<size_t>(gap) + reserved_len;
   } else if (get_size() + reserved_size + 1 > d_bitmap_t::MAX_ENTRY) {
     return true;
   } else if (is_ow_key(key) && !can_ow) {
