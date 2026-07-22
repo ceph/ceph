@@ -7,7 +7,7 @@
 
 #include <boost/algorithm/string/predicate.hpp>
 
-#include "common/split.h"
+#include "include/str_lib.h"
 #include "rgw_common.h"
 #include "rgw_op.h"
 #include "rgw_op_internal.h"

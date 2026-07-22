@@ -17,7 +17,7 @@
 
 #include "services/svc_zone.h"
 
-#include "include/str_list.h"
+#include "include/str_lib.h"
 
 #include <boost/asio/yield.hpp>
 
@@ -41,11 +41,7 @@ class ItemList {
   set<string> suffixes;
 
   void parse(const string& str) {
-    list<string> l;
-
-    get_str_list(str, ",", l);
-
-    for (auto& entry : l) {
+    for (auto entry : ceph::split(str, ",")) {
       entry = rgw_trim_whitespace(entry);
       if (entry.empty()) {
         continue;
@@ -57,16 +53,16 @@ class ItemList {
       }
 
       if (entry[0] == '*') {
-        suffixes.insert(entry.substr(1));
+        suffixes.emplace(entry.substr(1));
         continue;
       }
 
       if (entry.back() == '*') {
-        prefixes.insert(entry.substr(0, entry.size() - 1));
+        prefixes.emplace(entry.substr(0, entry.size() - 1));
         continue;
       }
 
-      entries.insert(entry);
+      entries.emplace(entry);
     }
   }
 
@@ -957,4 +953,3 @@ int RGWElasticSyncModule::create_instance(const DoutPrefixProvider *dpp, CephCon
   instance->reset(new RGWElasticSyncModuleInstance(dpp, cct, config));
   return 0;
 }
-

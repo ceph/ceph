@@ -15,9 +15,8 @@
 #include "ceph_ver.h"
 #include "common/HTMLFormatter.h"
 #include "common/XMLFormatter.h"
-#include "common/split.h"
 #include "common/utf8.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "rgw_common.h"
 #include "rgw_zone.h"
 #include "rgw_auth_s3.h"
@@ -187,19 +186,17 @@ void rgw_rest_init(CephContext *cct, const rgw::sal::ZoneGroup& zone_group)
     generic_attrs_map[http2rgw.http_header] = http2rgw.rgw_attr;
   }
 
-  list<string> extended_http_attrs;
-  get_str_list(cct->_conf->rgw_extended_http_attrs, extended_http_attrs);
-
-  list<string>::iterator iter;
-  for (iter = extended_http_attrs.begin(); iter != extended_http_attrs.end(); ++iter) {
+  for (const auto attr_view :
+       ceph::split(cct->_conf->rgw_extended_http_attrs)) {
+    const std::string attr { attr_view };
     string rgw_attr = RGW_ATTR_PREFIX;
     // bidirectional mimics the '-' -> '_' behavior
-    lowercase_dash_transform(*iter, std::back_inserter(rgw_attr), true);
+    lowercase_dash_transform(attr, std::back_inserter(rgw_attr), true);
 
-    rgw_to_http_attrs[rgw_attr] = camelcase_dash_http_attr(*iter);
+    rgw_to_http_attrs[rgw_attr] = camelcase_dash_http_attr(attr);
 
     string http_header = "HTTP_";
-    uppercase_dash_transform(*iter, std::back_inserter(http_header));
+    uppercase_dash_transform(attr, std::back_inserter(http_header));
 
     generic_attrs_map[http_header] = rgw_attr;
   }
@@ -208,10 +205,10 @@ void rgw_rest_init(CephContext *cct, const rgw::sal::ZoneGroup& zone_group)
     http_status_names[h->code] = h->name;
   }
 
-  std::list<std::string> rgw_dns_names;
   std::string rgw_dns_names_str = cct->_conf->rgw_dns_name;
-  get_str_list(rgw_dns_names_str, ", ", rgw_dns_names);
-  hostnames_set.insert(rgw_dns_names.begin(), rgw_dns_names.end());
+  for (const auto name : ceph::split(rgw_dns_names_str, ", ")) {
+    hostnames_set.emplace(name);
+  }
 
   std::list<std::string> names;
   zone_group.get_hostnames(names);
@@ -2036,10 +2033,10 @@ RGWRESTMgr* RGWRESTMgr::get_resource_mgr(req_state* const s,
 
 void RGWREST::register_x_headers(const string& s_headers)
 {
-  std::vector<std::string> hdrs = get_str_vec(s_headers);
-  for (auto& hdr : hdrs) {
+  for (const auto header : ceph::split(s_headers)) {
+    std::string hdr { header };
     boost::algorithm::to_upper(hdr); // XXX
-    (void) x_headers.insert(hdr);
+    (void) x_headers.insert(std::move(hdr));
   }
 }
 
