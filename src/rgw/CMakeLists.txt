@@ -132,6 +132,7 @@ set(librgw_common_srcs
   rgw_object_lock.cc
   rgw_kms.cc
   rgw_kms_cache.cc
+  rgw_sts_keyring_cache.cc
   rgw_kmip_client.cc
   rgw_url.cc
   rgw_oidc_provider.cc

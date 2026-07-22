@@ -27,6 +27,7 @@
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "rgw_kms_cache.h"
+#include "rgw_sts_keyring_cache.h"
 #include "rgw_main.h"
 #include "rgw_asio_thread.h"
 #include "rgw_common.h"
@@ -292,7 +293,7 @@ void rgw::AppMain::cond_init_apis()
     // S3 website mode is a specialization of S3
     const bool s3website_enabled = apis_set.contains("s3website");
     const bool s3control_enabled = apis_set.contains("s3control");
-    const bool sts_enabled = apis_set.contains("sts");
+    sts_api_enabled = apis_set.contains("sts");
     const bool iam_enabled = apis_set.contains("iam");
     const bool pubsub_enabled =
         apis_set.contains("pubsub") || apis_set.contains("notifications");
@@ -302,7 +303,7 @@ void rgw::AppMain::cond_init_apis()
       if (!swift_at_root) {
         rest.register_default_mgr(set_logging(
             rest_filter(env.driver, RGW_REST_S3,
-                        new RGWRESTMgr_S3(s3control_enabled, s3website_enabled, sts_enabled,
+                        new RGWRESTMgr_S3(s3control_enabled, s3website_enabled, sts_api_enabled,
                                           iam_enabled, pubsub_enabled))));
       } else {
         derr << "Cannot have the S3 or S3 Website enabled together with "
@@ -538,6 +539,9 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
     if (dedup_background) {
       rgw_pauser->add_pauser(dedup_background.get());
     }
+      if (env.sts_keyring) {
+        rgw_pauser->add_pauser(env.sts_keyring.get());
+      }
       reloader = std::make_unique<RGWRealmReloader>(
           env, *implicit_tenant_context, service_map_meta, rgw_pauser.get(), *context_pool);
       realm_watcher->add_watcher(RGWRealmNotify::Reload, *reloader);
@@ -614,6 +618,27 @@ void rgw::AppMain::init_kms_cache()
       dpp->get_cct(), Keyring::get_best());
 }
 
+void rgw::AppMain::init_sts_keyring()
+{
+  // the cache serves both the STS API (issuing tokens) and S3 STS auth
+  // (verifying them), so build it whenever either is reachable
+  if (!have_http_frontend) {
+    return;
+  }
+  // the keyring lives in the mon config-key store; RadosStore only
+  if (env.driver->get_name() != "rados") {
+    return;
+  }
+  if (!sts_api_enabled && !g_conf().get_val<bool>("rgw_s3_auth_use_sts")) {
+    return;
+  }
+  const auto interval =
+      g_conf().get_val<int64_t>("rgw_sts_keyring_refresh_interval");
+  env.sts_keyring = std::make_unique<STS::KeyringCache>(
+      dpp->get_cct(), env.driver, std::chrono::seconds(interval));
+  env.sts_keyring->start();
+}
+
 void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 {
   // stop the realm reloader
@@ -640,6 +665,9 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 
   if (env.kms_cache) {
     env.kms_cache->stop_ttl_reaper();
+  }
+  if (env.sts_keyring) {
+    env.sts_keyring->stop();
   }
   ldh.reset(nullptr); // deletes ldap helper if it was created
   rgw_log_usage_finalize();

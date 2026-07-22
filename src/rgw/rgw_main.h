@@ -68,6 +68,8 @@ class AppMain {
     * also serving HTTP */
   bool have_http_frontend{false};
   bool nfs{false};
+  // whether rgw_enable_apis includes sts
+  bool sts_api_enabled{false};
 
   std::vector<RGWFrontend*> fes;
   std::vector<RGWFrontendConfig*> fe_configs;
@@ -141,6 +143,7 @@ public:
   void init_tracepoints();
   void init_lua();
   void init_kms_cache();
+  void init_sts_keyring();
 #ifdef WITH_RADOSGW_RADOS
   void init_dedup();
 #endif
