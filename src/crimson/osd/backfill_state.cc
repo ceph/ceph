@@ -398,7 +398,13 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
 
   do {
     if (!backfill_listener().budget_available()) {
-      post_event(RequestWaiting{});
+      if (backfill_state().progress_tracker->tracked_objects_completed()) {
+        INFODPP("backfill budget unavailable with nothing in flight, "
+                "entering BudgetBlocked", pg());
+        post_event(RequestBudgetBlocked{});
+      } else {
+        post_event(RequestWaiting{});
+      }
       return;
     } else if (should_rescan_replicas(backfill_state().peer_backfill_info,
 				      primary_bi)) {
@@ -649,6 +655,51 @@ BackfillState::Waiting::react(Triggered evt)
   if (backfill_state().on_resumed()) {
     DEBUGDPP("Backfill resumed, going Enqueuing", pg());
     return transit<Enqueuing>();
+  }
+  return discard_event();
+}
+
+// -- BudgetBlocked
+BackfillState::BudgetBlocked::BudgetBlocked(my_context ctx)
+  : my_base(ctx)
+{
+  LOG_PREFIX(BackfillState::BudgetBlocked::BudgetBlocked);
+  DEBUGDPP("budget unavailable with nothing in flight, "
+           "waiting for throttle slot to become available", pg());
+  backfill_listener().request_budget_retry();
+}
+
+boost::statechart::result
+BackfillState::BudgetBlocked::react(SuspendBackfill evt)
+{
+  LOG_PREFIX(BackfillState::BudgetBlocked::react::SuspendBackfill);
+  DEBUGDPP("suspended within BudgetBlocked", pg());
+  backfill_state().on_suspended();
+  return discard_event();
+}
+
+boost::statechart::result
+BackfillState::BudgetBlocked::react(Triggered evt)
+{
+  LOG_PREFIX(BackfillState::BudgetBlocked::react::Triggered);
+  ceph_assert(backfill_state().is_suspended());
+  if (backfill_state().on_resumed()) {
+    DEBUGDPP("Backfill resumed, going Enqueuing", pg());
+    return transit<Enqueuing>();
+  }
+  return discard_event();
+}
+
+boost::statechart::result
+BackfillState::BudgetBlocked::react(BudgetAvailable evt)
+{
+  LOG_PREFIX(BackfillState::BudgetBlocked::react::BudgetAvailable);
+  DEBUGDPP("BudgetBlocked::react() on BudgetAvailable", pg());
+  if (!backfill_state().is_suspended()) {
+    return transit<Enqueuing>();
+  } else {
+    DEBUGDPP("backfill suspended, not going Enqueuing", pg());
+    backfill_state().go_enqueuing_on_resume();
   }
   return discard_event();
 }
