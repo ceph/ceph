@@ -1012,5 +1012,13 @@
    fun:gss_acquire_cred
    ...
    fun:sasl_client_start
+}
+{
+   lancedb opendal operator registry static init
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:*alloc
+   ...
+   fun:*opendal*register_default_operator_registry*
    ...
 }

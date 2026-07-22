@@ -597,6 +597,7 @@ option(WITH_RADOSGW_RADOS "RADOS backend for Rados Gateway" ON)
 option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" ON)
 option(WITH_RADOSGW_ARROW_FLIGHT "Build arrow flight when not using system-provided arrow" OFF)
 option(WITH_RADOSGW_BACKTRACE_LOGGING "Enable backtraces in rgw logs" OFF)
+option(WITH_RADOSGW_LANCEDB "Enable lancedb support in RADOS Gateway" ON)
 
 option(WITH_SYSTEM_ARROW "Use system-provided arrow" OFF)
 option(WITH_SYSTEM_UTF8PROC "Use system-provided utf8proc" OFF)
@@ -655,6 +656,41 @@ if(WITH_RADOSGW)
   endif()
   message(STATUS "ssl soname: ${LIBSSL_SONAME}")
   message(STATUS "crypto soname: ${LIBCRYPTO_SONAME}")
+  if(WITH_RADOSGW_LANCEDB)
+    find_program(CARGO_EXECUTABLE cargo)
+    if(CARGO_EXECUTABLE)
+      execute_process(
+        COMMAND ${CARGO_EXECUTABLE} --version
+        OUTPUT_VARIABLE CARGO_VERSION_OUTPUT
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+      string(REGEX MATCH "[0-9]+\\.[0-9]+" CARGO_VERSION "${CARGO_VERSION_OUTPUT}")
+      if(CARGO_VERSION VERSION_LESS "1.78")
+        message(STATUS "System cargo ${CARGO_VERSION} is too old for lancedb (need >= 1.78), installing via rustup")
+        unset(CARGO_EXECUTABLE CACHE)
+      endif()
+    endif()
+    if(NOT CARGO_EXECUTABLE)
+      set(ENV{CARGO_HOME} "${CMAKE_BINARY_DIR}/.cargo")
+      set(ENV{RUSTUP_HOME} "${CMAKE_BINARY_DIR}/.rustup")
+      set(ENV{RUSTUP_INIT_SKIP_PATH_CHECK} "yes")
+      execute_process(
+        COMMAND sh -c "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable"
+        RESULT_VARIABLE RUSTUP_RESULT)
+      if(NOT RUSTUP_RESULT EQUAL 0)
+        message(FATAL_ERROR "Failed to install Rust via rustup. Install cargo >= 1.78 manually or set -DWITH_RADOSGW_LANCEDB=OFF")
+      endif()
+      find_program(CARGO_EXECUTABLE cargo PATHS "${CMAKE_BINARY_DIR}/.cargo/bin" NO_DEFAULT_PATH)
+      if(NOT CARGO_EXECUTABLE)
+        message(FATAL_ERROR "rustup installed but cargo still not found")
+      endif()
+      execute_process(
+        COMMAND ${CARGO_EXECUTABLE} --version
+        OUTPUT_VARIABLE CARGO_VERSION_OUTPUT
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+      message(STATUS "Using rustup-installed cargo: ${CARGO_EXECUTABLE} (${CARGO_VERSION_OUTPUT})")
+      set(ENV{PATH} "${CMAKE_BINARY_DIR}/.cargo/bin:$ENV{PATH}")
+    endif()
+  endif(WITH_RADOSGW_LANCEDB)
 endif (WITH_RADOSGW)
 
 if(WITH_RADOSGW_FDB)

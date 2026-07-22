@@ -41,6 +41,7 @@
 #include "rgw_rest_s3control.h"
 #include "rgw_rest_s3website.h"
 #include "rgw_rest_pubsub.h"
+#include "rgw_rest_s3vector.h"
 #include "rgw_auth_s3.h"
 #include "rgw_acl.h"
 #include "rgw_policy_s3.h"
@@ -2826,12 +2827,10 @@ void RGWCreateBucket_ObjStore_S3::send_response()
     set_req_state_err(s, op_ret);
   }
   dump_errno(s);
-  end_header(s, this);
 
-  if (op_ret < 0)
-    return;
-
-  if (s->system_request) {
+  if (op_ret == 0 && s->system_request) {
+    s->format = RGWFormat::JSON;
+    end_header(s, this, to_mime_type(s->format));
     JSONFormatter f; /* use json formatter for system requests output */
 
     const RGWBucketInfo& info = s->bucket->get_info();
@@ -2842,7 +2841,9 @@ void RGWCreateBucket_ObjStore_S3::send_response()
     encode_json("bucket_info", info, &f);
     f.close_section();
     rgw_flush_formatter_and_reset(s, &f);
+    return;
   }
+  end_header(s, this);
 }
 
 void RGWDeleteBucket_ObjStore_S3::send_response()
@@ -6047,14 +6048,33 @@ void parse_post_action(const std::string& post_body, req_state* s)
   }
 }
 
+// s3vector requests looks like bucket POST operations
+// where the "bucket name" is the operation name.
+// with JSON payload
+// and no user provided params
+// POST /<op name> HTTP/1.1
+// Content-type: application/json
+bool is_s3vector_op(const req_state* s) {
+  const auto content_type = s->info.env->get_optional("CONTENT_TYPE");
+  const auto& params = s->info.args.get_params();
+  return std::string_view(s->info.method) == "POST" &&
+    std::count_if(params.begin(), params.end(), [](const auto& p) {
+        return !p.first.starts_with(RGW_SYS_PARAM_PREFIX);
+    }) == 0 &&
+    content_type &&
+    *content_type == "application/json";
+}
+
 RGWRESTMgr_S3::RGWRESTMgr_S3(bool enable_s3control,
                              bool _enable_s3website,
                              bool _enable_sts,
                              bool _enable_iam,
-                             bool _enable_pubsub)
+                             bool _enable_pubsub,
+                             bool _enable_s3vector)
   : enable_sts(_enable_sts),
     enable_iam(_enable_iam),
-    enable_pubsub(_enable_pubsub)
+    enable_pubsub(_enable_pubsub),
+    enable_s3vector(_enable_s3vector)
 {
   if (enable_s3control) {
     s3control = std::make_unique<RGWRESTMgr_S3Control>();
@@ -6148,6 +6168,21 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Driver* driver,
     return nullptr;
   }
   // has bucket
+  if (enable_s3vector && is_s3vector_op(s)) {
+    ldpp_dout(s, 20) << "INFO: s3vector op: " << s->init_state.url_bucket << dendl;
+    const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+    int ret;
+    bufferlist data;
+    std::tie(ret, data) = rgw_rest_read_all_input(s, max_size, false);
+    if (ret < 0) {
+      return nullptr;
+    }
+    if (!s->info.args.exists("PayloadHash")) {
+      const auto payload_hash = rgw::auth::s3::calc_v4_payload_hash(data.to_str());
+      s->info.args.append("PayloadHash", payload_hash);
+    }
+    return new RGWHandler_REST_s3Vector(auth_registry, data);
+  }
   return new RGWHandler_REST_Bucket_S3(auth_registry, enable_pubsub);
 }
 
@@ -6812,6 +6847,22 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_GET_BUCKET_LOGGING: 
         case RGW_OP_PUT_BUCKET_OWNERSHIP_CONTROLS:
         case RGW_OP_PUT_PUBLIC_ACCESS_BLOCK:
+        case RGW_OP_S3VECTOR_CREATE_INDEX:
+        case RGW_OP_S3VECTOR_CREATE_VECTOR_BUCKET:
+        case RGW_OP_S3VECTOR_DELETE_INDEX:
+        case RGW_OP_S3VECTOR_DELETE_VECTOR_BUCKET:
+        case RGW_OP_S3VECTOR_DELETE_VECTOR_BUCKET_POLICY:
+        case RGW_OP_S3VECTOR_DELETE_VECTORS:
+        case RGW_OP_S3VECTOR_GET_INDEX:
+        case RGW_OP_S3VECTOR_GET_VECTOR_BUCKET:
+        case RGW_OP_S3VECTOR_GET_VECTOR_BUCKET_POLICY:
+        case RGW_OP_S3VECTOR_GET_VECTORS:
+        case RGW_OP_S3VECTOR_LIST_INDEXES:
+        case RGW_OP_S3VECTOR_LIST_VECTOR_BUCKETS:
+        case RGW_OP_S3VECTOR_LIST_VECTORS:
+        case RGW_OP_S3VECTOR_PUT_VECTOR_BUCKET_POLICY:
+        case RGW_OP_S3VECTOR_PUT_VECTORS:
+        case RGW_OP_S3VECTOR_QUERY_VECTORS:
           break;
         default:
           ldpp_dout(s, 10) << "ERROR: AWS4 completion for operation: " << s->op_type << ", NOT IMPLEMENTED" << dendl;
