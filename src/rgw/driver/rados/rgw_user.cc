@@ -1756,7 +1756,8 @@ int RGWUser::execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_
   }
 
   if (op_state.placement_tags_specified) {
-    user_info.placement_tags = op_state.placement_tags;
+    user_info.placement_tags.assign(std::begin(op_state.placement_tags),
+                                    std::end(op_state.placement_tags));
   }
 
   if (!op_state.account_id.empty()) {
@@ -2089,7 +2090,8 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
   }
 
   if (op_state.placement_tags_specified) {
-    user_info.placement_tags = op_state.placement_tags;
+    user_info.placement_tags.assign(std::begin(op_state.placement_tags),
+                                    std::end(op_state.placement_tags));
   }
 
   if (!op_state.account_id.empty()) {
@@ -2992,4 +2994,3 @@ void rgw_user::dump(Formatter *f) const
 {
   ::encode_json("user", *this, f);
 }
-

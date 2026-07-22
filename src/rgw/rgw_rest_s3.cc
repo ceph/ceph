@@ -11,7 +11,7 @@
 
 #include "common/ceph_crypto.h"
 #include "common/dout.h"
-#include "common/split.h"
+#include "include/str_lib.h"
 #include "common/Formatter.h"
 #include "common/utf8.h"
 #include "common/ceph_json.h"
@@ -829,7 +829,7 @@ int RGWGetObj_ObjStore_S3::override_range_hdr(const rgw::auth::StrategyRegistry&
   for (std::string_view hdr : ceph::split(cache_hdr, hdrs_split)) {
     auto kv = ceph::split(hdr, kv_split);
     auto k = kv.begin();
-    if (std::distance(k, kv.end()) != 2) {
+    if (std::ranges::distance(k, kv.end()) != 2) {
       return -EINVAL;
     }
     auto v = std::next(k);
@@ -1907,9 +1907,8 @@ int RGWListBucket_ObjStore_S3::get_common_params()
   // Parse x-amz-optional-object-attributes header.
   const char* opt_attrs = s->info.env->get("HTTP_X_AMZ_OPTIONAL_OBJECT_ATTRIBUTES");
   if (opt_attrs) {
-    auto tokens = ceph::split(opt_attrs, ", ");
-    fetch_restore_status =
-        std::find(tokens.begin(), tokens.end(), "RestoreStatus") != tokens.end();
+    fetch_restore_status = ceph::util::contains(
+      ceph::split(opt_attrs, ", "), "RestoreStatus");
   }
 
   return 0;
@@ -5150,32 +5149,33 @@ int RGWConfigBucketMetaSearch_ObjStore_S3::get_params(optional_yield y)
     return -EINVAL;
   }
 
-  list<string> expressions;
-  get_str_list(iter->second, ",", expressions);
+  for (const auto expression : ceph::split(iter->second, ",")) {
+    const auto args = ceph::split(expression, ";");
+    auto arg = std::begin(args);
 
-  for (auto& expression : expressions) {
-    vector<string> args;
-    get_str_vec(expression, ";", args);
-
-    if (args.empty()) {
+    if (arg == std::end(args)) {
       s->err.message = "invalid empty expression";
       ldpp_dout(this, 5) << s->err.message << dendl;
       return -EINVAL;
     }
-    if (args.size() > 2) {
-      s->err.message = string("invalid expression: ") + expression;
+    if (std::ranges::distance(args) > 2) {
+      s->err.message = fmt::format("invalid expression: {}", expression);
       ldpp_dout(this, 5) << s->err.message << dendl;
       return -EINVAL;
     }
 
-    string key = boost::algorithm::to_lower_copy(rgw_trim_whitespace(args[0]));
+    string key = boost::algorithm::to_lower_copy(
+      std::string { rgw_trim_whitespace(*arg++) });
     string val;
-    if (args.size() > 1) {
-      val = boost::algorithm::to_lower_copy(rgw_trim_whitespace(args[1]));
+    if (arg != std::end(args)) {
+      val = boost::algorithm::to_lower_copy(
+        std::string { rgw_trim_whitespace(*arg) });
     }
 
     if (!boost::algorithm::starts_with(key, RGW_AMZ_META_PREFIX)) {
-      s->err.message = string("invalid expression, key must start with '" RGW_AMZ_META_PREFIX "' : ") + expression;
+      s->err.message = fmt::format(
+        "invalid expression, key must start with '" RGW_AMZ_META_PREFIX "' : {}",
+        expression);
       ldpp_dout(this, 5) << s->err.message << dendl;
       return -EINVAL;
     }

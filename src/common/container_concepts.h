@@ -255,6 +255,11 @@ concept has_remove_if = requires(ContainerT& c, PredicateT pred) {
   c.remove_if(pred);
 };
 
+template <typename ContainerT, typename T>
+concept has_contains = requires(ContainerT&& c, const T& v) {
+  { std::as_const(c).contains(v) } -> std::convertible_to<bool>;
+};
+
 template <typename ContainerT>
 concept has_clear = requires(ContainerT& c) {
   c.clear();
@@ -372,6 +377,24 @@ concept can_remove_front =
 //  n may need to be surprisingly large before inserting at the head of a list is
 //  *actually* faster than shifting an array, for instance):
 namespace ceph::util {
+
+template <typename ContainerT, typename T>
+requires ceph::concepts::has_contains<ContainerT, T> ||
+         requires(ContainerT&& c, const T& v) {
+           std::ranges::find(c, v);
+         }
+constexpr bool contains(ContainerT&& c, const T& v)
+{
+  if constexpr (ceph::concepts::has_contains<ContainerT, T>) {
+    return std::as_const(c).contains(v);
+  }
+
+  if constexpr (!ceph::concepts::has_contains<ContainerT, T>) {
+    return std::ranges::find(c, v) != std::ranges::end(c);
+  }
+
+  std::unreachable();
+}
 
 template <typename ContainerT, typename T>
 requires ceph::concepts::can_append<ContainerT, T>

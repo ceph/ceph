@@ -15,11 +15,11 @@
 
 #include "include/ceph_assert.h"
 
+#include <algorithm>
 #include <sstream>
 
 #include "include/compat.h"
-#include "include/str_list.h"
-#include "include/types.h" // for operator<<(std::list)
+#include "include/str_lib.h"
 #include "common/BackTrace.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/debug.h"
@@ -45,11 +45,12 @@ namespace ceph {
   {
     ceph_assert(!g_assert_context);
     g_assert_context = cct;
-    const auto supressions = get_str_list(
-      g_assert_context->_conf.get_val<std::string>("ceph_assert_supresssions"));
+    const auto configured_supressions =
+      g_assert_context->_conf.get_val<std::string>("ceph_assert_supresssions");
+    const auto supressions = ceph::split(configured_supressions, ";,= \t");
     if (!supressions.empty()) {
       lderr(g_assert_context) << "WARNING: supressions for ceph_assert present: "
-			      << supressions << dendl;
+			      << ceph::str_join(supressions, ", ") << dendl;
     }
   }
 
@@ -90,10 +91,11 @@ namespace ceph {
       }
 
       // bypass the abort?
-      const auto supressions = get_str_list(
-	g_assert_context->_conf.get_val<std::string>("ceph_assert_supresssions"));
-      should_abort = std::none_of(
-	std::begin(supressions), std::end(supressions),
+      const auto configured_supressions =
+	g_assert_context->_conf.get_val<std::string>("ceph_assert_supresssions");
+      const auto supressions = ceph::split(configured_supressions, ";,= \t");
+      should_abort = std::ranges::none_of(
+	supressions,
 	[file, line](const auto& supression) {
 	  return supression == fmt::format("{}:{}", file, line);
         });
@@ -185,10 +187,11 @@ namespace ceph {
       }
 
       // bypass the abort?
-      const auto supressions = get_str_list(
-	g_assert_context->_conf.get_val<std::string>("ceph_assert_supresssions"));
-      should_abort = std::none_of(
-	std::begin(supressions), std::end(supressions),
+      const auto configured_supressions =
+	g_assert_context->_conf.get_val<std::string>("ceph_assert_supresssions");
+      const auto supressions = ceph::split(configured_supressions, ";,= \t");
+      should_abort = std::ranges::none_of(
+	supressions,
 	[file, line](const auto& supression) {
 	  return supression == fmt::format("{}:{}", file, line);
         });

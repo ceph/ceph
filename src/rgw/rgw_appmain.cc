@@ -24,9 +24,8 @@
 #include "common/Timer.h"
 #include "common/TracepointProvider.h"
 #include "common/numa.h"
-#include "common/split.h"
 #include "include/compat.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "include/stringify.h"
 #include "perfglue/heap_profiler.h"
 #include "rgw_kms_cache.h"
@@ -115,8 +114,7 @@ public:
       errss << "unable to get value for command \"heap\"";
       return -EINVAL;
     }
-    vector<string> cmd_vec;
-    get_str_vec(heapcmd, cmd_vec);
+    auto cmd_vec = ceph::split_strings(heapcmd);
     string value;
     if (cmd_getval(cmdmap, "value", value)) {
       cmd_vec.push_back(value);
@@ -152,15 +150,13 @@ void rgw::AppMain::init_frontends1(bool nfs)
 {
   this->nfs = nfs;
   std::string fe_key = (nfs) ? "rgw_nfs_frontends" : "rgw_frontends";
-  std::vector<std::string> frontends;
   std::string rgw_frontends_str = g_conf().get_val<string>(fe_key);
   g_conf().early_expand_meta(rgw_frontends_str, &cerr);
-  get_str_vec(rgw_frontends_str, ",", frontends);
+  auto frontends = ceph::split_strings(rgw_frontends_str, ",");
 
   /* default frontends */
   if (nfs) {
-    const auto is_rgw_nfs = [](const auto& s){return s == "rgw-nfs";};
-    if (std::find_if(frontends.begin(), frontends.end(), is_rgw_nfs) == frontends.end()) {
+    if (!ceph::util::contains(frontends, "rgw-nfs")) {
       frontends.push_back("rgw-nfs");
     }
   } else {
@@ -471,10 +467,9 @@ void rgw::AppMain::init_opslog()
 int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
 {
   int r{0};
-  vector<string> frontends_def;
   std::string frontend_defs_str =
     g_conf().get_val<string>("rgw_frontend_defaults");
-  get_str_vec(frontend_defs_str, ",", frontends_def);
+  const auto frontends_def = ceph::split_strings(frontend_defs_str, ",");
 
   service_map_meta["pid"] = stringify(getpid());
 

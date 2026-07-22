@@ -323,10 +323,10 @@ public:  // for global_init
   bool finalize_reexpand_meta(ConfigValues& values,
 			      const ConfigTracker& tracker);
 
-  std::list<std::string> get_conffile_paths(const ConfigValues& values,
-					    const char *conf_files,
-					    std::ostream *warnings,
-					    int flags) const;
+  std::vector<std::string> get_conffile_paths(const ConfigValues& values,
+					      const char *conf_files,
+					      std::ostream *warnings,
+					      int flags) const;
 
   const std::string& get_conf_path() const {
     return conf_path;

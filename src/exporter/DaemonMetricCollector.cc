@@ -16,7 +16,7 @@
 #include "common/debug.h"
 #include "common/hostname.h"
 #include "common/perf_counters.h"
-#include "common/split.h"
+#include "include/str_lib.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "include/common_fwd.h"
@@ -335,10 +335,7 @@ void DaemonMetricCollector::dump_asok_metrics(bool sort_metrics, int64_t counter
 
 std::vector<std::string> read_proc_stat_file(std::string path) {
   std::string stat = read_file_to_string(path);
-  std::vector<std::string> strings;
-  auto parts = ceph::split(stat);
-  strings.assign(parts.begin(), parts.end());
-  return strings;
+  return ceph::split_strings(stat);
 }
 
 struct pstat read_pid_stat(int pid) {
@@ -559,4 +556,3 @@ DaemonMetricCollector &collector_instance() {
   static DaemonMetricCollector instance;
   return instance;
 }
-

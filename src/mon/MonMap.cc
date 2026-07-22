@@ -18,6 +18,7 @@
 #endif
 
 #include "common/Formatter.h"
+#include "common/container_concepts.h"
 
 #include "include/ceph_fs.h"
 #include "include/ceph_features.h"
@@ -724,7 +725,7 @@ int MonMap::init_with_hosts(const std::string& hostlist,
 }
 
 void MonMap::set_initial_members(CephContext *cct,
-				 list<std::string>& initial_members,
+				 const vector<std::string>& initial_members,
 				 string my_name,
 				 const entity_addrvec_t& my_addrs,
 				 set<entity_addrvec_t> *removed)
@@ -733,8 +734,7 @@ void MonMap::set_initial_members(CephContext *cct,
   unsigned i = 0;
   while (i < size()) {
     string n = get_name(i);
-    if (std::find(initial_members.begin(), initial_members.end(), n)
-	!= initial_members.end()) {
+    if (ceph::util::contains(initial_members, n)) {
       lgeneric_dout(cct, 1) << " keeping " << n << " " << get_addrs(i) << dendl;
       i++;
       continue;
@@ -750,7 +750,7 @@ void MonMap::set_initial_members(CephContext *cct,
   }
 
   // add missing initial members
-  for (auto& p : initial_members) {
+  for (const auto& p : initial_members) {
     if (!contains(p)) {
       if (p == my_name) {
 	lgeneric_dout(cct, 1) << " adding self " << p << " " << my_addrs
