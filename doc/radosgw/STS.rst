@@ -113,7 +113,324 @@ STS Configuration
 The following configurable options have to be added for STS integration:
 
 .. confval:: rgw_sts_key
+.. confval:: rgw_sts_token_format
+.. confval:: rgw_sts_keyring_refresh_interval
+.. confval:: rgw_sts_max_session_duration
 .. confval:: rgw_s3_auth_use_sts
+
+Keyring session-token sealing
+-----------------------------
+
+The keyring that seals and verifies ``keyring`` session tokens is stored in
+the Monitor config-key store under ``rgw/sts/keys``, alongside other cluster
+secrets, and is managed with ``radosgw-admin sts keyring`` commands. The
+keyring applies only to ``keyring`` format tokens; the ``legacy`` format uses
+:confval:`rgw_sts_key` and never reads it. The stored value is a
+whitespace-separated list of ``<key-id>=<key>`` entries,
+where the key id is 40 hexadecimal characters (20 bytes) and the key is the
+padded base64 encoding of 32 random bytes, as ``openssl rand -base64 32``
+prints it. This list is not a cephx keyring file. At most 16 entries are
+accepted. The first entry seals new tokens; every entry verifies. Each
+``keyring`` token is sealed with aes256-cts-hmac-sha384-192, the ``aes256k``
+key type, and carries the id of the key that sealed it.
+
+Each RGW reads the keyring on a background thread through its Monitor
+session and caches an immutable snapshot, so token operations never wait on
+the Monitor. The snapshot is refreshed every
+:confval:`rgw_sts_keyring_refresh_interval` seconds, so a rotated key
+propagates within one interval. As of August 2026 the default is 60 seconds.
+Each refresh sends ``config-key get`` commands to the Monitor, so a shorter
+interval propagates changes sooner at the cost of more Monitor commands from
+every RGW. Until an RGW's first read completes, it rejects STS requests that
+need a key it has not loaded; if that read fails, the next attempt comes one
+interval later.
+
+Monitor access
+~~~~~~~~~~~~~~
+
+An RGW reads the keyring with the ``config-key get`` Monitor command.
+``mon 'profile rgw'`` grants that under the ``rgw/`` prefix, as does
+``mon 'allow *'``. Blanket capabilities such as ``mon 'allow rw'`` do not.
+``ceph auth caps`` replaces a key's entire capability set, so give all
+three:
+
+.. prompt:: bash $
+
+   ceph auth caps client.rgw.<id> mon 'profile rgw' osd 'profile rgw' mgr 'profile rgw'
+
+The keyring travels over each RGW's Monitor session. An RGW logs a
+warning when that session permits insecure connection modes; prefer msgr2
+secure mode on deployments that use token sealing.
+
+New deployments
+~~~~~~~~~~~~~~~
+
+For a single cluster with no existing STS credentials, create the keyring
+and enable keyring sealing:
+
+.. prompt:: bash $
+
+   radosgw-admin sts keyring init
+   ceph config set client.rgw rgw_sts_token_format keyring
+
+``sts keyring init`` generates one random key and prints its id. It refuses
+to overwrite an existing keyring. :confval:`rgw_sts_token_format` is
+runtime-updatable and does not require a restart. Verify the effective
+settings on every daemon under `Verifying the running configuration`_ and
+complete `End-to-end token verification`_ before admitting production
+traffic.
+
+Manually generated keys and multisite
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Every cluster whose RGWs issue or verify the same tokens must hold an
+identical keyring, including all zones in the realm and all federating
+realms: each cluster's config-key store is independent, and a cluster cannot
+verify tokens sealed with a key its own store does not hold. Generate the
+keyring once and install the same file on every cluster instead of running
+a bare ``init`` per cluster. The key file is a secret; create it under
+``umask 077`` so it is readable only by its owner:
+
+.. prompt:: bash $
+
+   umask 077
+   echo "$(openssl rand -hex 20)=$(openssl rand -base64 32)" > sts-keyring.txt
+   radosgw-admin sts keyring init --infile=sts-keyring.txt
+
+``--infile`` accepts the same entry format as the stored keyring and applies
+the same strict validation (canonical base64, unique ids and key material,
+at most 16 entries), so a malformed file is rejected before it reaches the
+Monitors. To export the keyring of a cluster that used generated keys, for
+example when another cluster joins the deployment later:
+
+.. prompt:: bash $
+
+   umask 077
+   ceph config-key get rgw/sts/keys > sts-keyring.txt
+
+Upgrading an existing deployment
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The default ``legacy`` mode issues the existing session tokens and accepts
+both legacy and ``keyring`` tokens. The ``keyring`` mode issues and accepts
+only ``keyring`` tokens. Use this ordering when upgrading:
+
+#. Upgrade every RGW that issues or verifies the credentials, in every zone
+   and federating realm. Keep :confval:`rgw_sts_token_format` at ``legacy`` and
+   use the deployment or orchestrator inventory to confirm that no old RGW,
+   including a stopped daemon that could later rejoin, remains. Use
+   ``ceph versions`` in each cluster to verify the versions of running daemons.
+   Old binaries cannot verify ``keyring`` tokens.
+#. Install the same keyring in every cluster while all RGWs remain in
+   ``legacy`` mode, as described in `Manually generated keys and
+   multisite`_:
+
+   .. prompt:: bash $
+
+      radosgw-admin sts keyring init --infile=sts-keyring.txt
+
+#. Verify the keyring in every cluster and confirm that every RGW still
+   uses ``legacy`` mode. Resolve any daemon-specific, local-file,
+   command-line, or runtime overrides of the format before continuing.
+#. Test the keyring before the fleet-wide cutover. Drain one upgraded RGW
+   from normal traffic, set a daemon-specific override, and verify that it uses
+   ``keyring`` mode:
+
+   .. prompt:: bash $
+
+      canary='client.rgw.<canary-daemon-id>'
+      ceph config set "$canary" rgw_sts_token_format keyring
+      ceph config show "$canary" rgw_sts_token_format
+
+   Complete `End-to-end token verification`_ with credentials issued directly
+   through the canary's STS endpoint. Return the canary to the inherited
+   ``legacy`` setting and verify it before restoring normal traffic:
+
+   .. prompt:: bash $
+
+      ceph config rm "$canary" rgw_sts_token_format
+      ceph config show "$canary" rgw_sts_token_format
+
+#. In a coordinated maintenance change, enable keyring sealing in every
+   cluster as close together as possible:
+
+   .. prompt:: bash $
+
+      ceph config set client.rgw rgw_sts_token_format keyring
+
+   Runtime configuration propagates asynchronously, so this cutover is not
+   atomic across daemons or clusters. During a partial cutover, keyring-mode
+   RGWs reject legacy tokens that legacy-mode RGWs can still issue.
+   Existing legacy sessions must re-authenticate.
+#. Verify ``keyring`` mode everywhere, then complete `End-to-end token
+   verification`_.
+#. Retain :confval:`rgw_sts_key` until the rollback window has closed. When it
+   is no longer needed, remove it from each scope where it was configured. For
+   example, if it was set at the ``client.rgw`` scope:
+
+   .. prompt:: bash $
+
+      ceph config rm client.rgw rgw_sts_key
+
+Verifying the running configuration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``radosgw-admin sts keyring list`` prints key ids and never key material,
+and it parses the stored keyring with the same checks the daemon applies,
+so it doubles as a correctness check after a manual installation. To compare keyrings across clusters,
+compare digests instead of printing the value:
+
+.. prompt:: bash $
+
+   radosgw-admin sts keyring list
+   ceph config-key get rgw/sts/keys | sha256sum
+   ceph config show client.rgw.<daemon-id> rgw_sts_token_format
+
+The digest must match on every cluster, and the format must have the value
+required by the current migration step on every RGW. The raw
+``ceph config-key get`` output contains the secret keyring, so digest it
+rather than copying it to logs or tickets.
+
+End-to-end token verification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Issue temporary security credentials through every STS endpoint that is
+expected to issue them, then use each returned session token for an S3 request
+through every RGW endpoint that is expected to verify it. This confirms
+token issuance and cross-daemon verification with the effective runtime
+configuration.
+
+Waiting out issued tokens
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Rollback and key retirement wait for previously issued tokens to expire. Role
+credentials can currently last up to 43,200 seconds;
+:confval:`rgw_sts_max_session_duration` governs only ``GetSessionToken`` and is
+not by itself the wait bound.
+
+Rolling back to legacy sealing
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Rollback must finish before any RGW is downgraded to a binary that does not
+support ``keyring`` tokens:
+
+#. Ensure that the same original :confval:`rgw_sts_key` is still available to
+   every RGW. This option is not runtime-updatable. If it was removed, set
+   it again in every cluster, restart every RGW with the deployment's normal
+   restart procedure, and verify the effective value before continuing. For
+   example, compare digests without printing the key:
+
+   .. prompt:: bash $
+
+      rgw_daemon='client.rgw.<daemon-id>'
+      legacy_key='<original-legacy-key>'
+      ceph config set client.rgw rgw_sts_key "$legacy_key"
+      printf '%s\n' "$legacy_key" | sha256sum
+      ceph config show "$rgw_daemon" rgw_sts_key | sha256sum
+
+#. Set every upgraded RGW back to ``legacy`` mode in a coordinated change:
+
+   .. prompt:: bash $
+
+      ceph config set client.rgw rgw_sts_token_format legacy
+
+   Upgraded RGWs now issue legacy tokens but continue to accept both token
+   formats.
+#. Verify ``legacy`` mode on every daemon. Keep the keyring and the
+   upgraded binaries in place for the maximum lifetime of any ``keyring`` token
+   issued before the last daemon was confirmed in ``legacy`` mode, as described
+   in `Waiting out issued tokens`_.
+#. After all ``keyring`` tokens have expired, old RGW binaries may be
+   installed. The keyring can then be removed:
+
+   .. prompt:: bash $
+
+      ceph config-key rm rgw/sts/keys
+
+Rotating keys
+~~~~~~~~~~~~~
+
+``sts keyring rotate`` prepends a new key, which seals all new tokens, and
+preserves every existing entry for verification. Each RGW adopts the new
+key on its next successful refresh, so during a rotation an RGW that has
+already refreshed may seal a token with the new key that an RGW which has
+not refreshed cannot yet verify. This window closes once every RGW has
+refreshed successfully; a failed refresh keeps the previous keyring and
+retries one :confval:`rgw_sts_keyring_refresh_interval` later. The previous
+key stays valid throughout, so already-issued sessions are unaffected.
+
+.. note:: The keyring commands (``init``, ``rotate``, ``promote``, ``rm``,
+   and ``trim``) read the stored keyring, modify it, and write it back. The
+   config-key store has no compare-and-swap, so two commands running against
+   the same cluster at once can lose one of their changes. Run keyring
+   commands serially; do not invoke them concurrently on the same cluster.
+
+On a single cluster, rotate with a generated key:
+
+.. prompt:: bash $
+
+   radosgw-admin sts keyring rotate
+
+In a multisite deployment, every cluster must be able to verify a new key
+before any cluster seals with it: a cluster only learns keys from its own
+config-key store, so it rejects tokens that another cluster seals with a key
+it has not installed. Generate the new key once and stage it on every
+cluster. A staged key verifies tokens but does not seal them:
+
+.. prompt:: bash $
+
+   umask 077
+   echo "$(openssl rand -hex 20)=$(openssl rand -base64 32)" > new-key.txt
+   radosgw-admin sts keyring rotate --stage --infile=new-key.txt
+
+After staging the key on the last cluster, wait at least one
+:confval:`rgw_sts_keyring_refresh_interval`, then promote it on every cluster:
+
+.. prompt:: bash $
+
+   radosgw-admin sts keyring promote --key-id="$(cut -d= -f1 new-key.txt)"
+
+``promote`` makes the named key seal new tokens and keeps the previous
+sealing key to verify the tokens it sealed. ``trim`` can remove a staged key,
+so do not run it between ``rotate --stage`` and ``promote``.
+
+The keyring holds at most 16 entries. ``rotate --max-keys=<count>``
+bounds its size in the same step by dropping the oldest entries beyond
+``<count>`` after prepending the new key; use a bound large enough to keep
+every key that may still have live tokens. ``rotate --max-keys=1`` discards
+the current sealing key, invalidating all outstanding tokens, and requires
+``--yes-i-really-mean-it``. If the keyring is already full,
+first retire a verification key whose tokens have all expired. Never remove
+a key that may still have live tokens merely to make room.
+
+An RGW that has not refreshed its cached keyring yet keeps sealing with
+the old key until its next successful refresh after its cluster's rotation
+or promotion. Starting from the last cluster's rotation or promotion plus
+one refresh interval, wait for the maximum lifetime of any token issued
+under the old key, as described in `Waiting out issued tokens`_. Then
+retire the oldest key everywhere:
+
+.. prompt:: bash $
+
+   radosgw-admin sts keyring trim
+
+``trim`` removes the oldest entry and never the sealing key;
+``trim --max-keys=<count>`` instead drops as many of the oldest entries
+as needed to leave at most ``<count>``, and ``rm --key-id=<id>`` removes one
+specific key.
+
+Removing a key invalidates tokens that it sealed. If a key is exposed,
+remove it as soon as the replacement has propagated instead of retaining it
+for the normal wait period; every RGW that still trusts the exposed key
+remains forgeable.
+
+.. warning:: The keys in ``rgw/sts/keys`` authenticate every keyring session
+   token: anyone who obtains one can forge a valid token for any user or role,
+   just as a leaked ``rgw_sts_key`` allows forging legacy tokens. The
+   config-key store is not readable through blanket Monitor capabilities, and
+   ``radosgw-admin sts keyring list`` never prints key material. Keep exported
+   keyring files out of plaintext repositories and logs, and distribute them
+   to every zone and realm over a secure channel.
 
 .. note:: The STS and S3 APIs co-exist in the same namespace, and both S3
    and STS APIs can be accessed via the same endpoint.
