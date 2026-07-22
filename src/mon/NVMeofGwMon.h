@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -16,6 +17,8 @@
 
 #include "PaxosService.h"
 #include "NVMeofGwMap.h"
+
+struct Subscription;
 
 struct LastBeacon {
   NvmeGwId gw_id;
@@ -71,6 +74,9 @@ public:
   bool prepare_update(MonOpRequestRef op) override;
 
   bool preprocess_command(MonOpRequestRef op);
+  bool nvme_gw_show_command(ceph::Formatter* f,
+       bufferlist &rdata, const std::string  &pool,
+       const std::string &group);
   bool prepare_command(MonOpRequestRef op);
 
   void encode_full(MonitorDBStore::TransactionRef t) override {}
@@ -100,15 +106,14 @@ private:
   void restore_pending_map_info(NVMeofGwMap & tmp_map);
   void cleanup_pending_map();
   void get_gw_listeners(ceph::Formatter *f, std::pair<std::string, std::string>& group_key);
-  void check_beacon_timeout(ceph::coarse_mono_clock::time_point now,
-       bool &propose_pending);
-
   int apply_beacon(const NvmeGwId &gw_id, int gw_version,
              const NvmeGroupKey& group_key, void *msg,
 			 const BeaconSubsystems& sub, gw_availability_t &avail, bool &propose_pending);
   void do_send_map_ack(MonOpRequestRef op, bool gw_created, bool gw_propose,
        uint64_t stored_sequence, bool is_correct_sequence,
        const NvmeGroupKey& group_key, const NvmeGwId &gw_id);
+  void check_beacon_timeout(ceph::coarse_mono_clock::time_point now,
+       bool &propose_pending);
 };
 
 #endif /* MON_NVMEGWMONITOR_H_ */
