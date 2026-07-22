@@ -645,18 +645,24 @@ public:
           }));
   }
 
-  void expect_notifications(MockThreads& mock_threads,
+  void expect_notifications(
     MockReplayerListener& mock_replayer_listener,
-    std::vector<bool>* notification_forces = nullptr) {
+    MockReplayer* mock_replayer = nullptr,
+    std::vector<bool>* notification_forces = nullptr,
+    std::vector<std::string>* replay_states = nullptr) {
     EXPECT_CALL(mock_replayer_listener, handle_notification(_))
-      .WillRepeatedly(Invoke([this, notification_forces](bool force) {
-        std::unique_lock locker{m_lock};
-        if (notification_forces) {
-          notification_forces->push_back(force);
-        }
-        ++m_notifications;
-        m_cond.notify_all();
-      }));
+      .WillRepeatedly(Invoke(
+          [this, mock_replayer, notification_forces, replay_states](bool force) {
+            std::unique_lock locker{m_lock};
+            if (notification_forces) {
+              notification_forces->push_back(force);
+            }
+            if (replay_states) {
+              replay_states->push_back(mock_replayer->get_replay_state());
+            }
+            ++m_notifications;
+            m_cond.notify_all();
+    }));
   }
 
   int wait_for_notification(uint32_t count) {
@@ -729,7 +735,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InitShutDown) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -785,11 +791,6 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, SyncSnapshot) {
 
   MockReplayerListener mock_replayer_listener;
 
-  std::vector<bool> notification_forces;
-  expect_notifications(mock_threads, mock_replayer_listener, &notification_forces);
-
-  InSequence seq;
-
   MockInstanceWatcher mock_instance_watcher;
   MockImageMeta mock_image_meta;
   MockStateBuilder mock_state_builder(mock_local_image_ctx,
@@ -799,6 +800,14 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, SyncSnapshot) {
                              "local mirror uuid", "local mirror peer uuid",
                              &m_pool_meta_cache, &mock_state_builder,
                              &mock_replayer_listener};
+  
+  std::vector<bool> notification_forces;
+  std::vector<std::string> replay_states;
+  expect_notifications(mock_replayer_listener, &mock_replayer,
+                       &notification_forces, &replay_states);
+
+  InSequence seq;
+
   m_pool_meta_cache.set_remote_pool_meta(
     m_remote_fsid, m_remote_io_ctx.get_id(),
     {"remote mirror uuid", "remote mirror peer uuid"});
@@ -949,9 +958,20 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, SyncSnapshot) {
   ASSERT_EQ(0, init_ctx.wait());
 
   // wait for sync to complete
-  ASSERT_EQ(0, wait_for_notification(6));
+  ASSERT_EQ(0, wait_for_notification(8));
   EXPECT_THAT(notification_forces,
-              ElementsAre(false, true, true, true, true, true));
+              ElementsAre(false, true, true, true, true, true, true, true));
+
+  EXPECT_THAT(replay_states,
+              ElementsAre(
+                "scanning",         // post-init
+                "waiting_to_sync",  // snap1 found
+                "syncing",          // snap1 copy requested
+                "scanning",         // finish_sync after snap1
+                "waiting_to_sync",  // snap4 found
+                "syncing",          // snap4 copy requested
+                "scanning",         // finish_sync after snap4
+                "idle"));           // nothing left to sync
 
   // shut down
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
@@ -967,7 +987,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedSyncInitial) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -1038,7 +1058,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedSyncInitial) {
   update_watch_ctx->handle_notify();
 
   // wait for sync to complete
-  ASSERT_EQ(0, wait_for_notification(3));
+  ASSERT_EQ(0, wait_for_notification(4));
 
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
                                         mock_local_image_ctx,
@@ -1053,7 +1073,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedSyncDelta) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -1160,7 +1180,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedSyncDelta) {
   update_watch_ctx->handle_notify();
 
   // wait for sync to complete
-  ASSERT_EQ(0, wait_for_notification(3));
+  ASSERT_EQ(0, wait_for_notification(4));
 
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
                                         mock_local_image_ctx,
@@ -1175,7 +1195,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedSyncDeltaDemote) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -1283,7 +1303,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedSyncDeltaDemote) {
   update_watch_ctx->handle_notify();
 
   // wait for sync to complete
-  ASSERT_EQ(0, wait_for_notification(3));
+  ASSERT_EQ(0, wait_for_notification(4));
 
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
                                         mock_local_image_ctx,
@@ -1298,7 +1318,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedPendingSyncInitial) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -1368,7 +1388,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedPendingSyncInitial) {
   update_watch_ctx->handle_notify();
 
   // wait for sync to complete
-  ASSERT_EQ(0, wait_for_notification(3));
+  ASSERT_EQ(0, wait_for_notification(4));
 
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
                                         mock_local_image_ctx,
@@ -1383,7 +1403,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedPendingSyncDelta) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -1509,7 +1529,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedPendingSyncDelta) {
   update_watch_ctx->handle_notify();
 
   // wait for sync to complete
-  ASSERT_EQ(0, wait_for_notification(3));
+  ASSERT_EQ(0, wait_for_notification(4));
 
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
                                         mock_local_image_ctx,
@@ -1524,7 +1544,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedPendingSyncDeltaDemote)
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -1651,7 +1671,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedPendingSyncDeltaDemote)
   update_watch_ctx->handle_notify();
 
   // wait for sync to complete
-  ASSERT_EQ(0, wait_for_notification(3));
+  ASSERT_EQ(0, wait_for_notification(4));
 
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
                                         mock_local_image_ctx,
@@ -1666,7 +1686,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RemoteImageDemoted) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -1740,7 +1760,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RemoteImageDemoted) {
   update_watch_ctx->handle_notify();
 
   // wait for sync to complete and expect replay complete
-  ASSERT_EQ(0, wait_for_notification(3));
+  ASSERT_EQ(0, wait_for_notification(4));
   ASSERT_FALSE(mock_replayer.is_replaying());
 
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
@@ -1756,7 +1776,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, LocalImagePromoted) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -1813,7 +1833,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, ResyncRequested) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -1870,7 +1890,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, ResyncRequestedRemoteNotPrimary) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -1946,7 +1966,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, ResyncRequestedRemoteNotPrimary) {
   // wake-up replayer
   update_watch_ctx->handle_notify();
 
-  ASSERT_EQ(0, wait_for_notification(3));
+  ASSERT_EQ(0, wait_for_notification(4));
   ASSERT_FALSE(mock_replayer.is_resync_requested());
   ASSERT_FALSE(mock_replayer.is_replaying());
 
@@ -2035,7 +2055,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UnregisterRemoteUpdateWatcherError
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -2078,7 +2098,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UnregisterLocalUpdateWatcherError)
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -2121,7 +2141,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, LoadImageMetaError) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -2170,7 +2190,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RefreshLocalImageError) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -2222,7 +2242,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RefreshRemoteImageError) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -2273,7 +2293,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, CopySnapshotsError) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -2334,7 +2354,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, GetImageStateError) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -2397,7 +2417,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, CreateNonPrimarySnapshotError) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -2464,7 +2484,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UpdateMirrorImageStateError) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -2533,7 +2553,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RequestSyncError) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -2604,7 +2624,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, CopyImageError) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -2661,7 +2681,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, CopyImageError) {
   update_watch_ctx->handle_notify();
 
   // wait for sync to complete and expect replay complete
-  ASSERT_EQ(0, wait_for_notification(2));
+  ASSERT_EQ(0, wait_for_notification(3));
   ASSERT_FALSE(mock_replayer.is_replaying());
   ASSERT_EQ(-EINVAL, mock_replayer.get_error_code());
 
@@ -2678,7 +2698,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UpdateNonPrimarySnapshotError) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -2739,7 +2759,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UpdateNonPrimarySnapshotError) {
   update_watch_ctx->handle_notify();
 
   // wait for sync to complete and expect replay complete
-  ASSERT_EQ(0, wait_for_notification(2));
+  ASSERT_EQ(0, wait_for_notification(3));
   ASSERT_FALSE(mock_replayer.is_replaying());
   ASSERT_EQ(-EINVAL, mock_replayer.get_error_code());
 
@@ -2756,7 +2776,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UnlinkPeerError) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -2828,7 +2848,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UnlinkPeerError) {
   update_watch_ctx->handle_notify();
 
   // wait for sync to complete and expect replay complete
-  ASSERT_EQ(0, wait_for_notification(2));
+  ASSERT_EQ(0, wait_for_notification(3));
   ASSERT_FALSE(mock_replayer.is_replaying());
   ASSERT_EQ(-EINVAL, mock_replayer.get_error_code());
 
@@ -2845,7 +2865,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, SplitBrain) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -2909,7 +2929,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RemoteSnapshotMissingSplitBrain) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -2978,7 +2998,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RemoteFailover) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -3106,7 +3126,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RemoteFailover) {
   update_watch_ctx->handle_notify();
 
   // wait for sync to complete and expect replay complete
-  ASSERT_EQ(0, wait_for_notification(3));
+  ASSERT_EQ(0, wait_for_notification(4));
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
                                         mock_local_image_ctx,
                                         mock_remote_image_ctx));
@@ -3137,7 +3157,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UnlinkRemoteSnapshot) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -3216,7 +3236,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, SkipImageSync) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -3296,7 +3316,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, ImageNameUpdated) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -3359,7 +3379,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, ApplyImageStatePendingShutdown) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -3432,7 +3452,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, ApplyImageStatePendingShutdown) {
   // wake-up replayer
   update_watch_ctx->handle_notify();
 
-  ASSERT_EQ(0, wait_for_notification(2));
+  ASSERT_EQ(0, wait_for_notification(3));
   ASSERT_FALSE(mock_replayer.is_replaying());
   ASSERT_EQ(0, mock_replayer.get_error_code());
 
@@ -3447,7 +3467,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, ApplyImageStateErrorPendingShutdow
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 
@@ -3528,7 +3548,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, PruneObsoleteNonPrimaryDemotedSnap
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notifications(mock_threads, mock_replayer_listener);
+  expect_notifications(mock_replayer_listener);
 
   InSequence seq;
 

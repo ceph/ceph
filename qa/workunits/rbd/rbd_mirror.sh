@@ -225,13 +225,17 @@ if [ "${RBD_MIRROR_MODE}" = "snapshot" ]; then
   write_image ${CLUSTER2} ${POOL} ${big_image} 1024 1048576
   mirror_image_snapshot ${CLUSTER2} ${POOL} ${big_image}
 
-  wait_for_replay_state_transition ${CLUSTER1} ${POOL} ${big_image} 'idle' 'syncing' state_transition_time
+  wait_for_replay_state_transition ${CLUSTER1} ${POOL} ${big_image} 'scanning' 'waiting_to_sync' state_transition_time
   test ${state_transition_time} -lt ${REPLAY_STATE_FORCE_TRANSITION_TIMEOUT}
 
-  wait_for_replay_state_transition ${CLUSTER1} ${POOL} ${big_image} 'syncing' 'idle' state_transition_time
+  wait_for_replay_state_transition ${CLUSTER1} ${POOL} ${big_image} 'waiting_to_sync' 'syncing' state_transition_time
+  test ${state_transition_time} -lt ${REPLAY_STATE_FORCE_TRANSITION_TIMEOUT}
+
+  wait_for_replay_state_transition ${CLUSTER1} ${POOL} ${big_image} 'scanning' 'idle' state_transition_time
   test ${state_transition_time} -lt ${REPLAY_STATE_FORCE_TRANSITION_TIMEOUT}
 
   test_snapshot_sync_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${big_image}
+
   remove_image_retry ${CLUSTER2} ${POOL} ${big_image}
   wait_for_image_present ${CLUSTER1} ${POOL} ${big_image} 'deleted'
   stop_mirrors ${CLUSTER2}

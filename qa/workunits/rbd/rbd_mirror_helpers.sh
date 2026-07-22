@@ -1052,9 +1052,6 @@ wait_for_replay_state_transition()
                 replay_state_transition_time=$((last_update - old_state_last_update))
             fi
             return 0
-        else
-            echo "Unexpected replay_state: '${replay_state}'"
-            return 1
         fi
         sleep ${sleep_interval}
     done
