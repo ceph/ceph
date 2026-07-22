@@ -1679,7 +1679,8 @@ public:
   void handle_backoff(OpRequestRef& op);
 
   int add_trim_to_ctx(OpContext *ctx, const hobject_t &coid, snapid_t snap_to_trim,
-                      ObjectContextRef obc, ObjectContextRef head_obc);
+                      ObjectContextRef obc, ObjectContextRef head_obc,
+                      int64_t src_pool = -1);
   int trim_object(bool first, const hobject_t &coid, snapid_t snap_to_trim,
                   OpContextUPtr *ctxp);
   void snap_trimmer(epoch_t e) override;

@@ -4986,7 +4986,8 @@ int PrimaryLogPG::add_trim_to_ctx(
   const hobject_t &coid,
   snapid_t snap_to_trim,
   ObjectContextRef obc,
-  ObjectContextRef head_obc)
+  ObjectContextRef head_obc,
+  int64_t src_pool)
 {
   // Validate inputs
   if (!obc || !obc->ssc || !obc->ssc->exists) {
@@ -5026,11 +5027,12 @@ int PrimaryLogPG::add_trim_to_ctx(
 
   set<snapid_t> new_snaps;
   const OSDMapRef& osdmap = get_osdmap();
+  int64_t snaps_pool = (src_pool >= 0) ? src_pool : info.pgid.pgid.pool();
   for (set<snapid_t>::iterator i = old_snaps.begin();
        i != old_snaps.end();
        ++i) {
-    if (!osdmap->in_removed_snaps_queue(info.pgid.pgid.pool(), *i) &&
-	*i != snap_to_trim) {
+    if (!osdmap->in_removed_snaps_queue(snaps_pool, *i) &&
+        *i != snap_to_trim) {
       new_snaps.insert(*i);
     }
   }
@@ -10139,7 +10141,7 @@ void PrimaryLogPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
             ctx->op_t->remove(cop->results.temp_oid);
             ctx->op_t->add_obc(tempobc);
           }
-          if (add_trim_to_ctx(ctx.get(), oid, oid.snap, cobc, head_obc) < 0) {
+          if (add_trim_to_ctx(ctx.get(), oid, oid.snap, cobc, head_obc, pool) < 0) {
             // Trim failed - cluster error logged
             close_op_ctx(ctx.release());
           } else {
