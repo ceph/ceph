@@ -99,7 +99,7 @@ export class PrometheusAlertFormatter {
   }
 
   private appendSourceLink(alert: PrometheusCustomAlert, message: string): string {
-    return `${message} <a href="${alert.url}" target="_blank"><i class="${Icons.lineChart}"></i></a>`;
+    return `${message} <a href="${alert.url}" target="_blank"><svg cdsIcon="${Icons.lineChart}" size="16" ></svg></a>`;
   }
 
   private mapStatusToSeverity(status: string): string {
