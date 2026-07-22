@@ -42,6 +42,7 @@
 
 #include "rgw_request.h"
 #include "rgw_process.h"
+#include "rgw_process_env.h"
 #include "rgw_iam_policy.h"
 #include "rgw_iam_policy_keywords.h"
 
@@ -889,7 +890,7 @@ void RGWSTSGetSessionToken::execute(optional_yield y)
     return;
   }
 
-  STS::STSService sts(s->cct, driver, s->user->get_id(), s->auth.identity.get());
+  STS::STSService sts(s->cct, driver, s->penv.sts_keyring.get(), s->user->get_id(), s->auth.identity.get());
 
   STS::GetSessionTokenRequest req(duration, serialNumber, tokenCode);
   const auto& [ret, creds] = sts.getSessionToken(this, req);
@@ -959,7 +960,7 @@ int RGWSTSAssumeRoleWithWebIdentity::verify_permission(optional_yield y)
                        << dendl;
     return -EPERM;
   }
-  STS::STSService _sts(s->cct, driver, s->user->get_id(), s->auth.identity.get());
+  STS::STSService _sts(s->cct, driver, s->penv.sts_keyring.get(), s->user->get_id(), s->auth.identity.get());
   sts = std::move(_sts);
 
   string rArn = s->info.args.get("RoleArn");
@@ -1096,7 +1097,7 @@ int RGWSTSAssumeRole::verify_permission(optional_yield y)
                        << dendl;
     return -EPERM;
   }
-  STS::STSService _sts(s->cct, driver, s->user->get_id(), s->auth.identity.get());
+  STS::STSService _sts(s->cct, driver, s->penv.sts_keyring.get(), s->user->get_id(), s->auth.identity.get());
   sts = std::move(_sts);
 
   string rArn = s->info.args.get("RoleArn");
