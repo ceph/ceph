@@ -85,13 +85,22 @@ class Lvm(BaseObjectStore):
         device = self.args.data
         if disk.is_partition(device) or disk.is_device(device):
             if device_type == 'block' and self.objectstore == 'bluestore':
-                # NVMe preformat already discards, skip mkfs discard.
-                # Only preformat a device that holds no VG yet: with
-                # --osds-per-device > 1 subsequent prepare calls re-use the
-                # VG created for the first OSD and formatting the namespace
-                # again would destroy it. (https://tracker.ceph.com/issues/77613)
-                if not api.get_device_vgs(device) and nvme_utils.preformat(device):
-                    self.skip_mkfs_discard = True
+                # A whole NVMe namespace preformat already discards the device,
+                # so BlueStore can skip its own mkfs-time discard. This only
+                # applies to whole NVMe namespaces -- the precondition
+                # preformat() itself checks -- so gate on it here as well: for
+                # any other device (non-NVMe, partitions) nothing preformats it
+                # and the mkfs-time discard must not be skipped.
+                if nvme_utils.is_namespace(nvme_utils.resolve(device)):
+                    if api.get_device_vgs(device):
+                        # With --osds-per-device > 1 subsequent prepare calls
+                        # re-use the VG created for the first OSD. The namespace
+                        # was already preformatted (discarded) back then, so skip
+                        # the redundant discard -- and do NOT reformat, which
+                        # would destroy the VG. (tracker.ceph.com/issues/77613)
+                        self.skip_mkfs_discard = True
+                    elif nvme_utils.preformat(device):
+                        self.skip_mkfs_discard = True
             # we must create a vg, and then a single lv
             lv_name_prefix = "osd-{}".format(device_type)
             kwargs = {
