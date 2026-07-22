@@ -4507,6 +4507,42 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
     }
   }
 
+  /* conditional write checks against existing target object */
+  if (if_match || if_nomatch) {
+    bool target_exists = target_obj->exists();
+
+    if (if_match) {
+      if (!target_exists) {
+        return -ENOENT;
+      }
+      if (strcmp(if_match, "*") != 0) {
+        bufferlist bl;
+        if (!get_attr(target_obj->get_attrs(), RGW_ATTR_ETAG, bl)) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+        std::string if_match_str = rgw_string_unquote(if_match);
+        if (if_match_str != bl.to_str()) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      }
+    }
+    if (if_nomatch) {
+      if (strcmp(if_nomatch, "*") == 0) {
+        if (target_exists) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      } else if (target_exists) {
+        bufferlist bl;
+        if (get_attr(target_obj->get_attrs(), RGW_ATTR_ETAG, bl)) {
+          std::string if_nomatch_str = rgw_string_unquote(if_nomatch);
+          if (if_nomatch_str == bl.to_str()) {
+            return -ERR_PRECONDITION_FAILED;
+          }
+        }
+      }
+    }
+  }
+
   // Rename to target_obj
   ret = shadow->rename(dpp, y, target_obj);
   if (ret < 0) {
