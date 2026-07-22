@@ -186,6 +186,7 @@ void Replayer<I>::init(Context* on_finish) {
 
   {
     std::unique_lock locker{m_lock};
+    m_replay_state = "scanning";
     register_perf_counters();
   }
 
@@ -266,13 +267,8 @@ bool Replayer<I>::get_replay_status(std::string* description,
     return false;
   }
 
-  std::string replay_state = "idle";
-  if (m_remote_snap_id_end != CEPH_NOSNAP) {
-    replay_state = "syncing";
-  }
-
   json_spirit::mObject root_obj;
-  root_obj["replay_state"] = replay_state;
+  root_obj["replay_state"] = m_replay_state;
   root_obj["remote_snapshot_timestamp"] =
     static_cast<int64_t>(remote_snap_info->timestamp.sec());
   if (m_perf_counters) {
@@ -376,6 +372,7 @@ void Replayer<I>::load_local_image_meta() {
     // reset state in case new snapshot is added while we are scanning
     std::unique_lock locker{m_lock};
     m_image_updated = false;
+    m_replay_state = "scanning";
   }
 
   bool update_status = false;
@@ -764,6 +761,7 @@ void Replayer<I>::scan_remote_mirror_snapshots(
                << "remote_snap_id_end=" << m_remote_snap_id_end << ", "
                << "remote_snap_ns=" << m_remote_mirror_snap_ns << dendl;
       if (m_remote_mirror_snap_ns.complete) {
+        m_replay_state = "waiting_for_sync";
         locker->unlock();
 
         if (m_local_snap_id_end != CEPH_NOSNAP &&
@@ -814,7 +812,7 @@ void Replayer<I>::scan_remote_mirror_snapshots(
            << dendl;
   ceph_assert(m_state == STATE_REPLAYING);
   m_state = STATE_IDLE;
-
+  m_replay_state = "idle";
   notify_status_updated();
 }
 
@@ -1134,6 +1132,7 @@ void Replayer<I>::handle_request_sync(int r) {
   }
 
   m_sync_in_progress = true;
+  m_replay_state = "syncing";
   locker.unlock();
 
   copy_image();
