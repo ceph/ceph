@@ -1,31 +1,95 @@
-<p class="cds--type-heading-03 cds-mb-3"
-   i18n>Review</p>
-<p class="cds--type-body-compact-01 cds-mb-5"
-   i18n>Confirm the paths and snapshot schedule before adding the mirror path(s).</p>
+<p
+  class="cds--type-heading-03 cds-mb-3"
+  i18n
+>
+  Review
+</p>
+<p
+  class="cds--type-body-compact-01 cds-mb-5"
+  i18n
+>
+  Confirm the paths and snapshot schedule before adding the mirror path(s).
+</p>
 
-<div cdsStack="vertical"
-     [gap]="5">
-  <div>
-    <div class="cds--type-label-01 cds-mb-2"
-         i18n>Filesystem</div>
-    <div class="cds--type-body-01">{{ fsName }}</div>
+<div
+  cdsGrid
+  [useCssGrid]="true"
+  [narrow]="true"
+  [fullWidth]="true"
+>
+  <div
+    cdsCol
+    [columnNumbers]="{ sm: 2, md: 4, lg: 6 }"
+    class="cds-mt-5"
+  >
+    <p
+      class="cds--type-label-01"
+      i18n
+    >
+      Filesystem
+    </p>
+    <p class="cds--type-body-compact-01 cds-mt-2">{{ fsName }}</p>
   </div>
 
-  <div>
-    <div class="cds--type-label-01 cds-mb-2"
-         i18n>Paths</div>
-    @if (pathsToAdd.length) {
-      @for (path of pathsToAdd; track path) {
-        <div class="cds--type-body-01">{{ path }}</div>
-      }
-    } @else {
-      <div class="cds--type-body-01">—</div>
-    }
+  <div
+    cdsCol
+    [columnNumbers]="{ sm: 2, md: 4, lg: 6 }"
+    class="cds-mt-5"
+  >
+    <p
+      class="cds--type-label-01"
+      i18n
+    >
+      Total paths selected
+    </p>
+    <p class="cds--type-body-compact-01 cds-mt-2">{{ totalPaths }}</p>
   </div>
 
-  <div>
-    <div class="cds--type-label-01 cds-mb-2"
-         i18n>Snapshot schedule</div>
-    <div class="cds--type-body-01">{{ scheduleSummary || '—' }}</div>
+  <div
+    cdsCol
+    [columnNumbers]="{ sm: 2, md: 4, lg: 6 }"
+    class="cds-mt-5"
+  >
+    <p
+      class="cds--type-label-01"
+      i18n
+    >
+      Snapshot interval
+    </p>
+    <p class="cds--type-body-compact-01 cds-mt-2">{{ snapshotInterval }}</p>
   </div>
+
+  <div
+    cdsCol
+    [columnNumbers]="{ sm: 2, md: 4, lg: 6 }"
+    class="cds-mt-5"
+  >
+    <p
+      class="cds--type-label-01"
+      i18n
+    >
+      Retention
+    </p>
+    <p class="cds--type-body-compact-01 cds-mt-2">{{ retention }}</p>
+  </div>
+
+  @if (selectedPaths.length) {
+    <div
+      cdsCol
+      [columnNumbers]="{ sm: 4, md: 8, lg: 12 }"
+      class="cds-mt-5"
+    >
+      <p
+        class="cds--type-label-01"
+        i18n
+      >
+        Selected paths
+      </p>
+      <ul class="cds--type-body-compact-01 cds-mt-2">
+        @for (path of selectedPaths; track path) {
+          <li>{{ path }}</li>
+        }
+      </ul>
+    </div>
+  }
 </div>

@@ -194,7 +194,7 @@ describe('CephfsMirroringFsOverviewComponent helpers', () => {
   });
 
   const call = <T>(method: string, ...args: unknown[]): T =>
-    ((component as unknown) as Record<string, (...a: unknown[]) => T>)[method](...args);
+    (component as unknown as Record<string, (...a: unknown[]) => T>)[method](...args);
 
   it('getDaemonOverviewInfo returns defaults when filesystem is missing', () => {
     const info = call<DaemonOverviewInfo>('getDaemonOverviewInfo', [], 'missing');
