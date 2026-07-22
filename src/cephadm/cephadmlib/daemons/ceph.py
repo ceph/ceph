@@ -1,6 +1,7 @@
 import logging
 import os
 import json
+import time
 
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -423,11 +424,25 @@ echo "$DM_CRYPT_KEY" | cryptsetup luksOpen $LV_PATH $DEV_NAME
                     helper_script_path: '/tmp/cryptsetup_action.sh',
                 },
             )
-            out, err, ret = call(
-                ctx,
-                cryptsetup_open_container.run_cmd(),
-                verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
-            )
+            max_retries = 10
+            retry_delay = 2
+            for attempt in range(1, max_retries + 1):
+                out, err, ret = call(
+                    ctx,
+                    cryptsetup_open_container.run_cmd(),
+                    verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+                )
+                if not ret:
+                    break
+                if 'Device or resource busy' in err or ret == 16 or 'busy' in err.lower():
+                    logger.info(
+                        f'Device busy during cryptsetup luksOpen, retrying in {retry_delay}s '
+                        f'(attempt {attempt}/{max_retries})...'
+                    )
+                    time.sleep(retry_delay)
+                else:
+                    break
+
             os.remove(helper_script_path)
             if ret:
                 raise Error(
@@ -452,11 +467,25 @@ echo "$DM_CRYPT_KEY" | cryptsetup luksOpen $LV_PATH $DEV_NAME
             ],
             volume_mounts={'/dev': '/dev'},
         )
-        out, err, ret = call(
-            ctx,
-            bluestore_tool_container.run_cmd(),
-            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
-        )
+        max_retries = 10
+        retry_delay = 2
+        for attempt in range(1, max_retries + 1):
+            out, err, ret = call(
+                ctx,
+                bluestore_tool_container.run_cmd(),
+                verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+            )
+            if not ret:
+                break
+            if 'Device or resource busy' in err or ret == 16 or 'busy' in err.lower():
+                logger.info(
+                    f'Block device {dev_path} is busy during ceph-bluestore-tool set-label-key, '
+                    f'retrying in {retry_delay}s (attempt {attempt}/{max_retries})...'
+                )
+                time.sleep(retry_delay)
+            else:
+                break
+
         if ret:
             raise Error(
                 'Got error rotating osd keyring using ceph-bluestore-tool\n'
@@ -478,11 +507,25 @@ echo "$DM_CRYPT_KEY" | cryptsetup luksOpen $LV_PATH $DEV_NAME
                     '/dev': '/dev',
                 },
             )
-            out, err, ret = call(
-                ctx,
-                cryptsetup_close_container.run_cmd(),
-                verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
-            )
+            max_retries = 10
+            retry_delay = 2
+            for attempt in range(1, max_retries + 1):
+                out, err, ret = call(
+                    ctx,
+                    cryptsetup_close_container.run_cmd(),
+                    verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+                )
+                if not ret:
+                    break
+                if 'Device or resource busy' in err or ret == 16 or 'busy' in err.lower():
+                    logger.info(
+                        f'Device busy during cryptsetup luksClose, retrying in {retry_delay}s '
+                        f'(attempt {attempt}/{max_retries})...'
+                    )
+                    time.sleep(retry_delay)
+                else:
+                    break
+
             if ret:
                 raise Error(
                     'Got error rotating osd keyring while using cryptsetup tool\n'
