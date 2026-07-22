@@ -44,6 +44,7 @@ releases:
 
   reef:
     target_eol: 2026-03-31
+    actual_eol: 2025-03-31
     releases:
       - version: 18.2.8
         released: 2026-03-31
