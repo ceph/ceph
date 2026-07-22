@@ -591,6 +591,14 @@ void rgw::AppMain::init_lua()
 #ifdef WITH_RADOSGW_RADOS
 void rgw::AppMain::init_dedup()
 {
+  auto run_dedup =
+    (g_conf()->rgw_enable_dedup_threads &&
+      ((!nfs) || (nfs && g_conf()->rgw_nfs_run_dedup_threads)));
+
+  if (!run_dedup) {
+    return;
+  }
+
   rgw::sal::Driver* driver = env.driver;
   if (driver->get_name() == "rados") { /* Supported for only RadosStore */
     try {

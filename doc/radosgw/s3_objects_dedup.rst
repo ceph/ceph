@@ -68,6 +68,24 @@ are treated as comments. Whitespace is ignored. The file must contain at least
 one valid name; an empty or all-comment file is rejected.
 
 
+Configuration
+=============
+
+The dedup background thread must be enabled on at least one RGW daemon in each
+zone for dedup operations to function. Having the thread enabled on multiple
+RGW processes within the same zone spreads the dedup work between them.
+
+.. confval:: rgw_enable_dedup_threads
+
+This setting is evaluated at RGW startup. Changing it requires a daemon
+restart.
+
+When running RGW as an NFS-Ganesha gateway (librgw), the dedup thread is
+disabled by default. To enable it in NFS mode, also set:
+
+.. confval:: rgw_nfs_run_dedup_threads
+
+
 Skipped Objects
 ===============
 
