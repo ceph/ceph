@@ -1153,6 +1153,7 @@ public:
   std::string gen_temp_fname();
   const std::string get_fname(bool use_version);
   bool check_exists(const DoutPrefixProvider* dpp) { stat(dpp); return state.exists; }
+  bool exists() override { stat(nullptr); return state.exists;};
   int get_owner(const DoutPrefixProvider *dpp, optional_yield y, std::unique_ptr<User> *owner);
   int copy(const DoutPrefixProvider *dpp, optional_yield y, POSIXBucket *sb,
            POSIXBucket *db, POSIXObject *dobj);
