@@ -111,7 +111,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().pool;
-    this.resource = $localize`NFS export`;
+    this.resource = $localize`NFS share`;
     this.storageBackend = getFsalFromRoute(this.router.url);
   }
 
