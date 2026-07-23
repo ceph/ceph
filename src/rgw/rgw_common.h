@@ -1332,6 +1332,7 @@ struct req_state : DoutPrefixProvider {
   rgw_err err;
   bool expect_cont{false};
   uint64_t obj_size{0};
+  uint64_t rdma_bytes_transferred{0};
   bool enable_ops_log;
   bool enable_usage_log;
   rgw_s3select_usage_data s3select_usage;
