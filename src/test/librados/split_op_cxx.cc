@@ -11,7 +11,14 @@ using namespace librados;
 using namespace cls;
 using namespace rados::cls;
 
-typedef RadosTestPP LibRadosSplitOpPP;
+// Skip replica split reads test whilst the feature is disabled
+class LibRadosSplitOpPP : public RadosTestPP {
+protected:
+  void SetUp() override {
+    GTEST_SKIP() << "Replica split reads disabled";
+  }
+};
+
 typedef RadosTestECPP LibRadosSplitOpECPP;
 
 // After a write is committed, it isn't necessarily true that the log is
