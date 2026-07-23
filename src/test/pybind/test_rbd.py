@@ -3146,6 +3146,70 @@ class TestGroups(object):
         with Image(ioctx, image_name) as image:
             eq(0, image.op_features() & RBD_OPERATION_FEATURE_GROUP)
 
+    def test_group_image_remove_default(self):
+        self.group.add_image(ioctx, image_name)
+        self.group.create_snap("snap1")
+        assert_raises(ImageBusy, self.group.remove_image,
+                      ioctx, image_name)
+        self.group.remove_snap("snap1")
+        self.group.remove_image(ioctx, image_name)
+        eq([], list(self.group.list_images()))
+
+    def test_group_image_remove_force(self):
+        self.group.add_image(ioctx, image_name)
+        self.group.create_snap("snap1")
+        self.group.remove_image(ioctx, image_name, force=True)
+        eq([], list(self.group.list_images()))
+        with Image(ioctx, image_name) as image:
+            snaps = list(image.list_snaps())
+            eq(1, len(snaps))
+            eq(RBD_SNAP_NAMESPACE_TYPE_GROUP, snaps[0]["namespace"])
+        eq(1, len(list(self.group.list_snaps())))
+        self.group.remove_snap("snap1")
+
+    def test_group_image_remove_purge(self):
+        self.group.add_image(ioctx, image_name)
+        self.group.create_snap("snap1")
+        with Image(ioctx, image_name) as image:
+            eq(1, len(list(image.list_snaps())))
+        self.group.remove_image(ioctx, image_name, purge_user_snaps=True)
+        eq([], list(self.group.list_snaps()))
+        with Image(ioctx, image_name) as image:
+            eq([], list(image.list_snaps()))
+        eq([], list(self.group.list_images()))
+
+    def test_group_image_remove_purge_preserves_unrelated_group_snapshot(self):
+        image2_name = get_temp_image_name()
+        RBD().create(ioctx, image2_name, IMG_SIZE)
+        try:
+            self.group.add_image(ioctx, image_name)
+            self.group.create_snap("snap1")
+            self.group.add_image(ioctx, image2_name)
+            # Future snapshots should no longer include image1.
+            self.group.remove_image(ioctx, image_name, force=True)
+            self.group.create_snap("snap2")
+            # Purge only snapshots that reference image2.
+            self.group.remove_image(ioctx, image2_name,
+                                    purge_user_snaps=True)
+            eq(["snap1"], [s["name"] for s in self.group.list_snaps()])
+            with Image(ioctx, image_name) as image:
+                snaps = list(image.list_snaps())
+                eq(1, len(snaps))
+                eq(RBD_SNAP_NAMESPACE_TYPE_GROUP, snaps[0]["namespace"])
+            with Image(ioctx, image2_name) as image:
+                eq([], list(image.list_snaps()))
+            self.group.remove_snap("snap1")
+        finally:
+            RBD().remove(ioctx, image2_name)
+
+    def test_group_image_remove_force_and_purge_invalid(self):
+        self.group.add_image(ioctx, image_name)
+        self.group.create_snap("snap1")
+        assert_raises(InvalidArgument, self.group.remove_image, ioctx,
+                      image_name, force=True, purge_user_snaps=True)
+        eq([image_name], [img["name"] for img in self.group.list_images()])
+        eq(["snap1"], [snap["name"] for snap in self.group.list_snaps()])
+
     def test_group_snap_get_info(self):
         self.image_names.append(create_image())
         self.image_names.sort()
@@ -3257,7 +3321,7 @@ class TestGroups(object):
         self.group.add_image(ioctx, image_name)
         self.group.create_snap(snap_name)
         eq(1, len([snap['name'] for snap in self.image.list_snaps()]))
-        self.group.remove_image(ioctx, image_name)
+        self.group.remove_image(ioctx, image_name, force=True) # old default
         self.group.remove_snap(snap_name)
         eq([], list(self.group.list_snaps()))
 
@@ -3449,7 +3513,7 @@ class TestGroups(object):
             image.write(b'c' * 256, 0)
 
         for i in range(0, 3):
-            self.group.remove_image(ioctx, self.image_names[i])
+            self.group.remove_image(ioctx, self.image_names[i], force=True) # old default
         with Image(ioctx, self.image_names[0]) as image:
             image_snaps = list(image.list_snaps())
             assert [s['namespace'] for s in image_snaps] == [RBD_SNAP_NAMESPACE_TYPE_GROUP,
@@ -3495,21 +3559,21 @@ class TestGroups(object):
             assert read == b'c' * 256
 
         # group = [img1]
-        self.group.remove_image(ioctx, self.image_names[0])
+        self.group.remove_image(ioctx, self.image_names[0], force=True) # old default
         self.group.add_image(ioctx, self.image_names[1])
         assert_raises(InvalidArgument, self.group.rollback_to_snap, snap_name1)
         assert_raises(InvalidArgument, self.group.rollback_to_snap, snap_name2)
         assert_raises(InvalidArgument, self.group.rollback_to_snap, snap_name3)
 
         # group = [img2]
-        self.group.remove_image(ioctx, self.image_names[1])
+        self.group.remove_image(ioctx, self.image_names[1], force=True) # old default
         self.group.add_image(ioctx, self.image_names[2])
         assert_raises(InvalidArgument, self.group.rollback_to_snap, snap_name1)
         assert_raises(InvalidArgument, self.group.rollback_to_snap, snap_name2)
         assert_raises(InvalidArgument, self.group.rollback_to_snap, snap_name3)
 
         # group = [img0 img1]
-        self.group.remove_image(ioctx, self.image_names[2])
+        self.group.remove_image(ioctx, self.image_names[2], force=True) # old default
         # re-add in reverse order to test that order doesn't matter
         self.group.add_image(ioctx, self.image_names[1])
         self.group.add_image(ioctx, self.image_names[0])
@@ -3528,14 +3592,14 @@ class TestGroups(object):
             assert read == b'c' * 256
 
         # group = [img0 img2]
-        self.group.remove_image(ioctx, self.image_names[1])
+        self.group.remove_image(ioctx, self.image_names[1], force=True) # old default
         self.group.add_image(ioctx, self.image_names[2])
         assert_raises(InvalidArgument, self.group.rollback_to_snap, snap_name1)
         assert_raises(InvalidArgument, self.group.rollback_to_snap, snap_name2)
         assert_raises(InvalidArgument, self.group.rollback_to_snap, snap_name3)
 
         # group = [img1 img2]
-        self.group.remove_image(ioctx, self.image_names[0])
+        self.group.remove_image(ioctx, self.image_names[0], force=True) # old default
         self.group.add_image(ioctx, self.image_names[1])
         assert_raises(InvalidArgument, self.group.rollback_to_snap, snap_name1)
         assert_raises(InvalidArgument, self.group.rollback_to_snap, snap_name2)
@@ -3558,7 +3622,7 @@ class TestGroups(object):
             assert read == b'9' * 256
 
         # group = [img0 img1]
-        self.group.remove_image(ioctx, self.image_names[2])
+        self.group.remove_image(ioctx, self.image_names[2], force=True) # old default
         assert_raises(InvalidArgument, self.group.rollback_to_snap, snap_name1)
         self.group.rollback_to_snap(snap_name2)
         assert_raises(InvalidArgument, self.group.rollback_to_snap, snap_name3)
@@ -3574,7 +3638,7 @@ class TestGroups(object):
             assert read == b'9' * 256
 
         # group = [img0]
-        self.group.remove_image(ioctx, self.image_names[1])
+        self.group.remove_image(ioctx, self.image_names[1], force=True) # old default
         self.group.rollback_to_snap(snap_name1)
         assert_raises(InvalidArgument, self.group.rollback_to_snap, snap_name2)
         assert_raises(InvalidArgument, self.group.rollback_to_snap, snap_name3)

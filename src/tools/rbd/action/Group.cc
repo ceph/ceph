@@ -445,6 +445,20 @@ int execute_remove_image(const po::variables_map &vm,
     return r;
   }
 
+  const bool purge = vm["purge-user-snaps"].as<bool>();
+  const bool force = vm["force"].as<bool>();
+  if (purge && force) {
+    std::cerr << "rbd: --force and --purge-user-snaps are mutually exclusive."
+              << std::endl;
+    return -EINVAL;
+  }
+  librbd::GroupImageRemoveMode mode = librbd::GROUP_IMAGE_REMOVE_DEFAULT;
+  if (purge) {
+    mode = librbd::GROUP_IMAGE_REMOVE_PURGE_USER_SNAPS;
+  } else if (force) {
+    mode = librbd::GROUP_IMAGE_REMOVE_FORCE;
+  }
+
   if (group_namespace_name != image_namespace_name) {
     std::cerr << "rbd: group and image namespace must match." << std::endl;
     return -EINVAL;
@@ -470,12 +484,18 @@ int execute_remove_image(const po::variables_map &vm,
   librbd::RBD rbd;
   if (image_id.empty()) {
     r = rbd.group_image_remove(cg_io_ctx, group_name.c_str(),
-                               image_io_ctx, image_name.c_str());
+                               image_io_ctx, image_name.c_str(), mode);
   } else {
     r = rbd.group_image_remove_by_id(cg_io_ctx, group_name.c_str(),
-                                     image_io_ctx, image_id.c_str());
+                                     image_io_ctx, image_id.c_str(), mode);
   }
-  if (r < 0) {
+  if (r == -EBUSY) {
+    std::cerr << "rbd: image is referenced by one or more user group snapshots.\n"
+              << "Use --force to keep dependent snapshots.\n"
+              << "Use --purge-user-snaps to delete dependent snapshots."
+              << std::endl;
+    return r;
+  } else if (r < 0) {
     std::cerr << "rbd: remove image error: " << cpp_strerror(r) << std::endl;
     return r;
   }
@@ -1070,6 +1090,15 @@ void get_remove_image_arguments(po::options_description *positional,
   at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE);
 
   at::add_image_id_option(options);
+
+  options->add_options()
+    ("force",
+     po::bool_switch()->default_value(false),
+     "keep dependent user group snapshots");
+
+  options->add_options()
+    ("purge-user-snaps", po::bool_switch()->default_value(false),
+     "delete dependent user group snapshots");
 }
 
 void get_list_images_arguments(po::options_description *positional,

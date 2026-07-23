@@ -34,11 +34,15 @@ struct Group {
   static int image_add(librados::IoCtx& group_ioctx, const char *group_name,
                        librados::IoCtx& image_ioctx, const char *image_name);
   static int image_remove(librados::IoCtx& group_ioctx, const char *group_name,
-                          librados::IoCtx& image_ioctx, const char *image_name);
+                          librados::IoCtx& image_ioctx, const char *image_name,
+                          GroupImageRemoveMode mode =
+                            GROUP_IMAGE_REMOVE_DEFAULT);
   static int image_remove_by_id(librados::IoCtx& group_ioctx,
                                 const char *group_name,
                                 librados::IoCtx& image_ioctx,
-                                const char *image_id);
+                                const char *image_id,
+                                GroupImageRemoveMode mode =
+                                  GROUP_IMAGE_REMOVE_DEFAULT);
   static int image_list(librados::IoCtx& group_ioctx, const char *group_name,
 		        std::vector<group_image_info_t> *images);
 
@@ -65,9 +69,10 @@ struct Group {
                                     const std::string &group_id,
                                     std::vector<cls::rbd::GroupImageStatus> *images);
   static int group_image_remove(librados::IoCtx& group_ioctx,
-                                std::string group_id,
+                                const std::string& group_id,
                                 librados::IoCtx& image_ioctx,
-                                std::string image_id);
+                                const std::string& image_id,
+                                GroupImageRemoveMode mode);
 
   static int snap_get_mirror_namespace(librados::IoCtx& group_ioctx,
                                        const char *group_name, const char *snap_id,

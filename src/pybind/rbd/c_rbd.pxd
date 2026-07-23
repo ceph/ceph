@@ -348,6 +348,11 @@ cdef extern from "rbd/librbd.h" nogil:
         _RBD_ENCRYPTION_ALGORITHM_AES128 "RBD_ENCRYPTION_ALGORITHM_AES128"
         _RBD_ENCRYPTION_ALGORITHM_AES256 "RBD_ENCRYPTION_ALGORITHM_AES256"
 
+    ctypedef enum rbd_group_image_remove_mode_t:
+        RBD_GROUP_IMAGE_REMOVE_DEFAULT
+        RBD_GROUP_IMAGE_REMOVE_FORCE
+        RBD_GROUP_IMAGE_REMOVE_PURGE_USER_SNAPS
+
     ctypedef struct rbd_encryption_luks1_format_options_t:
         rbd_encryption_algorithm_t alg
         const char* passphrase
@@ -810,7 +815,9 @@ cdef extern from "rbd/librbd.h" nogil:
                             rados_ioctx_t image_p, const char *image_name)
     int rbd_group_image_remove(rados_ioctx_t group_p, const char *group_name,
                                rados_ioctx_t image_p, const char *image_name)
-
+    int rbd_group_image_remove2(rados_ioctx_t group_p, const char *group_name,
+                                rados_ioctx_t image_p, const char *image_name,
+                                rbd_group_image_remove_mode_t mode)
     int rbd_group_image_list(rados_ioctx_t group_p,
                              const char *group_name,
                              rbd_group_image_info_t *images,
