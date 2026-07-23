@@ -276,55 +276,43 @@ class TestCephAdm(object):
         assert port_in_use(empty_ctx, _cephadm.EndPoint('100.0.0.0', 4567)) == True
         assert port_in_use(empty_ctx, _cephadm.EndPoint('155.0.0.0', 4567)) == False
 
-    @mock.patch('socket.socket')
+    @mock.patch('cephadmlib.net_utils.run_in_host', return_value=0)
     @mock.patch('cephadm.logger')
-    def test_check_ip_port_success(self, _logger, _socket):
+    def test_check_ip_port_success(self, _logger, _run_in_host):
         ctx = _cephadm.CephadmContext()
         ctx.skip_ping_check = False  # enables executing port check with `check_ip_port`
 
-        for address, address_family in (
-            ('0.0.0.0', socket.AF_INET),
-            ('::', socket.AF_INET6),
-        ):
-            try:
-                _cephadm.check_ip_port(ctx, _cephadm.EndPoint(address, 9100))
-            except:
-                assert False
-            else:
-                assert _socket.call_args == mock.call(address_family, socket.SOCK_STREAM)
+        for address in ('0.0.0.0', '::'):
+            _cephadm.check_ip_port(ctx, _cephadm.EndPoint(address, 9100))
+            assert _run_in_host.called
+            assert _run_in_host.call_args.kwargs['name'] == 'cephadm-check-ip-port.service'
+            cmd = _run_in_host.call_args.args[0]
+            assert cmd[0] == '/usr/bin/python3'
+            assert cmd[-2] == address
+            assert cmd[-1] == '9100'
 
-    @mock.patch('socket.socket')
+    @mock.patch('cephadmlib.net_utils.run_in_host')
     @mock.patch('cephadm.logger')
-    def test_check_ip_port_failure(self, _logger, _socket):
+    def test_check_ip_port_failure(self, _logger, _run_in_host):
         from cephadmlib.net_utils import PortOccupiedError
 
         ctx = _cephadm.CephadmContext()
         ctx.skip_ping_check = False  # enables executing port check with `check_ip_port`
 
-        def os_error(errno):
-            _os_error = OSError()
-            _os_error.errno = errno
-            return _os_error
-
-        for address, address_family in (
-            ('0.0.0.0', socket.AF_INET),
-            ('::', socket.AF_INET6),
-        ):
-            for side_effect, expected_exception in (
-                (os_error(errno.EADDRINUSE), PortOccupiedError),
-                (os_error(errno.EADDRNOTAVAIL), OSError),
-                (os_error(errno.EAFNOSUPPORT), OSError),
-                (None, None),
+        for address in ('0.0.0.0', '::'):
+            for status, expected_exception in (
+                (errno.EADDRINUSE, PortOccupiedError),
+                (errno.EADDRNOTAVAIL, OSError),
+                (errno.EAFNOSUPPORT, OSError),
+                (0, None),
             ):
-                mock_socket_obj = mock.Mock()
-                mock_socket_obj.bind.side_effect = side_effect
-                _socket.return_value = mock_socket_obj
+                _run_in_host.return_value = status
                 try:
                     _cephadm.check_ip_port(ctx, _cephadm.EndPoint(address, 9100))
                 except Exception as e:
                     assert isinstance(e, expected_exception)
                 else:
-                    if side_effect is not None:
+                    if status:
                         assert False
 
 

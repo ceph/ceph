@@ -552,6 +552,7 @@ Summary:        Utility to bootstrap Ceph clusters
 BuildArch:      noarch
 Requires:       lvm2
 Requires:       python3
+Requires:       python3-pystemd
 Requires:       openssh-server
 Requires:       which
 %if 0%{?weak_deps}
