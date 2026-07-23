@@ -23,6 +23,14 @@ route:
       group_interval: 10s
       repeat_interval: 1h
       receiver: 'ceph-dashboard'
+{% if webhook_urls %}
+      continue: true
+    - group_by: ['alertname']
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 1h
+      receiver: 'custom-receiver'
+{% endif %}
 {% if snmp_gateway_urls %}
       continue: true
     - receiver: 'snmp-gateway'
@@ -36,7 +44,9 @@ route:
 receivers:
 - name: 'default'
   webhook_configs:
-{% for url in default_webhook_urls %}
+- name: 'custom-receiver'
+  webhook_configs:
+{% for url in webhook_urls %}
   - url: '{{ url }}'
 {% endfor %}
 - name: 'ceph-dashboard'
