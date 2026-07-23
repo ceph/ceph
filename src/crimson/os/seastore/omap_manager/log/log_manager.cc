@@ -153,7 +153,8 @@ LogManager::omap_set_keys(
 	  continue;
 	}
 	if (cur->expect_overflow(p.first, p.second.length(),
-	    !is_ow_key(p.first) ? cur->can_ow() : false)) {
+	    (!is_ow_key(p.first) && !cur->is_initial_pending())
+	      ? cur->can_ow() : false)) {
 	  // This means the first entry of the new LogNode is not _fastinfo
 	  if (!is_ow_key(p.first)) {
 	    // remove _fastinfo in old LogNode
