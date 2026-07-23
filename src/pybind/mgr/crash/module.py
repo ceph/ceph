@@ -228,7 +228,7 @@ class Module(MgrModule):
         assert self.crashes is not None
         crash = self.crashes.get(crashid)
         if not crash:
-            return errno.EINVAL, '', 'crash info: %s not found' % crashid
+            return -errno.EINVAL, '', 'crash info: %s not found' % crashid
         val = json.dumps(crash, indent=4, sort_keys=True)
         return 0, val, ''
 
@@ -240,7 +240,7 @@ class Module(MgrModule):
         try:
             metadata = self.validate_crash_metadata(inbuf)
         except Exception as e:
-            return errno.EINVAL, '', 'malformed crash metadata: %s' % e
+            return -errno.EINVAL, '', 'malformed crash metadata: %s' % e
         if 'backtrace' in metadata:
             backtrace = cast(List[str], metadata.get('backtrace'))
             assert_msg = cast(Optional[str], metadata.get('assert_msg'))
@@ -345,7 +345,7 @@ class Module(MgrModule):
         assert self.crashes is not None
         crash = self.crashes.get(crashid)
         if not crash:
-            return errno.EINVAL, '', 'crash info: %s not found' % crashid
+            return -errno.EINVAL, '', 'crash info: %s not found' % crashid
         if not crash.get('archived'):
             crash['archived'] = str(datetime.datetime.utcnow())
             self.crashes[crashid] = crash
