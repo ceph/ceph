@@ -724,7 +724,7 @@ login_control:
   - name: itstaff
     category: group
     access: rw
-  - name: caldor
+  - name: "caldor hart"
     category: user
     access: admin
   - name: delbard
@@ -742,7 +742,7 @@ login_control:
     assert share.login_control[1].name == 'itstaff'
     assert share.login_control[1].category == enums.LoginCategory.GROUP
     assert share.login_control[1].access == enums.LoginAccess.READ_WRITE
-    assert share.login_control[2].name == 'caldor'
+    assert share.login_control[2].name == 'caldor hart'
     assert share.login_control[2].category == enums.LoginCategory.USER
     assert share.login_control[2].access == enums.LoginAccess.ADMIN
     assert share.login_control[3].name == 'delbard'
