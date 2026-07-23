@@ -61,9 +61,16 @@ int sts_load_key(const sts_keyring_entry& in, CryptoKey& out)
 }
 
 int get_sts_legacy_key_handler(const DoutPrefixProvider* dpp, CephContext* cct,
+                               STS::KeyringCache* keyring_cache,
                                std::shared_ptr<CryptoKeyHandler>& out)
 {
-  const std::string secret = cct->_conf.get_val<std::string>("rgw_sts_key");
+  // rgw_sts_key always takes precedence over the stored legacy key
+  const std::string conf_key = cct->_conf.get_val<std::string>("rgw_sts_key");
+  STS::LegacyKeySnapshot legacy;
+  if (conf_key.empty() && keyring_cache) {
+    legacy = keyring_cache->get_legacy();
+  }
+  const std::string& secret = legacy ? *legacy : conf_key;
   if (secret.empty()) {
     ldpp_dout(dpp, 1) << "ERROR: rgw sts key not set" << dendl;
     return -EINVAL;
@@ -190,7 +197,7 @@ int decode_session_token(const DoutPrefixProvider* dpp, CephContext* cct,
       return -EINVAL;
     }
     std::shared_ptr<CryptoKeyHandler> keyhandler;
-    if (int ret = get_sts_legacy_key_handler(dpp, cct, keyhandler); ret < 0) {
+    if (int ret = get_sts_legacy_key_handler(dpp, cct, keyring_cache, keyhandler); ret < 0) {
       return ret;
     }
     std::string error;
@@ -254,7 +261,8 @@ int Credentials::generateCredentials(const DoutPrefixProvider *dpp,
     if (int ret = get_sts_keyring(dpp, keyring_cache, keyring); ret < 0) {
       return ret;
     }
-  } else if (int ret = get_sts_legacy_key_handler(dpp, cct, keyhandler); ret < 0) {
+  } else if (int ret = get_sts_legacy_key_handler(dpp, cct, keyring_cache,
+                                                  keyhandler); ret < 0) {
     return ret;
   }
 
