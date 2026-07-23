@@ -1,4 +1,3 @@
-
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
@@ -138,7 +137,8 @@ public:
                                                                               nullptr: orig_info was not found (new bucket instance */
                                  bool exclusive,
                                  real_time mtime,
-                                 const std::map<std::string, bufferlist> *pattrs,
+                                 const std::map<std::string, bufferlist>* pattrs,
+                                 const std::map<std::string, bufferlist>* omap_entries,
                                  optional_yield y,
                                  const DoutPrefixProvider *dpp) override;
 
@@ -156,5 +156,29 @@ public:
   int read_buckets_stats(std::vector<RGWBucketEnt>& buckets,
                          optional_yield y,
                          const DoutPrefixProvider *dpp) override;
-};
 
+  /*
+   * parameters:
+   *   after: returned keys must be greater than after
+   *   prefix: all returned entries must begin with prefix
+   *   max: maximum number to return
+   *   default_key: if using after and prefix nothing matches, then return
+   *                this entry instead
+   *   results: key/value pairs
+   *   more: if true additional entries match
+   */
+  int read_bucket_info_map(const std::string& bucket_key,
+                           const std::string& after,
+                           const std::string& prefix,
+                           const uint64_t count,
+                           const std::string* default_key, // nullptr indicates none
+                           std::map<std::string, bufferlist>* results,
+                           bool* more,
+                           optional_yield y,
+                           const DoutPrefixProvider *dpp);
+
+  int clear_bucket_info_map(const std::string& bucket_key,
+                            optional_yield y,
+                            const DoutPrefixProvider *dpp);
+
+}; // class RGWSI_Bucket_SObj

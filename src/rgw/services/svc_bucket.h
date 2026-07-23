@@ -1,4 +1,3 @@
-
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
@@ -79,15 +78,16 @@ public:
                        optional_yield y,
                        const DoutPrefixProvider *dpp) = 0;
 
-  virtual int store_bucket_instance_info(const std::string& key,
-                                 RGWBucketInfo& info,
-                                 std::optional<RGWBucketInfo *> orig_info, /* nullopt: orig_info was not fetched,
-                                                                              nullptr: orig_info was not found (new bucket instance */
-                                 bool exclusive,
-                                 real_time mtime,
-                                 const std::map<std::string, bufferlist> *pattrs,
-                                 optional_yield y,
-                                 const DoutPrefixProvider *dpp) = 0;
+    virtual int store_bucket_instance_info(const std::string& key,
+                                           RGWBucketInfo& info,
+                                           std::optional<RGWBucketInfo *> orig_info, /* nullopt: orig_info was not fetched,
+                                                                                        nullptr: orig_info was not found (new bucket instance */
+                                           bool exclusive,
+                                           real_time mtime,
+                                           const std::map<std::string, bufferlist>* pattrs,
+                                           const std::map<std::string, bufferlist>* omap_entries,
+                                           optional_yield y,
+                                           const DoutPrefixProvider *dpp) = 0;
 
   virtual int remove_bucket_instance_info(const std::string& key,
 				  const RGWBucketInfo& bucket_info,

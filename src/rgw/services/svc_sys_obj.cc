@@ -131,14 +131,39 @@ int RGWSI_SysObj::Obj::OmapOp::get_all(const DoutPrefixProvider *dpp, std::map<s
 }
 
 int RGWSI_SysObj::Obj::OmapOp::get_vals(const DoutPrefixProvider *dpp, 
-                                        const string& marker, uint64_t count,
+                                        const string& marker,
+                                        uint64_t count,
                                         std::map<string, bufferlist> *m,
-                                        bool *pmore, optional_yield y)
+                                        bool *pmore,
+                                        optional_yield y)
+{
+  return get_vals(dpp, marker, "", count, nullptr, m, pmore, y);
+}
+
+
+/*
+ * parameters:
+ *   marker: returned keys must be greater than *after*
+ *   prefix: all returned entries must begin with prefix
+ *   count: maximum number to return
+ *   default_key: if using after and prefix nothing matches, then return
+ *                this entry instead
+ *   m: key/value pairs
+ *   pmore: if true additional entries match
+ */
+int RGWSI_SysObj::Obj::OmapOp::get_vals(const DoutPrefixProvider* dpp,
+                                        const std::string& marker,
+                                        const std::string& prefix,
+                                        uint64_t count,
+                                        const std::string* default_key,
+                                        std::map<std::string, bufferlist>* m,
+                                        bool* pmore,
+                                        optional_yield y)
 {
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.obj;
 
-  return svc->omap_get_vals(dpp, obj, marker, count, m, pmore, y);
+  return svc->omap_get_vals(dpp, obj, marker, prefix, count, default_key, m, pmore, y);
 }
 
 int RGWSI_SysObj::Obj::OmapOp::set(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& bl,
@@ -165,6 +190,14 @@ int RGWSI_SysObj::Obj::OmapOp::del(const DoutPrefixProvider *dpp, const std::str
   rgw_raw_obj& obj = source.obj;
 
   return svc->omap_del(dpp, obj, key, y);
+}
+
+int RGWSI_SysObj::Obj::OmapOp::clear(const DoutPrefixProvider *dpp, optional_yield y)
+{
+  RGWSI_SysObj_Core *svc = source.core_svc;
+  rgw_raw_obj& obj = source.obj;
+
+  return svc->omap_clear(dpp, obj, y);
 }
 
 int RGWSI_SysObj::Obj::WNOp::notify(const DoutPrefixProvider *dpp, bufferlist& bl, uint64_t timeout_ms,

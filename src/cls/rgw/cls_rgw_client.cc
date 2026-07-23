@@ -21,6 +21,7 @@ using namespace cls::rgw;
 
 const string BucketIndexShardsManager::KEY_VALUE_SEPARATOR = "#";
 const string BucketIndexShardsManager::SHARDS_SEPARATOR = ",";
+const bufferlist cls_rgw_empty_buffer_list; // no data inside
 
 /**
  * This class represents the bucket index object operation callback context.
@@ -50,15 +51,25 @@ public:
   }
 };
 
-void cls_rgw_bucket_init_index(ObjectWriteOperation& o)
+void cls_rgw_bucket_init_index(ObjectWriteOperation& o,
+			       rgw::BucketIndexType type,
+			       const bufferlist& index_type_data)
 {
   bufferlist in;
+  encode(type, in);
+  encode(index_type_data, in);
+
   o.exec(method::bucket_init_index, in);
 }
 
-void cls_rgw_bucket_init_index2(ObjectWriteOperation& o)
+void cls_rgw_bucket_init_index2(ObjectWriteOperation& o,
+			       rgw::BucketIndexType type,
+			       const bufferlist& index_type_data)
 {
   bufferlist in;
+  encode(type, in);
+  encode(index_type_data, in);
+
   o.exec(method::bucket_init_index2, in);
 }
 

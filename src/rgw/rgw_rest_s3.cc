@@ -2767,7 +2767,7 @@ int RGWCreateBucket_ObjStore_S3::get_params(optional_yield y)
       createparams.index_type = type;
 
       if (config->index->num_shards) {
-        if (type != rgw::BucketIndexType::Normal) {
+        if (type != rgw::BucketIndexType::Hashed) {
           s->err.message = "NumShards requires Type to be Normal";
           return -EINVAL;
         }

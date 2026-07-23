@@ -22,6 +22,8 @@
 class RGWBucketInfo;
 struct RGWBucketEnt;
 
+namespace rgw { namespace rados { class BIndexer; } }
+
 
 class RGWSI_BucketIndex : public RGWServiceInstance
 {
@@ -30,12 +32,16 @@ public:
   virtual ~RGWSI_BucketIndex() {}
 
   virtual int init_index(const DoutPrefixProvider *dpp, optional_yield y,
-                         const RGWBucketInfo& bucket_info,
-                         const rgw::bucket_index_layout_generation& idx_layout,
+                         std::unique_ptr<rgw::rados::BIndexer>& bindexer,
+                         std::map<std::string, bufferlist>* binfo_map_data,
                          bool judge_support_logrecord = false) = 0;
+#if 1 // OBI deprecate??
   virtual int clean_index(const DoutPrefixProvider *dpp, optional_yield y,
                           const RGWBucketInfo& bucket_info,
                           const rgw::bucket_index_layout_generation& idx_layout) = 0;
+#endif
+  virtual int clean_index(const DoutPrefixProvider *dpp, optional_yield y,
+                          std::unique_ptr<rgw::rados::BIndexer>& bindexer) = 0;
 
   virtual int read_stats(const DoutPrefixProvider *dpp,
                          const RGWBucketInfo& bucket_info,

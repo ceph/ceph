@@ -2503,7 +2503,7 @@ namespace rgw::dedup {
     librados::IoCtx ioctx;
     // objects holding the bucket-listings
     std::map<int, std::string> oids;
-    ret = store->svc()->bi_rados->open_bucket_index(dpp, bucket_info, std::nullopt,
+    ret = store->svc()->bi_rados->open_bucket_index(dpp, bucket_info, rgw::rados::BIndexer::BI_ALL_SHARDS,
                                                     idx_layout, &ioctx, &oids, nullptr);
     if (ret >= 0) {
       // process all the shards in this bucket owned by the worker_id

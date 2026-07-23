@@ -2215,6 +2215,24 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_bucket_default_index
+  type: str
+  level: advanced
+  desc: Whether new buckets are created w/ "hashed" or "ordered" (currently experimental) indexes
+  long_desc: >-
+    Specifies the bucket indexing scheme when buckets are created. Can
+    be "hashed" and "ordered". They can be resharded between schemes
+    after they're created. WARNING: Ordered is currently in the
+    experimental phase of development.
+  fmt_desc: >-
+    Specifies the bucket indexing scheme when buckets are created. Can
+    be ``hashed`` and ``ordered``. They can be resharded between schemes
+    after they're created. **WARNING**: Ordered is currently in the
+    experimental phase of development.
+  default: hashed
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_relaxed_s3_bucket_names
   type: bool
   level: advanced

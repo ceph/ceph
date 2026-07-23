@@ -222,7 +222,7 @@ struct RGWZonePlacementInfo {
   rgw::BucketIndexType index_type;
   bool inline_data;
 
-  RGWZonePlacementInfo() : index_type(rgw::BucketIndexType::Normal), inline_data(true) {}
+  RGWZonePlacementInfo() : index_type(rgw::BucketIndexType::Hashed), inline_data(true) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(8, 1, bl);

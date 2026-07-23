@@ -633,7 +633,10 @@ int RGWAsyncGetBucketInstanceInfo::_send_request(const DoutPrefixProvider *dpp)
 int RGWAsyncPutBucketInstanceInfo::_send_request(const DoutPrefixProvider *dpp)
 {
   auto r = store->getRados()->put_bucket_instance_info(bucket_info, exclusive,
-						       mtime, attrs, dpp, null_yield);
+						       mtime, attrs,
+// OBI: research further to see if nullptr for omap_entries, is OK
+						       nullptr,
+						       dpp, null_yield);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to put bucket instance info for "
 		      << bucket_info.bucket << dendl;

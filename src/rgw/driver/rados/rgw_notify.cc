@@ -303,7 +303,7 @@ private:
       const auto stale_time = ceph::coarse_real_time::clock::now() - stale_reservations_period;
       librados::ObjectWriteOperation op;
       op.assert_exists();
-      rados::cls::lock::assert_locked(&op, queue_name+"_lock",
+      ::rados::cls::lock::assert_locked(&op, queue_name+"_lock",
         ClsLockType::EXCLUSIVE,
         lock_cookie,
         "" /*no tag*/);
@@ -335,7 +335,7 @@ private:
   int unlock_queue(const std::string& queue_name, boost::asio::yield_context yield) {
     librados::ObjectWriteOperation op;
     op.assert_exists();
-    rados::cls::lock::unlock(&op, queue_name+"_lock", lock_cookie);
+    ::rados::cls::lock::unlock(&op, queue_name+"_lock", lock_cookie);
     auto& rados_ioctx = rados_store->getRados()->get_notif_pool_ctx();
     const auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, std::move(op), yield);
     if (ret == -ENOENT) {
@@ -421,7 +421,7 @@ private:
         op.assert_exists();
         bufferlist obl;
         int rval;
-        rados::cls::lock::assert_locked(&op, queue_name+"_lock", 
+        ::rados::cls::lock::assert_locked(&op, queue_name+"_lock", 
           ClsLockType::EXCLUSIVE,
           lock_cookie, 
           "" /*no tag*/);
@@ -562,7 +562,7 @@ private:
         uint64_t entries_to_remove = index;
         librados::ObjectWriteOperation op;
         op.assert_exists();
-        rados::cls::lock::assert_locked(&op, queue_name+"_lock", 
+        ::rados::cls::lock::assert_locked(&op, queue_name+"_lock", 
           ClsLockType::EXCLUSIVE,
           lock_cookie, 
           "" /*no tag*/);
@@ -710,7 +710,7 @@ private:
         // or if ownership needs to be taken
         librados::ObjectWriteOperation op;
         op.assert_exists();
-        rados::cls::lock::lock(&op, queue_name+"_lock",
+        ::rados::cls::lock::lock(&op, queue_name+"_lock",
               ClsLockType::EXCLUSIVE,
               lock_cookie,
               "" /*no tag*/,

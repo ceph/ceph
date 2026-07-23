@@ -198,8 +198,9 @@ int RadosBucket::create(const DoutPrefixProvider* dpp,
     // prevent re-creation with different index type or shard count
     if ((params.index_type && *params.index_type !=
          info.layout.current_index.layout.type) ||
-        (params.index_shards && *params.index_shards !=
-         info.layout.current_index.layout.normal.num_shards)) {
+        (params.index_shards &&
+	 (rgw::BIShardIndex) (*params.index_shards) !=
+	 rgw::num_shards(info.layout.current_index.layout))) {
       return -ERR_BUCKET_EXISTS;
     }
     ret = 0;
@@ -774,7 +775,8 @@ int RadosBucket::chown(const DoutPrefixProvider* dpp,
 int RadosBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time _mtime, optional_yield y)
 {
   mtime = _mtime;
-  return store->getRados()->put_bucket_instance_info(info, exclusive, mtime, &attrs, dpp, y);
+  // OBI: is nullptr OK here?
+  return store->getRados()->put_bucket_instance_info(info, exclusive, mtime, &attrs, nullptr, dpp, y);
 }
 
 int RadosBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
@@ -850,10 +852,11 @@ int RadosBucket::set_tag_timeout(const DoutPrefixProvider *dpp, optional_yield y
 
 int RadosBucket::purge_instance(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  int max_shards = (info.layout.current_index.layout.normal.num_shards > 0 ? info.layout.current_index.layout.normal.num_shards : 1);
+  int max_shards = (rgw::num_shards(info.layout.current_index.layout.specs) > 0 ?
+		    rgw::num_shards(info.layout.current_index.layout.specs) : 1);
   for (int i = 0; i < max_shards; i++) {
     RGWRados::BucketShard bs(store->getRados());
-    int shard_id = (info.layout.current_index.layout.normal.num_shards > 0  ? i : -1);
+    int shard_id = (rgw::num_shards(info.layout.current_index.layout.specs) > 0 ? i : -1);
     int ret = bs.init(dpp, info, info.layout.current_index, shard_id, y);
     if (ret < 0) {
       cerr << "ERROR: bs.init(bucket=" << info.bucket << ", shard=" << shard_id
@@ -1294,7 +1297,7 @@ int RadosBucket::set_logging_object_name(const std::string& obj_name,
                                objv_tracker,
                                ceph::real_time::clock::now(),
                                y,
-                               no_change_attrs());
+                               no_change_attrs_omap());
   if (ret == -EEXIST) {
     ldpp_dout(dpp, 20) << "INFO: race detected in initializing '" << obj_name_oid << "' with logging object name:'" << obj_name  << "'. ret = " << ret << dendl;
   } else if (ret == -ECANCELED) {
@@ -2746,7 +2749,9 @@ bool RadosObject::is_sync_completed(const DoutPrefixProvider* dpp,
   bool truncated;
   list<rgw_bi_log_entry> entries;
 
-  const int shard_id = RGWSI_BucketIndex_RADOS::bucket_shard_index(get_key(), shard_count);
+  // OBI: need to convert this over to BIShardIdent
+  const int shard_id =
+    rgw::rados::HashedBIndexer::get_shard_index(get_key(), shard_count);
 
   int ret = store->svc()->bilog_rados->log_list(dpp, y, bucket_info, log_layout, shard_id,
     marker, 1, entries, &truncated);
@@ -4640,7 +4645,7 @@ static void renewal(const DoutPrefixProvider* dpp,
                     rgw::sal::MPSerializer& serializer,
                     librados::IoCtx& ioctx,
                     const std::string& oid,
-                    rados::cls::lock::Lock lock,
+                    ::rados::cls::lock::Lock lock,
                     auto& timer,
                     ceph::timespan dur,
                     boost::asio::yield_context yield)
