@@ -435,6 +435,7 @@
      --key-id                      sts keyring key id (40 hexadecimal characters)
      --stage                       sts keyring rotate adds a key that only verifies until promoted
      --max-keys                    keep at most this many keys after sts keyring rotate/trim
+     --legacy                      operate on the stored legacy sts key instead of the keyring
   
   Bucket notifications options:
      --topic                       bucket notifications topic name

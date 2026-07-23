@@ -507,7 +507,8 @@ as follows:
   Initialize the STS token-sealing keyring in the Monitor config-key store.
   Generates a key, or installs one supplied with ``--infile``. The keyring
   seals and verifies ``keyring`` format session tokens; ``legacy`` tokens use
-  the ``rgw_sts_key`` option instead.
+  the ``rgw_sts_key`` option or, when that is unset, the single key stored
+  by ``--legacy``. ``--yes-i-really-mean-it`` allows replacing that key.
 
 :command:`sts keyring rotate`
   Prepend a new sealing key to the STS keyring. Generates a key, or installs
@@ -521,10 +522,12 @@ as follows:
   previous sealing key stays in the keyring to verify the tokens it sealed.
 
 :command:`sts keyring list`
-  List the key ids of the STS keyring.
+  List the key ids of the STS keyring. With ``--legacy``, print whether a
+  legacy key is stored and its sha256 digest.
 
 :command:`sts keyring rm`
-  Remove the STS keyring key named by ``--key-id``.
+  Remove the STS keyring key named by ``--key-id``. With ``--legacy``,
+  remove the stored legacy key instead.
 
 :command:`sts keyring trim`
   Remove the oldest STS keyring keys, keeping the sealing key and, with
@@ -713,6 +716,11 @@ Options
 
    Optional for ``sts keyring rotate`` and ``sts keyring trim`` to keep at
    most this many keys.
+
+.. option:: --legacy
+
+   Operate on the single stored legacy key instead of the keyring.
+   Supported by ``sts keyring init``, ``list``, and ``rm``.
 
 .. option:: --purge-data
 

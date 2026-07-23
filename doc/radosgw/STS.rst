@@ -124,8 +124,10 @@ Keyring session-token sealing
 The keyring that seals and verifies ``keyring`` session tokens is stored in
 the Monitor config-key store under ``rgw/sts/keys``, alongside other cluster
 secrets, and is managed with ``radosgw-admin sts keyring`` commands. The
-keyring applies only to ``keyring`` format tokens; the ``legacy`` format uses
-:confval:`rgw_sts_key` and never reads it. The stored value is a
+keyring seals only ``keyring`` format tokens; the ``legacy`` format uses a
+single key, managed with the same commands under ``--legacy`` and always
+overridden by :confval:`rgw_sts_key` when that option is set (see `Storing
+the legacy key in the config-key store`_). The stored value is a
 whitespace-separated list of ``<key-id>=<key>`` entries,
 where the key id is 40 hexadecimal characters (20 bytes) and the key is the
 padded base64 encoding of 32 random bytes, as ``openssl rand -base64 32``
@@ -148,11 +150,11 @@ interval later.
 Monitor access
 ~~~~~~~~~~~~~~
 
-An RGW reads the keyring with the ``config-key get`` Monitor command.
-``mon 'profile rgw'`` grants that under the ``rgw/`` prefix, as does
-``mon 'allow *'``. Blanket capabilities such as ``mon 'allow rw'`` do not.
-``ceph auth caps`` replaces a key's entire capability set, so give all
-three:
+An RGW reads the keyring and the stored legacy key with the
+``config-key get`` Monitor command. ``mon 'profile rgw'`` grants that under
+the ``rgw/`` prefix, as does ``mon 'allow *'``. Blanket capabilities such as
+``mon 'allow rw'`` do not. ``ceph auth caps`` replaces a key's entire
+capability set, so give all three:
 
 .. prompt:: bash $
 
@@ -207,6 +209,40 @@ example when another cluster joins the deployment later:
 
    umask 077
    ceph config-key get rgw/sts/keys > sts-keyring.txt
+
+Storing the legacy key in the config-key store
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``legacy`` token key can be stored at ``rgw/sts/legacy_key`` beside the
+keyring instead of in the configuration database, where any client
+with ordinary Monitor capabilities can read it. The same commands manage
+it under ``--legacy``:
+
+.. prompt:: bash $
+
+   radosgw-admin sts keyring init --legacy
+   radosgw-admin sts keyring list --legacy
+
+``init --legacy`` generates a key the way ``ceph-authtool --gen-print-key``
+does, or installs one supplied with ``--infile``; with
+``--yes-i-really-mean-it`` it replaces a stored key in one step, which
+invalidates all outstanding legacy tokens.
+``list --legacy`` prints a sha256 digest of the stored key and never the
+key itself; compare digests across clusters the way keyrings are compared
+under `Manually generated keys and multisite`_. ``rm --legacy`` removes
+the stored key. ``rotate``, ``promote``, and ``trim`` do not apply: legacy
+tokens carry no key id, so only one legacy key can exist.
+
+When :confval:`rgw_sts_key` is set it always takes precedence and the
+stored key is ignored; RGW logs a warning when the two differ. To
+migrate an existing deployment, store the current key with
+``init --legacy --infile``, confirm the digest on every cluster, and then
+unset ``rgw_sts_key`` everywhere, including any daemon-local configuration
+files. Each RGW adopts the stored key within one
+:confval:`rgw_sts_keyring_refresh_interval`, except an RGW that read
+``rgw_sts_key`` from a local configuration file, which keeps that value
+until it restarts. In multisite deployments,
+install the same value on every cluster, as with the keyring.
 
 Upgrading an existing deployment
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
