@@ -246,6 +246,56 @@ public:
   }
 };
 
+class ZeroGenerator : public ContentsGenerator {
+  uint64_t zero_offset;
+  uint64_t zero_length;
+  uint64_t obj_size;
+
+  class iterator_impl : public ContentsGenerator::iterator_impl {
+  public:
+    uint64_t pos;
+    const uint64_t end_pos;
+    explicit iterator_impl(uint64_t offset, uint64_t length)
+      : pos(offset), end_pos(offset + length) {}
+    char operator*() override { return '\0'; }
+    iterator_impl &operator++() override { ++pos; return *this; }
+    void seek(uint64_t _pos) override { pos = _pos; }
+    bool end() override { return pos >= end_pos; }
+    ContDesc get_cont() const override { return ContDesc(); }
+    uint64_t get_pos() const override { return pos; }
+  };
+
+public:
+  ZeroGenerator(uint64_t offset, uint64_t length, uint64_t obj_size)
+    : zero_offset(offset), zero_length(length), obj_size(obj_size) {}
+
+  uint64_t get_length(const ContDesc &) override {
+    return obj_size;
+  }
+
+  uint64_t get_zero_offset() const { return zero_offset; }
+  uint64_t get_zero_length() const { return zero_length; }
+
+  void get_ranges_map(const ContDesc &, std::map<uint64_t, uint64_t> &out) override {
+    out.insert(std::make_pair(zero_offset, zero_length));
+  }
+
+  ContentsGenerator::iterator_impl *get_iterator_impl(const ContDesc &) override {
+    return new iterator_impl(zero_offset, zero_length);
+  }
+
+  ContentsGenerator::iterator_impl *dup_iterator_impl(
+    const ContentsGenerator::iterator_impl *in) override {
+    auto *ret = new iterator_impl(zero_offset, zero_length);
+    ret->seek(in->get_pos());
+    return ret;
+  }
+
+  void put_iterator_impl(ContentsGenerator::iterator_impl *in) override {
+    delete in;
+  }
+};
+
 class AttrGenerator : public RandGenerator {
   uint64_t max_len;
   uint64_t big_max_len;
@@ -405,9 +455,9 @@ public:
 
     char operator*() {
       if (current == layers.end()) {
-	return '\0';
+        return '\0';
       } else {
-	return pos >= size ? '\0' : *(current->iter);
+        return pos >= current->get_size() ? '\0' : *(current->iter);
       }
     }
 
@@ -444,7 +494,7 @@ public:
       while (s > 0) {
 	ceph_assert(cur_valid_till >= pos);
 	uint64_t next = std::min(s, cur_valid_till - pos);
-	if (current != layers.end() && pos < size) {
+	if (current != layers.end() && pos < current->get_size()) {
 	  ret.append(current->iter.gen_bl_advance(next));
 	} else {
 	  ret.append_zero(next);
@@ -475,10 +525,11 @@ public:
 
 	bufferlist to_check;
 	to_check.substr_of(bl, off, next);
-	if (current != layers.end() && pos < size) {
-	  if (!current->iter.check_bl_advance(to_check, error_at)) {
+	if (current != layers.end() && pos < current->get_size()) {
+	  uint64_t inner_error_at = 0;
+	  if (!current->iter.check_bl_advance(to_check, &inner_error_at)) {
 	    if (error_at)
-	      *error_at += off;
+	      *error_at = off + inner_error_at;
 	    return false;
 	  }
 	} else {
@@ -521,10 +572,10 @@ public:
   // takes ownership of gen
   void update(ContentsGenerator *gen, const ContDesc &next);
   bool check(bufferlist &to_check,
-	     const std::pair<uint64_t, uint64_t>& offlen);
+      const std::pair<uint64_t, uint64_t>& offlen);
   bool check_sparse(const std::map<uint64_t, uint64_t>& extends,
-		    bufferlist &to_check,
-		    const std::pair<uint64_t, uint64_t>& offlen);
+      bufferlist &to_check,
+      const std::pair<uint64_t, uint64_t>& offlen);
   const ContDesc &most_recent();
 
   // Returns the minimum set of byte ranges that MUST appear in the OSD's

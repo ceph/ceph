@@ -388,12 +388,15 @@ void ObjectModel::applyIoOp(IoOp& op) {
     } break;
 
     case OpType::TruncateWrite: {
-      ceph_assert(primary_created);
+      if (!primary_created) {
+        primary_created = true;
+      }
       ceph_assert(reads.empty());
       ceph_assert(writes.empty());
       SingleTruncateWriteOp& truncWriteOp = static_cast<SingleTruncateWriteOp&>(op);
       // Blocks that the truncate adds have seed 0, so they read as zeros.
       primary_contents.resize(truncWriteOp.size);
+      primary_allocated.resize(truncWriteOp.size, false);
       // Now apply the write operations
       for (int i = 0; i < 1; i++) {
         ceph_assert(!reads.intersects(truncWriteOp.offset[i], truncWriteOp.length[i]));
@@ -401,6 +404,7 @@ void ObjectModel::applyIoOp(IoOp& op) {
         writes.union_insert(truncWriteOp.offset[i], truncWriteOp.length[i]);
         if (truncWriteOp.offset[i] + truncWriteOp.length[i] > primary_contents.size()) {
           primary_contents.resize(truncWriteOp.offset[i] + truncWriteOp.length[i]);
+          primary_allocated.resize(truncWriteOp.offset[i] + truncWriteOp.length[i], false);
         }
         for (uint64_t b = truncWriteOp.offset[i];
              b < truncWriteOp.offset[i] + truncWriteOp.length[i]; b++) {
@@ -408,16 +412,20 @@ void ObjectModel::applyIoOp(IoOp& op) {
           primary_contents[b] = s;
           write_seeds[b] = s;
         }
+        mark_allocated(truncWriteOp.offset[i], truncWriteOp.length[i]);
       }
       num_io++;
     } break;
     case OpType::TruncateWrite2: {
-      ceph_assert(primary_created);
+      if (!primary_created) {
+        primary_created = true;
+      }
       ceph_assert(reads.empty());
       ceph_assert(writes.empty());
       DoubleTruncateWriteOp& truncWriteOp = static_cast<DoubleTruncateWriteOp&>(op);
       // Blocks that the truncate adds have seed 0, so they read as zeros.
       primary_contents.resize(truncWriteOp.size);
+      primary_allocated.resize(truncWriteOp.size, false);
       // Now apply the write operations
       for (int i = 0; i < 2; i++) {
         ceph_assert(!reads.intersects(truncWriteOp.offset[i], truncWriteOp.length[i]));
@@ -425,6 +433,7 @@ void ObjectModel::applyIoOp(IoOp& op) {
         writes.union_insert(truncWriteOp.offset[i], truncWriteOp.length[i]);
         if (truncWriteOp.offset[i] + truncWriteOp.length[i] > primary_contents.size()) {
           primary_contents.resize(truncWriteOp.offset[i] + truncWriteOp.length[i]);
+          primary_allocated.resize(truncWriteOp.offset[i] + truncWriteOp.length[i], false);
         }
         for (uint64_t b = truncWriteOp.offset[i];
              b < truncWriteOp.offset[i] + truncWriteOp.length[i]; b++) {
@@ -432,16 +441,20 @@ void ObjectModel::applyIoOp(IoOp& op) {
           primary_contents[b] = s;
           write_seeds[b] = s;
         }
+        mark_allocated(truncWriteOp.offset[i], truncWriteOp.length[i]);
       }
       num_io++;
     } break;
     case OpType::TruncateWrite3: {
-      ceph_assert(primary_created);
+      if (!primary_created) {
+        primary_created = true;
+      }
       ceph_assert(reads.empty());
       ceph_assert(writes.empty());
       TripleTruncateWriteOp& truncWriteOp = static_cast<TripleTruncateWriteOp&>(op);
       // Blocks that the truncate adds have seed 0, so they read as zeros.
       primary_contents.resize(truncWriteOp.size);
+      primary_allocated.resize(truncWriteOp.size, false);
       // Now apply the write operations
       for (int i = 0; i < 3; i++) {
         ceph_assert(!reads.intersects(truncWriteOp.offset[i], truncWriteOp.length[i]));
@@ -449,6 +462,7 @@ void ObjectModel::applyIoOp(IoOp& op) {
         writes.union_insert(truncWriteOp.offset[i], truncWriteOp.length[i]);
         if (truncWriteOp.offset[i] + truncWriteOp.length[i] > primary_contents.size()) {
           primary_contents.resize(truncWriteOp.offset[i] + truncWriteOp.length[i]);
+          primary_allocated.resize(truncWriteOp.offset[i] + truncWriteOp.length[i], false);
         }
         for (uint64_t b = truncWriteOp.offset[i];
              b < truncWriteOp.offset[i] + truncWriteOp.length[i]; b++) {
@@ -456,6 +470,7 @@ void ObjectModel::applyIoOp(IoOp& op) {
           primary_contents[b] = s;
           write_seeds[b] = s;
         }
+        mark_allocated(truncWriteOp.offset[i], truncWriteOp.length[i]);
       }
       num_io++;
     } break;
