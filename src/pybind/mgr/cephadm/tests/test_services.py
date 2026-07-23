@@ -4740,8 +4740,6 @@ class TestMgmtGateway:
                                          oidc_issuer_url= "http://192.168.10.10:8888/dex"
                                          redirect_url= "{redirect_url}"
 
-                                         ssl_insecure_skip_verify=true
-
                                          # following configuration is needed to avoid getting Forbidden
                                          # when using chrome like browsers as they handle 3rd party cookies
                                          # more strictly than Firefox
@@ -4768,7 +4766,7 @@ class TestMgmtGateway:
 
         with with_host(cephadm_module, 'ceph-node'):
             with with_service(cephadm_module, mgmt_gw_spec) as _, with_service(cephadm_module, oauth2_spec):
-                _run_cephadm.assert_called_with(
+                _run_cephadm.assert_any_call(
                     'ceph-node',
                     'oauth2-proxy.ceph-node',
                     ['_orch', 'deploy'],
