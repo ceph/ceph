@@ -11528,7 +11528,7 @@ TEST_P(UnsharingBlobsOnRemove, FullCloneAndErase) {
   write_object(hoid_head, 0x0, 0x10000);
 
   ghobject_t hoid_snap_1 = hoid_head;
-  hoid_snap_1.hobj.snap = 1;
+  hoid_snap_1.generation = 1;
 
   t.clone(cid, hoid_head, hoid_snap_1);
   commit_transaction();
@@ -11566,7 +11566,7 @@ TEST_P(UnsharingBlobsOnRemove, UnshareOnPartial) {
   write_object(hoid_head, 0x0, 0xe000);
 
   ghobject_t hoid_snap_1 = hoid_head;
-  hoid_snap_1.hobj.snap = 1;
+  hoid_snap_1.generation = 1;
 
   t.clone(cid, hoid_head, hoid_snap_1);
   commit_transaction();
