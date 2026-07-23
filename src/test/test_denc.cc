@@ -5,6 +5,7 @@
  * Ceph distributed storage system
  *
  * Copyright (C) 2016 Red Hat
+ * Copyright (C) 2026 International Business Machines Corp. (IBM)
  *
  * Author: Sage Weil <sage@redhat.com>
  *
@@ -33,6 +34,9 @@
 #include <boost/optional.hpp>
 
 using namespace std;
+
+static_assert(denc_traits<std::pair<const uint64_t, uint64_t>>::bounded);
+static_assert(!denc_traits<std::pair<const std::string, uint64_t>>::need_contiguous);
 
 // test helpers
 
@@ -545,6 +549,39 @@ TEST(denc, flat_map)
   test_common_maplike<default_flat_map>("boost::container::flat_map");
 }
 
+TEST(denc, container_wire_format)
+{
+  const auto u64s = sized_u64s({1, 2, 3});
+
+  expect_wire_format(std::vector<uint64_t>{1, 2, 3}, u64s);
+  expect_wire_format(std::list<uint64_t>{1, 2, 3}, u64s);
+  expect_wire_format(boost::container::small_vector<uint64_t, 4>{1, 2, 3}, u64s);
+  expect_wire_format(std::set<uint64_t>{1, 2, 3}, u64s);
+  expect_wire_format(boost::container::flat_set<uint64_t>{1, 2, 3}, u64s);
+
+  std::string map_wire;
+  append_le32(map_wire, 2);
+  append_string(map_wire, "a");
+  append_le64(map_wire, 1);
+  append_string(map_wire, "b");
+  append_le64(map_wire, 2);
+
+  expect_wire_format(std::map<std::string, uint64_t>{{"b", 2}, {"a", 1}}, map_wire);
+  expect_wire_format(boost::container::flat_map<std::string, uint64_t>{{"b", 2}, {"a", 1}}, map_wire);
+
+  std::string vector_string_wire;
+  append_le32(vector_string_wire, 2);
+  append_string(vector_string_wire, "foo");
+  append_string(vector_string_wire, "bar");
+  expect_wire_format(std::vector<std::string>{"foo", "bar"}, vector_string_wire);
+
+  std::string nested_wire;
+  append_le32(nested_wire, 2);
+  nested_wire += sized_u64s({1, 2});
+  nested_wire += sized_u64s({3});
+  expect_wire_format(std::vector<std::vector<uint64_t>>{{1, 2}, {3}}, nested_wire);
+}
+
 TEST(denc, bufferptr_shallow_and_deep) {
   // shallow encode
   int32_t i = 1;
@@ -620,9 +657,14 @@ TEST(denc, tuple)
     test_denc(s);
   }
   {
-    cout << "std::tuple<std::string, uint3_t>" << std::endl;
+    cout << "std::tuple<std::string, uint32_t>" << std::endl;
     std::tuple<std::string, uint32_t> s("foo", 97);
     test_denc(s);
+  }
+  {
+    cout << "std::tuple<std::string, bar_t>" << std::endl;
+    std::tuple<std::string, bar_t> s("foo", bar_t{});
+    test_denc_featured(s);
   }
   {
     cout << "std::tuple<std::string, std::set<uint32_t>>" << std::endl;
