@@ -375,7 +375,11 @@ class RgwRESTController(RESTController):
                 result = json_str_to_object(result)
             return result
         except (DashboardException, RequestException) as e:
-            http_status_code = e.status if isinstance(e, DashboardException) else 500
+            response = getattr(e, 'response', None)
+            if isinstance(e, RequestException) and response is not None:
+                http_status_code = getattr(response, 'status_code', 500)
+            else:
+                http_status_code = getattr(e, 'status_code', getattr(e, 'status', None)) or 500
             raise DashboardException(e, http_status_code=http_status_code, component='rgw')
 
 
