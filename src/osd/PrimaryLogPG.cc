@@ -15166,18 +15166,25 @@ void PrimaryLogPG::update_range(
 
     auto func = [&](const pg_log_entry_t &e) {
       dout(10) << func_name << ": updating from version " << e.version << dendl;
-      if (e.soid >= pmi->begin && e.soid < pmi->end) {
+      if (e.soid < pmi->end) {
         if (e.is_update()) {
           dout(10) << func_name << ": " << e.soid << " updated to version "
                    << e.version << dendl;
           pmi->objects.erase(e.soid);
           pmi->objects.insert(make_pair(e.soid, e.version));
+          if (e.soid < pmi->begin) {
+            pmi->begin = e.soid;
+          }
           if (e.soid < last_pool_migration_started) {
             ObjectContextRef obc = get_object_context(e.soid, false);
             if (obc && obc->obs.exists) {
-              dout(10) << func_name << ": update to " << e.soid << " lower than watermark ("
-                       << last_pool_migration_started << "), updating watermark" << dendl;
+              dout(10) << func_name << ": update to " << e.soid << " lower than watermarks ("
+                       << last_pool_migration_started << ","
+                       << pool_migration_watermark << "), updating watermarks" << dendl;
               last_pool_migration_started = e.soid;
+              if (e.soid < pool_migration_watermark) {
+                pool_migration_watermark = e.soid;
+              }
             }
           }
         } else if (e.is_delete()) {
