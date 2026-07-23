@@ -997,7 +997,7 @@ void BlueStore::GarbageCollector::process_protrusive_extents(
     Blob* b = b_it->first;
     BlobInfo& bi = b_it->second;
     if (bi.referenced_bytes == 0) {
-      uint64_t len_on_disk = b_it->first->get_blob().get_ondisk_length();
+      uint64_t len_on_disk = b_it->first->get_blob().get_ondisk_capacity();
       int64_t blob_expected_for_release =
         round_up_to(len_on_disk, min_alloc_size) / min_alloc_size;
 
@@ -2914,6 +2914,7 @@ void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
 {
   dout(10) << __func__ << " 0x" << std::hex << blob_offset << std::dec
 	   << " start " << *this << dendl;
+  ceph_assert(r);
   ceph_assert(blob.can_split());
   ceph_assert(used_in_blob.can_split());
   bluestore_blob_t &lb = dirty_blob();
@@ -2925,6 +2926,10 @@ void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
 
   lb.split(blob_offset, rb);
 
+  maybe_prune_tail(); // we might get tail-to-prune after splitting
+  r->maybe_prune_tail(); // likely redundant (as we tend to prune original blob beforehand)
+                         // but let it be
+
   dout(10) << __func__ << " 0x" << std::hex << blob_offset << std::dec
 	   << " finish " << *this << dendl;
   dout(10) << __func__ << " 0x" << std::hex << blob_offset << std::dec
@@ -2935,7 +2940,7 @@ void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
 void BlueStore::Blob::maybe_prune_tail() {
   if (get_blob().can_prune_tail()) {
     dirty_blob().prune_tail();
-    used_in_blob.prune_tail(get_blob().get_ondisk_length());
+    used_in_blob.prune_tail(get_blob().get_ondisk_capacity());
     dout(20) << __func__ << " pruned tail, now " << get_blob() << dendl;
   }
 }
@@ -3585,9 +3590,14 @@ BlueStore::ExtentMap::reshard_decision(uint32_t segment_size) {
 	   << needs_reshard_end << ") segment 0x" << segment_size << std::dec
 	   << " of " << onode->onode.extent_map_shards.size()
 	   << " shards on " << onode->oid << dendl;
-  for (auto& p : spanning_blob_map) {
-    dout(20) << __func__ << "   spanning blob " << p.first << " " << *p.second
-	     << dendl;
+  const int span_blob_log_level = 20;
+  if (cct->_conf->subsys.should_gather<ceph_subsys_bluestore, span_blob_log_level>()) {
+    for (auto& p : spanning_blob_map) {
+      dout(span_blob_log_level) << __func__
+                                << "   spanning blob "
+                                << p.first << " " << *p.second
+	                        << dendl;
+    }
   }
   // determine shard index range
   unsigned shard_index_begin = 0, shard_index_end = 0;
@@ -3910,6 +3920,11 @@ void BlueStore::ExtentMap::reshard_action(
 			   << std::hex << bstart1 << " blob_offset 0x"
 			   << blob_offset << std::dec << " " << *b << dendl;
 		  b = split_blob(b, blob_offset, sh.shard_info->offset);
+                  if (b->get_blob().get_ondisk_size() == 0) {
+                    // The blob b is empty; there are no extents that can reference it.
+                    // It will be deleted as soon as it gets out of scope.
+                    break;
+                  }
 		  // switch b to the new right-hand side, in case it
 		  // *also* has to get split.
 		  bstart1 = sh.shard_info->offset;
@@ -12786,7 +12801,7 @@ int BlueStore::_prepare_read_ioc(
       compressed_blob_bls->push_back(bufferlist());
       bufferlist& bl = compressed_blob_bls->back();
       auto r = bptr->get_blob().map(
-        0, bptr->get_blob().get_ondisk_length(),
+        0, bptr->get_blob().get_ondisk_size(),
         [&](uint64_t offset, uint64_t length) {
           int r = bdev->aio_read(offset, length, &bl, ioc);
           if (r < 0)
@@ -16443,7 +16458,7 @@ void BlueStore::_do_write_small(
 
         // direct write into unused blocks of an existing mutable blob?
         if ((b_off % chunk_size == 0 && b_len % chunk_size == 0) &&
-            b->get_blob().get_ondisk_length() >= b_off + b_len &&
+            b->get_blob().get_ondisk_capacity() >= b_off + b_len &&
             b->get_blob().is_unused(b_off, b_len) &&
             b->get_blob().is_allocated(b_off, b_len)) {
           _buffer_cache_write(txc, o, offset, bl,
@@ -16492,7 +16507,7 @@ void BlueStore::_do_write_small(
 	uint64_t head_read = p2phase(b_off, chunk_size);
 	uint64_t tail_read = p2nphase(b_off + b_len, chunk_size);
 	if ((head_read || tail_read) &&
-	    (b->get_blob().get_ondisk_length() >= b_off + b_len + tail_read) &&
+	    (b->get_blob().get_ondisk_capacity() >= b_off + b_len + tail_read) &&
 	    head_read + tail_read < min_alloc_size) {
 	  b_off -= head_read;
 	  b_len += head_read + tail_read;
@@ -16502,7 +16517,7 @@ void BlueStore::_do_write_small(
 	}
 
 	// chunk-aligned deferred overwrite?
-	if (b->get_blob().get_ondisk_length() >= b_off + b_len &&
+	if (b->get_blob().get_ondisk_capacity() >= b_off + b_len &&
 	    b_off % chunk_size == 0 &&
 	    b_len % chunk_size == 0 &&
 	    b->get_blob().is_allocated(b_off, b_len)) {
@@ -16745,7 +16760,7 @@ bool BlueStore::BigDeferredWriteContext::can_defer(
     off = offset;
     b_off = offset - ep->blob_start();
     uint64_t chunk_size = blob.get_chunk_size(block_size);
-    uint64_t ondisk = blob.get_ondisk_length();
+    uint64_t ondisk = blob.get_ondisk_capacity();
     used = std::min(l, ondisk - b_off);
 
     // will read some data to fill out the chunk?
@@ -18056,9 +18071,20 @@ int BlueStore::_do_remove(
   nogen.generation = ghobject_t::NO_GEN;
   OnodeRef h = c->get_onode(nogen, false);
 
-  if (!h || !h->exists) {
-    return 0;
+  if (h && h->exists) {
+    return _maybe_unshare_on_remove(txc, c, h, std::move(maybe_unshared_blobs));
   }
+  return 0;
+}
+
+int BlueStore::_maybe_unshare_on_remove(
+  TransContext *txc,
+  CollectionRef& c,
+  OnodeRef& h,
+  std::set<SharedBlob*>&& maybe_unshared_blobs)
+{
+  //Populate the extent map structure from DB; required for shared blob processing below.
+  h->extent_map.fault_range(db, 0, h->onode.size);
   // Set maybe_unshared_blobs contains those shared blobs that have all nref=1.
   // Is .head object is using all those segments?
   // If it is using all, then no one else can use the shared blob,
@@ -18069,33 +18095,29 @@ int BlueStore::_do_remove(
   // that is not yet loaded! We must have had inspected it to even check nrefs.
   dout(20) << __func__ << " checking for unshareable blobs on " << h
 	   << " " << h->oid << dendl;
-  map<SharedBlob*,bluestore_extent_ref_map_t> expect;
+  map<const Blob*, bluestore_extent_ref_map_t> expect;
   for (auto& e : h->extent_map.extent_map) {
-    const bluestore_blob_t& b = e.blob->get_blob();
-    SharedBlob *sb = e.blob->get_shared_blob().get();
-    if (b.is_shared() &&
-	sb->loaded &&
-	maybe_unshared_blobs.count(sb)) {
-      if (b.is_compressed()) {
-	expect[sb].get(0, b.get_ondisk_length());
-      } else {
-	// todo: it seems to be an overkill to go through map()
-	b.map(e.blob_offset, e.length, [&](uint64_t off, uint64_t len) {
-	    expect[sb].get(off, len);
-	    return 0;
-	  });
+    const Blob* B = e.blob.get();
+    const bluestore_blob_t& b = B->get_blob();
+    SharedBlob *sb = B->get_shared_blob().get();
+    if (b.is_shared() && sb->loaded && maybe_unshared_blobs.count(sb)) {
+      for (const auto& e: b.get_extents()) {
+        if (e.is_valid()) {
+          expect[B].get(e.offset, e.length);
+        }
       }
+      maybe_unshared_blobs.erase(sb);
     }
   }
 
   // expect has now refs set exactly as .head is using it
   vector<SharedBlob*> unshared_blobs;
-  unshared_blobs.reserve(maybe_unshared_blobs.size());
-  for (auto& p : expect) {
-    dout(20) << " ? " << *p.first << " vs " << p.second << dendl;
-    if (p.first->persistent->ref_map == p.second) {
+  unshared_blobs.reserve(expect.size());
+  for (const auto& [B, expect_refs] : expect) {
+    SharedBlob* sb = B->get_shared_blob().get();
+    dout(20) << __func__ << " ? " << *sb << " vs " << expect_refs << dendl;
+    if (sb->persistent->ref_map == expect_refs) {
       // yup, .head is only one that is using the shared blob now
-      SharedBlob *sb = p.first;
       dout(20) << __func__ << "  unsharing " << *sb << dendl;
       unshared_blobs.push_back(sb);
       txc->unshare_blob(sb);
