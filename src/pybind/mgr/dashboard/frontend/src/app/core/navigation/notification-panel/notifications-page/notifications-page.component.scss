@@ -51,14 +51,16 @@
 
 // Empty state
 .empty-state {
+  align-items: center;
   color: var(--cds-text-secondary);
+  display: flex;
+  justify-content: center;
   margin-top: var(--cds-spacing-05);
-  text-align: center;
 
   p {
     font-size: var(--cds-body-01-font-size);
     line-height: var(--cds-body-01-line-height);
-    margin: var(--cds-spacing-03) 0 0 0;
+    margin: 0;
   }
 }
 
@@ -78,6 +80,7 @@
 // Notification details
 .notification-details {
   background-color: var(--cds-layer-01);
+  border: 1px solid var(--cds-border-subtle);
   border-radius: var(--cds-border-radius);
   padding: var(--cds-spacing-05);
 }
@@ -88,8 +91,7 @@
     border-bottom: 1px solid var(--cds-border-subtle);
 
     &:last-child {
-      /* stylelint-disable-next-line declaration-property-value-disallowed-list */
-      border-bottom: none;
+      border-bottom-style: none;
     }
 
     &:hover {
@@ -133,6 +135,9 @@
 .empty-icon,
 .no-selection-icon {
   fill: var(--cds-icon-secondary);
+}
+
+.no-selection-icon {
   margin-bottom: var(--cds-spacing-05);
 }
 

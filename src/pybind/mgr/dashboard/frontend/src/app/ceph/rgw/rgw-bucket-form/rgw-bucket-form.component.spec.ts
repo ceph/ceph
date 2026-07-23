@@ -5,7 +5,7 @@ import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import _ from 'lodash';
-import { ToastrModule } from 'ngx-toastr';
+
 import { of as observableOf } from 'rxjs';
 
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
@@ -43,7 +43,6 @@ describe('RgwBucketFormComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule,
       SharedModule,
-      ToastrModule.forRoot(),
       SelectModule,
       CheckboxModule
     ],

@@ -5,7 +5,7 @@ import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import _ from 'lodash';
-import { ToastrModule } from 'ngx-toastr';
+
 import { BehaviorSubject, of } from 'rxjs';
 
 import { HealthService } from '~/app/shared/api/health.service';
@@ -176,7 +176,7 @@ describe('Dashbord Component', () => {
   const orchName: any = 'Cephadm';
 
   configureTestBed({
-    imports: [RouterTestingModule, HttpClientTestingModule, ToastrModule.forRoot(), SharedModule],
+    imports: [RouterTestingModule, HttpClientTestingModule, SharedModule],
     declarations: [DashboardV3Component, DashboardPieComponent, PgSummaryPipe],
     schemas: [NO_ERRORS_SCHEMA],
     providers: [

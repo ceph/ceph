@@ -5,7 +5,6 @@ import { By } from '@angular/platform-browser';
 import { ActivatedRoute, Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastrModule } from 'ngx-toastr';
 import { NEVER, of } from 'rxjs';
 import { delay } from 'rxjs/operators';
 
@@ -63,7 +62,6 @@ describe('RbdFormComponent', () => {
       HttpClientTestingModule,
       ReactiveFormsModule,
       RouterTestingModule,
-      ToastrModule.forRoot(),
       SharedModule,
       CheckboxModule,
       InputModule,

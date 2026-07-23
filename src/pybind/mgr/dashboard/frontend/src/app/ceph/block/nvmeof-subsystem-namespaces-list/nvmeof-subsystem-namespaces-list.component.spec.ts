@@ -9,7 +9,6 @@ import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { provideAnimations } from '@angular/platform-browser/animations';
-import { provideToastr } from 'ngx-toastr';
 
 describe('NvmeofSubsystemNamespacesListComponent', () => {
   let component: NvmeofSubsystemNamespacesListComponent;
@@ -49,7 +48,7 @@ describe('NvmeofSubsystemNamespacesListComponent', () => {
       imports: [HttpClientTestingModule, RouterTestingModule, SharedModule],
       providers: [
         provideAnimations(),
-        provideToastr(),
+
         {
           provide: ActivatedRoute,
           useValue: {

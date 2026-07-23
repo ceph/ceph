@@ -1,14 +1,14 @@
 @use '@carbon/styles/scss/spacing';
 
+:host {
+  flex-shrink: 0;
+}
+
 .notification-header {
   background-color: var(--cds-layer-01);
   border-block-end: 1px solid var(--cds-border-subtle-01);
-  height: var(--header-height);
-  inset-block-start: 0;
+  flex-shrink: 0;
   padding: spacing.$spacing-03 spacing.$spacing-05;
-  position: sticky;
-  top: 0;
-  z-index: 2;
 
   &__title {
     margin-top: 0.4rem;
@@ -18,11 +18,5 @@
     color: var(--cds-text-primary);
     padding-left: spacing.$spacing-06;
     padding-top: 0;
-  }
-
-  &__heading-and-button {
-    display: flex;
-    flex-direction: row;
-    justify-content: space-between;
   }
 }

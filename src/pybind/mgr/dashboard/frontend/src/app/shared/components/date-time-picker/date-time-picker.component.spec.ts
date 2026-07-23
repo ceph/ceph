@@ -1,5 +1,5 @@
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
-import { FormControl, FormsModule } from '@angular/forms';
+import { FormControl } from '@angular/forms';
 
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { DateTimePickerComponent } from './date-time-picker.component';
@@ -15,7 +15,7 @@ describe('DateTimePickerComponent', () => {
 
   configureTestBed({
     declarations: [DateTimePickerComponent],
-    imports: [DatePickerModule, FormsModule, TimePickerModule, TimePickerSelectModule]
+    imports: [DatePickerModule, TimePickerModule, TimePickerSelectModule]
   });
 
   beforeEach(() => {

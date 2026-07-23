@@ -1,0 +1,23 @@
+@use '@carbon/styles/scss/spacing';
+@use '@carbon/styles/scss/theme';
+
+:host {
+  flex-shrink: 0;
+}
+
+.notification-footer {
+  align-items: center;
+  background-color: theme.$layer-01;
+  block-size: 2.5rem;
+  border-block-start: 1px solid theme.$border-subtle-01;
+  cursor: pointer;
+  display: flex;
+  flex-shrink: 0;
+  min-block-size: 2.5rem;
+  width: 100%;
+
+  &__view-all-button {
+    color: theme.$text-primary;
+    padding: spacing.$spacing-03 spacing.$spacing-05;
+  }
+}

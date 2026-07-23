@@ -52,7 +52,7 @@ export enum Icons {
   disk = 'fa fa-hdd-o', // Hard disk, disks
   server = 'fa fa-server', // Server, Portal
   filter = 'fa fa-filter', // Filter
-  lineChart = 'fa fa-line-chart', // Line chart
+  lineChart = 'analytics', // Line chart
   signOut = 'fa fa-sign-out', // Sign Out
   health = 'fa fa-heartbeat', // Health
   circle = 'fa fa-circle', // Circle
@@ -136,6 +136,7 @@ export enum IconSize {
 }
 
 export const ICON_TYPE = {
+  check: 'check',
   copy: 'copy',
   danger: 'warning--filled',
   infoCircle: 'information--filled',

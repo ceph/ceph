@@ -27,7 +27,6 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { TagModule } from 'carbon-components-angular';
 import { NvmeofGatewayNodeComponent } from './nvmeof-gateway-node.component';
-import { provideToastr } from 'ngx-toastr';
 
 describe('NvmeofGatewayNodeComponent', () => {
   let component: NvmeofGatewayNodeComponent;
@@ -110,7 +109,7 @@ describe('NvmeofGatewayNodeComponent', () => {
     ],
     providers: [
       provideAnimations(),
-      provideToastr(),
+
       { provide: AuthStorageService, useValue: fakeAuthStorageService },
       {
         provide: ActivatedRoute,
