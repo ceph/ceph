@@ -23,6 +23,7 @@
 #include "rapidjson/error/error.h"
 #include "rapidjson/error/en.h"
 #include <regex>
+#include "rgw_kmip_sse_s3.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -1076,6 +1077,34 @@ static int make_actual_key_from_vault(const DoutPrefixProvider *dpp,
   return get_actual_key_from_vault(dpp, kctx, attrs, y, actual_key, true);
 }
 
+static int make_actual_key_from_kmip(const DoutPrefixProvider *dpp,
+                                     SSEContext & kctx,
+                                     map<string, bufferlist>& attrs,
+                                     optional_yield y,
+                                     std::string& actual_key)
+{
+  CephContext* cct = dpp->get_cct();
+  RGWKmipSSES3* kmip_backend = get_kmip_sse_s3_backend(cct);
+  if (!kmip_backend) {
+    ldpp_dout(dpp, 0) << "ERROR: KMIP backend not available" << dendl;
+    return -EIO;
+  }
+
+  std::string kek_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
+  bufferlist unwrapped_dek_bl;
+  bufferlist wrapped_dek_bl;
+  std::string encryption_context = get_str_attribute(attrs, RGW_ATTR_CRYPT_CONTEXT);
+
+  int r = kmip_backend->generate_and_wrap_dek(dpp, kek_id, encryption_context, unwrapped_dek_bl, wrapped_dek_bl, y);
+  if (r < 0) return r;
+
+  if (wrapped_dek_bl.length() == 0)
+    return -EIO;
+
+  attrs[RGW_ATTR_CRYPT_DATAKEY] = wrapped_dek_bl;
+  actual_key = unwrapped_dek_bl.to_str();
+  return 0;
+}
 
 static int reconstitute_actual_key_from_vault(const DoutPrefixProvider *dpp,
                                               SSEContext & kctx,
@@ -1086,22 +1115,46 @@ static int reconstitute_actual_key_from_vault(const DoutPrefixProvider *dpp,
   return get_actual_key_from_vault(dpp, kctx, attrs, y, actual_key, false);
 }
 
+static int reconstitute_actual_key_from_kmip(const DoutPrefixProvider *dpp,
+                                              SSEContext & kctx,
+                                              map<string, bufferlist>& attrs,
+                                              optional_yield y,
+                                              std::string& actual_key)
+{
+  CephContext* cct = dpp->get_cct();
+  RGWKmipSSES3* kmip_backend = get_kmip_sse_s3_backend(cct);
+
+  if (!kmip_backend) {
+    ldpp_dout(dpp, 0) << "ERROR: KMIP backend not available" << dendl;
+    return -EIO;
+  }
+
+  std::string kek_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
+
+  auto it = attrs.find(RGW_ATTR_CRYPT_DATAKEY);
+  if (it == attrs.end() || it->second.length() == 0) {
+    ldpp_dout(dpp, 0) << "ERROR: missing or empty wrapped DEK" << dendl;
+    return -EIO;
+  }
+  const bufferlist& dek_bl = it->second;
+
+  std::string encryption_context = get_str_attribute(attrs, RGW_ATTR_CRYPT_CONTEXT);
+  bufferlist unwrapped_dek_bl;
+
+  int r = kmip_backend->unwrap_dek(dpp, kek_id, dek_bl, encryption_context, unwrapped_dek_bl, y);
+  if (r < 0) return r;
+
+  actual_key.assign(unwrapped_dek_bl.c_str(), unwrapped_dek_bl.length());
+  return 0;
+}
 
 static int get_actual_key_from_kmip(const DoutPrefixProvider *dpp,
                                     std::string_view key_id,
                                     optional_yield y,
                                     std::string& actual_key)
 {
-  std::string secret_engine = RGW_SSE_KMS_KMIP_SE_KV;
-
-  if (RGW_SSE_KMS_KMIP_SE_KV == secret_engine){
-    KmipSecretEngine engine(dpp->get_cct());
-    return engine.get_key(dpp, key_id, y, actual_key);
-  }
-  else{
-    ldpp_dout(dpp, 0) << "Missing or invalid secret engine" << dendl;
-    return -EINVAL;
-  }
+  KmipSecretEngine engine(dpp->get_cct());
+  return engine.get_key(dpp, key_id, y, actual_key);
 }
 class KMSContext : public SSEContext {
   CephContext *cct;
@@ -1300,6 +1353,9 @@ int reconstitute_actual_key_from_sse_s3(const DoutPrefixProvider *dpp,
   if (RGW_SSE_KMS_BACKEND_VAULT == kms_backend) {
     return reconstitute_actual_key_from_vault(dpp, kctx, attrs, y, actual_key);
   }
+  if (RGW_SSE_KMS_BACKEND_KMIP == kms_backend) {
+    return reconstitute_actual_key_from_kmip(dpp, kctx, attrs, y, actual_key);
+  }
 
   ldpp_dout(dpp, 0) << "ERROR: Invalid rgw_crypt_sse_s3_backend: " << kms_backend << dendl;
   return -EINVAL;
@@ -1311,60 +1367,105 @@ int make_actual_key_from_sse_s3(const DoutPrefixProvider *dpp,
                                 std::string& actual_key)
 {
   SseS3Context kctx { dpp->get_cct() };
-  const std::string kms_backend { kctx.backend() };
-  if (RGW_SSE_KMS_BACKEND_VAULT != kms_backend) {
-    ldpp_dout(dpp, 0) << "ERROR: Unsupported rgw_crypt_sse_s3_backend: " << kms_backend << dendl;
-    return -EINVAL;
+  const std::string &kms_backend { kctx.backend() };
+
+  if (RGW_SSE_KMS_BACKEND_VAULT == kms_backend) {
+    return make_actual_key_from_vault(dpp, kctx, attrs, y, actual_key);
   }
-  return make_actual_key_from_vault(dpp, kctx, attrs, y, actual_key);
+  if (RGW_SSE_KMS_BACKEND_KMIP == kms_backend) {
+    return make_actual_key_from_kmip(dpp, kctx, attrs, y, actual_key);
+  }
+  ldpp_dout(dpp, 0) << "ERROR: Unsupported rgw_crypt_sse_s3_backend: " << kms_backend << dendl;
+  return -EINVAL;
 }
 
 
 int create_sse_s3_bucket_key(const DoutPrefixProvider *dpp,
-                             const std::string& bucket_key,
-                             optional_yield y)
+                             std::string& bucket_key,
+                             optional_yield y,
+                             const std::string& sse_s3_bucket_id)
 {
   CephContext* cct = dpp->get_cct();
   SseS3Context kctx { cct };
 
   const std::string kms_backend { kctx.backend() };
-  if (RGW_SSE_KMS_BACKEND_VAULT != kms_backend) {
-    ldpp_dout(dpp, 0) << "ERROR: Unsupported rgw_crypt_sse_s3_backend: " << kms_backend << dendl;
-    return -EINVAL;
+  ldpp_dout(dpp, 10) << "create_sse_s3_bucket_key using backend: " << kms_backend << dendl;
+
+  if (kms_backend == RGW_SSE_KMS_BACKEND_KMIP) {
+    RGWKmipSSES3* kmip_backend = get_kmip_sse_s3_backend(cct);
+    if (!kmip_backend) {
+      ldpp_dout(dpp, 0) << "ERROR: KMIP SSE-S3 backend unavailable" << dendl;
+      return -EIO;
+    }
+    if (sse_s3_bucket_id.empty()) {
+      ldpp_dout(dpp, 0) << "ERROR: KMIP SSE-S3 key create requires S3 bucket name" << dendl;
+      return -EINVAL;
+    }
+    /* Do not pass the same string as both KMIP name input and kek_id output (aliasing). */
+    const std::string kmip_name_base(sse_s3_bucket_id);
+    std::string kek_id_from_kmip;
+    int r = kmip_backend->create_bucket_key(dpp, kmip_name_base, kek_id_from_kmip, y);
+    if (r < 0) {
+      return r;
+    }
+    bucket_key = std::move(kek_id_from_kmip);
+    return 0;
   }
 
-  std::string secret_engine_str = kctx.secret_engine();
-  EngineParmMap secret_engine_parms;
-  auto secret_engine { config_to_engine_and_parms(
-    cct, "rgw_crypt_sse_s3_vault_secret_engine",
-    secret_engine_str, secret_engine_parms) };
-  if (RGW_SSE_KMS_VAULT_SE_TRANSIT == secret_engine){
-    TransitSecretEngine engine(cct, kctx, std::move(secret_engine_parms));
-    return engine.create_bucket_key(dpp, bucket_key, y);
+  if (kms_backend == RGW_SSE_KMS_BACKEND_VAULT) {
+    std::string secret_engine_str = kctx.secret_engine();
+    EngineParmMap secret_engine_parms;
+    auto secret_engine { config_to_engine_and_parms(
+      cct, "rgw_crypt_sse_s3_vault_secret_engine",
+      secret_engine_str, secret_engine_parms) };
+
+    if (RGW_SSE_KMS_VAULT_SE_TRANSIT == secret_engine) {
+      TransitSecretEngine engine(cct, kctx, std::move(secret_engine_parms));
+      // For Vault, bucket_key is the name expanded from the template
+      return engine.create_bucket_key(dpp, bucket_key, y);
+    } else {
+      ldpp_dout(dpp, 0) << "Missing or invalid Vault secret engine: " << secret_engine_str << dendl;
+      return -EINVAL;
+    }
   }
-  else {
-    ldpp_dout(dpp, 0) << "Missing or invalid secret engine" << dendl;
-    return -EINVAL;
-  }
+
+  ldpp_dout(dpp, 0) << "ERROR: Unsupported rgw_crypt_sse_s3_backend: " << kms_backend << dendl;
+  return -EINVAL;
+
 }
 
 int remove_sse_s3_bucket_key(const DoutPrefixProvider *dpp,
                              const std::string& bucket_key,
-                             optional_yield y)
+                             optional_yield y,
+                             int* worker_id_out)
 {
   CephContext* cct = dpp->get_cct();
   SseS3Context kctx { cct };
-  std::string secret_engine_str = kctx.secret_engine();
-  EngineParmMap secret_engine_parms;
-  auto secret_engine { config_to_engine_and_parms(
-    cct, "rgw_crypt_sse_s3_vault_secret_engine",
-    secret_engine_str, secret_engine_parms) };
-  if (RGW_SSE_KMS_VAULT_SE_TRANSIT == secret_engine){
-    TransitSecretEngine engine(cct, kctx, std::move(secret_engine_parms));
-    return engine.delete_bucket_key(dpp, bucket_key, y);
+  const std::string kms_backend { kctx.backend() };
+
+  if (kms_backend == RGW_SSE_KMS_BACKEND_KMIP) {
+    RGWKmipSSES3* kmip_backend = get_kmip_sse_s3_backend(cct);
+    if (!kmip_backend) {
+      ldpp_dout(dpp, 0) << "ERROR: KMIP SSE-S3 backend unavailable" << dendl;
+      return -EIO;
+    }
+
+    return kmip_backend->destroy_bucket_key(dpp, bucket_key, y, worker_id_out);
   }
-  else {
-    ldpp_dout(dpp, 0) << "Missing or invalid secret engine" << dendl;
-    return -EINVAL;
+
+  if (kms_backend == RGW_SSE_KMS_BACKEND_VAULT) {
+    std::string secret_engine_str = kctx.secret_engine();
+    EngineParmMap secret_engine_parms;
+    auto secret_engine { config_to_engine_and_parms(
+      cct, "rgw_crypt_sse_s3_vault_secret_engine",
+      secret_engine_str, secret_engine_parms) };
+    if (RGW_SSE_KMS_VAULT_SE_TRANSIT == secret_engine) {
+      TransitSecretEngine engine(cct, kctx, std::move(secret_engine_parms));
+      return engine.delete_bucket_key(dpp, bucket_key, y);
+    } else {
+      ldpp_dout(dpp, 0) << "Missing or invalid secret engine" << dendl;
+      return -EINVAL;
+    }
   }
+  return 0;
 }
