@@ -515,6 +515,12 @@ typedef struct {
     size_t passphrase_size;
 } rbd_encryption_luks_format_options_t;
 
+typedef enum {
+  RBD_GROUP_IMAGE_REMOVE_DEFAULT = 0,
+  RBD_GROUP_IMAGE_REMOVE_FORCE,
+  RBD_GROUP_IMAGE_REMOVE_PURGE_USER_SNAPS
+} rbd_group_image_remove_mode_t;
+
 CEPH_RBD_API void rbd_image_options_create(rbd_image_options_t* opts);
 CEPH_RBD_API void rbd_image_options_destroy(rbd_image_options_t opts);
 CEPH_RBD_API int rbd_image_options_set_string(rbd_image_options_t opts,
@@ -1611,10 +1617,21 @@ CEPH_RBD_API int rbd_group_image_remove(rados_ioctx_t group_p,
                                         const char *group_name,
                                         rados_ioctx_t image_p,
                                         const char *image_name);
+
 CEPH_RBD_API int rbd_group_image_remove_by_id(rados_ioctx_t group_p,
                                               const char *group_name,
                                               rados_ioctx_t image_p,
                                               const char *image_id);
+CEPH_RBD_API int rbd_group_image_remove2(rados_ioctx_t group_p,
+                                         const char *group_name,
+                                         rados_ioctx_t image_p,
+                                         const char *image_name,
+                                         rbd_group_image_remove_mode_t mode);
+CEPH_RBD_API int rbd_group_image_remove_by_id2(rados_ioctx_t group_p,
+                                               const char *group_name,
+                                               rados_ioctx_t image_p,
+                                               const char *image_id,
+                                               rbd_group_image_remove_mode_t mode);
 CEPH_RBD_API int rbd_group_image_list(rados_ioctx_t group_p,
                                       const char *group_name,
                                       rbd_group_image_info_t *images,
