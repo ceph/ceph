@@ -9,6 +9,7 @@
 #include <functional>
 #include <string>
 #include <sstream>
+#include <unordered_set>
 #include <optional>
 #include <iostream>
 #include <CLI/CLI.hpp>
@@ -3806,6 +3807,15 @@ void warn_duplicates(CLI::App* root) {
   }
 }
 
+// Warns for each option name the user spelled with underscores (legacy still
+// accepts it; normalize_cli11_tokens rewrites it to the registered dash form).
+void warn_underscore_options(
+    const std::vector<std::pair<std::string, std::string>>& rewrites) {
+  for (const auto& [original, dashed] : rewrites) {
+    cerr << "Warning: " << original << " should be spelled " << dashed << "\n";
+  }
+}
+
 // Normalize the token stream before CLI11 parses it, fixing two places where
 // CLI11's tokenizer loses information the legacy parser preserves:
 //   --name=    ->  ["--name", ""]      empty '=' form: CLI11 collapses it into
@@ -3819,10 +3829,12 @@ void warn_duplicates(CLI::App* root) {
 // after a value-taking flag) is never rewritten. Returns the full token list;
 // the caller owns it and points argv at it.
 std::vector<std::string> normalize_cli11_tokens(
-    const CLI::App& app, const std::vector<const char*>& argv) {
+    const CLI::App& app, const std::vector<const char*>& argv,
+    std::vector<std::pair<std::string, std::string>>& underscore_rewrites) {
   std::vector<std::string> tokens;
   tokens.reserve(argv.size() * 2);
   bool pending_value = false;  // previous token was a flag awaiting its value
+  std::unordered_set<std::string> seen;  // option names already collected
   for (const char* arg : argv) {
     std::string_view token(arg);
     std::string rewritten;  // backing storage when the token below is rewritten
@@ -3841,14 +3853,19 @@ std::vector<std::string> normalize_cli11_tokens(
     if (token.size() >= 3 && token.starts_with("--") &&
         token.find('_') != token.npos) {
       size_t name_len = std::min(token.find('='), token.size());
-      std::string_view name_part = token.substr(0, name_len);
-      if (name_part.find('_') != name_part.npos) {
+      std::string_view option_name = token.substr(0, name_len);
+      if (option_name.find('_') != option_name.npos) {
         std::string dash_name;
         dash_name.reserve(name_len);
-        for (char c : name_part) {
+        for (char c : option_name) {
           dash_name.push_back(c == '_' ? '-' : c);
         }
         if (app.get_option_no_throw(dash_name) != nullptr) {
+          std::string original(option_name);
+          // dedup by name: warn_duplicates covers repeats of the same flag
+          if (seen.insert(original).second) {
+            underscore_rewrites.emplace_back(std::move(original), dash_name);
+          }
           rewritten = std::move(dash_name);
           rewritten.append(token.substr(name_len));
           token = rewritten;
@@ -5563,7 +5580,9 @@ int main(int argc, const char **argv)
       // normalized so CLI11 sees the same token meanings as the legacy parser.
       // Only CLI11's copy is normalized — the legacy loop below still iterates
       // the original `args`.
-      const auto cli_tokens = normalize_cli11_tokens(app, cli_argv);
+      std::vector<std::pair<std::string, std::string>> underscore_rewrites;
+      const auto cli_tokens =
+          normalize_cli11_tokens(app, cli_argv, underscore_rewrites);
       std::vector<const char*> parse_argv;
       parse_argv.reserve(cli_tokens.size());
       for (const auto& t : cli_tokens) {
@@ -5576,6 +5595,7 @@ int main(int argc, const char **argv)
           cout << app.help();
           return 0;
         }
+        warn_underscore_options(underscore_rewrites);
         warn_wrong_position_and_unrelated_option(&app);
         warn_duplicates(&app);
         app.exit(e);                    // prints CLI11's own message
@@ -5591,6 +5611,7 @@ int main(int argc, const char **argv)
       // Any parsed CLI11 command will appear as a subcommand of app.
       cli11_parsed = !app.get_subcommands().empty();
       if (cli11_parsed) {
+        warn_underscore_options(underscore_rewrites);
         warn_wrong_position_and_unrelated_option(&app);
         warn_duplicates(&app);
 
