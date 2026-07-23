@@ -10012,8 +10012,12 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
       mask |= CEPH_STAT_RSTAT;
     }
     int r = _getattr(dn->inode, mask, dirp->perms);
-    if (r < 0)
+    if (r == -EACCES && dn->inode->is_under_quarantine()) {
+      ldout(cct, 10) << __func__ << " quarantined entry '"
+		     << dn->name << "', using cached stat" << dendl;
+    } else if (r < 0) {
       return r;
+    }
 
     /* fix https://tracker.ceph.com/issues/56288 */
     if (dirp->inode->dir == NULL) {
@@ -10267,8 +10271,12 @@ int Client::_readdir_r_cb(int op,
           mask |= rstat_on_dir;
 	}
 	r = _getattr(entry.inode, mask, dirp->perms);
-	if (r < 0)
+	if (r == -EACCES && entry.inode->is_under_quarantine()) {
+	  ldout(cct, 10) << __func__ << " quarantined entry "
+			 << entry.name << ", using cached stat" << dendl;
+	} else if (r < 0) {
 	  return r;
+	}
       }
 
       fill_statx(entry.inode, caps, &stx);

@@ -625,6 +625,69 @@ class TestQuarantineMultipleSubvolumes(QuarantineTestBase):
                          "Data in %s" % self.SUBVOL1)
         self.assert_blocked(lambda: self.mount_a.read_file(f2))
 
+    def test_subvolume_ls_complete_during_quarantine(self):
+        """Quarantining one subvolume must not hide others from subvolume ls.
+
+        Regression test: enabling quarantine on tenant-a caused
+        'ceph fs subvolume ls' to return an incomplete list — most
+        subvolumes disappeared because is_under_quarantine() fail-closed
+        on uncached subvolume root inodes, causing the mgr client's
+        readdir to lose entries.
+        """
+        extra_subvols = ["quarantine_ls_extra_%d" % i for i in range(5)]
+        all_subvols = [self.SUBVOL1, self.SUBVOL2] + extra_subvols
+
+        try:
+            for sv in extra_subvols:
+                self._fs_cmd("subvolume", "create", self.volname, sv,
+                             "--mode=777")
+
+            ls_out = self._fs_cmd("subvolume", "ls", self.volname)
+            listed_before = set(
+                e["name"] for e in json.loads(ls_out))
+            for sv in all_subvols:
+                self.assertIn(sv, listed_before,
+                              "%s missing from ls before quarantine" % sv)
+
+            self.enable_and_wait(subvol_name=self.SUBVOL1)
+
+            # Debug: check what the FUSE mount sees at the _nogroup level
+            nogroup_path = "volumes/_nogroup"
+            try:
+                fuse_entries = set(self.mount_a.ls(nogroup_path))
+                log.info("FUSE mount sees in _nogroup: %s", fuse_entries)
+            except Exception as e:
+                log.warning("FUSE mount ls failed: %s", e)
+                fuse_entries = set()
+
+            ls_out = self._fs_cmd("subvolume", "ls", self.volname)
+            listed_during = set(
+                e["name"] for e in json.loads(ls_out))
+            log.info("subvolume ls during quarantine: %s", listed_during)
+            log.info("expected: %s", set(all_subvols))
+            log.info("missing: %s", set(all_subvols) - listed_during)
+
+            for sv in all_subvols:
+                self.assertIn(sv, listed_during,
+                              "%s missing from ls DURING quarantine of %s"
+                              % (sv, self.SUBVOL1))
+
+            self.disable_and_wait(subvol_name=self.SUBVOL1)
+
+            ls_out = self._fs_cmd("subvolume", "ls", self.volname)
+            listed_after = set(
+                e["name"] for e in json.loads(ls_out))
+            for sv in all_subvols:
+                self.assertIn(sv, listed_after,
+                              "%s missing from ls after quarantine" % sv)
+        finally:
+            for sv in extra_subvols:
+                try:
+                    self._fs_cmd("subvolume", "rm", self.volname, sv,
+                                 "--force")
+                except Exception:
+                    pass
+
 
 # ---------------------------------------------------------------------------
 # Mgr operations on quarantined subvolumes
