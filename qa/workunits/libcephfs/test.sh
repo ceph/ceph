@@ -1,4 +1,4 @@
-#!/bin/sh -e
+#!/bin/sh -ex
 
 ceph_test_libcephfs
 ceph_test_libcephfs_access
