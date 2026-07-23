@@ -2731,6 +2731,57 @@ test_force_promote()
   start_mirrors "${secondary_cluster}"
 }
 
+declare -a test_mirror_group_snapshot_unlink_peer_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 3 '')
+
+test_mirror_group_snapshot_unlink_peer_scenarios=1
+
+test_mirror_group_snapshot_unlink_peer()
+{
+  local primary_cluster=$1 ; shift
+  local secondary_cluster=$1 ; shift
+  local pool=$1 ; shift
+  local image_prefix=$1 ; shift
+  local image_count=$(($1*"${image_multiplier}")) ; shift
+
+  local group0=test-group-unlink
+  start_mirrors "${primary_cluster}"
+  start_mirrors "${secondary_cluster}"
+
+  local mirror_peer_uuid
+  get_remote_peer_uuid "${primary_cluster}" "${pool}" "${secondary_cluster}" mirror_peer_uuid
+  group_create "${primary_cluster}" "${pool}/${group0}"
+  images_create "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+  for ((i = 0; i < image_count; i++)); do
+    write_image "${primary_cluster}" "${pool}" "${image_prefix}${i}" 10 4096
+  done
+  group_images_add "${primary_cluster}" "${pool}/${group0}" "${pool}/${image_prefix}" "${image_count}"
+
+  mirror_group_enable "${primary_cluster}" "${pool}/${group0}"
+  local group_snap_id
+  get_newest_complete_mirror_group_snapshot_id "${primary_cluster}" "${pool}/${group0}" group_snap_id
+  local group_snap_name
+  get_group_snap_name "${primary_cluster}" "${pool}/${group0}" "${group_snap_id}" group_snap_name
+  wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" "${image_count}"
+  wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group0}" "${image_count}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+replaying' "${image_count}"
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+stopped' "${image_count}"
+  wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}"/"${group0}"
+  mirror_group_snapshot "${primary_cluster}" "${pool}/${group0}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+replaying' "${image_count}"
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+stopped' "${image_count}"
+  wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}"/"${group0}"
+  wait_for_group_snapshot_uuid_removed "${primary_cluster}" "${pool}/${group0}" "${group_snap_id}" "${mirror_peer_uuid}"
+  test_image_snapshots_uuid_removed "${primary_cluster}" "${pool}/${group0}@${group_snap_name}" "${mirror_peer_uuid}"
+
+  mirror_group_disable "${primary_cluster}" "${pool}/${group0}"
+  group_remove "${primary_cluster}" "${pool}/${group0}"
+  wait_for_group_not_present "${primary_cluster}" "${pool}" "${group0}"
+  wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group0}"
+  images_remove "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+  wait_for_no_keys "${primary_cluster}"
+  stop_mirrors "${primary_cluster}"
+}
+
 declare -a test_force_promote_delete_group_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 5 '')
 declare -a test_force_promote_delete_group_2=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 5 'disable_reenable_primary')
 
@@ -4087,6 +4138,7 @@ run_all_tests()
   #run_test_all_scenarios test_invalid_actions
   run_test_all_scenarios test_remote_namespace
   run_test_all_scenarios test_create_multiple_groups_do_io
+  run_test_all_scenarios test_mirror_group_snapshot_unlink_peer
 }
 
 if [ -n "${RBD_MIRROR_HIDE_BASH_DEBUGGING}" ]; then

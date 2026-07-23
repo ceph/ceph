@@ -2559,6 +2559,17 @@ get_pool_count()
     fi
 }
 
+get_remote_peer_uuid()
+{
+    local local_cluster=$1
+    local pool_name=$2
+    local remote_cluster=$3
+    local -n peer_uuid=$4
+
+    peer_uuid=$(rbd mirror pool info --cluster ${local_cluster} --pool ${pool_name} --format xml | \
+        xmlstarlet sel -t -v "//peers/peer[site_name='${remote_cluster}']/uuid")
+}
+
 get_pool_obj_count()
 {
     local cluster=$1
@@ -2592,6 +2603,57 @@ get_images_from_group_snap_info()
     run_cmd "rbd --cluster=${cluster} group snap info --format xml --pretty-format ${snap_spec}"
     # sed script removes extra path delimiter if namespace field is blank
     _images="$(xmlstarlet sel -t -m "//group_snapshot/images/image" -v "pool_name" -o "/" -v "namespace" -o "/" -v "image_name" -o " " < "$CMD_STDOUT" |  sed s/"\/\/"/"\/"/g )"
+}
+
+wait_for_group_snapshot_uuid_removed()
+{
+    local cluster=$1
+    local group_snap_spec=$2
+    local group_snap_id=$3
+    local mirror_peer_uuid=$4
+
+    # Verify the group snapshot mirror_peer_uuids list does not contain mirror_peer_uuid.
+    for s in 0.1 0.2 0.4 0.8 1 1 2 2 2 4 4 4 8 8 16; do
+        run_cmd "rbd --cluster=${cluster} group snap ls --format xml --pretty-format ${group_snap_spec}"
+
+        if ! xmlstarlet sel -t \
+            -m "//group_snap[id='${group_snap_id}']/namespace/mirror_peer_uuids/peer_uuid" \
+            -v . -n < "$CMD_STDOUT" | grep -Fxq "${mirror_peer_uuid}"; then
+            return 0
+        fi
+
+        sleep "${s}"
+    done
+    return 1
+}
+
+test_image_snapshots_uuid_removed()
+{
+    local cluster=$1
+    local group_snap_spec=$2
+    local mirror_peer_uuid=$3
+
+    # Verify all image snapshots do not contain the mirror_peer_uuid.
+    local images
+    get_images_from_group_snap_info "${cluster}" "${group_snap_spec}" images
+
+    local image
+    for image in ${images}; do
+        local snap_id
+        get_image_snap_id_from_group_snap_info \
+            "${cluster}" "${group_snap_spec}" "${image}" snap_id
+
+        run_cmd "rbd --cluster=${cluster} snap ls --all --format xml --pretty-format ${image}"
+
+        if xmlstarlet sel -t \
+            -m "//snapshot[id='${snap_id}']/namespace/mirror_peer_uuids/peer_uuid" \
+            -v . -n < "$CMD_STDOUT" | grep -Fxq "${mirror_peer_uuid}"; then
+            echo "mirror_peer_uuid ${mirror_peer_uuid} still present in ${image} snapshot ${snap_id}"
+            return 1
+        fi
+    done
+
+    return 0
 }
 
 get_image_snap_complete()
