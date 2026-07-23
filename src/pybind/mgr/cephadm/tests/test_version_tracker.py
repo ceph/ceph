@@ -7,6 +7,7 @@ import errno
 from cephadm.version_tracker import VERSION_HISTORY_KEY_PREFIX, VersionTracker
 from ceph.cephadm.version_entry import UpgradeType, UpgradeStatus, CephVersionEntry
 from cephadm.module import CephadmOrchestrator
+from cephadm.upgrade import UpgradeState
 
 
 class TestCephVersionEntry(object):
@@ -125,7 +126,8 @@ class TestVersionTracker(object):
             key: json.dumps(entry)
         }
         vt: VersionTracker = cephadm_module.version_tracker
-        vt.update_cluster_version_status(UpgradeStatus.COMPLETE)
+        upgrade_state = mock.MagicMock(spec=UpgradeState)
+        vt.update_cluster_version_status(upgrade_state, UpgradeStatus.COMPLETE)
         expected = dict(entry, status=UpgradeStatus.COMPLETE)
         _set_store.assert_called_once_with(key, json.dumps(expected))
 
@@ -141,9 +143,32 @@ class TestVersionTracker(object):
             key2: json.dumps(entry2)
         }
         vt: VersionTracker = cephadm_module.version_tracker
-        vt.update_cluster_version_status(UpgradeStatus.COMPLETE)
+        upgrade_state = mock.MagicMock(spec=UpgradeState)
+        vt.update_cluster_version_status(upgrade_state, UpgradeStatus.COMPLETE)
         expected = dict(entry2, status=UpgradeStatus.COMPLETE)
         _set_store.assert_called_once_with(key2, json.dumps(expected))
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
+    @mock.patch("cephadm.module.CephadmOrchestrator.get_store_prefix")
+    def test_update_cluster_version_status_adds_entry_when_no_entry_found(self, _get_store_prefix, _set_store, cephadm_module: CephadmOrchestrator):
+        _get_store_prefix.return_value = {}
+        vt: VersionTracker = cephadm_module.version_tracker
+        upgrade_state = mock.MagicMock(spec=UpgradeState)
+        upgrade_state.target_name = '19.2.3'
+        upgrade_state.daemon_types = None
+        upgrade_state.hosts = None
+        upgrade_state.services = None
+        upgrade_state.total_count = None
+        upgrade_state.crush_bucket_type = None
+        upgrade_state.crush_bucket_name = None
+        vt.update_cluster_version_status(upgrade_state, UpgradeStatus.COMPLETE)
+        _set_store.assert_called_once()
+        called_key, called_value = _set_store.call_args.args
+        assert called_key.startswith(VERSION_HISTORY_KEY_PREFIX)
+        stored_entry = json.loads(called_value)
+        assert stored_entry['version'] == '19.2.3'
+        assert stored_entry['status'] == UpgradeStatus.COMPLETE
+        assert stored_entry['upgrade_type'] == UpgradeType.FULL
 
     @mock.patch("cephadm.module.CephadmOrchestrator.get_store_prefix")
     def test_get_cluster_version_history_empty(self, _get_store_prefix, cephadm_module: CephadmOrchestrator):
