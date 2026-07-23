@@ -22,11 +22,15 @@ KeyringCache::KeyringCache(CephContext* cct, rgw::sal::Driver* driver,
 
 KeyringCache::~KeyringCache() { stop(); }
 
-void KeyringCache::refresh()
+int KeyringCache::fetch(const std::string& key, ceph::bufferlist* bl)
+{
+  return driver->get_config_key_val(key, bl);
+}
+
+void KeyringCache::refresh_keyring()
 {
   bufferlist bl;
-  int ret = driver->get_config_key_val(
-      std::string{rgw::sts::STS_KEYRING_CONFIG_KEY}, &bl);
+  int ret = fetch(std::string{rgw::sts::STS_KEYRING_CONFIG_KEY}, &bl);
   if (ret == -ENOENT) {
     // the keyring is gone; drop it so we stop sealing and verifying with it
     if (snapshot.load()) {
@@ -61,6 +65,60 @@ void KeyringCache::refresh()
   snapshot.store(KeyringSnapshot{std::move(keyring)});
 }
 
+void KeyringCache::refresh_legacy()
+{
+  bufferlist bl;
+  int ret = fetch(std::string{rgw::sts::STS_LEGACY_KEY_CONFIG_KEY}, &bl);
+  if (ret == -ENOENT) {
+    if (legacy_snapshot.load()) {
+      ldout(cct, 1) << "legacy STS key " << rgw::sts::STS_LEGACY_KEY_CONFIG_KEY
+          << " was removed; revoking the cached key" << dendl;
+    }
+    legacy_snapshot.store(nullptr);
+    legacy_conflict = false;
+    return;
+  }
+  if (ret < 0) {
+    // mon error, keep the last key
+    ldout(cct, 5) << "WARNING: failed to refresh the legacy STS key: "
+        << cpp_strerror(-ret) << dendl;
+    return;
+  }
+  std::string key = bl.to_str();
+  bl.zero();
+  rgw::sts::trim_legacy_key(key);
+  if (key.empty()) {
+    // an empty value revokes the key just like removing it
+    legacy_snapshot.store(nullptr);
+    legacy_conflict = false;
+    return;
+  }
+  const std::string conf_key = cct->_conf.get_val<std::string>("rgw_sts_key");
+  if (!conf_key.empty() && conf_key != key) {
+    if (!legacy_conflict) {
+      ldout(cct, 0) << "WARNING: rgw_sts_key is set and differs from the"
+          " stored legacy STS key; this daemon seals and verifies legacy"
+          " tokens with rgw_sts_key" << dendl;
+      legacy_conflict = true;
+    }
+  } else {
+    legacy_conflict = false;
+  }
+  std::shared_ptr<std::string> next{
+      new std::string(std::move(key)),
+      [](std::string* p) {
+        ceph_memzero_s(p->data(), p->size(), p->size());
+        delete p;
+      }};
+  legacy_snapshot.store(LegacyKeySnapshot{std::move(next)});
+}
+
+void KeyringCache::refresh()
+{
+  refresh_keyring();
+  refresh_legacy();
+}
+
 void KeyringCache::run(std::stop_token stop)
 {
   ceph_pthread_setname("sts-keyring");
@@ -68,7 +126,7 @@ void KeyringCache::run(std::stop_token stop)
   std::condition_variable cond;
   std::stop_callback on_stop(stop, [&cond]() { cond.notify_all(); });
   while (!stop.stop_requested()) {
-    // refresh first so the keyring loads without blocking daemon startup
+    // refresh first so the keys load without blocking daemon startup
     refresh();
     std::unique_lock lock(mutex);
     if (cond.wait_for(lock, interval,

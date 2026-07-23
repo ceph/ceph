@@ -21,6 +21,7 @@ namespace rgw::sts {
 
 // the token-sealing keyring lives in the mon config-key store
 inline constexpr std::string_view STS_KEYRING_CONFIG_KEY = "rgw/sts/keys";
+inline constexpr std::string_view STS_LEGACY_KEY_CONFIG_KEY = "rgw/sts/legacy_key";
 
 inline constexpr std::size_t STS_AEAD_KEY_ID_SIZE = 20;
 inline constexpr std::size_t STS_AEAD_KEY_SIZE = 32;
@@ -47,6 +48,16 @@ inline int parse_hex_id(const std::string& hex, std::string& raw_id)
     return -EINVAL;
   }
   return 0;
+}
+
+// strip trailing whitespace from a stored legacy key value
+inline void trim_legacy_key(std::string& key)
+{
+  if (const auto end = key.find_last_not_of(" \t\r\n"); end != key.npos) {
+    key.resize(end + 1);
+  } else {
+    key.clear();
+  }
 }
 
 /*

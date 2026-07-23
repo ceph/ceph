@@ -122,6 +122,7 @@ bool sts_derive_token_key(const std::string& master,
 }
 
 int get_sts_cbc_key_handler(const DoutPrefixProvider* dpp, CephContext* cct,
+                            STS::KeyringCache* keyring_cache,
                             std::unique_ptr<CryptoKeyHandler>& out)
 {
   auto* cryptohandler = cct->get_crypto_handler(CEPH_CRYPTO_AES);
@@ -129,7 +130,13 @@ int get_sts_cbc_key_handler(const DoutPrefixProvider* dpp, CephContext* cct,
     ldpp_dout(dpp, 0) << "ERROR: No AES crypto handler found !" << dendl;
     return -EINVAL;
   }
-  const std::string secret_s = cct->_conf.get_val<std::string>("rgw_sts_key");
+  // rgw_sts_key always takes precedence over the stored legacy key
+  std::string secret_s = cct->_conf.get_val<std::string>("rgw_sts_key");
+  if (secret_s.empty() && keyring_cache) {
+    if (const auto legacy = keyring_cache->get_legacy(); legacy) {
+      secret_s = *legacy;
+    }
+  }
   if (secret_s.empty()) {
     ldpp_dout(dpp, 1) << "ERROR: rgw sts key not set" << dendl;
     return -EINVAL;
@@ -282,7 +289,7 @@ int decode_session_token(const DoutPrefixProvider* dpp, CephContext* cct,
       return -EINVAL;
     }
     std::unique_ptr<CryptoKeyHandler> keyhandler;
-    if (int ret = get_sts_cbc_key_handler(dpp, cct, keyhandler); ret < 0) {
+    if (int ret = get_sts_cbc_key_handler(dpp, cct, keyring_cache, keyhandler); ret < 0) {
       return ret;
     }
     std::string error;
@@ -346,7 +353,8 @@ int Credentials::generateCredentials(const DoutPrefixProvider *dpp,
     if (int ret = get_sts_keyring(dpp, keyring_cache, keyring); ret < 0) {
       return ret;
     }
-  } else if (int ret = get_sts_cbc_key_handler(dpp, cct, keyhandler); ret < 0) {
+  } else if (int ret = get_sts_cbc_key_handler(dpp, cct, keyring_cache,
+                                               keyhandler); ret < 0) {
     return ret;
   }
 

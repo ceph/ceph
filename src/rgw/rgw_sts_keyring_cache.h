@@ -8,6 +8,7 @@
 #include <memory>
 #include <thread>
 
+#include "include/buffer_fwd.h"
 #include "rgw_realm_reloader.h"
 #include "rgw_sts_keyring.h"
 
@@ -17,11 +18,13 @@ namespace rgw::sal { class Driver; }
 namespace STS {
 
 using KeyringSnapshot = std::shared_ptr<const rgw::sts::StsKeyring>;
+using LegacyKeySnapshot = std::shared_ptr<const std::string>;
 
 /*
- * Caches the token-sealing keyring from the mon config-key store. A background
- * thread refreshes the snapshot every interval so requests just read it and
- * never talk to the mon; the blocking read stays off the shared executor.
+ * Caches the token-sealing keyring and the stored legacy key from the mon
+ * config-key store. A background thread refreshes the snapshots every interval
+ * so requests just read them and never talk to the mon; the blocking reads
+ * stay off the shared executor.
  */
 class KeyringCache : public RGWRealmReloader::Pauser {
   CephContext* const cct;
@@ -29,16 +32,27 @@ class KeyringCache : public RGWRealmReloader::Pauser {
   const std::chrono::milliseconds interval;
 
   std::atomic<KeyringSnapshot> snapshot;
+  std::atomic<LegacyKeySnapshot> legacy_snapshot;
   std::jthread thread;
   // set while the stored keyring won't parse, to log the problem only once
   bool keyring_invalid = false;
+  // set while rgw_sts_key overrides a different stored key, to log only once
+  bool legacy_conflict = false;
 
   /*
-   * re-read the keyring and swap the snapshot. a missing keyring clears it; a
-   * mon error leaves the last one in place
+   * re-read a key and swap its snapshot. a missing key clears it; a mon
+   * error leaves the last one in place
    */
-  void refresh();
+  void refresh_keyring();
+  void refresh_legacy();
   void run(std::stop_token stop);
+
+ protected:
+  // reads one config-key value from the mon; unit tests override this
+  virtual int fetch(const std::string& key, ceph::bufferlist* bl);
+
+  // one pass over both keys; the thread repeats it every interval
+  void refresh();
 
  public:
   KeyringCache(CephContext* cct, rgw::sal::Driver* driver,
@@ -58,6 +72,9 @@ class KeyringCache : public RGWRealmReloader::Pauser {
 
   // the current keyring, or nullptr when none is loaded
   KeyringSnapshot get() const { return snapshot.load(); }
+
+  // the stored legacy key, or nullptr when none is loaded
+  LegacyKeySnapshot get_legacy() const { return legacy_snapshot.load(); }
 };
 
 } // namespace STS
