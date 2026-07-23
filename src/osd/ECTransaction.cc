@@ -563,6 +563,8 @@ ECTransaction::Generate::Generate(PGTransaction &t,
     encode_and_write();
   }
 
+  log_shard_size_analysis();
+
   written_map->emplace(oid, std::move(to_write));
 
   if (entry && plan.orig_size < plan.projected_size) {
@@ -1048,3 +1050,60 @@ void ECTransaction::generate_transactions(
       plans.plans.pop_front();
   });
 }
+
+void ECTransaction::Generate::log_shard_size_analysis() const {
+  // ----------------------------------------------------------------
+  // Step 1: Build per-shard sizes from the plan's orig/projected sizes.
+  //
+  // orig_shard_sizes[shard]  = on-disk shard size before this operation,
+  //                            derived from plan.orig_size via the stripe mapping.
+  // proj_shard_sizes[shard]  = expected on-disk shard size after the operation,
+  //                            as recorded in the projected object_info.
+  // ----------------------------------------------------------------
+  shard_id_map<uint64_t> orig_shard_sizes(sinfo.get_k_plus_m());
+  shard_id_map<uint64_t> proj_shard_sizes(sinfo.get_k_plus_m());
+
+  for (shard_id_t shard; shard < sinfo.get_k_plus_m(); ++shard) {
+    orig_shard_sizes[shard] = sinfo.object_size_to_shard_size(plan.orig_size, shard);
+    proj_shard_sizes[shard] = sinfo.object_size_to_shard_size(plan.projected_size, shard);
+  }
+
+  // ----------------------------------------------------------------
+  // Step 2: Compute the resulting per-shard size by replaying each
+  // shard's ObjectStore::Transaction via ECUtil::compute_shard_size_from_transaction().
+  // ----------------------------------------------------------------
+  shard_id_map<uint64_t> result_shard_sizes(sinfo.get_k_plus_m());
+
+  for (auto &&[shard, txn] : transactions) {
+    const ghobject_t target_goid(oid, ghobject_t::NO_GEN, shard);
+    result_shard_sizes[shard] = ECUtil::compute_shard_size_from_transaction(
+      txn, target_goid, orig_shard_sizes[shard]);
+  }
+
+  // ----------------------------------------------------------------
+  // Step 3: Assert that the transaction produces the projected shard size.
+  // Always log the summary so we can verify this code path is reached.
+  // ----------------------------------------------------------------
+  ldpp_dout(dpp, -1) << __func__ << ": oid=" << oid
+                     << " orig_size=" << plan.orig_size
+                     << " projected_size=" << plan.projected_size
+                     << dendl;
+  for (shard_id_t shard; shard < sinfo.get_k_plus_m(); ++shard) {
+    uint64_t orig_sz   = orig_shard_sizes[shard];
+    uint64_t proj_sz   = proj_shard_sizes[shard];
+    uint64_t result_sz = result_shard_sizes.count(shard)
+                           ? result_shard_sizes[shard]
+                           : orig_sz;
+
+    ldpp_dout(dpp, -1) << __func__ << ":   shard " << shard
+                       << " orig=" << orig_sz
+                       << " projected=" << proj_sz
+                       << " computed=" << result_sz
+                       << dendl;
+
+    if (result_sz != proj_sz) {
+      ceph_abort_msg("EC transaction produces wrong shard size");
+    }
+  }
+}
+
