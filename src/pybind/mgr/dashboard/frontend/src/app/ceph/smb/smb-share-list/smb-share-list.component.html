@@ -21,3 +21,21 @@
     </div>
   </cd-table>
 </ng-container>
+
+<ng-template #iopsLimitTpl
+             let-value="data.value">
+  R: {{ value?.read_iops_limit ? (value.read_iops_limit | number) : '-' }}
+  / W: {{ value?.write_iops_limit ? (value.write_iops_limit | number) : '-' }}
+</ng-template>
+
+<ng-template #bwLimitTpl
+             let-value="data.value">
+  R: {{ value?.read_bw_limit ? (value.read_bw_limit | dimlessBinary) : '-' }}
+  / W: {{ value?.write_bw_limit ? (value.write_bw_limit | dimlessBinary) : '-' }}
+</ng-template>
+
+<ng-template #delayMaxTpl
+             let-value="data.value">
+  R: {{ value?.read_delay_max ? value.read_delay_max + 's' : '-' }}
+  / W: {{ value?.write_delay_max ? value.write_delay_max + 's' : '-' }}
+</ng-template>
