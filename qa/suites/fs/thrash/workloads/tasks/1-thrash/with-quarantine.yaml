@@ -1,0 +1,14 @@
+tasks:
+- quarantine_thrasher:
+    min_hold: 5
+    max_hold: 20
+    min_release: 5
+    max_release: 15
+    initial_delay: 15
+
+overrides:
+  ceph:
+    log-ignorelist:
+      - quarantine
+      - evicting unresponsive client
+      - slow request
