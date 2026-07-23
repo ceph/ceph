@@ -389,6 +389,53 @@ check_cluster "rm: --purge-objects (dash)"       0 "" -- \
 check_cluster "rm: --purge_objects (underscore)" 0 "" -- \
   bucket rm --bucket=cli11-no-such-bucket --purge_objects
 
+# Rewriting an underscore spelling also prints a spelling warning, in the same
+# spot as the position/duplicate warnings. Both flags are checked from ONE
+# command: --bucket_id warns only once even when repeated (dedup; the separate
+# "specified multiple times" case is warn_duplicates' job), and --max_entries
+# also warns. The command fails at parse (--max_entries banana), so it runs
+# cluster-free and exits 22.
+multi_out=$(_run bucket list --bucket_id x --bucket_id y --max_entries banana 2>&1)
+multi_exit=$?
+bucketid_n=$(echo "$multi_out" | grep -cF "should be spelled --bucket-id")
+if [ "$multi_exit" = "22" ] && [ "$bucketid_n" = "1" ] && \
+   echo "$multi_out" | grep -qF "should be spelled --max-entries"; then
+  echo "PASS [list: underscore warnings for --bucket_id and --max_entries, deduped]"
+  PASS=$((PASS+1))
+else
+  echo "FAIL [list: underscore warnings for --bucket_id and --max_entries, deduped]:"
+  echo "     expected exit 22 (got $multi_exit), --bucket-id warning once (got $bucketid_n), --max-entries warning"
+  echo "     output: $multi_out"
+  FAIL=$((FAIL+1))
+fi
+
+# '=' form is a distinct normalization path; confirm it warns too
+check "list: --max_entries= form warns underscore spelling" 22 \
+  "Warning: --max_entries should be spelled --max-entries" \
+  bucket list --max_entries=banana
+
+# underscore warning coexists with, and prints before, another warning type
+order_out=$(_run bucket list --max_entries 1 --max_entries banana 2>&1)
+order_exit=$?
+us_line=$(echo "$order_out" | grep -nF "should be spelled --max-entries" | head -1 | cut -d: -f1)
+dup_line=$(echo "$order_out" | grep -nF "specified multiple times" | head -1 | cut -d: -f1)
+if [ "$order_exit" = "22" ] && [ -n "$us_line" ] && [ -n "$dup_line" ] && \
+   [ "$us_line" -lt "$dup_line" ]; then
+  echo "PASS [list: underscore warning precedes duplicate warning]"
+  PASS=$((PASS+1))
+else
+  echo "FAIL [list: underscore warning precedes duplicate warning]:"
+  echo "     exit=$order_exit us_line=$us_line dup_line=$dup_line"
+  echo "     output: $order_out"
+  FAIL=$((FAIL+1))
+fi
+
+# The two tests above hit the parse-error (failure) path. This one hits the
+# success path: parse succeeds and the command runs, warning still fires.
+check_cluster "list: underscore warning on success path" 0 \
+  "Warning: --max_entries should be spelled --max-entries" -- \
+  bucket list --max_entries 100
+
 # ============================================================
 echo ""
 echo "=== bucket stats ==="
