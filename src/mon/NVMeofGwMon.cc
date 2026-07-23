@@ -691,8 +691,7 @@ bool NVMeofGwMon::prepare_command(MonOpRequestRef op)
       if (rc == 0) {
         bool propose = false;
         // Simulate  immediate Failover of this GW
-        process_gw_down(id, group_key, propose,
-           gw_availability_t::GW_UNAVAILABLE);
+        process_gw_down(id, group_key, propose);
         pending_map.check_all_gws_in_deleting_state(id, group_key);
       } else if (rc == -EINVAL) {
 	dout (4) << "Error: GW not found in the database " << id << " "
@@ -851,20 +850,14 @@ bool NVMeofGwMon::prepare_command(MonOpRequestRef op)
 }
 
 void NVMeofGwMon::process_gw_down(const NvmeGwId &gw_id,
-   const NvmeGroupKey& group_key, bool &propose_pending,
-   gw_availability_t avail)
+   const NvmeGroupKey& group_key, bool &propose_pending)
 {
   LastBeacon lb = {gw_id, group_key};
   auto it = last_beacon.find(lb);
   if (it != last_beacon.end()) {
     last_beacon.erase(it);
-    if (avail == gw_availability_t::GW_UNAVAILABLE) {
-      pending_map.process_gw_map_gw_down(gw_id, group_key, propose_pending);
-    } else {
-      pending_map.process_gw_map_gw_no_subsys_no_listeners(gw_id, group_key, propose_pending);
-    }
-
   }
+  pending_map.process_gw_map_gw_down(gw_id, group_key, propose_pending);
 }
 
 bool NVMeofGwMon::preprocess_beacon(MonOpRequestRef op)
@@ -1124,7 +1117,8 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
 	dout(1) << " Warning :GW marked as Available in the NVmeofGwMon "
 		<< "database, performed full startup - Apply it but don't allow failover!"
 		<< gw_id << dendl;
-	 process_gw_down(gw_id, group_key, gw_propose, avail);
+	 pending_map.process_gw_map_gw_pass_to_created
+                               (gw_id, group_key, gw_propose);
 	 pending_map.skip_failovers_for_group(group_key);
 	 dout(4) << "fast_reboot:set skip-failovers for group " << gw_id << " group "
 	 << group_key << dendl;
@@ -1222,9 +1216,13 @@ check_availability:
     epoch_t last_osd_epoch = m->get_last_osd_epoch();
     pending_map.process_gw_map_ka(gw_id, group_key, last_osd_epoch, gw_propose);
   // state set by GW client application
-  } else if (avail == gw_availability_t::GW_UNAVAILABLE ||
-      avail == gw_availability_t::GW_CREATED) {
-      process_gw_down(gw_id, group_key, gw_propose, avail);
+  } else if (avail == gw_availability_t::GW_UNAVAILABLE) {
+    process_gw_down(gw_id, group_key, gw_propose);
+  } else if (avail == gw_availability_t::GW_CREATED) {
+    LastBeacon lb = {gw_id, group_key};
+    last_beacon[lb] = now;
+    pending_map.process_gw_map_gw_pass_to_created
+      (gw_id, group_key, gw_propose);
   }
   // Periodic: check active FSM timers
   pending_map.update_active_timers(timer_propose);
