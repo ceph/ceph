@@ -207,7 +207,7 @@
          "thresholds": [ ],
          "timeFrom": null,
          "timeShift": null,
-         "title": "Replication (objects) from Source Zone",
+         "title": "Replication Rate (Objects/s) from Source Zone",
          "tooltip": {
             "shared": true,
             "sort": 0,
