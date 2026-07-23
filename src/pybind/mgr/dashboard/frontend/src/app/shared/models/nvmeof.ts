@@ -24,6 +24,7 @@ export interface NvmeofSubsystem {
   gw_group?: string;
   initiator_count?: number;
   has_dhchap_key: boolean;
+  network_mask?: string[];
 }
 
 export interface NvmeofSubsystemData extends NvmeofSubsystem {
@@ -52,6 +53,7 @@ export interface NvmeofSubsystemNamespace {
   bdev_name: string;
   rbd_image_name: string;
   rbd_pool_name: string;
+  rados_namespace_name?: string; // empty string or absent means default RADOS namespace
   load_balancing_group: number;
   rbd_image_size: number | string;
   block_size: number;
@@ -61,6 +63,11 @@ export interface NvmeofSubsystemNamespace {
   w_mbytes_per_second: number | string;
   subsystem_nqn?: string; // Field from JSON (mapped from ns_subsystem_nqn if needed)
 }
+
+export type RadosNamespace = {
+  namespace: string;
+  num_images: number;
+};
 
 export interface NvmeofGatewayGroup extends CephServiceSpec {
   name: string;
@@ -72,12 +79,24 @@ export interface NvmeofGatewayGroup extends CephServiceSpec {
   nodeCount: number;
 }
 
+export enum NvmeofSubsystemAuthType {
+  NO_AUTH = 'No authentication',
+  UNIDIRECTIONAL = 'Unidirectional',
+  BIDIRECTIONAL = 'Bi-directional'
+}
+
+export enum NvmeofGatewayNodeMode {
+  SELECTOR = 'selector',
+  DETAILS = 'details'
+}
+
 export enum AUTHENTICATION {
   Unidirectional = 'unidirectional',
   Bidirectional = 'bidirectional',
   None = 'none'
 }
 
+export const ALLOW_ALL_HOST = '*';
 export const NO_AUTH = 'No authentication';
 
 export const HOST_TYPE = {
@@ -169,4 +188,6 @@ export type AuthStepType = {
 export type DetailsStepType = {
   nqn: string;
   listeners: Array<string>;
+  listenerMode?: string;
+  subnetMask?: string;
 };

@@ -1,6 +1,7 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { Component, forwardRef } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ReactiveFormsModule } from '@angular/forms';
+import { ControlValueAccessor, ReactiveFormsModule, NG_VALUE_ACCESSOR } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
@@ -16,7 +17,6 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FormHelper, Mocks } from '~/testing/unit-test-helper';
 import { ServiceFormComponent } from './service-form.component';
 import { PoolService } from '~/app/shared/api/pool.service';
-import { TextLabelListComponent } from '~/app/shared/components/text-label-list/text-label-list.component';
 import { USER } from '~/app/shared/constants/app.constants';
 import {
   CheckboxModule,
@@ -39,6 +39,26 @@ class MockPoolService {
   }
 }
 
+// Stub for the standalone TextLabelListComponent which imports a non-standalone
+// NgModule (ComponentsModule) making it incompatible with TestBed's DynamicTestModule.
+// The stub registers NG_VALUE_ACCESSOR so formControlName='custom_sans' resolves.
+@Component({
+  selector: 'cd-text-label-list',
+  template: '',
+  providers: [
+    {
+      provide: NG_VALUE_ACCESSOR,
+      useExisting: forwardRef(() => TextLabelListStubComponent),
+      multi: true
+    }
+  ]
+})
+class TextLabelListStubComponent implements ControlValueAccessor {
+  writeValue() {}
+  registerOnChange() {}
+  registerOnTouched() {}
+}
+
 describe('ServiceFormComponent', () => {
   let component: ServiceFormComponent;
   let fixture: ComponentFixture<ServiceFormComponent>;
@@ -47,7 +67,7 @@ describe('ServiceFormComponent', () => {
   let formHelper: FormHelper;
 
   configureTestBed({
-    declarations: [ServiceFormComponent],
+    declarations: [ServiceFormComponent, TextLabelListStubComponent],
     providers: [NgbActiveModal, { provide: PoolService, useClass: MockPoolService }],
     imports: [
       HttpClientTestingModule,
@@ -60,8 +80,7 @@ describe('ServiceFormComponent', () => {
       NumberModule,
       ModalModule,
       CheckboxModule,
-      RadioModule,
-      TextLabelListComponent
+      RadioModule
     ]
   });
 
@@ -511,48 +530,27 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
       it('should set default values correctly onInit', () => {
         expect(form.get('service_type').value).toBe('nvmeof');
         expect(form.get('group').value).toBe('default');
-        expect(form.get('pool').value).toBe('rbd');
-        expect(form.get('service_id').value).toBe('rbd.default');
+        expect(form.get('service_id').value).toBe('default');
       });
 
       it('should reflect correct values on group change', () => {
-        // Initially the group value should be 'default'
         expect(component.serviceForm.get('group')?.value).toBe('default');
         const groupInput = fixture.debugElement.query(By.css('#group')).nativeElement;
-        // Simulate input value change
         groupInput.value = 'foo';
-        // Trigger the input event
         groupInput.dispatchEvent(new Event('input'));
-        // Trigger the change event
         groupInput.dispatchEvent(new Event('change'));
         fixture.detectChanges();
-        // Verify values after change
         expect(form.get('group').value).toBe('foo');
-        expect(form.get('service_id').value).toBe('rbd.foo');
+        expect(form.get('service_id').value).toBe('foo');
       });
 
-      it('should reflect correct values on pool change', () => {
-        // Initially the pool value should be 'rbd'
-        expect(component.serviceForm.get('pool')?.value).toBe('rbd');
-        const poolInput = fixture.debugElement.query(By.css('#pool')).nativeElement;
-        // Simulate input value change
-        form.get('pool').setValue('pool-2');
-        // Trigger the input event
-        poolInput.dispatchEvent(new Event('input'));
-        // Trigger the change event
-        poolInput.dispatchEvent(new Event('change'));
-        fixture.detectChanges();
-        // Verify values after change
-        expect(form.get('pool').value).toBe('pool-2');
-        expect(form.get('service_id').value).toBe('pool-2.default');
+      it('should hide pool selector in create mode', () => {
+        const poolEl = fixture.debugElement.query(By.css('#pool'));
+        expect(poolEl).toBeNull();
       });
 
       it('should throw error when there is no service id', () => {
         formHelper.expectErrorChange('service_id', '', 'required');
-      });
-
-      it('should throw error when there is no pool', () => {
-        formHelper.expectErrorChange('pool', '', 'required');
       });
 
       it('should throw error when there is no group', () => {
@@ -583,10 +581,9 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         component.onSubmit();
         expect(cephServiceService.create).toHaveBeenCalledWith({
           service_type: 'nvmeof',
-          service_id: 'rbd.default',
+          service_id: 'default',
           placement: {},
           unmanaged: false,
-          pool: 'rbd',
           group: 'default',
           enable_auth: false
         });
@@ -594,6 +591,7 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
 
       it('should submit nvmeof with mTLS', () => {
         formHelper.setValue('enable_mtls', true);
+        formHelper.setValue('certificateType', 'external');
         formHelper.setValue('root_ca_cert', 'root_ca_cert');
         formHelper.setValue('client_cert', 'client_cert');
         formHelper.setValue('client_key', 'client_key');
@@ -605,14 +603,32 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
           service_id: 'rbd.default',
           placement: {},
           unmanaged: false,
-          pool: 'rbd',
           group: 'default',
           enable_auth: true,
+          ssl: true,
+          pool: 'rbd',
+          certificate_source: 'inline',
           root_ca_cert: 'root_ca_cert',
           client_cert: 'client_cert',
           client_key: 'client_key',
           server_cert: 'server_cert',
           server_key: 'server_key'
+        });
+      });
+
+      it('should submit nvmeof with internal mTLS', () => {
+        formHelper.setValue('enable_mtls', true);
+        formHelper.setValue('certificateType', 'internal');
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'nvmeof',
+          service_id: 'default',
+          placement: {},
+          unmanaged: false,
+          group: 'default',
+          enable_auth: true,
+          ssl: true,
+          certificate_source: 'cephadm-signed'
         });
       });
     });
@@ -840,15 +856,6 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         expect(serviceId.disabled).toBeTruthy();
       });
 
-      it('should not edit pools for nvmeof service', () => {
-        component.serviceType = 'nvmeof';
-        formHelper.setValue('service_type', 'nvmeof');
-        component.ngOnInit();
-        fixture.detectChanges();
-        const poolId = fixture.componentInstance.serviceForm.get('pool');
-        expect(poolId.disabled).toBeTruthy();
-      });
-
       it('should not edit groups for nvmeof service', () => {
         component.serviceType = 'nvmeof';
         formHelper.setValue('service_type', 'nvmeof');
@@ -862,16 +869,13 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         spyOn(cephServiceService, 'update').and.stub();
         component.serviceType = 'nvmeof';
         formHelper.setValue('service_type', 'nvmeof');
-        formHelper.setValue('pool', 'rbd');
         formHelper.setValue('group', 'default');
-        // mTLS disabled
         formHelper.setValue('enable_mtls', false);
         component.onSubmit();
         expect(cephServiceService.update).toHaveBeenCalledWith({
           service_type: 'nvmeof',
           placement: {},
           unmanaged: false,
-          pool: 'rbd',
           group: 'default',
           enable_auth: false
         });

@@ -1,7 +1,7 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 
@@ -14,9 +14,9 @@ import { SharedModule } from '~/app/shared/shared.module';
 
 import { NvmeofGroupFormComponent } from './nvmeof-group-form.component';
 import { CheckboxModule, GridModule, InputModule, SelectModule } from 'carbon-components-angular';
-import { PoolService } from '~/app/shared/api/pool.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
+import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { FormHelper } from '~/testing/unit-test-helper';
 
 describe('NvmeofGroupFormComponent', () => {
@@ -24,16 +24,10 @@ describe('NvmeofGroupFormComponent', () => {
   let fixture: ComponentFixture<NvmeofGroupFormComponent>;
   let form: CdFormGroup;
   let formHelper: FormHelper;
-  let poolService: PoolService;
   let taskWrapperService: TaskWrapperService;
   let cephServiceService: CephServiceService;
+  let nvmeofService: NvmeofService;
   let router: Router;
-
-  const mockPools = [
-    { pool_name: 'rbd', application_metadata: ['rbd'] },
-    { pool_name: 'rbd', application_metadata: ['rbd'] },
-    { pool_name: 'pool2', application_metadata: ['rgw'] }
-  ];
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -51,16 +45,19 @@ describe('NvmeofGroupFormComponent', () => {
         SelectModule
       ],
       schemas: [CUSTOM_ELEMENTS_SCHEMA]
-    }).compileComponents();
+    })
+      .overrideTemplate(NvmeofGroupFormComponent, '')
+      .compileComponents();
 
     fixture = TestBed.createComponent(NvmeofGroupFormComponent);
     component = fixture.componentInstance;
-    poolService = TestBed.inject(PoolService);
     taskWrapperService = TestBed.inject(TaskWrapperService);
     cephServiceService = TestBed.inject(CephServiceService);
+    nvmeofService = TestBed.inject(NvmeofService);
     router = TestBed.inject(Router);
 
-    spyOn(poolService, 'list').and.returnValue(Promise.resolve(mockPools));
+    // Mock NvmeofService.exists so the async unique validator resolves immediately
+    spyOn(nvmeofService, 'exists').and.returnValue(of(false));
 
     component.ngOnInit();
     form = component.groupForm;
@@ -75,6 +72,7 @@ describe('NvmeofGroupFormComponent', () => {
   it('should initialize form with empty fields', () => {
     expect(form.controls.groupName.value).toBeNull();
     expect(form.controls.unmanaged.value).toBe(false);
+    expect(form.controls.enableEncryption.value).toBe(false);
   });
 
   it('should set action to CREATE on init', () => {
@@ -91,57 +89,15 @@ describe('NvmeofGroupFormComponent', () => {
       formHelper.expectError('groupName', 'required');
     });
 
-    it('should require pool', () => {
-      formHelper.setValue('pool', null);
-      formHelper.expectError('pool', 'required');
-    });
-
-    it('should be valid when groupName and pool are set', () => {
+    it('should be valid when groupName is set', () => {
       formHelper.setValue('groupName', 'test-group');
-      formHelper.setValue('pool', 'rbd');
-      expect(form.valid).toBe(true);
+      expect(form.controls.groupName.valid).toBe(true);
     });
-  });
 
-  describe('loadPools', () => {
-    it('should load pools and filter by rbd application metadata', fakeAsync(() => {
-      component.loadPools();
-      tick();
-      expect(component.pools.length).toBe(2);
-      expect(component.pools.map((p) => p.pool_name)).toEqual(['rbd', 'rbd']);
-    }));
-
-    it('should set default pool to rbd if available', fakeAsync(() => {
-      component.groupForm.get('pool').setValue(null);
-      component.loadPools();
-      tick();
-      expect(component.groupForm.get('pool').value).toBe('rbd');
-    }));
-
-    it('should set first pool if rbd is not available', fakeAsync(() => {
-      component.groupForm.get('pool').setValue(null);
-      const poolsWithoutRbd = [{ pool_name: 'custom-pool', application_metadata: ['rbd'] }];
-      (poolService.list as jasmine.Spy).and.returnValue(Promise.resolve(poolsWithoutRbd));
-      component.loadPools();
-      tick();
-      expect(component.groupForm.get('pool').value).toBe('custom-pool');
-    }));
-
-    it('should handle empty pools', fakeAsync(() => {
-      (poolService.list as jasmine.Spy).and.returnValue(Promise.resolve([]));
-      component.loadPools();
-      tick();
-      expect(component.pools.length).toBe(0);
-      expect(component.poolsLoading).toBe(false);
-    }));
-
-    it('should handle pool loading error', fakeAsync(() => {
-      (poolService.list as jasmine.Spy).and.returnValue(Promise.reject('error'));
-      component.loadPools();
-      tick();
-      expect(component.pools).toEqual([]);
-      expect(component.poolsLoading).toBe(false);
-    }));
+    it('should validate groupName for invalid characters', () => {
+      formHelper.setValue('groupName', 'test@group');
+      formHelper.expectError('groupName', 'invalidChars');
+    });
   });
 
   describe('onSubmit', () => {
@@ -158,7 +114,6 @@ describe('NvmeofGroupFormComponent', () => {
       } as any;
 
       component.groupForm.get('groupName').setValue('test-group');
-      component.groupForm.get('pool').setValue('rbd');
       component.onSubmit();
 
       expect(cephServiceService.create).not.toHaveBeenCalled();
@@ -170,16 +125,14 @@ describe('NvmeofGroupFormComponent', () => {
         getSelectedHostnames: (): string[] => ['host1', 'host2']
       } as any;
 
-      component.groupForm.get('groupName').setValue('defalut');
-      component.groupForm.get('pool').setValue('rbd');
+      component.groupForm.get('groupName').setValue('default');
       component.groupForm.get('unmanaged').setValue(false);
       component.onSubmit();
 
       expect(cephServiceService.create).toHaveBeenCalledWith({
         service_type: 'nvmeof',
-        service_id: 'rbd.defalut',
-        pool: 'rbd',
-        group: 'defalut',
+        service_id: 'nvmeof.default',
+        group: 'default',
         placement: {
           hosts: ['host1', 'host2']
         },
@@ -194,15 +147,93 @@ describe('NvmeofGroupFormComponent', () => {
       } as any;
 
       component.groupForm.get('groupName').setValue('unmanaged-group');
-      component.groupForm.get('pool').setValue('rbd');
       component.groupForm.get('unmanaged').setValue(true);
       component.onSubmit();
 
       expect(cephServiceService.create).toHaveBeenCalledWith(
         jasmine.objectContaining({
           unmanaged: true,
-          group: 'unmanaged-group',
-          pool: 'rbd'
+          group: 'unmanaged-group'
+        })
+      );
+    });
+
+    it('should create service with encryption key when enabled', () => {
+      component.gatewayNodeComponent = {
+        getSelectedHosts: (): any[] => [{ hostname: 'host1' }],
+        getSelectedHostnames: (): string[] => ['host1']
+      } as any;
+
+      component.groupForm.get('groupName').setValue('encrypted-group');
+      component.groupForm.get('enable_auth').setValue(true);
+      component.groupForm.get('encryptionKey').setValue('encryption-key-123');
+      component.onSubmit();
+
+      expect(cephServiceService.create).toHaveBeenCalledWith(
+        jasmine.objectContaining({
+          group: 'encrypted-group',
+          encryption_key: 'encryption-key-123'
+        })
+      );
+    });
+
+    it('should create service with cephadm-signed mTLS when internal selected', () => {
+      component.gatewayNodeComponent = {
+        getSelectedHosts: (): any[] => [{ hostname: 'host1' }],
+        getSelectedHostnames: (): string[] => ['host1']
+      } as any;
+
+      component.groupForm.get('groupName').setValue('mtls-internal');
+      component.groupForm.get('enableEncryption').setValue(true);
+      component.groupForm.get('encryptionKey').setValue('test-encryption-key');
+      component.groupForm.get('enableMtls').setValue(true);
+      component.groupForm.get('certificateType').setValue(component.CertificateType.internal);
+      component.groupForm.get('custom_sans').setValue(['gw1.local', '192.168.0.10']);
+
+      component.onSubmit();
+
+      expect(cephServiceService.create).toHaveBeenCalledWith(
+        jasmine.objectContaining({
+          service_type: 'nvmeof',
+          service_id: 'nvmeof.mtls-internal',
+          ssl: true,
+          enable_auth: true,
+          certificate_source: 'cephadm-signed',
+          custom_sans: ['gw1.local', '192.168.0.10']
+        })
+      );
+    });
+
+    it('should create service with inline mTLS when external selected', () => {
+      component.gatewayNodeComponent = {
+        getSelectedHosts: (): any[] => [{ hostname: 'host1' }],
+        getSelectedHostnames: (): string[] => ['host1']
+      } as any;
+
+      component.groupForm.get('groupName').setValue('mtls-external');
+      component.groupForm.get('enableEncryption').setValue(true);
+      component.groupForm.get('encryptionKey').setValue('test-encryption-key');
+      component.groupForm.get('enableMtls').setValue(true);
+      component.groupForm.get('certificateType').setValue(component.CertificateType.external);
+      component.groupForm.get('rootCACert').setValue('root');
+      component.groupForm.get('clientCert').setValue('client-cert');
+      component.groupForm.get('clientKey').setValue('client-key');
+      component.groupForm.get('serverCert').setValue('server-cert');
+      component.groupForm.get('serverKey').setValue('server-key');
+
+      component.onSubmit();
+
+      expect(cephServiceService.create).toHaveBeenCalledWith(
+        jasmine.objectContaining({
+          service_id: 'nvmeof.mtls-external',
+          ssl: true,
+          enable_auth: true,
+          certificate_source: 'inline',
+          root_ca_cert: 'root',
+          client_cert: 'client-cert',
+          client_key: 'client-key',
+          server_cert: 'server-cert',
+          server_key: 'server-key'
         })
       );
     });
@@ -214,7 +245,6 @@ describe('NvmeofGroupFormComponent', () => {
       } as any;
 
       component.groupForm.get('groupName').setValue('test-group');
-      component.groupForm.get('pool').setValue('rbd');
       component.onSubmit();
 
       expect(router.navigateByUrl).toHaveBeenCalledWith('/block/nvmeof/gateways');

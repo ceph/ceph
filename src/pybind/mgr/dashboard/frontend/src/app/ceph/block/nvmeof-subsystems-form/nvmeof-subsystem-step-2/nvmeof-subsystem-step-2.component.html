@@ -23,6 +23,7 @@
           orientation="vertical">
           <cds-radio
             [value]="HOST_TYPE.ALL"
+            [disabled]="!allowAllHosts"
             class="cds-mb-2"
             i18n>Allow all hosts</cds-radio>
           <span class="cds--form__helper-text cds-mb-3"
