@@ -267,6 +267,10 @@ cdef nogil:
         _RBD_GROUP_IMAGE_STATE_ATTACHED "RBD_GROUP_IMAGE_STATE_ATTACHED"
         _RBD_GROUP_IMAGE_STATE_INCOMPLETE "RBD_GROUP_IMAGE_STATE_INCOMPLETE"
 
+    ctypedef enum rbd_group_image_remove_mode_t:
+        RBD_GROUP_IMAGE_REMOVE_DEFAULT
+        RBD_GROUP_IMAGE_REMOVE_FORCE
+
     ctypedef struct rbd_group_image_info_t:
         char *name
         int64_t pool
@@ -1016,6 +1020,10 @@ cdef nogil:
         pass
     int rbd_group_image_remove(rados_ioctx_t group_p, const char *group_name,
                                rados_ioctx_t image_p, const char *image_name):
+        pass
+    int rbd_group_image_remove2(rados_ioctx_t group_p, const char *group_name,
+                                rados_ioctx_t image_p, const char *image_name,
+                                rbd_group_image_remove_mode_t mode):
         pass
     int rbd_group_image_list(rados_ioctx_t group_p,
                              const char *group_name,
