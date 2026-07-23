@@ -3,70 +3,10 @@ import ipaddress
 import logging
 import re
 
-from teuthology import misc as teuthology
 from teuthology.config import config as teuth_config
 from teuthology.exceptions import ConfigError
 
 log = logging.getLogger(__name__)
-
-
-def subst_vip(ctx, cmd):
-    p = re.compile(r'({{VIP(\d+)}})')
-    for m in p.findall(cmd):
-        n = int(m[1])
-        if n >= len(ctx.vip["vips"]):
-            log.warning(f'no VIP{n} (we have {len(ctx.vip["vips"])})')
-        else:
-            cmd = cmd.replace(m[0], str(ctx.vip["vips"][n]))
-
-    if '{{VIPPREFIXLEN}}' in cmd:
-        cmd = cmd.replace('{{VIPPREFIXLEN}}', str(ctx.vip["vnet"].prefixlen))
-
-    if '{{VIPSUBNET}}' in cmd:
-        cmd = cmd.replace('{{VIPSUBNET}}', str(ctx.vip["vnet"].network_address))
-
-    return cmd
-
-
-def echo(ctx, config):
-    """
-    This is mostly for debugging
-    """
-    for remote in ctx.cluster.remotes.keys():
-        log.info(subst_vip(ctx, config))
-
-
-def exec(ctx, config):
-    """
-    This is similar to the standard 'exec' task, but does the VIP substitutions.
-    """
-    assert isinstance(config, dict), "task exec got invalid config"
-
-    testdir = teuthology.get_testdir(ctx)
-
-    if 'all-roles' in config and len(config) == 1:
-        a = config['all-roles']
-        roles = teuthology.all_roles(ctx.cluster)
-        config = dict((id_, a) for id_ in roles if not id_.startswith('host.'))
-    elif 'all-hosts' in config and len(config) == 1:
-        a = config['all-hosts']
-        roles = teuthology.all_roles(ctx.cluster)
-        config = dict((id_, a) for id_ in roles if id_.startswith('host.'))
-
-    for role, ls in config.items():
-        (remote,) = ctx.cluster.only(role).remotes.keys()
-        log.info('Running commands on role %s host %s', role, remote.name)
-        for c in ls:
-            c.replace('$TESTDIR', testdir)
-            remote.run(
-                args=[
-                    'sudo',
-                    'TESTDIR={tdir}'.format(tdir=testdir),
-                    'bash',
-                    '-ex',
-                    '-c',
-                    subst_vip(ctx, c)],
-                )
 
 
 def _map_vips(mip, count):
