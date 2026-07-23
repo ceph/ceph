@@ -3239,6 +3239,14 @@ std::string s3_expiration_header(
   RGWLifecycleConfiguration config(cct);
   std::string hdr{""};
 
+  /* The x-amz-expiration header reports the current-version Expiration
+   * lifecycle action for the object. It must never be derived from a
+   * NoncurrentVersionExpiration rule, and it does not apply to a request that
+   * targets a specific version: a non-empty instance here means the caller
+   * asked for a particular version by versionId, so no header is returned. */
+  if (!obj_key.instance.empty())
+    return hdr;
+
   const auto& aiter = bucket_attrs.find(RGW_ATTR_LC);
   if (aiter == bucket_attrs.end())
     return hdr;
@@ -3273,16 +3281,12 @@ std::string s3_expiration_header(
     auto& filter = rule.get_filter();
     auto& prefix = filter.has_prefix() ? filter.get_prefix(): rule.get_prefix();
     auto& expiration = rule.get_expiration();
-    auto& noncur_expiration = rule.get_noncur_expiration();
 
     ldpp_dout(dpp, 10) << "rule: " << ri.first
 		       << " prefix: " << prefix
 		       << " expiration: "
 		       << " date: " << expiration.get_date()
 		       << " days: " << expiration.get_days()
-		       << " noncur_expiration: "
-		       << " date: " << noncur_expiration.get_date()
-		       << " days: " << noncur_expiration.get_days()
 		       << dendl;
 
     /* skip if rule !enabled
@@ -3324,10 +3328,9 @@ std::string s3_expiration_header(
 	      continue;
     }
 
-    // compute a uniform expiration date
+    // compute a uniform expiration date (current-version Expiration only)
     boost::optional<ceph::real_time> rule_expiration_date;
-    const LCExpiration& rule_expiration =
-      (obj_key.instance.empty()) ? expiration : noncur_expiration;
+    const LCExpiration& rule_expiration = expiration;
 
     if (rule_expiration.has_date()) {
       rule_expiration_date =
