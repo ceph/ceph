@@ -1054,7 +1054,12 @@ void PrimaryLogPG::do_command(
   }
 
   if (prefix == "query") {
+    const pg_pool_t *pi = get_osdmap()->get_pg_pool(get_pgid().pool());
+    bool pool_eio = pi && pi->has_flag(pg_pool_t::FLAG_EIO);
     f->open_object_section("pg");
+    if (pool_eio) {
+        f->dump_bool("pool_eio", true);  // ← added
+    }    
     f->dump_stream("snap_trimq") << snap_trimq;
     f->dump_unsigned("snap_trimq_len", snap_trimq.size());
     recovery_state.dump_peering_state(f.get());
