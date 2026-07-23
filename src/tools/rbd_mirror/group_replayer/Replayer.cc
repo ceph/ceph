@@ -1105,6 +1105,9 @@ void Replayer<I>::mirror_snapshot_complete(
 
   if (itr == m_remote_group_snaps.end()) {
     derr << "remote group snapshot doesn't exist: " << group_snap_id << dendl;
+    // prune the local group snapshot
+    m_prune_group_snap = &(*itl);
+    prune_mirror_group_snapshot(&locker);
     locker.unlock();
     on_finish->complete(-ENOENT);
     return;
