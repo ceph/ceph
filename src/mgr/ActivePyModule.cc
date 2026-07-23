@@ -142,11 +142,7 @@ std::optional<std::vector<std::byte>> ActivePyModule::dispatch_remote(
 
   auto pmodule = py_module->pPickleModule;
   auto pickled_args_bytes = py_bytes_from_span(pickled_args);
-  auto args = PyObject_CallMethodObjArgs(
-    pmodule,
-    PyUnicode_FromString("loads"),
-    pickled_args_bytes,
-    nullptr);
+  auto args = PyObject_CallMethod(pmodule, "loads", "(O)", pickled_args_bytes);
   Py_DECREF(pickled_args_bytes);
   if (args == nullptr) {
     std::string caller = "ActivePyModule::dispatch_remote "s + method;
@@ -156,11 +152,7 @@ std::optional<std::vector<std::byte>> ActivePyModule::dispatch_remote(
   }
 
   auto pickled_kwargs_bytes = py_bytes_from_span(pickled_kwargs);
-  auto kwargs = PyObject_CallMethodObjArgs(
-    pmodule,
-    PyUnicode_FromString("loads"),
-    pickled_kwargs_bytes,
-    nullptr);
+  auto kwargs = PyObject_CallMethod(pmodule, "loads", "(O)", pickled_kwargs_bytes);
   Py_DECREF(pickled_kwargs_bytes);
   if (kwargs == nullptr) {
     std::string caller = "ActivePyModule::dispatch_remote "s + method;
@@ -195,11 +187,7 @@ std::optional<std::vector<std::byte>> ActivePyModule::dispatch_remote(
   }
   dout(20) << "Success calling '" << method << "'" << dendl;
 
-  auto pickled_ret = PyObject_CallMethodObjArgs(
-    pmodule,
-    PyUnicode_FromString("dumps"),
-    ret,
-    nullptr);
+  auto pickled_ret = PyObject_CallMethod(pmodule, "dumps", "(O)", ret);
   Py_DECREF(ret);
   if (pickled_ret == nullptr) {
     std::string caller = "ActivePyModule::dispatch_remote "s + method;
