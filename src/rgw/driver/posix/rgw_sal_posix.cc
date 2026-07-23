@@ -1827,16 +1827,6 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y,
     return ret;
 
   if (instance_id.empty()) {
-    /* Check if directory is empty */
-    ret = for_each(dpp, [](const char *n) {
-      return -ENOENT;
-    });
-
-    if (ret == 0) {
-      /* We're empty, nuke us */
-      return Directory::remove(dpp, y, /*delete_children=*/true, result);
-    }
-
     /* Add a delete marker */
     std::unique_ptr<File> f;
     rgw_obj_key key = decode_obj_key(get_name());
@@ -3968,17 +3958,30 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
   }
 
   int ret = stat(dpp);
-  if (ret < 0) {
-      if (ret == -ENOENT) {
-	// Nothing to do
-	return 0;
-      }
-      return ret;
-  }
-  ret = ent->remove(dpp, y, /*delete_children=*/false, &del_result);
 
   cls_rgw_obj_key key;
   get_key().get_index_key(&key);
+
+  if (ret == -ENOENT) {
+    if (!versioned() || !key.instance.empty() ) {
+      // Nothing to do
+      return 0;
+    }
+    // A delete marker must be created even if the key does not exist
+    // Create the versioned directory and create a delete marker
+    ret = make_ent(ObjectType::VERSIONED);
+    if (ret < 0) {
+      return ret;
+    }
+
+    ret = ent->create(dpp, nullptr, false);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: could not create " << ent->get_name() << dendl;
+      return ret;
+    }
+  }
+  ret = ent->remove(dpp, y, /*delete_children=*/false, &del_result);
+
 
   driver->get_bucket_cache()->remove_entry(dpp, b->get_name(), key);
 
