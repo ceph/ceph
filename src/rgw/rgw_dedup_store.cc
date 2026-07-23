@@ -36,6 +36,7 @@ namespace rgw::dedup {
   disk_record_t::disk_record_t(const rgw::sal::Bucket *p_bucket,
                                const std::string      &obj_name,
                                const parsed_etag_t    *p_parsed_etag,
+                               const std::string      &instance,
                                uint64_t                obj_size,
                                const std::string      &storage_class)
   {
@@ -50,12 +51,13 @@ namespace rgw::dedup {
     this->s.md5_high        = p_parsed_etag->md5_high;
     this->s.md5_low         = p_parsed_etag->md5_low;
     this->s.obj_bytes_size  = obj_size;
-    this->s.object_version  = 0;
 
     this->bucket_id         = p_bucket->get_bucket_id();
     this->s.bucket_id_len   = this->bucket_id.length();
     this->tenant_name       = p_bucket->get_tenant();
     this->s.tenant_name_len = this->tenant_name.length();
+    this->instance          = instance;
+    this->s.instance_len    = instance.length();
     this->stor_class        = storage_class;
     this->s.stor_class_len  = storage_class.length();
 
@@ -63,7 +65,7 @@ namespace rgw::dedup {
     this->s.manifest_len    = 0;
 
     this->s.shared_manifest = 0;
-    memset(this->s.sha256, 0, sizeof(this->s.sha256));
+    memset(this->s.hash, 0, sizeof(this->s.hash));
     this->ref_tag           = "";
     this->manifest_bl.clear();
   }
@@ -86,10 +88,10 @@ namespace rgw::dedup {
     this->s.md5_high        = CEPHTOH_64(p_rec->s.md5_high);
     this->s.md5_low         = CEPHTOH_64(p_rec->s.md5_low);
     this->s.obj_bytes_size  = CEPHTOH_64(p_rec->s.obj_bytes_size);
-    this->s.object_version  = CEPHTOH_64(p_rec->s.object_version);
 
     this->s.bucket_id_len   = CEPHTOH_16(p_rec->s.bucket_id_len);
     this->s.tenant_name_len = CEPHTOH_16(p_rec->s.tenant_name_len);
+    this->s.instance_len    = CEPHTOH_16(p_rec->s.instance_len);
     this->s.stor_class_len  = CEPHTOH_16(p_rec->s.stor_class_len);
     this->s.ref_tag_len     = CEPHTOH_16(p_rec->s.ref_tag_len);
     this->s.manifest_len    = CEPHTOH_16(p_rec->s.manifest_len);
@@ -107,6 +109,9 @@ namespace rgw::dedup {
     this->tenant_name = std::string(p, this->s.tenant_name_len);
     p += p_rec->s.tenant_name_len;
 
+    this->instance = std::string(p, this->s.instance_len);
+    p += p_rec->s.instance_len;
+
     this->stor_class = std::string(p, this->s.stor_class_len);
     p += p_rec->s.stor_class_len;
 
@@ -117,8 +122,11 @@ namespace rgw::dedup {
     }
     else {
       this->s.shared_manifest = CEPHTOH_64(p_rec->s.shared_manifest);
-      for (int i = 0; i < 4; i++) {
-        this->s.sha256[i] = CEPHTOH_64(p_rec->s.sha256[i]);
+      // BLAKE3 hash has 256 bit splitted into multiple 64bit units
+      const unsigned units = (256 / (sizeof(uint64_t)*8));
+      static_assert(units == 4);
+      for (unsigned i = 0; i < units; i++) {
+        this->s.hash[i] = CEPHTOH_64(p_rec->s.hash[i]);
       }
       this->ref_tag = std::string(p, this->s.ref_tag_len);
       p += p_rec->s.ref_tag_len;
@@ -141,10 +149,10 @@ namespace rgw::dedup {
     p_rec->s.md5_high        = HTOCEPH_64(this->s.md5_high);
     p_rec->s.md5_low         = HTOCEPH_64(this->s.md5_low);
     p_rec->s.obj_bytes_size  = HTOCEPH_64(this->s.obj_bytes_size);
-    p_rec->s.object_version  = HTOCEPH_64(this->s.object_version);
 
     p_rec->s.bucket_id_len   = HTOCEPH_16(this->bucket_id.length());
     p_rec->s.tenant_name_len = HTOCEPH_16(this->tenant_name.length());
+    p_rec->s.instance_len    = HTOCEPH_16(this->instance.length());
     p_rec->s.stor_class_len  = HTOCEPH_16(this->stor_class.length());
     p_rec->s.ref_tag_len     = HTOCEPH_16(this->ref_tag.length());
     p_rec->s.manifest_len    = HTOCEPH_16(this->manifest_bl.length());
@@ -165,6 +173,10 @@ namespace rgw::dedup {
     std::memcpy(p, this->tenant_name.data(), len);
     p += len;
 
+    len = this->instance.length();
+    std::memcpy(p, this->instance.data(), len);
+    p += len;
+
     len = this->stor_class.length();
     std::memcpy(p, this->stor_class.data(), len);
     p += len;
@@ -176,8 +188,11 @@ namespace rgw::dedup {
     }
     else {
       p_rec->s.shared_manifest = HTOCEPH_64(this->s.shared_manifest);
-      for (int i = 0; i < 4; i++) {
-        p_rec->s.sha256[i] = HTOCEPH_64(this->s.sha256[i]);
+      // BLAKE3 hash has 256 bit splitted into multiple 64bit units
+      const unsigned units = (256 / (sizeof(uint64_t)*8));
+      static_assert(units == 4);
+      for (unsigned i = 0; i < units; i++) {
+        p_rec->s.hash[i] = HTOCEPH_64(this->s.hash[i]);
       }
       len = this->ref_tag.length();
       std::memcpy(p, this->ref_tag.data(), len);
@@ -199,6 +214,7 @@ namespace rgw::dedup {
             this->bucket_name.length() +
             this->bucket_id.length() +
             this->tenant_name.length() +
+            this->instance.length() +
             this->stor_class.length() +
             this->ref_tag.length() +
             this->manifest_bl.length());
@@ -246,14 +262,18 @@ namespace rgw::dedup {
     stream << rec.bucket_name << "::" << rec.s.bucket_name_len << "\n";
     stream << rec.bucket_id << "::" << rec.s.bucket_id_len << "\n";
     stream << rec.tenant_name << "::" << rec.s.tenant_name_len << "\n";
+    stream << rec.instance << "::" << rec.s.instance_len  << "\n";
     stream << rec.stor_class << "::" << rec.s.stor_class_len  << "\n";
     stream << rec.ref_tag << "::" << rec.s.ref_tag_len << "\n";
     stream << "num_parts = " << rec.s.num_parts << "\n";
     stream << "obj_size  = " << rec.s.obj_bytes_size/1024 <<" KiB"  << "\n";
     stream << "MD5       = " << std::hex << rec.s.md5_high << rec.s.md5_low << "\n";
-    stream << "SHA256    = ";
-    for (int i =0; i < 4; i++) {
-      stream << rec.s.sha256[i];
+    stream << "HASH      = ";
+    // BLAKE3 hash has 256 bit splitted into multiple 64bit units
+    const unsigned units = (256 / (sizeof(uint64_t)*8));
+    static_assert(units == 4);
+    for (unsigned i = 0; i < units; i++) {
+      stream << rec.s.hash[i];
     }
     stream << "\n";
 
@@ -607,6 +627,9 @@ namespace rgw::dedup {
     unsigned len = (p_curr_block + 1 - p_arr) * sizeof(disk_block_t);
     bufferlist bl = bufferlist::static_from_mem((char*)p_arr, len);
     int ret = store_slab(ioctx, bl, d_md5_shard, d_worker_id, d_seq_number, dpp);
+    if (unlikely(ret != 0)) {
+      p_stats->write_slab_failure++;
+    }
     // Need to make sure the call to rgw_put_system_obj was fully synchronous
 
     // d_seq_number++ must be called **after** flush!!

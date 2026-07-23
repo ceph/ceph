@@ -129,6 +129,8 @@ namespace rgw::dedup {
     this->remote_pause_req   = false;
     this->remote_paused      = false;
     this->remote_restart_req = false;
+    this->bucket_index_throttle.disable();
+    this->metadata_access_throttle.disable();
   }
 
   //---------------------------------------------------------------------------
@@ -147,6 +149,8 @@ namespace rgw::dedup {
     encode(ctl.remote_pause_req, bl);
     encode(ctl.remote_paused, bl);
     encode(ctl.remote_restart_req, bl);
+    encode(ctl.bucket_index_throttle, bl);
+    encode(ctl.metadata_access_throttle, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -168,6 +172,8 @@ namespace rgw::dedup {
     decode(ctl.remote_pause_req, bl);
     decode(ctl.remote_paused, bl);
     decode(ctl.remote_restart_req, bl);
+    decode(ctl.bucket_index_throttle, bl);
+    decode(ctl.metadata_access_throttle, bl);
     DECODE_FINISH(bl);
   }
 
@@ -207,6 +213,13 @@ namespace rgw::dedup {
     }
     if (ctl.remote_restart_req) {
       out << "::remote_restart_req";
+    }
+
+    if (!ctl.bucket_index_throttle.is_disabled()) {
+      out << "::bucket_index_throttle=" << ctl.bucket_index_throttle.get_max_calls_per_second();
+    }
+    if (!ctl.metadata_access_throttle.is_disabled()) {
+      out << "::metadata_throttle=" << ctl.metadata_access_throttle.get_max_calls_per_second();
     }
 
     return out;
@@ -344,7 +357,7 @@ namespace rgw::dedup {
       return ret;
     }
 
-    ret = ioctx.application_enable("rgw_dedup", false);
+    ret = ioctx.application_enable("rgw", false);
     if (ret == 0) {
       ldpp_dout(dpp, 10) << __func__ << "::pool " << dedup_pool.name
                          << " was associated with dedup app" << dendl;
@@ -406,10 +419,11 @@ namespace rgw::dedup {
                                                const rgw::sal::Bucket *p_bucket,
                                                const parsed_etag_t    *p_parsed_etag,
                                                const std::string      &obj_name,
+                                               const std::string      &instance,
                                                uint64_t                obj_size,
                                                const std::string      &storage_class)
   {
-    disk_record_t rec(p_bucket, obj_name, p_parsed_etag, obj_size, storage_class);
+    disk_record_t rec(p_bucket, obj_name, p_parsed_etag, instance, obj_size, storage_class);
     // First pass using only ETAG and size taken from bucket-index
     rec.s.flags.set_fastlane();
 
@@ -534,6 +548,7 @@ namespace rgw::dedup {
       librados::IoCtx ioctx = obj.ioctx;
       ldpp_dout(dpp, 20) << __func__ << "::removing tail object: " << raw_obj.oid
                          << dendl;
+      d_ctl.metadata_access_throttle.acquire();
       ret = ioctx.remove(raw_obj.oid);
     }
 
@@ -567,6 +582,8 @@ namespace rgw::dedup {
       }
 
       ObjectWriteOperation op;
+      d_ctl.metadata_access_throttle.acquire();
+      ldpp_dout(dpp, 20) << __func__ << "::dec ref-count on tail object: " << raw_obj.oid << dendl;
       cls_refcount_put(op, ref_tag, true);
       rgw::AioResultList completed = aio->get(obj.obj,
                                               rgw::Aio::librados_op(obj.ioctx, std::move(op), null_yield),
@@ -602,6 +619,7 @@ namespace rgw::dedup {
 
       ObjectWriteOperation op;
       cls_refcount_get(op, ref_tag, true);
+      d_ctl.metadata_access_throttle.acquire();
       ldpp_dout(dpp, 20) << __func__ << "::inc ref-count on tail object: " << raw_obj.oid << dendl;
       rgw::AioResultList completed = aio->get(obj.obj,
                                               rgw::Aio::librados_op(obj.ioctx, std::move(op), null_yield),
@@ -666,10 +684,10 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   static int get_ioctx(const DoutPrefixProvider* const dpp,
                        rgw::sal::Driver* driver,
-                       RGWRados* rados,
+                       rgw::sal::RadosStore* store,
                        const disk_record_t *p_rec,
                        librados::IoCtx *p_ioctx,
-                       std::string *oid)
+                       std::string *p_oid)
   {
     unique_ptr<rgw::sal::Bucket> bucket;
     {
@@ -682,29 +700,18 @@ namespace rgw::dedup {
       }
     }
 
-    build_oid(p_rec->bucket_id, p_rec->obj_name, oid);
-    //ldpp_dout(dpp, 0) << __func__ << "::OID=" << oid << " || bucket_id=" << bucket_id << dendl;
-    rgw_pool data_pool;
-    rgw_obj obj{bucket->get_key(), *oid};
-    if (!rados->get_obj_data_pool(bucket->get_placement_rule(), obj, &data_pool)) {
-      ldpp_dout(dpp, 1) << __func__ << "::failed to get data pool for bucket "
-                        << bucket->get_name()  << dendl;
-      return -EIO;
-    }
-    int ret = rgw_init_ioctx(dpp, rados->get_rados_handle(), data_pool, *p_ioctx);
-    if (ret < 0) {
-      ldpp_dout(dpp, 1) << __func__ << "::ERR: failed to get ioctx from data pool:"
-                        << data_pool.to_str() << dendl;
-      return -EIO;
-    }
-
-    return 0;
+    string dummy_locator;
+    const rgw_obj_index_key key(p_rec->obj_name, p_rec->instance);
+    rgw_obj obj(bucket->get_key(), key);
+    get_obj_bucket_and_oid_loc(obj, *p_oid, dummy_locator);
+    RGWBucketInfo& bucket_info = bucket->get_info();
+    return store->get_obj_head_ioctx(dpp, bucket_info, obj, p_ioctx);
   }
 
   //---------------------------------------------------------------------------
   static void init_cmp_pairs(const disk_record_t *p_rec,
                              const bufferlist    &etag_bl,
-                             bufferlist          &sha256_bl, // OUT PARAM
+                             bufferlist          &hash_bl, // OUT PARAM
                              librados::ObjectWriteOperation *p_op)
   {
     p_op->cmpxattr(RGW_ATTR_ETAG, CEPH_OSD_CMPXATTR_OP_EQ, etag_bl);
@@ -712,15 +719,15 @@ namespace rgw::dedup {
     // Can replace it with something cheaper like size/version?
     p_op->cmpxattr(RGW_ATTR_MANIFEST, CEPH_OSD_CMPXATTR_OP_EQ, p_rec->manifest_bl);
 
-    // SHA has 256 bit splitted into multiple 64bit units
+    // BLAKE3 hash has 256 bit splitted into multiple 64bit units
     const unsigned units = (256 / (sizeof(uint64_t)*8));
     static_assert(units == 4);
     for (unsigned i = 0; i < units; i++) {
-      ceph::encode(p_rec->s.sha256[i], sha256_bl);
+      ceph::encode(p_rec->s.hash[i], hash_bl);
     }
 
-    if (!p_rec->s.flags.sha256_calculated()) {
-      p_op->cmpxattr(RGW_ATTR_SHA256, CEPH_OSD_CMPXATTR_OP_EQ, sha256_bl);
+    if (!p_rec->s.flags.hash_calculated()) {
+      p_op->cmpxattr(RGW_ATTR_BLAKE3, CEPH_OSD_CMPXATTR_OP_EQ, hash_bl);
     }
   }
 
@@ -755,23 +762,23 @@ namespace rgw::dedup {
     ldpp_dout(dpp, 20) << __func__ << "::num_parts=" << p_tgt_rec->s.num_parts
                        << "::ETAG=" << etag_bl.to_str() << dendl;
 
-    bufferlist hash_bl, manifest_hash_bl, tgt_sha256_bl;
+    bufferlist hash_bl, manifest_hash_bl, tgt_hash_bl;
     crypto::digest<crypto::SHA1>(p_src_rec->manifest_bl).encode(hash_bl);
     // Use a shorter hash (64bit instead of 160bit)
     hash_bl.splice(0, 8, &manifest_hash_bl);
     librados::ObjectWriteOperation tgt_op;
-    init_cmp_pairs(p_tgt_rec, etag_bl, tgt_sha256_bl, &tgt_op);
+    init_cmp_pairs(p_tgt_rec, etag_bl, tgt_hash_bl, &tgt_op);
     tgt_op.setxattr(RGW_ATTR_SHARE_MANIFEST, manifest_hash_bl);
     tgt_op.setxattr(RGW_ATTR_MANIFEST, p_src_rec->manifest_bl);
-    if (p_tgt_rec->s.flags.sha256_calculated()) {
-      tgt_op.setxattr(RGW_ATTR_SHA256, tgt_sha256_bl);
-      p_stats->set_sha256_attrs++;
+    if (p_tgt_rec->s.flags.hash_calculated()) {
+      tgt_op.setxattr(RGW_ATTR_BLAKE3, tgt_hash_bl);
+      p_stats->set_hash_attrs++;
     }
 
     std::string src_oid, tgt_oid;
     librados::IoCtx src_ioctx, tgt_ioctx;
-    int ret1 = get_ioctx(dpp, driver, rados, p_src_rec, &src_ioctx, &src_oid);
-    int ret2 = get_ioctx(dpp, driver, rados, p_tgt_rec, &tgt_ioctx, &tgt_oid);
+    int ret1 = get_ioctx(dpp, driver, store, p_src_rec, &src_ioctx, &src_oid);
+    int ret2 = get_ioctx(dpp, driver, store, p_tgt_rec, &tgt_ioctx, &tgt_oid);
     if (unlikely(ret1 != 0 || ret2 != 0)) {
       ldpp_dout(dpp, 1) << __func__ << "::ERR: failed get_ioctx()" << dendl;
       return (ret1 ? ret1 : ret2);
@@ -782,6 +789,7 @@ namespace rgw::dedup {
     ldpp_dout(dpp, 20) << __func__ << "::ref_tag=" << ref_tag << dendl;
     int ret = inc_ref_count_by_manifest(ref_tag, src_oid, src_manifest);
     if (ret == 0) {
+      d_ctl.metadata_access_throttle.acquire();
       ldpp_dout(dpp, 20) << __func__ << "::send TGT CLS (Shared_Manifest)" << dendl;
       ret = tgt_ioctx.operate(tgt_oid, &tgt_op);
       if (unlikely(ret != 0)) {
@@ -800,15 +808,16 @@ namespace rgw::dedup {
         // disk-record (as require an expensive random-disk-write).
         // When deduping C we can trust the shared_manifest state in the table and
         // skip a redundant update to SRC object attribute
-        bufferlist src_sha256_bl;
+        bufferlist src_hash_bl;
         librados::ObjectWriteOperation src_op;
-        init_cmp_pairs(p_src_rec, etag_bl, src_sha256_bl, &src_op);
+        init_cmp_pairs(p_src_rec, etag_bl, src_hash_bl, &src_op);
         src_op.setxattr(RGW_ATTR_SHARE_MANIFEST, manifest_hash_bl);
-        if (p_src_rec->s.flags.sha256_calculated()) {
-          src_op.setxattr(RGW_ATTR_SHA256, src_sha256_bl);
-          p_stats->set_sha256_attrs++;
+        if (p_src_rec->s.flags.hash_calculated()) {
+          src_op.setxattr(RGW_ATTR_BLAKE3, src_hash_bl);
+          p_stats->set_hash_attrs++;
         }
 
+        d_ctl.metadata_access_throttle.acquire();
         ldpp_dout(dpp, 20) << __func__ <<"::send SRC CLS (Shared_Manifest)"<< dendl;
         ret = src_ioctx.operate(src_oid, &src_op);
         if (unlikely(ret != 0)) {
@@ -824,57 +833,49 @@ namespace rgw::dedup {
     return ret;
   }
 
-  using ceph::crypto::SHA256;
   //---------------------------------------------------------------------------
-  int Background::calc_object_sha256(const disk_record_t *p_rec, uint8_t *p_sha256)
+  int Background::calc_object_blake3(const disk_record_t *p_rec, uint8_t *p_hash)
   {
-    ldpp_dout(dpp, 20) << __func__ << "::p_rec->obj_name=" << p_rec->obj_name << dendl;
-    // Open questions -
-    // 1) do we need the secret if so what is the correct one to use?
-    // 2) are we passing the head/tail objects in the correct order?
+    ldpp_dout(dpp, 20) << __func__ << "::obj_name=" << p_rec->obj_name << dendl;
     RGWObjManifest manifest;
     try {
       auto bl_iter = p_rec->manifest_bl.cbegin();
       decode(manifest, bl_iter);
     } catch (buffer::error& err) {
-      ldpp_dout(dpp, 1)  << __func__ << "::ERROR: bad src manifest" << dendl;
+      ldpp_dout(dpp, 1)  << __func__ << "::ERROR: bad src manifest for: "
+                         << p_rec->obj_name << dendl;
       return -EINVAL;
     }
-    std::string oid;
-    build_oid(p_rec->bucket_id, p_rec->obj_name, &oid);
-    librados::IoCtx head_ioctx;
-    const char *secret = "0555b35654ad1656d804f1b017cd26e9";
-    TOPNSPC::crypto::HMACSHA256 hmac((const uint8_t*)secret, strlen(secret));
+
+    blake3_hasher hmac;
+    blake3_hasher_init(&hmac);
     for (auto p = manifest.obj_begin(dpp); p != manifest.obj_end(dpp); ++p) {
       rgw_raw_obj raw_obj = p.get_location().get_raw_obj(rados);
       rgw_rados_ref obj;
       int ret = rgw_get_rados_ref(dpp, rados_handle, raw_obj, &obj);
       if (ret < 0) {
-        ldpp_dout(dpp, 1) << __func__ << "::failed rgw_get_rados_ref() for raw_obj="
-                          << raw_obj << dendl;
+        ldpp_dout(dpp, 1) << __func__ << "::failed rgw_get_rados_ref() for oid: "
+                          << raw_obj.oid << ", err is " << cpp_strerror(-ret) << dendl;
         return ret;
       }
 
-      if (oid == raw_obj.oid) {
-        ldpp_dout(dpp, 20) << __func__ << "::manifest: head object=" << oid << dendl;
-        head_ioctx = obj.ioctx;
-      }
       bufferlist bl;
       librados::IoCtx ioctx = obj.ioctx;
       // read full object
       ret = ioctx.read(raw_obj.oid, bl, 0, 0);
       if (ret > 0) {
         for (const auto& bptr : bl.buffers()) {
-          hmac.Update((const unsigned char *)bptr.c_str(), bptr.length());
+          blake3_hasher_update(&hmac, (const unsigned char *)bptr.c_str(), bptr.length());
         }
       }
       else {
-        ldpp_dout(dpp, 1) << __func__ << "::ERR: failed to read " << oid
+        ldpp_dout(dpp, 1) << __func__ << "::ERR: failed to read " << raw_obj.oid
                           << ", error is " << cpp_strerror(-ret) << dendl;
         return ret;
       }
     }
-    hmac.Final(p_sha256);
+
+    blake3_hasher_finalize(&hmac, p_hash, BLAKE3_OUT_LEN);
     return 0;
   }
 
@@ -977,33 +978,33 @@ namespace rgw::dedup {
       memset(&p_rec->s.shared_manifest, 0, sizeof(p_rec->s.shared_manifest));
     }
 
-    itr = attrs.find(RGW_ATTR_SHA256);
+    itr = attrs.find(RGW_ATTR_BLAKE3);
     if (itr != attrs.end()) {
       try {
         auto bl_iter = itr->second.cbegin();
-        // SHA has 256 bit splitted into multiple 64bit units
+        // BLAKE3 hash 256 bit splitted into multiple 64bit units
         const unsigned units = (256 / (sizeof(uint64_t)*8));
         static_assert(units == 4);
         for (unsigned i = 0; i < units; i++) {
           uint64_t val;
           ceph::decode(val, bl_iter);
-          p_rec->s.sha256[i] = val;
+          p_rec->s.hash[i] = val;
         }
-        p_stats->valid_sha256_attrs++;
+        p_stats->valid_hash_attrs++;
         return 0;
       } catch (buffer::error& err) {
-        ldpp_dout(dpp, 1) << __func__ << "::ERR: failed SHA256 decode" << dendl;
+        ldpp_dout(dpp, 1) << __func__ << "::ERR: failed HASH decode" << dendl;
         return -EINVAL;
       }
     }
 
-    p_stats->invalid_sha256_attrs++;
+    p_stats->invalid_hash_attrs++;
     // TBD: redundant memset...
-    memset(p_rec->s.sha256, 0, sizeof(p_rec->s.sha256));
-    // CEPH_CRYPTO_HMACSHA256_DIGESTSIZE is 32 Bytes (32*8=256)
-    int ret = calc_object_sha256(p_rec, (uint8_t*)p_rec->s.sha256);
+    memset(p_rec->s.hash, 0, sizeof(p_rec->s.hash));
+    // BLAKE3_OUT_LEN is 32 Bytes
+    int ret = calc_object_blake3(p_rec, (uint8_t*)p_rec->s.hash);
     if (ret == 0) {
-      p_rec->s.flags.set_sha256_calculated();
+      p_rec->s.flags.set_hash_calculated();
     }
 
     return ret;
@@ -1073,8 +1074,8 @@ namespace rgw::dedup {
                          << cpp_strerror(-ret) << dendl;
       return 0;
     }
-
-    unique_ptr<rgw::sal::Object> p_obj = bucket->get_object(p_rec->obj_name);
+    const rgw_obj_index_key roi_key(p_rec->obj_name, p_rec->instance);
+    unique_ptr<rgw::sal::Object> p_obj = bucket->get_object(roi_key);
     if (unlikely(!p_obj)) {
       // could happen when the object is removed between passes
       p_stats->ingress_failed_get_object++;
@@ -1083,6 +1084,7 @@ namespace rgw::dedup {
       return 0;
     }
 
+    d_ctl.metadata_access_throttle.acquire();
     ret = p_obj->get_obj_attrs(null_yield, dpp);
     if (unlikely(ret < 0)) {
       p_stats->ingress_failed_get_obj_attrs++;
@@ -1177,22 +1179,22 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  static int write_sha256_object_attribute(const DoutPrefixProvider* const dpp,
+  static int write_blake3_object_attribute(const DoutPrefixProvider* const dpp,
                                            rgw::sal::Driver* driver,
-                                           RGWRados* rados,
+                                           rgw::sal::RadosStore *store,
                                            const disk_record_t *p_rec)
   {
     bufferlist etag_bl;
-    bufferlist sha256_bl;
+    bufferlist hash_bl;
     librados::ObjectWriteOperation op;
     etag_to_bufferlist(p_rec->s.md5_high, p_rec->s.md5_low, p_rec->s.num_parts,
                        &etag_bl);
-    init_cmp_pairs(p_rec, etag_bl, sha256_bl /*OUT PARAM*/, &op);
-    op.setxattr(RGW_ATTR_SHA256, sha256_bl);
+    init_cmp_pairs(p_rec, etag_bl, hash_bl /*OUT PARAM*/, &op);
+    op.setxattr(RGW_ATTR_BLAKE3, hash_bl);
 
     std::string oid;
     librados::IoCtx ioctx;
-    int ret = get_ioctx(dpp, driver, rados, p_rec, &ioctx, &oid);
+    int ret = get_ioctx(dpp, driver, store, p_rec, &ioctx, &oid);
     if (unlikely(ret != 0)) {
       ldpp_dout(dpp, 5) << __func__ << "::ERR: failed get_ioctx()" << dendl;
       return ret;
@@ -1287,10 +1289,11 @@ namespace rgw::dedup {
                        << "/" << src_rec.obj_name << dendl;
     // verify that SRC and TGT records don't refer to the same physical object
     // This could happen in theory if we read the same objects twice
-    if (src_rec.obj_name == p_tgt_rec->obj_name && src_rec.bucket_name == p_tgt_rec->bucket_name) {
+    if (src_rec.ref_tag == p_tgt_rec->ref_tag) {
       p_stats->duplicate_records++;
-      ldpp_dout(dpp, 10) << __func__ << "::WARN: Duplicate records for object="
-                         << src_rec.obj_name << dendl;
+      ldpp_dout(dpp, 10) << __func__ << "::WARN::REF_TAG::Duplicate records for "
+                         << src_rec.obj_name << "::" << src_rec.ref_tag << "::"
+                         << p_tgt_rec->obj_name << dendl;
       return 0;
     }
 
@@ -1304,17 +1307,17 @@ namespace rgw::dedup {
       return 0;
     }
 
-    if (memcmp(src_rec.s.sha256, p_tgt_rec->s.sha256, sizeof(src_rec.s.sha256)) != 0) {
-      p_stats->sha256_mismatch++;
-      ldpp_dout(dpp, 10) << __func__ << "::SHA256 mismatch" << dendl;
-      // TBD: set sha256 attributes on head objects to save calc next time
-      if (src_rec.s.flags.sha256_calculated()) {
-        write_sha256_object_attribute(dpp, driver, rados, &src_rec);
-        p_stats->set_sha256_attrs++;
+    if (memcmp(src_rec.s.hash, p_tgt_rec->s.hash, sizeof(src_rec.s.hash)) != 0) {
+      p_stats->hash_mismatch++;
+      ldpp_dout(dpp, 10) << __func__ << "::HASH mismatch" << dendl;
+      // TBD: set hash attributes on head objects to save calc next time
+      if (src_rec.s.flags.hash_calculated()) {
+        write_blake3_object_attribute(dpp, driver, store, &src_rec);
+        p_stats->set_hash_attrs++;
       }
-      if (p_tgt_rec->s.flags.sha256_calculated()) {
-        write_sha256_object_attribute(dpp, driver, rados, p_tgt_rec);
-        p_stats->set_sha256_attrs++;
+      if (p_tgt_rec->s.flags.hash_calculated()) {
+        write_blake3_object_attribute(dpp, driver, store, p_tgt_rec);
+        p_stats->set_hash_attrs++;
       }
       return 0;
     }
@@ -1401,6 +1404,7 @@ namespace rgw::dedup {
         }
       }
 
+      p_stats->ingress_slabs++;
       (*p_slab_count)++;
       failure_count = 0;
       unsigned slab_rec_count = 0;
@@ -1507,22 +1511,23 @@ namespace rgw::dedup {
                                                    const rgw_bucket_dir_entry &entry,
                                                    worker_stats_t             *p_worker_stats /*IN-OUT*/)
   {
-    // ceph store full blocks so need to round up and multiply by block_size
-    uint64_t ondisk_byte_size = calc_on_disk_byte_size(entry.meta.size);
-    // count all objects including too small and non default storage_class objs
-    p_worker_stats->ingress_obj++;
-    p_worker_stats->ingress_obj_bytes += ondisk_byte_size;
-
     parsed_etag_t parsed_etag;
     if (unlikely(!parse_etag_string(entry.meta.etag, &parsed_etag))) {
       p_worker_stats->ingress_corrupted_etag++;
-      ldpp_dout(dpp, 1) << __func__ << "::ERROR: corrupted etag" << dendl;
+      ldpp_dout(dpp, 1) << __func__ << "::ERROR: corrupted etag:" << entry.meta.etag
+                        << "::" << p_bucket->get_name() << "/" << entry.key.name << dendl;
       return -EINVAL;
     }
 
     if (unlikely((cct->_conf->subsys.should_gather<ceph_subsys_rgw_dedup, 20>()))) {
       show_ingress_bucket_idx_obj(dpp, parsed_etag, p_bucket->get_name(), entry.key.name);
     }
+
+    // ceph store full blocks so need to round up and multiply by block_size
+    uint64_t ondisk_byte_size = calc_on_disk_byte_size(entry.meta.size);
+    // count all objects including too small and non default storage_class objs
+    p_worker_stats->ingress_obj++;
+    p_worker_stats->ingress_obj_bytes += ondisk_byte_size;
 
     // We limit dedup to objects from the same storage_class
     // TBD:
@@ -1569,8 +1574,8 @@ namespace rgw::dedup {
     }
 
     return add_disk_rec_from_bucket_idx(disk_arr, p_bucket, &parsed_etag,
-                                        entry.key.name, entry.meta.size,
-                                        storage_class);
+                                        entry.key.name, entry.key.instance,
+                                        entry.meta.size, storage_class);
   }
 
   //---------------------------------------------------------------------------
@@ -1654,6 +1659,7 @@ namespace rgw::dedup {
       const string& oid = oids[current_shard];
       rgw_cls_list_ret result;
       librados::ObjectReadOperation op;
+      d_ctl.bucket_index_throttle.acquire();
       // get bucket-indices of @current_shard
       cls_rgw_bucket_list_op(op, marker, null_prefix, null_delimiter, max_entries,
                              list_versions, &result);
@@ -1668,15 +1674,21 @@ namespace rgw::dedup {
       obj_count += result.dir.m.size();
       for (auto& entry : result.dir.m) {
         const rgw_bucket_dir_entry& dirent = entry.second;
+        // make sure to advance marker in all cases!
+        marker = dirent.key;
+        ldpp_dout(dpp, 20) << __func__ << "::dirent = " << bucket->get_name() << "/"
+                           << marker.name << "::instance=" << marker.instance << dendl;
         if (unlikely((!dirent.exists && !dirent.is_delete_marker()) || !dirent.pending_map.empty())) {
           // TBD: should we bailout ???
-          ldpp_dout(dpp, 1) << __func__ << "::ERR: calling check_disk_state bucket="
-                            << bucket->get_name() << " entry=" << dirent.key << dendl;
-          // make sure we're advancing marker
-          marker = dirent.key;
+          ldpp_dout(dpp, 1) << __func__ << "::ERR: bad dirent::" << bucket->get_name()
+                            << "/" << marker.name << "::instance=" << marker.instance << dendl;
           continue;
         }
-        marker = dirent.key;
+        else if (unlikely(dirent.is_delete_marker())) {
+          ldpp_dout(dpp, 20) << __func__ << "::skip delete_marker::" << bucket->get_name()
+                             << "/" << marker.name << "::instance=" << marker.instance << dendl;
+          continue;
+        }
         ret = ingress_bucket_idx_single_object(disk_arr, bucket, dirent, p_worker_stats);
       }
       // TBD: advance marker only once here!
@@ -1788,7 +1800,7 @@ namespace rgw::dedup {
     display_table_stat_counters(dpp, p_stats);
 
     ldpp_dout(dpp, 10) << __func__ << "::MD5 Loop::" << d_ctl.dedup_type << dendl;
-    if (d_ctl.dedup_type != dedup_req_type_t::DEDUP_TYPE_FULL) {
+    if (d_ctl.dedup_type != dedup_req_type_t::DEDUP_TYPE_EXEC) {
       for (work_shard_t worker_id = 0; worker_id < num_work_shards; worker_id++) {
         remove_slabs(worker_id, md5_shard, slab_count_arr[worker_id]);
       }
@@ -2042,6 +2054,8 @@ namespace rgw::dedup {
                                                 &worker_stats,raw_mem, raw_mem_size);
     if (ret == 0) {
       worker_stats.duration = ceph_clock_now() - start_time;
+      worker_stats.bidx_throttle_sleep_events = d_ctl.bucket_index_throttle.get_sleep_events();
+      worker_stats.bidx_throttle_sleep_time_usec = d_ctl.bucket_index_throttle.get_sleep_time_usec();
       d_cluster.mark_work_shard_token_completed(store, worker_id, &worker_stats);
       ldpp_dout(dpp, 10) << "stat counters [worker]:\n" << worker_stats << dendl;
       ldpp_dout(dpp, 10) << "Shard Process Duration   = "
@@ -2049,6 +2063,7 @@ namespace rgw::dedup {
     }
     //ldpp_dout(dpp, 0) << __func__ << "::sleep for 2 seconds\n" << dendl;
     //std::this_thread::sleep_for(std::chrono::seconds(2));
+    //std::this_thread::sleep_forstd::chrono::microseconds(usec_timeout);
     return ret;
   }
 
@@ -2066,6 +2081,9 @@ namespace rgw::dedup {
     int ret = objects_dedup_single_md5_shard(&table, md5_shard, &md5_stats, num_work_shards);
     if (ret == 0) {
       md5_stats.duration = ceph_clock_now() - start_time;
+      md5_stats.md_throttle_sleep_events = d_ctl.metadata_access_throttle.get_sleep_events();
+      md5_stats.md_throttle_sleep_time_usec = d_ctl.metadata_access_throttle.get_sleep_time_usec();
+
       d_cluster.mark_md5_shard_token_completed(store, md5_shard, &md5_stats);
       ldpp_dout(dpp, 10) << "stat counters [md5]:\n" << md5_stats << dendl;
       ldpp_dout(dpp, 10) << "Shard Process Duration   = "
@@ -2255,7 +2273,7 @@ namespace rgw::dedup {
     ldpp_dout(dpp, 10) <<__func__ << "::" << *p_epoch << dendl;
     d_ctl.dedup_type = p_epoch->dedup_type;
 #ifdef FULL_DEDUP_SUPPORT
-    ceph_assert(d_ctl.dedup_type == dedup_req_type_t::DEDUP_TYPE_FULL ||
+    ceph_assert(d_ctl.dedup_type == dedup_req_type_t::DEDUP_TYPE_EXEC ||
                 d_ctl.dedup_type == dedup_req_type_t::DEDUP_TYPE_ESTIMATE);
 #else
     ceph_assert(d_ctl.dedup_type == dedup_req_type_t::DEDUP_TYPE_ESTIMATE);
@@ -2298,14 +2316,27 @@ namespace rgw::dedup {
   {
     int ret = 0;
     int32_t urgent_msg = URGENT_MSG_NONE;
+    auto bl_iter = bl.cbegin();
     try {
-      auto bl_iter = bl.cbegin();
       ceph::decode(urgent_msg, bl_iter);
     } catch (buffer::error& err) {
       ldpp_dout(dpp, 1) << __func__ << "::ERROR: bad urgent_msg" << dendl;
-      ret = -EINVAL;
+      cluster::ack_notify(store, dpp, &d_ctl, notify_id, cookie, -EINVAL);
+      return;
     }
-    ldpp_dout(dpp, 5) << __func__ << "::-->" << get_urgent_msg_names(urgent_msg) << dendl;
+    ldpp_dout(dpp, 5) << __func__ << "::" << get_urgent_msg_names(urgent_msg) << dendl;
+
+    throttle_msg_t throttle_msg;
+    if (urgent_msg == URGENT_MSG_THROTTLE) {
+      try {
+        decode(throttle_msg, bl_iter);
+        ldpp_dout(dpp, 5) << __func__ << "::" << throttle_msg << dendl;
+      } catch (buffer::error& err) {
+        ldpp_dout(dpp, 1) << __func__ << "::ERROR: bad throttle_msg" << dendl;
+        cluster::ack_notify(store, dpp, &d_ctl, notify_id, cookie, -EINVAL);
+        return;
+      }
+    }
 
     // use lock to prevent concurrent pause/resume requests
     std::unique_lock cond_lock(d_cond_mutex); // [------>open lock block
@@ -2364,6 +2395,24 @@ namespace rgw::dedup {
       }
       else {
         ldpp_dout(dpp, 5) << __func__ << "::dedup is not paused->nothing to do" << dendl;
+      }
+      break;
+    case URGENT_MSG_THROTTLE:
+      for (auto action : throttle_msg.vec) {
+        if (action.op_type == BUCKET_INDEX_OP) {
+          d_ctl.bucket_index_throttle.set_max_calls_per_sec(action.limit);
+        }
+        else if (action.op_type == METADATA_ACCESS_OP) {
+          d_ctl.metadata_access_throttle.set_max_calls_per_sec(action.limit);
+        }
+        else if (action.op_type == STAT) {
+          ldpp_dout(dpp, 10) << __func__ << "::Throttle STAT" << dendl;
+        }
+        else {
+          ldpp_dout(dpp, 1) << __func__ << "::unexpected throttle_msg "
+                            << action.op_type << dendl;
+          ret = -EINVAL;
+        }
       }
       break;
     default:
