@@ -5,6 +5,7 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2016 Allen Samuels <allen.samuels@sandisk.com>
+ * Copyright (C) 2026 International Business Machines Corp. (IBM)
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -29,6 +30,7 @@
 #include <bit>
 #include <cstring>
 #include <concepts>
+#include <list>
 #include <map>
 #include <optional>
 #include <set>
@@ -43,6 +45,7 @@
 
 #include "include/cpp_lib_backport.h"
 #include "include/compat.h"
+#include "include/concepts.h"
 #include "include/int_types.h"
 #include "include/scope_guard.h"
 
@@ -112,8 +115,9 @@ private:
     // quite.
     i++;
     int bits = 0;
-    for (unsigned t = i; t; bits++)
+    for (unsigned t = i; t; bits++) {
       t &= t - 1;
+    }
     return bits <= 2;
   }
   size_t space_size() const {
@@ -135,10 +139,11 @@ private:
       const size_t space_len = space_size();
       dump_bl.append(appender.get_pos() - space_len, space_len);
       dump_bl.write_fd(fd);
-    } else {
-      size_t len = appender.get_pos() - start;
-      [[maybe_unused]] int r = ::write(fd, start, len);
+      return;
     }
+
+    size_t len = appender.get_pos() - start;
+    [[maybe_unused]] int r = ::write(fd, start, len);
   }
   const char* name;
   const ceph::bufferlist::contiguous_appender& appender;
@@ -451,11 +456,7 @@ inline void denc_signed_varint(int64_t v, size_t& p) {
 template<class It>
 requires (!is_const_iterator<It>)
 void denc_signed_varint(int64_t v, It& p) {
-  if (v < 0) {
-    v = (-v << 1) | 1;
-  } else {
-    v <<= 1;
-  }
+  v = v < 0 ? (-v << 1) | 1 : v << 1;
   denc_varint(v, p);
 }
 
@@ -464,11 +465,7 @@ inline void denc_signed_varint(T& v, It& p)
 {
   int64_t i = 0;
   denc_varint(i, p);
-  if (i & 1) {
-    v = -(i >> 1);
-  } else {
-    v = i >> 1;
-  }
+  v = (i & 1) ? -(i >> 1) : i >> 1;
 }
 
 // varint + lowz encoding
@@ -534,15 +531,10 @@ inline void denc_signed_varint_lowz(T& v, It& p)
   int64_t i = 0;
   denc_varint(i, p);
   int lowznib = (i & 6) >> 1;
-  if (i & 1) {
-    i >>= 3;
-    i <<= lowznib * 4;
-    v = -i;
-  } else {
-    i >>= 3;
-    i <<= lowznib * 4;
-    v = i;
-  }
+  const bool negative = i & 1;
+  i >>= 3;
+  i <<= lowznib * 4;
+  v = negative ? -i : i;
 }
 
 
@@ -564,21 +556,27 @@ template<class It>
 requires (!is_const_iterator<It>)
 inline void denc_lba(uint64_t v, It& p) {
   int low_zero_nibbles = v ? std::countr_zero(v) / 4 : 0;
-  int pos;
-  uint32_t word;
   int t = low_zero_nibbles - 3;
-  if (t < 0) {
-    pos = 3;
-    word = 0x7;
-  } else if (t < 3) {
-    v >>= (low_zero_nibbles * 4);
-    pos = t + 1;
-    word = (1 << t) - 1;
-  } else {
-    v >>= 20;
-    pos = 3;
-    word = 0x3;
-  }
+
+  struct lba_prefix {
+    uint64_t v;
+    int pos;
+    uint32_t word;
+  };
+
+  const auto prefix = [&] {
+    if (t < 0) {
+      return lba_prefix{v, 3, 0x7};
+    }
+    if (t < 3) {
+      return lba_prefix{v >> (low_zero_nibbles * 4), t + 1, uint32_t((1 << t) - 1)};
+    }
+    return lba_prefix{v >> 20, 3, 0x3};
+  }();
+
+  v = prefix.v;
+  const auto pos = prefix.pos;
+  uint32_t word = prefix.word;
   word |= (v << pos) & 0x7fffffff;
   v >>= 31 - pos;
   if (!v) {
@@ -643,7 +641,8 @@ inline std::enable_if_t<traits::supported> denc(
 {
   if constexpr (traits::featured) {
     traits::bound_encode(o, p, f);
-  } else {
+  }
+  if constexpr (!traits::featured) {
     traits::bound_encode(o, p);
   }
 }
@@ -657,7 +656,8 @@ denc(const T& o,
 {
   if constexpr (traits::featured) {
     traits::encode(o, p, features);
-  } else {
+  }
+  if constexpr (!traits::featured) {
     traits::encode(o, p);
   }
 }
@@ -671,7 +671,8 @@ denc(T& o,
 {
   if constexpr (traits::featured) {
     traits::decode(o, p, features);
-  } else {
+  }
+  if constexpr (!traits::featured) {
     traits::decode(o, p);
   }
 }
@@ -759,17 +760,19 @@ public:
   }
   static void decode_nohead(size_t len, value_type& s,
                             ceph::buffer::list::const_iterator& p) {
-    if (len) {
-      if constexpr (std::is_same_v<value_type, std::string>) {
-        s.clear();
-        p.copy(len, s);
-      } else {
-        s.resize(len);
-        p.copy(len, s.data());
-      }
-    } else {
+    if (!len) {
       s.clear();
+      return;
     }
+
+    if constexpr (std::is_same_v<value_type, std::string>) {
+      s.clear();
+      p.copy(len, s);
+      return;
+    }
+
+    s.resize(len);
+    p.copy(len, s.data());
   }
   template<class It>
   requires (!is_const_iterator<It>)
@@ -812,10 +815,11 @@ struct denc_traits<ceph::buffer::ptr> {
     ceph::buffer::list s;
     p.copy(len, s);
     if (len) {
-      if (s.get_num_buffers() == 1)
-	v = s.front();
-      else
-	v = ceph::buffer::copy(s.c_str(), s.length());
+      if (s.get_num_buffers() == 1) {
+        v = s.front();
+        return;
+      }
+      v = ceph::buffer::copy(s.c_str(), s.length());
     }
   }
 };
@@ -833,7 +837,7 @@ struct denc_traits<ceph::buffer::list> {
     p += sizeof(uint32_t) + v.length();
   }
   static void encode(const ceph::buffer::list& v, ceph::buffer::list::contiguous_appender& p,
-	      uint64_t f=0) {
+                     uint64_t f=0) {
     denc((uint32_t)v.length(), p);
     p.append(v);
   }
@@ -850,18 +854,18 @@ struct denc_traits<ceph::buffer::list> {
     p.copy(len, v);
   }
   static void encode_nohead(const ceph::buffer::list& v,
-			    ceph::buffer::list::contiguous_appender& p) {
+                            ceph::buffer::list::contiguous_appender& p) {
     p.append(v);
   }
   static void decode_nohead(size_t len, ceph::buffer::list& v,
-			    ceph::buffer::ptr::const_iterator& p) {
+                            ceph::buffer::ptr::const_iterator& p) {
     v.clear();
     if (len) {
       v.append(p.get_ptr(len));
     }
   }
   static void decode_nohead(size_t len, ceph::buffer::list& v,
-			    ceph::buffer::list::const_iterator& p) {
+                            ceph::buffer::list::const_iterator& p) {
     v.clear();
     p.copy(len, v);
   }
@@ -874,55 +878,48 @@ template<typename A, typename B>
 struct denc_traits<
   std::pair<A, B>,
   std::enable_if_t<denc_supported<std::remove_const_t<A>> && denc_supported<B>>> {
-  typedef denc_traits<A> a_traits;
-  typedef denc_traits<B> b_traits;
+  using first_type = std::remove_const_t<A>;
+  using a_traits = denc_traits<first_type>;
+  using b_traits = denc_traits<B>;
 
   static constexpr bool supported = true;
-  static constexpr bool featured = a_traits::featured || b_traits::featured ;
+  static constexpr bool featured = a_traits::featured || b_traits::featured;
   static constexpr bool bounded = a_traits::bounded && b_traits::bounded;
   static constexpr bool need_contiguous = (a_traits::need_contiguous ||
-					   b_traits::need_contiguous);
+                                           b_traits::need_contiguous);
 
   static void bound_encode(const std::pair<A,B>& v, size_t& p, uint64_t f = 0) {
-    if constexpr (featured) {
-      denc(v.first, p, f);
-      denc(v.second, p, f);
-    } else {
-      denc(v.first, p);
-      denc(v.second, p);
-    }
+    denc(v.first, p, f);
+    denc(v.second, p, f);
   }
 
   static void encode(const std::pair<A,B>& v, ceph::buffer::list::contiguous_appender& p,
-		     uint64_t f = 0) {
-    if constexpr (featured) {
-      denc(v.first, p, f);
-      denc(v.second, p, f);
-    } else {
-      denc(v.first, p);
-      denc(v.second, p);
-    }
-  }
-
-  static void decode(std::pair<A,B>& v, ceph::buffer::ptr::const_iterator& p, uint64_t f=0) {
-    denc(const_cast<std::remove_const_t<A>&>(v.first), p, f);
+                     uint64_t f = 0) {
+    denc(v.first, p, f);
     denc(v.second, p, f);
   }
-  template<typename AA=A>
-  static std::enable_if_t<!!sizeof(AA) && !need_contiguous>
-  decode(std::pair<A,B>& v, ceph::buffer::list::const_iterator& p,
-	 uint64_t f = 0) {
-    denc(const_cast<std::remove_const_t<AA>&>(v.first), p);
+
+  static void decode(std::pair<A,B>& v, ceph::buffer::ptr::const_iterator& p,
+                     uint64_t f = 0) {
+    denc(const_cast<first_type&>(v.first), p, f);
+    denc(v.second, p, f);
+  }
+
+  static void decode(std::pair<A,B>& v, ceph::buffer::list::const_iterator& p,
+                     uint64_t f = 0)
+  requires (!need_contiguous)
+  {
+    denc(const_cast<first_type&>(v.first), p);
     denc(v.second, p);
   }
 };
 
 namespace _denc {
-  template<template<class...> class C, typename Details, typename ...Ts>
+  template<typename Container>
   struct container_base {
   private:
-    using container = C<Ts...>;
-    using T = typename Details::T;
+    using container = Container;
+    using T = typename container::value_type;
 
   public:
     using traits = denc_traits<T>;
@@ -932,9 +929,9 @@ namespace _denc {
     static constexpr bool bounded = false;
     static constexpr bool need_contiguous = traits::need_contiguous;
 
-    template<typename U=T>
     static void bound_encode(const container& s, size_t& p, uint64_t f = 0) {
       p += sizeof(uint32_t);
+
       if constexpr (traits::bounded) {
 #if _GLIBCXX_USE_CXX11_ABI
         // intensionally not calling container's empty() method to not prohibit
@@ -946,122 +943,77 @@ namespace _denc {
         if (!s.empty()) {
 	  const auto elem_num = s.size();
 #endif
-          // STL containers use weird element types like std::pair<const K, V>;
-          // cast to something we have denc_traits for.
           size_t elem_size = 0;
-          if constexpr (traits::featured) {
-            denc(static_cast<const T&>(*s.begin()), elem_size, f);
-          } else {
-            denc(static_cast<const T&>(*s.begin()), elem_size);
-          }
+          denc(*s.begin(), elem_size, f);
           p += elem_size * elem_num;
         }
-      } else {
-        for (const T& e : s) {
-          if constexpr (traits::featured) {
-            denc(e, p, f);
-          } else {
-            denc(e, p);
-          }
-        }
+        return;
+      }
+
+      for (const auto& e : s) {
+        denc(e, p, f);
       }
     }
 
-    template<typename U=T>
     static void encode(const container& s,
-		       ceph::buffer::list::contiguous_appender& p,
-		       uint64_t f = 0) {
+                       ceph::buffer::list::contiguous_appender& p,
+                       uint64_t f = 0) {
       denc((uint32_t)s.size(), p);
-      if constexpr (traits::featured) {
-        encode_nohead(s, p, f);
-      } else {
-        encode_nohead(s, p);
-      }
+      encode_nohead(s, p, f);
     }
+
     static void decode(container& s, ceph::buffer::ptr::const_iterator& p,
-		       uint64_t f = 0) {
+                       uint64_t f = 0) {
       uint32_t num;
       denc(num, p);
       decode_nohead(num, s, p, f);
     }
-    template<typename U=T>
-    static std::enable_if_t<!!sizeof(U) && !need_contiguous>
-    decode(container& s, ceph::buffer::list::const_iterator& p) {
+
+    static void decode(container& s, ceph::buffer::list::const_iterator& p)
+    requires (!need_contiguous)
+    {
       uint32_t num;
       denc(num, p);
       decode_nohead(num, s, p);
     }
 
-    // nohead
-    static void encode_nohead(const container& s, ceph::buffer::list::contiguous_appender& p,
-			      uint64_t f = 0) {
-      for (const T& e : s) {
-        if constexpr (traits::featured) {
-          denc(e, p, f);
-        } else {
-          denc(e, p);
-        }
+    static void encode_nohead(const container& s,
+                              ceph::buffer::list::contiguous_appender& p,
+                              uint64_t f = 0) {
+      for (const auto& e : s) {
+        denc(e, p, f);
       }
     }
+
     static void decode_nohead(size_t num, container& s,
-			      ceph::buffer::ptr::const_iterator& p,
-			      uint64_t f=0) {
+                              ceph::buffer::ptr::const_iterator& p,
+                              uint64_t f = 0) {
+      clear_and_reserve(s, num);
+
+      for (size_t i = 0; i < num; ++i) {
+        T t;
+        denc(t, p, f);
+        ceph::util::push_back(s, std::move(t));
+      }
+    }
+
+    static void decode_nohead(size_t num, container& s,
+                              ceph::buffer::list::const_iterator& p)
+    requires (!need_contiguous)
+    {
+      clear_and_reserve(s, num);
+
+      for (size_t i = 0; i < num; ++i) {
+        T t;
+        denc(t, p);
+        ceph::util::push_back(s, std::move(t));
+      }
+    }
+
+  private:
+    static void clear_and_reserve(container& s, size_t num) {
       s.clear();
-      Details::reserve(s, num);
-      while (num--) {
-	T t;
-	denc(t, p, f);
-	Details::insert(s, std::move(t));
-      }
-    }
-    template<typename U=T>
-    static std::enable_if_t<!!sizeof(U) && !need_contiguous>
-    decode_nohead(size_t num, container& s,
-		  ceph::buffer::list::const_iterator& p) {
-      s.clear();
-      Details::reserve(s, num);
-      while (num--) {
-	T t;
-	denc(t, p);
-	Details::insert(s, std::move(t));
-      }
-    }
-  };
-
-  template<typename T>
-  class container_has_reserve {
-    template<typename U, U> struct SFINAE_match;
-    template<typename U>
-    static std::true_type test(SFINAE_match<T(*)(typename T::size_type),
-			       &U::reserve>*);
-
-    template<typename U>
-    static std::false_type test(...);
-
-  public:
-    static constexpr bool value = decltype(
-      test<denc_traits<T>>(0))::value;
-  };
-  template<typename T>
-  inline constexpr bool container_has_reserve_v =
-    container_has_reserve<T>::value;
-
-
-  template<typename Container>
-  struct container_details_base {
-    using T = typename Container::value_type;
-    static void reserve(Container& c, size_t s) {
-      if constexpr (container_has_reserve_v<Container>) {
-        c.reserve(s);
-      }
-    }
-  };
-
-  template<typename Container>
-  struct pushback_details : public container_details_base<Container> {
-    template<typename ...Args>
-    static void insert(Container& c, Args&& ...args) {
-      c.emplace_back(std::forward<Args>(args)...);
+      ceph::util::maybe_reserve(s, num);
     }
   };
 }
@@ -1070,176 +1022,45 @@ template<typename T, typename ...Ts>
 struct denc_traits<
   std::list<T, Ts...>,
   typename std::enable_if_t<denc_traits<T>::supported>>
-  : public _denc::container_base<std::list,
-				 _denc::pushback_details<std::list<T, Ts...>>,
-				 T, Ts...> {};
+  : public _denc::container_base<std::list<T, Ts...>> {};
 
 template<typename T, typename ...Ts>
 struct denc_traits<
   std::vector<T, Ts...>,
   typename std::enable_if_t<denc_traits<T>::supported>>
-  : public _denc::container_base<std::vector,
-				 _denc::pushback_details<std::vector<T, Ts...>>,
-				 T, Ts...> {};
+  : public _denc::container_base<std::vector<T, Ts...>> {};
 
 template<typename T, std::size_t N, typename ...Ts>
 struct denc_traits<
   boost::container::small_vector<T, N, Ts...>,
-  typename std::enable_if_t<denc_traits<T>::supported>> {
-private:
-  using container = boost::container::small_vector<T, N, Ts...>;
-public:
-  using traits = denc_traits<T>;
-
-  static constexpr bool supported = true;
-  static constexpr bool featured = traits::featured;
-  static constexpr bool bounded = false;
-  static constexpr bool need_contiguous = traits::need_contiguous;
-
-  template<typename U=T>
-  static void bound_encode(const container& s, size_t& p, uint64_t f = 0) {
-    p += sizeof(uint32_t);
-    if constexpr (traits::bounded) {
-      if (!s.empty()) {
-	const auto elem_num = s.size();
-	size_t elem_size = 0;
-	if constexpr (traits::featured) {
-	  denc(*s.begin(), elem_size, f);
-        } else {
-          denc(*s.begin(), elem_size);
-        }
-        p += elem_size * elem_num;
-      }
-    } else {
-      for (const T& e : s) {
-	if constexpr (traits::featured) {
-	  denc(e, p, f);
-	} else {
-	  denc(e, p);
-	}
-      }
-    }
-  }
-
-  template<typename U=T>
-  static void encode(const container& s,
-		     ceph::buffer::list::contiguous_appender& p,
-		     uint64_t f = 0) {
-    denc((uint32_t)s.size(), p);
-    if constexpr (traits::featured) {
-      encode_nohead(s, p, f);
-    } else {
-      encode_nohead(s, p);
-    }
-  }
-  static void decode(container& s, ceph::buffer::ptr::const_iterator& p,
-		     uint64_t f = 0) {
-    uint32_t num;
-    denc(num, p);
-    decode_nohead(num, s, p, f);
-  }
-  template<typename U=T>
-  static std::enable_if_t<!!sizeof(U) && !need_contiguous>
-  decode(container& s, ceph::buffer::list::const_iterator& p) {
-    uint32_t num;
-    denc(num, p);
-    decode_nohead(num, s, p);
-  }
-
-  // nohead
-  static void encode_nohead(const container& s, ceph::buffer::list::contiguous_appender& p,
-			    uint64_t f = 0) {
-    for (const T& e : s) {
-      if constexpr (traits::featured) {
-        denc(e, p, f);
-      } else {
-        denc(e, p);
-      }
-    }
-  }
-  static void decode_nohead(size_t num, container& s,
-			    ceph::buffer::ptr::const_iterator& p,
-			    uint64_t f=0) {
-    s.clear();
-    s.reserve(num);
-    while (num--) {
-      T t;
-      denc(t, p, f);
-      s.push_back(std::move(t));
-    }
-  }
-  template<typename U=T>
-  static std::enable_if_t<!!sizeof(U) && !need_contiguous>
-  decode_nohead(size_t num, container& s,
-		ceph::buffer::list::const_iterator& p) {
-    s.clear();
-    s.reserve(num);
-    while (num--) {
-      T t;
-      denc(t, p);
-      s.push_back(std::move(t));
-    }
-  }
-};
-
-namespace _denc {
-  template<typename Container>
-  struct setlike_details : public container_details_base<Container> {
-    using T = typename Container::value_type;
-    template<typename ...Args>
-    static void insert(Container& c, Args&& ...args) {
-      c.emplace_hint(c.cend(), std::forward<Args>(args)...);
-    }
-  };
-}
+  typename std::enable_if_t<denc_traits<T>::supported>>
+  : public _denc::container_base<boost::container::small_vector<T, N, Ts...>> {};
 
 template<typename T, typename ...Ts>
 struct denc_traits<
   std::set<T, Ts...>,
   std::enable_if_t<denc_traits<T>::supported>>
-  : public _denc::container_base<std::set,
-				 _denc::setlike_details<std::set<T, Ts...>>,
-				 T, Ts...> {};
+  : public _denc::container_base<std::set<T, Ts...>> {};
 
 template<typename T, typename ...Ts>
 struct denc_traits<
   boost::container::flat_set<T, Ts...>,
   std::enable_if_t<denc_traits<T>::supported>>
-  : public _denc::container_base<
-  boost::container::flat_set,
-  _denc::setlike_details<boost::container::flat_set<T, Ts...>>,
-  T, Ts...> {};
-
-namespace _denc {
-  template<typename Container>
-  struct maplike_details : public container_details_base<Container> {
-    using T = typename Container::value_type;
-    template<typename ...Args>
-    static void insert(Container& c, Args&& ...args) {
-      c.emplace_hint(c.cend(), std::forward<Args>(args)...);
-    }
-  };
-}
+  : public _denc::container_base<boost::container::flat_set<T, Ts...>> {};
 
 template<typename A, typename B, typename ...Ts>
 struct denc_traits<
   std::map<A, B, Ts...>,
   std::enable_if_t<denc_traits<A>::supported &&
 		   denc_traits<B>::supported>>
-  : public _denc::container_base<std::map,
-				 _denc::maplike_details<std::map<A, B, Ts...>>,
-				 A, B, Ts...> {};
+  : public _denc::container_base<std::map<A, B, Ts...>> {};
 
 template<typename A, typename B, typename ...Ts>
 struct denc_traits<
   boost::container::flat_map<A, B, Ts...>,
   std::enable_if_t<denc_traits<A>::supported &&
 		   denc_traits<B>::supported>>
-  : public _denc::container_base<
-  boost::container::flat_map,
-  _denc::maplike_details<boost::container::flat_map<
-			   A, B, Ts...>>,
-  A, B, Ts...> {};
+  : public _denc::container_base<boost::container::flat_map<A, B, Ts...>> {};
 
 template<typename T, size_t N>
 struct denc_traits<
@@ -1257,47 +1078,35 @@ public:
 
   static void bound_encode(const container& s, size_t& p, uint64_t f = 0) {
     if constexpr (traits::bounded) {
-      if constexpr (traits::featured) {
-        if (!s.empty()) {
-          size_t elem_size = 0;
-          denc(*s.begin(), elem_size, f);
-          p += elem_size * s.size();
-        }
-      } else {
+      if (!s.empty()) {
         size_t elem_size = 0;
-        denc(*s.begin(), elem_size);
-        p += elem_size * N;
+        denc(*s.begin(), elem_size, f);
+        p += elem_size * s.size();
       }
-    } else {
-      for (const auto& e : s) {
-        if constexpr (traits::featured) {
-          denc(e, p, f);
-        } else {
-          denc(e, p);
-        }
-      }
+      return;
+    }
+
+    for (const auto& e : s) {
+      denc(e, p, f);
     }
   }
 
   static void encode(const container& s, ceph::buffer::list::contiguous_appender& p,
-		     uint64_t f = 0) {
+                     uint64_t f = 0) {
     for (const auto& e : s) {
-      if constexpr (traits::featured) {
-        denc(e, p, f);
-      } else {
-        denc(e, p);
-      }
+      denc(e, p, f);
     }
   }
   static void decode(container& s, ceph::buffer::ptr::const_iterator& p,
-		     uint64_t f = 0) {
-    for (auto& e : s)
+                     uint64_t f = 0) {
+    for (auto& e : s) {
       denc(e, p, f);
+    }
   }
-  template<typename U=T>
-  static std::enable_if_t<!!sizeof(U) &&
-			  !need_contiguous>
-  decode(container& s, ceph::buffer::list::const_iterator& p) {
+
+  static void decode(container& s, ceph::buffer::list::const_iterator& p)
+  requires (!need_contiguous)
+  {
     for (auto& e : s) {
       denc(e, p);
     }
@@ -1322,58 +1131,33 @@ public:
   static constexpr bool need_contiguous =
       (denc_traits<Ts>::need_contiguous || ...);
 
-  template<typename U = container>
-  static std::enable_if_t<denc_traits<U>::featured>
-  bound_encode(const container& s, size_t& p, uint64_t f) {
+  static void bound_encode(const container& s, size_t& p, uint64_t f = 0) {
     ceph::for_each(s, [&p, f] (const auto& e) {
-	if constexpr (denc_traits<std::decay_t<decltype(e)>>::featured) {
-	  denc(e, p, f);
-	} else {
-	  denc(e, p);
-	}
-      });
-  }
-  template<typename U = container>
-  static std::enable_if_t<!denc_traits<U>::featured>
-  bound_encode(const container& s, size_t& p) {
-    ceph::for_each(s, [&p] (const auto& e) {
-	denc(e, p);
-      });
+      denc(e, p, f);
+    });
   }
 
-  template<typename U = container>
-  static std::enable_if_t<denc_traits<U>::featured>
-  encode(const container& s, ceph::buffer::list::contiguous_appender& p,
-	 uint64_t f) {
+  static void encode(const container& s, ceph::buffer::list::contiguous_appender& p,
+                     uint64_t f = 0) {
     ceph::for_each(s, [&p, f] (const auto& e) {
-	if constexpr (denc_traits<std::decay_t<decltype(e)>>::featured) {
-	  denc(e, p, f);
-	} else {
-	  denc(e, p);
-	}
-      });
-  }
-  template<typename U = container>
-  static std::enable_if_t<!denc_traits<U>::featured>
-  encode(const container& s, ceph::buffer::list::contiguous_appender& p) {
-    ceph::for_each(s, [&p] (const auto& e) {
-	denc(e, p);
-      });
+      denc(e, p, f);
+    });
   }
 
   static void decode(container& s, ceph::buffer::ptr::const_iterator& p,
-		     uint64_t f = 0) {
-    ceph::for_each(s, [&p] (auto& e) {
-	denc(e, p);
-      });
+                     uint64_t f = 0) {
+    ceph::for_each(s, [&p, f] (auto& e) {
+      denc(e, p, f);
+    });
   }
 
-  template<typename U = container>
-  static std::enable_if_t<!denc_traits<U>::need_contiguous>
-  decode(container& s, ceph::buffer::list::const_iterator& p, uint64_t f = 0) {
+  static void decode(container& s, ceph::buffer::list::const_iterator& p,
+                     uint64_t f = 0)
+  requires (!need_contiguous)
+  {
     ceph::for_each(s, [&p] (auto& e) {
-	denc(e, p);
-      });
+      denc(e, p);
+    });
   }
 };
 
@@ -1614,18 +1398,19 @@ inline std::enable_if_t<traits::supported && !traits::need_contiguous> decode(
   // it is expensive to rebuild a contigous buffer and drop it, so avoid this.
   if (!p.is_pointing_same_raw(bl.back()) && remaining > CEPH_PAGE_SIZE) {
     traits::decode(o, p);
-  } else {
-    // ensure we get a contigous buffer... until the end of the
-    // ceph::buffer::list.  we don't really know how much we'll need here,
-    // unfortunately.  hopefully it is already contiguous and we're just
-    // bumping the raw ref and initializing the ptr tmp fields.
-    ceph::buffer::ptr tmp;
-    auto t = p;
-    t.copy_shallow(remaining, tmp);
-    auto cp = std::cbegin(tmp);
-    traits::decode(o, cp);
-    p += cp.get_offset();
+    return;
   }
+
+  // ensure we get a contigous buffer... until the end of the
+  // ceph::buffer::list.  we don't really know how much we'll need here,
+  // unfortunately.  hopefully it is already contiguous and we're just
+  // bumping the raw ref and initializing the ptr tmp fields.
+  ceph::buffer::ptr tmp;
+  auto t = p;
+  t.copy_shallow(remaining, tmp);
+  auto cp = std::cbegin(tmp);
+  traits::decode(o, cp);
+  p += cp.get_offset();
 }
 
 template<typename T,
@@ -1671,6 +1456,11 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
     return;
   if (p.end())
     throw ceph::buffer::end_of_buffer();
+  if constexpr (!traits::need_contiguous) {
+    traits::decode_nohead(num, o, p);
+    return;
+  }
+
   if constexpr (traits::need_contiguous) {
     ceph::buffer::ptr tmp;
     auto t = p;
@@ -1679,14 +1469,13 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
       typename T::value_type v;
       denc_traits<typename T::value_type>::bound_encode(v, element_size);
       t.copy_shallow(num * element_size, tmp);
-    } else {
+    }
+    if constexpr (!denc_traits<typename T::value_type>::bounded) {
       t.copy_shallow(p.get_bl().length() - p.get_off(), tmp);
     }
     auto cp = std::cbegin(tmp);
     traits::decode_nohead(num, o, cp);
     p += cp.get_offset();
-  } else {
-    traits::decode_nohead(num, o, p);
   }
 }
 }
