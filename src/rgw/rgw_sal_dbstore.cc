@@ -26,9 +26,12 @@
 #include "rgw_sal_dbstore.h"
 #include "rgw_bucket.h"
 
-#include "driver/rados/rgw_rados.h" // XXX: for RGW_OBJ_NS_MULTIPART, PUT_OBJ_CREATE, etc
-
 #define dout_subsys ceph_subsys_rgw
+
+/* flags for put_obj_meta() */
+#define PUT_OBJ_CREATE      0x01
+#define PUT_OBJ_EXCL        0x02
+#define PUT_OBJ_CREATE_EXCL (PUT_OBJ_CREATE | PUT_OBJ_EXCL)
 
 using namespace std;
 

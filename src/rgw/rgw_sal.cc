@@ -81,19 +81,8 @@ extern rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, boost::asio::io_co
 
 
 #ifdef WITH_RADOSGW_RADOS
-std::optional<neorados::RADOS>
-make_neorados(CephContext* cct, boost::asio::io_context& io_context) {
-  try {
-    auto neorados = neorados::RADOS::make_with_cct(boost::intrusive_ptr{cct},
-                                                   io_context,
-                                                   ceph::async::use_blocked);
-    return neorados;
-  } catch (const std::exception& e) {
-    ldout(cct, 0) << "Failed constructing neroados handle: " << e.what()
-		  << dendl;
-  }
-  return std::nullopt;
-}
+extern std::optional<neorados::RADOS>
+make_neorados(CephContext* cct, boost::asio::io_context& io_context);
 #endif
 
 rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider* dpp,
@@ -371,6 +360,14 @@ DriverManager::Config DriverManager::get_config(bool admin, CephContext* cct)
 {
   DriverManager::Config cfg;
 
+#ifdef WITH_RADOSGW_STANDALONE
+  {
+    /* Shortcut the whole thing, and only allow POSIXDriver for Standalone */
+    cfg.store_name = "posix";
+    return cfg;
+  }
+#endif /* WITH_RADOSGW_STANDALONE */
+
   // Get the store backend
   const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
   if (config_store == "rados") {
@@ -432,6 +429,12 @@ auto DriverManager::create_config_store(const DoutPrefixProvider* dpp,
   -> std::unique_ptr<rgw::sal::ConfigStore>
 {
   try {
+#ifdef WITH_RADOSGW_STANDALONE
+    { /* For Standalone, only allow DBStore config */
+      const auto uri = g_conf().get_val<std::string>("dbstore_config_uri");
+      return rgw::dbstore::create_config_store(dpp, uri);
+    }
+#endif
 #ifdef WITH_RADOSGW_RADOS
     if (type == "rados") {
       return rgw::rados::create_config_store(dpp);

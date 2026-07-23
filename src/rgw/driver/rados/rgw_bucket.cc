@@ -38,12 +38,14 @@ constexpr uint64_t BUCKET_TAG_QUICK_TIMEOUT = 30;
 using namespace std;
 
 // these values are copied from cls/rgw/cls_rgw.cc
+#ifdef WITH_RADOSGW_RADOS
 static const string BI_OLH_ENTRY_NS_START = "\x80" "1001_";
 static const string BI_INSTANCE_ENTRY_NS_START = "\x80" "1000_";
 
 // number of characters that we should allow to be buffered by the formatter
 // before flushing (used by index check methods with dump_keys=true)
 static constexpr int FORMATTER_LEN_FLUSH_THRESHOLD = 4 * 1024 * 1024;
+#endif
 
 // default number of entries to list with each bucket listing call
 // (use marker to bridge between calls)

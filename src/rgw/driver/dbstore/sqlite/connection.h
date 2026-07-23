@@ -20,7 +20,7 @@
 
 #include <fmt/format.h>
 
-#include "sqlite/statement.h"
+#include "statement.h"
 
 class DoutPrefixProvider;
 

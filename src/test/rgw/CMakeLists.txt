@@ -387,7 +387,7 @@ if(WITH_RADOSGW_RADOS)
 add_executable(ceph_test_rgw_gc_log test_rgw_gc_log.cc $<TARGET_OBJECTS:unit-main>)
 target_include_directories(ceph_test_rgw_gc_log
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
-target_link_libraries(ceph_test_rgw_gc_log ${rgw_libs} radostest-cxx)
+target_link_libraries(ceph_test_rgw_gc_log ${rgw_libs} rgw radostest-cxx)
 install(TARGETS ceph_test_rgw_gc_log DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
@@ -462,8 +462,10 @@ target_compile_definitions(unittest_rgw_posix_driver PUBLIC LMDB_SAFE_NO_CPP_UTI
 target_include_directories(unittest_rgw_posix_driver
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/posix")
-target_link_libraries(unittest_rgw_posix_driver  ${UNITTEST_LIBS}
-  ${rgw_libs} ${LMDB_LIBRARIES})
+target_link_libraries(unittest_rgw_posix_driver
+  ${UNITTEST_LIBS}
+  rgw_a_standalone
+  ${LMDB_LIBRARIES})
 endif(WITH_RADOSGW_POSIX)
 
 if(WITH_RADOSGW_RADOS)

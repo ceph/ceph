@@ -24,9 +24,6 @@
 
 #include "rgw_common.h"
 #include "rgw_sal.h"
-#ifdef WITH_RADOSGW_RADOS
-#include "rgw_sal_rados.h"
-#endif
 #include "rgw_quota.h"
 #include "rgw_bucket.h"
 #include "driver/rados/rgw_user.h"

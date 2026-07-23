@@ -59,9 +59,6 @@
 #include "rgw_process_env.h"
 #include "rgw_notify_event_type.h"
 #include "rgw_sal.h"
-#ifdef WITH_RADOSGW_RADOS
-#include "rgw_sal_rados.h"
-#endif
 #include "rgw_torrent.h"
 #include "rgw_cksum_pipe.h"
 #include "rgw_lua_data_filter.h"
@@ -87,10 +84,6 @@
 #ifdef WITH_ARROW_FLIGHT
 #include "rgw_flight.h"
 #include "rgw_flight_frontend.h"
-#endif
-
-#ifdef WITH_RADOSGW_D4N
-#include "driver/d4n/rgw_sal_d4n.h"
 #endif
 
 #ifdef WITH_LTTNG
@@ -2703,11 +2696,8 @@ void RGWGetObj::execute(optional_yield y)
   if (multipart_part_num) {
     read_op->params.part_num = &*multipart_part_num;
   }
-#ifdef WITH_RADOSGW_D4N
-  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "d4n")) {
-    dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get())->set_cache_request();
-  }
-#endif
+  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST"))
+    s->object->set_cache_request();
 
   op_ret = read_op->prepare(s->yield, this);
   version_id = s->object->get_instance();
@@ -3605,11 +3595,8 @@ void RGWListBucket::execute(optional_yield y)
   params.list_versions = list_versions;
   params.allow_unordered = allow_unordered;
   params.shard_id = shard_id;
-#ifdef WITH_RADOSGW_D4N
-  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "d4n")) {
-    dynamic_cast<rgw::sal::D4NFilterBucket*>(s->bucket.get())->set_cache_request();
-  }
-#endif
+  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST"))
+    s->bucket->set_cache_request();
 
   rgw::sal::Bucket::ListResults results;
 
@@ -4860,11 +4847,8 @@ void RGWPutObj::execute(optional_yield y)
 					 s->owner,
 					 pdest_placement, olh_epoch, s->req_id);
   }
-#ifdef WITH_RADOSGW_D4N
-  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "d4n")) {
-    dynamic_cast<rgw::sal::D4NFilterWriter*>(processor.get())->set_cache_request();
-  }
-#endif
+  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST"))
+    s->object->set_cache_request();
 
   op_ret = processor->prepare(s->yield);
   if (op_ret < 0) {
@@ -6010,11 +5994,9 @@ void RGWDeleteObj::execute(optional_yield y)
       del_op->params.null_verid = null_verid;
       del_op->params.size_match = size_match;
       del_op->params.if_match = if_match;
-#ifdef WITH_RADOSGW_D4N
-      if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "d4n")) {
-		dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get())->set_cache_request();
-      }
-#endif
+
+      if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST"))
+        s->object->set_cache_request();
 
       op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
       if (op_ret >= 0) {
