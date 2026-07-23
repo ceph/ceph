@@ -38,7 +38,7 @@ class Environment : public ::testing::Environment {
       dpp = new DoutPrefix(cct->get(), dout_subsys, "D4N Policy Test: ");
       common_init_finish(g_ceph_context);
       
-      redisHost = cct->_conf->rgw_d4n_address; 
+      redisHost = cct->_conf->rgw_d4n_l1_datacache_address; 
     }
 
     std::string redisHost;
@@ -83,7 +83,6 @@ class LFUDAPolicyFixture : public ::testing::Test {
       ASSERT_NE(policyDriver, nullptr);
       ASSERT_NE(conn, nullptr);
 
-      env->cct->_conf->rgw_d4n_l1_datacache_address = "127.0.0.1:6379";
       cacheDriver->initialize(env->dpp);
 
       bl.append("test data");
@@ -114,8 +113,7 @@ class LFUDAPolicyFixture : public ::testing::Test {
       std::string oid = rgw::sal::get_key_in_cache(get_prefix(block->cacheObj.bucketName, block->cacheObj.objName, version), std::to_string(block->blockID), std::to_string(block->size));
 
       if (this->policyDriver->get_cache_policy()->exist_key(oid)) { /* Local copy */
-        policyDriver->get_cache_policy()->update(env->dpp, oid, 0, TEST_DATA_LENGTH, "", std::nullopt, rgw::d4n::RefCount::NOOP, y);
-        // The local weight will not update until the calls exceed 10000 in total
+		policyDriver->get_cache_policy()->update(env->dpp, oid, 0, TEST_DATA_LENGTH, "", std::nullopt, uid, block->cacheObj.bucketName, rgw::d4n::RefCount::NOOP, y);
         return 0;
       } else {
         if (this->policyDriver->get_cache_policy()->eviction(dpp, block->size, y) < 0)
@@ -143,7 +141,7 @@ class LFUDAPolicyFixture : public ::testing::Test {
           if (dir->set(env->dpp, block, y) < 0)
             return -1;
 
-          this->policyDriver->get_cache_policy()->update(dpp, oid, 0, TEST_DATA_LENGTH, "", false, rgw::d4n::RefCount::NOOP, y);
+		  this->policyDriver->get_cache_policy()->update(dpp, oid, 0, TEST_DATA_LENGTH, "", false, uid, block->cacheObj.bucketName, rgw::d4n::RefCount::NOOP, y);
           if (cacheDriver->put(dpp, oid, bl, TEST_DATA_LENGTH, attrs, y) < 0)
             return -1;
           return cacheDriver->set_attr(dpp, oid, "localWeight", std::to_string(age), y);
@@ -158,6 +156,7 @@ class LFUDAPolicyFixture : public ::testing::Test {
     rgw::d4n::PolicyDriver* policyDriver;
     rgw::cache::RedisDriver* cacheDriver;
     rgw::sal::D4NFilterDriver* driver = nullptr;
+	rgw_user uid{"test_tenant", "test"};
 
     net::io_context io;
     std::shared_ptr<connection> conn;
@@ -267,7 +266,7 @@ TEST_F(LFUDAPolicyFixture, LocalGetBlockYield)
     std::string version;
     std::string key = rgw::sal::get_key_in_cache(get_prefix(block->cacheObj.bucketName, block->cacheObj.objName, version), std::to_string(block->blockID), std::to_string(block->size));
     ASSERT_EQ(0, cacheDriver->put(env->dpp, key, bl, TEST_DATA_LENGTH, attrs, optional_yield{yield}));
-    policyDriver->get_cache_policy()->update(env->dpp, key, 0, TEST_DATA_LENGTH, "", false, rgw::d4n::RefCount::NOOP, optional_yield{yield});
+	policyDriver->get_cache_policy()->update(env->dpp, key, 0, TEST_DATA_LENGTH, "", false, uid, block->cacheObj.bucketName, rgw::d4n::RefCount::NOOP, optional_yield{yield});
 
     ASSERT_EQ(lfuda(env->dpp, block, cacheDriver, yield), 0);
 
@@ -303,7 +302,6 @@ TEST_F(LFUDAPolicyFixture, EvictionYield)
     TestRedisDriver testDriver(io, partition_info);
     rgw::d4n::PolicyDriver policyDriver(conn, &testDriver, "lfuda", optional_yield{yield});
 
-    env->cct->_conf->rgw_d4n_l1_datacache_address = "127.0.0.1:6379";
     testDriver.initialize(env->dpp);
     policyDriver.get_cache_policy()->init(env->cct, env->dpp, io, driver);
 
@@ -338,7 +336,7 @@ TEST_F(LFUDAPolicyFixture, EvictionYield)
     std::string victimKeyInCache = rgw::sal::get_key_in_cache(get_prefix(victim.cacheObj.bucketName, victim.cacheObj.objName, victim.version), 
                                                                std::to_string(victim.blockID), std::to_string(TEST_DATA_LENGTH));
     ASSERT_EQ(0, testDriver.put(env->dpp, victimKeyInCache, bl, TEST_DATA_LENGTH, attrs, optional_yield{yield}));
-    policyDriver.get_cache_policy()->update(env->dpp, victimKeyInCache, 0, TEST_DATA_LENGTH, victim.version, false, rgw::d4n::RefCount::NOOP, optional_yield{yield});
+	policyDriver.get_cache_policy()->update(env->dpp, victimKeyInCache, 0, TEST_DATA_LENGTH, victim.version, false, uid, block->cacheObj.bucketName, rgw::d4n::RefCount::NOOP, optional_yield{yield});
 
     ASSERT_EQ(0, dir->set(env->dpp, &victim, optional_yield{yield}));
 
