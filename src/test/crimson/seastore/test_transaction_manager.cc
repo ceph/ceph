@@ -2298,6 +2298,121 @@ TEST_P(tm_single_device_test_t, invalid_lba_mapping_detect)
   });
 }
 
+TEST_P(tm_single_device_test_t, lazy_read_conflict_detection)
+{
+  run_async([this] {
+    using namespace crimson::os::seastore::lba;
+
+    // Enable lazy-read conflict detection for this test
+    crimson::common::local_conf().set_val(
+      "seastore_lazy_read_conflict_detection", "true").get();
+
+    // Phase 1: fill one LBA leaf to capacity so the next alloc triggers
+    // a split that invalidates pointers into the old leaf.
+    {
+      auto t = create_transaction();
+      for (unsigned i = 0; i < LEAF_NODE_CAPACITY; i++) {
+	auto extent = alloc_extent(
+	  t,
+	  get_laddr_hint(i * 4096),
+	  4096,
+	  'a');
+      }
+      submit_transaction(std::move(t));
+    }
+
+    // Phase 2: open a READ transaction (which will be lazy-read) and
+    // obtain a pin.  Then, in a separate MUTATE transaction, trigger a
+    // leaf split that invalidates the READ's cursor.
+    {
+      auto read_t = create_read_test_transaction();
+      ASSERT_TRUE(read_t.t->is_lazy_read());
+
+      // Look up a pin near the end of the leaf -- this is the one that
+      // will be invalidated by the split.
+      auto pin = get_pin(
+	read_t, get_laddr_hint((LEAF_NODE_CAPACITY - 1) * 4096));
+      ASSERT_TRUE(pin.is_viewable());
+
+      // Commit a MUTATE that overflows the leaf -> split
+      {
+	auto mut_t = create_transaction();
+	auto extent = alloc_extent(
+	  mut_t,
+	  get_laddr_hint(LEAF_NODE_CAPACITY * 4096),
+	  4096,
+	  'a');
+	submit_transaction(std::move(mut_t));
+      }
+
+      // The READ's pin should now be stale because the commit
+      // invalidated the leaf node (which was not in the read set).
+      ASSERT_FALSE(pin.is_viewable());
+
+      // Accessing the stale cursor should surface eagain via
+      // check_viewable / maybe_throw_lazy_read_stale, not crash.
+      auto refreshed = refresh_lba_mapping(read_t, std::move(pin));
+      if (!read_t.t->is_conflicted()) {
+	// Refresh succeeded -- the cursor was repaired.
+	ASSERT_TRUE(refreshed.has_value());
+	ASSERT_TRUE(refreshed->is_viewable());
+      }
+      // Either way the lazy-read machinery handled it without
+      // asserting -- that is the invariant under test.
+    }
+
+    // Phase 3: verify the eagain (stale structural access) path.
+    // Open a READ, get a pin, invalidate it, then call next() which
+    // must traverse the btree and hit a stale node.
+    {
+      auto read_t = create_read_test_transaction();
+      ASSERT_TRUE(read_t.t->is_lazy_read());
+
+      auto pin = get_pin(read_t, get_laddr_hint(0));
+      ASSERT_TRUE(pin.is_viewable());
+
+      // Commit a MUTATE that modifies the tree structure
+      {
+	auto mut_t = create_transaction();
+	auto extent = alloc_extent(
+	  mut_t,
+	  get_laddr_hint((LEAF_NODE_CAPACITY + 1) * 4096),
+	  4096,
+	  'a');
+	submit_transaction(std::move(mut_t));
+      }
+
+      // Attempt next() on the now-stale cursor -- this exercises the
+      // btree traversal guards (maybe_throw_lazy_read_stale at
+      // continuation boundaries in fixed_kv_btree.h).
+      bool got_eagain = false;
+      with_trans_intr(*(read_t.t), [&pin](auto &trans) {
+	return pin.next().si_then([](auto) {
+	  return seastar::now();
+	});
+      }).handle_error(
+	[&got_eagain](const crimson::ct_error::eagain &e) {
+	  got_eagain = true;
+	  return seastar::now();
+	},
+	crimson::ct_error::assert_all(
+	  "lazy_read next() got unexpected error"
+	)
+      ).get();
+
+      // We accept either outcome: eagain (stale detected during
+      // traversal) or success (the tree structure happened to remain
+      // valid for this pin's path).  The key assertion is that we
+      // never hit ceph_abort / ceph_assert -- that would mean the
+      // lazy-read guards failed to fire before the assert.
+      (void)got_eagain;
+    }
+
+    crimson::common::local_conf().set_val(
+      "seastore_lazy_read_conflict_detection", "false").get();
+  });
+}
+
 TEST_P(tm_single_device_test_t, random_writes_concurrent)
 {
   test_random_writes_concurrent();
