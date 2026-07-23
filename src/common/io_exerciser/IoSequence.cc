@@ -939,7 +939,8 @@ ceph::io_exerciser::Seq16::Seq16(std::pair<int, int> obj_size_range, int seed, b
       total_operations(20),
       truncate_write_done(false),
       consistency_done(false) {
-  select_random_object_size();
+  set_min_object_size(10);
+  set_max_object_size(10);
   setup_next_operation();
 }
 
@@ -1003,10 +1004,9 @@ ceph::io_exerciser::Seq17::Seq17(std::pair<int, int> obj_size_range, int seed,
     : IoSequence(obj_size_range, seed, check_consistency),
       offset1(0),
       offset2(0) {
-  // Seq16 reads back current_size == obj_size after each WriteAndZero op, so
-  // the full obj_size-block object must exist up front.
   create = true;
-  set_min_object_size(2);
+  set_min_object_size(5);
+  set_max_object_size(13);
   select_random_object_size();
 }
 
@@ -1069,10 +1069,9 @@ ceph::io_exerciser::Seq18::Seq18(std::pair<int, int> obj_size_range, int seed,
     : IoSequence(obj_size_range, seed, check_consistency),
       offset(0),
       length(1) {
-  // Seq17 reads back current_size after each ZeroOp; current_size can equal
-  // obj_size, so the full obj_size-block object must exist up front.
   create = true;
-  set_min_object_size(2);
+  set_min_object_size(4);
+  set_max_object_size(13);
   select_random_object_size();
 }
 
@@ -1134,10 +1133,9 @@ ceph::io_exerciser::Seq19::Seq19(std::pair<int, int> obj_size_range, int seed,
       length1(1),
       offset2(1),
       length2(1) {
-  // Seq18 reads back current_size after each DoubleZeroOp; current_size can
-  // equal obj_size, so the full obj_size-block object must exist up front.
   create = true;
-  set_min_object_size(2);
+  set_min_object_size(4);
+  set_max_object_size(13);
   select_random_object_size();
 }
 
@@ -1217,11 +1215,9 @@ ceph::io_exerciser::Seq20::Seq20(std::pair<int, int> obj_size_range, int seed,
       zero_offset(0),
       zero_length(1),
       truncate_size(0) {
-  // Seq19 reads back current_size (== truncate_size) after each op; the zero
-  // sub-op operates within the pre-existing obj_size-block object, so it must
-  // exist up front.
   create = true;
-  set_min_object_size(2);
+  set_min_object_size(4);
+  set_max_object_size(13);
   select_random_object_size();
 }
 
