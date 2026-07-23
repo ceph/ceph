@@ -44,7 +44,7 @@ export class HostActionService {
       this.cdsModalService.show(FormModalComponent, {
         titleText: $localize`Edit Host: ${host.hostname}`,
         fields: [labelsField],
-        submitButtonText: $localize`Edit Host`,
+        submitButtonText: $localize`Save changes`,
         onSubmit: (values: { labels: string[] }) => {
           this.submitHostLabelUpdate(host.hostname, values.labels, onSuccess);
         }
