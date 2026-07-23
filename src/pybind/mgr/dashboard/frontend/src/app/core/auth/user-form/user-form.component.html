@@ -157,22 +157,40 @@
         </ng-template>
       </div>
       <!-- Roles -->
-      <div class="form-item"
-           *ngIf="allRoles">
-        <cds-combo-box label="Roles"
-                       type="multi"
-                       selectionFeedback="top-after-reopen"
-                       for="roles"
-                       formControlName="roles"
-                       id="roles"
-                       placeholder="Select Roles..."
-                       i18n-placeholder
-                       [appendInline]="true"
-                       [items]="allRoles"
-                       itemValueKey="name"
-                       i18n>
+      <div
+        class="form-item"
+        *ngIf="allRoles"
+        [class.roles-clear-disabled]="isAdminRoleProtected"
+      >
+        <cds-combo-box
+          label="Roles"
+          type="multi"
+          selectionFeedback="top-after-reopen"
+          for="roles"
+          formControlName="roles"
+          id="roles"
+          placeholder="Select Roles..."
+          i18n-placeholder
+          [appendInline]="true"
+          [items]="allRoles"
+          itemValueKey="name"
+          [cdRequiredField]="!isSSO ? 'Roles' : ''"
+          [invalid]="!userForm.controls.roles.valid && userForm.controls.roles.dirty"
+          [invalidText]="rolesError"
+          (clear)="onRolesClear()"
+          i18n
+        >
           <cds-dropdown-list></cds-dropdown-list>
         </cds-combo-box>
+
+        <ng-template #rolesError>
+          <span
+            class="invalid-feedback"
+            *ngIf="userForm.showError('roles', formDir, 'required')"
+            i18n
+            >This field is required.</span
+          >
+        </ng-template>
       </div>
       <!-- Enabled -->
       <div class="form-item"
