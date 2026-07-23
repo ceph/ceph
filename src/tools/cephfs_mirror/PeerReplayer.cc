@@ -3816,10 +3816,8 @@ void PeerReplayer::dump_sync_stat(Formatter *f, const SnapSyncStat &sync_stat) {
       f->dump_string("sync_duration", format_time(*sync_stat.last_sync_duration));
     }
     if (!sync_stat.last_synced.is_zero()) {
-      std::ostringstream os;
-      os << std::fixed << std::setprecision(6)
-         << static_cast<double>(sync_stat.last_synced);
-      f->dump_string("sync_time_stamp", os.str() + "s");
+      // ISO-8601 local time with offset (matches utime_t::localtime / mgr format)
+      f->dump_string("sync_time_stamp", stringify(sync_stat.last_synced));
     }
     if (sync_stat.last_sync_bytes) {
       f->dump_string("sync_bytes", format_bytes(*sync_stat.last_sync_bytes));
