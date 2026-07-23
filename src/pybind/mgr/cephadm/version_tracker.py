@@ -3,6 +3,7 @@ import json
 import datetime
 from typing import TYPE_CHECKING, Optional, Tuple
 from ceph.cephadm.version_entry import UpgradeType, UpgradeStatus, CephVersionEntry
+from cephadm.upgrade import UpgradeState
 
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
@@ -46,14 +47,32 @@ class VersionTracker:
         self.mgr.set_store(f'{VERSION_HISTORY_KEY_PREFIX}{time}', json.dumps(new_entry))
         self.mgr.log.info(f'Version Tracker: {VERSION_HISTORY_KEY_PREFIX}{time} entry added with version {version}')
 
-    def update_cluster_version_status(self, status: UpgradeStatus) -> None:
-        # Changes status field depending on if upgrade was completed or was stopped
+    def update_cluster_version_status(self, upgrade_state: UpgradeState, status: UpgradeStatus) -> None:
         raw = self.mgr.get_store_prefix(VERSION_HISTORY_KEY_PREFIX)
-        latest_entry_key, latest_entry_value = next(reversed(raw.items()))
-        latest_entry_value = json.loads(latest_entry_value)
-        latest_entry_value['status'] = status
-        self.mgr.set_store(latest_entry_key, json.dumps(latest_entry_value))
-        self.mgr.log.info(f'Version Tracker: {latest_entry_key} entry updated with status {status}')
+        if not raw:
+            # This condition exists for the edge case of upgrading from a version that didn't have
+            # version tracking, if raw is empty then no history is stored and use UpgradeState to
+            # obtain info for first entry
+            self.add_cluster_version(
+                version=upgrade_state._target_name,
+                time=datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
+                params={
+                    'daemon_types': upgrade_state.daemon_types,
+                    'hosts': upgrade_state.hosts,
+                    'services': upgrade_state.services,
+                    'limit': upgrade_state.total_count,
+                    'bucket_type': upgrade_state.crush_bucket_type,
+                    'bucket_name': upgrade_state.crush_bucket_name,
+                },
+                status=status
+            )
+        else:
+            # Changes status field of last entry depending on if upgrade was completed or was stopped
+            latest_entry_key, latest_entry_value = next(reversed(raw.items()))
+            latest_entry_value = json.loads(latest_entry_value)
+            latest_entry_value['status'] = status
+            self.mgr.set_store(latest_entry_key, json.dumps(latest_entry_value))
+            self.mgr.log.info(f'Version Tracker: {latest_entry_key} entry updated with status {status}')
 
     def get_cluster_version_history(self, show_config: Optional[bool] = False) -> str:
         raw = self.mgr.get_store_prefix(VERSION_HISTORY_KEY_PREFIX)

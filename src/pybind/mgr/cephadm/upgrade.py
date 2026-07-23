@@ -775,12 +775,12 @@ class CephadmUpgrade:
                             self.upgrade_state.progress_id)
         target_image = self.target_image
         self.mgr.log.info('Upgrade: Stopped')
+        self.mgr.version_tracker.update_cluster_version_status(upgrade_state=self.upgrade_state, status=UpgradeStatus.STOPPED)
         self.upgrade_state = None
         self._ok_to_upgrade_osds_in_crush_bucket = None
         self._save_upgrade_state()
         self._clear_upgrade_health_checks()
         self.mgr.event.set()
-        self.mgr.version_tracker.update_cluster_version_status(status=UpgradeStatus.STOPPED)
         return 'Stopped upgrade to %s' % target_image
 
     def update_service(self, service_type: str, service_image: str, image: str) -> List[str]:
@@ -1753,13 +1753,13 @@ class CephadmUpgrade:
             self._unset_noautoscale()
             self.upgrade_state.noautoscale_set = False
         logger.info('Upgrade: Complete!')
+        self.mgr.version_tracker.update_cluster_version_status(upgrade_state=self.upgrade_state, status=UpgradeStatus.COMPLETE)
         if self.upgrade_state.progress_id:
             self.mgr.remote('progress', 'complete',
                             self.upgrade_state.progress_id)
         self.upgrade_state = None
         self._ok_to_upgrade_osds_in_crush_bucket = None
         self._save_upgrade_state()
-        self.mgr.version_tracker.update_cluster_version_status(status=UpgradeStatus.COMPLETE)
 
     def _do_upgrade(self):
         # type: () -> None
