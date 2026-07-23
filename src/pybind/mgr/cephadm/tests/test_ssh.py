@@ -151,7 +151,7 @@ class TestHostConnectionErrorPickle:
         assert restored.addr == '192.168.100.101'
         assert restored.errno == original.errno
 
-    def test_pickle_round_trip_with_orchtresult(self):
+    def test_pickle_round_trip_with_orch_result(self):
         """End-to-end: exception through OrchResult serialization matches production path."""
         from cephadm.ssh import HostConnectionError
         from orchestrator._interface import OrchResult, completion_to_result
