@@ -1,0 +1,120 @@
+<div class="notifications-page">
+  <header class="notifications-page__header border-subtle-bottom">
+    <a
+      cdsLink
+      class="notifications-page__header-action"
+      tabindex="0"
+      (click)="goBack()"
+      (keydown.enter)="goBack()"
+    >
+      <cd-icon
+        type="left"
+        [useDefault]="true"
+      ></cd-icon>
+      <span i18n>Back</span>
+    </a>
+    <h4
+      class="notifications-page__header-title cds--type-heading-03"
+      i18n
+    >
+      Notifications
+    </h4>
+    <a
+      cdsLink
+      class="notifications-page__header-action"
+      tabindex="0"
+      (click)="clearAll()"
+      (keydown.enter)="clearAll()"
+      i18n
+    >
+      Clear all
+    </a>
+  </header>
+
+  <div class="notifications-page__body">
+    <div class="notifications-page__list border-subtle-right">
+      @for (notification of notifications(); track notification.id) {
+        <div
+          class="notifications-page__item border-subtle-bottom"
+          [class.notifications-page__item--active]="selectedNotificationID() === notification.id"
+          [class.notifications-page__item--unread]="!readMap()[notification.id]"
+          role="button"
+          tabindex="0"
+          (click)="onNotificationSelect(notification)"
+          (keydown.enter)="onNotificationSelect(notification)"
+        >
+          <cd-notification-item
+            [type]="notification.type"
+            [title]="notification.displayTitle"
+            [timestamp]="notification.timestamp"
+            [message]="notification.displayPreview"
+            [notificationId]="notification.id"
+            [showChevron]="true"
+            [showUnread]="!readMap()[notification.id]"
+          >
+          </cd-notification-item>
+        </div>
+      } @empty {
+        <div class="notifications-page__empty">
+          <cd-icon
+            type="notification"
+            [size]="iconSize.size20"
+            [useDefault]="true"
+          ></cd-icon>
+          <p
+            class="cds-mt-3"
+            i18n
+          >
+            No notifications available
+          </p>
+        </div>
+      }
+    </div>
+
+    <div class="notifications-page__detail">
+      @if (selectedNotification(); as selected) {
+        <div class="notifications-page__detail-header">
+          <cd-notification-item
+            [type]="selected.type"
+            [title]="selected.displayTitle"
+            [timestamp]="selected.timestamp"
+            [notificationId]="selected.id"
+            [application]="selected.application"
+            (deleted)="onNotificationDeleted($event)"
+          ></cd-notification-item>
+        </div>
+        <div class="notifications-page__detail-body cds-mt-5">
+          <p class="notifications-page__detail-text cds--type-body-01">
+            {{ selected.displayPreview }}
+          </p>
+          @if (selected.prometheusAlert?.sourceUrl) {
+            <a
+              cdsLink
+              class="cds-mt-5"
+              [href]="selected.prometheusAlert.sourceUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              i18n
+            >
+              View in Prometheus
+            </a>
+          }
+        </div>
+      } @else {
+        <div class="notifications-page__empty">
+          <cd-icon
+            type="notification"
+            [size]="iconSize.size20"
+            [useDefault]="true"
+          ></cd-icon>
+          <p
+            class="cds-mt-3"
+            i18n
+          >
+            Select a notification to view details
+          </p>
+        </div>
+      }
+    </div>
+  </div>
+</div>

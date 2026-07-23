@@ -1,0 +1,19 @@
+$block-size: 38.5rem;
+$inline-max-size: 22.75rem;
+$inline-min-size: 20rem;
+
+.notification-panel {
+  position: fixed;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--cds-layer-01);
+  border-block-end: 1px solid var(--cds-border-subtle-02);
+  border-inline-start: 1px solid var(--cds-border-subtle-02);
+  box-shadow: 0 0.125rem 0.25rem var(--cds-overlay);
+  block-size: $block-size;
+  max-block-size: calc(100vh - 3rem);
+  inline-size: $inline-max-size;
+  inset-block-start: 3rem;
+  inset-inline-end: 0;
+}

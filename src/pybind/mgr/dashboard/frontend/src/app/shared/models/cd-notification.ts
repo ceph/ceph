@@ -1,13 +1,31 @@
-import { IndividualConfig } from 'ngx-toastr';
-
 import { Icons } from '../enum/icons.enum';
 import { NotificationType } from '../enum/notification-type.enum';
+import { ToastContent } from 'carbon-components-angular';
 
 export class CdNotificationConfig {
   applicationClass: string;
   isFinishedTask = false;
+  options: ToastContent = {
+    lowContrast: true,
+    type: undefined,
+    title: '',
+    subtitle: '',
+    caption: ''
+  };
 
-  private classes = {
+  // Prometheus-specific metadata
+  prometheusAlert?: {
+    alertName: string;
+    status: string;
+    severity: string;
+    instance?: string;
+    job?: string;
+    description: string;
+    sourceUrl?: string;
+    fingerprint?: string;
+  };
+
+  private classes: { [key: string]: string } = {
     Ceph: 'ceph-icon',
     Prometheus: 'prometheus-icon'
   };
@@ -16,14 +34,19 @@ export class CdNotificationConfig {
     public type: NotificationType = NotificationType.info,
     public title?: string,
     public message?: string, // Use this for additional information only
-    public options?: any | IndividualConfig,
+    options?: ToastContent,
     public application: string = 'Ceph'
   ) {
-    this.applicationClass = this.classes[this.application];
+    this.applicationClass =
+      this.classes[this.application as keyof typeof this.classes] || 'ceph-icon';
+    if (options) {
+      this.options = { ...this.options, ...options };
+    }
   }
 }
 
 export class CdNotification extends CdNotificationConfig {
+  id!: string;
   timestamp: string;
   textClass: string;
   iconClass: string;
@@ -38,7 +61,15 @@ export class CdNotification extends CdNotificationConfig {
 
   constructor(private config: CdNotificationConfig = new CdNotificationConfig()) {
     super(config.type, config.title, config.message, config.options, config.application);
+
+    // Copy Prometheus metadata if present
+    if (config.prometheusAlert) {
+      this.prometheusAlert = config.prometheusAlert;
+    }
+
     delete this.config;
+
+    this.id = this.generateID();
     /* string representation of the Date object so it can be directly compared
     with the timestamps parsed from localStorage */
     this.timestamp = new Date().toJSON();
@@ -46,5 +77,9 @@ export class CdNotification extends CdNotificationConfig {
     this.textClass = this.textClasses[this.type];
     this.borderClass = this.borderClasses[this.type];
     this.isFinishedTask = config.isFinishedTask;
+  }
+
+  private generateID(): string {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
   }
 }

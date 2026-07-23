@@ -4,7 +4,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
+
 import { of } from 'rxjs';
 
 import { NfsService } from '~/app/shared/api/nfs.service';
@@ -37,8 +37,7 @@ describe('NfsListComponent', () => {
       HttpClientTestingModule,
       RouterTestingModule,
       SharedModule,
-      NgbNavModule,
-      ToastrModule.forRoot()
+      NgbNavModule
     ],
     providers: [TaskListService]
   });

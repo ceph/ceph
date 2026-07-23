@@ -5,41 +5,47 @@ export class NotificationSidebarPageHelper extends PageHelper {
     return cy.get('cd-notifications a');
   }
 
+  getPanel() {
+    return cy.get('cd-notification-panel');
+  }
+
   getSidebar() {
-    return cy.get('cd-notifications-sidebar');
+    return cy.get('cd-notification-area');
   }
 
   getTasks() {
-    return this.getSidebar().find('.card.tc_task');
+    return cy.get('cd-notification-area .task-item');
   }
 
   getNotifications() {
-    return this.getSidebar().find('.card.tc_notification');
+    return cy.get('cd-notification-area [data-testid="notification-item"]');
+  }
+
+  getNotificationCount() {
+    return cy.get('cd-notification-area').then(($area) => {
+      return $area.find('[data-testid="notification-item"]').length;
+    });
   }
 
   getClearNotificationsBtn() {
-    return this.getSidebar().find('button.btn-block');
-  }
-
-  getCloseBtn() {
-    return this.getSidebar().find('button.close');
+    return cy.get('cd-notification-panel .notification-header__dismiss-btn');
   }
 
   open() {
     this.getNotificationIcon().click();
-    this.getSidebar().should('be.visible');
+    this.getPanel().should('exist');
+    this.getSidebar().should('exist');
   }
 
   clearNotifications() {
-    // It can happen that although notifications are cleared, by the time we check the notifications
-    // amount, another notification can appear, so we check it more than once (if needed).
-    this.getClearNotificationsBtn().click();
-    this.getNotifications()
-      .should('have.length.gte', 0)
-      .then(($elems) => {
-        if ($elems.length > 0) {
-          this.clearNotifications();
-        }
-      });
+    this.getNotificationCount().then((count) => {
+      if (count === 0) {
+        return;
+      }
+
+      this.getClearNotificationsBtn().scrollIntoView().click({ force: true });
+
+      this.clearNotifications();
+    });
   }
 }
