@@ -2861,26 +2861,41 @@ cdef class Group(object):
         if ret != 0:
             raise make_ex(ret, 'error adding image to group', group_errno_to_exception)
 
-    def remove_image(self, image_ioctx, image_name):
+    def remove_image(self, image_ioctx, image_name,
+                     force=False, purge_user_snaps=False):
         """
         Remove an image from a group.
 
         :param image_ioctx: determines which RADOS pool the image belongs to.
-        :type ioctx: :class:`rados.Ioctx`
-        :param name: the name of the image to remove
-        :type name: str
+        :type image_ioctx: :class:`rados.Ioctx`
+        :param image_name: the name of the image to remove
+        :type image_name: str
+        :param force: Remove the image even if referenced by user group snapshots.
+        :type force: bool
+        :param purge_user_snaps: Remove dependent user group snapshots before
+                                 removing the image.
+        :type purge_user_snaps: bool
 
         :raises: :class:`ObjectNotFound`
         :raises: :class:`InvalidArgument`
         :raises: :class:`FunctionNotSupported`
         """
+        if force and purge_user_snaps:
+            raise InvalidArgument(
+                    "force and purge_user_snaps are mutually exclusive")
         image_name = cstr(image_name, 'image_name')
         cdef:
             rados_ioctx_t _image_ioctx = convert_ioctx(image_ioctx)
             char *_image_name = image_name
+            rbd_group_image_remove_mode_t mode = RBD_GROUP_IMAGE_REMOVE_DEFAULT
+        if purge_user_snaps:
+            mode = RBD_GROUP_IMAGE_REMOVE_PURGE_USER_SNAPS
+        elif force:
+            mode = RBD_GROUP_IMAGE_REMOVE_FORCE
         with nogil:
-            ret = rbd_group_image_remove(self._ioctx, self._name,
-                                         _image_ioctx, _image_name)
+            ret = rbd_group_image_remove2(self._ioctx, self._name,
+                                          _image_ioctx, _image_name,
+                                          mode)
         if ret != 0:
             raise make_ex(ret, 'error removing image from group', group_errno_to_exception)
 
