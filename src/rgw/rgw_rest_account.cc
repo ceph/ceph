@@ -233,23 +233,23 @@ public:
 
 /**
  * @brief Sets quota limits for an RGW account
- * 
+ *
  * @param y Optional yield context for coroutine-based async operations
- * 
+ *
  * REST Endpoint:
  *   PUT /admin/account
- * 
+ *
  * Query Parameters:
  *   - quota: (required) Subresource to trigger the put account quota operation
  *   - id: (required) Account ID to set quota for
- *   - quota-type (required): Type of quota to set - "account" or "bucket" 
+ *   - quota-type (required): Type of quota to set - "account" or "bucket"
  *   - max-size: (optional) Maximum storage size in bytes
  *   - max-objects: (optional) Maximum number of objects (-1 for unlimited)
  *   - enabled: (optional) Enable/disable quota enforcement (true/false)
- * 
+ *
  * Example Usage:
  *   PUT /admin/account?quota&id=RGW123&quota-type=account&max-size=1073741824&enabled=true
- * 
+ *
  */
 
 void RGWOp_Account_Quota_Set::execute(optional_yield y)
@@ -273,16 +273,16 @@ void RGWOp_Account_Quota_Set::execute(optional_yield y)
     return;
   }
 
-  int32_t quota_max_size = 0;
+  int64_t quota_max_size = 0;
   bool has_quota_max_size = false;
-  RESTArgs::get_int32(s, "max-size", 0, &quota_max_size, &has_quota_max_size);
+  RESTArgs::get_int64(s, "max-size", 0, &quota_max_size, &has_quota_max_size);
   if (has_quota_max_size) {
     op_state.quota_max_size = quota_max_size;
   }
 
-  int32_t quota_max_objects = 0;
+  int64_t quota_max_objects = 0;
   bool has_quota_max_objects = false;
-  RESTArgs::get_int32(s, "max-objects", 0, &quota_max_objects, &has_quota_max_objects);
+  RESTArgs::get_int64(s, "max-objects", 0, &quota_max_objects, &has_quota_max_objects);
   if (has_quota_max_objects) {
     op_state.quota_max_objects = quota_max_objects;
   }
