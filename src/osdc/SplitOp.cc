@@ -800,7 +800,7 @@ bool validate_operations(Objecter::Op *op, const pg_pool_t *pi, bool is_erasure,
  * This function performs a multi-stage validation to determine if an operation
  * can be split across multiple OSDs for improved read performance:
  * 1. Validates operation flags (BALANCE_READS required, no WRITE flag)
- * 2. For replicated pools, rejects if min_split_replica_read_size is 0 (splitting disabled)
+ * 2. For replicated pools, always rejects (data integrity issues)
  * 3. Validates operation types and read size constraints
  *
  * @param op The operation to validate
@@ -820,17 +820,17 @@ std::pair<bool, bool> validate(Objecter::Op *op, Objecter &objecter,
     return {false, false};
   }
 
+  if (!is_erasure) {
+    ldout(cct, DBG_LVL) << __func__ << " REJECT: replica split reads disabled" << dendl;
+    return {false,false};
+  }
+
   // Initialize state for operation validation
   bool has_primary_ops = nullptr != op->objver;
   bool single_direct_op = is_erasure;
 
   uint64_t replica_min_shard_read_size = objecter.get_min_split_replica_read_size();
-  
-  if (!is_erasure && replica_min_shard_read_size == 0) {
-    ldout(cct, DBG_LVL) << __func__ << " REJECT: splitting disabled (min_split_replica_read_size=0)" << dendl;
-    return {false, false};
-  }
-  
+
   uint64_t replica_min_read_size = replica_min_shard_read_size * kReplicaMinShardReads;
 
   // Validate operations and read sizes
