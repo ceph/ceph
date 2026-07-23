@@ -117,6 +117,7 @@ struct pool_conf_t {
   std::string name{"rep_pool"};
   uint8_t type{pg_pool_t::TYPE_REPLICATED};
   std::optional<erasure_code_profile_conf_t> erasure_code_profile;
+  std::set<shard_id_t> nonprimary_shards;
 };
 
 using attr_t = std::map<std::string, std::string>;
@@ -261,6 +262,13 @@ RealObjsConfList make_real_objs_conf(int64_t pool_id,
  * to be used as the 'snap_mapper')
  */
 all_clones_snaps_t all_clones(const RealObj& head_obj);
+bufferlist encode_object_info(
+    const hobject_t& soid,
+    eversion_t version,
+    uint64_t size,
+    eversion_t prior_version = eversion_t{},
+    std::map<shard_id_t, eversion_t> shard_versions = {});
+
 }  // namespace ScrubGenerator
 
 template <>

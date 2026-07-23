@@ -9,18 +9,31 @@
 
 using namespace ScrubGenerator;
 
+bufferlist ScrubGenerator::encode_object_info(
+    const hobject_t& soid,
+    eversion_t version,
+    uint64_t size,
+    eversion_t prior_version,
+    std::map<shard_id_t, eversion_t> shard_versions)
+{
+  object_info_t oi{};
+  oi.soid = soid;
+  oi.version = version;
+  oi.prior_version = prior_version;
+  oi.size = size;
+  oi.shard_versions = shard_versions;
+  bufferlist bl;
+  oi.encode(bl, -1ull);
+  return bl;
+}
+
 // ref: PGLogTestRebuildMissing()
 bufferlist create_object_info(const ScrubGenerator::RealObj& objver)
 {
-  object_info_t oi{};
-  oi.soid = objver.ghobj.hobj;
-  oi.version = eversion_t(objver.ghobj.generation, 0);
-  oi.size = objver.data.size;
-
-  bufferlist bl;
-  oi.encode(bl,
-	    0 /*get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr)*/);
-  return bl;
+  return ScrubGenerator::encode_object_info(
+      objver.ghobj.hobj,
+      eversion_t(objver.ghobj.generation, 0),
+      objver.data.size);
 }
 
 std::pair<bufferlist, std::vector<snapid_t>> create_object_snapset(
