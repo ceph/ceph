@@ -4,7 +4,6 @@ import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { Observable, Subscriber } from 'rxjs';
 
 import { PrometheusListHelper } from '~/app/shared/helpers/prometheus-list-helper';
-import { SilenceFormComponent } from '~/app/ceph/cluster/prometheus/silence-form/silence-form.component';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, SucceededActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -29,10 +28,7 @@ import { CdSortPropDir } from '~/app/shared/models/cd-sort-prop-dir';
 const BASE_URL = 'monitoring/silences';
 
 @Component({
-  providers: [
-    { provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) },
-    SilenceFormComponent
-  ],
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
   selector: 'cd-silences-list',
   templateUrl: './silence-list.component.html',
   styleUrls: ['./silence-list.component.scss']
@@ -61,7 +57,6 @@ export class SilenceListComponent extends PrometheusListHelper {
     private urlBuilder: URLBuilderService,
     private actionLabels: ActionLabelsI18n,
     private succeededLabels: SucceededActionLabelsI18n,
-    private silenceFormComponent: SilenceFormComponent,
     private silenceMatcher: PrometheusSilenceMatcherService,
     @Inject(PrometheusService) prometheusService: PrometheusService
   ) {
@@ -164,7 +159,7 @@ export class SilenceListComponent extends PrometheusListHelper {
           const activeSilences = silences.filter(
             (silence: AlertmanagerSilence) => silence.status.state !== 'expired'
           );
-          this.getAlerts(activeSilences);
+          this.loadRulesAndMatchAlerts(activeSilences);
         },
         () => {
           this.prometheusService.disableAlertmanagerConfig();
@@ -177,13 +172,32 @@ export class SilenceListComponent extends PrometheusListHelper {
     this.selection = selection;
   }
 
-  getAlerts(silences: any) {
-    const rules = this.silenceFormComponent.getRules();
-    silences.forEach((silence: any) => {
-      silence.matchers.forEach((matcher: any) => {
-        this.rules = this.silenceMatcher.getMatchedRules(matcher, rules);
+  private loadRulesAndMatchAlerts(silences: AlertmanagerSilence[]) {
+    this.prometheusService.ifPrometheusConfigured(
+      () =>
+        this.prometheusService.getRules().subscribe(
+          (groups) => {
+            this.rules = groups.groups.flatMap((group) => group.rules);
+            this.getAlerts(silences);
+          },
+          () => {
+            this.rules = [];
+            this.getAlerts(silences);
+          }
+        ),
+      () => {
+        this.rules = [];
+        this.getAlerts(silences);
+      }
+    );
+  }
+
+  getAlerts(silences: AlertmanagerSilence[]) {
+    silences.forEach((silence) => {
+      silence.matchers.forEach((matcher) => {
+        const matchedRules = this.silenceMatcher.getMatchedRules(matcher, this.rules);
         const alertNames: string[] = [];
-        for (const rule of this.rules) {
+        for (const rule of matchedRules) {
           alertNames.push(rule.name);
         }
         silence.silencedAlerts = alertNames;
