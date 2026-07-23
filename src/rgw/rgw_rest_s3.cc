@@ -1436,7 +1436,17 @@ struct ReplicationConfiguration {
       }
 
       if (pipe.dest.bucket) {
-        destination.bucket = ARN(*pipe.dest.bucket).to_string();
+        // The bucket name may already contain the full ARN from data
+        // written before commit b8f89327e1a ("rgw: handle destination
+        // bucket as an ARN in ReplicationConfiguration").  Detect this
+        // to avoid producing a doubled ARN like
+        // "arn:aws:s3:::arn:aws:s3:::bucket".
+        auto existing = ARN::parse(pipe.dest.bucket->name);
+        if (existing && existing->service == rgw::Service::s3) {
+          destination.bucket = existing->to_string();
+        } else {
+          destination.bucket = ARN(*pipe.dest.bucket).to_string();
+        }
       }
 
       filter.emplace();
