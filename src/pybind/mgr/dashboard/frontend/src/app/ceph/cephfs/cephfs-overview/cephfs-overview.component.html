@@ -1,0 +1,223 @@
+<main class="cephfs-overview cds-mt-5">
+  <cd-loading-panel
+    *ngIf="isLoading"
+    i18n
+  >
+    Loading File Systems overview...
+  </cd-loading-panel>
+
+  <div *ngIf="!isLoading">
+    <!-- Resource Overview Details Card -->
+    <div class="cds-mb-5">
+      <cd-resource-overview-card
+        title="File Systems Overview"
+        [columns]="6"
+        [fields]="overviewFields"
+        i18n-title
+      >
+      </cd-resource-overview-card>
+    </div>
+
+    <!-- Capacity & Health Card -->
+    <div class="cds-mb-5">
+      <cds-tile class="pool-overview-card">
+        <div class="pool-overview-panels">
+          <!-- LEFT COLUMN: Capacity Panel -->
+          <section class="pool-detail-panel">
+            <h4
+              class="cds--type-heading-02"
+              i18n
+            >
+              Capacity
+            </h4>
+            <p
+              class="cds--type-body-compact-01 pool-detail-panel__subtitle"
+              i18n
+            >
+              Storage utilization across all file systems
+            </p>
+
+            <div class="capacity-flex-container cds-mt-4">
+              <div class="capacity-chart-wrapper">
+                <cd-donut-chart
+                  [data]="capacityChartData"
+                  title="Storage Capacity"
+                  i18n-title
+                  height="250px"
+                  legendPosition="bottom"
+                  [centerTitle]="'Raw Used'"
+                  [centerNumber]="usagePercentNumber"
+                  [numberFormatter]="percentageFormatter"
+                >
+                </cd-donut-chart>
+              </div>
+
+              <div class="capacity-stats-wrapper cds-ml-5">
+                <div class="pool-detail-stat-box cds-mb-4">
+                  <span
+                    class="cds--type-label-01"
+                    i18n
+                    >Total Pool Capacity</span
+                  >
+                  <span class="cds--type-heading-03">{{ totalCapacity | dimlessBinary }}</span>
+                </div>
+                <div class="pool-detail-stat-box cds-mb-4">
+                  <span
+                    class="cds--type-label-01"
+                    i18n
+                    >Data Pools Raw Used</span
+                  >
+                  <span class="cds--type-heading-03">{{ totalDataUsed | dimlessBinary }}</span>
+                </div>
+                <div class="pool-detail-stat-box">
+                  <span
+                    class="cds--type-label-01"
+                    i18n
+                    >Metadata Pools Raw Used</span
+                  >
+                  <span class="cds--type-heading-03">{{ totalMetadataUsed | dimlessBinary }}</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- RIGHT COLUMN: Mirroring & Protocols -->
+          <div class="pool-detail-right-column">
+            <!-- Mirroring Panel -->
+            <section class="pool-detail-panel cds-mb-6">
+              <div class="pool-detail-header-row">
+                <div>
+                  <h4
+                    class="cds--type-heading-02"
+                    i18n
+                  >
+                    Mirroring & Health
+                  </h4>
+                  <p
+                    class="cds--type-body-compact-01 pool-detail-panel__subtitle"
+                    i18n
+                  >
+                    Replication and daemon status
+                  </p>
+                </div>
+              </div>
+              <div class="pool-detail-stats cds-mt-4">
+                <div class="pool-detail-stat-box">
+                  <span
+                    class="cds--type-label-01"
+                    i18n
+                    >Mirror Daemons</span
+                  >
+                  <span class="cds--type-heading-03">{{ mirrorDaemonCount }}</span>
+                </div>
+                <div class="pool-detail-stat-box">
+                  <span
+                    class="cds--type-label-01"
+                    i18n
+                    >Mirror Peers</span
+                  >
+                  <span class="cds--type-heading-03">{{ mirrorPeerCount }}</span>
+                </div>
+              </div>
+            </section>
+
+            <!-- Gateways & Protocols Panel -->
+            <section class="pool-detail-panel">
+              <div class="pool-detail-header-row">
+                <div>
+                  <h4
+                    class="cds--type-heading-02"
+                    i18n
+                  >
+                    Gateways & Protocols
+                  </h4>
+                  <p
+                    class="cds--type-body-compact-01 pool-detail-panel__subtitle"
+                    i18n
+                  >
+                    File storage access points
+                  </p>
+                </div>
+              </div>
+              <div class="pool-detail-stats cds-mt-4">
+                <div class="pool-detail-stat-box">
+                  <span
+                    class="cds--type-label-01"
+                    i18n
+                    >NFS Clusters</span
+                  >
+                  <span class="cds--type-heading-03">{{ nfsClusterCount }}</span>
+                </div>
+                <div class="pool-detail-stat-box">
+                  <span
+                    class="cds--type-label-01"
+                    i18n
+                    >NFS Exports</span
+                  >
+                  <span class="cds--type-heading-03">{{ nfsExportCount }}</span>
+                </div>
+                <div class="pool-detail-stat-box">
+                  <span
+                    class="cds--type-label-01"
+                    i18n
+                    >SMB Clusters</span
+                  >
+                  <span class="cds--type-heading-03">{{ smbClusterCount }}</span>
+                </div>
+                <div class="pool-detail-stat-box">
+                  <span
+                    class="cds--type-label-01"
+                    i18n
+                    >SMB Shares</span
+                  >
+                  <span class="cds--type-heading-03">{{ smbShareCount }}</span>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </cds-tile>
+    </div>
+
+    <!-- Performance Statistics Card -->
+    <div class="cds-mb-5">
+      <cd-productive-card [applyShadow]="false">
+        <ng-template #header>
+          <h2
+            class="cds--type-heading-compact-02"
+            i18n
+          >
+            Performance Statistics
+          </h2>
+          <cd-time-picker
+            [dropdownSize]="'sm'"
+            [label]="'Time Span'"
+            (selectedTime)="loadPerformanceData($event)"
+          ></cd-time-picker>
+        </ng-template>
+        <div class="cds--grid cds--grid--narrow cds--grid--full-width">
+          <div class="cds--row cds--row--narrow">
+            <div class="cds--col-lg-8 cds--col-md-8 cds--col-sm-12 cds-mb-5">
+              <cd-area-chart
+                chartTitle="Client Requests"
+                i18n-chartTitle
+                [dataUnit]="'req/s'"
+                [rawData]="clientRequestsChartData"
+              >
+              </cd-area-chart>
+            </div>
+            <div class="cds--col-lg-8 cds--col-md-8 cds--col-sm-12 cds-mb-5">
+              <cd-area-chart
+                chartTitle="Metadata Throughput"
+                i18n-chartTitle
+                [dataUnit]="'B/s'"
+                [rawData]="throughputChartData"
+              >
+              </cd-area-chart>
+            </div>
+          </div>
+        </div>
+      </cd-productive-card>
+    </div>
+  </div>
+</main>

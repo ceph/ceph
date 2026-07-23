@@ -4,6 +4,7 @@ import { ActivatedRouteSnapshot, PreloadAllModules, RouterModule, Routes } from 
 import _ from 'lodash';
 
 import { CephfsListComponent } from './ceph/cephfs/cephfs-list/cephfs-list.component';
+import { CephfsOverviewComponent } from './ceph/cephfs/cephfs-overview/cephfs-overview.component';
 import { ConfigurationFormComponent } from './ceph/cluster/configuration/configuration-form/configuration-form.component';
 import { ConfigurationComponent } from './ceph/cluster/configuration/configuration.component';
 import { CreateClusterComponent } from './ceph/cluster/create-cluster/create-cluster.component';
@@ -454,6 +455,12 @@ const routes: Routes = [
         path: 'cephfs',
         canActivate: [FeatureTogglesGuardService],
         children: [
+          { path: '', redirectTo: 'overview', pathMatch: 'full' },
+          {
+            path: 'overview',
+            component: CephfsOverviewComponent,
+            data: { breadcrumbs: 'File/Overview' }
+          },
           {
             path: 'fs',
             component: CephfsListComponent,

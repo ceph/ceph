@@ -172,6 +172,9 @@ export class RbdOverviewComponent implements OnInit, OnDestroy {
   }
 
   percentageFormatter = (value: number) => {
+    if (value > 0 && value < 0.1) {
+      return '< 0.1%';
+    }
     return `${value.toFixed(1)}%`;
   };
 
@@ -385,14 +388,10 @@ export class RbdOverviewComponent implements OnInit, OnDestroy {
       this.rawUsedBytes = used;
       this.rawTotalBytes = used + avail;
 
-      if (this.rawTotalBytes > 0) {
-        this.capacityChartData = [
-          { group: 'Used', value: this.rawUsedBytes },
-          { group: 'Available', value: avail }
-        ];
-      } else {
-        this.capacityChartData = [];
-      }
+      this.capacityChartData = [
+        { group: 'Used', value: this.rawUsedBytes },
+        { group: 'Available', value: this.rawTotalBytes > 0 ? avail : 1 }
+      ];
 
       this.totalImages = allImages.length;
       this.provisionedBytes = totalProv;

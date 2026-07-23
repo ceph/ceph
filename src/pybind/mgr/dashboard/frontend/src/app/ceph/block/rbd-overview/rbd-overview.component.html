@@ -16,39 +16,57 @@
       <div class="pool-overview-panels">
         <!-- LEFT COLUMN: Capacity Panel -->
         <section class="pool-detail-panel">
-          <h4 class="cds--type-heading-02" i18n>Capacity</h4>
-          <p class="cds--type-body-compact-01 pool-detail-panel__subtitle" i18n>Storage utilization</p>
+          <h4
+            class="cds--type-heading-02"
+            i18n
+          >
+            Capacity
+          </h4>
+          <p
+            class="cds--type-body-compact-01 pool-detail-panel__subtitle"
+            i18n
+          >
+            Storage utilization
+          </p>
 
           <div class="capacity-flex-container cds-mt-4">
             <div class="capacity-chart-wrapper">
-              @if (rawTotalBytes > 0) {
-                <cd-donut-chart
-                  [data]="capacityChartData"
-                  title="Storage Capacity"
-                  i18n-title
-                  height="250px"
-                  legendPosition="bottom"
-                  [centerTitle]="'Raw Used'"
-                  [centerNumber]="usagePercentNumber"
-                  [numberFormatter]="percentageFormatter"
-                >
-                </cd-donut-chart>
-              } @else {
-                <span class="cds--type-body-compact-01">-</span>
-              }
+              <cd-donut-chart
+                [data]="capacityChartData"
+                title="Storage Capacity"
+                i18n-title
+                height="250px"
+                legendPosition="bottom"
+                [centerTitle]="'Raw Used'"
+                [centerNumber]="usagePercentNumber"
+                [numberFormatter]="percentageFormatter"
+              >
+              </cd-donut-chart>
             </div>
 
             <div class="capacity-stats-wrapper cds-ml-5">
               <div class="pool-detail-stat-box cds-mb-4">
-                <span class="cds--type-label-01" i18n>Total Pool Capacity</span>
+                <span
+                  class="cds--type-label-01"
+                  i18n
+                  >Total Pool Capacity</span
+                >
                 <span class="cds--type-heading-03">{{ rawTotalBytes | dimlessBinary }}</span>
               </div>
               <div class="pool-detail-stat-box cds-mb-4">
-                <span class="cds--type-label-01" i18n>Provisioned</span>
+                <span
+                  class="cds--type-label-01"
+                  i18n
+                  >Provisioned</span
+                >
                 <span class="cds--type-heading-03">{{ provisionedBytes | dimlessBinary }}</span>
               </div>
               <div class="pool-detail-stat-box">
-                <span class="cds--type-label-01" i18n>Raw Used</span>
+                <span
+                  class="cds--type-label-01"
+                  i18n
+                  >Raw Used</span
+                >
                 <span class="cds--type-heading-03">{{ rawUsedBytes | dimlessBinary }}</span>
               </div>
             </div>
@@ -61,17 +79,35 @@
           <section class="pool-detail-panel cds-mb-6">
             <div class="pool-detail-header-row">
               <div>
-                <h4 class="cds--type-heading-02" i18n>Mirroring & Health</h4>
-                <p class="cds--type-body-compact-01 pool-detail-panel__subtitle" i18n>Replication and daemon status</p>
+                <h4
+                  class="cds--type-heading-02"
+                  i18n
+                >
+                  Mirroring & Health
+                </h4>
+                <p
+                  class="cds--type-body-compact-01 pool-detail-panel__subtitle"
+                  i18n
+                >
+                  Replication and daemon status
+                </p>
               </div>
             </div>
             <div class="pool-detail-stats cds-mt-4">
               <div class="pool-detail-stat-box">
-                <span class="cds--type-label-01" i18n>Mirror Daemons</span>
+                <span
+                  class="cds--type-label-01"
+                  i18n
+                  >Mirror Daemons</span
+                >
                 <span class="cds--type-heading-03">{{ daemonCount }}</span>
               </div>
               <div class="pool-detail-stat-box">
-                <span class="cds--type-label-01" i18n>Mirror Peers</span>
+                <span
+                  class="cds--type-label-01"
+                  i18n
+                  >Mirror Peers</span
+                >
                 <span class="cds--type-heading-03">{{ totalPeers }}</span>
               </div>
             </div>
@@ -81,21 +117,43 @@
           <section class="pool-detail-panel">
             <div class="pool-detail-header-row">
               <div>
-                <h4 class="cds--type-heading-02" i18n>Gateways & Protocols</h4>
-                <p class="cds--type-body-compact-01 pool-detail-panel__subtitle" i18n>Block storage access points</p>
+                <h4
+                  class="cds--type-heading-02"
+                  i18n
+                >
+                  Gateways & Protocols
+                </h4>
+                <p
+                  class="cds--type-body-compact-01 pool-detail-panel__subtitle"
+                  i18n
+                >
+                  Block storage access points
+                </p>
               </div>
             </div>
             <div class="pool-detail-stats pool-detail-stats--3-col cds-mt-4">
               <div class="pool-detail-stat-box">
-                <span class="cds--type-label-01" i18n>NVMe-oF Gateways</span>
+                <span
+                  class="cds--type-label-01"
+                  i18n
+                  >NVMe-oF Gateways</span
+                >
                 <span class="cds--type-heading-03">{{ nvmeofGatewayCount }}</span>
               </div>
               <div class="pool-detail-stat-box">
-                <span class="cds--type-label-01" i18n>NVMe-oF Subsystems</span>
+                <span
+                  class="cds--type-label-01"
+                  i18n
+                  >NVMe-oF Subsystems</span
+                >
                 <span class="cds--type-heading-03">{{ nvmeofSubsystemCount }}</span>
               </div>
               <div class="pool-detail-stat-box">
-                <span class="cds--type-label-01" i18n>iSCSI Targets</span>
+                <span
+                  class="cds--type-label-01"
+                  i18n
+                  >iSCSI Targets</span
+                >
                 <span class="cds--type-heading-03">{{ iscsiTargetCount }}</span>
               </div>
             </div>
@@ -105,33 +163,38 @@
     </cds-tile>
   </div>
 
-@if (isMirroringPanelOpen && mirroringIssues.length > 0) {
-  <cd-side-panel
-    [headerText]="'Mirroring Health Issues (' + mirroringIssues.length + ')'"
-    [expanded]="isMirroringPanelOpen"
-    size="md"
-    (closed)="toggleMirroringPanel()"
-  >
-    <div
-      panel-header-description
-      class="cds--type-body-01"
+  @if (isMirroringPanelOpen && mirroringIssues.length > 0) {
+    <cd-side-panel
+      [headerText]="'Mirroring Health Issues (' + mirroringIssues.length + ')'"
+      [expanded]="isMirroringPanelOpen"
+      size="md"
+      (closed)="toggleMirroringPanel()"
     >
-      <span i18n>Review the daemons, pools, or images experiencing mirroring issues.</span>
-    </div>
-    <div class="panel-content">
-      @for (issue of mirroringIssues; track issue.name) {
-        <div class="cds-mb-4">
-          <div class="cds--type-body-compact-02 cds-mb-2">
-            <strong>{{ issue.type }}:</strong> {{ issue.name }}
+      <div
+        panel-header-description
+        class="cds--type-body-01"
+      >
+        <span i18n>Review the daemons, pools, or images experiencing mirroring issues.</span>
+      </div>
+      <div class="panel-content">
+        @for (issue of mirroringIssues; track issue.name) {
+          <div class="cds-mb-4">
+            <div class="cds--type-body-compact-02 cds-mb-2">
+              <strong>{{ issue.type }}:</strong> {{ issue.name }}
+            </div>
+            <div
+              class="cds--type-body-compact-01"
+              [ngClass]="
+                issue.color === 'error' ? 'cd-status-text--danger' : 'cd-status-text--warning'
+              "
+            >
+              {{ issue.state }}
+            </div>
           </div>
-          <div class="cds--type-body-compact-01" [ngClass]="issue.color === 'error' ? 'cd-status-text--danger' : 'cd-status-text--warning'">
-            {{ issue.state }}
-          </div>
-        </div>
-      }
-    </div>
-  </cd-side-panel>
-}
+        }
+      </div>
+    </cd-side-panel>
+  }
   <!-- Performance Statistics Card (Single Row Layout matching Object Overview rgw-overview-dashboard.component.html) -->
   <div class="cds-mb-5">
     <cd-productive-card [applyShadow]="false">
