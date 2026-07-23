@@ -153,7 +153,6 @@ class TestHostConnectionErrorPickle:
 
     def test_pickle_round_trip_with_orchtresult(self):
         """End-to-end: exception through OrchResult serialization matches production path."""
-        import pickle
         from cephadm.ssh import HostConnectionError
         from orchestrator._interface import OrchResult, completion_to_result
 
