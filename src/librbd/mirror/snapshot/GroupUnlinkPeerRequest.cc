@@ -174,16 +174,87 @@ void GroupUnlinkPeerRequest<I>::remove_peer_uuid(
                               std::string mirror_peer_uuid) {
   ldout(m_cct, 10) << dendl;
 
-  auto aio_comp = create_rados_callback(
-      new LambdaContext([this, group_snap](int r) {
-        handle_remove_peer_uuid(r, group_snap);
-      }));
+  if (!m_image_ctxs->empty() && m_image_ctx_map.empty()) {
+    for (size_t i = 0; i < m_image_ctxs->size(); ++i) {
+      ImageCtx *ictx = (*m_image_ctxs)[i];
+      m_image_ctx_map[ictx->id] = ictx;
+    }
+  }
+  std::vector<cls::rbd::ImageSnapshotSpec> image_snaps = group_snap.snaps;
+  auto ctx = new LambdaContext([this, group_snap, mirror_peer_uuid](int r) {
+    if (r < 0) {
+      lderr(m_cct) << "failed to remove group snapshot mirror peer: "
+                   << dendl;
+      finish(r);
+      return;
+    }
+    remove_group_snapshot_peer_uuid(group_snap, mirror_peer_uuid);
+  });
 
-  auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
-    &group_snap.snapshot_namespace);
-  ns->mirror_peer_uuids.erase(mirror_peer_uuid);
+  C_Gather *unlink_gather_ctx = new C_Gather(m_cct, ctx);
+  for (const auto &spec : image_snaps) {
+    if (spec.snap_id == CEPH_NOSNAP) {
+      continue;
+    }
 
+    librados::IoCtx image_io_ctx;
+    if (m_image_ctx_map.find(spec.image_id) != m_image_ctx_map.end()) {
+      image_io_ctx = m_image_ctx_map[spec.image_id]->md_ctx;
+    } else {
+      ldout(m_cct, 10) << "image: " << spec.image_id
+                       << " was removed from the group" << dendl;
+      int r = librbd::util::create_ioctx(m_group_io_ctx, "image",
+                                         spec.pool, {}, &image_io_ctx);
+      if (r < 0) {
+        ldout(m_cct, 10) << "unlink peer failed for removed image snapshot "
+                         << spec.image_id << " snap_id: " << spec.snap_id
+                         << " : pool " << spec.pool
+                         << " inaccessible: " << cpp_strerror(r) << dendl;
+        unlink_gather_ctx->new_sub()->complete(r);
+        continue;
+      }
+    }
+    std::string image_header_oid = librbd::util::header_name(spec.image_id);
+    librados::ObjectWriteOperation op;
+    librbd::cls_client::mirror_image_snapshot_unlink_peer(
+        &op, spec.snap_id, mirror_peer_uuid);
+    auto img_snapshot_unlink = new LambdaContext(
+      [this, spec, new_sub_ctx=unlink_gather_ctx->new_sub()](int r) {
+        if (r == -ENOENT || r == -ERESTART) {
+          r = 0;
+        }
+        if (r < 0) {
+          lderr(m_cct) << "failed to remove peer uuid for image snapshot "
+                       << spec.snap_id << " of image " << spec.image_id
+                       << ": " << cpp_strerror(r) << dendl;
+        }
+        new_sub_ctx->complete(r);
+      });
+    auto aio_comp = create_rados_callback(img_snapshot_unlink);
+    int r = image_io_ctx.aio_operate(image_header_oid, aio_comp, &op);
+    ceph_assert(r == 0);
+    aio_comp->release();
+  }
+
+  unlink_gather_ctx->activate();
+}
+
+template <typename I>
+void GroupUnlinkPeerRequest<I>::remove_group_snapshot_peer_uuid(
+                              cls::rbd::GroupSnapshot group_snap,
+                              std::string mirror_peer_uuid) {
+  ldout(m_cct, 10) << dendl;
+
+  auto &ns = std::get<cls::rbd::GroupSnapshotNamespaceMirror>(
+    group_snap.snapshot_namespace);
+  ns.mirror_peer_uuids.erase(mirror_peer_uuid);
   m_group_snap_id = group_snap.id;
+
+  auto aio_comp = create_rados_callback(
+    new LambdaContext([this, group_snap](int r) {
+      handle_remove_peer_uuid(r, group_snap);
+    }));
+
   librados::ObjectWriteOperation op;
   librbd::cls_client::group_snap_set(&op, group_snap);
   int r = m_group_io_ctx.aio_operate(
