@@ -503,6 +503,9 @@
 * NFS: cluster/export delete commands now throw a deprecation warning when
        used and will be removed in V release. 
 
+ * RADOS: The `ceph osd pool get threshold` command is deprecated in favor of the
+  `ceph config get mgr mgr/pg_autoscaler/threshold` command.
+
 >=19.2.1
 
 * CephFS: The `fs subvolume create` command now allows tagging subvolumes through option
