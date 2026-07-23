@@ -63,12 +63,16 @@ describe('UserFormComponent', () => {
     form = component.userForm;
     httpTesting = TestBed.inject(HttpTestingController);
     userService = TestBed.inject(UserService);
+    spyOn(userService, 'validatePassword').and.returnValue(
+      of({ valid: true, credits: 10, valuation: 'strong' })
+    );
     modalService = TestBed.inject(ModalCdsService);
     router = TestBed.inject(Router);
     spyOn(router, 'navigate');
     fixture.detectChanges();
     const notify = TestBed.inject(NotificationService);
     spyOn(notify, 'show');
+    spyOn(TestBed.inject(AuthStorageService), 'isSSO').and.returnValue(false);
     formHelper = new FormHelper(form);
   });
 
@@ -108,6 +112,34 @@ describe('UserFormComponent', () => {
 
     it('should validate email', () => {
       formHelper.expectErrorChange('email', 'aaa', 'email');
+    });
+
+    it('should validate password required in create mode', () => {
+      formHelper.expectErrorChange('password', '', 'required');
+      formHelper.expectValidChange('password', 'pass123');
+    });
+
+    it('should validate confirmpassword required in create mode', () => {
+      formHelper.setValue('password', 'pass123');
+      formHelper.expectErrorChange('confirmpassword', '', 'required');
+      formHelper.expectValidChange('confirmpassword', 'pass123');
+    });
+
+    it('should validate roles required in create mode', () => {
+      formHelper.expectErrorChange('roles', [], 'required');
+      formHelper.expectValidChange('roles', ['administrator']);
+    });
+
+    it('should not validate password and roles if SSO is enabled', () => {
+      component.isSSO = true;
+      component.createForm();
+      form = component.userForm;
+      form.get('password').updateValueAndValidity();
+      expect(form.get('password').valid).toBeTruthy();
+      form.get('confirmpassword').updateValueAndValidity();
+      expect(form.get('confirmpassword').valid).toBeTruthy();
+      form.get('roles').updateValueAndValidity();
+      expect(form.get('roles').valid).toBeTruthy();
     });
 
     it('should set mode', () => {
@@ -209,6 +241,13 @@ describe('UserFormComponent', () => {
 
     it('should set mode', () => {
       expect(component.mode).toBe('editing');
+    });
+
+    it('should not validate password required in edit mode', () => {
+      form.get('password').setValue('');
+      expect(form.get('password').valid).toBeTruthy();
+      form.get('confirmpassword').setValue('');
+      expect(form.get('confirmpassword').valid).toBeTruthy();
     });
 
     it('should alert if user is removing needed role permission', () => {

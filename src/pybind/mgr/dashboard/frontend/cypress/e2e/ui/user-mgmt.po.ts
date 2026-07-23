@@ -16,6 +16,15 @@ export class UserMgmtPageHelper extends PageHelper {
     cy.get('#name').type(name);
     cy.get('#email').type(email);
 
+    // Select role 'administrator'
+    cy.get('cds-combo-box[type="multi"] input.cds--text-input').first().click({ force: true });
+    cy.get('.cds--list-box__menu.cds--multi-select').should('be.visible');
+    cy.get('.cds--list-box__menu.cds--multi-select .cds--checkbox-label')
+      .contains('.cds--checkbox-label-text', 'administrator', { matchCase: false })
+      .parent()
+      .click({ force: true });
+    cy.get('body').type('{esc}');
+
     // Click the create button and wait for user to be made
     cy.get('[data-cy=submitBtn]').click();
     this.getFirstTableCell(username).should('exist');
