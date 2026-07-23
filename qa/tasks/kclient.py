@@ -127,9 +127,10 @@ def task(ctx, config):
         try:
             log.info(f"Generating key for {entity} with key-type {key_type} at {keyring_path}")
             p = ceph_manager.ceph(f'auth rotate {entity} --key-type={key_type}', stdout=StringIO())
-            remote.write_file(keyring_path, p.stdout.getvalue())
         except CommandFailedError as e:
             log.warning(f"Failed to rotate key, maybe --key-type is unsupported: {e}")
+        else:
+            remote.write_file(keyring_path, p.stdout.getvalue(), sudo=True)
 
         if client_config.get('debug', False):
             remote.run(args=["sudo", "bash", "-c", "echo 'module ceph +p' > /sys/kernel/debug/dynamic_debug/control"])
