@@ -564,6 +564,7 @@ target_include_directories(radosgw SYSTEM PUBLIC "../rapidjson/include")
 target_link_libraries(radosgw PRIVATE
   legacy-option-headers
   ${rgw_libs}
+  heap_profiler
   ${ALLOC_LIBS})
 
 if(WITH_RADOSGW_FDB)
@@ -712,6 +713,7 @@ target_include_directories(rgw SYSTEM PUBLIC "../rapidjson/include")
 target_link_libraries(rgw
   PRIVATE
   ${rgw_libs}
+  heap_profiler
   librados
   cls_rgw_client
   cls_otp_client
