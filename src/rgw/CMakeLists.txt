@@ -226,7 +226,6 @@ list(APPEND librgw_rados_srcs
   driver/rados/rgw_rest_bucket.cc
   driver/rados/rgw_rest_log.cc
   driver/rados/rgw_rest_realm.cc
-  driver/rados/rgw_rest_user.cc
   driver/rados/rgw_sal_rados.cc
   driver/rados/rgw_service.cc
   driver/rados/rgw_sync.cc
