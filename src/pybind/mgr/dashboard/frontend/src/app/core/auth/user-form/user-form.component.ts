@@ -29,6 +29,8 @@ import { UserFormMode } from './user-form-mode.enum';
 import { UserFormRoleModel } from './user-form-role.model';
 import { UserFormModel } from './user-form.model';
 
+const DASHBOARD_USERNAME_PATTERN = /^(?!\.+$)[a-zA-Z0-9._@+-]+$/;
+
 @Component({
   selector: 'cd-user-form',
   templateUrl: './user-form.component.html',
@@ -85,7 +87,11 @@ export class UserFormComponent extends CdForm implements OnInit {
       {
         username: [
           '',
-          [Validators.required],
+          [
+            Validators.required,
+            Validators.pattern(DASHBOARD_USERNAME_PATTERN),
+            Validators.maxLength(256)
+          ],
           [CdValidators.unique(this.userService.validateUserName, this.userService)]
         ],
         name: [''],
