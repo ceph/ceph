@@ -375,9 +375,16 @@ void PrimaryLogPG::OpContext::finish_read(PrimaryLogPG *pg)
   ceph_assert(inflightreads > 0);
   --inflightreads;
   if (async_reads_complete()) {
-    ceph_assert(pg->in_progress_async_reads.size());
-    ceph_assert(pg->in_progress_async_reads.front().second == this);
-    pg->in_progress_async_reads.pop_front();
+    // Fast-EC direct async reads (ECSparseReadResult, ECMapextResult) are
+    // dispatched inside do_osd_op and push onto in_progress_async_reads
+    // immediately, so multiple concurrent fast-EC reads can be present in
+    // the list and may complete out of order.  Find our entry by identity
+    // rather than assuming we are always at front().
+    auto it = pg->in_progress_async_reads.begin();
+    while (it != pg->in_progress_async_reads.end() && it->second != this)
+      ++it;
+    ceph_assert(it != pg->in_progress_async_reads.end());
+    pg->in_progress_async_reads.erase(it);
 
     // Restart the op context now that all reads have been
     // completed. Read failures will be handled by the op finisher

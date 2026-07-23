@@ -373,7 +373,9 @@ void ObjectModel::applyIoOp(IoOp& op) {
     } break;
 
     case OpType::TruncateWrite: {
-      ceph_assert(primary_created);
+      if (!primary_created) {
+        primary_created = true;
+      }
       ceph_assert(reads.empty());
       ceph_assert(writes.empty());
       SingleTruncateWriteOp& truncWriteOp = static_cast<SingleTruncateWriteOp&>(op);
@@ -381,6 +383,7 @@ void ObjectModel::applyIoOp(IoOp& op) {
       auto old_size = primary_contents.size();
       bool expand = new_size > old_size;
       primary_contents.resize(new_size);
+      primary_allocated.resize(new_size, false);
       if (expand) {
         std::generate(std::execution::seq, primary_contents.begin() + old_size,
                       primary_contents.end(), generate_random);
@@ -392,17 +395,21 @@ void ObjectModel::applyIoOp(IoOp& op) {
         writes.union_insert(truncWriteOp.offset[i], truncWriteOp.length[i]);
         if (truncWriteOp.offset[i] + truncWriteOp.length[i] > primary_contents.size()) {
           primary_contents.resize(truncWriteOp.offset[i] + truncWriteOp.length[i]);
+          primary_allocated.resize(truncWriteOp.offset[i] + truncWriteOp.length[i], false);
         }
         std::generate(std::execution::seq,
                       std::next(primary_contents.begin(), truncWriteOp.offset[i]),
                       std::next(primary_contents.begin(),
                                 truncWriteOp.offset[i] + truncWriteOp.length[i]),
                       generate_random);
+        mark_allocated(truncWriteOp.offset[i], truncWriteOp.length[i]);
       }
       num_io++;
     } break;
     case OpType::TruncateWrite2: {
-      ceph_assert(primary_created);
+      if (!primary_created) {
+        primary_created = true;
+      }
       ceph_assert(reads.empty());
       ceph_assert(writes.empty());
       DoubleTruncateWriteOp& truncWriteOp = static_cast<DoubleTruncateWriteOp&>(op);
@@ -410,6 +417,7 @@ void ObjectModel::applyIoOp(IoOp& op) {
       auto old_size = primary_contents.size();
       bool expand = new_size > old_size;
       primary_contents.resize(new_size);
+      primary_allocated.resize(new_size, false);
       if (expand) {
         std::generate(std::execution::seq, primary_contents.begin() + old_size,
                       primary_contents.end(), generate_random);
@@ -421,17 +429,21 @@ void ObjectModel::applyIoOp(IoOp& op) {
         writes.union_insert(truncWriteOp.offset[i], truncWriteOp.length[i]);
         if (truncWriteOp.offset[i] + truncWriteOp.length[i] > primary_contents.size()) {
           primary_contents.resize(truncWriteOp.offset[i] + truncWriteOp.length[i]);
+          primary_allocated.resize(truncWriteOp.offset[i] + truncWriteOp.length[i], false);
         }
         std::generate(std::execution::seq,
                       std::next(primary_contents.begin(), truncWriteOp.offset[i]),
                       std::next(primary_contents.begin(),
                                 truncWriteOp.offset[i] + truncWriteOp.length[i]),
                       generate_random);
+        mark_allocated(truncWriteOp.offset[i], truncWriteOp.length[i]);
       }
       num_io++;
     } break;
     case OpType::TruncateWrite3: {
-      ceph_assert(primary_created);
+      if (!primary_created) {
+        primary_created = true;
+      }
       ceph_assert(reads.empty());
       ceph_assert(writes.empty());
       TripleTruncateWriteOp& truncWriteOp = static_cast<TripleTruncateWriteOp&>(op);
@@ -439,6 +451,7 @@ void ObjectModel::applyIoOp(IoOp& op) {
       auto old_size = primary_contents.size();
       bool expand = new_size > old_size;
       primary_contents.resize(new_size);
+      primary_allocated.resize(new_size, false);
       if (expand) {
         std::generate(std::execution::seq, primary_contents.begin() + old_size,
                       primary_contents.end(), generate_random);
@@ -450,12 +463,14 @@ void ObjectModel::applyIoOp(IoOp& op) {
         writes.union_insert(truncWriteOp.offset[i], truncWriteOp.length[i]);
         if (truncWriteOp.offset[i] + truncWriteOp.length[i] > primary_contents.size()) {
           primary_contents.resize(truncWriteOp.offset[i] + truncWriteOp.length[i]);
+          primary_allocated.resize(truncWriteOp.offset[i] + truncWriteOp.length[i], false);
         }
         std::generate(std::execution::seq,
                       std::next(primary_contents.begin(), truncWriteOp.offset[i]),
                       std::next(primary_contents.begin(),
                                 truncWriteOp.offset[i] + truncWriteOp.length[i]),
                       generate_random);
+        mark_allocated(truncWriteOp.offset[i], truncWriteOp.length[i]);
       }
       num_io++;
     } break;
