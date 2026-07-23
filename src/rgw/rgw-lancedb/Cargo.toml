@@ -1,0 +1,30 @@
+# Umbrella crate combining lancedb-c and lancedb-rgw-store into a single
+# Rust staticlib.  Linking two independent Rust staticlibs into one binary
+# is not possible (each would bundle its own copy of the Rust runtime and
+# shared dependencies, causing duplicate symbol definitions), so both
+# crates are compiled as rlibs into this one archive instead.
+
+[package]
+name = "rgw-lancedb"
+version = "0.1.0"
+edition = "2021"
+description = "Static library bundling the LanceDB C API and the RGW SAL backend"
+license = "Apache-2.0"
+repository = "https://github.com/ceph/ceph"
+keywords = ["ceph", "rgw", "lancedb", "vector", "storage"]
+categories = ["database", "api-bindings"]
+
+[lib]
+name = "rgw_lancedb"
+crate-type = ["staticlib"]
+
+[dependencies]
+# Both crates are workspace members (src/rgw/Cargo.toml) sharing one
+# Cargo.lock — dependency versions are unified automatically.
+lancedb-c = { path = "../lancedb-c" }
+lancedb-rgw-store = { path = "../lancedb-rgw-store" }
+# Force the pure-Rust blake3 implementation.  The default build bundles
+# the upstream BLAKE3 C/asm objects, whose global symbols collide at link
+# time with ceph's own vendored copy (src/BLAKE3, linked as libblake3.a).
+# Feature unification applies this to every blake3 user in the graph.
+blake3 = { version = "1", features = ["pure"] }

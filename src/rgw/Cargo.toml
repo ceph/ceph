@@ -2,5 +2,6 @@
 members = [
     "lancedb-c",
     "lancedb-rgw-store",
+    "rgw-lancedb",
 ]
 resolver = "2"
