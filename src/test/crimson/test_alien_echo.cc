@@ -4,6 +4,7 @@
 #include "messages/MPing.h"
 #include "common/ceph_argparse.h"
 #include "crimson/auth/DummyAuth.h"
+#include "crimson/common/config_proxy.h" // for local_conf()
 #include "crimson/common/throttle.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Dispatcher.h"
@@ -179,7 +180,7 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
       return server.msgr->bind(entity_addrvec_t{addr}
       ).safe_then([&server] {
         return server.msgr->start({&server.dispatcher});
-      }, crimson::net::Messenger::bind_ertr::assert_all{"bind failed"}
+      }, crimson::net::Messenger::bind_ertr::assert_all("bind failed")
       ).then([&dispatcher=server.dispatcher, count] {
         return dispatcher.on_reply.wait([&dispatcher, count] {
           return dispatcher.count >= count;

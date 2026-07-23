@@ -24,7 +24,6 @@ in Kubernetes, while also enabling management of storage resources and
 provisioning via Kubernetes APIs. We recommend Rook as the way to run Ceph in
 Kubernetes or to connect an existing Ceph storage cluster to Kubernetes.
 
-* Rook supports only Nautilus and newer releases of Ceph.
 * Rook is the preferred method for running Ceph on Kubernetes, or for
   connecting a Kubernetes cluster to an existing (external) Ceph
   cluster.
@@ -33,25 +32,6 @@ Kubernetes or to connect an existing Ceph storage cluster to Kubernetes.
 
 Other methods
 ~~~~~~~~~~~~~
-
-`ceph-ansible <https://docs.ceph.com/ceph-ansible/>`_ deploys and manages
-Ceph clusters using Ansible.
-
-* ceph-ansible is widely deployed.
-* ceph-ansible is not integrated with the orchestrator APIs that were
-  introduced in Nautilus and Octopus, which means that the management features
-  and dashboard integration introduced in Nautilus and Octopus are not
-  available in Ceph clusters deployed by means of ceph-ansible.
-
-
-`ceph-deploy <https://docs.ceph.com/projects/ceph-deploy/en/latest/>`_ is a
-tool that can be used to quickly deploy clusters. It is deprecated.
-
-  .. IMPORTANT::
-
-   ceph-deploy is not actively maintained. It is not tested on versions of Ceph
-   newer than Nautilus. It does not support RHEL8, CentOS 8, or newer operating
-   systems.
 
 `ceph-salt <https://github.com/ceph/ceph-salt>`_ installs Ceph using Salt and cephadm.
 

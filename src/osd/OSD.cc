@@ -18,6 +18,7 @@
 
 #include "acconfig.h"
 
+#include <algorithm>
 #include <cctype>
 #include <fstream>
 #include <iomanip>
@@ -38,6 +39,7 @@
 #include <sys/mount.h>
 #endif
 
+#include "mgr/DaemonHealthMetric.h" // for enum daemon_metric
 #include "osd/PG.h"
 #include "osd/scrubber/scrub_machine.h"
 #include "osd/scrubber/pg_scrubber.h"
@@ -1473,18 +1475,17 @@ MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
     // send what we have so far
     return m;
   }
-  // send something
+  // send something if we can
   bufferlist bl;
   if (get_inc_map_bl(m->newest_map, bl)) {
     m->incremental_maps[m->newest_map] = std::move(bl);
-  } else {
-    derr << __func__ << " unable to load latest map " << m->newest_map << dendl;
-    if (!get_map_bl(m->newest_map, bl)) {
-      derr << __func__ << " unable to load latest full map " << m->newest_map
-	   << dendl;
-      ceph_abort();
-    }
+  } else if (get_map_bl(m->newest_map, bl)) {
     m->maps[m->newest_map] = std::move(bl);
+  } else {
+    derr << __func__ << " unable to load latest map " << m->newest_map
+	 << ", sending empty map message (peer will drop or re-request from mon)"
+	 << dendl;
+
   }
   return m;
 }
@@ -1766,7 +1767,8 @@ void OSDService::queue_for_snap_trim(PG *pg, uint64_t cost_per_object)
       return cost_per_object * cct->_conf->osd_pg_max_concurrent_snap_trims;
     } else {
       /* We retain this legacy behavior for WeightedPriorityQueue.
-       * This branch should be removed after Squid.
+       * This branch should be removed after Umbrella (after consulting
+       * dev team)
        */
       return cct->_conf->osd_snap_trim_cost;
     }
@@ -2422,7 +2424,7 @@ OSD::OSD(CephContext *cct_,
   dev_path(dev), journal_path(jdev),
   store_is_rotational(store->is_rotational()),
   trace_endpoint("0.0.0.0", 0, "osd"),
-  asok_hook(NULL),
+  asok_hook(nullptr),
   m_osd_pg_epoch_max_lag_factor(cct->_conf.get_val<double>(
 				  "osd_pg_epoch_max_lag_factor")),
   osd_compat(get_osd_compat_set()),
@@ -2439,7 +2441,7 @@ OSD::OSD(CephContext *cct_,
   heartbeat_dispatcher(this),
   op_tracker(cct, cct->_conf->osd_enable_op_tracker,
                   cct->_conf->osd_num_op_tracker_shard),
-  test_ops_hook(NULL),
+  test_ops_hook(nullptr),
   op_shardedwq(
     this,
     ceph::make_timespan(cct->_conf->osd_op_thread_timeout),
@@ -2758,7 +2760,7 @@ int OSD::asok_route_to_pg(
   } catch (const TOPNSPC::common::bad_cmd_get& e) {
     (*target_pg)->unlock();
     ss << e.what();
-    on_finish(ret, ss.str(), outbl);
+    on_finish(-EINVAL, ss.str(), outbl);
     return -EINVAL;
   }
 }
@@ -3417,9 +3419,9 @@ will start to track new ops received afterwards.";
       f->dump_format_unquoted("15min", "%s", fixed_u_to_string(sitem.times[2],3).c_str());
       f->close_section();  // average
       f->open_object_section("min");
-      f->dump_format_unquoted("1min", "%s", fixed_u_to_string(sitem.max[0],3).c_str());
-      f->dump_format_unquoted("5min", "%s", fixed_u_to_string(sitem.max[1],3).c_str());
-      f->dump_format_unquoted("15min", "%s", fixed_u_to_string(sitem.max[2],3).c_str());
+      f->dump_format_unquoted("1min", "%s", fixed_u_to_string(sitem.min[0],3).c_str());
+      f->dump_format_unquoted("5min", "%s", fixed_u_to_string(sitem.min[1],3).c_str());
+      f->dump_format_unquoted("15min", "%s", fixed_u_to_string(sitem.min[2],3).c_str());
       f->close_section();  // min
       f->open_object_section("max");
       f->dump_format_unquoted("1min", "%s", fixed_u_to_string(sitem.max[0],3).c_str());
@@ -4194,7 +4196,7 @@ void OSD::final_init()
 
   r = admin_socket->register_command("compact",
 				     asok_hook,
-				     "Commpact object store's omap."
+				     "Compact object store's omap."
                                      " WARNING: Compaction probably slows your requests");
   ceph_assert(r == 0);
 
@@ -4649,6 +4651,15 @@ int OSD::shutdown()
       tick_timer_without_osd_lock.shutdown();
     }
 
+    // unregister commands
+    cct->get_admin_socket()->unregister_commands(asok_hook);
+    delete asok_hook;
+    asok_hook = nullptr;
+
+    cct->get_admin_socket()->unregister_commands(test_ops_hook);
+    delete test_ops_hook;
+    test_ops_hook = nullptr;
+
     osd_lock.unlock();
     utime_t  start_time_osd_drain = ceph_clock_now();
 
@@ -4703,11 +4714,11 @@ int OSD::shutdown()
   // unregister commands
   cct->get_admin_socket()->unregister_commands(asok_hook);
   delete asok_hook;
-  asok_hook = NULL;
+  asok_hook = nullptr;
 
   cct->get_admin_socket()->unregister_commands(test_ops_hook);
   delete test_ops_hook;
-  test_ops_hook = NULL;
+  test_ops_hook = nullptr;
 
   osd_lock.unlock();
 
@@ -5515,14 +5526,26 @@ bool OSD::maybe_wait_for_max_pg(const OSDMapRef& osdmap,
 // to re-trigger a peering, we have to twiddle the pg mapping a little bit,
 // see PG::should_restart_peering(). OSDMap::pg_to_up_acting_osds() will turn
 // to up set if pg_temp is empty. so an empty pg_temp won't work.
-static vector<int32_t> twiddle(const vector<int>& acting) {
+static vector<int32_t> twiddle(const vector<int>& acting, const OSDMapRef& osdmap, pg_t pgid) {
+  vector<int32_t> twiddled;
   if (acting.size() > 1) {
-    return {acting[0]};
+    twiddled = {acting[0]};
   } else {
-    vector<int32_t> twiddled(acting.begin(), acting.end());
+    twiddled = vector<int32_t>(acting.begin(), acting.end());
     twiddled.push_back(-1);
-    return twiddled;
   }
+  
+  // Optimized EC does not cope with pg temp with a mismatched size.
+  // Only resize for EC pools with optimizations enabled.
+  const pg_pool_t *pool = osdmap->get_pg_pool(pgid.pool());
+  if (pool && pool->is_erasure() && pool->allows_ecoptimizations()) {
+    unsigned pool_size = pool->get_size();
+    if (twiddled.size() < pool_size) {
+      twiddled.resize(pool_size, CRUSH_ITEM_NONE);
+    }
+  }
+  
+  return twiddled;
 }
 
 void OSD::resume_creating_pg()
@@ -5555,7 +5578,7 @@ void OSD::resume_creating_pg()
       dout(20) << __func__ << " pg " << pg->first << dendl;
       vector<int> acting;
       get_osdmap()->pg_to_up_acting_osds(pg->first.pgid, nullptr, nullptr, &acting, nullptr);
-      service.queue_want_pg_temp(pg->first.pgid, twiddle(acting), true);
+      service.queue_want_pg_temp(pg->first.pgid, twiddle(acting, get_osdmap(), pg->first.pgid), true);
       pg = pending_creates_from_osd.erase(pg);
       do_sub_pg_creates = true;
       spare_pgs--;
@@ -6455,6 +6478,12 @@ void OSD::tick_without_osd_lock()
   }
 
   if (is_active()) {
+    constexpr uint_fast16_t snap_trim_scan_interval = 5;
+    if (++trim_queue_length_countdown >= snap_trim_scan_interval) {
+      trim_queue_length_countdown = 0;
+      service.snap_trim_queue_total =
+	service.calc_snap_trim_queue_total();
+    }
     service.get_scrub_services().initiate_scrub(service.is_recovery_active());
     service.promote_throttle_recalibrate();
     resume_creating_pg();
@@ -7876,6 +7905,22 @@ std::optional<PGLockWrapper> OSDService::get_locked_pg(spg_t pgid)
 }
 
 
+uint64_t OSDService::calc_snap_trim_queue_total()
+{
+  std::vector<spg_t> pgids;
+  osd->_get_pgids(&pgids);
+  uint64_t total = 0;
+  for (auto& pgid : pgids) {
+    if (auto locked_pg = get_locked_pg(pgid)) {
+      const auto& pg = locked_pg->pg();
+      if (pg->is_primary()) {
+	total += pg->get_snap_trimq_size();
+      }
+    }
+  }
+  return total;
+}
+
 MPGStats* OSD::collect_pg_stats()
 {
   dout(15) << __func__ << dendl;
@@ -8001,7 +8046,8 @@ vector<DaemonHealthMetric> OSD::get_health_metrics()
                                  [](std::pair<uint64_t, int> p1, std::pair<uint64_t, int> p2) {
                                    return p1.second < p2.second;
                                  });
-          if (osdmap->get_pools().find(slow_pool_it->first) != osdmap->get_pools().end()) {
+          if (slow_pool_it != slow_op_pools.end() &&
+              osdmap->get_pools().find(slow_pool_it->first) != osdmap->get_pools().end()) {
             string pool_name = osdmap->get_pool_name(slow_pool_it->first);
             ss << "] most affected pool [ '"
                << pool_name
@@ -11738,7 +11784,9 @@ void OSDBenchTest::perform_write_test()
     std::string nm;
     unsigned offset = 0;
     bufferptr bp(bsize);
-    memset(bp.c_str(), random_gen() & 0xff, bp.length());
+    std::generate_n(bp.c_str(), bp.length(), [&random_gen]() {
+        return static_cast<char>(random_gen() & 0xff);
+    });
     bl.push_back(std::move(bp));
     bl.rebuild_page_aligned();
     if (onum && osize) {

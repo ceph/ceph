@@ -70,9 +70,9 @@ test_rbd_journal()
     save_commit_position ${journal}
     rbd bench --io-type write ${image} --io-size 4096 --io-threads 1 \
 	--io-total $((4096 * count)) --io-pattern seq
-    rbd journal status --image ${image} | fgrep "tid=$((count - 1))"
+    rbd journal status --image ${image} | grep -F "tid=$((count - 1))"
     restore_commit_position ${journal}
-    rbd journal status --image ${image} | fgrep "positions=[]"
+    rbd journal status --image ${image} | grep -F "positions=[]"
     local count1=$(rbd journal inspect --verbose ${journal} |
 			  grep -c 'event_type.*AioWrite')
     test "${count}" -eq "${count1}"

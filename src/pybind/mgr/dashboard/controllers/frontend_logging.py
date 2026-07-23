@@ -2,7 +2,7 @@ import logging
 
 from . import BaseController, Endpoint, UIRouter
 
-logger = logging.getLogger('frontend.error')
+logger = logging.getLogger(__name__)
 
 
 @UIRouter('/logging', secure=False)

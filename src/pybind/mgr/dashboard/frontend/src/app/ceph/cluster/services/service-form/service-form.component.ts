@@ -8,7 +8,7 @@ import { NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
 import { ListItem } from 'carbon-components-angular';
 import _ from 'lodash';
 import { forkJoin, Observable, Subject, Subscription } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { distinctUntilChanged, filter, map } from 'rxjs/operators';
 import { Pool } from '~/app/ceph/pool/pool';
 import { CreateRgwServiceEntitiesComponent } from '~/app/ceph/rgw/create-rgw-service-entities/create-rgw-service-entities.component';
 import { RgwRealm, RgwZonegroup, RgwZone, RgwEntities } from '~/app/ceph/rgw/models/rgw-multisite';
@@ -18,6 +18,7 @@ import { HostService } from '~/app/shared/api/host.service';
 import { PoolService } from '~/app/shared/api/pool.service';
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
+import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
@@ -37,9 +38,9 @@ import { Host } from '~/app/shared/models/host.interface';
 import {
   CephServiceCertificate,
   CephServiceSpec,
+  CertificateType,
   QatOptions,
-  QatSepcs,
-  CERTIFICATE_STATUS_ICON_MAP
+  QatSepcs
 } from '~/app/shared/models/service.interface';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -54,12 +55,14 @@ import { TimerService } from '~/app/shared/services/timer.service';
 export class ServiceFormComponent extends CdForm implements OnInit {
   public sub = new Subscription();
 
+  readonly CertificateType = CertificateType;
   readonly MDS_SVC_ID_PATTERN = /^[a-zA-Z_.-][a-zA-Z0-9_.-]*$/;
   readonly SNMP_DESTINATION_PATTERN = /^[^\:]+:[0-9]/;
   readonly SNMP_ENGINE_ID_PATTERN = /^[0-9A-Fa-f]{10,64}/g;
   readonly INGRESS_SUPPORTED_SERVICE_TYPES = ['rgw', 'nfs'];
   readonly SMB_CONFIG_URI_PATTERN = /^(http:|https:|rados:|rados:mon-config-key:)/;
-  readonly OAUTH2_ISSUER_URL_PATTERN = /^(https?:\/\/)?([a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)+)(:[0-9]{1,5})?(\/.*)?$/;
+  readonly OAUTH2_ISSUER_URL_PATTERN =
+    /^(https?:\/\/)?([a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)+)(:[0-9]{1,5})?(\/.*)?$/;
   readonly SSL_CIPHERS_PATTERN = /^[a-zA-Z0-9\-:]+$/;
   readonly DEFAULT_SSL_PROTOCOL_ITEM = [{ content: 'TLSv1.3', selected: true }];
   @ViewChild(NgbTypeahead, { static: false })
@@ -80,7 +83,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   resource: string;
   serviceTypes: string[] = [];
   serviceIds: string[] = [];
-  selectedLabels: string[] = [];
   selectedHosts: string[] = [];
   labels: string[];
   labelClick = new Subject<string>();
@@ -97,6 +99,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   realmList: RgwRealm[] = [];
   zonegroupList: RgwZonegroup[] = [];
   zoneList: RgwZone[] = [];
+  filteredZonegroupList: RgwZonegroup[] = [];
+  filteredZoneList: RgwZone[] = [];
   defaultZonegroup: RgwZonegroup;
   showRealmCreationForm = false;
   defaultsInfo: { defaultRealmName: string; defaultZonegroupName: string; defaultZoneName: string };
@@ -116,6 +120,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   }));
   showMgmtGatewayMessage: boolean = false;
   showCertSourceChangeWarning: boolean = false;
+  showRgwRealmChangedInfo: boolean = false;
+  rgwModuleEnabled = false;
   qatCompressionOptions = [
     { value: QatOptions.hw, label: 'Hardware' },
     { value: QatOptions.sw, label: 'Software' },
@@ -125,7 +131,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   hostsAndLabels$: Observable<{ hosts: { content: string }[]; labels: { content: string }[] }>;
   currentCertificate: CephServiceCertificate = null;
   currentSpecCertificateSource: string = null;
-  statusIconMap = CERTIFICATE_STATUS_ICON_MAP;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -142,6 +147,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     public rgwZonegroupService: RgwZonegroupService,
     public rgwZoneService: RgwZoneService,
     public rgwMultisiteService: RgwMultisiteService,
+    private mgrModuleService: MgrModuleService,
     private route: ActivatedRoute,
     public modalService: ModalCdsService,
     private location: Location
@@ -218,9 +224,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         [
           CdValidators.requiredIf({
             service_type: 'iscsi'
-          }),
-          CdValidators.requiredIf({
-            service_type: 'nvmeof'
           })
         ]
       ],
@@ -237,7 +240,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           CdValidators.composeIf(
             {
               service_type: 'nvmeof',
-              enable_mtls: true
+              enable_mtls: true,
+              certificateType: CertificateType.external
             },
             [Validators.required]
           )
@@ -249,7 +253,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           CdValidators.composeIf(
             {
               service_type: 'nvmeof',
-              enable_mtls: true
+              enable_mtls: true,
+              certificateType: CertificateType.external
             },
             [Validators.required]
           )
@@ -261,7 +266,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           CdValidators.composeIf(
             {
               service_type: 'nvmeof',
-              enable_mtls: true
+              enable_mtls: true,
+              certificateType: CertificateType.external
             },
             [Validators.required]
           )
@@ -273,7 +279,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           CdValidators.composeIf(
             {
               service_type: 'nvmeof',
-              enable_mtls: true
+              enable_mtls: true,
+              certificateType: CertificateType.external
             },
             [Validators.required]
           )
@@ -285,7 +292,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           CdValidators.composeIf(
             {
               service_type: 'nvmeof',
-              enable_mtls: true
+              enable_mtls: true,
+              certificateType: CertificateType.external
             },
             [Validators.required]
           )
@@ -423,7 +431,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               service_type: 'rgw',
               unmanaged: false,
               ssl: true,
-              certificateType: 'external'
+              certificateType: CertificateType.external
             },
             [Validators.required, CdValidators.pemCert()]
           ),
@@ -432,7 +440,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               service_type: 'iscsi',
               unmanaged: false,
               ssl: true,
-              certificateType: 'external'
+              certificateType: CertificateType.external
             },
             [Validators.required, CdValidators.sslCert()]
           ),
@@ -441,7 +449,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               service_type: 'ingress',
               unmanaged: false,
               ssl: true,
-              certificateType: 'external'
+              certificateType: CertificateType.external
             },
             [Validators.required, CdValidators.pemCert()]
           ),
@@ -450,7 +458,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               service_type: 'oauth2-proxy',
               unmanaged: false,
               ssl: true,
-              certificateType: 'external'
+              certificateType: CertificateType.external
             },
             [Validators.required, CdValidators.sslCert()]
           ),
@@ -459,7 +467,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               service_type: 'mgmt-gateway',
               unmanaged: false,
               ssl: true,
-              certificateType: 'external'
+              certificateType: CertificateType.external
             },
             [Validators.required, CdValidators.sslCert()]
           ),
@@ -468,7 +476,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               service_type: 'nfs',
               unmanaged: false,
               ssl: true,
-              certificateType: 'external'
+              certificateType: CertificateType.external
             },
             [Validators.required, CdValidators.pemCert()]
           )
@@ -482,7 +490,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               service_type: 'iscsi',
               unmanaged: false,
               ssl: true,
-              certificateType: 'external'
+              certificateType: CertificateType.external
             },
             [Validators.required, CdValidators.sslPrivKey()]
           ),
@@ -491,7 +499,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               service_type: 'oauth2-proxy',
               unmanaged: false,
               ssl: true,
-              certificateType: 'external'
+              certificateType: CertificateType.external
             },
             [Validators.required, CdValidators.sslPrivKey()]
           ),
@@ -500,7 +508,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               service_type: 'mgmt-gateway',
               unmanaged: false,
               ssl: true,
-              certificateType: 'external'
+              certificateType: CertificateType.external
             },
             [Validators.required, CdValidators.sslPrivKey()]
           ),
@@ -509,14 +517,17 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               service_type: 'nfs',
               unmanaged: false,
               ssl: true,
-              certificateType: 'external'
+              certificateType: CertificateType.external
             },
             [Validators.required, CdValidators.sslPrivKey()]
           )
         ]
       ],
-      certificateType: ['internal'],
+      certificateType: [CertificateType.internal],
       custom_sans: [null],
+      virtual_host_enabled: [false],
+      zonegroup_hostnames: [null],
+      wildcard_enabled: [true],
       ssl_ca_cert: [
         '',
         [
@@ -525,7 +536,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               service_type: 'nfs',
               unmanaged: false,
               ssl: true,
-              certificateType: 'external'
+              certificateType: CertificateType.external
             },
             [Validators.required, CdValidators.pemCert()]
           )
@@ -657,7 +668,10 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       ],
       https_address: [null, [CdValidators.oauthAddressTest()]],
       redirect_url: [null],
-      allowlist_domains: [null]
+      scope: [null],
+      email_domains: [null],
+      allowlist_domains: [null],
+      ssl_insecure_skip_verify: [false]
     });
   }
 
@@ -684,6 +698,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     this.open = true;
     this.action = this.actionLabels.CREATE;
     this.resolveRoute();
+    this.getRgwModuleStatus();
+    this.mgrModuleService.updateCompleted$.subscribe(() => this.getRgwModuleStatus());
 
     this.cephServiceService
       .list(new HttpParams({ fromObject: { limit: -1, offset: 0 } }))
@@ -722,7 +738,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
 
     if (this.editing) {
       this.action = this.actionLabels.EDIT;
-      this.disableForEditing(this.serviceType);
       this.cephServiceService
         .list(new HttpParams({ fromObject: { limit: -1, offset: 0 } }), this.serviceName)
         .observable.subscribe((response: CephServiceSpec[]) => {
@@ -730,6 +745,15 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           formKeys.forEach((keys) => {
             this.serviceForm.get(keys).setValue(response[0][keys]);
           });
+          // change is made because on editing mds service, a new service was created with mds.mds.service
+          // For non-prefixed services (mgr, mon, etc.), if service_id is empty,
+          // set it to the full service name
+          if (!response[0]['service_id'] && !this.isPrefixedNamedService) {
+            this.serviceForm.get('service_id').setValue(this.serviceName);
+          }
+
+          // Disable fields AFTER setting values to ensure the view updates properly
+          this.disableForEditing(this.serviceType);
           if (response[0].certificate) {
             this.currentCertificate = response[0].certificate;
           }
@@ -744,8 +768,17 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               : (placementValue = 'hosts');
             this.serviceForm.get('placement').setValue(placementValue);
             this.serviceForm.get('count').setValue(response[0]['placement']['count']);
-            if (response[0]?.placement[placementValue]) {
-              this.serviceForm.get(placementValue).setValue(response[0]?.placement[placementValue]);
+            if (placementValue === 'hosts' && response[0]?.placement?.hosts) {
+              this.serviceForm.get('hosts').setValue(
+                response[0].placement.hosts.map((host: string) => ({
+                  content: host,
+                  selected: true
+                }))
+              );
+            } else if (placementValue === 'label' && response[0]?.placement?.label) {
+              this.serviceForm
+                .get('label')
+                .setValue({ content: response[0].placement.label, selected: true });
             }
           }
           switch (this.serviceType) {
@@ -761,14 +794,21 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               }
               break;
             case 'nvmeof':
-              this.serviceForm.get('pool').setValue(response[0].spec.pool);
               this.serviceForm.get('group').setValue(response[0].spec.group);
               this.serviceForm.get('enable_mtls').setValue(response[0].spec?.enable_auth);
-              this.serviceForm.get('root_ca_cert').setValue(response[0].spec?.root_ca_cert);
-              this.serviceForm.get('client_cert').setValue(response[0].spec?.client_cert);
-              this.serviceForm.get('client_key').setValue(response[0].spec?.client_key);
-              this.serviceForm.get('server_cert').setValue(response[0].spec?.server_cert);
-              this.serviceForm.get('server_key').setValue(response[0].spec?.server_key);
+              if (response[0].spec?.enable_auth) {
+                if (response[0].spec?.certificate_source !== 'cephadm-signed') {
+                  this.serviceForm.get('certificateType').setValue(CertificateType.external);
+                }
+                if (response[0].spec?.['custom_sans']) {
+                  this.serviceForm.get('custom_sans').setValue(response[0].spec['custom_sans']);
+                }
+                this.serviceForm.get('root_ca_cert').setValue(response[0].spec?.root_ca_cert);
+                this.serviceForm.get('client_cert').setValue(response[0].spec?.client_cert);
+                this.serviceForm.get('client_key').setValue(response[0].spec?.client_key);
+                this.serviceForm.get('server_cert').setValue(response[0].spec?.server_cert);
+                this.serviceForm.get('server_key').setValue(response[0].spec?.server_key);
+              }
               break;
             case 'rgw':
               this.serviceForm
@@ -781,10 +821,21 @@ export class ServiceFormComponent extends CdForm implements OnInit {
                 response[0].spec?.qat
               );
               this.serviceForm.get('ssl').setValue(response[0].spec?.ssl);
+              if (response[0].spec?.zonegroup_hostnames?.length) {
+                this.serviceForm
+                  .get('zonegroup_hostnames')
+                  .setValue(response[0].spec.zonegroup_hostnames);
+                if (this.rgwModuleEnabled) {
+                  this.serviceForm.get('virtual_host_enabled').setValue(true);
+                }
+              }
+              this.serviceForm
+                .get('wildcard_enabled')
+                .setValue(response[0].spec?.wildcard_enabled ?? true);
               if (response[0].spec?.ssl) {
                 // Special case for rgw: if certificate_source is not cephadm-signed, set certificateType to external
                 if (response[0].spec?.certificate_source != 'cephadm-signed') {
-                  this.serviceForm.get('certificateType').setValue('external');
+                  this.serviceForm.get('certificateType').setValue(CertificateType.external);
                 }
                 let certValue = response[0].spec?.rgw_frontend_ssl_certificate || '';
                 if (response[0].spec?.ssl_cert) {
@@ -794,6 +845,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
                   }
                 }
                 this.serviceForm.get('ssl_cert').setValue(certValue);
+                if (response[0].spec?.custom_sans) {
+                  this.serviceForm.get('custom_sans').setValue(response[0].spec.custom_sans);
+                }
               }
               break;
             case 'ingress':
@@ -819,7 +873,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               this.port = response[0].spec?.port;
               this.serviceForm.get('ssl').setValue(true);
               if (response[0].spec?.certificate_source !== 'cephadm-signed') {
-                this.serviceForm.get('certificateType').setValue('external');
+                this.serviceForm.get('certificateType').setValue(CertificateType.external);
               }
               if (response[0].spec?.ssl_protocols) {
                 let selectedValues: Array<ListItem> = [];
@@ -915,7 +969,10 @@ export class ServiceFormComponent extends CdForm implements OnInit {
                 'client_secret',
                 'oidc_issuer_url',
                 'redirect_url',
-                'allowlist_domains'
+                'scope',
+                'email_domains',
+                'allowlist_domains',
+                'ssl_insecure_skip_verify'
               ];
               oauth2SpecKeys.forEach((key) => {
                 this.serviceForm.get(key).setValue(response[0].spec[key]);
@@ -924,10 +981,17 @@ export class ServiceFormComponent extends CdForm implements OnInit {
                 this.serviceForm.get('ssl_cert').setValue(response[0].spec?.ssl_cert);
                 this.serviceForm.get('ssl_key').setValue(response[0].spec?.ssl_key);
               }
+              break;
+            default:
+              // No special handling needed for other service types (mds, nfs, etc.)
+              // service_id is already correctly set from API response at line 749
+              break;
           }
         });
     }
     this.detectChanges();
+    this.updateRgwPlacementControlsState();
+    this.updateGrafanaPasswordControlState();
   }
 
   detectChanges(): void {
@@ -1064,11 +1128,17 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           this.defaultZoneId
         );
         if (!this.editing) {
-          this.serviceForm.get('realm_name').setValue(this.defaultsInfo['defaultRealmName']);
-          this.serviceForm
-            .get('zonegroup_name')
-            .setValue(this.defaultsInfo['defaultZonegroupName']);
-          this.serviceForm.get('zone_name').setValue(this.defaultsInfo['defaultZoneName']);
+          this.filteredZonegroupList = [...this.zonegroupList];
+          this.filteredZoneList = [...this.zoneList];
+          setTimeout(() => {
+            this.rgwInitializing = true;
+            this.serviceForm.get('realm_name').setValue(this.defaultsInfo['defaultRealmName']);
+            this.serviceForm
+              .get('zonegroup_name')
+              .setValue(this.defaultsInfo['defaultZonegroupName']);
+            this.serviceForm.get('zone_name').setValue(this.defaultsInfo['defaultZoneName']);
+            this.rgwInitializing = false;
+          });
         } else {
           if (realm_name && !this.realmNames.includes(realm_name)) {
             const realm = new RgwRealm();
@@ -1089,9 +1159,28 @@ export class ServiceFormComponent extends CdForm implements OnInit {
             zonegroup_name = 'default';
             zone_name = 'default';
           }
-          this.serviceForm.get('realm_name').setValue(realm_name);
-          this.serviceForm.get('zonegroup_name').setValue(zonegroup_name);
-          this.serviceForm.get('zone_name').setValue(zone_name);
+          this.originalRgwRealm = realm_name ?? null;
+          this.originalRgwZonegroup = zonegroup_name ?? null;
+          this.originalRgwZone = zone_name ?? null;
+          this.filteredZonegroupList = realm_name
+            ? this.zonegroupList.filter((zg) => {
+                const realm = this.realmList.find((r) => r.name === realm_name);
+                return realm ? zg.realm_id === realm.id : true;
+              })
+            : [...this.zonegroupList];
+          const selectedZonegroup = this.zonegroupList.find((zg) => zg.name === zonegroup_name);
+          this.filteredZoneList = selectedZonegroup?.zones?.length
+            ? this.zoneList.filter((z) =>
+                selectedZonegroup.zones.some((zgz) => zgz.name === z.name)
+              )
+            : [...this.zoneList];
+          setTimeout(() => {
+            this.rgwInitializing = true;
+            this.serviceForm.get('realm_name').setValue(realm_name);
+            this.serviceForm.get('zonegroup_name').setValue(zonegroup_name);
+            this.serviceForm.get('zone_name').setValue(zone_name);
+            this.rgwInitializing = false;
+          });
         }
         if (qat) {
           this.serviceForm.get(`qat.compression`)?.setValue(qat['compression']);
@@ -1101,6 +1190,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         } else {
           this.showRealmCreationForm = false;
         }
+        this.updateRgwControlStates();
+        this.subscribeToRgwSelectionChanges();
       },
       (_error) => {
         const defaultZone = new RgwZone();
@@ -1109,29 +1200,99 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         defaultZonegroup.name = 'default';
         this.zoneList.push(defaultZone);
         this.zonegroupList.push(defaultZonegroup);
+        this.updateRgwControlStates();
       }
     );
   }
 
+  private rgwSelectionSubscribed = false;
+  private rgwInitializing = false;
+  private originalRgwRealm: string | null = null;
+  private originalRgwZonegroup: string | null = null;
+  private originalRgwZone: string | null = null;
+
+  private subscribeToRgwSelectionChanges(): void {
+    if (this.rgwSelectionSubscribed) {
+      return;
+    }
+    this.rgwSelectionSubscribed = true;
+
+    this.serviceForm
+      .get('realm_name')
+      .valueChanges.pipe(distinctUntilChanged())
+      .subscribe((realmName: string) => {
+        const realm = this.realmList.find((r) => r.name === realmName);
+        if (realm) {
+          this.filteredZonegroupList = this.zonegroupList.filter((zg) => zg.realm_id === realm.id);
+        } else {
+          this.filteredZonegroupList = [...this.zonegroupList];
+        }
+        if (this.rgwInitializing) {
+          return;
+        }
+        this.filteredZoneList = [];
+        this.updateRgwControlStates();
+        const firstZonegroup = this.filteredZonegroupList[0]?.name ?? null;
+        setTimeout(() => {
+          this.serviceForm.get('zonegroup_name').setValue(firstZonegroup);
+          this.serviceForm.get('zone_name').setValue(null);
+        });
+      });
+
+    this.serviceForm
+      .get('zonegroup_name')
+      .valueChanges.pipe(
+        distinctUntilChanged(),
+        filter((v) => !!v)
+      )
+      .subscribe((zonegroupName: string) => {
+        const zonegroup = this.zonegroupList.find((zg) => zg.name === zonegroupName);
+        if (zonegroup?.zones?.length) {
+          this.filteredZoneList = this.zoneList.filter((z) =>
+            zonegroup.zones.some((zgz) => zgz.name === z.name)
+          );
+        } else {
+          this.filteredZoneList = [...this.zoneList];
+        }
+        this.updateRgwControlStates();
+        // During initial population the caller's setTimeout sets zone_name explicitly.
+        // For user-driven changes, auto-select the first available zone.
+        if (!this.rgwInitializing) {
+          const firstZone = this.filteredZoneList[0]?.name ?? null;
+          setTimeout(() => {
+            this.serviceForm.get('zone_name').setValue(firstZone);
+          });
+        }
+      });
+
+    // Re-evaluate the banner whenever zone_name settles on a value.
+    this.serviceForm
+      .get('zone_name')
+      .valueChanges.pipe(distinctUntilChanged())
+      .subscribe(() => {
+        if (!this.rgwInitializing) {
+          this.updateRgwRealmChangedInfo();
+        }
+      });
+  }
+
+  private updateRgwRealmChangedInfo(): void {
+    const realm = this.serviceForm.get('realm_name').value;
+    const zonegroup = this.serviceForm.get('zonegroup_name').value;
+    const zone = this.serviceForm.get('zone_name').value;
+    this.showRgwRealmChangedInfo =
+      realm !== this.originalRgwRealm ||
+      zonegroup !== this.originalRgwZonegroup ||
+      zone !== this.originalRgwZone;
+  }
+
   setNvmeServiceId() {
-    const pool = this.serviceForm.get('pool').value;
     const group = this.serviceForm.get('group').value;
-    if (pool && group) {
-      this.serviceForm.get('service_id').setValue(`${pool}.${group}`);
-    } else if (pool) {
-      this.serviceForm.get('service_id').setValue(pool);
-    } else if (group) {
+    if (group) {
       this.serviceForm.get('service_id').setValue(group);
     } else {
       this.serviceForm.get('service_id').setValue(null);
     }
-  }
-
-  setNvmeDefaultPool() {
-    const defaultPool =
-      this.rbdPools?.find((p: Pool) => p.pool_name === 'rbd')?.pool_name ||
-      this.rbdPools?.[0].pool_name;
-    this.serviceForm.get('pool').setValue(defaultPool);
   }
 
   requiresServiceId(serviceType: string) {
@@ -1141,7 +1302,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   setServiceId(serviceId: string): void {
     const requiresServiceId: boolean = this.requiresServiceId(serviceId);
     if (requiresServiceId && serviceId === 'nvmeof') {
-      this.setNvmeDefaultPool();
       this.setNvmeServiceId();
     } else if (requiresServiceId) {
       this.serviceForm.get('service_id').setValue(null);
@@ -1152,12 +1312,17 @@ export class ServiceFormComponent extends CdForm implements OnInit {
 
   onServiceTypeChange(selectedServiceType: string) {
     this.setServiceId(selectedServiceType);
+    this.updateGrafanaPasswordControlState(selectedServiceType);
 
     this.serviceIds = this.serviceList
       ?.filter((service) => service['service_type'] === selectedServiceType)
       .map((service) => service['service_id']);
 
     this.getDefaultPlacementCount(selectedServiceType);
+
+    if (selectedServiceType === 'nvmeof' && this.rbdPools?.length > 0) {
+      this.serviceForm.get('pool').setValue(this.rbdPools[0].pool_name);
+    }
 
     if (selectedServiceType === 'rgw') {
       this.setRgwFields();
@@ -1171,6 +1336,35 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       this.serviceForm.get('count').disable();
     } else {
       this.serviceForm.get('count').enable();
+    }
+  }
+
+  private updateRgwPlacementControlsState(): void {
+    this.toggleFormControlState('realm_name', this.realmList.length === 0);
+    this.toggleFormControlState('zonegroup_name', this.zonegroupList.length === 0);
+    this.toggleFormControlState('zone_name', this.zoneList.length === 0);
+  }
+
+  private updateGrafanaPasswordControlState(
+    serviceType = this.serviceForm?.get('service_type')?.value
+  ): void {
+    this.toggleFormControlState(
+      'grafana_admin_password',
+      this.editing && serviceType === 'grafana'
+    );
+  }
+
+  private toggleFormControlState(controlName: string, disabled: boolean): void {
+    const control = this.serviceForm.get(controlName);
+    if (!control) {
+      return;
+    }
+    if (disabled && control.enabled) {
+      control.disable({ emitEvent: false });
+      return;
+    }
+    if (!disabled && control.disabled) {
+      control.enable({ emitEvent: false });
     }
   }
 
@@ -1190,9 +1384,35 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         this.serviceForm.get('backend_service').disable();
         break;
       case 'nvmeof':
-        this.serviceForm.get('pool').disable();
         this.serviceForm.get('group').disable();
         break;
+      case 'grafana':
+        this.serviceForm.get('grafana_admin_password').disable();
+        break;
+    }
+  }
+
+  private updateRgwControlStates(): void {
+    const realmControl = this.serviceForm.get('realm_name');
+    const zonegroupControl = this.serviceForm.get('zonegroup_name');
+    const zoneControl = this.serviceForm.get('zone_name');
+
+    if (this.realmList.length === 0) {
+      realmControl.disable({ emitEvent: false });
+    } else {
+      realmControl.enable({ emitEvent: false });
+    }
+
+    if (this.filteredZonegroupList.length === 0) {
+      zonegroupControl.disable({ emitEvent: false });
+    } else {
+      zonegroupControl.enable({ emitEvent: false });
+    }
+
+    if (this.filteredZoneList.length === 0) {
+      zoneControl.disable({ emitEvent: false });
+    } else {
+      zoneControl.enable({ emitEvent: false });
     }
   }
 
@@ -1215,13 +1435,35 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     }
   }
 
-  onCertificateTypeChange(type: string) {
+  onCertificateTypeChange(type: CertificateType) {
     this.serviceForm.get('certificateType').setValue(type);
     if (this.editing && this.currentCertificate?.has_certificate) {
       const originalSource =
-        this.currentSpecCertificateSource === 'cephadm-signed' ? 'internal' : 'external';
+        this.currentSpecCertificateSource === 'cephadm-signed'
+          ? CertificateType.internal
+          : CertificateType.external;
       this.showCertSourceChangeWarning = type !== originalSource;
     }
+  }
+
+  private getRgwModuleStatus(): void {
+    this.rgwMultisiteService.getRgwModuleStatus().subscribe((enabled: boolean) => {
+      this.rgwModuleEnabled = enabled;
+      const virtualHostControl = this.serviceForm.get('virtual_host_enabled');
+      if (enabled) {
+        virtualHostControl.enable({ emitEvent: false });
+        if (this.serviceForm.get('zonegroup_hostnames').value?.length) {
+          virtualHostControl.setValue(true, { emitEvent: false });
+        }
+      } else {
+        virtualHostControl.setValue(false, { emitEvent: false });
+        virtualHostControl.disable({ emitEvent: false });
+      }
+    });
+  }
+
+  enableRgwModule(): void {
+    this.mgrModuleService.updateModuleState('rgw', false, null, '', $localize`Enabled RGW Module`);
   }
 
   prePopulateId() {
@@ -1281,15 +1523,26 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         break;
 
       case 'nvmeof':
-        serviceSpec['pool'] = values['pool'];
         serviceSpec['group'] = values['group'];
         serviceSpec['enable_auth'] = values['enable_mtls'];
         if (values['enable_mtls']) {
-          serviceSpec['root_ca_cert'] = values['root_ca_cert'];
-          serviceSpec['client_cert'] = values['client_cert'];
-          serviceSpec['client_key'] = values['client_key'];
-          serviceSpec['server_cert'] = values['server_cert'];
-          serviceSpec['server_key'] = values['server_key'];
+          serviceSpec['ssl'] = true;
+          serviceSpec['certificate_source'] =
+            values['certificateType'] === CertificateType.internal ? 'cephadm-signed' : 'inline';
+          if (values['certificateType'] === CertificateType.internal) {
+            if (values['custom_sans']?.length > 0) {
+              serviceSpec['custom_sans'] = values['custom_sans'];
+            }
+          }
+          if (values['certificateType'] === CertificateType.external) {
+            serviceSpec['pool'] = values['pool'];
+            serviceSpec['service_id'] = `${values['pool']}.${values['group']}`;
+            serviceSpec['root_ca_cert'] = values['root_ca_cert'];
+            serviceSpec['client_cert'] = values['client_cert'];
+            serviceSpec['client_key'] = values['client_key'];
+            serviceSpec['server_cert'] = values['server_cert'];
+            serviceSpec['server_key'] = values['server_key'];
+          }
         }
         break;
       case 'iscsi':
@@ -1355,9 +1608,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           }
           break;
         case 'label':
-          serviceSpec['placement']['label'] = values['label']
-            .filter((label: { content: string; selected: boolean }) => label.selected)
-            .map((label: { content: string }) => label.content);
+          if (!_.isEmpty(values['label'])) {
+            serviceSpec['placement']['label'] = values['label']?.content;
+          }
           break;
       }
       if (_.isNumber(values['count']) && values['count'] > 0) {
@@ -1369,11 +1622,21 @@ export class ServiceFormComponent extends CdForm implements OnInit {
             serviceSpec['rgw_frontend_port'] = values['rgw_frontend_port'];
           }
           serviceSpec['ssl'] = values['ssl'];
+          if (values['virtual_host_enabled'] && values['zonegroup_hostnames']?.length > 0) {
+            serviceSpec['zonegroup_hostnames'] = values['zonegroup_hostnames'];
+          }
           if (values['ssl']) {
             this.applySslCertificateConfig(serviceSpec, values, {
               sslCertField: 'rgw_frontend_ssl_certificate',
               includeSslKey: false
             });
+            if (
+              values['certificateType'] === CertificateType.internal &&
+              values['virtual_host_enabled'] &&
+              values['zonegroup_hostnames']?.length > 0
+            ) {
+              serviceSpec['wildcard_enabled'] = values['wildcard_enabled'];
+            }
           }
           break;
         case 'iscsi':
@@ -1433,6 +1696,12 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           serviceSpec['oidc_issuer_url'] = values['oidc_issuer_url']?.trim();
           serviceSpec['https_address'] = values['https_address']?.trim();
           serviceSpec['redirect_url'] = values['redirect_url']?.trim();
+          serviceSpec['scope'] = values['scope']?.join(' ');
+          if (values['email_domains']) {
+            serviceSpec['email_domains'] = values['email_domains']?.map((emailDomain: string) => {
+              return emailDomain.trim();
+            });
+          }
           if (values['allowlist_domains']) {
             serviceSpec['allowlist_domains'] = values['allowlist_domains']?.map(
               (allowlistDomain: string) => {
@@ -1440,6 +1709,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               }
             );
           }
+          serviceSpec['ssl_insecure_skip_verify'] = values['ssl_insecure_skip_verify'];
           if (values['ssl']) {
             this.applySslCertificateConfig(serviceSpec, values);
           }
@@ -1499,9 +1769,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     });
   }
 
-  multiSelector(event: any, field: 'label' | 'hosts') {
-    if (field === 'hosts') this.selectedHosts = event.map((host: any) => host.content);
-    else this.selectedLabels = event.map((label: any) => label.content);
+  multiSelector(event: any) {
+    this.selectedHosts = event.map((host: any) => host.content);
   }
 
   get isPrefixedNamedService(): boolean {
@@ -1515,23 +1784,25 @@ export class ServiceFormComponent extends CdForm implements OnInit {
 
   get showExternalSslCert(): boolean {
     const serviceType = this.serviceForm.controls.service_type?.value;
-    const isExternalCert = this.serviceForm.controls.certificateType?.value === 'external';
+    const isExternalCert =
+      this.serviceForm.controls.certificateType?.value === CertificateType.external;
     const isSslEnabled = this.serviceForm.controls.ssl?.value;
 
     if (serviceType === 'mgmt-gateway') {
       return isExternalCert;
     }
 
-    const sslCertServices = ['rgw', 'ingress', 'iscsi', 'grafana', 'oauth2-proxy', 'nvmeof', 'nfs'];
+    const sslCertServices = ['rgw', 'ingress', 'iscsi', 'grafana', 'oauth2-proxy', 'nfs'];
     return isSslEnabled && isExternalCert && sslCertServices.includes(serviceType);
   }
 
   get showExternalSslKey(): boolean {
     const serviceType = this.serviceForm.controls.service_type?.value;
-    const isExternalCert = this.serviceForm.controls.certificateType?.value === 'external';
+    const isExternalCert =
+      this.serviceForm.controls.certificateType?.value === CertificateType.external;
     const isSslEnabled = this.serviceForm.controls.ssl?.value;
 
-    const sslKeyServices = ['iscsi', 'grafana', 'oauth2-proxy', 'nvmeof', 'nfs', 'mgmt-gateway'];
+    const sslKeyServices = ['iscsi', 'grafana', 'oauth2-proxy', 'nfs', 'mgmt-gateway'];
     return isSslEnabled && isExternalCert && sslKeyServices.includes(serviceType);
   }
 
@@ -1562,13 +1833,16 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     } = options;
 
     serviceSpec['certificate_source'] =
-      values['certificateType'] === 'internal' ? 'cephadm-signed' : 'inline';
+      values['certificateType'] === CertificateType.internal ? 'cephadm-signed' : 'inline';
 
-    if (values['certificateType'] === 'internal' && values['custom_sans']?.length > 0) {
+    if (
+      values['certificateType'] === CertificateType.internal &&
+      values['custom_sans']?.length > 0
+    ) {
       serviceSpec['custom_sans'] = values['custom_sans'];
     }
 
-    if (values['certificateType'] === 'external') {
+    if (values['certificateType'] === CertificateType.external) {
       serviceSpec[sslCertField] = values['ssl_cert']?.trim();
       if (includeSslKey) {
         serviceSpec[sslKeyField] = values['ssl_key']?.trim();

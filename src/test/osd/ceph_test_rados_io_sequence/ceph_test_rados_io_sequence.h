@@ -1,10 +1,12 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/program_options.hpp>
 #include <optional>
+#include <random>
 #include <string>
 #include <utility>
 
 #include "ProgramOptionReader.h"
+#include "common/io_exerciser/DataGenerator.h"
 #include "common/io_exerciser/IoOp.h"
 #include "common/io_exerciser/IoSequence.h"
 #include "common/io_exerciser/Model.h"
@@ -14,6 +16,8 @@
 #include "global/global_init.h"
 #include "include/random.h"
 #include "librados/librados_asio.h"
+
+using GenerationType = ceph::io_exerciser::data_generation::GenerationType;
 
 /* Overview
  *
@@ -85,7 +89,7 @@ namespace io_sequence {
 namespace tester {
 // Choices for min and max object size
 inline static constexpr size_t object_size_array_size = 10;
-inline static constexpr std::array<std::pair<int, int>, object_size_array_size>
+inline constexpr std::array<std::pair<int, int>, object_size_array_size>
     object_size_choices = {{{1, 32},  // Default - best for boundary checking
                           {12, 14},
                           {28, 30},
@@ -104,13 +108,13 @@ using SelectObjectSize =
 
 // Choices for block size
 inline static constexpr int block_size_array_size = 5;
-inline static constexpr std::array<uint64_t, block_size_array_size> block_size_choices = {
+inline constexpr std::array<uint64_t, block_size_array_size> block_size_choices = {
     {2048,  // Default - test boundaries for EC 4K chunk size
      512, 3767, 4096, 32768}};
 
 // Choices for block size
 inline static constexpr int block_size_array_size_stable = 2;
-inline static constexpr std::array<uint64_t, block_size_array_size_stable> block_size_choices_stable = {
+inline constexpr std::array<uint64_t, block_size_array_size_stable> block_size_choices_stable = {
   {2048,  // Default - test boundaries for EC 4K chunk size
    32768}};
 
@@ -124,7 +128,7 @@ using SelectBlockSize =
 
 // Choices for number of threads
 inline static constexpr int thread_array_size = 4;
-inline static constexpr std::array<int, thread_array_size> thread_count_choices = {
+inline constexpr std::array<int, thread_array_size> thread_count_choices = {
     {1,  // Default
      2, 4, 8}};
 
@@ -144,11 +148,11 @@ class SelectSeqRange
 
 // Choices for plugin
 inline static constexpr int plugin_array_size = 5;
-inline static constexpr std::array<std::string_view, plugin_array_size>
+inline constexpr std::array<std::string_view, plugin_array_size>
     plugin_choices = {{"jerasure", "isa", "clay", "shec", "lrc"}};
 
 inline static constexpr int plugin_array_size_stable = 2;
-inline static constexpr std::array<std::string_view, plugin_array_size_stable>
+inline constexpr std::array<std::string_view, plugin_array_size_stable>
     plugin_choices_stable = {{"jerasure", "isa"}};
 
 using SelectErasurePlugin =
@@ -161,7 +165,7 @@ using SelectErasurePlugin =
 class SelectErasureKM
     : public ProgramOptionGeneratedSelector<std::pair<int, int>> {
  public:
-  SelectErasureKM(ceph::util::random_number_generator<int>& rng,
+  SelectErasureKM(std::mt19937_64& rng,
                   po::variables_map& vm,
                   std::string_view plugin,
                   const std::optional<std::string>& technique,
@@ -170,7 +174,7 @@ class SelectErasureKM
   const std::vector<std::pair<int, int>> generate_selections() override;
 
  private:
-  ceph::util::random_number_generator<int>& rng;
+  std::mt19937_64& rng;
 
   std::string_view plugin;
   std::optional<std::string> technique;
@@ -179,7 +183,7 @@ class SelectErasureKM
 namespace shec {
 class SelectErasureC : public ProgramOptionGeneratedSelector<uint64_t> {
  public:
-  SelectErasureC(ceph::util::random_number_generator<int>& rng,
+  SelectErasureC(std::mt19937_64& rng,
                  po::variables_map& vm,
                  std::string_view plugin,
                  const std::optional<std::pair<int, int>>& km,
@@ -188,7 +192,7 @@ class SelectErasureC : public ProgramOptionGeneratedSelector<uint64_t> {
   const std::vector<uint64_t> generate_selections() override;
 
  private:
-  ceph::util::random_number_generator<int>& rng;
+  std::mt19937_64& rng;
 
   std::string_view plugin;
   std::optional<std::pair<int, int>> km;
@@ -198,7 +202,7 @@ class SelectErasureC : public ProgramOptionGeneratedSelector<uint64_t> {
 namespace jerasure {
 class SelectErasureW : public ProgramOptionGeneratedSelector<uint64_t> {
  public:
-  SelectErasureW(ceph::util::random_number_generator<int>& rng,
+  SelectErasureW(std::mt19937_64& rng,
                  po::variables_map& vm,
                  std::string_view plugin,
                  const std::optional<std::string_view>& technique,
@@ -209,7 +213,7 @@ class SelectErasureW : public ProgramOptionGeneratedSelector<uint64_t> {
   const std::vector<uint64_t> generate_selections() override;
 
  private:
-  ceph::util::random_number_generator<int>& rng;
+  std::mt19937_64& rng;
 
   std::string_view plugin;
   std::optional<std::string_view> technique;
@@ -220,7 +224,7 @@ class SelectErasureW : public ProgramOptionGeneratedSelector<uint64_t> {
 class SelectErasurePacketSize
     : public ProgramOptionGeneratedSelector<uint64_t> {
  public:
-  SelectErasurePacketSize(ceph::util::random_number_generator<int>& rng,
+  SelectErasurePacketSize(std::mt19937_64& rng,
                           po::variables_map& vm,
                           std::string_view plugin,
                           const std::optional<std::string_view>& technique,
@@ -230,7 +234,7 @@ class SelectErasurePacketSize
   const std::vector<uint64_t> generate_selections() override;
 
  private:
-  ceph::util::random_number_generator<int>& rng;
+  std::mt19937_64& rng;
 
   std::string_view plugin;
   std::optional<std::string_view> technique;
@@ -291,7 +295,7 @@ using SelectLayers =
 
 class SelectMappingAndLayers {
  public:
-  SelectMappingAndLayers(ceph::util::random_number_generator<int>& rng,
+  SelectMappingAndLayers(std::mt19937_64& rng,
                          po::variables_map& vm,
                          bool first_use);
   const std::pair<std::string, std::string> select();
@@ -299,8 +303,8 @@ class SelectMappingAndLayers {
  private:
   uint64_t rng_seed;
 
-  ceph::util::random_number_generator<int> mapping_rng;
-  ceph::util::random_number_generator<int> layers_rng;
+  std::mt19937_64 mapping_rng;
+  std::mt19937_64 layers_rng;
 
   SelectMapping sma;
   SelectLayers sly;
@@ -310,7 +314,7 @@ class SelectMappingAndLayers {
 class SelectErasureTechnique
     : public ProgramOptionGeneratedSelector<std::string> {
  public:
-  SelectErasureTechnique(ceph::util::random_number_generator<int>& rng,
+  SelectErasureTechnique(std::mt19937_64& rng,
                          po::variables_map& vm,
                          std::string_view plugin,
                          bool first_use);
@@ -318,7 +322,7 @@ class SelectErasureTechnique
   const std::vector<std::string> generate_selections() override;
 
  private:
-  ceph::util::random_number_generator<int>& rng;
+  std::mt19937_64& rng;
 
   std::string_view plugin;
   bool stable;
@@ -326,14 +330,14 @@ class SelectErasureTechnique
 
 class SelectErasureChunkSize : public ProgramOptionGeneratedSelector<uint64_t> {
  public:
-  SelectErasureChunkSize(ceph::util::random_number_generator<int>& rng,
+  SelectErasureChunkSize(std::mt19937_64& rng,
                          po::variables_map& vm,
                          ErasureCodeInterfaceRef ec_impl,
                          bool first_use);
   const std::vector<uint64_t> generate_selections() override;
 
  private:
-  ceph::util::random_number_generator<int>& rng;
+  std::mt19937_64& rng;
 
   ErasureCodeInterfaceRef ec_impl;
 };
@@ -355,7 +359,7 @@ struct Profile {
 class SelectErasureProfile : public ProgramOptionReader<Profile> {
  public:
   SelectErasureProfile(boost::intrusive_ptr<CephContext> cct,
-                       ceph::util::random_number_generator<int>& rng,
+                       std::mt19937_64& rng,
                        po::variables_map& vm, librados::Rados& rados,
                        bool dry_run, bool first_use);
   const Profile select() override;
@@ -366,7 +370,7 @@ class SelectErasureProfile : public ProgramOptionReader<Profile> {
   boost::intrusive_ptr<CephContext> cct;
   librados::Rados& rados;
   bool dry_run;
-  ceph::util::random_number_generator<int>& rng;
+  std::mt19937_64& rng;
   po::variables_map& vm;
 
   bool first_use;
@@ -380,7 +384,7 @@ class SelectErasureProfile : public ProgramOptionReader<Profile> {
 class SelectErasurePool : public ProgramOptionReader<std::string> {
  public:
   SelectErasurePool(boost::intrusive_ptr<CephContext> cct,
-                    ceph::util::random_number_generator<int>& rng,
+                    std::mt19937_64& rng,
                     po::variables_map& vm,
                     librados::Rados& rados,
                     bool dry_run,
@@ -453,7 +457,7 @@ class TestObject {
              ceph::io_sequence::tester::SelectObjectSize& sos,
              ceph::io_sequence::tester::SelectNumThreads& snt,
              ceph::io_sequence::tester::SelectSeqRange& ssr,
-             ceph::util::random_number_generator<int>& rng,
+             std::mt19937_64& rng,
              ceph::mutex& lock,
              ceph::condition_variable& cond,
              bool dryrun,
@@ -461,7 +465,9 @@ class TestObject {
              std::optional<int> seqseed,
              bool testRecovery,
              bool checkConsistency,
-             bool delete_objects);
+             bool delete_objects,
+             int balanced_read_percentage,
+             GenerationType data_generation_type);
 
   int get_num_io();
   bool readyForIo();
@@ -474,10 +480,10 @@ class TestObject {
   std::pair<ceph::io_exerciser::Sequence, ceph::io_exerciser::Sequence>
       seq_range;
   ceph::io_exerciser::Sequence curseq;
-  std::unique_ptr<ceph::io_exerciser::IoSequence> seq;
+  std::shared_ptr<ceph::io_exerciser::IoSequence> seq;
   std::unique_ptr<ceph::io_exerciser::IoOp> op;
   bool done;
-  ceph::util::random_number_generator<int>& rng;
+  std::mt19937_64& rng;
   bool verbose;
   std::optional<int> seqseed;
   std::optional<std::pair<int, int>> pool_km;
@@ -486,6 +492,8 @@ class TestObject {
   bool testrecovery;
   bool checkconsistency;
   bool delete_objects;
+  int balanced_read_percentage;
+  GenerationType data_generation_type;
 };
 
 class TestRunner {
@@ -500,7 +508,7 @@ class TestRunner {
  private:
   librados::Rados& rados;
   int seed;
-  ceph::util::random_number_generator<int> rng;
+  std::mt19937_64 rng;
 
   ceph::io_sequence::tester::SelectBlockSize sbs;
   ceph::io_sequence::tester::SelectObjectSize sos;
@@ -539,9 +547,13 @@ class TestRunner {
   std::string primary_object_name;
   std::string secondary_object_name;
 
+  GenerationType data_generation_type;
+
   std::string line;
   ceph::split split = ceph::split("");
   ceph::spliterator tokens;
+
+  int balanced_read_percentage;
 
   void clear_tokens();
   std::string get_token(bool allow_eof = false);

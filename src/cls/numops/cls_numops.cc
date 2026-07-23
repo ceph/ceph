@@ -30,6 +30,8 @@
 #include <cstdio>
 #include <include/compat.h>
 
+#include "cls_numops_ops.h"
+
 #define DECIMAL_PRECISION 10
 
 using ceph::bufferlist;
@@ -158,13 +160,10 @@ CLS_INIT(numops)
   cls_method_handle_t h_add;
   cls_method_handle_t h_mul;
 
-  cls_register("numops", &h_class);
+  using namespace rados::cls::numops;
+  cls_register(ClassId::name, &h_class);
+  ClassRegistrar<ClassId> cls(h_class);
 
-  cls_register_cxx_method(h_class, "add",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          add, &h_add);
-
-  cls_register_cxx_method(h_class, "mul",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          mul, &h_mul);
+  cls.register_cxx_method(method::add, add, &h_add);
+  cls.register_cxx_method(method::mul, mul, &h_mul);
 }

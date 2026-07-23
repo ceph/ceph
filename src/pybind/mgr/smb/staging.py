@@ -15,7 +15,7 @@ import operator
 
 from ceph.fs.earmarking import EarmarkTopScope
 
-from . import config_store, resources
+from . import config_store, resources, rgw
 from .enums import (
     AuthMode,
     ConfigNS,
@@ -30,6 +30,7 @@ from .internal import (
     ClusterEntry,
     JoinAuthEntry,
     ResourceEntry,
+    RGWCredentialEntry,
     ShareEntry,
     TLSCredentialEntry,
     UsersAndGroupsEntry,
@@ -54,8 +55,9 @@ class Staging:
     the destination store.
     """
 
-    def __init__(self, store: ConfigStore) -> None:
+    def __init__(self, store: ConfigStore, tool_exec: rgw.ToolExecer) -> None:
         self.destination_store = store
+        self._tool_execer = tool_exec
         self.incoming: Dict[EntryKey, SMBResource] = {}
         self.deleted: Dict[EntryKey, SMBResource] = {}
         self._store_keycache: Set[EntryKey] = set()
@@ -126,6 +128,18 @@ class Staging:
             self.destination_store, ug_id
         ).get_users_and_groups()
 
+    def get_rgw_credential(
+        self, rgw_credential_id: str
+    ) -> resources.RGWCredential:
+        ekey = (str(RGWCredentialEntry.namespace), rgw_credential_id)
+        if ekey in self.incoming:
+            res = self.incoming[ekey]
+            assert isinstance(res, resources.RGWCredential)
+            return res
+        return RGWCredentialEntry.from_store(
+            self.destination_store, rgw_credential_id
+        ).get_rgw_credential()
+
     def save(self) -> ResultGroup:
         results = ResultGroup()
         for res in self.deleted.values():
@@ -166,6 +180,7 @@ class Staging:
         self._prune(cids, JoinAuthEntry, resources.JoinAuth)
         self._prune(cids, UsersAndGroupsEntry, resources.UsersAndGroups)
         self._prune(cids, TLSCredentialEntry, resources.TLSCredential)
+        self._prune(cids, RGWCredentialEntry, resources.RGWCredential)
 
 
 def auth_refs(cluster: resources.Cluster) -> Collection[str]:
@@ -269,6 +284,7 @@ def _check_cluster_resource(
                     'other_cluster_id': ug.linked_to_cluster,
                 },
             )
+    _check_cluster_keybridge(cluster)
 
 
 def _check_cluster_modifications(
@@ -318,6 +334,21 @@ def _check_cluster_modifications(
         raise ErrorResult(cluster, msg, status={'hint': hint})
 
 
+def _check_cluster_keybridge(cluster: resources.Cluster) -> None:
+    if cluster.keybridge is None:
+        return
+    cluster.keybridge.validate()
+    names: Set[str] = set()
+    for kb_scope in checked(cluster.keybridge.scopes):
+        kbsi = kb_scope.scope_identity()
+        if str(kbsi) in names:
+            raise ErrorResult(
+                cluster,
+                f"scope name {kb_scope.name} already in use",
+            )
+        names.add(str(kbsi))
+
+
 @cross_check_resource.register
 def _check_removed_share_resource(
     share: resources.RemovedShare, staging: Staging, **_: Any
@@ -342,6 +373,127 @@ def _check_share_resource(
             msg="no matching cluster id",
             status={"cluster_id": share.cluster_id},
         )
+
+    # Handle RGW shares
+    if share.rgw is not None:
+        # Check if cluster uses external Ceph cluster
+        cluster = staging.get_cluster(share.cluster_id)
+        is_external_cluster = (
+            cluster.external_ceph_cluster is not None
+            and cluster.external_ceph_cluster.ref
+        )
+
+        # If credential_ref is not provided, auto-create credential
+        if not share.rgw.credential_ref:
+            # For external clusters, require explicit credential_ref
+            if is_external_cluster:
+                raise ErrorResult(
+                    share,
+                    msg=(
+                        "RGW shares with external clusters require explicit 'credential_ref'. "
+                        "Create an RGWCredential resource and reference it in the share."
+                    ),
+                )
+
+            # Fetch credentials from RGW (LOCAL cluster only)
+            try:
+                (
+                    fetched_user_id,
+                    access_key,
+                    secret_key,
+                ) = rgw.fetch_rgw_credentials(
+                    staging._tool_execer,
+                    share.rgw.bucket,
+                    share.rgw.user_id or '',
+                )
+            except ValueError as e:
+                raise ErrorResult(
+                    share,
+                    msg=f"Failed to fetch RGW credentials: {str(e)}",
+                )
+
+            # Create credential resource automatically
+            # Use user_id as credential_id (linked to cluster via linked_to_cluster field)
+            credential_id = fetched_user_id
+
+            # Check if credential already exists
+            try:
+                cred = staging.get_rgw_credential(credential_id)
+                # Credential exists, validate it's linked to correct cluster
+                if (
+                    cred.linked_to_cluster
+                    and cred.linked_to_cluster != share.cluster_id
+                ):
+                    raise ErrorResult(
+                        share,
+                        msg='RGW credential is linked to a different cluster',
+                        status={
+                            'credential_ref': credential_id,
+                            'other_cluster_id': cred.linked_to_cluster,
+                        },
+                    )
+            except KeyError:
+                # Credential doesn't exist, create it
+                cred = resources.RGWCredential(
+                    rgw_credential_id=credential_id,
+                    user_id=fetched_user_id,
+                    access_key_id=access_key,
+                    secret_access_key=secret_key,
+                    linked_to_cluster=share.cluster_id,
+                )
+                # Stage the credential
+                staging.stage(cred)
+
+            # Update share to use credential_ref
+            share.rgw = resources.RGWStorage(
+                bucket=share.rgw.bucket,
+                credential_ref=credential_id,
+            )
+        else:
+            # Validate existing credential_ref
+            try:
+                cred = staging.get_rgw_credential(share.rgw.credential_ref)
+            except KeyError:
+                raise ErrorResult(
+                    share,
+                    msg=f"RGW credential '{share.rgw.credential_ref}' not found",
+                    status={"credential_ref": share.rgw.credential_ref},
+                )
+
+            if (
+                cred.linked_to_cluster
+                and cred.linked_to_cluster != share.cluster_id
+            ):
+                raise ErrorResult(
+                    share,
+                    msg='RGW credential is linked to a different cluster',
+                    status={
+                        'credential_ref': share.rgw.credential_ref,
+                        'other_cluster_id': cred.linked_to_cluster,
+                    },
+                )
+        # Validate bucket exists (skip for external clusters)
+        if not is_external_cluster:
+            if not rgw.validate_rgw_bucket(
+                staging._tool_execer, share.rgw.bucket
+            ):
+                raise ErrorResult(
+                    share,
+                    msg=f"RGW bucket '{share.rgw.bucket}' does not exist or is not accessible",
+                )
+        # For external clusters, skip bucket validation
+        # User must ensure bucket exists on external cluster
+
+        name_used_by = _share_name_in_use(staging, share)
+        if name_used_by:
+            raise ErrorResult(
+                share,
+                msg="share name already in use",
+                status={"conflicting_share_id": name_used_by},
+            )
+        return
+
+    # Handle CephFS shares
     assert share.cephfs is not None
     try:
         volpath = path_resolver.resolve_exists(
@@ -398,6 +550,7 @@ def _check_share_resource(
             msg="share name already in use",
             status={"conflicting_share_id": name_used_by},
         )
+    _check_fscrypt_scopes(share, staging)
 
 
 def _share_name_in_use(
@@ -443,6 +596,27 @@ def _share_name_in_use(
             ' '.join(s.get()['share_id'] for s in found_curr),
         )
     return found_curr[0].get()['share_id']
+
+
+def _check_fscrypt_scopes(share: resources.Share, staging: Staging) -> None:
+    """Validate that the share refers to a valid keybridge scope defined
+    on the cluster the share belongs to.
+    """
+    if not share.checked_cephfs.fscrypt_key:
+        return
+    kbsi = share.checked_cephfs.fscrypt_key.scope_identity()
+    cluster = staging.get_cluster(share.cluster_id)
+    known = _keybridge_ids(cluster)
+    if str(kbsi) not in known:
+        raise ErrorResult(
+            share,
+            msg="scope name not known",
+            status={
+                'invalid_scope': str(kbsi),
+                'known_scopes': list(known),
+                'cluster_id': share.cluster_id,
+            },
+        )
 
 
 @cross_check_resource.register
@@ -582,6 +756,59 @@ def _check_tls_credential_present(
 
 
 @cross_check_resource.register
+def _check_rgw_credential_resource(
+    resource: resources.RGWCredential, staging: Staging, **_kw: Any
+) -> None:
+    """Check that the RGW credential resource can be updated."""
+    if resource.intent == Intent.PRESENT:
+        return _check_rgw_credential_present(resource, staging)
+    return _check_rgw_credential_removed(resource, staging)
+
+
+def _check_rgw_credential_removed(
+    rgw_cred: resources.RGWCredential, staging: Staging
+) -> None:
+    refs_in_use: Dict[str, List[str]] = {}
+    for cid, sid in ShareEntry.ids(staging):
+        try:
+            share = ShareEntry.from_store(
+                staging.destination_store, cid, sid
+            ).get_share()
+        except KeyError:
+            continue
+        if (
+            share.rgw
+            and share.rgw.credential_ref == rgw_cred.rgw_credential_id
+        ):
+            refs_in_use.setdefault(rgw_cred.rgw_credential_id, []).append(
+                f'{cid}.{sid}'
+            )
+    if rgw_cred.rgw_credential_id in refs_in_use:
+        raise ErrorResult(
+            rgw_cred,
+            msg='RGW credential resource in use by shares',
+            status={
+                'shares': refs_in_use[rgw_cred.rgw_credential_id],
+            },
+        )
+
+
+def _check_rgw_credential_present(
+    rgw_cred: resources.RGWCredential, staging: Staging
+) -> None:
+    if rgw_cred.linked_to_cluster:
+        cids = set(ClusterEntry.ids(staging))
+        if rgw_cred.linked_to_cluster not in cids:
+            raise ErrorResult(
+                rgw_cred,
+                msg='linked_to_cluster id not valid',
+                status={
+                    'unknown_id': rgw_cred.linked_to_cluster,
+                },
+            )
+
+
+@cross_check_resource.register
 def _check_external_ceph_cluster_resource(
     ext_cluster: resources.ExternalCephCluster, staging: Staging, **_: Any
 ) -> None:
@@ -612,7 +839,23 @@ def _tls_ref(src: Optional[resources.TLSSource]) -> str:
     return ''
 
 
-def tls_refs(cluster: resources.Cluster) -> Collection[str]:
+def _keybridge_tls_refs(cluster: resources.Cluster) -> Set[str]:
+    if not cluster.keybridge or not cluster.keybridge.scopes:
+        return set()
+    maybe_refs: Set[Optional[str]] = set()
+    for scope in cluster.keybridge.scopes:
+        maybe_refs.update(
+            _tls_ref(s)
+            for s in (
+                scope.kmip_cert,
+                scope.kmip_key,
+                scope.kmip_ca_cert,
+            )
+        )
+    return {ref for ref in maybe_refs if ref}
+
+
+def _remotectl_tls_refs(cluster: resources.Cluster) -> Set[str]:
     if not cluster.remote_control:
         return set()
     refs = (
@@ -635,6 +878,30 @@ def ext_cluster_refs(cluster: resources.Cluster) -> Collection[str]:
     ):
         return [cluster.external_ceph_cluster.ref]
     return []
+
+
+def tls_refs(cluster: resources.Cluster) -> Collection[str]:
+    return _remotectl_tls_refs(cluster) | _keybridge_tls_refs(cluster)
+
+
+def rgw_credential_refs(
+    shares: List[resources.Share],
+) -> Collection[str]:
+    """Return all credential_ref IDs used by RGW-backed shares."""
+    return {
+        share.rgw.credential_ref
+        for share in shares
+        if share.rgw is not None and share.rgw.credential_ref
+    }
+
+
+def _keybridge_ids(
+    cluster: resources.Cluster,
+) -> Dict[str, resources.KeyBridgeScopeIdentity]:
+    if not cluster.keybridge or not cluster.keybridge.scopes:
+        return {}
+    kbsids = (s.scope_identity() for s in cluster.keybridge.scopes)
+    return {str(kbsi): kbsi for kbsi in kbsids}
 
 
 def _parse_earmark(earmark: str) -> dict:

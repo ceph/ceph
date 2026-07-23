@@ -398,7 +398,13 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
 
   do {
     if (!backfill_listener().budget_available()) {
-      post_event(RequestWaiting{});
+      if (backfill_state().progress_tracker->tracked_objects_completed()) {
+        INFODPP("backfill budget unavailable with nothing in flight, "
+                "entering BudgetBlocked", pg());
+        post_event(RequestBudgetBlocked{});
+      } else {
+        post_event(RequestWaiting{});
+      }
       return;
     } else if (should_rescan_replicas(backfill_state().peer_backfill_info,
 				      primary_bi)) {
@@ -444,10 +450,11 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
     post_event(RequestPrimaryScanning{});
     return;
   } else {
-    if (backfill_state().progress_tracker->tracked_objects_completed()
+    if (backfill_state().progress_tracker->tracked_pushes_completed()
 	&& Enqueuing::all_enqueued(peering_state(),
 				   backfill_state().backfill_info,
 				   backfill_state().peer_backfill_info)) {
+      backfill_state().progress_tracker->complete_drops();
       backfill_state().last_backfill_started = hobject_t::get_max();
       backfill_listener().update_peers_last_backfill(hobject_t::get_max());
     }
@@ -652,6 +659,51 @@ BackfillState::Waiting::react(Triggered evt)
   return discard_event();
 }
 
+// -- BudgetBlocked
+BackfillState::BudgetBlocked::BudgetBlocked(my_context ctx)
+  : my_base(ctx)
+{
+  LOG_PREFIX(BackfillState::BudgetBlocked::BudgetBlocked);
+  DEBUGDPP("budget unavailable with nothing in flight, "
+           "waiting for throttle slot to become available", pg());
+  backfill_listener().request_budget_retry();
+}
+
+boost::statechart::result
+BackfillState::BudgetBlocked::react(SuspendBackfill evt)
+{
+  LOG_PREFIX(BackfillState::BudgetBlocked::react::SuspendBackfill);
+  DEBUGDPP("suspended within BudgetBlocked", pg());
+  backfill_state().on_suspended();
+  return discard_event();
+}
+
+boost::statechart::result
+BackfillState::BudgetBlocked::react(Triggered evt)
+{
+  LOG_PREFIX(BackfillState::BudgetBlocked::react::Triggered);
+  ceph_assert(backfill_state().is_suspended());
+  if (backfill_state().on_resumed()) {
+    DEBUGDPP("Backfill resumed, going Enqueuing", pg());
+    return transit<Enqueuing>();
+  }
+  return discard_event();
+}
+
+boost::statechart::result
+BackfillState::BudgetBlocked::react(BudgetAvailable evt)
+{
+  LOG_PREFIX(BackfillState::BudgetBlocked::react::BudgetAvailable);
+  DEBUGDPP("BudgetBlocked::react() on BudgetAvailable", pg());
+  if (!backfill_state().is_suspended()) {
+    return transit<Enqueuing>();
+  } else {
+    DEBUGDPP("backfill suspended, not going Enqueuing", pg());
+    backfill_state().go_enqueuing_on_resume();
+  }
+  return discard_event();
+}
+
 // -- Done
 BackfillState::Done::Done(my_context ctx)
   : my_base(ctx)
@@ -686,6 +738,10 @@ bool BackfillState::ProgressTracker::enqueue_push(const hobject_t& obj)
 {
   [[maybe_unused]] const auto [it, first_seen] = registry.try_emplace(
     obj, registry_item_t{op_stage_t::enqueued_push, std::nullopt});
+  if (first_seen) {
+    // multiple targets may enqueue the same object; only count it once
+    ++num_pending_pushes;
+  }
   return first_seen;
 }
 
@@ -704,6 +760,10 @@ void BackfillState::ProgressTracker::complete_to(
   DEBUGDPP("obj={}", pg(), obj);
   if (auto completion_iter = registry.find(obj);
       completion_iter != std::end(registry)) {
+    if (completion_iter->second.stage == op_stage_t::enqueued_push) {
+      ceph_assert(num_pending_pushes > 0);
+      --num_pending_pushes;
+    }
     completion_iter->second = \
       registry_item_t{ op_stage_t::completed_push, stats };
   } else {
@@ -734,6 +794,27 @@ void BackfillState::ProgressTracker::complete_to(
   }
 }
 
+void BackfillState::ProgressTracker::complete_drops()
+{
+  LOG_PREFIX(BackfillState::ProgressTracker::complete_drops);
+  ceph_assert(num_pending_pushes == 0);
+  auto new_last_backfill = peering_state().earliest_backfill();
+  for (auto it = std::begin(registry);
+       it != std::end(registry);
+       it = registry.erase(it)) {
+    const auto& [soid, item] = *it;
+    ceph_assert(item.stage == op_stage_t::enqueued_drop);
+    assert(item.stats);
+    DEBUGDPP("draining drop obj={}", pg(), soid);
+    peering_state().update_complete_backfill_object_stats(
+      soid,
+      *item.stats);
+    assert(soid > new_last_backfill);
+    new_last_backfill = soid;
+  }
+  backfill_listener().update_peers_last_backfill(new_last_backfill);
+}
+
 void BackfillState::enqueue_standalone_push(
   const hobject_t &obj,
   const eversion_t &v,
@@ -747,10 +828,7 @@ void BackfillState::enqueue_standalone_delete(
   const eversion_t &v,
   const std::vector<pg_shard_t> &peers)
 {
-  progress_tracker->enqueue_drop(obj);
-  for (auto bt : peers) {
-    backfill_machine.backfill_listener.enqueue_drop(bt, obj, v);
-  }
+  backfill_machine.backfill_listener.send_recovery_deletes(obj, peers);
 }
 
 std::ostream &operator<<(std::ostream &out, const BackfillState::PGFacade &pg) {

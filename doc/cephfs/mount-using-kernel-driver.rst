@@ -24,7 +24,7 @@ as described on the `Mount CephFS: Prerequisites`_ page.
 Is mount helper present?
 ------------------------
 The ``mount.ceph`` helper is installed by Ceph packages. The helper passes the
-monitor address(es) and CephX user keyrings, saving the Ceph admin the effort
+Monitor address(es) and CephX user keyrings, saving the Ceph admin the effort
 of passing these details explicitly while mounting CephFS. If the helper is not
 present on the client machine, CephFS can still be mounted using the kernel
 driver but only by passing these details explicitly to the ``mount`` command.
@@ -34,6 +34,8 @@ command:
 .. prompt:: bash #
 
    stat /sbin/mount.ceph
+
+.. _cephfs_which_kernel_version:
 
 Which Kernel Version?
 ---------------------
@@ -48,9 +50,9 @@ Remember that the "latest" kernel in a stable Linux distribution is likely
 to be years behind the latest upstream Linux kernel where Ceph development
 takes place (including bug fixes).
 
-As a rough guide, as of Ceph 10.x (Jewel), you should be using a least a 4.x
+As a rough guide, as of Ceph 10.x (Jewel), you should be using at least a 4.x
 kernel. If you absolutely have to use an older kernel, you should use the
-fuse client instead of the kernel client.
+FUSE client instead of the kernel client.
 
 This advice does not apply if you are using a Linux distribution that includes
 CephFS support. In that case, the distributor is responsible for backporting
@@ -77,14 +79,14 @@ command to use the kernel driver to mount CephFS:
 #. ``name`` is the username of the CephX user we are using to mount CephFS.
 #. ``fsid`` is the FSID of the Ceph cluster, which can be found using the
    ``ceph fsid`` command. ``fs_name`` is the file system to mount. The kernel
-   driver requires a ceph Monitor's address and the secret key of the CephX
+   driver requires a Ceph Monitor's address and the secret key of the CephX
    user. For example:
 
    .. prompt:: bash #
 
       mount -t ceph cephuser@b3acfc0d-575f-41d3-9c91-0e7ed3dbb3fa.cephfs=/ /mnt/mycephfs -o mon_addr=192.168.0.1:6789,secret=AQATSKdNGBnwLhAAnNDKnH65FmVKpXZJVasUeQ==
 
-When using the mount helper, monitor hosts and FSID are optional. The
+When using the mount helper, Monitor hosts and FSID are optional. The
 ``mount.ceph`` helper discovers these details by finding and reading the ceph
 conf file. For example:
 
@@ -92,7 +94,7 @@ conf file. For example:
 
    mount -t ceph cephuser@.cephfs=/ -o secret=AQATSKdNGBnwLhAAnNDKnH65FmVKpXZJVasUeQ==
 
-.. note:: Note that the dot (``.`` in the string ``cephuser@.cephfs``) must  be
+.. note:: Note that the dot (``.`` in the string ``cephuser@.cephfs``) must be
    a part of the device string.
 
 A weakness of this method is that it will leave the secret key in your shell's
@@ -106,7 +108,7 @@ file by using the option ``secretfile`` instead of ``secret``. For example:
 Ensure that the permissions on the secret key file are appropriate (preferably,
 ``600``).
 
-Multiple monitor hosts can be passed by separating addresses with a ``/``:
+Multiple Monitor hosts can be passed by separating addresses with a ``/``:
 
 .. prompt:: bash #
 

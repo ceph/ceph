@@ -11,7 +11,8 @@ import {
   TooltipModule,
   SkeletonModule,
   LayoutModule,
-  TagModule
+  TagModule,
+  ButtonModule
 } from 'carbon-components-angular';
 import { ProductiveCardComponent } from '~/app/shared/components/productive-card/productive-card.component';
 import { MeterChartComponent, MeterChartOptions } from '@carbon/charts-angular';
@@ -19,6 +20,8 @@ import { FormatterService } from '~/app/shared/services/formatter.service';
 import { AreaChartComponent } from '~/app/shared/components/area-chart/area-chart.component';
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { BreakdownChartData, CapacityThreshold, TrendPoint } from '~/app/shared/models/overview';
+import { EmptyStateComponent } from '~/app/shared/components/empty-state/empty-state.component';
+import { RouterModule } from '@angular/router';
 
 const CHART_HEIGHT = '45px';
 
@@ -33,7 +36,10 @@ const CHART_HEIGHT = '45px';
     LayoutModule,
     AreaChartComponent,
     ComponentsModule,
-    TagModule
+    TagModule,
+    EmptyStateComponent,
+    ButtonModule,
+    RouterModule
   ],
   standalone: true,
   templateUrl: './overview-storage-card.component.html',
@@ -44,6 +50,9 @@ const CHART_HEIGHT = '45px';
 export class OverviewStorageCardComponent {
   private readonly formatterService = inject(FormatterService);
   private readonly cdr = inject(ChangeDetectorRef);
+
+  @Input() storageEmptyState: boolean = false;
+  @Input() prometheusEmptyState: boolean = false;
 
   @Input()
   set totalCapacity(value: number) {

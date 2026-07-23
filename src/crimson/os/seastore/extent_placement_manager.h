@@ -535,6 +535,13 @@ public:
     return devices_by_id[addr.get_device_id()]->read(addr, len, out);
   }
 
+  read_ertr::future<> readv(
+    paddr_t addr,
+    std::vector<bufferptr> ptrs) {
+    assert(devices_by_id[addr.get_device_id()] != nullptr);
+    return devices_by_id[addr.get_device_id()]->readv(addr, std::move(ptrs));
+  }
+
   void mark_space_used(paddr_t addr, extent_len_t len) {
     background_process.mark_space_used(addr, len);
   }
@@ -585,6 +592,10 @@ public:
 
   seastar::future<> run_background_work_until_halt() {
     return background_process.run_until_halt();
+  }
+
+  seastar::future<> run_cleaner_until_done() {
+    return background_process.run_cleaner_until_done();
   }
 
   bool get_checksum_needed(paddr_t addr) {
@@ -871,7 +882,9 @@ private:
     }
 
     seastar::future<> run_until_halt();
-    
+
+    seastar::future<> run_cleaner_until_done();
+
     bool is_no_background() const {
       return !trimmer || !main_cleaner;
     }
@@ -1111,6 +1124,11 @@ private:
     std::optional<seastar::future<>> process_join;
     std::optional<seastar::promise<>> blocking_background;
     std::optional<seastar::promise<>> blocking_io;
+    // Set by maybe_wake_blocked_io() whenever it actually unblocks a
+    // user IO; consumed by run() to yield exactly once on that edge,
+    // giving the woken continuation a chance to retry the reservation
+    // before the next background cycle.
+    bool pending_user_io_wake = false;
     bool is_running_until_halt = false;
     state_t state = state_t::STOP;
     eviction_state_t eviction_state;

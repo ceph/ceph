@@ -122,7 +122,7 @@ List stuck placement groups by running one of the following commands:
   :ref:`failures-osd-peering`).
 - Stuck ``unclean`` placement groups usually indicate that something is
   preventing recovery from completing, possibly unfound objects (see
-  :ref:`failures-osd-unfound`);
+  :ref:`failures-osd-unfound`).
 
 
 .. _failures-osd-peering:

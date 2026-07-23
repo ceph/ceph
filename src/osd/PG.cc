@@ -1215,6 +1215,17 @@ void PG::requeue_op(OpRequestRef op)
 
 void PG::requeue_ops(list<OpRequestRef> &ls)
 {
+  if (!waiting_for_readable.empty() && &ls != &waiting_for_peered &&
+      &ls != &waiting_for_flush && &ls != &waiting_for_active &&
+      &ls != &waiting_for_readable) {
+    dout(20) << __func__ << " not readable ops (count=" << ls.size() << ")"
+             << dendl;
+    for (auto& op : ls) {
+      op->mark_delayed("waiting for readable");
+    }
+    waiting_for_readable.splice(waiting_for_readable.begin(), ls);
+  }
+
   for (list<OpRequestRef>::reverse_iterator i = ls.rbegin();
        i != ls.rend();
        ++i) {

@@ -21,6 +21,7 @@
 
 #include <string_view>
 
+#include "common/ceph_mutex.h"
 #include "erasure-code/ErasureCode.h"
 
 using namespace std::literals;
@@ -124,6 +125,12 @@ public:
 
 protected:
   virtual int parse(ceph::ErasureCodeProfile &profile, std::ostream *ss);
+
+  // The Jerasure library has thread safety issues in functions
+  // like cauchy_good_general_coding_matrix() which use global variables
+  // without proper synchronization. This mutex serializes all prepare()
+  // calls to prevent race conditions during initialization.
+  static ceph::mutex jerasure_init_mutex;
 };
 class ErasureCodeJerasureReedSolomonVandermonde : public ErasureCodeJerasure {
 public:

@@ -4,7 +4,6 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
 
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
 import { SharedModule } from '~/app/shared/shared.module';
@@ -22,7 +21,6 @@ describe('RoleListComponent', () => {
     imports: [
       BrowserAnimationsModule,
       SharedModule,
-      ToastrModule.forRoot(),
       NgbNavModule,
       RouterTestingModule,
       HttpClientTestingModule

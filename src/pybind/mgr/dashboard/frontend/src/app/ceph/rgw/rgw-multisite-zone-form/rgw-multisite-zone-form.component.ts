@@ -14,6 +14,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { RgwRealm, RgwZone, RgwZonegroup, SystemKey } from '../models/rgw-multisite';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { CdForm } from '~/app/shared/forms/cd-form';
+import { ComboBoxItem } from '~/app/shared/models/combo-box.model';
 
 @Component({
   selector: 'cd-rgw-multisite-zone-form',
@@ -42,7 +43,7 @@ export class RgwMultisiteZoneFormComponent extends CdForm implements OnInit {
   syncStatusTimedOut: boolean = false;
   bsModalRef: NgbModalRef;
   createSystemUser: boolean = false;
-  master_zone_of_master_zonegroup: RgwZone;
+  master_zone_name: string;
   masterZoneUser: any;
   access_key: any;
   master_zonegroup_of_realm: RgwZonegroup;
@@ -52,6 +53,8 @@ export class RgwMultisiteZoneFormComponent extends CdForm implements OnInit {
     'To see or copy your S3 secret key, go to Object Gateway > Users and click on your user name. In Keys, click Show. View the secret key by clicking Show and copy the key by clicking Copy to Clipboard';
   AccessKeyText =
     'To see or copy your S3 access key, go to Object Gateway > Users and click on your user name. In Keys, click Show. View the access key by clicking Show and copy the key by clicking Copy to Clipboard';
+  syncFromZonesOptions: ComboBoxItem[] = [];
+
   constructor(
     public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
@@ -100,14 +103,33 @@ export class RgwMultisiteZoneFormComponent extends CdForm implements OnInit {
       placementDataExtraPool: new UntypedFormControl(null),
       storageClass: new UntypedFormControl(null),
       storageDataPool: new UntypedFormControl(null),
-      storageCompression: new UntypedFormControl(null)
+      storageCompression: new UntypedFormControl(null),
+      sync_from_zones: new UntypedFormControl(null),
+      sync_from_all: new UntypedFormControl(true)
     });
   }
 
   onZoneGroupChange(zonegroupName: string) {
+    this.syncFromZonesOptions = [];
+
     let zg = new RgwZonegroup();
     zg.name = zonegroupName;
+
     this.rgwZoneGroupService.get(zg).subscribe((zonegroup: RgwZonegroup) => {
+      const syncFromZones = this.info?.data?.info?.sync_from || [];
+
+      this.syncFromZonesOptions = zonegroup.zones
+        .filter((zone) => zone.name !== this.multisiteZoneForm.getValue('zoneName'))
+        .map((zone) => ({
+          name: zone.name,
+          content: zone.name,
+          selected: syncFromZones.includes(zone.name)
+        }));
+
+      this.multisiteZoneForm
+        .get('sync_from_zones')
+        .setValue(this.syncFromZonesOptions.filter((opt) => opt.selected));
+
       if (_.isEmpty(zonegroup.master_zone)) {
         this.multisiteZoneForm.get('master_zone').setValue(true);
         this.multisiteZoneForm.get('master_zone').disable();
@@ -116,6 +138,10 @@ export class RgwMultisiteZoneFormComponent extends CdForm implements OnInit {
         this.multisiteZoneForm.get('master_zone').setValue(false);
         this.multisiteZoneForm.get('master_zone').disable();
         this.disableMaster = true;
+      }
+      const masterZone = this.zoneList.find((zone) => zone.id === zonegroup.master_zone);
+      if (masterZone) {
+        this.master_zone_name = masterZone.name;
       }
     });
     if (
@@ -166,6 +192,8 @@ export class RgwMultisiteZoneFormComponent extends CdForm implements OnInit {
       this.multisiteZoneForm
         .get('archive_zone')
         .setValue(this.info.data.info.tier_type === 'archive');
+      this.onArchiveZoneChange(this.info.data.info.tier_type === 'archive');
+      this.multisiteZoneForm.get('sync_from_all').setValue(this.info.data.info.sync_from_all);
       this.multisiteZoneForm
         .get('placementTarget')
         .setValue((this.info.data?.parentNode || this.info.parent.data)?.default_placement);
@@ -245,6 +273,10 @@ export class RgwMultisiteZoneFormComponent extends CdForm implements OnInit {
       this.zone.system_key.access_key = values['access_key'];
       this.zone.system_key.secret_key = values['secret_key'];
       this.zone.tier_type = values['archive_zone'] ? 'archive' : '';
+      this.zone.sync_from = values['sync_from_zones']
+        ? values['sync_from_zones'].map((zone: RgwZone) => zone.name).join(',')
+        : '';
+      this.zone.sync_from_all = values['sync_from_all'];
       this.rgwZoneService
         .create(
           this.zone,
@@ -275,6 +307,10 @@ export class RgwMultisiteZoneFormComponent extends CdForm implements OnInit {
       this.zone.system_key.access_key = values['access_key'];
       this.zone.system_key.secret_key = values['secret_key'];
       this.zone.tier_type = values['archive_zone'] ? 'archive' : '';
+      this.zone.sync_from = values['sync_from_zones']
+        ? values['sync_from_zones'].map((zone: RgwZone) => zone.name).join(',')
+        : '';
+      this.zone.sync_from_all = values['sync_from_all'];
       this.rgwZoneService
         .update(
           this.zone,
@@ -303,6 +339,23 @@ export class RgwMultisiteZoneFormComponent extends CdForm implements OnInit {
             this.multisiteZoneForm.setErrors({ cdSubmitButton: true });
           }
         );
+    }
+  }
+
+  onArchiveZoneChange(isArchiveZone: boolean) {
+    if (isArchiveZone) {
+      this.multisiteZoneForm.get('sync_from_all').setValue(false);
+      this.multisiteZoneForm.get('sync_from_all').disable();
+      this.syncFromZonesOptions = this.syncFromZonesOptions.map((zone) => ({
+        ...zone,
+        selected: zone.name === this.master_zone_name
+      }));
+      this.multisiteZoneForm
+        .get('sync_from_zones')
+        .setValue(this.syncFromZonesOptions.filter((opt) => opt.selected));
+    } else {
+      this.multisiteZoneForm.get('sync_from_all').enable();
+      this.multisiteZoneForm.get('sync_from_all').setValue(true);
     }
   }
 }

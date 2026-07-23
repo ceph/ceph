@@ -10,6 +10,7 @@
 #include <boost/range/algorithm/copy.hpp>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
+#include "include/err.h" // for MAX_ERRNO
 #include "include/utime_fmt.h"
 #include <seastar/core/print.hh>
 
@@ -17,9 +18,12 @@
 #include "os/Transaction.h"
 #include "common/Checksummer.h"
 #include "common/Clock.h"
+#include "erasure-code/ErasureCodeInterface.h"
+#include "erasure-code/ErasureCodePlugin.h"
 
 #include "crimson/common/coroutine.h"
 #include "crimson/common/exception.h"
+#include "crimson/common/errorator-utils.h"
 #include "crimson/common/tmap_helpers.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
@@ -47,41 +51,106 @@ namespace crimson::osd {
 
 std::unique_ptr<PGBackend>
 PGBackend::create(pg_t pgid,
-		  const pg_shard_t pg_shard,
+		  const pg_shard_t whoami,
 		  const pg_pool_t& pool,
 		  crimson::osd::PG& pg,
 		  crimson::os::CollectionRef coll,
 		  crimson::osd::ShardServices& shard_services,
 		  const ec_profile_t& ec_profile,
-		  DoutPrefixProvider &dpp)
+		  DoutPrefixProvider &dpp,
+		  ECListener &eclistener)
 {
   switch (pool.type) {
   case pg_pool_t::TYPE_REPLICATED:
-    return std::make_unique<ReplicatedBackend>(pgid, pg_shard, pg,
+    return std::make_unique<ReplicatedBackend>(pgid, whoami, pg,
 					       coll, shard_services,
 					       dpp);
   case pg_pool_t::TYPE_ERASURE:
-    return std::make_unique<ECBackend>( pg_shard.shard, coll, shard_services, pg.get_store_index(),
+    return std::make_unique<ECBackend>(whoami, coll, shard_services, pg.get_store_index(),
                                        std::move(ec_profile),
                                        pool.stripe_width,
-				       dpp);
+				       pool.fast_read,
+				       pool.allows_ecoverwrites(),
+				       dpp,
+				       eclistener);
   default:
     throw runtime_error(seastar::format("unsupported pool type '{}'",
                                         pool.type));
   }
 }
 
-PGBackend::PGBackend(shard_id_t shard,
+PGBackend::PGBackend(pg_shard_t whoami,
                      CollectionRef coll,
                      crimson::osd::ShardServices &shard_services,
                      store_index_t store_index,
 		     DoutPrefixProvider &dpp)
-  : shard{shard},
+  : whoami{whoami},
     coll{coll},
     shard_services{shard_services},
     dpp{dpp},
     store{shard_services.get_store(store_index)}
-{}
+{
+}
+
+tl::expected<PGBackend::loaded_object_md_t::ref, std::error_code>
+PGBackend::decode_metadata2(
+  const hobject_t& oid,
+  crimson::os::FuturizedStore::Shard::attrs_t attrs)
+{
+  loaded_object_md_t::ref ret(new loaded_object_md_t());
+  if (auto oiiter = attrs.find(OI_ATTR); oiiter != attrs.end()) {
+    bufferlist bl = std::move(oiiter->second);
+    try {
+      ret->os = ObjectState(object_info_t(bl), true);
+      ceph_assert(oid == ret->os.oi.soid);
+    } catch (const buffer::error&) {
+      logger().warn("unable to decode ObjectState");
+      throw crimson::osd::invalid_argument();
+    }
+  } else {
+    logger().error(
+      "load_metadata: object {} present but missing object info",
+      oid);
+    return tl::unexpected(
+      ErrorHelper<load_metadata_ertr>::to_error(
+        crimson::ct_error::enoent::make()));
+  }
+
+  if (oid.is_head()) {
+    // Returning object_corrupted when the object exsits and the
+    // Snapset is either not found or empty.
+    bool object_corrupted = true;
+    if (auto ssiter = attrs.find(SS_ATTR); ssiter != attrs.end()) {
+      object_corrupted = false;
+      bufferlist bl = std::move(ssiter->second);
+      if (bl.length()) {
+        ret->ssc = new crimson::osd::SnapSetContext(oid.get_snapdir());
+        try {
+          ret->ssc->snapset = SnapSet(bl);
+          ret->ssc->exists = true;
+          logger().debug(
+            "load_metadata: object {} and snapset {} present",
+             oid, ret->ssc->snapset);
+        } catch (const buffer::error&) {
+          logger().warn("unable to decode SnapSet");
+          throw crimson::osd::invalid_argument();
+        }
+      } else {
+        object_corrupted = true;
+      }
+    }
+    if (object_corrupted) {
+      logger().error(
+        "load_metadata: object {} present but missing snapset",
+        oid);
+      return tl::unexpected(
+        ErrorHelper<load_metadata_ertr>::to_error(
+          crimson::ct_error::object_corrupted::make()));
+    }
+  }
+  ret->attr_cache = std::move(attrs);
+  return loaded_object_md_t::ref(std::move(ret));
+}
 
 PGBackend::load_metadata_iertr::future
   <PGBackend::loaded_object_md_t::ref>
@@ -91,60 +160,19 @@ PGBackend::load_metadata(const hobject_t& oid)
     crimson::os::with_store<&crimson::os::FuturizedStore::Shard::get_attrs>(
     store,
     coll,
-    ghobject_t{oid, ghobject_t::NO_GEN, shard}, 0)).safe_then_interruptible(
-      [oid](auto &&attrs) -> load_metadata_ertr::future<loaded_object_md_t::ref>{
-        loaded_object_md_t::ref ret(new loaded_object_md_t());
-        if (auto oiiter = attrs.find(OI_ATTR); oiiter != attrs.end()) {
-          bufferlist bl = std::move(oiiter->second);
-          try {
-            ret->os = ObjectState(
-              object_info_t(bl, oid),
-              true);
-          } catch (const buffer::error&) {
-            logger().warn("unable to decode ObjectState");
-            throw crimson::osd::invalid_argument();
-          }
+    ghobject_t{oid, ghobject_t::NO_GEN, get_shard()}, 0)).safe_then_interruptible(
+      [oid, this](auto &&attrs) -> load_metadata_iertr::future<PGBackend::loaded_object_md_t::ref> {
+        if (auto maybe_decoded = decode_metadata2(oid, std::move(attrs));
+            maybe_decoded.has_value()) {
+          return load_metadata_ertr::make_ready_future<loaded_object_md_t::ref>(
+            std::move(*maybe_decoded));
         } else {
-          logger().error(
-            "load_metadata: object {} present but missing object info",
-            oid);
-          return crimson::ct_error::object_corrupted::make();
+          return ErrorHelper<load_metadata_ertr>\
+	    ::from_error<PGBackend::loaded_object_md_t::ref>(maybe_decoded.error());
         }
-
-        if (oid.is_head()) {
-          // Returning object_corrupted when the object exsits and the
-          // Snapset is either not found or empty.
-          bool object_corrupted = true;
-          if (auto ssiter = attrs.find(SS_ATTR); ssiter != attrs.end()) {
-            object_corrupted = false;
-            bufferlist bl = std::move(ssiter->second);
-            if (bl.length()) {
-              ret->ssc = new crimson::osd::SnapSetContext(oid.get_snapdir());
-              try {
-                ret->ssc->snapset = SnapSet(bl);
-                ret->ssc->exists = true;
-                logger().debug(
-                  "load_metadata: object {} and snapset {} present",
-                   oid, ret->ssc->snapset);
-              } catch (const buffer::error&) {
-                logger().warn("unable to decode SnapSet");
-                throw crimson::osd::invalid_argument();
-              }
-            } else {
-              object_corrupted = true;
-            }
-          }
-          if (object_corrupted) {
-            logger().error(
-              "load_metadata: object {} present but missing snapset",
-              oid);
-            return crimson::ct_error::object_corrupted::make();
-          }
-        }
-
-        return load_metadata_ertr::make_ready_future<loaded_object_md_t::ref>(
-          std::move(ret));
-      }, crimson::ct_error::enoent::handle([oid] {
+      }
+    ).handle_error_interruptible(
+      crimson::ct_error::enoent::handle([oid] {
         logger().debug(
           "load_metadata: object {} doesn't exist, returning empty metadata",
           oid);
@@ -155,7 +183,9 @@ PGBackend::load_metadata(const hobject_t& oid)
               false),
             oid.is_head() ? (new crimson::osd::SnapSetContext(oid)) : nullptr
           });
-      }));
+      }),
+      load_metadata_iertr::pass_further{}
+    );
 }
 
 static inline bool _read_verify_data(
@@ -209,7 +239,7 @@ PGBackend::read(const ObjectState& os, OSDOp& osd_op,
       return read_errorator::now();
     }
   }
-  return _read(oi.soid, offset, length, op.flags).safe_then_interruptible_tuple(
+  return _read(oi.soid, oi.size, offset, length, op.flags).safe_then_interruptible_tuple(
     [&delta_stats, &oi, &osd_op](auto&& bl) -> read_errorator::future<> {
     if (!_read_verify_data(oi, bl)) {
       // crc mismatches
@@ -354,7 +384,7 @@ PGBackend::checksum(const ObjectState& os, OSDOp& osd_op)
   }
 
   // read the chunk to be checksum'ed
-  return _read(os.oi.soid, checksum.offset, checksum.length, osd_op.op.flags)
+  return _read(os.oi.soid, os.oi.size, checksum.offset, checksum.length, osd_op.op.flags)
   .safe_then_interruptible(
     [&osd_op](auto&& read_bl) mutable -> checksum_errorator::future<> {
     auto& checksum = osd_op.op.checksum;
@@ -411,7 +441,7 @@ PGBackend::cmp_ext(const ObjectState& os, OSDOp& osd_op)
   } else if (!os.exists || os.oi.is_whiteout()) {
     logger().debug("{}: {} DNE", __func__, os.oi.soid);
   } else {
-    read_ext = _read(os.oi.soid, op.extent.offset, ext_len, 0);
+    read_ext = _read(os.oi.soid, os.oi.size, op.extent.offset, ext_len, 0);
   }
   return read_ext.safe_then_interruptible([&osd_op](auto&& read_bl)
     -> cmp_ext_errorator::future<> {
@@ -587,15 +617,15 @@ void PGBackend::truncate_update_size_and_usage(object_stat_sum_t& delta_stats,
   }
 }
 
-static bool is_offset_and_length_valid(
-  const std::uint64_t offset,
-  const std::uint64_t length)
+bool PGBackend::is_offset_and_length_valid(
+    const std::uint64_t offset,
+    const std::uint64_t length) const
 {
-  if (const std::uint64_t max = local_conf()->osd_max_object_size;
+  if (const std::uint64_t max = store.f_store.get_max_object_size();
       offset >= max || length > max || offset + length > max) {
-    logger().debug("{} osd_max_object_size: {}, offset: {}, len: {}; "
-                   "Hard limit of object size is 4GB",
-                   __func__, max, offset, length);
+    logger().debug("{} max_object_size: {}, offset: {}, len: {}; "
+        "Hard limit of object size is 4GB",
+        __func__, max, offset, length);
     return false;
   } else {
     return true;
@@ -797,7 +827,7 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
     // 1) Delete current head
     if (os.exists) {
       txn.remove(coll->get_cid(), ghobject_t{os.oi.soid,
-                                  ghobject_t::NO_GEN, shard});
+                                  ghobject_t::NO_GEN, get_shard()});
     }
     // 2) Clone correct snapshot into head
     txn.clone(coll->get_cid(), ghobject_t{resolved_obc->obs.oi.soid},
@@ -852,7 +882,7 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
       );
     }),
     rollback_ertr::pass_further{},
-    crimson::ct_error::assert_all{"unexpected error in rollback"}
+    crimson::ct_error::assert_all("unexpected error in rollback")
   );
 }
 
@@ -973,7 +1003,7 @@ PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn)
 {
   // todo: snapset
   txn.remove(coll->get_cid(),
-	     ghobject_t{os.oi.soid, ghobject_t::NO_GEN, shard});
+	     ghobject_t{os.oi.soid, ghobject_t::NO_GEN, get_shard()});
   os.oi.size = 0;
   os.oi.new_object();
   os.exists = false;
@@ -992,19 +1022,15 @@ PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn,
   int num_bytes)
 {
   if (!os.exists) {
-    return crimson::ct_error::enoent::make();
-  }
-
-  if (!os.exists) {
     logger().debug("{} {} does not exist",__func__, os.oi.soid);
-    return seastar::now();
+    return crimson::ct_error::enoent::make();
   }
   if (whiteout && os.oi.is_whiteout()) {
     logger().debug("{} whiteout set on {} ",__func__, os.oi.soid);
-    return seastar::now();
+    return crimson::ct_error::enoent::make();
   }
   txn.remove(coll->get_cid(),
-	     ghobject_t{os.oi.soid, ghobject_t::NO_GEN, shard});
+	     ghobject_t{os.oi.soid, ghobject_t::NO_GEN, get_shard()});
 
   if (os.oi.is_omap()) {
     os.oi.clear_flag(object_info_t::FLAG_OMAP);
@@ -1032,7 +1058,7 @@ PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn,
     os.oi.set_flag(object_info_t::FLAG_WHITEOUT);
     delta_stats.num_whiteouts++;
     txn.create(coll->get_cid(),
-               ghobject_t{os.oi.soid, ghobject_t::NO_GEN, shard});
+               ghobject_t{os.oi.soid, ghobject_t::NO_GEN, get_shard()});
     return seastar::now();
   }
 
@@ -1054,8 +1080,8 @@ PGBackend::interruptible_future<std::tuple<std::vector<hobject_t>, hobject_t>>
 PGBackend::list_objects(
   const hobject_t& start, const hobject_t &end, uint64_t limit) const
 {
-  auto gstart = start.is_min() ? ghobject_t{} : ghobject_t{start, 0, shard};
-  auto gend = end.is_max() ? ghobject_t::get_max() : ghobject_t{end, 0, shard};
+  auto gstart = start.is_min() ? ghobject_t{} : ghobject_t{start, 0, get_shard()};
+  auto gend = end.is_max() ? ghobject_t::get_max() : ghobject_t{end, 0, get_shard()};
   auto [gobjects, next] = co_await interruptor::make_interruptible(
     crimson::os::with_store<&crimson::os::FuturizedStore::Shard::list_objects>(
       store, coll, gstart, gend, limit, 0));
@@ -1085,7 +1111,8 @@ PGBackend::setxattr_ierrorator::future<> PGBackend::setxattr(
   ObjectState& os,
   const OSDOp& osd_op,
   ceph::os::Transaction& txn,
-  object_stat_sum_t& delta_stats)
+  object_stat_sum_t& delta_stats,
+  ObjectContext::attr_cache_t& attr_cache)
 {
   if (local_conf()->osd_max_attr_size > 0 &&
       osd_op.op.xattr.value_len > local_conf()->osd_max_attr_size) {
@@ -1093,7 +1120,7 @@ PGBackend::setxattr_ierrorator::future<> PGBackend::setxattr(
   }
   return crimson::os::with_store<
     &crimson::os::FuturizedStore::Shard::get_max_attr_name_length
-  >(store).then([this, &os, &osd_op, &txn, &delta_stats](unsigned store_max_name_len) {
+  >(store).then([this, &os, &osd_op, &txn, &delta_stats, &attr_cache](unsigned store_max_name_len) {
     const auto max_name_len = std::min<uint64_t>(
       store_max_name_len, local_conf()->osd_max_attr_name_len);
     if (osd_op.op.xattr.name_len > max_name_len) {
@@ -1111,6 +1138,7 @@ PGBackend::setxattr_ierrorator::future<> PGBackend::setxattr(
     }
     logger().debug("setxattr on obj={} for attr={}", os.oi.soid, name);
     txn.setattr(coll->get_cid(), ghobject_t{os.oi.soid}, name, val);
+    attr_cache[name] = val;
     delta_stats.num_wr++;
     return setxattr_ierrorator::future<>(seastar::now());
   });
@@ -1118,19 +1146,35 @@ PGBackend::setxattr_ierrorator::future<> PGBackend::setxattr(
 
 PGBackend::get_attr_ierrorator::future<> PGBackend::getxattr(
   const ObjectState& os,
+  const ObjectContext::attr_cache_t& attr_cache,
   OSDOp& osd_op,
   object_stat_sum_t& delta_stats) const
 {
   std::string name;
-  ceph::bufferlist val;
   {
     auto bp = osd_op.indata.cbegin();
     std::string aname;
     bp.copy(osd_op.op.xattr.name_len, aname);
     name = "_" + aname;
   }
-  logger().debug("getxattr on obj={} for attr={}", os.oi.soid, name);
-  return getxattr(os.oi.soid, std::move(name)).safe_then_interruptible(
+  auto get_attr_maybe_from_cache =
+    [&] () mutable -> get_attr_ierrorator::future<ceph::bufferlist> {
+    if (!is_erasure()) {
+      logger().debug("getxattr on obj={} for attr={}", os.oi.soid, name);
+      return getxattr(os.oi.soid, std::move(name));
+    }
+    if (auto cache_it = attr_cache.find(name); cache_it != std::end(attr_cache)) {
+      return get_attr_ierrorator::make_ready_future<ceph::bufferlist>(
+        cache_it->second);
+    }
+    logger().debug("getxattr on obj={} for attr={}", os.oi.soid, name);
+    return crimson::ct_error::enodata::make();
+  };
+  if (is_erasure() && !os.exists) {
+    logger().debug("getxattr: object {} does not exist (erasure)", os.oi.soid);
+    return crimson::ct_error::enoent::make();
+  }
+  return get_attr_maybe_from_cache().safe_then_interruptible(
     [&delta_stats, &osd_op] (ceph::bufferlist&& val) {
     osd_op.outdata = std::move(val);
     osd_op.op.xattr.value_len = osd_op.outdata.length();
@@ -1140,45 +1184,35 @@ PGBackend::get_attr_ierrorator::future<> PGBackend::getxattr(
   });
 }
 
-PGBackend::get_attr_ierrorator::future<ceph::bufferlist>
-PGBackend::getxattr(
-  const hobject_t& soid,
-  std::string_view key) const
-{
-  return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::get_attr>(
-    store, coll, ghobject_t{soid}, key, 0);
-}
-
-PGBackend::get_attr_ierrorator::future<ceph::bufferlist>
-PGBackend::getxattr(
-  const hobject_t& soid,
-  std::string&& key) const
-{
-  return seastar::do_with(key, [this, &soid](auto &key) {
-    return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::get_attr>(
-      store, coll, ghobject_t{soid}, key, 0);
-  });
-}
-
 PGBackend::get_attr_ierrorator::future<> PGBackend::get_xattrs(
   const ObjectState& os,
+  const ObjectContext::attr_cache_t& attr_cache,
   OSDOp& osd_op,
   object_stat_sum_t& delta_stats) const
 {
-  return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::get_attrs>(
-    store, coll, ghobject_t{os.oi.soid}, 0).safe_then(
+  auto get_attrs_maybe_from_cache =
+    [&] () {
+    if (!is_erasure()) {
+      logger().debug("getxattrx on obj={} goes into objstore", os.oi.soid);
+      return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::get_attrs>(
+        store, coll, ghobject_t{os.oi.soid}, 0);
+    }
+    return crimson::os::FuturizedStore::Shard::get_attrs_ertr::make_ready_future<
+      crimson::os::FuturizedStore::Shard::attrs_t>(attr_cache);
+  };
+  return get_attrs_maybe_from_cache().safe_then(
     [&delta_stats, &osd_op](auto&& attrs) {
     std::vector<std::pair<std::string, bufferlist>> user_xattrs;
-    ceph::bufferlist bl;
+    uint64_t total_len = 0;
     for (auto& [key, val] : attrs) {
       if (key.size() > 1 && key[0] == '_') {
-	bl.append(std::move(val));
-	user_xattrs.emplace_back(key.substr(1), std::move(bl));
+	total_len += val.length();
+	user_xattrs.emplace_back(key.substr(1), std::move(val));
       }
     }
     ceph::encode(user_xattrs, osd_op.outdata);
     delta_stats.num_rd++;
-    delta_stats.num_rd_kb += shift_round_up(bl.length(), 10);
+    delta_stats.num_rd_kb += shift_round_up(total_len, 10);
     return get_attr_errorator::now();
   });
 }
@@ -1285,6 +1319,22 @@ PGBackend::cmp_xattr_ierrorator::future<> PGBackend::cmp_xattr(
       ->cmp_xattr_errorator::future<> {
       delta_stats.num_rd++;
       delta_stats.num_rd_kb += shift_round_up(osd_op.op.xattr.value_len, 10);
+
+      // RGW delete uses cmpxattr with an empty expected value and expects a
+      // missing xattr to compare equal (classic OSD behavior).
+      if (osd_op.op.xattr.cmp_op == CEPH_OSD_CMPXATTR_OP_EQ) {
+        auto bp = osd_op.indata.cbegin();
+        bp += osd_op.op.xattr.name_len;
+        if (osd_op.op.xattr.cmp_mode == CEPH_OSD_CMPXATTR_MODE_STRING) {
+          string lhs;
+          bp.copy(osd_op.op.xattr.value_len, lhs);
+          if (lhs.empty()) {
+            osd_op.rval = 1;
+            return cmp_xattr_errorator::now();
+          }
+        }
+      }
+      logger().debug("cmpxattr: xattr does not exist, comparison failed");
       return crimson::ct_error::ecanceled::make();
     }),
     cmp_xattr_errorator::pass_further{}
@@ -1295,7 +1345,8 @@ PGBackend::rm_xattr_iertr::future<>
 PGBackend::rm_xattr(
   ObjectState& os,
   const OSDOp& osd_op,
-  ceph::os::Transaction& txn)
+  ceph::os::Transaction& txn,
+  ObjectContext::attr_cache_t& attr_cache)
 {
   if (!os.exists || os.oi.is_whiteout()) {
     logger().debug("{}: {} DNE", __func__, os.oi.soid);
@@ -1305,6 +1356,7 @@ PGBackend::rm_xattr(
   string attr_name{"_"};
   bp.copy(osd_op.op.xattr.name_len, attr_name);
   txn.rmattr(coll->get_cid(), ghobject_t{os.oi.soid}, attr_name);
+  attr_cache.erase(attr_name);
   return rm_xattr_iertr::now();
 }
 
@@ -1328,6 +1380,7 @@ maybe_get_omap_vals_by_keys(
     return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::omap_get_values>(
       store, coll, ghobject_t{oi.soid}, keys_to_get, 0);
   } else {
+    logger().error("{} on {}: backend has no OMAP support",__func__, oi.soid);
     return crimson::ct_error::enodata::make();
   }
 }
@@ -1349,6 +1402,7 @@ maybe_do_omap_iterate(
     return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::omap_iterate>(
       store, coll, ghobject_t{oi.soid}, start_from, callback, 0, nullptr);
   } else {
+    logger().error("{} on {}: backend has no OMAP support",__func__, oi.soid);
     return crimson::ct_error::enodata::make();
   }
 }
@@ -1389,6 +1443,7 @@ PGBackend::omap_get_header(
   } else {
     // no omap? return empty data but not ENOENT. This is imporant for
     // the case when the object is being creating due to to may_write().
+    logger().error("{} on {}: backend has no OMAP support",__func__, os.oi.soid);
     return seastar::now();
   }
 }
@@ -1400,7 +1455,7 @@ PGBackend::omap_get_keys(
   object_stat_sum_t& delta_stats) const
 {
   if (!os.exists || os.oi.is_whiteout()) {
-    logger().debug("{}: object does not exist: {}", os.oi.soid);
+    logger().debug("object does not exist: {}", os.oi.soid);
     co_await ll_read_ierrorator::future<>(crimson::ct_error::enoent::make());
   }
   std::string start_after;
@@ -1494,7 +1549,7 @@ PGBackend::omap_cmp(
   object_stat_sum_t& delta_stats) const
 {
   if (!os.exists || os.oi.is_whiteout()) {
-    logger().debug("{}: object does not exist: {}", os.oi.soid);
+    logger().debug("object does not exist: {}", os.oi.soid);
     return crimson::ct_error::enoent::make();
   }
 
@@ -1519,6 +1574,7 @@ PGBackend::omap_cmp(
       return  do_omap_val_cmp(out, assertions);
     });
   } else {
+    logger().error("{} on {}: backend has no OMAP support", __func__, os.oi.soid);
     return crimson::ct_error::ecanceled::make();
   }
 }
@@ -1529,7 +1585,7 @@ PGBackend::omap_get_vals(
   object_stat_sum_t& delta_stats) const
 {
   if (!os.exists || os.oi.is_whiteout()) {
-    logger().debug("{}: object does not exist: {}", os.oi.soid);
+    logger().debug("object does not exist: {}", os.oi.soid);
     co_await ll_read_ierrorator::future<>(crimson::ct_error::enoent::make());
   }
   std::string start_after;
@@ -1700,7 +1756,9 @@ PGBackend::interruptible_future<> PGBackend::omap_remove_range(
 PGBackend::interruptible_future<> PGBackend::omap_remove_key(
   ObjectState& os,
   const OSDOp& osd_op,
-  ceph::os::Transaction& txn)
+  ceph::os::Transaction& txn,
+  osd_op_params_t &osd_op_params,
+  object_stat_sum_t &delta_stats)
 {
   ceph::bufferlist to_rm_bl;
   try {
@@ -1710,9 +1768,8 @@ PGBackend::interruptible_future<> PGBackend::omap_remove_key(
     throw crimson::osd::invalid_argument{};
   }
   txn.omap_rmkeys(coll->get_cid(), ghobject_t{os.oi.soid}, to_rm_bl);
-  // TODO:
-  // ctx->clean_regions.mark_omap_dirty();
-  // ctx->delta_stats.num_wr++;
+  osd_op_params.clean_regions.mark_omap_dirty();
+  delta_stats.num_wr++;
   os.oi.clear_omap_digest();
   return seastar::now();
 }
@@ -1726,7 +1783,7 @@ PGBackend::omap_clear(
   object_stat_sum_t& delta_stats)
 {
   if (!os.exists || os.oi.is_whiteout()) {
-    logger().debug("{}: object does not exist: {}", os.oi.soid);
+    logger().debug("object does not exist: {}", os.oi.soid);
     return crimson::ct_error::enoent::make();
   }
   if (!os.oi.is_omap()) {
@@ -1797,15 +1854,14 @@ PGBackend::tmapup_iertr::future<> PGBackend::tmapup(
   logger().debug("PGBackend::tmapup: {}", os.oi.soid);
   return PGBackend::write_iertr::now(
   ).si_then([this, &os] {
-    return _read(os.oi.soid, 0, os.oi.size, 0);
+    return _read(os.oi.soid, os.oi.size, 0, os.oi.size, 0);
   }).handle_error_interruptible(
     crimson::ct_error::enoent::handle([](auto &) {
       return seastar::make_ready_future<bufferlist>();
     }),
     PGBackend::write_iertr::pass_further{},
-    crimson::ct_error::assert_all{fmt::format(
-      "read error in mutate_object_contents of {}", os.oi.soid).c_str()
-    }).si_then([this, &os, &osd_op, &txn,
+    crimson::ct_error::assert_all(
+      "read error in mutate_object_contents of {}", os.oi.soid)).si_then([this, &os, &osd_op, &txn,
 	     &delta_stats, &osd_op_params]
 	    (auto &&bl) mutable -> PGBackend::tmapup_iertr::future<> {
     auto result = crimson::common::do_tmap_up(
@@ -1854,7 +1910,7 @@ PGBackend::read_ierrorator::future<> PGBackend::tmapget(
     return crimson::ct_error::enoent::make();
   }
 
-  return _read(oi.soid, 0, oi.size, 0).safe_then_interruptible_tuple(
+  return _read(oi.soid, os.oi.size, 0, oi.size, 0).safe_then_interruptible_tuple(
     [&delta_stats, &osd_op](auto&& bl) -> read_errorator::future<> {
       logger().debug("PGBackend::tmapget: data length: {}", bl.length());
       osd_op.op.extent.length = bl.length();
@@ -1878,7 +1934,7 @@ void PGBackend::set_metadata(
   ceph_assert((obj.is_head() && ss) || (!obj.is_head() && !ss));
   {
     ceph::bufferlist bv;
-    oi.encode_no_oid(bv, CEPH_FEATURES_ALL);
+    oi.encode(bv, CEPH_FEATURES_ALL);
     txn.setattr(coll->get_cid(), ghobject_t{obj}, OI_ATTR, bv);
   }
   if (ss) {

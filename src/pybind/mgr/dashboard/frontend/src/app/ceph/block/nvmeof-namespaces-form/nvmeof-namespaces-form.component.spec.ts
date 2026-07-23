@@ -4,8 +4,6 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { ToastrModule } from 'ngx-toastr';
-
 import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -96,8 +94,7 @@ describe('NvmeofNamespacesFormComponent', () => {
         NumberModule,
         RadioModule,
         ComboBoxModule,
-        SelectModule,
-        ToastrModule.forRoot()
+        SelectModule
       ]
     }).compileComponents();
     fixture = TestBed.createComponent(NvmeofNamespacesFormComponent);
@@ -137,16 +134,16 @@ describe('NvmeofNamespacesFormComponent', () => {
       expect(nvmeofService.createNamespace).toHaveBeenCalled();
     });
 
-    it('should not send block_size from namespace_size UI field', () => {
+    it('should send block_size from namespace_size UI field', () => {
       formHelper.setValue('pool', 'rbd');
       formHelper.setValue('image_size', new FormatterService().toBytes('1GiB'));
       formHelper.setValue('subsystem', MOCK_SUBSYSTEM);
-      formHelper.setValue('namespace_size', 10);
+      formHelper.setValue('namespace_size', 1024);
 
       component.onSubmit();
 
       const request = (nvmeofService.createNamespace as jasmine.Spy).calls.mostRecent().args[1];
-      expect(request.block_size).toBeUndefined();
+      expect(request.block_size).toBe(1024);
     });
   });
 });

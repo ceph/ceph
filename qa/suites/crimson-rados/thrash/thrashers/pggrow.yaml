@@ -35,3 +35,5 @@ tasks:
     chance_pgnum_grow: 2
     chance_pgpnum_fix: 1
     chance_down: 0
+    # See: https://tracker.ceph.com/issues/75273
+    op_delay: 20

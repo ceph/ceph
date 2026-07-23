@@ -18,7 +18,9 @@ import {
   TagModule,
   ProgressBarModule,
   StructuredListModule,
-  SearchModule
+  SearchModule,
+  ModalModule,
+  LinkModule
 } from 'carbon-components-angular';
 
 import { AppRoutingModule } from '~/app/app-routing.module';
@@ -66,11 +68,14 @@ import IbmCloudBareMetalServerIcon from '@carbon/icons/es/ibm-cloud--bare-metal-
 import IbmCloudDedicatedHostIcon from '@carbon/icons/es/ibm-cloud--dedicated-host/20';
 import VmdkDiskIcon from '@carbon/icons/es/vmdk-disk/20';
 
+import ArrowLeftIcon from '@carbon/icons/es/arrow--left/16';
+import ChevronRightIcon from '@carbon/icons/es/chevron--right/16';
 import CloseIcon from '@carbon/icons/es/close/16';
 import { NotificationPanelComponent } from './notification-panel/notification-panel/notification-panel.component';
 import { NotificationHeaderComponent } from './notification-panel/notification-header/notification-header.component';
 import { NotificationAreaComponent } from './notification-panel/notification-area/notification-area.component';
 import { NotificationFooterComponent } from './notification-panel/notification-footer/notification-footer.component';
+import { NotificationItemComponent } from './notification-panel/notification-item/notification-item.component';
 
 @NgModule({
   imports: [
@@ -94,7 +99,9 @@ import { NotificationFooterComponent } from './notification-panel/notification-f
     TagModule,
     ProgressBarModule,
     StructuredListModule,
-    SearchModule
+    SearchModule,
+    ModalModule,
+    LinkModule
   ],
   declarations: [
     AboutComponent,
@@ -106,6 +113,7 @@ import { NotificationFooterComponent } from './notification-panel/notification-f
     NotificationHeaderComponent,
     NotificationAreaComponent,
     NotificationFooterComponent,
+    NotificationItemComponent,
     NotificationsPageComponent,
     DashboardHelpComponent,
     AdministrationComponent,
@@ -154,6 +162,8 @@ export class NavigationModule {
       CircleDashIcon20,
       CheckmarkOutlineIcon20,
       ArrowRightIcon,
+      ArrowLeftIcon,
+      ChevronRightIcon,
       VmdkDiskIcon
     ]);
   }

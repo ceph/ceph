@@ -166,12 +166,17 @@ class BackfillFixture : public crimson::osd::BackfillState::BackfillListener {
     const hobject_t& obj,
     const eversion_t& v) override;
 
+  void send_recovery_deletes(
+    const hobject_t& obj,
+    const std::vector<pg_shard_t>& peers) override;
+
   void maybe_flush() override;
 
   void update_peers_last_backfill(
     const hobject_t& new_last_backfill) override;
 
   bool budget_available() const override;
+  void request_budget_retry() override;
 
 public:
   MOCK_METHOD(void, backfilled, (), (override));
@@ -399,6 +404,13 @@ void BackfillFixture::enqueue_drop(
   enqueued_drops[target].emplace_back(obj, v);
 }
 
+void BackfillFixture::send_recovery_deletes(
+  const hobject_t& obj,
+  const std::vector<pg_shard_t>& peers)
+{
+  // no-op in test mock
+}
+
 void BackfillFixture::maybe_flush()
 {
   for (const auto& [target, versioned_objs] : enqueued_drops) {
@@ -420,6 +432,13 @@ void BackfillFixture::update_peers_last_backfill(
 bool BackfillFixture::budget_available() const
 {
   return true;
+}
+
+void BackfillFixture::request_budget_retry()
+{
+  // budget_available() always returns true in tests so BudgetBlocked
+  // should never be entered and this should never be called
+  ceph_abort_msg("request_budget_retry called unexpectedly in test");
 }
 
 struct BackfillFixtureBuilder {

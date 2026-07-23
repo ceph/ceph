@@ -14,9 +14,9 @@ enum TABS {
 }
 
 const TAB_LABELS: Record<TABS, string> = {
-  [TABS.gateways]: $localize`Gateways`,
-  [TABS.subsystem]: $localize`Subsystem`,
-  [TABS.namespace]: $localize`Namespace`
+  [TABS.gateways]: $localize`Gateway groups`,
+  [TABS.subsystem]: $localize`Subsystems`,
+  [TABS.namespace]: $localize`Namespaces`
 };
 
 @Component({

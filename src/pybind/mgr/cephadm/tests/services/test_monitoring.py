@@ -4,7 +4,7 @@ import json
 import urllib.parse
 import yaml
 import pytest
-from unittest.mock import Mock, patch, ANY
+from unittest.mock import Mock, patch, ANY, MagicMock
 
 from cephadm.serve import CephadmServe
 from cephadm.services.service_registry import service_registry
@@ -196,9 +196,7 @@ class TestMonitoring:
                   resolve_timeout: 5m
                   http_config:
                     tls_config:
-                      ca_file: root_cert.pem
-                      cert_file: alertmanager.crt
-                      key_file: alertmanager.key
+                      insecure_skip_verify: true
 
                 route:
                   receiver: 'default'
@@ -217,6 +215,12 @@ class TestMonitoring:
                 - name: 'ceph-dashboard'
                   webhook_configs:
                   - url: 'https://host_fqdn:29443/internal/dashboard/api/prometheus_receiver'
+                    http_config:
+                      tls_config:
+                        insecure_skip_verify: false
+                        ca_file: root_cert.pem
+                        cert_file: alertmanager.crt
+                        key_file: alertmanager.key
                 """).lstrip()
 
                 web_config = dedent("""
@@ -298,9 +302,7 @@ class TestMonitoring:
                   resolve_timeout: 5m
                   http_config:
                     tls_config:
-                      ca_file: root_cert.pem
-                      cert_file: alertmanager.crt
-                      key_file: alertmanager.key
+                      insecure_skip_verify: true
 
                 route:
                   receiver: 'default'
@@ -743,6 +745,7 @@ class TestMonitoring:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=nvmeof
 
 
+
                 """).lstrip()
 
                 _run_cephadm.assert_called_with(
@@ -780,8 +783,8 @@ class TestMonitoring:
                             "use_url_prefix": False
                         },
                     }),
-                    error_ok=True,
                     use_current_daemon_image=False,
+                    error_ok=True,
                 )
 
     @patch("cephadm.module.CephadmOrchestrator.get_unique_name")
@@ -790,7 +793,7 @@ class TestMonitoring:
     @patch("cephadm.services.monitoring.password_hash", lambda password: 'prometheus_password_hash')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: 'cephadm_root_cert')
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
-           lambda instance, dspec, ips=None, fqdns=None: TLSCredentials('mycert', 'mykey'))
+           lambda instance, dspec, ips=None, fqdns=None, ca_cert_required=False: TLSCredentials('mycert', 'mykey'))
     def test_prometheus_config_security_enabled(self, _run_cephadm, _get_uname, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
         _get_uname.return_value = 'test'
@@ -1003,6 +1006,7 @@ class TestMonitoring:
                         key_file: prometheus.key
 
 
+
                 """).lstrip()
 
                 _run_cephadm.assert_called_with(
@@ -1044,8 +1048,8 @@ class TestMonitoring:
                             'web_config': '/etc/prometheus/web.yml'
                         },
                     }),
-                    error_ok=True,
                     use_current_daemon_image=False,
+                    error_ok=True,
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -1185,6 +1189,58 @@ class TestMonitoring:
                     use_current_daemon_image=False,
                 )
 
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_post_remove_no_op_when_other_daemons_remain_on_same_host_host_scope(
+            self, cephadm_module: CephadmOrchestrator):
+        """
+        HOST-scope service: when a sibling daemon is still running on the same
+        """
+        cephadm_module._init_cert_mgr()
+        cm = cephadm_module.cert_mgr
+        host = 'host1'
+
+        with with_host(cephadm_module, host):
+            grafana_svc = service_registry.get_service('grafana')
+            svc_name = 'grafana'
+
+            # Seed a HOST-scoped inline cert for this host
+            cm.save_cert(grafana_svc.cert_name, ceph_generated_cert,
+                         host=host, user_made=True, editable=False)
+            cm.save_key(grafana_svc.key_name, ceph_generated_key,
+                        host=host, user_made=True, editable=False)
+
+            assert cm.get_cert(grafana_svc.cert_name, host=host) is not None
+            assert cm.get_key(grafana_svc.key_name, host=host) is not None
+
+            mock_entry = MagicMock()
+            mock_entry.spec = MagicMock()
+            mock_entry.spec.ssl = True
+            mock_entry.spec.certificate_source = 'inline'
+            mock_spec_store = MagicMock()
+            mock_spec_store.__contains__ = MagicMock(return_value=True)
+            mock_spec_store.__getitem__ = MagicMock(return_value=mock_entry)
+
+            daemon = MagicMock()
+            daemon.daemon_type = 'grafana'
+            daemon.daemon_id = 'host1.0'
+            daemon.hostname = host
+            daemon.name.return_value = f'grafana.{daemon.daemon_id}'
+            daemon.service_name.return_value = svc_name
+
+            # Sibling still on the same host
+            sibling = MagicMock()
+            sibling.hostname = host
+            sibling.name.return_value = 'grafana.host1.1'
+
+            with patch.object(cephadm_module, 'spec_store', mock_spec_store), \
+                 patch.object(cephadm_module.cache, 'get_daemons_by_service',
+                              return_value=[daemon, sibling]):
+                grafana_svc.post_remove(daemon, is_failed_deploy=False)
+
+            # Cert must still be present — sibling is still on host1
+            assert cm.get_cert(grafana_svc.cert_name, host=host) is not None
+            assert cm.get_key(grafana_svc.key_name, host=host) is not None
+
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '1::4')
     @patch("cephadm.module.CephadmOrchestrator.get_fqdn", lambda a, b: 'host_fqdn')
@@ -1273,7 +1329,7 @@ class TestMonitoring:
                           cert_file = /etc/grafana/certs/cert_file
                           cert_key = /etc/grafana/certs/cert_key
                           http_port = 3000
-                          http_addr = 
+                          http_addr = ::
                           root_url = %(protocol)s://%(domain)s:%(http_port)s/grafana/
                           serve_from_sub_path = true
                         [snapshots]
@@ -1434,7 +1490,7 @@ class TestMonitoring:
                           cert_file = /etc/grafana/certs/cert_file
                           cert_key = /etc/grafana/certs/cert_key
                           http_port = 3000
-                          http_addr = 
+                          http_addr = ::
                           root_url = %(protocol)s://%(domain)s:%(http_port)s/grafana/
                           serve_from_sub_path = true
                         [snapshots]
@@ -1534,7 +1590,7 @@ class TestMonitoring:
                           cert_file = /etc/grafana/certs/cert_file
                           cert_key = /etc/grafana/certs/cert_key
                           http_port = 3000
-                          http_addr = 
+                          http_addr = ::
                         [snapshots]
                           external_enabled = false
                         [security]
@@ -1625,6 +1681,7 @@ class TestMonitoring:
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '192.0.2.1')
     def test_grafana_initial_admin_pw(self, cephadm_module: CephadmOrchestrator):
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, ServiceSpec('mgr')) as _, \
@@ -1649,7 +1706,7 @@ class TestMonitoring:
                                     '  cert_file = /etc/grafana/certs/cert_file\n'
                                     '  cert_key = /etc/grafana/certs/cert_key\n'
                                     '  http_port = 3000\n'
-                                    '  http_addr = \n'
+                                    '  http_addr = 0.0.0.0\n'
                                     '[snapshots]\n'
                                     '  external_enabled = false\n'
                                     '[security]\n'
@@ -1691,9 +1748,36 @@ class TestMonitoring:
                                     '    editable: false\n'
                                     '    options:\n'
                                     "      path: '/etc/grafana/provisioning/dashboards'"
-                            }}, ['secure_monitoring_stack:False'])
+                            }}, ['certificate_source: cephadm-signed', 'secure_monitoring_stack:False'])
 
     @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '192.0.2.1')
+    def test_grafana_http_addr_binds_all_by_default_ipv4(self, cephadm_module: CephadmOrchestrator):
+        grafana_svc = service_registry.get_service('grafana')
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, GrafanaSpec()):
+                ini = grafana_svc.generate_grafana_ini(
+                    CephadmDaemonDeploySpec('test', 'daemon', 'grafana'),
+                    mgmt_gw_enabled=False,
+                    oauth2_enabled=False,
+                )
+                assert 'http_addr = 0.0.0.0' in ini
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '1::4')
+    def test_grafana_http_addr_binds_all_by_default_ipv6(self, cephadm_module: CephadmOrchestrator):
+        grafana_svc = service_registry.get_service('grafana')
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, GrafanaSpec()):
+                ini = grafana_svc.generate_grafana_ini(
+                    CephadmDaemonDeploySpec('test', 'daemon', 'grafana'),
+                    mgmt_gw_enabled=False,
+                    oauth2_enabled=False,
+                )
+                assert 'http_addr = ::' in ini
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '192.0.2.1')
     def test_grafana_no_anon_access(self, cephadm_module: CephadmOrchestrator):
         # with anonymous_access set to False, expecting the [auth.anonymous] section
         # to not be present in the grafana config. Note that we require an initial_admin_password
@@ -1718,7 +1802,7 @@ class TestMonitoring:
                                     '  cert_file = /etc/grafana/certs/cert_file\n'
                                     '  cert_key = /etc/grafana/certs/cert_key\n'
                                     '  http_port = 3000\n'
-                                    '  http_addr = \n'
+                                    '  http_addr = 0.0.0.0\n'
                                     '[snapshots]\n'
                                     '  external_enabled = false\n'
                                     '[security]\n'
@@ -1760,7 +1844,7 @@ class TestMonitoring:
                                     '    editable: false\n'
                                     '    options:\n'
                                     "      path: '/etc/grafana/provisioning/dashboards'"
-                            }}, ['secure_monitoring_stack:False'])
+                            }}, ['certificate_source: cephadm-signed', 'secure_monitoring_stack:False'])
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_monitoring_ports(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
@@ -1811,3 +1895,67 @@ spec:
                         error_ok=True,
                         use_current_daemon_image=False,
                     )
+
+    @patch("cephadm.services.monitoring.PrometheusService.get_dependencies", lambda *a, **k: [])
+    def test_prometheus_config_sets_default_when_missing(self, cephadm_module):
+
+        svc = PrometheusService(cephadm_module)
+
+        daemon_spec = Mock()
+        daemon_spec.daemon_type = 'prometheus'
+        daemon_spec.service_name = 'prometheus'
+        daemon_spec.host = 'test'
+
+        cephadm_module.mon_command = Mock(return_value=(-2, '', ''))
+        cephadm_module.check_mon_command = Mock()
+
+        loader = Mock()
+        loader.get_source.return_value = ("raw_template_content", None, None)
+        cephadm_module.template.engine.env.loader = loader
+
+        cephadm_module.template.render = Mock(return_value="rendered_config")
+
+        cephadm_module._get_security_config = Mock(return_value=(False, False, False))
+        cephadm_module._get_alertmanager_credentials = Mock(return_value=(None, None))
+        cephadm_module._get_mgr_ips = Mock(return_value=['127.0.0.1'])
+
+        cephadm_module.spec_store = {
+            'prometheus': Mock()
+        }
+        cephadm_module.spec_store['prometheus'].spec = PrometheusSpec('prometheus')
+
+        svc.generate_config(daemon_spec)
+
+        cephadm_module.check_mon_command.assert_called_once_with({
+            'prefix': 'config-key set',
+            'key': 'mgr/cephadm/services/prometheus/prometheus.yml',
+            'val': "raw_template_content"
+        })
+
+    @patch("cephadm.services.monitoring.PrometheusService.get_dependencies", lambda *a, **k: [])
+    def test_prometheus_config_does_not_override_existing(self, cephadm_module):
+
+        svc = PrometheusService(cephadm_module)
+
+        daemon_spec = Mock()
+        daemon_spec.daemon_type = 'prometheus'
+        daemon_spec.service_name = 'prometheus'
+        daemon_spec.host = 'test'
+
+        cephadm_module.mon_command = Mock(return_value=(0, 'existing', ''))
+        cephadm_module.check_mon_command = Mock()
+
+        cephadm_module.template.render = Mock(return_value="rendered_config")
+
+        cephadm_module._get_security_config = Mock(return_value=(False, False, False))
+        cephadm_module._get_alertmanager_credentials = Mock(return_value=(None, None))
+        cephadm_module._get_mgr_ips = Mock(return_value=['127.0.0.1'])
+
+        cephadm_module.spec_store = {
+            'prometheus': Mock()
+        }
+        cephadm_module.spec_store['prometheus'].spec = PrometheusSpec('prometheus')
+
+        svc.generate_config(daemon_spec)
+
+        cephadm_module.check_mon_command.assert_not_called()

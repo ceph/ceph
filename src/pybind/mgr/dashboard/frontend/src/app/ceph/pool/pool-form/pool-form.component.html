@@ -2,9 +2,7 @@
   cdsCol
   [columnNumbers]="{ md: 4 }"
 >
-  <ng-container
-    *cdFormLoading="loading"
-  >
+  <ng-container *cdFormLoading="loading">
     <form
       name="form"
       [formGroup]="form"
@@ -15,15 +13,18 @@
         class="form-header"
       >
         {{ action | titlecase }} {{ resource | upperFirst }}
+        @if (isStretchMode) {
+          <cd-help-text>
+            Stretch cluster is enabled. Only replicated pool type is supported in Stretch mode.
+          </cd-help-text>
+        }
       </div>
       <!-- Name -->
       <div
         class="form-item"
         cdsRow
       >
-        <div
-          cdsCol
-        >
+        <div cdsCol>
           <cds-text-label
             labelInputID="name"
             i18n
@@ -44,37 +45,37 @@
           </cds-text-label>
           <ng-template #nameError>
             @if (form.showError('name', formDir, 'required')) {
-            <span
-              class="invalid-feedback"
-              i18n
-            >
-              This field is required!
-            </span>
+              <span
+                class="invalid-feedback"
+                i18n
+              >
+                This field is required!
+              </span>
             }
             @if (form.showError('name', formDir, 'uniqueName')) {
-            <span
-              class="invalid-feedback"
-              i18n
-            >
-              The chosen Ceph pool name is already in use.
-            </span>
+              <span
+                class="invalid-feedback"
+                i18n
+              >
+                The chosen Ceph pool name is already in use.
+              </span>
             }
             @if (form.showError('name', formDir, 'rbdPool')) {
-            <span
-              class="invalid-feedback"
-              i18n
-            >
-              It's not possible to create an RBD pool with '/' in the name. Please change the name
-              or remove 'rbd' from the applications list.
-            </span>
+              <span
+                class="invalid-feedback"
+                i18n
+              >
+                It's not possible to create an RBD pool with '/' in the name. Please change the name
+                or remove 'rbd' from the applications list.
+              </span>
             }
             @if (form.showError('name', formDir, 'pattern')) {
-            <span
-              class="invalid-feedback"
-              i18n
-            >
-              Pool name can only contain letters, numbers, '.', '-', '_' or '/'.
-            </span>
+              <span
+                class="invalid-feedback"
+                i18n
+              >
+                Pool name can only contain letters, numbers, '.', '-', '_' or '/'.
+              </span>
             }
           </ng-template>
         </div>
@@ -84,226 +85,231 @@
         class="form-item"
         cdsRow
       >
-        <div
-          cdsCol
-        >
+        <div cdsCol>
           <legend
             class="cds--label"
             i18n
           >
             Pool type
           </legend>
-          <cds-radio-group
-            formControlName="poolType"
-            cdRequiredField="Pool type"
-            data-testid="pool-type-select"
-          >
-            @for (poolType of data.poolTypes; track poolType) {
-            <cds-radio
-              [value]="poolType"
-              [id]="poolType"
-              (change)="data.erasureInfo = false; data.crushInfo = false;"
+          @if (isStretchMode) {
+            <cds-tooltip
+              description="In stretch mode, only replicated pool type is supported."
+              placement="right"
+              [highContrast]="true"
+              [caret]="true"
+            >
+              <cds-radio-group
+                formControlName="poolType"
+                cdRequiredField="Pool type"
+                data-testid="pool-type-select"
+              >
+                @for (poolType of data.poolTypes; track poolType) {
+                  <cds-radio
+                    [value]="poolType"
+                    [id]="poolType"
+                    [disabled]="isStretchMode && !editing && poolType === 'erasure'"
+                    (change)="data.erasureInfo = false; data.crushInfo = false"
+                    i18n
+                  >
+                    {{ poolType | upperFirst }}
+                  </cds-radio>
+                }
+              </cds-radio-group>
+            </cds-tooltip>
+          } @else {
+            <cds-radio-group
+              formControlName="poolType"
+              cdRequiredField="Pool type"
+              data-testid="pool-type-select"
+            >
+              @for (poolType of data.poolTypes; track poolType) {
+                <cds-radio
+                  [value]="poolType"
+                  [id]="poolType"
+                  [disabled]="isStretchMode && !editing && poolType === 'erasure'"
+                  (change)="data.erasureInfo = false; data.crushInfo = false"
+                  i18n
+                >
+                  {{ poolType | upperFirst }}
+                </cds-radio>
+              }
+            </cds-radio-group>
+          }
+          @if (form.showError('poolType', formDir, 'required')) {
+            <span
+              class="cds--form-requirement invalid-feedback"
               i18n
             >
-              {{ poolType | upperFirst }}
-            </cds-radio>
-            }
-          </cds-radio-group>
-          @if (form.showError('poolType', formDir, 'required')) {
-          <span
-            class="cds--form-requirement invalid-feedback"
-            i18n
-          >
-            This field is required!
-          </span>
+              This field is required!
+            </span>
           }
         </div>
       </div>
       @if (isReplicated || isErasure) {
-      <div>
-        <!-- PG Autoscale Mode -->
-        <div
-          class="form-item"
-          cdsRow
-        >
+        <div>
+          <!-- PG Autoscale Mode -->
           <div
-            cdsCol
+            class="form-item"
+            cdsRow
           >
-            <cds-select
-              formControlName="pgAutoscaleMode"
-              [helperText]="poolService.formTooltips.pgAutoscaleModes[form.getValue('pgAutoscaleMode')]"
-              label="PG Autoscale"
-              i18n-label
-              id="pgAutoscaleMode"
-            >
-              @for (mode of pgAutoscaleModes; track mode) {
-              <option [value]="mode">
-                {{ mode }}
-              </option>
-              }
-            </cds-select>
-          </div>
-        </div>
-        <!-- Pg number -->
-        @if (form.getValue('pgAutoscaleMode') !== 'on') {
-        <div
-          class="form-item"
-          cdsRow
-        >
-          <div
-            cdsCol
-          >
-            <cds-number
-              label="Placement groups"
-              cdRequiredField="Placement groups"
-              [helperText]="calculationHelp"
-              min="1"
-              [invalid]="form.controls.pgNum.invalid && form.controls.pgNum.dirty"
-              [invalidText]="pgNumError"
-              formControlName="pgNum"
-              data-testid="pgNum"
-              (handleFocus)="externalPgChange = false"
-              (blur)="alignPgs()"
-              i18n
-            >
-            </cds-number>
-            <ng-template #pgNumError>
-              @if (form.showError('pgNum', formDir, 'required')) {
-              <span
-                class="invalid-feedback"
-                i18n
+            <div cdsCol>
+              <cds-select
+                formControlName="pgAutoscaleMode"
+                [helperText]="
+                  poolService.formTooltips.pgAutoscaleModes[form.getValue('pgAutoscaleMode')]
+                "
+                label="PG Autoscale"
+                i18n-label
+                id="pgAutoscaleMode"
               >
-                This field is required!
-              </span>
-              }
-              @if (form.showError('pgNum', formDir, 'min')) {
-              <span
-                class="invalid-feedback"
-                i18n
-              >
-                At least one placement group is needed!
-              </span>
-              }
-              @if (form.showError('pgNum', formDir, 'pgMax')) {
-              <span
-                class="invalid-feedback"
-                i18n
-              >
-                The specified PG is out of range. A value from {{ getMinPgs() }} to {{ getMaxPgs() }} is allowed.
-              </span>
-              }
-            </ng-template>
-            <ng-template #calculationHelp>
-              <span>
-                @if (externalPgChange) {
-                <span i18n>The current PGs settings were calculated for you, you should make sure the values suit your needs before submit. </span>
+                @for (mode of pgAutoscaleModes; track mode) {
+                  <option [value]="mode">
+                    {{ mode }}
+                  </option>
                 }
-                <cd-doc
-                  section="pgs"
-                  docText="Calculation help"
-                  i18n-docText
+              </cds-select>
+            </div>
+          </div>
+          <!-- Pg number -->
+          @if (form.getValue('pgAutoscaleMode') !== 'on') {
+            <div
+              class="form-item"
+              cdsRow
+            >
+              <div cdsCol>
+                <cds-number
+                  label="Placement groups"
+                  cdRequiredField="Placement groups"
+                  [helperText]="calculationHelp"
+                  min="1"
+                  [invalid]="form.controls.pgNum.invalid && form.controls.pgNum.dirty"
+                  [invalidText]="pgNumError"
+                  formControlName="pgNum"
+                  data-testid="pgNum"
+                  (handleFocus)="externalPgChange = false"
+                  (blur)="alignPgs()"
+                  i18n
                 >
-                </cd-doc>
-              </span>
-            </ng-template>
-          </div>
-        </div>
-        }
-        <!-- Replica Size -->
-        @if (isReplicated) {
-        <div
-          class="form-item"
-          cdsRow
-        >
-          <div
-            cdsCol
-          >
-            <cds-number
-              label="Replicated size"
-              cdRequiredField="Replicated size"
-              [invalid]="form.controls.size.invalid && form.controls.size.dirty"
-              [helperText]="sizeWarning"
-              [invalidText]="sizeError"
-              formControlName="size"
-              data-testid="size"
-              [max]="getMaxSize()"
-              [min]="getMinSize()"
-              (handleFocus)="externalPgChange = false"
-              (input)="alignPgs()"
-              i18n
-              i18n-helperText
+                </cds-number>
+                <ng-template #pgNumError>
+                  @if (form.showError('pgNum', formDir, 'required')) {
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                    >
+                      This field is required!
+                    </span>
+                  }
+                  @if (form.showError('pgNum', formDir, 'min')) {
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                    >
+                      At least one placement group is needed!
+                    </span>
+                  }
+                  @if (form.showError('pgNum', formDir, 'pgMax')) {
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                    >
+                      The specified PG is out of range. A value from {{ getMinPgs() }} to
+                      {{ getMaxPgs() }} is allowed.
+                    </span>
+                  }
+                </ng-template>
+                <ng-template #calculationHelp>
+                  <span>
+                    @if (externalPgChange) {
+                      <span i18n
+                        >The current PGs settings were calculated for you, you should make sure the
+                        values suit your needs before submit.
+                      </span>
+                    }
+                    <cd-doc
+                      section="pgs"
+                      docText="Calculation help"
+                      i18n-docText
+                    >
+                    </cd-doc>
+                  </span>
+                </ng-template>
+              </div>
+            </div>
+          }
+          <!-- Replica Size -->
+          @if (isReplicated) {
+            <div
+              class="form-item"
+              cdsRow
             >
-            </cds-number>
-            <ng-template #sizeError>
-              @if (form.showError('size', formDir)) {
-              <span class="invalid-feedback">
-                <ul class="list-inline">
-                  <li
-                    i18n
-                  >
-                    Minimum: {{ getMinSize() }}
-                  </li>
-                  <li
-                    i18n
-                  >
-                    Maximum: {{ getMaxSize() }}
-                  </li>
-                </ul>
-              </span>
-              }
-              @if (form.showError('size', formDir)) {
-              <span
-                class="invalid-feedback"
-                i18n
-              >
-                The size specified is out of range. A value from {{ getMinSize() }} to
-                {{ getMaxSize() }} is usable.
-              </span>
-              }
-            </ng-template>
-            <ng-template #sizeWarning>
-              @if (form.getValue('size') === 1) {
-              <span
-                class="text-warning-dark"
-                i18n
-              >
-                A size of 1 will not create a replication of the object. The 'Replicated size'
-                includes the object itself.
-              </span>
-              }
-            </ng-template>
-          </div>
-        </div>
-        }
-        <!-- Flags -->
-        @if (info?.is_all_bluestore && isErasure) {
-        <div
-          class="form-item"
-          cdsRow
-        >
-          <div
-            cdsCol
-          >
-            <cds-checkbox
-              id="ec-overwrites"
-              formControlName="ecOverwrites"
+              <div cdsCol>
+                <cds-number
+                  label="Replicated size"
+                  cdRequiredField="Replicated size"
+                  [invalid]="form.controls.size.invalid && form.controls.size.dirty"
+                  [helperText]="sizeWarning"
+                  [invalidText]="sizeError"
+                  formControlName="size"
+                  data-testid="size"
+                  [max]="getMaxSize()"
+                  [min]="getMinSize()"
+                  (handleFocus)="externalPgChange = false"
+                  (input)="alignPgs()"
+                  i18n
+                  i18n-helperText
+                >
+                </cds-number>
+                <ng-template #sizeError>
+                  @if (form.showError('size', formDir)) {
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                    >
+                      Invalid input. Replicated size must be between {{ getMinSize() }} and
+                      {{ getMaxSize() }}.
+                    </span>
+                  }
+                </ng-template>
+                <ng-template #sizeWarning>
+                  @if (isStretchMode) {
+                    <span i18n> The replicated size value is predefined for stretch cluster </span>
+                  }
+                  @if (form.getValue('size') === 1) {
+                    <span
+                      class="text-warning-dark"
+                      i18n
+                    >
+                      A size of 1 will not create a replication of the object. The 'Replicated size'
+                      includes the object itself.
+                    </span>
+                  }
+                </ng-template>
+              </div>
+            </div>
+          }
+          <!-- Flags -->
+          @if (info?.is_all_bluestore && isErasure) {
+            <div
+              class="form-item"
+              cdsRow
             >
-              <ng-container i18n>
-                Flags
-              </ng-container>
-              <cd-help-text i18n>
-                EC Overwrites
-              </cd-help-text>
-            </cds-checkbox>
-          </div>
+              <div cdsCol>
+                <cds-checkbox
+                  id="ec-overwrites"
+                  formControlName="ecOverwrites"
+                >
+                  <ng-container i18n> Flags </ng-container>
+                  <cd-help-text i18n> EC Overwrites </cd-help-text>
+                </cds-checkbox>
+              </div>
+            </div>
+          }
         </div>
-        }
-      </div>
       }
       <!-- Applications -->
-      <div
-        class="form-item"
-      >
+      <div class="form-item">
         <cds-combo-box
           type="multi"
           selectionFeedback="top-after-reopen"
@@ -315,7 +321,9 @@
           [appendInline]="true"
           [items]="data.applications.available"
           (selected)="appSelection($event)"
-          [invalid]="data.applications.selected.length === 0 && (formDir?.submitted || isFormSubmitted)"
+          [invalid]="
+            data.applications.selected.length === 0 && (formDir?.submitted || isFormSubmitted)
+          "
           [invalidText]="applicationsError"
           [helperText]="helperText"
           cdRequiredField="Applications"
@@ -324,8 +332,7 @@
           (updatedItems)="data.applications.available = $event"
           i18n-placeholder
         >
-          <cds-dropdown-list>
-          </cds-dropdown-list>
+          <cds-dropdown-list> </cds-dropdown-list>
         </cds-combo-box>
         <ng-template #applicationsError>
           <span
@@ -336,717 +343,716 @@
           </span>
         </ng-template>
         <ng-template #helperText>
-          <span i18n>
-            Pools need to be associated with an application before use
-          </span>
+          <span i18n> Pools need to be associated with an application before use </span>
         </ng-template>
       </div>
       <!-- Mirroring -->
-      @if (data.applications.selected.includes('rbd')) {
-      <div
-        class="form-item"
-        cdsRow
-      >
+      @if (
+        (permissions?.rbdMirroring?.create || (editing && permissions?.rbdMirroring?.update)) &&
+        data.applications.selected.includes('rbd')
+      ) {
         <div
-          cdsCol
+          class="form-item"
+          cdsRow
         >
-          <cds-checkbox
-            id="rbdMirroring"
-            formControlName="rbdMirroring"
-            data-testid="rbd-mirroring-check"
-            i18n-label
-          >
-            Mirroring
-            <cd-help-text i18n>
-              Check this option to enable Pool based mirroring on a Block(RBD) pool.
-            </cd-help-text>
-          </cds-checkbox>
+          <div cdsCol>
+            <cds-checkbox
+              id="rbdMirroring"
+              formControlName="rbdMirroring"
+              data-testid="rbd-mirroring-check"
+              i18n-label
+            >
+              Mirroring
+              <cd-help-text i18n>
+                Check this option to enable Pool based mirroring on a Block(RBD) pool.
+              </cd-help-text>
+            </cds-checkbox>
+          </div>
         </div>
-      </div>
       }
       <!-- CRUSH -->
       @if (isErasure || isReplicated) {
-      <div>
-        <legend class="cd-header"
-                i18n>
-          CRUSH
-        </legend>
-        <!-- Erasure Profile select -->
-        @if (isErasure) {
-        <div
-          cdsRow
-          class="form-item form-item-append"
-        >
-          <div
-            cdsCol
-            [columnNumbers]="{ lg: 13 }"
+        <div>
+          <legend
+            class="cd-header"
+            i18n
           >
-            <cds-select
-              formControlName="erasureProfile"
-              (change)="erasureProfileChange()"
-              label="Erasure code profile"
-              i18n-label
-              [helperText]="'Policy used for compression algorithm'"
-              id="erasureProfile"
-              i18n-helperText
+            CRUSH
+          </legend>
+          <!-- Erasure Profile select -->
+          @if (isErasure) {
+            <div
+              cdsRow
+              class="form-item form-item-append"
             >
-              @if (!ecProfiles) {
-              <option
-                value=""
-                i18n
+              <div
+                cdsCol
+                [columnNumbers]="{ lg: 13 }"
               >
-                Loading...
-              </option>
-              }
-              @if (ecProfiles && ecProfiles.length === 0) {
-              <option
-                [value]="null"
-                i18n
-              >
-                -- No erasure code profile available --
-              </option>
-              }
-              @for (ecp of ecProfiles; track ecp.name) {
-              <option [value]="ecp.name">
-                {{ ecp.name }}
-              </option>
-              }
-            </cds-select>
-          </div>
-
-          <div
-            cdsCol
-            [columnNumbers]="{ lg: 1}"
-            class="item-action-btn"
-          >
-            <cds-icon-button
-              kind="ghost"
-              size="md"
-              data-testid="ecp-info-button"
-              (click)="data.erasureInfo = !data.erasureInfo"
-            >
-              <svg
-                cdsIcon="help"
-                size="20"
-                class="cds--btn__icon-help"
-              >
-              </svg>
-            </cds-icon-button>
-          </div>
-          @if (!editing) {
-          <div
-            cdsCol
-            [columnNumbers]="{ lg: 1}"
-            class="item-action-btn"
-          >
-            <cds-icon-button
-              kind="primary"
-              size="md"
-              (click)="addErasureCodeProfile()"
-            >
-              <svg
-                cdsIcon="add"
-                size="32"
-                class="cds--btn__icon"
-              >
-              </svg>
-            </cds-icon-button>
-          </div>
-          <div
-            cdsCol
-            [columnNumbers]="{ lg: 1}"
-            class="item-action-btn "
-          >
-            @if (ecpUsage || ecProfiles?.length === 1) {
-            <cds-tooltip
-              [description]="ecpUsage ? 'This profile can\'t be deleted as it is in use.' : 'At least one erasure code profile must exist.'"
-              i18n-description
-              [highContrast]="true"
-              [caret]="true"
-            >
-              <cds-icon-button
-                kind="danger"
-                size="md"
-                [disabled]="true"
-              >
-                <svg
-                  cdsIcon="trash-can"
-                  size="32"
-                  class="cds--btn__icon"
+                <cds-select
+                  formControlName="erasureProfile"
+                  label="Erasure code profile"
+                  i18n-label
+                  [helperText]="'Policy used for compression algorithm'"
+                  id="erasureProfile"
+                  i18n-helperText
                 >
-                </svg>
-              </cds-icon-button>
-            </cds-tooltip>
-            } @else {
-            <cds-icon-button
-              kind="danger"
-              size="md"
-              (click)="deleteErasureCodeProfile()"
-            >
-              <svg
-                cdsIcon="trash-can"
-                size="32"
-                class="cds--btn__icon"
-              >
-              </svg>
-            </cds-icon-button>
-            }
-          </div>
-          }
-        </div>
-        }
-
-        <div
-          class="form-item"
-          cdsRow
-        >
-          <div
-            cdsCol
-          >
-            @if (data.erasureInfo) {
-            <span
-              class="form-text text-muted"
-              id="ecp-info-block"
-            >
-              <cds-tabs
-                [type]="'contained'"
-                [followFocus]="true"
-                [isNavigation]="false"
-                [cacheActive]="true"
-              >
-                <cds-tab
-                  heading="Profile"
-                  i18n-heading
-                  [tabContent]="profilTpl"
-                >
-                </cds-tab>
-                <cds-tab
-                  heading="Used by pools"
-                  i18n-heading
-                  [tabContent]="usedPoolTpl"
-                >
-                </cds-tab>
-              </cds-tabs>
-              <ng-template #profilTpl>
-                <cd-table-key-value
-                  [renderObjects]="true"
-                  [hideKeys]="['name']"
-                  [data]="selectedEcp"
-                  [autoReload]="false"
-                >
-                </cd-table-key-value>
-              </ng-template>
-              <ng-template #usedPoolTpl>
-                <ng-template #ecpIsNotUsed>
-                  <span i18n>
-                    Profile is not in use.
-                  </span>
-                </ng-template>
-                @if (ecpUsage) {
-                <ul>
-                  @for (pool of ecpUsage; track pool) {
-                  <li>
-                    {{ pool }}
-                  </li>
+                  @if (!ecProfiles) {
+                    <option
+                      value=""
+                      i18n
+                    >
+                      Loading...
+                    </option>
                   }
-                </ul>
-                } @else {
-                <ng-container *ngTemplateOutlet="ecpIsNotUsed"></ng-container>
-                }
-              </ng-template>
-            </span>
-            }
-          </div>
-        </div>
+                  @if (ecProfiles && ecProfiles.length === 0) {
+                    <option
+                      [value]="null"
+                      i18n
+                    >
+                      -- No erasure code profile available --
+                    </option>
+                  }
+                  @for (ecp of ecProfiles; track ecp.name) {
+                    <option [value]="ecp.name">
+                      {{ ecp.name }}
+                    </option>
+                  }
+                </cds-select>
+              </div>
 
-        <!-- Crush ruleset selection -->
-        @if (isErasure && !editing) {
-        <div
-          cdsRow
-          class="form-item"
-        >
+              <div
+                cdsCol
+                [columnNumbers]="{ lg: 1 }"
+                class="item-action-btn"
+              >
+                <cds-icon-button
+                  kind="ghost"
+                  size="md"
+                  data-testid="ecp-info-button"
+                  (click)="data.erasureInfo = !data.erasureInfo"
+                >
+                  <svg
+                    cdsIcon="help"
+                    size="20"
+                    class="cds--btn__icon-help"
+                  ></svg>
+                </cds-icon-button>
+              </div>
+              @if (!editing) {
+                <div
+                  cdsCol
+                  [columnNumbers]="{ lg: 1 }"
+                  class="item-action-btn"
+                >
+                  <cds-icon-button
+                    kind="primary"
+                    size="md"
+                    (click)="addErasureCodeProfile()"
+                  >
+                    <svg
+                      cdsIcon="add"
+                      size="32"
+                      class="cds--btn__icon"
+                    ></svg>
+                  </cds-icon-button>
+                </div>
+                <div
+                  cdsCol
+                  [columnNumbers]="{ lg: 1 }"
+                  class="item-action-btn"
+                >
+                  @if (ecpUsage || ecProfiles?.length === 1) {
+                    <cds-tooltip
+                      [description]="
+                        ecpUsage
+                          ? 'This profile can\'t be deleted as it is in use.'
+                          : 'At least one erasure code profile must exist.'
+                      "
+                      i18n-description
+                      [highContrast]="true"
+                      [caret]="true"
+                    >
+                      <cds-icon-button
+                        kind="danger"
+                        size="md"
+                        [disabled]="true"
+                      >
+                        <svg
+                          cdsIcon="trash-can"
+                          size="32"
+                          class="cds--btn__icon"
+                        ></svg>
+                      </cds-icon-button>
+                    </cds-tooltip>
+                  } @else {
+                    <cds-icon-button
+                      kind="danger"
+                      size="md"
+                      (click)="deleteErasureCodeProfile()"
+                    >
+                      <svg
+                        cdsIcon="trash-can"
+                        size="32"
+                        class="cds--btn__icon"
+                      ></svg>
+                    </cds-icon-button>
+                  }
+                </div>
+              }
+            </div>
+          }
+
           <div
-            cdsCol
+            class="form-item"
+            cdsRow
           >
-            <cds-label
-              for="crushRule"
-              i18n
+            <div cdsCol>
+              @if (data.erasureInfo) {
+                <span
+                  class="form-text text-muted"
+                  id="ecp-info-block"
+                >
+                  <cds-tabs
+                    [type]="'contained'"
+                    [followFocus]="true"
+                    [isNavigation]="false"
+                    [cacheActive]="true"
+                  >
+                    <cds-tab
+                      heading="Profile"
+                      i18n-heading
+                      [tabContent]="profilTpl"
+                    >
+                    </cds-tab>
+                    <cds-tab
+                      heading="Used by pools"
+                      i18n-heading
+                      [tabContent]="usedPoolTpl"
+                    >
+                    </cds-tab>
+                  </cds-tabs>
+                  <ng-template #profilTpl>
+                    <cd-table-key-value
+                      [renderObjects]="true"
+                      [hideKeys]="['name']"
+                      [data]="getEcpProfileDetails()"
+                      [preserveOrder]="true"
+                      [autoReload]="false"
+                    >
+                    </cd-table-key-value>
+                  </ng-template>
+                  <ng-template #usedPoolTpl>
+                    <ng-template #ecpIsNotUsed>
+                      <span i18n> Profile is not in use. </span>
+                    </ng-template>
+                    @if (ecpUsage) {
+                      <ul>
+                        @for (pool of ecpUsage; track pool) {
+                          <li>
+                            {{ pool }}
+                          </li>
+                        }
+                      </ul>
+                    } @else {
+                      <ng-container *ngTemplateOutlet="ecpIsNotUsed"></ng-container>
+                    }
+                  </ng-template>
+                </span>
+              }
+            </div>
+          </div>
+
+          <!-- Crush ruleset selection -->
+          @if (isErasure && !editing) {
+            <div
+              cdsRow
+              class="form-item"
             >
-              Crush ruleset
-            </cds-label>
-            <div class="cd-col-form-input">
-              @if (!msrCrush) {
-              <span
-                class="form-text text-muted"
-                i18n
-              >
-                A new crush ruleset will be implicitly created.
-              </span>
+              <div cdsCol>
+                <cds-label
+                  for="crushRule"
+                  i18n
+                >
+                  Crush ruleset
+                </cds-label>
+                <div class="cd-col-form-input">
+                  @if (!msrCrush) {
+                    <span
+                      class="form-text text-muted"
+                      i18n
+                    >
+                      A new crush ruleset will be implicitly created.
+                    </span>
+                  } @else {
+                    <span
+                      class="form-text text-muted"
+                      i18n
+                    >
+                      A new crush MSR ruleset will be implicitly created. When
+                      crush-osds-per-failure-domain or crush-num-failure-domains is specified
+                    </span>
+                  }
+                </div>
+              </div>
+            </div>
+          }
+
+          <!-- isReplicated -->
+          @if (isReplicated || editing) {
+            <div
+              cdsRow
+              fullWidth="true"
+              class="form-item form-item-append"
+            >
+              <ng-template #noRules>
+                <span class="form-text text-muted">
+                  <span i18n> There are no rules. </span>
+                  &nbsp;
+                </span>
+              </ng-template>
+              @if (current.rules.length > 0) {
+                <div
+                  cdsCol
+                  [columnNumbers]="{ lg: 13 }"
+                >
+                  <cds-select
+                    cdValidate
+                    #crushRuleRef="cdValidate"
+                    formControlName="crushRule"
+                    label="Crush ruleset"
+                    i18n-label
+                    id="crushRule"
+                    [invalid]="crushRuleRef.isInvalid"
+                    [invalidText]="crushRuleError"
+                  >
+                    @for (rule of current.rules; track rule.rule_name) {
+                      <option [value]="rule.rule_name">
+                        {{ rule.rule_name }}
+                      </option>
+                    }
+                  </cds-select>
+                  <ng-template #crushRuleError>
+                    @if (form.showError('crushRule', formDir, 'required')) {
+                      <span
+                        class="invalid-feedback"
+                        i18n
+                      >
+                        This field is required!
+                      </span>
+                    }
+                  </ng-template>
+                </div>
               } @else {
-              <span
-                class="form-text text-muted"
-                i18n
+                <div cdsCol>
+                  <ng-container *ngTemplateOutlet="noRules"></ng-container>
+                </div>
+              }
+
+              <div
+                cdsCol
+                [columnNumbers]="{ lg: 1 }"
+                class="item-action-btn"
               >
-                A new crush MSR ruleset will be implicitly created. When
-                crush-osds-per-failure-domain or crush-num-failure-domains is specified
-              </span>
+                <cds-tooltip
+                  description="Placement and
+                            replication strategies or distribution policies that allow to
+                            specify how CRUSH places data replicas."
+                  [highContrast]="true"
+                  [caret]="true"
+                >
+                  <cds-icon-button
+                    kind="ghost"
+                    size="md"
+                    data-testid="crush-info-button"
+                    (click)="data.crushInfo = !data.crushInfo"
+                  >
+                    <svg
+                      cdsIcon="help"
+                      size="20"
+                      class="cds--btn__icon-help"
+                    ></svg>
+                  </cds-icon-button>
+                </cds-tooltip>
+              </div>
+              @if (isReplicated && !editing) {
+                <div
+                  cdsCol
+                  [columnNumbers]="{ lg: 1 }"
+                  class="item-action-btn"
+                >
+                  <cds-icon-button
+                    kind="primary"
+                    size="md"
+                    (click)="addCrushRule()"
+                  >
+                    <svg
+                      cdsIcon="add"
+                      size="32"
+                      class="cds--btn__icon"
+                    ></svg>
+                  </cds-icon-button>
+                </div>
+              }
+              @if (!editing) {
+                <div
+                  cdsCol
+                  [columnNumbers]="{ lg: 1 }"
+                  class="item-action-btn"
+                >
+                  @if (crushUsage || current?.rules?.length === 1) {
+                    <cds-tooltip
+                      [description]="
+                        crushUsage
+                          ? 'This rule can\'t be deleted as it is in use.'
+                          : 'At least one crush rule must exist.'
+                      "
+                      i18n-description
+                      [highContrast]="true"
+                      [caret]="true"
+                    >
+                      <cds-icon-button
+                        kind="danger"
+                        size="md"
+                        [disabled]="true"
+                      >
+                        <svg
+                          cdsIcon="trash-can"
+                          size="32"
+                          class="cds--btn__icon"
+                        ></svg>
+                      </cds-icon-button>
+                    </cds-tooltip>
+                  } @else {
+                    <cds-icon-button
+                      kind="danger"
+                      size="md"
+                      (click)="deleteCrushRule()"
+                    >
+                      <svg
+                        cdsIcon="trash-can"
+                        size="32"
+                        class="cds--btn__icon"
+                      ></svg>
+                    </cds-icon-button>
+                  }
+                </div>
+              }
+            </div>
+          }
+
+          <div
+            class="form-item"
+            cdsRow
+          >
+            <div cdsCol>
+              @if (data.crushInfo && form.getValue('crushRule')) {
+                <span
+                  class="form-text text-muted"
+                  id="crush-info-block"
+                >
+                  <cds-tabs
+                    [type]="'contained'"
+                    [followFocus]="true"
+                    [isNavigation]="false"
+                    [cacheActive]="true"
+                  >
+                    <cds-tab
+                      heading="Crush rule"
+                      i18n-heading
+                      [tabContent]="crushRuleTpl"
+                    >
+                    </cds-tab>
+                    <cds-tab
+                      heading="Crush steps"
+                      i18n-heading
+                      [tabContent]="crushStepsTpl"
+                    >
+                    </cds-tab>
+                    <cds-tab
+                      heading="Used by pools"
+                      i18n-heading
+                      [tabContent]="usedPoolTpl"
+                    >
+                    </cds-tab>
+                  </cds-tabs>
+                  <ng-template #crushRuleTpl>
+                    <cd-table-key-value
+                      [renderObjects]="false"
+                      [hideKeys]="['steps', 'type', 'rule_name']"
+                      [data]="this.selectedCrushRule"
+                      [autoReload]="false"
+                    >
+                    </cd-table-key-value>
+                  </ng-template>
+                  <ng-template #crushStepsTpl>
+                    <ol>
+                      @for (step of this.selectedCrushRule?.steps; track $index) {
+                        <li>
+                          {{ describeCrushStep(step) }}
+                        </li>
+                      }
+                    </ol>
+                  </ng-template>
+                  <ng-template #usedPoolTpl>
+                    <ng-template #ruleIsNotUsed>
+                      <span i18n> Rule is not in use. </span>
+                    </ng-template>
+                    @if (crushUsage) {
+                      <ul>
+                        @for (pool of crushUsage; track pool) {
+                          <li>
+                            {{ pool }}
+                          </li>
+                        }
+                      </ul>
+                    } @else {
+                      <ng-container *ngTemplateOutlet="ruleIsNotUsed"></ng-container>
+                    }
+                  </ng-template>
+                </span>
               }
             </div>
           </div>
         </div>
-        }
-
-        <!-- isReplicated -->
-        @if (isReplicated || editing) {
-        <div
-          cdsRow
-          fullWidth="true"
-          class="form-item form-item-append"
-        >
-          <ng-template #noRules>
-            <span
-              class="form-text text-muted"
-            >
-              <span
-                i18n
-              >
-                There are no rules.
-              </span>
-              &nbsp;
-            </span>
-          </ng-template>
-          @if (current.rules.length > 0) {
-          <div
-            cdsCol
-            [columnNumbers]="{ lg: 13 }"
-          >
-            <cds-select
-              formControlName="crushRule"
-              label="Crush ruleset"
-              i18n-label
-              id="crushRule"
-            >
-              <option [value]="null"
-                      i18n>-- Select a crush rule --
-              </option>
-              @for (rule of current.rules; track rule.rule_name) {
-              <option [value]="rule.rule_name">
-                {{ rule.rule_name }}
-              </option>
-              }
-            </cds-select>
-          </div>
-          } @else {
-          <div cdsCol>
-            <ng-container *ngTemplateOutlet="noRules"></ng-container>
-          </div>
-          }
-
-          <div cdsCol
-               [columnNumbers]="{ lg: 1}"
-               class="item-action-btn">
-            <cds-tooltip
-              description="Placement and
-                            replication strategies or distribution policies that allow to
-                            specify how CRUSH places data replicas."
-              [highContrast]="true"
-              [caret]="true"
-            >
-              <cds-icon-button
-                kind="ghost"
-                size="md"
-                data-testid="crush-info-button"
-                (click)="data.crushInfo = !data.crushInfo"
-              >
-                <svg
-                  cdsIcon="help"
-                  size="20"
-                  class="cds--btn__icon-help"
-                >
-                </svg>
-              </cds-icon-button>
-            </cds-tooltip>
-          </div>
-          @if (isReplicated && !editing) {
-          <div
-            cdsCol
-            [columnNumbers]="{ lg: 1}"
-            class="item-action-btn"
-          >
-            <cds-icon-button
-              kind="primary"
-              size="md"
-              (click)="addCrushRule()"
-            >
-              <svg
-                cdsIcon="add"
-                size="32"
-                class="cds--btn__icon"
-              >
-              </svg>
-            </cds-icon-button>
-          </div>
-          }
-          @if (!editing) {
-          <div
-            cdsCol
-            [columnNumbers]="{ lg: 1}"
-            class="item-action-btn "
-          >
-            @if (crushUsage || current?.rules?.length === 1) {
-            <cds-tooltip
-              [description]="crushUsage ? 'This rule can\'t be deleted as it is in use.' : 'At least one crush rule must exist.'"
-              i18n-description
-              [highContrast]="true"
-              [caret]="true"
-            >
-              <cds-icon-button
-                kind="danger"
-                size="md"
-                [disabled]="true"
-              >
-                <svg
-                  cdsIcon="trash-can"
-                  size="32"
-                  class="cds--btn__icon"
-                >
-                </svg>
-              </cds-icon-button>
-            </cds-tooltip>
-            } @else {
-            <cds-icon-button
-              kind="danger"
-              size="md"
-              (click)="deleteCrushRule()"
-            >
-              <svg
-                cdsIcon="trash-can"
-                size="32"
-                class="cds--btn__icon"
-              >
-              </svg>
-            </cds-icon-button>
-            }
-          </div>
-          }
-        </div>
-        }
-
-        <div
-          class="form-item"
-          cdsRow
-        >
-          <div
-            cdsCol
-          >
-            @if (data.crushInfo && form.getValue('crushRule')) {
-            <span
-              class="form-text text-muted"
-              id="crush-info-block"
-            >
-              <cds-tabs
-                [type]="'contained'"
-                [followFocus]="true"
-                [isNavigation]="false"
-                [cacheActive]="true"
-              >
-                <cds-tab
-                  heading="Crush rule"
-                  i18n-heading
-                  [tabContent]="crushRuleTpl"
-                >
-                </cds-tab>
-                <cds-tab
-                  heading="Crush steps"
-                  i18n-heading
-                  [tabContent]="crushStepsTpl"
-                >
-                </cds-tab>
-                <cds-tab
-                  heading="Used by pools"
-                  i18n-heading
-                  [tabContent]="usedPoolTpl"
-                >
-                </cds-tab>
-              </cds-tabs>
-              <ng-template #crushRuleTpl>
-                <cd-table-key-value
-                  [renderObjects]="false"
-                  [hideKeys]="['steps', 'type', 'rule_name']"
-                  [data]="this.selectedCrushRule"
-                  [autoReload]="false"
-                >
-                </cd-table-key-value>
-              </ng-template>
-              <ng-template #crushStepsTpl>
-                <ol>
-                  @for (step of this.selectedCrushRule?.steps; track $index) {
-                  <li>
-                    {{ describeCrushStep(step) }}
-                  </li>
-                  }
-                </ol>
-              </ng-template>
-              <ng-template #usedPoolTpl>
-                <ng-template #ruleIsNotUsed>
-                  <span i18n>
-                    Rule is not in use.
-                  </span>
-                </ng-template>
-                @if (crushUsage) {
-                <ul>
-                  @for (pool of crushUsage; track pool) {
-                  <li>
-                    {{ pool }}
-                  </li>
-                  }
-                </ul>
-                } @else {
-                <ng-container *ngTemplateOutlet="ruleIsNotUsed"></ng-container>
-                }
-              </ng-template>
-            </span>
-            }
-          </div>
-        </div>
-      </div>
       }
       <!-- Compression -->
       @if (info?.is_all_bluestore) {
-      <div formGroupName="compression">
-        <legend class="cd-header"
-                i18n>
-          Compression
-        </legend>
-        <!-- Compression Mode -->
-        <div
-          class="form-item"
-          cdsRow
-        >
-          <div
-            cdsCol
+        <div formGroupName="compression">
+          <legend
+            class="cd-header"
+            i18n
           >
-            <cds-select
-              formControlName="mode"
-              label="Mode"
-              i18n-label
-              [helperText]="compressionModeHelperText"
-              id="mode"
-            >
-              @for (mode of info.compression_modes; track mode) {
-              <option [value]="mode">
-                {{ mode }}
-              </option>
-              }
-            </cds-select>
-            <ng-template #compressionModeHelperText>
-              <span>Policy used for compression algorithm. </span>
-              {{ poolService.formTooltips.compressionModes[form.controls.compression.controls.mode.value] }}
-            </ng-template>
-          </div>
-        </div>
-        @if (hasCompressionEnabled()) {
-        <div>
-          <!-- Compression algorithm selection -->
+            Compression
+          </legend>
+          <!-- Compression Mode -->
           <div
             class="form-item"
             cdsRow
           >
-            <div
-              cdsCol
-            >
+            <div cdsCol>
               <cds-select
-                formControlName="algorithm"
-                label="Algorithm"
+                formControlName="mode"
+                label="Mode"
                 i18n-label
-                [helperText]="'Compression algorithm used'"
-                id="algorithm"
+                [helperText]="compressionModeHelperText"
+                id="mode"
               >
-                @if (!info.compression_algorithms) {
-                <option
-                  value=""
-                  i18n
-                >
-                  Loading...
-                </option>
-                }
-                @if (info.compression_algorithms && info.compression_algorithms.length === 0) {
-                <option
-                  i18n
-                  value=""
-                >
-                  -- No erasure compression algorithm available --
-                </option>
-                }
-                @for (algorithm of info.compression_algorithms; track algorithm) {
-                <option [value]="algorithm">
-                  {{ algorithm }}
-                </option>
+                @for (mode of info.compression_modes; track mode) {
+                  <option [value]="mode">
+                    {{ mode }}
+                  </option>
                 }
               </cds-select>
-            </div>
-          </div>
-          <!-- Compression min blob size -->
-          <div
-            cdsRow
-            class="form-item form-item-append"
-          >
-            <div
-              cdsCol
-            >
-              <cds-number
-                label="Minimum blob size"
-                [helperText]="'Chunks smaller than Minimum blob size are never compressed'"
-                [invalid]="
-                  form.controls.compression.controls.minBlobSize.invalid &&
-                  form.controls.compression.controls.minBlobSize.dirty
-                "
-                [invalidText]="minBlobSizeError"
-                formControlName="minBlobSize"
-                min="0"
-                i18n
-                i18n-helperText
-              >
-              </cds-number>
-              <ng-template #minBlobSizeError>
-                @if (form.showError('minBlobSize', formDir, 'min')) {
-                <span
-                  class="invalid-feedback"
-                  i18n
-                >
-                  Value should be greater than or equal to 0
-                </span>
-                }
-                @if (form.showError('minBlobSize', formDir, 'maximum')) {
-                <span class="invalid-feedback"
-                      i18n>Value should be less than the maximum blob size
-                </span>
-                }
-              </ng-template>
-            </div>
-            <div
-              cdsCol
-            >
-              <cds-select
-                formControlName="minBlobSizeUnit"
-                label="Unit"
-                i18n-label
-                id="minBlobSizeUnit"
-              >
-                @for (minBlobSizeUnit of blobUnits; track minBlobSizeUnit) {
-                <option
-                  [value]="minBlobSizeUnit"
-                  i18n
-                >
-                  {{ minBlobSizeUnit }}
-                </option>
-                }
-              </cds-select>
-            </div>
-          </div>
-          <!-- Compression max blob size -->
-          <div
-            cdsRow
-            class="form-item form-item-append"
-          >
-            <div
-              cdsCol
-            >
-              <cds-number
-                label="Maximum blob size"
-                [helperText]="'Chunks larger than Maximum Blob Size are broken into smaller blobs of size mentioned before being compressed.'"
-                [invalid]="
-                  form.controls.compression.controls.maxBlobSize.invalid &&
-                  form.controls.compression.controls.maxBlobSize.dirty
-                "
-                [invalidText]="maxBlobSizeError"
-                formControlName="maxBlobSize"
-                min="0"
-                i18n
-                i18n-helperText
-              >
-              </cds-number>
-              <ng-template #maxBlobSizeError>
-                @if (form.showError('maxBlobSize', formDir, 'min')) {
-                <span
-                  class="invalid-feedback"
-                  i18n
-                >
-                  Value should be greater than or equal to 0
-                </span>
-                }
-                @if (form.showError('maxBlobSize', formDir, 'minimum')) {
-                <span class="invalid-feedback"
-                      i18n>
-                      Value should be greater than the minimum blob size
-                </span>
-                }
-              </ng-template>
-            </div>
-            <div
-              cdsCol
-            >
-              <cds-select
-                formControlName="maxBlobSizeUnit"
-                label="Unit"
-                i18n-label
-                id="maxBlobSizeUnit"
-              >
-                @for (maxBlobSizeUnit of blobUnits; track maxBlobSizeUnit) {
-                <option
-                  [value]="maxBlobSizeUnit"
-                  i18n
-                >
-                  {{ maxBlobSizeUnit }}
-                </option>
-                }
-              </cds-select>
-            </div>
-          </div>
-          <!-- Compression ratio -->
-          <div
-            class="form-item"
-            cdsRow
-          >
-            <div
-              cdsCol
-            >
-              <cds-number
-                label="Ratio"
-                [helperText]="'The ratio of the size of the data chunk after compression relative to the original size must be at least this small in order to store the compressed version'"
-                [invalid]="
-                  form.controls.compression.controls.ratio.invalid &&
-                  form.controls.compression.controls.ratio.dirty
-                "
-                [invalidText]="ratioError"
-                formControlName="ratio"
-                min="0"
-                max="1"
-                step="0.1"
-                i18n-placeholder
-                i18n-helperText
-              >
-              </cds-number>
-              <ng-template #ratioError>
-                @if (form.showError('ratio', formDir, 'min') || form.showError('ratio', formDir, 'max')) {
-                <span
-                  class="invalid-feedback"
-                  i18n
-                >
-                  Value should be between 0.0 and 1.0
-                </span>
-                }
+              <ng-template #compressionModeHelperText>
+                <span>Policy used for compression algorithm. </span>
+                {{
+                  poolService.formTooltips.compressionModes[
+                    form.controls.compression.controls.mode.value
+                  ]
+                }}
               </ng-template>
             </div>
           </div>
+          @if (hasCompressionEnabled()) {
+            <div>
+              <!-- Compression algorithm selection -->
+              <div
+                class="form-item"
+                cdsRow
+              >
+                <div cdsCol>
+                  <cds-select
+                    formControlName="algorithm"
+                    label="Algorithm"
+                    i18n-label
+                    [helperText]="'Compression algorithm used'"
+                    id="algorithm"
+                  >
+                    @if (!info.compression_algorithms) {
+                      <option
+                        value=""
+                        i18n
+                      >
+                        Loading...
+                      </option>
+                    }
+                    @if (info.compression_algorithms && info.compression_algorithms.length === 0) {
+                      <option
+                        i18n
+                        value=""
+                      >
+                        -- No erasure compression algorithm available --
+                      </option>
+                    }
+                    @for (algorithm of info.compression_algorithms; track algorithm) {
+                      <option [value]="algorithm">
+                        {{ algorithm }}
+                      </option>
+                    }
+                  </cds-select>
+                </div>
+              </div>
+              <!-- Compression min blob size -->
+              <div
+                cdsRow
+                class="form-item form-item-append"
+              >
+                <div cdsCol>
+                  <cds-number
+                    label="Minimum blob size"
+                    [helperText]="'Chunks smaller than Minimum blob size are never compressed'"
+                    [invalid]="
+                      form.controls.compression.controls.minBlobSize.invalid &&
+                      form.controls.compression.controls.minBlobSize.dirty
+                    "
+                    [invalidText]="minBlobSizeError"
+                    formControlName="minBlobSize"
+                    min="0"
+                    i18n
+                    i18n-helperText
+                  >
+                  </cds-number>
+                  <ng-template #minBlobSizeError>
+                    @if (form.showError('minBlobSize', formDir, 'min')) {
+                      <span
+                        class="invalid-feedback"
+                        i18n
+                      >
+                        Value should be greater than or equal to 0
+                      </span>
+                    }
+                    @if (form.showError('minBlobSize', formDir, 'maximum')) {
+                      <span
+                        class="invalid-feedback"
+                        i18n
+                        >Value should be less than the maximum blob size
+                      </span>
+                    }
+                  </ng-template>
+                </div>
+                <div cdsCol>
+                  <cds-select
+                    formControlName="minBlobSizeUnit"
+                    label="Unit"
+                    i18n-label
+                    id="minBlobSizeUnit"
+                  >
+                    @for (minBlobSizeUnit of blobUnits; track minBlobSizeUnit) {
+                      <option
+                        [value]="minBlobSizeUnit"
+                        i18n
+                      >
+                        {{ minBlobSizeUnit }}
+                      </option>
+                    }
+                  </cds-select>
+                </div>
+              </div>
+              <!-- Compression max blob size -->
+              <div
+                cdsRow
+                class="form-item form-item-append"
+              >
+                <div cdsCol>
+                  <cds-number
+                    label="Maximum blob size"
+                    [helperText]="'Chunks larger than Maximum Blob Size are broken into smaller blobs of size mentioned before being compressed.'"
+                    [invalid]="
+                      form.controls.compression.controls.maxBlobSize.invalid &&
+                      form.controls.compression.controls.maxBlobSize.dirty
+                    "
+                    [invalidText]="maxBlobSizeError"
+                    formControlName="maxBlobSize"
+                    min="0"
+                    i18n
+                    i18n-helperText
+                  >
+                  </cds-number>
+                  <ng-template #maxBlobSizeError>
+                    @if (form.showError('maxBlobSize', formDir, 'min')) {
+                      <span
+                        class="invalid-feedback"
+                        i18n
+                      >
+                        Value should be greater than or equal to 0
+                      </span>
+                    }
+                    @if (form.showError('maxBlobSize', formDir, 'minimum')) {
+                      <span
+                        class="invalid-feedback"
+                        i18n
+                      >
+                        Value should be greater than the minimum blob size
+                      </span>
+                    }
+                  </ng-template>
+                </div>
+                <div cdsCol>
+                  <cds-select
+                    formControlName="maxBlobSizeUnit"
+                    label="Unit"
+                    i18n-label
+                    id="maxBlobSizeUnit"
+                  >
+                    @for (maxBlobSizeUnit of blobUnits; track maxBlobSizeUnit) {
+                      <option
+                        [value]="maxBlobSizeUnit"
+                        i18n
+                      >
+                        {{ maxBlobSizeUnit }}
+                      </option>
+                    }
+                  </cds-select>
+                </div>
+              </div>
+              <!-- Compression ratio -->
+              <div
+                class="form-item"
+                cdsRow
+              >
+                <div cdsCol>
+                  <cds-number
+                    label="Ratio"
+                    [helperText]="'The ratio of the size of the data chunk after compression relative to the original size must be at least this small in order to store the compressed version'"
+                    [invalid]="
+                      form.controls.compression.controls.ratio.invalid &&
+                      form.controls.compression.controls.ratio.dirty
+                    "
+                    [invalidText]="ratioError"
+                    formControlName="ratio"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    i18n-placeholder
+                    i18n-helperText
+                  >
+                  </cds-number>
+                  <ng-template #ratioError>
+                    @if (
+                      form.showError('ratio', formDir, 'min') ||
+                      form.showError('ratio', formDir, 'max')
+                    ) {
+                      <span
+                        class="invalid-feedback"
+                        i18n
+                      >
+                        Value should be between 0.0 and 1.0
+                      </span>
+                    }
+                  </ng-template>
+                </div>
+              </div>
+            </div>
+          }
         </div>
-        }
-      </div>
       }
       <!-- Quotas -->
       <div>
-        <legend class="cd-header"
-                i18n>
+        <legend
+          class="cd-header"
+          i18n
+        >
           Quotas
         </legend>
         <!-- Max Bytes -->
@@ -1054,9 +1060,7 @@
           cdsRow
           class="form-item form-item-append"
         >
-          <div
-            cdsCol
-          >
+          <div cdsCol>
             <cds-number
               label="Max bytes"
               [helperText]="maxObjectsHelpText"
@@ -1069,17 +1073,15 @@
             </cds-number>
             <ng-template #maxBytesError>
               @if (form.showError('max_bytes', formDir, 'min')) {
-              <span
-                class="invalid-feedback"
-                i18n
-              >The value should be greater or equal to 0
-              </span>
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >The value should be greater or equal to 0
+                </span>
               }
             </ng-template>
           </div>
-          <div
-            cdsCol
-          >
+          <div cdsCol>
             <cds-select
               formControlName="maxBytesUnit"
               label="Unit"
@@ -1087,12 +1089,12 @@
               id="maxBytesUnit"
             >
               @for (maxBytesUnit of maxBytesUnits; track maxBytesUnit) {
-              <option
-                [value]="maxBytesUnit"
-                i18n
-              >
-                {{ maxBytesUnit }}
-              </option>
+                <option
+                  [value]="maxBytesUnit"
+                  i18n
+                >
+                  {{ maxBytesUnit }}
+                </option>
               }
             </cds-select>
           </div>
@@ -1102,9 +1104,7 @@
           cdsRow
           class="form-item"
         >
-          <div
-            cdsCol
-          >
+          <div cdsCol>
             <cds-number
               label="Max objects"
               [helperText]="maxObjectsHelpText"
@@ -1117,19 +1117,17 @@
             >
             </cds-number>
             <ng-template #maxObjectsHelpText>
-              <span i18n>
-                Leave it blank or specify 0 to disable this quota.
-              </span>
+              <span i18n> Leave it blank or specify 0 to disable this quota. </span>
               <br />
-              <span i18n>
-                A valid quota should be greater than 0.
-              </span>
+              <span i18n> A valid quota should be greater than 0. </span>
             </ng-template>
             <ng-template #maxObjectsError>
               @if (form.showError('max_objects', formDir, 'min')) {
-              <span class="invalid-feedback"
-                    i18n>The value should be greater or equal to 0
-              </span>
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >The value should be greater or equal to 0
+                </span>
               }
             </ng-template>
           </div>

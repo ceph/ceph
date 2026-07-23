@@ -1,0 +1,56 @@
+@if (showTabsShell) {
+  <fieldset>
+    <legend class="cds-mb-5">
+      <h1 class="cds--type-heading-04">NVMe over Fabrics (TCP)</h1>
+      <p
+        class="cds--type-body-01"
+        i18n
+      >
+        Monitor and manage NVMe-over-TCP resources for high-performance block storage.
+      </p>
+    </legend>
+  </fieldset>
+
+  @if (showSetupCards) {
+    <cd-nvmeof-setup-cards
+      [hasGatewayGroups]="hasGatewayGroups"
+      [hasSubsystems]="hasSubsystems"
+      [hasNamespaces]="hasNamespaces"
+      [isAllConfigured]="isAllConfigured"
+    >
+    </cd-nvmeof-setup-cards>
+  }
+
+  <section class="cds-mt-5">
+    <cds-tabs
+      type="contained"
+      followFocus="true"
+      isNavigation="true"
+      [cacheActive]="false"
+    >
+      <cds-tab
+        heading="Gateways"
+        i18n-heading
+        [active]="activeTab === Tabs.gateways"
+        (selected)="onSelected(Tabs.gateways)"
+      >
+      </cds-tab>
+      <cds-tab
+        heading="Subsystems"
+        i18n-heading
+        [active]="activeTab === Tabs.subsystems"
+        (selected)="onSelected(Tabs.subsystems)"
+      >
+      </cds-tab>
+      <cds-tab
+        heading="Namespaces"
+        i18n-heading
+        [active]="activeTab === Tabs.namespaces"
+        (selected)="onSelected(Tabs.namespaces)"
+      >
+      </cds-tab>
+    </cds-tabs>
+  </section>
+}
+
+<router-outlet></router-outlet>

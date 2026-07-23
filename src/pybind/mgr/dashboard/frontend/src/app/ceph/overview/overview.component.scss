@@ -31,6 +31,10 @@
     border-right: 1px solid var(--cds-border-subtle-01);
   }
 
+  &-pr-0 {
+    padding-right: 0 !important;
+  }
+
   // Overrides
   cds-panel .cds--header-panel {
     background-color: var(--cds-background);

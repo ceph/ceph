@@ -19,6 +19,10 @@ _name_re = re.compile('^[a-zA-Z0-9]($|[a-zA-Z0-9-]{,16}[a-zA-Z0-9]$)')
 # but as above it's easier to start strict.
 _share_re = re.compile('^[a-zA-Z0-9_][a-zA-Z0-9. _-]{,63}$')
 
+_fscrypt_key_name_re = re.compile(
+    '^[a-zA-Z0-9]($|[a-zA-Z0-9-]{,61}[a-zA-Z0-9]$)'
+)
+
 
 def valid_id(value: str) -> bool:
     """Return true if value is a valid (cluster|share|etc) ID."""
@@ -40,6 +44,17 @@ def check_share_name(value: str) -> None:
     """Raise ValueError if value is not a valid share name."""
     if not valid_share_name(value):
         raise ValueError(f"{value!r} is not a valid share name")
+
+
+def valid_fscrypt_key_name(value: str) -> bool:
+    """Return true if value is a valid fscrypt key name."""
+    return bool(_fscrypt_key_name_re.match(value))
+
+
+def check_fscrypt_key_name(value: str) -> None:
+    """Raise ValueError if value is not a valid fscrypt key name."""
+    if not valid_fscrypt_key_name(value):
+        raise ValueError(f"{value!r} is not a valid fscrypt key name")
 
 
 # alias for normpath so other smb libs can just import validation module

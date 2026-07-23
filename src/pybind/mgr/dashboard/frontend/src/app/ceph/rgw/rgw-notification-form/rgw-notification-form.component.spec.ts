@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RgwNotificationFormComponent } from './rgw-notification-form.component';
 import { CdLabelComponent } from '~/app/shared/components/cd-label/cd-label.component';
 import { ReactiveFormsModule } from '@angular/forms';
-import { ToastrModule } from 'ngx-toastr';
+
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import {
   InputModule,
@@ -40,7 +40,6 @@ describe('RgwNotificationFormComponent', () => {
         SelectModule,
         NumberModule,
         InputModule,
-        ToastrModule.forRoot(),
         ComponentsModule,
         ModalModule,
         ComboBoxModule,
@@ -59,7 +58,7 @@ describe('RgwNotificationFormComponent', () => {
 
     fixture = TestBed.createComponent(RgwNotificationFormComponent);
     component = fixture.componentInstance;
-    rgwBucketService = (TestBed.inject(RgwBucketService) as unknown) as MockRgwBucketService;
+    rgwBucketService = TestBed.inject(RgwBucketService) as unknown as MockRgwBucketService;
     fixture.detectChanges();
   });
 
@@ -67,7 +66,7 @@ describe('RgwNotificationFormComponent', () => {
     expect(component).toBeTruthy();
   });
   it('should call setNotification when submitting form', () => {
-    rgwBucketService = (TestBed.inject(RgwBucketService) as unknown) as MockRgwBucketService;
+    rgwBucketService = TestBed.inject(RgwBucketService) as unknown as MockRgwBucketService;
     component['notificationList'] = [];
     component.notificationForm.patchValue({
       id: 'notif-1',

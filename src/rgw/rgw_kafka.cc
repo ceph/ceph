@@ -76,13 +76,41 @@ connection_id_t::connection_id_t(
     const std::string& _password,
     const boost::optional<const std::string&>& _ca_location,
     const boost::optional<const std::string&>& _mechanism,
-    bool _ssl)
-    : broker(_broker), user(_user), password(_password), ssl(_ssl) {
+    bool _ssl,
+    bool _verify_ssl,
+    const boost::optional<const std::string&>& _ssl_certificate,
+    const boost::optional<const std::string&>& _ssl_key,
+    const boost::optional<const std::string&>& _ssl_key_password,
+    const boost::optional<const std::string&>& _kerberos_service_name,
+    const boost::optional<const std::string&>& _kerberos_principal,
+    const boost::optional<const std::string&>& _kerberos_keytab
+  )
+    : broker(_broker), user(_user), password(_password), ssl(_ssl),
+      verify_ssl(_verify_ssl) {
+
   if (_ca_location.has_value()) {
     ca_location = _ca_location.get();
   }
   if (_mechanism.has_value()) {
     mechanism = _mechanism.get();
+  }
+  if (_ssl_certificate.has_value()) {
+    ssl_certificate = _ssl_certificate.get();
+  }
+  if (_ssl_key.has_value()) {
+    ssl_key = _ssl_key.get();
+  }
+  if (_ssl_key_password.has_value()) {
+    ssl_key_password = _ssl_key_password.get();
+  }
+  if (_kerberos_service_name.has_value()) {
+    kerberos_service_name = _kerberos_service_name.get();
+  }
+  if (_kerberos_principal.has_value()) {
+    kerberos_principal = _kerberos_principal.get();
+  }
+  if (_kerberos_keytab.has_value()) {
+    kerberos_keytab = _kerberos_keytab.get();
   }
 }
 
@@ -91,7 +119,14 @@ connection_id_t::connection_id_t(
 bool operator==(const connection_id_t& lhs, const connection_id_t& rhs) {
   return lhs.broker == rhs.broker && lhs.user == rhs.user &&
          lhs.password == rhs.password && lhs.ca_location == rhs.ca_location &&
-         lhs.mechanism == rhs.mechanism && lhs.ssl == rhs.ssl;
+         lhs.mechanism == rhs.mechanism && lhs.ssl == rhs.ssl &&
+         lhs.verify_ssl == rhs.verify_ssl &&
+         lhs.ssl_certificate == rhs.ssl_certificate &&
+         lhs.ssl_key == rhs.ssl_key &&
+         lhs.ssl_key_password == rhs.ssl_key_password &&
+         lhs.kerberos_service_name == rhs.kerberos_service_name &&
+         lhs.kerberos_principal == rhs.kerberos_principal &&
+         lhs.kerberos_keytab == rhs.kerberos_keytab;
 }
 
 struct connection_id_hasher {
@@ -103,12 +138,36 @@ struct connection_id_hasher {
     boost::hash_combine(h, k.ca_location);
     boost::hash_combine(h, k.mechanism);
     boost::hash_combine(h, k.ssl);
+    boost::hash_combine(h, k.verify_ssl);
+    boost::hash_combine(h, k.ssl_certificate);
+    boost::hash_combine(h, k.ssl_key);
+    boost::hash_combine(h, k.ssl_key_password);
+    boost::hash_combine(h, k.kerberos_service_name);
+    boost::hash_combine(h, k.kerberos_principal);
+    boost::hash_combine(h, k.kerberos_keytab);
     return h;
   }
 };
 
 std::string to_string(const connection_id_t& id) {
-  return id.broker + ":" + id.user;
+  std::ostringstream ss;
+  ss << id.broker;
+  if (!id.user.empty()) {
+    ss << ":" << id.user;
+  }
+  if (!id.mechanism.empty()) {
+    ss << " mechanism=" << id.mechanism;
+  }
+  if (!id.kerberos_service_name.empty()) {
+    ss << " service=" << id.kerberos_service_name;
+  }
+  if (!id.kerberos_principal.empty()) {
+    ss << " principal=" << id.kerberos_principal;
+  }
+  if (!id.kerberos_keytab.empty()) {
+    ss << " keytab=" << id.kerberos_keytab;
+  }
+  return ss.str();
 }
 
 // convert int status to errno - both RGW and librdkafka values
@@ -159,11 +218,17 @@ struct connection_t {
   CallbackList callbacks;
   const std::string broker;
   const bool use_ssl;
-  const bool verify_ssl; // TODO currently ignored, not supported in librdkafka v0.11.6
+  const bool verify_ssl;
   const boost::optional<std::string> ca_location;
   const std::string user;
   const std::string password;
   const boost::optional<std::string> mechanism;
+  const boost::optional<std::string> ssl_certificate;
+  const boost::optional<std::string> ssl_key;
+  const boost::optional<std::string> ssl_key_password;
+  const boost::optional<std::string> kerberos_service_name;
+  const boost::optional<std::string> kerberos_principal;
+  const boost::optional<std::string> kerberos_keytab;
   utime_t timestamp = ceph_clock_now();
 
   // cleanup of all internal connection resource
@@ -196,8 +261,16 @@ struct connection_t {
   // ctor for setting immutable values
   connection_t(CephContext* _cct, const std::string& _broker, bool _use_ssl, bool _verify_ssl, 
           const boost::optional<const std::string&>& _ca_location,
-          const std::string& _user, const std::string& _password, const boost::optional<const std::string&>& _mechanism) :
-      cct(_cct), broker(_broker), use_ssl(_use_ssl), verify_ssl(_verify_ssl), ca_location(_ca_location), user(_user), password(_password), mechanism(_mechanism) {}                                                                                                                                                        
+          const std::string& _user, const std::string& _password, const boost::optional<const std::string&>& _mechanism,
+          const boost::optional<const std::string&>& _ssl_certificate,
+          const boost::optional<const std::string&>& _ssl_key,
+          const boost::optional<const std::string&>& _ssl_key_password,
+          const boost::optional<const std::string&>& _kerberos_service_name,
+          const boost::optional<const std::string&>& _kerberos_principal,
+          const boost::optional<const std::string&>& _kerberos_keytab) :
+      cct(_cct), broker(_broker), use_ssl(_use_ssl), verify_ssl(_verify_ssl), ca_location(_ca_location), user(_user), password(_password), mechanism(_mechanism),
+      ssl_certificate(_ssl_certificate), ssl_key(_ssl_key), ssl_key_password(_ssl_key_password),
+      kerberos_service_name(_kerberos_service_name), kerberos_principal(_kerberos_principal), kerberos_keytab(_kerberos_keytab) {}                                                                                                                                                        
 
   // dtor also destroys the internals
   ~connection_t() {
@@ -281,23 +354,58 @@ bool new_producer(connection_t* conn) {
 
   char errstr[512] = {0};
 
+  const bool is_gssapi = conn->mechanism && boost::iequals(*conn->mechanism, "GSSAPI");
+
   // set message timeout
   // according to documentation, value of zero will expire the message based on retries.
   // however, testing with librdkafka v1.6.1 did not expire the message in that case. hence, a value of zero is changed to 1ms
   constexpr std::uint64_t min_message_timeout = 1;
   const auto message_timeout = std::max(min_message_timeout, conn->cct->_conf->rgw_kafka_message_timeout);
+  const auto batch_size = conn->cct->_conf->rgw_kafka_max_batch_size;
+  ldout(conn->cct, 1) << "Kafka connect: broker=" << conn->broker
+      << " use_ssl=" << conn->use_ssl
+      << " user=" << conn->user
+      << " message_timeout=" << message_timeout
+      << " batch_size=" << batch_size << dendl;
+
   if (rd_kafka_conf_set(conf.get(), "message.timeout.ms", 
         std::to_string(message_timeout).c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
 
+  if (batch_size > 0) {
+    if (rd_kafka_conf_set(conf.get(), "batch.size",
+        std::to_string(batch_size).c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+    if (rd_kafka_conf_set(conf.get(), "message.max.bytes",
+        std::to_string(batch_size).c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+  }
   // get list of brokers based on the bootstrap broker
   if (rd_kafka_conf_set(conf.get(), "bootstrap.servers", conn->broker.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
 
-  if (conn->use_ssl) {
+  if (is_gssapi) {
+    const char* security_protocol = conn->use_ssl ? "SASL_SSL" : "SASL_PLAINTEXT";
+    if (rd_kafka_conf_set(conf.get(), "security.protocol", security_protocol, errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
+        rd_kafka_conf_set(conf.get(), "sasl.mechanism", "GSSAPI", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+    ldout(conn->cct, 20) << "Kafka connect: configured GSSAPI SASL" << dendl;
+
+    if (conn->kerberos_service_name) {
+      if (rd_kafka_conf_set(conf.get(), "sasl.kerberos.service.name", conn->kerberos_service_name->c_str(), errstr, 
+                            sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+    }
+    if (conn->kerberos_principal) {
+      if (rd_kafka_conf_set(conf.get(), "sasl.kerberos.principal", conn->kerberos_principal->c_str(), errstr, 
+                            sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+    }
+    if (conn->kerberos_keytab) {
+      if (rd_kafka_conf_set(conf.get(), "sasl.kerberos.keytab", conn->kerberos_keytab->c_str(), errstr,
+                            sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+    } else {
+      ldout(conn->cct, 20) << "Kafka connect: GSSAPI without keytab; using ticket cache" << dendl;
+    }
+  } else if (conn->use_ssl) {
     if (!conn->user.empty()) {
       // use SSL+SASL
       if (rd_kafka_conf_set(conf.get(), "security.protocol", "SASL_SSL", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
-              rd_kafka_conf_set(conf.get(), "sasl.username", conn->user.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
-              rd_kafka_conf_set(conf.get(), "sasl.password", conn->password.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+          rd_kafka_conf_set(conf.get(), "sasl.username", conn->user.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
+          rd_kafka_conf_set(conf.get(), "sasl.password", conn->password.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
       ldout(conn->cct, 20) << "Kafka connect: successfully configured SSL+SASL security" << dendl;
 
       if (conn->mechanism) {
@@ -319,24 +427,52 @@ bool new_producer(connection_t* conn) {
     } else {
       ldout(conn->cct, 20) << "Kafka connect: using default CA location" << dendl;
     }
+    if (rd_kafka_conf_set(conf.get(), "enable.ssl.certificate.verification",
+                          conn->verify_ssl ? "true" : "false",
+                          errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+      goto conf_error;
+    }
+    if (conn->ssl_certificate) {
+      if (rd_kafka_conf_set(conf.get(), "ssl.certificate.location", conn->ssl_certificate->c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+      ldout(conn->cct, 20) << "Kafka connect: successfully configured client certificate location" << dendl;
+    }
+    if (conn->ssl_key) {
+      if (rd_kafka_conf_set(conf.get(), "ssl.key.location", conn->ssl_key->c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+      ldout(conn->cct, 20) << "Kafka connect: successfully configured client key location" << dendl;
+    }
+    if (conn->ssl_key_password) {
+      if (rd_kafka_conf_set(conf.get(), "ssl.key.password", conn->ssl_key_password->c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+      ldout(conn->cct, 20) << "Kafka connect: successfully configured client key password" << dendl;
+    }
     // Note: when librdkafka.1.0 is available the following line could be uncommented instead of the callback setting call
     // if (rd_kafka_conf_set(conn->conf, "enable.ssl.certificate.verification", "0", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
 
     ldout(conn->cct, 20) << "Kafka connect: successfully configured security" << dendl;
   } else if (!conn->user.empty()) {
-      // use SASL+PLAINTEXT
-      if (rd_kafka_conf_set(conf.get(), "security.protocol", "SASL_PLAINTEXT", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
-              rd_kafka_conf_set(conf.get(), "sasl.username", conn->user.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
-              rd_kafka_conf_set(conf.get(), "sasl.password", conn->password.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
-      ldout(conn->cct, 20) << "Kafka connect: successfully configured SASL_PLAINTEXT" << dendl;
+    // use SASL+PLAINTEXT
+    if (rd_kafka_conf_set(conf.get(), "security.protocol", "SASL_PLAINTEXT", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
+        rd_kafka_conf_set(conf.get(), "sasl.username", conn->user.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
+        rd_kafka_conf_set(conf.get(), "sasl.password", conn->password.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+    ldout(conn->cct, 20) << "Kafka connect: successfully configured SASL_PLAINTEXT" << dendl;
 
-      if (conn->mechanism) {
-        if (rd_kafka_conf_set(conf.get(), "sasl.mechanism", conn->mechanism->c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
-        ldout(conn->cct, 20) << "Kafka connect: successfully configured SASL mechanism" << dendl;
-      } else {
-        if (rd_kafka_conf_set(conf.get(), "sasl.mechanism", "PLAIN", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
-        ldout(conn->cct, 20) << "Kafka connect: using default SASL mechanism" << dendl;
-      }
+    if (conn->mechanism) {
+      if (rd_kafka_conf_set(conf.get(), "sasl.mechanism", conn->mechanism->c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+      ldout(conn->cct, 20) << "Kafka connect: successfully configured SASL mechanism" << dendl;
+    } else {
+      if (rd_kafka_conf_set(conf.get(), "sasl.mechanism", "PLAIN", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+      ldout(conn->cct, 20) << "Kafka connect: using default SASL mechanism" << dendl;
+    }
+  }
+
+  if (is_gssapi && conn->use_ssl) {
+    if (conn->ca_location) {
+      if (rd_kafka_conf_set(conf.get(), "ssl.ca.location", conn->ca_location->c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+      ldout(conn->cct, 20) << "Kafka connect: successfully configured CA location" << dendl;
+    } else {
+      ldout(conn->cct, 20) << "Kafka connect: using default CA location" << dendl;
+    }
+    if (rd_kafka_conf_set(conf.get(), "enable.ssl.certificate.verification", conn->verify_ssl ? "true" : "false", errstr, 
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
   }
 
   // set the global callback for delivery success/fail
@@ -600,7 +736,13 @@ public:
                boost::optional<const std::string&> mechanism,
                boost::optional<const std::string&> topic_user_name,
                boost::optional<const std::string&> topic_password,
-               boost::optional<const std::string&> brokers) {
+               boost::optional<const std::string&> brokers,
+               boost::optional<const std::string&> ssl_certificate,
+               boost::optional<const std::string&> ssl_key,
+               boost::optional<const std::string&> ssl_key_password,
+               boost::optional<const std::string&> topic_kerberos_service_name,
+               boost::optional<const std::string&> topic_kerberos_principal,
+               boost::optional<const std::string&> topic_kerberos_keytab) {
     if (stopped) {
       ldout(cct, 1) << "Kafka connect: manager is stopped" << dendl;
       return false;
@@ -630,13 +772,49 @@ public:
       password = topic_password.get();
     }
 
-    // this should be validated by the regex in parse_url()
-    ceph_assert(user.empty() == password.empty());
+    const bool is_gssapi = mechanism.has_value() && boost::iequals(mechanism.get(), "GSSAPI");
 
-    if (!user.empty() && !use_ssl && !g_conf().get_val<bool>("rgw_allow_notification_secrets_in_cleartext")) {
-      ldout(cct, 1) << "Kafka connect: user/password are only allowed over secure connection" << dendl;
+    if (is_gssapi) {
+      if (!user.empty() || !password.empty()) {
+        ldout(cct, 5) << "Kafka connect: user/password provided with GSSAPI; ignoring" << dendl;
+      }
+      user.clear();
+      password.clear();
+    } else {
+      // this should be validated by the regex in parse_url()
+      ceph_assert(user.empty() == password.empty());
+
+      if (!user.empty() && !use_ssl && !g_conf().get_val<bool>("rgw_allow_notification_secrets_in_cleartext")) {
+        ldout(cct, 1) << "Kafka connect: user/password are only allowed over secure connection" << dendl;
+        return false;
+      }
+    }
+    
+    // ssl_certificate and ssl_key must both be provided for mTLS
+    if (ssl_certificate.has_value() != ssl_key.has_value()) {
+      ldout(cct, 1) << "Kafka connect: both ssl_certificate and ssl_key must be provided for mTLS (got only "
+                    << (ssl_certificate.has_value() ? "ssl_certificate" : "ssl_key") << ")" << dendl;
       return false;
     }
+    
+    boost::optional<const std::string&> kerberos_service_name;
+    boost::optional<const std::string&> kerberos_principal;
+    boost::optional<const std::string&> kerberos_keytab;
+
+    if (is_gssapi) {
+      if (topic_kerberos_service_name.has_value()) {
+        kerberos_service_name = topic_kerberos_service_name;
+      } else if (!cct->_conf->rgw_kafka_sasl_kerberos_service_name.empty()) {
+        kerberos_service_name = boost::optional<const std::string&>(cct->_conf->rgw_kafka_sasl_kerberos_service_name);
+      }
+      if (topic_kerberos_principal.has_value()) {
+        kerberos_principal = topic_kerberos_principal;
+      }
+      if (topic_kerberos_keytab.has_value()) {
+        kerberos_keytab = topic_kerberos_keytab;
+      }
+    }
+    
 
     if (brokers.has_value()) {
       broker_list.append(",");
@@ -644,7 +822,8 @@ public:
     }
 
     connection_id_t tmp_id(broker_list, user, password, ca_location, mechanism,
-                           use_ssl);
+                           use_ssl, verify_ssl, ssl_certificate, ssl_key, ssl_key_password,
+                           kerberos_service_name, kerberos_principal, kerberos_keytab);
     std::lock_guard lock(connections_lock);
     const auto it = connections.find(tmp_id);
     // note that ssl vs. non-ssl connection to the same host are two separate connections
@@ -663,7 +842,9 @@ public:
       return false;
     }
 
-    auto conn = std::make_unique<connection_t>(cct, broker_list, use_ssl, verify_ssl, ca_location, user, password, mechanism);
+    auto conn = std::make_unique<connection_t>(cct, broker_list, use_ssl, verify_ssl, ca_location, user, password,
+                                               mechanism, ssl_certificate, ssl_key, ssl_key_password,
+                                               kerberos_service_name, kerberos_principal, kerberos_keytab);
     if (!new_producer(conn.get())) {
       ldout(cct, 10) << "Kafka connect: producer creation failed in new connection" << dendl;
       return false;
@@ -782,11 +963,19 @@ bool connect(connection_id_t& conn_id,
              boost::optional<const std::string&> mechanism,
              boost::optional<const std::string&> user_name,
              boost::optional<const std::string&> password,
-             boost::optional<const std::string&> brokers) {
+             boost::optional<const std::string&> brokers,
+             boost::optional<const std::string&> ssl_certificate,
+             boost::optional<const std::string&> ssl_key,
+             boost::optional<const std::string&> ssl_key_password,
+             boost::optional<const std::string&> kerberos_service_name,
+             boost::optional<const std::string&> kerberos_principal,
+             boost::optional<const std::string&> kerberos_keytab) {
   std::shared_lock lock(s_manager_mutex);
   if (!s_manager) return false;
   return s_manager->connect(conn_id, url, use_ssl, verify_ssl, ca_location,
-                            mechanism, user_name, password, brokers);
+                            mechanism, user_name, password, brokers,
+                            ssl_certificate, ssl_key, ssl_key_password,
+                            kerberos_service_name, kerberos_principal, kerberos_keytab);
 }
 
 int publish(const connection_id_t& conn_id,

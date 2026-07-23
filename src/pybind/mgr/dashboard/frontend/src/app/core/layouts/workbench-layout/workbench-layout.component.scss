@@ -1,15 +1,20 @@
 @use './src/styles/vendor/variables' as vv;
 
-.overview {
-  background-color: vv.$body-bg-alt;
+.overview,
+.rgw-dashboard {
   margin: 0;
   padding: 0;
-  padding-bottom: 48px;
+
+  .breadcrumbs--padding {
+    padding-left: var(--cds-spacing-07);
+  }
 }
 
 .container-fluid {
   overflow: auto;
-  padding-top: 48px;
+  padding-top: var(--cds-spacing-09);
+  padding-bottom: var(--cds-spacing-09);
+  background-color: var(--cds-background);
 
   &:has(.tearsheet--full) {
     padding-left: 0;
@@ -20,10 +25,15 @@
       padding-left: var(--cds-spacing-07);
     }
   }
-}
 
-.rgw-dashboard {
-  background-color: vv.$body-bg-alt;
+  &:has(.sidebar-layout--full) {
+    padding-left: 0;
+    padding-right: 0;
+
+    .breadcrumbs--padding {
+      padding-left: var(--cds-spacing-05);
+    }
+  }
 }
 
 .cd-alert-container {

@@ -140,6 +140,8 @@ class ScrubSchedListener {
    */
   virtual AsyncReserver<spg_t, Finisher>& get_scrub_reserver() = 0;
 
+  virtual uint64_t get_snap_trim_queue_total() const = 0;
+
   virtual ~ScrubSchedListener() {}
 };
 

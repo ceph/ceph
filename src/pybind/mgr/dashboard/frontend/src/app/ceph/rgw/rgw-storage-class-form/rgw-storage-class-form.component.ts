@@ -64,7 +64,8 @@ import {
   AclType,
   ZoneRequest,
   AllZonesResponse,
-  POOL
+  POOL,
+  FROM_STORAGE_CLASS
 } from '../models/rgw-storage-class.model';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -100,6 +101,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
   defaultZonegroup: ZoneGroup;
   zoneGroupDetails: ZoneGroupDetails;
   storageClassInfo: StorageClass;
+  existingStorageClasses: StorageClass[] = [];
   tierTargetInfo: TierTarget;
   glacierStorageClassDetails: S3Glacier;
   allowReadThrough: boolean = false;
@@ -119,6 +121,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
   rgwPools: Pool[];
   zones: any[];
   POOL = POOL;
+  FROM_STORAGE_CLASS = FROM_STORAGE_CLASS;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -438,7 +441,14 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     });
     this.storageClassForm = this.formBuilder.group({
       storage_class: new FormControl('', {
-        validators: [Validators.required]
+        validators: [
+          Validators.required,
+          CdValidators.custom('uniqueName', (storageClassName: string) => {
+            return this.existingStorageClasses.some(
+              (storageClass: StorageClass) => storageClass.storage_class === storageClassName
+            );
+          })
+        ]
       }),
       zonegroup: new FormControl(this.selectedZoneGroup, {
         validators: [Validators.required]
@@ -513,6 +523,8 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
       this.rgwZoneGroupService.getAllZonegroupsInfo().subscribe(
         (data: ZoneGroupDetails) => {
           this.zoneGroupDetails = data;
+          this.existingStorageClasses = BucketTieringUtils.filterAndMapTierTargets(data);
+          this.storageClassForm.get('storage_class')?.updateValueAndValidity({ emitEvent: false });
           this.zonegroupNames = [];
           this.zones = [];
           if (data.zonegroups && data.zonegroups.length > 0) {
@@ -621,6 +633,12 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
   }
   goToListView() {
     this.router.navigate([`rgw/storage-class`]);
+  }
+
+  navigateCreatePool(): void {
+    this.router.navigate([POOL.PATH], {
+      state: { from: FROM_STORAGE_CLASS, returnUrl: this.router.url }
+    });
   }
 
   getTierTargetByStorageClass(placementTargetInfo: PlacementTarget, storageClass: string) {

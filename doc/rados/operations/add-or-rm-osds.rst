@@ -140,7 +140,7 @@ cluster have and therefore might have greater weight as well.
    and it moves that bucket underneath any other buckets that you have
    specified. **Important:** If you specify only the root bucket, the command
    will attach the OSD directly to the root, but CRUSH rules expect OSDs to be
-   inside of hosts. If the OSDs are not inside hosts, the OSDS will likely not
+   inside of hosts. If the OSDs are not inside hosts, the OSDs will likely not
    receive any data.
 
    .. prompt:: bash $

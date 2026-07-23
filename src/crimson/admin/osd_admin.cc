@@ -209,14 +209,15 @@ public:
   {}
   seastar::future<tell_result_t> call(const cmdmap_t&,
 				      std::string_view format,
-				      ceph::bufferlist&& input) const final
+				      ceph::bufferlist&&) const final
   {
     LOG_PREFIX(AdminSocketHook::FlushPgStatsHook);
     DEBUG("");
-    uint64_t seq = osd.send_pg_stats();
-    unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
-    f->dump_unsigned("stat_seq", seq);
-    co_return std::move(f);
+    return osd.send_pg_stats().then([format](uint64_t seq) {
+      unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
+      f->dump_unsigned("stat_seq", seq);
+      return seastar::make_ready_future<tell_result_t>(std::move(f));
+    });
   }
 
 private:

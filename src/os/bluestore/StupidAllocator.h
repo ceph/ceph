@@ -14,7 +14,7 @@
 #include "include/mempool.h"
 #include "common/ceph_mutex.h"
 
-class StupidAllocator : public AllocatorBase {
+class StupidAllocator : public AllocatorBase, public AllocatorPerf {
   CephContext* cct;
   ceph::mutex lock = ceph::make_mutex("StupidAllocator::lock");
 

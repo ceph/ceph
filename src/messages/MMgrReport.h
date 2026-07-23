@@ -32,13 +32,13 @@ public:
   std::string path;
   std::string description;
   std::string nick;
-  enum perfcounter_type_d type;
+  enum perfcounter_type_d type = PERFCOUNTER_NONE;
 
   // For older clients that did not send priority, pretend everything
   // is "useful" so that mgr plugins filtering on prio will get some
   // data (albeit probably more than they wanted)
   uint8_t priority = PerfCountersBuilder::PRIO_USEFUL;
-  enum unit_t unit;
+  enum unit_t unit = UNIT_NONE;
 
   void encode(ceph::buffer::list &bl) const
   {

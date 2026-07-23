@@ -621,28 +621,16 @@ CLS_INIT(lock)
   cls_method_handle_t h_assert_locked;
   cls_method_handle_t h_set_cookie;
 
-  cls_register("lock", &h_class);
-  cls_register_cxx_method(h_class, "lock",
-                          CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PROMOTE,
-                          lock_op, &h_lock_op);
-  cls_register_cxx_method(h_class, "unlock",
-                          CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PROMOTE,
-                          unlock_op, &h_unlock_op);
-  cls_register_cxx_method(h_class, "break_lock",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          break_lock, &h_break_lock);
-  cls_register_cxx_method(h_class, "get_info",
-                          CLS_METHOD_RD,
-                          get_info, &h_get_info);
-  cls_register_cxx_method(h_class, "list_locks",
-                          CLS_METHOD_RD,
-                          list_locks, &h_list_locks);
-  cls_register_cxx_method(h_class, "assert_locked",
-                          CLS_METHOD_RD | CLS_METHOD_PROMOTE,
-                          assert_locked, &h_assert_locked);
-  cls_register_cxx_method(h_class, "set_cookie",
-                          CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PROMOTE,
-                          set_cookie, &h_set_cookie);
+  cls_register(ClassId::name, &h_class);
+  ClassRegistrar<ClassId> cls(h_class);
+
+  cls.register_cxx_method(method::lock, lock_op, &h_lock_op);
+  cls.register_cxx_method(method::unlock, unlock_op, &h_unlock_op);
+  cls.register_cxx_method(method::break_lock, break_lock, &h_break_lock);
+  cls.register_cxx_method(method::get_info, get_info, &h_get_info);
+  cls.register_cxx_method(method::list_locks, list_locks, &h_list_locks);
+  cls.register_cxx_method(method::assert_locked, assert_locked, &h_assert_locked);
+  cls.register_cxx_method(method::set_cookie, set_cookie, &h_set_cookie);
 
   return;
 }

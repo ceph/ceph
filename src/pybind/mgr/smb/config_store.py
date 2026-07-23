@@ -19,6 +19,14 @@ class MemConfigEntry:
     def get(self) -> Simplified:
         return self._store._data[(self._ns, self._name)]
 
+    def get_data(self) -> str:
+        value = self._store.data[(self._ns, self._name)]
+        assert isinstance(value, str)
+        return value
+
+    def set_data(self, value: Simplified) -> None:
+        self._store._data[(self._ns, self._name)] = value
+
     def remove(self) -> bool:
         return self._store.remove(self.full_key)
 

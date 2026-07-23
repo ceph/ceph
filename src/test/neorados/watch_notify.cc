@@ -10,8 +10,8 @@
  *
  */
 
+#include <boost/asio/detached.hpp>
 #include <boost/system/detail/errc.hpp>
-#include <coroutine>
 #include <cstdint>
 #include <iostream>
 #include <utility>
@@ -36,8 +36,6 @@
 
 #include "gtest/gtest.h"
 
-using std::uint64_t;
-
 namespace asio = boost::asio;
 namespace buffer = ceph::buffer;
 namespace container = boost::container;
@@ -46,7 +44,6 @@ namespace sys = boost::system;
 using namespace std::literals;
 
 using neorados::ReadOp;
-using neorados::WriteOp;
 
 using std::uint64_t;
 
@@ -234,6 +231,31 @@ CORO_TEST_F(NeoRadosWatchNotifyPoll, WatchNotify, NeoRadosTest) {
   co_return;
 }
 
+CORO_TEST_F(NeoRadosWatchNotifyPoll, WatchNotifyOverflow, NeoRadosTest) {
+  static constexpr auto oid = "obj"sv;
+  co_await create_obj(oid);
+  auto handle = co_await rados().watch(oid, pool(), asio::use_awaitable,
+                                       std::nullopt, 1);
+  EXPECT_TRUE(rados().check_watch(handle));
+  // TODO: Write an awaitable future. This should work for testing for now.
+  rados().notify(oid, pool(), {}, 1s, asio::detached);
+  rados().notify(oid, pool(), {}, 1s, asio::detached);
+  rados().notify(oid, pool(), {}, 1s, asio::detached);
+  rados().notify(oid, pool(), {}, 1s, asio::detached);
+  co_await wait_for(1s);
+  co_await rados().next_notification(handle, asio::use_awaitable);
+  rados().notify(oid, pool(), {}, 1s, asio::detached);
+  co_await expect_error_code(rados().next_notification(handle, asio::use_awaitable),
+                             neorados::errc::notification_overflow);
+  rados().notify(oid, pool(), {}, 1s, asio::detached);
+  co_await rados().next_notification(handle, asio::use_awaitable);
+  co_await rados().unwatch(handle, pool(), asio::use_awaitable);
+  std::cout << "Flushing..." << std::endl;
+  co_await rados().flush_watch(asio::use_awaitable);
+  std::cout << "Flushed..." << std::endl;
+  co_return;
+}
+
 CORO_TEST_F(NeoRadosWatchNotifyPoll, WatchNotifyTimeout, NeoRadosTest) {
   static constexpr auto oid = "obj"sv;
   static constexpr auto timeout = 1s;
@@ -290,6 +312,7 @@ CORO_TEST_F(NeoRadosWatchNotifyPoll, WrongWatchType, NeoRadosTest) {
   co_await expect_error_code(
     rados().next_notification(handle, asio::use_awaitable),
     sys::errc::invalid_argument);
+  co_await rados().unwatch(handle, pool(), asio::use_awaitable);
 }
 
 CORO_TEST_F(NeoRadosWatchNotifyPoll, WatchNotifyCancel, NeoRadosTest) {

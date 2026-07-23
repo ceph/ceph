@@ -19,6 +19,7 @@ from tests.fixtures import (
 from cephadmlib import context
 from cephadmlib import systemd_unit
 from cephadmlib.constants import CGROUPS_SPLIT_PODMAN_VERSION
+from cephadmlib.daemon_identity import DaemonIdentity
 
 _cephadm = import_cephadm()
 
@@ -147,3 +148,87 @@ def test_new_podman():
         '[Install]',
         'WantedBy=ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9.target',
     ]
+
+
+_FSID = '9b9d7609-f4d5-4aba-94c8-effa764d96c9'
+
+
+def test_success_exit_status_drop_in_written(tmp_path):
+    """When exit codes are provided, a drop-in with SuccessExitStatus is
+    written into the service's .d/ directory."""
+    ident = DaemonIdentity(_FSID, 'node-exporter', 'ceph-node-00')
+    pinfo = systemd_unit.PathInfo(tmp_path, ident)
+    systemd_unit._install_success_exit_status_drop_in(
+        pinfo, ident, [143]
+    )
+    fname = systemd_unit._SUCCESS_EXIT_STATUS_DROP_IN_FMT.format(
+        daemon_type='node-exporter'
+    )
+    drop_in = pinfo.drop_in_file.parent / fname
+    assert drop_in.exists()
+    assert fname == '90-cephadm-node-exporter.conf'
+    content = drop_in.read_text()
+    assert '[Service]' in content
+    assert 'SuccessExitStatus=143' in content
+
+
+def test_success_exit_status_drop_in_not_written_for_empty_list(tmp_path):
+    """When exit codes list is empty, no drop-in is created."""
+    ident = DaemonIdentity(_FSID, 'mgr', 'host1')
+    pinfo = systemd_unit.PathInfo(tmp_path, ident)
+    systemd_unit._install_success_exit_status_drop_in(
+        pinfo, ident, []
+    )
+    fname = systemd_unit._SUCCESS_EXIT_STATUS_DROP_IN_FMT.format(
+        daemon_type='mgr'
+    )
+    drop_in = pinfo.drop_in_file.parent / fname
+    assert not drop_in.exists()
+
+
+@mock.patch('cephadmlib.daemons.monitoring.Monitoring._prevalidate')
+@mock.patch('cephadmlib.daemons.monitoring.daemon_to_container')
+@mock.patch('cephadmlib.daemons.monitoring.to_deployment_container')
+def test_monitoring_node_exporter_container_has_success_exit_status(
+    _to_deploy, _to_ctr, _preval
+):
+    """Monitoring.container() sets success_exit_status=[143] for
+    node-exporter."""
+    from cephadmlib.daemons.monitoring import Monitoring
+    from cephadmlib.container_types import CephContainer
+
+    ctx = context.CephadmContext()
+    ctx.container_engine = mock_podman()
+    fake_ctr = mock.MagicMock(spec=CephContainer)
+    fake_ctr.success_exit_status = None
+    _to_deploy.return_value = fake_ctr
+    ident = DaemonIdentity(_FSID, 'node-exporter', 'host1')
+    daemon = Monitoring(ctx, ident)
+    ctr = daemon.container(ctx)
+    assert ctr.success_exit_status == [143]
+
+
+@mock.patch('cephadmlib.daemons.monitoring.Monitoring._prevalidate')
+@mock.patch('cephadmlib.daemons.monitoring.daemon_to_container')
+@mock.patch('cephadmlib.daemons.monitoring.to_deployment_container')
+@pytest.mark.parametrize(
+    'daemon_type',
+    ['prometheus', 'grafana', 'alertmanager', 'loki', 'promtail'],
+)
+def test_monitoring_other_types_no_success_exit_status(
+    _to_deploy, _to_ctr, _preval, daemon_type
+):
+    """Monitoring.container() leaves success_exit_status as None for
+    non-node-exporter types."""
+    from cephadmlib.daemons.monitoring import Monitoring
+    from cephadmlib.container_types import CephContainer
+
+    ctx = context.CephadmContext()
+    ctx.container_engine = mock_podman()
+    fake_ctr = mock.MagicMock(spec=CephContainer)
+    fake_ctr.success_exit_status = None
+    _to_deploy.return_value = fake_ctr
+    ident = DaemonIdentity(_FSID, daemon_type, 'host1')
+    daemon = Monitoring(ctx, ident)
+    ctr = daemon.container(ctx)
+    assert ctr.success_exit_status is None

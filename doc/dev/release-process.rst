@@ -87,8 +87,8 @@ Once QE has determined a stopping point in the working (e.g., ``squid``) branch,
 
 Notify the "Build Lead" that the release branch is ready.
 
-2. Starting the build
-=====================
+2a. Starting the build
+======================
 
 We'll use a stable/regular 19.2.2 release of Squid as an example throughout this document.
 
@@ -104,24 +104,51 @@ We'll use a stable/regular 19.2.2 release of Squid as an example throughout this
 
 NOTE: if for some reason the build has to be restarted (for example if one distro failed) then the ``TAG`` option has to be unchecked.
 
-4. Use https://docs.ceph.com/en/latest/start/os-recommendations/?highlight=debian#platforms to determine the ``DISTROS`` parameter.  For example,
+4. Use :ref:`start-platforms` to determine the ``DISTROS`` parameter.  For example,
 
-    +-------------------+--------------------------------------------------+
-    | Release           | Distro Codemap                                   |
-    +===================+==================================================+
-    | pacific (16.X.X)  | ``focal bionic buster bullseye``                 |
-    +-------------------+--------------------------------------------------+
-    | quincy (17.X.X)   | ``jammy focal centos9 bullseye``                 |
-    +-------------------+--------------------------------------------------+
-    | reef (18.X.X)     | ``jammy focal centos9 windows bookworm``         |
-    +-------------------+--------------------------------------------------+
-    | squid (19.X.X)    | ``jammy centos9 windows bookworm``               |
-    +-------------------+--------------------------------------------------+
-    | tentacle (20.X.X) | ``jammy centos9 noble windows bookworm rocky10`` |
-    +-------------------+--------------------------------------------------+
+    +-------------------+---------------------------------------------------------+
+    | Release           | Distro Codemap                                          |
+    +===================+=========================================================+
+    | squid (19.X.X)    | ``jammy centos9 windows bookworm``                      |
+    +-------------------+---------------------------------------------------------+
+    | tentacle (20.X.X) | ``jammy centos9 rocky10 windows bookworm``              |
+    +-------------------+---------------------------------------------------------+
+    | umbrella (21.X.X) | ``jammy noble centos9 rocky10 bookworm trixie windows`` |
+    +-------------------+---------------------------------------------------------+
 
 
 5. Click ``Build``.
+
+2b. What to do if your build fails
+==================================
+
+The ceph-release-pipeline parent job has three stages.
+
+If your build fails during the "create ceph release tag" stage, troubleshoot the child ceph-tag job and re-run the parent ceph-release-pipeline job with the same parameters.
+
+----
+
+If your build fails during the "package build" stage, troubleshoot the child ceph-dev-pipeline job.  If only one variant failed to build (e.g., centos9 arm64), start a new ceph-release-pipeline job specifying::
+
+    DISTROS=centos9
+    ARCHS=arm64
+    TAG=false <-- VERY IMPORTANT
+
+This will leave the version commit and previously-created tag intact in ceph-releases.git.  You will want the subsequent ceph-dev-pipeline job to reuse that SHA/tag.
+
+Once all of your variants are successfully built, you will have to manually run the ceph-tag job.  For example,::
+
+    BRANCH=tentacle
+    TAG=true
+    TAG_PHASE=push
+    VERSION=20.2.0
+    RELEASE_TYPE=STABLE
+
+Then proceed with the normal release process.
+
+----
+
+If your build fails during the "push ceph release tag" stage, troubleshoot the child ceph-tag job and re-run **just** the ceph-tag job again manually.  Do not re-run ceph-release-pipeline.
 
 3. Release Notes
 ================
@@ -178,18 +205,57 @@ See `the Ceph Tracker wiki page that explains how to write the release notes <ht
 
    .. prompt:: bash
 
-      merfi gpg /opt/repos/ceph/squid-19.2.2/debian/
+      sign-debs ceph squid
 
    Example::
 
+      + project=ceph
+      + releases=(squid)
+      + distro_versions=(jessie)
+      + for release in "${releases[@]}"
+      + for distro_version in "${distro_versions[@]}"
+      + for path in /opt/repos/ceph/squid*
+      + '[' -d /opt/repos/ceph/squid-19.2.2/debian/jessie ']'
+      + needs_signing=0
+      + gpg --verify /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/Release.gpg /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/Release
+      + needs_signing=1
+      + break
+      + '[' 1 -eq 0 ']'
+      + echo 'Signing: /opt/repos/ceph/squid-19.2.2/debian/jessie'
+      Signing: /opt/repos/ceph/squid-19.2.2/debian/jessie
+      + merfi gpg /opt/repos/ceph/squid-19.2.2/debian/jessie
       --> Starting path collection, looking for files to sign
-      --> 1 repos found
+      --> 2 repos found
       --> signing: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/Release
       --> Running command: gpg --batch --yes --armor --detach-sig --output Release.gpg Release
       --> Running command: gpg --batch --yes --clearsign --output InRelease Release
       --> signing: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/jammy/Release
       --> Running command: gpg --batch --yes --armor --detach-sig --output Release.gpg Release
       --> Running command: gpg --batch --yes --clearsign --output InRelease Release
+      + gpg --verify /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/Release.gpg /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/Release
+      gpg: Signature made Thu May 14 12:00:00 2026 UTC
+      gpg:                using RSA key 460F3994
+      gpg: Good signature from "Ceph Release Key <security@ceph.com>"
+      + echo 'verifying: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/Release.gpg'
+      verifying: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/Release.gpg
+      + gpg --verify /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/InRelease
+      gpg: Signature made Thu May 14 12:00:00 2026 UTC
+      gpg:                using RSA key 460F3994
+      gpg: Good signature from "Ceph Release Key <security@ceph.com>"
+      + echo 'verifying: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/InRelease'
+      verifying: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/InRelease
+      + gpg --verify /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/jammy/Release.gpg /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/jammy/Release
+      gpg: Signature made Thu May 14 12:00:00 2026 UTC
+      gpg:                using RSA key 460F3994
+      gpg: Good signature from "Ceph Release Key <security@ceph.com>"
+      + echo 'verifying: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/jammy/Release.gpg'
+      verifying: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/jammy/Release.gpg
+      + gpg --verify /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/jammy/InRelease
+      gpg: Signature made Thu May 14 12:00:00 2026 UTC
+      gpg:                using RSA key 460F3994
+      gpg: Good signature from "Ceph Release Key <security@ceph.com>"
+      + echo 'verifying: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/jammy/InRelease'
+      verifying: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/jammy/InRelease
 
       etc...
 
@@ -265,7 +331,7 @@ This job:
   or "fat" container image and pushes it to ``quay.ceph.io/ceph/prerelease``
 
 Finally, when all appropriate testing and verification is done on the
-container images, run ``make-manifest-list.py --promote`` from the Ceph
+container images, run ``make-manifest-list.py --promote --version <ver>`` from the Ceph
 source tree (at ``container/make-manifest-list.py``) to promote them to
 their final release location on ``quay.io/ceph/ceph`` (you must ensure
 that you're logged into ``quay.io/ceph`` and ``quay.ceph.io/ceph`` with appropriate permissions):
@@ -273,7 +339,7 @@ that you're logged into ``quay.io/ceph`` and ``quay.ceph.io/ceph`` with appropri
     .. prompt:: bash
 
        cd <ceph-checkout>/container
-       ./make-manifest-list.py --promote
+       ./make-manifest-list.py --promote --version <ver>
 
 The ``--promote`` step should be performed only as the final step in releasing
 containers, after the container images have been tested and have been confirmed

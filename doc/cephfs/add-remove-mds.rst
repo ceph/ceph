@@ -15,7 +15,7 @@
 
 Each CephFS file system requires at least one MDS. The cluster operator will
 generally use their automated deployment tool to launch required MDS servers as
-needed.  Rook and ansible (via the ceph-ansible playbooks) are recommended
+needed.  Rook and Ansible (via the ceph-ansible playbooks) are recommended
 tools for doing this. For clarity, we also show the systemd commands here which
 may be run by the deployment technology if executed on bare-metal.
 
@@ -31,7 +31,7 @@ aggressive client loads uses about 2 to 3 CPU cores. This is due to the other
 miscellaneous upkeep threads working in tandem.
 
 Even so, it is recommended that an MDS server be well provisioned with an
-advanced CPU with sufficient cores. Development is on-going to make better use
+advanced CPU with sufficient cores. Development is ongoing to make better use
 of available CPU cores in the MDS; it is expected in future versions of Ceph
 that the MDS server will improve performance by taking advantage of more cores.
 
@@ -107,8 +107,8 @@ the following method.
 
 	$ sudo systemctl stop ceph-mds@${id}
 
-   The MDS will automatically notify the Ceph monitors that it is going down.
-   This enables the monitors to perform instantaneous failover to an available
+   The MDS will automatically notify the Ceph Monitors that it is going down.
+   This enables the Monitors to perform instantaneous failover to an available
    standby, if one exists. It is unnecessary to use administrative commands to
    effect this failover, e.g. through the use of ``ceph mds fail mds.${id}``.
 

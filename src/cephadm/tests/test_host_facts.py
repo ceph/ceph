@@ -115,3 +115,23 @@ def test_host_facts_security(cephadm_fs):
     assert ksec['complain'] == 0
     assert ksec['enforce'] == 1
     assert ksec['unconfined'] == 2
+
+
+def test_host_facts_skips_sysfs_only_nvme_alias_entries(cephadm_fs):
+    """
+    Some platforms expose extra /sys/block nvme entries that don't have a real
+    /dev node (ex:nvme2c2n1 alongside nvme2n1),duplicates should not be counted.
+    """
+    from cephadmlib.host_facts import HostFacts
+
+    # nvme2n1 is the "real" block device (has /sys/block/../dev and /dev/..).
+    cephadm_fs.create_dir('/dev')
+    cephadm_fs.create_dir('/sys/block/nvme2n1')
+    cephadm_fs.create_file('/sys/block/nvme2n1/dev', contents='259:7')
+    cephadm_fs.create_file('/dev/nvme2n1')
+
+    # nvme2c2n1 is a sysfs-only alias (no /dev node), and it should be ignored.
+    cephadm_fs.create_dir('/sys/block/nvme2c2n1')
+
+    hfacts = object.__new__(HostFacts)
+    assert hfacts._get_block_devs() == ['nvme2n1']

@@ -210,13 +210,14 @@ public:
 			 << err.what() << dendl;
       throw;
     } catch (const sys::system_error& e) {
-      if (e.code() == sys::errc::no_such_file_or_directory) {
-	co_return std::make_tuple(entries.first(0), std::string{});
+      if (e.code() == sys::errc::no_such_file_or_directory ||
+          e.code() == ceph::buffer::errc::end_of_buffer) {
+        co_return std::make_tuple(entries.first(0), std::string{});
       } else {
-	ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
-			   << ": failed to list " << oids[shard]
-			   << ": " << e.what() << dendl;
-	throw;
+        ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
+              << ": failed to list " << oids[shard]
+              << ": " << e.what() << dendl;
+	      throw;
       }
     }
   }
@@ -228,7 +229,8 @@ public:
       co_return RGWDataChangesLogInfo{.marker = header.max_marker,
 				      .last_update = header.max_time};
     } catch (const sys::system_error& e) {
-      if (e.code() == sys::errc::no_such_file_or_directory) {
+      if (e.code() == sys::errc::no_such_file_or_directory || 
+          e.code() == ceph::buffer::errc::end_of_buffer) {
 	co_return RGWDataChangesLogInfo{};
       }
       ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
@@ -244,7 +246,8 @@ public:
 			  asio::use_awaitable);
       co_return;
     } catch (const sys::system_error& e) {
-      if (e.code() == sys::errc::no_such_file_or_directory) {
+      if (e.code() == sys::errc::no_such_file_or_directory || 
+          e.code() == ceph::buffer::errc::end_of_buffer) {
 	co_return;
       } else {
 	ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
@@ -268,7 +271,8 @@ public:
 	  co_return false;
 	}
       } catch (const sys::system_error& e) {
-	if (e.code() == sys::errc::no_such_file_or_directory) {
+	if (e.code() == sys::errc::no_such_file_or_directory || 
+      e.code() == ceph::buffer::errc::end_of_buffer) {
 	  continue;
 	}
       }
@@ -346,7 +350,15 @@ public:
   }
   asio::awaitable<void> trim(const DoutPrefixProvider *dpp, int index,
 	   std::string_view marker) override {
-    co_await fifos[index].trim(dpp, std::string{marker}, false);
+    try {
+      co_await fifos[index].trim(dpp, std::string{marker}, false);
+    } catch (const sys::system_error& e) {
+      if (e.code() != sys::errc::no_message_available) {
+	ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
+			   << ": trim failed: " << e.what() << dendl;
+	throw;
+      }
+    }
   }
   std::string_view max_marker() const override {
     static const auto max_mark = fifo::FIFO::max_marker();
@@ -482,10 +494,6 @@ RGWDataChangesLog::start(const DoutPrefixProvider *dpp,
   down_flag = false;
   ran_background = (recovery || watch || renew);
 
-  auto defbacking = to_log_type(
-    cct->_conf.get_val<std::string>("rgw_default_data_log_backing"));
-  // Should be guaranteed by `set_enum_allowed`
-  ceph_assert(defbacking);
   try {
     loc = co_await rgw::init_iocontext(dpp, *rados, log_pool,
 				       rgw::create, asio::use_awaitable);
@@ -501,7 +509,7 @@ RGWDataChangesLog::start(const DoutPrefixProvider *dpp,
       dpp, *rados, metadata_log_oid(), loc,
       [this](uint64_t gen_id, int shard) {
 	return get_oid(gen_id, shard);
-      }, num_shards, *defbacking, *this);
+      }, num_shards, log_type::fifo, *this);
   } catch (const std::exception& e) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		       << ": Error initializing backends: " << e.what()
@@ -1185,7 +1193,7 @@ asio::awaitable<void> DataLogBackends::trim_entries(
     l.unlock();
     auto c = be->gen_id == target_gen ? cursor : be->max_marker();
     co_await be->trim(dpp, shard_id, c);
-    if (be->gen_id == target_gen)
+    if (be->gen_id == target_gen || be->gen_id >= head_gen)
       break;
     l.lock();
   };
@@ -1474,7 +1482,8 @@ RGWDataChangesLog::read_sems(int index, std::string cursor) {
 				       &out, &cursor)),
       nullptr, asio::use_awaitable);
   } catch (const sys::system_error& e) {
-    if (e.code() != sys::errc::no_such_file_or_directory) {
+    if (e.code() != sys::errc::no_such_file_or_directory || 
+        e.code() == ceph::buffer::errc::end_of_buffer) {
       throw;
     }
   }
@@ -1705,7 +1714,8 @@ RGWDataChangesLog::admin_sem_list(std::optional<int> req_shard,
 	mkeep = marker;
       }
     } catch (const sys::system_error& e) {
-      if (e.code() == sys::errc::no_such_file_or_directory) {
+      if (e.code() == sys::errc::no_such_file_or_directory || 
+          e.code() == ceph::buffer::errc::end_of_buffer) {
 	if (!req_shard) {
 	  begin_next = true;
 	  ++shard;

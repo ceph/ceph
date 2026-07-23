@@ -16,7 +16,7 @@ usage() {
 $0 [containerfile] (defaults to 'Containerfile')
 For a CI build (from ceph-ci.git, built and pushed to shaman):
 CI_CONTAINER: must be 'true'
-FROM_IMAGE: defaults to quay.io/centos/centos9:stream
+FROM_IMAGE: defaults to docker.io/rockylinux/rockylinux:10
 FLAVOR (OSD flavor, default or crimson)
 BRANCH (of Ceph. <remote>/<ref>)
 CEPH_SHA1 (of Ceph)
@@ -82,17 +82,24 @@ if [[ ${NO_PUSH} != "true" ]] ; then
 fi
 if [[ ${CI_CONTAINER} != "true" ]] ; then : "${VERSION:?}"; fi
 
+# set container engine
+CONTAINER_ENGINE=${CONTAINER_ENGINE:-podman}
+if [[ ${CONTAINER_ENGINE} != "podman" && ${CONTAINER_ENGINE} != "docker" ]]; then
+    echo "CONTAINER_ENGINE must be 'podman' or 'docker', current: ${CONTAINER_ENGINE}"
+    exit 1
+fi
+
 # check for valid repo auth (if pushing)
 repopath=${CONTAINER_REPO_HOSTNAME}/${CONTAINER_REPO_ORGANIZATION}/${CONTAINER_REPO}
 MINIMAL_IMAGE=${repopath}:minimal-test
 if [[ ${NO_PUSH} != "true" ]] ; then
-    podman rmi ${MINIMAL_IMAGE} || true
-    echo "FROM scratch" | podman build -f - -t ${MINIMAL_IMAGE}
-    if ! podman push ${MINIMAL_IMAGE} ; then
+    ${CONTAINER_ENGINE} rmi ${MINIMAL_IMAGE} || true
+    echo "FROM scratch" | ${CONTAINER_ENGINE} build -f - -t ${MINIMAL_IMAGE}
+    if ! ${CONTAINER_ENGINE} push ${MINIMAL_IMAGE} ; then
         echo "Not authenticated to ${repopath}; need docker/podman login?"
         exit 1
     fi
-    podman rmi ${MINIMAL_IMAGE} | true
+    ${CONTAINER_ENGINE} rmi ${MINIMAL_IMAGE} | true
 fi
 
 if [[ -z "${CEPH_GIT_REPO}" ]] ; then
@@ -106,28 +113,49 @@ fi
 # BRANCH will be, say, origin/main.  remove <remote>/
 BRANCH=${BRANCH##*/}
 
-# podman build only supports secret files.
-# This must be removed after podman build
+# podman/docker build only supports secret files.
+# This must be removed after podman/docker build
 touch prerelease.secret.txt
 chmod 600 prerelease.secret.txt
 echo -e "\
     PRERELEASE_USERNAME=${PRERELEASE_USERNAME}\n
     PRERELEASE_PASSWORD=${PRERELEASE_PASSWORD}\n " > prerelease.secret.txt
 
-podman build --pull=newer --squash -f $CFILE -t build.sh.output \
-    --build-arg FROM_IMAGE=${FROM_IMAGE:-quay.io/centos/centos:stream9} \
-    --build-arg CEPH_SHA1=${CEPH_SHA1} \
-    --build-arg CEPH_GIT_REPO=${CEPH_GIT_REPO} \
-    --build-arg CEPH_REF=${BRANCH:-main} \
-    --build-arg OSD_FLAVOR=${FLAVOR:-default} \
-    --build-arg CI_CONTAINER=${CI_CONTAINER:-default} \
-    --build-arg CUSTOM_CEPH_REPO_URL="${CUSTOM_CEPH_REPO_URL}" \
-    --secret=id=prerelease_creds,src=./prerelease.secret.txt \
-    2>&1
+CONTAINER_BUILD_ARGS=(
+    --squash
+    -f "$CFILE"
+    -t build.sh.output
+    --build-arg FROM_IMAGE="${FROM_IMAGE:-docker.io/rockylinux/rockylinux:10}"
+    --build-arg CEPH_SHA1="${CEPH_SHA1}"
+    --build-arg CEPH_GIT_REPO="${CEPH_GIT_REPO}"
+    --build-arg CEPH_REF="${BRANCH:-main}"
+    --build-arg OSD_FLAVOR="${FLAVOR:-default}"
+    --build-arg CI_CONTAINER="${CI_CONTAINER:-default}"
+    --build-arg CUSTOM_CEPH_REPO_URL="${CUSTOM_CEPH_REPO_URL}"
+    "--secret=id=prerelease_creds,src=./prerelease.secret.txt"
+)
+
+if [[ ${CONTAINER_ENGINE} == "podman" ]]; then
+    CMD=("${CONTAINER_ENGINE}" build --pull=newer "${CONTAINER_BUILD_ARGS[@]}")
+    echo "+ ${CMD[*]}"
+    "${CMD[@]}" 2>&1
+else
+    CMD=("${CONTAINER_ENGINE}" build --pull "${CONTAINER_BUILD_ARGS[@]}" .)
+    echo "+ DOCKER_BUILDKIT=1 ${CMD[*]}"
+    DOCKER_BUILDKIT=1 "${CMD[@]}" 2>&1
+fi
 
 rm ./prerelease.secret.txt
 
-image_id=$(podman image ls localhost/build.sh.output --format '{{.ID}}')
+# get image id
+image_id=$(${CONTAINER_ENGINE} image ls build.sh.output --format '{{.ID}}')
+if [[ -z "${image_id}" ]]; then
+    image_id=$(${CONTAINER_ENGINE} image ls localhost/build.sh.output --format '{{.ID}}' || true)
+fi
+if [[ -z "${image_id}" ]]; then
+    echo "ERROR: build.sh.output image not found!"
+    exit 1
+fi
 
 # grab useful image attributes for building the tag
 #
@@ -146,8 +174,8 @@ image_id=$(podman image ls localhost/build.sh.output --format '{{.ID}}')
 # so that vars will get the output of the first command, newline, output
 # of the second command
 #
-vars="$(podman inspect -f '{{printf "export CEPH_CONTAINER_ARCH=%v" .Architecture}}' ${image_id})
-$(podman inspect -f '{{range $index, $value := .Config.Env}}export CEPH_CONTAINER_{{$value}}{{println}}{{end}}' ${image_id})"
+vars="$(${CONTAINER_ENGINE} inspect -f '{{printf "export CEPH_CONTAINER_ARCH=%v" .Architecture}}' ${image_id})
+$(${CONTAINER_ENGINE} inspect -f '{{range $index, $value := .Config.Env}}export CEPH_CONTAINER_{{$value}}{{println}}{{end}}' ${image_id})"
 vars="$(echo "${vars}" | grep -v PATH)"
 eval ${vars}
 
@@ -173,14 +201,26 @@ if [[ ${CI_CONTAINER} == "true" ]] ; then
         branch_repo_tag=${repopath}:${BRANCH}
         sha1_repo_tag=${repopath}:${CEPH_SHA1}
     fi
-    # while we have more than just centos9 containers:
-    # anything that's not gets suffixed with its fromtag
-    # for the branch and sha1 tags (for example, <branch>-rocky-10).
-    # The default can change when it needs to.
+    # The container build tooling is capable of using CentOS 9 and Rocky 10
+    # as the FROM_IMAGE base container images.
+    # In Tentacle, the default/preferred FROM_IMAGE changed to rockylinux-10.
+    # So we want `podman pull quay.ceph.io/ceph-ci/ceph:tentacle` to get the
+    # FROM_IMAGE=rockylinux-10 container, NOT the CentOS 9 one.
+    # And vice versa for ceph:squid.
 
-    if [[ "${fromtag}" != "centos-stream9" ]] ; then
+    if [[ "$BRANCH" == "reef" || "$BRANCH" == "squid" ]]; then
+        default_fromtag="centos-stream9"
+    else
+        default_fromtag="rockylinux-10"
+    fi
+    # We set fromtag above by extracting FROM_IMAGE from `podman inspect`
+    if [[ "${fromtag}" != "${default_fromtag}" ]] ; then
         branch_repo_tag=${repopath}:${BRANCH}-${fromtag}
         sha1_repo_tag=${repopath}:${CEPH_SHA1}-${fromtag}
+        if [[ ${FLAVOR} == "debug" ]]; then
+            branch_repo_tag=${branch_repo_tag}-${FLAVOR}
+            sha1_repo_tag=${sha1_repo_tag}-${FLAVOR}
+        fi
     fi
 
     if [[ "${ARCH}" == "arm64" ]] ; then
@@ -188,16 +228,16 @@ if [[ ${CI_CONTAINER} == "true" ]] ; then
         sha1_repo_tag=${sha1_repo_tag}-arm64
     fi
 
-    podman tag ${image_id} ${full_repo_tag}
-    podman tag ${image_id} ${branch_repo_tag}
-    podman tag ${image_id} ${sha1_repo_tag}
+    ${CONTAINER_ENGINE} tag ${image_id} ${full_repo_tag}
+    ${CONTAINER_ENGINE} tag ${image_id} ${branch_repo_tag}
+    ${CONTAINER_ENGINE} tag ${image_id} ${sha1_repo_tag}
 
     if [[ -z "${NO_PUSH}" ]] ; then
-        podman push ${full_repo_tag}
-        podman push ${branch_repo_tag}
-        podman push ${sha1_repo_tag}
+        ${CONTAINER_ENGINE} push ${full_repo_tag}
+        ${CONTAINER_ENGINE} push ${branch_repo_tag}
+        ${CONTAINER_ENGINE} push ${sha1_repo_tag}
         if [[ ${REMOVE_LOCAL_IMAGES} == "true" ]] ; then
-            podman rmi -f ${full_repo_tag} ${branch_repo_tag} ${sha1_repo_tag}
+            ${CONTAINER_ENGINE} rmi -f ${full_repo_tag} ${branch_repo_tag} ${sha1_repo_tag}
         fi
     fi
 else
@@ -207,12 +247,11 @@ else
     #
     version_tag=${repopath}:v${VERSION}-${builddate}
 
-    podman tag ${image_id} ${version_tag}
+    ${CONTAINER_ENGINE} tag ${image_id} ${version_tag}
     if [[ -z "${NO_PUSH}" ]] ; then
-        podman push ${version_tag}
+        ${CONTAINER_ENGINE} push ${version_tag}
         if [[ ${REMOVE_LOCAL_IMAGES} == "true" ]] ; then
-            podman rmi -f ${version_tag}
+            ${CONTAINER_ENGINE} rmi -f ${version_tag}
         fi
     fi
 fi
-

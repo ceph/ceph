@@ -63,6 +63,12 @@ struct BackfillState {
   struct SuspendBackfill : sc::event<SuspendBackfill> {
   };
 
+  struct RequestBudgetBlocked : sc::event<RequestBudgetBlocked> {
+  };
+
+  struct BudgetAvailable : sc::event<BudgetAvailable> {
+  };
+
 private:
   // internal events
   struct RequestPrimaryScanning : sc::event<RequestPrimaryScanning> {
@@ -84,6 +90,7 @@ public:
   struct ReplicasScanning;
   struct Waiting;
   struct Done;
+  struct BudgetBlocked;
 
   struct BackfillMachine : sc::state_machine<BackfillMachine, Initial> {
     BackfillMachine(BackfillState& backfill_state,
@@ -157,6 +164,7 @@ public:
       sc::transition<RequestPrimaryScanning, PrimaryScanning>,
       sc::transition<RequestReplicasScanning, ReplicasScanning>,
       sc::transition<RequestWaiting, Waiting>,
+      sc::transition<RequestBudgetBlocked, BudgetBlocked>,
       sc::transition<sc::event_base, Crashed>>;
     explicit Enqueuing(my_context);
 
@@ -281,6 +289,19 @@ public:
     }
   };
 
+  struct BudgetBlocked : sc::state<BudgetBlocked, BackfillMachine>,
+                         StateHelper<BudgetBlocked> {
+    using reactions = boost::mpl::list<
+      sc::custom_reaction<BudgetAvailable>,
+      sc::custom_reaction<SuspendBackfill>,
+      sc::custom_reaction<Triggered>,
+      sc::transition<sc::event_base, Crashed>>;
+    explicit BudgetBlocked(my_context ctx);
+    sc::result react(BudgetAvailable);
+    sc::result react(SuspendBackfill);
+    sc::result react(Triggered);
+  };
+
   BackfillState(BackfillListener& backfill_listener,
                 std::unique_ptr<PeeringFacade> peering_state,
                 std::unique_ptr<PGFacade> pg);
@@ -374,6 +395,10 @@ struct BackfillState::BackfillListener {
     const hobject_t& obj,
     const eversion_t& v) = 0;
 
+  virtual void send_recovery_deletes(
+    const hobject_t& obj,
+    const std::vector<pg_shard_t>& peers) = 0;
+
   virtual void maybe_flush() = 0;
 
   virtual void update_peers_last_backfill(
@@ -382,6 +407,8 @@ struct BackfillState::BackfillListener {
   virtual bool budget_available() const = 0;
 
   virtual void backfilled() = 0;
+
+  virtual void request_budget_retry() = 0;
 
   virtual ~BackfillListener() = default;
 };
@@ -442,6 +469,8 @@ class BackfillState::ProgressTracker {
 
   BackfillMachine& backfill_machine;
   std::map<hobject_t, registry_item_t> registry;
+  // count of registry entries at enqueued_push stage, awaiting ObjectPushed.
+  size_t num_pending_pushes = 0;
 
   BackfillState& backfill_state() {
     return backfill_machine.backfill_state;
@@ -463,15 +492,25 @@ public:
 
   bool tracked_objects_completed() const;
 
+  // true when no push operations are awaiting ObjectPushed completion.
+  bool tracked_pushes_completed() const {
+    return num_pending_pushes == 0;
+  }
+
   bool enqueue_push(const hobject_t&);
   void enqueue_drop(const hobject_t&);
   void complete_to(const hobject_t&, const pg_stat_t&, bool may_push_to_max);
+
+  // drain all remaining drop entries from the registry, updating stats.
+  void complete_drops();
 };
 
 } // namespace crimson::osd
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<crimson::osd::BackfillState::PGFacade>
+  : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::osd::BackfillState::BudgetBlocked>
   : fmt::ostream_formatter {};
 #endif
 

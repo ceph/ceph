@@ -121,7 +121,7 @@ export class OverviewStorageService {
   }
 
   getStorageBreakdown(): Observable<PromqlGuageMetric> {
-    return this.prom.getPrometheusQueryData({ params: this.RAW_USED_BY_STORAGE_TYPE_QUERY });
+    return this.prom.getGaugeQueryData(this.RAW_USED_BY_STORAGE_TYPE_QUERY);
   }
 
   getThresholdStatus(total, used, nearfull, full): CapacityThreshold {

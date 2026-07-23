@@ -13,6 +13,7 @@ add_executable(unittest-transaction-manager
   --memory 256M --smp 1)
 target_link_libraries(
   unittest-transaction-manager
+  crimson::gtest
   ${CMAKE_DL_LIBS}
   crimson-seastore)
 avoid_asan_uar_slowdown(unittest-transaction-manager)
@@ -24,6 +25,7 @@ add_ceph_unittest(unittest-omap-manager
   --memory 256M --smp 1)
 target_link_libraries(
   unittest-omap-manager
+  crimson::gtest
   ${CMAKE_DL_LIBS}
   crimson-seastore)
 avoid_asan_uar_slowdown(unittest-omap-manager)
@@ -35,6 +37,7 @@ add_ceph_unittest(unittest-btree-lba-manager
   --memory 256M --smp 1)
 target_link_libraries(
   unittest-btree-lba-manager
+  crimson::gtest
   ${CMAKE_DL_LIBS}
   crimson-seastore)
 
@@ -91,6 +94,7 @@ add_ceph_unittest(unittest-seastore
   --memory 256M --smp 1)
 target_link_libraries(
   unittest-seastore
+  crimson::gtest
   ${CMAKE_DL_LIBS}
   crimson-seastore
   crimson-common)

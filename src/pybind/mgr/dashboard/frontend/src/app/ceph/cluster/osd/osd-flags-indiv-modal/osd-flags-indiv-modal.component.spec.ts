@@ -3,8 +3,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { NgbActiveModal, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
+import { ModalService, TooltipModule } from 'carbon-components-angular';
+
 import { of as observableOf } from 'rxjs';
 
 import { OsdService } from '~/app/shared/api/osd.service';
@@ -26,12 +26,11 @@ describe('OsdFlagsIndivModalComponent', () => {
       HttpClientTestingModule,
       ReactiveFormsModule,
       SharedModule,
-      ToastrModule.forRoot(),
-      NgbTooltipModule,
+      TooltipModule,
       RouterTestingModule
     ],
     declarations: [OsdFlagsIndivModalComponent],
-    providers: [NgbActiveModal]
+    providers: [ModalService]
   });
 
   beforeEach(() => {
@@ -137,7 +136,6 @@ describe('OsdFlagsIndivModalComponent', () => {
     describe('submitAction', () => {
       let notificationType: NotificationType;
       let notificationService: NotificationService;
-      let bsModalRef: NgbActiveModal;
       let flags: object;
 
       beforeEach(() => {
@@ -145,8 +143,7 @@ describe('OsdFlagsIndivModalComponent', () => {
         spyOn(notificationService, 'show').and.callFake((type) => {
           notificationType = type;
         });
-        bsModalRef = TestBed.inject(NgbActiveModal);
-        spyOn(bsModalRef, 'close').and.callThrough();
+        spyOn(component, 'closeModal');
         flags = {
           nodown: false,
           noin: false,
@@ -165,7 +162,7 @@ describe('OsdFlagsIndivModalComponent', () => {
         req.flush({ flags, ids: [0] });
         expect(req.request.body).toEqual({ flags, ids: [0] });
         expect(notificationType).toBe(NotificationType.success);
-        expect(component.activeModal.close).toHaveBeenCalledTimes(1);
+        expect(component.closeModal).toHaveBeenCalledTimes(1);
       });
 
       it('should submit multiple flags', () => {
@@ -180,7 +177,7 @@ describe('OsdFlagsIndivModalComponent', () => {
         req.flush({ flags, ids: [0] });
         expect(req.request.body).toEqual({ flags, ids: [0] });
         expect(notificationType).toBe(NotificationType.success);
-        expect(component.activeModal.close).toHaveBeenCalledTimes(1);
+        expect(component.closeModal).toHaveBeenCalledTimes(1);
       });
 
       it('should hide modal if request fails', () => {
@@ -189,7 +186,7 @@ describe('OsdFlagsIndivModalComponent', () => {
         const req = httpTesting.expectOne('api/osd/flags/individual');
         req.flush([], { status: 500, statusText: 'failure' });
         expect(notificationService.show).toHaveBeenCalledTimes(0);
-        expect(component.activeModal.close).toHaveBeenCalledTimes(1);
+        expect(component.closeModal).toHaveBeenCalledTimes(1);
       });
     });
   });
@@ -269,7 +266,6 @@ describe('OsdFlagsIndivModalComponent', () => {
     describe('submitAction', () => {
       let notificationType: NotificationType;
       let notificationService: NotificationService;
-      let bsModalRef: NgbActiveModal;
       let flags: object;
 
       beforeEach(() => {
@@ -277,8 +273,7 @@ describe('OsdFlagsIndivModalComponent', () => {
         spyOn(notificationService, 'show').and.callFake((type) => {
           notificationType = type;
         });
-        bsModalRef = TestBed.inject(NgbActiveModal);
-        spyOn(bsModalRef, 'close').and.callThrough();
+        spyOn(component, 'closeModal');
         flags = {
           nodown: false,
           noin: false,
@@ -299,7 +294,7 @@ describe('OsdFlagsIndivModalComponent', () => {
         req.flush({ flags, ids: submittedIds });
         expect(req.request.body).toEqual({ flags, ids: submittedIds });
         expect(notificationType).toBe(NotificationType.success);
-        expect(component.activeModal.close).toHaveBeenCalledTimes(1);
+        expect(component.closeModal).toHaveBeenCalledTimes(1);
       });
 
       it('should submit multiple flags for multiple OSDs', () => {
@@ -316,7 +311,7 @@ describe('OsdFlagsIndivModalComponent', () => {
         req.flush({ flags, ids: submittedIds });
         expect(req.request.body).toEqual({ flags, ids: submittedIds });
         expect(notificationType).toBe(NotificationType.success);
-        expect(component.activeModal.close).toHaveBeenCalledTimes(1);
+        expect(component.closeModal).toHaveBeenCalledTimes(1);
       });
     });
   });

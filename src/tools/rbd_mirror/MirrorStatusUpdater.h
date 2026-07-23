@@ -105,7 +105,7 @@ private:
   void schedule_timer_task();
   void handle_timer_task(int r);
 
-  void queue_update_task(std::unique_lock<ceph::mutex>&& locker);
+  void queue_update_task(std::unique_lock<ceph::mutex> locker);
   void update_task(int r);
   void handle_update_task(int r);
 

@@ -165,9 +165,6 @@ else:
         'engine': 'ditaa'
     }
 
-if build_with_rtd:
-    extensions += ['sphinx_search.extension']
-
 # sphinx.ext.todo options
 todo_include_todos = True
 

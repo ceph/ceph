@@ -1,16 +1,20 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
-import { ToastrModule } from 'ngx-toastr';
+
 import { of } from 'rxjs';
 
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { PaginateObservable } from '~/app/shared/api/paginate.model';
+import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
+import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
+import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
+import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FormHelper, Mocks } from '~/testing/unit-test-helper';
@@ -55,7 +59,6 @@ describe('ServiceFormComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule,
       SharedModule,
-      ToastrModule.forRoot(),
       InputModule,
       SelectModule,
       NumberModule,
@@ -105,15 +108,18 @@ describe('ServiceFormComponent', () => {
       });
     });
 
-    it('should test placement (label)', () => {
+    it('should test placement (label) with single select value', () => {
+      // placement labels take only single value
       formHelper.setValue('service_type', 'mgr');
       formHelper.setValue('placement', 'label');
-      formHelper.setValue('label', [{ content: 'foo', selected: true }]);
+      formHelper.setValue('label', { content: 'foo', selected: true });
+
       component.onSubmit();
+
       expect(cephServiceService.create).toHaveBeenCalledWith({
         service_type: 'mgr',
         placement: {
-          label: ['foo']
+          label: 'foo'
         },
         unmanaged: false
       });
@@ -258,6 +264,64 @@ describe('ServiceFormComponent', () => {
           rgw_frontend_port: 1234,
           ssl: true,
           certificate_source: 'cephadm-signed'
+        });
+      });
+
+      it('should submit rgw with virtual-host style bucket access and SSL', () => {
+        formHelper.setValue('virtual_host_enabled', true);
+        formHelper.setValue('ssl', true);
+        formHelper.setValue('zonegroup_hostnames', ['s3.cephlab.com']);
+        formHelper.setValue('wildcard_enabled', true);
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'rgw',
+          service_id: 'svc',
+          rgw_realm: null,
+          rgw_zone: null,
+          rgw_zonegroup: null,
+          placement: {},
+          unmanaged: false,
+          ssl: true,
+          certificate_source: 'cephadm-signed',
+          zonegroup_hostnames: ['s3.cephlab.com'],
+          wildcard_enabled: true
+        });
+      });
+
+      it('should submit rgw with SSL and without virtual-host style bucket access', () => {
+        formHelper.setValue('ssl', true);
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'rgw',
+          service_id: 'svc',
+          rgw_realm: null,
+          rgw_zone: null,
+          rgw_zonegroup: null,
+          placement: {},
+          unmanaged: false,
+          ssl: true,
+          certificate_source: 'cephadm-signed'
+        });
+      });
+
+      it('should submit rgw with virtual-host style bucket access and SSL without wildcard certificate', () => {
+        formHelper.setValue('virtual_host_enabled', true);
+        formHelper.setValue('ssl', true);
+        formHelper.setValue('zonegroup_hostnames', ['s3.cephlab.com']);
+        formHelper.setValue('wildcard_enabled', false);
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'rgw',
+          service_id: 'svc',
+          rgw_realm: null,
+          rgw_zone: null,
+          rgw_zonegroup: null,
+          placement: {},
+          unmanaged: false,
+          ssl: true,
+          certificate_source: 'cephadm-signed',
+          zonegroup_hostnames: ['s3.cephlab.com'],
+          wildcard_enabled: false
         });
       });
 
@@ -451,48 +515,27 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
       it('should set default values correctly onInit', () => {
         expect(form.get('service_type').value).toBe('nvmeof');
         expect(form.get('group').value).toBe('default');
-        expect(form.get('pool').value).toBe('rbd');
-        expect(form.get('service_id').value).toBe('rbd.default');
+        expect(form.get('service_id').value).toBe('default');
       });
 
       it('should reflect correct values on group change', () => {
-        // Initially the group value should be 'default'
         expect(component.serviceForm.get('group')?.value).toBe('default');
         const groupInput = fixture.debugElement.query(By.css('#group')).nativeElement;
-        // Simulate input value change
         groupInput.value = 'foo';
-        // Trigger the input event
         groupInput.dispatchEvent(new Event('input'));
-        // Trigger the change event
         groupInput.dispatchEvent(new Event('change'));
         fixture.detectChanges();
-        // Verify values after change
         expect(form.get('group').value).toBe('foo');
-        expect(form.get('service_id').value).toBe('rbd.foo');
+        expect(form.get('service_id').value).toBe('foo');
       });
 
-      it('should reflect correct values on pool change', () => {
-        // Initially the pool value should be 'rbd'
-        expect(component.serviceForm.get('pool')?.value).toBe('rbd');
-        const poolInput = fixture.debugElement.query(By.css('#pool')).nativeElement;
-        // Simulate input value change
-        form.get('pool').setValue('pool-2');
-        // Trigger the input event
-        poolInput.dispatchEvent(new Event('input'));
-        // Trigger the change event
-        poolInput.dispatchEvent(new Event('change'));
-        fixture.detectChanges();
-        // Verify values after change
-        expect(form.get('pool').value).toBe('pool-2');
-        expect(form.get('service_id').value).toBe('pool-2.default');
+      it('should hide pool selector in create mode', () => {
+        const poolEl = fixture.debugElement.query(By.css('#pool'));
+        expect(poolEl).toBeNull();
       });
 
       it('should throw error when there is no service id', () => {
         formHelper.expectErrorChange('service_id', '', 'required');
-      });
-
-      it('should throw error when there is no pool', () => {
-        formHelper.expectErrorChange('pool', '', 'required');
       });
 
       it('should throw error when there is no group', () => {
@@ -519,14 +562,29 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         expect(server_key).toBeNull();
       });
 
+      it('should not show certs and keys field with internal mTLS', () => {
+        formHelper.setValue('enable_mtls', true);
+        formHelper.setValue('certificateType', 'internal');
+        fixture.detectChanges();
+        const root_ca_cert = fixture.debugElement.query(By.css('#root_ca_cert'));
+        const client_cert = fixture.debugElement.query(By.css('#client_cert'));
+        const client_key = fixture.debugElement.query(By.css('#client_key'));
+        const server_cert = fixture.debugElement.query(By.css('#server_cert'));
+        const server_key = fixture.debugElement.query(By.css('#server_key'));
+        expect(root_ca_cert).toBeNull();
+        expect(client_cert).toBeNull();
+        expect(client_key).toBeNull();
+        expect(server_cert).toBeNull();
+        expect(server_key).toBeNull();
+      });
+
       it('should submit nvmeof without mTLS', () => {
         component.onSubmit();
         expect(cephServiceService.create).toHaveBeenCalledWith({
           service_type: 'nvmeof',
-          service_id: 'rbd.default',
+          service_id: 'default',
           placement: {},
           unmanaged: false,
-          pool: 'rbd',
           group: 'default',
           enable_auth: false
         });
@@ -534,6 +592,7 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
 
       it('should submit nvmeof with mTLS', () => {
         formHelper.setValue('enable_mtls', true);
+        formHelper.setValue('certificateType', 'external');
         formHelper.setValue('root_ca_cert', 'root_ca_cert');
         formHelper.setValue('client_cert', 'client_cert');
         formHelper.setValue('client_key', 'client_key');
@@ -545,14 +604,32 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
           service_id: 'rbd.default',
           placement: {},
           unmanaged: false,
-          pool: 'rbd',
           group: 'default',
           enable_auth: true,
+          ssl: true,
+          pool: 'rbd',
+          certificate_source: 'inline',
           root_ca_cert: 'root_ca_cert',
           client_cert: 'client_cert',
           client_key: 'client_key',
           server_cert: 'server_cert',
           server_key: 'server_key'
+        });
+      });
+
+      it('should submit nvmeof with internal mTLS', () => {
+        formHelper.setValue('enable_mtls', true);
+        formHelper.setValue('certificateType', 'internal');
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'nvmeof',
+          service_id: 'default',
+          placement: {},
+          unmanaged: false,
+          group: 'default',
+          enable_auth: true,
+          ssl: true,
+          certificate_source: 'cephadm-signed'
         });
       });
     });
@@ -768,54 +845,309 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         component.editing = true;
       });
 
-      it('should check whether edit field is correctly loaded', () => {
-        const paginate_obs = new PaginateObservable<any>(of({}));
+      it('should check whether edit field is correctly loaded', (done) => {
+        const mockService = {
+          service_type: 'mds',
+          service_id: 'test',
+          unmanaged: false,
+          placement: {}
+        };
+        const paginate_obs = new PaginateObservable<any>(of([mockService]));
         const cephServiceSpy = spyOn(cephServiceService, 'list').and.returnValue(paginate_obs);
         component.ngOnInit();
         expect(cephServiceSpy).toBeCalledTimes(2);
         expect(component.action).toBe('Edit');
-        const serviceType = fixture.componentInstance.serviceForm.get('service_type');
-        const serviceId = fixture.componentInstance.serviceForm.get('service_id');
-        expect(serviceType.disabled).toBeTruthy();
-        expect(serviceId.disabled).toBeTruthy();
+
+        // Wait for async observable to complete before checking disabled state
+        setTimeout(() => {
+          const serviceType = fixture.componentInstance.serviceForm.get('service_type');
+          const serviceId = fixture.componentInstance.serviceForm.get('service_id');
+          expect(serviceType.disabled).toBeTruthy();
+          expect(serviceId.disabled).toBeTruthy();
+          done();
+        }, 0);
       });
 
-      it('should not edit pools for nvmeof service', () => {
+      it('should not edit groups for nvmeof service', (done) => {
+        const mockService = {
+          service_type: 'nvmeof',
+          service_id: 'default',
+          unmanaged: false,
+          placement: {},
+          spec: {
+            group: 'default'
+          }
+        };
+        const paginate_obs = new PaginateObservable<any>(of([mockService]));
+        spyOn(cephServiceService, 'list').and.returnValue(paginate_obs);
+
         component.serviceType = 'nvmeof';
         formHelper.setValue('service_type', 'nvmeof');
         component.ngOnInit();
-        fixture.detectChanges();
-        const poolId = fixture.componentInstance.serviceForm.get('pool');
-        expect(poolId.disabled).toBeTruthy();
-      });
 
-      it('should not edit groups for nvmeof service', () => {
-        component.serviceType = 'nvmeof';
-        formHelper.setValue('service_type', 'nvmeof');
-        component.ngOnInit();
-        fixture.detectChanges();
-        const groupId = fixture.debugElement.query(By.css('#group')).nativeElement;
-        expect(groupId.disabled).toBeTruthy();
+        // Wait for async observable to complete before checking disabled state
+        setTimeout(() => {
+          fixture.detectChanges();
+          const groupId = fixture.debugElement.query(By.css('#group')).nativeElement;
+          expect(groupId.disabled).toBeTruthy();
+          done();
+        }, 0);
       });
 
       it('should update nvmeof service to disable mTLS', () => {
         spyOn(cephServiceService, 'update').and.stub();
         component.serviceType = 'nvmeof';
         formHelper.setValue('service_type', 'nvmeof');
-        formHelper.setValue('pool', 'rbd');
         formHelper.setValue('group', 'default');
-        // mTLS disabled
         formHelper.setValue('enable_mtls', false);
         component.onSubmit();
         expect(cephServiceService.update).toHaveBeenCalledWith({
           service_type: 'nvmeof',
           placement: {},
           unmanaged: false,
-          pool: 'rbd',
           group: 'default',
           enable_auth: false
         });
       });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // RGW multisite filtering and subscription behaviour
+  // ---------------------------------------------------------------------------
+  describe('RGW multisite filtering', () => {
+    // Shared multisite fixture data
+    const realmA = { id: 'r1', name: 'realm-a' };
+    const realmB = { id: 'r2', name: 'realm-b' };
+    const zgA1 = { id: 'zg1', name: 'zg-a1', realm_id: 'r1', zones: [{ name: 'zone-a1' }] };
+    const zgA2 = { id: 'zg2', name: 'zg-a2', realm_id: 'r1', zones: [{ name: 'zone-a2' }] };
+    const zgB1 = { id: 'zg3', name: 'zg-b1', realm_id: 'r2', zones: [{ name: 'zone-b1' }] };
+    const zoneA1 = { id: 'z1', name: 'zone-a1' };
+    const zoneA2 = { id: 'z2', name: 'zone-a2' };
+    const zoneB1 = { id: 'z3', name: 'zone-b1' };
+
+    const realmsInfo = {
+      realms: [realmA, realmB],
+      default_realm: 'r1'
+    };
+    const zonegroupsInfo = {
+      zonegroups: [zgA1, zgA2, zgB1],
+      default_zonegroup: 'zg1'
+    };
+    const zonesInfo = {
+      zones: [zoneA1, zoneA2, zoneB1],
+      default_zone: 'z1'
+    };
+
+    let rgwRealmService: RgwRealmService;
+    let rgwZonegroupService: RgwZonegroupService;
+    let rgwZoneService: RgwZoneService;
+    let rgwMultisiteService: RgwMultisiteService;
+
+    beforeEach(() => {
+      rgwRealmService = TestBed.inject(RgwRealmService);
+      rgwZonegroupService = TestBed.inject(RgwZonegroupService);
+      rgwZoneService = TestBed.inject(RgwZoneService);
+      rgwMultisiteService = TestBed.inject(RgwMultisiteService);
+
+      spyOn(rgwRealmService, 'getAllRealmsInfo').and.returnValue(of(realmsInfo));
+      spyOn(rgwZonegroupService, 'getAllZonegroupsInfo').and.returnValue(of(zonegroupsInfo));
+      spyOn(rgwZoneService, 'getAllZonesInfo').and.returnValue(of(zonesInfo));
+      spyOn(rgwMultisiteService, 'getRgwModuleStatus').and.returnValue(of(false));
+    });
+
+    describe('create mode – initial filtering', () => {
+      beforeEach(fakeAsync(() => {
+        formHelper.setValue('service_type', 'rgw');
+        component.setRgwFields();
+        tick();
+      }));
+
+      it('should populate filteredZonegroupList with all zonegroups when no realm is selected', () => {
+        // Default realm-a is selected; its two zonegroups should appear.
+        expect(component.filteredZonegroupList.length).toBe(2);
+        expect(component.filteredZonegroupList.map((zg) => zg.name)).toEqual(
+          jasmine.arrayContaining(['zg-a1', 'zg-a2'])
+        );
+      });
+
+      it('should populate filteredZoneList based on the default zonegroup', () => {
+        // Default zonegroup is zg-a1 which has zone-a1.
+        expect(component.filteredZoneList.length).toBe(1);
+        expect(component.filteredZoneList[0].name).toBe('zone-a1');
+      });
+    });
+
+    describe('realm change cascades zonegroup and zone lists', () => {
+      beforeEach(fakeAsync(() => {
+        formHelper.setValue('service_type', 'rgw');
+        component.setRgwFields();
+        tick();
+      }));
+
+      it('switching realm filters zonegroups to the new realm', fakeAsync(() => {
+        form.get('realm_name').setValue('realm-b');
+        tick();
+
+        expect(component.filteredZonegroupList.length).toBe(1);
+        expect(component.filteredZonegroupList[0].name).toBe('zg-b1');
+      }));
+
+      it('switching realm auto-cascades zonegroup then zone for the new realm', fakeAsync(() => {
+        form.get('realm_name').setValue('realm-b');
+        tick();
+
+        // The subscription chain (realm → zonegroup → zone) resolves within the same
+        // tick: realm-b's only zonegroup (zg-b1) is auto-selected, then its first zone
+        // (zone-b1) is auto-selected.  zone_name should be non-null and point to
+        // the first zone of the new realm's first zonegroup.
+        expect(form.get('zone_name').value).toBe('zone-b1');
+      }));
+
+      it('switching realm then zonegroup populates zones for the new zonegroup', fakeAsync(() => {
+        form.get('realm_name').setValue('realm-b');
+        tick();
+
+        // The first zonegroup of realm-b (zg-b1) is auto-selected by the subscription.
+        tick();
+        expect(component.filteredZoneList.length).toBe(1);
+        expect(component.filteredZoneList[0].name).toBe('zone-b1');
+      }));
+    });
+
+    describe('zonegroup change cascades zone list', () => {
+      beforeEach(fakeAsync(() => {
+        formHelper.setValue('service_type', 'rgw');
+        component.setRgwFields();
+        tick();
+      }));
+
+      it('switching zonegroup within the same realm updates filteredZoneList', fakeAsync(() => {
+        form.get('zonegroup_name').setValue('zg-a2');
+        tick();
+
+        expect(component.filteredZoneList.length).toBe(1);
+        expect(component.filteredZoneList[0].name).toBe('zone-a2');
+      }));
+
+      it('auto-selects the first zone of the new zonegroup', fakeAsync(() => {
+        form.get('zonegroup_name').setValue('zg-a2');
+        tick();
+
+        expect(form.get('zone_name').value).toBe('zone-a2');
+      }));
+    });
+
+    describe('edit mode – initial population from spec', () => {
+      beforeEach(fakeAsync(() => {
+        component.editing = true;
+        component.setRgwFields('realm-a', 'zg-a2', 'zone-a2');
+        tick();
+      }));
+
+      it('should set filteredZonegroupList to realm-a zonegroups', () => {
+        expect(component.filteredZonegroupList.map((zg) => zg.name)).toEqual(
+          jasmine.arrayContaining(['zg-a1', 'zg-a2'])
+        );
+      });
+
+      it('should set filteredZoneList based on the spec zonegroup', () => {
+        expect(component.filteredZoneList.length).toBe(1);
+        expect(component.filteredZoneList[0].name).toBe('zone-a2');
+      });
+
+      it('should not show the realm-changed banner immediately after loading', () => {
+        expect(component.showRgwRealmChangedInfo).toBe(false);
+      });
+    });
+
+    describe('edit mode – realm-changed banner (showRgwRealmChangedInfo)', () => {
+      beforeEach(fakeAsync(() => {
+        component.editing = true;
+        component.setRgwFields('realm-a', 'zg-a1', 'zone-a1');
+        tick();
+        // Banner must be false right after initial load.
+        expect(component.showRgwRealmChangedInfo).toBe(false);
+      }));
+
+      it('shows the banner when the realm is changed', fakeAsync(() => {
+        form.get('realm_name').setValue('realm-b');
+        tick();
+        form.get('zonegroup_name').setValue('zg-b1');
+        tick();
+        form.get('zone_name').setValue('zone-b1');
+        tick();
+
+        expect(component.showRgwRealmChangedInfo).toBe(true);
+      }));
+
+      it('shows the banner when only the zonegroup is changed', fakeAsync(() => {
+        form.get('zonegroup_name').setValue('zg-a2');
+        tick();
+        form.get('zone_name').setValue('zone-a2');
+        tick();
+
+        expect(component.showRgwRealmChangedInfo).toBe(true);
+      }));
+
+      it('shows the banner when only the zone is changed', fakeAsync(() => {
+        // Add a second zone to zg-a1 so there is something to switch to
+        component.filteredZoneList = [
+          { id: 'z1', name: 'zone-a1' } as any,
+          { id: 'z4', name: 'zone-a1-extra' } as any
+        ];
+        form.get('zone_name').setValue('zone-a1-extra');
+        tick();
+
+        expect(component.showRgwRealmChangedInfo).toBe(true);
+      }));
+
+      it('hides the banner when reverted back to original values', fakeAsync(() => {
+        // Change then revert
+        form.get('zonegroup_name').setValue('zg-a2');
+        tick();
+        form.get('zonegroup_name').setValue('zg-a1');
+        tick();
+        form.get('zone_name').setValue('zone-a1');
+        tick();
+
+        expect(component.showRgwRealmChangedInfo).toBe(false);
+      }));
+    });
+
+    describe('no-realm scenario – filteredZoneList falls back to all zones', () => {
+      const noRealmZonegroupsInfo = {
+        zonegroups: [{ id: 'zg0', name: 'default', realm_id: null, zones: [] }],
+        default_zonegroup: 'zg0'
+      };
+      const noRealmZonesInfo = {
+        zones: [{ id: 'z0', name: 'default' }],
+        default_zone: 'z0'
+      };
+
+      beforeEach(fakeAsync(() => {
+        (rgwZonegroupService.getAllZonegroupsInfo as jasmine.Spy).and.returnValue(
+          of(noRealmZonegroupsInfo)
+        );
+        (rgwZoneService.getAllZonesInfo as jasmine.Spy).and.returnValue(of(noRealmZonesInfo));
+        (rgwRealmService.getAllRealmsInfo as jasmine.Spy).and.returnValue(
+          of({ realms: [], default_realm: null })
+        );
+
+        component.setRgwFields();
+        tick();
+      }));
+
+      it('should show realm creation form when no realms exist', () => {
+        expect(component.showRealmCreationForm).toBe(true);
+      });
+
+      it('should fall back to all zones when the zonegroup has no zones list', fakeAsync(() => {
+        form.get('zonegroup_name').setValue('default');
+        tick();
+
+        expect(component.filteredZoneList.length).toBeGreaterThan(0);
+      }));
     });
   });
 });

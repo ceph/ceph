@@ -57,7 +57,7 @@ class SeastoreNodeExtent final: public NodeExtent {
  protected:
   NodeExtentRef mutate(context_t, DeltaRecorderURef&&) override;
 
-  void do_on_state_commit() final {
+  void do_on_state_commit() override {
     auto &prior = static_cast<SeastoreNodeExtent&>(*get_prior_instance());
     prior.recorder = std::move(recorder);
   }
@@ -133,7 +133,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
   }
 
   alloc_iertr::future<NodeExtentRef> alloc_extent(
-      Transaction& t, laddr_t hint, extent_len_t len) override {
+      Transaction& t, laddr_hint_t hint, extent_len_t len) override {
     SUBTRACET(seastore_onode, "allocating {}B with hint {} ...", t, len, hint);
     if constexpr (INJECT_EAGAIN) {
       if (trigger_eagain()) {

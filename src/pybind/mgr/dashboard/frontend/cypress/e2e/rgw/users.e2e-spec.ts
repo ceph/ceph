@@ -65,7 +65,7 @@ describe('RGW users page', () => {
       accounts
         .getTableRow(account.name)
         .find('td')
-        .eq(3)
+        .eq(2)
         .invoke('text')
         .then((acc_id: string) => {
           cy.log(acc_id);

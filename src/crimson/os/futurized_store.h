@@ -244,6 +244,11 @@ public:
 
   virtual uuid_d get_fsid() const  = 0;
 
+  /// Override to report a tighter per-object cap than osd_max_object_size.
+  virtual uint64_t get_max_object_size() const {
+    return crimson::common::local_conf()->osd_max_object_size;
+  }
+
   virtual seastar::future<> write_meta(const std::string& key,
 				       const std::string& value) = 0;
 
@@ -258,6 +263,10 @@ public:
   virtual seastar::future<std::vector<coll_core_t>> list_collections() = 0;
 
   virtual seastar::future<std::string> get_default_device_class() = 0;
+
+  /// Run garbage collection on all shards until space ratios are acceptable.
+  /// Default implementation is a no-op (for stores that don't need GC).
+  virtual seastar::future<> do_gc() { return seastar::now(); }
 protected:
   const core_id_t primary_core;
 };

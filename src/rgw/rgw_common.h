@@ -18,15 +18,16 @@
 
 #include <array>
 #include <cstdint>
+#include <iterator>
+#include <ranges>
 #include <string_view>
-#include <atomic>
 #include <unordered_map>
 
 #include <fmt/format.h>
+
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 
-#include "common/dout_fmt.h"
 #include "include/neorados/RADOS.hpp"
 
 #include "common/ceph_crypto.h"
@@ -53,7 +54,6 @@
 #include "include/rados/librados.hpp"
 #include "rgw_public_access.h"
 #include "rgw_sal_fwd.h"
-#include "rgw_hex.h"
 
 namespace ceph {
   class Formatter;
@@ -115,6 +115,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_BUCKET_LOGGING RGW_ATTR_PREFIX "logging"
 #define RGW_ATTR_BUCKET_LOGGING_MTIME RGW_ATTR_PREFIX "logging-mtime"
 #define RGW_ATTR_BUCKET_LOGGING_SOURCES RGW_ATTR_PREFIX "logging-sources"
+#define RGW_ATTR_ARCHIVE_INSTANCE_MTIME RGW_ATTR_PREFIX "zone.archive.instance.mtime"
 
 /* S3 Object Lock*/
 #define RGW_ATTR_OBJECT_LOCK        RGW_ATTR_PREFIX "object-lock"
@@ -191,6 +192,11 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_CRYPT_CONTEXT  RGW_ATTR_CRYPT_PREFIX "context"
 #define RGW_ATTR_CRYPT_DATAKEY  RGW_ATTR_CRYPT_PREFIX "datakey"
 #define RGW_ATTR_CRYPT_PARTS    RGW_ATTR_CRYPT_PREFIX "part-lengths"
+#define RGW_ATTR_CRYPT_PART_NUMS RGW_ATTR_CRYPT_PREFIX "part-numbers"
+#define RGW_ATTR_CRYPT_PART_SALT  RGW_ATTR_CRYPT_PREFIX "part-salt"
+#define RGW_ATTR_CRYPT_SALT     RGW_ATTR_CRYPT_PREFIX "salt"
+#define RGW_ATTR_CRYPT_ORIGINAL_SIZE RGW_ATTR_CRYPT_PREFIX "original-size"
+#define RGW_ATTR_CRYPT_PREFETCH_ALIGN RGW_ATTR_CRYPT_PREFIX "prefetch-align"
 
 /* SSE-S3 Encryption Attributes */
 #define RGW_ATTR_BUCKET_ENCRYPTION_PREFIX RGW_ATTR_PREFIX "sse-s3."
@@ -242,6 +248,7 @@ static inline const char* to_mime_type(const RGWFormat f)
 #define RGW_REST_STS            0x10
 #define RGW_REST_IAM            0x20
 #define RGW_REST_SNS            0x40
+#define RGW_REST_S3CONTROL      0x80
 
 inline constexpr const char* RGW_REST_IAM_XMLNS =
     "https://iam.amazonaws.com/doc/2010-05-08/";
@@ -359,6 +366,7 @@ inline constexpr const char* RGW_REST_STS_XMLNS =
 #define ERR_BUSY_RESHARDING      2300 // also in cls_rgw_types.h, don't change!
 #define ERR_NO_SUCH_ENTITY       2301
 #define ERR_LIMIT_EXCEEDED       2302
+#define ERR_CONCURRENT_MODIFICATION 2303
 
 // STS Errors
 #define ERR_PACKED_POLICY_TOO_LARGE 2400
@@ -368,7 +376,8 @@ inline constexpr const char* RGW_REST_STS_XMLNS =
 #define ERR_ACCOUNT_EXISTS 2403
 
 #define ERR_RESTORE_ALREADY_IN_PROGRESS 2500
-    
+#define ERR_EXPIRED_TOKEN 2501
+
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffffu)
 #endif
@@ -1309,6 +1318,7 @@ struct req_state : DoutPrefixProvider {
   std::shared_ptr<RateLimiter> ratelimit_data;
   RGWRateLimitInfo user_ratelimit;
   RGWRateLimitInfo bucket_ratelimit;
+  int64_t ratelimit_retry_after{0};
   std::string ratelimit_bucket_marker;
   std::string ratelimit_user_name;
   bool content_started{false};
@@ -1333,6 +1343,7 @@ struct req_state : DoutPrefixProvider {
 
   std::string bucket_tenant;
   std::string bucket_name;
+  rgw_obj_key object_key; // requested object name and version id
 
   /* bucket is only created in rgw_build_bucket_policies() and should never be
    * overwritten */
@@ -1340,6 +1351,7 @@ struct req_state : DoutPrefixProvider {
   std::unique_ptr<rgw::sal::Object> object;
   std::string src_tenant_name;
   std::string src_bucket_name;
+  rgw_obj_key src_object_key; // requested source object name and version id
   std::unique_ptr<rgw::sal::Object> src_object;
   ACLOwner bucket_owner;
   // Resource owner for the authenticated identity, initialized in authorize()
@@ -1400,7 +1412,8 @@ struct req_state : DoutPrefixProvider {
 
   rgw::IAM::Environment env;
   boost::optional<rgw::IAM::Policy> iam_policy;
-  boost::optional<PublicAccessBlockConfiguration> bucket_access_conf;
+  // PublicAccessBlock configuration that applies to this request
+  PublicAccessBlockConfiguration public_access_block;
   rgw::s3::ObjectOwnership bucket_object_ownership = rgw::s3::ObjectOwnership::ObjectWriter;
   std::vector<rgw::IAM::Policy> iam_identity_policies;
 
@@ -1643,13 +1656,14 @@ static inline int rgw_str_to_bool(const char *s, int def_val)
           strcasecmp(s, "1") == 0);
 }
 
-static inline void append_rand_alpha(CephContext *cct, const std::string& src, std::string& dest, int len)
+inline void
+append_rand_alpha(
+    CephContext* cct,
+    const std::string& src,
+    std::string& dest,
+    int len)
 {
-  dest = src;
-  char buf[len + 1];
-  gen_rand_alphanumeric(cct, buf, len);
-  dest.append("_");
-  dest.append(buf);
+  dest = fmt::format("{}_{}", src, gen_rand_alphanumeric(cct, len));
 }
 
 static inline uint64_t rgw_rounded_kb(uint64_t bytes)
@@ -1719,7 +1733,7 @@ struct perm_state_base {
   rgw::s3::ObjectOwnership bucket_object_ownership;
   int perm_mask;
   bool defer_to_bucket_acls;
-  boost::optional<PublicAccessBlockConfiguration> bucket_access_conf;
+  PublicAccessBlockConfiguration public_access_block;
 
   perm_state_base(CephContext *_cct,
                   const rgw::IAM::Environment& _env,
@@ -1728,7 +1742,7 @@ struct perm_state_base {
                   rgw::s3::ObjectOwnership bucket_object_ownership,
                   int _perm_mask,
                   bool _defer_to_bucket_acls,
-                  boost::optional<PublicAccessBlockConfiguration> _bucket_access_conf = boost::none) :
+                  PublicAccessBlockConfiguration _public_access_block = {}) :
                                                 cct(_cct),
                                                 env(_env),
                                                 identity(_identity),
@@ -1736,7 +1750,7 @@ struct perm_state_base {
                                                 bucket_object_ownership(bucket_object_ownership),
                                                 perm_mask(_perm_mask),
                                                 defer_to_bucket_acls(_defer_to_bucket_acls),
-                                                bucket_access_conf(_bucket_access_conf)
+                                                public_access_block(_public_access_block)
   {}
 
   virtual ~perm_state_base() {}
@@ -1964,58 +1978,248 @@ static constexpr uint32_t MATCH_POLICY_ARN = 0x02;
 extern bool match_policy(const std::string& pattern, const std::string& input,
                          uint32_t flag);
 
-extern std::string camelcase_dash_http_attr(const std::string& orig, bool convert2dash = true);
-extern std::string lowercase_dash_http_attr(const std::string& orig, bool bidirection = false);
+/*
+ * Converts to lowercase with upper after a separator
+ *
+ * `THIS_KIND_OF_STRING` to `This_Kind_Of_String` and possibly
+ * `This-Kind-Of-String` if `convert2dash` is true. Not actually CamelCase
+ * as generally understood.
+ *
+ * \param[in] in Range to transform
+ * \param[out] out Output iterator
+ * \param[in] convert2dash Transform '_' to '-'
+ *
+ * \return A structure of input and output iterators, as with std::transform.
+ */
+inline auto
+camelcase_dash_transform(
+    std::ranges::input_range auto&& in,
+    std::output_iterator<char> auto out,
+    bool convert2dash = true)
+{
+  bool last_sep = true;
+  return std::ranges::transform(
+      std::forward<decltype(in)>(in), out, [&last_sep, convert2dash](char c) -> char {
+    switch (c) {
+    case '_':
+    case '-':
+      last_sep = true;
+      return convert2dash ? '-' : c;
+    default:
+      c = last_sep ? toupper(static_cast<unsigned char>(c)) : tolower(static_cast<unsigned char>(c));
+      last_sep = false;
+      return c;
+    }
+  });
+}
+
+/*
+ * Converts to lowercase with upper after a separator
+ *
+ * `THIS_KIND_OF_STRING` to `This_Kind_Of_String` and possibly
+ * `This-Kind-Of-String` if `convert2dash` is true. Not actually CamelCase
+ * as generally understood.
+ *
+ * \param[in] in Range to transform
+ * \param[in] convert2dash Transform '_' to '-'
+ *
+ * \return Transformed string
+ */
+inline std::string
+camelcase_dash_http_attr(const std::string& in, bool convert2dash = true)
+{
+  std::string out;
+  out.reserve(in.size());
+  camelcase_dash_transform(in, std::back_inserter(out), convert2dash);
+  return out;
+}
+
+/*
+ * Converts to lowercase with upper after a separator
+ *
+ * `THIS_KIND_OF_STRING` to `This_Kind_Of_String` and possibly
+ * `This-Kind-Of-String` if `convert2dash` is true. Not actually CamelCase
+ * as generally understood.
+ *
+ * \param[in] in Range to transform
+ * \param[in] convert2dash Transform '_' to '-'
+ *
+ * \return Transformed string move-constructed from 'in'.
+ */
+inline std::string
+camelcase_dash_http_attr(std::string&& in, bool convert2dash = true)
+{
+  camelcase_dash_transform(in, in.begin(), convert2dash);
+  return std::move(in);
+}
+
+/*
+ * Converts uppercase to lowercase and underscores to dashes
+ *
+ * `THIS_KIND_OF_STRING` to `this-kind-of-string`
+ *
+ * \param[in] in Range to transform
+ * \param[out] out Output iterator
+ * \param[in] bidirectional Transform '-' to '_'
+ *
+ * \return A structure of input and output iterators, as with std::transform.
+ */
+inline auto
+lowercase_dash_transform(
+    std::ranges::input_range auto&& in,
+    std::output_iterator<char> auto out,
+    bool bidirectional = false)
+{
+  return std::ranges::transform(
+      std::forward<decltype(in)>(in), out, [bidirectional](char c) -> char {
+        switch (c) {
+        case '_':
+          return '-';
+        case '-':
+          return bidirectional ? '_' : '-';
+        default:
+          return tolower(static_cast<unsigned char>(c));
+        }
+      });
+}
+
+/*
+ * Converts uppercase to lowercase and underscores to dashes
+ *
+ * `THIS_KIND_OF_STRING` to `this-kind-of-string`
+ *
+ * \param[in] in String to transform
+ * \param[in] bidirectional Transform '-' to '_'
+ *
+ * \return Transformed string
+ */
+inline std::string
+lowercase_dash_http_attr(const std::string& in, bool bidirectional = false)
+{
+  std::string out;
+  out.reserve(in.size());
+  lowercase_dash_transform(in, std::back_inserter(out), bidirectional);
+  return out;
+}
+
+/*
+ * Converts uppercase to lowercase and underscores to dashes
+ *
+ * `THIS_KIND_OF_STRING` to `this-kind-of-string`
+ *
+ * \param[in] in String to transform
+ * \param[in] bidirectional Transform '-' to '_'
+ *
+ * \return Transformed string move-constructed from 'in'.
+ */
+inline std::string
+lowercase_dash_http_attr(std::string&& in, bool bidirectional = false)
+{
+  lowercase_dash_transform(in, in.begin(), bidirectional);
+  return std::move(in);
+}
+
+/*
+ * Converts lower to upper and dashes to underscores
+ *
+ * 'this-kind-of-string' to 'THIS_KIND_OF_STRING'
+ *
+ * \param[in] in Range to transform
+ * \param[out] out Output iterator
+ * \param[in] bidirectional Transform '_' to '-'
+ *
+ * \return A structure of input and output iterators, as with std::transform.
+ */
+inline auto
+uppercase_dash_transform(
+    std::ranges::input_range auto&& in,
+    std::output_iterator<char> auto out,
+    bool bidirectional = false)
+{
+  return std::ranges::transform(
+      std::forward<decltype(in)>(in), out, [bidirectional](char c) -> char {
+        switch (c) {
+        case '-':
+          return '_';
+        case '_':
+          if (bidirectional)
+            return '-';
+          else
+            return toupper(static_cast<unsigned char>(c));
+        default:
+          return toupper(static_cast<unsigned char>(c));
+        }
+      });
+}
 
 void rgw_setup_saved_curl_handles();
 void rgw_release_all_curl_handles();
 
-static inline void rgw_escape_str(const std::string& s, char esc_char,
-				  char special_char, std::string *dest)
+/// Escape one character with another
+///
+/// \note This function appends, it does not clear its output.
+///
+/// \param[in] in Input string
+/// \param[in] esc_char Character with which to escape
+/// \param[in] special_char Character to be escaped
+/// \param[in] out Output iterator to append
+///
+/// \return New output iterator
+inline auto
+rgw_escape_str(
+    std::ranges::input_range auto&& in,
+    char esc_char,
+    char special_char,
+    std::output_iterator<char> auto out)
 {
-  const char *src = s.c_str();
-  char dest_buf[s.size() * 2 + 1];
-  char *destp = dest_buf;
-
-  for (size_t i = 0; i < s.size(); i++) {
-    char c = src[i];
+  for (const auto c : std::forward<decltype(in)>(in)) {
     if (c == esc_char || c == special_char) {
-      *destp++ = esc_char;
+      *out++ = esc_char;
     }
-    *destp++ = c;
+    *out++ = c;
   }
-  *destp++ = '\0';
-  *dest = dest_buf;
+  return out;
 }
 
-static inline ssize_t rgw_unescape_str(const std::string& s, ssize_t ofs,
-				       char esc_char, char special_char,
-				       std::string *dest)
+/// Unescapes an escaped character
+///
+/// \note This function appends, it does not clear its output.
+///
+/// \param[in] in Input string
+/// \param[in] esc_char Character with which we escaped
+/// \param[in] special_char Character which was to be escaped
+/// \param[in] out Output iterator to append
+///
+/// \return If we encounter `special_char` not preceded by `esc_char`,
+///         return a subrange beginning with the next character,
+///         otherwise an empty subrange.
+template <std::ranges::input_range In>
+  requires std::ranges::borrowed_range<In> || std::is_lvalue_reference_v<In&&>
+inline auto
+rgw_unescape_str(
+    In&& in,
+    char esc_char,
+    char special_char,
+    std::output_iterator<char> auto out)
 {
-  const char *src = s.c_str();
-  char dest_buf[s.size() + 1];
-  char *destp = dest_buf;
   bool esc = false;
 
-  dest_buf[0] = '\0';
-
-  for (size_t i = ofs; i < s.size(); i++) {
-    char c = src[i];
+  auto it = std::ranges::begin(in);
+  auto end = std::ranges::end(in);
+  while (it != end) {
+    const char c = *it;
+    ++it;
     if (!esc && c == esc_char) {
       esc = true;
       continue;
     }
     if (!esc && c == special_char) {
-      *destp = '\0';
-      *dest = dest_buf;
-      return (ssize_t)i + 1;
+      break;
     }
-    *destp++ = c;
+    *out++ = c;
     esc = false;
   }
-  *destp = '\0';
-  *dest = dest_buf;
-  return std::string::npos;
+  return std::ranges::subrange{it, end};
 }
 
 /// Return a string copy of the given bufferlist with trailing nulls removed
@@ -2094,4 +2298,37 @@ static inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, std::string& o
   } else {
     locator.clear();
   }
+}
+
+/// Truncate a bufferlist to a given length
+///
+/// \param[inout] bl The bufferlist to truncate
+/// \param[in] len The new size
+inline void
+truncate_bl(buffer::list& bl, std::size_t len)
+{
+  if (len < bl.length()) {
+    bl.splice(len, bl.length() - len);
+  }
+}
+
+/// Reserve a size and append to a bufferlist
+///
+/// \param[inout] bl The list to which we append
+/// \param[in] reserve The maximum that we will append
+/// \param[in] appender A function taking an iterator that it increments
+///                     and returns. The function *must not* append more
+///                     than was reserved.
+inline void
+append_bl(
+    buffer::list& bl,
+    std::size_t reserve,
+    std::invocable<char*> auto&& appender)
+requires std::is_same_v<std::invoke_result_t<decltype(appender), char*>, char*>
+{
+  auto orig_size = bl.length();
+  auto iter = bl.append_hole(reserve).c_str();
+  const auto start = iter;
+  iter = std::forward<decltype(appender)>(appender)(iter);
+  truncate_bl(bl, orig_size + (iter - start));
 }

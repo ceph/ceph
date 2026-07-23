@@ -1,20 +1,19 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
-#include "include/types.h"
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/rgw/cls_rgw_ops.h"
 
 #include "gtest/gtest.h"
 #include "test/librados/test_cxx.h"
-#include "global/global_context.h"
-#include "common/ceph_context.h"
+#include "include/common_fwd.h"
 
-#include <errno.h>
+#include <cerrno>
 #include <string>
 #include <vector>
 #include <map>
-#include <set>
+
+#include <fmt/format.h>
 
 using namespace std;
 using namespace librados;
@@ -755,7 +754,7 @@ static bool cmp_objs(cls_rgw_obj& obj1, cls_rgw_obj& obj2)
 }
 
 static int gc_list(librados::IoCtx& io_ctx, std::string& oid, std::string& marker, uint32_t max, bool expired_only,
-                   std::list<cls_rgw_gc_obj_info>& entries, bool *truncated, std::string& next_marker)
+                   std::list<cls_rgw_gc_obj_info>& entries, bool& truncated, std::string& next_marker)
 {
   librados::ObjectReadOperation op;
   bufferlist bl;
@@ -798,7 +797,7 @@ TEST_F(cls_rgw, gc_set)
   string next_marker;
 
   /* list chains, verify truncated */
-  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 8, true, entries, &truncated, next_marker));
+  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 8, true, entries, truncated, next_marker));
   ASSERT_EQ(8, (int)entries.size());
   ASSERT_EQ(1, truncated);
 
@@ -806,7 +805,7 @@ TEST_F(cls_rgw, gc_set)
   next_marker.clear();
 
   /* list all chains, verify not truncated */
-  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 10, true, entries, &truncated, next_marker));
+  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 10, true, entries, truncated, next_marker));
   ASSERT_EQ(10, (int)entries.size());
   ASSERT_EQ(0, truncated);
  
@@ -875,14 +874,14 @@ TEST_F(cls_rgw, gc_list)
   string next_marker;
 
   /* list chains, verify truncated */
-  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 8, true, entries, &truncated, next_marker));
+  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 8, true, entries, truncated, next_marker));
   ASSERT_EQ(8, (int)entries.size());
   ASSERT_EQ(1, truncated);
 
   marker = next_marker;
   next_marker.clear();
 
-  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 8, true, entries2, &truncated, next_marker));
+  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 8, true, entries2, truncated, next_marker));
   ASSERT_EQ(2, (int)entries2.size());
   ASSERT_EQ(0, truncated);
 
@@ -952,7 +951,7 @@ TEST_F(cls_rgw, gc_defer)
   string next_marker;
 
   /* list chains, verify num entries as expected */
-  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 1, true, entries, &truncated, next_marker));
+  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 1, true, entries, truncated, next_marker));
   ASSERT_EQ(1, (int)entries.size());
   ASSERT_EQ(0, truncated);
 
@@ -966,7 +965,7 @@ TEST_F(cls_rgw, gc_defer)
   next_marker.clear();
 
   /* verify list doesn't show deferred entry (this may fail if cluster is thrashing) */
-  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 1, true, entries, &truncated, next_marker));
+  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 1, true, entries, truncated, next_marker));
   ASSERT_EQ(0, (int)entries.size());
   ASSERT_EQ(0, truncated);
 
@@ -975,7 +974,7 @@ TEST_F(cls_rgw, gc_defer)
   next_marker.clear();
 
   /* verify list shows deferred entry */
-  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 1, true, entries, &truncated, next_marker));
+  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 1, true, entries, truncated, next_marker));
   ASSERT_EQ(1, (int)entries.size());
   ASSERT_EQ(0, truncated);
 
@@ -991,7 +990,7 @@ TEST_F(cls_rgw, gc_defer)
   next_marker.clear();
 
   /* verify entry was removed */
-  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 1, true, entries, &truncated, next_marker));
+  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 1, true, entries, truncated, next_marker));
   ASSERT_EQ(0, (int)entries.size());
   ASSERT_EQ(0, truncated);
 
@@ -1028,16 +1027,12 @@ auto gen_usage_log_info(std::string payer, std::string bucket, int total_usage_e
 // Copied from cls_rgw.cc in order to populate usage logs with old keys
 static void usage_record_name_by_time(uint64_t epoch, const std::string& user, const std::string& bucket, std::string& key)
 {
-    char buf[32 + user.size() + bucket.size()];
-    snprintf(buf, sizeof(buf), "%011llu_%s_%s", (long long unsigned)epoch, user.c_str(), bucket.c_str());
-    key = buf;
+    key = fmt::format("{:011}_{}_{}", epoch, user, bucket);
 }
 
 static void usage_record_name_by_user_old(const std::string& user, uint64_t epoch, const std::string& bucket, std::string& key)
 {
-    char buf[32 + user.size() + bucket.size()];
-    snprintf(buf, sizeof(buf), "%s_%011llu_%s", user.c_str(), (long long unsigned)epoch, bucket.c_str());
-    key = buf;
+    key = fmt::format("{}_{:011}_{}", user, epoch, bucket);
 }
 
 void populate_old_usage_log_info(librados::IoCtx &ioctx,

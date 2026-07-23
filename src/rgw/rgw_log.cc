@@ -420,12 +420,13 @@ void OpsLogFile::flush()
         std::this_thread::sleep_for(std::chrono::seconds(sleep_time_secs));
         try_num++;
       } else {
+        file << '\n';
         break;
       }
     }
   }
   flush_buffer.clear();
-  file << std::endl;
+  file.flush();
 }
 
 void* OpsLogFile::entry() {

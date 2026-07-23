@@ -202,3 +202,12 @@ try_compile(HAVE_LINK_EXCLUDE_LIBS
   ${CMAKE_CURRENT_BINARY_DIR}
   SOURCES ${CMAKE_CURRENT_LIST_DIR}/CephCheck_link.c
   LINK_LIBRARIES "-Wl,--exclude-libs,ALL")
+
+# Mold linker applies --exclude-libs after version script processing,
+# which hides .symver-aliased symbols (e.g. rados_*) even when the
+# version script lists them as global.  Disable --exclude-libs for Mold;
+# version scripts already control symbol visibility.
+if(HAVE_LINK_EXCLUDE_LIBS AND USING_MOLD_LINKER)
+  message(STATUS "Mold linker -- disabling --exclude-libs (incompatible with .symver)")
+  set(HAVE_LINK_EXCLUDE_LIBS FALSE CACHE INTERNAL "" FORCE)
+endif()

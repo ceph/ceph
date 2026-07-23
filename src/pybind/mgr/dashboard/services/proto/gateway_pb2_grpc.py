@@ -44,6 +44,26 @@ class GatewayStub(object):
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.del_subsystem_network_req.SerializeToString,
                 response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
                 )
+        self.gw_refresh_network = channel.unary_unary(
+                '/Gateway/gw_refresh_network',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.gw_refresh_network_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.gw_refresh_network_status.FromString,
+                )
+        self.add_kmip_server_endpoints = channel.unary_unary(
+                '/Gateway/add_kmip_server_endpoints',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.add_kmip_server_endpoints_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+                )
+        self.del_kmip_server_endpoints = channel.unary_unary(
+                '/Gateway/del_kmip_server_endpoints',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.del_kmip_server_endpoints_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+                )
+        self.list_kmip_server_endpoints = channel.unary_unary(
+                '/Gateway/list_kmip_server_endpoints',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.list_kmip_server_endpoints_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.kmip_server_endpoints_info.FromString,
+                )
         self.list_namespaces = channel.unary_unary(
                 '/Gateway/list_namespaces',
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.list_namespaces_req.SerializeToString,
@@ -117,6 +137,11 @@ class GatewayStub(object):
         self.remove_host = channel.unary_unary(
                 '/Gateway/remove_host',
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.remove_host_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+                )
+        self.set_keep_host_connected = channel.unary_unary(
+                '/Gateway/set_keep_host_connected',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.set_keep_host_connected_req.SerializeToString,
                 response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
                 )
         self.change_host_key = channel.unary_unary(
@@ -266,6 +291,34 @@ class GatewayServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def gw_refresh_network(self, request, context):
+        """Refresh auto-listeners for all network masks configured on the given subsystem on this gateway
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def add_kmip_server_endpoints(self, request, context):
+        """Add KMIP server endpoints
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def del_kmip_server_endpoints(self, request, context):
+        """Delete KMIP server endpoints
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def list_kmip_server_endpoints(self, request, context):
+        """List KMIP server endpoints
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def list_namespaces(self, request, context):
         """List namespaces
         """
@@ -366,6 +419,13 @@ class GatewayServicer(object):
 
     def remove_host(self, request, context):
         """Removes a host from a subsystem
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def set_keep_host_connected(self, request, context):
+        """Set keep host connected flag
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -544,6 +604,26 @@ def add_GatewayServicer_to_server(servicer, server):
                     request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.del_subsystem_network_req.FromString,
                     response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
             ),
+            'gw_refresh_network': grpc.unary_unary_rpc_method_handler(
+                    servicer.gw_refresh_network,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.gw_refresh_network_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.gw_refresh_network_status.SerializeToString,
+            ),
+            'add_kmip_server_endpoints': grpc.unary_unary_rpc_method_handler(
+                    servicer.add_kmip_server_endpoints,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.add_kmip_server_endpoints_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
+            ),
+            'del_kmip_server_endpoints': grpc.unary_unary_rpc_method_handler(
+                    servicer.del_kmip_server_endpoints,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.del_kmip_server_endpoints_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
+            ),
+            'list_kmip_server_endpoints': grpc.unary_unary_rpc_method_handler(
+                    servicer.list_kmip_server_endpoints,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.list_kmip_server_endpoints_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.kmip_server_endpoints_info.SerializeToString,
+            ),
             'list_namespaces': grpc.unary_unary_rpc_method_handler(
                     servicer.list_namespaces,
                     request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.list_namespaces_req.FromString,
@@ -617,6 +697,11 @@ def add_GatewayServicer_to_server(servicer, server):
             'remove_host': grpc.unary_unary_rpc_method_handler(
                     servicer.remove_host,
                     request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.remove_host_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
+            ),
+            'set_keep_host_connected': grpc.unary_unary_rpc_method_handler(
+                    servicer.set_keep_host_connected,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.set_keep_host_connected_req.FromString,
                     response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
             ),
             'change_host_key': grpc.unary_unary_rpc_method_handler(
@@ -828,6 +913,74 @@ class Gateway(object):
         return grpc.experimental.unary_unary(request, target, '/Gateway/del_subsystem_network',
             dashboard_dot_services_dot_proto_dot_gateway__pb2.del_subsystem_network_req.SerializeToString,
             dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def gw_refresh_network(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/gw_refresh_network',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.gw_refresh_network_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.gw_refresh_network_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def add_kmip_server_endpoints(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/add_kmip_server_endpoints',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.add_kmip_server_endpoints_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def del_kmip_server_endpoints(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/del_kmip_server_endpoints',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.del_kmip_server_endpoints_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def list_kmip_server_endpoints(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/list_kmip_server_endpoints',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.list_kmip_server_endpoints_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.kmip_server_endpoints_info.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -1082,6 +1235,23 @@ class Gateway(object):
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/remove_host',
             dashboard_dot_services_dot_proto_dot_gateway__pb2.remove_host_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def set_keep_host_connected(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/set_keep_host_connected',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.set_keep_host_connected_req.SerializeToString,
             dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

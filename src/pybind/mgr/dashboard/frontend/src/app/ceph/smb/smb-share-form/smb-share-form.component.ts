@@ -33,8 +33,9 @@ const UNIT_TO_BYTES: Record<string, number> = {
   GiB: 2 ** 30,
   TiB: 2 ** 40
 };
-const QOS_DELAY_MAX = 300;
-const QOS_DELAY_DEFAULT = 30;
+const QOS_BURST_MULT_MIN = 10;
+const QOS_BURST_MULT_MAX = 100;
+const QOS_BURST_MULT_DEFAULT = 15;
 const QOS_BW_UNITS = ['KiB', 'MiB', 'GiB', 'TiB'];
 
 function getBwMaxForUnit(unit: string): number {
@@ -106,8 +107,8 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
           browseable: this.shareResponse.browseable ?? true,
           read_iops_limit: qos?.read_iops_limit,
           write_iops_limit: qos?.write_iops_limit,
-          read_delay_max: qos?.read_delay_max,
-          write_delay_max: qos?.write_delay_max
+          read_burst_mult: qos?.read_burst_mult,
+          write_burst_mult: qos?.write_burst_mult
         });
         this.smbShareForm.get('share_id').disable();
         this.smbShareForm.get('name').disable();
@@ -167,13 +168,13 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
       read_bw_limit_unit: new FormControl(QOS_BW_UNITS[1]),
       write_bw_limit: new FormControl(0, [Validators.min(0), Validators.max(this.writeBwMax)]),
       write_bw_limit_unit: new FormControl(QOS_BW_UNITS[1]),
-      read_delay_max: new FormControl(QOS_DELAY_DEFAULT, [
-        Validators.min(0),
-        Validators.max(QOS_DELAY_MAX)
+      read_burst_mult: new FormControl(QOS_BURST_MULT_DEFAULT, [
+        Validators.min(QOS_BURST_MULT_MIN),
+        Validators.max(QOS_BURST_MULT_MAX)
       ]),
-      write_delay_max: new FormControl(QOS_DELAY_DEFAULT, [
-        Validators.min(0),
-        Validators.max(QOS_DELAY_MAX)
+      write_burst_mult: new FormControl(QOS_BURST_MULT_DEFAULT, [
+        Validators.min(QOS_BURST_MULT_MIN),
+        Validators.max(QOS_BURST_MULT_MAX)
       ])
     });
   }
@@ -246,16 +247,21 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
       const subvolGroup = this.smbShareForm.getValue('subvolume_group') || ''; // Default to empty if not present
       const subvol = this.smbShareForm.getValue('subvolume');
 
-      this.subvolService
-        .info(fsName, subvol, subvolGroup)
-        .pipe(map((data: any) => data['path']))
-        .subscribe(
-          (path: string) => {
-            this.updatePath(path);
-            resolve();
-          },
-          (error: any) => reject(error)
-        );
+      if (subvol) {
+        this.subvolService
+          .info(fsName, subvol, subvolGroup)
+          .pipe(map((data: any) => data['path']))
+          .subscribe(
+            (path: string) => {
+              this.updatePath(path);
+              resolve();
+            },
+            (error: any) => reject(error)
+          );
+      } else {
+        this.updatePath(`/volumes/${subvolGroup}/`);
+        resolve();
+      }
     });
   }
 
@@ -293,8 +299,8 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
                 ' ' +
                 this.smbShareForm.get('write_bw_limit_unit').value
             ),
-            read_delay_max: rawFormValue.read_delay_max,
-            write_delay_max: rawFormValue.write_delay_max
+            read_burst_mult: rawFormValue.read_burst_mult,
+            write_burst_mult: rawFormValue.write_burst_mult
           }
         },
         browseable: rawFormValue.browseable,

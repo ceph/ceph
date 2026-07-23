@@ -40,7 +40,7 @@ inherit (copy) the parent's configuration.
           the configuration so long as the preconditions apply: it is empty
           and not part of an existing snapshot.
 
-.. warning:: The charmap is not applied to snapshot names. Snapshots names are always case-sensitive and not normalized.
+.. warning:: The charmap is not applied to snapshot names. Snapshot names are always case-sensitive and not normalized.
 
 Normalization
 -------------
@@ -92,7 +92,7 @@ will cause the default to be restored:
     # file: foo/
     ceph.dir.normalization="nfd"
 
-To remove normlization on a directory, you must remove the ``ceph.dir.charmap``
+To remove normalization on a directory, you must remove the ``ceph.dir.charmap``
 configuration.
 
 .. note:: The MDS maintains an ``alternate_name`` metadata (also used for
@@ -107,7 +107,7 @@ Case Folding
 
 The ``ceph.dir.casesensitive`` attribute accepts a boolean value. By default,
 names are case-sensitive (as normal in a POSIX file system). Setting this value
-to false will make the named entries in the directory (and its descendent
+to false will make the named entries in the directory (and its descendant
 directories) case-insensitive.
 
 Case folding requires that names are also normalized. By default, after setting
@@ -183,7 +183,7 @@ to use the file system at all:
 Permissions
 -----------
 
-As with other CephFS virtual extended atributes, a client may only set the
+As with other CephFS virtual extended attributes, a client may only set the
 ``charmap`` configuration on a directory with the **p** MDS auth cap.  Viewing
 the configuration does not require this cap.
 

@@ -8,7 +8,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal, NgbModalModule, NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
-import { ToastrModule } from 'ngx-toastr';
+
 import { Observable, of } from 'rxjs';
 
 import { DashboardNotFoundError } from '~/app/core/error/error';
@@ -26,7 +26,7 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FixtureHelper, FormHelper, Mocks } from '~/testing/unit-test-helper';
-import { Pool } from '../pool';
+import { Pool, PoolType } from '../pool';
 import { PoolModule } from '../pool.module';
 import { PoolFormComponent } from './pool-form.component';
 
@@ -135,7 +135,6 @@ describe('PoolFormComponent', () => {
       BrowserAnimationsModule,
       HttpClientTestingModule,
       RouterTestingModule.withRoutes(routes),
-      ToastrModule.forRoot(),
       NgbNavModule,
       PoolModule,
       SharedModule,
@@ -226,10 +225,12 @@ describe('PoolFormComponent', () => {
 
     it('is invalid at the beginning all sub forms are valid', () => {
       expect(form.valid).toBeFalsy();
-      ['name', 'poolType', 'pgNum'].forEach((name) => formHelper.expectError(name, 'required'));
-      ['size', 'crushRule', 'erasureProfile', 'ecOverwrites'].forEach((name) =>
-        formHelper.expectValid(name)
-      );
+      // With default poolType 'replicated', expect 'name' required.
+      ['name'].forEach((name) => formHelper.expectError(name, 'required'));
+      // crushRule is auto-selected when replicated rules exist, so it is valid.
+      formHelper.expectValid('crushRule');
+      // Other fields are valid by default.
+      ['size', 'erasureProfile', 'ecOverwrites'].forEach((name) => formHelper.expectValid(name));
       expect(component.form.get('compression').valid).toBeTruthy();
     });
 
@@ -247,12 +248,13 @@ describe('PoolFormComponent', () => {
     });
 
     it('validates poolType', () => {
-      formHelper.expectError('poolType', 'required');
+      // Default is 'replicated' now, so just verify switching remains valid
       formHelper.expectValidChange('poolType', 'erasure');
       formHelper.expectValidChange('poolType', 'replicated');
     });
 
     it('validates that pgNum is required creation mode', () => {
+      formHelper.setValue('pgNum', '');
       formHelper.expectError(form.get('pgNum'), 'required');
     });
 
@@ -270,14 +272,19 @@ describe('PoolFormComponent', () => {
       formHelper.setValue('name', 'some-name');
       formHelper.setValue('poolType', 'erasure');
       fixture.detectChanges();
+      // Recompute crushRule validator since it depends on poolType
+      form.get('crushRule').updateValueAndValidity();
       setPgNum(1);
       expect(form.valid).toBeTruthy();
     });
 
-    it('validates crushRule with multiple crush rules', () => {
+    it('auto-selects `crushRule` with multiple crush rules', () => {
       formHelper.expectValidChange('poolType', 'replicated');
       form.get('crushRule').updateValueAndValidity();
-      formHelper.expectError('crushRule', 'required'); // As multiple rules exist
+      expect(form.getValue('crushRule')).toEqual(
+        component.info.crush_rules_replicated[0].rule_name
+      );
+      formHelper.expectValid('crushRule');
     });
 
     it('validates crushRule with no crush rules', () => {
@@ -508,10 +515,22 @@ describe('PoolFormComponent', () => {
         expect(control.disabled).toBe(true);
       });
 
-      it('does not select the first rule if more than one exist', () => {
+      it('selects the first rule if `replicated_rule` does not exist', () => {
         formHelper.setValue('poolType', 'replicated');
         const control = form.get('crushRule');
-        expect(control.value).toEqual(null);
+        expect(control.value).toEqual(component.info.crush_rules_replicated[0].rule_name);
+        expect(control.disabled).toBe(false);
+      });
+
+      it('selects `replicated_rule` by default when available', () => {
+        infoReturn.crush_rules_replicated = [
+          Mocks.getCrushRule({ id: 0, name: 'rep1', type: 'replicated' }),
+          Mocks.getCrushRule({ id: 1, name: 'replicated_rule', type: 'replicated' }),
+          Mocks.getCrushRule({ id: 2, name: 'rep2', type: 'replicated' })
+        ];
+        setUpPoolComponent();
+        const control = form.get('crushRule');
+        expect(control.value).toEqual('replicated_rule');
         expect(control.disabled).toBe(false);
       });
 
@@ -541,6 +560,7 @@ describe('PoolFormComponent', () => {
     });
 
     it('returns 1 as minimum and 3 as maximum if no crush rule is available', () => {
+      component.selectedCrushRule = undefined;
       expect(component.getMinSize()).toBe(1);
       expect(component.getMaxSize()).toBe(3);
     });
@@ -741,7 +761,7 @@ describe('PoolFormComponent', () => {
       });
 
       const getValidCase = () => ({
-        type: 'replicated',
+        type: PoolType.REPLICATED,
         osds: OSDS,
         size: 4,
         ecp: {
@@ -772,7 +792,7 @@ describe('PoolFormComponent', () => {
         form.get('pgNum').markAsPristine();
         fixture.detectChanges();
 
-        if (type === 'replicated') {
+        if (type === PoolType.REPLICATED) {
           // Set a valid crush rule for replicated pools
           if (
             component.info.crush_rules_replicated &&
@@ -786,7 +806,7 @@ describe('PoolFormComponent', () => {
           // Explicitly call pgCalc() to ensure calculation happens with new values
           component['pgCalc']();
           fixture.detectChanges();
-        } else if (type === 'erasure') {
+        } else if (type === PoolType.ERASURE) {
           // For erasure code, initialize an ECP with the given k/m values
           if (ecp) {
             component['initEcp']([
@@ -809,7 +829,7 @@ describe('PoolFormComponent', () => {
 
       // TODO: These tests have state pollution from parent beforeEach that sets invalid crushRule
       it.skip('does not change anything if type is not valid', () => {
-        const test = getValidCase();
+        const test: Record<string, any> = getValidCase();
         test.type = '';
         test.expected = PGS;
         testPgCalc(test);
@@ -818,7 +838,7 @@ describe('PoolFormComponent', () => {
       it.skip('does not change anything if ecp is not valid', () => {
         const test = getValidCase();
         test.expected = PGS;
-        test.type = 'erasure';
+        test.type = PoolType.ERASURE;
         test.ecp = null;
         testPgCalc(test);
       });
@@ -846,14 +866,14 @@ describe('PoolFormComponent', () => {
       it('calculates erasure code values even if selection is disabled', () => {
         component['initEcp']([{ k: 2, m: 2, name: 'bla', plugin: '', technique: '' }]);
         const test = getValidCase();
-        test.type = 'erasure';
+        test.type = PoolType.ERASURE;
         testPgCalc(test);
         expect(form.get('erasureProfile').disabled).toBeTruthy();
       });
 
       it('calculates some erasure code values', () => {
         const test = getValidCase();
-        test.type = 'erasure';
+        test.type = PoolType.ERASURE;
         testPgCalc(test);
         test.osds = 16;
         test.ecp.m = 5;
@@ -1044,21 +1064,116 @@ describe('PoolFormComponent', () => {
       fixtureHelper.expectIdElementsVisible(['erasureProfile', 'ecp-info-block'], true);
     });
 
+    it('should order profile details consistently with the creation form', () => {
+      component.selectedEcp = {
+        name: 'ecp1',
+        plugin: 'lrc',
+        k: 4,
+        m: 2,
+        l: 3,
+        'crush-failure-domain': 'host',
+        'crush-locality': 'rack'
+      } as ErasureCodeProfile;
+      expect(component.getEcpProfileDetails()).toEqual([
+        ['Plugin', 'lrc'],
+        ['Data chunks (k)', 4],
+        ['Coding chunks (m)', 2],
+        ['Locality (l)', 3],
+        ['Crush failure domain', 'host'],
+        ['Crush locality', 'rack']
+      ]);
+    });
+
+    it('should only show plugin-eligible fields with values in profile details', () => {
+      component.selectedEcp = {
+        name: 'ecp1',
+        plugin: 'shec',
+        k: 4,
+        m: 3,
+        c: 2,
+        l: 3,
+        d: 5,
+        scalar_mds: 'jerasure',
+        'crush-failure-domain': 'host',
+        'crush-num-failure-domains': 0,
+        'crush-osds-per-failure-domain': 0
+      } as ErasureCodeProfile;
+      expect(component.getEcpProfileDetails()).toEqual([
+        ['Plugin', 'shec'],
+        ['Data chunks (k)', 4],
+        ['Coding chunks (m)', 3],
+        ['Durability estimator (c)', 2],
+        ['Crush failure domain', 'host']
+      ]);
+    });
+
     it('should select the newly created profile', () => {
       spyOn(ecpService, 'list').and.callFake(() => of(infoReturn.erasure_code_profiles));
       expect(form.getValue('erasureProfile')).toBe('ecp1');
       const name = 'awesomeProfile';
       const modalCdsService = TestBed.inject(ModalCdsService);
-      // Mock the show method to return a mock component with submitAction
-      spyOn(modalCdsService, 'show').and.returnValue({
-        submitAction: of({ name })
-      } as any);
       const ecp2 = new ErasureCodeProfile();
       ecp2.name = name;
+      ecp2.plugin = 'isa';
+      ecp2.k = 4;
+      ecp2.m = 2;
+      spyOn(modalCdsService, 'show').and.returnValue({
+        submitAction: of(ecp2)
+      } as any);
       infoReturn.erasure_code_profiles.push(ecp2);
       component.addErasureCodeProfile();
-      // Form stores erasureProfile as string name, not full object
       expect(form.getValue('erasureProfile')).toBe(name);
+      expect(component.selectedEcp).toEqual(ecp2);
+    });
+
+    it('should select the newly created profile before it appears in the listing', () => {
+      const name = 'pendingProfile';
+      const ecp2 = new ErasureCodeProfile();
+      ecp2.name = name;
+      ecp2.plugin = 'jerasure';
+      ecp2.k = 4;
+      ecp2.m = 2;
+      spyOn(ecpService, 'list').and.callFake(() => of([infoReturn.erasure_code_profiles[0]]));
+      const modalCdsService = TestBed.inject(ModalCdsService);
+      spyOn(modalCdsService, 'show').and.returnValue({
+        submitAction: of(ecp2)
+      } as any);
+      component.addErasureCodeProfile();
+      expect(form.getValue('erasureProfile')).toBe(name);
+      expect(component.selectedEcp).toEqual(ecp2);
+      expect(component.ecProfiles.some((profile) => profile.name === name)).toBe(true);
+    });
+
+    it('should update the dropdown immediately without waiting for the listing API', () => {
+      const name = 'instantProfile';
+      const ecp2 = new ErasureCodeProfile();
+      ecp2.name = name;
+      ecp2.plugin = 'isa';
+      ecp2.k = 4;
+      ecp2.m = 2;
+      let emitList: (value: ErasureCodeProfile[]) => void;
+      spyOn(ecpService, 'list').and.returnValue(
+        new Observable((subscriber) => {
+          emitList = (profiles) => {
+            subscriber.next(profiles);
+            subscriber.complete();
+          };
+        })
+      );
+      const modalCdsService = TestBed.inject(ModalCdsService);
+      spyOn(modalCdsService, 'show').and.returnValue({
+        submitAction: of(ecp2)
+      } as any);
+
+      component.addErasureCodeProfile();
+
+      expect(component.ecProfiles.some((profile) => profile.name === name)).toBe(true);
+      expect(form.getValue('erasureProfile')).toBe(name);
+      expect(component.selectedEcp).toEqual(ecp2);
+
+      emitList([infoReturn.erasure_code_profiles[0], ecp2]);
+      expect(form.getValue('erasureProfile')).toBe(name);
+      expect(component.ecProfiles.some((profile) => profile.name === name)).toBe(true);
     });
 
     describe('ecp deletion', () => {
@@ -1066,6 +1181,16 @@ describe('PoolFormComponent', () => {
       let deleteSpy: jasmine.Spy;
       let modalSpy: jasmine.Spy;
       let submitActionObservable: () => Observable<any>;
+
+      const mockDeletionModalShow = () => {
+        const modalCdsService = TestBed.inject(ModalCdsService);
+        const existingShowSpy = modalCdsService.show as jasmine.Spy;
+        modalSpy = existingShowSpy?.and ? existingShowSpy : spyOn(modalCdsService, 'show');
+        modalSpy.and.callFake((_deletionClass: any, config: any) => {
+          submitActionObservable = config.submitActionObservable;
+          return {} as any;
+        });
+      };
 
       const callEcpDeletion = () => {
         component.deleteErasureCodeProfile();
@@ -1081,21 +1206,29 @@ describe('PoolFormComponent', () => {
       };
 
       beforeEach(() => {
-        const modalCdsService = TestBed.inject(ModalCdsService);
-        modalSpy = spyOn(modalCdsService, 'show').and.callFake(
-          (_deletionClass: any, config: any) => {
-            submitActionObservable = config.submitActionObservable;
-            return {} as any;
-          }
-        );
-        deleteSpy = spyOn(ecpService, 'delete').and.callFake((name: string) => {
+        mockDeletionModalShow();
+
+        const listSpy = ecpService.list as jasmine.Spy;
+        if (listSpy?.and) {
+          listSpy.and.callFake(() => of(infoReturn.erasure_code_profiles));
+        }
+
+        const existingDeleteSpy = ecpService.delete as jasmine.Spy;
+        deleteSpy = existingDeleteSpy?.and ? existingDeleteSpy : spyOn(ecpService, 'delete');
+        deleteSpy.and.callFake((name: string) => {
           const profiles = infoReturn.erasure_code_profiles;
           const index = _.findIndex(profiles, (profile) => profile.name === name);
           profiles.splice(index, 1);
           return of({ status: 202 });
         });
+
         taskWrapper = TestBed.inject(TaskWrapperService);
-        spyOn(taskWrapper, 'wrapTaskAroundCall').and.callThrough();
+        const wrapSpy = taskWrapper.wrapTaskAroundCall as jasmine.Spy;
+        if (wrapSpy?.and) {
+          wrapSpy.and.callThrough();
+        } else {
+          spyOn(taskWrapper, 'wrapTaskAroundCall').and.callThrough();
+        }
 
         const ecp2 = new ErasureCodeProfile();
         ecp2.name = 'someEcpName';
@@ -1104,6 +1237,9 @@ describe('PoolFormComponent', () => {
         const ecp3 = new ErasureCodeProfile();
         ecp3.name = 'aDifferentEcpName';
         infoReturn.erasure_code_profiles.push(ecp3);
+
+        component.ecProfiles = [...infoReturn.erasure_code_profiles];
+        component.form.get('erasureProfile').enable({ emitEvent: false });
       });
 
       it('should delete two different erasure code profiles', () => {
@@ -1192,6 +1328,8 @@ describe('PoolFormComponent', () => {
           poolType: 'erasure',
           pgNum: 4
         });
+        // Ensure crushRule validator clears when switching to erasure
+        form.get('crushRule').updateValueAndValidity();
       });
 
       it('minimum requirements without ECP to create ec pool', () => {
@@ -1204,6 +1342,8 @@ describe('PoolFormComponent', () => {
           poolType: 'erasure',
           pgNum: 4
         });
+        // Ensure crushRule validator clears when switching to erasure
+        form.get('crushRule').updateValueAndValidity();
         expectValidSubmit({
           pool: 'minECPool',
           pool_type: 'erasure',
@@ -1474,15 +1614,9 @@ describe('PoolFormComponent', () => {
           form.get(controlName).markAsPristine();
 
         beforeEach(() => {
-          [
-            'algorithm',
-            'maxBlobSize',
-            'minBlobSize',
-            'mode',
-            'pgNum',
-            'ratio',
-            'name'
-          ].forEach((name) => markControlAsPreviouslySet(name));
+          ['algorithm', 'maxBlobSize', 'minBlobSize', 'mode', 'pgNum', 'ratio', 'name'].forEach(
+            (name) => markControlAsPreviouslySet(name)
+          );
           fixture.detectChanges();
         });
 

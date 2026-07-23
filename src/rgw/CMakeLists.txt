@@ -77,7 +77,6 @@ set(librgw_common_srcs
   rgw_object_ownership.cc
   rgw_period.cc
   rgw_realm.cc
-  rgw_sync.cc
   rgw_sync_policy.cc
   rgw_notify_event_type.cc
   rgw_period_history.cc
@@ -96,6 +95,7 @@ set(librgw_common_srcs
   rgw_rest_client.cc
   rgw_rest_config.cc
   rgw_rest_conn.cc
+  rgw_rest_dedup.cc
   rgw_rest_metadata.cc
   rgw_rest_ratelimit.cc
   rgw_rest_role.cc
@@ -103,6 +103,7 @@ set(librgw_common_srcs
   rgw_rest_iam_group.cc
   rgw_rest_iam_user.cc
   rgw_rest_s3.cc
+  rgw_rest_s3control.cc
   rgw_rest_pubsub.cc
   rgw_rest_zero.cc
   rgw_s3select.cc
@@ -130,6 +131,7 @@ set(librgw_common_srcs
   rgw_rest_iam.cc
   rgw_object_lock.cc
   rgw_kms.cc
+  rgw_kms_cache.cc
   rgw_kmip_client.cc
   rgw_url.cc
   rgw_oidc_provider.cc
@@ -218,6 +220,8 @@ if(WITH_RADOSGW_RADOS)
           driver/rados/rgw_trim_datalog.cc
           driver/rados/rgw_trim_mdlog.cc
           driver/rados/rgw_user.cc
+          driver/rados/oidc.cc
+          driver/rados/oidcs.cc
           driver/rados/role.cc
           driver/rados/roles.cc
           driver/rados/sync_fairness.cc
@@ -234,6 +238,7 @@ if(WITH_RADOSGW_RADOS)
           driver/rados/config/zone.cc
           driver/rados/config/zonegroup.cc
           driver/rados/rgw_dedup.cc
+          driver/rados/rgw_dedup_filter.cc
           driver/rados/rgw_dedup_table.cc
           driver/rados/rgw_dedup_store.cc
           driver/rados/rgw_dedup_utils.cc
@@ -257,19 +262,22 @@ endif()
 if(WITH_RADOSGW_DAOS)
   list(APPEND librgw_common_srcs driver/motr/rgw_sal_daos.cc)
 endif()
+
 if(WITH_RADOSGW_POSIX)
   #add_subdirectory(driver/posix)
   find_package(LMDB REQUIRED)
   add_compile_definitions(LMDB_SAFE_NO_CPP_UTILITIES)
   list(APPEND librgw_common_srcs
-	      driver/posix/rgw_sal_posix.cc
 	      driver/posix/lmdb-safe.cc
-	      driver/posix/posixDB.cc
-	      driver/posix/notify.cpp)
+	      driver/posix/notify.cpp
+          driver/posix/posixDB.cc
+	      driver/posix/rgw_sal_posix.cc)
 endif()
+
 if(WITH_JAEGER)
   list(APPEND librgw_common_srcs rgw_tracer.cc)
 endif()
+
 if(WITH_RADOSGW_ARROW_FLIGHT)
   # NOTE: eventually don't want this in common but just in radosgw daemon
   # list(APPEND radosgw_srcs rgw_flight.cc rgw_flight_frontend.cc)
@@ -295,11 +303,18 @@ if(COMPILER_SUPPORTS_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
     HAVE_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
 endif()
 
+if(COMPILER_SUPPORTS_VLA_ERROR)
+  # Will be picked up by anyone including rgw_common
+  target_compile_options(rgw_common PUBLIC
+    $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
+endif()
+
 target_link_libraries(rgw_common
   PRIVATE
     legacy-option-headers
     global
     cls_rgw_client
+    keyring
     rt
     ICU::uc
     OATH::OATH
@@ -381,10 +396,6 @@ if(WITH_RADOSGW_DBSTORE)
   target_link_libraries(rgw_common PRIVATE global dbstore)
 endif()
 
-if(WITH_RADOSGW_POSIX)
-  target_link_libraries(rgw_common PRIVATE global dbstore)
-endif()
-
 if(WITH_RADOSGW_MOTR)
   find_package(motr REQUIRED)
   target_link_libraries(rgw_common PRIVATE motr::motr)
@@ -419,6 +430,7 @@ set(rgw_a_srcs
   rgw_realm_reloader.cc
   rgw_rest_config.cc
   rgw_rest_info.cc
+  rgw_rest_dedup.cc
   rgw_rest_metadata.cc
   rgw_rest_ratelimit.cc
   rgw_rest_sts.cc
@@ -460,7 +472,35 @@ if(WITH_RADOSGW_AMQP_ENDPOINT)
   find_package(RabbitMQ REQUIRED)
 endif()
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
-  find_package(RDKafka 0.9.2 REQUIRED)
+  set(rdkafka_min_version 2.11)
+  if(WITH_SYSTEM_RDKAFKA)
+    find_package(RDKafka ${rdkafka_min_version} REQUIRED)
+  elseif(EXISTS "${CMAKE_SOURCE_DIR}/src/librdkafka/CMakeLists.txt")
+    message(STATUS "Building librdkafka as submodule")
+    set(WITH_SSL ON)
+    set(WITH_SASL ON)
+    set(RDKAFKA_BUILD_EXAMPLES OFF)
+    set(RDKAFKA_BUILD_TESTS OFF)
+    set(RDKAFKA_BUILD_STATIC ON)
+    add_subdirectory(${CMAKE_SOURCE_DIR}/src/librdkafka
+                     ${CMAKE_BINARY_DIR}/src/librdkafka
+                     EXCLUDE_FROM_ALL)
+    target_compile_options(rdkafka PRIVATE -w)
+    if(NOT TARGET RDKafka::RDKafka)
+      add_library(RDKafka::RDKafka ALIAS rdkafka)
+    endif()
+    # create a compatibility symlink, so that rgw_a can include <librdkafka/rdkafka.h>
+    # both for the submodule and system librdkafka
+    set(rdkafka_compat_dir "${CMAKE_BINARY_DIR}/src/librdkafka-compat")
+    file(MAKE_DIRECTORY "${rdkafka_compat_dir}")
+    execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
+      "${CMAKE_SOURCE_DIR}/src/librdkafka/src"
+      "${rdkafka_compat_dir}/librdkafka")
+    target_include_directories(rdkafka PUBLIC "$<BUILD_INTERFACE:${rdkafka_compat_dir}>")
+  else()
+    message(STATUS "src/librdkafka submodule not present; falling back to system librdkafka")
+    find_package(RDKafka ${rdkafka_min_version} REQUIRED)
+  endif()
 endif()
 
 target_link_libraries(rgw_a
@@ -490,6 +530,14 @@ set(rgw_schedulers_srcs
 add_library(rgw_schedulers STATIC ${rgw_schedulers_srcs})
 target_link_libraries(rgw_schedulers
   PUBLIC dmclock::dmclock Boost::context)
+if(COMPILER_SUPPORTS_VLA_ERROR)
+  target_compile_options(rgw_schedulers PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
+endif()
+
+# rgw_a references rgw::dmclock::* (rgw_schedulers) and kmip_* (kmip); declare
+# it here so the dependency propagates to every consumer. PRIVATE: not in headers.
+target_link_libraries(rgw_a PRIVATE rgw_schedulers kmip)
 
 set(radosgw_srcs
   rgw_main.cc)
@@ -516,9 +564,47 @@ target_include_directories(radosgw SYSTEM PUBLIC "../rapidjson/include")
 target_link_libraries(radosgw PRIVATE
   legacy-option-headers
   ${rgw_libs}
-  rgw_schedulers
-  kmip
   ${ALLOC_LIBS})
+
+if(WITH_RADOSGW_FDB)
+ message("FoundationDB support is active (experimental)")
+
+ add_library(rgw_fdb INTERFACE)
+
+ target_link_libraries(rgw_fdb INTERFACE
+  -lfdb_c
+  -lm
+  -lrt
+ )
+
+ target_compile_options(rgw_fdb INTERFACE
+   -pthread)
+
+#JFW: this is where the FDB client library packages install
+#fdb_c headers-- we need to find a smarter way to handle this
+#end of it before libfdb can be non-experimental:
+ target_include_directories(rgw_fdb INTERFACE
+  /usr/include/foundationdb)
+
+ target_include_directories(rgw_common PRIVATE
+  /usr/include/foundationdb
+  "${CMAKE_SOURCE_DIR}/src/rgw")
+
+ target_link_libraries(rgw_common PRIVATE
+  rgw_fdb)
+
+ target_include_directories(radosgw PRIVATE
+  /usr/include/foundationdb)
+
+ # Use the zpp_bits back-end for serialization:
+ add_library(zpp_bits INTERFACE)
+
+ # JFW: there must be a nicer way to refer to this path (or ask it to be installed somewhere?):
+ target_include_directories(zpp_bits INTERFACE "${CMAKE_BINARY_DIR}/_deps/zpp_bits-src/")
+
+ target_link_libraries(rgw_fdb INTERFACE zpp_bits)
+
+endif(WITH_RADOSGW_FDB)
 
 install(TARGETS radosgw DESTINATION bin)
 
@@ -526,6 +612,12 @@ set(radosgw_admin_srcs
   radosgw-admin/radosgw-admin.cc
   radosgw-admin/sync_checkpoint.cc
   radosgw-admin/orphan.cc)
+
+set(radosgw_admin_srcs_without_rados
+  radosgw-admin/radosgw-admin.cc
+  driver/rados/rgw_user.cc
+  driver/rados/rgw_bucket.cc
+  driver/rados/rgw_obj_manifest.cc)
 
 # this is unsatisfying and hopefully temporary; ARROW should not be
 # part of radosgw_admin
@@ -545,6 +637,12 @@ target_link_libraries(radosgw-admin
   OATH::OATH
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
 endif()
+
+if(WITH_RADOSGW_POSIX AND NOT WITH_RADOSGW_RADOS)
+add_executable(radosgw-admin ${radosgw_admin_srcs_without_rados})
+target_link_libraries(radosgw-admin
+  ${rgw_libs} librados)
+endif(WITH_RADOSGW_POSIX AND NOT WITH_RADOSGW_RADOS)
 
 # this is unsatisfying and hopefully temporary; ARROW should not be
 # part of radosgw_admin
@@ -574,6 +672,9 @@ target_link_libraries(radosgw-token
   legacy-option-headers
   librados
   global)
+if(COMPILER_SUPPORTS_VLA_ERROR)
+  target_compile_options(radosgw-token PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
+endif()
 install(TARGETS radosgw-token DESTINATION bin)
 
 if(WITH_RADOSGW_RADOS)
@@ -611,8 +712,6 @@ target_include_directories(rgw SYSTEM PUBLIC "../rapidjson/include")
 target_link_libraries(rgw
   PRIVATE
   ${rgw_libs}
-  rgw_schedulers
-  kmip
   librados
   cls_rgw_client
   cls_otp_client

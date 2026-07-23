@@ -93,6 +93,7 @@ status: 1
 status_desc: starting
 is_active: false
 pending_daemon_config: false
+user_stopped: false
 events:
 - 2020-06-10T10:08:22.933241Z daemon:crash.ubuntu [INFO] "Deployed crash.ubuntu on
   host 'ubuntu'"
@@ -143,7 +144,7 @@ def test_handle_command():
     m = OrchestratorCli('orchestrator', 0, 0)
     r = m._handle_command(None, cmd)
     assert r == HandleCommandResult(
-        retval=2, stdout='', stderr='No orchestrator configured (try `ceph orch set backend`)')
+        retval=-2, stdout='', stderr='No orchestrator configured (try `ceph orch set backend`)')
 
 
 r = OrchResult([ServiceDescription(spec=ServiceSpec(service_type='osd'), running=123)])
@@ -334,7 +335,10 @@ class TestApplyNvmeof:
         res = self.m._apply_nvmeof(pool=".nvmeof", group="mygroup")
 
         assert res.retval != 0
-        assert "nvmeof module must be enabled to use .nvmeof pool" in res.stderr
+        assert (
+            "NVMe-oF support requires the nvmeof manager module to be enabled before proceeding. "
+            "Enable it with: ceph mgr module enable nvmeof"
+        ) in res.stderr
         mock_remote.assert_not_called()
         mock_apply_misc.assert_not_called()
 
@@ -348,3 +352,74 @@ class TestApplyNvmeof:
         mock_remote.assert_called_once_with('nvmeof', 'create_pool_if_not_exists')
         mock_apply_misc.assert_called_once()
         assert res.retval == 0
+
+
+@mock.patch("orchestrator.module.OrchestratorCli._apply_misc")
+class TestApplyOAuth2Proxy:
+
+    def setup_method(self):
+        self.m = OrchestratorCli('orchestrator', 0, 0)
+
+    def test_missing_required_fields_raises_error(self, mock_apply_misc):
+        res = self.m._apply_oauth2_proxy()
+
+        assert res.retval != 0
+        assert (
+            'Missing required fields for oauth2-proxy: provider_display_name, '
+            'oidc_issuer_url, client_id, client_secret.'
+        ) in res.stderr
+        mock_apply_misc.assert_not_called()
+
+    def test_inbuf_with_missing_fields_is_rejected(self, mock_apply_misc):
+        res = self.m._apply_oauth2_proxy(inbuf=textwrap.dedent("""
+            service_type: oauth2-proxy
+            spec:
+              oidc_issuer_url: "https://idp.example.com"
+              client_id: "oauth-client"
+              client_secret: "oauth-secret"
+            """).strip())
+
+        assert res.retval != 0
+        assert (
+            'unrecognized command -i; -h or --help for usage'
+        ) in res.stderr
+        mock_apply_misc.assert_not_called()
+
+    def test_inbuf_with_valid_spec_is_rejected(self, mock_apply_misc):
+        res = self.m._apply_oauth2_proxy(inbuf=textwrap.dedent("""
+            service_type: oauth2-proxy
+            spec:
+              provider_display_name: "My OIDC Provider"
+              oidc_issuer_url: "https://idp.example.com"
+              client_id: "oauth-client"
+              client_secret: "oauth-secret"
+            """).strip())
+
+        assert res.retval != 0
+        assert (
+            'unrecognized command -i; -h or --help for usage'
+        ) in res.stderr
+        mock_apply_misc.assert_not_called()
+
+
+@mock.patch("orchestrator.module.OrchestratorCli._apply_misc")
+class TestApplyOAuth2ProxyYaml:
+
+    def setup_method(self):
+        self.m = OrchestratorCli('orchestrator', 0, 0)
+
+    def test_apply_yaml_missing_required_fields(self, mock_apply_misc):
+        res = self.m.apply_misc(
+            inbuf=textwrap.dedent("""
+                service_type: oauth2-proxy
+                spec:
+                  oidc_issuer_url: "https://idp.example.com"
+                """).strip()
+        )
+
+        assert res.retval != 0
+        assert (
+            'Missing required fields for oauth2-proxy: '
+            'provider_display_name, client_id, client_secret.'
+        ) in res.stderr
+        mock_apply_misc.assert_not_called()

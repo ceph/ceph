@@ -9,7 +9,7 @@
 #include "crimson/os/seastore/segment_manager/zbd.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/os/seastore/logging.h"
-#include "crimson/common/errorator-loop.h"
+#include "crimson/common/errorator-utils.h"
 #include "include/buffer.h"
 
 SET_SUBSYS(seastore_device);
@@ -22,7 +22,7 @@ SET_SUBSYS(seastore_device);
 using z_op = crimson::os::seastore::segment_manager::zbd::zone_op;
 template <> struct fmt::formatter<z_op>: fmt::formatter<std::string_view> {
   template <typename FormatContext>
-  auto format(z_op s, FormatContext& ctx) {
+  auto format(z_op s, FormatContext& ctx) const {
     std::string_view name = "Unknown";
     switch (s) {
       using enum z_op;
@@ -91,9 +91,9 @@ static open_device_ret open_device(
   );
 }
 
-static zbd_sm_metadata_t make_metadata(
+static device_superblock_t make_metadata(
   uint64_t total_size,
-  seastore_meta_t meta,
+  device_config_t config,
   const seastar::stat_data &data,
   size_t zone_size_sectors,
   size_t zone_capacity_sectors,
@@ -142,7 +142,7 @@ static zbd_sm_metadata_t make_metadata(
     per_shard_segments,
     per_shard_available_size);
 
-  std::vector<zbd_shard_info_t> shard_infos(seastar::smp::count);
+  std::vector<device_shard_info_t> shard_infos(seastar::smp::count);
   for (unsigned int i = 0; i < seastar::smp::count; i++) {
     shard_infos[i].size = per_shard_available_size;
     shard_infos[i].segments = per_shard_segments;
@@ -152,16 +152,15 @@ static zbd_sm_metadata_t make_metadata(
          i, shard_infos[i].first_segment_offset);
   }
 
-  zbd_sm_metadata_t ret = zbd_sm_metadata_t{
+  auto ret = device_superblock_t::make_zbd(
     seastar::smp::count,
     segment_size,
-    zone_capacity * zones_per_segment,
-    zones_per_segment,
-    zone_capacity,
     data.block_size,
+    std::move(config),
     zone_size,
-    shard_infos,
-    meta};
+    zone_capacity,
+    zones_per_segment,
+    std::move(shard_infos));
   ret.validate();
   return ret;
 }
@@ -343,21 +342,26 @@ static write_ertr::future<> do_writev(
 }
 
 static ZBDSegmentManager::access_ertr::future<>
-write_metadata(seastar::file &device, zbd_sm_metadata_t sb)
+write_metadata(seastar::file &device, device_superblock_t sb)
 {
-  assert(ceph::encoded_sizeof_bounded<zbd_sm_metadata_t>() <
-	 sb.block_size);
+  assert(SUPERBLOCK_HEADER_PREFIX +
+	 ceph::encoded_sizeof<device_superblock_t>(sb) < sb.block_size);
   return seastar::do_with(
     bufferptr(ceph::buffer::create_page_aligned(sb.block_size)),
     [=, &device](auto &bp) {
       LOG_PREFIX(ZBDSegmentManager::write_metadata);
       DEBUG("block_size 0x{:x}", sb.block_size);
+      bp.zero();
+      // magic at offset 0, followed by 37 bytes of null padding (just zero'ed)
+      std::memcpy(bp.c_str(),
+		  CRIMSON_DEVICE_SUPERBLOCK_MAGIC.data(), SUPERBLOCK_MAGIC_SIZE);
+      // DENC-encoded superblock at offset 60
       bufferlist bl;
       encode(sb, bl);
       auto iter = bl.begin();
-      assert(bl.length() < sb.block_size);
+      assert(SUPERBLOCK_HEADER_PREFIX + bl.length() < sb.block_size);
       DEBUG("buffer length 0x{:x}", bl.length());
-      iter.copy(bl.length(), bp.c_str());
+      iter.copy(bl.length(), bp.c_str() + SUPERBLOCK_HEADER_PREFIX);
       DEBUG("doing writeout");
       return do_write(device, 0, bp);
     });
@@ -392,12 +396,47 @@ static read_ertr::future<> do_read(
   });
 }
 
+static read_ertr::future<> do_readv(
+  device_id_t device_id,
+  seastar::file &device,
+  uint64_t offset,
+  std::vector<bufferptr> ptrs)
+{
+  LOG_PREFIX(block_do_readv);
+  std::vector<iovec> iov;
+  size_t len = 0;
+  for (auto &ptr : ptrs) {
+    iov.emplace_back(ptr.c_str(), ptr.length());
+    len += ptr.length();
+  }
+  TRACE("{} poffset=0x{:x}~0x{:x} {} buffers",
+    device_id_printer_t{device_id}, offset, len, ptrs.size());
+  return device.dma_read(offset, std::move(iov)
+  ).handle_exception(
+    //FIXME: this is a little bit tricky, since seastar::future<T>::handle_exception
+    //	returns seastar::future<T>, to return an crimson::ct_error, we have to create
+    //	a seastar::future<T> holding that crimson::ct_error. This is not necessary
+    //	once seastar::future<T>::handle_exception() returns seastar::futurize_t<T>
+    [FNAME, device_id, offset, len](auto e) -> read_ertr::future<size_t>
+  {
+    ERROR("{} poffset=0x{:x}~0x{:x} got error -- {}",
+          device_id_printer_t{device_id}, offset, len, e);
+    return crimson::ct_error::input_output_error::make();
+  }).then([FNAME, device_id, offset, len](auto result) -> read_ertr::future<> {
+    if (result != len) {
+      ERROR("{} poffset=0x{:x}~0x{:x} read len=0x{:x} inconsistent",
+            device_id_printer_t{device_id}, offset, len, result);
+      return crimson::ct_error::input_output_error::make();
+    }
+    TRACE("{} poffset=0x{:x}~0x{:x} done", device_id_printer_t{device_id}, offset, len);
+    return read_ertr::now();
+  });
+}
+
 static
-ZBDSegmentManager::access_ertr::future<zbd_sm_metadata_t>
+ZBDSegmentManager::access_ertr::future<device_superblock_t>
 read_metadata(seastar::file &device, seastar::stat_data sd)
 {
-  assert(ceph::encoded_sizeof_bounded<zbd_sm_metadata_t>() <
-	 sd.block_size);
   return seastar::do_with(
     bufferptr(ceph::buffer::create_page_aligned(sd.block_size)),
     [=, &device](auto &bp) {
@@ -407,13 +446,32 @@ read_metadata(seastar::file &device, seastar::stat_data sd)
 	bp.length(),
 	bp
       ).safe_then([=, &bp] {
+        LOG_PREFIX(ZBDSegmentManager::read_metadata);
+	// verify magic at offset 0
+	superblock_magic_t disk_magic;
+	std::memcpy(disk_magic.data(), bp.c_str(), SUPERBLOCK_MAGIC_SIZE);
+	if (disk_magic != CRIMSON_DEVICE_SUPERBLOCK_MAGIC) {
+          ERROR("invalid superblock magic, got: {:02x}",
+            fmt::join(
+              std::views::transform(disk_magic,
+                [](std::byte b) { return std::to_integer<uint8_t>(b); }),
+              " "));
+	  ceph_abort_msg("invalid superblock magic");
+	}
+	// decode DENC superblock from offset 60
 	bufferlist bl;
-	bl.push_back(bp);
-	zbd_sm_metadata_t ret;
+	bl.append(bp.c_str() + SUPERBLOCK_HEADER_PREFIX,
+		  bp.length() - SUPERBLOCK_HEADER_PREFIX);
+	device_superblock_t ret;
 	auto bliter = bl.cbegin();
-	decode(ret, bliter);
+        try {
+	  decode(ret, bliter);
+        } catch (...) {
+          ERROR("got decode error!");
+          ceph_abort_msg("failed to decode superblock");
+        }
         ret.validate();
-	return ZBDSegmentManager::access_ertr::future<zbd_sm_metadata_t>(
+	return ZBDSegmentManager::access_ertr::future<device_superblock_t>(
 	  ZBDSegmentManager::access_ertr::ready_future_marker{},
 	  ret);
       });
@@ -428,12 +486,12 @@ ZBDSegmentManager::read_ertr::future<uint32_t> ZBDSegmentManager::get_shard_nums
     device = std::move(p.first);
     auto sd = p.second;
     return read_metadata(device, sd);
-  }).safe_then([this](auto meta){
+  }).safe_then([](auto meta){
     return read_ertr::make_ready_future<uint32_t>(meta.shard_num);
   }).handle_error(
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid error in ZBDSegmentManager::get_shard_nums"
-  });
+  ));
 }
 
 ZBDSegmentManager::mount_ret ZBDSegmentManager::mount()
@@ -442,9 +500,9 @@ ZBDSegmentManager::mount_ret ZBDSegmentManager::mount()
     return seastar::do_for_each(local_device.mshard_devices, [](auto& mshard_device) {
       return mshard_device->shard_mount(
       ).handle_error(
-        crimson::ct_error::assert_all{
+        crimson::ct_error::assert_all(
           "Invalid error in ZBDSegmentManager::mount"
-      });
+      ));
     });
   });
 }
@@ -458,11 +516,12 @@ ZBDSegmentManager::mount_ret ZBDSegmentManager::shard_mount()
     auto sd = p.second;
     return read_metadata(device, sd);
   }).safe_then([=, this](auto meta){
+    LOG_PREFIX(ZBDSegmentManager::shard_mount);
     if(seastar::this_shard_id() + seastar::smp::count * store_index >= meta.shard_num) {
       INFO("{} shard_id {} out of range {}",
         device_id_printer_t{get_device_id()},
         seastar::this_shard_id() + seastar::smp::count * store_index,
-        sb.shard_num);
+        meta.shard_num);
       shard_status = false;
       return mount_ertr::now();
     }
@@ -481,9 +540,9 @@ ZBDSegmentManager::mkfs_ret ZBDSegmentManager::mkfs(
       return seastar::do_for_each(local_device.mshard_devices, [](auto& mshard_device) {
         return mshard_device->shard_mkfs(
         ).handle_error(
-          crimson::ct_error::assert_all{
+          crimson::ct_error::assert_all(
             "Invalid error in ZBDSegmentManager::mkfs"
-        });
+        ));
       });
     });
   });
@@ -497,7 +556,7 @@ ZBDSegmentManager::mkfs_ret ZBDSegmentManager::primary_mkfs(
   return seastar::do_with(
     seastar::file{},
     seastar::stat_data{},
-    zbd_sm_metadata_t{},
+    device_superblock_t{},
     size_t(),
     size_t(),
     size_t(),
@@ -543,7 +602,7 @@ ZBDSegmentManager::mkfs_ret ZBDSegmentManager::primary_mkfs(
                 zone_size_sects, zone_capacity_sects);
 	  sb = make_metadata(
             size,
-	    config.meta,
+	    config,
 	    stat,
 	    zone_size_sects,
 	    zone_capacity_sects,
@@ -551,7 +610,7 @@ ZBDSegmentManager::mkfs_ret ZBDSegmentManager::primary_mkfs(
 	    nr_zones);
 	  metadata = sb;
 	  stats.metadata_write.increment(
-	    ceph::encoded_sizeof_bounded<zbd_sm_metadata_t>());
+	    ceph::encoded_sizeof<device_superblock_t>(sb));
 	  DEBUG("Wrote to stats.");
 	  return write_metadata(device, sb);
 	}).finally([&, FNAME] {
@@ -695,6 +754,35 @@ ZBDSegmentManager::release_ertr::future<> ZBDSegmentManager::release(
   });
 }
 
+SegmentManager::read_ertr::future<> ZBDSegmentManager::readv(
+  paddr_t addr,
+  std::vector<bufferptr> ptrs)
+{
+  LOG_PREFIX(ZBDSegmentManager::readv);
+  size_t len = 0;
+  for (auto &ptr : ptrs) {
+    len += ptr.length();
+  }
+  auto& seg_addr = addr.as_seg_paddr();
+  if (seg_addr.get_segment_id().device_segment_id() >= get_num_segments()) {
+    ERROR("invalid segment {}",
+      seg_addr.get_segment_id().device_segment_id());
+    return crimson::ct_error::invarg::make();
+  }
+  
+  if (seg_addr.get_segment_off() + len > metadata.segment_capacity) {
+    ERROR("invalid read offset {}, len 0x{:x}",
+      addr,
+      len);
+    return crimson::ct_error::invarg::make();
+  }
+  return do_readv(
+    get_device_id(),
+    device,
+    get_offset(addr),
+    std::move(ptrs));
+}
+
 SegmentManager::read_ertr::future<> ZBDSegmentManager::read(
   paddr_t addr,
   size_t len,
@@ -769,17 +857,17 @@ Segment::write_ertr::future<> ZBDSegmentManager::segment_write(
 
 device_id_t ZBDSegmentManager::get_device_id() const
 {
-  return metadata.device_id;
+  return metadata.config.spec.id;
 };
 
 secondary_device_set_t& ZBDSegmentManager::get_secondary_devices()
 {
-  return metadata.secondary_devices;
+  return metadata.config.secondary_devices;
 };
 
 magic_t ZBDSegmentManager::get_magic() const
 {
-  return metadata.magic;
+  return metadata.config.spec.magic;
 };
 
 segment_off_t ZBDSegment::get_write_capacity() const
@@ -825,7 +913,7 @@ Segment::write_ertr::future<> ZBDSegment::write_padding_bytes(
   DEBUG("Writing 0x{:x} padding bytes to segment {} at wp 0x{:x}",
         padding_bytes, id, write_pointer);
 
-  return crimson::repeat([FNAME, padding_bytes, this] () mutable {
+  return crimson::repeat([padding_bytes, this] () mutable {
     size_t bufsize = 0;
     if (padding_bytes >= MAX_PADDING_SIZE) {
       bufsize = MAX_PADDING_SIZE;
@@ -838,7 +926,7 @@ Segment::write_ertr::future<> ZBDSegment::write_padding_bytes(
     bp.zero();
     bufferlist padd_bl;
     padd_bl.append(bp);
-    return write(write_pointer, padd_bl).safe_then([FNAME, padding_bytes, this]() {
+    return write(write_pointer, padd_bl).safe_then([padding_bytes]() {
       if (padding_bytes == 0) {
         return write_ertr::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::yes);
       } else {

@@ -16,14 +16,17 @@ namespace crimson::osd {
  *   next older and the next newest clone obejct.
  *   Use the existing (next) clones object overlaps instead
  *   of pushing the whole clone object to the replica.
+ *
+ *   Returns candidates in preference order (closest first).
+ *   The caller locks the first usable candidate from each list.
  */
 
-subsets_t calc_clone_subsets(
+clone_overlap_plan_t calc_clone_subsets(
   SnapSet& snapset, const hobject_t& soid,
   const pg_missing_t& missing,
   const hobject_t &last_backfill)
 {
-  subsets_t subsets;
+  clone_overlap_plan_t plan;
   logger().debug("{}: {} clone_overlap {} ",
                  __func__, soid, snapset.clone_overlap);
   assert(missing.get_items().contains(soid));
@@ -34,17 +37,17 @@ subsets_t calc_clone_subsets(
       "{} {} not touched, no need to recover, skipping",
       __func__,
       soid);
-    return subsets;
+    return plan;
   }
   uint64_t size = snapset.clone_size[soid.snap];
   if (size) {
-    subsets.data_subset.insert(0, size);
+    plan.data_subset.insert(0, size);
   }
 
   // let data_subset store only the modified content of the object.
-  subsets.data_subset.intersection_of(dirty_regions);
+  plan.data_subset.intersection_of(dirty_regions);
   logger().debug("{} {} data_subset {}",
-                 __func__, soid, subsets.data_subset);
+                 __func__, soid, plan.data_subset);
 
   // TODO: make sure CEPH_FEATURE_OSD_CACHEPOOL is not supported in Crimson
   // Skips clone subsets if caching was enabled (allow_incomplete_clones).
@@ -52,14 +55,14 @@ subsets_t calc_clone_subsets(
 #ifndef UNIT_TESTS_BUILT
   if (!crimson::common::local_conf()->osd_recover_clone_overlap) {
     logger().debug("{} {} -- osd_recover_clone_overlap is disabled",
-                   __func__, soid); ;
-    return subsets;
+                   __func__, soid);
+    return plan;
   }
 #endif
 
   if (snapset.clones.empty()) {
     logger().debug("{} {} -- no clones", __func__, soid);
-    return subsets;
+    return plan;
   }
 
   auto soid_snap_iter = find(snapset.clones.begin(),
@@ -68,8 +71,7 @@ subsets_t calc_clone_subsets(
   assert(soid_snap_iter != snapset.clones.end());
   auto soid_snap_index = soid_snap_iter - snapset.clones.begin();
 
-  // any overlap with next older clone?
-  interval_set<uint64_t> cloning;
+  // older clones, closest first
   interval_set<uint64_t> prev;
   if (size) {
     prev.insert(0, size);
@@ -80,54 +82,42 @@ subsets_t calc_clone_subsets(
     // clone_overlap of i holds the overlap between i to i+1
     prev.intersection_of(snapset.clone_overlap[snapset.clones[i]]);
     if (!missing.is_missing(clone) && clone < last_backfill) {
-      logger().debug("{} {} has prev {} overlap {}",
+      logger().debug("{} {} candidate prev {} overlap {}",
                      __func__, soid, clone, prev);
-      subsets.clone_subsets[clone] = prev;
-      cloning.union_of(prev);
-      break;
+      plan.older_candidates.push_back(
+        clone_candidate_t{clone, prev});
+    } else {
+      logger().debug("{} {} does not have prev {} overlap {}",
+                     __func__, soid, clone, prev);
     }
-    logger().debug("{} {} does not have prev {} overlap {}",
-                   __func__, soid, clone, prev);
   }
 
-  // overlap with next newest?
+  // newer clones, closest first
   interval_set<uint64_t> next;
   if (size) {
     next.insert(0, size);
   }
-  for (unsigned i = soid_snap_index+1;
+  for (unsigned i = soid_snap_index + 1;
        i < snapset.clones.size(); i++) {
     hobject_t clone = soid;
     clone.snap = snapset.clones[i];
     // clone_overlap of i-1 holds the overlap between i-1 to i
     next.intersection_of(snapset.clone_overlap[snapset.clones[i - 1]]);
     if (!missing.is_missing(clone) && clone < last_backfill) {
-      logger().debug("{} {} has next {} overlap {}",
+      logger().debug("{} {} candidate next {} overlap {}",
                      __func__, soid, clone, next);
-      subsets.clone_subsets[clone] = next;
-      cloning.union_of(next);
-      break;
+      plan.newer_candidates.push_back(
+        clone_candidate_t{clone, next});
+    } else {
+      logger().debug("{} {} does not have next {} overlap {}",
+                     __func__, soid, clone, next);
     }
-    logger().debug("{} {} does not have next {} overlap {}",
-                   __func__, soid, clone, next);
   }
 
-#ifndef UNIT_TESTS_BUILT
-  if (cloning.num_intervals() >
-      crimson::common::local_conf().get_val<uint64_t>
-      ("osd_recover_clone_overlap_limit")) {
-    logger().debug("skipping clone, too many holes");
-    subsets.clone_subsets.clear();
-    cloning.clear();
-  }
-#endif
-
-  // what's left for us to push?
-  subsets.data_subset.subtract(cloning);
-  logger().debug("{} {} data_subsets {}"
-                 "clone_subsets {}",
-                 __func__, soid, subsets.data_subset, subsets.clone_subsets);
-  return subsets;
+  logger().debug("{} {} data_subset {} older_candidates {} newer_candidates {}",
+                 __func__, soid, plan.data_subset,
+                 plan.older_candidates.size(), plan.newer_candidates.size());
+  return plan;
 }
 
 /*
@@ -138,9 +128,11 @@ subsets_t calc_clone_subsets(
  * 2) The modified content may already overlap with the
  *    next older clone obejct. Use the existing clone
  *    object overlap as well.
+ *
+ * Returns older candidates in preference order (newest clone first).
  */
 
-subsets_t calc_head_subsets(
+clone_overlap_plan_t calc_head_subsets(
   uint64_t obj_size,
   SnapSet& snapset,
   const hobject_t& head,
@@ -150,18 +142,18 @@ subsets_t calc_head_subsets(
   logger().debug("{}: {} clone_overlap {} ",
                  __func__, head, snapset.clone_overlap);
 
-  subsets_t subsets;
+  clone_overlap_plan_t plan;
 
 // 1) Calculate modified content only
   if (obj_size) {
-    subsets.data_subset.insert(0, obj_size);
+    plan.data_subset.insert(0, obj_size);
   }
   assert(missing.get_items().contains(head));
   const pg_missing_item &missing_item = missing.get_items().at(head);
   // let data_subset store only the modified content of the object.
-  subsets.data_subset.intersection_of(missing_item.clean_regions.get_dirty_regions());
+  plan.data_subset.intersection_of(missing_item.clean_regions.get_dirty_regions());
   logger().debug("{} {} data_subset {}",
-                 __func__, head, subsets.data_subset);
+                 __func__, head, plan.data_subset);
 
   // TODO: make sure CEPH_FEATURE_OSD_CACHEPOOL is not supported in Crimson
   // Skips clone subsets if caching was enabled (allow_incomplete_clones).
@@ -170,17 +162,16 @@ subsets_t calc_head_subsets(
   if (!crimson::common::local_conf()->osd_recover_clone_overlap) {
     logger().debug("{} {} -- osd_recover_clone_overlap is disabled",
                    __func__, head);
-    return subsets;
+    return plan;
   }
 #endif
 
   if (snapset.clones.empty()) {
     logger().debug("{} {} -- no clones", __func__, head);
-    return subsets;
+    return plan;
   }
 
-  // 2) Find any overlap with next older clone
-  interval_set<uint64_t> cloning;
+  // 2) Candidates: next older clones, newest first
   interval_set<uint64_t> prev;
   hobject_t clone = head;
   if (obj_size) {
@@ -191,39 +182,45 @@ subsets_t calc_head_subsets(
     // let prev store only the overlap with clone i
     prev.intersection_of(snapset.clone_overlap[snapset.clones[i]]);
     if (!missing.is_missing(clone) && clone < last_backfill) {
-      logger().debug("{} {} has prev {} overlap {}",
+      interval_set<uint64_t> overlap = prev;
+      overlap.intersection_of(plan.data_subset);
+      if (overlap.empty()) {
+        logger().debug("{} {} candidate prev {} overlap empty after data_subset",
+                       __func__, head, clone);
+      } else {
+        logger().debug("{} {} candidate prev {} overlap {}",
+                       __func__, head, clone, overlap);
+        plan.older_candidates.push_back(
+          clone_candidate_t{clone, std::move(overlap)});
+      }
+    } else {
+      logger().debug("{} {} does not have prev {} overlap {}",
                      __func__, head, clone, prev);
-      cloning = prev;
-      break;
     }
-    logger().debug("{} {} does not have prev {} overlap {}",
-                   __func__, head, clone, prev);
   }
 
-  // let cloning store only the overlap with data_subset
-  cloning.intersection_of(subsets.data_subset);
-  if (cloning.empty()) {
-    logger().debug("skipping clone, nothing needs to clone");
-    return subsets;
-  }
+  logger().debug("{} {} data_subset {} older_candidates {}",
+                 __func__, head, plan.data_subset,
+                 plan.older_candidates.size());
+  return plan;
+}
 
-#ifndef UNIT_TESTS_BUILT
-  if (cloning.num_intervals() >
-      crimson::common::local_conf().get_val<uint64_t>
-      ("osd_recover_clone_overlap_limit")) {
-    logger().debug("skipping clone, too many holes");
-    subsets.clone_subsets.clear();
-    cloning.clear();
+subsets_t commit_subsets_unlocked(clone_overlap_plan_t plan)
+{
+  subsets_t subsets;
+  subsets.data_subset = std::move(plan.data_subset);
+  interval_set<uint64_t> cloning;
+  if (!plan.older_candidates.empty()) {
+    const auto& c = plan.older_candidates.front();
+    subsets.clone_subsets[c.clone] = c.overlap;
+    cloning.union_of(c.overlap);
   }
-#endif
-
-  // what's left for us to push?
-  subsets.clone_subsets[clone] = cloning;
+  if (!plan.newer_candidates.empty()) {
+    const auto& c = plan.newer_candidates.front();
+    subsets.clone_subsets[c.clone] = c.overlap;
+    cloning.union_of(c.overlap);
+  }
   subsets.data_subset.subtract(cloning);
-  logger().debug("{} {} data_subsets {}"
-                 "clone_subsets {}",
-                 __func__, head, subsets.data_subset, subsets.clone_subsets);
-
   return subsets;
 }
 

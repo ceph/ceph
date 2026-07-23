@@ -17,6 +17,7 @@
 #include "crimson/os/futurized_collection.h"
 #include "osd/PeeringState.h"
 #include "crimson/common/log.h"
+#include "crimson/osd/heartbeat.h"
 #include "crimson/osd/osdmap_service.h"
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_meta.h"
@@ -26,6 +27,7 @@
 #include "common/AsyncReserver.h"
 #include "crimson/net/Connection.h"
 #include "mgr/OSDPerfMetricTypes.h"
+#include "osd/ECExtentCache.h"
 
 namespace crimson::net {
   class Messenger;
@@ -207,10 +209,14 @@ class PerShardState {
   std::list<OSDPerfMetricQuery> m_perf_queries;
   std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> m_perf_limits;
 
+  // This is an extent cache for the erasure coding. Specifically, this acts as
+  // a least-recently-used cache invalidator, allowing for cache shards to last
+  // longer than the most recent IO in each object.
+  ECExtentCache::LRU ec_extent_cache_lru;
+
 public:
   PerShardState(
     int whoami,
-    ceph::mono_time startup_time,
     PerfCounters *perf,
     PerfCounters *recoverystate_perf,
     crimson::os::FuturizedStore &store,
@@ -271,6 +277,19 @@ private:
   seastar::future<> osdmap_subscribe(version_t epoch, bool force_request);
 
   crimson::mgr::Client &mgrc;
+
+  osd_stat_t osd_stat;
+  uint32_t osd_stat_seq = 0;
+  osd_stat_t get_osd_stat() {
+    return osd_stat;
+  }
+  void update_osd_stat(
+    epoch_t up_epoch,
+    const Heartbeat::osds_t& peers,
+    const store_statfs_t& st);
+  void inc_osd_stat_repaired() {
+    osd_stat.num_shards_repaired++;
+  }
 
   std::unique_ptr<OSDMeta> meta_coll;
   template <typename... Args>
@@ -351,12 +370,35 @@ private:
   seastar::future<> store_maps(ceph::os::Transaction& t,
                                epoch_t start, Ref<MOSDMap> m);
   void trim_maps(ceph::os::Transaction& t, OSDSuperblock& superblock);
+
+  // -- PG merging --
+  std::map<pg_t, eversion_t> ready_to_merge_source;
+  std::map<pg_t,std::tuple<eversion_t,epoch_t,epoch_t>> ready_to_merge_target;
+  std::set<pg_t> not_ready_to_merge_source;
+  std::map<pg_t,pg_t> not_ready_to_merge_target;
+  std::set<pg_t> sent_ready_to_merge_source;
+  std::set<int64_t> pools_merge_stopped_reported;
+  seastar::future<> set_ready_to_merge_source(pg_t pgid,
+                                 eversion_t version);
+  seastar::future<> set_ready_to_merge_target(pg_t pgid,
+                                 eversion_t version,
+                                 epoch_t last_epoch_started,
+                                 epoch_t last_epoch_clean);
+  seastar::future<> set_not_ready_to_merge_source(pg_t source);
+  seastar::future<> set_not_ready_to_merge_target(pg_t target, pg_t source);
+  void clear_ready_to_merge(pg_t pgid);
+  seastar::future<> send_ready_to_merge();
+  seastar::future<> send_stop_pool_pg_merge(int64_t pool, pg_t pgid);
+  void clear_sent_ready_to_merge();
+  void prune_pools_merge_stopped_reported();
+  void prune_sent_ready_to_merge();
 };
 
 /**
  * Represents services available to each PG
  */
-class ShardServices : public OSDMapService {
+class ShardServices : public OSDMapService,
+                      public seastar::peering_sharded_service<ShardServices> {
   friend class PGShardManager;
   friend class OSD;
   using cached_map_t = OSDMapService::cached_map_t;
@@ -506,6 +548,13 @@ public:
     return pg_to_shard_mapping.get_or_create_pg_mapping(pgid, core, store_index);
   }
 
+  seastar::future<core_id_t> get_pg_mapping(spg_t pgid) {
+    return pg_to_shard_mapping.get_or_create_pg_mapping(pgid).then(
+      [](std::pair<core_id_t, store_index_t> mapping) {
+        return mapping.first;
+      });
+  }
+
   auto remove_pg(spg_t pgid) {
     local_state.pg_map.remove_pg(pgid);
     return pg_to_shard_mapping.remove_pg_mapping(pgid);
@@ -626,6 +675,34 @@ public:
       });
   }
 
+  ECExtentCache::LRU &lookup_ec_extent_cache_lru() {
+    return local_state.ec_extent_cache_lru;
+  }
+
+  seastar::future<Ref<PG>> extract_pg(spg_t pgid);
+  // Hand the source PG off to the target PG's rendezvous, hopping shards
+  // if needed. The consumer side (target PG) waits via
+  // PG::collect_merge_sources(); cleanup happens when the target drops the
+  // local_shared_foreign_ptr it received.
+  seastar::future<> register_merge_source(spg_t target, spg_t source);
+
+  static bool is_seastore_objectstore();
+
+  // True if every merge source is co-located on the target PG's shard
+  // (Seastore only). Uses the full sibling set so one source cannot commit
+  // while another would abort.
+  seastar::future<bool> seastore_merge_shards_ok(
+    spg_t target, const std::set<spg_t>& merge_sources);
+
+  FORWARD_TO_OSD_SINGLETON(set_ready_to_merge_source)
+  FORWARD_TO_OSD_SINGLETON(set_ready_to_merge_target)
+  FORWARD_TO_OSD_SINGLETON(set_not_ready_to_merge_source)
+  FORWARD_TO_OSD_SINGLETON(set_not_ready_to_merge_target)
+  FORWARD_TO_OSD_SINGLETON(clear_ready_to_merge)
+  FORWARD_TO_OSD_SINGLETON(send_ready_to_merge)
+  FORWARD_TO_OSD_SINGLETON(clear_sent_ready_to_merge)
+  FORWARD_TO_OSD_SINGLETON(prune_sent_ready_to_merge)
+
   FORWARD_TO_OSD_SINGLETON(get_pool_info)
   FORWARD(get_throttle, get_throttle, local_state.throttler)
 
@@ -640,6 +717,9 @@ public:
   QUEUE_FOR_OSD_SINGLETON(send_pg_created)
   QUEUE_FOR_OSD_SINGLETON(send_alive)
   QUEUE_FOR_OSD_SINGLETON(send_pg_temp)
+  FORWARD_TO_OSD_SINGLETON(get_osd_stat)
+  FORWARD_TO_OSD_SINGLETON(update_osd_stat)
+  FORWARD_TO_OSD_SINGLETON(inc_osd_stat_repaired)
   FORWARD_TO_LOCAL_CONST(get_mnow)
   FORWARD_TO_LOCAL(get_hb_stamps)
   FORWARD_TO_LOCAL(update_shard_superblock)
@@ -783,6 +863,15 @@ public:
       },
       invoke_context_on_core(seastar::this_shard_id(), on_reserved));
   }
+
+private:
+  seastar::future<> reset_target_merge_rendezvous(spg_t target);
+  seastar::future<> send_stop_pool_merge(pg_t source_pgid);
+  seastar::future<> abort_seastore_cross_shard_merge(
+    spg_t target,
+    pg_t source_pgid,
+    const std::set<spg_t>* all_sources,
+    bool reset_target_rendezvous);
 
 #undef FORWARD_CONST
 #undef FORWARD

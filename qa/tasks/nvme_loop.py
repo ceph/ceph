@@ -5,6 +5,7 @@ import json
 from io import StringIO
 from teuthology import misc as teuthology
 from teuthology import contextutil
+from teuthology.exceptions import CommandCrashedError
 from teuthology.orchestra import run
 
 
@@ -37,30 +38,39 @@ def task(ctx, config):
                 'sudo', 'tee', f'{base}/ports/{port}/addr_trtype',
             ]
         )
+        provide_hostname = True
         for dev in devs:
             short = dev.split('/')[-1]
             log.info(f'Connecting nvme_loop {remote.shortname}:{dev}...')
-            remote.run(
-                args=[
-                    'sudo', 'mkdir', '-p', f'{base}/subsystems/{short}',
-                    run.Raw('&&'),
-                    'echo', '1', run.Raw('|'),
-                    'sudo', 'tee', f'{base}/subsystems/{short}/attr_allow_any_host',
-                    run.Raw('&&'),
-                    'sudo', 'mkdir', '-p', f'{base}/subsystems/{short}/namespaces/1',
-                    run.Raw('&&'),
-                    'echo', '-n', dev, run.Raw('|'),
-                    'sudo', 'tee', f'{base}/subsystems/{short}/namespaces/1/device_path',
-                    run.Raw('&&'),
-                    'echo', '1', run.Raw('|'),
-                    'sudo', 'tee', f'{base}/subsystems/{short}/namespaces/1/enable',
-                    run.Raw('&&'),
-                    'sudo', 'ln', '-s', f'{base}/subsystems/{short}',
-                    f'{base}/ports/{port}/subsystems/{short}',
-                    run.Raw('&&'),
-                    'sudo', 'nvme', 'connect', '-t', 'loop', '-n', short, '-q', host,
-                ]
-            )
+            nvme_connect_args=[
+                'sudo', 'mkdir', '-p', f'{base}/subsystems/{short}',
+                run.Raw('&&'),
+                'echo', '1', run.Raw('|'),
+                'sudo', 'tee', f'{base}/subsystems/{short}/attr_allow_any_host',
+                run.Raw('&&'),
+                'sudo', 'mkdir', '-p', f'{base}/subsystems/{short}/namespaces/1',
+                run.Raw('&&'),
+                'echo', '-n', dev, run.Raw('|'),
+                'sudo', 'tee', f'{base}/subsystems/{short}/namespaces/1/device_path',
+                run.Raw('&&'),
+                'echo', '1', run.Raw('|'),
+                'sudo', 'tee', f'{base}/subsystems/{short}/namespaces/1/enable',
+                run.Raw('&&'),
+                'sudo', 'ln', '-s', f'{base}/subsystems/{short}',
+                f'{base}/ports/{port}/subsystems/{short}',
+                run.Raw('&&'),
+                'sudo', 'nvme', 'connect', '-t', 'loop', '-n', short
+            ]
+            if provide_hostname:
+                nvme_connect_args.extend(['-q', host])
+            try:
+                remote.run(args=nvme_connect_args)
+            except Exception:
+                if provide_hostname:
+                    provide_hostname = False
+                    remote.run(args=['sudo', 'nvme', 'connect', '-t', 'loop', '-n', short])
+                else:
+                    raise
 
         # identify nvme_loops devices
         old_scratch_by_remote[remote] = remote.read_file('/scratch_devs')
@@ -68,7 +78,17 @@ def task(ctx, config):
         with contextutil.safe_while(sleep=1, tries=15) as proceed:
             while proceed():
                 remote.run(args=['lsblk'], stdout=StringIO())
-                p = remote.run(args=['sudo', 'nvme', 'list', '-o', 'json'], stdout=StringIO())
+                try:
+                    p = remote.run(
+                        args=['sudo', 'nvme', 'list', '-o', 'json'],
+                        stdout=StringIO(),
+                    )
+                except CommandCrashedError:
+                    log.warning(
+                        'nvme list -o json command failed, retrying...'
+                    )
+                    continue
+
                 new_devs = []
                 # `nvme list -o json` will return one of the following output:
                 '''{

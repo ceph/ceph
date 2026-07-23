@@ -225,12 +225,12 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         return [self._create_osds(dg) for dg in specs]
 
     @handle_orch_error
-    def remove_daemons(self, names):
+    def remove_daemons(self, names, force_delete_data=False):
         assert isinstance(names, list)
         return 'done'
 
     @handle_orch_error
-    def remove_service(self, service_name, force = False):
+    def remove_service(self, service_name, force=False, force_delete_data=False):
         assert isinstance(service_name, str)
         return 'done'
 
@@ -245,7 +245,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         return 'done'
 
     @handle_orch_error
-    def daemon_action(self, action, daemon_name, image=None):
+    def daemon_action(self, action, daemon_name, image=None, force=False):
         return 'done'
 
     @handle_orch_error

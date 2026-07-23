@@ -1,0 +1,87 @@
+@use '@carbon/layout';
+@use '@carbon/colors';
+
+.host-header-extra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: layout.$spacing-05;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.host-header-tags {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: layout.$spacing-02;
+  min-width: 0;
+}
+
+.host-header-actions {
+  margin-left: auto;
+}
+
+.host-details-layout .sidebar-header-content {
+  flex-wrap: nowrap;
+  width: 100%;
+}
+
+.host-details-layout .sidebar-header-content h2 {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.host-details-layout .sidebar-header {
+  padding-right: var(--cds-spacing-07);
+}
+
+.host-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cds-spacing-02);
+  font-size: var(--cds-body-compact-01-font-size, 0.875rem);
+  font-weight: 600;
+}
+
+.host-status-badge--success {
+  color: var(--cds-support-success);
+}
+
+.host-status-badge--warning {
+  color: var(--cds-support-caution-major);
+}
+
+.host-status-badge--danger {
+  color: var(--cds-support-error);
+}
+
+.host-status-badge--info {
+  color: var(--cds-support-info);
+}
+
+/* Menu is rendered under document.body; scope fixes by menu id. */
+#host-actions-menu.cds--menu {
+  width: max-content !important;
+  min-width: 12rem;
+  background-color: colors.$white !important;
+}
+
+#host-actions-menu.cds--menu > .cds--menu-item {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+#host-actions-menu.cds--menu .cds--menu-item {
+  color: var(--cds-text-primary);
+}
+
+#host-actions-menu.cds--menu .cds--menu-item__label {
+  overflow: visible;
+  text-overflow: unset;
+  white-space: normal;
+}
+
+#host-actions-menu.cds--menu .cds--menu-item:hover,
+#host-actions-menu.cds--menu .cds--menu-item:focus {
+  background-color: colors.$gray-10;
+}

@@ -50,13 +50,8 @@ public:
     finalize();
   }
   std::vector<bool> transitioned_objects_cache;
+  int get_max_objs() const { return max_objs; }
   std::tuple<int, std::optional<cls_rgw_obj_chain>> send_split_chain(const cls_rgw_obj_chain& chain, const std::string& tag, optional_yield y);
-
-  // asynchronously defer garbage collection on an object that's still being read
-  int async_defer_chain(const std::string& tag, const cls_rgw_obj_chain& info);
-
-  // callback for when async_defer_chain() fails with ECANCELED
-  void on_defer_canceled(const cls_rgw_gc_obj_info& info);
 
   int remove(int index, const std::vector<std::string>& tags, librados::AioCompletion **pc, optional_yield y);
   int remove(int index, int num_entries, optional_yield y);
@@ -64,11 +59,10 @@ public:
   void initialize(CephContext *_cct, RGWRados *_store, optional_yield y);
   void finalize();
 
-  int list(int *index, std::string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated, bool& processing_queue);
-  void list_init(int *index) { *index = 0; }
+  int list(int& index, std::string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool& truncated, bool& processing_queue, std::optional<int> shard_id = std::nullopt);
   int process(int index, int process_max_secs, bool expired_only,
               RGWGCIOManager& io_manager, optional_yield y);
-  int process(bool expired_only, optional_yield y);
+  int process(bool expired_only, optional_yield y, std::optional<int> shard_id = std::nullopt);
 
   bool going_down();
   void start_processor();

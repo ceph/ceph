@@ -3,8 +3,6 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { ToastrModule } from 'ngx-toastr';
-
 import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -34,8 +32,7 @@ describe('NvmeofSubsystemsStepThreeComponent', () => {
         GridModule,
         RadioModule,
         TagModule,
-        InputModule,
-        ToastrModule.forRoot()
+        InputModule
       ]
     }).compileComponents();
 
@@ -57,6 +54,19 @@ describe('NvmeofSubsystemsStepThreeComponent', () => {
     });
 
     describe('form initialization', () => {
+      beforeEach(() => {
+        fixture = TestBed.createComponent(NvmeofSubsystemsStepThreeComponent);
+        component = fixture.componentInstance;
+
+        component.stepTwoValue = {
+          hostType: 'specific',
+          addedHosts: ['nqn.2001-07.com.ceph:1776805137618']
+        } as any;
+
+        fixture.detectChanges();
+        form = component.formGroup;
+      });
+
       it('should initialize form with default values', () => {
         expect(form).toBeTruthy();
         expect(form.get('authType')?.value).toBe(AUTHENTICATION.Unidirectional);

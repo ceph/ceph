@@ -20,7 +20,9 @@
 #include <sys/un.h>
 
 #ifndef WIN32
-#include <sys/wait.h>
+#include <time.h>
+#else
+typedef void* timer_t;
 #endif
 
 #include <iomanip>
@@ -825,9 +827,44 @@ class RaiseHook: public AdminSocketHook {
   using clock = ceph::coarse_mono_clock;
   struct Killer {
     CephContext* m_cct;
-    pid_t pid;
+    std::optional<timer_t> timer_id;
     int signal;
     clock::time_point due;
+
+    Killer(CephContext* cct, timer_t id, int sig, clock::time_point d)
+        : m_cct(cct), timer_id(id), signal(sig), due(d) {}
+
+    Killer(Killer&& o) noexcept {
+      *this = std::move(o);
+    }
+
+    void release() noexcept {
+#ifndef WIN32
+      if (timer_id) {
+        timer_delete(*timer_id);
+        timer_id = std::nullopt;
+      }
+#endif
+    }
+
+    Killer& operator=(Killer&& o) noexcept {
+      if (this == &o) {
+        return *this;
+      }
+      release();
+      m_cct = o.m_cct;
+      timer_id = o.timer_id;
+      signal = o.signal;
+      due = o.due;
+      o.timer_id = std::nullopt;
+      return *this;
+    }
+    Killer(const Killer&) = delete;
+    Killer& operator=(const Killer&) = delete;
+
+    ~Killer() {
+      release();
+    }
 
     std::string describe()
     {
@@ -835,84 +872,52 @@ class RaiseHook: public AdminSocketHook {
       using std::chrono::seconds;
       auto remaining = (due - clock::now());
       return fmt::format(
-        "pending signal ({}) due in {}", 
+        "pending signal ({}) due in {}",
         strsignal_compat(signal),
         duration_cast<seconds>(remaining).count());
     }
 
     bool cancel()
     {
-#   ifndef WIN32
-      int wstatus;
-      int status;
-      if (0 == (status = waitpid(pid, &wstatus, WNOHANG))) {
-        status = kill(pid, SIGKILL);
-        if (status) {
-          ldout(m_cct, 5) << __func__ << "couldn't kill the killer. Error: " << strerror(errno) << dendl;
-          return false;
-        }
-        while (pid == waitpid(pid, &wstatus, 0)) {
-          if (WIFEXITED(wstatus)) {
-            return false;
-          }
-          if (WIFSIGNALED(wstatus)) {
-            return true;
-          }
-        }
+#ifndef WIN32
+      struct itimerspec zero = {};
+      struct itimerspec prev = {};
+      if (timer_settime(*timer_id, 0, &zero, &prev) < 0) {
+        ldout(m_cct, 5) << __func__ << " timer_settime failed: " << strerror(errno) << dendl;
+        return false;
       }
-      if (status < 0) {
-        ldout(m_cct, 5) << __func__ << "waitpid(killer, NOHANG) returned " << status << "; " << strerror(errno) << dendl;
-      } else {
-        ldout(m_cct, 20) << __func__ << "killer process " << pid << "\"" << describe() << "\" reaped. "
-                         << "WIFEXITED: " << WIFEXITED(wstatus)
-                         << "WIFSIGNALED: " << WIFSIGNALED(wstatus)
-                         << dendl;
-      }
-#   endif
+      return prev.it_value.tv_sec > 0 || prev.it_value.tv_nsec > 0;
+#endif
       return false;
     }
 
-    static std::optional<Killer> fork(CephContext *m_cct, int signal_to_send, double delay) {
-#   ifndef WIN32
-      pid_t victim = getpid();
-      clock::time_point until = clock::now() + ceph::make_timespan(delay);
+    static std::optional<Killer> arm(CephContext* m_cct, int signal_to_send, double delay)
+    {
+#ifndef WIN32
+      struct sigevent sev = {};
+      sev.sigev_notify = SIGEV_SIGNAL;
+      sev.sigev_signo = signal_to_send;
 
-      int fresult = ::fork();
-      if (fresult < 0) {
-        ldout(m_cct, 5) << __func__ << "couldn't fork the killer. Error: " << strerror(errno) << dendl;
+      timer_t timer_id;
+      if (timer_create(CLOCK_MONOTONIC, &sev, &timer_id) < 0) {
+        ldout(m_cct, 5) << __func__ << " timer_create failed: " << strerror(errno) << dendl;
         return std::nullopt;
       }
 
-      if (fresult) {
-        // this is parent
-        return {{m_cct, fresult, signal_to_send, until}};
+      auto span = ceph::make_timespan(delay);
+      auto sec = std::chrono::floor<std::chrono::seconds>(span);
+      struct itimerspec spec = {};
+      spec.it_value.tv_sec  = sec.count();
+      spec.it_value.tv_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(span - sec).count();
+
+      if (timer_settime(timer_id, 0, &spec, nullptr) < 0) {
+        ldout(m_cct, 5) << __func__ << " timer_settime failed: " << strerror(errno) << dendl;
+        timer_delete(timer_id);
+        return std::nullopt;
       }
 
-      const ceph::signedspan poll_interval = ceph::make_timespan(0.1);
-      while (getppid() == victim) {
-        ceph::signedspan remaining = (until - clock::now());
-        if (remaining.count() > 0) {
-          using std::chrono::duration_cast;
-          using std::chrono::nanoseconds;
-          std::this_thread::sleep_for(duration_cast<nanoseconds>(std::min(remaining, poll_interval)));
-        } else {
-          break;
-        }
-      }
-
-      if (getppid() != victim) {
-        // suicide if my parent has changed
-        // this means that the original parent process has terminated
-        ldout(m_cct, 5) << __func__ << "my parent isn't what it used to be, i'm out" << strerror(errno) << dendl;
-        _exit(1);
-      }
-
-      int status = kill(victim, signal_to_send);
-      if (0 != status) {
-        ldout(m_cct, 5) << __func__ << "couldn't kill the victim: " << strerror(errno) << dendl;
-      }
-      _exit(status);
-#   endif
+      return Killer{m_cct, timer_id, signal_to_send, clock::now() + span};
+#endif
       return std::nullopt;
     }
   };
@@ -970,8 +975,8 @@ public:
   static const char* get_help()
   {
     return "deliver the <signal> to the daemon process, optionally delaying <after> seconds; "
-           "when --after is used, the program will fork before sleeping, which allows to "
-           "schedule signal delivery to a stopped daemon; it's possible to --cancel a pending signal delivery. "
+           "when --after is used, a POSIX timer is armed to deliver the signal, "
+           "allowing scheduling to a stopped daemon; it's possible to --cancel a pending signal delivery. "
            "<signal> can be in the forms '9', '-9', 'kill', '-KILL'. Use `raise -l` to list known signal names.";
   }
 
@@ -1030,13 +1035,13 @@ public:
         }
       }
 
-      killer = Killer::fork(m_cct, signal_to_send, delay);
+      killer = Killer::arm(m_cct, signal_to_send, delay);
 
       if (killer) {
         errss << "scheduled " << killer->describe() << endl;
         ldout(m_cct, 20) << __func__ << "scheduled " << killer->describe() << dendl;
       } else {
-        errss << "couldn't fork the killer" << std::endl;
+        errss << "couldn't arm the signal timer" << std::endl;
         return -EAGAIN;
       }
     } else {

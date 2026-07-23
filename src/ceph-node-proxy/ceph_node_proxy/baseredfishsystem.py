@@ -33,8 +33,21 @@ class BaseRedfishSystem(BaseSystem):
         "Status",
     ]
     POWER_FIELDS: List[str] = ["Name", "Model", "Manufacturer", "Status"]
-    FANS_FIELDS: List[str] = ["Name", "PhysicalContext", "Status"]
-    FIRMWARES_FIELDS: List[str] = [
+    FANS_FIELDS: List[str] = [
+        "Name",
+        "PhysicalContext",
+        "Reading",
+        "ReadingUnits",
+        "Status",
+    ]
+    TEMPERATURES_FIELDS: List[str] = [
+        "Name",
+        "PhysicalContext",
+        "Reading",
+        "ReadingUnits",
+        "Status",
+    ]
+    FIRMWARE_FIELDS: List[str] = [
         "Name",
         "Description",
         "ReleaseDate",
@@ -63,9 +76,14 @@ class BaseRedfishSystem(BaseSystem):
         "fans": [
             ComponentUpdateSpec("chassis", "Thermal", FANS_FIELDS, "Fans"),
         ],
-        "firmwares": [
+        "temperatures": [
             ComponentUpdateSpec(
-                "update_service", "FirmwareInventory", FIRMWARES_FIELDS, None
+                "chassis", "Thermal", TEMPERATURES_FIELDS, "Temperatures"
+            ),
+        ],
+        "firmware": [
+            ComponentUpdateSpec(
+                "update_service", "FirmwareInventory", FIRMWARE_FIELDS, None
             ),
         ],
     }
@@ -102,10 +120,11 @@ class BaseRedfishSystem(BaseSystem):
                 "memory",
                 "power",
                 "fans",
+                "temperatures",
                 "network",
                 "processors",
                 "storage",
-                "firmwares",
+                "firmware",
             ],
         )
         self.update_funcs: List[Callable] = []
@@ -119,6 +138,16 @@ class BaseRedfishSystem(BaseSystem):
         self.refresh_interval: int = config.get("system", {}).get(
             "refresh_interval", DEFAULTS["system"]["refresh_interval"]
         )
+
+    def initialize_redfish_session(self) -> None:
+        self.client.login()
+        self.endpoints.init()
+
+    def run_update_cycle(self) -> None:
+        self._update_system()
+        self._update_sn()
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            executor.map(lambda f: f(), self.update_funcs)
 
     def update(
         self,
@@ -141,8 +170,7 @@ class BaseRedfishSystem(BaseSystem):
 
     def main(self) -> None:
         self.stop = False
-        self.client.login()
-        self.endpoints.init()
+        self.initialize_redfish_session()
 
         while not self.stop:
             self.log.debug("waiting for a lock in the update loop.")
@@ -150,12 +178,7 @@ class BaseRedfishSystem(BaseSystem):
                 if not self.pending_shutdown:
                     self.log.debug("lock acquired in the update loop.")
                     try:
-                        self._update_system()
-                        self._update_sn()
-
-                        with concurrent.futures.ThreadPoolExecutor() as executor:
-                            executor.map(lambda f: f(), self.update_funcs)
-
+                        self.run_update_cycle()
                         self.data_ready = True
                     except RuntimeError as e:
                         self.stop = True
@@ -209,8 +232,9 @@ class BaseRedfishSystem(BaseSystem):
                 "memory": self.get_memory(),
                 "power": self.get_power(),
                 "fans": self.get_fans(),
+                "temperatures": self.get_temperatures(),
             },
-            "firmwares": self.get_firmwares(),
+            "firmware": self.get_firmware(),
         }
         return result
 
@@ -242,14 +266,17 @@ class BaseRedfishSystem(BaseSystem):
     def get_storage(self) -> Dict[str, Dict[str, Dict]]:
         return dict(self._sys.get("storage", {}))
 
-    def get_firmwares(self) -> Dict[str, Dict[str, Dict]]:
-        return dict(self._sys.get("firmwares", {}))
+    def get_firmware(self) -> Dict[str, Dict[str, Dict]]:
+        return dict(self._sys.get("firmware", {}))
 
     def get_power(self) -> Dict[str, Dict[str, Dict]]:
         return dict(self._sys.get("power", {}))
 
     def get_fans(self) -> Dict[str, Dict[str, Dict]]:
         return dict(self._sys.get("fans", {}))
+
+    def get_temperatures(self) -> Dict[str, Dict[str, Dict]]:
+        return dict(self._sys.get("temperatures", {}))
 
     def get_component_spec_overrides(self) -> Dict[str, Dict[str, Any]]:
         return {}
@@ -361,8 +388,11 @@ class BaseRedfishSystem(BaseSystem):
     def _update_fans(self) -> None:
         self._run_update("fans")
 
-    def _update_firmwares(self) -> None:
-        self._run_update("firmwares")
+    def _update_temperatures(self) -> None:
+        self._run_update("temperatures")
+
+    def _update_firmware(self) -> None:
+        self._run_update("firmware")
 
     def device_led_on(self, device: str) -> int:
         raise NotImplementedError()

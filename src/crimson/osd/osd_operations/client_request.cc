@@ -150,14 +150,6 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
   // enter_stage.
   ihref.enter_stage_sync(client_pp(pg).wait_pg_ready, *this);
 
-  if (!m->get_hobj().get_key().empty()) {
-    // There are no users of locator. It was used to ensure that multipart-upload
-    // parts would end up in the same PG so that they could be clone_range'd into
-    // the same object via librados, but that's not how multipart upload works
-    // anymore and we no longer support clone_range via librados.
-    co_await reply_op_error(pgref, -ENOTSUP);
-    co_return;
-  }
   if (pg.can_discard_op(*m)) {
     co_await interruptor::make_interruptible(
       shard_services->send_incremental_map(
@@ -321,7 +313,7 @@ ClientRequest::recover_missing_snaps(
     }
     return seastar::now();
   }).handle_error_interruptible(
-    crimson::ct_error::assert_all(fmt::format("{} {} error", *pg, FNAME).c_str())
+    crimson::ct_error::assert_all("{} {} error", std::cref(*pg), FNAME)
   );
   co_await std::move(resolve_oids);
 
@@ -632,7 +624,7 @@ bool ClientRequest::is_misdirected_replica_read(const PG& pg) const
       flags & CEPH_OSD_FLAG_BALANCE_READS ||
       flags & CEPH_OSD_FLAG_LOCALIZE_READS) {
     if (op_info.rwordered()) {
-      DEBUGDPP("{}: dropping - rwoedered with balanced/localize read {}", pg, *this);
+      DEBUGDPP("dropping - reordered with balanced/localize read {}", pg, *this);
       return true;
     }
     if (!op_info.may_read()) {

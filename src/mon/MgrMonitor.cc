@@ -20,6 +20,7 @@
 #include "messages/MMonCommand.h"
 
 #include "include/stringify.h"
+#include "include/util.h" // for dump_services()
 #include "mgr/MgrContext.h"
 #include "mgr/mgr_commands.h"
 #include "OSDMonitor.h"
@@ -28,6 +29,8 @@
 #include "Monitor.h"
 #include "Paxos.h"
 
+#include "common/debug.h"
+#include "common/errno.h"
 #include "common/TextTable.h"
 #include "include/stringify.h"
 
@@ -98,6 +101,7 @@ static const std::map<uint32_t, std::set<std::string>>& always_on_modules() {
     { CEPH_RELEASE_REEF, octopus_modules },
     { CEPH_RELEASE_SQUID, octopus_modules },
     { CEPH_RELEASE_TENTACLE, octopus_modules },
+    { CEPH_RELEASE_UMBRELLA, octopus_modules },
   };
   return always_on_modules_map;
 };
@@ -994,6 +998,14 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     f->dump_bool("available", map.get_available());
     f->dump_string("active_name", map.get_active_name());
     f->dump_unsigned("num_standby", map.get_num_standby());
+    f->open_array_section("standbys");
+    for (const auto& [gid, s] : map.standbys) {
+      f->open_object_section("standby_mgr");
+      f->dump_unsigned("gid", s.gid);
+      f->dump_string("name", s.name);
+      f->close_section();
+    }
+    f->close_section();
     f->close_section();
     f->flush(rdata);
   } else if (prefix == "mgr dump") {

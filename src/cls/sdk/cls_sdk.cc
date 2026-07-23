@@ -2,6 +2,7 @@
  * This is an example RADOS object class built using only the Ceph SDK interface.
  */
 #include "include/rados/objclass.h"
+#include "cls_sdk_ops.h"
 
 CLS_VER(1,0)
 CLS_NAME(sdk)
@@ -115,17 +116,13 @@ static int test_coverage_replay(cls_method_context_t hctx, ceph::buffer::list *i
   return 0;
 }
 
-CLS_INIT(sdk)
-{
+CLS_INIT(sdk) {
   CLS_LOG(0, "loading cls_sdk");
 
-  cls_register("sdk", &h_class);
+  using namespace cls::sdk;
+  cls_register(ClassId::name, &h_class);
+  ClassRegistrar<ClassId> cls(h_class);
 
-  cls_register_cxx_method(h_class, "test_coverage_write",
-      CLS_METHOD_RD|CLS_METHOD_WR,
-      test_coverage_write, &h_test_coverage_write);
-  
-  cls_register_cxx_method(h_class, "test_coverage_replay",
-      CLS_METHOD_RD|CLS_METHOD_WR,
-      test_coverage_replay, &h_test_coverage_replay);
+  cls.register_cxx_method(method::test_coverage_write,  test_coverage_write,  &h_test_coverage_write);
+  cls.register_cxx_method(method::test_coverage_replay, test_coverage_replay, &h_test_coverage_replay);
 }

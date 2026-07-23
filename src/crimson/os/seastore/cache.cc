@@ -33,6 +33,9 @@ Cache::Cache(
   ExtentPlacementManager &epm,
   store_index_t store_index)
   : epm(epm),
+    delta_based_overwrite_enabled(
+      crimson::common::get_conf<Option::size_t>(
+        "seastore_data_delta_based_overwrite") > 0),
     pinboard(create_extent_pinboard(
       crimson::common::get_conf<Option::size_t>(
        "seastore_cachepin_size_pershard")))
@@ -50,76 +53,50 @@ Cache::~Cache()
   ceph_assert(extents_index.empty());
 }
 
-// TODO: this method can probably be removed in the future
-Cache::retire_extent_ret Cache::retire_extent_addr(
-  Transaction &t, paddr_t paddr, extent_len_t length)
+CachedExtentRef Cache::retire_absent_extent_addr_by_type(
+  Transaction &t,
+  laddr_t laddr,
+  paddr_t addr,
+  extent_len_t length,
+  extent_types_t type,
+  extent_init_func_t &&extent_init_func)
 {
-  LOG_PREFIX(Cache::retire_extent_addr);
-  TRACET("retire {}~0x{:x}", t, paddr, length);
-
-  assert(paddr.is_real_location());
-
-  CachedExtentRef ext;
-  auto result = t.get_extent(paddr, &ext);
-  if (result == Transaction::get_extent_ret::PRESENT) {
-    DEBUGT("retire {}~0x{:x} on t -- {}",
-           t, paddr, length, *ext);
-    t.add_present_to_retired_set(ext);
-    return retire_extent_iertr::now();
-  } else if (result == Transaction::get_extent_ret::RETIRED) {
-    ERRORT("retire {}~0x{:x} failed, already retired -- {}",
-           t, paddr, length, *ext);
-    ceph_abort();
+  switch (type) {
+  case extent_types_t::ROOT_META:
+    return retire_absent_extent_addr<RootMetaBlock>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::ONODE_BLOCK_STAGED:
+    return retire_absent_extent_addr<onode::SeastoreNodeExtent>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::OMAP_INNER:
+    return retire_absent_extent_addr<omap_manager::OMapInnerNode>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::OMAP_LEAF:
+    return retire_absent_extent_addr<omap_manager::OMapLeafNode>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::COLL_BLOCK:
+    return retire_absent_extent_addr<collection_manager::CollectionNode>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::TEST_BLOCK_PHYSICAL:
+    return retire_absent_extent_addr<TestBlockPhysical>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::LOG_NODE:
+    return retire_absent_extent_addr<log_manager::LogNode>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::OBJECT_DATA_BLOCK:
+    return retire_absent_extent_addr<ObjectDataBlock>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::TEST_BLOCK:
+    return retire_absent_extent_addr<TestBlock>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::NONE: {
+    ceph_assert(0 == "NONE is an invalid extent type");
+    return CachedExtentRef();
   }
-
-  // any record-relative or delayed paddr must have been on the transaction
-  assert(paddr.is_absolute());
-
-  // absent from transaction
-  // retiring is not included by the cache hit metrics
-  ext = query_cache(paddr);
-  if (ext) {
-    DEBUGT("retire {}~0x{:x} in cache -- {}", t, paddr, length, *ext);
-  } else {
-    // add a new placeholder to Cache
-    ext = CachedExtent::make_cached_extent_ref<
-      RetiredExtentPlaceholder>(length);
-    ext->init(
-      CachedExtent::extent_state_t::CLEAN, paddr,
-      PLACEMENT_HINT_NULL, NULL_GENERATION, TRANS_ID_NULL);
-    DEBUGT("retire {}~0x{:x} as placeholder, add extent -- {}",
-           t, paddr, length, *ext);
-    add_extent(ext);
+  default:
+    ceph_assert(0 == "impossible");
+    return CachedExtentRef();
   }
-  t.add_absent_to_retired_set(ext);
-  return retire_extent_iertr::now();
-}
-
-CachedExtentRef Cache::retire_absent_extent_addr(
-  Transaction &t, laddr_t laddr, paddr_t paddr, extent_len_t length)
-{
-  assert(paddr.is_absolute());
-
-  CachedExtentRef ext;
-#ifndef NDEBUG
-  auto result = t.get_extent(paddr, &ext);
-  assert(result != Transaction::get_extent_ret::PRESENT
-    && result != Transaction::get_extent_ret::RETIRED);
-  assert(!query_cache(paddr));
-#endif
-  LOG_PREFIX(Cache::retire_absent_extent_addr);
-  // add a new placeholder to Cache
-  ext = CachedExtent::make_cached_extent_ref<
-    RetiredExtentPlaceholder>(length);
-  ext->init(
-    CachedExtent::extent_state_t::CLEAN, paddr,
-    PLACEMENT_HINT_NULL, NULL_GENERATION, TRANS_ID_NULL);
-  static_cast<RetiredExtentPlaceholder&>(*ext).set_laddr(laddr);
-  DEBUGT("retire {}~0x{:x} as placeholder, add extent -- {}",
-	 t, paddr, length, *ext);
-  add_extent(ext);
-  t.add_absent_to_retired_set(ext);
-  return ext;
 }
 
 void Cache::dump_contents()
@@ -170,7 +147,6 @@ void Cache::register_metrics(store_index_t store_index)
     {extent_types_t::ONODE_BLOCK_STAGED,  {sm::label_instance("ext", "ONODE_BLOCK_STAGED")}},
     {extent_types_t::COLL_BLOCK,          {sm::label_instance("ext", "COLL_BLOCK")}},
     {extent_types_t::OBJECT_DATA_BLOCK,   {sm::label_instance("ext", "OBJECT_DATA_BLOCK")}},
-    {extent_types_t::RETIRED_PLACEHOLDER, {sm::label_instance("ext", "RETIRED_PLACEHOLDER")}},
     {extent_types_t::ALLOC_INFO,      	  {sm::label_instance("ext", "ALLOC_INFO")}},
     {extent_types_t::JOURNAL_TAIL,        {sm::label_instance("ext", "JOURNAL_TAIL")}},
     {extent_types_t::TEST_BLOCK,          {sm::label_instance("ext", "TEST_BLOCK")}},
@@ -519,7 +495,7 @@ void Cache::register_metrics(store_index_t store_index)
   }
 
   /**
-   * Cached extents (including placeholders)
+   * Cached extents
    *
    * Dirty extents
    */
@@ -922,7 +898,7 @@ void Cache::remove_extent(
          ref->get_paddr().is_root());
   if (ref->is_stable_dirty()) {
     remove_from_dirty(ref, p_src);
-  } else if (!ref->is_placeholder()) {
+  } else {
     assert(ref->get_paddr().is_absolute());
     pinboard->remove(*ref);
   }
@@ -942,11 +918,13 @@ void Cache::commit_retire_extent(
   invalidate_extent(t, *ref);
 }
 
-void Cache::commit_replace_extent(
+void Cache::stage_visibility_handoff(
     Transaction& t,
     CachedExtentRef next,
     CachedExtentRef prev)
 {
+  LOG_PREFIX(Cache::stage_visibility_handoff);
+  SUBDEBUGT(seastore_t, "", t);
   assert(next->get_paddr() == prev->get_paddr() ||
          // prev is being rewritten by a trim_dirty
          // or cleaner transaction
@@ -954,8 +932,39 @@ void Cache::commit_replace_extent(
   assert(next->get_paddr().is_absolute() || next->get_paddr().is_root());
   assert(next->version == prev->version + 1);
   const auto t_src = t.get_src();
-  bool t_rewrite = is_rewrite_transaction(t_src);
-  if (booting && !t_rewrite) {
+  ceph_assert(should_use_no_conflict_publish(t, next->get_type()));
+
+  bool was_stable_dirty = prev->is_stable_dirty();
+  if (!was_stable_dirty) {
+    pinboard->remove(*prev);
+  }
+
+  // Block prev/prior into an io-wait state so anyone waiting on
+  // it will not proceed while we are preparing/publishing the new view.
+  prev->set_io_wait(CachedExtent::extent_state_t::DIRTY, true);
+  ceph_assert(next->committer);
+  ceph_assert(prev->committer);
+  ceph_assert(next->committer == prev->committer);
+
+  // commit_state() is called afer commit, a CLEAN prior may still have NULL_TIME.
+  prev->set_modify_time(next->get_modify_time());
+
+  if (!was_stable_dirty) {
+    add_to_dirty(prev, &t_src);
+  }
+}
+
+void Cache::commit_replace_extent(
+    Transaction& t,
+    CachedExtentRef next,
+    CachedExtentRef prev)
+{
+  assert(next->get_paddr() == prev->get_paddr());
+  assert(next->get_paddr().is_absolute() || next->get_paddr().is_root());
+  assert(next->version == prev->version + 1);
+  const auto t_src = t.get_src();
+
+  if (booting) {
     extents_index.replace(*next, *prev);
   }
 
@@ -965,23 +974,6 @@ void Cache::commit_replace_extent(
     // add the new dirty root to front
     remove_from_dirty(prev, nullptr/* exclude root */);
     add_to_dirty(next, nullptr/* exclude root */);
-  } else if (t_rewrite) {
-    bool was_stable_dirty = prev->is_stable_dirty();
-    if (!was_stable_dirty) {
-      pinboard->remove(*prev);
-    }
-    prev->set_io_wait(CachedExtent::extent_state_t::DIRTY, true);
-    ceph_assert(next->committer);
-    ceph_assert(prev->committer);
-    ceph_assert(next->committer == prev->committer);
-    auto &committer = *next->committer;
-    committer.commit_state();
-    if (is_lba_backref_node(next->get_type())) {
-      committer.sync_checksum();
-    }
-    if (!was_stable_dirty) {
-      add_to_dirty(prev, &t_src);
-    }
   } else if (prev->is_stable_dirty()) {
     replace_dirty(next, prev, t_src);
   } else {
@@ -989,9 +981,8 @@ void Cache::commit_replace_extent(
     add_to_dirty(next, &t_src);
   }
 
-  if (!t_rewrite || is_root_type(prev->get_type())) {
-    invalidate_extent(t, *prev);
-  }
+  invalidate_extent(t, *prev);
+
 }
 
 void Cache::invalidate_extent(
@@ -1006,6 +997,7 @@ void Cache::invalidate_extent(
 
   LOG_PREFIX(Cache::invalidate_extent);
   bool do_conflict_log = true;
+  std::vector<Transaction*> invalidated_trans;
   for (auto &&i: extent.read_transactions) {
     if (!i.t->conflicted) {
       if (do_conflict_log) {
@@ -1015,7 +1007,14 @@ void Cache::invalidate_extent(
       assert(!i.t->is_weak());
       account_conflict(t.get_src(), i.t->get_src());
       mark_transaction_conflicted(*i.t, extent);
+      invalidated_trans.emplace_back(i.t);
     }
+  }
+  for (auto trans : invalidated_trans) {
+    trans->clear_read_set();
+    trans->invalidate_clear_write_set();
+    trans->retired_set.clear();
+    trans->views.clear();
   }
   extent.set_invalid(t);
 }
@@ -1027,6 +1026,9 @@ void Cache::mark_transaction_conflicted(
   SUBTRACET(seastore_t, "", t);
   assert(!t.conflicted);
   t.conflicted = true;
+  // count is only *sampled* for the user-MUTATE do_transaction path,
+  // where the transaction is reused across retries
+  ++t.num_replays;
 
   auto& efforts = get_by_src(stats.invalidated_efforts_by_src,
                              t.get_src());
@@ -1160,6 +1162,44 @@ void Cache::check_full_extent_integrity(
   }
 }
 
+CachedExtentRef Cache::alloc_remapped_extent_by_type(
+  Transaction &t,
+  extent_types_t type,
+  laddr_t remap_laddr,
+  paddr_t remap_paddr,
+  extent_len_t remap_offset,
+  extent_len_t remap_length,
+  const std::optional<ceph::bufferptr> &original_bptr)
+{
+  ceph_assert(is_logical_type(type));
+  switch (type) {
+  case extent_types_t::ROOT_META:
+    return alloc_remapped_extent<RootMetaBlock>(
+      t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
+  case extent_types_t::OMAP_INNER:
+    return alloc_remapped_extent<omap_manager::OMapInnerNode>(
+      t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
+  case extent_types_t::OMAP_LEAF:
+    return alloc_remapped_extent<omap_manager::OMapLeafNode>(
+      t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
+  case extent_types_t::ONODE_BLOCK_STAGED:
+    return alloc_remapped_extent<onode::SeastoreNodeExtent>(
+      t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
+  case extent_types_t::COLL_BLOCK:
+    return alloc_remapped_extent<collection_manager::CollectionNode>(
+      t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
+  case extent_types_t::OBJECT_DATA_BLOCK:
+    return alloc_remapped_extent<ObjectDataBlock>(
+      t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
+  case extent_types_t::TEST_BLOCK:
+    return alloc_remapped_extent<TestBlock>(
+      t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
+  default:
+    ceph_abort("invalid extent type");
+    return CachedExtentRef();
+  }
+}
+
 CachedExtentRef Cache::alloc_new_non_data_extent_by_type(
   Transaction &t,        ///< [in, out] current transaction
   extent_types_t type,   ///< [in] type tag
@@ -1196,9 +1236,6 @@ CachedExtentRef Cache::alloc_new_non_data_extent_by_type(
   case extent_types_t::COLL_BLOCK:
     return alloc_new_non_data_extent<collection_manager::CollectionNode>(
       t, length, hint, gen);
-  case extent_types_t::RETIRED_PLACEHOLDER:
-    ceph_assert(0 == "impossible");
-    return CachedExtentRef();
   case extent_types_t::TEST_BLOCK_PHYSICAL:
     return alloc_new_non_data_extent<TestBlockPhysical>(t, length, hint, gen);
   case extent_types_t::LOG_NODE:
@@ -1325,7 +1362,6 @@ record_t Cache::prepare_record(
   auto trans_src = t.get_src();
   assert(!t.is_weak());
   assert(trans_src != Transaction::src_t::READ);
-  assert(t.read_set.size() + t.num_replace_placeholder == t.read_items.size());
 
   auto& efforts = get_by_src(stats.committed_efforts_by_src,
                              trans_src);
@@ -1356,10 +1392,8 @@ record_t Cache::prepare_record(
       DEBUGT("invalid mutated extent -- {}", t, *i);
       continue;
     }
-    if (is_rewrite_transaction(t.get_src()) &&
-        !is_root_type(i->get_type())) {
+    if (should_use_no_conflict_publish(t, i->get_type())) {
       i->new_committer(t);
-      i->committer->block_trans(t);
     }
     assert(i->is_exist_mutation_pending() ||
 	   i->prior_instance);
@@ -1473,17 +1507,26 @@ record_t Cache::prepare_record(
    * - prepare_commit()
    */
   for (auto &i: t.mutated_block_list) {
-    if (i->is_valid()) {
-      if (i->is_mutation_pending()) {
-        i->set_io_wait(CachedExtent::extent_state_t::DIRTY,
-                       is_rewrite_transaction(t.get_src()));
-        commit_replace_extent(t, i, i->prior_instance);
-      } // else, is_exist_mutation_pending():
-        // - it doesn't have prior_instance to replace
-        // - and add_extent() atomically below
-        // - set_io_wait(DIRTY) atomically below
+    if (!i->is_valid()) {
+      continue;
     }
-  }
+
+    if (i->is_mutation_pending()) {
+      const bool use_no_conflict =
+        should_use_no_conflict_publish(t, i->get_type());
+      // Block the new extent readers until the journal commit completes.
+      i->set_io_wait(CachedExtent::extent_state_t::DIRTY, use_no_conflict);
+
+      if (use_no_conflict) {
+        stage_visibility_handoff(t, i, i->prior_instance);
+      } else {
+        commit_replace_extent(t, i, i->prior_instance);
+      }
+      // else, is_exist_mutation_pending():
+      // - it doesn't have prior_instance to replace
+      // - handled by add_extent() atomically below
+      }
+    }
 
   // Transaction is now a go, set up in-memory cache state
   // invalidate now invalid blocks
@@ -1499,7 +1542,10 @@ record_t Cache::prepare_record(
     retire_stat.increment(extent->get_length());
     DEBUGT("retired and remove extent {}~0x{:x} -- {}",
 	   t, extent->get_paddr(), extent->get_length(), *extent);
-    if (is_rewrite_transaction(t.get_src())) {
+    if (should_use_no_conflict_publish(t, extent->get_type())) {
+      // avoid extent invalidation on retirement
+      // only adjust dirty bookkeeping
+      // we would invalidate them in complete_commit final stage
       assert(extent->is_stable());
       if (extent->is_stable_dirty()) {
         remove_from_dirty(extent, &trans_src);
@@ -1512,8 +1558,7 @@ record_t Cache::prepare_record(
     }
 
     // Note: commit extents and backref allocations in the same place
-    if (is_backref_mapped_type(extent->get_type()) ||
-	is_retired_placeholder_type(extent->get_type())) {
+    if (is_backref_mapped_type(extent->get_type())) {
       DEBUGT("backref_entry free {}~0x{:x}",
 	     t,
 	     extent->get_paddr(),
@@ -1620,24 +1665,18 @@ record_t Cache::prepare_record(
 	  i->get_type()));
     }
     i->set_io_wait(CachedExtent::extent_state_t::CLEAN,
-                   is_rewrite_transaction(t.get_src()));
+                   should_use_no_conflict_publish(t, i->get_type()));
     // Note, paddr is known until complete_commit(),
     // so add_extent() later.
-    if (is_rewrite_transaction(t.get_src())) {
+    if (should_use_no_conflict_publish(t, i->get_type())) {
       assert(i->get_prior_instance());
       assert(!i->committer);
       assert(!i->get_prior_instance()->committer);
       i->new_committer(t);
       assert(i->committer);
-      auto &committer = *i->committer;
-      // this must have been a rewriten extent
-      committer.commit_state();
-      if (is_lba_backref_node(i->get_type())) {
-        committer.sync_checksum();
-      }
-      committer.block_trans(t);
       i->get_prior_instance()->set_io_wait(
-        CachedExtent::extent_state_t::CLEAN, true);
+        CachedExtent::extent_state_t::CLEAN,
+        should_use_no_conflict_publish(t, i->get_type()));
     }
   }
 
@@ -1662,28 +1701,20 @@ record_t Cache::prepare_record(
 	  i->get_length(),
 	  i->get_type()));
     }
-    if (is_rewrite_transaction(t.get_src())) {
+    if (should_use_no_conflict_publish(t, i->get_type())) {
       assert(i->get_prior_instance());
       assert(!i->committer);
       assert(!i->get_prior_instance()->committer);
       i->new_committer(t);
       assert(i->committer);
       i->get_prior_instance()->committer = i->committer;
-      auto &committer = *i->committer;
-      // this must have been a rewriten extent
-      committer.commit_state();
-      if (is_lba_backref_node(i->get_type())) {
-        committer.sync_checksum();
-      }
-      committer.block_trans(t);
       i->get_prior_instance()->set_io_wait(
         CachedExtent::extent_state_t::CLEAN, true);
     }
     i->set_io_wait(CachedExtent::extent_state_t::CLEAN,
-                   is_rewrite_transaction(t.get_src()));
+                   should_use_no_conflict_publish(t, i->get_type()));
     // Note, paddr is (can be) known until complete_commit(),
     // so add_extent() later.
-
   }
 
   for (auto &i: t.inplace_ool_block_list) {
@@ -1730,7 +1761,7 @@ record_t Cache::prepare_record(
     } else {
       assert(i->is_exist_mutation_pending());
       i->set_io_wait(CachedExtent::extent_state_t::DIRTY,
-                     is_rewrite_transaction(t.get_src()));
+                     should_use_no_conflict_publish(t, i->get_type()));
     }
 
     // exist mutation pending extents must be in t.mutated_block_list
@@ -1964,8 +1995,9 @@ void Cache::complete_commit(
             t, final_block_start, start_seq);
   for (auto &i: t.retired_set) {
     auto &extent = i.extent;
-    auto trans_src = t.get_src();
-    if (is_rewrite_transaction(trans_src)) {
+    if (should_use_no_conflict_publish(t, extent->get_type())) {
+     // retired extents should remain valid through complete_commit().
+     // We only free space post-commit *AFTER* handoff.
       assert(extent->is_valid());
     }
     epm.mark_space_free(extent->get_paddr(), extent->get_length());
@@ -1993,7 +2025,7 @@ void Cache::complete_commit(
     i->pending_for_transaction = TRANS_ID_NULL;
     i->on_initial_write();
     const auto t_src = t.get_src();
-    if (is_rewrite_transaction(t_src)) {
+    if (should_use_no_conflict_publish(t, i->get_type())) {
       ceph_assert(i->committer);
       auto &committer = *i->committer;
       auto &prior = *i->get_prior_instance();
@@ -2002,13 +2034,17 @@ void Cache::complete_commit(
              "existing, inline={} -- {}, prior={}",
              t, is_inline, *i, prior);
       prior.pending_for_transaction = TRANS_ID_NULL;
+      committer.commit_state();
+      committer.sync_checksum();
       committer.commit_and_share_paddr();
       if (is_lba_backref_node(i->get_type())) {
         committer.commit_data();
       }
+      if (i->is_logical()) {
+        committer.maybe_sync_copied_lba_key();
+      }
       touch_extent_fully(prior, &t_src, t.get_cache_hint());
       committer.sync_version();
-      committer.unblock_trans(t);
       prior.complete_io();
       i->committer.reset();
       prior.committer.reset();
@@ -2071,7 +2107,7 @@ void Cache::complete_commit(
     if (i->version == 1 || is_root_type(i->get_type())) {
       i->dirty_from = start_seq;
       DEBUGT("commit extent done, become dirty -- {}", t, *i);
-      if (is_rewrite_transaction(t.get_src()) && !is_root_type(i->get_type())) {
+      if (should_use_no_conflict_publish(t, i->get_type())) {
         auto &prior = *i->get_prior_instance();
         prior.dirty_from = start_seq;
         ceph_assert(i->committer);
@@ -2082,13 +2118,13 @@ void Cache::complete_commit(
       DEBUGT("commit extent done -- {}", t, *i);
     }
     i->on_delta_write(final_block_start);
-    if (is_rewrite_transaction(t.get_src()) &&
-        !is_root_type(i->get_type())) {
+    if (should_use_no_conflict_publish(t, i->get_type())) {
       TRACET("committing paddr to prior for {}, prior={}",
         t, *i, *i->prior_instance);
       assert(i->committer);
       auto &committer = *i->committer;
-      committer.unblock_trans(t);
+      committer.commit_state();
+      committer.sync_checksum();
       auto &prior = *i->prior_instance;
       prior.pending_for_transaction = TRANS_ID_NULL;
       ceph_assert(prior.is_valid());
@@ -2126,14 +2162,15 @@ void Cache::complete_commit(
     commit_backref_entries(std::move(backref_entries), start_seq);
   }
 
-  if (is_rewrite_transaction(t.get_src())) {
-    t.for_each_finalized_fresh_block([&t](const CachedExtentRef &i) {
+  t.for_each_finalized_fresh_block([&t](const CachedExtentRef &i) {
+    if (should_use_no_conflict_publish(t, i->get_type())) {
       i->set_invalid(t);
-    });
-    for (auto &i: t.mutated_block_list) {
-      if (i->get_type() != extent_types_t::ROOT) {
+    }
+  });
+
+  for (auto &i: t.mutated_block_list) {
+    if (should_use_no_conflict_publish(t, i->get_type())) {
         i->set_invalid(t);
-      }
     }
   }
 }
@@ -2169,9 +2206,9 @@ Cache::mkfs_iertr::future<> Cache::mkfs(Transaction &t)
     return mkfs_iertr::now();
   }).handle_error_interruptible(
     mkfs_iertr::pass_further{},
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid error in Cache::mkfs"
-    }
+    )
   );
 }
 
@@ -2317,9 +2354,6 @@ Cache::replay_delta(
       // replay is not included by the cache hit metrics
       auto ret = query_cache(addr);
       if (ret) {
-        // no retired-placeholder should be exist yet because no transaction
-        // has been created.
-        assert(!is_retired_placeholder_type(ret->get_type()));
         return ret->wait_io().then([ret] {
           return ret;
         });
@@ -2348,9 +2382,9 @@ Cache::replay_delta(
 	delta.paddr)
     ).handle_error(
       replay_delta_ertr::pass_further{},
-      crimson::ct_error::assert_all{
+      crimson::ct_error::assert_all(
 	"Invalid error in Cache::replay_delta"
-      }
+      )
     );
     return extent_fut.safe_then([=, this, &delta](auto extent) {
       if (!extent) {
@@ -2560,9 +2594,6 @@ Cache::_get_absent_extent_by_type(
   case extent_types_t::OBJECT_DATA_BLOCK:
     ret = CachedExtent::make_cached_extent_ref<ObjectDataBlock>(length);
     break;
-  case extent_types_t::RETIRED_PLACEHOLDER:
-    ceph_assert(0 == "impossible");
-    break;
   case extent_types_t::TEST_BLOCK:
     ret = CachedExtent::make_cached_extent_ref<TestBlock>(length);
     break;
@@ -2680,9 +2711,6 @@ Cache::do_get_caching_extent_by_type(
     ).safe_then([](auto extent) {
       return CachedExtentRef(extent.detach(), false /* add_ref */);
     });
-  case extent_types_t::RETIRED_PLACEHOLDER:
-    ceph_assert(0 == "impossible");
-    return get_extent_ertr::make_ready_future<CachedExtentRef>();
   case extent_types_t::TEST_BLOCK:
     return do_get_caching_extent<TestBlock>(
       offset, length, std::move(extent_init_func), std::move(on_cache), p_src

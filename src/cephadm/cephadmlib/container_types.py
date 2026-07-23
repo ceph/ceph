@@ -254,6 +254,7 @@ class CephContainer(BasicContainer):
         self.remove = True
         self.ipc = 'host'
         self.network = 'host' if self.host_network else ''
+        self.success_exit_status: Optional[List[int]] = None
 
     @classmethod
     def for_daemon(

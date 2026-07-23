@@ -99,6 +99,7 @@ void PyModuleRegistry::init()
   ceph_assert(pMainThreadState != nullptr);
 
   std::list<std::string> failed_modules;
+  thread_monitor->start_monitoring();
 
   const std::string module_path = g_conf().get_val<std::string>("mgr_module_path");
   auto module_names = probe_modules(module_path);
@@ -118,7 +119,6 @@ void PyModuleRegistry::init()
       failed_modules.push_back(module_name);
       // Don't drop out here, load the other modules
     }
-
     // Record the module even if the load failed, so that we can
     // report its loading error
     modules[module_name] = std::move(mod);
@@ -236,7 +236,7 @@ void PyModuleRegistry::active_start(
       kv_store, mon_provides_kv_sub,
       ds, cs, mc,
       clog_, audit_clog_, objecter_, f, server,
-      *this));
+      *this, thread_monitor.get()));
 
   for (const auto &i : modules) {
     // Anything we're skipping because of !can_run will be flagged
@@ -429,6 +429,8 @@ void PyModuleRegistry::get_health_checks(health_check_map_t *checks)
         //   checks (to avoid outputting two health messages about a
         //   module that said can_run=false but we tried running it anyway)
         failed_modules[module->get_name()] = module->get_error_string();
+      } else if ((active_modules->is_pending(module->get_name()))) {
+        failed_modules[module->get_name()] = "Module failed to initialize.";
       }
     }
 
@@ -507,4 +509,8 @@ void PyModuleRegistry::handle_config_notify()
   if (active_modules) {
     active_modules->config_notify();
   }
+}
+
+void PyModuleRegistry::check_all_modules_started(Context *modules_start_complete) {
+  active_modules->check_all_modules_started(modules_start_complete);
 }

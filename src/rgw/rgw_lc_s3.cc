@@ -255,6 +255,8 @@ void LCRule_S3::decode_xml(XMLObj *obj)
     if (!RGWXMLDecoder::decode_xml("Prefix", prefix, obj)) {
       throw RGWXMLDecoder::err("missing Prefix in Filter");
     }
+  } else {
+    filter_s3.set_flag(LCFlagType::Filter);
   }
   filter = (LCFilter)filter_s3;
 

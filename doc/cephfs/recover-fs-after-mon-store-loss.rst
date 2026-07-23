@@ -1,10 +1,10 @@
 Recovering the file system after catastrophic Monitor store loss
 ================================================================
 
-During rare occasions, all the monitor stores of a cluster may get corrupted
+During rare occasions, all the Monitor stores of a cluster may get corrupted
 or lost. To recover the cluster in such a scenario, you need to rebuild the
-monitor stores using the OSDs (see :ref:`mon-store-recovery-using-osds`),
-and get back the pools intact (active+clean state). However, the rebuilt monitor
+Monitor stores using the OSDs (see :ref:`mon-store-recovery-using-osds`),
+and get back the pools intact (``active+clean`` state). However, the rebuilt Monitor
 stores don't restore the file system maps ("FSMap"). Additional steps are required
 to bring back the file system. The steps to recover a multiple active MDS file
 system or multiple file systems are yet to be identified. Currently, only the steps

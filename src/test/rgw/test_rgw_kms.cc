@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "gtest/gtest.h"
+#include <common/random_string.h>
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 #include "common/ceph_context.h"
@@ -315,4 +316,15 @@ TEST_F(TestSSEKMS, test_transit_backend_empty_response)
 
   ASSERT_EQ(res, -EINVAL);
   ASSERT_EQ(actual_key, from_base64(""));
+}
+
+TEST_F(TestSSEKMS, TestingBackendDifferentKeyselSameKeyIdDoNotCollide) {
+  map<string, bufferlist> attrs;
+  const NoDoutPrefix no_dpp(cct, 1);
+  cct->_conf->rgw_crypt_s3_kms_encryption_keys =
+      "foo=IyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyM=";
+  std::string out_a, out_b;
+  ASSERT_EQ(0, get_actual_key_from_conf(&no_dpp, "foo", gen_rand_alphanumeric(cct, AES_256_KEYSIZE), out_a));
+  ASSERT_EQ(0, get_actual_key_from_conf(&no_dpp, "foo", gen_rand_alphanumeric(cct, AES_256_KEYSIZE), out_b));
+  ASSERT_NE(out_a, out_b);
 }

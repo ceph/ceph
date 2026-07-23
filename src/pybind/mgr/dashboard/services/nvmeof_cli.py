@@ -14,7 +14,8 @@ from mgr_module import CLICheckNonemptyFileInput, HandleCommandResult
 from prettytable import PrettyTable
 
 from ..cli import DBCLICommand
-from ..model.nvmeof import CliFieldTransformer, CliFlags, CliHeader
+from ..exceptions import DashboardException
+from ..model.nvmeof import CliEmptyMessage, CliFieldTransformer, CliFlags, CliHeader
 from ..rest_client import RequestException
 from .nvmeof_conf import ManagedByOrchestratorException, \
     NvmeofGatewayAlreadyExists, NvmeofGatewaysConfig
@@ -138,9 +139,39 @@ def convert_from_bytes(num_in_bytes):
     return f"{size_str}{units[unit_index]}"
 
 
+def resolve_nvmeof_server_address(
+    *,
+    server_address: Optional[str] = None,
+    traddr: Optional[str] = None,
+    require: bool = False,
+) -> Optional[str]:
+    sa = (server_address or "").strip() or None
+    ta = (traddr or "").strip() or None
+
+    if sa and ta:
+        raise DashboardException(
+            msg="Pass either 'server_address' or deprecated 'traddr', not both.",
+            code="server_address_and_traddr_mutually_exclusive",
+            http_status_code=400,
+            component="nvmeof",
+        )
+
+    resolved = sa or ta
+
+    if require and not resolved:
+        raise DashboardException(
+            msg="Missing required gateway address: 'server_address' (or deprecated 'traddr').",
+            code="missing_server_address",
+            http_status_code=400,
+            component="nvmeof",
+        )
+
+    return resolved
+
+
 class OutputFormatter(ABC):
     @abstractmethod
-    def format_output(self, data, model):
+    def format_output(self, data, model, template_context: Optional[Dict] = None):
         """Format the given data for output."""
         raise NotImplementedError()
 
@@ -173,6 +204,8 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
 
     def _get_list_text_output(self, data):
         columns = list(dict.fromkeys([key for obj in data for key in obj.keys()]))
+        if not columns:
+            return ''
         table = self._create_table(columns)
         for d in data:
             table.add_row(self._get_row(columns, d))
@@ -180,6 +213,8 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
 
     def _get_object_text_output(self, data):
         columns = [k for k in data.keys() if k not in ["status", "error_message"]]
+        if not columns:
+            return ''
         table = self._create_table(columns)
         table.add_row(self._get_row(columns, data))
         return table.get_string()
@@ -214,7 +249,8 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
     # pylint: disable=too-many-branches, too-many-nested-blocks
     def process_dict(self, input_dict: dict,
                      nt_class: Type[NamedTuple],
-                     is_top_level: bool) -> Union[Dict, str, List]:
+                     is_top_level: bool,
+                     template_context: Optional[Dict] = None) -> Union[Dict, str, List]:
         result: Dict = {}
         if not input_dict:
             return result
@@ -231,6 +267,7 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
             annotations = []
             output_name = field
             skip = False
+            empty_message_template = None
 
             if origin is Annotated:
                 actual_type, *annotations = get_args(type_hint)
@@ -240,20 +277,38 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
                         break
                     if isinstance(annotation, CliHeader):
                         output_name = annotation.label
+                    if isinstance(annotation, CliEmptyMessage):
+                        empty_message_template = annotation.template
+
+                for annotation in annotations:
                     if isinstance(annotation, CliFieldTransformer):
                         value = annotation.transform(value)
                     if is_top_level and annotation == CliFlags.EXCLUSIVE_LIST:
                         assert get_origin(actual_type) == list
                         assert len(get_args(actual_type)) == 1
+                        if not value and empty_message_template:
+                            format_dict = {**input_dict}
+                            if template_context:
+                                format_dict.update(template_context)
+                            try:
+                                return empty_message_template.format(**format_dict)
+                            except KeyError as e:
+                                logger.warning(
+                                    "Missing template variable %s in empty message template: %s",
+                                    e, empty_message_template
+                                )
+                                # Fall back to returning the template as-is if formatting fails
+                                return empty_message_template
                         return [self.process_dict(item, get_args(actual_type)[0],
-                                                  False) for item in value]
+                                                  False, template_context) for item in value]
                     if is_top_level and annotation == CliFlags.EXCLUSIVE_RESULT:
                         return f"Failure: {input_dict.get('error_message')}" if bool(
                             input_dict[field]) else "Success"
                     if annotation == CliFlags.SIZE:
                         value = convert_from_bytes(int(input_dict[field]))
                     elif annotation == CliFlags.PROMOTE_INTERNAL_FIELDS:
-                        object_to_promote = self.process_dict(value, actual_type, False)
+                        object_to_promote = self.process_dict(
+                            value, actual_type, False, template_context)
                         if isinstance(object_to_promote, dict):
                             for field_name, value in object_to_promote.items():
                                 result[field_name] = value
@@ -273,14 +328,14 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
 
         return result
 
-    def _convert_to_text_output(self, data, model):
-        data = self.process_dict(data, model, True)
+    def _convert_to_text_output(self, data, model, template_context: Optional[Dict] = None):
+        data = self.process_dict(data, model, True, template_context)
         if isinstance(data, str):
             return data
         return self._get_text_output(data)
 
-    def format_output(self, data, model):
-        return self._convert_to_text_output(data, model)
+    def format_output(self, data, model, template_context: Optional[Dict] = None):
+        return self._convert_to_text_output(data, model, template_context)
 
 
 class NvmeofCLICommand(DBCLICommand):
@@ -456,7 +511,14 @@ class NvmeofCLICommand(DBCLICommand):
                     logger.warning("Formatting of success message failed for %s",
                                    self.prefix, exc_info=True)
 
-                out = message if message else self._output_formatter.format_output(ret, self._model)
+                # Pass args_map as template_context for variable substitution in empty messages
+                # This ensures parameters like 'nqn' are available without polluting the data
+                out = message if message else self._output_formatter.format_output(
+                    ret, self._model, template_context=args_map
+                )
+                wrn_msg = ret.get('error_message', '') if isinstance(ret, dict) else ''
+                if wrn_msg:
+                    out += f"\nWarning: {wrn_msg}"
 
             elif out_format == 'json':
                 out = json.dumps(ret, indent=4)

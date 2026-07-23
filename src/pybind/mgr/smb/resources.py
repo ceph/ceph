@@ -19,6 +19,7 @@ from ceph.smb.constants import (
     BURST_MULT_MIN,
     BYTES_LIMIT_MAX,
     IOPS_LIMIT_MAX,
+    KEYBRIDGE,
     REMOTE_CONTROL,
     REMOTE_CONTROL_LOCAL,
 )
@@ -29,9 +30,12 @@ from . import resourcelib, validation
 from .enums import (
     AuthMode,
     CephFSStorageProvider,
+    ClientSupportMode,
     HostAccess,
     Intent,
     JoinSourceType,
+    KeyBridgePeerPolicy,
+    KeyBridgeScopeType,
     LoginAccess,
     LoginCategory,
     PasswordFilter,
@@ -131,6 +135,88 @@ class BigString(str):
 yaml.SafeDumper.add_representer(BigString, BigString.yaml_representer)
 
 
+class KeyBridgeScopeIdentity:
+    """Represent a KeyBridge scope's name in a structured manner.
+    Helps parse and validate the name of a keybridge scope without encoding a
+    more complex type in the JSON/YAML.
+
+    NOTE: Does not need to be serialized by resourcelib.
+    """
+
+    _AUTO_SUB = '00'
+
+    def __init__(
+        self,
+        scope_type: KeyBridgeScopeType,
+        subname: str = '',
+        *,
+        autosub: bool = False,
+    ):
+        if scope_type.unique() and subname:
+            raise ValueError(
+                f'invalid scope name {scope_type}.{subname},'
+                f' must be {scope_type}'
+            )
+        if subname:
+            # is the subname valid?
+            try:
+                validation.check_id(subname)
+            except ValueError as err:
+                raise ValueError(f'invalid scope name: {err}')
+        if autosub and not scope_type.unique():
+            # used to transform unqualified non-unique to qualified
+            subname = self._AUTO_SUB
+        elif subname and subname.startswith(self._AUTO_SUB):
+            # reserved for auto-naming and other future uses
+            raise ValueError(f'invalid scope name: reserved id: {subname}')
+        self._scope_type = scope_type
+        self._subname = subname
+
+    @property
+    def scope_type(self) -> KeyBridgeScopeType:
+        return self._scope_type
+
+    def __str__(self) -> str:
+        if self._subname:
+            return f'{self._scope_type}.{self._subname}'
+        return str(self._scope_type)
+
+    def qualified(self) -> Self:
+        """Return a qualified version of this scope identity if the scope is
+        not unique.
+        """
+        if self._scope_type.unique() or self._subname:
+            return self
+        return self.__class__(self._scope_type, autosub=True)
+
+    @classmethod
+    def from_name(cls, name: str) -> Self:
+        """Parse a scope name string into a scope identity.
+
+        A scope name can be unqualified, consisting only of the scope type, like
+        "mem" or "kmip" or qualified where a sub-name follows a dot (.)
+        following the type, like "kmip.foo". This allows the common case of
+        just one "kmip" scope but allow for >1 if needed (eg. "kmip.1" &
+        "kmip.2".
+
+        Subnames starting with "00" are reserved for automatic naming and/or
+        future uses.
+        """
+        typename, subname = name, ''
+        if '.' in name:
+            typename, subname = name.split('.', 1)
+            if not subname:
+                raise ValueError(
+                    'invalid scope name: no value after delimiter'
+                )
+        try:
+            _type = KeyBridgeScopeType(typename)
+        except ValueError:
+            scopes = sorted(st.value for st in KeyBridgeScopeType)
+            raise ValueError(f'invalid scope type: must be one of {scopes}')
+        return cls(_type, subname)
+
+
 class _RBase:
     # mypy doesn't currently (well?) support class decorators adding methods
     # so we use a base class to add this method to all our resource classes.
@@ -155,6 +241,23 @@ class QoSConfig(_RBase):
 
 
 @resourcelib.component()
+class FSCryptKeySelector(_RBase):
+    """Parameters used to define where a fscrypt key will be acquired."""
+
+    # name of the keybridge scope to use
+    scope: str
+    # name of the entity (the key) to fetch
+    name: str
+
+    def scope_identity(self) -> KeyBridgeScopeIdentity:
+        return KeyBridgeScopeIdentity.from_name(self.scope)
+
+    def validate(self) -> None:
+        self.scope_identity()  # raises value error if scope invalid
+        validation.check_fscrypt_key_name(self.name)
+
+
+@resourcelib.component()
 class CephFSStorage(_RBase):
     """Description of where in a CephFS file system a share is located."""
 
@@ -164,6 +267,9 @@ class CephFSStorage(_RBase):
     subvolume: str = ''
     provider: CephFSStorageProvider = CephFSStorageProvider.SAMBA_VFS
     qos: Optional[QoSConfig] = None
+    # fscrypt_key is used to identify and obtain fscrypt key material
+    # from the keybridge.
+    fscrypt_key: Optional[FSCryptKeySelector] = None
 
     def __post_init__(self) -> None:
         # Allow a shortcut form of <subvolgroup>/<subvol> in the subvolume
@@ -295,6 +401,32 @@ class LoginAccessEntry(_RBase):
 
 
 @resourcelib.component()
+class RGWStorage(_RBase):
+    """Description of where in an RGW bucket a share is located."""
+
+    bucket: str
+    user_id: Optional[str] = None
+    credential_ref: Optional[str] = None
+
+    def validate(self) -> None:
+        if not self.bucket:
+            raise ValueError('bucket requires a value')
+
+    def convert(self, operation: ConversionOp) -> Self:
+        """Convert password fields based on the operation."""
+        return self.__class__(
+            bucket=self.bucket,
+            user_id=self.user_id,
+            credential_ref=self.credential_ref,
+        )
+
+    @resourcelib.customize
+    def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
+        rc.user_id.quiet = True
+        return rc
+
+
+@resourcelib.component()
 class HostAccessEntry(_RBase):
     access: HostAccess
     address: str = ''
@@ -355,6 +487,7 @@ class Share(_RBase):
     comment: Optional[str] = None
     max_connections: Optional[int] = None
     cephfs: Optional[CephFSStorage] = None
+    rgw: Optional[RGWStorage] = None
     custom_smb_share_options: Optional[Dict[str, str]] = None
     login_control: Optional[List[LoginAccessEntry]] = None
     restrict_access: bool = False
@@ -375,9 +508,14 @@ class Share(_RBase):
         validation.check_share_name(self.name)
         if self.intent != Intent.PRESENT:
             raise ValueError('Share must have present intent')
-        # currently only cephfs is supported
-        if self.cephfs is None:
-            raise ValueError('a cephfs configuration is required')
+        # Ensure exactly one storage backend is specified
+        storage_count = len([b for b in (self.cephfs, self.rgw) if b])
+        if storage_count == 0:
+            raise ValueError(
+                'a storage configuration is required (cephfs or rgw)'
+            )
+        if storage_count > 1:
+            raise ValueError('only one storage backend can be specified')
         if self.max_connections is not None and self.max_connections < 0:
             raise ValueError(
                 'max_connections must be 0 or a non-negative integer'
@@ -394,6 +532,25 @@ class Share(_RBase):
     def checked_cephfs(self) -> CephFSStorage:
         """Return the .cephfs storage object or raise ValueError if None."""
         return checked(self.cephfs)
+
+    def convert(self, operation: ConversionOp) -> Self:
+        """Convert password fields in nested storage components."""
+        return self.__class__(
+            cluster_id=self.cluster_id,
+            share_id=self.share_id,
+            intent=self.intent,
+            name=self.name,
+            readonly=self.readonly,
+            browseable=self.browseable,
+            comment=self.comment,
+            max_connections=self.max_connections,
+            cephfs=self.cephfs.convert(operation) if self.cephfs else None,
+            rgw=self.rgw.convert(operation) if self.rgw else None,
+            custom_smb_share_options=self.custom_smb_share_options,
+            login_control=self.login_control,
+            restrict_access=self.restrict_access,
+            hosts_access=self.hosts_access,
+        )
 
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
@@ -678,6 +835,96 @@ class RemoteControl(_RBase):
         return out
 
 
+@resourcelib.component()
+class KeyBridgeScope(_RBase):
+    """Define and configure scopes for the doc/mgr/smb.rstkeybridge service.
+    Each scope is to be named via <type>[.<subname>] and specifies zero or
+    more configuration parameters depending on the scope type.
+    """
+
+    # name of the scope (can be unique, like "mem" or "kmip" or qualified
+    # like "kmip.1")
+    name: str
+    # KMIP fields
+    kmip_hosts: Optional[List[str]] = None
+    kmip_port: Optional[int] = None
+    kmip_cert: Optional[TLSSource] = None
+    kmip_key: Optional[TLSSource] = None
+    kmip_ca_cert: Optional[TLSSource] = None
+
+    def scope_identity(self) -> KeyBridgeScopeIdentity:
+        return KeyBridgeScopeIdentity.from_name(self.name)
+
+    def validate(self) -> None:
+        kbsi = self.scope_identity()  # raises value error if scope invalid
+        vfn = {
+            KeyBridgeScopeType.KMIP: self.validate_kmip,
+            KeyBridgeScopeType.MEM: self.validate_mem,
+        }
+        vfn[kbsi.scope_type]()
+
+    def validate_kmip(self) -> None:
+        if not self.kmip_hosts:
+            raise ValueError('at least one kmip hostname is required')
+        if not (self.kmip_port or all(':' in h for h in self.kmip_hosts)):
+            raise ValueError(
+                'a kmip default port is required unless all'
+                ' hosts include a port'
+            )
+        # TODO: should tls credentials be always required?
+        if not (self.kmip_cert and self.kmip_key and self.kmip_ca_cert):
+            raise ValueError('kmip requires a cert, a key, and a ca cert')
+
+    def validate_mem(self) -> None:
+        if (
+            self.kmip_hosts
+            or self.kmip_port
+            or self.kmip_cert
+            or self.kmip_key
+            or self.kmip_ca_cert
+        ):
+            raise ValueError('mem scope does not support kmip parameters')
+
+
+@resourcelib.component()
+class KeyBridge(_RBase):
+    """Configure and enable/disable the keybridge service for this cluster.
+
+    The keybridge can be explicitly enabled or disabled. It will automatically
+    be enabled if scopes are defined and is not explicitly enabled (or
+    disabled).  The peer_policy parameter can be used by devs/testers to relax
+    some of the normal access restrictions.
+    """
+
+    # enabled can be set to explicitly toggle the keybridge server
+    enabled: Optional[bool] = None
+    scopes: Optional[List[KeyBridgeScope]] = None
+    # peer_policy allows one to change/relax the keybridge server's peer
+    # verification policy. generally this is only something a developer
+    # should change
+    peer_policy: Optional[KeyBridgePeerPolicy] = None
+
+    @property
+    def is_enabled(self) -> bool:
+        if self.enabled is not None:
+            return self.enabled
+        return bool(self.scopes)
+
+    @property
+    def use_peer_policy(self) -> KeyBridgePeerPolicy:
+        if self.peer_policy is None:
+            return KeyBridgePeerPolicy.RESTRICTED
+        return self.peer_policy
+
+    def validate(self) -> None:
+        if self.enabled and not self.scopes:
+            raise ValueError(
+                'an enabled KeyBridge requires at least one scope'
+            )
+        for scope in self.scopes or []:
+            scope.validate()
+
+
 @resourcelib.resource('ceph.smb.cluster')
 class Cluster(_RBase):
     """Represents a cluster (instance) that is / should be present."""
@@ -706,6 +953,10 @@ class Cluster(_RBase):
     # debug_level can be used to change the smb services
     # default debugging levels
     debug_level: Optional[dict[str, str]] = None
+    # configure the keybridge (KMS integration) for this cluster
+    keybridge: Optional[KeyBridge] = None
+    # client support mode for client-specific optimizations (macOS, etc.)
+    client_compat: Optional[ClientSupportMode] = None
 
     def validate(self) -> None:
         if not self.cluster_id:
@@ -755,6 +1006,24 @@ class Cluster(_RBase):
         return self.clustering if self.clustering else SMBClustering.DEFAULT
 
     @property
+    def effective_client_compat(self) -> ClientSupportMode:
+        """Return the effective client compat mode.
+
+        Returns ClientSupportMode.DEFAULT if not explicitly set, ensuring
+        client-specific features are disabled by default.
+        """
+        return (
+            self.client_compat
+            if self.client_compat
+            else ClientSupportMode.DEFAULT
+        )
+
+    @property
+    def is_macos_compatibility_enabled(self) -> bool:
+        """Return true if macOS-specific SMB features should be enabled."""
+        return self.effective_client_compat == ClientSupportMode.MACOS
+
+    @property
     def remote_control_is_enabled(self) -> bool:
         """Return true if a remote control service should be enabled for this
         cluster.
@@ -762,6 +1031,24 @@ class Cluster(_RBase):
         if not self.remote_control:
             return False
         return self.remote_control.is_enabled
+
+    @property
+    def keybridge_is_enabled(self) -> bool:
+        """Return true if a keybridge service should be enabled for this
+        cluster.
+        """
+        if not self.keybridge:
+            return False
+        return self.keybridge.is_enabled
+
+    def is_feature_enabled(self, feature: str) -> bool:
+        """Return true if the specified SMB feature is enabled for this
+        cluster.
+        """
+        return {
+            REMOTE_CONTROL: self.remote_control_is_enabled,
+            KEYBRIDGE: self.keybridge_is_enabled,
+        }[feature]
 
     def is_clustered(self) -> bool:
         """Return true if smbd instance should use (CTDB) clustering."""
@@ -900,6 +1187,52 @@ class TLSCredential(_RBase):
         return self
 
 
+@resourcelib.resource('ceph.smb.rgw.credential')
+class RGWCredential(_RBase):
+    """Contains RGW user credentials that can be referenced by multiple
+    SMB shares backed by RGW buckets.
+    """
+
+    rgw_credential_id: str
+    user_id: str
+    access_key_id: str
+    secret_access_key: str
+    intent: Intent = Intent.PRESENT
+    linked_to_cluster: Optional[str] = None
+
+    def validate(self) -> None:
+        if not self.rgw_credential_id:
+            raise ValueError('rgw_credential_id requires a value')
+        validation.check_id(self.rgw_credential_id)
+        if self.linked_to_cluster is not None:
+            validation.check_id(self.linked_to_cluster)
+        if self.intent is Intent.PRESENT:
+            if not self.user_id:
+                raise ValueError('user_id must be specified')
+            if not self.access_key_id:
+                raise ValueError('access_key_id must be specified')
+            if not self.secret_access_key:
+                raise ValueError('secret_access_key must be specified')
+
+    @resourcelib.customize
+    def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
+        rc.linked_to_cluster.quiet = True
+        rc.on_construction_error(InvalidResourceError.wrap)
+        return rc
+
+    def convert(self, operation: ConversionOp) -> Self:
+        return self.__class__(
+            rgw_credential_id=self.rgw_credential_id,
+            intent=self.intent,
+            user_id=self.user_id,
+            access_key_id=_password_convert(self.access_key_id, operation),
+            secret_access_key=_password_convert(
+                self.secret_access_key, operation
+            ),
+            linked_to_cluster=self.linked_to_cluster,
+        )
+
+
 @resourcelib.component()
 class CephUserKey(_RBase):
     """A Ceph User Key name and value pair."""
@@ -916,7 +1249,18 @@ class ExternalCephClusterValues(_RBase):
 
     fsid: str
     mon_host: str
-    cephfs_user: CephUserKey
+    cephfs_user: Optional[CephUserKey] = None
+    rgw_user: Optional[CephUserKey] = None
+
+    def __post_init__(self) -> None:
+        self.validate()
+
+    def validate(self) -> None:
+        """Validate that at least one user (cephfs_user or rgw_user) is configured."""
+        if not self.cephfs_user and not self.rgw_user:
+            raise ValueError(
+                'At least one of cephfs_user or rgw_user must be configured'
+            )
 
 
 @resourcelib.resource('ceph.smb.ext.cluster')
@@ -944,6 +1288,7 @@ SMBResource = Union[
     Share,
     UsersAndGroups,
     TLSCredential,
+    RGWCredential,
     ExternalCephCluster,
 ]
 

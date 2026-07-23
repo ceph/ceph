@@ -169,6 +169,7 @@ def task(ctx, config):
           objects: 20 # <number of objects>
           pgnum: 12
           crimson_objectstore_tool: true # use crimson-objectstore-tool instead of ceph-objectstore-tool
+          gc_before_restart: true # run crimson-objectstore-tool --op gc before restarting OSDs
     """
 
     if config is None:
@@ -702,6 +703,21 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
     ERRORS += IMP_ERRORS
 
     if EXP_ERRORS == 0 and RM_ERRORS == 0 and IMP_ERRORS == 0:
+        if CRIMSON and config.get('gc_before_restart', False):
+            # Run GC on each OSD's seastore to reclaim segments consumed
+            # by repeated tool mount/unmount cycles before restarting.
+            gc_timeout = config.get('gc_timeout', 120)
+            log.info("Running GC on each OSD store (timeout={})...".format(
+                gc_timeout))
+            for remote in osds.remotes.keys():
+                for role in osds.remotes[remote]:
+                    if not role.startswith("osd."):
+                        continue
+                    osdid = int(role.split('.')[1])
+                    cmd = ("timeout {timeout} " + prefix + "--op gc").format(
+                        timeout=gc_timeout, id=osdid)
+                    remote.sh(cmd, wait=True)
+
         log.info("Restarting OSDs....")
         # They are still look to be up because of setting nodown
         for osd in manager.get_osd_status()['up']:

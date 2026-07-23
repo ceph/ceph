@@ -49,6 +49,8 @@ export class RgwZone {
   notif_pool: string;
   endpoints: string;
   tier_type: string;
+  sync_from: string;
+  sync_from_all: boolean;
 }
 
 export class SystemKey {

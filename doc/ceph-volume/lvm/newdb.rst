@@ -27,30 +27,30 @@ following steps:
 
    .. prompt:: bash #
 
-      lvextend -l ${size} ${lv}/${db} ${ssd_dev}
+      lvextend -l <size> <lv>/<db> <ssd_dev>
 
 #. Stop the OSD:
 
    .. prompt:: bash #
 
-      cephadm unit --fsid $cid --name osd.${osd} stop
+      cephadm unit --fsid <cid> --name osd.<osd> stop
 
 #. Run the ``bluefs-bdev-expand`` command:
 
    .. prompt:: bash #
 
-      cephadm shell --fsid $cid --name osd.${osd} -- ceph-bluestore-tool bluefs-bdev-expand --path /var/lib/ceph/osd/ceph-${osd}
+      cephadm shell --fsid <cid> --name osd.<osd> -- ceph-bluestore-tool bluefs-bdev-expand --path /var/lib/ceph/osd/ceph-<osd>
 
 #. Run the ``bluefs-bdev-migrate`` command:
 
    .. prompt:: bash #
 
-      cephadm shell --fsid $cid --name osd.${osd} -- ceph-bluestore-tool bluefs-bdev-migrate --path /var/lib/ceph/osd/ceph-${osd} --devs-source /var/lib/ceph/osd/ceph-${osd}/block --dev-target /var/lib/ceph/osd/ceph-${osd}/block.db 
+      cephadm shell --fsid <cid> --name osd.<osd> -- ceph-bluestore-tool bluefs-bdev-migrate --path /var/lib/ceph/osd/ceph-<osd> --devs-source /var/lib/ceph/osd/ceph-<osd>/block --dev-target /var/lib/ceph/osd/ceph-<osd>/block.db
 
 #. Restart the OSD:
 
    .. prompt:: bash #
 
-      cephadm unit --fsid $cid --name osd.${osd} start
+      cephadm unit --fsid <cid> --name osd.<osd> start
 
-.. note:: *The above procedure was developed by Chris Dunlop on the [ceph-users] mailing list, and can be seen in its original context here:* `[ceph-users] Re: Fixing BlueFS spillover (pacific 16.2.14) <https://lists.ceph.io/hyperkitty/list/ceph-users@ceph.io/message/POPUFSZGXR3P2RPYPJ4WJ4HGHZ3QESF6/>`_
+.. note:: *The above procedure was developed by Chris Dunlop on the [ceph-users] mailing list, and can be seen in its original context here:* `[ceph-users] Re: Fixing BlueFS spillover (pacific 16.2.14) <https://lists.ceph.io/hyperkitty/list/ceph-users@ceph.io/message/POPUFSZGXR3P2RPYPJ4WJ4HGHZ3QESF6/>`_.

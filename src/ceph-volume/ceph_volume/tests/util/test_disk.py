@@ -1,5 +1,8 @@
+import errno
 import pytest
 import stat
+from typing import Any, Callable, ClassVar, Optional
+
 from ceph_volume.util import disk
 from unittest.mock import patch, Mock, MagicMock, mock_open
 from pyfakefs.fake_filesystem_unittest import TestCase
@@ -71,6 +74,75 @@ class TestLsblkParser(object):
         output = 'NAME="sdaa5" PARTLABEL RM="0" SIZE="10M" RO="0" TYPE="part" MOUNTPOINT=""'
         result = disk._lsblk_parser(output)
         assert result['SIZE'] == '10M'
+
+
+class TestBackingDeviceIsRotational(object):
+    """Upper dm nodes lie in sysfs queue/rotational; we walk slaves/ to the leaf."""
+
+    @patch('ceph_volume.util.disk.os.path.realpath')
+    def test_sysfs_dm_stack_to_nvme(self, m_realpath, fake_filesystem):
+        m_realpath.return_value = '/dev/dm-5'
+        fake_filesystem.create_dir('/sys/block/dm-5/slaves/dm-4')
+        fake_filesystem.create_dir('/sys/block/dm-4/slaves/nvme0n1')
+        fake_filesystem.create_file('/sys/block/nvme0n1/queue/rotational', contents='0')
+        assert disk.BackingDeviceRotation.is_rotational('/dev/ceph-foo/osd-block-bar') is False
+
+    @patch('os.path.realpath')
+    def test_plain_disk_reads_leaf_rotational(self, m_realpath, fake_filesystem):
+        m_realpath.return_value = '/dev/nvme0n1'
+        fake_filesystem.create_file('/sys/block/nvme0n1/queue/rotational', contents='0')
+        assert disk.BackingDeviceRotation.is_rotational('/dev/nvme0n1') is False
+
+    @patch('ceph_volume.util.disk.get_partitions', return_value={'nvme0n1p1': 'nvme0n1'})
+    @patch('os.path.realpath')
+    def test_partition_uses_parent_block_rotational(
+            self, m_realpath, m_get_partitions, fake_filesystem):
+        m_realpath.return_value = '/dev/nvme0n1p1'
+        fake_filesystem.create_file('/sys/block/nvme0n1/queue/rotational', contents='0')
+        assert disk.BackingDeviceRotation.is_rotational('/dev/nvme0n1p1') is False
+
+    @patch('os.path.realpath')
+    def test_missing_sys_block_defaults_rotational(self, m_realpath, fake_filesystem):
+        m_realpath.return_value = '/dev/dm-99'
+        assert disk.BackingDeviceRotation.is_rotational('/dev/mapper/x') is True
+
+    @patch('ceph_volume.util.disk.get_partitions', return_value={'sda1': 'sda'})
+    @patch('os.path.realpath')
+    def test_dm_slave_partition_resolves_to_parent(
+            self, m_realpath, m_get_partitions, fake_filesystem):
+        m_realpath.return_value = '/dev/dm-0'
+        fake_filesystem.create_dir('/sys/block/dm-0/slaves/sda1')
+        fake_filesystem.create_file('/sys/block/sda/queue/rotational', contents='0')
+        assert disk.BackingDeviceRotation.is_rotational('/dev/dm-0') is False
+
+    @patch('os.path.realpath')
+    def test_multi_slave_any_rotational(self, m_realpath, fake_filesystem):
+        m_realpath.return_value = '/dev/dm-0'
+        fake_filesystem.create_dir('/sys/block/dm-0/slaves/sda')
+        fake_filesystem.create_dir('/sys/block/dm-0/slaves/sdb')
+        fake_filesystem.create_file('/sys/block/sda/queue/rotational', contents='0')
+        fake_filesystem.create_file('/sys/block/sdb/queue/rotational', contents='1')
+        assert disk.BackingDeviceRotation.is_rotational('/dev/dm-0') is True
+
+    @patch('os.listdir', side_effect=OSError(errno.EACCES, 'Permission denied'))
+    @patch('os.path.realpath')
+    def test_listdir_slaves_oserror_defaults_rotational(
+            self, m_realpath, m_listdir, fake_filesystem):
+        m_realpath.return_value = '/dev/dm-0'
+        fake_filesystem.create_dir('/sys/block/dm-0/slaves')
+        fake_filesystem.create_file('/sys/block/dm-0/queue/rotational', contents='0')
+        assert disk.BackingDeviceRotation.is_rotational('/dev/dm-0') is True
+
+    @patch('ceph_volume.util.disk.BackingDeviceRotation._kname_for_sysfs_walk', side_effect=lambda kname: kname)
+    @patch('ceph_volume.util.disk.os.path.exists', return_value=True)
+    @patch('ceph_volume.util.disk.UdevData')
+    def test_leaf_block_uses_udev_hints(
+            self, m_udev, _m_exists, _m_kname_for_sysfs_walk, fake_filesystem):
+        m_udev.return_value.environment = {'ID_SSD': '1'}
+        assert disk.BackingDeviceRotation._leaf_block_is_rotational('sda') is False
+
+        m_udev.return_value.environment = {'ID_ATA_ROTATION_RATE_RPM': '7200'}
+        assert disk.BackingDeviceRotation._leaf_block_is_rotational('sdb') is True
 
 
 class TestBlkidParser(object):
@@ -356,15 +428,142 @@ class TestGetDevices(object):
         fake_filesystem.create_file('/sys/block/dm-0/size', contents='204800')
         fake_filesystem.create_file('/sys/block/dm-0/queue/rotational', contents='1')
         fake_filesystem.create_file('/sys/block/dm-0/queue/hw_sector_size', contents='512')
+        fake_filesystem.create_file(lv_path, st_mode=(stat.S_IFBLK | 0o600))
         with patch("ceph_volume.util.disk.UdevData") as MockUdevData:
             mock_instance = MagicMock()
-            mock_instance.slashed_path = lv_path
+            mock_instance.is_internal_lv = False
+            mock_instance.preferred_block_path = lv_path
             mock_instance.environment = {}
             MockUdevData.return_value = mock_instance
             result = disk.get_devices()
         assert lv_path in result
         assert result[lv_path]['type'] == 'lvm'
         assert result[lv_path]['human_readable_size'] == '100.00 MB'
+
+    def test_internal_raid_lv_is_excluded(self, patched_get_block_devs_sysfs, fake_filesystem):
+        mapper_path = '/dev/mapper/debian-var_rmeta_0'
+        dm_path = '/dev/dm-5'
+        patched_get_block_devs_sysfs.return_value = [
+            [dm_path, mapper_path, 'lvm', dm_path]
+        ]
+        fake_filesystem.create_dir('/sys/block/dm-5/slaves')
+        fake_filesystem.create_dir('/sys/block/dm-5/queue')
+        fake_filesystem.create_file('/sys/block/dm-5/size', contents='8192')
+        fake_filesystem.create_file('/sys/block/dm-5/queue/rotational', contents='1')
+        fake_filesystem.create_file('/sys/block/dm-5/queue/hw_sector_size', contents='512')
+        with patch("ceph_volume.util.disk.UdevData") as MockUdevData:
+            mock_instance = MagicMock()
+            mock_instance.is_internal_lv = True
+            MockUdevData.return_value = mock_instance
+            result = disk.get_devices()
+        assert mapper_path not in result
+        assert not result
+
+    def test_lvm_device_without_accessible_node_is_excluded(
+        self, patched_get_block_devs_sysfs, fake_filesystem
+    ):
+        mapper_path = '/dev/mapper/debian-var_rmeta_0'
+        dm_path = '/dev/dm-5'
+        patched_get_block_devs_sysfs.return_value = [
+            [dm_path, mapper_path, 'lvm', dm_path]
+        ]
+        fake_filesystem.create_dir('/sys/block/dm-5/slaves')
+        fake_filesystem.create_dir('/sys/block/dm-5/queue')
+        fake_filesystem.create_file('/sys/block/dm-5/size', contents='8192')
+        fake_filesystem.create_file('/sys/block/dm-5/queue/rotational', contents='1')
+        fake_filesystem.create_file('/sys/block/dm-5/queue/hw_sector_size', contents='512')
+        with patch("ceph_volume.util.disk.UdevData") as MockUdevData:
+            mock_instance = MagicMock()
+            mock_instance.is_internal_lv = False
+            mock_instance.preferred_block_path = '/dev/debian/var_rmeta_0'
+            MockUdevData.return_value = mock_instance
+            result = disk.get_devices()
+        assert not result
+
+    def test_nvme_reads_vendor_model_rev_under_controller(
+        self, patched_get_block_devs_sysfs, fake_filesystem
+    ):
+        nvme_path = '/dev/nvme0n1'
+        patched_get_block_devs_sysfs.return_value = [
+            [nvme_path, nvme_path, 'disk', nvme_path]
+        ]
+        fake_filesystem.create_dir('/sys/block/nvme0n1/slaves')
+        fake_filesystem.create_dir('/sys/block/nvme0n1/queue')
+        fake_filesystem.create_file(
+            '/sys/block/nvme0n1/device/nvme0/device/vendor',
+            contents='Samsung',
+        )
+        fake_filesystem.create_file(
+            '/sys/block/nvme0n1/device/nvme0/device/model',
+            contents='SSD 990 PRO',
+        )
+        fake_filesystem.create_file(
+            '/sys/block/nvme0n1/device/nvme0/device/rev',
+            contents='1B2Q',
+        )
+        with patch('ceph_volume.util.disk.UdevData') as MockUdevData:
+            mock_instance = MagicMock()
+            mock_instance.is_lvm = False
+            MockUdevData.return_value = mock_instance
+            result = disk.get_devices()
+        assert result[nvme_path]['vendor'] == 'Samsung'
+        assert result[nvme_path]['model'] == 'SSD 990 PRO'
+        assert result[nvme_path]['rev'] == '1B2Q'
+
+
+class TestGetBlockDevsSysfs(object):
+    def test_optical_device_is_skipped(self, fake_filesystem):
+        # sr0 is a CDROM (IPMI/BMC virtual media),not a usable disk.
+        fake_filesystem.create_file('/dev/sr0')
+        fake_filesystem.create_dir('/sys/dev/block')
+        fake_filesystem.create_dir('/sys/block/sr0/holders')
+        fake_filesystem.create_dir('/sys/block/sr0/device')
+        fake_filesystem.create_file('/sys/block/sr0/device/type', contents='5\n')
+
+        assert disk.get_block_devs_sysfs(device='sr0') == []
+
+    def test_ram_device_is_skipped(self, fake_filesystem):
+        fake_filesystem.create_file('/dev/ram0')
+        fake_filesystem.create_dir('/sys/dev/block')
+        fake_filesystem.create_dir('/sys/block/ram0/holders')
+
+        assert disk.get_block_devs_sysfs(device='ram0') == []
+
+    def test_ram_device_partitions_are_skipped(self, fake_filesystem):
+        fake_filesystem.create_file('/dev/ram0')
+        fake_filesystem.create_dir('/sys/dev/block')
+        fake_filesystem.create_dir('/sys/block/ram0/holders')
+
+        # If ram0 is skipped, skip its partition ram0p1 too.
+        with patch('ceph_volume.util.disk.get_partitions', MagicMock(return_value={"ram0p1": "ram0"})):
+            assert disk.get_block_devs_sysfs(device='ram0') == []
+
+    def test_ram_devices_are_skipped_in_full_scan(self, fake_filesystem):
+        # Common inventory path: scan /sys/block and include partitions.
+        fake_filesystem.create_dir('/sys/dev/block')
+
+        fake_filesystem.create_file('/dev/ram0')
+        fake_filesystem.create_dir('/sys/block/ram0/holders')
+
+        fake_filesystem.create_file('/dev/sda')
+        fake_filesystem.create_dir('/sys/block/sda/holders')
+
+        with patch('ceph_volume.util.disk.get_partitions', MagicMock(return_value={"ram0p1": "ram0"})):
+            result = disk.get_block_devs_sysfs()
+
+        paths = [row[0] for row in result]
+        assert '/dev/sda' in paths
+        assert '/dev/ram0' not in paths
+        assert '/dev/ram0p1' not in paths
+
+    def test_regular_device_is_not_skipped(self, fake_filesystem):
+        # normal disk should still be reported.
+        fake_filesystem.create_file('/dev/sda')
+        fake_filesystem.create_dir('/sys/dev/block')
+        fake_filesystem.create_dir('/sys/block/sda/holders')
+
+        result = disk.get_block_devs_sysfs(device='sda')
+        assert result == [['/dev/sda', '/dev/sda', 'disk', '/dev/sda']]
 
 
 class TestSizeCalculations(object):
@@ -592,6 +791,91 @@ class TestHasBlueStoreLabel(object):
         fake_filesystem.create_dir(device_path)
         assert not disk.has_bluestore_label(device_path)
 
+    def test_bluestore_label_at_replica_offset(self):
+        class _FakeBlockDev:
+            def __init__(self, label_offset):
+                self._label_offset = label_offset
+                self._pos = 0
+
+            def seek(self, offset, whence=0):
+                if whence != 0:
+                    raise NotImplementedError
+                self._pos = offset
+                return offset
+
+            def read(self, n):
+                buf_start = self._pos
+                self._pos += n
+                sig = disk.BLUESTORE_BDEV_LABEL_SIGNATURE
+                if buf_start == self._label_offset:
+                    return sig[:n] + (b'\x00' * max(0, n - len(sig)))
+                return b'\x00' * n
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return None
+
+        for off in disk.BLUESTORE_BDEV_LABEL_OFFSETS[1:3]:
+            with patch('builtins.open', lambda *a, **k: _FakeBlockDev(off)):
+                assert disk.has_bluestore_label('/dev/fake'), off
+
+    def test_bluestore_label_non_seekable_returns_false(self):
+        class _NonSeekable:
+            def seek(self, offset, whence=0):
+                raise OSError(errno.EINVAL, 'Invalid argument')
+
+            def read(self, n):
+                return b'\x00' * n
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return None
+
+        with patch('builtins.open', lambda *a, **k: _NonSeekable()):
+            assert not disk.has_bluestore_label('/dev/fake')
+
+    def test_bluestore_label_non_seekable_fallback_read_matches(self):
+        class _NonSeekableWithLabelAtStart:
+            def seek(self, offset, whence=0):
+                raise OSError(errno.EINVAL, 'Invalid argument')
+
+            def read(self, n):
+                return disk.BLUESTORE_BDEV_LABEL_SIGNATURE[:n] + (
+                    b'\x00' * max(0, n - len(disk.BLUESTORE_BDEV_LABEL_SIGNATURE))
+                )
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return None
+
+        with patch('builtins.open', lambda *a, **k: _NonSeekableWithLabelAtStart()):
+            assert disk.has_bluestore_label('/dev/fake')
+
+    def test_bluestore_label_io_error_propagates(self):
+        class _EIOOnSeek:
+            def seek(self, offset, whence=0):
+                raise OSError(errno.EIO, 'Input/output error')
+
+            def read(self, n):
+                return b'\x00' * n
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return None
+
+        with patch('builtins.open', lambda *a, **k: _EIOOnSeek()):
+            with pytest.raises(OSError) as excinfo:
+                disk.has_bluestore_label('/dev/fake')
+            assert excinfo.value.errno == errno.EIO
+
 
 class TestBlockSysFs(TestCase):
     def setUp(self) -> None:
@@ -676,7 +960,29 @@ class TestBlockSysFs(TestCase):
         assert b.active_mappers()['dm-1']['uuid'] == 'abcdef'
 
 
+class _StatWithStRdev:
+    __slots__ = ('_st', 'st_rdev')
+
+    def __init__(self, st: Any, rdev: int = 0) -> None:
+        object.__setattr__(self, '_st', st)
+        object.__setattr__(self, 'st_rdev', rdev)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._st, name)
+
+
+def _udev_data_patched_os_stat(path: str, *args: Any, **kwargs: Any) -> Any:
+    if TestUdevData._pyfakefs_os_stat is None:
+        raise RuntimeError('TestUdevData.setUp must assign _pyfakefs_os_stat')
+    st = TestUdevData._pyfakefs_os_stat(path, *args, **kwargs)
+    if not hasattr(st, 'st_rdev'):
+        return _StatWithStRdev(st, 0)
+    return st
+
+
 class TestUdevData(TestCase):
+    _pyfakefs_os_stat: ClassVar[Optional[Callable[..., Any]]] = None
+
     def setUp(self) -> None:
         udev_data_lv_device: str = """
 S:disk/by-id/dm-uuid-LVM-1f1RaxWlzQ61Sbc7oCIHRMdh0M8zRTSnU03ekuStqWuiA6eEDmwoGg3cWfFtE2li
@@ -719,13 +1025,20 @@ V:1"""
         self.fs.create_file('/run/udev/data/b999:0', create_missing_dirs=True, contents=udev_data_bare_device)
         self.fs.create_file('/run/udev/data/b998:1', create_missing_dirs=True, contents=udev_data_lv_device)
         self.fs.create_file('/run/udev/data/b997:2', create_missing_dirs=True, contents="")
+        TestUdevData._pyfakefs_os_stat = disk.os.stat
+
+    def tearDown(self) -> None:
+        try:
+            super().tearDown()
+        finally:
+            TestUdevData._pyfakefs_os_stat = None
 
     def test_device_not_found(self) -> None:
         self.fs.remove(self.fake_device)
         with pytest.raises(RuntimeError):
             disk.UdevData(self.fake_device)
 
-    @patch('ceph_volume.util.disk.os.stat', MagicMock())
+    @patch('ceph_volume.util.disk.os.stat', _udev_data_patched_os_stat)
     @patch('ceph_volume.util.disk.os.minor', Mock(return_value=0))
     @patch('ceph_volume.util.disk.os.major', Mock(return_value=999))
     def test_no_data(self) -> None:
@@ -733,56 +1046,140 @@ V:1"""
         with pytest.raises(RuntimeError):
             disk.UdevData(self.fake_device)
 
-    @patch('ceph_volume.util.disk.os.stat', MagicMock())
+    @patch('ceph_volume.util.disk.os.stat', _udev_data_patched_os_stat)
     @patch('ceph_volume.util.disk.os.minor', Mock(return_value=2))
     @patch('ceph_volume.util.disk.os.major', Mock(return_value=997))
     def test_empty_data(self) -> None:
         # no exception should be raised when a /run/udev/data/* file is empty
         _ = disk.UdevData(self.fake_device)
 
-    @patch('ceph_volume.util.disk.os.stat', MagicMock())
+    @patch('ceph_volume.util.disk.os.stat', _udev_data_patched_os_stat)
     @patch('ceph_volume.util.disk.os.minor', Mock(return_value=0))
     @patch('ceph_volume.util.disk.os.major', Mock(return_value=999))
     def test_is_dm_false(self) -> None:
         assert not disk.UdevData(self.fake_device).is_dm
 
-    @patch('ceph_volume.util.disk.os.stat', MagicMock())
+    @patch('ceph_volume.util.disk.os.stat', _udev_data_patched_os_stat)
     @patch('ceph_volume.util.disk.os.minor', Mock(return_value=1))
     @patch('ceph_volume.util.disk.os.major', Mock(return_value=998))
     def test_is_dm_true(self) -> None:
         assert disk.UdevData(self.fake_device).is_dm
 
-    @patch('ceph_volume.util.disk.os.stat', MagicMock())
+    @patch('ceph_volume.util.disk.os.stat', _udev_data_patched_os_stat)
     @patch('ceph_volume.util.disk.os.minor', Mock(return_value=1))
     @patch('ceph_volume.util.disk.os.major', Mock(return_value=998))
     def test_is_lvm_true(self) -> None:
-        assert disk.UdevData(self.fake_device).is_dm
+        assert disk.UdevData(self.fake_device).is_lvm
 
-    @patch('ceph_volume.util.disk.os.stat', MagicMock())
+    @patch('ceph_volume.util.disk.os.stat', _udev_data_patched_os_stat)
     @patch('ceph_volume.util.disk.os.minor', Mock(return_value=0))
     @patch('ceph_volume.util.disk.os.major', Mock(return_value=999))
     def test_is_lvm_false(self) -> None:
-        assert not disk.UdevData(self.fake_device).is_dm
+        assert not disk.UdevData(self.fake_device).is_lvm
 
-    @patch('ceph_volume.util.disk.os.stat', MagicMock())
+    @patch('ceph_volume.util.disk.os.stat', _udev_data_patched_os_stat)
     @patch('ceph_volume.util.disk.os.minor', Mock(return_value=1))
     @patch('ceph_volume.util.disk.os.major', Mock(return_value=998))
     def test_slashed_path_with_lvm(self) -> None:
         assert disk.UdevData(self.fake_device).slashed_path == '/dev/fake_vg1/fake-lv1'
 
-    @patch('ceph_volume.util.disk.os.stat', MagicMock())
+    @patch('ceph_volume.util.disk.os.stat', _udev_data_patched_os_stat)
     @patch('ceph_volume.util.disk.os.minor', Mock(return_value=1))
     @patch('ceph_volume.util.disk.os.major', Mock(return_value=998))
     def test_dashed_path_with_lvm(self) -> None:
         assert disk.UdevData(self.fake_device).dashed_path == '/dev/mapper/fake_vg1-fake-lv1'
 
-    @patch('ceph_volume.util.disk.os.stat', MagicMock())
+    @patch('ceph_volume.util.disk.os.stat', _udev_data_patched_os_stat)
+    @patch('ceph_volume.util.disk.os.minor', Mock(return_value=1))
+    @patch('ceph_volume.util.disk.os.major', Mock(return_value=998))
+    def test_is_internal_lv_true_for_raid_metadata(self) -> None:
+        udev = disk.UdevData(self.fake_device)
+        udev.environment['DM_LV_NAME'] = 'var_rmeta_0'
+        assert udev.is_internal_lv
+
+    @patch('ceph_volume.util.disk.os.stat', _udev_data_patched_os_stat)
+    @patch('ceph_volume.util.disk.os.minor', Mock(return_value=1))
+    @patch('ceph_volume.util.disk.os.major', Mock(return_value=998))
+    def test_is_internal_lv_true_for_raid_image(self) -> None:
+        udev = disk.UdevData(self.fake_device)
+        udev.environment['DM_LV_NAME'] = 'var_rimage_1'
+        assert udev.is_internal_lv
+
+    @patch('ceph_volume.util.disk.os.stat', _udev_data_patched_os_stat)
+    @patch('ceph_volume.util.disk.os.minor', Mock(return_value=1))
+    @patch('ceph_volume.util.disk.os.major', Mock(return_value=998))
+    def test_is_internal_lv_true_for_layered_lv(self) -> None:
+        udev = disk.UdevData(self.fake_device)
+        udev.environment['DM_LV_LAYER'] = 'var'
+        assert udev.is_internal_lv
+
+    @patch('ceph_volume.util.disk.os.stat', _udev_data_patched_os_stat)
+    @patch('ceph_volume.util.disk.os.minor', Mock(return_value=1))
+    @patch('ceph_volume.util.disk.os.major', Mock(return_value=998))
+    def test_is_internal_lv_false_for_public_lv(self) -> None:
+        assert not disk.UdevData(self.fake_device).is_internal_lv
+
+    @patch('ceph_volume.util.disk.os.stat', _udev_data_patched_os_stat)
+    @patch('ceph_volume.util.disk.os.minor', Mock(return_value=1))
+    @patch('ceph_volume.util.disk.os.major', Mock(return_value=998))
+    def test_preferred_block_path_lvm_falls_back_to_mapper(self) -> None:
+        """When /dev/vg/lv is missing, use /dev/mapper/vg-lv (container-style LVM)."""
+        mapper: str = '/dev/mapper/fake_vg1-fake-lv1'
+        self.fs.create_file(mapper, st_mode=(stat.S_IFBLK | 0o600))
+        assert disk.UdevData(self.fake_device).preferred_block_path == mapper
+
+    @patch('ceph_volume.util.disk.os.stat', _udev_data_patched_os_stat)
+    @patch('ceph_volume.util.disk.os.minor', Mock(return_value=1))
+    @patch('ceph_volume.util.disk.os.major', Mock(return_value=998))
+    def test_preferred_block_path_lvm_skips_slashed_when_not_block_device(self) -> None:
+        """If /dev/vg/lv exists but is not a block device (for example, a directory), try mapper."""
+        slashed: str = '/dev/fake_vg1/fake-lv1'
+        mapper: str = '/dev/mapper/fake_vg1-fake-lv1'
+        self.fs.create_dir(slashed)
+        self.fs.create_file(mapper, st_mode=(stat.S_IFBLK | 0o600))
+        assert disk.UdevData(self.fake_device).preferred_block_path == mapper
+
+    @patch('ceph_volume.util.disk.os.stat', _udev_data_patched_os_stat)
+    @patch('ceph_volume.util.disk.os.minor', Mock(return_value=1))
+    @patch('ceph_volume.util.disk.os.major', Mock(return_value=998))
+    def test_preferred_block_path_lvm_falls_back_when_candidates_are_not_block_devices(
+        self,
+    ) -> None:
+        """Neither candidate may be used if they are only directories (for example, empty udev fields)."""
+        slashed: str = '/dev/fake_vg1/fake-lv1'
+        mapper: str = '/dev/mapper/fake_vg1-fake-lv1'
+        self.fs.create_dir(slashed)
+        self.fs.create_dir(mapper)
+        assert disk.UdevData(self.fake_device).preferred_block_path == self.fake_device
+
+    @patch('ceph_volume.util.disk.os.stat', _udev_data_patched_os_stat)
+    @patch('ceph_volume.util.disk.os.minor', Mock(return_value=1))
+    @patch('ceph_volume.util.disk.os.major', Mock(return_value=998))
+    def test_preferred_block_path_lvm_prefers_slashed_when_present(self) -> None:
+        slashed: str = '/dev/fake_vg1/fake-lv1'
+        self.fs.create_file(slashed, st_mode=(stat.S_IFBLK | 0o600))
+        assert disk.UdevData(self.fake_device).preferred_block_path == slashed
+
+    @patch('ceph_volume.util.disk.os.stat', _udev_data_patched_os_stat)
+    @patch('ceph_volume.util.disk.os.minor', Mock(return_value=1))
+    @patch('ceph_volume.util.disk.os.major', Mock(return_value=998))
+    def test_preferred_block_path_lvm_falls_back_to_opening_path_when_no_symlinks(self) -> None:
+        """Neither /dev/vg/lv nor /dev/mapper/name exist; keep the original device node."""
+        assert disk.UdevData(self.fake_device).preferred_block_path == self.fake_device
+
+    @patch('ceph_volume.util.disk.os.stat', _udev_data_patched_os_stat)
+    @patch('ceph_volume.util.disk.os.minor', Mock(return_value=0))
+    @patch('ceph_volume.util.disk.os.major', Mock(return_value=999))
+    def test_preferred_block_path_bare_device(self) -> None:
+        assert disk.UdevData(self.fake_device).preferred_block_path == '/dev/cephtest'
+
+    @patch('ceph_volume.util.disk.os.stat', _udev_data_patched_os_stat)
     @patch('ceph_volume.util.disk.os.minor', Mock(return_value=0))
     @patch('ceph_volume.util.disk.os.major', Mock(return_value=999))
     def test_slashed_path_with_bare_device(self) -> None:
         assert disk.UdevData(self.fake_device).slashed_path == '/dev/cephtest'
 
-    @patch('ceph_volume.util.disk.os.stat', MagicMock())
+    @patch('ceph_volume.util.disk.os.stat', _udev_data_patched_os_stat)
     @patch('ceph_volume.util.disk.os.minor', Mock(return_value=0))
     @patch('ceph_volume.util.disk.os.major', Mock(return_value=999))
     def test_dashed_path_with_bare_device(self) -> None:

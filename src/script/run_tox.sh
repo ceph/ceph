@@ -125,6 +125,10 @@ function main() {
     export CEPH_BUILD_DIR=$build_dir
     # use the wheelhouse prepared by install-deps.sh
     export PIP_FIND_LINKS="$tox_path/wheelhouse"
+    # CEPH_PYTHON_SYSTEM_SITE (default off): let tox's venvs see system site-packages
+    if ${CEPH_PYTHON_SYSTEM_SITE:-false}; then
+        export VIRTUALENV_SYSTEM_SITE_PACKAGES=true
+    fi
     tox_cmd=(tox -c $tox_path/tox.ini)
     if [ "$tox_envs" != "__tox_defaults__" ]; then
         tox_cmd+=("-e" "$tox_envs")

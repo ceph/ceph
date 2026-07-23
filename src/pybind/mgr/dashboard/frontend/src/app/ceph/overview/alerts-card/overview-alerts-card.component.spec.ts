@@ -102,7 +102,7 @@ describe('OverviewAlertsCardComponent', () => {
     expect(vm.badges).toEqual([{ key: 'warning', icon: 'warning', count: 3 }]);
   });
 
-  it('template should render border class only on 2nd badge (when both exist)', async () => {
+  it('template should render right border class only on the first badge when both exist', async () => {
     mockSvc.emitCounts(10, 1, 2);
     fixture.detectChanges();
     await fixture.whenStable();
@@ -113,11 +113,7 @@ describe('OverviewAlertsCardComponent', () => {
     ) as HTMLElement[];
 
     expect(badgeEls.length).toBe(2);
-    expect(badgeEls[0].classList.contains('overview-alerts-card-badge-with-border--right')).toBe(
-      true
-    );
-    expect(badgeEls[1].classList.contains('overview-alerts-card-badge-with-border--right')).toBe(
-      false
-    );
+    expect(badgeEls[0].classList.contains('border-subtle-right')).toBe(true);
+    expect(badgeEls[1].classList.contains('border-subtle-right')).toBe(false);
   });
 });

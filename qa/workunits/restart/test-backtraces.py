@@ -61,7 +61,7 @@ def conf_set_kill_mds(location, killnum):
 
 def flush(ceph, testnum):
     print('flushing {t}'.format(t=testnum), file=sys.stderr)
-    set_mds_config_param(ceph, '--mds_log_max_segments 1')
+    set_mds_config_param(ceph, '--mds_log_max_segments 8')
 
     for i in range(1, 500):
         f = '{p}.{pid}.{t}.{i}'.format(p=prefix, pid=os.getpid(), t=testnum, i=i)

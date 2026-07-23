@@ -60,7 +60,7 @@ To specify a WAL device or DB device, run the following command:
 
    ceph-volume lvm prepare --bluestore --data <device> --block.wal <wal-device> --block.db <db-device>
 
-.. note:: The option ``--data`` can take as its argument any of the the
+.. note:: The option ``--data`` can take as its argument any of the
    following devices: logical volumes specified using *vg/lv* notation,
    existing logical volumes, and GPT partitions.
 
@@ -88,7 +88,7 @@ sense to specify the block device only and to leave ``block.db`` and
    ceph-volume lvm create --bluestore --data /dev/sda
 
 If the devices to be used for a BlueStore OSD are pre-created logical volumes,
-then the :ref:`ceph-volume-lvm` call for an logical volume named
+then the :ref:`ceph-volume-lvm` call for a logical volume named
 ``ceph-vg/block-lv`` is as follows:
 
 .. prompt:: bash $
@@ -104,7 +104,7 @@ If you have a mix of fast and slow devices (for example, SSD or HDD), then we
 recommend placing ``block.db`` on the faster device while ``block`` (that is,
 the data) is stored on the slower device (that is, the rotational drive).
 
-You must create these volume groups and these logical volumes manually. as The
+You must create these volume groups and these logical volumes manually. The
 ``ceph-volume`` tool is currently unable to do so [create them?] automatically.
 
 The following procedure illustrates the manual creation of volume groups and
@@ -155,16 +155,20 @@ be on the four HDDs, and each HDD should have a 50GB logical volume
 
 Sizing
 ======
-When using a :ref:`mixed spinning-and-solid-drive setup
-<bluestore-mixed-device-config>`, it is important to make a large enough
-``block.db`` logical volume for BlueStore. The logical volumes associated with
-``block.db`` should have logical volumes that are *as large as possible*.
+When deploying :ref:`hybrid HDD and SSD OSDs
+<bluestore-mixed-device-config>`, it is important to provision a large enough
+``block.db`` logical volume for BlueStore.
 
-It is generally recommended that the size of ``block.db`` be somewhere between
-1% and 4% of the size of ``block``. For RGW workloads, it is recommended that
+We recommend when offloading WAL+DB to a faster device that
+the size of ``block.db`` be at least 2.5% of the size
+of the larger but slower ``block`` device.
+
+When running a release older than Squid, RocksDB compression is not enabled,
+and larger offload shares were recommended.
+For RGW workloads, we recommended that
 the ``block.db`` be at least 4% of the ``block`` size, because RGW makes heavy
 use of ``block.db`` to store metadata (in particular, omap keys). For example,
-if the ``block`` size is 1TB, then ``block.db`` should have a size of at least
+if the ``block`` size is 1TB, then ``block.db`` would have a size of at least
 40GB. For RBD workloads, however, ``block.db`` usually needs no more than 1% to
 2% of the ``block`` size.
 
@@ -173,7 +177,9 @@ only those specific partition / logical volume sizes that correspond to sums of
 L0, L0+L1, L1+L2, and so on--that is, given default settings, sizes of roughly
 3GB, 30GB, 300GB, and so on. Most deployments do not substantially benefit from
 sizing that accommodates L3 and higher, though DB compaction can be facilitated
-by doubling these figures to 6GB, 60GB, and 600GB.
+by doubling these figures to 6GB, 60GB, and 600GB. OSDs created before Pacific
+will benefit from using ``ceph-bluestore-tool`` to convert RocksDB to use
+sharding.
 
 Improvements in Nautilus 14.2.12, Octopus 15.2.6, and subsequent releases allow
 for better utilization of arbitrarily-sized DB devices. Moreover, the Pacific
@@ -193,7 +199,7 @@ BlueStore can be configured to automatically resize its caches, provided that
 certain conditions are met: TCMalloc must be configured as the memory allocator
 and the ``bluestore_cache_autotune`` configuration option must be enabled (note
 that it is currently enabled by default). When automatic cache sizing is in
-effect, BlueStore attempts to keep OSD heap-memory usage under a certain target
+effect, BlueStore attempts to keep OSD heap memory usage under a certain target
 size (as determined by ``osd_memory_target``). This approach makes use of a
 best-effort algorithm and caches do not shrink smaller than the size defined by
 the value of ``osd_memory_cache_min``. Cache ratios are selected in accordance
@@ -220,7 +226,7 @@ different configuration option to determine the default memory budget:
 ``bluestore_cache_size_hdd`` if the primary device is an HDD, or
 ``bluestore_cache_size_ssd`` if the primary device is an SSD.
 
-BlueStore and the rest of the Ceph OSD daemon make every effort to work within
+BlueStore and the other subsystems within the OSD make every effort to work within
 this memory budget. Note that in addition to the configured cache size, there
 is also memory consumed by the OSD itself. There is additional utilization due
 to memory fragmentation and other allocator overhead. 
@@ -298,7 +304,7 @@ The compression modes are as follows:
 For more information about the *compressible* and *incompressible* I/O hints,
 see :c:func:`rados_set_alloc_hint`.
 
-Note that data in Bluestore will be compressed only if the data chunk will be
+Note that data in BlueStore will be compressed only if the data chunk will be
 sufficiently reduced in size (as determined by the ``bluestore compression
 required ratio`` setting). No matter which compression modes have been used, if
 the data chunk is too big, then it will be discarded and the original
@@ -440,16 +446,16 @@ its value from the value of either :confval:`bluestore_min_alloc_size_hdd` or
 :confval:`bluestore_min_alloc_size_ssd`, depending on the OSD's ``rotational``
 attribute. Thus if an OSD is created on an HDD, BlueStore is initialized with
 the current value of :confval:`bluestore_min_alloc_size_hdd`; but with SSD OSDs
-(including NVMe devices), Bluestore is initialized with the current value of
+(including NVMe devices), BlueStore is initialized with the current value of
 :confval:`bluestore_min_alloc_size_ssd`.
 
 In Mimic and earlier releases, the default values were 64KB for rotational
 media (HDD) and 16KB for non-rotational media (SSD). The Octopus release
-changed the the default value for non-rotational media (SSD) to 4KB, and the
+changed the default value for non-rotational media (SSD) to 4KB, and the
 Pacific release changed the default value for rotational media (HDD) to 4KB.
 
 These changes were driven by space amplification that was experienced by Ceph
-RADOS GateWay (RGW) deployments that hosted large numbers of small files
+RADOS Gateway (RGW) deployments that hosted large numbers of small files
 (S3/Swift objects).
 
 For example, when an RGW client stores a 1 KB S3 object, that object is written

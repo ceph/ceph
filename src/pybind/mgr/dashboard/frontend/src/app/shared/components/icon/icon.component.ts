@@ -18,7 +18,7 @@ import { ICON_TYPE, Icons, IconSize } from '../../enum/icons.enum';
 export class IconComponent implements OnInit, OnChanges {
   @Input() type!: keyof typeof ICON_TYPE;
   @Input() size: IconSize = IconSize.size16;
-  @Input() class: string = '';
+  @Input() customClass: string = '';
   // No CSS class will be applied.
   @Input() useDefault: boolean = false;
 

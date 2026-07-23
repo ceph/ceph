@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <cmath>
+
 #include <fmt/chrono.h>
 #include <seastar/core/metrics.hh>
 
@@ -607,9 +609,9 @@ seastar::future<> JournalTrimmerImpl::trim() {
       if (should_trim_alloc()) {
         return trim_alloc(
         ).handle_error(
-          crimson::ct_error::assert_all{
+          crimson::ct_error::assert_all(
             "encountered invalid error in trim_alloc"
-          }
+          )
         );
       } else {
         return seastar::now();
@@ -619,9 +621,9 @@ seastar::future<> JournalTrimmerImpl::trim() {
       if (should_start_trim_dirty()) {
         return trim_dirty(
         ).handle_error(
-          crimson::ct_error::assert_all{
+          crimson::ct_error::assert_all(
             "encountered invalid error in trim_dirty"
-          }
+          )
         );
       } else {
         return seastar::now();
@@ -1128,6 +1130,91 @@ segment_id_t SegmentCleaner::allocate_segment(
   return NULL_SEG_ID;
 }
 
+void SegmentCleaner::maybe_adjust_thresholds()
+{
+  // Sample current open-segment count into the window peak each call.
+  peak_open_segments_window = std::max(
+      peak_open_segments_window, segments.get_num_open());
+
+  // Only recompute hard_limit every 30s.
+  LOG_PREFIX(SegmentCleaner::maybe_adjust_thresholds);
+  auto now = seastar::lowres_clock::now();
+  double elapsed_sec = 0.0;
+  if (adaptive_last_time != seastar::lowres_clock::time_point{}) {
+    elapsed_sec = std::chrono::duration<double>(
+        now - adaptive_last_time).count();
+    if (elapsed_sec < 30.0) {
+      return;
+    }
+  }
+  adaptive_last_time = now;
+  double old_hard_limit = config.available_ratio_hard_limit;
+  double old_gc_max = config.available_ratio_gc_max;
+
+  // Architectural floor: named writers (journal + hot/cold gens + metadata).
+  auto hot = crimson::common::get_conf<uint64_t>(
+      "seastore_hot_tier_generations");
+  auto cold = crimson::common::get_conf<uint64_t>(
+      "seastore_cold_tier_generations");
+  std::size_t named_writers = hot + cold + 2;
+  std::size_t seg_size = segments.get_segment_size();
+  std::size_t total_bytes = segments.get_total_bytes();
+  if (total_bytes == 0 || seg_size == 0) {
+    return;
+  }
+
+  double segment_ratio =
+      static_cast<double>(seg_size) /
+      static_cast<double>(total_bytes);
+
+  // hard_limit = (max(peak, named) + 1) * segment_ratio. "+1" is the minimum
+  // safety unit: allow one more open segment than ever observed.
+  std::size_t observed_peak =
+      std::max<std::size_t>(peak_open_segments_window, named_writers);
+  double new_hard_limit =
+      static_cast<double>(observed_peak + 1) * segment_ratio;
+
+  double crash_floor =
+      static_cast<double>(named_writers) * segment_ratio;
+  crash_floor = std::min(crash_floor, 0.95);
+  new_hard_limit = std::min(std::max(new_hard_limit, crash_floor), 0.95);
+
+  // Apply lazy decay covering elapsed time (allows gc_max to gradually fall
+  // when workload eases) so peaks fade even when the background process was
+  // idle and this hook went uncalled for many cycles.
+  if (elapsed_sec > 0.0) {
+    peak_projected_used_decayed *= std::pow(0.995, elapsed_sec / 30.0);
+  }
+
+  // gc_max decays halfway each window toward (hard_limit + recent peak burst).
+  double burst_floor_ratio =
+      peak_projected_used_decayed /
+      static_cast<double>(total_bytes);
+  double target_gc_max = new_hard_limit + burst_floor_ratio;
+  double decayed_gc_max =
+      (config.available_ratio_gc_max + target_gc_max) / 2.0;
+  config.available_ratio_gc_max = std::max(decayed_gc_max, target_gc_max);
+  if (config.available_ratio_gc_max <= new_hard_limit) {
+    config.available_ratio_gc_max = new_hard_limit + segment_ratio;
+  }
+  config.available_ratio_hard_limit = new_hard_limit;
+
+  if (old_hard_limit != new_hard_limit || old_gc_max != config.available_ratio_gc_max) {
+    INFO("[ADAPTIVE_GC] update: hard_limit {:.4f} -> {:.4f}, gc_max {:.4f} -> {:.4f} "
+         "(peak_open={} named={} peak_proj_decayed={:.0f} crash_floor={:.4f})",
+         old_hard_limit, new_hard_limit,
+         old_gc_max, config.available_ratio_gc_max,
+         peak_open_segments_window, named_writers,
+         peak_projected_used_decayed, crash_floor);
+  } else {
+    DEBUG("[ADAPTIVE_GC] no-op: hard_limit {:.4f}, gc_max {:.4f}",
+          old_hard_limit, old_gc_max);
+  }
+
+  // Reset per-window open-segment peak.
+  peak_open_segments_window = segments.get_num_open();
+}
+
 void SegmentCleaner::close_segment(segment_id_t segment)
 {
   LOG_PREFIX(SegmentCleaner::close_segment);
@@ -1343,11 +1430,12 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
   }
   reclaim_state->advance(config.reclaim_bytes_per_cycle);
 
-  DEBUG("reclaiming {} {}~{}",
+  double pavail_ratio = get_projected_available_ratio();
+  DEBUG("reclaiming {} {}~{}, projected_avail_ratio={}",
         rewrite_gen_printer_t{reclaim_state->generation},
         reclaim_state->start_pos,
-        reclaim_state->end_pos);
-  double pavail_ratio = get_projected_available_ratio();
+        reclaim_state->end_pos,
+        pavail_ratio);
   sea_time_point start = seastar::lowres_system_clock::now();
 
   // Backref-tree doesn't support tree-read during tree-updates with parallel
@@ -1429,9 +1517,9 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
           return sm_group->release_segment(segment_to_release
           ).handle_error(
             clean_space_ertr::pass_further{},
-            crimson::ct_error::assert_all{
+            crimson::ct_error::assert_all(
               "SegmentCleaner::clean_space encountered invalid error in release_segment"
-            }
+            )
           ).safe_then([this, FNAME, segment_to_release] {
             auto old_usage = calc_utilization(segment_to_release);
             if(unlikely(old_usage != 0)) {
@@ -1564,7 +1652,7 @@ SegmentCleaner::mount_ret SegmentCleaner::mount()
         return mount_ertr::now();
       }),
       crimson::ct_error::input_output_error::pass_further{},
-      crimson::ct_error::assert_all{"unexpected error"}
+      crimson::ct_error::assert_all("unexpected error")
     );
   }).safe_then([this, FNAME] {
     INFO("done, {}", segments);
@@ -1759,15 +1847,52 @@ segment_id_t SegmentCleaner::get_next_reclaim_segment() const
   } else {
     bound_time = NULL_TIME;
   }
+  // Track the configured formula's best-scoring candidate alongside the
+  // greedy choice (lowest utilization / highest free fraction).
+  // See doc/dev/crimson/seastore.rst#cleaner-gc-autotune.
+  segment_id_t greedy_id = NULL_SEG_ID;
+  double greedy_min_util = 1.0;
   for (auto& [_id, segment_info] : segments) {
     if (segment_info.is_closed() &&
         (trimmer == nullptr ||
          !segment_info.is_in_journal(trimmer->get_journal_tail()))) {
+      // Track the configured formula's best-scoring reclaim candidate.
       double benefit_cost = calc_gc_benefit_cost(_id, now_time, bound_time);
       if (benefit_cost > max_benefit_cost) {
         id = _id;
         max_benefit_cost = benefit_cost;
       }
+      // Track the greedy candidate (lowest utilization / highest free fraction).
+      double util = calc_utilization(_id);
+      if (util < greedy_min_util) {
+        greedy_id = _id;
+        greedy_min_util = util;
+      }
+    }
+  }
+  // Autotune override: prefer greedy when its pick would free far more.
+  // See doc/dev/crimson/seastore.rst#cleaner-gc-autotune.
+  const bool autotune_enabled =
+      crimson::common::get_conf<bool>(
+        "seastore_segment_cleaner_gc_autotune");
+  if (autotune_enabled &&
+      gc_formula != gc_formula_t::GREEDY &&
+      id != NULL_SEG_ID && greedy_id != NULL_SEG_ID && id != greedy_id) {
+    double picked_util = calc_utilization(id);
+    double picked_free = 1.0 - picked_util;
+    double greedy_free = 1.0 - greedy_min_util;
+    const double ratio = crimson::common::get_conf<double>(
+      "seastore_segment_cleaner_gc_autotune_ratio");
+    if (should_override_to_greedy(picked_free, greedy_free, ratio)) {
+      DEBUG("auto-tune: formula picked seg {} (util {:.3f}, free {:.3f}),"
+            " overriding with greedy seg {} (util {:.3f}, free {:.3f})",
+            id, picked_util, picked_free,
+            greedy_id, greedy_min_util, greedy_free);
+      id = greedy_id;
+      // Recompute the formula score for the chosen segment so the
+      // value logged below stays semantically consistent.
+      max_benefit_cost =
+          calc_gc_benefit_cost(greedy_id, now_time, bound_time);
     }
   }
   if (id != NULL_SEG_ID) {
@@ -1786,6 +1911,11 @@ bool SegmentCleaner::try_reserve_projected_usage(std::size_t projected_usage)
 {
   assert(background_callback->is_ready());
   stats.projected_used_bytes += projected_usage;
+  // Update decayed peak; the slow decay in maybe_adjust_thresholds() lets old
+  // peaks fade so gc_max can eventually re-discover lower floors.
+  peak_projected_used_decayed = std::max(
+      peak_projected_used_decayed,
+      static_cast<double>(stats.projected_used_bytes));
   if (should_block_io_on_clean()) {
     stats.projected_used_bytes -= projected_usage;
     return false;
@@ -1901,6 +2031,27 @@ void RBMCleaner::commit_space_used(paddr_t addr, extent_len_t len)
 bool RBMCleaner::try_reserve_projected_usage(std::size_t projected_usage)
 {
   assert(background_callback->is_ready());
+
+  // Capacity check. Without this, concurrent transactions over-commit the
+  // RBM device: each reserves but the cleaner has no clean_space() yet, so
+  // a write that physically can't be served reaches the allocator and
+  // surfaces as `unexpected enospc` asserts in the data path (object_data
+  // _handler.cc et al.). Return false so the EPM BackgroundProcess blocks
+  // the IO until committed transactions release space.
+  //
+  // Headroom carves out room for metadata writes (LBA btree, backref) and
+  // for fragmentation slack the allocator can't pack into. 5% is a starting
+  // point; until RBMCleaner::clean_space() exists we cannot reclaim from
+  // fragmented free space, so headroom doubles as a fragmentation guard.
+  assert(get_total_bytes() > get_journal_bytes());
+  auto data_capacity = get_total_bytes() - get_journal_bytes();
+  auto headroom = data_capacity / 20;
+  auto committed_and_projected = stats.used_bytes
+                               + stats.projected_used_bytes
+                               + projected_usage;
+  if (committed_and_projected + headroom > data_capacity) {
+    return false;
+  }
   stats.projected_used_bytes += projected_usage;
   return true;
 }
@@ -1933,8 +2084,8 @@ RBMCleaner::mount_ret RBMCleaner::mount()
       return it->open(
       ).handle_error(
 	crimson::ct_error::input_output_error::pass_further(),
-	crimson::ct_error::assert_all{
-	"Invalid error when opening RBM"}
+	crimson::ct_error::assert_all(
+	"Invalid error when opening RBM")
       );
     });
   });

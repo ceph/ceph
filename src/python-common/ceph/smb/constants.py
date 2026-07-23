@@ -8,13 +8,14 @@ CTDB = 'ctdb'
 
 
 # Feature names
+# (please keep sorted)
 CEPHFS_PROXY = 'cephfs-proxy'
 CLUSTERED = 'clustered'
 DOMAIN = 'domain'
+KEYBRIDGE = 'keybridge'
 REMOTE_CONTROL = 'remote-control'
 REMOTE_CONTROL_LOCAL = 'remote-control-local'
 SMBMETRICS = 'smbmetrics'
-
 
 # Features are optional components that can be deployed in a suite of smb
 # related containers. It may run as a separate sidecar or side-effect the
@@ -23,6 +24,7 @@ FEATURES = {
     CEPHFS_PROXY,
     CLUSTERED,
     DOMAIN,
+    KEYBRIDGE,
     REMOTE_CONTROL,
     REMOTE_CONTROL_LOCAL,
 }
@@ -36,6 +38,15 @@ SERVICES = {
     SMBMETRICS,
 }
 
+FEATURE_FILE_NAMES = {
+    KEYBRIDGE: KEYBRIDGE,
+    REMOTE_CONTROL: "remote_control",
+}
+SMB_FEATURE_SUPPORTS_SSL = {
+    "remote_control",
+    KEYBRIDGE,
+}
+CA_CERT_REQUIRED_FEATURES = {'keybridge'}
 
 # Default port values
 SMB_PORT = 445

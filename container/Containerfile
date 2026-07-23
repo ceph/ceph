@@ -1,4 +1,4 @@
-ARG FROM_IMAGE="quay.io/centos/centos:stream9"
+ARG FROM_IMAGE="docker.io/rockylinux/rockylinux:10"
 FROM $FROM_IMAGE
 
 # allow FROM_IMAGE to be visible inside this stage
@@ -14,7 +14,7 @@ ARG CEPH_SHA1
 ARG CEPH_GIT_REPO
 
 # (optional) Define the baseurl= for the ganesha.repo
-ARG GANESHA_REPO_BASEURL="https://buildlogs.centos.org/centos/\$releasever-stream/storage/\$basearch/nfsganesha-5/"
+ARG GANESHA_REPO_BASEURL="https://buildlogs.centos.org/centos/\$releasever-stream/storage/\$basearch/nfsganesha-9/"
 
 # (optional) Set to "crimson" to install crimson packages.
 ARG OSD_FLAVOR="default"
@@ -84,18 +84,13 @@ RUN dnf install -y --setopt=install_weak_deps=False epel-release jq
 
 # NFS-Ganesha repo
 RUN set -eux; \
-    source /etc/ceph-distro.env; \
-    if [[ "${DIST_PATH}" == rocky/* ]]; then \
-        curl -fs -L "https://shaman.ceph.com/api/repos/nfs-ganesha/main/latest/${DIST_PATH}/repo?arch=$(arch)" -o /etc/yum.repos.d/ganesha.repo; \
-    else \
-      { \
+    { \
         printf '%s\n' '[ganesha]'; \
         printf '%s\n' 'name=ganesha'; \
         printf '%s\n' "baseurl=${GANESHA_REPO_BASEURL}"; \
         printf '%s\n' 'gpgcheck=0'; \
         printf '%s\n' 'enabled=1'; \
-      } > /etc/yum.repos.d/ganesha.repo; \
-    fi
+    } > /etc/yum.repos.d/ganesha.repo
 
 # ISCSI repo
 RUN set -eux && \
@@ -129,7 +124,16 @@ RUN --mount=type=secret,id=prerelease_creds set -ex && \
         source /run/secrets/prerelease_creds; \
         REPO_URL="https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/rpm-${CEPH_REF}/${EL_VER}/" ;\
     fi && \
-    rpm -Uvh "$REPO_URL/noarch/ceph-release-1-${IS_RELEASE}.${EL_VER}.noarch.rpm" ; \
+    # Trim trailing slashes
+    REPO_URL="${REPO_URL%/}" && \
+    if [[ "$REPO_URL" == */pulp/content/* ]] ; then \
+        # Pulp nests packages under noarch/Packages/<first-letter>/
+        CEPH_RELEASE_RPM="$REPO_URL/noarch/Packages/c/ceph-release-1-${IS_RELEASE}.${EL_VER}.noarch.rpm" ; \
+    else \
+        # chacra serves packages flat under noarch/
+        CEPH_RELEASE_RPM="$REPO_URL/noarch/ceph-release-1-${IS_RELEASE}.${EL_VER}.noarch.rpm" ; \
+    fi && \
+    rpm -Uvh "$CEPH_RELEASE_RPM" ; \
     if [[ "$IS_RELEASE" == 1 ]] ; then \
         sed -i "s;http://download.ceph.com/;https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/;" /etc/yum.repos.d/ceph.repo ; \
         dnf clean expire-cache ; \
@@ -165,6 +169,8 @@ ceph-mgr-cephadm \
 ceph-mgr-dashboard \
 ceph-mgr-diskprediction-local \
 ceph-mgr-k8sevents \
+ceph-mgr-modules-core \
+ceph-mgr-modules-standard \
 ceph-mgr-rook \
 ceph-mgr \
 ceph-mon \
@@ -185,6 +191,9 @@ RUN set -euo pipefail; \
     source /etc/ceph-distro.env; \
     if [ "$MAJOR" -le 9 ]; then \
         echo "python3-saml" >> packages.txt; \
+    fi ; \
+    if [ "$MAJOR" -ge 10 ]; then \
+        echo "python3-ceph-smb-ctl" >> packages.txt; \
     fi
 
 # NFS-Ganesha

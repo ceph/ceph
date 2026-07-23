@@ -28,7 +28,7 @@ class BtreeOMapManager : public OMapManager {
   omap_context_t get_omap_context(
     Transaction &t, const omap_root_t &omap_root) {
     ceph_assert(omap_root.type < omap_type_t::NONE);
-    return omap_context_t{tm, t, omap_root.hint, omap_root.type};
+    return omap_context_t{tm, t, omap_root.hint, omap_root.type, omap_root.addr};
   }
 
   /* get_omap_root
@@ -66,28 +66,30 @@ class BtreeOMapManager : public OMapManager {
 public:
   explicit BtreeOMapManager(TransactionManager &tm);
 
-  initialize_omap_ret initialize_omap(Transaction &t, laddr_t hint,
+  initialize_omap_ret initialize_omap(
+    Transaction &t,
+    laddr_hint_t hint,
     omap_type_t type) final;
 
   omap_get_value_ret omap_get_value(
     const omap_root_t &omap_root,
     Transaction &t,
-    const std::string &key) final;
+    std::string key) final;
 
   omap_set_key_ret omap_set_key(
     omap_root_t &omap_root,
     Transaction &t,
-    const std::string &key, const ceph::bufferlist &value) final;
+    std::string key, ceph::bufferlist value) final;
 
   omap_set_keys_ret omap_set_keys(
     omap_root_t &omap_root,
     Transaction &t,
-    std::map<std::string, ceph::bufferlist>&& keys) final;
+    std::map<std::string, ceph::bufferlist> keys) final;
 
   omap_rm_key_ret omap_rm_key(
     omap_root_t &omap_root,
     Transaction &t,
-    const std::string &key) final;
+    std::string key) final;
 
   omap_rm_key_range_ret omap_rm_key_range(
     omap_root_t &omap_root,
@@ -115,7 +117,7 @@ public:
   omap_rm_keys_ret omap_rm_keys(
     omap_root_t &omap_root,
     Transaction &t,
-    std::set<std::string>& keys) final;
+    std::set<std::string> keys) final;
 };
 using BtreeOMapManagerRef = std::unique_ptr<BtreeOMapManager>;
 

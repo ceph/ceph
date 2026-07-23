@@ -13,6 +13,7 @@
  *
  */
 
+#include <cerrno>
 #include <limits>
 #include <unistd.h>
 #include <stdlib.h>
@@ -38,6 +39,7 @@
 #include "common/buffer_instrumentation.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/errno.h"
+#include "BlockDevice.h"
 #if defined(__FreeBSD__)
 #include "bsm/audit_errno.h"
 #endif
@@ -294,12 +296,6 @@ int KernelDevice::open(const string& p)
       support_discard = blkdev_buffered.support_discard();
       optimal_io_size = blkdev_buffered.get_optimal_io_size();
       this->devname = devname;
-      // check if any extended block device plugin recognizes this device
-      // detect_vdo has moved into the VDO plugin
-      int rc = extblkdev::detect_device(cct, devname, ebd_impl);
-      if (rc != 0) {
-	dout(20) << __func__ << " no plugin volume maps to " << devname << dendl;
-      }
     }
   }
 
@@ -308,7 +304,7 @@ int KernelDevice::open(const string& p)
     goto out_fail;
   }
 
-  if (size > 0) {
+  if (size >= block_size) {
     r = _aio_start();
     if (r < 0) {
       goto out_fail;
@@ -357,6 +353,37 @@ int KernelDevice::get_devices(std::set<std::string> *ls) const
     return 0;
   }
   get_raw_devices(devname, ls);
+  return 0;
+}
+
+int KernelDevice::refresh_size()
+{
+  if (fd_directs.empty() || fd_directs[WRITE_LIFE_NOT_SET] < 0) {
+    return -ENODEV;
+  }
+
+  struct stat st;
+  int r = ::fstat(fd_directs[WRITE_LIFE_NOT_SET], &st);
+  if (r < 0) {
+    r = -errno;
+    derr << __func__ << " fstat failed: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  // logic taken from open() for block vs file
+  int64_t new_size;
+  if (S_ISBLK(st.st_mode)) {
+    BlkDev blkdev(fd_directs[WRITE_LIFE_NOT_SET]);
+    r = blkdev.get_size(&new_size);
+    if (r < 0) {
+      derr << __func__ << " ioctl failed: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+  } else {
+    new_size = st.st_size;
+  }
+
+  size = new_size;
   return 0;
 }
 
@@ -473,6 +500,22 @@ int KernelDevice::get_ebd_state(ExtBlkDevState &state) const
   // VDO specific get_thin_utilization has moved into VDO plugin
   if (ebd_impl) {
     return ebd_impl->get_state(state);
+  }
+  return -ENOENT;
+}
+
+int KernelDevice::detect_ebd(std::string& id)
+{
+  // check if any extended block device plugin recognizes this device
+  // detect_vdo has moved into the VDO plugin
+  if (!ebd_impl) {
+    int rc = extblkdev::detect_device(cct, devname, ebd_impl);
+    if (rc != 0) {
+      dout(20) << __func__ << " no plugin volume maps to " << devname << dendl;
+    }
+  }
+  if (ebd_impl) {
+    return ebd_impl->get_plugin_id(id);
   }
   return -ENOENT;
 }
@@ -910,6 +953,14 @@ bool KernelDevice::try_discard(interval_set<uint64_t> &to_release,
     logger->inc(l_blk_kernel_device_discard_op, to_release.num_intervals());
   }
   return false;
+}
+
+void KernelDevice::collect_alerts(osd_alert_list_t& alerts, const std::string& device_name)
+{
+  BlockDevice::collect_alerts(alerts, device_name);
+  if (ebd_impl) {
+    ebd_impl->collect_alerts(alerts);
+  }
 }
 
 void KernelDevice::_aio_log_start(

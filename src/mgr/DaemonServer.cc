@@ -125,7 +125,9 @@ DaemonServer::DaemonServer(MonClient *monc_,
       mds_perf_metric_collector_listener(this),
       mds_perf_metric_collector(mds_perf_metric_collector_listener),
       op_tracker(g_ceph_context, g_ceph_context->_conf->mgr_enable_op_tracker,
-                                 g_ceph_context->_conf->mgr_num_op_tracker_shard)
+                                 g_ceph_context->_conf->mgr_num_op_tracker_shard),
+      stats_autotuner(std::make_unique<StatsAutotuner>(
+        g_conf().get_val<int64_t>("mgr_stats_period")))
 {
   g_conf().add_observer(this);
   /* define op size and time for mgr daemon */
@@ -174,6 +176,8 @@ int DaemonServer::init(uint64_t gid, entity_addrvec_t client_addrs)
 			   entity_name_t::MGR(gid),
 			   "mgr",
 			   Messenger::get_random_nonce());
+  msgr->set_dispatch_throttle_size(
+      g_conf().get_val<Option::size_t>("mgr_dispatch_throttle_bytes"));
   msgr->set_default_policy(Messenger::Policy::stateless_server(0));
   // throttle policy
   msgr->set_policy(entity_name_t::TYPE_OSD,
@@ -424,11 +428,42 @@ void DaemonServer::maybe_ready(int32_t osd_id)
 void DaemonServer::tick()
 {
   dout(10) << dendl;
+  auto tick_period = g_conf().get_val<std::chrono::seconds>("mgr_tick_period").count();
+  utime_t now = ceph_clock_now();
+
+  if (g_conf().get_val<bool>("mgr_stats_period_autotune") &&
+      stats_autotuner->should_check_now(now, tick_period)) {
+    dout(20) << "checking whether to adjust stats period" << dendl;
+    maybe_adjust_stats_period();
+  }
   send_report();
   adjust_pgs();
 
   schedule_tick_locked(
     g_conf().get_val<std::chrono::seconds>("mgr_tick_period").count());
+}
+
+void DaemonServer::maybe_adjust_stats_period() {
+  int64_t queue_depth = msgr->get_dispatch_queue_len();
+  int64_t current_period = g_conf().get_val<int64_t>("mgr_stats_period");
+  int64_t queue_threshold = g_conf().get_val<int64_t>("mgr_stats_period_autotune_queue_threshold");
+  auto result = stats_autotuner->evaluate_adjustment(queue_depth, current_period, queue_threshold);
+
+  if (result.new_period != current_period) {
+    dout(10) << "Adjusting mgr_stats_period from " << current_period
+      << " to " << result.new_period << " seconds ("
+      << result.reason_str()
+      << ")" << dendl;
+
+    std::stringstream ss;
+    int r = cct->_conf.set_val("mgr_stats_period", std::to_string(result.new_period), &ss);
+    if (r != 0) {
+      derr << "Failed to update mgr_stats_period: " << ss.str() << dendl;
+      return;
+    }
+    stats_autotuner->record_our_change(result.new_period);  // Track that we made this change
+    cct->_conf.apply_changes(nullptr);
+  }
 }
 
 // Currently modules do not set health checks in response to events delivered to
@@ -1243,6 +1278,7 @@ int DaemonServer::_populate_crush_bucket_osds(
   } else if (bucket_type_str == "host" || bucket_type_str == "osd") {
     bucket_names.push_back(item_name);
   }
+
   // The following struct is to help re-order the
   // osds based on the number of pgs on them.
   struct pgs_per_osd {
@@ -1250,10 +1286,8 @@ int DaemonServer::_populate_crush_bucket_osds(
     size_t num_pgs;
   };
   std::vector<pgs_per_osd> child_bucket_pgs_per_osd;
-  // get osds under each child bucket
+  // get osds under each child bucket and associate with their PG counts
   for (const auto &name : bucket_names) {
-    // Clear the items for the current child bucket
-    child_bucket_pgs_per_osd.clear();
     std::set<int> tmp_bucket_osds;
     r = osdmap.get_osds_by_bucket_name(name, &tmp_bucket_osds);
     if (r < 0) {
@@ -1267,39 +1301,27 @@ int DaemonServer::_populate_crush_bucket_osds(
       dout(20) << os.str() << dendl;
       return r;
     }
-
-    // Special case when bucket contains only 1 osd
-    if (tmp_bucket_osds.size() == 1) {
-      for (const auto &osd : tmp_bucket_osds) {
-        crush_bucket_osds.push_back(osd);
-      }
-      dout(20) << "picked osd: " << tmp_bucket_osds
-               << " from bucket: " << name << dendl;
-      continue;
-    }
-    /**
-     * The osds in this bucket are further re-ordered based on the
-     * number of pgs (ascending) they host. This helps optimize
-     * the result of _check_offlines_pgs() down the line.
-     */
     for (const auto &osd : tmp_bucket_osds) {
       child_bucket_pgs_per_osd.push_back({osd, pgmap.get_num_pg_by_osd(osd)});
-    }
-    // Sort once after all data is added
-    std::sort(child_bucket_pgs_per_osd.begin(), child_bucket_pgs_per_osd.end(),
-              [](const pgs_per_osd& a, const pgs_per_osd& b) {
-        return std::tie(a.num_pgs, a.osd_id) < std::tie(b.num_pgs, b.osd_id);
-    });
-    /**
-     * The sorted osds are finally pushed to the passed crush_bucket_osds
-     * vector where osds are maintained according to the child order.
-     */
-    for (const auto &item : child_bucket_pgs_per_osd) {
-      crush_bucket_osds.push_back(item.osd_id);
     }
     dout(20) << "picked osds: " << tmp_bucket_osds
              << " from bucket: " << name << dendl;
   }
+
+  /**
+   * Sort all collected osds globally based on the number of pgs (ascending)
+   * they host and update the crush_bucket_osds vector with the same order.
+   */
+  std::sort(child_bucket_pgs_per_osd.begin(), child_bucket_pgs_per_osd.end(),
+            [](const pgs_per_osd& a, const pgs_per_osd& b) {
+      return std::tie(a.num_pgs, a.osd_id) < std::tie(b.num_pgs, b.osd_id);
+  });
+  crush_bucket_osds.reserve(
+    crush_bucket_osds.size() + child_bucket_pgs_per_osd.size());
+  for (const auto &item : child_bucket_pgs_per_osd) {
+    crush_bucket_osds.push_back(item.osd_id);
+  }
+
   return r;
 }
 
@@ -1327,19 +1349,20 @@ void DaemonServer::_maximize_ok_to_upgrade_set(
     auto ver = get_osd_metadata("ceph_version_short", osd_id);
     if (ver.has_value()) {
       if (*ver != ceph_version_new) {
-        dout(20) << "found " << osd_id << " to upgrade" << dendl;
         to_upgrade.push_back(osd);
       } else {
-        dout(20) << osd_id << " is already running the new version("
-                 << *ver << ")" << dendl;
         upgraded.push_back(osd);
       }
     } else {
-        derr << "couldn't determine 'ceph_version_short' for "
-             << osd_id << dendl;
-        version_unknown.push_back(osd);
+      derr << "couldn't determine 'ceph_version_short' for "
+           << osd_id << dendl;
+      version_unknown.push_back(osd);
     }
   }
+
+  dout(20) << "osds to upgrade: " << to_upgrade << dendl;
+  dout(20) << "osds upgraded: " << upgraded << " running new version("
+           << ceph_version_new << ")" << dendl;
 
   // Check if all OSDs are upgraded
   _update_upgraded_osds(orig_osds, to_upgrade, upgraded,
@@ -1361,111 +1384,108 @@ void DaemonServer::_maximize_ok_to_upgrade_set(
   const double convergence_factor =
     g_conf().get_val<double>("mgr_osd_upgrade_check_convergence_factor");
   size_t osd_subset_count = to_upgrade.size();
+  std::vector<int> osds = to_upgrade;
   while (true) {
+    // reset pg report
+    *out_pg_report = offline_pg_report();
     // Check impact to PGs with the filtered set. Use the existing
     // ok-to-stop logic for this purpose.
-    _check_offlines_pgs(to_upgrade, osdmap, pgmap, out_pg_report);
-    if (!out_pg_report->ok_to_stop()) {
-      if (osd_subset_count == 1) {
-        // This means that there's no safe set of OSDs to upgrade.
-        // This probably indicates a problem with the cluster configuration.
-        to_upgrade.clear();
-        _update_upgraded_osds(orig_osds, to_upgrade, upgraded,
-          version_unknown, out_osd_report);
-        return;
+    _check_offlines_pgs(osds, osdmap, pgmap, out_pg_report);
+    if (out_pg_report->ok_to_stop()) {
+      // we have a set that can be upgraded. But if it still exceeds
+      // the 'max' criteria set by the user, prune the to_upgrade
+      // vector further to hold only 'max' number of osds. For
+      // safety, run the offline pg check before returning.
+      if (osd_subset_count > max) {
+        osd_subset_count = max;
+        osds.resize(osd_subset_count);
+        continue;
       }
-      // Reduce the number of OSDs in the set by the convergence factor.
-      osd_subset_count = std::max<size_t>(
-        1, static_cast<size_t>(osd_subset_count * convergence_factor));
-      // Prune the 'to-upgrade' set to hold the new subset of OSDs
-      auto start_it = std::next(to_upgrade.begin(), osd_subset_count);
-      auto end_it = to_upgrade.end();
-      to_upgrade.erase(start_it, end_it);
-      // reset pg report
-      *out_pg_report = offline_pg_report();
-    } else {
-      _update_upgraded_osds(orig_osds, to_upgrade, upgraded,
-        version_unknown, out_osd_report);
+      _update_upgraded_osds(orig_osds, osds, upgraded,
+                            version_unknown, out_osd_report);
       if (out_osd_report->ok_to_upgrade()) {
         // Found a safe subset! Break and generate the output.
-        dout(20) << "found " << osd_subset_count << " OSDs that are safe to "
-                 << "upgrade" << dendl;
+        dout(20) << "found " << osd_subset_count << " OSDs that are "
+                 << "safe to upgrade." << dendl;
         break;
       }
     }
+    // The offline pg check failed. Trigger the reduction logic.
+    if (osd_subset_count == 1) {
+      // This means that there's no safe set of OSDs to upgrade.
+      // This probably indicates a problem with the cluster configuration.
+      osds.clear();
+      _update_upgraded_osds(orig_osds, osds, upgraded,
+        version_unknown, out_osd_report);
+      return;
+    }
+    // Reduce the number of OSDs in the set by the convergence factor.
+    osd_subset_count = std::max<size_t>(
+      1, static_cast<size_t>(osd_subset_count * convergence_factor));
+    // Prune the 'to-upgrade' set to hold the new subset of OSDs
+    osds.resize(osd_subset_count);
   }
-  if (to_upgrade.size() >= max) {
-    // already at max
-    dout(20) << "to_upgrade(" << to_upgrade.size() << ") >= "
-             <<  " max(" << max << ")" << dendl;
-    return;
+
+  if (osds.size() == max) {
+   // already at max
+   dout(20) << "to_upgrade(" << osds.size() << ") == "
+            <<  " max(" << max << ")" << dendl;
+   return;
   }
 
   /**
-   * semi-arbitrarily start with the first osd in the 'to_upgrade'
-   * vector and see if we can add more osds to upgrade. The reason
-   * for using a vector instead of set is to preserve the order of
-   * OSDs according to the order of other parent and their child
-   * buckets. This order ensures that the offline pgs check can
-   * correctly determine the outcome of a set of OSDs stopped from
-   * a specific bucket.
+   * Handle case if 'max' criteria is not met and there are OSDs
+   * not yet considered from the to_upgrade vector. This can
+   * happen depending on the value of the convergence factor
+   * resulting in some residual OSDs in the crush bucket
+   * not participating in the initial offline pg check. Consider
+   * the residual OSDs and try maximizing the upgrade set.
    */
-  offline_pg_report _pg_report;
-  upgrade_osd_report _osd_report;
-  std::vector<int> osds = to_upgrade;
-  int parent = *osds.begin();
-  std::vector<int> children;
-
-  dout(20) << "Trying to add more children..." << dendl;
-  while (true) {
-    // identify the next parent
-    int r = osdmap.crush->get_immediate_parent_id(parent, &parent);
-    if (r < 0) {
-      dout(20) << "No parent found for item id: " << parent << dendl;
-      return;  // just go with what we have so far!
+  if (osds.size() < max && osds.size() < to_upgrade.size()) {
+    // Avoid reallocations as we won't exceed max
+    osds.reserve(max);
+    int failed = 0;
+    dout(20) << "Maximization phase: testing candidate subset [ ";
+    for (auto it = to_upgrade.begin() + osd_subset_count;
+         it != to_upgrade.end();
+         ++it) {
+      *_dout << *it << " ";
     }
+    *_dout << "]" << dendl;
 
-    // get candidate additions that are beneath this point in the tree
-    children.clear();
-    r = _populate_crush_bucket_osds(parent, osdmap, pgmap, children);
-    if (r != 0) {
-      return; // just go with what we have so far!
-    }
-
-    // try adding in more osds from the list of children
-    // determined above to maximize the upgrade set.
-    int failed = 0;  // how many children we failed to add to our set
-    for (auto o : children) {
-      auto it = std::find(osds.begin(), osds.end(), o);
-      bool can_add_osd = (it == osds.end());
-      if (o >= 0 && osdmap.is_up(o) && can_add_osd) {
-        osds.push_back(o);
-        _check_offlines_pgs(osds, osdmap, pgmap, &_pg_report);
-        if (!_pg_report.ok_to_stop()) {
-          osds.pop_back();
-          ++failed;
+    for(size_t i = osd_subset_count;
+        i < to_upgrade.size() && osds.size() < max;
+        ++i) {
+      int candidate = to_upgrade[i];
+      osds.push_back(candidate);
+      // offline pg check with new osd
+      offline_pg_report _pg_report;
+      _check_offlines_pgs(osds, osdmap, pgmap, &_pg_report);
+      if (_pg_report.ok_to_stop()) {
+        upgrade_osd_report _osd_report;
+        _update_upgraded_osds(orig_osds, osds, upgraded,
+                              version_unknown, &_osd_report);
+        if (_osd_report.ok_to_upgrade()) {
+          // avoid deep copies as the reports may be huge
+          *out_pg_report = std::move(_pg_report);
+          *out_osd_report = std::move(_osd_report);
           continue;
         }
-        _update_upgraded_osds(orig_osds, osds, upgraded,
-          version_unknown, &_osd_report);
-        *out_pg_report = _pg_report;
-        *out_osd_report = _osd_report;
-        if (osds.size() == max) {
-          dout(20) << " hit max" << dendl;
-          if (out_osd_report->ok_to_upgrade()) {
-            // Found additional children that can be upgraded
-            dout(20) << "found " << osds.size() - to_upgrade.size()
-                     << " additional OSD(s) to upgrade" << dendl;
-          }
-          return;  // yay, we hit the max
-        }
       }
+      // pg check or osd report failed, disregard osd
+      osds.pop_back();
+      ++failed;
     }
-
+    if (osds.size() == max) {
+      dout(20) << " hit max" << dendl;
+    }
+    if (osds.size() > osd_subset_count) {
+      dout(20) << "found " << osds.size() - osd_subset_count
+               << " additional OSD(s) to upgrade" << dendl;
+    }
     if (failed) {
       // we hit some failures; go with what we have
       dout(20) << " hit some peer failures" << dendl;
-      return;
     }
   }
 }
@@ -2282,7 +2302,7 @@ bool DaemonServer::_handle_command(
     cmd_getval(cmdctx->cmdmap, "crush_bucket", crush_bucket_name);
     std::string ceph_version;
     cmd_getval(cmdctx->cmdmap, "ceph_version", ceph_version);
-    int64_t max = 1;
+    int64_t max = 0; // default value
     cmd_getval(cmdctx->cmdmap, "max", max);
     int r;
     std::vector<int> osds_in_crush_bucket;
@@ -2335,8 +2355,12 @@ bool DaemonServer::_handle_command(
       cmdctx->reply(-ENOENT, ss);
       return true;
     }
-    if (max < (int)osds_in_crush_bucket.size()) {
-      max = osds_in_crush_bucket.size();
+    // If 'max' is not specified, limit it to the number of osds
+    // in the crush bucket
+    if (max == 0) {
+      max = (int)osds_in_crush_bucket.size();
+      dout(0) << "Override 'max' to " << max << ", which is the total number "
+              << "of osds in crush bucket " << crush_bucket_name << dendl;
     }
     upgrade_osd_report osd_upgrade_report;
     offline_pg_report pg_offline_report;
@@ -2365,9 +2389,10 @@ bool DaemonServer::_handle_command(
         cmdctx->reply(-EAGAIN, ss);
       }
       if (!pg_offline_report.ok_to_stop()) {
-        ss << "unsafe to upgrade osd(s) at this time ("
-           << pg_offline_report.not_ok.size()
-           << " PGs are or would become offline)";
+        ss << "unsafe to upgrade OSD(s) at this time (one or more"
+           << " PG(s) will become offline if any OSD out of the "
+           << osds_in_crush_bucket.size() << " in CRUSH bucket '"
+           << crush_bucket_name << "' is stopped)";
         cmdctx->reply(-EBUSY, ss);
       }
       // ok_to_upgrade() would be false in case all osds are upgraded
@@ -3045,14 +3070,27 @@ bool DaemonServer::_handle_command(
     return true;
   }
 
+  // Validate that the module is enabled
+  auto& py_handler_name = py_command.module_name;
+  PyModuleRef module = py_modules.get_module(py_handler_name);
+  ceph_assert(module);
+  if (!module->is_enabled()) {
+    ss << "Module '" << py_handler_name << "' is not enabled (required by "
+          "command '" << prefix << "'): use `ceph mgr module enable "
+          << py_handler_name << "` to enable it";
+    dout(4) << ss.str() << dendl;
+    cmdctx->reply(-EOPNOTSUPP, ss);
+    return true;
+  }
+
   // Validate that the module is active
   auto& mod_name = py_command.module_name;
   if (!py_modules.is_module_active(mod_name)) {
-    ss << "Module '" << mod_name << "' is not enabled/loaded (required by "
-          "command '" << prefix << "'): use `ceph mgr module enable "
-          << mod_name << "` to enable it";
+    ss << "Module '" << mod_name << "' did not initialize in time (required by "
+          "command '" << prefix << "'): see https://docs.ceph.com/en/latest/rados/operations/health-checks/#mgr-module-error "
+	  "for troubleshooting tips.";
     dout(4) << ss.str() << dendl;
-    cmdctx->reply(-EOPNOTSUPP, ss);
+    cmdctx->reply(-ETIMEDOUT, ss);
     return true;
   }
 
@@ -3061,24 +3099,11 @@ bool DaemonServer::_handle_command(
   dout(10) << "passing through command '" << prefix << "' size " << cmdctx->cmdmap.size() << dendl;
   Finisher& mod_finisher = py_modules.get_active_module_finisher(mod_name);
 
-  mod_finisher.queue(new LambdaContext([this, cmdctx, session, py_command, prefix, op]
+  mod_finisher.queue(new LambdaContext([this, cmdctx, session, py_command, prefix, op, py_handler_name, module]
                                        (int r_) mutable {
     std::stringstream ss;
 
     dout(10) << "dispatching command '" << prefix << "' size " << cmdctx->cmdmap.size() << dendl;
-
-    // Validate that the module is enabled
-    auto& py_handler_name = py_command.module_name;
-    PyModuleRef module = py_modules.get_module(py_handler_name);
-    ceph_assert(module);
-    if (!module->is_enabled()) {
-      ss << "Module '" << py_handler_name << "' is not enabled (required by "
-            "command '" << prefix << "'): use `ceph mgr module enable "
-            << py_handler_name << "` to enable it";
-      dout(4) << ss.str() << dendl;
-      cmdctx->reply(-EOPNOTSUPP, ss);
-      return;
-    }
 
     // Hack: allow the self-test method to run on unhealthy modules.
     // Fix this in future by creating a special path for self test rather
@@ -3683,6 +3708,12 @@ void DaemonServer::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("mgr_stats_threshold") || changed.count("mgr_stats_period")) {
     dout(4) << "Updating stats threshold/period on "
             << daemon_connections.size() << " clients" << dendl;
+    if (changed.count("mgr_stats_period")) {
+      int64_t new_period = g_conf().get_val<int64_t>("mgr_stats_period");
+      if (stats_autotuner->was_changed_by_user(new_period)) {
+        stats_autotuner->set_baseline_period(new_period); // user changed
+      }
+    }
     // Send a fresh MMgrConfigure to all clients, so that they can follow
     // the new policy for transmitting stats
     finisher.queue(new LambdaContext([this](int r) {

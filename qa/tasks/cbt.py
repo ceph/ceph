@@ -67,7 +67,22 @@ class CBT(Task):
 
         if system_type == 'rpm':
             install_cmd = ['sudo', 'yum', '-y', 'install']
-            cbt_depends = ['librbd-devel', 'pdsh', 'pdsh-rcmd-ssh','perf']
+            cbt_depends = ['librbd-devel', 'perf']
+
+            # pdsh is not available in the repos for el10, use el9 version which works fine
+            os_version = misc.get_distro_version(self.ctx)
+            os_major_version = int(os_version.split('.')[0])
+            if os_major_version >= 10:
+                self.log.info('Installing pdsh from el9 repo into el10 system')
+                pdsh_base = 'https://dl.fedoraproject.org/pub/epel/9/Everything/x86_64/Packages/p'
+                self.first_mon.run(args=[
+                    'sudo', 'yum', '-y', 'install',
+                    f'{pdsh_base}/pdsh-2.34-7.el9.x86_64.rpm',
+                    f'{pdsh_base}/pdsh-rcmd-ssh-2.34-7.el9.x86_64.rpm',
+                ])
+            else:
+                cbt_depends += ['pdsh', 'pdsh-rcmd-ssh']
+
             self.log.info('Installing collectl')
             collectl_location = "https://sourceforge.net/projects/collectl/files/collectl/collectl-4.3.1/collectl-4.3.1.src.tar.gz/download"
             self.first_mon.run(
@@ -82,17 +97,20 @@ class CBT(Task):
             )
         else:
             install_cmd = ['sudo', 'apt-get', '-y', '--force-yes', 'install']
-            cbt_depends = ['librbd-dev', 'collectl', 'linux-tools-generic']
+            cbt_depends = ['librbd-dev', 'collectl', 'linux-tools-generic', 'python3-venv']
         self.first_mon.run(args=install_cmd + cbt_depends)
 
-        # Install the python dependencies from the CBT project requirements.txt file
+        # Create a virtual environment for CBT
+        testdir = misc.get_testdir(self.ctx)
+        venv_path = f'{testdir}/cbt-venv'
+        self.first_mon.run(args=['python3', '-m', 'venv', venv_path])
+
+        # Install the python dependencies from the CBT project requirements.txt file into the venv
         pip_install_cmd = [
-            'python3',
-            '-m',
-            'pip',
+            f'{venv_path}/bin/pip',
             'install',
             '-r',
-            f'{misc.get_testdir(self.ctx)}/cbt/requirements.txt',
+            f'{testdir}/cbt/requirements.txt',
         ]
         self.first_mon.run(args=pip_install_cmd)
 
@@ -172,6 +190,7 @@ class CBT(Task):
         )
         self.first_mon.run(
             args=[
+                '{tdir}/cbt-venv/bin/python'.format(tdir=testdir),
                 '{tdir}/cbt/cbt.py'.format(tdir=testdir),
                 '-a', self.cbt_dir,
                 '{cbtdir}/cbt_config.yaml'.format(cbtdir=self.cbt_dir),
@@ -187,6 +206,7 @@ class CBT(Task):
             args=[
                 'rm', '--one-file-system', '-rf', '--',
                 '{tdir}/cbt'.format(tdir=testdir),
+                '{tdir}/cbt-venv'.format(tdir=testdir),
             ]
         )
         benchmark_type = next(iter(self.cbt_config.get('benchmarks').keys()))

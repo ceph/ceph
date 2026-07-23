@@ -109,7 +109,6 @@ class Module(MgrModule):
 
                     metadata = self.get_metadata('mds', info['name'],
                                                  default=defaultdict(lambda: 'unknown'))
-                    assert metadata
                     mds_versions[metadata['ceph_version']].append(info['name'])
 
                     if output_format in ('json', 'json-pretty'):
@@ -159,7 +158,6 @@ class Module(MgrModule):
 
                 metadata = self.get_metadata('mds', daemon_info['name'],
                                              default=defaultdict(lambda: 'unknown'))
-                assert metadata
                 mds_versions[metadata['ceph_version']].append(daemon_info['name'])
 
                 if output_format in ('json', 'json-pretty'):
@@ -226,7 +224,7 @@ class Module(MgrModule):
                 output += "\n" + pools_table.get_string() + "\n"
 
         if not output and not json_output and fs_filter is not None:
-            return errno.EINVAL, "", "Invalid filesystem: " + fs_filter
+            return -errno.EINVAL, "", "Invalid filesystem: " + fs_filter
 
         standby_table = PrettyTable(["STANDBY MDS"], border=False)
         standby_table.left_padding_width = 0
@@ -234,7 +232,6 @@ class Module(MgrModule):
         for standby in fsmap['standbys']:
             metadata = self.get_metadata('mds', standby['name'],
                                          default=defaultdict(lambda: 'unknown'))
-            assert metadata
             mds_versions[metadata['ceph_version']].append(standby['name'])
 
             if output_format in ('json', 'json-pretty'):
@@ -320,7 +317,7 @@ class Module(MgrModule):
 
             if not found:
                 msg = "Bucket '{0}' not found".format(bucket_filter)
-                return errno.ENOENT, msg, ""
+                return -errno.ENOENT, msg, ""
 
         # Build dict of OSD ID to stats
         osd_stats = dict([(o['osd'], o) for o in self.get("osd_stats")['osd_stats']])
@@ -337,7 +334,6 @@ class Module(MgrModule):
             if osd_id in osd_stats:
                 metadata = self.get_metadata('osd', str(osd_id), default=defaultdict(str))
                 stats = osd_stats[osd_id]
-                assert metadata
                 hostname = metadata['hostname']
                 kb_used = stats['kb_used'] * 1024
                 kb_avail = stats['kb_avail'] * 1024

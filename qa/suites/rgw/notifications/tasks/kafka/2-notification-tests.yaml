@@ -1,0 +1,5 @@
+tasks:
+- notification-tests:
+    client.0:
+      extra_attr: ["kafka_test", "kafka_security_test"]
+      rgw_server: client.0

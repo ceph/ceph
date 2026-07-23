@@ -347,7 +347,10 @@ test_rmobj() {
     $CEPH_TOOL osd pool set-quota $p max_objects 1
     V1=`mktemp fooattrXXXXXXX`
     $RADOS_TOOL put $OBJ $V1 -p $p
-    while ! $CEPH_TOOL osd dump | grep 'full_quota max_objects'
+    while ! $CEPH_TOOL osd dump --format=json | \
+            jq -e ".pools[] | select(.pool_name == \"$p\") | \
+            select(.flags_names | contains(\"full_quota\")) | \
+            select(.quota_max_objects > 0)"
     do
 	sleep 2
     done

@@ -130,6 +130,7 @@ CHECK_CXX_COMPILER_FLAG("-Wredundant-move" COMPILER_SUPPORTS_REDUNDANT_MOVE)
 if(COMPILER_SUPPORTS_REDUNDANT_MOVE)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wredundant-move>)
 endif()
+CHECK_CXX_COMPILER_FLAG("-Werror=vla" COMPILER_SUPPORTS_VLA_ERROR)
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   if(WIN32)
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 10)
@@ -238,8 +239,15 @@ if(HAVE_INTEL)
     check_nasm_support(${object_format}
       HAVE_NASM_X64
       HAVE_NASM_X64_AVX2
-      HAVE_NASM_X64_AVX512)
+      HAVE_NASM_X64_AVX512
+      HAVE_NASM_X64_AVX512_VPCLMUL)
   endif()
+endif()
+
+# Set WITH_EC_ISA_PLUGIN early so it's available when processing common/options
+# This must be set before add_subdirectory(common) is called
+if(HAVE_NASM_X64_AVX2 OR HAVE_ARMV8_SIMD OR HAS_ALTIVEC OR HAVE_RISCV_RVV)
+  set(WITH_EC_ISA_PLUGIN TRUE CACHE BOOL "")
 endif()
 
 # require c++23
@@ -438,6 +446,8 @@ else()
   set(BUILD_SHARED_LIBS ${old_BUILD_SHARED_LIBS})
   unset(old_BUILD_SHARED_LIBS)
   include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/fmt/include")
+  get_target_property(FMT_VERSION fmt VERSION)
+  set(fmt_VERSION "${FMT_VERSION}")
 endif()
 
 # in osd/PeeringState.h, the number of elements in PeeringState::Active::reactions
@@ -465,6 +475,11 @@ if(WITH_CRIMSON)
   set(Seastar_API_LEVEL "6" CACHE STRING "" FORCE)
   set(Seastar_IO_URING ${HAVE_LIBURING} CACHE BOOL "" FORCE)
   set(Seastar_DEPRECATED_OSTREAM_FORMATTERS OFF CACHE BOOL "" FORCE)
+  if(WITH_ASAN)
+    set(Seastar_SANITIZE "ON" CACHE STRING "" FORCE)
+  else()
+    set(Seastar_SANITIZE "OFF" CACHE STRING "" FORCE)
+  endif()
   if(Seastar_DPDK)
     find_package(dpdk QUIET)
     if(NOT DPDK_FOUND)
@@ -494,7 +509,7 @@ if(WITH_CRIMSON)
   target_compile_options(seastar
   PUBLIC
     # required by any target that links to seastar
-    "-Wno-non-virtual-dtor"
+    "$<$<COMPILE_LANGUAGE:CXX>:-Wno-non-virtual-dtor>"
   PRIVATE
     "-DSEASTAR_NO_EXCEPTION_HACK"
     "-Wno-error"
@@ -502,7 +517,13 @@ if(WITH_CRIMSON)
     "-Wno-attributes"
     "-Wno-pessimizing-move"
     "-Wno-address-of-packed-member")
+  if(WITH_ASAN)
+    # As built here (RelWithDebInfo) seastar keeps its own allocator, which
+    # ASan calls via dlsym before init, crashing every test before main().
+    target_compile_definitions(seastar PUBLIC SEASTAR_DEFAULT_ALLOCATOR)
+  endif()
   add_subdirectory(crimson)
+  add_dependencies(crimson-osd erasure_code)
 endif()
 
 include(CheckTypeSize)
@@ -530,6 +551,7 @@ set(libcommon_files
   mon/MonMap.cc
   mon/MonSub.cc
   mon/error_code.cc
+  mgr/DaemonHealthMetric.cc
   mgr/MgrClient.cc
   mon/MgrMap.cc
   mon/PGMap.cc
@@ -589,6 +611,7 @@ set(ceph_common_deps
   common_utf8 extblkdev arch crc32
   ${LIB_RESOLV}
   Boost::thread
+  Boost::context
   Boost::random
   Boost::program_options
   Boost::date_time
@@ -781,6 +804,7 @@ if(NOT CEPH_BUILD_VIRTUALENV)
 endif()
 
 option(WITH_CEPHADM "Flag to determine if cephadm should be built" ON)
+option(WITH_PYPKG "Build using PEP517 & PEP518 packaging when possible" OFF)
 
 if(NOT WIN32)
 add_subdirectory(pybind)
@@ -1007,19 +1031,16 @@ if(WITH_FUSE)
 endif(WITH_FUSE)
 
 # NVMEOF GATEWAY MONITOR CLIENT
-# Supported on RPM-based platforms only, depends on grpc devel libraries/tools
-if(EXISTS "/etc/redhat-release" OR EXISTS "/etc/fedora-release")
-  option(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT "build nvmeof gateway monitor client" ON)
-else()
-  option(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT "build nvmeof gateway monitor client" OFF)
-endif()
+option(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT "build nvmeof gateway monitor client" ON)
 
 if(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT)
 
-  # Find Protobuf installation
-  # Looks for protobuf-config.cmake file installed by Protobuf's cmake installation.
-  option(protobuf_MODULE_COMPATIBLE TRUE)
-  find_package(Protobuf REQUIRED)
+  # Prefer config mode so gRPC sees protobuf's full target set
+  # (incl. upb); fall back to module mode.
+  find_package(Protobuf CONFIG)
+  if(NOT Protobuf_FOUND)
+    find_package(Protobuf REQUIRED)
+  endif()
 
   set(_REFLECTION grpc++_reflection)
   if(CMAKE_CROSSCOMPILING)
@@ -1029,16 +1050,31 @@ if(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT)
     set(_PROTOBUF_PROTOC $<TARGET_FILE:protobuf::protoc>)
   endif()
 
-  # Find gRPC installation
-  # Looks for gRPCConfig.cmake file installed by gRPC's cmake installation.
-  find_package(gRPC CONFIG REQUIRED)
-  message(STATUS "Using gRPC ${gRPC_VERSION}")
-  set(_GRPC_GRPCPP gRPC::grpc++)
-  if(CMAKE_CROSSCOMPILING)
-    find_program(_GRPC_CPP_PLUGIN_EXECUTABLE grpc_cpp_plugin
-      REQUIRED)
+  # Find gRPC - try cmake config first (gRPC >= 1.50 and RHEL/Rocky packages),
+  # fall back to pkg-config for distros without cmake config files (e.g. Ubuntu 22.04).
+  find_package(gRPC CONFIG QUIET)
+  if(gRPC_FOUND)
+    message(STATUS "Using gRPC ${gRPC_VERSION}")
+    set(_GRPC_GRPCPP gRPC::grpc++)
+    if(CMAKE_CROSSCOMPILING)
+      find_program(_GRPC_CPP_PLUGIN_EXECUTABLE grpc_cpp_plugin REQUIRED)
+    else()
+      set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
+    endif()
+    # Modern gRPC links system absl; HAVE_ABSEIL makes opentelemetry-cpp do the
+    # same so their two absl inline namespaces don't collide in shared TUs.
+    set(_HAVE_ABSEIL ON)
   else()
-    set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(GRPCPP REQUIRED IMPORTED_TARGET grpc++)
+    message(STATUS "Using gRPC ${GRPCPP_VERSION} (via pkg-config)")
+    set(_GRPC_GRPCPP PkgConfig::GRPCPP)
+    find_program(_GRPC_CPP_PLUGIN_EXECUTABLE grpc_cpp_plugin REQUIRED)
+    # Older gRPC (e.g. Jammy's 1.30.2) uses bundled absl; libabsl-dev not required.
+    set(_HAVE_ABSEIL OFF)
+    # grpc++.pc omits protobuf from Requires; add it so PkgConfig::GRPCPP
+    # carries the same transitive dependency as the cmake-config gRPC::grpc++.
+    target_link_libraries(PkgConfig::GRPCPP INTERFACE protobuf::libprotobuf)
   endif()
 
   # Gateway Proto file
@@ -1103,9 +1139,7 @@ if(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT)
     nvmeof/NVMeofGwMonitorClient.cc)
   add_executable(ceph-nvmeof-monitor-client ${ceph_nvmeof_monitor_client_srcs})
   add_dependencies(ceph-nvmeof-monitor-client ceph-common)
-  # absl is installed as grpc build dependency on RPM based systems
-  # Also isolate this flag to specific targets which needs this package
-  if(EXISTS "/etc/redhat-release" OR EXISTS "/etc/fedora-release")
+  if(_HAVE_ABSEIL)
     target_compile_definitions(ceph-nvmeof-monitor-client PRIVATE HAVE_ABSEIL)
     target_compile_definitions(ceph-mon PRIVATE HAVE_ABSEIL)
   endif()
@@ -1149,10 +1183,6 @@ if(WITH_RBD)
 endif(WITH_RBD)
 
 # RadosGW
-if(WITH_KVS)
-  add_subdirectory(key_value_store)
-endif(WITH_KVS)
-
 if(WITH_RADOSGW)
   if(WITH_RADOSGW_SELECT_PARQUET OR WITH_RADOSGW_ARROW_FLIGHT)
     if(WITH_SYSTEM_ARROW)
@@ -1284,7 +1314,6 @@ if(DOXYGEN_FOUND)
     include
     journal
     json_spirit
-    key_value_store
     kv
     librados
     libradosstriper

@@ -5,7 +5,7 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
-import { ToastrModule } from 'ngx-toastr';
+
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 
@@ -14,13 +14,7 @@ describe('RgwSystemUserComponent', () => {
   let fixture: ComponentFixture<RgwSystemUserComponent>;
 
   configureTestBed({
-    imports: [
-      SharedModule,
-      ReactiveFormsModule,
-      RouterTestingModule,
-      HttpClientTestingModule,
-      ToastrModule.forRoot()
-    ],
+    imports: [SharedModule, ReactiveFormsModule, RouterTestingModule, HttpClientTestingModule],
     declarations: [RgwSystemUserComponent],
     providers: [NgbActiveModal]
   });

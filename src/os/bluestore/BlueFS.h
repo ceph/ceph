@@ -211,6 +211,15 @@ public:
   /* used for sanity checking of vselector */
   virtual BlueFSVolumeSelector* clone_empty() const { return nullptr; }
   virtual bool compare(BlueFSVolumeSelector* other) { return true; };
+
+  /**
+  *  Update device total size after online expansion
+  *  Parameters:
+  *    dev_id: BlueFS device id (BDEV_WAL, BDEV_DB, BDEV_SLOW)
+  *    new_size: new total size of the device
+  *
+  */
+  virtual void expand_device(uint8_t dev_id, uint64_t new_size) = 0;
 };
 
 struct bluefs_shared_alloc_context_t {
@@ -409,19 +418,38 @@ public:
     MEMPOOL_CLASS_HELPERS();
 
     FileRef file;
-    uint64_t pos = 0;       ///< start offset for buffer
-  private:
-    ceph::buffer::list buffer;      ///< new data to write (at end of file)
-    ceph::buffer::list tail_block;  ///< existing partial block at end of file, if any
-  public:
-    unsigned get_buffer_length() const {
-      return buffer.length();
+    uint64_t get_pos() {
+      return pos;
     }
-    ceph::bufferlist flush_buffer(
+    void set_pos(uint64_t new_pos) {
+      ceph_assert(buffer.length() == 0);
+      ceph_assert(p2aligned<uint32_t>(new_pos, super_block_size));
+      pos = new_pos;
+      buffer_pos = pos;
+    }
+  private:
+    uint64_t pos = 0;          ///< offset of unflushed data
+    ceph::buffer::list buffer; ///< new data to write (at end of file)
+                               ///  includes unaligned tail from last flush
+    uint32_t super_block_size;
+    uint64_t buffer_pos = 0;   ///< offset of buffer in file
+  public:
+    // does not take into account part of `buffer` already flushed to disk
+    unsigned get_buffer_length() const {
+      return buffer.length() - (pos - buffer_pos);
+    }
+    // indicates that a part of buffer has already been flushed to disk
+    bool has_flushed_data() {
+      return pos != buffer_pos;
+    }
+    // offset (in file) of `buffer` to flush
+    uint64_t get_flush_offset() {
+      return buffer_pos;
+    }
+    // create bufferlist to write to disk, modify buffer
+    ceph::bufferlist get_flush_buffer(
       CephContext* cct,
-      const bool partial,
-      const unsigned length,
-      const bluefs_super_t& super);
+      uint64_t flush_end);
     ceph::buffer::list::page_aligned_appender buffer_appender;  //< for const char* only
     bufferlist::contiguous_filler envelope_head_filler;
   public:
@@ -432,10 +460,12 @@ public:
     std::array<IOContext*,MAX_BDEV> iocv; ///< for each bdev
     std::array<bool, MAX_BDEV> dirty_devs;
 
-    FileWriter(FileRef f)
-      : file(std::move(f)),
-       buffer_appender(buffer.get_page_aligned_appender(
-                         g_conf()->bluefs_alloc_size / CEPH_PAGE_SIZE)), envelope_head_filler() {
+    FileWriter(FileRef f, unsigned super_block_size)
+      : file(std::move(f))
+      , super_block_size(super_block_size)
+      , buffer_appender(buffer.get_page_aligned_appender(
+        std::max<uint64_t>(g_conf()->bluefs_alloc_size, 2 * super_block_size) / CEPH_PAGE_SIZE))
+      , envelope_head_filler() {
       ++file->num_writers;
       iocv.fill(nullptr);
       dirty_devs.fill(false);
@@ -445,7 +475,9 @@ public:
     }
     // NOTE: caller must call BlueFS::close_writer()
     ~FileWriter() {
-      --file->num_writers;
+      if (file) {
+        --file->num_writers;
+      }
       for (unsigned i = 0; i < MAX_BDEV; ++i) {
         delete iocv[i];
       }
@@ -479,11 +511,15 @@ public:
     }
 
     bufferlist::contiguous_filler append_hole(uint64_t len) {
+      if (buffer.get_append_buffer_unused_tail_length() < len) {
+        ceph_assert(buffer.length() == 0);
+        buffer_appender.refill();
+      }
       return buffer.append_hole(len);
     }
 
     uint64_t get_effective_write_pos() {
-      return pos + buffer.length();
+      return buffer_pos + buffer.length();
     }
 
   };
@@ -522,21 +558,27 @@ public:
     }
   };
 
+  struct FileReaderOpts {
+    bool ignore_eof;
+    bool buffered;
+  };
   struct FileReader {
     MEMPOOL_CLASS_HELPERS();
 
     FileRef file;
     FileReaderBuffer buf;
     bool ignore_eof;        ///< used when reading our log file
+    bool buffered;
     ceph::shared_mutex lock {
      ceph::make_shared_mutex(std::string(), false, false, false)
     };
 
 
-    FileReader(FileRef f, uint64_t mpf, bool ie)
+    FileReader(FileRef f, uint64_t mpf, const FileReaderOpts opts)
       : file(f),
 	buf(mpf),
-	ignore_eof(ie) {
+	ignore_eof(opts.ignore_eof),
+        buffered(opts.buffered) {
       ++file->num_readers;
     }
     ~FileReader() {
@@ -667,8 +709,8 @@ private:
 
   /* signal replay log to include h->file in nearest log flush */
   int _signal_dirty_to_log_D(FileWriter *h);
-  int _flush_range_F(FileWriter *h, uint64_t offset, uint64_t length);
-  int _flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool buffered);
+  int _flush_range_F(FileWriter *h, uint64_t end); // flush up to offset 'end'
+  uint64_t _flush_data(FileWriter *h, uint64_t end, bool buffered);
   int _flush_F(FileWriter *h, bool force, bool *flushed = nullptr);
   int _flush_envelope_F(FileWriter *h);
   int _fsync(FileWriter *h, bool force_dirty);
@@ -805,6 +847,12 @@ public:
   }
   int fsck();
 
+  int migrate_file(
+    CephContext *cct,
+    FileRef file_ref,
+    int from_bdev,
+    int to_bdev
+  );
   int device_migrate_to_new(
     CephContext *cct,
     const std::set<int>& devs_source,
@@ -855,6 +903,7 @@ public:
   int unlink(std::string_view dirname, std::string_view filename);
   int mkdir(std::string_view dirname);
   int rmdir(std::string_view dirname);
+
   bool wal_is_rotational();
   bool db_is_rotational();
 
@@ -895,6 +944,8 @@ public:
                        bluefs_shared_alloc_context_t* _shared_alloc = nullptr);
   bool bdev_support_label(unsigned id);
   BlockDevice* get_block_device(unsigned bdev) const;
+
+  void expand_device(unsigned devid, uint64_t new_size, uint64_t old_size);
 
   // handler for discard event
   void handle_discard(unsigned dev, interval_set<uint64_t>& to_release);
@@ -960,6 +1011,121 @@ private:
     const std::string& dir,
     const std::string& name
   );
+
+  enum class SpillOverCleanerAction {
+    CONTINUE,
+    SLEEP,
+    DONE
+  };
+
+  struct SpilloverCleanerLogic {
+    virtual ~SpilloverCleanerLogic() = default;
+    const char* const name;
+    explicit SpilloverCleanerLogic(const char* n) : name(n) {}
+    virtual SpillOverCleanerAction advance(
+      BlueFS* fs
+    ) = 0;
+    virtual void dump_history(Formatter* f) = 0;
+    virtual void dump_plan(Formatter* f) = 0;
+  };
+
+  struct SpilloverCleanerThread : public Thread {
+  public:
+    explicit SpilloverCleanerThread(BlueFS* fs)
+      : bluefs(fs) {}
+    void* entry() override;
+    void init() {
+      std::lock_guard l(lock);
+      if (created) {
+        return;
+      }
+      stop = false;
+      logic = std::make_shared<RebalanceToDB>();
+      create("bluefs_splctr");
+      created = true;
+    }
+    void shutdown() {
+      {
+        std::unique_lock l(lock);
+        if (!created) {
+          return;
+        }
+        while (!start) {
+          cond.wait(l);
+        }
+        stop = true;
+        cond.notify_all();
+      }
+      join();
+    }
+
+    void update_logic(std::shared_ptr<SpilloverCleanerLogic> logic_)
+    {
+      std::lock_guard l(lock);
+      logic = std::move(logic_);
+      cond.notify_all();
+    }
+    void dump(Formatter* f) {
+      std::lock_guard l(lock);
+      if (logic) {
+        logic->dump_history(f);
+        logic->dump_plan(f);
+      }
+    }
+  private:
+    BlueFS* bluefs;
+    ceph::mutex lock = ceph::make_mutex("SpilloverCleanerThread::lock");
+    ceph::condition_variable cond;
+
+    bool stop = false;
+    bool start = false;
+    bool created = false;
+
+    std::shared_ptr<SpilloverCleanerLogic> logic;
+  } spillover_cleaner_thread;
+
+  struct RebalanceToDB : public SpilloverCleanerLogic {
+    std::vector<std::pair<std::string, FileRef>> pending;
+    std::vector<std::pair<std::string, int>> skipped;
+    utime_t last_scan_time;
+    std::deque<std::string> history;
+    static constexpr size_t max_history = 100;
+    size_t idx = 0;
+    RebalanceToDB()
+      : SpilloverCleanerLogic("RebalanceToDB") {}
+    SpillOverCleanerAction advance(
+      BlueFS* fs
+    ) override;
+    void dump_history(Formatter* f) override;
+    void dump_plan(Formatter* f) override;
+    void append_entry(const std::string& path,
+      uint64_t size,
+      uint64_t migrated,
+      int from_bdev,
+      int to_bdev);
+  };
+public:
+  void spillover_cleaner_start()
+  {
+    spillover_cleaner_thread.init();
+  }
+  void spillover_cleaner_stop()
+  {
+    spillover_cleaner_thread.shutdown();
+  }
+  void update_spillover_cleaner_from_config()
+  {
+    if(cct->_conf->bluefs_spillover_cleaner) {
+      spillover_cleaner_start();
+    } else {
+      spillover_cleaner_stop();
+    }
+  }
+  void dump_spillover_cleaner_stats(Formatter* f) {
+    f->open_object_section("spillover_cleaner_stats");
+    spillover_cleaner_thread.dump(f);
+    f->close_section();
+  }
 };
 
 class OriginalVolumeSelector : public BlueFSVolumeSelector {
@@ -1002,6 +1168,22 @@ public:
   void reset_history(std::ostream& sout) override {
     // do nothing
     return;
+  }
+
+  void expand_device(uint8_t dev_id, uint64_t new_size) override {
+    switch (dev_id) {
+    case BlueFS::BDEV_WAL:
+      wal_total = new_size;
+      break;
+    case BlueFS::BDEV_DB:
+      db_total = new_size;
+      break;
+    case BlueFS::BDEV_SLOW:
+      slow_total = new_size;
+      break;
+    default:
+      break;
+    }
   }
 };
 
@@ -1147,12 +1329,27 @@ public:
     }
   }
 
-  uint64_t get_available_extra() const {
-    return db_avail4slow;
-  }
+  // Returns a static value (based on disk layout and store's settings)
+  // of the first RocksDB level which doesn't fully fit into "fast" volume.
+  // So with the selector's help data belonging to this level could be 
+  // [partially] allocated at that volume if get_*_extra() methods below
+  // indicate non-zero values. 
   uint64_t get_extra_level() const {
     return extra_level;
   }
+  // Returns a static value (based on disk layout and store's settings)
+  // of the extra space at DB volume which
+  // this volume selector permits for using by data from "slow" levels.
+  // Takes both maximum historical observations and store's settings
+  // into account
+  uint64_t get_max_extra() const {
+    return db_avail4slow;
+  }
+  // Calculates the effective amount of extra space at "fast" volume which
+  // this volume selector permits for using by data from "slow" levels.
+  // Takes both the maximum historical observations and the value from 
+  // get_max_extra() into account to get the final result.
+  uint64_t get_effective_extra() const;
   void* get_hint_for_log() const override {
     return  reinterpret_cast<void*>(LEVEL_LOG);
   }
@@ -1237,6 +1434,22 @@ public:
   void dump(std::ostream& sout) override;
   BlueFSVolumeSelector* clone_empty() const override;
   bool compare(BlueFSVolumeSelector* other) override;
+
+  void expand_device(uint8_t dev_id, uint64_t new_size) override {
+    switch (dev_id) {
+    case BlueFS::BDEV_WAL:
+      l_totals[LEVEL_WAL - LEVEL_FIRST] = new_size;
+      break;
+    case BlueFS::BDEV_DB:
+      l_totals[LEVEL_DB - LEVEL_FIRST] = new_size;
+      break;
+    case BlueFS::BDEV_SLOW:
+      l_totals[LEVEL_SLOW - LEVEL_FIRST] = new_size;
+      break;
+    default:
+      break;
+    }
+  }
 };
 
 /**

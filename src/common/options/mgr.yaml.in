@@ -33,6 +33,51 @@ options:
   services:
   - mgr
   - common
+- name: mgr_stats_period_autotune
+  type: bool
+  level: basic
+  desc: Automatically adjust mgr_stats_period based on Manager message queue depth
+  long_desc: When enabled, the Manager monitors its incoming message queue and automatically
+    increases mgr_stats_period when the queue backs up beyond the configured threshold,
+    reducing daemon reporting frequency to prevent Manager overload. The period is
+    gradually decreased back to the original value when the queue depth recovers.
+    This prevents performance degradation during high cluster activity without requiring
+    manual intervention. When disabled, mgr_stats_period remains at the manually
+    configured value.
+  default: true
+  services:
+  - mgr
+  see_also:
+  - mgr_stats_period
+- name: mgr_stats_period_autotune_queue_threshold
+  type: int
+  level: advanced
+  desc: Message queue depth that triggers automatic increase of mgr_stats_period
+  long_desc: When mgr_stats_period_autotune is enabled, the Manager will increase
+    the stats reporting period if the incoming message queue exceeds this threshold.
+    Higher values make the system less sensitive to temporary queue spikes but may
+    allow longer periods of Manager overload. Should be well below the smallest
+    of mgr_mon_messages, mgr_mds_messages, and mgr_osd_messages so the autotune
+    fires before any per-connection throttle saturates.
+  default: 100
+  services:
+  - mgr
+  see_also:
+  - mgr_stats_period
+- name: mgr_dispatch_throttle_bytes
+  type: size
+  level: advanced
+  desc: Limit total size of messages waiting in the mgr dispatch queue
+  long_desc: Sets the maximum total bytes of messages queued in the mgr dispatch
+    throttle. Overrides ms_dispatch_throttle_bytes for the mgr process. Should be
+    set to at least the sum of all per-type byte throttles (mgr_osd_bytes +
+    mgr_mds_bytes + mgr_client_bytes) to avoid the dispatch queue becoming a
+    bottleneck before per-connection throttles engage.
+  default: 1_G
+  services:
+  - mgr
+  see_also:
+  - ms_dispatch_throttle_bytes
 - name: mgr_client_bytes
   type: size
   level: dev
@@ -145,6 +190,19 @@ options:
   - mgr_module_path
   flags:
   - startup
+- name: mgr_subinterpreter_modules
+  type: str
+  level: advanced
+  desc: List of manager modules to load in independent subinterpreters
+  long_desc: A comma delimited list of module names. This list is read by manager
+    when it starts. By default, manager loads each module into the main interpreter.
+    Modules in this list will instead be loaded into independent subinterpreters.
+    Specifying '*' will cause all modules to be run in independent subinterpreters.
+  default: @mgr_subinterpreter_modules@
+  services:
+  - mgr
+  flags:
+  - startup
 - name: mgr_initial_modules
   type: str
   level: basic
@@ -160,6 +218,41 @@ options:
   flags:
   - no_mon_update
   - cluster_create
+- name: mgr_module_load_delay
+  type: millisecs
+  level: dev
+  default: 0
+  desc: Number of milliseconds for Manager modules to delay loading. For testing purposes only.
+  long_desc: Number of milliseconds for Manager modules to delay loading. For testing purposes only.
+  see_also:
+  - mgr_module_load_delay_name
+  flags:
+  - runtime
+  services:
+  - mgr
+- name: mgr_module_load_delay_name
+  type: str
+  level: dev
+  desc: Specify which Manager module is to delay loading by mgr_module_load_delay milliseconds. For testing purposes only.
+  long_desc: Specify which Manager module is to delay loading by mgr_module_load_delay milliseconds. For testing purposes only.
+  see_also:
+  - mgr_module_load_delay
+  flags:
+  - runtime
+  services:
+  - mgr
+- name: mgr_module_load_expiration
+  type: millisecs
+  level: dev
+  default: 20000
+  desc: Maximum number of milliseconds the active mgr is allowed to load the mgr modules before declaring availability.
+  long_desc: Maximum number of milliseconds the active mgr is allowed to load the mgr modules. If any modules are still
+    uninitialized after the expiration is exceeded, the mgr proceeds to declare availability, but a health error will be
+    issued indicating which modules didn't load in time.
+  flags:
+  - runtime
+  services:
+  - mgr
 - name: cephadm_path
   type: str
   level: advanced
@@ -317,9 +410,9 @@ options:
     replicas on each OSD as shown by the PGS column of a ``ceph osd df``
     report. In some circumstances it may exceed this target, up to the
     ``mon_max_pg_per_osd`` limit. Conversely, a lower number of PGs per OSD may be
-    set if the cluster is not yet fully utilized or when the sum of power-of-two
-    per-pool ``pg_num`` values does not permit a perfect fit.
-  default: 100
+    created if the cluster is not yet fully populated and the ``bulk`` flag is not
+    enabled for a given pool.
+  default: 200
   min: 1
 # min pgs per osd for reweight-by-pg command
 - name: mon_reweight_min_pgs_per_osd
@@ -361,6 +454,14 @@ options:
   default: 5
   min: 0
   max: 11
+- name: mgr_module_monitor_interval
+  type: int
+  level: advanced
+  desc: Period in seconds for collecting Manager modules cpu and memory performance counters.
+  long_desc: Period in seconds for Manager Monitor to collect the cpu and memory for
+    each enabled module. If set to 0, collection of these stats will be disabled.
+  default: 5
+  min: 0
 - name: mgr_tick_period
   type: secs
   level: advanced

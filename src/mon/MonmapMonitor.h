@@ -30,6 +30,8 @@
 #include "MonMap.h"
 #include "MonitorDBStore.h"
 
+struct Subscription;
+
 class MonmapMonitor : public PaxosService {
  public:
   MonmapMonitor(Monitor &mn, Paxos &p, const std::string& service_name)
@@ -87,13 +89,35 @@ private:
    * @param okay: Filled to true if okay, false if validation fails
    * @param errcode: filled with -errno if there's a problem
    * @param commit: true if we should commit the change, false if just testing
-   * @param tiebreaker_mon: the name of the monitor to declare tiebreaker
+   * @param tiebreaker_mon: the name of the monitor to declare tiebreaker (empty for auto-select)
    * @param dividing_bucket: the bucket type (eg 'dc') that divides the cluster
+   * @param crush: the pending CrushWrapper for validating monitor locations against subtrees
+   *
+   * Note: CRUSH bucket type and subtree count validation is performed by
+   * OSDMonitor::try_enable_stretch_mode() to avoid redundancy.
    */
   void try_enable_stretch_mode(std::stringstream& ss, bool *okay,
 			       int *errcode, bool commit,
-			       const std::string& tiebreaker_mon,
-			       const std::string& dividing_bucket);
+			       std::string tiebreaker_mon,
+			       const std::string& dividing_bucket,
+			       const CrushWrapper& crush);
+
+public:
+  /**
+   * Static helper for validating and enabling stretch mode on a MonMap.
+   * Extracted for testability - can be called from unit tests.
+   * Parameters same as try_enable_stretch_mode above.
+   * @param monmap: current committed monmap to validate against
+   * @param pending_map: pending monmap to modify when commit=true
+   */
+  static void validate_and_enable_stretch_mode(
+			       const MonMap& monmap,
+			       MonMap& pending_map,
+			       std::stringstream& ss, bool *okay,
+			       int *errcode, bool commit,
+			       std::string tiebreaker_mon,
+			       const std::string& dividing_bucket,
+			       const CrushWrapper& crush);
 
 public:
   /**

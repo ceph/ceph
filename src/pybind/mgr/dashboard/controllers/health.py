@@ -296,10 +296,10 @@ class HealthData(object):
         return mon_status
 
     def osd_map(self):
-        osd_map = mgr.get('osd_map')
+        osd_map = dict(mgr.get('osd_map'))
         assert osd_map is not None
         # Not needed, skip the effort of transmitting this to UI
-        del osd_map['pg_temp']
+        osd_map.pop('pg_temp', None)
         if self._minimal:
             osd_map = partial_dict(osd_map, ['osds'])
             osd_map['osds'] = [
@@ -395,7 +395,8 @@ class Health(BaseController):
                 'quorum': data.get('quorum', {})
             }
 
-        if self._has_permissions(Permission.READ, Scope.OSD):
+        if (self._has_permissions(Permission.READ, Scope.OSD)
+                or self._has_permissions(Permission.READ, Scope.POOL)):
             summary['osdmap'] = {
                 'in': data.get('osdmap', {}).get('num_in_osds'),
                 'up': data.get('osdmap', {}).get('num_up_osds'),

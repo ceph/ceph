@@ -13,9 +13,12 @@
  *
  */
 
+#include <common/pretty_binary.h>
 #include <stdio.h>
 #include <string.h>
 #include <iostream>
+#include <string>
+#include <random>
 #include <time.h>
 #include <sys/mount.h>
 #include "kv/KeyValueDB.h"
@@ -28,6 +31,7 @@
 #include "common/errno.h"
 #include "include/stringify.h"
 #include <gtest/gtest.h>
+#include <fmt/format.h>
 
 using namespace std;
 
@@ -127,6 +131,61 @@ TEST_P(KVTest, OpenWriteRead) {
     ASSERT_EQ(v2.length(), 6u);
     (v2.c_str())[v2.length()] = 0x0;
     ASSERT_EQ(std::string(v2.c_str()), std::string("value2"));
+  }
+  fini();
+}
+
+TEST_P(KVTest, RocksDBDumpTransaction) {
+  RocksDBStore* rdb = dynamic_cast<RocksDBStore*>(db.get());
+  if (!rdb) {
+    return;
+  }
+
+  ASSERT_EQ(0, db->create_and_open(cout));
+  {
+    KeyValueDB::Transaction t = db->get_transaction();
+    bufferlist value;
+    value.append("value");
+    t->set("O", "key", value);
+    value.clear();
+    value.append("value2");
+    t->set("P", "key2", value);
+    value.clear();
+    value.append("value3");
+    t->set("O", "key3", value);
+
+    t->rmkey("O", "A1");
+    t->rmkey("D", "A1");
+    t->rmkey("D", "A2");
+    t->rmkey("D", "A3");
+    t->merge("A", "A5", value);
+    // following txcs to be skipped
+    t->merge("B", "A5", value);
+    t->merge("B", "A5", value);
+
+    auto* _t = dynamic_cast<RocksDBStore::RocksDBTransactionImpl*>(t.get());
+    ASSERT_TRUE(_t != nullptr);
+    RocksWBHandler bat_txc_short(*rdb, false, 8);
+    _t->bat.Iterate(&bat_txc_short);
+    auto seen = bat_txc_short.get_seen(true); // using 'sorted' result to ensure
+                                              // fixed ordering in the result
+    std::cout << "Seen short = " << seen << std::endl;
+    ASSERT_EQ(seen, "DF:D*3,DF:O,MF:A,PF:O*2,PF:P,...*2");
+
+    RocksWBHandler bat_txc_verbose(*rdb, true, 8);
+    _t->bat.Iterate(&bat_txc_verbose);
+    seen = bat_txc_verbose.get_seen();
+    std::cout << "Seen verbose:" << seen << std::endl;
+    ASSERT_EQ(seen,
+      "\nPutCF(prefix = O, key = 'key', val len = 5)"
+      "\nPutCF(prefix = P, key = 'key2', val len = 6)"
+      "\nPutCF(prefix = O, key = 'key3', val len = 6)"
+      "\nDeleteCF(prefix = O, key = 'A1')"
+      "\nDeleteCF(prefix = D, key = 'A1')"
+      "\nDeleteCF(prefix = D, key = 'A2')"
+      "\nDeleteCF(prefix = D, key = 'A3')"
+      "\nMergeCF(prefix = A, key = 'A5', val len = 6)"
+      "\n<...>*2");
   }
   fini();
 }
@@ -1284,6 +1343,425 @@ TEST_F(RocksDBResharding, change_reshard) {
     check_db();
     db->close();
   }
+}
+
+typedef std::mt19937 gen_type;
+
+class RocksDBSplitRange : public ::testing::Test {
+public:
+  boost::scoped_ptr<RocksDBStore> db;
+  gen_type rng = gen_type(0);
+  RocksDBSplitRange() : db(0) {}
+
+  string _bl_to_str(bufferlist val) {
+    string str(val.c_str(), val.length());
+    return str;
+  }
+
+  void rm_r(string path) {
+    string cmd = string("rm -r ") + path;
+    if (verbose)
+      cout << "==> " << cmd << std::endl;
+    int r = ::system(cmd.c_str());
+    if (r) {
+      cerr << "failed with exit code " << r
+        << ", continuing anyway" << std::endl;
+    }
+  }
+
+  void SetUp() override {
+    verbose = getenv("VERBOSE") && strcmp(getenv("VERBOSE"), "1") == 0;
+
+    int r = ::mkdir("kv_test_temp_dir", 0777);
+    if (r < 0 && errno != EEXIST) {
+      r = -errno;
+      cerr << __func__ << ": unable to create kv_test_temp_dir: "
+        << cpp_strerror(r) << std::endl;
+      return;
+    }
+
+    KeyValueDB* db_kv = KeyValueDB::create(g_ceph_context, "rocksdb", "kv_test_temp_dir");
+    RocksDBStore* db_rocks = dynamic_cast<RocksDBStore*>(db_kv);
+    ceph_assert(db_rocks);
+    db.reset(db_rocks);
+    ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
+  }
+
+  void TearDown() override {
+    db.reset(nullptr);
+    rm_r("kv_test_temp_dir");
+  }
+
+  bool is_jenkins() {
+    return (getenv("JENKINS_HOME") != nullptr);
+  }
+
+  bool verbose;
+  std::vector<std::string> random_words = {
+    "found", "brain", "fully", "pen", "worth", "race",
+    "stand", "nodded", "whenever", "surrounded", "industrial", "skin",
+    "this", "direction", "family", "beginning", "whenever", "held",
+    "metal", "year", "like", "valuable", "softly", "whistle",
+    "perfectly", "broken", "idea", "also", "coffee", "branch",
+    "tongue", "immediately", "bent", "partly", "burn", "include",
+    "certain", "burst", "final", "smoke", "positive", "perfectly"
+  };
+  uniform_int_distribution<> uniform_random_words =
+    uniform_int_distribution<>(0, random_words.size() - 1);
+  uniform_int_distribution<> random_byte =
+    uniform_int_distribution<>('!', '~');
+  std::map<std::string, std::string> data;
+
+  std::string random_string(uint32_t msg_size, uint32_t compress_target)
+  {
+    std::string result;
+    uint32_t s = 0; // accumulated message
+    uint32_t c = 0; // estimated compressed size
+    // pick words
+    while (s < msg_size && (msg_size - s) > (compress_target - c)) {
+      uint32_t idx = uniform_random_words(rng);
+      result += random_words[idx];
+      s += random_words[idx].length();
+      c += 2; //~1 = random byte, ~2 = ref message
+    }
+    // fillup with full random bytes
+    while (s < msg_size) {
+      result.push_back(random_byte(rng));
+      s++;
+    }
+    return result;
+  }
+
+  struct DataToDB {
+    KeyValueDB* db;
+    std::string prefix;
+    KeyValueDB::Transaction t;
+    uint32_t cnt = 0;
+    DataToDB(KeyValueDB* db, const std::string& prefix)
+    : db(db), prefix(prefix)
+    {
+      t = db->get_transaction();
+    }
+    void add(const std::string& key, const std::string& value)
+    {
+      bufferlist v;
+      v.append(value);
+      t->set(prefix, key, v);
+      cnt++;
+      if ((cnt % 1000) == 0) {
+        ASSERT_EQ(db->submit_transaction_sync(t), 0);
+        t.reset();
+        t = db->get_transaction();
+      }
+    }
+    void rm(const std::string& key)
+    {
+      t->rmkey(prefix, key);
+      cnt++;
+      if ((cnt % 1000) == 0) {
+        ASSERT_EQ(db->submit_transaction_sync(t), 0);
+        t.reset();
+        t = db->get_transaction();
+      }
+    }
+    void flush()
+    {
+      ASSERT_EQ(db->submit_transaction_sync(t), 0);
+      t.reset();
+      t = db->get_transaction();
+    }
+  };
+
+  struct TreeGen {
+    uint32_t left_w;
+    uint32_t right_w;
+    std::string left_name;
+    std::string right_name;
+    bool sub_tree_branch(int& n) const
+    {
+      uint32_t count_left = (n * left_w) / (left_w + right_w);
+      uint32_t rem = (n * left_w) % (left_w + right_w);
+      uint32_t count_right = n - count_left;
+      if (rem >= right_w) {
+        n = count_left;
+        return false; //left
+      } else {
+        n = count_right - 1; //right
+        return true;
+      }
+    }
+    std::string get_branch_name(int n) const
+    {
+      std::string result;
+      while (n > 0) {
+        bool do_right = sub_tree_branch(n);
+        if (do_right)
+          result.append(right_name);
+        else
+          result.append(left_name);
+      }
+      return result;
+    }
+    TreeGen(
+      uint32_t left_weight,
+      uint32_t right_weight,
+      const std::string& left_name,
+      const std::string& right_name)
+      : left_w(left_weight)
+      , right_w(right_weight)
+      , left_name(left_name)
+      , right_name(right_name)
+    {
+      if (left_weight < right_weight) {
+        std::swap(this->left_name, this->right_name);
+        std::swap(left_weight, right_weight);
+      }
+    }
+  };
+
+  void grow_tree(
+    const TreeGen& t, DataToDB& data_to_db,
+    uint32_t key_from, uint32_t key_to,
+    const std::string& key_tail,
+    uint32_t value_size, uint32_t value_comp_size)
+  {
+    for(uint32_t i = key_from; i < key_to; i++) {
+      std::string key = t.get_branch_name(i) + key_tail;
+      std::string value = random_string(value_size, value_comp_size);
+      data_to_db.add(key, value);
+    }
+    data_to_db.flush();
+  }
+
+  void prune_tree(
+    const TreeGen& t, DataToDB& data_to_db,
+    uint32_t key_from, uint32_t key_to,
+    const std::string& key_tail)
+  {
+    for(uint32_t i = key_from; i < key_to; i++) {
+      std::string key = t.get_branch_name(i) + key_tail;
+      data_to_db.rm(key);
+    }
+    data_to_db.flush();
+  }
+
+  std::pair<uint64_t, uint64_t> get_split_quality(
+    const std::string& prefix,
+    const std::vector<KeyValueDB::keyrange_t>& chunks)
+  {
+    uint64_t all_keys = 0;
+    uint64_t max_keys = 0;
+    KeyValueDB::Iterator it;
+    it = db->get_iterator(prefix);
+    if (verbose) std::cout << "keys_in_shards: ";
+    for (const auto& c : chunks) {
+      uint64_t keys = 0;
+      it->lower_bound(c.first_key);
+      while(it->valid() && it->key() < c.upper_bound) {
+        keys++;
+        all_keys++;
+        it->next();
+      }
+      if (verbose) std::cout << keys << " " << std::flush;
+      if (max_keys < keys) {
+        max_keys = keys;
+      }
+    }
+    if (verbose) std::cout << std::endl;
+    return make_pair(all_keys, max_keys);
+  }
+
+  void scan_split_quality(
+    const std::string& prefix)
+  {
+    if (!verbose) return;
+    std::vector<KeyValueDB::keyrange_t> chunks;
+    auto c_set = {1, 3, 5, 10, 20, 30};
+    auto p_set = {0.2, 0.1, 0.05, 0.02, 0.01};
+    std::cout << fmt::format("{:6}","");
+    for (uint32_t c: c_set) {
+      std::cout << fmt::format("{:10}",c);
+    }
+    std::cout << std::endl;
+    for (double prec: p_set) {
+      std::cout << fmt::format("{:5.2f} ",prec);
+      for (uint32_t c: c_set) {
+        utime_t start = ceph_clock_now();
+        db->util_divide_key_range(
+          prefix, "", std::string(20, '\377'),
+          c, 1000000, prec, chunks);
+        utime_t end = ceph_clock_now();
+        std::cout << fmt::format("{:7.3f}/{:2}", double(end - start) * 1000, chunks.size());
+      }
+      std::cout << std::endl;
+    }
+  }
+};
+
+TEST_F(RocksDBSplitRange, grow_tree) {
+  ASSERT_EQ(0, db->create_and_open(cout, "O"));
+
+  TreeGen t(70, 30, "l", "r");
+  DataToDB to_db(db.get(), "O");
+  vector<uint32_t> keys_to_test = {0, 1000, 10000, 100000, 1'000'000, 2'000'000, 5'000'000, 10'000'000};
+  if (is_jenkins()) keys_to_test = {1'000'000};
+  uint64_t keys = 0;
+  for (auto keys_end : keys_to_test) {
+    if (verbose) std::cout << "grow " << keys << "->" << keys_end << std::endl;
+    grow_tree(t, to_db, keys, keys_end, "a", 1000, 300);
+    keys = keys_end;
+    keys_end = keys_end * 2;
+
+    std::vector<KeyValueDB::keyrange_t> chunks;
+    utime_t start = ceph_clock_now();
+    db->util_divide_key_range(
+      "O", "", "",
+      10, 10000000, 0.1, chunks);
+    utime_t end = ceph_clock_now();
+    if (verbose) std::cout << "time=" << end - start << std::endl;
+    auto [all_keys, max_keys] = get_split_quality("O", chunks);
+    double speedup = double(all_keys) / max_keys;
+    if (verbose) std::cout << "quality=" << double(all_keys) / max_keys / chunks.size()
+      << " speedup=" << speedup << std::endl;
+    EXPECT_EQ(all_keys, keys);
+    if (all_keys > 1000000) {
+      EXPECT_GT(speedup, 8);
+    }
+    scan_split_quality("O");
+  }
+  db->close();
+}
+
+TEST_F(RocksDBSplitRange, grow_tree_high_quality) {
+  ASSERT_EQ(0, db->create_and_open(cout, "O"));
+
+  TreeGen t(70, 30, "l", "r");
+  DataToDB to_db(db.get(), "O");
+  vector<uint32_t> keys_to_test = {0, 1000, 10000, 100000, 1'000'000, 2'000'000, 5'000'000, 10'000'000};
+  if (is_jenkins()) keys_to_test = {1'000'000};
+  uint64_t keys = 0;
+  for (auto keys_end : keys_to_test) {
+    if (verbose) std::cout << "grow " << keys << "->" << keys_end << std::endl;
+    grow_tree(t, to_db, keys, keys_end, "a", 1000, 300);
+    keys = keys_end;
+    keys_end = keys_end * 2;
+
+    std::vector<KeyValueDB::keyrange_t> chunks;
+    db->util_divide_key_range(
+      "O", "", "",
+      10, 10000000, 0.02, chunks);
+    auto [all_keys, max_keys] = get_split_quality("O", chunks);
+    double speedup = double(all_keys) / max_keys;
+    if (verbose) std::cout << "quality=" << double(all_keys) / max_keys / chunks.size()
+      << " speedup=" << speedup << std::endl;
+    EXPECT_EQ(all_keys, keys);
+    if (all_keys > 1000000) {
+      EXPECT_GT(speedup, 8);
+    }
+    scan_split_quality("O");
+  }
+  db->close();
+}
+
+TEST_F(RocksDBSplitRange, grow_two_trees) {
+  ASSERT_EQ(0, db->create_and_open(cout, "O"));
+
+  TreeGen t1(70, 30, "left", "right");
+  TreeGen t2(60, 40, "left", "right");
+  DataToDB to_db(db.get(), "O");
+  vector<uint32_t> keys_to_test = {0, 1000, 10000, 100000, 1'000'000, 2'000'000, 5'000'000, 10'000'000};
+  if (is_jenkins()) keys_to_test = {1'000'000};
+  uint64_t keys = 0;
+  for (auto keys_end : keys_to_test) {
+    if (verbose) std::cout << "grow " << keys << "->" << keys_end << std::endl;
+    grow_tree(t1, to_db, keys, keys_end, "a", 1000, 300);
+    grow_tree(t2, to_db, keys, keys_end, "b", 500, 150);
+    keys = keys_end;
+    keys_end = keys_end * 2;
+
+    std::vector<KeyValueDB::keyrange_t> chunks;
+    db->util_divide_key_range(
+      "O", "", "",
+      10, 10000000, 0.1, chunks);
+    auto [all_keys, max_keys] = get_split_quality("O", chunks);
+    double speedup = double(all_keys) / max_keys;
+    if (verbose) std::cout << "quality=" << double(all_keys) / max_keys / chunks.size()
+      << " speedup=" << speedup << std::endl;
+    EXPECT_EQ(all_keys, keys * 2);
+    if (all_keys > 1000000) {
+      EXPECT_GT(speedup, 5);
+    }
+    scan_split_quality("O");
+  }
+  db->close();
+}
+
+TEST_F(RocksDBSplitRange, grow_prune_tree) {
+  ASSERT_EQ(0, db->create_and_open(cout, "O"));
+
+  TreeGen t(70, 30, "l", "r");
+  DataToDB to_db(db.get(), "O");
+  vector<uint32_t> keys_to_test = {0, 1000, 10000, 100000, 1'000'000, 2'000'000, 5'000'000, 10'000'000};
+  if (is_jenkins()) keys_to_test = {1'000'000};
+  uint64_t keys = 0;
+  uint64_t pruned_keys = 0;
+  for (auto keys_end : keys_to_test) {
+    if (verbose) std::cout << "grow  " << keys << "->" << keys_end << std::endl;
+    grow_tree(t, to_db, keys, keys_end, "a", 1000, 300);
+    if (verbose) std::cout << "prune " << pruned_keys << "->" << keys / 2 << std::endl;
+    prune_tree(t, to_db, pruned_keys, keys / 2, "a");
+    pruned_keys = keys / 2;
+    keys = keys_end;
+    keys_end = keys_end * 2;
+
+    std::vector<KeyValueDB::keyrange_t> chunks;
+    db->util_divide_key_range(
+      "O", "", "",
+      10, 10000000, 0.1, chunks);
+    auto [all_keys, max_keys] = get_split_quality("O", chunks);
+    double speedup = double(all_keys) / max_keys;
+    if (verbose) std::cout << "quality=" << double(all_keys) / max_keys / chunks.size()
+      << " speedup=" << speedup << std::endl;
+    EXPECT_EQ(all_keys, keys - pruned_keys);
+    if (all_keys > 1000000) {
+      EXPECT_GT(speedup, 5);
+    }
+    scan_split_quality("O");
+  }
+  db->close();
+}
+
+TEST_F(RocksDBSplitRange, grow_tree_small_leaves) {
+  ASSERT_EQ(0, db->create_and_open(cout, "O"));
+
+  TreeGen t(7, 3, "0", "1");
+  DataToDB to_db(db.get(), "O");
+  vector<uint32_t> keys_to_test = {
+    0, 1000, 10000, 100000, 1'000'000, 2'000'000, 5'000'000, 10'000'000, 20'000'000, 50'000'000};
+  if (is_jenkins()) keys_to_test = {2'500'000};
+
+  uint64_t keys = 0;
+  for (auto keys_end : keys_to_test) {
+    if (verbose) std::cout << "grow " << keys << "->" << keys_end << std::endl;
+    grow_tree(t, to_db, keys, keys_end, "aaaa", 100, 30);
+    keys = keys_end;
+    keys_end = keys_end * 2;
+
+    std::vector<KeyValueDB::keyrange_t> chunks;
+    db->util_divide_key_range(
+      "O", "", "",
+      10, 10000000, 0.05, chunks);
+    auto [all_keys, max_keys] = get_split_quality("O", chunks);
+    double speedup = double(all_keys) / max_keys;
+    if (verbose) std::cout << "quality=" << double(all_keys) / max_keys / chunks.size()
+      << " speedup=" << speedup << std::endl;
+    EXPECT_EQ(all_keys, keys);
+    if (all_keys > 2000000) {
+      EXPECT_GT(speedup, 6);
+    }
+    scan_split_quality("O");
+  }
+  db->close();
 }
 
 

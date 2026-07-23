@@ -2,9 +2,14 @@
 SHEC erasure code plugin
 ========================
 
+.. deprecated:: Umbrella
+   
+The SHEC plugin is deprecated. Support for this plugin will be removed in
+the Vampire release.
+
 The *shec* plugin encapsulates the `multiple SHEC
 <http://tracker.ceph.com/projects/ceph/wiki/Shingled_Erasure_Code_(SHEC)>`_
-library. It allows ceph to recover data more efficiently than Reed Solomon codes.
+library. It allows Ceph to recover data more efficiently than Reed-Solomon codes.
 
 Create an SHEC profile
 ======================
@@ -108,7 +113,7 @@ Brief description of SHEC's layouts
 Space Efficiency
 ----------------
 
-Space efficiency is a ratio of data chunks to all ones in a object and
+Space efficiency is a ratio of data chunks to all ones in an object and
 represented as k/(k+m).
 In order to improve space efficiency, you should increase k or decrease m:
 

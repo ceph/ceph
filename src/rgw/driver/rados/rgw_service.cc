@@ -24,6 +24,7 @@
 
 #include "account.h"
 #include "group.h"
+#include "oidc.h"
 #include "rgw_bucket.h"
 #include "rgw_cr_rados.h"
 #include "rgw_datalog.h"
@@ -350,6 +351,8 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Driver* driver,
       *svc.sysobj, *svc.cls, *svc.mdlog, svc.zone->get_zone_params());
   meta.role = rgwrados::role::create_metadata_handler(
       rados, *svc.sysobj, *svc.mdlog, svc.zone->get_zone_params());
+  meta.oidc = rgwrados::oidc::create_metadata_handler(
+      rados, *svc.sysobj, *svc.mdlog, svc.zone->get_zone_params());
   meta.account = rgwrados::account::create_metadata_handler(
       *svc.sysobj, svc.zone->get_zone_params());
   meta.group = rgwrados::group::create_metadata_handler(
@@ -421,6 +424,13 @@ int RGWCtl::init(RGWServices *_svc, rgw::sal::Driver* driver,
   r = meta.role->attach(meta.mgr);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed to start init meta.role ctl (" << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  r = _ctl.meta.oidc->attach(meta.mgr);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start init meta.oidc ctl ("
+                  << cpp_strerror(-r) << ")" << dendl;
     return r;
   }
 

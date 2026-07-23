@@ -8,8 +8,15 @@ import { AutofocusDirective } from './autofocus.directive';
 @Component({
   template: `
     <form>
-      <input id="x" type="text" />
-      <input id="y" type="password" autofocus />
+      <input
+        id="x"
+        type="text"
+      />
+      <input
+        id="y"
+        type="password"
+        autofocus
+      />
     </form>
   `,
   standalone: false
@@ -19,8 +26,15 @@ export class PasswordFormComponent {}
 @Component({
   template: `
     <form>
-      <input id="x" type="checkbox" [autofocus]="edit" />
-      <input id="y" type="text" />
+      <input
+        id="x"
+        type="checkbox"
+        [autofocus]="edit"
+      />
+      <input
+        id="y"
+        type="text"
+      />
     </form>
   `,
   standalone: false
@@ -32,7 +46,11 @@ export class CheckboxFormComponent {
 @Component({
   template: `
     <form>
-      <input id="x" type="text" [autofocus]="foo" />
+      <input
+        id="x"
+        type="text"
+        [autofocus]="foo"
+      />
     </form>
   `,
   standalone: false
@@ -59,9 +77,8 @@ describe('AutofocusDirective', () => {
   });
 
   it('should focus the password form field', () => {
-    const fixture: ComponentFixture<PasswordFormComponent> = TestBed.createComponent(
-      PasswordFormComponent
-    );
+    const fixture: ComponentFixture<PasswordFormComponent> =
+      TestBed.createComponent(PasswordFormComponent);
     fixture.detectChanges();
     const focused = fixture.debugElement.query(By.css(':focus'));
     expect(focused.attributes.id).toBe('y');
@@ -71,9 +88,8 @@ describe('AutofocusDirective', () => {
   });
 
   it('should focus the checkbox form field', () => {
-    const fixture: ComponentFixture<CheckboxFormComponent> = TestBed.createComponent(
-      CheckboxFormComponent
-    );
+    const fixture: ComponentFixture<CheckboxFormComponent> =
+      TestBed.createComponent(CheckboxFormComponent);
     fixture.detectChanges();
     const focused = fixture.debugElement.query(By.css(':focus'));
     expect(focused.attributes.id).toBe('x');

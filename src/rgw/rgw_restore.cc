@@ -266,7 +266,7 @@ std::ostream& Restore::gen_prefix(std::ostream& out) const
 int Restore::choose_oid(const RestoreEntry& e) {
   int index;
   const auto& name = e.bucket.name + e.obj_key.name + e.obj_key.instance;
-  index = ((ceph_str_hash_linux(name.data(), name.size())) % max_objs);
+  index = ((ceph_str_hash_linux(name.data(), name.size())) % HASH_PRIME % max_objs);
   return static_cast<int>(index);
 }
 
@@ -353,7 +353,7 @@ int Restore::process(int index, int max_secs, optional_yield y)
     return -EAGAIN;
 
   end += max_secs;
-  utime_t time(max_secs, 0);
+  const ceph::timespan time = std::chrono::seconds(max_secs);
   int ret = serializer->try_lock(this, time, y);
   if (ret == -EBUSY || ret == -EEXIST) {
     /* already locked by another lc processor */

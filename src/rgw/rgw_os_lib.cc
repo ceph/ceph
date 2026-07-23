@@ -51,11 +51,14 @@ namespace rgw {
       s->bucket_name = std::move(first);
       if (pos >= 0) {
 	// XXX ugh, another copy
-	string encoded_obj_str = req.substr(pos+1);
-	s->object = driver->get_object(rgw_obj_key(encoded_obj_str, s->info.args.get("versionId")));
+	s->object_key.name = req.substr(pos+1);
+	s->object_key.instance = s->info.args.get("versionId");
+	s->object = driver->get_object(s->object_key);
       }
     } else {
-      s->object = driver->get_object(rgw_obj_key(req_name, s->info.args.get("versionId")));
+      s->object_key.name = req_name;
+      s->object_key.instance = s->info.args.get("versionId");
+      s->object = driver->get_object(s->object_key);
     }
     return 0;
   } /* init_from_header */

@@ -104,7 +104,7 @@ Page Size
 ^^^^^^^^^
 
 SQLite allows configuring the page size prior to creating a new database. It is
-advisable to increase this config to 65536 (64K) when using RADOS backed
+advisable to increase this config to 65536 (64K) when using RADOS-backed
 databases to reduce the number of OSD reads/writes and thereby improve
 throughput and latency.
 
@@ -228,7 +228,7 @@ by a single exclusive lock.
 Export or Extract Database out of RADOS
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The database is striped on RADOS and can be extracted using the RADOS cli toolset.
+The database is striped on RADOS and can be extracted using the RADOS CLI toolset.
 
 .. code:: sh
 

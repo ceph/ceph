@@ -434,8 +434,8 @@ tests`_ chapter.
 Code review
 -----------
 
-After your bugfix has been thoroughly tested--and sometimeseven during the
-testing--it will be subjected to code review by other developers. This
+After your bugfix has been thoroughly tested -- and sometimes even during the
+testing -- it will be subjected to code review by other developers. This
 typically takes the form of comments in the PR itself, but can be supplemented
 by discussions on :ref:`irc`, or on :ref:`Slack <ceph-slack>` or on the
 :ref:`mailing-list`.

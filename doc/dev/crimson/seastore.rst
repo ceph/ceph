@@ -299,6 +299,30 @@ separated into **Segmented** and **RBM** backend types as follows:
   *Interface:* ``RBMDevice``
 
 
+Device Hardware
+---------------
+
+The following table maps each device_type_t enum value to
+the physical hardware it represents and the backend implementation it uses.
+
+
++------------------------------------------+---------------------------+------------------------+
+| Device Type                              | Physical Hardware         | Backend                |
++==========================================+===========================+========================+
+| ``HDD``                                  | Spinning disk             | **Segmented**          |
++------------------------------------------+---------------------------+------------------------+
+| ``SSD``                                  | Conventional SSD / NVMe   | **Segmented**          |
++------------------------------------------+---------------------------+------------------------+
+| ``ZBD``                                  | ZNS SSD or SMR HDD        | **Segmented**          |
++------------------------------------------+---------------------------+------------------------+
+| ``RANDOM_BLOCK_SSD``                     | NVMe                      | **Random Block (RBM)** |
++------------------------------------------+---------------------------+------------------------+
+| ``EPHEMERAL_COLD`` / ``EPHEMERAL_MAIN``  | In-memory (test)          | **Segmented**          |
++------------------------------------------+---------------------------+------------------------+
+| ``RANDOM_BLOCK_EPHEMERAL``               | In-memory (test)          | **Random Block (RBM)** |
++------------------------------------------+---------------------------+------------------------+
+
+
 .. _journal:
 
 Journal
@@ -598,6 +622,65 @@ ExtentPlacementManager is responsible for:
     and physical extents are updated accordingly. The SegmmentCleaner is also responisble for throttling GC work
     in order to avoid abrupt pauses and maintain smooth IO latenices.
 
+.. _cleaner-gc-autotune:
+
+**Cleaner GC autotune**:
+
+  ``SegmentCleaner::get_next_reclaim_segment()`` chooses the next segment to
+  reclaim using one of three configurable formulas selected by
+  ``seastore_segment_cleaner_gc_formula``: ``GREEDY`` (lowest utilization
+  wins), ``COST_BENEFIT`` (``(1-u) * age / (2u)``), or ``BENEFIT``
+  (age-weighted quadratic). ``COST_BENEFIT`` is the default and the right
+  call for journaling / LIFO workloads where age predicts future
+  dead-byte accumulation.
+
+  That assumption breaks under random-write at high cluster fill. Dead
+  bytes spread uniformly across segments regardless of age, so age stops
+  predicting future deadness, and ``(1-u)/(2u)`` becomes the only term that
+  distinguishes candidates. With every segment in the 0.7-0.94 utilization
+  band, ``(1-u)/(2u)`` ranges from 0.227 to 0.032 -- a 7x spread the
+  formula can easily lose to a 7x age difference. A 0.94-util old segment
+  then outscores a 0.68-util young one, even though reclaiming the 0.68
+  segment would free 5x more space.
+
+  The autotune override detects this mis-selection at runtime. In the
+  same pass that scores segments by the configured formula, it also
+  tracks the lowest-utilization candidate (what ``GREEDY`` would pick).
+  After the pass, if greedy's free-fraction (``1 - util``) is at least
+  ``seastore_segment_cleaner_gc_autotune_ratio`` times the formula's
+  pick's free-fraction (default 2.0), the override swaps the formula's
+  pick for greedy. Since all segments share the same size, comparing
+  free-fractions is equivalent to comparing freed bytes.
+
+  Behaviour by regime:
+
+  - **Low alive_ratio**: many low-util candidates exist; the formula's
+    age-preferred pick is typically within ~30% of greedy in
+    free-fraction. The override does not fire and age weighting is
+    preserved.
+  - **High alive_ratio with non-uniform utilisation** (hot/cold mix):
+    greedy and the formula converge on the same segment in most cases;
+    when they differ, the formula's choice is usually within 2x. The
+    override rarely fires.
+  - **High alive_ratio with uniform utilisation** (the failure regime
+    the autotune targets): greedy's pick exceeds the formula's by 3-5x
+    routinely. The override fires reliably; net free per reclaim jumps
+    from 4-6 MB to 14-22 MB.
+
+  Configurable:
+
+  - ``seastore_segment_cleaner_gc_autotune`` (bool, default true):
+    operators can disable the override unconditionally.
+  - ``seastore_segment_cleaner_gc_autotune_ratio`` (float, default 2.0,
+    min 1.0): operators can tune the threshold; higher is more
+    conservative (preserves age weighting more aggressively).
+
+  A safety guard skips the override when the formula's pick has
+  free-fraction below ``1/1024`` of a segment, because the ratio
+  comparison is meaningless against a near-zero denominator. On
+  override the formula's score for the chosen segment is recomputed
+  so the value logged after selection stays consistent.
+
 **Tiering**:
 
   .. note::
@@ -638,7 +721,8 @@ When changing to seastar::smp::count: 2:
 
 using ./bin/ceph daemon osd.0 dump_store_shards to check store assignment.
 See the following example outputs from running dump_store_shards with the above scenarios:
-**first start with 3 reactors**:
+**first start with 3 reactors**::
+
   ./bin/ceph daemon osd.0 dump_store_shards
   *** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***
   {
@@ -659,7 +743,8 @@ See the following example outputs from running dump_store_shards with the above 
     }
   }
 
-**second restart with 2 reactors**:
+**second restart with 2 reactors**::
+
   ./bin/ceph daemon osd.0 dump_store_shards
   *** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***
   {
@@ -694,7 +779,8 @@ See the following example outputs from running dump_store_shards with the above 
     }
   }
 
-**third restart with 5 reactors**:
+**third restart with 5 reactors**::
+
   ./bin/ceph daemon osd.0 dump_store_shards
   *** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***
   {
@@ -743,6 +829,166 @@ See the following example outputs from running dump_store_shards with the above 
         }
     }
   }
+
+Physical Layout, and the common device header
+=============================================
+
+A device on-disk format starts with a 60-byte prefix:
+
+* 23 bytes of magic: same size as BlueStore devices, but the magic string is ``CRIMSON_DEVICE``.
+* 37 bytes of nulls (the corresponding field in Classic devices is the UUID).
+
+
+Internally, all devices use a common superblock layout, ``device_superblock_t``.
+The per-shard layout information is stored in ``device_shard_info_t``, which contains
+the union of all fields relevant to each device type.
+They also share a single ``device_config_t`` for device identity and metadata.
+
+
+.. list-table:: ``device_superblock_t``
+   :header-rows: 1
+   :widths: 15 20 20 20 25
+
+   * - Field
+     - Type
+     - HDD/SSD
+     - ZNS/SMR
+     - RBM (NVMe)
+   * - ``version``
+     - ``uint8_t``
+     - 1
+     - 1
+     - 1
+   * - ``shard_num``
+     - ``uint``
+     - number of shards
+     - number of shards
+     - number of shards
+   * - ``segment_size``
+     - ``size_t``
+     - logical segment size (bytes)
+     - logical segment size (bytes)
+     - 0 (unused)
+   * - ``block_size``
+     - ``size_t``
+     - filesystem block size
+     - filesystem block size
+     - filesystem block size
+   * - ``config``
+     - ``device_config_t``
+     - device identity/meta
+     - device identity/meta
+     - device identity/meta
+   * - ``total_size``
+     - ``size_t``
+     - 0 (unused)
+     - 0 (unused)
+     - total device capacity (bytes)
+   * - ``journal_size``
+     - ``uint64_t``
+     - 0 (unused)
+     - 0 (unused)
+     - journal area size (bytes)
+   * - ``segment_capacity``
+     - ``size_t``
+     - 0 (unused)
+     - usable bytes/segment
+     - 0 (unused)
+   * - ``zones_per_segment``
+     - ``size_t``
+     - 0 (unused)
+     - zones per logical segment
+     - 0 (unused)
+   * - ``zone_size``
+     - ``size_t``
+     - 0 (unused)
+     - physical zone size (bytes)
+     - 0 (unused)
+   * - ``zone_capacity``
+     - ``size_t``
+     - 0 (unused)
+     - usable bytes per zone
+     - 0 (unused)
+   * - ``shard_infos``
+     - ``vector<device_shard_info_t>``
+     - one entry per shard
+     - one entry per shard
+     - one entry per shard
+   * - ``crc``
+     - ``checksum_t``
+     - 0 (unused)
+     - 0 (unused)
+     - CRC of serialized superblock
+   * - ``feature``
+     - ``uint64_t``
+     - 0 (unused)
+     - 0 (unused)
+     - ``NVME_END_TO_END_PROTECTION`` bit
+   * - ``nvme_block_size``
+     - ``uint32_t``
+     - 0 (unused)
+     - 0 (unused)
+     - NVMe logical block size (E2E protection)
+
+|
+
+.. list-table:: ``device_config_t``
+   :header-rows: 1
+   :widths: 20 25 55
+
+   * - Field
+     - Type
+     - Description
+   * - ``major_dev``
+     - ``bool``
+     - whether this is the primary device
+   * - ``spec``
+     - ``device_spec_t``
+     - magic number, device type (``device_type_t``), and device id
+   * - ``meta``
+     - ``seastore_meta_t``
+     - seastore filesystem id (``uuid_d``)
+   * - ``secondary_devices``
+     - ``secondary_device_set_t``
+     - map of secondary device ids to their ``device_spec_t``
+
+|
+
+.. list-table:: ``device_shard_info_t``
+   :header-rows: 1
+   :widths: 15 20 20 20 25
+
+   * - Field
+     - Type
+     - HDD/SSD
+     - ZNS/SMR
+     - RBM (NVMe)
+   * - ``size``
+     - ``size_t``
+     - usable shard size (bytes)
+     - usable shard size (bytes)
+     - usable shard size (bytes)
+   * - ``segments``
+     - ``size_t``
+     - number of segments
+     - number of segments
+     - 0 (unused)
+   * - ``first_segment_offset``
+     - ``uint64_t``
+     - byte offset of first segment
+     - byte offset of first segment
+     - 0 (unused)
+   * - ``tracker_offset``
+     - ``uint64_t``
+     - byte offset of segment-state tracker
+     - 0 (unused)
+     - 0 (unused)
+   * - ``start_offset``
+     - ``uint64_t``
+     - 0 (unused)
+     - 0 (unused)
+     - byte offset of shard start
+
 
 Next Steps
 ==========

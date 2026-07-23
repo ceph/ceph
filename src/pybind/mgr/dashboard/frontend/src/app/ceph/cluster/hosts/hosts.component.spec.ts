@@ -4,7 +4,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
 import { CephModule } from '~/app/ceph/ceph.module';
@@ -62,7 +61,6 @@ describe('HostsComponent', () => {
       SharedModule,
       HttpClientTestingModule,
       RouterTestingModule,
-      ToastrModule.forRoot(),
       CephModule,
       CoreModule,
       TagModule
@@ -241,8 +239,8 @@ describe('HostsComponent', () => {
     fixture.detectChanges();
 
     component.getHosts(new CdTableFetchDataContext(() => undefined));
-    expect(component.hosts[0]['memory_total_bytes']).toEqual('N/A');
-    expect(component.hosts[0]['raw_capacity']).toEqual('N/A');
+    expect(component.hosts[0]['memory_total_bytes']).toEqual('-');
+    expect(component.hosts[0]['raw_capacity']).toEqual('-');
   });
 
   it('should show force maintenance modal when it is safe to stop host', () => {

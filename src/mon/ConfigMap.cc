@@ -6,6 +6,7 @@
 #include "common/entity_name.h"
 
 #include <boost/algorithm/string/split.hpp>
+#include <boost/algorithm/string/trim.hpp>
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -207,6 +208,7 @@ bool ConfigMap::parse_mask(
   boost::split(split, who, [](char c){ return c == '/'; });
   for (unsigned j = 0; j < split.size(); ++j) {
     auto& i = split[j];
+    boost::algorithm::trim(i);
     if (i == "global") {
       *section = "global";
       continue;

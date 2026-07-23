@@ -33,6 +33,7 @@
 
 #include "auth/AuthServiceHandler.h"
 #include "auth/KeyRing.h"
+#include "common/debug.h"
 #include "include/stringify.h"
 #include "include/ceph_assert.h"
 
@@ -44,6 +45,8 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, get_last_committed())
 using namespace TOPNSPC::common;
+
+using namespace std::string_view_literals;
 
 using std::list;
 using std::map;
@@ -1697,6 +1700,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     string mon_cap_string = "allow r";
     string mds_cap_string, osd_cap_string;
     string osd_cap_wanted = "r";
+    bool osd_cap_needs_w = false;
 
     const Filesystem* fs = nullptr;
     if (filesystem != "*" && filesystem != "all") {
@@ -1722,18 +1726,34 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 	++it;
       }
 
-      if (cap.compare(0, 2, "rw") == 0)
-	osd_cap_wanted = "rw";
-
-      char last='\0';
-      for (size_t i = 2; i < cap.size(); ++i) {
-	char c = cap.at(i);
+      char last = '\0';
+      for (char c : cap) {
+        dout(25) << "permission flag: " << c << dendl;
 	if (last >= c) {
 	  ss << "Permission flags (except 'rw') must be specified in alphabetical order.";
 	  err = -EINVAL;
 	  goto done;
 	}
+        if (last == 'r' && c == 'w') {
+          /* treat 'rw' as a unit permitted at beginning: */
+          last = '\0';
+        } else {
+          last = c;
+        }
 	switch (c) {
+        case 'r':
+          break;
+        case '*':
+          if (cap != "*"sv) {
+	    ss << "Permission '*' implies all, remove other caps.";
+	    err = -EINVAL;
+	    goto done;
+          }
+          osd_cap_needs_w = true;
+          break;
+        case 'w':
+          osd_cap_needs_w = true;
+          break;
 	case 'p':
 	  break;
 	case 's':
@@ -1761,6 +1781,9 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       }
     }
 
+    if (osd_cap_needs_w) {
+      osd_cap_wanted += 'w';
+    }
     osd_cap_string += osd_cap_string.empty() ? "" : ", ";
     osd_cap_string += "allow " + osd_cap_wanted
       + " tag " + pg_pool_t::APPLICATION_NAME_CEPHFS

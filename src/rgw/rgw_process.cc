@@ -140,8 +140,8 @@ bool rate_limit(rgw::sal::Driver* driver, req_state* s) {
   if (s->user->get_id().id == RGW_USER_ANON_ID && global_anon.enabled) {
     *user_ratelimit = global_anon;
   }
-  bool limit_bucket = false;
-  bool limit_user = s->ratelimit_data->should_rate_limit(method, s->ratelimit_user_name, s->time, user_ratelimit, s->info.request_params);
+  int64_t limit_bucket = 0;
+  int64_t limit_user = s->ratelimit_data->should_rate_limit(method, s->ratelimit_user_name, s->time, user_ratelimit, s->info.request_params);
 
   if(!rgw::sal::Bucket::empty(s->bucket.get()))
   {
@@ -169,6 +169,10 @@ bool rate_limit(rgw::sal::Driver* driver, req_state* s) {
   }
   s->user_ratelimit = *user_ratelimit;
   s->bucket_ratelimit = *bucket_ratelimit;
+  int64_t delay = limit_user ? limit_user : limit_bucket;
+  if (delay > 0) {
+    s->ratelimit_retry_after = delay;
+  }
   return (limit_user || limit_bucket);
 }
 
@@ -210,6 +214,10 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
 
   ldpp_dout(op, 2) << "init op" << dendl;
   ret = op->init_processing(y);
+  if (op->get_type() == RGW_OP_OPTIONS_CORS && ret == -EINVAL) {
+    ldpp_dout(op, 0) << "NOTICE: RGW_OP_OPTIONS_CORS shouldn't return -EINVAL in case we have a global CORS!" << dendl;
+    ret = 0;
+  }
   if (ret < 0) {
     return ret;
   }
@@ -260,6 +268,34 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   ldpp_dout(op, 2) << "check rate limiting" << dendl;
   if (rate_limit(driver, s)) {
     return -ERR_RATE_LIMITED;
+  }
+
+  bool is_health_request = (op->get_type() == RGW_OP_GET_HEALTH_CHECK);
+  {
+    if (!is_health_request) {
+      std::string script;
+      auto rc = rgw::lua::read_script(s, s->penv.lua.manager.get(),
+                                      s->bucket_tenant, s->yield,
+                                      rgw::lua::context::postAuth, script);
+      if (rc == -ENOENT) {
+        // no script, nothing to do
+      } else if (rc < 0) {
+        ldpp_dout(op, 5) <<
+          "WARNING: failed to execute post authorization script. "
+          "error: " << rc << dendl;
+      } else {
+        int script_return_code = 0;
+        rc = rgw::lua::request::execute(s->penv.rest, s->penv.olog.get(), s, op, script, script_return_code);
+        if (rc < 0) {
+          ldpp_dout(op, 5) <<
+            "WARNING: failed to execute post authorization script. "
+            "error: " << rc << dendl;
+        }
+        if (script_return_code == -EPERM) {
+          return script_return_code;
+        }
+      }
+    }
   }
   ldpp_dout(op, 2) << "executing" << dendl;
   {
@@ -351,7 +387,6 @@ int process_request(const RGWProcessEnv& penv,
   req->op = op;
   ldpp_dout(op, 10) << "op=" << typeid(*op).name() << " " << dendl;
   s->op_type = op->get_type();
-
   try {
     ldpp_dout(op, 2) << "verifying requester" << dendl;
     ret = op->verify_requester(*penv.auth_registry, yield);

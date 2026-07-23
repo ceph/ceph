@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+"""
+Translate a teuthology-style benchmark YAML into a CBT configuration file.
+
+The YAML files under ``src/test/crimson/cbt/`` describe workloads using
+teuthology's ``tasks`` list. ``run-cbt.sh`` invokes this module to extract the
+``cbt`` task and emit a CBT-ready configuration (cluster layout, benchmark
+definitions, monitoring profiles).
+"""
 
 from __future__ import print_function
 import argparse
@@ -39,12 +47,16 @@ class Translator(object):
             rados_cmd=os.path.join(self.build_dir, 'bin', 'rados'),
             pid_dir=os.path.join(self.build_dir, 'out')
         ))
-        return conf 
+        return conf
 
 def get_cbt_tasks(path):
-    with open(path) as input:
-        teuthology_config = yaml.load(input)
-    for task in teuthology_config['tasks']:
+    with open(path) as yaml_file:
+        teuthology_config = yaml.safe_load(yaml_file) or {}
+    if not isinstance(teuthology_config, dict):
+        teuthology_config = {}
+    for task in teuthology_config.get('tasks', []):
+        if not isinstance(task, dict):
+            continue
         for name, conf in task.items():
             if name == 'cbt':
                 yield conf

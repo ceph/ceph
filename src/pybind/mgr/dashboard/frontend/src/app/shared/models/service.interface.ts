@@ -16,6 +16,13 @@ export enum CephCertificateStatus {
   invalid = 'invalid'
 }
 
+export enum DaemonAction {
+  START = 'start',
+  STOP = 'stop',
+  RESTART = 'restart',
+  REDEPLOY = 'redeploy'
+}
+
 export const CERTIFICATE_STATUS_ICON_MAP: Record<string, string> = {
   valid: 'success',
   expiring: 'warning',
@@ -49,12 +56,14 @@ export interface CephServiceSpec {
   certificate?: CephServiceCertificate;
   spec: CephServiceAdditionalSpec;
   placement: CephServicePlacement;
+  events?: string[];
 }
 
 // Type for service spec update payload (excludes read-only status field)
 export type CephServiceSpecUpdate = Omit<CephServiceSpec, 'status'>;
 
 export interface CephServiceAdditionalSpec {
+  placement?: CephServicePlacement;
   backend_service: string;
   api_user: string;
   api_password: string;
@@ -82,6 +91,9 @@ export interface CephServiceAdditionalSpec {
   ssl_protocols: string[];
   ssl_ciphers: string[];
   certificate_source: string;
+  custom_sans?: string[];
+  zonegroup_hostnames?: string[];
+  wildcard_enabled?: boolean;
   port: number;
   initial_admin_password: string;
   rgw_realm: string;
@@ -99,6 +111,7 @@ export interface CephServiceAdditionalSpec {
   client_secret: string;
   oidc_issuer_url: string;
   enable_auth: boolean;
+  encryption_key?: string;
   qat: QatSepcs;
 }
 
@@ -107,10 +120,16 @@ export interface CephServicePlacement {
   placement?: string;
   hosts?: string[];
   label?: string | string[];
+  locations?: Record<string, string[]>;
 }
 
 export interface QatSepcs {
   [key: string]: string;
+}
+
+export enum CertificateType {
+  internal = 'internal',
+  external = 'external'
 }
 
 export enum QatOptions {

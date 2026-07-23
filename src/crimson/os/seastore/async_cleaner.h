@@ -1245,6 +1245,9 @@ public:
 
   virtual std::size_t get_reclaim_size_per_cycle() const = 0;
 
+  // Periodic hook for adaptive threshold control. Default: no-op.
+  virtual void maybe_adjust_thresholds() {}
+
 #ifdef UNIT_TESTS_BUILT
   virtual void prefill_fragmented_devices() {}
 #endif
@@ -1433,15 +1436,32 @@ public:
       return false;
     }
     auto aratio = segments.get_available_ratio();
+    auto projected_aratio = get_projected_available_ratio();
     auto rratio = get_reclaim_ratio();
+    // should_block_io_on_clean() uses projected ratio; mirror that here so the
+    // cleaner wakes whenever IO would block, not only when actual space is low.
     return (
-      (aratio < config.available_ratio_hard_limit) ||
+      (projected_aratio < config.available_ratio_hard_limit) ||
       ((aratio < config.available_ratio_gc_max) &&
        (rratio > config.reclaim_ratio_gc_threshold))
     );
   }
 
   clean_space_ret clean_space() final;
+
+  // Predicate for the autotune override: returns true when greedy's pick frees
+  // significantly more space than the formula's pick.
+  // See doc/dev/crimson/seastore.rst#cleaner-gc-autotune.
+  static bool should_override_to_greedy(
+      double picked_free, double greedy_free, double ratio) {
+    // Guard against picked_free near zero (1/1024 of a segment): the ratio
+    // comparison is meaningless against a near-zero denominator.
+    constexpr double kMinPickedFreeForRatio = 1.0 / 1024.0;
+    return picked_free >= kMinPickedFreeForRatio &&
+           greedy_free >= ratio * picked_free;
+  }
+
+  void maybe_adjust_thresholds() final;
 
   const std::set<device_id_t>& get_device_ids() const final {
     return sm_group->get_device_ids();
@@ -1642,7 +1662,17 @@ private:
   store_index_t store_index;
   const bool detailed;
   const bool is_cold;
-  const config_t config;
+  // Mutated by maybe_adjust_thresholds(): hard_limit tracks observed open-segment peak.
+  config_t config;
+
+  // Adaptive state: peak open segments observed since last adjust.
+  std::size_t peak_open_segments_window = 0;
+  seastar::lowres_clock::time_point adaptive_last_time;
+
+  // Peak projected_used with slow exponential decay per adjust cycle. Decay
+  // 0.5% per 30s window = half-life ~1 hour: long enough not to forget peaks
+  // mid-workload, short enough to re-discover lower floors over time.
+  double peak_projected_used_decayed = 0.0;
 
   SegmentManagerGroupRef sm_group;
   BackrefManager &backref_manager;

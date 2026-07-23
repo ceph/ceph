@@ -43,7 +43,6 @@ from ..exceptions import Error
 from ..host_facts import list_networks
 from ..net_utils import EndPoint
 
-
 logger = logging.getLogger()
 
 # sambacc provided commands we will need (when clustered)
@@ -51,6 +50,7 @@ _SCC = '/usr/bin/samba-container'
 _NODES_SUBCMD = [_SCC, 'ctdb-list-nodes']
 _MUTEX_SUBCMD = [_SCC, 'ctdb-rados-mutex']  # requires rados uri
 _ETC_SAMBA_TLS = '/etc/samba/tls'
+_WANT_SIGNAL_DIR = '/run/want_update_signal'
 
 
 class Features(enum.Enum):
@@ -59,6 +59,7 @@ class Features(enum.Enum):
     CEPHFS_PROXY = 'cephfs-proxy'
     REMOTE_CONTROL = 'remote-control'
     REMOTE_CONTROL_LOCAL = 'remote-control-local'
+    KEYBRIDGE = 'keybridge'
 
     @classmethod
     def valid(cls, value: str) -> bool:
@@ -226,6 +227,12 @@ class RemoteControlConfig:
 
 
 @dataclasses.dataclass(frozen=True)
+class KeyBridgeConfig:
+    tls_files: TLSFiles
+    socket: str = 'unix:/run/keybridge.s'
+
+
+@dataclasses.dataclass(frozen=True)
 class Config:
     identity: DaemonIdentity
     instance_id: str
@@ -237,6 +244,7 @@ class Config:
     debug_delay: int = 0
     join_sources: List[str] = dataclasses.field(default_factory=list)
     user_sources: List[str] = dataclasses.field(default_factory=list)
+    extra_config_uris: List[str] = dataclasses.field(default_factory=list)
     custom_dns: List[str] = dataclasses.field(default_factory=list)
     smb_port: int = 0
     ctdb_port: int = 0
@@ -255,9 +263,11 @@ class Config:
     bind_to: List[BindInterface] = dataclasses.field(default_factory=list)
     proxy_image: str = ''
     remote_control: Optional[RemoteControlConfig] = None
+    keybridge: Optional[KeyBridgeConfig] = None
 
     def config_uris(self) -> List[str]:
         uris = [self.source_config]
+        uris.extend(self.extra_config_uris or [])
         uris.extend(self.user_sources or [])
         if self.clustered:
             # When clustered, we inject certain clustering related config vars
@@ -435,7 +445,11 @@ class ConfigWatchContainer(SambaContainerCommon):
         return 'configwatch'
 
     def args(self) -> List[str]:
-        return super().args() + ['update-config', '--watch']
+        return super().args() + [
+            'update-config',
+            '--watch',
+            f'--signal-pids-dir={_WANT_SIGNAL_DIR}',
+        ]
 
 
 class SMBMetricsContainer(ContainerCommon):
@@ -501,6 +515,31 @@ class RemoteControlContainer(SambaContainerCommon):
         return super().container_args() + [
             '--entrypoint=samba-remote-control'
         ]
+
+
+class KeyBridgeContainer(SambaContainerCommon):
+    def name(self) -> str:
+        return 'keybridge'
+
+    def args(self) -> List[str]:
+        args = super().args()
+        assert self.cfg.keybridge, 'keybridge is not configured'
+        args.append(f'--pidfile={_WANT_SIGNAL_DIR}/keybridge.pid')
+        args.append('keybridge')
+        if self.cfg.keybridge.tls_files:
+            cert_path = self.cfg.keybridge.tls_files.cert_interior_path
+            key_path = self.cfg.keybridge.tls_files.key_interior_path
+            ca_cert_path = self.cfg.keybridge.tls_files.ca_cert_interior_path
+            # all or nothing with kmip
+            assert cert_path and key_path and ca_cert_path
+            args.append(f'--kmip-tls-cert={cert_path}')
+            args.append(f'--kmip-tls-key={key_path}')
+            args.append(f'--kmip-tls-ca-cert={ca_cert_path}')
+        args.append(self.cfg.keybridge.socket)
+        return args
+
+    def container_args(self) -> List[str]:
+        return super().container_args() + ['--entrypoint=samba-satellite']
 
 
 class CephFSProxyContainer(ContainerCommon):
@@ -664,6 +703,7 @@ class SMB(ContainerDaemonForm):
         source_config = configs.get('config_uri', '')
         join_sources = configs.get('join_sources', [])
         user_sources = configs.get('user_sources', [])
+        extra_config_uris = configs.get('extra_config_uris', [])
         custom_dns = configs.get('custom_dns', [])
         instance_features = configs.get('features', [])
         files = data_utils.dict_get(configs, 'files', {})
@@ -715,6 +755,12 @@ class SMB(ContainerDaemonForm):
             service_ports,
             self._tls_files,
         )
+        if Features.KEYBRIDGE.value in instance_features:
+            keybridge_cfg = KeyBridgeConfig(
+                tls_files=TLSFiles.match(self._tls_files, 'keybridge')
+            )
+        else:
+            keybridge_cfg = None
 
         rank, rank_gen = self._rank_info
         self._instance_cfg = Config(
@@ -724,6 +770,7 @@ class SMB(ContainerDaemonForm):
             source_config=source_config,
             join_sources=join_sources,
             user_sources=user_sources,
+            extra_config_uris=extra_config_uris,
             custom_dns=custom_dns,
             # major features
             domain_member=Features.DOMAIN.value in instance_features,
@@ -743,6 +790,7 @@ class SMB(ContainerDaemonForm):
             proxy_image=proxy_image,
             bind_to=self._network_mapper.bind_interfaces(bind_networks),
             remote_control=remote_control_cfg,
+            keybridge=keybridge_cfg,
             ctdb_log_level=tunables.get('log_level.ctdb', ''),
         )
         logger.debug('SMB Instance Config: %s', self._instance_cfg)
@@ -805,6 +853,8 @@ class SMB(ContainerDaemonForm):
             )
         if self._cfg.remote_control:
             ctrs.append(RemoteControlContainer(self._cfg))
+        if self._cfg.keybridge:
+            ctrs.append(KeyBridgeContainer(self._cfg))
 
         if self._cfg.clustered:
             init_ctrs += [
@@ -953,7 +1003,7 @@ class SMB(ContainerDaemonForm):
             ctdb_volatile = str(data_dir / 'ctdb/volatile')
             ctdb_etc = str(data_dir / 'ctdb/etc')
             mounts[ctdb_persistent] = '/var/lib/ctdb/persistent:z'
-            mounts[ctdb_run] = '/var/run/ctdb:z'
+            mounts[ctdb_run] = '/run/samba/ctdb:z'
             mounts[ctdb_volatile] = '/var/lib/ctdb/volatile:z'
             mounts[ctdb_etc] = '/etc/ctdb:z'
             # create a shared smb.conf file for our clustered instances.
@@ -1008,7 +1058,7 @@ class SMB(ContainerDaemonForm):
         etc_samba_ctr = ddir / 'etc-samba-container'
         file_utils.makedirs(etc_samba_ctr, uid, gid, 0o770)
         file_utils.makedirs(ddir / 'lib-samba', uid, gid, 0o755)
-        file_utils.makedirs(ddir / 'run', uid, gid, 0o770)
+        file_utils.makedirs(ddir / 'run', uid, gid, 0o755)
         if self._files:
             file_utils.populate_files(data_dir, self._files, uid, gid)
         if self._tls_files:
@@ -1020,6 +1070,8 @@ class SMB(ContainerDaemonForm):
             file_utils.makedirs(ddir / 'ctdb/run', uid, gid, 0o770)
             file_utils.makedirs(ddir / 'ctdb/volatile', uid, gid, 0o770)
             file_utils.makedirs(ddir / 'ctdb/etc', uid, gid, 0o770)
+            file_utils.makedirs(ddir / 'run/ctdb', uid, gid, 0o770)
+            file_utils.makedirs(ddir / 'lib-samba/lock/ctdb', uid, gid, 0o770)
             self._write_ctdb_stub_config(etc_samba_ctr / 'ctdb.json')
             self._write_smb_conf_stub(ddir / 'ctdb/smb.conf')
             if self._cfg.bind_to:

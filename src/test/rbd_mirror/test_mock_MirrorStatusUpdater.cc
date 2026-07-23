@@ -150,7 +150,7 @@ public:
       const std::string& global_image_id,
       const cls::rbd::MirrorImageSiteStatus& mirror_image_status, int r) {
     EXPECT_CALL(*m_mock_local_io_ctx,
-                exec(RBD_MIRRORING, _, StrEq("rbd"),
+                exec_internal(RBD_MIRRORING, _, StrEq("rbd"),
                      StrEq("mirror_image_status_set"), _, _, _, _))
       .WillOnce(WithArg<4>(Invoke(
         [r, global_image_id, mirror_image_status](bufferlist& in_bl) {
@@ -188,7 +188,7 @@ public:
 
   void expect_mirror_status_remove(const std::string& global_image_id, int r) {
     EXPECT_CALL(*m_mock_local_io_ctx,
-                exec(RBD_MIRRORING, _, StrEq("rbd"),
+                exec_internal(RBD_MIRRORING, _, StrEq("rbd"),
                      StrEq("mirror_image_status_remove"), _, _, _, _))
       .WillOnce(WithArg<4>(Invoke(
         [r, global_image_id](bufferlist& in_bl) {

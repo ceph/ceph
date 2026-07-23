@@ -13,7 +13,6 @@
 #include "include/encoding.h"
 #include "include/types.h"
 
-
 class JSONObj;
 
 
@@ -124,6 +123,5 @@ struct obj_version_cond {
   }
 };
 WRITE_CLASS_ENCODER(obj_version_cond)
-
 
 #endif

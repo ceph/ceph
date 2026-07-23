@@ -7,7 +7,7 @@
 #include <fcntl.h>
 
 #include "crimson/common/log.h"
-#include "crimson/common/errorator-loop.h"
+#include "crimson/common/errorator-utils.h"
 #include "crimson/os/seastore/logging.h"
 
 #include "include/buffer.h"
@@ -44,26 +44,30 @@ RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
     );
   }
 
-  super.block_size = (*st).block_size;
-  super.size = (*st).size;
-  super.config = std::move(config);
-  super.journal_size = journal_size;
-  ceph_assert_always(super.journal_size > 0);
-  ceph_assert_always(super.size >= super.journal_size);
+  const size_t cur_block_size = (*st).block_size;
+  const size_t cur_total_size = (*st).size;
+  ceph_assert_always(journal_size > 0);
+  ceph_assert_always(cur_total_size >= journal_size);
   ceph_assert_always(shard_num > 0);
 
-  std::vector<rbm_shard_info_t> shard_infos(shard_num);
+  const size_t aligned_size =
+    (cur_total_size / shard_num) -
+    ((cur_total_size / shard_num) % cur_block_size);
+
+  std::vector<device_shard_info_t> shard_infos(shard_num);
   for (int i = 0; i < shard_num; i++) {
-    uint64_t aligned_size = 
-      (super.size / shard_num) -
-      ((super.size / shard_num) % super.block_size);
     shard_infos[i].size = aligned_size;
     shard_infos[i].start_offset = i * aligned_size;
-    assert(shard_infos[i].size > super.journal_size);
+    assert(shard_infos[i].size > journal_size);
   }
-  super.shard_infos = shard_infos;
-  super.shard_num = shard_num;
   shard_info = shard_infos[seastar::this_shard_id()];
+  super = device_superblock_t::make_rbm(
+    shard_num,
+    cur_block_size,
+    cur_total_size,
+    journal_size,
+    std::move(config),
+    std::move(shard_infos));
   DEBUG("super {} ", super);
 
   // write super block
@@ -71,16 +75,16 @@ RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
     seastar::open_flags::rw | seastar::open_flags::dsync
   ).handle_error(
     mkfs_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-    "Invalid error open in RBMDevice::do_primary_mkfs"}
+    crimson::ct_error::assert_all(
+    "Invalid error open in RBMDevice::do_primary_mkfs")
   );
   co_await initialize_nvme_features();
   co_await write_rbm_superblock(
   ).handle_error(
     mkfs_ertr::pass_further{},
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
     "Invalid error write_rbm_superblock in RBMDevice::do_primary_mkfs"
-  });
+  ));
   co_await close();
 }
 
@@ -100,24 +104,46 @@ write_ertr::future<> RBMDevice::write_rbm_superblock()
 
   bufferlist bl;
   encode(super, bl);
-  auto iter = bl.begin();
   auto bp = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
-  assert(bl.length() < super.block_size);
-  iter.copy(bl.length(), bp.c_str());
+  bp.zero();
+  // magic at offset 0, followed by 37 bytes of null padding (just zeroed)
+  std::memcpy(bp.c_str(),
+	      CRIMSON_DEVICE_SUPERBLOCK_MAGIC.data(), SUPERBLOCK_MAGIC_SIZE);
+  // DENC-encoded superblock at offset 60
+  assert(SUPERBLOCK_HEADER_PREFIX + bl.length() < super.block_size);
+  auto iter = bl.begin();
+  iter.copy(bl.length(), bp.c_str() + SUPERBLOCK_HEADER_PREFIX);
   co_return co_await write(RBM_START_ADDRESS, bp);
 }
 
-read_ertr::future<rbm_superblock_t> RBMDevice::read_rbm_superblock(
+read_ertr::future<device_superblock_t> RBMDevice::read_rbm_superblock(
   rbm_abs_addr addr)
 {
   LOG_PREFIX(RBMDevice::read_rbm_superblock);
   assert(super.block_size > 0);
   auto bptr = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
   co_await read(addr, bptr);
+
+  // verify magic at offset 0
+  superblock_magic_t disk_magic;
+  std::memcpy(disk_magic.data(), bptr.c_str(), SUPERBLOCK_MAGIC_SIZE);
+  if (disk_magic != CRIMSON_DEVICE_SUPERBLOCK_MAGIC) {
+    ERROR("invalid superblock magic in read_rbm_superblock, got: {:02x}",
+      fmt::join(
+        std::views::transform(disk_magic,
+          [](std::byte b) { return std::to_integer<uint8_t>(b); }),
+        " "));
+    co_return co_await read_ertr::future<device_superblock_t>(
+      crimson::ct_error::input_output_error::make()
+    );
+  }
+
+  // decode DENC superblock from offset 60
   bufferlist bl;
-  bl.append(bptr);
+  bl.append(bptr.c_str() + SUPERBLOCK_HEADER_PREFIX,
+	    bptr.length() - SUPERBLOCK_HEADER_PREFIX);
   auto p = bl.cbegin();
-  rbm_superblock_t super_block;
+  device_superblock_t super_block;
   bool err = false;
   try {
     decode(super_block, p);
@@ -127,7 +153,7 @@ read_ertr::future<rbm_superblock_t> RBMDevice::read_rbm_superblock(
     err = true;
   }
   if (err) {
-    co_return co_await read_ertr::future<rbm_superblock_t>(
+    co_return co_await read_ertr::future<device_superblock_t>(
       crimson::ct_error::input_output_error::make()
     );
   }
@@ -135,15 +161,16 @@ read_ertr::future<rbm_superblock_t> RBMDevice::read_rbm_superblock(
   bufferlist meta_b_header;
   super_block.crc = 0;
   encode(super_block, meta_b_header);
-  assert(ceph::encoded_sizeof<rbm_superblock_t>(super_block) <
-      super_block.block_size);
+  assert(SUPERBLOCK_HEADER_PREFIX +
+	 ceph::encoded_sizeof<device_superblock_t>(super_block) <
+	 super_block.block_size);
 
   // Do CRC verification only if data protection is not supported.
   if (super_block.is_end_to_end_data_protection() == false) {
     if (meta_b_header.crc32c(-1) != crc) {
       DEBUG("bad crc on super block, expected {} != actual {} ",
 	    meta_b_header.crc32c(-1), crc);
-      co_return co_await read_ertr::future<rbm_superblock_t>(
+      co_return co_await read_ertr::future<device_superblock_t>(
 	crimson::ct_error::input_output_error::make()
       );
     }
@@ -153,7 +180,7 @@ read_ertr::future<rbm_superblock_t> RBMDevice::read_rbm_superblock(
   super_block.crc = crc;
   super = super_block;
   DEBUG("got {} ", super);
-  co_return co_await read_ertr::future<rbm_superblock_t>(
+  co_return co_await read_ertr::future<device_superblock_t>(
     read_ertr::ready_future_marker{},
     super_block
   );
@@ -165,8 +192,8 @@ RBMDevice::mount_ret RBMDevice::do_shard_mount()
     seastar::open_flags::rw | seastar::open_flags::dsync
   ).handle_error(
     mkfs_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-    "Invalid error open in RBMDevice::do_shard_mount"}
+    crimson::ct_error::assert_all(
+    "Invalid error open in RBMDevice::do_shard_mount")
   );
 
   auto st = co_await stat_device(
@@ -186,8 +213,8 @@ RBMDevice::mount_ret RBMDevice::do_shard_mount()
   auto s = co_await read_rbm_superblock(RBM_START_ADDRESS
   ).handle_error(
     mount_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-    "Invalid error read_rbm_superblock in RBMDevice::do_shard_mount"}
+    crimson::ct_error::assert_all(
+    "Invalid error read_rbm_superblock in RBMDevice::do_shard_mount")
   );
   LOG_PREFIX(RBMDevice::do_shard_mount);
   if(seastar::this_shard_id() + seastar::smp::count * store_index >= s.shard_num) {
@@ -208,22 +235,22 @@ read_ertr::future<uint32_t> RBMDevice::get_shard_nums()
   co_await open(get_device_path(),
     seastar::open_flags::rw | seastar::open_flags::dsync
   ).handle_error(
-    crimson::ct_error::assert_all{
-    "Invalid error open in RBMDevice::get_shard_nums"}
+    crimson::ct_error::assert_all(
+    "Invalid error open in RBMDevice::get_shard_nums")
   );
 
   auto st = co_await stat_device(
   ).handle_error(
-    crimson::ct_error::assert_all{
-      "Invalid error stat_device in RBMDevice::get_shard_nums"}
+    crimson::ct_error::assert_all(
+      "Invalid error stat_device in RBMDevice::get_shard_nums")
   );
 
   assert(st.block_size > 0);
   super.block_size = st.block_size;
   auto sb = co_await read_rbm_superblock(RBM_START_ADDRESS
   ).handle_error(
-    crimson::ct_error::assert_all{
-      "Invalid error in RBMDevice::get_shard_nums"}
+    crimson::ct_error::assert_all(
+      "Invalid error in RBMDevice::get_shard_nums")
   );
 
   co_return sb.shard_num;
@@ -231,7 +258,8 @@ read_ertr::future<uint32_t> RBMDevice::get_shard_nums()
 
 EphemeralRBMDeviceRef create_test_ephemeral(uint64_t journal_size, uint64_t data_size) {
   return EphemeralRBMDeviceRef(
-    new EphemeralRBMDevice(journal_size + data_size + 
+    new EphemeralRBMDevice(
+      (journal_size + data_size) * seastar::smp::count +
 	random_block_device::RBMDevice::get_shard_reserved_size(),
 	EphemeralRBMDevice::TEST_BLOCK_SIZE));
 }
@@ -271,6 +299,24 @@ write_ertr::future<> EphemeralRBMDevice::write(
   ::memcpy(buf + offset, bptr.c_str(), bptr.length());
 
   return write_ertr::now();
+}
+
+read_ertr::future<> EphemeralRBMDevice::_readv(
+  uint64_t offset,
+  std::vector<bufferptr> ptrs) {
+  LOG_PREFIX(EphemeralRBMDevice::_readv);
+  ceph_assert(buf);
+  DEBUG(
+    "EphemeralRBMDevice: read offset {} {} buffers",
+    offset,
+    ptrs.size());
+
+  for (auto &ptr : ptrs) {
+    ptr.copy_in(0, ptr.length(), buf + offset);
+    offset += ptr.length();
+  }
+
+  return read_ertr::now();
 }
 
 read_ertr::future<> EphemeralRBMDevice::read(
@@ -313,7 +359,7 @@ EphemeralRBMDevice::mount_ret EphemeralRBMDevice::mount() {
 }
 
 EphemeralRBMDevice::mkfs_ret EphemeralRBMDevice::mkfs(device_config_t config) {
-  return do_primary_mkfs(config, 1, DEFAULT_TEST_CBJOURNAL_SIZE);
+  return do_primary_mkfs(config, seastar::smp::count, DEFAULT_TEST_CBJOURNAL_SIZE);
 }
 
 }

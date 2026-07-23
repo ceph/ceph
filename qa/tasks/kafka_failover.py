@@ -12,10 +12,21 @@ from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 
+# This task currently supports Kafka 3.x (Zookeeper) only. KRaft (4.x)
+# requires a different multi-controller bootstrap for the two-broker HA
+# topology this task spins up. The suite yaml at
+# qa/suites/rgw/notifications/tasks/kafka_failover/test_kafka.yaml pins
+# kafka_version: 3.9.2; the runtime check below fails fast if anyone
+# changes that to a 4.x version without updating the task.
 def get_kafka_version(config):
     for client, client_config in config.items():
         if 'kafka_version' in client_config:
             kafka_version = client_config.get('kafka_version')
+    if int(kafka_version.split('.')[0]) >= 4:
+        raise RuntimeError(
+            "kafka_failover task does not yet support Kafka 4.x (KRaft); "
+            "pin kafka_version to a 3.x release or extend this task."
+        )
     return kafka_version
 
 kafka_prefix = 'kafka_2.13-'
@@ -115,8 +126,13 @@ def install_kafka(ctx, config):
 
         link1 = '{apache_mirror_url_front}/kafka/'.format(apache_mirror_url_front=apache_mirror_url_front) + \
             current_version + '/' + kafka_file
+        archive_link = 'https://archive.apache.org/dist/kafka/' + current_version + '/' + kafka_file
+        log.info('Trying to download Kafka from mirror: %s', link1)
+        log.info('Archive fallback URL: %s', archive_link)
         ctx.cluster.only(client).run(
-            args=['cd', '{tdir}'.format(tdir=test_dir), run.Raw('&&'), 'wget', link1],
+            args=['cd', '{tdir}'.format(tdir=test_dir), run.Raw('&&'),
+                  'wget', link1, run.Raw('||'),
+                  run.Raw('('), 'rm', '-f', kafka_file, run.Raw('&&'), 'wget', archive_link, run.Raw(')')],
         )
 
         ctx.cluster.only(client).run(
@@ -139,6 +155,9 @@ def install_kafka(ctx, config):
         for (client,_) in config.items():
             ctx.cluster.only(client).run(
                 args=['rm', '-rf', '{tdir}'.format(tdir=kafka_dir)],
+            )
+            ctx.cluster.only(client).run(
+                args=['rm', '-rf', '{tdir}/{doc}'.format(tdir=teuthology.get_testdir(ctx),doc=kafka_file)],
             )
 
 
@@ -302,6 +321,8 @@ def task(ctx,config):
         config = all_clients
     if isinstance(config, list):
         config = dict.fromkeys(config)
+
+    ctx.kafka_dir = get_kafka_dir(ctx, config)
 
     log.debug('Kafka config is %s', config)
 
