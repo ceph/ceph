@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { PerformanceCardService } from './performance-card.service';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { PrometheusService } from './prometheus.service';
 
 describe('PerformanceCardService', () => {
   let service: PerformanceCardService;
@@ -12,7 +13,16 @@ describe('PerformanceCardService', () => {
   });
 
   beforeEach(() => {
-    TestBed.configureTestingModule({});
+    TestBed.configureTestingModule({
+      providers: [
+        {
+          provide: PrometheusService,
+          useValue: {
+            getRangeQueriesData: jest.fn()
+          }
+        }
+      ]
+    });
     service = TestBed.inject(PerformanceCardService);
   });
 

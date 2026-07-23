@@ -3,14 +3,14 @@ import { PageHelper } from '../page-helper.po';
 export class LoginPageHelper extends PageHelper {
   pages = {
     index: { url: '#/login', id: 'cd-login' },
-    overview: { url: '#/overview', id: 'cd-dashboard' }
+    overview: { url: '#/overview', id: 'cd-overview' }
   };
 
   doLogin() {
     cy.get('[name=username]').type('admin');
     cy.get('#password').type('admin');
     cy.get('[type=submit]').click();
-    cy.get('cd-dashboard').should('exist');
+    cy.get('cd-overview').should('exist');
   }
 
   doLogout() {

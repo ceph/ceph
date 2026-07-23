@@ -40,7 +40,11 @@ export class PrometheusAlertService {
   ) {}
 
   getGroupedAlerts(clusterFilteredAlerts = false) {
-    this.prometheusService.ifAlertmanagerConfigured(() => {
+    this.prometheusService.isAlertmanagerUsable().subscribe((usable) => {
+      if (!usable) {
+        return;
+      }
+
       this.prometheusService.getGroupedAlerts(clusterFilteredAlerts).subscribe(
         (alerts) => this.handleAlerts(alerts),
         (resp) => {

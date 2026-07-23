@@ -1,4 +1,10 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import {
+  ComponentFixture,
+  discardPeriodicTasks,
+  fakeAsync,
+  TestBed,
+  tick
+} from '@angular/core/testing';
 import { of, Subject, throwError } from 'rxjs';
 
 import { OverviewComponent } from './overview.component';
@@ -6,34 +12,20 @@ import { HealthService } from '~/app/shared/api/health.service';
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 import { HealthSnapshotMap } from '~/app/shared/models/health.interface';
 
-import { provideHttpClient } from '@angular/common/http';
-import { provideRouter, RouterModule } from '@angular/router';
+import { provideRouter } from '@angular/router';
 
-import { CommonModule } from '@angular/common';
-import { GridModule, TilesModule } from 'carbon-components-angular';
-import { OverviewHealthCardComponent } from './health-card/overview-health-card.component';
-import { OverviewStorageCardComponent } from './storage-card/overview-storage-card.component';
 import { HealthMap, SeverityIconMap } from '~/app/shared/models/overview';
-import { OverviewAlertsCardComponent } from './alerts-card/overview-alerts-card.component';
 import { HardwareService } from '~/app/shared/api/hardware.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { OverviewStorageService } from '~/app/shared/api/storage-overview.service';
-import { Component } from '@angular/core';
-
-@Component({
-  selector: 'cd-overview-alerts-card',
-  standalone: true,
-  template: ''
-})
-class MockOverviewAlertsCardComponent {}
+import { PrometheusService } from '~/app/shared/api/prometheus.service';
 
 describe('OverviewComponent', () => {
   let component: OverviewComponent;
   let fixture: ComponentFixture<OverviewComponent>;
 
-  let mockHealthService: { getHealthSnapshot: jest.Mock };
+  let mockHealthService: { getHealthSnapshot: jest.Mock; getTelemetryStatus: jest.Mock };
   let mockRefreshIntervalService: { intervalData$: Subject<void> };
   let mockOverviewStorageService: {
     getTrendData: jest.Mock;
@@ -47,7 +39,8 @@ describe('OverviewComponent', () => {
   };
 
   const mockAuthStorageService = {
-    getPermissions: jest.fn(() => ({ configOpt: { read: false } }))
+    getPermissions: jest.fn(() => ({ configOpt: { read: false } })),
+    isPwdDisplayedSource: new Subject<boolean>()
   };
 
   const mockMgrModuleService = {
@@ -59,8 +52,19 @@ describe('OverviewComponent', () => {
     getSummary: jest.fn(() => of(null))
   };
 
+  let mockPrometheusService: {
+    refreshPrometheusUsable: jest.Mock;
+  };
+
   beforeEach(async () => {
-    mockHealthService = { getHealthSnapshot: jest.fn() };
+    mockPrometheusService = {
+      refreshPrometheusUsable: jest.fn().mockReturnValue(of(true))
+    };
+
+    mockHealthService = {
+      getHealthSnapshot: jest.fn(),
+      getTelemetryStatus: jest.fn().mockReturnValue(of(false))
+    };
     mockRefreshIntervalService = { intervalData$: new Subject<void>() };
 
     mockOverviewStorageService = {
@@ -97,35 +101,20 @@ describe('OverviewComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      imports: [
-        OverviewComponent,
-        CommonModule,
-        GridModule,
-        TilesModule,
-        OverviewStorageCardComponent,
-        OverviewHealthCardComponent,
-        OverviewAlertsCardComponent,
-        RouterModule,
-        HttpClientTestingModule
-      ],
+      imports: [OverviewComponent],
       providers: [
-        provideHttpClient(),
         provideRouter([]),
         { provide: HealthService, useValue: mockHealthService },
         { provide: RefreshIntervalService, useValue: mockRefreshIntervalService },
         { provide: OverviewStorageService, useValue: mockOverviewStorageService },
+        { provide: PrometheusService, useValue: mockPrometheusService },
         { provide: AuthStorageService, useValue: mockAuthStorageService },
         { provide: MgrModuleService, useValue: mockMgrModuleService },
         { provide: HardwareService, useValue: mockHardwareService }
       ]
     })
       .overrideComponent(OverviewComponent, {
-        remove: {
-          imports: [OverviewAlertsCardComponent]
-        },
-        add: {
-          imports: [MockOverviewAlertsCardComponent]
-        }
+        set: { template: '' }
       })
       .compileComponents();
 
@@ -267,7 +256,7 @@ describe('OverviewComponent', () => {
     mockRefreshIntervalService.intervalData$.complete();
   });
 
-  it('storageCardVm$ should emit storage view model with mapped fields', (done) => {
+  it('storageCardVm$ should emit storage view model with mapped fields', fakeAsync(() => {
     const mockData: HealthSnapshotMap = {
       fsid: 'fsid-storage',
       health: { status: 'HEALTH_OK', checks: {} },
@@ -319,11 +308,12 @@ describe('OverviewComponent', () => {
       expect(mockOverviewStorageService.mapStorageChartData).toHaveBeenCalled();
 
       sub.unsubscribe();
-      done();
     });
 
+    tick(0);
     mockRefreshIntervalService.intervalData$.next();
-  });
+    discardPeriodicTasks();
+  }));
 
   it('storageCardVm$ should emit safe defaults before storage side streams resolve', (done) => {
     const mockData: HealthSnapshotMap = {
@@ -347,7 +337,7 @@ describe('OverviewComponent', () => {
     } as any;
 
     mockHealthService.getHealthSnapshot.mockReturnValue(of(mockData));
-    mockOverviewStorageService.getStorageBreakdown.mockReturnValue(of(null));
+    mockOverviewStorageService.getStorageBreakdown.mockReturnValue(of({ result: [] }));
 
     const sub = component.storageCardVm$.subscribe((vm) => {
       expect(vm.totalCapacity).toBe(1000);

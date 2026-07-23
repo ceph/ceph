@@ -143,19 +143,22 @@
                 aria-label="Add Storage"
                 i18n>
           Add storage
-          <svg [cdsIcon]="icons.add"
-               [size]="icons.size20"
-               class="cds--btn__icon">
-          </svg>
+          <cd-icon
+            [cdsIcon]="icons.add"
+            [size]="icons.size20"
+            class="cds--btn__icon">
+          </cd-icon>
         </button>
         <button cdsButton="tertiary"
                 (click)="skipClusterCreation()"
+                aria-label="View cluster overview"
                 i18n>
           View cluster overview
-          <svg [cdsIcon]="icons.right"
-               [size]="icons.size20"
-               class="cds--btn__icon">
-          </svg>
+          <cd-icon
+            [cdsIcon]="icons.right"
+            [size]="icons.size20"
+            class="cds--btn__icon">
+          </cd-icon>
         </button>
       </div>
     </div>
