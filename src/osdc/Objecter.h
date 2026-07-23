@@ -553,6 +553,33 @@ struct ObjectOperation {
       }
     }
   };
+
+  struct CB_ObjectOperation_mapext {
+    std::map<uint64_t,uint64_t>* extents;
+    int* prval;
+    CB_ObjectOperation_mapext(std::map<uint64_t,uint64_t>* extents, int* prval)
+      : extents(extents), prval(prval) {}
+    void operator()(boost::system::error_code ec, int r,
+                    const ceph::buffer::list& bl) {
+      auto iter = bl.cbegin();
+      if (r >= 0) {
+        // NOTE: it's possible the sub-op has not been executed but the result
+        // code remains zeroed. Avoid the costly exception handling on a
+        // potential IO path.
+        if (bl.length() > 0) {
+          try {
+            decode(*extents, iter);
+          } catch (const ceph::buffer::error& e) {
+            if (prval)
+              *prval = -EIO;
+          }
+        } else if (prval) {
+          *prval = -EIO;
+        }
+      }
+    }
+  };
+
   void sparse_read(uint64_t off, uint64_t len, std::map<uint64_t, uint64_t>* m,
 		   ceph::buffer::list* data_bl, int* prval,
 		   uint64_t truncate_size = 0, uint32_t truncate_seq = 0) {
@@ -620,6 +647,13 @@ struct ObjectOperation {
   void mapext(uint64_t off, uint64_t len) {
     ceph::buffer::list bl;
     add_data(CEPH_OSD_OP_MAPEXT, off, len, bl);
+  }
+  void mapext(uint64_t off, uint64_t len,
+              std::map<uint64_t,uint64_t>* m, int* prval) {
+    ceph::buffer::list bl;
+    add_data(CEPH_OSD_OP_MAPEXT, off, len, bl);
+    set_handler(CB_ObjectOperation_mapext(m, prval));
+    out_rval.back() = prval;
   }
   void sparse_read(uint64_t off, uint64_t len) {
     ceph::buffer::list bl;
