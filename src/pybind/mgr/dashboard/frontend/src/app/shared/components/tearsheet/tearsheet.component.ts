@@ -1,4 +1,5 @@
 import {
+  ChangeDetectorRef,
   Component,
   ContentChildren,
   EventEmitter,
@@ -9,6 +10,8 @@ import {
   AfterViewInit,
   DestroyRef,
   OnDestroy,
+  OnChanges,
+  SimpleChanges,
   ChangeDetectionStrategy,
   TemplateRef,
   ViewEncapsulation
@@ -22,6 +25,8 @@ import { Location } from '@angular/common';
 import { ConfirmationModalComponent } from '../confirmation-modal/confirmation-modal.component';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subject } from 'rxjs';
+
+export type TearsheetOverflowScroll = 'auto' | 'hidden' | 'visible' | 'scroll';
 
 /**
 <cd-tearsheet
@@ -57,7 +62,7 @@ formgroup: CdFormGroup;
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None
 })
-export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
+export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy, OnChanges {
   @Input() title!: string;
   @Input() steps!: Array<Step>;
   @Input() description!: string;
@@ -65,7 +70,9 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   @Input() size: 'xs' | 'sm' | 'md' | 'lg' = 'lg';
   @Input() submitButtonLabel: string = $localize`Create`;
   @Input() submitButtonLoadingLabel: string = $localize`Creating`;
-  @Input() isSubmitLoading: boolean = true;
+  @Input() isSubmitLoading: boolean = false;
+  /** When set, applies `overflow` on the tearsheet content area; omit to use stylesheet defaults. */
+  @Input() overflowScroll?: TearsheetOverflowScroll;
 
   @Output() submitRequested = new EventEmitter<void>();
   @Output() closeRequested = new EventEmitter<void>();
@@ -86,6 +93,13 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
     return this.stepContents?.toArray()[this.currentStep]?.showRightInfluencer;
   }
 
+  get contentOverflowStyle(): { overflow: TearsheetOverflowScroll } | null {
+    if (!this.overflowScroll) {
+      return null;
+    }
+    return { overflow: this.overflowScroll };
+  }
+
   getStepValue<T = any>(index: number): T | null {
     const wrapper = this.stepContents?.toArray()?.[index];
     return wrapper?.stepComponent?.formGroup?.value ?? null;
@@ -102,7 +116,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   currentStep: number = 0;
-  lastStep: number = null;
+  lastStep: number | null = null;
   isOpen: boolean = true;
   hasModalOutlet: boolean = false;
   private destroy$ = new Subject<void>();
@@ -112,7 +126,8 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
     private cdsModalService: ModalCdsService,
     private route: ActivatedRoute,
     private location: Location,
-    private destroyRef: DestroyRef
+    private destroyRef: DestroyRef,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit() {
@@ -120,13 +135,42 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
     this.hasModalOutlet = this.route.outlet === 'modal';
   }
 
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes['steps']) {
+      this.lastStep = this.steps.length - 1;
+      if (this.currentStep > this.lastStep) {
+        this.currentStep = this.lastStep;
+      }
+      this.cdr.markForCheck();
+    }
+  }
+
   private _updateStepInvalid(index: number, invalid: boolean) {
     this.steps = this.steps.map((step, i) => (i === index ? { ...step, invalid } : step));
   }
 
   onStepSelect(event: { step: Step; index: number }) {
+    if (this.isStepNavBlocked(event.index)) {
+      return;
+    }
     this.currentStep = event.index;
     this.stepChanged.emit({ current: this.currentStep });
+    this.cdr.markForCheck();
+  }
+
+  private isStepNavBlocked(index: number): boolean {
+    if (this.steps[index]?.disabled) {
+      return true;
+    }
+    if (index > this.currentStep && this.steps[this.currentStep]?.invalid) {
+      return true;
+    }
+    for (let i = 0; i < index; i++) {
+      if (this.steps[i]?.invalid || this.steps[i]?.disabled) {
+        return true;
+      }
+    }
+    return false;
   }
 
   closeTearsheet() {
@@ -139,6 +183,10 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
 
   closeWideTearsheet() {
     this.isOpen = false;
+    if (this.closeRequested.observers.length > 0) {
+      this.closeRequested.emit();
+      return;
+    }
     if (this.hasModalOutlet) {
       this.location.back();
     } else {
@@ -150,6 +198,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.currentStep !== 0) {
       this.currentStep = this.currentStep - 1;
       this.stepChanged.emit({ current: this.currentStep });
+      this.cdr.markForCheck();
     }
   }
 
@@ -164,17 +213,27 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.currentStep !== this.lastStep && !this.steps[this.currentStep].invalid) {
       this.currentStep = this.currentStep + 1;
       this.stepChanged.emit({ current: this.currentStep });
+      this.cdr.markForCheck();
     }
   }
 
   getMergedPayload(): any {
     return this.stepContents.toArray().reduce((acc, wrapper) => {
-      const stepFormValue = wrapper.stepComponent.formGroup.value;
+      const stepFormValue = wrapper.stepComponent?.formGroup?.value;
       return { ...acc, ...stepFormValue };
     }, {});
   }
 
-  handleSubmit() {
+  onSubmit() {
+    this.stepContents?.forEach((wrapper, index) => {
+      const form = wrapper.stepComponent?.formGroup;
+      if (!form) return;
+
+      form.markAllAsTouched();
+      form.updateValueAndValidity({ emitEvent: true });
+      this._updateStepInvalid(index, form.invalid);
+    });
+
     if (this.steps.some((step) => step?.invalid)) return;
 
     const mergedPayloads = this.getMergedPayload();
