@@ -28,5 +28,6 @@ public:
 
   virtual int get(const std::string& key, bool secure, bufferlist *result) = 0;
   virtual int set(const std::string& key, const bufferlist& value, bool secure) = 0;
+  virtual int rm(const std::string& key) = 0;
 };
 

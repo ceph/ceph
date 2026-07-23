@@ -71,3 +71,14 @@ int RGWSI_ConfigKey_RADOS::set(const string& key, const bufferlist& value,
   bufferlist inbl = value;
   return rados->mon_command(std::move(cmd), std::move(inbl), nullptr, nullptr);
 }
+
+int RGWSI_ConfigKey_RADOS::rm(const string& key)
+{
+  string cmd =
+    "{"
+      "\"prefix\": \"config-key rm\", "
+      "\"key\": \"" + key + "\""
+    "}";
+
+  return rados->mon_command(std::move(cmd), {}, nullptr, nullptr);
+}

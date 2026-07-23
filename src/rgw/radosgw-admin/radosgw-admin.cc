@@ -565,6 +565,7 @@ void usage()
   cout << "\nSTS keyring options:\n";
   cout << "   --key-id                      sts keyring key id (40 hexadecimal characters)\n";
   cout << "   --max-keys                    keep at most this many keys after sts keyring rotate/trim\n";
+  cout << "   --legacy                      operate on the stored legacy sts key instead of the keyring\n";
   cout << "\nBucket notifications options:\n";
   cout << "   --topic                       bucket notifications topic name\n";
   cout << "   --notification-id             bucket notifications id\n";
@@ -3739,10 +3740,101 @@ void init_realm_param(CephContext *cct, string& var, std::optional<string>& opt_
 }
 
 #ifdef WITH_RADOSGW_RADOS
+static int sts_legacy_key_command(OPT opt_cmd, RGWSI_ConfigKey *svc_config_key,
+                                  const string& infile,
+                                  bool yes_i_really_mean_it,
+                                  Formatter *formatter)
+{
+  if (opt_cmd == OPT::STS_KEYRING_ROTATE || opt_cmd == OPT::STS_KEYRING_TRIM) {
+    cerr << "ERROR: the legacy key is a single key; run sts keyring init "
+            "--legacy --yes-i-really-mean-it to replace it" << std::endl;
+    return EINVAL;
+  }
+  const std::string legacy_key{rgw::sts::STS_LEGACY_KEY_CONFIG_KEY};
+  bufferlist bl;
+  int ret = svc_config_key->get(legacy_key, true, &bl);
+  if (ret < 0 && ret != -ENOENT) {
+    cerr << "failed to read the legacy sts key: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+  if (opt_cmd == OPT::STS_KEYRING_LIST) {
+    formatter->open_object_section("legacy_key");
+    formatter->dump_bool("present", ret == 0);
+    if (ret == 0) {
+      const auto digest =
+          calc_hash_sha256(std::string_view{bl.c_str(), bl.length()});
+      formatter->dump_string("sha256", digest.to_str());
+    }
+    formatter->close_section();
+    formatter->flush(cout);
+    bl.zero();
+    return 0;
+  }
+  bl.zero();
+  if (opt_cmd == OPT::STS_KEYRING_RM) {
+    if (ret == -ENOENT) {
+      cerr << "ERROR: no legacy sts key is stored" << std::endl;
+      return ENOENT;
+    }
+    if (! yes_i_really_mean_it) {
+      cerr << "ERROR: removing the legacy key invalidates all outstanding "
+              "legacy tokens unless rgw_sts_key is set. Pass "
+              "--yes-i-really-mean-it to proceed." << std::endl;
+      return EINVAL;
+    }
+    if (int r = svc_config_key->rm(legacy_key); r < 0) {
+      cerr << "failed to remove the legacy sts key: " << cpp_strerror(-r) << std::endl;
+      return -r;
+    }
+    cout << "removed the legacy key" << std::endl;
+    return 0;
+  }
+  // init
+  if (ret == 0 && ! yes_i_really_mean_it) {
+    cerr << "ERROR: a legacy sts key is already stored; replacing it "
+            "invalidates all outstanding legacy tokens. Pass "
+            "--yes-i-really-mean-it to proceed." << std::endl;
+    return EEXIST;
+  }
+  std::string key;
+  if (! infile.empty()) {
+    bufferlist input;
+    if (int r = read_input(infile, input); r < 0) {
+      cerr << "ERROR: failed to read infile: " << cpp_strerror(-r) << std::endl;
+      return -r;
+    }
+    key = input.to_str();
+    input.zero();
+    rgw::sts::trim_legacy_key(key);
+  } else {
+    key = gen_rand_alphanumeric(g_ceph_context, 16);
+  }
+  // match the validation the daemon applies when loading the key
+  auto* cryptohandler = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
+  bufferptr secret{key.c_str(), static_cast<unsigned>(key.size())};
+  if (! cryptohandler || cryptohandler->validate_secret(secret) < 0) {
+    ceph_memzero_s(key.data(), key.size(), key.size());
+    cerr << "ERROR: the legacy sts key must be at least 16 characters" << std::endl;
+    return EINVAL;
+  }
+  bufferlist out_bl;
+  out_bl.append(key);
+  ceph_memzero_s(key.data(), key.size(), key.size());
+  int r = svc_config_key->set(legacy_key, out_bl, true);
+  out_bl.zero();
+  if (r < 0) {
+    cerr << "failed to write the legacy sts key: " << cpp_strerror(-r) << std::endl;
+    return -r;
+  }
+  cout << (ret == 0 ? "replaced the legacy key" : "stored the legacy key")
+       << std::endl;
+  return 0;
+}
+
 static int sts_keyring_command(OPT opt_cmd, RGWSI_ConfigKey *svc_config_key,
-			       const string& infile, const string& key_id,
-			       int max_keys, bool yes_i_really_mean_it,
-			       Formatter *formatter)
+                               const string& infile, const string& key_id,
+                               int max_keys, bool yes_i_really_mean_it,
+                               Formatter *formatter)
 {
   using rgw::sts::StsKeyring;
   using rgw::sts::sts_aead_key;
@@ -3810,12 +3902,12 @@ static int sts_keyring_command(OPT opt_cmd, RGWSI_ConfigKey *svc_config_key,
       added.push_back(hex_id(key.id));
     }
   } else if (opt_cmd == OPT::STS_KEYRING_INIT ||
-	     opt_cmd == OPT::STS_KEYRING_ROTATE) {
+             opt_cmd == OPT::STS_KEYRING_ROTATE) {
     if (opt_cmd == OPT::STS_KEYRING_ROTATE && max_keys == 1 &&
-	! yes_i_really_mean_it) {
+        ! yes_i_really_mean_it) {
       cerr << "ERROR: rotate --max-keys=1 discards the current sealing key "
-	      "and invalidates all outstanding tokens. Pass "
-	      "--yes-i-really-mean-it to proceed." << std::endl;
+              "and invalidates all outstanding tokens. Pass "
+              "--yes-i-really-mean-it to proceed." << std::endl;
       return EINVAL;
     }
     /*
@@ -3824,18 +3916,18 @@ static int sts_keyring_command(OPT opt_cmd, RGWSI_ConfigKey *svc_config_key,
      */
     if (opt_cmd == OPT::STS_KEYRING_ROTATE && max_keys > 0) {
       for (auto& id : keyring.trim(static_cast<size_t>(max_keys) - 1)) {
-	removed.push_back(hex_id(id));
+        removed.push_back(hex_id(id));
       }
     }
     sts_aead_key newkey;
     if (! infile.empty()) {
       StsKeyring incoming;
       if (ret = read_keyring_file(incoming); ret < 0) {
-	return -ret;
+        return -ret;
       }
       if (incoming.size() != 1) {
-	cerr << "ERROR: sts keyring rotate expects exactly one key entry" << std::endl;
-	return EINVAL;
+        cerr << "ERROR: sts keyring rotate expects exactly one key entry" << std::endl;
+        return EINVAL;
       }
       auto single = incoming.release();
       newkey = std::move(single[0]);
@@ -3863,10 +3955,10 @@ static int sts_keyring_command(OPT opt_cmd, RGWSI_ConfigKey *svc_config_key,
       return EINVAL;
     }
     if (keyring.size() > 1 && raw_id == keyring.sealing_key().id &&
-	!yes_i_really_mean_it) {
+        !yes_i_really_mean_it) {
       cerr << "ERROR: key " << key_id << " currently seals new tokens; "
-	      "removing it invalidates all outstanding tokens. Pass "
-	      "--yes-i-really-mean-it to proceed." << std::endl;
+              "removing it invalidates all outstanding tokens. Pass "
+              "--yes-i-really-mean-it to proceed." << std::endl;
       return EINVAL;
     }
     if (int r = keyring.remove(raw_id, err); r < 0) {
@@ -4162,6 +4254,7 @@ int main(int argc, const char **argv)
   string totp_serial;
   string sts_key_id;
   int sts_max_keys = -1;
+  int sts_legacy = false;
   string totp_seed;
   string totp_seed_type = "hex";
   vector<string> totp_pin;
@@ -4771,6 +4864,8 @@ int main(int argc, const char **argv)
              << rgw::sts::STS_AEAD_MAX_KEYS << std::endl;
         return EINVAL;
       }
+    } else if (ceph_argparse_binary_flag(args, i, &sts_legacy, NULL, "--legacy", (char*)NULL)) {
+      // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-pin", (char*)NULL)) {
       totp_pin.push_back(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-seed", (char*)NULL)) {
@@ -12280,10 +12375,15 @@ next:
       cerr << "ERROR: this command is only available with the RADOS driver." << std::endl;
       return EINVAL;
     }
-    return sts_keyring_command(
-        opt_cmd, static_cast<rgw::sal::RadosStore*>(driver)->svc()->config_key,
-        infile, sts_key_id, sts_max_keys, yes_i_really_mean_it,
-        formatter.get());
+    auto* svc_config_key =
+        static_cast<rgw::sal::RadosStore*>(driver)->svc()->config_key;
+    if (sts_legacy) {
+      return sts_legacy_key_command(opt_cmd, svc_config_key, infile,
+                                    yes_i_really_mean_it, formatter.get());
+    }
+    return sts_keyring_command(opt_cmd, svc_config_key, infile, sts_key_id,
+                               sts_max_keys, yes_i_really_mean_it,
+                               formatter.get());
   }
 
  if (opt_cmd == OPT::RESHARD_STALE_INSTANCES_LIST) {
