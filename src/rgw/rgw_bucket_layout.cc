@@ -187,6 +187,7 @@ std::string_view to_string(const BucketLogType& t)
 {
   switch (t) {
   case BucketLogType::InIndex: return "InIndex";
+  case BucketLogType::FIFO: return "FIFO";
   case BucketLogType::Deleted: return "Deleted";
   default: return "Unknown";
   }
@@ -195,6 +196,10 @@ bool parse(std::string_view str, BucketLogType& t)
 {
   if (boost::iequals(str, "InIndex")) {
     t = BucketLogType::InIndex;
+    return true;
+  }
+  if (boost::iequals(str, "FIFO")) {
+    t = BucketLogType::FIFO;
     return true;
   }
   if (boost::iequals(str, "Deleted")) {
@@ -242,6 +247,34 @@ void decode_json_obj(bucket_index_log_layout& l, JSONObj *obj)
   JSONDecoder::decode_json("layout", l.layout, obj);
 }
 
+// bucket_fifo_log_layout
+void encode(const bucket_fifo_log_layout& l, bufferlist& bl, uint64_t f)
+{
+  ENCODE_START(1, 1, bl);
+  encode(l.num_shards, bl);
+  encode(l.hash_type, bl);
+  ENCODE_FINISH(bl);
+}
+void decode(bucket_fifo_log_layout& l, bufferlist::const_iterator& bl)
+{
+  DECODE_START(1, bl);
+  decode(l.num_shards, bl);
+  decode(l.hash_type, bl);
+  DECODE_FINISH(bl);
+}
+void encode_json_impl(const char *name, const bucket_fifo_log_layout& l, ceph::Formatter *f)
+{
+  f->open_object_section(name);
+  encode_json("num_shards", l.num_shards, f);
+  encode_json("hash_type", l.hash_type, f);
+  f->close_section();
+}
+void decode_json_obj(bucket_fifo_log_layout& l, JSONObj *obj)
+{
+  JSONDecoder::decode_json("num_shards", l.num_shards, obj);
+  JSONDecoder::decode_json("hash_type", l.hash_type, obj);
+}
+
 // bucket_log_layout
 void encode(const bucket_log_layout& l, bufferlist& bl, uint64_t f)
 {
@@ -251,11 +284,15 @@ void encode(const bucket_log_layout& l, bufferlist& bl, uint64_t f)
   case BucketLogType::InIndex:
     encode(l.in_index, bl);
     break;
+  case BucketLogType::FIFO:
+    encode(l.fifo, bl);
+    break;
   case BucketLogType::Deleted:
     break;
   }
   ENCODE_FINISH(bl);
 }
+
 void decode(bucket_log_layout& l, bufferlist::const_iterator& bl)
 {
   DECODE_START(1, bl);
@@ -264,25 +301,34 @@ void decode(bucket_log_layout& l, bufferlist::const_iterator& bl)
   case BucketLogType::InIndex:
     decode(l.in_index, bl);
     break;
+  case BucketLogType::FIFO:
+    decode(l.fifo, bl);
+    break;
   case BucketLogType::Deleted:
     break;
   }
   DECODE_FINISH(bl);
 }
+
 void encode_json_impl(const char *name, const bucket_log_layout& l, ceph::Formatter *f)
 {
   f->open_object_section(name);
   encode_json("type", l.type, f);
   if (l.type == BucketLogType::InIndex) {
     encode_json("in_index", l.in_index, f);
+  } else if (l.type == BucketLogType::FIFO) {
+    encode_json("fifo", l.fifo, f);
   }
   f->close_section();
 }
+
 void decode_json_obj(bucket_log_layout& l, JSONObj *obj)
 {
   JSONDecoder::decode_json("type", l.type, obj);
   if (l.type == BucketLogType::InIndex) {
     JSONDecoder::decode_json("in_index", l.in_index, obj);
+  } else if (l.type == BucketLogType::FIFO) {
+    JSONDecoder::decode_json("fifo", l.fifo, obj);
   }
 }
 

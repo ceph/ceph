@@ -135,8 +135,11 @@ void decode_json_obj(bucket_index_layout_generation& l, JSONObj *obj);
 
 enum class BucketLogType : uint8_t {
   // colocated with bucket index, so the log layout matches the index layout
-  InIndex,
-  Deleted
+  InIndex,  // 0
+  // log generation has been removed.
+  Deleted,  // 1
+  // independent FIFO objects
+  FIFO,     // 2
 };
 
 std::string_view to_string(const BucketLogType& t);
@@ -149,6 +152,8 @@ inline std::ostream& operator<<(std::ostream& out, const BucketLogType &log_type
   switch (log_type) {
     case BucketLogType::InIndex:
       return out << "InIndex";
+    case BucketLogType::FIFO:
+      return out << "FIFO";
     case BucketLogType::Deleted:
       return out << "Deleted";
     default:
@@ -173,13 +178,40 @@ void decode(bucket_index_log_layout& l, bufferlist::const_iterator& bl);
 void encode_json_impl(const char *name, const bucket_index_log_layout& l, ceph::Formatter *f);
 void decode_json_obj(bucket_index_log_layout& l, JSONObj *obj);
 
+// layout for FIFO-backed bilog
+struct bucket_fifo_log_layout {
+  uint32_t num_shards = 7;
+  BucketHashType hash_type = BucketHashType::Mod;
+};
+
+inline bool operator==(const bucket_fifo_log_layout& l,
+                       const bucket_fifo_log_layout& r) {
+  return l.num_shards == r.num_shards && l.hash_type == r.hash_type;
+}
+inline bool operator!=(const bucket_fifo_log_layout& l,
+                       const bucket_fifo_log_layout& r) {
+  return !(l == r);
+}
+
+void encode(const bucket_fifo_log_layout& l, bufferlist& bl, uint64_t f=0);
+void decode(bucket_fifo_log_layout& l, bufferlist::const_iterator& bl);
+void encode_json_impl(const char *name, const bucket_fifo_log_layout& l, ceph::Formatter *f);
+void decode_json_obj(bucket_fifo_log_layout& l, JSONObj *obj);
+
 struct bucket_log_layout {
   BucketLogType type = BucketLogType::InIndex;
 
   bucket_index_log_layout in_index;
+  bucket_fifo_log_layout  fifo;
 
   friend std::ostream& operator<<(std::ostream& out, const bucket_log_layout& l) {
     out << "type=" << to_string(l.type);
+    if (l.type == BucketLogType::InIndex) {
+      out << ", in_index.gen=" << l.in_index.gen
+          << ", in_index.num_shards=" << l.in_index.layout.num_shards;
+    } else if (l.type == BucketLogType::FIFO) {
+      out << ", fifo.num_shards=" << l.fifo.num_shards;
+    }
     return out;
   }
 };
@@ -284,6 +316,23 @@ inline uint32_t num_shards(const bucket_index_layout& index) {
 }
 inline uint32_t num_shards(const bucket_index_layout_generation& index) {
   return num_shards(index.layout);
+}
+
+inline uint32_t num_shards(const bucket_fifo_log_layout& fifo) {
+  return fifo.num_shards > 0 ? fifo.num_shards : 1;
+}
+inline uint32_t num_shards(const bucket_log_layout& log) {
+  switch (log.type) {
+  case BucketLogType::InIndex:
+    return num_shards(log.in_index.layout);
+  case BucketLogType::FIFO:
+    return num_shards(log.fifo);
+  default:
+    return 0;
+  }
+}
+inline uint32_t num_shards(const bucket_log_layout_generation& log) {
+  return num_shards(log.layout);
 }
 
 inline uint32_t current_num_shards(const BucketLayout& layout) {

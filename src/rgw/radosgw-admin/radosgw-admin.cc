@@ -2920,12 +2920,17 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
       source_sync_info.status = "init: bucket sync has not started";
       return 0;
     }
-    if (log.layout.type != rgw::BucketLogType::InIndex) {
+    if (log.layout.type != rgw::BucketLogType::InIndex &&
+        log.layout.type != rgw::BucketLogType::FIFO) {
       source_sync_info.error = fmt::format("unrecognized log layout type {}", to_string(log.layout.type));
       return -EINVAL;
     }
     // use shard count from our log gen=0
-    shard_status.resize(rgw::num_shards(log.layout.in_index));
+    if (log.layout.type == rgw::BucketLogType::FIFO) {
+      shard_status.resize(rgw::num_shards(log.layout.fifo));
+    } else {
+      shard_status.resize(rgw::num_shards(log.layout.in_index));
+    }
   } else {
     source_sync_info.error = fmt::format("failed to read bucket full sync status: {}", cpp_strerror(r));
     return r;
@@ -10917,11 +10922,8 @@ next:
 
       count += entries.size();
 
-      for (list<rgw_bi_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
-        rgw_bi_log_entry& entry = *iter;
+      for (auto& entry : entries) {
         encode_json("entry", entry, formatter.get());
-
-        marker = entry.id;
       }
       formatter->flush(cout);
     } while (truncated && count < max_entries);
