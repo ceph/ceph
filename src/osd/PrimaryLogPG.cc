@@ -9877,6 +9877,23 @@ void PrimaryLogPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
   }
 }
 
+void PrimaryLogPG::migration_copy_from_check(hobject_t soid)
+{
+  // Pool migration can start migrating an object while there
+  // is an outstanding copy-from request active for the same
+  // object because these release the PG lock while issuing
+  // copy-get's to fetch the data for the write. If this
+  // happens the copy-from needs to be cancelled and requeued
+  // which will then block waiting for the migration and then
+  // eventually will be redirected to the target pool.
+  if (copy_ops.count(soid)) {
+    CopyOpRef cop = copy_ops[soid];
+    vector<ceph_tid_t> tids;
+    cancel_copy(cop, true, &tids);
+    osd->objecter->op_cancel(tids, -ECANCELED);
+  }
+}
+
 void PrimaryLogPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
 {
   dout(10) << __func__ << " " << *obc << " " << cop << dendl;
@@ -16115,6 +16132,7 @@ uint64_t PrimaryLogPG::recover_pool_migration(
     ceph_assert(!recovering.count(soid));
     recovering.insert(make_pair(soid, obc));
     pool_migrations_in_flight.insert(soid);
+    migration_copy_from_check(soid);
     int flags = CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION;
     flags |= CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE;
     flags |= CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION_HAS_RES;

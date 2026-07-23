@@ -1493,6 +1493,7 @@ protected:
 		  object_locator_t oloc, version_t version, unsigned flags,
 		  bool mirror_snapset, unsigned src_obj_fadvise_flags,
 		  unsigned dest_obj_fadvise_flags);
+  void migration_copy_from_check(hobject_t soid);
   void process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r);
   void _write_copy_chunk(CopyOpRef cop, PGTransaction *t);
   uint64_t get_copy_chunk_size() const {
