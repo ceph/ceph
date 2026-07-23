@@ -1425,6 +1425,7 @@ class NFSServiceSpec(ServiceSpec):
                  tls_ciphers: Optional[str] = None,
                  colocation_ports: Optional[List[Dict[str, int]]] = None,
                  enable_nfsv3: bool = False,
+                 client_per_export: bool = False,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -1454,6 +1455,8 @@ class NFSServiceSpec(ServiceSpec):
         self.cluster_qos_config = cluster_qos_config
         self.cluster_qos_port = cluster_qos_port
         self.enable_nfsv3 = enable_nfsv3
+        # When true, NFS Ganesha attaches a separate CephFS client per export
+        self.client_per_export = client_per_export
 
         # colocation_ports is a list of port dicts for ADDITIONAL colocated daemons
         # The first daemon always uses port and monitoring_port from the spec

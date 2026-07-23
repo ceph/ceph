@@ -57,26 +57,19 @@ RADOS_URLS {
         watch_url = "{{ url }}";
 }
 
-CEPH {
-        Ceph_Conf = "/etc/ceph/ceph.conf";
-        umask = 0000;
-        client_oc = false;
-        async = false;
-        zerocopy = false;
-        use_old_uuid = false;
-
-        register_service = true;
-        nodeid = "{{ nodeid }}";
-}
-
 RGW {
         cluster = "ceph";
         name = "client.{{ rgw_user }}";
 }
 
+{% if use_old_nodeid or client_per_export %}
+CEPH {
 {% if use_old_nodeid %}
-Ceph {
 	Use_old_uuid = true;
+{% endif %}
+{% if client_per_export %}
+	client_per_export = true;
+{% endif %}
 }
 
 {% endif %}
