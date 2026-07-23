@@ -7466,7 +7466,40 @@ bool RGWCompleteMultipart::check_previously_completed(const RGWMultiCompleteUplo
                                   << oetag << ", re-calculated etag:" << final_etag_str << dendl;
     return false;
   }
-  ldpp_dout(this, 5) << __func__ << "() object etag and re-calculated etag match, etag: " << oetag << dendl;
+  ldpp_dout(this, 5) << __func__
+                     << "() object etag and re-calculated etag match, etag: "
+                     << oetag << dendl;
+  etag = oetag;
+
+  /* assign cksum and armored_cksum */
+  auto iter = sattrs.find(RGW_ATTR_CKSUM);
+  if (iter != sattrs.end()) {
+    auto bliter = iter->second.cbegin();
+    try {
+      rgw::cksum::Cksum tcksum;
+      tcksum.decode(bliter);
+      cksum = std::move(tcksum);
+
+      /* extract a multipart etag's part-count suffix, or "" if
+       * (impossibly) it's not present */
+      auto extract_part_count = [](std::string& etag) -> std::string {
+        std::string str{""};
+        auto pos = etag.find("-");
+        if (pos != std::string::npos) {
+          str = etag.substr(pos, etag.length()-pos);
+        }
+          return str;
+      };
+
+      armored_cksum = cksum->to_armor();
+      if (cksum->composite()) {
+        *armored_cksum += extract_part_count(etag);
+      }
+    } catch (buffer::error& err) {
+      ldpp_dout(this, 0) << "ERROR: could not decode stored cksum, caught buffer::error" << dendl;
+    }
+  }
+
   return true;
 }
 
