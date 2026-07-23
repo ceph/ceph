@@ -192,9 +192,11 @@ dump_cmd_to_json(Formatter *f, uint64_t features, const string& cmd)
 	if (!HAVE_FEATURE(features, SERVER_QUINCY)) {
 	  continue;
 	}
-	f->dump_bool(key, value == "true" || value == "True");
+        assert(value == "true" || value == "false");
+	f->dump_bool(key, value == "true");
       } else if (key == "req" && HAVE_FEATURE(features, SERVER_QUINCY)) {
-	f->dump_bool(key, value == "true" || value == "True");
+        assert(value == "true" || value == "false");
+	f->dump_bool(key, value == "true");
       } else {
 	f->dump_string(key, value);
       }
