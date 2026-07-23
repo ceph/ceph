@@ -8,7 +8,8 @@ import { MotdNotificationService } from '~/app/shared/services/motd-notification
 @Component({
   selector: 'cd-motd',
   templateUrl: './motd.component.html',
-  styleUrls: ['./motd.component.scss']
+  styleUrls: ['./motd.component.scss'],
+  standalone: false
 })
 export class MotdComponent implements OnInit, OnDestroy {
   motd: Motd | undefined = undefined;

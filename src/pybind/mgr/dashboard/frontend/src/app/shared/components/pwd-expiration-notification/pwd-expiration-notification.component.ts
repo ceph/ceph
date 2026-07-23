@@ -7,7 +7,8 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 @Component({
   selector: 'cd-pwd-expiration-notification',
   templateUrl: './pwd-expiration-notification.component.html',
-  styleUrls: ['./pwd-expiration-notification.component.scss']
+  styleUrls: ['./pwd-expiration-notification.component.scss'],
+  standalone: false
 })
 export class PwdExpirationNotificationComponent implements OnInit, OnDestroy {
   alertType: string;

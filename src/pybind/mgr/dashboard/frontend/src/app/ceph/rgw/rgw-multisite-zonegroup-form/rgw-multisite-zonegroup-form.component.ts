@@ -21,7 +21,8 @@ import { SelectOption } from '~/app/shared/components/select/select-option.model
 @Component({
   selector: 'cd-rgw-multisite-zonegroup-form',
   templateUrl: './rgw-multisite-zonegroup-form.component.html',
-  styleUrls: ['./rgw-multisite-zonegroup-form.component.scss']
+  styleUrls: ['./rgw-multisite-zonegroup-form.component.scss'],
+  standalone: false
 })
 export class RgwMultisiteZonegroupFormComponent implements OnInit {
   action: string;

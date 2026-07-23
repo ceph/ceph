@@ -5,7 +5,8 @@ import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.s
 @Component({
   selector: 'cd-prometheus-tabs',
   templateUrl: './prometheus-tabs.component.html',
-  styleUrls: ['./prometheus-tabs.component.scss']
+  styleUrls: ['./prometheus-tabs.component.scss'],
+  standalone: false
 })
 export class PrometheusTabsComponent {
   constructor(public prometheusAlertService: PrometheusAlertService) {}

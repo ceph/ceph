@@ -24,7 +24,8 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 @Component({
   selector: 'cd-rbd-namespace-form-modal',
   templateUrl: './rbd-namespace-form-modal.component.html',
-  styleUrls: ['./rbd-namespace-form-modal.component.scss']
+  styleUrls: ['./rbd-namespace-form-modal.component.scss'],
+  standalone: false
 })
 export class RbdNamespaceFormModalComponent extends BaseModal implements OnInit {
   poolPermission: Permission;

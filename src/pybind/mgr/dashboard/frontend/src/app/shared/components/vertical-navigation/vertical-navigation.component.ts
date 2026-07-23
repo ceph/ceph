@@ -3,7 +3,8 @@ import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 @Component({
   selector: 'cd-vertical-navigation',
   templateUrl: './vertical-navigation.component.html',
-  styleUrls: ['./vertical-navigation.component.scss']
+  styleUrls: ['./vertical-navigation.component.scss'],
+  standalone: false
 })
 export class VerticalNavigationComponent implements OnInit {
   @Input() items: string[];

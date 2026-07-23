@@ -10,7 +10,8 @@ import { Permission } from '~/app/shared/models/permissions';
 @Component({
   selector: 'cd-table-actions',
   templateUrl: './table-actions.component.html',
-  styleUrls: ['./table-actions.component.scss']
+  styleUrls: ['./table-actions.component.scss'],
+  standalone: false
 })
 export class TableActionsComponent implements OnChanges, OnInit {
   @Input()

@@ -24,7 +24,8 @@ import _ from 'lodash';
 @Component({
   selector: 'cd-rgw-multisite-sync-policy-form',
   templateUrl: './rgw-multisite-sync-policy-form.component.html',
-  styleUrls: ['./rgw-multisite-sync-policy-form.component.scss']
+  styleUrls: ['./rgw-multisite-sync-policy-form.component.scss'],
+  standalone: false
 })
 export class RgwMultisiteSyncPolicyFormComponent extends CdForm implements OnInit {
   syncPolicyForm: CdFormGroup;

@@ -27,7 +27,8 @@ const BASE_URL = 'rgw/multisite/sync-policy';
   selector: 'cd-rgw-multisite-sync-policy',
   templateUrl: './rgw-multisite-sync-policy.component.html',
   styleUrls: ['./rgw-multisite-sync-policy.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
+  standalone: false
 })
 export class RgwMultisiteSyncPolicyComponent extends ListWithDetails implements OnInit {
   @ViewChild(TableComponent, { static: true })

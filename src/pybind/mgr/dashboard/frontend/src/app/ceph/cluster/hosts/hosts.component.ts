@@ -42,7 +42,8 @@ const BASE_URL = 'hosts';
   selector: 'cd-hosts',
   templateUrl: './hosts.component.html',
   styleUrls: ['./hosts.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
+  standalone: false
 })
 export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit {
   private sub = new Subscription();

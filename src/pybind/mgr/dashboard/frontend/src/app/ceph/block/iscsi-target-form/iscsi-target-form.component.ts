@@ -25,7 +25,8 @@ import { IscsiTargetIqnSettingsModalComponent } from '../iscsi-target-iqn-settin
 @Component({
   selector: 'cd-iscsi-target-form',
   templateUrl: './iscsi-target-form.component.html',
-  styleUrls: ['./iscsi-target-form.component.scss']
+  styleUrls: ['./iscsi-target-form.component.scss'],
+  standalone: false
 })
 export class IscsiTargetFormComponent extends CdForm implements OnInit {
   cephIscsiConfigVersion: number;

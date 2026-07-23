@@ -8,7 +8,8 @@ import { Subscription } from 'rxjs';
 @Component({
   selector: 'cd-date-time-picker',
   templateUrl: './date-time-picker.component.html',
-  styleUrls: ['./date-time-picker.component.scss']
+  styleUrls: ['./date-time-picker.component.scss'],
+  standalone: false
 })
 export class DateTimePickerComponent implements OnInit {
   @Input()

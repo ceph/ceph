@@ -3,7 +3,8 @@ import { Pipe, PipeTransform } from '@angular/core';
 import _ from 'lodash';
 
 @Pipe({
-  name: 'notAvailable'
+  name: 'notAvailable',
+  standalone: false
 })
 export class NotAvailablePipe implements PipeTransform {
   transform(value: any, text?: string): any {

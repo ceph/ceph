@@ -3,7 +3,8 @@ import { Directive, Host, HostListener, Input, OnInit, Optional } from '@angular
 import { NgbNav, NgbNavChangeEvent } from '@ng-bootstrap/ng-bootstrap';
 
 @Directive({
-  selector: '[cdStatefulTab]'
+  selector: '[cdStatefulTab]',
+  standalone: false
 })
 export class StatefulTabDirective implements OnInit {
   @Input()

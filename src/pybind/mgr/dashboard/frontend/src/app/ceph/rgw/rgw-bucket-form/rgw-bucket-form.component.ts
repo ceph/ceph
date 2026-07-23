@@ -47,7 +47,8 @@ import { RgwUser } from '../models/rgw-user';
 @Component({
   selector: 'cd-rgw-bucket-form',
   templateUrl: './rgw-bucket-form.component.html',
-  styleUrls: ['./rgw-bucket-form.component.scss']
+  styleUrls: ['./rgw-bucket-form.component.scss'],
+  standalone: false
 })
 export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewChecked {
   @ViewChild('bucketPolicyTextArea')

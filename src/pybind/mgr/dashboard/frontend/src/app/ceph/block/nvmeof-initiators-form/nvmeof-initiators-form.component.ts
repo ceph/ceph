@@ -23,7 +23,8 @@ const STEP_LABELS = {
 @Component({
   selector: 'cd-nvmeof-initiators-form',
   templateUrl: './nvmeof-initiators-form.component.html',
-  styleUrls: ['./nvmeof-initiators-form.component.scss']
+  styleUrls: ['./nvmeof-initiators-form.component.scss'],
+  standalone: false
 })
 export class NvmeofInitiatorsFormComponent implements OnInit {
   group!: string;

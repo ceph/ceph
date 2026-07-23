@@ -35,7 +35,8 @@ import { TaskMessageService } from '~/app/shared/services/task-message.service';
   selector: 'cd-notifications-sidebar',
   templateUrl: './notifications-sidebar.component.html',
   styleUrls: ['./notifications-sidebar.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 export class NotificationsSidebarComponent implements OnInit, OnDestroy {
   @HostBinding('class.active') isSidebarOpened = false;

@@ -1,11 +1,13 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ViewEncapsulation } from '@angular/core';
 
-import SwaggerUI from 'swagger-ui';
+import SwaggerUI from 'swagger-ui-dist/swagger-ui-bundle';
 
 @Component({
   selector: 'cd-api-docs',
   templateUrl: './api-docs.component.html',
-  styleUrls: ['./api-docs.component.scss']
+  styleUrls: ['./api-docs.component.scss'],
+  standalone: false,
+  encapsulation: ViewEncapsulation.None
 })
 export class ApiDocsComponent implements OnInit {
   ngOnInit(): void {

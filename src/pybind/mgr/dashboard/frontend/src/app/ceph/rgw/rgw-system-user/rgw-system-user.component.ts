@@ -10,7 +10,8 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 @Component({
   selector: 'cd-rgw-system-user',
   templateUrl: './rgw-system-user.component.html',
-  styleUrls: ['./rgw-system-user.component.scss']
+  styleUrls: ['./rgw-system-user.component.scss'],
+  standalone: false
 })
 export class RgwSystemUserComponent {
   multisiteSystemUserForm: CdFormGroup;

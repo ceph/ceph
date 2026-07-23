@@ -8,7 +8,8 @@ import { IscsiBackstorePipe } from '~/app/shared/pipes/iscsi-backstore.pipe';
 @Component({
   selector: 'cd-iscsi',
   templateUrl: './iscsi.component.html',
-  styleUrls: ['./iscsi.component.scss']
+  styleUrls: ['./iscsi.component.scss'],
+  standalone: false
 })
 export class IscsiComponent implements OnInit {
   @ViewChild('iscsiSparklineTpl', { static: true })

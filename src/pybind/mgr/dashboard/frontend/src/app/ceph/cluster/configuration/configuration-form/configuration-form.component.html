@@ -131,7 +131,7 @@
                        [id]="section"
                        [placeholder]="humanReadableType"
                        [formControlName]="section"
-                       [step]="getStep(type, this.configForm.getValue(section))">
+                       [step]="getStep(type, configForm.getValue(section))">
                 <span class="invalid-feedback"
                       *ngIf="configForm.showError(section, formDir, 'pattern')">
                   {{ patternHelpText }}

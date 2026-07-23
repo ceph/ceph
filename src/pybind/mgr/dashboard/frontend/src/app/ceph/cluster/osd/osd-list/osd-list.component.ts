@@ -49,7 +49,8 @@ const BASE_URL = 'osd';
   selector: 'cd-osd-list',
   templateUrl: './osd-list.component.html',
   styleUrls: ['./osd-list.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
+  standalone: false
 })
 export class OsdListComponent extends ListWithDetails implements OnInit {
   @ViewChild('osdUsageTpl', { static: true })

@@ -15,7 +15,8 @@ import { DevicesSelectionClearEvent } from './devices-selection-clear-event.inte
 @Component({
   selector: 'cd-osd-devices-selection-groups',
   templateUrl: './osd-devices-selection-groups.component.html',
-  styleUrls: ['./osd-devices-selection-groups.component.scss']
+  styleUrls: ['./osd-devices-selection-groups.component.scss'],
+  standalone: false
 })
 export class OsdDevicesSelectionGroupsComponent implements OnInit, OnChanges {
   // data, wal, db

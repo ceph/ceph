@@ -13,7 +13,8 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 @Component({
   selector: 'cd-osd-creation-preview-modal',
   templateUrl: './osd-creation-preview-modal.component.html',
-  styleUrls: ['./osd-creation-preview-modal.component.scss']
+  styleUrls: ['./osd-creation-preview-modal.component.scss'],
+  standalone: false
 })
 export class OsdCreationPreviewModalComponent {
   @Input()

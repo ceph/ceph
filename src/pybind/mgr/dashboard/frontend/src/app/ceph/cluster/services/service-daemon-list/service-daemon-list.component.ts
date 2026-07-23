@@ -43,7 +43,8 @@ import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impa
 @Component({
   selector: 'cd-service-daemon-list',
   templateUrl: './service-daemon-list.component.html',
-  styleUrls: ['./service-daemon-list.component.scss']
+  styleUrls: ['./service-daemon-list.component.scss'],
+  standalone: false
 })
 export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewInit, OnDestroy {
   @ViewChild('statusTpl', { static: true })

@@ -17,7 +17,8 @@ import { RbdConfigurationService } from '~/app/shared/services/rbd-configuration
 @Component({
   selector: 'cd-rbd-configuration-form',
   templateUrl: './rbd-configuration-form.component.html',
-  styleUrls: ['./rbd-configuration-form.component.scss']
+  styleUrls: ['./rbd-configuration-form.component.scss'],
+  standalone: false
 })
 export class RbdConfigurationFormComponent implements OnInit {
   @Input()

@@ -26,7 +26,8 @@ enum MultisiteResourceType {
 @Component({
   selector: 'cd-rgw-multisite-sync-policy-details',
   templateUrl: './rgw-multisite-sync-policy-details.component.html',
-  styleUrls: ['./rgw-multisite-sync-policy-details.component.scss']
+  styleUrls: ['./rgw-multisite-sync-policy-details.component.scss'],
+  standalone: false
 })
 export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
   @Input()

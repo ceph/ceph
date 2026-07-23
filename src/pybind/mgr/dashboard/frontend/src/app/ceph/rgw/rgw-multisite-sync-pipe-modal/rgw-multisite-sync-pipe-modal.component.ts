@@ -36,7 +36,8 @@ interface GroupParams {
 @Component({
   selector: 'cd-rgw-multisite-sync-pipe-modal',
   templateUrl: './rgw-multisite-sync-pipe-modal.component.html',
-  styleUrls: ['./rgw-multisite-sync-pipe-modal.component.scss']
+  styleUrls: ['./rgw-multisite-sync-pipe-modal.component.scss'],
+  standalone: false
 })
 export class RgwMultisiteSyncPipeModalComponent extends BaseModal implements OnInit {
   pipeForm: CdFormGroup;

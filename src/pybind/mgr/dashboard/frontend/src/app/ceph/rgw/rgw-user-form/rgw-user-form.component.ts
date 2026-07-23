@@ -35,7 +35,8 @@ import { ComboBoxItem } from '~/app/shared/models/combo-box.model';
 @Component({
   selector: 'cd-rgw-user-form',
   templateUrl: './rgw-user-form.component.html',
-  styleUrls: ['./rgw-user-form.component.scss']
+  styleUrls: ['./rgw-user-form.component.scss'],
+  standalone: false
 })
 export class RgwUserFormComponent extends CdForm implements OnInit {
   userForm: CdFormGroup;

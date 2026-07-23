@@ -7,7 +7,8 @@ import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
 @Component({
   selector: 'cd-cephfs-detail',
   templateUrl: './cephfs-detail.component.html',
-  styleUrls: ['./cephfs-detail.component.scss']
+  styleUrls: ['./cephfs-detail.component.scss'],
+  standalone: false
 })
 export class CephfsDetailComponent implements OnChanges, OnInit {
   @ViewChild('poolUsageTpl', { static: true })

@@ -17,7 +17,8 @@ import _ from 'lodash';
 @Component({
   selector: 'cd-rgw-user-accounts-form',
   templateUrl: './rgw-user-accounts-form.component.html',
-  styleUrls: ['./rgw-user-accounts-form.component.scss']
+  styleUrls: ['./rgw-user-accounts-form.component.scss'],
+  standalone: false
 })
 export class RgwUserAccountsFormComponent extends CdForm implements OnInit {
   accountForm: CdFormGroup;

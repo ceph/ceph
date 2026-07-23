@@ -20,7 +20,8 @@ import { ComboBoxItem } from '~/app/shared/models/combo-box.model';
 @Component({
   selector: 'cd-rgw-multisite-sync-flow-modal',
   templateUrl: './rgw-multisite-sync-flow-modal.component.html',
-  styleUrls: ['./rgw-multisite-sync-flow-modal.component.scss']
+  styleUrls: ['./rgw-multisite-sync-flow-modal.component.scss'],
+  standalone: false
 })
 export class RgwMultisiteSyncFlowModalComponent extends BaseModal implements OnInit {
   editing: boolean = false;

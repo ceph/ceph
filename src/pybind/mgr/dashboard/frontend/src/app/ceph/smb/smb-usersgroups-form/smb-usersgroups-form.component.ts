@@ -25,7 +25,8 @@ import { USERSGROUPS_PATH } from '../smb-usersgroups-list/smb-usersgroups-list.c
 @Component({
   selector: 'cd-smb-usersgroups-form',
   templateUrl: './smb-usersgroups-form.component.html',
-  styleUrls: ['./smb-usersgroups-form.component.scss']
+  styleUrls: ['./smb-usersgroups-form.component.scss'],
+  standalone: false
 })
 export class SmbUsersgroupsFormComponent extends CdForm implements OnInit, OnDestroy {
   form: CdFormGroup;

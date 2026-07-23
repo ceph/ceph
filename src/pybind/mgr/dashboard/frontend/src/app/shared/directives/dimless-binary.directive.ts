@@ -15,7 +15,8 @@ import { DimlessBinaryPipe } from '../pipes/dimless-binary.pipe';
 import { FormatterService } from '../services/formatter.service';
 
 @Directive({
-  selector: '[cdDimlessBinary]'
+  selector: '[cdDimlessBinary]',
+  standalone: false
 })
 export class DimlessBinaryDirective implements OnInit {
   @Output()

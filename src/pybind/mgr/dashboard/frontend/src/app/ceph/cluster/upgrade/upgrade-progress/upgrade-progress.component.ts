@@ -21,7 +21,8 @@ import { UpgradeStatusInterface } from '~/app/shared/models/upgrade.interface';
 @Component({
   selector: 'cd-upgrade-progress',
   templateUrl: './upgrade-progress.component.html',
-  styleUrls: ['./upgrade-progress.component.scss']
+  styleUrls: ['./upgrade-progress.component.scss'],
+  standalone: false
 })
 export class UpgradeProgressComponent implements OnInit, OnDestroy {
   permission: Permission;

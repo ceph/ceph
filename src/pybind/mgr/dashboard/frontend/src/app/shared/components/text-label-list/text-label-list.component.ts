@@ -6,7 +6,6 @@ import { ComponentsModule } from '../components.module';
 
 @Component({
   selector: 'cd-text-label-list',
-  standalone: true,
   imports: [
     CommonModule,
     ReactiveFormsModule,

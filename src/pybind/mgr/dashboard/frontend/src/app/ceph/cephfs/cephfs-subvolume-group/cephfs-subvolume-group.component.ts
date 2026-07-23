@@ -25,7 +25,8 @@ import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impa
 @Component({
   selector: 'cd-cephfs-subvolume-group',
   templateUrl: './cephfs-subvolume-group.component.html',
-  styleUrls: ['./cephfs-subvolume-group.component.scss']
+  styleUrls: ['./cephfs-subvolume-group.component.scss'],
+  standalone: false
 })
 export class CephfsSubvolumeGroupComponent implements OnInit, OnChanges {
   @ViewChild('quotaUsageTpl', { static: true })

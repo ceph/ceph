@@ -35,7 +35,8 @@ const BASE_URL = 'monitoring/silences';
   ],
   selector: 'cd-silences-list',
   templateUrl: './silence-list.component.html',
-  styleUrls: ['./silence-list.component.scss']
+  styleUrls: ['./silence-list.component.scss'],
+  standalone: false
 })
 export class SilenceListComponent extends PrometheusListHelper {
   silences: AlertmanagerSilence[] = [];

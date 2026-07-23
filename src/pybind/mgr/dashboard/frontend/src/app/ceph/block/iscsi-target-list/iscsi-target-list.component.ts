@@ -29,7 +29,8 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
   selector: 'cd-iscsi-target-list',
   templateUrl: './iscsi-target-list.component.html',
   styleUrls: ['./iscsi-target-list.component.scss'],
-  providers: [TaskListService]
+  providers: [TaskListService],
+  standalone: false
 })
 export class IscsiTargetListComponent extends ListWithDetails implements OnInit, OnDestroy {
   @ViewChild(TableComponent)

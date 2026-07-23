@@ -22,7 +22,8 @@ import { Lifecycle, Rule } from '../models/rgw-bucket-lifecycle';
 @Component({
   selector: 'cd-rgw-bucket-lifecycle-list',
   templateUrl: './rgw-bucket-lifecycle-list.component.html',
-  styleUrls: ['./rgw-bucket-lifecycle-list.component.scss']
+  styleUrls: ['./rgw-bucket-lifecycle-list.component.scss'],
+  standalone: false
 })
 export class RgwBucketLifecycleListComponent implements OnInit {
   @Input() bucket: Bucket;

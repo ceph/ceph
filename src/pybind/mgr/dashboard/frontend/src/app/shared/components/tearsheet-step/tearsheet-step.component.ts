@@ -4,7 +4,8 @@ import { TearsheetStep } from '../../models/tearsheet-step';
 @Component({
   selector: 'cd-tearsheet-step',
   templateUrl: './tearsheet-step.component.html',
-  styleUrls: ['./tearsheet-step.component.scss']
+  styleUrls: ['./tearsheet-step.component.scss'],
+  standalone: false
 })
 export class TearsheetStepComponent {
   @ViewChild(TemplateRef, { static: true })

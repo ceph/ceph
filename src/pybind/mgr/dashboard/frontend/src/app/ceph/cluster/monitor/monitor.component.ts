@@ -13,7 +13,8 @@ const enum QuorumPresent {
 @Component({
   selector: 'cd-monitor',
   templateUrl: './monitor.component.html',
-  styleUrls: ['./monitor.component.scss']
+  styleUrls: ['./monitor.component.scss'],
+  standalone: false
 })
 export class MonitorComponent {
   mon_status: any;

@@ -27,7 +27,8 @@ import {
 @Component({
   selector: 'cd-rgw-configuration-page',
   templateUrl: './rgw-configuration-page.component.html',
-  styleUrls: ['./rgw-configuration-page.component.scss']
+  styleUrls: ['./rgw-configuration-page.component.scss'],
+  standalone: false
 })
 export class RgwConfigurationPageComponent extends ListWithDetails implements OnInit {
   readonly vaultAddress = /^((https?:\/\/)|(www.))(?:([a-zA-Z]+)|(\d+\.\d+.\d+.\d+)):\d{4}$/;

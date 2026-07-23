@@ -5,7 +5,8 @@ import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 @Component({
   selector: 'cd-mgr-module-details',
   templateUrl: './mgr-module-details.component.html',
-  styleUrls: ['./mgr-module-details.component.scss']
+  styleUrls: ['./mgr-module-details.component.scss'],
+  standalone: false
 })
 export class MgrModuleDetailsComponent implements OnChanges {
   module_config: any;

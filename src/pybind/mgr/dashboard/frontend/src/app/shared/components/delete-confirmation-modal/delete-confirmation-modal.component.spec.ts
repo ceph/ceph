@@ -32,7 +32,8 @@ export class MockModule {}
         The spinner is handled by the modal if your given deletion function returns a Observable.
       </ng-template>
     </button>
-  `
+  `,
+  standalone: false
 })
 class MockComponent {
   @ViewChild('ctrlDescription', { static: true })

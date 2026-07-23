@@ -14,7 +14,7 @@ describe('ChangePasswordGuardService', () => {
   let route: ActivatedRouteSnapshot;
   let state: RouterStateSnapshot;
 
-  @Component({ selector: 'cd-login-password-form', template: '' })
+  @Component({ selector: 'cd-login-password-form', template: '', standalone: false })
   class LoginPasswordFormComponent {}
 
   const routes: Routes = [{ path: 'login-change-password', component: LoginPasswordFormComponent }];

@@ -13,7 +13,8 @@ enum TABS {
 @Component({
   selector: 'cd-smb-tabs',
   templateUrl: './smb-tabs.component.html',
-  styleUrls: ['./smb-tabs.component.scss']
+  styleUrls: ['./smb-tabs.component.scss'],
+  standalone: false
 })
 export class SmbTabsComponent implements OnInit {
   selectedTab: TABS;

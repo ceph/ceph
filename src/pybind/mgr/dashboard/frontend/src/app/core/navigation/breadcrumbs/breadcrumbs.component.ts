@@ -36,7 +36,8 @@ import { BreadcrumbService } from '~/app/shared/services/breadcrumb.service';
 @Component({
   selector: 'cd-breadcrumbs',
   templateUrl: './breadcrumbs.component.html',
-  styleUrls: ['./breadcrumbs.component.scss']
+  styleUrls: ['./breadcrumbs.component.scss'],
+  standalone: false
 })
 export class BreadcrumbsComponent implements OnDestroy {
   crumbs: IBreadcrumb[] = [];

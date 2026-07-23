@@ -42,7 +42,8 @@ import { Host } from '~/app/shared/models/host.interface';
 @Component({
   selector: 'cd-smb-cluster-form',
   templateUrl: './smb-cluster-form.component.html',
-  styleUrls: ['./smb-cluster-form.component.scss']
+  styleUrls: ['./smb-cluster-form.component.scss'],
+  standalone: false
 })
 export class SmbClusterFormComponent extends CdForm implements OnInit {
   smbForm: CdFormGroup;

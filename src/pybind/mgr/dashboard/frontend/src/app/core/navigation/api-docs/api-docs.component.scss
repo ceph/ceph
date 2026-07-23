@@ -1,5 +1,7 @@
 @use './src/styles/vendor/variables' as vv;
 
+@import 'swagger-ui-dist/swagger-ui.css';
+
 .apiDocs {
   background: vv.$gray-100;
   font-size: 18px !important;

@@ -8,7 +8,8 @@ import { SupportedLanguages } from './supported-languages.enum';
 @Component({
   selector: 'cd-language-selector',
   templateUrl: './language-selector.component.html',
-  styleUrls: ['./language-selector.component.scss']
+  styleUrls: ['./language-selector.component.scss'],
+  standalone: false
 })
 export class LanguageSelectorComponent implements OnInit {
   allLanguages = SupportedLanguages;

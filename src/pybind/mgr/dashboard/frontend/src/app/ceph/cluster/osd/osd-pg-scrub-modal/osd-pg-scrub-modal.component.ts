@@ -15,7 +15,8 @@ import { OsdPgScrubModalOptions } from './osd-pg-scrub-modal.options';
 @Component({
   selector: 'cd-osd-pg-scrub-modal',
   templateUrl: './osd-pg-scrub-modal.component.html',
-  styleUrls: ['./osd-pg-scrub-modal.component.scss']
+  styleUrls: ['./osd-pg-scrub-modal.component.scss'],
+  standalone: false
 })
 export class OsdPgScrubModalComponent {
   osdPgScrubForm: CdFormGroup;

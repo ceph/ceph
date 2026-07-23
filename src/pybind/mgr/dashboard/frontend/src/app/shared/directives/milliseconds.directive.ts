@@ -4,7 +4,8 @@ import { NgControl } from '@angular/forms';
 import { FormatterService } from '../services/formatter.service';
 
 @Directive({
-  selector: '[cdMilliseconds]'
+  selector: '[cdMilliseconds]',
+  standalone: false
 })
 export class MillisecondsDirective implements OnInit {
   @Input()

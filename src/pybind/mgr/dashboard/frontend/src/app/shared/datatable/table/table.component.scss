@@ -2,7 +2,7 @@
 @use './src/styles/defaults/mixins';
 @use '@carbon/layout';
 
-$scrollbar-thumb-color: rgba(128, 128, 128, 0.3);
+$scrollbar-thumb-color: rgba(128, 128, 128, 30%);
 $scrollbar-track-color: transparent;
 
 @mixin row-details-icon {

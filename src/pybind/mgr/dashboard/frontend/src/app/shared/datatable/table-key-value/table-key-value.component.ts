@@ -34,7 +34,8 @@ interface KeyValueItem {
   selector: 'cd-table-key-value',
   templateUrl: './table-key-value.component.html',
   styleUrls: ['./table-key-value.component.scss'],
-  encapsulation: ViewEncapsulation.None
+  encapsulation: ViewEncapsulation.None,
+  standalone: false
 })
 export class TableKeyValueComponent implements OnInit, OnChanges {
   @ViewChild(TableComponent, { static: true })

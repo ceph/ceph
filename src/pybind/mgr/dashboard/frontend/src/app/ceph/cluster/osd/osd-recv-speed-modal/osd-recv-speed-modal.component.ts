@@ -17,7 +17,8 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 @Component({
   selector: 'cd-osd-recv-speed-modal',
   templateUrl: './osd-recv-speed-modal.component.html',
-  styleUrls: ['./osd-recv-speed-modal.component.scss']
+  styleUrls: ['./osd-recv-speed-modal.component.scss'],
+  standalone: false
 })
 export class OsdRecvSpeedModalComponent implements OnInit {
   osdRecvSpeedForm: CdFormGroup;

@@ -25,7 +25,8 @@ const DEFAULT_PLACEHOLDER = $localize`Enter group name`;
 @Component({
   selector: 'cd-nvmeof-namespaces-list',
   templateUrl: './nvmeof-namespaces-list.component.html',
-  styleUrls: ['./nvmeof-namespaces-list.component.scss']
+  styleUrls: ['./nvmeof-namespaces-list.component.scss'],
+  standalone: false
 })
 export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
   @Input()

@@ -1,7 +1,8 @@
 import { Pipe, PipeTransform } from '@angular/core';
 
 @Pipe({
-  name: 'encodeUri'
+  name: 'encodeUri',
+  standalone: false
 })
 export class EncodeUriPipe implements PipeTransform {
   transform(value: any): any {

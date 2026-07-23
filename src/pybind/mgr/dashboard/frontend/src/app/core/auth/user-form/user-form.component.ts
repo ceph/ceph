@@ -32,7 +32,8 @@ import { UserFormModel } from './user-form.model';
 @Component({
   selector: 'cd-user-form',
   templateUrl: './user-form.component.html',
-  styleUrls: ['./user-form.component.scss']
+  styleUrls: ['./user-form.component.scss'],
+  standalone: false
 })
 export class UserFormComponent extends CdForm implements OnInit {
   @ViewChild('removeSelfUserReadUpdatePermissionTpl', { static: true })

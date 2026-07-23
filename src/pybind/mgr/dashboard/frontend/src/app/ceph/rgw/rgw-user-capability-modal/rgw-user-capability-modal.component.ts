@@ -13,7 +13,8 @@ import { BaseModal } from 'carbon-components-angular';
 @Component({
   selector: 'cd-rgw-user-capability-modal',
   templateUrl: './rgw-user-capability-modal.component.html',
-  styleUrls: ['./rgw-user-capability-modal.component.scss']
+  styleUrls: ['./rgw-user-capability-modal.component.scss'],
+  standalone: false
 })
 export class RgwUserCapabilityModalComponent extends BaseModal {
   /**

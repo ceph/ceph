@@ -4,7 +4,8 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 @Component({
   selector: 'cd-rgw-sync-metadata-info',
   templateUrl: './rgw-sync-metadata-info.component.html',
-  styleUrls: ['./rgw-sync-metadata-info.component.scss']
+  styleUrls: ['./rgw-sync-metadata-info.component.scss'],
+  standalone: false
 })
 export class RgwSyncMetadataInfoComponent {
   icons = Icons;
