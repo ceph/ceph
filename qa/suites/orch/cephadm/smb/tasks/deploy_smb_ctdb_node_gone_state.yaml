@@ -22,7 +22,7 @@ overrides:
     log-only-match:
       - CEPHADM_
 tasks:
-- cephadm.configure_samba_client_container:
+- smb.configure_samba_client_container:
     role: host.d
 - pexec:
     all:
