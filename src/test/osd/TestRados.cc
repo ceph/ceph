@@ -291,6 +291,13 @@ private:
 	   << context.current_snap << std::endl;
       return new WriteSameOp(m_op, &context, oid, m_stats);
 
+    case TEST_OP_ZERO:
+      oid = *(rand_choose(context.oid_not_in_use));
+      context.cout_prefix() << m_op << ": " << "zero oid "
+           << oid << " current snap is "
+           << context.current_snap << std::endl;
+      return new ZeroOp(m_op, &context, oid, m_stats);
+
     case TEST_OP_DELETE:
       oid = *(rand_choose(context.oid_not_in_use));
       context.cout_prefix() << m_op << ": " << "delete oid " << oid << " current snap is "
@@ -438,6 +445,11 @@ private:
       context.cout_prefix() << m_op << ": " << "tier_evict oid " << oid << std::endl;
       return new TierEvictOp(m_op, &context, oid, m_stats);
 
+    case TEST_OP_MAPEXT:
+      oid = *(rand_choose(context.oid_not_in_use));
+      context.cout_prefix() << m_op << ": " << "mapext oid " << oid << std::endl;
+      return new MapextOp(m_op, &context, oid, m_stats);
+
     default:
       cerr << m_op << ": Invalid op type " << type << std::endl;
       ceph_abort();
@@ -471,7 +483,7 @@ void usage(const char *prog)
   cout << "              rollback|setattr|rmattr|watch|copy_from|hit_set_list|is_dirty|" << std::endl;
   cout << "              undirty|cache_flush|cache_try_flush|cache_evict|append|append_excl|" << std::endl;
   cout << "              set_redirect|unset_redirect|chunk_read|tier_promote|tier_flush|" << std::endl;
-  cout << "              set_chunk|tier_evict> <weight>" << std::endl;
+  cout << "              set_chunk|tier_evict|mapext> <weight>" << std::endl;
   cout << "        [--op <operation_type> <weight> ...]" << std::endl;
   cout << "        [--pool <pool_name>]" << std::endl;
   cout << "        [--max-ops <op_count>]" << std::endl;
@@ -525,6 +537,7 @@ int main(int argc, char **argv)
     { TEST_OP_WRITE, "write", false },
     { TEST_OP_WRITE_EXCL, "write_excl", false },
     { TEST_OP_WRITESAME, "writesame", false },
+    { TEST_OP_ZERO, "zero", true },
     { TEST_OP_DELETE, "delete", true },
     { TEST_OP_SNAP_CREATE, "snap_create", true },
     { TEST_OP_SNAP_REMOVE, "snap_remove", true },
@@ -548,6 +561,7 @@ int main(int argc, char **argv)
     { TEST_OP_TIER_FLUSH, "tier_flush", true },
     { TEST_OP_SET_CHUNK, "set_chunk", true },
     { TEST_OP_TIER_EVICT, "tier_evict", true },
+    { TEST_OP_MAPEXT, "mapext", true },
     { TEST_OP_READ /* grr */, NULL },
   };
 
@@ -619,7 +633,6 @@ int main(int argc, char **argv)
       }
       ec_pool = true;
       no_omap = true;
-      no_sparse = true;
     } else if (strcmp(argv[i], "--op") == 0) {
       i++;
       if (i == argc) {
@@ -778,6 +791,54 @@ int main(int argc, char **argv)
 	 << cpp_strerror(r) << std::endl;
     exit(1);
   }
+
+  if (ec_pool && no_write) {
+    auto result = query_pool_flag(pool_name, "allow_ec_overwrites", context.rados);
+    if (!result) {
+      cerr << "Warning: failed to query allow_ec_overwrites for pool " << pool_name
+    << ": " << cpp_strerror(result.error()) << std::endl;
+    } else if (result.value()) {
+      cout << "EC pool " << pool_name
+    << " has allow_ec_overwrites enabled, setting no_write=false" << std::endl;
+      no_write = false;
+    }
+  }
+
+  // When allow_ec_optimizations is enabled, mapext returns BlueStore fiemap
+  // extents rounded to BlueStore's allocation granularity (4096 bytes), not
+  // stripe-width-rounded extents.  Override the alignment so the model rounds
+  // expected extents to 4096 rather than the (coarser) stripe width.
+  if (ec_pool) {
+    auto result = query_pool_flag(pool_name, "allow_ec_optimizations", context.rados);
+    if (result && result.value()) {
+      context.mapext_alignment = 4096;
+    }
+  }
+
+  if (no_write) {
+    for (const auto& [op, weight] : op_weights) {
+      if (weight == 0) {
+        continue;
+      }
+      if (op == TEST_OP_WRITE ||
+          op == TEST_OP_WRITE_EXCL ||
+          op == TEST_OP_WRITESAME ||
+          op == TEST_OP_ZERO) {
+        const char* op_name = nullptr;
+        for (int j = 0; op_types[j].name; ++j) {
+          if (op_types[j].op == op) {
+            op_name = op_types[j].name;
+            break;
+          }
+        }
+        ceph_assert(op_name);
+        cerr << "Error: cannot use op type " << op_name
+              << " without EC overwrites enabled" << std::endl;
+        exit(1);
+      }
+    }
+  }
+
   context.loop(&gen);
   if (enable_dedup) {
     if (!context.check_chunks_refcount(context.low_tier_io_ctx, context.io_ctx)) {
