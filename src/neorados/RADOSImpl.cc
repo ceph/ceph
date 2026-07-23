@@ -21,7 +21,8 @@ namespace neorados {
 namespace detail {
 
 RADOS::RADOS(boost::asio::io_context& ioctx,
-	     boost::intrusive_ptr<CephContext> cct)
+             boost::intrusive_ptr<CephContext> cct,
+             const std::optional<std::string>& objecter_admin_socket_name)
   : Dispatcher(cct.get()),
     ioctx(ioctx),
     cct(cct),
@@ -41,7 +42,9 @@ RADOS::RADOS(boost::asio::io_context& ioctx,
   messenger->set_default_policy(
     Messenger::Policy::lossy_client(CEPH_FEATURE_OSDREPLYMUX));
 
-  objecter = std::make_unique<Objecter>(cct.get(), messenger.get(), &monclient, ioctx);
+  objecter = std::make_unique<Objecter>(cct.get(), messenger.get(), &monclient,
+					ioctx,
+					objecter_admin_socket_name.value_or("NeoRados"));
 
   objecter->set_balanced_budget();
   monclient.set_messenger(messenger.get());
