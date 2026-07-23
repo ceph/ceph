@@ -2,24 +2,20 @@
   size="md"
   [open]="open"
   [hasScrollingContent]="false"
-  (overlaySelected)="closeModal()"
->
+  (overlaySelected)="closeModal()">
   <cds-modal-header (closeSelect)="closeModal()">
     <h4
       cdsModalHeaderLabel
-      class="cds--type-label-01"
-    >{{ accountName }}</h4>
+      class="cds--type-label-01">{{ accountName }}</h4>
     <h3
       cdsModalHeaderHeading
-      i18n
-    >{{ mode }} role</h3>
+      i18n>{{ mode }} role</h3>
   </cds-modal-header>
 
   <form
     class="form"
     #formDir="ngForm"
-    [formGroup]="form"
-  >
+    [formGroup]="form">
     <div cdsModalContent>
       <!-- Role Name -->
       <div class="form-item">
@@ -48,8 +44,7 @@
           @if (form.showError('role_name', formDir, 'required')) {
           <span
             class="invalid-feedback"
-            i18n
-          >This field is required.</span>
+            i18n>This field is required.</span>
           }
         </ng-template>
       </div>
@@ -81,8 +76,7 @@
           @if (form.showError('role_path', formDir, 'required')) {
           <span
             class="invalid-feedback"
-            i18n
-          >This field is required.</span>
+            i18n>This field is required.</span>
           }
         </ng-template>
       </div>
@@ -92,7 +86,6 @@
         <cds-textarea-label
           labelInputID="role_assume_policy_doc"
           [invalid]="policyDoc.isInvalid"
-          [invalidText]="policyError"
           cdRequiredField="Trust Policy"
           >Trust policy
           <textarea
@@ -105,21 +98,17 @@
             placeholder="Placeholder text"
             rows="8"
             cols="200"
-            [invalid]="policyDoc.isInvalid"
-            [invalidText]="policyError"
           ></textarea>
         </cds-textarea-label>
         <ng-template #policyError>
           @if (form.showError('role_assume_policy_doc', formDir, 'required')) {
           <span
             class="invalid-feedback"
-            i18n
-          >This field is required.</span>
+            i18n>This field is required.</span>
           } @if (form.showError('role_assume_policy_doc', formDir, 'json')) {
           <span
             class="invalid-feedback"
-            i18n
-          >Must be a valid JSON.</span>
+            i18n>Must be a valid JSON.</span>
           }
         </ng-template>
       </div>
@@ -144,18 +133,15 @@
           @if (form.showError('max_session_duration', formDir, 'required')) {
           <span
             class="invalid-feedback"
-            i18n
-          >This field is required.</span>
+            i18n>This field is required.</span>
           } @if (form.showError('max_session_duration', formDir, 'min')) {
           <span
             class="invalid-feedback"
-            i18n
-          >Minimum value is 1 hour.</span>
+            i18n>Minimum value is 1 hour.</span>
           } @if (form.showError('max_session_duration', formDir, 'max')) {
           <span
             class="invalid-feedback"
-            i18n
-          >Maximum value is 12 hours.</span>
+            i18n>Maximum value is 12 hours.</span>
           }
         </ng-template>
       </div>
@@ -166,7 +152,7 @@
       (submitActionEvent)="onSubmit()"
       [form]="form"
       [submitText]="mode"
-      [modalForm]="true"
-    ></cd-form-button-panel>
+    >
+    </cd-form-button-panel>
   </form>
 </cds-modal>
