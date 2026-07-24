@@ -1535,6 +1535,14 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             dg_specs = []
             for dg in drivegroups:
                 spec = DriveGroupSpec.from_json(dg)
+                # incentivize users to provide a service id for their OSD specs
+                # we can't make this part of the spec validation itself because
+                # it would cause us to drop previously working specs during upgrade,
+                # but we can do it for new specs
+                if not spec.service_id:
+                    raise SpecValidationError(
+                        'OSD spec with no service_id field found. Please provide a service_id for all OSD specs'
+                    )
                 if dry_run:
                     spec.preview_only = True
                 dg_specs.append(spec)
