@@ -28,12 +28,12 @@ Options
 
 .. option:: --mon-host monaddress[:port]
 
-   Connect to specified monitor (instead of looking through
+   Connect to specified Monitor (instead of looking through
    ``ceph.conf``).
 
 .. option:: --keyring=<path-to-keyring>
 
-   Provide path to keyring; useful when it's absent in standard locations.
+   Provide path to keyring; useful when it is absent in standard locations.
 
 .. option:: --log-file=<logfile>
 
@@ -46,7 +46,7 @@ Options
 .. option:: -c ceph.conf, --conf=ceph.conf
 
    Use ``ceph.conf`` configuration file instead of the default
-   ``/etc/ceph/ceph.conf`` to determine monitor addresses during startup.
+   ``/etc/ceph/ceph.conf`` to determine Monitor addresses during startup.
 
 .. option:: -i ID, --id ID
 
@@ -54,7 +54,7 @@ Options
 
 .. option:: -n TYPE.ID, --name TYPE.ID
 
-   Set the rados user name (eg. client.mirror)
+   Set the RADOS user name (e.g. client.mirror)
 
 .. option:: --cluster NAME
 

@@ -15,7 +15,7 @@ Synopsis
 Description
 ===========
 
-**rbd-replay** is a utility for replaying rados block device (RBD) workloads.
+**rbd-replay** is a utility for replaying RADOS block device (RBD) workloads.
 
 
 Options
@@ -24,7 +24,7 @@ Options
 .. option:: -c ceph.conf, --conf ceph.conf
 
    Use ceph.conf configuration file instead of the default /etc/ceph/ceph.conf to
-   determine monitor addresses during startup.
+   determine Monitor addresses during startup.
 
 .. option:: -p pool, --pool pool
 
@@ -46,7 +46,7 @@ Options
 .. option:: --dump-perf-counters
 
    **Experimental**
-   Dump performance counters to standard out before an image is closed.
+   Dump performance counters to stdout before an image is closed.
    Performance counters may be dumped multiple times if multiple images are closed,
    or if the same image is opened and closed multiple times.
    Performance counters and their meaning may change between versions.
