@@ -8,6 +8,7 @@ from typing import (
     Iterator,
     List,
     Optional,
+    Set,
     Tuple,
     Union,
 )
@@ -454,6 +455,9 @@ class SqliteMirroringStore(SqliteStore):
     ) -> None:
         super().__init__(backend, tables)
         self._mirrors: Dict[str, Mirror] = {m.namespace: m for m in mirrors}
+        self._pending_mirror_removals: Optional[
+            List[Tuple[Mirror, EntryKey]]
+        ] = None
 
     def _mirror(self, key: EntryKey) -> Optional[Mirror]:
         ns, _ = key
@@ -467,10 +471,52 @@ class SqliteMirroringStore(SqliteStore):
             super().set_object(key, obj)
             return
         log.debug("Mirroring set_object: mirror=%r", mirror)
+        if self._pending_mirror_removals is not None:
+            # cancel any earlier queued removal for this key given
+            # we're about to write fresh data for it
+            self._pending_mirror_removals = [
+                item
+                for item in self._pending_mirror_removals
+                if item[1] != key
+            ]
         obj_for_store = mirror.filter_object(obj)
         obj_for_mirror = mirror.filter_mirror_object(obj)
         mirror.store[key].set(obj_for_mirror)
         super().set_object(key, obj_for_store)
+
+    def remove(self, key: EntryKey) -> bool:
+        """Remove an entry from the store, including its mirror copy, if any."""
+        mirror = self._mirror(key)
+        if mirror is None:
+            log.debug("Mirroring remove: no mirror for key %r", key)
+            return super().remove(key)
+        log.debug("Mirroring remove: mirror=%r", mirror)
+        removed = super().remove(key)
+        if removed:
+            if self._pending_mirror_removals is not None:
+                self._pending_mirror_removals.append((mirror, key))
+            else:
+                mirror.store.remove(key)
+        return removed
+
+    @contextlib.contextmanager
+    def transaction(self) -> Iterator[None]:
+        """Flushes any mirror-side removals queued by remove() only
+        after the sqlite transaction commits successfully, and discards
+        them if it doesn't.
+        """
+        with super().transaction():
+            self._pending_mirror_removals = []
+            try:
+                yield None
+            except Exception:
+                self._pending_mirror_removals = None
+                raise
+            else:
+                pending = self._pending_mirror_removals
+                self._pending_mirror_removals = None
+        for mirror, key in pending:
+            mirror.store.remove(key)
 
     def get_object(self, key: EntryKey) -> Simplified:
         """Fetch a simplified object from the store."""
@@ -480,8 +526,58 @@ class SqliteMirroringStore(SqliteStore):
             return super().get_object(key)
         log.debug("Mirroring get_object: mirror=%r", mirror)
         obj = super().get_object(key)
-        mirror_obj = mirror.store[key].get()
+        try:
+            mirror_obj = mirror.store[key].get()
+        except KeyError:
+            if mirror.filter_object(obj) != obj:
+                log.debug(
+                    "Mirroring get_object: no mirror entry for %r,"
+                    " falling back to sqlite copy",
+                    key,
+                )
+                return obj
+            raise
         return mirror.merge(obj, mirror_obj)
+
+    def reconcile(self) -> None:
+        """Compare the sqlite store and the mirror store and removes any
+        mirror entries if there's no corresponding sqlite row.
+        Sqlite rows with no mirror entry are only logged.
+        """
+        if not self._mirrors:
+            return
+        with self.transaction():
+            mirror_store = next(iter(self._mirrors.values())).store
+            mirror_ids_by_ns: Dict[str, Set[str]] = {}
+            for ns, name in mirror_store:
+                mirror_ids_by_ns.setdefault(ns, set()).add(name)
+
+            for ns in self._mirrors:
+                if ns not in self._tables:
+                    log.debug(
+                        "reconcile: skipping mirror namespace %r with no"
+                        " matching sqlite table",
+                        ns,
+                    )
+                    continue
+                sqlite_ids = set(self.contents(ns))
+                mirror_ids = mirror_ids_by_ns.get(ns, set())
+
+                for orphan in sorted(mirror_ids - sqlite_ids):
+                    log.warning(
+                        "reconcile: removing orphaned mirror entry"
+                        " (%s, %s) with no matching sqlite row",
+                        ns,
+                        orphan,
+                    )
+                    mirror_store.remove((ns, orphan))
+
+                for missing in sorted(sqlite_ids - mirror_ids):
+                    log.warning(
+                        "reconcile: (%s, %s) has no mirror entry",
+                        ns,
+                        missing,
+                    )
 
 
 class MirrorJoinAuths(Mirror):
@@ -516,10 +612,10 @@ class MirrorUsersAndGroups(Mirror):
 
 
 class MirrorTLSCredentials(Mirror):
-    """Mirroring configuration for objects in the tls_credentials namespace."""
+    """Mirroring configuration for objects in the tls_creds namespace."""
 
     def __init__(self, store: ConfigStore) -> None:
-        super().__init__('tls_credentials', store)
+        super().__init__('tls_creds', store)
 
     def filter_object(self, obj: Simplified) -> Simplified:
         """Filter tls_credential for sqlite3 store."""
@@ -545,10 +641,10 @@ class MirrorExternalCephCluster(Mirror):
 
 
 class MirrorRGWCredentials(Mirror):
-    """Mirroring configuration for objects in the rgw_credentials namespace."""
+    """Mirroring configuration for objects in the rgw_creds namespace."""
 
     def __init__(self, store: ConfigStore) -> None:
-        super().__init__('rgw_credentials', store)
+        super().__init__('rgw_creds', store)
 
     def filter_object(self, obj: Simplified) -> Simplified:
         """Filter rgw_credential for sqlite3 store."""
