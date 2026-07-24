@@ -1612,10 +1612,19 @@ class RgwService(CephService):
                 port = ports[0]
 
         if spec.ssl:
-            san_list = spec.zonegroup_hostnames or []
-            custom_sans = san_list + [f"*.{h}" for h in san_list] if spec.wildcard_enabled else san_list
-            tls_creds = self.get_certificates(daemon_spec, custom_sans=custom_sans)
-            pem = f'{tls_creds.key.rstrip()}\n{tls_creds.cert.lstrip()}'
+
+            legacy_pem = spec.rgw_frontend_ssl_certificate
+            if legacy_pem and not spec.ssl_cert:
+                if isinstance(legacy_pem, list):
+                    pem = '\n'.join(legacy_pem)
+                else:
+                    pem = legacy_pem
+            else:
+                san_list = spec.zonegroup_hostnames or []
+                custom_sans = san_list + [f"*.{h}" for h in san_list] if spec.wildcard_enabled else san_list
+                tls_creds = self.get_certificates(daemon_spec, custom_sans=custom_sans)
+                pem = f'{tls_creds.key.rstrip()}\n{tls_creds.cert.lstrip()}'
+
             rgw_cert_name = daemon_spec.name() if spec.generate_cert else spec.service_name()
             ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config-key set',
