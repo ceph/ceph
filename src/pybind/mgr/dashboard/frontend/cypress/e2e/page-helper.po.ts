@@ -274,11 +274,11 @@ export abstract class PageHelper {
     this.waitDataTableToLoad();
     if (content) {
       return cy
-        .contains('[cdstablerow] [cdstabledata]', content)
-        .parent('[cdstablerow]')
-        .contains('[cdstabledata] a', new RegExp(`^${content}$`));
+        .contains('[cdstabledata]', content)
+        .parent('tr, [cdstablerow]')
+        .contains('[cdstabledata] a', new RegExp(`^\\s*${content}\\s*$`));
     }
-    return cy.get('[cdstablerow] [cdstabledata] a').first();
+    return cy.get('tr [cdstabledata] a, [cdstablerow] [cdstabledata] a').first();
   }
 
   /**
