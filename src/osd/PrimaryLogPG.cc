@@ -6374,6 +6374,35 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (flags & CLS_METHOD_WR)
 	  ctx->user_modify = true;
 
+        if (!ctx->op->may_write() && ctx->user_modify) {
+          ostringstream ss;
+          const std::string classmethod = cname + "." + mname;
+          ss << fmt::format("Method {}.{} to PG {} contains a {} operation "
+                            "but is marked as {}. ",
+                            cname, mname, pg_whoami, ctx->user_modify ? "write" : "read",
+                            ctx->op->may_write() ? "WR" : "RD");
+          dout(10) << ss.str() << dendl;
+          bool is_umbrella_client = ctx->op->has_feature(CEPH_FEATURE_SERVER_UMBRELLA);
+          if (!cls_method_last_warned.contains(classmethod) ||
+              cls_method_last_warned[classmethod] + std::chrono::days(1) <
+                    ceph::coarse_mono_clock::now()) {
+            cls_method_last_warned[classmethod] = ceph::coarse_mono_clock::now();
+            if (is_umbrella_client) {
+              osd->clog->error() << ss.str();
+            } else {
+              osd->clog->warn() << fmt::format("{} It is advisable to update "
+                                              "your client to umbrella "
+                                              "or newer.",
+                                              ss.str());
+            }
+          }
+
+          if (is_umbrella_client) {
+            result = -EINVAL;
+            break;
+          }
+        }
+
 	bufferlist outdata;
 	dout(10) << "call method " << cname << "." << mname << dendl;
 	int prev_rd = ctx->num_read;
