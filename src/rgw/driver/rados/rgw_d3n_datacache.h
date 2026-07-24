@@ -64,6 +64,7 @@ private:
   std::set<std::string> d3n_outstanding_write_list;
   std::mutex d3n_cache_lock;
   std::mutex d3n_eviction_lock;
+  std::condition_variable d3n_aio_cv;
 
   CephContext *cct;
   enum class _io_type {
@@ -87,6 +88,15 @@ private:
 public:
   D3nDataCache();
   ~D3nDataCache() {
+    {
+      std::unique_lock l(d3n_cache_lock);
+      if (!d3n_aio_cv.wait_for(l, std::chrono::seconds(30), [this] {
+            return d3n_outstanding_write_list.empty();
+          })) {
+        lsubdout(g_ceph_context, rgw_datacache, 0) << "D3nDataCache: ~D3nDataCache(): WARNING: timed out draining d3n_outstanding_write_list.size() = " 
+                                                   << d3n_outstanding_write_list.size() << dendl;
+      }
+    }
     while (lru_eviction() > 0);
   }
 

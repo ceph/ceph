@@ -175,6 +175,28 @@ void D3nDataCache::d3n_libaio_write_completion_cb(D3nCacheAioWriteRequest* c)
 
   ldout(cct, 5) << "D3nDataCache: " << __func__ << "(): oid=" << c->oid << dendl;
 
+  int ret = aio_error(c->cb);
+  ssize_t nbytes = aio_return(c->cb);
+
+  if (ret != 0 || nbytes < 0) {
+    ldout(cct, 0) << "ERROR: D3nDataCache: " << __func__ << "(): aio_write failed for oid=" << c->oid 
+                  << ", error=" << ret << ", nbytes=" << nbytes << dendl;
+    {
+      const std::lock_guard l(d3n_cache_lock);
+      d3n_outstanding_write_list.erase(c->oid);
+    }
+    {
+      const std::lock_guard l(d3n_eviction_lock);
+      outstanding_write_size -= c->cb->aio_nbytes;
+    }
+    std::string location = cache_location + c->oid;
+    ::unlink(location.c_str());
+    delete c;
+    c = nullptr;
+    d3n_aio_cv.notify_all();
+    return;
+  }
+
   { // update cache_map entries for new chunk in cache
     const std::lock_guard l(d3n_cache_lock);
     d3n_outstanding_write_list.erase(c->oid);
@@ -194,6 +216,7 @@ void D3nDataCache::d3n_libaio_write_completion_cb(D3nCacheAioWriteRequest* c)
 
   delete c;
   c = nullptr;
+  d3n_aio_cv.notify_all();
 }
 
 int D3nDataCache::d3n_libaio_create_write_request(bufferlist& bl, unsigned int len, std::string oid)
