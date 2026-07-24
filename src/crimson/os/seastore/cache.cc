@@ -537,6 +537,50 @@ void Cache::register_metrics(store_index_t store_index)
 
   pinboard->register_metrics(store_index);
 
+  for (auto& [ext, ext_label] : labels_by_ext) {
+    metrics.add_group(
+      "cache",
+      {
+        sm::make_counter(
+          "pinboard_hit",
+          get_by_ext(pinboard->hits_by_ext, ext),
+          sm::description("extents found already in pinboard when touched, by type"),
+          {ext_label}
+        ),
+        sm::make_counter(
+          "pinboard_miss",
+          get_by_ext(pinboard->misses_by_ext, ext),
+          sm::description("extents not in pinboard when touched (newly added), by type"),
+          {ext_label}
+        ),
+        sm::make_counter(
+          "cache_hit",
+          [this, ext] {
+            uint64_t total = 0;
+            for (auto& per_src : stats.access_by_src_ext) {
+              total += get_by_ext(per_src, ext).get_cache_hit();
+            }
+            return total;
+          },
+          sm::description("read_extent hits in Cache::extents (no disk I/O) by extent type"),
+          {ext_label}
+        ),
+        sm::make_counter(
+          "cache_miss",
+          [this, ext] {
+            uint64_t total = 0;
+            for (auto& per_src : stats.access_by_src_ext) {
+              total += get_by_ext(per_src, ext).load_absent;
+            }
+            return total;
+          },
+          sm::description("read_extent misses requiring disk I/O by extent type"),
+          {ext_label}
+        ),
+      }
+    );
+  }
+
   /**
    * tree stats
    */
