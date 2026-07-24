@@ -9422,6 +9422,10 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
         ss << "error parsing int value '" << val << "': " << interr;
         return -EINVAL;
       }
+      if (n <= 0 || (n & (n - 1)) != 0) {
+        ss << "invalid value '" << n << "', input must be positive and a power of 2.";
+        return -EINVAL;
+      }
     } else if (var == "fingerprint_algorithm") {
       if (!unset) {
         auto alg = pg_pool_t::get_fingerprint_from_str(val);
