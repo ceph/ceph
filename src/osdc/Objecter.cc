@@ -1238,7 +1238,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 
   if (m->fsid != monc->get_fsid()) {
     ldout(cct, 0) << "handle_osd_map fsid " << m->fsid
-		  << " != " << monc->get_fsid() << dendl;
+                  << " != " << monc->get_fsid() << dendl;
     return;
   }
 
@@ -1247,10 +1247,19 @@ void Objecter::handle_osd_map(MOSDMap *m)
   bool was_pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) || cluster_full ||
     _osdmap_has_pool_full();
   map<int64_t, bool> pool_full_map;
+  
+  // Block flags. This is used to block balanced reads when any pool supports
+  // legacy dedupe or tiering (unsupported) features. 
+  int new_blocked_flags = 0;
   for (auto it = osdmap->get_pools().begin();
-       it != osdmap->get_pools().end(); ++it)
+       it != osdmap->get_pools().end(); ++it) {
     pool_full_map[it->first] = _osdmap_pool_full(it->second);
-
+    const pg_pool_t& pool = it->second;
+    if (pool.is_tier() || pool.has_tiers() || pool.get_dedup_tier() > 0) {
+      new_blocked_flags = CEPH_OSD_FLAG_BALANCE_READS | CEPH_OSD_FLAG_LOCALIZE_READS;
+    }
+  }
+  blocked_read_flags = new_blocked_flags;
 
   list<LingerOp*> need_resend_linger;
   map<ceph_tid_t, Op*> need_resend;
