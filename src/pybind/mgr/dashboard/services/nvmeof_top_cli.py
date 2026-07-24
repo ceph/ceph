@@ -136,6 +136,36 @@ else:
             self.busy_rate = self.busy_secs.rate(delay)
             self.idle_rate = self.idle_secs.rate(delay)
 
+    class ControllerBucketStats:
+        def __init__(self):
+            self.io_count = Counter()
+            self.bdev_sum = Counter()
+            self.net_sum = Counter()
+            self.qos_sum = Counter()
+            self.total_sum = Counter()
+
+            self.ops_rate = 0.0
+            self.bdev_mean = 0.0
+            self.net_mean = 0.0
+            self.qos_mean = 0.0
+            self.total_mean = 0.0
+
+        def update(self, io_count: int, bdev_mean: float, net_mean: float,
+                   qos_mean: float, total_mean: float):
+            self.io_count.update(io_count)
+            self.bdev_sum.update(bdev_mean * io_count)
+            self.net_sum.update(net_mean * io_count)
+            self.qos_sum.update(qos_mean * io_count)
+            self.total_sum.update(total_mean * io_count)
+
+        def calculate(self, delay: float):
+            self.ops_rate = self.io_count.rate(delay)
+            delta_count = self.io_count.current - self.io_count.last
+            self.bdev_mean = self.bdev_sum.rate(delta_count)
+            self.net_mean = self.net_sum.rate(delta_count)
+            self.qos_mean = self.qos_sum.rate(delta_count)
+            self.total_mean = self.total_sum.rate(delta_count)
+
     class NvmeofTopCollector:  # type: ignore[no-redef]  # noqa  # pylint: disable=function-redefined,too-many-instance-attributes
         def __init__(self):
             self.tool: Any = None
@@ -148,6 +178,7 @@ else:
             self.subsystems: Any = None
             self.reactor_stats = {}
             self.iostats = {}
+            self.controller_stats: dict = {}
             self.gw_info: Any = None
             self.client: Any = None
             self.timestamp = time.time()
@@ -254,6 +285,27 @@ else:
                     ))
             reactor_data.sort(key=lambda t: t[sort_pos], reverse=reverse_sort)
             return reactor_data
+
+        def get_host_controller_data(self, sort_pos: int, reverse_sort: bool):
+            ctrl_data = []
+            for (gw_addr, size_kb), io_stats in self.controller_stats.items():
+                total_iops = 0.0
+                metrics = []
+                for io_type in ('read', 'write'):
+                    stats = io_stats.get(io_type)
+                    if stats:
+                        stats.calculate(self.delay)
+                        total_iops += stats.ops_rate
+                        metrics += [stats.ops_rate, stats.bdev_mean, stats.net_mean,
+                                    max(0.0, stats.qos_mean), stats.total_mean]
+                    else:
+                        metrics += [None, None, None, None, None]
+
+                ctrl_data.append((gw_addr, f"{size_kb}KB", total_iops, *metrics))
+
+            ctrl_data.sort(key=lambda t: t[sort_pos] if t[sort_pos] is not None else 0.0,
+                           reverse=reverse_sort)
+            return ctrl_data
 
         def get_subsystem_summary_data(self):
             return [
@@ -509,6 +561,43 @@ else:
                     return
             logger.debug("collect_io_data completed")
 
+        def collect_controller_data(self):
+            nqn = self.tool.subsystem_nqn
+            host_nqn = self.tool.host_nqn
+            for client in self.clients.values():
+                req = NVMeoFClient.pb2.get_connection_io_statistics_req(
+                    subsystem_nqn=nqn,
+                    host_nqn=host_nqn,
+                    reset=False
+                )
+                ret = self._call_grpc('get_connection_io_statistics', req, client)
+                if ret is None:
+                    if not self.ready:
+                        return
+                    continue
+                if ret.status != 0:
+                    logger.debug("No controller stats from %s: %s",
+                                 client.gateway_addr, ret.error_message)
+                    continue
+                gw_addr = client.gateway_addr
+                for bucket in ret.buckets:
+                    key = (gw_addr, bucket.size)
+                    for io_type, lat_group in (('read', bucket.read), ('write', bucket.write)):
+                        if not lat_group.io_count:
+                            continue
+                        if key not in self.controller_stats:
+                            self.controller_stats[key] = {}
+                        if io_type not in self.controller_stats[key]:
+                            self.controller_stats[key][io_type] = ControllerBucketStats()
+                        self.controller_stats[key][io_type].update(
+                            lat_group.io_count,
+                            lat_group.bdev.mean,
+                            lat_group.net.mean,
+                            lat_group.qos.mean,
+                            lat_group.total.mean,
+                        )
+            logger.debug("collect_controller_data completed")
+
     class NVMeoFTopTool:
         def __init__(self, args: dict):
             self.args = args
@@ -664,6 +753,103 @@ else:
                 rows.append("<no namespaces defined>\n")
 
             return ''.join(rows)
+
+    class NVMeoFTopHostController(NVMeoFTopTool):
+        controller_headers = [
+            'Gateway', 'Size', 'Total IOPS',
+            'rIOPS', 'rBDEV µs', 'rNet µs', 'rQoS µs', 'rTotal µs',
+            'wIOPS', 'wBDEV µs', 'wNet µs', 'wQoS µs', 'wTotal µs',
+        ]
+        controller_template = (
+            "{:<20}   {:>6}   {:>10}"
+            "   {:>6}   {:>8}   {:>7}   {:>7}   {:>8}"
+            "   {:>6}   {:>8}   {:>7}   {:>7}   {:>8}\n"
+        )
+
+        def __init__(self, args: dict):
+            super().__init__(args)
+            self.subsystem_nqn = args.get('nqn')
+            self.host_nqn = args.get('host_nqn')
+
+        def _collect(self):
+            self.collector.collect_controller_data()
+
+        def format_output(self):
+            if self.sort_key not in NVMeoFTopHostController.controller_headers:
+                raise ValueError(
+                    f"Invalid sort key '{self.sort_key}'. "
+                    f"Valid options: {NVMeoFTopHostController.controller_headers}"
+                )
+            sort_pos = NVMeoFTopHostController.controller_headers.index(self.sort_key)
+
+            rows = []
+            if self.args.get('with_timestamp'):
+                timestamp = time.strftime('%Y-%m-%d %H:%M:%S',
+                                          time.localtime(self.collector.timestamp))
+                rows.append(f"{timestamp} (delay: {self.collector.delay:.2f}s)\n")
+
+            ctrl_data = self.collector.get_host_controller_data(
+                sort_pos=sort_pos, reverse_sort=self.reverse_sort)
+
+            if not self.args.get('no_header'):
+                rows.append(NVMeoFTopHostController.controller_template.format(
+                    *NVMeoFTopHostController.controller_headers))
+            if ctrl_data:
+                for row in ctrl_data:
+                    formatted = [
+                        '-' if v is None else (f"{v:.0f}" if isinstance(v, float) else v)
+                        for v in row
+                    ]
+                    rows.append(NVMeoFTopHostController.controller_template.format(*formatted))
+            else:
+                rows.append("<no IO statistics available>\n")
+
+            rows.append("\n")
+            return ''.join(rows)
+
+    @DBCLICommand.Read('nvmeof top controller', poll=True)
+    def nvmeof_top_controller(_, nqn: str = '', host_nqn: str = '',
+                              server_address: str = '', server_port: Optional[int] = None,
+                              gw_group: str = '',
+                              descending: bool = False, sort_by: str = 'Size',
+                              with_timestamp: bool = False, no_header: bool = False,
+                              period: float = 1.0, session_id: Optional[str] = None):
+        '''
+        NVMeoF Top Host Controller IO Tool
+        '''
+        if not nqn:
+            return HandleCommandResult(
+                stderr="Required argument '--nqn' missing",
+                retval=-errno.EINVAL
+            )
+        if not host_nqn:
+            return HandleCommandResult(
+                stderr="Required argument '--host-nqn' missing",
+                retval=-errno.EINVAL
+            )
+        if sort_by not in NVMeoFTopHostController.controller_headers:
+            return HandleCommandResult(
+                stderr=f"Invalid sort-by '{sort_by}': must match a header title: "
+                       f"{NVMeoFTopHostController.controller_headers}",
+                retval=-errno.EINVAL
+            )
+        args = {
+            'nqn': nqn,
+            'host_nqn': host_nqn,
+            'with_timestamp': with_timestamp,
+            'no_header': no_header,
+            'sort_descending': descending,
+            'sort_by': sort_by,
+            'server_address': server_address,
+            'server_port': server_port,
+            'gw_group': gw_group,
+            'period': period,
+            'session_id': session_id,
+        }
+        rc, output = NVMeoFTopHostController(args).run()
+        if rc != 0:
+            return HandleCommandResult(stderr=output, retval=rc)
+        return HandleCommandResult(stdout=output, retval=rc)
 
     @DBCLICommand.Read('nvmeof top cpu', poll=True)
     def nvmeof_top_cpu(_, server_address: str = '', server_port: Optional[int] = None,
