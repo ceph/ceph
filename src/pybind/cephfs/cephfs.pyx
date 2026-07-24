@@ -3409,7 +3409,7 @@ class RmtreeDir:
         # or unlink() for them.
         self.de_ignore_list = []
 
-        # Indicates whether an error occured during call to readdir().
+        # Indicates whether an error occurred during call to readdir().
         self.has_readdir_failed = False
 
         # If a dir entry has been removed and readdir() returns None,
@@ -3469,7 +3469,7 @@ class RmtreeDir:
 
                     de = self.fs.readdir(self.handle)
         except Error as e:
-            log.error(f'Exception occured: "{e}"')
+            log.error(f'Exception occurred: "{e}"')
             self.set_readdir_error()
 
     def try_rmdir(self, suppress_errors=False):
@@ -3492,7 +3492,7 @@ class RmtreeDir:
             # XXX: push this dir to stack, done in the caller method
             raise
         except Error as e:
-            log.error('Following exception occured while calling rmdir() for '
+            log.error('Following exception occurred while calling rmdir() for '
                       f'dir "{self.name}": "{e}"')
             self.add_to_de_ignore_list(self.name)
 
@@ -3507,7 +3507,7 @@ class RmtreeDir:
             self.fs.unlinkat(self.fd, de_name, 0)
             self.de_has_been_removed = True
         except Error as e:
-            log.error('Following exception occured while calling unlink() for '
+            log.error('Following exception occurred while calling unlink() for '
                       f'file "{de_name}": "{e}"')
             self.add_to_de_ignore_list(de_name)
 

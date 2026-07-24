@@ -2354,7 +2354,7 @@ bool PeerReplayer::SyncMechanism::pop_dataq_entry(SyncEntry &out_entry) {
     // predicate true
     if (ready)
       break;
-    // otherwise timeout occured, nothing to do - loop again
+    // otherwise timeout occurred, nothing to do - loop again
   }
   dout(20) << ": snapshot data replayer woke up to process m_syncm_dataq, syncm=" << this
            << " crawl_finished=" << m_crawl_finished << dendl;
@@ -3514,7 +3514,7 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *data_replayer) {
           mark_and_notify_syncms_to_backoff(-EBLOCKLISTED);
           break;
         }
-        // otherwise timeout occured, nothing to do - loop again
+        // otherwise timeout occurred, nothing to do - loop again
       }
 
       if (shutdown || blocklist) {
