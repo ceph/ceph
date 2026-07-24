@@ -340,10 +340,15 @@ class CephString(CephArgtype):
         )
 
     def valid(self, s: str, partial: bool = False) -> None:
+        # If a strict format rule (like goodchars) is defined on a subvolume name,
+        # an empty string input is inherently an invalid format structure.
+        if self.goodchars and s == "":
+            raise ArgumentFormat("argument can't be an empty string")
+
         sset = set(s)
         if self.goodset and not sset <= self.goodset:
-            raise ArgumentFormat("invalid chars {0} in {1}".
-                                 format(''.join(sset - self.goodset), s))
+            raise ArgumentFormat("invalid chars '{0}' in input string '{1}'".
+                                 format(''.join(sorted(list(sset - self.goodset))), s))
         self.val = s
 
     def __str__(self) -> str:
