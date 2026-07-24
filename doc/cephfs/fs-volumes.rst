@@ -216,7 +216,7 @@ Create a subvolume group by running a command of the following form:
 
 .. prompt:: bash #
 
-   ceph fs subvolumegroup create <vol_name> <group_name> [--size <size_in_bytes>] [--pool_layout <data_pool_name>] [--uid <uid>] [--gid <gid>] [--mode <octal_mode>] [--normalization <form>] [--casesensitive <bool>]
+   ceph fs subvolumegroup create <vol_name> <group_name> [--size <size_in_bytes>] [--pool_layout <data_pool_name>] [--uid <uid>] [--gid <gid>] [--mode <octal_mode>] [--normalization <form>] [--casesensitive <bool>] [--namespace-isolated] [--pool-namespace <namespace>]
 
 The command succeeds even if the subvolume group already exists.
 
@@ -250,6 +250,26 @@ file. The case of the file name used when the file was created is preserved.
 
 .. note:: Setting ``--casesensitive=0`` option implicitly enables
    Unicode normalization on the subvolume group.
+
+A subvolume group can be created in a separate RADOS namespace by specifying
+the ``--namespace-isolated`` option. When a subvolume group has namespace
+isolation enabled, the group directory is placed in its own RADOS namespace
+(``fsvolumens__<group>``), and any subvolume subsequently created within that
+group automatically inherits namespace isolation -- each subvolume gets its
+own unique RADOS namespace (``fsvolumens__<group>_<subvolume>``) without
+needing the ``--namespace-isolated`` flag on the ``fs subvolume create``
+command. This provides security isolation at the RADOS level for all
+subvolumes belonging to the group.
+
+An explicit RADOS namespace can be specified via the ``--pool-namespace``
+option (e.g. ``--pool-namespace my-custom-ns``), which overrides the
+auto-generated namespace. This is useful when a RADOS namespace has been
+pre-created by an administrator and needs to be associated with a specific
+subvolume group.
+
+To check if a subvolume group has namespace isolation enabled, use the
+``fs subvolumegroup info`` command and look for the ``pool_namespace``
+field in the output.
 
 Remove a subvolume group by running a command of the following form:
 
@@ -302,6 +322,8 @@ The output format is JSON and contains fields as follows:
 * ``bytes_used``: current used size of the subvolume group in bytes
 * ``created_at``: creation time of the subvolume group in the format "YYYY-MM-DD HH:MM:SS"
 * ``data_pool``: data pool to which the subvolume group belongs
+* ``pool_namespace``: RADOS namespace of the subvolume group if namespace isolation is
+  enabled, otherwise empty string
 
 Check for the presence of a given subvolume group by running a command of the
 following form:
