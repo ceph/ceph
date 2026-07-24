@@ -63,6 +63,7 @@ struct bench_data {
 const int OP_WRITE     = 1;
 const int OP_SEQ_READ  = 2;
 const int OP_RAND_READ = 3;
+const int OP_ROLLBACK  = 4;
 
 // Object is composed of <oid,namespace>
 typedef std::pair<std::string, std::string> Object;
@@ -86,6 +87,7 @@ protected:
   int write_bench(int secondsToRun, int concurrentios, const std::string& run_name_meta, unsigned max_objects, int prev_pid);
   int seq_read_bench(int secondsToRun, int num_ops, int num_objects, int concurrentios, int writePid, bool no_verify=false);
   int rand_read_bench(int secondsToRun, int num_ops, int num_objects, int concurrentios, int writePid, bool no_verify=false);
+  int rollback_bench(int secondsToRun, int num_ops, int num_objects, int concurrentios, int prev_pid);
 
   int clean_up(int num_objects, int prevPid, int concurrentios);
   bool more_objects_matching_prefix(const std::string& prefix, std::list<Object>* name);
@@ -106,6 +108,7 @@ protected:
   virtual int sync_read(const std::string& oid, bufferlist& bl, size_t len) = 0;
   virtual int sync_write(const std::string& oid, bufferlist& bl, size_t len) = 0;
   virtual int sync_remove(const std::string& oid) = 0;
+  virtual int aio_rollback(const std::string& oid, int slot) = 0;
 
   virtual bool get_objects(std::list< std::pair<std::string, std::string> >* objects, int num) = 0;
   virtual void set_namespace(const std::string&) {}
@@ -133,5 +136,87 @@ public:
   int clean_up_slow(const std::string& prefix, int concurrentios);
 };
 
+const std::string BENCH_LASTRUN_METADATA = "benchmark_last_metadata";
+const std::string BENCH_PREFIX = "benchmark_data";
+const std::string BENCH_OBJ_NAME = BENCH_PREFIX + "_%s_%d_object%d";
+
+namespace ceph::bench {
+  inline std::string generate_object_prefix_nopid(const std::string &base_prefix,
+                                                  const std::string &hostname) {
+    std::string name;
+    name.reserve(base_prefix.size() + 1 + hostname.size());
+    name.append(base_prefix);
+    name.append("_");
+    name.append(hostname);
+    return name;
+  }
+  inline std::string generate_object_prefix_nopid(const std::string &hostname) {
+    return ceph::bench::generate_object_prefix_nopid(BENCH_PREFIX, hostname);
+  }
+
+  inline std::string generate_object_prefix(const std::string &base_prefix,
+                                            const std::string &hostname, int pid) {
+    std::string name;
+    name.reserve(base_prefix.size() + 1 + hostname.size() + 11);
+    name.append(base_prefix);
+    name.append("_");
+    name.append(hostname);
+    name.append("_");
+    name.append(std::to_string(pid));
+    return name;
+  }
+  inline std::string generate_object_prefix(const std::string &hostname, int pid) {
+    return ceph::bench::generate_object_prefix(BENCH_PREFIX, hostname, pid);
+  }
+
+  inline std::string generate_object_name_fast(const std::string &base_prefix,
+                                               const std::string &hostname,
+                                               int pid, int index) {
+    std::string name;
+    name.reserve(base_prefix.size() + 1 + hostname.size() + 1 + 11 + 7 + 20);
+    name.append(base_prefix);
+    name.append("_");
+    name.append(hostname);
+    name.append("_");
+    name.append(std::to_string(pid));
+    name.append("_object");
+    name.append(std::to_string(index));
+    return name;
+  }
+  inline std::string generate_object_name_fast(const std::string &hostname,
+                                               int pid, int index) {
+    return ceph::bench::generate_object_name_fast(BENCH_PREFIX, hostname, pid, index);
+  }
+
+  inline std::string get_local_hostname() {
+    char hostname[256];
+    if (gethostname(hostname, sizeof(hostname)) < 0) {
+      return "localhost";
+    }
+    return std::string(hostname);
+  }
+
+  inline void decode_bench_metadata(const bufferlist &bl, uint64_t *object_size,
+                                    int *num_ops, int *prev_pid, uint64_t *op_size) {
+    using ceph::decode;
+    auto p = bl.cbegin();
+    decode(*object_size, p);
+    decode(*num_ops, p);
+    decode(*prev_pid, p);
+    if (!p.end()) {
+      decode(*op_size, p);
+    } else {
+      *op_size = *object_size;
+    }
+  }
+  inline void encode_bench_metadata(bufferlist *bl, uint64_t object_size,
+                                    int num_ops, int prev_pid, uint64_t op_size) {
+    using ceph::encode;
+    encode(object_size, *bl);
+    encode(num_ops, *bl);
+    encode(prev_pid, *bl);
+    encode(op_size, *bl);
+  }
+} // namespace ceph::bench
 
 #endif
