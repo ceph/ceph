@@ -345,6 +345,12 @@ class Migrations:
 
             registry_credentials = {'url': registry_url,
                                     'username': registry_username, 'password': registry_password}
+            # Store in secret store (phase 1) as well
+            try:
+                self.mgr.cephadm_secrets.set(name='registry_credentials', data=registry_credentials,
+                                             user_made=True, editable=True)
+            except Exception:
+                pass
             self.mgr.set_store('registry_credentials', json.dumps(registry_credentials))
 
             self.mgr.set_module_option('registry_url', None)

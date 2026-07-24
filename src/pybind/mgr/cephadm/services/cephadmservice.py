@@ -332,19 +332,25 @@ class CephadmService(metaclass=ABCMeta):
         daemon_type: Optional[str] = None,
     ) -> List[str]:
 
-        ssl_enabled = getattr(spec, 'ssl', False)
-        if not spec or not ssl_enabled:
+        if not spec:
             return []
 
-        deps = []
-        cert_source = getattr(spec, 'certificate_source', None)
-        if cert_source:
-            deps.append(f'certificate_source: {cert_source}')
-        if spec.ssl_cert and spec.ssl_key:
-            deps.append(f'ssl_cert: {str(utils.config_hash(spec.ssl_cert))}')
-            deps.append(f'ssl_key: {str(utils.config_hash(spec.ssl_key))}')
-        if spec.ssl_ca_cert:
-            deps.append(f'ssl_ca_cert: {str(utils.config_hash(spec.ssl_ca_cert))}')
+        deps: List[str] = []
+
+        # Scan for secret:/ URI refs in the spec unconditionally so that
+        # changing a secret triggers reconfig regardless of TLS being enabled.
+        deps.extend(mgr.cephadm_secrets.deps_for_spec(spec))
+
+        ssl_enabled = getattr(spec, 'ssl', False)
+        if ssl_enabled:
+            cert_source = getattr(spec, 'certificate_source', None)
+            if cert_source:
+                deps.append(f'certificate_source: {cert_source}')
+            if spec.ssl_cert and spec.ssl_key:
+                deps.append(f'ssl_cert: {str(utils.config_hash(spec.ssl_cert))}')
+                deps.append(f'ssl_key: {str(utils.config_hash(spec.ssl_key))}')
+            if spec.ssl_ca_cert:
+                deps.append(f'ssl_ca_cert: {str(utils.config_hash(spec.ssl_ca_cert))}')
 
         return sorted(deps)
 
@@ -487,6 +493,16 @@ class CephadmService(metaclass=ABCMeta):
                 f"'{service_name}' (cert/key names: {cert_name}/{key_name})"
             )
             return EMPTY_TLS_CREDENTIALS
+
+        # Defensive guard: secret:/ refs in TLS fields are rejected at apply
+        # time by _check_secrets_refs. If one reaches here it is a bug.
+        for field_name, value in [(cert_attr, cert), (key_attr, key), (ca_cert_attr, ca_cert)]:
+            if value and isinstance(value, str) and value.strip().startswith('secret:/'):
+                raise OrchestratorError(
+                    f"secret:/ ref in TLS field '{field_name}' for service "
+                    f"'{service_name}' reached config generation: this is a bug. "
+                    f"TLS secret refs should have been rejected at apply time."
+                )
         # Save TLS credentials
         if needs_ca:
             assert ca_cert_name and ca_cert

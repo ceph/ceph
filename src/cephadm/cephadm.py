@@ -2551,6 +2551,7 @@ def enable_cephadm_mgr_module(
 ) -> None:
 
     logger.info('Enabling cephadm module...')
+    cli(['mgr', 'module', 'enable', 'ceph_secrets'])
     cli(['mgr', 'module', 'enable', 'cephadm'])
     wait_for_mgr_restart()
     # https://tracker.ceph.com/issues/67969

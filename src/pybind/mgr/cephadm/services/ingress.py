@@ -386,7 +386,9 @@ class IngressService(CephService):
         if not spec:
             return []
         daemons = mgr.cache.get_daemons_by_service(spec.service_name())
-        return sorted([d.name() for d in daemons if d.daemon_type == 'haproxy'])
+        deps = sorted([d.name() for d in daemons if d.daemon_type == 'haproxy'])
+        parent_deps = CephadmService.get_dependencies(mgr, spec)
+        return parent_deps + deps
 
     def keepalived_generate_config(
             self,
