@@ -61,9 +61,19 @@ static int do_diff(librbd::Image& image, const char *fromsnapname,
     om.t->define_column("Length", TextTable::LEFT, TextTable::LEFT);
     om.t->define_column("Type", TextTable::LEFT, TextTable::LEFT);
   }
+  uint32_t flags = RBD_DIFF_ITERATE_FLAG_INCLUDE_PARENT;
+  if (whole_object) {
+    flags |= RBD_DIFF_ITERATE_FLAG_WHOLE_OBJECT;
+  }
+  uint64_t from_snap_id = 0;
+  if (fromsnapname != nullptr) {
+    r = image.snap_get_id(fromsnapname, &from_snap_id);
+    if (r < 0) {
+      return r;
+    }
+  }
 
-  r = image.diff_iterate2(fromsnapname, 0, info.size, true, whole_object,
-                          diff_cb, &om);
+  r = image.diff_iterate3(from_snap_id, 0, info.size, flags, diff_cb, &om);
   if (f) {
     f->close_section();
     f->flush(std::cout);

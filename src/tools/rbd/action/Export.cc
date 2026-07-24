@@ -195,7 +195,20 @@ int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
   ExportDiffContext edc(&image, fd, info.size,
                         g_conf().get_val<uint64_t>("rbd_concurrent_management_ops"),
                         no_progress, export_format);
-  r = image.diff_iterate2(fromsnapname, 0, info.size, true, whole_object,
+
+  uint32_t flags = RBD_DIFF_ITERATE_FLAG_INCLUDE_PARENT;
+  if (whole_object) {
+    flags |= RBD_DIFF_ITERATE_FLAG_WHOLE_OBJECT;
+  }
+  uint64_t from_snap_id = 0;
+  if (fromsnapname != nullptr) {
+    r = image.snap_get_id(fromsnapname, &from_snap_id);
+    if (r < 0) {
+      goto out;
+    }
+  }
+
+  r = image.diff_iterate3(from_snap_id, 0, info.size, flags,
                           &C_ExportDiff::export_diff_cb, (void *)&edc);
   if (r < 0) {
     goto out;
