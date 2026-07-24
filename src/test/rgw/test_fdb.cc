@@ -33,12 +33,17 @@
 
 #include <map>
 #include <list>
-#include <chrono>
 #include <vector>
+#include <unordered_map>
+
+#include <chrono>
+#include <cstdint>
+#include <compare>
+#include <utility>
+
 #include <ranges>
 #include <iterator>
 #include <algorithm>
-#include <unordered_map>
 
 using Catch::Matchers::AllMatch;
 
@@ -59,6 +64,11 @@ using namespace std::literals;
 
 // Be nice to Catch2's template-test macros:
 using string_pair = std::pair<std::string, std::string>;
+
+template <typename ...Ts>
+concept can_lfdb_set = requires(Ts&& ...xs) {
+ lfdb::set(std::forward<Ts>(xs)...);
+};
 
 // Collect values in selection to out_values:
 auto key_counter(auto txn, const auto& selector, auto& out_values) -> auto {
@@ -189,6 +199,149 @@ TEST_CASE("fdb simple", "[rgw][fdb]") {
     // ...and now it should be gone again:
     lfdb::erase(lfdb::make_transaction(j), k, lfdb::commit_after_op::commit);
     CHECK_FALSE(lfdb::key_exists(lfdb::make_transaction(j), k, lfdb::commit_after_op::no_commit));
+ }
+}
+
+// Version-stamped keys and values are deliberately mutually exclusive:
+static_assert(can_lfdb_set<lfdb::database_handle,
+                           lfdb::versioned_bytes,
+                           std::string>);
+
+static_assert(can_lfdb_set<lfdb::database_handle,
+                           std::string_view,
+                           lfdb::versioned_bytes>);
+
+static_assert(not can_lfdb_set<lfdb::database_handle,
+                               lfdb::versioned_bytes,
+                               lfdb::versioned_bytes>);
+
+TEST_CASE("version stamps", "[fdb]") {
+ janitor dbh;
+
+ constexpr auto stamp_data = [](const std::uint8_t x) {
+  lfdb::versionstamp::versionstamp_data_t out {};
+  out.back() = x;
+  return out;
+ };
+
+ const auto resolved_stamp = [](const auto& versionstamp_data) {
+  lfdb::versionstamp stamp;
+  lfdb::from::convert(std::span(versionstamp_data), stamp);
+  return stamp;
+ };
+
+ SECTION("accessing unresolved versionstamp throws") {
+  lfdb::versionstamp stamp;
+
+  CHECK_FALSE(stamp.is_resolved());
+  CHECK_THROWS_WITH(stamp.resolved_bytes(),
+                    Catch::Matchers::ContainsSubstring("attempt to access unresolved version stamp"));
+ }
+
+ SECTION("commit resolves explicit version stamp") {
+  auto txn = lfdb::make_transaction(dbh);
+  lfdb::versionstamp stamp;
+
+  lfdb::set(txn, "versionstamp/explicit", "value");
+  REQUIRE(lfdb::commit(txn, stamp));
+
+  CHECK(stamp.is_resolved());
+  CHECK(10 == stamp.resolved_bytes().size());
+ }
+
+ SECTION("versionstamp comparison requires resolved values") {
+  lfdb::versionstamp unresolved;
+  const auto resolved = resolved_stamp(stamp_data(1));
+
+  CHECK_THROWS_WITH((void)(unresolved == resolved),
+                    Catch::Matchers::ContainsSubstring("attempt to access unresolved version stamp"));
+  CHECK_THROWS_WITH((void)(resolved == unresolved),
+                    Catch::Matchers::ContainsSubstring("attempt to access unresolved version stamp"));
+  CHECK_THROWS_WITH((void)(unresolved < resolved),
+                    Catch::Matchers::ContainsSubstring("attempt to access unresolved version stamp"));
+  CHECK_THROWS_WITH((void)(resolved < unresolved),
+                    Catch::Matchers::ContainsSubstring("attempt to access unresolved version stamp"));
+ }
+
+ SECTION("versionstamp comparison algebra") {
+  auto [lhs_version, rhs_version, expected_result] =
+   GENERATE(Catch::Generators::table<std::uint8_t,
+                                     std::uint8_t,
+                                     std::strong_ordering>({
+    { 1, 1, std::strong_ordering::equal },
+    { 1, 2, std::strong_ordering::less },
+    { 2, 1, std::strong_ordering::greater },
+   }));
+
+  const auto lhs = resolved_stamp(stamp_data(lhs_version));
+  const auto rhs = resolved_stamp(stamp_data(rhs_version));
+
+  CHECK((lhs <=> rhs) == expected_result);
+  CHECK((lhs == rhs) == (expected_result == std::strong_ordering::equal));
+  CHECK((lhs != rhs) == (expected_result != std::strong_ordering::equal));
+  CHECK((lhs < rhs) == (expected_result == std::strong_ordering::less));
+  CHECK((lhs <= rhs) == (expected_result != std::strong_ordering::greater));
+  CHECK((lhs > rhs) == (expected_result == std::strong_ordering::greater));
+  CHECK((lhs >= rhs) == (expected_result != std::strong_ordering::less));
+ }
+
+ SECTION("versionstamp key") {
+  lfdb::versionstamp stamp;
+
+  lfdb::set(dbh,
+            lfdb::versioned("versionstamp/key/", "/entry", stamp),
+            "value"s);
+
+  REQUIRE(stamp.is_resolved());
+
+  std::map<std::string, std::string> out;
+  lfdb::get(dbh, lfdb::select { "versionstamp/key/" }, std::inserter(out, out.end()));
+
+  REQUIRE(1 == out.size());
+  CHECK("value" == out.begin()->second);
+ }
+
+ SECTION("versionstamp value") {
+  lfdb::versionstamp stamp;
+
+  lfdb::set(dbh,
+            "versionstamp/value",
+            lfdb::versioned("", stamp));
+
+  REQUIRE(stamp.is_resolved());
+
+  lfdb::versionstamp out;
+  REQUIRE(lfdb::get(dbh, "versionstamp/value", out));
+
+  REQUIRE(out.is_resolved());
+  CHECK(stamp.resolved_bytes() == out.resolved_bytes());
+ }
+
+ SECTION("versionstamp overloads compile and commit") {
+  // As these overloads share call paths, just check that they compile and briefly check output:
+  {
+    auto txn = lfdb::make_transaction(dbh);
+    lfdb::versionstamp stamp;
+
+    lfdb::set(txn,
+              lfdb::versioned("versionstamp/overload/key/", stamp),
+              "value",
+              lfdb::commit_after_op::commit);
+
+    CHECK(stamp.is_resolved());
+  }
+
+  {
+    auto txn = lfdb::make_transaction(dbh);
+    lfdb::versionstamp stamp;
+
+    lfdb::set(txn,
+              "versionstamp/overload/value",
+              lfdb::versioned("value:", stamp),
+              lfdb::commit_after_op::commit);
+
+    CHECK(stamp.is_resolved());
+  }
  }
 }
 

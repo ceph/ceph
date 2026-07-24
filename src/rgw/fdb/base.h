@@ -25,21 +25,26 @@
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 
-#include <tuple>
-#include <mutex>
-#include <memory>
 #include <span>
-#include <ranges>
-#include <thread>
+#include <array>
+#include <tuple>
 #include <vector>
-#include <cstdint>
-#include <utility>
 #include <variant>
 #include <optional>
+
+#include <ranges>
 #include <iterator>
-#include <concepts>
 #include <algorithm>
 #include <generator>
+
+#include <mutex>
+#include <thread>
+
+#include <memory>
+#include <cstdint>
+#include <utility>
+#include <compare>
+#include <concepts>
 #include <exception>
 #include <functional>
 #include <filesystem>
@@ -59,6 +64,7 @@
 namespace ceph::libfdb {
 
 struct select;
+struct versionstamp;
 
 class database;
 class transaction;
@@ -69,6 +75,13 @@ using transaction_handle = std::shared_ptr<transaction>;
 extern transaction_handle make_transaction(database_handle dbh);
 
 } // namespace ceph::libfdb
+
+namespace ceph::libfdb::from {
+
+inline void convert(const std::span<const std::uint8_t>& from,
+                    ceph::libfdb::versionstamp& to);
+
+} // namespace ceph::libfdb::from
 
 // MOAR forward declarations-- "pay no attention to that man behind the curtain": 
 namespace ceph::libfdb::detail {
@@ -82,6 +95,7 @@ template <typename ValueT = std::string>
 std::pair<std::string, ValueT> to_decoded_kv_pair(const FDBKeyValue& kv);
 
 inline fdb_error_t do_commit(transaction_handle& txn);
+inline future_value block_until_ready(future_value&& fv);
 
 inline void transaction_set_kv_bytes(const transaction_handle& txn,
                                      std::span<const std::uint8_t> k,
@@ -235,6 +249,144 @@ inline std::string make_range_end_key_for_prefix(std::string_view prefix)
 }
 
 } // namespace ceph::libfdb::detail
+
+struct versionstamp final
+{
+ // FoundationDB versionstamps are 10 bytes: 8 bytes of committed
+ // database version followed by 2 bytes of transaction batch order.
+ using versionstamp_data_t = std::array<std::uint8_t, 10>;
+
+ bool is_resolved() const noexcept
+ {
+  return result->has_value();
+ }
+
+ const versionstamp_data_t& resolved_bytes() const
+ {
+  if (not is_resolved()) {
+   throw libfdb_exception("attempt to access unresolved version stamp");
+  }
+
+  return result->value();
+ }
+
+ bool operator==(const versionstamp& rhs) const
+ {
+  return resolved_bytes() == rhs.resolved_bytes();
+ }
+
+ auto operator<=>(const versionstamp& rhs) const
+ {
+  return resolved_bytes() <=> rhs.resolved_bytes();
+ }
+
+ private:
+ std::shared_ptr<std::optional<versionstamp_data_t>> result =
+  std::make_shared<std::optional<versionstamp_data_t>>();
+
+ void store_result(const std::span<const std::uint8_t> versionstamp_result);
+
+ private:
+ friend class transaction;
+ friend void ceph::libfdb::from::convert(const std::span<const std::uint8_t>&,
+                                         ceph::libfdb::versionstamp&);
+};
+
+// versioned_bytes can only be constructed by calling versioned():
+// It carries data in transaction-correct version stamp encoding:
+struct versioned_bytes final
+{
+ public:
+ versioned_bytes() = delete;
+
+ versioned_bytes(const versioned_bytes&) = default;
+ versioned_bytes(versioned_bytes&&) noexcept = default;
+ versioned_bytes& operator=(const versioned_bytes&) = default;
+ versioned_bytes& operator=(versioned_bytes&&) noexcept = default;
+
+ private:
+ std::vector<std::uint8_t> encoding_buffer;
+ versionstamp stamp;
+
+ versioned_bytes(std::vector<std::uint8_t> encoding_buffer_, versionstamp stamp_)
+  : encoding_buffer(std::move(encoding_buffer_)),
+    stamp(std::move(stamp_))
+ {}
+
+ private:
+ friend class transaction;
+
+ template <concepts::stringview_convertible PrefixT>
+ friend versioned_bytes versioned(const PrefixT& prefix, versionstamp stamp);
+
+ template <concepts::stringview_convertible PrefixT, concepts::stringview_convertible SuffixT>
+ friend versioned_bytes versioned(const PrefixT& prefix, const SuffixT& suffix, versionstamp stamp);
+};
+
+namespace detail {
+
+// FDB version stamp mutations expect the final four bytes to be a little-endian uint32_t offset pointing at the 10-byte placeholder:
+inline void append_little_endian_u32(std::vector<std::uint8_t>& out, const std::uint32_t x)
+{
+ out.push_back(static_cast<std::uint8_t>(x));
+ out.push_back(static_cast<std::uint8_t>(x >> 8));
+ out.push_back(static_cast<std::uint8_t>(x >> 16));
+ out.push_back(static_cast<std::uint8_t>(x >> 24));
+}
+
+inline std::vector<std::uint8_t> make_versioned_encoding(std::string_view prefix, std::string_view suffix)
+{
+ constexpr auto versionstamp_byte_count = std::tuple_size_v<versionstamp::versionstamp_data_t>;
+
+ std::vector<std::uint8_t> out;
+ out.reserve(prefix.size() + versionstamp_byte_count + suffix.size() + sizeof(std::uint32_t));
+
+ std::ranges::copy(prefix, std::back_inserter(out));
+
+ const auto versionstamp_offset = static_cast<std::uint32_t>(out.size());
+ out.resize(out.size() + versionstamp_byte_count);
+
+ std::ranges::copy(suffix, std::back_inserter(out));
+ detail::append_little_endian_u32(out, versionstamp_offset);
+
+ return out;
+}
+
+} // namespace detail
+
+template <concepts::stringview_convertible PrefixT, concepts::stringview_convertible SuffixT>
+versioned_bytes versioned(const PrefixT& prefix, const SuffixT& suffix, versionstamp stamp)
+{
+ return versioned_bytes {
+  detail::make_versioned_encoding(std::string_view(prefix), std::string_view(suffix)),
+  std::move(stamp)
+ };
+}
+
+template <concepts::stringview_convertible PrefixT>
+versioned_bytes versioned(const PrefixT& prefix, versionstamp stamp)
+{
+ return versioned(prefix, std::string_view {}, std::move(stamp));
+}
+
+inline void versionstamp::store_result(const std::span<const std::uint8_t> versionstamp_result)
+{
+ if (versionstamp_result.size() != std::tuple_size_v<versionstamp_data_t>) {
+  throw libfdb_exception("invalid version stamp (size)");
+ }
+
+ versionstamp_data_t result_value;
+ std::ranges::copy(versionstamp_result, std::begin(result_value));
+
+ if (not result->has_value()) {
+  result->emplace(std::move(result_value));
+  return;
+ }
+
+ if (result->value() != result_value) {
+  throw libfdb_exception("attempt to overwrite resolved version stamp");
+ }
+}
 
 struct range_endpoint final
 {
@@ -541,6 +693,8 @@ class transaction final
 
  std::unique_ptr<FDBTransaction, decltype(&fdb_transaction_destroy)> txn_handle;
 
+ std::vector<versionstamp> version_stamps;
+
  private:
  bool get_single_value_from_transaction(const std::span<const std::uint8_t>& key,
                                         std::invocable<std::span<const std::uint8_t>> auto&& write_output_fn);
@@ -571,6 +725,36 @@ class transaction final
     fdb_transaction_set(raw_handle(),
                         (const uint8_t*)k.data(), k.size(),
                         (const uint8_t*)v.data(), v.size());
+ }
+
+ void mark_version(const versionstamp& stamp)
+ {
+  version_stamps.push_back(stamp);
+ }
+
+ template <FDBMutationType MutationKind>
+ void set_versioned_data(std::span<const std::uint8_t> k,
+                         std::span<const std::uint8_t> v,
+                         const versionstamp& stamp)
+ {
+  fdb_transaction_atomic_op(raw_handle(),
+                            (const std::uint8_t*)k.data(), k.size(),
+                            (const std::uint8_t*)v.data(), v.size(),
+                            MutationKind);
+
+  mark_version(stamp);
+ }
+
+ void set(const versioned_bytes& k, std::span<const std::uint8_t> v)
+ {
+  set_versioned_data<FDB_MUTATION_TYPE_SET_VERSIONSTAMPED_KEY>(
+    std::span<const std::uint8_t>(k.encoding_buffer), v, k.stamp);
+ }
+
+ void set(std::span<const std::uint8_t> k, const versioned_bytes& v)
+ {
+  set_versioned_data<FDB_MUTATION_TYPE_SET_VERSIONSTAMPED_VALUE>(
+    k, std::span<const std::uint8_t>(v.encoding_buffer), v.stamp);
  }
 
  // JFW: it's not as easy to wedge an output_range into here as it appears, perhaps
@@ -615,6 +799,10 @@ class transaction final
  friend inline void set(database_handle, std::string_view, const auto&);
  friend inline void set(transaction_handle, std::string_view, const ceph::libfdb::concepts::stringview_convertible auto&, const commit_after_op);
  friend inline void set(database_handle, std::string_view, const ceph::libfdb::concepts::stringview_convertible auto&);
+ friend inline void set(transaction_handle, const versioned_bytes&, const auto&, const commit_after_op);
+ friend inline void set(database_handle, const versioned_bytes&, const auto&);
+ friend inline void set(transaction_handle, std::string_view, const versioned_bytes&, const commit_after_op);
+ friend inline void set(database_handle, std::string_view, const versioned_bytes&);
 
  template <typename OutputTargetOrFnT>
  requires concepts::value_callback<std::remove_reference_t<OutputTargetOrFnT>> ||
@@ -633,6 +821,7 @@ class transaction final
  friend inline bool key_exists(transaction_handle txn, std::string_view k, const commit_after_op commit_after);
 
  friend inline bool commit(transaction_handle& txn);
+ friend inline bool commit(transaction_handle& txn, const versionstamp& stamp);
  friend inline fdb_error_t ceph::libfdb::detail::do_commit(transaction_handle& txn);
  friend inline void ceph::libfdb::detail::transaction_set_kv_bytes(const transaction_handle&,
                                                                    std::span<const std::uint8_t>,
@@ -695,6 +884,12 @@ inline bool ceph::libfdb::transaction::get_single_value_from_transaction(const s
  if (!*this)
   return false;
 
+ std::optional<detail::future_value> versionstamp_future;
+
+ if (not version_stamps.empty()) {
+  versionstamp_future.emplace(fdb_transaction_get_versionstamp(raw_handle()));
+ }
+
  detail::future_value fv(fdb_transaction_commit(raw_handle()));
 
  if (fdb_error_t r = fdb_future_block_until_ready(fv.raw_handle()); 0 != r) {
@@ -719,7 +914,25 @@ inline bool ceph::libfdb::transaction::get_single_value_from_transaction(const s
    *replay_error = r;
   }
 
+  version_stamps.clear();
   return false;
+ }
+
+ if (versionstamp_future) {
+  auto ready = detail::block_until_ready(std::move(*versionstamp_future));
+
+  const uint8_t *out_versionstamp_data = nullptr;
+  int out_versionstamp_size = 0;
+
+  if (fdb_error_t r = fdb_future_get_key(ready.raw_handle(), &out_versionstamp_data, &out_versionstamp_size); 0 != r) {
+   throw libfdb_exception(r);
+  }
+
+  for (auto& stamp : version_stamps) {
+   stamp.store_result(std::span(out_versionstamp_data, out_versionstamp_size));
+  }
+
+  version_stamps.clear();
  }
 
  // Ok:
