@@ -37,6 +37,29 @@ prun() {
     PATH=$CEPH_BIN:$PATH "$@"
 }
 
+# retry <max_attempts> <delay_secs> <description> <command> [args...]
+# Run the command until it succeeds or <max_attempts> attempts have been made
+# (use 0 for unlimited). Returns the command's last exit status.
+retry() {
+    local max=$1 delay=$2 what=$3
+    shift 3
+    local n=0 rc=0
+    while true; do
+        rc=0
+        "$@" || rc=$?
+        if [ "$rc" -eq 0 ]; then
+            return 0
+        fi
+        n=$((n + 1))
+        if [ "$max" -ne 0 ] && [ "$n" -ge "$max" ]; then
+            echo "$what failed after $n attempt(s) (rc=$rc)" >&2
+            return "$rc"
+        fi
+        echo "$what failed (rc=$rc), retry $n in ${delay}s" >&2
+        sleep "$delay"
+    done
+}
+
 
 if [ -n "$VSTART_DEST" ]; then
     SRC_PATH=`dirname $0`
@@ -1330,8 +1353,14 @@ EOF
             echo "{\"cephx_secret\": \"$OSD_SECRET\"}" > $CEPH_DEV_DIR/osd$osd/new.json
             ceph_adm osd new $uuid -i $CEPH_DEV_DIR/osd$osd/new.json
             rm $CEPH_DEV_DIR/osd$osd/new.json
-            prun $SUDO $CEPH_BIN/$ceph_osd $extra_osd_args -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid $extra_seastar_args \
-                2>&1 | tee $CEPH_OUT_DIR/osd-mkfs.$osd.log
+            # ceph-osd --mkfs authenticates to the monitor as the just-created
+            # osd.$osd entity, which the monitor can briefly reject with EACCES
+            # right after "osd new" (handle_auth_bad_method / failed to fetch
+            # mon config). Transient; retry past it.
+            retry 10 2 "ceph-osd --mkfs for osd.$osd" \
+                prun $SUDO $CEPH_BIN/$ceph_osd $extra_osd_args -i $osd $ARGS \
+                --mkfs --key $OSD_SECRET --osd-uuid $uuid $extra_seastar_args \
+                > $CEPH_OUT_DIR/osd-mkfs.$osd.log 2>&1 || exit $?
 
             local key_fn=$CEPH_DEV_DIR/osd$osd/keyring
             cat > $key_fn<<EOF
