@@ -262,7 +262,8 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   throw po::validation_error(po::validation_error::invalid_option_value);
 }
 
-void format(const ImageStats& image_stats, Formatter* f, bool global_search) {
+void format(const ImageStats& image_stats, Formatter* f,
+            const std::string& pool_filter) {
   TextTable tbl;
   if (f) {
     f->open_array_section("images");
@@ -310,7 +311,7 @@ void format(const ImageStats& image_stats, Formatter* f, bool global_search) {
       f->close_section();
     } else {
       std::string name;
-      if (global_search) {
+      if (pool_filter.empty() || image_stat.pool_name != pool_filter) {
         name += image_stat.pool_name + "/";
         if (!image_stat.pool_namespace.empty()) {
           name += image_stat.pool_namespace + "/";
@@ -648,7 +649,7 @@ int execute_iostat(const po::variables_map &vm,
         printed_notice = true;
       }
     } else {
-      iostat::format(image_stats, f, pool_spec.empty());
+      iostat::format(image_stats, f, pool);
       if (f != nullptr) {
         break;
       }
@@ -704,13 +705,19 @@ int execute_iotop(const po::variables_map &vm,
 }
 
 Shell::Action top_action(
-  {"perf", "image", "iotop"}, {}, "Display a top-like IO monitor.", "",
+  {"perf", "image", "iotop"}, {}, "Display a top-like IO monitor.",
+  "The pool/pool-spec refers to the pool where image data is stored (the data\n"
+  "pool for images created with --data-pool, otherwise the pool where the\n"
+  "image is defined).\n",
   &get_arguments_iotop, &execute_iotop);
 
 #endif // HAVE_CURSES
 
 Shell::Action stat_action(
-  {"perf", "image", "iostat"}, {}, "Display image IO statistics.", "",
+  {"perf", "image", "iostat"}, {}, "Display image IO statistics.",
+  "The pool/pool-spec refers to the pool where image data is stored (the data\n"
+  "pool for images created with --data-pool, otherwise the pool where the\n"
+  "image is defined).\n",
   &get_arguments_iostat, &execute_iostat);
 } // namespace perf
 } // namespace action
