@@ -113,6 +113,10 @@ class FuseMountBase(CephFSMountBase):
         if self.client_keyring_path and self.client_id:
             mount_cmd += ['-k', self.client_keyring_path]
 
+        if not self.cephfs_name:
+            self.fs.discover()
+            self.cephfs_name = self.fs.name
+
         self.validate_subvol_options()
 
         if self.cephfs_mntpt:
