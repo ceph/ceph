@@ -22,6 +22,23 @@ describe('NfsFormComponent', () => {
   let activatedRoute: ActivatedRouteStub;
   let router: Router;
 
+  const nfsClusterListResponse = [
+    {
+      name: 'mynfs',
+      enable_rdma: false,
+      backend: [],
+      virtual_ip: null,
+      placement: {}
+    }
+  ];
+
+  const flushNfsClusterList = () => {
+    const req = httpTesting.expectOne(
+      (request) => request.url === 'api/nfs-ganesha/cluster' && request.params.get('info') === 'true'
+    );
+    req.flush(nfsClusterListResponse);
+  };
+
   configureTestBed({
     declarations: [NfsFormComponent, NfsFormClientComponent],
     imports: [
@@ -41,7 +58,7 @@ describe('NfsFormComponent', () => {
 
   const matchSquash = (backendSquashValue: string, uiSquashValue: string) => {
     component.ngOnInit();
-    httpTesting.expectOne('api/nfs-ganesha/cluster').flush(['mynfs']);
+    flushNfsClusterList();
     httpTesting.expectOne('ui-api/nfs-ganesha/cephfs/filesystems').flush([{ id: 1, name: 'a' }]);
     httpTesting.expectOne('api/nfs-ganesha/export/mynfs/1').flush({
       fsal: {
@@ -72,7 +89,7 @@ describe('NfsFormComponent', () => {
     RgwHelper.selectDaemon();
     fixture.detectChanges();
 
-    httpTesting.expectOne('api/nfs-ganesha/cluster').flush(['mynfs']);
+    flushNfsClusterList();
     httpTesting.expectOne('ui-api/nfs-ganesha/cephfs/filesystems').flush([{ id: 1, name: 'a' }]);
     httpTesting.verify();
   });
@@ -98,9 +115,31 @@ describe('NfsFormComponent', () => {
       subvolume: '',
       subvolume_group: '_nogroup',
       transportTCP: true,
-      transportUDP: true
+      transportUDP: true,
+      transportRDMA: false
     });
     expect(component.nfsForm.get('cluster_id').disabled).toBeFalsy();
+  });
+
+  it('should hide RDMA transport when cluster does not support it', () => {
+    expect(component.clusterRdmaEnabled).toBe(false);
+  });
+
+  it('should show RDMA transport when cluster supports it', () => {
+    component.allClusters = [{ cluster_id: 'rdma-cluster', enable_rdma: true }];
+    component.updateClusterRdmaAvailability('rdma-cluster');
+    expect(component.clusterRdmaEnabled).toBe(true);
+  });
+
+  it('should clear RDMA transport when switching to a non-RDMA cluster', () => {
+    component.allClusters = [
+      { cluster_id: 'rdma-cluster', enable_rdma: true },
+      { cluster_id: 'no-rdma-cluster', enable_rdma: false }
+    ];
+    component.nfsForm.get('transportRDMA').setValue(true);
+    component.updateClusterRdmaAvailability('no-rdma-cluster');
+    expect(component.clusterRdmaEnabled).toBe(false);
+    expect(component.nfsForm.get('transportRDMA').value).toBe(false);
   });
 
   it('should prepare data when selecting an cluster', () => {
@@ -222,8 +261,8 @@ describe('NfsFormComponent', () => {
 
   describe('pathExistence', () => {
     beforeEach(() => {
-      component['nfsService']['lsDir'] = jest.fn((): Observable<Directory> =>
-        of({ paths: ['/path1'] })
+      component['nfsService']['lsDir'] = jest.fn(
+        (): Observable<Directory> => of({ paths: ['/path1'] })
       );
       component.nfsForm.get('name').setValue('CEPH');
       component.setPathValidation();
