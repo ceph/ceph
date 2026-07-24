@@ -42,6 +42,14 @@ Options
 
    Path to cephfs-shell.conf
 
+.. option:: -C, --ceph-config FILE
+
+   Path to ceph.conf
+
+.. option:: -I, --ceph-id ID
+
+   Ceph auth client id.
+
 .. option:: -f, --fs FS
 
    Name of filesystem to mount.
