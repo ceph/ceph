@@ -24,7 +24,7 @@ from ceph.deployment.service_spec import (
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent, service_to_daemon_types
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
-from mgr_util import parse_combined_pem_file
+from ceph.deployment.tls_utils import SSLConfigException, parse_tls_pem_bundle
 
 from .utils import get_node_proxy_status_value, resolve_ip, SpecialHostLabels
 from .migrations import queue_migrate_nfs_spec, queue_migrate_rgw_spec
@@ -405,7 +405,21 @@ class SpecStore():
                 else:
                     cert_str = rgw_cert
                 assert isinstance(cert_str, str)
-                cert, key = parse_combined_pem_file(cert_str)
+                # parse_tls_pem_bundle is the canonical parser for any TLS PEM
+                # bundle (plain cert, cert+key, or fullchain with intermediates)
+                # — it preserves the full chain and validates key/cert match.
+                # Explicitly typed Optional[str]: this name is reused further
+                # down in this function (nvmeof branch) with Optional values,
+                # and Python/mypy give a single type to a name across the
+                # whole function body, not per if/elif block.
+                cert: Optional[str]
+                key: Optional[str]
+                try:
+                    cert, key = parse_tls_pem_bundle(cert_str)
+                except SSLConfigException as exc:
+                    cert, key = '', ''
+                    # Never log cert_str — it may contain private key material.
+                    logger.error(f'Cannot parse RGW certificate PEM: {exc}')
                 if cert and key:
                     self.mgr.cert_mgr.save_cert(
                         'rgw_ssl_cert',
@@ -418,7 +432,8 @@ class SpecStore():
                         service_name=rgw_spec.service_name(),
                         user_made=True)
                 else:
-                    logger.error(f'Cannot parse the rgw certificate {cert_str}.')
+                    # Never log cert_str — it may contain private key material.
+                    logger.error('Cannot parse the rgw certificate: missing certificate or key.')
         elif spec.service_type == 'iscsi':
             iscsi_spec = cast(IscsiServiceSpec, spec)
             if iscsi_spec.ssl_cert:

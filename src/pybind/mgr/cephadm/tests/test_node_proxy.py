@@ -7,7 +7,7 @@ from cherrypy.test import helper
 from cephadm.agent import NodeProxyEndpoint
 from unittest.mock import MagicMock, call, patch
 from cephadm.inventory import AgentCache, NodeProxyCache, Inventory
-from cephadm.ssl_cert_utils import SSLCerts
+from cephadm.ssl_certs import SSLCerts
 from . import node_proxy_data
 
 

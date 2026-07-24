@@ -42,7 +42,7 @@ from ceph.deployment.hostspec import (
 from ceph.deployment.utils import unwrap_ipv6, valid_addr, verify_non_negative_int
 from ceph.deployment.utils import verify_positive_int, verify_non_negative_number
 from ceph.deployment.utils import verify_boolean, verify_enum, verify_int, verify_non_empty_string
-from ceph.deployment.utils import parse_combined_pem_file, validate_port, validate_unique_ports
+from ceph.deployment.utils import validate_port, validate_unique_ports
 from ceph.cephadm.d3n_types import D3NCacheSpec, D3NCacheError
 from ceph.utils import is_hex
 from ceph.smb import constants as smbconst
@@ -1776,18 +1776,39 @@ class RGWSpec(ServiceSpec):
 
         return ports
 
+    def _migrate_legacy_rgw_frontend_ssl_certificate(self) -> None:
+
+        if self.rgw_frontend_ssl_certificate is None:
+            return
+
+        from ceph.deployment.tls_utils import SSLConfigException, parse_tls_pem_bundle
+
+        combined_cert = self.rgw_frontend_ssl_certificate
+        if isinstance(combined_cert, list):
+            combined_cert = '\n'.join(combined_cert)
+
+        try:
+            ssl_cert, ssl_key = parse_tls_pem_bundle(combined_cert)
+        except SSLConfigException:
+            # Could not migrate legacy rgw_frontend_ssl_certificate field. Leaving field unchanged.
+            return
+
+        if not (ssl_cert and ssl_key):
+            # Could not migrate legacy rgw_frontend_ssl_certificate field
+            # for service. We expect a PEM bundle containing both an
+            # unencrypted private key and at least one certificate. Leaving
+            # field unchanged.
+            return
+
+        self.ssl_cert = ssl_cert
+        self.ssl_key = ssl_key
+        self.certificate_source = CertificateSource.INLINE.value
+        self.rgw_frontend_ssl_certificate = None
+
     def validate(self) -> None:
 
-        if self.ssl:
-            if not self.ssl_cert and self.rgw_frontend_ssl_certificate:
-                combined_cert = self.rgw_frontend_ssl_certificate
-                if isinstance(combined_cert, list):
-                    combined_cert = '\n'.join(combined_cert)
-                self.certificate_source = CertificateSource.INLINE.value
-                self.ssl_cert, self.ssl_key = parse_combined_pem_file(combined_cert)
-                self.rgw_frontend_ssl_certificate = None
-                if not (self.ssl_cert and self.ssl_key):
-                    raise SpecValidationError("Failed to parse rgw_frontend_ssl_certificate field.")
+        if self.ssl and not self.ssl_cert and self.rgw_frontend_ssl_certificate:
+            self._migrate_legacy_rgw_frontend_ssl_certificate()
 
         # This validation is done after adjusting the SSL field so when
         # RGW Spec is updated with the right fields before validation
