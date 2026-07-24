@@ -124,17 +124,25 @@ do
     if [ $vstart -eq 1 ]; then
         executable="./bin/$executable"
     fi
+    # Allow per-test gtest filter overrides via environment variables.
+    # E.g. OMAP_GTEST_FILTER='-OmapTest.OmapRecovery:OmapTest.NoOmapRecovery'
+    gtest_filter_var="${f^^}_GTEST_FILTER"
+    gtest_filter_var="${gtest_filter_var//[^A-Z0-9_]/_}"
+    gtest_filter_arg=""
+    if [ -n "${!gtest_filter_var}" ]; then
+        gtest_filter_arg="--gtest_filter=${!gtest_filter_var}"
+    fi
     if [ $parallel -eq 1 ]; then
         r=`printf '%25s' $f`
         ff=`echo $f | awk '{print $1}'`
-        bash -o pipefail -exc "$executable --gtest_output=xml:$GTEST_OUTPUT_DIR/$f.xml $color 2>&1 | tee ceph_test_rados_$ff.log | sed \"s/^/$r: /\"" &
+        bash -o pipefail -exc "$executable --gtest_output=xml:$GTEST_OUTPUT_DIR/$f.xml $color $gtest_filter_arg 2>&1 | tee ceph_test_rados_$ff.log | sed \"s/^/$r: /\"" &
         pid=$!
         echo "test $f on pid $pid"
 	    pids[$f]=$pid
         test_type["$f"]="rados" # Store test type for later use in parallel mode
     else
         # If running in serial mode, run the test directly
-        if ! timeout $timeout $executable; then
+        if ! timeout $timeout $executable $gtest_filter_arg; then
             echo "ERROR: Test $f timed out after $timeout seconds"
             echo "Check the logs for failures in $f"
             ret=1
