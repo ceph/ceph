@@ -21,6 +21,7 @@ static const size_t MAX_LIST_ENTRIES = 1000;
 static const size_t MAX_TRIM_ENTRIES = 1000;
 
 static const string TIMEINDEX_PREFIX = "1_";
+static const string EXTINDEX_PREFIX  = "2_";
 
 static void get_index_time_prefix(const utime_t& ts,
                                   string& index)
@@ -57,6 +58,81 @@ static int parse_index(const string& index,
   return ret;
 }
 
+static void get_ext_index_key(const string& key_ext,
+			      string *ext_index)
+{
+	*ext_index = EXTINDEX_PREFIX;
+	ext_index->append(key_ext);
+}
+
+static int add_ext_index(cls_method_context_t hctx,
+			 const string& key_ext,
+			 const string& index,
+			 string* old_index)
+{
+  old_index->clear();
+
+  if (key_ext.empty()) {
+    return 0;
+  }
+
+  string ext_index;
+  get_ext_index_key(key_ext, &ext_index);
+  bufferlist bl;
+
+  int ret = cls_cxx_map_get_val(hctx, ext_index, &bl);
+  if (ret < 0 && ret != -ENOENT) {
+    CLS_LOG(1, "ERROR: cls_cxx_map_get_val failed ret=%d", ret);
+    return ret;
+  }
+
+  if (ret != -ENOENT) {
+    try {
+      auto bl_iter = bl.cbegin();
+      decode(*old_index, bl_iter);
+    } catch (ceph::buffer::error& err) {
+      CLS_LOG(1, "ERROR: failed to decode old index");
+      return -EIO;
+    }
+    bl.clear();
+  }
+
+  encode(index, bl);
+  ret = cls_cxx_map_set_val(hctx, ext_index, &bl);
+  if (ret < 0) {
+    CLS_LOG(1, "ERROR: cls_cxx_map_set_val failed ret=%d", ret);
+    return ret;
+  }
+
+  return 0;
+}
+
+static int remove_ext_index(cls_method_context_t hctx,
+			    const string& index)
+{
+  utime_t key_ts;
+  string key_ext;
+
+  int ret = parse_index(index, key_ts, key_ext);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: could not parse index=%s", index.c_str());
+  }
+  if (key_ext.empty()) {
+    return 0;
+  }
+
+  string ext_index;
+  get_ext_index_key(key_ext, &ext_index);
+
+  ret = cls_cxx_map_remove_key(hctx, ext_index);
+  if (ret < 0 && ret != -ENOENT) {
+    CLS_LOG(1, "ERROR: cls_cxx_map_remove_key failed ret=%d", ret);
+    return ret;
+  }
+
+  return 0;
+}
+
 static int cls_timeindex_add(cls_method_context_t hctx,
                              bufferlist * const in,
                              bufferlist * const out)
@@ -79,9 +155,26 @@ static int cls_timeindex_add(cls_method_context_t hctx,
     string index;
     get_index(hctx, entry.key_ts, entry.key_ext, index);
 
+    string old_index;
+    int ret = add_ext_index(hctx, entry.key_ext, index, &old_index);
+    if (ret < 0) {
+      CLS_LOG(1, "ERROR: cls_timeindex_add_op(): failed to add ext index");
+      return ret;
+    }
+
+    if (!old_index.empty()) {
+      CLS_LOG(20, "removing old entry at %s", old_index.c_str());
+
+      ret = cls_cxx_map_remove_key(hctx, old_index);
+      if (ret < 0 && ret != -ENOENT) {
+	CLS_LOG(1, "ERROR: cls_cxx_map_remove_key failed ret=%d", ret);
+	return ret;
+      }
+    }
+
     CLS_LOG(20, "storing entry at %s", index.c_str());
 
-    int ret = cls_cxx_map_set_val(hctx, index, &entry.value);
+    ret = cls_cxx_map_set_val(hctx, index, &entry.value);
     if (ret < 0) {
       return ret;
     }
@@ -229,6 +322,12 @@ static int cls_timeindex_trim(cls_method_context_t hctx,
     int rc = cls_cxx_map_remove_key(hctx, index);
     if (rc < 0) {
       CLS_LOG(1, "ERROR: cls_cxx_map_remove_key failed rc=%d", rc);
+      return rc;
+    }
+
+    rc = remove_ext_index(hctx, index);
+    if (rc < 0) {
+      CLS_LOG(1, "ERROR: cls_timeindex_trim: failed to remove ext index");
       return rc;
     }
 
