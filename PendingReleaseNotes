@@ -4,6 +4,14 @@
   from ``false`` to ``true``.
 * RGW: The default value of ``rgw_rest_conn_ip_fail_timeout_secs`` changed
   from ``2`` to ``30`` seconds.
+* RADOS: Changing a pool's CRUSH rule can now optionally preserve data
+  placement: with ``mon_crush_rule_change_preserve_acting`` enabled, the
+  monitor stages ``pg-upmap-items`` entries in the same map epoch as the rule
+  change, keeping each shard on an OSD of its acting set whenever the new
+  failure domain allows it and relocating only the violating shards (either
+  load-aware, the default, or by deterministic hashing; see
+  ``mon_crush_rule_change_preserve_acting_fill_strategy``). This avoids
+  relocating the bulk of a pool when only its failure domain changes.
 
 * ``src/script/ceph-backport.sh`` now runs on macOS in addition to Linux: it
   re-execs under GNU bash >= 4 when the system bash is too old, and honors a
