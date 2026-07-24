@@ -622,6 +622,37 @@ commands, as in the following examples:
    be restarted for the changes to take effect.
 
 
+.. _radosgw-bucket-management:
+
+Bucket Management
+=================
+
+.. _radosgw-remove-all-objects:
+
+Removing All Objects from a Bucket
+-----------------------------------
+
+The ``object rm --all`` command removes all objects from a bucket while leaving
+the bucket itself and its policies (ACL, lifecycle configuration, etc.) intact.
+This differs from ``bucket rm``, which deletes the bucket entirely.
+
+``--yes-i-really-mean-it`` is required as a guardrail. Objects are deleted and
+queued to garbage collection as normal:
+
+.. prompt:: bash #
+
+   radosgw-admin object rm --all --bucket=<bucket-name> --yes-i-really-mean-it
+
+To remove objects via async AIO instead, bypassing garbage collection, use
+``--bypass-gc``:
+
+.. prompt:: bash #
+
+   radosgw-admin object rm --all --bucket=<bucket-name> --bypass-gc --yes-i-really-mean-it
+
+.. note:: This command may not be supported by all drivers. In that case
+   it will return ``ENOTSUP``.
+
 .. _radosgw-rate-limit-management:
 
 Rate Limit Management

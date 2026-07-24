@@ -208,6 +208,8 @@ void usage()
   cout << "  bi list                          list raw bucket index entries\n";
   cout << "  bi purge                         purge bucket index entries\n";
   cout << "  object rm                        remove object; include --yes-i-really-mean-it to force removal from bucket index\n";
+  cout << "                                   use --all to remove all objects from a bucket while keeping the bucket itself;\n";
+  cout << "                                   combine with --bypass-gc to remove via async AIO instead of garbage collection\n";
   cout << "  object put                       put object\n";
   cout << "  object stat                      stat an object for its metadata\n";
   cout << "  object manifest                  display the manifest of an object, producing a list of RADOS objects containing the data\n";
@@ -3905,6 +3907,7 @@ int main(int argc, const char **argv)
   int sync_stats = false;
   int reset_stats = false;
   int bypass_gc = false;
+  int all_objects = false;
   int warnings_only = false;
   int inconsistent_index = false;
 
@@ -4388,6 +4391,8 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &extra_info, NULL, "--extra-info", (char*)NULL)) {
      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &bypass_gc, NULL, "--bypass-gc", (char*)NULL)) {
+     // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &all_objects, NULL, "--all", (char*)NULL)) {
      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &warnings_only, NULL, "--warnings-only", (char*)NULL)) {
      // do nothing
@@ -8788,12 +8793,41 @@ next:
       return -ret;
     }
 
-    rgw_obj_key key(object, object_version);
-
-    ret = rgw_remove_object(dpp(), driver, bucket.get(), key, null_yield, yes_i_really_mean_it);
-    if (ret < 0) {
-      cerr << "ERROR: object remove returned: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
+    if (all_objects) {
+      if (bucket_name.empty()) {
+        cerr << "ERROR: bucket name required" << std::endl;
+        return EINVAL;
+      }
+      if (!object.empty()) {
+        cerr << "ERROR: --object is not compatible with --all" << std::endl;
+        return EINVAL;
+      }
+      if (!object_version.empty()) {
+        cerr << "ERROR: --object-version is not compatible with --all" << std::endl;
+        return EINVAL;
+      }
+      if (!yes_i_really_mean_it) {
+        cerr << "ERROR: this command removes all objects in the bucket. "
+             << "Add --yes-i-really-mean-it to confirm." << std::endl;
+        return EINVAL;
+      }
+      bucket_op.set_delete_children(true);
+      ret = RGWBucketAdminOp::remove_all_objects(driver, bucket_op, null_yield, dpp(), bypass_gc, true);
+      if (ret < 0) {
+        cerr << "ERROR: remove_all_objects returned: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+    } else {
+      if (object.empty()) {
+        cerr << "ERROR: object not specified" << std::endl;
+        return EINVAL;
+      }
+      rgw_obj_key key(object, object_version);
+      ret = rgw_remove_object(dpp(), driver, bucket.get(), key, null_yield, yes_i_really_mean_it);
+      if (ret < 0) {
+        cerr << "ERROR: object remove returned: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
     }
   }
 

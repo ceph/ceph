@@ -704,6 +704,9 @@ class RadosBucket : public StoreBucket {
     RadosStore* store;
     RGWAccessControlPolicy acls;
     std::string topics_oid() const;
+    int delete_objects_sync(const DoutPrefixProvider* dpp, bool delete_children, optional_yield y);
+    int delete_objects_aio(const DoutPrefixProvider* dpp, optional_yield y,
+			       int concurrent_max, bool keep_index_consistent);
 
   public:
     RadosBucket(RadosStore *_st)
@@ -731,6 +734,12 @@ class RadosBucket : public StoreBucket {
 				 keep_index_consistent,
 				 optional_yield y, const
 				 DoutPrefixProvider *dpp) override;
+    virtual int remove_all_objects(const DoutPrefixProvider* dpp,
+			     bool delete_children, optional_yield y) override;
+    virtual int remove_all_objects_bypass_gc(int concurrent_max,
+				       bool keep_index_consistent,
+				       optional_yield y,
+				       const DoutPrefixProvider* dpp) override;
     virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
     virtual int set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy& acl, optional_yield y) override;
     int create(const DoutPrefixProvider* dpp, const CreateParams& params,
