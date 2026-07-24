@@ -15,9 +15,12 @@
 // -----------------------------------------------------------------------------
 #include <algorithm>
 #include <cerrno>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 // -----------------------------------------------------------------------------
-#include "common/debug.h"
 #include "ErasureCodeIsa.h"
+#include "erasure-code/ErasureCodeLog.h"
 #include "include/ceph_assert.h"
 using namespace std;
 using namespace ceph;
@@ -26,20 +29,6 @@ using namespace ceph;
 extern "C" {
 #include "isa-l/include/erasure_code.h"
 #include "isa-l/include/raid.h"
-}
-// -----------------------------------------------------------------------------
-#define dout_context g_ceph_context
-#define dout_subsys ceph_subsys_osd
-#undef dout_prefix
-#define dout_prefix _prefix(_dout)
-// -----------------------------------------------------------------------------
-
-// -----------------------------------------------------------------------------
-
-static ostream&
-_prefix(std::ostream* _dout)
-{
-  return *_dout << "ErasureCodeIsa: ";
 }
 // -----------------------------------------------------------------------------
 
@@ -67,12 +56,12 @@ ErasureCodeIsa::get_chunk_size(unsigned int stripe_width) const
 {
   unsigned alignment = get_alignment();
   unsigned chunk_size = (stripe_width + k - 1) / k;
-  dout(20) << "get_chunk_size: chunk_size " << chunk_size
-           << " must be modulo " << alignment << dendl;
+  EC_LOG(20, "get_chunk_size: chunk_size %u must be modulo %u",
+         chunk_size, alignment);
   unsigned modulo = chunk_size % alignment;
   if (modulo) {
-    dout(10) << "get_chunk_size: " << chunk_size
-             << " padded to " << chunk_size + alignment - modulo << dendl;
+    EC_LOG(10, "get_chunk_size: %u padded to %u",
+           chunk_size, chunk_size + alignment - modulo);
     chunk_size += alignment - modulo;
   }
   return chunk_size;
@@ -450,7 +439,7 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
   if ((m == 1) || 
       ((matrixtype == kVandermonde) && (nerrs == 1) && (erasures[0] < (k + 1)))) {
     // single parity decoding
-    dout(20) << "isa_decode: reconstruct using xor_gen [" << erasures[0] << "]" << dendl;
+    EC_LOG(20, "isa_decode: reconstruct using xor_gen [%d]", erasures[0]);
     isa_xor(recover_buf, recover_buf[k], blocksize, k);
     return 0;
   }
@@ -488,7 +477,7 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
 
     offset += snprintf(sig_buf + offset, sizeof(sig_buf) - offset, "+%d", r);
     if (offset >= (int)sizeof(sig_buf)) {
-      dout(0) << "isa_decode: signature buffer overflow" << dendl;
+      EC_LOG(0, "isa_decode: signature buffer overflow");
       return -1;
     }
   }
@@ -500,7 +489,7 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
   for (int p = 0; p < nerrs; p++) {
     offset += snprintf(sig_buf + offset, sizeof(sig_buf) - offset, "-%d", erasures[p]);
     if (offset >= (int)sizeof(sig_buf)) {
-      dout(0) << "isa_decode: signature buffer overflow" << dendl;
+      EC_LOG(0, "isa_decode: signature buffer overflow");
       return -1;
     }
   }
@@ -533,7 +522,7 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
     // does not help. Therefor we keep the code simpler.
     // --------------------------------------------------------
     if (gf_invert_matrix(b, d, k) < 0) {
-      dout(0) << "isa_decode: bad matrix" << dendl;
+      EC_LOG(0, "isa_decode: bad matrix");
       return -1;
     }
 
@@ -647,8 +636,7 @@ ErasureCodeIsaDefault::prepare()
   ceph_assert(p_enc_coeff);
 
   if (!*p_enc_coeff) {
-    dout(10) << "[ cache tables ] creating coeff for k=" <<
-      k << " m=" << m << dendl;
+    EC_LOG(10, "[ cache tables ] creating coeff for k=%d m=%d", k, m);
     // build encoding coefficients which need to be computed once for each (k,m)
     //
     // the coeff array is freed by ErasureCodeIsaTableCache::setEncodingCoefficient
@@ -670,8 +658,7 @@ ErasureCodeIsaDefault::prepare()
   ceph_assert(encode_coeff);
 
   if (!*p_enc_table) {
-    dout(10) << "[ cache tables ] creating tables for k=" <<
-      k << " m=" << m << dendl;
+    EC_LOG(10, "[ cache tables ] creating tables for k=%d m=%d", k, m);
     // build encoding table which needs to be computed once for each (k,m)
     encode_tbls = new unsigned char[k * (m + k)*32];
     ec_init_tables(k, m, &encode_coeff[k * k], encode_tbls);
@@ -688,9 +675,9 @@ ErasureCodeIsaDefault::prepare()
   unsigned memory_lru_cache =
     k * (m + k) * 32 * tcache.decoding_tables_lru_length;
 
-  dout(10) << "[ cache memory ] = " << memory_lru_cache << " bytes" <<
-    " [ matrix ] = " <<
-    ((matrixtype == kVandermonde) ? "Vandermonde" : "Cauchy") << dendl;
+  EC_LOG(10, "[ cache memory ] = %u bytes [ matrix ] = %s",
+         memory_lru_cache,
+         (matrixtype == kVandermonde) ? "Vandermonde" : "Cauchy");
 
   ceph_assert((matrixtype == kVandermonde) || (matrixtype == kCauchy));
 
