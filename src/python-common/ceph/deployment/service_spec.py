@@ -1381,13 +1381,7 @@ yaml.add_representer(ServiceSpec, ServiceSpec.yaml_representer)
 
 
 class NFSServiceSpec(ServiceSpec):
-    COLOCATION_PORT_FIELDS = ['data_port', 'monitoring_port', 'cluster_qos_port']
-    COLOCATION_PORT_FIELDS_WITH_RDMA = [
-        'data_port',
-        'monitoring_port',
-        'cluster_qos_port',
-        'rdma_port'
-    ]
+    COLOCATION_PORT_FIELDS = ['data_port', 'monitoring_port']
 
     def __init__(self,
                  service_type: str = 'nfs',
@@ -1467,13 +1461,18 @@ class NFSServiceSpec(ServiceSpec):
         self.tls_min_version = tls_min_version
 
     def get_colocation_port_fields(self) -> List[str]:
-        """Return port fields for colocation; include rdma_port when RDMA is enabled."""
+        """Return port fields for colocation; include rdma_port when RDMA is enabled and cluster_qos_port when QoS is configured."""
+        fields = list(self.COLOCATION_PORT_FIELDS)
+        if self.cluster_qos_config:
+            fields.append('cluster_qos_port')
         if self.enable_rdma:
-            return self.COLOCATION_PORT_FIELDS_WITH_RDMA
-        return self.COLOCATION_PORT_FIELDS
+            fields.append('rdma_port')
+        return fields
 
     def get_port_start(self) -> List[int]:
-        ports = [self.port or 2049, self.monitoring_port or 9587, self.cluster_qos_port or 31311]
+        ports = [self.port or 2049, self.monitoring_port or 9587]
+        if self.cluster_qos_config:
+            ports.append(self.cluster_qos_port or 31311)
         if self.enable_rdma:
             ports.append(self.rdma_port or 20049)
         return ports
@@ -1486,7 +1485,7 @@ class NFSServiceSpec(ServiceSpec):
         if not self.colocation_ports:
             return []
         fields = self.get_colocation_port_fields()
-        return [[port_dict[field] for field in fields]
+        return [[port_dict.get(field, 0) for field in fields]
                 for port_dict in self.colocation_ports]
 
     def rados_config_name(self):

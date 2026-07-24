@@ -596,12 +596,13 @@ def test_alertmanager_spec_2():
 
 
 def test_nfs_spec_rdma_default():
-    """NFS spec without RDMA: enable_rdma is False, get_port_start returns 2 ports."""
+    """NFS spec without RDMA or QoS: get_port_start returns 2 ports."""
     spec = NFSServiceSpec(service_id='mynfs', placement=PlacementSpec(count=1))
     assert spec.enable_rdma is False
     assert spec.rdma_port is None
-    assert spec.get_port_start() == [2049, 9587, 31311]
-    assert spec.get_colocation_port_fields() == ['data_port', 'monitoring_port', 'cluster_qos_port']
+    assert spec.cluster_qos_config is None
+    assert spec.get_port_start() == [2049, 9587]
+    assert spec.get_colocation_port_fields() == ['data_port', 'monitoring_port']
 
 
 def test_nfs_spec_rdma_enabled():
@@ -613,8 +614,8 @@ def test_nfs_spec_rdma_enabled():
     )
     assert spec.enable_rdma is True
     assert spec.rdma_port is None
-    assert spec.get_port_start() == [2049, 9587, 31311, 20049]
-    assert spec.get_colocation_port_fields() == ['data_port', 'monitoring_port', 'cluster_qos_port', 'rdma_port']
+    assert spec.get_port_start() == [2049, 9587, 20049]
+    assert spec.get_colocation_port_fields() == ['data_port', 'monitoring_port', 'rdma_port']
 
 
 def test_nfs_spec_rdma_custom_port():
@@ -629,7 +630,37 @@ def test_nfs_spec_rdma_custom_port():
     )
     assert spec.enable_rdma is True
     assert spec.rdma_port == 20050
-    assert spec.get_port_start() == [3049, 9588, 31311, 20050]
+    assert spec.get_port_start() == [3049, 9588, 20050]
+
+
+def test_nfs_spec_qos_enabled():
+    """NFS spec with QoS: cluster_qos_port is included in colocation fields."""
+    spec = NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(count=1),
+        cluster_qos_config={'enable_qos': True, 'enable_bw_control': True},
+        cluster_qos_port=31312,
+    )
+    assert spec.cluster_qos_config is not None
+    assert spec.cluster_qos_port == 31312
+    assert spec.get_port_start() == [2049, 9587, 31312]
+    assert spec.get_colocation_port_fields() == ['data_port', 'monitoring_port', 'cluster_qos_port']
+
+
+def test_nfs_spec_qos_and_rdma():
+    """NFS spec with both QoS and RDMA enabled."""
+    spec = NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(count=1),
+        cluster_qos_config={'enable_qos': True, 'enable_bw_control': True},
+        cluster_qos_port=31312,
+        enable_rdma=True,
+        rdma_port=20050,
+    )
+    assert spec.cluster_qos_config is not None
+    assert spec.enable_rdma is True
+    assert spec.get_port_start() == [2049, 9587, 31312, 20050]
+    assert spec.get_colocation_port_fields() == ['data_port', 'monitoring_port', 'cluster_qos_port', 'rdma_port']
 
 
 def test_nfs_spec_from_json_rdma():
