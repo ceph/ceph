@@ -8282,7 +8282,7 @@ void RGWDeleteMultiObj::execute(optional_yield y)
     bool has_versioned = false;
     for (auto object : multi_delete->objects) {
       const string& instance = object.get_version_id();
-      if (instance.empty()) {
+      if (!instance.empty()) {
         has_versioned = true;
         break;
       }
