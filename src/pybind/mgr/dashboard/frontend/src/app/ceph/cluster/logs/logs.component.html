@@ -1,6 +1,4 @@
 <div *ngIf="contentData">
-  <ng-container *ngTemplateOutlet="logFiltersTpl"></ng-container>
-
   <nav
     ngbNav
     #nav="ngbNav"
@@ -16,6 +14,7 @@
         >Cluster Logs</a
       >
       <ng-template ngbNavContent>
+        <ng-container *ngTemplateOutlet="logFiltersTpl"></ng-container>
         @if (clog) {
           <div
             class="log-viewer"
@@ -72,6 +71,7 @@
         >Audit Logs</a
       >
       <ng-template ngbNavContent>
+        <ng-container *ngTemplateOutlet="logFiltersTpl"></ng-container>
         @if (audit_log && showAuditLogs) {
           <div class="log-viewer">
             @if (audit_log.length && showDownloadCopyButton) {
@@ -152,7 +152,7 @@
 
 <ng-template #logFiltersTpl>
   <div
-    class="row mb-3"
+    class="row mb-3 cds-mt-5"
     *ngIf="showFilterTools"
   >
     <div class="col-lg-10 d-flex">
@@ -249,14 +249,16 @@
       </div>
 
       <div class="col-md-5">
-        <legend
+        <label
           i18n
-          class="cds--label fw-bold"
+          class="fw-bold"
+          for="start-time"
         >
-          Time range:
-        </legend>
+          Time range:</label
+        >
         <div class="d-flex">
           <ngb-timepicker
+            id="start-time"
             [spinners]="false"
             [(ngModel)]="startTime"
             (ngModelChange)="filterLogs()"
