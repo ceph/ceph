@@ -3179,7 +3179,8 @@ cdef class LibCephFS(object):
         finally:
            free(buf)
 
-    def rmtree(self, trash_path, should_cancel=lambda: False, suppress_errors=False):
+    def rmtree(self, trash_path, should_cancel=lambda: False,
+               suppress_errors=False, mpr=None):
         '''
         Delete entire file hierarchy present under trash_path when trash_path is
         a dir. Do this deletion using depth-first (to prevent excessive memory
@@ -3194,11 +3195,12 @@ cdef class LibCephFS(object):
         if stat.S_ISDIR(st_b.st_mode):
             unlink_tree_worker = UnlinkTreeWorker(self, trash_path,
                                                   should_cancel,
-                                                  suppress_errors)
+                                                  suppress_errors, mpr)
             unlink_tree_worker.start()
         else:
             try:
                 self.unlink(trash_path)
+                mpr.inc_count()
                 return
             except Exception as e:
                 log.info('Following exception occurred while unlinking '
@@ -3266,7 +3268,7 @@ class UnlinkTreeWorker:
     unlink() (in a safe way) and recording failures.
     '''
 
-    def __init__(self, fs, trash_path, should_cancel, suppress_errors=False):
+    def __init__(self, fs, trash_path, should_cancel, suppress_errors=False, mpr=None):
         self.fs = fs
         self.trash_path = trash_path
         if isinstance(self.trash_path, str):
@@ -3274,6 +3276,9 @@ class UnlinkTreeWorker:
 
         self.should_cancel = should_cancel
         self.suppress_errors = suppress_errors
+
+        # instance of class that measures purge/deletion rate.
+        self.mpr = mpr
 
         # Stack needed for traversing the file heirarchy under trash_path in
         # depth-first, non-recursive fashion. Each stack member is an instance
@@ -3360,6 +3365,7 @@ class UnlinkTreeWorker:
                         break
                 else:
                     self.curr_dir.try_unlink(de.d_name, self.suppress_errors)
+                    self.mpr.inc_count()
 
                 de = self.curr_dir.read_dir()
 
@@ -3370,6 +3376,7 @@ class UnlinkTreeWorker:
                 if self.curr_dir.is_empty:
                     try:
                         self.curr_dir.try_rmdir(self.suppress_errors)
+                        self.mpr.inc_count()
                     except ObjectNotEmpty:
                         log.info(f'removing "{self.curr_dir.name}" failed with '
                                   'with ObjectNotEmpty even though dir empty '
