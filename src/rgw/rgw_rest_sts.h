@@ -152,7 +152,6 @@ protected:
   STS::STSService sts;
 public:
   RGWREST_STS() = default;
-  int verify_permission(optional_yield y) override;
   void send_response() override;
 };
 
@@ -168,6 +167,7 @@ protected:
   std::string iss;
 public:
   RGWSTSAssumeRoleWithWebIdentity() = default;
+  int verify_permission(optional_yield y) override;
   void execute(optional_yield y) override;
   int get_params();
   const char* name() const override { return "assume_role_web_identity"; }
@@ -185,6 +185,7 @@ protected:
   std::string tokenCode;
 public:
   RGWSTSAssumeRole() = default;
+  int verify_permission(optional_yield y) override;
   void execute(optional_yield y) override;
   int get_params();
   const char* name() const override { return "assume_role"; }
