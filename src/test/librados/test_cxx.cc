@@ -123,22 +123,33 @@ std::string create_one_ec_pool_pp(const std::string &pool_name,
   return err;
 }
 
-std::string create_pool_pp(const std::string &pool_name, Rados &cluster) {
-  int ret = cluster.pool_create(pool_name.c_str());
-  if (ret) {
-    cluster.shutdown();
-    std::ostringstream oss;
-    oss << "cluster.pool_create(" << pool_name << ") failed with error " << ret;
-    return oss.str();
+std::string create_pool_pp(const std::string &pool_name, Rados &cluster, int size) {
+  std::ostringstream oss;
+  int ret;
+  if (size > 0) {
+    ret = cluster.mon_command(
+      "{\"prefix\": \"osd pool create\", \"pool\": \"" + pool_name +
+      "\", \"size\": " + std::to_string(size) + "}",
+      {}, NULL, NULL);
+    if (ret) {
+      oss << "mon_command osd pool create pool:" << pool_name
+          << " size:" << size << " failed with error " << ret;
+      return oss.str();
+    }
+  } else {
+    ret = cluster.pool_create(pool_name.c_str());
+    if (ret) {
+      cluster.shutdown();
+      oss << "cluster.pool_create(" << pool_name << ") failed with error " << ret;
+      return oss.str();
+    }
   }
 
   IoCtx ioctx;
   ret = cluster.ioctx_create(pool_name.c_str(), ioctx);
   if (ret < 0) {
     cluster.shutdown();
-    std::ostringstream oss;
-    oss << "cluster.ioctx_create(" << pool_name << ") failed with error "
-        << ret;
+    oss << "cluster.ioctx_create(" << pool_name << ") failed with error " << ret;
     return oss.str();
   }
   ioctx.application_enable("rados", true);
