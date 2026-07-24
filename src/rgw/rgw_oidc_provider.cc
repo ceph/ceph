@@ -3,13 +3,33 @@
 
 #include "rgw_oidc_provider.h"
 
+#include <cstring>
+#include <ctime>
+
 #define dout_subsys ceph_subsys_rgw
+
+std::string format_creation_date(ceph::real_time now)
+{
+  struct timeval tv;
+  ceph::real_clock::to_timeval(now, tv);
+
+  struct tm result;
+  gmtime_r(&tv.tv_sec, &result);
+  char buf[30];
+  strftime(buf, 30, "%Y-%m-%dT%H:%M:%S", &result);
+  sprintf(buf + strlen(buf), ".%03dZ", (int)tv.tv_usec / 1000);
+  return buf;
+}
 
 void RGWOIDCProviderInfo::dump(Formatter *f) const
 {
   encode_json("id", id, f);
   encode_json("provider_url", provider_url, f);
-  encode_json("arn", arn, f);
+  if (is_global_oidc_provider(*this)) {
+    encode_json("arn", provider_url, f);
+  } else {
+    encode_json("arn", arn, f);
+  }
   encode_json("creation_date", creation_date, f);
   encode_json("tenant", tenant, f);
   encode_json("client_ids", client_ids, f);

@@ -64,20 +64,7 @@ void RGWRestOIDCProvider::send_response()
 }
 
 
-static std::string format_creation_date(ceph::real_time now)
-{
-  struct timeval tv;
-  real_clock::to_timeval(now, tv);
-
-  struct tm result;
-  gmtime_r(&tv.tv_sec, &result);
-  char buf[30];
-  strftime(buf,30,"%Y-%m-%dT%H:%M:%S", &result);
-  sprintf(buf + strlen(buf),".%03dZ",(int)tv.tv_usec/1000);
-  return buf;
-}
-
-
+// format_creation_date() moved to rgw_oidc_provider.cc for reuse
 
 inline constexpr int MAX_OIDC_NUM_CLIENT_IDS = 100;
 inline constexpr int MAX_OIDC_CLIENT_ID_LEN = 255;

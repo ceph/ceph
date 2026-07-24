@@ -190,6 +190,11 @@
     role policy detach               detach a managed policy
     role policy list attached        list attached managed policies
     role update                      update max_session_duration of a role
+    oidc-provider create             create an OIDC provider (global if no --account-id)
+    oidc-provider modify             update thumbprints and/or client-ids of an OIDC provider
+    oidc-provider get                get an OIDC provider
+    oidc-provider delete             delete an OIDC provider
+    oidc-provider list               list OIDC providers
     reshard add                      schedule a resharding of a bucket
     reshard list                     list all bucket resharding or scheduled to be resharded
     reshard status                   read bucket resharding status
@@ -406,6 +411,11 @@
      --description                 Role description
      --policy-arn                  ARN of a managed policy
   
+  OIDC Provider options:
+     --provider-url                URL of the OIDC provider
+     --client-ids                  comma-separated list of client IDs
+     --thumbprints                 comma-separated list of thumbprints
+  
   MFA options:
      --totp-serial                 a string that represents the ID of a TOTP token
      --totp-seed                   the secret seed that is used to calculate the TOTP
@@ -448,3 +458,4 @@
     --setgroup GROUP  set gid to group or gid
     --version         show version and quit
   
+
