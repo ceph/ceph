@@ -33,10 +33,12 @@ class OmapTest : public ceph::test::PoolTypeTestFixture {
 protected:
   std::string nspace;
   uint64_t alignment = 0;
+  static std::chrono::seconds recovery_budget;
 
   static void SetUpTestSuite() {
     SKIP_IF_CRIMSON();
     ASSERT_EQ("", connect_cluster_pp(rados));
+    recovery_budget = std::chrono::minutes(15);
   }
 
   static void TearDownTestSuite() {
@@ -141,11 +143,10 @@ protected:
 
   int wait_for_upmap(
       std::string oid,
-      int desired_primary,
-      std::chrono::seconds timeout) {
+      int desired_primary) {
     bool upmap_in_effect = false;
     auto start_time = std::chrono::steady_clock::now();
-    while (!upmap_in_effect && (std::chrono::steady_clock::now() - start_time < timeout)) {
+    while (!upmap_in_effect && (std::chrono::steady_clock::now() - start_time < recovery_budget)) {
       ceph::messaging::osd::OSDMapReply reply;
       int res = request_osd_map(oid, &reply);
       EXPECT_TRUE(res == 0);
@@ -157,6 +158,14 @@ protected:
         std::this_thread::sleep_for(std::chrono::seconds(1));
       }
     }
+    // Deduct elapsed time so the next Recovery test inherits a reduced budget,
+    // but guarantee each test always has at least 60 seconds to work with.
+    auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::steady_clock::now() - start_time);
+    static constexpr auto min_budget = std::chrono::seconds(60);
+    auto deductible = std::min(elapsed, recovery_budget - min_budget);
+    recovery_budget -= std::max(deductible, std::chrono::seconds(0));
+    std::cout << "New recovery_budget: " << recovery_budget << std::endl;
     return upmap_in_effect ? 0 : -ETIMEDOUT;
   }
 
@@ -199,6 +208,9 @@ protected:
   // Helper to get standard test omap data
   std::map<std::string, bufferlist> get_test_omap_data();
 };
+
+// Static member definitions for OmapTest
+std::chrono::seconds OmapTest::recovery_budget{0};
 
 // Helper method to create a test object with omap data
 void OmapTest::create_test_object_with_omap(
@@ -593,7 +605,7 @@ TEST_P(OmapTest, OmapRecovery) {
   EXPECT_TRUE(rc == 0);
 
   // 5. Wait for new upmap to appear as acting set of osds
-  int res2 = wait_for_upmap("change_upmap_oid", new_primary, 60s);
+  int res2 = wait_for_upmap("change_upmap_oid", new_primary);
   EXPECT_TRUE(res2 == 0);
   
   // 6. Read omap
@@ -636,7 +648,7 @@ TEST_P(OmapTest, NoOmapRecovery) {
   EXPECT_TRUE(rc == 0);
 
   // 5. Wait for new upmap to appear as acting set of osds
-  int res2 = wait_for_upmap("no_omap_oid", new_primary, 60s);
+  int res2 = wait_for_upmap("no_omap_oid", new_primary);
   EXPECT_TRUE(res2 == 0);
 
   // 6. Read data
@@ -713,7 +725,7 @@ TEST_P(OmapTest, LargeOmapRecovery) {
   EXPECT_TRUE(rc == 0);
 
   // 5. Wait for new upmap to appear as acting set of osds
-  int res2 = wait_for_upmap("large_oid", new_primary, 60s);
+  int res2 = wait_for_upmap("large_oid", new_primary);
   EXPECT_TRUE(res2 == 0);
 
   // 6. Read omap
@@ -1813,10 +1825,8 @@ TEST_P(OmapTest, GenerationalObjectRecovery) {
   std::cout << "Set new upmap to trigger recovery" << std::endl;
   
   // 6. Wait for recovery to complete
-  int res2 = wait_for_upmap(oid, new_primary, 60s);
+  int res2 = wait_for_upmap(oid, new_primary);
   EXPECT_TRUE(res2 == 0);
-  
-  std::cout << "Recovery completed" << std::endl;
   
   // 7. Read omap - verify we got the NEW head value, not old generation
   // If the bug exists, recovery might have retrieved data from wrong generation
