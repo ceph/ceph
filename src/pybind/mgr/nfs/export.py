@@ -581,7 +581,7 @@ class ExportMgr:
         nfs_caps = [
             'mon', 'allow r',
             'osd', osd_cap,
-            'mds', f'allow rw path={path}'
+            'mds', f'allow all path={path}'
         ]
 
         ret, out, err = self.mgr.mon_command({
