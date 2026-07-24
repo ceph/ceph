@@ -800,14 +800,6 @@ def get_devices(_sys_block_path='/sys/block', device=''):
         if is_ceph_rbd(diskname):
             continue
 
-        # If the mapper device is a logical volume it gets excluded
-        try:
-            if UdevData(diskname).is_lvm:
-                continue
-        except RuntimeError:
-            logger.debug("get_devices(): device {} couldn't be found.".format(diskname))
-            continue
-
         # all facts that have no defaults
         # (<name>, <path relative to _sys_block_path>)
         facts = [('removable', 'removable'),
