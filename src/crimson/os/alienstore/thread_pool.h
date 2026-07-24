@@ -44,7 +44,7 @@ public:
     try {
       if constexpr (std::is_void_v<T>) {
         func();
-        state.set();
+        state.set(seastar::internal::monostate{});
       } else {
         state.set(func());
       }
@@ -58,7 +58,7 @@ public:
       if (state.failed()) {
         return futurator_t::make_exception_future(state.get_exception());
       } else {
-        return futurator_t::from_tuple(state.get_value());
+        return futurator_t::from_tuple(std::move(state).get_value());
       }
     });
   }

@@ -327,7 +327,7 @@ static seastar::future<> run(
         seastar::promise<> pr_report;
         fut_report = pr_report.get_future();
         seastar::do_with(
-            TimerReport(seastar::smp::count),
+            TimerReport(seastar::this_smp_shard_count()),
             [this](auto &report) {
           return seastar::do_until(
             [this] { return is_stopped; },
@@ -588,7 +588,7 @@ static seastar::future<> run(
              unsigned nonce_base,
              std::optional<unsigned> server_sid)
         : sid{seastar::this_shard_id()},
-          id{sid + num_clients - seastar::smp::count},
+          id{sid + num_clients - seastar::this_smp_shard_count()},
           server_sid{server_sid},
           num_clients{num_clients},
           num_conns{num_conns},
@@ -650,7 +650,7 @@ static seastar::future<> run(
       // should start messenger at this shard?
       bool is_active() {
         ceph_assert(seastar::this_shard_id() == sid);
-        return sid + num_clients >= seastar::smp::count;
+        return sid + num_clients >= seastar::this_smp_shard_count();
       }
 
       seastar::future<> init() {
@@ -1114,14 +1114,14 @@ static seastar::future<> run(
     // reserve core 0 for potentially better performance
     if (mode == perf_mode_t::both) {
       logger().info("\nperf settings:\n  smp={}\n  {}\n  {}\n",
-                    seastar::smp::count, client_conf.str(), server_conf.str());
+                    seastar::this_smp_shard_count(), client_conf.str(), server_conf.str());
       if (client_conf.skip_core_0) {
-        ceph_assert(seastar::smp::count > client_conf.num_clients);
+        ceph_assert(seastar::this_smp_shard_count() > client_conf.num_clients);
       } else {
-        ceph_assert(seastar::smp::count >= client_conf.num_clients);
+        ceph_assert(seastar::this_smp_shard_count() >= client_conf.num_clients);
       }
       ceph_assert(client_conf.num_clients > 0);
-      ceph_assert(seastar::smp::count > server_conf.core + client_conf.num_clients);
+      ceph_assert(seastar::this_smp_shard_count() > server_conf.core + client_conf.num_clients);
       return seastar::when_all_succeed(
         // it is not reasonable to allow server/client to shared cores for
         // performance benchmarking purposes.
@@ -1139,11 +1139,11 @@ static seastar::future<> run(
       });
     } else if (mode == perf_mode_t::client) {
       logger().info("\nperf settings:\n  smp={}\n  {}\n",
-                    seastar::smp::count, client_conf.str());
+                    seastar::this_smp_shard_count(), client_conf.str());
       if (client_conf.skip_core_0) {
-        ceph_assert(seastar::smp::count > client_conf.num_clients);
+        ceph_assert(seastar::this_smp_shard_count() > client_conf.num_clients);
       } else {
-        ceph_assert(seastar::smp::count >= client_conf.num_clients);
+        ceph_assert(seastar::this_smp_shard_count() >= client_conf.num_clients);
       }
       ceph_assert(client_conf.num_clients > 0);
       return client->init(
@@ -1156,9 +1156,9 @@ static seastar::future<> run(
         return client->shutdown();
       });
     } else { // mode == perf_mode_t::server
-      ceph_assert(seastar::smp::count > server_conf.core);
+      ceph_assert(seastar::this_smp_shard_count() > server_conf.core);
       logger().info("\nperf settings:\n  smp={}\n  {}\n",
-                    seastar::smp::count, server_conf.str());
+                    seastar::this_smp_shard_count(), server_conf.str());
       return seastar::async([server, server_conf] {
         // FIXME: SIGINT is not received by stop_signal
         seastar_apps_lib::stop_signal should_stop;

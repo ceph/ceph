@@ -87,7 +87,7 @@ public:
     return seastar::do_with(
       std::vector<seastar::foreign_ptr<local_cached_map_t>>(),
       [this, map](auto &fmaps) {
-	fmaps.resize(seastar::smp::count);
+	fmaps.resize(seastar::this_smp_shard_count());
 	for (auto &i: fmaps) {
 	  i = seastar::foreign_ptr(map);
 	}

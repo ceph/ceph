@@ -486,7 +486,7 @@ seastar::future<> OSD::report_osd_stats()
 seastar::future<> OSD::start()
 {
   LOG_PREFIX(OSD::start);
-  INFO("seastar::smp::count {}", seastar::smp::count);
+  INFO("smp shard count {}", seastar::this_smp_shard_count());
   if (auto cpu_cores =
         local_conf().get_val<std::string>("crimson_cpu_set");
       cpu_cores.empty()) {
@@ -496,7 +496,7 @@ seastar::future<> OSD::start()
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
   DEBUG("starting store");
   uint32_t store_shards_num = co_await store.start();
-  co_await pg_to_shard_mappings.start(0, seastar::smp::count, store_shards_num);
+  co_await pg_to_shard_mappings.start(0, seastar::this_smp_shard_count(), store_shards_num);
   co_await osd_singleton_state.start_single(
         whoami, std::ref(*cluster_msgr), std::ref(*public_msgr),
         std::ref(*monc), std::ref(*mgrc));
@@ -521,7 +521,7 @@ seastar::future<> OSD::start()
     );
   auto stats_seconds = local_conf().get_val<int64_t>("crimson_osd_stat_interval");
   if (stats_seconds > 0) {
-    shard_stats.resize(seastar::smp::count);
+    shard_stats.resize(seastar::this_smp_shard_count());
     stats_timer.set_callback([this] {
       gate.dispatch_in_background("stats_osd", *this, [this] {
         return report_osd_stats();

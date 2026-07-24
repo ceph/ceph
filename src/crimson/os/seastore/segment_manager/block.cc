@@ -255,15 +255,15 @@ device_superblock_t make_superblock(
     "seastore_segment_size");
   size_t raw_segments = size / config_segment_size;
   size_t shard_tracker_size = SegmentStateTracker::get_raw_size(
-    raw_segments / seastar::smp::count,
+    raw_segments / seastar::this_smp_shard_count(),
     data.block_size);
-  size_t total_tracker_size = shard_tracker_size * seastar::smp::count;
+  size_t total_tracker_size = shard_tracker_size * seastar::this_smp_shard_count();
   size_t tracker_off = data.block_size;   //superblock
   size_t segments = (size - tracker_off - total_tracker_size) / config_segment_size;
-  size_t segments_per_shard = segments / seastar::smp::count;
+  size_t segments_per_shard = segments / seastar::this_smp_shard_count();
 
-  vector<device_shard_info_t> shard_infos(seastar::smp::count);
-  for (unsigned int i = 0; i < seastar::smp::count; i++) {
+  vector<device_shard_info_t> shard_infos(seastar::this_smp_shard_count());
+  for (unsigned int i = 0; i < seastar::this_smp_shard_count(); i++) {
     shard_infos[i].size = segments_per_shard * config_segment_size;
     shard_infos[i].segments = segments_per_shard;
     shard_infos[i].tracker_offset = tracker_off + i * shard_tracker_size;
@@ -276,12 +276,12 @@ device_superblock_t make_superblock(
        size,
        uint64_t(config_segment_size),
        data.block_size);
-  for (unsigned int i = 0; i < seastar::smp::count; i++) {
+  for (unsigned int i = 0; i < seastar::this_smp_shard_count(); i++) {
     INFO("shard {} infos: {}", i, shard_infos[i]);
   }
 
   return device_superblock_t::make_segmented(
-    seastar::smp::count,
+    seastar::this_smp_shard_count(),
     config_segment_size,
     data.block_size,
     std::move(sm_config),
@@ -492,8 +492,8 @@ seastar::future<> BlockSegmentManager::start(uint32_t shard_nums)
 {
   LOG_PREFIX(BlockSegmentManager::start);
   device_shard_nums = shard_nums;
-  auto num_shard_services = (device_shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
-  INFO("device_shard_nums={} seastar::smp={}, num_shard_services={}", device_shard_nums, seastar::smp::count, num_shard_services);
+  auto num_shard_services = (device_shard_nums + seastar::this_smp_shard_count() - 1 ) / seastar::this_smp_shard_count();
+  INFO("device_shard_nums={} seastar::smp={}, num_shard_services={}", device_shard_nums, seastar::this_smp_shard_count(), num_shard_services);
   return shard_devices.start(num_shard_services, device_path, superblock.config.spec.dtype);
 
 }
@@ -550,15 +550,15 @@ BlockSegmentManager::mount_ret BlockSegmentManager::shard_mount()
     return read_superblock(device, sd);
   }).safe_then([=, this](auto sb) ->mount_ertr::future<> {
     set_device_id(sb.config.spec.id);
-    if(seastar::this_shard_id() + seastar::smp::count * store_index >= sb.shard_num) {
+    if(seastar::this_shard_id() + seastar::this_smp_shard_count() * store_index >= sb.shard_num) {
       INFO("{} shard_id {} out of range {}",
       device_id_printer_t{get_device_id()},
-        seastar::this_shard_id() + seastar::smp::count * store_index,
+        seastar::this_shard_id() + seastar::this_smp_shard_count() * store_index,
         sb.shard_num);
       shard_status = false;
       return mount_ertr::now();
     }
-    shard_info = sb.shard_infos[seastar::this_shard_id() + seastar::smp::count * store_index];
+    shard_info = sb.shard_infos[seastar::this_shard_id() + seastar::this_smp_shard_count() * store_index];
     INFO("{} read {}", device_id_printer_t{get_device_id()}, shard_info);
     sb.validate();
     superblock = sb;

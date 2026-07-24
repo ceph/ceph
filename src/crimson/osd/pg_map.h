@@ -52,12 +52,12 @@ public:
     : store_shard_nums(store_shard_nums) {
     ceph_assert_always(min_core_mapping < core_mapping_limit);
     auto max_core_mapping = std::min(min_core_mapping + store_shard_nums, core_mapping_limit);
-    auto num_shard_services = (store_shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
-    auto num_alien_cores = (seastar::smp::count + store_shard_nums -1 ) / store_shard_nums;
+    auto num_shard_services = (store_shard_nums + seastar::this_smp_shard_count() - 1 ) / seastar::this_smp_shard_count();
+    auto num_alien_cores = (seastar::this_smp_shard_count() + store_shard_nums -1 ) / store_shard_nums;
 
     for (auto i = min_core_mapping; i != max_core_mapping; ++i) {
       for (unsigned int j = 0; j < num_shard_services; ++j) {
-        if (i - min_core_mapping + j * seastar::smp::count < store_shard_nums) {
+        if (i - min_core_mapping + j * seastar::this_smp_shard_count() < store_shard_nums) {
           core_shard_to_num_pgs[i].emplace(j, 0);
         }
       }

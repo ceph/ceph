@@ -145,7 +145,7 @@ SeaStore::SeaStore(
   : root(root),
     mdstore(std::move(mdstore))
 {
-  store_shard_nums = seastar::smp::count;
+  store_shard_nums = seastar::this_smp_shard_count();
 }
 
 SeaStore::~SeaStore() = default;
@@ -341,7 +341,7 @@ seastar::future<> SeaStore::get_shard_nums()
   auto [done, value] = tuple;
   if (done == -1) {
     INFO("seastore not mkfs yet");
-    store_shard_nums = seastar::smp::count;
+    store_shard_nums = seastar::this_smp_shard_count();
     co_return;
   } else {
     INFO("seastore mkfs done");
@@ -354,8 +354,8 @@ seastar::future<> SeaStore::get_shard_nums()
     store_shard_nums = shard_nums;
     if(crimson::common::get_conf<bool>("seastore_require_partition_count_match_reactor_count")) {
       INFO("seastore doesn't allow shard change");
-      if (store_shard_nums != seastar::smp::count) {
-        INFO("seastore shards {} do not match seastar::smp {}", store_shard_nums, seastar::smp::count);
+      if (store_shard_nums != seastar::this_smp_shard_count()) {
+        INFO("seastore shards {} do not match seastar::smp {}", store_shard_nums, seastar::this_smp_shard_count());
         ceph_abort_msg("seastore_require_partition_count_match_reactor_count is true, seastore shards do not match seastar::smp");
       }
     }
@@ -366,8 +366,8 @@ seastar::future<> SeaStore::get_shard_nums()
 seastar::future<> SeaStore::shard_stores_start(bool is_test)
 {
   LOG_PREFIX(SeaStore::shard_stores_start);
-  auto num_shard_services = (store_shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
-  INFO("store_shard_nums={} seastar::smp={}, num_shard_services={}", store_shard_nums, seastar::smp::count, num_shard_services);
+  auto num_shard_services = (store_shard_nums + seastar::this_smp_shard_count() - 1 ) / seastar::this_smp_shard_count();
+  INFO("store_shard_nums={} seastar::smp={}, num_shard_services={}", store_shard_nums, seastar::this_smp_shard_count(), num_shard_services);
   return shard_stores.start(num_shard_services, root, device.get(), is_test, store_shard_nums);
 }
 
@@ -414,7 +414,7 @@ seastar::future<> SeaStore::test_start(DeviceRef device_obj)
   ceph_assert(device_obj);
   ceph_assert(root == "");
   device = std::move(device_obj);
-  co_await shard_stores.start_single(1, root, device.get(), true, seastar::smp::count);
+  co_await shard_stores.start_single(1, root, device.get(), true, seastar::this_smp_shard_count());
   INFO("done");
 }
 
@@ -846,11 +846,11 @@ seastar::future<> SeaStore::report_stats()
         report_detail = true;
         seconds = mshard_store->reset_report_interval();
       }
-      shard_device_stats[seastar::this_shard_id() + seastar::smp::count * mshard_store->get_store_index()] =
+      shard_device_stats[seastar::this_shard_id() + seastar::this_smp_shard_count() * mshard_store->get_store_index()] =
         mshard_store->get_device_stats(report_detail, seconds);
-      shard_io_stats[seastar::this_shard_id() + seastar::smp::count * mshard_store->get_store_index()] =
+      shard_io_stats[seastar::this_shard_id() + seastar::this_smp_shard_count() * mshard_store->get_store_index()] =
         mshard_store->get_io_stats(report_detail, seconds);
-      shard_cache_stats[seastar::this_shard_id() + seastar::smp::count * mshard_store->get_store_index()] =
+      shard_cache_stats[seastar::this_shard_id() + seastar::this_smp_shard_count() * mshard_store->get_store_index()] =
         mshard_store->get_cache_stats(report_detail, seconds);
     });
   }).then([this, FNAME] {
@@ -875,7 +875,7 @@ seastar::future<> SeaStore::report_stats()
     oss_iops << "device IOPS: "
              << fmt::format(dfmt, iops)
              << " "
-             << fmt::format(dfmt, iops/seastar::smp::count)
+             << fmt::format(dfmt, iops/seastar::this_smp_shard_count())
              << "(";
 
     std::ostringstream oss_bd;
@@ -883,7 +883,7 @@ seastar::future<> SeaStore::report_stats()
     oss_bd << "device bandwidth(MiB): "
            << fmt::format(dfmt, bd_mb)
            << " "
-           << fmt::format(dfmt, bd_mb/seastar::smp::count)
+           << fmt::format(dfmt, bd_mb/seastar::this_smp_shard_count())
            << "(";
 
     for (const auto &s : shard_device_stats) {
@@ -909,10 +909,10 @@ seastar::future<> SeaStore::report_stats()
          io_total.read_num/seconds,
          io_total.get_bg_num()/seconds,
          io_total.flush_num/seconds,
-         io_total.io_num/seconds/seastar::smp::count,
-         io_total.read_num/seconds/seastar::smp::count,
-         io_total.get_bg_num()/seconds/seastar::smp::count,
-         io_total.flush_num/seconds/seastar::smp::count);
+         io_total.io_num/seconds/seastar::this_smp_shard_count(),
+         io_total.read_num/seconds/seastar::this_smp_shard_count(),
+         io_total.get_bg_num()/seconds/seastar::this_smp_shard_count(),
+         io_total.flush_num/seconds/seastar::this_smp_shard_count());
     auto calc_conflicts = [](uint64_t ios, uint64_t repeats) {
       return (double)(repeats-ios)/ios;
     };
@@ -926,15 +926,15 @@ seastar::future<> SeaStore::report_stats()
          io_total.pending_read_num,
          io_total.pending_bg_num,
          io_total.pending_flush_num,
-         (double)io_total.pending_io_num/seastar::smp::count,
-         (double)io_total.starting_io_num/seastar::smp::count,
-         (double)io_total.waiting_collock_io_num/seastar::smp::count,
-         (double)io_total.waiting_throttler_io_num/seastar::smp::count,
-         (double)io_total.processing_inlock_io_num/seastar::smp::count,
-         (double)io_total.processing_postlock_io_num/seastar::smp::count,
-         (double)io_total.pending_read_num/seastar::smp::count,
-         (double)io_total.pending_bg_num/seastar::smp::count,
-         (double)io_total.pending_flush_num/seastar::smp::count);
+         (double)io_total.pending_io_num/seastar::this_smp_shard_count(),
+         (double)io_total.starting_io_num/seastar::this_smp_shard_count(),
+         (double)io_total.waiting_collock_io_num/seastar::this_smp_shard_count(),
+         (double)io_total.waiting_throttler_io_num/seastar::this_smp_shard_count(),
+         (double)io_total.processing_inlock_io_num/seastar::this_smp_shard_count(),
+         (double)io_total.processing_postlock_io_num/seastar::this_smp_shard_count(),
+         (double)io_total.pending_read_num/seastar::this_smp_shard_count(),
+         (double)io_total.pending_bg_num/seastar::this_smp_shard_count(),
+         (double)io_total.pending_flush_num/seastar::this_smp_shard_count());
 
     std::ostringstream oss_pending;
     for (const auto &s : shard_io_stats) {
@@ -954,9 +954,9 @@ seastar::future<> SeaStore::report_stats()
     }
 
     cache_size_stats_t queue_sizes_ps = cache_total.pinboard_sizes;
-    queue_sizes_ps.divide_by(seastar::smp::count);
+    queue_sizes_ps.divide_by(seastar::this_smp_shard_count());
     cache_io_stats_t queue_io_ps = cache_total.pinboard_io;
-    queue_io_ps.divide_by(seastar::smp::count);
+    queue_io_ps.divide_by(seastar::this_smp_shard_count());
     INFO("cache pinboard: total{} {}; per-shard: total{} {}",
          cache_total.pinboard_sizes,
          cache_io_stats_printer_t{seconds, cache_total.pinboard_io},
@@ -964,9 +964,9 @@ seastar::future<> SeaStore::report_stats()
          cache_io_stats_printer_t{seconds, queue_io_ps});
 
     cache_size_stats_t dirty_sizes_ps = cache_total.dirty_sizes;
-    dirty_sizes_ps.divide_by(seastar::smp::count);
+    dirty_sizes_ps.divide_by(seastar::this_smp_shard_count());
     dirty_io_stats_t dirty_io_ps = cache_total.dirty_io;
-    dirty_io_ps.divide_by(seastar::smp::count);
+    dirty_io_ps.divide_by(seastar::this_smp_shard_count());
     INFO("cache dirty: total{} {}; per-shard: total{} {}",
          cache_total.dirty_sizes,
          dirty_io_stats_printer_t{seconds, cache_total.dirty_io},
@@ -974,7 +974,7 @@ seastar::future<> SeaStore::report_stats()
          dirty_io_stats_printer_t{seconds, dirty_io_ps});
 
     cache_access_stats_t access_ps = cache_total.access;
-    access_ps.divide_by(seastar::smp::count);
+    access_ps.divide_by(seastar::this_smp_shard_count());
     INFO("cache_access: total{}; per-shard{}",
          cache_access_stats_printer_t{seconds, cache_total.access},
          cache_access_stats_printer_t{seconds, access_ps});

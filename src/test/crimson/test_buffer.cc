@@ -23,10 +23,10 @@ seastar::future<> test_foreign_bufferlist()
     bl.claim_append(rhs);
     return bl;
   };
-  return seastar::map_reduce(seastar::smp::all_cpus(), make_foreign_buffer,
+  return seastar::map_reduce(seastar::this_smp_all_shards(), make_foreign_buffer,
                              bufferlist(), reduce).then(
     [] (bufferlist&& bl) {
-      if (bl.length() != 4 * seastar::smp::count) {
+      if (bl.length() != 4 * seastar::this_smp_shard_count()) {
         auto e = std::make_exception_ptr(std::runtime_error("wrong buffer size"));
         return seastar::make_exception_future<>(e);
       }
