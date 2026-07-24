@@ -1102,7 +1102,7 @@ int verify_target_bucket_policy(const DoutPrefixProvider* dpp,
     rgw::IAM::Environment env;
     const auto arn_it = env.emplace("aws:SourceArn", std::move(source_bucket_arn));
     const auto acct_it = env.emplace("aws:SourceAccount", std::move(source_account));
-    if (policy.eval(env, ident, rgw::IAM::s3PutObject, target_resource_arn) != rgw::IAM::Effect::Allow) {
+    if (policy.eval(dpp, env, ident, rgw::IAM::s3PutObject, target_resource_arn) != rgw::IAM::Effect::Allow) {
       ldpp_dout(dpp, 1) << "ERROR: logging bucket: '" << target_bucket_id <<
         "' must have a bucket policy that allows logging service principal to put objects in the following resource ARN: '" <<
         target_resource_arn.to_string() << "' from source bucket ARN: '" << arn_it->second <<

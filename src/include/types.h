@@ -114,6 +114,8 @@ template<class A, class B, class Hash, class KeyEqual>
 inline std::ostream& operator<<(std::ostream& out, const std::unordered_map<A,B,Hash, KeyEqual>& m);
 template<class A, class B, class Comp, class Alloc>
 inline std::ostream& operator<<(std::ostream& out, const std::multimap<A,B,Comp,Alloc>& m);
+template <class Key, class T, class Hash, class KeyEqual, class Alloc>
+inline std::ostream& operator<<(std::ostream& out, const std::unordered_multimap<Key, T, Hash, KeyEqual, Alloc>& m);
 }
 
 namespace boost {
@@ -293,6 +295,22 @@ inline std::ostream& operator<<(std::ostream& out, const std::multimap<A,B,Comp,
   return out;
 }
 
+template<class Key, class T, class Hash, class KeyEqual, class Alloc>
+inline std::ostream&
+operator<<(
+  std::ostream& out,
+  const std::unordered_multimap<Key, T, Hash, KeyEqual, Alloc>& m)
+{
+  out << "{{";
+  for (auto it = m.begin();
+       it != m.end();
+       ++it) {
+    if (it != m.begin()) out << ",";
+    out << it->first << "=" << it->second;
+  }
+  out << "}}";
+  return out;
+}
 } // namespace std
 
 namespace boost {
