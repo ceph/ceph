@@ -15,6 +15,7 @@
 #include "nvme_block_device.h"
 #include "block_rb_manager.h"
 #include "crimson/os/seastore/logging.h"
+#include "crimson/os/seastore/rbm_ool_io_timing.h"
 SET_SUBSYS(seastore_device);
 
 namespace crimson::os::seastore::random_block_device::nvme {
@@ -142,15 +143,19 @@ write_ertr::future<> NVMeBlockDevice::write(
     supported_stream = WRITE_LIFE_NOT_SET;
   }
   if (is_end_to_end_data_protection()) {
+    rbm_ool_io_dma_tracker_note_dma_start();
     co_await nvme_write(offset, bptr.length(), bptr.c_str());
+    rbm_ool_io_dma_tracker_note_dma_end();
     co_return;
   }
+  rbm_ool_io_dma_tracker_note_dma_start();
   auto ret = co_await io_device[supported_stream].dma_write(
     offset, bptr.c_str(), length).handle_exception(
     [FNAME](auto e) -> write_ertr::future<size_t> {
     ERROR("write: dma_write got error{}", e);
     return crimson::ct_error::input_output_error::make();
   });
+  rbm_ool_io_dma_tracker_note_dma_end();
   if (ret != length) {
     ERROR("write: dma_write got error with not proper length");
     co_await write_ertr::future<>(

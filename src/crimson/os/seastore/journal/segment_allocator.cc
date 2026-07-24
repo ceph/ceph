@@ -49,6 +49,9 @@ SegmentAllocator::do_open(bool is_mkfs)
 {
   LOG_PREFIX(SegmentAllocator::do_open);
   ceph_assert(!current_segment);
+#ifdef CRIMSON_DETAILED_SAMPLING
+  const auto alloc_start = seastar::lowres_clock::now();
+#endif
   segment_seq_t new_segment_seq =
     segment_seq_allocator.get_and_inc_next_segment_seq();
   auto meta = sm_group.get_meta();
@@ -60,13 +63,26 @@ SegmentAllocator::do_open(bool is_mkfs)
   auto new_segment_id = segment_provider.allocate_segment(
       new_segment_seq, type, category, gen);
   ceph_assert(new_segment_id != NULL_SEG_ID);
+#ifdef CRIMSON_DETAILED_SAMPLING
+  last_roll_parts.open_alloc =
+      seastar::lowres_clock::now() - alloc_start;
+  const auto sm_open_start = seastar::lowres_clock::now();
+#endif
   return sm_group.open(new_segment_id
   ).handle_error(
     open_ertr::pass_further{},
     crimson::ct_error::assert_all(
       "Invalid error in SegmentAllocator::do_open open"
     )
-  ).safe_then([this, is_mkfs, FNAME, new_segment_seq](auto sref) {
+  ).safe_then([this, is_mkfs, FNAME, new_segment_seq
+#ifdef CRIMSON_DETAILED_SAMPLING
+               , sm_open_start
+#endif
+              ](auto sref) {
+#ifdef CRIMSON_DETAILED_SAMPLING
+    last_roll_parts.open_sm_open =
+        seastar::lowres_clock::now() - sm_open_start;
+#endif
     // initialize new segment
     segment_id_t segment_id = sref->get_segment_id();
     journal_seq_t dirty_tail;
@@ -122,6 +138,9 @@ SegmentAllocator::do_open(bool is_mkfs)
       paddr_t::make_seg_paddr(segment_id, written_to)};
     segment_provider.update_segment_avail_bytes(
         type, new_journal_seq.offset);
+#ifdef CRIMSON_DETAILED_SAMPLING
+    const auto header_start = seastar::lowres_clock::now();
+#endif
     return sref->write(0, std::move(bl)
     ).handle_error(
       open_ertr::pass_further{},
@@ -131,7 +150,14 @@ SegmentAllocator::do_open(bool is_mkfs)
     ).safe_then([this,
                  FNAME,
                  new_journal_seq,
+#ifdef CRIMSON_DETAILED_SAMPLING
+                 header_start,
+#endif
                  sref=std::move(sref)]() mutable {
+#ifdef CRIMSON_DETAILED_SAMPLING
+      last_roll_parts.open_header =
+          seastar::lowres_clock::now() - header_start;
+#endif
       ceph_assert(!current_segment);
       current_segment = std::move(sref);
       DEBUG("{} rolled new segment id={}",
@@ -164,9 +190,20 @@ SegmentAllocator::roll_ertr::future<>
 SegmentAllocator::roll()
 {
   ceph_assert(can_write());
+#ifdef CRIMSON_DETAILED_SAMPLING
+  const auto close_start = seastar::lowres_clock::now();
+  return close_segment().safe_then([this, close_start] {
+    last_roll_parts.close = seastar::lowres_clock::now() - close_start;
+    const auto open_start = seastar::lowres_clock::now();
+    return do_open(false).safe_then([this, open_start](auto) {
+      last_roll_parts.open = seastar::lowres_clock::now() - open_start;
+    });
+  });
+#else
   return close_segment().safe_then([this] {
     return do_open(false).discard_result();
   });
+#endif
 }
 
 journal_seq_t
@@ -265,6 +302,42 @@ SegmentAllocator::close_segment()
   assert(bl.length() == sm_group.get_rounded_tail_length());
 
   auto p_seg_to_close = seg_to_close.get();
+#ifdef CRIMSON_DETAILED_SAMPLING
+  const auto advance_start = seastar::lowres_clock::now();
+  return p_seg_to_close->advance_wp(
+    sm_group.get_segment_size() - sm_group.get_rounded_tail_length()
+  ).safe_then([this, FNAME, bl=std::move(bl),
+               seg_to_close=std::move(seg_to_close),
+               advance_start]() mutable {
+    last_roll_parts.close_advance_wp =
+        seastar::lowres_clock::now() - advance_start;
+    auto* p_seg_to_close = seg_to_close.get();
+    DEBUG("Writing tail info to segment {}", p_seg_to_close->get_segment_id());
+    const auto write_start = seastar::lowres_clock::now();
+    return p_seg_to_close->write(
+      sm_group.get_segment_size() - sm_group.get_rounded_tail_length(),
+      std::move(bl)
+    ).safe_then([this, p_seg_to_close, write_start,
+                 seg_to_close=std::move(seg_to_close)]() mutable {
+      last_roll_parts.close_write_tail =
+          seastar::lowres_clock::now() - write_start;
+      const auto seg_close_start = seastar::lowres_clock::now();
+      return p_seg_to_close->close(
+      ).safe_then([this, seg_close_start,
+                   seg_to_close=std::move(seg_to_close)]() mutable {
+        last_roll_parts.close_seg_close =
+            seastar::lowres_clock::now() - seg_close_start;
+        const auto provider_start = seastar::lowres_clock::now();
+        segment_provider.close_segment(seg_to_close->get_segment_id());
+        last_roll_parts.close_provider =
+            seastar::lowres_clock::now() - provider_start;
+      });
+    });
+  }).handle_error(
+    close_segment_ertr::pass_further{},
+    crimson::ct_error::assert_all(
+    "Invalid error in SegmentAllocator::close_segment"));
+#else
   return p_seg_to_close->advance_wp(
     sm_group.get_segment_size() - sm_group.get_rounded_tail_length()
   ).safe_then([this, FNAME, bl=std::move(bl), p_seg_to_close]() mutable {
@@ -280,6 +353,7 @@ SegmentAllocator::close_segment()
     close_segment_ertr::pass_further{},
     crimson::ct_error::assert_all(
     "Invalid error in SegmentAllocator::close_segment"));
+#endif
 
 }
 
