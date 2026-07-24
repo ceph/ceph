@@ -88,6 +88,10 @@ int ErasureCode::init(
 int ErasureCode::create_rule(
   const std::string &name,
   int num_zones,
+  const std::string &root,
+  const std::string &zone_failure_domain,
+  const std::string &osd_failure_domain,
+  const std::string &device_class,
   CrushWrapper &crush,
   std::ostream *ss) const
 {
@@ -96,12 +100,12 @@ int ErasureCode::create_rule(
     unsigned int m = get_chunk_count() - k;
     return crush.add_simple_stretch_rule(
       name,
-      rule_root,
-      rule_zone_failure_domain,
-      rule_osd_failure_domain,
+      root.empty() ? rule_root : root,
+      zone_failure_domain.empty() ? rule_zone_failure_domain : zone_failure_domain,
+      osd_failure_domain.empty() ? rule_osd_failure_domain : osd_failure_domain,
       num_zones,
       k + m,
-      rule_device_class,
+      device_class.empty() ? rule_device_class : device_class,
       "indep",
       pg_pool_t::TYPE_ERASURE,
       false,

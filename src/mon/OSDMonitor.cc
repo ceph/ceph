@@ -7852,6 +7852,10 @@ int OSDMonitor::crush_rule_create_replica(const string &name,
 
 int OSDMonitor::crush_rule_create_erasure(const string &name,
                int64_t num_zones,
+               const std::string &root,
+               const std::string &zone_failure_domain,
+               const std::string &osd_failure_domain,
+               const std::string &device_class,
 					     const string &profile,
 					     int *rule,
 					     ostream *ss)
@@ -7882,7 +7886,8 @@ int OSDMonitor::crush_rule_create_erasure(const string &name,
       return err;
     }
 
-    err = erasure_code->create_rule(name, num_zones, newcrush, ss);
+    err = erasure_code->create_rule(name, num_zones, root,
+      zone_failure_domain, osd_failure_domain, device_class, newcrush, ss);
     erasure_code.reset();
     if (err < 0)
       return err;
@@ -8318,6 +8323,10 @@ int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
       {
 	int err = crush_rule_create_erasure(rule_name,
                  num_zones,
+                 root,
+                 zone_failure_domain,
+                 osd_failure_domain,
+                 device_class,
 					       erasure_code_profile,
 					       crush_rule, ss);
 	return handle_crush_rule_creation_result(err, pool_name);
@@ -8858,25 +8867,21 @@ int OSDMonitor::prepare_new_pool(string& name,
       }
     } else {
       if (pool_type == pg_pool_t::TYPE_ERASURE && num_zones > 1) {
-    stringstream ec_opt_ss;
-    int ec_opt_result = enable_pool_ec_optimizations(*pi, &ec_opt_ss, true);
-    
-    if (ec_opt_result != 0) {
-      // FastEC validation failed, pool creation must fail
-      *ss << "Multi-zone erasure coded pools require FastEC support. "
-          << "The erasure code profile '" << erasure_code_profile << "' "
-          << "does not support FastEC: " << ec_opt_ss.str()
-          << "Please use a FastEC-compatible profile (e.g., plugin=jerasure technique=reed_sol_van, "
-          << "or plugin=isa).";
-      return ec_opt_result;
-    }
-    
-    dout(20) << __func__ << " enabled FastEC for multi-zone pool " << name
-             << " with profile " << erasure_code_profile << dendl;
-  } else if (pool_type == pg_pool_t::TYPE_ERASURE &&
-             cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations")) {
-        // Silently fail silently if the pool cannot support ec optimizations
-        std::ignore = enable_pool_ec_optimizations(*pi, true);
+	if (auto r = enable_pool_ec_optimizations(*pi, true); !r) {
+	  // FastEC validation failed, pool creation must fail
+	  *ss << "Multi-zone erasure coded pools require FastEC support. "
+	      << "The erasure code profile '" << erasure_code_profile << "' "
+	      << "does not support FastEC: " << r.error().message
+	      << " Please use a FastEC-compatible profile (e.g., plugin=jerasure"
+	      << " technique=reed_sol_van, or plugin=isa).";
+	  return r.error().error;
+	}
+	dout(20) << __func__ << " enabled FastEC for multi-zone pool " << name
+		 << " with profile " << erasure_code_profile << dendl;
+      } else if (pool_type == pg_pool_t::TYPE_ERASURE &&
+		 cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations")) {
+	// Silently ignore if the pool cannot support ec optimizations
+	std::ignore = enable_pool_ec_optimizations(*pi, true);
       }
     }
   }
@@ -12577,7 +12582,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     int rule;
-    err = crush_rule_create_erasure(name, num_zones, profile, &rule, &ss);
+    err = crush_rule_create_erasure(name, num_zones, "", "", "", "", profile, &rule, &ss);
     if (err < 0) {
       switch(err) {
       case -EEXIST: // return immediately
