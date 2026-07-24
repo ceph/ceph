@@ -1912,6 +1912,46 @@ TEST_P(tm_random_block_device_test_t, scatter_allocation)
   });
 }
 
+TEST_P(tm_random_block_device_test_t, storage_full_failsafe_threshold)
+{
+  run_async([this] {
+    // A fresh store is far below the default failsafe ratio (0.97).
+    EXPECT_FALSE(tm->is_storage_full());
+
+    auto st = tm->store_stat();
+    ASSERT_GT(st.total, 0);
+    ASSERT_GE(st.total, st.available);
+
+    // Lower the ratio to just above the current used fraction, leaving half
+    // of the upcoming allocation as margin on each side of the threshold, so
+    // the allocation below is what crosses it.
+    constexpr extent_len_t EXTENT_SIZE = 16384;
+    constexpr unsigned NUM_EXTENTS = 64;
+    constexpr uint64_t alloc_bytes = uint64_t(EXTENT_SIZE) * NUM_EXTENTS;
+    const double used_fraction =
+      double(st.total - st.available) / double(st.total);
+    const double ratio =
+      used_fraction + double(alloc_bytes) / (2.0 * double(st.total));
+    crimson::common::local_conf().set_val(
+      "osd_failsafe_full_ratio", std::to_string(ratio)).get();
+    EXPECT_FALSE(tm->is_storage_full());
+
+    laddr_t ADDR = get_laddr_hint(0xFF * 4096);
+    auto t = create_transaction();
+    for (unsigned i = 0; i < NUM_EXTENTS; i++) {
+      alloc_extents(
+	t, (ADDR + i * EXTENT_SIZE).checked_to_laddr(), EXTENT_SIZE, 'a');
+    }
+    submit_transaction(std::move(t));
+    EXPECT_TRUE(tm->is_storage_full());
+
+    // The threshold tracks the config knob: restoring the default clears it.
+    crimson::common::local_conf().set_val(
+      "osd_failsafe_full_ratio", "0.97").get();
+    EXPECT_FALSE(tm->is_storage_full());
+  });
+}
+
 TEST_P(tm_single_device_test_t, basic)
 {
   constexpr size_t SIZE = 4096;

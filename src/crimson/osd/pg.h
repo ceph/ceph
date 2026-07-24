@@ -240,6 +240,10 @@ public:
     return false;
   }
 
+  bool is_local_store_full() const {
+    return shard_services.is_local_storage_full(get_store_index());
+  }
+
   epoch_t get_last_peering_reset_epoch() const final {
     return get_last_peering_reset();
   }
@@ -269,7 +273,7 @@ public:
     return pgid;
   }
 
-  const unsigned int get_store_index() {
+  unsigned get_store_index() const {
     return store_index;
   }
   PGBackend& get_backend() {
