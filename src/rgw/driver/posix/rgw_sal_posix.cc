@@ -1563,6 +1563,30 @@ int VersionedDirectory::set_cur_version_ent(const DoutPrefixProvider* dpp, FSEnt
   return 0;
 }
 
+int VersionedDirectory::get_latest_version_ent(const DoutPrefixProvider* dpp, std::unique_ptr<FSEnt> &latest)
+{
+  std::unique_ptr<Symlink> sl = std::make_unique<Symlink>(get_name(), this, ctx);
+  int ret = sl->stat(dpp);
+  if (ret < 0) {
+    if (ret == -ENOENT)
+      return 0;
+    return ret;
+  }
+
+  if (!sl->exists()) {
+    return 0;
+  }
+
+  auto nent = sl->get_target()->clone_base();
+  ret = nent->open(dpp);
+  if (ret < 0) {
+    return 0;
+  }
+  latest.swap(nent);
+  return 0;
+}
+
+
 int VersionedDirectory::stat(const DoutPrefixProvider* dpp, bool force)
 {
   int ret = Directory::stat(dpp, force);
@@ -1622,8 +1646,9 @@ int VersionedDirectory::stat(const DoutPrefixProvider* dpp, bool force)
       if (flags & rgw_bucket_dir_entry::FLAG_DELETE_MARKER) {
         ldpp_dout(dpp, 0) << "ERROR: a delete marker, returning ENOENT "
                           << get_name() << dendl;
-        cur_version.reset();
-        return -ENOENT;
+        curr_is_dm = true;
+//      cur_version.reset();
+//      return -ENOENT;
       }
     }
   }
@@ -1734,7 +1759,8 @@ int VersionedDirectory::copy(const DoutPrefixProvider *dpp, optional_yield y,
   }
 
   std::string tgtname;
-  ret = for_each(dpp, [this, &dest, &dest_key, &tgtname, &dpp, &y](const char* name) {
+  bool found{false};
+  ret = for_each(dpp, [this, &dest, &dest_key, &tgtname, &found, &dpp, &y](const char* name) {
     std::unique_ptr<FSEnt> sobj;
 
     if (name[0] == '.') {
@@ -1746,6 +1772,7 @@ int VersionedDirectory::copy(const DoutPrefixProvider *dpp, optional_yield y,
       /* Were asked to copy a single version, and this is not it */
       return 0;
     }
+    found = true;
 
     int r = this->get_ent(dpp, y, name, std::string(), sobj);
     if (r < 0)
@@ -1755,11 +1782,16 @@ int VersionedDirectory::copy(const DoutPrefixProvider *dpp, optional_yield y,
     return sobj->copy(dpp, y, dest.get(), tgtname);
   });
 
-  if (!dest_key.instance.empty()) {
+  if (!dest_key.instance.empty() && !found) {
+    return -ENOENT;
+  }
+
+  if (found && !dest_key.instance.empty()) {
     /* We didn't copy the symlink, make a new one */
     std::unique_ptr<Symlink> sl = std::make_unique<Symlink>(basename, dest.get(), tgtname, ctx);
     ret = sl->create(dpp, /*existed=*/nullptr, /*temp_file=*/false);
   }
+
 
   return ret;
 }
@@ -1833,9 +1865,10 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y,
     key.instance = gen_rand_instance_name();
     tgtname = get_key_fname(key, /*use_version=*/true);
 
-    result->delete_marker = true;
-    result->version_id = key.instance;
-
+    if (result) {
+      result->delete_marker = true;
+      result->version_id = key.instance;
+    }
     f = std::make_unique<File>(tgtname, this, ctx);
     ret = add_delete_marker(dpp, y, f, tgtname);
     if (ret < 0) {
@@ -1848,6 +1881,7 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y,
       return ret;
     }
     cur_version = std::move(f);
+    curr_is_dm = true;
     return 0;
   } else {
     /* Delete specific version */
@@ -1868,12 +1902,16 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y,
       }
       bufferlist bl;
       if (get_attr(attrs, RGW_POSIX_ATTR_VERSION, bl)) {
-       result->delete_marker = true;
+        if (result) {
+          result->delete_marker = true;
+        }
       }
       ret = f->remove(dpp, y, /*delete_children=*/true, result);
       if (ret < 0)
        return ret;
-      result->version_id = instance_id;
+      if (result) {
+        result->version_id = instance_id;
+      }
     } else {
       return ret;
     }
@@ -1910,13 +1948,28 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y,
     if (ret < 0) {
       return ret;
     }
+    ret = f->stat(dpp);
+    if (ret < 0) {
+      return ret;
+    }
+
     ret = set_cur_version_ent(dpp, f.get());
     if (ret < 0) {
       return ret;
     }
+/*
     cur_version = std::move(f);
+    Attrs attrs;
+    ret = f->read_attrs(dpp, null_yield, attrs);
+    if (ret < 0) {
+      return ret;
+    }
+    bufferlist bl;
+    if (rgw::sal::get_attr(attrs, RGW_POSIX_ATTR_VERSION, bl)) {
+      curr_is_dm = true;  
+    }
+*/
   }
-
   return 0;
 }
 
@@ -3962,13 +4015,33 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
   cls_rgw_obj_key key;
   get_key().get_index_key(&key);
 
-  if (ret == -ENOENT) {
-    if (!versioned() || !key.instance.empty() ) {
+  if (!versioned()) {
+    if (ret == -ENOENT) {
+      return 0;
+    }
+    ret = ent->remove(dpp, y, /*delete_children=*/false, &del_result);
+
+    if (ret < 0) {
+      return ret;
+    }
+    driver->get_bucket_cache()->remove_entry(dpp, b->get_name(), key);
+    driver->get_quota_handler()->update_stats(b->get_owner(), b->get_key(),
+                                              -1, 0, state.accounted_size);
+    return 0;
+  }
+
+  bool created = false;
+  auto* vd_ent = static_cast<posix::VersionedDirectory*>(ent.get());
+  // Versioned bucket
+  if (vd_ent && !vd_ent->get_cur_version_ent()) {
+    if (!key.instance.empty()) {
       // Nothing to do
       return 0;
     }
+  }
+  if (!vd_ent){
     // A delete marker must be created even if the key does not exist
-    // Create the versioned directory and create a delete marker
+    // Create the versioned directory in order to be able to create a delete marker
     ret = make_ent(ObjectType::VERSIONED);
     if (ret < 0) {
       return ret;
@@ -3979,56 +4052,98 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
       ldpp_dout(dpp, 0) << "ERROR: could not create " << ent->get_name() << dendl;
       return ret;
     }
+    created = true;
+    vd_ent = static_cast<posix::VersionedDirectory*>(ent.get());
   }
+
+  bool update_cur_version = false;
+
+  std::unique_ptr<FSEnt> old_cur_ent;
+  // The cur version exists
+  if (!created && !key.instance.empty()) {
+    ret = vd_ent->get_latest_version_ent(dpp, old_cur_ent);
+    if (ret < 0) {
+      return ret;
+    }
+    if (old_cur_ent){
+      old_cur_ent->stat(dpp, true);
+    }
+  }
+
+  if (old_cur_ent && ent->get_instance().empty()) {
+    update_cur_version = true;
+  }
+
   ret = ent->remove(dpp, y, /*delete_children=*/false, &del_result);
+  if (ret < 0) {
+    return ret;
+  }
 
+  if ((ent->get_type() == ObjectType::VERSIONED) && !ent->get_instance().empty())  {
+    // key.instance will be the same as ent->instance_id
+    driver->get_bucket_cache()->remove_entry(dpp, b->get_name(), key);
+  }
 
-  driver->get_bucket_cache()->remove_entry(dpp, b->get_name(), key);
-
+  // Last version was removed
   if (!key.instance.empty() && !ent->exists()) {
     /* Remove the non-versioned key as well */
     key.instance.clear();
     driver->get_bucket_cache()->remove_entry(dpp, b->get_name(), key);
+    driver->get_quota_handler()->update_stats(b->get_owner(), b->get_key(),
+                                            -1, 0, state.accounted_size);
+    return 0;
   }
 
   /* after removing a versioned entry, the current version may have
    * changed — if the symlink now points to a delete marker, update
    * its cache entry to add FLAG_CURRENT so the LC can expire it */
-  if (!get_key().instance.empty() && ent->get_parent()) {
-    auto* vdir = dynamic_cast<VersionedDirectory*>(ent->get_parent());
-    if (vdir) {
-      std::unique_ptr<Symlink> sl =
-	std::make_unique<Symlink>(vdir->get_name(), vdir, driver->ctx());
-      if (sl->stat(dpp) >= 0 && sl->exists()) {
-	auto* target = sl->get_target();
-	std::string cur_name = target->get_name();
-	if (!cur_name.empty()) {
-	  std::unique_ptr<FSEnt> cur_ent;
-	  ret = vdir->get_ent(dpp, y, cur_name, std::string(), cur_ent);
-	  if (ret == 0) {
-	    cur_ent->stat(dpp);
-	    rgw_bucket_dir_entry bde{};
-	    rgw_obj_key cur_key = decode_obj_key(cur_name);
-	    cur_key.get_index_key(&bde.key);
-	    bde.flags = rgw_bucket_dir_entry::FLAG_VER
-	      | rgw_bucket_dir_entry::FLAG_CURRENT;
-	    bde.ver.pool = 1;
-	    bde.ver.epoch = 1;
-	    bde.exists = true;
-	    bde.meta.mtime = from_statx_timestamp(cur_ent->get_stx().stx_mtime);
-	    bde.meta.size = cur_ent->get_stx().stx_size;
-	    bde.meta.accounted_size = bde.meta.size;
-	    if (bde.meta.size == 0) {
-	      Attrs attrs;
-	      bufferlist bl;
-	      if (cur_ent->read_attrs(dpp, y, attrs) >= 0 &&
-		  ::rgw::sal::get_attr(attrs, RGW_POSIX_ATTR_VERSION, bl)) {
-		bde.flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
-	      }
-	    }
-	    driver->get_bucket_cache()->add_entry(dpp, b->get_name(), bde);
-	  }
-	}
+
+  if (update_cur_version) {
+    if (old_cur_ent) {
+      std::string old_cur_name = old_cur_ent->get_name();
+      if (!old_cur_name.empty()) {
+        old_cur_ent->stat(dpp);
+        uint32_t fill_flags = FSEnt::FLAG_NONE;
+        Attrs attrs;
+        bufferlist bl;
+        if (old_cur_ent->read_attrs(dpp, y, attrs) >= 0 &&
+            ::rgw::sal::get_attr(attrs, RGW_POSIX_ATTR_VERSION, bl)) {
+          fill_flags |= FSEnt::FLAG_DELETE_MARKER;
+        }
+        old_cur_ent->fill_cache( dpp, null_yield,
+          [&](const DoutPrefixProvider *dpp, rgw_bucket_dir_entry &bde) -> int {
+	  driver->get_bucket_cache()->add_entry(dpp, b->get_name(), bde);
+	  return 0;
+        }, fill_flags);
+      }
+    }
+  }
+
+  if (vd_ent) {
+    std::unique_ptr<FSEnt> new_cur_ent;
+    ret = vd_ent->get_latest_version_ent(dpp, new_cur_ent);
+    if (ret < 0) {
+      return ret;
+    }
+    FSEnt *cur_ent = new_cur_ent.get();
+    if (cur_ent) {
+      std::string cur_name = cur_ent->get_name();
+      ldpp_dout(dpp, 0) << "NITHYA: Add NEW cur entry in cache: " << cur_name << dendl;
+      if (!cur_name.empty()) {
+        cur_ent->stat(dpp);
+        uint32_t fill_flags = FSEnt::FLAG_CURRENT;
+        Attrs attrs;
+        bufferlist bl;
+        if (cur_ent->read_attrs(dpp, y, attrs) >= 0 &&
+            ::rgw::sal::get_attr(attrs, RGW_POSIX_ATTR_VERSION, bl)) {
+          fill_flags |= FSEnt::FLAG_DELETE_MARKER;
+        }
+        cur_ent->fill_cache( dpp, null_yield,
+          [&](const DoutPrefixProvider *dpp, rgw_bucket_dir_entry &bde) -> int {
+	  driver->get_bucket_cache()->add_entry(dpp, b->get_name(), bde);
+	return 0;
+      }, fill_flags);
+
       }
     }
   }
@@ -4077,10 +4192,6 @@ int POSIXObject::copy_object(const ACLOwner& owner,
     ldpp_dout(dpp, 0) << "ERROR: could not get bucket to copy " << get_name()
                       << dendl;
     return -EINVAL;
-  }
-  if (db->get_info().versioning_enabled() &&
-      !dest_object->have_instance()) {
-    dest_object->gen_rand_obj_instance_name();
   }
   bool has_instance = !get_key().instance.empty();
 
@@ -4538,6 +4649,13 @@ int POSIXObject::stat(const DoutPrefixProvider* dpp)
   if (state.obj.key.instance.empty()) {
     state.obj.key.instance = ent->get_cur_version();
   }
+  if (ent->get_type() == ObjectType::VERSIONED) {
+    auto* vd_ent = static_cast<posix::VersionedDirectory*>(ent.get());
+    if (vd_ent && vd_ent->curr_is_delete_marker()) {
+      state.exists = false;
+      return -ENOENT;
+    }
+  }
 
   state.exists = ent->exists();
   if (!state.exists) {
@@ -4661,18 +4779,18 @@ int POSIXObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y)
   ret = open(dpp);
   if (ret < 0) {
     ldpp_dout(dpp, 20)
-        << "ERROR: POSIXAtomicWriter failed opening file" << dendl;
+        << "ERROR: link_temp_file: failed to open file : " << get_name() << dendl;
     return ret;
   }
 
   ret = stat(dpp);
   if (ret < 0) {
     ldpp_dout(dpp, 20)
-        << "ERROR: POSIXAtomicWriter failed closing file" << dendl;
+        << "ERROR: link_temp_file: failed to stat file: " << get_name() << dendl;
     return ret;
   }
 
-  fill_cache( nullptr, null_yield,
+  fill_cache( dpp, null_yield,
       [&](const DoutPrefixProvider *dpp, rgw_bucket_dir_entry &bde) -> int {
 	driver->get_bucket_cache()->add_entry(dpp, b->get_name(), bde);
 	return 0;
@@ -5725,6 +5843,7 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
       ldpp_dout(dpp, 0) << "ERROR: could not get bucket for " << obj->get_name() << dendl;
       return -EINVAL;
   }
+
   driver->get_quota_handler()->update_stats(b->get_owner(), b->get_key(),
                                             (exists ? 0 : 1), orig_size, accounted_size);
 

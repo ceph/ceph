@@ -844,7 +844,7 @@ TEST(FSEnt, VerDirBase)
   ret = testdir->copy(env->dpp, null_yield, root.get(), copyname);
   EXPECT_EQ(ret, 0);
   EXPECT_TRUE(sf::exists(cp));
-  EXPECT_TRUE(sf::is_directory(tp));
+  EXPECT_TRUE(sf::is_directory(cp));
 
   std::unique_ptr<VersionedDirectory> copydir = std::make_unique<VersionedDirectory>(copyname, root.get(), env->cct.get());
   ret = copydir->open(env->dpp);
@@ -878,7 +878,20 @@ TEST(FSEnt, VerDirBase)
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(ent->get_type(), ObjectType::VERSIONED);
 
-  ret = testdir->remove(env->dpp, null_yield, false, nullptr);
+  // This will create a delete marker
+  struct rgw::sal::Object::DeleteOp::Result result;
+  ret = testdir->remove(env->dpp, null_yield, false, &result);
+  EXPECT_EQ(ret, 0);
+
+  std::unique_ptr<VersionedDirectory> testdir2 = std::make_unique<VersionedDirectory>(dirname, root.get(),
+                                                 result.version_id, env->cct.get());
+
+  ret = testdir2->open(env->dpp);
+  EXPECT_EQ(ret, 0);
+  EXPECT_GT(testdir2->get_fd(), 0);
+
+  // remove the delete marker
+  ret = testdir2->remove(env->dpp, null_yield, false, nullptr);
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(sf::exists(tp));
 }
