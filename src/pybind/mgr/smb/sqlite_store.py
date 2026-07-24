@@ -505,18 +505,18 @@ class SqliteMirroringStore(SqliteStore):
         after the sqlite transaction commits successfully, and discards
         them if it doesn't.
         """
-        self._pending_mirror_removals = []
-        try:
-            with super().transaction():
+        with super().transaction():
+            self._pending_mirror_removals = []
+            try:
                 yield None
-        except Exception:
-            self._pending_mirror_removals = None
-            raise
-        else:
-            pending = self._pending_mirror_removals
-            self._pending_mirror_removals = None
-            for mirror, key in pending:
-                mirror.store.remove(key)
+            except Exception:
+                self._pending_mirror_removals = None
+                raise
+            else:
+                pending = self._pending_mirror_removals
+                self._pending_mirror_removals = None
+        for mirror, key in pending:
+            mirror.store.remove(key)
 
     def get_object(self, key: EntryKey) -> Simplified:
         """Fetch a simplified object from the store."""
@@ -526,7 +526,17 @@ class SqliteMirroringStore(SqliteStore):
             return super().get_object(key)
         log.debug("Mirroring get_object: mirror=%r", mirror)
         obj = super().get_object(key)
-        mirror_obj = mirror.store[key].get()
+        try:
+            mirror_obj = mirror.store[key].get()
+        except KeyError:
+            if mirror.filter_object(obj) != obj:
+                log.debug(
+                    "Mirroring get_object: no mirror entry for %r,"
+                    " falling back to sqlite copy",
+                    key,
+                )
+                return obj
+            raise
         return mirror.merge(obj, mirror_obj)
 
     def reconcile(self) -> None:
@@ -602,10 +612,10 @@ class MirrorUsersAndGroups(Mirror):
 
 
 class MirrorTLSCredentials(Mirror):
-    """Mirroring configuration for objects in the tls_credentials namespace."""
+    """Mirroring configuration for objects in the tls_creds namespace."""
 
     def __init__(self, store: ConfigStore) -> None:
-        super().__init__('tls_credentials', store)
+        super().__init__('tls_creds', store)
 
     def filter_object(self, obj: Simplified) -> Simplified:
         """Filter tls_credential for sqlite3 store."""
@@ -631,10 +641,10 @@ class MirrorExternalCephCluster(Mirror):
 
 
 class MirrorRGWCredentials(Mirror):
-    """Mirroring configuration for objects in the rgw_credentials namespace."""
+    """Mirroring configuration for objects in the rgw_creds namespace."""
 
     def __init__(self, store: ConfigStore) -> None:
-        super().__init__('rgw_credentials', store)
+        super().__init__('rgw_creds', store)
 
     def filter_object(self, obj: Simplified) -> Simplified:
         """Filter rgw_credential for sqlite3 store."""
