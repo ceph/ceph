@@ -1052,3 +1052,121 @@ def test_staggered_upgrade_validation(
     else:
         cephadm_module.upgrade._validate_upgrade_filters(
             'new_image_name', daemon_types, hosts, services)
+
+
+@mock.patch("cephadm.module.HostCache.get_daemons")
+def test_filtered_scope_up_to_date(
+    get_daemons: mock.MagicMock,
+    cephadm_module: CephadmOrchestrator,
+) -> None:
+    target_digest = 'new_image@repo_digest'
+    old_digest = 'old_image@repo_digest'
+
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image',
+        '0',
+        target_digests=[target_digest],
+        daemon_types=['mon'],
+        hosts=['trial031'],
+    )
+
+    get_daemons.return_value = [
+        DaemonDescription(
+            daemon_type='mon',
+            daemon_id='a',
+            hostname='trial031',
+            container_image_digests=[target_digest],
+        ),
+        DaemonDescription(
+            daemon_type='mon',
+            daemon_id='c',
+            hostname='trial031',
+            container_image_digests=[old_digest],
+        ),
+    ]
+
+    assert not cephadm_module.upgrade._filtered_scope_up_to_date(
+        [target_digest], 'target_image',
+    )
+
+    get_daemons.return_value[1].container_image_digests = [target_digest]
+    assert cephadm_module.upgrade._filtered_scope_up_to_date(
+        [target_digest], 'target_image',
+    )
+
+
+@mock.patch.object(CephadmUpgrade, '_mark_upgrade_complete')
+@mock.patch.object(CephadmUpgrade, '_filtered_scope_up_to_date', return_value=False)
+@mock.patch.object(CephadmUpgrade, '_handle_need_upgrade_self')
+@mock.patch.object(CephadmUpgrade, '_to_upgrade', return_value=(True, []))
+@mock.patch.object(
+    CephadmUpgrade, '_detect_need_upgrade', return_value=(False, [], [], 0),
+)
+@mock.patch.object(CephadmUpgrade, '_set_container_images')
+@mock.patch.object(CephadmUpgrade, '_complete_osd_upgrade')
+@mock.patch.object(CephadmUpgrade, '_complete_mds_upgrade')
+@mock.patch.object(CephadmUpgrade, '_update_upgrade_progress')
+@mock.patch.object(CephadmUpgrade, 'get_distinct_container_image_settings', return_value={})
+@mock.patch("cephadm.module.CephadmOrchestrator.lookup_release_name", return_value='tentacle')
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command", return_value=(0, '{}', ''))
+@mock.patch("cephadm.module.CephadmOrchestrator.set_container_image")
+@mock.patch("cephadm.module.CephadmOrchestrator.get_active_mgr_digests")
+@mock.patch("cephadm.module.CephadmOrchestrator.get", return_value={
+    'min_mon_release': 19,
+    'require_osd_release': 'tentacle',
+    'have_local_config_map': True,
+})
+@mock.patch(
+    "cephadm.module.CephadmOrchestrator.version",
+    new_callable=mock.PropertyMock,
+    return_value='ceph version 19.3.0-0 (hash)',
+)
+@mock.patch("cephadm.module.HostCache.get_daemons")
+def test_do_upgrade_limit_exhausted_marks_complete_without_scope_check(
+    get_daemons: mock.MagicMock,
+    _version: mock.MagicMock,
+    _get: mock.MagicMock,
+    get_active_mgr_digests: mock.MagicMock,
+    _set_container_image: mock.MagicMock,
+    _check_mon_command: mock.MagicMock,
+    _lookup_release_name: mock.MagicMock,
+    _get_distinct_container_image_settings: mock.MagicMock,
+    _update_upgrade_progress: mock.MagicMock,
+    _complete_mds_upgrade: mock.MagicMock,
+    _complete_osd_upgrade: mock.MagicMock,
+    _set_container_images: mock.MagicMock,
+    _detect_need_upgrade: mock.MagicMock,
+    _to_upgrade: mock.MagicMock,
+    _handle_need_upgrade_self: mock.MagicMock,
+    filtered_scope: mock.MagicMock,
+    mark_complete: mock.MagicMock,
+    cephadm_module: CephadmOrchestrator,
+) -> None:
+    target_digest = 'new_image@repo_digest'
+    old_digest = 'old_image@repo_digest'
+    get_active_mgr_digests.return_value = [target_digest]
+    get_daemons.return_value = [
+        DaemonDescription(
+            daemon_type='osd',
+            daemon_id=str(i),
+            hostname='host1',
+            container_image_digests=[target_digest] if i < 2 else [old_digest],
+        )
+        for i in range(8)
+    ]
+
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image',
+        '0',
+        target_id='image_id',
+        target_digests=[target_digest],
+        target_version='19.3.0-0',
+        daemon_types=['osd'],
+        total_count=2,
+        remaining_count=0,
+    )
+
+    cephadm_module.upgrade._do_upgrade()
+
+    mark_complete.assert_called_once()
+    filtered_scope.assert_not_called()
