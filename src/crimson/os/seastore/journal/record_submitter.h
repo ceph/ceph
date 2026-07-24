@@ -5,8 +5,14 @@
 
 #include <optional>
 #include <seastar/core/circular_buffer.hh>
+#ifdef CRIMSON_DETAILED_SAMPLING
+#include <seastar/core/lowres_clock.hh>
+#endif
 #include <seastar/core/metrics.hh>
 #include <seastar/core/shared_future.hh>
+#ifdef CRIMSON_DETAILED_SAMPLING
+#include <seastar/core/shared_ptr.hh>
+#endif
 
 #include "include/buffer.h"
 
@@ -23,6 +29,24 @@ namespace crimson::os::seastore::journal {
 
 class JournalAllocator {
 public:
+#ifdef CRIMSON_DETAILED_SAMPLING
+  // Wall times for the last completed SegmentAllocator::roll()
+  // (close_segment + do_open). Other allocators leave zeros.
+  struct roll_parts_t {
+    seastar::lowres_clock::duration close{0};
+    seastar::lowres_clock::duration open{0};
+    // close_segment():
+    seastar::lowres_clock::duration close_advance_wp{0};
+    seastar::lowres_clock::duration close_write_tail{0};
+    seastar::lowres_clock::duration close_seg_close{0};
+    seastar::lowres_clock::duration close_provider{0};
+    // do_open():
+    seastar::lowres_clock::duration open_alloc{0};
+    seastar::lowres_clock::duration open_sm_open{0};
+    seastar::lowres_clock::duration open_header{0};
+  };
+#endif
+
   virtual const std::string& get_name() const = 0;
   
   virtual void update_modify_time(record_t& record) = 0;
@@ -43,6 +67,12 @@ public:
   
   using roll_ertr = base_ertr;
   virtual roll_ertr::future<> roll() = 0;
+
+#ifdef CRIMSON_DETAILED_SAMPLING
+  virtual roll_parts_t get_last_roll_parts() const {
+    return {};
+  }
+#endif
 
   virtual bool needs_roll(std::size_t length) const = 0;
 
@@ -144,6 +174,13 @@ public:
     pending.reserve(batch_capacity);
   }
 
+#ifdef CRIMSON_DETAILED_SAMPLING
+  // Shared across all waiters on this batch; filled when the device write
+  // is issued (flush_current_batch / fast-path submit).
+  using write_issued_ptr_t = seastar::lw_shared_ptr<
+      std::optional<seastar::lowres_clock::time_point>>;
+#endif
+
   // Add to the batch, the future will be resolved after the batch is
   // written.
   //
@@ -155,12 +192,23 @@ public:
     // only useful in case of ool.
     journal_seq_t record_base_regardless_md;
     add_pending_fut future;
+#ifdef CRIMSON_DETAILED_SAMPLING
+    write_issued_ptr_t write_issued_at;
+#endif
   };
   add_pending_ret_t add_pending(
       const std::string& name,
       record_t&&,
       extent_len_t block_size,
       std::optional<journal_seq_t> maybe_write_base);
+
+#ifdef CRIMSON_DETAILED_SAMPLING
+  void mark_write_issued() {
+    assert(write_issued_at);
+    assert(!write_issued_at->has_value());
+    *write_issued_at = seastar::lowres_clock::now();
+  }
+#endif
 
   // Encode the batched records for write.
   struct encode_ret_t {
@@ -214,6 +262,10 @@ private:
   };
   using maybe_promise_result_t = std::optional<promise_result_t>;
   std::optional<seastar::shared_promise<maybe_promise_result_t> > io_promise;
+#ifdef CRIMSON_DETAILED_SAMPLING
+  // Valid while PENDING/SUBMITTING; shared with add_pending_ret_t waiters.
+  write_issued_ptr_t write_issued_at;
+#endif
 };
 
 /**
@@ -254,6 +306,18 @@ public:
   // whether is available to submit a record
   bool is_available() const;
 
+#ifdef CRIMSON_DETAILED_SAMPLING
+  // Why is_available() is false (NONE if available).
+  enum class unavailable_reason_t : uint8_t {
+    NONE = 0,
+    ROLLING,      // roll_segment() in progress
+    FULL_FLUSH,   // needs_flush but io-depth FULL
+  };
+  unavailable_reason_t get_unavailable_reason() const {
+    return unavailable_reason;
+  }
+#endif
+
   // get the stats since last_stats
   writer_stats_t get_stats() const;
 
@@ -273,7 +337,16 @@ public:
 
   // when available, roll the segment if needed
   using roll_segment_ertr = base_ertr;
+#ifdef CRIMSON_DETAILED_SAMPLING
+  // Optional out-param: flush_prep + allocator close/open breakdown.
+  struct roll_timings_t {
+    seastar::lowres_clock::duration flush_prep{0};
+    JournalAllocator::roll_parts_t parts;
+  };
+  roll_segment_ertr::future<> roll_segment(roll_timings_t* timings = nullptr);
+#else
   roll_segment_ertr::future<> roll_segment();
+#endif
 
   // when available, submit the record if possible
   using submit_ret = RecordBatch::add_pending_ret_t;
@@ -296,6 +369,33 @@ public:
 
 private:
   void update_state();
+
+#ifdef CRIMSON_DETAILED_SAMPLING
+  void set_unavailable(unavailable_reason_t reason) {
+    assert(reason != unavailable_reason_t::NONE);
+    assert(!wait_available_promise.has_value());
+    wait_available_promise = seastar::shared_promise<>();
+    unavailable_reason = reason;
+  }
+
+  void clear_unavailable() {
+    assert(wait_available_promise.has_value());
+    wait_available_promise->set_value();
+    wait_available_promise.reset();
+    unavailable_reason = unavailable_reason_t::NONE;
+  }
+#else
+  void set_unavailable() {
+    assert(!wait_available_promise.has_value());
+    wait_available_promise = seastar::shared_promise<>();
+  }
+
+  void clear_unavailable() {
+    assert(wait_available_promise.has_value());
+    wait_available_promise->set_value();
+    wait_available_promise.reset();
+  }
+#endif
 
   void increment_io() {
     ++num_outstanding_io;
@@ -337,6 +437,9 @@ private:
 
   // blocked for rolling or lack of resource
   std::optional<seastar::shared_promise<> > wait_available_promise;
+#ifdef CRIMSON_DETAILED_SAMPLING
+  unavailable_reason_t unavailable_reason = unavailable_reason_t::NONE;
+#endif
   bool has_io_error = false;
   // when needs flush but io depth is full,
   // wait for decrement_io_with_flush()
@@ -344,6 +447,14 @@ private:
 
   writer_stats_t stats;
   mutable writer_stats_t last_stats;
+
+#ifdef CRIMSON_DETAILED_SAMPLING
+  // Path mix for RecordSubmitter::submit() (journal + OOL).
+  uint64_t submit_fast = 0;              // direct write (empty batch + flush)
+  uint64_t submit_batched_flush = 0;     // add_pending + flush now
+  uint64_t submit_batched_deferred = 0;  // add_pending, flush later
+  uint64_t submit_full_blocked = 0;      // needs_flush but io-depth FULL
+#endif
 
   seastar::metrics::metric_group metrics;
 };

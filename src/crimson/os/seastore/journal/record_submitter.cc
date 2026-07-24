@@ -37,7 +37,14 @@ RecordBatch::add_pending(
   assert(pending.size == new_size);
   if (state == state_t::EMPTY) {
     assert(!io_promise.has_value());
+#ifdef CRIMSON_DETAILED_SAMPLING
+    assert(!write_issued_at);
+#endif
     io_promise = seastar::shared_promise<maybe_promise_result_t>();
+#ifdef CRIMSON_DETAILED_SAMPLING
+    write_issued_at = seastar::make_lw_shared<
+        std::optional<seastar::lowres_clock::time_point>>();
+#endif
     assert(maybe_write_base.has_value());
     assert(!write_base.has_value());
     write_base = maybe_write_base;
@@ -45,6 +52,9 @@ RecordBatch::add_pending(
   state = state_t::PENDING;
   assert(write_base.has_value());
   assert(io_promise.has_value());
+#ifdef CRIMSON_DETAILED_SAMPLING
+  assert(write_issued_at);
+#endif
 
   auto _write_base = *write_base;
   auto fut = io_promise->get_shared_future(
@@ -65,7 +75,11 @@ RecordBatch::add_pending(
       submit_result);
   });
   _write_base.offset = _write_base.offset.add_offset(dlength_offset);
+#ifdef CRIMSON_DETAILED_SAMPLING
+  return {_write_base, std::move(fut), write_issued_at};
+#else
   return {_write_base, std::move(fut)};
+#endif
 }
 
 RecordBatch::encode_ret_t RecordBatch::encode_batch(
@@ -110,6 +124,9 @@ void RecordBatch::set_result(
   submitting_mdlength = 0;
   io_promise->set_value(result);
   io_promise.reset();
+#ifdef CRIMSON_DETAILED_SAMPLING
+  write_issued_at = {};
+#endif
 }
 
 ceph::bufferlist
@@ -237,14 +254,25 @@ RecordSubmitter::check_action(
 }
 
 RecordSubmitter::roll_segment_ertr::future<>
+#ifdef CRIMSON_DETAILED_SAMPLING
+RecordSubmitter::roll_segment(roll_timings_t* timings)
+#else
 RecordSubmitter::roll_segment()
+#endif
 {
   LOG_PREFIX(RecordSubmitter::roll_segment);
   ceph_assert(p_current_batch->needs_flush() ||
               is_available());
   // #1 block concurrent submissions due to rolling
-  wait_available_promise = seastar::shared_promise<>();
+#ifdef CRIMSON_DETAILED_SAMPLING
+  set_unavailable(unavailable_reason_t::ROLLING);
+#else
+  set_unavailable();
+#endif
   ceph_assert(!wait_unfull_flush_promise.has_value());
+#ifdef CRIMSON_DETAILED_SAMPLING
+  const auto flush_start = seastar::lowres_clock::now();
+#endif
   return [FNAME, this] {
     if (p_current_batch->is_pending()) {
       if (state == state_t::FULL) {
@@ -260,12 +288,20 @@ RecordSubmitter::roll_segment()
       assert(p_current_batch->is_empty());
       return seastar::now();
     }
-  }().then_wrapped([FNAME, this](auto fut) {
+  }().then_wrapped([FNAME, this
+#ifdef CRIMSON_DETAILED_SAMPLING
+                    , timings, flush_start
+#endif
+                   ](auto fut) {
+#ifdef CRIMSON_DETAILED_SAMPLING
+    if (timings) {
+      timings->flush_prep = seastar::lowres_clock::now() - flush_start;
+    }
+#endif
     if (fut.failed()) {
       ERROR("{} rolling is skipped unexpectedly, available", get_name());
       has_io_error = true;
-      wait_available_promise->set_value();
-      wait_available_promise.reset();
+      clear_unavailable();
       return roll_segment_ertr::now();
     } else {
       // start rolling in background
@@ -274,24 +310,29 @@ RecordSubmitter::roll_segment()
         // good
         DEBUG("{} rolling done, available", get_name());
         assert(!has_io_error);
-        wait_available_promise->set_value();
-        wait_available_promise.reset();
+        clear_unavailable();
       }).handle_error(
         crimson::ct_error::all_same_way([FNAME, this](auto e) {
           ERROR("{} got error {}, available", get_name(), e);
           has_io_error = true;
-          wait_available_promise->set_value();
-          wait_available_promise.reset();
+          clear_unavailable();
           return seastar::now();
         })
       ).handle_exception([FNAME, this](auto e) {
         ERROR("{} got exception {}, available", get_name(), e);
         has_io_error = true;
-        wait_available_promise->set_value();
-        wait_available_promise.reset();
+        clear_unavailable();
       });
       // wait for background rolling
+#ifdef CRIMSON_DETAILED_SAMPLING
+      return wait_available().finally([this, timings] {
+        if (timings) {
+          timings->parts = journal_allocator.get_last_roll_parts();
+        }
+      });
+#else
       return wait_available();
+#endif
     }
   });
 }
@@ -320,6 +361,9 @@ RecordSubmitter::submit(
       needs_flush &&
       state != state_t::FULL) {
     // fast path with direct write
+#ifdef CRIMSON_DETAILED_SAMPLING
+    ++submit_fast;
+#endif
     increment_io();
     auto block_size = journal_allocator.get_block_size();
     auto rg = record_group_t(std::move(record), block_size);
@@ -337,6 +381,11 @@ RecordSubmitter::submit(
     write_result_t result{
         journal_allocator.get_written_to(),
         to_write.length()};
+#ifdef CRIMSON_DETAILED_SAMPLING
+    auto write_issued_at = seastar::make_lw_shared<
+        std::optional<seastar::lowres_clock::time_point>>();
+    *write_issued_at = seastar::lowres_clock::now();
+#endif
     auto write_fut = journal_allocator.write(std::move(to_write)
     ).safe_then([mdlength=sizes.get_mdlength(), result] {
       return record_locator_t{
@@ -346,7 +395,11 @@ RecordSubmitter::submit(
     }).finally([this] {
       decrement_io_with_flush();
     });
+#ifdef CRIMSON_DETAILED_SAMPLING
+    return {result.start_seq, std::move(write_fut), std::move(write_issued_at)};
+#else
     return {result.start_seq, std::move(write_fut)};
+#endif
   }
   // indirect batched write
   std::optional<journal_seq_t> maybe_write_base;
@@ -365,6 +418,9 @@ RecordSubmitter::submit(
   if (needs_flush) {
     if (state == state_t::FULL) {
       // #2 block concurrent submissions due to lack of resource
+#ifdef CRIMSON_DETAILED_SAMPLING
+      ++submit_full_blocked;
+#endif
       DEBUG("{} added with {} pending, outstanding_io={}, unavailable, wait flush ...",
             get_name(),
             p_current_batch->get_num_records(),
@@ -374,23 +430,32 @@ RecordSubmitter::submit(
         // need to be delegated to the follow-up atomic roll_segment();
         assert(p_current_batch->is_pending());
       } else {
-        wait_available_promise = seastar::shared_promise<>();
+#ifdef CRIMSON_DETAILED_SAMPLING
+        set_unavailable(unavailable_reason_t::FULL_FLUSH);
+#else
+        set_unavailable();
+#endif
         ceph_assert(!wait_unfull_flush_promise.has_value());
         wait_unfull_flush_promise = seastar::promise<>();
         // flush and mark available in background
         std::ignore = wait_unfull_flush_promise->get_future(
         ).finally([FNAME, this] {
           DEBUG("{} flush done, available", get_name());
-          wait_available_promise->set_value();
-          wait_available_promise.reset();
+          clear_unavailable();
         });
       }
     } else {
+#ifdef CRIMSON_DETAILED_SAMPLING
+      ++submit_batched_flush;
+#endif
       DEBUG("{} added pending, flush", get_name());
       flush_current_batch();
     }
   } else {
     // will flush later
+#ifdef CRIMSON_DETAILED_SAMPLING
+    ++submit_batched_deferred;
+#endif
     DEBUG("{} added with {} pending, outstanding_io={}",
           get_name(),
           p_current_batch->get_num_records(),
@@ -409,6 +474,12 @@ RecordSubmitter::open(store_index_t store_index, bool is_mkfs)
     DEBUG("{} register metrics", get_name());
     stats = {};
     last_stats = {};
+#ifdef CRIMSON_DETAILED_SAMPLING
+    submit_fast = 0;
+    submit_batched_flush = 0;
+    submit_batched_deferred = 0;
+    submit_full_blocked = 0;
+#endif
     namespace sm = seastar::metrics;
     std::vector<sm::label_instance> label_instances;
     label_instances.push_back(sm::label_instance("submitter", get_name()));
@@ -453,6 +524,32 @@ RecordSubmitter::open(store_index_t store_index, bool is_mkfs)
           sm::description("bytes of data when write record groups"),
           label_instances
         ),
+#ifdef CRIMSON_DETAILED_SAMPLING
+        sm::make_counter(
+          "submit_fast",
+          submit_fast,
+          sm::description("RecordSubmitter submits via direct (fast) write"),
+          label_instances
+        ),
+        sm::make_counter(
+          "submit_batched_flush",
+          submit_batched_flush,
+          sm::description("RecordSubmitter submits that flush the batch immediately"),
+          label_instances
+        ),
+        sm::make_counter(
+          "submit_batched_deferred",
+          submit_batched_deferred,
+          sm::description("RecordSubmitter submits parked in batch for later flush"),
+          label_instances
+        ),
+        sm::make_counter(
+          "submit_full_blocked",
+          submit_full_blocked,
+          sm::description("RecordSubmitter submits blocked because io-depth is FULL"),
+          label_instances
+        ),
+#endif
       }
     );
     return ret;
@@ -468,6 +565,9 @@ RecordSubmitter::close()
   ceph_assert(p_current_batch != nullptr);
   ceph_assert(p_current_batch->is_empty());
   ceph_assert(!wait_available_promise.has_value());
+#ifdef CRIMSON_DETAILED_SAMPLING
+  ceph_assert(unavailable_reason == unavailable_reason_t::NONE);
+#endif
   has_io_error = false;
   ceph_assert(!wait_unfull_flush_promise.has_value());
   metrics.clear();
@@ -575,6 +675,9 @@ void RecordSubmitter::flush_current_batch()
         write_result_t{write_base, write_len},
         get_committed_to(), num_outstanding_io);
   assert(write_base == journal_allocator.get_written_to());
+#ifdef CRIMSON_DETAILED_SAMPLING
+  p_batch->mark_write_issued();
+#endif
   std::ignore = journal_allocator.write(std::move(encode_ret.bl)
   ).safe_then([this, p_batch, FNAME, num, sizes, write_len] {
     TRACE("{} {} records, {}, write done",

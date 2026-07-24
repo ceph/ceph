@@ -7,6 +7,9 @@
 #include <iostream>
 
 #include <boost/intrusive/list.hpp>
+#ifdef CRIMSON_DETAILED_SAMPLING
+#include <seastar/core/lowres_clock.hh>
+#endif
 
 #include "crimson/common/log.h"
 #include "crimson/os/seastore/backref_entry.h"
@@ -495,6 +498,27 @@ public:
   struct phase_durations_t {
     std::chrono::steady_clock::duration reserve{0};         // enter reserve + epm reserve
     std::chrono::steady_clock::duration ool_write{0};       // delayed + preallocated OOL writes
+#ifdef CRIMSON_DETAILED_SAMPLING
+    // Segmented backend (SegmentedOolWriter) — nested under ool_write:
+    seastar::lowres_clock::duration ool_write_seg_delayed{0};      // write_delayed_ool_extents
+    seastar::lowres_clock::duration ool_write_seg_delayed_wait{0}; // RecordSubmitter::wait_available
+    seastar::lowres_clock::duration ool_write_seg_delayed_wait_roll{0}; // unavailable: rolling
+    seastar::lowres_clock::duration ool_write_seg_delayed_wait_full{0}; // unavailable: FULL flush
+    seastar::lowres_clock::duration ool_write_seg_delayed_roll{0}; // RecordSubmitter::roll_segment
+    seastar::lowres_clock::duration ool_write_seg_delayed_roll_flush{0}; // flush prep before roll
+    seastar::lowres_clock::duration ool_write_seg_delayed_roll_close{0}; // close_segment
+    seastar::lowres_clock::duration ool_write_seg_delayed_roll_close_advance_wp{0};
+    seastar::lowres_clock::duration ool_write_seg_delayed_roll_close_write_tail{0};
+    seastar::lowres_clock::duration ool_write_seg_delayed_roll_close_seg_close{0};
+    seastar::lowres_clock::duration ool_write_seg_delayed_roll_close_provider{0};
+    seastar::lowres_clock::duration ool_write_seg_delayed_roll_open{0};  // do_open (alloc+header)
+    seastar::lowres_clock::duration ool_write_seg_delayed_roll_open_alloc{0};
+    seastar::lowres_clock::duration ool_write_seg_delayed_roll_open_sm_open{0};
+    seastar::lowres_clock::duration ool_write_seg_delayed_roll_open_header{0};
+    seastar::lowres_clock::duration ool_write_seg_delayed_io{0};   // write_record futures
+    seastar::lowres_clock::duration ool_write_seg_delayed_io_queue{0};  // until device write issued
+    seastar::lowres_clock::duration ool_write_seg_delayed_io_device{0}; // write issued → complete
+#endif
     std::chrono::steady_clock::duration lba_update{0};      // update_lba_mappings
     std::chrono::steady_clock::duration prepare_enter{0};   // enter(prepare) pipeline stage
     std::chrono::steady_clock::duration prepare_record{0};  // prepare_record

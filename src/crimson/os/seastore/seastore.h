@@ -57,6 +57,27 @@ enum class txn_stage_t : uint8_t {
     // Sub-phases of submit_transaction:
     SUBMIT_RESERVE,        // enter(reserve_projected_usage) + epm reserve_projected_usage
     SUBMIT_OOL_WRITE,      // write_delayed + write_preallocated OOL extents (device I/O)
+#ifdef CRIMSON_DETAILED_SAMPLING
+    // SegmentedOolWriter (segmented device backend):
+    SUBMIT_OOL_WRITE_SEG_DELAYED,      // write_delayed_ool_extents
+    SUBMIT_OOL_WRITE_SEG_DELAYED_WAIT, // RecordSubmitter::wait_available
+    SUBMIT_OOL_WRITE_SEG_DELAYED_WAIT_ROLL, // wait while roll_segment in progress
+    SUBMIT_OOL_WRITE_SEG_DELAYED_WAIT_FULL, // wait while FULL needs flush
+    SUBMIT_OOL_WRITE_SEG_DELAYED_ROLL, // RecordSubmitter::roll_segment
+    SUBMIT_OOL_WRITE_SEG_DELAYED_ROLL_FLUSH, // flush prep before allocator.roll
+    SUBMIT_OOL_WRITE_SEG_DELAYED_ROLL_CLOSE, // SegmentAllocator::close_segment
+    SUBMIT_OOL_WRITE_SEG_DELAYED_ROLL_CLOSE_ADVANCE_WP,
+    SUBMIT_OOL_WRITE_SEG_DELAYED_ROLL_CLOSE_WRITE_TAIL,
+    SUBMIT_OOL_WRITE_SEG_DELAYED_ROLL_CLOSE_SEG_CLOSE,
+    SUBMIT_OOL_WRITE_SEG_DELAYED_ROLL_CLOSE_PROVIDER,
+    SUBMIT_OOL_WRITE_SEG_DELAYED_ROLL_OPEN,  // SegmentAllocator::do_open
+    SUBMIT_OOL_WRITE_SEG_DELAYED_ROLL_OPEN_ALLOC,
+    SUBMIT_OOL_WRITE_SEG_DELAYED_ROLL_OPEN_SM_OPEN,
+    SUBMIT_OOL_WRITE_SEG_DELAYED_ROLL_OPEN_HEADER,
+    SUBMIT_OOL_WRITE_SEG_DELAYED_IO,   // SegmentedOolWriter::write_record futures
+    SUBMIT_OOL_WRITE_SEG_DELAYED_IO_QUEUE,  // wait until RecordSubmitter issues write
+    SUBMIT_OOL_WRITE_SEG_DELAYED_IO_DEVICE, // journal_allocator.write completion
+#endif
     SUBMIT_LBA_UPDATE,     // update_lba_mappings
     SUBMIT_PREPARE_ENTER,  // enter(prepare) pipeline stage (global OrderedExclusive wait)
     SUBMIT_PREPARE_RECORD, // prepare_record (record encoding)
