@@ -221,6 +221,8 @@ void PGMapDigest::print_summary(ceph::Formatter *f, ostream *out) const
 {
   if (f)
     f->open_array_section("pgs_by_state");
+  
+  bool pad = false;
 
   // list is descending numeric order (by count)
   std::multimap<int,uint64_t> state_by_count;  // count -> state
@@ -252,18 +254,16 @@ void PGMapDigest::print_summary(ceph::Formatter *f, ostream *out) const
     f->dump_unsigned("bytes_avail", osd_sum.statfs.available);
     f->dump_unsigned("bytes_total", osd_sum.statfs.total);
   } else {
-    *out << "    pools:   " << pg_pool_sum.size() << " pools, "
-         << num_pg << " pgs\n";
+    *out << "    pools:   " << pg_pool_sum.size() << " pools\n";
     *out << "    objects: " << si_u_t(pg_sum.stats.sum.num_objects) << " objects, "
          << byte_u_t(pg_sum.stats.sum.num_bytes) << "\n";
     *out << "    usage:   "
          << byte_u_t(osd_sum.statfs.get_used_raw()) << " used, "
          << byte_u_t(osd_sum.statfs.available) << " / "
          << byte_u_t(osd_sum.statfs.total) << " avail\n";
-    *out << "    pgs:     ";
+    *out << "    pgs:     " << num_pg << " total\n";
+    pad = true;
   }
-
-  bool pad = false;
 
   if (num_pg_unknown > 0) {
     float p = (float)num_pg_unknown / (float)num_pg;
@@ -273,7 +273,6 @@ void PGMapDigest::print_summary(ceph::Formatter *f, ostream *out) const
       char b[20];
       snprintf(b, sizeof(b), "%.3lf", p * 100.0);
       *out << b << "% pgs unknown\n";
-      pad = true;
     }
   }
 
