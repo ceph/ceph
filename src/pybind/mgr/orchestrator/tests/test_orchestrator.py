@@ -423,3 +423,16 @@ class TestApplyOAuth2ProxyYaml:
             'provider_display_name, client_id, client_secret.'
         ) in res.stderr
         mock_apply_misc.assert_not_called()
+
+
+
+@pytest.mark.parametrize('service_type,expected_daemon_types', [
+    ('ingress', ['haproxy', 'keepalived']),
+    ('jaeger-tracing', ['elasticsearch', 'jaeger-query', 'jaeger-collector', 'jaeger-agent']),
+])
+def test_service_spec_schema_uses_daemon_type_resolver(service_type, expected_daemon_types):
+    from orchestrator import service_to_daemon_types
+    from ceph.deployment.service_spec_schema import build_service_spec_schema
+
+    schema = build_service_spec_schema(service_type, service_to_daemon_types)
+    assert schema['daemon_types'] == expected_daemon_types
