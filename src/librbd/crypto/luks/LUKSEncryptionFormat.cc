@@ -25,7 +25,8 @@ void EncryptionFormat<I>::flatten(I* image_ctx, Context* on_finish) {
 }
 
 template <typename I>
-void LUKSEncryptionFormat<I>::format(I* image_ctx, Context* on_finish) {
+void LUKSEncryptionFormat<I>::format(I* image_ctx, bool insecure_fast_mode,
+                                     Context* on_finish) {
   lderr(image_ctx->cct) << "explicit LUKS version required for format" << dendl;
   on_finish->complete(-EINVAL);
 }
@@ -41,10 +42,11 @@ void LUKSEncryptionFormat<I>::load(I* image_ctx,
 }
 
 template <typename I>
-void LUKS1EncryptionFormat<I>::format(I* image_ctx, Context* on_finish) {
+void LUKS1EncryptionFormat<I>::format(I* image_ctx, bool insecure_fast_mode,
+                                      Context* on_finish) {
   auto req = luks::FormatRequest<I>::create(
       image_ctx, RBD_ENCRYPTION_FORMAT_LUKS1, m_alg, m_passphrase,
-      &this->m_crypto, on_finish, false);
+      &this->m_crypto, on_finish, insecure_fast_mode);
   req->send();
 }
 
@@ -59,10 +61,11 @@ void LUKS1EncryptionFormat<I>::load(I* image_ctx,
 }
 
 template <typename I>
-void LUKS2EncryptionFormat<I>::format(I* image_ctx, Context* on_finish) {
+void LUKS2EncryptionFormat<I>::format(I* image_ctx, bool insecure_fast_mode,
+                                      Context* on_finish) {
   auto req = luks::FormatRequest<I>::create(
       image_ctx, RBD_ENCRYPTION_FORMAT_LUKS2, m_alg, m_passphrase,
-      &this->m_crypto, on_finish, false);
+      &this->m_crypto, on_finish, insecure_fast_mode);
   req->send();
 }
 
