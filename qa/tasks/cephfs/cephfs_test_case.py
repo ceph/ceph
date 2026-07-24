@@ -71,6 +71,7 @@ class CephFSTestCase(CephTestCase):
     CLIENTS_REQUIRED = 1
     MDSS_REQUIRED = 1
     REQUIRE_ONE_CLIENT_REMOTE = False
+    MDS_ALLOW_ALL = False
 
     # Whether to create the default filesystem during setUp
     REQUIRE_FILESYSTEM = True
@@ -174,10 +175,14 @@ class CephFSTestCase(CephTestCase):
             for client_id in client_mount_ids:
                 cmd = ['auth', 'caps', f'client.{client_id}', 'mon','allow r',
                        'osd', f'allow rw tag cephfs data={self.fs.name}',
-                       'mds', 'allow']
-
+                       'mds']
+                if self.MDS_ALLOW_ALL:
+                    cmd.append('allow all')
+                else:
+                    cmd.append('allow')
+                print(cmd)
                 if self.get_ceph_cmd_result(*cmd) == 0:
-                    break
+                    continue
 
                 cmd[1] = 'add'
                 if self.get_ceph_cmd_result(*cmd) != 0:
