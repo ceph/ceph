@@ -16,8 +16,10 @@
 #define DAEMON_SERVER_H_
 
 #include "PyModuleRegistry.h"
+#include "FailSlowOSDDetector.h"
 
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
@@ -53,7 +55,7 @@ class CommandContext;
 struct OSDPerfMetricQuery;
 struct MDSPerfMetricQuery;
 class StatsAutotuner;
-
+struct health_check_map_t;
 
 struct offline_pg_report {
   using ContainerType = std::variant<std::vector<int>, std::set<int>>;
@@ -224,6 +226,14 @@ private:
   std::optional<std::string> get_osd_metadata(
     const std::string& name,
     const std::string& osd_id);
+  std::vector<std::string> _get_osd_devices(int osd_id);
+  std::vector<fail_slow_device_score> _find_fail_slow_devices(
+    const OSDMap& osdmap,
+    const PGMap& pgmap);
+  void _check_fail_slow_osds(
+    const OSDMap& osdmap,
+    const PGMap& pgmap,
+    health_check_map_t *checks);
   void _update_upgraded_osds(
     const std::vector<int>& orig_osds,
     const std::vector<int>& to_upgrade,
@@ -242,6 +252,8 @@ private:
   utime_t started_at;
   std::atomic<bool> pgmap_ready;
   std::set<int32_t> reported_osds;
+  std::map<std::string, uint64_t> fail_slow_device_counts;
+  utime_t last_fail_slow;
   void maybe_ready(int32_t osd_id);
 
   SafeTimer timer;
@@ -459,4 +471,3 @@ public:
   }
 };
 #endif
-
