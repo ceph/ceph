@@ -6259,6 +6259,15 @@ void PeeringState::RepWaitBackfillReserved::exit()
 }
 
 boost::statechart::result
+PeeringState::RepWaitBackfillReserved::react(const BackfillTooFull &)
+{
+  DECLARE_LOCALS;
+  ps->reject_reservation();
+  post_event(RemoteReservationRejectedTooFull());
+  return discard_event();
+}
+
+boost::statechart::result
 PeeringState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &evt)
 {
   DECLARE_LOCALS;
