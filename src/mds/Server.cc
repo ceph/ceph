@@ -503,6 +503,7 @@ void Server::reclaim_session(Session *session, const cref_t<MClientReclaim> &m)
 	       << " != target auth_name " << target->info.auth_name << dendl;
       reply->set_result(-EPERM);
       mds->send_message_client(reply, session);
+      return;
     }
 
     ceph_assert(!target->reclaiming_from);
@@ -7713,6 +7714,7 @@ void Server::handle_client_symlink(const MDRequestRef& mdr)
   if (req->get_alternate_name().size() > alternate_name_max) {
     dout(10) << " alternate_name longer than " << alternate_name_max << dendl;
     respond_to_request(mdr, -ENAMETOOLONG);
+    return;
   }
   dn->set_alternate_name(req->get_alternate_name());
 
@@ -12242,6 +12244,7 @@ void Server::handle_client_readdir_snapdiff(const MDRequestRef& mdr)
       mdr->snapid_diff_other == CEPH_NOSNAP) {
     dout(10) << "reply to " << *req << " snapdiff -EINVAL" << dendl;
     respond_to_request(mdr, -EINVAL);
+    return;
   }
 
   unsigned max = req->head.args.snapdiff.max_entries;
