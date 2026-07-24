@@ -209,3 +209,15 @@ add_subdirectory(admin)
 add_subdirectory(os)
 add_subdirectory(osd)
 add_subdirectory(tools)
+
+if(WITH_EC_ISA_PLUGIN)
+  add_library(ec_isa_crimson STATIC
+    ${PROJECT_SOURCE_DIR}/src/erasure-code/isa/ErasureCodeIsa.cc
+    ${PROJECT_SOURCE_DIR}/src/erasure-code/isa/ErasureCodeIsaTableCache.cc
+    ${PROJECT_SOURCE_DIR}/src/erasure-code/isa/ErasureCodePluginIsa.cc
+    $<TARGET_OBJECTS:erasure_code_objs>)
+  target_link_libraries(ec_isa_crimson PUBLIC ISAL::ISAL crimson::cflags)
+  target_compile_definitions(ec_isa_crimson INTERFACE WITH_EC_ISA_PLUGIN)
+  target_link_libraries(crimson-osd
+    -Wl,--whole-archive ec_isa_crimson -Wl,--no-whole-archive)
+endif()
