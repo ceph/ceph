@@ -922,7 +922,7 @@ def get_devices(_sys_block_path='/sys/block', device=''):
 
     block_devs = get_block_devs_sysfs(_sys_block_path)
 
-    block_types = ['disk', 'mpath', 'lvm', 'part']
+    block_types = ['disk', 'mpath', 'lvm', 'part', 'crypt']
     if allow_loop_devices():
         block_types.append('loop')
 

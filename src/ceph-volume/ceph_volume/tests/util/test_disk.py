@@ -510,6 +510,46 @@ class TestGetDevices(object):
         assert result[nvme_path]['model'] == 'SSD 990 PRO'
         assert result[nvme_path]['rev'] == '1B2Q'
 
+    def test_crypt_device_is_included(self, patched_get_block_devs_sysfs, fake_filesystem):
+        dm_path = '/dev/dm-2'
+        mapper_path = '/dev/mapper/luks2-r-data-0'
+        patched_get_block_devs_sysfs.return_value = [
+            [dm_path, mapper_path, 'crypt', dm_path]
+        ]
+        fake_filesystem.create_dir('/sys/block/dm-2/slaves')
+        fake_filesystem.create_dir('/sys/block/dm-2/queue')
+        fake_filesystem.create_file('/sys/block/dm-2/size', contents='195264000')
+        fake_filesystem.create_file('/sys/block/dm-2/queue/rotational', contents='1')
+        fake_filesystem.create_file('/sys/block/dm-2/queue/hw_sector_size', contents='512')
+        with patch("ceph_volume.util.disk.UdevData") as MockUdevData:
+            mock_instance = MagicMock()
+            mock_instance.is_lvm = False
+            MockUdevData.return_value = mock_instance
+            result = disk.get_devices()
+        assert mapper_path in result
+        assert result[mapper_path]['type'] == 'crypt'
+
+    def test_crypt_device_is_not_skipped(self, patched_get_block_devs_sysfs, fake_filesystem):
+        sda_path = '/dev/sda'
+        dm_path = '/dev/dm-2'
+        mapper_path = '/dev/mapper/luks2-r-data-0'
+        patched_get_block_devs_sysfs.return_value = [
+            [sda_path, sda_path, 'disk', sda_path],
+            [dm_path, mapper_path, 'crypt', dm_path],
+        ]
+        fake_filesystem.create_dir('/sys/block/dm-2/slaves')
+        fake_filesystem.create_dir('/sys/block/dm-2/queue')
+        fake_filesystem.create_file('/sys/block/dm-2/size', contents='195264000')
+        fake_filesystem.create_file('/sys/block/dm-2/queue/rotational', contents='1')
+        fake_filesystem.create_file('/sys/block/dm-2/queue/hw_sector_size', contents='512')
+        with patch("ceph_volume.util.disk.UdevData") as MockUdevData:
+            mock_instance = MagicMock()
+            mock_instance.is_lvm = False
+            MockUdevData.return_value = mock_instance
+            result = disk.get_devices()
+        assert sda_path in result
+        assert mapper_path in result
+
 
 class TestGetBlockDevsSysfs(object):
     def test_optical_device_is_skipped(self, fake_filesystem):

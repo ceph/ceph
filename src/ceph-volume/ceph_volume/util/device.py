@@ -513,7 +513,7 @@ class Device(object):
         elif self.blkid_api:
             api = self.blkid_api
         if api:
-            valid_types = ['disk', 'device', 'mpath']
+            valid_types = ['disk', 'device', 'mpath', 'crypt']
             if allow_loop_devices():
                 valid_types.append('loop')
             return self.device_type in valid_types
