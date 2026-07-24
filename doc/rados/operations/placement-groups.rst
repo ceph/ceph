@@ -175,6 +175,11 @@ The output will resemble the following::
   .. prompt:: bash #
 
      ceph osd pool get threshold
+ 
+  .. note::
+
+     The ``ceph osd pool get threshold `` command is deprecated and will be removed in a future release.
+     Use ``ceph config get mgr mgr/pg_autoscaler/threshold `` instead.
 
 - **AUTOSCALE** is the pool's ``pg_autoscale_mode`` and is set to ``on``,
   ``off``, or ``warn``.
