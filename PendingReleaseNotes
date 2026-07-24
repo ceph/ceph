@@ -162,6 +162,16 @@
   in weight by a small fraction (default 0.1). This is tunable via
   `mon_stretch_max_bucket_weight_delta`.
 
+* RADOS: Added a debug-level guard that protects against accidentally leaving
+  debug subsystems at high log levels in production. When `high_debug_level_threshold`
+  is set (default `0` = disabled), any subsystem whose log level sits at or above
+  the threshold for longer than `high_debug_level_reset_timeout` seconds (default
+  `300`) is automatically reverted to the last known safe value, and a
+  `HIGH_DEBUG_LEVEL` health warning surfaces in `ceph health detail` while the
+  level remains elevated. Setting `high_debug_level_reset_timeout` to `0` gives
+  warn-only mode (health warning without auto-revert).
+  Related Tracker: https://tracker.ceph.com/issues/75467
+
 * CephFS: The offline CephFS tools (cephfs-data-scan, cephfs-journal-tool,
   and cephfs-table-tool) now include progress tracking with ETA (Estimated Time of
   Arrival) for long-running operations. Progress updates are displayed automatically

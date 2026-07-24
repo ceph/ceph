@@ -130,6 +130,7 @@ OSD::OSD(int id, uint32_t nonce,
       std::ignore = update_heartbeat_peers(
       ).then([this] {
 	update_stats();
+	check_debug_levels();
         mgrc->update_daemon_health(get_health_metrics());
 	if (++trim_queue_length_countdown >= TRIM_QLENGTHS_UPDATE_PERIOD) {
 	  trim_queue_length_countdown = 0;
@@ -1087,6 +1088,32 @@ void OSD::handle_conf_change(
   }
 }
 
+void OSD::check_debug_levels()
+{
+  auto threshold = local_conf().get_val<int64_t>(
+    "high_debug_level_threshold");
+  if (threshold <= 0) {
+    return;
+  }
+  auto timeout = local_conf().get_val<std::chrono::seconds>(
+    "high_debug_level_reset_timeout");
+  auto actions = debug_level_guard.check(
+    local_conf()->subsys, threshold, timeout);
+  for (auto& a : actions) {
+    auto val = std::to_string(a.to_log) + "/" + std::to_string(a.to_gather);
+    LOG_PREFIX(OSD::check_debug_levels);
+    ERROR("Auto-reverted {} from {} to {} after {}s",
+	  a.name, a.from_level, val, timeout.count());
+    gate.dispatch_in_background(
+      "debug_level_revert", *this, [name=a.name, val, FNAME] {
+	return local_conf().set_val(name, val).handle_exception(
+	  [name, val, FNAME](auto ep) {
+	    ERROR("failed to revert {} to {}: {}", name, val, ep);
+	  });
+      });
+  }
+}
+
 void OSD::update_stats()
 {
   gate.dispatch_in_background("statfs", *this, [this] {
@@ -1529,6 +1556,13 @@ vector<DaemonHealthMetric> OSD::get_health_metrics()
     }
     oldest_secs = now - oldest_op->get_started();
     metrics.emplace_back(daemon_metric::SLOW_OPS, slow, oldest_secs);
+  }
+
+  {
+    auto threshold = local_conf().get_val<int64_t>("high_debug_level_threshold");
+    auto [count, max_level] = DebugLevelGuard::count_elevated(
+      local_conf()->subsys, threshold);
+    metrics.emplace_back(daemon_metric::HIGH_DEBUG_LEVEL, count, max_level);
   }
 
   return metrics;

@@ -41,6 +41,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/ceph_argparse.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_context.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_crypto.cc
+  ${PROJECT_SOURCE_DIR}/src/common/debug_level_guard.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_fs.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_hash.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_time.cc

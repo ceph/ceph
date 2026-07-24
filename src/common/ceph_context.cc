@@ -943,6 +943,32 @@ void CephContext::reopen_logs()
     _service_thread->reopen_logs();
 }
 
+void CephContext::check_debug_level_guard()
+{
+  auto threshold = _conf.get_val<int64_t>("high_debug_level_threshold");
+  if (threshold <= 0) {
+    return;
+  }
+  auto timeout = _conf.get_val<std::chrono::seconds>("high_debug_level_reset_timeout");
+
+  auto actions = _debug_level_guard.check(_conf->subsys, threshold, timeout);
+
+  for (auto& a : actions) {
+    auto val = std::to_string(a.to_log) + "/" + std::to_string(a.to_gather);
+    _conf.set_val(a.name, val);
+
+    lgeneric_derr(this) << "Auto-reverted " << a.name
+      << " from " << a.from_level
+      << " to " << val
+      << " after " << timeout.count() << "s"
+      << " (high_debug_level_threshold=" << threshold << ")"
+      << dendl;
+  }
+  if (!actions.empty()) {
+    _conf.apply_changes(nullptr);
+  }
+}
+
 void CephContext::join_service_thread()
 {
   std::unique_lock<ceph::spinlock> lg(_service_thread_lock);
