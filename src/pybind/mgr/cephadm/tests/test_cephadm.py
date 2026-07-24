@@ -1771,6 +1771,46 @@ class TestCephadm(object):
             assert 'Ignoring invalid mgr config option test' in cephadm_module.health_checks[
                 'CEPHADM_INVALID_CONFIG_OPTION']['detail']
 
+    @mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command")
+    @mock.patch("cephadm.module.CephadmOrchestrator.get_foreign_ceph_option")
+    def test_remove_service_config(self, get_foreign_ceph_option, check_mon_command, cephadm_module: CephadmOrchestrator):
+        get_foreign_ceph_option.return_value = 'foo'
+        ps = PlacementSpec(hosts=['test'], count=1)
+        spec = ServiceSpec('nfs', service_id='a', placement=ps, config={'rados_replica_read_policy': 'localize'})
+        CephadmServe(cephadm_module)._remove_service_config(spec)
+        check_mon_command.assert_called_once_with({
+            'prefix': 'config rm',
+            'name': 'rados_replica_read_policy',
+            'who': 'client.nfs.a',
+        })
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command")
+    @mock.patch("cephadm.module.CephadmOrchestrator.get_foreign_ceph_option")
+    def test_remove_service_config_skips_invalid(self, get_foreign_ceph_option, check_mon_command, cephadm_module: CephadmOrchestrator):
+        get_foreign_ceph_option.side_effect = KeyError
+        ps = PlacementSpec(hosts=['test'], count=1)
+        spec = ServiceSpec('nfs', placement=ps, config={'invalid_key': 'val'})
+        CephadmServe(cephadm_module)._remove_service_config(spec)
+        check_mon_command.assert_not_called()
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command")
+    @mock.patch("cephadm.module.CephadmOrchestrator.get_foreign_ceph_option")
+    @mock.patch("cephadm.module.CephadmOrchestrator._kick_serve_loop")
+    def test_remove_service_cleans_spec_config(
+        self, _kick_serve_loop, get_foreign_ceph_option, check_mon_command, cephadm_module: CephadmOrchestrator
+    ):
+        get_foreign_ceph_option.return_value = 'foo'
+        ps = PlacementSpec(hosts=['test'], count=1)
+        spec = ServiceSpec('rgw', service_id='foo', placement=ps, config={'rgw_frontends': 'beast port=8080'})
+        cephadm_module.spec_store.save(spec)
+        cephadm_module.remove_service('rgw.foo')
+        check_mon_command.assert_called_once_with({
+            'prefix': 'config rm',
+            'name': 'rgw_frontends',
+            'who': 'client.rgw.foo',
+        })
+        assert 'rgw.foo' in cephadm_module.spec_store.spec_deleted
+
     @mock.patch("cephadm.module.CephadmOrchestrator.get_foreign_ceph_option")
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")

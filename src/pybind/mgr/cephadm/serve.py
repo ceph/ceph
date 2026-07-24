@@ -699,6 +699,30 @@ class CephadmServe:
                 self.mgr.set_health_warning('CEPHADM_FAILED_SET_OPTION', f'Failed to set {len(options_failed_to_set)} option(s)', len(
                     options_failed_to_set), options_failed_to_set)
 
+    def _remove_service_config(self, spec: ServiceSpec) -> None:
+        if not spec.config:
+            return
+        section = utils.name_to_config_section(spec.service_name())
+        for k in spec.config.keys():
+            try:
+                self.mgr.get_foreign_ceph_option(section, k)
+            except KeyError:
+                self.log.debug(
+                    'Ignoring invalid %s config option %s on removal', spec.service_name(), k
+                )
+                continue
+            self.log.debug(
+                'Removing config keys for %s, section: %s, key: %s', spec.service_name(), section, k
+            )
+            try:
+                self.mgr.check_mon_command({
+                    'prefix': 'config rm',
+                    'name': k,
+                    'who': section,
+                })
+            except MonCommandFailed as e:
+                self.log.warning('Failed to remove %s option %s: %s', spec.service_name(), k, e)
+
     def _update_rgw_endpoints(self, rgw_spec: RGWSpec) -> None:
 
         if not rgw_spec.update_endpoints or rgw_spec.rgw_realm_token is None:

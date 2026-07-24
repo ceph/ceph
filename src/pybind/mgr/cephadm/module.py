@@ -2883,6 +2883,8 @@ Then run the following:
                 raise OrchestratorError(
                     f'If {service_name} is removed then the following OSDs will remain, --force to proceed anyway\n{msg}')
 
+        spec = self.spec_store[service_name].spec
+        CephadmServe(self)._remove_service_config(spec)
         found = self.spec_store.rm(service_name)
         if found and service_name.startswith('osd.'):
             self.spec_store.finally_rm(service_name)
