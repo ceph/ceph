@@ -1,5 +1,6 @@
 overrides:
   ceph:
+    crush_tunables: jewel
     log-ignorelist:
       - \(POOL_APP_NOT_ENABLED\)
     conf:
@@ -10,8 +11,10 @@ overrides:
 tasks:
 - rados:
     clients: [client.0]
-    ops: 4000
-    objects: 50
+    ops: 400000
+    max_seconds: 600
+    max_in_flight: 64
+    objects: 1024
     balance_reads: true
     op_weights:
       read: 100
@@ -21,3 +24,5 @@ tasks:
       snap_remove: 50
       rollback: 50
       copy_from: 50
+      setattr: 25
+      rmattr: 25
