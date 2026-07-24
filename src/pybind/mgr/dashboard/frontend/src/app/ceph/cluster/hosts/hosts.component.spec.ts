@@ -1,6 +1,13 @@
 import { HttpHeaders } from '@angular/common/http';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import {
+  ComponentFixture,
+  discardPeriodicTasks,
+  fakeAsync,
+  flush,
+  TestBed,
+  tick
+} from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
@@ -85,7 +92,7 @@ describe('HostsComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should render hosts list even with not permission mapped services', () => {
+  it('should render hosts list even with not permission mapped services', fakeAsync(() => {
     const hostname = 'ceph.dev';
     const payload = [
       {
@@ -111,6 +118,8 @@ describe('HostsComponent', () => {
 
     OrchestratorHelper.mockStatus(false);
     fixture.detectChanges();
+    tick();
+    fixture.detectChanges();
     hostListSpy.and.callFake(() => of(payload));
     fixture.detectChanges();
 
@@ -121,7 +130,9 @@ describe('HostsComponent', () => {
       'table > tbody > tr > td > span'
     );
     expect(spans[0].textContent.trim()).toBe(hostname);
-  });
+    flush();
+    discardPeriodicTasks();
+  }));
 
   it('should test if host facts are transformed correctly if orch available', () => {
     const features = [OrchestratorFeature.HOST_FACTS];
@@ -161,7 +172,7 @@ describe('HostsComponent', () => {
     expect(component.hosts[0]['nic_count']).toEqual(1);
   });
 
-  it('should test if host facts are unavailable if no orch available', () => {
+  it('should test if host facts are unavailable if no orch available', fakeAsync(() => {
     const payload = [
       {
         hostname: 'host_test',
@@ -176,6 +187,8 @@ describe('HostsComponent', () => {
     ];
     OrchestratorHelper.mockStatus(false);
     fixture.detectChanges();
+    tick();
+    fixture.detectChanges();
     hostListSpy.and.callFake(() => of(payload));
     fixture.detectChanges();
 
@@ -184,9 +197,11 @@ describe('HostsComponent', () => {
 
     const spans = fixture.debugElement.nativeElement.querySelectorAll('[cdstabledata] span');
     expect(spans[7].textContent).toBe('-');
-  });
+    flush();
+    discardPeriodicTasks();
+  }));
 
-  it('should test if host facts are unavailable if get_facts orch feature is not available', () => {
+  it('should test if host facts are unavailable if get_facts orch feature is not available', fakeAsync(() => {
     const payload = [
       {
         hostname: 'host_test',
@@ -201,6 +216,8 @@ describe('HostsComponent', () => {
     ];
     OrchestratorHelper.mockStatus(true);
     fixture.detectChanges();
+    tick();
+    fixture.detectChanges();
     hostListSpy.and.callFake(() => of(payload));
     fixture.detectChanges();
 
@@ -209,7 +226,9 @@ describe('HostsComponent', () => {
 
     const spans = fixture.debugElement.nativeElement.querySelectorAll('[cdstabledata] span');
     expect(spans[7].textContent).toBe('-');
-  });
+    flush();
+    discardPeriodicTasks();
+  }));
 
   it('should test if memory/raw capacity columns shows N/A if facts are available but in fetching state', () => {
     const features = [OrchestratorFeature.HOST_FACTS];

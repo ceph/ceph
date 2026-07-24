@@ -1,51 +1,39 @@
-<nav
-  class="nav nav-tabs"
-  ngbNav
-  #nav="ngbNav"
->
-  <ng-container ngbNavItem>
-    <a
-      class="nav-link"
-      routerLink="/monitoring/active-alerts"
-      routerLinkActive="active"
-      ariaCurrentWhenActive="page"
-      [routerLinkActiveOptions]="{ exact: true }"
-      i18n
-      >Active Alerts
-      <cds-tag
-        *ngIf="prometheusAlertService.activeCriticalAlerts > 0"
-        class="tag-danger ms-1"
-        >{{ prometheusAlertService.activeCriticalAlerts }}</cds-tag
-      >
-      <cds-tag
-        *ngIf="prometheusAlertService.activeWarningAlerts > 0"
-        class="tag-warning ms-1"
-        >{{ prometheusAlertService.activeWarningAlerts }}</cds-tag
-      ></a
-    >
-  </ng-container>
-  @if (prometheusPermissions.read) {
-    <ng-container ngbNavItem>
-      <a
-        class="nav-link"
-        routerLink="/monitoring/silences"
-        routerLinkActive="active"
-        ariaCurrentWhenActive="page"
-        [routerLinkActiveOptions]="{ exact: true }"
-        i18n
-        >Silences</a
-      >
-    </ng-container>
+<ng-template #activeAlertsHeading>
+  <span i18n>Active Alerts</span>
+  @if (prometheusAlertService.activeCriticalAlerts > 0) {
+    <cds-tag class="tag-danger ms-1">{{ prometheusAlertService.activeCriticalAlerts }}</cds-tag>
   }
-  <ng-container ngbNavItem>
-    <a
-      class="nav-link"
-      routerLink="/monitoring/alerts"
-      routerLinkActive="active"
-      ariaCurrentWhenActive="page"
-      [routerLinkActiveOptions]="{ exact: true }"
-      i18n
-      >Alert Rules</a
-    >
-  </ng-container>
-</nav>
+  @if (prometheusAlertService.activeWarningAlerts > 0) {
+    <cds-tag class="tag-warning ms-1">{{ prometheusAlertService.activeWarningAlerts }}</cds-tag>
+  }
+</ng-template>
+<cds-tabs
+  type="contained"
+  followFocus="true"
+  isNavigation="true"
+  [cacheActive]="false">
+  <cds-tab
+    [heading]="activeAlertsHeading"
+    title="Active Alerts"
+    i18n-title
+    [tabIndex]="null"
+    [active]="activeTab === Tabs.activeAlerts"
+    (selected)="onSelected(Tabs.activeAlerts)">
+  </cds-tab>
+  @if (prometheusPermissions.read) {
+    <cds-tab
+      heading="Silences"
+      i18n-heading
+      [tabIndex]="null"
+      [active]="activeTab === Tabs.silences"
+      (selected)="onSelected(Tabs.silences)">
+    </cds-tab>
+  }
+  <cds-tab
+    heading="Alert Rules"
+    i18n-heading
+    [tabIndex]="null"
+    [active]="activeTab === Tabs.alerts"
+    (selected)="onSelected(Tabs.alerts)">
+  </cds-tab>
+</cds-tabs>

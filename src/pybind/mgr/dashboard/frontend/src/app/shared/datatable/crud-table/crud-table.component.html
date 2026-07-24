@@ -1,22 +1,19 @@
-<ul
-  class="nav nav-tabs"
-  *ngIf="tabs"
->
-  <li
-    class="nav-item"
-    *ngFor="let tab of tabs; keyvalue"
-  >
-    <a
-      class="nav-link"
-      [routerLink]="tab.url"
-      routerLinkActive="active"
-      ariaCurrentWhenActive="page"
-      [routerLinkActiveOptions]="{ exact: true }"
-      i18n
-      >{{ tab.name }}</a
-    >
-  </li>
-</ul>
+@if (tabs) {
+  <cds-tabs
+    type="contained"
+    followFocus="true"
+    isNavigation="true"
+    [cacheActive]="false">
+    @for (tab of tabs; track tab.url) {
+      <cds-tab
+        [heading]="tab.name"
+        [tabIndex]="null"
+        [active]="tab.url === activeTabUrl"
+        (selected)="onTabSelected(tab.url)">
+      </cds-tab>
+    }
+  </cds-tabs>
+}
 
 <ng-container *ngIf="meta">
   <cd-table

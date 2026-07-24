@@ -21,7 +21,8 @@ import {
   LayoutModule,
   InlineLoadingModule,
   PopoverModule,
-  TooltipModule
+  TooltipModule,
+  TabsModule
 } from 'carbon-components-angular';
 import AddIcon from '@carbon/icons/es/add/16';
 import FilterIcon from '@carbon/icons/es/filter/16';
@@ -113,7 +114,8 @@ import { TableDetailDirective } from './directives/table-detail.directive';
     LayoutModule,
     InlineLoadingModule,
     PopoverModule,
-    TooltipModule
+    TooltipModule,
+    TabsModule
   ],
   declarations: [
     TableComponent,
