@@ -3117,10 +3117,15 @@ void RGWGetUsage::execute(optional_yield y)
   bool is_truncated = true;
 
   RGWUsageIter usage_iter;
-  
-  while (s->bucket && is_truncated) {
-    op_ret = s->bucket->read_usage(this, start_epoch, end_epoch, max_entries, &is_truncated,
+
+  while (is_truncated) {
+    if (s->bucket) {
+      op_ret = s->bucket->read_usage(this, start_epoch, end_epoch, max_entries, &is_truncated,
+				     usage_iter, usage);
+    } else {
+      op_ret = s->user->read_usage(this, start_epoch, end_epoch, max_entries, &is_truncated,
 				   usage_iter, usage);
+    }
     if (op_ret == -ENOENT) {
       op_ret = 0;
       is_truncated = false;
@@ -3128,7 +3133,7 @@ void RGWGetUsage::execute(optional_yield y)
 
     if (op_ret < 0) {
       return;
-    }    
+    }
   }
 
   op_ret = rgw_sync_all_stats(this, y, driver, s->user->get_id(),
