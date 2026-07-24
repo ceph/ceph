@@ -2816,13 +2816,12 @@ int RGWCreateBucket_ObjStore_S3::get_params(optional_yield y)
 
 void RGWCreateBucket_ObjStore_S3::send_response()
 {
-  if (op_ret == -ERR_BUCKET_EXISTS) {
-    const auto eexist_override = s->cct->_conf.get_val<bool>("rgw_bucket_eexist_override");
-    if (! eexist_override) [[likely]] {
-      op_ret = 0;
-    } else {
+  if (op_ret == -ERR_BUCKET_EXISTS && s->err.message.empty()) {
+    s->err.message = "The bucket you tried to create already exists, and you own it.";
+  }
+
+  if (op_ret == -EEXIST && s->err.message.empty()) {
       s->err.message = "The requested bucket name is not available. The bucket namespace is shared by all users of the system. Specify a different name and try again.";
-    }
   }
 
   if (op_ret) {
