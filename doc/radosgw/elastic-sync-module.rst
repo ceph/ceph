@@ -1,3 +1,5 @@
+.. _radosgw-elastic-sync-module:
+
 =========================
 ElasticSearch Sync Module
 =========================
