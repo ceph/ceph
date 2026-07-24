@@ -3205,6 +3205,14 @@ Then run the following:
         assert d.daemon_id is not None
         assert d.hostname
 
+        service_name = d.service_name()
+        if service_name in self.spec_store:
+            spec = self.spec_store[service_name].spec
+            if spec.unmanaged:
+                raise OrchestratorError(
+                    f'Unable to {action} {daemon_name}: Service {service_name} is unmanaged. '
+                    f'Daemon actions (start/stop/restart/redeploy/reconfig/rotate-key) are not allowed for unmanaged services.')
+
         if (action == 'redeploy' or action == 'restart') and self.daemon_is_self(d.daemon_type, d.daemon_id) \
                 and not self.mgr_service.mgr_map_has_standby():
             raise OrchestratorError(
@@ -4516,6 +4524,15 @@ Then run the following:
         )
 
     def _apply_service_spec(self, spec: ServiceSpec) -> str:
+        service_name = spec.service_name()
+        if service_name in self.spec_store:
+            existing_spec = self.spec_store[service_name].spec
+            if existing_spec.unmanaged and spec.unmanaged:
+                raise OrchestratorError(
+                    f'Unable to apply spec for {service_name}: Service is currently unmanaged. '
+                    f'Cannot update an unmanaged service. '
+                    f'To update this service, first set unmanaged=false in the spec to make it managed.')
+
         if spec.placement.is_empty():
             # fill in default placement
             defaults = {
