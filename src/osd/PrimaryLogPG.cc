@@ -13606,7 +13606,8 @@ bool PrimaryLogPG::start_recovery_ops(
       !get_backfill_targets().empty() && started < max &&
       missing.num_missing() == 0 &&
       waiting_on_backfill.empty()) {
-    if (get_osdmap()->test_flag(CEPH_OSDMAP_NOBACKFILL)) {
+    if (get_osdmap()->test_flag(CEPH_OSDMAP_NOBACKFILL) ||
+        pool.info.has_flag(pg_pool_t::FLAG_NOBACKFILL)) {
       dout(10) << "deferring backfill due to NOBACKFILL" << dendl;
       deferred_backfill = true;
     } else if (get_osdmap()->test_flag(CEPH_OSDMAP_NOREBALANCE) &&

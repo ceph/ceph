@@ -488,6 +488,15 @@ You may set values for the following keys:
    :Valid Range: 1 sets flag, 0 unsets flag
    :Version: Version ``FIXME``
 
+.. _nobackfill:
+
+.. describe:: nobackfill
+
+   :Description: Sets or unsets the ``NOBACKFILL`` flag on a given pool, if set, any backfills to or from the OSDs in the given pool would be paused
+   :Type: Integer
+   :Valid Range: 1 sets flag, 0 unsets flag
+   :Version: Version ``FIXME``
+
 .. _nosizechange:
 
 .. describe:: nosizechange
