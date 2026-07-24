@@ -274,7 +274,7 @@ class SpecStore():
 
     def get_by_service_type(self, service_type: str) -> List[SpecDescription]:
         matching_specs: List[SpecDescription] = []
-        for name, spec in self._specs.items():
+        for name, spec in list(self._specs.items()):
             if spec.service_type == service_type:
                 matching_specs.append(
                     SpecDescription(
@@ -288,7 +288,7 @@ class SpecStore():
 
     @property
     def active_specs(self) -> Mapping[str, ServiceSpec]:
-        return {k: v for k, v in self._specs.items() if k not in self.spec_deleted}
+        return {k: v for k, v in list(self._specs.items()) if k not in self.spec_deleted}
 
     def load(self):
         # type: () -> None
@@ -550,7 +550,7 @@ class SpecStore():
     def get_specs_by_type(self, service_type: str) -> Mapping[str, ServiceSpec]:
         return {
             service_name: spec
-            for service_name, spec in self._specs.items()
+            for service_name, spec in list(self._specs.items())
             if service_type == spec.service_type
         }
 
