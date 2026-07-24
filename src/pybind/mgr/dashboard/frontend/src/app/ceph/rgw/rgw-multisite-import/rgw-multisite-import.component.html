@@ -114,10 +114,10 @@
           formControlName="archive_zone"
         >
           <span i18n>Archive</span>
-          <cd-help-text i18n
-            >Enable archival storage to keep all object versions and protect data from deletion or
-            corruption.</cd-help-text
-          >
+          <cd-help-text i18n>
+            Enable archival storage to keep all object versions and protect data from deletion or
+            corruption.
+          </cd-help-text>
         </cds-checkbox>
       </div>
 
@@ -133,10 +133,10 @@
           formControlName="unmanaged"
         >
           <span i18n>Unmanaged</span>
-          <cd-help-text i18n
-            >If set to true, the orchestrator will not start nor stop any daemon associated with
-            this service. Placement and all other properties will be ignored.</cd-help-text
-          >
+          <cd-help-text i18n>
+            If set to true, the orchestrator will not start nor stop any daemon associated with
+            this service. Placement and all other properties will be ignored.
+          </cd-help-text>
         </cds-checkbox>
       </div>
 
@@ -314,9 +314,9 @@
     let-control="control"
   >
     @if (control?.errors) {
-      @for (err of control.errors | keyvalue; track err.key) {
-        <span class="invalid-feedback">{{ INVALID_TEXTS[err.key] }}</span>
-      }
+    @for (err of control.errors | keyvalue; track err.key) {
+    <span class="invalid-feedback">{{ INVALID_TEXTS[err.key] }}</span>
+    }
     }
   </ng-template>
 </cds-modal>
