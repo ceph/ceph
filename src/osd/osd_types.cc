@@ -2453,8 +2453,10 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
   out << p.get_type_name();
   if (p.get_type_name() == "erasure") {
     out << " profile " << p.erasure_code_profile;
-    out << " ec_data_shard_count " << p.ec_data_shard_count.value_or(0);
-    out << " ec_coding_shard_count " << p.ec_coding_shard_count.value_or(0);
+    out << " ec_data_shard_count "
+        << static_cast<unsigned int>(p.ec_data_shard_count.value_or(0));
+    out << " ec_coding_shard_count "
+        << static_cast<unsigned int>(p.ec_coding_shard_count.value_or(0));
   }
   out << " size " << p.get_size()
       << " min_size " << p.get_min_size()
