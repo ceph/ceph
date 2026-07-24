@@ -6,6 +6,7 @@
 #include "crimson/common/errorator-utils.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/os/seastore/logging.h"
+#include "crimson/os/seastore/rbm_ool_io_timing.h"
 
 SET_SUBSYS(seastore_epm);
 
@@ -1180,7 +1181,18 @@ RandomBlockOolWriter::alloc_write_ool_extents(
   if (extents.empty()) {
     return alloc_write_iertr::now();
   }
-  return seastar::with_gate(write_guard, [this, &t, &extents] {
+#ifdef CRIMSON_DETAILED_SAMPLING
+  const auto gate_start = seastar::lowres_clock::now();
+#endif
+  return seastar::with_gate(write_guard, [this, &t, &extents
+#ifdef CRIMSON_DETAILED_SAMPLING
+                                          , gate_start
+#endif
+                                         ] {
+#ifdef CRIMSON_DETAILED_SAMPLING
+    t.get_phase_durations().ool_write_rbm_gate +=
+      seastar::lowres_clock::now() - gate_start;
+#endif
     seastar::lw_shared_ptr<rbm_pending_ool_t> ptr =
       seastar::make_lw_shared<rbm_pending_ool_t>();
     ptr->pending_extents = t.get_pre_alloc_list();
@@ -1206,6 +1218,9 @@ RandomBlockOolWriter::do_write(
   assert(!extents.empty());
   DEBUGT("start with {} allocated extents",
          t, extents.size());
+#ifdef CRIMSON_DETAILED_SAMPLING
+  const auto prep_start = seastar::lowres_clock::now();
+#endif
   std::vector<write_info_t> writes;
   for (auto& ex : extents) {
     auto paddr = ex->get_paddr();
@@ -1284,6 +1299,72 @@ RandomBlockOolWriter::do_write(
     }
   }
 
+#ifdef CRIMSON_DETAILED_SAMPLING
+  const auto io_start = seastar::lowres_clock::now();
+  t.get_phase_durations().ool_write_rbm_prep += io_start - prep_start;
+  auto last_issued = seastar::make_lw_shared<
+    std::optional<seastar::lowres_clock::time_point>>();
+  auto dma_tracker = seastar::make_lw_shared<rbm_ool_io_dma_tracker_t>();
+  return trans_intr::make_interruptible(
+    seastar::do_with(std::move(writes),
+      [&t, this, last_issued, dma_tracker](auto& writes) {
+      rbm_ool_io_dma_tracker = dma_tracker.get();
+      auto& stats = t.get_ool_write_stats();
+      stats.num_records += writes.size();
+      auto& trans_stats = get_by_src(w_stats.stats_by_src, t.get_src());
+      trans_stats.num_records += writes.size();
+      return alloc_write_ertr::parallel_for_each(writes,
+        [last_issued](auto& info) {
+        const auto issued = seastar::lowres_clock::now();
+        if (!last_issued->has_value() || issued > last_issued->value()) {
+          *last_issued = issued;
+        }
+        return info.rbm->write(info.offset, info.bp
+        ).handle_error(
+          alloc_write_ertr::pass_further{},
+          crimson::ct_error::assert_all(
+            "Invalid error when writing record")
+        );
+      });
+    })
+  ).si_then([&t, io_start, last_issued, dma_tracker] {
+    rbm_ool_io_dma_tracker = nullptr;
+    const auto io_end = seastar::lowres_clock::now();
+    auto& pd = t.get_phase_durations();
+    pd.ool_write_rbm_io += io_end - io_start;
+
+    auto issued = io_end;
+    if (last_issued->has_value()) {
+      issued = last_issued->value();
+    }
+    if (issued < io_start) {
+      issued = io_start;
+    } else if (issued > io_end) {
+      issued = io_end;
+    }
+    pd.ool_write_rbm_io_queue += issued - io_start;
+    pd.ool_write_rbm_io_device += io_end - issued;
+
+    if (dma_tracker->first_dma_start && dma_tracker->last_dma_end) {
+      auto first_dma = dma_tracker->first_dma_start.value();
+      auto last_dma = dma_tracker->last_dma_end.value();
+      if (first_dma < io_start) {
+        first_dma = io_start;
+      }
+      if (last_dma < first_dma) {
+        last_dma = first_dma;
+      } else if (last_dma > io_end) {
+        last_dma = io_end;
+      }
+      pd.ool_write_rbm_io_dma += last_dma - first_dma;
+      if (last_dma <= io_end) {
+        pd.ool_write_rbm_io_reactor += io_end - last_dma;
+      }
+    }
+  }).finally([dma_tracker] {
+    rbm_ool_io_dma_tracker = nullptr;
+  });
+#else
   return trans_intr::make_interruptible(
     seastar::do_with(std::move(writes),
       [&t, this](auto& writes) {
@@ -1302,6 +1383,7 @@ RandomBlockOolWriter::do_write(
       });
     })
   );
+#endif
 }
 
 }

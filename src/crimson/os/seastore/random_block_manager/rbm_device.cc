@@ -9,6 +9,7 @@
 #include "crimson/common/log.h"
 #include "crimson/common/errorator-utils.h"
 #include "crimson/os/seastore/logging.h"
+#include "crimson/os/seastore/rbm_ool_io_timing.h"
 
 #include "include/buffer.h"
 #include "rbm_device.h"
@@ -296,7 +297,9 @@ write_ertr::future<> EphemeralRBMDevice::write(
     offset,
     bptr.length());
 
+  rbm_ool_io_dma_tracker_note_dma_start();
   ::memcpy(buf + offset, bptr.c_str(), bptr.length());
+  rbm_ool_io_dma_tracker_note_dma_end();
 
   return write_ertr::now();
 }

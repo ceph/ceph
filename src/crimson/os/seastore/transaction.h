@@ -518,6 +518,15 @@ public:
     seastar::lowres_clock::duration ool_write_seg_delayed_io{0};   // write_record futures
     seastar::lowres_clock::duration ool_write_seg_delayed_io_queue{0};  // until device write issued
     seastar::lowres_clock::duration ool_write_seg_delayed_io_device{0}; // write issued → complete
+    // Random-block backend (RandomBlockOolWriter) — nested under ool_write:
+    seastar::lowres_clock::duration ool_write_rbm{0};    // write_preallocated_ool_extents
+    seastar::lowres_clock::duration ool_write_rbm_gate{0}; // write_guard wait
+    seastar::lowres_clock::duration ool_write_rbm_prep{0}; // prepare/merge before I/O
+    seastar::lowres_clock::duration ool_write_rbm_io{0};   // RBM::write device futures
+    seastar::lowres_clock::duration ool_write_rbm_io_queue{0};  // until last write issued
+    seastar::lowres_clock::duration ool_write_rbm_io_device{0}; // last write issued → complete
+    seastar::lowres_clock::duration ool_write_rbm_io_dma{0};    // first dma_write → last dma_write
+    seastar::lowres_clock::duration ool_write_rbm_io_reactor{0}; // last dma_write → future done
 #endif
     std::chrono::steady_clock::duration lba_update{0};      // update_lba_mappings
     std::chrono::steady_clock::duration prepare_enter{0};   // enter(prepare) pipeline stage

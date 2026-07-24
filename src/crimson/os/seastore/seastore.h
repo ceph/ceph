@@ -77,6 +77,15 @@ enum class txn_stage_t : uint8_t {
     SUBMIT_OOL_WRITE_SEG_DELAYED_IO,   // SegmentedOolWriter::write_record futures
     SUBMIT_OOL_WRITE_SEG_DELAYED_IO_QUEUE,  // wait until RecordSubmitter issues write
     SUBMIT_OOL_WRITE_SEG_DELAYED_IO_DEVICE, // journal_allocator.write completion
+    // RandomBlockOolWriter (RBM backend):
+    SUBMIT_OOL_WRITE_RBM,              // write_preallocated_ool_extents
+    SUBMIT_OOL_WRITE_RBM_GATE,         // write_guard wait
+    SUBMIT_OOL_WRITE_RBM_PREP,         // prepare/merge before I/O
+    SUBMIT_OOL_WRITE_RBM_IO,           // RandomBlockOolWriter::do_write futures
+    SUBMIT_OOL_WRITE_RBM_IO_QUEUE,     // until last write issued
+    SUBMIT_OOL_WRITE_RBM_IO_DEVICE,    // last write issued → complete
+    SUBMIT_OOL_WRITE_RBM_IO_DMA,       // first dma_write → last dma_write
+    SUBMIT_OOL_WRITE_RBM_IO_REACTOR,   // last dma_write → future done
 #endif
     SUBMIT_LBA_UPDATE,     // update_lba_mappings
     SUBMIT_PREPARE_ENTER,  // enter(prepare) pipeline stage (global OrderedExclusive wait)
