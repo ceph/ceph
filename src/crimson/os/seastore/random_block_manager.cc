@@ -12,10 +12,11 @@ seastar::future<random_block_device::RBMDeviceRef>
 get_rb_device(
   const std::string &device)
 {
+  std::string device_path = normalize_device_path(device);
   return seastar::make_ready_future<random_block_device::RBMDeviceRef>(
     std::make_unique<
       random_block_device::nvme::NVMeBlockDevice
-    >(device + "/block"));
+    >(std::move(device_path)));
 }
 
 }
