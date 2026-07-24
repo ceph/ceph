@@ -943,12 +943,16 @@ private:
       static constexpr auto type_name = "PG::BackgroundProcessLock::wait";
     } wait;
     seastar::shared_mutex mutex;
+    bool locked = false;
 
     interruptible_future<> lock_with_op(SnapTrimEvent &st_event) noexcept;
     interruptible_future<> lock() noexcept;
 
     void unlock() noexcept {
-      mutex.unlock();
+      if (locked) {
+        locked = false;
+        mutex.unlock();
+      }
     }
   } background_process_lock;
 
