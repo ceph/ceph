@@ -52,17 +52,26 @@ SHELL ["/bin/bash", "-c"]
 # Derive EL_VER (el9/el10) and DIST_PATH (centos/9|rocky/10|almalinux/X)
 # from /etc/os-release for later use in repo URLs.
 RUN set -euo pipefail; \
-    source /etc/os-release; \
+    . /etc/os-release; \
     MAJOR="${VERSION_ID%%.*}"; \
+    PKG_MGR="dnf"; \
     case "${ID}" in \
       centos)    DIST_PATH="centos/${MAJOR}" ;; \
       rocky)     DIST_PATH="rocky/${MAJOR}" ;; \
       almalinux) DIST_PATH="almalinux/${MAJOR}" ;; \
+      debian) \
+          PKG_MGR="apt"; \
+          ;; \
       *) echo "Unsupported base: ID=${ID} VERSION_ID=${VERSION_ID}" >&2; exit 1 ;; \
     esac; \
-    EL_VER="el${MAJOR}"; \
-    printf 'EL_VER=%s\nDIST_PATH=%s\nID=%s\nVERSION_ID=%s\nMAJOR=%s\n' \
-           "$EL_VER" "$DIST_PATH" "$ID" "$VERSION_ID" "$MAJOR" > /etc/ceph-distro.env
+    if [ "${PKG_MGR}" = "dnf" ] ; then \
+        EL_VER="el${MAJOR}"; \
+        printf 'EL_VER=%s\nDIST_PATH=%s\nID=%s\nVERSION_ID=%s\nMAJOR=%s\nPKG_MGR=%s\n' \
+               "$EL_VER" "$DIST_PATH" "$ID" "$VERSION_ID" "$MAJOR" "$PKG_MGR" > /etc/ceph-distro.env ; \
+    else \
+        printf 'ID=%s\nVERSION_ID=%s\nMAJOR=%s\nPKG_MGR=%s\n' \
+               "$ID" "$VERSION_ID" "$MAJOR" "$PKG_MGR" > /etc/ceph-distro.env ; \
+    fi
 
 #===================================================================================================
 # Install ceph and dependencies, and clean up
@@ -73,70 +82,91 @@ RUN set -euo pipefail; \
 # Disable documentation
 # (assumes only [main] section exists)
 RUN \
-    if grep -q 'tsflags' /etc/dnf/dnf.conf ; then \
-        sed -i 's/tsflags=.*/tsflags=nodocs/g' /etc/dnf/dnf.conf ; \
-    else \
-        echo "tsflags=nodocs" >> /etc/dnf/dnf.conf ; \
+    . /etc/ceph-distro.env; \
+    if [ "${PKG_MGR}" = "dnf" ] ; then \
+        if grep -q 'tsflags' /etc/dnf/dnf.conf ; then \
+            sed -i 's/tsflags=.*/tsflags=nodocs/g' /etc/dnf/dnf.conf ; \
+        else \
+            echo "tsflags=nodocs" >> /etc/dnf/dnf.conf ; \
+        fi ; \
     fi
 
 # Pre-reqs
-RUN dnf install -y --setopt=install_weak_deps=False epel-release jq
+RUN . /etc/ceph-distro.env; \
+    if [ "${PKG_MGR}" = "dnf" ] ; then \
+        dnf install -y --setopt=install_weak_deps=False epel-release jq ; \
+    else \
+        apt-get update ; DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::=--force-confold  jq ; \
+    fi
 
 # NFS-Ganesha repo
 RUN set -eux; \
-    { \
-        printf '%s\n' '[ganesha]'; \
-        printf '%s\n' 'name=ganesha'; \
-        printf '%s\n' "baseurl=${GANESHA_REPO_BASEURL}"; \
-        printf '%s\n' 'gpgcheck=0'; \
-        printf '%s\n' 'enabled=1'; \
-    } > /etc/yum.repos.d/ganesha.repo
+    . /etc/ceph-distro.env; \
+    if [ "${PKG_MGR}" = "dnf" ] ; then \
+        { \
+            printf '%s\n' '[ganesha]'; \
+            printf '%s\n' 'name=ganesha'; \
+            printf '%s\n' "baseurl=${GANESHA_REPO_BASEURL}"; \
+            printf '%s\n' 'gpgcheck=0'; \
+            printf '%s\n' 'enabled=1'; \
+        } > /etc/yum.repos.d/ganesha.repo ; \
+    fi
 
 # ISCSI repo
 RUN set -eux && \
-    source /etc/ceph-distro.env && \
-    curl -s -L https://shaman.ceph.com/api/repos/tcmu-runner/main/latest/${DIST_PATH}/repo?arch=$(arch) -o /etc/yum.repos.d/tcmu-runner.repo && \
-    case "${CEPH_REF}" in \
-        quincy|reef) \
-            curl -fs -L https://download.ceph.com/ceph-iscsi/3/rpm/${EL_VER}/ceph-iscsi.repo -o /etc/yum.repos.d/ceph-iscsi.repo ;\
-            ;;\
-        main|*) \
-            curl -fs -L https://shaman.ceph.com/api/repos/ceph-iscsi/main/latest/${DIST_PATH}/repo -o /etc/yum.repos.d/ceph-iscsi.repo ;\
-            ;;\
-    esac
+    . /etc/ceph-distro.env && \
+    if [ "${PKG_MGR}" = "dnf" ] ; then \
+        curl -s -L https://shaman.ceph.com/api/repos/tcmu-runner/main/latest/${DIST_PATH}/repo?arch=$(arch) -o /etc/yum.repos.d/tcmu-runner.repo && \
+        case "${CEPH_REF}" in \
+            quincy|reef) \
+                curl -fs -L https://download.ceph.com/ceph-iscsi/3/rpm/${EL_VER}/ceph-iscsi.repo -o /etc/yum.repos.d/ceph-iscsi.repo ;\
+                ;;\
+            main|*) \
+                curl -fs -L https://shaman.ceph.com/api/repos/ceph-iscsi/main/latest/${DIST_PATH}/repo -o /etc/yum.repos.d/ceph-iscsi.repo ;\
+                ;;\
+        esac ; \
+    fi
 
 # Ceph repo
 RUN --mount=type=secret,id=prerelease_creds set -ex && \
-    source /etc/ceph-distro.env && \
-    if [ "$CUSTOM_CEPH_REPO_URL" ]; then \
-        curl -L -o /tmp/custom-ceph.repo "$CUSTOM_CEPH_REPO_URL" && \
-        mv /tmp/custom-ceph.repo  /etc/yum.repos.d/custom-ceph.repo && \
-        exit 0 ; \
-    fi && \
-    rpm --import 'https://download.ceph.com/keys/release.asc' && \
-    ARCH=$(arch); if [ "${ARCH}" == "aarch64" ]; then ARCH="arm64"; fi ;\
-    IS_RELEASE=0 ;\
-    if [[ "${CI_CONTAINER}" == "true" ]] ; then \
-        # TODO: this can return different ceph builds (SHA1) for x86 vs. arm runs. is it important to fix?
-        REPO_URL=$(curl -fs "https://shaman.ceph.com/api/search/?project=ceph&distros=${DIST_PATH}/${ARCH}&flavor=${OSD_FLAVOR}&ref=${CEPH_REF}&sha1=latest" | jq -r .[0].url) ;\
+    . /etc/ceph-distro.env && \
+    if [ "${PKG_MGR}" = "dnf" ] ; then \
+        if [ "$CUSTOM_CEPH_REPO_URL" ]; then \
+            curl -L -o /tmp/custom-ceph.repo "$CUSTOM_CEPH_REPO_URL" && \
+            mv /tmp/custom-ceph.repo  /etc/yum.repos.d/custom-ceph.repo && \
+            exit 0 ; \
+        fi && \
+        rpm --import 'https://download.ceph.com/keys/release.asc' && \
+        ARCH=$(arch); if [ "${ARCH}" == "aarch64" ]; then ARCH="arm64"; fi ;\
+        IS_RELEASE=0 ;\
+        if [[ "${CI_CONTAINER}" == "true" ]] ; then \
+            # TODO: this can return different ceph builds (SHA1) for x86 vs. arm runs. is it important to fix?
+            REPO_URL=$(curl -fs "https://shaman.ceph.com/api/search/?project=ceph&distros=${DIST_PATH}/${ARCH}&flavor=${OSD_FLAVOR}&ref=${CEPH_REF}&sha1=latest" | jq -r .[0].url) ;\
+        else \
+            IS_RELEASE=1 ;\
+            . /run/secrets/prerelease_creds; \
+            REPO_URL="https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/rpm-${CEPH_REF}/${EL_VER}/" ;\
+        fi && \
+        # Trim trailing slashes
+        REPO_URL="${REPO_URL%/}" && \
+        if [[ "$REPO_URL" == */pulp/content/* ]] ; then \
+            # Pulp nests packages under noarch/Packages/<first-letter>/
+            CEPH_RELEASE_RPM="$REPO_URL/noarch/Packages/c/ceph-release-1-${IS_RELEASE}.${EL_VER}.noarch.rpm" ; \
+        else \
+            # chacra serves packages flat under noarch/
+            CEPH_RELEASE_RPM="$REPO_URL/noarch/ceph-release-1-${IS_RELEASE}.${EL_VER}.noarch.rpm" ; \
+        fi && \
+        rpm -Uvh "$CEPH_RELEASE_RPM" ; \
+        if [[ "$IS_RELEASE" == 1 ]] ; then \
+            sed -i "s;http://download.ceph.com/;https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/;" /etc/yum.repos.d/ceph.repo ; \
+            dnf clean expire-cache ; \
+        fi ; \
     else \
-        IS_RELEASE=1 ;\
-        source /run/secrets/prerelease_creds; \
-        REPO_URL="https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/rpm-${CEPH_REF}/${EL_VER}/" ;\
-    fi && \
-    # Trim trailing slashes
-    REPO_URL="${REPO_URL%/}" && \
-    if [[ "$REPO_URL" == */pulp/content/* ]] ; then \
-        # Pulp nests packages under noarch/Packages/<first-letter>/
-        CEPH_RELEASE_RPM="$REPO_URL/noarch/Packages/c/ceph-release-1-${IS_RELEASE}.${EL_VER}.noarch.rpm" ; \
-    else \
-        # chacra serves packages flat under noarch/
-        CEPH_RELEASE_RPM="$REPO_URL/noarch/ceph-release-1-${IS_RELEASE}.${EL_VER}.noarch.rpm" ; \
-    fi && \
-    rpm -Uvh "$CEPH_RELEASE_RPM" ; \
-    if [[ "$IS_RELEASE" == 1 ]] ; then \
-        sed -i "s;http://download.ceph.com/;https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/;" /etc/yum.repos.d/ceph.repo ; \
-        dnf clean expire-cache ; \
+        apt-get update ; DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::=--force-confold extrepo ; \
+        echo 'Package: *' >/etc/apt/preferences.d/99ceph-from-debian-backports ; \
+	echo 'Pin: release o=osbpo' >>/etc/apt/preferences.d/99ceph-from-debian-backports ; \
+        echo 'Pin-Priority: 900' >>/etc/apt/preferences.d/99ceph-from-debian-backports ; \
+        extrepo enable ceph_tentacle ; apt-get update ; \
     fi
 
 
@@ -144,14 +174,19 @@ RUN --mount=type=secret,id=prerelease_creds set -ex && \
 # scikit for mgr-diskprediction-local
 # ref: https://github.com/ceph/ceph-container/pull/1821
 RUN set -euo pipefail; \
-    source /etc/ceph-distro.env; \
-    if [ "$MAJOR" -le 9 ]; then \
-        dnf install -y --setopt=install_weak_deps=False dnf-plugins-core && \
-        dnf copr enable -y tchaikov/python-scikit-learn; \
+    . /etc/ceph-distro.env; \
+    if [ "${PKG_MGR}" = "dnf" ] ; then \
+        if [ "$MAJOR" -le 9 ]; then \
+            dnf install -y --setopt=install_weak_deps=False dnf-plugins-core && \
+            dnf copr enable -y tchaikov/python-scikit-learn; \
+        fi ; \
     fi
 
 # Update package mgr
-RUN dnf update -y --setopt=install_weak_deps=False
+RUN . /etc/ceph-distro.env; \
+    if [ "${PKG_MGR}" = "dnf" ] ; then \
+        dnf update -y --setopt=install_weak_deps=False ; \
+    fi
 
 # Define and install packages
 # General
@@ -159,56 +194,85 @@ RUN echo "ca-certificates" > packages.txt
 # Ceph
 # TODO: remove lua-devel and luarocks once they are present in ceph.spec.in
 #       ref: https://github.com/ceph/ceph/pull/54575#discussion_r1401199635
-RUN echo \
+RUN . /etc/ceph-distro.env; \
+    echo \
 "ceph-common \
-ceph-exporter \
 ceph-grafana-dashboards \
 ceph-immutable-object-cache \
 ceph-mds \
 ceph-mgr-cephadm \
 ceph-mgr-dashboard \
-ceph-mgr-diskprediction-local \
 ceph-mgr-k8sevents \
 ceph-mgr-modules-core \
-ceph-mgr-modules-standard \
 ceph-mgr-rook \
 ceph-mgr \
 ceph-mon \
 ceph-osd \
-ceph-radosgw lua-devel luarocks \
+luarocks \
 ceph-volume \
 cephfs-mirror \
 cephfs-top \
 kmod \
-libcephfs-daemon \
 libradosstriper1 \
+libcephfs-daemon \
 rbd-mirror" \
->> packages.txt
+>> packages.txt ; \
+    if [ "${PKG_MGR}" = "dnf" ] ; then \
+        echo "\
+ceph-exporter \
+ceph-mgr-diskprediction-local \
+ceph-mgr-modules-standard \
+ceph-radosgw \
+lua-devel\
+" >> packages.txt ; \
+    else \
+        echo "\
+radosgw\
+">> packages.txt ; \
+    fi
 
 # Ceph "Recommends"
 RUN set -euo pipefail; \
+    . /etc/ceph-distro.env; \
     echo "nvme-cli smartmontools" >> packages.txt; \
-    source /etc/ceph-distro.env; \
-    if [ "$MAJOR" -le 9 ]; then \
-        echo "python3-saml" >> packages.txt; \
-    fi ; \
-    if [ "$MAJOR" -ge 10 ]; then \
-        echo "python3-ceph-smb-ctl" >> packages.txt; \
+    . /etc/ceph-distro.env; \
+    if [ "${PKG_MGR}" = "dnf" ] ; then \
+        if [ "$MAJOR" -le 9 ]; then \
+            echo "python3-saml" >> packages.txt; \
+        fi ; \
+        if [ "$MAJOR" -ge 10 ]; then \
+            echo "python3-ceph-smb-ctl" >> packages.txt; \
+        fi ; \
     fi
 
 # NFS-Ganesha
-RUN echo "\
+RUN . /etc/ceph-distro.env; \
+    echo "\
 dbus-daemon \
 nfs-ganesha-ceph \
 nfs-ganesha-rados-grace \
-nfs-ganesha-rados-urls \
 nfs-ganesha-rgw \
 nfs-ganesha \
-rpcbind \
-sssd-client" >> packages.txt
+rpcbind\
+" >> packages.txt ; \
+    if [ "${PKG_MGR}" = "dnf" ] ; then \
+        echo "\
+nfs-ganesha-rados-urls \
+sssd-client\
+" >> packages.txt ; \
+    else \
+        echo "\
+sssd" >> packages.txt ; \
+    fi
 
 # ISCSI
-RUN echo "ceph-iscsi tcmu-runner python3-rtslib" >> packages.txt
+RUN . /etc/ceph-distro.env; \
+    echo "ceph-iscsi tcmu-runner" >> packages.txt ; \
+    if [ "${PKG_MGR}" = "dnf" ] ; then \
+        echo "python3-rtslib" >> packages.txt ; \
+    else \
+        echo "python3-rtslib-fb" >> packages.txt ; \
+    fi
 
 # Ceph-CSI
 # TODO: coordinate with @Madhu-1 to have Ceph-CSI install these itself if unused by ceph
@@ -216,27 +280,54 @@ RUN echo "ceph-iscsi tcmu-runner python3-rtslib" >> packages.txt
 RUN echo "attr ceph-fuse rbd-nbd"  >> packages.txt
 
 # Rook (only if packages must be in ceph container image)
-RUN echo "systemd-udev" >> packages.txt
+RUN . /etc/ceph-distro.env; \
+    if [ "${PKG_MGR}" = "dnf" ] ; then \
+        echo "systemd-udev" >> packages.txt ; \
+    else \
+        echo "udev" >> packages.txt ; \
+    fi
 
 # Util packages (should be kept to only utils that are truly very useful)
 # 'sgdisk' (from gdisk) is used in docs and scripts for clearing disks (could be a risk? @travisn @guits @ktdreyer ?)
 # 'ps' (from procps-ng) and 'hostname' are very valuable for debugging and CI
 # TODO: remove sg3_utils once they are moved to ceph.spec.in with libstoragemgmt
 #       ref: https://github.com/ceph/ceph-container/pull/2013#issuecomment-1248606472
-RUN echo "gdisk hostname procps-ng sg3_utils e2fsprogs lvm2 gcc" >> packages.txt
+RUN . /etc/ceph-distro.env; \
+    echo "gdisk hostname e2fsprogs lvm2 gcc" >> packages.txt ; \
+    if [ "${PKG_MGR}" = "dnf" ] ; then \
+        echo "procps-ng sg3_utils" >> packages.txt ; \
+    else \
+        echo "procps sg3-utils" >> packages.txt ; \
+    fi
 
 # scikit
-RUN echo "python3-scikit-learn" >> packages.txt
+RUN . /etc/ceph-distro.env; \
+    if [ "${PKG_MGR}" = "dnf" ] ; then \
+        echo "python3-scikit-learn" >> packages.txt ; \
+    else \
+        echo "python3-sklearn-lib" >> packages.txt ; \
+    fi
 
 # ceph-node-proxy
-RUN echo "ceph-node-proxy" >> packages.txt
+RUN . /etc/ceph-distro.env; \
+    if [ "${PKG_MGR}" = "dnf" ] ; then \
+        echo "ceph-node-proxy" >> packages.txt ; \
+    fi
 
 RUN echo "=== PACKAGES TO BE INSTALLED ==="; cat packages.txt
 RUN echo "=== INSTALLING ===" ; \
-dnf install -y --setopt=install_weak_deps=False --setopt=skip_missing_names_on_install=False --enablerepo=crb $(cat packages.txt)
+    . /etc/ceph-distro.env; \
+    if [ "${PKG_MGR}" = "dnf" ] ; then \
+        dnf install -y --setopt=install_weak_deps=False --setopt=skip_missing_names_on_install=False --enablerepo=crb $(cat packages.txt) ; \
+    else \
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::=--force-confold $(cat packages.txt) ; \
+    fi
 
 # XXX why isn't this done in the ganesha package?
-RUN mkdir -p /var/run/ganesha
+RUN . /etc/ceph-distro.env; \
+    if [ "${PKG_MGR}" = "dnf" ] ; then \
+        mkdir -p /var/run/ganesha ; \
+    fi
 
 # Disable sync with udev since the container can not contact udev
 RUN \
@@ -251,17 +342,26 @@ RUN \
 
 # CLEAN UP!
 RUN set -ex && \
-    dnf clean all && \
-    rm -rf /var/cache/dnf/* && \
-    rm -rf /var/lib/dnf/* && \
-    rm -f /var/lib/rpm/__db* && \
-    # remove unnecessary files with big impact
-    rm -rf /etc/selinux /usr/share/selinux && \
-    rm -f /etc/yum.repos.d/{ceph,ganesha,tcmu-runner,ceph-iscsi}.repo
+    . /etc/ceph-distro.env; \
+    if [ "${PKG_MGR}" = "dnf" ] ; then \
+        dnf clean all && \
+        rm -rf /var/cache/dnf/* && \
+        rm -rf /var/lib/dnf/* && \
+        rm -f /var/lib/rpm/__db* && \
+        # remove unnecessary files with big impact
+        rm -rf /etc/selinux /usr/share/selinux && \
+        rm -f /etc/yum.repos.d/{ceph,ganesha,tcmu-runner,ceph-iscsi}.repo ; \
+    else \
+        apt-get clean ; apt-get autoclean ; \
+    fi
 
 # Verify that the packages installed haven't been accidentally cleaned, then
 # clean the package list and re-clean unnecessary RPM database files
-RUN rpm -q $(cat packages.txt) && rm -f /var/lib/rpm/__db* && rm -f *packages.txt
+RUN . /etc/ceph-distro.env; \
+    if [ "${PKG_MGR}" = "dnf" ] ; then \
+        rpm -q $(cat packages.txt) && rm -f /var/lib/rpm/__db* ; \
+    fi ; \
+    rm -f *packages.txt
 
 #
 # Set some envs in the container for quickly inspecting details about the build at runtime
@@ -269,5 +369,5 @@ ENV CEPH_IS_DEVEL="${CI_CONTAINER}" \
     CEPH_REF="${CEPH_REF}" \
     CEPH_VERSION="${CEPH_REF}" \
     CEPH_OSD_FLAVOR="${OSD_FLAVOR}" \
-    FROM_IMAGE="${FROM_IMAGE}"
-
+    FROM_IMAGE="${FROM_IMAGE}" \
+    PKG_MGR="${PKG_MGR}"
