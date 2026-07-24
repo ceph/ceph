@@ -186,6 +186,9 @@ enum {
   l_bluestore_extents,
   l_bluestore_blobs,
   l_bluestore_spanning_blobs,
+  l_bluestore_onode_cache_hit_count,   
+  l_bluestore_onode_cache_time_latency_time,  
+  l_bluestore_onode_shard_miss_lat,           
   //****************************************
 
   // buffer cache stats
@@ -194,6 +197,8 @@ enum {
   l_bluestore_buffer_bytes,
   l_bluestore_buffer_hit_bytes,
   l_bluestore_buffer_miss_bytes,
+  l_bluestore_buffer_miss_lat, ////cost per miss
+  l_bluestore_buffer_read_reqs, 
   //****************************************
 
   // internal stats
