@@ -995,10 +995,14 @@ public:
     osd_op_params_t&& oop,
     std::vector<pg_log_entry_t>&& log_entries);
 
-private:
+  /// Repair a corrupt object discovered on read: mark it missing locally and
+  /// recover the authoritative copy from a replica. Invoked by ClientRequest
+  /// when a read returns object_corrupted (tracker #77070).
   interruptible_future<> repair_object(
     const hobject_t& oid,
     eversion_t& v);
+
+private:
   void check_blocklisted_obc_watchers(ObjectContextRef &obc);
   interruptible_future<seastar::stop_iteration> trim_snap(
     snapid_t to_trim,
