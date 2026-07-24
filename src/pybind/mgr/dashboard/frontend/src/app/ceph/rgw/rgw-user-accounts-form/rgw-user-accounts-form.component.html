@@ -23,6 +23,9 @@
                  placeholder="Enter account name"
                  id="acc_name"
                  name="acc_name"
+                 cdValidate
+                 #accName="cdValidate"
+                 [invalid]="accName.isInvalid"
                  formControlName="name"/>
         </cds-text-label>
         <ng-template #accountIdError>
@@ -30,6 +33,11 @@
                 class="invalid-feedback">
             <ng-container i18n>This field is required.</ng-container>
           </span>
+          @if(accountForm.showError('name', formDir, 'notUnique')) {
+            <div class="invalid-feedback">
+          <ng-container i18n>An account with this name already exists.</ng-container>
+            </div>
+          }
         </ng-template>
       </div>
       <!-- Tenant -->
