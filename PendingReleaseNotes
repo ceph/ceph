@@ -55,6 +55,8 @@
 
 * RGW: Bucket Logging suppports creating log buckets in EC pools.
   Implicit logging object commits are now performed asynchronously.
+* RGW: The beast frontend's default configuration for `ssl_options` now includes
+  `no_tlsv1_2` to force the use of TLS v1.3.
 * RGW: radosgw-admin bucket list now supports pagination for versioned buckets by using
   both --marker and --object-version options together (e.g., ``--marker=obj1 --object-version=abc123``).
   This enables proper pagination through versioned bucket listings without duplicates or

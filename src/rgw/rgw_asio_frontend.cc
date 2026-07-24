@@ -981,7 +981,7 @@ int AsioFrontend::ssl_reload() {
       return -EINVAL;
     }
   } else if (cert) {
-    options = "no_sslv2:no_sslv3:no_tlsv1:no_tlsv1_1";
+    options = "no_sslv2:no_sslv3:no_tlsv1:no_tlsv1_1:no_tlsv1_2";
   }
 
   if (options) {
