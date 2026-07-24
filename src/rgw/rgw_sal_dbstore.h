@@ -217,6 +217,7 @@ protected:
     virtual bool allow_read_through() { return tier.allow_read_through; }
     virtual uint64_t get_read_through_restore_days() { return tier.read_through_restore_days; }
     virtual bool retain_head_object() { return tier.retain_head_object; }
+    virtual bool retain_current_version() { return tier.retain_current_version; }
     RGWZoneGroupPlacementTier& get_rt() { return tier; }
   };
 

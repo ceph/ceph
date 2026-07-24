@@ -2048,6 +2048,73 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   return write_bucket_header(hctx, &header); /* updates header version */
 }
 
+static int rgw_bucket_refresh_instance(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(10, "entered %s", __func__);
+
+  rgw_cls_refresh_instance_op op;
+  auto iter = in->cbegin();
+  try {
+    decode(op, iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(1, "ERROR: %s: failed to decode request", __func__);
+    return -EINVAL;
+  }
+
+  rgw_bucket_dir_header header;
+  int rc = read_bucket_header(hctx, &header);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: %s: failed to read header", __func__);
+    return rc;
+  }
+
+  rc = guard_bucket_resharding(hctx, header);
+  if (rc < 0) {
+    return rc;
+  }
+
+  rgw_bucket_dir_entry entry;
+  string idx;
+  rc = read_key_entry(hctx, op.key, &idx, &entry);
+  if (rc == -ENOENT) {
+    CLS_LOG(10, "%s: no instance entry for key=%s, nothing to refresh",
+            __func__, op.key.to_string().c_str());
+    return 0;
+  }
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: %s: read_key_entry key=%s rc=%d",
+            __func__, op.key.to_string().c_str(), rc);
+    return rc;
+  }
+
+  /*
+   * Only versioned instances have a separate list entry. complete_op
+   * refreshes this instance's data entry (size/etag/mtime), but the
+   * bucket version listing reads the list entry, so copy the refreshed
+   * data entry into it and leave the data entry untouched. No OLH
+   * change and no stats change; complete_op already accounted the size
+   * delta.
+   */
+  if (!(entry.flags & rgw_bucket_dir_entry::FLAG_VER)) {
+    CLS_LOG(10, "%s: key=%s is not a versioned instance, skipping",
+            __func__, op.key.to_string().c_str());
+    return 0;
+  }
+
+  string list_idx;
+  get_list_index_key(entry, &list_idx);
+  if (idx != list_idx) {
+    rc = write_entry(hctx, entry, list_idx, header);
+    if (rc < 0) {
+      CLS_LOG(0, "ERROR: %s: write_entry key=%s rc=%d",
+              __func__, op.key.to_string().c_str(), rc);
+      return rc;
+    }
+  }
+
+  return write_bucket_header(hctx, &header); /* updates header version */
+}
+
 static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
@@ -5311,6 +5378,7 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_bucket_read_olh_log;
   cls_method_handle_t h_rgw_bucket_trim_olh_log;
   cls_method_handle_t h_rgw_bucket_clear_olh;
+  cls_method_handle_t h_rgw_bucket_refresh_instance;
   cls_method_handle_t h_rgw_obj_remove;
   cls_method_handle_t h_rgw_obj_store_pg_ver;
   cls_method_handle_t h_rgw_obj_check_attrs_prefix;
@@ -5374,6 +5442,7 @@ CLS_INIT(rgw)
   cls.register_cxx_method(bucket_read_olh_log, rgw_bucket_read_olh_log, &h_rgw_bucket_read_olh_log);
   cls.register_cxx_method(bucket_trim_olh_log, rgw_bucket_trim_olh_log, &h_rgw_bucket_trim_olh_log);
   cls.register_cxx_method(bucket_clear_olh, rgw_bucket_clear_olh, &h_rgw_bucket_clear_olh);
+  cls.register_cxx_method(bucket_refresh_instance, rgw_bucket_refresh_instance, &h_rgw_bucket_refresh_instance);
 
   // Object
   cls.register_cxx_method(obj_remove, rgw_obj_remove, &h_rgw_obj_remove);

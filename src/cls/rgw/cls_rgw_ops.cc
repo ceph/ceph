@@ -217,6 +217,21 @@ void rgw_cls_link_olh_op::dump(Formatter *f) const
   encode_json("zones_trace", zones_trace, f);
 }
 
+list<rgw_cls_refresh_instance_op> rgw_cls_refresh_instance_op::generate_test_instances()
+{
+  list<rgw_cls_refresh_instance_op> o;
+  rgw_cls_refresh_instance_op op;
+  op.key.name = "name";
+  o.push_back(std::move(op));
+  o.emplace_back();
+  return o;
+}
+
+void rgw_cls_refresh_instance_op::dump(Formatter *f) const
+{
+  encode_json("key", key, f);
+}
+
 list<rgw_cls_unlink_instance_op> rgw_cls_unlink_instance_op::generate_test_instances()
 {
   list<rgw_cls_unlink_instance_op> o;

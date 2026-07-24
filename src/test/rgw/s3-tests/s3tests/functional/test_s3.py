@@ -82,6 +82,7 @@ from . import (
     get_svc_client,
     get_cloud_storage_class,
     get_cloud_retain_head_object,
+    get_cloud_retain_current_version,
     get_allow_read_through,
     get_cloud_regular_storage_class,
     get_cloud_target_path,
@@ -10745,6 +10746,438 @@ def test_list_object_versions_restore_status():
     response = client.list_object_versions(Bucket=bucket)
     for v in response['Versions']:
         assert 'RestoreStatus' not in v
+
+@pytest.mark.lifecycle
+@pytest.mark.lifecycle_transition
+@pytest.mark.cloud_transition
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
+def test_lifecycle_cloud_transition_versioned_current_retained():
+    cloud_sc = get_cloud_storage_class()
+    if cloud_sc is None:
+        pytest.skip('[s3 cloud] section missing cloud_storage_class')
+
+    retain_current = get_cloud_retain_current_version()
+    if retain_current is None or retain_current != "true":
+        pytest.skip('[s3 cloud] retain_current_version is not enabled')
+
+    bucket = get_new_bucket()
+    client = get_client()
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+
+    key = 'test_retain_current'
+    data = 'retain current version data'
+    response = client.put_object(Bucket=bucket, Key=key, Body=data)
+    version_id = response['VersionId']
+
+    rules = [{'ID': 'rule1', 'Transitions': [{'Days': 1, 'StorageClass': cloud_sc}], 'Prefix': '', 'Status': 'Enabled'}]
+    client.put_bucket_lifecycle_configuration(Bucket=bucket, LifecycleConfiguration={'Rules': rules})
+
+    lc_interval = get_lc_debug_interval()
+    time.sleep(10 * lc_interval)
+
+    # the current version stays current as a cloud-tier stub; no delete marker is created
+    response = client.list_object_versions(Bucket=bucket)
+    assert 'DeleteMarkers' not in response or len(response['DeleteMarkers']) == 0
+    versions = response['Versions']
+    assert len(versions) == 1
+    assert versions[0]['VersionId'] == version_id
+    assert versions[0]['IsLatest'] == True
+
+    verify_transition(client, bucket, key, cloud_sc)
+    response = client.head_object(Bucket=bucket, Key=key)
+    assert response['ContentLength'] == 0
+
+@pytest.mark.lifecycle
+@pytest.mark.lifecycle_transition
+@pytest.mark.cloud_transition
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
+def test_lifecycle_cloud_transition_versioned_current_delete_marker():
+    cloud_sc = get_cloud_storage_class()
+    if cloud_sc is None:
+        pytest.skip('[s3 cloud] section missing cloud_storage_class')
+
+    retain_current = get_cloud_retain_current_version()
+    if retain_current is not None and retain_current == "true":
+        pytest.skip('[s3 cloud] retain_current_version is enabled; this test covers the default')
+
+    bucket = get_new_bucket()
+    client = get_client()
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+
+    key = 'test_delete_marker'
+    data = 'delete marker on transition'
+    client.put_object(Bucket=bucket, Key=key, Body=data)
+
+    rules = [{'ID': 'rule1', 'Transitions': [{'Days': 1, 'StorageClass': cloud_sc}], 'Prefix': '', 'Status': 'Enabled'}]
+    client.put_bucket_lifecycle_configuration(Bucket=bucket, LifecycleConfiguration={'Rules': rules})
+
+    lc_interval = get_lc_debug_interval()
+    time.sleep(10 * lc_interval)
+
+    # a delete marker becomes current and no plain version is latest
+    response = client.list_object_versions(Bucket=bucket)
+    delete_markers = response.get('DeleteMarkers', [])
+    assert len(delete_markers) >= 1
+    assert any(dm['IsLatest'] for dm in delete_markers)
+    for v in response.get('Versions', []):
+        assert v['IsLatest'] == False
+
+    # the current key now resolves to a delete marker
+    e = assert_raises(ClientError, client.get_object, Bucket=bucket, Key=key)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 404
+
+@pytest.mark.cloud_restore
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
+def test_restore_versioned_current_no_version_id():
+    cloud_sc = get_cloud_storage_class()
+    if cloud_sc is None:
+        pytest.skip('[s3 cloud] section missing cloud_storage_class')
+
+    retain_current = get_cloud_retain_current_version()
+    if retain_current is None or retain_current != "true":
+        pytest.skip('[s3 cloud] retain_current_version is not enabled')
+
+    bucket = get_new_bucket()
+    client = get_client()
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+
+    key = 'test_restore_current'
+    data = 'restore current version data'
+    response = client.put_object(Bucket=bucket, Key=key, Body=data)
+    version_id = response['VersionId']
+
+    rules = [{'ID': 'rule1', 'Transitions': [{'Days': 1, 'StorageClass': cloud_sc}], 'Prefix': '', 'Status': 'Enabled'}]
+    client.put_bucket_lifecycle_configuration(Bucket=bucket, LifecycleConfiguration={'Rules': rules})
+
+    lc_interval = get_lc_debug_interval()
+    restore_period = get_restore_processor_period()
+    time.sleep(10 * lc_interval)
+
+    verify_transition(client, bucket, key, cloud_sc)
+
+    client.delete_bucket_lifecycle(Bucket=bucket)
+
+    # restore without a versionId resolves and restores the current version
+    client.restore_object(Bucket=bucket, Key=key, RestoreRequest={'Days': 20})
+    time.sleep(3 * restore_period)
+
+    response = client.head_object(Bucket=bucket, Key=key)
+    assert response['ContentLength'] == len(data)
+    assert response['VersionId'] == version_id
+
+    # the restored version remains current; no delete marker was introduced
+    response = client.list_object_versions(Bucket=bucket)
+    assert 'DeleteMarkers' not in response or len(response['DeleteMarkers']) == 0
+    versions = response['Versions']
+    assert len(versions) == 1
+    assert versions[0]['VersionId'] == version_id
+    assert versions[0]['IsLatest'] == True
+
+@pytest.mark.cloud_restore
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
+def test_read_through_versioned_current():
+    cloud_sc = get_cloud_storage_class()
+    if cloud_sc is None:
+        pytest.skip('[s3 cloud] section missing cloud_storage_class')
+
+    retain_current = get_cloud_retain_current_version()
+    if retain_current is None or retain_current != "true":
+        pytest.skip('[s3 cloud] retain_current_version is not enabled')
+
+    allow_readthrough = get_allow_read_through()
+    if allow_readthrough is None or allow_readthrough != "true":
+        pytest.skip('[s3 cloud] allow_read_through is not enabled')
+
+    bucket = get_new_bucket()
+    client_config = botocore.config.Config(connect_timeout=100, read_timeout=100)
+    client = get_client(client_config=client_config)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+
+    key = 'test_readthrough_current'
+    data = 'read through current version data'
+    response = client.put_object(Bucket=bucket, Key=key, Body=data)
+    version_id = response['VersionId']
+
+    rules = [{'ID': 'rule1', 'Transitions': [{'Days': 1, 'StorageClass': cloud_sc}], 'Prefix': '', 'Status': 'Enabled'}]
+    client.put_bucket_lifecycle_configuration(Bucket=bucket, LifecycleConfiguration={'Rules': rules})
+
+    lc_interval = get_lc_debug_interval()
+    restore_period = get_restore_processor_period()
+    time.sleep(10 * lc_interval)
+
+    verify_transition(client, bucket, key, cloud_sc)
+
+    client.delete_bucket_lifecycle(Bucket=bucket)
+
+    # a versionless GET read-through restores the current version
+    try:
+        response = client.get_object(Bucket=bucket, Key=key)
+        assert response['VersionId'] == version_id
+    except ClientError as e:
+        status, error_code = _get_status_and_error_code(e.response)
+        assert status == 400
+
+    time.sleep(2 * restore_period)
+
+    response = client.head_object(Bucket=bucket, Key=key)
+    assert response['ContentLength'] == len(data)
+    assert response['VersionId'] == version_id
+
+    # the restored version remains current; no new version was created
+    response = client.list_object_versions(Bucket=bucket)
+    assert 'DeleteMarkers' not in response or len(response['DeleteMarkers']) == 0
+    versions = response['Versions']
+    assert len(versions) == 1
+    assert versions[0]['VersionId'] == version_id
+    assert versions[0]['IsLatest'] == True
+
+@pytest.mark.cloud_restore
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
+def test_restore_suspended_null_version():
+    cloud_sc = get_cloud_storage_class()
+    if cloud_sc is None:
+        pytest.skip('[s3 cloud] section missing cloud_storage_class')
+
+    retain_current = get_cloud_retain_current_version()
+    if retain_current is None or retain_current != "true":
+        pytest.skip('[s3 cloud] retain_current_version is not enabled')
+
+    bucket = get_new_bucket()
+    client = get_client()
+    # an overwrite while versioning is suspended lands on the null version, which is current
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'test_restore_suspended'
+    client.put_object(Bucket=bucket, Key=key, Body='first version')
+    check_configure_versioning_retry(bucket, "Suspended", "Suspended")
+    data = 'null version overwrite'
+    client.put_object(Bucket=bucket, Key=key, Body=data)
+
+    rules = [{'ID': 'rule1', 'Transitions': [{'Days': 1, 'StorageClass': cloud_sc}], 'Prefix': '', 'Status': 'Enabled'}]
+    client.put_bucket_lifecycle_configuration(Bucket=bucket, LifecycleConfiguration={'Rules': rules})
+
+    lc_interval = get_lc_debug_interval()
+    restore_period = get_restore_processor_period()
+    time.sleep(10 * lc_interval)
+
+    verify_transition(client, bucket, key, cloud_sc)
+
+    client.delete_bucket_lifecycle(Bucket=bucket)
+
+    # restore without a versionId updates the null-version slot
+    client.restore_object(Bucket=bucket, Key=key, RestoreRequest={'Days': 20})
+    time.sleep(3 * restore_period)
+
+    response = client.head_object(Bucket=bucket, Key=key)
+    assert response['ContentLength'] == len(data)
+
+    # the bucket listing reflects the restored size on the null version
+    response = client.list_object_versions(Bucket=bucket)
+    null_versions = [v for v in response['Versions'] if v['VersionId'] == 'null']
+    assert len(null_versions) == 1
+    assert null_versions[0]['IsLatest'] == True
+    assert null_versions[0]['Size'] == len(data)
+
+@pytest.mark.cloud_restore
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
+def test_restore_non_versioned_version_id_rejected():
+    cloud_sc = get_cloud_storage_class()
+    if cloud_sc is None:
+        pytest.skip('[s3 cloud] section missing cloud_storage_class')
+
+    bucket = get_new_bucket()
+    client = get_client()
+    key = 'test_restore_nonversioned'
+    data = 'non versioned restore data'
+    client.put_object(Bucket=bucket, Key=key, Body=data)
+
+    rules = [{'ID': 'rule1', 'Transitions': [{'Days': 1, 'StorageClass': cloud_sc}], 'Prefix': '', 'Status': 'Enabled'}]
+    client.put_bucket_lifecycle_configuration(Bucket=bucket, LifecycleConfiguration={'Rules': rules})
+
+    lc_interval = get_lc_debug_interval()
+    restore_period = get_restore_processor_period()
+    time.sleep(10 * lc_interval)
+
+    verify_transition(client, bucket, key, cloud_sc)
+
+    client.delete_bucket_lifecycle(Bucket=bucket)
+
+    # restoring a bogus versionId on a non-versioned bucket finds no such object (NoSuchKey)
+    e = assert_raises(ClientError, client.restore_object, Bucket=bucket, Key=key,
+                      VersionId='not-allowed', RestoreRequest={'Days': 20})
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 404
+
+    # restore without a versionId still works
+    client.restore_object(Bucket=bucket, Key=key, RestoreRequest={'Days': 20})
+    time.sleep(3 * restore_period)
+    response = client.head_object(Bucket=bucket, Key=key)
+    assert response['ContentLength'] == len(data)
+
+@pytest.mark.cloud_restore
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
+def test_restore_versioned_explicit_version_id():
+    cloud_sc = get_cloud_storage_class()
+    if cloud_sc is None:
+        pytest.skip('[s3 cloud] section missing cloud_storage_class')
+
+    retain_current = get_cloud_retain_current_version()
+    if retain_current is None or retain_current != "true":
+        pytest.skip('[s3 cloud] retain_current_version is not enabled')
+
+    bucket = get_new_bucket()
+    client = get_client()
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+
+    key = 'test_restore_explicit'
+    (version_ids, contents) = create_multiple_versions(client, bucket, key, 2)
+    current_id = version_ids[-1]
+
+    rules = [{'ID': 'rule1', 'Transitions': [{'Days': 1, 'StorageClass': cloud_sc}], 'Prefix': '', 'Status': 'Enabled'}]
+    client.put_bucket_lifecycle_configuration(Bucket=bucket, LifecycleConfiguration={'Rules': rules})
+
+    lc_interval = get_lc_debug_interval()
+    restore_period = get_restore_processor_period()
+    time.sleep(10 * lc_interval)
+
+    verify_transition(client, bucket, key, cloud_sc, current_id)
+
+    client.delete_bucket_lifecycle(Bucket=bucket)
+
+    # restoring an explicit versionId targets exactly that version
+    client.restore_object(Bucket=bucket, Key=key, VersionId=current_id, RestoreRequest={'Days': 20})
+    time.sleep(3 * restore_period)
+
+    response = client.head_object(Bucket=bucket, Key=key, VersionId=current_id)
+    assert response['ContentLength'] == len(contents[-1])
+
+@pytest.mark.cloud_restore
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
+def test_restore_null_version_across_versioning_states():
+    cloud_sc = get_cloud_storage_class()
+    if cloud_sc is None:
+        pytest.skip('[s3 cloud] section missing cloud_storage_class')
+
+    retain_current = get_cloud_retain_current_version()
+    if retain_current is None or retain_current != "true":
+        pytest.skip('[s3 cloud] retain_current_version is not enabled')
+
+    bucket = get_new_bucket()
+    client = get_client()
+    key = 'test_null_lifecycle'
+
+    rules = [{'ID': 'rule1',
+              'Transitions': [{'Days': 1, 'StorageClass': cloud_sc}],
+              'NoncurrentVersionTransitions': [{'NoncurrentDays': 1, 'StorageClass': cloud_sc}],
+              'Prefix': '', 'Status': 'Enabled'}]
+    lc_interval = get_lc_debug_interval()
+    restore_period = get_restore_processor_period()
+
+    # unversioned: this upload becomes the null version once versioning is
+    # enabled, and it is the only version, so it stays the current version
+    null_data = 'null version data'
+    client.put_object(Bucket=bucket, Key=key, Body=null_data)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+
+    client.put_bucket_lifecycle_configuration(Bucket=bucket, LifecycleConfiguration={'Rules': rules})
+    time.sleep(10 * lc_interval)
+    verify_transition(client, bucket, key, cloud_sc, 'null')
+    client.delete_bucket_lifecycle(Bucket=bucket)
+
+    # the null version is the sole version, so restoring it leaves it current
+    client.restore_object(Bucket=bucket, Key=key, VersionId='null', RestoreRequest={'Days': 20})
+    time.sleep(3 * restore_period)
+
+    response = client.list_object_versions(Bucket=bucket)
+    null_versions = [v for v in response['Versions'] if v['VersionId'] == 'null']
+    assert len(null_versions) == 1
+    assert null_versions[0]['IsLatest'] == True
+    assert len(response['Versions']) == 1
+    assert _get_body(client.get_object(Bucket=bucket, Key=key)) == null_data
+
+    # suspended: an overwrite lands on the null version, which stays current
+    check_configure_versioning_retry(bucket, "Suspended", "Suspended")
+    suspended_data = 'suspended null overwrite'
+    client.put_object(Bucket=bucket, Key=key, Body=suspended_data)
+
+    client.put_bucket_lifecycle_configuration(Bucket=bucket, LifecycleConfiguration={'Rules': rules})
+    time.sleep(10 * lc_interval)
+    verify_transition(client, bucket, key, cloud_sc)
+    client.delete_bucket_lifecycle(Bucket=bucket)
+
+    # restore the null version again; it remains the current null slot with the new size
+    client.restore_object(Bucket=bucket, Key=key, VersionId='null', RestoreRequest={'Days': 20})
+    time.sleep(3 * restore_period)
+
+    response = client.head_object(Bucket=bucket, Key=key)
+    assert response['ContentLength'] == len(suspended_data)
+
+    response = client.list_object_versions(Bucket=bucket)
+    null_versions = [v for v in response['Versions'] if v['VersionId'] == 'null']
+    assert len(null_versions) == 1
+    assert null_versions[0]['IsLatest'] == True
+    assert null_versions[0]['Size'] == len(suspended_data)
+
+@pytest.mark.cloud_restore
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
+def test_restore_noncurrent_null_version_not_promoted():
+    cloud_sc = get_cloud_storage_class()
+    if cloud_sc is None:
+        pytest.skip('[s3 cloud] section missing cloud_storage_class')
+
+    retain_current = get_cloud_retain_current_version()
+    if retain_current is None or retain_current != "true":
+        pytest.skip('[s3 cloud] retain_current_version is not enabled')
+
+    bucket = get_new_bucket()
+    client = get_client()
+    key = 'test_null_noncurrent'
+
+    rules = [{'ID': 'rule1',
+              'Transitions': [{'Days': 1, 'StorageClass': cloud_sc}],
+              'NoncurrentVersionTransitions': [{'NoncurrentDays': 1, 'StorageClass': cloud_sc}],
+              'Prefix': '', 'Status': 'Enabled'}]
+    lc_interval = get_lc_debug_interval()
+    restore_period = get_restore_processor_period()
+
+    # unversioned upload becomes the null version once versioning is enabled
+    null_data = 'null version data'
+    client.put_object(Bucket=bucket, Key=key, Body=null_data)
+
+    # add real versions so the null version is no longer the current version
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    create_multiple_versions(client, bucket, key, 2)
+    response = client.put_object(Bucket=bucket, Key=key, Body='new latest')
+    latest_version = response['VersionId']
+
+    client.put_bucket_lifecycle_configuration(Bucket=bucket, LifecycleConfiguration={'Rules': rules})
+    time.sleep(10 * lc_interval)
+    verify_transition(client, bucket, key, cloud_sc, 'null')
+    client.delete_bucket_lifecycle(Bucket=bucket)
+
+    # restoring a noncurrent null version must not change which version is current
+    client.restore_object(Bucket=bucket, Key=key, VersionId='null', RestoreRequest={'Days': 20})
+    time.sleep(3 * restore_period)
+
+    response = client.list_object_versions(Bucket=bucket)
+    null_versions = [v for v in response['Versions'] if v['VersionId'] == 'null']
+    assert len(null_versions) == 1
+    assert null_versions[0]['IsLatest'] == False
+    latest = [v for v in response['Versions'] if v['VersionId'] == latest_version]
+    assert latest[0]['IsLatest'] == True
+
+    # the restored data is reachable by version id; the current object is unchanged
+    assert _get_body(client.get_object(Bucket=bucket, Key=key, VersionId='null')) == null_data
+    assert _get_body(client.get_object(Bucket=bucket, Key=key)) == 'new latest'
 
 @pytest.mark.encryption
 @pytest.mark.fails_on_dbstore

@@ -1177,6 +1177,18 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
       auto iter = bl.cbegin();
       decode(restore_status, iter);
     }
+
+    // Non-versioned bucket: only the implicit version exists. Versionless
+    // requests on versioned buckets need no handling here; s->object
+    // already carries the OLH-resolved current version from the head read.
+    if (!s->bucket->versioned() && s->object->have_instance()) {
+      if (!s->object->get_key().have_null_instance()) {
+        s->err.message = "versionId is not allowed for a non-versioned bucket";
+        return -ERR_INVALID_REQUEST;
+      }
+      s->object->set_instance("");
+    }
+
     if (restore_status == rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress) {
       if (read_through) {
         // For glacier tier, fail immediately as restores can take hours/days
