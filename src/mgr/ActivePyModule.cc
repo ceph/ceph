@@ -45,11 +45,28 @@ int ActivePyModule::load(ActivePyModules *py_modules)
   Py_DECREF(pModuleName);
   Py_DECREF(pArgs);
   if (pClassInstance == nullptr) {
+    // Capture the exception type name before handle_pyerror() clears the error state.
+    // PyErr_GetRaisedException() steals the exception, so restore it afterward.
+    PyObject *exc = PyErr_GetRaisedException();
+    if (exc) {
+      PyObject *name_attr = PyObject_GetAttrString((PyObject *)Py_TYPE(exc), "__name__");
+      if (name_attr) {
+        set_load_exception_type(PyUnicode_AsUTF8(name_attr));
+        Py_DECREF(name_attr);
+      }
+      PyErr_SetRaisedException(exc); // restore for handle_pyerror()
+    }
+    std::string error_str = handle_pyerror(true, get_name(), "ActivePyModule::load");
     derr << "Failed to construct class in '" << get_name() << "'" << dendl;
-    derr << handle_pyerror(true, get_name(), "ActivePyModule::load") << dendl;
+    derr << error_str << dendl;
+    set_load_error_string(error_str);
+    increment_load_retry_count();
     return -EINVAL;
   } else {
     dout(1) << "Constructed class from module: " << get_name() << dendl;
+    set_load_error_string("");
+    set_load_exception_type("");
+    reset_load_retry_count();
   }
 
   return 0;

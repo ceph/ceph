@@ -48,6 +48,35 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
+// Retry mechanism constants
+namespace {
+  constexpr int RETRY_MAX_ATTEMPTS = 5;
+  constexpr int RETRY_BASE_INTERVAL_SECS = 10;
+  constexpr int RETRY_CHECK_INTERVAL_SECS = 10;
+
+  // Exception types that represent transient conditions worth retrying.
+  // Anything not in this list is treated as a permanent programming error
+  // and reported immediately without retrying.
+  constexpr std::string_view RETRYABLE_EXCEPTIONS[] = {
+    "ConnectionRefusedError",
+    "ConnectionResetError",
+    "ConnectionError",
+    "OSError",
+    "TimeoutError",
+    "RuntimeError",
+  };
+
+  bool is_retryable_exception(const std::string& exc_type)
+  {
+    for (const auto& name : RETRYABLE_EXCEPTIONS) {
+      if (exc_type == name) {
+        return true;
+      }
+    }
+    return false;
+  }
+}
+
 using std::pair;
 using std::string;
 using namespace std::literals;
@@ -65,6 +94,7 @@ ActivePyModules::ActivePyModules(
   monc(mc), clog(clog_), audit_clog(audit_clog_), objecter(objecter_),
   finisher(f),
   m_thread_monitor(monitor_),
+  retry_timer(g_ceph_context, lock),
   cmd_finisher(g_ceph_context, "cmd_finisher", "cmdfin"),
   server(server), py_module_registry(pmr)
 {
@@ -74,6 +104,7 @@ ActivePyModules::ActivePyModules(
   have_local_config_map = mon_provides_kv_sub;
   _refresh_config_map();
   cmd_finisher.start();
+  retry_timer.init();
 }
 
 ActivePyModules::~ActivePyModules()
@@ -83,6 +114,11 @@ ActivePyModules::~ActivePyModules()
   // Stop the thread monitor if it was started
   if (m_thread_monitor) {
     m_thread_monitor->stop_monitoring();
+  }
+
+  {
+    std::lock_guard l(lock);
+    retry_timer.shutdown();
   }
 
   // Stop the finisher thread
@@ -553,14 +589,21 @@ PyObject *ActivePyModules::get_python(std::string_view what, const bool get_muta
   return f.get();
 }
 
-void ActivePyModules::start_one(PyModuleRef py_module)
+void ActivePyModules::start_one(PyModuleRef py_module,
+                                 std::shared_ptr<ActivePyModule> active_module)
 {
   std::lock_guard l(lock);
 
   const auto name = py_module->get_name();
-  auto active_module = std::make_shared<ActivePyModule>(py_module, clog, m_thread_monitor);
-
+  
+  // Create new module instance if not provided (normal start)
+  // Reuse existing instance if provided (retry to preserve retry count)
+  if (!active_module) {
+    active_module = std::make_shared<ActivePyModule>(py_module, clog, m_thread_monitor);
+  }
+  
   pending_modules.insert(name);
+  
   // Send all python calls down a Finisher to avoid blocking
   // C++ code, and avoid any potential lock cycles.
   finisher.queue(new LambdaContext([this, active_module, name, py_module](int) {
@@ -578,6 +621,11 @@ void ActivePyModules::start_one(PyModuleRef py_module)
     if (r != 0) {
       derr << "Failed to run module in active mode ('" << name << "')"
            << dendl;
+      
+      if (py_module->is_always_on()) {
+        dout(4) << "Scheduling retry for always-on module '" << name << "'" << dendl;
+        schedule_retry_failed_module(name, py_module, active_module);
+      }
     } else {
       auto em = modules.emplace(name, active_module);
       ceph_assert(em.second); // actually inserted
@@ -591,6 +639,8 @@ void ActivePyModules::start_one(PyModuleRef py_module)
           active_module->thread.get_tid(),
           name, py_module);
       }
+
+      failed_always_on_modules.erase(name);
     }
 
     // Signal when we're finally done starting up modules
@@ -1812,5 +1862,117 @@ void ActivePyModules::check_all_modules_started(Context *modules_start_complete)
     finisher.queue(modules_start_complete);
   } else {
     recheck_modules_start = modules_start_complete; // signal that we need to check again later
+  }
+}
+
+void ActivePyModules::schedule_retry_failed_module(
+    const std::string& module_name,
+    PyModuleRef py_module,
+    std::shared_ptr<ActivePyModule> active_module)
+{
+  const std::string& exc_type = active_module->get_load_exception_type();
+  int retry_count = active_module->get_load_retry_count();
+
+  // Only known transient exceptions are retried. Anything else is assumed to
+  // be a code bug that won't be fixed by waiting — record it permanently.
+  if (!exc_type.empty() && !is_retryable_exception(exc_type)) {
+    dout(1) << "Module '" << module_name << "' failed with non-retryable exception "
+            << exc_type << ", not retrying" << dendl;
+    // Store without a retry time so health reporting can still see the error.
+    FailedModuleInfo info;
+    info.py_module = py_module;
+    info.active_module = active_module;
+    info.next_retry_time = std::chrono::steady_clock::time_point::max();
+    failed_always_on_modules[module_name] = info;
+    return;
+  }
+
+  if (retry_count >= RETRY_MAX_ATTEMPTS) {
+    dout(1) << "Module '" << module_name << "' exceeded max retry attempts ("
+            << RETRY_MAX_ATTEMPTS << "), giving up" << dendl;
+    // Keep in the map so the health check continues to report the error.
+    FailedModuleInfo info;
+    info.py_module = py_module;
+    info.active_module = active_module;
+    info.next_retry_time = std::chrono::steady_clock::time_point::max();
+    failed_always_on_modules[module_name] = info;
+    return;
+  }
+
+  auto retry_interval = std::chrono::seconds(RETRY_BASE_INTERVAL_SECS * retry_count);
+  auto next_retry = std::chrono::steady_clock::now() + retry_interval;
+
+  dout(4) << "Will retry module '" << module_name << "' in "
+          << retry_interval.count() << "s (attempt " << retry_count
+          << "/" << RETRY_MAX_ATTEMPTS << ")" << dendl;
+
+  // Find the current earliest scheduled time before inserting the new entry,
+  // so we can tell if the new module should fire sooner than the existing timer.
+  auto earliest_before = std::chrono::steady_clock::time_point::max();
+  if (retry_event) {
+    for (const auto& [n, info] : failed_always_on_modules) {
+      if (info.next_retry_time < earliest_before) {
+        earliest_before = info.next_retry_time;
+      }
+    }
+  }
+
+  failed_always_on_modules[module_name] = {py_module, active_module, next_retry};
+
+  if (retry_event) {
+    if (next_retry < earliest_before) {
+      // New module fires sooner — cancel the existing timer and reschedule.
+      retry_timer.cancel_event(retry_event);
+      retry_event = nullptr;
+    } else {
+      return; // existing timer is already early enough
+    }
+  }
+
+  retry_event = new LambdaContext([this](int) {
+    retry_failed_modules();
+  });
+  retry_timer.add_event_after(retry_interval.count(), retry_event);
+}
+
+void ActivePyModules::retry_failed_modules()
+{
+  std::vector<std::pair<PyModuleRef, std::shared_ptr<ActivePyModule>>> modules_to_retry;
+
+  {
+    std::lock_guard l(lock);
+    retry_event = nullptr;
+    auto now = std::chrono::steady_clock::now();
+
+    for (auto it = failed_always_on_modules.begin();
+         it != failed_always_on_modules.end(); ) {
+      if (now >= it->second.next_retry_time) {
+        dout(4) << "Retrying failed always-on module '" << it->first << "'" << dendl;
+        modules_to_retry.emplace_back(it->second.py_module, it->second.active_module);
+        it = failed_always_on_modules.erase(it);
+      } else {
+        ++it;
+      }
+    }
+
+    // Only re-arm the poll timer if there are modules still waiting to be
+    // retried (i.e. not permanently failed ones with time_point::max()).
+    bool has_pending_retry = false;
+    for (const auto& [n, info] : failed_always_on_modules) {
+      if (info.next_retry_time != std::chrono::steady_clock::time_point::max()) {
+        has_pending_retry = true;
+        break;
+      }
+    }
+    if (has_pending_retry) {
+      retry_event = new LambdaContext([this](int) {
+        retry_failed_modules();
+      });
+      retry_timer.add_event_after(RETRY_CHECK_INTERVAL_SECS, retry_event);
+    }
+  }
+
+  for (const auto& [py_module, active_module] : modules_to_retry) {
+    start_one(py_module, active_module);
   }
 }

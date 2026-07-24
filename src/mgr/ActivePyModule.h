@@ -49,6 +49,10 @@ private:
 
   std::string m_command_perms;
   const MgrSession* m_session = nullptr;
+
+  std::string load_error_string;
+  std::string load_exception_type;
+  int load_retry_count = 0;
 public:
   Finisher finisher; // per active module finisher to execute commands
 
@@ -111,6 +115,13 @@ public:
 
   bool is_authorized(const std::map<std::string, std::string>& arguments) const;
 
+  const std::string& get_load_error_string() const { return load_error_string; }
+  void set_load_error_string(const std::string& err) { load_error_string = err; }
+  const std::string& get_load_exception_type() const { return load_exception_type; }
+  void set_load_exception_type(const std::string& t) { load_exception_type = t; }
+  int get_load_retry_count() const { return load_retry_count; }
+  void increment_load_retry_count() { ++load_retry_count; }
+  void reset_load_retry_count() { load_retry_count = 0; }
 };
 
 
