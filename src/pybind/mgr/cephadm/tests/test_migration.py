@@ -162,6 +162,7 @@ def test_migrate_service_id_mds_one(cephadm_module: CephadmOrchestrator):
         assert len(cephadm_module.spec_store.all_specs) == 0
 
 
+@mock.patch("cephadm.services.nfs.NFSService.run_grace_tool", mock.MagicMock())
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
 def test_migrate_nfs_initial(cephadm_module: CephadmOrchestrator):
     with with_host(cephadm_module, 'host1'):
@@ -195,6 +196,7 @@ def test_migrate_nfs_initial(cephadm_module: CephadmOrchestrator):
         assert cephadm_module.migration_current == LAST_MIGRATION
 
 
+@mock.patch("cephadm.services.nfs.NFSService.run_grace_tool", mock.MagicMock())
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
 def test_migrate_nfs_initial_octopus(cephadm_module: CephadmOrchestrator):
     with with_host(cephadm_module, 'host1'):

@@ -47,11 +47,17 @@ class NFSService(CephService):
                 for daemon_id in m.values():
                     if daemon_id is not None:
                         self.fence(daemon_id)
-                del rank_map[rank]
-                nodeid = f'{rank}'
-                self.mgr.log.info(f'Removing {nodeid} from the ganesha grace table')
-                self.run_grace_tool(cast(NFSServiceSpec, spec), 'remove', nodeid)
-                self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
+                nodeid = self.get_daemon_nodeid(spec.service_name(), rank)
+                self.mgr.log.info(
+                    "Removing %s from the ganesha grace table for service %s", nodeid, spec.service_name()
+                )
+                try:
+                    self.run_grace_tool(cast(NFSServiceSpec, spec), 'remove', nodeid)
+                    # Only delete from rank_map if grace tool succeeds
+                    del rank_map[rank]
+                    self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
+                except RuntimeError:
+                    self.mgr.log.exception('Got exception while removing node id from grace table')
             else:
                 max_gen = max(m.keys())
                 for gen, daemon_id in list(m.items()):
@@ -72,6 +78,12 @@ class NFSService(CephService):
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         return daemon_spec
 
+    def get_daemon_nodeid(self, service_name: str, rank: Optional[int]) -> str:
+        out = self.mgr.get_store('nfs_services_with_old_nodeid')
+        if out and service_name in out.split(','):
+            return f'{service_name}.{rank}'
+        return str(rank)
+
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
 
@@ -82,7 +94,7 @@ class NFSService(CephService):
 
         deps: List[str] = []
 
-        nodeid = f'{daemon_spec.rank}'
+        nodeid = self.get_daemon_nodeid(spec.service_name(), daemon_spec.rank)
 
         nfs_idmap_conf = '/etc/ganesha/idmap.conf'
 
@@ -129,6 +141,7 @@ class NFSService(CephService):
                 "nfs_idmap_conf": nfs_idmap_conf,
                 "enable_nlm": str(spec.enable_nlm).lower(),
                 "cluster_id": self.mgr._cluster_fsid,
+                "use_old_nodeid": False if nodeid.isdigit() else True
             }
             if spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()
@@ -236,7 +249,7 @@ class NFSService(CephService):
     def run_grace_tool(self,
                        spec: NFSServiceSpec,
                        action: str,
-                       nodeid: str) -> None:
+                       nodeid: str = '') -> str:
         # write a temp keyring and referencing config file.  this is a kludge
         # because the ganesha-grace-tool can only authenticate as a client (and
         # not a mgr).  Also, it doesn't allow you to pass a keyring location via
@@ -273,6 +286,7 @@ class NFSService(CephService):
                 )
                 raise RuntimeError(f'grace tool failed: {result.stderr.decode("utf-8")}')
 
+            return result.stdout.decode("utf-8")
         finally:
             self.mgr.check_mon_command({
                 'prefix': 'auth rm',
