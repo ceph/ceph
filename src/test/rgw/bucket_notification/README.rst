@@ -80,11 +80,13 @@ Then start the broker::
 For security tests, the same ``server.properties`` edits in the section
 below apply. The KRaft controller listener (e.g. ``CONTROLLER://:9097``)
 must remain in the ``listeners`` line on a port outside the 9092-9096
-range, since those are reserved by the security listeners. Do not set
-``controller.quorum.voters``; the ``--standalone`` flag passed to
-``kafka-storage.sh format`` writes the voter set into the bootstrap
-metadata automatically, and Kafka 4.1.1+ rejects the combination of
-``--standalone`` with an explicit ``controller.quorum.voters``.
+range, since those are reserved by the security listeners. Set
+``controller.quorum.bootstrap.servers=localhost:9097`` to the same
+controller port. Do not set ``controller.quorum.voters``; the
+``--standalone`` flag passed to ``kafka-storage.sh format`` writes the
+voter set into the bootstrap metadata automatically, and Kafka 4.1.1+
+rejects the combination of ``--standalone`` with an explicit
+``controller.quorum.voters``.
 
 --------------------
 Kafka Security Tests
