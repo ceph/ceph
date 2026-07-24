@@ -1,0 +1,30 @@
+@use '@carbon/layout';
+
+@mixin base() {
+  .pool-overview-card {
+    display: block;
+  }
+
+  .pool-overview-panels {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: layout.$spacing-06;
+  }
+
+  .pool-detail-panel {
+    // border: 1px solid var(--cds-border-subtle-01);
+    padding: layout.$spacing-05;
+    min-width: 0;
+  }
+
+  .pool-detail-panel__subtitle {
+    color: var(--cds-text-secondary);
+  }
+
+  .pool-detail-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: layout.$spacing-03;
+  }
+}

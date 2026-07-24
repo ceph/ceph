@@ -56,8 +56,9 @@ export class PoolService {
     return this.http.delete(`${this.apiPath}/${name}`, { observe: 'response' });
   }
 
-  get(poolName: string) {
-    return this.http.get(`${this.apiPath}/${poolName}`);
+  get(poolName: string, stats: boolean = false) {
+    const url = stats ? `${this.apiPath}/${poolName}?stats=true` : `${this.apiPath}/${poolName}`;
+    return this.http.get(url);
   }
 
   getList() {

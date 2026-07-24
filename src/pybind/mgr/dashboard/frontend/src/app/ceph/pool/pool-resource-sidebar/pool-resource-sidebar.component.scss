@@ -1,0 +1,65 @@
+@use '@carbon/layout';
+@use '@carbon/colors';
+
+.pool-header-extra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: layout.$spacing-05;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pool-header-tags {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: layout.$spacing-02;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.pool-header-actions {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.pool-details-layout .sidebar-header-content {
+  flex-wrap: nowrap;
+  width: 100%;
+}
+
+.pool-details-layout .sidebar-header-content h2 {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pool-details-layout .sidebar-header {
+  padding-right: var(--cds-spacing-07);
+}
+
+/* Menu is rendered under document.body; scope fixes by menu id. */
+#pool-actions-menu.cds--menu {
+  width: max-content !important;
+  min-width: 12rem;
+  background-color: colors.$white !important;
+}
+
+#pool-actions-menu.cds--menu > .cds--menu-item {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+#pool-actions-menu.cds--menu .cds--menu-item {
+  color: var(--cds-text-primary);
+}
+
+#pool-actions-menu.cds--menu .cds--menu-item__label {
+  overflow: visible;
+  text-overflow: unset;
+  white-space: normal;
+}
+
+#pool-actions-menu.cds--menu .cds--menu-item:hover,
+#pool-actions-menu.cds--menu .cds--menu-item:focus {
+  background-color: colors.$gray-10;
+}

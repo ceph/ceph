@@ -6,6 +6,15 @@ export enum PoolType {
   REPLICATED = 'replicated'
 }
 
+export const POOL_APPLICATION_LABELS: Record<string, string> = {
+  cephfs: $localize`File system`,
+  rbd: $localize`Block`,
+  rgw: $localize`Object`
+};
+
+export const mapPoolApplications = (applications: string[] = []): string[] =>
+  applications.map((application: string) => POOL_APPLICATION_LABELS[application] || application);
+
 export class Pool {
   cache_target_full_ratio_micro: number;
   fast_read: boolean;
@@ -76,3 +85,15 @@ export class Pool {
     this.pool_name = name;
   }
 }
+
+export const getPoolDataProtection = (pool?: Pool): string => {
+  if (pool?.type === PoolType.ERASURE && pool.erasure_code_profile) {
+    return `EC: ${pool.erasure_code_profile}`;
+  }
+
+  if (pool?.type === PoolType.REPLICATED && pool.size != null) {
+    return `replica: x${pool.size}`;
+  }
+
+  return '';
+};
