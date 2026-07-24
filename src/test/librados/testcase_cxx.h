@@ -226,7 +226,6 @@ protected:
   static std::string pool_name;
   void turn_balancing_off();
   void turn_balancing_on();
-  void enable_omap();
   int request_osd_map(
     std::string oid,
     ceph::messaging::osd::OSDMapReply* reply
