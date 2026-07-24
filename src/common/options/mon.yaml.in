@@ -5,7 +5,7 @@ options:
 - name: osd_crush_update_weight_set
   type: bool
   level: advanced
-  desc: update CRUSH weight-set weights when updating weights
+  desc: Update CRUSH weight-set weights when updating weights
   long_desc: If this setting is true, we will update the weight-set weights when adjusting
     an item's weight, effectively making changes take effect immediately, and discarding
     any previous optimization in the weight-set value.  Setting this value to false
@@ -16,7 +16,7 @@ options:
 - name: osd_pool_erasure_code_stripe_unit
   type: size
   level: advanced
-  desc: the amount of data (in bytes) in a data chunk, per stripe
+  desc: The amount of data (in bytes) in a data chunk, per stripe
   fmt_desc: Sets the default size, in bytes, of a chunk of an object
     stripe for erasure coded pools. Every object of size S
     will be stored as N stripes, with each data chunk
@@ -49,7 +49,7 @@ options:
 - name: mon_mgr_digest_period
   type: int
   level: dev
-  desc: Period in seconds between monitor-to-manager health/status updates
+  desc: Period in seconds between Monitor-to-Manager health/status updates
   default: 5
   services:
   - mon
@@ -74,7 +74,7 @@ options:
 - name: mon_down_uptime_grace
   type: secs
   level: advanced
-  desc: Period in seconds that the cluster may have a mon down after this (leader) monitor comes up.
+  desc: Period in seconds that the cluster may have a mon down after this (leader) Monitor comes up.
   default: 1_min
   services:
   - mon
@@ -83,7 +83,7 @@ options:
 - name: mon_mgr_beacon_grace
   type: secs
   level: advanced
-  desc: Period in seconds from last beacon to monitor marking a manager daemon as
+  desc: Period in seconds from last beacon to Monitor marking a Manager daemon as
     failed
   default: 30
   services:
@@ -91,7 +91,7 @@ options:
 - name: mon_nvmeofgw_beacon_grace
   type: secs
   level: advanced
-  desc: Period in seconds from last beacon to monitor marking a  NVMeoF gateway as
+  desc: Period in seconds from last beacon to Monitor marking a  NVMeoF gateway as
     failed
   default: 7
   services:
@@ -107,10 +107,10 @@ options:
 - name: mon_nvmeofgw_set_group_id_retry
   type: uint
   level: advanced
-  desc: Retry wait time in microsecond for set group id between the monitor client
+  desc: Retry wait time in microsecond for set group id between the Monitor client
     and gateway
-  long_desc: The monitor server determines the gateway's group ID. If the monitor client
-    receives a monitor group ID assignment before the gateway is fully up during
+  long_desc: The Monitor server determines the gateway's group ID. If the Monitor client
+    receives a Monitor group ID assignment before the gateway is fully up during
     initialization, a retry is required.
   default: 1000
 - name: mon_nvmeofgw_beacons_till_ack
@@ -145,16 +145,16 @@ options:
   type: int
   level: advanced
   desc: Period in seconds after cluster creation during which cluster may have no
-    active manager
+    active Manager
   long_desc: This grace period enables the cluster to come up cleanly without raising
-    spurious health check failures about managers that aren't online yet
+    spurious health check failures about Managers that aren't online yet
   default: 1_min
   services:
   - mon
 - name: mon_mgr_mkfs_grace
   type: int
   level: advanced
-  desc: Period in seconds that the cluster may have no active manager before this
+  desc: Period in seconds that the cluster may have no active Manager before this
     is reported as an ERR rather than a WARN
   default: 2_min
   services:
@@ -162,7 +162,7 @@ options:
 - name: mon_mgr_proxy_client_bytes_ratio
   type: float
   level: dev
-  desc: ratio of mon_client_bytes that can be consumed by proxied mgr commands before
+  desc: Ratio of mon_client_bytes that can be consumed by proxied mgr commands before
     we error out to client
   default: 0.3
   services:
@@ -170,7 +170,7 @@ options:
 - name: mon_cluster_log_to_stderr
   type: bool
   level: advanced
-  desc: Make monitor send cluster log messages to stderr (prefixed by channel)
+  desc: Make Monitor send cluster log messages to stderr (prefixed by channel)
   default: false
   services:
   - mon
@@ -182,7 +182,7 @@ options:
 - name: mon_cluster_log_to_syslog
   type: str
   level: advanced
-  desc: Make monitor send cluster log messages to syslog
+  desc: Make Monitor send cluster log messages to syslog
   fmt_desc: Determines if the cluster log should be output to the syslog.
   default: default=false
   services:
@@ -205,7 +205,7 @@ options:
 - name: mon_cluster_log_to_file
   type: bool
   level: advanced
-  desc: Make monitor send cluster log messages to file
+  desc: Make Monitor send cluster log messages to file
   default: true
   services:
   - mon
@@ -255,7 +255,7 @@ options:
 - name: mon_cluster_log_to_graylog
   type: str
   level: advanced
-  desc: Make monitor send cluster log to graylog
+  desc: Make Monitor send cluster log to graylog
   default: 'false'
   services:
   - mon
@@ -289,7 +289,7 @@ options:
 - name: mon_cluster_log_to_journald
   type: str
   level: advanced
-  desc: Make monitor send cluster log to journald
+  desc: Make Monitor send cluster log to journald
   default: 'false'
   services:
   - mon
@@ -298,7 +298,7 @@ options:
 - name: mon_log_max
   type: uint
   level: advanced
-  desc: number of recent cluster log messages to retain
+  desc: Number of recent cluster log messages to retain
   default: 10000
   services:
   - mon
@@ -306,7 +306,7 @@ options:
 - name: mon_log_max_summary
   type: uint
   level: advanced
-  desc: number of recent cluster log messages to dedup against
+  desc: Number of recent cluster log messages to dedup against
   default: 50
   services:
   - mon
@@ -314,14 +314,14 @@ options:
 - name: mon_log_full_interval
   type: uint
   level: advanced
-  desc: how many epochs before we encode a full copy of recent log keys
+  desc: How many epochs before we encode a full copy of recent log keys
   default: 50
   services: [mon]
   with_legacy: true
 - name: mon_max_log_entries_per_event
   type: int
   level: advanced
-  desc: max cluster log entries per paxos event
+  desc: Max cluster log entries per paxos event
   fmt_desc: The maximum number of log entries per event.
   default: 4096
   services:
@@ -330,7 +330,7 @@ options:
 - name: mon_health_to_clog
   type: bool
   level: advanced
-  desc: log monitor health to cluster log
+  desc: Log Monitor health to cluster log
   fmt_desc: Enable sending a health summary to the cluster log periodically.
   default: true
   services:
@@ -339,8 +339,8 @@ options:
 - name: mon_health_to_clog_interval
   type: int
   level: advanced
-  desc: frequency to log monitor health to cluster log
-  fmt_desc: How often (in seconds) the monitor sends a health summary to the cluster
+  desc: Frequency to log Monitor health to cluster log
+  fmt_desc: How often (in seconds) the Monitor sends a health summary to the cluster
     log (a non-positive number disables). Monitors will always
     send a summary to the cluster log whether or not it differs from
     the previous summary.
@@ -353,9 +353,9 @@ options:
 - name: mon_health_to_clog_tick_interval
   type: float
   level: dev
-  fmt_desc: How often (in seconds) the monitor sends a health summary to the cluster
+  fmt_desc: How often (in seconds) the Monitor sends a health summary to the cluster
     log (a non-positive number disables). If current health summary
-    is empty or identical to the last time, monitor will not send it
+    is empty or identical to the last time, Monitor will not send it
     to cluster log.
   default: 1_min
   services:
@@ -364,26 +364,26 @@ options:
 - name: mon_health_detail_to_clog
   type: bool
   level: dev
-  desc: log health detail to cluster log
+  desc: Log health detail to cluster log
   default: true
   with_legacy: true
 - name: mon_warn_on_filestore_osds
   type: bool
   level: dev
-  desc: log health warn for filestore OSDs
+  desc: Log health warn for filestore OSDs
   default: true
   with_legacy: true
 - name: mon_health_max_detail
   type: uint
   level: advanced
-  desc: max detailed pgs to report in health detail
+  desc: Max detailed pgs to report in health detail
   default: 50
   services:
   - mon
 - name: mon_health_log_update_period
   type: int
   level: dev
-  desc: minimum time in seconds between log messages about each health check
+  desc: Minimum time in seconds between log messages about each health check
   default: 5
   services:
   - mon
@@ -391,9 +391,9 @@ options:
 - name: mon_data_avail_crit
   type: int
   level: advanced
-  desc: issue MON_DISK_CRIT health error when mon available space below this percentage
+  desc: Issue MON_DISK_CRIT health error when mon available space below this percentage
   fmt_desc: Raise ``HEALTH_ERR`` status when the filesystem that houses a
-    monitor's data store reports that its available capacity is
+    Monitor's data store reports that its available capacity is
     less than or equal to this percentage.
   default: 5
   services:
@@ -402,9 +402,9 @@ options:
 - name: mon_data_avail_warn
   type: int
   level: advanced
-  desc: issue MON_DISK_LOW health warning when mon available space below this percentage
+  desc: Issue MON_DISK_LOW health warning when mon available space below this percentage
   fmt_desc: Raise ``HEALTH_WARN`` status when the filesystem that houses a
-    monitor's data store reports that its available capacity is
+    Monitor's data store reports that its available capacity is
     less than or equal to this percentage .
   default: 30
   services:
@@ -413,8 +413,8 @@ options:
 - name: mon_data_size_warn
   type: size
   level: advanced
-  desc: issue MON_DISK_BIG health warning when mon database is above this size
-  fmt_desc: Raise ``HEALTH_WARN`` status when a monitor's data
+  desc: Issue MON_DISK_BIG health warning when mon database is above this size
+  fmt_desc: Raise ``HEALTH_WARN`` status when a Monitor's data
     store grows to be larger than this size, 15GB by default.
   default: 15_G
   services:
@@ -423,7 +423,7 @@ options:
 - name: mon_daemon_bytes
   type: size
   level: advanced
-  desc: max bytes of outstanding mon messages mon will read off the network
+  desc: Max bytes of outstanding mon messages mon will read off the network
   fmt_desc: The message memory cap for metadata server and OSD messages (in bytes).
   default: 400_M
   services:
@@ -432,7 +432,7 @@ options:
 - name: mon_election_timeout
   type: float
   level: advanced
-  desc: maximum time for a mon election (seconds)
+  desc: Maximum time for a mon election (seconds)
   fmt_desc: On election proposer, maximum waiting time for all ACKs in seconds.
   default: 5
   services:
@@ -448,10 +448,10 @@ options:
 - name: mon_lease
   type: float
   level: advanced
-  desc: lease interval between quorum monitors (seconds)
+  desc: Lease interval between quorum Monitors (seconds)
   long_desc: This setting controls how sensitive your mon quorum is to intermittent
     network issues or other failures.
-  fmt_desc: The length (in seconds) of the lease on the monitor's versions.
+  fmt_desc: The length (in seconds) of the lease on the Monitor's versions.
   default: 5
   services:
   - mon
@@ -459,12 +459,12 @@ options:
 - name: mon_lease_renew_interval_factor
   type: float
   level: advanced
-  desc: multiple of mon_lease for the lease renewal interval
+  desc: Multiple of mon_lease for the lease renewal interval
   long_desc: Leases must be renewed before they time out.  A smaller value means frequent
     renewals, while a value close to 1 makes a lease expiration more likely.
   fmt_desc: |
     ``mon_lease`` \* ``mon_lease_renew_interval_factor`` will be the
-    interval for the Leader to renew the other monitor's leases. The
+    interval for the Leader to renew the other Monitor's leases. The
     factor should be less than ``1.0``.
   default: 0.6
   services:
@@ -477,7 +477,7 @@ options:
 - name: mon_lease_ack_timeout_factor
   type: float
   level: advanced
-  desc: multiple of mon_lease for the lease ack interval before calling new election
+  desc: Multiple of mon_lease for the lease ack interval before calling new election
   fmt_desc: The Leader will wait ``mon_lease`` \* ``mon_lease_ack_timeout_factor``
     for the Providers to acknowledge the lease extension.
   default: 2
@@ -491,7 +491,7 @@ options:
 - name: mon_accept_timeout_factor
   type: float
   level: advanced
-  desc: multiple of mon_lease for follower mons to accept proposed state changes before
+  desc: Multiple of mon_lease for follower mons to accept proposed state changes before
     calling a new election
   fmt_desc: The Leader will wait ``mon_lease`` \* ``mon_accept_timeout_factor``
     for the Requester(s) to accept a Paxos update. It is also used
@@ -523,7 +523,7 @@ options:
 - name: mon_con_tracker_persist_interval
   type: uint
   level: advanced
-  desc: how many updates the ConnectionTracker takes before it persists to disk
+  desc: How many updates the ConnectionTracker takes before it persists to disk
   default: 10
   services:
   - mon
@@ -548,7 +548,7 @@ options:
 - name: mon_warn_on_cache_pools_without_hit_sets
   type: bool
   level: advanced
-  desc: issue CACHE_POOL_NO_HIT_SET health warning for cache pools that do not have
+  desc: Issue CACHE_POOL_NO_HIT_SET health warning for cache pools that do not have
     hit sets configured
   fmt_desc: Raise ``HEALTH_WARN`` when a cache pool does not have the ``hit_set_type``
     value configured. See :ref:`hit_set_type <hit_set_type>` for more details.
@@ -559,7 +559,7 @@ options:
 - name: mon_warn_on_pool_pg_num_not_power_of_two
   type: bool
   level: dev
-  desc: issue POOL_PG_NUM_NOT_POWER_OF_TWO warning if pool has a non-power-of-two
+  desc: Issue POOL_PG_NUM_NOT_POWER_OF_TWO warning if pool has a non-power-of-two
     pg_num value
   default: true
   services:
@@ -567,14 +567,14 @@ options:
 - name: mon_allow_pool_size_one
   type: bool
   level: advanced
-  desc: allow configuring pool with no replicas
+  desc: Allow configuring pool with no replicas
   default: false
   services:
   - mon
 - name: mon_warn_on_crush_straw_calc_version_zero
   type: bool
   level: advanced
-  desc: issue OLD_CRUSH_STRAW_CALC_VERSION health warning if the CRUSH map's straw_calc_version
+  desc: Issue OLD_CRUSH_STRAW_CALC_VERSION health warning if the CRUSH map's straw_calc_version
     is zero
   fmt_desc: Raise ``HEALTH_WARN`` when the CRUSH ``straw_calc_version`` is zero. See
     :ref:`CRUSH map tunables <crush-map-tunables>` for details.
@@ -596,7 +596,7 @@ options:
 - name: mon_warn_on_osd_down_out_interval_zero
   type: bool
   level: advanced
-  desc: issue OSD_NO_DOWN_OUT_INTERVAL health warning if mon_osd_down_out_interval
+  desc: Issue OSD_NO_DOWN_OUT_INTERVAL health warning if mon_osd_down_out_interval
     is zero
   long_desc: Having mon_osd_down_out_interval set to 0 means that down OSDs are not
     marked out automatically and the cluster does not heal itself without administrator
@@ -614,7 +614,7 @@ options:
 - name: mon_warn_on_legacy_crush_tunables
   type: bool
   level: advanced
-  desc: issue OLD_CRUSH_TUNABLES health warning if CRUSH tunables are older than mon_crush_min_required_version
+  desc: Issue OLD_CRUSH_TUNABLES health warning if CRUSH tunables are older than mon_crush_min_required_version
   fmt_desc: Raise ``HEALTH_WARN`` when CRUSH tunables are too old (older than ``mon_min_crush_required_version``)
   default: true
   services:
@@ -625,7 +625,7 @@ options:
 - name: mon_crush_min_required_version
   type: str
   level: advanced
-  desc: minimum ceph release to use for mon_warn_on_legacy_crush_tunables
+  desc: Minimum ceph release to use for mon_warn_on_legacy_crush_tunables
   fmt_desc: The minimum tunable profile required by the cluster. See
     :ref:`CRUSH map tunables <crush-map-tunables>` for details.
   default: hammer
@@ -652,7 +652,7 @@ options:
 - name: mon_stretch_cluster_recovery_ratio
   type: float
   level: advanced
-  desc: the ratio of up OSDs at which a degraded stretch cluster enters recovery
+  desc: The ratio of up OSDs at which a degraded stretch cluster enters recovery
   default: 0.6
   services:
   - mon
@@ -661,7 +661,7 @@ options:
 - name: mon_stretch_recovery_min_wait
   type: float
   level: advanced
-  desc: how long the monitors wait before considering fully-healthy PGs as evidence
+  desc: How long the Monitors wait before considering fully-healthy PGs as evidence
     the stretch mode is repaired
   default: 15
   services:
@@ -694,7 +694,7 @@ options:
 - name: mon_clock_drift_allowed
   type: float
   level: advanced
-  desc: allowed clock drift (in seconds) between mons before issuing a health warning
+  desc: Allowed clock drift (in seconds) between mons before issuing a health warning
   default: 0.05
   services:
   - mon
@@ -703,7 +703,7 @@ options:
 - name: mon_clock_drift_warn_backoff
   type: float
   level: advanced
-  desc: exponential backoff factor for logging clock drift warnings in the cluster
+  desc: Exponential backoff factor for logging clock drift warnings in the cluster
     log
   default: 5
   services:
@@ -713,7 +713,7 @@ options:
 - name: mon_timecheck_interval
   type: float
   level: advanced
-  desc: frequency of clock synchronization checks between monitors (seconds)
+  desc: Frequency of clock synchronization checks between Monitors (seconds)
   fmt_desc: The time check interval (clock drift check) in seconds
     for the Leader.
   default: 5_min
@@ -724,7 +724,7 @@ options:
 - name: mon_timecheck_skew_interval
   type: float
   level: advanced
-  desc: frequency of clock synchronization (re)checks between monitors while clocks
+  desc: Frequency of clock synchronization (re)checks between Monitors while clocks
     are believed to be skewed (seconds)
   fmt_desc: The time check interval (clock drift check) in seconds when in
     presence of a skew in seconds for the Leader.
@@ -753,7 +753,7 @@ options:
   services:
   - mon
   fmt_desc: The maximum Paxos iterations before we must first sync the
-    monitor data stores. When a monitor finds that its peer is too
+    Monitor data stores. When a Monitor finds that its peer is too
     far ahead of it, it will first sync with data stores before moving
     on.
   with_legacy: true
@@ -825,7 +825,7 @@ options:
 - name: paxos_service_trim_max_multiplier
   type: uint
   level: advanced
-  desc: factor by which paxos_service_trim_max will be multiplied to get a new upper
+  desc: Factor by which paxos_service_trim_max will be multiplied to get a new upper
     bound when trim sizes are high  (0 disables it)
   default: 20
   services:
@@ -843,8 +843,8 @@ options:
 - name: mon_auth_validate_all_caps
   type: bool
   level: advanced
-  desc: Whether to parse non-monitor capabilities set by the 'ceph auth ...' commands.
-    Disabling this saves CPU on the monitor, but allows invalid capabilities to be
+  desc: Whether to parse non-Monitor capabilities set by the 'ceph auth ...' commands.
+    Disabling this saves CPU on the Monitor, but allows invalid capabilities to be
     set, and only be rejected later, when they are used.
   default: true
   services:
@@ -855,8 +855,8 @@ options:
 - name: mon_mds_force_trim_to
   type: int
   level: dev
-  desc: force mons to trim mdsmaps/fsmaps up to this epoch
-  fmt_desc: Force monitor to trim mdsmaps up to but not including this FSMap
+  desc: Force mons to trim mdsmaps/fsmaps up to this epoch
+  fmt_desc: Force Monitor to trim mdsmaps up to but not including this FSMap
     epoch. A value of 0 disables (the default) this config. This command is
     potentially dangerous, use with care.
   default: 0
@@ -866,10 +866,10 @@ options:
 - name: mon_fsmap_prune_threshold
   type: secs
   level: advanced
-  desc: prune fsmap older than this threshold in seconds
-  fmt_desc: The monitors keep historical fsmaps in memory to optimize asking
+  desc: Prune fsmap older than this threshold in seconds
+  fmt_desc: The Monitors keep historical fsmaps in memory to optimize asking
     when an MDS daemon was last seen in the FSMap. This option controls
-    how far back in time the monitors will look.
+    how far back in time the Monitors will look.
   default: 300
   flags:
   - runtime
@@ -878,15 +878,15 @@ options:
 - name: mds_beacon_mon_down_grace
   type: secs
   level: advanced
-  desc: tolerance in seconds for missed MDS beacons to monitors
+  desc: Tolerance in seconds for missed MDS beacons to Monitors
   fmt_desc: The interval without beacons before Ceph declares an MDS laggy
-    when a monitor is down.
+    when a Monitor is down.
   default: 1_min
 # skip safety assertions on FSMap (in case of bugs where we want to continue anyway)
 - name: mon_mds_skip_sanity
   type: bool
   level: advanced
-  desc: skip sanity checks on fsmap/mdsmap
+  desc: Skip sanity checks on fsmap/mdsmap
   fmt_desc: Skip safety assertions on FSMap (in case of bugs where we want to
     continue anyway). Monitor terminates if the FSMap sanity check
     fails, but we can disable it by enabling this option.
@@ -925,7 +925,7 @@ options:
 - name: mon_osd_laggy_halflife
   type: int
   level: advanced
-  desc: halflife of OSD 'lagginess' factor
+  desc: Halflife of OSD 'lagginess' factor
   fmt_desc: The number of seconds laggy estimates will decay.
   default: 1_hr
   services:
@@ -934,7 +934,7 @@ options:
 - name: mon_osd_laggy_weight
   type: float
   level: advanced
-  desc: how heavily to weight OSD marking itself back up in overall laggy_probability
+  desc: How heavily to weight OSD marking itself back up in overall laggy_probability
   long_desc: 1.0 means that an OSD marking itself back up (because it was marked down
     but not actually dead) means a 100% laggy_probability; 0.0 effectively disables
     tracking of laggy_probability.
@@ -948,7 +948,7 @@ options:
 - name: mon_osd_laggy_max_interval
   type: int
   level: advanced
-  desc: cap value for period for OSD to be marked for laggy_interval calculation
+  desc: Cap value for period for OSD to be marked for laggy_interval calculation
   fmt_desc: Maximum value of ``laggy_interval`` in laggy estimations (in seconds).
               Monitor uses an adaptive approach to evaluate the ``laggy_interval`` of
               a certain OSD. This value will be used to calculate the grace time for
@@ -960,7 +960,7 @@ options:
 - name: mon_osd_adjust_heartbeat_grace
   type: bool
   level: advanced
-  desc: increase OSD heartbeat grace if peers appear to be laggy
+  desc: Increase OSD heartbeat grace if peers appear to be laggy
   long_desc: If an OSD is marked down but then marks itself back up, it implies it
     wasn't actually down but was unable to respond to heartbeats.  If this option
     is true, we can use the laggy_probability and laggy_interval values calculated
@@ -980,7 +980,7 @@ options:
 - name: mon_osd_adjust_down_out_interval
   type: bool
   level: advanced
-  desc: increase the mon_osd_down_out_interval if an OSD appears to be laggy
+  desc: Increase the mon_osd_down_out_interval if an OSD appears to be laggy
   fmt_desc: If set to ``true``, Ceph will scaled based on laggy estimations.
   default: true
   services:
@@ -991,7 +991,7 @@ options:
 - name: mon_osd_auto_mark_in
   type: bool
   level: advanced
-  desc: mark any OSD that comes up 'in'
+  desc: Mark any OSD that comes up 'in'
   fmt_desc: Ceph will mark any booting Ceph OSD Daemons as ``in``
               the Ceph Storage Cluster.
   default: false
@@ -1001,7 +1001,7 @@ options:
 - name: mon_osd_auto_mark_auto_out_in
   type: bool
   level: advanced
-  desc: mark any OSD that comes up that was automatically marked 'out' back 'in'
+  desc: Mark any OSD that comes up that was automatically marked 'out' back 'in'
   fmt_desc: Ceph will mark booting Ceph OSD Daemons auto marked ``out``
               of the Ceph Storage Cluster as ``in`` the cluster.
   default: true
@@ -1013,7 +1013,7 @@ options:
 - name: mon_osd_auto_mark_new_in
   type: bool
   level: advanced
-  desc: mark any new OSD that comes up 'in'
+  desc: Mark any new OSD that comes up 'in'
   fmt_desc: Ceph will mark booting new Ceph OSD Daemons as ``in`` the
               Ceph Storage Cluster.
   default: true
@@ -1023,7 +1023,7 @@ options:
 - name: mon_osd_destroyed_out_interval
   type: int
   level: advanced
-  desc: mark any OSD 'out' that has been 'destroy'ed for this long (seconds)
+  desc: Mark any OSD 'out' that has been 'destroy'ed for this long (seconds)
   default: 10_min
   services:
   - mon
@@ -1031,7 +1031,7 @@ options:
 - name: mon_osd_down_out_interval
   type: int
   level: advanced
-  desc: mark any OSD 'out' that has been 'down' for this long (seconds)
+  desc: Mark any OSD 'out' that has been 'down' for this long (seconds)
   fmt_desc: The number of seconds Ceph waits before marking a Ceph OSD Daemon
               ``down`` and ``out`` if it doesn't respond.
   default: 10_min
@@ -1041,7 +1041,7 @@ options:
 - name: mon_osd_down_out_subtree_limit
   type: str
   level: advanced
-  desc: do not automatically mark OSDs 'out' if an entire subtree of this size is
+  desc: Do not automatically mark OSDs 'out' if an entire subtree of this size is
     down
   fmt_desc: The smallest :term:`CRUSH` unit type that Ceph will **not**
               automatically mark out. For instance, if set to ``host`` and if
@@ -1057,7 +1057,7 @@ options:
 - name: mon_osd_min_up_ratio
   type: float
   level: advanced
-  desc: do not automatically mark OSDs 'out' if fewer than this many OSDs are 'up'
+  desc: Do not automatically mark OSDs 'out' if fewer than this many OSDs are 'up'
   fmt_desc: The minimum ratio of ``up`` Ceph OSD Daemons before Ceph will
               mark Ceph OSD Daemons ``down``.
   default: 0.3
@@ -1069,7 +1069,7 @@ options:
 - name: mon_osd_min_in_ratio
   type: float
   level: advanced
-  desc: do not automatically mark OSDs 'out' if fewer than this many OSDs are 'in'
+  desc: Do not automatically mark OSDs 'out' if fewer than this many OSDs are 'in'
   fmt_desc: The minimum ratio of ``in`` Ceph OSD Daemons before Ceph will
               mark Ceph OSD Daemons ``out``.
   default: 0.75
@@ -1081,7 +1081,7 @@ options:
 - name: mon_osd_warn_op_age
   type: float
   level: advanced
-  desc: issue REQUEST_SLOW health warning if OSD ops are slower than this age (seconds)
+  desc: Issue REQUEST_SLOW health warning if OSD ops are slower than this age (seconds)
   default: 32
   services:
   - mgr
@@ -1089,7 +1089,7 @@ options:
 - name: mon_osd_warn_num_repaired
   type: uint
   level: advanced
-  desc: issue OSD_TOO_MANY_REPAIRS health warning if an OSD has more than this many
+  desc: Issue OSD_TOO_MANY_REPAIRS health warning if an OSD has more than this many
     read repairs
   default: 10
   services:
@@ -1097,7 +1097,7 @@ options:
 - name: mon_osd_prime_pg_temp
   type: bool
   level: dev
-  desc: minimize peering work by priming pg_temp values after a map change
+  desc: Minimize peering work by priming pg_temp values after a map change
   fmt_desc: Enables or disables priming the PGMap with the previous OSDs when an ``out``
     OSD comes back into the cluster. With the ``true`` setting, clients
     will continue to use the previous OSDs until the newly ``in`` OSDs for
@@ -1109,8 +1109,8 @@ options:
 - name: mon_osd_prime_pg_temp_max_time
   type: float
   level: dev
-  desc: maximum time to spend precalculating PG mappings on map change (seconds)
-  fmt_desc: How much time in seconds the monitor should spend trying to prime the
+  desc: Maximum time to spend precalculating PG mappings on map change (seconds)
+  fmt_desc: How much time in seconds the Monitor should spend trying to prime the
     PGMap when an out OSD comes back into the cluster.
   default: 0.5
   services:
@@ -1119,7 +1119,7 @@ options:
 - name: mon_osd_prime_pg_temp_max_estimate
   type: float
   level: advanced
-  desc: calculate all PG mappings if estimated fraction of PGs that change is above
+  desc: Calculate all PG mappings if estimated fraction of PGs that change is above
     this amount
   fmt_desc: Maximum estimate of time spent on each PG before we prime all PGs
     in parallel.
@@ -1138,7 +1138,7 @@ options:
 - name: mon_osd_crush_smoke_test
   type: bool
   level: advanced
-  desc: perform a smoke test on any new CRUSH map before accepting changes
+  desc: Perform a smoke test on any new CRUSH map before accepting changes
   default: true
   services:
   - mon
@@ -1153,7 +1153,7 @@ options:
 - name: mon_warn_on_older_version
   type: bool
   level: advanced
-  desc: issue DAEMON_OLD_VERSION health warning if daemons are not all running the
+  desc: Issue DAEMON_OLD_VERSION health warning if daemons are not all running the
     same version
   default: true
   services:
@@ -1161,15 +1161,15 @@ options:
 - name: mon_warn_older_version_delay
   type: secs
   level: advanced
-  desc: issue DAEMON_OLD_VERSION health warning after this amount of time has elapsed
+  desc: Issue DAEMON_OLD_VERSION health warning after this amount of time has elapsed
   default: 7_day
   services:
   - mon
 - name: mon_data
   type: str
   level: advanced
-  desc: path to mon database
-  fmt_desc: The monitor's data location.
+  desc: Path to mon database
+  fmt_desc: The Monitor's data location.
   default: /var/lib/ceph/mon/$cluster-$id
   services:
   - mon
@@ -1252,7 +1252,7 @@ options:
 - name: mon_enable_op_tracker
   type: bool
   level: advanced
-  desc: enable/disable MON op tracking
+  desc: Enable/disable MON op tracking
   default: true
   services:
   - mon
@@ -1265,7 +1265,7 @@ options:
   - mon
   fmt_desc: Compact the database used as Ceph Monitor store on
     ``ceph-mon`` start. A manual compaction helps to shrink the
-    monitor database and improve the performance of it if the regular
+    Monitor database and improve the performance of it if the regular
     compaction fails to work.
   with_legacy: true
 # trigger RocksDB compaction on bootstrap
@@ -1277,7 +1277,7 @@ options:
   - mon
   fmt_desc: Compact the database used as Ceph Monitor store
     on bootstrap. Monitors probe each other to establish
-    a quorum after bootstrap. If a monitor times out before joining the
+    a quorum after bootstrap. If a Monitor times out before joining the
     quorum, it will start over and bootstrap again.
   with_legacy: true
 # compact (a prefix) when we trim old states
@@ -1292,49 +1292,49 @@ options:
 - name: mon_op_complaint_time
   type: secs
   level: advanced
-  desc: time after which to consider a monitor operation blocked after no updates
+  desc: Time after which to consider a Monitor operation blocked after no updates
   default: 30
   services:
   - mon
 - name: mon_op_log_threshold
   type: int
   level: advanced
-  desc: max number of slow ops to display
+  desc: Max number of slow ops to display
   default: 5
   services:
   - mon
 - name: mon_op_history_size
   type: uint
   level: advanced
-  desc: max number of completed ops to track
+  desc: Max number of completed ops to track
   default: 20
   services:
   - mon
 - name: mon_op_history_duration
   type: secs
   level: advanced
-  desc: expiration time in seconds of historical MON OPS
+  desc: Expiration time in seconds of historical MON OPS
   default: 10_min
   services:
   - mon
 - name: mon_op_history_slow_op_size
   type: uint
   level: advanced
-  desc: max number of slow historical MON OPS to keep
+  desc: Max number of slow historical MON OPS to keep
   default: 20
   services:
   - mon
 - name: mon_op_history_slow_op_threshold
   type: secs
   level: advanced
-  desc: duration of an op to be considered as a historical slow op
+  desc: Duration of an op to be considered as a historical slow op
   default: 10
   services:
   - mon
 - name: mon_osdmap_full_prune_enabled
   type: bool
   level: advanced
-  desc: enables pruning full osdmap versions when we go over a given number of maps
+  desc: Enables pruning full osdmap versions when we go over a given number of maps
   default: true
   services:
   - mon
@@ -1345,7 +1345,7 @@ options:
 - name: mon_osdmap_full_prune_min
   type: uint
   level: advanced
-  desc: minimum number of versions in the store to trigger full map pruning
+  desc: Minimum number of versions in the store to trigger full map pruning
   default: 10000
   services:
   - mon
@@ -1356,7 +1356,7 @@ options:
 - name: mon_osdmap_full_prune_interval
   type: uint
   level: advanced
-  desc: interval between maps that will not be pruned; maps in the middle will be
+  desc: Interval between maps that will not be pruned; maps in the middle will be
     pruned.
   default: 10
   services:
@@ -1368,7 +1368,7 @@ options:
 - name: mon_osdmap_full_prune_txsize
   type: uint
   level: advanced
-  desc: number of maps we will prune per iteration
+  desc: Number of maps we will prune per iteration
   default: 100
   services:
   - mon
@@ -1379,7 +1379,7 @@ options:
 - name: mon_osd_cache_size
   type: int
   level: advanced
-  desc: maximum number of OSDMaps to cache in memory
+  desc: Maximum number of OSDMaps to cache in memory
   fmt_desc: The size of osdmaps cache, not to rely on underlying store's cache
   default: 500
   services:
@@ -1388,9 +1388,9 @@ options:
 - name: mon_osd_cache_size_min
   type: size
   level: advanced
-  desc: The minimum amount of bytes to be kept mapped in memory for osd monitor caches.
+  desc: The minimum amount of bytes to be kept mapped in memory for OSD Monitor caches.
   fmt_desc: The minimum amount of bytes to be kept mapped in memory for osd
-     monitor caches.
+     Monitor caches.
   default: 128_M
   services:
   - mon
@@ -1398,7 +1398,7 @@ options:
 - name: mon_osd_mapping_pgs_per_chunk
   type: int
   level: dev
-  desc: granularity of PG placement calculation background work
+  desc: Granularity of PG placement calculation background work
   fmt_desc: We calculate the mapping from placement group to OSDs in chunks.
     This option specifies the number of placement groups per chunk.
   default: 4096
@@ -1408,7 +1408,7 @@ options:
 - name: mon_clean_pg_upmaps_per_chunk
   type: uint
   level: dev
-  desc: granularity of PG upmap validation background work
+  desc: Granularity of PG upmap validation background work
   default: 256
   services:
   - mon
@@ -1416,7 +1416,7 @@ options:
 - name: mon_osd_max_initial_pgs
   type: int
   level: advanced
-  desc: maximum number of PGs a pool will created with
+  desc: Maximum number of PGs a pool will created with
   long_desc: If the user specifies more PGs than this, the cluster will subsequently
     split PGs after the pool is created in order to reach the target.
   default: 1024
@@ -1425,9 +1425,9 @@ options:
 - name: mon_memory_target
   type: size
   level: basic
-  desc: The amount of bytes pertaining to osd monitor caches and kv cache to be kept
+  desc: The amount of bytes pertaining to OSD Monitor caches and KV cache to be kept
     mapped in memory with cache auto-tuning enabled
-  fmt_desc: The amount of bytes pertaining to OSD monitor caches and KV cache
+  fmt_desc: The amount of bytes pertaining to OSD Monitor caches and KV cache
     to be kept mapped in memory with cache auto-tuning enabled.
   default: 2_G
   services:
@@ -1438,8 +1438,8 @@ options:
 - name: mon_memory_autotune
   type: bool
   level: basic
-  desc: Autotune the cache memory being used for osd monitors and kv database
-  fmt_desc: Autotune the cache memory used for OSD monitors and KV
+  desc: Autotune the cache memory being used for OSD Monitors and KV database
+  fmt_desc: Autotune the cache memory used for OSD Monitors and KV
     database.
   default: true
   services:
@@ -1450,8 +1450,8 @@ options:
 - name: mon_cpu_threads
   type: int
   level: advanced
-  desc: worker threads for CPU intensive background work
-  fmt_desc: Number of threads for performing CPU intensive work on monitor.
+  desc: Worker threads for CPU intensive background work
+  fmt_desc: Number of threads for performing CPU intensive work on Monitor.
   default: 4
   services:
   - mon
@@ -1459,8 +1459,8 @@ options:
 - name: mon_tick_interval
   type: int
   level: advanced
-  desc: interval for internal mon background checks
-  fmt_desc: A monitor's tick interval in seconds.
+  desc: Interval for internal mon background checks
+  fmt_desc: A Monitor's tick interval in seconds.
   default: 5
   services:
   - mon
@@ -1468,7 +1468,7 @@ options:
 - name: mon_session_timeout
   type: int
   level: advanced
-  desc: close inactive mon client connections after this many seconds
+  desc: Close inactive mon client connections after this many seconds
   fmt_desc: Monitor will terminate inactive sessions stay idle over this
     time limit.
   default: 5_min
@@ -1478,7 +1478,7 @@ options:
 - name: mon_subscribe_interval
   type: float
   level: dev
-  desc: subscribe interval for pre-jewel clients
+  desc: Subscribe interval for pre-jewel clients
   fmt_desc: The refresh interval (in seconds) for subscriptions. The
     subscription mechanism enables obtaining cluster maps
     and log information.
@@ -1490,7 +1490,7 @@ options:
   type: bool
   level: advanced
   default: false
-  desc: priority packets between mons
+  desc: Priority packets between mons
   with_legacy: true
   see_also:
   - osd_heartbeat_use_min_delay_socket
@@ -1498,14 +1498,14 @@ options:
   type: secs
   level: advanced
   desc: The duration, expressed in seconds, after which the nvmeof gateway
-    should trigger a panic if it loses connection to the monitor
+    should trigger a panic if it loses connection to the Monitor
   default: 100
   services:
   - mon
 - name: nvmeof_mon_client_tick_period
   type: secs
   level: advanced
-  desc: Period in seconds of nvmeof gateway beacon messages to monitor
+  desc: Period in seconds of nvmeof gateway beacon messages to Monitor
   default: 1
   services:
   - mon
@@ -1523,7 +1523,7 @@ options:
   type: secs
   level: advanced
   desc: The duration, expressed in seconds, after which the nvmeof gateway
-    should trigger a panic if it does not receive the initial map from the monitor
+    should trigger a panic if it does not receive the initial map from the Monitor
   default: 30
   services:
 - name: mon_netsplit_grace_period
