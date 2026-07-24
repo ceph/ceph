@@ -49,6 +49,7 @@
 #include "common/pick_address.h"
 #include "common/TextTable.h"
 #include "crush/CrushWrapper.h"
+#include "perfglue/heap_profiler.h"
 
 #include <boost/algorithm/string.hpp>
 
@@ -270,6 +271,14 @@ int DaemonServer::init(uint64_t gid, entity_addrvec_t client_addrs)
              "name=filterstr,type=CephString,n=N,req=false",
              asok_hook,
              "show slowest recent ops, sorted by duration");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "heap " \
+    "name=heapcmd,type=CephChoices,strings=" \
+    "dump|start_profiler|stop_profiler|release|get_release_rate|set_release_rate|stats " \
+    "name=value,type=CephString,req=false",
+    asok_hook,
+    "show heap usage info (available only if compiled with tcmalloc)");
   ceph_assert(r == 0);
   return 0;
 }
@@ -3846,6 +3855,22 @@ will start to track new ops received afterwards.";
         goto out;
       }
     }
+  } else if (admin_command == "heap") {
+    if (!ceph_using_tcmalloc()) {
+      ss << "not using tcmalloc";
+      ret = -EOPNOTSUPP;
+      goto out;
+    }
+    string heapcmd;
+    cmd_getval(cmdmap, "heapcmd", heapcmd);
+    vector<string> heapcmd_vec;
+    get_str_vec(heapcmd, heapcmd_vec);
+    string value;
+    if (cmd_getval(cmdmap, "value", value)) {
+      heapcmd_vec.push_back(value);
+    }
+    ceph_heap_profiler_handle_command(heapcmd_vec, ss);
+    ret = 0;
   }
   dout(10) << "ret := " << ret << dendl;
   return true;
