@@ -271,11 +271,19 @@ int Snapshot<I>::get_id(I *ictx, const std::string& snap_name, uint64_t *snap_id
       return r;
 
     std::shared_lock image_locker{ictx->image_lock};
-    *snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(), snap_name);
-    if (*snap_id == CEPH_NOSNAP)
-      return -ENOENT;
-
-    return 0;
+    cls::rbd::for_each_snapshot_namespace(
+      [ictx, &snap_name, &snap_id, &r]
+      (const cls::rbd::SnapshotNamespace &snap_namespace) {
+        *snap_id = ictx->get_snap_id(snap_namespace, snap_name);
+        if (*snap_id == CEPH_NOSNAP) {
+          r = -ENOENT;
+          return true;
+        }
+        r = 0;
+        return false;
+      }
+    );
+    return r;
   }
 
 template <typename I>
