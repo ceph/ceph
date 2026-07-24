@@ -130,11 +130,12 @@ To remove a specific ``pg-upmap-primary`` mapping, use:
 
    ceph osd rm-pg-upmap-primary <pgid>
 
-If you need to clear **all** ``pg-upmap-primary`` mappings in your cluster, you may use:
+If you need to clear **all** ``pg-upmap-primary`` mappings in your cluster, you may use the
+following command to either remove all mappings or optionally remove mappings for a single pool:
 
 .. prompt:: bash $
 
-   ceph osd rm-pg-upmap-primary-all
+   ceph osd rm-pg-upmap-primary-all {pool name}
 
 Unable to Use Kernel Client
 ---------------------------

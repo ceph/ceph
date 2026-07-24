@@ -1029,14 +1029,15 @@ COMMAND("osd rm-pg-upmap-items "
 COMMAND("osd pg-upmap-primary "
 	"name=pgid,type=CephPgid "
 	"name=id,type=CephOsdName ",
-	"set pg primary osd <pgid>:<id> (id (osd) must be part of pgid)",
+	"set pg_upmap_primary osd <pgid>:<id> (id (osd) must be part of pgid)",
         "osd", "rw")
 COMMAND("osd rm-pg-upmap-primary "
 	"name=pgid,type=CephPgid ",
-	"clear pg primary setting for <pgid>",
+	"clear pg_upmap_primary setting for <pgid>",
         "osd", "rw")
-COMMAND("osd rm-pg-upmap-primary-all ",
-        "clear all pg primary entries (developers only)",
+COMMAND("osd rm-pg-upmap-primary-all "
+        "name=pool,type=CephPoolname,req=false",
+        "clear all pg_upmap_primary entries, or all entries for pool <pool> (developers only)",
         "osd", "rw")
 COMMAND("osd primary-temp "
 	"name=pgid,type=CephPgid "
