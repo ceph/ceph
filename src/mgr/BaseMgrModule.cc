@@ -765,6 +765,26 @@ ceph_get_osdmap(BaseMgrModule *self, PyObject *args)
 }
 
 static PyObject*
+ceph_set_max_queue_len(BaseMgrModule *self, PyObject *args)
+{
+  uint64_t val;
+  uint64_t res;
+  dout(10) << "ceph_set_max_queue_len" << "First" << val << dendl;
+  if (!PyArg_ParseTuple(args, "s:ceph_set_max_queue_len", &val))
+  {
+    return nullptr;
+  }
+
+    dout(10) << "ceph_set_max_queue_len" << "Second" << val << dendl;
+    without_gil([&]  {
+    res = self->py_modules->set_max_queue_len(val);
+    });
+    dout(10) << "ceph_set_max_queue_len" << "RESULT" << res << dendl;
+    dout(10) << "ceph_set_max_queue_len" << "Third"<< val << dendl;
+    Py_RETURN_NONE;
+}
+
+static PyObject*
 ceph_set_uri(BaseMgrModule *self, PyObject *args)
 {
   char *svc_str = nullptr;
@@ -1683,6 +1703,9 @@ PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_get_osdmap", (PyCFunction)ceph_get_osdmap, METH_NOARGS,
     "Get an OSDMap* in a python capsule"},
 
+  {"_ceph_set_max_queue_len", (PyCFunction)ceph_set_max_queue_len, METH_VARARGS,
+    "Set queue limit for module"},
+  
   {"_ceph_set_uri", (PyCFunction)ceph_set_uri, METH_VARARGS,
     "Advertize a service URI served by this module"},
 
