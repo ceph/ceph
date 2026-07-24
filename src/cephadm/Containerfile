@@ -35,6 +35,12 @@ RUN dnf install -y \
         openssh-clients \
         rsync \
         udev \
+        # container engine client – cephadm resolves 'podman'/'docker' from
+        # PATH at startup; without the binary the daemon fails even for
+        # read-only subcommands.  podman is used in remote mode so that all
+        # container operations are forwarded to the host daemon via the socket
+        # bind-mounted by container-run.sh.
+        podman \
     && dnf clean all \
     && rm -rf /var/cache/dnf
 

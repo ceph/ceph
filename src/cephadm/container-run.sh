@@ -130,6 +130,8 @@ MOUNTS="\
 
 # Container engine socket so cephadm can launch further containers.
 # Podman uses a user/system socket path; Docker uses /var/run/docker.sock.
+# The socket is mounted at a fixed path inside the container so that the
+# container engine client installed in the image can reach the host daemon.
 if [ "${CONTAINER_ENGINE}" = "podman" ]; then
     PODMAN_SOCK="${XDG_RUNTIME_DIR:-/run}/podman/podman.sock"
     if [ ! -S "${PODMAN_SOCK}" ]; then
@@ -137,8 +139,14 @@ if [ "${CONTAINER_ENGINE}" = "podman" ]; then
         PODMAN_SOCK="/run/podman/podman.sock"
     fi
     MOUNTS="${MOUNTS} -v ${PODMAN_SOCK}:/run/podman/podman.sock"
+    # Tell the podman client inside the container to operate in remote mode
+    # and forward all requests to the host daemon via the mounted socket.
+    ENGINE_ENV="-e CONTAINER_HOST=unix:///run/podman/podman.sock"
 else
     MOUNTS="${MOUNTS} -v /var/run/docker.sock:/var/run/docker.sock"
+    # Docker CLI connects to /var/run/docker.sock by default; no extra env
+    # variable is needed when the socket is mounted at the canonical path.
+    ENGINE_ENV="-e DOCKER_HOST=unix:///var/run/docker.sock"
 fi
 
 # ---------------------------------------------------------------------------
@@ -152,5 +160,6 @@ exec ${CONTAINER_ENGINE} run \
     ${NAMESPACES} \
     ${SECURITY} \
     ${MOUNTS} \
+    ${ENGINE_ENV} \
     "${IMAGE}" \
     "$@"
