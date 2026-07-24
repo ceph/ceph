@@ -513,11 +513,14 @@ public:
 class RGWCompleteMultipart_ObjStore_S3 : public RGWCompleteMultipart_ObjStore {
 private:
   std::map<std::string, std::string> crypt_http_responses;
+  bool sent_header{false};
 public:
   RGWCompleteMultipart_ObjStore_S3() {}
   ~RGWCompleteMultipart_ObjStore_S3() override {}
 
   int get_params(optional_yield y) override;
+  void send_response_begin() override;
+  void send_keepalive() override;
   void send_response() override;
 };
 
