@@ -6,6 +6,7 @@ import json
 import logging
 import os
 
+from .agent import get_agent_version
 from .call_wrappers import call, CallVerbosity
 from .container_engines import (
     normalize_container_id,
@@ -189,11 +190,17 @@ class VersionStatusUpdater(DaemonStatusUpdater):
         version = val.get('version', None)
         daemon_type = identity.daemon_type
         container_id = val['container_id']
-        if not image_id and not version:
+        if not image_id and not version and daemon_type != 'agent':
             return  # container info missing or no longer running?
         # identify software version inside the container (if we can)
         if not version or '.' not in version:
             version = self.seen_versions.get(image_id, None)
+        if daemon_type == 'agent':
+            # agent runs as a Python process, get cephadm version
+            if not version:
+                version = get_agent_version()
+                if version:
+                    self.seen_versions['agent'] = version
         if daemon_type == NFSGanesha.daemon_type:
             version = NFSGanesha.get_version(ctx, container_id)
         if daemon_type == CephIscsi.daemon_type:

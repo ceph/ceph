@@ -1,6 +1,7 @@
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen, Request
 from typing import Optional, Any, Tuple
+import importlib
 import logging
 
 logger = logging.getLogger()
@@ -32,3 +33,23 @@ def http_query(
     except Exception:
         raise
     return (response_status, response_str)
+
+
+def get_agent_version() -> Optional[str]:
+    """Return the cephadm version string for the agent process.
+
+    Tries to import the version module from the bundled ``_cephadmmeta``
+    package first, then falls back to the legacy ``_version`` module.
+    Returns ``None`` when neither module is available.
+    """
+    vmod = None
+    try:
+        vmod = importlib.import_module('_cephadmmeta.version')
+    except ImportError:
+        try:
+            vmod = importlib.import_module('_version')
+        except ImportError:
+            pass
+    if vmod is not None:
+        return getattr(vmod, 'CEPH_GIT_NICE_VER', None)
+    return None
