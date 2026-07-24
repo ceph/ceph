@@ -28,6 +28,7 @@
 #include "mon/MonClient.h"
 #include "mds/MDCache.h"
 #include "mds/MDLog.h"
+#include "mds/MDSContext.h" // for MDSIOContextBase
 #include "mds/MDSRank.h"
 #include "mds/Locker.h"
 #include "mds/mdstypes.h"

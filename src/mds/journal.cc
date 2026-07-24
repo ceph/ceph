@@ -48,6 +48,7 @@
 
 #include "LogSegment.h"
 
+#include "MDSContext.h" // for MDSIOContext
 #include "MDSRank.h"
 #include "MDLog.h"
 #include "MDCache.h"
