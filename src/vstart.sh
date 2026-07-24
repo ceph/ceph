@@ -187,7 +187,6 @@ rgw_compression=""
 rgw_store="rados"
 lockdep=${LOCKDEP:-1}
 spdk_enabled=0 # disable SPDK by default
-pmem_enabled=0
 io_uring_enabled=0
 with_jaeger=0
 force_addr=0
@@ -259,7 +258,6 @@ options:
 	--multimds <count> allow multimds with maximum active count
 	--without-dashboard: do not run using mgr dashboard
 	--bluestore-spdk: enable SPDK and with a comma-delimited list of PCI-IDs of NVME device (e.g, 0000:81:00.0)
-	--bluestore-pmem: enable PMEM and with path to a file mapped to PMEM
 	--msgr1: use msgr1 only
 	--msgr2: use msgr2 only
 	--msgr21: use msgr2 and msgr1
@@ -657,12 +655,6 @@ case $1 in
         spdk_enabled=1
         shift
         ;;
-    --bluestore-pmem)
-        [ -z "$2" ] && usage_exit
-        bluestore_pmem_file="$2"
-        pmem_enabled=1
-        shift
-        ;;
     --bluestore-devs)
         parse_block_devs --bluestore-devs "$2"
         shift
@@ -911,7 +903,7 @@ EOF
         osd max object namespace len = 64"
     fi
     if [ "$objectstore" == "bluestore" ]; then
-        if [ "$spdk_enabled" -eq 1 ] || [ "$pmem_enabled" -eq 1 ]; then
+        if [ "$spdk_enabled" -eq 1 ]; then
             BLUESTORE_OPTS="        bluestore_block_db_path = \"\"
         bluestore_block_db_size = 0
         bluestore_block_db_create = false
@@ -1290,10 +1282,6 @@ EOF
             if [ "$spdk_enabled" -eq 1 ]; then
                 wconf <<EOF
         bluestore_block_path = spdk:${bluestore_spdk_dev[$osd]}
-EOF
-            elif [ "$pmem_enabled" -eq 1 ]; then
-                wconf <<EOF
-        bluestore_block_path = ${bluestore_pmem_file}
 EOF
             fi
             rm -rf $CEPH_DEV_DIR/osd$osd || true

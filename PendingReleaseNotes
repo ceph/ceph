@@ -267,6 +267,18 @@
   rather rigid and also challenging to disseminate in some environments.  The
   key can be embedded in the migration spec or just referenced from there while
   stored in the MON config-key store.
+* BlueStore: The experimental PMEM device backend has been removed, together
+  with the ``pmem`` value of the ``bdev_type`` option and the DML/DSA offload
+  path. The hardware it targeted, Intel Optane DC persistent memory, was
+  discontinued in 2022. The RBD persistent write-back cache, which also uses
+  PMDK, is unaffected.
+
+  Existing OSDs backed by persistent memory in fsdax mode (a block device such
+  as ``/dev/pmem0``) keep working on the default ``aio`` backend over the same
+  data. Remove any explicit ``bdev_type = pmem`` from their configuration. OSDs
+  on a devdax namespace (a character device such as ``/dev/dax0.0``) will no
+  longer start, because no remaining backend can open one; reconfigure the
+  namespace to fsdax with ``ndctl`` or re-provision them before upgrading.
 
 >=20.0.0
 

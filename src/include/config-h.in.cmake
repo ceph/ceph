@@ -84,9 +84,6 @@
 /* Defined if you have libaio */
 #cmakedefine HAVE_LIBAIO
 
-/* Defined if you have libdml */
-#cmakedefine HAVE_LIBDML
-
 /* Defined if you have liburing */
 #cmakedefine HAVE_LIBURING
 
@@ -113,9 +110,6 @@
 
 /* DPDK conditional compilation */
 #cmakedefine HAVE_DPDK
-
-/* PMEM_DEVICE (OSD) conditional compilation */
-#cmakedefine HAVE_BLUESTORE_PMEM
 
 /* Define if you have tcmalloc */
 #cmakedefine HAVE_LIBTCMALLOC

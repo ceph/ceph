@@ -1,4 +1,4 @@
-function(build_pmdk enable_ndctl)
+function(build_pmdk)
   include(FindMake)
   find_make("MAKE_EXECUTABLE" "make_cmd")
 
@@ -15,12 +15,6 @@ function(build_pmdk enable_ndctl)
   endif()
 
   set(LIBPMEM_INTERFACE_LINK_LIBRARIES Threads::Threads)
-  if(${enable_ndctl})
-    set(ndctl "y")
-    list(APPEND LIBPMEM_INTERFACE_LINK_LIBRARIES ndctl::ndctl daxctl::daxctl)
-  else()
-    set(ndctl "n")
-  endif()
 
   # Use debug PMDK libs in debug lib/rbd builds
   if(CMAKE_BUILD_TYPE STREQUAL Debug)
@@ -34,7 +28,7 @@ function(build_pmdk enable_ndctl)
   ExternalProject_Add(pmdk_ext
       ${source_dir_args}
       CONFIGURE_COMMAND ""
-      BUILD_COMMAND ${make_cmd} CC=${CMAKE_C_COMPILER} "EXTRA_CFLAGS=${pmdk_cflags}" NDCTL_ENABLE=${ndctl} BUILD_EXAMPLES=n BUILD_BENCHMARKS=n DOC=n
+      BUILD_COMMAND ${make_cmd} CC=${CMAKE_C_COMPILER} "EXTRA_CFLAGS=${pmdk_cflags}" NDCTL_ENABLE=n BUILD_EXAMPLES=n BUILD_BENCHMARKS=n DOC=n
       BUILD_IN_SOURCE 1
       BUILD_BYPRODUCTS "<SOURCE_DIR>/src/${PMDK_LIB_DIR}/libpmem.a" "<SOURCE_DIR>/src/${PMDK_LIB_DIR}/libpmemobj.a"
       INSTALL_COMMAND "")
