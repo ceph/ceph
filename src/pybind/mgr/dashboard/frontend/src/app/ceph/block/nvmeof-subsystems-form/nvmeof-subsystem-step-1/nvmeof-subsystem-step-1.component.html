@@ -113,35 +113,30 @@
         </fieldset>
       </div>
       @if (listenerMode === LISTENER_MODE.AUTO_FETCH) {
-        <div
-          cdsRow
-          class="form-item"
-        >
-          <cds-text-label
-            i18n
-            [invalid]="subnetMaskRef.isInvalid"
-            [invalidText]="subnetMaskInvalidText"
-            helperText="Listeners from this subnet-masks will be use."
-            i18n-helperText
-          >
-            Subnet-mask
-            <input
-              cdsText
-              cdValidate
-              #subnetMaskRef="cdValidate"
-              type="text"
-              placeholder="e.g. 255.0.0.0"
-              i18n-placeholder
-              id="subnetMask"
-              name="subnetMask"
-              formControlName="subnetMask"
-              [invalid]="subnetMaskRef.isInvalid"
-            />
-          </cds-text-label>
-          <ng-template #subnetMaskInvalidText>
-            <span i18n>This field is required.</span>
-          </ng-template>
-        </div>
+      <div cdsRow
+           class="form-item">
+        <cds-text-label
+          i18n
+          [invalid]="subnetMaskRef.isInvalid"
+          [invalidText]="requiredFieldInvalidText"
+          helperText="Listeners from this subnet-masks will be use."
+          i18n-helperText>
+          Subnet-mask
+          <input cdsText
+                 cdValidate
+                 #subnetMaskRef="cdValidate"
+                 type="text"
+                 placeholder="e.g. 255.0.0.0"
+                 i18n-placeholder
+                 id="subnetMask"
+                 name="subnetMask"
+                 formControlName="subnetMask"
+                 [invalid]="subnetMaskRef.isInvalid">
+        </cds-text-label>
+        <ng-template #requiredFieldInvalidText>
+          <span i18n>This field is required.</span>
+        </ng-template>
+      </div>
       }
       @if (listenerMode === LISTENER_MODE.MANUAL) {
         <div
