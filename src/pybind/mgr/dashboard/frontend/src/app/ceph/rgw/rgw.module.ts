@@ -96,6 +96,8 @@ import ShareIcon from '@carbon/icons/es/share/16';
 import ViewIcon from '@carbon/icons/es/view/16';
 import PasswordIcon from '@carbon/icons/es/password/16';
 import ArrowDownIcon from '@carbon/icons/es/arrow--down/16';
+import ChevronDownIcon from '@carbon/icons/es/chevron--down/16';
+import ChevronUpIcon from '@carbon/icons/es/chevron--up/16';
 import ProgressBarRoundIcon from '@carbon/icons/es/progress-bar--round/32';
 import ToolsIcon from '@carbon/icons/es/tools/32';
 import UserAccessLocked from '@carbon/icons/es/user--access-locked/16';
@@ -248,6 +250,8 @@ export class RgwModule {
       ViewIcon,
       PasswordIcon,
       ArrowDownIcon,
+      ChevronDownIcon,
+      ChevronUpIcon,
       ProgressBarRoundIcon,
       ToolsIcon,
       UserAccessLocked
@@ -287,12 +291,12 @@ const routes: Routes = [
       {
         path: URLVerbs.CREATE,
         component: RgwUserAccountsFormComponent,
-        data: { breadcrumbs: ActionLabels.CREATE }
+        data: { breadcrumbs: $localize`Create account` }
       },
       {
         path: `${URLVerbs.EDIT}/:id`,
         component: RgwUserAccountsFormComponent,
-        data: { breadcrumbs: ActionLabels.EDIT }
+        data: { breadcrumbs: $localize`Edit account` }
       }
     ]
   },

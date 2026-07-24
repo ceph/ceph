@@ -88,7 +88,8 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
           next: () => {
             this.notificationService.show(
               NotificationType.success,
-              $localize`Role updated successfully`
+              $localize`Session duration updated`,
+              $localize`The maximum session duration for role "${this.roleName}" has been updated to ${payload.max_session_duration} hours.`
             );
             this.closeModal();
           },
