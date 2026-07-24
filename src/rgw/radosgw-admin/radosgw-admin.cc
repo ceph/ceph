@@ -7492,15 +7492,21 @@ int main(int argc, const char **argv)
         constexpr int32_t max_chunk = 100;
         int32_t count = std::min(max_chunk, remaining);
 
+        // Copy the marker to a separate local variable to break the reference alias
+        std::string current_marker = listing.next_marker;
+        // Clear the roles list to prevent appending duplicates across loop iterations
+        listing.roles.clear();
+        listing.next_marker.clear();
+
         if (!account_id.empty()) {
           // list roles in the account
           ret = driver->list_account_roles(dpp(), null_yield, account_id,
-                                           path_prefix, listing.next_marker,
+                                           path_prefix, current_marker,
                                            count, listing);
         } else {
           // list roles in the tenant
           ret = driver->list_roles(dpp(), null_yield, tenant, path_prefix,
-                                   listing.next_marker, count, listing);
+                                   current_marker, count, listing);
         }
         if (ret < 0) {
           return -ret;
