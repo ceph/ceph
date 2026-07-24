@@ -119,7 +119,7 @@ namespace rgw::putobj {
   using GetHeaderCksumResult = std::pair<cksum::Cksum, std::string_view>;
 
   static inline GetHeaderCksumResult get_hdr_cksum(const RGWEnv& env) {
-    cksum::Type cksum_type;
+    cksum::Type cksum_type{cksum::Type::none};
     auto algo_hdr = cksum_algorithm_hdr(env);
     if (algo_hdr.first) {
       if (algo_hdr.second) {
