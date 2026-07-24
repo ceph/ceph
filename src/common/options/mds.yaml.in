@@ -1125,6 +1125,15 @@ options:
   fmt_desc: Ceph will inject MDS failure in MDSTable code
     (for developers only).
   with_legacy: true
+- name: mds_kill_undef_dirfrag_at
+  type: int
+  level: dev
+  default: 0
+  services:
+  - mds
+  fmt_desc: Ceph will inject MDS failure when processing undefined
+    dirfrags during rejoin (for developers only).
+  with_legacy: true
 - name: mds_max_export_size
   type: size
   level: dev
