@@ -6491,6 +6491,13 @@ void MDCache::start_files_to_recover()
   }
   rejoin_check_q.clear();
   for (CInode *in : rejoin_recover_q) {
+    if (in->filelock.get_state() == LOCK_SCAN) {
+        continue;
+    }
+    if (in->filelock.get_state() != LOCK_PRE_SCAN) {
+        // Debug logging for unexpected state
+        dout(0) << "Inode in unexpected state " << in->filelock.get_state() << dendl;
+    }
     mds->locker->file_recover(&in->filelock);
     if (!(++count % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
