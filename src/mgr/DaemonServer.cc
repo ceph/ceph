@@ -16,6 +16,7 @@
 #include "DaemonState.h"
 #include "Mgr.h"
 #include "MgrSession.h"
+#include "PerfCounterInstance.h"
 
 #include "include/stringify.h"
 #include "include/str_list.h"
@@ -54,8 +55,11 @@
 
 #include <iomanip>
 
+#include <array>
 #include <list>
 #include <map>
+#include <optional>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -2023,6 +2027,144 @@ bool DaemonServer::_handle_command(
 			      &on_finish->from_mon, &on_finish->outs, on_finish);
       return true;
     }
+  } else if (prefix == "osd perf") {
+    // Per-OSD latency KPIs pulled from the mgr's cached perf counters.
+    // Crimson OSDs use seastar metrics rather than PerfCounters, so the
+    // paths below won't be present in their daemon_state; the plain-text
+    // table omits a column entirely if no OSD has data for it, and the
+    // JSON output skips missing fields per-OSD.
+    //
+    // The previous commit/apply latency columns/JSON keys were dropped
+    // here. Prometheus and the dashboard read pg_map.osd_stat.os_perf_stat
+    // directly, not the CLI, so ceph_osd_commit_latency_ms /
+    // ceph_osd_apply_latency_ms continue to work unchanged.
+    struct extra_col {
+      const char* path;        // mgr perf counter path
+      const char* json_field;  // JSON key
+      const char* column;      // plain-table column header
+    };
+    static const std::array<extra_col, 6> extra = {{
+      {"osd.op_latency",         "op_latency_ms",          "op_latency(ms)"},
+      {"osd.op_r_latency",       "op_r_latency_ms",        "op_r_latency(ms)"},
+      {"osd.op_w_latency",       "op_w_latency_ms",        "op_w_latency(ms)"},
+      {"bluestore.write_lat",    "bluestore_w_latency_ms", "bluestore_w_latency(ms)"},
+      {"bluestore.read_lat",     "bluestore_r_latency_ms", "bluestore_r_latency(ms)"},
+      {"bluestore.kv_sync_lat",  "kv_sync_lat_ms",         "kv_sync(ms)"},
+    }};
+
+    // Bound the per-op avg walk-back so a long idle stretch can't drag
+    // a stale "busy" reference point into the displayed value.
+    const utime_t avg_max_age{60, 0};
+
+    auto lookup_ns = [this, &avg_max_age](int osd_id, const std::string& path)
+        -> std::optional<uint64_t> {
+      DaemonKey key{"osd", std::to_string(osd_id)};
+      if (!daemon_state.exists(key)) {
+        return std::nullopt;
+      }
+      auto daemon = daemon_state.get(key);
+      std::lock_guard l(daemon->lock);
+      auto it = daemon->perf_counters.instances.find(path);
+      if (it == daemon->perf_counters.instances.end()) {
+        return std::nullopt;
+      }
+      return it->second.get_current_avg(avg_max_age);
+    };
+
+    // Render a nanosecond latency as milliseconds. >=1 ms is integer
+    // milliseconds; sub-millisecond shows three decimals so fast
+    // storage does not render as "0".
+    auto format_ms = [](uint64_t ns) -> std::string {
+      if (ns >= 1000000ULL) {
+        return std::to_string(ns / 1000000ULL);
+      }
+      std::ostringstream oss;
+      oss << std::fixed << std::setprecision(3) << (ns / 1000000.0);
+      return oss.str();
+    };
+
+    // Pull the OSD list out of pg_map under its lock; do all
+    // perf-counter lookups + formatting outside so daemon->lock is
+    // never acquired while pg_map's lock is held.
+    std::vector<int> osd_ids;
+    r = cluster_state.with_pgmap([&](const PGMap& pg_map) {
+      osd_ids.reserve(pg_map.osd_stat.size());
+      for (const auto& [osd_id, _] : pg_map.osd_stat) {
+        osd_ids.push_back(osd_id);
+      }
+      return 0;
+    });
+
+    if (f) {
+      f->open_object_section("osdstats");
+      f->open_array_section("osd_perf_infos");
+      for (int osd_id : osd_ids) {
+        f->open_object_section("osd");
+        f->dump_int("id", osd_id);
+        f->open_object_section("perf_stats");
+        for (const auto& e : extra) {
+          if (auto ns = lookup_ns(osd_id, e.path); ns) {
+            // Three decimals keeps the JSON compact and matches the
+            // plain-text table; double precision would leak
+            // "0.056222000000000001"-style noise via
+            // JSONFormatter::dump_float.
+            f->dump_format_unquoted(e.json_field, "%.3f",
+                                    *ns / 1000000.0);
+          }
+        }
+        f->close_section();
+        f->close_section();
+      }
+      f->close_section();
+      f->close_section();
+      f->flush(cmdctx->odata);
+    } else {
+      // First pass: record which columns have data for any OSD. Drop
+      // columns with nothing to report (typical on pure-crimson
+      // clusters) so the table isn't padded with `-` placeholders.
+      std::vector<std::vector<std::optional<uint64_t>>> rows;
+      rows.reserve(osd_ids.size());
+      std::array<bool, extra.size()> has_data{};
+      for (int osd_id : osd_ids) {
+        std::vector<std::optional<uint64_t>> vals;
+        vals.reserve(extra.size());
+        for (size_t i = 0; i < extra.size(); ++i) {
+          auto v = lookup_ns(osd_id, extra[i].path);
+          if (v) {
+            has_data[i] = true;
+          }
+          vals.push_back(v);
+        }
+        rows.push_back(std::move(vals));
+      }
+
+      TextTable tab;
+      tab.define_column("osd", TextTable::LEFT, TextTable::RIGHT);
+      for (size_t i = 0; i < extra.size(); ++i) {
+        if (has_data[i]) {
+          tab.define_column(extra[i].column, TextTable::LEFT, TextTable::RIGHT);
+        }
+      }
+      for (size_t row_idx = 0; row_idx < osd_ids.size(); ++row_idx) {
+        tab << osd_ids[row_idx];
+        for (size_t i = 0; i < extra.size(); ++i) {
+          if (!has_data[i]) {
+            continue;
+          }
+          if (rows[row_idx][i]) {
+            tab << format_ms(*rows[row_idx][i]);
+          } else {
+            tab << "-";
+          }
+        }
+        tab << TextTable::endrow;
+      }
+      std::ostringstream os;
+      os << tab;
+      cmdctx->odata.append(os.str());
+    }
+    cmdctx->reply(r, ss);
+    return true;
   } else if (prefix == "osd df") {
     string method, filter;
     cmd_getval(cmdctx->cmdmap, "output_method", method);
