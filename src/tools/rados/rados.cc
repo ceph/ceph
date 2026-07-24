@@ -649,7 +649,7 @@ static int do_put(IoCtx& io_ctx,
   }
   ret = 0;
  out:
-  if (fd != STDOUT_FILENO)
+  if (fd != STDIN_FILENO)
     VOID_TEMP_FAILURE_RETRY(close(fd));
   return ret;
 }
@@ -684,7 +684,7 @@ static int do_append(IoCtx& io_ctx,
   }
   ret = 0;
 out:
-  if (fd != STDOUT_FILENO)
+  if (fd != STDIN_FILENO)
     VOID_TEMP_FAILURE_RETRY(close(fd));
   return ret;
 }
@@ -2581,7 +2581,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       }
       formatter->flush(*outstream);
     }
-    if (!stdout) {
+    if (!use_stdout) {
       delete outstream;
     }
   }
@@ -4091,7 +4091,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
     ret = PoolDump(file_fd).dump(&io_ctx);
 
-    if (file_fd != STDIN_FILENO) {
+    if (file_fd != STDOUT_FILENO) {
       VOID_TEMP_FAILURE_RETRY(::close(file_fd));
     }
 
