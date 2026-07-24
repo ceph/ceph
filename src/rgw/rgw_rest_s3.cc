@@ -6249,6 +6249,7 @@ rgw::auth::s3::LDAPEngine::get_creds_info(const rgw::RGWToken& token) const noex
     acct_privilege_t::IS_PLAIN_ACCT,
     rgw::auth::RemoteApplier::AuthInfo::NO_ACCESS_KEY,
     rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER,
+    std::string(),  // keystone_user (not applicable for LDAP)
     TYPE_LDAP
   };
 }
@@ -6393,6 +6394,7 @@ rgw::auth::s3::STSEngine::get_creds_info(const STS::SessionToken& token) const n
     (token.is_admin) ? acct_privilege_t::IS_ADMIN_ACCT: acct_privilege_t::IS_PLAIN_ACCT,
     token.access_key_id,
     rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER,
+    std::string(),  // keystone_user (not applicable for STS)
     token.acct_type
   };
 }
