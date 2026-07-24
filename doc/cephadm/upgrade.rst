@@ -61,6 +61,59 @@ The automated upgrade process follows Ceph best practices.  For example:
    to turn autoscaling on for the duration of the upgrade).
 
 
+Upgrade image pre-distribution
+==============================
+
+On clusters with many hosts and large container images, pulling the target
+image from a registry on each host during the upgrade can add significant
+time. This is especially noticeable during MDS upgrades when CephFS may
+already be offline while a host still downloads the image.
+
+When enabled, cephadm pre-distributes the target image to in-scope hosts
+**before any daemon is upgraded**. Two methods are available:
+
+``local_http`` (default)
+  Pull once on a seed host, save to a gzip-compressed tar archive, serve it
+  briefly over HTTP on the cluster network, and load it in parallel on
+  worker hosts. Use this when only one or a few nodes can reach the registry
+  (telco, air-gapped, or bandwidth-constrained setups).
+
+``registry``
+  Pull in parallel on each in-scope host from the cluster registry (Harbor,
+  Quay, etc.). Use this when every node already has registry connectivity.
+  No tar, HTTP server, or seed-host disk space is required.
+
+Enable pre-distribution:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/cephadm/upgrade_image_mirror true
+
+Select the method:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/cephadm/upgrade_image_mirror_method local_http
+   ceph config set mgr mgr/cephadm/upgrade_image_mirror_method registry
+
+Optional tuning (both methods):
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/cephadm/upgrade_image_mirror_max_parallel 8
+
+``local_http`` only:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/cephadm/upgrade_image_mirror_port 8766
+
+For ``local_http``, the seed host is the first online ``_admin`` host in
+upgrade scope, or the active mgr host if no ``_admin`` host is in scope.
+Hosts that already have the target image are skipped. If pre-distribution
+fails on any host, the upgrade is paused before any daemon is upgraded.
+
+
 Starting the Upgrade
 ====================
 
