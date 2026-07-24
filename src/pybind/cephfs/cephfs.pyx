@@ -2159,6 +2159,38 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in fcopyfile")
 
+    def fcopyfilex(self, source_fd, src_offset, dest_fd, dest_offset, size, flags=0):
+        """
+        Copy data from one file descriptor to another with offsets.
+
+        :param source_fd: the source file descriptor.
+        :param src_offset: the starting offset in the source file.
+        :param dest_fd: the destination file descriptor.
+        :param dest_offset: the starting offset in the destination file.
+        :param size: the number of bytes to copy.
+        :param flags: reserved for future extensions; must be 0.  Like
+            copy_file_range(2), this allows future copy behaviors without
+            changing the API.  Non-zero values return EINVAL.
+        :return: the number of bytes copied.
+        """
+        self.require_state("mounted")
+
+        cdef:
+            int _source_fd = source_fd
+            int64_t _src_offset = src_offset
+            int _dest_fd = dest_fd
+            int64_t _dest_offset = dest_offset
+            size_t _size = size
+            unsigned _flags = flags
+
+        with nogil:
+            ret = ceph_fcopyfilex(self.cluster, _source_fd, _src_offset, _dest_fd, _dest_offset, _size, _flags)
+
+        if ret < 0:
+            raise make_ex(ret, "error in fcopyfilex")
+
+        return ret
+
     def stat(self, path, follow_symlink=True):
         """
         Get a file's extended statistics and attributes.
