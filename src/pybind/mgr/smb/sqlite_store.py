@@ -8,6 +8,7 @@ from typing import (
     Iterator,
     List,
     Optional,
+    Set,
     Tuple,
     Union,
 )
@@ -527,6 +528,46 @@ class SqliteMirroringStore(SqliteStore):
         obj = super().get_object(key)
         mirror_obj = mirror.store[key].get()
         return mirror.merge(obj, mirror_obj)
+
+    def reconcile(self) -> None:
+        """Compare the sqlite store and the mirror store and removes any
+        mirror entries if there's no corresponding sqlite row.
+        Sqlite rows with no mirror entry are only logged.
+        """
+        if not self._mirrors:
+            return
+        with self.transaction():
+            mirror_store = next(iter(self._mirrors.values())).store
+            mirror_ids_by_ns: Dict[str, Set[str]] = {}
+            for ns, name in mirror_store:
+                mirror_ids_by_ns.setdefault(ns, set()).add(name)
+
+            for ns in self._mirrors:
+                if ns not in self._tables:
+                    log.debug(
+                        "reconcile: skipping mirror namespace %r with no"
+                        " matching sqlite table",
+                        ns,
+                    )
+                    continue
+                sqlite_ids = set(self.contents(ns))
+                mirror_ids = mirror_ids_by_ns.get(ns, set())
+
+                for orphan in sorted(mirror_ids - sqlite_ids):
+                    log.warning(
+                        "reconcile: removing orphaned mirror entry"
+                        " (%s, %s) with no matching sqlite row",
+                        ns,
+                        orphan,
+                    )
+                    mirror_store.remove((ns, orphan))
+
+                for missing in sorted(sqlite_ids - mirror_ids):
+                    log.warning(
+                        "reconcile: (%s, %s) has no mirror entry",
+                        ns,
+                        missing,
+                    )
 
 
 class MirrorJoinAuths(Mirror):
