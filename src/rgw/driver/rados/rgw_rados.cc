@@ -6366,31 +6366,49 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, std::map<std::string, bu
     }
   }
  
+  /*
+   * FIX (multisite orphaning): Handle bucket instance persistence BEFORE
+   * removing the entrypoint. In multisite, we must successfully flag the
+   * instance with BUCKET_DELETED before making it unreferenceable.
+   * Otherwise a concurrent sync peer that removes the entrypoint but fails
+   * to set flags will leave an orphan instance that BucketTrimInstanceCR
+   * ignores (it skips unflagged instances).
+   */
+  if (!svc.zone->is_syncing_bucket_meta()) {
+    /* Monosite: synchronous removal of instance and index */
+    r = ctl.bucket->remove_bucket_instance_info(bucket, bucket_info, y, dpp);
+    if (r < 0) {
+      return r;  // entrypoint is still intact
+    }
+    std::ignore = svc.bi->clean_index(dpp, y, bucket_info, bucket_info.layout.current_index);
+  } else {
+    /* Multisite: flag for async cleanup by BucketTrimInstanceCR */
+    r = store_delete_bucket_info_flag(bucket_info, attrs, y, dpp);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to flag bucket instance for deletion. "
+                        << "Preserving entrypoint. bucket=" << bucket.name
+                        << " bucket_id=" << bucket.bucket_id
+                        << " r=" << r << dendl;
+      return r;  // entrypoint still intact, bucket remains visible
+    }
+    ldpp_dout(dpp, 20) << "INFO: bucket instance flagged as deleted: "
+                       << bucket.name << " bucket_id=" << bucket.bucket_id << dendl;
+  }
+
+  /*
+   * Only remove the entrypoint if instance persistence succeeded.
+   * If another sync peer already removed it (-ENOENT), that's okay -
+   * we've already flagged the instance above so BucketTrimInstanceCR
+   * will clean up the orphan.
+   */
   if (remove_ep) {
     r = ctl.bucket->remove_bucket_entrypoint_info(bucket_info.bucket, y, dpp,
                                                   RGWBucketCtl::Bucket::RemoveParams()
                                                   .set_objv_tracker(&objv_tracker));
-    if (r < 0)
+    if (r < 0 && r != -ENOENT) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to remove bucket entrypoint for "
+                        << bucket.name << " r=" << r << dendl;
       return r;
-  }
-
-  /* if the bucket is not synced we can remove the meta file */
-  if (!svc.zone->is_syncing_bucket_meta()) {
-    r = ctl.bucket->remove_bucket_instance_info(bucket, bucket_info, y, dpp);
-    if (r < 0) {
-      return r;
-    }
-
-    /* remove bucket index objects asynchronously by best effort */
-    std::ignore = svc.bi->clean_index(dpp, y, bucket_info, bucket_info.layout.current_index);
-  } else {
-    // set 'deleted' flag for multisite replication to handle bucket instance removal
-    r = store_delete_bucket_info_flag(bucket_info, attrs, y, dpp);
-    if (r < 0) {
-      // no need to treat this as an error
-      ldpp_dout(dpp, 0) << "WARNING: failed to store bucket info flag 'deleted' on bucket: " << bucket.name << " r=" << r << dendl;
-    } else {
-      ldpp_dout(dpp, 20) << "INFO: setting bucket info flag to deleted for bucket: " << bucket.name << dendl;
     }
   }
 
