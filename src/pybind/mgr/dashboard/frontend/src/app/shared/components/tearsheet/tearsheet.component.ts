@@ -16,7 +16,7 @@ import {
   TemplateRef,
   ViewEncapsulation
 } from '@angular/core';
-import { FormBuilder } from '@angular/forms';
+import { AbstractControl, FormArray, FormBuilder, FormGroup } from '@angular/forms';
 import { Step } from 'carbon-components-angular';
 import { TearsheetStepComponent } from '../tearsheet-step/tearsheet-step.component';
 import { ModalCdsService } from '../../services/modal-cds.service';
@@ -211,13 +211,12 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy, OnC
 
   onNext() {
     this.validateStep.emit({ step: this.currentStep });
-
     const wrapper = this.stepContents?.toArray()?.[this.currentStep];
-    const legacyForm = wrapper?.resolvedFormGroup;
-    if (legacyForm) {
-      legacyForm.markAllAsTouched();
-      legacyForm.updateValueAndValidity({ emitEvent: true });
-      this._updateStepInvalid(this.currentStep, legacyForm.invalid);
+    const currentForm = wrapper?.resolvedFormGroup;
+    currentForm?.markAllAsTouched();
+    this.markControlsDirtyAndValidate(currentForm);
+    if (currentForm) {
+      this._updateStepInvalid(this.currentStep, currentForm.invalid);
     }
 
     const canAdvance = wrapper ? wrapper.canProceed : true;
@@ -243,7 +242,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy, OnC
       const form = wrapper.resolvedFormGroup;
       if (!form) return;
       form.markAllAsTouched();
-      form.updateValueAndValidity({ emitEvent: true });
+      this.markControlsDirtyAndValidate(form);
       this._updateStepInvalid(index, form.invalid);
     });
 
@@ -255,6 +254,17 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy, OnC
 
     const mergedPayloads = this.getMergedPayload();
     this.submitRequested.emit(mergedPayloads);
+  }
+
+  private markControlsDirtyAndValidate(control: AbstractControl | null) {
+    if (!control) {
+      return;
+    }
+    if (control instanceof FormGroup || control instanceof FormArray) {
+      Object.values(control.controls).forEach((child) => this.markControlsDirtyAndValidate(child));
+    }
+    control.markAsDirty({ onlySelf: true });
+    control.updateValueAndValidity({ onlySelf: true, emitEvent: true });
   }
 
   closeFullTearsheet() {
