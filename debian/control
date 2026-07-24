@@ -250,7 +250,6 @@ Recommends: ceph-mgr-alerts,
             ceph-mgr-cephadm,
             ceph-mgr-cli-api,
             ceph-mgr-dashboard,
-            ceph-mgr-diskprediction-local,
             ceph-mgr-influx,
             ceph-mgr-insights,
             ceph-mgr-iostat,
@@ -296,18 +295,6 @@ Description: dashboard module for ceph-mgr
  .
  See the Dashboard documentation at http://docs.ceph.com/ for details
  and a detailed feature overview.
-
-Package: ceph-mgr-diskprediction-local
-Architecture: all
-Depends: ceph-mgr (= ${binary:Version}),
-         ${python3:Depends}
-Description: diskprediction-local module for ceph-mgr
- Ceph is a massively scalable, open-source, distributed
- storage system that runs on commodity hardware and delivers object,
- block and file system storage.
- .
- This package contains the diskprediction_local module for the ceph-mgr
- daemon, which helps predict disk failures.
 
 Package: ceph-mgr-modules-core
 Architecture: all

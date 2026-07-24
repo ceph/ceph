@@ -660,7 +660,6 @@ Recommends:	ceph-mgr-alerts = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-cephadm = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-cli-api = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-dashboard = %{_epoch_prefix}%{version}-%{release}
-Recommends:	ceph-mgr-diskprediction-local = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-influx = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-insights = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-iostat = %{_epoch_prefix}%{version}-%{release}
@@ -717,22 +716,6 @@ ceph-mgr-dashboard is a manager module, providing a web-based application
 to monitor and manage many aspects of a Ceph cluster and related components.
 See the Dashboard documentation at http://docs.ceph.com/ for details and a
 detailed feature overview.
-
-%package mgr-diskprediction-local
-Summary:        Ceph Manager module for predicting disk failures
-BuildArch:      noarch
-%if 0%{?suse_version}
-Group:          System/Filesystems
-%endif
-Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
-Requires:       python3dist(numpy)
-%if 0%{?fedora} || 0%{?suse_version} || 0%{?openEuler} || 0%{?openruyi}
-Requires:       python3dist(scikit-learn)
-%endif
-Requires:       python3dist(scipy)
-%description mgr-diskprediction-local
-ceph-mgr-diskprediction-local is a ceph-mgr module that tries to predict
-disk failures using local algorithms and machine-learning databases.
 
 %package mgr-modules-core
 Summary:        Ceph Manager modules which are always enabled
@@ -2310,11 +2293,6 @@ fi
 %{_datadir}/ceph/mgr/dashboard
 
 %ceph_mgr_module_scripts mgr-dashboard
-
-%files mgr-diskprediction-local
-%{_datadir}/ceph/mgr/diskprediction_local
-
-%ceph_mgr_module_scripts mgr-diskprediction-local
 
 %files mgr-modules-core
 %dir %{_datadir}/ceph/mgr
