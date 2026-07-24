@@ -247,7 +247,7 @@ int RGWGC::remove(int index, int num_entries, optional_yield y)
 
 static int gc_list(const DoutPrefixProvider* dpp, optional_yield y, librados::IoCtx& io_ctx,
                    std::string& oid, std::string& marker, uint32_t max, bool expired_only,
-                   std::list<cls_rgw_gc_obj_info>& entries, bool *truncated, std::string& next_marker)
+                   std::list<cls_rgw_gc_obj_info>& entries, bool& truncated, std::string& next_marker)
 {
   librados::ObjectReadOperation op;
   bufferlist bl;
@@ -259,36 +259,41 @@ static int gc_list(const DoutPrefixProvider* dpp, optional_yield y, librados::Io
   return cls_rgw_gc_list_decode(bl, entries, truncated, next_marker);
 }
 
-int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated, bool& processing_queue)
+int RGWGC::list(int& index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool& truncated, bool& processing_queue, std::optional<int> shard_id)
 {
   result.clear();
   string next_marker;
   bool check_queue = false;
 
-  for (; *index < max_objs && result.size() < max; (*index)++, marker.clear(), check_queue = false) {
+  int max_index = shard_id.has_value() ? (shard_id.value() + 1) : max_objs;
+  if (shard_id.has_value()) {
+    index = shard_id.value();
+  }
+
+  for (; index < max_index && result.size() < max; index++, marker.clear(), check_queue = false) {
     std::list<cls_rgw_gc_obj_info> entries, queue_entries;
     int ret = 0;
 
     //processing_queue is set to true from previous iteration if the queue was under process and probably has more elements in it.
-    if (! transitioned_objects_cache[*index] && ! check_queue && ! processing_queue) {
-      ret = gc_list(this, null_yield, store->gc_pool_ctx, obj_names[*index], marker, max - result.size(), expired_only, entries, truncated, next_marker);
+    if (! transitioned_objects_cache[index] && ! check_queue && ! processing_queue) {
+      ret = gc_list(this, null_yield, store->gc_pool_ctx, obj_names[index], marker, max - result.size(), expired_only, entries, truncated, next_marker);
       if (ret != -ENOENT && ret < 0) {
         return ret;
       }
       obj_version objv;
-      cls_version_read(store->gc_pool_ctx, obj_names[*index], &objv);
+      cls_version_read(store->gc_pool_ctx, obj_names[index], &objv);
       if (ret == -ENOENT || entries.size() == 0) {
         if (objv.ver == 0) {
           continue;
         } else {
           if (! expired_only) {
-            transitioned_objects_cache[*index] = true;
+            transitioned_objects_cache[index] = true;
             marker.clear();
           } else {
             std::list<cls_rgw_gc_obj_info> non_expired_entries;
-            ret = gc_list(this, null_yield, store->gc_pool_ctx, obj_names[*index], marker, 1, false, non_expired_entries, truncated, next_marker);
+            ret = gc_list(this, null_yield, store->gc_pool_ctx, obj_names[index], marker, 1, false, non_expired_entries, truncated, next_marker);
             if (non_expired_entries.size() == 0) {
-              transitioned_objects_cache[*index] = true;
+              transitioned_objects_cache[index] = true;
               marker.clear();
             }
           }
@@ -299,9 +304,9 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
         marker.clear();
       }
     }
-    if (transitioned_objects_cache[*index] || check_queue || processing_queue) {
+    if (transitioned_objects_cache[index] || check_queue || processing_queue) {
       processing_queue = false;
-      ret = cls_rgw_gc_queue_list_entries(store->gc_pool_ctx, obj_names[*index], marker, (max - result.size()) - entries.size(), expired_only, queue_entries, truncated, next_marker);
+      ret = cls_rgw_gc_queue_list_entries(store->gc_pool_ctx, obj_names[index], marker, (max - result.size()) - entries.size(), expired_only, queue_entries, truncated, next_marker);
       if (ret < 0) {
         return ret;
       }
@@ -320,8 +325,8 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
 
     marker = next_marker;
 
-    if (*index == max_objs - 1) {
-      if (queue_entries.size() > 0 && *truncated) {
+    if (index == max_index - 1) {
+      if (queue_entries.size() > 0 && truncated) {
         processing_queue = true;
       } else {
         processing_queue = false;
@@ -331,22 +336,22 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
     }
 
     if (result.size() == max) {
-      if (queue_entries.size() > 0 && *truncated) {
+      if (queue_entries.size() > 0 && truncated) {
         processing_queue = true;
       } else {
         processing_queue = false;
-        *index += 1; //move to next gc object
+        index += 1; //move to next gc object
       }
 
       /* close approximation, it might be that the next of the objects don't hold
        * anything, in this case truncated should have been false, but we can find
        * that out on the next iteration
        */
-      *truncated = true;
+      truncated = true;
       return 0;
     }
   }
-  *truncated = false;
+  truncated = false;
   processing_queue = false;
 
   return 0;
@@ -604,7 +609,7 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
     int ret = 0;
 
     if (! transitioned_objects_cache[index]) {
-      ret = gc_list(this, y, store->gc_pool_ctx, obj_names[index], marker, max, expired_only, entries, &truncated, next_marker);
+      ret = gc_list(this, y, store->gc_pool_ctx, obj_names[index], marker, max, expired_only, entries, truncated, next_marker);
       ldpp_dout(this, 20) <<
       "RGWGC::process cls_rgw_gc_list returned with returned:" << ret <<
       ", entries.size=" << entries.size() << ", truncated=" << truncated <<
@@ -613,7 +618,7 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
       cls_version_read(store->gc_pool_ctx, obj_names[index], &objv);
       if ((objv.ver == 1) && entries.size() == 0) {
         std::list<cls_rgw_gc_obj_info> non_expired_entries;
-        ret = gc_list(this, y, store->gc_pool_ctx, obj_names[index], marker, 1, false, non_expired_entries, &truncated, next_marker);
+        ret = gc_list(this, y, store->gc_pool_ctx, obj_names[index], marker, 1, false, non_expired_entries, truncated, next_marker);
         if (non_expired_entries.size() == 0) {
           transitioned_objects_cache[index] = true;
           marker.clear();
@@ -630,7 +635,7 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
     }
 
     if (transitioned_objects_cache[index]) {
-      ret = cls_rgw_gc_queue_list_entries(store->gc_pool_ctx, obj_names[index], marker, max, expired_only, entries, &truncated, next_marker);
+      ret = cls_rgw_gc_queue_list_entries(store->gc_pool_ctx, obj_names[index], marker, max, expired_only, entries, truncated, next_marker);
       ldpp_dout(this, 20) <<
       "RGWGC::process cls_rgw_gc_queue_list_entries returned with return value:" << ret <<
       ", entries.size=" << entries.size() << ", truncated=" << truncated <<
@@ -739,19 +744,26 @@ done:
   return 0;
 }
 
-int RGWGC::process(bool expired_only, optional_yield y)
+int RGWGC::process(bool expired_only, optional_yield y, std::optional<int> shard_id)
 {
   int max_secs = cct->_conf->rgw_gc_processor_max_time;
 
-  const int start = ceph::util::generate_random_number(0, max_objs - 1);
-
   RGWGCIOManager io_manager(this, store->ctx(), this);
 
-  for (int i = 0; i < max_objs; i++) {
-    int index = (i + start) % max_objs;
-    int ret = process(index, max_secs, expired_only, io_manager, y);
+  if (shard_id.has_value()) {
+    // Process only the specified shard
+    int ret = process(shard_id.value(), max_secs, expired_only, io_manager, y);
     if (ret < 0)
       return ret;
+  } else {
+    // Process all shards with random start
+    const int start = ceph::util::generate_random_number(0, max_objs - 1);
+    for (int i = 0; i < max_objs; i++) {
+      int index = (i + start) % max_objs;
+      int ret = process(index, max_secs, expired_only, io_manager, y);
+      if (ret < 0)
+        return ret;
+    }
   }
   if (!going_down()) {
     io_manager.drain();
