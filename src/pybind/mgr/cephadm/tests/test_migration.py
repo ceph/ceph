@@ -454,3 +454,150 @@ def test_migrate_cert_store(cephadm_module: CephadmOrchestrator):
     assert cephadm_module.cert_mgr.get_key('iscsi_ssl_key', service_name='iscsi.foo')
     assert cephadm_module.cert_mgr.get_cert('ingress_ssl_cert', service_name='ingress.rgw.foo')
     assert cephadm_module.cert_mgr.get_key('ingress_ssl_key', service_name='ingress.rgw.foo')
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+def test_migrate_host_pattern_uppercase(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'host1'):
+        cephadm_module.set_store(SPEC_STORE_PREFIX + 'mon', json.dumps({
+            'spec': {
+                'service_type': 'mon',
+                'placement': {
+                    'host_pattern': 'MYHOST-[0-2]'
+                }
+            },
+            'created': datetime_to_str(datetime_now()),
+        }, sort_keys=True))
+        cephadm_module.set_store(SPEC_STORE_PREFIX + 'crash', json.dumps({
+            'spec': {
+                'service_type': 'crash',
+                'placement': {
+                    'host_pattern': 'TESTNODE-[0-5]'
+                }
+            },
+            'created': datetime_to_str(datetime_now()),
+        }, sort_keys=True))
+
+        cephadm_module.spec_store.load()
+
+        cephadm_module.migration_current = 9
+        cephadm_module.migration.migrate()
+        assert cephadm_module.migration_current == LAST_MIGRATION
+
+        assert cephadm_module.spec_store.all_specs['mon'].placement.host_pattern.pattern == 'myhost-[0-2]'
+        assert cephadm_module.spec_store.all_specs['crash'].placement.host_pattern.pattern == 'testnode-[0-5]'
+
+        raw_mon = json.loads(cephadm_module.get_store(SPEC_STORE_PREFIX + 'mon'))
+        assert raw_mon['spec']['placement']['host_pattern'] == 'myhost-[0-2]'
+        raw_crash = json.loads(cephadm_module.get_store(SPEC_STORE_PREFIX + 'crash'))
+        assert raw_crash['spec']['placement']['host_pattern'] == 'testnode-[0-5]'
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+def test_migrate_host_pattern_already_lowercase(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'host1'):
+        cephadm_module.set_store(SPEC_STORE_PREFIX + 'mon', json.dumps({
+            'spec': {
+                'service_type': 'mon',
+                'placement': {
+                    'host_pattern': 'myhost-[0-2]'
+                }
+            },
+            'created': datetime_to_str(datetime_now()),
+        }, sort_keys=True))
+
+        cephadm_module.spec_store.load()
+
+        cephadm_module.migration_current = 9
+        cephadm_module.migration.migrate()
+        assert cephadm_module.migration_current == LAST_MIGRATION
+
+        assert cephadm_module.spec_store.all_specs['mon'].placement.host_pattern.pattern == 'myhost-[0-2]'
+
+        raw = json.loads(cephadm_module.get_store(SPEC_STORE_PREFIX + 'mon'))
+        assert raw['spec']['placement']['host_pattern'] == 'myhost-[0-2]'
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+def test_migrate_host_pattern_wildcard(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'host1'):
+        cephadm_module.set_store(SPEC_STORE_PREFIX + 'mon', json.dumps({
+            'spec': {
+                'service_type': 'mon',
+                'placement': {
+                    'host_pattern': '*'
+                }
+            },
+            'created': datetime_to_str(datetime_now()),
+        }, sort_keys=True))
+
+        cephadm_module.spec_store.load()
+
+        cephadm_module.migration_current = 9
+        cephadm_module.migration.migrate()
+        assert cephadm_module.migration_current == LAST_MIGRATION
+
+        assert cephadm_module.spec_store.all_specs['mon'].placement.host_pattern.pattern == '*'
+
+        raw = json.loads(cephadm_module.get_store(SPEC_STORE_PREFIX + 'mon'))
+        assert raw['spec']['placement']['host_pattern'] == '*'
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+def test_migrate_host_pattern_idempotent(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'host1'):
+        cephadm_module.set_store(SPEC_STORE_PREFIX + 'mon', json.dumps({
+            'spec': {
+                'service_type': 'mon',
+                'placement': {
+                    'host_pattern': 'MYHOST-[0-2]'
+                }
+            },
+            'created': datetime_to_str(datetime_now()),
+        }, sort_keys=True))
+
+        cephadm_module.spec_store.load()
+
+        cephadm_module.migration_current = 9
+        cephadm_module.migration.migrate()
+        assert cephadm_module.migration_current == LAST_MIGRATION
+
+        raw_after_first = cephadm_module.get_store(SPEC_STORE_PREFIX + 'mon')
+
+        cephadm_module.migration_current = 9
+        cephadm_module.migration.migrate()
+        assert cephadm_module.migration_current == LAST_MIGRATION
+
+        raw_after_second = cephadm_module.get_store(SPEC_STORE_PREFIX + 'mon')
+        assert raw_after_first == raw_after_second
+
+        assert cephadm_module.spec_store.all_specs['mon'].placement.host_pattern.pattern == 'myhost-[0-2]'
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+def test_migrate_host_pattern_regex_unchanged(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'host1'):
+        cephadm_module.set_store(SPEC_STORE_PREFIX + 'mon', json.dumps({
+            'spec': {
+                'service_type': 'mon',
+                'placement': {
+                    'host_pattern': {
+                        'pattern': 'NODE[0-9]',
+                        'pattern_type': 'regex'
+                    }
+                }
+            },
+            'created': datetime_to_str(datetime_now()),
+        }, sort_keys=True))
+
+        cephadm_module.spec_store.load()
+
+        cephadm_module.migration_current = 9
+        cephadm_module.migration.migrate()
+        assert cephadm_module.migration_current == LAST_MIGRATION
+
+        assert cephadm_module.spec_store.all_specs['mon'].placement.host_pattern.pattern == 'NODE[0-9]'
+
+        raw = json.loads(cephadm_module.get_store(SPEC_STORE_PREFIX + 'mon'))
+        assert raw['spec']['placement']['host_pattern']['pattern'] == 'NODE[0-9]'
+        assert raw['spec']['placement']['host_pattern']['pattern_type'] == 'regex'

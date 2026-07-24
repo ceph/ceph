@@ -229,6 +229,8 @@ class HostPattern():
     def __init__(self,
                  pattern: Optional[str] = None,
                  pattern_type: PatternType = PatternType.fnmatch) -> None:
+        if pattern and pattern_type == PatternType.fnmatch:
+            pattern = pattern.lower()
         self.pattern: Optional[str] = pattern
         self.pattern_type: PatternType = pattern_type
         self.compiled_regex = None

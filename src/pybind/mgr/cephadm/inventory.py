@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Dict, List, Iterator, Optional, Any, Tuple, Se
 
 import orchestrator
 from ceph.deployment import inventory
+from ceph.deployment.hostspec import normalize_hostname
 from ceph.deployment.service_spec import (
     ServiceSpec,
     PlacementSpec,
@@ -86,17 +87,52 @@ class Inventory:
         # load inventory
         i = self.mgr.get_store('inventory')
         if i:
-            self._inventory: Dict[str, dict] = json.loads(i)
-            # handle old clusters missing 'hostname' key from hostspec
-            for k, v in self._inventory.items():
+            raw_inventory = json.loads(i)
+            # Normalize hostname keys to lowercase (RFC 952/1123:
+            # hostnames are case-insensitive). This ensures upgraded
+            # clusters with uppercase hostnames become consistent with
+            # HostSpec normalization on first load.
+            #
+            # Collision handling: if legacy data contains keys that
+            # differ only by case (e.g. HOST1 and host1), merge
+            # their records deterministically — union labels and
+            # prefer the entry with more labels, then alphabetically
+            # earlier original key as tiebreaker — rather than
+            # silently dropping one.
+            self._inventory: Dict[str, dict] = {}
+            needs_save = False
+            collisions: Dict[str, List[Tuple[str, dict]]] = {}
+            for k, v in raw_inventory.items():
+                normalized_key = normalize_hostname(k)
+                if normalized_key != k or v.get('hostname', '') != normalized_key:
+                    needs_save = True
                 if 'hostname' not in v:
-                    v['hostname'] = k
+                    v['hostname'] = normalized_key
+                else:
+                    v['hostname'] = normalize_hostname(v['hostname'])
+                collisions.setdefault(normalized_key, []).append((k, v))
 
+            for normalized_key, entries in collisions.items():
+                if len(entries) == 1:
+                    self._inventory[normalized_key] = entries[0][1]
+                else:
+                    needs_save = True
+                    original_keys = [e[0] for e in entries]
+                    logger.warning(
+                        f'Inventory: case-collision detected for hostname '
+                        f'{normalized_key!r}: found keys {original_keys}. '
+                        f'Merging labels and keeping richest record.'
+                    )
+                    merged = self._merge_inventory_entries(
+                        normalized_key, entries)
+                    self._inventory[normalized_key] = merged
+
+            for k, v in self._inventory.items():
                 # convert legacy non-IP addr?
                 if is_valid_ip(str(v.get('addr'))):
                     continue
                 if len(self._inventory) > 1:
-                    if k == socket.gethostname():
+                    if k == normalize_hostname(socket.gethostname()):
                         # Never try to resolve our own host!  This is
                         # fraught and can lead to either a loopback
                         # address (due to podman's futzing with
@@ -117,20 +153,65 @@ class Inventory:
                     )
                     v['addr'] = ip
                     adjusted_addrs = True
-            if adjusted_addrs:
+            if adjusted_addrs or needs_save:
                 self.save()
         else:
             self._inventory = dict()
         self._all_known_names: Dict[str, List[str]] = {}
         logger.debug('Loaded inventory %s' % self._inventory)
 
+    @staticmethod
+    def _merge_inventory_entries(
+        normalized_key: str,
+        entries: List[Tuple[str, dict]],
+    ) -> dict:
+        """Merge multiple inventory records that map to the same
+        normalized hostname.
+
+        Deterministic precedence (does not depend on dict iteration order):
+          1. Sort entries by (most labels desc, original key asc) for a
+             stable winner.
+          2. Union all labels across every record.
+          3. For scalar fields (addr, status), keep the winner's value
+             but log a warning when a losing record has a different
+             non-empty value so operators can audit the result.
+          4. Fill any field present in a loser but absent in the winner.
+        """
+        entries.sort(key=lambda e: (-len(e[1].get('labels', [])), e[0]))
+        winner_key, winner = entries[0]
+
+        all_labels: Set[str] = set()
+        for _orig_key, entry in entries:
+            all_labels.update(entry.get('labels', []))
+
+        for loser_key, loser in entries[1:]:
+            for field in ('addr', 'status'):
+                w_val = winner.get(field, '')
+                l_val = loser.get(field, '')
+                if l_val and w_val and l_val != w_val:
+                    logger.warning(
+                        f'Inventory merge for {normalized_key!r}: '
+                        f'field {field!r} differs between '
+                        f'{winner_key!r} ({w_val!r}) and '
+                        f'{loser_key!r} ({l_val!r}); '
+                        f'keeping value from {winner_key!r}'
+                    )
+                if l_val and not w_val:
+                    winner[field] = l_val
+
+        winner['labels'] = sorted(all_labels)
+        winner['hostname'] = normalized_key
+        return winner
+
     def keys(self) -> List[str]:
         return list(self._inventory.keys())
 
     def __contains__(self, host: str) -> bool:
+        host = normalize_hostname(host)
         return host in self._inventory or host in itertools.chain.from_iterable(self._all_known_names.values())
 
     def _get_stored_name(self, host: str) -> str:
+        host = normalize_hostname(host)
         self.assert_host(host)
         if host in self._inventory:
             return host
@@ -140,6 +221,7 @@ class Inventory:
         return host
 
     def get_fqdn(self, hname: str) -> Optional[str]:
+        hname = normalize_hostname(hname)
         if hname in self._inventory:
             if hname in self._all_known_names:
                 all_names = self._all_known_names[hname]  # [hostname, shortname, fqdn]
@@ -149,9 +231,10 @@ class Inventory:
         return None
 
     def update_known_hostnames(self, hostname: str, shortname: str, fqdn: str) -> None:
+        hostname = normalize_hostname(hostname)
+        shortname = normalize_hostname(shortname)
+        fqdn = normalize_hostname(fqdn)
         for hname in [hostname, shortname, fqdn]:
-            # if we know the host by any of the names, store the full set of names
-            # in order to be able to check against those names for matching a host
             if hname in self._inventory:
                 self._all_known_names[hname] = [hostname, shortname, fqdn]
                 return
@@ -821,35 +904,53 @@ class HostCache():
                     host))
                 self.mgr.set_store(k, None)
             try:
+                original_host = host
+                host = normalize_hostname(host)
                 j = json.loads(v)
+
+                is_collision = host in self.daemons
+                if is_collision:
+                    self.mgr.log.warning(
+                        f'HostCache: case-collision detected for '
+                        f'{host!r}: merging record from key '
+                        f'{original_host!r} into existing entry'
+                    )
+
                 if 'last_device_update' in j:
                     self.last_device_update[host] = str_to_datetime(j['last_device_update'])
-                else:
+                elif not is_collision:
                     self.device_refresh_queue.append(host)
                 if 'last_device_change' in j:
                     self.last_device_change[host] = str_to_datetime(j['last_device_change'])
                 # for services, we ignore the persisted last_*_update
                 # and always trigger a new scrape on mgr restart.
-                self.daemon_refresh_queue.append(host)
-                self.network_refresh_queue.append(host)
-                self.daemons[host] = {}
-                self.osdspec_previews[host] = []
-                self.osdspec_last_applied[host] = {}
-                self.networks[host] = {}
-                self.daemon_config_deps[host] = {}
+                if not is_collision:
+                    self.daemon_refresh_queue.append(host)
+                    self.network_refresh_queue.append(host)
+                    self.daemons[host] = {}
+                    self.osdspec_previews[host] = []
+                    self.osdspec_last_applied[host] = {}
+                    self.networks[host] = {}
+                    self.daemon_config_deps[host] = {}
                 for name, d in j.get('daemons', {}).items():
                     self.daemons[host][name] = \
                         orchestrator.DaemonDescription.from_json(d)
-                self.devices[host] = []
+                if not is_collision:
+                    self.devices[host] = []
                 # still want to check old device location for upgrade scenarios
                 for d in j.get('devices', []):
                     self.devices[host].append(inventory.Device.from_json(d))
-                self.devices[host] += self.load_host_devices(host)
-                self.networks[host] = j.get('networks_and_interfaces', {})
-                self.osdspec_previews[host] = j.get('osdspec_previews', {})
-                self.last_client_files[host] = {
+                self.devices[host] += self.load_host_devices(original_host)
+                if not is_collision:
+                    self.networks[host] = j.get('networks_and_interfaces', {})
+                else:
+                    self.networks[host].update(
+                        j.get('networks_and_interfaces', {}))
+                if not is_collision:
+                    self.osdspec_previews[host] = j.get('osdspec_previews', {})
+                self.last_client_files.setdefault(host, {}).update({
                     path: tuple(v) for path, v in j.get('last_client_files', {}).items()
-                }
+                })
                 for name, ts in j.get('osdspec_last_applied', {}).items():
                     self.osdspec_last_applied[host][name] = str_to_datetime(ts)
 
@@ -870,6 +971,13 @@ class HostCache():
                 self.registry_login_queue.add(host)
                 self.scheduled_daemon_actions[host] = j.get('scheduled_daemon_actions', {})
                 self.metadata_up_to_date[host] = j.get('metadata_up_to_date', False)
+
+                if original_host != host:
+                    self.save_host(host)
+                    self.mgr.set_store(k, None)
+                    for dk, _dv in self.mgr.get_store_prefix(
+                            HOST_CACHE_PREFIX + original_host + '.devices.').items():
+                        self.mgr.set_store(dk, None)
 
                 self.mgr.log.debug(
                     'HostCache.load: host %s has %d daemons, '
@@ -1651,26 +1759,32 @@ class NodeProxyCache:
 
     def load(self) -> None:
         _oob = self.mgr.get_store(f'{NODE_PROXY_CACHE_PREFIX}/oob', '{}')
-        self.oob = json.loads(_oob)
+        raw_oob = json.loads(_oob)
+        self.oob = {normalize_hostname(h): v for h, v in raw_oob.items()}
 
         _keyrings = self.mgr.get_store(f'{NODE_PROXY_CACHE_PREFIX}/keyrings', '{}')
-        self.keyrings = json.loads(_keyrings)
+        raw_keyrings = json.loads(_keyrings)
+        self.keyrings = {normalize_hostname(h): v for h, v in raw_keyrings.items()}
 
         for k, v in self.mgr.get_store_prefix(f'{NODE_PROXY_CACHE_PREFIX}/data').items():
-            host = k.split('/')[-1:][0]
+            original_host = k.split('/')[-1:][0]
+            host = normalize_hostname(original_host)
 
-            if host not in self.mgr.inventory.keys():
-                # remove entry for host that no longer exists
-                self.mgr.set_store(f'{NODE_PROXY_CACHE_PREFIX}/data/{host}', None)
+            if host not in self.mgr.inventory:
+                self.mgr.set_store(f'{NODE_PROXY_CACHE_PREFIX}/data/{original_host}', None)
                 try:
-                    self.oob.pop(host)
-                    self.data.pop(host)
-                    self.keyrings.pop(host)
+                    self.oob.pop(host, None)
+                    self.data.pop(host, None)
+                    self.keyrings.pop(host, None)
                 except KeyError:
                     pass
                 continue
 
             self.data[host] = json.loads(v)
+            if original_host != host:
+                self.save(host=host, data=self.data[host])
+                self.mgr.set_store(
+                    f'{NODE_PROXY_CACHE_PREFIX}/data/{original_host}', None)
 
     def save(self,
              host: str = '',
@@ -1875,11 +1989,13 @@ class AgentCache():
     def load(self):
         # type: () -> None
         for k, v in self.mgr.get_store_prefix(AGENT_CACHE_PREFIX).items():
-            host = k[len(AGENT_CACHE_PREFIX):]
+            original_host = k[len(AGENT_CACHE_PREFIX):]
+            host = normalize_hostname(original_host)
             if host not in self.mgr.inventory:
                 self.mgr.log.warning('removing stray AgentCache record for agent on %s' % (
-                    host))
+                    original_host))
                 self.mgr.set_store(k, None)
+                continue
             try:
                 j = json.loads(v)
                 self.agent_config_deps[host] = {}
@@ -1894,6 +2010,14 @@ class AgentCache():
                 agent_port = int(j.get('agent_ports', 0))
                 if agent_port:
                     self.agent_ports[host] = agent_port
+
+                if original_host != host:
+                    self.mgr.log.info(
+                        f'AgentCache: normalized key {original_host!r} '
+                        f'-> {host!r}, re-persisting'
+                    )
+                    self.save_agent(host)
+                    self.mgr.set_store(k, None)
 
             except Exception as e:
                 self.mgr.log.warning('unable to load cached state for agent on host %s: %s' % (
