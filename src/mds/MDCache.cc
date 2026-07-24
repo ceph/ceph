@@ -8626,6 +8626,16 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 
       // can we conclude ENOENT?
       if (dnl->is_null()) {
+        /* a null dentry linkage for a snap range in an incomplete dir can
+         * lead to permanent negative shadowing of a snap dentry that doesn't
+         * happen to be in `items` map.
+         */
+        if (curdir->is_auth() && !curdir->is_complete() && snapid < CEPH_NOSNAP) {
+          dout(10) << "traverse: null+readable snap dentry at " << *dn
+                   << " in incomplete dir, fetching" << dendl;
+          curdir->fetch(path[depth], snapid, cf.build());
+          return 1;
+        }
 	dout(10) << "traverse: null+readable dentry at " << *dn << dendl;
 	if (depth == path.depth() - 1) {
 	  if (want_dentry)
