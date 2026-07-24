@@ -246,12 +246,19 @@ class IngressService(CephService):
         else:
             monitor_ips = [ip, host_ip]
 
+        if spec.virtual_ips_list:
+            cert_ips = [str(v).split('/')[0] for v in spec.virtual_ips_list if v]
+        elif ip and ip != '[::]':
+            cert_ips = [ip]
+        else:
+            cert_ips = [host_ip]
         monitor_ssl_file = None
-        cert_ips = [ip]
         if spec.monitor_ssl:
             if spec.monitor_cert_source == MonitorCertSource.REUSE_SERVICE_CERT.value:
                 monitor_ssl_file = 'haproxy.pem'
-                cert_ips.extend(monitor_ips)
+                for mip in monitor_ips:
+                    if mip and mip not in cert_ips:
+                        cert_ips.append(mip)
             else:
                 monitor_ssl_file = 'stats_haproxy.pem'
 
@@ -283,7 +290,7 @@ class IngressService(CephService):
         }
 
         if spec.ssl:
-            tls_pair = self.get_certificates(daemon_spec)
+            tls_pair = self.get_certificates(daemon_spec, ips=cert_ips)
             combined_pem = tls_pair.cert + '\n' + tls_pair.key
             config_files['files']['haproxy.pem'] = combined_pem
 
