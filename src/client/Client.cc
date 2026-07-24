@@ -9134,7 +9134,26 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
     st->st_blocks = 1;
 #endif
   } else {
-    st->st_size = in->effective_size();
+#if defined(__linux__)
+      if (in->is_symlink() && in->is_fscrypt_enabled()) {
+      std::string symlink;
+      auto fscrypt_denc = fscrypt->get_fname_denc(in->fscrypt_ctx, &in->fscrypt_key_validator, true);
+
+      if (fscrypt_denc) {
+        int ret = fscrypt_denc->get_decrypted_symlink(in->symlink, &symlink);
+        if (ret < 0) {
+          ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt symlink (r=" << ret << ")" << dendl;
+          return -EPERM;
+        }
+      }
+      st->st_size = symlink.length();
+     } else {
+      st->st_size = in->effective_size();
+     }
+#else
+      st->st_size = in->effective_size();
+#endif
+
 #ifndef _WIN32
     st->st_blocks = (in->effective_size() + 511) >> 9;
 #endif
