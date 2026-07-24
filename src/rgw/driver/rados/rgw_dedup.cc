@@ -1259,14 +1259,14 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 5)  << __func__ << "::ERROR: no manifest" << dendl;
       return -EINVAL;
     }
-    const auto &head_placement_rule = manifest.get_head_placement_rule();
-    const std::string& storage_class =
-      rgw_placement_rule::get_canonical_storage_class(head_placement_rule.storage_class);
 
+    // non-default storage_class only applies to tail-objects
+    const rgw_bucket_placement& tail_placement = manifest.get_tail_placement();
+    const auto& sc_from_tail = tail_placement.placement_rule.get_storage_class();
     // p_rec holds an the storage_class value taken from the bucket-index/obj-attr
-    if (unlikely(storage_class != p_rec->stor_class)) {
-      ldpp_dout(dpp, 5) << __func__ << "::ERROR::manifest storage_class="
-                        << storage_class << " != " << "::bucket-index storage_class="
+    if (unlikely(sc_from_tail != p_rec->stor_class)) {
+      ldpp_dout(dpp, 5) << __func__ << "::ERROR::manifest tail storage_class="
+                        << sc_from_tail << " != p_rec->stor_class="
                         << p_rec->stor_class << dendl;
       p_stats->different_storage_class++;
       return -EINVAL;
@@ -3416,9 +3416,13 @@ namespace rgw::dedup {
 
       ldpp_dout(dpp, 10) << __func__ << "::Wait for object ingress completion, ttl="
                          << ttl << " seconds" << dendl;
-      std::unique_lock cond_lock(d_cond_mutex);
-      d_cond.wait_for(cond_lock, std::chrono::seconds(ttl),
-                      [this]{return d_ctl.should_stop() || d_ctl.should_pause();});
+      {
+        // limit the scope of cond_lock
+        std::unique_lock cond_lock(d_cond_mutex);
+        d_cond.wait_for(cond_lock, std::chrono::seconds(ttl),
+                        [this]{return d_ctl.should_stop() || d_ctl.should_pause();});
+      }
+
       if (unlikely(d_ctl.should_pause())) {
         handle_pause_req(__func__);
       }
@@ -3458,9 +3462,13 @@ namespace rgw::dedup {
     while (!all_md5_shards_completed(&d_cluster, store, num_md5_shards)) {
       ldpp_dout(dpp, 10) << __func__ << "::Wait for md5 completion, ttl="
                          << ttl << " seconds" << dendl;
-      std::unique_lock cond_lock(d_cond_mutex);
-      d_cond.wait_for(cond_lock, std::chrono::seconds(ttl),
-                      [this]{return d_ctl.should_stop() || d_ctl.should_pause();});
+      {
+        // limit the scope of cond_lock
+        std::unique_lock cond_lock(d_cond_mutex);
+        d_cond.wait_for(cond_lock, std::chrono::seconds(ttl),
+                        [this]{return d_ctl.should_stop() || d_ctl.should_pause();});
+      }
+
       if (unlikely(d_ctl.should_pause())) {
         handle_pause_req(__func__);
       }
