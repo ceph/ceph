@@ -261,6 +261,11 @@ static void dump_account_metadata(req_state * const s,
     if (geniter != rgw_to_http_attrs.end()) {
       dump_header(s, geniter->second, iter->second);
     } else if (strncmp(name, RGW_ATTR_META_PREFIX, PREFIX_LEN) == 0) {
+      if (s->perm_mask != RGW_PERM_FULL_CONTROL && 
+         (boost::algorithm::iequals(name + PREFIX_LEN, "temp-url-key") || 
+          boost::algorithm::iequals(name + PREFIX_LEN, "temp-url-key-2"))) {
+        continue;
+      }
       dump_header_prefixed(s, "X-Account-Meta-",
                            camelcase_dash_http_attr(name + PREFIX_LEN, false),
                            iter->second);
@@ -269,7 +274,7 @@ static void dump_account_metadata(req_state * const s,
 
   /* Dump account ACLs, if any */
   auto account_acls = rgw::swift::format_account_acl(policy);
-  if (account_acls) {
+  if (account_acls && s->perm_mask == RGW_PERM_FULL_CONTROL) {
     dump_header(s, "X-Account-Access-Control", std::move(*account_acls));
   }
 }
@@ -571,14 +576,15 @@ static void dump_container_metadata(req_state *s,
     dump_header(s, "X-Container-Bytes-Used-Actual", stats->size_rounded);
   }
 
+  const bool is_owner = s->system_request || (s->auth.identity->is_owner_of(s->bucket->get_info().owner));
   if (rgw::sal::Object::empty(s->object.get())) {
     std::string read_acl, write_acl;
     rgw::swift::format_container_acls(s->bucket_acl, read_acl, write_acl);
 
-    if (read_acl.size()) {
+    if (read_acl.size() && is_owner) {
       dump_header(s, "X-Container-Read", read_acl);
     }
-    if (write_acl.size()) {
+    if (write_acl.size() && is_owner) {
       dump_header(s, "X-Container-Write", write_acl);
     }
     if (!s->bucket->get_placement_rule().name.empty()) {
@@ -598,6 +604,10 @@ static void dump_container_metadata(req_state *s,
       if (geniter != rgw_to_http_attrs.end()) {
         dump_header(s, geniter->second, iter->second);
       } else if (strncmp(name, RGW_ATTR_META_PREFIX, PREFIX_LEN) == 0) {
+        if (!is_owner && (boost::algorithm::iequals(name + PREFIX_LEN, "temp-url-key") || 
+                          boost::algorithm::iequals(name + PREFIX_LEN, "temp-url-key-2"))) {
+          continue; 
+        }
         dump_header_prefixed(s, "X-Container-Meta-",
                              camelcase_dash_http_attr(name + PREFIX_LEN, false),
                              iter->second);
