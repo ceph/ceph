@@ -263,6 +263,11 @@ RUN set -ex && \
 # clean the package list and re-clean unnecessary RPM database files
 RUN rpm -q $(cat packages.txt) && rm -f /var/lib/rpm/__db* && rm -f *packages.txt
 
+# AppArmor unix-chkpwd profile enabled on Ubuntu 24.04+ blocks reading /etc/shadow
+# since RHEL base images ship /etc/shadow with mode 0000, while the profile lacks
+# CAP_DAC_OVERRIDE. This leads to running 'sudo smartctl' throw an error from pam_unix.
+RUN chmod u+r /etc/shadow
+
 #
 # Set some envs in the container for quickly inspecting details about the build at runtime
 ENV CEPH_IS_DEVEL="${CI_CONTAINER}" \
@@ -270,4 +275,3 @@ ENV CEPH_IS_DEVEL="${CI_CONTAINER}" \
     CEPH_VERSION="${CEPH_REF}" \
     CEPH_OSD_FLAVOR="${OSD_FLAVOR}" \
     FROM_IMAGE="${FROM_IMAGE}"
-
