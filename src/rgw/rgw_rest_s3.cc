@@ -6557,7 +6557,7 @@ AWSSignerV4::prepare(const DoutPrefixProvider *dpp,
   }
 
   /* Craft canonical URI. Using std::move later so let it be non-const. */
-  auto canonical_uri = rgw::auth::s3::gen_v4_canonical_uri(info);
+  auto canonical_uri = rgw::auth::s3::gen_v4_canonical_uri(info, is_non_s3_op);
 
 
   /* Craft canonical query string. std::moving later so non-const here. */
@@ -6688,7 +6688,8 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
   }
 
   /* Craft canonical URI. Using std::move later so let it be non-const. */
-  auto canonical_uri = rgw::auth::s3::get_v4_canonical_uri(s->info);
+  auto canonical_uri = rgw::auth::s3::get_v4_canonical_uri(s->info,
+                                                            is_non_s3_op);
 
   /* Craft canonical query string. std::moving later so non-const here. */
   auto canonical_qs = rgw::auth::s3::get_v4_canonical_qs(s->info, using_qs);

@@ -598,12 +598,20 @@ static inline std::string aws4_uri_recode(const std::string_view& src, bool enco
   return aws4_uri_encode(decoded, encode_slash);
 }
 
-static inline std::string get_v4_canonical_uri(const req_info& info) {
-  /* The code should normalize according to RFC 3986 but S3 does NOT do path
-   * normalization that SigV4 typically does. This code follows the same
-   * approach that boto library. See auth.py:canonical_uri(...). */
-
-  std::string canonical_uri = aws4_uri_recode(info.request_uri_aws4, false);
+// Per AWS SigV4 spec, non-S3 services double-encode the canonical
+// URI: the wire path is already %-encoded, and the canonical form
+// %-encodes a second time (so a wire `%2F` becomes canonical
+// `%252F`). S3 keeps the path single-encoded. Boto3 follows the
+// same split (auth.py SigV4Auth.canonical_request vs
+// S3SigV4Auth.canonical_request). We mirror that: for is_non_s3_op
+// we feed the wire URI through aws4_uri_encode unchanged (no
+// decode), so existing %-escapes get re-encoded; for S3 we
+// decode-then-encode to canonicalize.
+static inline std::string get_v4_canonical_uri(const req_info& info,
+                                                bool is_non_s3_op = false) {
+  std::string canonical_uri = is_non_s3_op
+      ? aws4_uri_encode(info.request_uri_aws4, false)
+      : aws4_uri_recode(info.request_uri_aws4, false);
 
   if (canonical_uri.empty()) {
     canonical_uri = "/";
@@ -614,12 +622,11 @@ static inline std::string get_v4_canonical_uri(const req_info& info) {
   return canonical_uri;
 }
 
-static inline std::string gen_v4_canonical_uri(const req_info& info) {
-  /* The code should normalize according to RFC 3986 but S3 does NOT do path
-   * normalization that SigV4 typically does. This code follows the same
-   * approach that boto library. See auth.py:canonical_uri(...). */
-
-  std::string canonical_uri = aws4_uri_recode(info.request_uri, false);
+static inline std::string gen_v4_canonical_uri(const req_info& info,
+                                                bool is_non_s3_op = false) {
+  std::string canonical_uri = is_non_s3_op
+      ? aws4_uri_encode(info.request_uri, false)
+      : aws4_uri_recode(info.request_uri, false);
 
   if (canonical_uri.empty()) {
     canonical_uri = "/";
