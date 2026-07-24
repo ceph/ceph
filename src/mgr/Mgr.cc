@@ -402,6 +402,8 @@ void Mgr::init()
   }
 #endif
 
+  server.ensure_audit_pool();
+
   dout(4) << "Complete." << dendl;
 }
 

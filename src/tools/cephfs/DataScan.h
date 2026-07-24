@@ -25,6 +25,9 @@ class MDSTable;
 
 class RecoveryDriver {
   protected:
+    // used to stream errors to std::cerr and audit db
+    std::ostream& err;
+
     // If true, overwrite structures that generate decoding errors.
     bool force_corrupt;
 
@@ -96,8 +99,8 @@ class RecoveryDriver {
       return std::string(s);
     }
 
-    RecoveryDriver()
-      : force_corrupt(false),
+    RecoveryDriver(std::ostream& err_)
+      : err(err_), force_corrupt(false),
 	force_init(false)
     {}
 
@@ -117,8 +120,8 @@ class LocalFileDriver : public RecoveryDriver
       inodeno_t ino);
   public:
 
-    LocalFileDriver(const std::string &path_, librados::IoCtx &data_io_)
-      : RecoveryDriver(), path(path_), data_io(data_io_)
+    LocalFileDriver(const std::string &path_, librados::IoCtx &data_io_, std::ostream& err_)
+      : RecoveryDriver(err_), path(path_), data_io(data_io_)
     {}
 
     // Implement RecoveryDriver interface
@@ -215,6 +218,7 @@ class MetadataDriver : public RecoveryDriver, public MetadataTool
         frag_t *result_ft);
 
   public:
+    MetadataDriver(std::ostream& err_): RecoveryDriver(err_) {}
 
     // Implement RecoveryDriver interface
     int init(
@@ -343,6 +347,9 @@ protected:
 public:
   static void usage();
   int main(const std::vector<const char*>& args);
+  int connect_rados();
+  bool rados_connected{false};
+  librados::Rados& get_rados_handle();
 
   DataScan() :
     driver(NULL),

@@ -188,6 +188,31 @@ string clog_type_to_string(clog_type t)
       ceph_abort();
   }
 }
+void LogMsg::encode(bufferlist& bl, uint64_t features) const
+{
+  ENCODE_START(1, 1, bl);
+  encode(name, bl);
+  encode(addrs, bl, features);
+  encode(entity_name, bl);
+  encode(cmd, bl);
+  encode(cmd_args, bl);
+  encode(cmd_state, bl);
+  encode(cmd_retval, bl);
+  ENCODE_FINISH(bl);
+}
+
+void LogMsg::decode(bufferlist::const_iterator& p)
+{
+  DECODE_START(1, p);
+  decode(name, p);
+  decode(addrs, p);
+  decode(entity_name, p);
+  decode(cmd, p);
+  decode(cmd_args, p);
+  decode(cmd_state, p);
+  decode(cmd_retval, p);
+  DECODE_FINISH(p);
+}
 
 void LogEntry::log_to_syslog(string level, string facility) const
 {
@@ -206,7 +231,7 @@ void LogEntry::log_to_syslog(string level, string facility) const
 void LogEntry::encode(bufferlist& bl, uint64_t features) const
 {
   assert(HAVE_FEATURE(features, SERVER_NAUTILUS));
-  ENCODE_START(5, 5, bl);
+  ENCODE_START(6, 5, bl);
   __u16 t = prio;
   encode(name, bl);
   encode(rank, bl);
@@ -216,12 +241,14 @@ void LogEntry::encode(bufferlist& bl, uint64_t features) const
   encode(t, bl);
   encode(msg, bl);
   encode(channel, bl);
+  encode(epoch, bl);
+  encode(logmsg, bl, features);
   ENCODE_FINISH(bl);
 }
 
 void LogEntry::decode(bufferlist::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 2, 2, bl);
   if (struct_v < 5) {
     __u16 t;
     entity_inst_t who;
@@ -256,6 +283,10 @@ void LogEntry::decode(bufferlist::const_iterator& bl)
     prio = (clog_type)t;
     decode(msg, bl);
     decode(channel, bl);
+    if (struct_v >= 6) {
+      decode(epoch, bl);
+      decode(logmsg, bl);
+    }
   }
   DECODE_FINISH(bl);
 }
