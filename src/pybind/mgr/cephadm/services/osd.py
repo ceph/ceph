@@ -13,7 +13,7 @@ from ceph.utils import datetime_to_str, str_to_datetime
 from datetime import datetime
 import orchestrator
 from cephadm.serve import CephadmServe
-from cephadm.utils import SpecialHostLabels
+from cephadm.utils import SpecialHostLabels, can_apply_post_create
 from ceph.utils import datetime_now
 from orchestrator import OrchestratorError, DaemonDescription
 from mgr_module import MonCommandFailed
@@ -30,6 +30,50 @@ logger = logging.getLogger(__name__)
 @register_cephadm_service
 class OSDService(CephService):
     TYPE = 'osd'
+
+    def _apply_osd_config_to_daemon(
+        self,
+        osd_id: str,
+        cfg: dict[str, str],
+    ) -> None:
+        if not cfg:
+            return
+
+        for key, value in cfg.items():
+            logger.info(
+                "Applying OSD spec config %s=%s to osd.%s",
+                key, value, osd_id,
+            )
+
+            self.mgr.check_mon_command({
+                'prefix': 'config set',
+                'who': f'osd.{osd_id}',
+                'name': key,
+                'value': value,
+            })
+
+    def _get_post_create_osd_config(
+        self,
+        spec: DriveGroupSpec,
+    ) -> dict[str, str]:
+        cfg = getattr(spec, 'config', None) or {}
+        if not cfg:
+            return {}
+
+        meta_cache: dict[str, Optional[dict[str, Any]]] = {}
+        post_create_cfg: dict[str, str] = {}
+
+        for key, value in cfg.items():
+            if not can_apply_post_create(self.mgr, key, meta_cache):
+                logger.debug(
+                    "Skipping OSD spec config key %s in post-create",
+                    key,
+                )
+                continue
+
+            post_create_cfg[key] = str(value)
+
+        return post_create_cfg
 
     def create_from_spec(self, drive_group: DriveGroupSpec, force_apply: bool = False) -> str:
         """
@@ -122,6 +166,7 @@ class OSDService(CephService):
         # daemon (misleading "Created no osd(s)" while the osd exists but is still down).
         # wait_for_latest_osdmap() is synchronous:
         # We need to run it in a thread pool so we do not block the cephadm asyncio event loop.
+        post_create_cfg = self._get_post_create_osd_config(spec)
         ret = await to_thread(self.mgr.rados.wait_for_latest_osdmap)
         if ret < 0:
             raise OrchestratorError(
@@ -179,6 +224,8 @@ class OSDService(CephService):
                     daemon_spec,
                     osd_uuid_map=osd_uuid_map)
 
+                self._apply_osd_config_to_daemon(str(osd_id), post_create_cfg)
+
         # check result: raw
         raw_elems: dict = await CephadmServe(self.mgr)._run_cephadm_json(
             host, 'osd', 'ceph-volume',
@@ -220,6 +267,7 @@ class OSDService(CephService):
             await CephadmServe(self.mgr)._create_daemon(
                 daemon_spec,
                 osd_uuid_map=osd_uuid_map)
+            self._apply_osd_config_to_daemon(osd_id, post_create_cfg)
 
         if created:
             self.mgr.cache.invalidate_host_devices(host)
