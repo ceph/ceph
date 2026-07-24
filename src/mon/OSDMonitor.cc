@@ -6164,20 +6164,24 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
     rdata.append(ds);
   } else if (prefix == "osd blocklist ls" ||
-	     prefix == "osd blacklist ls") {
-    if (f)
+             prefix == "osd blacklist ls") {
+    bool new_format = op->get_connection()->has_features(CEPH_FEATUREMASK_SERVER_UMBRELLA);
+    if (f) {
+      if (new_format) {
+        f->open_object_section("blocklist_info");
+      }
       f->open_array_section("blocklist");
-
-    for (auto p = osdmap.blocklist.begin(); p != osdmap.blocklist.end(); ++p) {
+    }
+    for (auto & p : osdmap.blocklist) {
       if (f) {
 	f->open_object_section("entry");
-	f->dump_string("addr", p->first.get_legacy_str());
-	f->dump_stream("until") << p->second;
+	f->dump_string("addr", p.first.get_legacy_str());
+	f->dump_stream("until") << p.second;
 	f->close_section();
       } else {
 	stringstream ss;
 	string s;
-	ss << p->first << " " << p->second;
+	ss << p.first << " " << p.second;
 	getline(ss, s);
 	s += "\n";
 	rdata.append(s);
@@ -6185,34 +6189,41 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
     if (f) {
       f->close_section();
-      f->flush(rdata);
+      if (!new_format) {
+        f->flush(rdata);
+      }
     }
     if (f)
       f->open_array_section("range_blocklist");
 
-    for (auto p = osdmap.range_blocklist.begin();
-	 p != osdmap.range_blocklist.end();
-	 ++p) {
+    for (auto & p : osdmap.range_blocklist) {
       if (f) {
-	f->open_object_section("entry");
-	f->dump_string("range", p->first.get_legacy_str());
-	f->dump_stream("until") << p->second;
-	f->close_section();
+        f->open_object_section("entry");
+        f->dump_string("range", p.first.get_legacy_str());
+        f->dump_stream("until") << p.second;
+        f->close_section();
       } else {
-	stringstream ss;
-	string s;
-	ss << p->first << " " << p->second;
-	getline(ss, s);
-	s += "\n";
-	rdata.append(s);
+        stringstream ss;
+        string s;
+        ss << p.first << " " << p.second;
+        getline(ss, s);
+        s += "\n";
+        rdata.append(s);
       }
     }
     if (f) {
       f->close_section();
-      f->flush(rdata);
+      if (new_format) {
+        f->close_section();
+        f->flush(ds);
+        rdata.append(ds);
+      } else {
+        f->flush(rdata);
+      }
     }
-    ss << "listed " << osdmap.blocklist.size() + osdmap.range_blocklist.size() << " entries";
-
+    if (!new_format || !f) {
+      ss << "listed " << osdmap.blocklist.size() + osdmap.range_blocklist.size() << " entries";
+    }
   } else if (prefix == "osd pool ls") {
     string detail;
     cmd_getval(cmdmap, "detail", detail);
