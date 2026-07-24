@@ -15,6 +15,7 @@
 #include "cls/lock/cls_lock_client.h"
 #include "include/random.h"
 #include "rgw_gc_log.h"
+#include "perfglue/heap_profiler.h"
 
 #include <list> // XXX
 #include <sstream>
@@ -743,6 +744,7 @@ void *RGWGC::GCWorker::entry() {
     secs -= end.sec();
 
     std::unique_lock locker{lock};
+    ceph_heap_mark_thread_temporarily_idle();
     cond.wait_for(locker, std::chrono::seconds(secs));
   } while (!gc->going_down());
 

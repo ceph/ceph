@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_amqp.h"
+#include "perfglue/heap_profiler.h"
 #if __has_include(<rabbitmq-c/amqp.h>)
 #include <rabbitmq-c/amqp.h>
 #include <rabbitmq-c/ssl_socket.h>
@@ -812,6 +813,7 @@ private:
       }
       // if no messages were received or published, sleep for 100ms
       if (count == 0 && !incoming_message) {
+        ceph_heap_mark_thread_temporarily_idle();
         std::this_thread::sleep_for(idle_time);
       }
     }

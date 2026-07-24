@@ -16,6 +16,7 @@
 #include "common/ceph_argparse.h"
 #include "common/Formatter.h"
 #include "common/errno.h"
+#include "perfglue/heap_profiler.h"
 
 #include "global/global_init.h"
 
@@ -417,6 +418,7 @@ void *RGWObjectExpirer::OEWorker::entry() {
     secs -= end.sec();
 
     std::unique_lock l{lock};
+    ceph_heap_mark_thread_temporarily_idle();
     cond.wait_for(l, std::chrono::seconds(secs));
   } while (!oe->going_down());
 
