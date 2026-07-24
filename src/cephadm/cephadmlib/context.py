@@ -1,7 +1,10 @@
 # context.py - cephadm application context support classes
 
 import argparse
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from .container_engine_base import ContainerEngine
 
 from .constants import (
     CONTAINER_INIT,
@@ -34,8 +37,7 @@ class BaseConfig:
         self.logging_level: str = 'debug'
 
         self.container_init: bool = CONTAINER_INIT
-        # FIXME(refactor) : should be Optional[ContainerEngine]
-        self.container_engine: Any = None
+        self.container_engine: Optional['ContainerEngine'] = None
 
     def set_from_args(self, args: argparse.Namespace) -> None:
         argdict: Dict[str, Any] = vars(args)
