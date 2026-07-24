@@ -53,5 +53,6 @@ public:
   }
 
   int check(RGWPolicyEnv *env, std::string& err_msg);
+  int from_json(std::string_view bl, std::string& err_msg);
   int from_json(bufferlist& bl, std::string& err_msg);
 };

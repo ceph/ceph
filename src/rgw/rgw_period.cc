@@ -154,6 +154,7 @@ void RGWPeriod::dump(Formatter *f) const
   encode_json("realm_epoch", realm_epoch, f);
 }
 
+// Reads internal fields /from/ JSONObj:
 void RGWPeriod::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("id", id, obj);
