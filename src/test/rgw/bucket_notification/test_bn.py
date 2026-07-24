@@ -3636,6 +3636,15 @@ def persistent_topic_configs(persistency_time, config_dict):
     # topic stats
     get_stats_persistent_topic(topic_name, 0)
 
+    # wait for the persistent topic's queue to be discovered and owned by the
+    # notification manager before generating events. the manager only refreshes
+    # its list of queues every rgw_notification_queue_update_period (30s by
+    # default), so a queue created just after a refresh may not start being
+    # processed for up to that long. without this wait, events from the create
+    # phase can still be sitting in the queue (not yet retried/expired) when the
+    # delete phase runs, inflating the entry count and failing the assertions.
+    time.sleep(30)
+
     # create objects in the bucket (async)
     number_of_objects = 10
     client_threads = []
@@ -3703,7 +3712,13 @@ def create_persistency_config_string(config_dict):
 @pytest.mark.basic_test
 def test_persistent_topic_configs_ttl():
     """ test persistent topic configurations with time_to_live """
-    config_dict = {"time_to_live": 30, "max_retries": "None", "retry_sleep_duration": "None"}
+    # set retry_sleep_duration explicitly instead of leaving it "None" (which
+    # defaults to rgw_topic_persistency_sleep_duration=0). the push endpoint in
+    # this test is intentionally unreachable, so a 0s sleep makes the manager
+    # retry the same events hundreds of times per second, which is both wasteful
+    # and has been observed to wedge the queue's processing. a 1s sleep paces the
+    # retries without affecting what the test asserts (expiry is driven by ttl).
+    config_dict = {"time_to_live": 30, "max_retries": "None", "retry_sleep_duration": 1}
     persistency_time = config_dict["time_to_live"]
 
     persistent_topic_configs(persistency_time, config_dict)
