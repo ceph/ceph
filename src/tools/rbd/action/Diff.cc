@@ -42,7 +42,7 @@ static int diff_cb(uint64_t ofs, size_t len, int exists, void *arg)
 }
 
 static int do_diff(librbd::Image& image, const char *fromsnapname,
-                   bool whole_object, Formatter *f)
+                   bool whole_object, Formatter *f, bool all_snaps)
 {
   int r;
   librbd::image_info_t info;
@@ -67,7 +67,7 @@ static int do_diff(librbd::Image& image, const char *fromsnapname,
   }
   uint64_t from_snap_id = 0;
   if (fromsnapname != nullptr) {
-    r = image.snap_get_id(fromsnapname, &from_snap_id);
+    r = image.snap_get_id(fromsnapname, &from_snap_id, all_snaps);
     if (r < 0) {
       return r;
     }
@@ -92,7 +92,10 @@ void get_arguments(po::options_description *positional,
   options->add_options()
     (at::FROM_SNAPSHOT_NAME.c_str(), po::value<std::string>(),
      "snapshot starting point")
-    (at::WHOLE_OBJECT.c_str(), po::bool_switch(), "compare whole object");
+    (at::WHOLE_OBJECT.c_str(), po::bool_switch(), "compare whole object")
+    (at::ALL_SNAPSHOTS.c_str(), po::bool_switch(),
+     "allow calculating diffs between all kinds of snapshots, "
+     "including group/trash/mirror snapshots");
   at::add_format_options(options);
 }
 
@@ -128,13 +131,14 @@ int execute(const po::variables_map &vm,
   librados::IoCtx io_ctx;
   librbd::Image image;
   r = utils::init_and_open_image(pool_name, namespace_name, image_name, "",
-                                 snap_name, true, &rados, &io_ctx, &image);
+                                 snap_name, true, &rados, &io_ctx, &image,
+                                 vm[at::ALL_SNAPSHOTS].as<bool>());
   if (r < 0) {
     return r;
   }
 
   r = do_diff(image, from_snap_name.empty() ? nullptr : from_snap_name.c_str(),
-              diff_whole_object, formatter.get());
+              diff_whole_object, formatter.get(), vm[at::ALL_SNAPSHOTS].as<bool>());
   if (r < 0) {
     std::cerr << "rbd: diff error: " << cpp_strerror(r) << std::endl;
     return -r;

@@ -714,7 +714,7 @@
   rbd help diff
   usage: rbd diff [--pool <pool>] [--namespace <namespace>] [--image <image>] 
                   [--snap <snap>] [--from-snap <from-snap>] [--whole-object] 
-                  [--format <format>] [--pretty-format] 
+                  [--format <format>] [--pretty-format] [--all-snapshots] 
                   <image-or-snap-spec> 
   
   Print extents that differ since a previous snap, or image creation.
@@ -733,6 +733,9 @@
     --whole-object        compare whole object
     --format arg          output format (plain, json, or xml) [default: plain]
     --pretty-format       pretty formatting (json and xml)
+    --all-snapshots       allow calculating diffs between
+                          all kinds of snapshots, including
+                          group/trash/mirror snapshots
   
   rbd help disk-usage
   usage: rbd disk-usage [--pool <pool>] [--namespace <namespace>] 
@@ -808,7 +811,7 @@
   usage: rbd export-diff [--pool <pool>] [--namespace <namespace>] 
                          [--image <image>] [--snap <snap>] [--path <path>] 
                          [--from-snap <from-snap>] [--whole-object] 
-                         [--no-progress] 
+                         [--no-progress] [--all-snapshots] 
                          <source-image-or-snap-spec> <path-name> 
   
   Export incremental diff to file.
@@ -829,6 +832,9 @@
     --from-snap arg              snapshot starting point
     --whole-object               compare whole object
     --no-progress                disable progress output
+    --all-snapshots              allow calculating diffs between
+                                 all kinds of snapshots, including
+                                 group/trash/mirror snapshots
   
   rbd help feature disable
   usage: rbd feature disable [--pool <pool>] [--namespace <namespace>] 
