@@ -13,11 +13,15 @@
   <div [ngSwitch]="value">
     <span
       *ngSwitchCase="'global'"
+      i18n-ngbTooltip
+      ngbTooltip="This is the global value. No value for this option has been set for this image."
       i18n
       >Global</span
     >
     <strong
       *ngSwitchCase="'image'"
+      i18n-ngbTooltip
+      ngbTooltip="This setting overrides the global value"
       i18n
       >Image</strong
     >
