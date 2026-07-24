@@ -2384,6 +2384,7 @@ public:
     osdc_opvec ops;
     ceph::buffer::list inbl;
     version_t *pobjver{nullptr};
+    version_t notify_version{0};
 
     bool is_watch{false};
     ceph::coarse_mono_time watch_valid_thru; ///< send time for last acked ping
