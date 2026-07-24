@@ -1511,9 +1511,10 @@ struct ObjectOperation {
   }
 
   void get_internal_versions(boost::system::error_code* ec,
-		buffer::list *pbl) {
+		buffer::list *pbl, uint8_t version) {
   	ceph::buffer::list bl;
-  	add_op(CEPH_OSD_OP_GET_INTERNAL_VERSIONS);
+  	OSDOp& o = add_op(CEPH_OSD_OP_GET_INTERNAL_VERSIONS);
+        o.op.get_internal_versions.version = version;
   	out_bl.back() = pbl;
   	out_ec.back() = ec;
   }
@@ -1742,6 +1743,7 @@ private:
   bool honor_pool_full = true;
 
   std::atomic<int> extra_read_flags{0};
+  std::atomic<bool> supports_internal_versions_versioning{false};
 
   // If this is true, accumulate a set of blocklisted entities
   // to be drained by consume_blocklist_events.

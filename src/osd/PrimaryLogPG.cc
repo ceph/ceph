@@ -6681,9 +6681,26 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_GET_INTERNAL_VERSIONS: {
       std::map<shard_id_t, eversion_t> out;
-      result = get_internal_versions(soid, &out);
+      uint8_t version = 0;
+      if (ctx->op->get_req()->get_connection()->has_features(
+        CEPH_FEATUREMASK_INTERVAL_VERSIONS_VERSIONING)) {
+
+        version = osd_op.op.get_internal_versions.version;
+      }
+      if (version > 1) {
+        result = -EOPNOTSUPP;
+        break;
+      }
+      result = get_internal_versions(soid, version, &out);
       if (result >= 0) {
-        encode(out, osd_op.outdata);
+        internal_versions_response_t response{out};
+        response.shard_versions = out;
+        if (version >= 1) {
+          encode(response, osd_op.outdata,
+            ctx->op->get_req()->get_connection()->get_features());
+        } else {
+          internal_versions_response_t::encode_legacy(response, osd_op.outdata);
+        }
       }
     }
     break;
@@ -16264,6 +16281,7 @@ int PrimaryLogPG::getattrs_maybe_cache(
 }
 
 int PrimaryLogPG::get_internal_versions(const hobject_t& soid,
+                                        uint8_t version,
                                         std::map<shard_id_t, eversion_t>* out) {
   ObjectContextRef obc = get_object_context(soid, false);
 
@@ -16271,15 +16289,17 @@ int PrimaryLogPG::get_internal_versions(const hobject_t& soid,
     return -ENOENT;
   }
 
-  if (is_primary() && pool.info.is_erasure()) {
+  if (pool.info.is_erasure() && (version >= 1 || (version == 0 && is_primary()))) {
     for (unsigned int i = 0; i < pool.info.get_size(); ++i) {
       (*out)[shard_id_t(i)] = obc->obs.oi.version;
     }
     for (const auto& [shard, version] : obc->obs.oi.shard_versions) {
       out->at(shard) = version;
     }
-  } else {
+  } else if (pool.info.is_erasure() && version == 0) {
     (*out)[pg_whoami.shard] = obc->obs.oi.version;
+  } else {
+    (*out)[shard_id_t::NO_SHARD] = obc->obs.oi.version;
   }
   return 0;
 }
