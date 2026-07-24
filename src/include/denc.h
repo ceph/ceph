@@ -1377,93 +1377,86 @@ public:
   }
 };
 
+namespace _denc {
+  template<typename Optional>
+  void clear_optional(Optional& v) {
+    v.reset();
+  }
+
+  template<typename Optional, typename T>
+  struct optional_base {
+    using traits = denc_traits<T>;
+
+    static constexpr bool supported = true;
+    static constexpr bool featured = traits::featured;
+    static constexpr bool bounded = false;
+    static constexpr bool need_contiguous = traits::need_contiguous;
+
+    static void bound_encode(const Optional& v, size_t& p, uint64_t f = 0) {
+      p += sizeof(bool);
+      if (v) {
+        denc(*v, p, f);
+      }
+    }
+
+    static void encode(const Optional& v,
+                       ceph::buffer::list::contiguous_appender& p,
+                       uint64_t f = 0) {
+      denc((bool)v, p);
+      encode_nohead(v, p, f);
+    }
+
+    static void decode(Optional& v, ceph::buffer::ptr::const_iterator& p,
+                       uint64_t f = 0) {
+      bool x;
+      denc(x, p, f);
+      decode_nohead(x, v, p, f);
+    }
+
+    static void decode(Optional& v, ceph::buffer::list::const_iterator& p)
+    requires (!need_contiguous)
+    {
+      bool x;
+      denc(x, p);
+      if (x) {
+        v = T{};
+        denc(*v, p);
+        return;
+      }
+
+      clear_optional(v);
+    }
+
+    static void encode_nohead(const Optional& v,
+                              ceph::buffer::list::contiguous_appender& p,
+                              uint64_t f = 0) {
+      if (v) {
+        denc(*v, p, f);
+      }
+    }
+
+    static void decode_nohead(bool present, Optional& v,
+                              ceph::buffer::ptr::const_iterator& p,
+                              uint64_t f = 0) {
+      if (present) {
+        v = T{};
+        denc(*v, p, f);
+        return;
+      }
+
+      clear_optional(v);
+    }
+  };
+}
+
 //
 // boost::optional<T>
 //
 template<typename T>
 struct denc_traits<
   boost::optional<T>,
-  std::enable_if_t<denc_traits<T>::supported>> {
-  using traits = denc_traits<T>;
-
-  static constexpr bool supported = true;
-  static constexpr bool featured = traits::featured;
-  static constexpr bool bounded = false;
-  static constexpr bool need_contiguous = traits::need_contiguous;
-
-  static void bound_encode(const boost::optional<T>& v, size_t& p,
-			   uint64_t f = 0) {
-    p += sizeof(bool);
-    if (v) {
-      if constexpr (featured) {
-        denc(*v, p, f);
-      } else {
-        denc(*v, p);
-      }
-    }
-  }
-
-  static void encode(const boost::optional<T>& v,
-		     ceph::buffer::list::contiguous_appender& p,
-		     uint64_t f = 0) {
-    denc((bool)v, p);
-    if (v) {
-      if constexpr (featured) {
-        denc(*v, p, f);
-      } else {
-        denc(*v, p);
-      }
-    }
-  }
-
-  static void decode(boost::optional<T>& v, ceph::buffer::ptr::const_iterator& p,
-		     uint64_t f = 0) {
-    bool x;
-    denc(x, p, f);
-    if (x) {
-      v = T{};
-      denc(*v, p, f);
-    } else {
-      v = boost::none;
-    }
-  }
-
-  template<typename U = T>
-  static std::enable_if_t<!!sizeof(U) && !need_contiguous>
-  decode(boost::optional<T>& v, ceph::buffer::list::const_iterator& p) {
-    bool x;
-    denc(x, p);
-    if (x) {
-      v = T{};
-      denc(*v, p);
-    } else {
-      v = boost::none;
-    }
-  }
-
-  template<typename U = T>
-  static void encode_nohead(const boost::optional<T>& v,
-			    ceph::buffer::list::contiguous_appender& p,
-			    uint64_t f = 0) {
-    if (v) {
-      if constexpr (featured) {
-        denc(*v, p, f);
-      } else {
-        denc(*v, p);
-      }
-    }
-  }
-
-  static void decode_nohead(bool num, boost::optional<T>& v,
-			    ceph::buffer::ptr::const_iterator& p, uint64_t f = 0) {
-    if (num) {
-      v = T();
-      denc(*v, p, f);
-    } else {
-      v = boost::none;
-    }
-  }
-};
+  std::enable_if_t<denc_traits<T>::supported>>
+  : public _denc::optional_base<boost::optional<T>, T> {};
 
 template<>
 struct denc_traits<boost::none_t> {
@@ -1488,86 +1481,8 @@ struct denc_traits<boost::none_t> {
 template<typename T>
 struct denc_traits<
   std::optional<T>,
-  std::enable_if_t<denc_traits<T>::supported>> {
-  using traits = denc_traits<T>;
-
-  static constexpr bool supported = true;
-  static constexpr bool featured = traits::featured;
-  static constexpr bool bounded = false;
-  static constexpr bool need_contiguous = traits::need_contiguous;
-
-  static void bound_encode(const std::optional<T>& v, size_t& p,
-			   uint64_t f = 0) {
-    p += sizeof(bool);
-    if (v) {
-      if constexpr (featured) {
-        denc(*v, p, f);
-      } else {
-        denc(*v, p);
-      }
-    }
-  }
-
-  static void encode(const std::optional<T>& v,
-		     ceph::buffer::list::contiguous_appender& p,
-		     uint64_t f = 0) {
-    denc((bool)v, p);
-    if (v) {
-      if constexpr (featured) {
-        denc(*v, p, f);
-      } else {
-        denc(*v, p);
-      }
-    }
-  }
-
-  static void decode(std::optional<T>& v, ceph::buffer::ptr::const_iterator& p,
-		     uint64_t f = 0) {
-    bool x;
-    denc(x, p, f);
-    if (x) {
-      v = T{};
-      denc(*v, p, f);
-    } else {
-      v = std::nullopt;
-    }
-  }
-
-  template<typename U = T>
-  static std::enable_if_t<!!sizeof(U) && !need_contiguous>
-  decode(std::optional<T>& v, ceph::buffer::list::const_iterator& p) {
-    bool x;
-    denc(x, p);
-    if (x) {
-      v = T{};
-      denc(*v, p);
-    } else {
-      v = std::nullopt;
-    }
-  }
-
-  static void encode_nohead(const std::optional<T>& v,
-			    ceph::buffer::list::contiguous_appender& p,
-			    uint64_t f = 0) {
-    if (v) {
-      if constexpr (featured) {
-        denc(*v, p, f);
-      } else {
-        denc(*v, p);
-      }
-    }
-  }
-
-  static void decode_nohead(bool num, std::optional<T>& v,
-			    ceph::buffer::ptr::const_iterator& p, uint64_t f = 0) {
-    if (num) {
-      v = T();
-      denc(*v, p, f);
-    } else {
-      v = std::nullopt;
-    }
-  }
-};
+  std::enable_if_t<denc_traits<T>::supported>>
+  : public _denc::optional_base<std::optional<T>, T> {};
 
 template<>
 struct denc_traits<std::nullopt_t> {
@@ -1792,6 +1707,70 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
     " minimal_decoder=" + std::to_string(struct_compat));
 }
 
+namespace ceph::denc_detail {
+
+inline constexpr auto struct_header_len() noexcept
+{
+  return sizeof(__u8) + sizeof(__u8) + sizeof(uint32_t);
+}
+
+inline void start(size_t& p, __u8*, __u8*, char**, uint32_t*)
+{
+  p += struct_header_len();
+}
+
+inline void finish(size_t&, char**, uint32_t*) {}
+
+inline void start(::ceph::buffer::list::contiguous_appender& p,
+		  __u8* struct_v, __u8* struct_compat,
+		  char** len_pos, uint32_t* start_oob_off)
+{
+  ::denc(*struct_v, p);
+  ::denc(*struct_compat, p);
+  *len_pos = p.get_pos_add(sizeof(uint32_t));
+  *start_oob_off = p.get_out_of_band_offset();
+}
+
+inline void finish(::ceph::buffer::list::contiguous_appender& p,
+		   char** len_pos, uint32_t* start_oob_off)
+{
+  ceph_le32 struct_len;
+  struct_len = p.get_pos() - *len_pos - sizeof(uint32_t) +
+    p.get_out_of_band_offset() - *start_oob_off;
+  std::memcpy(*len_pos, &struct_len, sizeof(struct_len));
+}
+
+inline void start(::ceph::buffer::ptr::const_iterator& p,
+		  __u8* struct_v, __u8* struct_compat,
+		  char** start_pos, uint32_t* struct_len,
+		  const char* func)
+{
+  const auto code_v = *struct_v;
+  ::denc(*struct_v, p);
+  ::denc(*struct_compat, p);
+  if (unlikely(code_v < *struct_compat)) {
+    ::denc_compat_throw(func, code_v, *struct_v, *struct_compat);
+  }
+  ::denc(*struct_len, p);
+  *start_pos = const_cast<char*>(p.get_pos());
+}
+
+inline void finish(::ceph::buffer::ptr::const_iterator& p,
+		   char** start_pos, uint32_t* struct_len,
+		   const char* func)
+{
+  const auto pos = p.get_pos();
+  const auto end = *start_pos + *struct_len;
+  if (pos > end) {
+    throw ::ceph::buffer::malformed_input(func);
+  }
+  if (pos < end) {
+    p += end - pos;
+  }
+}
+
+} // namespace ceph::denc_detail
+
 // compile-time  checker for struct_v to detect mismatch of declared
 // decoder version with actually implemented blocks like "struct_v < 100".
 // it addresses the common problem of forgetting to bump the version up
@@ -1830,55 +1809,44 @@ struct StructVChecker
 #define DENC_HELPERS							\
   /* bound_encode */							\
   static void _denc_start(size_t& p,					\
-			  __u8 *struct_v,				\
-			  __u8 *struct_compat,				\
-			  char **, uint32_t *) {			\
-    p += 2 + 4;								\
+			  __u8* struct_v,				\
+			  __u8* struct_compat,				\
+			  char** len_pos, uint32_t* start_oob_off) {	\
+    ::ceph::denc_detail::start(p, struct_v, struct_compat, len_pos,	\
+			       start_oob_off);				\
   }									\
   static void _denc_finish(size_t& p,					\
-			   char **, uint32_t *) { }			\
+			   char** len_pos, uint32_t* start_oob_off) {	\
+    ::ceph::denc_detail::finish(p, len_pos, start_oob_off);		\
+  }									\
   /* encode */								\
   static void _denc_start(::ceph::buffer::list::contiguous_appender& p,	\
-			  __u8 *struct_v,				\
-			  __u8 *struct_compat,				\
-			  char **len_pos,				\
-			  uint32_t *start_oob_off) {			\
-    denc(*struct_v, p);							\
-    denc(*struct_compat, p);						\
-    *len_pos = p.get_pos_add(4);					\
-    *start_oob_off = p.get_out_of_band_offset();			\
+			  __u8* struct_v,				\
+			  __u8* struct_compat,				\
+			  char** len_pos,				\
+			  uint32_t* start_oob_off) {			\
+    ::ceph::denc_detail::start(p, struct_v, struct_compat, len_pos,	\
+			       start_oob_off);				\
   }									\
   static void _denc_finish(::ceph::buffer::list::contiguous_appender& p, \
-			   char **len_pos,				\
-			   uint32_t *start_oob_off) {			\
-    *(ceph_le32*)*len_pos = p.get_pos() - *len_pos - sizeof(uint32_t) +	\
-      p.get_out_of_band_offset() - *start_oob_off;			\
+			   char** len_pos,				\
+			   uint32_t* start_oob_off) {			\
+    ::ceph::denc_detail::finish(p, len_pos, start_oob_off);		\
   }									\
   /* decode */								\
   static void _denc_start(::ceph::buffer::ptr::const_iterator& p,	\
-			  __u8 *struct_v,				\
-			  __u8 *struct_compat,				\
-			  char **start_pos,				\
-			  uint32_t *struct_len) {			\
-    __u8 code_v = *struct_v;						\
-    denc(*struct_v, p);							\
-    denc(*struct_compat, p);						\
-    if (unlikely(code_v < *struct_compat))				\
-      denc_compat_throw(__PRETTY_FUNCTION__, code_v, *struct_v, *struct_compat);\
-    denc(*struct_len, p);						\
-    *start_pos = const_cast<char*>(p.get_pos());			\
+			  __u8* struct_v,				\
+			  __u8* struct_compat,				\
+			  char** start_pos,				\
+			  uint32_t* struct_len) {			\
+    ::ceph::denc_detail::start(p, struct_v, struct_compat, start_pos,	\
+			       struct_len, __PRETTY_FUNCTION__);		\
   }									\
   static void _denc_finish(::ceph::buffer::ptr::const_iterator& p,	\
-			   char **start_pos,				\
-			   uint32_t *struct_len) {			\
-    const char *pos = p.get_pos();					\
-    char *end = *start_pos + *struct_len;				\
-    if (pos > end) {							\
-      throw ::ceph::buffer::malformed_input(__PRETTY_FUNCTION__);	\
-    }									\
-    if (pos < end) {							\
-      p += end - pos;							\
-    }									\
+			   char** start_pos,				\
+			   uint32_t* struct_len) {			\
+    ::ceph::denc_detail::finish(p, start_pos, struct_len,		\
+				__PRETTY_FUNCTION__);			\
   }
 
 // Helpers for versioning the encoding.  These correspond to the

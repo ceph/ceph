@@ -19,6 +19,7 @@
 
 #include <iostream> // for std::cout
 #include <numeric>
+#include <string_view>
 
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
@@ -34,6 +35,59 @@
 using namespace std;
 
 // test helpers
+
+template<typename T>
+std::string encode_to_string(const T& v) {
+  bufferlist bl;
+  encode(v, bl);
+  return bl.to_str();
+}
+
+template<typename T>
+void expect_wire_format(const T& v, const std::string& wire) {
+  ASSERT_EQ(wire, encode_to_string(v));
+
+  bufferlist bl;
+  bl.append(wire);
+  auto p = bl.cbegin();
+  T out;
+  decode(out, p);
+  ASSERT_EQ(v, out);
+  ASSERT_EQ(wire.size(), p.get_off());
+}
+
+static void append_le32(std::string& s, uint32_t v) {
+  for (unsigned i = 0; i < 4; ++i) {
+    s.push_back(static_cast<char>(v >> (i * 8)));
+  }
+}
+
+static void append_denc_header(std::string& s, uint8_t v,
+                               uint8_t compat, uint32_t len) {
+  s.push_back(static_cast<char>(v));
+  s.push_back(static_cast<char>(compat));
+  append_le32(s, len);
+}
+
+static void append_le64(std::string& s, uint64_t v) {
+  for (unsigned i = 0; i < 8; ++i) {
+    s.push_back(static_cast<char>(v >> (i * 8)));
+  }
+}
+
+static void append_string(std::string& s, std::string_view v) {
+  append_le32(s, v.size());
+  s.append(v);
+}
+
+static std::string sized_u64s(std::initializer_list<uint64_t> values) {
+  std::string s;
+  append_le32(s, values.size());
+  for (auto v : values) {
+    append_le64(s, v);
+  }
+  return s;
+}
 
 template<typename T>
 void test_encode_decode(T v) {
@@ -390,6 +444,17 @@ struct foo2_only2_t {
   }
 };
 WRITE_CLASS_DENC_BOUNDED(foo2_only2_t)
+
+struct denc_overread_t {
+  DENC(denc_overread_t, v, p) {
+    DENC_START(1, 1, p);
+    __u8 value;
+    ::denc(value, p);
+    ::denc(value, p);
+    DENC_FINISH(p);
+  }
+};
+WRITE_CLASS_DENC_BOUNDED(denc_overread_t)
 
 struct bar_t {
   int32_t a = 0;
@@ -799,5 +864,45 @@ TEST(denc, compat_disallows)
   foo_t v1;
   v1.a = 111; v1.b = 111;
   auto bpi = bl.front().begin();
-  ASSERT_ANY_THROW(denc(v1,bpi));
+  ASSERT_ANY_THROW(denc(v1, bpi));
+}
+
+TEST(denc, finish_skips_unread_fields)
+{
+  foo2_accept1_t v2;
+  v2.a = 5001;
+  v2.b = 6002;
+  v2.c = 7003;
+
+  size_t s = 0;
+  denc(v2, s);
+  bufferlist bl;
+  {
+    auto app = bl.get_contiguous_appender(s);
+    denc(v2, app);
+  }
+
+  foo_t v1;
+  auto bpi = bl.front().begin();
+  denc(v1, bpi);
+
+  ASSERT_EQ(v2.a, v1.a);
+  ASSERT_EQ(v2.b, v1.b);
+  ASSERT_EQ(bpi.get_pos(), bl.c_str() + bl.length());
+}
+
+TEST(denc, finish_rejects_overread)
+{
+  std::string wire;
+  append_denc_header(wire, 1, 1, 1);
+  wire.push_back(17);
+  wire.push_back(19);
+
+  bufferlist bl;
+  bl.append(wire);
+
+  denc_overread_t value;
+  auto bpi = bl.front().begin();
+
+  ASSERT_THROW(denc(value, bpi), buffer::malformed_input);
 }
