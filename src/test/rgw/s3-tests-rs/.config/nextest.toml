@@ -1,0 +1,125 @@
+# Nextest profiles for running test categories.
+# Usage: cargo nextest run -P <profile-name> --features fails_on_nsfs
+#
+# Parallelism model:
+#   S3 data-path tests use unique per-process bucket names and run in
+#   parallel by default.  IAM tests share a fixed entity namespace and
+#   must be serialized (test-group serial-iam).  Quota tests mutate a
+#   shared user and are also serialized (test-group serial-quota).
+#
+# To force serial execution: add --test-threads=1
+#
+# To skip per-test bucket cleanup (inspect disk/cache state after failure):
+#   S3TEST_NO_CLEANUP=1 cargo nextest run -E 'test(foo)' --test-threads=1
+
+# --- Test groups (serialization constraints) ---
+
+[test-groups.serial-iam]
+max-threads = 1
+
+[test-groups.serial-quota]
+max-threads = 1
+
+# --- Per-module profiles ---
+
+[profile.bucket-list]
+default-filter = 'test(bucket_list::)'
+
+[profile.object-ops]
+default-filter = 'test(object_ops::)'
+
+[profile.multipart]
+default-filter = 'test(multipart::)'
+
+[profile.versioning]
+default-filter = 'test(versioning::)'
+
+[profile.copy]
+default-filter = 'test(copy::)'
+
+[profile.acl]
+default-filter = 'test(acl::)'
+
+[profile.tagging]
+default-filter = 'test(tagging::)'
+
+[profile.conditional]
+default-filter = 'test(conditional::)'
+
+[profile.encryption]
+default-filter = 'test(encryption::)'
+
+[profile.bucket-policy]
+default-filter = 'test(bucket_policy::)'
+
+[profile.object-lock]
+default-filter = 'test(object_lock::)'
+
+[profile.cors]
+default-filter = 'test(cors::)'
+
+[profile.lifecycle]
+default-filter = 'test(lifecycle::)'
+
+[profile.post-object]
+default-filter = 'test(post_object::)'
+
+[profile.bucket-logging]
+default-filter = 'test(bucket_logging::)'
+
+[profile.headers]
+default-filter = 'test(headers::)'
+
+[profile.signing]
+default-filter = 'test(signing::)'
+
+[profile.stress]
+default-filter = 'test(stress::)'
+
+[profile.iam]
+default-filter = 'test(user_policy::) | test(role::) | test(oidc::) | test(sts::) | test(group::) | test(user::)'
+
+[[profile.iam.overrides]]
+filter = 'test(user_policy::) | test(role::) | test(oidc::) | test(sts::) | test(group::) | test(user::)'
+test-group = 'serial-iam'
+
+[profile.role]
+default-filter = 'test(role::)'
+
+[profile.oidc]
+default-filter = 'test(oidc::)'
+
+[profile.sts]
+default-filter = 'test(sts::)'
+
+# --- Composite profiles ---
+
+# Fast pre-commit gate: everything except lifecycle (slow), bucket_logging
+# (not implemented on posix/nsfs), and stress (ignored).
+#
+[profile.baseline]
+test-threads = 8
+default-filter = 'all() & !test(lifecycle::) & !test(bucket_logging::) & !test(stress::)'
+
+[[profile.baseline.overrides]]
+filter = 'test(user_policy::) | test(role::) | test(oidc::) | test(sts::) | test(group::) | test(user::)'
+test-group = 'serial-iam'
+
+[[profile.baseline.overrides]]
+filter = 'test(quota::)'
+test-group = 'serial-quota'
+
+[profile.basic]
+default-filter = 'test(bucket_list::) | test(object_ops::) | test(copy::) | test(conditional::) | test(cors::) | test(acl::)'
+
+# Full suite with parallelism and serialization constraints.
+[profile.all]
+default-filter = 'all()'
+
+[[profile.all.overrides]]
+filter = 'test(user_policy::) | test(role::) | test(oidc::) | test(sts::) | test(group::) | test(user::)'
+test-group = 'serial-iam'
+
+[[profile.all.overrides]]
+filter = 'test(quota::)'
+test-group = 'serial-quota'
