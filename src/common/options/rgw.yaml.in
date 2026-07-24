@@ -1694,10 +1694,13 @@ options:
   level: advanced
   desc: Number of shards for garbage collector data
   long_desc: The number of garbage collector data shards, is the number of RADOS objects
-    that RGW will use to store the garbage collection information on.
+    that RGW will use to store the garbage collection information on. This value is
+    read once at daemon startup.
   fmt_desc: The maximum number of objects that may be handled by
     garbage collection in one garbage collection processing cycle.
-    Please do not change this value after the first deployment.
+    This value can be increased after first deployment, please do
+    not decrease this value without ensuring all data shards are
+    completely empty.
   default: 32
   services:
   - rgw
@@ -1706,6 +1709,8 @@ options:
   - rgw_gc_processor_max_time
   - rgw_gc_processor_period
   - rgw_gc_max_concurrent_io
+  flags:
+  - startup
   with_legacy: true
 # wait time before object may be handled by gc, recommended lower limit is 30 mins
 - name: rgw_gc_obj_min_wait
