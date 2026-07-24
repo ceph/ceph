@@ -356,6 +356,29 @@ public:
 
   seastar::future<> broadcast_map_to_pgs(epoch_t epoch);
 
+  /**
+   * prime_merges
+   *
+   * Ensure local merge participants exist for merges in (first, last].
+   *
+   * The crimson analogue of classic OSD::consume_map() -> prime_merges():
+   * for every pool whose pg_num shrinks between consecutive maps in
+   * the range, derive the merge participants (target + sources) this OSD is
+   * in the acting set for and instantiate any that are not already live as
+   * empty placeholders, registered at (merge_epoch - 1) without advancing.
+   * The subsequent broadcast_map_to_pgs() advances them through the merge
+   * epoch and runs PG::merge_from().
+   *
+   * Participants are derived from the OSDMap (pg_num + CRUSH acting set), not
+   * from live PGs, so a target that CRUSH has just remapped onto this OSD
+   * (e.g. because pgp_num dropped alongside pg_num) is found even though it
+   * is not instantiated and has no live sibling here yet.  Without this,
+   * ShardServices::register_merge_source() can find no target PG.
+   *
+   * Must run before broadcast_map_to_pgs().
+   */
+  seastar::future<> prime_merges(epoch_t first, epoch_t last);
+
   template <typename F>
   auto with_pg(spg_t pgid, F &&f) {
     core_id_t core = get_pg_to_shard_mapping().get_pg_mapping(pgid);

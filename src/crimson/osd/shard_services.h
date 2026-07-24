@@ -680,6 +680,15 @@ public:
   }
 
   seastar::future<Ref<PG>> extract_pg(spg_t pgid);
+
+  // Instantiate an empty placeholder PG for a merge participant that is not
+  // currently live on this shard, registering it at (merge_epoch - 1) WITHOUT
+  // advancing it.  The caller (PGShardManager::prime_merges) runs this before
+  // broadcast_map_to_pgs(), which then advances the placeholder through the
+  // merge epoch and performs the actual merge_from().  No-op if the PG is
+  // already live or this OSD is not in its acting set.
+  seastar::future<> prime_merge_participant(
+    spg_t pgid, store_index_t store_index, epoch_t merge_epoch);
   // Hand the source PG off to the target PG's rendezvous, hopping shards
   // if needed. The consumer side (target PG) waits via
   // PG::collect_merge_sources(); cleanup happens when the target drops the

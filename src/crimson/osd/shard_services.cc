@@ -139,12 +139,88 @@ seastar::future<> ShardServices::register_merge_source(
     [target, source, birth_shard, foreign_pg = std::move(foreign_pg)]
     (ShardServices& target_svc) mutable {
       auto target_pg = target_svc.local_state.pg_map.get_pg(target);
-      // PGAdvanceMap on the target shard is expected to have instantiated
-      // the target PG by this point in the merge protocol.
-      ceph_assert(target_pg);
+      // PGShardManager::prime_merges() is expected to have instantiated the
+      // target PG (as an empty placeholder if needed) before the maps were
+      // broadcast.  It can still be absent if CRUSH moved the target off this
+      // OSD entirely between the source freezing and this handoff.  In that
+      // case do not crash: tell the monitor we are not ready so it backs off
+      // the pg_num decrement, and this source will retry under a later,
+      // consistent map.
+      if (!target_pg) {
+        LOG_PREFIX(ShardServices::register_merge_source);
+        WARN("target {} not present for source {}; backing off merge",
+             target, source);
+        return target_svc.set_not_ready_to_merge_source(source.pgid);
+      }
       target_pg->add_merge_source(
         source, birth_shard, std::move(foreign_pg));
+      return seastar::now();
     });
+}
+
+seastar::future<> ShardServices::prime_merge_participant(
+  spg_t pgid,
+  store_index_t store_index,
+  epoch_t merge_epoch)
+{
+  LOG_PREFIX(ShardServices::prime_merge_participant);
+
+  if (local_state.pg_map.get_pg(pgid)) {
+    co_return;  // already live, nothing to prime
+  }
+
+  const epoch_t create_epoch = merge_epoch - 1;
+  cached_map_t startmap = co_await get_map(create_epoch);
+
+  // Only prime participants this OSD genuinely owns, both at the creation
+  // epoch and in the current map.
+  if (!get_map()->is_up_acting_osd_shard(pgid, local_state.whoami) ||
+      !startmap->is_up_acting_osd_shard(pgid, local_state.whoami)) {
+    DEBUG("{} not in acting set, skip priming", pgid);
+    co_return;
+  }
+  // Could have been created concurrently while we awaited the map.
+  if (local_state.pg_map.get_pg(pgid)) {
+    co_return;
+  }
+
+  Ref<PG> pg = co_await make_pg(startmap, pgid, store_index, /*do_create=*/true);
+  const pg_pool_t *pp = startmap->get_pg_pool(pgid.pool());
+  ceph_assert(pp);
+
+  int up_primary, acting_primary;
+  std::vector<int> up, acting;
+  startmap->pg_to_up_acting_osds(
+    pgid.pgid, &up, &up_primary, &acting, &acting_primary);
+  int role = startmap->calc_pg_role(
+    pg_shard_t(local_state.whoami, pgid.shard), acting);
+
+  PeeringCtx rctx;
+  create_pg_collection(
+    rctx.transaction, pgid, pgid.get_split_bits(pp->get_pg_num()));
+  init_pg_ondisk(rctx.transaction, pgid, pp);
+
+  // Leave history zeroed; PG::merge_from() fills it in once the sources
+  // arrive (mirrors classic OSDShard::prime_merges()).
+  pg_history_t history;
+  co_await pg->init(
+    role, up, up_primary, acting, acting_primary,
+    history, PastIntervals(), rctx.transaction);
+
+  // Initialize peering state and commit the on-disk creation, but DO NOT
+  // advance past create_epoch.  The subsequent broadcast_map_to_pgs() will
+  // start a PGAdvanceMap for this PG (it is registered below) and carry it
+  // through the merge epoch, running merge_from() exactly as for an
+  // already-live target.
+  pg->handle_initialize(rctx);
+  pg->handle_activate_map(rctx);
+  co_await pg->complete_rctx(std::move(rctx));
+
+  // pg_loaded() (rather than pg_created()) because we are registering outside
+  // the pgs_creating bookkeeping; it also wakes any op already parked on this
+  // pgid.
+  local_state.pg_map.pg_loaded(pgid, pg);
+  INFO("primed merge participant {} at epoch {}", pgid, create_epoch);
 }
 
 bool ShardServices::is_seastore_objectstore()
