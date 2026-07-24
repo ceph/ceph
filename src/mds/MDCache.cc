@@ -8626,6 +8626,23 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 
       // can we conclude ENOENT?
       if (dnl->is_null()) {
+        /*
+        * For snapshot lookups, an in-memory null dentry in an incomplete dir
+        * frag is not a definitive proof to return ENOENT right away since
+        * cache eviction (trim_dentry()) may have removed the primary snap
+        * dentry that would have held the inode, and a subsequent call to
+        * add_null_dentry() places a null dentry whose range covers all
+        * historical snapids i.e leading to permanent negative shadowing the
+        * real snap dentry that may still exist on disk. Therefore, trigger a
+        * full directory fetch from OMAP to reload any missing snap dentries;
+        * the request will retry once the fetch completes.
+        */
+        if (curdir->is_auth() && !curdir->is_complete() && snapid < CEPH_NOSNAP) {
+          dout(10) << "traverse: null+readable dentry " << *dn  << " in "
+                      "incomplete dir for snap lookup, fetching" << dendl;
+          curdir->fetch(path[depth], snapid, cf.build());
+          return 1;
+        }
 	dout(10) << "traverse: null+readable dentry at " << *dn << dendl;
 	if (depth == path.depth() - 1) {
 	  if (want_dentry)
