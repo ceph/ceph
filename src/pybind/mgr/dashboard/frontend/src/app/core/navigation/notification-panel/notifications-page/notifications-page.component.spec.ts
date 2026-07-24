@@ -11,6 +11,7 @@ import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.s
 import { PrometheusNotificationService } from '~/app/shared/services/prometheus-notification.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { SharedModule } from '~/app/shared/shared.module';
 
 describe('NotificationsPageComponent', () => {
@@ -21,6 +22,7 @@ describe('NotificationsPageComponent', () => {
   let readMapSubject: BehaviorSubject<Record<string, boolean>>;
   let notificationService: any;
   let mockLocation: any;
+  let queryParamsSubject: BehaviorSubject<any>;
 
   const createMockNotificationService = () => {
     dataSourceSubject = new BehaviorSubject<CdNotification[]>([]);
@@ -33,7 +35,15 @@ describe('NotificationsPageComponent', () => {
         next: (value: CdNotification[]) => dataSourceSubject.next(value)
       },
       remove: jasmine.createSpy('remove'),
+      removeById: jasmine.createSpy('removeById').and.returnValue(true),
       removeAll: jasmine.createSpy('removeAll'),
+      markAllAsRead: jasmine.createSpy('markAllAsRead').and.callFake(() => {
+        const notifications = dataSourceSubject.getValue();
+        const updated = { ...readMapSubject.getValue() };
+        notifications.forEach((n) => (updated[n.id] = true));
+        readMapSubject.next(updated);
+        localStorage.setItem('cdNotificationsRead', JSON.stringify(updated));
+      }),
       markAsRead: jasmine.createSpy('markAsRead').and.callFake((id: string) => {
         const current = readMapSubject.getValue();
         if (!current[id]) {
@@ -41,7 +51,8 @@ describe('NotificationsPageComponent', () => {
           readMapSubject.next(updated);
           localStorage.setItem('cdNotificationsRead', JSON.stringify(updated));
         }
-      })
+      }),
+      getNotificationsSnapshot: () => dataSourceSubject.getValue()
     };
   };
 
@@ -109,6 +120,7 @@ describe('NotificationsPageComponent', () => {
     mockLocation = { back: jasmine.createSpy('back') };
     const mockNotificationService = createMockNotificationService();
     notificationService = mockNotificationService;
+    queryParamsSubject = new BehaviorSubject<any>({});
 
     localStorage.removeItem('cdNotificationsRead');
 
@@ -120,7 +132,14 @@ describe('NotificationsPageComponent', () => {
         { provide: PrometheusAlertService, useValue: mockPrometheusAlertService },
         { provide: PrometheusNotificationService, useValue: mockPrometheusNotificationService },
         { provide: AuthStorageService, useValue: mockAuthStorageService },
-        { provide: Location, useValue: mockLocation }
+        { provide: Location, useValue: mockLocation },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: { queryParams: {} },
+            queryParams: queryParamsSubject.asObservable()
+          }
+        }
       ],
       schemas: [CUSTOM_ELEMENTS_SCHEMA]
     }).compileComponents();
@@ -177,7 +196,7 @@ describe('NotificationsPageComponent', () => {
       } as any;
       component.removeNotification(component.notifications()[0], mockEvent);
       expect(mockEvent.stopPropagation).toHaveBeenCalled();
-      expect(notificationService.remove).toHaveBeenCalledWith(0);
+      expect(notificationService.removeById).toHaveBeenCalledWith('1');
     });
 
     it('should clear selection if removed notification was selected', () => {
@@ -238,6 +257,15 @@ describe('NotificationsPageComponent', () => {
       expect(component.readMap()['2']).toBe(true);
       expect(component.readMap()['1']).toBeFalsy();
     });
+
+    it('should mark all notifications as read', () => {
+      component.markAllAsRead();
+      fixture.detectChanges();
+      expect(notificationService.markAllAsRead).toHaveBeenCalled();
+      expect(component.readMap()['1']).toBe(true);
+      expect(component.readMap()['2']).toBe(true);
+      expect(component.readMap()['3']).toBe(true);
+    });
   });
 
   describe('displayTitle and displayPreview', () => {
@@ -287,6 +315,58 @@ describe('NotificationsPageComponent', () => {
       dataSourceSubject.next([emptyNotification]);
       fixture.detectChanges();
       expect(component.notifications()[0].displayPreview).toBe('');
+    });
+  });
+
+  describe('query param pre-selection', () => {
+    it('should pre-select notification from id query param', () => {
+      queryParamsSubject.next({ id: '2' });
+      fixture.detectChanges();
+
+      expect(component.selectedNotificationID()).toBe('2');
+      expect(notificationService.markAsRead).toHaveBeenCalledWith('2');
+    });
+
+    it('should not pre-select if id does not match any notification', () => {
+      queryParamsSubject.next({ id: 'nonexistent' });
+      fixture.detectChanges();
+
+      expect(component.selectedNotificationID()).toBeNull();
+    });
+
+    it('should not override manual selection on subsequent data emissions', () => {
+      queryParamsSubject.next({ id: '2' });
+      fixture.detectChanges();
+      expect(component.selectedNotificationID()).toBe('2');
+
+      component.onNotificationSelect(component.notifications()[0]);
+      expect(component.selectedNotificationID()).toBe('1');
+
+      dataSourceSubject.next(mockNotifications);
+      fixture.detectChanges();
+      expect(component.selectedNotificationID()).toBe('1');
+    });
+
+    it('should re-select when query params change while a notification is already selected', () => {
+      queryParamsSubject.next({ id: '1' });
+      fixture.detectChanges();
+      expect(component.selectedNotificationID()).toBe('1');
+
+      queryParamsSubject.next({ id: '2' });
+      fixture.detectChanges();
+      expect(component.selectedNotificationID()).toBe('2');
+      expect(notificationService.markAsRead).toHaveBeenCalledWith('2');
+    });
+
+    it('should pre-select when navigating from toast view more link', () => {
+      dataSourceSubject.next(mockNotifications);
+      fixture.detectChanges();
+
+      queryParamsSubject.next({ id: '3' });
+      fixture.detectChanges();
+
+      expect(component.selectedNotificationID()).toBe('3');
+      expect(notificationService.markAsRead).toHaveBeenCalledWith('3');
     });
   });
 

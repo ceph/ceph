@@ -19,16 +19,41 @@
     >
       Notifications
     </h4>
-    <a
-      cdsLink
-      class="notifications-page__header-action"
-      tabindex="0"
-      (click)="clearAll()"
-      (keydown.enter)="clearAll()"
-      i18n
+    <cds-overflow-menu
+      class="notifications-page__header-menu"
+      [flip]="true"
+      description=""
+      i18n-description
     >
-      Clear all
-    </a>
+      <li
+        class="cds--overflow-menu-options__option"
+        [class.cds--overflow-menu-options__option--disabled]="allRead() || hasNoNotifications()"
+      >
+        <button
+          class="cds--overflow-menu-options__btn"
+          type="button"
+          [disabled]="allRead() || hasNoNotifications()"
+          (click)="markAllAsRead()"
+          i18n
+        >
+          Mark all as read
+        </button>
+      </li>
+      <li
+        class="cds--overflow-menu-options__option"
+        [class.cds--overflow-menu-options__option--disabled]="hasNoNotifications()"
+      >
+        <button
+          class="cds--overflow-menu-options__btn"
+          type="button"
+          [disabled]="hasNoNotifications()"
+          (click)="clearAll()"
+          i18n
+        >
+          Clear all
+        </button>
+      </li>
+    </cds-overflow-menu>
   </header>
 
   <div class="notifications-page__body">
@@ -49,6 +74,7 @@
             [timestamp]="notification.timestamp"
             [message]="notification.displayPreview"
             [notificationId]="notification.id"
+            [occurrences]="notification.occurrences"
             [showChevron]="true"
             [showUnread]="!readMap()[notification.id]"
           >
@@ -67,6 +93,12 @@
           >
             No notifications available
           </p>
+          <p
+            class="cds-mt-3 cds--type-helper-text-01"
+            i18n
+          >
+            Notifications are stored locally and cleared on browser reset.
+          </p>
         </div>
       }
     </div>
@@ -84,6 +116,14 @@
           ></cd-notification-item>
         </div>
         <div class="notifications-page__detail-body cds-mt-5">
+          @if (selected.occurrences > 1) {
+            <p
+              class="notifications-page__occurrences cds--type-label-01"
+              i18n
+            >
+              Occurrences: {{ selected.occurrences }}
+            </p>
+          }
           <p class="notifications-page__detail-text cds--type-body-01">
             {{ selected.displayPreview }}
           </p>

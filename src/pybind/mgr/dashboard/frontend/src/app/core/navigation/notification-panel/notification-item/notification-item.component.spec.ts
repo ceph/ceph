@@ -9,7 +9,6 @@ import {
 } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SharedModule } from '~/app/shared/shared.module';
-import { CdNotification, CdNotificationConfig } from '~/app/shared/models/cd-notification';
 
 @Component({
   template: `
@@ -162,17 +161,13 @@ describe('NotificationItemComponent', () => {
     expect(appEl).toBeNull();
   });
 
-  it('should call notificationService.remove and emit deleted on delete', () => {
-    const config = new CdNotificationConfig(NotificationType.error, 'Test', 'msg');
-    const notification = new CdNotification(config);
-    notification.id = 'test-1';
-    spyOn(notificationService, 'getNotificationsSnapshot').and.returnValue([notification]);
-    spyOn(notificationService, 'remove');
+  it('should call notificationService.removeById and emit deleted on delete', () => {
+    spyOn(notificationService, 'removeById').and.returnValue(true);
 
     const deleteBtn = fixture.nativeElement.querySelector('.cd-notification-item__delete');
     deleteBtn.click();
 
-    expect(notificationService.remove).toHaveBeenCalledWith(0);
+    expect(notificationService.removeById).toHaveBeenCalledWith('test-1');
     expect(hostComponent.deletedId).toBe('test-1');
   });
 
@@ -209,13 +204,12 @@ describe('NotificationItemComponent', () => {
   });
 
   it('should not emit deleted when notification is not found', () => {
-    spyOn(notificationService, 'getNotificationsSnapshot').and.returnValue([]);
-    spyOn(notificationService, 'remove');
+    spyOn(notificationService, 'removeById').and.returnValue(false);
 
     const deleteBtn = fixture.nativeElement.querySelector('.cd-notification-item__delete');
     deleteBtn.click();
 
-    expect(notificationService.remove).not.toHaveBeenCalled();
+    expect(notificationService.removeById).toHaveBeenCalledWith('test-1');
     expect(hostComponent.deletedId).toBeNull();
   });
 });
