@@ -27,13 +27,23 @@ inline constexpr auto AUDIT_APP_NAME = "audit";
 using sqlite3_ptr = std::unique_ptr<sqlite3, decltype(&sqlite3_close)>;
 
 struct AuditEntry {
-  int64_t seq{0};
-  std::string cmd;
-  std::string cmd_args;
-  time_t init_time{0};
-  std::optional<time_t> comp_time;
-  std::optional<std::string> status;
-  std::optional<int32_t> retval;
+  int64_t     seq{0};
+  time_t      init_time{0};
+  std::string json_dump;
+};
+
+/**
+ * A single equality filter on a json_dump field.
+ *
+ * @p field is the JSON field name e.g. "status", "cmd", "event".
+ * @p value is the string value to match against.
+ *
+ * AuditDB internally prepends "$." to @p field and emits:
+ *   json_extract(json_dump, '$.<field>') = ?
+ */
+struct JsonFilter {
+  std::string field;  // e.g. "status", "cmd", "event"
+  std::string value;  // e.g. "ok", "data-scan"
 };
 
 struct AuditQuery {
@@ -41,16 +51,16 @@ struct AuditQuery {
   std::optional<int64_t> before_seq;
   std::optional<int64_t> after_seq;
 
-  // time-based filtering (seconds since epoch)
+  // time-based filtering
   std::optional<time_t> since;
   std::optional<time_t> until;
 
-  // status filtering
-  std::optional<std::string> status;
+  // json_dump field filters
+   std::vector<JsonFilter> json_filters;
 
-  // sorting
+  // sorting — only structural columns: "seq" or "init_time"
   std::string order_by = "init_time";
-  bool ascending{false};
+  bool        ascending{false};
 
   // pagination
   int64_t limit{100};
@@ -210,93 +220,73 @@ public:
       librados::Rados& rados,
       const char* db_path);
 
-      /**
-    * @brief Phase-one commit (daemon mode): record cmd/args/init_time keyed by
-    * a caller-supplied @p seq.
-    *
-    * Use this overload on instances constructed with `is_standalone == false`.
-    * The daemon provides @p seq from its
-    * own counter (e.g. `LogEntry::seq` for the log-audit subscription, or a
-    * local monotonic id for mgr-side commands).
-    *
-    * @param seq monotonic command id; must be > 0 and unique within the
-    * table. Uniqueness is enforced by the PRIMARY KEY constraint, not by
-    * this method.
-    * @param cmd command executed; must be non-empty after trimming.
-    * @param cmd_args command arguments (may be empty).
-    * @param init_time cmd initiation timestamp in seconds since epoch; must
-    * be > 0.
-    *
-    * @return void on success; on failure @ref AuditDBError with one of:
-    * - `not_initialised` — @ref init not called or failed.
-    * - `seq_not_allowed_standalone` — called on a standalone instance.
-    * - `invalid_seq` — @p seq <= 0.
-    * - `sqlite_step_failed` — INSERT failed; `detail` carries the SQLite
-    *   extended result code, e.g. `SQLITE_CONSTRAINT_PRIMARYKEY` for a
-    *   duplicate seq, `SQLITE_CONSTRAINT_CHECK` for an empty cmd or
-    *   non-positive init_time, or `SQLITE_BUSY` under contention.
-    * - `sqlite_bind_failed` — parameter binding failed; `detail` carries
-    *   the SQLite result code.
-    * - `row_count_mismatch` — INSERT returned DONE but no row was added
-    *   (should not occur in practice).
-    */
-   std::expected<void, AuditDBError> first_phase_commit(
+  /**
+     * @brief Insert a new audit record (daemon mode). The caller supplies
+     * @p seq from its own monotonic counter.
+     *
+     * Use this overload on instances constructed with `is_standalone == false`.
+     *
+     * @param seq monotonic record id; must be > 0 and unique within the table.
+     * @param init_time record timestamp in seconds since epoch; must be > 0.
+     * @param json_dump caller-constructed JSON payload; must be non-empty.
+     *
+     * @return void on success; on failure @ref AuditDBError with one of:
+     * - `not_initialised` — @ref init not called or failed.
+     * - `seq_not_allowed_standalone` — called on a standalone instance.
+     * - `invalid_seq` — @p seq <= 0.
+     * - `sqlite_step_failed` — INSERT failed; `detail` carries the SQLite
+     *   extended result code.
+     * - `sqlite_bind_failed` — parameter binding failed.
+     * - `row_count_mismatch` — INSERT returned DONE but no row was added.
+     */
+  std::expected<void, AuditDBError> commit(
       int64_t seq,
-      const std::string& cmd,
-      const std::string& cmd_args,
-      time_t init_time);
-
-   /**
-    * @brief Phase-one commit (standalone mode): record cmd/args/init_time
-    * with a SQLite-allocated seq, returned to the caller.
-    *
-    * Use this overload on instances constructed with `is_standalone == true`.
-    * Standalone tools (e.g. CephFS DR utilities) cannot rely on a coordinated
-    * seq source and must let SQLite assign one via the `seq INTEGER PRIMARY
-    * KEY` rowid alias. Concurrent invocations of the same tool against the
-    * same DB file are serialized by SQLite's file lock; each invocation
-    * receives a unique seq.
-    *
-    * @param cmd command executed; must be non-empty after trimming.
-    * @param cmd_args command arguments (may be empty).
-    * @param init_time cmd initiation timestamp in seconds since epoch; must
-    * be > 0.
-    *
-    * @return the seq assigned by SQLite on success (use this value when
-    * later calling @ref second_phase_commit). On failure @ref AuditDBError
-    * with one of:
-    * - `not_initialised` — @ref init not called or failed.
-    * - `seq_required` — called on a daemon instance (use the int64_t
-    *   overload instead).
-    * - `sqlite_step_failed` — INSERT failed; `detail` carries the SQLite
-    *   extended result code (e.g. `SQLITE_CONSTRAINT_CHECK`,
-    *   `SQLITE_BUSY`).
-    * - `sqlite_bind_failed` — parameter binding failed; `detail` carries
-    *   the SQLite result code.
-    * - `row_count_mismatch` — INSERT returned DONE but no row was added.
-    */
-   std::expected<int64_t, AuditDBError> first_phase_commit(
-      const std::string& cmd,
-      const std::string& cmd_args,
-      time_t init_time);
+      time_t init_time,
+      const std::string& json_dump);
 
   /**
-     * @brief commit - command completion time, the status and its returned
-     * value as part of phase two
+     * @brief Insert a new audit record (standalone mode). SQLite assigns
+     * the seq, which is returned to the caller.
      *
-     * @param seq log number to be updated with completion info
-     * @param comp_time cmd completion timestamp in seconds since epoch
-     * @param status status reported by the daemon
-     * @param retval command return value
+     * Use this overload on instances constructed with `is_standalone == true`.
      *
-     * @note this will run an UPDATE SQL statement
-     * @note See @ref first_phase_commit regarding `SQLITE_BUSY` / retries.
+     * @param init_time record timestamp in seconds since epoch; must be > 0.
+     * @param json_dump caller-constructed JSON payload; must be non-empty.
+     *
+     * @return the seq assigned by SQLite on success. On failure @ref
+     * AuditDBError with one of:
+     * - `not_initialised` — @ref init not called or failed.
+     * - `seq_required` — called on a daemon instance (use the seq overload).
+     * - `sqlite_step_failed` — INSERT failed; `detail` carries the SQLite
+     *   extended result code.
+     * - `sqlite_bind_failed` — parameter binding failed.
+     * - `row_count_mismatch` — INSERT returned DONE but no row was added.
      */
-  std::expected<void, AuditDBError> second_phase_commit(
+  std::expected<int64_t, AuditDBError> commit(
+      time_t init_time,
+      const std::string& json_dump);
+
+  /**
+     * @brief Replace the @p json_dump of an existing row identified by @p seq.
+     * Both daemon and standalone instances may call this.
+     *
+     * The caller constructs the complete new JSON payload and passes it in.
+     * AuditDB stores it verbatim without parsing or merging.
+     *
+     * @param seq row to update; must be > 0 and already exist in the table.
+     * @param json_dump new JSON payload; must be non-empty.
+     *
+     * @return void on success; on failure @ref AuditDBError with one of:
+     * - `not_initialised` — @ref init not called or failed.
+     * - `invalid_seq` — @p seq <= 0.
+     * - `sqlite_step_failed` — UPDATE failed; `detail` carries the SQLite
+     *   extended result code.
+     * - `sqlite_bind_failed` — parameter binding failed.
+     * - `row_count_mismatch` — no row with @p seq exists.
+     */
+  std::expected<void, AuditDBError> update(
       int64_t seq,
-      time_t comp_time,
-      const std::string& status,
-      int32_t retval);
+      const std::string& json_dump);
 
   /**
      * @brief query audit log entries matching the given filters
@@ -383,22 +373,21 @@ private:
      */
   void release_sqlite_handles();
 
-   /**
-     * @brief this is a helper for first_phase_commit
+  /**
+     * @brief shared INSERT implementation for both commit() overloads.
+     * Caller must hold the lock.
      *
-     * @param seq (optional) log number from mgr/mon/other daemon
-     * @param cmd command executed
-     * @param cmd_args command arguments
-     * @param init_time cmd initiation timestamp in seconds since epoch
+     * @param seq if set, bound as the explicit row id (daemon mode);
+     *            if nullopt, SQLite assigns the next rowid (standalone mode).
+     * @param init_time record timestamp in seconds since epoch.
+     * @param json_dump caller-constructed JSON payload.
      *
-     * @note this will run an INSERT SQL statement
-     * @note caller must hold the lock
+     * @return the seq of the inserted row on success.
      */
-  std::expected<int64_t, AuditDBError> do_first_phase_commit(
+  std::expected<int64_t, AuditDBError> do_commit(
       std::optional<int64_t> seq,
-      const std::string& cmd,
-      const std::string& cmd_args,
-      time_t init_time);
+      time_t init_time,
+      const std::string& json_dump);
 
   /**
      * @brief open a db connection.

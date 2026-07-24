@@ -42,8 +42,7 @@ flag_to_op(int flags)
 bool
 is_valid_order_column(const std::string& col)
 {
-  return col == "seq" || col == "init_time" || col == "comp_time" ||
-         col == "status" || col == "retval";
+  return col == "seq" || col == "init_time";
 }
 
 // `table_name` is concatenated as-is into every DDL/DML statement
@@ -126,18 +125,9 @@ create_table(CephContext* cct, sqlite3*& db_handle, const std::string& table)
     table_sql =
         "CREATE TABLE IF NOT EXISTS " + table +
         " ("
-        // first-phase commit
         "seq INTEGER PRIMARY KEY, "
-        "cmd TEXT NOT NULL CHECK (length(trim(cmd)) > 0), "
-        "cmd_args TEXT, "
         "init_time INTEGER NOT NULL CHECK (init_time > 0), "
-        // second-phase commit therefore nullable until completion
-        "comp_time INTEGER CHECK (comp_time IS NULL OR comp_time >= "
-        "init_time), "
-        "status TEXT CHECK (status IS NULL OR length(trim(status)) > 0), "
-        "retval INTEGER, "
-        "CHECK ((comp_time IS NULL AND status IS NULL AND retval IS NULL) OR "
-        "(comp_time IS NOT NULL AND status IS NOT NULL AND retval IS NOT NULL))"
+        "json_dump TEXT NOT NULL"
         ");";
   }
   int rc =
@@ -154,11 +144,7 @@ create_table(CephContext* cct, sqlite3*& db_handle, const std::string& table)
   if (table != "schema_version") {
     const std::string indexes =
         "CREATE INDEX IF NOT EXISTS idx_audit_init_time ON " + table +
-        "(init_time);" + "CREATE INDEX IF NOT EXISTS idx_audit_comp_time ON " +
-        table + "(comp_time);" +
-        "CREATE INDEX IF NOT EXISTS idx_audit_status ON " + table +
-        "(status);" + "CREATE INDEX IF NOT EXISTS idx_audit_retval ON " +
-        table + "(retval);";
+        "(init_time);";
     err_msg = nullptr;
     rc = sqlite3_exec(db_handle, indexes.c_str(), nullptr, nullptr, &err_msg);
     if (rc != SQLITE_OK) {
@@ -209,16 +195,16 @@ prepare_sqlite3_stmt(
   std::string sql;
   if (phase == PreparePhase::Insert) {
     sql = "INSERT INTO " + table +
-          " (seq, cmd, cmd_args, init_time) "
-          "VALUES (?, ?, ?, ?);";
+          " (seq, init_time, json_dump) "
+          "VALUES (?, ?, ?);";
   } else if (phase == PreparePhase::InsertAutoSeq) {
-    sql = "INSERT INTO " + table + " (cmd, cmd_args, init_time)"
-    " VALUES (?, ?, ?)";
+    sql = "INSERT INTO " + table +
+          " (init_time, json_dump) "
+          "VALUES (?, ?);";
   } else {
     sql = "UPDATE " + table +
-          " SET "
-          "comp_time = ?, status = ?, retval = ? "
-          "WHERE seq = ? AND comp_time IS NULL;";
+          " SET json_dump = ? "
+          "WHERE seq = ?;";
   }
   int rc = sqlite3_prepare_v2(db_handle, sql.c_str(), -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
@@ -267,12 +253,13 @@ build_where(
     int_binds.push_back({bind_idx++, static_cast<int64_t>(*q.since)});
   }
   if (q.until) {
-    add_condition("init_time <= ?");
+    add_condition("init_time < ?");
     int_binds.push_back({bind_idx++, static_cast<int64_t>(*q.until)});
   }
-  if (q.status) {
-    add_condition("status = ?");
-    text_binds.push_back({bind_idx++, *q.status});
+  for (const auto& f : q.json_filters) {
+    add_condition("CAST(json_extract(json_dump, ?) AS TEXT) = ?");
+    text_binds.push_back({bind_idx++, "$." + f.field});
+    text_binds.push_back({bind_idx++, f.value});
   }
 
   return where;
@@ -583,9 +570,10 @@ AuditDB::delete_db_file(
   return {};
 }
 
-std::expected<int64_t, AuditDBError> 
-AuditDB::do_first_phase_commit(std::optional<int64_t> seq,
-  const std::string& cmd, const std::string& cmd_args, time_t init_time)
+std::expected<int64_t, AuditDBError>
+AuditDB::do_commit(std::optional<int64_t> seq,
+                   time_t init_time,
+                   const std::string& json_dump)
 {
   if (!initialised) {
     return std::unexpected(AuditDBError{AuditDBErr::not_initialised, 0});
@@ -599,21 +587,20 @@ AuditDB::do_first_phase_commit(std::optional<int64_t> seq,
 
   int idx = 1;
   int rc = 0;
-  int64_t result_seq = 1;
+  int64_t result_seq = 0;
+
   if (seq.has_value()) {
     rc = sqlite3_bind_int64(insert_stmt, idx++, *seq);
     if (rc != SQLITE_OK) goto bind_fail;
   }
-  rc = sqlite3_bind_text(insert_stmt, idx++, cmd.c_str(), -1, SQLITE_TRANSIENT);
+  rc = sqlite3_bind_int64(insert_stmt, idx++, static_cast<int64_t>(init_time));
   if (rc != SQLITE_OK) goto bind_fail;
-  rc = sqlite3_bind_text(insert_stmt, idx++, cmd_args.c_str(), -1, SQLITE_TRANSIENT);
-  if (rc != SQLITE_OK) goto bind_fail;
-  rc = sqlite3_bind_int64(insert_stmt, idx++, init_time);
+  rc = sqlite3_bind_text(insert_stmt, idx++, json_dump.c_str(), -1, SQLITE_TRANSIENT);
   if (rc != SQLITE_OK) goto bind_fail;
 
   rc = sqlite3_step(insert_stmt);
   if (rc != SQLITE_DONE) {
-    aderr(cct) << "first_phase_commit insert failed: rc=" << rc
+    aderr(cct) << "commit insert failed: rc=" << rc
                << " err=" << sqlite3_errmsg(db_handle) << dendl;
     return std::unexpected(AuditDBError{AuditDBErr::sqlite_step_failed, rc});
   }
@@ -628,64 +615,49 @@ AuditDB::do_first_phase_commit(std::optional<int64_t> seq,
   }
 
   result_seq = seq.value_or(sqlite3_last_insert_rowid(db_handle));
-  adout(cct, 20) << " seq=" << result_seq << dendl;
+  adout(cct, 20) << "seq=" << result_seq << dendl;
   return result_seq;
 
 bind_fail:
-  aderr(cct) << "first_phase_commit bind failed: rc=" << rc
+  aderr(cct) << "commit bind failed: rc=" << rc
              << " err=" << sqlite3_errmsg(db_handle) << dendl;
   return std::unexpected(AuditDBError{AuditDBErr::sqlite_bind_failed, rc});
 }
 
-/**
- * usage:
- * if (auto r = db.first_phase_commit(seq, cmd, cmd_args, t); !r) {
- * const auto& e = r.error();
- * // e.code, e.detail
- * return;
- * }
- */
 std::expected<void, AuditDBError>
-AuditDB::first_phase_commit(int64_t seq, const std::string& cmd,
-                            const std::string& cmd_args, time_t init_time)
+AuditDB::commit(int64_t seq, time_t init_time, const std::string& json_dump)
 {
   std::lock_guard<ceph::mutex> l(lock);
 
   if (is_standalone) {
     return std::unexpected(
-      AuditDBError{AuditDBErr::seq_not_allowed_standalone, -EINVAL});
+        AuditDBError{AuditDBErr::seq_not_allowed_standalone, -EINVAL});
   }
-  if (auto r = do_first_phase_commit(seq, cmd, cmd_args, init_time); !r) {
+  if (auto r = do_commit(seq, init_time, json_dump); !r) {
     return std::unexpected(r.error());
   }
   return {};
 }
 
 std::expected<int64_t, AuditDBError>
-AuditDB::first_phase_commit(const std::string& cmd,
-                            const std::string& cmd_args, time_t init_time)
+AuditDB::commit(time_t init_time, const std::string& json_dump)
 {
   std::lock_guard<ceph::mutex> l(lock);
 
   if (!is_standalone) {
     return std::unexpected(AuditDBError{AuditDBErr::seq_required, -EINVAL});
   }
-  return do_first_phase_commit(std::nullopt, cmd, cmd_args, init_time);
+  return do_commit(std::nullopt, init_time, json_dump);
 }
 
 std::expected<void, AuditDBError>
-AuditDB::second_phase_commit(
-    int64_t seq,
-    time_t comp_time,
-    const std::string& status,
-    int32_t retval)
+AuditDB::update(int64_t seq, const std::string& json_dump)
 {
   std::lock_guard<ceph::mutex> l(lock);
 
   if (!initialised) {
     return std::unexpected(AuditDBError{AuditDBErr::not_initialised, 0});
   }
-
   if (seq <= 0) {
     return std::unexpected(AuditDBError{AuditDBErr::invalid_seq, 0});
   }
@@ -693,29 +665,20 @@ AuditDB::second_phase_commit(
   sqlite3_reset(update_stmt);
   sqlite3_clear_bindings(update_stmt);
 
-  int rc = sqlite3_bind_int64(update_stmt, 1, comp_time);
-  if (rc != SQLITE_OK)
-    goto bind_fail;
-  rc = sqlite3_bind_text(update_stmt, 2, status.c_str(), -1, SQLITE_TRANSIENT);
-  if (rc != SQLITE_OK)
-    goto bind_fail;
-  rc = sqlite3_bind_int(update_stmt, 3, retval);
-  if (rc != SQLITE_OK)
-    goto bind_fail;
-  rc = sqlite3_bind_int64(update_stmt, 4, seq);
-  if (rc != SQLITE_OK)
-    goto bind_fail;
+  int rc = sqlite3_bind_text(update_stmt, 1, json_dump.c_str(), -1, SQLITE_TRANSIENT);
+  if (rc != SQLITE_OK) goto bind_fail;
+  rc = sqlite3_bind_int64(update_stmt, 2, seq);
+  if (rc != SQLITE_OK) goto bind_fail;
 
   rc = sqlite3_step(update_stmt);
   if (rc != SQLITE_DONE) {
-    aderr(cct) << "second_phase_commit update failed: rc=" << rc
+    aderr(cct) << "update failed: rc=" << rc
                << " err=" << sqlite3_errmsg(db_handle) << dendl;
     return std::unexpected(AuditDBError{AuditDBErr::sqlite_step_failed, rc});
   }
 
   if (sqlite3_changes(db_handle) != 1) {
-    aderr(cct) << "audit log seq: " << seq << " didn't update" << dendl;
-    // this could also mean the PK didn't exist hence the update never happened
+    aderr(cct) << "update: seq=" << seq << " not found" << dendl;
     return std::unexpected(AuditDBError{AuditDBErr::row_count_mismatch, 0});
   }
 
@@ -723,7 +686,7 @@ AuditDB::second_phase_commit(
   return {};
 
 bind_fail:
-  aderr(cct) << "second_phase_commit bind failed: rc=" << rc
+  aderr(cct) << "update bind failed: rc=" << rc
              << " err=" << sqlite3_errmsg(db_handle) << dendl;
   return std::unexpected(AuditDBError{AuditDBErr::sqlite_bind_failed, rc});
 }
@@ -748,7 +711,7 @@ AuditDB::query(const AuditQuery& q)
   std::string where = build_where(q, int_binds, text_binds);
 
   std::string sql =
-      "SELECT seq, cmd, cmd_args, init_time, comp_time, status, retval FROM " +
+      "SELECT seq, init_time, json_dump FROM " +
       table_name + where + " ORDER BY " + order_col + " " + direction +
       " LIMIT ?;";
 
@@ -780,35 +743,11 @@ AuditDB::query(const AuditQuery& q)
 
   while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
     AuditEntry entry;
-    
-    entry.seq = sqlite3_column_int64(stmt, 0);
-    
-    if (sqlite3_column_type(stmt, 1) != SQLITE_NULL) {
-      const char* cmd =
-          reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-      entry.cmd = cmd ? cmd : "";
+    entry.seq       = sqlite3_column_int64(stmt, 0);
+    entry.init_time = static_cast<time_t>(sqlite3_column_int64(stmt, 1));
+    if (const auto* p = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2))) {
+      entry.json_dump = p;
     }
-    
-    if (sqlite3_column_type(stmt, 2) != SQLITE_NULL) {
-      const char* cmd_args =
-          reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
-      entry.cmd_args = cmd_args ? cmd_args : "";
-    }
-    
-    entry.init_time = static_cast<time_t>(sqlite3_column_int64(stmt, 3));
-
-    if (sqlite3_column_type(stmt, 4) != SQLITE_NULL) {
-      entry.comp_time = static_cast<time_t>(sqlite3_column_int64(stmt, 4));
-    }
-    
-    if (sqlite3_column_type(stmt, 5) != SQLITE_NULL) {
-      entry.status = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
-    }
-    
-    if (sqlite3_column_type(stmt, 6) != SQLITE_NULL) {
-      entry.retval = sqlite3_column_int(stmt, 6);
-    }
-
     results.push_back(std::move(entry));
   }
 
