@@ -16,6 +16,63 @@ using ceph::bufferlist;
 using ceph::Formatter;
 using ceph::common::cmd_getval;
 
+//To help in short term tracking for cache stats
+static void take_cache_snapshot(BlueStore& store) {
+  std::lock_guard l(store.cache_stats_lock);
+  
+  BlueStore::CacheStatsSnapshot snap;
+  snap.timestamp = ceph::mono_clock::now();
+  snap.onode_hits = store.logger->get(l_bluestore_onode_cache_hit_count);
+  snap.onode_misses = store.logger->get(l_bluestore_onode_cache_time_latency_time + 1);
+  snap.onode_miss_latency_sum = store.logger->get(l_bluestore_onode_cache_time_latency_time);
+  snap.onode_shard_hits = store.logger->get(l_bluestore_onode_shard_hits);
+  snap.onode_shard_misses = store.logger->get(l_bluestore_onode_shard_misses);
+  snap.onode_shard_miss_latency_sum = store.logger->get(l_bluestore_onode_shard_miss_lat);
+  snap.buffer_read_reqs = store.logger->get(l_bluestore_buffer_read_reqs);
+  snap.buffer_miss_count = store.logger->get(l_bluestore_buffer_miss_lat + 1);
+  snap.buffer_miss_latency_sum = store.logger->get(l_bluestore_buffer_miss_lat);
+  
+  store.cache_stats_snapshots.push_back(snap);
+  
+  //Remove old ones
+  while (store.cache_stats_snapshots.size() > BlueStore::MAX_CACHE_SNAPSHOTS) {
+    store.cache_stats_snapshots.pop_front();
+  }
+}
+
+static bool get_snapshot_windows(BlueStore& store,
+                                 BlueStore::CacheStatsSnapshot& current,
+                                 BlueStore::CacheStatsSnapshot& most_recent,
+                                 BlueStore::CacheStatsSnapshot& oldest) {
+  std::lock_guard l(store.cache_stats_lock);
+  
+  if (store.cache_stats_snapshots.empty()) {
+    return false;
+  }
+  
+  // Get current values 
+  current.timestamp = ceph::mono_clock::now();
+  current.onode_hits = store.logger->get(l_bluestore_onode_cache_hit_count);
+  current.onode_misses = store.logger->get(l_bluestore_onode_cache_time_latency_time + 1);
+  current.onode_miss_latency_sum = store.logger->get(l_bluestore_onode_cache_time_latency_time);
+  current.onode_shard_hits = store.logger->get(l_bluestore_onode_shard_hits);
+  current.onode_shard_misses = store.logger->get(l_bluestore_onode_shard_misses);
+  current.onode_shard_miss_latency_sum = store.logger->get(l_bluestore_onode_shard_miss_lat);
+  current.buffer_read_reqs = store.logger->get(l_bluestore_buffer_read_reqs);
+  current.buffer_miss_count = store.logger->get(l_bluestore_buffer_miss_lat + 1);
+  current.buffer_miss_latency_sum = store.logger->get(l_bluestore_buffer_miss_lat);
+  
+  if(store.cache_stats_snapshots.size() >= 2) {
+    most_recent = store.cache_stats_snapshots[store.cache_stats_snapshots.size() - 2];
+  } else {
+  most_recent = store.cache_stats_snapshots.back();
+  }
+  oldest = store.cache_stats_snapshots.front();
+  
+  return true;
+}
+
+
 BlueStore::SocketHook::SocketHook(BlueStore& store)
   : store(store)
 {
@@ -72,6 +129,11 @@ BlueStore::SocketHook::SocketHook(BlueStore& store)
       "name=collection,type=CephString,req=false",
       this,
       "clear static fragmentation score, per collection");
+    ceph_assert(r == 0);
+    r = admin_socket->register_command(
+      "bluestore cache stats",
+      this,
+      "print cache performance stats");
     ceph_assert(r == 0);
     r = admin_socket->register_command(
       "bluestore show sharding ",
@@ -273,6 +335,278 @@ int BlueStore::SocketHook::call(
       }
     }
     f->close_section();
+    return 0;
+  } else if (command == "bluestore cache stats") {
+    //Store stats at this time for short term tracking
+    take_cache_snapshot(store);
+    
+    f->open_object_section("cache_stats");
+    
+    f->open_object_section("since_startup");
+    
+    f->open_object_section("onode_cache");
+    
+    uint64_t onode_hits = store.logger->get(l_bluestore_onode_cache_hit_count);
+    f->dump_unsigned("hits", onode_hits);
+    
+   
+    f->open_object_section("onode_cache_miss_latency");
+    auto onode_miss_tavg = store.logger->get_tavg_ns(l_bluestore_onode_cache_time_latency_time);
+    uint64_t onode_miss_sum_ns = onode_miss_tavg.first;
+    uint64_t onode_miss_count = onode_miss_tavg.second;
+    f->dump_unsigned("avgcount", onode_miss_count);
+    f->dump_format_unquoted("sum", "%" PRId64 ".%09" PRId64,
+                            onode_miss_sum_ns / 1000000000ull,
+                            onode_miss_sum_ns % 1000000000ull);
+    if (onode_miss_count) {
+      uint64_t avg_ns = onode_miss_sum_ns / onode_miss_count;
+      f->dump_format_unquoted("avgtime", "%" PRId64 ".%09" PRId64,
+                              avg_ns / 1000000000ull,
+                              avg_ns % 1000000000ull);
+    } else {
+      f->dump_format_unquoted("avgtime", "%" PRId64 ".%09" PRId64, 0, 0);
+    }
+    f->close_section();
+    
+    
+    f->open_object_section("onode_shard_miss_latency");
+    auto shard_miss_tavg = store.logger->get_tavg_ns(l_bluestore_onode_shard_miss_lat);
+    uint64_t shard_miss_sum_ns = shard_miss_tavg.first;
+    uint64_t shard_miss_count = shard_miss_tavg.second;
+    f->dump_unsigned("avgcount", shard_miss_count);
+    f->dump_format_unquoted("sum", "%" PRId64 ".%09" PRId64,
+                            shard_miss_sum_ns / 1000000000ull,
+                            shard_miss_sum_ns % 1000000000ull);
+    if (shard_miss_count) {
+      uint64_t avg_ns = shard_miss_sum_ns / shard_miss_count;
+      f->dump_format_unquoted("avgtime", "%" PRId64 ".%09" PRId64,
+                              avg_ns / 1000000000ull,
+                              avg_ns % 1000000000ull);
+    } else {
+      f->dump_format_unquoted("avgtime", "%" PRId64 ".%09" PRId64, 0, 0);
+    }
+    f->close_section();
+    
+    uint64_t total_accesses = onode_hits + onode_miss_count;
+    f->dump_unsigned("total_accesses", total_accesses);
+    if (total_accesses > 0) {
+      double hit_ratio = static_cast<double>(onode_hits) / static_cast<double>(total_accesses);
+      f->dump_float("hit_ratio", hit_ratio);
+    } else {
+      f->dump_float("hit_ratio", 0.0);
+    }
+    
+    f->close_section();
+    
+    f->open_object_section("onode_shard");
+    uint64_t shard_hits = store.logger->get(l_bluestore_onode_shard_hits);
+    uint64_t shard_misses = store.logger->get(l_bluestore_onode_shard_misses);
+    f->dump_unsigned("hits", shard_hits);
+    f->dump_unsigned("misses", shard_misses);
+    uint64_t shard_total = shard_hits + shard_misses;
+    if (shard_total > 0) {
+      f->dump_float("hit_ratio", (double)shard_hits / (double)shard_total);
+    } else {
+      f->dump_float("hit_ratio", 0.0);
+    }
+    
+    auto shard_miss_lat_tavg = store.logger->get_tavg_ns(l_bluestore_onode_shard_miss_lat);
+    uint64_t shard_miss_lat_sum_ns = shard_miss_lat_tavg.first;
+    uint64_t shard_miss_lat_count = shard_miss_lat_tavg.second;
+    if (shard_miss_lat_count > 0) {
+      uint64_t avg_ns = shard_miss_lat_sum_ns / shard_miss_lat_count;
+      f->dump_format_unquoted("avg_miss_latency", "%" PRId64 ".%09" PRId64,
+                              avg_ns / 1000000000ull,
+                              avg_ns % 1000000000ull);
+    }
+    f->close_section();
+    
+    f->open_object_section("object_data_cache");
+    
+    uint64_t read_reqs = store.logger->get(l_bluestore_buffer_read_reqs);
+    f->dump_unsigned("read_requests", read_reqs);
+    
+    f->open_object_section("buffer_miss_latency");
+    auto buffer_miss_tavg = store.logger->get_tavg_ns(l_bluestore_buffer_miss_lat);
+    uint64_t buffer_miss_sum_ns = buffer_miss_tavg.first;
+    uint64_t buffer_miss_count = buffer_miss_tavg.second;
+    f->dump_unsigned("avgcount", buffer_miss_count);
+    f->dump_format_unquoted("sum", "%" PRId64 ".%09" PRId64,
+                            buffer_miss_sum_ns / 1000000000ull,
+                            buffer_miss_sum_ns % 1000000000ull);
+    if (buffer_miss_count) {
+      uint64_t avg_ns = buffer_miss_sum_ns / buffer_miss_count;
+      f->dump_format_unquoted("avgtime", "%" PRId64 ".%09" PRId64,
+                              avg_ns / 1000000000ull,
+                              avg_ns % 1000000000ull);
+    } else {
+      f->dump_format_unquoted("avgtime", "%" PRId64 ".%09" PRId64, 0, 0);
+    }
+    f->close_section();
+    
+    uint64_t buffer_hits = (read_reqs > buffer_miss_count) ? (read_reqs - buffer_miss_count) : 0;
+    f->dump_unsigned("hits", buffer_hits);
+    f->dump_unsigned("misses", buffer_miss_count);
+    
+    if (read_reqs > 0) {
+      double buffer_hit_ratio = static_cast<double>(buffer_hits) / static_cast<double>(read_reqs);
+      f->dump_float("hit_ratio", buffer_hit_ratio);
+    } else {
+      f->dump_float("hit_ratio", 0.0);
+    }
+    
+    f->close_section();
+    
+    f->close_section();// since_startup
+    
+    // Short-term stat
+    BlueStore::CacheStatsSnapshot current, most_recent, oldest;
+    if (get_snapshot_windows(store, current, most_recent, oldest)) {
+      
+      auto recent_duration = std::chrono::duration<double>(current.timestamp - most_recent.timestamp).count();
+      if (recent_duration > 0) {
+        f->open_object_section("since_most_recent_snapshot");
+        f->dump_float("window_seconds", recent_duration);
+        
+        f->open_object_section("onode_cache");
+        uint64_t delta_onode_hits = current.onode_hits - most_recent.onode_hits;
+        uint64_t delta_onode_misses = current.onode_misses - most_recent.onode_misses;
+        uint64_t delta_onode_lat = current.onode_miss_latency_sum - most_recent.onode_miss_latency_sum;
+        f->dump_unsigned("hits", delta_onode_hits);
+        f->dump_unsigned("misses", delta_onode_misses);
+        uint64_t delta_onode_total = delta_onode_hits + delta_onode_misses;
+        if (delta_onode_total > 0) {
+          f->dump_float("hit_ratio", (double)delta_onode_hits / (double)delta_onode_total);
+        } else {
+          f->dump_float("hit_ratio", 0.0);
+        }
+        if (delta_onode_misses > 0) {
+          f->dump_float("avg_miss_latency_us", (double)delta_onode_lat / (double)delta_onode_misses / 1000.0);
+        }
+        f->close_section();
+        
+        f->open_object_section("onode_shard");
+        uint64_t delta_shard_hits = current.onode_shard_hits - most_recent.onode_shard_hits;
+        uint64_t delta_shard_misses = current.onode_shard_misses - most_recent.onode_shard_misses;
+        uint64_t delta_shard_lat = current.onode_shard_miss_latency_sum - most_recent.onode_shard_miss_latency_sum;
+        f->dump_unsigned("hits", delta_shard_hits);
+        f->dump_unsigned("misses", delta_shard_misses);
+        uint64_t delta_shard_total = delta_shard_hits + delta_shard_misses;
+        if (delta_shard_total > 0) {
+          f->dump_float("hit_ratio", (double)delta_shard_hits / (double)delta_shard_total);
+        } else {
+          f->dump_float("hit_ratio", 0.0);
+        }
+        if (delta_shard_misses > 0) {
+          f->dump_float("avg_miss_latency_us", (double)delta_shard_lat / (double)delta_shard_misses / 1000.0);
+        }
+        f->close_section();
+        
+        f->open_object_section("object_data_cache");
+        uint64_t delta_buffer_reqs = current.buffer_read_reqs - most_recent.buffer_read_reqs;
+        uint64_t delta_buffer_misses = current.buffer_miss_count - most_recent.buffer_miss_count;
+        uint64_t delta_buffer_lat = current.buffer_miss_latency_sum - most_recent.buffer_miss_latency_sum;
+        uint64_t delta_buffer_hits = (delta_buffer_reqs > delta_buffer_misses) ? (delta_buffer_reqs - delta_buffer_misses) : 0;
+        f->dump_unsigned("read_requests", delta_buffer_reqs);
+        f->dump_unsigned("hits", delta_buffer_hits);
+        f->dump_unsigned("misses", delta_buffer_misses);
+        if (delta_buffer_reqs > 0) {
+          f->dump_float("hit_ratio", (double)delta_buffer_hits / (double)delta_buffer_reqs);
+        } else {
+          f->dump_float("hit_ratio", 0.0);
+        }
+        if (delta_buffer_misses > 0) {
+          f->dump_float("avg_miss_latency_us", (double)delta_buffer_lat / (double)delta_buffer_misses / 1000.0);
+        }
+        f->close_section();
+        
+        f->close_section();
+      }
+      
+      auto oldest_duration = std::chrono::duration<double>(current.timestamp - oldest.timestamp).count();
+      
+      if (oldest_duration > 0) {
+        f->open_object_section("since_oldest_snapshot");
+        f->dump_float("window_seconds", oldest_duration);
+        
+        f->open_object_section("onode_cache");
+        uint64_t delta_onode_hits = current.onode_hits - oldest.onode_hits;
+        uint64_t delta_onode_misses = current.onode_misses - oldest.onode_misses;
+        uint64_t delta_onode_lat = current.onode_miss_latency_sum - oldest.onode_miss_latency_sum;
+        uint64_t delta_onode_total = delta_onode_hits + delta_onode_misses;
+        
+        f->dump_unsigned("hits", delta_onode_hits);
+        f->dump_unsigned("misses", delta_onode_misses);
+        f->dump_unsigned("total_accesses", delta_onode_total);
+        if (delta_onode_total > 0) {
+          f->dump_float("hit_ratio", (double)delta_onode_hits / (double)delta_onode_total);
+          f->dump_float("accesses_per_second", (double)delta_onode_total / oldest_duration);
+        } else {
+          f->dump_float("hit_ratio", 0.0);
+          f->dump_float("accesses_per_second", 0.0);
+        }
+        if (delta_onode_misses > 0) {
+          f->dump_float("avg_miss_latency_us", (double)delta_onode_lat / (double)delta_onode_misses / 1000.0);
+        }
+        f->close_section();
+        
+        f->open_object_section("onode_shard");
+        uint64_t delta_shard_hits = current.onode_shard_hits - oldest.onode_shard_hits;
+        uint64_t delta_shard_misses = current.onode_shard_misses - oldest.onode_shard_misses;
+        uint64_t delta_shard_lat = current.onode_shard_miss_latency_sum - oldest.onode_shard_miss_latency_sum;
+        f->dump_unsigned("hits", delta_shard_hits);
+        f->dump_unsigned("misses", delta_shard_misses);
+        uint64_t delta_shard_total = delta_shard_hits + delta_shard_misses;
+        if (delta_shard_total > 0) {
+          f->dump_float("hit_ratio", (double)delta_shard_hits / (double)delta_shard_total);
+        } else {
+          f->dump_float("hit_ratio", 0.0);
+        }
+        if (delta_shard_misses > 0) {
+          f->dump_float("avg_miss_latency_us", (double)delta_shard_lat / (double)delta_shard_misses / 1000.0);
+        }
+        f->close_section();
+        
+        f->open_object_section("object_data_cache");
+        uint64_t delta_buffer_reqs = current.buffer_read_reqs - oldest.buffer_read_reqs;
+        uint64_t delta_buffer_misses = current.buffer_miss_count - oldest.buffer_miss_count;
+        uint64_t delta_buffer_lat = current.buffer_miss_latency_sum - oldest.buffer_miss_latency_sum;
+        uint64_t delta_buffer_hits = (delta_buffer_reqs > delta_buffer_misses) ? (delta_buffer_reqs - delta_buffer_misses) : 0;
+        
+        f->dump_unsigned("read_requests", delta_buffer_reqs);
+        f->dump_unsigned("hits", delta_buffer_hits);
+        f->dump_unsigned("misses", delta_buffer_misses);
+        if (delta_buffer_reqs > 0) {
+          f->dump_float("hit_ratio", (double)delta_buffer_hits / (double)delta_buffer_reqs);
+          f->dump_float("requests_per_second", (double)delta_buffer_reqs / oldest_duration);
+        } else {
+          f->dump_float("hit_ratio", 0.0);
+          f->dump_float("requests_per_second", 0.0);
+        }
+        if (delta_buffer_misses > 0) {
+          f->dump_float("avg_miss_latency_us", (double)delta_buffer_lat / (double)delta_buffer_misses / 1000.0);
+        }
+        f->close_section();
+        
+        f->close_section();
+      }
+    }
+    
+    // RocksDB performance statistics (I think the hits and misses is useful, latency is not, commented out for now)
+    //f->open_object_section("rocksdb_perf_stats");
+    
+    //auto collection = store.cct->get_perfcounters_collection();
+    
+    //if (collection) {
+    //  collection->dump_formatted(f, false, static_cast<select_labeled_t>(0), "rocksdb", "");
+    //} else {
+    //  f->dump_string("status", "perf counters collection not available");
+    //}
+    
+    //f->close_section(); // rocksdb_perf_stats
+    
+    f->close_section(); // cache_stats
+    
     return 0;
   } else if (command == "bluestore clear static frag") {
     std::shared_lock l(store.coll_lock);
