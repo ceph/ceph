@@ -393,6 +393,34 @@ For example:
    ``--log-dest`` options described in the bootstrap section above.
 
 
+Setting Cephadm Log Verbosity
+-----------------------------
+
+The verbosity of cephadm's persistent logging (``/var/log/ceph/cephadm.log``
+and syslog, when enabled) can be controlled separately from its terminal
+output. Valid levels are ``info``, ``debug``, ``error``, and ``warning``.
+The default is ``debug``.
+
+When the cephadm orchestration module runs ``cephadm`` on cluster hosts, it
+uses the :confval:`mgr/cephadm/cephadm_binary_logging_level` configuration
+value:
+
+.. prompt:: bash #
+
+  ceph config set mgr mgr/cephadm/cephadm_binary_logging_level info
+
+For manual invocations, pass ``--logging-level`` on the command line:
+
+.. prompt:: bash #
+
+  cephadm --logging-level info check-host
+
+.. note:: The logging level applies only to persistent log destinations
+   (the log file and syslog). Console output during bootstrap and other
+   interactive use is unchanged. When you run ``cephadm`` directly, the
+   mgr configuration does not apply; use ``--logging-level`` as shown above.
+
+
 Data Location
 =============
 
