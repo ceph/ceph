@@ -119,10 +119,12 @@ The output will resemble the following::
   total raw storage capacity. In other words, RATIO is defined as 
   (SIZE * RATE) / RAW CAPACITY and may be thought of as a fullness percentage.
 
-- **FINAL RATIO** is the ratio of (1) the expected number of PGs allocated to the
-  pool to (2) the total target PG budget. FINAL RATIO is defined as
-  (FINAL_POOL_PG_TARGET * RATE) / TOTAL PG BUDGET where FINAL_POOL_PG_TARGET = NEW PG_NUM (if present)
-  or PG_NUM otherwise. FINAL RATIO may be thought of as the target utilization percentage.
+- **FINAL RATIO** is the ratio of (1) the expected number of PG replicas
+  allocated to the pool to (2) the total target PG budget. FINAL RATIO is
+  defined as (FINAL_POOL_PG_TARGET * SIZE) / TOTAL PG BUDGET where
+  FINAL_POOL_PG_TARGET = NEW PG_NUM (if present) or PG_NUM otherwise, and
+  SIZE is the pool's replica count (``k+m`` for erasure-coded pools). FINAL
+  RATIO may be thought of as the target utilization percentage.
 
 - **TARGET RATIO** (if present) is the ratio of the expected storage of this
   pool relative to the expected storage of all other pools
