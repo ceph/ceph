@@ -1617,11 +1617,19 @@ def test_zonegroup_rename():
     new_zg = ZoneGroup(new_name, master_zg.period)
     old_zg = ZoneGroup(old_name, master_zg.period)
     for zone in master_zg.zones:
-        _, r = new_zg.get(zone.cluster, check_retcode=False)
+        for _ in range(config.checkpoint_retries):
+            _, r = new_zg.get(zone.cluster, check_retcode=False)
+            if r == 0:
+                break
+            time.sleep(config.checkpoint_delay)
         assert r == 0, \
             "new zonegroup name '%s' not found on zone %s" % (new_name, zone.name)
 
-        _, r = old_zg.get(zone.cluster, check_retcode=False)
+        for _ in range(config.checkpoint_retries):
+            _, r = old_zg.get(zone.cluster, check_retcode=False)
+            if r == errno.ENOENT:
+                break
+            time.sleep(config.checkpoint_delay)
         assert r == errno.ENOENT, \
             "old zonegroup name '%s' still present on zone %s (r=%d)" % (old_name, zone.name, r)
 
