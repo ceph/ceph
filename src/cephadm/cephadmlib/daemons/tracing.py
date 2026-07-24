@@ -25,14 +25,8 @@ class Tracing(ContainerDaemonForm):
             'image': DefaultImages.ELASTICSEARCH.image_ref,
             'envs': ['discovery.type=single-node'],
         },
-        'jaeger-agent': {
-            'image': DefaultImages.JAEGER_AGENT.image_ref,
-        },
-        'jaeger-collector': {
-            'image': DefaultImages.JAEGER_COLLECTOR.image_ref,
-        },
-        'jaeger-query': {
-            'image': DefaultImages.JAEGER_QUERY.image_ref,
+        'jaeger': {
+            'image': DefaultImages.JAEGER.image_ref,
         },
     }  # type: ignore
 
@@ -42,17 +36,17 @@ class Tracing(ContainerDaemonForm):
 
     @staticmethod
     def set_configuration(config: Dict[str, str], daemon_type: str) -> None:
-        if daemon_type in ['jaeger-collector', 'jaeger-query']:
+        if daemon_type == 'jaeger':
             assert 'elasticsearch_nodes' in config
+            # Configure OTLP gRPC receiver host and port from Ceph config
+            # Default to 0.0.0.0:4317 if not specified
+            jaeger_agent_host = config.get('jaeger_agent_host', '0.0.0.0')
+            jaeger_agent_port = config.get('jaeger_agent_port', '4317')
             Tracing.components[daemon_type]['envs'] = [
                 'SPAN_STORAGE_TYPE=elasticsearch',
                 f'ES_SERVER_URLS={config["elasticsearch_nodes"]}',
-            ]
-        if daemon_type == 'jaeger-agent':
-            assert 'collector_nodes' in config
-            Tracing.components[daemon_type]['daemon_args'] = [
-                f'--reporter.grpc.host-port={config["collector_nodes"]}',
-                '--processor.jaeger-compact.server-host-port=6799',
+                'COLLECTOR_OTLP_ENABLED=true',
+                f'COLLECTOR_OTLP_GRPC_HOST_PORT={jaeger_agent_host}:{jaeger_agent_port}'
             ]
 
     def __init__(self, ident: DaemonIdentity) -> None:
@@ -94,10 +88,6 @@ class Tracing(ContainerDaemonForm):
         self, ctx: CephadmContext, args: List[str]
     ) -> None:
         self._configure(ctx)
-        # earlier code did an explicit check if the daemon type was jaeger-agent
-        # and would only call get_daemon_args if that was true. However, since
-        # the function only returns a non-empty list in the case of jaeger-agent
-        # that check is unnecessary and is not brought over.
         args.extend(self.get_daemon_args())
 
     def customize_container_envs(

@@ -859,9 +859,7 @@ class ServiceSpec(object):
         'mgmt-gateway',
         'oauth2-proxy',
         'iscsi',
-        'jaeger-agent',
-        'jaeger-collector',
-        'jaeger-query',
+        'jaeger',
         'jaeger-tracing',
         'loki',
         'mds',
@@ -951,10 +949,7 @@ class ServiceSpec(object):
             'alloy': MonitoringSpec,
             'snmp-gateway': SNMPGatewaySpec,
             'elasticsearch': TracingSpec,
-            'jaeger-agent': TracingSpec,
-            'jaeger-collector': TracingSpec,
-            'jaeger-query': TracingSpec,
-            'jaeger-tracing': TracingSpec,
+            'jaeger': TracingSpec,
             'node-proxy': NodeProxySpec,
             SMBSpec.service_type: SMBSpec,
         }.get(service_type, cls)
@@ -3588,7 +3583,7 @@ yaml.add_representer(MONSpec, ServiceSpec.yaml_representer)
 
 
 class TracingSpec(ServiceSpec):
-    SERVICE_TYPES = ['elasticsearch', 'jaeger-collector', 'jaeger-query', 'jaeger-agent']
+    SERVICE_TYPES = ['elasticsearch', 'jaeger']
 
     def __init__(self,
                  service_type: str,
@@ -3616,9 +3611,7 @@ class TracingSpec(ServiceSpec):
 
     def get_port(self) -> int:
         return {'elasticsearch': 9200,
-                'jaeger-agent': 6799,
-                'jaeger-collector': 14250,
-                'jaeger-query': 16686}[self.service_type]
+                'jaeger': 4317}[self.service_type]
 
     def get_tracing_specs(self) -> List[ServiceSpec]:
         assert self.service_type == 'jaeger-tracing'
@@ -3628,10 +3621,8 @@ class TracingSpec(ServiceSpec):
 
         if self.es_nodes:
             del daemons['elasticsearch']
-        if self.without_query:
-            del daemons['jaeger-query']
         if self.placement:
-            daemons.update({'jaeger-collector': self.placement})
+            daemons.update({'jaeger': self.placement})
 
         for daemon, daemon_placement in daemons.items():
             specs.append(TracingSpec(service_type=daemon,
