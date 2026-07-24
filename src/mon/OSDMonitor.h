@@ -552,7 +552,7 @@ private:
                        uint64_t repl_size,
 		       const uint64_t target_size_bytes,
 		       const float target_size_ratio,
-		       const float effective_ratio,
+		       const double effective_ratio,
 		       const std::string &erasure_code_profile,
                        const unsigned pool_type,
                        const uint64_t expected_num_objects,

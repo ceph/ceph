@@ -8315,7 +8315,7 @@ int OSDMonitor::prepare_new_pool(string& name,
                                  const uint64_t repl_size,
 				 const uint64_t target_size_bytes,
 				 const float target_size_ratio,
-				 const float effective_ratio,
+				 const double effective_ratio,
 				 const string &erasure_code_profile,
                                  const unsigned pool_type,
                                  const uint64_t expected_num_objects,
@@ -8400,7 +8400,9 @@ int OSDMonitor::prepare_new_pool(string& name,
   }
   if (effective_ratio > 0.0) {
     double committed = get_effective_ratio_sum(crush_rule, -1);
-    if (committed + effective_ratio > 1.0) {
+    // tolerate floating-point representation error so pins that are meant
+    // to sum to exactly 1.0 (e.g. 0.5 + 0.4 + 0.1) are accepted
+    if (committed + effective_ratio > 1.0 + 1e-6) {
       *ss << "'effective_ratio' " << effective_ratio
 	  << " would overcommit the PG budget of this CRUSH root: other pools"
 	  << " already pin a total of " << committed
@@ -8591,8 +8593,7 @@ int OSDMonitor::prepare_new_pool(string& name,
     pi->opts.set(pool_opts_t::TARGET_SIZE_RATIO, target_size_ratio);
   }
   if (effective_ratio > 0.0) {
-    pi->opts.set(pool_opts_t::EFFECTIVE_RATIO,
-		 static_cast<double>(effective_ratio));
+    pi->opts.set(pool_opts_t::EFFECTIVE_RATIO, effective_ratio);
   }
 
   pi->cache_target_dirty_ratio_micro =
@@ -9533,7 +9534,9 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 	bool force = false;
 	cmd_getval(cmdmap, "yes_i_really_mean_it", force);
 	double committed = get_effective_ratio_sum(p.get_crush_rule(), pool);
-	if (committed + f > 1.0 && !force) {
+	// tolerate floating-point representation error so pins that are meant
+	// to sum to exactly 1.0 (e.g. 0.5 + 0.4 + 0.1) are accepted
+	if (committed + f > 1.0 + 1e-6 && !force) {
 	  ss << "effective_ratio " << f << " would overcommit the PG budget of"
 	     << " this CRUSH root: other pools already pin a total of "
 	     << committed << " and the sum must not exceed 1.0; pass"

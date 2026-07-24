@@ -1166,7 +1166,8 @@ class PgAutoscaler(MgrModule):
 
         overcommitted_pinned = []
         for root_id, total in total_pinned_ratio.items():
-            if total > 1.0:
+            # tolerate floating-point error for pins meant to sum to 1.0
+            if total > 1.0 + 1e-6:
                 overcommitted_pinned.append(
                     'Pools %s pin a total effective_ratio of %.3f, '
                     'exceeding the PG budget of their CRUSH root' % (
