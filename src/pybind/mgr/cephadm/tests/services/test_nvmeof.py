@@ -176,11 +176,11 @@ config_file = /etc/ceph/ceph.conf
 id = nvmeof.{nvmeof_daemon_id}
 
 [mtls]
-server_key = /server.key
-client_key = /client.key
-server_cert = /server.cert
-client_cert = /client.cert
-root_ca_cert = /root.ca.cert
+server_key = /certs/mtls/server.key
+client_key = /certs/mtls/client.key
+server_cert = /certs/mtls/server.cert
+client_cert = /certs/mtls/client.cert
+root_ca_cert = /certs/mtls/root.ca.cert
 
 [kmip]
 cert_dir = ./certs/kmip/{{server_name}}
@@ -427,11 +427,11 @@ config_file = /etc/ceph/ceph.conf
 id = nvmeof.{nvmeof_daemon_id}
 
 [mtls]
-server_key = /server.key
-client_key = /client.key
-server_cert = /server.cert
-client_cert = /client.cert
-root_ca_cert = /root.ca.cert
+server_key = /certs/mtls/server.key
+client_key = /certs/mtls/client.key
+server_cert = /certs/mtls/server.cert
+client_cert = /certs/mtls/client.cert
+root_ca_cert = /certs/mtls/root.ca.cert
 
 [kmip]
 cert_dir = ./certs/kmip/{{server_name}}
@@ -620,11 +620,11 @@ config_file = /etc/ceph/ceph.conf
 id = nvmeof.{nvmeof_daemon_id}
 
 [mtls]
-server_key = /server.key
-client_key = /client.key
-server_cert = /server.cert
-client_cert = /client.cert
-root_ca_cert = /root.ca.cert
+server_key = /certs/mtls/server.key
+client_key = /certs/mtls/client.key
+server_cert = /certs/mtls/server.cert
+client_cert = /certs/mtls/client.cert
+root_ca_cert = /certs/mtls/root.ca.cert
 
 [kmip]
 cert_dir = ./certs/kmip/{{server_name}}
