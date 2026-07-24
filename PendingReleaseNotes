@@ -7,6 +7,16 @@
 * RADOS: PG autoscaler allows overlapping roots. Each root receives a PG target based
   on its OSDs, with OSDs shared across multiple roots contributing proportionally
   less to each root's allocation.
+
+* RADOS: A new per-pool option, ``effective_ratio``, pins an absolute fraction
+  of a CRUSH root's PG budget (OSD count x ``mon_target_pg_per_osd``) to the
+  pool, e.g. ``ceph osd pool create foo --effective-ratio 0.5``. Unlike
+  ``target_size_ratio``, the pinned value is not normalized against other
+  pools and is not overridden by actual usage, allowing operators to deploy
+  their entire PG budget up front without doing per-pool PG arithmetic. The
+  monitor rejects changes that would push the sum of the pins on one CRUSH
+  root past 1.0, and a new ``POOL_EFFECTIVE_RATIO_OVERCOMMITTED`` health
+  warning reports roots that become overcommitted anyway.
   
 * CephFS: CephFS snapshots metadata is now mutable. It is now possible to add,
   update and remove existing key-value pairs that are part of a snapshot

@@ -142,8 +142,12 @@ The output will resemble the following::
      that collectively they target cluster capacity. For example, four pools
      with target_ratio 1.0 would each have an effective ratio of 0.25.
 
-  The system's calculations use whichever of these two ratios (that is, the 
+  The system's calculations use whichever of these two ratios (that is, the
   target ratio and the effective ratio) is greater.
+
+  Pools with a pinned ``effective_ratio`` (see
+  :ref:`pinning_pool_effective_ratio`) display their pinned value here
+  unchanged; neither of the two adjustments above applies to them.
 
 - **BIAS** is used as a multiplier to manually adjust a pool's PG in accordance
   with prior information about how many PGs a specific pool is expected to
@@ -406,6 +410,66 @@ will be raised.
 Note that in most cases it is advised to not set both a bias value other than 1.0
 and a target ratio on the same pool.  Use a higher bias value for metadata /
 omap-rich pools and a target ratio for RADOS data-heavy pools.
+
+.. _pinning_pool_effective_ratio:
+
+Pinning a share of the PG budget
+--------------------------------
+
+``target_size_ratio`` values are relative weights: the autoscaler normalizes
+them against the sum of the ratios across all pools, so every pool that later
+sets a ratio changes every other pool's effective share. Operators who prefer
+to deploy their entire PG budget up front, and to keep the resulting shares
+stable, can instead pin an absolute share with ``effective_ratio``:
+
+.. prompt:: bash #
+
+   ceph osd pool create foo erasure ec22 --effective-ratio 0.5
+   ceph osd pool create bar --effective-ratio 0.4
+   ceph osd pool create baz --effective-ratio 0.1
+
+A pinned pool receives exactly that fraction of the PG budget of its CRUSH
+root (the number of OSDs multiplied by ``mon_target_pg_per_osd``). The
+resulting ``pg_num`` is the pool's share of the budget divided by its
+replica count (or ``k+m`` for erasure-coded pools), so the shares hold even
+when replicated and erasure-coded pools are mixed. The pools above receive
+50%, 40% and 10% of the budget on a cluster with any number of OSDs, and the
+autoscaler adjusts ``pg_num`` toward the same proportions as the cluster
+grows or shrinks.
+
+A pinned ``effective_ratio`` differs from ``target_size_ratio`` in three
+ways:
+
+#. The value is absolute. It is not normalized against other pools, and
+   pools added later do not dilute it.
+
+#. Actual usage never overrides the pin. A pool that outgrows its share
+   keeps its ``pg_num`` and stores more data per PG instead; capacity
+   problems are reported by the usual fullness warnings.
+
+#. The ``bulk`` flag has no effect on a pinned pool. The pin already
+   allocates the pool's full complement of PGs up front.
+
+``effective_ratio`` is mutually exclusive with ``target_size_ratio`` and
+``target_size_bytes`` on the same pool. Setting it to ``0`` unsets it.
+Pools without any pin continue to share whatever budget the pinned pools
+leave behind.
+
+Because the shares are absolute, the ``effective_ratio`` values of the pools
+of a CRUSH root may not sum past 1.0: the monitor rejects a pool creation or
+``osd pool set`` that would overcommit the budget. To add a pinned pool to a
+fully committed root, first lower another pool's pin:
+
+.. prompt:: bash #
+
+   ceph osd pool set bar effective_ratio 0.3
+   ceph osd pool create qux --effective-ratio 0.1
+
+``osd pool set`` accepts ``--yes-i-really-mean-it`` to overcommit anyway. If
+a root becomes overcommitted (for example, after such an override or after a
+pinned pool's ``crush_rule`` is changed to point to another root), the
+``POOL_EFFECTIVE_RATIO_OVERCOMMITTED`` health warning is raised and the
+autoscaler may be unable to scale pools up until the pins are reduced.
 
 
 Specifying bounds on a pool's PGs
