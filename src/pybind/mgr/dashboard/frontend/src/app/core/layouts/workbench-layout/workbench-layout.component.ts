@@ -31,6 +31,7 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
   permissions: Permissions;
   pageHeaderTitle: string | null = null;
   pageHeaderDescription: string | null = null;
+  showBreadcrumbsLayout = true;
   enabledFeature$: Observable<FeatureTogglesMap>;
 
   @HostBinding('class') get class(): string {
@@ -90,6 +91,9 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
     while (route?.firstChild) {
       route = route.firstChild;
     }
+    this.showBreadcrumbsLayout = !route?.pathFromRoot.some(
+      (snapshot) => snapshot.routeConfig?.data?.['showBreadcrumbsLayout'] === false
+    );
     const pageHeader = route?.routeConfig?.data?.['pageHeader'] as
       { title?: string; description?: string } | undefined;
     this.pageHeaderTitle = pageHeader?.title ?? null;

@@ -1,10 +1,13 @@
 @if (title) {
-  <header class="sidebar-header">
-    <div class="sidebar-header-content">
-      <h2 class="cds--type-heading-05">{{ title }}</h2>
-      <ng-content select="[sidebar-header-extra]"></ng-content>
-    </div>
-  </header>
+  <cd-page-header-resource
+    class="cds-mb-5 cds-pr-7"
+    [title]="title"
+    [status]="headerStatus"
+    [tags]="headerTags"
+    [actions]="headerActions"
+    [showBreadcrumbs]="showHeaderBreadcrumbs"
+  >
+  </cd-page-header-resource>
 }
 <div class="sidebar-layout-container sidebar-layout--full">
   <div class="sidebar-layout-shell">

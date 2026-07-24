@@ -7,6 +7,7 @@ import _ from 'lodash';
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
 import { PoolService } from '~/app/shared/api/pool.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
+import { ResourceHeaderAction } from '~/app/shared/components/page-header-resource/page-header-resource.component';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { SidebarItem } from '~/app/shared/components/sidebar-layout/sidebar-layout.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
@@ -67,6 +68,18 @@ export class PoolResourceSidebarComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.sub.unsubscribe();
+  }
+
+  get headerTags(): string[] {
+    return [this.poolDataProtection, ...this.poolApplications].filter((tag) => !!tag);
+  }
+
+  get headerActions(): ResourceHeaderAction[] {
+    return this.getVisiblePoolActions().map((action) => ({
+      label: action.name,
+      disabled: this.isPoolActionDisabled(action),
+      onClick: () => this.runPoolAction(action)
+    }));
   }
 
   private buildSidebarItems(permissions: any): void {

@@ -32,9 +32,11 @@
         }
       </div>
       <cd-context></cd-context>
-      <div class="breadcrumbs--padding">
-        <cd-breadcrumbs></cd-breadcrumbs>
-      </div>
+      @if (showBreadcrumbsLayout) {
+        <div class="breadcrumbs--padding">
+          <cd-breadcrumbs></cd-breadcrumbs>
+        </div>
+      }
       @if (pageHeaderTitle) {
         <cd-page-header
           [title]="pageHeaderTitle"

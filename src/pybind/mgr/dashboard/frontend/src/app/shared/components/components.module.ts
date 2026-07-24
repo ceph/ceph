@@ -43,7 +43,10 @@ import {
   TagModule,
   LinkModule,
   LayerModule,
-  ThemeModule
+  ThemeModule,
+  MenuButtonModule,
+  ContextMenuModule,
+  BreadcrumbModule
 } from 'carbon-components-angular';
 import EditIcon from '@carbon/icons/es/edit/16';
 import CodeIcon from '@carbon/icons/es/code/16';
@@ -135,6 +138,7 @@ import CloudMonitoring16 from '@carbon/icons/es/cloud--monitoring/16';
 
 import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
 import { PageHeaderComponent } from './page-header/page-header.component';
+import { PageHeaderResourceComponent } from './page-header-resource/page-header-resource.component';
 import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.component';
 import { NumberWithUnitComponent } from './number-with-unit/number-with-unit.component';
 import { OverviewComponent } from './resource-overview-card/resource-overview-card.component';
@@ -185,7 +189,10 @@ import { OverviewComponent } from './resource-overview-card/resource-overview-ca
     TagModule,
     LinkModule,
     LayerModule,
-    ThemeModule
+    ThemeModule,
+    MenuButtonModule,
+    ContextMenuModule,
+    BreadcrumbModule
   ],
   declarations: [
     SparklineComponent,
@@ -233,6 +240,7 @@ import { OverviewComponent } from './resource-overview-card/resource-overview-ca
     TearsheetComponent,
     TearsheetStepComponent,
     PageHeaderComponent,
+    PageHeaderResourceComponent,
     SidebarLayoutComponent,
     NumberWithUnitComponent,
     OverviewComponent
@@ -280,6 +288,7 @@ import { OverviewComponent } from './resource-overview-card/resource-overview-ca
     TearsheetComponent,
     TearsheetStepComponent,
     PageHeaderComponent,
+    PageHeaderResourceComponent,
     SidebarLayoutComponent,
     NumberWithUnitComponent,
     OverviewComponent

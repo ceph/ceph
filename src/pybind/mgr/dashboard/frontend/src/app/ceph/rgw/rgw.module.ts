@@ -295,7 +295,10 @@ const routes: Routes = [
       {
         path: ':uid',
         component: RgwUserResourceSidebarComponent,
-        data: { breadcrumbs: RgwUserResourceBreadcrumbResolver },
+        data: {
+          breadcrumbs: RgwUserResourceBreadcrumbResolver,
+          showBreadcrumbsLayout: false
+        },
         resolve: {
           user: RgwUserDetailsResolver
         },
@@ -328,7 +331,10 @@ const routes: Routes = [
       {
         path: ':accountName',
         component: RgwUserAccountsResourceSidebarComponent,
-        data: { breadcrumbs: RgwAccountDetailsBreadcrumbResolver },
+        data: {
+          breadcrumbs: RgwAccountDetailsBreadcrumbResolver,
+          showBreadcrumbsLayout: false
+        },
         resolve: {
           account: RgwAccountDetailsResolver
         },
@@ -479,7 +485,10 @@ const routes: Routes = [
       {
         path: ':name',
         component: RgwTopicResourceSidebarComponent,
-        data: { breadcrumbs: RgwTopicResourceBreadcrumbResolver },
+        data: {
+          breadcrumbs: RgwTopicResourceBreadcrumbResolver,
+          showBreadcrumbsLayout: false
+        },
         children: [
           { path: '', redirectTo: 'overview', pathMatch: 'full' },
           {
