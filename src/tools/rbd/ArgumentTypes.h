@@ -55,6 +55,7 @@ static const std::string DEST_SNAPSHOT_NAME("dest-snap");
 static const std::string PATH("path");
 static const std::string FROM_SNAPSHOT_NAME("from-snap");
 static const std::string WHOLE_OBJECT("whole-object");
+static const std::string ALL_SNAPSHOTS("all-snapshots");
 
 // encryption arguments
 static const std::string ENCRYPTION_FORMAT("encryption-format");
@@ -94,7 +95,7 @@ static const std::string IGNORE_QUIESCE_ERROR("ignore-quiesce-error");
 static const std::set<std::string> SWITCH_ARGUMENTS = {
   WHOLE_OBJECT, IMAGE_SHARED, IMAGE_THICK_PROVISION, IMAGE_FLATTEN,
   NO_PROGRESS, PRETTY_FORMAT, VERBOSE, NO_ERR, SKIP_QUIESCE,
-  IGNORE_QUIESCE_ERROR
+  IGNORE_QUIESCE_ERROR, ALL_SNAPSHOTS
 };
 
 struct ImageSize {};
