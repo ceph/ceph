@@ -1145,6 +1145,16 @@ public:
      * completion if there are no other in progress writes.
      */
     PCT_UPDATE_DELAY,
+    /**
+     * EFFECTIVE_RATIO
+     *
+     * Pinned fraction (0.0, 1.0] of the PG-per-OSD budget of the pool's
+     * CRUSH root. Unlike TARGET_SIZE_RATIO, this value is used by the
+     * pg_autoscaler as an absolute share: it is not normalized against
+     * other pools and is not overridden by actual usage. Mutually
+     * exclusive with TARGET_SIZE_RATIO and TARGET_SIZE_BYTES.
+     */
+    EFFECTIVE_RATIO,
   };
 
   enum type_t {

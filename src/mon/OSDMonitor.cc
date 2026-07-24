@@ -5586,7 +5586,7 @@ namespace {
     PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM, 
     DEDUP_CDC_CHUNK_SIZE, POOL_EIO, BULK, PG_NUM_MAX, READ_RATIO,
     EC_OPTIMIZATIONS, EC_DATA_SHARD_COUNT, EC_CODING_SHARD_COUNT,
-    SUPPORTS_OMAP };
+    SUPPORTS_OMAP, EFFECTIVE_RATIO };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -6386,6 +6386,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"pg_num_max", PG_NUM_MAX},
       {"target_size_bytes", TARGET_SIZE_BYTES},
       {"target_size_ratio", TARGET_SIZE_RATIO},
+      {"effective_ratio", EFFECTIVE_RATIO},
       {"pg_autoscale_bias", PG_AUTOSCALE_BIAS},
       {"dedup_tier", DEDUP_TIER},
       {"dedup_chunk_algorithm", DEDUP_CHUNK_ALGORITHM},
@@ -6643,6 +6644,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case DEDUP_CHUNK_ALGORITHM:
 	  case DEDUP_CDC_CHUNK_SIZE:
           case READ_RATIO:
+	  case EFFECTIVE_RATIO:
 	    {
 	      pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
 	      if (p->opts.is_set(key)) {
@@ -6824,6 +6826,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case DEDUP_CHUNK_ALGORITHM:
 	  case DEDUP_CDC_CHUNK_SIZE:
           case READ_RATIO:
+	  case EFFECTIVE_RATIO:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
 		break;
@@ -7630,7 +7633,7 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
   bool bulk = false;
   int ret = 0;
   ret = prepare_new_pool(m->name, m->crush_rule, rule_name,
-			 0, 0, 0, 0, 0, 0, 0.0,
+			 0, 0, 0, 0, 0, 0, 0.0, 0.0,
 			 erasure_code_profile,
 			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, {}, bulk,
 			 cct->_conf.get_val<bool>("osd_pool_default_crimson"),
@@ -8200,6 +8203,36 @@ uint32_t OSDMonitor::get_osd_num_by_crush(int crush_rule)
   return crush_in_osds.size();
 }
 
+/*
+* Sum the pinned effective_ratio of every pool whose CRUSH rule shares a
+* root with crush_rule, skipping skip_pool (pass -1 to skip none).
+*/
+double OSDMonitor::get_effective_ratio_sum(int crush_rule, int64_t skip_pool)
+{
+  CrushWrapper newcrush = _get_pending_crush();
+  set<int> roots;
+  newcrush.find_takes_by_rule(crush_rule, &roots);
+  double sum = 0.0;
+  for (auto& [id, pool] : osdmap.get_pools()) {
+    if (id == skip_pool) {
+      continue;
+    }
+    double ratio = 0.0;
+    if (!pool.opts.get(pool_opts_t::EFFECTIVE_RATIO, &ratio)) {
+      continue;
+    }
+    set<int> pool_roots;
+    newcrush.find_takes_by_rule(pool.get_crush_rule(), &pool_roots);
+    for (auto root : pool_roots) {
+      if (roots.count(root)) {
+	sum += ratio;
+	break;
+      }
+    }
+  }
+  return sum;
+}
+
 int OSDMonitor::check_pg_num(int64_t pool,
                              int pg_num,
                              int size,
@@ -8261,6 +8294,7 @@ int OSDMonitor::check_pg_num(int64_t pool,
  * @param pg_num_min min pg_num
  * @param pg_num_max max pg_num
  * @param repl_size Replication factor, or 0 for default
+ * @param effective_ratio Pinned fraction of the CRUSH root's PG budget, or 0 for none
  * @param erasure_code_profile The profile name in OSDMap to be used for erasure code
  * @param pool_type TYPE_ERASURE, or TYPE_REP
  * @param expected_num_objects expected number of objects on the pool
@@ -8281,6 +8315,7 @@ int OSDMonitor::prepare_new_pool(string& name,
                                  const uint64_t repl_size,
 				 const uint64_t target_size_bytes,
 				 const float target_size_ratio,
+				 const float effective_ratio,
 				 const string &erasure_code_profile,
                                  const unsigned pool_type,
                                  const uint64_t expected_num_objects,
@@ -8346,12 +8381,32 @@ int OSDMonitor::prepare_new_pool(string& name,
     *ss << "'fast_read' can only apply to erasure coding pool";
     return -EINVAL;
   }
+  if (effective_ratio < 0.0 || effective_ratio > 1.0) {
+    *ss << "'effective_ratio' must be between 0.0 and 1.0";
+    return -ERANGE;
+  }
+  if (effective_ratio > 0.0 &&
+      (target_size_ratio > 0.0 || target_size_bytes > 0)) {
+    *ss << "'effective_ratio' cannot be combined with 'target_size_ratio' "
+	<< "or 'target_size_bytes'";
+    return -EINVAL;
+  }
   int r;
   r = prepare_pool_crush_rule(pool_type, erasure_code_profile,
 				 crush_rule_name, &crush_rule, ss);
   if (r) {
     dout(10) << "prepare_pool_crush_rule returns " << r << dendl;
     return r;
+  }
+  if (effective_ratio > 0.0) {
+    double committed = get_effective_ratio_sum(crush_rule, -1);
+    if (committed + effective_ratio > 1.0) {
+      *ss << "'effective_ratio' " << effective_ratio
+	  << " would overcommit the PG budget of this CRUSH root: other pools"
+	  << " already pin a total of " << committed
+	  << " and the sum must not exceed 1.0";
+      return -ERANGE;
+    }
   }
   unsigned size, min_size;
   r = prepare_pool_size(pool_type, erasure_code_profile, repl_size,
@@ -8534,6 +8589,10 @@ int OSDMonitor::prepare_new_pool(string& name,
       osdmap.require_osd_release >= ceph_release_t::nautilus) {
     // only store for nautilus+, just to be consistent and tidy.
     pi->opts.set(pool_opts_t::TARGET_SIZE_RATIO, target_size_ratio);
+  }
+  if (effective_ratio > 0.0) {
+    pi->opts.set(pool_opts_t::EFFECTIVE_RATIO,
+		 static_cast<double>(effective_ratio));
   }
 
   pi->cache_target_dirty_ratio_micro =
@@ -9440,10 +9499,47 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
            << "later before setting target_size_bytes";
         return -EINVAL;
       }
+      if (n > 0 && p.opts.is_set(pool_opts_t::EFFECTIVE_RATIO)) {
+	ss << "cannot set target_size_bytes while effective_ratio is set; "
+	   << "unset effective_ratio first";
+	return -EINVAL;
+      }
     } else if (var == "target_size_ratio") {
       if (f < 0.0) {
 	ss << "target_size_ratio cannot be negative";
 	return -EINVAL;
+      }
+      if (f > 0.0 && p.opts.is_set(pool_opts_t::EFFECTIVE_RATIO)) {
+	ss << "cannot set target_size_ratio while effective_ratio is set; "
+	   << "unset effective_ratio first";
+	return -EINVAL;
+      }
+    } else if (var == "effective_ratio") {
+      if (floaterr.length()) {
+	ss << "error parsing float value '" << val << "': " << floaterr;
+	return -EINVAL;
+      }
+      if (f < 0.0 || f > 1.0) {
+	ss << "effective_ratio must be between 0.0 and 1.0";
+	return -ERANGE;
+      }
+      if (f > 0.0) {
+	if (p.opts.is_set(pool_opts_t::TARGET_SIZE_RATIO) ||
+	    p.opts.is_set(pool_opts_t::TARGET_SIZE_BYTES)) {
+	  ss << "cannot set effective_ratio while target_size_ratio or "
+	     << "target_size_bytes is set; unset those first";
+	  return -EINVAL;
+	}
+	bool force = false;
+	cmd_getval(cmdmap, "yes_i_really_mean_it", force);
+	double committed = get_effective_ratio_sum(p.get_crush_rule(), pool);
+	if (committed + f > 1.0 && !force) {
+	  ss << "effective_ratio " << f << " would overcommit the PG budget of"
+	     << " this CRUSH root: other pools already pin a total of "
+	     << committed << " and the sum must not exceed 1.0; pass"
+	     << " --yes-i-really-mean-it to override";
+	  return -ERANGE;
+	}
       }
     } else if (var == "pg_num_min") {
       if (interr.length()) {
@@ -14118,8 +14214,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     cmd_getval(cmdmap, "size", repl_size);
     int64_t target_size_bytes = 0;
     double target_size_ratio = 0.0;
+    double effective_ratio = 0.0;
     cmd_getval(cmdmap, "target_size_bytes", target_size_bytes);
     cmd_getval(cmdmap, "target_size_ratio", target_size_ratio);
+    cmd_getval(cmdmap, "effective_ratio", effective_ratio);
 
     string pg_autoscale_mode;
     cmd_getval(cmdmap, "autoscale_mode", pg_autoscale_mode);
@@ -14134,6 +14232,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 			   rule_name,
 			   pg_num, pgp_num, pg_num_min, pg_num_max,
                            repl_size, target_size_bytes, target_size_ratio,
+			   effective_ratio,
 			   erasure_code_profile, pool_type,
                            (uint64_t)expected_num_objects,
                            fast_read,
