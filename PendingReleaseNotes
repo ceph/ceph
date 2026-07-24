@@ -29,6 +29,12 @@
   index, so only objects written or restored after this upgrade will populate
   the field. Existing objects are unaffected.
 * RGW: New S3 Control APIs to apply PublicAccessBlock configuration to User Accounts.
+* RGW: New config option ``rgw_keystone_accepted_project_reader_roles``.
+  A Keystone user whose only access-granting role is one of the configured project-reader
+  roles is capped to read-only access within its project, mirroring the
+  ``project_reader_roles`` behavior of Swift's keystoneauth middleware. A bucket
+  policy naming the user can still grant additional access. The reader role must
+  also be listed in ``rgw_keystone_accepted_roles``.
 * ceph-volume: Raw BlueStore OSD preparation now pre-formats NVMe devices and
   skips the slower BlueStore discard phase,reducing mkfs time on
   very large namespaces.

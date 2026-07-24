@@ -1793,6 +1793,12 @@ struct perm_state : public perm_state_base {
   }
 };
 
+/* A Keystone project reader is marked by a read-only perm_mask. The
+ * identity-type check matters: Swift read-only subusers also carry
+ * RGW_PERM_READ but must not gain project-wide read access. */
+bool is_keystone_project_reader(uint32_t perm_mask,
+                                const rgw::auth::Identity& identity);
+
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action  */
 bool verify_bucket_permission_no_policy(

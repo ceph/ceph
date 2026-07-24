@@ -151,17 +151,21 @@ public:
 
   class Role {
   public:
-    Role() : is_admin(false), is_reader(false) { }
+    Role() : is_admin(false), is_system_reader(false), is_project_reader(false), is_accepted(false) { }
     Role(const Role &r) {
       id = r.id;
       name = r.name;
       is_admin = r.is_admin;
-      is_reader = r.is_reader;
+      is_system_reader = r.is_system_reader;
+      is_project_reader = r.is_project_reader;
+      is_accepted = r.is_accepted;
     }
     std::string id;
     std::string name;
     bool is_admin;
-    bool is_reader;
+    bool is_system_reader;
+    bool is_project_reader;
+    bool is_accepted;
     void decode_json(JSONObj *obj);
   };
 
@@ -203,6 +207,7 @@ public:
   const std::string& get_user_id() const {return user.id;};
   const std::string& get_user_name() const {return user.name;};
   bool has_role(const std::string& r) const;
+  bool is_project_reader_only() const;
   bool expired() const {
     const uint64_t now = ceph_clock_now().sec();
     return std::cmp_greater_equal(now, get_expires());
@@ -210,8 +215,10 @@ public:
   int parse(const DoutPrefixProvider *dpp,
             const std::string& token_str,
             ceph::buffer::list& bl /* in */);
-  void update_roles(const std::vector<std::string> & admin,
-                    const std::vector<std::string> & reader);
+  void update_roles(const std::vector<std::string> & plain,
+                    const std::vector<std::string> & admin,
+                    const std::vector<std::string> & system_reader,
+                    const std::vector<std::string> & project_reader);
 };
 
 

@@ -289,23 +289,54 @@ int TokenEnvelope::parse(const DoutPrefixProvider *dpp,
  * Maybe one day we'll have the parser find this in Keystone replies.
  * But for now, we use the confguration to augment the list of roles.
  */
-void TokenEnvelope::update_roles(const std::vector<std::string> & admin,
-                                 const std::vector<std::string> & reader)
+void TokenEnvelope::update_roles(const std::vector<std::string> & plain,
+                                 const std::vector<std::string> & admin,
+                                 const std::vector<std::string> & system_reader,
+                                 const std::vector<std::string> & project_reader)
 {
   for (auto& iter: roles) {
+    for (const auto& r : plain) {
+      if (fnmatch(r.c_str(), iter.name.c_str(), 0) == 0) {
+        iter.is_accepted = true;
+        break;
+      }
+    }
     for (const auto& r : admin) {
       if (fnmatch(r.c_str(), iter.name.c_str(), 0) == 0) {
         iter.is_admin = true;
         break;
       }
     }
-    for (const auto& r : reader) {
+    for (const auto& r : system_reader) {
       if (fnmatch(r.c_str(), iter.name.c_str(), 0) == 0) {
-        iter.is_reader = true;
+        iter.is_system_reader = true;
+        break;
+      }
+    }
+    for (const auto& r : project_reader) {
+      if (fnmatch(r.c_str(), iter.name.c_str(), 0) == 0) {
+        iter.is_project_reader = true;
         break;
       }
     }
   }
+}
+
+bool TokenEnvelope::is_project_reader_only() const
+{
+  bool any_reader = false;
+  for (const auto& r : roles) {
+    if (r.is_admin) {
+      return false;
+    }
+    if (r.is_accepted && !r.is_project_reader) {
+      return false;
+    } else if (r.is_accepted && r.is_project_reader) {
+      // project_reader must also be in accepted roles.
+      any_reader = true;
+    }
+  }
+  return any_reader;
 }
 
 bool TokenCache::find(const std::string& token_id,
