@@ -440,14 +440,46 @@ def audit_tracker_and_relabel(session, redmine_issue, default_label, dry_run=Fal
 
     print(f"Fetching open {BASE_PROJECT}/{BASE_REPO} PRs labeled '{label}'...")
     endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues"
-    prs = []
+    labeled_prs = []
     for page in get(session, endpoint, params={'labels': label, 'state': 'open'}):
         for item in page:
             if 'pull_request' in item:
-                prs.append((item['number'], item['title']))
+                labeled_prs.append((item['number'], item['title']))
+
+    if not labeled_prs:
+        print(f"No open PRs found with label '{label}' -- nothing to do.")
+        return 'cancelled'
+
+    # A label can be reused for a later, unrelated round of testing once this
+    # ticket has already been approved -- matching by label text alone would
+    # then relabel PRs that were never part of THIS ticket as tested. Cross-
+    # check against the ticket's own recorded PR list (the same '"PR #N":'
+    # markers its description table is built from -- see old_prs in
+    # manage_qa_tracker()) before trusting that a labeled PR belongs here.
+    owned_prs = set()
+    if hasattr(redmine_issue, 'description') and redmine_issue.description:
+        for match in re.finditer(r'"PR #(\d+)":', redmine_issue.description):
+            owned_prs.add(int(match.group(1)))
+
+    if not owned_prs:
+        print(f"Tracker #{redmine_issue.id}'s description has no \"PR #N\": entries -- "
+              f"can't verify which PRs actually belong to this ticket, so refusing to "
+              f"relabel by label text alone (the label may have been reused for a later, "
+              f"unrelated round of testing).")
+        return 'cancelled'
+
+    prs = [(num, title) for num, title in labeled_prs if num in owned_prs]
+    unowned = [(num, title) for num, title in labeled_prs if num not in owned_prs]
+    if unowned:
+        print(f"\nSkipping {len(unowned)} PR(s) that carry label '{label}' but are NOT in "
+              f"tracker #{redmine_issue.id}'s own PR list (label likely reused for a newer, "
+              f"unrelated round of testing):")
+        for num, title in unowned:
+            safe_title = title.encode('ascii', 'replace').decode('ascii')
+            print(f"  SKIP #{num}  {safe_title}")
 
     if not prs:
-        print(f"No open PRs found with label '{label}' -- nothing to do.")
+        print(f"No open PRs both labeled '{label}' and listed in tracker #{redmine_issue.id} -- nothing to do.")
         return 'cancelled'
 
     print("\nPRs to update:")

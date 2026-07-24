@@ -147,10 +147,18 @@ def test_post_consolidated_review_noop_when_no_issues(ptl_tool):
 # tested for exactly when those calls should (and should not) happen.
 # ---------------------------------------------------------------------------
 
-def _fake_issue(ptl_tool, status_name="QA Approved", issue_id=78399):
+def _fake_issue(ptl_tool, status_name="QA Approved", issue_id=78399, owned_prs=(100, 111, 222, 333)):
+    """owned_prs seeds the tracker's own '"PR #N":' description markers (the
+    same format manage_qa_tracker() builds and later re-parses) -- defaults
+    to every PR number used across the existing tests below so none of them
+    need to know about ownership-filtering to keep passing."""
     issue = mock.Mock()
     issue.status.name = status_name
     issue.id = issue_id
+    issue.description = "\n".join(
+        f'|"PR #{n}":https://github.com/ceph/ceph/pull/{n}|author|labels|title|'
+        for n in owned_prs
+    )
     return issue
 
 
@@ -496,3 +504,52 @@ def test_audit_handles_non_ascii_pr_titles(ptl_tool, monkeypatch, capsys):
     assert "#111" in out
     assert "café" not in out
     assert "🎉" not in out
+
+
+def test_audit_excludes_labeled_prs_not_in_tracker_description(ptl_tool, monkeypatch, capsys):
+    """A label can be reused for a later, unrelated round of testing once a
+    ticket is already approved. #222 carries the label but was never part
+    of THIS tracker's own PR list -- it must be skipped and reported, while
+    #111 (which the tracker's description actually lists) still proceeds."""
+    issue = _fake_issue(ptl_tool, owned_prs=(111,))
+    session = mock.Mock()
+    _patch_get(ptl_tool, monkeypatch, [(111, "owned PR"), (222, "unrelated later PR")])
+    with mock.patch("builtins.input", side_effect=["", ""]):
+        result = ptl_tool.audit_tracker_and_relabel(
+            session, issue, "wip-yuri-testing", dry_run=True
+        )
+    assert result == "completed"
+    out = capsys.readouterr().out
+    assert "#111" in out
+    assert "SKIP #222" in out
+    # #222 must not appear in the "PRs to update" plan itself, only in the
+    # SKIP listing above it.
+    assert "  #222" not in out
+
+
+def test_audit_cancels_when_tracker_description_has_no_pr_list(ptl_tool, monkeypatch):
+    """A tracker whose description has no '\"PR #N\":' entries at all gives
+    us nothing to verify ownership against -- refuse to relabel by label
+    text alone rather than silently falling back to the unfiltered set."""
+    issue = _fake_issue(ptl_tool, owned_prs=())
+    session = mock.Mock()
+    _patch_get(ptl_tool, monkeypatch, [(111, "some PR")])
+    with mock.patch("builtins.input", side_effect=[""]):
+        result = ptl_tool.audit_tracker_and_relabel(session, issue, "wip-yuri-testing")
+    assert result == "cancelled"
+    session.delete.assert_not_called()
+    session.post.assert_not_called()
+
+
+def test_audit_noop_when_no_labeled_pr_is_owned_by_tracker(ptl_tool, monkeypatch):
+    """The tracker has a real PR list, but none of the currently labeled
+    PRs are on it (the label has been fully reused elsewhere) -- must be a
+    clean no-op, not an error, and must not prompt for target labels."""
+    issue = _fake_issue(ptl_tool, owned_prs=(999,))
+    session = mock.Mock()
+    _patch_get(ptl_tool, monkeypatch, [(111, "unrelated PR")])
+    with mock.patch("builtins.input", side_effect=[""]):
+        result = ptl_tool.audit_tracker_and_relabel(session, issue, "wip-yuri-testing")
+    assert result == "cancelled"
+    session.delete.assert_not_called()
+    session.post.assert_not_called()
