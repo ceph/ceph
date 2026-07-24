@@ -15,6 +15,10 @@ Key features include:
 * Configurable block sizes, file counts, and fsync intervals.
 * Detailed statistical reporting (Mean, Std Dev, Min/Max) for throughput and IOPS.
 * Support for specific CephFS user/group impersonation (UID/GID) via ``ceph_mount_perms_set``.
+* Optional JSON output and libcephfs perf counter dumps.
+* Optional progress reporting during benchmark phases.
+* Optional asynchronous I/O benchmarking with configurable queue depth.
+* Optional overrides for selected client configuration settings such as object cache and messenger worker threads.
 
 Building
 ========
@@ -60,7 +64,7 @@ General Options
 
    Path to keyring file
 
-.. option:: --filesystem <name>
+.. option:: --filesystem, --fs <name>
 
    CephFS filesystem name to mount
 
@@ -71,6 +75,19 @@ General Options
 .. option:: --gid <gid>
 
    Group ID to mount as (default: ``-1``)
+
+.. option:: --client-oc <0|1>
+
+   Override the ``client_oc`` setting for the benchmark mount
+
+.. option:: --client-oc-size <value>
+
+   Override the ``client_oc_size`` setting for the benchmark mount
+
+.. option:: --msgr-workers <n>
+
+   Override ``ms_async_op_threads`` for the benchmark mount. Valid values are
+   ``1`` to ``24``; ``0`` keeps the configured default.
 
 Benchmark Options
 -----------------
@@ -120,6 +137,40 @@ These options are used with the ``bench`` command.
 .. option:: --no-cleanup
 
    Disable cleanup of files
+
+.. option:: --json <path>
+
+   Write structured benchmark results to a JSON file. Use ``-`` to output to stdout.
+
+.. option:: --duration <seconds>
+
+   Limit each write and read phase to ``N`` seconds. A value of ``0`` means the
+   benchmark processes all files.
+
+.. option:: --perf-dump <path>
+
+   Dump libcephfs performance counters to the specified file after the benchmark
+
+.. option:: --progress
+
+   Show live progress, bandwidth, file rate, and ETA during benchmark phases
+
+.. option:: --progress-interval <percent>
+
+   Minimum percentage increment between progress updates (default: ``10``;
+   valid range: ``1`` to ``100``)
+
+.. option:: --async-io
+
+   Use asynchronous I/O via ``ceph_ll_nonblocking_readv_writev`` for read and
+   write phases
+
+.. option:: --queue-depth <n>
+
+   Maximum number of outstanding async I/Os per worker thread (default:
+   ``16``; valid range: ``1`` to ``1024``). This option is only meaningful with
+   ``--async-io`` and ``--async-io`` cannot be combined with
+   ``--per-thread-mount``.
 
 Examples
 ========
