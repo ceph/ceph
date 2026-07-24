@@ -1417,7 +1417,7 @@ bool Client::_wrap_name(Inode& diri, std::string& dname, std::string& alternate_
     int r = fscrypt_denc->get_encrypted_fname(dname, &_enc_name, &_alt_name, false);
     if (r < 0) {
       ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
-      return r;
+      return false;
     }
     dname = std::move(_enc_name);
     if (alternate_name.empty()) {
@@ -1428,7 +1428,7 @@ bool Client::_wrap_name(Inode& diri, std::string& dname, std::string& alternate_
       int r = fscrypt_denc->get_encrypted_fname(alternate_name, &_enc_name, &_alt_name, true);
       if (r < 0) {
         ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
-        return r;
+        return false;
       }
       alternate_name = std::move(_alt_name);
     }
@@ -7044,14 +7044,14 @@ int Client::mount(const std::string &mount_root, const UserPerm& perms,
 #if defined(__linux__)
   // dummy encryption?
   if (cct->_conf.get_val<bool>("client_fscrypt_dummy_encryption")) {
-    client_lock.unlock();
+    cl.unlock();
 
     r = fscrypt_dummy_encryption();
     if (r < 0) {
       return r;
     }
 
-    client_lock.lock();
+    cl.lock();
   }
 #endif
   /*
@@ -7372,7 +7372,9 @@ int Client::fscrypt_dummy_encryption() {
     char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
     int r = add_fscrypt_key(key, sizeof(key), keyid);
     if (r < 0) {
-      goto err;
+      // The key was not added, so keyid is not populated and there is
+      // nothing to remove.
+      return r;
     }
 
     // set dummy encryption policy
@@ -7386,6 +7388,7 @@ int Client::fscrypt_dummy_encryption() {
     memcpy(policy.master_key_identifier, keyid, FSCRYPT_KEY_IDENTIFIER_SIZE);
     r = ll_set_fscrypt_policy_v2(root.get(), policy);
     if (r < 0) {
+      ldout(cct, 0) << __func__ << "(): failed to set dummy encryption policy: r=" << r << dendl;
       goto err;
     }
 
@@ -7398,7 +7401,11 @@ int Client::fscrypt_dummy_encryption() {
     memcpy(key_spec.u.identifier, keyid, FSCRYPT_KEY_IDENTIFIER_SIZE);
     arg.removal_status_flags = 0;
     arg.key_spec = key_spec;
-    r = remove_fscrypt_key(&arg);
+    // Preserve the original failure; don't mask it with the removal result.
+    int r2 = remove_fscrypt_key(&arg);
+    if (r2 < 0) {
+      ldout(cct, 0) << __func__ << "(): failed to remove fscrypt key: r=" << r2 << dendl;
+    }
     return r;
 }
 #endif
