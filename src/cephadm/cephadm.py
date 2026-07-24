@@ -237,6 +237,7 @@ from cephadmlib.listing_updaters import (
 )
 from cephadmlib.container_lookup import infer_local_ceph_image, identify
 from ceph.cephadm.d3n_types import D3NCache, D3NCacheError
+from ceph.cephadm.version_entry import UpgradeType, UpgradeStatus, CephVersionEntry
 from cephadmlib.user_utils import (
     setup_ssh_user,
     validate_user_exists,
@@ -3136,6 +3137,18 @@ def command_bootstrap(ctx):
     else:
         logger.info('Enabling the logrotate.timer service to perform daily log rotation.')
         enable_service(ctx, 'logrotate.timer')
+
+    # Stores bootstrap version in version tracker
+    bootstrap_time = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+    bootstrap_entry = CephVersionEntry(
+        version=image_ver,
+        upgrade_type=UpgradeType.BOOTSTRAP,
+        status=UpgradeStatus.COMPLETE,
+        command_options=None,
+        config_dump=json.loads(cli(['config', 'dump', '--format', 'json']))
+    ).to_json()
+    cli(['config-key', 'set', f'mgr/cephadm/version_history/{bootstrap_time}', json.dumps(bootstrap_entry)])
+
     return ctx.error_code
 
 ##################################
