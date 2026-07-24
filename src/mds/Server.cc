@@ -11936,7 +11936,7 @@ void Server::handle_client_snap_md_op(const MDRequestRef& mdr)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
 
-  CInode* diri = rdlock_path_pin_ref(mdr, false, true);
+  CInode* diri = rdlock_path_pin_ref(mdr, true, false);
   if (!diri)
     return;
 

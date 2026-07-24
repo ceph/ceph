@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from textwrap import dedent
 
 from teuthology.contextutil import safe_while
-from teuthology.misc import get_file, write_file
+from teuthology.misc import get_file, write_file, get_testdir
 from teuthology.orchestra import run
 from teuthology.orchestra.run import Raw
 from teuthology.exceptions import CommandFailedError, ConnectionLostError
@@ -928,6 +928,53 @@ class CephFSMountBase(object):
                                 check_status=False)
         self._verify(proc, retval, errmsgs)
         return proc
+
+    def run_pybind_unit_test(self, test_class_name=None, test_func_name=None):
+        '''
+        Run unit tests from src/tests/pybind/ using pytest command.
+        '''
+        # preventing repeated definitions of these variables
+        if not hasattr(self.run_pybind_unit_test, 'TEST_FILE_PATH'):
+            PYBIND_TEST_DIR = 'src/test/pybind'
+            ASSERT_FILE_NAME = 'assertions.py'
+            TEST_FILE_NAME = 'test_cephfs.py'
+
+            dirname = os.path.dirname
+            # TWN = teuthology worker node
+            TWN_CEPH_REPO_ROOT = dirname(dirname(dirname(dirname(__file__))))
+            TWN_ASSERT_FILE_PATH = os.path.join(TWN_CEPH_REPO_ROOT,
+                                                PYBIND_TEST_DIR,
+                                                ASSERT_FILE_NAME)
+
+            TWN_TEST_FILE_PATH = os.path.join(TWN_CEPH_REPO_ROOT,
+                                              PYBIND_TEST_DIR,
+                                              TEST_FILE_NAME)
+
+            TEST_DIR = get_testdir(self.ctx)
+            ASSERT_FILE_PATH = os.path.join(TEST_DIR, ASSERT_FILE_NAME)
+            TEST_FILE_PATH = os.path.join(TEST_DIR, TEST_FILE_NAME)
+
+            log.info(f'running put_file() to bring assertions.py...')
+            self.client_remote.put_file(TWN_ASSERT_FILE_PATH, ASSERT_FILE_PATH)
+
+            log.info(f'running put_file() to bring test_cephfs.py...')
+            self.client_remote.put_file(TWN_TEST_FILE_PATH, TEST_FILE_PATH)
+
+        if test_class_name and test_func_name:
+            FILTER_STR = f'{test_class_name} and {test_func_name}'
+        elif test_class_name and not test_func_name:
+            FILTER_STR = test_class_name
+        elif not test_class_name and test_func_name:
+            FILTER_STR = test_func_name
+        else:
+            FILTER_STR = ''
+
+        if FILTER_STR:
+            pytest_cmd = f'pytest --verbose -k "{FILTER_STR}" {TEST_FILE_PATH}'
+        else:
+            pytest_cmd = f'pytest --verbose {TEST_FILE_PATH}'
+
+        self.run_shell(args=pytest_cmd)
 
     def open_for_reading(self, basename):
         """
