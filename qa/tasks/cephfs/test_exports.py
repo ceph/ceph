@@ -814,3 +814,362 @@ class TestKillExports(CephFSTestCase):
 
             # failed if buggy
             self.mount_a.ls()
+
+class TestBalMask(CephFSTestCase):
+    MDSS_REQUIRED = 3
+        self.fs.set_max_mds(3)
+        self.status = self.fs.wait_for_daemons()
+
+        if self.fs.get_var("max_mds") < 3:
+            self.skipTest("Require three MDSes")
+
+        self.fs.set_balance_automate(True)
+
+        self.mount_a.run_shell_payload("mkdir -p 1/a")
+
+    def test_set_to_only_invalid_value_for_subdir(self):
+        """
+        That passing invalid values leads to a command failure.
+        """
+        MAX_MDS = 256
+        invalid_values = list(map(str, [-2,MAX_MDS, MAX_MDS+1]))
+        for value in invalid_values:
+            try:
+                self.mount_a.setfattr("1", "ceph.dir.bal.mask", value)
+            except CommandFailedError as e:
+                self.assertEqual(e.exitstatus, 1)
+
+    def test_set_to_mix_invalid_value_for_subdir(self):
+        """
+        That combining valid and invalid values results in a command failure.
+        """
+        MAX_MDS = 256
+        valid_values = list(map(str, [0, 1]))
+        invalid_values = list(map(str, [-2, MAX_MDS, MAX_MDS+1]))
+        invalid_values = [f'{pair[1]},{pair[1]}' for pair in zip(invalid_values, valid_values)]
+        for value in invalid_values:
+            try:
+                self.mount_a.setfattr("1", "ceph.dir.bal.mask", value)
+            except CommandFailedError as e:
+                self.assertEqual(e.exitstatus, 1)
+
+    def test_distribute_directory_to_multiple_ranks(self):
+        """
+        That bal.mask distributes a directory to multiple ranks.
+        """
+        self.mount_a.setfattr("1", "ceph.dir.bal.mask", "1,2")
+        for i in range(10):
+            self.mount_a.run_shell_payload(f"mkdir -p 1/{i}")
+            self.mount_a.create_n_files(f"1/{i}/file", 100, sync=True)
+
+        time.sleep(15)
+
+        subtrees = self._get_subtrees(status=self.status, rank='all', path="/1")
+        hit_ranks = set([s['auth_first'] for s in subtrees])
+        self.assertEqual(set([1,2]), hit_ranks)
+
+    def test_set_to_single_valid_value_for_subdir(self):
+        """
+        That vaild value is passed.
+        """
+        self.mount_a.setfattr("1", "ceph.dir.bal.mask", "1")
+        self._wait_subtrees([('/1', 1)], status=self.status)
+
+        self.mount_a.setfattr("1", "ceph.dir.bal.mask", "2")
+        self._wait_subtrees([('/1', 2)], status=self.status)
+
+    def test_set_to_multiple_valid_values_for_subdir(self):
+        """
+        That multiple vaild values are passed.
+        The root of the subtree is moved to the lowest rank
+        among multiple rank values.
+        """
+        self.mount_a.setfattr("1", "ceph.dir.bal.mask", "0,1")
+        self._wait_subtrees([('/1', 0)], status=self.status)
+
+        self.mount_a.setfattr("1", "ceph.dir.bal.mask", "1,2")
+        self._wait_subtrees([('/1', 1)], status=self.status)
+
+        self.mount_a.setfattr("1", "ceph.dir.bal.mask", "0,2")
+        self._wait_subtrees([('/1', 0)], status=self.status)
+
+    def test_set_to_invalid_value_for_root(self):
+        """
+        That the root directory must always include rank 0.
+        Otherwise, it will result in a command failure.
+        """
+
+        try:
+            self.mount_a.setfattr("", "ceph.dir.bal.mask", "1")
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, 1)
+
+        try:
+            self.mount_a.setfattr("", "ceph.dir.bal.mask", "2")
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, 1)
+
+        try:
+            self.mount_a.setfattr("", "ceph.dir.bal.mask", "1,2")
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, 1)
+
+    def test_set_to_valid_value_for_root(self):
+        """
+        That the root directory must always include rank 0.
+        """
+
+        self.mount_a.setfattr(".", "ceph.dir.bal.mask", "0")
+        self._wait_subtrees([('', 0)], status=self.status, path='')
+
+        self.mount_a.setfattr(".", "ceph.dir.bal.mask", "0,1")
+        self._wait_subtrees([('', 0)], status=self.status, path='')
+
+        self.mount_a.setfattr(".", "ceph.dir.bal.mask", "0,2")
+        self._wait_subtrees([('', 0)], status=self.status, path='')
+
+        self.mount_a.setfattr(".", "ceph.dir.bal.mask", "0,1,2")
+        self._wait_subtrees([('', 0)], status=self.status, path='')
+
+
+    def test_override_ceph_fs_set_bal_rank_mask(self):
+        """
+        That ceph.dir.bal.mask overrides mdsmap's bal_rank_mask.
+        The bal_rank_mask is originally set to 0x1, which confines all workloads to rank 0.
+        By overriding it with ceph.dir.bal.mask at 0,1, you can now examine sub-trees like /1 on rank 1.
+        """
+        bal_rank_mask = '0x1'
+        self.fs.set_bal_rank_mask(bal_rank_mask)
+        self.assertEqual(bal_rank_mask, self.fs.get_var('bal_rank_mask'))
+        self._wait_subtrees([('', 0)], status=self.status, path='')
+
+        self.mount_a.setfattr(".", "ceph.dir.bal.mask", "0,1")
+        self._wait_subtrees([('', 0)], status=self.status, path='')
+
+        found = False
+        for i in range(10):
+            self.mount_a.create_n_files("1/file", 100, sync=True)
+            self.mount_a.create_n_files("file", 100, sync=True)
+
+            try:
+                self._wait_subtrees([('/1', 1)], status=self.status, timeout=10)
+                found = True
+                break
+            except:
+                pass
+
+        self.assertEqual(found, True)
+
+    def test_rank_mask_override_pin(self):
+        """
+        That ceph.dir.bal.mask overrides ceph.dir.pin.
+        """
+        self.mount_a.setfattr("1", "ceph.dir.pin", "1")
+        self._wait_subtrees([('/1', 1)], status=self.status, rank=1)
+
+        self.mount_a.setfattr("1/a", "ceph.dir.bal.mask", "2")
+        self._wait_subtrees([('/1', 1), ('/1/a', 2)], status=self.status, rank=2)
+
+    def test_pin_override_rank_mask_simple(self):
+        """
+        That ceph.dir.pin overrides ceph.dir.bal.mask.
+        """
+        self.mount_a.run_shell(["touch", "1/a/file"])
+
+        self.mount_a.setfattr("1", "ceph.dir.bal.mask", "1")
+        self._wait_subtrees([('/1', 1)], status=self.status, rank=1)
+
+        self.mount_a.setfattr("1/a", "ceph.dir.pin", "2")
+        self._wait_subtrees([('/1', 1),('/1/a', 2)], status=self.status, rank=2)
+
+    def test_pin_override_rank_mask_mix(self):
+        """
+        That ceph.dir.pin overrides ceph.dir.bal.mask in the same directory.
+        ceph.dir.pin has higher priority.
+        """
+        self.mount_a.setfattr("1", "ceph.dir.bal.mask", "1")
+        self._wait_subtrees([('/1', 1)], status=self.status, rank=1)
+
+        self.mount_a.setfattr("1", "ceph.dir.pin", "2")
+        self._wait_subtrees([('/1', 2)], status=self.status, rank=2)
+
+        self.mount_a.setfattr("1", "ceph.dir.pin", "-1")
+        self._wait_subtrees([('/1', 1)], status=self.status, rank=1)
+
+        self.mount_a.setfattr("1", "ceph.dir.bal.mask", "2")
+        self._wait_subtrees([('/1', 2)], status=self.status, rank=2)
+
+        self.mount_a.setfattr("1", "ceph.dir.pin", "1")
+        self._wait_subtrees([('/1', 1)], status=self.status, rank=1)
+
+        self.mount_a.setfattr("1", "ceph.dir.pin", "-1")
+        self._wait_subtrees([('/1', 2)], status=self.status, rank=2)
+
+    def test_ephemeral_pin_overried_rank_mask(self):
+        """
+        That ephemeral pin overrides ceph.dir.bal.mask
+        """
+        self.mount_a.setfattr("1", "ceph.dir.bal.mask", "2")
+        self._wait_subtrees([('/1', 2)], status=self.status, rank=2)
+        self.mount_a.create_n_files("1/file", 100, sync=True)
+        time.sleep(10)
+
+        self.config_set('mds', 'mds_export_ephemeral_distributed', True)
+        self.mount_a.setfattr("1", "ceph.dir.pin.distributed", "1")
+        self.mount_a.create_n_files("1/file", 100, sync=True)
+        subtrees = self._wait_distributed_subtrees(3 * 2, status=self.status, rank="all")
+        for s in subtrees:
+            path = s['dir']['path']
+            if path == '/1':
+                self.assertTrue(s['distributed_ephemeral_pin'])
+                self.assertEqual(s['bal_rank_mask'], "2")
+
+    def test_ephemeral_random_overried_rank_mask(self):
+        """
+        that ephemeral random overrides ceph.dir.bal.mask.
+        """
+        self.config_set('mds', 'mds_export_ephemeral_random', True)
+        self.config_set('mds', 'mds_export_ephemeral_random_max', 1.0)
+        count = 10
+
+        self.mount_a.setfattr("1", "ceph.dir.bal.mask", "2")
+        for i in range(count):
+            self.mount_a.create_n_files("1/file", 10, sync=True)
+        self._wait_subtrees([('/1', 2)], status=self.status, rank=2)
+
+        self.mount_a.setfattr("1", "ceph.dir.pin.random", "1.0")
+        # timing issue
+        # Sometimes, there might be a delay in the synchronization of export_ephemeral_random_pin.
+        time.sleep(10)
+        for i in range(count):
+            self.mount_a.run_shell_payload(f"mkdir -p 1/{i}")
+            self.mount_a.create_n_files(f"1/{i}/file", 10, sync=True)
+
+        self._wait_random_subtrees(count, status=self.status, rank="all")
+
+        self.mount_a.setfattr("1", "ceph.dir.bal.mask", "1")
+        for i in range(count):
+            self.mount_a.create_n_files("1/file", 10, sync=True)
+
+        self._wait_random_subtrees(count, status=self.status, rank="all")
+
+    def test_unset_rank_mask(self):
+        """
+        That ceph.dir.bal.mask is unset with -1.
+        """
+
+        self.mount_a.setfattr("1", "ceph.dir.bal.mask", "2")
+        value = self.mount_a.getfattr("1", "ceph.dir.bal.mask")
+        self.assertEqual(value, "2")
+        self._wait_subtrees([('/1', 2)], status=self.status)
+
+        self.mount_a.setfattr("1", "ceph.dir.bal.mask", "-1")
+        value = self.mount_a.getfattr("1", "ceph.dir.bal.mask")
+        self.assertEqual(value, None)
+
+    def test_unset_rank_mask_under_nested_root(self):
+        """
+        That ceph.dir.bal.mask is unset under root directory.
+        """
+
+        self.mount_a.setfattr(".", "ceph.dir.bal.mask", "0")
+        self._wait_subtrees([('', 0)], status=self.status, path='')
+
+        self.mount_a.setfattr("1", "ceph.dir.bal.mask", "2")
+        value = self.mount_a.getfattr("1", "ceph.dir.bal.mask")
+        self.assertEqual(value, "2")
+        self._wait_subtrees([('/1', 2)], status=self.status)
+
+        self.mount_a.setfattr("1", "ceph.dir.bal.mask", "-1")
+        value = self.mount_a.getfattr("1", "ceph.dir.bal.mask")
+        self.assertEqual(value, None)
+
+        """
+        After the ceph.dir.bal.mask value of /1 is unset,
+        the /1 subtree is merged with the / root .
+
+        """
+        self.mount_a.setfattr(".", "ceph.dir.bal.mask", "0")
+        self._wait_subtrees([('', 0)], status=self.status, path='')
+
+    def test_unset_rank_mask_under_nested_parent(self):
+        """
+        That ceph.dir.bal.mask is unset under nested directory.
+        """
+
+        self.mount_a.setfattr("1", "ceph.dir.bal.mask", "1")
+        self._wait_subtrees([('/1', 1)], status=self.status, rank=1)
+        self.mount_a.setfattr("1/a", "ceph.dir.bal.mask", "2")
+        self._wait_subtrees([('/1', 1), ('/1/a', 2)], status=self.status, rank=2)
+
+        self.mount_a.setfattr("1/a", "ceph.dir.bal.mask", "-1")
+        self._wait_subtrees([('/1', 1)], status=self.status, rank=1)
+
+    def test_mds_failover(self):
+        """
+        That MDS failover does not affect the ceph.dir.bal.mask.
+        """
+
+        self.mount_a.setfattr("1", "ceph.dir.bal.mask", "2")
+        self._wait_xattrs(self.mount_a, "1", "ceph.dir.bal.mask", "2")
+        self._wait_subtrees([('/1', 2)], status=self.status)
+
+        for i in range(5):
+            self.fs.rank_fail(rank=2)
+            self.status = self.fs.wait_for_daemons()
+
+            value = self.mount_a.getfattr("1", "ceph.dir.bal.mask")
+            self.assertEqual(value, "2")
+            self._wait_subtrees([('/1', 2)], status=self.status)
+
+    def test_mds_shrink(self):
+        """
+        That ceph.dir.bal.mask is sustained during reducing MDS.
+        """
+
+        self.fs.set_max_mds(3)
+        self.status = self.fs.wait_for_daemons()
+
+        self.mount_a.setfattr("1", "ceph.dir.bal.mask", "1")
+        self._wait_xattrs(self.mount_a, "1", "ceph.dir.bal.mask", "1")
+        self._wait_subtrees([('/1', 1)], status=self.status)
+
+        self.fs.set_max_mds(2)
+        self.status = self.fs.wait_for_daemons()
+        self._wait_subtrees([('/1', 1)], status=self.status)
+
+    def test_mds_shrink_and_grow(self):
+        """
+        That ceph.dir.bal.mask is sustained during reducing and growing MDS.
+        """
+
+        self.fs.set_max_mds(3)
+        self.status = self.fs.wait_for_daemons()
+
+        self.mount_a.setfattr("1", "ceph.dir.bal.mask", "2")
+        self._wait_xattrs(self.mount_a, "1", "ceph.dir.bal.mask", "2")
+        self._wait_subtrees([('/1', 2)], status=self.status)
+
+        self.fs.set_max_mds(2)
+        self.status = self.fs.wait_for_daemons()
+        self._wait_subtrees([('/1', 0)], status=self.status)
+
+        self.fs.set_max_mds(3)
+        self.status = self.fs.wait_for_daemons()
+        self._wait_subtrees([('/1', 2)], status=self.status)
+
+    def test_mds_grow(self):
+        """
+        That ceph.dir.bal.mask is sustained during growing MDS.
+        """
+
+        self.fs.set_max_mds(2)
+        self.status = self.fs.wait_for_daemons()
+
+        self.mount_a.setfattr("1", "ceph.dir.bal.mask", "1")
+        self._wait_xattrs(self.mount_a, "1", "ceph.dir.bal.mask", "1")
+        self._wait_subtrees([('/1', 1)], status=self.status, timeout=600)
+
+        self.fs.set_max_mds(3)
+        self.status = self.fs.wait_for_daemons()
+        self._wait_subtrees([('/1', 1)], status=self.status, timeout=600)
