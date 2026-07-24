@@ -3602,7 +3602,9 @@ Then run the following:
             unmanaged=False,
             method=drive_group.method,
             objectstore=drive_group.objectstore,
-            osd_type=OSDType(drive_group.osd_type)
+            osd_type=OSDType(drive_group.osd_type),
+            extra_container_args=drive_group.extra_container_args,
+            extra_entrypoint_args=drive_group.extra_entrypoint_args,
         )
 
         self.log.info(f"Creating OSDs with service ID: {drive_group.service_id} on {host}:{device_list}")
