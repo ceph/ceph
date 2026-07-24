@@ -5763,6 +5763,13 @@ void Monitor::get_versions(std::map<string, list<string> > &versions)
       // not likely
       continue;
     }
+    if (static_cast<size_t>(rank) >= monmap->ranks.size()){
+      auto p = metadata.find("hostname");
+      if (p != metadata.end()) {
+        dout(1) << __func__ << " ignoring stale monitor: " << p->second << dendl;
+      }
+      continue;
+    }
     versions[q->second].push_back(string("mon.") + monmap->get_name(rank));
   }
 }
@@ -5776,6 +5783,10 @@ int Monitor::print_nodes(Formatter *f, ostream& err)
     Metadata::const_iterator hostname = m.find("hostname");
     if (hostname == m.end()) {
       // not likely though
+      continue;
+    }
+    if (static_cast<size_t>(it->first) >= monmap->ranks.size()){
+      dout(1) << __func__ << " ignoring stale monitor: " << hostname->second << dendl;
       continue;
     }
     mons[hostname->second].push_back(monmap->get_name(it->first));
