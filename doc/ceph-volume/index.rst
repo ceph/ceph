@@ -29,18 +29,18 @@ about a node's physical disk inventory.
 
 Migrating
 ---------
-Starting on Ceph version 13.0.0, ``ceph-disk`` is deprecated. Deprecation
-warnings will show up that will link to this page. It is strongly suggested
-that users start consuming ``ceph-volume``. There are two paths for migrating:
+``ceph-disk`` was deprecated in Ceph 13.0.0 and has since been removed.
+``ceph-volume`` is the supported tool for provisioning and managing OSDs. If
+your cluster still has OSDs that were originally deployed with ``ceph-disk``,
+there are two migration paths:
 
-#. Keep OSDs deployed with ``ceph-disk``: The :ref:`ceph-volume-simple` command
-   provides a way to take over the management while disabling ``ceph-disk``
-   triggers.
-#. Redeploy existing OSDs with ``ceph-volume``: This is covered in depth on
-   :ref:`rados-replacing-an-osd`
+#. Keep OSDs deployed with ``ceph-disk``: the :ref:`ceph-volume-simple` command
+   takes over their management and disables the old ``ceph-disk`` triggers.
+#. Redeploy existing OSDs with ``ceph-volume``: this is covered in depth in
+   :ref:`rados-replacing-an-osd`.
 
-For details on why ``ceph-disk`` was removed please see the :ref:`Why was
-ceph-disk replaced? <ceph-disk-replaced>` section.
+For background on why ``ceph-disk`` was replaced, see the :ref:`Replacing
+ceph-disk <ceph-disk-replaced>` section.
 
 
 New deployments
