@@ -2342,11 +2342,114 @@ bool RadosObject::is_sync_completed(const DoutPrefixProvider* dpp,
 
   const rgw_bi_log_entry& earliest_marker = entries.front();
   return earliest_marker.timestamp > obj_mtime;
-}
+} /* is_sync_completed */
 
-int RadosObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **pstate, optional_yield y, bool follow_olh)
+int RadosObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
+			   int max_parts, int marker, int* next_marker,
+			   bool* truncated, list_parts_each_t each_func,
+			   optional_yield y)
 {
-  int ret = store->getRados()->get_obj_state(dpp, rados_ctx, bucket->get_info(), get_obj(), pstate, &manifest, follow_olh, y);
+  int ret{0};
+
+  /* require an object with a manifest, so call to get_obj_state() must precede this */
+  if (! manifest) {
+    return -EINVAL;
+  }
+
+  RGWObjManifest::obj_iterator end = manifest->obj_end(dpp);
+  if (end.get_cur_part_id() == 0) { // not multipart
+    ldpp_dout(dpp, 20) << __func__ << " object does not have a multipart manifest"
+		       << dendl;
+    return 0;
+  }
+
+  auto end_part_id = end.get_cur_part_id();
+  auto parts_count = (end_part_id == 1) ? 1 : end_part_id - 1;
+  if (marker > (parts_count - 1)) {
+    return 0;
+  }
+
+  RGWObjManifest::obj_iterator part_iter = manifest->obj_begin(dpp);
+
+  if (marker != 0) {
+    ldpp_dout_fmt(dpp, 20,
+		  "{} seeking to part #{} in the object manifest",
+		  __func__, marker);
+
+    part_iter  = manifest->obj_find_part(dpp, marker + 1);
+
+    if (part_iter == end) {
+      ldpp_dout_fmt(dpp, 5,
+		    "{} failed to find part #{} in the object manifest",
+		    __func__, marker + 1);
+      return 0;
+    }
+  }
+
+  RGWObjectCtx& obj_ctx = get_ctx();
+  RGWBucketInfo& bucket_info = get_bucket()->get_info();
+
+  Object::Part obj_part{};
+  for (; part_iter != manifest->obj_end(dpp); ++part_iter) {
+
+    /* we're only interested in the first object in each logical part */
+    auto cur_part_id = part_iter.get_cur_part_id();
+    if (cur_part_id == obj_part.part_number) {
+      continue;
+    }
+
+    if (max_parts < 1) {
+      *truncated = true;
+      break;
+    }
+
+    /* get_part_obj_state alters the passed manifest** to point to a part
+     * manifest, which we don't want to leak out here */
+    RGWObjManifest* obj_m = manifest;
+    RGWObjState* astate;
+    bool part_prefetch = false;
+    ret = RGWRados::get_part_obj_state(dpp, y, store->getRados(), bucket_info, &obj_ctx,
+				       obj_m, cur_part_id, &parts_count,
+				       part_prefetch, &astate, &obj_m);
+
+    if (ret < 0) {
+      ldpp_dout_fmt(dpp, 4,
+		    "{} get_part_obj_state() failed ret={}",
+		    __func__, ret);
+      break;
+    }
+
+    obj_part.part_number = part_iter.get_cur_part_id();
+    obj_part.part_size = astate->accounted_size;
+
+    if (auto iter = astate->attrset.find(RGW_ATTR_CKSUM);
+	iter != astate->attrset.end()) {
+          try {
+	    rgw::cksum::Cksum part_cksum;
+	    auto ck_iter = iter->second.cbegin();
+	    part_cksum.decode(ck_iter);
+	    obj_part.cksum = std::move(part_cksum);
+	  } catch (buffer::error& err) {
+	    ldpp_dout_fmt(dpp, 4,
+			  "WARN: {} could not decode stored cksum, "
+			  "caught buffer::error",
+			  __func__);
+	  }
+    }
+
+    each_func(obj_part);
+    *next_marker = ++marker;
+    --max_parts;
+  } /* each part */
+  
+  return ret;
+} /* RadosObject::list_parts */
+
+int RadosObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh)
+{
+  RGWObjState *pstate{nullptr};
+
+  int ret = store->getRados()->get_obj_state(dpp, rados_ctx, bucket->get_info(), get_obj(), &pstate, &manifest, follow_olh, y);
   if (ret < 0) {
     return ret;
   }
@@ -2356,7 +2459,7 @@ int RadosObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **psta
   bool is_atomic = state.is_atomic;
   bool prefetch_data = state.prefetch_data;
 
-  state = **pstate;
+  state = *pstate;
 
   state.obj = obj;
   state.is_atomic = is_atomic;
@@ -3306,7 +3409,9 @@ int RadosMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y, 
 
     multipart_upload_info upload_info;
     upload_info.dest_placement = dest_placement;
-    
+    upload_info.cksum_type = cksum_type;
+    upload_info.cksum_flags = cksum_flags;
+
     if (obj_legal_hold) {
       upload_info.obj_legal_hold_exist = true;
       upload_info.obj_legal_hold = (*obj_legal_hold);
@@ -3645,6 +3750,7 @@ int RadosMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
     return 0;
   }
 
+  /* Handle caching */
   if (rule) {
     if (!placement.empty()) {
       *rule = &placement;
@@ -3654,6 +3760,14 @@ int RadosMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
       }
     } else {
       *rule = nullptr;
+    }
+  }
+
+  if (attrs) {
+    if (!cached_attrs.empty()) {
+      *attrs = cached_attrs;
+      if (!rule || *rule != nullptr)
+        return 0;
     }
   }
 
@@ -3677,11 +3791,13 @@ int RadosMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
     return ret;
   }
 
+  /* Cache attrs filled in by prepare */
+  cached_attrs = meta_obj->get_attrs();
+
   extract_span_context(meta_obj->get_attrs(), trace_ctx);
 
   if (attrs) {
-    /* Attrs are filled in by prepare */
-    *attrs = meta_obj->get_attrs();
+    *attrs = cached_attrs;
     if (!rule || *rule != nullptr) {
       /* placement was cached; don't actually read */
       return 0;
@@ -3709,6 +3825,8 @@ int RadosMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
     ldpp_dout(dpp, 0) << "ERROR: failed to decode multipart upload info" << dendl;
     return -EIO;
   }
+  cksum_type = upload_info.cksum_type;
+  cksum_flags = upload_info.cksum_flags;
   placement = upload_info.dest_placement;
   upload_information = upload_info;
   *rule = &placement;
@@ -3908,6 +4026,7 @@ int RadosAtomicWriter::process(bufferlist&& data, uint64_t offset)
 int RadosAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
@@ -3915,8 +4034,9 @@ int RadosAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        const req_context& rctx,
                        uint32_t flags)
 {
-  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
-			    if_match, if_nomatch, user_data, zones_trace, canceled, rctx, flags);
+  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs,
+			    cksum, delete_at, if_match, if_nomatch,
+			    user_data, zones_trace, canceled, rctx, flags);
 }
 
 int RadosAppendWriter::prepare(optional_yield y)
@@ -3932,6 +4052,7 @@ int RadosAppendWriter::process(bufferlist&& data, uint64_t offset)
 int RadosAppendWriter::complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
@@ -3939,8 +4060,9 @@ int RadosAppendWriter::complete(size_t accounted_size, const std::string& etag,
                        const req_context& rctx,
                        uint32_t flags)
 {
-  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
-			    if_match, if_nomatch, user_data, zones_trace, canceled, rctx, flags);
+  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs,
+			    cksum, delete_at, if_match, if_nomatch,
+			    user_data, zones_trace, canceled, rctx, flags);
 }
 
 int RadosMultipartWriter::prepare(optional_yield y)
@@ -3953,9 +4075,12 @@ int RadosMultipartWriter::process(bufferlist&& data, uint64_t offset)
   return processor.process(std::move(data), offset);
 }
 
-int RadosMultipartWriter::complete(size_t accounted_size, const std::string& etag,
+int RadosMultipartWriter::complete(
+		       size_t accounted_size,
+		       const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
@@ -3963,8 +4088,9 @@ int RadosMultipartWriter::complete(size_t accounted_size, const std::string& eta
                        const req_context& rctx,
                        uint32_t flags)
 {
-  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
-                            if_match, if_nomatch, user_data, zones_trace, canceled, rctx, flags);
+  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs,
+			    cksum, delete_at, if_match, if_nomatch,
+			    user_data, zones_trace, canceled, rctx, flags);
 }
 
 bool RadosZoneGroup::placement_target_exists(std::string& target) const

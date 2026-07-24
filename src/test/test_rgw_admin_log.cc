@@ -30,6 +30,7 @@ extern "C"{
 #include "common/ceph_json.h"
 #include "common/code_environment.h"
 #include "common/ceph_argparse.h"
+#include "common/armor.h"
 #include "common/Finisher.h"
 #include "global/global_init.h"
 #include "rgw_common.h"
@@ -55,8 +56,6 @@ using namespace std;
 static string uid = "ceph";
 static string display_name = "CEPH";
 
-extern "C" int ceph_armor(char *dst, const char *dst_end, 
-                          const char *src, const char *end);
 static void print_usage(char *exec){
   cout << "Usage: " << exec << " <Options>\n";
   cout << "Options:\n"

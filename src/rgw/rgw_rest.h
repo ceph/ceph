@@ -356,6 +356,17 @@ public:
   int get_params(optional_yield y) override;
 };
 
+class RGWGetObjAttrs_ObjStore : public RGWGetObjAttrs {
+public:
+  RGWGetObjAttrs_ObjStore() {}
+  ~RGWGetObjAttrs_ObjStore() override {}
+
+  int get_params(optional_yield y) = 0;
+  /* not actually used */
+  int send_response_data_error(optional_yield y) override { return 0; };
+  int send_response_data(bufferlist& bl, off_t ofs, off_t len) override { return 0; };
+};
+
 class RGWGetLC_ObjStore : public RGWGetLC {
 public:
   RGWGetLC_ObjStore() {}
