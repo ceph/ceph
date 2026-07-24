@@ -1370,6 +1370,26 @@ class Module(MgrModule):
 
         # NOTE: We do not include the 'device' channel in this report; it is
         # sent to a different endpoint.
+        # -- Dashboard metrics --
+        try:
+            r, outb, outs = self.mon_command({
+                'prefix': 'config-key get',
+                'key': 'mgr/dashboard/telemetry/metrics/protocols_enabled'
+            })
+
+            protocols_raw = outb.strip() if r == 0 and outb else None
+
+            report['dashboard'] = {
+                'protocols_enabled': json.loads(protocols_raw or '{}'),
+            }
+
+        except Exception as e:  # pylint: disable=broad-except
+            self.log.warning(
+                'telemetry: failed to attach dashboard section: %s',
+                e
+            )
+
+        # -- End Dashboard metrics --
 
         return report
 
