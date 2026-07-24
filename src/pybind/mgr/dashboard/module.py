@@ -361,6 +361,8 @@ class Module(MgrModule, CherryPyConfig):
         AuthManager.initialize()
         load_sso_db()
 
+        self.update_telemetry_metrics()
+
         conf_result = self.await_configuration()
         if conf_result is None:
             return
@@ -596,6 +598,14 @@ class Module(MgrModule, CherryPyConfig):
             'OAuth2 SSO has been automatically disabled because '
             'oauth2-proxy is no longer running.'
         )
+
+    def update_telemetry_metrics(self):
+        """
+        Update dashboard telemetry metrics in config-key store.
+        """
+        from .services.telemetry import DashboardTelemetryService
+
+        DashboardTelemetryService.refresh_authentication_user_signals()
 
     def notify(self, notify_type: NotifyType, notify_id):
         NotificationQueue.new_notification(str(notify_type), notify_id)

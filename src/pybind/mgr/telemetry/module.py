@@ -573,7 +573,7 @@ class Module(MgrModule):
                     parsed_output = dict(zip(categories, values))
             else:
                 self.log.error('No heap stats available on {}.{}: {}'.format(daemon_type, daemon_id, outs))
-        
+
         return parsed_output
 
     def get_mempool(self, mode: str = 'separated') -> Dict[str, dict]:
@@ -1370,7 +1370,25 @@ class Module(MgrModule):
 
         # NOTE: We do not include the 'device' channel in this report; it is
         # sent to a different endpoint.
-
+        # -- Dashboard metrics --
+        try:
+            r, outb, outs = self.mon_command({
+                'prefix': 'config-key get',
+                'key': 'mgr/dashboard/telemetry/metrics/authentication_user_signals'
+            })
+            auth_raw = outb.strip() if r == 0 and outb else None
+            report.setdefault('dashboard', {})
+            report['dashboard']['authentication_user_signals'] = (
+                json.loads(auth_raw) if auth_raw else {}
+            )
+        except Exception as e:
+            self.log.warning(
+                'telemetry: failed to attach dashboard '
+                'authentication_user_signals: %s',
+                e
+            )
+         # -- End Dashboard metrics --  
+           
         return report
 
     def get_rook_data(self, report: Dict[str, object]) -> None:
