@@ -220,27 +220,27 @@ public:
     return t == Service;
   }
 
-  const std::string& get_account() const {
+  std::string_view get_account() const {
     return u.tenant;
   }
 
-  const std::string& get_id() const {
+  std::string_view get_id() const {
     return u.id;
   }
 
-  const std::string& get_idp_url() const {
+  std::string_view get_idp_url() const {
     return idp_url;
   }
 
-  const std::string& get_role_session() const {
+  std::string_view get_role_session() const {
     return u.id;
   }
 
-  const std::string& get_role() const {
+  std::string_view get_role() const {
     return u.id;
   }
 
-  const std::string& get_service() const {
+  std::string_view get_service() const {
     return service_id;
   }
 

@@ -9472,7 +9472,7 @@ void RGWPutBucketPolicy::execute(optional_yield y)
       s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
     rgw::sal::Attrs attrs(s->bucket_attrs);
     if (s->public_access_block.BlockPublicPolicy &&
-        rgw::IAM::is_public(p)) {
+        rgw::IAM::is_public(this, p)) {
       op_ret = -EACCES;
       return;
     }
@@ -10019,7 +10019,8 @@ int RGWGetBucketPolicyStatus::verify_permission(optional_yield y)
 
 void RGWGetBucketPolicyStatus::execute(optional_yield y)
 {
-  isPublic = (s->iam_policy && rgw::IAM::is_public(*s->iam_policy)) || s->bucket_acl.is_public(this);
+  isPublic = (s->iam_policy && rgw::IAM::is_public(this, *s->iam_policy)) ||
+             s->bucket_acl.is_public(this);
 }
 
 int RGWPutBucketPublicAccessBlock::verify_permission(optional_yield y)
