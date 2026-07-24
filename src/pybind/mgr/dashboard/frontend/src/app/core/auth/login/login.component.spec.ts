@@ -13,7 +13,9 @@ import { LoginComponent } from './login.component';
 describe('LoginComponent', () => {
   let component: LoginComponent;
   let fixture: ComponentFixture<LoginComponent>;
-  let routerNavigateSpy: jasmine.Spy;
+  let routerNavigateByUrlSpy: jasmine.Spy;
+  let router: Router;
+  let routerCreateUrlTreeSpy: jasmine.Spy;
   let authServiceLoginSpy: jasmine.Spy;
 
   configureTestBed({
@@ -23,8 +25,10 @@ describe('LoginComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(LoginComponent);
     component = fixture.componentInstance;
-    routerNavigateSpy = spyOn(TestBed.inject(Router), 'navigate');
-    routerNavigateSpy.and.returnValue(true);
+    router = TestBed.inject(Router);
+    routerNavigateByUrlSpy = spyOn(router, 'navigateByUrl');
+    routerNavigateByUrlSpy.and.returnValue(Promise.resolve(true));
+    routerCreateUrlTreeSpy = spyOn(router, 'createUrlTree').and.callThrough();
     authServiceLoginSpy = spyOn(TestBed.inject(AuthService), 'login');
     authServiceLoginSpy.and.returnValue(of(null));
     fixture.detectChanges();
@@ -42,18 +46,20 @@ describe('LoginComponent', () => {
 
   it('should not show create cluster wizard if cluster creation was successful', () => {
     component.postInstalled = true;
+    component.loginForm.setValue({ username: 'admin', password: 'admin' });
     component.login();
 
-    expect(routerNavigateSpy).toHaveBeenCalledTimes(1);
-    expect(routerNavigateSpy).toHaveBeenCalledWith(['/']);
+    expect(routerNavigateByUrlSpy).toHaveBeenCalledTimes(1);
+    expect(routerNavigateByUrlSpy).toHaveBeenCalledWith('/');
   });
 
   it('should show create cluster wizard if cluster creation was failed', () => {
     component.postInstalled = false;
+    component.loginForm.setValue({ username: 'admin', password: 'admin' });
     component.login();
 
-    expect(routerNavigateSpy).toHaveBeenCalledTimes(1);
-    expect(routerNavigateSpy).toHaveBeenCalledWith(['/add-storage'], {
+    expect(routerNavigateByUrlSpy).toHaveBeenCalledTimes(1);
+    expect(routerCreateUrlTreeSpy).toHaveBeenCalledWith(['/add-storage'], {
       queryParams: { welcome: true }
     });
   });
