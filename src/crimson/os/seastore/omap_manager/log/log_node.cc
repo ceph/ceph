@@ -275,10 +275,16 @@ bool LogNode::log_less_than(std::string_view str) const
 bool LogNode::log_has_larger_than(std::string_view str) const
 {
   auto iter = iter_begin();
+  bool is_dup = str.starts_with("dup_");
   // return true if the first log entry > str
   while(iter != iter_end()) {
     std::string key = iter->get_key();
     if (!is_log_key(key)) {
+      iter++;
+      continue;
+    }
+    if (!is_dup && key.starts_with("dup_") ||
+	is_dup && !key.starts_with("dup_")) {
       iter++;
       continue;
     }
