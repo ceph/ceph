@@ -24,6 +24,17 @@
 using namespace std;
 using namespace ECUtil;
 
+namespace {
+
+void verify_offset_cache(const shard_extent_map_t& sem)
+{
+  shard_extent_map_t cached = sem;
+  cached.compute_ro_range();
+  ASSERT_EQ(cached, sem);
+}
+
+} // anonymous namespace
+
 TEST(ECUtil, stripe_info_t)
 {
   const uint64_t swidth = 4096;
@@ -1051,28 +1062,31 @@ TEST(ECUtil, slice)
   {
     auto slice_map = sem.slice_map(512, 1024);
     ASSERT_EQ(4, slice_map.get_extent_maps().size());
-    ASSERT_EQ(512, slice_map.get_start_offset());
-    ASSERT_EQ(512+1024, slice_map.get_end_offset());
+    verify_offset_cache(slice_map);
+  }
 
-    for (int i=1; i<5; i++) {
-      ASSERT_EQ(512, slice_map.get_extent_map(shard_id_t(i)).get_start_off());
-      ASSERT_EQ(512+1024, slice_map.get_extent_map(shard_id_t(i)).get_end_off());
-    }
+  {
+    shard_extent_map_t single(&sinfo);
+    single.insert_in_shard(shard_id_t(1), 512, bl1k);
+
+    auto slice_map = single.slice_map(512, 1024);
+    ASSERT_EQ(1, slice_map.get_extent_maps().size());
+    verify_offset_cache(slice_map);
+  }
+
+  {
+    shard_extent_map_t single(&sinfo);
+    single.insert_in_shard(shard_id_t(1), 512, bl1k);
+
+    auto slice_map = single.slice_map(0, 4096);
+    ASSERT_EQ(1, slice_map.get_extent_maps().size());
+    verify_offset_cache(slice_map);
   }
 
   {
     auto slice_map = sem.slice_map(0, 4096);
     ASSERT_EQ(4, slice_map.get_extent_maps().size());
-    ASSERT_EQ(5, slice_map.get_start_offset());
-    ASSERT_EQ(4096, slice_map.get_end_offset());
-    ASSERT_EQ(512, slice_map.get_extent_map(shard_id_t(1)).get_start_off());
-    ASSERT_EQ(512 + 1024, slice_map.get_extent_map(shard_id_t(1)).get_end_off());
-    ASSERT_EQ(5, slice_map.get_extent_map(shard_id_t(2)).get_start_off());
-    ASSERT_EQ(4096, slice_map.get_extent_map(shard_id_t(2)).get_end_off());
-    ASSERT_EQ(256, slice_map.get_extent_map(shard_id_t(3)).get_start_off());
-    ASSERT_EQ(4096, slice_map.get_extent_map(shard_id_t(3)).get_end_off());
-    ASSERT_EQ(5, slice_map.get_extent_map(shard_id_t(4)).get_start_off());
-    ASSERT_EQ(4096, slice_map.get_extent_map(shard_id_t(4)).get_end_off());
+    verify_offset_cache(slice_map);
   }
 
   {

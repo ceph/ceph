@@ -810,14 +810,15 @@ shard_extent_map_t shard_extent_map_t::slice_map(
     extent_map iemap = emap.intersect(offset, length);
 
     if (!iemap.empty()) {
+      raw_shard_id_t raw_shard = sinfo->get_raw_shard(shard);
       slice.start_offset = min(slice.start_offset, iemap.get_start_off());
-      slice.end_offset = max(slice.start_offset, iemap.get_end_off());
-      slice.ro_start = min(slice.start_offset,
-                           calc_ro_offset(sinfo->get_raw_shard(shard),
-                                          iemap.get_start_off()));
-      slice.ro_end = min(slice.ro_end,
-                         calc_ro_end(sinfo->get_raw_shard(shard),
-                                     iemap.get_end_off()));
+      slice.end_offset = max(slice.end_offset, iemap.get_end_off());
+      if (raw_shard < sinfo->get_k()) {
+        slice.ro_start = min(slice.ro_start,
+                             calc_ro_offset(raw_shard, iemap.get_start_off()));
+        slice.ro_end = max(slice.ro_end,
+                           calc_ro_end(raw_shard, iemap.get_end_off()));
+      }
       slice.extent_maps.emplace(shard, iemap);
     }
   }
