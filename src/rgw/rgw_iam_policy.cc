@@ -225,6 +225,32 @@ static const actpair actpairs[] =
  { "organizations:ListRoots", organizationsListRoots},
  { "organizations:ListPolicies", organizationsListPolicies},
  { "organizations:ListTargetsForPolicy", organizationsListTargetsForPolicy},
+
+ { "s3files:CreateFileSystem", s3filesCreateFileSystem},
+ { "s3files:GetFileSystem", s3filesGetFileSystem},
+ { "s3files:ListFileSystems", s3filesListFileSystems},
+ { "s3files:DeleteFileSystem", s3filesDeleteFileSystem},
+ { "s3files:PutFileSystemPolicy", s3filesPutFileSystemPolicy},
+ { "s3files:GetFileSystemPolicy", s3filesGetFileSystemPolicy},
+ { "s3files:DeleteFileSystemPolicy", s3filesDeleteFileSystemPolicy},
+ { "s3files:PutSynchronizationConfiguration", s3filesPutSynchronizationConfiguration},
+ { "s3files:GetSynchronizationConfiguration", s3filesGetSynchronizationConfiguration},
+ { "s3files:CreateAccessPoint", s3filesCreateAccessPoint},
+ { "s3files:GetAccessPoint", s3filesGetAccessPoint},
+ { "s3files:ListAccessPoints", s3filesListAccessPoints},
+ { "s3files:DeleteAccessPoint", s3filesDeleteAccessPoint},
+ { "s3files:CreateMountTarget", s3filesCreateMountTarget},
+ { "s3files:GetMountTarget", s3filesGetMountTarget},
+ { "s3files:ListMountTargets", s3filesListMountTargets},
+ { "s3files:UpdateMountTarget", s3filesUpdateMountTarget},
+ { "s3files:DeleteMountTarget", s3filesDeleteMountTarget},
+ { "s3files:TagResource", s3filesTagResource},
+ { "s3files:UntagResource", s3filesUntagResource},
+ { "s3files:ListTagsForResource", s3filesListTagsForResource},
+ // Mount-auth (data-plane) actions; see doc/dev/radosgw/s3_files_api.rst.
+ { "s3files:ClientMount", s3filesClientMount},
+ { "s3files:ClientWrite", s3filesClientWrite},
+ { "s3files:ClientRootAccess", s3filesClientRootAccess},
 };
 
 struct PolicyParser;
@@ -690,6 +716,12 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
         }
         if ((t->notaction & organizationsAllValue) == organizationsAllValue) {
           t->notaction[organizationsAll] = 1;
+        }
+        if ((t->action & s3filesAllValue) == s3filesAllValue) {
+          t->action[s3filesAll] = 1;
+        }
+        if ((t->notaction & s3filesAllValue) == s3filesAllValue) {
+          t->notaction[s3filesAll] = 1;
         }
       }
     }
@@ -1760,6 +1792,55 @@ const char* action_bit_string(uint64_t action) {
 
   case organizationsListTargetsForPolicy:
     return "organizations:ListTargetsForPolicy";
+
+  case s3filesCreateFileSystem:
+    return "s3files:CreateFileSystem";
+  case s3filesGetFileSystem:
+    return "s3files:GetFileSystem";
+  case s3filesListFileSystems:
+    return "s3files:ListFileSystems";
+  case s3filesDeleteFileSystem:
+    return "s3files:DeleteFileSystem";
+  case s3filesPutFileSystemPolicy:
+    return "s3files:PutFileSystemPolicy";
+  case s3filesGetFileSystemPolicy:
+    return "s3files:GetFileSystemPolicy";
+  case s3filesDeleteFileSystemPolicy:
+    return "s3files:DeleteFileSystemPolicy";
+  case s3filesPutSynchronizationConfiguration:
+    return "s3files:PutSynchronizationConfiguration";
+  case s3filesGetSynchronizationConfiguration:
+    return "s3files:GetSynchronizationConfiguration";
+  case s3filesCreateAccessPoint:
+    return "s3files:CreateAccessPoint";
+  case s3filesGetAccessPoint:
+    return "s3files:GetAccessPoint";
+  case s3filesListAccessPoints:
+    return "s3files:ListAccessPoints";
+  case s3filesDeleteAccessPoint:
+    return "s3files:DeleteAccessPoint";
+  case s3filesCreateMountTarget:
+    return "s3files:CreateMountTarget";
+  case s3filesGetMountTarget:
+    return "s3files:GetMountTarget";
+  case s3filesListMountTargets:
+    return "s3files:ListMountTargets";
+  case s3filesUpdateMountTarget:
+    return "s3files:UpdateMountTarget";
+  case s3filesDeleteMountTarget:
+    return "s3files:DeleteMountTarget";
+  case s3filesTagResource:
+    return "s3files:TagResource";
+  case s3filesUntagResource:
+    return "s3files:UntagResource";
+  case s3filesListTagsForResource:
+    return "s3files:ListTagsForResource";
+  case s3filesClientMount:
+    return "s3files:ClientMount";
+  case s3filesClientWrite:
+    return "s3files:ClientWrite";
+  case s3filesClientRootAccess:
+    return "s3files:ClientRootAccess";
   }
   return "s3Invalid";
 }
