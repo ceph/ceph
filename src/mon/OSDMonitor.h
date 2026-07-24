@@ -505,7 +505,7 @@ private:
 			  std::ostream *ss);
   void check_legacy_ec_plugin(const std::string& plugin, 
 			      const std::string& profile) const;
-  int normalize_profile(const std::string& profilename, 
+  int normalize_profile(const std::string& profilename,
 			ceph::ErasureCodeProfile &profile,
 			bool force,
 			std::ostream *ss);
@@ -521,6 +521,10 @@ private:
 				std::ostream *ss);
   int crush_rule_create_erasure(const std::string &name,
         int64_t num_zones,
+        const std::string &root,
+        const std::string &zone_failure_domain,
+        const std::string &osd_failure_domain,
+        const std::string &device_class,
 				const std::string &profile,
 				int *rule,
 				std::ostream *ss);
