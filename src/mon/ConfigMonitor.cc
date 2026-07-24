@@ -38,6 +38,10 @@ using std::make_pair;
 using std::ostream;
 using std::ostringstream;
 using std::pair;
+using std::regex;
+using std::regex_match;
+using std::smatch;
+using std::stoi;
 using std::set;
 using std::setfill;
 using std::string;
@@ -761,12 +765,17 @@ void ConfigMonitor::tick()
   if (!pending_cleanup.empty()) {
     changed = true;
   }
-  if (changed && mon.kvmon()->is_writeable()) {
-    paxos.plug();
-    encode_pending_to_kvmon();
-    mon.kvmon()->propose_pending();
-    paxos.unplug();
-    propose_pending();
+  if (mon.kvmon()->is_writeable()) {
+    if (_trim_config_history()) {
+      changed = true;
+    }
+    if (changed) {
+      paxos.plug();
+      encode_pending_to_kvmon();
+      mon.kvmon()->propose_pending();
+      paxos.unplug();
+      propose_pending();
+    } 
   }
 }
 
@@ -984,4 +993,95 @@ void ConfigMonitor::check_all_subs()
     }
   }
   dout(10) << __func__ << " updated " << updated << " / " << total << dendl;
+}
+
+bool ConfigMonitor::_trim_config_history() {
+  dout(10) << __func__ << " trimming old config-history versions" << dendl;
+
+  const string history_prefix = "config-history/";
+  // key_re is used to match key entries in config-history list
+  // example: config-history/100/+osd/host:dx-arsenalceph01rack02data-01/osd_memory_target"
+  static const regex key_re(history_prefix + R"((\d+)/[+-]([^/]+(?:/[^/]+)+))");
+  // marker_re is used to match the epoch marker entries in config-history list
+  // example: config-history/100/
+  static const regex marker_re(history_prefix + R"((\d+)/)");
+
+  map<string, map<int, vector<string>>> config_versions;
+  set<string> version_markers;
+
+  auto iter = mon.store->get_iterator(KV_PREFIX);
+  iter->lower_bound(history_prefix);
+
+  while (iter->valid() && iter->key().starts_with(history_prefix)) {
+    const string& key = iter->key();
+    if (key.back() == '/') {
+      version_markers.insert(key);
+    } else if (smatch match; regex_match(key, match, key_re)) {
+      int version = stoi(match[1]);
+      string config_key = match[2];
+      config_versions[config_key][version].push_back(key);
+    }
+    iter->next();
+  }
+
+  vector<string> keys_to_delete;
+  map<int, int> version_key_deletion_count;
+
+  const size_t mon_config_history_size = g_conf()->mon_config_history_size;
+  constexpr size_t max_entries_to_remove = 100; // num of records to be removed in a single tick
+  size_t entries_removed = 0;
+
+  auto should_stop = [&] {
+    return entries_removed >= max_entries_to_remove;
+  };
+
+  auto mark_for_deletion = [&](const string& key, int version) {
+    dout(10) << __func__ << " removing old key: " << key << dendl;
+    keys_to_delete.push_back(key);
+    version_key_deletion_count[version]++;
+    ++entries_removed;
+  };
+
+  for (auto& [config_key, version_map] : config_versions) {
+    if (version_map.size() <= mon_config_history_size) continue;
+    size_t remove_count = version_map.size() - mon_config_history_size;
+    
+    size_t i = 0;
+    for (const auto& [version, keys] : version_map) {
+      if (i >= remove_count || should_stop()) {
+        break;
+      }
+      for (const auto& key : keys) {
+        mark_for_deletion(key, version);
+        if (should_stop()) { 
+          break; 
+        }
+      }
+      ++i;
+    }
+
+    if (should_stop()) { 
+      break; 
+    }
+  }
+
+  for (const auto& marker : version_markers) {
+    if (smatch m; regex_match(marker, m, marker_re)) {
+      int version = stoi(m[1]);
+      if (version_key_deletion_count.contains(version)) {
+        dout(10) << __func__ << " removing version marker: " << marker << dendl;
+        keys_to_delete.push_back(marker);
+      }
+    }
+  }
+
+  if (!keys_to_delete.empty()) {
+    for (const auto& key : keys_to_delete) {
+      mon.kvmon()->enqueue_rm(key);
+    }
+    return true;
+  }
+  
+  return false;
+  //  mon.kvmon()->propose_pending(); --> right, this should be removed
 }
