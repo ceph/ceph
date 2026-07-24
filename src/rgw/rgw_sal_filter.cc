@@ -1537,10 +1537,16 @@ int FilterWriter::complete(size_t accounted_size, const std::string& etag,
 			canceled, rctx, flags);
 }
 
-int FilterLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y,
+int FilterLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, RGWObjVersionTracker* objv,
 				const std::string& key, std::string& script)
 {
-  return next->get_script(dpp, y, key, script);
+  return next->get_script(dpp, y, objv, key, script);
+}
+
+int FilterLuaManager::list_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& list_meta_key,
+        const std::string& unnamed_script_key, RGWObjVersionTracker* objv, std::vector<std::string>& scripts)
+{
+  return next->list_scripts(dpp, y, list_meta_key, unnamed_script_key, objv, scripts);
 }
 
 std::tuple<rgw::lua::LuaCodeType, int> FilterLuaManager::get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y,
