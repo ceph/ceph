@@ -5,12 +5,15 @@
 
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
+#include <utility>
 
 #include <boost/intrusive_ptr.hpp>
 #include <boost/statechart/event.hpp>
 
+#include "osd/BackfillReservation.h"
 #include "osd/osd_types.h"
 
 class MOSDPGLog;
@@ -81,11 +84,13 @@ struct MInfoRec : boost::statechart::event< MInfoRec > {
   epoch_t msg_epoch;
   std::optional<pg_lease_t> lease;
   std::optional<pg_lease_ack_t> lease_ack;
+  std::optional<backfill_osd_space_usage_t> osd_space_usage;
   MInfoRec(pg_shard_t from, const pg_info_t &info, epoch_t msg_epoch,
 	   std::optional<pg_lease_t> l = {},
-	   std::optional<pg_lease_ack_t> la = {})
+	   std::optional<pg_lease_ack_t> la = {},
+	   std::optional<backfill_osd_space_usage_t> osd_space_usage = {})
     : from(from), info(info), msg_epoch(msg_epoch),
-      lease(l), lease_ack(la) {}
+      lease(l), lease_ack(la), osd_space_usage(osd_space_usage) {}
   void print(std::ostream *out) const {
     *out << "MInfoRec from " << from << " info: " << info;
     if (lease) {
@@ -109,8 +114,15 @@ struct MNotifyRec : boost::statechart::event< MNotifyRec > {
   pg_shard_t from;
   pg_notify_t notify;
   uint64_t features;
-  MNotifyRec(spg_t p, pg_shard_t from, const pg_notify_t &notify, uint64_t f)
-    : pgid(p), from(from), notify(notify), features(f) {}
+  std::optional<backfill_osd_space_usage_t> osd_space_usage;
+  MNotifyRec(
+    spg_t p,
+    pg_shard_t from,
+    const pg_notify_t &notify,
+    uint64_t f,
+    std::optional<backfill_osd_space_usage_t> osd_space_usage = {})
+    : pgid(p), from(from), notify(notify), features(f),
+      osd_space_usage(osd_space_usage) {}
   void print(std::ostream *out) const {
     *out << "MNotifyRec " << pgid << " from " << from << " notify: " << notify
 	 << " features: 0x" << std::hex << features << std::dec;
@@ -171,13 +183,22 @@ struct RequestBackfillPrio : boost::statechart::event< RequestBackfillPrio > {
   unsigned priority;
   int64_t primary_num_bytes;
   int64_t local_num_bytes;
-  explicit RequestBackfillPrio(unsigned prio, int64_t pbytes, int64_t lbytes) :
+  std::optional<backfill_reservation_space_info_t> space_info;
+  explicit RequestBackfillPrio(
+    unsigned prio,
+    int64_t pbytes,
+    int64_t lbytes,
+    std::optional<backfill_reservation_space_info_t> space_info = {}) :
     boost::statechart::event< RequestBackfillPrio >(),
-    priority(prio), primary_num_bytes(pbytes), local_num_bytes(lbytes) {}
+    priority(prio), primary_num_bytes(pbytes), local_num_bytes(lbytes),
+    space_info(std::move(space_info)) {}
   void print(std::ostream *out) const {
     *out << "RequestBackfillPrio: priority " << priority
          << " primary bytes " << primary_num_bytes
          << " local bytes " << local_num_bytes;
+    if (space_info) {
+      *out << " space info " << *space_info;
+    }
   }
 };
 

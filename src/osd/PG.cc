@@ -1668,11 +1668,25 @@ static int64_t pending_backfill(CephContext *cct, int64_t bf_bytes, int64_t loca
 }
 
 
+std::optional<backfill_osd_space_usage_t> PG::get_local_osd_space_usage()
+{
+  std::lock_guard l{osd->stat_lock};
+  const auto& statfs = osd->osd_stat.statfs;
+  if (statfs.total == 0) {
+    return std::nullopt;
+  }
+  return backfill_osd_space_usage_t{
+    statfs.get_used_raw(),
+    statfs.total};
+}
+
 // We can zero the value of primary num_bytes as just an atomic.
 // However, setting above zero reserves space for backfill and requires
 // the OSDService::stat_lock which protects all OSD usage
 bool PG::try_reserve_recovery_space(
-  int64_t primary_bytes, int64_t local_bytes) {
+  int64_t primary_bytes,
+  int64_t local_bytes,
+  backfill_reservation_space_info_t *space_info) {
   // Use tentative_bacfill_full() to make sure enough
   // space is available to handle target bytes from primary.
 
@@ -1725,6 +1739,15 @@ bool PG::try_reserve_recovery_space(
 	     << dendl;
     return false;
   } else {
+    if (space_info) {
+      float before = 0;
+      const float after = osd->compute_adjusted_ratio(
+	cur_stat, &before, pending_adjustment);
+      space_info->target_usage_before =
+	backfill_reservation_space_info_t::encode_usage_ratio(before);
+      space_info->target_usage_after =
+	backfill_reservation_space_info_t::encode_usage_ratio(after);
+    }
     // Don't reserve space if skipped reservation check, this is used
     // to test the other backfill full check AND in case a corruption
     // of num_bytes requires ignoring that value and trying the

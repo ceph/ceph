@@ -16,13 +16,17 @@
 #ifndef CEPH_MBACKFILL_H
 #define CEPH_MBACKFILL_H
 
+#include <optional>
+#include <utility>
+
 #include "msg/Message.h"
 #include "messages/MOSDPeeringOp.h"
+#include "osd/BackfillReservation.h"
 #include "osd/PGPeeringEvent.h"
 
 class MBackfillReserve : public MOSDPeeringOp {
 private:
-  static constexpr int HEAD_VERSION = 5;
+  static constexpr int HEAD_VERSION = 6;
   static constexpr int COMPAT_VERSION = 4;
 public:
   spg_t pgid;
@@ -40,6 +44,7 @@ public:
   uint32_t priority;
   int64_t primary_num_bytes;
   int64_t shard_num_bytes;
+  std::optional<backfill_reservation_space_info_t> space_info;
 
   spg_t get_spg() const {
     return pgid;
@@ -57,7 +62,11 @@ public:
       return new PGPeeringEvent(
 	query_epoch,
 	query_epoch,
-	RequestBackfillPrio(priority, primary_num_bytes, shard_num_bytes));
+	RequestBackfillPrio(
+	  priority,
+	  primary_num_bytes,
+	  shard_num_bytes,
+	  space_info));
     case GRANT:
       return new PGPeeringEvent(
 	query_epoch,
@@ -101,11 +110,13 @@ public:
 		   spg_t pgid,
 		   epoch_t query_epoch, unsigned prio = -1,
 		   int64_t primary_num_bytes = 0,
-                   int64_t shard_num_bytes = 0)
+		   int64_t shard_num_bytes = 0,
+		   std::optional<backfill_reservation_space_info_t> space_info = {})
     : MOSDPeeringOp{MSG_OSD_BACKFILL_RESERVE, HEAD_VERSION, COMPAT_VERSION},
       pgid(pgid), query_epoch(query_epoch),
       type(type), priority(prio), primary_num_bytes(primary_num_bytes),
-      shard_num_bytes(shard_num_bytes) {}
+      shard_num_bytes(shard_num_bytes),
+      space_info(std::move(space_info)) {}
 
   std::string_view get_type_name() const override {
     return "MBackfillReserve";
@@ -132,7 +143,12 @@ public:
       out << "REVOKE";
       break;
     }
-    if (type == REQUEST) out << " prio: " << priority;
+    if (type == REQUEST) {
+      out << " prio: " << priority;
+      if (space_info) {
+	out << " space info: " << *space_info;
+      }
+    }
     return;
   }
 
@@ -150,6 +166,11 @@ public:
     } else {
       primary_num_bytes = 0;
       shard_num_bytes = 0;
+    }
+    if (header.version >= 6) {
+      decode(space_info, p);
+    } else {
+      space_info = std::nullopt;
     }
   }
 
@@ -175,6 +196,7 @@ public:
     encode(pgid.shard, payload);
     encode(primary_num_bytes, payload);
     encode(shard_num_bytes, payload);
+    encode(space_info, payload);
   }
 };
 

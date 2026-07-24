@@ -59,10 +59,15 @@ BufferedRecoveryMessages::BufferedRecoveryMessages(PeeringCtx &ctx)
   : message_map{std::move(ctx.message_map)}
 {}
 
-void BufferedRecoveryMessages::send_notify(int to, const pg_notify_t &n)
+void BufferedRecoveryMessages::send_notify(
+  int to,
+  const pg_notify_t &n,
+  std::optional<backfill_osd_space_usage_t> osd_space_usage)
 {
   spg_t pgid(n.info.pgid.pgid, n.to);
-  send_osd_message(to, TOPNSPC::make_message<MOSDPGNotify2>(pgid, n));
+  send_osd_message(
+    to,
+    TOPNSPC::make_message<MOSDPGNotify2>(pgid, n, osd_space_usage));
 }
 
 void BufferedRecoveryMessages::send_query(
@@ -80,7 +85,8 @@ void BufferedRecoveryMessages::send_info(
   epoch_t cur_epoch,
   const pg_info_t &info,
   std::optional<pg_lease_t> lease,
-  std::optional<pg_lease_ack_t> lease_ack)
+  std::optional<pg_lease_ack_t> lease_ack,
+  std::optional<backfill_osd_space_usage_t> osd_space_usage)
 {
   send_osd_message(
     to,
@@ -90,7 +96,8 @@ void BufferedRecoveryMessages::send_info(
       cur_epoch,
       min_epoch,
       lease,
-      lease_ack)
+      lease_ack,
+      osd_space_usage)
   );
 }
 
@@ -449,7 +456,10 @@ void PeeringState::update_peer_info(const pg_shard_t &from,
   }
 }
 
-bool PeeringState::proc_replica_notify(const pg_shard_t &from, const pg_notify_t &notify)
+bool PeeringState::proc_replica_notify(
+  const pg_shard_t &from,
+  const pg_notify_t &notify,
+  const std::optional<backfill_osd_space_usage_t> &osd_space_usage)
 {
   const pg_info_t &oinfo = notify.info;
   const epoch_t send_epoch = notify.epoch_sent;
@@ -469,6 +479,11 @@ bool PeeringState::proc_replica_notify(const pg_shard_t &from, const pg_notify_t
 
   psdout(10) << " got osd." << from << " " << oinfo << dendl;
   ceph_assert(is_primary());
+  if (osd_space_usage) {
+    peer_osd_space_usage[from] = *osd_space_usage;
+  } else {
+    peer_osd_space_usage.erase(from);
+  }
   peer_info[from] = oinfo;
   update_peer_info(from, oinfo);
   might_have_unfound.insert(from);
@@ -1050,6 +1065,7 @@ void PeeringState::clear_primary_state()
   peer_missing_requested.clear();
   peer_info.clear();
   peer_bytes.clear();
+  peer_osd_space_usage.clear();
   peer_missing.clear();
   peer_last_complete_ondisk.clear();
   peer_activated.clear();
@@ -1226,6 +1242,129 @@ unsigned PeeringState::get_backfill_priority()
   return static_cast<unsigned>(ret);
 }
 
+unsigned PeeringState::apply_backfill_space_priority(
+  unsigned base_priority,
+  const std::optional<backfill_reservation_space_info_t> &space_info)
+{
+  if (!space_info || base_priority >= OSD_BACKFILL_DEGRADED_PRIORITY_BASE) {
+    return base_priority;
+  }
+
+  const unsigned max_priority =
+    get_max_prio_for_base(OSD_BACKFILL_PRIORITY_BASE);
+  if (base_priority >= max_priority) {
+    return base_priority;
+  }
+
+  const unsigned boost =
+    space_info->priority_boost(max_priority - base_priority);
+  const unsigned priority = base_priority + boost;
+  psdout(20) << "space-aware backfill priority is " << priority
+	     << " base " << base_priority
+	     << " boost " << boost
+	     << " raw_score " << space_info->raw_score()
+	     << " " << *space_info
+	     << dendl;
+  return priority;
+}
+
+std::optional<backfill_reservation_space_info_t>
+PeeringState::get_backfill_reservation_space_info(
+  bool require_target_usage)
+{
+  if ((state & PG_STATE_FORCED_BACKFILL) ||
+      actingset.size() < pool.info.min_size ||
+      is_undersized() ||
+      is_degraded()) {
+    return std::nullopt;
+  }
+
+  auto get_usage = [this](pg_shard_t shard)
+    -> std::optional<backfill_osd_space_usage_t> {
+    if (shard == pg_whoami) {
+      return pl->get_local_osd_space_usage();
+    }
+    auto it = peer_osd_space_usage.find(shard);
+    if (it == peer_osd_space_usage.end()) {
+      return std::nullopt;
+    }
+    return it->second;
+  };
+
+  auto get_shard_bytes = [this](pg_shard_t shard) -> int64_t {
+    if (shard == pg_whoami) {
+      return std::max<int64_t>(0, info.stats.stats.sum.num_bytes);
+    }
+    auto p = peer_bytes.find(shard);
+    if (p != peer_bytes.end()) {
+      return std::max<int64_t>(0, p->second);
+    }
+    auto pi = peer_info.find(shard);
+    if (pi != peer_info.end()) {
+      return std::max<int64_t>(0, pi->second.stats.stats.sum.num_bytes);
+    }
+    return 0;
+  };
+
+  backfill_reservation_space_info_t space_info;
+  bool have_relieved_osd = false;
+  for (const auto& acting : actingset) {
+    if (upset.count(acting)) {
+      continue;
+    }
+    auto usage = get_usage(acting);
+    if (!usage || usage->total_bytes == 0) {
+      psdout(20) << "missing OSD space usage for relieved " << acting << dendl;
+      return std::nullopt;
+    }
+    have_relieved_osd = true;
+    const int64_t shard_bytes = get_shard_bytes(acting);
+    space_info.relieved_usage_before = std::max(
+      space_info.relieved_usage_before,
+      usage->usage_ratio());
+    space_info.relieved_usage_after = std::max(
+      space_info.relieved_usage_after,
+      usage->projected_usage_ratio(-shard_bytes));
+  }
+
+  if (!have_relieved_osd) {
+    return std::nullopt;
+  }
+
+  for (const auto &target : backfill_targets) {
+    auto target_usage = get_usage(target);
+    if (target_usage && target_usage->total_bytes > 0) {
+      const int64_t incoming_bytes = std::max<int64_t>(
+        0,
+        std::max<int64_t>(0, info.stats.stats.sum.num_bytes) -
+        get_shard_bytes(target));
+      space_info.target_usage_before = std::max(
+        space_info.target_usage_before,
+        target_usage->usage_ratio());
+      space_info.target_usage_after = std::max(
+        space_info.target_usage_after,
+        target_usage->projected_usage_ratio(incoming_bytes));
+    } else if (require_target_usage) {
+      psdout(20) << "missing OSD space usage for target " << target << dendl;
+      return std::nullopt;
+    }
+    psdout(20) << "backfill reservation space info for target " << target
+               << " " << space_info << dendl;
+  }
+  return space_info;
+}
+
+unsigned PeeringState::get_space_aware_local_backfill_priority()
+{
+  const unsigned base_priority = get_backfill_priority();
+  unsigned priority = std::max(
+    base_priority,
+    apply_backfill_space_priority(
+      base_priority,
+      get_backfill_reservation_space_info(true)));
+  return priority;
+}
+
 unsigned PeeringState::get_delete_priority()
 {
   auto state = get_osdmap()->get_state(pg_whoami.osd);
@@ -1288,7 +1427,8 @@ bool PeeringState::set_force_backfill(bool b)
   if (did) {
     psdout(20) << "state " << get_current_state()
 	     << dendl;
-    pl->update_local_background_io_priority(get_backfill_priority());
+    pl->update_local_background_io_priority(
+      get_space_aware_local_backfill_priority());
   }
   return did;
 }
@@ -3289,7 +3429,8 @@ void PeeringState::share_pg_info()
 			  get_osdmap_epoch(),
 			  get_osdmap_epoch(),
 			  std::optional<pg_lease_t>{get_lease()},
-			  std::nullopt);
+			  std::nullopt,
+			  pl->get_local_osd_space_usage());
     pl->send_cluster_message(pg_shard.osd, std::move(m), get_osdmap_epoch());
   }
 }
@@ -3727,7 +3868,8 @@ void PeeringState::fulfill_query(const MQuery& query, PeeringCtxWrapper &rctx)
 	get_osdmap_epoch(),
 	notify_info.second,
 	past_intervals,
-	local_pg_acting_features));
+	local_pg_acting_features),
+      pl->get_local_osd_space_usage());
   } else {
     update_history(query.query.history);
     fulfill_log(query.from, query.query, query.query_epoch);
@@ -5376,7 +5518,10 @@ PeeringState::Initial::Initial(my_context ctx)
 boost::statechart::result PeeringState::Initial::react(const MNotifyRec& notify)
 {
   DECLARE_LOCALS;
-  ps->proc_replica_notify(notify.from, notify.notify);
+  ps->proc_replica_notify(
+    notify.from,
+    notify.notify,
+    notify.osd_space_usage);
   ps->set_last_peering_reset();
   return transit< Primary >();
 }
@@ -5620,7 +5765,10 @@ boost::statechart::result PeeringState::Primary::react(const MNotifyRec& notevt)
 {
   DECLARE_LOCALS;
   psdout(7) << "handle_pg_notify from osd." << notevt.from << dendl;
-  ps->proc_replica_notify(notevt.from, notevt.notify);
+  ps->proc_replica_notify(
+    notevt.from,
+    notevt.notify,
+    notevt.osd_space_usage);
   return discard_event();
 }
 
@@ -5943,6 +6091,8 @@ PeeringState::WaitRemoteBackfillReserved::react(const RemoteBackfillReserved &ev
       context< Active >().remote_shards_to_reserve_backfill.end()) {
     // The primary never backfills itself
     ceph_assert(*backfill_osd_it != ps->pg_whoami);
+    auto space_info =
+      ps->get_backfill_reservation_space_info();
     pl->send_cluster_message(
       backfill_osd_it->osd,
       TOPNSPC::make_message<MBackfillReserve>(
@@ -5951,7 +6101,8 @@ PeeringState::WaitRemoteBackfillReserved::react(const RemoteBackfillReserved &ev
 	ps->get_osdmap_epoch(),
 	ps->get_backfill_priority(),
         num_bytes,
-        ps->peer_bytes[*backfill_osd_it]),
+        ps->peer_bytes[*backfill_osd_it],
+	space_info),
       ps->get_osdmap_epoch());
     ++backfill_osd_it;
   } else {
@@ -6029,7 +6180,7 @@ PeeringState::WaitLocalBackfillReserved::WaitLocalBackfillReserved(my_context ct
 
   ps->state_set(PG_STATE_BACKFILL_WAIT);
   pl->request_local_background_io_reservation(
-    ps->get_backfill_priority(),
+    ps->get_space_aware_local_backfill_priority(),
     std::make_unique<PGPeeringEvent>(
       ps->get_osdmap_epoch(),
       ps->get_osdmap_epoch(),
@@ -6199,8 +6350,10 @@ PeeringState::RepNotRecovering::react(const RequestBackfillPrio &evt)
 
   DECLARE_LOCALS;
 
+  auto space_info = evt.space_info;
   if (!pl->try_reserve_recovery_space(
-	evt.primary_num_bytes, evt.local_num_bytes)) {
+	evt.primary_num_bytes, evt.local_num_bytes,
+	space_info ? &*space_info : nullptr)) {
     post_event(RejectTooFullRemoteReservation());
   } else {
     PGPeeringEventURef preempt;
@@ -6211,8 +6364,11 @@ PeeringState::RepNotRecovering::react(const RequestBackfillPrio &evt)
 	pl->get_osdmap_epoch(),
 	RemoteBackfillPreempted());
     }
-    pl->request_remote_recovery_reservation(
+    const unsigned priority = ps->apply_backfill_space_priority(
       evt.priority,
+      space_info);
+    pl->request_remote_recovery_reservation(
+      priority,
       std::make_unique<PGPeeringEvent>(
 	pl->get_osdmap_epoch(),
 	pl->get_osdmap_epoch(),
@@ -6872,7 +7028,10 @@ boost::statechart::result PeeringState::Active::react(const MNotifyRec& notevt)
     psdout(10) << "Active: got notify from " << notevt.from
 		       << ", calling proc_replica_notify and discover_all_missing"
 		       << dendl;
-    ps->proc_replica_notify(notevt.from, notevt.notify);
+    ps->proc_replica_notify(
+      notevt.from,
+      notevt.notify,
+      notevt.osd_space_usage);
     if (ps->have_unfound() || (ps->is_degraded() && ps->might_have_unfound.count(notevt.from))) {
       ps->discover_all_missing(
 	context<PeeringMachine>().get_recovery_ctx().msgs);
@@ -6909,6 +7068,10 @@ boost::statechart::result PeeringState::Active::react(const MInfoRec& infoevt)
 {
   DECLARE_LOCALS;
   ceph_assert(ps->is_primary());
+
+  if (infoevt.osd_space_usage) {
+    ps->peer_osd_space_usage[infoevt.from] = *infoevt.osd_space_usage;
+  }
 
   ceph_assert(!ps->acting_recovery_backfill.empty());
   if (infoevt.lease_ack) {
@@ -7228,7 +7391,8 @@ boost::statechart::result PeeringState::ReplicaActive::react(
     epoch,
     i,
     {}, /* lease */
-    ps->get_lease_ack());
+    ps->get_lease_ack(),
+    pl->get_local_osd_space_usage());
 
   if (ps->acting_set_writeable()) {
     ps->state_set(PG_STATE_ACTIVE);
@@ -7698,7 +7862,10 @@ boost::statechart::result PeeringState::GetInfo::react(const MNotifyRec& infoevt
   }
 
   epoch_t old_start = ps->info.history.last_epoch_started;
-  if (ps->proc_replica_notify(infoevt.from, infoevt.notify)) {
+  if (ps->proc_replica_notify(
+	infoevt.from,
+	infoevt.notify,
+	infoevt.osd_space_usage)) {
     // we got something new ...
     PastIntervals::PriorSet &prior_set = context< Peering >().prior_set;
     if (old_start < ps->info.history.last_epoch_started) {
@@ -8106,7 +8273,10 @@ boost::statechart::result PeeringState::Incomplete::react(const AdvMap &advmap) 
 boost::statechart::result PeeringState::Incomplete::react(const MNotifyRec& notevt) {
   DECLARE_LOCALS;
   psdout(7) << "handle_pg_notify from osd." << notevt.from << dendl;
-  if (ps->proc_replica_notify(notevt.from, notevt.notify)) {
+  if (ps->proc_replica_notify(
+	notevt.from,
+	notevt.notify,
+	notevt.osd_space_usage)) {
     // We got something new, try again!
     return transit< GetLog >();
   } else {
@@ -8474,5 +8644,4 @@ std::vector<pg_shard_t> PeeringState::get_replica_recovery_order() const
   }
   return ret;
 }
-
 
