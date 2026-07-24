@@ -703,7 +703,6 @@ TransactionManager::do_submit_transaction(
   tref.get_phase_durations().prepare_record +=
     std::chrono::steady_clock::now() - prepare_record_start;
 
-  tref.get_handle().maybe_release_collection_lock();
   if (tref.get_src() == Transaction::src_t::MUTATE) {
     --(shard_stats.processing_inlock_io_num);
     ++(shard_stats.processing_postlock_io_num);
@@ -749,7 +748,6 @@ seastar::future<> TransactionManager::flush(OrderingHandle &handle)
   }).then([this, &handle] {
     return handle.enter(write_pipeline.prepare);
   }).then([this, &handle] {
-    handle.maybe_release_collection_lock();
     return journal->flush(handle);
   }).then([FNAME, &handle] {
     SUBDEBUG(seastore_t, "H{} completed", (void*)&handle);

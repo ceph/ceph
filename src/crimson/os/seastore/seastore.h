@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <deque>
 #include <map>
 #include <optional>
 #include <string>
@@ -48,9 +49,7 @@ enum class op_type_t : uint8_t {
 };
 
 enum class txn_stage_t : uint8_t {
-    COLLOCK_WAIT = 0,  // waiting on the collection ordering_lock
-    COLLOCK_HOLD,      // collection ordering_lock held (acquire -> release at prepare_record)
-    THROTTLER_WAIT,    // waiting for a throttler slot
+    THROTTLER_WAIT = 0, // waiting for a throttler slot
     BUILD,             // building the transaction (_do_transaction_step loop)
     BUILD_GET_ONODE,   // onode_manager get/get_or_create calls within BUILD
     SUBMIT_TOTAL,      // the whole submit_transaction (pipeline + journal write)
@@ -70,7 +69,13 @@ public:
   SeastoreCollection(T&&... args) :
     FuturizedCollection(std::forward<T>(args)...) {}
 
-  seastar::shared_mutex ordering_lock;
+  struct batch_entry_t {
+    ceph::os::Transaction txn;
+    seastar::promise<> pr;
+    bool batchable = true;
+  };
+  std::deque<batch_entry_t> pending_txns;
+  bool collection_in_flight = false;
 };
 
 /**
@@ -272,6 +277,12 @@ public:
         iter = ext_transaction.begin();
       }
     };
+
+    seastar::future<> dispatch_collection(CollectionRef ch);
+    ceph::os::Transaction build_next_batch(
+      SeastoreCollection& coll,
+      std::vector<seastar::promise<>>& pending_txns_promises);
+    seastar::future<> run_one_batch(CollectionRef ch, ceph::os::Transaction&& t);
 
     TransactionManager::read_extent_iertr::future<std::optional<unsigned>>
     get_coll_bits(CollectionRef ch, Transaction &t) const;

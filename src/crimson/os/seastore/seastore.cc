@@ -215,8 +215,6 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
   );
 
   std::pair<txn_stage_t, sm::label_instance> labels_by_stage[] = {
-    {txn_stage_t::COLLOCK_WAIT,          sm::label_instance("stage", "collock_wait")},
-    {txn_stage_t::COLLOCK_HOLD,          sm::label_instance("stage", "collock_hold")},
     {txn_stage_t::THROTTLER_WAIT,        sm::label_instance("stage", "throttler_wait")},
     {txn_stage_t::BUILD,                 sm::label_instance("stage", "build")},
     {txn_stage_t::BUILD_GET_ONODE,       sm::label_instance("stage", "build_get_onode")},
@@ -921,14 +919,13 @@ seastar::future<> SeaStore::report_stats()
          calc_conflicts(io_total.read_num, io_total.repeat_read_num),
          calc_conflicts(io_total.get_bg_num(), io_total.get_repeat_bg_num()));
     INFO("trans outstanding: {},{},{},{} "
-         "per-shard: {:.2f}({:.2f},{:.2f},{:.2f},{:.2f},{:.2f}),{:.2f},{:.2f},{:.2f}",
+         "per-shard: {:.2f}({:.2f},{:.2f},{:.2f},{:.2f}),{:.2f},{:.2f},{:.2f}",
          io_total.pending_io_num,
          io_total.pending_read_num,
          io_total.pending_bg_num,
          io_total.pending_flush_num,
          (double)io_total.pending_io_num/seastar::smp::count,
          (double)io_total.starting_io_num/seastar::smp::count,
-         (double)io_total.waiting_collock_io_num/seastar::smp::count,
          (double)io_total.waiting_throttler_io_num/seastar::smp::count,
          (double)io_total.processing_inlock_io_num/seastar::smp::count,
          (double)io_total.processing_postlock_io_num/seastar::smp::count,
@@ -940,7 +937,6 @@ seastar::future<> SeaStore::report_stats()
     for (const auto &s : shard_io_stats) {
       oss_pending << s.pending_io_num
                  << "(" << s.starting_io_num
-                 << "," << s.waiting_collock_io_num
                  << "," << s.waiting_throttler_io_num
                  << "," << s.processing_inlock_io_num
                  << "," << s.processing_postlock_io_num
@@ -1729,13 +1725,104 @@ void SeaStore::Shard::transaction_dump(ceph::os::Transaction &t) {
   ERROR("{}", str.str());
 }
 
+// Whether a client txn may be merged with others into one seastore batch
+// (build_next_batch). Default is yes, specific op patterns opt out and run solo.
+
+// Bathced pg-log trim (OP_OMAP_RMKEYS / OP_OMAP_RMKEYRANGE)
+static bool txn_is_batchable(ceph::os::Transaction& t)
+{
+  using ceph::os::Transaction;
+  auto i = t.begin();
+  while (i.have_op()) {
+    auto op = i.decode_op();
+    if (op->op == Transaction::OP_OMAP_RMKEYS ||
+        op->op == Transaction::OP_OMAP_RMKEYRANGE) {
+      return false;
+    }
+  }
+  return true;
+}
+
 seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
   CollectionRef _ch,
   ceph::os::Transaction&& _t)
 {
-  assert(store_active);
   LOG_PREFIX(SeaStoreS::do_transaction_no_callbacks);
+  assert(store_active);
   ++(shard_stats.io_num);
+
+  auto& coll = static_cast<SeastoreCollection&>(*_ch);
+  auto& entry = coll.pending_txns.emplace_back();
+  entry.txn = std::move(_t);
+  entry.batchable = txn_is_batchable(entry.txn);
+  auto fut = entry.pr.get_future();
+  DEBUG("enqueue cid={} queue_depth={} in_flight={}",
+        coll.get_cid(), coll.pending_txns.size(), coll.collection_in_flight);
+  if (!coll.collection_in_flight) {
+    coll.collection_in_flight = true;
+    DEBUG("cid={} gate closed, starting dispatch", coll.get_cid());
+    std::ignore = dispatch_collection(_ch);
+  }
+  return fut;
+}
+
+ceph::os::Transaction SeaStore::Shard::build_next_batch(
+  SeastoreCollection& coll,
+  std::vector<seastar::promise<>>& pending_txns_promises)
+{
+  ceph::os::Transaction merged;
+  bool first = true;
+  uint64_t batch_features = 0;
+  while (!coll.pending_txns.empty()) {
+    const bool no_batch = !coll.pending_txns.front().batchable;
+    if (!first &&
+        (no_batch || coll.pending_txns.front().txn.get_data_features() != batch_features)) {
+      // Batch boundary: seal what we have so far in the batch
+      break;
+    }
+    auto e = std::move(coll.pending_txns.front());
+    coll.pending_txns.pop_front();
+    if (first) {
+      batch_features = e.txn.get_data_features();
+      merged = std::move(e.txn);
+      first = false;
+    } else {
+      merged.append(e.txn);
+    }
+    pending_txns_promises.push_back(std::move(e.pr));
+    if (no_batch) {
+      // no_batch runs solo (never is appended)
+      break;
+    }
+  }
+  return merged;
+}
+
+seastar::future<> SeaStore::Shard::dispatch_collection(CollectionRef ch)
+{
+  LOG_PREFIX(SeaStoreS::dispatch_collection);
+  auto& coll = static_cast<SeastoreCollection&>(*ch);
+  while (!coll.pending_txns.empty()) {
+    std::vector<seastar::promise<>> pending_txns_promises;
+    auto merged = build_next_batch(coll, pending_txns_promises);
+    DEBUG("draining {} txns from cid={}, committing batch ({} ops)",
+          pending_txns_promises.size(), coll.get_cid(), merged.get_num_ops());
+    co_await run_one_batch(ch, std::move(merged));
+    DEBUG("committed batch of {} txns for cid={}",
+          pending_txns_promises.size(), coll.get_cid());
+    for (auto& p : pending_txns_promises) {
+      p.set_value();
+    }
+  }
+  DEBUG("cid={} drained, gate open", coll.get_cid());
+  coll.collection_in_flight = false;
+}
+
+seastar::future<> SeaStore::Shard::run_one_batch(
+  CollectionRef _ch,
+  ceph::os::Transaction&& _t)
+{
+  LOG_PREFIX(SeaStoreS::run_one_batch);
   ++(shard_stats.pending_io_num);
   ++(shard_stats.starting_io_num);
 
@@ -1750,18 +1837,6 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
 
   assert(shard_stats.starting_io_num);
   --(shard_stats.starting_io_num);
-  ++(shard_stats.waiting_collock_io_num);
-
-  auto t_pre_collock = seastar::lowres_clock::now();
-  co_await ctx.transaction->get_handle().take_collection_lock(
-    static_cast<SeastoreCollection&>(*(ctx.ch)).ordering_lock
-  );
-  auto t_post_collock = seastar::lowres_clock::now();
-  auto collock_wait = t_post_collock - t_pre_collock;
-  ctx.transaction->get_handle().set_lock_acquire_time(t_post_collock);
-
-  assert(shard_stats.waiting_collock_io_num);
-  --(shard_stats.waiting_collock_io_num);
   ++(shard_stats.waiting_throttler_io_num);
 
   auto t_pre_throttler = seastar::lowres_clock::now();
@@ -1841,8 +1916,6 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
     const std::array<
       std::pair<txn_stage_t, seastar::lowres_clock::duration>, STAGE_MAX>
       stage_samples = {{
-        {txn_stage_t::COLLOCK_WAIT,          collock_wait},
-        {txn_stage_t::COLLOCK_HOLD,          ctx.transaction->get_handle().get_lock_hold_time()},
         {txn_stage_t::THROTTLER_WAIT,        throttler_wait},
         {txn_stage_t::BUILD,                 ctx.build_time},
         {txn_stage_t::BUILD_GET_ONODE,       ctx.get_onode_time},
@@ -1884,16 +1957,15 @@ seastar::future<> SeaStore::Shard::flush(CollectionRef ch)
   ++(shard_stats.flush_num);
   ++(shard_stats.pending_flush_num);
 
-  return seastar::do_with(
-    get_dummy_ordering_handle(),
-    [this, ch](auto &handle) {
-      return handle.take_collection_lock(
-	static_cast<SeastoreCollection&>(*ch).ordering_lock
-      ).then([this, &handle] {
+  return do_transaction_no_callbacks(
+    ch, ceph::os::Transaction{}
+  ).then([this] {
+    return seastar::do_with(
+      get_dummy_ordering_handle(),
+      [this](auto &handle) {
 	return transaction_manager->flush(handle);
       });
-    }
-  ).finally([this] {
+  }).finally([this] {
     assert(shard_stats.pending_flush_num);
     --(shard_stats.pending_flush_num);
   });
@@ -3004,7 +3076,7 @@ shard_stats_t SeaStore::Shard::get_io_stats(
     };
     INFO("iops={:.2f},{:.2f},{:.2f}({:.2f},{:.2f},{:.2f},{:.2f}),{:.2f} "
          "conflicts={:.2f},{:.2f},{:.2f}({:.2f},{:.2f},{:.2f},{:.2f}) "
-         "outstanding={}({},{},{},{},{}),{},{},{}",
+         "outstanding={}({},{},{},{}),{},{},{}",
          // iops
          ret.io_num/seconds,
          ret.read_num/seconds,
@@ -3025,7 +3097,6 @@ shard_stats_t SeaStore::Shard::get_io_stats(
          // outstanding
          ret.pending_io_num,
          ret.starting_io_num,
-         ret.waiting_collock_io_num,
          ret.waiting_throttler_io_num,
          ret.processing_inlock_io_num,
          ret.processing_postlock_io_num,
