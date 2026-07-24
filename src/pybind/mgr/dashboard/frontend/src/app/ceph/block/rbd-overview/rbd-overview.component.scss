@@ -1,0 +1,109 @@
+@use '@carbon/layout';
+
+.rbd-overview {
+  display: block;
+
+  .pool-overview-card {
+    display: block;
+    padding: layout.$spacing-05;
+  }
+
+  .pool-overview-panels {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: layout.$spacing-06;
+  }
+
+  .pool-detail-panel {
+    padding: layout.$spacing-05;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .pool-detail-header-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: layout.$spacing-03;
+  }
+
+  .pool-detail-panel__subtitle {
+    color: var(--cds-text-secondary, #525252);
+  }
+
+  .pool-detail-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: layout.$spacing-04;
+  }
+
+  .pool-detail-mono-val {
+    max-width: 60%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: right;
+  }
+
+  .pool-detail-panel__usage-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: layout.$spacing-03;
+    margin-bottom: layout.$spacing-03;
+  }
+
+  .pool-detail-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: layout.$spacing-04;
+    
+    &--3-col {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  .pool-detail-stat-box {
+    padding: layout.$spacing-04;
+    display: flex;
+    flex-direction: column;
+    gap: layout.$spacing-02;
+    min-height: 5.5rem;
+    background-color: var(--cds-layer-01, #f4f4f4);
+  }
+
+  .pool-detail-divider {
+    border: 0;
+    border-top: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  }
+
+  cd-usage-bar {
+    display: block;
+  }
+
+  .capacity-flex-container {
+    display: flex;
+    align-items: center;
+    gap: layout.$spacing-06;
+  }
+  
+  .capacity-chart-wrapper {
+    flex: 1;
+    min-width: 0;
+  }
+  
+  .capacity-stats-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .pool-detail-right-column {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+}

@@ -23,12 +23,28 @@
 
           @if (field.type === 'status') {
             @let statusMeta = field.status | overviewStatus;
-            <span class="cd-overview-status">
-              <cd-icon [type]="statusMeta.icon"></cd-icon>
-              <span [class]="'cds--type-body-compact-01 ' + statusMeta.textClass">
-                {{ field.value | empty: field.emptyText }}
+            @if (field.routerLink) {
+              <a [routerLink]="field.routerLink" class="cd-overview-status">
+                <cd-icon [type]="statusMeta.icon"></cd-icon>
+                <span [class]="'cds--type-body-compact-01 ' + statusMeta.textClass">
+                  {{ field.value | empty: field.emptyText }}
+                </span>
+              </a>
+            } @else if (field.action) {
+              <a (click)="field.action()" class="cd-overview-status" style="cursor: pointer; text-decoration: none;">
+                <cd-icon [type]="statusMeta.icon"></cd-icon>
+                <span [class]="'cds--type-body-compact-01 ' + statusMeta.textClass">
+                  {{ field.value | empty: field.emptyText }}
+                </span>
+              </a>
+            } @else {
+              <span class="cd-overview-status">
+                <cd-icon [type]="statusMeta.icon"></cd-icon>
+                <span [class]="'cds--type-body-compact-01 ' + statusMeta.textClass">
+                  {{ field.value | empty: field.emptyText }}
+                </span>
               </span>
-            </span>
+            }
           } @else if (field.type === 'tags') {
             <div class="cd-overview-tags">
               @for (value of field.values; track $index) {
@@ -39,7 +55,11 @@
             </div>
           } @else {
             <span class="cds--type-body-compact-01 cd-overview-value">
-              {{ field.value | empty: field.emptyText }}
+              @if (field.routerLink) {
+                <a [routerLink]="field.routerLink">{{ field.value | empty: field.emptyText }}</a>
+              } @else {
+                {{ field.value | empty: field.emptyText }}
+              }
             </span>
           }
         </div>

@@ -11,6 +11,8 @@
 }
 
 .cd-overview-grid {
+  display: flex !important;
+  flex-wrap: wrap;
   row-gap: layout.$spacing-05;
   column-gap: layout.$spacing-05;
 }
@@ -21,6 +23,8 @@
 
 .cd-overview-item {
   min-width: 0;
+  flex: 1 1 0%;
+  max-width: none !important;
 }
 
 .cd-overview-label {

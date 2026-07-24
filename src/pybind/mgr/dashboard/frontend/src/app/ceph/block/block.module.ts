@@ -11,6 +11,9 @@ import { FeatureTogglesGuardService } from '~/app/shared/services/feature-toggle
 import { ModuleStatusGuardService } from '~/app/shared/services/module-status-guard.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { TextLabelListComponent } from '~/app/shared/components/text-label-list/text-label-list.component';
+import { AreaChartComponent } from '~/app/shared/components/area-chart/area-chart.component';
+import { DonutChartComponent } from '~/app/shared/components/donut-chart/donut-chart.component';
+import { TimePickerComponent } from '~/app/shared/components/time-picker/time-picker.component';
 import { IscsiSettingComponent } from './iscsi-setting/iscsi-setting.component';
 import { IscsiTabsComponent } from './iscsi-tabs/iscsi-tabs.component';
 import { IscsiTargetDetailsComponent } from './iscsi-target-details/iscsi-target-details.component';
@@ -28,6 +31,7 @@ import { RbdConfigurationListComponent } from './rbd-configuration-list/rbd-conf
 import { RbdDetailsComponent } from './rbd-details/rbd-details.component';
 import { RbdFormComponent } from './rbd-form/rbd-form.component';
 import { RbdListComponent } from './rbd-list/rbd-list.component';
+import { RbdOverviewComponent } from './rbd-overview/rbd-overview.component';
 import { RbdNamespaceFormModalComponent } from './rbd-namespace-form/rbd-namespace-form-modal.component';
 import { RbdNamespaceListComponent } from './rbd-namespace-list/rbd-namespace-list.component';
 import { RbdPerformanceComponent } from './rbd-performance/rbd-performance.component';
@@ -111,6 +115,7 @@ import { NvmeofGatewayGroupDeleteGuardModalComponent } from './nvmeof-gateway-gr
 import { NvmeofSetupCardsComponent } from './nvmeof-setup-cards/nvmeof-setup-cards.component';
 import { NvmeofGatewayGroupFilterComponent } from './nvmeof-gateway-group-filter/nvmeof-gateway-group-filter.component';
 import { NvmeofEditAuthenticationComponent } from './nvmeof-edit-authentication/nvmeof-edit-authentication.component';
+import { PerformanceCardComponent } from '~/app/shared/components/performance-card/performance-card.component';
 
 @NgModule({
   imports: [
@@ -150,9 +155,14 @@ import { NvmeofEditAuthenticationComponent } from './nvmeof-edit-authentication/
     ThemeModule,
     NvmeofSetupCardsComponent,
     NvmeofGatewayGroupFilterComponent,
-    TextLabelListComponent
+    TextLabelListComponent,
+    PerformanceCardComponent,
+    AreaChartComponent,
+    DonutChartComponent,
+    TimePickerComponent
   ],
   declarations: [
+    RbdOverviewComponent,
     RbdListComponent,
     IscsiComponent,
     IscsiSettingComponent,
@@ -231,7 +241,24 @@ export class BlockModule {
     components)
 */
 const routes: Routes = [
-  { path: '', redirectTo: 'rbd', pathMatch: 'full' },
+  { path: '', redirectTo: 'overview', pathMatch: 'full' },
+  {
+    path: 'overview',
+    component: RbdOverviewComponent,
+    canActivate: [FeatureTogglesGuardService, ModuleStatusGuardService],
+    data: {
+      moduleStatusGuardConfig: {
+        uiApiPath: 'block/rbd',
+        redirectTo: 'error',
+        header: $localize`Block Pool is not configured`,
+        button_name: $localize`Configure Default pool`,
+        button_route: '/pool/create',
+        component: 'Default Pool',
+        uiConfig: true
+      },
+      breadcrumbs: 'Overview'
+    }
+  },
   {
     path: 'rbd',
     canActivate: [FeatureTogglesGuardService, ModuleStatusGuardService],

@@ -14,6 +14,9 @@ import { provideCharts, withDefaultRegisterables, BaseChartDirective } from 'ng2
 import { AppRoutingModule } from '~/app/app-routing.module';
 import { SharedModule } from '~/app/shared/shared.module';
 import { CephfsChartComponent } from './cephfs-chart/cephfs-chart.component';
+import { DonutChartComponent } from '~/app/shared/components/donut-chart/donut-chart.component';
+import { AreaChartComponent } from '~/app/shared/components/area-chart/area-chart.component';
+import { TimePickerComponent } from '~/app/shared/components/time-picker/time-picker.component';
 import { CephfsClientsComponent } from './cephfs-clients/cephfs-clients.component';
 import { CephfsDetailComponent } from './cephfs-detail/cephfs-detail.component';
 import { CephfsDirectoriesComponent } from './cephfs-directories/cephfs-directories.component';
@@ -67,6 +70,7 @@ import Renew16 from '@carbon/icons/es/renew/16';
 import { CephfsMirroringWizardComponent } from './cephfs-mirroring-wizard/cephfs-mirroring-wizard.component';
 import { CephfsFilesystemSelectorComponent } from './cephfs-filesystem-selector/cephfs-filesystem-selector.component';
 import { CephfsMirroringEntityComponent } from './cephfs-mirroring-entity/cephfs-mirroring-entity.component';
+import { CephfsOverviewComponent } from './cephfs-overview/cephfs-overview.component';
 
 @NgModule({
   imports: [
@@ -105,7 +109,10 @@ import { CephfsMirroringEntityComponent } from './cephfs-mirroring-entity/cephfs
     RadioModule,
     TilesModule,
     TagModule,
-    NotificationModule
+    NotificationModule,
+    DonutChartComponent,
+    AreaChartComponent,
+    TimePickerComponent
   ],
   declarations: [
     CephfsDetailComponent,
@@ -130,7 +137,8 @@ import { CephfsMirroringEntityComponent } from './cephfs-mirroring-entity/cephfs
     CephfsMirroringWizardComponent,
     CephfsFilesystemSelectorComponent,
     CephfsMirroringErrorComponent,
-    CephfsMirroringEntityComponent
+    CephfsMirroringEntityComponent,
+    CephfsOverviewComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())]
 })
