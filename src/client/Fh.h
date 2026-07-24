@@ -2,6 +2,7 @@
 #define CEPH_CLIENT_FH_H
 
 #include "common/Readahead.h"
+#include "common/reentrant_lock.h"
 #include "include/types.h"
 #include "InodeRef.h"
 #include "UserPerm.h"
@@ -26,7 +27,7 @@ struct Fh {
   int       mode;       // the mode i opened the file with
 
   bool pos_locked = false;           // pos is currently in use
-  std::list<ceph::condition_variable*> pos_waiters;   // waiters for pos
+  std::list<ceph::tracked_condition_variable*> pos_waiters;   // waiters for pos
 
   Readahead readahead;
 

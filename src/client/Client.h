@@ -24,6 +24,7 @@
 #include "common/Finisher.h"
 #include "common/Timer.h"
 #include "common/ceph_mutex.h"
+#include "common/reentrant_lock.h"
 #include "common/cmdparse.h"
 #include "common/compiler_extensions.h"
 #include "include/common_fwd.h"
@@ -300,6 +301,8 @@ protected:
     std::shared_mutex metrics_lock;
 };
 
+class ClientCaps;
+
 class Client : public Dispatcher, public md_config_obs_t {
 public:
   friend class C_Block_Sync; // Calls block map and protected helpers
@@ -310,7 +313,9 @@ public:
   friend class C_Client_RequestInterrupt;
   friend class C_Deleg_Timeout; // Asserts on client_lock, called when a delegation is unreturned
   friend class C_Client_CacheRelease; // Asserts on client_lock
+  friend class ClientCaps;
   friend class SyntheticClient;
+  friend class Inode;
   friend void intrusive_ptr_release(Inode *in);
   template <typename T> friend struct RWRefState;
   template <typename T> friend class RWRef;
@@ -743,6 +748,7 @@ public:
                             bufferlist *blp = nullptr,
                             bool do_fsync = false, bool syncdataonly = false);
   int64_t nonblocking_fsync(Inode *in, bool syncdataonly, Context *onfinish);
+  void queue_client_finisher(Context *ctx);
   loff_t ll_lseek(Fh *fh, loff_t offset, int whence);
   int ll_flush(Fh *fh);
   int ll_fsync(Fh *fh, bool syncdataonly);
@@ -785,8 +791,8 @@ public:
   int ll_delegation(Fh *fh, unsigned cmd, ceph_deleg_cb_t cb, void *priv);
 
   entity_name_t get_myname() { return messenger->get_myname(); }
-  void wait_on_list(std::list<ceph::condition_variable*>& ls);
-  void signal_cond_list(std::list<ceph::condition_variable*>& ls);
+  void wait_on_list(std::list<ceph::tracked_condition_variable*>& ls);
+  void signal_cond_list(std::list<ceph::tracked_condition_variable*>& ls);
 
   void set_filer_flags(int flags);
   void clear_filer_flags(int flags);
@@ -852,6 +858,7 @@ public:
   void kick_flushing_caps(MetaSession *session);
   void early_kick_flushing_caps(MetaSession *session);
   int get_caps(Fh *fh, int need, int want, int *have, loff_t endoff);
+  int try_get_caps(Fh *fh, int need, int want, int *have);
   int get_caps_used(Inode *in);
 
   void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, snapid_t snap_highwater,
@@ -909,9 +916,16 @@ public:
    * @returns true if the data was already flushed, false otherwise.
    */
   bool _flush(Inode *in, Context *c);
+  void _flush_cap_snap_buffer(Inode *in);
   void _flush_range(Inode *in, int64_t off, uint64_t size);
   void _flushed(Inode *in);
   void flush_set_callback(ObjectCacher::ObjectSet *oset);
+
+  bool objectcacher_set_is_empty(Inode *in);
+  void objectcacher_purge_set(Inode *in);
+  void objectcacher_release_set(Inode *in);
+  int64_t objectcacher_release_all();
+  void objectcacher_wait_for_flush_callbacks();
 
   void close_release(Inode *in);
   void close_safe(Inode *in);
@@ -1036,7 +1050,7 @@ public:
 
   /* tick thread */
   std::thread upkeeper;
-  ceph::condition_variable upkeep_cond;
+  ceph::tracked_condition_variable upkeep_cond;
   bool tick_thread_stopped = false;
 
   std::unique_ptr<PerfCounters> logger;
@@ -1064,7 +1078,7 @@ protected:
     void print(std::ostream& os) const;
   };
 
-  std::list<ceph::condition_variable*> waiting_for_reclaim;
+  std::list<ceph::tracked_condition_variable*> waiting_for_reclaim;
   /* Flags for check_caps() */
   static const unsigned CHECK_CAPS_NODELAY = 0x1;
   static const unsigned CHECK_CAPS_SYNCHRONOUS = 0x2;
@@ -1198,6 +1212,7 @@ protected:
   void wake_up_session_caps(MetaSession *s, bool reconnect);
 
   void wait_on_context_list(std::vector<Context*>& ls);
+  void signal_deferred_context_list(std::vector<Context*>& ls);
   void signal_context_list(std::vector<Context*>& ls) {
     finish_contexts(cct, ls, 0);
   }
@@ -1208,6 +1223,8 @@ protected:
   // decrease inode ref.  delete if dangling.
   void _put_inode(Inode *in, int n);
   void delay_put_inodes(bool wakeup=false);
+  void dispose_stale_inodes();
+  void dispose_orphan_inodes();
   void put_inode(Inode *in, int n=1);
   void close_dir(Dir *dir);
 
@@ -1299,7 +1316,14 @@ protected:
 
   // global client lock
   //  - protects Client and buffer cache both!
-  ceph::mutex client_lock = ceph::make_mutex("Client::client_lock");
+  ceph::TrackedLock client_lock = ceph::make_tracked("Client::client_lock");
+
+  // Acquire client_lock when a callback may run without it (finisher thread).
+  // No-op when the caller already holds client_lock (e.g. synchronous _flush).
+  struct ClientLockIfNeeded {
+    std::unique_lock<ceph::TrackedLock> lock;
+    explicit ClientLockIfNeeded(Client *clnt);
+  };
 
   std::map<snapid_t, int> ll_snap_ref;
 
@@ -1472,7 +1496,12 @@ private:
       : CRF(nullptr) {}
 
     void finish(int r) override {
-      CRF->finish_io(r);
+      if (!CRF) {
+        return;
+      }
+      auto *crf = CRF;
+      CRF = nullptr;
+      crf->finish_io(r);
     }
   };
 
@@ -1525,14 +1554,16 @@ private:
     uint64_t pos;
     bool fini;
 
-    void retry();
-    void finish(int r) override;
+    struct C_Step : public Context {
+      C_Read_Sync_NonBlocking *self;
+      explicit C_Step(C_Read_Sync_NonBlocking *s) : self(s) {}
+      void finish(int r) override;
+    };
 
-    void complete(int r) override
-    {
-      finish(r);
-      if (fini)
-        delete this;
+    void retry();
+    void finish_locked(int r);
+    void finish(int r) override {
+      ceph_abort_msg("C_Read_Sync_NonBlocking::finish called directly");
     }
   };
 
@@ -1568,6 +1599,7 @@ private:
 #endif
     uint64_t read_start;
     uint64_t read_len;
+    bool finished = false;
 
     void finish(int r) override;
   };
@@ -1735,6 +1767,9 @@ private:
     bufferlist encbl;
     bufferlist *pbl;
 
+    const struct iovec *defer_iov = nullptr;
+    int defer_iovcnt = 0;
+
     bool async;
 
 #if defined(__linux__)
@@ -1824,6 +1859,9 @@ private:
 
     int64_t get_ofs() { return offset; }
     uint64_t get_size() { return size; }
+
+    void set_deferred_iov(const struct iovec *iov, int iovcnt);
+    void ensure_bl();
   };
 
   class WriteEncMgr_Buffered : public WriteEncMgr {
@@ -1848,30 +1886,41 @@ private:
     int do_write() override;
   };
 
+  struct C_nonblocking_fsync_state;
+
   class C_Write_Finisher : public Context {
   public:
     void finish_io(int r);
+    void queue_finish_io(int r);
     void finish_onuninline(int r);
     void finish_fsync(int r);
+
+    class C_FlushRangeFinish : public Context {
+      C_Write_Finisher *cwf;
+      int r;
+    public:
+      C_FlushRangeFinish(C_Write_Finisher *c, int _r) : cwf(c), r(_r) {}
+      void finish(int fr) override;
+    };
+
+    class C_FsyncFinish : public Context {
+      C_Write_Finisher *cwf;
+    public:
+      explicit C_FsyncFinish(C_Write_Finisher *c) : cwf(c) {}
+      void finish(int r) override;
+      void complete(int r) override {
+        finish(r);
+      }
+    };
 
     C_Write_Finisher(Client *clnt, Context *onfinish, bool dont_need_uninline,
                      bool is_file_write, Fh *f, Inode *in,
                      uint64_t fpos, int64_t req_ofs, uint64_t req_size,
                      int64_t offset, uint64_t size,
                      bool do_fsync, bool syncdataonly,
-                     bool encrypted)
-      : clnt(clnt), onfinish(onfinish),
-        is_file_write(is_file_write), start(mono_clock_now()), f(f), in(in), fpos(fpos),
-        req_ofs(req_ofs), req_size(req_size),
-        offset(offset), size(size), syncdataonly(syncdataonly),
-        encrypted(encrypted) {
-      iofinished_r = 0;
-      onuninlinefinished_r = 0;
-      fsync_r = 0;
-      iofinished = false;
-      onuninlinefinished = dont_need_uninline;
-      fsync_finished = !do_fsync;
-    }
+                     bool encrypted);
+
+    ~C_Write_Finisher() override;
 
     void finish(int r) override {
       // We need to override finish, but have nothing to do.
@@ -1885,6 +1934,7 @@ private:
   private:
     Client *clnt;
     Context *onfinish;
+    C_FsyncFinish fsync_finish_ctx;
     bool is_file_write;
     utime_t start;
     Fh *f;
@@ -1902,6 +1952,9 @@ private:
     bool iofinished;
     bool onuninlinefinished;
     bool fsync_finished;
+    InodeRef inode_pin;
+    void release_inode_pin();
+    void finish_io_complete(int r);
     bool try_complete();
   };
 
@@ -1912,18 +1965,7 @@ private:
       : CWF(nullptr) {}
 
     void finish(int r) override {
-      CWF->finish_io(r);
-    }
-  };
-
-  struct CWF_fsync_finish : public Context {
-    C_Write_Finisher *CWF;
-
-    CWF_fsync_finish(C_Write_Finisher *CWF)
-      : CWF(CWF) {}
-
-    void finish(int r) override {
-      CWF->finish_fsync(r);
+      CWF->queue_finish_io(r);
     }
   };
 
@@ -1983,19 +2025,17 @@ private:
       : clnt(clnt), state(state) {
     }
 
-    void finish(int r) override {
-      ceph_assert(ceph_mutex_is_locked_by_me(clnt->client_lock));
-      state->complete_flush(r);
-    }
+    void finish(int r) override;
   };
 
   struct C_Readahead : public Context {
-    C_Readahead(Client *c, Fh *f);
+    C_Readahead(Client *c, Fh *f, Inode *in);
     ~C_Readahead() override;
     void finish(int r) override;
 
     Client *client;
     Fh *f;
+    InodeRef in;
     utime_t start_time = 0;
   };
 
@@ -2150,6 +2190,7 @@ private:
                          int64_t offset, uint64_t size, Inode *in,
                          bool encrypted);
   int64_t _write(Fh *fh, int64_t offset, uint64_t size, bufferlist bl,
+          const struct iovec *iov = nullptr, int iovcnt = 0,
           Context *onfinish = nullptr, bool do_fsync = false,
           bool syncdataonly = false);
   int64_t _preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
@@ -2285,6 +2326,7 @@ private:
   Finisher interrupt_finisher;
   Finisher remount_finisher;
   Finisher async_ino_releasor;
+  Finisher client_finisher;
   Finisher objecter_finisher;
 
   ceph::coarse_mono_time last_cap_renew;
@@ -2299,10 +2341,10 @@ private:
   // mds sessions
   map<mds_rank_t, MetaSessionRef> mds_sessions;  // mds -> push seq
   std::set<mds_rank_t> mds_ranks_closing;  // mds ranks currently tearing down sessions
-  std::list<ceph::condition_variable*> waiting_for_mdsmap;
+  std::list<ceph::tracked_condition_variable*> waiting_for_mdsmap;
 
   // FSMap, for when using mds_command
-  std::list<ceph::condition_variable*> waiting_for_fsmap;
+  std::list<ceph::tracked_condition_variable*> waiting_for_fsmap;
   std::unique_ptr<FSMap> fsmap;
   std::unique_ptr<FSMapUser> fsmap_user;
 
@@ -2344,27 +2386,24 @@ private:
   map<ceph_tid_t, MetaRequest*> mds_requests;
 
   // cap flushing
-  ceph_tid_t last_flush_tid = 1;
-
-  xlist<Inode*> delayed_list;
-  int num_flushing_caps = 0;
   std::unordered_map<inodeno_t, SnapRealm*> snap_realms;
+  std::unique_ptr<ClientCaps> client_caps;
   std::map<std::string, std::string> metadata;
 
   ceph::coarse_mono_time last_auto_reconnect;
-  std::chrono::seconds caps_release_delay, mount_timeout;
+  std::chrono::seconds mount_timeout;
   int injected_write_delay_secs;
   // trace generation
   std::ofstream traceout;
 
   bool fscrypt_as;
 
-  ceph::condition_variable mount_cond, sync_cond;
+  ceph::tracked_condition_variable mount_cond, sync_cond;
 
   std::map<std::pair<int64_t,std::string>, int> pool_perms;
-  std::list<ceph::condition_variable*> waiting_for_pool_perm;
+  std::list<ceph::tracked_condition_variable*> waiting_for_pool_perm;
 
-  std::list<ceph::condition_variable*> waiting_for_rename;
+  std::list<ceph::tracked_condition_variable*> waiting_for_rename;
 
   uint64_t retries_on_invalidate = 0;
 
@@ -2393,6 +2432,7 @@ private:
 
   ceph::spinlock delay_i_lock;
   std::map<Inode*,int> delay_i_release;
+  std::unordered_set<Inode*> deleting_inodes;
 
   uint64_t nr_metadata_request = 0;
   uint64_t nr_read_request = 0;
