@@ -5,7 +5,7 @@
 
 #include "common/Formatter.h"
 
-#include "crimson/osd/ec_backend.h"
+//#include "crimson/osd/ec_backend.h"
 #include "crimson/osd/osd.h"
 #include "crimson/osd/osd_connection_priv.h"
 #include "crimson/osd/osd_operation_external_tracking.h"
@@ -57,6 +57,56 @@ struct overloaded : Ts... { using Ts::operator()...; };
 template<class... Ts>
 overloaded(Ts...) -> overloaded<Ts...>;
 
+ECRepRequest::interruptible_future<>
+ECRepRequest::with_pg_interruptible(
+  ShardServices &shard_services, Ref<PG> pg,
+  ECBackend *ec_backend)
+{
+  // only throttle write/read ops -- replies must never be throttled
+  // to avoid deadlock with the ops waiting for those replies
+  int cost = 1;
+  unsigned prio = 0;
+  bool needs_throttle = false;
+
+  if (auto* write = std::get_if<Ref<MOSDECSubOpWrite>>(&req)) {
+    prio = static_cast<unsigned>((*write)->get_priority());
+    needs_throttle = true;
+  } else if (auto* read = std::get_if<Ref<MOSDECSubOpRead>>(&req)) {
+    cost = std::max<int>((*read)->get_cost(), 1);
+    prio = static_cast<unsigned>((*read)->get_priority());
+    needs_throttle = true;
+  }
+
+  std::optional<OperationThrottler::ThrottleReleaser> throttle;
+  if (needs_throttle) {
+    auto releaser = co_await interruptor::make_interruptible(
+      shard_services.get_throttle(
+        scheduler::params_t{
+          cost,
+          prio,
+          0,
+          SchedulerClass::repop}));
+    throttle.emplace(std::move(releaser));
+  }
+  co_await std::visit(overloaded{
+    [pg] (Ref<MOSDECSubOpWrite> concrete_req) {
+      return pg->handle_rep_write_op(std::move(concrete_req));
+    },
+    [pg] (Ref<MOSDECSubOpWriteReply> concrete_req) {
+      return pg->handle_rep_write_reply(std::move(concrete_req));
+    },
+    [pg] (Ref<MOSDECSubOpRead> concrete_req) {
+      return pg->handle_rep_read_op(std::move(concrete_req));
+    },
+    [ec_backend] (Ref<MOSDECSubOpReadReply> concrete_req) {
+      return ec_backend->handle_rep_read_reply(
+        std::move(concrete_req)
+      ).handle_error_interruptible(
+        crimson::ct_error::assert_all("unexpected error"));
+    }}, req);
+  // throttle destructs here if set
+}
+
 seastar::future<> ECRepRequest::with_pg(
   ShardServices &shard_services, Ref<PG> pg)
 {
@@ -64,23 +114,9 @@ seastar::future<> ECRepRequest::with_pg(
 
   IRef ref = this;
   return interruptor::with_interruption(
-    [this, pg, ec_backend=dynamic_cast<ECBackend*>(&pg->get_backend())] {
+    [this, pg, ec_backend=dynamic_cast<ECBackend*>(&pg->get_backend()), &shard_services] {
     assert(ec_backend);
-    return std::visit(overloaded{
-      [pg] (Ref<MOSDECSubOpWrite> concrete_req) {
-        return pg->handle_rep_write_op(std::move(concrete_req));
-      },
-      [pg] (Ref<MOSDECSubOpWriteReply> concrete_req) {
-        return pg->handle_rep_write_reply(std::move(concrete_req));
-      },
-      [pg] (Ref<MOSDECSubOpRead> concrete_req) {
-        return pg->handle_rep_read_op(std::move(concrete_req));
-      },
-      [ec_backend] (Ref<MOSDECSubOpReadReply> concrete_req) {
-        return ec_backend->handle_rep_read_reply(
-	  std::move(concrete_req)
-	).handle_error_interruptible(crimson::ct_error::assert_all("unexpected error"));
-      }}, req);
+    return  with_pg_interruptible(shard_services, pg, ec_backend);
   }, [ref, this](std::exception_ptr) {
     logger().debug("{}: ECRepRequest::exception handling", *this);
     return seastar::now();

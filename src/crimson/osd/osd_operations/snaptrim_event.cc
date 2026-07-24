@@ -401,6 +401,7 @@ SnapTrimObjSubEvent::remove_or_update(
 SnapTrimObjSubEvent::snap_trim_obj_subevent_ret_t
 SnapTrimObjSubEvent::start()
 {
+  using crimson::common::local_conf;
   obc_orderer = pg->obc_loader.get_obc_orderer(
     coid);
 
@@ -432,6 +433,16 @@ SnapTrimObjSubEvent::start()
   );
 
   logger().debug("{}: got obc={}", *this, obc_manager.get_obc()->get_oid());
+  auto throttle = co_await interruptor::make_interruptible(
+    pg->get_shard_services().get_throttle(
+      scheduler::params_t{
+        std::max<int>(
+          static_cast<unsigned>(pg->get_average_object_size()) *
+          local_conf()->osd_pg_max_concurrent_snap_trims,
+          uint64_t(1)),
+        static_cast<unsigned>(local_conf()->osd_snap_trim_priority),
+        0,
+        SchedulerClass::background_best_effort}));
 
   auto all_completed = interruptor::now();
   {
@@ -470,6 +481,7 @@ SnapTrimObjSubEvent::start()
   co_await std::move(all_completed);
 
   logger().debug("{}: completed", *this);
+  // throttle destructs here after all_completed resolves
 }
 
 void SnapTrimObjSubEvent::print(std::ostream &lhs) const

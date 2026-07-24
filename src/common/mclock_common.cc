@@ -143,6 +143,13 @@ const dmc::ClientInfo *ClientRegistry::get_info(
     return (dmc::ClientInfo*)nullptr;
   case SchedulerClass::client:
     return get_external_client(id.client_profile_id);
+#ifdef WITH_CRIMSON
+  case SchedulerClass::repop:
+    // repop uses background_recovery profile for now
+    // TODO: add dedicated repop profile with own R/W/L
+    return &internal_client_infos[
+      static_cast<size_t>(SchedulerClass::background_recovery)];
+#endif
   default:
     ceph_assert(static_cast<size_t>(id.class_id) < internal_client_infos.size());
     return &internal_client_infos[static_cast<size_t>(id.class_id)];

@@ -27,21 +27,33 @@ SET_SUBSYS(osd);
 
 namespace crimson::osd {
 
+RecoverySubRequest::interruptible_future<>
+RecoverySubRequest::with_pg_interruptible(
+  ShardServices &shard_services, Ref<PG> pgref)
+{
+  LOG_PREFIX(RecoverySubRequest::with_pg_interruptible);
+  DEBUGI("{}: {}", "RecoverySubRequest::with_pg", *this);
+  auto throttle = co_await interruptor::make_interruptible(
+    shard_services.get_throttle(
+      scheduler::params_t{
+        std::max<int>(pgref->get_average_object_size(), 1),
+        static_cast<unsigned>(pgref->get_recovery_op_priority()),
+        0,
+        SchedulerClass::background_recovery}));
+  co_await pgref->get_recovery_backend()->handle_recovery_op(
+    m, get_remote_connection());
+  DEBUGI("{}: complete", *this);
+  co_await interruptor::make_interruptible(handle.complete());
+  // throttle destructs here -> release_throttle()
+}
+
 seastar::future<> RecoverySubRequest::with_pg(
   ShardServices &shard_services, Ref<PG> pgref)
 {
   track_event<StartEvent>();
   IRef opref = this;
-  return interruptor::with_interruption([this, pgref] {
-    LOG_PREFIX(RecoverySubRequest::with_pg);
-    DEBUGI("{}: {}", "RecoverySubRequest::with_pg", *this);
-    return pgref->get_recovery_backend()->handle_recovery_op(
-      m, get_remote_connection()
-    ).then_interruptible([this] {
-      LOG_PREFIX(RecoverySubRequest::with_pg);
-      DEBUGI("{}: complete", *this);
-      return handle.complete();
-    });
+  return interruptor::with_interruption([this, pgref, &shard_services] {
+    return with_pg_interruptible(shard_services, pgref);
   }, [](std::exception_ptr) {
     return seastar::now();
   }, pgref, pgref->get_osdmap_epoch()).finally([this, opref=std::move(opref), pgref] {

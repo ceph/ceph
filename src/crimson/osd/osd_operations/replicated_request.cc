@@ -82,6 +82,15 @@ RepRequest::interruptible_future<> RepRequest::with_pg_interruptible(
     co_return;
   }
 
+  // acquire mClock throttle slot before handling the repop
+  // hold it for the op's lifetime -- destructs after send_reply
+  auto throttle = co_await interruptor::make_interruptible(
+    pg->shard_services.get_throttle(
+      scheduler::params_t{
+        std::max<int>(req->get_cost(), 1),
+        req->get_priority(),
+        static_cast<uint64_t>(req->from.osd),
+        SchedulerClass::repop}));
   auto [commit_fut, reply] = co_await pg->handle_rep_op(req);
 
   // Transitions from OrderedExclusive->OrderedConcurrent cannot block
@@ -96,6 +105,7 @@ RepRequest::interruptible_future<> RepRequest::with_pg_interruptible(
     pg->shard_services.send_to_osd(
       req->from.osd, std::move(reply), pg->get_osdmap_epoch())
   );
+  // throttle destructs here -> release_throttle()
 }
 
 seastar::future<> RepRequest::with_pg(
