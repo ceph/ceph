@@ -11770,7 +11770,11 @@ next:
         op_state.quota_max_objects = std::max<int64_t>(-1, max_objects);
       }
       if (have_max_size) {
-        op_state.quota_max_size = std::max<int64_t>(-1, rgw_rounded_kb(max_size) * 1024);
+        if (max_size < 0) {
+          op_state.quota_max_size = -1;
+        } else {
+          op_state.quota_max_size = rgw_rounded_kb(max_size) * 1024;
+        }
       }
 
       std::string err_msg;
