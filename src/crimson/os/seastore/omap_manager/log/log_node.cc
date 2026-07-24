@@ -265,6 +265,9 @@ bool LogNode::log_less_than(std::string_view str) const
   while(iter != iter_end()) {
     std::string key = iter->get_key();
     if (is_log_key(key)) {
+      if (key >= str) {
+        return false;
+      }
       all_less = key < str;
     }
     iter++;
@@ -361,6 +364,31 @@ int LogNode::ow_gap_from_last_entry(const size_t key, const size_t val) {
     gap = _ow_gap_from_last_entry(key, val);
   }
   return gap;
+}
+
+LogNode::range_t LogNode::has_between(std::optional<std::string> start,
+  std::optional<std::string> end) {
+  std::string_view s(*start);
+  std::string_view e(*end);
+  std::string last_key = get_last_key();
+  std::string first_key = iter_begin()->get_key();
+
+  if (is_log_key(last_key) && is_log_key(first_key)) {
+    if (last_key <= e && last_key >= s) {
+      return range_t::HAS_BETWEEN;
+    } else if (first_key <= e && first_key >=s) {
+      return range_t::HAS_BETWEEN;
+    }
+  }
+  auto iter = iter_begin();
+  while(iter != iter_end()) {
+    std::string k = iter->get_key();
+    if (k <= e && k >= s) {
+      return range_t::HAS_BETWEEN;
+    }
+    iter++;
+  };
+  return range_t::NO_BETWEEN;
 }
 
 }
