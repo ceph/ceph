@@ -299,8 +299,7 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
 
   ShardStats GetStats();
   void ClearStats();
-  void print_bins(std::stringstream& out) const;
-
+  void get_age_bins(std::vector<uint64_t>& bins) const;
  private:
   CephContext *cct;
   void LRU_Remove(BinnedLRUHandle* e);
@@ -418,7 +417,7 @@ class BinnedLRUCache : public ShardedCache {
  private:
   void SetupPerfCounters();
   void UpdatePerfCounters();
-  void printshard(int shard_no, std::stringstream& out);
+  void get_age_bins(int shard_no, std::vector<uint64_t>& bins);
  private:
   CephContext *cct;
   std::string name;

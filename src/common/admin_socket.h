@@ -124,6 +124,11 @@ public:
   AdminSocket(AdminSocket&&) = delete;
   AdminSocket& operator =(AdminSocket&&) = delete;
 
+/// Specifies requirements for AdminSocketHook registration / invocation
+  enum flag_t : uint8_t {
+    baseline_default = 0,        /// default behaviours apply
+    accepts_null_formatter = 1   /// do not create fallback formatter (json-pretty)
+  };
   /**
    * register an admin socket command
    *
@@ -145,7 +150,8 @@ public:
    */
   int register_command(std::string_view cmddesc,
 		       AdminSocketHook *hook,
-		       std::string_view help);
+		       std::string_view help,
+                       flag_t flags = flag_t::baseline_default);
 
   /*
    * unregister all commands belong to hook.
@@ -210,14 +216,15 @@ private:
     AdminSocketHook* hook;
     std::string desc;
     std::string help;
+    AdminSocket::flag_t flags;
 
     hook_info(AdminSocketHook* hook, std::string_view desc,
-	      std::string_view help)
-      : hook(hook), desc(desc), help(help) {}
+	      std::string_view help, flag_t flags)
+      : hook(hook), desc(desc), help(help), flags(flags) {}
   };
 
   /// find the first hook which matches the given prefix and cmdmap
-  std::pair<int, AdminSocketHook*> find_matched_hook(
+  std::pair<int, const hook_info*> find_matched_hook(
     std::string& prefix,
     const cmdmap_t& cmdmap);
 
