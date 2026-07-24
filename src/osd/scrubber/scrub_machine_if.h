@@ -53,6 +53,8 @@ class ScrubFsmIf {
 
   /// "initiate" the state machine (an internal state_chart function)
   virtual void initiate() = 0;
+
+  virtual void set_replica_parent_ctx(const jspan_context& ctx) = 0;
 };
 
 }  // namespace Scrub
