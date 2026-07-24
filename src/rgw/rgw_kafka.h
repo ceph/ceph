@@ -34,6 +34,10 @@ struct connection_id_t {
   std::string kerberos_service_name;
   std::string kerberos_principal;
   std::string kerberos_keytab;
+  std::string oauthbearer_token_endpoint_url;
+  std::string oauthbearer_client_id;
+  std::string oauthbearer_client_secret;
+  std::string oauthbearer_scope;
   bool ssl = false;
   bool verify_ssl = true;
   connection_id_t() = default;
@@ -49,7 +53,11 @@ struct connection_id_t {
                   const boost::optional<const std::string&>& _ssl_key_password,
                   const boost::optional<const std::string&>& _kerberos_service_name,
                   const boost::optional<const std::string&>& _kerberos_principal,
-                  const boost::optional<const std::string&>& _kerberos_keytab);
+                  const boost::optional<const std::string&>& _kerberos_keytab,
+                  const boost::optional<const std::string&>& _oauthbearer_token_endpoint_url,
+                  const boost::optional<const std::string&>& _oauthbearer_client_id,
+                  const boost::optional<const std::string&>& _oauthbearer_client_secret,
+                  const boost::optional<const std::string&>& _oauthbearer_scope);
 };
 
 std::string to_string(const connection_id_t& id);
@@ -69,7 +77,11 @@ bool connect(connection_id_t& conn_id,
              boost::optional<const std::string&> ssl_key_password,
              boost::optional<const std::string&> kerberos_service_name,
              boost::optional<const std::string&> kerberos_principal,
-             boost::optional<const std::string&> kerberos_keytab);
+             boost::optional<const std::string&> kerberos_keytab,
+             boost::optional<const std::string&> oauthbearer_token_endpoint_url,
+             boost::optional<const std::string&> oauthbearer_client_id,
+             boost::optional<const std::string&> oauthbearer_client_secret,
+             boost::optional<const std::string&> oauthbearer_scope);
 
 // publish a message over a connection that was already created
 int publish(const connection_id_t& conn_id,
@@ -83,6 +95,14 @@ int publish_with_confirm(const connection_id_t& conn_id,
                          const std::string& topic,
                          const std::string& message,
                          reply_callback_t cb);
+
+// validate required OAUTHBEARER parameters; nullptr means "not provided"
+// returns true if all required params are present and non-empty
+// on failure, sets message to a human-readable error string
+bool validate_oauthbearer_params(const std::string* token_endpoint_url,
+                                 const std::string* client_id,
+                                 const std::string* client_secret,
+                                 std::string& message);
 
 // convert the integer status returned from the "publish" function to a string
 std::string status_to_string(int s);

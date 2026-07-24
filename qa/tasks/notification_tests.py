@@ -338,6 +338,16 @@ def task(ctx,config):
                 'kerberos':kerberos_conf
             }
         )
+        if getattr(ctx, 'dex_token_endpoint', None):
+            bntests_conf[client]['oauthbearer'] = {
+                'token_endpoint_url': ctx.dex_token_endpoint,
+                'client_id': ctx.dex_client_id,
+                'client_secret': ctx.dex_client_secret,
+                'access_token': ctx.dex_access_token,
+                'scope': ctx.dex_scope,
+            }
+        else:
+            bntests_conf[client]['oauthbearer'] = {}
 
     with contextutil.nested(
         lambda: download(ctx=ctx, config=config),
