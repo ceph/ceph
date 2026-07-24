@@ -156,6 +156,134 @@ int Credentials::generateCredentials(const DoutPrefixProvider *dpp,
   return ret;
 }
 
+int decode_session_token(const DoutPrefixProvider* dpp,
+                         CephContext* cct,
+                         std::string_view session_token,
+                         SessionToken& out)
+{
+  string decoded;
+  try {
+    decoded = rgw::from_base64(session_token);
+  } catch (...) {
+    ldpp_dout(dpp, 0) << "ERROR: Invalid session token, not base64 encoded." << dendl;
+    return -EINVAL;
+  }
+
+  auto* cryptohandler = cct->get_crypto_handler(CEPH_CRYPTO_AES);
+  if (!cryptohandler) {
+    return -EINVAL;
+  }
+  string secret_s = cct->_conf->rgw_sts_key;
+  if (secret_s.empty()) {
+    ldpp_dout(dpp, 1) << "ERROR: rgw sts key not set" << dendl;
+    return -EINVAL;
+  }
+  buffer::ptr secret(secret_s.c_str(), secret_s.length());
+  if (int ret = cryptohandler->validate_secret(secret); ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: Invalid secret key" << dendl;
+    return -EINVAL;
+  }
+  string error;
+  std::unique_ptr<CryptoKeyHandler> keyhandler(
+      cryptohandler->get_key_handler(secret, error));
+  if (!keyhandler) {
+    return -EINVAL;
+  }
+  error.clear();
+
+  buffer::list en_input = buffer::list::static_from_string(decoded);
+  buffer::list dec_output;
+  if (int ret = keyhandler->decrypt(en_input, dec_output, &error); ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: Decryption failed: " << error << dendl;
+    return -EPERM;
+  }
+  try {
+    dec_output.append('\0');
+    auto iter = dec_output.cbegin();
+    decode(out, iter);
+  } catch (const buffer::error& e) {
+    ldpp_dout(dpp, 0) << "ERROR: decode SessionToken failed: " << e.what() << dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
+int resolve_session(const DoutPrefixProvider* dpp,
+                    CephContext* cct,
+                    rgw::sal::Driver* driver,
+                    optional_yield y,
+                    const SessionToken& token,
+                    ResolvedSession& out)
+{
+  /* Role-based session: load the referenced role. */
+  if (!token.roleId.empty()) {
+    std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(token.roleId);
+    if (role->load_by_id(dpp, y) < 0) {
+      return -EPERM;
+    }
+    out.role.id = token.roleId;
+    out.role.name = role->get_name();
+    out.role.path = role->get_path();
+    out.role.tenant = role->get_tenant();
+
+    const auto& account_id = role->get_account_id();
+    if (!account_id.empty()) {
+      out.role.account.emplace();
+      rgw::sal::Attrs attrs; // ignored
+      RGWObjVersionTracker objv; // ignored
+      int ret = driver->load_account_by_id(dpp, y, account_id,
+                                           *out.role.account, attrs, objv);
+      if (ret < 0) {
+        ldpp_dout(dpp, 1) << "ERROR: failed to load account "
+            << account_id << " for role " << out.role.name
+            << ": " << cpp_strerror(ret) << dendl;
+        return -EPERM;
+      }
+    }
+
+    for (auto& [name, policy] : role->get_info().perm_policy_map) {
+      out.role.inline_policies.push_back(std::move(policy));
+    }
+    for (auto& arn : role->get_info().managed_policies.arns) {
+      out.role.managed_policies.push_back(std::move(arn));
+    }
+  }
+
+  if (token.acct_type == TYPE_KEYSTONE || token.acct_type == TYPE_LDAP) {
+    /* Caller builds a RemoteApplier from the token directly. */
+    return 0;
+  }
+
+  if (token.acct_type == TYPE_ROLE) {
+    out.t_attrs.user_id = token.user;
+    out.t_attrs.token_policy = token.policy;
+    out.t_attrs.role_session_name = token.role_session;
+    out.t_attrs.token_claims = token.token_claims;
+    out.t_attrs.token_issued_at = token.issued_at;
+    out.t_attrs.principal_tags = token.principal_tags;
+    return 0;
+  }
+
+  /* TYPE_RGW / TYPE_ROOT / TYPE_NONE: load the local user. */
+  if (token.user.empty()) {
+    ldpp_dout(dpp, 5) << "ERROR: got session token with empty user id" << dendl;
+    return -EPERM;
+  }
+  out.user = driver->get_user(token.user);
+  if (int ret = out.user->load_user(dpp, y); ret < 0) {
+    ldpp_dout(dpp, 5) << "ERROR: failed reading user info: uid="
+                      << token.user << dendl;
+    return -EPERM;
+  }
+  if (int ret = rgw::auth::load_account_and_policies(
+          dpp, y, driver, out.user->get_info(), out.user->get_attrs(),
+          out.account, out.policies);
+      ret < 0) {
+    return -EPERM;
+  }
+  return 0;
+}
+
 void AssumedRoleUser::dump(Formatter *f) const
 {
   encode_json("Arn", arn , f);
