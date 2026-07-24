@@ -7055,6 +7055,24 @@ options:
   - bluestore_extent_map_shard_target_size
   - bluestore_debug_onode_segmentation_random
   with_legacy: false
+- name: bluestore_onode_prefetch
+  type: bool
+  level: advanced
+  desc: Speculatively prefetch onodes into cache when operations are enqueued.
+  long_desc: When enabled, BlueStore fetches an onode into its cache as soon as the
+    corresponding OSD operation enters the PG work queue. This hides the onode lookup
+    latency behind the queuing time.
+  default: false
+  with_legacy: false
+- name: bluestore_onode_prefetch_max_queue_depth
+  type: uint
+  level: dev
+  desc: Maximum number of pending onode prefetch requests.
+  long_desc: Caps the depth of the BlueStore onode prefetch queue. When full,
+    new prefetch hints are silently dropped. Tune higher under deep queues
+    or high object-count workloads.
+  default: 64
+  with_legacy: false
 - name: bluestore_debug_onode_segmentation_random
   type: bool
   level: dev

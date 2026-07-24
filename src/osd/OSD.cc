@@ -9946,6 +9946,22 @@ void OSD::enqueue_op(spg_t pg, OpRequestRef&& op, epoch_t epoch)
     });
 
   op->mark_queued_for_pg();
+  if (op->get_req()->get_type() == CEPH_MSG_OSD_OP &&
+    store->prefetch_onode_enabled()) {
+    auto m = static_cast<MOSDOp*>(op->get_nonconst_req());
+    // The object identity (oid name, pool, snap) lives in the message's
+    // deferred-decode tail; get_hobj() returns an empty hobject_t until
+    // finish_decode() runs (normally in do_op on the worker thread).  Decode
+    // here so the prefetch targets the real onode key.
+    if (m->finish_decode()) {
+      op->reset_desc();
+      m->clear_payload();
+    }
+    if (ObjectStore::CollectionHandle ch = store->open_collection(coll_t(pg)); ch) {
+      store->prefetch_onode(
+        ch, ghobject_t(m->get_hobj(), ghobject_t::NO_GEN, pg.shard));
+    }
+  }
   logger->tinc(l_osd_op_before_queue_op_lat, latency);
   if (PGRecoveryMsg::is_recovery_msg(op)) {
     op_shardedwq.queue(
