@@ -1544,3 +1544,46 @@ options:
   - mon
   flags:
   - runtime
+- name: mon_crush_rule_change_preserve_acting
+  type: bool
+  level: advanced
+  desc: Minimize data movement when a pool's crush rule is changed
+  long_desc: When a pool is switched to a CRUSH rule with a different failure
+    domain, placement is normally recomputed from scratch and most data moves.
+    With this option enabled, the monitor stages pg-upmap-items entries in the
+    same map epoch as the rule change that keep every shard on an OSD of its
+    current acting set whenever the new failure domain allows it, relocating
+    only the shards that violate the new rule. The upmap balancer, when
+    enabled, will gradually optimize the residual imbalance and retire these
+    entries.
+  default: false
+  services:
+  - mon
+  with_legacy: false
+- name: mon_crush_rule_change_preserve_acting_max_pgs
+  type: uint
+  level: advanced
+  desc: Do not attempt acting-preserving crush rule changes on pools with more
+    placement groups than this (bounds the synchronous work in the mon)
+  default: 65536
+  services:
+  - mon
+  with_legacy: false
+- name: mon_crush_rule_change_preserve_acting_fill_strategy
+  type: str
+  level: advanced
+  desc: How to pick replacement OSDs for shards that violate the new failure
+    domain during an acting-preserving crush rule change
+  long_desc: load-aware picks the OSD with the lowest planned shard count,
+    normalized by crush weight, across the remaining free failure-domain
+    buckets, leaving the pool nearly balanced and the upmap balancer with
+    little residual work. hash prefers the raw CRUSH pick when its failure
+    domain bucket is free and otherwise spreads by deterministic hashing,
+    which generates fewer pg-upmap-items pairs but a less balanced result.
+  enum_values:
+  - load-aware
+  - hash
+  default: load-aware
+  services:
+  - mon
+  with_legacy: false

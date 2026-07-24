@@ -9104,6 +9104,61 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << "crush rule " << id << " type does not match pool";
       return -EINVAL;
     }
+    if (g_conf().get_val<bool>("mon_crush_rule_change_preserve_acting") &&
+        id != (int)p.get_crush_rule()) {
+      if (osdmap.require_min_compat_client != ceph_release_t::unknown &&
+          osdmap.require_min_compat_client < ceph_release_t::luminous) {
+        // same gate as the `osd pg-upmap-items` command: pre-luminous
+        // clients cannot decode pg_upmap_items
+        dout(1) << __func__ << " pool " << pool << ": not staging"
+                << " acting-preserving pg-upmap-items:"
+                << " require_min_compat_client "
+                << osdmap.require_min_compat_client << " < luminous" << dendl;
+      } else if (p.get_pg_num() != p.get_pg_num_pending()) {
+        // a pg merge is in flight: pins for the merge-source pgs would
+        // immediately be cleaned again; change the rule plainly instead
+        dout(1) << __func__ << " pool " << pool << ": not staging"
+                << " acting-preserving pg-upmap-items: pg_num change in"
+                << " progress" << dendl;
+      } else if (p.get_pg_num() >
+          g_conf().get_val<uint64_t>(
+            "mon_crush_rule_change_preserve_acting_max_pgs")) {
+        dout(1) << __func__ << " pool " << pool << " has too many pgs for"
+                << " acting-preserving rule change, falling back to plain"
+                << " rule change" << dendl;
+      } else {
+        // Stage, in the same pending incremental as the rule change,
+        // pg_upmap_items that keep each shard on its acting OSD whenever
+        // the new failure domain allows.  Compute them against a scratch
+        // map carrying everything already staged in this proposal (a
+        // pending crush map, pending pool changes, ...) plus the new rule,
+        // so the pins match what will actually be committed.
+        OSDMap tmp;
+        tmp.deepish_copy_from(osdmap);
+        {
+          OSDMap::Incremental t_inc = pending_inc;
+          pg_pool_t tp = p;
+          tp.crush_rule = id;
+          t_inc.new_pools[pool] = tp;
+          tmp.apply_incremental(t_inc);
+        }
+        bool load_aware =
+          g_conf().get_val<std::string>(
+            "mon_crush_rule_change_preserve_acting_fill_strategy") != "hash";
+        int pr = osdmap.calc_crush_rule_change_pins(cct, tmp, pool,
+                                                    &pending_inc, load_aware);
+        if (pr >= 0) {
+          dout(1) << __func__ << " pool " << pool << " crush_rule " << id
+                  << ": staged acting-preserving pg-upmap-items for " << pr
+                  << " pgs (fill=" << (load_aware ? "load-aware" : "hash")
+                  << ")" << dendl;
+        } else {
+          dout(1) << __func__ << " pool " << pool << " crush_rule " << id
+                  << ": could not stage acting-preserving pg-upmap-items: "
+                  << cpp_strerror(pr) << dendl;
+        }
+      }
+    }
     p.crush_rule = id;
   } else if (var == "nodelete" || var == "nopgchange" ||
 	     var == "nosizechange" || var == "write_fadvise_dontneed" ||

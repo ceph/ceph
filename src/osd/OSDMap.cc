@@ -2356,6 +2356,329 @@ void OSDMap::clean_pg_upmaps(
   }
 }
 
+int OSDMap::calc_crush_rule_change_pins(
+  CephContext *cct,
+  const OSDMap& newmap,
+  int64_t pool_id,
+  Incremental *pending_inc,
+  bool load_aware_fill) const
+{
+  const pg_pool_t *pi = newmap.get_pg_pool(pool_id);
+  if (!pi)
+    return -ENOENT;
+  const int rule = pi->get_crush_rule();
+  const unsigned size = pi->get_size();
+
+  if (!newmap.crush->rule_exists(rule))
+    return -ENOENT;
+
+  // failure-domain type = type of the last choose/chooseleaf step of the rule
+  int ftype = 0;
+  const int rule_len = newmap.crush->get_rule_len(rule);
+  for (int step = 0; step < rule_len; ++step) {
+    int op = newmap.crush->get_rule_op(rule, step);
+    if (op == CRUSH_RULE_CHOOSELEAF_FIRSTN ||
+        op == CRUSH_RULE_CHOOSELEAF_INDEP ||
+        op == CRUSH_RULE_CHOOSE_FIRSTN ||
+        op == CRUSH_RULE_CHOOSE_INDEP) {
+      ftype = newmap.crush->get_rule_arg2(rule, step);
+    }
+  }
+  if (ftype <= 0)
+    return 0;               // osd-level rule: nothing to preserve, raw is fine
+
+  // enumerate in+up OSDs of the rule's subtree and their failure-domain bucket
+  std::map<int, float> weight_map;
+  int r = newmap.crush->get_rule_weight_osd_map(rule, &weight_map);
+  if (r < 0)
+    return r;
+  std::map<int, int> fd_of;                 // osd -> failure-domain bucket
+  std::map<int, std::vector<int>> fd_osds;  // bucket -> in osds
+  for (auto& [osd, w] : weight_map) {
+    if (w <= 0)
+      continue;
+    if (osd < 0 || osd >= newmap.get_max_osd() ||
+        !newmap.exists(osd) || !newmap.is_up(osd) ||
+        newmap.get_weightf(osd) == 0)
+      continue;
+    int parent = newmap.crush->get_parent_of_type(osd, ftype, rule);
+    if (parent >= 0)                        // could not resolve an ancestor
+      continue;
+    fd_of[osd] = parent;
+    fd_osds[parent].push_back(osd);
+  }
+  if (fd_osds.size() < size)
+    return -ENOSPC;                         // pool cannot satisfy the domain
+
+  // shards this plan has already assigned per OSD, for the load-aware fill
+  std::map<int, unsigned> planned;
+  int npins = 0;
+  for (unsigned ps = 0; ps < pi->get_pg_num(); ++ps) {
+    pg_t pg(ps, pool_id);
+    std::vector<int> up, acting;
+    // acting from *this* (pre-change) map: up + pg_temp = where the data is
+    pg_to_up_acting_osds(pg, up, acting);
+    std::vector<int> raw_new;
+    int primary;
+    newmap.pg_to_raw_osds(pg, &raw_new, &primary);
+    if (raw_new.size() != size) {
+      for (auto o : raw_new) {
+        if (o != CRUSH_ITEM_NONE)
+          planned[o]++;
+      }
+      continue;
+    }
+
+    // pass 1: keep acting OSDs the new failure domain allows (per position)
+    std::set<int> used;
+    std::vector<int> target(size, CRUSH_ITEM_NONE);
+    std::vector<bool> pinned(size, false);
+    for (unsigned i = 0; i < size && i < acting.size(); ++i) {
+      int a = acting[i];
+      auto it = fd_of.find(a);
+      if (a != CRUSH_ITEM_NONE && it != fd_of.end() &&
+          !used.count(it->second)) {
+        target[i] = a;
+        used.insert(it->second);
+        pinned[i] = true;
+      }
+    }
+    // pass 2: fill the violators; prefer CRUSH's own pick, else spread
+    // deterministically over the free buckets so forced moves stay balanced
+    bool ok = true;
+    for (unsigned i = 0; i < size; ++i) {
+      if (pinned[i])
+        continue;
+      if (load_aware_fill) {
+        // pick the least-loaded (crush-weight normalized) in-OSD across the
+        // remaining free failure-domain buckets; deterministic tie-break so
+        // the result is reproducible for identical inputs.  This scan is
+        // O(#osds in the rule subtree) per relocated shard; the total work
+        // is bounded by mon_crush_rule_change_preserve_acting_max_pgs.
+        int chosen = -1;
+        int chosen_bkt = 0;
+        std::pair<double, uint32_t> best_key;
+        for (auto& [b, osds] : fd_osds) {
+          if (used.count(b))
+            continue;
+          for (int cand : osds) {
+            auto pit = planned.find(cand);
+            std::pair<double, uint32_t> key(
+              (pit == planned.end() ? 0 : pit->second) /
+                (double)weight_map.at(cand),
+              (uint32_t)cand * 2654435761u + (uint32_t)ps * 40503u);
+            if (chosen < 0 || key < best_key) {
+              best_key = key;
+              chosen = cand;
+              chosen_bkt = b;
+            }
+          }
+        }
+        if (chosen < 0) {
+          ok = false;
+          break;
+        }
+        used.insert(chosen_bkt);
+        target[i] = chosen;
+        continue;
+      }
+      int u = raw_new[i];
+      auto it = fd_of.find(u);
+      if (u != CRUSH_ITEM_NONE && it != fd_of.end() &&
+          !used.count(it->second)) {
+        target[i] = u;
+        used.insert(it->second);
+        continue;
+      }
+      std::vector<int> free_bkts;
+      for (auto& q : fd_osds) {
+        if (!used.count(q.first))
+          free_bkts.push_back(q.first);
+      }
+      if (free_bkts.empty()) {
+        ok = false;
+        break;
+      }
+      uint32_t h = ps * 2654435761u + i * 40503u + 3u;
+      int b = free_bkts[h % free_bkts.size()];
+      used.insert(b);
+      int chosen = -1;
+      for (int cand : raw_new) {            // reuse a CRUSH pick living in b
+        auto ct = fd_of.find(cand);
+        if (ct != fd_of.end() && ct->second == b) {
+          chosen = cand;
+          break;
+        }
+      }
+      if (chosen < 0) {
+        auto& leaves = fd_osds[b];
+        uint32_t h2 = ps * 2654435761u + i * 40503u + 7u;
+        chosen = leaves[h2 % leaves.size()];
+      }
+      target[i] = chosen;
+    }
+    if (!ok)
+      continue;
+
+    // Express `target` relative to raw_new as an ordered list of from->to
+    // pairs.  _apply_upmap() substitutes members sequentially and skips a
+    // pair whose `to` is still present, so an OSD that must change slots
+    // (erasure-coded shards are positional) is only expressible if the
+    // pair vacating its old slot is applied first.  Model this as a
+    // displacement graph (edge i -> j when target[j] == raw_new[i]); each
+    // node has at most one predecessor and one successor, so components
+    // are simple paths -- emitted from their source onwards -- or cycles,
+    // which pg_upmap_items cannot express (see the bidirectional-swap
+    // note in _apply_upmap()).  Cycles are broken by re-targeting one
+    // member to a fresh OSD outside raw_new (so no new edge can appear),
+    // which keeps the remaining members of the cycle in place.
+    std::map<unsigned, unsigned> succ, pred;
+    std::set<unsigned> cyc;
+    auto mismatched = [&](unsigned i) {
+      return raw_new[i] != CRUSH_ITEM_NONE &&
+             target[i] != CRUSH_ITEM_NONE &&
+             raw_new[i] != target[i];
+    };
+    auto rebuild_graph = [&]() {
+      succ.clear();
+      pred.clear();
+      cyc.clear();
+      std::map<int, unsigned> pos_in_raw;
+      for (unsigned i = 0; i < size; ++i) {
+        if (raw_new[i] != CRUSH_ITEM_NONE)
+          pos_in_raw[raw_new[i]] = i;
+      }
+      for (unsigned j = 0; j < size; ++j) {
+        if (!mismatched(j))
+          continue;
+        auto it = pos_in_raw.find(target[j]);
+        if (it != pos_in_raw.end() && mismatched(it->second)) {
+          succ[it->second] = j;
+          pred[j] = it->second;
+        }
+      }
+      std::set<unsigned> visited;
+      for (unsigned i = 0; i < size; ++i) {
+        if (!mismatched(i) || pred.count(i))
+          continue;
+        unsigned c = i;
+        while (!visited.count(c)) {
+          visited.insert(c);
+          auto n = succ.find(c);
+          if (n == succ.end())
+            break;
+          c = n->second;
+        }
+      }
+      for (unsigned i = 0; i < size; ++i) {
+        if (mismatched(i) && !visited.count(i))
+          cyc.insert(i);
+      }
+    };
+    rebuild_graph();
+    std::set<int> rawset(raw_new.begin(), raw_new.end());
+    for (unsigned guard = 0; !cyc.empty() && guard < size; ++guard) {
+      unsigned c = *cyc.begin();
+      // free the bucket of the member we re-target, then pick a fresh
+      // OSD; cycles are rare, so the load-aware pick is used for both
+      // fill strategies for simplicity (still deterministic)
+      used.erase(fd_of.at(target[c]));
+      int chosen = -1;
+      int chosen_bkt = 0;
+      std::pair<double, uint32_t> best_key;
+      for (auto& [b, osds] : fd_osds) {
+        if (used.count(b))
+          continue;
+        for (int cand : osds) {
+          if (rawset.count(cand))
+            continue;
+          auto pit = planned.find(cand);
+          std::pair<double, uint32_t> key(
+            (pit == planned.end() ? 0 : pit->second) /
+              (double)weight_map.at(cand),
+            (uint32_t)cand * 2654435761u + (uint32_t)ps * 40503u);
+          if (chosen < 0 || key < best_key) {
+            best_key = key;
+            chosen = cand;
+            chosen_bkt = b;
+          }
+        }
+      }
+      if (chosen < 0) {
+        // cannot break the cycle: accept the rotation for these slots
+        used.insert(fd_of.at(target[c]));
+        for (auto i : cyc)
+          target[i] = raw_new[i];
+      } else {
+        used.insert(chosen_bkt);
+        target[c] = chosen;
+      }
+      rebuild_graph();
+    }
+    if (!cyc.empty()) {
+      for (auto i : cyc)
+        target[i] = raw_new[i];
+      rebuild_graph();
+    }
+
+    for (auto o : target) {
+      if (o != CRUSH_ITEM_NONE)
+        planned[o]++;
+    }
+
+    // emit each path from its source: the pair re-introducing an OSD at
+    // its new slot always follows the pair that vacated its old slot
+    mempool::osdmap::vector<std::pair<int32_t,int32_t>> pairs;
+    std::set<unsigned> emitted;
+    for (unsigned s = 0; s < size; ++s) {
+      if (!mismatched(s) || pred.count(s) || emitted.count(s))
+        continue;
+      unsigned c = s;
+      while (true) {
+        emitted.insert(c);
+        pairs.emplace_back(raw_new[c], target[c]);
+        auto n = succ.find(c);
+        if (n == succ.end())
+          break;
+        c = n->second;
+      }
+    }
+
+    if (pairs.empty()) {
+      // raw placement already optimal; drop a stale pre-change entry if any
+      if (pg_upmap_items.count(pg))
+        pending_inc->old_pg_upmap_items.insert(pg);
+      continue;
+    }
+    // final safety: the intended up must satisfy the new rule
+    std::vector<int> intended(raw_new);
+    for (auto& [f, t] : pairs) {
+      bool exists = false;
+      ssize_t pos = -1;
+      for (unsigned i = 0; i < intended.size(); ++i) {
+        if (intended[i] == t) {
+          exists = true;
+          break;
+        }
+        if (intended[i] == f && pos < 0)
+          pos = i;
+      }
+      if (!exists && pos >= 0)
+        intended[pos] = t;
+    }
+    if (newmap.crush->verify_upmap(cct, rule, size, intended) < 0) {
+      ldout(cct, 10) << __func__ << " pg " << pg
+                     << " computed pin failed verify_upmap, skipping" << dendl;
+      continue;
+    }
+    pending_inc->new_pg_upmap_items[pg] = pairs;
+    ++npins;
+  }
+  ldout(cct, 10) << __func__ << " pool " << pool_id << " pinned "
+                 << npins << " pgs" << dendl;
+  return npins;
+}
+
 bool OSDMap::clean_pg_upmaps(
   CephContext *cct,
   Incremental *pending_inc) const
