@@ -616,21 +616,22 @@ void MetricsHandler::aggregate_subvolume_metrics(const std::string& subvolume_pa
   // Lookup quota and used_bytes after aggregating I/O metrics
   if (!metrics_list.empty()) {
     inodeno_t subvolume_id = metrics_list.front().subvolume_id;
-    
-    // Get quota/used bytes from cache and update last activity time
+
+    // Get quota_bytes from cache and update last activity time
     auto it = subvolume_quota.find(subvolume_id);
     if (it != subvolume_quota.end()) {
       res.quota_bytes = it->second.quota_bytes;
-      res.used_bytes = it->second.used_bytes;
       it->second.last_activity = std::chrono::steady_clock::now();
     }
-    
-    // Fallback: if cache didn't have used_bytes, use the pre-fetched map
-    if (res.used_bytes == 0) {
-      auto used_it = subvol_used_bytes.find(subvolume_id);
-      if (used_it != subvol_used_bytes.end()) {
-        res.used_bytes = used_it->second;
-      }
+
+    // Always prefer the freshly fetched rbytes for used_bytes.
+    // The cache can become stale when quota is disabled (set to 0/unlimited)
+    // because broadcast_quota_to_client() stops updating it.
+    auto used_it = subvol_used_bytes.find(subvolume_id);
+    if (used_it != subvol_used_bytes.end()) {
+      res.used_bytes = used_it->second;
+    } else if (it != subvolume_quota.end()) {
+      res.used_bytes = it->second.used_bytes;
     }
   }
 
