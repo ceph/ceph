@@ -19,6 +19,7 @@ namespace cephfs {
 namespace mirror {
 
 static const std::string CEPHFS_MIRROR_OBJECT("cephfs_mirror");
+static const std::string CEPHFS_MIRROR_SYNC_STAT_OMAP_PREFIX("sync_stat");
 
 typedef std::variant<bool, uint64_t, std::string> AttributeValue;
 typedef std::map<std::string, AttributeValue> Attributes;
