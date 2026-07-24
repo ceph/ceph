@@ -342,7 +342,7 @@ class CephString(CephArgtype):
     def valid(self, s: str, partial: bool = False) -> None:
         sset = set(s)
         if self.goodset and not sset <= self.goodset:
-            raise ArgumentFormat("invalid chars {0} in {1}".
+            raise ArgumentFormat("invalid chars '{0}' in '{1}'".
                                  format(''.join(sset - self.goodset), s))
         self.val = s
 
@@ -1042,8 +1042,14 @@ def validate_one(word: str,
             desc.instance.valid(part, partial)
             vals.append(desc.instance.val)
     else:
-        desc.instance.valid(word, partial)
-        vals.append(desc.instance.val)
+        try:
+            desc.instance.valid(word, partial)
+            vals.append(desc.instance.val)
+        except ArgumentError as e:
+            l = list(e.args)
+            l[0] += f" for argument {desc.name}"
+            e.args = tuple(l)
+            raise
     desc.numseen += 1
     if desc.N:
         desc.n = desc.numseen + 1
