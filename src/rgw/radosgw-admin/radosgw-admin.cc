@@ -2725,10 +2725,395 @@ static auto get_disabled_features(const rgw::zone_features::set& enabled) {
 }
 
 
-static void sync_status(Formatter *formatter)
+static void dump_int_set(Formatter *formatter, const char *name,
+                         const set<int>& values)
+{
+  formatter->open_array_section(name);
+  for (const int id : values) {
+    formatter->dump_int("shard", id);
+  }
+  formatter->close_section();
+}
+
+/*
+ * Structured JSON for the same facts as plaintext `sync status`.
+ * Fields are typed (ints/bools/arrays) for parsers — not prose strings.
+ * Do not dump per-shard markers (huge, not part of the human summary).
+ */
+static void dump_md_sync_status_json(Formatter *formatter)
+{
+  formatter->open_object_section("metadata_sync");
+
+  if (driver->is_meta_master()) {
+    formatter->dump_string("status", "no sync (zone is master)");
+    formatter->close_section();
+    return;
+  }
+
+  RGWMetaSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver),
+                                static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor);
+
+  int ret = sync.init(dpp());
+  if (ret < 0) {
+    formatter->dump_string("error",
+                           string("failed to retrieve sync info: sync.init() failed: ") +
+                           cpp_strerror(-ret));
+    formatter->close_section();
+    return;
+  }
+
+  rgw_meta_sync_status sync_status;
+  ret = sync.read_sync_status(dpp(), &sync_status);
+  if (ret < 0) {
+    formatter->dump_string("error",
+                           string("failed to read sync status: ") + cpp_strerror(-ret));
+    formatter->close_section();
+    return;
+  }
+
+  string status_str;
+  switch (sync_status.sync_info.state) {
+    case rgw_meta_sync_info::StateInit:
+      status_str = "init";
+      break;
+    case rgw_meta_sync_info::StateBuildingFullSyncMaps:
+      status_str = "preparing for full sync";
+      break;
+    case rgw_meta_sync_info::StateSync:
+      status_str = "syncing";
+      break;
+    default:
+      status_str = "unknown";
+  }
+
+  formatter->dump_string("status", status_str);
+
+  uint64_t full_total = 0;
+  uint64_t full_complete = 0;
+  int num_full = 0;
+  int num_inc = 0;
+  int total_shards = 0;
+  set<int> shards_behind_set;
+
+  for (auto marker_iter : sync_status.sync_markers) {
+    full_total += marker_iter.second.total_entries;
+    total_shards++;
+    if (marker_iter.second.state == rgw_meta_sync_marker::SyncState::FullSync) {
+      num_full++;
+      full_complete += marker_iter.second.pos;
+      shards_behind_set.insert(marker_iter.first);
+    } else {
+      full_complete += marker_iter.second.total_entries;
+    }
+    if (marker_iter.second.state == rgw_meta_sync_marker::SyncState::IncrementalSync) {
+      num_inc++;
+    }
+  }
+
+  formatter->open_object_section("full_sync");
+  formatter->dump_int("shards", num_full);
+  formatter->dump_int("total_shards", total_shards);
+  formatter->dump_unsigned("total_entries", full_total);
+  formatter->dump_unsigned("complete_entries", full_complete);
+  if (num_full > 0) {
+    formatter->dump_unsigned("entries_to_sync", full_total - full_complete);
+  }
+  formatter->close_section();
+
+  formatter->open_object_section("incremental_sync");
+  formatter->dump_int("shards", num_inc);
+  formatter->dump_int("total_shards", total_shards);
+  formatter->close_section();
+
+  map<int, RGWMetadataLogInfo> master_shards_info;
+  string master_period = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_current_period_id();
+
+  ret = sync.read_master_log_shards_info(dpp(), master_period, &master_shards_info);
+  if (ret < 0) {
+    formatter->dump_string("error",
+                           string("failed to fetch master sync status: ") + cpp_strerror(-ret));
+    formatter->close_section();
+    return;
+  }
+
+  map<int, string> shards_behind;
+  if (sync_status.sync_info.period != master_period) {
+    formatter->dump_string("master_period", master_period);
+    formatter->dump_string("local_period", sync_status.sync_info.period);
+    formatter->dump_bool("period_mismatch", true);
+  } else {
+    formatter->dump_bool("period_mismatch", false);
+    for (auto local_iter : sync_status.sync_markers) {
+      int shard_id = local_iter.first;
+      auto iter = master_shards_info.find(shard_id);
+      if (iter == master_shards_info.end()) {
+        derr << "ERROR: could not find remote sync shard status for shard_id=" << shard_id << dendl;
+        continue;
+      }
+      auto master_marker = iter->second.marker;
+      if (local_iter.second.state == rgw_meta_sync_marker::SyncState::IncrementalSync &&
+          master_marker > local_iter.second.marker) {
+        shards_behind[shard_id] = local_iter.second.marker;
+        shards_behind_set.insert(shard_id);
+      }
+    }
+  }
+
+  std::optional<std::pair<int, ceph::real_time>> oldest;
+  if (!shards_behind.empty()) {
+    map<int, rgw_mdlog_shard_data> master_pos;
+    ret = sync.read_master_log_shards_next(dpp(), sync_status.sync_info.period,
+                                           shards_behind, &master_pos);
+    if (ret < 0) {
+      derr << "ERROR: failed to fetch master next positions (" << cpp_strerror(-ret) << ")" << dendl;
+    } else {
+      for (auto iter : master_pos) {
+        rgw_mdlog_shard_data& shard_data = iter.second;
+        if (shard_data.entries.empty()) {
+          shards_behind.erase(iter.first);
+          shards_behind_set.erase(iter.first);
+        } else {
+          rgw_mdlog_entry& entry = shard_data.entries.front();
+          if (!oldest) {
+            oldest.emplace(iter.first, entry.timestamp);
+          } else if (!ceph::real_clock::is_zero(entry.timestamp) &&
+                     entry.timestamp < oldest->second) {
+            oldest.emplace(iter.first, entry.timestamp);
+          }
+        }
+      }
+    }
+  }
+
+  int total_behind = shards_behind.size() + (sync_status.sync_info.num_shards - num_inc);
+  formatter->dump_bool("caught_up", total_behind == 0);
+  formatter->dump_int("shards_behind", total_behind);
+  dump_int_set(formatter, "behind_shards", shards_behind_set);
+  if (oldest) {
+    formatter->open_object_section("oldest_incremental_change");
+    formatter->dump_int("shard_id", oldest->first);
+    formatter->dump_string("timestamp",
+                           to_iso_8601(oldest->second, iso_8601_format::YMDhmsn));
+    formatter->close_section();
+  }
+
+  formatter->close_section();
+}
+
+static void dump_data_sync_status_json(const rgw_zone_id& source_zone,
+                                       Formatter *formatter)
+{
+  formatter->open_object_section("source");
+  formatter->dump_string("source_zone", source_zone.id);
+
+  std::unique_ptr<rgw::sal::Zone> sz_sal;
+  if (driver->get_zone()->get_zonegroup().get_zone_by_id(source_zone.id, &sz_sal) == 0) {
+    formatter->dump_string("source_zone_name", sz_sal->get_name());
+  }
+
+  RGWZone *sz;
+  if (!(sz = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->find_zone(source_zone))) {
+    formatter->dump_string("error", "zone not found");
+    formatter->close_section();
+    return;
+  }
+
+  if (!static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->zone_syncs_from(*sz)) {
+    formatter->dump_string("status", "not syncing from zone");
+    formatter->close_section();
+    return;
+  }
+
+  RGWDataSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver),
+                                static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor,
+                                source_zone, nullptr);
+
+  int ret = sync.init(dpp());
+  if (ret < 0) {
+    formatter->dump_string("error",
+                           string("failed to retrieve sync info: ") + cpp_strerror(-ret));
+    formatter->close_section();
+    return;
+  }
+
+  rgw_data_sync_status sync_status;
+  ret = sync.read_sync_status(dpp(), &sync_status);
+  if (ret < 0 && ret != -ENOENT) {
+    formatter->dump_string("error",
+                           string("failed read sync status: ") + cpp_strerror(-ret));
+    formatter->close_section();
+    return;
+  }
+
+  set<int> recovering_shards;
+  ret = sync.read_recovering_shards(dpp(), sync_status.sync_info.num_shards, recovering_shards);
+  if (ret < 0 && ret != ENOENT) {
+    formatter->dump_string("error",
+                           string("failed read recovering shards: ") + cpp_strerror(-ret));
+    formatter->close_section();
+    return;
+  }
+
+  string status_str;
+  switch (sync_status.sync_info.state) {
+    case rgw_data_sync_info::StateInit:
+      status_str = "init";
+      break;
+    case rgw_data_sync_info::StateBuildingFullSyncMaps:
+      status_str = "preparing for full sync";
+      break;
+    case rgw_data_sync_info::StateSync:
+      status_str = "syncing";
+      break;
+    default:
+      status_str = "unknown";
+  }
+
+  formatter->dump_string("status", status_str);
+
+  uint64_t full_total = 0;
+  uint64_t full_complete = 0;
+  int num_full = 0;
+  int num_inc = 0;
+  int total_shards = 0;
+  set<int> shards_behind_set;
+
+  for (auto marker_iter : sync_status.sync_markers) {
+    full_total += marker_iter.second.total_entries;
+    total_shards++;
+    if (marker_iter.second.state == rgw_data_sync_marker::SyncState::FullSync) {
+      num_full++;
+      full_complete += marker_iter.second.pos;
+      shards_behind_set.insert(marker_iter.first);
+    } else {
+      full_complete += marker_iter.second.total_entries;
+    }
+    if (marker_iter.second.state == rgw_data_sync_marker::SyncState::IncrementalSync) {
+      num_inc++;
+    }
+  }
+
+  formatter->open_object_section("full_sync");
+  formatter->dump_int("shards", num_full);
+  formatter->dump_int("total_shards", total_shards);
+  formatter->dump_unsigned("total_buckets", full_total);
+  formatter->dump_unsigned("complete_buckets", full_complete);
+  if (num_full > 0) {
+    formatter->dump_unsigned("buckets_to_sync", full_total - full_complete);
+  }
+  formatter->close_section();
+
+  formatter->open_object_section("incremental_sync");
+  formatter->dump_int("shards", num_inc);
+  formatter->dump_int("total_shards", total_shards);
+  formatter->close_section();
+
+  map<int, RGWDataChangesLogInfo> source_shards_info;
+  ret = sync.read_source_log_shards_info(dpp(), &source_shards_info);
+  if (ret < 0) {
+    formatter->dump_string("error",
+                           string("failed to fetch source sync status: ") + cpp_strerror(-ret));
+    formatter->close_section();
+    return;
+  }
+
+  map<int, string> shards_behind;
+  for (auto local_iter : sync_status.sync_markers) {
+    int shard_id = local_iter.first;
+    auto iter = source_shards_info.find(shard_id);
+    if (iter == source_shards_info.end()) {
+      derr << "ERROR: could not find remote sync shard status for shard_id=" << shard_id << dendl;
+      continue;
+    }
+    auto master_marker = iter->second.marker;
+    if (local_iter.second.state == rgw_data_sync_marker::SyncState::IncrementalSync &&
+        master_marker > local_iter.second.marker) {
+      shards_behind[shard_id] = local_iter.second.marker;
+      shards_behind_set.insert(shard_id);
+    }
+  }
+
+  std::optional<std::pair<int, ceph::real_time>> oldest;
+  if (!shards_behind.empty()) {
+    map<int, rgw_datalog_shard_data> master_pos;
+    ret = sync.read_source_log_shards_next(dpp(), shards_behind, &master_pos);
+    if (ret < 0) {
+      derr << "ERROR: failed to fetch next positions (" << cpp_strerror(-ret) << ")" << dendl;
+    } else {
+      for (auto iter : master_pos) {
+        rgw_datalog_shard_data& shard_data = iter.second;
+        if (shard_data.entries.empty()) {
+          shards_behind.erase(iter.first);
+          shards_behind_set.erase(iter.first);
+        } else {
+          rgw_datalog_entry& entry = shard_data.entries.front();
+          if (!oldest) {
+            oldest.emplace(iter.first, entry.timestamp);
+          } else if (!ceph::real_clock::is_zero(entry.timestamp) &&
+                     entry.timestamp < oldest->second) {
+            oldest.emplace(iter.first, entry.timestamp);
+          }
+        }
+      }
+    }
+  }
+
+  int total_behind = shards_behind.size() + (sync_status.sync_info.num_shards - num_inc);
+  int total_recovering = recovering_shards.size();
+
+  formatter->dump_bool("caught_up", total_behind == 0 && total_recovering == 0);
+  formatter->dump_int("shards_behind", total_behind);
+  dump_int_set(formatter, "behind_shards", shards_behind_set);
+  if (oldest) {
+    formatter->open_object_section("oldest_incremental_change");
+    formatter->dump_int("shard_id", oldest->first);
+    formatter->dump_string("timestamp",
+                           to_iso_8601(oldest->second, iso_8601_format::YMDhmsn));
+    formatter->close_section();
+  }
+  formatter->dump_int("shards_recovering", total_recovering);
+  dump_int_set(formatter, "recovering_shards", recovering_shards);
+
+  formatter->close_section();
+}
+
+static void sync_status(Formatter *formatter, bool use_formatter)
 {
   const rgw::sal::ZoneGroup& zonegroup = driver->get_zone()->get_zonegroup();
   rgw::sal::Zone* zone = driver->get_zone();
+
+  const auto& rzg =
+    static_cast<const rgw::sal::RadosZoneGroup&>(zonegroup).get_group();
+  const auto current_time = to_iso_8601(ceph::real_clock::now(),
+                                        iso_8601_format::YMDhms);
+
+  if (use_formatter) {
+    formatter->open_object_section("sync_status");
+    formatter->dump_string("realm_id", zone->get_realm_id());
+    formatter->dump_string("realm_name", zone->get_realm_name());
+    formatter->dump_string("zonegroup_id", zonegroup.get_id());
+    formatter->dump_string("zonegroup_name", zonegroup.get_name());
+    formatter->dump_string("zone_id", zone->get_id());
+    formatter->dump_string("zone_name", zone->get_name());
+    formatter->dump_string("current_time", current_time);
+    encode_json("zonegroup_features_enabled", rzg.enabled_features, formatter);
+    if (auto d = get_disabled_features(rzg.enabled_features); !d.empty()) {
+      encode_json("zonegroup_features_disabled", d, formatter);
+    }
+
+    dump_md_sync_status_json(formatter);
+
+    formatter->open_array_section("data_sync");
+    auto& zone_conn_map = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone_conn_map();
+    for (auto iter : zone_conn_map) {
+      dump_data_sync_status_json(iter.first, formatter);
+    }
+    formatter->close_section();
+
+    formatter->close_section();
+    formatter->flush(cout);
+    return;
+  }
 
   int width = 15;
 
@@ -2736,10 +3121,7 @@ static void sync_status(Formatter *formatter)
   cout << std::setw(width) << "zonegroup" << std::setw(1) << " " << zonegroup.get_id() << " (" << zonegroup.get_name() << ")" << std::endl;
   cout << std::setw(width) << "zone" << std::setw(1) << " " << zone->get_id() << " (" << zone->get_name() << ")" << std::endl;
   cout << std::setw(width) << "current time" << std::setw(1) << " "
-       << to_iso_8601(ceph::real_clock::now(), iso_8601_format::YMDhms) << std::endl;
-
-  const auto& rzg =
-    static_cast<const rgw::sal::RadosZoneGroup&>(zonegroup).get_group();
+       << current_time << std::endl;
 
   cout << std::setw(width) << "zonegroup features enabled: " << rzg.enabled_features << std::endl;
   if (auto d = get_disabled_features(rzg.enabled_features); !d.empty()) {
@@ -10490,7 +10872,7 @@ next:
 
 #ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::SYNC_STATUS) {
-    sync_status(formatter.get());
+    sync_status(formatter.get(), format_arg_passed);
   }
 
   if (opt_cmd == OPT::METADATA_SYNC_STATUS) {
