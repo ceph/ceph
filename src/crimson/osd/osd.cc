@@ -29,6 +29,10 @@
 #include "messages/MOSDPGUpdateLogMissingReply.h"
 #include "messages/MOSDRepOpReply.h"
 #include "messages/MOSDScrub2.h"
+#include "messages/MOSDECSubOpWrite.h"
+#include "messages/MOSDECSubOpWriteReply.h"
+#include "messages/MOSDECSubOpRead.h"
+#include "messages/MOSDECSubOpReadReply.h"
 #include "messages/MOSDPGPCT.h"
 #include "messages/MPGStats.h"
 

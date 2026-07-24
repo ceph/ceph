@@ -6,6 +6,7 @@
 #include <memory>
 #include <optional>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
+
 #include <seastar/core/future.hh>
 #include <seastar/core/shared_future.hh>
 #include <seastar/core/semaphore.hh>
@@ -1366,5 +1367,16 @@ struct PG::do_osd_ops_params_t {
 };
 
 std::ostream& operator<<(std::ostream&, const PG& pg);
+
+inline void intrusive_ptr_add_ref(const PG* p) noexcept {
+  boost::sp_adl_block::intrusive_ptr_add_ref(
+    static_cast<const boost::intrusive_ref_counter<
+      PG, boost::thread_unsafe_counter>*>(p));
+}
+inline void intrusive_ptr_release(const PG* p) noexcept {
+  boost::sp_adl_block::intrusive_ptr_release(
+    static_cast<const boost::intrusive_ref_counter<
+      PG, boost::thread_unsafe_counter>*>(p));
+}
 
 }
