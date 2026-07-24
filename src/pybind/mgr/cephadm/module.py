@@ -553,6 +553,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                  'When enabled, cephadm and bash commands are validated and executed via '
                  'the secure invoker wrapper.'
         ),
+        Option(
+            'ceph_volume_log_level',
+            type='str',
+            default='debug',
+            enum_allowed=['debug', 'info', 'warning', 'error', 'critical'],
+            desc='Change log level for ceph-volume commands.'
+            'executed by cephadm',
+        ),
     ]
     for image in DefaultImages:
         MODULE_OPTIONS.append(Option(image.key, default=image.image_ref, desc=image.desc))
@@ -659,6 +667,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.default_cephadm_command_timeout = 0
             self.cephadm_log_destination = ''
             self.oob_default_addr = ''
+            self.ceph_volume_log_level = 'debug'
             self.ssh_keepalive_interval = 0
             self.ssh_keepalive_count_max = 0
             self.sudo_hardening = False
@@ -3449,7 +3458,7 @@ Then run the following:
                     f"OSD{'s' if len(active_osds) > 1 else ''}"
                     f" ({', '.join(active_osds)}). Use 'ceph orch osd rm' first.")
 
-        cv_args = ['--', 'lvm', 'zap', '--destroy', path]
+        cv_args = ['--', '--log-level', self.ceph_volume_log_level, 'lvm', 'zap', '--destroy', path]
         with self.async_timeout_handler(host, f'cephadm ceph-volume {" ".join(cv_args)}'):
             out, err, code = self.wait_async(CephadmServe(self)._run_cephadm(
                 host, 'osd', 'ceph-volume', cv_args, error_ok=True))
