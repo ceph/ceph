@@ -10258,6 +10258,12 @@ void PrimaryLogPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
     r = -EIO;
     goto out;
   }
+  if (int inject = cct->_conf->osd_debug_inject_copyfrom_single_error; inject != 0) {
+    derr << __func__ << " injecting single copyfrom error " << cpp_strerror(inject) << dendl;
+    cct->_conf.set_val("osd_debug_inject_copyfrom_single_error", "0");
+    r = -inject;
+    goto out;
+  }
 
   cop->results.fill_in_final_tx = std::function<void(PGTransaction*)>(
     [this, &cop /* avoid ref cycle */](PGTransaction *t) {

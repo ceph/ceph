@@ -3305,6 +3305,12 @@ options:
   level: dev
   default: false
   with_legacy: true
+# inject a single copyfrom failure with a specific errno then self-clear
+- name: osd_debug_inject_copyfrom_single_error
+  type: int
+  level: dev
+  default: 0
+  with_legacy: true
 - name: osd_debug_misdirected_ops
   type: bool
   level: dev
