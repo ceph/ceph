@@ -3778,6 +3778,8 @@ private:
     old_extent_map_t old_extents;   ///< must deref these blobs
     interval_set<uint64_t> extents_to_gc; ///< extents for garbage collection
 
+    bool full_write = false;        /// < whether full object is overwritten
+
     struct write_item {
       uint64_t logical_offset;      ///< write logical offset
       BlobRef b;
@@ -3869,6 +3871,20 @@ private:
     uint64_t offset, uint64_t length,
     ceph::buffer::list::iterator& blp,
     WriteContext *wctx);
+
+  /// Determines if small write can reuse existing blob
+  /// and hence omit blob relocation.
+  /// Returns the amount of remaining bytes which need relocation,
+  /// effectively the possibe return values are for now:
+  /// * 0 - blob has been reused and writing has been staged
+  /// * min_alloc_size - no writing staged, blob to be relocated.
+  uint32_t _do_write_small_with_maybe_blob_reuse(
+    TransContext* txc,
+    CollectionRef& c,
+    OnodeRef& o,
+    uint64_t offset, uint64_t length,
+    bufferlist& bl,
+    WriteContext* wctx);
   void _do_write_big_apply_deferred(
     TransContext* txc,
     CollectionRef& c,
