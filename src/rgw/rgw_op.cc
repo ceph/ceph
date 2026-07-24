@@ -63,6 +63,7 @@
 #include "rgw_cksum_pipe.h"
 #include "rgw_lua_data_filter.h"
 #include "rgw_lua.h"
+#include "rgw_sc_quota_checker.h"
 #include "rgw_iam_managed_policy.h"
 #include "rgw_bucket_sync.h"
 #include "rgw_bucket_logging.h"
@@ -4761,6 +4762,16 @@ void RGWPutObj::execute(optional_yield y)
       ldpp_dout(this, 20) << "check_quota() returned ret=" << op_ret << dendl;
       return;
     }
+    /* Per-storage-class pre-check.  We only run this for non-chunked
+     * uploads because (a) content_length is meaningful here, and (b) the
+     * post-upload check below will catch chunked uploads anyway. */
+    op_ret = rgw::quota::rgw_check_storage_class_quota(
+        this, quota, s->bucket->get_key(), s->dest_placement,
+        s->content_length, /*new_objects=*/1, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 20) << "sc-quota pre-check returned ret=" << op_ret << dendl;
+      return;
+    }
   }
 
   if (supplied_etag) {
@@ -5041,6 +5052,17 @@ void RGWPutObj::execute(optional_yield y)
     ldpp_dout(this, 20) << "second check_quota() returned op_ret=" << op_ret << dendl;
     return;
   }
+  /* Authoritative per-SC check using the real streamed size.  Even when
+   * the pre-check above passed (or was skipped for chunked uploads),
+   * this is the call that prevents a measurement-late overshoot from
+   * being persisted. */
+  op_ret = rgw::quota::rgw_check_storage_class_quota(
+      this, quota, s->bucket->get_key(), s->dest_placement,
+      s->obj_size, /*new_objects=*/1, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 20) << "sc-quota final check returned ret=" << op_ret << dendl;
+    return;
+  }
 
   hash.Final(m);
 
@@ -5294,6 +5316,12 @@ void RGWPostObj::execute(optional_yield y)
     if (op_ret < 0) {
       return;
     }
+    op_ret = rgw::quota::rgw_check_storage_class_quota(
+        this, quota, s->bucket->get_key(), s->dest_placement,
+        s->content_length, /*new_objects=*/1, y);
+    if (op_ret < 0) {
+      return;
+    }
 
     if (supplied_md5_b64) {
       char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
@@ -5425,6 +5453,12 @@ void RGWPostObj::execute(optional_yield y)
     }
 
     op_ret = s->bucket->check_quota(this, quota, s->obj_size, y);
+    if (op_ret < 0) {
+      return;
+    }
+    op_ret = rgw::quota::rgw_check_storage_class_quota(
+        this, quota, s->bucket->get_key(), s->dest_placement,
+        s->obj_size, /*new_objects=*/1, y);
     if (op_ret < 0) {
       return;
     }
@@ -6491,6 +6525,15 @@ void RGWCopyObj::execute(optional_yield y)
       }
       // enforce quota against the destination bucket owner
       op_ret = s->bucket->check_quota(this, quota, s->src_object->get_accounted_size(), y);
+      if (op_ret < 0) {
+        return;
+      }
+      /* For a copy, the destination's storage class is what determines
+       * which SC quota applies -- not the source's.  s->dest_placement
+       * has already been set up by the placement-resolution code above. */
+      op_ret = rgw::quota::rgw_check_storage_class_quota(
+          this, quota, s->bucket->get_key(), s->dest_placement,
+          s->src_object->get_accounted_size(), /*new_objects=*/1, y);
       if (op_ret < 0) {
         return;
       }
@@ -7708,6 +7751,49 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
 
+  /*
+   * Per-storage-class final check for multipart completes.
+   *
+   * The per-part PutObj operations already went through the SC checker.
+   * This pass is the safety net that catches the case where many parts
+   * each individually fit under the limit but the *aggregate* size of
+   * the to-be-committed object pushes the storage class over.  This is
+   * a realistic scenario: a multi-GB multipart upload may sustain
+   * dozens of parallel part PUTs, all of which pre-checked against the
+   * same (stale) cached usage number.
+   *
+   * We require that the destination placement was successfully fetched
+   * by upload->get_info() above.  If it wasn't, we silently skip the
+   * check rather than block the commit -- the per-part PutObj checks
+   * already made a reasonable enforcement effort.
+   */
+  if (dest_placement) {
+    uint64_t mp_total_size = 0;
+    int lp_ret = upload->list_parts(this, s->cct,
+                                    /*max_parts=*/1000,
+                                    /*marker=*/0,
+                                    /*next_marker=*/nullptr,
+                                    /*truncated=*/nullptr,
+                                    y);
+    if (lp_ret >= 0) {
+      for (auto& [_, mp_part] : upload->get_parts()) {
+        mp_total_size += mp_part->get_size();
+      }
+      int q_ret = rgw::quota::rgw_check_storage_class_quota(
+          this, quota, s->bucket->get_key(), *dest_placement,
+          mp_total_size, /*new_objects=*/1, y);
+      if (q_ret < 0) {
+        op_ret = q_ret;
+        ldpp_dout(this, 20) << "sc-quota multipart complete check returned ret="
+                            << op_ret << " total_size=" << mp_total_size << dendl;
+        return;
+      }
+    } else {
+      ldpp_dout(this, 10) << "WARNING: list_parts for sc-quota sum failed ret="
+                          << lp_ret << "; skipping multipart sc-quota check" << dendl;
+    }
+  }
+
   op_ret =
     upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size,
                      compressed, cs_info, ofs, s->req_id, s->owner, olh_epoch,
@@ -8742,6 +8828,13 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   rgw_placement_rule dest_placement = s->dest_placement;
   dest_placement.inherit_from(bucket->get_placement_rule());
 
+  op_ret = rgw::quota::rgw_check_storage_class_quota(
+      this, quota, bucket->get_key(), dest_placement,
+      size, /*new_objects=*/1, y);
+  if (op_ret < 0) {
+    return op_ret;
+  }
+
   std::unique_ptr<rgw::sal::Writer> processor;
   processor = driver->get_atomic_writer(this, s->yield, obj.get(), bowner,
 				       &s->dest_placement, 0, s->req_id);
@@ -8810,6 +8903,13 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   op_ret = bucket->check_quota(this, quota, size, y);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "quota exceeded for path=" << path << dendl;
+    return op_ret;
+  }
+  op_ret = rgw::quota::rgw_check_storage_class_quota(
+      this, quota, bucket->get_key(), dest_placement,
+      size, /*new_objects=*/1, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 20) << "sc-quota exceeded for path=" << path << dendl;
     return op_ret;
   }
 

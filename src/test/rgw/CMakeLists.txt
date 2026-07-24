@@ -355,6 +355,13 @@ target_include_directories(unittest_rgw_arn
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(unittest_rgw_arn ${rgw_libs})
 
+# unittest_rgw_sc_quota -- per-storage-class quota encode/decode and checker
+add_executable(unittest_rgw_sc_quota test_rgw_sc_quota.cc $<TARGET_OBJECTS:unit-main>)
+add_ceph_unittest(unittest_rgw_sc_quota)
+target_include_directories(unittest_rgw_sc_quota
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_sc_quota ${rgw_libs})
+
 # unittest_rgw_kms
 add_executable(unittest_rgw_kms test_rgw_kms.cc)
 add_ceph_unittest(unittest_rgw_kms)

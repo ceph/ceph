@@ -61,6 +61,7 @@ extern "C" {
 #include "rgw_user.h"
 #include "rgw_otp.h"
 #include "rgw_rados.h"
+#include "rgw_sc_quota_types.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
 #include "rgw_datalog.h"
@@ -452,7 +453,10 @@ void usage()
   cout << "   --read-only                       set zone as read-only (when adding to zonegroup)\n";
   cout << "   --redirect-zone                   specify zone id to redirect when response is 404 (not found)\n";
   cout << "   --placement-id                    placement id for zonegroup placement commands\n";
-  cout << "   --storage-class                   storage class for zonegroup placement commands\n";
+  cout << "   --placement-target                alias for --placement-id; for 'quota set' this scopes\n";
+  cout << "                                       the quota to a per-storage-class slot\n";
+  cout << "   --storage-class                   storage class for zonegroup placement commands; for\n";
+  cout << "                                       'quota set' this scopes the quota to a per-SC slot\n";
   cout << "   --tags=<list>                     list of tags for zonegroup placement add and modify commands\n";
   cout << "   --tags-add=<list>                 list of tags to add for zonegroup placement modify command\n";
   cout << "   --tags-rm=<list>                  list of tags to remove for zonegroup placement modify command\n";
@@ -1628,6 +1632,141 @@ void set_quota_info(RGWQuotaInfo& quota, OPT opt_cmd, int64_t max_size, int64_t 
     default:
       break;
   }
+}
+
+/*
+ * Per-storage-class quota setter.
+ *
+ * Writes into RGWQuotaInfo.storage_class_quotas at key
+ *   rgw_sc_quota_key(placement_id, storage_class)
+ * and bumps enforcement_mode to HYBRID if it is currently LEGACY -- so
+ * that the existing global quota fields keep being enforced AND the new
+ * per-SC field is enforced too.  Admins that want SC-only enforcement
+ * can explicitly downgrade to STORAGE_CLASS via the JSON admin API
+ * after setting up the per-SC entries.
+ *
+ * Returns true if any change was applied (so callers know whether to
+ * actually persist the RGWQuotaInfo back to the store).
+ */
+static bool set_sc_quota_info(RGWQuotaInfo& quota, OPT opt_cmd,
+                              const std::string& placement_id,
+                              const std::string& storage_class,
+                              int64_t max_size, int64_t max_objects,
+                              bool have_max_size, bool have_max_objects)
+{
+  const std::string key = rgw_sc_quota_key(placement_id, storage_class);
+
+  switch (opt_cmd) {
+    case OPT::QUOTA_SET:
+    case OPT::QUOTA_ENABLE: {
+      auto& sc = quota.storage_class_quotas[key];
+      if (have_max_objects) {
+        sc.max_objects = (max_objects < 0) ? -1 : max_objects;
+      }
+      if (have_max_size) {
+        /* Match the kB-rounding semantics of the global quota path so
+         * that radosgw-admin's --max-size value behaves identically
+         * whether or not a storage class is supplied. */
+        sc.max_size = (max_size < 0) ? -1 : rgw_rounded_kb(max_size) * 1024;
+      }
+      if (opt_cmd == OPT::QUOTA_ENABLE) {
+        sc.enabled = true;
+      } else if (sc.max_size >= 0 || sc.max_objects >= 0) {
+        /* `quota set` with at least one limit specified -- mark this
+         * entry "enabled" automatically so the admin doesn't need a
+         * separate `quota enable` step.  This matches the practical
+         * UX expectation that "set a limit" implies "enforce it". */
+        sc.enabled = true;
+      }
+      /* If the bucket/user was running in LEGACY mode, upgrade to
+       * HYBRID so the new SC entry actually takes effect.  We never
+       * silently downgrade enforcement_mode -- if the admin chose
+       * STORAGE_CLASS explicitly we honour that. */
+      if (quota.enforcement_mode == RGWQuotaEnforcementMode::LEGACY ||
+          quota.enforcement_mode == RGWQuotaEnforcementMode::GLOBAL_ONLY) {
+        quota.enforcement_mode = RGWQuotaEnforcementMode::HYBRID;
+      }
+      return true;
+    }
+    case OPT::QUOTA_DISABLE: {
+      auto it = quota.storage_class_quotas.find(key);
+      if (it == quota.storage_class_quotas.end()) {
+        cerr << "WARNING: no per-storage-class quota configured for key="
+             << key << "; nothing to disable" << std::endl;
+        return false;
+      }
+      it->second.enabled = false;
+      return true;
+    }
+    default:
+      return false;
+  }
+}
+
+int set_bucket_sc_quota(rgw::sal::Driver* driver, OPT opt_cmd,
+                        const string& tenant_name, const string& bucket_name,
+                        const string& placement_id,
+                        const string& storage_class,
+                        int64_t max_size, int64_t max_objects,
+                        bool have_max_size, bool have_max_objects)
+{
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  int r = driver->load_bucket(dpp(), rgw_bucket(tenant_name, bucket_name),
+                              &bucket, null_yield);
+  if (r < 0) {
+    cerr << "could not get bucket info for bucket=" << bucket_name
+         << ": " << cpp_strerror(-r) << std::endl;
+    return -r;
+  }
+  if (!set_sc_quota_info(bucket->get_info().quota, opt_cmd,
+                         placement_id, storage_class,
+                         max_size, max_objects,
+                         have_max_size, have_max_objects)) {
+    return 0;  // nothing to write
+  }
+  r = bucket->put_info(dpp(), false, real_time(), null_yield);
+  if (r < 0) {
+    cerr << "ERROR: failed writing bucket instance info: "
+         << cpp_strerror(-r) << std::endl;
+    return -r;
+  }
+  return 0;
+}
+
+int set_user_sc_quota(OPT opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state,
+                      const string& quota_scope,
+                      const string& placement_id,
+                      const string& storage_class,
+                      int64_t max_size, int64_t max_objects,
+                      bool have_max_size, bool have_max_objects)
+{
+  RGWUserInfo& user_info = op_state.get_user_info();
+  /* For users the per-SC limits live under user.quota.user_quota or
+   * user.quota.bucket_quota depending on --quota-scope, matching the
+   * existing semantics of the global quotas. */
+  RGWQuotaInfo& target = (quota_scope == "bucket")
+                         ? user_info.quota.bucket_quota
+                         : user_info.quota.user_quota;
+  if (!set_sc_quota_info(target, opt_cmd, placement_id, storage_class,
+                         max_size, max_objects,
+                         have_max_size, have_max_objects)) {
+    return 0;
+  }
+  /* Mirror the global path: push the updated RGWQuotaInfo through
+   * RGWUserAdminOpState so user metadata replication picks it up. */
+  if (quota_scope == "bucket") {
+    op_state.set_bucket_quota(user_info.quota.bucket_quota);
+  } else {
+    op_state.set_user_quota(user_info.quota.user_quota);
+  }
+  string err;
+  int r = user.modify(dpp(), op_state, null_yield, &err);
+  if (r < 0) {
+    cerr << "ERROR: failed updating user info: "
+         << cpp_strerror(-r) << ": " << err << std::endl;
+    return -r;
+  }
+  return 0;
 }
 
 int set_bucket_quota(rgw::sal::Driver* driver, OPT opt_cmd,
@@ -4469,6 +4608,12 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--zonegroup-new-name", (char*)NULL)) {
       zonegroup_new_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--placement-id", (char*)NULL)) {
+      placement_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--placement-target", (char*)NULL)) {
+      /* --placement-target is the user-facing alias used in the
+       * per-storage-class quota documentation.  It writes into the same
+       * `placement_id` slot so all downstream code (including the
+       * zonegroup placement commands) treats them identically. */
       placement_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--storage-class", (char*)NULL)) {
       opt_storage_class = val;
@@ -11731,6 +11876,52 @@ next:
   bool quota_op = (opt_cmd == OPT::QUOTA_SET || opt_cmd == OPT::QUOTA_ENABLE || opt_cmd == OPT::QUOTA_DISABLE);
 
   if (quota_op) {
+    /*
+     * Per-storage-class quotas activate when BOTH --placement-target
+     * (a.k.a. --placement-id) and --storage-class are provided.
+     * Providing only one is rejected -- it would be ambiguous about
+     * which slot in storage_class_quotas the limit lives in.
+     */
+    const bool sc_quota_op =
+        !placement_id.empty() && opt_storage_class && !opt_storage_class->empty();
+    if (sc_quota_op) {
+      if (!bucket_name.empty()) {
+        if (!quota_scope.empty() && quota_scope != "bucket") {
+          cerr << "ERROR: invalid quota scope specification." << std::endl;
+          return EINVAL;
+        }
+        return set_bucket_sc_quota(driver, opt_cmd, tenant, bucket_name,
+                                   placement_id, *opt_storage_class,
+                                   max_size, max_objects,
+                                   have_max_size, have_max_objects);
+      } else if (!rgw::sal::User::empty(user)) {
+        if (quota_scope != "bucket" && quota_scope != "user") {
+          cerr << "ERROR: invalid quota scope specification. Please specify "
+                  "either --quota-scope=bucket or --quota-scope=user"
+               << std::endl;
+          return EINVAL;
+        }
+        return set_user_sc_quota(opt_cmd, ruser, user_op, quota_scope,
+                                 placement_id, *opt_storage_class,
+                                 max_size, max_objects,
+                                 have_max_size, have_max_objects);
+      } else {
+        cerr << "ERROR: --placement-target and --storage-class require "
+                "a --bucket or --uid scope" << std::endl;
+        return EINVAL;
+      }
+    }
+
+    /* Reject the ambiguous "only one of placement-target / storage-class"
+     * case BEFORE falling into the global path, so admins get a clear
+     * error rather than silently configuring the wrong quota. */
+    if (!placement_id.empty() ||
+        (opt_storage_class && !opt_storage_class->empty())) {
+      cerr << "ERROR: per-storage-class quota requires BOTH "
+              "--placement-target and --storage-class" << std::endl;
+      return EINVAL;
+    }
+
     if (!bucket_name.empty()) {
       if (!quota_scope.empty() && quota_scope != "bucket") {
         cerr << "ERROR: invalid quota scope specification." << std::endl;
