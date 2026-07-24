@@ -12250,7 +12250,7 @@ void Server::handle_client_readdir_snapdiff(const MDRequestRef& mdr)
   unsigned max_bytes = req->head.args.snapdiff.max_bytes;
   if (!max_bytes)
     // make sure at least one item can be encoded
-    max_bytes = (512 << 10) + mds->mdsmap->get_max_xattr_size();
+    max_bytes = ((512 << 10) + mds->mdsmap->get_max_xattr_size()) << 1;
 
   SnapRealm* realm = diri->find_snaprealm();
 
@@ -12341,88 +12341,51 @@ void Server::_readdir_diff(
   bool from_the_beginning = !offset_hash && offset_str.empty();
   // skip all dns <= dentry_key_t(*, offset_str, offset_hash)
   dentry_key_t skip_key(CEPH_NOSNAP, offset_str.c_str(), offset_hash);
-
-  // We need to rollback all the entries with the same name
-  // when some entries with this name don't fit into the same fragment.
-  // This is caused by the limited ability for offset provisioning between
-  // fragments - there is no way to identify specific snapshot for the last entry.
-  // The following vars denote the potential rollback position for such a case.
-  // Fixes: https://tracker.ceph.com/issues/72518
-  string last_name;
-  size_t rollback_pos = 0;
-  size_t rollback_num = 0;
+  bool retry = false;
 
   bool end = build_snap_diff(
-    mdr,
-    dir,
-    bytes_left,
-    from_the_beginning ? nullptr : & skip_key,
-    snapid_prev,
-    snapid,
-    dnbl,
-    [&](CDentry* dn, CInode* in, bool exists) {
-      string name;
-      snapid_t effective_snapid;
-      const auto& dn_name = dn->get_name();
-      // provide the first snapid for removed entries and
-      // the last one for existent ones
-      effective_snapid = exists ? snapid : snapid_prev;
-      name.append(dn_name);
-      if ((int)(dnbl.length() + name.length() + sizeof(__u32) + sizeof(LeaseStat)) > bytes_left) {
-	dout(10) << " ran out of room for name, stopping at " << dnbl.length() << " < " << bytes_left << dendl;
-        if (name == last_name) {
-	  bufferlist keep;
-	  keep.substr_of(dnbl, 0, rollback_pos);
-	  dnbl.swap(keep);
-          last_name.clear();
-          rollback_pos = 0;
-          numfiles = rollback_num;
-          rollback_num = 0;
+      mdr, dir, bytes_left, from_the_beginning ? nullptr : &skip_key,
+      snapid_prev, snapid, dnbl, &retry,
+      [&](const std::vector<SnapdiffEntryInfo> &dn_vec) {
+        if ((int)dnbl.length() >= bytes_left) {
+          return false;
         }
-	return false;
-      }
+        for (const auto &entry_info : dn_vec) {
+          auto dn = entry_info.dn;
+          auto in = entry_info.in;
+          auto exists = entry_info.exists;
+          string name;
+          snapid_t effective_snapid;
+          const auto &dn_name = dn->get_name();
+          // provide the first snapid for removed entries and
+          // the last one for existent ones
+          effective_snapid = exists ? snapid : snapid_prev;
+          name.append(dn_name);
+          auto diri = dir->get_inode();
+          auto hash = ceph_frag_value(diri->hash_dentry_name(dn_name));
+          dout(10) << "inc dn " << *dn << " as " << name << std::hex
+                   << " hash 0x" << hash << std::dec << " " << effective_snapid
+                   << dendl;
+          encode(name, dnbl);
+          mds->locker->issue_client_lease(dn, in, mdr, now, dnbl);
 
-      auto diri = dir->get_inode();
-      auto hash = ceph_frag_value(diri->hash_dentry_name(dn_name));
-      unsigned start_len = dnbl.length();
-      dout(10) << "inc dn " << *dn << " as " << name
-               << std::hex << " hash 0x" << hash << std::dec
-               << " " << effective_snapid
-               << dendl;
-      encode(name, dnbl);
-      mds->locker->issue_client_lease(dn, in, mdr, now, dnbl);
+          // inode
+          dout(10) << "inc inode " << *in << " snap " << effective_snapid
+                   << dendl;
 
-      // inode
-      dout(10) << "inc inode " << *in << " snap "	<< effective_snapid << dendl;
-      int r = in->encode_inodestat(dnbl, mdr->session, realm, effective_snapid, bytes_left - (int)dnbl.length());
-      if (r < 0) {
-	// chop off dn->name, lease
-	dout(10) << " ran out of room, stopping at "
-	         << start_len << " < " << bytes_left << dendl;
-	bufferlist keep;
-
-	keep.substr_of(dnbl, 0,
-          name == last_name ? rollback_pos : start_len);
-	dnbl.swap(keep);
-
-        last_name.clear();
-        rollback_pos = 0;
-        numfiles = rollback_num;
-        rollback_num = 0;
-	return false;
-      }
-
-      // set rollback position
-      if (name != last_name) {
-        last_name = name;
-        rollback_pos = start_len;
-        rollback_num = numfiles;
-      }
-      // touch dn
-      mdcache->lru.lru_touch(dn);
-      ++numfiles;
-      return true;
-    });
+          // I know I am breaking rules of byte limit, but just adding at most
+          // two entries to get rid of rollback complexity in attempted fix:
+          // https://tracker.ceph.com/issues/72518
+          in->encode_inodestat(dnbl, mdr->session, realm, effective_snapid);
+          // touch dn
+          mdcache->lru.lru_touch(dn);
+          ++numfiles;
+        }
+        return true;
+      });
+  if (retry) {
+    return;
+  }
 
   __u16 flags = 0;
   if (req_flags & CEPH_READDIR_REPLY_BITFLAGS) {
@@ -12443,26 +12406,54 @@ bool Server::build_snap_diff(
   snapid_t snapid_prev,
   snapid_t snapid,
   const bufferlist& dnbl,
-  std::function<bool (CDentry*, CInode*, bool)> add_result_cb)
+  bool *retry,
+  std::function<bool(const std::vector<SnapdiffEntryInfo> &)>
+        add_result_cb)
 {
+  assert(retry);
   client_t client = mdr->client_request->get_source().num();
+  SnapdiffEntryInfo before;
 
-  struct EntryInfo {
-    CDentry* dn = nullptr;
-    CInode* in = nullptr;
-    utime_t mtime;
-
-    void reset() {
-      *this = EntryInfo();
+  auto insert_current = [&](SnapdiffEntryInfo &current,
+                            bool ignore_prev = false) {
+    if (before.dn) {
+      if (!ignore_prev) {
+        ceph_assert(before.dn->get_name() != current.dn->get_name());
+      } else {
+        ceph_assert(before.dn->get_name() == current.dn->get_name());
+      }
+      if (!ignore_prev && !add_result_cb({before})) {
+        return false;
+      }
+      before.reset();
     }
-  } before;
+    if (!add_result_cb({current})) {
+      return false;
+    }
+    return true;
+  };
 
-  auto insert_deleted = [&](EntryInfo& ei) {
-    dout(20) << "build_snap_diff deleted file " << ei.dn->get_name() << " "
-      << ei.dn->first << "/" << ei.dn->last << dendl;
-    int r = add_result_cb(ei.dn, ei.in, false);
-    ei.reset();
-    return r;
+  auto insert_before = [&](SnapdiffEntryInfo& current) {
+    if (before.dn) {
+      ceph_assert(before.dn->get_name() != current.dn->get_name());
+      if (!add_result_cb({before})) {
+        return false;
+      }
+      before.reset();
+    }
+    before = current;
+    before.exists = false;
+    return true;
+  };
+
+  auto insert_both = [&](SnapdiffEntryInfo& current) {
+    ceph_assert(before.dn);
+    ceph_assert(before.dn->get_name() == current.dn->get_name());
+    if (!add_result_cb({before, current})) {
+      return false;
+    }
+    before.reset();
+    return true;
   };
 
   auto it = !skip_key ? dir->begin() : dir->upper_bound(*skip_key);
@@ -12517,6 +12508,7 @@ bool Server::build_snap_diff(
 	  mds->locker->drop_locks(mdr.get());
 	  mdr->drop_local_auth_pins();
 	  mdcache->open_remote_dentry(dn, dnp, new C_MDS_RetryRequest(mdcache, mdr));
+    *retry = true;
 	}
 	return false;
       }
@@ -12524,94 +12516,45 @@ bool Server::build_snap_diff(
     ceph_assert(in);
 
     utime_t mtime = in->get_inode()->mtime;
-    if (in->is_dir()) {
-
-      // we need to maintain the order of entries (determined by their name hashes)
-      // hence need to insert the previous entry if any immediately.
-      if (before.dn) {
-	if (!insert_deleted(before)) {
-	  break;
-	}
+    SnapdiffEntryInfo current{dn, in, true, mtime};
+    if (dn->first > snapid_prev && dn->last < snapid) {
+      continue;
+    } else if (dn->first <= snapid_prev && dn->last >= snapid) {
+      if (in->is_dir()) {
+        if (!insert_current(current)) {
+          return false;
+        }
       }
-
-      bool exists = true;
-      if (snapid_prev < dn->first && dn->last < snapid) {
-	dout(20) << __func__ << " skipping inner " << dn->get_name() << " "
-	  << dn->first << "/" << dn->last << dendl;
-	continue;
-      } else if (dn->first <= snapid_prev && dn->last < snapid) {
-	// dir deleted
-	dout(20) << __func__ << " deleted dir " << dn->get_name() << " "
-	  << dn->first << "/" << dn->last << dendl;
-	exists = false;
-      }
-      bool r = add_result_cb(dn, in, exists);
-      if (!r) {
-	break;
+    } else if (dn->first <= snapid_prev && dn->last < snapid) {
+      if (!insert_before(current)) {
+        return false;
       }
     } else {
-      if (snapid_prev >= dn->first && snapid <= dn->last) {
-	dout(20) << __func__ << " skipping unchanged " << dn->get_name() << " "
-	  << dn->first << "/" << dn->last << dendl;
-	continue;
-      } else if (snapid_prev < dn->first && snapid > dn->last) {
-	dout(20) << __func__ << " skipping inner modification " << dn->get_name() << " "
-	  << dn->first << "/" << dn->last << dendl;
-	continue;
-      }
+      ceph_assert(dn->first > snapid_prev && dn->last >= snapid);
       string_view name_before =
-        before.dn ? string_view(before.dn->get_name()) : string_view();
-      if (before.dn && dn->get_name() != name_before) {
-        if (!insert_deleted(before)) {
-          break;
+          before.dn ? string_view(before.dn->get_name()) : string_view();
+      if (name_before != dn->get_name()) {
+        if (!insert_current(current)) {
+          return false;
         }
-        before.reset();
-      }
-      if (snapid_prev >= dn->first && snapid_prev <= dn->last) {
-	dout(30) << __func__ << " dn_before " << dn->get_name() << " "
-	  << dn->first << "/" << dn->last << dendl;
-	before = EntryInfo {dn, in, mtime};
-	continue;
+      } else if (before.in->is_dir() || in->is_dir() ||
+          before.in->ino() != in->ino()) {
+        if (!insert_both(current)) {
+          return false;
+        }
+      } else if (before.mtime != mtime) {
+        if (!insert_current(current, true)) {
+          return false;
+        }
       } else {
-	if (before.dn && dn->get_name() == name_before) {
-	  if (before.in->ino() != in->ino()) {
-	    dout(30) << __func__ << " inode changed " << dn->get_name() << " "
-		     << dn->first << "/" << dn->last
-		     << " " << before.mtime << " vs. " << mtime
-		     << dendl;
-	    if (!insert_deleted(before)) {
-	      break;
-	    }
-	    before.reset();
-	  } else {
-	    if (mtime == before.mtime) {
-	      dout(30) << __func__ << " timestamp not changed " << dn->get_name() << " "
-		       << dn->first << "/" << dn->last
-		       << " " << mtime
-		       << dendl;
-	      before.reset();
-	      continue;
-	    } else {
-	      dout(30) << __func__ << " timestamp changed " << dn->get_name() << " "
-		       << dn->first << "/" << dn->last
-		       << " " << before.mtime << " vs. " << mtime
-		       << dendl;
-	      before.reset();
-	    }
-	  }
-	}
-	dout(20) << __func__ << " new file " << dn->get_name() << " "
-	  << dn->first << "/" << dn->last
-	  << dendl;
-	ceph_assert(snapid >= dn->first && snapid <= dn->last);
-      }
-      if (!add_result_cb(dn, in, true)) {
-	break;
+        before.reset();
       }
     }
   }
   if (before.dn) {
-    insert_deleted(before);
+    if (!add_result_cb({before})) {
+      return false;
+    }
   }
-  return it == dir->end();
+  return true;
 }
