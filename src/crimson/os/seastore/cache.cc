@@ -1066,7 +1066,17 @@ void Cache::mark_transaction_conflicted(
     efforts.mutate_delta_bytes += delta_stat.bytes;
 
     if (t.get_pending_ool()) {
+      // Paddrs are still in-flight; mark_space_free happens in
+      // do_write().finally() once the write completes (safe for all devices,
+      // including NVMe MQ which may reorder overlapping writes).
       t.get_pending_ool()->is_conflicted = true;
+      std::size_t pending_bytes = 0;
+      for (auto &e : t.pre_alloc_list) {
+        pending_bytes += e->get_length();
+      }
+      if (pending_bytes > 0) {
+        epm.account_conflict_pending_free(pending_bytes);
+      }
     } else {
       for (auto &i: t.pre_alloc_list) {
 	epm.mark_space_free(i->get_paddr(), i->get_length());

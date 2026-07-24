@@ -52,6 +52,10 @@ public:
       return true;
     }
 
+    // Returns true when the local store is full (failsafe limit); checked at
+    // OSDOp boundary to short-circuit writes with -ENOSPC. Default false.
+    virtual bool is_storage_full() const { return false; }
+
     using CollectionRef = boost::intrusive_ptr<FuturizedCollection>;
     using base_errorator = crimson::errorator<crimson::ct_error::input_output_error>;
     using read_errorator = crimson::errorator<crimson::ct_error::enoent,
