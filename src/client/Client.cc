@@ -19241,6 +19241,252 @@ int Client::fcopyfile(const char *spath, const char *dpath, UserPerm& perms, mod
   return 0;
 }
 
+int Client::ll_copy_file_range(Fh *src_fh, int64_t src_off,
+                                Fh *dst_fh, int64_t dst_off,
+                                size_t len, unsigned int flags)
+{
+  return _copy_file_range(src_fh, src_off, dst_fh, dst_off, len, flags);
+}
+
+int Client::copy_file_range(int src_fd, int64_t src_off,
+                             int dst_fd, int64_t dst_off,
+                             size_t len, unsigned int flags)
+{
+  /* Resolve fds to Fh* under client_lock, then release it before
+   * calling _copy_file_range() which manages the lock internally
+   * (needs to release/reacquire around cv.wait). */
+  Fh *src_fh = nullptr;
+  Fh *dst_fh = nullptr;
+  {
+    std::unique_lock lock(client_lock);
+    src_fh = get_filehandle(src_fd);
+    if (!src_fh)
+      return -EBADF;
+    dst_fh = get_filehandle(dst_fd);
+    if (!dst_fh)
+      return -EBADF;
+  }
+  return _copy_file_range(src_fh, src_off, dst_fh, dst_off, len, flags);
+}
+
+int Client::_copy_file_range(Fh *src_fh, int64_t src_off,
+                              Fh *dst_fh, int64_t dst_off,
+                              size_t len, unsigned int flags)
+{
+  (void)flags;
+
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
+  std::unique_lock lock(client_lock);
+
+  tout(cct) << "copy_file_range" << std::endl;
+  tout(cct) << src_off << std::endl;
+  tout(cct) << dst_off << std::endl;
+  tout(cct) << len << std::endl;
+
+  Inode *src_in = src_fh->inode.get();
+  Inode *dst_in = dst_fh->inode.get();
+
+  ldout(cct, 10) << "copy_file_range: src ino " << src_in->ino
+		 << " dst ino " << dst_in->ino << dendl;
+
+  /* Source must be on the live filesystem */
+  if (src_in->snapid != CEPH_NOSNAP)
+    return -EXDEV;
+
+  /* Destination must not be a snapshot */
+  if (dst_in->snapid != CEPH_NOSNAP)
+    return -EROFS;
+
+  if (!have_copy_from2) {
+    ldout(cct, 10) << "copy_file_range: copy-from2 not supported" << dendl;
+    return -EOPNOTSUPP;
+  }
+
+  auto& src_layout = src_in->layout;
+  auto& dst_layout = dst_in->layout;
+  if (src_layout.stripe_count != 1 || dst_layout.stripe_count != 1 ||
+      src_layout.stripe_unit != dst_layout.stripe_unit ||
+      src_layout.object_size != dst_layout.object_size) {
+    ldout(cct, 10) << "copy_file_range: incompatible src/dst layout" << dendl;
+    return -EOPNOTSUPP;
+  }
+
+  uint32_t object_size = src_layout.object_size;
+
+  if (len < object_size) {
+    ldout(cct, 10) << "copy_file_range: len < object_size" << dendl;
+    return -EOPNOTSUPP;
+  }
+
+  uint64_t src_objoff = src_off % object_size;
+  uint64_t dst_objoff = dst_off % object_size;
+  if (src_objoff || dst_objoff || src_objoff != dst_objoff) {
+    ldout(cct, 10) << "copy_file_range: unaligned offsets" << dendl;
+    return -EOPNOTSUPP;
+  }
+
+  int src_have = 0, dst_have = 0;
+  int r;
+
+  r = get_caps(src_fh, CEPH_CAP_FILE_RD, CEPH_CAP_FILE_SHARED,
+	       &src_have, -1);
+  if (r < 0)
+    return r;
+
+  r = get_caps(dst_fh, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_BUFFER,
+	       &dst_have, dst_off + len);
+  if (r < 0) {
+    src_in->put_cap_ref(CEPH_CAP_FILE_RD);
+    return r;
+  }
+
+  ssize_t total = 0;
+  size_t remaining = len;
+  int64_t cur_src_off = src_off;
+  int64_t cur_dst_off = dst_off;
+  bool eopnotsupp = false;
+
+  /* Pre-compute values that don't change across objects */
+  object_locator_t src_oloc = OSDMap::file_to_object_locator(src_layout);
+  object_locator_t dst_oloc = OSDMap::file_to_object_locator(dst_layout);
+  snapid_t snapid = src_in->snapid;
+  const auto truncate_seq = dst_in->truncate_seq;
+  const auto truncate_size = dst_in->truncate_size;
+
+  int num_objects = len / object_size;
+  ceph_assert(num_objects >= 1);
+
+  /*
+   * Per-object state for parallel COPY_FROM2 submission.
+   * using 'struct' here limits visibility to this function.
+   */
+  struct CopyState {
+    int result = 0;
+  };
+  std::vector<CopyState> states(num_objects);
+
+  ceph::mutex mtx{"Client::copy_file_range::mtx"};
+  ceph::condition_variable cv;
+  int pending = num_objects;
+
+  /*
+   * Submit all COPY_FROM2 requests concurrently.  Each Objecter::mutate
+   * call is non-blocking and the callback fires on the Objecter finisher
+   * thread, so we release client_lock below and wait for the last
+   * completion to signal.
+   */
+  for (int i = 0; i < num_objects; i++) {
+    uint64_t src_objnum = (src_off + (int64_t)i * object_size) / object_size;
+    uint64_t dst_objnum = (dst_off + (int64_t)i * object_size) / object_size;
+
+    char src_oid_buf[32], dst_oid_buf[32];
+    snprintf(src_oid_buf, sizeof(src_oid_buf), "%llx.%08llx",
+	     (unsigned long long)src_in->ino,
+	     (unsigned long long)src_objnum);
+    snprintf(dst_oid_buf, sizeof(dst_oid_buf), "%llx.%08llx",
+	     (unsigned long long)dst_in->ino,
+	     (unsigned long long)dst_objnum);
+    object_t src_oid = src_oid_buf;
+    object_t dst_oid = dst_oid_buf;
+
+    ObjectOperation op;
+    op.copy_from2(src_oid, snapid, src_oloc, 0,
+		  CEPH_OSD_COPY_FROM_FLAG_TRUNCATE_SEQ,
+		  truncate_seq, truncate_size,
+		  CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL |
+		  CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+
+    SnapContext snapc = dst_in->snaprealm->get_snap_context();
+
+    objecter->mutate(dst_oid, dst_oloc, std::move(op),
+		     snapc, ceph::real_clock::now(), 0,
+		     [&states, &pending, &mtx, &cv, i](
+			 boost::system::error_code ec) {
+		       std::lock_guard l{mtx};
+		       states[i].result = ceph::from_error_code(ec);
+		       if (--pending == 0)
+			 cv.notify_all();
+		     });
+  }
+
+  /* Release client_lock while waiting for all requests to drain */
+  lock.unlock();
+  {
+    std::unique_lock l{mtx};
+    cv.wait(l, [&pending] { return pending == 0; });
+  }
+  lock.lock();
+
+  /*
+   * Scan results in offset order; truncate at the first failure.
+   * Objects beyond the first failure that were successfully written
+   * by the OSD become unreachable orphans beyond EOF -- harmless
+   * and cleaned up on file deletion.
+   */
+  int first_fail = num_objects;
+  for (int i = 0; i < num_objects; i++) {
+    if (states[i].result < 0) {
+      first_fail = i;
+      break;
+    }
+  }
+
+  if (first_fail == 0) {
+    /* First object failed -- propagate the error */
+    r = states[0].result;
+    if (r == -EOPNOTSUPP) {
+      have_copy_from2 = false;
+      ldout(cct, 1) << "copy_file_range: OSDs don't support copy-from2; "
+		       "disabling copy offload" << dendl;
+      eopnotsupp = true;
+    }
+    ldout(cct, 10) << "copy_file_range: copy_from2 failed with "
+		   << r << dendl;
+    total = r;
+  } else {
+    total = (ssize_t)first_fail * object_size;
+
+    /* Check remaining results for EOPNOTSUPP */
+    for (int i = first_fail; i < num_objects; i++) {
+      if (states[i].result == -EOPNOTSUPP) {
+	have_copy_from2 = false;
+	eopnotsupp = true;
+	break;
+      }
+    }
+    if (eopnotsupp) {
+      ldout(cct, 1) << "copy_file_range: OSDs don't support copy-from2; "
+		       "disabling copy offload" << dendl;
+    }
+
+    cur_src_off = src_off + total;
+    cur_dst_off = dst_off + total;
+    remaining = len - total;
+  }
+
+  src_in->put_cap_ref(CEPH_CAP_FILE_RD);
+  dst_in->put_cap_ref(CEPH_CAP_FILE_WR);
+
+  if (cur_dst_off > (int64_t)dst_in->size) {
+    dst_in->size = cur_dst_off;
+    dst_in->mark_caps_dirty(CEPH_CAP_FILE_WR);
+    dst_in->change_attr++;
+  }
+
+  if (total == 0) {
+    if (eopnotsupp)
+      return -EOPNOTSUPP;
+    return r;
+  }
+
+  ldout(cct, 10) << "copy_file_range: copied " << total
+		 << " bytes, " << remaining << " remaining" << dendl;
+  return total;
+}
+
 StandaloneClient::StandaloneClient(Messenger *m, MonClient *mc,
 				   boost::asio::io_context& ictx)
   : Client(m, mc, new Objecter(m->cct, m, mc, ictx))

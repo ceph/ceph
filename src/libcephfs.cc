@@ -2692,3 +2692,65 @@ extern "C" int ceph_fcopyfile(struct ceph_mount_info *cmount, const char *spath,
     return -ENOTCONN;
   return cmount->get_client()->fcopyfile(spath, dpath, cmount->default_perms, mode);
 }
+
+extern "C" int ceph_copy_file_range(struct ceph_mount_info *cmount, int src_fd, int64_t *src_off,
+                                    int dst_fd, int64_t *dst_off, size_t len, unsigned int flags)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+
+  int64_t s_off = *src_off;
+  int64_t d_off = *dst_off;
+
+  /*
+   * Flush dirty data on both files before attempting server-side copy,
+   * so the OSDs have the latest version of the objects.
+   */
+  ceph_fsync(cmount, src_fd, 1);
+  ceph_fsync(cmount, dst_fd, 1);
+
+  int ret = cmount->get_client()->copy_file_range(src_fd, s_off,
+                                                   dst_fd, d_off,
+                                                   len, flags);
+
+  if (ret == -EOPNOTSUPP || ret == -EXDEV) {
+    char buf[1048576];  /* 1MB — same as fcopyfile */
+    size_t total = 0;
+
+    while (total < len) {
+      size_t chunk = len - total;
+      if (chunk > sizeof(buf))
+        chunk = sizeof(buf);
+
+      int r = ceph_read(cmount, src_fd, buf, chunk, s_off);
+      if (r < 0)
+        return total ? (int)total : r;
+      if (r == 0)
+        break;
+
+      int w = ceph_write(cmount, dst_fd, buf, r, d_off);
+      if (w < 0)
+        return total ? (int)total : w;
+
+      s_off += w;
+      d_off += w;
+      total += w;
+
+      if (r < (int)chunk)
+        break;
+    }
+    ret = total;
+    if (ret > 0) {
+      *src_off = s_off;
+      *dst_off = d_off;
+    }
+    return ret;
+  }
+
+  if (ret > 0) {
+    *src_off = s_off + ret;
+    *dst_off = d_off + ret;
+  }
+
+  return ret;
+}

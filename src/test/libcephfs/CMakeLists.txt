@@ -194,4 +194,21 @@ if(WITH_LIBCEPHFS)
   install(TARGETS ceph_test_libcephfs_fscrypt
     DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+  add_executable(ceph_test_libcephfs_copyfilerange
+    copyfilerange.cc
+  )
+  target_link_libraries(ceph_test_libcephfs_copyfilerange
+    ceph-common
+    cephfs
+    librados
+    ${UNITTEST_LIBS}
+    ${EXTRALIBS}
+    ${CMAKE_DL_LIBS}
+  )
+  if(NOT WIN32)
+    target_link_options(ceph_test_libcephfs_copyfilerange PRIVATE -Wl,--copy-dt-needed-entries)
+  endif()
+  install(TARGETS ceph_test_libcephfs_copyfilerange
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 endif(WITH_LIBCEPHFS)

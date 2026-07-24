@@ -987,6 +987,50 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "fallocate failed")
 
+    def copy_file_range(self, src_fd, dst_fd, length, src_offset=0, dst_offset=0, flags=0):
+        """
+        Copy a byte range from one file to another, possibly using
+        server-side copy offload (COPY2) when the range is object-aligned.
+
+        :param src_fd: the file descriptor of the source file.
+        :param dst_fd: the file descriptor of the destination file.
+        :param length: the number of bytes to copy.
+        :param src_offset: the source file offset to start from (default 0).
+        :param dst_offset: the destination file offset to start from (default 0).
+        :param flags: copy flags (reserved, default 0).
+        :returns: a tuple of (bytes_copied, new_src_offset, new_dst_offset).
+        """
+
+        self.require_state("mounted")
+        if not isinstance(src_fd, int):
+            raise TypeError('src_fd must be an int')
+        if not isinstance(dst_fd, int):
+            raise TypeError('dst_fd must be an int')
+        if not isinstance(length, int):
+            raise TypeError('length must be an int')
+        if not isinstance(src_offset, int):
+            raise TypeError('src_offset must be an int')
+        if not isinstance(dst_offset, int):
+            raise TypeError('dst_offset must be an int')
+        if not isinstance(flags, int):
+            raise TypeError('flags must be an int')
+
+        cdef:
+            int _src_fd = src_fd
+            int _dst_fd = dst_fd
+            int64_t _src_offset = src_offset
+            int64_t _dst_offset = dst_offset
+            size_t _length = length
+            unsigned int _flags = flags
+
+        with nogil:
+            ret = ceph_copy_file_range(self.cluster, _src_fd, &_src_offset,
+                                       _dst_fd, &_dst_offset,
+                                       _length, _flags)
+        if ret < 0:
+            raise make_ex(ret, "copy_file_range failed")
+        return (ret, _src_offset, _dst_offset)
+
     def getcwd(self) -> bytes:
         """
         Get the current working directory.

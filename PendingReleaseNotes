@@ -1,3 +1,9 @@
+* CephFS: Server-side copy offload (COPY2) is now supported via
+  ``ceph_copy_file_range()`` in libcephfs, the ``copy_file_range`` FUSE
+  low-level handler, and the ``copy_file_range`` command in cephfs-shell.
+  For object-aligned ranges, data is copied between OSDs without passing
+  through the client, providing significant performance improvements
+  over the traditional read+write fallback.
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
   this option could be changed at runtime, but changes had no effect on opened file
