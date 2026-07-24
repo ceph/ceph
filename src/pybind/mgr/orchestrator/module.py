@@ -1359,6 +1359,68 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         output = raise_if_exception(completion)
         return HandleCommandResult(stdout=output)
 
+    @staticmethod
+    def _split_certmgr_csv_values(values: Optional[List[str]]) -> Optional[List[str]]:
+        if values is None:
+            return None
+        result = []
+        for value in values:
+            result.extend(v.strip() for v in value.split(',') if v.strip())
+        return result
+
+    @OrchestratorCLICommand.Write('orch certmgr vault token set')
+    def _cert_store_vault_token_set(
+        self,
+        _end_positional_: int = 0,
+        token: Optional[str] = None,
+        inbuf: Optional[str] = None,
+    ) -> HandleCommandResult:
+        token_content = token or inbuf
+        if not token_content:
+            raise OrchestratorError('This command requires passing a Vault token using --token or "-i <token-file>"')
+
+        completion = self.cert_store_vault_token_set(token_content)
+        output = raise_if_exception(completion)
+        return HandleCommandResult(stdout=output)
+
+    @OrchestratorCLICommand.Write('orch certmgr vault token rm')
+    def _cert_store_vault_token_rm(self) -> HandleCommandResult:
+        completion = self.cert_store_vault_token_rm()
+        output = raise_if_exception(completion)
+        return HandleCommandResult(stdout=output)
+
+    @OrchestratorCLICommand.Write('orch certmgr vault issue')
+    def _cert_store_vault_issue(
+        self,
+        consumer: str,
+        common_name: str,
+        _end_positional_: int = 0,
+        cert_name: str = '',
+        service_name: str = '',
+        hostname: str = '',
+        ca_cert_name: str = '',
+        alt_names: Optional[List[str]] = None,
+        ip_sans: Optional[List[str]] = None,
+        pki_mount: Optional[str] = None,
+        role: Optional[str] = None,
+        ttl: Optional[str] = None,
+    ) -> HandleCommandResult:
+        completion = self.cert_store_vault_issue(
+            consumer,
+            common_name,
+            cert_name,
+            service_name,
+            hostname,
+            ca_cert_name,
+            self._split_certmgr_csv_values(alt_names),
+            self._split_certmgr_csv_values(ip_sans),
+            pki_mount,
+            role,
+            ttl,
+        )
+        output = raise_if_exception(completion)
+        return HandleCommandResult(stdout=output)
+
     @OrchestratorCLICommand.Write('orch certmgr cert rm')
     def _cert_store_rm_cert(
         self,

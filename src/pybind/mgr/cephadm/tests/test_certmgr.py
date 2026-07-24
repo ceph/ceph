@@ -5,10 +5,28 @@ import json
 from tests import mock
 import logging
 
-from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectException, TLSObjectProtocol, TLSCredentials
+from cephadm.tlsobject_types import (
+    Cert,
+    PrivKey,
+    TLSObjectException,
+    TLSObjectManager,
+    TLSObjectProtocol,
+    TLSCredentials,
+    managed_by_from_user_made,
+    user_made_from_managed_by,
+)
 from cephadm.tlsobject_store import TLSOBJECT_STORE_PREFIX, TLSObjectStore, TLSObjectScope
 from cephadm.module import CephadmOrchestrator
 from cephadm.cert_mgr import CertInfo, CertMgr
+from cephadm.vault import VaultAuthError, VaultClientError, VaultIssuerConfig, VaultPKIClient
+from ceph.deployment.service_spec import CertificateSource
+from cephadm.services.cephadmservice import CephadmService
+from orchestrator import OrchestratorError
+from cephadm.cert_metadata import (
+    VAULT_CERT_METADATA_STORE_PREFIX,
+    VaultCertificateMetadata,
+    VaultCertificateMetadataStore,
+)
 
 EXPIRED_CERT = """
 -----BEGIN CERTIFICATE-----
@@ -292,7 +310,349 @@ TLSOBJECT_STORE_CERT_PREFIX = f'{TLSOBJECT_STORE_PREFIX}cert.'
 TLSOBJECT_STORE_KEY_PREFIX = f'{TLSOBJECT_STORE_PREFIX}key.'
 
 
+
+
+class TestCertificateSourceVaultServiceSupport:
+
+    class VaultTestService(CephadmService):
+        @property
+        def TYPE(self) -> str:
+            return 'rgw'
+
+    def _service(self):
+        mgr = mock.MagicMock()
+        mgr.inventory.get_addr.return_value = '10.0.0.10'
+        mgr.get_fqdn.return_value = 'rgw.example.com'
+        mgr.cert_mgr = mock.MagicMock()
+        mgr.cert_mgr.cert_store.get_tlsobject_if_exists.return_value = None
+        mgr.cert_mgr.key_store.get_tlsobject_if_exists.return_value = None
+        return self.VaultTestService(mgr)
+
+    def _spec(self):
+        spec = mock.MagicMock()
+        spec.service_name.return_value = 'rgw.foo'
+        spec.certificate_source = CertificateSource.VAULT.value
+        spec.custom_sans = ['rgw.alt.example.com']
+        return spec
+
+    def test_certificate_source_vault_issues_and_stores_certificate_on_first_use(self):
+        svc = self._service()
+        daemon_spec = mock.MagicMock(host='host1')
+        spec = self._spec()
+        svc.mgr.cert_mgr.issue_vault_certificate.return_value = TLSCredentials(
+            cert='vault-cert',
+            key='vault-key',
+            ca_cert='vault-ca',
+        )
+
+        creds = svc.get_certificates_generic(
+            svc_spec=spec,
+            daemon_spec=daemon_spec,
+            cert_source_attr='certificate_source',
+            cert_attr='ssl_cert',
+            cert_name='rgw_ssl_cert',
+            key_attr='ssl_key',
+            key_name='rgw_ssl_key',
+            ca_cert_name='rgw_ssl_ca_cert',
+            ips=['10.0.0.10'],
+            fqdns=['rgw.example.com'],
+            custom_sans=['rgw.alt.example.com'],
+        )
+
+        assert creds.cert == 'vault-cert'
+        svc.mgr.cert_mgr.issue_vault_certificate.assert_called_once_with(
+            cert_name='rgw_ssl_cert',
+            key_name='rgw_ssl_key',
+            ca_cert_name='rgw_ssl_ca_cert',
+            service_name='rgw.foo',
+            host='host1',
+            common_name='rgw.example.com',
+            alt_names=['rgw.alt.example.com', 'rgw.example.com'],
+            ip_sans=['10.0.0.10'],
+        )
+
+    def test_certificate_source_vault_reuses_stored_vault_material(self):
+        svc = self._service()
+        daemon_spec = mock.MagicMock(host='host1')
+        spec = self._spec()
+
+        def get_cert(name, service_name=None, host=None):
+            objects = {
+                'rgw_ssl_cert': Cert('stored-vault-cert', managed_by=TLSObjectManager.VAULT),
+                'rgw_ssl_ca_cert': Cert('stored-vault-ca', managed_by=TLSObjectManager.VAULT),
+            }
+            return objects.get(name)
+
+        svc.mgr.cert_mgr.cert_store.get_tlsobject_if_exists.side_effect = get_cert
+        svc.mgr.cert_mgr.key_store.get_tlsobject_if_exists.return_value = PrivKey(
+            'stored-vault-key',
+            managed_by=TLSObjectManager.VAULT,
+        )
+
+        creds = svc.get_certificates_generic(
+            svc_spec=spec,
+            daemon_spec=daemon_spec,
+            cert_source_attr='certificate_source',
+            cert_attr='ssl_cert',
+            cert_name='rgw_ssl_cert',
+            key_attr='ssl_key',
+            key_name='rgw_ssl_key',
+            ca_cert_name='rgw_ssl_ca_cert',
+            ips=['10.0.0.10'],
+            fqdns=['rgw.example.com'],
+            custom_sans=[],
+        )
+
+        assert creds.cert == 'stored-vault-cert'
+        assert creds.key == 'stored-vault-key'
+        assert creds.ca_cert == 'stored-vault-ca'
+        svc.mgr.cert_mgr.issue_vault_certificate.assert_not_called()
+
+    def test_certificate_source_vault_rejects_non_vault_existing_material(self):
+        svc = self._service()
+        daemon_spec = mock.MagicMock(host='host1')
+        spec = self._spec()
+        svc.mgr.cert_mgr.cert_store.get_tlsobject_if_exists.return_value = Cert(
+            'user-cert',
+            managed_by=TLSObjectManager.USER,
+        )
+        svc.mgr.cert_mgr.key_store.get_tlsobject_if_exists.return_value = PrivKey(
+            'user-key',
+            managed_by=TLSObjectManager.USER,
+        )
+
+        creds = svc.get_certificates_generic(
+            svc_spec=spec,
+            daemon_spec=daemon_spec,
+            cert_source_attr='certificate_source',
+            cert_attr='ssl_cert',
+            cert_name='rgw_ssl_cert',
+            key_attr='ssl_key',
+            key_name='rgw_ssl_key',
+            ips=['10.0.0.10'],
+            fqdns=['rgw.example.com'],
+            custom_sans=[],
+        )
+
+        assert not creds.cert
+        assert not creds.key
+        svc.mgr.cert_mgr.issue_vault_certificate.assert_not_called()
+
+
 class TestCertMgr(object):
+
+    @pytest.mark.parametrize('user_made, managed_by', [
+        (True, TLSObjectManager.USER),
+        (False, TLSObjectManager.CEPHADM),
+    ])
+    def test_managed_by_from_user_made(self, user_made, managed_by):
+        assert managed_by_from_user_made(user_made) == managed_by
+
+    @pytest.mark.parametrize('managed_by, user_made', [
+        (TLSObjectManager.USER, True),
+        (TLSObjectManager.CEPHADM, False),
+        (TLSObjectManager.VAULT, False),
+        (TLSObjectManager.ACME, False),
+    ])
+    def test_user_made_from_managed_by(self, managed_by, user_made):
+        assert user_made_from_managed_by(managed_by) == user_made
+
+    def test_certinfo_legacy_user_made_sets_managed_by(self):
+        cert_info = CertInfo('rgw_ssl_cert', 'rgw.foo', user_made=True)
+
+        assert cert_info.managed_by == TLSObjectManager.USER
+        assert cert_info.user_made is True
+        assert cert_info.signed_by == 'user'
+
+    def test_certinfo_managed_by_takes_precedence_over_user_made(self):
+        cert_info = CertInfo(
+            'rgw_ssl_cert',
+            'rgw.foo',
+            user_made=True,
+            managed_by=TLSObjectManager.VAULT,
+        )
+
+        assert cert_info.managed_by == TLSObjectManager.VAULT
+        assert cert_info.user_made is False
+        assert cert_info.signed_by == 'vault'
+
+    @pytest.mark.parametrize('managed_by, description', [
+        (TLSObjectManager.USER, 'user-made'),
+        (TLSObjectManager.CEPHADM, 'cephadm-signed'),
+        (TLSObjectManager.VAULT, 'vault-managed'),
+        (TLSObjectManager.ACME, 'acme-managed'),
+    ])
+    def test_certinfo_status_description_uses_managed_by(self, managed_by, description):
+        cert_info = CertInfo(
+            'rgw_ssl_cert',
+            'rgw.foo',
+            is_valid=False,
+            error_info='invalid format',
+            managed_by=managed_by,
+        )
+
+        assert f"({description})" in cert_info.get_status_description()
+
+    def _new_cert_mgr_for_filter_tests(self):
+        cm = CertMgr(mock.Mock())
+        cm.cert_store = mock.Mock()
+        cm.key_store = mock.Mock()
+        cm.known_certs[TLSObjectScope.SERVICE].extend(['rgw_ssl_cert', 'vault_ssl_cert'])
+        return cm
+
+    def _set_filter_test_certs(self, cm):
+        cm.cert_store.list_tlsobjects.return_value = [
+            ('rgw_ssl_cert', Cert('user-cert', managed_by=TLSObjectManager.USER), 'rgw.foo'),
+            ('cephadm-signed_grafana_cert', Cert('cephadm-cert', managed_by=TLSObjectManager.CEPHADM), 'node1'),
+            ('vault_ssl_cert', Cert('vault-cert', managed_by=TLSObjectManager.VAULT), 'rgw.foo'),
+        ]
+
+    @mock.patch('cephadm.cert_mgr.get_certificate_info', return_value={})
+    def test_cert_ls_managed_by_filter_selects_manager(self, _get_cert_info):
+        cm = self._new_cert_mgr_for_filter_tests()
+        self._set_filter_test_certs(cm)
+
+        def check_state(cert_name, target, cert_obj, key_obj=None):
+            return CertInfo(cert_name, target, is_valid=True, managed_by=cert_obj.managed_by)
+
+        with mock.patch.object(cm, '_check_certificate_state', side_effect=check_state):
+            ls = cm.cert_ls(filter_by='managed-by=vault')
+
+        assert set(ls.keys()) == {'vault_ssl_cert'}
+
+    @mock.patch('cephadm.cert_mgr.get_certificate_info', return_value={})
+    def test_cert_ls_signed_by_filter_remains_compat_alias(self, _get_cert_info):
+        cm = self._new_cert_mgr_for_filter_tests()
+        self._set_filter_test_certs(cm)
+
+        def check_state(cert_name, target, cert_obj, key_obj=None):
+            return CertInfo(cert_name, target, is_valid=True, managed_by=cert_obj.managed_by)
+
+        with mock.patch.object(cm, '_check_certificate_state', side_effect=check_state):
+            ls = cm.cert_ls(filter_by='signed-by=vault')
+
+        assert set(ls.keys()) == {'vault_ssl_cert'}
+
+    @mock.patch('cephadm.cert_mgr.get_certificate_info', return_value={})
+    def test_cert_ls_explicit_managed_by_overrides_default_cephadm_filter(self, _get_cert_info):
+        cm = self._new_cert_mgr_for_filter_tests()
+        self._set_filter_test_certs(cm)
+
+        def check_state(cert_name, target, cert_obj, key_obj=None):
+            return CertInfo(cert_name, target, is_valid=True, managed_by=cert_obj.managed_by)
+
+        with mock.patch.object(cm, '_check_certificate_state', side_effect=check_state):
+            ls = cm.cert_ls(filter_by='managed-by=cephadm', include_cephadm_signed=False)
+
+        assert set(ls.keys()) == {'cephadm-signed_grafana_cert'}
+
+    @mock.patch('cephadm.cert_mgr.get_certificate_info', return_value={})
+    def test_cert_ls_default_still_shows_only_user_managed_and_root_ca(self, _get_cert_info):
+        cm = self._new_cert_mgr_for_filter_tests()
+        self._set_filter_test_certs(cm)
+
+        def check_state(cert_name, target, cert_obj, key_obj=None):
+            return CertInfo(cert_name, target, is_valid=True, managed_by=cert_obj.managed_by)
+
+        with mock.patch.object(cm, '_check_certificate_state', side_effect=check_state):
+            ls = cm.cert_ls(include_cephadm_signed=False)
+
+        assert set(ls.keys()) == {'rgw_ssl_cert'}
+
+    @mock.patch('cephadm.cert_mgr.certificate_days_to_expire')
+    def test_check_certificate_state_carries_managed_by(self, cert_days_mock, cephadm_module: CephadmOrchestrator):
+        cert_days_mock.return_value = 100
+        cert_info = cephadm_module.cert_mgr._check_certificate_state(
+            'rgw_ssl_cert',
+            'rgw.foo',
+            Cert('cert-data', managed_by=TLSObjectManager.VAULT),
+        )
+
+        assert cert_info.managed_by == TLSObjectManager.VAULT
+        assert cert_info.signed_by == 'vault'
+
+    @pytest.mark.parametrize('tlsobject_cls, field_name, payload_value', [
+        (Cert, 'cert', 'fake-cert'),
+        (PrivKey, 'key', 'fake-key'),
+    ])
+    def test_tlsobject_from_json_legacy_user_made(self, tlsobject_cls, field_name, payload_value):
+        tlsobject = tlsobject_cls.from_json({
+            field_name: payload_value,
+            'user_made': True,
+            'editable': True,
+        })
+
+        assert tlsobject.managed_by == TLSObjectManager.USER
+        assert tlsobject.user_made is True
+        assert tlsobject.editable is True
+
+    @pytest.mark.parametrize('tlsobject_cls, field_name, payload_value', [
+        (Cert, 'cert', 'fake-cert'),
+        (PrivKey, 'key', 'fake-key'),
+    ])
+    def test_tlsobject_from_json_legacy_cephadm_managed(self, tlsobject_cls, field_name, payload_value):
+        tlsobject = tlsobject_cls.from_json({
+            field_name: payload_value,
+            'user_made': False,
+            'editable': False,
+        })
+
+        assert tlsobject.managed_by == TLSObjectManager.CEPHADM
+        assert tlsobject.user_made is False
+        assert tlsobject.editable is False
+
+    @pytest.mark.parametrize('tlsobject_cls, field_name, payload_value', [
+        (Cert, 'cert', 'fake-cert'),
+        (PrivKey, 'key', 'fake-key'),
+    ])
+    def test_tlsobject_from_json_managed_by_vault(self, tlsobject_cls, field_name, payload_value):
+        tlsobject = tlsobject_cls.from_json({
+            field_name: payload_value,
+            'managed_by': 'vault',
+            'editable': False,
+        })
+
+        assert tlsobject.managed_by == TLSObjectManager.VAULT
+        assert tlsobject.user_made is False
+        assert tlsobject.editable is False
+
+    @pytest.mark.parametrize('tlsobject_cls, field_name, payload_value', [
+        (Cert, 'cert', 'fake-cert'),
+        (PrivKey, 'key', 'fake-key'),
+    ])
+    def test_tlsobject_from_json_managed_by_precedence(self, tlsobject_cls, field_name, payload_value):
+        tlsobject = tlsobject_cls.from_json({
+            field_name: payload_value,
+            'managed_by': 'vault',
+            'user_made': True,
+            'editable': False,
+        })
+
+        assert tlsobject.managed_by == TLSObjectManager.VAULT
+        assert tlsobject.user_made is False
+
+    @pytest.mark.parametrize('tlsobject_cls, field_name, payload_value', [
+        (Cert, 'cert', 'fake-cert'),
+        (PrivKey, 'key', 'fake-key'),
+    ])
+    def test_tlsobject_from_json_invalid_managed_by(self, tlsobject_cls, field_name, payload_value):
+        with pytest.raises(TLSObjectException):
+            tlsobject_cls.from_json({
+                field_name: payload_value,
+                'managed_by': 'unknown-manager',
+            })
+
+    @pytest.mark.parametrize('tlsobject, payload_key, payload_value', [
+        (Cert('fake-cert', managed_by=TLSObjectManager.VAULT), 'cert', 'fake-cert'),
+        (PrivKey('fake-key', managed_by=TLSObjectManager.ACME), 'key', 'fake-key'),
+    ])
+    def test_tlsobject_to_json_includes_managed_by_and_legacy_user_made(self, tlsobject, payload_key, payload_value):
+        payload = tlsobject.to_json()
+
+        assert payload[payload_key] == payload_value
+        assert payload['managed_by'] == tlsobject.managed_by.value
+        assert payload['user_made'] == tlsobject.user_made
+        assert payload['editable'] is False
 
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_tlsobject_store_save_cert(self, _set_store, cephadm_module: CephadmOrchestrator):
@@ -554,6 +914,13 @@ class TestCertMgr(object):
         assert cm.get_cert(cert_name, host=host) == CEPHADM_SELF_GENERATED_CERT_1
         assert cm.get_key(key_name, host=host) == CEPHADM_SELF_GENERATED_KEY_2048
 
+        cert_obj = cm.cert_store.get_tlsobject(cert_name, host=host)
+        key_obj = cm.key_store.get_tlsobject(key_name, host=host)
+        assert cert_obj is not None
+        assert key_obj is not None
+        assert cert_obj.managed_by == TLSObjectManager.CEPHADM
+        assert key_obj.managed_by == TLSObjectManager.CEPHADM
+
         # Scope detection for cephadm-signed objects should be HOST
         assert cm.get_cert_scope(cert_name) == TLSObjectScope.HOST
         assert cm.get_key_scope(key_name) == TLSObjectScope.HOST
@@ -589,6 +956,30 @@ class TestCertMgr(object):
             mock.call(f'{TLSOBJECT_STORE_KEY_PREFIX}nvmeof_ssl_key', json.dumps({'nvmeof.self-signed.foo': PrivKey(nvmeof_ssl_key).to_json()})),
         ]
         _set_store.assert_has_calls(expected_calls)
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
+    def test_cert_mgr_save_cert_and_key_accept_managed_by(self, _set_store, cephadm_module: CephadmOrchestrator):
+        cephadm_module.cert_mgr.save_cert(
+            'nfs_ssl_cert',
+            'vault-cert',
+            service_name='nfs.foo',
+            managed_by=TLSObjectManager.VAULT,
+        )
+        cephadm_module.cert_mgr.save_key(
+            'nfs_ssl_key',
+            'vault-key',
+            service_name='nfs.foo',
+            managed_by=TLSObjectManager.VAULT,
+        )
+
+        cert_obj = cephadm_module.cert_mgr.cert_store.get_tlsobject('nfs_ssl_cert', service_name='nfs.foo')
+        key_obj = cephadm_module.cert_mgr.key_store.get_tlsobject('nfs_ssl_key', service_name='nfs.foo')
+        assert cert_obj is not None
+        assert key_obj is not None
+        assert cert_obj.managed_by == TLSObjectManager.VAULT
+        assert key_obj.managed_by == TLSObjectManager.VAULT
+        assert cert_obj.user_made is False
+        assert key_obj.user_made is False
 
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_tlsobject_store_key_ls(self, _set_store, cephadm_module: CephadmOrchestrator):
@@ -683,6 +1074,8 @@ class TestCertMgr(object):
                     )
                     for key_name, (target, key_value, scope) in chain(keys.items(), unknown_keys.items())
                 }
+            elif key == VAULT_CERT_METADATA_STORE_PREFIX:
+                return {}
             else:
                 raise Exception(f'Unexpected key access in store: {key}')
 
@@ -769,6 +1162,9 @@ class TestCertMgr(object):
                     "-----BEGIN PRIVATE KEY-----\nSNIP\n-----END PRIVATE KEY-----"  # raw PEM
                 )
                 return store
+
+            if prefix == VAULT_CERT_METADATA_STORE_PREFIX:
+                return {}
 
             raise Exception(f'Unexpected key access in store: {prefix}')
 
@@ -887,6 +1283,9 @@ class TestCertMgr(object):
                     f'{TLSOBJECT_STORE_KEY_PREFIX}totally_unknown_key_global': _dump_key(None, 'ignored-key-3', TLSObjectScope.GLOBAL),
                 }
                 return store
+
+            if prefix == VAULT_CERT_METADATA_STORE_PREFIX:
+                return {}
 
             raise Exception(f'Unexpected key access in store: {prefix}')
 
@@ -1033,6 +1432,193 @@ class TestCertMgr(object):
         with mock.patch.object(cert_mgr.ssl_certs, "renew_cert", return_value=("mock_new_cert", "mock_new_key")) as renew_mock:
             cert_mgr._renew_self_signed_certificate(cert_info, cert_obj)
             renew_mock.assert_called_once()
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
+    def test_certificate_issuer_registry_marks_cephadm_and_vault_auto_fixable(
+        self, _set_store, cephadm_module: CephadmOrchestrator
+    ):
+        cert_mgr = cephadm_module.cert_mgr
+
+        assert cert_mgr._supports_auto_fix(Cert('cephadm-cert', managed_by=TLSObjectManager.CEPHADM))
+        assert not cert_mgr._supports_auto_fix(Cert('user-cert', managed_by=TLSObjectManager.USER))
+        assert cert_mgr._supports_auto_fix(Cert('vault-cert', managed_by=TLSObjectManager.VAULT))
+        assert not cert_mgr._supports_auto_fix(Cert('acme-cert', managed_by=TLSObjectManager.ACME))
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
+    def test_renew_certificate_dispatches_to_registered_cephadm_issuer(
+        self, _set_store, cephadm_module: CephadmOrchestrator
+    ):
+        cert_mgr = cephadm_module.cert_mgr
+        cert_info = CertInfo(
+            'rgw_ssl_cert',
+            'rgw.foo',
+            is_valid=True,
+            is_close_to_expiration=True,
+            days_to_expiration=5,
+            managed_by=TLSObjectManager.CEPHADM,
+        )
+        cert_obj = Cert('cephadm-cert', managed_by=TLSObjectManager.CEPHADM)
+        issuer = cert_mgr.certificate_issuers[TLSObjectManager.CEPHADM]
+
+        with mock.patch.object(issuer, 'renew', return_value=True) as renew_mock:
+            assert cert_mgr._renew_certificate(cert_info, cert_obj)
+
+        renew_mock.assert_called_once_with(cert_mgr, cert_info, cert_obj)
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
+    def test_renew_certificate_dispatches_to_registered_vault_issuer(
+        self, _set_store, cephadm_module: CephadmOrchestrator
+    ):
+        cert_mgr = cephadm_module.cert_mgr
+        cert_info = CertInfo(
+            'rgw_ssl_cert',
+            'rgw.foo',
+            is_valid=True,
+            is_close_to_expiration=True,
+            days_to_expiration=5,
+            managed_by=TLSObjectManager.VAULT,
+        )
+        cert_obj = Cert('vault-cert', managed_by=TLSObjectManager.VAULT)
+        issuer = cert_mgr.certificate_issuers[TLSObjectManager.VAULT]
+
+        with mock.patch.object(issuer, 'renew', return_value=True) as renew_mock:
+            assert cert_mgr._renew_certificate(cert_info, cert_obj)
+
+        renew_mock.assert_called_once_with(cert_mgr, cert_info, cert_obj)
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
+    def test_renew_certificate_returns_false_for_unsupported_issuer(
+        self, _set_store, cephadm_module: CephadmOrchestrator
+    ):
+        cert_mgr = cephadm_module.cert_mgr
+        cert_info = CertInfo(
+            'rgw_ssl_cert',
+            'rgw.foo',
+            is_valid=True,
+            is_close_to_expiration=True,
+            days_to_expiration=5,
+            managed_by=TLSObjectManager.ACME,
+        )
+        cert_obj = Cert('acme-cert', managed_by=TLSObjectManager.ACME)
+        issuer = cert_mgr.certificate_issuers[TLSObjectManager.ACME]
+
+        with mock.patch.object(issuer, 'renew', wraps=issuer.renew) as renew_mock:
+            assert not cert_mgr._renew_certificate(cert_info, cert_obj)
+
+        renew_mock.assert_not_called()
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
+    def test_check_services_certificates_renews_auto_fixable_managed_cert(
+        self, _set_store, cephadm_module: CephadmOrchestrator
+    ):
+        cert_mgr = cephadm_module.cert_mgr
+        cephadm_module.certificate_automated_rotation_enabled = True
+
+        cert_info = CertInfo(
+            'rgw_ssl_cert',
+            'rgw.foo',
+            is_valid=True,
+            is_close_to_expiration=True,
+            days_to_expiration=5,
+            managed_by=TLSObjectManager.CEPHADM,
+        )
+        cert_obj = Cert('cephadm-cert', managed_by=TLSObjectManager.CEPHADM)
+
+        with mock.patch.object(cert_mgr, 'get_problematic_certificates', return_value=[(cert_info, cert_obj)]), \
+             mock.patch.object(cert_mgr, '_renew_certificate', return_value=True) as renew_mock, \
+             mock.patch.object(cert_mgr, 'get_associated_service', return_value='rgw.foo'), \
+             mock.patch.object(cert_mgr, '_notify_certificates_health_status') as notify_mock:
+            services_to_reconfig, certs_with_issues = cert_mgr.check_services_certificates(fix_issues=True)
+
+        renew_mock.assert_called_once_with(cert_info, cert_obj)
+        assert services_to_reconfig == ['rgw.foo']
+        assert certs_with_issues == []
+        notify_mock.assert_called_once_with([])
+
+    @pytest.mark.parametrize('managed_by', [
+        TLSObjectManager.USER,
+        TLSObjectManager.ACME,
+    ])
+    @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
+    def test_check_services_certificates_does_not_renew_unsupported_managed(
+        self, _set_store, cephadm_module: CephadmOrchestrator, managed_by: TLSObjectManager
+    ):
+        cert_mgr = cephadm_module.cert_mgr
+        cephadm_module.certificate_automated_rotation_enabled = True
+
+        cert_info = CertInfo(
+            'rgw_ssl_cert',
+            'rgw.foo',
+            is_valid=True,
+            is_close_to_expiration=True,
+            days_to_expiration=5,
+            managed_by=managed_by,
+        )
+        cert_obj = Cert('external-cert', managed_by=managed_by)
+
+        with mock.patch.object(cert_mgr, 'get_problematic_certificates', return_value=[(cert_info, cert_obj)]), \
+             mock.patch.object(cert_mgr, '_renew_certificate') as renew_mock, \
+             mock.patch.object(cert_mgr, '_notify_certificates_health_status') as notify_mock:
+            services_to_reconfig, certs_with_issues = cert_mgr.check_services_certificates(fix_issues=True)
+
+        renew_mock.assert_not_called()
+        assert services_to_reconfig == []
+        assert certs_with_issues == [cert_info]
+        notify_mock.assert_called_once_with([cert_info])
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
+    def test_check_services_certificates_reports_failed_auto_fix(
+        self, _set_store, cephadm_module: CephadmOrchestrator
+    ):
+        cert_mgr = cephadm_module.cert_mgr
+        cephadm_module.certificate_automated_rotation_enabled = True
+
+        cert_info = CertInfo(
+            'rgw_ssl_cert',
+            'rgw.foo',
+            is_valid=True,
+            is_close_to_expiration=True,
+            days_to_expiration=5,
+            managed_by=TLSObjectManager.VAULT,
+        )
+        cert_obj = Cert('vault-cert', managed_by=TLSObjectManager.VAULT)
+
+        with mock.patch.object(cert_mgr, 'get_problematic_certificates', return_value=[(cert_info, cert_obj)]), \
+             mock.patch.object(cert_mgr, '_renew_certificate', return_value=False) as renew_mock, \
+             mock.patch.object(cert_mgr, '_notify_certificates_health_status') as notify_mock:
+            services_to_reconfig, certs_with_issues = cert_mgr.check_services_certificates(fix_issues=True)
+
+        renew_mock.assert_called_once_with(cert_info, cert_obj)
+        assert services_to_reconfig == []
+        assert certs_with_issues == [cert_info]
+        notify_mock.assert_called_once_with([cert_info])
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
+    def test_check_services_certificates_rotation_disabled_requires_intervention(
+        self, _set_store, cephadm_module: CephadmOrchestrator
+    ):
+        cert_mgr = cephadm_module.cert_mgr
+        cephadm_module.certificate_automated_rotation_enabled = False
+
+        cert_info = CertInfo(
+            'rgw_ssl_cert',
+            'rgw.foo',
+            is_valid=True,
+            is_close_to_expiration=True,
+            days_to_expiration=5,
+            managed_by=TLSObjectManager.CEPHADM,
+        )
+        cert_obj = Cert('cephadm-cert', managed_by=TLSObjectManager.CEPHADM)
+
+        with mock.patch.object(cert_mgr, 'get_problematic_certificates', return_value=[(cert_info, cert_obj)]), \
+             mock.patch.object(cert_mgr, '_renew_certificate') as renew_mock, \
+             mock.patch.object(cert_mgr, '_notify_certificates_health_status') as notify_mock:
+            services_to_reconfig, certs_with_issues = cert_mgr.check_services_certificates(fix_issues=True)
+
+        renew_mock.assert_not_called()
+        assert services_to_reconfig == []
+        assert certs_with_issues == [cert_info]
+        notify_mock.assert_called_once_with([cert_info])
 
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_health_errors_appending(self, _set_store, cephadm_module: CephadmOrchestrator):
@@ -1872,21 +2458,40 @@ class TestCertMgr(object):
 class MockTLSObject(TLSObjectProtocol):
     STORAGE_PREFIX = "mocktls"
 
-    def __init__(self, data: str = "", user_made: bool = False, editable: bool = False):
+    def __init__(self, data: str = "", user_made=None, editable: bool = False, managed_by=None):
         self.data = data
-        self.user_made = user_made
+        if managed_by is not None:
+            self.managed_by = TLSObjectManager(managed_by)
+        elif user_made is not None:
+            self.managed_by = managed_by_from_user_made(user_made)
+        else:
+            self.managed_by = TLSObjectManager.CEPHADM
         self.editable = editable
+
+    @property
+    def user_made(self):
+        return user_made_from_managed_by(self.managed_by)
 
     def __bool__(self):
         return bool(self.data)
 
     @staticmethod
     def to_json(obj):
-        return {"data": obj.data, "user_made": obj.user_made, "editable": obj.editable}
+        return {
+            "data": obj.data,
+            "managed_by": obj.managed_by.value,
+            "user_made": obj.user_made,
+            "editable": obj.editable,
+        }
 
     @staticmethod
     def from_json(json_data):
-        return MockTLSObject(json_data["data"], json_data["user_made"], json_data["editable"])
+        return MockTLSObject(
+            json_data["data"],
+            json_data.get("user_made"),
+            json_data.get("editable", False),
+            json_data.get("managed_by"),
+        )
 
 
 class MockCephadmOrchestrator:
@@ -1896,8 +2501,708 @@ class MockCephadmOrchestrator:
     def set_store(self, key, value):
         self.store[key] = value
 
+    def get_store(self, key):
+        return self.store.get(key)
+
     def get_store_prefix(self, prefix):
         return {k: v for k, v in self.store.items() if k.startswith(prefix)}
+
+
+class TestVaultCertificateMetadata(unittest.TestCase):
+
+    def _metadata(self, **kwargs):
+        values = {
+            'cert_name': 'rgw_ssl_cert',
+            'key_name': 'rgw_ssl_key',
+            'ca_cert_name': 'rgw_ssl_ca_cert',
+            'scope': TLSObjectScope.SERVICE,
+            'target': 'rgw.foo',
+            'pki_mount': 'pki',
+            'role': 'ceph-rgw',
+            'ttl': '720h',
+            'common_name': 'rgw.example.com',
+            'alt_names': ['rgw.example.com', 'rgw.internal'],
+            'ip_sans': ['10.0.0.10'],
+        }
+        values.update(kwargs)
+        return VaultCertificateMetadata(**values)
+
+    def test_vault_metadata_serializes_renewal_inputs(self):
+        metadata = self._metadata()
+
+        assert metadata.managed_by == TLSObjectManager.VAULT
+        assert metadata.store_target == 'rgw.foo'
+        assert metadata.to_json() == {
+            'cert_name': 'rgw_ssl_cert',
+            'key_name': 'rgw_ssl_key',
+            'ca_cert_name': 'rgw_ssl_ca_cert',
+            'managed_by': 'vault',
+            'scope': 'service',
+            'target': 'rgw.foo',
+            'pki_mount': 'pki',
+            'role': 'ceph-rgw',
+            'ttl': '720h',
+            'common_name': 'rgw.example.com',
+            'alt_names': ['rgw.example.com', 'rgw.internal'],
+            'ip_sans': ['10.0.0.10'],
+        }
+
+        loaded = VaultCertificateMetadata.from_json(metadata.to_json())
+        assert loaded == metadata
+
+    def test_vault_metadata_supports_global_scope(self):
+        metadata = self._metadata(
+            cert_name='mgmt_gateway_ssl_cert',
+            key_name='mgmt_gateway_ssl_key',
+            ca_cert_name=None,
+            scope=TLSObjectScope.GLOBAL,
+            target=None,
+        )
+
+        assert metadata.store_target == ''
+        assert metadata.to_json()['target'] is None
+
+    def test_vault_metadata_validates_scope_and_owner(self):
+        with pytest.raises(TLSObjectException, match='requires target'):
+            self._metadata(target=None)
+
+        with pytest.raises(TLSObjectException, match='must not set target'):
+            self._metadata(scope=TLSObjectScope.GLOBAL, target='rgw.foo')
+
+        with pytest.raises(TLSObjectException, match='managed_by=vault'):
+            self._metadata(managed_by=TLSObjectManager.CEPHADM)
+
+        bad = self._metadata().to_json()
+        bad['unexpected'] = True
+        with pytest.raises(TLSObjectException, match='unknown field'):
+            VaultCertificateMetadata.from_json(bad)
+
+    def test_vault_metadata_store_save_load_get_remove(self):
+        mgr = MockCephadmOrchestrator()
+        store = VaultCertificateMetadataStore(mgr)
+        rgw_metadata = self._metadata()
+        global_metadata = self._metadata(
+            cert_name='mgmt_gateway_ssl_cert',
+            key_name='mgmt_gateway_ssl_key',
+            ca_cert_name=None,
+            scope=TLSObjectScope.GLOBAL,
+            target=None,
+            common_name='mgmt.example.com',
+            alt_names=['mgmt.example.com'],
+            ip_sans=[],
+        )
+
+        store.save(rgw_metadata)
+        store.save(global_metadata)
+
+        assert store.get('rgw_ssl_cert', 'rgw.foo') == rgw_metadata
+        assert store.get('mgmt_gateway_ssl_cert') == global_metadata
+        assert json.loads(mgr.store[VAULT_CERT_METADATA_STORE_PREFIX + 'rgw_ssl_cert']) == {
+            'rgw.foo': rgw_metadata.to_json(),
+        }
+
+        reloaded = VaultCertificateMetadataStore(mgr)
+        reloaded.load()
+        assert reloaded.get('rgw_ssl_cert', 'rgw.foo') == rgw_metadata
+        assert reloaded.get('mgmt_gateway_ssl_cert') == global_metadata
+
+        assert reloaded.remove('rgw_ssl_cert', 'rgw.foo')
+        assert reloaded.get('rgw_ssl_cert', 'rgw.foo') is None
+        assert mgr.store[VAULT_CERT_METADATA_STORE_PREFIX + 'rgw_ssl_cert'] is None
+        assert not reloaded.remove('rgw_ssl_cert', 'rgw.foo')
+
+    def test_vault_metadata_store_skips_bad_records(self):
+        mgr = MockCephadmOrchestrator()
+        good = self._metadata()
+        mgr.store[VAULT_CERT_METADATA_STORE_PREFIX + 'rgw_ssl_cert'] = json.dumps({
+            'rgw.foo': good.to_json(),
+            'broken': {'cert_name': 'broken'},
+        })
+        mgr.store[VAULT_CERT_METADATA_STORE_PREFIX + 'bad-json'] = 'not-json'
+
+        store = VaultCertificateMetadataStore(mgr)
+        store.load()
+
+        assert store.get('rgw_ssl_cert', 'rgw.foo') == good
+        assert store.get('broken', 'broken') is None
+
+    def test_cert_mgr_vault_metadata_helpers_and_cert_removal(self):
+        mgr = MockCephadmOrchestrator()
+        cm = CertMgr(mgr)
+        cm.register_cert_key_pair(
+            'rgw',
+            'rgw_ssl_cert',
+            'rgw_ssl_key',
+            TLSObjectScope.SERVICE,
+            ca_cert_name='rgw_ssl_ca_cert',
+        )
+        cm.init_tlsobject_store = mock.Mock()
+        cm.cert_store = mock.Mock()
+        cm.cert_store.rm_tlsobject.return_value = True
+        cm.vault_cert_metadata_store = VaultCertificateMetadataStore(mgr)
+
+        metadata = self._metadata()
+        cm.save_vault_certificate_metadata(metadata)
+
+        assert cm.get_vault_certificate_metadata('rgw_ssl_cert', service_name='rgw.foo') == metadata
+        assert cm.rm_cert('rgw_ssl_cert', service_name='rgw.foo')
+        assert cm.get_vault_certificate_metadata('rgw_ssl_cert', service_name='rgw.foo') is None
+
+        cm.save_vault_certificate_metadata(metadata)
+        cm.key_store = mock.Mock()
+        cm.key_store.rm_tlsobject.return_value = True
+        assert cm.rm_key('rgw_ssl_key', service_name='rgw.foo')
+        assert cm.get_vault_certificate_metadata('rgw_ssl_cert', service_name='rgw.foo') is None
+
+
+class TestVaultManualIssue(unittest.TestCase):
+
+    def _cert_mgr(self) -> CertMgr:
+        mgr = MockCephadmOrchestrator()
+        mgr.certmgr_vault_addr = 'https://vault.example.com:8200'
+        mgr.certmgr_vault_pki_mount = 'pki'
+        mgr.certmgr_vault_role = 'ceph-rgw'
+        mgr.certmgr_vault_ttl = '720h'
+        mgr.certmgr_vault_cacert = None
+        mgr.certmgr_vault_verify_tls = True
+        cm = CertMgr(mgr)
+        cm.register_cert_key_pair(
+            'rgw',
+            'rgw_ssl_cert',
+            'rgw_ssl_key',
+            TLSObjectScope.SERVICE,
+            ca_cert_name='rgw_ssl_ca_cert',
+        )
+        cm.cert_store = TLSObjectStore(mgr, Cert, cm.known_certs, cm.is_cephadm_signed_object)
+        cm.key_store = TLSObjectStore(mgr, PrivKey, cm.known_keys, cm.is_cephadm_signed_object)
+        cm.vault_cert_metadata_store = VaultCertificateMetadataStore(mgr)
+        cm.set_vault_token('s.vault-token')
+        return cm
+
+    @mock.patch('cephadm.cert_mgr.VaultPKIClient')
+    def test_issue_vault_certificate_stores_cert_key_ca_and_metadata(self, m_client_cls):
+        cm = self._cert_mgr()
+        m_client = m_client_cls.return_value
+        m_client.issue_certificate.return_value = TLSCredentials(
+            cert='---VAULT CERT---',
+            key='---VAULT KEY---',
+            ca_cert='---VAULT CA---',
+        )
+
+        creds = cm.issue_vault_certificate(
+            cert_name='rgw_ssl_cert',
+            key_name='rgw_ssl_key',
+            ca_cert_name='rgw_ssl_ca_cert',
+            service_name='rgw.foo',
+            common_name='rgw.example.com',
+            alt_names=['rgw.example.com', 'rgw.internal'],
+            ip_sans=['10.0.0.10'],
+            pki_mount='pki-int',
+            role='ceph-rgw-int',
+            ttl='24h',
+        )
+
+        assert creds.cert == '---VAULT CERT---'
+        m_client_cls.assert_called_once_with(cm.get_vault_issuer_config(), 's.vault-token')
+        m_client.issue_certificate.assert_called_once_with(
+            common_name='rgw.example.com',
+            alt_names=['rgw.example.com', 'rgw.internal'],
+            ip_sans=['10.0.0.10'],
+            ttl='24h',
+            mount='pki-int',
+            role='ceph-rgw-int',
+        )
+
+        cert_obj = cm.cert_store.get_tlsobject('rgw_ssl_cert', service_name='rgw.foo')
+        key_obj = cm.key_store.get_tlsobject('rgw_ssl_key', service_name='rgw.foo')
+        ca_obj = cm.cert_store.get_tlsobject('rgw_ssl_ca_cert', service_name='rgw.foo')
+        assert cert_obj.cert == '---VAULT CERT---'
+        assert key_obj.key == '---VAULT KEY---'
+        assert ca_obj.cert == '---VAULT CA---'
+        assert cert_obj.managed_by == TLSObjectManager.VAULT
+        assert key_obj.managed_by == TLSObjectManager.VAULT
+        assert ca_obj.managed_by == TLSObjectManager.VAULT
+        assert cert_obj.editable is False
+        assert key_obj.editable is False
+        assert ca_obj.editable is False
+
+        metadata = cm.get_vault_certificate_metadata('rgw_ssl_cert', service_name='rgw.foo')
+        assert metadata == VaultCertificateMetadata(
+            cert_name='rgw_ssl_cert',
+            key_name='rgw_ssl_key',
+            ca_cert_name='rgw_ssl_ca_cert',
+            scope=TLSObjectScope.SERVICE,
+            target='rgw.foo',
+            pki_mount='pki-int',
+            role='ceph-rgw-int',
+            ttl='24h',
+            common_name='rgw.example.com',
+            alt_names=['rgw.example.com', 'rgw.internal'],
+            ip_sans=['10.0.0.10'],
+        )
+
+    @mock.patch('cephadm.cert_mgr.VaultPKIClient')
+    def test_issue_vault_certificate_uses_global_config_defaults_in_metadata(self, m_client_cls):
+        cm = self._cert_mgr()
+        m_client_cls.return_value.issue_certificate.return_value = TLSCredentials(
+            cert='---VAULT CERT---',
+            key='---VAULT KEY---',
+            ca_cert='',
+        )
+
+        cm.issue_vault_certificate(
+            cert_name='rgw_ssl_cert',
+            key_name='rgw_ssl_key',
+            service_name='rgw.foo',
+            common_name='rgw.example.com',
+        )
+
+        metadata = cm.get_vault_certificate_metadata('rgw_ssl_cert', service_name='rgw.foo')
+        assert metadata.pki_mount == 'pki'
+        assert metadata.role == 'ceph-rgw'
+        assert metadata.ttl == '720h'
+        assert metadata.ca_cert_name is None
+
+    def test_issue_vault_certificate_validates_scope_and_registered_names(self):
+        cm = self._cert_mgr()
+
+        with pytest.raises(TLSObjectException, match='service-scoped'):
+            cm.issue_vault_certificate(
+                cert_name='rgw_ssl_cert',
+                key_name='rgw_ssl_key',
+                common_name='rgw.example.com',
+            )
+
+        with pytest.raises(TLSObjectException, match='Unknown certificate'):
+            cm.issue_vault_certificate(
+                cert_name='unknown_cert',
+                key_name='rgw_ssl_key',
+                service_name='rgw.foo',
+                common_name='rgw.example.com',
+            )
+
+        with pytest.raises(TLSObjectException, match='Unknown key'):
+            cm.issue_vault_certificate(
+                cert_name='rgw_ssl_cert',
+                key_name='unknown_key',
+                service_name='rgw.foo',
+                common_name='rgw.example.com',
+            )
+
+    @mock.patch('cephadm.cert_mgr.VaultPKIClient')
+    def test_issue_vault_certificate_failure_preserves_existing_material(self, m_client_cls):
+        cm = self._cert_mgr()
+        cm.save_cert('rgw_ssl_cert', 'old-cert', service_name='rgw.foo', managed_by=TLSObjectManager.USER, editable=True)
+        cm.save_key('rgw_ssl_key', 'old-key', service_name='rgw.foo', managed_by=TLSObjectManager.USER, editable=True)
+        m_client_cls.return_value.issue_certificate.side_effect = VaultClientError('Vault unavailable')
+
+        with pytest.raises(VaultClientError, match='Vault unavailable'):
+            cm.issue_vault_certificate(
+                cert_name='rgw_ssl_cert',
+                key_name='rgw_ssl_key',
+                service_name='rgw.foo',
+                common_name='rgw.example.com',
+            )
+
+        assert cm.get_cert('rgw_ssl_cert', service_name='rgw.foo') == 'old-cert'
+        assert cm.get_key('rgw_ssl_key', service_name='rgw.foo') == 'old-key'
+        assert cm.get_vault_certificate_metadata('rgw_ssl_cert', service_name='rgw.foo') is None
+
+    def test_issue_vault_certificate_rejects_non_editable_non_vault_overwrite(self):
+        cm = self._cert_mgr()
+        cm.save_cert('rgw_ssl_cert', 'inline-cert', service_name='rgw.foo', managed_by=TLSObjectManager.USER, editable=False)
+
+        with pytest.raises(TLSObjectException, match='Cannot overwrite non-editable certificate'):
+            cm.issue_vault_certificate(
+                cert_name='rgw_ssl_cert',
+                key_name='rgw_ssl_key',
+                service_name='rgw.foo',
+                common_name='rgw.example.com',
+            )
+
+    @mock.patch('cephadm.cert_issuer.VaultPKIClient')
+    def test_vault_issuer_renews_stored_material_from_metadata(self, m_client_cls):
+        cm = self._cert_mgr()
+        cm.save_cert('rgw_ssl_cert', 'old-cert', service_name='rgw.foo', managed_by=TLSObjectManager.VAULT, editable=False)
+        cm.save_key('rgw_ssl_key', 'old-key', service_name='rgw.foo', managed_by=TLSObjectManager.VAULT, editable=False)
+        cm.save_cert('rgw_ssl_ca_cert', 'old-ca', service_name='rgw.foo', managed_by=TLSObjectManager.VAULT, editable=False)
+        cm.save_vault_certificate_metadata(VaultCertificateMetadata(
+            cert_name='rgw_ssl_cert',
+            key_name='rgw_ssl_key',
+            ca_cert_name='rgw_ssl_ca_cert',
+            scope=TLSObjectScope.SERVICE,
+            target='rgw.foo',
+            pki_mount='pki-int',
+            role='ceph-rgw-int',
+            ttl='24h',
+            common_name='rgw.example.com',
+            alt_names=['rgw.example.com'],
+            ip_sans=['10.0.0.10'],
+        ))
+        m_client = m_client_cls.return_value
+        m_client.issue_certificate.return_value = TLSCredentials(
+            cert='new-vault-cert',
+            key='new-vault-key',
+            ca_cert='new-vault-ca',
+        )
+
+        cert_info = CertInfo(
+            'rgw_ssl_cert',
+            'rgw.foo',
+            is_valid=True,
+            is_close_to_expiration=True,
+            days_to_expiration=5,
+            managed_by=TLSObjectManager.VAULT,
+        )
+        cert_obj = cm.cert_store.get_tlsobject('rgw_ssl_cert', service_name='rgw.foo')
+
+        assert cm._renew_certificate(cert_info, cert_obj)
+
+        m_client_cls.assert_called_once_with(cm.get_vault_issuer_config(), 's.vault-token')
+        m_client.issue_certificate.assert_called_once_with(
+            common_name='rgw.example.com',
+            alt_names=['rgw.example.com'],
+            ip_sans=['10.0.0.10'],
+            ttl='24h',
+            mount='pki-int',
+            role='ceph-rgw-int',
+        )
+        cert_obj = cm.cert_store.get_tlsobject('rgw_ssl_cert', service_name='rgw.foo')
+        key_obj = cm.key_store.get_tlsobject('rgw_ssl_key', service_name='rgw.foo')
+        ca_obj = cm.cert_store.get_tlsobject('rgw_ssl_ca_cert', service_name='rgw.foo')
+        assert cert_obj.cert == 'new-vault-cert'
+        assert key_obj.key == 'new-vault-key'
+        assert ca_obj.cert == 'new-vault-ca'
+        assert cert_obj.managed_by == TLSObjectManager.VAULT
+        assert key_obj.managed_by == TLSObjectManager.VAULT
+        assert ca_obj.managed_by == TLSObjectManager.VAULT
+        assert cert_obj.editable is False
+        assert key_obj.editable is False
+        assert ca_obj.editable is False
+
+    @mock.patch('cephadm.cert_issuer.VaultPKIClient')
+    def test_vault_issuer_missing_metadata_preserves_existing_material(self, m_client_cls):
+        cm = self._cert_mgr()
+        cm.save_cert('rgw_ssl_cert', 'old-cert', service_name='rgw.foo', managed_by=TLSObjectManager.VAULT, editable=False)
+        cm.save_key('rgw_ssl_key', 'old-key', service_name='rgw.foo', managed_by=TLSObjectManager.VAULT, editable=False)
+        cert_info = CertInfo(
+            'rgw_ssl_cert',
+            'rgw.foo',
+            is_valid=True,
+            is_close_to_expiration=True,
+            days_to_expiration=5,
+            managed_by=TLSObjectManager.VAULT,
+        )
+        cert_obj = cm.cert_store.get_tlsobject('rgw_ssl_cert', service_name='rgw.foo')
+
+        assert not cm._renew_certificate(cert_info, cert_obj)
+        m_client_cls.assert_not_called()
+        assert cm.get_cert('rgw_ssl_cert', service_name='rgw.foo') == 'old-cert'
+        assert cm.get_key('rgw_ssl_key', service_name='rgw.foo') == 'old-key'
+
+    @mock.patch('cephadm.cert_issuer.VaultPKIClient')
+    def test_vault_issuer_failure_preserves_existing_material(self, m_client_cls):
+        cm = self._cert_mgr()
+        cm.save_cert('rgw_ssl_cert', 'old-cert', service_name='rgw.foo', managed_by=TLSObjectManager.VAULT, editable=False)
+        cm.save_key('rgw_ssl_key', 'old-key', service_name='rgw.foo', managed_by=TLSObjectManager.VAULT, editable=False)
+        cm.save_vault_certificate_metadata(VaultCertificateMetadata(
+            cert_name='rgw_ssl_cert',
+            key_name='rgw_ssl_key',
+            scope=TLSObjectScope.SERVICE,
+            target='rgw.foo',
+            common_name='rgw.example.com',
+        ))
+        m_client_cls.return_value.issue_certificate.side_effect = VaultClientError('Vault unavailable')
+        cert_info = CertInfo(
+            'rgw_ssl_cert',
+            'rgw.foo',
+            is_valid=True,
+            is_close_to_expiration=True,
+            days_to_expiration=5,
+            managed_by=TLSObjectManager.VAULT,
+        )
+        cert_obj = cm.cert_store.get_tlsobject('rgw_ssl_cert', service_name='rgw.foo')
+
+        assert not cm._renew_certificate(cert_info, cert_obj)
+        assert cm.get_cert('rgw_ssl_cert', service_name='rgw.foo') == 'old-cert'
+        assert cm.get_key('rgw_ssl_key', service_name='rgw.foo') == 'old-key'
+
+
+
+class TestVaultIssuerConfig(unittest.TestCase):
+
+    class MockMgr:
+        certmgr_vault_addr = 'https://vault.example.com:8200'
+        certmgr_vault_pki_mount = 'pki'
+        certmgr_vault_role = 'ceph-rgw'
+        certmgr_vault_ttl = '720h'
+        certmgr_vault_cacert = '/etc/ceph/vault-ca.pem'
+        certmgr_vault_verify_tls = True
+
+    def test_from_mgr_loads_global_vault_config(self):
+        config = VaultIssuerConfig.from_mgr(self.MockMgr())
+
+        assert config.addr == 'https://vault.example.com:8200'
+        assert config.pki_mount == 'pki'
+        assert config.role == 'ceph-rgw'
+        assert config.ttl == '720h'
+        assert config.ca_cert == '/etc/ceph/vault-ca.pem'
+        assert config.verify_tls is True
+        assert config.is_configured()
+        assert config.missing_required_fields() == []
+
+    def test_from_mgr_normalizes_empty_strings(self):
+        class EmptyMgr:
+            certmgr_vault_addr = '  '
+            certmgr_vault_pki_mount = ''
+            certmgr_vault_role = None
+            certmgr_vault_verify_tls = False
+
+        config = VaultIssuerConfig.from_mgr(EmptyMgr())
+
+        assert config.addr is None
+        assert config.pki_mount is None
+        assert config.role is None
+        assert config.verify_tls is False
+        assert not config.is_configured()
+        assert config.missing_required_fields() == ['addr', 'pki_mount', 'role']
+
+    def test_to_json(self):
+        config = VaultIssuerConfig(
+            addr='https://vault.example.com:8200',
+            pki_mount='pki',
+            role='ceph-rgw',
+            ttl='720h',
+            ca_cert='vault-ca',
+            verify_tls=False,
+        )
+
+        assert config.to_json() == {
+            'addr': 'https://vault.example.com:8200',
+            'pki_mount': 'pki',
+            'role': 'ceph-rgw',
+            'ttl': '720h',
+            'ca_cert': 'vault-ca',
+            'verify_tls': False,
+        }
+
+    def test_cert_mgr_vault_config_and_token_helpers(self):
+        mgr = MockCephadmOrchestrator()
+        mgr.certmgr_vault_addr = 'https://vault.example.com:8200'
+        mgr.certmgr_vault_pki_mount = 'pki'
+        mgr.certmgr_vault_role = 'ceph-rgw'
+        mgr.certmgr_vault_ttl = '720h'
+        mgr.certmgr_vault_cacert = None
+        mgr.certmgr_vault_verify_tls = True
+        cm = CertMgr(mgr)
+
+        config = cm.get_vault_issuer_config()
+        assert config.is_configured()
+        assert config.addr == 'https://vault.example.com:8200'
+        assert config.pki_mount == 'pki'
+        assert config.role == 'ceph-rgw'
+
+        assert cm.get_vault_token() is None
+        cm.set_vault_token('  s.vault-token  ')
+        assert mgr.store[CertMgr.VAULT_TOKEN_STORE_KEY] == 's.vault-token'
+        assert cm.get_vault_token() == 's.vault-token'
+        cm.rm_vault_token()
+        assert mgr.store[CertMgr.VAULT_TOKEN_STORE_KEY] is None
+        assert cm.get_vault_token() is None
+
+
+class TestVaultPKIClient(unittest.TestCase):
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return json.dumps(self.payload).encode('utf-8')
+
+    def _config(self, **kwargs):
+        values = {
+            'addr': 'https://vault.example.com:8200/',
+            'pki_mount': 'pki',
+            'role': 'ceph-rgw',
+            'ttl': '720h',
+            'ca_cert': None,
+            'verify_tls': True,
+        }
+        values.update(kwargs)
+        return VaultIssuerConfig(**values)
+
+    @mock.patch('cephadm.vault.urlopen')
+    def test_issue_certificate_posts_to_vault_and_parses_response(self, m_urlopen):
+        m_urlopen.return_value = self.FakeResponse({
+            'data': {
+                'certificate': '---CERT---',
+                'private_key': '---KEY---',
+                'ca_chain': ['---CA1---', '---CA2---'],
+            }
+        })
+        client = VaultPKIClient(self._config(), 's.vault-token')
+
+        creds = client.issue_certificate(
+            common_name='rgw.example.com',
+            alt_names=['rgw.example.com', 'rgw.internal'],
+            ip_sans=['10.0.0.10'],
+        )
+
+        assert creds.cert == '---CERT---'
+        assert creds.key == '---KEY---'
+        assert creds.ca_cert == '---CA1---\n---CA2---'
+        request = m_urlopen.call_args[0][0]
+        assert request.full_url == 'https://vault.example.com:8200/v1/pki/issue/ceph-rgw'
+        assert request.get_method() == 'POST'
+        assert request.get_header('X-vault-token') == 's.vault-token'
+        payload = json.loads(request.data.decode('utf-8'))
+        assert payload == {
+            'common_name': 'rgw.example.com',
+            'ttl': '720h',
+            'alt_names': 'rgw.example.com,rgw.internal',
+            'ip_sans': '10.0.0.10',
+        }
+
+    @mock.patch('cephadm.vault.urlopen')
+    def test_issue_certificate_allows_mount_role_and_ttl_overrides(self, m_urlopen):
+        m_urlopen.return_value = self.FakeResponse({
+            'data': {
+                'certificate': '---CERT---',
+                'private_key': '---KEY---',
+                'issuing_ca': '---CA---',
+            }
+        })
+        client = VaultPKIClient(self._config(), 's.vault-token')
+
+        creds = client.issue_certificate(
+            common_name='dashboard.example.com',
+            ttl='24h',
+            mount='pki-int',
+            role='ceph-dashboard',
+        )
+
+        assert creds.ca_cert == '---CA---'
+        request = m_urlopen.call_args[0][0]
+        assert request.full_url == 'https://vault.example.com:8200/v1/pki-int/issue/ceph-dashboard'
+        payload = json.loads(request.data.decode('utf-8'))
+        assert payload == {
+            'common_name': 'dashboard.example.com',
+            'ttl': '24h',
+        }
+
+    def test_issue_certificate_requires_config_and_token(self):
+        client = VaultPKIClient(self._config(addr=None), 's.vault-token')
+        with pytest.raises(VaultClientError, match='addr'):
+            client.issue_certificate(common_name='rgw.example.com')
+
+        client = VaultPKIClient(self._config(), None)
+        with pytest.raises(VaultClientError, match='token'):
+            client.issue_certificate(common_name='rgw.example.com')
+
+        client = VaultPKIClient(self._config(), 's.vault-token')
+        with pytest.raises(VaultClientError, match='common_name'):
+            client.issue_certificate(common_name='  ')
+
+    @mock.patch('cephadm.vault.urlopen')
+    def test_issue_certificate_rejects_missing_response_fields(self, m_urlopen):
+        client = VaultPKIClient(self._config(), 's.vault-token')
+
+        m_urlopen.return_value = self.FakeResponse({'data': {'private_key': '---KEY---'}})
+        with pytest.raises(VaultClientError, match='certificate'):
+            client.issue_certificate(common_name='rgw.example.com')
+
+        m_urlopen.return_value = self.FakeResponse({'data': {'certificate': '---CERT---'}})
+        with pytest.raises(VaultClientError, match='private_key'):
+            client.issue_certificate(common_name='rgw.example.com')
+
+        m_urlopen.return_value = self.FakeResponse({'no_data': {}})
+        with pytest.raises(VaultClientError, match='data'):
+            client.issue_certificate(common_name='rgw.example.com')
+
+    @mock.patch('cephadm.vault.urlopen')
+    def test_issue_certificate_reports_vault_http_errors(self, m_urlopen):
+        from io import BytesIO
+        from urllib.error import HTTPError
+
+        m_urlopen.side_effect = HTTPError(
+            'https://vault.example.com:8200/v1/pki/issue/ceph-rgw',
+            400,
+            'Bad Request',
+            {},
+            BytesIO(json.dumps({'errors': ['role not allowed']}).encode('utf-8')),
+        )
+        client = VaultPKIClient(self._config(), 's.vault-token')
+
+        with pytest.raises(VaultClientError, match='HTTP 400: role not allowed'):
+            client.issue_certificate(common_name='rgw.example.com')
+
+    @mock.patch('cephadm.vault.urlopen')
+    def test_issue_certificate_reports_vault_auth_errors(self, m_urlopen):
+        from io import BytesIO
+        from urllib.error import HTTPError
+
+        m_urlopen.side_effect = HTTPError(
+            'https://vault.example.com:8200/v1/pki/issue/ceph-rgw',
+            403,
+            'Forbidden',
+            {},
+            BytesIO(json.dumps({'errors': ['permission denied']}).encode('utf-8')),
+        )
+        client = VaultPKIClient(self._config(), 's.expired-token')
+
+        with pytest.raises(VaultAuthError, match='token may be invalid or expired'):
+            client.issue_certificate(common_name='rgw.example.com')
+
+    @mock.patch('cephadm.vault.urlopen')
+    def test_issue_certificate_reports_invalid_json(self, m_urlopen):
+        class InvalidJsonResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return b'not-json'
+
+        m_urlopen.return_value = InvalidJsonResponse()
+        client = VaultPKIClient(self._config(), 's.vault-token')
+
+        with pytest.raises(VaultClientError, match='invalid JSON'):
+            client.issue_certificate(common_name='rgw.example.com')
+
+
+class TestVaultCertSourceValidation:
+
+    def _vault_spec(self):
+        spec = mock.MagicMock()
+        spec.service_name.return_value = 'rgw.foo'
+        spec.service_type = 'rgw'
+        spec.certificate_source = CertificateSource.VAULT.value
+        spec.is_using_certificates_source.return_value = False
+        return spec
+
+    def test_check_cert_source_rejects_vault_when_config_incomplete(self, cephadm_module):
+        spec = self._vault_spec()
+
+        with pytest.raises(OrchestratorError, match='Vault issuer config is incomplete'):
+            cephadm_module._check_cert_source(spec)
+
+    def test_check_cert_source_rejects_vault_when_token_missing(self, cephadm_module):
+        spec = self._vault_spec()
+        cephadm_module.certmgr_vault_addr = 'https://vault.example.com:8200'
+        cephadm_module.certmgr_vault_pki_mount = 'pki'
+        cephadm_module.certmgr_vault_role = 'ceph-rgw'
+
+        with pytest.raises(OrchestratorError, match='no Vault token is configured'):
+            cephadm_module._check_cert_source(spec)
 
 
 class TestTLSObjectStore(unittest.TestCase):
@@ -1919,6 +3224,45 @@ class TestTLSObjectStore(unittest.TestCase):
         obj = self.store.get_tlsobject("per_service1", service_name="my_service")
         self.assertIsNotNone(obj)
         self.assertEqual(obj.data, "my_cert_data")
+
+    def test_save_tlsobject_legacy_user_made_true_sets_user_manager(self):
+        self.store.save_tlsobject("per_service1", "my_cert_data", service_name="my_service", user_made=True)
+        obj = self.store.get_tlsobject("per_service1", service_name="my_service")
+        self.assertIsNotNone(obj)
+        self.assertEqual(obj.managed_by, TLSObjectManager.USER)
+        self.assertTrue(obj.user_made)
+
+    def test_save_tlsobject_legacy_user_made_false_sets_cephadm_manager(self):
+        self.store.save_tlsobject("per_service1", "my_cert_data", service_name="my_service", user_made=False)
+        obj = self.store.get_tlsobject("per_service1", service_name="my_service")
+        self.assertIsNotNone(obj)
+        self.assertEqual(obj.managed_by, TLSObjectManager.CEPHADM)
+        self.assertFalse(obj.user_made)
+
+    def test_save_tlsobject_managed_by_vault(self):
+        self.store.save_tlsobject(
+            "per_service1",
+            "my_cert_data",
+            service_name="my_service",
+            managed_by=TLSObjectManager.VAULT,
+        )
+        obj = self.store.get_tlsobject("per_service1", service_name="my_service")
+        self.assertIsNotNone(obj)
+        self.assertEqual(obj.managed_by, TLSObjectManager.VAULT)
+        self.assertFalse(obj.user_made)
+
+    def test_save_tlsobject_managed_by_takes_precedence_over_user_made(self):
+        self.store.save_tlsobject(
+            "per_service1",
+            "my_cert_data",
+            service_name="my_service",
+            user_made=True,
+            managed_by=TLSObjectManager.VAULT,
+        )
+        obj = self.store.get_tlsobject("per_service1", service_name="my_service")
+        self.assertIsNotNone(obj)
+        self.assertEqual(obj.managed_by, TLSObjectManager.VAULT)
+        self.assertFalse(obj.user_made)
 
     def test_remove_tlsobject(self):
         self.store.save_tlsobject("per_host1", "cert_data", host="my_host")

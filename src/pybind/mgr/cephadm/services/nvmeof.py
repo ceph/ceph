@@ -94,7 +94,7 @@ class NvmeofService(CephService):
             tls_creds = self.get_self_signed_certificates_with_label(
                 spec, daemon_spec, NVMEOF_CLIENT_CERT_LABEL
             )
-        elif spec.certificate_source in [CertificateSource.REFERENCE.value, CertificateSource.INLINE.value]:
+        elif spec.certificate_source in [CertificateSource.REFERENCE.value, CertificateSource.INLINE.value, CertificateSource.VAULT.value]:
             tls_creds = self.get_certificates_generic(
                 svc_spec=spec,
                 daemon_spec=daemon_spec,
@@ -429,7 +429,7 @@ class NvmeofService(CephService):
                 client_key = getattr(spec, 'client_key', '') or ''
 
         # -------- REFERENCE --------
-        elif cert_source == CertificateSource.REFERENCE.value:
+        elif cert_source in (CertificateSource.REFERENCE.value, CertificateSource.VAULT.value):
             server_cert = cert_mgr.get_cert(self.cert_name, service_name=service_name) or ''
             server_key = cert_mgr.get_key(self.key_name, service_name=service_name) or ''
             ca_cert = cert_mgr.get_cert(self.ca_cert_name, service_name=service_name) or ''

@@ -25,6 +25,7 @@ from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent, service_to_daemon_types
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from mgr_util import parse_combined_pem_file
+from cephadm.tlsobject_types import TLSObjectManager
 
 from .utils import get_node_proxy_status_value, resolve_ip, SpecialHostLabels
 from .migrations import queue_migrate_nfs_spec, queue_migrate_rgw_spec
@@ -411,12 +412,12 @@ class SpecStore():
                         'rgw_ssl_cert',
                         cert,
                         service_name=rgw_spec.service_name(),
-                        user_made=True)
+                        managed_by=TLSObjectManager.USER)
                     self.mgr.cert_mgr.save_key(
                         'rgw_ssl_key',
                         key,
                         service_name=rgw_spec.service_name(),
-                        user_made=True)
+                        managed_by=TLSObjectManager.USER)
                 else:
                     logger.error(f'Cannot parse the rgw certificate {cert_str}.')
         elif spec.service_type == 'iscsi':
@@ -426,13 +427,13 @@ class SpecStore():
                     'iscsi_ssl_cert',
                     iscsi_spec.ssl_cert,
                     service_name=iscsi_spec.service_name(),
-                    user_made=True)
+                    managed_by=TLSObjectManager.USER)
             if iscsi_spec.ssl_key:
                 self.mgr.cert_mgr.save_key(
                     'iscsi_ssl_key',
                     iscsi_spec.ssl_key,
                     service_name=iscsi_spec.service_name(),
-                    user_made=True)
+                    managed_by=TLSObjectManager.USER)
         elif spec.service_type == 'ingress':
             ingress_spec = cast(IngressSpec, spec)
             if ingress_spec.ssl_cert:
@@ -440,13 +441,13 @@ class SpecStore():
                     'ingress_ssl_cert',
                     ingress_spec.ssl_cert,
                     service_name=ingress_spec.service_name(),
-                    user_made=True)
+                    managed_by=TLSObjectManager.USER)
             if ingress_spec.ssl_key:
                 self.mgr.cert_mgr.save_key(
                     'ingress_ssl_key',
                     ingress_spec.ssl_key,
                     service_name=ingress_spec.service_name(),
-                    user_made=True)
+                    managed_by=TLSObjectManager.USER)
         elif spec.service_type == 'nvmeof':
             nvmeof_spec = cast(NvmeofServiceSpec, spec)
             for cert_attr in [
@@ -460,7 +461,7 @@ class SpecStore():
                         f'nvmeof_{cert_attr}',
                         cert,
                         service_name=nvmeof_spec.service_name(),
-                        user_made=True)
+                        managed_by=TLSObjectManager.USER)
             for key_attr in [
                 'server_key',
                 'client_key',
@@ -472,7 +473,7 @@ class SpecStore():
                         f'nvmeof_{key_attr}',
                         key,
                         service_name=nvmeof_spec.service_name(),
-                        user_made=True)
+                        managed_by=TLSObjectManager.USER)
 
     def rm(self, service_name: str, force_delete_data: bool = False) -> bool:
         if service_name not in self._specs:

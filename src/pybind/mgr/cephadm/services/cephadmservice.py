@@ -42,13 +42,19 @@ from ceph.cephadm.d3n_types import (
 )
 from cephadm.services.rgw_d3n import D3NDevicePlanner
 from .service_registry import register_cephadm_service
-from cephadm.tlsobject_types import TLSObjectScope, TLSCredentials, EMPTY_TLS_CREDENTIALS
+from cephadm.tlsobject_types import (
+    TLSObjectScope,
+    TLSCredentials,
+    EMPTY_TLS_CREDENTIALS,
+    TLSObjectManager,
+)
 from cephadm.ssl_cert_utils import extract_ips_and_fqdns_from_cert
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
 
 logger = logging.getLogger(__name__)
+
 
 ServiceSpecs = TypeVar('ServiceSpecs', bound=ServiceSpec)
 AuthEntity = NewType('AuthEntity', str)
@@ -442,6 +448,17 @@ class CephadmService(metaclass=ABCMeta):
             return self._get_certificates_from_certmgr_store(svc_spec, fqdns, cert_name, key_name, ca_cert_name)
         elif cert_source == CertificateSource.CEPHADM_SIGNED.value:
             return self._get_cephadm_signed_certificates(svc_spec, daemon_spec, ips, fqdns, custom_sans)
+        elif cert_source == CertificateSource.VAULT.value:
+            return self._get_vault_certificates(
+                svc_spec,
+                daemon_spec,
+                ips,
+                fqdns,
+                custom_sans,
+                cert_name,
+                key_name,
+                ca_cert_name,
+            )
         else:
             logger.error(f'Invalid cert_source: {cert_source}')
             return EMPTY_TLS_CREDENTIALS
@@ -490,10 +507,28 @@ class CephadmService(metaclass=ABCMeta):
         # Save TLS credentials
         if needs_ca:
             assert ca_cert_name and ca_cert
-            self.mgr.cert_mgr.save_cert(ca_cert_name, ca_cert, service_name, host, user_made=True)
+            self.mgr.cert_mgr.save_cert(
+                ca_cert_name,
+                ca_cert,
+                service_name,
+                host,
+                managed_by=TLSObjectManager.USER,
+            )
         assert cert and key
-        self.mgr.cert_mgr.save_cert(cert_name, cert, service_name, host, user_made=True)
-        self.mgr.cert_mgr.save_key(key_name, key, service_name, host, user_made=True)
+        self.mgr.cert_mgr.save_cert(
+            cert_name,
+            cert,
+            service_name,
+            host,
+            managed_by=TLSObjectManager.USER,
+        )
+        self.mgr.cert_mgr.save_key(
+            key_name,
+            key,
+            service_name,
+            host,
+            managed_by=TLSObjectManager.USER,
+        )
         return TLSCredentials(cert=cert, key=key, ca_cert=ca_cert)
 
     def _get_certificates_from_certmgr_store(
@@ -515,6 +550,83 @@ class CephadmService(metaclass=ABCMeta):
             return TLSCredentials(cert=cert, key=key, ca_cert=ca_cert)
         else:
             logger.error(f'Failed to get cert/key {cert_name} for service {svc_spec.service_name()} host: {host} from the certmgr store.')
+            return EMPTY_TLS_CREDENTIALS
+
+    def _get_vault_certificates(
+        self,
+        svc_spec: ServiceSpec,
+        daemon_spec: CephadmDaemonDeploySpec,
+        ips: List[str],
+        fqdns: List[str],
+        custom_sans: List[str],
+        cert_name: str,
+        key_name: str,
+        ca_cert_name: Optional[str] = None,
+    ) -> TLSCredentials:
+        """Return Vault-managed certs for a service, issuing them on first use.
+
+        The first deployment with certificate_source=vault enrolls the service's
+        known cert/key pair into certmgr by calling the Vault issue path. Later
+        deployments reuse the stored Vault-managed material and leave renewal to
+        certmgr's periodic check.
+        """
+        service_name = svc_spec.service_name()
+        host = daemon_spec.host
+        cert_obj = self.mgr.cert_mgr.cert_store.get_tlsobject_if_exists(cert_name, service_name, host)
+        key_obj = self.mgr.cert_mgr.key_store.get_tlsobject_if_exists(key_name, service_name, host)
+        ca_obj = (
+            self.mgr.cert_mgr.cert_store.get_tlsobject_if_exists(ca_cert_name, service_name, host)
+            if ca_cert_name else None
+        )
+
+        if cert_obj and key_obj:
+            if (
+                getattr(cert_obj, 'managed_by', TLSObjectManager.CEPHADM) == TLSObjectManager.VAULT
+                and getattr(key_obj, 'managed_by', TLSObjectManager.CEPHADM) == TLSObjectManager.VAULT
+            ):
+                if ca_cert_name and not ca_obj:
+                    logger.error(
+                        f'certificate_source=vault for {service_name} requires CA cert {ca_cert_name}, '
+                        f'but it is missing from the certmgr store.'
+                    )
+                    return EMPTY_TLS_CREDENTIALS
+                if ca_obj and getattr(ca_obj, 'managed_by', TLSObjectManager.CEPHADM) != TLSObjectManager.VAULT:
+                    logger.error(
+                        f'certificate_source=vault for {service_name} found CA cert {ca_cert_name} '
+                        f'that is not Vault-managed.'
+                    )
+                    return EMPTY_TLS_CREDENTIALS
+                return TLSCredentials(
+                    cert=cert_obj.cert,
+                    key=key_obj.key,
+                    ca_cert=ca_obj.cert if ca_obj else None,
+                )
+            logger.error(
+                f'certificate_source=vault for {service_name} found existing cert/key '
+                f'{cert_name}/{key_name} that are not Vault-managed.'
+            )
+            return EMPTY_TLS_CREDENTIALS
+
+        host_fqdn = self.mgr.get_fqdn(host)
+        common_name = host_fqdn or (fqdns[0] if fqdns else (custom_sans[0] if custom_sans else ''))
+        sans = sorted({san for san in fqdns + custom_sans + ([common_name] if common_name else []) if san})
+        if not common_name:
+            logger.error(f'Cannot issue Vault certificate for {service_name}: no common_name could be resolved')
+            return EMPTY_TLS_CREDENTIALS
+
+        try:
+            return self.mgr.cert_mgr.issue_vault_certificate(
+                cert_name=cert_name,
+                key_name=key_name,
+                ca_cert_name=ca_cert_name,
+                service_name=service_name,
+                host=host,
+                common_name=common_name,
+                alt_names=sans,
+                ip_sans=ips,
+            )
+        except Exception as e:
+            logger.error(f'Failed to issue Vault certificate for {service_name}: {e}')
             return EMPTY_TLS_CREDENTIALS
 
     def _get_cephadm_signed_certificates(
@@ -625,10 +737,10 @@ class CephadmService(metaclass=ABCMeta):
         svc_name = spec.service_name()
         host = daemon_spec.host
 
-        # Inline-saved certs/keys are persisted in the certmgr store as user_made=True
-        # but editable=False. These should be garbage-collected once the service no
+        # Inline-saved certs/keys are persisted in the certmgr store as
+        # managed_by=user but editable=False. These should be garbage-collected once the service no
         # longer uses INLINE.
-        if cert_source in (CertificateSource.REFERENCE.value, CertificateSource.CEPHADM_SIGNED.value):
+        if cert_source in (CertificateSource.REFERENCE.value, CertificateSource.CEPHADM_SIGNED.value, CertificateSource.VAULT.value):
             self.mgr.cert_mgr.rm_inline_saved_cert_key_pair(
                 self.cert_name,
                 self.key_name,
@@ -899,11 +1011,12 @@ class CephadmService(metaclass=ABCMeta):
                     ca_cert_name=self.ca_cert_name,
                 )
 
-            if cert_source == CertificateSource.REFERENCE.value:
-                # It's a reference cert/key to the certmgr so we must keep them as user may want to use them later
+            if cert_source in (CertificateSource.REFERENCE.value, CertificateSource.VAULT.value):
+                # Reference and Vault certs live in the certmgr store and should be kept
+                # on daemon removal. Certmgr rotation/cleanup owns Vault-managed material.
                 logger.info(
-                    "Certificate source is 'reference'; user-provided certmgr entries (if present) will be kept for service: %s, host: %s",
-                    svc_name, host
+                    "Certificate source is '%s'; certmgr entries (if present) will be kept for service: %s, host: %s",
+                    cert_source, svc_name, host
                 )
 
         assert daemon.daemon_type is not None

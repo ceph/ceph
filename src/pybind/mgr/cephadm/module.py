@@ -18,6 +18,7 @@ from threading import Event
 from ceph.deployment.service_spec import PrometheusSpec
 from cephadm.cert_mgr import CertMgr
 from cephadm.tlsobject_store import TLSObjectScope, TLSObjectException
+from cephadm.tlsobject_types import TLSObjectManager
 
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
@@ -500,6 +501,42 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             max=90
         ),
         Option(
+            'certmgr_vault_addr',
+            type='str',
+            default=None,
+            desc='Vault server address used by certmgr for Vault-managed certificates.',
+        ),
+        Option(
+            'certmgr_vault_pki_mount',
+            type='str',
+            default=None,
+            desc='Vault PKI secrets engine mount used by certmgr for Vault-managed certificates.',
+        ),
+        Option(
+            'certmgr_vault_role',
+            type='str',
+            default=None,
+            desc='Default Vault PKI role used by certmgr for Vault-managed certificates.',
+        ),
+        Option(
+            'certmgr_vault_ttl',
+            type='str',
+            default=None,
+            desc='Default Vault certificate TTL requested by certmgr for Vault-managed certificates.',
+        ),
+        Option(
+            'certmgr_vault_cacert',
+            type='str',
+            default=None,
+            desc='CA certificate path or PEM used to verify the Vault server TLS certificate.',
+        ),
+        Option(
+            'certmgr_vault_verify_tls',
+            type='bool',
+            default=True,
+            desc='Whether certmgr should verify the Vault server TLS certificate.',
+        ),
+        Option(
             'secure_monitoring_stack',
             type='bool',
             default=False,
@@ -668,6 +705,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.certificate_automated_rotation_enabled = False
             self.certificate_check_debug_mode = False
             self.certificate_check_period = 0
+            self.certmgr_vault_addr: Optional[str] = None
+            self.certmgr_vault_pki_mount: Optional[str] = None
+            self.certmgr_vault_role: Optional[str] = None
+            self.certmgr_vault_ttl: Optional[str] = None
+            self.certmgr_vault_cacert: Optional[str] = None
+            self.certmgr_vault_verify_tls = True
             self.cephadm_binary_logging_level = 'debug'
 
         self.notify(NotifyType.mon_map, None)
@@ -4155,8 +4198,22 @@ Then run the following:
             self._raise_non_editable_cert_error(cert_name, consumer, service_name, hostname)
 
         key_name = cert_name.replace('_cert', '_key')
-        self.cert_mgr.save_cert(cert_name, cert, service_name, hostname, user_made=True, editable=True)
-        self.cert_mgr.save_key(key_name, key, service_name, hostname, user_made=True, editable=True)
+        self.cert_mgr.save_cert(
+            cert_name,
+            cert,
+            service_name,
+            hostname,
+            managed_by=TLSObjectManager.USER,
+            editable=True,
+        )
+        self.cert_mgr.save_key(
+            key_name,
+            key,
+            service_name,
+            hostname,
+            managed_by=TLSObjectManager.USER,
+            editable=True,
+        )
         return "Certificate/key pair set correctly"
 
     @handle_orch_error
@@ -4178,7 +4235,14 @@ Then run the following:
             if not cert_info.is_operationally_valid():
                 raise OrchestratorError(cert_info.get_status_description())
 
-        self.cert_mgr.save_cert(cert_name, cert, service_name, hostname, user_made=True, editable=True)
+        self.cert_mgr.save_cert(
+            cert_name,
+            cert,
+            service_name,
+            hostname,
+            managed_by=TLSObjectManager.USER,
+            editable=True,
+        )
         return f'Certificate for {cert_name} set correctly'
 
     @handle_orch_error
@@ -4189,8 +4253,89 @@ Then run the following:
         service_name: Optional[str] = None,
         hostname: Optional[str] = None,
     ) -> str:
-        self.cert_mgr.save_key(key_name, key, service_name, hostname, True)
+        self.cert_mgr.save_key(
+            key_name,
+            key,
+            service_name,
+            hostname,
+            managed_by=TLSObjectManager.USER,
+        )
         return f'Key for {key_name} set correctly'
+
+    @handle_orch_error
+    def cert_store_vault_token_set(self, token: str) -> str:
+        token = token.strip()
+        if not token:
+            raise OrchestratorError('Vault token cannot be empty')
+        self.cert_mgr.set_vault_token(token)
+        return 'Vault token set correctly'
+
+    @handle_orch_error
+    def cert_store_vault_token_rm(self) -> str:
+        self.cert_mgr.rm_vault_token()
+        return 'Vault token removed correctly'
+
+    @handle_orch_error
+    def cert_store_vault_issue(
+        self,
+        consumer: str,
+        common_name: str,
+        cert_name: str = "",
+        service_name: str = "",
+        hostname: str = "",
+        ca_cert_name: str = "",
+        alt_names: Optional[List[str]] = None,
+        ip_sans: Optional[List[str]] = None,
+        pki_mount: Optional[str] = None,
+        role: Optional[str] = None,
+        ttl: Optional[str] = None,
+    ) -> str:
+        """Issue a Vault-managed certificate/key pair into the certmgr store."""
+        if consumer not in self.cert_mgr.list_consumers():
+            raise OrchestratorError(
+                f"Invalid service: {consumer}. Please use 'ceph orch certmgr bindings ls' to list valid bindings."
+            )
+
+        if not cert_name:
+            cert_names = self.cert_mgr.list_consumer_known_certificates(consumer)
+            if len(cert_names) == 1:
+                cert_name = cert_names[0]
+            elif len(cert_names) > 1:
+                raise OrchestratorError(
+                    f"Service '{consumer}' has many certificates, please use the --cert-name argument "
+                    f"to specify which one from the list: {cert_names}"
+                )
+            else:
+                raise OrchestratorError(f"Service '{consumer}' has no registered certificate bindings")
+
+        scope_errors = {
+            TLSObjectScope.HOST: "Certificate is bound to a host. Please specify the host using --hostname.",
+            TLSObjectScope.SERVICE: "Certificate is bound to a service. Please specify the service using --service-name.",
+            TLSObjectScope.UNKNOWN: f"Unknown certificate '{cert_name}'. Use 'ceph orch certmgr cert ls' to list supported certificates.",
+        }
+        scope = self.cert_mgr.get_cert_scope(cert_name)
+        if (scope == TLSObjectScope.HOST and not hostname) or (scope == TLSObjectScope.SERVICE and not service_name):
+            raise OrchestratorError(scope_errors[scope])
+        if scope == TLSObjectScope.UNKNOWN:
+            raise OrchestratorError(scope_errors[scope])
+
+        key_name = cert_name.replace('_cert', '_key')
+        self.cert_mgr.issue_vault_certificate(
+            cert_name=cert_name,
+            key_name=key_name,
+            common_name=common_name,
+            service_name=service_name or None,
+            host=hostname or None,
+            ca_cert_name=ca_cert_name or None,
+            alt_names=alt_names or [],
+            ip_sans=ip_sans or [],
+            pki_mount=pki_mount,
+            role=role,
+            ttl=ttl,
+        )
+        target = service_name or hostname
+        target_info = f" for {target}" if target else ""
+        return f"Vault-managed certificate/key pair for {cert_name}{target_info} issued correctly"
 
     @handle_orch_error
     def cert_store_rm_cert(
@@ -4450,6 +4595,19 @@ Then run the following:
                     f"certificate_source changed from '{old_source}' to '{new_source}' "
                     f"for service '{spec.service_name()}'. This will trigger a service "
                     f"reconfiguration."
+                )
+
+        if getattr(spec, 'certificate_source', None) == CertificateSource.VAULT.value:
+            vault_config = self.cert_mgr.get_vault_issuer_config()
+            missing_fields = vault_config.missing_required_fields()
+            if missing_fields:
+                raise OrchestratorError(
+                    f"SSL is configured with '{CertificateSource.VAULT.value}', but Vault issuer config is incomplete. "
+                    f"Missing: {', '.join(missing_fields)}."
+                )
+            if not self.cert_mgr.get_vault_token():
+                raise OrchestratorError(
+                    f"SSL is configured with '{CertificateSource.VAULT.value}', but no Vault token is configured."
                 )
 
         if spec.is_using_certificates_source(CertificateSource.REFERENCE):

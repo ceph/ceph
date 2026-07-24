@@ -10,6 +10,7 @@ from cephadm.services.nfs import NFSService
 from cephadm.services.service_registry import service_registry
 import rados
 from mgr_util import get_cert_issuer_info
+from cephadm.tlsobject_types import TLSObjectManager
 
 from mgr_module import NFS_POOL_NAME
 from orchestrator import OrchestratorError, DaemonDescription
@@ -457,8 +458,20 @@ class Migrations:
                 if org != 'Ceph':
                     logger.info(f'Migrating {grafana_daemon.name()}/{hostname} cert/key to cert store (as custom-certs)')
                     grafana_cephadm_signed_certs = False
-                    self.mgr.cert_mgr.save_cert('grafana_ssl_cert', grafana_cert, host=hostname, user_made=True, editable=True)
-                    self.mgr.cert_mgr.save_key('grafana_ssl_key', grafana_key, host=hostname, user_made=True, editable=True)
+                    self.mgr.cert_mgr.save_cert(
+                        'grafana_ssl_cert',
+                        grafana_cert,
+                        host=hostname,
+                        managed_by=TLSObjectManager.USER,
+                        editable=True,
+                    )
+                    self.mgr.cert_mgr.save_key(
+                        'grafana_ssl_key',
+                        grafana_key,
+                        host=hostname,
+                        managed_by=TLSObjectManager.USER,
+                        editable=True,
+                    )
 
         if not grafana_cephadm_signed_certs:
             # Update the spec to specify the right certificate source
