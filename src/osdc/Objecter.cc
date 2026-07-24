@@ -5344,7 +5344,15 @@ int Objecter::_calc_command_target(CommandOp *c,
       c->map_check_error_str = "osd down";
       c->target.osd = -1;
       return ret;
-    }
+    } else if (ret == RECALC_OP_TARGET_POOL_EIO) {
+      // Do NOT abort commands due to pool EIO.  Diagnostic commands
+      // such as "pg query" must still reach the OSD even when the pool
+      // has FLAG_EIO set.  _calc_target() returns early without setting
+      // t->osd in this case, so derive the acting primary directly.
+      int acting_primary = -1;
+      osdmap->pg_to_acting_osds(c->target_pg, nullptr, &acting_primary);
+      c->target.osd = acting_primary;
+      // fall through to _get_session below
   }
 
   OSDSession *s;
