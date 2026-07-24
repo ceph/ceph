@@ -97,7 +97,22 @@ options:
   type: size
   level: advanced
   desc: The minimum RGW object size for dedup (0 means no minimum size for dedup).
-  default: 64_K
+  default: 4_K
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_dedup_min_mem_allocation_mb
+  type: uint
+  level: advanced
+  desc: Minimum memory allocation (in MB) for dedup ingress buffers and hash table.
+  long_desc: A single buffer is allocated per dedup cycle, used first for ingress
+             output streams (B = allocation / 2MB) then repurposed as the per-shard
+             hash table. If the object count requires more shards than B (single-pass),
+             the allocation is doubled until B² shards suffice or the 2048 MB cap is
+             reached. Systems exceeding the cap are rejected.
+  default: 8
+  min: 8
+  max: 2048
   services:
   - rgw
   with_legacy: true

@@ -219,7 +219,7 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   int disk_record_t::validate(const char *caller,
                               const DoutPrefixProvider* dpp,
-                              disk_block_id_t block_id,
+                              disk_rec_id_t rec_addr,
                               record_id_t rec_id) const
   {
     // optimistic approach
@@ -234,7 +234,7 @@ namespace rgw::dedup {
       //p_stats->failed_wrong_ver++;
       ldpp_dout(dpp, 5) << __func__ << "::" << caller << "::ERR: Bad record version: "
                         << this->s.rec_version
-                        << "::block_id=" << block_id
+                        << "::rec_addr=" << rec_addr
                         << "::rec_id=" << rec_id
                         << dendl;
       return -EPROTO;           // Protocol error
@@ -245,7 +245,7 @@ namespace rgw::dedup {
     //p_stats->failed_rec_overflow++;
     ldpp_dout(dpp, 5) << __func__ << "::" << caller << "::ERR: record size too big: "
                       << this->length()
-                      << "::block_id=" << block_id
+                      << "::rec_addr=" << rec_addr
                       << "::rec_id=" << rec_id
                       << dendl;
     return -EOVERFLOW; // maybe should use -E2BIG ??
@@ -282,16 +282,16 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  void disk_block_t::init(work_shard_t worker_id, uint32_t seq_number)
+  void disk_block_t::init(uint16_t block_idx)
   {
     disk_block_header_t *p_header = get_header();
     p_header->offset = sizeof(disk_block_header_t);
     p_header->rec_count = 0;
-    p_header->block_id  = disk_block_id_t(worker_id, seq_number);
+    p_header->block_idx = block_idx;
   }
 
   //---------------------------------------------------------------------------
-  int disk_block_header_t::verify(disk_block_id_t expected_block_id, const DoutPrefixProvider* dpp)
+  int disk_block_header_t::verify(uint16_t expected_block_idx, const DoutPrefixProvider* dpp)
   {
     if (unlikely(offset != BLOCK_MAGIC && offset != LAST_BLOCK_MAGIC)) {
       ldpp_dout(dpp, 1) << __func__ << "::ERR::bad magic number (0x" << std::hex << offset << std::dec << ")" << dendl;
@@ -303,9 +303,9 @@ namespace rgw::dedup {
       return -EINVAL;
     }
 
-    if (unlikely(this->block_id != expected_block_id)) {
-      ldpp_dout(dpp, 1) << __func__ << "::ERR::block_id=" << block_id
-                        << "!= expected_block_id=" << expected_block_id << dendl;
+    if (unlikely(this->block_idx != expected_block_idx)) {
+      ldpp_dout(dpp, 1) << __func__ << "::ERR::block_idx=" << block_idx
+                        << " != expected=" << expected_block_idx << dendl;
       return -EINVAL;
     }
 
@@ -354,7 +354,7 @@ namespace rgw::dedup {
       p_header->rec_offsets[i] = HTOCEPH_16(p_header->rec_offsets[i]);
     }
     p_header->rec_count = HTOCEPH_16(p_header->rec_count);
-    p_header->block_id  = HTOCEPH_32((uint32_t)p_header->block_id);
+    p_header->block_idx = HTOCEPH_16(p_header->block_idx);
     // TBD: CRC
   }
 
@@ -363,10 +363,178 @@ namespace rgw::dedup {
   {
     this->offset    = CEPHTOH_16(this->offset);
     this->rec_count = CEPHTOH_16(this->rec_count);
-    this->block_id  = CEPHTOH_32((uint32_t)this->block_id);
+    this->block_idx = CEPHTOH_16(this->block_idx);
     for (unsigned i = 0; i < this->rec_count; i++) {
       this->rec_offsets[i] = CEPHTOH_16(this->rec_offsets[i]);
     }
+  }
+
+  //---------------------------------------------------------------------------
+  // slab_record_iterator_t
+  //---------------------------------------------------------------------------
+  slab_record_iterator_t::slab_record_iterator_t(const DoutPrefixProvider *_dpp,
+                                                 librados::IoCtx &ioctx,
+                                                 uint32_t shard_or_group,
+                                                 work_shard_t worker_id,
+                                                 bool is_coarse)
+    : dpp(_dpp), d_ioctx(ioctx), d_shard_or_group(shard_or_group),
+      d_worker_id(worker_id), d_is_coarse(is_coarse),
+      d_bl_itr(d_bl.cbegin())
+  {
+    ldpp_dout(dpp, 20) << __func__ << "::worker_id=" << (uint32_t)worker_id
+                       << ", shard_or_group=" << shard_or_group
+                       << ", is_coarse=" << is_coarse << dendl;
+  }
+
+  //---------------------------------------------------------------------------
+  bool slab_record_iterator_t::assign_next_record()
+  {
+    unsigned offset = d_p_header->rec_offsets[d_rec_idx];
+    d_ref.rec = disk_record_t(d_p_block + offset);
+    d_ref.rec_addr = disk_rec_id_t(d_worker_id, d_slab_id, d_block_num, d_rec_idx);
+    d_rec_idx++;
+    return true;
+  }
+
+  //---------------------------------------------------------------------------
+  bool slab_record_iterator_t::check_for_more_blocks()
+  {
+    bool has_more_blocks = false;
+    has_more_blocks = (d_p_header->offset == BLOCK_MAGIC);
+    if (!has_more_blocks) {
+      ldpp_dout(dpp, 20) << __func__ << "::No more blocks! block_num=" << d_block_num
+                         << ", rec_count=" << d_p_header->rec_count << dendl;
+      d_has_more_slabs = false;
+      if (unlikely(d_p_header->offset != LAST_BLOCK_MAGIC)) {
+        d_missing_last_block_marker++;
+      }
+    }
+    return has_more_blocks;
+  }
+
+  //---------------------------------------------------------------------------
+  bool slab_record_iterator_t::open_next_block()
+  {
+    // Try to advance to next block within current slab
+    for ( ; d_block_num < DISK_BLOCK_COUNT && d_has_more_blocks; d_block_num++) {
+      const char *p = get_next_data_ptr(d_bl_itr, d_block_buff,
+                                        sizeof(d_block_buff), dpp);
+      disk_block_t *p_disk_block = (disk_block_t*)p;
+      disk_block_header_t *p_header = p_disk_block->get_header();
+      p_header->deserialize();
+
+      if (p_header->verify(d_block_num, dpp) == 0) {
+        d_block_failure_count = 0;
+        if (unlikely(p_header->rec_count == 0)) {
+          ldpp_dout(dpp, 20) << __func__ << "::Block #" << d_block_num
+                             << " has an empty header, no more blocks" << dendl;
+          d_has_more_slabs = false;
+          break;
+        }
+        else {
+          d_p_header = p_header;
+          // check if there are more blocks after this one
+          d_has_more_blocks = check_for_more_blocks();
+          d_p_block = p;
+          d_rec_idx = 0;
+          return true;
+        }
+      }
+      else { // failed verify()
+        d_failed_block_count++;
+        // skip bad blocks, break from slab after MAX_BAD_BLOCKS consecutive
+        if (d_block_failure_count++ < MAX_BAD_BLOCKS) {
+          continue;
+        }
+        else {
+          ldpp_dout(dpp, 1) << __func__ << "::Skipping slab with too many bad blocks::"
+                            << d_shard_or_group << ", worker_id=" << (int)d_worker_id
+                            << ", slab_id=" << d_slab_id << dendl;
+          d_block_failure_count = 0;
+          break;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  //---------------------------------------------------------------------------
+  bool slab_record_iterator_t::next()
+  {
+    while (true) {
+      if (d_slab_count > 0) {
+        // If we have records remaining in the current block, return the next one
+        if (d_rec_idx < d_p_header->rec_count) {
+          return assign_next_record();
+        }
+
+        // Current block exhausted — check if there are more blocks in this slab
+        ldpp_dout(dpp, 20) << __func__ << "::bloc_num=" << d_block_num << " done" << dendl;
+        d_block_num++;
+        if (open_next_block()) {
+          // Restart Rec-Scan for the new Block
+          continue;
+        }
+
+        // finished processing a slab, advance to next
+        ldpp_dout(dpp, 20) << __func__ << "::slab_id=" << d_slab_id << " done" << dendl;
+        d_has_more_blocks = false;
+        d_slab_id++;
+        d_p_header = nullptr;
+      }
+
+      // Current slab exhausted — need to load next slab
+      if (load_next_slab()) {
+        // Restart Rec-Scan for the new SLAB
+        continue;
+      }
+      return false;  // EOF or error (caller checks error())
+    }
+  }
+
+  //---------------------------------------------------------------------------
+  bool slab_record_iterator_t::load_next_slab()
+  {
+    while (d_has_more_slabs) {
+      d_bl.clear();
+      int ret = load_slab(d_ioctx, d_bl, d_shard_or_group, d_worker_id,
+                          d_slab_id, dpp, d_is_coarse);
+      if (unlikely(ret < 0)) {
+        ldpp_dout(dpp, 1) << __func__ << "::ERR::Failed loading slab!! shard_or_group="
+                          << d_shard_or_group << ", worker_id=" << (uint32_t)d_worker_id
+                          << ", slab_id=" << d_slab_id
+                          << ", failure_count=" << d_slab_failure_count << dendl;
+        // skip to the next slab, stopping after MAX_OBJ_LOAD_FAILURE consecutive failures
+        if (d_slab_failure_count++ < MAX_OBJ_LOAD_FAILURE) {
+          d_slab_id++;
+          continue;
+        } else {
+          d_error = ret;
+          return false;
+        }
+      }
+
+      d_slab_count++;
+      d_slab_failure_count = 0;
+      d_block_failure_count = 0;
+
+      // Set up block iteration for this slab
+      d_bl_itr = d_bl.cbegin();
+      d_block_num = 0;
+      d_has_more_blocks = true;
+
+      // Read the first block
+      if (open_next_block()) {
+        return true;
+      }
+      // else, continue to next_slab
+      d_slab_id++;
+      d_p_header = nullptr;
+    }
+
+    // EOF — d_error stays 0
+    return false;
   }
 
   //---------------------------------------------------------------------------
@@ -376,7 +544,7 @@ namespace rgw::dedup {
                                      md5_shard_t md5_shard,
                                      worker_stats_t *p_stats_in)
   {
-    activate(dpp_in, p_arr_in, worker_id, md5_shard, p_stats_in);
+    activate(dpp_in, p_arr_in, worker_id, md5_shard, p_stats_in, false);
   }
 
   //---------------------------------------------------------------------------
@@ -384,15 +552,18 @@ namespace rgw::dedup {
                                   disk_block_t *p_arr_in,
                                   work_shard_t worker_id,
                                   md5_shard_t md5_shard,
-                                  worker_stats_t *p_stats_in)
+                                  worker_stats_t *p_stats_in,
+                                  bool coarse)
   {
     dpp          = dpp_in;
     p_arr        = p_arr_in;
     d_worker_id  = worker_id;
     d_md5_shard  = md5_shard;
+    d_coarse     = coarse;
     p_stats      = p_stats_in;
     p_curr_block = nullptr;
-    d_seq_number = 0;
+    d_slab_id    = 0;
+    d_block_id   = 0;
 
     memset(p_arr, 0, sizeof(disk_block_t));
     slab_reset();
@@ -422,13 +593,14 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  std::ostream& operator<<(std::ostream& out, const disk_block_id_t& block_id)
+  std::ostream& operator<<(std::ostream& out, const disk_rec_id_t& rec_id)
   {
     std::ios_base::fmtflags flags = out.flags();
     out << std::hex << "0x"
-        << (uint32_t)block_id.get_work_shard_id() << "::"
-        << (uint32_t)block_id.get_slab_id() << "::"
-        << (uint32_t)block_id.get_block_offset();
+        << (uint32_t)rec_id.work_shard << "::"
+        << (uint32_t)rec_id.slab_id << "::"
+        << (uint32_t)rec_id.block_id << "::"
+        << (uint32_t)rec_id.rec_id;
 
     if (flags & std::ios::dec) {
       out << std::dec;
@@ -437,16 +609,29 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  std::string disk_block_id_t::get_slab_name(md5_shard_t md5_shard) const
+  std::string disk_rec_id_t::get_slab_name(md5_shard_t md5_shard) const
   {
-    // SLAB.MD5_ID.WORKER_ID.SLAB_SEQ_ID
-    const char *SLAB_NAME_FORMAT = "SLB.%03X.%02X.%04X";
+    // S|MD5_ID.WORKER_ID.SLAB_ID
+    static constexpr const char *SLAB_NAME_FORMAT = "S%05X.%02X.%05X";
     static constexpr uint32_t SLAB_NAME_SIZE = 16;
     char name_buf[SLAB_NAME_SIZE];
-    slab_id_t slab_id = get_slab_id();
-    work_shard_t work_id = get_work_shard_id();
     unsigned n = snprintf(name_buf, sizeof(name_buf), SLAB_NAME_FORMAT,
-                          md5_shard, work_id, slab_id);
+                          md5_shard, (unsigned)this->work_shard,
+                          (unsigned)this->slab_id);
+    std::string oid(name_buf, n);
+    return oid;
+  }
+
+  //---------------------------------------------------------------------------
+  std::string disk_rec_id_t::get_coarse_slab_name(uint16_t group_id) const
+  {
+    // CS|GRP_ID.WORKER_ID.SLAB_ID
+    static constexpr const char *COARSE_SLAB_NAME_FORMAT = "CS%03X.%02X.%06X";
+    static constexpr uint32_t COARSE_SLAB_NAME_SIZE = 16;
+    char name_buf[COARSE_SLAB_NAME_SIZE];
+    unsigned n = snprintf(name_buf, sizeof(name_buf), COARSE_SLAB_NAME_FORMAT,
+                          group_id, (unsigned)this->work_shard,
+                          (unsigned)this->slab_id);
     std::string oid(name_buf, n);
     return oid;
   }
@@ -455,15 +640,15 @@ namespace rgw::dedup {
   int load_record(librados::IoCtx          &ioctx,
                   const disk_record_t      *p_tgt_rec,
                   disk_record_t            *p_src_rec, /* OUT */
-                  disk_block_id_t           block_id,
-                  record_id_t               rec_id,
+                  disk_rec_id_t             rec_addr,
                   md5_shard_t               md5_shard,
                   const DoutPrefixProvider *dpp)
   {
-    std::string oid(block_id.get_slab_name(md5_shard));
+    std::string oid(rec_addr.get_slab_name(md5_shard));
     int read_len = DISK_BLOCK_SIZE;
     static_assert(sizeof(disk_block_t) == DISK_BLOCK_SIZE);
-    int byte_offset = block_id.get_block_offset() * DISK_BLOCK_SIZE;
+    int byte_offset = rec_addr.block_id * DISK_BLOCK_SIZE;
+    record_id_t rec_id = rec_addr.rec_id;
     bufferlist bl;
     int ret = ioctx.read(oid, bl, read_len, byte_offset);
     if (unlikely(ret != read_len)) {
@@ -480,7 +665,7 @@ namespace rgw::dedup {
     disk_block_t *p_disk_block = (disk_block_t*)p;
     disk_block_header_t *p_header = p_disk_block->get_header();
     p_header->deserialize();
-    ret = p_header->verify(block_id, dpp);
+    ret = p_header->verify(rec_addr.block_id, dpp);
     if (ret != 0) {
       return ret;
     }
@@ -488,7 +673,7 @@ namespace rgw::dedup {
     unsigned offset = p_header->rec_offsets[rec_id];
     // We deserialize the record inside the CTOR
     disk_record_t rec(p + offset);
-    ret = rec.validate(__func__, dpp, block_id, rec_id);
+    ret = rec.validate(__func__, dpp, rec_addr, rec_id);
     if (unlikely(ret != 0)) {
       //p_stats->failed_rec_load++;
       return ret;
@@ -504,8 +689,7 @@ namespace rgw::dedup {
       return 0;
     }
     else {
-      ldpp_dout(dpp, 5) << __func__ << "::ERR: Bad record in block=" << block_id
-                        << ", rec_id=" << rec_id << dendl;
+      ldpp_dout(dpp, 5) << __func__ << "::ERR: Bad record at rec_addr=" << rec_addr << dendl;
       return -EIO;
     }
 
@@ -542,17 +726,19 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   int load_slab(librados::IoCtx &ioctx,
                 bufferlist &bl_out,
-                md5_shard_t md5_shard,
+                shard_t shard,
                 work_shard_t worker_id,
-                uint32_t seq_number,
-                const DoutPrefixProvider* dpp)
+                uint32_t slab_id,
+                const DoutPrefixProvider* dpp,
+                bool is_coarse)
   {
-    disk_block_id_t block_id(worker_id, seq_number);
-    std::string oid(block_id.get_slab_name(md5_shard));
+    disk_rec_id_t rec_addr(worker_id, slab_id, 0);
+    std::string oid = is_coarse
+      ? rec_addr.get_coarse_slab_name(shard)
+      : rec_addr.get_slab_name(shard);
     ldpp_dout(dpp, 20) << __func__ << "::worker_id=" << (uint32_t)worker_id
-                       << ", md5_shard=" << (uint32_t)md5_shard
-                       << ", seq_number=" << seq_number
-                       << ":: oid=" << oid << dendl;
+                       << "::shard/group=" << shard << "::slab_id=" << slab_id
+                       << "::oid=" << oid << dendl;
 #ifndef DEBUG_FRAGMENTED_BUFFERLIST
     int ret = ioctx.read(oid, bl_out, 0, 0);
     if (ret > 0) {
@@ -585,15 +771,19 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   int store_slab(librados::IoCtx &ioctx,
                  bufferlist &bl,
-                 md5_shard_t md5_shard,
+                 shard_t shard,
                  work_shard_t worker_id,
-                 uint32_t seq_number,
-                 const DoutPrefixProvider* dpp)
+                 uint32_t slab_id,
+                 const DoutPrefixProvider* dpp,
+                 bool is_coarse)
   {
-    disk_block_id_t block_id(worker_id, seq_number);
-    std::string oid(block_id.get_slab_name(md5_shard));
-    ldpp_dout(dpp, 20) << __func__ << "::oid=" << oid << ", len="
-                       << bl.length() << dendl;
+    disk_rec_id_t rec_addr(worker_id, slab_id, 0);
+    std::string oid = is_coarse
+      ? rec_addr.get_coarse_slab_name(shard)
+      : rec_addr.get_slab_name(shard);
+    ldpp_dout(dpp, 20) << __func__ << "::worker_id=" << (uint32_t)worker_id
+                       << "::shard/group=" << shard << "::slab_id=" << slab_id
+                       << "::oid=" << oid << "::len=" << bl.length() << dendl;
     ceph_assert(bl.length());
 
     int ret = ioctx.write_full(oid, bl);
@@ -613,15 +803,17 @@ namespace rgw::dedup {
   {
     unsigned len = (p_curr_block + 1 - p_arr) * sizeof(disk_block_t);
     bufferlist bl = bufferlist::static_from_mem((char*)p_arr, len);
-    int ret = store_slab(ioctx, bl, d_md5_shard, d_worker_id, d_seq_number, dpp);
+    int ret = store_slab(ioctx, bl, d_md5_shard, d_worker_id, d_slab_id, dpp, d_coarse);
     if (unlikely(ret != 0)) {
       p_stats->write_slab_failure++;
     }
-    // Need to make sure the call to rgw_put_system_obj was fully synchronous
 
-    // d_seq_number++ must be called **after** flush!!
-    d_seq_number++;
-    p_stats->egress_slabs++;
+    d_slab_id++;
+    if (d_coarse) {
+      p_stats->egress_coarse_slabs++;
+    } else {
+      p_stats->egress_slabs++;
+    }
     slab_reset();
     return ret;
   }
@@ -638,7 +830,12 @@ namespace rgw::dedup {
     if (p_curr_block == &p_arr[0] && p_curr_block->is_empty()) {
       ldpp_dout(dpp, 20) << __func__ << "::Empty buffers, generate terminating block" << dendl;
     }
-    p_stats->egress_blocks++;
+    if (d_coarse) {
+      p_stats->egress_coarse_blocks++;
+    }
+    else {
+      p_stats->egress_blocks++;
+    }
     p_curr_block->close_block(dpp, false);
 
     int ret = flush(ioctx);
@@ -647,22 +844,21 @@ namespace rgw::dedup {
 
   //---------------------------------------------------------------------------
   int disk_block_seq_t::add_record(librados::IoCtx     &ioctx,
-                                   const disk_record_t *p_rec, // IN-OUT
-                                   record_info_t       *p_rec_info) // OUT-PARAM
+                                   const disk_record_t *p_rec,
+                                   disk_rec_id_t       *p_rec_addr) // OUT
   {
-    disk_block_id_t null_block_id;
-    int ret = p_rec->validate(__func__, dpp, null_block_id, MAX_REC_IN_BLOCK);
+    disk_rec_id_t null_rec_addr;
+    int ret = p_rec->validate(__func__, dpp, null_rec_addr, MAX_REC_IN_BLOCK);
     if (unlikely(ret != 0)) {
       // TBD
       //p_stats->failed_rec_store++;
       return ret;
     }
 
-    p_stats->egress_records ++;
     // first, try and add the record to the current open block
-    p_rec_info->rec_id = p_curr_block->add_record(p_rec, dpp);
-    if (p_rec_info->rec_id < MAX_REC_IN_BLOCK) {
-      p_rec_info->block_id = p_curr_block->get_block_id();
+    record_id_t rec_id = p_curr_block->add_record(p_rec, dpp);
+    if (rec_id < MAX_REC_IN_BLOCK) {
+      *p_rec_addr = disk_rec_id_t(d_worker_id, d_slab_id, d_block_id, rec_id);
       return 0;
     }
     else {
@@ -674,18 +870,18 @@ namespace rgw::dedup {
 
     // Do we have more Blocks in the block-array ?
     if (p_curr_block < last_block()) {
-      p_curr_block ++;
-      d_seq_number ++;
-      p_curr_block->init(d_worker_id, d_seq_number);
-      p_rec_info->rec_id = p_curr_block->add_record(p_rec, dpp);
+      p_curr_block++;
+      d_block_id++;
+      p_curr_block->init(d_block_id);
+      rec_id = p_curr_block->add_record(p_rec, dpp);
     }
     else {
       ldpp_dout(dpp, 20)  << __func__ << "::calling flush()" << dendl;
       ret = flush(ioctx);
-      p_rec_info->rec_id = p_curr_block->add_record(p_rec, dpp);
+      rec_id = p_curr_block->add_record(p_rec, dpp);
     }
 
-    p_rec_info->block_id = p_curr_block->get_block_id();
+    *p_rec_addr = disk_rec_id_t(d_worker_id, d_slab_id, d_block_id, rec_id);
     return ret;
   }
 
@@ -695,22 +891,68 @@ namespace rgw::dedup {
                                          uint64_t raw_mem_size,
                                          work_shard_t worker_id,
                                          worker_stats_t *p_stats,
-                                         md5_shard_t num_md5_shards)
+                                         md5_shard_t num_md5_shards,
+                                         uint32_t num_groups,
+                                         uint32_t shards_per_group,
+                                         uint32_t group_id,
+                                         mode_t mode)
   {
-    d_num_md5_shards = num_md5_shards;
-    d_worker_id = worker_id;
+    d_num_md5_shards   = num_md5_shards;
+    d_worker_id        = worker_id;
+    d_shards_per_group = shards_per_group;
+    d_group_id         = group_id;
+    d_mode             = mode;
+
+    uint32_t num_buffers;
+    if (mode == mode_t::SINGLE_PASS) {
+      num_buffers = num_md5_shards;
+      // when num_groups == 0 we use mode_t::SINGLE_PASS
+      ceph_assert(num_groups == 0);
+      // group_id is only used when mode is mode_t::PHASE2_FINE
+      ceph_assert(group_id == 0);
+    }
+    else if (mode == mode_t::PHASE1_COARSE) {
+      // when num_groups == 0 we use mode_t::SINGLE_PASS
+      ceph_assert(num_groups > 0);
+      // group_id is only used when mode is mode_t::PHASE2_FINE
+      ceph_assert(group_id == 0);
+
+      // In this mode we need one buffer per-group (G)
+      // G = ceil(sqrt(N)) coarse group buffers
+      num_buffers = num_groups;
+    } else {
+      // Phase 2: shards_per_group shards in this group
+      // when num_groups == 0 we use mode_t::SINGLE_PASS
+      ceph_assert(num_groups > 0);
+
+      uint32_t first_shard = group_id * shards_per_group;
+      uint32_t last_shard =  first_shard + shards_per_group;
+      // last group may be shorter, make sure we don't use more than num_md5_shards
+      last_shard = std::min(last_shard, num_md5_shards);
+      num_buffers = last_shard - first_shard;
+    }
+
+    d_disk_arr.resize(num_buffers);
     disk_block_t *p     = (disk_block_t *)raw_mem;
     disk_block_t *p_end = (disk_block_t *)(raw_mem + raw_mem_size);
+    bool coarse = (mode == mode_t::PHASE1_COARSE);
 
-    for (unsigned md5_shard = 0; md5_shard < d_num_md5_shards; md5_shard++) {
+    for (unsigned i = 0; i < num_buffers; i++) {
       ldpp_dout(dpp, 20) << __func__ << "::p=" << p << "::p_end=" << p_end << dendl;
       if (p + DISK_BLOCK_COUNT <= p_end) {
-        d_disk_arr[md5_shard].activate(dpp, p, d_worker_id, md5_shard, p_stats);
+        // In coarse mode, d_md5_shard stores the group_id for CS slab naming.
+        // In fine mode, d_md5_shard stores the actual md5 shard for S slab naming.
+        md5_shard_t shard_id = i;
+        if (mode == mode_t::PHASE2_FINE) {
+          shard_id = (group_id * shards_per_group + i);
+        }
+        d_disk_arr[i].activate(dpp, p, d_worker_id, shard_id, p_stats, coarse);
         p += DISK_BLOCK_COUNT;
+
       }
       else {
         ldpp_dout(dpp, 1) << __func__ << "::ERR: buffer overflow! "
-                          << "::md5_shard=" << md5_shard << "/" << d_num_md5_shards
+                          << "::buffer=" << i << "/" << num_buffers
                           << "::raw_mem_size=" << raw_mem_size << dendl;
         ldpp_dout(dpp, 1) << __func__
                           << "::sizeof(disk_block_t)=" << sizeof(disk_block_t)
@@ -724,10 +966,10 @@ namespace rgw::dedup {
   void disk_block_array_t::flush_output_buffers(const DoutPrefixProvider* dpp,
                                                 librados::IoCtx &ioctx)
   {
-    for (md5_shard_t md5_shard = 0; md5_shard < d_num_md5_shards; md5_shard++) {
+    for (uint32_t i = 0; i < d_disk_arr.size(); i++) {
       ldpp_dout(dpp, 20) <<__func__ << "::flush buffers:: worker_id="
-                         << d_worker_id<< ", md5_shard=" << md5_shard << dendl;
-      d_disk_arr[md5_shard].flush_disk_records(ioctx);
+                         << d_worker_id << ", idx=" << i << dendl;
+      d_disk_arr[i].flush_disk_records(ioctx);
     }
   }
 } // namespace rgw::dedup

@@ -19,10 +19,12 @@
 #include "rgw_dedup_store.h"
 #include "rgw_dedup_filter.h"
 #include <string>
+#include <vector>
 
 namespace rgw::dedup {
-  static constexpr const char* WORKER_SHARD_PREFIX = "WRK.SHRD.TK.";
-  static constexpr const char* MD5_SHARD_PREFIX    = "MD5.SHRD.TK.";
+  static constexpr const char* WORKER_SHARD_PREFIX = "WRK.TK.";
+  static constexpr const char* MD5_SHARD_PREFIX    = "MD5.TK.";
+  static constexpr const char* GRP_SHARD_PREFIX    = "GRP.TK.";
   struct control_t;
   struct dedup_epoch_t;
 
@@ -38,21 +40,23 @@ namespace rgw::dedup {
       }
 
       //---------------------------------------------------------------------------
-      shard_token_oid(const char *prefix, uint16_t shard) {
+      shard_token_oid(const char *prefix, uint32_t shard) {
         this->prefix_len = snprintf(this->buff, BUFF_SIZE, "%s", prefix);
         set_shard(shard);
       }
 
       //---------------------------------------------------------------------------
-      void set_shard(uint16_t shard) {
-        int n = snprintf(this->buff + this->prefix_len, BUFF_SIZE - this->prefix_len, "%03x", shard);
+      void set_shard(uint32_t shard) {
+        int n = snprintf(this->buff + this->prefix_len, BUFF_SIZE - this->prefix_len, "%05x", shard);
         this->total_len = this->prefix_len + n;
       }
 
       //---------------------------------------------------------------------------
       static bool legal_oid_name(const std::string& oid) {
         return ((oid.length() <= BUFF_SIZE) &&
-                (oid.starts_with(WORKER_SHARD_PREFIX)||oid.starts_with(MD5_SHARD_PREFIX)));
+                (oid.starts_with(WORKER_SHARD_PREFIX) ||
+                 oid.starts_with(MD5_SHARD_PREFIX) ||
+                 oid.starts_with(GRP_SHARD_PREFIX)));
       }
       inline const char* get_buff() { return this->buff; }
       inline unsigned get_buff_size() { return this->total_len; }
@@ -73,9 +77,9 @@ namespace rgw::dedup {
                        md5_shard_t num_md5_shards);
 
     utime_t      get_epoch_time() { return d_epoch_time; }
-    work_shard_t get_next_work_shard_token(rgw::sal::RadosStore *store,
+    shard_t      get_next_work_shard_token(rgw::sal::RadosStore *store,
                                            work_shard_t num_work_shards);
-    md5_shard_t  get_next_md5_shard_token(rgw::sal::RadosStore *store,
+    shard_t      get_next_md5_shard_token(rgw::sal::RadosStore *store,
                                           md5_shard_t num_md5_shards);
     bool         can_start_new_scan(rgw::sal::RadosStore *store);
     static int   collect_all_shard_stats(rgw::sal::RadosStore *store,
@@ -139,8 +143,8 @@ namespace rgw::dedup {
 
     int update_shard_token_heartbeat(rgw::sal::RadosStore *store,
                                      unsigned shard,
-                                     uint64_t count_a,
-                                     uint64_t count_b,
+                                     uint64_t obj_count,
+                                     dedup_step_t step,
                                      const char *prefix);
 
     //---------------------------------------------------------------------------
@@ -156,7 +160,7 @@ namespace rgw::dedup {
                                        md5_shard_t num_md5_shards)
     {
       return all_shard_tokens_completed(store, num_md5_shards, MD5_SHARD_PREFIX,
-                                        &d_num_completed_md5, d_completed_md5);
+                                        &d_num_completed_md5, d_completed_md5.data());
     }
 
   private:
@@ -169,12 +173,12 @@ namespace rgw::dedup {
     int  all_shard_tokens_completed(rgw::sal::RadosStore *store,
                                     unsigned shards_count,
                                     const char *prefix,
-                                    uint16_t *p_num_completed,
+                                    uint32_t *p_num_completed,
                                     uint8_t completed_arr[]);
     int cleanup_prev_run(rgw::sal::RadosStore *store);
     int32_t get_next_shard_token(rgw::sal::RadosStore *store,
-                                 uint16_t start_shard,
-                                 uint16_t max_count,
+                                 uint32_t start_shard,
+                                 uint32_t max_count,
                                  const char *prefix);
     int create_shard_tokens(rgw::sal::RadosStore *store,
                             unsigned shards_count,
@@ -196,9 +200,9 @@ namespace rgw::dedup {
     utime_t                   d_epoch_time;
     utime_t                   d_token_creation_time;
     uint8_t                   d_completed_workers[MAX_WORK_SHARD];
-    uint8_t                   d_completed_md5[MAX_MD5_SHARD];
-    uint16_t                  d_num_completed_workers = 0;
-    uint16_t                  d_num_completed_md5 = 0;
+    std::vector<uint8_t>      d_completed_md5;
+    uint32_t                  d_num_completed_workers = 0;
+    uint32_t                  d_num_completed_md5 = 0;
   };
 
 } //namespace rgw::dedup
