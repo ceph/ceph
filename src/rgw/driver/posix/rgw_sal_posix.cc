@@ -4095,7 +4095,49 @@ int POSIXObject::POSIXReadOp::get_attr(const DoutPrefixProvider* dpp, const char
 int POSIXObject::POSIXDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 					   optional_yield y, uint32_t flags)
 {
-  int ret = source->delete_object(dpp, y, flags, nullptr, nullptr);
+  int ret;
+  uint64_t orig_size = 0;
+  auto exists = source->check_exists(dpp);
+  if (exists) {
+    orig_size = source->get_size();
+  }
+
+  if (params.size_match.has_value() && exists) {
+    ldpp_dout(dpp, 10) << "POSIXObject::POSIXDeleteOp::delete_obj size_match: " << params.size_match.value() << ", size: " << orig_size << dendl;
+    if (orig_size != params.size_match) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+  }
+
+  if (!real_clock::is_zero(params.last_mod_time_match) && exists) {
+    timespec ctime = real_clock::to_timespec(source->get_mtime());
+    timespec last_mod_time = real_clock::to_timespec(params.last_mod_time_match);
+    if (!params.high_precision_time) {
+      ctime.tv_nsec = 0;
+      last_mod_time.tv_nsec = 0;
+    }
+
+    ldpp_dout(dpp, 10) << "POSIXObject::POSIXDeleteOp::delete_obj If-Match-Last-Modified-Time: " << params.last_mod_time_match
+                       << ", Last-Modified: " << ctime << ", with high_precision_time:" << params.high_precision_time << dendl;
+    if (ctime != last_mod_time) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+  }
+
+  if (params.if_match && strcmp(params.if_match, "*") != 0 && exists) {
+    auto it = source->get_attrs().find(RGW_ATTR_ETAG);
+    if (it == source->get_attrs().end()) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+    bufferlist& bl = it->second;
+    std::string if_match_str = rgw_string_unquote(params.if_match);
+    if (if_match_str.compare(0, bl.length(), bl.c_str(), bl.length()) != 0) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+  }
+  
+
+  ret = source->delete_object(dpp, y, flags, nullptr, nullptr);
   if (ret < 0) {
     return ret;
   }
@@ -4465,6 +4507,42 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
     }
   }
 
+  /* conditional write checks against existing target object */
+  if (if_match || if_nomatch) {
+    bool target_exists = target_obj->exists();
+
+    if (if_match) {
+      if (!target_exists) {
+        return -ENOENT;
+      }
+      if (strcmp(if_match, "*") != 0) {
+        bufferlist bl;
+        if (!get_attr(target_obj->get_attrs(), RGW_ATTR_ETAG, bl)) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+        std::string if_match_str = rgw_string_unquote(if_match);
+        if (if_match_str != bl.to_str()) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      }
+    }
+    if (if_nomatch) {
+      if (strcmp(if_nomatch, "*") == 0) {
+        if (target_exists) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      } else if (target_exists) {
+        bufferlist bl;
+        if (get_attr(target_obj->get_attrs(), RGW_ATTR_ETAG, bl)) {
+          std::string if_nomatch_str = rgw_string_unquote(if_nomatch);
+          if (if_nomatch_str == bl.to_str()) {
+            return -ERR_PRECONDITION_FAILED;
+          }
+        }
+      }
+    }
+  }
+
   // Rename to target_obj
   ret = shadow->rename(dpp, y, target_obj);
   if (ret < 0) {
@@ -4608,28 +4686,6 @@ int POSIXMultipartWriter::complete(
   int ret;
   POSIXUploadPartInfo info;
 
-  if (if_match) {
-    if (strcmp(if_match, "*") == 0) {
-      // test the object is existing
-      if (!part_file->exists()) {
-        return -ERR_PRECONDITION_FAILED;
-      }
-    } else {
-      Attrs attrs;
-      bufferlist bl;
-      ret = part_file->read_attrs(rctx.dpp, rctx.y, attrs);
-      if (ret < 0) {
-        return -ERR_PRECONDITION_FAILED;
-      }
-      if (!get_attr(attrs, RGW_ATTR_ETAG, bl)) {
-        return -ERR_PRECONDITION_FAILED;
-      }
-      if (strncmp(if_match, bl.c_str(), bl.length()) != 0) {
-        return -ERR_PRECONDITION_FAILED;
-      }
-    }
-  }
-
   info.num = part_num;
   info.etag = etag;
   info.cksum = cksum;
@@ -4698,31 +4754,38 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     if (strcmp(if_match, "*") == 0) {
       // test the object is existing
       if (!exists) {
-	return -ERR_PRECONDITION_FAILED;
+	      return -ENOENT;
       }
     } else {
       bufferlist bl;
-      if (!get_attr(obj->get_attrs(), RGW_ATTR_ETAG, bl)) {
-        return -ERR_PRECONDITION_FAILED;
-      }
-      if (strncmp(if_match, bl.c_str(), bl.length()) != 0) {
-        return -ERR_PRECONDITION_FAILED;
+      if (obj->get_attr(RGW_ATTR_ETAG, bl)) {
+        std::string if_match_str = rgw_string_unquote(if_match);
+        std::string etag = std::string(bl.c_str(), bl.length());
+        ldpp_dout(dpp, 10) << "POSIXAtomicWriter::complete if_match: " << if_match_str << ", etag: " << etag << dendl;
+        if (if_match_str.compare(0, etag.length(), etag.c_str(), etag.length()) != 0) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      } else {
+        ldpp_dout(dpp, 10) << "POSIXAtomicWriter::complete if_match object has no etag" << dendl;
+        return (!exists)? -ENOENT: -ERR_PRECONDITION_FAILED;
       }
     }
   }
   if (if_nomatch) {
     if (strcmp(if_nomatch, "*") == 0) {
-      // test the object is not existing
-      if (!exists) {
-	return -ERR_PRECONDITION_FAILED;
+      // test the object is existing
+      if (exists) {
+	      return -ERR_PRECONDITION_FAILED;
       }
     } else {
       bufferlist bl;
-      if (!get_attr(obj->get_attrs(), RGW_ATTR_ETAG, bl)) {
-        return -ERR_PRECONDITION_FAILED;
-      }
-      if (strncmp(if_nomatch, bl.c_str(), bl.length()) == 0) {
-        return -ERR_PRECONDITION_FAILED;
+      if (obj->get_attr(RGW_ATTR_ETAG, bl)) {
+        std::string if_nomatch_str = rgw_string_unquote(if_nomatch);
+        std::string etag = std::string(bl.c_str(), bl.length());
+        ldpp_dout(dpp, 10) << "POSIXAtomicWriter::complete if_nomatch: " << if_nomatch_str << ", etag: " << etag << dendl;
+        if (if_nomatch_str.compare(0, etag.length(), etag.c_str(), etag.length()) == 0) {
+          return -ERR_PRECONDITION_FAILED;
+        }
       }
     }
   }
