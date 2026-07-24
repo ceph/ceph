@@ -16,6 +16,12 @@
   to throttle client metadata requests (e.g., create, mkdir, lookup, and so on) to
   subvolumes, where each subvolume QoS is shared among multiple client sessions at
   that time.
+* MON: Each monitor now reports four new perf counters covering its data
+  directory: ``data_disk_total_bytes``, ``data_disk_avail_bytes``,
+  ``data_disk_avail_percent``, and ``db_total_bytes`` (estimated on-disk size
+  of the key/value store). They surface automatically as ``ceph_mon_*``
+  Prometheus metrics via the ``prometheus`` mgr module and ``ceph-exporter``,
+  enabling trending of mon DB growth and filesystem free space.
 
 * librados/neorados: The C++ APIs for executing Ceph Class (CLS) methods
   have undergone a breaking change to enforce compile-time type safety, replacing

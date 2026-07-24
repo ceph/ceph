@@ -605,6 +605,13 @@ bool HealthMonitor::check_member_health()
 	   << ", used " << byte_u_t(stats.fs_stats.byte_used)
 	   << ", avail " << byte_u_t(stats.fs_stats.byte_avail) << dendl;
 
+  if (mon.logger) {
+    mon.logger->set(l_mon_data_disk_total_bytes, stats.fs_stats.byte_total);
+    mon.logger->set(l_mon_data_disk_avail_bytes, stats.fs_stats.byte_avail);
+    mon.logger->set(l_mon_data_disk_avail_percent, stats.fs_stats.avail_percent);
+    mon.logger->set(l_mon_db_total_bytes, stats.store_stats.bytes_total);
+  }
+
   // MON_DISK_{LOW,CRIT,BIG}
   health_check_map_t next;
   if (stats.fs_stats.avail_percent <= g_conf()->mon_data_avail_crit) {

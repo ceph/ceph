@@ -902,6 +902,18 @@ int Monitor::preinit()
         nullptr, PerfCountersBuilder::PRIO_INTERESTING);
     pcb.add_u64(l_mon_backup_cleanup_deleted, "backup_cleanup_deleted", "Mon backup cleanup deleted backups",
         nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64(l_mon_data_disk_total_bytes, "data_disk_total_bytes",
+        "Total size of the filesystem hosting the monitor data directory",
+        "dtot", PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+    pcb.add_u64(l_mon_data_disk_avail_bytes, "data_disk_avail_bytes",
+        "Available space on the filesystem hosting the monitor data directory",
+        "davb", PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+    pcb.add_u64(l_mon_data_disk_avail_percent, "data_disk_avail_percent",
+        "Available space on the filesystem hosting the monitor data directory, as a percentage",
+        "dpct", PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64(l_mon_db_total_bytes, "db_total_bytes",
+        "Estimated on-disk size of the monitor key/value store",
+        "dbsz", PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
   }
