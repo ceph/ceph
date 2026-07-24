@@ -74,6 +74,7 @@ else:
                     None
                 )
                 if matched_gateway:
+                    self.daemon_name = matched_gateway.get('daemon_name')
                     self.gateway_addr = matched_gateway.get('service_url')
                     logger.debug("Gateway address set to: %s", self.gateway_addr)
                 else:
