@@ -37,6 +37,8 @@ function(gperf_generate input output)
     )
 endfunction()
 
+add_subdirectory(curl)
+
 find_package(ICU 52.0 COMPONENTS uc REQUIRED)
 
 set(librgw_common_srcs
@@ -365,7 +367,7 @@ target_link_libraries(rgw_common
     ICU::uc
     OATH::OATH
     dmclock::dmclock
-    ${CURL_LIBRARIES}
+    rgw_curl
     ${EXPAT_LIBRARIES}
     ${ARROW_LIBRARIES}
     ${ARROW_FLIGHT_LIBRARIES}
