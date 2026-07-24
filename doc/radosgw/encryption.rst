@@ -56,33 +56,34 @@ The encryption algorithm for new objects can be configured with::
 GCM Encryption Format
 ---------------------
 
-AES-256-GCM encrypts data in 4 KB (4096 byte) chunks. Each chunk produces
-4112 bytes of ciphertext (4096 bytes of encrypted data plus a 16-byte
-authentication tag).
+AES-256-GCM encrypts data in fixed-size plaintext chunks. The chunk size
+is controlled by ``rgw_crypt_aead_chunk_size``; the only supported values
+are ``4096`` (4 KiB, the default) and ``65536`` (64 KiB). Each chunk
+produces ``chunk_size + 16`` bytes of ciphertext: the encrypted data
+followed by a 16-byte authentication tag. The chunk size used at upload
+time is recorded per object (in the ``rgw.crypt.prefetch-align`` xattr)
+and remains in effect for that object regardless of later config changes.
 
-.. list-table:: GCM Size Calculation Example
+.. list-table:: GCM Size Calculation Example (10,000-byte plaintext)
    :header-rows: 1
-   :widths: 40 30 30
+   :widths: 25 25 25 25
 
-   * - Description
-     - Size
-     - Notes
-   * - Original plaintext
-     - 10,000 bytes
-     - User's data
-   * - Number of chunks
-     - 3
-     - ⌈10000 ÷ 4096⌉
-   * - Authentication tags
+   * - chunk_size
+     - Number of chunks
+     - Authentication tags
+     - Encrypted on disk
+   * - 4 KiB (default)
+     - 3 (⌈10000 ÷ 4096⌉)
      - 48 bytes
-     - 3 chunks × 16 bytes
-   * - **Encrypted on disk**
-     - **10,048 bytes**
-     - plaintext + tags
+     - 10,048 bytes
+   * - 64 KiB
+     - 1
+     - 16 bytes
+     - 10,016 bytes
 
-The storage overhead is approximately 0.4% (16 bytes per 4 KB). S3 API
-responses always report the original plaintext size, so this overhead is
-transparent to clients.
+Storage overhead is ``16 / chunk_size``: about 0.4 % at 4 KiB and 0.025 %
+at 64 KiB. S3 API responses always report
+the original plaintext size, so this overhead is transparent to clients.
 
 Customer-Provided Keys
 ======================
