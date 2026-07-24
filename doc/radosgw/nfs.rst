@@ -2,8 +2,6 @@
 NFS
 ===
 
-.. versionadded:: Jewel
-
 .. note:: Only the NFSv4 protocol is supported when using a cephadm or Rook based deployment.
 
 Ceph Object Gateway namespaces can be exported via NFSv4,

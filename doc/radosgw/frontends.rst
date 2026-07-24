@@ -13,8 +13,6 @@ for details about the syntax.
 Beast
 =====
 
-.. versionadded:: Mimic
-
 The ``beast`` frontend uses the Boost.Beast library for HTTP parsing
 and the Boost.Asio library for asynchronous network I/O.
 

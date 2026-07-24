@@ -2,8 +2,6 @@
 LDAP Authentication
 ===================
 
-.. versionadded:: Jewel
-
 You can delegate the Ceph Object Gateway authentication to an LDAP server.
 
 How it works

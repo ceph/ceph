@@ -4,8 +4,6 @@
 RGW Multi-tenancy
 =================
 
-.. versionadded:: Jewel
-
 The multi-tenancy feature allows to use buckets and users of the same
 name simultaneously by segregating them under so-called ``tenants``.
 This may be useful, for instance, to permit users of Swift API to
