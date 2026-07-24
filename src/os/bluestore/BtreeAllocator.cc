@@ -466,6 +466,44 @@ void BtreeAllocator::foreach(std::function<void(uint64_t offset, uint64_t length
   }
 }
 
+uint64_t BtreeAllocator::get_free_extents(
+  uint64_t range_begin,
+  uint64_t range_end,
+  size_t max_count,
+  free_extent_vector_t* out)
+{
+  ceph_assert(range_begin <= range_end);
+  if (range_begin == range_end) {
+    return range_end;
+  }
+
+  std::lock_guard l(lock);
+  // lower_bound gives first segment with start >= range_begin.
+  // The previous segment may start before range_begin but extend into the range.
+  auto it = range_tree.lower_bound(range_begin);
+  if (it != range_tree.begin()) {
+    auto prev = std::prev(it);
+    if (prev->second > range_begin) {
+      it = prev;
+    }
+  }
+  size_t n = 0;
+  const bool unbounded = (max_count == 0);
+  while (it != range_tree.end() && it->first < range_end &&
+         (unbounded || n < max_count)) {
+    uint64_t lo = std::max(it->first, range_begin);
+    uint64_t hi = std::min(it->second, range_end);
+    out->emplace_back(lo, hi - lo);
+    ++it;
+    ++n;
+  }
+  if (it == range_tree.end() || it->first >= range_end) {
+    return range_end;
+  }
+  // Stopped on the count cap: resume from the next, not-yet-emitted extent.
+  return it->first;
+}
+
 void BtreeAllocator::init_add_free(uint64_t offset, uint64_t length)
 {
   if (!length)
