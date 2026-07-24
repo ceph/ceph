@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include "acconfig.h"
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/test_support.h"
 #include "test/librbd/mock/MockImageCtx.h"
@@ -91,7 +92,9 @@ struct TestMockCryptoLuksFormatRequest : public TestMockFixture {
   }
 
   void verify_header(const char* expected_format, size_t expected_key_length,
-                     uint64_t expected_sector_size, bool magic_switched) {
+                     uint64_t expected_sector_size, bool magic_switched,
+                     const char* expected_cipher = nullptr,
+                     const char* expected_cipher_mode = nullptr) {
     Header header(mock_image_ctx->cct);
 
     ASSERT_EQ(0, header.init());
@@ -109,7 +112,14 @@ struct TestMockCryptoLuksFormatRequest : public TestMockFixture {
     ASSERT_EQ(expected_sector_size, header.get_sector_size());
     ASSERT_EQ(0, header.get_data_offset() % OBJECT_SIZE);
 
-    char volume_key[64];
+    if (expected_cipher) {
+      ASSERT_STREQ(expected_cipher, header.get_cipher());
+    }
+    if (expected_cipher_mode) {
+      ASSERT_STREQ(expected_cipher_mode, header.get_cipher_mode());
+    }
+
+    char volume_key[96];
     size_t volume_key_size = sizeof(volume_key);
     ASSERT_EQ(0, header.read_volume_key(
             passphrase_cstr, strlen(passphrase_cstr),
@@ -224,6 +234,24 @@ TEST_F(TestMockCryptoLuksFormatRequest, WriteFail) {
   complete_aio(-123);
   ASSERT_EQ(-123, finished_cond.wait());
 }
+
+#ifdef HAVE_CRYPT_FORMAT_INLINE
+TEST_F(TestMockCryptoLuksFormatRequest, AES256_HMAC_SHA256) {
+  auto mock_format_request = MockFormatRequest::create(
+          mock_image_ctx, RBD_ENCRYPTION_FORMAT_LUKS2,
+          RBD_ENCRYPTION_ALGORITHM_AES256_HMAC_SHA256, std::move(passphrase),
+          &crypto, on_finish, true);
+  expect_get_stripe_period();
+  expect_get_image_size(IMAGE_SIZE);
+  expect_image_write();
+  mock_format_request->send();
+  ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
+  complete_aio(0);
+  ASSERT_EQ(0, finished_cond.wait());
+  ASSERT_NO_FATAL_FAILURE(verify_header(CRYPT_LUKS2, 96, 4096, false,
+                                        "aes", "xts-random"));
+}
+#endif
 
 } // namespace luks
 } // namespace crypto

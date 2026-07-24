@@ -10,6 +10,17 @@
 namespace librbd {
 namespace crypto {
 
+struct CryptArgs {
+  const unsigned char* in;
+  unsigned char* out;
+  uint32_t len;   // Common length (if in_len == out_len)
+  const unsigned char* iv = nullptr;
+  uint32_t iv_len = 0;
+
+  unsigned char* meta = nullptr; 
+  uint32_t meta_len = 0;
+};
+
 template <typename T>
 class DataCryptor {
 
@@ -27,8 +38,9 @@ public:
 
   virtual int init_context(T* ctx, const unsigned char* iv,
                            uint32_t iv_length) const = 0;
-  virtual int update_context(T* ctx, const unsigned char* in,
-                             unsigned char* out, uint32_t len) const = 0;
+
+  virtual int update_context(T* ctx, const CryptArgs& params) const = 0;
+  virtual int decrypt(T* ctx,  const CryptArgs& params) const = 0;
 };
 
 } // namespace crypto

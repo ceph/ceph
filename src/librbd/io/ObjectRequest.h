@@ -12,6 +12,8 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Types.h"
 #include "librbd/io/Types.h"
+#include "librbd/crypto/CryptoInterface.h"
+#include "librbd/crypto/EncryptionFormat.h"
 #include <map>
 
 class Context;
@@ -266,7 +268,10 @@ public:
       int write_flags, std::optional<uint64_t> assert_version,
       const ZTracer::Trace &parent_trace, Context *completion)
     : AbstractObjectWriteRequest<ImageCtxT>(ictx, object_no, object_off,
-                                            data.length(), io_context, "write",
+                                            logical_data_length(
+                                                ictx, data.length(),
+                                                write_flags),
+                                            io_context, "write",
                                             parent_trace, completion),
       m_write_data(std::move(data)), m_op_flags(op_flags),
       m_write_flags(write_flags), m_assert_version(assert_version) {
@@ -285,6 +290,19 @@ protected:
   void add_write_hint(neorados::WriteOp *wr) override;
 
 private:
+  static uint64_t logical_data_length(ImageCtxT* ictx, uint64_t raw_len,
+                                      int write_flags) {
+    if (write_flags & OBJECT_WRITE_FLAG_ENCRYPTED_AEAD_WRITE) {
+      auto crypto = ictx->encryption_format->get_crypto();
+      size_t meta_size = crypto->get_meta_size();
+      if (meta_size > 0) {
+        size_t block_size = crypto->get_block_size();
+        return (raw_len / (meta_size + block_size)) * block_size;
+      }
+    }
+    return raw_len;
+  }
+
   ceph::bufferlist m_write_data;
   int m_op_flags;
   int m_write_flags;
