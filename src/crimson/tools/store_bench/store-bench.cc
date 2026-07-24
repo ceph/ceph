@@ -22,6 +22,22 @@
    touch store_bench_dir/block
    truncate -s 10G store_bench_dir/block
    ./build/bin/crimson-store-bench --store-path store_bench_dir --smp 4 --duration 10 --work-load-type pg_log --seastore_device_size 10G
+ *
+ * To filter specific metrics from the output, use --track-metrics with a
+ * comma-separated list of metric names.  Only the named metrics will appear
+ * in the metrics_values section instead of the full metric dump:
+ *
+ *   ./build/bin/crimson-store-bench --store-path store_bench_dir --smp 4 \
+ *     --duration 10 --work-load-type pg_log --seastore_device_size 10G \
+ *     --track-metrics cache_cache_access,cache_cache_hit
+ *
+ * Example output:
+ *   "metrics_values": [
+ *       { "cache_cache_access": { "shard": "0", "shard_store_index": "0", "value": 195377 } },
+ *       { "cache_cache_hit":    { "shard": "0", "shard_store_index": "0", "value": 195374 } },
+ *       { "cache_cache_access": { "shard": "1", "shard_store_index": "0", "value": 194982 } },
+ *       { "cache_cache_hit":    { "shard": "1", "shard_store_index": "0", "value": 194979 } }
+ *   ]
  */
 
 #include <random>
@@ -47,6 +63,7 @@
 #include "crimson/common/coroutine.h"
 #include "crimson/common/log.h"
 #include "crimson/common/metrics_helpers.h"
+#include "crimson/common/smp_helpers.h"
 
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
@@ -92,6 +109,7 @@ private:
 public:
   unsigned num_concurrent_io = 16;
   bool dump_metrics = false;
+  std::string track_metrics="";
   std::chrono::duration<uint64_t> get_duration() const {
     return std::chrono::seconds(duration);
   }
@@ -106,6 +124,8 @@ public:
        "for")
       ("dump-metrics", po::bool_switch(&dump_metrics),
        "Dump JSON formatted metrics to stdout")
+      ("track-metrics",po:: value<std::string>(&track_metrics),
+        "Metrics we want to include in result list,filtered from dump-metrics")
       ;
     return ret;
   }
@@ -951,12 +971,24 @@ int main(int argc, char **argv) {
           }
           f.close_section();
         }
-        if (common_options.dump_metrics) {
+        if (common_options.dump_metrics ||!common_options.track_metrics.empty()) {
+          std::set<std::string> requested_metrics;
+          if(!common_options.track_metrics.empty()){
+            std::stringstream ss(common_options.track_metrics);
+            std::string name;
+            while (std::getline(ss,name,',')){
+              requested_metrics.insert(name);
+            }
+          }
           f.open_array_section("metrics_values");
-          crimson::metrics::dump_metric_value_map(
-            seastar::scollectd::get_value_map(),
-            &f,
-            [](const auto &) { return true; });
+          co_await crimson::invoke_on_all_seq([&f, &requested_metrics] {
+            crimson::metrics::dump_metric_value_map(
+              seastar::scollectd::get_value_map(),
+              &f,
+              [&requested_metrics](const std::string& full_name) {
+                return requested_metrics.empty() || requested_metrics.count(full_name) > 0;
+              });
+          });
           f.close_section();
         }
         f.close_section();
