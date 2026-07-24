@@ -294,7 +294,10 @@ const routes: Routes = [
       {
         path: ':image_spec',
         component: RbdImageResourceSidebarComponent,
-        data: { breadcrumbs: RbdImageResourceBreadcrumbResolver },
+        data: {
+          breadcrumbs: RbdImageResourceBreadcrumbResolver,
+          showBreadcrumbsLayout: false
+        },
         children: [
           { path: '', redirectTo: 'overview', pathMatch: 'full' },
           {
@@ -426,7 +429,10 @@ const routes: Routes = [
           {
             path: `${URLVerbs.VIEW}/:group`,
             component: NvmeGatewayViewComponent,
-            data: { breadcrumbs: NvmeGatewayViewBreadcrumbResolver },
+            data: {
+              breadcrumbs: NvmeGatewayViewBreadcrumbResolver,
+              showBreadcrumbsLayout: false
+            },
             children: [
               { path: '', redirectTo: 'nodes', pathMatch: 'full' },
               {
@@ -476,7 +482,10 @@ const routes: Routes = [
           {
             path: ':subsystem_nqn',
             component: NvmeSubsystemViewComponent,
-            data: { breadcrumbs: NvmeSubsystemViewBreadcrumbResolver },
+            data: {
+              breadcrumbs: NvmeSubsystemViewBreadcrumbResolver,
+              showBreadcrumbsLayout: false
+            },
             children: [
               { path: '', redirectTo: 'overview', pathMatch: 'full' },
               {

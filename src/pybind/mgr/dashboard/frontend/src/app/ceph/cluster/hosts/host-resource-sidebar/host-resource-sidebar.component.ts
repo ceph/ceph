@@ -15,6 +15,10 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { HostService, HostModalRef } from '~/app/shared/api/host.service';
 import { HostActionService } from '~/app/shared/services/host-action.service';
 import { Host, HostStatusConfig, STATUS_MAP, getStatus } from '~/app/shared/models/host.interface';
+import {
+  ResourceHeaderAction,
+  ResourceHeaderStatus
+} from '~/app/shared/components/page-header-resource/page-header-resource.component';
 import { SidebarItem } from '~/app/shared/components/sidebar-layout/sidebar-layout.component';
 import { ActionLabels, ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { HostStatus } from '~/app/shared/enum/host-status.enum';
@@ -101,6 +105,29 @@ export class HostSidebarComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.sub.unsubscribe();
+  }
+
+  get headerStatus(): ResourceHeaderStatus | undefined {
+    if (!this.hostStatus) {
+      return undefined;
+    }
+
+    return {
+      type: (this.hostStatusMap?.icon as ResourceHeaderStatus['type']) ?? 'warning',
+      text: this.hostStatusMap?.label ?? this.hostStatus
+    };
+  }
+
+  get headerTags(): string[] {
+    return this.hostLabels;
+  }
+
+  get headerActions(): ResourceHeaderAction[] {
+    return this.getVisibleHostActions().map((action) => ({
+      label: action.name,
+      disabled: this.isHostActionDisabled(action),
+      onClick: () => this.runHostAction(action)
+    }));
   }
 
   private buildSidebarItems(permissions: Permissions): void {
