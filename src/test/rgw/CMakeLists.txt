@@ -502,6 +502,7 @@ target_link_libraries(unittest_rgw_http_client
 
 if(WITH_RADOSGW_FDB)
  list(APPEND rgw_incs "${CMAKE_BINARY_DIR}/_deps/zpp_bits-src/")
+ list(APPEND rgw_libs rgw_fdb)
  add_catch2_test_rgw(rgw_hex)
  add_catch2_test_rgw(fdb NO_CATCH2_MAIN)
  add_catch2_test_rgw(fdb_ceph NO_CATCH2_MAIN)
