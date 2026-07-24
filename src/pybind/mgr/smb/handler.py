@@ -26,6 +26,7 @@ from ceph.deployment.service_spec import (
     SSLParameters,
 )
 from ceph.fs.earmarking import EarmarkTopScope
+from .fs import CephFSSubvolumeResolutionError
 
 from . import config_store, external, resources, rgw
 from .enums import (
@@ -403,8 +404,13 @@ class ClusterConfigHandler:
             with _store_transaction(staging.destination_store):
                 results = staging.save()
                 staging.prune_linked_entries()
-            with _store_transaction(staging.destination_store):
-                self._sync_modified(results)
+            try:
+                with _store_transaction(staging.destination_store):
+                    self._sync_modified(results)
+            except ValueError as err:
+                if results._contents:
+                    r = results._contents[-1]
+                    r.msg = str(err)
         return results
 
     def cluster_ids(self) -> List[str]:
@@ -1557,7 +1563,16 @@ def _save_pending_config(
     cluster_conf: _ClusterConf,
 ) -> None:
     # generate the cluster configuration and save it in the public store
-    cconfig = _generate_config(cluster_conf)
+    try:
+        cconfig = _generate_config(cluster_conf)
+    except CephFSSubvolumeResolutionError as e:
+        cluster_id = cluster_conf.resource.cluster_id
+        raise ValueError(
+            f"Subvolume issue for cluster '{cluster_id}' with error : {str(e)}. "
+            "This may indicate that one or more shares reference a subvolume that "
+            "no longer exists. Please verify share configurations and remove or "
+            "update any shares with invalid subvolume references."
+        ) from e
     centry = store[external.config_key(cluster_conf.resource.cluster_id)]
     centry.set(cconfig)
     cluster_conf.change_group.cache_updated_entry(centry)
