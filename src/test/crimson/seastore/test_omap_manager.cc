@@ -25,6 +25,19 @@ namespace {
 
 const int STR_LEN = 50;
 
+// Depth-driven tests: under ASan a larger value lowers leaf fanout, reaching
+// the same tree depth (same split/merge paths) with far fewer keys. Keep it
+// < leaf capacity()/4 (16KB) to avoid value_too_large (exceeds_max_kv_limit).
+#ifndef __has_feature
+#define __has_feature(x) 0
+#endif
+#if __has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
+static constexpr bool omap_under_asan = true;
+#else
+static constexpr bool omap_under_asan = false;
+#endif
+static constexpr int tree_growth_value_size = omap_under_asan ? 8192 : 512;
+
 std::string rand_name(const int len)
 {
   std::string ret;
@@ -572,7 +585,7 @@ TEST_P(omap_manager_test_t, innernode_split_merge_balancing)
       for (int i = 0; i < 64; i++) {
         // Use large value size to accelerate tree growth.
         auto key = rand_name(STR_LEN);
-        set_key(omap_root, *t, key, rand_buffer(512));
+        set_key(omap_root, *t, key, rand_buffer(tree_growth_value_size));
       }
       submit_transaction(std::move(t));
     }
@@ -586,7 +599,7 @@ TEST_P(omap_manager_test_t, innernode_split_merge_balancing)
     for (unsigned i = 0; i < keys_for_leaf_split; ++i) {
       // Use large value size to accelerate tree growth.
       auto key = rand_name(STR_LEN);
-      set_key(omap_root, *t, key, rand_buffer(512));
+      set_key(omap_root, *t, key, rand_buffer(tree_growth_value_size));
       if (i % 64 == 0) {
         submit_transaction(std::move(t));
         t = create_mutate_transaction();
@@ -613,7 +626,9 @@ TEST_P(omap_manager_test_t, innernode_split_merge_balancing)
                    final_count);
     // Bound derivation: 64 KiB OMAP_LEAF_BLOCK_SIZE / ~580 B entry size (50 B key + 512 B value
     // + overhead) => healthy post-merge leaves hold >=55 entries, so count is <= size / 55 + C.
-    EXPECT_LE(final_count, test_omap_mappings.size() / 40 + 20U);
+    // Scale with the value size; at 512 B this is the original size / 40.
+    const unsigned entries_per_leaf = std::max(40 * 512 / tree_growth_value_size, 1);
+    EXPECT_LE(final_count, test_omap_mappings.size() / entries_per_leaf + 20U);
 
     logger().debug("== clearing entire tree and verifying no leaks");
     auto t_clear = create_mutate_transaction();
@@ -728,7 +743,7 @@ TEST_P(omap_manager_test_t, omap_iterate)
         for (unsigned j = 0; j < 64; ++j) {
 	  // Use large value size to accelerate tree growth.
           auto key = rand_name(STR_LEN);
-          set_key(omap_root, *t, key, rand_buffer(512));
+          set_key(omap_root, *t, key, rand_buffer(tree_growth_value_size));
           if (i == 3) {
             lower_key = key;
           }
@@ -793,7 +808,7 @@ TEST_P(omap_manager_test_t, list)
           // Use large value size to accelerate tree growth.
           auto key = rand_name(STR_LEN);
           generated_keys.push_back(key);
-          set_key(omap_root, *t, key, rand_buffer(512));
+          set_key(omap_root, *t, key, rand_buffer(tree_growth_value_size));
         }
         submit_transaction(std::move(t));
       } while (omap_root.depth < target_depth);
@@ -924,7 +939,7 @@ TEST_P(omap_manager_test_t, monotonic_inc)
       auto t = create_mutate_transaction();
       for (int i = 0; i < 128; i++) {
         auto key = monotonic_inc();
-        auto val = rand_buffer(512);
+        auto val = rand_buffer(tree_growth_value_size);
         set_key(omap_root, *t, key, val);
       }
       submit_transaction(std::move(t));
