@@ -8,6 +8,7 @@ etc/bash_completion.d/rbd
 {usr/,}lib/systemd/system/rbdmap.service
 usr/bin/ceph
 usr/bin/ceph-authtool
+usr/bin/ceph-lockstat
 usr/bin/ceph-conf
 usr/bin/ceph-dencoder
 usr/bin/ceph-rbdnamer

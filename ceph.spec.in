@@ -2121,6 +2121,7 @@ exit 0
 %license %{_docdir}/ceph/COPYING
 %{_bindir}/ceph
 %{_bindir}/ceph-authtool
+%{_bindir}/ceph-lockstat
 %{_bindir}/ceph-conf
 %{_bindir}/ceph-dencoder
 %{_bindir}/ceph-rbdnamer
