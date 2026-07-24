@@ -16,6 +16,7 @@ import logging
 
 import pytest
 from unittest import mock
+from typing import Tuple
 
 from ceph.deployment.service_spec import RGWSpec
 
@@ -35,6 +36,47 @@ from .pem_fixtures import (
     multi_block_no_cert_no_key,
     encrypted_fullchain,
 )
+
+
+def _generate_ec_cert_key(hostname: str = 'rgw.ec-real-validation.test') -> Tuple[str, str]:
+    from datetime import datetime, timedelta
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.x509.oid import NameOID
+
+    key = ec.generate_private_key(ec.SECP256R1())
+
+    subject = issuer = x509.Name([
+        x509.NameAttribute(NameOID.COMMON_NAME, hostname),
+    ])
+
+    now = datetime.utcnow()
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(issuer)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(days=1))
+        .not_valid_after(now + timedelta(days=365))
+        .add_extension(
+            x509.SubjectAlternativeName([x509.DNSName(hostname)]),
+            critical=False,
+        )
+        .sign(key, hashes.SHA256())
+    )
+
+    cert_pem = cert.public_bytes(serialization.Encoding.PEM).decode('utf-8')
+    key_pem = key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode('utf-8')
+
+    assert '-----BEGIN EC PRIVATE KEY-----' in key_pem
+    return cert_pem, key_pem
 
 
 # ===========================================================================
@@ -887,3 +929,54 @@ class TestGetCertificatesFromSpecFullchain:
             key_name='rgw_ssl_key',
         )
         assert result == EMPTY_TLS_CREDENTIALS
+
+    @mock.patch('cephadm.module.CephadmOrchestrator.set_store')
+    def test_ec_fullchain_via_cli_uses_real_validation(
+        self, _set_store, cephadm_module
+    ):
+        """EC fullchain PEM must pass the real cert/key validation path.
+
+        This specifically covers the pyOpenSSL PKey.check() regression:
+        PKey.check() is RSA-only, so verify_tls() must not call it for EC keys.
+        """
+        cert, key = _generate_ec_cert_key()
+        blob = key + cert
+
+        with mock.patch.object(
+            cephadm_module.cert_mgr,
+            'check_certificate_state',
+            wraps=cephadm_module.cert_mgr.check_certificate_state,
+        ) as mock_check:
+            result = cephadm_module.cert_store_set_pair(
+                cert=blob,
+                key='',
+                consumer='rgw',
+                service_name='rgw.ec-real-validation',
+            )
+
+            assert wait(cephadm_module, result) == 'Certificate/key pair set correctly'
+            mock_check.assert_called_once()
+
+        stored_cert = cephadm_module.cert_mgr.get_cert(
+            'rgw_ssl_cert',
+            service_name='rgw.ec-real-validation',
+        )
+        stored_key = cephadm_module.cert_mgr.get_key(
+            'rgw_ssl_key',
+            service_name='rgw.ec-real-validation',
+        )
+
+        assert stored_cert == cert
+        assert stored_key == key
+        assert '-----BEGIN EC PRIVATE KEY-----' not in stored_cert
+        assert '-----BEGIN CERTIFICATE-----' not in stored_key
+
+        cert_info = cephadm_module.cert_mgr.check_certificate_state(
+            'rgw_ssl_cert',
+            'rgw.ec-real-validation',
+            stored_cert,
+            stored_key,
+        )
+
+        assert cert_info.is_valid, cert_info.error_info
+        assert not cert_info.is_close_to_expiration
