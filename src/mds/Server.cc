@@ -306,6 +306,7 @@ Server::Server(MDSRank *m, MetricsHandler *metrics_handler) :
   bal_fragment_size_max = g_conf().get_val<int64_t>("mds_bal_fragment_size_max");
   dispatch_client_request_delay = g_conf().get_val<std::chrono::milliseconds>("mds_server_dispatch_client_request_delay");
   dispatch_killpoint_random = g_conf().get_val<double>("mds_server_dispatch_killpoint_random");
+  kill_ino_prealloc_at = static_cast<enum ino_prealloc_killpoint>(g_conf().get_val<int64_t>("mds_kill_ino_prealloc_at"));
   supported_features = feature_bitset_t(CEPHFS_FEATURES_MDS_SUPPORTED);
   supported_metric_spec = feature_bitset_t(CEPHFS_METRIC_FEATURES_ALL);
 }
@@ -348,6 +349,7 @@ void Server::dispatch(const cref_t<Message> &m)
       dout(5) << "dispatch request in up:reconnect: " << *req << dendl;
       if (req->is_replay() || req->is_async()) {
 	dout(3) << "queuing replayed op" << dendl;
+        //ceph_assert(kill_ino_prealloc_at != ino_prealloc_killpoint::QUEUE_REPLAY);
 	queue_replay = true;
 	if (req->head.ino &&
 	    !session->have_completed_request(req->get_reqid().tid, nullptr)) {
@@ -1461,6 +1463,9 @@ void Server::handle_conf_change(const std::set<std::string>& changed) {
     dispatch_killpoint_random = g_conf().get_val<double>("mds_server_dispatch_killpoint_random");
     dout(20) << __func__ << " mds_server_dispatch_killpoint_random now "
             << dispatch_killpoint_random << dendl;
+  }
+  if (changed.count("mds_kill_ino_prealloc_at")) {
+    kill_ino_prealloc_at = static_cast<enum ino_prealloc_killpoint>(g_conf().get_val<int64_t>("mds_kill_ino_prealloc_at"));
   }
 }
 
@@ -2589,6 +2594,7 @@ void Server::trim_completed_request_list(ceph_tid_t tid, Session *session)
 
 void Server::set_reply_extra_bl(const cref_t<MClientRequest> &req, inodeno_t ino, bufferlist& extra_bl)
 {
+  ceph_assert(kill_ino_prealloc_at != ino_prealloc_killpoint::REPLY_EXTRA_BL);
   Session *session = mds->get_session(req);
 
   if (mds_allow_async_dirops && session->info.has_feature(CEPHFS_FEATURE_DELEG_INO)) {
@@ -2601,7 +2607,7 @@ void Server::set_reply_extra_bl(const cref_t<MClientRequest> &req, inodeno_t ino
       // Try to delegate some prealloc_inos to the client, if it's down to half the max
       unsigned frac = 100 / delegate_inos_pct;
       if (session->delegated_inos.size() < (unsigned)g_conf()->mds_client_prealloc_inos / frac / 2)
-	session->delegate_inos(g_conf()->mds_client_prealloc_inos / frac, ocresp.delegated_inos);
+	session->delegate_inos(g_conf()->mds_client_prealloc_inos / frac, ocresp.delegated_inos, kill_ino_prealloc_at);
     }
 
     encode(ocresp, extra_bl);
@@ -2615,6 +2621,7 @@ void Server::set_reply_extra_bl(const cref_t<MClientRequest> &req, inodeno_t ino
 void Server::handle_client_request(const cref_t<MClientRequest> &req)
 {
   dout(4) << "handle_client_request " << *req << dendl;
+  ceph_assert(kill_ino_prealloc_at != ino_prealloc_killpoint::HANDLE_CLIENT_REQUEST);
 
   if (mds->logger)
     mds->logger->inc(l_mds_request);
@@ -2723,6 +2730,7 @@ void Server::handle_client_request(const cref_t<MClientRequest> &req)
   }
 
   dispatch_client_request(mdr);
+  ceph_assert(kill_ino_prealloc_at != ino_prealloc_killpoint::DISPATCH_CLIENT_REQUEST);
   return;
 }
 
@@ -3596,6 +3604,7 @@ CDentry* Server::prepare_stray_dentry(const MDRequestRef& mdr, CInode *in)
 CInode* Server::prepare_new_inode(const MDRequestRef& mdr, CDir *dir, inodeno_t useino, unsigned mode,
 				  const file_layout_t *layout)
 {
+  ceph_assert(kill_ino_prealloc_at != ino_prealloc_killpoint::PREPARE_NEW_INODE);
   CInode *in = new CInode(mdcache);
   auto _inode = in->_get_inode();
   

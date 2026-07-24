@@ -1033,4 +1033,13 @@ struct SubvolumeMetric {
     void dump(Formatter *f) const;
     friend std::ostream& operator<<(std::ostream& os, const SubvolumeMetric &m);
 };
+
+enum ino_prealloc_killpoint : std::int8_t {
+  REPLY_EXTRA_BL = 1,
+  HANDLE_CLIENT_REQUEST,
+  DISPATCH_CLIENT_REQUEST,
+  PREPARE_NEW_INODE,
+  //QUEUE_REPLAY,
+};
+
 #endif

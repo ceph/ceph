@@ -640,6 +640,8 @@ private:
 
   // record laggy clients due to laggy OSDs
   std::set<client_t> laggy_clients;
+
+  enum ino_prealloc_killpoint kill_ino_prealloc_at;
 };
 
 static inline constexpr auto operator|(Server::RecallFlags a, Server::RecallFlags b) {
