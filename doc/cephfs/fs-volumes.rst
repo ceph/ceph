@@ -1297,6 +1297,8 @@ This enables distributed subtree partitioning policy for the "csi" subvolume
 group. This will cause every subvolume within the group to be automatically
 pinned to one of the available ranks on the file system.
 
+.. note:: Setting pins on the default group i.e. ``_nogroup`` is allowed.
+
 Normalization and Case Sensitivity
 ----------------------------------
 
