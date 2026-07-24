@@ -550,26 +550,25 @@ option(WITH_CATCH2 "Enable Catch2 unit tests" ON)
 option(WITH_SYSTEM_CATCH2 "Enable Catch2 unit tests (require system packages)" OFF)
 
 if(WITH_CATCH2)
-  # Save pre-existing definitions (if any):
-  set(ORIG_CPM_LOCAL_PACKAGES_ONLY ${CPM_USE_LOCAL_PACKAGES_ONLY})
-
-    if(WITH_SYSTEM_CATCH2)
-   set(CPM_LOCAL_PACKAGES_ONLY ON)
+  if(WITH_SYSTEM_CATCH2)
+    find_package(Catch2 3 REQUIRED)
+  else()
+    include(FetchContent)
+    FetchContent_Declare(
+      Catch2
+      GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+      GIT_TAG        v3.8.1
+      GIT_SHALLOW    TRUE)
+    FetchContent_MakeAvailable(Catch2)
   endif()
 
-  include(${CMAKE_MODULE_PATH}/CPM.cmake)
-  CPMAddPackage("gh:catchorg/Catch2@3.8.1")
-
-  # Restore the original CPM settings in case someone else wants to use the module:
-  set(CPM_USE_LOCAL_PACKAGES_ONLY, ${ORIG_CPM_USE_LOCAL_PACKAGES_ONLY})
-
-  # CPM skips the fetch silently if downloads are disabled,
-  # e.g. with FETCHCONTENT_FULLY_DISCONNECTED=ON on deb builds
+  # FetchContent_MakeAvailable() leaves the target undefined instead of failing
+  # when the fetch is skipped (FETCHCONTENT_FULLY_DISCONNECTED), so fail here.
   if(NOT TARGET Catch2::Catch2WithMain)
-    message(WARNING "Catch2 unavailable, disabling Catch2 tests")
-    set(WITH_CATCH2 OFF)
-  else()
-    message("-- Enabled Catch2 support")
+    message(FATAL_ERROR
+      "Catch2 is required but could not be made available; with "
+      "FETCHCONTENT_FULLY_DISCONNECTED set, provide a populated "
+      "FETCHCONTENT_SOURCE_DIR_Catch2 or use -DWITH_SYSTEM_CATCH2=ON")
   endif()
 endif()
 
