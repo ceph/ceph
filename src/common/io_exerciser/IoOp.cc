@@ -24,6 +24,9 @@ using DoubleFailedWriteOp = ceph::io_exerciser::DoubleFailedWriteOp;
 using TripleFailedWriteOp = ceph::io_exerciser::TripleFailedWriteOp;
 using SingleAppendOp = ceph::io_exerciser::SingleAppendOp;
 using TruncateOp = ceph::io_exerciser::TruncateOp;
+using SingleTruncateWriteOp = ceph::io_exerciser::SingleTruncateWriteOp;
+using DoubleTruncateWriteOp = ceph::io_exerciser::DoubleTruncateWriteOp;
+using TripleTruncateWriteOp = ceph::io_exerciser::TripleTruncateWriteOp;
 
 namespace {
 std::string value_to_string(uint64_t v) {
@@ -286,6 +289,68 @@ std::unique_ptr<TruncateOp> TruncateOp::generate(uint64_t size) {
 std::string TruncateOp::to_string(uint64_t block_size) const {
   return "Truncate (size=" + value_to_string(size * block_size) + ")";
 }
+
+template <OpType opType, int N>
+ceph::io_exerciser::TruncateWriteOp<opType, N>::TruncateWriteOp(
+    uint64_t size, std::array<uint64_t, N>&& offset,
+    std::array<uint64_t, N>&& length)
+    : TestOp<opType>(), size(size), offset(offset), length(length) {}
+
+template <OpType opType, int N>
+std::string ceph::io_exerciser::TruncateWriteOp<opType, N>::to_string(
+    uint64_t block_size) const {
+  std::string result = "TruncateWrite (size=" + value_to_string(size * block_size);
+  for (int i = 0; i < N; i++) {
+    result += ", offset" + (N > 1 ? std::to_string(i + 1) : "") + "=" +
+              value_to_string(offset[i] * block_size) + ", length" +
+              (N > 1 ? std::to_string(i + 1) : "") + "=" +
+              value_to_string(length[i] * block_size);
+  }
+  result += ")";
+  return result;
+}
+
+SingleTruncateWriteOp::SingleTruncateWriteOp(uint64_t size, uint64_t offset,
+                                             uint64_t length)
+    : TruncateWriteOp<OpType::TruncateWrite, 1>(size, {offset}, {length}) {}
+
+std::unique_ptr<SingleTruncateWriteOp> SingleTruncateWriteOp::generate(
+    uint64_t size, uint64_t offset, uint64_t length) {
+  return std::make_unique<SingleTruncateWriteOp>(size, offset, length);
+}
+
+DoubleTruncateWriteOp::DoubleTruncateWriteOp(uint64_t size, uint64_t offset1,
+                                             uint64_t length1, uint64_t offset2,
+                                             uint64_t length2)
+    : TruncateWriteOp<OpType::TruncateWrite2, 2>(size, {offset1, offset2},
+                                                  {length1, length2}) {}
+
+std::unique_ptr<DoubleTruncateWriteOp> DoubleTruncateWriteOp::generate(
+    uint64_t size, uint64_t offset1, uint64_t length1, uint64_t offset2,
+    uint64_t length2) {
+  return std::make_unique<DoubleTruncateWriteOp>(size, offset1, length1,
+                                                 offset2, length2);
+}
+
+TripleTruncateWriteOp::TripleTruncateWriteOp(uint64_t size, uint64_t offset1,
+                                             uint64_t length1, uint64_t offset2,
+                                             uint64_t length2, uint64_t offset3,
+                                             uint64_t length3)
+    : TruncateWriteOp<OpType::TruncateWrite3, 3>(
+          size, {offset1, offset2, offset3}, {length1, length2, length3}) {}
+
+std::unique_ptr<TripleTruncateWriteOp> TripleTruncateWriteOp::generate(
+    uint64_t size, uint64_t offset1, uint64_t length1, uint64_t offset2,
+    uint64_t length2, uint64_t offset3, uint64_t length3) {
+  return std::make_unique<TripleTruncateWriteOp>(size, offset1, length1,
+                                                 offset2, length2, offset3,
+                                                 length3);
+}
+
+// Explicit template instantiations
+template class ceph::io_exerciser::TruncateWriteOp<OpType::TruncateWrite, 1>;
+template class ceph::io_exerciser::TruncateWriteOp<OpType::TruncateWrite2, 2>;
+template class ceph::io_exerciser::TruncateWriteOp<OpType::TruncateWrite3, 3>;
 
 SingleFailedWriteOp::SingleFailedWriteOp(uint64_t offset, uint64_t length)
     : ReadWriteOp<OpType::FailedWrite, 1>({offset}, {length}) {}

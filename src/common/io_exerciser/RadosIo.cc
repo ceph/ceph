@@ -236,6 +236,13 @@ void RadosIo::applyIoOp(IoOp& op) {
     case OpType::FailedWrite3:
       applyReadWriteOp(op);
       break;
+    case OpType::TruncateWrite:
+      [[fallthrough]];
+    case OpType::TruncateWrite2:
+      [[fallthrough]];
+    case OpType::TruncateWrite3:
+      applyTruncateWriteOp(op);
+      break;
     case OpType::InjectReadError:
       [[fallthrough]];
     case OpType::InjectWriteError:
@@ -404,6 +411,59 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
     default:
       ceph_abort_msg(
           fmt::format("Unsupported Read/Write operation ({})", op.getOpType()));
+      break;
+  }
+}
+
+void RadosIo::applyTruncateWriteOp(IoOp& op) {
+  auto applyTruncateWriteOp = [this]<OpType opType, int N>(
+                                  TruncateWriteOp<opType, N> truncWriteOp) {
+    auto op_info =
+        std::make_shared<AsyncOpInfo<N>>(truncWriteOp.offset, truncWriteOp.length);
+    librados::ObjectWriteOperation wop;
+    
+    // First, add the truncate operation
+    wop.truncate(truncWriteOp.size * block_size);
+    
+    // Then, add the write operations
+    for (int i = 0; i < N; i++) {
+      op_info->bufferlist[i] =
+          db->generate_data(truncWriteOp.offset[i], truncWriteOp.length[i]);
+      wop.write(truncWriteOp.offset[i] * block_size,
+                op_info->bufferlist[i]);
+    }
+    
+    auto write_cb = [this](boost::system::error_code ec, version_t ver) {
+      ceph_assert(ec == boost::system::errc::success);
+      finish_io();
+    };
+    librados::async_operate(asio.get_executor(), io, primary_oid,
+                            std::move(wop), 0, nullptr, write_cb);
+    num_io++;
+  };
+
+  switch (op.getOpType()) {
+    case OpType::TruncateWrite: {
+      start_io();
+      SingleTruncateWriteOp& truncWriteOp = static_cast<SingleTruncateWriteOp&>(op);
+      applyTruncateWriteOp(truncWriteOp);
+      break;
+    }
+    case OpType::TruncateWrite2: {
+      start_io();
+      DoubleTruncateWriteOp& truncWriteOp = static_cast<DoubleTruncateWriteOp&>(op);
+      applyTruncateWriteOp(truncWriteOp);
+      break;
+    }
+    case OpType::TruncateWrite3: {
+      start_io();
+      TripleTruncateWriteOp& truncWriteOp = static_cast<TripleTruncateWriteOp&>(op);
+      applyTruncateWriteOp(truncWriteOp);
+      break;
+    }
+    default:
+      ceph_abort_msg(
+          fmt::format("Unsupported TruncateWrite operation ({})", op.getOpType()));
       break;
   }
 }
