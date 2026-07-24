@@ -10,6 +10,8 @@
 #define CEPH_COMMON_CRC32C_RISCV_H
 
 #include <stdint.h>
+#include "acconfig.h"
+#include "arch/riscv.h"
 
 #ifdef __cplusplus
 extern "C" {
