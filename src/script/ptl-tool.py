@@ -51,6 +51,7 @@ import tempfile
 import textwrap
 import threading
 import webbrowser
+from urllib.parse import quote
 
 MISSING_DEPS = []
 
@@ -402,6 +403,108 @@ def get_pr_tracker_string(session, pr, response=None):
     title = response["title"].strip().replace('|', '&#124;')
     pr_link = f'"PR #{pr}":{response["html_url"]}'
     return f'| {pr_link} | {author} | {labels_str} | {title} |'
+
+def audit_tracker_and_relabel(session, redmine_issue, default_label, dry_run=False):
+    """
+    Interactive helper for the --qe-label ticket-decision prompt's 'a'
+    option: confirm the matched tracker is actually QA Approved, then
+    offer to swap its PR label for a caller-chosen set of "done" labels
+    (TESTED + ready-to-merge by default) on every open PR still carrying
+    it. Mirrors the already-verified relabel_tested()/sync_approved()
+    logic in the ptl-tool-helper skill's check-wip-labels.sh, done here
+    natively so ptl-tool.py doesn't depend on that separate script.
+
+    Returns one of:
+      'not_approved' -- ticket isn't QA Approved yet, caller should
+                        re-prompt without exiting.
+      'cancelled'    -- user backed out (or there was nothing to do)
+                        before applying anything, caller should re-prompt.
+      'completed'    -- labels were actually changed (or would have been,
+                        under --dry-run), caller should exit.
+
+    Calls sys.exit(1) instead of returning if every PR in the batch failed
+    to update -- 'completed' must never be returned for a run that changed
+    nothing, since the caller treats it as unconditional success.
+    """
+    status_name = redmine_issue.status.name
+    if status_name != "QA Approved":
+        print(f"Tracker #{redmine_issue.id} is not QA Approved yet (current status: '{status_name}').")
+        print("Nothing to relabel until QA approves this ticket.")
+        return 'not_approved'
+
+    label_in = input(f"Label to relabel [{default_label}] (Enter to accept, type a different label, or 'q' to cancel): ").strip()
+    if label_in.lower() == 'q':
+        print("Audit cancelled.")
+        return 'cancelled'
+    label = label_in or default_label
+
+    print(f"Fetching open {BASE_PROJECT}/{BASE_REPO} PRs labeled '{label}'...")
+    endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues"
+    prs = []
+    for page in get(session, endpoint, params={'labels': label, 'state': 'open'}):
+        for item in page:
+            if 'pull_request' in item:
+                prs.append((item['number'], item['title']))
+
+    if not prs:
+        print(f"No open PRs found with label '{label}' -- nothing to do.")
+        return 'cancelled'
+
+    print("\nPRs to update:")
+    for num, title in prs:
+        # Titles are arbitrary contributor-authored text; normalize to ASCII
+        # so this never crashes under a non-UTF-8 stdout (e.g. LANG=en_US
+        # over a non-interactive SSH session -- the same bug class already
+        # hit and fixed for this function's own UI strings).
+        safe_title = title.encode('ascii', 'replace').decode('ascii')
+        print(f"  #{num}  {safe_title}")
+
+    targets_in = input("Labels to apply instead [TESTED,ready-to-merge] (comma-separated, or 'q' to cancel): ").strip()
+    if targets_in.lower() == 'q':
+        print("Audit cancelled.")
+        return 'cancelled'
+    target_labels = [t.strip() for t in targets_in.split(',') if t.strip()] if targets_in else ["TESTED", "ready-to-merge"]
+    if not target_labels:
+        print("No target labels given (input was empty after parsing) -- nothing to apply. Audit cancelled.")
+        return 'cancelled'
+
+    print(f"\nPlan: remove '{label}', add {', '.join(target_labels)} on {len(prs)} PR(s) above.")
+    if dry_run:
+        print("[DRY RUN] Would apply the above -- no labels changed.")
+        return 'completed'
+
+    confirm = input("Apply this? [y/N] ").strip().lower()
+    if confirm != 'y':
+        print("Audit cancelled -- no labels changed.")
+        return 'cancelled'
+
+    print("Applying label changes...")
+    updated = 0
+    for num, title in prs:
+        # Add the new labels FIRST, remove the old one second: if the POST
+        # fails, the PR still has its old label (safe, retry-able). Doing it
+        # the other way round risks a PR left with neither label if the POST
+        # fails after a successful DELETE.
+        add_url = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{num}/labels"
+        resp = session.post(add_url, auth=GithubBearerAuth(), json={"labels": target_labels})
+        if resp.status_code != 200:
+            log.error(f"Failed to add labels to #{num}: {resp.status_code} {resp.text}")
+            continue
+        updated += 1
+        del_url = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{num}/labels/{quote(label, safe='')}"
+        resp = session.delete(del_url, auth=GithubBearerAuth())
+        if resp.status_code not in (200, 404):
+            log.error(f"Added new labels to #{num} but failed to remove '{label}': {resp.status_code} {resp.text}")
+            print(f"  PARTIAL #{num}: new labels added, old label '{label}' still present -- see error above")
+        else:
+            print(f"  OK #{num} updated")
+
+    if updated == 0:
+        log.error(f"All {len(prs)} PR(s) failed to update -- no labels were changed anywhere.")
+        sys.exit(1)
+
+    print(f"\nDone. Re-run ptl-tool.py if you want to start a new round for tracker #{redmine_issue.id} or a different label.")
+    return 'completed'
 
 def verify_redmine_auth(R):
     """
@@ -2066,7 +2169,7 @@ def build_branch(args):
             print(f"\nFound existing open QA ticket: #{t.id} - {t.subject}")
             print(f"Link: {t_url}")
             while True:
-                ans = input("Do you want to update this existing QA ticket? [y/n/o/q] (y=update existing, n=create new, o=open in browser, q=quit): ").strip().lower()
+                ans = input("Do you want to update this existing QA ticket? [y/n/o/a/q] (y=update existing, n=create new, o=open in browser, a=audit tracker & relabel tested PRs, q=quit): ").strip().lower()
                 if ans == 'y':
                     args.update_qa = t.id
                     log.info(f"Will update existing QA ticket #{t.id}.")
@@ -2078,13 +2181,19 @@ def build_branch(args):
                 elif ans == 'o':
                     open_in_browser([t_url])
                     print(f"Opened {t_url} in browser.")
+                elif ans == 'a':
+                    result = audit_tracker_and_relabel(session, t, args.qe_label, dry_run=args.dry_run)
+                    if result == 'completed':
+                        log.info("Exiting script.")
+                        sys.exit(0)
+                    # 'not_approved' or 'cancelled' -- fall through, re-prompt
                 elif ans == 'q':
                     log.info("Exiting script.")
                     sys.exit(0)
                 elif ans == '':
                     continue
                 else:
-                    print("Invalid choice. Please enter y, n, o, or q.")
+                    print("Invalid choice. Please enter y, n, o, a, or q.")
         else:
             log.info("No open QA tickets found for this label. Will create a new QA ticket.")
             args.create_qa = True
