@@ -642,10 +642,10 @@ def main():
     if args.skip_clone and args.ref_repo != CEPH_UPSTREAM_REMOTE_URL:
         parser.error("--ref-repo cannot be set if --skip-clone is used.")
 
-    if args.ref_commit_sha and not args.ref_branch:
+    if getattr(args, "ref_commit_sha", None) and not args.ref_branch:
         parser.error("--ref-commit-sha needs --ref-branch to be set.")
 
-    if args.cmp_commit_sha and not args.cmp_branch:
+    if getattr(args, "cmp_commit_sha", None) and not args.cmp_branch:
         parser.error("--cmp-commit-sha needs --cmp-branch to be set.")
 
     if args.mode == "diff-branch":
