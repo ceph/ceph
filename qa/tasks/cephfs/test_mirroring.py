@@ -1475,6 +1475,38 @@ class TestMirroring(CephFSTestCase):
 
         self._teardown_mirroring(dir_path, peer_spec)
 
+    def test_checkpoint_remove_during_sync(self):
+        """Removing a checkpoint during sync must not recreate it on completion."""
+        dir_path = '/cp_remove_sync'
+        snap_name = 'snap0'
+        peer_spec = "client.mirror_remote@ceph"
+
+        self._setup_mirrored_directory(dir_path, mount_b=True)
+        dir_name = dir_path.lstrip('/')
+        self.mount_a.create_n_files(f'{dir_name}/file', 10000, sync=True)
+        for i in range(20):
+            self.mount_a.write_n_mb(os.path.join(dir_name, f'large_file.{i}'), 100)
+        self._add_checkpoint_snapshot(dir_path, snap_name)
+        self.check_checkpoint_status(self.primary_fs_name, dir_path, snap_name, 'created')
+
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec,
+                      self.secondary_fs_name)
+        self.check_peer_snap_in_progress(self.primary_fs_name, self.primary_fs_id,
+                                         peer_spec, dir_path, snap_name)
+
+        self.checkpoint_remove(self.primary_fs_name, dir_path, snap_name)
+        res = self.checkpoint_list(self.primary_fs_name, dir_path)
+        self.assertEqual(res['checkpoints'], [])
+
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, dir_path, snap_name, 1)
+        self.verify_snapshot(dir_name, snap_name)
+
+        res = self.checkpoint_list(self.primary_fs_name, dir_path)
+        self.assertEqual(res['checkpoints'], [])
+
+        self._teardown_mirroring(dir_path, peer_spec)
+
     def test_add_relative_directory_path(self):
         self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
         try:

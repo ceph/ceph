@@ -13957,6 +13957,13 @@ int Client::get_snap_info(const char *path, const UserPerm &perms, SnapInfo *sna
     return -EINVAL;
   }
 
+  // Snapshot metadata is mutable after creation (PR #66723), so a cached inode
+  // copy may be stale if another client added, updated, or removed metadata
+  // keys.  Refresh from the MDS before returning metadata.
+  if (int rc = _getattr(in, CEPH_CAP_AUTH_SHARED, perms, true); rc < 0) {
+    return rc;
+  }
+
   snap_info->id = in->snapid;
   snap_info->metadata = in->snap_metadata;
   return 0;
@@ -14296,6 +14303,17 @@ int Client::do_snap_md_op(const char* path, const string& md_key,
   ldout(cct, 10) << __func__ << ": making request" << dendl;
   int res = make_request(req, perms, &wdr.target);
   ldout(cct, 10) << __func__ << ": result is " << res << dendl;
+
+  if (res >= 0) {
+    // Snapshot metadata is mutable after creation (PR #66723); keep the
+    // writing client's inode cache consistent with the MDS.
+    auto &md = wdr.target->snap_metadata;
+    if (op_flag == CEPH_SNAP_MD_OP_REMOVE) {
+      md.erase(md_key);
+    } else {
+      md[md_key] = md_val;
+    }
+  }
 
   trim_cache();
 
