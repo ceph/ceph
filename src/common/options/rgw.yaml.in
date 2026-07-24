@@ -1000,7 +1000,11 @@ options:
 - name: rgw_keystone_accepted_reader_roles
   type: str
   level: advanced
-  desc: List of roles that can only be used for reads (Keystone).
+  desc: >
+    List of roles granting implicit read access (Keystone). Users with
+    a role listed here AND an admin role get system-scope read (bypassing
+    ACLs). Users with only a reader role get project-scope read (read
+    access within their Keystone project).
   services:
   - rgw
   with_legacy: true
