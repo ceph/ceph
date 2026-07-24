@@ -2426,6 +2426,9 @@ fi
 %files mgr-cephadm
 %{_datadir}/ceph/mgr/cephadm
 
+%files mgr-ceph-secrets
+%{_datadir}/ceph/mgr/ceph_secrets
+
 %ceph_mgr_module_scripts mgr-cephadm
 
 %files mgr-cli-api
