@@ -1961,10 +1961,10 @@ class TestBootstrap(object):
         funkypatch.patch('cephadmlib.systemd.call')
 
         cmd = self._get_cmd()
-        with bootstrap_test_ctx(cmd) as ctx:
-            msg = r'must specify --mon-ip or --mon-addrv'
-            with pytest.raises(_cephadm.Error, match=msg):
-                _cephadm.command_bootstrap(ctx)
+        with pytest.raises(SystemExit) as exc_info:
+            with bootstrap_test_ctx(cmd):
+                pass
+        assert exc_info.value.code == 2
 
     def test_skip_mon_network(self, cephadm_fs, funkypatch):
         funkypatch.patch('cephadmlib.systemd.call')
@@ -2145,6 +2145,248 @@ class TestBootstrap(object):
         with bootstrap_test_ctx(cmd, hostname=hostname) as ctx:
             retval = _cephadm.command_bootstrap(ctx)
             assert retval == 0
+
+    @pytest.mark.parametrize('mon_net, list_networks, result',
+        [
+            # IPv4 - valid CIDR networks
+            (
+                '192.168.1.0/24',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                True,
+            ),
+            (
+                '192.168.1.0/25',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                True,
+            ),
+            (
+                '192.168.0.0/16',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                True,
+            ),
+            # IPv4 - invalid or no-match cases
+            (
+                '10.0.0.0/8',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                False,
+            ),
+            (
+                '192.168.2.0/24',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                False,
+            ),
+            # IPv6 - valid CIDR networks
+            (
+                'fd00::/64',
+                {'fd00::/64': {'eth0': ['fd00::1']}},
+                True,
+            ),
+            (
+                'fd00::/63',
+                {'fd00::/64': {'eth0': ['fd00::1']}},
+                True,
+            ),
+            (
+                'fd00::/48',
+                {'fd00::/64': {'eth0': ['fd00::1']}},
+                True,
+            ),
+            (
+                'fe80::/10',
+                {'fe80::/10': {'eth0': ['fe80::1']}},
+                True,
+            ),
+            # IPv6 - invalid or no-match cases
+            (
+                'fd01::/64',
+                {'fd00::/64': {'eth0': ['fd00::1']}},
+                False,
+            ),
+            (
+                '::ffff:0:0/96',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                False,
+            ),
+        ])
+    def test_mon_net(self, mon_net, list_networks, result, cephadm_fs, funkypatch):
+        funkypatch.patch('cephadmlib.systemd.call')
+
+        cmd = self._get_cmd('--mon-net', mon_net)
+        if not result:
+            with bootstrap_test_ctx(cmd, list_networks=list_networks) as ctx:
+                msg = r'No local IP found in network'
+                with pytest.raises(_cephadm.Error, match=msg):
+                    _cephadm.command_bootstrap(ctx)
+        else:
+            with bootstrap_test_ctx(cmd, list_networks=list_networks) as ctx:
+                retval = _cephadm.command_bootstrap(ctx)
+                assert retval == 0
+
+    @pytest.mark.parametrize('invalid_cidr',
+        [
+            'invalid-cidr',           # No slashes, random text
+            '192.168.1.0/33',         # Invalid prefix length (> 32 for IPv4)
+            '192.168.1.0/256',        # Completely invalid prefix
+            '192.168.1.0/-1',         # Negative prefix
+            '256.256.256.256/24',     # Invalid IPv4 octets
+            '192.168.1/24',           # Incomplete IPv4
+            'fd00::/129',             # Invalid prefix length (> 128 for IPv6)
+            'gggg::/64',              # Invalid hex in IPv6
+            '192.168.1.0/',           # Missing prefix length
+            '/24',                    # Missing IP address
+            'not.a.network/24',       # Invalid format entirely
+            '192.168.1.0/24/32',      # Too many slashes
+        ])
+    def test_mon_net_invalid_cidr(self, invalid_cidr, cephadm_fs, funkypatch):
+        """Test --mon-net with various invalid CIDR formats"""
+        funkypatch.patch('cephadmlib.systemd.call')
+
+        cmd = self._get_cmd('--mon-net', invalid_cidr)
+        with bootstrap_test_ctx(cmd) as ctx:
+            msg = r'Invalid network CIDR'
+            with pytest.raises(_cephadm.Error, match=msg):
+                _cephadm.command_bootstrap(ctx)
+
+    def test_mon_net_mutually_exclusive_with_mon_ip(self, cephadm_fs, funkypatch):
+        """Test that --mon-net and --mon-ip are mutually exclusive"""
+        funkypatch.patch('cephadmlib.systemd.call')
+
+        cmd = self._get_cmd('--mon-net', '192.168.1.0/24', '--mon-ip', '192.168.1.1')
+        with pytest.raises(SystemExit):
+            with bootstrap_test_ctx(cmd) as ctx:
+                _cephadm.command_bootstrap(ctx)
+
+    def test_mon_net_mutually_exclusive_with_mon_addrv(self, cephadm_fs, funkypatch):
+        """Test that --mon-net and --mon-addrv are mutually exclusive"""
+        funkypatch.patch('cephadmlib.systemd.call')
+
+        cmd = self._get_cmd('--mon-net', '192.168.1.0/24', '--mon-addrv', '[192.168.1.1:1234]')
+        with pytest.raises(SystemExit):
+            with bootstrap_test_ctx(cmd) as ctx:
+                _cephadm.command_bootstrap(ctx)
+
+    def test_mon_net_with_public_network_overlap(self, cephadm_fs, funkypatch):
+        """Test --mon-net validation with overlapping public_network config"""
+        funkypatch.patch('cephadmlib.systemd.call')
+        
+        # Create a config file with public_network
+        conf_content = """[global]
+public_network = 192.168.1.0/24
+"""
+        cephadm_fs.create_file('ceph.conf', contents=conf_content)
+        
+        cmd = self._get_cmd(
+            '--mon-net', '192.168.1.0/24',
+            '--config', 'ceph.conf'
+        )
+        # Should succeed because --mon-net overlaps with public_network
+        with bootstrap_test_ctx(cmd, list_networks={'192.168.1.0/24': {'eth0': ['192.168.1.1']}}) as ctx:
+            retval = _cephadm.command_bootstrap(ctx)
+            assert retval == 0
+
+    def test_mon_net_with_public_network_no_overlap(self, cephadm_fs, funkypatch):
+        """Test --mon-net validation fails when not overlapping with public_network"""
+        funkypatch.patch('cephadmlib.systemd.call')
+        
+        # Create a config file with public_network in different subnet
+        conf_content = """[global]
+public_network = 10.0.0.0/24
+"""
+        cephadm_fs.create_file('ceph.conf', contents=conf_content)
+        
+        cmd = self._get_cmd(
+            '--mon-net', '192.168.1.0/24',
+            '--config', 'ceph.conf'
+        )
+        # Should fail because the IP selected from --mon-net does not belong to public_network
+        # Note: list_networks must include the public_network from config, or validation fails earlier
+        with bootstrap_test_ctx(cmd, list_networks={'10.0.0.0/24': {'eth1': ['10.0.0.1']}, '192.168.1.0/24': {'eth0': ['192.168.1.1']}}) as ctx:
+            msg = r'does not belong to any public_network'
+            with pytest.raises(_cephadm.Error, match=msg):
+                _cephadm.command_bootstrap(ctx)
+
+    def test_mon_net_with_public_network_partial_overlap(self, cephadm_fs, funkypatch):
+        """Test --mon-net validation succeeds with partial overlap of public_network"""
+        funkypatch.patch('cephadmlib.systemd.call')
+        
+        # Create a config with public_network, user uses --mon-net that overlaps part of it
+        conf_content = """[global]
+public_network = 192.168.0.0/16
+"""
+        cephadm_fs.create_file('ceph.conf', contents=conf_content)
+        
+        cmd = self._get_cmd(
+            '--mon-net', '192.168.1.0/24',
+            '--config', 'ceph.conf'
+        )
+        # Should succeed because 192.168.1.0/24 overlaps with 192.168.0.0/16
+        # Note: list_networks must include the public_network from config for local validation
+        with bootstrap_test_ctx(cmd, list_networks={'192.168.0.0/16': {'eth0': ['192.168.1.1']}, '192.168.1.0/24': {'eth0': ['192.168.1.1']}}) as ctx:
+            retval = _cephadm.command_bootstrap(ctx)
+            assert retval == 0
+
+    def test_mon_net_with_multiple_public_networks(self, cephadm_fs, funkypatch):
+        """Test --mon-net with multiple public_network entries"""
+        funkypatch.patch('cephadmlib.systemd.call')
+        
+        # Create config with multiple public networks
+        conf_content = """[global]
+public_network = 10.0.0.0/24, 192.168.1.0/24, 172.16.0.0/16
+"""
+        cephadm_fs.create_file('ceph.conf', contents=conf_content)
+        
+        cmd = self._get_cmd(
+            '--mon-net', '192.168.1.0/25',
+            '--config', 'ceph.conf'
+        )
+        # Should succeed because --mon-net overlaps with one of the public networks
+        with bootstrap_test_ctx(cmd, list_networks={'192.168.1.0/24': {'eth0': ['192.168.1.1']}}) as ctx:
+            retval = _cephadm.command_bootstrap(ctx)
+            assert retval == 0
+
+    def test_mon_net_ipv6_with_ipv4_public_network(self, cephadm_fs, funkypatch):
+        """Test --mon-net with IPv6 CIDR fails when public_network is IPv4 only"""
+        funkypatch.patch('cephadmlib.systemd.call')
+
+        conf_content = """[global]
+public_network = 192.168.1.0/24
+"""
+        cephadm_fs.create_file('ceph.conf', contents=conf_content)
+
+        cmd = self._get_cmd(
+            '--mon-net', 'fd00::/64',
+            '--config', 'ceph.conf'
+        )
+        # IPv6 and IPv4 networks never overlap; the selected IP won't belong to the IPv4 public_network
+        local_networks = {
+            'fd00::/64': {'eth0': ['fd00::1']},
+            '192.168.1.0/24': {'eth1': ['192.168.1.1']},
+        }
+        with bootstrap_test_ctx(cmd, list_networks=local_networks) as ctx:
+            with pytest.raises(_cephadm.Error, match=r'does not belong to any public_network'):
+                _cephadm.command_bootstrap(ctx)
+
+    def test_mon_net_ipv4_with_ipv6_public_network(self, cephadm_fs, funkypatch):
+        """Test --mon-net with IPv4 CIDR fails when public_network is IPv6 only"""
+        funkypatch.patch('cephadmlib.systemd.call')
+
+        conf_content = """[global]
+public_network = fd00::/64
+"""
+        cephadm_fs.create_file('ceph.conf', contents=conf_content)
+
+        cmd = self._get_cmd(
+            '--mon-net', '192.168.1.0/24',
+            '--config', 'ceph.conf'
+        )
+        # IPv4 and IPv6 networks never overlap; the selected IP won't belong to the IPv6 public_network
+        local_networks = {
+            '192.168.1.0/24': {'eth0': ['192.168.1.1']},
+            'fd00::/64': {'eth1': ['fd00::1']},
+        }
+        with bootstrap_test_ctx(cmd, list_networks=local_networks) as ctx:
+            with pytest.raises(_cephadm.Error, match=r'does not belong to any public_network'):
+                _cephadm.command_bootstrap(ctx)
 
     @pytest.mark.parametrize('fsid, err',
         [
