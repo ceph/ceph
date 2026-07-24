@@ -7,7 +7,9 @@
 
 #include <fmt/format.h>
 #include <seastar/core/do_with.hh>
+#include <seastar/core/fstream.hh>
 #include <seastar/core/future.hh>
+#include <seastar/core/task_profiler.hh>
 #include <seastar/core/thread.hh>
 #include <seastar/core/scollectd_api.hh>
 
@@ -664,5 +666,59 @@ private:
 };
 template std::unique_ptr<AdminSocketHook>
 make_asok_hook<StoreShardNumsHook>(crimson::osd::ShardServices& shard_services);
+
+class TaskProfilerHook : public AdminSocketHook {
+public:
+  TaskProfilerHook() :
+    AdminSocketHook("task_profiler",
+                    "name=cmd,type=CephChoices,strings=start|stop "
+                    "name=sample_interval_ms,type=CephInt,range=1,req=false "
+                    "name=output_prefix,type=CephString,req=false",
+                    "start/stop profiling by collecting samples of task traces "
+                    "from the seastar scheduler. Sample interval can be given "
+                    "when starting, output_prefix is used when stopping, "
+                    "producing one file per shard")
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
+                                      std::string_view format,
+                                      ceph::bufferlist&& input) const final
+  {
+    LOG_PREFIX(AdminSocketHook::TaskProfilerHook);
+    DEBUG("");
+    int64_t sample_interval_ms = cmd_getval_or<int64_t>(cmdmap, "sample_interval_ms", 10);
+    if (sample_interval_ms <= 0) {
+      co_return tell_result_t(-EINVAL, "sample_interval_ms must be > 0");
+    }
+    std::string cmd, file_prefix;
+    cmd_getval(cmdmap, "cmd", cmd);
+    cmd_getval(cmdmap, "output_prefix", file_prefix);
+    if (file_prefix.empty())
+      file_prefix = "task_profiler";
+    auto interval = std::chrono::milliseconds(sample_interval_ms);
+    co_await crimson::invoke_on_all_seq([&cmd, &interval, &file_prefix] -> seastar::future<> {
+      if (cmd == "start") {
+        seastar::task_profiler::start(interval);
+      } else {
+        auto shard_id = seastar::this_shard_id();
+        auto raw_file_path = fmt::format("{}.{}.raw", file_prefix, shard_id);
+        auto norm_file_path = fmt::format("{}.{}.norm", file_prefix, shard_id);
+        auto flags = seastar::open_flags::create |
+          seastar::open_flags::truncate |
+          seastar::open_flags::wo;
+        seastar::file raw_file = co_await seastar::open_file_dma(raw_file_path, flags);
+        seastar::file norm_file = co_await seastar::open_file_dma(norm_file_path, flags);
+        seastar::output_stream<char> raw_stream = co_await seastar::make_file_output_stream(raw_file);
+        seastar::output_stream<char> norm_stream = co_await seastar::make_file_output_stream(norm_file);
+        co_await seastar::task_profiler::stop(raw_stream, norm_stream);
+        co_await raw_stream.flush();
+        co_await norm_stream.flush();
+        co_await raw_stream.close();
+        co_await norm_stream.close();
+      }
+    });
+    co_return tell_result_t();
+  }
+};
+template std::unique_ptr<AdminSocketHook> make_asok_hook<TaskProfilerHook>();
 
 } // namespace crimson::admin
