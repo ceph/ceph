@@ -70,10 +70,13 @@ LogManager::omap_set_keys(
   auto resync_node = [&](LogNodeRef e)
     -> log_load_extent_iertr::future<CachedExtentRef> {
     CachedExtentRef node;
-    [[maybe_unused]] Transaction::get_extent_ret ret;
-    // To find mutable extent in the same transaction
-    ret = t.get_extent(e->get_paddr(), &node);
-    assert(ret == Transaction::get_extent_ret::PRESENT);
+    // Look for a mutable version already tracked by this transaction.
+    auto ret = t.get_extent(e->get_paddr(), &node);
+    // ABSENT is expected when the target LogNode was newly created and is
+    // not yet tracked in the transaction's extent cache; fall through to a
+    // full reload below. RETIRED would mean the caller is resyncing an
+    // extent already removed in this transaction, which is a real logic bug.
+    ceph_assert(ret != Transaction::get_extent_ret::RETIRED);
     if (!node) {
       // Do full reload if not cached
       node = co_await log_load_extent<LogNode>(
