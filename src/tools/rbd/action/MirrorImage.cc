@@ -16,6 +16,7 @@
 #include "tools/rbd/MirrorDaemonServiceInfo.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
+#include "include/container_ios.h"
 #include "include/stringify.h"
 #include "common/config.h"
 #include "common/errno.h"

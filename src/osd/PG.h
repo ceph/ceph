@@ -22,6 +22,7 @@
 
 // re-include our assert to clobber boost's
 #include "common/admin_finisher.h" // for asok_finisher
+#include "common/Formatter.h"
 #include "include/ceph_assert.h" 
 #include "include/common_fwd.h"
 

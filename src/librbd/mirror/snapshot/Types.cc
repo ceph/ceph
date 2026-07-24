@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "common/Formatter.h"
+#include "include/container_ios.h"
 #include "include/encoding.h"
 #include "include/stringify.h"
 #include "librbd/mirror/snapshot/Types.h"

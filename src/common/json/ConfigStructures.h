@@ -3,11 +3,10 @@
 #include <optional>
 #include <string>
 
-#include "include/types.h"
-
 class JSONObj;
 
 namespace ceph {
+class Formatter;
 namespace messaging {
 namespace config {
 struct ConfigSetRequest {

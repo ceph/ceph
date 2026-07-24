@@ -20,7 +20,7 @@
 #include "common/debug.h"
 #include "common/strtol.h"
 #include "include/ceph_assert.h"	// boost clobbers this
-#include "include/types.h" // for operator<<(std::vector)
+#include "include/container_ios.h"
 #include "json_spirit/json_spirit.h"
 
 #include <ostream>
