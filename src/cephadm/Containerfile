@@ -1,0 +1,56 @@
+# Containerfile for running cephadm inside a container with minimal privileges.
+#
+# Build:
+#   podman build -t cephadm -f src/cephadm/Containerfile .
+#   docker build -t cephadm -f src/cephadm/Containerfile .
+#
+# Run: see container-run.sh for the required flags and bind-mounts.
+#
+# Base image: uses the official Ceph image which already contains all Ceph
+# binaries (ceph, ceph-volume, ceph-osd, ceph-mon, …).  A plain OS base image
+# can be used instead if you install the ceph packages yourself.
+FROM quay.ceph.io/ceph-ci/ceph:main
+
+# Install tools that cephadm needs on the host but that may be absent from the
+# base Ceph image.  Many of these are already present; the list is kept
+# explicit so the image is self-contained regardless of base image changes.
+RUN dnf install -y \
+        # systemd / D-Bus client tools
+        systemd \
+        dbus-tools \
+        # NTP (cephadm can deploy/check chrony)
+        chrony \
+        # network inspection
+        iproute \
+        hostname \
+        # block-device / OSD tooling
+        lvm2 \
+        util-linux \
+        # SMART / drive health
+        smartmontools \
+        # firewall management (optional but used by cephadm)
+        firewalld \
+        # misc utilities used by cephadm
+        procps-ng \
+        openssh-clients \
+        rsync \
+        udev \
+        # container engine client – cephadm resolves 'podman'/'docker' from
+        # PATH at startup; without the binary the daemon fails even for
+        # read-only subcommands.  podman is used in remote mode so that all
+        # container operations are forwarded to the host daemon via the socket
+        # bind-mounted by container-run.sh.
+        podman \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf
+
+# Copy the cephadm sources into the image so the script is self-contained.
+# When building from the ceph.git tree the context root is the repo root.
+COPY src/cephadm/ /usr/share/cephadm/
+RUN ln -sf /usr/share/cephadm/cephadm.py /usr/sbin/cephadm \
+    && chmod 0755 /usr/sbin/cephadm
+
+# cephadm always runs as root.
+USER root
+
+ENTRYPOINT ["/usr/sbin/cephadm"]
