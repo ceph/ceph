@@ -2611,8 +2611,17 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, snap_set_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name);
-    int r = librbd::api::Image<>::snap_set(
-      ictx, cls::rbd::UserSnapshotNamespace(), snap_name);
+
+    int r = 0;
+    cls::rbd::for_each_snapshot_namespace(
+      [&r, ictx, snap_name](const cls::rbd::SnapshotNamespace &snap_namespace) {
+        r = librbd::api::Image<>::snap_set(ictx, snap_namespace, snap_name);
+        if (r == -ENOENT) {
+          return true;
+        }
+        return false;
+      }
+    );
     tracepoint(librbd, snap_set_exit, r);
     return r;
   }
