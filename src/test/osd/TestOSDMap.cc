@@ -3490,3 +3490,398 @@ INSTANTIATE_TEST_SUITE_P(
     std::make_pair<int, int>(3, 0)  // chooseleaf firstn 3 osd
   )
 );
+
+TEST_F(OSDMapTest, CalcCrushRuleChangePins) {
+  // 12 osds -> 6 hosts (2 osds each) -> 3 racks (2 hosts each) under default
+  set_up_map(12, true);
+  {
+    CrushWrapper newcrush;
+    get_crush(osdmap, newcrush);
+    for (int i = 0; i < 12; i++) {
+      map<string,string> loc = {
+        {"root", "default"},
+        {"rack", "rack" + std::to_string(i / 4)},
+        {"host", "host" + std::to_string(i / 2)},
+      };
+      int r = newcrush.create_or_move_item(
+        g_ceph_context, i, 1.0, "osd." + std::to_string(i), loc);
+      ASSERT_GE(r, 0);
+    }
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    pending_inc.fsid = osdmap.get_fsid();
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
+    osdmap.apply_incremental(pending_inc);
+  }
+  int host_rule = crush_rule_create_replicated("pins_host", "default", "host");
+  ASSERT_GE(host_rule, 0);
+  int rack_rule = crush_rule_create_replicated("pins_rack", "default", "rack");
+  ASSERT_GE(rack_rule, 0);
+  const int rack_type = osdmap.crush->get_type_id("rack");
+  ASSERT_GT(rack_type, 0);
+
+  // a size-3 replicated pool with failure domain host
+  uint64_t pool_id;
+  {
+    OSDMap::Incremental new_pool_inc(osdmap.get_epoch() + 1);
+    new_pool_inc.fsid = osdmap.get_fsid();
+    new_pool_inc.new_pool_max = osdmap.get_pool_max();
+    pg_pool_t empty;
+    pool_id = ++new_pool_inc.new_pool_max;
+    pg_pool_t *p = new_pool_inc.get_new_pool(pool_id, &empty);
+    p->size = 3;
+    p->set_pg_num(64);
+    p->set_pgp_num(64);
+    p->type = pg_pool_t::TYPE_REPLICATED;
+    p->crush_rule = host_rule;
+    p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+    new_pool_inc.new_pool_names[pool_id] = "pinpool";
+    osdmap.apply_incremental(new_pool_inc);
+  }
+
+  // pristine snapshot of the pre-change state (pool on host_rule); later
+  // sections mutate osdmap, so re-computations start from this instead
+  OSDMap base;
+  base.deepish_copy_from(osdmap);
+
+  // record the pre-change up sets (clean cluster: acting == up)
+  map<unsigned, set<int>> old_up;
+  for (unsigned ps = 0; ps < 64; ++ps) {
+    pg_t pg(ps, pool_id);
+    vector<int> up, acting;
+    osdmap.pg_to_up_acting_osds(pg, up, acting);
+    ASSERT_EQ(3u, up.size());
+    old_up[ps] = set<int>(up.begin(), up.end());
+  }
+
+  // stage the host->rack rule change and the pins in ONE incremental,
+  // exactly as OSDMonitor::prepare_command_pool_set does
+  OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+  pending_inc.fsid = osdmap.get_fsid();
+  {
+    pg_pool_t tp = *osdmap.get_pg_pool(pool_id);
+    tp.crush_rule = rack_rule;
+    pending_inc.new_pools[pool_id] = tp;
+  }
+  OSDMap scratch;
+  scratch.deepish_copy_from(osdmap);
+  {
+    OSDMap::Incremental s_inc(scratch.get_epoch() + 1);
+    s_inc.fsid = scratch.get_fsid();
+    pg_pool_t tp = *osdmap.get_pg_pool(pool_id);
+    tp.crush_rule = rack_rule;
+    s_inc.new_pools[pool_id] = tp;
+    scratch.apply_incremental(s_inc);
+  }
+  int pins = osdmap.calc_crush_rule_change_pins(
+    g_ceph_context, scratch, pool_id, &pending_inc);
+  ASSERT_GT(pins, 0);
+
+  OSDMap newmap;
+  newmap.deepish_copy_from(osdmap);
+  newmap.apply_incremental(pending_inc);
+
+  int total_moved = 0;
+  for (unsigned ps = 0; ps < 64; ++ps) {
+    pg_t pg(ps, pool_id);
+    vector<int> up, acting;
+    newmap.pg_to_up_acting_osds(pg, up, acting);
+    ASSERT_EQ(3u, up.size());
+
+    // 1) the new up must satisfy the rack failure domain
+    set<int> racks;
+    for (auto o : up) {
+      int r = newmap.crush->get_parent_of_type(o, rack_type, rack_rule);
+      ASSERT_LT(r, 0);
+      racks.insert(r);
+    }
+    ASSERT_EQ(3u, racks.size());
+
+    // 2) retention is maximal: exactly one old-up member is kept per distinct
+    //    rack the old up covered (the theoretical minimal-movement floor)
+    set<int> old_racks;
+    for (auto o : old_up[ps]) {
+      old_racks.insert(
+        osdmap.crush->get_parent_of_type(o, rack_type, rack_rule));
+    }
+    unsigned kept = 0;
+    for (auto o : up) {
+      if (old_up[ps].count(o))
+        kept++;
+    }
+    ASSERT_EQ(old_racks.size(), kept);
+    total_moved += 3 - kept;
+  }
+  // with 3 racks and a host-level old placement, some PGs must have had
+  // rack collisions, so some data moves -- but far from all of it
+  ASSERT_GT(total_moved, 0);
+  ASSERT_LT(total_moved, 3 * 64);
+
+  // 3) the mon must find nothing to cancel or simplify: the pins are stable
+  {
+    OSDMap::Incremental clean_inc(newmap.get_epoch() + 1);
+    clean_inc.fsid = newmap.get_fsid();
+    ASSERT_FALSE(newmap.clean_pg_upmaps(g_ceph_context, &clean_inc));
+  }
+
+  // 4) an osd-level target rule has no failure domain to preserve
+  {
+    int osd_rule = crush_rule_create_replicated("pins_osd", "default", "osd");
+    ASSERT_GE(osd_rule, 0);
+    OSDMap scratch2;
+    scratch2.deepish_copy_from(osdmap);
+    OSDMap::Incremental s_inc(scratch2.get_epoch() + 1);
+    s_inc.fsid = scratch2.get_fsid();
+    pg_pool_t tp = *osdmap.get_pg_pool(pool_id);
+    tp.crush_rule = osd_rule;
+    s_inc.new_pools[pool_id] = tp;
+    scratch2.apply_incremental(s_inc);
+    OSDMap::Incremental noop_inc(osdmap.get_epoch() + 1);
+    ASSERT_EQ(0, osdmap.calc_crush_rule_change_pins(
+      g_ceph_context, scratch2, pool_id, &noop_inc));
+    ASSERT_TRUE(noop_inc.new_pg_upmap_items.empty());
+  }
+
+  // 5) a pool whose size exceeds the number of failure-domain buckets
+  //    cannot be pinned (3 racks < size 4)
+  {
+    uint64_t big_pool;
+    OSDMap::Incremental new_pool_inc(osdmap.get_epoch() + 1);
+    new_pool_inc.fsid = osdmap.get_fsid();
+    new_pool_inc.new_pool_max = osdmap.get_pool_max();
+    pg_pool_t empty;
+    big_pool = ++new_pool_inc.new_pool_max;
+    pg_pool_t *p = new_pool_inc.get_new_pool(big_pool, &empty);
+    p->size = 4;
+    p->set_pg_num(8);
+    p->set_pgp_num(8);
+    p->type = pg_pool_t::TYPE_REPLICATED;
+    p->crush_rule = host_rule;
+    p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+    new_pool_inc.new_pool_names[big_pool] = "bigpool";
+    osdmap.apply_incremental(new_pool_inc);
+
+    OSDMap scratch3;
+    scratch3.deepish_copy_from(osdmap);
+    OSDMap::Incremental s_inc(scratch3.get_epoch() + 1);
+    s_inc.fsid = scratch3.get_fsid();
+    pg_pool_t tp = *osdmap.get_pg_pool(big_pool);
+    tp.crush_rule = rack_rule;
+    s_inc.new_pools[big_pool] = tp;
+    scratch3.apply_incremental(s_inc);
+    OSDMap::Incremental fail_inc(osdmap.get_epoch() + 1);
+    ASSERT_EQ(-ENOSPC, osdmap.calc_crush_rule_change_pins(
+      g_ceph_context, scratch3, big_pool, &fail_inc));
+    ASSERT_TRUE(fail_inc.new_pg_upmap_items.empty());
+  }
+
+  // 6) fill strategies: identical (minimal) data movement, and the default
+  //    load-aware fill must leave the pool at least as balanced as hash.
+  //    Recomputed from the pristine snapshot so earlier sections that mutate
+  //    osdmap cannot perturb the comparison.
+  {
+    OSDMap sc;
+    sc.deepish_copy_from(base);
+    {
+      OSDMap::Incremental si(sc.get_epoch() + 1);
+      si.fsid = sc.get_fsid();
+      pg_pool_t tp = *base.get_pg_pool(pool_id);
+      tp.crush_rule = rack_rule;
+      si.new_pools[pool_id] = tp;
+      sc.apply_incremental(si);
+    }
+    OSDMap::Incremental la_inc(base.get_epoch() + 1);
+    OSDMap::Incremental h_inc(base.get_epoch() + 1);
+    la_inc.fsid = h_inc.fsid = base.get_fsid();
+    {
+      pg_pool_t tp = *base.get_pg_pool(pool_id);
+      tp.crush_rule = rack_rule;
+      la_inc.new_pools[pool_id] = tp;
+      h_inc.new_pools[pool_id] = tp;
+    }
+    int la_pins = base.calc_crush_rule_change_pins(
+      g_ceph_context, sc, pool_id, &la_inc, true);
+    int h_pins = base.calc_crush_rule_change_pins(
+      g_ceph_context, sc, pool_id, &h_inc, false);
+    ASSERT_GT(la_pins, 0);
+    // The hash fill may legitimately produce zero pg-upmap-items: when a
+    // violating shard's natural raw-CRUSH landing is acceptable it lets CRUSH
+    // relocate the shard instead of adding an entry.  The data still moves the
+    // same amount (asserted below), it is just not upmap-expressed -- which is
+    // exactly why load-aware is the default.  ASSERT_GE also catches an error
+    // return (negative) from the hash path.
+    ASSERT_GE(h_pins, 0);
+
+    OSDMap lam, ham;
+    lam.deepish_copy_from(base);
+    lam.apply_incremental(la_inc);
+    ham.deepish_copy_from(base);
+    ham.apply_incremental(h_inc);
+
+    map<int, int> la_cnt, h_cnt;
+    int la_moved = 0, h_moved = 0;
+    for (unsigned ps = 0; ps < 64; ++ps) {
+      pg_t pg(ps, pool_id);
+      vector<int> up, acting;
+      lam.pg_to_up_acting_osds(pg, up, acting);
+      for (auto o : up) {
+        la_cnt[o]++;
+        if (!old_up[ps].count(o))
+          la_moved++;
+      }
+      vector<int> up2, acting2;
+      ham.pg_to_up_acting_osds(pg, up2, acting2);
+      for (auto o : up2) {
+        h_cnt[o]++;
+        if (!old_up[ps].count(o))
+          h_moved++;
+      }
+    }
+    // the fill strategy affects balance, never the amount of data moved
+    ASSERT_EQ(la_moved, h_moved);
+    double mean = 3.0 * 64 / 12;
+    double la_ssq = 0, h_ssq = 0;
+    for (int o = 0; o < 12; ++o) {
+      la_ssq += (la_cnt[o] - mean) * (la_cnt[o] - mean);
+      h_ssq += (h_cnt[o] - mean) * (h_cnt[o] - mean);
+    }
+    ASSERT_LE(la_ssq, h_ssq);
+  }
+
+  // 7) a down (but still in) osd must never be chosen as a pin target:
+  //    _raw_to_up_osds() would strip it from the up set, leaving the pg
+  //    degraded until it returns
+  {
+    OSDMap dmap;
+    dmap.deepish_copy_from(base);
+    {
+      OSDMap::Incremental di(dmap.get_epoch() + 1);
+      di.fsid = dmap.get_fsid();
+      di.new_state[0] = CEPH_OSD_UP;          // mark osd.0 down
+      dmap.apply_incremental(di);
+    }
+    ASSERT_TRUE(dmap.exists(0));
+    ASSERT_FALSE(dmap.is_up(0));
+    OSDMap dsc;
+    dsc.deepish_copy_from(dmap);
+    {
+      OSDMap::Incremental si(dsc.get_epoch() + 1);
+      si.fsid = dsc.get_fsid();
+      pg_pool_t tp = *dmap.get_pg_pool(pool_id);
+      tp.crush_rule = rack_rule;
+      si.new_pools[pool_id] = tp;
+      dsc.apply_incremental(si);
+    }
+    OSDMap::Incremental dpins(dmap.get_epoch() + 1);
+    dpins.fsid = dmap.get_fsid();
+    {
+      pg_pool_t tp = *dmap.get_pg_pool(pool_id);
+      tp.crush_rule = rack_rule;
+      dpins.new_pools[pool_id] = tp;
+    }
+    int dp = dmap.calc_crush_rule_change_pins(
+      g_ceph_context, dsc, pool_id, &dpins, true);
+    ASSERT_GT(dp, 0);
+    for (auto& [pg, items] : dpins.new_pg_upmap_items) {
+      for (auto& fr : items) {
+        ASSERT_NE(0, fr.second);
+      }
+    }
+  }
+
+  // 8) EC (indep) rule change: retention must be positional -- an old up
+  //    member present in the new up sits at its old index, since
+  //    erasure-coded shards are positional and a permuted set still moves
+  {
+    OSDMap emap;
+    emap.deepish_copy_from(base);
+    int host_ec = -1, rack_ec = -1;
+    {
+      CrushWrapper newcrush;
+      get_crush(emap, newcrush);
+      std::ostringstream ss;
+      host_ec = newcrush.add_simple_rule(
+        "pins_host_ec", "default", "host", "", "indep",
+        pg_pool_t::TYPE_ERASURE, &ss);
+      ASSERT_GE(host_ec, 0);
+      rack_ec = newcrush.add_simple_rule(
+        "pins_rack_ec", "default", "rack", "", "indep",
+        pg_pool_t::TYPE_ERASURE, &ss);
+      ASSERT_GE(rack_ec, 0);
+      OSDMap::Incremental ci(emap.get_epoch() + 1);
+      ci.fsid = emap.get_fsid();
+      ci.crush.clear();
+      newcrush.encode(ci.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
+      emap.apply_incremental(ci);
+    }
+    uint64_t ec_pool_id;
+    {
+      OSDMap::Incremental pi(emap.get_epoch() + 1);
+      pi.fsid = emap.get_fsid();
+      pi.new_pool_max = emap.get_pool_max();
+      pg_pool_t empty;
+      ec_pool_id = ++pi.new_pool_max;
+      pg_pool_t *pp = pi.get_new_pool(ec_pool_id, &empty);
+      pp->size = 3;
+      pp->min_size = 2;
+      pp->set_pg_num(64);
+      pp->set_pgp_num(64);
+      pp->type = pg_pool_t::TYPE_ERASURE;
+      pp->crush_rule = host_ec;
+      pp->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+      pi.new_pool_names[ec_pool_id] = "pinpool_ec";
+      emap.apply_incremental(pi);
+    }
+    map<unsigned, vector<int>> ec_old;
+    for (unsigned ps = 0; ps < 64; ++ps) {
+      pg_t pg(ps, ec_pool_id);
+      vector<int> up, acting;
+      emap.pg_to_up_acting_osds(pg, up, acting);
+      ASSERT_EQ(3u, up.size());
+      ec_old[ps] = up;
+    }
+    OSDMap esc;
+    esc.deepish_copy_from(emap);
+    {
+      OSDMap::Incremental si(esc.get_epoch() + 1);
+      si.fsid = esc.get_fsid();
+      pg_pool_t tp = *emap.get_pg_pool(ec_pool_id);
+      tp.crush_rule = rack_ec;
+      si.new_pools[ec_pool_id] = tp;
+      esc.apply_incremental(si);
+    }
+    OSDMap::Incremental epins(emap.get_epoch() + 1);
+    epins.fsid = emap.get_fsid();
+    {
+      pg_pool_t tp = *emap.get_pg_pool(ec_pool_id);
+      tp.crush_rule = rack_ec;
+      epins.new_pools[ec_pool_id] = tp;
+    }
+    int ep = emap.calc_crush_rule_change_pins(
+      g_ceph_context, esc, ec_pool_id, &epins, true);
+    ASSERT_GT(ep, 0);
+    OSDMap after;
+    after.deepish_copy_from(emap);
+    after.apply_incremental(epins);
+    for (unsigned ps = 0; ps < 64; ++ps) {
+      pg_t pg(ps, ec_pool_id);
+      vector<int> up, acting;
+      after.pg_to_up_acting_osds(pg, up, acting);
+      ASSERT_EQ(3u, up.size());
+      set<int> racks;
+      for (auto o : up) {
+        ASSERT_NE(CRUSH_ITEM_NONE, o);
+        int r = after.crush->get_parent_of_type(o, rack_type, rack_ec);
+        ASSERT_LT(r, 0);
+        racks.insert(r);
+      }
+      ASSERT_EQ(up.size(), racks.size());
+      set<int> old_set(ec_old[ps].begin(), ec_old[ps].end());
+      for (unsigned i = 0; i < up.size(); ++i) {
+        if (old_set.count(up[i])) {
+          ASSERT_EQ(ec_old[ps][i], up[i]);
+        }
+      }
+    }
+  }
+}
