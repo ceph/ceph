@@ -2147,7 +2147,6 @@ def _ceph_service_next_action(
     mgr: 'CephadmOrchestrator',
     last_config: Optional[datetime.datetime],
 ) -> Optional[str]:
-    action = None
     if daemon_type not in CEPH_TYPES:
         return action
     if last_config is None:
