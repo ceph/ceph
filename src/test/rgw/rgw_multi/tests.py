@@ -4514,6 +4514,34 @@ def test_copy_object_same_bucket():
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
 @attr('copy_object')
+def test_copy_object_replacing_tagging():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+
+    bucket = primary.create_bucket(gen_bucket_name())
+    objname = 'dummy'
+
+    primary.s3_client.put_object(Bucket=bucket.name, Key=objname, Body='foo', Tagging='key1=value1&key2=value2')
+    zonegroup_meta_checkpoint(zonegroup)
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    primary.s3_client.copy_object(
+        Bucket=bucket.name,
+        CopySource={'Bucket': bucket.name, 'Key': objname},
+        Key=objname + '-copy',
+        TaggingDirective='REPLACE',
+        Tagging='key3=value3&key4=value4'
+    )
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    expected = [{'Key': 'key3', 'Value': 'value3'}, {'Key': 'key4', 'Value': 'value4'}]
+    for zone in zonegroup_conns.rw_zones:
+        response = zone.s3_client.get_object_tagging(Bucket=bucket.name, Key=objname + '-copy')
+        assert_equal(response['TagSet'], expected)
+
+@attr('copy_object')
 def test_copy_object_different_bucket():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
