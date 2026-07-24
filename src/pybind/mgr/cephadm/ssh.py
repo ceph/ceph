@@ -35,6 +35,10 @@ class HostConnectionError(OrchestratorError):
         self.hostname = hostname
         self.addr = addr
 
+    def __reduce__(self) -> tuple:
+        return (type(self), (self.args[0], self.hostname, self.addr),
+                self.__dict__)
+
 
 DEFAULT_SSH_CONFIG = """
 Host *
