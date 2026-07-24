@@ -353,6 +353,15 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             desc='Automatically convert image tags to image digest to ensure that all daemons use the same image'
         ),
         Option(
+            'upgrade_fs_one_at_a_time',
+            type='bool',
+            default=True,
+            desc='During upgrade, prepare (fail or scale down) and restore one '
+                 'CephFS filesystem at a time when upgrading its MDS, instead of '
+                 'disrupting every filesystem simultaneously. MDS are upgraded '
+                 'serially regardless, so this only narrows the disruption window.'
+        ),
+        Option(
             'config_checks_enabled',
             type='bool',
             default=False,
@@ -627,6 +636,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.registry_password: Optional[str] = None
             self.registry_insecure: bool = False
             self.use_repo_digest = True
+            self.upgrade_fs_one_at_a_time = True
             self.config_checks_enabled = False
             self.default_registry = ''
             self.autotune_memory_target_ratio = 0.0
