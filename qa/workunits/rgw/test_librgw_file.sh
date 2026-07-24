@@ -74,4 +74,10 @@ ceph_test_librgw_file_gp ${K} --delete
 echo "phase 6.1"
 ceph_test_librgw_file_rename ${K} --create
 
+# lru replacement and large (ish) directory listing
+echo "phase 7.1"
+ceph_test_librgw_file_chunksim ${K} --create --num_objs=10000 --verbose
+echo "phase 7.2"
+ceph_test_librgw_file_chunksim ${K} --num_objs=10000 --verbose
+
 exit 0
