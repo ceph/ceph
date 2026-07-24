@@ -54,7 +54,21 @@ int ClientIO::init_env(CephContext *cct)
     std::string key{HTTP_};
     key.reserve(name.size() + HTTP_.size());
     uppercase_dash_transform(name, std::back_inserter(key), true);
-    env.set(std::move(key), std::string(value));
+
+    // Per RFC 7230 a repeated header field-line is equivalent to a single
+    // field whose value is the comma-joined list of the individual values.
+    // AWS SigV4 canonicalization relies on this: the client signs the
+    // combined "v1,v2" form. If we let a later occurrence overwrite an
+    // earlier one, the server reconstructs a different canonical header and
+    // rejects the request with SignatureDoesNotMatch (tracker #75304). So
+    // combine duplicates here, preserving the order they arrived on the wire.
+    if (const char* existing = env.get(key.c_str())) {
+      std::string combined{existing};
+      combined.append(",").append(value.data(), value.size());
+      env.set(std::move(key), std::move(combined));
+    } else {
+      env.set(std::move(key), std::string(value));
+    }
   }
 
   int major = request.version() / 10;
