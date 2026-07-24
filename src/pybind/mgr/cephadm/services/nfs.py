@@ -13,6 +13,7 @@ from mgr_module import HandleCommandResult
 from mgr_module import NFS_POOL_NAME as POOL_NAME
 
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec
+from ceph.utils import with_units_to_int
 from .service_registry import register_cephadm_service
 
 from orchestrator import DaemonDescription, OrchestratorError
@@ -147,6 +148,19 @@ class NFSService(CephService):
             deps.append(f'tls_min_version: {nfs_spec.tls_min_version}')
         if nfs_spec.tls_ciphers is not None:
             deps.append(f'tls_ciphers: {nfs_spec.tls_ciphers}')
+        # Ceph client object cache related
+        if nfs_spec.enable_client_object_cache:
+            deps.append(f'enable_client_object_cache: {nfs_spec.enable_client_object_cache}')
+            if nfs_spec.client_object_cache_size is not None:
+                deps.append(
+                    f'client_object_cache_size: {nfs_spec.client_object_cache_size}'
+                )
+            if nfs_spec.client_object_cache_max_dirty is not None:
+                deps.append(
+                    f'client_object_cache_max_dirty: '
+                    f'{nfs_spec.client_object_cache_max_dirty}'
+                )
+
         parent_deps = super().get_dependencies(mgr, spec, daemon_type)
         return sorted(deps + parent_deps)
 
@@ -284,7 +298,16 @@ class NFSService(CephService):
                 "tls_debug": spec.tls_debug,
                 "ceph_nodes": ceph_nodes,
                 "protocols": "3, 4" if spec.enable_nfsv3 else "4",
-                "use_old_nodeid": False if nodeid.isdigit() else True
+                "use_old_nodeid": False if nodeid.isdigit() else True,
+                "enable_client_object_cache": spec.enable_client_object_cache,
+                "client_object_cache_size": (
+                    with_units_to_int(str(spec.client_object_cache_size))
+                    if spec.client_object_cache_size is not None else None
+                ),
+                "client_object_cache_max_dirty": (
+                    with_units_to_int(str(spec.client_object_cache_max_dirty))
+                    if spec.client_object_cache_max_dirty is not None else None
+                ),
             }
             if spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()

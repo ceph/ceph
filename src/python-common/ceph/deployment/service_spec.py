@@ -43,6 +43,7 @@ from ceph.deployment.utils import unwrap_ipv6, valid_addr, verify_non_negative_i
 from ceph.deployment.utils import verify_positive_int, verify_non_negative_number
 from ceph.deployment.utils import verify_boolean, verify_enum, verify_int, verify_non_empty_string
 from ceph.deployment.utils import parse_combined_pem_file, validate_port, validate_unique_ports
+from ceph.deployment.utils import verify_size_with_units
 from ceph.cephadm.d3n_types import D3NCacheSpec, D3NCacheError
 from ceph.utils import is_hex
 from ceph.smb import constants as smbconst
@@ -1425,6 +1426,9 @@ class NFSServiceSpec(ServiceSpec):
                  tls_ciphers: Optional[str] = None,
                  colocation_ports: Optional[List[Dict[str, int]]] = None,
                  enable_nfsv3: bool = False,
+                 enable_client_object_cache: bool = False,
+                 client_object_cache_size: Optional[Union[str, int]] = None,
+                 client_object_cache_max_dirty: Optional[Union[str, int]] = None,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -1454,6 +1458,13 @@ class NFSServiceSpec(ServiceSpec):
         self.cluster_qos_config = cluster_qos_config
         self.cluster_qos_port = cluster_qos_port
         self.enable_nfsv3 = enable_nfsv3
+
+        # Ceph client object cache settings written to ganesha.conf CEPH block.
+        # Disabled by default; enabling it increases Ganesha memory use.
+        # Size fields accept int bytes or strings like "512KiB", "100MB", "1GiB".
+        self.enable_client_object_cache = enable_client_object_cache
+        self.client_object_cache_size = client_object_cache_size
+        self.client_object_cache_max_dirty = client_object_cache_max_dirty
 
         # colocation_ports is a list of port dicts for ADDITIONAL colocated daemons
         # The first daemon always uses port and monitoring_port from the spec
@@ -1544,6 +1555,23 @@ class NFSServiceSpec(ServiceSpec):
         if self.virtual_ip and (self.ip_addrs or self.networks):
             raise SpecValidationError("Invalid NFS spec: Cannot set virtual_ip and "
                                       f"{'ip_addrs' if self.ip_addrs else 'networks'} fields")
+
+        verify_boolean(self.enable_client_object_cache, "enable_client_object_cache")
+        cache_size = verify_size_with_units(
+            self.client_object_cache_size, "client_object_cache_size"
+        )
+        cache_max_dirty = verify_size_with_units(
+            self.client_object_cache_max_dirty, "client_object_cache_max_dirty"
+        )
+        if (
+            cache_size is not None
+            and cache_max_dirty is not None
+            and cache_size <= cache_max_dirty
+        ):
+            raise SpecValidationError(
+                "Invalid NFS spec: client_object_cache_size must be greater than "
+                "client_object_cache_max_dirty"
+            )
 
         # Validate colocation_ports
         self.validate_colocation_ports()
