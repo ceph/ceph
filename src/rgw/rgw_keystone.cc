@@ -466,6 +466,13 @@ void rgw::keystone::TokenEnvelope::Role::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("name", name, obj, true);
 }
 
+void rgw::keystone::TokenEnvelope::AccessRule::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("service", service, obj);
+  JSONDecoder::decode_json("method", method, obj);
+  JSONDecoder::decode_json("path", path, obj);
+}
+
 void rgw::keystone::TokenEnvelope::Domain::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("id", id, obj, true);
@@ -491,6 +498,10 @@ void rgw::keystone::TokenEnvelope::ApplicationCredential::decode_json(JSONObj *o
   JSONDecoder::decode_json("id", id, obj, true);
   JSONDecoder::decode_json("name", name, obj, true);
   JSONDecoder::decode_json("restricted", restricted, obj, true);
+  // access_rules is nested under application_credential in the Keystone
+  // response, and only present when the OpenStack-Identity-Access-Rules
+  // request header was sent.
+  JSONDecoder::decode_json("access_rules", access_rules, obj, false);
 }
 
 void rgw::keystone::TokenEnvelope::decode(JSONObj* const root_obj)

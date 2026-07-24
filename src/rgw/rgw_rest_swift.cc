@@ -2932,10 +2932,16 @@ RGWOp *RGWHandler_REST_Obj_SWIFT::op_options()
   return new RGWOptionsCORS_ObjStore_SWIFT;
 }
 
-
 int RGWHandler_REST_SWIFT::authorize(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  return rgw::auth::Strategy::apply(dpp, auth_strategy, s, y);
+
+  int ret = rgw::auth::Strategy::apply(dpp, auth_strategy, s, y);
+  if (ret < 0) {
+    return ret;
+  }
+  /* Keystone Application Credentials Access Rules already enforced in TokenEngine */
+
+  return 0;
 }
 
 int RGWHandler_REST_SWIFT::postauth_init(optional_yield y)
