@@ -892,9 +892,17 @@ class RookCluster(object):
     def get_hosts(self) -> List[orchestrator.HostSpec]:
         ret = []
         for node in self.nodes.items:
+            addrs = node.status.addresses or []
+            # Prefer InternalIP; fall back to the first address. orchestrator
+            # consumers (mgr/nfs, mgr/dashboard, ...) treat HostSpec.addr as a
+            # single IP/hostname and call socket.getaddrinfo() on it. The old
+            # '/'.join(...) produced strings like "<ip>/<hostname>" that broke
+            # every such consumer.
+            internal = [a.address for a in addrs if a.type == "InternalIP"]
+            addr = internal[0] if internal else (addrs[0].address if addrs else "")
             spec = orchestrator.HostSpec(
                 node.metadata.name,
-                addr='/'.join([addr.address for addr in node.status.addresses]), 
+                addr=addr,
                 labels=[label.split('/')[1] for label in node.metadata.labels if label.startswith('ceph-label')],
             )
             ret.append(spec)
