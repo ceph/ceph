@@ -1018,6 +1018,33 @@ public:
     const std::map<pg_t, mempool::osdmap::vector<std::pair<int,int>>>& to_remap) const;
   bool clean_pg_upmaps(CephContext *cct, Incremental *pending_inc) const;
 
+  /**
+   * For every PG of @pool_id, stage pg_upmap_items into @pending_inc that
+   * keep each shard of the PG's current acting set (as known from this map,
+   * i.e. up + pg_temp) whenever the pool's crush rule in @newmap allows it,
+   * relocating only the shards that violate the new failure domain.  @newmap
+   * must be a scratch copy of this map with the pool's new crush_rule
+   * applied.  Replacement OSDs for the violating shards are picked either
+   * load-aware (lowest planned shard count per crush weight across the free
+   * failure-domain buckets, the default) or, with load_aware_fill=false, by
+   * preferring the raw CRUSH pick and falling back to deterministic hashing.
+   * Returns the number of PGs pinned, or -errno.
+   *
+   * This function does not read any configuration itself; the monitor
+   * (OSDMonitor::prepare_command_pool_set) drives it from:
+   *  - mon_crush_rule_change_preserve_acting: whether to call it at all;
+   *  - mon_crush_rule_change_preserve_acting_fill_strategy: @load_aware_fill
+   *    (true for "load-aware", false for "hash");
+   *  - mon_crush_rule_change_preserve_acting_max_pgs: pools with more PGs
+   *    are not pinned (enforced by the caller, along with the
+   *    require_min_compat_client and pg_num-change guards).
+   */
+  int calc_crush_rule_change_pins(CephContext *cct,
+                                  const OSDMap& newmap,
+                                  int64_t pool_id,
+                                  Incremental *pending_inc,
+                                  bool load_aware_fill = true) const;
+
   int apply_incremental(const Incremental &inc);
 
   /// try to re-use/reference addrs in oldmap from newmap
