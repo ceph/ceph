@@ -1,0 +1,67 @@
+<header
+  class="cd-resource-page-header"
+  data-testid="resource-page-header"
+>
+  <div class="cd-resource-page-header__content">
+    @if (showBreadcrumbs && breadcrumbs.length) {
+      <div class="cd-resource-page-header__breadcrumbs cds--type-body-compact-01">
+        @for (crumb of breadcrumbs; track crumb.text; let last = $last) {
+          @if (crumb.route) {
+            <a [routerLink]="crumb.route">{{ crumb.text }}</a>
+          } @else {
+            <span>{{ crumb.text }}</span>
+          }
+          @if (!last) {
+            <span class="cd-resource-page-header__breadcrumb-sep">/</span>
+          }
+        }
+      </div>
+    }
+
+    <div class="cd-resource-page-header__title-row">
+      <div class="cd-resource-page-header__title-group">
+        <h2 class="cds--type-heading-05">{{ title }}</h2>
+
+        @if (status) {
+          <span
+            class="cd-resource-page-header__status cd-resource-page-header__status--{{
+              status.type
+            }}"
+          >
+            <cd-icon [type]="statusIconType"></cd-icon>
+            <span>{{ status.text }}</span>
+          </span>
+        }
+
+        @if (tags.length) {
+          <span class="cd-resource-page-header__tags">
+            @for (tag of tags; track tag) {
+              <cds-tag type="blue">{{ tag }}</cds-tag>
+            }
+          </span>
+        }
+      </div>
+
+      <div class="cd-resource-page-header__actions">
+        <cds-menu-button
+          kind="tertiary"
+          size="lg"
+          menuId="resource-header-actions-menu"
+          menuAlignment="bottom-end"
+          label="Actions"
+          i18n-label
+        >
+          @for (action of actions; track action.label) {
+            <cds-menu-item
+              [label]="action.label"
+              [disabled]="action.disabled"
+              (click)="runAction(action)"
+              [title]="action.label"
+            >
+            </cds-menu-item>
+          }
+        </cds-menu-button>
+      </div>
+    </div>
+  </div>
+</header>
