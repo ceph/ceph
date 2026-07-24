@@ -379,6 +379,9 @@ class TestLvm:
         self.lvm.setup_metadata_devices()
         m_create_lv.assert_not_called()
         m_set_tags.assert_not_called()
+        assert self.lvm.tags['ceph.db_device'] == '/dev/foo1'
+        assert self.lvm.tags['ceph.db_uuid'] == 'c6798f59-01'
+        assert self.lvm.db_device_path == '/dev/foo1'
 
     def test_get_osd_device_path_lv_block(self):
         lvs = [Volume(lv_name='lv_foo',

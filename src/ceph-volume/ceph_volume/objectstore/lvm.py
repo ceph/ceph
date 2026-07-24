@@ -285,6 +285,17 @@ class Lvm(BaseObjectStore):
             lv.set_tags(tags)
             return lv.lv_path
 
+        # A partition is used directly rather than being wrapped in an LV.
+        # Its PARTUUID and path must still be recorded as tags on the OSD's
+        # block LV, otherwise activation cannot locate the device and the
+        # block.db/block.wal symlink is never created.
+        tags.update(
+            {
+                f"ceph.{device_type}_uuid": self.get_ptuuid(device_name),
+                f"ceph.{device_type}_device": device_name,
+            }
+        )
+        self.tags.update(tags)
         return device_name
 
     def get_osd_device_path(self,
