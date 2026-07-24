@@ -1979,6 +1979,17 @@ class CephExporterService(CephService):
             exporter_config.update({'prio-limit': f'{spec.prio_limit}'})
         if spec.stats_period:
             exporter_config.update({'stats-period': f'{spec.stats_period}'})
+        if spec.only_bind_port_on_networks and spec.networks:
+            assert daemon_spec.host is not None
+            ip_to_bind_to = self.mgr.get_first_matching_network_ip(daemon_spec.host, spec) or ''
+            if ip_to_bind_to:
+                exporter_config.update({'addrs': ip_to_bind_to})
+            else:
+                logger.warning(
+                    f'Failed to find ip in {spec.networks} for host {daemon_spec.host}. '
+                    f'{daemon_spec.name()} will bind to all IPs')
+        elif spec.addrs:
+            exporter_config.update({'addrs': spec.addrs})
 
         security_enabled, _, _ = self.mgr._get_security_config()
         if security_enabled:
