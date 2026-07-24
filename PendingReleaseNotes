@@ -59,6 +59,10 @@
   both --marker and --object-version options together (e.g., ``--marker=obj1 --object-version=abc123``).
   This enables proper pagination through versioned bucket listings without duplicates or
   infinite loops. For non-versioned buckets, use only --marker as before (backward compatible).
+* RGW: ``radosgw-admin bucket suspend`` and ``bucket unsuspend`` can suspend an
+  individual bucket without suspending its owner. S3 requests against a suspended
+  bucket fail with ``403 BucketSuspended``. The ``suspended`` field is now included
+  in ``radosgw-admin bucket stats`` output.
 * RGW: OpenSSL engine support is deprecated in favor of provider support.
   - Removed the `openssl_engine_opts` configuration option. OpenSSL engine configuration in string format is no longer supported.
   - Added the `openssl_conf` configuration option for loading specified providers as default providers.

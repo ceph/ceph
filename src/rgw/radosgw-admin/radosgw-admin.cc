@@ -188,6 +188,8 @@ void usage()
   cout << "  bucket link                      link bucket to specified user\n";
   cout << "  bucket unlink                    unlink bucket from specified user\n";
   cout << "  bucket stats                     returns bucket statistics\n";
+  cout << "  bucket suspend                   suspend a bucket\n";
+  cout << "  bucket unsuspend                 unsuspend a bucket\n";
   cout << "  bucket rm                        remove bucket\n";
   cout << "  bucket check                     check bucket index by verifying size and object count stats\n";
   cout << "  bucket check olh                 check for olh index entries and objects that are pending removal\n";
@@ -746,6 +748,8 @@ enum class OPT {
 #endif
   BUCKET_LAYOUT,
   BUCKET_STATS,
+  BUCKET_SUSPEND,
+  BUCKET_UNSUSPEND,
 #ifdef WITH_RADOSGW_RADOS
   BUCKET_CHECK,
   BUCKET_CHECK_OLH,
@@ -1032,6 +1036,8 @@ static SimpleCmd::Commands all_cmds = {
 #endif
   { "bucket layout", OPT::BUCKET_LAYOUT },
   { "bucket stats", OPT::BUCKET_STATS },
+  { "bucket suspend", OPT::BUCKET_SUSPEND },
+  { "bucket unsuspend", OPT::BUCKET_UNSUSPEND },
 #ifdef WITH_RADOSGW_RADOS
   { "bucket check", OPT::BUCKET_CHECK },
   { "bucket check olh", OPT::BUCKET_CHECK_OLH },
@@ -7029,7 +7035,9 @@ int main(int argc, const char **argv)
 #ifdef WITH_RADOSGW_RADOS
                                         OPT::BUCKET_LINK, OPT::BUCKET_UNLINK,
 #endif
-                                        OPT::BUCKET_CHOWN, 
+                                        OPT::BUCKET_CHOWN,
+                                        OPT::BUCKET_SUSPEND,
+                                        OPT::BUCKET_UNSUSPEND,
 #ifdef WITH_RADOSGW_RADOS
                                         OPT::METADATA_PUT,
                                         OPT::METADATA_RM,
@@ -10779,6 +10787,26 @@ next:
     ret = RGWBucketAdminOp::sync_bucket(driver, bucket_op, dpp(), null_yield, &err_msg);
     if (ret < 0) {
       cerr << err_msg << std::endl;
+      return -ret;
+    }
+  }
+
+  if ((opt_cmd == OPT::BUCKET_SUSPEND) || (opt_cmd == OPT::BUCKET_UNSUSPEND)) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+    if (ret < 0) {
+      return -ret;
+    }
+    std::vector<rgw_bucket> buckets;
+    buckets.push_back(bucket->get_key());
+    const bool enabled = (opt_cmd == OPT::BUCKET_UNSUSPEND);
+    ret = driver->set_buckets_enabled(dpp(), buckets, enabled, null_yield);
+    if (ret < 0) {
+      cerr << "failed to " << (enabled ? "unsuspend" : "suspend")
+           << " bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
   }
