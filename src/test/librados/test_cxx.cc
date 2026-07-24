@@ -304,3 +304,22 @@ int destroy_one_ec_pool_pp(const std::string &pool_name, Rados &cluster)
 int destroy_pool_pp(const std::string &pool_name, Rados &cluster) {
   return cluster.pool_delete(pool_name.c_str());
 }
+
+int destroy_ec_pool_pp(const std::string &pool_name, Rados &cluster) {
+  int ret = cluster.pool_delete(pool_name.c_str());
+  if (ret) {
+    return ret;
+  }
+
+  CephContext *cct = static_cast<CephContext*>(cluster.cct());
+  if (!cct->_conf->mon_fake_pool_delete) { // hope this is in [global]
+    std::ostringstream oss;
+    ret = destroy_ec_profile_and_rule_pp(cluster, pool_name, oss);
+    if (ret) {
+      return ret;
+    }
+  }
+
+  cluster.wait_for_latest_osdmap();
+  return 0;
+}
