@@ -141,32 +141,22 @@ template <typename T>
 using read_trans_set_t = typename read_set_item_t<T>::trans_set_t;
 
 struct trans_spec_view_t {
-  // if the extent is pending, contains the id of the owning transaction;
-  // TRANS_ID_NULL otherwise
-  transaction_id_t pending_for_transaction = TRANS_ID_NULL;
+  // if the extent is pending, this points to the transaction
+  Transaction *t = nullptr;
   trans_spec_view_t() = default;
-  trans_spec_view_t(transaction_id_t id) : pending_for_transaction(id) {}
+  trans_spec_view_t(Transaction &t);
   virtual ~trans_spec_view_t() = default;
 
   struct cmp_t {
     bool operator()(
       const trans_spec_view_t &lhs,
-      const trans_spec_view_t &rhs) const
-    {
-      return lhs.pending_for_transaction < rhs.pending_for_transaction;
-    }
+      const trans_spec_view_t &rhs) const;
     bool operator()(
       const transaction_id_t &lhs,
-      const trans_spec_view_t &rhs) const
-    {
-      return lhs < rhs.pending_for_transaction;
-    }
+      const trans_spec_view_t &rhs) const;
     bool operator()(
       const trans_spec_view_t &lhs,
-      const transaction_id_t &rhs) const
-    {
-      return lhs.pending_for_transaction < rhs;
-    }
+      const transaction_id_t &rhs) const;
   };
 
   using trans_view_hook_t =
@@ -266,12 +256,17 @@ private:
   map_t buffer_map;
 };
 
-enum class extent_2q_state_t : uint8_t {
+enum class extent_pin_state_t : uint8_t {
+  // shared state between LRU and 2Q impl
   Fresh = 0,
+  PendingPromote,
+  Promoting,
+  // 2Q impl only
   WarmIn,
   Hot,
   Max
 };
+std::ostream &operator<<(std::ostream &, const extent_pin_state_t &);
 
 class ExtentCommitter : public boost::intrusive_ref_counter<
   ExtentCommitter, boost::thread_unsafe_counter> {
@@ -295,6 +290,8 @@ public:
   void commit_and_share_paddr();
 
   void maybe_sync_copied_lba_key();
+  void commit_shadow_demote(Transaction&);
+  void commit_shadow_promote(Transaction&);
 private:
   // the rewritten extent
   CachedExtent &extent;
@@ -356,12 +353,14 @@ public:
             paddr_t paddr,
             placement_hint_t hint,
             rewrite_gen_t gen,
-	    transaction_id_t trans_id) {
+            Transaction *trans,
+            write_policy_t policy) {
     state = _state;
     set_paddr(paddr);
     user_hint = hint;
     rewrite_generation = gen;
-    pending_for_transaction = trans_id;
+    t = trans;
+    write_policy = policy;
   }
 
   void set_modify_time(sea_time_point t) {
@@ -514,36 +513,7 @@ public:
 
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
   virtual std::ostream &print_detail(std::ostream &out) const { return out; }
-  std::ostream &print(std::ostream &out) const {
-    std::string prior_poffset_str = prior_poffset
-      ? fmt::format("{}", *prior_poffset)
-      : "nullopt";
-    out << "CachedExtent(addr=" << this
-	<< ", type=" << get_type()
-	<< ", trans=" << pending_for_transaction
-	<< ", version=" << version
-	<< ", dirty_from=" << dirty_from
-	<< ", modify_time=" << sea_time_point_printer_t{modify_time}
-	<< ", paddr=" << get_paddr()
-	<< ", prior_paddr=" << prior_poffset_str
-	<< std::hex << ", length=0x" << get_length()
-	<< ", loaded=0x" << get_loaded_length() << std::dec
-	<< ", state=" << state
-	<< ", last_committed_crc=" << last_committed_crc
-	<< ", refcount=" << use_count()
-	<< ", user_hint=" << user_hint
-	<< ", rewrite_gen=" << rewrite_gen_printer_t{rewrite_generation}
-	<< ", pending_io=";
-    if (is_pending_io()) {
-      out << io_wait->from_state;
-    } else {
-      out << "N/A";
-    }
-    if (is_valid() && is_fully_loaded() && !is_stable_clean_pending()) {
-      print_detail(out);
-    }
-    return out << ")";
-  }
+  std::ostream &print(std::ostream &out) const;
 
   /**
    * get_delta
@@ -806,8 +776,14 @@ public:
   }
 
   /// assign the target rewrite generation for the followup rewrite
-  void set_target_rewrite_generation(rewrite_gen_t gen) {
-    user_hint = placement_hint_t::REWRITE;
+  void set_target_rewrite_generation(
+    rewrite_gen_t gen,
+    placement_hint_t hint = PLACEMENT_HINT_NULL) {
+    if (hint != PLACEMENT_HINT_NULL) {
+      user_hint = hint;
+    } else {
+      user_hint = placement_hint_t::REWRITE;
+    }
     rewrite_generation = gen;
   }
 
@@ -842,9 +818,7 @@ public:
   }
 
   /// Returns true if the extent part of the open transaction
-  bool is_pending_in_trans(transaction_id_t id) const {
-    return is_pending() && pending_for_transaction == id;
-  }
+  bool is_pending_in_trans(transaction_id_t id) const;
 
   enum class viewable_state_t {
     stable,                // viewable
@@ -864,17 +838,34 @@ public:
   std::pair<bool, viewable_state_t>
   is_viewable_by_trans(Transaction &t);
 
-  extent_2q_state_t get_2q_state() const {
-    assert("2Q" == crimson::common::get_conf<std::string>
-	   ("seastore_cachepin_type"));
-    return cache_state;
+  extent_pin_state_t get_pin_state() const {
+#ifndef NDEBUG
+    using crimson::common::get_conf;
+    auto type = get_conf<std::string>("seastore_cachepin_type");
+    if (type == "LRU") {
+      assert(pin_state <= extent_pin_state_t::Promoting);
+    } else if (type == "2Q") {
+      assert(pin_state < extent_pin_state_t::Max);
+    } else {
+      ceph_abort("invalid seastore_cachepin_type(LRU or 2Q)");
+    }
+#endif
+    return pin_state;
   }
 
-  void set_2q_state(extent_2q_state_t state) {
-    assert("2Q" == crimson::common::get_conf<std::string>
-	   ("seastore_cachepin_type"));
-    assert(state < extent_2q_state_t::Max);
-    cache_state = state;
+  void set_pin_state(extent_pin_state_t state) {
+    pin_state = state;
+#ifndef NDEBUG
+    using crimson::common::get_conf;
+    auto type = get_conf<std::string>("seastore_cachepin_type");
+    if (type == "LRU") {
+      assert(pin_state <= extent_pin_state_t::Promoting);
+    } else if (type == "2Q") {
+      assert(pin_state < extent_pin_state_t::Max);
+    } else {
+      ceph_abort("invalid seastore_cachepin_type(LRU or 2Q)");
+    }
+#endif
   }
 
   extent_len_t get_last_touch_end() const {
@@ -884,6 +875,26 @@ public:
   void set_last_touch_end(extent_len_t touch_end) {
     assert(touch_end != 0);
     last_touch_end = touch_end;
+  }
+
+  bool is_shadow_extent() const {
+    return is_shadow;
+  }
+
+  void set_shadow_extent(bool b) {
+    is_shadow = b;
+  }
+
+  write_policy_t get_write_policy() const {
+    return write_policy;
+  }
+
+  void set_write_policy(write_policy_t w) {
+    write_policy = w;
+  }
+
+  void reset_write_policy() {
+    write_policy = write_policy_t::WRITE_BACK;
   }
 
 private:
@@ -997,6 +1008,8 @@ private:
 
   placement_hint_t user_hint = PLACEMENT_HINT_NULL;
 
+  write_policy_t write_policy = write_policy_t::WRITE_BACK;
+
   // the target rewrite generation for the followup rewrite
   // or the rewrite generation for the fresh write
   rewrite_gen_t rewrite_generation = NULL_GENERATION;
@@ -1005,14 +1018,16 @@ private:
   // see Cache::touch_extent_by_range() and ExtentPinboardTwoQ.
   extent_len_t last_touch_end = 0;
 
-  // This field is unused when the ExtentPinboard use LRU algorithm
-  extent_2q_state_t cache_state = extent_2q_state_t::Fresh;
+  // This field is used by ExtentPinboard
+  extent_pin_state_t pin_state = extent_pin_state_t::Fresh;
 
   ExtentCommitterRef committer;
 
   void new_committer(Transaction &t);
 
   seastar::shared_mutex commit_lock;
+
+  bool is_shadow = false;
 
 protected:
   trans_view_set_t mutation_pending_extents;
@@ -1096,6 +1111,7 @@ protected:
   friend class ExtentQueue;
   friend class ExtentPinboardLRU;
   friend class ExtentPinboardTwoQ;
+  friend class ExtentPromoter;
   template <typename T, typename... Args>
   static TCachedExtentRef<T> make_cached_extent_ref(
     Args&&... args) {
@@ -1279,8 +1295,8 @@ struct trans_retired_extent_link_t {
   // Otherwise, we have to search through each extent's "retired_transactions"
   // to remove the transaction
   trans_spec_view_t trans_view;
-  trans_retired_extent_link_t(CachedExtentRef extent, transaction_id_t id)
-    : extent(extent), trans_view{id}
+  trans_retired_extent_link_t(CachedExtentRef extent, Transaction &t)
+    : extent(extent), trans_view{t}
   {
     assert(extent->is_stable());
     extent->retired_transactions.insert(trans_view);
@@ -1621,25 +1637,5 @@ using lextent_list_t = addr_extent_list_base_t<
 template <> struct fmt::formatter<crimson::os::seastore::CachedExtent> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::CachedExtent::viewable_state_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::LogicalCachedExtent> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::extent_pin_state_t> : fmt::ostream_formatter {};
 #endif
-
-template <>
-struct fmt::formatter<crimson::os::seastore::extent_2q_state_t>
-    : public fmt::formatter<std::string_view> {
-  using State = crimson::os::seastore::extent_2q_state_t;
-  auto format(const State &s, auto &ctx) const {
-    switch (s) {
-    case State::Fresh:
-      return fmt::format_to(ctx.out(), "Fresh");
-    case State::WarmIn:
-      return fmt::format_to(ctx.out(), "WarmIn");
-    case State::Hot:
-      return fmt::format_to(ctx.out(), "Hot");
-    case State::Max:
-      return fmt::format_to(ctx.out(), "Max");
-    default:
-      __builtin_unreachable();
-      return ctx.out();
-    }
-  }
-};

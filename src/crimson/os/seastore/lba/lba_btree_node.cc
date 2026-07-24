@@ -50,8 +50,9 @@ void LBALeafNode::update(
   modification_t mod)
 {
   LOG_PREFIX(LBALeafNode::update);
+  assert(this->t != nullptr);
   SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}",
-    this->pending_for_transaction,
+    this->t->get_trans_id(),
     iter.get_offset());
   if (likely(mod == modification_t::USER_MODIFY)) {
     this->on_modify();
@@ -71,8 +72,9 @@ LBALeafNode::internal_const_iterator_t LBALeafNode::insert(
   lba_map_val_t val)
 {
   LOG_PREFIX(LBALeafNode::insert);
+  assert(this->t != nullptr);
   SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, key {}",
-    this->pending_for_transaction,
+    this->t->get_trans_id(),
     iter.get_offset(),
     addr);
   this->on_modify();

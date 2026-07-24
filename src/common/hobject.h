@@ -60,6 +60,12 @@ public:
   static bool is_meta_pool(int64_t pool) {
     return pool == POOL_META;
   }
+  static int64_t get_logical_pool(int64_t pool) {
+    if (is_temp_pool(pool))
+      return get_temp_pool(pool);  // it's reversible
+    else
+      return pool;
+  }
 
 public:
   object_t oid;
@@ -114,10 +120,7 @@ public:
     return is_meta_pool(pool);
   }
   int64_t get_logical_pool() const {
-    if (is_temp_pool(pool))
-      return get_temp_pool(pool);  // it's reversible
-    else
-      return pool;
+    return get_logical_pool(pool);
   }
 
   hobject_t() : snap(0), hash(0), max(false), pool(INT64_MIN) {

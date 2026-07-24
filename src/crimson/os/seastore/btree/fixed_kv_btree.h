@@ -216,6 +216,21 @@ public:
 
     }
 
+    // return true if reached the next mapping and false otherwise
+    bool next_sync(op_context_t c) {
+#ifndef NDEBUG
+      assert_valid();
+#endif
+      assert(is_full());
+      assert(!is_end());
+      leaf.pos++;
+      if (at_boundary()) {
+        return handle_boundary_sync(c);
+      } else {
+        return true;
+      }
+    }
+
     /**
      * Move to the previous entry.  If already at position 0 in the current
      * leaf, walks up the internal stack (ensure_internal_bottom_up) to find
@@ -520,6 +535,44 @@ public:
       });
     }
 
+    // return true if reached the next mapping and false otherwise
+    bool handle_boundary_sync(op_context_t c) {
+      assert(at_boundary());
+      assert(is_full());
+      depth_t depth = 2;
+      for (; depth <= get_depth(); depth++) {
+        auto &internal = get_internal(depth);
+        auto it = internal.node->iter_idx(internal.pos + 1);
+        if (it != internal.node->end()) {
+          auto pos = internal.pos + 1;
+          while (depth > 2) {
+            it = get_internal(depth).node->iter_idx(pos);
+            auto child = get_internal(depth).node->template get_child_sync<
+              internal_node_t>(c.trans, c.cache, pos, it.get_key());
+            if (!is_valid_child_ptr(child.get())) {
+              return false;
+            }
+            depth--;
+            get_internal(depth).node = child;
+            get_internal(depth).pos = pos;
+            pos = 0;
+          }
+          assert(depth == 2);
+          assert(pos == 0);
+          it = get_internal(depth).node->begin();
+          auto child = get_internal(depth).node->template get_child_sync<
+            leaf_node_t>(c.trans, c.cache, pos, it.get_key());
+          if (!is_valid_child_ptr(child.get())) {
+            return false;
+          }
+          leaf.node = child;
+          leaf.pos = 0;
+          return true;
+        }
+      }
+      return false;
+    }
+
     /**
      * Called when leaf.pos has advanced past the end of the current leaf
      * (at_boundary() == true).  Walks up the internal stack to find the
@@ -649,14 +702,25 @@ public:
    * leaf node as the root, links it to the RootBlock, and returns the
    * tree's root descriptor.
    */
-  using mkfs_ret = phy_tree_root_t;
+  using mkfs_iertr = base_iertr;
+  using mkfs_ret = mkfs_iertr::future<phy_tree_root_t>;
   static mkfs_ret mkfs(RootBlockRef &root_block, op_context_t c) {
     assert(root_block->is_mutation_pending());
-    auto root_leaf = c.cache.template alloc_new_non_data_extent<leaf_node_t>(
-      c.trans,
-      node_size,
-      placement_hint_t::HOT,
-      INIT_GENERATION);
+    LeafNodeRef root_leaf;
+    while (!root_leaf) {
+      try {
+        root_leaf = c.cache.template alloc_new_non_data_extent<leaf_node_t>(
+          c.trans, node_size, {placement_hint_t::HOT, INIT_GENERATION});
+      } catch (crimson::ct_error::eagain&) {
+      } catch (crimson::ct_error::enospc&) {
+        ceph_abort("shouldn't have no space");
+      }
+      if (!root_leaf) {
+        c.cache.get_epm().maybe_wake_background();
+        co_await trans_intr::make_interruptible(
+          c.cache.get_epm().wait_background());
+      }
+    }
     root_leaf->set_size(0);
     fixed_kv_node_meta_t<node_key_t> meta{min_max_t<node_key_t>::min, min_max_t<node_key_t>::max, 1};
     root_leaf->set_meta(meta);
@@ -664,7 +728,7 @@ public:
     get_tree_stats<self_type>(c.trans).depth = 1u;
     get_tree_stats<self_type>(c.trans).extents_num_delta++;
     TreeRootLinker<RootBlock, leaf_node_t>::link_root(root_block, root_leaf.get());
-    return phy_tree_root_t{root_leaf->get_paddr(), 1u};
+    co_return phy_tree_root_t{root_leaf->get_paddr(), 1u};
   }
 
   /**
@@ -752,10 +816,12 @@ public:
       if (depth > 1) {
         auto child = entry.node->template get_child_sync<internal_node_t>(
           c.trans, c.cache, entry.pos, riter.get_key());
+        ceph_assert(is_valid_child_ptr(child.get()));
         iter.get_internal(depth).node = child;
       } else {
         auto child = entry.node->template get_child_sync<leaf_node_t>(
           c.trans, c.cache, entry.pos, riter.get_key());
+        ceph_assert(is_valid_child_ptr(child.get()));
         iter.leaf.node = child;
       }
     }
@@ -1730,15 +1796,29 @@ public:
     LOG_PREFIX(FixedKVBtree::rewrite_extent);
     assert(is_lba_backref_node(e->get_type()));
 
-    auto do_rewrite = [&](auto &fixed_kv_extent) {
-      auto n_fixed_kv_extent = c.cache.template alloc_new_non_data_extent<
-        std::remove_reference_t<decltype(fixed_kv_extent)>
-        >(
-        c.trans,
-        fixed_kv_extent.get_length(),
+    auto do_rewrite = [&](auto &fixed_kv_extent) -> rewrite_extent_ret {
+      auto opt = Cache::alloc_option_t {
         fixed_kv_extent.get_user_hint(),
         // get target rewrite generation
-        fixed_kv_extent.get_rewrite_generation());
+        fixed_kv_extent.get_rewrite_generation()
+      };
+      TCachedExtentRef<std::remove_reference_t<
+        decltype(fixed_kv_extent)>> n_fixed_kv_extent;
+      while (!n_fixed_kv_extent) {
+        try {
+          n_fixed_kv_extent = c.cache.template alloc_new_non_data_extent<
+            std::remove_reference_t<decltype(fixed_kv_extent)>
+            >(
+            c.trans,
+            fixed_kv_extent.get_length(),
+            opt);
+        } catch (crimson::ct_error::eagain&) {}
+        if (!n_fixed_kv_extent) {
+          c.cache.get_epm().maybe_wake_background();
+          co_await trans_intr::make_interruptible(
+            c.cache.get_epm().wait_background());
+        }
+      }
       n_fixed_kv_extent->rewrite(c.trans, fixed_kv_extent, 0);
 
       SUBTRACET(
@@ -1747,26 +1827,24 @@ public:
         c.trans,
         fixed_kv_extent,
         *n_fixed_kv_extent);
-
-      return update_internal_mapping(
+      
+      co_await update_internal_mapping(
         c,
         n_fixed_kv_extent->get_node_meta().depth,
         n_fixed_kv_extent->get_node_meta().begin,
         e->get_paddr(),
         n_fixed_kv_extent->get_paddr(),
-        n_fixed_kv_extent
-      ).si_then([c, e] {
-        c.cache.retire_extent(c.trans, e);
-      });
+        n_fixed_kv_extent);
+      c.cache.retire_extent(c.trans, e);
     };
 
     if (e->get_type() == internal_node_t::TYPE) {
       auto lint = e->cast<internal_node_t>();
-      return do_rewrite(*lint);
+      co_await do_rewrite(*lint);
     } else {
       assert(e->get_type() == leaf_node_t::TYPE);
       auto lleaf = e->cast<leaf_node_t>();
-      return do_rewrite(*lleaf);
+      co_await do_rewrite(*lleaf);
     }
   }
 
@@ -2601,126 +2679,150 @@ private:
   {
     LOG_PREFIX(FixedKVBtree::handle_split);
 
-    return iter.check_split(c
-    ).si_then([FNAME, this, c, &iter](auto split_from) {
-      SUBTRACET(seastore_fixedkv_tree,
-        "split_from {}, depth {}", c.trans, split_from, iter.get_depth());
+    auto split_from = co_await iter.check_split(c);
+    SUBTRACET(seastore_fixedkv_tree,
+      "split_from {}, depth {}", c.trans, split_from, iter.get_depth());
 
-      if (split_from == iter.get_depth()) {
-        assert(iter.is_full());
-        auto nroot = c.cache.template alloc_new_non_data_extent<internal_node_t>(
-          c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
-        fixed_kv_node_meta_t<node_key_t> meta{
-          min_max_t<node_key_t>::min, min_max_t<node_key_t>::max, iter.get_depth() + 1};
-        nroot->set_meta(meta);
-        nroot->range = meta;
-        nroot->journal_insert(
-          nroot->begin(),
-          min_max_t<node_key_t>::min,
-          get_root().get_location(),
-          nullptr);
-        iter.internal.push_back({nroot, 0});
+    if (split_from == iter.get_depth()) {
+      assert(iter.is_full());
+      InternalNodeRef nroot;
+      while (!nroot) {
+        try {
+          nroot = c.cache.template alloc_new_non_data_extent<internal_node_t>(
+            c.trans, node_size, {placement_hint_t::HOT, INIT_GENERATION});
+        } catch (crimson::ct_error::eagain&) {}
+        if (!nroot) {
+          c.cache.get_epm().maybe_wake_background();
+          co_await trans_intr::make_interruptible(
+            c.cache.get_epm().wait_background());
+        }
+      }
+      fixed_kv_node_meta_t<node_key_t> meta{
+        min_max_t<node_key_t>::min, min_max_t<node_key_t>::max, iter.get_depth() + 1};
+      nroot->set_meta(meta);
+      nroot->range = meta;
+      nroot->journal_insert(
+        nroot->begin(),
+        min_max_t<node_key_t>::min,
+        get_root().get_location(),
+        nullptr);
+      iter.internal.push_back({nroot, 0});
 
-        get_tree_stats<self_type>(c.trans).depth = iter.get_depth();
-        get_tree_stats<self_type>(c.trans).extents_num_delta++;
+      get_tree_stats<self_type>(c.trans).depth = iter.get_depth();
+      get_tree_stats<self_type>(c.trans).extents_num_delta++;
 
-        root_block = c.cache.duplicate_for_write(
-          c.trans, root_block)->template cast<RootBlock>();
-        get_root().set_location(nroot->get_paddr());
-        get_root().set_depth(iter.get_depth());
-        ceph_assert(get_root().get_depth() <= MAX_DEPTH);
-        set_root_node(nroot);
+      root_block = c.cache.duplicate_for_write(
+        c.trans, root_block)->template cast<RootBlock>();
+      get_root().set_location(nroot->get_paddr());
+      get_root().set_depth(iter.get_depth());
+      ceph_assert(get_root().get_depth() <= MAX_DEPTH);
+      set_root_node(nroot);
+    }
+
+    /* pos may be either node_position_t<leaf_node_t> or
+     * node_position_t<internal_node_t> */
+    auto split_level = [&, c, FNAME](auto &parent_pos, auto &pos)
+                        -> handle_split_iertr::future<std::pair<
+                          decltype(pos.node), decltype(pos.node)>> {
+      decltype(pos.node) left, right;
+      node_key_t pivot = min_max_t<node_key_t>::null;
+      while (!left) {
+        assert(!right);
+        assert(pivot == min_max_t<node_key_t>::null);
+        try {
+          auto t = pos.node->make_split_children(c);
+          left = std::get<0>(t);
+          right = std::get<1>(t);
+          pivot = std::get<2>(t);
+        } catch (crimson::ct_error::eagain&) {}
+        if (!left) {
+          c.cache.get_epm().maybe_wake_background();
+          co_await trans_intr::make_interruptible(
+            c.cache.get_epm().wait_background());
+        }
       }
 
-      /* pos may be either node_position_t<leaf_node_t> or
-       * node_position_t<internal_node_t> */
-      auto split_level = [&, c, FNAME](auto &parent_pos, auto &pos) {
-        auto [left, right, pivot] = pos.node->make_split_children(c);
+      auto parent_node = parent_pos.node;
+      auto parent_iter = parent_pos.get_iter();
 
-        auto parent_node = parent_pos.node;
-        auto parent_iter = parent_pos.get_iter();
+      parent_node->update(
+        parent_iter,
+        left->get_paddr(),
+        left.get());
+      parent_node->insert(
+        parent_iter + 1,
+        pivot,
+        right->get_paddr(),
+        right.get());
 
-        parent_node->update(
-          parent_iter,
-          left->get_paddr(),
-          left.get());
-        parent_node->insert(
-          parent_iter + 1,
-          pivot,
-          right->get_paddr(),
-          right.get());
+      SUBTRACET(
+        seastore_fixedkv_tree,
+        "splitted {} into left: {}, right: {}",
+        c.trans,
+        *pos.node,
+        *left,
+        *right);
+      c.cache.retire_extent(c.trans, pos.node);
 
+      get_tree_stats<self_type>(c.trans).extents_num_delta++;
+      co_return std::make_pair(left, right);
+    };
+
+    for (; split_from > 0; --split_from) {
+      auto &parent_pos = iter.get_internal(split_from + 1);
+      if (!parent_pos.node->is_mutable()) {
+        parent_pos.node = c.cache.duplicate_for_write(
+          c.trans, parent_pos.node
+        )->template cast<internal_node_t>();
+      }
+
+      if (split_from > 1) {
+        auto &pos = iter.get_internal(split_from);
         SUBTRACET(
           seastore_fixedkv_tree,
-          "splitted {} into left: {}, right: {}",
+          "splitting internal {} at depth {}, parent: {} at pos: {}",
           c.trans,
           *pos.node,
-          *left,
-          *right);
-        c.cache.retire_extent(c.trans, pos.node);
+          split_from,
+          *parent_pos.node,
+          parent_pos.pos);
+        auto [left, right] = co_await split_level(parent_pos, pos);
 
-        get_tree_stats<self_type>(c.trans).extents_num_delta++;
-        return std::make_pair(left, right);
-      };
-
-      for (; split_from > 0; --split_from) {
-        auto &parent_pos = iter.get_internal(split_from + 1);
-        if (!parent_pos.node->is_mutable()) {
-          parent_pos.node = c.cache.duplicate_for_write(
-            c.trans, parent_pos.node
-          )->template cast<internal_node_t>();
-        }
-
-        if (split_from > 1) {
-          auto &pos = iter.get_internal(split_from);
-          SUBTRACET(
-            seastore_fixedkv_tree,
-            "splitting internal {} at depth {}, parent: {} at pos: {}",
-            c.trans,
-            *pos.node,
-            split_from,
-            *parent_pos.node,
-            parent_pos.pos);
-          auto [left, right] = split_level(parent_pos, pos);
-
-          if (pos.pos < left->get_size()) {
-            pos.node = left;
-          } else {
-            pos.node = right;
-            pos.pos -= left->get_size();
-
-            parent_pos.pos += 1;
-          }
+        if (pos.pos < left->get_size()) {
+          pos.node = left;
         } else {
-          auto &pos = iter.leaf;
-          SUBTRACET(
-            seastore_fixedkv_tree,
-            "splitting leaf {}, parent: {} at pos: {}",
-            c.trans,
-            *pos.node,
-            *parent_pos.node,
-            parent_pos.pos);
-          auto [left, right] = split_level(parent_pos, pos);
+          pos.node = right;
+          pos.pos -= left->get_size();
 
-          /* right->get_node_meta().begin == pivot == right->begin()->get_key()
-           * Thus, if pos.pos == left->get_size(), we want iter to point to
-           * left with pos.pos at the end rather than right with pos.pos = 0
-           * since the insertion would be to the left of the first element
-           * of right and thus necessarily less than right->get_node_meta().begin.
-           */
-          if (pos.pos <= left->get_size()) {
-            pos.node = left;
-          } else {
-            pos.node = right;
-            pos.pos -= left->get_size();
+          parent_pos.pos += 1;
+        }
+      } else {
+        auto &pos = iter.leaf;
+        SUBTRACET(
+          seastore_fixedkv_tree,
+          "splitting leaf {}, parent: {} at pos: {}",
+          c.trans,
+          *pos.node,
+          *parent_pos.node,
+          parent_pos.pos);
+        auto [left, right] = co_await split_level(parent_pos, pos);
 
-            parent_pos.pos += 1;
-          }
+        /* right->get_node_meta().begin == pivot == right->begin()->get_key()
+         * Thus, if pos.pos == left->get_size(), we want iter to point to
+         * left with pos.pos at the end rather than right with pos.pos = 0
+         * since the insertion would be to the left of the first element
+         * of right and thus necessarily less than right->get_node_meta().begin.
+         */
+        if (pos.pos <= left->get_size()) {
+          pos.node = left;
+        } else {
+          pos.node = right;
+          pos.pos -= left->get_size();
+
+          parent_pos.pos += 1;
         }
       }
-
-      return seastar::now();
-    });
+    }
   }
 
 
@@ -2896,7 +2998,7 @@ private:
     
     SUBTRACET(seastore_fixedkv_tree, "parent: {}, node: {}", c.trans, *parent_pos.node, *pos.node);
     auto do_merge = [c, iter, donor_iter, donor_is_left, &parent_pos, &pos](
-                typename NodeType::Ref donor) {
+                typename NodeType::Ref donor) -> handle_merge_ret {
       LOG_PREFIX(FixedKVBtree::merge_level);
       auto [l, r] = donor_is_left ?
         std::make_pair(donor, pos.node) : std::make_pair(pos.node, donor);
@@ -2905,7 +3007,17 @@ private:
         std::make_pair(donor_iter, iter) : std::make_pair(iter, donor_iter);
 
       if (donor->at_min_capacity()) {
-        auto replacement = l->make_full_merge(c, r);
+        typename NodeType::Ref replacement;
+        while (!replacement) {
+          try {
+            replacement = l->make_full_merge(c, r);
+          } catch (crimson::ct_error::eagain&) {}
+          if (!replacement) {
+            c.cache.get_epm().maybe_wake_background();
+            co_await trans_intr::make_interruptible(
+              c.cache.get_epm().wait_background());
+          }
+        }
 
         parent_pos.node->update(
           liter,
@@ -2926,11 +3038,23 @@ private:
       } else {
         auto pivot_idx = l->get_balance_pivot_idx(*l, *r);
         LOG_PREFIX(FixedKVBtree::merge_level);
-        auto [replacement_l, replacement_r, pivot] =
-          l->make_balanced(
-            c,
-            r,
-            pivot_idx);
+        typename NodeType::Ref replacement_l, replacement_r;
+        node_key_t pivot = min_max_t<node_key_t>::null;
+        while (!replacement_l) {
+          assert(!replacement_r);
+          assert(pivot == min_max_t<node_key_t>::null);
+          try {
+            auto t = l->make_balanced(c, r, pivot_idx);
+            replacement_l = std::get<0>(t);
+            replacement_r = std::get<1>(t);
+            pivot = std::get<2>(t);
+          } catch (crimson::ct_error::eagain&) {}
+          if (!replacement_l) {
+            c.cache.get_epm().maybe_wake_background();
+            co_await trans_intr::make_interruptible(
+              c.cache.get_epm().wait_background());
+          }
+        }
 
         parent_pos.node->update(
           liter,
@@ -2966,8 +3090,6 @@ private:
         c.cache.retire_extent(c.trans, l);
         c.cache.retire_extent(c.trans, r);
       }
-
-      return seastar::now();
     };
 
     auto v = parent_pos.node->template get_child<NodeType>(
@@ -2975,30 +3097,26 @@ private:
     // checking the lba child must be atomic with creating
     // and linking the absent child
     if (v.has_child()) {
-      return std::move(v.get_child_fut()
-      ).si_then([do_merge=std::move(do_merge), &pos,
-                donor_iter, donor_is_left, c, parent_pos](auto child) {
-        LOG_PREFIX(FixedKVBtree::merge_level);
-        SUBTRACET(seastore_fixedkv_tree,
-          "got child on {}, pos: {}, res: {}",
-          c.trans,
-          *parent_pos.node,
-          donor_iter.get_offset(),
-          *child);
-        std::ignore = donor_is_left;
-        std::ignore = pos;
-        [[maybe_unused]] auto &node = (typename internal_node_t::base_t&)*child;
-        assert(donor_is_left ?
-          node.get_node_meta().end == pos.node->get_node_meta().begin :
-          node.get_node_meta().begin == pos.node->get_node_meta().end);
-        assert(node.get_node_meta().begin == donor_iter.get_key());
-        assert(node.get_node_meta().end > donor_iter.get_key());
-        return do_merge(child->template cast<NodeType>());
-      });
+      auto child = co_await std::move(v.get_child_fut());
+      SUBTRACET(seastore_fixedkv_tree,
+        "got child on {}, pos: {}, res: {}",
+        c.trans,
+        *parent_pos.node,
+        donor_iter.get_offset(),
+        *child);
+      std::ignore = donor_is_left;
+      std::ignore = pos;
+      [[maybe_unused]] auto &node = (typename internal_node_t::base_t&)*child;
+      assert(donor_is_left ?
+        node.get_node_meta().end == pos.node->get_node_meta().begin :
+        node.get_node_meta().begin == pos.node->get_node_meta().end);
+      assert(node.get_node_meta().begin == donor_iter.get_key());
+      assert(node.get_node_meta().end > donor_iter.get_key());
+      co_return co_await do_merge(child->template cast<NodeType>());
     }
 
     auto child_pos = v.get_child_pos();
-    return get_node<NodeType>(
+    auto donor = co_await get_node<NodeType>(
       c,
       depth,
       donor_iter.get_val().maybe_relative_to(parent_pos.node->get_paddr()),
@@ -3006,10 +3124,8 @@ private:
       end,
       std::make_optional<node_position_t<internal_node_t>>(
         child_pos.get_parent(),
-        child_pos.get_pos())
-    ).si_then([do_merge=std::move(do_merge)](typename NodeType::Ref donor) {
-      return do_merge(donor);
-    });
+        child_pos.get_pos()));
+    co_await do_merge(donor);
   }
 };
 

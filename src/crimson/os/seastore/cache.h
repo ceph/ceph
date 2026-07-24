@@ -742,8 +742,16 @@ public:
     }
   }
 
+  ExtentPlacementManager& get_epm() {
+    return epm;
+  }
+
   extent_len_t get_block_size() const {
     return epm.get_block_size();
+  }
+
+  ExtentPinboard *get_extent_pinboard() {
+    return pinboard.get();
   }
 
 // Interfaces only for tests.
@@ -754,7 +762,12 @@ public:
   }
 
   bool can_drop_backref() const {
-    return epm.is_pure_rbm();
+    return epm.is_pure_rbm() && !force_backref;
+  }
+
+  void update_read_ratio(Transaction &t) {
+    stats.read_hit_hot += t.read_hit_hot;
+    stats.read_hit_cold += t.read_hit_cold;
   }
 
 private:
@@ -853,7 +866,8 @@ private:
 	      offset,
 	      PLACEMENT_HINT_NULL,
 	      NULL_GENERATION,
-	      TRANS_ID_NULL);
+	      nullptr,
+	      write_policy_t::WRITE_BACK);
     SUBDEBUGT(seastore_cache,
 	"{} {}~0x{:x} is absent, add extent and reading range 0x{:x}~0x{:x} ... -- {}",
 	t, T::TYPE, offset, length, partial_off, partial_len, *ret);
@@ -892,7 +906,8 @@ private:
                 offset,
                 PLACEMENT_HINT_NULL,
                 NULL_GENERATION,
-		TRANS_ID_NULL);
+		nullptr,
+		write_policy_t::WRITE_BACK);
       SUBDEBUG(seastore_cache,
           "{} {}~0x{:x} is absent, add extent and reading range 0x{:x}~0x{:x} ... -- {}",
           T::TYPE, offset, length, partial_off, partial_len, *ret);
@@ -1065,6 +1080,24 @@ private:
     return res;
   }
 
+  std::optional<backref_entry_t> get_cached_backref_entry(paddr_t addr) {
+    auto it = backref_entry_mset.lower_bound(
+      addr,
+      backref_entry_t::cmp_t());
+    if (it == backref_entry_mset.end()) {
+      return std::nullopt;
+    }
+    while (it->paddr == addr) {
+      auto &backref_entry = *it;
+      ++it;
+      if (it == backref_entry_mset.end() ||
+          it->paddr != addr) {
+        return backref_entry;
+      }
+    }
+    return std::nullopt;
+  }
+
   const backref_entry_mset_t& get_backref_entry_mset() {
     return backref_entry_mset;
   }
@@ -1142,6 +1175,7 @@ public:
     }
   }
 
+  using alloc_option_t = ExtentPlacementManager::alloc_option_t;
   /**
    * alloc_new_non_data_extent
    *
@@ -1152,25 +1186,20 @@ public:
   TCachedExtentRef<T> alloc_new_non_data_extent(
     Transaction &t,         ///< [in, out] current transaction
     extent_len_t length,    ///< [in] length
-    placement_hint_t hint,  ///< [in] user hint
-#ifdef UNIT_TESTS_BUILT
-    rewrite_gen_t gen,      ///< [in] rewrite generation
-    std::optional<paddr_t> epaddr = std::nullopt ///< [in] paddr fed by callers
-#else
-    rewrite_gen_t gen
-#endif
+    alloc_option_t opt      ///< [in] allocation options
   ) {
     LOG_PREFIX(Cache::alloc_new_non_data_extent);
-    SUBTRACET(seastore_cache, "allocate {} 0x{:x}B, hint={}, gen={}",
-              t, T::TYPE, length, hint, rewrite_gen_printer_t{gen});
-#ifdef UNIT_TESTS_BUILT
-    auto result = epm.alloc_new_non_data_extent(t, T::TYPE, length, hint, gen, epaddr);
-#else
-    auto result = epm.alloc_new_non_data_extent(t, T::TYPE, length, hint, gen);
-#endif
+    SUBTRACET(seastore_cache, "allocate {} 0x{:x}B, opt.hint={}, gen={}",
+              t, T::TYPE, length, opt.hint, rewrite_gen_printer_t{opt.gen});
+    auto result = epm.alloc_new_non_data_extent(t, T::TYPE, length, opt);
     if (!result) {
-      SUBERRORT(seastore_cache, "insufficient space", t);
-      std::rethrow_exception(crimson::ct_error::enospc::exception_ptr());
+      if (epm.is_full()) {
+        SUBERRORT(seastore_cache, "insufficient space", t);
+        std::rethrow_exception(crimson::ct_error::enospc::exception_ptr());
+      } else {
+        SUBERRORT(seastore_cache, "insufficient space, wait for demoting", t);
+        std::rethrow_exception(crimson::ct_error::eagain::exception_ptr());
+      }
     }
     auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result->bp));
     assert(is_rewrite_generation(
@@ -1178,14 +1207,15 @@ public:
       epm.dynamic_max_rewrite_generation));
     ret->init(CachedExtent::extent_state_t::INITIAL_WRITE_PENDING,
               result->paddr,
-              hint,
+              opt.hint,
               result->gen,
-	      t.get_trans_id());
+	      &t,
+	      write_policy_t::WRITE_BACK);
     t.add_fresh_extent(ret);
     SUBDEBUGT(seastore_cache,
               "allocated {} 0x{:x}B extent at {}, hint={}, gen={} -- {}",
               t, T::TYPE, length, result->paddr,
-              hint, rewrite_gen_printer_t{result->gen}, *ret);
+              opt.hint, rewrite_gen_printer_t{result->gen}, *ret);
     return ret;
   }
   /**
@@ -1198,25 +1228,20 @@ public:
   std::vector<TCachedExtentRef<T>> alloc_new_data_extents(
     Transaction &t,         ///< [in, out] current transaction
     extent_len_t length,    ///< [in] length
-    placement_hint_t hint,  ///< [in] user hint
-#ifdef UNIT_TESTS_BUILT
-    rewrite_gen_t gen,      ///< [in] rewrite generation
-    std::optional<paddr_t> epaddr = std::nullopt ///< [in] paddr fed by callers
-#else
-    rewrite_gen_t gen
-#endif
+    alloc_option_t opt      ///< [in] allocation options
   ) {
     LOG_PREFIX(Cache::alloc_new_data_extents);
     SUBTRACET(seastore_cache, "allocate {} 0x{:x}B, hint={}, gen={}",
-              t, T::TYPE, length, hint, rewrite_gen_printer_t{gen});
-#ifdef UNIT_TESTS_BUILT
-    auto results = epm.alloc_new_data_extents(t, T::TYPE, length, hint, gen, epaddr);
-#else
-    auto results = epm.alloc_new_data_extents(t, T::TYPE, length, hint, gen);
-#endif
+              t, T::TYPE, length, opt.hint, rewrite_gen_printer_t{opt.gen});
+    auto results = epm.alloc_new_data_extents(t, T::TYPE, length, opt);
     if (results.empty()) {
-      SUBERRORT(seastore_cache, "insufficient space", t);
-      std::rethrow_exception(crimson::ct_error::enospc::exception_ptr());
+      if (epm.is_full()) {
+        SUBERRORT(seastore_cache, "insufficient space", t);
+        std::rethrow_exception(crimson::ct_error::enospc::exception_ptr());
+      } else {
+        SUBERRORT(seastore_cache, "insufficient space, wait for demoting", t);
+        std::rethrow_exception(crimson::ct_error::eagain::exception_ptr());
+      }
     }
     std::vector<TCachedExtentRef<T>> extents;
     for (auto &result : results) {
@@ -1226,14 +1251,15 @@ public:
 	epm.dynamic_max_rewrite_generation));
       ret->init(CachedExtent::extent_state_t::INITIAL_WRITE_PENDING,
                 result.paddr,
-                hint,
+                opt.hint,
                 result.gen,
-                t.get_trans_id());
+                &t,
+		opt.write_policy);
       t.add_fresh_extent(ret);
       SUBDEBUGT(seastore_cache,
                 "allocated {} 0x{:x}B extent at {}, hint={}, gen={} -- {}",
                 t, T::TYPE, length, result.paddr,
-                hint, rewrite_gen_printer_t{result.gen}, *ret);
+                opt.hint, rewrite_gen_printer_t{result.gen}, *ret);
       extents.emplace_back(std::move(ret));
     }
     return extents;
@@ -1270,7 +1296,8 @@ public:
 	      remap_paddr,
 	      PLACEMENT_HINT_NULL,
 	      NULL_GENERATION,
-              t.get_trans_id());
+              &t,
+	      write_policy_t::WRITE_BACK);
 
     auto extent = ext->template cast<T>();
     extent->set_laddr(remap_laddr);
@@ -1299,7 +1326,9 @@ public:
     extent_types_t type,   ///< [in] type tag
     extent_len_t length,   ///< [in] length
     placement_hint_t hint, ///< [in] user hint
-    rewrite_gen_t gen      ///< [in] rewrite generation
+    rewrite_gen_t gen,     ///< [in] rewrite generation
+    paddr_t paddr_hint,
+    bool is_tracked
     );
 
   /**
@@ -1311,8 +1340,7 @@ public:
     Transaction &t,        ///< [in, out] current transaction
     extent_types_t type,   ///< [in] type tag
     extent_len_t length,   ///< [in] length
-    placement_hint_t hint, ///< [in] user hint
-    rewrite_gen_t gen      ///< [in] rewrite generation
+    alloc_option_t opt     ///< [in] allocation options
     );
 
   /**
@@ -1701,6 +1729,9 @@ public:
       read_extent_futs, [](auto &fut) { return std::move(fut); });
   }
 
+  bool is_on_cold_tier(paddr_t paddr) const {
+    return epm.is_cold_device(paddr.get_device_id());
+  }
 private:
   void touch_extent_fully(
       CachedExtent &ext,
@@ -1722,6 +1753,9 @@ private:
       extent_len_t load_length)
   {
     assert(ext.get_paddr().is_absolute());
+    if (ext.is_shadow_extent()) {
+      return;
+    }
     if (hint == CACHE_HINT_NOCACHE && is_logical_type(ext.get_type())) {
       return;
     }
@@ -1741,6 +1775,8 @@ private:
   std::vector<SegmentProvider*> segment_providers_by_device_id;
 
   transaction_id_t next_id = 0;
+
+  const bool force_backref = false;
 
   /**
    * dirty
@@ -1875,8 +1911,15 @@ private:
     std::array<uint64_t, NUM_SRC_COMB> trans_conflicts_by_srcs;
     counter_by_src_t<uint64_t> trans_conflicts_by_unknown;
 
+    uint64_t write_hit_hot = 0;
+    uint64_t write_hit_cold = 0;
+    uint64_t read_hit_hot = 0;
+    uint64_t read_hit_cold = 0;
+
     rewrite_stats_t trim_rewrites;
     rewrite_stats_t reclaim_rewrites;
+    rewrite_stats_t promote_rewrites;
+    rewrite_stats_t demote_rewrites;
   } stats;
 
   mutable dirty_io_stats_t last_dirty_io;
@@ -1884,6 +1927,8 @@ private:
     last_dirty_io_by_src_ext;
   mutable rewrite_stats_t last_trim_rewrites;
   mutable rewrite_stats_t last_reclaim_rewrites;
+  mutable rewrite_stats_t last_promote_rewrites;
+  mutable rewrite_stats_t last_demote_rewrites;
   mutable cache_access_stats_t last_access;
   mutable counter_by_src_t<uint64_t> last_cache_absent_by_src;
   mutable counter_by_src_t<counter_by_extent_t<cache_access_stats_t> >
@@ -1905,6 +1950,10 @@ private:
 	     src2 == Transaction::src_t::CLEANER_MAIN));
     assert(!(src1 == Transaction::src_t::CLEANER_COLD &&
 	     src2 == Transaction::src_t::CLEANER_COLD));
+    assert(!(src1 == Transaction::src_t::PROMOTE &&
+	     src2 == Transaction::src_t::PROMOTE));
+    assert(!(src1 == Transaction::src_t::DEMOTE &&
+	     src2 == Transaction::src_t::DEMOTE));
     assert(!(src1 == Transaction::src_t::TRIM_ALLOC &&
              src2 == Transaction::src_t::TRIM_ALLOC));
 

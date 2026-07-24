@@ -1578,6 +1578,7 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
       read_len,
       pin_start,
       pin_len);
+
     rpins.emplace_back(
       pin, read_start_aligned, read_len_aligned,
       unalign_start_offset, read_len);
@@ -1590,6 +1591,8 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
       "ObjectDataHandler::read hit invalid error"
     )
   );
+  auto prefix = l_start.get_laddr().get_object_prefix();
+  bool all_cold = true;
   for (auto &pin : rpins) {
     if (pin.mapping.is_zero_reserved()) {
       ret.append_zero(pin.unaligned_len);
@@ -1608,7 +1611,20 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
       assert(pin.unaligned_start_offset == 0);
       ret.append(std::move(aligned_bl));
     }
+    DEBUGT("got extent: {}", ctx.t, *maybe_indirect_extent.extent);
+    auto paddr = maybe_indirect_extent.extent->get_paddr();
+    all_cold &= ctx.tm.is_cold_device(paddr.get_device_id());
+
+    if (paddr.is_absolute()) {
+      ctx.tm.update_read_ratio(ctx.t, paddr.get_device_id());
+    }
+
   }
+  if (!all_cold) {
+    assert(ctx.tm.is_prefix_cached(prefix));
+    ctx.tm.update_logical_bucket_for_read(prefix);
+  }
+  ctx.tm.submit_read_ratio(ctx.t);
   co_return std::move(ret);
 }
 

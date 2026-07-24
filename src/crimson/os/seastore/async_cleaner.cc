@@ -603,10 +603,10 @@ std::size_t JournalTrimmerImpl::get_alloc_journal_size() const
   return static_cast<std::size_t>(ret);
 }
 
-seastar::future<> JournalTrimmerImpl::trim() {
+seastar::future<> JournalTrimmerImpl::trim(bool force) {
   return seastar::when_all(
-    [this] {
-      if (should_trim_alloc()) {
+    [this, force] {
+      if (force || should_trim_alloc()) {
         return trim_alloc(
         ).handle_error(
           crimson::ct_error::assert_all(
@@ -617,8 +617,8 @@ seastar::future<> JournalTrimmerImpl::trim() {
         return seastar::now();
       }
     },
-    [this] {
-      if (should_start_trim_dirty()) {
+    [this, force] {
+      if (force || should_start_trim_dirty()) {
         return trim_dirty(
         ).handle_error(
           crimson::ct_error::assert_all(
@@ -717,8 +717,11 @@ JournalTrimmerImpl::trim_dirty()
 	    return trans_intr::do_for_each(
 	      dirty_list,
 	      [this, &t](auto &e) {
-	      return extent_callback->rewrite_extent(
+              return extent_callback->maybe_remove_shadow(t, *e
+              ).si_then([this, &t, e] {
+	        return extent_callback->rewrite_extent(
 		  t, e, INIT_GENERATION, NULL_TIME);
+              });
 	    });
 	  });
 	}).si_then([this, &t] {
@@ -1388,15 +1391,11 @@ do_reclaim_space_ret do_reclaim_space(
 		    &reclaimed, &t, modify_time, target_generation] {
           DEBUGT("reclaim {} extents", t, extents.size());
           // rewrite live extents
-          return trans_intr::do_for_each(
-            extents,
-            [&extent_callback, modify_time, &t,
-	    &reclaimed, target_generation](auto ext)
-          {
-            reclaimed += ext->get_length();
-            return extent_callback.rewrite_extent(
-                t, ext, target_generation, modify_time);
-          });
+	  for (auto &ext : extents) {
+	    reclaimed += ext->get_length();
+	  }
+	  return extent_callback.rewrite_extents(
+	    t, extents, target_generation, PLACEMENT_HINT_NULL, modify_time);
         });
       }).si_then([&extent_callback, &t] {
         return extent_callback.submit_transaction_direct(t);
@@ -1962,9 +1961,11 @@ RBMCleaner::RBMCleaner(
   RBMDeviceGroupRef&& rb_group,
   BackrefManager &backref_manager,
   LBAManager &lba_manager,
-  bool detailed)
+  bool detailed,
+  bool is_cold)
   : store_index(store_index),
     detailed(detailed),
+    is_cold(is_cold),
     rb_group(std::move(rb_group)),
     backref_manager(backref_manager),
     lba_manager(lba_manager)
@@ -2194,7 +2195,13 @@ void RBMCleaner::register_metrics()
 {
   namespace sm = seastar::metrics;
 
-  metrics.add_group("rbm_cleaner", {
+  std::string prefix;
+  if (is_cold) {
+    prefix.append("cold_");
+  }
+  prefix.append("rbm_cleaner");
+
+  metrics.add_group(prefix, {
     sm::make_counter("total_bytes",
 		     [this] { return get_total_bytes(); },
 		     sm::description("the size of the space"),

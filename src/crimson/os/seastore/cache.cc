@@ -36,9 +36,12 @@ Cache::Cache(
     delta_based_overwrite_enabled(
       crimson::common::get_conf<Option::size_t>(
         "seastore_data_delta_based_overwrite") > 0),
+    force_backref(crimson::common::get_conf<bool>(
+        "seastore_logical_bucket_cache_test_stress")),
     pinboard(create_extent_pinboard(
       crimson::common::get_conf<Option::size_t>(
-       "seastore_cachepin_size_pershard")))
+       "seastore_cachepin_size_pershard"),
+      &epm))
 {
   register_metrics(store_index);
   segment_providers_by_device_id.resize(DEVICE_ID_MAX, nullptr);
@@ -119,6 +122,8 @@ void Cache::register_metrics(store_index_t store_index)
   last_dirty_io_by_src_ext = {};
   last_trim_rewrites = {};
   last_reclaim_rewrites = {};
+  last_promote_rewrites = {};;
+  last_demote_rewrites = {};
   last_access = {};
   last_cache_absent_by_src = {};
   last_access_by_src_ext = {};
@@ -133,6 +138,8 @@ void Cache::register_metrics(store_index_t store_index)
     {src_t::TRIM_ALLOC, {sm::label_instance("src", "TRIM_ALLOC")}},
     {src_t::CLEANER_MAIN, {sm::label_instance("src", "CLEANER_MAIN")}},
     {src_t::CLEANER_COLD, {sm::label_instance("src", "CLEANER_COLD")}},
+    {src_t::PROMOTE, {sm::label_instance("src", "PROMOTE")}},
+    {src_t::DEMOTE, {sm::label_instance("src", "DEMOTE")}},
   };
   assert(labels_by_src.size() == (std::size_t)src_t::MAX);
 
@@ -227,6 +234,13 @@ void Cache::register_metrics(store_index_t store_index)
       ),
     }
   );
+
+  metrics.add_group("cache", {
+    sm::make_counter("write_hit_hot", stats.write_hit_hot, sm::description("")),
+    sm::make_counter("write_hit_cold", stats.write_hit_cold, sm::description("")),
+    sm::make_counter("read_hit_hot", stats.read_hit_hot, sm::description("")),
+    sm::make_counter("read_hit_cold", stats.read_hit_cold, sm::description("")),
+  });
 
   {
     /*
@@ -672,6 +686,10 @@ void Cache::register_metrics(store_index_t store_index)
            src2 == Transaction::src_t::CLEANER_MAIN) ||
           (src1 == Transaction::src_t::CLEANER_COLD &&
            src2 == Transaction::src_t::CLEANER_COLD) ||
+          (src1 == Transaction::src_t::PROMOTE &&
+           src2 == Transaction::src_t::PROMOTE) ||
+          (src1 == Transaction::src_t::DEMOTE &&
+           src2 == Transaction::src_t::DEMOTE) ||
           (src1 == Transaction::src_t::TRIM_ALLOC &&
            src2 == Transaction::src_t::TRIM_ALLOC)) {
         continue;
@@ -745,6 +763,34 @@ void Cache::register_metrics(store_index_t store_index)
         "version_sum_reclaim",
         stats.reclaim_rewrites.dirty_version,
         sm::description("sum of the version from rewrite-reclaim extents"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "version_count_promote",
+        [this] {
+          return stats.promote_rewrites.get_num_rewrites();
+        },
+        sm::description("total number of rewrite-promote extents"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "version_sum_promote",
+        stats.promote_rewrites.dirty_version,
+        sm::description("sum of the version from rewrite-promote extents"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "version_count_demote",
+        [this] {
+          return stats.demote_rewrites.get_num_rewrites();
+        },
+        sm::description("total number of rewrite-demote extents"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "version_sum_demote",
+        stats.demote_rewrites.dirty_version,
+        sm::description("sum of the version from rewrite-demote extents"),
         {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
     }
@@ -1194,6 +1240,9 @@ CachedExtentRef Cache::alloc_remapped_extent_by_type(
   case extent_types_t::TEST_BLOCK:
     return alloc_remapped_extent<TestBlock>(
       t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
+  case extent_types_t::LOG_NODE:
+    return alloc_remapped_extent<log_manager::LogNode>(
+      t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
   default:
     ceph_abort("invalid extent type");
     return CachedExtentRef();
@@ -1205,42 +1254,45 @@ CachedExtentRef Cache::alloc_new_non_data_extent_by_type(
   extent_types_t type,   ///< [in] type tag
   extent_len_t length,   ///< [in] length
   placement_hint_t hint, ///< [in] user hint
-  rewrite_gen_t gen      ///< [in] rewrite generation
+  rewrite_gen_t gen,     ///< [in] rewrite generation
+  paddr_t paddr_hint,
+  bool is_tracked
 )
 {
   LOG_PREFIX(Cache::alloc_new_non_data_extent_by_type);
   SUBDEBUGT(seastore_cache, "allocate {} 0x{:x}B, hint={}, gen={}",
             t, type, length, hint, rewrite_gen_printer_t{gen});
   ceph_assert(get_extent_category(type) == data_category_t::METADATA);
+  auto opt = alloc_option_t{hint, gen, is_tracked, paddr_hint};
   switch (type) {
   case extent_types_t::ROOT:
     ceph_assert(0 == "ROOT is never directly alloc'd");
     return CachedExtentRef();
   case extent_types_t::LADDR_INTERNAL:
-    return alloc_new_non_data_extent<lba::LBAInternalNode>(t, length, hint, gen);
+    return alloc_new_non_data_extent<lba::LBAInternalNode>(t, length, opt);
   case extent_types_t::LADDR_LEAF:
     return alloc_new_non_data_extent<lba::LBALeafNode>(
-      t, length, hint, gen);
+      t, length, opt);
   case extent_types_t::ROOT_META:
     return alloc_new_non_data_extent<RootMetaBlock>(
-      t, length, hint, gen);
+      t, length, opt);
   case extent_types_t::ONODE_BLOCK_STAGED:
     return alloc_new_non_data_extent<onode::SeastoreNodeExtent>(
-      t, length, hint, gen);
+      t, length, opt);
   case extent_types_t::OMAP_INNER:
     return alloc_new_non_data_extent<omap_manager::OMapInnerNode>(
-      t, length, hint, gen);
+      t, length, opt);
   case extent_types_t::OMAP_LEAF:
     return alloc_new_non_data_extent<omap_manager::OMapLeafNode>(
-      t, length, hint, gen);
+      t, length, opt);
   case extent_types_t::COLL_BLOCK:
     return alloc_new_non_data_extent<collection_manager::CollectionNode>(
-      t, length, hint, gen);
+      t, length, opt);
   case extent_types_t::TEST_BLOCK_PHYSICAL:
-    return alloc_new_non_data_extent<TestBlockPhysical>(t, length, hint, gen);
+    return alloc_new_non_data_extent<TestBlockPhysical>(t, length, opt);
   case extent_types_t::LOG_NODE:
      return alloc_new_non_data_extent<log_manager::LogNode>(
-       t, length, hint, gen);
+       t, length, opt);
   case extent_types_t::NONE: {
     ceph_assert(0 == "NONE is an invalid extent type");
     return CachedExtentRef();
@@ -1255,27 +1307,26 @@ std::vector<CachedExtentRef> Cache::alloc_new_data_extents_by_type(
   Transaction &t,        ///< [in, out] current transaction
   extent_types_t type,   ///< [in] type tag
   extent_len_t length,   ///< [in] length
-  placement_hint_t hint, ///< [in] user hint
-  rewrite_gen_t gen      ///< [in] rewrite generation
+  alloc_option_t opt     ///< [in] allocation options
 )
 {
   LOG_PREFIX(Cache::alloc_new_data_extents_by_type);
   SUBDEBUGT(seastore_cache, "allocate {} 0x{:x}B, hint={}, gen={}",
-            t, type, length, hint, rewrite_gen_printer_t{gen});
+            t, type, length, opt.hint, rewrite_gen_printer_t{opt.gen});
   ceph_assert(get_extent_category(type) == data_category_t::DATA);
   std::vector<CachedExtentRef> res;
   switch (type) {
   case extent_types_t::OBJECT_DATA_BLOCK:
     {
       auto extents = alloc_new_data_extents<
-	ObjectDataBlock>(t, length, hint, gen);
+	ObjectDataBlock>(t, length, std::move(opt));
       res.insert(res.begin(), extents.begin(), extents.end());
     }
     return res;
   case extent_types_t::TEST_BLOCK:
     {
       auto extents = alloc_new_data_extents<
-	TestBlock>(t, length, hint, gen);
+	TestBlock>(t, length, std::move(opt));
       res.insert(res.begin(), extents.begin(), extents.end());
     }
     return res;
@@ -1322,7 +1373,7 @@ CachedExtentRef Cache::duplicate_for_write(
   }
 
   auto ret = i->duplicate_for_write(t);
-  ret->pending_for_transaction = t.get_trans_id();
+  ret->t = &t;
   ret->set_prior_instance(i);
   if (!is_root_type(ret->get_type())) {
     assert(ret->get_paddr().is_absolute());
@@ -1723,7 +1774,7 @@ record_t Cache::prepare_record(
     }
     assert(i->state == CachedExtent::extent_state_t::DIRTY);
     assert(i->version > 0);
-    assert(i->pending_for_transaction == TRANS_ID_NULL);
+    assert(i->t == nullptr);
     assert(!i->prior_instance);
     remove_from_dirty(i, &trans_src);
     // set the version to zero because the extent state is now clean
@@ -1753,10 +1804,10 @@ record_t Cache::prepare_record(
 
     if (i->is_exist_clean()) {
       assert(i->version == 0);
-      assert(!i->prior_instance);
+      assert(!i->prior_instance || t.get_src() == transaction_type_t::DEMOTE);
       // no set_io_wait(), skip complete_commit()
       assert(!i->is_pending_io());
-      i->pending_for_transaction = TRANS_ID_NULL;
+      i->t = nullptr;
       i->state = CachedExtent::extent_state_t::CLEAN;
     } else {
       assert(i->is_exist_mutation_pending());
@@ -1764,13 +1815,22 @@ record_t Cache::prepare_record(
                      should_use_no_conflict_publish(t, i->get_type()));
     }
 
-    // exist mutation pending extents must be in t.mutated_block_list
-    add_extent(i);
-    const auto t_src = t.get_src();
-    if (i->is_stable_dirty()) {
-      add_to_dirty(i, &t_src);
+    assert(i->is_logical());
+    if (t.get_src() == transaction_type_t::DEMOTE) {
+      assert(!i->committer);
+      assert(!i->get_prior_instance()->committer);
+      i->new_committer(t);
+      assert(i->committer);
+      i->get_prior_instance()->committer = i->committer;
     } else {
-      touch_extent_fully(*i, &t_src, t.get_cache_hint());
+      // exist mutation pending extents must be in t.mutated_block_list
+      add_extent(i);
+      const auto t_src = t.get_src();
+      if (i->is_stable_dirty()) {
+        add_to_dirty(i, &t_src);
+      } else {
+        touch_extent_fully(*i, &t_src, t.get_cache_hint());
+      }
     }
 
     alloc_delta.alloc_blk_ranges.emplace_back(
@@ -1945,6 +2005,10 @@ record_t Cache::prepare_record(
   } else if (trans_src == Transaction::src_t::CLEANER_MAIN ||
              trans_src == Transaction::src_t::CLEANER_COLD) {
     stats.reclaim_rewrites.add(rewrite_stats);
+  } else if (trans_src == Transaction::src_t::PROMOTE) {
+    stats.promote_rewrites.add(rewrite_stats);
+  } else if (trans_src == Transaction::src_t::DEMOTE) {
+    stats.demote_rewrites.add(rewrite_stats);
   } else {
     assert(rewrite_stats.is_clear());
   }
@@ -2022,7 +2086,7 @@ void Cache::complete_commit(
       assert(i->get_last_committed_crc() == CRC_NULL);
     }
 #endif
-    i->pending_for_transaction = TRANS_ID_NULL;
+    i->t = nullptr;
     i->on_initial_write();
     const auto t_src = t.get_src();
     if (should_use_no_conflict_publish(t, i->get_type())) {
@@ -2033,7 +2097,7 @@ void Cache::complete_commit(
       TRACET("committing rewritten extent into "
              "existing, inline={} -- {}, prior={}",
              t, is_inline, *i, prior);
-      prior.pending_for_transaction = TRANS_ID_NULL;
+      prior.t = nullptr;
       committer.commit_state();
       committer.sync_checksum();
       committer.commit_and_share_paddr();
@@ -2042,6 +2106,9 @@ void Cache::complete_commit(
       }
       if (i->is_logical()) {
         committer.maybe_sync_copied_lba_key();
+        if (t.get_src() == transaction_type_t::PROMOTE) {
+          committer.commit_shadow_promote(t);
+        }
       }
       touch_extent_fully(prior, &t_src, t.get_cache_hint());
       committer.sync_version();
@@ -2126,7 +2193,7 @@ void Cache::complete_commit(
       committer.commit_state();
       committer.sync_checksum();
       auto &prior = *i->prior_instance;
-      prior.pending_for_transaction = TRANS_ID_NULL;
+      prior.t = nullptr;
       ceph_assert(prior.is_valid());
       if (is_lba_backref_node(i->get_type())) {
         committer.commit_data();
@@ -2138,7 +2205,7 @@ void Cache::complete_commit(
       prior.committer.reset();
     }
 
-    i->pending_for_transaction = TRANS_ID_NULL;
+    i->t = nullptr;
     i->reset_prior_instance();
     assert(i->version > 0);
     i->complete_io();
@@ -2150,6 +2217,30 @@ void Cache::complete_commit(
       continue;
     }
     epm.mark_space_used(i->get_paddr(), i->get_length());
+    assert(i->is_logical());
+    auto t_src = t.get_src();
+    if (t.get_src() == transaction_type_t::DEMOTE) {
+      assert(i->committer);
+      auto &committer = *i->committer;
+      auto &prior = static_cast<LogicalChildNode&>(
+        *i->get_prior_instance());
+      ceph_assert(prior.is_valid());
+      TRACET("committing rewritten extent into "
+             "existing -- {}, prior={}",
+             t, *i, prior);
+      prior.t = nullptr;
+      if (auto shadow = prior.get_shadow(); shadow) {
+        committer.commit_shadow_demote(t);
+        prior.reset_shadow();
+      }
+      committer.commit_state();
+      committer.sync_checksum();
+      committer.commit_and_share_paddr();
+      touch_extent_fully(prior, &t_src, t.get_cache_hint());
+      committer.sync_version();
+      i->committer.reset();
+      prior.committer.reset();
+    }
   }
   for (auto &i: t.pre_alloc_list) {
     if (!i->is_valid()) {
@@ -2173,6 +2264,9 @@ void Cache::complete_commit(
         i->set_invalid(t);
     }
   }
+
+  stats.write_hit_hot += t.write_hit_hot;
+  stats.write_hit_cold += t.write_hit_cold;
 }
 
 void Cache::init()
@@ -2190,7 +2284,8 @@ void Cache::init()
              P_ADDR_ROOT,
              PLACEMENT_HINT_NULL,
              NULL_GENERATION,
-             TRANS_ID_NULL);
+             nullptr,
+	     write_policy_t::WRITE_BACK);
   root->set_modify_time(seastar::lowres_system_clock::now());
   INFO("init root -- {}", *root);
   add_extent(root);
@@ -2614,7 +2709,8 @@ Cache::_get_absent_extent_by_type(
 	    offset,
 	    PLACEMENT_HINT_NULL,
 	    NULL_GENERATION,
-	    TRANS_ID_NULL);
+	    nullptr,
+	    write_policy_t::WRITE_BACK);
   DEBUGT("{} length=0x{:x} is absent, add extent ... -- {}",
     t, type, length, *ret);
   add_extent(ret);
@@ -2837,6 +2933,10 @@ cache_stats_t Cache::get_stats(
     _trim_rewrites.minus(last_trim_rewrites);
     rewrite_stats_t _reclaim_rewrites = stats.reclaim_rewrites;
     _reclaim_rewrites.minus(last_reclaim_rewrites);
+    rewrite_stats_t _promote_rewrites = stats.promote_rewrites;
+    _promote_rewrites.minus(last_promote_rewrites);
+    rewrite_stats_t _demote_rewrites = stats.demote_rewrites;
+    _demote_rewrites.minus(last_demote_rewrites);
     oss << "\nrewrite trim ndirty="
         << fmt::format(dfmt, _trim_rewrites.num_n_dirty/seconds)
         << "ps, dirty="
@@ -2848,7 +2948,19 @@ cache_stats_t Cache::get_stats(
         << "ps, dirty="
         << fmt::format(dfmt, _reclaim_rewrites.num_dirty/seconds)
         << "ps, dversion="
-        << fmt::format(dfmt, _reclaim_rewrites.get_avg_version());
+        << fmt::format(dfmt, _reclaim_rewrites.get_avg_version())
+        << "; promote ndirty="
+        << fmt::format(dfmt, _promote_rewrites.num_n_dirty/seconds)
+        << "ps, dirty="
+        << fmt::format(dfmt, _promote_rewrites.num_dirty/seconds)
+        << "ps, dversion="
+        << fmt::format(dfmt, _promote_rewrites.get_avg_version())
+        << "; demote ndirty="
+        << fmt::format(dfmt, _demote_rewrites.num_n_dirty/seconds)
+        << "ps, dirty="
+        << fmt::format(dfmt, _demote_rewrites.num_dirty/seconds)
+        << "ps, dversion="
+        << fmt::format(dfmt, _demote_rewrites.get_avg_version());
 
     oss << "\ncache total"
         << cache_size_stats_t{extents_index.get_bytes(), extents_index.size()};
@@ -2907,6 +3019,8 @@ cache_stats_t Cache::get_stats(
     last_dirty_io_by_src_ext = stats.dirty_io_by_src_ext;
     last_trim_rewrites = stats.trim_rewrites;
     last_reclaim_rewrites = stats.reclaim_rewrites;
+    last_promote_rewrites = stats.promote_rewrites;
+    last_demote_rewrites = stats.demote_rewrites;
     last_cache_absent_by_src = stats.cache_absent_by_src;
     last_access_by_src_ext = stats.access_by_src_ext;
   }

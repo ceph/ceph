@@ -966,6 +966,7 @@ enum class device_type_t : uint8_t {
   EPHEMERAL_MAIN,
   RANDOM_BLOCK_SSD,
   RANDOM_BLOCK_EPHEMERAL,
+  RANDOM_BLOCK_HDD,
   NUM_TYPES
 };
 
@@ -974,7 +975,8 @@ std::ostream& operator<<(std::ostream& out, device_type_t t);
 bool can_delay_allocation(device_type_t type);
 device_type_t string_to_device_type(std::string type);
 
-enum class backend_type_t {
+enum class backend_type_t : uint8_t {
+  NONE,
   SEGMENTED,    // SegmentManager: SSD, ZBD, HDD
   RANDOM_BLOCK  // RBMDevice:      RANDOM_BLOCK_SSD
 };
@@ -983,7 +985,7 @@ std::ostream& operator<<(std::ostream& out, backend_type_t);
 
 constexpr backend_type_t get_default_backend_of_device(device_type_t dtype) {
   assert(dtype != device_type_t::NONE &&
-	 dtype != device_type_t::NUM_TYPES);
+        dtype != device_type_t::NUM_TYPES);
   if (dtype >= device_type_t::HDD &&
       dtype <= device_type_t::EPHEMERAL_MAIN) {
     return backend_type_t::SEGMENTED;
@@ -991,6 +993,8 @@ constexpr backend_type_t get_default_backend_of_device(device_type_t dtype) {
     return backend_type_t::RANDOM_BLOCK;
   }
 }
+
+backend_type_t string_to_backend_type(const std::string &str);
 
 /**
  * Monotonically increasing identifier for the location of a
@@ -2066,6 +2070,13 @@ constexpr bool is_real_type(extent_types_t type) {
 
 std::ostream &operator<<(std::ostream &out, extent_types_t t);
 
+enum class write_policy_t {
+  WRITE_BACK,
+  WRITE_THROUGH
+};
+
+std::ostream& operator<<(std::ostream& out, write_policy_t w);
+
 /**
  * rewrite_gen_t
  *
@@ -2718,6 +2729,8 @@ enum class transaction_type_t : uint8_t {
   TRIM_ALLOC,
   CLEANER_MAIN,
   CLEANER_COLD,
+  PROMOTE,
+  DEMOTE,
   MAX
 };
 
@@ -2744,7 +2757,9 @@ constexpr bool is_background_transaction(transaction_type_t type) {
 constexpr bool is_rewrite_transaction(transaction_type_t type) {
   return type == transaction_type_t::TRIM_DIRTY ||
     type == transaction_type_t::CLEANER_MAIN ||
-    type == transaction_type_t::CLEANER_COLD;
+    type == transaction_type_t::CLEANER_COLD ||
+    type == transaction_type_t::DEMOTE ||
+    type == transaction_type_t::PROMOTE;
 }
 
 constexpr bool is_trim_transaction(transaction_type_t type) {
@@ -3650,6 +3665,7 @@ template <> struct fmt::formatter<crimson::os::seastore::transaction_type_t> : f
 template <> struct fmt::formatter<crimson::os::seastore::write_result_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::omap_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<ceph::buffer::list> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::write_policy_t> : fmt::ostream_formatter {};
 #endif
 
 namespace fmt {

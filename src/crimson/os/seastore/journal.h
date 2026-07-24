@@ -106,6 +106,24 @@ public:
   virtual backend_type_t get_type() = 0;
 
   virtual bool is_checksum_needed() = 0; 
+
+protected:
+  using alloc_map_t = std::map<paddr_t, journal_seq_t>;
+  using scan_alloc_map_ertr = replay_ertr;
+  using scan_alloc_map_ret = scan_alloc_map_ertr::future<alloc_map_t>;
+  scan_alloc_map_ret scan_alloc_map();
+
+  using scan_delta_handler_t = std::function<
+    replay_ertr::future<bool>(
+      const record_locator_t&,
+      const delta_info_t&,
+      sea_time_point modify_time)>;
+  virtual replay_ret scan_valid_record_delta(
+    scan_delta_handler_t &&delta_handler,
+    journal_seq_t tail) = 0;
+
+  virtual journal_seq_t get_dirty_tail() const = 0;
+  virtual journal_seq_t get_alloc_tail() const = 0;
 };
 using JournalRef = std::unique_ptr<Journal>;
 
@@ -114,7 +132,8 @@ namespace journal {
 JournalRef make_segmented(
   store_index_t store_index,
   SegmentProvider &provider,
-  JournalTrimmer &trimmer);
+  JournalTrimmer &trimmer,
+  bool scan_alloc_on_boot);
 
 JournalRef make_circularbounded(
   store_index_t store_index,

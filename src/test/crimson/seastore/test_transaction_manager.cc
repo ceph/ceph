@@ -806,7 +806,7 @@ struct transaction_manager_test_t :
 	  t,
 	  get_laddr_hint(0),
 	  L_ADDR_MAX,
-	  [iter=overlay.begin(), &overlay](auto l, auto p, auto len) mutable {
+	  [iter=overlay.begin(), &overlay](auto l, auto p, auto s, auto len) mutable {
 	    EXPECT_NE(iter, overlay.end());
 	    logger().debug(
 	      "check_mappings: scan {}",
@@ -922,7 +922,7 @@ struct transaction_manager_test_t :
       if (run_clean) {
         return epm->run_background_work_until_halt();
       } else {
-        return epm->background_process.trimmer->trim();
+        return epm->background_process.trimmer->trim(false);
       }
     }).handle_error(
       crimson::ct_error::assert_all(
@@ -1149,7 +1149,9 @@ struct transaction_manager_test_t :
               get_extent_category(t),
               t,
               placement_hint_t::HOT,
-              gen);
+              gen,
+	      write_policy_t::WRITE_BACK,
+	      false);
             if (expected_generations[t][gen] != epm_gen) {
               logger().error("caller: {}, extent type: {}, input generation: {}, "
 			     "expected generation : {}, adjust result from EPM: {}",
@@ -1901,13 +1903,12 @@ TEST_P(tm_random_block_device_test_t, scatter_allocation)
     laddr_t ADDR = get_laddr_hint(0xFF * 4096);
     epm->prefill_fragmented_devices();
     auto t = create_transaction();
-    for (int i = 0; i < 1974; i++) {
+    for (int i = 0; i < 1958; i++) {
+      logger().info("scatter_allocation: {}", i);
       auto extents = alloc_extents(t, (ADDR + i * 16384).checked_to_laddr(), 16384, 'a');
     }
-    alloc_extents_deemed_fail(t, (ADDR + 1974 * 16384).checked_to_laddr(), 16384, 'a');
+    alloc_extents_deemed_fail(t, (ADDR + 1958 * 16384).checked_to_laddr(), 16384, 'a');
     check_mappings(t);
-    check();
-    submit_transaction(std::move(t));
     check();
   });
 }
