@@ -335,6 +335,31 @@ class OSDService(CephService):
                         osdspec.service_name()))
                     continue
 
+                # crush device class that would be assigned per data device:
+                # explicit per-device override, else spec-level override, else
+                # the rotational-derived default (matches what the OSD picks at
+                # activation time from bluestore_bdev_type).
+                # When the spec selects devices by path, the Device objects in
+                # ds.data_devices() carry no sys_api, so fall back to the
+                # cached host inventory to look up rotational.
+                inv_by_path: Dict[str, Device] = {
+                    inv.path: inv
+                    for inv in self.mgr.cache.devices.get(host, [])
+                    if inv.path
+                }
+                path_to_class: Dict[str, str] = {}
+                for d in ds.data_devices():
+                    if d.path is None:
+                        continue
+                    derived = d.human_readable_type
+                    if derived == 'unknown' and d.path in inv_by_path:
+                        derived = inv_by_path[d.path].human_readable_type
+                    path_to_class[d.path] = (
+                        d.crush_device_class
+                        or osdspec.crush_device_class
+                        or derived
+                    )
+
                 # get preview data from ceph-volume
                 for cmd in cmds:
                     with self.mgr.async_timeout_handler(host, f'cephadm ceph-volume -- {cmd}'):
@@ -345,6 +370,12 @@ class OSDService(CephService):
                         except ValueError:
                             logger.exception('Cannot decode JSON: \'%s\'' % ' '.join(out))
                             concat_out = {}
+                        for osd_entry in concat_out:
+                            if not isinstance(osd_entry, dict):
+                                continue
+                            data_path = osd_entry.get('data')
+                            if data_path in path_to_class:
+                                osd_entry['crush_device_class'] = path_to_class[data_path]
                         notes = []
                         if (
                             osdspec.data_devices is not None
