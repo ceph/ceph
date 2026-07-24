@@ -12,8 +12,8 @@ from mgr_module import ERROR_MSG_EMPTY_INPUT_FILE
 
 from .. import mgr
 from ..security import Permission, Scope
-from ..services.access_control import SYSTEM_ROLES, AccessControlDB, \
-    PasswordPolicy, load_access_control_db, password_hash
+from ..services.access_control import CEPHFS_MGR_ROLE, SYSTEM_ROLES, \
+    AccessControlDB, PasswordPolicy, load_access_control_db, password_hash
 from ..settings import Settings
 from ..tests import CLICommandTestMixin, CmdException
 
@@ -179,6 +179,15 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
     def test_block_manager_role_has_hosts_read(self):
         role = self.exec_cmd('ac-role-show', rolename='block-manager')
         self.assertEqual(role['scopes_permissions'][Scope.HOSTS], [Permission.READ])
+
+    def test_cephfs_mgr_role_scopes(self):
+        role = self.exec_cmd('ac-role-show', rolename='cephfs-manager')
+        self.assertEqual(role['name'], CEPHFS_MGR_ROLE.name)
+        scopes_perms = role['scopes_permissions']
+        self.assertIn(Scope.HOSTS, scopes_perms)
+        self.assertEqual(scopes_perms[Scope.HOSTS], [Permission.READ])
+        self.assertIn(Scope.POOL, scopes_perms)
+        self.assertEqual(scopes_perms[Scope.POOL], [Permission.READ])
 
     def test_delete_system_role(self):
         with self.assertRaises(CmdException) as ctx:
