@@ -1,0 +1,42 @@
+commit 3516e905c1c8b3661ba4c9c0678157af0367b131
+Author: Abhishek Desai <abhishek.desai1@ibm.com>
+Date:   Tue Jul 21 12:12:40 2026 +0530
+
+    mgr/dashboard/downstream : Fix Favicon Issue
+    Reolves : IBMCEPH-14246
+    Signed-off-by: Abhishek Desai <abhishek.desai1@ibm.com>
+
+diff --git a/src/pybind/mgr/dashboard/frontend/src/app/shared/services/favicon.service.ts b/src/pybind/mgr/dashboard/frontend/src/app/shared/services/favicon.service.ts
+index 4e6db76379b..c83c124faa0 100644
+--- a/src/pybind/mgr/dashboard/frontend/src/app/shared/services/favicon.service.ts
++++ b/src/pybind/mgr/dashboard/frontend/src/app/shared/services/favicon.service.ts
+@@ -5,6 +5,7 @@ import { Subscription } from 'rxjs';
+ 
+ import { CssHelper } from '~/app/shared/classes/css-helper';
+ import { HealthColor } from '~/app/shared/enum/health-color.enum';
++import { AppConstants } from '~/app/shared/constants/app.constants';
+ import { SummaryService } from './summary.service';
+ 
+ @Injectable()
+@@ -20,7 +21,7 @@ export class FaviconService implements OnDestroy {
+   ) {}
+ 
+   init() {
+-    this.url = this.document.getElementById('cdFavicon')?.getAttribute('href');
++    this.url = AppConstants.cephLogo;
+ 
+     this.sub = this.summaryService.subscribe((summary) => {
+       this.changeIcon(summary.health_status);
+diff --git a/src/pybind/mgr/dashboard/frontend/src/index.html b/src/pybind/mgr/dashboard/frontend/src/index.html
+index 4cceb2cb490..d3abe712887 100644
+--- a/src/pybind/mgr/dashboard/frontend/src/index.html
++++ b/src/pybind/mgr/dashboard/frontend/src/index.html
+@@ -10,7 +10,7 @@
+   </script>
+ 
+   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+-  <link rel="icon" type="image/x-icon" id="cdFavicon" href="assets/RedHat_favicon_0319.svg">
++  <link rel="icon" type="image/png" id="cdFavicon" href="assets/RedHat_favicon_0319.svg">
+ </head>
+ <body>
+   <noscript>
