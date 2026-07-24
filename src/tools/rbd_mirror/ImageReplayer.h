@@ -107,6 +107,7 @@ public:
   void flush();
 
   void print_status(Formatter *f);
+  void refresh_mirror_image_status(bool force = false);
 
 protected:
   /**
@@ -255,7 +256,7 @@ private:
   void start_replay();
   void handle_start_replay(int r);
 
-  void handle_replayer_notification();
+  void handle_replayer_notification(bool force=false);
 
   void register_admin_socket_hook();
   void unregister_admin_socket_hook();
