@@ -11,6 +11,22 @@ describe('Services page', () => {
   });
 
   it('should check if rgw service is created', () => {
+    // rgw.foo is created by the previous spec (08-hosts). If it was not created
+    // (e.g., that spec's host-navigation beforeEach timed out), create it here
+    // so that downstream tests that depend on rgw.foo can still run.
+    cy.get('body').then(($body) => {
+      const rgwExists = $body
+        .find('[cdstablerow] [cdstabledata]')
+        .toArray()
+        .some((el) => {
+          return el.textContent?.includes('rgw.foo');
+        });
+      if (!rgwExists) {
+        services.navigateTo('create');
+        services.addService('rgw', false, 4);
+        services.navigateTo();
+      }
+    });
     services.checkExist('rgw.foo', true);
   });
 
