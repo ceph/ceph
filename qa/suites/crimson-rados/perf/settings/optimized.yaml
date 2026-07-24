@@ -6,6 +6,7 @@ overrides:
         debug ms: "0/0"
         debug paxos: "0/0"
       osd:
+        seastore segment size: 33554432
         debug filestore: "0/0"
         debug journal: "0/0"
         debug ms: "0/0"
