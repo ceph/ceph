@@ -151,6 +151,13 @@ add_executable(unittest_http_manager test_http_manager.cc)
 add_ceph_unittest(unittest_http_manager)
 target_link_libraries(unittest_http_manager ${rgw_libs})
 
+# unittest_rgw_swift_info
+add_executable(unittest_rgw_swift_info test_rgw_swift_info.cc)
+add_ceph_unittest(unittest_rgw_swift_info)
+target_include_directories(unittest_rgw_swift_info
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_swift_info ${rgw_libs})
+
 if(WITH_RADOSGW_RADOS)
 # unittest_rgw_reshard_wait
 add_executable(unittest_rgw_reshard_wait test_rgw_reshard_wait.cc)
