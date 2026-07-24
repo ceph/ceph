@@ -11,6 +11,7 @@ import functools
 
 from io import StringIO
 from collections import deque
+from datetime import datetime
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
@@ -18,6 +19,16 @@ from teuthology.contextutil import safe_while
 from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
+
+# ISO-8601 local time with offset, as dumped by peer_status / mgr status
+# (e.g. 2026-07-15T12:00:00.558797+0530)
+SYNC_TIME_STAMP_RE = re.compile(
+    r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}[+-]\d{4}$')
+
+
+def parse_sync_time_stamp(ts):
+    """Parse sync_time_stamp / metrics_updated_at ISO-8601 display strings."""
+    return datetime.strptime(ts, '%Y-%m-%dT%H:%M:%S.%f%z')
 
 
 # Exceptions to retry in test assertions
@@ -410,6 +421,7 @@ class TestMirroring(CephFSTestCase):
         self.assertRegex(
             last_synced_snap['sync_bytes'],
             r'^\d+(\.\d+)?\s+(B|KiB|MiB|GiB|TiB|PiB)$')
+        self.assertRegex(last_synced_snap['sync_time_stamp'], SYNC_TIME_STAMP_RE)
         self.assertIsInstance(last_synced_snap['sync_files'], int)
         self.assertGreaterEqual(last_synced_snap['sync_files'], 0)
 
@@ -2765,12 +2777,12 @@ class TestMirroring(CephFSTestCase):
                                          'fs', 'mirror', 'peer', 'status',
                                          f'{self.primary_fs_name}@{self.primary_fs_id}',
                                          peer_uuid)
-        d0_sync_time_stamp = float(self.peer_dir_status(res, '/d0', peer_uuid)
-                                  ['last_synced_snap']['sync_time_stamp'].rstrip('s'))
-        d1_sync_time_stamp = float(self.peer_dir_status(res, '/d1', peer_uuid)
-                                  ['last_synced_snap']['sync_time_stamp'].rstrip('s'))
-        d2_sync_time_stamp = float(self.peer_dir_status(res, '/d2', peer_uuid)
-                                  ['last_synced_snap']['sync_time_stamp'].rstrip('s'))
+        d0_sync_time_stamp = parse_sync_time_stamp(
+            self.peer_dir_status(res, '/d0', peer_uuid)['last_synced_snap']['sync_time_stamp'])
+        d1_sync_time_stamp = parse_sync_time_stamp(
+            self.peer_dir_status(res, '/d1', peer_uuid)['last_synced_snap']['sync_time_stamp'])
+        d2_sync_time_stamp = parse_sync_time_stamp(
+            self.peer_dir_status(res, '/d2', peer_uuid)['last_synced_snap']['sync_time_stamp'])
 
         self.assertGreaterEqual(d1_sync_time_stamp, d0_sync_time_stamp)
         self.assertGreaterEqual(d2_sync_time_stamp, d0_sync_time_stamp)
@@ -2837,12 +2849,12 @@ class TestMirroring(CephFSTestCase):
                                          'fs', 'mirror', 'peer', 'status',
                                          f'{self.primary_fs_name}@{self.primary_fs_id}',
                                          peer_uuid)
-        d0_sync_time_stamp = float(self.peer_dir_status(res, '/d0', peer_uuid)
-                                  ['last_synced_snap']['sync_time_stamp'].rstrip('s'))
-        d1_sync_time_stamp = float(self.peer_dir_status(res, '/d1', peer_uuid)
-                                  ['last_synced_snap']['sync_time_stamp'].rstrip('s'))
-        d2_sync_time_stamp = float(self.peer_dir_status(res, '/d2', peer_uuid)
-                                  ['last_synced_snap']['sync_time_stamp'].rstrip('s'))
+        d0_sync_time_stamp = parse_sync_time_stamp(
+            self.peer_dir_status(res, '/d0', peer_uuid)['last_synced_snap']['sync_time_stamp'])
+        d1_sync_time_stamp = parse_sync_time_stamp(
+            self.peer_dir_status(res, '/d1', peer_uuid)['last_synced_snap']['sync_time_stamp'])
+        d2_sync_time_stamp = parse_sync_time_stamp(
+            self.peer_dir_status(res, '/d2', peer_uuid)['last_synced_snap']['sync_time_stamp'])
 
         self.assertLess(d1_sync_time_stamp, d0_sync_time_stamp)
         self.assertLess(d2_sync_time_stamp, d0_sync_time_stamp)

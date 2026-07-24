@@ -1,3 +1,6 @@
+from ..checkpoint import format_epoch_timestamp
+
+
 def default_sync_stat_metrics():
     return {
         'state': 'idle',
@@ -134,8 +137,8 @@ def format_and_order_sync_stat_for_display(stat, policy=None, dir_path=None,
         if isinstance(sync_bytes, (int, float)):
             snap['sync_bytes'] = _format_bytes(sync_bytes)
         sync_time_stamp = snap.get('sync_time_stamp')
-        if isinstance(sync_time_stamp, (int, float)):
-            snap['sync_time_stamp'] = f'{sync_time_stamp:.6f}s'
+        if isinstance(sync_time_stamp, (int, float, str)):
+            snap['sync_time_stamp'] = format_epoch_timestamp(sync_time_stamp)
         out['last_synced_snap'] = _order_dict(
             snap, ('id', 'name', 'crawl_duration',
                    'datasync_queue_wait_duration', 'sync_duration',
@@ -145,6 +148,10 @@ def format_and_order_sync_stat_for_display(stat, policy=None, dir_path=None,
     if isinstance(current_syncing_snap, dict):
         out['current_syncing_snap'] = _order_current_syncing_snap(
             current_syncing_snap)
+
+    metrics_updated_at = out.get('metrics_updated_at')
+    if isinstance(metrics_updated_at, (int, float, str)):
+        out['metrics_updated_at'] = format_epoch_timestamp(metrics_updated_at)
 
     out.pop('_instance_id', None)
 
