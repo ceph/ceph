@@ -3221,8 +3221,9 @@ class CephManager:
         Revive osds by either power cycling (if indicated by the config)
         or by restarting.
         """
-        if self.config.get('powercycle'):
+        if self.config.get('powercycle') or self.cephadm:
             remote = self.find_remote('osd', osd)
+        if self.config.get('powercycle'):
             self.log('kill_osd on osd.{o} doing powercycle of {s}'.
                      format(o=osd, s=remote.name))
             self._assert_ipmi(remote)
@@ -3234,6 +3235,14 @@ class CephManager:
             mount_osd_data(self.ctx, remote, self.cluster, str(osd))
             self.make_admin_daemon_dir(remote)
             self.ctx.daemons.get_daemon('osd', osd, self.cluster).reset()
+        if self.cephadm:
+            # If the OSD was killed hard by the OSD thrasher or a powercycle,
+            # the unit may be left in 'failed' state, which prevents restart.
+            # reset-failed clears that state
+            fsid = self.ctx.ceph[self.cluster].fsid
+            service = 'ceph-{fsid}@osd.{osd}'.format(fsid=fsid, osd=osd)
+            self.log('resetting systemd failed state for %s' % service)
+            remote.run(args=['sudo', 'systemctl', 'reset-failed', service])
         self.ctx.daemons.get_daemon('osd', osd, self.cluster).restart()
 
         if not skip_admin_check:
