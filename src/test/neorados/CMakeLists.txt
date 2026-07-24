@@ -22,6 +22,13 @@ add_library(neoradostest-support STATIC common_tests.cc)
 target_link_libraries(neoradostest-support
   libneorados ${FMT_LIB} GTest::GTest)
 
+add_executable(ceph_test_neorados_completions completions.cc)
+target_link_libraries(ceph_test_neorados_completions
+  libneorados neoradostest-support GTest::Main)
+install(TARGETS
+  ceph_test_neorados_completions
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 add_executable(ceph_test_neorados_list_pool list_pool.cc)
 target_link_libraries(ceph_test_neorados_list_pool
   libneorados neoradostest-support global ${FMT_LIB} ${unittest_libs})
