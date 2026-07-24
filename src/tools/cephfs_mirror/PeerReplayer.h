@@ -785,6 +785,10 @@ private:
                      bool is_remote=false);
 
   void initialize_checkpoints(const std::string &dir_root);
+  void prune_old_synced_checkpoints(
+      const std::string &dir_root,
+      const std::vector<std::pair<uint64_t, std::string>> &already_complete,
+      size_t newly_complete);
   void checkpoint_sync_complete(const std::string &dir_root, uint64_t synced_snap_id,
                                 const std::string &snap_name);
   void checkpoint_sync_failed(const std::string &dir_root, uint64_t snap_id,

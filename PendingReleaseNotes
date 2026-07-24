@@ -216,8 +216,11 @@
   ``ceph fs snapshot mirror checkpoint now`` to checkpoint the latest snapshot,
   ``ceph fs snapshot mirror checkpoint ls`` to list all checkpoints with their status
   (created/complete/failed), and ``ceph fs snapshot mirror checkpoint remove`` to remove
-  a checkpoint. Checkpoint metadata is persistent across daemon restarts. This feature is
-  useful for compliance auditing, application consistency verification, and SLA tracking.
+  a checkpoint. Checkpoint metadata is persistent across daemon restarts. The mirror daemon
+  automatically prunes old COMPLETE checkpoints per directory, retaining the newest ones;
+  retention is controlled by ``cephfs_mirror_checkpoint_keep_count`` (default: 10). CREATED
+  and FAILED checkpoints are not pruned. This feature is useful for compliance auditing,
+  application consistency verification, and SLA tracking.
   For more information, see https://tracker.ceph.com/issues/73454
 * RBD: Mirror snapshot creation and trash purge schedules are now automatically
   staggered when no explicit "start-time" is specified. This reduces scheduling
