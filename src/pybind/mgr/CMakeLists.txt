@@ -46,6 +46,7 @@ set(mgr_modules
   prometheus
   rbd_support
   rgw
+  ceph_secrets
   # rook (optional)
   selftest
   smb
