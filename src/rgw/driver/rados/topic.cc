@@ -357,7 +357,15 @@ class MetadataHandler : public RGWMetadataHandler {
       librados::IoCtx ioctx;
       r = rgw_init_ioctx(dpp, &rados, zone.notif_pool, ioctx, true, false);
       if (r >= 0) {
-        r = rgw::notify::add_persistent_topic(dpp, ioctx, info.dest.persistent_queue, y);
+        // create all shards of the persistent queue, matching CreateTopic, so
+        // that notification delivery works on zones that receive the topic
+        // through metadata sync rather than a local CreateTopic request.
+        for (const auto& q : info.dest.get_shard_names()) {
+          r = rgw::notify::add_persistent_topic(dpp, ioctx, q, y);
+          if (r < 0) {
+            break;
+          }
+        }
       }
       if (r < 0) {
         ldpp_dout(dpp, 1) << "ERROR: failed to create queue for persistent topic "
@@ -395,7 +403,13 @@ class MetadataHandler : public RGWMetadataHandler {
       librados::IoCtx ioctx;
       r = rgw_init_ioctx(dpp, &rados, zone.notif_pool, ioctx, true, false);
       if (r >= 0) {
-        r = rgw::notify::remove_persistent_topic(dpp, ioctx, dest.persistent_queue, y);
+        // remove all shards of the persistent queue (matches CreateTopic)
+        for (const auto& q : dest.get_shard_names()) {
+          r = rgw::notify::remove_persistent_topic(dpp, ioctx, q, y);
+          if (r < 0 && r != -ENOENT) {
+            break;
+          }
+        }
       }
       if (r < 0 && r != -ENOENT) {
         ldpp_dout(dpp, 1) << "Failed to delete queue for persistent topic: "
