@@ -2155,14 +2155,23 @@ void stage_visibility_handoff(Transaction& t,
           extents_read.back().extent != extent) {
         extents_read.emplace_back(extent, false);
       }
+      if (extent->is_range_loaded(ext.offset, ext.length)) {
+        extents_read.back().fully_loaded = extent->is_fully_loaded();
+        continue;
+      }
       if (!extent->is_pending_io()) {
         extent->set_io_wait(extent->state, false);
       }
       auto old_length = extent->get_loaded_length();
       load_ranges_t to_read = extent->load_ranges(ext.offset, ext.length);
       auto new_length = extent->get_loaded_length();
-      assert(new_length > old_length);
-      pinboard->increase_cached_size(*extent, new_length - old_length, &t_src);
+      ceph_assert(new_length >= old_length);
+      if (new_length > old_length) {
+        pinboard->increase_cached_size(*extent, new_length - old_length, &t_src);
+      } else {
+        // duplicate request should not schedule additional reads
+        ceph_assert(to_read.ranges.empty());
+      }
       for (auto &range : to_read.ranges) {
 	auto range_paddr = extent->get_paddr() + range.offset;
 	ranges_to_read.emplace_back(range_to_read_t{range_paddr, range});
