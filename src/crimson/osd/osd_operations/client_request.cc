@@ -219,8 +219,20 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
   DEBUGDPP("{}.{}: pg active, entering process[_pg]_op",
 	   *pgref, *this, this_instance_id);
 
+  int cost  = std::max<int>(m->get_cost(), 1);
+  unsigned prio  = m->get_priority();
+  uint64_t owner = m->get_source().num();
+
+  // admit in QoS order, then HOLD the slot for the op's lifetime
+  // (its destructor == mClock RequestCompletion).
+  auto throttle = co_await interruptor::make_interruptible(
+    shard_services->get_throttle(
+      scheduler::params_t{cost, prio, owner, SchedulerClass::client}));
+
   co_await (is_pg_op() ? process_pg_op(pgref) :
 	    process_op(ihref, pgref, this_instance_id));
+
+  // `throttle` destructs here -> release_throttle()
 
   DEBUGDPP("{}.{}: process[_pg]_op complete, completing handle",
 	   *pgref, *this, this_instance_id);
