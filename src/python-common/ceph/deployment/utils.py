@@ -191,3 +191,9 @@ def validate_unique_ports(ports: List[int]) -> None:
         raise SpecValidationError(
             'Invalid port: Duplicate ports are not allowed'
         )
+
+
+def verify_non_empty_string(field: Any, field_name: str) -> None:
+    # isinstance first so we never call .strip() on None or non-str
+    if not isinstance(field, str) or not field.strip():
+        raise SpecValidationError(f"Invalid {field_name}: Must be a non-empty string.")
