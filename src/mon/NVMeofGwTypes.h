@@ -67,6 +67,7 @@ enum class subsystem_change_t {
 };
 
 #define REDUNDANT_GW_ANA_GROUP_ID 0xFF
+#define DELAY_FAILOVERS_INTERVAL_SEC 3
 using SmState = std::map < NvmeAnaGrpId, gw_states_per_group_t>;
 
 using ana_state_t =
