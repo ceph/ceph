@@ -20,6 +20,7 @@
 #include "arch/probe.h"
 #include "arch/intel.h"
 #include "arch/arm.h"
+#include "arch/riscv.h"
 #include "global/global_context.h"
 #include "gtest/gtest.h"
 
@@ -81,6 +82,33 @@ TEST(Arch, all)
 
 #endif
 
+#endif
+
+#if __riscv && __linux__
+  char isa[FLAGS_SIZE];
+  FILE *f_isa = popen("grep '^isa[	 ]*:' /proc/cpuinfo | head -1", "r");
+  if (f_isa == NULL || fgets(isa, FLAGS_SIZE - 1, f_isa) == NULL) {
+    if (f_isa)
+      pclose(f_isa);
+    return;
+  }
+  pclose(f_isa);
+  // Replace '_' with ' ' so we can match extensions with strstr(" ext ")
+  for (char *p = isa; *p; p++) {
+    if (*p == '_')
+      *p = ' ';
+  }
+  size_t isa_len = strlen(isa);
+  if (isa_len > 0 && isa[isa_len - 1] == '\n')
+    isa[isa_len - 1] = ' ';
+
+  int expected;
+
+  expected = strstr(isa, " zbc ") ? 1 : 0;
+  EXPECT_EQ(expected, ceph_arch_riscv_zbc);
+
+  expected = strstr(isa, " zvbc ") ? 1 : 0;
+  EXPECT_EQ(expected, ceph_arch_riscv_zvbc);
 #endif
 }
 
