@@ -39,6 +39,10 @@ case "${CEPH_BASE_BRANCH}~${DISTRO_KIND}" in
     *~*centos*|*~fedora*|*~rocky*|*~alma*)
         dnf install -y /usr/bin/{rpmbuild,wget,curl}
         install_container_deps
+        # mold comes from EPEL, which install-deps.sh enables during
+        # install_container_deps. Only WITH_MOLD=ON builds use it, so a
+        # distro without the package is not an error.
+        dnf install -y mold || echo "mold not available, not installing"
         dnf_clean
     ;;
     *~*ubuntu*|*~*debian*)
@@ -52,6 +56,11 @@ case "${CEPH_BASE_BRANCH}~${DISTRO_KIND}" in
             pkgs+=(software-properties-common)
         else
             pkgs+=(clang-19)
+        fi
+        # Only WITH_MOLD=ON builds use mold, so a release without the
+        # package (focal) is not an error.
+        if apt-cache show mold >/dev/null 2>&1; then
+            pkgs+=(mold)
         fi
         apt-get install -y "${pkgs[@]}"
         install_container_deps

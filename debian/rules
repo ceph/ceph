@@ -32,6 +32,9 @@ extraopts += -DWITH_CEPHFS_JAVA=ON
 extraopts += -DWITH_CEPHFS_SHELL=ON
 extraopts += -DWITH_SYSTEMD=ON -DCEPH_SYSTEMD_ENV_DIR=/etc/default
 extraopts += -DWITH_GRAFANA=ON
+# link with mold where installed and supported; no-op otherwise (e.g. focal
+# has no mold package, jammy's default GCC lacks -fuse-ld=mold)
+extraopts += -DWITH_MOLD=AUTO
 extraopts += -DCEPHADM_BUNDLED_DEPENDENCIES=deb
 ifeq ($(DEB_HOST_ARCH), amd64)
   extraopts += -DWITH_RBD_RWL=ON
