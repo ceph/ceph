@@ -68,8 +68,10 @@ void PyModuleRegistry::init()
   py_config.pathconfig_warnings = 0;
 
   PyStatus status;
+  status = PyConfig_SetBytesString(&py_config, &py_config.executable, MGR_PYTHON_EXECUTABLE);
+  ceph_assertf(!PyStatus_Exception(status), "PyConfig_SetBytesString(executable): %s:%s", status.func, status.err_msg);
   status = PyConfig_SetString(&py_config, &py_config.program_name, WCHAR(MGR_PYTHON_EXECUTABLE));
-  ceph_assertf(!PyStatus_Exception(status), "PyConfig_SetString: %s:%s", status.func, status.err_msg);
+  ceph_assertf(!PyStatus_Exception(status), "PyConfig_SetString(program_name): %s:%s", status.func, status.err_msg);
   // Some python modules do not cope with an unpopulated argv, so lets
   // fake one.  This step also picks up site-packages into sys.path.
   const wchar_t* argv[] = {L"ceph-mgr"};
