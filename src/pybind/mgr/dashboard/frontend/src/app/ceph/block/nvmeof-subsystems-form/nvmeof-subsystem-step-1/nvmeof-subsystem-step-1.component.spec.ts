@@ -71,5 +71,17 @@ describe('NvmeofSubsystemsStepOneComponent', () => {
       formHelper.setValue('nqn', 'nqn:2001-07.com.ceph:');
       formHelper.expectError('nqn', 'nqnPattern');
     });
+
+    it('should require subnet mask when auto-fetch is selected and next is clicked', () => {
+      formHelper.setValue('listenerMode', component.LISTENER_MODE.AUTO_FETCH);
+      formHelper.setValue('subnetMask', '');
+
+      form.get('subnetMask')?.markAsTouched();
+      form.get('subnetMask')?.markAsDirty();
+      form.updateValueAndValidity();
+      fixture.detectChanges();
+
+      expect(form.get('subnetMask')?.hasError('required')).toBeTruthy();
+    });
   });
 });

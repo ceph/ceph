@@ -119,26 +119,24 @@
         >
           <cds-text-label
             i18n
-            [invalid]="subnetMaskRef.isInvalid"
-            [invalidText]="subnetMaskInvalidText"
+            [invalid]="isControlInvalid('subnetMask')"
+            [invalidText]="requiredFieldInvalidText"
             helperText="Listeners from this subnet-masks will be use."
             i18n-helperText
           >
             Subnet-mask
             <input
               cdsText
-              cdValidate
-              #subnetMaskRef="cdValidate"
               type="text"
               placeholder="e.g. 255.0.0.0"
               i18n-placeholder
               id="subnetMask"
               name="subnetMask"
               formControlName="subnetMask"
-              [invalid]="subnetMaskRef.isInvalid"
+              [invalid]="isControlInvalid('subnetMask')"
             />
           </cds-text-label>
-          <ng-template #subnetMaskInvalidText>
+          <ng-template #requiredFieldInvalidText>
             <span i18n>This field is required.</span>
           </ng-template>
         </div>

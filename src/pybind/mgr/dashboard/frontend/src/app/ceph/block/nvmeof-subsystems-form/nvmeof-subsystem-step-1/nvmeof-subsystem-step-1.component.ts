@@ -133,4 +133,13 @@ export class NvmeofSubsystemsStepOneComponent implements OnInit, TearsheetStep {
     listeners.splice(index, 1);
     this.formGroup.get('listeners').setValue([...listeners]);
   }
+
+  isControlInvalid(controlName: string): boolean {
+    const control = this.formGroup.get(controlName);
+    return (
+      !!control &&
+      control.invalid &&
+      (control.dirty || control.touched || this.formGroup.dirty || this.formGroup.touched)
+    );
+  }
 }
