@@ -4414,8 +4414,10 @@ string OSDMap::get_flag_string() const
   return get_flag_string(flags);
 }
 
-void OSDMap::print_pools(CephContext *cct, ostream& out) const
+void OSDMap::print_pools(CephContext *cct, ostream& out,
+                         bool show_rule_names) const
 {
+  const CrushWrapper *crush_for_names = show_rule_names ? crush.get() : nullptr;
   for (const auto &[pid, pdata] : pools) {
     std::string name("<unknown>");
     const auto &pni = pool_name.find(pid);
@@ -4431,10 +4433,9 @@ void OSDMap::print_pools(CephContext *cct, ostream& out) const
 		  " read_balance_score %.2f", rb_info.acting_adj_score);
     }
 
-    out << "pool " << pid
-	<< " '" << name
-	<< "' " << pdata
-	<< rb_score_str << "\n";
+    out << "pool " << pid << " '" << name << "' ";
+    pdata.print(out, crush_for_names);
+    out << rb_score_str << "\n";
     if (rb_info.err_msg.length() > 0) {
       out << (rc < 0 ? " ERROR: " : " Warning: ") << rb_info.err_msg << "\n";
     }

@@ -58,6 +58,8 @@
 #include "pg_features.h"
 #include "ECTypes.h"
 
+class CrushWrapper;
+
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 
 #define CEPH_OSD_FEATURE_INCOMPAT_BASE CompatSet::Feature(1, "initial feature set(~v.18)")
@@ -1782,7 +1784,20 @@ public:
 
   pg_pool_t() = default;
 
-  void dump(ceph::Formatter *f) const;
+  // When `crush` is non-null, `show_rule_names` is true, and the
+  // pool's crush rule still exists, an extra `crush_rule_name`
+  // string is emitted alongside the (always-int) `crush_rule`
+  // field. Defaults preserve the existing JSON schema.
+  void dump(ceph::Formatter *f,
+            const CrushWrapper *crush = nullptr,
+            bool show_rule_names = false) const;
+
+  // Renders the pool fields used by `pg_pool_t`'s stream operator
+  // (which delegates here with `crush == nullptr`). When `crush`
+  // is non-null and the pool's rule still exists, `crush_rule` is
+  // rendered as the rule name instead of the numeric id; otherwise
+  // the numeric id is used so the output is never misleading.
+  void print(std::ostream& out, const CrushWrapper *crush = nullptr) const;
 
   const utime_t &get_create_time() const { return create_time; }
   uint64_t get_flags() const { return flags; }
