@@ -101,7 +101,8 @@ def open_subvol_in_group(mgr, vol_handle, vol_spec, group_name, subvol_name,
 
 @contextmanager
 def open_clone_subvol_pair_in_vol(vc, vol_spec, vol_name, group_name,
-                                  subvol_name, lockless=False):
+                                  subvol_name, lockless=False, failed=False):
+
     with open_subvol_in_vol(vc, vol_spec, vol_name, group_name, subvol_name,
                             SubvolumeOpType.CLONE_INTERNAL, lockless) \
                             as (vol_handle, _, dst_subvol):
@@ -112,9 +113,14 @@ def open_clone_subvol_pair_in_vol(vc, vol_spec, vol_name, group_name,
             # use the same subvolume to avoid metadata overwrites
             yield (dst_subvol, dst_subvol, src_snap_name)
         else:
+            if failed:
+                op_type = SubvolumeOpType.CLONE_FAILED
+            else:
+                op_type = SubvolumeOpType.CLONE_SOURCE
+
             with open_subvol_in_group(vc.mgr, vol_handle, vol_spec,
                                       src_group_name, src_subvol_name,
-                                      SubvolumeOpType.CLONE_SOURCE) \
+                                      op_type) \
                                       as src_subvol:
                 yield (dst_subvol, src_subvol, src_snap_name)
 
