@@ -5889,6 +5889,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       f->dump_string("host", p->second);
     }
     for (auto& k : {
+	"devices",                   // set by get_device_metadata()
 	"pod_name", "pod_namespace", // set by rook
 	"container_name"             // set by cephadm, ceph-ansible
 	}) {
