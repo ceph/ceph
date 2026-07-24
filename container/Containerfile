@@ -84,18 +84,13 @@ RUN dnf install -y --setopt=install_weak_deps=False epel-release jq
 
 # NFS-Ganesha repo
 RUN set -eux; \
-    source /etc/ceph-distro.env; \
-    if [[ "${DIST_PATH}" == rocky/* ]]; then \
-        curl -fs -L "https://shaman.ceph.com/api/repos/nfs-ganesha/main/latest/${DIST_PATH}/repo?arch=$(arch)" -o /etc/yum.repos.d/ganesha.repo; \
-    else \
-      { \
+    { \
         printf '%s\n' '[ganesha]'; \
         printf '%s\n' 'name=ganesha'; \
         printf '%s\n' "baseurl=${GANESHA_REPO_BASEURL}"; \
         printf '%s\n' 'gpgcheck=0'; \
         printf '%s\n' 'enabled=1'; \
-      } > /etc/yum.repos.d/ganesha.repo; \
-    fi
+    } > /etc/yum.repos.d/ganesha.repo
 
 # ISCSI repo
 RUN set -eux && \
