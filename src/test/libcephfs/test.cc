@@ -18,6 +18,8 @@
 #include "gtest/gtest.h"
 #include "include/cephfs/libcephfs.h"
 #include "include/ceph_fs.h"
+#include "client/FSCrypt.h"
+#include "fscrypt_conf.h"
 #include "mds/mdstypes.h"
 #include "include/stat.h"
 #include <errno.h>
@@ -50,6 +52,11 @@
 // Darwin or windows fails to define this
 #ifndef O_RSYNC
 #define O_RSYNC 0x0
+#endif
+
+// fscrypt is supported only on linux
+#ifndef FSCRYPT_MAXIO_SIZE
+#define FSCRYPT_MAXIO_SIZE (INT_MAX & ~4095)
 #endif
 
 using namespace std;
@@ -5163,4 +5170,32 @@ TEST(LibCephFS, ZeroSizeBufferAsyncReadFsync) {
   ASSERT_EQ(0, ceph_unmount(cmount));
   ceph_release(cmount);
   ceph_userperm_destroy(perms);
+}
+
+TEST(LibCephFS, BuffersOverLimit) {
+  uint64_t READ_WRITE_LIMIT = INT_MAX;
+  if (fscrypt_enabled) {
+    READ_WRITE_LIMIT = FSCRYPT_MAXIO_SIZE;
+  }
+
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(0, do_ceph_mount(cmount, "/"));
+
+  char test_file[1024];
+  sprintf(test_file, "test_buffers_over_limit_%d", getpid());
+  int fd = ceph_open(cmount, test_file, O_CREAT|O_RDWR, 0666);
+  ASSERT_LT(0, fd);
+
+  const size_t BUFSIZE = static_cast<size_t>(3) * 1024 * 1024 * 1024;
+  auto out_buf = std::make_unique<char[]>(BUFSIZE); 
+  memset(out_buf.get(), 'a', BUFSIZE);
+  auto in_buf = std::make_unique<char[]>(BUFSIZE);
+  ASSERT_EQ(ceph_write(cmount, fd, out_buf.get(), BUFSIZE, 0), READ_WRITE_LIMIT); 
+  ASSERT_EQ(ceph_read(cmount, fd, in_buf.get(), BUFSIZE, 0), READ_WRITE_LIMIT); 
+  ASSERT_EQ(0, ceph_close(cmount, fd));
+
+  ceph_shutdown(cmount);
 }

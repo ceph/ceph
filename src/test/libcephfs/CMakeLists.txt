@@ -18,6 +18,7 @@
 
 if(WITH_LIBCEPHFS)
   add_executable(ceph_test_libcephfs
+    fscrypt_conf.cc
     test.cc
     readdir_r_cb.cc
     caps.cc
@@ -179,6 +180,7 @@ if(WITH_LIBCEPHFS)
   
   add_executable(ceph_test_libcephfs_fscrypt
     fscrypt.cc
+    fscrypt_conf.cc
     test.cc
   )
   target_link_libraries(ceph_test_libcephfs_fscrypt
