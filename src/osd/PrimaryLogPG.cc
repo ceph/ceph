@@ -105,7 +105,6 @@ using ceph::bufferlist;
 using ceph::bufferptr;
 using ceph::Formatter;
 using ceph::decode;
-using ceph::decode_noclear;
 using ceph::encode;
 using ceph::encode_destructively;
 
@@ -4650,8 +4649,7 @@ void PrimaryLogPG::do_scan(
       auto p = m->get_data().cbegin();
 
       // take care to preserve ordering!
-      bi.clear_objects();
-      decode_noclear(bi.objects, p);
+      decode(bi.objects, p);
       dout(10) << __func__ << " bi.begin=" << bi.begin << " bi.end=" << bi.end
                << " bi.objects.size()=" << bi.objects.size() << dendl;
 

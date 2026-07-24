@@ -3804,7 +3804,7 @@ void RGWRestoreObj_ObjStore_S3::send_response()
     } else if (st == rgw::sal::RGWRestoreStatus::CloudRestored) {
       rgw::sal::Attrs attrs;
       ceph::real_time expiration_date;
-      rgw::sal::RGWRestoreType rt;
+      rgw::sal::RGWRestoreType rt = rgw::sal::RGWRestoreType::None;
       attrs = s->object->get_attrs();
       auto expire_iter = attrs.find(RGW_ATTR_RESTORE_EXPIRY_DATE);
       auto type_iter = attrs.find(RGW_ATTR_RESTORE_TYPE);

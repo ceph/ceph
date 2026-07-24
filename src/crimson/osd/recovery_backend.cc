@@ -422,7 +422,7 @@ RecoveryBackend::handle_scan_digest(
   bi.end = m.end;
   {
     auto p = m.get_data().cbegin();
-    // take care to preserve ordering!
+    // Preserve ordering:
     bi.clear_objects();
     ::decode_noclear(bi.objects, p);
   }

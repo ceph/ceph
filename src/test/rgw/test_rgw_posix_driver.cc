@@ -1223,7 +1223,6 @@ TEST_F(POSIXDriverTest, Bucket)
 TEST_F(POSIXDriverTest, BucketCreate)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  bool bucket_exists;
   rgw::sal::Bucket::CreateParams createparams;
 
   RGWBucketInfo info;
@@ -1233,6 +1232,9 @@ TEST_F(POSIXDriverTest, BucketCreate)
   bucket = driver->get_bucket(info);
   EXPECT_NE(bucket.get(), nullptr);
 
+  sf::path tp{bp / "root" / testname};
+  EXPECT_FALSE(sf::exists(tp));
+
   createparams.owner = owner;
 
   int ret = bucket->create(env->dpp, createparams, null_yield);
@@ -1241,9 +1243,7 @@ TEST_F(POSIXDriverTest, BucketCreate)
   EXPECT_EQ(bucket->get_key().name, testname);
   EXPECT_EQ(bucket->get_key().tenant, "");
   EXPECT_EQ(bucket->get_key().bucket_id, "");
-  EXPECT_FALSE(bucket_exists);
 
-  sf::path tp{bp / "root" / testname};
   EXPECT_TRUE(sf::exists(tp));
   EXPECT_TRUE(sf::is_directory(tp));
 }
