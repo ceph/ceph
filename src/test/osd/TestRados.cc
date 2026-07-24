@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 #include "test/osd/RadosModel.h"
+#include "test/osd/RadosTestHelpers.h"
 
 using namespace std;
 
@@ -534,9 +535,9 @@ int main(int argc, char **argv)
     bool ec_pool_valid;
   } op_types[] = {
     { TEST_OP_READ, "read", true },
-    { TEST_OP_WRITE, "write", false },
-    { TEST_OP_WRITE_EXCL, "write_excl", false },
-    { TEST_OP_WRITESAME, "writesame", false },
+    { TEST_OP_WRITE, "write", true },
+    { TEST_OP_WRITE_EXCL, "write_excl", true },
+    { TEST_OP_WRITESAME, "writesame", true },
     { TEST_OP_ZERO, "zero", true },
     { TEST_OP_DELETE, "delete", true },
     { TEST_OP_SNAP_CREATE, "snap_create", true },
@@ -577,6 +578,7 @@ int main(int argc, char **argv)
   string low_tier_pool_name = "";
   bool ec_pool = false;
   bool no_omap = false;
+  bool no_write = false;
   bool no_sparse = false;
   bool balance_reads = false;
   bool localize_reads = false;
@@ -633,6 +635,7 @@ int main(int argc, char **argv)
       }
       ec_pool = true;
       no_omap = true;
+      no_write = true;
     } else if (strcmp(argv[i], "--op") == 0) {
       i++;
       if (i == argc) {
@@ -788,7 +791,7 @@ int main(int argc, char **argv)
   int r = context.init();
   if (r < 0) {
     cerr << "Error initializing rados test context: "
-	 << cpp_strerror(r) << std::endl;
+  << cpp_strerror(r) << std::endl;
     exit(1);
   }
 
