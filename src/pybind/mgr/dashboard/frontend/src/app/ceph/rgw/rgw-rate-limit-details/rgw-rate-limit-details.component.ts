@@ -9,5 +9,6 @@ import { RgwRateLimitConfig } from '../models/rgw-rate-limit';
 })
 export class RgwRateLimitDetailsComponent {
   @Input() rateLimitConfig: RgwRateLimitConfig;
-  @Input() type: string;
+  @Input() type!: string;
+  @Input() showHeading = true;
 }
