@@ -89,18 +89,21 @@ def test_new_docker():
         'LimitNPROC=1048576',
         'EnvironmentFile=-/etc/environment',
         'ExecStart=/bin/bash '
-        '/var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/%i/unit.run',
+        '/var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/%i/unit.run %t/%n-pid',
         "ExecStop=-/bin/bash -c 'bash "
         "/var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/%i/unit.stop'",
         'ExecStopPost=-/bin/bash '
         '/var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/%i/unit.poststop',
         'KillMode=none',
-        'Restart=on-failure',
         'RestartSec=10s',
         'TimeoutStartSec=200',
         'TimeoutStopSec=120',
         'StartLimitInterval=30min',
         'StartLimitBurst=5',
+        'Type=forking',
+        'PIDFile=%t/%n-pid',
+        'Restart=always',
+        'ExecStartPre=-/bin/rm -f %t/%n-pid',
         '[Install]',
         'WantedBy=ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9.target',
     ]
@@ -134,12 +137,12 @@ def test_new_podman():
         'ExecStopPost=-/bin/bash '
         '/var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/%i/unit.poststop',
         'KillMode=none',
-        'Restart=on-failure',
         'RestartSec=10s',
         'TimeoutStartSec=200',
         'TimeoutStopSec=120',
         'StartLimitInterval=30min',
         'StartLimitBurst=5',
+        'Restart=on-failure',
         'ExecStartPre=-/bin/rm -f %t/%n-pid %t/%n-cid',
         'ExecStopPost=-/bin/rm -f %t/%n-pid %t/%n-cid',
         'Type=forking',
