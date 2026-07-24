@@ -3423,25 +3423,28 @@ void PeeringState::proc_master_log(
       // of p->version. So long as there are no entries in olog between
       // p->version and olog.head we can still try to wind forward
       // partially written entries
-      auto op = olog.log.end();
-      if (op == olog.log.begin()) {
-	// Other log is emtpy
+      if (olog.log.empty()) {
 	if (p->version <= olog.head) {
 	  consider_adjusting_pwlc(p->version);
 	  ++p;
 	} else {
 	  consider_adjusting_pwlc(pg_log.get_tail());
 	}
-      } else if (op->version == p->version) {
-	// Normal case - both logs have this entry
-	consider_adjusting_pwlc(p->version);
-	++p;
-      } else if (op->version < p->version) {
-	// Last entry in other log is before this entry
-	consider_adjusting_pwlc(pg_log.get_tail());
       } else {
-	// Other log is ahead of the primary log - give up
-	p = pg_log.get_log().log.end();
+	const eversion_t olast = olog.log.back().version;
+	if (olast == p->version ||
+	    (olast < p->version && p->version <= olog.head)) {
+	  // Normal case - both logs have entry p->version, or olog has
+	  // no entries between p->version and olog.head
+	  consider_adjusting_pwlc(p->version);
+	  ++p;
+	} else if (olast < p->version) {
+	  // Divergence is before the oldest entry both logs share
+	  consider_adjusting_pwlc(pg_log.get_tail());
+	} else {
+	  // Other log is ahead of the primary log - give up
+	  p = pg_log.get_log().log.end();
+	}
       }
     }
     // See if we can wind forward partially written entries
