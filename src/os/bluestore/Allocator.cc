@@ -124,6 +124,8 @@ double Allocator::get_fragmentation_score()
     size_t sc_shifted = size_t(1) << sc;
     double x = double(v - sc_shifted) / sc_shifted; //x is <0,1) in its scale grade
     // linear extrapolation in its scale grade
+    ceph_assert(sc < scales.size());
+    ceph_assert(sc + 1 < scales.size());
     double score = (sc_shifted    ) * scales[sc]   * (1-x) +
                    (sc_shifted * 2) * scales[sc+1] * x;
     return score;
@@ -135,6 +137,9 @@ double Allocator::get_fragmentation_score()
     sum += len;
   };
   foreach(iterated_allocation);
+  if (sum == 0) {
+    return 0.0;
+  }
 
   double ideal = get_score(sum);
   double terrible = (sum / block_size) * get_score(block_size);
