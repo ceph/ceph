@@ -38,6 +38,7 @@
 #include "messages/MMDSMap.h"
 #include "messages/MMDSTableRequest.h"
 #include "messages/MMDSMetrics.h"
+#include "msg/Messenger.h"
 
 #include "mgr/MgrClient.h"
 
