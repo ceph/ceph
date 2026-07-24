@@ -3807,7 +3807,7 @@ public:
           if (r < 0) {
             ldpp_dout(dpp, 4) << "failed to read part lengths from the manifest" << dendl;
           } else {
-            // store the encoded part lenghts in RGW_ATTR_CRYPT_PARTS
+            // store the encoded part lengths in RGW_ATTR_CRYPT_PARTS
             bufferlist parts_bl;
             encode(parts_len, parts_bl);
             src_attrs[RGW_ATTR_CRYPT_PARTS] = std::move(parts_bl);
@@ -5598,7 +5598,7 @@ int fixup_manifest_to_parts_len(const DoutPrefixProvider *dpp, rgw::sal::Attrs &
       ldpp_dout(dpp, 0) << "failed to read part lengths from the manifest r=" << r << dendl;
       return r;
     }
-    // store the encoded part lenghts in RGW_ATTR_CRYPT_PARTS
+    // store the encoded part lengths in RGW_ATTR_CRYPT_PARTS
     bufferlist parts_bl;
     encode(parts_len, parts_bl);
     src_attrs[RGW_ATTR_CRYPT_PARTS] = std::move(parts_bl);
