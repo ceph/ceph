@@ -1083,6 +1083,9 @@ public:
     class ExtentDecoderFull : public ExtentDecoder {
       ExtentMap& extent_map;
       std::vector<BlobRef> blobs;
+      // owns the Extent from get_next_extent() until add_extent() inserts it,
+      // so a throw during decode_extent() can't leak it
+      std::unique_ptr<Extent> pending_extent;
     protected:
       BlobRef decode_create_blob(
         bptr_c_it_t& p,
@@ -1110,7 +1113,7 @@ public:
     void encode_spanning_blobs(ceph::buffer::list::contiguous_appender& p);
     BlobRef& get_spanning_blob(int id) {
       auto p = spanning_blob_map.find(id);
-      ceph_assert(p != spanning_blob_map.end());
+      ceph_assert_decode(p != spanning_blob_map.end());
       return p->second;
     }
 
