@@ -1145,6 +1145,7 @@ COMMAND("osd pool create "
 	"name=bulk,type=CephBool,req=false "
 	"name=target_size_bytes,type=CephInt,range=0,req=false "
 	"name=target_size_ratio,type=CephFloat,range=0.0,req=false "\
+	"name=effective_ratio,type=CephFloat,range=0.0|1.0,req=false "\
 	"name=yes_i_really_mean_it,type=CephBool,req=false"
 	"name=crimson,type=CephBool,req=false",
 	"create pool", "osd", "rw")
@@ -1195,6 +1196,7 @@ COMMAND("osd pool get "
           "|dedup_tier"
           "|ec_coding_shard_count"
           "|ec_data_shard_count"
+          "|effective_ratio"
           "|eio"
           "|erasure_code_profile"
           "|fast_read"
@@ -1260,6 +1262,7 @@ COMMAND("osd pool set "
           "|dedup_cdc_chunk_size"
           "|dedup_chunk_algorithm"
           "|dedup_tier"
+          "|effective_ratio"
           "|eio"
           "|fast_read"
           "|fingerprint_algorithm"

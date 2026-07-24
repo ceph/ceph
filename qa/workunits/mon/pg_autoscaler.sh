@@ -30,6 +30,11 @@ function wait_for() {
     return 0
 }
 
+function expect_false() {
+    set -x
+    if "$@"; then return 1; else return 0; fi
+}
+
 function power2_floor() { echo "x=l($1)/l(2); scale=0; 2^(x/1)" | bc -l;}
 
 function power2_ceil() { echo "x=l($1)/l(2); scale=0; 2^((x+0.999)/1)" | bc -l; }
@@ -211,6 +216,66 @@ function test_exact_budget() {
     ceph osd pool rm data1 data1 --yes-i-really-really-mean-it
 }
 
+function test_effective_ratio() {
+    # pinned effective_ratio: pools get an absolute share of the PG budget.
+    # Aim the budget slightly above 768 PG replicas regardless of OSD count
+    # so the pinned shares land on exact powers of two, with a few PGs of
+    # slack so a stray non-autoscale pool cannot overcommit the root.
+    MON_TARGET_PG_PER_OSD=$(( 768 / $NUM_OSDS + 1 ))
+    ceph config set global mon_target_pg_per_osd $MON_TARGET_PG_PER_OSD
+
+    # pins summing to exactly 1.0 must be accepted
+    ceph osd pool create pin0 --effective-ratio 0.5 --autoscale-mode=on
+    ceph osd pool create pin1 --effective-ratio 0.25 --autoscale-mode=on
+    ceph osd pool create pin2 --effective-ratio 0.25 --autoscale-mode=on
+    ceph osd pool set pin0 size 3
+    ceph osd pool set pin1 size 3
+    ceph osd pool set pin2 size 3
+
+    # the option round-trips through pool get and autoscale-status
+    RATIO=$(ceph osd pool get pin0 effective_ratio | grep -Eo '[0-9.]+')
+    eval_actual_expected_val $RATIO '0.5'
+    EFF=$(ceph osd pool autoscale-status | grep 'pin0' | grep -o -m 1 '0\.5000' || true)
+    eval_actual_expected_val "$EFF" '0.5000'
+
+    # a pin is mutually exclusive with target_size_ratio/target_size_bytes
+    expect_false ceph osd pool set pin0 target_size_ratio 0.5
+    expect_false ceph osd pool set pin0 target_size_bytes 1000000
+    expect_false ceph osd pool create bad0 --effective-ratio 0.05 --target-size-ratio 0.1
+
+    # values outside (0.0, 1.0] are rejected
+    expect_false ceph osd pool create bad1 --effective-ratio 1.5
+
+    # overcommitting the budget is rejected at create and at set time
+    expect_false ceph osd pool create bad2 --effective-ratio 0.1
+    expect_false ceph osd pool set pin1 effective_ratio 0.5
+
+    # each pool converges to exactly its pinned share of the budget:
+    # pin0 = 0.5 * 768 / 3 = 128, pin1 = pin2 = 0.25 * 768 / 3 = 64
+    wait_for 300 "ceph osd pool get pin0 pg_num | grep -w 128"
+    wait_for 300 "ceph osd pool get pin1 pg_num | grep -w 64"
+    wait_for 300 "ceph osd pool get pin2 pg_num | grep -w 64"
+
+    # an overridden overcommit raises a health warning that clears on revert
+    ceph osd pool set pin1 effective_ratio 0.5 --yes-i-really-mean-it
+    wait_for 120 "ceph health detail | grep POOL_EFFECTIVE_RATIO_OVERCOMMITTED"
+    ceph osd pool set pin1 effective_ratio 0.25
+    wait_for 120 "! (ceph health detail | grep POOL_EFFECTIVE_RATIO_OVERCOMMITTED)"
+
+    # lowering one pin frees budget for a new pinned pool
+    ceph osd pool set pin2 effective_ratio 0.15
+    ceph osd pool create pin3 --effective-ratio 0.1 --autoscale-mode=on
+
+    # setting the pin to 0 unsets the option
+    ceph osd pool set pin3 effective_ratio 0
+    expect_false ceph osd pool get pin3 effective_ratio
+
+    ceph osd pool rm pin0 pin0 --yes-i-really-really-mean-it
+    ceph osd pool rm pin1 pin1 --yes-i-really-really-mean-it
+    ceph osd pool rm pin2 pin2 --yes-i-really-really-mean-it
+    ceph osd pool rm pin3 pin3 --yes-i-really-really-mean-it
+}
+
 function test_overlapping_roots() {
     # Create custom CRUSH rules for zone-based placement
     MON_TARGET_PG_PER_OSD=100
@@ -365,6 +430,7 @@ ceph osd pool set threshold 1.0
 test_autoscaler_basic || return 1
 test_pool_starvation || return 1
 test_exact_budget || return 1
+test_effective_ratio || exit 1
 test_overlapping_roots || exit 1
 
 echo OK

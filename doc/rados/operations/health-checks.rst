@@ -1450,6 +1450,27 @@ To reset ``target_size_bytes`` to zero, run a command of the following form:
 
    ceph osd pool set <pool-name> target_size_bytes 0
 
+POOL_EFFECTIVE_RATIO_OVERCOMMITTED
+__________________________________
+
+The pinned ``effective_ratio`` values of the pools that share a CRUSH root
+sum to more than 1.0, so together the pools claim more than the root's
+entire PG budget. The pg_autoscaler may be unable to scale pools up until
+the pins are reduced.
+
+The monitor normally prevents this, but the state can still arise if the
+sum check was overridden with ``--yes-i-really-mean-it`` or if a pinned
+pool's ``crush_rule`` was changed so that the pool moved to a different
+CRUSH root.
+
+To reduce a pool's pinned share, run a command of the following form:
+
+.. prompt:: bash #
+
+   ceph osd pool set <pool-name> effective_ratio <ratio>
+
+For more information, see :ref:`pinning_pool_effective_ratio`.
+
 For more information, see :ref:`specifying_pool_target_size`.
 
 TOO_FEW_OSDS

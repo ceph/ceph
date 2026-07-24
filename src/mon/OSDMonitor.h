@@ -541,6 +541,7 @@ private:
 				unsigned *stripe_width,
 				std::ostream *ss);
   uint32_t get_osd_num_by_crush(int crush_rule);
+  double get_effective_ratio_sum(int crush_rule, int64_t skip_pool);
   int check_pg_num(int64_t pool, int pg_num, int size, int crush_rule, std::ostream* ss);
   int prepare_new_pool(std::string& name,
 		       int crush_rule,
@@ -551,6 +552,7 @@ private:
                        uint64_t repl_size,
 		       const uint64_t target_size_bytes,
 		       const float target_size_ratio,
+		       const double effective_ratio,
 		       const std::string &erasure_code_profile,
                        const unsigned pool_type,
                        const uint64_t expected_num_objects,
