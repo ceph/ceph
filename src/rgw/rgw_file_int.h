@@ -6,6 +6,7 @@
 #include "include/rados/rgw_file.h"
 
 /* internal header */
+#include <cstdint>
 #include <string.h>
 #include <string_view>
 #include <sys/stat.h>
@@ -1061,8 +1062,13 @@ namespace rgw {
 	if (likely(! fh_locked))
 	    fh->mtx.lock(); // XXX !RAII because may-return-LOCKED
 	/* need initial ref from LRU (fast path) */
-	if (! fh_lru.ref(fh, cohort::lru::FLAG_INITIAL)) {
-	  lat.lock->unlock();
+
+	/* ref() returns false if fh is mid-eviction (evict_block() set
+	 * evicting and dropped the lane lock before calling reclaim());
+	 * retry, the racing eviction will finish and fh_cache.find_latch()
+	 * will no longer find this handle. */
+        if (unlikely(! fh_lru.ref(fh, cohort::lru::FLAG_INITIAL))) {
+          lat.lock->unlock();
 	  if (likely(! fh_locked))
 	    fh->mtx.unlock();
 	  goto retry; /* !LATCHED */
