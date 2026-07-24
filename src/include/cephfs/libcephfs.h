@@ -2250,6 +2250,13 @@ int ceph_ll_get_fscrypt_policy_v2(struct ceph_mount_info *cmount,
 
 int ceph_ll_is_encrypted(struct ceph_mount_info *cmount, Inode *in, char* enctag);
 
+int ceph_ll_open_snapdiff(
+    struct ceph_mount_info* cmount,
+    Inode* in1,
+    Inode* in2,
+    struct ceph_snapdiff_info* out,
+    const UserPerm* perms);
+
 /*
  * Delegation support
  *
