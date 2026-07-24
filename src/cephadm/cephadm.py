@@ -52,6 +52,7 @@ from cephadmlib.constants import (
     DATA_DIR_MODE,
     DATEFMT,
     DEFAULT_RETRY,
+    BOOTSTRAP_MGR_MODULE_LOAD_RETRY,
     DEFAULT_TIMEOUT,
     LATEST_STABLE_RELEASE,
     LOGROTATE_DIR,
@@ -310,6 +311,57 @@ def is_available(ctx, what, func):
         logger.info('%s not available, waiting (%s/%s)...'
                     % (what, num, retry))
 
+        num += 1
+        time.sleep(2)
+
+
+def wait_for_mgr_modules_loaded(
+    cli: Callable,
+    module_names: Sequence[str],
+) -> None:
+    """
+    Wait until the given mgr modules are loaded in the active mgr.
+
+    Enabling a module updates the mgrmap before the active mgr finishes
+    loading Python modules.  Bootstrap should not run orchestrator commands
+    until orchestrator is out of pending_modules.
+
+    Uses up to BOOTSTRAP_MGR_MODULE_LOAD_RETRY waits of 2 seconds each
+    (~90 seconds total).  If modules are still pending when the limit is
+    reached, log a warning and return so bootstrap can continue; later orch
+    commands may still fail with a clearer error.
+    """
+    names = set(module_names)
+    label = 'mgr modules %s loaded' % ','.join(sorted(names))
+    retry = BOOTSTRAP_MGR_MODULE_LOAD_RETRY
+    wait_seconds = retry * 2
+    still_pending = names
+    logger.info('Waiting for %s...' % label)
+    num = 1
+    while True:
+        try:
+            out = cli(
+                ['tell', 'mgr', 'mgr_status'],
+                verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+            )
+            pending = set(json.loads(out).get('pending_modules', []))
+            still_pending = names & pending
+            if not still_pending:
+                logger.info('%s is available' % label)
+                return
+        except Exception as e:
+            logger.debug('tell mgr mgr_status failed: %s' % e)
+
+        if num > retry:
+            logger.warning(
+                '%s not available after %s tries (~%s seconds); '
+                'continuing bootstrap anyway (still pending: %s)'
+                % (label, retry, wait_seconds,
+                   ','.join(sorted(still_pending)) or 'unknown'))
+            return
+
+        logger.info('%s not available, waiting (%s/%s)...'
+                    % (label, num, retry))
         num += 1
         time.sleep(2)
 
@@ -2547,18 +2599,21 @@ def prepare_ssh(
 
 
 def enable_cephadm_mgr_module(
-    cli: Callable, wait_for_mgr_restart: Callable
+    cli: Callable,
+    wait_for_mgr_restart: Callable,
 ) -> None:
 
     logger.info('Enabling cephadm module...')
     cli(['mgr', 'module', 'enable', 'cephadm'])
-    wait_for_mgr_restart()
+    wait_for_mgr_restart(['cephadm'])
     # https://tracker.ceph.com/issues/67969
+    # https://tracker.ceph.com/issues/77148
     # luckily `ceph mgr module enable <module>` returns
     # a zero rc when the module is already enabled so
     # this is no issue even if it is unnecessary
     logger.info('Verifying orchestrator module is enabled...')
     cli(['mgr', 'module', 'enable', 'orchestrator'])
+    wait_for_mgr_restart(['orchestrator'])
     logger.info('Setting orchestrator backend to cephadm...')
     cli(['orch', 'set', 'backend', 'cephadm'])
 
@@ -2576,7 +2631,7 @@ def prepare_dashboard(
     # configuring dashboard parameters
     logger.info('Enabling the dashboard module...')
     cli(['mgr', 'module', 'enable', 'dashboard'])
-    wait_for_mgr_restart()
+    wait_for_mgr_restart(['dashboard'])
 
     # dashboard crt and key
     if ctx.dashboard_key and ctx.dashboard_crt:
@@ -3032,7 +3087,9 @@ def command_bootstrap(ctx):
             cli(['config', 'set', 'mgr', ldkey, value, '--force'])
 
     # wait for mgr to restart (after enabling a module)
-    def wait_for_mgr_restart() -> None:
+    def wait_for_mgr_restart(
+        module_names: Optional[Sequence[str]] = None,
+    ) -> None:
         # first get latest mgrmap epoch from the mon.  try newer 'mgr
         # stat' command first, then fall back to 'mgr dump' if
         # necessary
@@ -3055,6 +3112,8 @@ def command_bootstrap(ctx):
                 logger.debug('tell mgr mgr_status failed: %s' % e)
                 return False
         is_available(ctx, 'mgr epoch %d' % epoch, mgr_has_latest_epoch)
+        if module_names:
+            wait_for_mgr_modules_loaded(cli, module_names)
 
     enable_cephadm_mgr_module(cli, wait_for_mgr_restart)
 
