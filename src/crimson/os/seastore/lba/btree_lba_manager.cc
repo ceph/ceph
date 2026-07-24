@@ -347,6 +347,7 @@ BtreeLBAManager::reserve_region(
   assert(cursor->is_viewable());
   auto c = get_context(t);
   auto btree = co_await get_btree<LBABtree>(cache, c);
+  co_await cursor->refresh();
   auto iter = btree.make_partial_iter(c, *cursor);
   lba_map_val_t val{
     len,
@@ -379,6 +380,7 @@ BtreeLBAManager::alloc_extents(
   DEBUGT("{}", t, *cursor);
   auto c = get_context(t);
   auto btree = co_await get_btree<LBABtree>(cache, c);
+  co_await cursor->refresh();
   auto iter = btree.make_partial_iter(c, *cursor);
   std::vector<LBACursorRef> ret;
   for (auto eiter = extents.rbegin(); eiter != extents.rend(); ++eiter) {
