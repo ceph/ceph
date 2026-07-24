@@ -22,6 +22,7 @@ from orchestrator import OrchestratorClientMixin, raise_if_exception, Orchestrat
 from rbd import RBD
 
 from typing import DefaultDict, Optional, Dict, Any, Set, cast, Tuple, Union, List, Callable, IO, TypeVar, Iterator
+import time
 LabelValues = Tuple[str, ...]
 Number = Union[int, float]
 MetricValue = Dict[LabelValues, Number]
@@ -1379,6 +1380,83 @@ class Module(MgrModule, OrchestratorClientMixin):
                     self.metrics["pg_{}".format(state)].set(num, (pool,))
                 except KeyError:
                     self.log.warning("skipping pg in unknown state {}".format(state))
+
+        # Collect PG timing metrics from pg_dump
+        self.get_pg_timing_metrics()
+
+    def get_pg_timing_metrics(self) -> None:
+        """Collect all PG timing metrics from pg_dump and aggregate per pool."""
+        try:
+            from datetime import datetime
+            dump = self.get('pg_dump')
+            # Initialize pool timing metrics
+            pool_timing: Dict[int, Dict[str, float]] = {}
+            timing_metric_names: Set[str] = set()
+
+            for pg_stat in dump.get('pg_stats', []):
+                # Extract pool_id from pgid string (format: "pool.pg_num")
+                pgid = pg_stat.get('pgid')
+                if not pgid:
+                    continue
+                try:
+                    pool_id = int(str(pgid).split('.')[0])
+                except (ValueError, IndexError):
+                    continue
+
+                if pool_id not in pool_timing:
+                    pool_timing[pool_id] = {}
+
+                # Dynamically extract all timing fields (those starting with 'last_')
+                # and keep the maximum value per pool
+                for key, value in pg_stat.items():
+                    if key.startswith('last_'):
+                        # Convert ISO 8601 date string to timestamp if it's a string
+                        try:
+                            if isinstance(value, str):
+                                # Parse ISO 8601 format: "2026-05-15T05:40:24.630640+0000"
+                                # Convert +0000 to +00:00 for fromisoformat compatibility
+                                iso_str = value
+                                if '+' in iso_str and ':' not in iso_str.split('+')[1]:
+                                    # Fix timezone format: +0000 -> +00:00
+                                    tz = iso_str.split('+')[1]
+                                    if len(tz) == 4:
+                                        iso_str = iso_str.replace(tz, tz[:2] + ':' + tz[2:])
+                                
+                                dt = datetime.fromisoformat(iso_str.replace('Z', '+00:00'))
+                                numeric_value = dt.timestamp()
+                            elif isinstance(value, (int, float)):
+                                numeric_value = float(value)
+                            else:
+                                continue
+                            
+                            timing_metric_names.add(key)
+                            current_max = pool_timing[pool_id].get(key, 0.0)
+                            pool_timing[pool_id][key] = max(current_max, numeric_value)
+                        except (ValueError, AttributeError, IndexError):
+                            # Skip if we can't convert the value
+                            continue
+
+            # Create metrics dynamically for any new timing fields discovered
+            for timing_metric in timing_metric_names:
+                metric_name = "pg_{}".format(timing_metric)
+                if metric_name not in self.metrics:
+                    self.metrics[metric_name] = Metric(
+                        'gauge',
+                        metric_name,
+                        'PG {} (seconds since epoch)'.format(timing_metric),
+                        ('pool_id',)
+                    )
+
+            # Set metrics for each pool
+            for pool_id, timing_values in pool_timing.items():
+                for timing_metric, value in timing_values.items():
+                    metric_name = "pg_{}".format(timing_metric)
+                    try:
+                        self.metrics[metric_name].set(value, (pool_id,))
+                    except Exception as e:
+                        self.log.debug(f"Failed to set metric {metric_name} for pool {pool_id}: {e}")
+        except Exception as e:
+            self.log.error(f"Failed to collect PG timing metrics: {e}")
 
     @profile_method()
     def get_osd_stats(self) -> None:
