@@ -25,22 +25,6 @@ static const std::string ALL_NAME("all");
 namespace at = argument_types;
 namespace po = boost::program_options;
 
-std::string get_snap_namespace_name(librbd::snap_namespace_type_t type)
-{
-  switch (type) {
-  case RBD_SNAP_NAMESPACE_TYPE_USER:
-    return "user";
-  case RBD_SNAP_NAMESPACE_TYPE_GROUP:
-    return "group";
-  case RBD_SNAP_NAMESPACE_TYPE_TRASH:
-    return "trash";
-  case RBD_SNAP_NAMESPACE_TYPE_MIRROR:
-    return "mirror";
-  default:
-    return "unknown (" + stringify(type) + ")";
-  }
-}
-
 int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::Rados& rados)
 {
   std::vector<librbd::snap_info_t> snaps;
@@ -153,7 +137,7 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
       f->dump_string("timestamp", tt_str);
       if (all_snaps) {
         f->open_object_section("namespace");
-        f->dump_string("type", get_snap_namespace_name(snap_namespace));
+        f->dump_string("type", utils::get_snap_namespace_name(snap_namespace));
         if (get_group_res == 0) {
           std::string pool_name = pool_map[group_snap.group_pool];
           f->dump_string("pool", pool_name);
@@ -161,7 +145,7 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
           f->dump_string("group snap", group_snap.group_snap_name);
         } else if (get_trash_res == 0) {
           f->dump_string("original_namespace_type",
-                         get_snap_namespace_name(
+                         utils::get_snap_namespace_name(
                            trash_snap.original_namespace_type));
           f->dump_string("original_name", trash_snap.original_name);
         } else if (get_mirror_res == 0) {
@@ -191,7 +175,7 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
 
       if (all_snaps) {
         std::ostringstream oss;
-        oss << get_snap_namespace_name(snap_namespace);
+        oss << utils::get_snap_namespace_name(snap_namespace);
 
         if (get_group_res == 0) {
           std::string pool_name = pool_map[group_snap.group_pool];
@@ -200,7 +184,7 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
                       << group_snap.group_snap_name << ")";
         } else if (get_trash_res == 0) {
           oss << " ("
-              << get_snap_namespace_name(trash_snap.original_namespace_type)
+              << utils::get_snap_namespace_name(trash_snap.original_namespace_type)
               << " " << trash_snap.original_name << ")";
         } else if (get_mirror_res == 0) {
           oss << " (" << mirror_snap_state << " "
