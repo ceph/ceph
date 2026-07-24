@@ -355,6 +355,17 @@ target_include_directories(unittest_rgw_arn
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(unittest_rgw_arn ${rgw_libs})
 
+add_executable(unittest_rgw_sc_quota test_rgw_sc_quota.cc)
+target_include_directories(unittest_rgw_sc_quota
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_sc_quota
+  ${rgw_libs}
+  GTest::GTest      # not GTest::Main — we supply main()
+  global)
+add_test(NAME unittest_rgw_sc_quota
+         COMMAND unittest_rgw_sc_quota
+         WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+
 # unittest_rgw_kms
 add_executable(unittest_rgw_kms test_rgw_kms.cc)
 add_ceph_unittest(unittest_rgw_kms)
