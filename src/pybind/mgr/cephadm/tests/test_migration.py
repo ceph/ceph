@@ -9,7 +9,8 @@ from ceph.deployment.service_spec import (
     IngressSpec,
     IscsiServiceSpec,
     GrafanaSpec,
-    CertificateSource
+    CertificateSource,
+    NFSServiceSpec,
 )
 from ceph.utils import datetime_to_str, datetime_now
 from cephadm import CephadmOrchestrator
@@ -403,6 +404,59 @@ def test_migrate_rgw_spec(cephadm_module: CephadmOrchestrator, rgw_spec_store_en
             # if it was migrated, so we can use this to test the spec
             # was untouched
             assert 'rgw.foo' not in cephadm_module.spec_store.all_specs
+
+
+def test_migrate_nfs_old_userid_only_old_format(cephadm_module: CephadmOrchestrator):
+    """migrate_9_10 should only record NFS services that still have old per-daemon auth entities."""
+    old_daemon_id = 'foo.0.0.host1.abc123'
+    new_daemon_id = 'bar.0.0.host1.def456'
+    old_service = 'nfs.foo'
+    new_service = 'nfs.bar'
+
+    cephadm_module.spec_store._specs = {
+        old_service: NFSServiceSpec(service_id='foo', placement=PlacementSpec(hosts=['host1'])),
+        new_service: NFSServiceSpec(service_id='bar', placement=PlacementSpec(hosts=['host1'])),
+    }
+    cephadm_module.cache.daemons = {
+        'host1': {
+            f'nfs.{old_daemon_id}': DaemonDescription('nfs', old_daemon_id, 'host1', service_name=old_service),
+            f'nfs.{new_daemon_id}': DaemonDescription('nfs', new_daemon_id, 'host1', service_name=new_service),
+        }
+    }
+
+    # auth ls lists the old per-daemon entity for nfs.foo only; nfs.bar uses shared userid
+    cephadm_module._mon_command_mock_auth_ls = lambda cmd: (
+        f'[client.nfs.{old_daemon_id}]\n\tkey = AQFake==\n'
+        f'[client.{new_service}]\n\tkey = AQFake==\n'
+        f'[client.nfs.{new_daemon_id}-rgw]\n\tkey = AQFake==\n'
+    )
+
+    assert cephadm_module.migration.migrate_9_10() is True
+    stored = cephadm_module.get_store('nfs_services_with_old_userid')
+    assert stored == old_service
+    assert new_service not in (stored or '').split(',')
+
+
+def test_migrate_nfs_old_userid_skips_when_no_old_entities(cephadm_module: CephadmOrchestrator):
+    """Services that already use the shared service_name userid must not be recorded."""
+    daemon_id = 'foo.host1.abc123'
+    service_name = 'nfs.foo'
+
+    cephadm_module.spec_store._specs = {
+        service_name: NFSServiceSpec(service_id='foo', placement=PlacementSpec(hosts=['host1'])),
+    }
+    cephadm_module.cache.daemons = {
+        'host1': {
+            f'nfs.{daemon_id}': DaemonDescription('nfs', daemon_id, 'host1'),
+        }
+    }
+    cephadm_module._mon_command_mock_auth_ls = lambda cmd: (
+        f'client.{service_name}\n'
+        f'client.nfs.{daemon_id}-rgw\n'
+    )
+
+    assert cephadm_module.migration.migrate_9_10() is True
+    assert cephadm_module.get_store('nfs_services_with_old_userid') is None
 
 
 @mock.patch('cephadm.migrations.get_cert_issuer_info')

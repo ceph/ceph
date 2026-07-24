@@ -17,7 +17,7 @@ from orchestrator import OrchestratorError, DaemonDescription
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
 
-LAST_MIGRATION = 9
+LAST_MIGRATION = 10
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +128,11 @@ class Migrations:
             logger.info('Running migration 8 -> 9')
             if self.migrate_8_9():
                 self.set(9)
+
+        if self.mgr.migration_current == 9 and not startup:
+            logger.info('Running migration 9 -> 10')
+            if self.migrate_9_10():
+                self.set(10)
 
     def migrate_0_1(self) -> bool:
         """
@@ -558,6 +563,49 @@ class Migrations:
             return False
         if nfs_services:
             self.mgr.set_store('nfs_services_with_old_nodeid', ','.join(nfs_services))
+        self.mgr.remove_health_warning('CEPHADM_MIGRATION_FAILURE')
+        return True
+
+    def migrate_9_10(self) -> bool:
+        # For NFS, only services still using old per-daemon userid (nfs.<daemon_id>)
+        # are recorded so they keep that userid after upgrade. Specs that already
+        # use the shared service_name userid are skipped.
+        def nfs_service_uses_old_userid(service_name: str, auth_out: str) -> bool:
+            # Match the exact per-daemon auth entity for each known NFS daemon.
+            # auth ls prints entities as [client.nfs.<daemon_id>].
+            for dd in self.mgr.cache.get_daemons_by_service(service_name):
+                if dd.daemon_id is None:
+                    continue
+                old_entity = f'client.nfs.{dd.daemon_id}'
+                if re.search(rf'\[{re.escape(old_entity)}\]', auth_out):
+                    return True
+            return False
+
+        nfs_services = []
+        service_specs = self.mgr.spec_store.get_specs_by_type('nfs')
+        if not service_specs:
+            return True
+        try:
+            ret, out, err = self.mgr.mon_command({
+                'prefix': 'auth ls',
+            })
+            if ret:
+                raise OrchestratorError(f'auth ls failed: {err}')
+            auth_out = out or ''
+            for service_name, spec in service_specs.items():
+                if nfs_service_uses_old_userid(service_name, auth_out):
+                    nfs_services.append(service_name)
+                    logger.info(
+                        f'NFS service {service_name} needs to maintain old userid after upgrade'
+                    )
+        except Exception as e:
+            logger.exception(f'Got error while detecting NFS old userid: {e}')
+            self.mgr.set_health_warning('CEPHADM_MIGRATION_FAILURE',
+                                        f'Cephadm migration failed: {e}',
+                                        1, [str(e)])
+            return False
+        if nfs_services:
+            self.mgr.set_store('nfs_services_with_old_userid', ','.join(nfs_services))
         self.mgr.remove_health_warning('CEPHADM_MIGRATION_FAILURE')
         return True
 
