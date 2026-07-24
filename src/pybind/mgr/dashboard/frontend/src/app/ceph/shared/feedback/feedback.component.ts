@@ -27,7 +27,10 @@ export class FeedbackComponent extends CdForm implements OnInit, OnDestroy {
     'ceph_volume',
     'core_ceph'
   ];
-  tracker: string[] = ['bug', 'feature'];
+  issueTypes = [
+    { value: 'bug', label: $localize`Bug` },
+    { value: 'feature', label: $localize`Feature request` }
+  ];
   api_key: string;
   keySub: Subscription;
   submit: string;
@@ -47,8 +50,15 @@ export class FeedbackComponent extends CdForm implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.createForm();
+    this.loadFeedbackState();
+  }
+
+  private loadFeedbackState() {
+    this.keySub?.unsubscribe();
     this.keySub = this.feedbackService.isKeyExist().subscribe({
       next: (data: boolean) => {
+        this.isFeedbackEnabled = true;
+        this.feedbackForm.enable();
         this.isAPIKeySet = data;
         if (this.isAPIKeySet) {
           this.feedbackForm.get('api_key').clearValidators();
@@ -63,8 +73,8 @@ export class FeedbackComponent extends CdForm implements OnInit, OnDestroy {
 
   private createForm() {
     this.feedbackForm = new CdFormGroup({
-      project: new UntypedFormControl('', Validators.required),
-      tracker: new UntypedFormControl(this.tracker[0], Validators.required),
+      project: new UntypedFormControl(this.projects[0], Validators.required),
+      tracker: new UntypedFormControl(this.issueTypes[0].value, Validators.required),
       subject: new UntypedFormControl('', Validators.required),
       description: new UntypedFormControl('', Validators.required),
       api_key: new UntypedFormControl('', Validators.required)
@@ -109,7 +119,13 @@ export class FeedbackComponent extends CdForm implements OnInit, OnDestroy {
       null,
       null,
       'Enabled Feedback Module',
+      false,
+      undefined,
       true
     );
+    const subscription = this.mgrModuleService.updateCompleted$.subscribe(() => {
+      subscription.unsubscribe();
+      this.loadFeedbackState();
+    });
   }
 }
