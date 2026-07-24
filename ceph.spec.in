@@ -1868,6 +1868,7 @@ cmake .. \
 %if 0%{with crimson}
     -DWITH_CRIMSON:BOOL=ON \
     -DWITH_JAEGER:BOOL=OFF \
+    -DWITH_ZNS:BOOL=ON \
 %endif
     -DWITH_GRAFANA:BOOL=ON \
 %if %{with sccache}
