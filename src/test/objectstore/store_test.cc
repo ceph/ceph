@@ -21,6 +21,7 @@
 #include <iostream>
 #include <memory>
 #include <time.h>
+#include <random>
 #include <sys/mount.h>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
@@ -108,7 +109,13 @@ static bool bl_eq(bufferlist& expected, bufferlist& actual)
   }
   return false;
 }
-
+std::unique_ptr<char[]> gen_buffer(uint64_t size)
+{
+  std::unique_ptr<char[]> buffer = std::make_unique<char[]>(size);
+  std::independent_bits_engine<std::default_random_engine, CHAR_BIT, unsigned char> e;
+  std::generate(buffer.get(), buffer.get() + size, std::ref(e));
+  return buffer;
+}
 void dump_bluefs_stats()
 {
   AdminSocket* admin_socket = g_ceph_context->get_admin_socket();
@@ -485,6 +492,22 @@ public:
   void StartDeferred(size_t min_alloc_size) {
     SetVal(g_conf(), "bluestore_min_alloc_size", stringify(min_alloc_size).c_str());
     DeferredSetup();
+  }
+};
+
+class StoreTestReformatting : public StoreTestFixture,
+                              public ::testing::WithParamInterface<const char*> {
+public:
+  StoreTestReformatting()
+    : StoreTestFixture("bluestore")
+  {
+  }
+  void SetUp() override {
+    //do nothing
+  }
+protected:
+  void DeferredSetup() {
+    StoreTestFixture::SetUp();
   }
 };
 
@@ -12795,6 +12818,1056 @@ TEST_P(StoreTest, BlueFS_truncate_remove_race) {
   EXPECT_EQ(store->umount(), 0);
   EXPECT_EQ(store->mount(), 0);
 }
+
+// This test case checks:
+//  * if full onode overwrite triggers non-deferred write
+//  * if full small tail overwrite trigger deferred write
+//  * if partial small tail overwrite trigger deferred write
+//
+void doOverwriteDeferredTest(ObjectStore* store, bool v2) {
+  size_t basic_size = 0x11000; // be that large to avoid deferring for big blob
+  size_t extra = 4;
+
+  int r;
+  coll_t cid;
+  ghobject_t obj(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  ghobject_t obj_clone = obj;
+  obj_clone.hobj.snap = 1;
+
+  auto ch = store->create_new_collection(cid);
+  const PerfCounters* logger = store->get_perf_counters();
+
+  cerr << "Creating collection " << cid << std::endl;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  cerr << "Making object " << cid << " " << obj << std::endl;
+  bufferlist bl;
+  bufferlist expected_bl;
+  uint64_t len = basic_size + extra;
+  bl.append(std::string(len, 'a'));
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.write(cid, obj, 0, len, bl, 0);
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  ASSERT_EQ(0, logger->get(l_bluestore_issued_deferred_writes));
+
+  cerr << "Overwriting object (exact size match) " << cid << " " << obj << std::endl;
+  bl.clear();
+  bl.append(std::string(len, 'b'));
+  expected_bl.clear();
+  expected_bl.append(std::string(len, 'b'));
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.write(cid, obj, 0, len, bl, 0);
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+    EXPECT_EQ(0, logger->get(l_bluestore_issued_deferred_writes));
+  }
+  {
+    bl.clear();
+    int r = store->read(ch, obj, 0, len, bl, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    ASSERT_EQ(r, (int)expected_bl.length());
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+  }
+
+  cerr << "Overwriting tail only (size match)" << cid << " " << obj << std::endl;
+  bl.clear();
+  bl.append(std::string(extra, '0'));
+  expected_bl.clear();
+  expected_bl.append(std::string(basic_size, 'b'));
+  expected_bl.append(std::string(extra, '0'));
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.write(cid, obj, basic_size, extra, bl, 0);
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+    EXPECT_EQ(1, logger->get(l_bluestore_issued_deferred_writes));
+  }
+  {
+    bl.clear();
+    int r = store->read(ch, obj, 0, len, bl, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    ASSERT_EQ(r, (int)expected_bl.length());
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+  }
+
+  cerr << "Overwriting object (overwrite size is greater) " << cid << " " << obj << std::endl;
+  bl.clear();
+  len = basic_size + extra + 1;
+  bl.append(std::string(len, 'c'));
+  expected_bl.clear();
+  expected_bl.append(std::string(len, 'c'));
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.write(cid, obj, 0, len, bl, 0);
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+    EXPECT_EQ(1, logger->get(l_bluestore_issued_deferred_writes));
+  }
+  {
+    bl.clear();
+    int r = store->read(ch, obj, 0, basic_size + extra + 1, bl, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    ASSERT_EQ(r, (int)expected_bl.length());
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+  }
+
+  cerr << "Overwriting tail only (size is greater)" << cid << " " << obj << std::endl;
+  bl.clear();
+  len = extra + 2;
+  bl.append(std::string(len, '2'));
+  expected_bl.clear();
+  expected_bl.append(std::string(basic_size, 'c'));
+  expected_bl.append(std::string(len, '2'));
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.write(cid, obj, basic_size, len, bl, 0);
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+    EXPECT_EQ(2, logger->get(l_bluestore_issued_deferred_writes));
+  }
+  {
+    bl.clear();
+    int r = store->read(ch, obj, 0, basic_size + extra + 2, bl, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    ASSERT_EQ(r, (int)expected_bl.length());
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+  }
+
+  cerr << "Overwriting tail only (size is less)" << cid << " " << obj << std::endl;
+  bl.clear();
+  len = extra - 1;
+  bl.append(std::string(len, '1'));
+  expected_bl.clear();
+  expected_bl.append(std::string(basic_size, 'c'));
+  expected_bl.append(std::string(len, '1'));
+  expected_bl.append(std::string(1, '2'));
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.write(cid, obj, basic_size, len, bl, 0);
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+    EXPECT_EQ(3, logger->get(l_bluestore_issued_deferred_writes));
+  }
+  {
+    bl.clear();
+    int r = store->read(ch, obj, 0, basic_size + extra, bl, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    ASSERT_EQ(r, (int)expected_bl.length());
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+  }
+
+  cerr << "Overwriting object (overwrite size is less) " << cid << " " << obj << std::endl;
+  bl.clear();
+  len = basic_size + extra - 1;
+  bl.append(std::string(len, 'd'));
+  expected_bl.clear();
+  expected_bl.append(std::string(len, 'd'));
+  expected_bl.append(std::string(1, '2'));
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.write(cid, obj, 0, len, bl, 0);
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+    // Write v2 behaves differently for now and omits deferred write even
+    // when it's not a full overwrite
+    EXPECT_EQ(v2 ? 3 : 4, logger->get(l_bluestore_issued_deferred_writes));
+  }
+  {
+    bl.clear();
+    int r = store->read(ch, obj, 0, basic_size + extra, bl, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    ASSERT_EQ(r, (int)expected_bl.length());
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+  }
+
+}
+
+TEST_P(StoreTestSpecificAUSize, OverwriteDeferredTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  // enforce 'hddd' settings to enable deferred writes
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "hdd");
+  SetVal(g_conf(), "bluestore_write_v2", "false");
+
+  g_conf().apply_changes(nullptr);
+
+  size_t min_alloc_size = 0x1000;
+  StartDeferred(min_alloc_size);
+
+  doOverwriteDeferredTest(store.get(), false);
+}
+
+TEST_P(StoreTestSpecificAUSize, OverwriteDeferredV2Test) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  // enforce 'hddd' settings to enable deferred writes
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "hdd");
+  SetVal(g_conf(), "bluestore_write_v2", "true");
+
+  g_conf().apply_changes(nullptr);
+
+  size_t min_alloc_size = 0x1000;
+  StartDeferred(min_alloc_size);
+
+  doOverwriteDeferredTest(store.get(), true);
+}
+
+TEST_P(StoreTestReformatting, BasicTest) {
+
+  // enforce 'ssd' settings to avoid deferred writes
+  // which result in cached data blocks and hence
+  // prevents from reformatting
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "ssd");
+  // enforce hdd-optimized allocation strategy to increase resulting
+  // space fragmentation as new allocations tend to occupy new extents
+  // in this mode.
+  SetVal(g_conf(), "bluestore_allocator_lookup_policy", "hdd_optimized");
+  SetVal(g_conf(), "bluestore_write_v2", GetParam());
+  g_conf().apply_changes(nullptr);
+  DeferredSetup();
+
+  int r;
+  coll_t cid;
+  ghobject_t obj(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  ghobject_t obj_clone = obj;
+  obj_clone.hobj.snap = 1;
+
+  auto ch = store->create_new_collection(cid);
+  const PerfCounters* logger = store->get_perf_counters();
+
+  pool_opts_t popts;
+  popts.set(pool_opts_t::DEEP_SCRUB_REFORMAT, "defragment");
+  store->set_collection_opts(ch, popts);
+
+  cerr << "Creating collection " << cid << std::endl;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  auto wait_fn = [&]() {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.touch(cid, obj);
+    t.register_on_complete(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  };
+  cerr << "Making object " << cid << " " << obj << std::endl;
+  bufferlist bl;
+  bufferlist expected_bl;
+  uint64_t len = 127 * 1024;
+  uint64_t len4K = 4096;
+  bl.append(std::string(len, 'a'));
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.write(cid, obj, 0, len, bl, 0);
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  wait_fn();
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
+    ASSERT_EQ(r, (int)len);
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_issued));
+  }
+  cerr << "Fragmenting object " << std::endl;
+  {
+    C_SaferCond c;
+    bufferlist bl1;
+    uint64_t pos = 0;
+    bl1.append(std::string(len4K, 'c'));
+    ObjectStore::Transaction t;
+    auto p = bl.begin();
+    while (pos + len4K <= len) {
+      t.write(cid, obj, pos, len4K, bl1, 0);
+      expected_bl.append(bl1);
+      p += len4K;
+      p.copy(std::min(len4K, (uint64_t)p.get_remaining()), expected_bl);
+      pos += 2 * len4K;
+    }
+    p.copy(p.get_remaining(), expected_bl);
+
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  wait_fn();
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
+    ASSERT_EQ(r, (int)len);
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_defragment_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_omitted));
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_issued));
+  }
+  wait_fn();
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
+    ASSERT_EQ(r, (int)len);
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_defragment_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_omitted));
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_issued));
+  }
+  // object with shared blobs
+  cerr << "Making and fragmenting shared object " << std::endl;
+  {
+    expected_bl.clear();
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.write(cid, obj, 0, len, bl, 0);
+    {
+      bufferlist bl1;
+      uint64_t pos = 0;
+      bl1.append(std::string(len4K, 'c'));
+      auto p = bl.begin();
+      while (pos + len4K <= len) {
+    t.write(cid, obj, pos, len4K, bl1, 0);
+    expected_bl.append(bl1);
+    p += len4K;
+    p.copy(std::min(len4K, (uint64_t)p.get_remaining()), expected_bl);
+    pos += 2 * len4K;
+      }
+      p.copy(p.get_remaining(), expected_bl);
+    }
+
+    t.clone(cid, obj, obj_clone);
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  wait_fn();
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
+    ASSERT_EQ(r, (int)len);
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_defragment_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_omitted));
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_issued));
+  }
+  {
+    // remove the clone hence enabling reformatting
+    ObjectStore::Transaction t;
+    t.remove(cid, obj_clone);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
+    ASSERT_EQ(r, (int)len);
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+    ASSERT_EQ(2, logger->get(l_bluestore_reformat_defragment_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_omitted));
+    ASSERT_EQ(2, logger->get(l_bluestore_reformat_issued));
+  }
+  wait_fn();
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
+    ASSERT_EQ(r, (int)len);
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+    ASSERT_EQ(2, logger->get(l_bluestore_reformat_defragment_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_omitted));
+    ASSERT_EQ(2, logger->get(l_bluestore_reformat_issued));
+  }
+
+  // object with mostly contiguous allocation but having a small gap
+  cerr << "Making and fragmenting object, single small gap" << std::endl;
+  {
+    uint64_t o = 4096;
+    uint64_t l = 4096;
+    expected_bl.clear();
+    auto p = bl.begin();
+    p.copy(o, expected_bl);
+    expected_bl.append_zero(l);
+    p += l;
+    p.copy_all(expected_bl);
+
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.remove(cid, obj);
+    t.write(cid, obj, 0, len, bl, 0);
+    t.zero(cid, obj, 4096, 4096);
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  wait_fn();
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
+
+    ASSERT_EQ(r, (int)len);
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+    ASSERT_EQ(3, logger->get(l_bluestore_reformat_defragment_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_omitted));
+    ASSERT_EQ(3, logger->get(l_bluestore_reformat_issued));
+  }
+  wait_fn();
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
+    ASSERT_EQ(r, (int)len);
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+    ASSERT_EQ(3, logger->get(l_bluestore_reformat_defragment_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_omitted));
+    ASSERT_EQ(3, logger->get(l_bluestore_reformat_issued));
+  }
+  // check none reformatting setting
+  popts.set(pool_opts_t::DEEP_SCRUB_REFORMAT, "");
+  store->set_collection_opts(ch, popts);
+  cerr << "Making and fragmenting object, single small gap, no reformatting" << std::endl;
+  {
+    // reuse existing expected_bl
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.remove(cid, obj);
+    t.write(cid, obj, 0, len, bl, 0);
+    t.zero(cid, obj, 4096, 4096);
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  wait_fn();
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
+    ASSERT_EQ(r, (int)len);
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+    ASSERT_EQ(3, logger->get(l_bluestore_reformat_defragment_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_omitted));
+    ASSERT_EQ(3, logger->get(l_bluestore_reformat_issued));
+  }
+  wait_fn();
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, obj);
+    t.remove(cid, obj_clone);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTestReformatting, CompressedTest) {
+
+  // enforce 'ssd' settings to avoid deferred writes
+  // which result in cached data blocks and hence
+  // prevents from reformatting
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "ssd");
+  // enforce hdd-optimized allocation strategy to increase resulting
+  // space fragmentation as new allocations tend to occupy new extents
+  // in this mode.
+  SetVal(g_conf(), "bluestore_allocator_lookup_policy", "hdd_optimized");
+  SetVal(g_conf(), "bluestore_write_v2", GetParam());
+  // disable write v2 recompression
+  SetVal(g_conf(), "bluestore_recompression_min_gain", "1000");
+  g_conf().apply_changes(nullptr);
+  DeferredSetup();
+
+  int r;
+  coll_t cid;
+
+  SetVal(g_conf(), "bluestore_compression_algorithm", "lz4");
+  SetVal(g_conf(), "bluestore_compression_mode", "force");
+
+  g_ceph_context->_conf.apply_changes(nullptr);
+  ghobject_t obj(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  ghobject_t objw(hobject_t(sobject_t("Object 2", CEPH_NOSNAP)));
+  auto ch = store->create_new_collection(cid);
+  const PerfCounters* logger = store->get_perf_counters();
+
+  pool_opts_t popts;
+  popts.set(pool_opts_t::DEEP_SCRUB_REFORMAT, "recompress");
+
+  store->set_collection_opts(ch, popts);
+
+  cerr << "Creating collection " << cid << std::endl;
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    t.register_on_complete(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  cerr << "Making object " << cid << " " << obj << std::endl;
+  auto wait_fn = [&]() {
+    ch.reset();
+    int r = store->umount();
+    ASSERT_EQ(0, r);
+    r = store->mount();
+    ASSERT_EQ(0, r);
+    ch = store->open_collection(cid);
+    store->set_collection_opts(ch, popts);
+  };
+  bufferlist bl;
+  bufferlist expected_bl;
+  uint64_t len1 = 508 * 1024;
+  uint64_t len2 = 4096 - 10; // make an independent "small" write
+                             // to simulate v1 writing scheme where
+			     // tail gets independent uncompressed blob.
+  uint64_t len = len1 + len2;
+  size_t len4K = 4096;
+  bl.append(std::string(len1, 'a'));
+  bl.append(std::string(len2, 'A'));
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    bufferlist bl0;
+    bl0.substr_of(bl, 0, len1);
+    t.write(cid, obj, 0, len1, bl0, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    bl0.substr_of(bl, len1, len2);
+    t.write(cid, obj, len1, len2, bl0, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    t.register_on_complete(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  wait_fn();
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
+    ASSERT_EQ(r, (int)len);
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_compress_attempted));
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_compress_omitted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_omitted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_issued));
+  }
+  cerr << "Fragmenting object " << std::endl;
+  {
+    C_SaferCond c;
+    bufferlist bl1;
+    uint64_t pos = 0;
+    bl1.append(std::string(len4K, 'b'));
+    ObjectStore::Transaction t;
+    auto p = bl.begin();
+    while (pos + len4K <= len) {
+      t.write(cid, obj, pos, len4K, bl1, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+      expected_bl.append(bl1);
+      p += len4K;
+      p.copy(std::min(len4K, (uint64_t)p.get_remaining()), expected_bl);
+      pos += 2 * len4K;
+    }
+    p.copy(p.get_remaining(), expected_bl);
+
+    t.register_on_complete(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  wait_fn();
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
+    ASSERT_EQ(r, (int)len);
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+    ASSERT_EQ(2, logger->get(l_bluestore_reformat_compress_attempted));
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_compress_omitted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_omitted));
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_issued));
+  }
+  wait_fn();
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
+    ASSERT_EQ(r, (int)len);
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+    ASSERT_EQ(3, logger->get(l_bluestore_reformat_compress_attempted));
+    ASSERT_EQ(2, logger->get(l_bluestore_reformat_compress_omitted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_omitted));
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_issued));
+  }
+  // now let's write non-compressible data
+  cerr << "Fragmenting non-compressible object " << std::endl;
+  {
+    C_SaferCond c;
+    uint64_t pos = 0;
+    ObjectStore::Transaction t;
+    expected_bl.clear();
+    auto p = bl.begin();
+
+    // have to make full buffer in a single shot as repetitive gen_buffer calls
+    // produce the same output which is inappropriate
+    bufferlist bl1;
+    bl1.append(gen_buffer(len).get(), len);
+    auto p1 = bl1.begin();
+    while (pos + len4K <= len) {
+      bufferlist b;
+      p1.copy(len4K, b);
+      t.write(cid, obj, pos, len4K, b, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+      expected_bl.append(b);
+      p += len4K;
+      p.copy(std::min(len4K, (uint64_t)p.get_remaining()), expected_bl);
+      pos += 2 * len4K;
+    }
+    p.copy(p.get_remaining(), expected_bl);
+
+    t.register_on_complete(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  wait_fn();
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
+    ASSERT_EQ(r, (int)len);
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+    ASSERT_EQ(4, logger->get(l_bluestore_reformat_compress_attempted));
+    ASSERT_EQ(3, logger->get(l_bluestore_reformat_compress_omitted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_omitted));
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_issued));
+  }
+  wait_fn();
+
+  //check both reformatting options enabled, data is compressible
+  popts.set(pool_opts_t::DEEP_SCRUB_REFORMAT, "recompress, defragment");
+  store->set_collection_opts(ch, popts);
+  cerr << "Making and fragmenting compressible object, 'both' reformatting mode" << std::endl;
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.write(cid, obj, 0, len, bl, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    t.register_on_complete(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  wait_fn();
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    bufferlist bl1;
+    uint64_t pos = 0;
+    expected_bl.clear();
+    bl1.append(std::string(len4K, 'b'));
+    auto p = bl.begin();
+    while (pos + len4K < len) {
+      t.write(cid, obj, pos, len4K, bl1, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+      expected_bl.append(bl1);
+      p += len4K;
+      p.copy(std::min(len4K, (uint64_t)p.get_remaining()), expected_bl);
+      pos += 2 * len4K;
+    }
+    p.copy(p.get_remaining(), expected_bl);
+    t.register_on_complete(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  wait_fn();
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
+    ASSERT_EQ(r, (int)len);
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+    ASSERT_EQ(5, logger->get(l_bluestore_reformat_compress_attempted));
+    ASSERT_EQ(3, logger->get(l_bluestore_reformat_compress_omitted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_omitted));
+    ASSERT_EQ(2, logger->get(l_bluestore_reformat_issued));
+  }
+  wait_fn();
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
+    ASSERT_EQ(r, (int)len);
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+    ASSERT_EQ(6, logger->get(l_bluestore_reformat_compress_attempted));
+    ASSERT_EQ(4, logger->get(l_bluestore_reformat_compress_omitted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_omitted));
+    ASSERT_EQ(2, logger->get(l_bluestore_reformat_issued));
+  }
+  // now write non-compressible data but this will perform recompression anyway due
+  // to defragmentation
+  //
+  cerr << "Making and fragmenting non-compressible object, 'both' reformatting mode" << std::endl;
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.write(cid, obj, 0, len, bl, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    t.register_on_complete(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  wait_fn();
+  {
+    C_SaferCond c;
+    uint64_t pos = 0;
+    ObjectStore::Transaction t;
+    expected_bl.clear();
+    auto p = bl.begin();
+
+    // have to make full buffer in a single shot as repetitive gen_buffer calls
+    // produce the same output which is inappropriate
+    bufferlist bl1;
+    bl1.append(gen_buffer(len).get(), len);
+    auto p1 = bl1.begin();
+    while (pos + len4K <= len) {
+      bufferlist b;
+      p1.copy(len4K, b);
+      t.write(cid, obj, pos, len4K, b, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+      expected_bl.append(b);
+      p += len4K;
+      p.copy(std::min(len4K, (uint64_t)p.get_remaining()), expected_bl);
+      pos += 2 * len4K;
+    }
+    p.copy(p.get_remaining(), expected_bl);
+
+    t.register_on_complete(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  wait_fn();
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
+    ASSERT_EQ(r, (int)len);
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+    ASSERT_EQ(7, logger->get(l_bluestore_reformat_compress_attempted));
+    ASSERT_EQ(5, logger->get(l_bluestore_reformat_compress_omitted));
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_defragment_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_omitted));
+    ASSERT_EQ(3, logger->get(l_bluestore_reformat_issued));
+  }
+  wait_fn();
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
+    ASSERT_EQ(r, (int)len);
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+    ASSERT_EQ(8, logger->get(l_bluestore_reformat_compress_attempted));
+    ASSERT_EQ(6, logger->get(l_bluestore_reformat_compress_omitted));
+    ASSERT_EQ(1,  logger->get(l_bluestore_reformat_defragment_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_omitted));
+    ASSERT_EQ(3, logger->get(l_bluestore_reformat_issued));
+  }
+  wait_fn();
+
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, obj);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTestReformatting, LazyCompressionTest) {
+
+  // enforce 'ssd' settings to avoid deferred writes
+  // which result in cached data blocks and hence
+  // prevents from reformatting
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "ssd");
+  // enforce hdd-optimized allocation strategy to increase resulting
+  // space fragmentation as new allocations tend to occupy new extents
+  // in this mode.
+  SetVal(g_conf(), "bluestore_allocator_lookup_policy", "hdd_optimized");
+  SetVal(g_conf(), "bluestore_write_v2", GetParam());
+
+  g_conf().apply_changes(nullptr);
+  DeferredSetup();
+
+  int r;
+  coll_t cid;
+
+  SetVal(g_conf(), "bluestore_compression_algorithm", "lz4");
+  g_ceph_context->_conf.apply_changes(nullptr);
+
+  ghobject_t obj(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  ghobject_t objw(hobject_t(sobject_t("Object 2", CEPH_NOSNAP)));
+  auto ch = store->create_new_collection(cid);
+  const PerfCounters* logger = store->get_perf_counters();
+
+  pool_opts_t popts;
+  popts.set(pool_opts_t::DEEP_SCRUB_REFORMAT, "recompress");
+  popts.set(pool_opts_t::COMPRESSION_MODE, "force_lazy");
+
+  store->set_collection_opts(ch, popts);
+
+  cerr << "Creating collection " << cid << std::endl;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  cerr << "Making object " << cid << " " << obj << std::endl;
+  auto wait_fn = [&]() {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.touch(cid, obj);
+    t.register_on_complete(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  };
+  bufferlist bl;
+  bufferlist expected_bl;
+  uint64_t len = 500 * 1024;
+  uint64_t len4K = 4096;
+  bl.append(std::string(len, 'a'));
+  expected_bl = bl;
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.write(cid, obj, 0, len, bl, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    t.register_on_complete(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  wait_fn();
+  cerr << "Lazy object compression" << std::endl;
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
+    ASSERT_EQ(r, (int)len);
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_compress_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_compress_omitted));
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_issued));
+  }
+  wait_fn();
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
+    ASSERT_EQ(r, (int)len);
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_compress_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_compress_omitted));
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_issued));
+  }
+  wait_fn();
+  cerr << "Fragmenting object " << std::endl;
+  {
+    expected_bl.clear();
+    C_SaferCond c;
+    bufferlist bl1;
+    uint64_t pos = 0;
+    bl1.append(std::string(len4K, 'b'));
+    ObjectStore::Transaction t;
+    auto p = bl.begin();
+    while (pos + len4K <= len) {
+      t.write(cid, obj, pos, len4K, bl1, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+      expected_bl.append(bl1);
+      p += len4K;
+      p.copy(std::min(len4K, (uint64_t)p.get_remaining()), expected_bl);
+      pos += 2 * len4K;
+    }
+    p.copy(p.get_remaining(), expected_bl);
+
+    t.register_on_complete(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  wait_fn();
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
+    ASSERT_EQ(r, (int)len);
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+    ASSERT_EQ(2, logger->get(l_bluestore_reformat_compress_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_compress_omitted));
+    ASSERT_EQ(2, logger->get(l_bluestore_reformat_issued));
+  }
+  wait_fn();
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
+    ASSERT_EQ(r, (int)len);
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+    ASSERT_EQ(2, logger->get(l_bluestore_reformat_compress_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_compress_omitted));
+    ASSERT_EQ(2, logger->get(l_bluestore_reformat_issued));
+  }
+  // now let's write non-compressible data
+  cerr << "Writing non-compressible object " << std::endl;
+  {
+    C_SaferCond c;
+    uint64_t pos = 0;
+    ObjectStore::Transaction t;
+    expected_bl.clear();
+    bufferlist bl1;
+    bl1.append(gen_buffer(len).get(), len);
+    auto p1 = bl1.begin();
+    while (pos + len4K <= len) {
+      bufferlist b;
+      p1.copy(len4K, b);
+      t.write(cid, obj, pos, len4K, b, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+      pos += len4K;
+    }
+    expected_bl.claim_append(bl1);
+    t.register_on_complete(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  wait_fn();
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
+    ASSERT_EQ(r, (int)len);
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+    ASSERT_EQ(3, logger->get(l_bluestore_reformat_compress_attempted));
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_compress_omitted));
+    ASSERT_EQ(2, logger->get(l_bluestore_reformat_issued));
+  }
+  wait_fn();
+
+  //check both reformatting options enabled, data is compressible
+  popts.set(pool_opts_t::DEEP_SCRUB_REFORMAT, "recompress, defragment");
+  store->set_collection_opts(ch, popts);
+  cerr << "Making and fragmenting compressible object, 'both' reformatting mode" << std::endl;
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.write(cid, obj, 0, len, bl, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    t.register_on_complete(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  wait_fn();
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    bufferlist bl1;
+    uint64_t pos = 0;
+    expected_bl.clear();
+    bl1.append(std::string(len4K, 'b'));
+    auto p = bl.begin();
+    while (pos < len) {
+      t.write(cid, obj, pos, len4K, bl1, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+      expected_bl.append(bl1);
+      p += len4K;
+      p.copy(std::min(len4K, (uint64_t)p.get_remaining()), expected_bl);
+      pos += 2 * len4K;
+    }
+    t.register_on_complete(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  wait_fn();
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
+    ASSERT_EQ(r, (int)len);
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+    ASSERT_EQ(4, logger->get(l_bluestore_reformat_compress_attempted));
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_compress_omitted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_omitted));
+    ASSERT_EQ(3, logger->get(l_bluestore_reformat_issued));
+  }
+  wait_fn();
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
+    ASSERT_EQ(r, (int)len);
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+    ASSERT_EQ(4, logger->get(l_bluestore_reformat_compress_attempted));
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_compress_omitted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_omitted));
+    ASSERT_EQ(3, logger->get(l_bluestore_reformat_issued));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, obj);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+// Vary write_v2 mode
+INSTANTIATE_TEST_SUITE_P(
+  BlueStore,
+  StoreTestReformatting,
+  ::testing::Values(
+    "false",
+    "true"
+  ));
+
 
 #endif  // WITH_BLUESTORE
 

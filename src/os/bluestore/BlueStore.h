@@ -72,6 +72,11 @@ class Allocator;
 class FreelistManager;
 class BlueStoreRepairer;
 class SimpleBitmap;
+class OnodeReformatContext;
+class OnodeReformatEngine;
+using reformat_engines_t =
+  std::array<std::shared_ptr<OnodeReformatEngine>, MAX_REFORMAT_ENGINES>;
+
 //#define DEBUG_CACHE
 //#define DEBUG_DEFERRED
 #ifdef WITH_CPUTRACE
@@ -250,6 +255,17 @@ enum {
   l_bluestore_runtime_frag_lat,
   l_bluestore_static_frag_lat,
   //****************************************
+
+  // reformatting counters
+  //****************************************
+  l_bluestore_reformat_lat,
+  l_bluestore_reformat_compress_attempted,
+  l_bluestore_reformat_compress_omitted,
+  l_bluestore_reformat_defragment_attempted,
+  l_bluestore_reformat_defragment_omitted,
+  l_bluestore_reformat_issued,
+  //****************************************
+
   l_bluestore_last
 };
 
@@ -263,6 +279,7 @@ class BlueStore : public ObjectStore,
   // -----------------------------------------------------
   // types
 public:
+  struct WriteContext;
   // config observer
   std::vector<std::string> get_tracked_keys() const noexcept override;
   void handle_conf_change(const ConfigProxy& conf,
@@ -601,7 +618,14 @@ public:
     inline bool is_loaded() const {
       return loaded;
     }
-
+    /// Calls back function for any inidividual extent within the specified range.
+    /// The functions gets mapped extent offset, remaining length and references
+    /// count.
+    template<class F>
+    int map_fn(uint32_t x_off, uint32_t x_len, F&& f) const {
+      ceph_assert(loaded && persistent);
+      return persistent->ref_map.map_fn(x_off, x_len, f);
+    }
   };
   typedef boost::intrusive_ptr<SharedBlob> SharedBlobRef;
 
@@ -1737,6 +1761,7 @@ public:
     std::optional<int64_t> comp_min_blob_size;
     std::optional<int64_t> comp_max_blob_size;
     std::optional<double> compression_req_ratio;
+    reformat_engines_t reformat_engines;
 
     ContextQueue *commit_queue;
     std::unique_ptr<Estimator> estimator;
@@ -1795,6 +1820,42 @@ public:
     void flush_all_but_last();
 
     Collection(BlueStore *ns, OnodeCacheShard *oc, BufferCacheShard *bc, coll_t c);
+  };
+
+  struct read_context_t {
+    BlueStore& store;
+    CollectionHandle ch;
+    OnodeRef o;
+    uint64_t offset;
+    size_t length;
+    bufferlist& bl;
+    uint32_t op_flags;
+    read_context_t(BlueStore& _store,
+        CollectionHandle _ch,
+        OnodeRef _o,
+        uint64_t _offset,
+        size_t _length,
+        bufferlist& _bl,
+        uint32_t _op_flags) :
+      store(_store),
+      ch(_ch),
+      o(_o),
+      offset(_offset),
+      length(_length),
+      bl(_bl),
+      op_flags(_op_flags)
+    {
+    }
+    read_context_t(const read_context_t& other) :
+      store(other.store),
+      ch(other.ch),
+      o(other.o),
+      offset(other.offset),
+      length(other.length),
+      bl(other.bl),
+      op_flags(other.op_flags)
+    {
+    }
   };
 
   struct volatile_statfs{
@@ -2957,8 +3018,13 @@ private:
   TransContext *_txc_create(Collection *c, OpSequencer *osr,
 			    std::list<Context*> *on_commits,
 			    TrackedOpRef osd_op=TrackedOpRef());
+  void _txc_exec(TransContext* txc, ThreadPool::TPHandle* handle);
   void _txc_update_store_statfs(TransContext *txc);
   void _txc_add_transaction(TransContext *txc, Transaction *t);
+  void _txc_exec_reformat_write(Collection* c, OnodeRef o,
+                                uint64_t offset, size_t length,
+                                const bufferlist& bl,
+                                WriteContext& wctx);
   void _txc_calc_cost(TransContext *txc);
   void _txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t);
   void _txc_state_proc(TransContext *txc);
@@ -3353,13 +3419,15 @@ private:
     size_t length,
     int read_cache_policy,
     ready_regions_t& ready_regions,
-    blobs2read_t& blobs2read);
+    blobs2read_t& blobs2read,
+    span_stat_t* span_stat = nullptr);
 
 
   int _prepare_read_ioc(
     blobs2read_t& blobs2read,
     std::vector<ceph::buffer::list>* compressed_blob_bls,
-    IOContext* ioc);
+    IOContext* ioc,
+    span_stat_t* span_stat = nullptr);
 
   int _generate_read_result_bl(
     OnodeRef& o,
@@ -3383,7 +3451,8 @@ private:
     size_t len,
     ceph::buffer::list& bl,
     uint32_t op_flags = 0,
-    uint64_t retry_count = 0);
+    uint64_t retry_count = 0,
+    span_stat_t* span_stat = nullptr);
 
   void _do_read_and_pad(
     Collection* c,
@@ -3541,6 +3610,9 @@ public:
   BlockDevice* get_bdev() {
     return bdev;
   }
+  Allocator* get_allocator() {
+    return alloc;
+  }
 
   int queue_transactions(
     CollectionHandle& ch,
@@ -3656,7 +3728,7 @@ public:
     OnodeRef o = c->get_onode(hoid, false);
     return o;
   }
-  inline void log_latency(const char* name,
+  void log_latency(const char* name,
     int idx,
     const ceph::timespan& lat,
     double lat_threshold,
@@ -3775,8 +3847,17 @@ private:
     unsigned csum_order = 0;        ///< target checksum chunk order
     uint64_t target_blob_size = 0;  ///< target (max) blob size
 
+    bool precompressed = false;     ///< reformatting write,
+                                    ///< ctx has precompressed data
+
+    PExtentVectorSlicer prealloc_slicer; ///< Prealloc vector incremental slicer
+
+    uint32_t preallocated() const { return prealloc_slicer.size(); }
+
     old_extent_map_t old_extents;   ///< must deref these blobs
     interval_set<uint64_t> extents_to_gc; ///< extents for garbage collection
+
+    bool full_write = false;        /// < whether full object is overwritten
 
     struct write_item {
       uint64_t logical_offset;      ///< write logical offset
@@ -3793,7 +3874,7 @@ private:
       bool compressed = false;
       ceph::buffer::list compressed_bl;
       size_t compressed_len = 0;
-
+      std::optional<int32_t> compressor_message;
       write_item(
 	uint64_t logical_offs,
         BlobRef b,
@@ -3825,17 +3906,16 @@ private:
       csum_type = other.csum_type;
       csum_order = other.csum_order;
     }
-    void write(
-      uint64_t loffs,
-      BlobRef b,
-      uint64_t blob_len,
-      uint64_t o,
-      ceph::buffer::list& bl,
-      uint64_t o0,
-      uint64_t len0,
-      bool _mark_unused,
-      bool _new_blob) {
-      writes.emplace_back(loffs,
+    write_item& write(uint64_t loffs,
+                      BlobRef b,
+                      uint64_t blob_len,
+                      uint64_t o,
+                      ceph::buffer::list& bl,
+                      uint64_t o0,
+                      uint64_t len0,
+                      bool _mark_unused,
+                      bool _new_blob) {
+      return writes.emplace_back(loffs,
                           b,
                           blob_len,
                           o,
@@ -3851,6 +3931,10 @@ private:
       uint64_t loffs,
       uint64_t loffs_end,
       uint64_t min_alloc_size);
+    void reset() {
+      WriteContext wctx0;
+      std::swap(*this, wctx0);
+    }
   };
   private:
   BlueStore::extent_map_t::iterator _punch_hole_2(
@@ -3867,27 +3951,50 @@ private:
     CollectionRef &c,
     OnodeRef& o,
     uint64_t offset, uint64_t length,
-    ceph::buffer::list::iterator& blp,
+    ceph::buffer::list::const_iterator& blp,
     WriteContext *wctx);
+
+  /// Determines if small write can reuse existing blob
+  /// and hence omit blob relocation.
+  /// Returns the amount of remaining bytes which need relocation,
+  /// effectively the possibe return values are for now:
+  /// * 0 - blob has been reused and writing has been staged
+  /// * min_alloc_size - no writing staged, blob to be relocated.
+  uint32_t _do_write_small_with_maybe_blob_reuse(
+    TransContext* txc,
+    CollectionRef& c,
+    OnodeRef& o,
+    uint64_t offset, uint64_t length,
+    bufferlist& bl,
+    WriteContext* wctx);
   void _do_write_big_apply_deferred(
     TransContext* txc,
     CollectionRef& c,
     OnodeRef& o,
     BigDeferredWriteContext& dctx,
-    bufferlist::iterator& blp,
+    bufferlist::const_iterator& blp,
     WriteContext* wctx);
   void _do_write_big(
     TransContext *txc,
     CollectionRef &c,
     OnodeRef& o,
     uint64_t offset, uint64_t length,
-    ceph::buffer::list::iterator& blp,
+    ceph::buffer::list::const_iterator& blp,
     WriteContext *wctx);
   int _do_alloc_write(
     TransContext *txc,
     CollectionRef c,
     OnodeRef& o,
     WriteContext *wctx);
+
+  void _update_reformat_engines(Collection* c);
+  void _maybe_do_reformat_onode(OnodeReformatContext& ctx,
+    Collection* c,
+    OnodeRef& o,
+    uint64_t offset,
+    size_t length,
+    const bufferlist& bl,
+    uint32_t op_flags);
   void _wctx_finish(
     TransContext *txc,
     CollectionRef& c,
@@ -3904,7 +4011,7 @@ private:
   void _pad_zeros(ceph::buffer::list *bl, uint64_t *offset,
 		  uint64_t chunk_size);
 
-  void _choose_write_options(CollectionRef& c,
+  void _choose_write_options(Collection* c,
                              OnodeRef& o,
                              uint32_t fadvise_flags,
                              WriteContext *wctx);
@@ -3920,14 +4027,14 @@ private:
 		CollectionRef &c,
 		OnodeRef& o,
 		uint64_t offset, uint64_t length,
-		ceph::buffer::list& bl,
-		uint32_t fadvise_flags);
+		const ceph::buffer::list& bl,
+		WriteContext& wctx);
   void _do_write_data(TransContext *txc,
                       CollectionRef& c,
                       OnodeRef& o,
                       uint64_t offset,
                       uint64_t length,
-                      ceph::buffer::list& bl,
+                      const ceph::buffer::list& bl,
                       WriteContext *wctx);
   int _do_write_v2(
     TransContext *txc,
