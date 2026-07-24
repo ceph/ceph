@@ -167,6 +167,12 @@ which are frequently updated. This warning only appears when
 the cluster is provisioned with at least three Ceph Monitors and are using the
 ``connectivity`` election strategy.
 
+To reduce false alarms from transient network issues, detected netsplits are
+not immediately reported as health warnings. Instead, they must persist for at
+least ``mon_netsplit_grace_period`` seconds (default: 9 seconds) before being
+reported. If the network partition resolves within this grace period, no health
+warning is emitted.
+
 Network partitions are reported in two ways:
 
 - As location-level netsplits (e.g., "Netsplit detected between dc1 and dc2") when
@@ -176,6 +182,18 @@ Network partitions are reported in two ways:
 
 The system prioritizes reporting at the highest topology level (``datacenter``, ``rack``, etc.)
 when possible, to better help operators identify infrastructure-level network issues.
+
+To adjust the grace period threshold, run the following command:
+
+.. prompt:: bash $
+
+   ceph config set mon mon_netsplit_grace_period <seconds>
+
+To disable the grace period entirely (immediate reporting), set the value to 0:
+
+.. prompt:: bash $
+
+   ceph config set mon mon_netsplit_grace_period 0
 
 AUTH_INSECURE_GLOBAL_ID_RECLAIM
 _______________________________
