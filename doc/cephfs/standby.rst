@@ -115,16 +115,60 @@ standby on modest or over-provisioned systems. To configure this preference,
 CephFS provides a configuration option for MDS called ``mds_join_fs`` which
 enforces this affinity.
 
-When failing over MDS daemons, a cluster's Monitors will prefer standby daemons with
-``mds_join_fs`` equal to the file system ``name`` with the failed ``rank``.  If no
-standby exists with ``mds_join_fs`` equal to the file system ``name``, it will
-choose an unqualified standby (no setting for ``mds_join_fs``) for the replacement.
-As a last resort, a standby for another filesystem will be chosen, although this
-behavior can be disabled:
+When a failover or standby allocation event occurs, the cluster's Monitors
+evaluate available standby candidates by utilizing a multi-tiered scoring
+matrix. This scoring engine balances software assignment rules against
+physical infrastructure failure domains, strictly prioritizing hardware node
+anti-affinity over software choices to prevent a standby from being promoted
+onto a host sharing the same physical failure domain.
 
-::
 
-    ceph fs set <fs name> refuse_standby_for_another_fs true
+Standby Selection Scoring Matrix
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Candidates are scored on an active scale where higher scores dictate a more
+optimal replacement. A candidate running on an independent physical host domain
+will always outrank a candidate running on the same host as the failing or
+active rank:
+
++-----------------------+-------------------------+---------------------+
+| Affinity Level        | Same Host (Fallback)    | Diff Host (Pref)    |
++=======================+=========================+=====================+
+| **Exact Match**       | SCORE_FALLBACK_MATCH    | SCORE_PREF_MATCH    |
+| (``mds_join_fs``)     | **(Score: 3)**          | **(Score: 6)**      |
++-----------------------+-------------------------+---------------------+
+| **Vanilla**           | SCORE_FALLBACK_VANILLA  | SCORE_PREF_VANILLA  |
+| (Unqualified)         | **(Score: 2)**          | **(Score: 5)**      |
++-----------------------+-------------------------+---------------------+
+| **Last Resort**       | SCORE_FALLBACK_OTHER_FS | SCORE_PREF_OTHER_FS |
+| (Other File System)   | **(Score: 1)**          | **(Score: 4)**      |
++-----------------------+-------------------------+---------------------+
+
+.. note::
+   As demonstrated in the evaluation matrix, an isolated vanilla standby
+   (**Score 5**) will naturally be preferred for promotion over a co-located
+   preferred standby (**Score 3**) to enforce failure domain anti-affinity.
+
+Anti-Affinity Behavioral Rules
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* **Hot Takeover (Active Rank):** If a standby daemon is selected while the
+  target rank is still registered as ``UP`` (such as setting up a
+  ``standby-replay`` daemon or a graceful takeover), the algorithm extracts the
+  running daemon's network addresses to actively weight down co-located standbys.
+* **Stale/Purged Topology Recovery (Cold Crash & Eviction):** If a rank slot has
+  completely failed or been administratively cleared (e.g., via ``mds fail``),
+  it is pruned from the active roster. The engine defensively bypasses host
+  anti-affinity constraints for that rank to prioritize immediate, unhindered
+  cluster recovery.
+* **Cross-FS Failover Restrictions:** If a file system has been configured to
+  refuse standbys assigned to other file systems, candidates explicitly configured
+  for another file system are dropped entirely from evaluation instead of receiving
+  a "Last Resort" score. This behavior can be toggled using the CLI:
+
+  ::
+
+       ceph fs set <fs name> refuse_standby_for_another_fs true
 
 Note, configuring MDS file system affinity does not change the behavior that
 ``standby-replay`` daemons are always selected before other standbys.
