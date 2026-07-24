@@ -3,9 +3,19 @@
 
 #include <gtest/gtest.h>
 #include "rgw_ratelimit.h"
-
+#include "rgw_ratelimit_core.h"
 
 using namespace std::chrono_literals;
+
+static int64_t ratelimit_interval()
+{
+  return g_ceph_context->_conf->rgw_ratelimit_interval;
+}
+
+static int64_t expected_ops_delay(int64_t max_ops)
+{
+  return rgw::ratelimit::compute_delay(max_ops, 1, ratelimit_interval());
+}
 
 
 TEST(RGWRateLimitEntry, compute_delay)
@@ -66,7 +76,7 @@ TEST(RGWRateLimit, reject_op_over_limit)
   int64_t delay = ratelimit.should_rate_limit("GET", key, time, &info, "");
   time = ceph::coarse_real_clock::now();
   delay = ratelimit.should_rate_limit("GET", key, time, &info, "");
-  EXPECT_EQ(60, delay);
+  EXPECT_EQ(expected_ops_delay(1), delay);
 }
 TEST(RGWRateLimit, accept_op_after_giveback)
 {
@@ -308,7 +318,7 @@ TEST(RGWRateLimitEntry, op_limit_not_enabled)
   RateLimiterEntry entry;
   RGWRateLimitInfo info;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::Read, &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::Read, &info, time, ratelimit_interval());
   EXPECT_EQ(0, delay);
 }
 TEST(RGWRateLimitEntry, reject_op_over_limit)
@@ -321,10 +331,10 @@ TEST(RGWRateLimitEntry, reject_op_over_limit)
   info.enabled = true;
   info.max_read_ops = 1;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::Read, &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::Read, &info, time, ratelimit_interval());
   time = ceph::coarse_real_clock::now().time_since_epoch();
-  delay = entry.should_rate_limit(OpType::Read, &info, time);
-  EXPECT_EQ(60, delay);
+  delay = entry.should_rate_limit(OpType::Read, &info, time, ratelimit_interval());
+  EXPECT_EQ(expected_ops_delay(1), delay);
 }
 TEST(RGWRateLimitEntry, accept_op_after_giveback)
 {
@@ -334,10 +344,10 @@ TEST(RGWRateLimitEntry, accept_op_after_giveback)
   info.enabled = true;
   info.max_read_ops = 1;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::Read,  &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::Read, &info, time, ratelimit_interval());
   entry.giveback_tokens(OpType::Read);
   time = ceph::coarse_real_clock::now().time_since_epoch();
-  delay = entry.should_rate_limit(OpType::Read,  &info, time);
+  delay = entry.should_rate_limit(OpType::Read, &info, time, ratelimit_interval());
   EXPECT_EQ(0, delay);
 }
 TEST(RGWRateLimitEntry, accept_op_after_refill)
@@ -348,9 +358,9 @@ TEST(RGWRateLimitEntry, accept_op_after_refill)
   info.enabled = true;
   info.max_read_ops = 1;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::Read,  &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::Read, &info, time, ratelimit_interval());
   time += 61s;
-  delay = entry.should_rate_limit(OpType::Read,  &info, time);
+  delay = entry.should_rate_limit(OpType::Read, &info, time, ratelimit_interval());
   EXPECT_EQ(0, delay);
 }
 TEST(RGWRateLimitEntry, reject_bw_over_limit)
@@ -361,10 +371,10 @@ TEST(RGWRateLimitEntry, reject_bw_over_limit)
   info.enabled = true;
   info.max_read_bytes = 1;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::Read,  &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::Read, &info, time, ratelimit_interval());
   entry.decrease_bytes(true, 2, &info);
   time = ceph::coarse_real_clock::now().time_since_epoch();
-  delay = entry.should_rate_limit(OpType::Read,  &info, time);
+  delay = entry.should_rate_limit(OpType::Read, &info, time, ratelimit_interval());
   EXPECT_GT(delay, 0);
 }
 TEST(RGWRateLimitEntry, accept_bw)
@@ -375,10 +385,10 @@ TEST(RGWRateLimitEntry, accept_bw)
   info.enabled = true;
   info.max_read_bytes = 2;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::Read, &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::Read, &info, time, ratelimit_interval());
   entry.decrease_bytes(true, 1, &info);
   time = ceph::coarse_real_clock::now().time_since_epoch();
-  delay = entry.should_rate_limit(OpType::Read, &info, time);
+  delay = entry.should_rate_limit(OpType::Read, &info, time, ratelimit_interval());
   EXPECT_EQ(0, delay);
 }
 TEST(RGWRateLimitEntry, check_bw_debt_at_max_120secs)
@@ -389,10 +399,10 @@ TEST(RGWRateLimitEntry, check_bw_debt_at_max_120secs)
   info.enabled = true;
   info.max_read_bytes = 2;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::Read, &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::Read, &info, time, ratelimit_interval());
   entry.decrease_bytes(true, 100, &info);
   time += 121s;
-  delay = entry.should_rate_limit(OpType::Read, &info, time);
+  delay = entry.should_rate_limit(OpType::Read, &info, time, ratelimit_interval());
   EXPECT_EQ(0, delay);
 }
 TEST(RGWRateLimitEntry, check_that_bw_limit_not_affect_ops)
@@ -404,10 +414,10 @@ TEST(RGWRateLimitEntry, check_that_bw_limit_not_affect_ops)
   info.max_read_ops = 1;
   info.max_read_bytes = 100000000;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::Read, &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::Read, &info, time, ratelimit_interval());
   entry.decrease_bytes(true, 10000, &info);
   time = ceph::coarse_real_clock::now().time_since_epoch();
-  delay = entry.should_rate_limit(OpType::Read, &info, time);
+  delay = entry.should_rate_limit(OpType::Read, &info, time, ratelimit_interval());
   EXPECT_GT(delay, 0);
 }
 TEST(RGWRateLimitEntry, read_limit_does_not_affect_writes)
@@ -419,10 +429,10 @@ TEST(RGWRateLimitEntry, read_limit_does_not_affect_writes)
   info.max_read_ops = 1;
   info.max_read_bytes = 100000000;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::Write, &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::Write, &info, time, ratelimit_interval());
   entry.decrease_bytes(false, 10000, &info);
   time = ceph::coarse_real_clock::now().time_since_epoch();
-  delay = entry.should_rate_limit(OpType::Write, &info, time);
+  delay = entry.should_rate_limit(OpType::Write, &info, time, ratelimit_interval());
   EXPECT_EQ(0, delay);
 }
 TEST(RGWRateLimitEntry, write_limit_does_not_affect_reads)
@@ -435,10 +445,10 @@ TEST(RGWRateLimitEntry, write_limit_does_not_affect_reads)
   info.max_write_bytes = 100000000;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
   std::string key = "uuser123";
-  int64_t delay = entry.should_rate_limit(OpType::Read, &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::Read, &info, time, ratelimit_interval());
   entry.decrease_bytes(true, 10000, &info);
   time = ceph::coarse_real_clock::now().time_since_epoch();
-  delay = entry.should_rate_limit(OpType::Read, &info, time);
+  delay = entry.should_rate_limit(OpType::Read, &info, time, ratelimit_interval());
   EXPECT_EQ(0, delay);
 }
 
@@ -449,7 +459,7 @@ TEST(RGWRateLimitEntry, allow_unlimited_access)
   RGWRateLimitInfo info;
   info.enabled = true;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::Read, &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::Read, &info, time, ratelimit_interval());
   EXPECT_EQ(0, delay);
 }
 
@@ -757,9 +767,9 @@ TEST(RGWRateLimitEntry, reject_list_op_over_limit)
   info.enabled = true;
   info.max_list_ops = 1;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::List, &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::List, &info, time, ratelimit_interval());
   time = ceph::coarse_real_clock::now().time_since_epoch();
-  delay = entry.should_rate_limit(OpType::List, &info, time);
+  delay = entry.should_rate_limit(OpType::List, &info, time, ratelimit_interval());
   EXPECT_GT(delay, 0);
 }
 
@@ -771,10 +781,10 @@ TEST(RGWRateLimitEntry, accept_list_op_after_giveback)
   info.enabled = true;
   info.max_list_ops = 1;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::List, &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::List, &info, time, ratelimit_interval());
   entry.giveback_tokens(OpType::List);
   time = ceph::coarse_real_clock::now().time_since_epoch();
-  delay = entry.should_rate_limit(OpType::List, &info, time);
+  delay = entry.should_rate_limit(OpType::List, &info, time, ratelimit_interval());
   EXPECT_EQ(0, delay);
 }
 
@@ -786,9 +796,9 @@ TEST(RGWRateLimitEntry, accept_list_op_after_refill)
   info.enabled = true;
   info.max_list_ops = 1;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::List, &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::List, &info, time, ratelimit_interval());
   time += 61s;
-  delay = entry.should_rate_limit(OpType::List, &info, time);
+  delay = entry.should_rate_limit(OpType::List, &info, time, ratelimit_interval());
   EXPECT_EQ(0, delay);
 }
 
@@ -801,9 +811,9 @@ TEST(RGWRateLimitEntry, list_limit_does_not_affect_reads)
   info.max_list_ops = 1;
   info.max_read_ops = 1;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::List, &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::List, &info, time, ratelimit_interval());
   time = ceph::coarse_real_clock::now().time_since_epoch();
-  delay = entry.should_rate_limit(OpType::Read, &info, time);
+  delay = entry.should_rate_limit(OpType::Read, &info, time, ratelimit_interval());
   EXPECT_EQ(0, delay);
 }
 
@@ -816,9 +826,9 @@ TEST(RGWRateLimitEntry, read_limit_does_not_affect_lists)
   info.max_list_ops = 1;
   info.max_read_ops = 1;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::Read, &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::Read, &info, time, ratelimit_interval());
   time = ceph::coarse_real_clock::now().time_since_epoch();
-  delay = entry.should_rate_limit(OpType::List, &info, time);
+  delay = entry.should_rate_limit(OpType::List, &info, time, ratelimit_interval());
   EXPECT_EQ(0, delay);
 }
 
@@ -831,9 +841,9 @@ TEST(RGWRateLimitEntry, list_limit_does_not_affect_writes)
   info.max_list_ops = 1;
   info.max_write_ops = 1;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::List, &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::List, &info, time, ratelimit_interval());
   time = ceph::coarse_real_clock::now().time_since_epoch();
-  delay = entry.should_rate_limit(OpType::Write, &info, time);
+  delay = entry.should_rate_limit(OpType::Write, &info, time, ratelimit_interval());
   EXPECT_EQ(0, delay);
 }
 
@@ -846,9 +856,9 @@ TEST(RGWRateLimitEntry, write_limit_does_not_affect_lists)
   info.max_list_ops = 1;
   info.max_write_ops = 1;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::Write, &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::Write, &info, time, ratelimit_interval());
   time = ceph::coarse_real_clock::now().time_since_epoch();
-  delay = entry.should_rate_limit(OpType::List, &info, time);
+  delay = entry.should_rate_limit(OpType::List, &info, time, ratelimit_interval());
   EXPECT_EQ(0, delay);
 }
 
@@ -861,9 +871,9 @@ TEST(RGWRateLimitEntry, list_limit_does_not_affect_deletes)
   info.max_list_ops = 1;
   info.max_delete_ops = 1;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::List, &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::List, &info, time, ratelimit_interval());
   time = ceph::coarse_real_clock::now().time_since_epoch();
-  delay = entry.should_rate_limit(OpType::Delete, &info, time);
+  delay = entry.should_rate_limit(OpType::Delete, &info, time, ratelimit_interval());
   EXPECT_EQ(0, delay);
 }
 
@@ -876,9 +886,9 @@ TEST(RGWRateLimitEntry, delete_limit_does_not_affect_lists)
   info.max_list_ops = 1;
   info.max_delete_ops = 1;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::Delete, &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::Delete, &info, time, ratelimit_interval());
   time = ceph::coarse_real_clock::now().time_since_epoch();
-  delay = entry.should_rate_limit(OpType::List, &info, time);
+  delay = entry.should_rate_limit(OpType::List, &info, time, ratelimit_interval());
   EXPECT_EQ(0, delay);
 }
 
@@ -1037,9 +1047,9 @@ TEST(RGWRateLimitEntry, reject_delete_op_over_limit)
   info.enabled = true;
   info.max_delete_ops = 1;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::Delete, &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::Delete, &info, time, ratelimit_interval());
   time = ceph::coarse_real_clock::now().time_since_epoch();
-  delay = entry.should_rate_limit(OpType::Delete, &info, time);
+  delay = entry.should_rate_limit(OpType::Delete, &info, time, ratelimit_interval());
   EXPECT_GT(delay, 0);
 }
 
@@ -1051,10 +1061,10 @@ TEST(RGWRateLimitEntry, accept_delete_op_after_giveback)
   info.enabled = true;
   info.max_delete_ops = 1;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::Delete, &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::Delete, &info, time, ratelimit_interval());
   entry.giveback_tokens(OpType::Delete);
   time = ceph::coarse_real_clock::now().time_since_epoch();
-  delay = entry.should_rate_limit(OpType::Delete, &info, time);
+  delay = entry.should_rate_limit(OpType::Delete, &info, time, ratelimit_interval());
   EXPECT_EQ(0, delay);
 }
 
@@ -1066,9 +1076,9 @@ TEST(RGWRateLimitEntry, accept_delete_op_after_refill)
   info.enabled = true;
   info.max_delete_ops = 1;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::Delete, &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::Delete, &info, time, ratelimit_interval());
   time += 61s;
-  delay = entry.should_rate_limit(OpType::Delete, &info, time);
+  delay = entry.should_rate_limit(OpType::Delete, &info, time, ratelimit_interval());
   EXPECT_EQ(0, delay);
 }
 
@@ -1081,9 +1091,9 @@ TEST(RGWRateLimitEntry, delete_limit_does_not_affect_reads)
   info.max_delete_ops = 1;
   info.max_read_ops = 1;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::Delete, &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::Delete, &info, time, ratelimit_interval());
   time = ceph::coarse_real_clock::now().time_since_epoch();
-  delay = entry.should_rate_limit(OpType::Read, &info, time);
+  delay = entry.should_rate_limit(OpType::Read, &info, time, ratelimit_interval());
   EXPECT_EQ(0, delay);
 }
 
@@ -1096,9 +1106,9 @@ TEST(RGWRateLimitEntry, read_limit_does_not_affect_deletes)
   info.max_delete_ops = 1;
   info.max_read_ops = 1;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::Read, &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::Read, &info, time, ratelimit_interval());
   time = ceph::coarse_real_clock::now().time_since_epoch();
-  delay = entry.should_rate_limit(OpType::Delete, &info, time);
+  delay = entry.should_rate_limit(OpType::Delete, &info, time, ratelimit_interval());
   EXPECT_EQ(0, delay);
 }
 
@@ -1111,9 +1121,9 @@ TEST(RGWRateLimitEntry, write_limit_does_not_affect_deletes)
   info.max_delete_ops = 1;
   info.max_write_ops = 1;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::Write, &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::Write, &info, time, ratelimit_interval());
   time = ceph::coarse_real_clock::now().time_since_epoch();
-  delay = entry.should_rate_limit(OpType::Delete, &info, time);
+  delay = entry.should_rate_limit(OpType::Delete, &info, time, ratelimit_interval());
   EXPECT_EQ(0, delay);
 }
 
@@ -1126,9 +1136,9 @@ TEST(RGWRateLimitEntry, delete_limit_does_not_affect_writes)
   info.max_delete_ops = 1;
   info.max_write_ops = 1;
   auto time = ceph::coarse_real_clock::now().time_since_epoch();
-  int64_t delay = entry.should_rate_limit(OpType::Delete, &info, time);
+  int64_t delay = entry.should_rate_limit(OpType::Delete, &info, time, ratelimit_interval());
   time = ceph::coarse_real_clock::now().time_since_epoch();
-  delay = entry.should_rate_limit(OpType::Write, &info, time);
+  delay = entry.should_rate_limit(OpType::Write, &info, time, ratelimit_interval());
   EXPECT_EQ(0, delay);
 }
 

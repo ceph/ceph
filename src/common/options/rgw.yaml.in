@@ -4854,6 +4854,76 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: rgw_ratelimit_backend
+  type: str
+  level: advanced
+  desc: Rate limit counter storage backend
+  long_desc: Selects where RGW stores runtime rate limit counters. ``local`` keeps
+    per-process counters (default upstream behavior). ``redis`` uses a cluster-wide
+    shared counter registry (intended for Redis/Valkey deployments). ``rados`` stores
+    counters in a dedicated RADOS pool via cls_rgw_ratelimit.
+  default: local
+  enum_options:
+  - local
+  - redis
+  - rados
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_ratelimit_redis_key_prefix
+  type: str
+  level: advanced
+  desc: Key prefix for redis/shared rate limit counters
+  default: rgw:rl
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_ratelimit_rados_pool
+  type: str
+  level: advanced
+  desc: RADOS pool for distributed rate limit counters
+  long_desc: Pool used when ``rgw_ratelimit_backend`` is ``rados``. When empty,
+    the rados backend falls back to the in-memory shared counter registry.
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_ratelimit_rados_oid_prefix
+  type: str
+  level: advanced
+  desc: OID prefix for sharded rate limit objects in RADOS
+  default: .rgw.ratelimit
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_ratelimit_rados_num_shards
+  type: uint
+  level: advanced
+  desc: Number of RADOS objects sharding rate limit counters
+  default: 256
+  min: 1
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_ratelimit_fail_open
+  type: bool
+  level: advanced
+  desc: Allow requests when distributed rate limit backend is unavailable
+  default: true
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
 - name: rgw_redis_connection_pool_size
   type: int
   level: basic

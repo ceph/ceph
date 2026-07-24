@@ -185,6 +185,30 @@ add_executable(unittest_rgw_ratelimit test_rgw_ratelimit.cc $<TARGET_OBJECTS:uni
 target_link_libraries(unittest_rgw_ratelimit ${rgw_libs})
 add_ceph_unittest(unittest_rgw_ratelimit)
 
+add_executable(unittest_rgw_ratelimit_distributed
+  test_rgw_ratelimit_distributed.cc
+  $<TARGET_OBJECTS:unit-main>)
+target_link_libraries(unittest_rgw_ratelimit_distributed ${rgw_libs})
+add_ceph_unittest(unittest_rgw_ratelimit_distributed)
+
+if(WITH_RADOSGW_RADOS)
+add_executable(ceph_test_rgw_ratelimit_rados_store
+  test_rgw_ratelimit_rados_store.cc
+  $<TARGET_OBJECTS:unit-main>)
+target_link_libraries(ceph_test_rgw_ratelimit_rados_store
+  rgw_common
+  cls_rgw_ratelimit_client
+  librados
+  global
+  ${rgw_libs}
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  radostest-cxx)
+install(TARGETS ceph_test_rgw_ratelimit_rados_store DESTINATION ${CMAKE_INSTALL_BINDIR})
+add_ceph_test(ceph_test_rgw_ratelimit_rados_store
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph_test_rgw_ratelimit_rados_store)
+endif()
+
 if(WITH_RADOSGW_RADOS)
 # ceph_test_rgw_manifest
 set(test_rgw_manifest_srcs test_rgw_manifest.cc)
