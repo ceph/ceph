@@ -140,14 +140,23 @@ class TLSObjectStore():
             return self.objects_by_name.get(obj_name, {}).get(target)
 
     def save_tlsobject(self, obj_name: str,
-                       tlsobject: str,
+                       tlsobject_cls: str,
                        service_name: Optional[str] = None,
                        host: Optional[str] = None,
                        user_made: bool = False,
-                       editable: bool = False) -> None:
+                       editable: bool = False,
+                       managed_by: Optional[str] = None) -> None:
 
         self._validate_tlsobject_name(obj_name, service_name, host)
-        tlsobject = self.tlsobject_class(tlsobject, user_made, editable)
+        if managed_by is None:
+            tlsobject = self.tlsobject_class(tlsobject_cls, user_made, editable)
+        else:
+            tlsobject = self.tlsobject_class(
+                tlsobject_cls,
+                user_made,
+                editable,
+                managed_by=managed_by,
+            )
         scope, target = self.get_tlsobject_scope_and_target(obj_name, service_name, host)
         if scope in (TLSObjectScope.SERVICE, TLSObjectScope.HOST):
             self.objects_by_name[obj_name][target] = tlsobject

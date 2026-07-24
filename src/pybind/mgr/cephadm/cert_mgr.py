@@ -6,7 +6,15 @@ from enum import Enum
 from cephadm.ssl_cert_utils import SSLCerts, SSLConfigException
 from mgr_util import verify_tls, certificate_days_to_expire, ServerConfigException
 from cephadm.ssl_cert_utils import get_certificate_info, get_private_key_info
-from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectScope, TLSObjectException, TLSObjectProtocol, TLSCredentials
+from cephadm.tlsobject_types import (
+    Cert,
+    PrivKey,
+    TLSObjectManager,
+    TLSObjectScope,
+    TLSObjectException,
+    TLSObjectProtocol,
+    TLSCredentials,
+)
 from cephadm.tlsobject_store import TLSObjectStore
 
 if TYPE_CHECKING:
@@ -49,8 +57,11 @@ class CertInfo:
                  is_valid: bool = False,
                  is_close_to_expiration: bool = False,
                  days_to_expiration: int = 0,
-                 error_info: str = ''):
-        self.user_made = user_made
+                 error_info: str = '',
+                 managed_by: Optional[str] = None):
+        self.managed_by = managed_by or (
+            TLSObjectManager.USER.value if user_made else TLSObjectManager.CEPHADM.value
+        )
         self.cert_name = cert_name
         self.target = target or ''
         self.is_valid = is_valid
@@ -59,8 +70,12 @@ class CertInfo:
         self.error_info = error_info
 
     @property
+    def user_made(self) -> bool:
+        return self.managed_by == TLSObjectManager.USER.value
+
+    @property
     def signed_by(self) -> str:
-        return "user" if self.user_made else "cephadm"
+        return self.managed_by
 
     @property
     def status(self) -> CertStatus:
@@ -78,7 +93,11 @@ class CertInfo:
         return self.is_valid and not self.is_close_to_expiration
 
     def get_status_description(self) -> str:
-        cert_source = 'user-made' if self.user_made else 'cephadm-signed'
+        cert_source = {
+            TLSObjectManager.USER.value: 'user-made',
+            TLSObjectManager.CEPHADM.value: 'cephadm-signed',
+            TLSObjectManager.ACME.value: 'acme-managed',
+        }.get(self.managed_by, self.managed_by)
         cert_target = f' ({self.target})' if self.target else ''
         cert_details = f"'{self.cert_name}{cert_target}' ({cert_source})"
         if not self.is_valid:
@@ -164,6 +183,7 @@ class CertMgr:
     CEPHADM_CERT_WARNING = 'CEPHADM_CERT_WARNING'
 
     CEPHADM_SIGNED = 'cephadm-signed'
+    ACME = 'acme'
     LABEL_SEPARATOR = "__lbl__"
 
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
@@ -187,6 +207,19 @@ class CertMgr:
 
     def is_cephadm_signed_object(self, object_name: str) -> bool:
         return object_name.startswith(self.CEPHADM_SIGNED)
+
+    def is_acme_object(self, object_name: str) -> bool:
+        return object_name.startswith(f'{self.ACME}_')
+
+    def acme_cert(self, service_name: str, label: Optional[str] = None) -> str:
+        if label:
+            return f'{self.ACME}_{service_name}{self.LABEL_SEPARATOR}{label}_cert'
+        return f'{self.ACME}_{service_name}_cert'
+
+    def acme_key(self, service_name: str, label: Optional[str] = None) -> str:
+        if label:
+            return f'{self.ACME}_{service_name}{self.LABEL_SEPARATOR}{label}_key'
+        return f'{self.ACME}_{service_name}_key'
 
     def self_signed_cert(self, service_name: str, label: Optional[str] = None) -> str:
         if label:
@@ -238,6 +271,14 @@ class CertMgr:
 
     def get_root_ca(self) -> str:
         return self.ssl_certs.get_root_cert()
+
+    def register_acme_cert_key_pair(self, service_name: str, scope: TLSObjectScope, label: Optional[str] = None) -> None:
+        self.register_cert_key_pair(
+            service_name,
+            self.acme_cert(service_name, label),
+            self.acme_key(service_name, label),
+            scope,
+        )
 
     def register_self_signed_cert_key_pair(self, service_name: str, label: Optional[str] = None) -> None:
         """
@@ -357,12 +398,39 @@ class CertMgr:
         return TLSCredentials(cert=cert, key=key, ca_cert=ca_cert)
 
     def save_cert(self, cert_name: str, cert: str, service_name: Optional[str] = None, host: Optional[str] = None,
-                  user_made: bool = False, editable: bool = False) -> None:
-        self.cert_store.save_tlsobject(cert_name, cert, service_name, host, user_made, editable)
+                  user_made: bool = False, editable: bool = False, managed_by: Optional[str] = None) -> None:
+        self.cert_store.save_tlsobject(cert_name, cert, service_name, host, user_made, editable, managed_by)
 
     def save_key(self, key_name: str, key: str, service_name: Optional[str] = None, host: Optional[str] = None,
-                 user_made: bool = False, editable: bool = False) -> None:
-        self.key_store.save_tlsobject(key_name, key, service_name, host, user_made, editable)
+                 user_made: bool = False, editable: bool = False, managed_by: Optional[str] = None) -> None:
+        self.key_store.save_tlsobject(key_name, key, service_name, host, user_made, editable, managed_by)
+
+    def save_acme_cert_key_pair(self, service_name: str, tls_creds: TLSCredentials,
+                                service_target: Optional[str] = None, host: Optional[str] = None,
+                                label: Optional[str] = None) -> None:
+        acme_cert_name = self.acme_cert(service_name, label)
+        acme_key_name = self.acme_key(service_name, label)
+        self.cert_store.save_tlsobject(
+            acme_cert_name,
+            tls_creds.cert,
+            service_name=service_target,
+            host=host,
+            editable=False,
+            managed_by=TLSObjectManager.ACME.value,
+        )
+        self.key_store.save_tlsobject(
+            acme_key_name,
+            tls_creds.key,
+            service_name=service_target,
+            host=host,
+            editable=False,
+            managed_by=TLSObjectManager.ACME.value,
+        )
+
+    def rm_acme_cert_key_pair(self, service_name: str, service_target: Optional[str] = None,
+                              host: Optional[str] = None, label: Optional[str] = None) -> None:
+        self.rm_cert_if_present(self.acme_cert(service_name, label), service_target, host)
+        self.rm_key_if_present(self.acme_key(service_name, label), service_target, host)
 
     def save_self_signed_cert_key_pair(self, service_name: str, tls_creds: TLSCredentials, host: str,
                                        label: Optional[str] = None) -> None:
@@ -372,8 +440,17 @@ class CertMgr:
         self.key_store.save_tlsobject(ss_key_name, tls_creds.key, host=host, user_made=False)
 
     def _is_inline_saved_tlsobject(self, obj: Optional[TLSObjectProtocol]) -> bool:
-        # Inline-saved credentials are persisted as user_made=True but editable=False.
-        return bool(obj and getattr(obj, 'user_made', False) and not getattr(obj, 'editable', True))
+        # Inline-saved credentials are user-managed but non-editable copies persisted by cephadm.
+        managed_by = getattr(
+            obj,
+            'managed_by',
+            TLSObjectManager.USER.value if getattr(obj, 'user_made', False) else TLSObjectManager.CEPHADM.value,
+        )
+        return bool(
+            obj
+            and managed_by == TLSObjectManager.USER.value
+            and not getattr(obj, 'editable', True)
+        )
 
     def rm_inline_saved_cert_key_pair(
         self,
@@ -450,14 +527,14 @@ class CertMgr:
 
         Defaults:
         - If `include_cephadm_signed` is False and no explicit `signed-by=` is provided,
-          we auto-filter to show only user-made certs (and always include the root CA).
+          we auto-filter out cephadm-managed certs (and always include the root CA).
         - If the caller explicitly filters by `signed-by=...`, that explicit filter wins.
 
         Behavior matrix:
           +------------------------+-----------------------------+----------------------------------------------+
           | include_cephadm_signed | 'signed-by=' in filter_by?  | Effective behavior on signed-by               |
           +------------------------+-----------------------------+----------------------------------------------+
-          | False                  | No                          | Auto-filter: signed-by=user  + root CA        |
+          | False                  | No                          | Auto-filter: signed-by!=cephadm + root CA     |
           | False                  | Yes                         | Use user's explicit selector                  |
           | True                   | No                          | No auto filter (include user + cephadm)       |
           | True                   | Yes                         | Use user's explicit selector                  |
@@ -507,7 +584,7 @@ class CertMgr:
             if not include_cephadm_signed and not explicit_signed_by:
                 cert_filters.append(
                     lambda cert_ctx:
-                    cert_ctx.get(CertFilterOption.SIGNED_BY) == 'user'
+                    cert_ctx.get(CertFilterOption.SIGNED_BY) != TLSObjectManager.CEPHADM.value
                     or cert_ctx[CertFilterOption.NAME] == self.CEPHADM_ROOT_CA_CERT
                 )
             return cert_filters
@@ -670,9 +747,25 @@ class CertMgr:
         try:
             days_to_expiration = verify_tls(cert.cert, key.key) if key else certificate_days_to_expire(cert.cert)
             is_close_to_expiration = days_to_expiration < self.mgr.certificate_renewal_threshold_days
-            return CertInfo(cert_name, target, cert.user_made, True, is_close_to_expiration, days_to_expiration, "")
+            return CertInfo(
+                cert_name,
+                target,
+                is_valid=True,
+                is_close_to_expiration=is_close_to_expiration,
+                days_to_expiration=days_to_expiration,
+                error_info="",
+                managed_by=cert.managed_by,
+            )
         except ServerConfigException as e:
-            return CertInfo(cert_name, target, cert.user_made, False, False, 0, str(e))
+            return CertInfo(
+                cert_name,
+                target,
+                is_valid=False,
+                is_close_to_expiration=False,
+                days_to_expiration=0,
+                error_info=str(e),
+                managed_by=cert.managed_by,
+            )
 
     def get_problematic_certificates(self) -> List[Tuple[CertInfo, Cert]]:
 
@@ -708,7 +801,7 @@ class CertMgr:
             elif any(key_name in ks for ks in self.known_keys.values()) or self.is_cephadm_signed_object(key_name):
                 # certificate is supposed to have a key but it's missing
                 logger.error(f"Key '{key_name}' is missing for certificate '{cert_name}'.")
-                cert_info = CertInfo(cert_name, target, cert_obj.user_made, False, False, 0, "missing key")
+                cert_info = CertInfo(cert_name, target, is_valid=False, error_info="missing key", managed_by=cert_obj.managed_by)
             else:
                 # certificate has no associated key
                 cert_info = self._check_certificate_state(cert_name, target, cert_obj)
@@ -747,12 +840,16 @@ class CertMgr:
         def requires_user_intervention(cert_info: CertInfo, cert_obj: Cert) -> bool:
             """Determines if a certificate requires manual user intervention."""
             close_to_expiry = (not cert_info.is_operationally_valid() and not self.mgr.certificate_automated_rotation_enabled)
-            user_made_and_invalid = cert_obj.user_made and not cert_info.is_operationally_valid()
-            return close_to_expiry or user_made_and_invalid
+            not_cephadm_managed = cert_obj.managed_by != TLSObjectManager.CEPHADM.value
+            external_or_unsupported_and_invalid = not_cephadm_managed and not cert_info.is_operationally_valid()
+            return close_to_expiry or external_or_unsupported_and_invalid
 
         def trigger_auto_fix(cert_info: CertInfo, cert_obj: Cert) -> bool:
             """Attempts to automatically fix certificate issues if possible."""
-            if not self.mgr.certificate_automated_rotation_enabled or cert_obj.user_made:
+            if (
+                not self.mgr.certificate_automated_rotation_enabled
+                or cert_obj.managed_by != TLSObjectManager.CEPHADM.value
+            ):
                 return False
 
             # This is a cephadm-signed certificate, let's try to fix it
@@ -786,6 +883,20 @@ class CertMgr:
         for cert_info, cert_obj in self.get_problematic_certificates():
 
             log_issue(cert_info)
+
+            if cert_obj.managed_by == TLSObjectManager.ACME.value:
+                fixed = False
+                if fix_issues and hasattr(self.mgr, 'acme_mgr'):
+                    fixed = self.mgr.acme_mgr.ensure_renewal(cert_info, cert_obj)
+                if fixed:
+                    svc = self.get_associated_service(cert_info)
+                    if svc:
+                        services_to_reconfig.add(svc)
+                    else:
+                        logger.error(f'Cannot find the service associated with the certificate {cert_info.cert_name}')
+                else:
+                    certs_with_issues.append(cert_info)
+                continue
 
             if requires_user_intervention(cert_info, cert_obj):
                 certs_with_issues.append(cert_info)

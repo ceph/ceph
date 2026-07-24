@@ -119,6 +119,8 @@ class CephadmServe:
 
                     self._check_certificates()
 
+                    self._process_acme_orders()
+
                     self._purge_deleted_services()
 
                     self._check_for_moved_osds()
@@ -169,6 +171,14 @@ class CephadmServe:
             for svc in services_to_reconfig:
                 self.log.info(f'certmgr: certificate has changed, reconfiguring service {svc}')
                 self.mgr.service_action('reconfig', svc)
+
+    def _process_acme_orders(self) -> None:
+        if not hasattr(self.mgr, 'acme_mgr'):
+            return
+        services_to_reconfig = self.mgr.acme_mgr.process_pending_orders()
+        for svc in services_to_reconfig:
+            self.log.info(f'acme: certificate has changed, reconfiguring service {svc}')
+            self.mgr.service_action('reconfig', svc)
 
     def _serve_sleep(self) -> None:
         sleep_interval = max(

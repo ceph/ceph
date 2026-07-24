@@ -7,6 +7,7 @@ from cherrypy.process.servers import ServerAdapter
 from cherrypy_mgr import CherryPyMgr
 
 from cephadm.agent import AgentEndpoint
+from cephadm.acme_challenges import ACMEChallengeRoot, ACMEChallengesServer
 from cephadm.services.service_discovery import ServiceDiscovery
 from mgr_util import test_port_allocation, PortAlreadyInUse
 from orchestrator import OrchestratorError
@@ -20,17 +21,21 @@ class CephadmHttpServer(threading.Thread):
         self.mgr = mgr
         self.agent = AgentEndpoint(mgr)
         self.service_discovery = ServiceDiscovery(mgr)
+        self.acme_challenges = ACMEChallengesServer(mgr)
         self.cherrypy_shutdown_event = threading.Event()
         self.cherrypy_restart_event = threading.Event()
         self._service_discovery_port = self.mgr.service_discovery_port
+        self._acme_challenge_port = self.mgr.acme_challenge_port
         security_enabled, _, _ = self.mgr._get_security_config()
         self.security_enabled = security_enabled
         self.agent_adapter = None
         self.sd_adapter = None
+        self.acme_adapter = None
         super().__init__(target=self.run)
 
     def config_update(self) -> None:
         self.service_discovery_port = self.mgr.service_discovery_port
+        self.acme_challenge_port = self.mgr.acme_challenge_port
         security_enabled, _, _ = self.mgr._get_security_config()
         if self.security_enabled != security_enabled:
             self.security_enabled = security_enabled
@@ -56,13 +61,34 @@ class CephadmHttpServer(threading.Thread):
         self._service_discovery_port = value
         self.restart()
 
+    @property
+    def acme_challenge_port(self) -> int:
+        return self._acme_challenge_port
+
+    @acme_challenge_port.setter
+    def acme_challenge_port(self, value: int) -> None:
+        if self._acme_challenge_port == value:
+            return
+
+        try:
+            test_port_allocation(self.mgr.get_mgr_ip(), value)
+        except PortAlreadyInUse:
+            raise OrchestratorError(f'ACME challenge port {value} is already in use. Listening on old port {self._acme_challenge_port}.')
+        except Exception as e:
+            raise OrchestratorError(f'Cannot check ACME challenge port ip:{self.mgr.get_mgr_ip()} port:{value} error:{e}')
+
+        self.mgr.log.info(f'Changing ACME challenge port from {self._acme_challenge_port} to {value}...')
+        self._acme_challenge_port = value
+        self.restart()
+
     def restart(self) -> None:
         self.cherrypy_restart_event.set()
 
     def _stop_adapters(self) -> None:
         adapters_to_stop = {
             'service-discovery': getattr(self, 'sd_adapter', None),
-            'cephadm-agent': getattr(self, 'agent_adapter', None)
+            'cephadm-agent': getattr(self, 'agent_adapter', None),
+            'acme-challenges': getattr(self, 'acme_adapter', None)
         }
         for name, adapter in adapters_to_stop.items():
             if adapter:
@@ -75,6 +101,7 @@ class CephadmHttpServer(threading.Thread):
 
         self.sd_adapter = None
         self.agent_adapter = None
+        self.acme_adapter = None
 
     def run(self) -> None:
         def _mount_server(
@@ -133,6 +160,18 @@ class CephadmHttpServer(threading.Thread):
                 main_config=agent_config,
                 ssl_info=agent_ssl_info,
                 extra_mounts=agent_mounts,
+                logger=self.mgr.log
+            )
+
+            # start ACME HTTP-01 challenge server
+            acme_config, acme_ssl_info = self.acme_challenges.configure()
+            self.acme_adapter = _mount_server(
+                name='acme-challenges',
+                bind_addr=(self.mgr.get_mgr_ip(), self._acme_challenge_port),
+                main_app=ACMEChallengeRoot(self.mgr),
+                main_path='/',
+                main_config=acme_config,
+                ssl_info=acme_ssl_info,
                 logger=self.mgr.log
             )
 

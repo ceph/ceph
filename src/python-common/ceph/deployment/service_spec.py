@@ -58,6 +58,7 @@ class TLSBlock(TypedDict, total=False):
     ssl_cert: str
     ssl_key: str
     custom_sans: List[str]
+    acme: Dict[str, Any]
 
 
 class RequiresCertificatesEntry(TypedDict):
@@ -68,15 +69,20 @@ class RequiresCertificatesEntry(TypedDict):
 
 class CertificateSource(Enum):
     """
-    Describes the source of the certificate used by cephadm:
+    Describes how cephadm resolves certificate material.
 
-    - INLINE: Certificate is embedded inline in the spec.
-    - REFEFRENCE: Certificate is provided by the user through the certmgr.
-    - CEPHADM_SIGNED: Certificate is generated and signed by cephadm (via certmgr).
+    - INLINE: User provides cert/key inline in the service spec. Cephadm persists
+      the resolved material in certmgr as non-editable.
+    - REFERENCE: User points to an existing editable certmgr object. Cephadm consumes
+      it but does not own its lifecycle.
+    - CEPHADM_SIGNED: Cephadm generates and owns cert/key lifecycle using the cephadm CA.
+    - ACME: Cephadm obtains cert/key from an external ACME CA and owns renewal.
+      The resolved cert/key is persisted in certmgr, but it is not a user-managed reference.
     """
     INLINE = "inline"
     REFERENCE = "reference"
     CEPHADM_SIGNED = "cephadm-signed"
+    ACME = "acme"
 
 
 class MonitorCertSource(Enum):
@@ -1007,6 +1013,7 @@ class ServiceSpec(object):
                  custom_configs: Optional[List[CustomConfig]] = None,
                  ip_addrs: Optional[Dict[str, str]] = None,
                  ssl_ca_cert: Optional[str] = None,
+                 acme: Optional[Dict[str, Any]] = None,
                  termination_grace_period_seconds: Optional[int] = None,
                  ):
 
@@ -1032,6 +1039,7 @@ class ServiceSpec(object):
             self.ssl_key = ssl_key
             self.ssl_ca_cert = ssl_ca_cert
             self.custom_sans = custom_sans
+            self.acme = acme
 
         if self.service_type in self.REQUIRES_SERVICE_ID or self.service_type == 'osd':
             self.service_id = service_id
@@ -1254,6 +1262,8 @@ class ServiceSpec(object):
                 tls['ssl_key'] = self.ssl_key
             if self.custom_sans:
                 tls['custom_sans'] = self.custom_sans
+            if self.certificate_source == CertificateSource.ACME.value and self.acme:
+                tls['acme'] = self.acme
             c.update(tls)
 
         if c:
@@ -1277,6 +1287,7 @@ class ServiceSpec(object):
         has_key = bool(getattr(self, "ssl_key", None))
         has_ca_cert = bool(getattr(self, "ssl_ca_cert", None))
         has_cert_src = bool(getattr(self, "certificate_source", None))
+        acme_cfg = getattr(self, "acme", None)
 
         # Pairing rule for legacy inline specs
         if (has_cert or has_key) and not (has_cert and has_key):
@@ -1316,6 +1327,66 @@ class ServiceSpec(object):
                 f"When using certificate_source '{self.certificate_source}', custom "
                 "ssl_cert or ssl_key must not be provided."
             )
+
+        if self.certificate_source == CertificateSource.ACME.value:
+            if self.service_type != 'mgmt-gateway':
+                raise SpecValidationError(
+                    f"certificate_source '{CertificateSource.ACME.value}' is currently supported only for mgmt-gateway"
+                )
+            if has_cert or has_key or has_ca_cert:
+                raise SpecValidationError(
+                    f"When using certificate_source '{CertificateSource.ACME.value}', custom "
+                    "ssl_cert, ssl_key, or ssl_ca_cert must not be provided."
+                )
+            if getattr(self, 'custom_sans', None):
+                raise SpecValidationError(
+                    f"When using certificate_source '{CertificateSource.ACME.value}', use acme.domains instead of custom_sans."
+                )
+            if not isinstance(acme_cfg, dict):
+                raise SpecValidationError(
+                    f"When using certificate_source '{CertificateSource.ACME.value}', an acme config block is required."
+                )
+
+            # Service-level ACME config intentionally only requires the domain
+            # list. CA/account settings such as directory_url, email, account_name
+            # and terms_of_service_agreed may come from a cluster-level ACME
+            # profile and can be overridden here when needed. Full profile
+            # resolution happens in cephadm.acme.ACMEManager, where mgr module
+            # options are available.
+            domains = acme_cfg.get('domains')
+            if not isinstance(domains, list) or not domains or not all(isinstance(d, str) and d.strip() for d in domains):
+                raise SpecValidationError(
+                    "ACME config requires a non-empty 'domains' list of DNS names."
+                )
+            for domain in domains:
+                domain = domain.strip()
+                if domain.startswith('*.'):
+                    raise SpecValidationError('ACME HTTP-01 does not support wildcard domains.')
+                try:
+                    ip_address(domain)
+                except ValueError:
+                    pass
+                else:
+                    raise SpecValidationError('ACME HTTP-01 domains must be DNS names, not IP addresses.')
+
+            profile = acme_cfg.get('profile')
+            if profile is not None and (not isinstance(profile, str) or not profile.strip()):
+                raise SpecValidationError("ACME 'profile' must be a non-empty string when provided.")
+            directory_url = acme_cfg.get('directory_url')
+            if directory_url is not None and (not isinstance(directory_url, str) or not directory_url.strip()):
+                raise SpecValidationError("ACME 'directory_url' must be a non-empty string when provided.")
+            email = acme_cfg.get('email')
+            if email is not None and not isinstance(email, str):
+                raise SpecValidationError("ACME 'email' must be a string when provided.")
+            terms_agreed = acme_cfg.get('terms_of_service_agreed')
+            if terms_agreed is not None and terms_agreed is not True:
+                raise SpecValidationError(
+                    "ACME 'terms_of_service_agreed' must be true when provided."
+                )
+            account_name = acme_cfg.get('account_name')
+            if account_name is not None and (not isinstance(account_name, str) or not account_name.strip()):
+                raise SpecValidationError("ACME 'account_name' must be a non-empty string when provided.")
+
 
     def validate(self) -> None:
         if not self.service_type:
@@ -2610,6 +2681,7 @@ class MgmtGatewaySpec(ServiceSpec):
                  ssl: Optional[bool] = True,
                  certificate_source: Optional[str] = None,
                  custom_sans: Optional[List[str]] = None,
+                 acme: Optional[Dict[str, Any]] = None,
                  ssl_prefer_server_ciphers: Optional[str] = None,
                  ssl_session_tickets: Optional[str] = None,
                  ssl_session_timeout: Optional[str] = None,
@@ -2638,6 +2710,7 @@ class MgmtGatewaySpec(ServiceSpec):
             ssl_key=ssl_key,
             certificate_source=certificate_source,
             custom_sans=custom_sans,
+            acme=acme,
             preview_only=preview_only,
             extra_container_args=extra_container_args,
             extra_entrypoint_args=extra_entrypoint_args,
@@ -2677,6 +2750,15 @@ class MgmtGatewaySpec(ServiceSpec):
             ports.append(cast(int, self.port))
         else:
             ports.append(443)  # default HTTPS port
+        if (
+            self.ssl
+            and self.certificate_source == CertificateSource.ACME.value
+            and 80 not in ports
+        ):
+            # HTTP-01 validation always starts on public TCP/80. Keep the
+            # HTTPS port first because other cephadm code treats ports[0] as
+            # the primary mgmt-gateway endpoint.
+            ports.append(80)
         return ports
 
     def validate(self) -> None:
