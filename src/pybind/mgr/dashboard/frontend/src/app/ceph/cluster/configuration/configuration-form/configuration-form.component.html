@@ -1,164 +1,438 @@
-<div class="cd-col-form"
-     *cdFormLoading="loading">
-  <form name="configForm"
-        #formDir="ngForm"
-        [formGroup]="configForm"
-        novalidate>
-    <div class="card">
-      <div class="card-header">
-        <ng-container i18>Edit</ng-container> {{ configForm.getValue('name') }}
-      </div>
-
-      <div class="card-body">
-        <!-- Name -->
-        <div class="form-group row">
-          <label i18n
-                 class="cd-col-form-label">Name</label>
-          <div class="cd-col-form-input">
-            <input class="form-control"
-                   type="text"
-                   id="name"
-                   formControlName="name"
-                   readonly>
-          </div>
+<ng-container *cdFormLoading="loading">
+  <form
+    [formGroup]="configForm"
+    novalidate
+  >
+    <div
+      cdsGrid
+      [useCssGrid]="true"
+      [narrow]="true"
+      [fullWidth]="true"
+    >
+      <div
+        cdsCol
+        [columnNumbers]="{ sm: 4, md: 8 }"
+      >
+        <div
+          cdsRow
+          class="form-heading"
+        >
+          <h3 i18n>Edit {{ configForm.getValue('name') }}</h3>
         </div>
 
-        <!-- Description -->
-        <div class="form-group row"
-             *ngIf="configForm.getValue('desc')">
-          <label i18n
-                 class="cd-col-form-label">Description</label>
-          <div class="cd-col-form-input">
-            <textarea class="form-control resize-vertical"
-                      id="desc"
-                      formControlName="desc"
-                      readonly>
-            </textarea>
-          </div>
+        <!-- Name -->
+        <div
+          cdsRow
+          class="form-item"
+        >
+          <cds-text-label
+            labelInputID="name"
+            i18n
+          >
+            Name
+            <input
+              cdsText
+              type="text"
+              id="name"
+              formControlName="name"
+              readonly
+            />
+          </cds-text-label>
         </div>
 
         <!-- Long description -->
-        <div class="form-group row"
-             *ngIf="configForm.getValue('long_desc')">
-          <label i18n
-                 class="cd-col-form-label">Long description</label>
-          <div class="cd-col-form-input">
-            <textarea class="form-control resize-vertical"
-                      id="long_desc"
-                      formControlName="long_desc"
-                      readonly>
-            </textarea>
-          </div>
+        @if (response?.long_desc) {
+        <div
+          cdsRow
+          class="form-item"
+        >
+          <label
+            class="cds--label"
+            i18n
+          >Description</label>
+          <p class="cds--type-body-01 mb-0">{{ response.long_desc }}</p>
         </div>
+        }
 
         <!-- Default -->
-        <div class="form-group row"
-             *ngIf="configForm.getValue('default') !== ''">
-          <label i18n
-                 class="cd-col-form-label">Default</label>
-          <div class="cd-col-form-input">
-            <input class="form-control"
-                   type="text"
-                   id="default"
-                   formControlName="default"
-                   readonly>
-          </div>
+        @if (configForm.getValue('default') !== '') {
+        <div
+          cdsRow
+          class="form-item"
+        >
+          <cds-text-label
+            labelInputID="default"
+            i18n
+          >
+            Default
+            <input
+              cdsText
+              type="text"
+              id="default"
+              formControlName="default"
+              readonly
+            />
+          </cds-text-label>
         </div>
+        }
 
         <!-- Daemon default -->
-        <div class="form-group row"
-             *ngIf="configForm.getValue('daemon_default') !== ''">
-          <label i18n
-                 class="cd-col-form-label">Daemon default</label>
-          <div class="cd-col-form-input">
-            <input class="form-control"
-                   type="text"
-                   id="daemon_default"
-                   formControlName="daemon_default"
-                   readonly>
-          </div>
+        @if (configForm.getValue('daemon_default') !== '') {
+        <div
+          cdsRow
+          class="form-item"
+        >
+          <cds-text-label
+            labelInputID="daemon_default"
+            i18n
+          >
+            Daemon default
+            <input
+              cdsText
+              type="text"
+              id="daemon_default"
+              formControlName="daemon_default"
+              readonly
+            />
+          </cds-text-label>
         </div>
+        }
 
         <!-- Services -->
-        <div class="form-group row"
-             *ngIf="configForm.getValue('services').length > 0">
-          <label i18n
-                 class="cd-col-form-label">Services</label>
-          <div class="cd-col-form-input">
-            <span *ngFor="let service of configForm.getValue('services')"
-                  class="form-component-badge">
-              <cds-tag [size]="'md'"
-                       class="tag-dark">
-                {{ service }}
-              </cds-tag>
-            </span>
+        @if (configForm.getValue('services')?.length > 0) {
+        <div
+          cdsRow
+          class="form-item form-item-append align-items-center"
+        >
+          <div
+            cdsCol
+            [columnNumbers]="{ sm: 2, md: 2, lg: 2 }"
+          >
+            <label
+              class="cds--label mb-0"
+              i18n
+            >Services</label>
+          </div>
+          <div
+            cdsCol
+            [columnNumbers]="{ sm: 6, md: 6, lg: 6 }"
+          >
+            @for (service of configForm.getValue('services'); track service) {
+            <cds-tag
+              [size]="'md'"
+              class="tag-dark me-2"
+            >
+              {{ service }}
+            </cds-tag>
+            }
           </div>
         </div>
+        }
 
         <!-- Values -->
         <div formGroupName="values">
-          <h3 i18n
-              class="cd-header">Values</h3>
-          <ng-container *ngFor="let section of availSections">
-            <div class="form-group row"
-                 *ngIf="type === 'bool'">
-              <label class="cd-col-form-label"
-                     [for]="section">{{ section }}
-              </label>
-              <div class="cd-col-form-input">
-                <select id="pool"
-                        name="pool"
-                        class="form-select"
-                        [formControlName]="section">
-                  <option [ngValue]="null"
-                          i18n>-- Default --</option>
-                  <option [ngValue]="true"
-                          i18n>true</option>
-                  <option [ngValue]="false"
-                          i18n>false</option>
-                </select>
-              </div>
+          <div
+            cdsRow
+            class="form-heading"
+          >
+            <h3 i18n>Values</h3>
+          </div>
+
+          @for (section of availSections; track section) {
+          <div
+            cdsRow
+            class="form-item">
+            <ng-container
+              *ngTemplateOutlet="
+                configFieldTemplate;
+                context: {
+                  controlName: section,
+                  label: section,
+                  id: section,
+                  control: configForm.get('values')?.get(section)
+                }
+              "
+            ></ng-container>
+          </div>
+          }
+        </div>
+
+        <!-- Client-specific configuration entries -->
+        <div
+          cdsRow
+          class="form-heading cds-mt-4"
+        >
+          <h3 i18n>Client Configuration</h3>
+        </div>
+
+        <div
+          cdsRow
+          class="form-item"
+        >
+          <p class="cds--type-body-01">
+            <span i18n>Configure this option for specific client entities. Select from the dropdown or enter
+              custom values like
+            </span>
+            <code>client.rgw.my-daemon</code>
+            <span i18n> or </span>
+            <code>client.admin</code>
+            <span i18n>.</span>
+          </p>
+        </div>
+
+        <div formArrayName="clientEntries">
+          @for (entry of clientEntries.controls; track entry; let i = $index) {
+          <div
+            [formGroupName]="i"
+            cdsRow
+            class="cds-mt-6"
+          >
+            <div
+              cdsCol
+              [columnNumbers]="{ lg: 4 }"
+            >
+              <cds-text-label
+                [labelInputID]="'client-entity-' + i"
+                [invalid]="entityValidate.isInvalid"
+                [invalidText]="entityErrors"
+              >
+                <span i18n>Client Entity</span>
+                <input
+                  cdsText
+                  cdValidate
+                  #entityValidate="cdValidate"
+                  type="text"
+                  [id]="'client-entity-' + i"
+                  formControlName="clientEntity"
+                  placeholder="e.g., client.rgw.my-daemon, client.admin"
+                  i18n-placeholder
+                  [invalid]="entityValidate.isInvalid"
+                  list="client-entity-datalist"
+                />
+              </cds-text-label>
+              <datalist id="client-entity-datalist">
+              @for (option of clientEntityOptions; track option.content) {
+              <option [value]="option.content">{{ option.content }}</option>
+              }
+              </datalist>
+              <ng-template #entityErrors>
+                <ng-container
+                  *ngTemplateOutlet="
+                    validationErrors;
+                    context: { control: entry.get('clientEntity') }
+                  "
+                ></ng-container>
+              </ng-template>
             </div>
 
-            <div class="form-group row"
-                 *ngIf="type !== 'bool'">
-              <label class="cd-col-form-label"
-                     [for]="section">{{ section }}
-              </label>
-              <div class="cd-col-form-input">
-                <input class="form-control"
-                       [type]="inputType"
-                       [id]="section"
-                       [placeholder]="humanReadableType"
-                       [formControlName]="section"
-                       [step]="getStep(type, this.configForm.getValue(section))">
-                <span class="invalid-feedback"
-                      *ngIf="configForm.showError(section, formDir, 'pattern')">
-                  {{ patternHelpText }}
-                </span>
-                <span class="invalid-feedback"
-                      *ngIf="configForm.showError(section, formDir, 'invalidUuid')">
-                  {{ patternHelpText }}
-                </span>
-                <span class="invalid-feedback"
-                      *ngIf="configForm.showError(section, formDir, 'max')"
-                      i18n>The entered value is too high! It must not be greater than {{ maxValue }}.</span>
-                <span class="invalid-feedback"
-                      *ngIf="configForm.showError(section, formDir, 'min')"
-                      i18n>The entered value is too low! It must not be lower than {{ minValue }}.</span>
-              </div>
+            <div
+              cdsCol
+              [columnNumbers]="{ lg: 4 }"
+            >
+              <ng-container
+                *ngTemplateOutlet="
+                  configFieldTemplate;
+                  context: {
+                    controlName: 'value',
+                    label: 'Value',
+                    id: 'client-value-' + i,
+                    control: entry.get('value')
+                  }
+                "
+              ></ng-container>
             </div>
-          </ng-container>
+
+            <div
+              cdsCol
+              class="item-action-btn"
+            >
+              <cds-icon-button
+                kind="danger"
+                size="sm"
+                description="Remove client entry"
+                i18n-description
+                (click)="removeClientEntry(i)"
+              >
+                <svg
+                  cdsIcon="trash-can"
+                  size="32"
+                  class="cds--btn__icon"
+                ></svg>
+              </cds-icon-button>
+            </div>
+          </div>
+          }
+
+          <div
+            cdsRow
+            class="cds-mt-6"
+          >
+            <button
+              cdsButton="tertiary"
+              [size]="'md'"
+              type="button"
+              (click)="addClientEntry()"
+              i18n
+            >
+              <svg
+                cdsIcon="add"
+                size="16"
+                class="cds--btn__icon"
+              ></svg>
+              Add Client Entry
+            </button>
+          </div>
         </div>
-      </div>
-      <!-- Footer -->
-      <div class="card-footer">
-        <cd-form-button-panel (submitActionEvent)="forceUpdate ? openCriticalConfirmModal() : submit()"
-                              [form]="configForm"
-                              [submitText]="actionLabels.UPDATE"
-                              wrappingClass="text-right"></cd-form-button-panel>
+
+        <div cdsRow>
+          <cd-form-button-panel
+            (submitActionEvent)="forceUpdate ? openCriticalConfirmModal() : submit()"
+            [form]="configForm"
+            [disabled]="configForm.invalid"
+            [submitText]="actionLabels.UPDATE"
+            wrappingClass="text-right form-button"
+          ></cd-form-button-panel>
+        </div>
       </div>
     </div>
   </form>
-</div>
+</ng-container>
 
+<!-- Reusable template for configuration fields -->
+<ng-template
+  #configFieldTemplate
+  let-controlName="controlName"
+  let-label="label"
+  let-id="id"
+  let-control="control"
+>
+  @if (control) {
+  @if (type === 'bool') {
+  <cds-select
+    [formControl]="control"
+    [label]="label"
+    i18n-label
+    [id]="id"
+    cdValidate
+    #fieldValidate="cdValidate"
+    [invalid]="fieldValidate.isInvalid"
+    [invalidText]="fieldErrors"
+  >
+    <option
+      [ngValue]="null"
+      i18n
+    >
+      -- Default --
+    </option>
+    <option
+      [ngValue]="true"
+      i18n
+    >
+      true
+    </option>
+    <option
+      [ngValue]="false"
+      i18n
+    >
+      false
+    </option>
+  </cds-select>
+  <ng-template #fieldErrors>
+    <ng-container
+      *ngTemplateOutlet="validationErrors; context: { control: control }"
+    ></ng-container>
+  </ng-template>
+  }
+
+  @if (type !== 'bool' && inputType === 'number') {
+  <cds-number
+    [formControl]="control"
+    [label]="label"
+    i18n-label
+    [id]="id"
+    [min]="minValue"
+    [max]="maxValue"
+    [step]="getStep(type, control?.value) ?? 1"
+    cdValidate
+    #fieldValidate="cdValidate"
+    [invalid]="fieldValidate.isInvalid"
+    [invalidText]="fieldErrors">
+  </cds-number>
+  <ng-template #fieldErrors>
+    <ng-container
+      *ngTemplateOutlet="validationErrors; context: { control: control }"
+    ></ng-container>
+  </ng-template>
+  }
+
+  @if (type !== 'bool' && inputType !== 'number') {
+  <cds-text-label
+    [labelInputID]="id"
+    [invalid]="fieldValidate.isInvalid"
+    [invalidText]="fieldErrors">
+    <span i18n>{{ label }}</span>
+    <input
+      cdsText
+      cdValidate
+      #fieldValidate="cdValidate"
+      [type]="inputType"
+      [id]="id"
+      [formControl]="control"
+      [invalid]="fieldValidate.isInvalid"
+    />
+  </cds-text-label>
+  <ng-template #fieldErrors>
+    <ng-container
+      *ngTemplateOutlet="validationErrors; context: { control: control }"
+    ></ng-container>
+  </ng-template>
+  }
+  }
+</ng-template>
+
+<ng-template
+  #validationErrors
+  let-control="control">
+  @if (control?.invalid && (control.dirty || control.touched)) {
+  @if (control.hasError('required')) {
+  <div
+    class="invalid-feedback"
+    i18n>
+    This field is required.
+  </div>
+  }
+  @if (control.hasError('clientPrefix')) {
+    <div
+      class="invalid-feedback"
+      i18n
+    >
+      Client entity must start with 'client.' <br />
+      (e.g., client.admin, client.rgw.my-daemon)
+    </div>
+  }
+  @if (control.hasError('clientEntityDuplicate')) {
+    <div
+      class="invalid-feedback"
+      i18n
+    >
+      This client entity is already configured. <br />
+      Each client entity can only be configured once.
+    </div>
+  }
+  @if (control.hasError('min')) {
+  <span
+    class="invalid-feedback"
+    i18n
+  >The entered value is too low! It must not be lower than {{ minValue }}.</span>
+  }
+  @if (control.hasError('max')) {
+  <span
+    class="invalid-feedback"
+    i18n
+  >The entered value is too high! It must not be greater than {{ maxValue }}.</span>
+  }
+  @if (control.hasError('pattern') || control.hasError('invalidUuid')) {
+  <span class="invalid-feedback">{{ patternHelpText }}</span>
+  }
+  }
+</ng-template>
