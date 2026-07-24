@@ -5371,24 +5371,73 @@ void OSDMonitor::tick()
         // complexity for now.
           down.sec() >= g_conf()->mon_osd_destroyed_out_interval;
         if (down_out || destroyed_out) {
-	  dout(10) << "tick marking osd." << o << " OUT after " << down
-		   << " sec (target " << grace << " = " << orig_grace << " + " << my_grace << ")" << dendl;
-	  pending_inc.new_weight[o] = CEPH_OSD_OUT;
+	  auto down_out_action = g_conf().get_val<string>(
+	    "mon_osd_down_out_action");
+	  bool crush_reweight_zero =
+	    down_out && !destroyed_out &&
+	    down_out_action == "crush_reweight_zero";
+	  bool mark_out = !crush_reweight_zero;
 
-	  // set the AUTOOUT bit.
-	  if (pending_inc.new_state.count(o) == 0)
-	    pending_inc.new_state[o] = 0;
-	  pending_inc.new_state[o] |= CEPH_OSD_AUTOOUT;
+	  if (crush_reweight_zero) {
+	    CrushWrapper newcrush = _get_pending_crush();
+	    int old_weight = newcrush.get_item_weight(o);
+	    if (old_weight < 0) {
+	      derr << "failed to get CRUSH weight for osd." << o
+		   << " after " << down << " sec: "
+		   << cpp_strerror(old_weight)
+		   << "; falling back to marking out" << dendl;
+	      mark_out = true;
+	    } else if (old_weight > 0) {
+	      int r = newcrush.adjust_item_weightf(
+		cct, o, 0.0, g_conf()->osd_crush_update_weight_set);
+	      if (r < 0) {
+		derr << "failed to CRUSH reweight osd." << o
+		     << " to 0 after " << down << " sec: "
+		     << cpp_strerror(r) << dendl;
+		continue;
+	      }
+	      pending_inc.crush.clear();
+	      newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
+	      do_propose = true;
 
-	  // remember previous weight
-	  if (pending_inc.new_xinfo.count(o) == 0)
-	    pending_inc.new_xinfo[o] = osdmap.osd_xinfo[o];
-	  pending_inc.new_xinfo[o].old_weight = osdmap.osd_weight[o];
+	      mon.clog->info() << "CRUSH reweighting osd." << o
+				<< " to 0 (has been down for "
+				<< int(down.sec()) << " seconds)";
+	    } else {
+	      dout(10) << "tick osd." << o
+		       << " already has CRUSH weight 0 after " << down
+		       << " sec" << dendl;
+	    }
+	  }
 
-	  do_propose = true;
+	  if (mark_out) {
+	    if (down_out_action != "mark_out" &&
+		down_out_action != "crush_reweight_zero") {
+	      dout(1) << "invalid mon_osd_down_out_action '"
+		      << down_out_action << "', falling back to mark_out"
+		      << dendl;
+	    }
+	    dout(10) << "tick marking osd." << o << " OUT after " << down
+		     << " sec (target " << grace << " = " << orig_grace
+		     << " + " << my_grace << ")" << dendl;
+	    pending_inc.new_weight[o] = CEPH_OSD_OUT;
 
-	  mon.clog->info() << "Marking osd." << o << " out (has been down for "
-                            << int(down.sec()) << " seconds)";
+	    // set the AUTOOUT bit.
+	    if (pending_inc.new_state.count(o) == 0)
+	      pending_inc.new_state[o] = 0;
+	    pending_inc.new_state[o] |= CEPH_OSD_AUTOOUT;
+
+	    // remember previous weight
+	    if (pending_inc.new_xinfo.count(o) == 0)
+	      pending_inc.new_xinfo[o] = osdmap.osd_xinfo[o];
+	    pending_inc.new_xinfo[o].old_weight = osdmap.osd_weight[o];
+
+	    do_propose = true;
+
+	    mon.clog->info() << "Marking osd." << o
+			      << " out (has been down for "
+			      << int(down.sec()) << " seconds)";
+	  }
 	} else
 	  continue;
       }
