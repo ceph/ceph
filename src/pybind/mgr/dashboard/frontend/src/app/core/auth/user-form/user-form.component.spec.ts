@@ -99,6 +99,12 @@ describe('UserFormComponent', () => {
       formHelper.expectValidChange('username', 'user1');
     });
 
+    it('should reject invalid usernames', () => {
+      formHelper.expectErrorChange('username', '..', 'pattern');
+      formHelper.expectErrorChange('username', '??', 'pattern');
+      formHelper.expectErrorChange('username', 'user/name', 'pattern');
+    });
+
     it('should validate password match', () => {
       formHelper.setValue('password', 'aaa');
       formHelper.expectErrorChange('confirmpassword', 'bbb', 'match');
