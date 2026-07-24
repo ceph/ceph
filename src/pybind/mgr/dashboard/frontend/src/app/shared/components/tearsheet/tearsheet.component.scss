@@ -110,6 +110,7 @@
   margin: 0;
   padding: 0;
   height: 100%;
+  grid-template-rows: minmax(0, 1fr);
 }
 
 // Wide tearsheet: body is a flex child of .cds--modal-container--lg; must shrink so
@@ -118,7 +119,7 @@
   flex: 1 1 auto;
   min-height: 0;
   min-block-size: 0;
-  height: auto;
+  height: 100%;
 }
 
 .tearsheet-left-influencer {
@@ -146,6 +147,7 @@
   min-height: 0;
   min-block-size: 0;
   inline-size: 100%;
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .tearsheet-main > .cds--css-grid > .tearsheet-content {
