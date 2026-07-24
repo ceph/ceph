@@ -39,7 +39,8 @@ public:
   std::vector<std::string> get_tracked_keys() const noexcept override;
   void handle_conf_change(const ConfigProxy& conf,
 			  const std::set <std::string> &changed) override;
-  int asok_command(std::string_view cmd, const cmdmap_t& cmdmap, Formatter* f, std::ostream& errss);
+  int asok_command(std::string_view cmd, const cmdmap_t& cmdmap, Formatter* f,
+		   std::ostream& errss, ceph::buffer::list& outbl);
 
 protected:
   ceph::async::io_context_pool poolctx;
