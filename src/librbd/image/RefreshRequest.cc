@@ -1035,12 +1035,32 @@ Context *RefreshRequest<I>::handle_v2_block_writes(int *result) {
 
 template <typename I>
 void RefreshRequest<I>::send_v2_open_object_map() {
+  auto has_live_snapshot_parent = [&]() {
+    // A snapshot's object map isn't immutable for a cloned image: a
+    // copyup anywhere in the parent chain (e.g. the parent gets
+    // flattened or removed) can invalidate it at any time, and there may
+    // be no watch to ever refresh it (e.g. a read-only open). Avoid
+    // caching the object map while this snapshot still has a live parent
+    // relationship of its own; once its recorded overlap drops to zero
+    // for good, a later refresh will load it safely.
+    if (m_image_ctx.snap_name.empty()) {
+      return false;
+    }
+
+    ParentImageInfo parent_md;
+    MigrationInfo migration_info;
+    int r = get_parent_info(m_image_ctx.snap_id, &parent_md, &migration_info);
+    ceph_assert(r == 0 || r == -ENOENT);
+    return (r == 0 && migration_info.empty() && parent_md.overlap > 0);
+  };
+
   if ((m_features & RBD_FEATURE_OBJECT_MAP) == 0 ||
       m_image_ctx.object_map != nullptr ||
       (m_image_ctx.snap_name.empty() &&
        (m_read_only ||
         m_image_ctx.exclusive_lock == nullptr ||
-        !m_image_ctx.exclusive_lock->is_lock_owner()))) {
+        !m_image_ctx.exclusive_lock->is_lock_owner())) ||
+      has_live_snapshot_parent()) {
     send_v2_open_journal();
     return;
   }

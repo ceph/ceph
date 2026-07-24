@@ -86,6 +86,7 @@ private:
   RefreshParentRequest<ImageCtxT> *m_refresh_parent;
 
   bool m_writes_blocked;
+  bool m_skip_object_map = false;
 
   void send_block_writes();
   Context *handle_block_writes(int *result);
