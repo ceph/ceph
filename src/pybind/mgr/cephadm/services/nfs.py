@@ -138,6 +138,9 @@ class NFSService(CephService):
             deps.append(f'enable_rdma: {nfs_spec.enable_rdma}')
             if nfs_spec.rdma_port is not None:
                 deps.append(f'rdma_port: {nfs_spec.rdma_port}')
+        # cephfs client per export
+        if nfs_spec.client_per_export:
+            deps.append(f'client_per_export: {nfs_spec.client_per_export}')
         # TLS related
         if nfs_spec.tls_ktls:
             deps.append(f'tls_ktls: {nfs_spec.tls_ktls}')
@@ -284,7 +287,8 @@ class NFSService(CephService):
                 "tls_debug": spec.tls_debug,
                 "ceph_nodes": ceph_nodes,
                 "protocols": "3, 4" if spec.enable_nfsv3 else "4",
-                "use_old_nodeid": False if nodeid.isdigit() else True
+                "use_old_nodeid": False if nodeid.isdigit() else True,
+                "client_per_export": spec.client_per_export,
             }
             if spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()

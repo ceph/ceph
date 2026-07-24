@@ -82,6 +82,40 @@ is met, the default binding will happen on all available network interfaces.
 By default, only the NFSv4 protocol is enabled. NFSv3 can be enabled by setting
 ``enable_nfsv3`` to ``true`` in the service specification.
 
+Ceph Client Per Export
+----------------------
+
+By default, NFS Ganesha with FSAL_CEPH attaches a single CephFS client that is
+shared by all exports on the daemon. Under a large number of concurrent NFS
+clients this can become a bottleneck because of per-client parallel I/O limits.
+
+Setting ``client_per_export: true`` in the NFS service spec enables a separate
+CephFS client for each export. Cephadm writes ``client_per_export = true`` into
+the Ganesha ``CEPH`` configuration block. Internally, Ganesha uses each export's
+path as the cmount path so clients are not shared across exports.
+
+Example:
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: mynfs
+    placement:
+      count: 1
+      hosts: [host1]
+    spec:
+      port: 2049
+      client_per_export: true
+
+.. note:: Each additional export increases the memory footprint of the Ganesha
+   process. Object caching is already disabled (``client_oc = false``) in the
+   cephadm-generated config; keep it disabled when using ``client_per_export``
+   to avoid high memory usage.
+
+You can also enable this at cluster creation time with
+``ceph nfs cluster create ... --client-per-export``; see
+:ref:`nfs-module-cluster-create`.
+
 NFS over RDMA
 -------------
 

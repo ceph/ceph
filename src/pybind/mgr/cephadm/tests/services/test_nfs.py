@@ -652,6 +652,35 @@ class TestNFS:
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert "Protocols = 3, 4;" in ganesha_conf
 
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_client_per_export(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """client_per_export is emitted in the CEPH block of ganesha.conf."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['test']))
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, deps = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0',
+                                            service_name=nfs_spec.service_name()))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert "client_per_export = false;" not in ganesha_conf
+                assert not any(d.startswith('client_per_export:') for d in deps)
+
+            nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['test']),
+                                      client_per_export=True)
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, deps = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0',
+                                            service_name=nfs_spec.service_name()))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert "client_per_export = true;" in ganesha_conf
+                assert 'client_per_export: True' in deps
+
 
 def test_nfs_placement_count_per_host_rejected():
     spec = NFSServiceSpec(
