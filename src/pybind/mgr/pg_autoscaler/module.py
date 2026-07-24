@@ -72,18 +72,21 @@ def nearest_power_of_two(n: float, direction: str = "nearest") -> int:
 def effective_target_ratio(target_ratio: float,
                            total_target_ratio: float,
                            total_target_bytes: int,
-                           capacity: int) -> float:
+                           capacity: int,
+                           total_pinned_ratio: float = 0.0) -> float:
     """
     Returns the target ratio after normalizing for ratios across pools and
-    adjusting for capacity reserved by pools that have target_size_bytes set.
+    adjusting for capacity reserved by pools that have target_size_bytes or
+    a pinned effective_ratio set.
     """
     target_ratio = float(target_ratio)
     if total_target_ratio:
         target_ratio = target_ratio / total_target_ratio
 
+    fraction_available = 1.0 - min(1.0, total_pinned_ratio)
     if total_target_bytes and capacity:
-        fraction_available = 1.0 - min(1.0, float(total_target_bytes) / capacity)
-        target_ratio *= fraction_available
+        fraction_available -= min(1.0, float(total_target_bytes) / capacity)
+    target_ratio *= max(0.0, fraction_available)
 
     return target_ratio
 
@@ -126,6 +129,7 @@ class CrushRootResourceStatus:
         self.pool_used = 0
         self.total_target_ratio = 0.0
         self.total_target_bytes = 0  # including replication / EC overhead
+        self.total_pinned_ratio = 0.0  # sum of pools' pinned effective_ratio
 
 
 class BacktrackNode(NamedTuple):
@@ -455,8 +459,11 @@ class PgAutoscaler(MgrModule):
             s.pool_ids.append(pool['pool'])
             s.pool_names.append(pool_name)
             s.pg_current += pool['pg_num_target'] * pool['size']
+            pinned_ratio = pool['options'].get('effective_ratio', 0.0)
             target_ratio = pool['options'].get('target_size_ratio', 0.0)
-            if target_ratio:
+            if pinned_ratio:
+                s.total_pinned_ratio += pinned_ratio
+            elif target_ratio:
                 s.total_target_ratio += target_ratio
             else:
                 target_bytes = pool['options'].get('target_size_bytes', 0)
@@ -734,9 +741,11 @@ class PgAutoscaler(MgrModule):
             pool_metrics: Dict[str, Dict[str, Any]],
     ) -> None:
         raw_used_rate = osdmap.pool_raw_used_rate(pool_id)
+        pinned_ratio = p['options'].get('effective_ratio', 0.0)
         target_bytes = 0
         # ratio takes precedence if both are set
-        if p['options'].get('target_size_ratio', 0.0) == 0.0:
+        if p['options'].get('target_size_ratio', 0.0) == 0.0 and \
+           pinned_ratio == 0.0:
             target_bytes = p['options'].get('target_size_bytes', 0)
 
         # What proportion of space are we using?
@@ -751,10 +760,16 @@ class PgAutoscaler(MgrModule):
             root_map[root_id].total_target_bytes,
             capacity))
 
-        target_ratio = effective_target_ratio(p['options'].get('target_size_ratio', 0.0),
-                                            root_map[root_id].total_target_ratio,
-                                            root_map[root_id].total_target_bytes,
-                                            int(capacity))
+        if pinned_ratio > 0.0:
+            # a pinned effective_ratio is absolute: it is neither normalized
+            # against other pools nor reduced by target_size_bytes reservations
+            target_ratio = pinned_ratio
+        else:
+            target_ratio = effective_target_ratio(p['options'].get('target_size_ratio', 0.0),
+                                                root_map[root_id].total_target_ratio,
+                                                root_map[root_id].total_target_bytes,
+                                                int(capacity),
+                                                root_map[root_id].total_pinned_ratio)
         pool_id = p['pool']
         pool_metrics[pool_id] = {
             'target_bytes': target_bytes,
@@ -764,6 +779,7 @@ class PgAutoscaler(MgrModule):
             'pool_raw_used': pool_raw_used,
             'capacity_ratio': capacity_ratio,
             'target_ratio': target_ratio,
+            'pinned_ratio': pinned_ratio,
             'bulk': bulk,
         }
 
@@ -905,7 +921,14 @@ class PgAutoscaler(MgrModule):
             pg_left = root_map[root_id].pg_left
             self.log.debug("{} metrics: {}".format(p['pool_name'], metrics))
 
-            capacity_ratio = max(metrics['capacity_ratio'], metrics['target_ratio'])
+            if metrics['pinned_ratio'] > 0.0:
+                # pinned pools get exactly their share of the PG budget:
+                # actual usage does not override the pin, and they are always
+                # ratio-driven rather than subject to bulk/even distribution
+                capacity_ratio = metrics['pinned_ratio']
+                bulk = False
+            else:
+                capacity_ratio = max(metrics['capacity_ratio'], metrics['target_ratio'])
             pg_target_managed = int(capacity_ratio * pg_left)
             pg_target_unmanaged = p['pg_num_target'] * p['size']
             autoscale = p['pg_autoscale_mode'] != 'off'
@@ -1030,6 +1053,8 @@ class PgAutoscaler(MgrModule):
         total_bytes = dict([(r, 0) for r in iter(root_map)])
         total_target_bytes = dict([(r, 0.0) for r in iter(root_map)])
         target_bytes_pools: Dict[int, List[int]] = dict([(r, []) for r in iter(root_map)])
+        total_pinned_ratio = dict([(r, 0.0) for r in iter(root_map)])
+        pinned_pools: Dict[int, List[str]] = dict([(r, []) for r in iter(root_map)])
 
         for p in ps:
             pool_id = p['pool_id']
@@ -1043,6 +1068,10 @@ class PgAutoscaler(MgrModule):
             if p['target_bytes'] > 0:
                 total_target_bytes[p['crush_root_id']] += p['target_bytes'] * p['raw_used_rate']
                 target_bytes_pools[p['crush_root_id']].append(p['pool_name'])
+            pinned = pool_opts.get('effective_ratio', 0.0)
+            if pinned > 0:
+                total_pinned_ratio[p['crush_root_id']] += pinned
+                pinned_pools[p['crush_root_id']].append(p['pool_name'])
             if p['pg_autoscale_mode'] == 'warn':
                 msg = 'Pool %s has %d placement groups, should have %d' % (
                     p['pool_name'],
@@ -1133,6 +1162,22 @@ class PgAutoscaler(MgrModule):
                 'summary': "%d subtrees have overcommitted pool target_size_bytes" % len(too_much_target_bytes),
                 'count': len(too_much_target_bytes),
                 'detail': too_much_target_bytes,
+            }
+
+        overcommitted_pinned = []
+        for root_id, total in total_pinned_ratio.items():
+            if total > 1.0:
+                overcommitted_pinned.append(
+                    'Pools %s pin a total effective_ratio of %.3f, '
+                    'exceeding the PG budget of their CRUSH root' % (
+                        pinned_pools[root_id], total))
+        if overcommitted_pinned:
+            health_checks['POOL_EFFECTIVE_RATIO_OVERCOMMITTED'] = {
+                'severity': 'warning',
+                'summary': "%d subtrees have overcommitted pool effective_ratio" % len(
+                    overcommitted_pinned),
+                'count': len(overcommitted_pinned),
+                'detail': overcommitted_pinned,
             }
 
         if bytes_and_ratio:
