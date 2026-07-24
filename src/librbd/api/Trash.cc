@@ -487,6 +487,7 @@ int Trash<I>::purge(IoCtx& io_ctx, time_t expire_ts,
           } else if (r < 0) {
             lderr(cct) << "failed to open image " << it << ": "
                        << cpp_strerror(r) << dendl;
+            continue;
           }
 
           r = librbd::api::DiffIterate<I>::diff_iterate(
