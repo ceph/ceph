@@ -2607,12 +2607,26 @@ namespace librbd {
     return r;
   }
 
-  int Image::snap_set(const char *snap_name)
+  int Image::snap_set(const char *snap_name, bool all_snaps)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, snap_set_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name);
-    int r = librbd::api::Image<>::snap_set(
-      ictx, cls::rbd::UserSnapshotNamespace(), snap_name);
+
+    int r = 0;
+    if (all_snaps) {
+      cls::rbd::for_each_snapshot_namespace(
+        [&r, ictx, snap_name](const cls::rbd::SnapshotNamespace &snap_namespace) {
+          r = librbd::api::Image<>::snap_set(ictx, snap_namespace, snap_name);
+          if (r == -ENOENT) {
+            return true;
+          }
+          return false;
+        }
+      );
+    } else {
+      r = librbd::api::Image<>::snap_set(
+        ictx, cls::rbd::UserSnapshotNamespace(), snap_name);
+    }
     tracepoint(librbd, snap_set_exit, r);
     return r;
   }
@@ -2629,10 +2643,13 @@ namespace librbd {
     return librbd::api::Snapshot<>::get_name(ictx, snap_id, snap_name);
   }
 
-  int Image::snap_get_id(const std::string snap_name, uint64_t *snap_id)
+  int Image::snap_get_id(
+    const std::string snap_name,
+    uint64_t *snap_id,
+    bool all_snaps)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    return librbd::api::Snapshot<>::get_id(ictx, snap_name, snap_id);
+    return librbd::api::Snapshot<>::get_id(ictx, snap_name, snap_id, all_snaps);
   }
 
   ssize_t Image::read(uint64_t ofs, size_t len, bufferlist& bl)
