@@ -178,5 +178,6 @@ def test_smb_get_dependencies(cephadm_module):
 
     deps = SMBService.get_dependencies(cephadm_module, spec, spec.service_type)
     assert deps == [
-        'smb+meta:ceph_cluster_config.exo=sha256:859b001f76df4d184b858b9c3e323ca8ff85a311414d0405f4484d17aa481ef3'
+        'smb+meta:ceph_cluster_config.exo=sha256:859b001f76df4d184b858b9c3e323ca8ff85a311414d0405f4484d17aa481ef3',
+        'smb+field:features=domain'
     ]
