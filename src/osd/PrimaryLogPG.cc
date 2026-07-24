@@ -15768,7 +15768,7 @@ bool PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
 
   // If already quiescing, treat -EIO as retryable since it's expected
   // when C_Migrate::finish converts completions to -EIO during quiesce
-  bool is_retryable = (r == -EBUSY) ||
+  bool is_retryable = (r == -EBUSY || r == -ERANGE | r == -EOVERFLOW) ||
     (r == -EIO && pool_migration_quiesce_reason != PoolMigrationQuiesceReason::NONE);
   bool is_fatal = (r == -ENOENT || r == -EPERM) ||
     (r == -EIO && pool_migration_quiesce_reason == PoolMigrationQuiesceReason::NONE);
