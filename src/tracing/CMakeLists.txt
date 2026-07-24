@@ -50,7 +50,7 @@ add_tracing_library(rgw_op_tp rgw_op.tp 2.0.0)
 add_tracing_library(rgw_rados_tp rgw_rados.tp 2.0.0)
 add_tracing_library(mgr_op_tp mgroprequest.tp 1.0.0)
 
-install(TARGETS rados_tp osd_tp os_tp rgw_rados_tp rgw_op_tp mgr_op_tp DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(TARGETS rados_tp osd_tp os_tp bluestore_tp rgw_rados_tp rgw_op_tp mgr_op_tp DESTINATION ${CMAKE_INSTALL_LIBDIR})
 if(WITH_RBD)
   add_tracing_library(rbd_tp librbd.tp 1.0.0)
   install(TARGETS rbd_tp DESTINATION ${CMAKE_INSTALL_LIBDIR})
