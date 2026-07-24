@@ -24,7 +24,7 @@ function run() {
 
     export CEPH_MON="127.0.0.1:7106" # git grep '\<7106\>' : there must be only one
     export CEPH_ARGS
-    CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
+    CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
     CEPH_ARGS+="--debug-bluestore 20 "
 
