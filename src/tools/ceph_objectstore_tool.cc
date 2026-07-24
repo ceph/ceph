@@ -1130,8 +1130,19 @@ int get_osdmap(ObjectStore *store, epoch_t e, OSDMap &osdmap, bufferlist& bl)
   bool found = store->read(
     ch, OSD::get_osdmap_pobject_name(e), 0, 0, bl) >= 0;
   if (!found) {
-    cerr << "Can't find OSDMap for pg epoch " << e << std::endl;
-    return -ENOENT;
+    bl.clear();
+    int r = OSD::build_full_map_from_store(*store, e, &osdmap);
+    if (r < 0) {
+      cerr << "Can't find OSDMap for pg epoch " << e << std::endl;
+      return -ENOENT;
+    }
+    osdmap.encode(bl, osdmap.get_encoding_features() | CEPH_FEATURE_RESERVED);
+    if (debug) {
+      cerr << "rebuilt osdmap epoch " << e << " from incremental maps"
+	   << std::endl;
+      cerr << osdmap << std::endl;
+    }
+    return 0;
   }
   osdmap.decode(bl);
   if (debug)
