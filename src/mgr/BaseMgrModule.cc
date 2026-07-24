@@ -871,11 +871,7 @@ ceph_dispatch_remote(BaseMgrModule *self, PyObject *args)
   }
 
   auto pmodule = self->this_module->py_module->pPickleModule;
-  auto pickled_args = PyObject_CallMethodObjArgs(
-    pmodule,
-    PyUnicode_FromString("dumps"),
-    remote_args,
-    nullptr);
+  auto pickled_args = PyObject_CallMethod(pmodule, "dumps", "(O)", remote_args);
   if (pickled_args == nullptr) {
     std::string caller = "ceph_dispatch_remote "s + " " + method;
     std::string err = handle_pyerror(true, other_module, caller);
@@ -885,11 +881,7 @@ ceph_dispatch_remote(BaseMgrModule *self, PyObject *args)
   }
   std::span<std::byte const> pickled_args_span = py_bytes_as_span(pickled_args);
 
-  auto pickled_kwargs = PyObject_CallMethodObjArgs(
-    pmodule,
-    PyUnicode_FromString("dumps"),
-    remote_kwargs,
-    nullptr);
+  auto pickled_kwargs = PyObject_CallMethod(pmodule, "dumps", "(O)", remote_kwargs);
   if (pickled_kwargs == nullptr) {
     std::string caller = "ceph_dispatch_remote "s + " " + method;
     std::string err = handle_pyerror(true, other_module, caller);
@@ -940,11 +932,7 @@ ceph_dispatch_remote(BaseMgrModule *self, PyObject *args)
   }
 
   auto pickled_ret_bytes = py_bytes_from_vec(*maybe_pickled_ret);
-  auto ret = PyObject_CallMethodObjArgs(
-    pmodule,
-    PyUnicode_FromString("loads"),
-    pickled_ret_bytes,
-    nullptr);
+  auto ret = PyObject_CallMethod(pmodule, "loads", "(O)", pickled_ret_bytes);
   if (ret == nullptr) {
     std::string caller = "ceph_dispatch_remote "s + " " + method;
     std::string err = handle_pyerror(true, other_module, caller);
