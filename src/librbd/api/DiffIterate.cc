@@ -76,6 +76,8 @@ public:
     }
     if (m_diff_context.whole_object) {
       list_snaps_flags |= io::LIST_SNAPS_FLAG_WHOLE_OBJECT;
+    } else {
+      list_snaps_flags |= io::LIST_SNAPS_FLAG_MAP_SPARSE_EXTENTS;
     }
     auto req = io::ImageDispatchSpec::create_list_snaps(
       m_image_ctx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START,

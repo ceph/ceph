@@ -15,6 +15,7 @@ TestMemCluster::File::File(const File &rhs)
     mtime(rhs.mtime),
     objver(rhs.objver),
     snap_id(rhs.snap_id),
+    allocated_extents(rhs.allocated_extents),
     exists(rhs.exists) {
 }
 
@@ -200,4 +201,3 @@ void TestMemCluster::transaction_finish(const ObjectLocator& locator) {
 }
 
 } // namespace librados
-

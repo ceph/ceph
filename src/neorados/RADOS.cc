@@ -599,6 +599,13 @@ ReadOp& ReadOp::sparse_read(uint64_t off, uint64_t len, cb::list* out,
   return *this;
 }
 
+ReadOp& ReadOp::mapext(uint64_t off, uint64_t len,
+		       std::map<std::uint64_t, std::uint64_t>* extents,
+		       bs::error_code* ec) & {
+  reinterpret_cast<OpImpl*>(&impl)->op.mapext(off, len, ec, extents);
+  return *this;
+}
+
 ReadOp& ReadOp::stat(std::uint64_t* size, ceph::real_time* mtime,
 		     bs::error_code* ec) & {
   reinterpret_cast<OpImpl*>(&impl)->op.stat(size, mtime, ec);
