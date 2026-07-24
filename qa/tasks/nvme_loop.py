@@ -5,7 +5,6 @@ import json
 from io import StringIO
 from teuthology import misc as teuthology
 from teuthology import contextutil
-from teuthology.exceptions import CommandCrashedError
 from teuthology.orchestra import run
 
 
@@ -24,6 +23,8 @@ def task(ctx, config):
             continue
         devs = teuthology.get_scratch_devices(remote)
         devs_by_remote[remote] = devs
+        log.info('Cleaning up stale nvme_loop state on %s...', remote.shortname)
+        remote.run(args=['sudo', 'nvme', 'disconnect-all'], check_status=False)
         base = '/sys/kernel/config/nvmet'
         remote.run(
             args=[
@@ -75,21 +76,21 @@ def task(ctx, config):
         # identify nvme_loops devices
         old_scratch_by_remote[remote] = remote.read_file('/scratch_devs')
 
-        with contextutil.safe_while(sleep=1, tries=15) as proceed:
+        with contextutil.safe_while(sleep=2, tries=60) as proceed:
             while proceed():
                 remote.run(args=['lsblk'], stdout=StringIO())
-                try:
-                    p = remote.run(
-                        args=['sudo', 'nvme', 'list', '-o', 'json'],
-                        stdout=StringIO(),
-                    )
-                except CommandCrashedError:
-                    log.warning(
-                        'nvme list -o json command failed, retrying...'
-                    )
-                    continue
-
+                p = remote.run(
+                    args=['sudo', 'nvme', 'list', '-o', 'json'],
+                    stdout=StringIO(),
+                    stderr=StringIO(),
+                    check_status=False,
+                )
                 new_devs = []
+                if p.exitstatus != 0:
+                    log.warning(
+                        'nvme list -o json exited %s, retrying...',
+                        p.exitstatus,
+                    )
                 # `nvme list -o json` will return one of the following output:
                 '''{
                      "Devices" : [
@@ -195,28 +196,52 @@ def task(ctx, config):
                   ]
                 }
                 '''
-                nvme_list = json.loads(p.stdout.getvalue())
-                for device in nvme_list['Devices']:
+                if p.exitstatus == 0:
                     try:
-                        # first try format 1 / older format
-                        dev = device['DevicePath']
-                        vendor = device['ModelNumber']
-                        if dev.startswith('/dev/') and vendor == 'Linux':
-                            new_devs.append(dev)
-                            bluestore_zap(remote, dev)
-                    except KeyError:
-                        for subsystem in device['Subsystems']:
-                            # format 2
-                            if 'Namespaces' in subsystem and subsystem['Namespaces']:
-                                dev = '/dev/' + subsystem['Namespaces'][0]['NameSpace']
-                            # try format 3 last
-                            else:
-                                dev = '/dev/' + subsystem['Controllers'][0]['Namespaces'][0]['NameSpace']
-                            # vendor is the same for format 2 and 3
-                            vendor = subsystem['Controllers'][0]['ModelNumber']
-                            if vendor == 'Linux':
-                                new_devs.append(dev)
-                                bluestore_zap(remote, dev)
+                        nvme_list = json.loads(p.stdout.getvalue())
+                    except (json.JSONDecodeError, ValueError):
+                        nvme_list = None
+                    if nvme_list:
+                        for device in nvme_list['Devices']:
+                            try:
+                                # first try format 1 / older format
+                                dev = device['DevicePath']
+                                vendor = device['ModelNumber']
+                                if dev.startswith('/dev/') and vendor == 'Linux':
+                                    new_devs.append(dev)
+                                    bluestore_zap(remote, dev)
+                            except KeyError:
+                                for subsystem in device['Subsystems']:
+                                    # format 2
+                                    if 'Namespaces' in subsystem and subsystem['Namespaces']:
+                                        dev = '/dev/' + subsystem['Namespaces'][0]['NameSpace']
+                                    # try format 3 last
+                                    else:
+                                        dev = '/dev/' + subsystem['Controllers'][0]['Namespaces'][0]['NameSpace']
+                                    # vendor is the same for format 2 and 3
+                                    vendor = subsystem['Controllers'][0]['ModelNumber']
+                                    if vendor == 'Linux':
+                                        new_devs.append(dev)
+                                        bluestore_zap(remote, dev)
+                if not new_devs:
+                    p_sysfs = remote.run(
+                        args=[
+                            'bash', '-c',
+                            'for model in /sys/class/nvme/nvme*/model; do '
+                            'if grep -q Linux "$model"; then '
+                            'ctrl=$(basename "$(dirname "$model")"); '
+                            'echo "/dev/${ctrl}n1"; fi; done',
+                        ],
+                        stdout=StringIO(),
+                        check_status=False,
+                    )
+                    for line in p_sysfs.stdout.getvalue().splitlines():
+                        if line.startswith('/dev/'):
+                            new_devs.append(line)
+                            bluestore_zap(remote, line)
+                if not new_devs:
+                    log.warning('no loop nvme devices found yet, retrying...')
+                    continue
                 log.info(f'new_devs {new_devs}')
                 assert len(new_devs) <= len(devs)
                 if len(new_devs) == len(devs):
