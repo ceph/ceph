@@ -37,6 +37,9 @@
     </cds-table-toolbar-actions>
     <!-- end batch actions -->
     <cds-table-toolbar-content>
+      <!-- gateway group / custom filter slot -->
+      <ng-content select=".table-filter"></ng-content>
+      <!-- end custom filter slot -->
       <!-- search -->
       <cds-table-toolbar-search *ngIf="searchField"
                                 [expandable]="false"
@@ -329,13 +332,15 @@
              let-column="data.column"
              let-row="data.row"
              let-value="data.value">
-  <i [ngClass]="[icons.spinner, icons.spin]"
-     *ngIf="row.cdExecuting"></i>
-  <span [ngClass]="column?.customTemplateConfig?.valueClass">
+  @if (row.cdExecuting) {
+  <cds-inline-loading></cds-inline-loading>
+  }
+  <span [ngClass]="column?.customTemplateConfig?.valueClass || ''">
     {{ value }}
   </span>
-  <span *ngIf="row.cdExecuting"
-        [ngClass]="column?.customTemplateConfig?.executingClass ? column?.customTemplateConfig.executingClass : 'text-muted italic'">({{ row.cdExecuting }})</span>
+  @if (row.cdExecuting) {
+  <span [ngClass]="column?.customTemplateConfig?.executingClass ? column?.customTemplateConfig.executingClass : 'text-muted italic'">({{ row.cdExecuting }})</span>
+  }
 </ng-template>
 <ng-template #classAddingTpl
              let-value="data.value">

@@ -1,0 +1,43 @@
+.nvmeof-gateway-group-filter {
+  align-items: center;
+  display: flex;
+  gap: var(--cds-spacing-03);
+  margin-left: var(--cds-spacing-05);
+
+  &__label {
+    color: var(--cds-text-secondary);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  &__combo {
+    max-inline-size: 20rem;
+    min-inline-size: 14rem;
+
+    // Remove bottom border from combobox - target all possible elements
+    ::ng-deep {
+      .cds--combo-box,
+      .cds--text-input,
+      .cds--list-box,
+      .cds--text-input__field-wrapper,
+      input,
+      input[role='combobox'] {
+        border-bottom: 0;
+      }
+
+      // Also remove from parent containers
+      .cds--form-requirement,
+      .cds--text-input__label,
+      .cds--list-box__wrapper {
+        border-bottom: 0;
+      }
+
+      // Target the input on all states
+      input:focus,
+      input:hover,
+      input:active {
+        border-bottom: 0;
+      }
+    }
+  }
+}

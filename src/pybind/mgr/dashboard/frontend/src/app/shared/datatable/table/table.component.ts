@@ -253,6 +253,8 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
   @Output()
   setExpandedRow = new EventEmitter();
+  @Input()
+  compactSearchField? = false;
 
   /**
    * This should be defined if you need access to the applied column filters.

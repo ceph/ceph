@@ -1,6 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { CommonModule } from '@angular/common';
+import { IconModule, LayoutModule } from 'carbon-components-angular';
 
 import { DetailsCardComponent } from './details-card.component';
+import { ProductiveCardComponent } from '../productive-card/productive-card.component';
+import { IconComponent } from '../icon/icon.component';
 
 describe('DetailsCardComponent', () => {
   let component: DetailsCardComponent;
@@ -8,7 +12,8 @@ describe('DetailsCardComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [DetailsCardComponent]
+      declarations: [DetailsCardComponent, IconComponent],
+      imports: [ProductiveCardComponent, LayoutModule, IconModule, CommonModule]
     }).compileComponents();
 
     fixture = TestBed.createComponent(DetailsCardComponent);
@@ -18,5 +23,33 @@ describe('DetailsCardComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('should filter hidden details', () => {
+    component.details = [
+      { label: 'Visible', value: 'test', type: 'text' },
+      { label: 'Hidden', value: 'test', type: 'text', hidden: true }
+    ];
+    const visible = component.getVisibleDetails();
+    expect(visible.length).toBe(1);
+    expect(visible[0].label).toBe('Visible');
+  });
+
+  it('should detect disabled status', () => {
+    expect(component.isStatusDisabled('Disabled')).toBe(true);
+    expect(component.isStatusDisabled('disabled')).toBe(true);
+    expect(component.isStatusDisabled('Enabled')).toBe(false);
+  });
+
+  it('should handle empty details array', () => {
+    component.details = [];
+    const visible = component.getVisibleDetails();
+    expect(visible.length).toBe(0);
+  });
+
+  it('should handle undefined details', () => {
+    component.details = undefined;
+    const visible = component.getVisibleDetails();
+    expect(visible.length).toBe(0);
   });
 });

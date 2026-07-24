@@ -1,62 +1,104 @@
 <cds-tile *ngIf="subsystem">
-  <h4 class="cds--type-heading-03 tile-title"
-      i18n>Subsystem details</h4>
-
-  <div class="details-grid">
-    <div class="detail-item">
-      <span class="cds--type-label-01"
-            i18n>Serial number</span>
-      <span class="cds--type-body-compact-01">{{ subsystem.serial_number }}</span>
-    </div>
-    <div class="detail-item">
-      <span class="cds--type-label-01"
-            i18n>Model Number</span>
-      <span class="cds--type-body-compact-01">{{ subsystem.model_number }}</span>
-    </div>
-    <div class="detail-item">
-      <span class="cds--type-label-01"
-            i18n>Gateway group</span>
-      <span class="cds--type-body-compact-01">{{ subsystem.gw_group || groupName }}</span>
+  <div [cdsStack]="'vertical'"
+       [gap]="6">
+    <div cdsGrid
+         [useCssGrid]="true"
+         [condensed]="true"
+         [fullWidth]="true">
+      <div cdsCol
+           [columnNumbers]="{ sm: 4, md: 8, lg: 12 }">
+        <h3 class="cds--type-heading-03"
+            i18n>Subsystem details</h3>
+      </div>
     </div>
 
-    <div class="detail-item">
-      <span class="cds--type-label-01"
-            i18n>Subsystem Type</span>
-      <span class="cds--type-body-compact-01">{{ subsystem.subtype }}</span>
-    </div>
-    <div class="detail-item">
-      <span class="cds--type-label-01"
-            i18n>HA Enabled</span>
-      <span class="cds--type-body-compact-01">{{ subsystem.enable_ha ? 'Yes' : 'No' }}</span>
-    </div>
-    <div class="detail-item">
-      <span class="cds--type-label-01"
-            i18n>Hosts allowed</span>
-      <span class="cds--type-body-compact-01">{{ subsystem.allow_any_host ? 'Any host' : 'Restricted' }}</span>
-    </div>
+    @for (row of getRows(); track row) {
+    <div cdsGrid
+         [useCssGrid]="true"
+         [condensed]="true"
+         [fullWidth]="true">
 
-    <div class="detail-item">
-      <span class="cds--type-label-01"
-            i18n>Maximum Controller Identifier</span>
-      <span class="cds--type-body-compact-01">{{ subsystem.max_cntlid }}</span>
-    </div>
-    <div class="detail-item">
-      <span class="cds--type-label-01"
-            i18n>Minimum Controller Identifier</span>
-      <span class="cds--type-body-compact-01">{{ subsystem.min_cntlid }}</span>
-    </div>
-    <div class="detail-item"></div>
+      @for (detail of getDetailsForRow(row); track detail.label) {
+      @if (detail.type === 'auth') {
+      <div cdsCol
+           [columnNumbers]="{ sm: 4, md: 4, lg: 4 }"
+           [cdsStack]="'vertical'"
+           [gap]="2">
+        <span class="cds--type-label-01"
+              i18n>Authentication</span>
+        <div>
+          <cd-icon [type]="getAuthStatusIcon(detail.value.toString())"
+                   class="cds-mr-3"></cd-icon>
+          <span class="cds--type-label-02">{{ detail.value }}</span>
+          <a cdsLink
+             class="cds-ml-2"
+             (click)="openEditAuthModal()"
+             [cdsStack]="'horizontal'"
+             [gap]="1">
+            <span i18n>Edit</span>
+            <cd-icon type="edit"></cd-icon>
+          </a>
+        </div>
+      </div>
+      }
 
-    <div class="detail-item">
-      <span class="cds--type-label-01"
-            i18n>Namespaces</span>
-      <span class="cds--type-body-compact-01">{{ subsystem.namespace_count }}</span>
+      @else if (detail.type === 'listeners') {
+      <div cdsCol
+           [columnNumbers]="{ sm: 4, md: 4, lg: 4 }"
+           [cdsStack]="'vertical'"
+           [gap]="2">
+        <div>
+          <span class="cds--type-label-01">{{ detail.label }}</span>
+          @if (detail.tooltip) {
+          <cd-icon type="infoCircle"
+                   class="cds-ml-2"
+                   [ngbTooltip]="detail.tooltip"></cd-icon>
+          }
+        </div>
+        <span class="cds--type-label-02">{{ detail.value }}</span>
+      </div>
+      }
+
+      @else if (detail.type === 'host-access') {
+      <div cdsCol
+           [columnNumbers]="getColNumbers(detail)"
+           [cdsStack]="'vertical'"
+           [gap]="2">
+        <span class="cds--type-label-01">{{ detail.label }}</span>
+        <div class="cds--type-label-02">
+          <span>{{ detail.value ? 'Allow all hosts' : 'Restrict to specific hosts' }}</span>
+          <a cdsLink
+             (click)="openEditHostAccessModal()"
+             [cdsStack]="'horizontal'"
+             class="cds-ml-2"
+             [gap]="1">
+            <span i18n>Edit</span>
+            <cd-icon type="edit"></cd-icon>
+          </a>
+        </div>
+      </div>
+      }
+
+      <!-- Default: plain text row -->
+      @else {
+      <div cdsCol
+           [columnNumbers]="getColNumbers(detail)"
+           [cdsStack]="'vertical'"
+           [gap]="2">
+        <span class="cds--type-label-01">{{ detail.label }}</span>
+        <span class="cds--type-label-02">{{ getDisplayValue(detail.value) }}</span>
+      </div>
+      }
+
+      }
+
+      @if (getDetailsForRow(row).length < 3 && !isFullWidthRow(row)) {
+      @for (filler of getFillerCount(row); track filler) {
+      <div cdsCol
+           [columnNumbers]="{ sm: 4, md: 4, lg: 4 }"></div>
+      }
+      }
     </div>
-    <div class="detail-item">
-      <span class="cds--type-label-01"
-            i18n>Maximum allowed namespaces</span>
-      <span class="cds--type-body-compact-01">{{ subsystem.max_namespaces }}</span>
-    </div>
-    <div class="detail-item"></div>
+    }
   </div>
 </cds-tile>

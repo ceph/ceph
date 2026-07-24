@@ -1,82 +1,74 @@
 <cds-modal
   [open]="open"
   (overlaySelected)="closeModal()"
-  [size]="'lg'">
-  <cds-modal-header
-    (closeSelect)="closeModal()">
+  [size]="'md'">
+  <cds-modal-header (closeSelect)="closeModal()">
     <h4
-      class="cds--type-heading-04 cds-ml-3"
+      class="cds--type-heading-04"
       i18n>
       Add gateway nodes
     </h4>
     <p
-      class="cds--type-body-compact-01 cds-ml-3"
+      class="cds--type-body-01"
       i18n>
       Select NVMe-oF gateway nodes to associate with this gateway group.
     </p>
   </cds-modal-header>
   <section cdsModalContent>
 
-    <div class="cds-mt-5">
+    <div class="cds-ml-5 cds-mt-5">
+      <p
+        class="cds--type-heading-01"
+        i18n>Select gateway nodes</p>
+      <p
+        class="cds--type-label-01"
+        i18n>Nodes to run NVMe-oF target pods/services</p>
+    </div>
+
+    <!-- Table on white background -->
+    <cd-table
+      (fetchData)="getHosts($event)"
+      selectionType="multiClick"
+      [searchableObjects]="true"
+      [data]="hosts"
+      [columns]="columns"
+      (updateSelection)="updateSelection($event)"
+      [autoReload]="false">
+    </cd-table>
+
+    <ng-template
+      #addrTemplate
+      let-value="data.value">
+      <span>{{ value || '-' }}</span>
+    </ng-template>
+
+    <ng-template
+      #statusTemplate
+      let-value="data.value"
+      let-row="data.row">
       <div
-        cdsStack="vertical"
-        gap="1">
-        <div
-          class="cds--type-heading-01"
-          i18n>
-          Select gateway nodes
-        </div>
-        <div
-          class="cds--type-label-01"
-          i18n>
-          Nodes to run NVMe-oF target service
-        </div>
-      </div>
-
-      <cd-table
-        (fetchData)="getHosts($event)"
-        selectionType="multiClick"
-        [searchableObjects]="true"
-        [data]="hosts"
-        [columns]="columns"
-        (updateSelection)="updateSelection($event)"
-        [autoReload]="false">
-      </cd-table>
-
-      <ng-template
-        #addrTemplate
-        let-value="data.value">
-        <span>{{ value || '-' }}</span>
-      </ng-template>
-
-      <ng-template
-        #statusTemplate
-        let-value="data.value"
-        let-row="data.row">
-        <div
-          class="status-cell"
-          cdsStack="horizontal"
-          gap="3">
+        class="status-cell"
+        cdsStack="horizontal"
+        gap="3">
         @if (value === HostStatus.AVAILABLE) {
-          <cd-icon type="success"></cd-icon>
+        <cd-icon type="success"></cd-icon>
         }
         <span>{{ value | titlecase }}</span>
-        </div>
-      </ng-template>
+      </div>
+    </ng-template>
 
-      <ng-template
-        #labelsTemplate
-        let-value="data.value">
+    <ng-template
+      #labelsTemplate
+      let-value="data.value">
       @if (value && value.length > 0) {
-        <cds-tag
-          *ngFor="let label of value"
-          class="tag tag-dark">{{ label }}</cds-tag>
+      <cds-tag
+        *ngFor="let label of value"
+        class="tag tag-dark">{{ label }}</cds-tag>
       } @else {
-        <span>-</span>
+      <span>-</span>
       }
-      </ng-template>
+    </ng-template>
 
-    </div>
   </section>
   <cd-form-button-panel
     [modalForm]="true"

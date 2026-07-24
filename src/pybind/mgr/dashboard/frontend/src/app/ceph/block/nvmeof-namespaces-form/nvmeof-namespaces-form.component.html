@@ -197,6 +197,41 @@
         </div>
       </div>
 
+      <!-- Namespace (optional) -->
+      <div
+        cdsRow
+        class="form-item"
+      >
+        <div cdsCol>
+          <cds-select
+            formControlName="rados_namespace"
+            label="RADOS Namespace"
+            helperText="Namespace where the RBD image resides."
+            i18n-label
+            i18n-helperText
+            cdOptionalField="RADOS Namespace"
+          >
+            <option
+              [ngValue]="null"
+              selected
+            >
+              Select a namespace
+            </option>
+            @if (radosNamespaces === null && nsForm.getValue('pool')) {
+              <option
+                disabled
+                [ngValue]="null"
+              >
+                Loading...
+              </option>
+            }
+            @for (ns of radosNamespaces; track ns.namespace) {
+              <option [value]="ns.namespace">{{ ns.namespace }}</option>
+            }
+          </cds-select>
+        </div>
+      </div>
+
       <!-- RBD image creation (UI only) -->
       <div cdsRow
            class="form-item">

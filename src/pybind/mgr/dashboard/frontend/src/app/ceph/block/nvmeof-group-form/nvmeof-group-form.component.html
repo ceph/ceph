@@ -10,7 +10,7 @@
     <div cdsCol
          [columnNumbers]="{sm: 4, md: 8}">
       <div cdsRow
-           class="form-heading form-item">
+           class="form-heading form-item cds-mt-5">
       <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
       </div>
       <div cdsRow
@@ -21,7 +21,6 @@
             i18n
             i18n-helperText
             helperText="A unique name to identify this gateway group."
-            cdRequiredField="Gateway group name"
             [invalid]="groupName.isInvalid">
             Gateway group name
             <input
@@ -32,6 +31,7 @@
               #groupName="cdValidate"
               autofocus
               formControlName="groupName"
+              cdRequiredField="Gateway group name"
               [invalid]="groupName.isInvalid"
             />
           </cds-text-label>
@@ -47,82 +47,9 @@
             class="invalid-feedback"
             *ngIf="groupForm.get('groupName')?.hasError('invalidChars') && (groupForm.get('groupName')?.dirty || groupForm.get('groupName')?.touched)"
             i18n>Special characters are not allowed.</span>
-
-        </div>
-      </div>
-      <!-- Pool -->
-      <div cdsRow
-           class="form-item">
-        <div cdsCol>
-          <cds-select
-            label="Block pool"
-            helperText="An RBD application-enabled pool in which the gateway configuration can be managed."
-            labelInputID="pool"
-            id="pool"
-            formControlName="pool"
-            cdRequiredField="Block pool"
-            [invalid]="groupForm.controls.pool.invalid && groupForm.controls.pool.dirty"
-            [invalidText]="poolError"
-            i18n-label
-            i18n-helperText
-          >
-            <option *ngIf="poolsLoading"
-                    [ngValue]="null"
-                    i18n>Loading...</option>
-            <option *ngIf="!poolsLoading && pools.length === 0"
-                    [ngValue]="null"
-                    i18n>-- No block pools available --</option>
-            <option *ngFor="let pool of pools"
-                    [value]="pool.pool_name">{{ pool.pool_name }}</option>
-          </cds-select>
-          <ng-template #poolError>
-            <span class="invalid-feedback"
-                  *ngIf="groupForm.showError('pool', formDir, 'required')"
-                  i18n>This field is required.</span>
-          </ng-template>
         </div>
       </div>
 
-      <!-- CDS Checkbox -->
-      <div cdsRow
-           class="form-item">
-        <div cdsCol>
-          <cds-checkbox id="enableCds"
-                        formControlName="enableEncryption"
-                        i18n>Enable encryption
-          </cds-checkbox>
-        </div>
-      </div>
-
-      <!-- CDS Input (shown when checkbox is checked) -->
-      @if (groupForm.controls.enableEncryption.value) {
-      <div cdsRow
-           class="form-item">
-        <div cdsCol>
-          <cds-textarea-label
-            labelInputID="cdsInput"
-            helperText="Provide the encryption configuration details."
-            i18n
-            i18n-helperText>Encryption configuration
-            <textarea cdsTextArea
-                      id="cdsInput"
-                      cdValidate
-                      #encryptionConfig="cdValidate"
-                      [invalid]="encryptionConfig.invalid"
-                      [invalidText]="encryptionConfigError"
-                      formControlName="encryptionConfig"
-                      cols="100"
-                      rows="4">
-            </textarea>
-          </cds-textarea-label>
-        </div>
-      </div>
-      <ng-template #encryptionConfigError>
-        <span *ngIf="groupForm.controls.encryptionConfig.hasError('required')"
-              class="invalid-feedback"
-              i18n>This field is required.</span>
-      </ng-template>
-      }
       <!-- Target Nodes Selection -->
       <div
         cdsRow
@@ -145,8 +72,399 @@
         ></cd-nvmeof-gateway-node>
       </div>
       </div>
+      <div
+        cdsRow
+        class="form-item cds-mb-0">
+        <div cdsCol>
+          <cds-tile [cdsLayer]="1">
+            <!-- Encryption -->
+            <div cdsRow
+                 class="form-item">
+              <div cdsCol>
+                <div class="cds--stack cds--stack-horizontal">
+                  <label
+                    class="cds--type-label-01"
+                    i18n>Enable encryption</label>
+                  <cds-tag
+                    type="green"
+                    size="sm"
+                    i18n>Recommended</cds-tag>
+                </div>
+                <cds-checkbox
+                  id="enableEncryption"
+                  formControlName="enableEncryption">
+                  <span
+                  class="cds--type-body-01"
+                  i18n>Secures group metadata and unlocks advanced authentication features.</span>
+                </cds-checkbox>
+              </div>
+            </div>
 
-      <div cdsRow>
+            @if (!groupForm.controls.enableEncryption.value) {
+            <div cdsRow
+                 class="cds-mt-2">
+              <div cdsCol>
+                <cd-alert-panel
+                  type="warning"
+                  spacingClass="mb-0"
+                  i18n>
+                  <span class="cds--type-heading-01">Encryption is required if you plan to use DH-CHAP or mTLS authentication.</span>
+                </cd-alert-panel>
+              </div>
+            </div>
+            }
+
+            @if (groupForm.controls.enableEncryption.value) {
+            <div cdsRow
+                 class="form-item">
+              <div cdsCol>
+                <cds-textarea-label
+                  labelInputID="encryptionKey"
+                  helperText="Provide the encryption key used for securing the gateway group."
+                  i18n
+                  i18n-helperText>
+                  Encryption key
+                  <textarea
+                    cdsTextArea
+                    id="encryptionKey"
+                    formControlName="encryptionKey"
+                    rows="4"
+                    cols="100"
+                    cdsTheme="g10">
+                  </textarea>
+                </cds-textarea-label>
+                <span
+                  class="invalid-feedback"
+                  *ngIf="groupForm.showError('encryptionKey', formDir, 'required')"
+                  i18n>This field is required.</span>
+              </div>
+            </div>
+            }
+          </cds-tile>
+
+          <cds-tile
+            [cdsLayer]="1"
+            class="cds-mt-3">
+            <div cdsRow
+                 class="form-item">
+              <div cdsCol>
+                <div class="cds--stack cds--stack-horizontal cds-mb-3">
+                  <label
+                    class="cds--type-label-01"
+                    i18n>Enable Mutual TLS (mTLS)</label>
+                </div>
+                <cds-checkbox
+                  id="enableMtls"
+                  formControlName="enableMtls">
+                  <span
+                  class="cds--type-body-01"
+                  i18n>Use mutual TLS (mTLS) to encrypt control and monitoring commands exchanged with NVMe-oF gateways.</span>
+                </cds-checkbox>
+              </div>
+            </div>
+
+            @if (!groupForm.controls.enableMtls.value) {
+            <div
+              cdsRow
+              class="cds-mt-3">
+              <div cdsCol>
+                <cd-alert-panel
+                  type="warning"
+                  spacingClass="mb-0"
+                  class="cds--type-heading-01"
+                  i18n>
+                  Disabling mTLS leaves gateway control and monitoring communication unencrypted.
+                </cd-alert-panel>
+              </div>
+            </div>
+            }
+
+            @if (groupForm.controls.enableMtls.value) {
+            <div cdsRow
+                 class="form-item">
+              <div cdsCol>
+                <label class="cds--label fw-bold"
+                       i18n>Choose Certificate Authority</label>
+                <cds-radio-group
+                  formControlName="certificateType"
+                  orientation="horizontal"
+                  helperText="Select how certificates will be signed for this service. Choose internal to use the cluster's CA, or external to upload certificates signed by your organization."
+                  i18n-helperText>
+                  <cds-radio
+                    value="internal"
+                    [checked]="groupForm.controls.certificateType.value === CertificateType.internal"
+                    (change)="onCertificateTypeChange(CertificateType.internal)"
+                    i18n>
+                    Internal
+                  </cds-radio>
+                  <cds-radio
+                    value="external"
+                    [checked]="groupForm.controls.certificateType.value === CertificateType.external"
+                    (change)="onCertificateTypeChange(CertificateType.external)"
+                    i18n>
+                    External
+                  </cds-radio>
+                </cds-radio-group>
+              </div>
+            </div>
+            }
+          </cds-tile>
+        </div>
+      </div>
+
+      @if (groupForm.controls.enableMtls.value && groupForm.controls.certificateType.value === CertificateType.internal) {
+      <div cdsRow
+           class="form-item">
+        <div cdsCol>
+          <cd-alert-panel type="info"
+                          spacingClass="mb-3"
+                          i18n>
+            Certificate will be generated automatically by Cephadm CA for internal certificate type.
+          </cd-alert-panel>
+          <cd-text-label-list formControlName="custom_sans"
+                              label="Custom SAN Entries"
+                              i18n-label
+                              helperText="Optional list of Subject Alternative Names (hostnames, IPs, or DNS names) to include in the auto-generated certificate."
+                              i18n-helperText>
+          </cd-text-label-list>
+        </div>
+      </div>
+      }
+
+      @if (groupForm.controls.enableMtls.value && groupForm.controls.certificateType.value === CertificateType.external) {
+      <!-- Root CA Certificate Input -->
+      <div cdsRow
+           class="form-item">
+        <div cdsCol>
+          <cds-text-label
+            labelInputID="rootCACert"
+            i18n
+            i18n-helperText
+            helperText="Upload a Root CA certificate file, or paste the Root CA certificate PEM content directly.">
+            Root CA Certificate Input
+          </cds-text-label>
+          <div class="cds-mb-2">
+            <button
+              cdsButton="tertiary"
+              type="button"
+              (click)="rootCAFileInput.click()"
+              i18n>
+              Upload File
+            </button>
+            <input
+              #rootCAFileInput
+              type="file"
+              accept=".pem,.crt,.cer"
+              class="hidden-file-input"
+              (change)="onFileUpload($event, 'rootCACert')"
+            />
+          </div>
+          <cds-textarea-label
+            labelInputID="rootCACertText"
+            helperText="Uploaded files will populate the Root CA certificate details automatically. Or paste the PEM content directly in the text area."
+            i18n-helperText>
+            <textarea cdsTextArea
+                      id="rootCACertText"
+                      formControlName="rootCACert"
+                      placeholder="Paste certificate or private key PEM content"
+                      i18n-placeholder
+                      cols="100"
+                      rows="4">
+            </textarea>
+          </cds-textarea-label>
+          <span class="invalid-feedback"
+                *ngIf="groupForm.showError('rootCACert', formDir, 'required')"
+                i18n>This field is required.</span>
+        </div>
+      </div>
+
+      <!-- Client Certificate Input -->
+      <div cdsRow
+           class="form-item">
+        <div cdsCol>
+          <cds-text-label
+            labelInputID="clientCert"
+            i18n
+            i18n-helperText
+            helperText="Upload a client certificate file, or paste the client certificate PEM content directly.">
+            Client Certificate Input
+          </cds-text-label>
+          <div class="cds-mb-2">
+            <button
+              cdsButton="tertiary"
+              type="button"
+              (click)="clientCertFileInput.click()"
+              i18n>
+              Upload File
+            </button>
+            <input
+              #clientCertFileInput
+              type="file"
+              accept=".pem,.crt,.cer"
+              class="hidden-file-input"
+              (change)="onFileUpload($event, 'clientCert')"
+            />
+          </div>
+          <cds-textarea-label
+            labelInputID="clientCertText"
+            helperText="Uploaded files will populate the client certificate details automatically. Or paste the PEM content directly in the text area."
+            i18n-helperText>
+            <textarea cdsTextArea
+                      id="clientCertText"
+                      formControlName="clientCert"
+                      placeholder="Paste certificate or private key PEM content"
+                      i18n-placeholder
+                      cols="100"
+                      rows="4">
+            </textarea>
+          </cds-textarea-label>
+          <span class="invalid-feedback"
+                *ngIf="groupForm.showError('clientCert', formDir, 'required')"
+                i18n>This field is required.</span>
+        </div>
+      </div>
+
+      <!-- Client Key Input -->
+      <div cdsRow
+           class="form-item">
+        <div cdsCol>
+          <cds-text-label
+            labelInputID="clientKey"
+            i18n
+            i18n-helperText
+            helperText="Upload a client key file, or paste the client key PEM content directly.">
+            Client Key Input
+          </cds-text-label>
+          <div class="cds-mb-2">
+            <button
+              cdsButton="tertiary"
+              type="button"
+              (click)="clientKeyFileInput.click()"
+              i18n>
+              Upload File
+            </button>
+            <input
+              #clientKeyFileInput
+              type="file"
+              accept=".pem,.key"
+              class="hidden-file-input"
+              (change)="onFileUpload($event, 'clientKey')"
+            />
+          </div>
+          <cds-textarea-label
+            labelInputID="clientKeyText"
+            helperText="Uploaded files will populate the client key details automatically. Or paste the PEM content directly in the text area."
+            i18n-helperText>
+            <textarea cdsTextArea
+                      id="clientKeyText"
+                      formControlName="clientKey"
+                      placeholder="Paste certificate or private key PEM content"
+                      i18n-placeholder
+                      cols="100"
+                      rows="4">
+            </textarea>
+          </cds-textarea-label>
+          <span class="invalid-feedback"
+                *ngIf="groupForm.showError('clientKey', formDir, 'required')"
+                i18n>This field is required.</span>
+        </div>
+      </div>
+
+      <!-- Server Certificate Input -->
+      <div cdsRow
+           class="form-item">
+        <div cdsCol>
+          <cds-text-label
+            labelInputID="serverCert"
+            i18n
+            i18n-helperText
+            helperText="Upload a server certificate file, or paste the server certificate PEM content directly.">
+            Server Certificate Input
+          </cds-text-label>
+          <div class="cds-mb-2">
+            <button
+              cdsButton="tertiary"
+              type="button"
+              (click)="serverCertFileInput.click()"
+              i18n>
+              Upload File
+            </button>
+            <input
+              #serverCertFileInput
+              type="file"
+              accept=".pem,.crt,.cer"
+              class="hidden-file-input"
+              (change)="onFileUpload($event, 'serverCert')"
+            />
+          </div>
+          <cds-textarea-label
+            labelInputID="serverCertText"
+            helperText="Uploaded files will populate the server certificate details automatically. Or paste the PEM content directly in the text area."
+            i18n-helperText>
+            <textarea cdsTextArea
+                      id="serverCertText"
+                      formControlName="serverCert"
+                      placeholder="Paste certificate or private key PEM content"
+                      i18n-placeholder
+                      cols="100"
+                      rows="4">
+            </textarea>
+          </cds-textarea-label>
+          <span class="invalid-feedback"
+                *ngIf="groupForm.showError('serverCert', formDir, 'required')"
+                i18n>This field is required.</span>
+        </div>
+      </div>
+
+      <!-- Server Key Input -->
+      <div cdsRow
+           class="form-item">
+        <div cdsCol>
+          <cds-text-label
+            labelInputID="serverKey"
+            i18n
+            i18n-helperText
+            helperText="Upload a server key file, or paste the server key PEM content directly.">
+            Server Key Input
+          </cds-text-label>
+          <div class="cds-mb-2">
+            <button
+              cdsButton="tertiary"
+              type="button"
+              (click)="serverKeyFileInput.click()"
+              i18n>
+              Upload File
+            </button>
+            <input
+              #serverKeyFileInput
+              type="file"
+              accept=".pem,.key"
+              class="hidden-file-input"
+              (change)="onFileUpload($event, 'serverKey')"
+            />
+          </div>
+          <cds-textarea-label
+            labelInputID="serverKeyText"
+            helperText="Uploaded files will populate the server key details automatically. Or paste the PEM content directly in the text area."
+            i18n-helperText>
+            <textarea cdsTextArea
+                      id="serverKeyText"
+                      formControlName="serverKey"
+                      placeholder="Paste certificate or private key PEM content"
+                      i18n-placeholder
+                      cols="100"
+                      rows="4">
+            </textarea>
+          </cds-textarea-label>
+          <span class="invalid-feedback"
+                *ngIf="groupForm.showError('serverKey', formDir, 'required')"
+                i18n>This field is required.</span>
+        </div>
+      </div>
+      }
+
+      <div cdsRow
+           class="cds-mt-5">
         <cd-form-button-panel
           (submitActionEvent)="onSubmit()"
           [form]="groupForm"
