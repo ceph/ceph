@@ -134,7 +134,9 @@ If your build fails during the "package build" stage, troubleshoot the child cep
     ARCHS=arm64
     TAG=false <-- VERY IMPORTANT
 
-This will leave the version commit and previously-created tag intact in ceph-releases.git.  You will want the subsequent ceph-dev-pipeline job to reuse that SHA/tag.
+This will leave the version commit and previously-created tag intact in `ceph-releases.git <https://github.com/ceph/ceph-releases>`_.  You will want the subsequent ceph-dev-pipeline job to reuse that SHA/tag.
+
+What is the fuction of this repository? Why is it not discussed before?
 
 Once all of your variants are successfully built, you will have to manually run the ceph-tag job.  For example,::
 
@@ -169,6 +171,9 @@ See `the Ceph Tracker wiki page that explains how to write the release notes <ht
 #. Obtain the sha1 of the version commit from the `build job <https://jenkins.ceph.com/view/all/job/ceph>`_ or the ``sha1`` file created by the `ceph-setup <https://jenkins.ceph.com/job/ceph-setup/>`_ job.
 
 #. Download the packages from chacra.ceph.com to the signing virtual machine. These packages get downloaded to ``/opt/repos`` where the `Sepia Lab Long Running (Ceph) Cluster <https://wiki.sepia.ceph.com/doku.php?id=services:longrunningcluster>`_ is mounted.  Note: this step will also run a command to transfer the source tarballs from chacra.ceph.com to download.ceph.com directly, by ssh'ing to download.ceph.com and running /home/signer/bin/get-tarballs.sh.
+
+
+.. warning:: A passphrase may be required during this process to use the signing key. Talk to Infrastructure Admins to get access to that.
 
    .. prompt:: bash $
 
@@ -301,9 +306,21 @@ See `the Ceph Tracker wiki page that explains how to write the release notes <ht
 
       sync-push ceph squid-19.2.2 2
 
+WHAT is the last argument for?
+
 This leaves the packages, and the tarball, in a password-protected
-prerelease area at https://download.ceph.com/prerelease/ceph.  Verify them
-from there.  When done and ready for release, log into download.ceph.com and
+prerelease area at https://download.ceph.com/prerelease/ceph.
+
+how to login to this? where is the username/password?
+
+Verify them
+from there. 
+
+What does "verify them" mean? Check they exist? what would be an example of  success?
+
+Suggest moving this to the end:
+
+When done and ready for release, log into download.ceph.com and
 mv the directories and the tarballs from the prerelease home
 (/data/download.ceph.com/www/prerelease/ceph) to the release directory
 (/data/download.ceph.com/www).
