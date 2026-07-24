@@ -238,7 +238,8 @@ timeout = 1.0\n"""
                             "files": {
                                 "ceph-nvmeof.conf": nvmeof_gateway_conf
                             }
-                        }
+                        },
+                        "skip_port_check": False,
                     }),
                     error_ok=True,
                     use_current_daemon_image=False,
@@ -505,6 +506,7 @@ timeout = 1.0
                                 "ceph-nvmeof.conf": nvmeof_gateway_conf_mtls,
                             },
                         },
+                        "skip_port_check": False,
                     }),
                     error_ok=True,
                     use_current_daemon_image=False,
@@ -693,6 +695,7 @@ timeout = 1.0
                                 "ceph-nvmeof.conf": nvmeof_gateway_conf_ssl,
                             },
                         },
+                        "skip_port_check": False,
                     }),
                     error_ok=True,
                     use_current_daemon_image=False,

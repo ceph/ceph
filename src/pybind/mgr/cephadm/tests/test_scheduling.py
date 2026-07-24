@@ -2137,3 +2137,60 @@ def test_ingress_scale_down_defers_related_when_ranked_backend_exceeds_required(
         'haproxy.ingress3',
         'keepalived.ingress3',
     ])
+
+
+class UseSamePortTest(NamedTuple):
+    placement: PlacementSpec
+    hosts: List[str]
+    use_same_port: bool
+
+
+@pytest.mark.parametrize("placement,hosts,use_same_port",
+                         [
+                             UseSamePortTest(
+                                 PlacementSpec(host_pattern='*', count_per_host=2),
+                                 'host1 host2 host3'.split(),
+                                 True,
+                             ),
+                             UseSamePortTest(
+                                 PlacementSpec(host_pattern='*', count_per_host=2),
+                                 'host1 host2 host3'.split(),
+                                 False,
+                             ),
+                         ])
+def test_use_same_port(
+    placement,
+    hosts,
+    use_same_port
+):
+
+    spec = ServiceSpec(service_type='rgw',
+                       service_id='foo',
+                       placement=placement)
+
+    slots, to_add, to_remove = HostAssignment(
+        spec=spec,
+        hosts=[HostSpec(h) for h in hosts],
+        allow_colo=True,
+        use_same_port=use_same_port,
+        unreachable_hosts=[],
+        draining_hosts=[],
+        blocking_daemon_hosts=[],
+        daemons=[],
+    ).place()
+
+    # total rgw daemons deployed should be the same in both cases
+    assert len(to_add) == placement.count_per_host * len(hosts)
+
+    for host in hosts:
+        daemon_hosts = [d for d in to_add if d.hostname == host]
+        if not daemon_hosts:
+            continue
+        if use_same_port:
+            ports_in_use = daemon_hosts[0].ports
+            assert all([d.ports == ports_in_use for d in daemon_hosts])
+        else:
+            # there should be no overlap of ports for daemons on this host
+            all_ports = [port for port in [d.ports for d in daemon_hosts]]
+            for port in all_ports:
+                assert (len([p for p in all_ports if p == port]) == 1)

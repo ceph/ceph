@@ -906,6 +906,15 @@ class CephadmServe:
                     self.mgr.cache.get_schedulable_hosts()
                 )
         host_selector = _host_selector(svc)
+
+        # RGW supports multiple daemons on the same host
+        # using the same port if so_reuseport=1 is set
+        # in the frontend config
+        use_same_port = False
+        if service_type == 'rgw':
+            rgw_spec = cast(RGWSpec, spec)
+            use_same_port = rgw_spec.allow_port_reuse
+
         ha = HostAssignment(
             spec=spec,
             hosts=self.mgr.cache.get_non_draining_hosts() if spec.service_name(
@@ -924,6 +933,7 @@ class CephadmServe:
             rank_map=rank_map,
             upgrade_in_progress=(self.mgr.upgrade.upgrade_state is not None),
             host_selector=host_selector,
+            use_same_port=use_same_port,
         )
 
         try:
@@ -1572,9 +1582,11 @@ class CephadmServe:
                     daemon_spec.name(), daemon_spec.host))
 
                 termination_grace_period = None
+                skip_port_check = False
                 if daemon_spec.service_name in self.mgr.spec_store:
                     svc_spec = self.mgr.spec_store[daemon_spec.service_name].spec
                     termination_grace_period = getattr(svc_spec, 'termination_grace_period_seconds', None)
+                    skip_port_check = getattr(svc_spec, 'allow_port_reuse', False)
 
                 if termination_grace_period is not None:
                     daemon_params['termination_grace_period_seconds'] = int(termination_grace_period)
@@ -1589,6 +1601,7 @@ class CephadmServe:
                         name=daemon_spec.name(),
                         image=image,
                         params=daemon_params,
+                        skip_port_check=skip_port_check,
                         meta=exchange.DeployMeta(
                             service_name=daemon_spec.service_name,
                             ports=daemon_spec.ports,

@@ -1681,6 +1681,7 @@ class RGWSpec(ServiceSpec):
                  rgw_exit_timeout_secs: int = 120,
                  qat: Optional[Dict[str, str]] = None,
                  d3n_cache: Optional[Dict[str, Any]] = None,
+                 allow_port_reuse: bool = False
                  ):
         assert service_type == 'rgw', service_type
 
@@ -1750,6 +1751,9 @@ class RGWSpec(ServiceSpec):
 
         self.qat = qat or {}
         self.d3n_cache = d3n_cache or {}
+        #: RGW ports on the same host can share a port if
+        #: so_reuseport=1 is set in the frontend config
+        self.allow_port_reuse = allow_port_reuse
 
     def get_port_start(self) -> List[int]:
         ports = self.get_port()
