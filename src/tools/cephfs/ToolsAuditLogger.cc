@@ -4,6 +4,8 @@
 
 #include <fmt/format.h>
 
+#include "common/JSONFormatter.h"
+
 #include "common/ceph_context.h"
 #include "common/debug.h"
 #include "include/ceph_assert.h"
@@ -93,13 +95,31 @@ void ToolsAuditLogger::log_begin(
     return;
   }
   if (begin_recorded) {
-    lderr(cct) << "called while previous being (seq=" << seq_in_flight << ") still in flight; dropping" << dendl;
+    lderr(cct) << "called while previous begin (seq=" << seq_in_flight
+               << ") still in flight; dropping" << dendl;
     return;
   }
-  auto r = db->first_phase_commit(cmd, cmd_args, init_time);
+
+  JSONFormatter jf;
+  jf.open_object_section("");
+  jf.dump_string("cmd",      cmd);
+  jf.dump_string("cmd_args", cmd_args);
+  jf.dump_int("init_time",   static_cast<int64_t>(init_time));
+  jf.dump_null("comp_time");
+  jf.dump_null("status");
+  jf.dump_null("retval");
+  jf.close_section();
+  std::ostringstream ss;
+  jf.flush(ss);
+  std::string json = ss.str();
+  auto r = db->commit(init_time, json);
+  
   if (r.has_value()) {
-    seq_in_flight = *r;
-    begin_recorded = true;
+    seq_in_flight       = *r;
+    cmd_in_flight       = cmd;
+    cmd_args_in_flight  = cmd_args;
+    init_time_in_flight = init_time;
+    begin_recorded      = true;
   } else {
     lderr(cct) << "failed: code " << static_cast<int>(r.error().code)
                << " detail=" << r.error().detail << dendl;
@@ -114,12 +134,27 @@ void ToolsAuditLogger::log_end(
   if (!is_ready() || !begin_recorded) {
     return;
   }
-  auto r = db->second_phase_commit(seq_in_flight, comp_time, status, retval);
+  JSONFormatter jf;
+  jf.open_object_section("");
+  jf.dump_string("cmd",      cmd_in_flight);
+  jf.dump_string("cmd_args", cmd_args_in_flight);
+  jf.dump_int("init_time",   static_cast<int64_t>(init_time_in_flight));
+  jf.dump_int("comp_time",   static_cast<int64_t>(comp_time));
+  jf.dump_string("status",   status);
+  jf.dump_int("retval",      static_cast<int64_t>(retval));
+  jf.close_section();
+  std::ostringstream ss;
+  jf.flush(ss);
+  std::string json = ss.str();
+  auto r = db->update(seq_in_flight, json);
   if (r.has_value()) {
-    begin_recorded = false;
-    seq_in_flight = 0;
+    begin_recorded      = false;
+    seq_in_flight       = 0;
+    cmd_in_flight       = {};
+    cmd_args_in_flight  = {};
+    init_time_in_flight = 0;
   } else {
-    lderr(cct) << __func__ << "failed: seq=" << seq_in_flight
+    lderr(cct) << "failed: seq=" << seq_in_flight
                << " code=" << static_cast<int>(r.error().code)
                << " detail=" << r.error().detail << dendl;
   }

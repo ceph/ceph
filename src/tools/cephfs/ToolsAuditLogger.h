@@ -78,14 +78,22 @@ public:
   ToolsAuditLogger(const ToolsAuditLogger&) = delete;
   ToolsAuditLogger& operator=(const ToolsAuditLogger&) = delete;
 
-  /** Standalone first phase; stores seq for @ref log_end. Ignored if a begin is
-   * already in flight without a matching @ref log_end. */
+  /**
+   * Record the start of a tool invocation. Builds a JSON payload containing
+   * cmd and cmd_args and inserts a new row via @ref AuditDB::commit.
+   * Stores seq, cmd, cmd_args, and init_time for use by @ref log_end.
+   * Ignored if a begin is already in flight without a matching @ref log_end.
+   */
   void log_begin(
       const std::string& cmd,
       const std::string& cmd_args,
       time_t init_time);
 
-  /** Second phase for the seq returned from the last @ref log_begin. */
+  /**
+   * Record the completion of a tool invocation. Builds a JSON
+   * payload containing cmd, cmd_args, init_time, comp_time, status, and
+   * retval, then updates the existing row via @ref AuditDB::update.
+   */
   void log_end(time_t comp_time, const std::string& status, int32_t retval);
 
   bool is_ready() const;
@@ -101,8 +109,12 @@ private:
   std::string db_uri;
   std::string table_name;
   std::unique_ptr<AuditDB> db;
-  int64_t seq_in_flight{0};
-  bool begin_recorded{false};
+  int64_t     seq_in_flight{0};
+  bool        begin_recorded{false};
+  // stored at log_begin time so log_end can reconstruct the full JSON
+  std::string cmd_in_flight;
+  std::string cmd_args_in_flight;
+  time_t      init_time_in_flight{0};
 };
 
 #endif

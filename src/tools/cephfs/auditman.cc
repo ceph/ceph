@@ -8,7 +8,6 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
-#include <vector>
 
 #include <boost/program_options.hpp>
 #include <fmt/format.h>
@@ -18,6 +17,7 @@
 #include "common/TextTable.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
+#include "json_spirit/json_spirit.h"
 
 using std::cerr;
 using std::cout;
@@ -32,61 +32,19 @@ const std::unordered_map<std::string, std::string> TOOL_TO_TABLE_NAME = {
     {"cephfs-journal-tool", "cephfs_journal_tool"}
 };
 
-const std::unordered_set<std::string> VALID_FIELDS = {
-    "seq",
-    "cmd",
-    "cmd_args",
-    "init_time",
-    "comp_time",
-    "status",
-    "retval"
-};
-
-const std::vector<std::string> DEFAULT_FIELDS = {
-    "seq",
-    "cmd",
-    "cmd_args",
-    "init_time",
-    "comp_time",
-    "status",
-    "retval"
-};
-
-const std::vector<std::string> BRIEF_FIELDS = {
-    "seq",
-    "cmd"
-};
-
 const std::unordered_set<std::string> VALID_FORMATS = {
     "plain",
     "json",
     "json-pretty"
 };
 
-// const std::unordered_set<std::string> VALID_STATUSES = {
-
-// };
-
-// Configuration for the audit query attempt
+// Configuration for query attempt
 struct AuditCliConfig {
   AuditQuery query;
   std::string table_name;
   bool count_mode = false;
-  bool brief = false;
   std::string format = "plain";
-  std::vector<std::string> selected_fields = DEFAULT_FIELDS;
 };
-
-// Helper to process cli options
-template <typename T, typename Func>
-void process_command(
-    const po::variables_map& vm,
-    const std::string& cmd_name,
-    Func handler) {
-  if (vm.count(cmd_name)) {
-    handler(vm[cmd_name].as<T>());
-  }
-}
 
 // Helper for converting string "YYYY-MM-DD" or ""YYYY-MM-DD HH:MM:SS" to time_t
 time_t str_to_time_t(const std::string& str_time) {
@@ -119,7 +77,6 @@ time_t str_to_time_t(const std::string& str_time) {
   } else if (date_and_time) {
     ss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
   }
-
   if (ss.fail()) {
     throw std::invalid_argument(date_error);
   }
@@ -196,70 +153,60 @@ void print_count_result_formatted(const std::string& format, int64_t count) {
 // Helper for printing formatted result of a query() call to AuditDB
 void print_query_result_formatted(
     const std::string& format,
-    const std::vector<std::string>& selected_fields,
     const std::vector<AuditEntry>& entries) {
   if (format == "plain") {
     TextTable table;
-    for (const auto& f : selected_fields) {
-      table.define_column(f, TextTable::LEFT, TextTable::LEFT);
-    }
+    table.define_column("seq", TextTable::LEFT, TextTable::LEFT);
+    table.define_column("init_time", TextTable::LEFT, TextTable::LEFT);
+    table.define_column("data", TextTable::LEFT, TextTable::LEFT);
+    
     for (const auto& e : entries) {
-      for (const auto& f : selected_fields) {
-        if (f == "seq") {
-          table << e.seq;
-        } else if (f == "cmd") {
-          table << e.cmd;
-        } else if (f == "cmd_args") {
-          table << e.cmd_args;
-        } else if (f == "init_time") {
-          table << format_time(e.init_time);
-        } else if (f == "comp_time") {
-          table << (e.comp_time ? format_time(*e.comp_time) : "");
-        } else if (f == "status") {
-          table << e.status.value_or("");
-        } else if (f == "retval") {
-          table << (e.retval ? std::to_string(*e.retval) : "");
-        }
-      }
-      table << TextTable::endrow;
+      table << e.seq
+            << format_time(e.init_time)
+            << e.json_dump
+            << TextTable::endrow;
     }
     cout << table;
     return;
   }
 
   if (format == "json" || format == "json-pretty") {
-    JSONFormatter jf((format == "json-pretty"));
-    jf.open_array_section("audit_entries");
+    json_spirit::Array output;
+
     for (const auto& e : entries) {
-      jf.open_object_section("entry");
-      for (const auto& f : selected_fields) {
-        if (f == "seq") {
-          jf.dump_unsigned("seq", e.seq);
-        } else if (f == "cmd") {
-          jf.dump_string("cmd", e.cmd);
-        } else if (f == "cmd_args") {
-          jf.dump_string("cmd_args", e.cmd_args);
-        } else if (f == "init_time") {
-          jf.dump_string("init_time", format_time(e.init_time));
-        } else if (f == "comp_time") {
-          e.comp_time ? jf.dump_string("comp_time", format_time(*e.comp_time))
-                      : jf.dump_null("comp_time");
-        } else if (f == "status") {
-          e.status ? jf.dump_string("status", *e.status)
-                   : jf.dump_null("status");
-        } else if (f == "retval") {
-          e.retval ? jf.dump_int("retval", *e.retval) : jf.dump_null("retval");
-        }
+      json_spirit::Value data;
+      if (!json_spirit::read(e.json_dump, data)) {
+        throw std::runtime_error(
+            fmt::format(
+                "Invalid json_dump in audit entry seq={}",
+                e.seq));
       }
-      jf.close_section();
+
+      json_spirit::Object entry;
+      entry.push_back(json_spirit::Pair(
+          "seq",
+          static_cast<int64_t>(e.seq)));
+      entry.push_back(json_spirit::Pair(
+          "init_time",
+          format_time(e.init_time)));
+      entry.push_back(json_spirit::Pair(
+          "data",
+          data));
+      output.push_back(entry);
     }
-    jf.close_section();
-    jf.flush(cout);
-    cout << endl;
+
+    const json_spirit::Value root(output);
+    if (format == "json-pretty") {
+      cout << json_spirit::write_formatted(root) << endl;
+    } else {
+      cout << json_spirit::write(root) << endl;
+    }
+
+    return;
   }
 }
 
-// Helper to error check and build AuditDB query with all cli options specified
+// Helper to error check cli options and build AuditQuery based on input
 void apply_cli_opts(const po::variables_map& vm, AuditCliConfig& config) {
   if (vm.count("range") &&
       (vm.count("since") || vm.count("until") || vm.count("last"))) {
@@ -277,42 +224,45 @@ void apply_cli_opts(const po::variables_map& vm, AuditCliConfig& config) {
     throw std::invalid_argument("Cannot use both --limit and --recent.");
   }
 
-  process_command<std::string>(
-      vm, "tool-name", [&config](const std::string& value) {
-        if (!TOOL_TO_TABLE_NAME.contains(value)) {
-          std::string accepted_tools_str;
-          for (const auto& [tool_name, _] : TOOL_TO_TABLE_NAME) {
-            if (!accepted_tools_str.empty()) {
-              accepted_tools_str += ", ";
-            }
-            accepted_tools_str += tool_name;
-          }
-          throw std::invalid_argument(
-              "Tool channel not found. Valid channels: " + accepted_tools_str);
+  if (vm.count("tool-name")) {
+    const std::string& tool_name = vm["tool-name"].as<std::string>();
+    if (!TOOL_TO_TABLE_NAME.contains(tool_name)) {
+      std::string accepted_tools_str;
+      for (const auto& [name, _] : TOOL_TO_TABLE_NAME) {
+        if (!accepted_tools_str.empty()) {
+          accepted_tools_str += ", ";
         }
-        config.table_name = TOOL_TO_TABLE_NAME.at(value);
-      });
+        accepted_tools_str += name;
+      }
+      throw std::invalid_argument(
+          "Tool channel not found. Valid channels: " + accepted_tools_str);
+    }
+    config.table_name = TOOL_TO_TABLE_NAME.at(tool_name);
+  }
 
-  process_command<int64_t>(vm, "limit", [&config](const int64_t value) {
-    if (value < 0) {
+  if (vm.count("limit")) {
+    int64_t limit = vm["limit"].as<int64_t>();
+    if (limit < 0) {
       throw std::invalid_argument("--limit must be >= 0.");
     }
-    config.query.limit = value;
-  });
+    config.query.limit = limit;
+  }
 
-  process_command<int64_t>(vm, "before-seq", [&config](const int64_t value) {
-    if (value < 0) {
+  if (vm.count("before-seq")) {
+    int64_t before_seq = vm["before-seq"].as<int64_t>();
+    if (before_seq < 0) {
       throw std::invalid_argument("--before-seq must be >= 0.");
     }
-    config.query.before_seq = value;
-  });
+    config.query.before_seq = before_seq;
+  }
 
-  process_command<int64_t>(vm, "after-seq", [&config](const int64_t value) {
-    if (value < 0) {
+  if (vm.count("after-seq")) {
+    int64_t after_seq = vm["after-seq"].as<int64_t>();
+    if (after_seq < 0) {
       throw std::invalid_argument("--after-seq must be >= 0.");
     }
-    config.query.after_seq = value;
-  });
+    config.query.after_seq = after_seq;
+  }
 
   if (vm.count("before-seq") && vm.count("after-seq") &&
       (config.query.before_seq && config.query.after_seq &&
@@ -321,89 +271,75 @@ void apply_cli_opts(const po::variables_map& vm, AuditCliConfig& config) {
         "--before-seq must be greater than --after-seq.");
   }
 
-  process_command<std::string>(vm, "since", [&config](const std::string& value) {
-    config.query.since = str_to_time_t(value);
-  });
+  if (vm.count("since")) {
+    const std::string& since_str = vm["since"].as<std::string>();
+    config.query.since = str_to_time_t(since_str);
+  }
 
-  process_command<std::string>(vm, "until", [&config](const std::string& value) {
-    config.query.until = str_to_time_t(value);
-  });
+  if (vm.count("until")) {
+    const std::string& until_str = vm["until"].as<std::string>();
+    config.query.until = str_to_time_t(until_str);
+  }
 
   if (vm.count("since") && vm.count("until") &&
       (config.query.since > config.query.until)) {
     throw std::invalid_argument("--since must be <= --until");
   }
 
-  process_command<std::string>(vm, "range", [&config](const std::string& value) {
-    std::pair<time_t, time_t> r = range_str_to_time(value);
+  if (vm.count("range")) {
+    const std::string& range_str = vm["range"].as<std::string>();
+    std::pair<time_t, time_t> r = range_str_to_time(range_str);
     config.query.since = r.first;
     config.query.until = r.second;
-  });
+  }
 
-  process_command<double>(vm, "last", [&config](const double& value) {
-    if (value < 0.0) {
+  if (vm.count("last")) {
+    double hours = vm["last"].as<double>();
+    if (hours < 0.0) {
       throw std::invalid_argument("--last must be a nonnegative number.");
     }
     time_t now = std::time(nullptr);
-    time_t timestamp_ago = now - static_cast<time_t>(value * 3600);
-    config.query.since = timestamp_ago;
-  });
+    config.query.since = now - static_cast<time_t>(hours * 3600);
+  }
 
-  process_command<int64_t>(vm, "recent", [&config](const int64_t value) {
-    if (value < 0) {
+  if (vm.count("recent")) {
+    int64_t n = vm["recent"].as<int64_t>();
+    if (n < 0) {
       throw std::invalid_argument("--recent must be a nonnegative number.");
     }
-    config.query.limit = value;
-  });
+    config.query.limit = n;
+    config.query.order_by = "init_time";
+    config.query.ascending = false;
+  }
 
-  process_command<std::string>(vm, "status", [&config](const std::string& value) {
-    // TO DO: add error check for valid status values?
-    config.query.status = value;
-  });
+  if (vm.count("filter")) {
+    for (const auto& raw : vm["filter"].as<std::vector<std::string>>()) {
+      const auto eq = raw.find('=');
+      if (eq == std::string::npos || eq == 0) {
+        throw std::invalid_argument(
+            "Invalid --filter value: '" + raw +
+            "'. Expected format: field=value");
+      }
+      std::string field = raw.substr(0, eq);
+      std::string value = raw.substr(eq + 1);
+      config.query.json_filters.push_back({std::move(field), std::move(value)});
+    }
+  }
 
-  process_command<std::string>(
-      vm, "order-by", [&config](const std::string& value) {
-        if (value != "seq" && value != "init_time" && value != "comp_time" &&
-            value != "retval") {
-          throw std::invalid_argument(
-              "--order-by must be in: seq, init_time, comp_time, retval.");
-        }
-        config.query.order_by = value;
-      });
+  if (vm.count("order-by")) {
+    const std::string& order_by = vm["order-by"].as<std::string>();
+    if (order_by != "seq" && order_by != "init_time") {
+      throw std::invalid_argument("--order-by must be seq or init_time.");
+    }
+    config.query.order_by = order_by;
+  }
 
-  process_command<std::string>(vm, "order", [&config](const std::string& value) {
-    if (value != "ASC" && value != "DESC") {
+  if (vm.count("order")) {
+    const std::string& order = vm["order"].as<std::string>();
+    if (order != "ASC" && order != "DESC") {
       throw std::invalid_argument("--order must be ASC or DESC.");
     }
-    config.query.ascending = (value == "ASC");
-  });
-
-  process_command<std::string>(vm, "fields", [&config](const std::string& value) {
-    config.selected_fields.clear();
-    std::istringstream ss(value);
-    std::string field;
-    while (std::getline(ss, field, ',')) {
-      if (!VALID_FIELDS.contains(field)) {
-        throw std::invalid_argument("Invalid field: " + field + ". Ensure all fields are valid and comma-separated with no spaces.");
-      }
-      config.selected_fields.push_back(field);
-    }
-  });
-
-  if (config.count_mode && vm.count("fields")) {
-    throw std::invalid_argument("Cannot combine --count with --fields.");
-  }
-
-  if (config.brief && vm.count("fields")) {
-    throw std::invalid_argument("Cannot combine --brief with --fields.");
-  }
-
-  if (config.brief && config.count_mode) {
-    throw std::invalid_argument("Cannot combine --brief with --count");
-  }
-
-  if (config.brief) {
-    config.selected_fields = BRIEF_FIELDS;
+    config.query.ascending = (order == "ASC");
   }
 
   if (!VALID_FORMATS.contains(config.format)) {
@@ -420,9 +356,9 @@ void do_audit_query(AuditDB& db, const AuditCliConfig& config) {
     if (!count_res) {
       const auto& error = count_res.error();
       throw std::runtime_error(
-          fmt::format(
-              "Failed to count audit entries. Code: {}, Detail: {}",
-              static_cast<int>(error.code), error.detail));
+        fmt::format(
+          "Failed to count audit entries. Code: {}, Detail: {}",
+                static_cast<int>(error.code), error.detail));
     }
     print_count_result_formatted(config.format, count_res.value());
     return;
@@ -438,7 +374,7 @@ void do_audit_query(AuditDB& db, const AuditCliConfig& config) {
   }
 
   const std::vector<AuditEntry>& entries = query_res.value();
-  print_query_result_formatted(config.format, config.selected_fields, entries);
+  print_query_result_formatted(config.format, entries);
 }
 
 int main(int argc, const char** argv) {
@@ -461,38 +397,54 @@ int main(int argc, const char** argv) {
   AuditCliConfig config;
   po::options_description query_opts("Query Options");
   query_opts.add_options()
-    ("tool-name", po::value<std::string>()->required(), "Tool name (channel you want to query).")
-    ("limit", po::value<int64_t>(), "Maximum number of entries to return.")
-    ("before-seq", po::value<int64_t>(), "Get entries before seq number n.")
-    ("after-seq", po::value<int64_t>(), "Get entries after seq number n.")
-    ("since", po::value<std::string>(), "Get entries since timestamp \"YYYY-MM-DD\" or \"YYYY-MM-DD HH:MM:SS\" .")
-    ("until", po::value<std::string>(), "Get entries until timestamp \"YYYY-MM-DD\" or \"YYYY-MM-DD HH:MM:SS\" .")
-    ("range", po::value<std::string>(), "Get entries between timestamp range \"YYYY-MM-DD\",\"YYYY-MM-DD\"")
-    ("last", po::value<double>(), "Get entries from the last N hours (supports decimals, e.g. 0.5 for last 30 mins).")
-    ("recent", po::value<int64_t>(), "Get last n recent entries (in DESC order by default).")
-    ("status", po::value<std::string>(), "Get entries with status s.") // TO DO: Ensure these are just success, failure, timeout or completed, unkown error, aborted
-    ("order-by", po::value<std::string>(), "Order returned entries by a specific field")        
-    ("order", po::value<std::string>()->default_value("DESC"), "Specify ASC or DESC ordering (default order is DESC)")
-    ("count", po::bool_switch(&config.count_mode), "Get count of entries that match filters.")
-    ("fields", po::value<std::string>(), "Specify one or more fields to retrieve.")
-    ("brief", po::bool_switch(&config.brief), "Return seq and cmd fields only.")
-    ("format", po::value<std::string>(&config.format)->default_value("plain"), 
-        "Specify output format: plain (default), json, json-pretty.")
+    ("tool-name", po::value<std::string>()->required(),
+        "The audit channel to query (e.g. cephfs-data-scan).")
+    ("limit", po::value<int64_t>(),
+        "Cap the number of rows returned.")
+    ("before-seq", po::value<int64_t>(),
+        "Return only entries whose seq number is less than N.")
+    ("after-seq", po::value<int64_t>(),
+        "Return only entries whose seq number is greater than N.")
+    ("since", po::value<std::string>(),
+        "Return entries recorded on or after this timestamp. "
+        "Format: \"YYYY-MM-DD\" or \"YYYY-MM-DD HH:MM:SS\".")
+    ("until", po::value<std::string>(),
+        "Return entries recorded on or before this timestamp. "
+        "Format: \"YYYY-MM-DD\" or \"YYYY-MM-DD HH:MM:SS\".")
+    ("range", po::value<std::string>(),
+        "Return entries within an inclusive timestamp range. "
+        "Format: \"YYYY-MM-DD,YYYY-MM-DD\" or \"YYYY-MM-DD HH:MM:SS,YYYY-MM-DD HH:MM:SS\". "
+        "Cannot be combined with --since, --until, or --last.")
+    ("last", po::value<double>(),
+        "Return entries from the last N hours before now. "
+        "Accepts decimals (e.g. 0.5 for the last 30 minutes).")
+    ("recent", po::value<int64_t>(),
+        "Return the N most recent entries, ordered by init_time descending.")
+    ("filter", po::value<std::vector<std::string>>()->composing(),
+        "Filter results by a field inside the json_dump column. "
+        "Format: field=value. Repeatable for multiple filters "
+        "(e.g. --filter status=ok --filter cmd=data-scan).")
+    ("order-by", po::value<std::string>(),
+        "Column to sort results by. Valid values: seq, init_time.")
+    ("order", po::value<std::string>()->default_value("DESC"),
+        "Sort direction: ASC or DESC (default: DESC).")
+    ("count", po::bool_switch(&config.count_mode),
+        "Print the number of matching entries.")
+    ("format", po::value<std::string>(&config.format)->default_value("plain"),
+        "Output format: plain (default), json, json-pretty.")
   ;
 
   // Visible options for help output
   po::options_description visible("Allowed options");
   visible.add(general).add(query_opts);
   
-  // Process cli options and build AuditCliConfig (Audit DB query)
+  // Process cli options and build AuditCliConfig (AuditDB's AuditQuery)
   po::variables_map vm;
   try {
     po::store(po::parse_command_line(argc, argv, visible), vm);
     if (vm.count("help")) {
-      cout << "Usage: audit-cli --tool-name <tool> [query-options]\n\n";
-      cout << "Query audit records stored in AuditDB for a specific tool "
-              "(channel).\n\n";
-
+      cout << "Usage: auditman --tool-name <tool> [query-options]\n\n";
+      cout << "Query audit records stored in AuditDB for a specific channel.\n\n";
       cout << "Supported tools:\n";
       for (const auto& [tool_name, table_name] : TOOL_TO_TABLE_NAME) {
         cout << "  " << tool_name << "\n";
@@ -508,7 +460,7 @@ int main(int argc, const char** argv) {
     return 1;
   } catch (const std::exception& e) {
     cerr << "Error: " << e.what() << endl;
-    cout << "Usage: audit-cli --tool-name <tool> [query-options]\n";
+    cout << "Usage: auditman --tool-name <tool> [query-options]\n";
     cout << "Query audit records stored in AuditDB for a specific tool "
             "(channel).\n";
     cout << "Try --help for more information.\n";
@@ -534,6 +486,3 @@ int main(int argc, const char** argv) {
 
   return 0;
 }
-
-// TO DO: Integrate status error checking
-// TO DO: command arguments (filter command that were run with --yes-i-really-really-mean-it flag)
