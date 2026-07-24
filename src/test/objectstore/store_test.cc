@@ -7704,13 +7704,13 @@ INSTANTIATE_TEST_SUITE_P(
 
 #if defined(WITH_BLUESTORE)
 INSTANTIATE_TEST_SUITE_P(
-  ObjectStore,
+  BlueStore,
   StoreTestDeferredSetup,
   ::testing::Values(
     "bluestore"));
 
 INSTANTIATE_TEST_SUITE_P(
-  ObjectStore,
+  BlueStore,
   MultiLabelTest,
   ::testing::Values(
     "bluestore"));
