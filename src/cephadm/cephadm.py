@@ -85,6 +85,7 @@ from cephadmlib.call_wrappers import (
     call,
     call_throws,
     call_timeout,
+    call_timeout_shell,
     concurrent_tasks,
 )
 from cephadmlib.container_engines import (
@@ -3460,7 +3461,7 @@ def command_shell(ctx):
         print(' '.join(shlex.quote(arg) for arg in command))
         return 0
 
-    return call_timeout(ctx, command, ctx.timeout)
+    return call_timeout_shell(ctx, command, ctx.timeout)
 
 ##################################
 

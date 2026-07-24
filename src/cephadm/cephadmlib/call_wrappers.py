@@ -6,6 +6,7 @@ import logging
 import os
 import subprocess
 import sys
+import time
 
 from enum import Enum
 from typing import Callable, List, Dict, Optional, Any, Tuple, NoReturn
@@ -311,6 +312,15 @@ def call_throws(
     return out, err, ret
 
 
+SHELL_MOUNT_RACE_MAX_RETRIES = 5
+SHELL_MOUNT_RACE_RETRY_DELAY_SEC = 0.5
+
+
+def is_transient_shell_mount_race_error(stderr: str) -> bool:
+    """True when runc failed to bind-mount a path replaced during container init."""
+    return 'was moved while re-opening' in stderr
+
+
 def call_timeout(
     ctx: CephadmContext, command: List[str], timeout: int
 ) -> int:
@@ -329,3 +339,66 @@ def call_timeout(
         )
     except subprocess.TimeoutExpired:
         raise_timeout(command, timeout)
+
+
+def call_timeout_shell(
+    ctx: CephadmContext, command: List[str], timeout: int
+) -> int:
+    """
+    Like call_timeout, but retry transient runc bind-mount races when cephadm
+    shell starts while mgr-driven deploy-file updates /etc/ceph/* on the host.
+    """
+    logger.debug(
+        'Running shell command (timeout=%s): %s' % (timeout, ' '.join(command))
+    )
+
+    def raise_timeout(command: List[str], timeout: int) -> NoReturn:
+        msg = 'Command `%s` timed out after %s seconds' % (command, timeout)
+        logger.debug(msg)
+        raise TimeoutExpired(msg)
+
+    last_ret = 1
+    last_stderr = ''
+    for attempt in range(1, SHELL_MOUNT_RACE_MAX_RETRIES + 1):
+        logger.debug(
+            'Shell command attempt %s/%s',
+            attempt, SHELL_MOUNT_RACE_MAX_RETRIES)
+        try:
+            result = subprocess.run(
+                command,
+                timeout=timeout,
+                env=os.environ.copy(),
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+        except subprocess.TimeoutExpired:
+            raise_timeout(command, timeout)
+
+        last_ret = result.returncode
+        last_stderr = result.stderr or ''
+        if last_ret == 0:
+            if last_stderr:
+                print(last_stderr, file=sys.stderr, end='')
+            return 0
+
+        if (
+            attempt < SHELL_MOUNT_RACE_MAX_RETRIES
+            and is_transient_shell_mount_race_error(last_stderr)
+        ):
+            logger.warning(
+                'Transient container mount race starting shell '
+                '(attempt %s/%s); retrying in %ss',
+                attempt,
+                SHELL_MOUNT_RACE_MAX_RETRIES,
+                SHELL_MOUNT_RACE_RETRY_DELAY_SEC,
+            )
+            time.sleep(SHELL_MOUNT_RACE_RETRY_DELAY_SEC)
+            continue
+
+        if last_stderr:
+            print(last_stderr, file=sys.stderr, end='')
+        return last_ret
+
+    if last_stderr:
+        print(last_stderr, file=sys.stderr, end='')
+    return last_ret
