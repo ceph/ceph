@@ -171,7 +171,8 @@ class Pool(RESTController):
             cluster_interval = RbdMirroringService.get_schedule_interval('')
             if cluster_interval:
                 pool[0]['schedule_info'] = {
-                    'name': '',
+                    'name': pool_schedule_spec,
+                    'schedule_source': '',
                     'schedule_interval': cluster_interval,
                     'schedule_time': None,
                     'inherited': 'cluster'

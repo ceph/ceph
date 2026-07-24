@@ -27,6 +27,7 @@ export class RbdFormModel {
 
 export class ScheduleInfo {
   image: string;
+  schedule_source: string;
   schedule_time: string;
   schedule_interval: ScheduleInterval[];
 }
