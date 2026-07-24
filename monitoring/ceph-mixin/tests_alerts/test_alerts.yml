@@ -1521,39 +1521,22 @@ tests:
           description: Reads from an OSD have used a secondary PG to return data to the client, indicating a potential failing drive.
 
 # Pools
-   # trigger percent full prediction on pools 1 and 2 only
- - interval: 12h
+   # trigger percent full prediction on pool 1 only; pool 2 stays flat
+ - interval: 1m
    input_series:
-    - series: 'ceph_pool_percent_used{pool_id="1", instance="9090", cluster="mycluster"}'
-      values: '1 1 1 1 1'
-    - series: 'ceph_pool_percent_used{pool_id="1", instance="8090", cluster="mycluster"}'
-      values: '78 89 79 98 78'
-    - series: 'ceph_pool_percent_used{pool_id="2", instance="9090", cluster="mycluster"}'
-      values: '1 1 1 1 1'
-    - series: 'ceph_pool_percent_used{pool_id="2", instance="8090", cluster="mycluster"}'
-      values: '22 22 23 23 24'
-    - series: 'ceph_pool_metadata{pool_id="1" , instance="9090" ,name="rbd",type="replicated", cluster="mycluster"}'
-      values: '1 1 1 1 1'
-    - series: 'ceph_pool_metadata{pool_id="1", instance="8090",name="default.rgw.index",type="replicated", cluster="mycluster"}'
-      values: '1 1 1 1 1'
-    - series: 'ceph_pool_metadata{pool_id="2" , instance="9090" ,name="rbd",type="replicated", cluster="mycluster"}'
-      values: '1 1 1 1 1'
-    - series: 'ceph_pool_metadata{pool_id="2", instance="8090",name="default.rgw.index",type="replicated", cluster="mycluster"}'
-      values: '1 1 1 1 1'
-   promql_expr_test:
-     - expr: |
-         (predict_linear(ceph_pool_percent_used[2d], 3600 * 24 * 5) * on(cluster, pool_id, instance)
-              group_right() ceph_pool_metadata) >= 95
-       eval_time: 36h
-       exp_samples:
-         - labels: '{instance="8090",name="default.rgw.index",pool_id="1",type="replicated", cluster="mycluster"}'
-           value: 1.435E+02 # 142%
+    - series: 'ceph_pool_percent_used{pool_id="1", instance="mgr-a:9283", cluster="mycluster"}'
+      values: '50+0.02x3000'  # 50 -> 110 over 50h, slope 1.2%/h
+    - series: 'ceph_pool_percent_used{pool_id="2", instance="mgr-a:9283", cluster="mycluster"}'
+      values: '20+0x3000'
+    - series: 'ceph_pool_metadata{pool_id="1", instance="mgr-a:9283", name="default.rgw.index", type="replicated", cluster="mycluster"}'
+      values: '1+0x3000'
+    - series: 'ceph_pool_metadata{pool_id="2", instance="mgr-a:9283", name="rbd", type="replicated", cluster="mycluster"}'
+      values: '1+0x3000'
    alert_rule_test:
-    - eval_time: 48h
+    - eval_time: 49h  # for: 1h has elapsed since the alert first crossed threshold
       alertname: CephPoolGrowthWarning
       exp_alerts:
       - exp_labels:
-          instance: 8090
           name: default.rgw.index
           pool_id: 1
           severity: warning
@@ -1563,6 +1546,23 @@ tests:
         exp_annotations:
           summary: Pool growth rate may soon exceed capacity on cluster mycluster
           description: Pool 'default.rgw.index' will be full in less than 5 days assuming the average fill-up rate of the past 48 hours.
+   # regression: must NOT fire when the active mgr fails over mid-window.
+   # Per-instance series end / begin abruptly, but the pool-aggregated series
+   # is steady, so predict_linear sees zero slope.
+ - interval: 1m
+   input_series:
+    - series: 'ceph_pool_percent_used{pool_id="1", instance="mgr-a:9283", cluster="mycluster"}'
+      values: '50+0x1500'  # mgr-a active 0..25h
+    - series: 'ceph_pool_percent_used{pool_id="1", instance="mgr-b:9283", cluster="mycluster"}'
+      values: '_x1500 50+0x1500'  # mgr-b active 25h..50h
+    - series: 'ceph_pool_metadata{pool_id="1", instance="mgr-a:9283", name="rbd", type="replicated", cluster="mycluster"}'
+      values: '1+0x1500'
+    - series: 'ceph_pool_metadata{pool_id="1", instance="mgr-b:9283", name="rbd", type="replicated", cluster="mycluster"}'
+      values: '_x1500 1+0x1500'
+   alert_rule_test:
+    - eval_time: 49h
+      alertname: CephPoolGrowthWarning
+      exp_alerts: []
  - interval: 1m
    input_series:
     - series: 'ceph_health_detail{name="POOL_BACKFILLFULL", cluster="mycluster"}'
