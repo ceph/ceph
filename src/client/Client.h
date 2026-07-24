@@ -172,9 +172,22 @@ struct dir_result_t {
     std::string name;
     std::string alternate_name;
     InodeRef inode;
-    explicit dentry(int64_t o) : offset(o) {}
-    dentry(int64_t o, std::string n, std::string an, InodeRef in) :
-      offset(o), name(std::move(n)), alternate_name(std::move(an)), inode(std::move(in)) {}
+    DentryRef dn;
+    explicit dentry(int64_t o) : offset(o)
+    {}
+
+    dentry(
+        int64_t o,
+        std::string n,
+        std::string an,
+        InodeRef in,
+        DentryRef dn) :
+      offset(o),
+      name(std::move(n)),
+      alternate_name(std::move(an)),
+      inode(std::move(in)),
+      dn(std::move(dn))
+    {}
     void print(std::ostream& os) const;
   };
   struct dentry_off_lt {
