@@ -5,3 +5,4 @@ interface NodeModule {
 }
 
 declare module '@carbon/icons/*';
+declare module 'swagger-ui-dist/swagger-ui-bundle';

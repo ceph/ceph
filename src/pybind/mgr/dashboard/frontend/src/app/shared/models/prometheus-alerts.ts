@@ -5,6 +5,7 @@ export class PrometheusAlertLabels {
   instance: string;
   job: string;
   severity: string;
+  category?: string;
 }
 
 class Annotations {

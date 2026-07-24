@@ -70,3 +70,19 @@ export const AllStoragetypesQueries = {
 
   WRITELATENCY: 'avg_over_time(ceph_osd_commit_latency_ms[1m])'
 };
+
+export const NvmeofPromqls = {
+  NVMEOF_READ_BYTES: 'sum(rate(ceph_nvmeof_bdev_read_bytes_total[1m]))',
+  NVMEOF_WRITE_BYTES: 'sum(rate(ceph_nvmeof_bdev_written_bytes_total[1m]))',
+  NVMEOF_COMBINED_BYTES:
+    'sum(rate(ceph_nvmeof_bdev_read_bytes_total[1m])) + sum(rate(ceph_nvmeof_bdev_written_bytes_total[1m]))'
+};
+
+export const NvmeofResourcePromqls = {
+  NVMEOF_GATEWAY_GROUPS: 'count(count by (group) (ceph_nvmeof_gateway_info)) or vector(0)',
+  NVMEOF_SUBSYSTEMS: 'count(count by (nqn) (ceph_nvmeof_subsystem_metadata)) or vector(0)',
+  NVMEOF_NAMESPACES:
+    'count(count by (nqn, nsid) (ceph_nvmeof_subsystem_namespace_metadata)) or vector(0)',
+  NVMEOF_HOSTS: 'count(count by (hostname) (ceph_nvmeof_gateway_info)) or vector(0)',
+  NVMEOF_ACTIVE_CONNECTIONS: 'sum(ceph_nvmeof_host_connection_state) or vector(0)'
+};

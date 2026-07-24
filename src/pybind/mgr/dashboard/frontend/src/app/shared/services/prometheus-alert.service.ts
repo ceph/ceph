@@ -1,6 +1,8 @@
 import { Injectable } from '@angular/core';
 
 import _ from 'lodash';
+import { BehaviorSubject, Observable, of } from 'rxjs';
+import { catchError, switchMap } from 'rxjs/operators';
 
 import { PrometheusService } from '../api/prometheus.service';
 import {
@@ -11,7 +13,6 @@ import {
   AlertState
 } from '../models/prometheus-alerts';
 import { PrometheusAlertFormatter } from './prometheus-alert-formatter';
-import { BehaviorSubject } from 'rxjs';
 
 @Injectable({
   providedIn: 'root'
@@ -39,21 +40,27 @@ export class PrometheusAlertService {
     private prometheusService: PrometheusService
   ) {}
 
-  getGroupedAlerts(clusterFilteredAlerts = false) {
-    this.prometheusService.isAlertmanagerUsable().subscribe((usable) => {
-      if (!usable) {
-        return;
-      }
-
-      this.prometheusService.getGroupedAlerts(clusterFilteredAlerts).subscribe(
-        (alerts) => this.handleAlerts(alerts),
-        (resp) => {
-          if ([404, 504].includes(resp.status)) {
-            this.prometheusService.disableAlertmanagerConfig();
-          }
+  fetchGroupedAlerts(clusterFilteredAlerts = false): Observable<GroupAlertmanagerAlert[]> {
+    return this.prometheusService.isAlertmanagerUsable().pipe(
+      switchMap((usable) => {
+        if (!usable) {
+          return of([]);
         }
-      );
-    });
+
+        return this.prometheusService.getGroupedAlerts(clusterFilteredAlerts).pipe(
+          catchError((resp) => {
+            if ([404, 504].includes(resp.status)) {
+              this.prometheusService.disableAlertmanagerConfig();
+            }
+            return of([]);
+          })
+        );
+      })
+    );
+  }
+
+  getGroupedAlerts(clusterFilteredAlerts = false) {
+    this.fetchGroupedAlerts(clusterFilteredAlerts).subscribe((alerts) => this.handleAlerts(alerts));
   }
 
   getRules() {

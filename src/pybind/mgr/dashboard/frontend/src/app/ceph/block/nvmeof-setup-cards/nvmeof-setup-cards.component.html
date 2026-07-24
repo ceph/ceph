@@ -1,28 +1,17 @@
 <cd-productive-card>
   <ng-template #header>
-    <div
-      cdsStack="vertical"
-      [gap]="3"
-    >
-      <h2
-        class="cds--type-heading-03"
-        i18n
-      >
-        Recommended first-time setup
-      </h2>
-      <p
-        class="cds--type-body-01"
-        i18n
-      >
+    <div cdsStack="vertical"
+         [gap]="3">
+      <h2 class="cds--type-heading-03"
+          i18n>Recommended first-time setup</h2>
+      <p class="cds--type-body-01"
+         i18n>
         Start your NVMe over Fabrics configuration by creating the essential resources in sequence.
       </p>
     </div>
   </ng-template>
 
-  <div
-    cdsStack="horizontal"
-    [gap]="4"
-  >
+  <div cdsStack="horizontal" [gap]="4">
     <div>
       <cd-setup-step-card
         [stepNumber]="1"
@@ -30,45 +19,39 @@
         [description]="cards.gateway.description"
         [isConfigured]="hasGatewayGroups"
         [successMessage]="cards.gateway.successMessage"
-        [infoMessage]="cards.gateway.infoMessage"
-      >
+        [infoMessage]="cards.gateway.infoMessage">
       </cd-setup-step-card>
     </div>
 
-    <div>
+    <div >
       <cd-setup-step-card
         [stepNumber]="2"
         [title]="cards.subsystem.title"
         [description]="cards.subsystem.description"
         [isConfigured]="hasSubsystems"
         [successMessage]="cards.subsystem.successMessage"
-        [infoMessage]="cards.subsystem.infoMessage"
-      >
+        [infoMessage]="cards.subsystem.infoMessage">
       </cd-setup-step-card>
     </div>
 
-    <div>
+    <div >
       <cd-setup-step-card
         [stepNumber]="3"
         [title]="cards.namespace.title"
         [description]="cards.namespace.description"
         [isConfigured]="hasNamespaces"
         [successMessage]="cards.namespace.successMessage"
-        [infoMessage]="cards.namespace.infoMessage"
-      >
+        [infoMessage]="cards.namespace.infoMessage">
       </cd-setup-step-card>
     </div>
   </div>
 
   @if (isAllConfigured) {
-    <div class="nvmeof-setup-cards__completion">
-      <a
-        cdsLink
-        class="cds--link--disabled"
-        aria-disabled="true"
-        i18n
-        >Configuration complete. View status →</a
-      >
-    </div>
+  <div class="cds-mt-5">
+    <a cdsLink
+       href=""
+       (click)="onViewStatus($event)"
+       i18n>Configuration complete. View status →</a>
+  </div>
   }
 </cd-productive-card>
