@@ -16,6 +16,7 @@
 #include "common/Cond.h"
 #include "common/iso_8601.h"
 #include "common/Thread.h"
+#include "common/async/context_pool.h"
 #include "rgw_common.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "rgw_sal.h"
@@ -24,10 +25,18 @@
 #include <atomic>
 #include <tuple>
 
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/cancellation_signal.hpp>
+#include <boost/asio/spawn.hpp>
+#include <boost/asio/basic_waitable_timer.hpp>
+
+#include "common/ceph_time.h"
+
 #define HASH_PRIME 7877
 #define MAX_ID_LEN 255
 static constexpr std::string_view restore_oid_prefix = "restore";
 static constexpr std::string_view restore_index_lock_name = "restore_process";
+static constexpr std::string_view restore_lock_cookie = "restore_thrd: ";
 
 namespace rgw::restore {
 
@@ -72,35 +81,13 @@ class Restore : public DoutPrefixProvider {
   std::unique_ptr<rgw::sal::Restore> sal_restore;
   int max_objs{0};
   std::vector<std::string> obj_names;
-  std::atomic<bool> down_flag = { false };
   std::shared_ptr<RestoreWaiterRegistry> waiter_registry;
 
-  class RestoreWorker : public Thread
-  {
-    const DoutPrefixProvider *dpp;
-    CephContext *cct;
-    rgw::restore::Restore *restore;
-    ceph::mutex lock = ceph::make_mutex("RestoreWorker");
-    ceph::condition_variable cond;
-
-  public:
-
-    using lock_guard = std::lock_guard<std::mutex>;
-    using unique_lock = std::unique_lock<std::mutex>;
-
-    RestoreWorker(const DoutPrefixProvider* _dpp, CephContext *_cct, rgw::restore::Restore *_restore) : dpp(_dpp), cct(_cct), restore(_restore) {}
-    rgw::restore::Restore* get_restore() { return restore; }
-    std::string thr_name() {
-      return std::string{"restore_thrd: "}; // + std::to_string(ix);
-    }
-    void *entry() override;
-    void stop();
-
-    friend class Restore;
-    friend class RGWRados;
-  }; // RestoreWorker
-
-  std::unique_ptr<Restore::RestoreWorker> worker;
+  ceph::async::io_context_pool proc_pool;
+  boost::asio::basic_waitable_timer<ceph::coarse_mono_clock>
+      proc_timer{proc_pool.get_executor()};
+  boost::asio::cancellation_signal proc_signal;
+  bool proc_started = false;
 
 public:
   ~Restore() {
@@ -115,7 +102,6 @@ public:
   int initialize(CephContext *_cct, rgw::sal::Driver* _driver);
   void finalize();
 
-  bool going_down();
   void start_processor();
   void stop_processor();
   void wake_worker();
@@ -127,9 +113,11 @@ public:
 
   std::ostream& gen_prefix(std::ostream& out) const;
 
-  int process(RestoreWorker* worker, optional_yield y);
+  int process(boost::asio::yield_context yield);
+  void process_cycles(boost::asio::yield_context yield);
   int choose_oid(const rgw::restore::RestoreEntry& e);
-  int process(int index, int max_secs, optional_yield y);
+  int process(int index, int max_secs, boost::asio::yield_context yield);
+  int process_locked(int index, int max_secs, boost::asio::yield_context yield);
   int process_restore_entry(rgw::restore::RestoreEntry& entry, optional_yield y);
   time_t thread_stop_at();
 
@@ -149,7 +137,7 @@ public:
 
   /** Given <bucket, obj>, restore the object from the cloud-tier. In case the
    * object cannot be restored immediately, save that restore state(/entry) 
-   * to be procesed later by RestoreWorker thread. */
+   * to be procesed later by the restore processor. */
   int restore_obj_from_cloud(rgw::sal::Bucket* pbucket, rgw::sal::Object* pobj,
 		  	     rgw::sal::PlacementTier* tier,
 			     std::optional<uint64_t> days,

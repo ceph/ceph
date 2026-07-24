@@ -973,20 +973,8 @@ public:
 						       const std::string& cookie) override;
 };
 
-class RadosRestoreSerializer : public StoreRestoreSerializer {
-  librados::IoCtx& ioctx;
-  ::rados::cls::lock::Lock lock;
-
-public:
-  RadosRestoreSerializer(RadosStore* store, const std::string& oid, const std::string& lock_name, const std::string& cookie);
-
-  virtual int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override;
-  virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override;
-};
-
 class RadosRestore : public StoreRestore {
   RadosStore* store;
-  librados::IoCtx& ioctx;
   neorados::RADOS& r;
   neorados::IOContext neo_ioctx;  
   std::vector<std::unique_ptr<fifo::FIFO>> fifos;  
@@ -1012,7 +1000,8 @@ public:
 		   bool* truncated) override;
   virtual int trim_entries(const DoutPrefixProvider *dpp, optional_yield y,
 		 	  int index, const std::string_view& marker) override;
-  virtual std::unique_ptr<RestoreSerializer> get_serializer(
+  virtual std::unique_ptr<ceph::async::LockClient> get_lock_client(
+                                boost::asio::any_io_executor ex,
 	  				       const std::string& lock_name,
 					       const std::string& oid,
 					       const std::string& cookie) override;

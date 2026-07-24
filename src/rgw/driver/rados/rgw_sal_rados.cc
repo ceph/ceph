@@ -24,7 +24,10 @@
 #include <fmt/core.h>
 
 #include "common/async/blocked_completion.h"
+#include "common/async/lock_rados.h"
+#include "common/async/yield_context.h"
 #include "neorados/cls/fifo.h"
+#include <boost/asio/deferred.hpp>
 
 #include "common/ceph_time.h"
 #include "common/Clock.h"
@@ -3232,6 +3235,13 @@ int RadosObject::restore_obj_from_cloud(Bucket* bucket,
                                 bucket->get_info(), get_obj(),
                                 tier_config, days, in_progress, size, dpp, y);
 
+  if (ret == -ECANCELED && yield_cancelled(y)) {
+    // cancellation leaves HEAD as-is; the restore worker will retry later
+    ldpp_dout(dpp, 10) << "Restore of object(" << get_key() << ") from the cloud endpoint("
+                       << endpoint << ") was canceled" << dendl;
+    return ret;
+  }
+
   if (ret < 0) { //failed to restore
     ldpp_dout(dpp, 0) << "Restoring object(" << get_key() << ") from the cloud endpoint(" << endpoint << ") failed, ret=" << ret << dendl;
 
@@ -4958,39 +4968,24 @@ std::unique_ptr<LCSerializer> RadosLifecycle::get_serializer(const std::string& 
   return std::make_unique<LCRadosSerializer>(store, oid, lock_name, cookie);
 }
 
-RadosRestoreSerializer::RadosRestoreSerializer(RadosStore* store, const std::string& _oid, const std::string& lock_name, const std::string& cookie) :
-  StoreRestoreSerializer(_oid),
-  ioctx(*store->getRados()->get_restore_pool_ctx()),
-  lock(lock_name)
-{
-  lock.set_cookie(cookie);
-}
-
-int RadosRestoreSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y)
-{
-  lock.set_duration(dur);
-  return lock.lock_exclusive((librados::IoCtx*)(&ioctx), oid);
-}
-
-int RadosRestoreSerializer::unlock(const DoutPrefixProvider *dpp, optional_yield y)
-{
-  librados::ObjectWriteOperation op;
-  op.assert_exists();
-  lock.unlock(&op);
-  return rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
-}
-
 RadosRestore::RadosRestore(RadosStore* _st) : store(_st),
-       	ioctx(*store->getRados()->get_restore_pool_ctx()),
 	r(store->get_neorados()),
 	neo_ioctx(*store->getRados()->get_restore_pool_neo_ctx()) {}
 
-std::unique_ptr<RestoreSerializer> RadosRestore::get_serializer(
-							const std::string& lock_name,
-							const std::string& oid,
-							const std::string& cookie)
+std::unique_ptr<ceph::async::LockClient> RadosRestore::get_lock_client(
+    boost::asio::any_io_executor ex,
+    const std::string& lock_name,
+    const std::string& oid,
+    const std::string& cookie)
 {
-  return std::make_unique<RadosRestoreSerializer>(store, oid, lock_name, cookie);
+  rados::cls::lock::Lock lock(lock_name);
+  lock.set_cookie(cookie);
+  return std::make_unique<ceph::async::RadosLockClient>(
+      std::move(ex),
+      *store->getRados()->get_restore_pool_ctx(),
+      oid,
+      std::move(lock),
+      false);
 }
 
 int RadosRestore::initialize(const DoutPrefixProvider* dpp, optional_yield y,
@@ -5058,9 +5053,14 @@ int RadosRestore::push(const DoutPrefixProvider *dpp, optional_yield y,
 		int index, std::deque<ceph::buffer::list>&& items) {
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
 		 << "Pushing entries to FIFO:" << obj_names[index] << dendl;
-  maybe_warn_about_blocking(dpp);
   try {
-    fifos[index]->push(dpp, items, ceph::async::use_blocked);
+    auto op = fifos[index]->push(dpp, items, boost::asio::deferred);
+    if (y) {
+      op(y.get_yield_context());
+    } else {
+      maybe_warn_about_blocking(dpp);
+      op(ceph::async::use_blocked);
+    }
   } catch (const sys::system_error& e) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		 << ": unable to push to FIFO: " << obj_names[index]
@@ -5075,9 +5075,14 @@ int RadosRestore::push(const DoutPrefixProvider *dpp, optional_yield y,
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
 		 << "Pushing entry to FIFO:" << obj_names[index] << dendl;
 
-  maybe_warn_about_blocking(dpp);
   try {
-    fifos[index]->push(dpp, std::move(bl), ceph::async::use_blocked);
+    auto op = fifos[index]->push(dpp, std::move(bl), boost::asio::deferred);
+    if (y) {
+      op(y.get_yield_context());
+    } else {
+      maybe_warn_about_blocking(dpp);
+      op(ceph::async::use_blocked);
+    }
   } catch (const sys::system_error& e) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		 << ": unable to push to FIFO: " << obj_names[index]
@@ -5126,10 +5131,13 @@ int RadosRestore::list(const DoutPrefixProvider *dpp, optional_yield y,
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
 		 << "Listing entries from FIFO:" << obj_names[index] << dendl;
 
-  maybe_warn_about_blocking(dpp);
+  if (!y) {
+    maybe_warn_about_blocking(dpp);
+  }
   try {
-    auto [lentries, lmark] = fifos[index]->list(dpp, marker,
-			  	 restore_entries, ceph::async::use_blocked);
+    auto [lentries, lmark] = y
+        ? fifos[index]->list(dpp, marker, restore_entries, y.get_yield_context())
+        : fifos[index]->list(dpp, marker, restore_entries, ceph::async::use_blocked);
     entries.clear();
 
     for (const auto& entry : lentries) {
@@ -5187,9 +5195,13 @@ int RadosRestore::trim(const DoutPrefixProvider *dpp, optional_yield y,
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
 		 << "Trimming FIFO:" << obj_names[index] << " upto marker:" << marker << dendl;
 
-  maybe_warn_about_blocking(dpp);
   try {
-    fifos[index]->trim(dpp, std::string(marker), false, ceph::async::use_blocked);
+    if (y) {
+      fifos[index]->trim(dpp, std::string(marker), false, y.get_yield_context());
+    } else {
+      maybe_warn_about_blocking(dpp);
+      fifos[index]->trim(dpp, std::string(marker), false, ceph::async::use_blocked);
+    }
   } catch (const sys::system_error& e) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		 << ": unable to trim FIFO: " << obj_names[index]

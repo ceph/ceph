@@ -459,19 +459,6 @@ public:
   virtual void print(std::ostream& out) const override { out << oid; }
 };
 
-class StoreRestoreSerializer : public RestoreSerializer {
-
-protected:
-  std::string oid;
-
-public:
-  StoreRestoreSerializer() {}
-  StoreRestoreSerializer(std::string _oid) : oid(_oid) {}
-
-  virtual ~StoreRestoreSerializer() = default;
-  virtual void print(std::ostream& out) const override { out << oid; }
-};
-
 class StoreRestore : public Restore {
 
 public:
