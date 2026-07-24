@@ -479,6 +479,13 @@ done:
       if (!rgw::sal::Object::empty(s->object)) {
         s->trace->SetAttribute(tracing::rgw::OBJECT_NAME, s->object->get_name());
       }
+      if (s->objects.size() > 0) {
+        for (size_t i = 0; i < s->objects.size(); i++) {
+          if (!rgw::sal::Object::empty(s->objects[i].get())) {
+            s->trace->SetAttribute(tracing::rgw::OBJECT_NAME, s->objects[i]->get_name());
+          }
+        }
+      }
     }
     if (!is_health_request) {
       auto [lua_script, rc] = rgw::lua::read_script_or_bytecode(s, penv.lua.manager.get(),

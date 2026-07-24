@@ -8278,6 +8278,14 @@ void RGWDeleteMultiObj::execute(optional_yield y)
   if (multi_delete->is_quiet())
     quiet = true;
 
+  // populate objects from the bucket into the Lua req_state
+  s->objects = std::vector<std::unique_ptr<rgw::sal::Object>>();
+  for (auto object : multi_delete->objects) {
+    rgw_obj_key obj_key(object.get_key(), object.get_version_id());
+    std::unique_ptr<rgw::sal::Object> object_ptr = s->bucket->get_object(obj_key);
+    s->objects.push_back(std::move(object_ptr));
+  }
+
   if (s->bucket->get_info().mfa_enabled()) {
     bool has_versioned = false;
     for (auto object : multi_delete->objects) {

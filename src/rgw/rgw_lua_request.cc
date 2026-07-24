@@ -411,6 +411,63 @@ struct ObjectMetaTable : public EmptyMetaTable {
   }
 };
 
+struct ObjectsMetaTable : public EmptyMetaTable {
+  using Type = std::vector<std::unique_ptr<rgw::sal::Object>>;
+
+  static int IndexClosure(lua_State* L) {
+    const auto name = table_name_upvalue(L);
+    const auto objects = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
+    ceph_assert(objects);
+
+    const auto index = luaL_checkinteger(L, 2);
+
+    if (index >= (int)objects->size() || index < 0) {
+      lua_pushnil(L);
+    } else {
+      create_metatable<ObjectMetaTable>(L, name, std::to_string(index),
+          false, (*objects)[index]);
+    }
+    return ONE_RETURNVAL;
+  }
+
+    static int PairsClosure(lua_State* L) {
+    return Pairs<Type, stateless_iter>(L);
+  }
+
+  static int stateless_iter(lua_State* L) {
+    const auto name = table_name_upvalue(L);
+    auto objects = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
+    size_t next_it;
+    if (lua_isnil(L, -1)) {
+      next_it = 0;
+    } else {
+      const auto it = luaL_checkinteger(L, -1);
+      next_it = it+1;
+    }
+
+    if (next_it >= objects->size()) {
+      // index of the last element was provided
+      lua_pushnil(L);
+      lua_pushnil(L);
+      // return nil, nil
+    } else {
+      lua_pushinteger(L, next_it);
+      create_metatable<ObjectMetaTable>(L, name, std::to_string(next_it),
+          false, (*objects)[next_it]);
+    }
+
+    return TWO_RETURNVALS;
+  }
+
+  static int LenClosure(lua_State* L) {
+    const auto objects = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+
+    lua_pushinteger(L, objects->size());
+
+    return ONE_RETURNVAL;
+  }
+};
+
 struct GrantMetaTable : public EmptyMetaTable {
   static int IndexClosure(lua_State* L) {
     const auto name = table_name_upvalue(L);
@@ -763,6 +820,12 @@ struct RequestMetaTable : public EmptyMetaTable {
       create_metatable<BucketMetaTable>(L, name, index, false, s);
     } else if (strcasecmp(index, "Object") == 0) {
       create_metatable<ObjectMetaTable>(L, name, index, false, s->object);
+    } else if (strcasecmp(index, "Objects") == 0) {
+      if (s->op_type == RGW_OP_DELETE_MULTI_OBJ) {
+        create_metatable<ObjectsMetaTable>(L, name, index, false, &(s->objects));
+      } else {
+        lua_pushnil(L);
+      }
     } else if (strcasecmp(index, "CopyFrom") == 0) {
       if (s->op_type == RGW_OP_COPY_OBJ) {
         create_metatable<CopyFromMetaTable>(L, name, index, false, s);

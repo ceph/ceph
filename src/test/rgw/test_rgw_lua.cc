@@ -1,4 +1,7 @@
+#include <common/tracer.h>
+#include <global/global_context.h>
 #include <gtest/gtest.h>
+#include <rgw_multi_del.h>
 #include "rgw_common.h"
 #include "rgw_process_env.h"
 #include "rgw_sal_rados.h"
@@ -195,6 +198,261 @@ class TestLuaManager : public rgw::sal::StoreLuaManager {
     ~TestLuaManager() {
       rgw_perf_stop(g_ceph_context);
     }
+};
+
+class TestSalObject : public rgw::sal::Object {
+private:
+  RGWAccessControlPolicy acp;
+  std::string name;
+  rgw::sal::Attrs attrs;
+  RGWObjVersionTracker objv;
+  rgw_obj_key obj_key;
+  std::string instance;
+  tracing::Tracer tracer;
+  jspan_ptr span;
+  jspan_context ctx;
+  CephContext* cctx;
+public:
+  TestSalObject(const std::string& name)
+    : name(name), ctx(false, false), cctx(g_ceph_context) {
+    tracer.init(cctx, "rgw");
+    span = tracer.start_trace("lua-pre-request");
+    ctx = span->GetContext();
+  }
+  int delete_object(const DoutPrefixProvider* dpp,
+			      optional_yield y,
+			      uint32_t flags,
+			      std::list<rgw_obj_index_key>* remove_objs,
+			      RGWObjVersionTracker* objv) {
+    return 0;
+  }
+  int copy_object(const ACLOwner& owner, const rgw_user& remote_user,
+              req_info* info, const rgw_zone_id& source_zone,
+              rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
+              rgw::sal::Bucket* src_bucket,
+              const rgw_placement_rule& dest_placement,
+              ceph::real_time* src_mtime, ceph::real_time* mtime,
+              const ceph::real_time* mod_ptr, const ceph::real_time* unmod_ptr,
+              bool high_precision_time,
+              const char* if_match, const char* if_nomatch,
+              rgw::sal::AttrsMod attrs_mod, bool copy_if_newer, rgw::sal::Attrs& attrs,
+              RGWObjCategory category, uint64_t olh_epoch,
+        boost::optional<ceph::real_time> delete_at,
+              std::string* version_id, std::string* tag, std::string* etag,
+              void (*progress_cb)(off_t, void *), void* progress_data,
+              rgw::sal::DataProcessorFactory* dp_factory,
+              const DoutPrefixProvider* dpp, optional_yield y) {
+    return 0;
+  }
+  RGWAccessControlPolicy& get_acl(void) {
+    return acp;
+  }
+  int set_acl(const RGWAccessControlPolicy& acl) {
+    return 0;
+  }
+  void set_atomic(bool atomic) {}
+  bool is_atomic() {
+    return false;
+  }
+  void set_prefetch_data() {}
+  bool is_prefetch_data() { return false; }
+  void set_compressed() {}
+  bool is_compressed() { return false; }
+  bool is_delete_marker() { return false; }
+  bool is_sync_completed(const DoutPrefixProvider* dpp,
+    optional_yield y,
+    const ceph::real_time& obj_mtime) {
+    return false;
+  }
+  void invalidate() {}
+  bool empty() const {
+    return false;
+  }
+  const std::string &get_name() const {
+    return name;
+  }
+  int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) {
+    return 0;
+  }
+  int set_obj_attrs(const DoutPrefixProvider* dpp, rgw::sal::Attrs* setattrs, rgw::sal::Attrs* delattrs, optional_yield y, uint32_t flags) {
+    return 0;
+  }
+  int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp) {
+    return 0;
+  }
+  int modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp,
+                                 uint32_t flags = rgw::sal::FLAG_LOG_OP) {
+    return 0;
+  }
+  int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y) {
+    return 0;
+  }
+  bool is_expired() {
+    return false;
+  }
+  void gen_rand_obj_instance_name() {}
+  std::unique_ptr<rgw::sal::MPSerializer> get_serializer(const DoutPrefixProvider *dpp,
+							 const std::string& lock_name) {
+    return nullptr;
+  }
+  int transition(rgw::sal::Bucket* bucket,
+			   const rgw_placement_rule& placement_rule,
+			   const real_time& mtime,
+			   uint64_t olh_epoch,
+			   const DoutPrefixProvider* dpp,
+			   optional_yield y,
+                           uint32_t flags) {
+    return 0;
+  }
+  int transition_to_cloud(rgw::sal::Bucket* bucket,
+    rgw::sal::PlacementTier* tier,
+    rgw_bucket_dir_entry& o,
+    std::set<std::string>& cloud_targets,
+    CephContext* cct,
+    bool update_object,
+    const DoutPrefixProvider* dpp,
+    optional_yield y) {
+    return 0;
+  }
+  int restore_obj_from_cloud(rgw::sal::Bucket* bucket,
+    rgw::sal::PlacementTier* tier,
+    CephContext* cct,
+    std::optional<uint64_t> days,
+    bool& in_progress,
+    uint64_t& size,
+    const DoutPrefixProvider* dpp,
+    optional_yield y) {
+    return 0;
+  }
+  bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) {
+    return false;
+  }
+  int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f) {
+    return 0;
+  }
+  int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
+    int max_parts, int marker, int* next_marker,
+    bool* truncated, list_parts_each_t&& each_func,
+    optional_yield y) {
+    return 0;
+  }
+  rgw::sal::Attrs& get_attrs(void) {
+    return attrs;
+  }
+  const rgw::sal::Attrs& get_attrs(void) const {
+    return attrs;
+  }
+  int set_attrs(rgw::sal::Attrs a) {
+    return 0;
+  }
+  bool has_attrs(void) {
+    return false;
+  }
+  bool get_attr(const std::string& name, bufferlist &dest) {
+    return false;
+  }
+  ceph::real_time get_mtime(void) const {
+    return ceph::real_time();
+  }
+  void set_mtime(ceph::real_time&) {}
+  uint64_t get_size(void) const {
+    return 0;
+  }
+  uint64_t get_accounted_size(void) const {
+    return 0;
+  }
+  void set_accounted_size(uint64_t) {}
+  uint64_t get_epoch(void) const {
+    return 0;
+  }
+  void set_epoch(uint64_t) {}
+  uint32_t get_short_zone_id(void) const {
+    return 0;
+  }
+  void set_short_zone_id(uint32_t) {}
+  rgw::sal::Bucket* get_bucket(void) const {
+    return nullptr;
+  }
+  void set_bucket(rgw::sal::Bucket* b) {}
+  std::string get_hash_source(void) {
+    return "";
+  }
+  void set_hash_source(std::string s) {}
+  std::string get_oid(void) const {
+    return "";
+  }
+  bool get_in_extra_data(void) {
+    return false;
+  }
+  bool exists(void) {
+    return false;
+  }
+  void set_in_extra_data(bool i) {}
+  void set_obj_size(uint64_t s) {}
+  void set_name(const std::string& n) {
+    name = n;
+  }
+  void set_key(const rgw_obj_key& k) {}
+  rgw_obj get_obj(void) const {
+    return rgw_obj();
+  }
+  int swift_versioning_restore(const ACLOwner& owner,
+    const rgw_user& remote_user,
+    bool& restored,
+    const DoutPrefixProvider* dpp,
+    optional_yield y) {
+    return 0;
+  }
+  int swift_versioning_copy(const ACLOwner& owner,
+    const rgw_user& remote_user,
+    const DoutPrefixProvider* dpp,
+    optional_yield y) {
+    return 0;
+  }
+  std::unique_ptr<ReadOp> get_read_op() {
+    return nullptr;
+  }
+  std::unique_ptr<DeleteOp> get_delete_op() {
+    return nullptr;
+  }
+  int get_torrent_info(const DoutPrefixProvider* dpp,
+    optional_yield y, bufferlist& bl) {
+    return 0;
+  }
+  RGWObjVersionTracker& get_version_tracker() {
+    return objv;
+  }
+  int omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::string& oid,
+    const std::set<std::string>& keys,
+    rgw::sal::Attrs* vals) {
+    return 0;
+  }
+  int omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& val,
+				    bool must_exist, optional_yield y) {
+    return 0;
+  }
+  int chown(rgw::sal::User& new_user, const DoutPrefixProvider* dpp, optional_yield y) {
+    return 0;
+  }
+  std::unique_ptr<Object> clone() {
+    return nullptr;
+  }
+  jspan_context& get_trace() {
+    return ctx;
+  }
+  void set_trace(jspan_context&& _trace_ctx) {}
+  rgw_obj_key& get_key() {
+    return obj_key;
+  }
+  void set_instance(const std::string &i) {}
+  const std::string &get_instance() const {
+    return instance;
+  }
+  bool have_instance(void) {
+    return false;
+  }
+  void clear_instance() {}
+  void print(std::ostream& out) const {}
 };
 
 void set_script(rgw::sal::LuaManager* manager, const std::string& script) {
@@ -866,6 +1124,30 @@ TEST(TestRGWLua, OpsLog)
   rc = lua::request::execute(nullptr, &olog, &s, nullptr, script);
   EXPECT_EQ(rc, 0);
   EXPECT_TRUE(olog.logged);
+}
+
+TEST(TestRGWLua, MultiDelete)
+{
+  const std::string script = R"(
+    local n = #Request.Objects
+    assert(n == 7)
+    for i = 0, n-1 do
+      assert(Request.Objects[i].Name == tostring(i+1))
+    end
+  )";
+
+  DEFINE_REQ_STATE;
+  s.objects = std::vector<std::unique_ptr<rgw::sal::Object>>();
+  s.objects.push_back(std::make_unique<TestSalObject>("1"));
+  s.objects.push_back(std::make_unique<TestSalObject>("2"));
+  s.objects.push_back(std::make_unique<TestSalObject>("3"));
+  s.objects.push_back(std::make_unique<TestSalObject>("4"));
+  s.objects.push_back(std::make_unique<TestSalObject>("5"));
+  s.objects.push_back(std::make_unique<TestSalObject>("6"));
+  s.objects.push_back(std::make_unique<TestSalObject>("7"));
+  s.op_type = RGW_OP_DELETE_MULTI_OBJ;
+  const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
 }
 
 class TestBackground : public rgw::lua::Background {
