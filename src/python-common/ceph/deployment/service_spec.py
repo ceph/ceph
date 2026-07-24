@@ -1413,6 +1413,10 @@ class NFSServiceSpec(ServiceSpec):
                  custom_configs: Optional[List[CustomConfig]] = None,
                  cluster_qos_config: Optional[Dict[str, Union[str, bool, int]]] = None,
                  cluster_qos_port: Optional[int] = None,
+                 kmip_cert: Optional[str] = None,
+                 kmip_key: Optional[str] = None,
+                 kmip_ca_cert: Optional[str] = None,
+                 kmip_host_list: Optional[List[Union[str, Dict[str, Union[str, int]]]]] = None,
                  ssl: bool = False,
                  ssl_cert: Optional[str] = None,
                  ssl_key: Optional[str] = None,
@@ -1425,6 +1429,7 @@ class NFSServiceSpec(ServiceSpec):
                  tls_ciphers: Optional[str] = None,
                  colocation_ports: Optional[List[Dict[str, int]]] = None,
                  enable_nfsv3: bool = False,
+                 skip_nfs_notify_on_kmip_update: bool = False,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -1460,6 +1465,21 @@ class NFSServiceSpec(ServiceSpec):
         # Format: [{'data_port': 1234, 'monitoring_port': 5678}, ...]
         self.colocation_ports = colocation_ports
 
+        self.kmip_cert = kmip_cert
+        self.kmip_key = kmip_key
+        self.kmip_ca_cert = kmip_ca_cert
+        self.kmip_host_list: list[Dict[str, Union[str, int]]] = []
+        if kmip_host_list:
+            for host_obj in kmip_host_list:
+                if isinstance(host_obj, str):
+                    self.kmip_host_list.append({'addr': host_obj})
+                elif isinstance(host_obj, dict):
+                    self.kmip_host_list.append(host_obj)
+                else:
+                    raise SpecValidationError(
+                        f'kmip_host_list contains an invalid element: {host_obj}.'
+                    )
+        self.skip_nfs_notify_on_kmip_update = skip_nfs_notify_on_kmip_update
         # TLS fields
         self.tls_ciphers = tls_ciphers
         self.tls_ktls = tls_ktls
@@ -1544,6 +1564,27 @@ class NFSServiceSpec(ServiceSpec):
         if self.virtual_ip and (self.ip_addrs or self.networks):
             raise SpecValidationError("Invalid NFS spec: Cannot set virtual_ip and "
                                       f"{'ip_addrs' if self.ip_addrs else 'networks'} fields")
+        kmip_field_names = [
+            'kmip_cert',
+            'kmip_key',
+            'kmip_ca_cert',
+            'kmip_host_list'
+        ]
+        kmip_fields = [getattr(self, kmip_field) for kmip_field in kmip_field_names]
+        if any(kmip_fields) and not all(kmip_fields):
+            raise SpecValidationError(
+                f'Either none or all of {kmip_field_names} attrbutes must be set'
+            )
+        for kmip_host in self.kmip_host_list:
+            if 'addr' not in kmip_host:
+                raise SpecValidationError(
+                    "Each dictionary in kmip_host_list must include the 'addr' key."
+                    f"{kmip_host} is missing 'addr'."
+                )
+            if 'port' in kmip_host and not isinstance(kmip_host['port'], int):
+                raise SpecValidationError(
+                    f'Provided port is not valid for {kmip_host} in kmip_host_list.'
+                )
 
         # Validate colocation_ports
         self.validate_colocation_ports()
