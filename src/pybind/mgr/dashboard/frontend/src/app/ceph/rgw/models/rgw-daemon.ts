@@ -10,3 +10,7 @@ export class RgwDaemon {
   default: boolean;
   port: number;
 }
+
+export interface RgwDaemonDetailsResponse {
+  rgw_metadata?: Record<string, string>;
+}
