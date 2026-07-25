@@ -562,6 +562,14 @@ def audit_tracker_and_relabel(session, redmine_issue, default_label, dry_run=Fal
         if resp.status_code not in (200, 404):
             log.error(f"Added new labels to #{num} but failed to remove '{label}': {resp.status_code} {resp.text}")
             print(f"  PARTIAL #{num}: new labels added, old label '{label}' still present -- see error above")
+        elif resp.status_code == 404:
+            # Old label was already gone before we tried to remove it (most
+            # likely a retry of a previous partial run). Not a failure --
+            # updated already counts this PR -- but worth a distinct log line
+            # so "label removed just now" and "label was already gone" don't
+            # both read as identical "OK" output in a real run.
+            log.info(f"#{num}: old label '{label}' was already gone (404 on delete)")
+            print(f"  OK #{num} updated (old label '{label}' was already gone)")
         else:
             print(f"  OK #{num} updated")
 
