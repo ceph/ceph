@@ -40,7 +40,7 @@ describe('NvmeofSetupCardsComponent', () => {
     expect(link).toBeTruthy();
   });
 
-  it('should not emit viewStatus from the disabled completion link', () => {
+  it('should emit viewStatus when the completion link is clicked', () => {
     component.isAllConfigured = true;
     fixture.detectChanges();
 
@@ -48,7 +48,7 @@ describe('NvmeofSetupCardsComponent', () => {
     const link = fixture.nativeElement.querySelector('.nvmeof-setup-cards__completion a');
     link.click();
 
-    expect(emitSpy).not.toHaveBeenCalled();
+    expect(emitSpy).toHaveBeenCalledTimes(1);
   });
 
   describe('setup state', () => {

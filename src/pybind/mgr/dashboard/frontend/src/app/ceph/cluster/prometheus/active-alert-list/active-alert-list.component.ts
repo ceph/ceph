@@ -13,6 +13,7 @@ import { AlertState } from '~/app/shared/models/prometheus-alerts';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+import { isNvmeofAlert } from '~/app/shared/helpers/nvmeof-alert.helper';
 
 const BASE_URL = 'silences'; // as only silence actions can be used
 
@@ -20,6 +21,11 @@ const SeverityMap = {
   critical: $localize`Critical`,
   warning: $localize`Warning`,
   all: $localize`All`
+};
+
+const SourceMap = {
+  all: $localize`All`,
+  nvmeof: $localize`NVMe-oF`
 };
 
 @Component({
@@ -64,6 +70,16 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
         else if (value === SeverityMap['warning']) return row.labels?.severity === 'warning';
         if (value === SeverityMap['all']) return true;
         return false;
+      }
+    },
+    {
+      name: $localize`Source`,
+      prop: 'labels.job',
+      filterOptions: [SourceMap['all'], SourceMap['nvmeof']],
+      filterInitValue: SourceMap['all'],
+      filterPredicate: (row, value) => {
+        if (value === SourceMap['nvmeof']) return isNvmeofAlert(row);
+        return true;
       }
     }
   ];
@@ -160,8 +176,9 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
     ];
     this.prometheusAlertService.getGroupedAlerts(true);
     this.route.queryParams.subscribe((params) => {
-      const severity = params['severity'];
-      this.filters[1].filterInitValue = SeverityMap[severity];
+      const severity = params['severity'] as keyof typeof SeverityMap;
+      this.filters[1].filterInitValue = SeverityMap[severity] || SeverityMap['all'];
+      this.filters[2].filterInitValue = params['nvmeof'] === 'true' ? SourceMap['nvmeof'] : SourceMap['all'];
     });
   }
 
