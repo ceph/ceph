@@ -1,32 +1,70 @@
-<ng-container
-  *ngIf="{
+@if (
+  {
     ftMap: featureToggleMap$ | async,
     daemons: rgwDaemonService.daemons$ | async,
     selectedDaemon: rgwDaemonService.selectedDaemon$ | async
-  } as data"
->
-  <ng-container
-    *ngIf="
-      data.ftMap && data.ftMap.rgw && permissions.rgw.read && isRgwRoute && data.daemons.length > 1
-    "
-  >
-    <div class="cd-context-bar pt-3 pb-3">
+  };
+  as data
+) {
+  @if (
+    data.ftMap && data.ftMap.rgw && permissions.rgw.read && isRgwRoute && data.daemons.length > 1
+  ) {
+    <div
+      class="cd-context-bar cds-pt-5 cds-pb-5"
+      [class.cds-pl-5]="isRgwResourcePage"
+    >
       <span
-        class="me-1"
+        class="cds-mr-2"
         i18n
         >Object gateway:</span
       >
-      <div
-        ngbDropdown
-        placement="bottom-left"
-        class="d-inline-block ms-2"
-      >
+
+      @if (!isRgwResourcePage) {
+        <div
+          ngbDropdown
+          placement="bottom-left"
+          class="cds-ml-3"
+          style="display: inline-block"
+        >
+          <button
+            ngbDropdownToggle
+            class="btn btn-outline-info ctx-bar-selected-rgw-daemon"
+            i18n-title
+            title="Object gateway"
+            type="button"
+          >
+            {{ data.selectedDaemon.id }}
+            <cds-tag
+              type="blue"
+              size="sm"
+              >{{ data.selectedDaemon.zonegroup_name }}</cds-tag
+            >
+          </button>
+          <div ngbDropdownMenu>
+            @for (daemon of data.daemons; track daemon.id) {
+              <button
+                ngbDropdownItem
+                class="ctx-bar-available-rgw-daemon"
+                (click)="onDaemonSelection(daemon)"
+                type="button"
+              >
+                {{ daemon.id }}
+                <cds-tag
+                  type="blue"
+                  size="sm"
+                  >{{ daemon.zonegroup_name }}</cds-tag
+                >
+              </button>
+            }
+          </div>
+        </div>
+      } @else {
         <button
-          ngbDropdownToggle
           class="btn btn-outline-info ctx-bar-selected-rgw-daemon"
           i18n-title
           title="Object gateway"
           type="button"
+          disabled
         >
           {{ data.selectedDaemon.id }}
           <cds-tag
@@ -35,24 +73,7 @@
             >{{ data.selectedDaemon.zonegroup_name }}</cds-tag
           >
         </button>
-        <div ngbDropdownMenu>
-          <ng-container *ngFor="let daemon of data.daemons">
-            <button
-              ngbDropdownItem
-              class="ctx-bar-available-rgw-daemon"
-              (click)="onDaemonSelection(daemon)"
-              type="button"
-            >
-              {{ daemon.id }}
-              <cds-tag
-                type="blue"
-                size="sm"
-                >{{ daemon.zonegroup_name }}</cds-tag
-              >
-            </button>
-          </ng-container>
-        </div>
-      </div>
+      }
     </div>
-  </ng-container>
-</ng-container>
+  }
+}
