@@ -453,6 +453,26 @@ def test_audit_delete_404_is_treated_as_already_gone(ptl_tool, monkeypatch):
     session.post.assert_called_once()
 
 
+def test_audit_delete_404_logs_distinctly_from_a_real_removal(ptl_tool, monkeypatch, caplog):
+    """A 404-on-delete (label already gone) must be distinguishable in the
+    log from a genuine 200 removal -- both count toward `updated` (the PR
+    still got its new labels), but silently treating them identically would
+    hide a first-run-vs-retry distinction from anyone reading real output."""
+    issue = _fake_issue(ptl_tool)
+    session = mock.Mock()
+    _patch_get(ptl_tool, monkeypatch, [(111, "some PR")])
+    session.post.return_value = FakeResponse(200)
+    session.delete.return_value = FakeResponse(404)
+    with mock.patch("builtins.input", side_effect=["", "", "y"]):
+        with caplog.at_level(logging.INFO, logger=ptl_tool.log.name):
+            result = ptl_tool.audit_tracker_and_relabel(session, issue, "wip-yuri-testing")
+    assert result == "completed"
+    assert any(
+        "#111" in r.message and "already gone" in r.message and r.levelname == "INFO"
+        for r in caplog.records
+    )
+
+
 def test_audit_post_failure_logs_status_and_body(ptl_tool, monkeypatch, caplog):
     """A failed add-labels call's status code and response body must both
     land in the log, matching the existing post_consolidated_review
