@@ -1098,7 +1098,7 @@ int File::close()
   }
 
   if (need_fsync) {
-    int ret = ::fsync(fd);
+    int ret = ::fdatasync(fd);
     if (ret < 0) {
       return ret;
     }
@@ -6697,6 +6697,7 @@ int NSFSMultipartWriter::complete(
     return ret;
   }
 
+  part_file->set_sync_on_close(false);
   ret = part_file->close();
   if (ret < 0) {
     ldpp_dout(rctx.dpp, 20) << "ERROR: failed closing file" << dendl;

@@ -256,6 +256,7 @@ public:
   virtual ~FSEnt() { }
 
   int get_fd() { return fd; };
+  void set_sync_on_close(bool sync) { need_fsync = sync; }
   std::string& get_name() { return fname; }
   void set_name(const std::string& name) { fname = name; }
   Directory* get_parent() { return parent; }
