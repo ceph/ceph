@@ -586,6 +586,9 @@ int KernelDevice::_aio_start()
       if (r == -EAGAIN) {
 	derr << __func__ << " io_setup(2) failed with EAGAIN; "
 	     << "try increasing /proc/sys/fs/aio-max-nr" << dendl;
+      } else if (r == -EPERM) {
+	derr << __func__ << " io_getevents(2) is not permitted; "
+	     << "AIO is unavailable (restricted by AppArmor or kernel security policy)" << dendl;
       } else {
 	derr << __func__ << " io_setup(2) failed: " << cpp_strerror(r) << dendl;
       }
