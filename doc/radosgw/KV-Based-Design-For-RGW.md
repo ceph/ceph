@@ -295,9 +295,16 @@ Transaction scope is always within a single cluster — cross-cluster atomicity 
 
 ## KV Schema
 
-### Key Format
+&lt;namespace&gt; &lt;shard_count&gt; &lt;shard_id&gt; &lt;bucket_id&gt;**&lt;category&gt;**&lt;object_name&gt;
 
-Four categories separate current objects, old versions, child entries, and multipart uploads. Category tags are 1-byte ASCII values (`O`, `V`, `M`, `C`). In prose, these are written as `:O:`, `:V:`, `:M:`, `:C:` for visual clarity.
+Four **categories** separate current objects:
+- Current S3 **O**bjects
+- S3 old **V**ersions
+- RGW internal **C**hild entries
+- **M**ultipart uploads.
+
+Category tags are 1-byte ASCII values (`O`, `V`, `C`, `M`).\
+For visual clarity they are written as `:O:`, `:V:`, `:C:`, `:M:`
 
 **Current object (`:O:`):**
 
@@ -328,16 +335,27 @@ Child type values: `A` (annotation), `T` (tags), `E` (extended value).
 
 **Field definitions:**
 
-- **namespace (1 B, ASCII)** — KV namespace: `S` (S3 object entries), `B` (bucket metadata), `Z` (zone/realm metadata), `G` (GC entries for background data cleanup — uses a different header layout, see below), `P` (pending multi-phase operations — crash recovery coordination).
-- **shard_count (2 B, uint16 big-endian)** — number of shards for this bucket (starts at 1, max 65535). `shard_id = hash(bucket_id + object_name) % shard_count`.
-- **shard_id (2 B, uint16 big-endian)** — zero-based shard index. Invariant: `shard_id < shard_count`. When `shard_count = 1`, always `0`.
+- **namespace (1 B, ASCII)** — KV namespace:
+- `S` - S3 object entries
+- `B` - bucket metadata (keyed by tenant_id + bucket_name)
+- `T` - tenant metadata
+- `Z` - zone/realm metadata
+- `G` - GC entries for background data cleanup
+- `P` - pending multi-phase operations — crash recovery coordination
+
+- **shard_count (2 B, uint16 big-endian)** — number of shards for this bucket.\
+`shard_id = hash(bucket_id + object_name) % shard_count`.
+- **shard_id (2 B, uint16 big-endian)** — zero-based shard index.\
+Invariant: `shard_id < shard_count`. When `shard_count = 1`, always `0`.
 - **bucket_id (8 B)** — binary bucket identifier.
 - **cat (1 B, ASCII)** — category tag: `O`, `V`, `M`, or `C`.
 - **object_name (1–1024 B)** — the S3 object key, stored as raw bytes. Preserves natural lexicographic ordering.
 - **version_id (4 B, uint32 big-endian)** — descending; first value is `max_uint32`, then decreasing. Latest version sorts first.
 - **ref_tag (12 B)** — compact unique identifier from the parent `:O:` entry (see [ref_tag](#ref_tag)).
 - **child_type (1 B, ASCII)** — `A`, `T`, or `E`.
-- **part_number (2 B, uint16 big-endian)** — 0 for upload metadata, 1–10000 for individual parts.
+- **part_number (2 B, uint16 big-endian)** —
+    - 0 for upload metadata
+    - 1–10000 for individual parts
 - **child_id (0–512 B)** — annotation name (type `A`); empty for `T`, `E`.
 
 See [S3 Operations — GC Namespace](S3-Operations-Over-KV.md#gc-namespace-and-background-cleanup).
@@ -346,15 +364,38 @@ For detailed binary layout, construction, deconstruction, and pseudo-code, see [
 
 **Listing behavior:**
 
-ListObjectsV2 scans `:O:` only — one entry per object key, no children, no old versions.
+ListObjectsV2 scans
+- `:O:` only — one entry per object key
+- no children
+- no old versions
 
-ListObjectVersions scans `:O:` and `:V:`, merge-sorts by object name. All versions of the same object appear together, latest first.
+ListObjectVersions scans
+- `:O:` and `:V:`
+- merge-sorts by object name
+- All versions of the same object appear together, latest first.
 
-ListMultipartUploads scans `:M:` only — one entry per active upload, sorted by object key then upload initiation time. Supports prefix/delimiter filtering directly on the object key.
+ListMultipartUploads scans
+- `:M:` only — one entry per active upload
+- sorted by object key, then by upload_id (ref_tag)
+- Supports prefix/delimiter filtering directly on the object key.
 
 Child entries under `:C:` are never encountered during bucket listing.
 
-Bucket/Realm/Zone metadata (name-to-id mapping, ACLs, policies, quota, versioning, lifecycle) is stored under separate namespaces in the same KV store.
+Bucket/Tenant/Realm/Zone metadata (name-to-id mappings, ACLs, policies, quota, versioning, lifecycle) is stored under separate namespaces (`B`, `T`, `Z`) in the same KV store.
+
+### Multi-Tenancy
+
+Every bucket belongs to exactly one tenant. Bucket names are unique per tenant, not globally — two tenants can each have a bucket called "test" with different bucket_ids.
+
+**B namespace key:** `B <tenant_id 4B> <bucket_name 1–63B>`
+
+ListBuckets per tenant is a prefix scan on `B <tenant_id>`.
+
+Cross-tenant access (tenant B reading tenant A's bucket) requires the client to explicitly name the owning tenant. The bucket remains owned by tenant A — sharing is an access-control decision, not a storage-layout decision.
+
+**T namespace** stores tenant-level metadata (quota, rate limits, tenant-wide policies).
+
+tenant_id does not appear in `S`/`G`/`P` namespace keys. Tenant identity is resolved once at request entry and does not affect the object key scheme or shard hash.
 
 ### Value Structure
 
@@ -378,16 +419,20 @@ It also serves as the RADOS object name for tail objects — the fixed short nam
 
 In the KV model, this role generalizes to compact identity for all child KV entries under the `:C:` namespace (annotations, tags, extended value entries) — logically equivalent, applied to KV children instead of RADOS children.
 
-**Generation — 12-byte binary:** `<rgw_id (4B, uint32 BE)><seq_id (8B, uint64 BE)>`
+**ref_tag generation:** `<rgw_id (4B, uint32 BE)><seq_id (8B, uint64 BE)>`
 
-- **rgw_id (32 bits)** — allocated from a single global `atomic_inc()` counter in the KV store at RGW boot. Each restart gets a new ID.
-- **seq_id (64 bits)** — in-memory counter starting at 0 on each boot. Incremented per write.
+- **rgw_id (32 bits)** — 
+    - Allocated from a single global `atomic_inc()` counter in the KV store at RGW boot.
+    - Each restart gets a new ID.
+- **seq_id (64 bits)** —
+    - In-memory counter starting at 0 on each boot.
+    - Incremented per write.
 
 Globally unique by construction — each `(rgw_id, seq_id)` pair appears exactly once. No per-shard state, no coordination between RGW instances, no cryptographic hash, no state to migrate during resharding. Compact enough to keep child `:C:` keys short.
 
 **User-visible attributes** (in the KV entry when they fit):
 
-- content_disposition, cache_control.
+- Content_disposition, cache_control.
 - User metadata (x-amz-meta-*) — up to 2KB per S3 limits.
 - Object ACL overrides, checksum values, object lock.
 
@@ -431,7 +476,7 @@ POSIX systems, for example, cannot prepend headers to existing files and would u
 
 ### HEAD
 
-1. Translate bucket name to bucket_id (local cache).
+1. Resolve bucket: (tenant_id, bucket_name) → bucket_id (local cache).
 2. Read the KV entry.
 3. If not found → return 404. If fenced delete marker → return 404 with `x-amz-delete-marker: true`.
 4. Return all S3-visible attributes from the value.
@@ -441,7 +486,7 @@ The assumption here is that KV-Get is faster than Rados Read with its heavy stac
 
 ### GET (Full Object)
 
-1. Translate bucket name to bucket_id (local cache).
+1. Resolve bucket: (tenant_id, bucket_name) → bucket_id (local cache).
 2. Read the KV entry.
 3. If not found → return 404. If fenced delete marker → return 404.
 4. Read data chunks from the storage tier using the chunk pointers.
@@ -462,7 +507,7 @@ This is mitigated by the KV store's distributed cache serving hot entries from m
 
 ### PUT
 
-1. Write data to the storage tier. The first chunk includes the data header.
+1. Write data to the storage tier.
 2. Write the KV entry:
    - New object: write the new value.
    - Overwriting a live object: move old entry to the `G` (GC) namespace with a stripped value, then write the new value. See [S3 Operations — GC Namespace](S3-Operations-Over-KV.md#gc-namespace-and-background-cleanup).
@@ -473,7 +518,7 @@ This is cheaper than the current model since no bucket-index update is needed.
 
 1. Read the KV entry.
 2. If not found → return success (idempotent).
-3. Move the entry to the `G` (GC) namespace with a stripped value containing only cleanup information. The key is removed from `S`. Update stats counters.
+3. Move the entry to the `G` (GC) namespace with a stripped value containing only cleanup information. The key is removed from `S`
 4. Return success.
 
 Data cleanup happens asynchronously — background workers scan `G` and free storage-tier data. See [S3 Operations — GC Namespace](S3-Operations-Over-KV.md#gc-namespace-and-background-cleanup) for the full protocol.
@@ -482,7 +527,7 @@ This is cheaper than the current model since no bucket-index update is needed.
 
 ### LIST (ListObjectsV2)
 
-1. Translate bucket name to bucket_id (local cache).
+1. Resolve bucket: (tenant_id, bucket_name) → bucket_id (local cache).
 2. Range scan on `:O:` entries for this bucket — `<namespace><shard_count><shard_id><bucket_id>O`.
 3. Filter out fenced entries (delete markers in versioned buckets). Non-versioned deleted objects are simply absent.
 4. Return up to 1000 keys with listing attributes from the KV values.
@@ -497,7 +542,8 @@ Should be cheaper than the current model with its excessive sharding and OMAP ov
 
 ### What RGW Caches Locally
 Locally cached metadata — created and removed, but never modified in place:
-- **Bucket name → bucket_id mapping** — small, stable, fully cached.
+- **tenant_name → tenant_id mapping** — small, stable, fully cached.
+- **(tenant_id, bucket_name) → bucket_id mapping** — small, stable, fully cached.
 - **Bucket metadata** — ACLs, policies, quota, versioning, lifecycle rules.
 - **Realm/Zone metadata**
 - **Attribute mapping tables** — binary mappings for repeated strings. Small, append-only, fully cached.
