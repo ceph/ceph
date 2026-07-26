@@ -406,3 +406,259 @@ def test_logged_input_without_filehandler_preserves_behavior(ptl_tool, monkeypat
     """Without a FileHandler, logged_input() should behave like plain input()."""
     monkeypatch.setattr(builtins, "input", lambda prompt='': 'plain-answer')
     assert ptl_tool.logged_input("plain> ") == "plain-answer"
+
+
+# ---------------------------------------------------------------------------
+# check_pr_approvals(): pre-flight approval gate for --pr-label merges,
+# native equivalent of ptl-check-approvals.sh. Uses one batched GraphQL call
+# (reviewDecision is only exposed there, same field `gh pr list
+# --json reviewDecision` reads) instead of N REST calls.
+# ---------------------------------------------------------------------------
+
+class FakeJSONResponse(FakeResponse):
+    def __init__(self, status_code, json_data=None, text=""):
+        super().__init__(status_code, text)
+        self._json_data = json_data or {}
+
+    def json(self):
+        return self._json_data
+
+
+def _graphql_response(decisions):
+    """decisions: dict of pr_number -> (reviewDecision, title, author_login)."""
+    repo = {}
+    for i, pr in enumerate(decisions):
+        review_decision, title, author = decisions[pr]
+        repo[f"pr{i}"] = {
+            "number": pr,
+            "title": title,
+            "reviewDecision": review_decision,
+            "author": {"login": author},
+        }
+    return FakeJSONResponse(200, {"data": {"repository": repo}})
+
+
+def test_check_pr_approvals_noop_when_no_prs(ptl_tool):
+    session = mock.Mock()
+    result = ptl_tool.check_pr_approvals(session, [], "wip-yuri-testing")
+    assert result == []
+    session.post.assert_not_called()
+
+
+def test_check_pr_approvals_all_approved_returns_unchanged_no_prompt(ptl_tool):
+    session = mock.Mock()
+    session.post.return_value = _graphql_response({
+        100: ("APPROVED", "fix a", "alice"),
+        200: ("APPROVED", "fix b", "bob"),
+    })
+    with mock.patch("builtins.input") as fake_input:
+        result = ptl_tool.check_pr_approvals(session, [100, 200], "wip-yuri-testing")
+    fake_input.assert_not_called()
+    assert result == [100, 200]
+    session.post.assert_called_once()
+
+
+def test_check_pr_approvals_graphql_query_includes_all_pr_numbers(ptl_tool):
+    session = mock.Mock()
+    session.post.return_value = _graphql_response({
+        100: ("APPROVED", "a", "alice"),
+        200: ("APPROVED", "b", "bob"),
+        300: ("APPROVED", "c", "carol"),
+    })
+    ptl_tool.check_pr_approvals(session, [100, 200, 300], "wip-yuri-testing")
+    query = session.post.call_args.kwargs["json"]["query"]
+    assert "pr0: pullRequest(number: 100)" in query
+    assert "pr1: pullRequest(number: 200)" in query
+    assert "pr2: pullRequest(number: 300)" in query
+
+
+def test_check_pr_approvals_graphql_error_response_exits(ptl_tool):
+    session = mock.Mock()
+    session.post.return_value = FakeResponse(401, "Bad credentials")
+    with pytest.raises(SystemExit):
+        ptl_tool.check_pr_approvals(session, [100], "wip-yuri-testing")
+
+
+def test_check_pr_approvals_ci_mode_skips_prompt_and_proceeds(ptl_tool, caplog):
+    session = mock.Mock()
+    session.post.return_value = _graphql_response({
+        100: ("REVIEW_REQUIRED", "needs review", "alice"),
+    })
+    with mock.patch("builtins.input") as fake_input:
+        with caplog.at_level(logging.WARNING, logger=ptl_tool.log.name):
+            result = ptl_tool.check_pr_approvals(session, [100], "wip-yuri-testing", ci_mode=True)
+    fake_input.assert_not_called()
+    assert result == [100]
+    assert any("NOT approved" in r.message and "--ci-mode" in r.message for r in caplog.records)
+
+
+def test_check_pr_approvals_accept_posts_reminder_comment_and_keeps_all_prs(ptl_tool):
+    session = mock.Mock()
+    session.post.side_effect = [
+        _graphql_response({
+            100: ("REVIEW_REQUIRED", "needs review", "alice"),
+            200: ("APPROVED", "already good", "bob"),
+        }),
+        FakeResponse(201),
+    ]
+    with mock.patch("builtins.input", return_value="a"):
+        result = ptl_tool.check_pr_approvals(session, [100, 200], "wip-yuri-testing")
+    assert result == [100, 200]
+    assert session.post.call_count == 2
+    comment_call = session.post.call_args_list[1]
+    assert comment_call.args[0] == "https://api.github.com/repos/ceph/ceph/issues/100/comments"
+    assert "@alice" in comment_call.kwargs["json"]["body"]
+    assert "wip-yuri-testing" in comment_call.kwargs["json"]["body"]
+    session.delete.assert_not_called()
+
+
+def test_check_pr_approvals_accept_with_two_unapproved_prs_comments_on_both(ptl_tool):
+    """The single-unapproved-PR accept test above only proves one comment POST
+    fires; this confirms the `for u in unapproved` loop actually iterates
+    rather than stopping after the first PR."""
+    session = mock.Mock()
+    session.post.side_effect = [
+        _graphql_response({
+            100: ("REVIEW_REQUIRED", "needs review", "alice"),
+            300: ("REVIEW_REQUIRED", "also needs review", "carol"),
+        }),
+        FakeResponse(201),
+        FakeResponse(201),
+    ]
+    with mock.patch("builtins.input", return_value="a"):
+        result = ptl_tool.check_pr_approvals(session, [100, 300], "wip-yuri-testing")
+    assert result == [100, 300]
+    assert session.post.call_count == 3  # 1 GraphQL fetch + 2 comments
+    commented_urls = {c.args[0] for c in session.post.call_args_list[1:]}
+    assert commented_urls == {
+        "https://api.github.com/repos/ceph/ceph/issues/100/comments",
+        "https://api.github.com/repos/ceph/ceph/issues/300/comments",
+    }
+
+
+def test_check_pr_approvals_accept_unknown_author_has_no_broken_mention(ptl_tool):
+    """A PR whose author resolved to None must not produce a comment addressed
+    to the literal string '@unknown' -- that pings no one and looks broken."""
+    session = mock.Mock()
+    session.post.side_effect = [
+        _graphql_response({100: ("REVIEW_REQUIRED", "needs review", None)}),
+        FakeResponse(201),
+    ]
+    with mock.patch("builtins.input", return_value="a"):
+        ptl_tool.check_pr_approvals(session, [100], "wip-yuri-testing")
+    comment_call = session.post.call_args_list[1]
+    assert "@unknown" not in comment_call.kwargs["json"]["body"]
+
+
+def test_check_pr_approvals_missing_pr_node_raises_systemexit(ptl_tool):
+    """If GraphQL returns no node for one of the aliased PRs (e.g. it doesn't
+    exist in this repo), the PR's approval status is unverifiable -- this must
+    fail closed (exit) rather than silently treating it as approved."""
+    session = mock.Mock()
+    session.post.return_value = FakeJSONResponse(200, {"data": {"repository": {}}})
+    with pytest.raises(SystemExit):
+        ptl_tool.check_pr_approvals(session, [100], "wip-yuri-testing")
+
+
+def test_check_pr_approvals_remove_deletes_label_and_excludes_pr(ptl_tool):
+    session = mock.Mock()
+    session.post.return_value = _graphql_response({
+        100: ("REVIEW_REQUIRED", "needs review", "alice"),
+        200: ("APPROVED", "already good", "bob"),
+    })
+    session.delete.return_value = FakeResponse(200)
+    with mock.patch("builtins.input", return_value="r"):
+        result = ptl_tool.check_pr_approvals(session, [100, 200], "wip-yuri-testing")
+    assert result == [200]
+    session.delete.assert_called_once_with(
+        "https://api.github.com/repos/ceph/ceph/issues/100/labels/wip-yuri-testing",
+        auth=mock.ANY,
+    )
+
+
+def test_check_pr_approvals_remove_delete_404_treated_as_already_removed(ptl_tool, caplog):
+    """A second, approved PR keeps `remaining` non-empty so this test can assert
+    the 404 log message on its own, independent of the all-unapproved exit path
+    covered separately below."""
+    session = mock.Mock()
+    session.post.return_value = _graphql_response({
+        100: ("REVIEW_REQUIRED", "needs review", "alice"),
+        200: ("APPROVED", "already good", "bob"),
+    })
+    session.delete.return_value = FakeResponse(404)
+    with mock.patch("builtins.input", return_value="r"):
+        with caplog.at_level(logging.INFO, logger=ptl_tool.log.name):
+            result = ptl_tool.check_pr_approvals(session, [100, 200], "wip-yuri-testing")
+    assert result == [200]
+    assert any("already absent" in r.message for r in caplog.records)
+
+
+def test_check_pr_approvals_remove_all_unapproved_exits_nonzero(ptl_tool):
+    session = mock.Mock()
+    session.post.return_value = _graphql_response({
+        100: ("REVIEW_REQUIRED", "needs review", "alice"),
+    })
+    session.delete.return_value = FakeResponse(200)
+    with mock.patch("builtins.input", return_value="r"):
+        with pytest.raises(SystemExit):
+            ptl_tool.check_pr_approvals(session, [100], "wip-yuri-testing")
+
+
+def test_check_pr_approvals_ignore_returns_unchanged_no_mutation(ptl_tool):
+    session = mock.Mock()
+    session.post.return_value = _graphql_response({
+        100: ("REVIEW_REQUIRED", "needs review", "alice"),
+        200: ("APPROVED", "already good", "bob"),
+    })
+    with mock.patch("builtins.input", return_value="i"):
+        result = ptl_tool.check_pr_approvals(session, [100, 200], "wip-yuri-testing")
+    assert result == [100, 200]
+    assert session.post.call_count == 1  # only the GraphQL fetch, no comment
+    session.delete.assert_not_called()
+
+
+def test_check_pr_approvals_invalid_choice_reprompts(ptl_tool, capsys):
+    session = mock.Mock()
+    session.post.return_value = _graphql_response({
+        100: ("REVIEW_REQUIRED", "needs review", "alice"),
+    })
+    with mock.patch("builtins.input", side_effect=["bogus", "i"]):
+        result = ptl_tool.check_pr_approvals(session, [100], "wip-yuri-testing")
+    assert result == [100]
+    assert "Invalid choice" in capsys.readouterr().out
+
+
+def test_check_pr_approvals_dry_run_accept_never_posts_comment(ptl_tool):
+    session = mock.Mock()
+    session.post.return_value = _graphql_response({
+        100: ("REVIEW_REQUIRED", "needs review", "alice"),
+    })
+    with mock.patch("builtins.input", return_value="a"):
+        result = ptl_tool.check_pr_approvals(session, [100], "wip-yuri-testing", dry_run=True)
+    assert result == [100]
+    assert session.post.call_count == 1  # GraphQL only, no comment POST
+
+
+def test_check_pr_approvals_dry_run_remove_never_calls_delete_but_still_excludes(ptl_tool):
+    session = mock.Mock()
+    session.post.return_value = _graphql_response({
+        100: ("REVIEW_REQUIRED", "needs review", "alice"),
+        200: ("APPROVED", "already good", "bob"),
+    })
+    with mock.patch("builtins.input", return_value="r"):
+        result = ptl_tool.check_pr_approvals(session, [100, 200], "wip-yuri-testing", dry_run=True)
+    assert result == [200]
+    session.delete.assert_not_called()
+
+
+def test_check_pr_approvals_normalizes_non_ascii_title_without_crashing(ptl_tool, capsys):
+    session = mock.Mock()
+    session.post.return_value = _graphql_response({
+        100: ("REVIEW_REQUIRED", "fix café crash", "alice"),
+    })
+    with mock.patch("builtins.input", return_value="i"):
+        result = ptl_tool.check_pr_approvals(session, [100], "wip-yuri-testing")
+    assert result == [100]
+    out = capsys.readouterr().out
+    assert "caf?" in out
+    assert "é" not in out
