@@ -51,6 +51,7 @@ import tempfile
 import textwrap
 import threading
 import webbrowser
+from urllib.parse import quote
 
 MISSING_DEPS = []
 
@@ -448,6 +449,127 @@ def get(session, url, params=None, paging=True):
             yield response.json()
             link = response.headers.get('link', None)
             page += 1
+
+def check_pr_approvals(session, prs, label, dry_run=False, ci_mode=False):
+    """
+    Pre-flight check: verifies every PR about to be merged via --pr-label has
+    GitHub's own reviewDecision (not REVIEW_REQUIRED) before the PRE-FLIGHT
+    base-branch check runs. Native equivalent of ptl-check-approvals.sh.
+    reviewDecision is a computed field GitHub only exposes over GraphQL (the
+    same one `gh pr list --json reviewDecision` reads), not over REST, so
+    this uses one batched GraphQL query instead of N REST calls.
+
+    Returns the (possibly filtered) list of PR numbers to actually merge.
+    """
+    if not prs:
+        return prs
+
+    query_parts = [
+        f'pr{i}: pullRequest(number: {pr}) {{ number title reviewDecision author {{ login }} }}'
+        for i, pr in enumerate(prs)
+    ]
+    query = 'query {{ repository(owner: "{owner}", name: "{repo}") {{ {fields} }} }}'.format(
+        owner=BASE_PROJECT, repo=BASE_REPO, fields=" ".join(query_parts)
+    )
+
+    log.info("Checking review approval status for %d PR(s)...", len(prs))
+    resp = session.post("https://api.github.com/graphql", auth=GithubBearerAuth(), json={'query': query})
+    if resp.status_code != 200:
+        log.error(f"Failed to fetch review decisions: {resp.status_code} {resp.text}")
+        sys.exit(1)
+    data = resp.json()
+    if data.get('errors'):
+        log.error(f"GraphQL errors fetching review decisions: {data['errors']}")
+        sys.exit(1)
+
+    repo_data = data['data']['repository']
+    unapproved = []
+    for i, pr in enumerate(prs):
+        node = repo_data.get(f'pr{i}')
+        if node is None:
+            raise SystemExit(
+                f"Could not fetch review status for PR #{pr} (GraphQL returned no data for "
+                f"it -- check it actually exists in {BASE_PROJECT}/{BASE_REPO})"
+            )
+        if node.get('reviewDecision') == 'REVIEW_REQUIRED':
+            title = (node.get('title') or '').encode('ascii', 'replace').decode('ascii')
+            author = (node.get('author') or {}).get('login') or 'unknown'
+            unapproved.append({'number': pr, 'title': title, 'author': author})
+
+    if not unapproved:
+        log.info("All %d PR(s) are approved.", len(prs))
+        return prs
+
+    if ci_mode:
+        log.warning(
+            "%d of %d PR(s) are NOT approved (running under --ci-mode, proceeding anyway): %s",
+            len(unapproved), len(prs), ", ".join(f"#{u['number']}" for u in unapproved)
+        )
+        return prs
+
+    print(f"\nWARNING: {len(unapproved)} of {len(prs)} PRs are NOT approved:\n")
+    for u in unapproved:
+        print(f"  #{u['number']} - {u['title']} (author: @{u['author']})")
+    print()
+
+    while True:
+        ans = input(
+            "How do you want to handle unapproved PRs? [a/r/i] (a=accept and proceed, "
+            "posting a reminder comment on each; r=remove the label from unapproved PRs "
+            "and exclude them from this run; i=ignore and proceed with no changes): "
+        ).strip().lower()
+
+        if ans == 'a':
+            for u in unapproved:
+                pr = u['number']
+                mention = f"@{u['author']} " if u['author'] != 'unknown' else ""
+                body = (
+                    f"{mention}this PR is part of the `{label}` integration batch and "
+                    "still needs review approval before it can be merged. Could you request "
+                    "a review or ping a reviewer? Thanks!"
+                )
+                if dry_run:
+                    log.info(f"[DRY RUN] Would comment on PR #{pr} requesting review approval")
+                else:
+                    endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/comments"
+                    r = session.post(endpoint, auth=GithubBearerAuth(), json={'body': body})
+                    if r.status_code != 201:
+                        log.error(f"Failed to comment on PR #{pr}: {r.status_code} {r.text}")
+                    else:
+                        log.info(f"Posted review reminder comment on PR #{pr}")
+            return prs
+
+        elif ans == 'r':
+            unapproved_numbers = {u['number'] for u in unapproved}
+            for u in unapproved:
+                pr = u['number']
+                endpoint = (
+                    f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/"
+                    f"{pr}/labels/{quote(label, safe='')}"
+                )
+                if dry_run:
+                    log.info(f"[DRY RUN] Would remove label '{label}' from PR #{pr}")
+                else:
+                    r = session.delete(endpoint, auth=GithubBearerAuth())
+                    if r.status_code == 404:
+                        log.info(f"Label '{label}' already absent from PR #{pr} (404); treating as removed")
+                    elif r.status_code != 200:
+                        log.error(f"Failed to remove label '{label}' from PR #{pr}: {r.status_code} {r.text}")
+                    else:
+                        log.info(f"Removed label '{label}' from PR #{pr}")
+            remaining = [p for p in prs if p not in unapproved_numbers]
+            if not remaining:
+                log.error("All PRs in this batch were unapproved and have been excluded; nothing left to merge.")
+                sys.exit(1)
+            log.info("Proceeding with approved PRs only: %s", remaining)
+            return remaining
+
+        elif ans == 'i':
+            log.info("Ignoring approval check; proceeding with all %d PR(s) as-is.", len(prs))
+            return prs
+
+        else:
+            print("Invalid choice. Please enter a, r, or i.")
 
 def resolve_ref(G, ref, remote_url, always_fetch=False):
     """
@@ -2001,6 +2123,8 @@ def build_branch(args):
                 prs.append(n)
     log.info("Will merge PRs: {}".format(prs))
 
+    if args.pr_label is not None and prs:
+        prs = check_pr_approvals(session, prs, args.pr_label, dry_run=args.dry_run, ci_mode=args.ci_mode)
 
     # PRE-FLIGHT: Validate base consistency and auto-detect base from PRs if necessary
     if prs and (base is None or args.qe_label or args.integration):
