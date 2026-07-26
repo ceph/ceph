@@ -9,25 +9,31 @@
   >
   </cd-page-header-resource>
 }
+
 <div class="sidebar-layout-container sidebar-layout--full">
   <div class="sidebar-layout-shell">
-    <cds-sidenav
-      [expanded]="true"
-      class="sidebar-layout-nav cds--side-nav--fixed"
-    >
-      @for (item of items; track item.label) {
-        <cds-sidenav-item
-          [route]="item.route"
-          [routeExtras]="item.routeExtras"
-          [useRouter]="true"
-          [routerLinkActiveOptions]="item.routerLinkActiveOptions || { exact: false }"
-        >
-          <span class="cds--type-heading-compact-01">{{ item.label }}</span>
-        </cds-sidenav-item>
-      }
-    </cds-sidenav>
+    @if (showSidebar) {
+      <cds-sidenav
+        [expanded]="true"
+        class="sidebar-layout-nav cds--side-nav--fixed"
+      >
+        @for (item of items; track item.label) {
+          <cds-sidenav-item
+            [route]="item.route"
+            [routeExtras]="item.routeExtras"
+            [useRouter]="true"
+            [routerLinkActiveOptions]="item.routerLinkActiveOptions || { exact: false }"
+          >
+            <span class="cds--type-heading-compact-01">{{ item.label }}</span>
+          </cds-sidenav-item>
+        }
+      </cds-sidenav>
+    }
 
-    <main class="sidebar-layout-main">
+    <main
+      class="sidebar-layout-main"
+      [class.no-sidebar]="!showSidebar"
+    >
       <router-outlet></router-outlet>
     </main>
   </div>
