@@ -22,9 +22,9 @@ static void take_cache_snapshot(BlueStore& store) {
   
   BlueStore::CacheStatsSnapshot snap;
   snap.timestamp = ceph::mono_clock::now();
-  snap.onode_hits = store.logger->get(l_bluestore_onode_cache_hit_count);
-  snap.onode_misses = store.logger->get(l_bluestore_onode_cache_time_latency_time + 1);
-  snap.onode_miss_latency_sum = store.logger->get(l_bluestore_onode_cache_time_latency_time);
+  snap.onode_hits = store.logger->get(l_bluestore_onode_hits);
+  snap.onode_misses = store.logger->get(l_bluestore_onode_misses);
+  snap.onode_miss_latency_sum = store.logger->get(l_bluestore_onode_miss_lat);
   snap.onode_shard_hits = store.logger->get(l_bluestore_onode_shard_hits);
   snap.onode_shard_misses = store.logger->get(l_bluestore_onode_shard_misses);
   snap.onode_shard_miss_latency_sum = store.logger->get(l_bluestore_onode_shard_miss_lat);
@@ -52,9 +52,9 @@ static bool get_snapshot_windows(BlueStore& store,
   
   // Get current values 
   current.timestamp = ceph::mono_clock::now();
-  current.onode_hits = store.logger->get(l_bluestore_onode_cache_hit_count);
-  current.onode_misses = store.logger->get(l_bluestore_onode_cache_time_latency_time + 1);
-  current.onode_miss_latency_sum = store.logger->get(l_bluestore_onode_cache_time_latency_time);
+  current.onode_hits = store.logger->get(l_bluestore_onode_hits);
+  current.onode_misses = store.logger->get(l_bluestore_onode_misses);
+  current.onode_miss_latency_sum = store.logger->get(l_bluestore_onode_miss_lat);
   current.onode_shard_hits = store.logger->get(l_bluestore_onode_shard_hits);
   current.onode_shard_misses = store.logger->get(l_bluestore_onode_shard_misses);
   current.onode_shard_miss_latency_sum = store.logger->get(l_bluestore_onode_shard_miss_lat);
@@ -346,12 +346,12 @@ int BlueStore::SocketHook::call(
     
     f->open_object_section("onode_cache");
     
-    uint64_t onode_hits = store.logger->get(l_bluestore_onode_cache_hit_count);
+    uint64_t onode_hits = store.logger->get(l_bluestore_onode_hits);
     f->dump_unsigned("hits", onode_hits);
     
    
     f->open_object_section("onode_cache_miss_latency");
-    auto onode_miss_tavg = store.logger->get_tavg_ns(l_bluestore_onode_cache_time_latency_time);
+    auto onode_miss_tavg = store.logger->get_tavg_ns(l_bluestore_onode_miss_lat);
     uint64_t onode_miss_sum_ns = onode_miss_tavg.first;
     uint64_t onode_miss_count = onode_miss_tavg.second;
     f->dump_unsigned("avgcount", onode_miss_count);

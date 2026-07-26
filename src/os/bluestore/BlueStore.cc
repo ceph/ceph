@@ -5402,10 +5402,6 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
 
   OnodeRef o = onode_space.lookup(oid);
   if (o) {
-    auto cache = get_onode_cache();
-    if (cache) {
-      store->logger->inc(l_bluestore_onode_cache_hit_count);//////cache hit
-    }
     return o;
   }
   auto start = mono_clock::now();//miss
@@ -5434,10 +5430,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
   // new object, load onode if available
   on = Onode::create_decode(this, oid, key, v, true, store->segment_size != 0);
   o.reset(on);
-  store->log_latency("cacheonode_lat",
-        l_bluestore_onode_cache_time_latency_time,
-	mono_clock::now() - start,
-	store->cct->_conf->bluestore_log_op_age);////miss lat for onode
+  store->logger->tinc(l_bluestore_onode_miss_lat, mono_clock::now() - start);
   return onode_space.add_onode(oid, o);
 }
 
@@ -6535,11 +6528,8 @@ void BlueStore::_init_logger()
   //after read is called it will always increment l_bluestore_buffer_read_reqs, and if there was any part that wasnt in cache it will eventually log it in l_bluestore_buffer_miss_lat, so the difference should be ones that were fully in cache
 
   
-  b.add_u64_counter(l_bluestore_onode_cache_hit_count,
-      "onode cache",
-      "onode cache total hits"); 
 
-  b.add_time_avg(l_bluestore_onode_cache_time_latency_time, "cacheonode_lat",
+  b.add_time_avg(l_bluestore_onode_miss_lat, "cacheonode_lat",
       "Average onode miss latency",
       "ro_l", PerfCountersBuilder::PRIO_CRITICAL);
 
