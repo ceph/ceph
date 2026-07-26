@@ -156,15 +156,9 @@ void MgrCapGrant::expand_profile(std::ostream *err) const {
     return;
   }
 
-  if (profile == "osd") {
-    // this is a documented profile (so we need to accept it as valid), but it
-    // currently doesn't do anything
-    return;
-  }
-
-  if (profile == "mds") {
-    // this is a documented profile (so we need to accept it as valid), but it
-    // currently doesn't do anything
+  if (profile == "osd" || profile == "mds" || profile == "rgw") {
+    // these are documented profiles (so we need to accept them as valid), but
+    // they grant nothing here
     return;
   }
 
