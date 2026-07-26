@@ -498,7 +498,7 @@ int File::close()
   }
 
   if (need_fsync) {
-    int ret = ::fsync(fd);
+    int ret = ::fdatasync(fd);
     if (ret < 0) {
       return ret;
     }
