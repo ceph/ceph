@@ -346,8 +346,10 @@ int LogNode::ow_gap_from_last_entry(const size_t key, const size_t val) {
   if (p) {
     auto ret = p->get_latest_write_delta();
     if (ret && (*ret).key == get_ow_key()) {
-      if ((*ret).val.length() < val) {
-	gap = val - (*ret).val.length();
+      auto old_size = get_entry_size((*ret).key.size(), (*ret).val.length());
+      auto new_size = get_entry_size(key, val);
+      if (new_size > old_size) {
+        gap = new_size - old_size;
       }
     } else {
       gap = _ow_gap_from_last_entry(key, val);
