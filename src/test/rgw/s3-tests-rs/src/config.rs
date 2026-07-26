@@ -103,8 +103,21 @@ pub struct S3TestConfig {
     // kafka (optional — present when kafka-vstart.sh has run)
     pub kafka_broker: Option<String>,
 
+    // bench (optional — elbencho workload defaults)
+    pub bench: BenchConfig,
+
     // optional
     pub cloud: Option<CloudConfig>,
+}
+
+#[derive(Clone, Debug)]
+pub struct BenchConfig {
+    pub elbencho_bin: String,
+    pub default_threads: u32,
+    pub default_num_dirs: u32,
+    pub default_num_files: u32,
+    pub default_file_size: String,
+    pub default_block_size: String,
 }
 
 pub fn get_config() -> Arc<S3TestConfig> {
@@ -289,8 +302,24 @@ fn load_config() -> Result<S3TestConfig, String> {
 
         kafka_broker: ini.get("kafka", "broker").map(|s| s.to_string()),
 
+        bench: load_bench_config(&ini),
+
         cloud: load_cloud_config(&ini),
     })
+}
+
+fn load_bench_config(ini: &configparser::ini::Ini) -> BenchConfig {
+    BenchConfig {
+        elbencho_bin: get_str_or(ini, "bench", "elbencho_bin", "/usr/local/bin/elbencho"),
+        default_threads: get_str_or(ini, "bench", "default_threads", "8")
+            .parse().unwrap_or(8),
+        default_num_dirs: get_str_or(ini, "bench", "default_num_dirs", "2")
+            .parse().unwrap_or(2),
+        default_num_files: get_str_or(ini, "bench", "default_num_files", "10")
+            .parse().unwrap_or(10),
+        default_file_size: get_str_or(ini, "bench", "default_file_size", "64m"),
+        default_block_size: get_str_or(ini, "bench", "default_block_size", "16m"),
+    }
 }
 
 pub fn configured_storage_classes() -> Vec<String> {

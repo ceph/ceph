@@ -188,3 +188,12 @@ KC_REALM=<name of the realm>
 #following section is added by kafka-vstart.sh for notification testing
 #[kafka]
 #broker = localhost:9092
+
+# elbencho benchmark workload defaults
+[bench]
+elbencho_bin = /usr/local/bin/elbencho
+default_threads = 8
+default_num_dirs = 2
+default_num_files = 10
+default_file_size = 64m
+default_block_size = 16m

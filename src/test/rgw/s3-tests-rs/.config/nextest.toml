@@ -20,6 +20,9 @@ max-threads = 1
 [test-groups.serial-quota]
 max-threads = 1
 
+[test-groups.serial-bench]
+max-threads = 1
+
 # --- Per-module profiles ---
 
 [profile.bucket-list]
@@ -123,3 +126,14 @@ test-group = 'serial-iam'
 [[profile.all.overrides]]
 filter = 'test(quota::)'
 test-group = 'serial-quota'
+
+# Bench profiles — elbencho workloads, run with --run-ignored=all
+# Smoke: quick sanity check under moderate load
+# Soak: sustained high-thread-count stress test
+[profile.bench-smoke]
+default-filter = 'test(bench_smoke)'
+test-threads = 1
+
+[profile.bench-soak]
+default-filter = 'test(bench_soak)'
+test-threads = 1
