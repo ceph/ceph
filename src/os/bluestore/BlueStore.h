@@ -186,8 +186,7 @@ enum {
   l_bluestore_extents,
   l_bluestore_blobs,
   l_bluestore_spanning_blobs,
-  l_bluestore_onode_cache_hit_count,   
-  l_bluestore_onode_cache_time_latency_time,  
+  l_bluestore_onode_miss_lat,  
   l_bluestore_onode_shard_miss_lat,           
   //****************************************
 
