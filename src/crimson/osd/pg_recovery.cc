@@ -348,7 +348,7 @@ RecoveryBackend::interruptible_future<> PGRecovery::prep_object_replica_deletes(
       trigger,
       pg->get_recovery_backend()->push_delete(soid, need).then_interruptible(
 	[=, this] {
-        if (pg->get_peering_state().get_pg_log().get_missing().is_missing(soid)) {
+        if (!pg->get_peering_state().get_pg_log().get_missing().is_missing(soid)) {
           object_stat_sum_t stat_diff;
           stat_diff.num_objects_recovered = 1;
           on_global_recover(soid, stat_diff, true);
