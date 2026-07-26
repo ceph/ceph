@@ -4,7 +4,8 @@ import { SmbClusterFormComponent } from './smb-cluster-form/smb-cluster-form.com
 import { AppRoutingModule } from '~/app/app-routing.module';
 import { DataTableModule } from '~/app/shared/datatable/datatable.module';
 import { SmbDomainSettingModalComponent } from './smb-domain-setting-modal/smb-domain-setting-modal.component';
-import { SmbClusterTabsComponent } from './smb-cluster-tabs/smb-cluster-tabs.component';
+import { SmbClusterResourcePageComponent } from './smb-cluster-resource-page/smb-cluster-resource-page.component';
+import { SmbClusterResourceSidebarComponent } from './smb-cluster-resource-sidebar/smb-cluster-resource-sidebar.component';
 import { SmbShareListComponent } from './smb-share-list/smb-share-list.component';
 import {
   ButtonModule,
@@ -72,7 +73,8 @@ import { SmbUsersgroupsResourcePageComponent } from './smb-usersgroups-resource-
     SmbClusterListComponent,
     SmbClusterFormComponent,
     SmbDomainSettingModalComponent,
-    SmbClusterTabsComponent,
+    SmbClusterResourcePageComponent,
+    SmbClusterResourceSidebarComponent,
     SmbShareListComponent,
     SmbUsersgroupsListComponent,
     SmbUsersgroupsResourceSidebarComponent,
