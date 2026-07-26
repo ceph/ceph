@@ -18,6 +18,7 @@
 #include "rgw_sal_filter.h"
 #include "rgw_sal_store.h"
 #include "rgw_quota.h"
+#include "driver/posix/sync_policy.h"
 #include "include/encoding.h"
 #include <cstdint>
 #include <memory>
@@ -398,6 +399,7 @@ protected:
   std::unique_ptr<rgw::store::POSIXUserDB> userDB;
   NSFSZone zone;
   std::unique_ptr<nsfs::BucketCache> bucket_cache;
+  std::unique_ptr<rgw::posix::SyncFsThread> syncfs_thread;
   UserCache user_cache;
   std::unique_ptr<nsfs::FSStrategy> fs_strategy;
   std::string base_path;

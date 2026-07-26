@@ -33,6 +33,8 @@
 #                       (e.g. --data-root /mnt/nvme for fast storage)
 #   --perf              Performance tuning: NUMA pinning, tcmalloc
 #                       thread cache, tcp_nodelay, no request timeout
+#   -o 'key=value'      Pass extra config option through to vstart.sh
+#                       (e.g. -o 'rgw_posix_sync_policy=relaxed')
 #   --profile           Start without debug logging (no -d to vstart.sh)
 #                       for performance profiling; sets all debug to 0
 #   --foreground        Print the radosgw command instead of running it;
@@ -60,6 +62,7 @@ PROFILE=false
 GPFS_ROOT=/mnt/rgw/nsfs
 DEBUG_RGW=20
 FOREGROUND=false
+EXTRA_OPTS=()
 
 while [[ $# -gt 0 ]]; do
 	case "$1" in
@@ -80,6 +83,7 @@ while [[ $# -gt 0 ]]; do
 		--gpfs-root)  GPFS_ROOT="$2"; shift 2 ;;
 		--debug-rgw)  DEBUG_RGW="$2"; shift 2 ;;
 		--foreground) FOREGROUND=true; shift ;;
+		-o) EXTRA_OPTS+=(-o "$2"); shift 2 ;;
 		*) echo "unknown option: $1" >&2; exit 1 ;;
 	esac
 done
@@ -239,7 +243,8 @@ fi
 MON=0 OSD=0 MDS=0 MGR=0 RGW=1 \
 	"$SRC_DIR/src/vstart.sh" "${VSTART_FLAGS[@]}" \
 	--rgw_store "$STORE" \
-	"${VSTART_OPTS[@]}"
+	"${VSTART_OPTS[@]}" \
+	${EXTRA_OPTS[@]+"${EXTRA_OPTS[@]}"}
 
 # --- for non-GPFS, vstart already started the daemon ---
 
@@ -269,8 +274,14 @@ else
 # users.
 
 echo "==> killing vstart-spawned daemon"
-kill "$(cat "$PID")" 2>/dev/null || true
-sleep 1
+VSTART_PID="$(cat "$PID" 2>/dev/null)"
+if [[ -n "$VSTART_PID" ]]; then
+	kill "$VSTART_PID" 2>/dev/null || true
+	for i in $(seq 1 15); do
+		kill -0 "$VSTART_PID" 2>/dev/null || break
+		sleep 1
+	done
+fi
 
 if $GPFS; then
 	echo "==> patching ceph.conf for GPFS base path"

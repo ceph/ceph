@@ -4393,6 +4393,25 @@ options:
   default: 3
   services:
   - rgw
+- name: rgw_posix_sync_policy
+  type: str
+  level: advanced
+  desc: File sync policy for POSIX and NSFS drivers
+  long_desc: Controls when fdatasync is called on object data files.
+    "always" syncs every file close.  "complete" (default) syncs only the
+    final object, skipping multipart part files.  "relaxed" skips per-file
+    sync entirely and uses a periodic syncfs to flush all writes on a timer.
+    "none" disables all sync (for benchmarking only, data loss on crash).
+  default: complete
+  services:
+  - rgw
+- name: rgw_posix_sync_interval_ms
+  type: uint
+  level: advanced
+  desc: Interval in milliseconds for syncfs in relaxed sync policy
+  default: 2000
+  services:
+  - rgw
 - name: rgw_posix_inotify
   type: bool
   level: advanced
