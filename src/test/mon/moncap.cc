@@ -38,6 +38,7 @@ const char *parse_good[] = {
   "allow service=\"froo\" x",
   "allow profile osd",
   "allow profile osd-bootstrap",
+  "allow profile rgw",
   "allow profile \"mds-bootstrap\", allow *",
   "allow command \"a b c\"",
   "allow command abc",
@@ -90,6 +91,7 @@ const char *parse_identity[] = {
   "allow service foo x",
   "allow profile osd",
   "allow profile osd-bootstrap",
+  "allow profile rgw",
   "allow profile mds-bootstrap, allow *",
   "allow profile \"foo bar\", allow *",
   "allow command abc",
@@ -267,6 +269,81 @@ TEST(MonCap, ProfileOSD) {
                              true, true, {}));
 }
 
+TEST(MonCap, ProfileRGW) {
+  MonCap cap;
+  ASSERT_FALSE(cap.is_allow_all());
+  ASSERT_TRUE(cap.parse("allow profile rgw", NULL));
+
+  EntityName name;
+  name.from_str("client.rgw.foo");
+  map<string,string> ca;
+
+  ASSERT_TRUE(cap.is_capable(NULL, name, "mon", "", ca, true, false, false, {}));
+  ASSERT_TRUE(cap.is_capable(NULL, name, "osd", "", ca, true, false, false, {}));
+  ASSERT_TRUE(cap.is_capable(NULL, name, "pg", "", ca, true, false, false, {}));
+
+  // pool creation is a command grant, checked with the command name that
+  // enforce_pool_op_caps supplies for MPoolOp
+  ASSERT_TRUE(cap.is_capable(NULL, name, "osd", "osd pool create", ca, false,
+                             true, false, {}));
+  ASSERT_FALSE(cap.is_capable(NULL, name, "osd", "", ca, true, true, false,
+                              {}));
+  ASSERT_FALSE(cap.is_capable(NULL, name, "osd", "osd pool rm", ca, false,
+                              true, false, {}));
+
+  // pool tuning is limited to app=rgw and specific vars
+  ca["app"] = "rgw";
+  ASSERT_TRUE(cap.is_capable(NULL, name, "", "osd pool application enable", ca,
+                             true, true, false, {}));
+  ca["app"] = "rbd";
+  ASSERT_FALSE(cap.is_capable(NULL, name, "", "osd pool application enable",
+                              ca, true, true, false, {}));
+  ca.clear();
+  ca["var"] = "bulk";
+  ASSERT_TRUE(cap.is_capable(NULL, name, "", "osd pool set", ca, true, true,
+                             false, {}));
+  ca["var"] = "size";
+  ASSERT_FALSE(cap.is_capable(NULL, name, "", "osd pool set", ca, true, true,
+                              false, {}));
+  ca.clear();
+
+  // the cluster log warning is a command grant, not mon write access
+  ASSERT_TRUE(cap.is_capable(NULL, name, "mon", "log", ca, true, true, false,
+                             {}));
+  ASSERT_FALSE(cap.is_capable(NULL, name, "mon", "", ca, true, true, false, {}));
+  ASSERT_FALSE(cap.is_capable(NULL, name, "mon", "health mute", ca, true, true,
+                              false, {}));
+
+  ASSERT_FALSE(cap.is_capable(NULL, name, "pg", "", ca, true, true, false, {}));
+  ASSERT_FALSE(cap.is_capable(NULL, name, "auth", "", ca, true, false, false,
+                              {}));
+  ASSERT_FALSE(cap.is_capable(NULL, name, "mds", "", ca, true, false, false,
+                              {}));
+
+  // config-key access is read-only and limited to the rgw/ prefix
+  ca["key"] = "rgw/cert/rgw.foo";
+  ASSERT_TRUE(cap.is_capable(NULL, name, "", "config-key get", ca, true, false,
+                             false, {}));
+  ASSERT_FALSE(cap.is_capable(NULL, name, "", "config-key set", ca, true, true,
+                              false, {}));
+  ASSERT_FALSE(cap.is_capable(NULL, name, "", "config-key exists", ca, true,
+                              false, false, {}));
+  ASSERT_FALSE(cap.is_capable(NULL, name, "", "config-key rm", ca, true, true,
+                              false, {}));
+  ca["key"] = "rgw/cert/rgw.bar";
+  ASSERT_TRUE(cap.is_capable(NULL, name, "", "config-key get", ca, true, false,
+                             false, {}));
+  ca["key"] = "dm-crypt/osd/foo";
+  ASSERT_FALSE(cap.is_capable(NULL, name, "", "config-key get", ca, true, false,
+                              false, {}));
+  ca["key"] = "rgw";
+  ASSERT_FALSE(cap.is_capable(NULL, name, "", "config-key get", ca, true, false,
+                              false, {}));
+  ca.clear();
+  ASSERT_FALSE(cap.is_capable(NULL, name, "", "config-key ls", ca, true, false,
+                              false, {}));
+}
+
 TEST(MonCap, CommandRegEx) {
   MonCap cap;
   ASSERT_FALSE(cap.is_allow_all());
@@ -350,6 +427,37 @@ TEST(MonCap, ProfileBootstrapRBDMirror) {
                                 {"caps_osd", "profile rbd pool=foo, allow *, profile rbd-read-only"},
                               }, true, true, true,
 			      {}));
+}
+
+TEST(MonCap, ProfileBootstrapRGW) {
+  MonCap cap;
+  ASSERT_FALSE(cap.is_allow_all());
+  ASSERT_TRUE(cap.parse("profile bootstrap-rgw", NULL));
+
+  EntityName name;
+  name.from_str("mon.a");
+
+  struct {
+    const char *entity;
+    const char *caps_mon;
+    const char *caps_osd;
+    bool allowed;
+  } tests[] = {
+    { "client.rgw.foo", "profile rgw", "profile rgw", true },
+    { "client.rgw.foo", "allow rw",    "profile rgw", false },
+    { "client.rgw.foo", "profile rgw", "allow rwx",   false },
+    { "client.admin",   "profile rgw", "profile rgw", false },
+  };
+  for (const auto& t : tests) {
+    EXPECT_EQ(t.allowed, cap.is_capable(nullptr, name, "",
+                                        "auth get-or-create", {
+                                          {"entity", t.entity},
+                                          {"caps_mon", t.caps_mon},
+                                          {"caps_osd", t.caps_osd},
+                                        }, true, true, true,
+                                        {}))
+      << t.entity << " mon '" << t.caps_mon << "' osd '" << t.caps_osd << "'";
+  }
 }
 
 TEST(MonCap, ProfileRBD) {
