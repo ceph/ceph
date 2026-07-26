@@ -48,14 +48,15 @@ Object Lifecycle Head objects add complexity beyond the extra RADOS object itsel
 - RGW objects have no internal dependency, but RADOS forces them to wait.
 
 **4. No cross-OSD atomicity.**
-RADOS transactions are scoped to a single PG. Objects mapped to different PGs (via CRUSH) cannot share a transaction. Every S3 mutation touches at least two RADOS objects — the head object and the bucket-index entry — which are on different PGs. There is no way to update them atomically.
+RADOS transactions are scoped to a single PG. Objects mapped to different PGs (via CRUSH) cannot share a transaction.\
+Every S3 mutation touches at least two RADOS objects — the head object and the bucket-index entry — which are on different PGs. There is no way to update them atomically.
 
 - **PUT** — writes the head object and updates the bucket-index entry in two separate operations. A crash between them leaves the bucket-index inconsistent with the actual object state.
 - **DELETE** — removes the bucket-index entry and deletes the head object separately. A crash can leave an orphaned head object (invisible but consuming storage) or a dangling bucket-index entry (pointing to nothing).
 - **Versioning** — the worst case. OLH, head object, and bucket-index are three separate RADOS objects, potentially on three different OSDs. Updating the version pointer, writing the new head, and updating the index are three non-atomic steps.
 - **CompleteMultipartUpload** — writes the final head object, updates the bucket-index, and cleans up multipart part objects. Multiple non-atomic operations across different PGs.
 
-A KV store eliminates this problem. The bucket-index is gone — all related entries (`:O:`, `:V:`, `:M:`, stats, delete-log) share the same shard and can be committed in a single transaction.
+A KV store eliminates this problem. The bucket-index is gone — all related entries can be committed in a single transaction.
 
 **5. Server-Side Copy and dedup.**
 Multiple S3 objects cannot share a head object.
@@ -202,11 +203,20 @@ But even with this change, GC still needs to delete K+M members on the storage t
 
 Background processing to reclaim storage-tier space is needed regardless of the metadata model.
 
-The KV design uses a persistent delete-log:
-- Every operation that orphans data (DELETE, PUT-overwrite) appends an entry recording the old data references.
-- A background process drains the log and frees storage.
+The KV design uses a dedicated `G` (GC) namespace:
+- Every operation that orphans data (DELETE, PUT-overwrite) moves the old KV entry to the `G` namespace with a stripped value retaining only cleanup information.
+- Background workers scan `G` entries, free storage-tier data, remove child KV entries, and delete the `G` entry.
+- The `G` key includes a logarithmic `size_tier` byte enabling prioritized cleanup — small objects can be batched for throughput, large objects prioritized for capacity recovery.
 
-Because the delete-log can be written in the same transaction as the KV mutation, there is no orphan window — every orphaned data reference is tracked.
+Because the move to `G` is in the same transaction as the KV mutation, there is no orphan window — every orphaned data reference is tracked. See [S3 Operations — GC Namespace](S3-Operations-Over-KV.md#gc-namespace-and-background-cleanup) for the full protocol.
+
+The `G` namespace supports both per-instance entries (`G:O`, `G:V`, `G:M`, `G:A` — fixed-length, one entry per deleted/overwritten instance) and directive entries (`G:P` — one entry to clean up all parts of an aborted upload; `G:F` — one entry to clean up all versions of an object). Directives reduce the number of `G` entries for bulk operations from thousands to one.
+
+**Storage-tier idempotency.** KV and storage-tier operations cannot be atomic. Every storage-tier chunk embeds its `ref_tag`, enabling GC workers to verify ownership before freeing data. This makes all GC deletions idempotent — safe to retry after a crash at any point. For packed small objects, "freeing data" means a Logical-Punch-Hole rather than a physical delete. See [Storage-Tier-Requirements.md](Storage-Tier-Requirements.md).
+
+**Transaction model.** Every operation that writes storage-tier data (PutObject, UploadPart, PutObjectAnnotation, CompleteMultipartUpload) uses a coordination entry in the `P` (pending operations) namespace to prevent orphaned data on crash. The `P` entry is written before data, deleted in the commit transaction. A background sweeper cleans up stale entries. DELETE operations use an optimistic pattern: read outside the transaction, then verify ref_tag inside a small transaction before committing the move to `G`. See [S3 Operations — Transaction Patterns](S3-Operations-Over-KV.md#transaction-patterns) and [Pending Operations Namespace](S3-Operations-Over-KV.md#pending-operations-namespace).
+
+**Vendor-unique delete-all-versions.** AWS S3 does not provide a single API to delete an object along with all its versions. The `G:F` directive enables an optional vendor-specific extension: a single call deletes the `:O:` entry and writes one `G:F` directive; background workers asynchronously clean up all versions, parts, and children. This extension may never be implemented. See [S3 Operations — Delete All Versions](S3-Operations-Over-KV.md#delete-all-versions-optional-vendor-extension) for the detailed design.
 
 ---
 
@@ -221,7 +231,7 @@ It duplicates metadata to enable listing, at the cost of:
 
 With a KV-based metadata layer, the bucket-index is eliminated.
 Listing is a direct range scan on the KV store — each entry already contains all listing attributes.
-No secondary structure, no dual updates, no resharding.
+No secondary structure, no dual updates.
 
 Listing performance depends on key ordering:
 - **Without sharding** — a bucket's objects form a contiguous key range. Listing is a simple range scan.
@@ -276,7 +286,7 @@ This is an early-stage API definition. It will be refined as the design matures 
 - `Commit()` — atomically apply all mutations, or fail if conflicts are detected.
 - `Abort()` — discard all mutations.
 
-Transactions enable atomic multi-key operations: object write + delete-log entry + stats update in a single commit.
+Transactions enable atomic multi-key operations: object write + GC entry + stats update in a single commit.
 
 Transaction scope is always within a single cluster — cross-cluster atomicity is handled by RGW-level coordination 
 (see [Key Sharding](#key-sharding))
@@ -287,46 +297,52 @@ Transaction scope is always within a single cluster — cross-cluster atomicity 
 
 ### Key Format
 
-Four key namespaces separate current objects, old versions, child entries, and multipart uploads:
+Four categories separate current objects, old versions, child entries, and multipart uploads. Category tags are 1-byte ASCII values (`O`, `V`, `M`, `C`). In prose, these are written as `:O:`, `:V:`, `:M:`, `:C:` for visual clarity.
 
 **Current object (`:O:`):**
 
 ```
-<prefix> <shard_id> <bucket_id> :O: <object_name>
+<namespace> <shard_count> <shard_id> <bucket_id> O <object_name>
 ```
 
 **Old versions and delete markers (`:V:`):**
 
 ```
-<prefix> <shard_id> <bucket_id> :V: <object_name> <version_id>
+<namespace> <shard_count> <shard_id> <bucket_id> V <object_name> <version_id>
 ```
 
 **Child entries (`:C:`):**
 
 ```
-<prefix> <shard_id> <bucket_id> :C: <ref_tag> :: <type> <identifier>
+<namespace> <shard_count> <shard_id> <bucket_id> C <ref_tag> <child_type> <child_id>
 ```
 
-Child type prefixes: `A` (annotation), `T` (tags), `E` (extended value), `L` (ACL).
+Child type values: `A` (annotation), `T` (tags), `E` (extended value).
 
 **Multipart uploads (`:M:`):**
 
 ```
-<prefix> <shard_id> <bucket_id> :M: <object_name> <upload_id>
+<namespace> <shard_count> <shard_id> <bucket_id> M <object_name> <ref_tag> <part_number>
 ```
 
-Multipart upload entries are transient — they exist only between `CreateMultipartUpload` and `CompleteMultipartUpload`/`AbortMultipartUpload`. A dedicated namespace keyed by object_name (not ref_tag) is required because `ListMultipartUploads` is a bucket-wide API that lists all active uploads sorted by object key with prefix/delimiter filtering — a range scan on `:M:` satisfies this directly.
 
 **Field definitions:**
 
-- **prefix** — a short namespace identifier distinguishing object entries from bucket metadata, stats, and other KV schemas sharing the same store.
-- **shard_id** — always present. When sharding is not enabled (epoch 0), `shard_id = 1`.
-- **bucket_id** — binary bucket identifier. All objects in a bucket share the same prefix.
-- **object_name** — the S3 object key, stored as raw bytes. Preserves natural lexicographic ordering.
-- **version_id** — binary value using a descending scheme. The latest version sorts first.
-- **ref_tag** — compact unique identifier from the parent `:O:` entry (see [ref_tag](#ref_tag)).
+- **namespace (1 B, ASCII)** — KV namespace: `S` (S3 object entries), `B` (bucket metadata), `Z` (zone/realm metadata), `G` (GC entries for background data cleanup — uses a different header layout, see below), `P` (pending multi-phase operations — crash recovery coordination).
+- **shard_count (2 B, uint16 big-endian)** — number of shards for this bucket (starts at 1, max 65535). `shard_id = hash(bucket_id + object_name) % shard_count`.
+- **shard_id (2 B, uint16 big-endian)** — zero-based shard index. Invariant: `shard_id < shard_count`. When `shard_count = 1`, always `0`.
+- **bucket_id (8 B)** — binary bucket identifier.
+- **cat (1 B, ASCII)** — category tag: `O`, `V`, `M`, or `C`.
+- **object_name (1–1024 B)** — the S3 object key, stored as raw bytes. Preserves natural lexicographic ordering.
+- **version_id (4 B, uint32 big-endian)** — descending; first value is `max_uint32`, then decreasing. Latest version sorts first.
+- **ref_tag (12 B)** — compact unique identifier from the parent `:O:` entry (see [ref_tag](#ref_tag)).
+- **child_type (1 B, ASCII)** — `A`, `T`, or `E`.
+- **part_number (2 B, uint16 big-endian)** — 0 for upload metadata, 1–10000 for individual parts.
+- **child_id (0–512 B)** — annotation name (type `A`); empty for `T`, `E`.
 
-Key size: average ~256 bytes. Absolute max ~1040 bytes (1024-byte S3 name limit + 16 bytes for bucket_id and version_id, plus prefix and shard_id).
+See [S3 Operations — GC Namespace](S3-Operations-Over-KV.md#gc-namespace-and-background-cleanup).
+
+For detailed binary layout, construction, deconstruction, and pseudo-code, see [Listing-and-Key-Scheme.md — Key Schema](Listing-and-Key-Scheme.md#key-schema--binary-layout).
 
 **Listing behavior:**
 
@@ -338,7 +354,7 @@ ListMultipartUploads scans `:M:` only — one entry per active upload, sorted by
 
 Child entries under `:C:` are never encountered during bucket listing.
 
-Bucket/Realm/Zone metadata (name-to-id mapping, ACLs, policies, quota, versioning, lifecycle) is stored under separate prefixes in the same KV store.
+Bucket/Realm/Zone metadata (name-to-id mapping, ACLs, policies, quota, versioning, lifecycle) is stored under separate namespaces in the same KV store.
 
 ### Value Structure
 
@@ -362,7 +378,7 @@ It also serves as the RADOS object name for tail objects — the fixed short nam
 
 In the KV model, this role generalizes to compact identity for all child KV entries under the `:C:` namespace (annotations, tags, extended value entries) — logically equivalent, applied to KV children instead of RADOS children.
 
-**Generation — 12-byte binary:** `<rgw_id (4B)><seq_id (8B)>`
+**Generation — 12-byte binary:** `<rgw_id (4B, uint32 BE)><seq_id (8B, uint64 BE)>`
 
 - **rgw_id (32 bits)** — allocated from a single global `atomic_inc()` counter in the KV store at RGW boot. Each restart gets a new ID.
 - **seq_id (64 bits)** — in-memory counter starting at 0 on each boot. Incremented per write.
@@ -388,21 +404,11 @@ To keep values compact, attributes are compressed using various techniques (e.g.
 
 ### AWS S3 Object Tags
 
-- Object-Tags are stored in a separate child KV under `:C:<ref_tag>::T`, co-located on the same shard as the parent `:O:` entry.
-- All Tags are stored together in a single KV entry.
-- AWS supports a maximum of 10 tags per object each with an aggregated size of 5,120 bytes
-
-### S3 Delete Reference
-
-On delete, we keep the original Key while replacing the live Value with a minimal delete reference containing:
-- A delete flag.
-- A timestamp.
-- The ref_tag of the deleted object.
-
-The ref_tag is retained so background cleanup can verify data ownership before freeing storage.
-All other attributes are discarded.
-
-RGW reads the entry, sees the delete reference, and returns 404.
+- Object-Tags are stored inline in the `:O:` value when they are short and space permits.
+- When tags are too large for the `:O:` value, they spill to a standalone child KV under `:C:<ref_tag>T`, co-located on the same shard as the parent `:O:` entry.
+- The `:O:` value indicates whether tags are inline or external.
+- All tags for an object are stored together (either all inline or all in the child KV entry).
+- AWS supports a maximum of 10 tags per object with an aggregated size of up to 5,120 bytes.
 
 ### Extended Value
 
@@ -427,7 +433,8 @@ POSIX systems, for example, cannot prepend headers to existing files and would u
 
 1. Translate bucket name to bucket_id (local cache).
 2. Read the KV entry.
-3. Return all S3-visible attributes from the value.
+3. If not found → return 404. If fenced delete marker → return 404 with `x-amz-delete-marker: true`.
+4. Return all S3-visible attributes from the value.
 
 Single KV read. No data-tier access. Should be faster than the current model.\
 The assumption here is that KV-Get is faster than Rados Read with its heavy stack.
@@ -436,7 +443,8 @@ The assumption here is that KV-Get is faster than Rados Read with its heavy stac
 
 1. Translate bucket name to bucket_id (local cache).
 2. Read the KV entry.
-3. Read data chunks from the storage tier using the chunk pointers.
+3. If not found → return 404. If fenced delete marker → return 404.
+4. Read data chunks from the storage tier using the chunk pointers.
 5. Read extended-attributes if needed.
 6. Extract ref_tag (verify against KV value), manifest, compression info.
 7. Decompress/decrypt and stream to client.
@@ -447,37 +455,39 @@ This is mitigated by the KV store's distributed cache serving hot entries from m
 ### GET (Byte-Range)
 
 1. Read the KV entry.
-2. If read-path metadata is in the KV value (common case): use it directly to locate the target chunk.
-3. If not (large compressed multipart): read the extended attributes, or use a locally cached copy.
-4. Read and decompress/decrypt the target byte range.
+2. If not found → return 404. If fenced delete marker → return 404.
+3. If read-path metadata is in the KV value (common case): use it directly to locate the target chunk.
+4. If not (large compressed multipart): read the extended attributes, or use a locally cached copy.
+5. Read and decompress/decrypt the target byte range.
 
 ### PUT
 
 1. Write data to the storage tier. The first chunk includes the data header.
 2. Write the KV entry:
-   - New object or overwriting a delete marker: write the new value.
-   - Overwriting a live object: record old data references in the delete-log, then write the new value.
+   - New object: write the new value.
+   - Overwriting a live object: move old entry to the `G` (GC) namespace with a stripped value, then write the new value. See [S3 Operations — GC Namespace](S3-Operations-Over-KV.md#gc-namespace-and-background-cleanup).
 
 This is cheaper than the current model since no bucket-index update is needed.
 
 ### DELETE
 
-1. Read the KV entry to get chunk pointers and ref_tag.
-2. Record old data references in the delete-log.
-3. Replace the value with a delete reference, or remove the entry.
+1. Read the KV entry.
+2. If not found → return success (idempotent).
+3. Move the entry to the `G` (GC) namespace with a stripped value containing only cleanup information. The key is removed from `S`. Update stats counters.
 4. Return success.
 
-Data cleanup happens asynchronously via the delete-log.
+Data cleanup happens asynchronously — background workers scan `G` and free storage-tier data. See [S3 Operations — GC Namespace](S3-Operations-Over-KV.md#gc-namespace-and-background-cleanup) for the full protocol.
+
 This is cheaper than the current model since no bucket-index update is needed.
 
 ### LIST (ListObjectsV2)
 
 1. Translate bucket name to bucket_id (local cache).
-2. Range scan on the bucket_id prefix.
-3. Filter out delete references.
+2. Range scan on `:O:` entries for this bucket — `<namespace><shard_count><shard_id><bucket_id>O`.
+3. Filter out fenced entries (delete markers in versioned buckets). Non-versioned deleted objects are simply absent.
 4. Return up to 1000 keys with listing attributes from the KV values.
 
-Pagination uses the last returned key as the continuation marker.
+Pagination uses the last returned key as the continuation marker. With sharding: fan out to all shards, merge-sort by object_name.
 
 Should be cheaper than the current model with its excessive sharding and OMAP overhead.
 
@@ -577,16 +587,16 @@ This is a concrete benefit of application-level sharding — discussed further i
 
 ## Key Sharding
 
-With a single shard (`shard_id = 1`, epoch 0), all objects in a bucket form a contiguous range:
+With a single shard (`shard_count = 1`, `shard_id = 0`), all objects in a bucket form a contiguous range:
 
 ```
-<prefix> 1 <bucket_id> :O: <object_name>
+<namespace> <shard_count=1> <shard_id=0> <bucket_id> O <object_name>
 ```
 
-With multiple shards, the `shard_id` is a cryptographic hash of `(bucket_id + object_name)`:
+With multiple shards, `shard_id = hash(bucket_id + object_name) % shard_count`:
 
 ```
-<prefix> <shard_id> <bucket_id> :O: <object_name>
+<namespace> <shard_count> <shard_id> <bucket_id> O <object_name>
 ```
 
 The hash distributes objects uniformly across a fixed number of shards, breaking the contiguous bucket range into N disjoint ranges scattered across the key space.
@@ -691,7 +701,7 @@ FDB clusters hold approximately 64 billion KV entries (potentially 128 billion).
 TiKV clusters can scale to approximately 1 trillion KV entries (potentially more).
 
 These are large numbers, but **some** production systems may eventually outgrow them.
-- The KV store design allocates one extra KV per object to store S3 Object Tags (when present) which can double the KV count
+- S3 Object Tags are stored inline in the `:O:` value when short; when they spill to an external child KV (`...C<ref_tag>T`), each tagged object adds one extra KV entry
 - Object Annotations allow up to 1000 Annotations per Object, and since we use a standalone KV for each Annotation we can have an effective 1 Trillion KV on a system with a mere 1 Billion S3-Objects.
 
 When a single cluster is no longer sufficient, the system must scale out to a fleet of independent KV clusters.\
@@ -758,7 +768,7 @@ Only operations involving two distinct object identities require cross-cluster c
 A KV entry logically tied to a specific object should derive its shard from the parent `:O:` entry.\
 Child entries use the `:C:` namespace with the parent's ref_tag:
 
-`<prefix> <shard_id> <bucket_id> :C: <ref_tag> :: <type> <identifier>`
+`<namespace> <shard_count> <shard_id> <bucket_id> C <ref_tag> <child_type> <child_id>`
 
 The ref_tag replaces the full object_name (up to 1024 bytes) with a compact identifier (see [ref_tag](#ref_tag)). All children of an object share the same ref_tag and therefore the same shard — enabling local transactions.
 
@@ -775,15 +785,15 @@ In S3 versioned buckets, deleting an object creates a delete marker — a lightw
 
 **Multipart upload state.**
 
-Multipart uploads use the `:M:` namespace keyed by `(bucket_id, object_name, upload_id)`. The object_name ensures multipart entries hash to the same shard as the target `:O:` entry. All multipart operations — initiate, upload parts, complete, abort — are shard-local. CompleteMultipartUpload (write `:O:` entry + delete all `:M:` entries for the upload) is a single transaction.
+Multipart uploads use the `:M:` namespace keyed by `(bucket_id, object_name, ref_tag, part_number)`. The `ref_tag` serves as the upload_id. The object_name ensures multipart entries hash to the same shard as the target `:O:` entry. All multipart operations — initiate, upload parts, complete, abort — are shard-local. CompleteMultipartUpload (write `:O:` entry + delete all `:M:` entries for the upload) is a single transaction.
 
 **Extended value / spillover entries.**
 
 When object metadata overflows the core KV entry, spillover entries must use the same key prefix with a distinguishing suffix. This ensures they hash to the same shard. Writing the core entry and its spillover is a single transaction.
 
-**Delete-log entries.**
+**GC entries.**
 
-When an object is overwritten or deleted, the old chunk pointers must be recorded for async data cleanup. The delete-log entry captures which storage-tier blobs to free later. If the delete-log key derives its shard from the same `(bucket_id + object_name)`, the object mutation and the delete-log write are a single transaction — guaranteeing no orphan window. Every overwrite or delete atomically records what to clean up.
+When an object is overwritten or deleted, its KV entry is moved to the `G` (GC) namespace for async data cleanup. The `G` entry retains the same `shard_count` and `shard_id` as the original — it is co-located on the same shard, so the metadata mutation and the GC write are a single transaction. No orphan window. See [S3 Operations — GC Namespace](S3-Operations-Over-KV.md#gc-namespace-and-background-cleanup).
 
 **Object tags, ACLs, and lock metadata.**
 
@@ -792,8 +802,8 @@ These are typically stored inline in the KV value.\
 If they ever spill to separate KV entries — due to size or access pattern optimization — deriving the shard from the same `(bucket_id + object_name)` keeps them co-located.\
 PutObjectTagging or PutObjectAcl are transactional with the object's metadata.
 
-- Object-Tags are stored in a standalone child KV (`:C:<ref_tag>::T`) since they are individually mutable.
-- ACL can be stored inside the parent `:O:` entry or spillover to extended-metadata since they are overwritten together.
+- Object-Tags are stored inline in the `:O:` value when short; spill to a standalone child KV (`:C:<ref_tag>T`) when they exceed the inline budget.
+- ACL is always stored inline in the parent `:O:` entry (spills to extended value if needed) since ACLs are overwritten as a whole.
 
 **Per-shard stats counters.**
 
@@ -808,31 +818,21 @@ If each shard maintains its own stats keys on the same cluster, the object write
 - **Cross-bucket operations** — any operation touching objects in different buckets may land on different clusters.
 
 
-### Logical Hashing Epoch
+### Hashing/Sharding
 
 A deployment does not need to choose its final shard count upfront.
 
-The system supports a **logical hashing epoch** — a global counter that defines the current shard count. Each epoch transition increases the shard count, and the same migration protocol runs each time.
+The system supports a global counter that defines the current shard count.
+Each transition increases the shard count, and the same migration protocol runs each time.
 
-**Epoch 0** — `SHARD_COUNT = 1`. All keys get `shard_id = 0`. Effectively no hashing. The entire keyspace is one contiguous range on one cluster. Simple listing, simple everything. The key still carries the `shard_id` prefix, but it is always 0.
+**Base Sharding** — `SHARD_COUNT = 1`. All keys get `shard_id = 0`. Effectively no hashing. The entire keyspace is one contiguous range on one cluster. Simple listing, simple everything. The key still carries the `shard_id` prefix, but it is always 0.
 
-**Epoch 1** — when the cluster reaches a capacity threshold (e.g., 80% full), the admin triggers a reshard. `SHARD_COUNT` increases — for example, to 2. Existing keys are re-keyed with their new `shard_id`. From this point, the fleet growth path is available — shards can be distributed across clusters.
+**First Reshard** — when the cluster reaches a capacity threshold (e.g., 80% full), the admin triggers a reshard. `SHARD_COUNT` increases — for example, to 2. Existing keys are re-keyed with their new `shard_id`. From this point, the fleet growth path is available — shards can be distributed across clusters.
 
-**Epoch N** — further reshards as the system grows. Each transition increases the shard count: 1 → 2 → 4 → 8 → 16 → ... The customer controls when to reshard and by how much.
+**Reshard N** — further reshards as the system grows. Each transition increases the shard count: 1 → 2 → 4 → 8 → 16 → ... The customer controls when to reshard and by how much.
 
 This means the listing complexity grows gradually, not all at once. With 2 shards, listing is a 2-way merge — barely noticeable. With 4, still manageable. The customer pays only the complexity their current scale demands.
 
-**Resharding mechanism.**
-
-Resharding uses the same watermark-based background migration protocol as directory rename:
-
-- A **background worker** scans range-by-range, re-keying each entry from the old `shard_id` to the new `shard_id`. The watermark advances through the keyspace as processing progresses.
-
-- **On-access reshard** — when a client writes to a key above the watermark (not yet resharded by the background worker), RGW reshards that entry on the fly, writing it with the new `shard_id`.
-
-- **GETs** check the watermark. Below the watermark — look in the new shard. Above the watermark — look in the old shard. A false negative on a race condition (watermark just advanced but the gateway's cached copy is stale) is fixed with a watermark reload and a retry using the new shard.
-
-- **Per-bucket progression** is natural. In epoch 0, each bucket is a contiguous range. The migration can be ordered by bucket, allowing admins to prioritize — e.g., reshard daytime-active buckets during the night.
 
 **Fleet-wide coordination.**
 
@@ -843,6 +843,8 @@ Resharding is a fleet-wide operation — the shard count is a global constant, s
 - **Parallel** — reshard multiple clusters concurrently. Faster overall, but higher I/O pressure across the fleet. Suitable during maintenance windows or low-traffic periods.
 
 Each cluster's migration is independent, with its own watermark progress. RGW ensures all gateways are aware of the new epoch before any migration begins.
+
+**Listing during resharding** — while old and new shard_count keys coexist, listing merges all X + Y streams (old shards + new shards). See [Listing During Resharding](Listing-and-Key-Scheme.md#listing-during-resharding) for the full protocol.
 
 ---
 
