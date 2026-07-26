@@ -17,7 +17,8 @@ from ceph.utils import with_units_to_int
 from .service_registry import register_cephadm_service
 
 from orchestrator import DaemonDescription, OrchestratorError
-from cephadm.services.cephadmservice import AuthEntity, CephadmDaemonDeploySpec, CephService
+from cephadm.services.cephadmservice import AuthEntity, CephadmDaemonDeploySpec, CephService, \
+    RGW_PROFILE_RELEASE
 from cephadm.schedule import get_placement_hosts
 if TYPE_CHECKING:
     from ..module import CephadmOrchestrator
@@ -475,9 +476,16 @@ class NFSService(CephService):
         entity: AuthEntity = self.get_auth_entity(f'{daemon_id}-rgw')
 
         logger.info('Creating key for %s' % entity)
+        # the profile grants nothing on a mon or osd that predates it
+        osdmap = self.mgr.get('osd_map')
+        release = osdmap.get('require_osd_release', 'argonaut')
+        if utils.ceph_release_to_major(release) >= RGW_PROFILE_RELEASE:
+            osd_caps = 'profile rgw'
+        else:
+            osd_caps = 'allow rwx tag rgw *=*'
         keyring = self.get_keyring_with_caps(entity,
                                              ['mon', 'allow r',
-                                              'osd', 'allow rwx tag rgw *=*'])
+                                              'osd', osd_caps])
 
         return keyring
 
