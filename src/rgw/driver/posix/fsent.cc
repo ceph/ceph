@@ -14,6 +14,7 @@
  */
 
 #include "fsent.h"
+#include "driver/posix/sync_policy.h"
 #include <dirent.h>
 #include "include/random.h"
 
@@ -498,9 +499,14 @@ int File::close()
   }
 
   if (need_fsync) {
-    int ret = ::fdatasync(fd);
-    if (ret < 0) {
-      return ret;
+    auto policy = rgw::posix::parse_sync_policy(
+      ctx->_conf.get_val<std::string>("rgw_posix_sync_policy"));
+    if (policy == rgw::posix::SyncPolicy::ALWAYS ||
+        policy == rgw::posix::SyncPolicy::COMPLETE) {
+      int ret = ::fdatasync(fd);
+      if (ret < 0) {
+        return ret;
+      }
     }
     need_fsync = false;
   }

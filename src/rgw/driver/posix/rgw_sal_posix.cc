@@ -15,6 +15,7 @@
 
 #include "rgw_sal_posix.h"
 #include "rgw_rest_user.h"
+#include "sync_policy.h"
 #include "rgw_pubsub_push.h"
 #include "rgw_pubsub.h"
 #include "rgw_s3_filter.h"
@@ -218,6 +219,20 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   ldpp_dout(dpp, 20) << "root_fd: " << root_dir->get_fd() << dendl;
   quota_handler = RGWQuotaHandler::generate_handler(this, true);
 
+  auto policy = rgw::posix::parse_sync_policy(
+    cct->_conf.get_val<std::string>("rgw_posix_sync_policy"));
+  if (policy == rgw::posix::SyncPolicy::RELAXED) {
+    uint64_t interval_ms = cct->_conf.get_val<uint64_t>("rgw_posix_sync_interval_ms");
+    syncfs_thread = std::make_unique<rgw::posix::SyncFsThread>(
+      root_dir->get_fd(), interval_ms);
+    syncfs_thread->start();
+    ldpp_dout(dpp, 1) << "sync policy: relaxed (syncfs every "
+      << interval_ms << "ms)" << dendl;
+  } else {
+    ldpp_dout(dpp, 1) << "sync policy: "
+      << cct->_conf.get_val<std::string>("rgw_posix_sync_policy") << dendl;
+  }
+
   if (!RGWPubSubEndpoint::init_all(cct)) {
     ldpp_dout(dpp, 1) << "WARNING: failed to init notification endpoints" << dendl;
   }
@@ -228,6 +243,9 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 
 void POSIXDriver::finalize()
 {
+  if (syncfs_thread) {
+    syncfs_thread->shutdown();
+  }
   RGWPubSubEndpoint::shutdown_all();
   RGWQuotaHandler::free_handler(quota_handler);
 }
