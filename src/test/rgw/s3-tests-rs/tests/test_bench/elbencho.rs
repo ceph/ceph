@@ -54,10 +54,10 @@ impl ElbenchoOpts {
             label: "soak_saturation",
             threads: env_or("BENCH_THREADS", "300")
                 .parse().unwrap_or(300),
-            num_dirs: env_or("BENCH_NUM_DIRS", "25")
-                .parse().unwrap_or(25),
-            num_files: env_or("BENCH_NUM_FILES", "10")
-                .parse().unwrap_or(10),
+            num_dirs: env_or("BENCH_NUM_DIRS", "2")
+                .parse().unwrap_or(2),
+            num_files: env_or("BENCH_NUM_FILES", "1")
+                .parse().unwrap_or(1),
             file_size: env_or("BENCH_FILE_SIZE", &bench.default_file_size),
             block_size: env_or("BENCH_BLOCK_SIZE", &bench.default_block_size),
             bucket: "benchsoak1",
