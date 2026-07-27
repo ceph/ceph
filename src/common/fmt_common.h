@@ -24,7 +24,7 @@
 // TODO: drop me once fmt v11 is required
 namespace fmt {
   template <typename T, typename Char = char>
-  concept formattable = is_formattable<std::remove_reference_t<T>, Char>::value>;
+  concept formattable = is_formattable<std::remove_reference_t<T>, Char>::value;
 }
 #endif
 
