@@ -299,6 +299,10 @@ struct ECCommon {
     // True if reading for recovery which could possibly reading only a subset
     // of the available shards.
     bool for_recovery;
+    // True for client reads/RMW. When set, each shard reply is checked for
+    // underruns (received bytes < requested bytes) and treated as -EIO.
+    // Recovery reads handle short returns differently (see Improvement 2).
+    bool check_for_underruns;
     std::unique_ptr<ReadCompleter> on_complete;
 
     ZTracer::Trace trace;
@@ -320,12 +324,14 @@ struct ECCommon {
         ceph_tid_t tid,
         bool do_redundant_reads,
         bool for_recovery,
+        bool check_for_underruns,
         std::unique_ptr<ReadCompleter> _on_complete,
         std::map<hobject_t, read_request_t> &&_to_read)
       : priority(priority),
         tid(tid),
         do_redundant_reads(do_redundant_reads),
         for_recovery(for_recovery),
+        check_for_underruns(check_for_underruns),
         on_complete(std::move(_on_complete)),
         to_read(std::move(_to_read)) {}
 
@@ -380,6 +386,7 @@ struct ECCommon {
         std::map<hobject_t, read_request_t> &to_read,
         bool do_redundant_reads,
         bool for_recovery,
+        bool check_for_underruns,
         std::unique_ptr<ReadCompleter> on_complete);
 
     void do_read_op(ReadOp &rop);

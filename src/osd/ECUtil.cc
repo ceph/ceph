@@ -1140,6 +1140,8 @@ std::ostream &operator<<(std::ostream &out, const log_entry_t &rhs) {
     break;
   case COMPLETE: out << "COMPLETE";
     break;
+  case SHARD_UNDERRUN: out << "SHARD_UNDERRUN";
+    break;
   default:
     ceph_assert(false);
   }

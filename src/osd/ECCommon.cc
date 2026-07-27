@@ -500,6 +500,7 @@ void ECCommon::ReadPipeline::start_read_op(
     map<hobject_t, read_request_t> &to_read,
     const bool do_redundant_reads,
     const bool for_recovery,
+    const bool check_for_underruns,
     std::unique_ptr<ReadCompleter> on_complete) {
   ceph_tid_t tid = get_parent()->get_tid();
   ceph_assert(!tid_to_read_map.contains(tid));
@@ -510,6 +511,7 @@ void ECCommon::ReadPipeline::start_read_op(
       tid,
       do_redundant_reads,
       for_recovery,
+      check_for_underruns,
       std::move(on_complete),
       std::move(to_read))).first->second;
   dout(10) << __func__ << ": starting " << op << dendl;
@@ -817,6 +819,7 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
     for_read_op,
     fast_read,
     false,
+    true,
     std::make_unique<ClientReadCompleter>(
       *this, &(in_progress_client_reads.back())));
 }
@@ -848,7 +851,7 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct_for_rmw(
 
   start_read_op(
     CEPH_MSG_PRIO_DEFAULT,
-    for_read_op, false, false,
+    for_read_op, false, false, true,
     std::make_unique<ClientReadCompleter>(
       *this, &(in_progress_client_reads.back())));
 }
@@ -1317,7 +1320,16 @@ void ECCommon::RecoveryBackend::handle_recovery_push(
   if (op.after_progress.data_complete && op.after_progress.omap_complete) {
     uint64_t shard_size = sinfo.object_size_to_shard_size(op.recovery_info.size,
       get_parent()->whoami_shard().shard);
-    ceph_assert(shard_size >= tobj_size);
+    if (shard_size < tobj_size) {
+      derr << __func__ << ": shard_size " << shard_size
+           << " < tobj_size " << tobj_size << " for " << op.soid
+           << ", cancelling push" << dendl;
+      read_result_t res(&sinfo);
+      res.r = -EIO;
+      res.errors[get_parent()->primary_shard()] = -EIO;
+      _failed_push(op.soid, res);
+      return;
+    }
     if (shard_size != tobj_size) {
       m->t.truncate( coll, tobj, shard_size);
     }
@@ -1475,6 +1487,51 @@ void ECCommon::RecoveryBackend::handle_recovery_read_complete(
     op.recovery_progress.omap_complete = true;
   }
 
+  // Validate source shard sizes before decode. If any source shard
+  // returned fewer bytes than expected for its requested extents
+  // (accounting for legitimate end-of-object zeros), treat it as
+  // an underrun and fail the push so recovery restarts without it.
+  {
+    uint64_t obj_size = op.obc->obs.oi.size;
+    for (auto &[shard_id, shard_read] : req.shard_reads) {
+      if (op.missing_on_shards.contains(shard_id)) {
+        continue;
+      }
+      uint64_t expected_shard_size = sinfo.object_size_to_shard_size(
+        obj_size, shard_id);
+      uint64_t requested = 0;
+      for (auto &[off, len] : shard_read.extents) {
+        requested += len;
+      }
+      uint64_t zeros = 0;
+      if (req.zeros_for_decode.contains(shard_id)) {
+        for (auto &[off, len] : req.zeros_for_decode.at(shard_id)) {
+          zeros += len;
+        }
+      }
+      uint64_t received = 0;
+      if (res.buffers_read.contains(shard_id)) {
+        for (auto &[off, len] : res.buffers_read.get_extent_set(shard_id)) {
+          received += len;
+        }
+      }
+      if (received + zeros < requested &&
+          received < expected_shard_size) {
+        derr << __func__ << ": source shard " << shard_read.pg_shard
+             << " underrun on " << hoid
+             << " expected_shard_size=" << expected_shard_size
+             << " requested=" << requested
+             << " received=" << received
+             << " zeros=" << zeros << dendl;
+        read_result_t fail_res(&sinfo);
+        fail_res.r = -EIO;
+        fail_res.errors[shard_read.pg_shard] = -EIO;
+        _failed_push(hoid, fail_res);
+        return;
+      }
+    }
+  }
+
   op.returned_data.emplace(std::move(res.buffers_read));
   uint64_t aligned_size = ECUtil::align_next(op.obc->obs.oi.size);
 
@@ -1484,7 +1541,14 @@ void ECCommon::RecoveryBackend::handle_recovery_read_complete(
 
   op.returned_data->add_zero_padding_for_decode(req.zeros_for_decode);
   int r = op.returned_data->decode(ec_impl, req.shard_want_to_read, aligned_size, get_parent()->get_dpp(), true);
-  ceph_assert(r == 0);
+  if (r != 0) {
+    derr << __func__ << ": decode failed with r=" << r
+         << " for " << hoid << dendl;
+    read_result_t fail_res(&sinfo);
+    fail_res.r = r;
+    _failed_push(hoid, fail_res);
+    return;
+  }
 
   // Finally, we don't want to write any padding, so truncate the buffer
   // to remove it.
@@ -1578,6 +1642,7 @@ void ECCommon::RecoveryBackend::dispatch_recovery_messages(
     m.recovery_reads,
     false,
     true,
+    false,
     std::make_unique<RecoveryReadCompleter>(*this));
 }
 

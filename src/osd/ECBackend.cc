@@ -817,6 +817,32 @@ void ECBackend::handle_sub_read_reply(
       continue;
     }
 
+    if (rop.check_for_underruns &&
+        rop.to_read.at(hoid).shard_reads.contains(from.shard)) {
+      uint64_t expected = 0;
+      for (auto &[off, len] : rop.to_read.at(hoid).shard_reads.at(from.shard).extents) {
+        expected += len;
+      }
+      uint64_t received = 0;
+      for (auto &[off, bl] : offset_buffer_map) {
+        received += bl.length();
+      }
+      if (received != expected) {
+        dout(0) << __func__ << " shard underrun from " << from
+                << " on " << hoid
+                << " expected " << expected << " got " << received << dendl;
+        if (!rop.complete.contains(hoid)) {
+          rop.complete.emplace(hoid, &sinfo);
+        }
+        rop.complete.at(hoid).errors.emplace(from, -EIO);
+        rop.complete.at(hoid).buffers_read.erase_shard(from.shard);
+        rop.complete.at(hoid).processed_read_requests.erase(from.shard);
+        rop.to_read.at(hoid).zeros_for_decode.erase(from.shard);
+        rop.debug_log.emplace_back(ECUtil::SHARD_UNDERRUN, op.from);
+        continue;
+      }
+    }
+
     if (!rop.complete.contains(hoid)) {
       rop.complete.emplace(hoid, &sinfo);
     }
@@ -1616,6 +1642,30 @@ int ECBackend::be_deep_scrub(
   pos.data_pos += r;
   if (r == (int)stride) {
     return -EINPROGRESS;
+  }
+
+  // Check shard size against expected size from the object's logical size.
+  {
+    auto oi_iter = o.attrs.find(OI_ATTR);
+    if (oi_iter != o.attrs.end()) {
+      try {
+        object_info_t oi;
+        auto p = oi_iter->second.cbegin();
+        decode(oi, p);
+        uint64_t expected = sinfo.object_size_to_shard_size(
+          oi.size, get_parent()->whoami_shard().shard);
+        if ((uint64_t)pos.data_pos != expected) {
+          dout(0) << __func__ << " " << poid
+                  << " shard size mismatch: on-disk " << pos.data_pos
+                  << " expected " << expected
+                  << " (object size " << oi.size << ")" << dendl;
+          o.ec_size_mismatch = true;
+        }
+      } catch (ceph::buffer::error &e) {
+        dout(0) << __func__ << " " << poid
+                << " failed to decode OI attr: " << e.what() << dendl;
+      }
+    }
   }
 
   if (sinfo.supports_encode_decode_crcs()) {
