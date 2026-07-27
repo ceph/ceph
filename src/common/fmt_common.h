@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <fmt/base.h>
 #include <optional>
 #include <type_traits>
 
@@ -11,6 +10,7 @@
  * \file default fmtlib formatters for specifically-tagged types
  */
 #include <fmt/compile.h>
+#include <fmt/core.h>
 #include <fmt/format.h>
 
 /**
