@@ -5,6 +5,7 @@ import { Subscription } from 'rxjs';
 
 import { CssHelper } from '~/app/shared/classes/css-helper';
 import { HealthColor } from '~/app/shared/enum/health-color.enum';
+import { AppConstants } from '~/app/shared/constants/app.constants';
 import { SummaryService } from './summary.service';
 
 @Injectable()
@@ -20,7 +21,7 @@ export class FaviconService implements OnDestroy {
   ) {}
 
   init() {
-    this.url = this.document.getElementById('cdFavicon')?.getAttribute('href');
+    this.url = AppConstants.cephLogo;
 
     this.sub = this.summaryService.subscribe((summary) => {
       this.changeIcon(summary.health_status);
