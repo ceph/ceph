@@ -618,7 +618,8 @@ function TEST_stretch_replica_device_class_pools() {
 
     ceph osd pool create data0 replicated --rule stretch_ssd --num-zones 2 || return 1
 
-    ceph osd pool create pool_hdd replicated --rule stretch_hdd --num-zones 2 || return 1
+    ceph osd pool create pool_hdd
+    ceph osd pool stretch set pool_hdd 2 2 datacenter stretch_hdd 4 2 || return 1
 
     ceph osd pool get pool_ssd crush_rule | grep "stretch_ssd" || return 1
     ceph osd pool get pool_hdd crush_rule | grep "stretch_hdd" || return 1
