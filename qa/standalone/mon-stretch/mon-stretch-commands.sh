@@ -65,6 +65,27 @@ function TEST_stretch_set_replicated_pool() {
     test "$(pool_field rep size)" = 2 || return 1
 }
 
+# The bucket counts cannot exceed the zones the rule spans, and the refusal
+# does not suggest an override that would not help
+function TEST_stretch_set_counts_above_zones() {
+    local dir=$1
+    setup_zones $dir || return 1
+
+    ceph osd pool create rep 8 8 replicated replicated_rule || return 1
+    for args in "3 2" "2 3"; do
+        for sure in "" --yes-i-really-mean-it; do
+            expect_failure $dir "zones (2) spanned by crush rule replicated_rule" \
+                ceph osd pool stretch set rep $args zone replicated_rule 4 2 \
+                $sure || return 1
+        done
+    done
+    test "$(pool_field rep peering_crush_bucket_count)" = 0 || return 1
+    # an individual stretch pool records no zones, so as in earlier releases
+    # its size need not divide by them
+    ceph osd pool stretch set rep 2 2 zone replicated_rule 5 2 || return 1
+    test "$(pool_field rep size)" = 5 || return 1
+}
+
 function TEST_stretch_set_ec_pool() {
     local dir=$1
     setup_zones $dir || return 1

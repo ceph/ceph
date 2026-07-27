@@ -127,14 +127,15 @@ ceph osd setcrushmap -i crushmap.bin
 # Set the election strategy to connectivity
 ceph mon set election_strategy connectivity
 
-# peer_crush_bucket_count > 3 datacenters throws Error EPERM
+# peer_crush_bucket_count > 3 datacenters throws Error EINVAL
 expect_false ceph osd pool stretch set $TEST_POOL_STRETCH 4 3 datacenter $TEST_CRUSH_RULE 6 3
 
-# peer_crush_bucket_target > 3 datacenters throws Error EPERM
+# peer_crush_bucket_target > 3 datacenters throws Error EINVAL
 expect_false ceph osd pool stretch set $TEST_POOL_STRETCH 2 4 datacenter $TEST_CRUSH_RULE 6 3
 
-# peer_crush_bucket_target > 3 datacenters success when add --yes-i-really-mean-it flag
-expect_true ceph osd pool stretch set $TEST_POOL_STRETCH 2 4 datacenter $TEST_CRUSH_RULE 6 3 --yes-i-really-mean-it
+# peering_crush_bucket_target is the pool's num_zones, so it cannot exceed
+# the 3 datacenters, even with --yes-i-really-mean-it
+expect_false ceph osd pool stretch set $TEST_POOL_STRETCH 2 4 datacenter $TEST_CRUSH_RULE 6 3 --yes-i-really-mean-it
 
 # pool must be a stretch pool for this command to show anything.
 expect_true ceph osd pool stretch set $TEST_POOL_STRETCH 2 3 datacenter $TEST_CRUSH_RULE 6 3
