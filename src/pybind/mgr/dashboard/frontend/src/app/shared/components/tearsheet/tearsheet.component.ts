@@ -1,4 +1,5 @@
 import {
+  ChangeDetectorRef,
   Component,
   ContentChildren,
   EventEmitter,
@@ -9,6 +10,8 @@ import {
   AfterViewInit,
   DestroyRef,
   OnDestroy,
+  OnChanges,
+  SimpleChanges,
   ChangeDetectionStrategy,
   TemplateRef,
   ViewEncapsulation
@@ -60,7 +63,7 @@ formgroup: CdFormGroup;
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None
 })
-export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
+export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy, OnChanges {
   @Input() title!: string;
   @Input() steps!: Array<Step>;
   @Input() description!: string;
@@ -114,7 +117,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   currentStep: number = 0;
-  lastStep: number = null;
+  lastStep: number | null = null;
   isOpen: boolean = true;
   hasModalOutlet: boolean = false;
   private destroy$ = new Subject<void>();
@@ -124,7 +127,8 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
     private cdsModalService: ModalCdsService,
     private route: ActivatedRoute,
     private location: Location,
-    private destroyRef: DestroyRef
+    private destroyRef: DestroyRef,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit() {
@@ -132,13 +136,42 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
     this.hasModalOutlet = this.route.outlet === 'modal';
   }
 
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes['steps']) {
+      this.lastStep = this.steps.length - 1;
+      if (this.currentStep > this.lastStep) {
+        this.currentStep = this.lastStep;
+      }
+      this.cdr.markForCheck();
+    }
+  }
+
   private _updateStepInvalid(index: number, invalid: boolean) {
     this.steps = this.steps.map((step, i) => (i === index ? { ...step, invalid } : step));
   }
 
   onStepSelect(event: { step: Step; index: number }) {
+    if (this.isStepNavBlocked(event.index)) {
+      return;
+    }
     this.currentStep = event.index;
     this.stepChanged.emit({ current: this.currentStep });
+    this.cdr.markForCheck();
+  }
+
+  private isStepNavBlocked(index: number): boolean {
+    if (this.steps[index]?.disabled) {
+      return true;
+    }
+    if (index > this.currentStep && this.steps[this.currentStep]?.invalid) {
+      return true;
+    }
+    for (let i = 0; i < index; i++) {
+      if (this.steps[i]?.invalid || this.steps[i]?.disabled) {
+        return true;
+      }
+    }
+    return false;
   }
 
   closeTearsheet() {
@@ -150,8 +183,11 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   closeWideTearsheet() {
-    this.closeRequested.emit();
     this.isOpen = false;
+    if (this.closeRequested.observers.length > 0) {
+      this.closeRequested.emit();
+      return;
+    }
     if (this.hasModalOutlet) {
       this.location.back();
     } else {
@@ -163,6 +199,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.currentStep !== 0) {
       this.currentStep = this.currentStep - 1;
       this.stepChanged.emit({ current: this.currentStep });
+      this.cdr.markForCheck();
     }
   }
 
@@ -177,6 +214,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.currentStep !== this.lastStep && !this.steps[this.currentStep].invalid) {
       this.currentStep = this.currentStep + 1;
       this.stepChanged.emit({ current: this.currentStep });
+      this.cdr.markForCheck();
     }
   }
 
