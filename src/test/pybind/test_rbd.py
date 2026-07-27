@@ -3168,49 +3168,6 @@ class TestGroups(object):
         eq(1, len(list(self.group.list_snaps())))
         self.group.remove_snap("snap1")
 
-    def test_group_image_remove_purge(self):
-        self.group.add_image(ioctx, image_name)
-        self.group.create_snap("snap1")
-        with Image(ioctx, image_name) as image:
-            eq(1, len(list(image.list_snaps())))
-        self.group.remove_image(ioctx, image_name, purge_user_snaps=True)
-        eq([], list(self.group.list_snaps()))
-        with Image(ioctx, image_name) as image:
-            eq([], list(image.list_snaps()))
-        eq([], list(self.group.list_images()))
-
-    def test_group_image_remove_purge_preserves_unrelated_group_snapshot(self):
-        image2_name = get_temp_image_name()
-        RBD().create(ioctx, image2_name, IMG_SIZE)
-        try:
-            self.group.add_image(ioctx, image_name)
-            self.group.create_snap("snap1")
-            self.group.add_image(ioctx, image2_name)
-            # Future snapshots should no longer include image1.
-            self.group.remove_image(ioctx, image_name, force=True)
-            self.group.create_snap("snap2")
-            # Purge only snapshots that reference image2.
-            self.group.remove_image(ioctx, image2_name,
-                                    purge_user_snaps=True)
-            eq(["snap1"], [s["name"] for s in self.group.list_snaps()])
-            with Image(ioctx, image_name) as image:
-                snaps = list(image.list_snaps())
-                eq(1, len(snaps))
-                eq(RBD_SNAP_NAMESPACE_TYPE_GROUP, snaps[0]["namespace"])
-            with Image(ioctx, image2_name) as image:
-                eq([], list(image.list_snaps()))
-            self.group.remove_snap("snap1")
-        finally:
-            RBD().remove(ioctx, image2_name)
-
-    def test_group_image_remove_force_and_purge_invalid(self):
-        self.group.add_image(ioctx, image_name)
-        self.group.create_snap("snap1")
-        assert_raises(InvalidArgument, self.group.remove_image, ioctx,
-                      image_name, force=True, purge_user_snaps=True)
-        eq([image_name], [img["name"] for img in self.group.list_images()])
-        eq(["snap1"], [snap["name"] for snap in self.group.list_snaps()])
-
     def test_group_snap_get_info(self):
         self.image_names.append(create_image())
         self.image_names.sort()

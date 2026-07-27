@@ -289,7 +289,7 @@ TEST_F(TestGroup, group_image_remove_default)
   ASSERT_EQ(0, m_rbd.group_snap_remove(ioctx, group, "snap1"));
   ASSERT_EQ(0, m_rbd.group_image_remove(ioctx, group, ioctx,
                                         m_image_name.c_str(),
-                                        RBD_GROUP_IMAGE_REMOVE_PURGE_USER_SNAPS));
+                                        RBD_GROUP_IMAGE_REMOVE_FORCE));
   ASSERT_EQ(0, m_rbd.group_remove(ioctx, group));
 }
 
@@ -326,113 +326,6 @@ TEST_F(TestGroup, group_image_remove_force)
   ASSERT_EQ(0, m_rbd.group_remove(ioctx, group));
 }
 
-TEST_F(TestGroup, group_image_remove_purge_dependent_snapshots)
-{
-  REQUIRE_FORMAT_V2();
-
-  librados::IoCtx ioctx;
-  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
-
-  const char *group = "purge_dep";
-
-  ASSERT_EQ(0, m_rbd.group_create(ioctx, group));
-  ASSERT_EQ(0, m_rbd.group_image_add(ioctx, group, ioctx,
-                                     m_image_name.c_str()));
-
-  ASSERT_EQ(0, m_rbd.group_snap_create(ioctx, group, "snap1"));
-
-  std::vector<librbd::group_snap_info_t> snaps;
-  ASSERT_EQ(0, m_rbd.group_snap_list(ioctx, group, &snaps, sizeof(snaps[0])));
-  ASSERT_EQ(1U, snaps.size());
-
-  ASSERT_EQ(0, m_rbd.group_image_remove(ioctx, group, ioctx,
-                                        m_image_name.c_str(),
-                                        RBD_GROUP_IMAGE_REMOVE_PURGE_USER_SNAPS));
-
-  snaps.clear();
-
-  ASSERT_EQ(0, m_rbd.group_snap_list(ioctx, group, &snaps, sizeof(snaps[0])));
-  ASSERT_TRUE(snaps.empty());
-
-  std::vector<librbd::group_image_info_t> images;
-  ASSERT_EQ(0, m_rbd.group_image_list(ioctx, group, &images,
-                                      sizeof(images[0])));
-  ASSERT_TRUE(images.empty());
-
-  ASSERT_EQ(0, m_rbd.group_remove(ioctx, group));
-}
-
-TEST_F(TestGroup, group_image_remove_purge_preserves_unrelated_group_snapshots)
-{
-  REQUIRE_FORMAT_V2();
-
-  librados::IoCtx ioctx;
-  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
-
-  std::string image2_name = get_temp_image_name();
-  ASSERT_EQ(0, create_image_pp(m_rbd, ioctx, image2_name, 0));
-
-  const char *group = "preserve_unrelated";
-
-  ASSERT_EQ(0, m_rbd.group_create(ioctx, group));
-
-  ASSERT_EQ(0, m_rbd.group_image_add(ioctx, group, ioctx,
-                                     m_image_name.c_str()));
-
-  ASSERT_EQ(0, m_rbd.group_snap_create(ioctx, group, "snap1"));
-
-  ASSERT_EQ(0, m_rbd.group_image_add(ioctx, group, ioctx,
-                                     image2_name.c_str()));
-
-  ASSERT_EQ(0, m_rbd.group_image_remove(
-      ioctx, group, ioctx, m_image_name.c_str(),
-      RBD_GROUP_IMAGE_REMOVE_FORCE));
-
-  ASSERT_EQ(0, m_rbd.group_snap_create(ioctx, group, "snap2"));
-
-  ASSERT_EQ(0, m_rbd.group_image_remove(
-      ioctx, group, ioctx, image2_name.c_str(),
-      RBD_GROUP_IMAGE_REMOVE_PURGE_USER_SNAPS));
-
-  std::vector<librbd::group_snap_info_t> group_snaps;
-  ASSERT_EQ(0, m_rbd.group_snap_list(ioctx, group, &group_snaps,
-                                     sizeof(group_snaps[0])));
-
-  ASSERT_EQ(1U, group_snaps.size());
-  ASSERT_EQ("snap1", group_snaps[0].name);
-
-  {
-    librbd::Image image1;
-    ASSERT_EQ(0, m_rbd.open(ioctx, image1, m_image_name.c_str()));
-
-    std::vector<librbd::snap_info_t> image1_snaps;
-    ASSERT_EQ(0, image1.snap_list(image1_snaps));
-
-    // snap1 should still exist on image1
-    ASSERT_EQ(1U, image1_snaps.size());
-
-    ASSERT_EQ(0, image1.close());
-  }
-
-  {
-    librbd::Image image2;
-    ASSERT_EQ(0, m_rbd.open(ioctx, image2, image2_name.c_str()));
-
-    std::vector<librbd::snap_info_t> image2_snaps;
-    ASSERT_EQ(0, image2.snap_list(image2_snaps));
-
-    // snap2 should have been purged
-    ASSERT_TRUE(image2_snaps.empty());
-
-    ASSERT_EQ(0, image2.close());
-  }
-
-  ASSERT_EQ(0, m_rbd.group_snap_remove(ioctx, group, "snap1"));
-  ASSERT_EQ(0, m_rbd.group_remove(ioctx, group));
-
-  ASSERT_EQ(0, m_rbd.remove(ioctx, image2_name.c_str()));
-}
-
 TEST_F(TestGroup, group_image_remove_invalid_mode)
 {
   REQUIRE_FORMAT_V2();
@@ -446,14 +339,10 @@ TEST_F(TestGroup, group_image_remove_invalid_mode)
   ASSERT_EQ(0, m_rbd.group_image_add(ioctx, group, ioctx,
                                      m_image_name.c_str()));
 
-  // Construct an invalid enum value. group_image_remove_mode_t is a
-  // mutually-exclusive mode, not a bitmask. FORCE | PURGE_USER_SNAPS
-  // evaluates to 3, which is not a valid mode.
+  // Construct an invalid enum value.
   ASSERT_EQ(-EINVAL, m_rbd.group_image_remove(ioctx, group, ioctx,
                                               m_image_name.c_str(),
-                                              static_cast<librbd::group_image_remove_mode_t>(
-                                                RBD_GROUP_IMAGE_REMOVE_FORCE |
-                                                RBD_GROUP_IMAGE_REMOVE_PURGE_USER_SNAPS)));
+                                              static_cast<librbd::group_image_remove_mode_t>(2)));
 
   // Verify the invalid mode did not modify the group.
   std::vector<librbd::group_image_info_t> images;
@@ -464,7 +353,7 @@ TEST_F(TestGroup, group_image_remove_invalid_mode)
 
   ASSERT_EQ(0, m_rbd.group_image_remove(ioctx, group, ioctx,
                                         m_image_name.c_str(),
-                                        RBD_GROUP_IMAGE_REMOVE_PURGE_USER_SNAPS));
+                                        RBD_GROUP_IMAGE_REMOVE_FORCE));
   ASSERT_EQ(0, m_rbd.group_remove(ioctx, group));
 }
 

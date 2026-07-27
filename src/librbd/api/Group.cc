@@ -327,58 +327,6 @@ int has_user_group_snapshot_dependency(librados::IoCtx& group_ioctx,
   return 0;
 }
 
-template <typename I>
-int purge_dependent_user_group_snapshots(librados::IoCtx& group_ioctx,
-                                         const std::string& group_id,
-                                         const std::string& image_id) {
-  CephContext* cct = reinterpret_cast<CephContext*>(group_ioctx.cct());
-
-  ldout(cct, 20) << "group_id=" << group_id
-                 << ", image_id=" << image_id << dendl;
-
-  std::vector<cls::rbd::GroupSnapshot> group_snaps;
-  int r = group_snap_list<I>(group_ioctx, group_id,
-                             false, false, &group_snaps);
-  if (r < 0) {
-    if (r == -ENOENT) {
-      return 0;
-    }
-
-    lderr(cct) << "failed to list group snapshots: "
-               << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  for (const auto& group_snap : group_snaps) {
-    // filter user group snapshots
-    if (!is_user_snapshot(group_snap)) {
-      continue;
-    }
-
-    // check whether this snapshot references the image
-    const auto it = std::find_if(group_snap.snaps.begin(),
-        group_snap.snaps.end(), [&](const auto& snap) {
-          return snap.image_id == image_id;
-        });
-    if (it == group_snap.snaps.end()) {
-      continue;
-    }
-
-    ldout(cct, 10) << "purging dependent user group snapshot "
-                   << group_snap.name << " (" << group_snap.id << ")"
-                   << dendl;
-
-    r = util::group_snap_remove(group_ioctx, group_id, group_snap);
-    if (r < 0) {
-      lderr(cct) << "failed to remove dependent user group snapshot "
-                 << group_snap.name << ": " << cpp_strerror(r) << dendl;
-      return r;
-    }
-  }
-
-  return 0;
-}
-
 } // anonymous namespace
 
 template <typename I>
@@ -1605,13 +1553,6 @@ int Group<I>::group_image_remove(librados::IoCtx& group_ioctx,
 
   int r;
   switch (mode) {
-    case RBD_GROUP_IMAGE_REMOVE_PURGE_USER_SNAPS:
-      r = purge_dependent_user_group_snapshots<I>(group_ioctx, group_id,
-                                                  image_id);
-      if (r < 0) {
-        return r;
-      }
-      break;
     case RBD_GROUP_IMAGE_REMOVE_DEFAULT: {
       bool has_dependency = false;
       r = has_user_group_snapshot_dependency<I>(group_ioctx, group_id, image_id,

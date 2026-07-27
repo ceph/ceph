@@ -979,6 +979,7 @@
                                 [--group <group>] [--image-pool <image-pool>] 
                                 [--image-namespace <image-namespace>] 
                                 [--image <image>] [--image-id <image-id>] 
+                                [--force] [--purge-user-snaps] 
                                 <group-spec> <image-spec> 
   
   Remove an image from a group.
@@ -997,6 +998,8 @@
     --image-namespace arg image namespace name
     --image arg           image name
     --image-id arg        image id
+    --force               keep dependent user group snapshots
+    --purge-user-snaps    delete dependent user group snapshots
   
   rbd help group info
   usage: rbd group info [--pool <pool>] [--namespace <namespace>] 
