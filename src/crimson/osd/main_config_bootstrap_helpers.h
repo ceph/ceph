@@ -39,10 +39,6 @@ struct early_config_t {
     return to_ptr_vector(early_args);
   }
 
-  std::vector<const char *> get_ceph_args() {
-    return to_ptr_vector(ceph_args);
-  }
-
 private:
   /// Returned pointers are valid only as long as \p in is alive.
   static std::vector<const char *> to_ptr_vector(
