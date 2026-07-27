@@ -30,7 +30,6 @@ from teuthology import contextutil
 from teuthology import exceptions
 from teuthology.orchestra import run
 from teuthology.util.scanner import ValgrindScanner
-from tasks import ceph_client as cclient
 from teuthology.orchestra.daemon import DaemonGroup
 from tasks.daemonwatchdog import DaemonWatchdog
 
@@ -391,6 +390,27 @@ def conf_setup(ctx, config):
     first_mon = teuthology.get_first_mon(ctx, config, cluster_name)
     (mon_remote,) = ctx.cluster.only(first_mon).remotes.keys()
 
+    client_key_type = config.get('client_key_type', None)
+
+    if client_key_type is not None:
+        if client_key_type in ('aes',):
+            args = ['sudo', 'ceph', '--cluster', cluster_name,
+                    'config', 'set', 'mon', 'mon_auth_allow_insecure_key', 'true']
+            mon_remote.run(args=args)
+
+            args = ['sudo', 'ceph', '--cluster', cluster_name,
+                    'mon', 'set', 'auth_allowed_ciphers', f'{client_key_type},aes256k']
+            mon_remote.run(args=args)
+
+            auth_warnings = [
+                'AUTH_INSECURE_CLIENT_KEY_TYPE',
+                'AUTH_INSECURE_KEYS_ALLOWED',
+                'AUTH_INSECURE_KEYS_CREATABLE',
+            ]
+            for w in auth_warnings:
+                args = ['ceph', 'health', 'mute', w, '--sticky']
+                mon_remote.run(args=args)
+
     configs = config.get('cluster-conf', {})
     procs = []
     for section, confs in configs.items():
@@ -525,6 +545,42 @@ def cephfs_setup(ctx, config):
             fs.destroy()
     else:
         yield
+
+@contextlib.contextmanager
+def ceph_clients(ctx, config):
+    cluster_name = config['cluster']
+
+    firstmon = teuthology.get_first_mon(ctx, config, cluster_name)
+    (mon_remote,) = ctx.cluster.only(firstmon).remotes.keys()
+
+    client_key_type = config.get('client_key_type', None)
+
+    log.info('Setting up client nodes...')
+    clients = ctx.cluster.only(teuthology.is_type('client', cluster_name))
+    for remote, roles_for_host in clients.remotes.items():
+        for role in teuthology.cluster_roles_of_type(roles_for_host, 'client',
+                                                     cluster_name):
+            name = teuthology.ceph_role(role)
+            client_keyring = '/etc/ceph/{0}.{1}.keyring'.format(cluster_name,
+                                                                name)
+
+            args = ['sudo', 'ceph', '--cluster', cluster_name, 'auth', 'get-or-create']
+            if client_key_type is not None:
+                args.append(f'--key-type={client_key_type}')
+            args.extend([
+                name,
+                'mon', 'allow *',
+                'osd', 'allow *',
+                'mds', 'allow *',
+                'mgr', 'allow *',
+            ])
+            r = mon_remote.run(
+                args=args,
+                stdout=StringIO(),
+            )
+            keyring = r.stdout.getvalue()
+            remote.sudo_write_file(client_keyring, keyring, mode='0644')
+    yield
 
 @contextlib.contextmanager
 def watchdog_setup(ctx, config):
@@ -926,7 +982,6 @@ def cluster(ctx, config):
                 'sudo', 'chown', '-R', 'ceph:ceph', mds_dir
             ])
 
-    cclient.create_keyring(ctx, cluster_name, auth_tool_extra_args)
     log.info('Running mkfs on osd nodes...')
 
     if not hasattr(ctx, 'disk_config'):
@@ -1102,14 +1157,6 @@ def cluster(ctx, config):
                 )
                 keys.append((type_, id_, data))
                 keys_fp.write(data)
-    for remote, roles_for_host in ctx.cluster.remotes.items():
-        for role in teuthology.cluster_roles_of_type(roles_for_host, 'client', cluster_name):
-            _, _, id_ = teuthology.split_role(role)
-            data = remote.read_file(
-                '/etc/ceph/{cluster}.client.{id}.keyring'.format(id=id_, cluster=cluster_name)
-            )
-            keys.append(('client', id_, data))
-            keys_fp.write(data)
 
     log.info('Adding keys to all mons...')
     writes = mons.run(
@@ -2175,6 +2222,7 @@ def task(ctx, config):
         lambda: create_rbd_pool(ctx=ctx, config=config),
         lambda: run_daemon(ctx=ctx, config=config, type_='mds'),
         lambda: cephfs_setup(ctx=ctx, config=config),
+        lambda: ceph_clients(ctx=ctx, config=config),
         lambda: watchdog_setup(ctx=ctx, config=config),
         lambda: conf_epoch(ctx=ctx, config=config),
     ]
