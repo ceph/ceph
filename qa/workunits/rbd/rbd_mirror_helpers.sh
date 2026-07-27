@@ -834,6 +834,43 @@ wait_for_non_primary_snap_present()
     return 1
 }
 
+wait_for_snap_not_present()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local snap_id=$4
+    local snap_count
+    local s
+
+    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32; do
+        sleep ${s}
+        snap_count=$(rbd --cluster ${cluster} snap list --all ${pool}/${image} --format xml | \
+                     xmlstarlet sel -t -v "count(//snapshots/snapshot[id='${snap_id}'])")
+        [ "${snap_count}" = "0" ] && return 0
+    done
+
+    return 1
+}
+
+wait_for_non_primary_snap_not_present()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local primary_snap_id=$4
+    local snap_count
+    local s
+
+    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32; do
+        sleep ${s}
+        snap_count=$(rbd --cluster ${cluster} snap list --all ${pool}/${image} --format xml | \
+            xmlstarlet sel -t -v "count(//snapshots/snapshot/namespace[primary_snap_id='${primary_snap_id}'])")
+        [ "${snap_count}" = "0" ] && return 0
+    done
+    return 1
+}
+
 wait_for_snapshot_sync_complete()
 {
     local local_cluster=$1

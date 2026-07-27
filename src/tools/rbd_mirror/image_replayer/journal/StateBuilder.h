@@ -65,6 +65,7 @@ public:
       Threads<ImageCtxT>* threads,
       InstanceWatcher<ImageCtxT>* instance_watcher,
       const std::string& local_mirror_uuid,
+      const std::string& local_mirror_peer_uuid,
       PoolMetaCache* pool_meta_cache,
       ReplayerListener* replayer_listener) override;
 
