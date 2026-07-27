@@ -518,7 +518,6 @@ typedef struct {
 typedef enum {
   RBD_GROUP_IMAGE_REMOVE_DEFAULT = 0,
   RBD_GROUP_IMAGE_REMOVE_FORCE,
-  RBD_GROUP_IMAGE_REMOVE_PURGE_USER_SNAPS
 } rbd_group_image_remove_mode_t;
 
 CEPH_RBD_API void rbd_image_options_create(rbd_image_options_t* opts);

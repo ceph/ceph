@@ -351,7 +351,6 @@ cdef extern from "rbd/librbd.h" nogil:
     ctypedef enum rbd_group_image_remove_mode_t:
         RBD_GROUP_IMAGE_REMOVE_DEFAULT
         RBD_GROUP_IMAGE_REMOVE_FORCE
-        RBD_GROUP_IMAGE_REMOVE_PURGE_USER_SNAPS
 
     ctypedef struct rbd_encryption_luks1_format_options_t:
         rbd_encryption_algorithm_t alg
