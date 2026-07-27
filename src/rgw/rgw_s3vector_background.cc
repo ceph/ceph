@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <memory>
+#include <mutex>
 #include <shared_mutex>
 #include <boost/functional/hash.hpp>
 #include <boost/lockfree/queue.hpp>
@@ -129,6 +130,8 @@ private:
   std::unordered_map<std::string, SessionPtr> sessions;
 
   struct table_state_t {
+    // track local insert/delete counts for each table, last_rebuild_time, to determine if a rebuild is needed.
+    // data is saved into table metadata to persist across RGW restarts and allow other RGW instances to see the global state.
     std::atomic<uint64_t> insert_count{0};
     std::atomic<uint64_t> delete_count{0};
     ceph::coarse_real_time last_rebuild_time;
@@ -140,6 +143,7 @@ private:
   };
   std::shared_mutex tables_mutex;
   std::unordered_map<table_name_t, table_state_t, boost::hash<table_name_t>> tables;
+  std::mutex active_builds_mutex;
   std::unordered_set<table_name_t, boost::hash<table_name_t>> active_builds;
   std::atomic<int> active_rebuild_count{0};
   MessageQueue messages;
@@ -627,10 +631,15 @@ private:
     const auto& index_name = table_name.second;
 
     // step 1: check if this RGW is already building this table (cheapest check).
-    if (active_builds.count(table_name)) {
-      ldpp_dout(this, 5) << "INFO: this RGW is already building "
-          << bucket_name << "." << index_name << ", skipping" << dendl;
-      return 1;
+    {
+      std::lock_guard lg(active_builds_mutex);
+      if (active_builds.count(table_name)) {
+        ldpp_dout(this, 5) << "INFO: this RGW is already building "
+            << bucket_name << "." << index_name << ", skipping"
+            << " (local_inserts=" << local_inserts
+            << ", local_deletes=" << local_deletes << ")" << dendl;
+        return 1;
+      }
     }
 
     // step 2: read ratio-based config
@@ -673,61 +682,54 @@ private:
           << bucket_name << "." << index_name << dendl;
       return -EIO;
     }
-    const auto& stats = stats_result.stats;
+    const auto& vector_index_status = stats_result.stats;
 
     ldpp_dout(this, 1) << "INFO: index stats for " << bucket_name << "." << index_name
-        << ": indexed=" << stats.num_indexed_rows
-        << " unindexed=" << stats.num_unindexed_rows
-        << " num_indices=" << stats.num_indices
+        << ": indexed=" << vector_index_status.num_indexed_rows
+        << " unindexed=" << vector_index_status.num_unindexed_rows
+        << " num_indices=" << vector_index_status.num_indices
         << " local_inserts=" << local_inserts
         << " local_deletes=" << local_deletes << dendl;
 
-    // step 5: read build state for the global delete counter
-    build_state_t prev_state;
-    read_build_state(table, prev_state);
-    const uint64_t global_delete_count = prev_state.global_delete_count + local_deletes;
-
-    // step 6: ratio-based rebuild decision
-    const double total_rows = static_cast<double>(stats.num_indexed_rows + stats.num_unindexed_rows);
+    // step 5: insert ratio pre-check (stats are global ground truth, no lock needed)
+    const double total_rows = static_cast<double>(vector_index_status.num_indexed_rows + vector_index_status.num_unindexed_rows);
     bool insert_rebuild = false;
     if (total_rows > 0 && insert_ratio_threshold > 0.0) {
-      const double insert_ratio = static_cast<double>(stats.num_unindexed_rows) / total_rows;
+      const double insert_ratio = static_cast<double>(vector_index_status.num_unindexed_rows) / total_rows;
       insert_rebuild = (insert_ratio >= insert_ratio_threshold);
       ldpp_dout(this, 5) << "INFO: insert ratio for " << bucket_name << "." << index_name
           << ": " << insert_ratio << " (threshold=" << insert_ratio_threshold << ")" << dendl;
     }
 
-    bool delete_rebuild = false;
-    if (stats.num_indexed_rows > 0 && delete_ratio_threshold > 0.0 && global_delete_count > 0) {
-      const double delete_ratio = static_cast<double>(global_delete_count)
-          / (static_cast<double>(stats.num_indexed_rows) + global_delete_count);
-      delete_rebuild = (delete_ratio >= delete_ratio_threshold);
-      ldpp_dout(this, 5) << "INFO: delete ratio for " << bucket_name << "." << index_name
-          << ": " << delete_ratio << " (threshold=" << delete_ratio_threshold
-          << ", global_delete_count=" << global_delete_count << ")" << dendl;
-    }
-
-    if (!insert_rebuild && !delete_rebuild) {
+    if (!insert_rebuild && local_deletes == 0) {
       ldpp_dout(this, 1) << "INFO: " << bucket_name << "." << index_name
-          << " below rebuild thresholds, skipping" << dendl;
-      // still persist the updated global delete count even if no rebuild is needed
-      if (local_deletes > 0 && global_delete_count != prev_state.global_delete_count) {
-        prev_state.global_delete_count = global_delete_count;
-        write_build_state(table, prev_state);
-      }
+          << " below insert threshold and no local deletes, skipping" << dendl;
       return 1;
     }
 
-    // step 7: try to acquire distributed lock (S3 conditional write)
+    // step 6: acquire distributed lock.
+    // needed to read/write global_delete_count atomically (LanceDB metadata
+    // commits are not mutual-exclusive — concurrent writes cause CommitConflict)
+    // and to protect the rebuild itself.
     optional_yield y(yield);
     std::string lock_token = try_acquire_lock(bucket_name, index_name, y);
     if (lock_token.empty()) {
       ldpp_dout(this, 5) << "INFO: lock held by another process for "
-          << bucket_name << "." << index_name << ", skipping rebuild" << dendl;
+          << bucket_name << "." << index_name << ", skipping" << dendl;
+      if (local_deletes > 0) {
+        std::shared_lock sl(tables_mutex);
+        auto it = tables.find(table_name);
+        if (it != tables.end()) {
+          it->second.delete_count.fetch_add(local_deletes, std::memory_order_relaxed);
+        }
+      }
       return 1;
     }
 
-    active_builds.insert(table_name);
+    {
+      std::lock_guard lg(active_builds_mutex);
+      active_builds.insert(table_name);
+    }
 
     struct lock_guard_t {
       Manager* mgr;
@@ -737,12 +739,41 @@ private:
       const std::string& token;
       optional_yield y;
       ~lock_guard_t() {
-        mgr->active_builds.erase(table_name);
+        {
+          std::lock_guard lg(mgr->active_builds_mutex);
+          mgr->active_builds.erase(table_name);
+        }
         mgr->release_lock(bucket_name, index_name, token, y);
       }
     } lock_guard{this, table_name, bucket_name, index_name, lock_token, y};
 
-    // step 8: record build state
+    // step 7: read build state under lock — fresh global_delete_count
+    build_state_t prev_state;
+    read_build_state(table, prev_state);
+    const uint64_t global_delete_count = prev_state.global_delete_count + local_deletes;
+
+    // step 8: delete ratio check (requires global counter, must be under lock)
+    bool delete_rebuild = false;
+    if (vector_index_status.num_indexed_rows > 0 && delete_ratio_threshold > 0.0 && global_delete_count > 0) {
+      const double delete_ratio = static_cast<double>(global_delete_count)
+          / (static_cast<double>(vector_index_status.num_indexed_rows) + global_delete_count);
+      delete_rebuild = (delete_ratio >= delete_ratio_threshold);
+      ldpp_dout(this, 5) << "INFO: delete ratio for " << bucket_name << "." << index_name
+          << ": " << delete_ratio << " (threshold=" << delete_ratio_threshold
+          << ", global_delete_count=" << global_delete_count << ")" << dendl;
+    }
+
+    if (!insert_rebuild && !delete_rebuild) {
+      ldpp_dout(this, 1) << "INFO: " << bucket_name << "." << index_name
+          << " below rebuild thresholds, skipping" << dendl;
+      if (local_deletes > 0) {
+        prev_state.global_delete_count = global_delete_count;
+        write_build_state(table, prev_state);
+      }
+      return 1;
+    }
+
+    // step 9: record build state
     build_state_t state;
     state.build_in_progress = true;
     state.build_started_at = std::chrono::duration_cast<std::chrono::seconds>(
@@ -757,20 +788,20 @@ private:
       return ret;
     }
 
-    // step 9: get distance metric for index config
+    // step 10: get distance metric for index config
     DistanceMetric metric = s3vector::get_distance_metric(table, this);
     LanceDBDistanceType distance_type = to_lancedb_distance(metric);
 
-    // step 10: run the vector index build
+    // step 11: run the vector index build
     ldpp_dout(this, 1) << "INFO: starting vector index build for "
         << bucket_name << "." << index_name
-        << " (unindexed=" << stats.num_unindexed_rows
+        << " (unindexed=" << vector_index_status.num_unindexed_rows
         << ", insert_rebuild=" << insert_rebuild
         << ", delete_rebuild=" << delete_rebuild << ")" << dendl;
 
     int build_ret = run_vector_index_build(table, distance_type);
 
-    // step 11: mark build complete in table metadata
+    // step 12: mark build complete in table metadata
     build_state_t post_state;
     if (int ret = read_build_state(table, post_state); ret < 0) {
       ldpp_dout(this, 1) << "WARNING: failed to read build state after build for "
@@ -818,13 +849,14 @@ private:
 
       // 1. consume control messages (REMOVE / SESSION_CREATE / SESSION_DELETE)
       messages.consume_all([this](auto message) {
+          // this message consumption should be quite fast, since there is no blocking I/O and no long-running operations.
         std::unique_ptr<message_t> message_guard(message);
         const auto table_name = std::move(message->table_name);
         switch(message->type) {
           case message_t::Op::REMOVE:
             {
               ldpp_dout(this, 20) << "INFO: received remove message for table: " << table_name.first << "." << table_name.second << dendl;
-              std::unique_lock ul(tables_mutex);
+              std::unique_lock ul(tables_mutex);//exclusive lock to erase the table from the map, since we don't want any other thread to be reading or writing to this table while it's being removed.(short time)
               tables.erase(table_name);
               return;
             }
@@ -881,7 +913,7 @@ private:
       // 2. scan tables for pending mutations
       bool spawned_any = false;
       {
-        std::shared_lock sl(tables_mutex);
+        std::shared_lock sl(tables_mutex);//this lock is held only for the duration of scanning the tables map, not for the entire processing of each table.
         const auto now = ceph::coarse_real_clock::now();
         for (auto& [name, state] : tables) {
           if (active_rebuild_count.load(std::memory_order_relaxed) >= max_concurrent) {
@@ -920,7 +952,7 @@ private:
               [this, table_name = name, inserts, deletes](boost::asio::yield_context yield) {
             const int rc = process_table(table_name, inserts, deletes, yield);
             if (rc == 0) {
-              std::shared_lock sl(tables_mutex);
+              std::shared_lock sl(tables_mutex);//short time lock to update last_rebuild_time after successful rebuild
               auto it = tables.find(table_name);
               if (it != tables.end()) {
                 it->second.last_rebuild_time = ceph::coarse_real_clock::now();
@@ -938,7 +970,7 @@ private:
             if (eptr) std::rethrow_exception(eptr);
           });
         }
-      }
+      }// end of scan tables for pending mutations 
 
       if (!spawned_any) {
         ldpp_dout(this, 20) << "INFO: no tables to process" << dendl;
@@ -985,20 +1017,23 @@ public:
           if (eptr) std::rethrow_exception(eptr);
         });
 
-    // start the worker threads to do the actual queue processing
-    // TODO: use multiple threads
-    workers.emplace_back(std::thread([this]() {
-      ceph_pthread_setname("notif-worker");
-      try {
-        ldpp_dout(this, 10) << "INFO: worker started" << dendl;
-        io_context.run();
-        ldpp_dout(this, 10) << "INFO: worker ended" << dendl;
-      } catch (const std::exception& err) {
-        ldpp_dout(this, 1) << "ERROR: worker failed with error: " << err.what() << dendl;
-        throw err;
-      }
-    }));
-    ldpp_dout(this, 10) << "INFO: started manager" << dendl;
+    const int num_workers = std::max(1,
+        static_cast<int>(cct->_conf.get_val<int64_t>("rgw_s3vector_background_workers")));
+    for (int i = 0; i < num_workers; ++i) {
+      workers.emplace_back(std::thread([this, i]() {
+        const auto name = fmt::format("s3v-worker-{}", i);
+        ceph_pthread_setname(name.c_str());
+        try {
+          ldpp_dout(this, 10) << "INFO: worker " << i << " started" << dendl;
+          io_context.run();
+          ldpp_dout(this, 10) << "INFO: worker " << i << " ended" << dendl;
+        } catch (const std::exception& err) {
+          ldpp_dout(this, 1) << "ERROR: worker " << i << " failed with error: " << err.what() << dendl;
+          throw err;
+        }
+      }));
+    }
+    ldpp_dout(this, 10) << "INFO: started manager with " << num_workers << " worker threads" << dendl;
   }
 
   bool notify_index(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name, message_t::Op op) {
@@ -1043,7 +1078,7 @@ public:
     }
 
     {
-      std::unique_lock ul(tables_mutex);
+      std::unique_lock ul(tables_mutex);//exclusive lock to create a new entry in the tables map if it doesn't exist
       auto [it, inserted] = tables.emplace(table_name, table_state_t{});
       if (is_delete) {
         it->second.delete_count.fetch_add(row_count, std::memory_order_relaxed);
