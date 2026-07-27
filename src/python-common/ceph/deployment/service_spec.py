@@ -1482,6 +1482,10 @@ class NvmeofServiceSpec(ServiceSpec):
                  iobuf_options: Optional[Dict[str, int]] = None,
                  qos_timeslice_in_usecs: Optional[int] = 0,
                  notifications_interval: Optional[int] = 60,
+                 cnc_enable: bool = True,
+                 cnc_rate_limiter_bytes: Optional[int] = 100000000,
+                 cnc_chunk_blocks: Optional[int] = 512,
+                 cnc_parallel_chunks: Optional[int] = 8,
                  discovery_addr: Optional[str] = None,
                  discovery_addr_map: Optional[Dict[str, str]] = None,
                  discovery_port: Optional[int] = None,
@@ -1675,6 +1679,14 @@ class NvmeofServiceSpec(ServiceSpec):
         self.qos_timeslice_in_usecs = qos_timeslice_in_usecs
         #: ``notifications_interval`` read SPDK notifications interval, in seconds
         self.notifications_interval = notifications_interval
+        #: ``cnc_enable`` enable CNC feature in SPDK
+        self.cnc_enable = cnc_enable
+        #: ``cnc_rate_limiter_bytes`` CNC rate limiter in bytes
+        self.cnc_rate_limiter_bytes = cnc_rate_limiter_bytes
+        #: ``cnc_chunk_blocks`` CNC chunk blocks
+        self.cnc_chunk_blocks = cnc_chunk_blocks
+        #: ``cnc_parallel_chunks`` CNC parallel chunk
+        self.cnc_parallel_chunks = cnc_parallel_chunks
         #: ``discovery_addr`` address of the discovery service
         self.discovery_addr = discovery_addr
         #: ``discovery_addr_map`` per node address map of the discovery service
@@ -1776,6 +1788,10 @@ class NvmeofServiceSpec(ServiceSpec):
         self.verify_spdk_ceph_connection_allocation()
         verify_non_negative_int(self.qos_timeslice_in_usecs, "QOS timeslice")
         verify_non_negative_int(self.notifications_interval, "SPDK notifications interval")
+        verify_boolean(self.cnc_enable, "Enable CNC")
+        verify_non_negative_int(self.cnc_rate_limiter_bytes, "CNC rate limiter")
+        verify_non_negative_int(self.cnc_chunk_blocks, "CNC chunk blocks")
+        verify_non_negative_int(self.cnc_parallel_chunks, "CNC parallel chunks")
 
         verify_non_negative_number(self.spdk_ping_interval_in_seconds, "SPDK ping interval")
         if (

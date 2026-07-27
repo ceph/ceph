@@ -132,6 +132,10 @@ iobuf_options = {{ iobuf_options }}
 {% endif %}
 qos_timeslice_in_usecs = {{ spec.qos_timeslice_in_usecs }}
 notifications_interval = {{ spec.notifications_interval }}
+cnc_enable = {{ spec.cnc_enable }}
+cnc_rate_limiter_bytes = {{ spec.cnc_rate_limiter_bytes }}
+cnc_chunk_blocks = {{ spec.cnc_chunk_blocks }}
+cnc_parallel_chunks = {{ spec.cnc_parallel_chunks }}
 
 [monitor]
 timeout = {{ spec.monitor_timeout }}
