@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=too-many-public-methods
 from __future__ import absolute_import
 
 import logging
@@ -277,6 +278,24 @@ class PoolTest(DashboardTestCase):
             new_pool = self._get_pool(pool['pool'])
             for conf in expected_configuration:
                 self.assertIn(conf, new_pool['configuration'])
+
+    def test_pool_create_with_compression_failure(self):
+        pool = {
+            'pool': 'dashboard_pool3_failure',
+            'pg_num': '32',
+            'pool_type': 'replicated',
+            'compression_algorithm': 'zstd',
+            'compression_mode': 'aggressive',
+            'compression_max_blob_size': '10000000',
+            'compression_required_ratio': '0.8',
+            'application_metadata': ['rbd'],
+            'configuration': {
+                'rbd_qos_bps_limit': 2048,
+                'rbd_qos_iops_limit': None,
+            },
+        }
+        self._task_post('/api/pool/', pool)
+        self.assertNotEqual(self._resp.status_code, 201)
 
     def test_pool_create_with_quotas(self):
         pools = [
