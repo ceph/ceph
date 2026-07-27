@@ -423,9 +423,9 @@ if(WITH_RADOSGW_LANCEDB)
 
   # lancedb-c (upstream LanceDB C FFI bindings, git submodule) and
   # lancedb-rgw-store (the SAL backend for LanceDB) are combined by the
-  # rgw-lancedb umbrella crate into a single Rust staticlib,
-  # librgw_lancedb.a, which is linked statically into the executables.
-  # A single staticlib is required because two independent Rust staticlibs
+  # rgw-lancedb umbrella crate into a single Rust librgw_lancedb.a,
+  # which is linked statically into the executables.
+  # A single static library is required because two independent static libraries
   # cannot be linked into one binary (duplicate Rust runtime symbols).
   # All three crates share a Cargo workspace (src/rgw/Cargo.toml) with a
   # single Cargo.lock, guaranteeing identical dependency versions.
@@ -448,7 +448,8 @@ if(WITH_RADOSGW_LANCEDB)
     CONFIGURE_COMMAND ""
     BUILD_COMMAND ${CMAKE_COMMAND} -E env
           CARGO_TARGET_DIR=${RGW_LANCEDB_BUILD_DIR}/target
-          cargo build ${RGW_LANCEDB_CARGO_FLAG}
+          ${RGW_LANCEDB_CARGO_ENV}
+          ${CARGO_EXECUTABLE} build ${RGW_LANCEDB_CARGO_FLAG}
           --manifest-path ${RGW_LANCEDB_SOURCE_DIR}/Cargo.toml
     BUILD_ALWAYS OFF
     BUILD_BYPRODUCTS ${RGW_LANCEDB_STATIC_LIB}
