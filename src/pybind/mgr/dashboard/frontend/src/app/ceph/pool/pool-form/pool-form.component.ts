@@ -287,6 +287,8 @@ export class PoolFormComponent extends CdForm implements OnInit {
         this.form.silentSet(controlName, value);
       }
     });
+    this.crushRuleIsUsedBy(pool.crush_rule);
+    this.ecpIsUsedBy(pool.erasure_code_profile);
     this.data.pgs = this.form.getValue('pgNum');
     this.setAvailableApps(this.data.applications.default.concat(pool.application_metadata));
     this.data.applications.selected = pool.application_metadata;
