@@ -736,7 +736,7 @@ class CommitParityCheck(BaseAuditCheck):
         bp_commits_mapped = set()
         
         valid_ref = None
-        for ref in ['main', 'origin/main', 'upstream/main']:
+        for ref in ['upstream/heads/main', 'upstream/main', 'origin/heads/main', 'origin/main', 'main']:
             try:
                 G.git.rev_parse('--verify', ref)
                 valid_ref = ref
