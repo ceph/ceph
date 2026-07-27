@@ -4,7 +4,8 @@ import {
   OnDestroy,
   ChangeDetectionStrategy,
   signal,
-  computed
+  computed,
+  Signal
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Location } from '@angular/common';
@@ -32,7 +33,7 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
   iconSize = IconSize;
   notifications = signal<DisplayNotification[]>([]);
   selectedNotificationID = signal<string | null>(null);
-  readMap: ReturnType<typeof toSignal<Record<string, boolean>>>;
+  readMap: Signal<Record<string, boolean>>;
 
   selectedNotification = computed(() =>
     this.notifications().find((n) => n.id === this.selectedNotificationID())
