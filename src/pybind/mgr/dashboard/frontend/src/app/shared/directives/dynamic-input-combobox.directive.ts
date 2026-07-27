@@ -53,7 +53,11 @@ export class DynamicInputComboboxDirective implements OnInit, OnDestroy {
         const exists = this.items.some((item: ComboBoxItem) => item.content === searchString);
 
         if (!exists) {
-          this.items = this.items.concat({ content: searchString, name: searchString });
+          this.items = this.items.concat({
+            content: searchString,
+            name: searchString,
+            selected: false
+          });
         }
         this.updatedItems.emit(this.items);
         this.combBoxService.emit({ searchString });

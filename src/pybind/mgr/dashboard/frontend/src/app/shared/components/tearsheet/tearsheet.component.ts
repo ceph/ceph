@@ -25,6 +25,7 @@ import { Location } from '@angular/common';
 import { ConfirmationModalComponent } from '../confirmation-modal/confirmation-modal.component';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subject } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 
 export type TearsheetOverflowScroll = 'auto' | 'hidden' | 'visible' | 'scroll';
 
@@ -74,10 +75,14 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy, OnC
   @Input() isSubmitLoading: boolean = false;
   /** When set, applies `overflow` on the tearsheet content area; omit to use stylesheet defaults. */
   @Input() overflowScroll?: TearsheetOverflowScroll;
+  @Input() hideInfluencer: boolean = false;
+  @Input() successIcon: boolean = false;
+  @Input() headerTestId?: string;
 
   @Output() submitRequested = new EventEmitter<void>();
   @Output() closeRequested = new EventEmitter<void>();
   @Output() stepChanged = new EventEmitter<{ current: number }>();
+  @Output() validateStep = new EventEmitter<{ step: number }>();
 
   @ContentChildren(TearsheetStepComponent)
   stepContents!: QueryList<TearsheetStepComponent>;
@@ -121,6 +126,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy, OnC
   isOpen: boolean = true;
   hasModalOutlet: boolean = false;
   private destroy$ = new Subject<void>();
+  private setupTeardown$ = new Subject<void>();
 
   constructor(
     protected formBuilder: FormBuilder,
@@ -204,16 +210,23 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy, OnC
   }
 
   onNext() {
-    const currentForm = this.stepContents?.toArray()?.[this.currentStep]?.stepComponent?.formGroup;
-    currentForm?.markAllAsTouched();
-    currentForm?.updateValueAndValidity({ emitEvent: true });
-    if (currentForm) {
-      this._updateStepInvalid(this.currentStep, currentForm.invalid);
+    this.validateStep.emit({ step: this.currentStep });
+
+    const wrapper = this.stepContents?.toArray()?.[this.currentStep];
+    const legacyForm = wrapper?.resolvedFormGroup;
+    if (legacyForm) {
+      legacyForm.markAllAsTouched();
+      legacyForm.updateValueAndValidity({ emitEvent: true });
+      this._updateStepInvalid(this.currentStep, legacyForm.invalid);
     }
 
-    if (this.currentStep !== this.lastStep && !this.steps[this.currentStep].invalid) {
+    const canAdvance = wrapper ? wrapper.canProceed : true;
+    this._updateStepInvalid(this.currentStep, !canAdvance);
+    if (this.currentStep !== this.lastStep && canAdvance) {
       this.currentStep = this.currentStep + 1;
       this.stepChanged.emit({ current: this.currentStep });
+      this.cdr.markForCheck();
+    } else if (!canAdvance) {
       this.cdr.markForCheck();
     }
   }
@@ -227,18 +240,20 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy, OnC
 
   onSubmit() {
     this.stepContents?.forEach((wrapper, index) => {
-      const form = wrapper.stepComponent?.formGroup;
+      const form = wrapper.resolvedFormGroup;
       if (!form) return;
-
       form.markAllAsTouched();
       form.updateValueAndValidity({ emitEvent: true });
       this._updateStepInvalid(index, form.invalid);
     });
 
-    if (this.steps.some((step) => step?.invalid)) return;
+    const wrappers = this.stepContents?.toArray() ?? [];
+    const anyStepInvalid = this.steps.some(
+      (step, index) => step?.invalid || (wrappers[index] ? !wrappers[index].canProceed : false)
+    );
+    if (anyStepInvalid) return;
 
     const mergedPayloads = this.getMergedPayload();
-
     this.submitRequested.emit(mergedPayloads);
   }
 
@@ -260,23 +275,43 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy, OnC
 
   ngAfterViewInit() {
     const setup = () => {
-      // keep lastStep in sync with steps input
+      // Cancel all subscriptions created by the previous setup run before
+      // re-subscribing, so that removed steps do not retain observers.
+      this.setupTeardown$.next();
+
       this.lastStep = this.steps.length - 1;
 
-      // clamp currentStep so template lookup never goes out of range
       if (this.currentStep > this.lastStep) {
         this.currentStep = this.lastStep;
       }
 
-      // subscribe to each form statusChanges
       this.stepContents.forEach((wrapper, index) => {
-        const form = wrapper.stepComponent?.formGroup;
-        if (!form) return;
+        // Path 1: step uses a formGroup via #tearsheetStep — subscribe to its
+        // statusChanges so the flag stays in sync as the user types.
+        // Initial state is NOT seeded here: these forms intentionally start
+        // with Next enabled so the user can navigate freely before touching fields.
+        const form = wrapper.resolvedFormGroup;
+        if (form) {
+          form.statusChanges
+            .pipe(takeUntil(this.setupTeardown$))
+            .subscribe(() => this._updateStepInvalid(index, form.invalid));
+        }
 
-        form.statusChanges
-          .pipe(takeUntilDestroyed(this.destroyRef))
-          .subscribe(() => this._updateStepInvalid(index, form.invalid));
+        // Path 2: step uses [stepValid] input binding (no formGroup reference).
+        // Always subscribe to validityChange$ so any future [stepValid] binding
+        // is tracked. When stepValid is already set at setup time, also seed the
+        // initial invalid state so Next is correctly disabled from first render.
+        if (wrapper.stepValid !== null) {
+          this._updateStepInvalid(index, !wrapper.canProceed);
+        }
+        wrapper.validityChange$.pipe(takeUntil(this.setupTeardown$)).subscribe((canProceed) => {
+          this._updateStepInvalid(index, !canProceed);
+          this.cdr.markForCheck();
+        });
       });
+
+      // After seeding stepValid-based steps, force OnPush to re-render.
+      this.cdr.markForCheck();
     };
 
     setup();
@@ -285,6 +320,8 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy, OnC
   }
 
   ngOnDestroy() {
+    this.setupTeardown$.next();
+    this.setupTeardown$.complete();
     this.destroy$.next();
     this.destroy$.complete();
   }
