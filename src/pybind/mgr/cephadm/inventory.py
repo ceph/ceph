@@ -490,6 +490,8 @@ class SpecStore():
         # type: (str) -> bool
         found = service_name in self._specs
         if found:
+            spec = self._specs[service_name]
+            self._rm_certs_and_keys(spec)
             del self._specs[service_name]
             if service_name in self._rank_maps:
                 del self._rank_maps[service_name]
@@ -517,6 +519,18 @@ class SpecStore():
             self.mgr.cert_mgr.rm_key('nvmeof_server_key', service_name=spec.service_name())
             self.mgr.cert_mgr.rm_key('nvmeof_client_key', service_name=spec.service_name())
             self.mgr.cert_mgr.rm_key('nvmeof_encryption_key', service_name=spec.service_name())
+        if spec.service_type == 'smb':
+            self.mgr.cert_mgr.rm_cert('smb_ssl_cert', service_name=spec.service_name())
+            self.mgr.cert_mgr.rm_key('smb_ssl_key', service_name=spec.service_name())
+            self.mgr.cert_mgr.rm_cert('smb_ssl_ca_cert', service_name=spec.service_name())
+
+            self.mgr.cert_mgr.rm_cert('smb_remote_control_ssl_cert', service_name=spec.service_name())
+            self.mgr.cert_mgr.rm_key('smb_remote_control_ssl_key', service_name=spec.service_name())
+            self.mgr.cert_mgr.rm_cert('smb_remote_control_ca_cert', service_name=spec.service_name())
+
+            self.mgr.cert_mgr.rm_cert('smb_keybridge_ssl_cert', service_name=spec.service_name())
+            self.mgr.cert_mgr.rm_key('smb_keybridge_ssl_key', service_name=spec.service_name())
+            self.mgr.cert_mgr.rm_cert('smb_keybridge_ca_cert', service_name=spec.service_name())
 
     def get_created(self, spec: ServiceSpec) -> Optional[datetime.datetime]:
         return self.spec_created.get(spec.service_name())
