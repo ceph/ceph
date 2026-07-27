@@ -261,13 +261,6 @@ class TestStretchCluster(MgrTestCase):
         pgs = self._get_pg_stats()
         return self._get_active_pg(pgs) == 0
 
-    def _pg_partial_active(self):
-        """
-        Check if some pgs are active.
-        """
-        pgs = self._get_pg_stats()
-        return 0 < self._get_active_pg(pgs) <= len(pgs)
-
     def _kill_osd(self, osd):
         """
         Kill the osd.
@@ -630,10 +623,11 @@ class TestStretchCluster(MgrTestCase):
             timeout=self.RECOVERY_PERIOD,
             success_hold_time=self.SUCCESS_HOLD_TIME
         )
-        # Fail over osds in DC2 expects PGs to be partially active
+        # Fail over osds in DC2 expects PGs to be 100% inactive: each PG
+        # keeps only its 2 copies in DC3, fewer than MIN_SIZE
         self._fail_over_all_osds_in_dc('dc2')
         self.wait_until_true_and_hold(
-            lambda: self._pg_partial_active,
+            lambda: self._pg_all_unavailable(),
             timeout=self.RECOVERY_PERIOD,
             success_hold_time=self.SUCCESS_HOLD_TIME
         )
