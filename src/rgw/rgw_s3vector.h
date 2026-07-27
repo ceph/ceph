@@ -9,6 +9,7 @@
 #include "include/encoding.h"
 #include "rgw_arn.h"
 #include "common/async/yield_context.h"
+#include "lancedb.h"
 
 namespace ceph {
 class Formatter;
@@ -518,5 +519,6 @@ int get_vector_bucket_policy(const get_vector_bucket_policy_t& configuration, Do
 int delete_vectors(const delete_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
 int query_vectors(const query_vectors_t& configuration, std::optional<JSONParser>& filter, DoutPrefixProvider* dpp, optional_yield y, query_vectors_reply_t& reply, std::vector<validation_error_t>& errors);
 
+int lancedb_error_to_errno(LanceDBError err);
 }
 
