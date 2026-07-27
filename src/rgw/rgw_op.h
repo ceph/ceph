@@ -284,6 +284,15 @@ public:
   int read_global_cors();
   bool generate_cors_headers(std::string& origin, std::string& method, std::string& headers, std::string& exp_headers, unsigned *max_age);
 
+  /* Enforce CORS policy for cross-origin non-preflight requests.
+   *
+   * The check is skipped when:
+   *  - no Origin header is present
+   *  - getting a preflight request (handled entirely by RGWOptionsCORS)
+   *  - no bucket/global CORS configuration exists
+   */
+  int verify_cors_match();
+
   virtual int verify_params() { return 0; }
   virtual bool prefetch_data() { return false; }
 

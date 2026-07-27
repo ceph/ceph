@@ -2009,6 +2009,53 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
   return false;
 }
 
+int RGWOp::verify_cors_match()
+{
+  if (get_type() == RGW_OP_OPTIONS_CORS) {
+    return 0;
+  }
+
+  const char *orig = s->info.env->get("HTTP_ORIGIN");
+  if (!orig || !*orig) {
+    return 0;
+  }
+
+  // if we have global/bucket cors config, it will set cors_exist=true
+  cors_exist = false;
+  read_global_cors();
+  read_bucket_cors();
+
+  if (!cors_exist) {
+    /* No CORS configuration at all — nothing to enforce. */
+    ldpp_dout(this, 20) << "verify_cors_origin: no CORS config, skipping verification" << dendl;
+    return -EACCES;
+  }
+
+  const char *req_meth = s->info.method;
+  if (!req_meth || strcmp(req_meth, "") == 0) {
+    return 0;
+  }
+
+  RGWCORSRule *rule = bucket_cors.match_rule(orig, req_meth, nullptr);
+  if (rule) {
+    ldpp_dout(this, 10) << "verify_cors_match: origin=" << orig
+                        << " method=" << req_meth << " allowed by bucket CORS rule" << dendl;
+    return 0;
+  }
+
+  if (optional_global_cors.has_value() &&
+      optional_global_cors->matches(orig, req_meth, nullptr)) {
+    ldpp_dout(this, 10) << "verify_cors_match: origin=" << orig
+                        << " method=" << req_meth << " allowed by global CORS rule" << dendl;
+    return 0;
+  }
+
+  ldpp_dout(this, 5) << "verify_cors_match: origin=" << orig
+                     << " method=" << req_meth
+                     << " rejected — not in CORS AllowedMethods" << dendl;
+  return -EACCES;
+}
+
 int rgw_policy_from_attrset(const DoutPrefixProvider *dpp, CephContext *cct, map<string, bufferlist>& attrset, RGWAccessControlPolicy *policy)
 {
   map<string, bufferlist>::iterator aiter = attrset.find(RGW_ATTR_ACL);

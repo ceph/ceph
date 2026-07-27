@@ -228,6 +228,12 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
     return ret;
   }
 
+  ldpp_dout(op, 2) << "verifying CORS origin matches" << dendl;
+  ret = op->verify_cors_match();
+  if (ret < 0) {
+    return ret;
+  }
+
   /* Check if OPA is used to authorize requests */
   if (s->cct->_conf->rgw_use_opa_authz) {
     ret = rgw_opa_authorize(op, s);
