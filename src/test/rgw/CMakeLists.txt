@@ -324,6 +324,10 @@ if(WITH_RADOSGW_POSIX)
     ${rgw_libs} ${LMDB_LIBRARIES})
 endif(WITH_RADOSGW_POSIX)
 
+add_executable(unittest_rgw_asio_frontend_connection test_rgw_asio_frontend_connection.cc)
+add_ceph_unittest(unittest_rgw_asio_frontend_connection)
+target_link_libraries(unittest_rgw_asio_frontend_connection ${rgw_libs} ${UNITTEST_LIBS})
+
 add_executable(unittest_rgw_tag test_rgw_tag.cc)
 add_ceph_unittest(unittest_rgw_tag)
 target_link_libraries(unittest_rgw_tag ${rgw_libs} ${UNITTEST_LIBS})
