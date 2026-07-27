@@ -1,10 +1,8 @@
 import logging
 
-from io import BytesIO
 from teuthology import misc as teuthology
 from teuthology.task import Task
 from teuthology.packaging import remove_package
-from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 
