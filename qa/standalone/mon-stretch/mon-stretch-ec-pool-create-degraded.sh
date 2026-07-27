@@ -26,6 +26,19 @@ function TEST_ec_pool_create_in_degraded_stretch_mode() {
     test "$(pool_field data1 peering_crush_bucket_count)" == 1 || return 1
     test "$(pool_field data1 peering_crush_bucket_mandatory_member)" == "$dc1" || return 1
     test "$(ceph osd dump -f json | jq .stretch_mode.degraded_stretch_mode)" == 1 || return 1
+    # so does a pool set to num_zones 2
+    ceph osd pool create data2 erasure --k 2 --m 1 || return 1
+    ceph osd pool set data2 allow_ec_optimizations true || return 1
+    # its PGs may have a pg_temp of the old size
+    timeout 120 ceph osd pool set data2 num_zones 2 || return 1
+    test "$(pool_field data2 peering_crush_bucket_count)" == 1 || return 1
+    test "$(pool_field data2 peering_crush_bucket_mandatory_member)" == "$dc1" || return 1
+    # the transitions never change size, min_size or the bucket target
+    for pool in data0 data1 data2; do
+        test "$(pool_field $pool size)" == 6 || return 1
+        test "$(pool_field $pool min_size)" == 2 || return 1
+        test "$(pool_field $pool peering_crush_bucket_target)" == 2 || return 1
+    done
     ceph osd getmap -o $dir/osdmap || return 1
     timeout 120 rados -p data1 put obj $dir/osdmap || return 1
 
@@ -36,9 +49,11 @@ function TEST_ec_pool_create_in_degraded_stretch_mode() {
     done
     wait_for_stretch_state 0 0 || return 1
     ceph osd pool ls detail
-    for pool in data0 data1; do
+    for pool in data0 data1 data2; do
         test "$(pool_field $pool peering_crush_bucket_count)" == 2 || return 1
         test "$(pool_field $pool peering_crush_bucket_mandatory_member)" == $CRUSH_ITEM_NONE || return 1
+        test "$(pool_field $pool size)" == 6 || return 1
+        test "$(pool_field $pool min_size)" == 2 || return 1
     done
     wait_for_clean || return 1
 

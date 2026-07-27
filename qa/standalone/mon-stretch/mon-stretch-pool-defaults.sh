@@ -166,7 +166,15 @@ function TEST_set_k_m_in_default_profile() {
     run_mon $dir a || return 1
 
     ceph osd pool create before 8 8 erasure || return 1
+    # naming default names no profile
+    ceph osd pool create named 8 8 erasure default || return 1
+    ceph osd pool create named2 --pool_type erasure \
+        --erasure_code_profile default || return 1
     local option="$(ceph config get mon osd_pool_default_erasure_code_profile)"
+    # applied whole or not at all
+    expect_failure $dir "'pgp_num' must be greater than 0 and lower or equal than 'pg_num'" \
+        ceph osd pool default set --k 4 --m 3 --pg_num 8 --pgp_num 16 || return 1
+    test "$(ceph osd erasure-code-profile get default -f json | jq -r .k)" = 2 || return 1
     ceph osd pool default set --k 4 --m 3 || return 1
     test "$(default_field k value)" = 4 || return 1
     test "$(default_field m value)" = 3 || return 1
@@ -182,8 +190,10 @@ function TEST_set_k_m_in_default_profile() {
     # new pools copy the default profile, existing pools keep theirs
     ceph osd pool create after 8 8 erasure || return 1
     test "$(profile_of after)" = after-k5-m3 || return 1
-    test "$(profile_of before)" = before-k2-m2 || return 1
-    test "$(ceph osd erasure-code-profile get before-k2-m2 -f json | jq -r .k)" = 2 || return 1
+    for pool in before named named2; do
+        test "$(profile_of $pool)" = $pool-k2-m2 || return 1
+        test "$(ceph osd erasure-code-profile get $pool-k2-m2 -f json | jq -r .k)" = 2 || return 1
+    done
 
     expect_failure $dir "erasure_code_profile" \
         ceph osd pool default set --erasure_code_profile default || return 1

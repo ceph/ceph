@@ -61,6 +61,8 @@ function TEST_pool_create_checks() {
         ceph osd pool create p --pg_num 8 --pgp_num 16 || return 1
     expect_refused $dir "erasure code profile 'nosuch' does not exist" \
         ceph osd pool create p erasure --erasure_code_profile nosuch || return 1
+    expect_refused $dir "specified rule none doesn't exist" \
+        ceph osd pool create p --rule none || return 1
 
     # the refused commands left no pool id or rule behind
     ceph osd pool create p 8 || return 1
