@@ -9,13 +9,37 @@ export class UsersPageHelper extends PageHelper {
   pages = pages;
 
   @PageHelper.restrictTo(pages.create.url)
-  create(tenant: string, user_id: string, fullname: string, email: string, maxbuckets: string) {
+  create(
+    tenant: string,
+    user_id: string,
+    fullname: string,
+    email: string,
+    maxbuckets: string,
+    account_id?: string,
+    selectPolicy: boolean = false
+  ) {
     // Enter in user_id
     cy.get('#user_id').type(user_id);
     // Show Tenant
     cy.get('#show_tenant_input').click({ force: true });
     // Enter in tenant
     cy.get('#tenant').type(tenant);
+
+    if (account_id) {
+      cy.get('select#link_account').select(account_id);
+      if (selectPolicy) {
+        // Wait for the policies combo box to appear (it only shows when account is linked and not root user)
+        cy.get('cds-combo-box#account_policies').scrollIntoView().should('be.visible');
+        cy.get('cds-combo-box#account_policies input[type="text"]').scrollIntoView().click();
+        cy.get('cds-combo-box#account_policies cds-dropdown-list ul[role="listbox"]')
+          .should('be.visible')
+          .find('li[role="option"]')
+          .first()
+          .find('input[type="checkbox"]')
+          .check({ force: true });
+      }
+    }
+
     // Enter in full name
     cy.get('#display_name').click().type(fullname);
 
@@ -181,6 +205,16 @@ export class UsersPageHelper extends PageHelper {
       'have.text',
       `${account_name} - ${tenant}`
     );
+
+    cy.get('cds-combo-box#account_policies').scrollIntoView().should('be.visible');
+    cy.get('cds-combo-box#account_policies input[type="text"]').scrollIntoView().click();
+    cy.get('cds-combo-box#account_policies cds-dropdown-list ul[role="listbox"]')
+      .should('be.visible')
+      .find('li[role="option"]')
+      .first()
+      .find('input[type="checkbox"]')
+      .check({ force: true });
+
     cy.contains('button', 'Edit User').click();
 
     this.getTableRow(tenant + '$' + user_id).as('AccountUser');
