@@ -1320,6 +1320,8 @@ void ECCommon::RecoveryBackend::handle_recovery_push(
   if (op.after_progress.data_complete && op.after_progress.omap_complete) {
     uint64_t shard_size = sinfo.object_size_to_shard_size(op.recovery_info.size,
       get_parent()->whoami_shard().shard);
+    BOB: This appears to be in handle_recovery_push - which is too late and on the wrong OSD> 
+       This needs to be handled on the primary, in the sending location. 
     if (shard_size < tobj_size) {
       derr << __func__ << ": shard_size " << shard_size
            << " < tobj_size " << tobj_size << " for " << op.soid
@@ -1491,32 +1493,40 @@ void ECCommon::RecoveryBackend::handle_recovery_read_complete(
   // returned fewer bytes than expected for its requested extents
   // (accounting for legitimate end-of-object zeros), treat it as
   // an underrun and fail the push so recovery restarts without it.
+  BOB: Skip this if not the LAST read.  You should be able to tell this from the raad 
+  progress. 
   {
     uint64_t obj_size = op.obc->obs.oi.size;
     for (auto &[shard_id, shard_read] : req.shard_reads) {
+      BOB: Check this.  Is missing_on_shards the OSDs that are STILL offline, or those that need to be recovered?
       if (op.missing_on_shards.contains(shard_id)) {
         continue;
       }
       uint64_t expected_shard_size = sinfo.object_size_to_shard_size(
         obj_size, shard_id);
+
       uint64_t requested = 0;
       for (auto &[off, len] : shard_read.extents) {
         requested += len;
       }
+      BOB: Zeros are only read AFTER the object logical end (for decode)
       uint64_t zeros = 0;
       if (req.zeros_for_decode.contains(shard_id)) {
         for (auto &[off, len] : req.zeros_for_decode.at(shard_id)) {
           zeros += len;
         }
       }
+      BOB: When this is the last read, the size to check is simply offset + length for the shard. 
       uint64_t received = 0;
       if (res.buffers_read.contains(shard_id)) {
         for (auto &[off, len] : res.buffers_read.get_extent_set(shard_id)) {
           received += len;
         }
       }
+      BOB: This is WRONG check received == expected_shard_size is correct. 
       if (received + zeros < requested &&
           received < expected_shard_size) {
+        BOB: Does this go to the cluster log? Do we need "ERR"?
         derr << __func__ << ": source shard " << shard_read.pg_shard
              << " underrun on " << hoid
              << " expected_shard_size=" << expected_shard_size
@@ -1524,8 +1534,11 @@ void ECCommon::RecoveryBackend::handle_recovery_read_complete(
              << " received=" << received
              << " zeros=" << zeros << dendl;
         read_result_t fail_res(&sinfo);
+        // Hmmm... 
         fail_res.r = -EIO;
         fail_res.errors[shard_read.pg_shard] = -EIO;
+        BOB: Is failed_push really correct here?  This is a read, not a push. 
+        BOB: I don't see any code which would re-drive the recovery from the beginning, with an extra shard *to recover*
         _failed_push(hoid, fail_res);
         return;
       }
@@ -1541,6 +1554,7 @@ void ECCommon::RecoveryBackend::handle_recovery_read_complete(
 
   op.returned_data->add_zero_padding_for_decode(req.zeros_for_decode);
   int r = op.returned_data->decode(ec_impl, req.shard_want_to_read, aligned_size, get_parent()->get_dpp(), true);
+  BOB: Leave this as an assert.  I can't think of another reason besides a missized shard or a BUG that would cause decode to fail. '
   if (r != 0) {
     derr << __func__ << ": decode failed with r=" << r
          << " for " << hoid << dendl;

@@ -828,6 +828,7 @@ void ECBackend::handle_sub_read_reply(
         received += bl.length();
       }
       if (received != expected) {
+        BOB: This needs to be an ERROR, and in the cluster log.
         dout(0) << __func__ << " shard underrun from " << from
                 << " on " << hoid
                 << " expected " << expected << " got " << received << dendl;
@@ -1644,6 +1645,8 @@ int ECBackend::be_deep_scrub(
     return -EINPROGRESS;
   }
 
+  BOB: I am confused - I think there is already some code to test shard sizes?
+     can't we use that? (I think its in scrub_backend)'
   // Check shard size against expected size from the object's logical size.
   {
     auto oi_iter = o.attrs.find(OI_ATTR);
