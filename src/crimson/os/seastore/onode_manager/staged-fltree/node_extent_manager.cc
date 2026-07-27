@@ -18,14 +18,17 @@ NodeExtentManagerURef NodeExtentManager::create_dummy(bool is_sync)
 }
 
 NodeExtentManagerURef NodeExtentManager::create_seastore(
-    TransactionManager &tm, laddr_t min_laddr, double p_eagain)
+    TransactionManager &tm, laddr_t min_laddr, double p_eagain,
+    std::size_t onode_tree_shard)
 {
   if (p_eagain == 0.0) {
     return NodeExtentManagerURef(
-        new SeastoreNodeExtentManager<false>(tm, min_laddr, p_eagain));
+        new SeastoreNodeExtentManager<false>(
+            tm, min_laddr, p_eagain, onode_tree_shard));
   } else {
     return NodeExtentManagerURef(
-        new SeastoreNodeExtentManager<true>(tm, min_laddr, p_eagain));
+        new SeastoreNodeExtentManager<true>(
+            tm, min_laddr, p_eagain, onode_tree_shard));
   }
 }
 

@@ -1011,11 +1011,12 @@ public:
    */
   using read_onode_root_iertr = base_iertr;
   using read_onode_root_ret = read_onode_root_iertr::future<laddr_t>;
-  read_onode_root_ret read_onode_root(Transaction &t) {
-    return cache->get_root(t).si_then([&t](auto croot) {
+  read_onode_root_ret read_onode_root(Transaction &t, std::size_t shard) {
+    assert(shard < MAX_ONODE_TREES);
+    return cache->get_root(t).si_then([&t, shard](auto croot) {
       LOG_PREFIX(TransactionManager::read_onode_root);
-      laddr_t ret = croot->get_root().onode_root;
-      SUBTRACET(seastore_tm, "{}", t, ret);
+      laddr_t ret = croot->get_root().onode_root[shard];
+      SUBTRACET(seastore_tm, "shard {}: {}", t, shard, ret);
       return ret;
     });
   }
@@ -1023,14 +1024,16 @@ public:
   /**
    * write_onode_root
    *
-   * Write onode-tree root logical address, must be called after read.
+   * Write the onode-tree root logical address for the given shard, must be
+   * called after read.
    */
-  void write_onode_root(Transaction &t, laddr_t addr) {
+  void write_onode_root(Transaction &t, std::size_t shard, laddr_t addr) {
     LOG_PREFIX(TransactionManager::write_onode_root);
-    SUBDEBUGT(seastore_tm, "{}", t, addr);
+    SUBDEBUGT(seastore_tm, "shard {}: {}", t, shard, addr);
+    assert(shard < MAX_ONODE_TREES);
     auto croot = cache->get_root_fast(t);
     croot = cache->duplicate_for_write(t, croot)->cast<RootBlock>();
-    croot->get_root().onode_root = addr;
+    croot->get_root().onode_root[shard] = addr;
   }
 
   /**

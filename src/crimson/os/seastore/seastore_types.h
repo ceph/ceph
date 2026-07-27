@@ -2530,6 +2530,14 @@ using lba_root_t = phy_tree_root_t;
 using backref_root_t = phy_tree_root_t;
 
 /**
+ * MAX_ONODE_TREES
+ *
+ * How many collections a shard can host: each gets its own onode tree, and
+ * root_t below holds their roots in a fixed array.
+ */
+constexpr std::size_t MAX_ONODE_TREES = 256;
+
+/**
  * root_t
  *
  * Contains information required to find metadata roots.
@@ -2538,7 +2546,7 @@ using backref_root_t = phy_tree_root_t;
 struct __attribute__((packed)) root_t {
   backref_root_t backref_root;
   lba_root_t lba_root;
-  laddr_le_t onode_root;
+  laddr_le_t onode_root[MAX_ONODE_TREES];
   coll_root_le_t collection_root;
   laddr_le_t meta;
 

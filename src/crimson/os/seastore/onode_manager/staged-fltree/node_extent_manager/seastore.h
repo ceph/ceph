@@ -21,8 +21,9 @@ namespace crimson::os::seastore::onode {
 class SeastoreSuper final: public Super {
  public:
   SeastoreSuper(Transaction& t, RootNodeTracker& tracker,
-                laddr_t root_addr, TransactionManager& tm)
-    : Super(t, tracker), root_addr{root_addr}, tm{tm} {}
+                laddr_t root_addr, TransactionManager& tm,
+                std::size_t shard)
+    : Super(t, tracker), root_addr{root_addr}, tm{tm}, shard{shard} {}
   ~SeastoreSuper() override = default;
  protected:
   laddr_t get_root_laddr() const override {
@@ -30,13 +31,15 @@ class SeastoreSuper final: public Super {
   }
   void write_root_laddr(context_t c, laddr_t addr) override {
     LOG_PREFIX(OTree::Seastore);
-    SUBDEBUGT(seastore_onode, "update root {} ...", c.t, addr);
+    SUBDEBUGT(seastore_onode, "update onode shard {} root {} ...",
+              c.t, shard, addr);
     root_addr = addr;
-    tm.write_onode_root(c.t, addr);
+    tm.write_onode_root(c.t, shard, addr);
   }
  private:
   laddr_t root_addr;
   TransactionManager &tm;
+  const std::size_t shard;
 };
 
 class SeastoreNodeExtent final: public NodeExtent {
@@ -89,8 +92,10 @@ template <bool INJECT_EAGAIN=false>
 class SeastoreNodeExtentManager final: public TransactionManagerHandle {
  public:
   SeastoreNodeExtentManager(
-      TransactionManager &tm, laddr_t min, double p_eagain)
-      : TransactionManagerHandle(tm), addr_min{min}, p_eagain{p_eagain} {
+      TransactionManager &tm, laddr_t min, double p_eagain,
+      std::size_t shard = 0)
+      : TransactionManagerHandle(tm), addr_min{min},
+        shard{shard}, p_eagain{p_eagain} {
     if constexpr (INJECT_EAGAIN) {
       assert(p_eagain > 0.0 && p_eagain < 1.0);
     } else {
@@ -195,9 +200,10 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
         return getsuper_iertr::make_ready_future<Super::URef>();
       }
     }
-    return tm.read_onode_root(t).si_then([this, &t, &tracker](auto root_addr) {
-      SUBTRACET(seastore_onode, "got root {}", t, root_addr);
-      return Super::URef(new SeastoreSuper(t, tracker, root_addr, tm));
+    return tm.read_onode_root(t, shard).si_then(
+        [this, &t, &tracker](auto root_addr) {
+      SUBTRACET(seastore_onode, "shard {} got root {}", t, shard, root_addr);
+      return Super::URef(new SeastoreSuper(t, tracker, root_addr, tm, shard));
     });
   }
 
@@ -213,6 +219,9 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
   static LOG_PREFIX(OTree::Seastore);
 
   const laddr_t addr_min;
+
+  // which of root_t's onode roots this manager is bound to
+  const std::size_t shard;
 
   // XXX: conditional members by INJECT_EAGAIN
   bool trigger_eagain() {
