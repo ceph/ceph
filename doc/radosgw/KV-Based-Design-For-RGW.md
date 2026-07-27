@@ -96,6 +96,15 @@ Deleting an S3 object requires two non-atomic operations on separate systems:
 
 See [Delete](#delete) for detailed analysis.
 
+**12. Delete markers as full RADOS objects.**
+In versioned buckets, deleting an object without a version-id creates a delete marker — a zero-byte metadata-only entry indicating the object appears deleted.
+Despite carrying no user data, each delete marker is a full RADOS head object:
+- PG membership, OSD tracking, recovery bookkeeping — all for zero bytes of content.
+- On EC pools, replicated across all K+M members (6 copies of nothing for 4+2, 11 for 8+3).
+- On HDD-backed pools, creating and eventually deleting the DM incurs disk I/O on every member.
+
+Workloads with frequent versioned deletes (e.g., lifecycle expiration creating delete markers) accumulate large numbers of these zero-byte RADOS objects, consuming cluster resources disproportionate to their purpose.
+
 ---
 
 ## Requirements
