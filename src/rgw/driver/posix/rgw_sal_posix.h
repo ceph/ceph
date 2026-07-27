@@ -155,7 +155,7 @@ public:
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) = 0;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) = 0;
   virtual std::unique_ptr<FSEnt> clone_base() = 0;
-  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags);
+  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const std::string& meta_prefix = "");
   virtual std::string get_cur_version() { return ""; };
 };
 
@@ -227,7 +227,7 @@ public:
   }
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
-  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags) override;
+  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const std::string& meta_prefix = "") override;
 
   int get_ent(const DoutPrefixProvider *dpp, optional_yield y, const std::string& name, const std::string& version, std::unique_ptr<FSEnt>& ent);
 };
@@ -300,7 +300,7 @@ public:
   std::unique_ptr<MPDirectory> clone() {
     return std::make_unique<MPDirectory>(*this);
   }
-  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags) override;
+  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const std::string& meta_prefix = "") override;
 };
 
 class VersionedDirectory : public Directory {
@@ -362,7 +362,7 @@ public:
     return std::make_unique<VersionedDirectory>(*this);
   }
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
-  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags) override;
+  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const std::string& meta_prefix = "") override;
 };
 
 std::string get_key_fname(rgw_obj_key& key, bool use_version);
@@ -1472,6 +1472,8 @@ private:
   uint64_t part_num;
   std::unique_ptr<posix::Directory> upload_dir;
   std::unique_ptr<posix::File> part_file;
+  std::string upload_meta;
+  std::string parent_bucket_name;
 
 public:
   POSIXMultipartWriter(const DoutPrefixProvider *dpp,
@@ -1481,14 +1483,18 @@ public:
                     POSIXDriver* _driver,
                     const ACLOwner& _owner,
                     const rgw_placement_rule *_ptail_placement_rule,
-                    uint64_t _part_num) :
+                    uint64_t _part_num,
+		    const std::string& _upload_meta,
+		    const std::string& _parent_bucket_name) :
     StoreWriter(dpp, y),
     driver(_driver),
     owner(_owner),
     ptail_placement_rule(_ptail_placement_rule),
     part_num(_part_num),
     upload_dir(_shadow_bucket->get_dir()->clone()),
-    part_file(std::make_unique<posix::File>(posix::get_key_fname(_key, false), upload_dir.get(), _driver->ctx()))
+    part_file(std::make_unique<posix::File>(posix::get_key_fname(_key, false), upload_dir.get(), _driver->ctx())),
+    upload_meta(_upload_meta),
+    parent_bucket_name(_parent_bucket_name)
   { upload_dir->open(dpp); }
   virtual ~POSIXMultipartWriter() = default;
 

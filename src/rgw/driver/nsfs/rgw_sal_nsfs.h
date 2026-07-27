@@ -1145,6 +1145,7 @@ struct NSFSMPObj {
   multipart_upload_info upload_info;
   std::string meta;
 
+  NSFSMPObj() = default;
   NSFSMPObj(NSFSDriver* driver, const std::string& _oid,
 	     std::optional<std::string> _upload_id, ACLOwner& _owner) {
     if (_upload_id && !_upload_id->empty()) {
@@ -1364,6 +1365,8 @@ private:
   uint64_t part_num;
   std::unique_ptr<nsfs::Directory> upload_dir;
   std::unique_ptr<nsfs::File> part_file;
+  std::string upload_meta;
+  std::string parent_bucket_name;
 
 public:
   NSFSMultipartWriter(const DoutPrefixProvider *dpp,
@@ -1373,14 +1376,18 @@ public:
                     NSFSDriver* _driver,
                     const ACLOwner& _owner,
                     const rgw_placement_rule *_ptail_placement_rule,
-                    uint64_t _part_num) :
+                    uint64_t _part_num,
+		    const std::string& _upload_meta,
+		    const std::string& _parent_bucket_name) :
     StoreWriter(dpp, y),
     driver(_driver),
     owner(_owner),
     ptail_placement_rule(_ptail_placement_rule),
     part_num(_part_num),
     upload_dir(_shadow_bucket->get_dir()->clone()),
-    part_file(std::make_unique<nsfs::File>(nsfs::get_key_fname(_key, false), upload_dir.get(), _driver->ctx()))
+    part_file(std::make_unique<nsfs::File>(nsfs::get_key_fname(_key, false), upload_dir.get(), _driver->ctx())),
+    upload_meta(_upload_meta),
+    parent_bucket_name(_parent_bucket_name)
   { upload_dir->open(dpp); }
   virtual ~NSFSMultipartWriter() = default;
 

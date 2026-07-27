@@ -509,11 +509,13 @@ int FSEnt::read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& at
   return get_x_attrs(y, dpp, get_fd(), attrs, get_name());
 }
 
-int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags)
+int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const std::string& meta_prefix)
 {
   rgw_bucket_dir_entry bde{};
 
-  rgw_obj_key key = decode_obj_key(get_name());
+  std::string full_key = meta_prefix.empty()
+    ? get_name() : meta_prefix + "/" + get_name();
+  rgw_obj_key key = decode_obj_key(full_key);
   if (parent->get_type() == ObjectType::MULTIPART) {
     key.ns = mp_ns;
   }
@@ -1192,23 +1194,40 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
 }
 
 int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
-                          fill_cache_cb_t &cb, uint32_t flags)
+                          fill_cache_cb_t &cb, uint32_t flags,
+			  const std::string& meta_prefix)
 {
-  int ret = for_each(dpp, [this, &cb, &dpp, &y](const char *name) {
+  static const std::string mp_pre{"." + mp_ns + "_"};
+
+  int ret = for_each(dpp, [this, &cb, &dpp, &y, &meta_prefix](const char *name) {
     std::unique_ptr<FSEnt> ent;
 
     if (name[0] == '.') {
-      /* Skip dotfiles */
-      return 0;
+      std::string_view sv{name};
+      if (!sv.starts_with(mp_pre)) {
+	return 0;
+      }
+      /* .multipart_<meta> staging directory: enumerate parts into the
+       * parent bucket's cache with meta-prefixed, namespaced keys */
+      std::string meta = url_decode(
+	std::string(sv.substr(mp_pre.size())));
+      ldpp_dout(dpp, 10) << "fill_cache: walking staging dir="
+	<< sv << " meta=" << meta << dendl;
+      MPDirectory mpdir(std::string(sv), this, ctx);
+      int ret = mpdir.open(dpp);
+      if (ret < 0) {
+	return 0;
+      }
+      return mpdir.fill_cache(dpp, y, cb, FSEnt::FLAG_NONE, meta);
     }
 
     int ret = get_ent(dpp, y, name, std::string(), ent);
     if (ret < 0)
       return ret;
 
-    ent->stat(dpp); // Stat the object to get the type
+    ent->stat(dpp);
 
-    ret = ent->fill_cache(dpp, y, cb, FSEnt::FLAG_NONE);
+    ret = ent->fill_cache(dpp, y, cb, FSEnt::FLAG_NONE, meta_prefix);
     if (ret < 0)
       return ret;
     return 0;
@@ -1447,13 +1466,19 @@ std::unique_ptr<File> MPDirectory::get_part_file(int partnum)
 }
 
 int MPDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
-                            fill_cache_cb_t &cb, uint32_t flags)
+                            fill_cache_cb_t &cb, uint32_t flags,
+			    const std::string& meta_prefix)
 {
-  int ret = FSEnt::fill_cache(dpp, y, cb, FSEnt::FLAG_NONE);
-  if (ret < 0)
-    return ret;
+  /* when called with a meta_prefix, we're filling parts into the
+   * parent bucket's cache — skip the FSEnt entry for the staging
+   * directory itself and only enumerate children */
+  if (meta_prefix.empty()) {
+    int ret = FSEnt::fill_cache(dpp, y, cb, FSEnt::FLAG_NONE, meta_prefix);
+    if (ret < 0)
+      return ret;
+  }
 
-  return Directory::fill_cache(dpp, y, cb, FSEnt::FLAG_NONE);
+  return Directory::fill_cache(dpp, y, cb, FSEnt::FLAG_NONE, meta_prefix);
 }
 
 int VersionedDirectory::open(const DoutPrefixProvider* dpp)
@@ -1946,7 +1971,8 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y,
 }
 
 int VersionedDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
-                                   fill_cache_cb_t &cb, uint32_t flags)
+                                   fill_cache_cb_t &cb, uint32_t flags,
+				   const std::string& meta_prefix)
 {
   /* Fill cur_version — stat() may reset cur_version to null if the
    * current version is a delete marker, so also resolve the symlink
@@ -5204,44 +5230,60 @@ int POSIXMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext 
     return ret;
   }
 
-  rgw::sal::Bucket::ListParams params;
-  rgw::sal::Bucket::ListResults results;
+  /* list parts from the parent bucket's LMDB cache using the
+   * meta-prefixed, namespaced key convention:
+   *   _multipart_<meta>/<partname>
+   * The marker for LMDB lookup uses the index-key-encoded form. */
+  std::string meta = get_meta();
+  std::string prefix = meta + "/" + MP_OBJ_PART_PFX;
+  rgw_obj_key marker_key(prefix + fmt::format("{:0>5}", marker),
+			 std::string(), mp_ns);
+  std::string lmdb_marker = marker_key.get_index_key_name();
 
-  params.prefix = MP_OBJ_PART_PFX;
-  params.marker = MP_OBJ_PART_PFX + fmt::format("{:0>5}", marker);
-  params.marker.ns = mp_ns;
-  params.ns = mp_ns;
+  POSIXBucket* pb = static_cast<POSIXBucket*>(bucket);
+  ldpp_dout(dpp, 10) << "list_parts: bucket=" << pb->get_name()
+    << " meta=" << meta << " lmdb_marker=" << lmdb_marker << dendl;
+  int found = 0;
+  ret = driver->get_bucket_cache()->list_bucket(
+    dpp, y, pb, lmdb_marker,
+    [&](const rgw_bucket_dir_entry& bde) -> bool {
+      rgw_obj_key bde_key{bde.key};
+      ldpp_dout(dpp, 15) << "list_parts: visit key=" << bde.key.name
+	<< " ns=" << bde_key.ns << dendl;
+      if (bde_key.ns != mp_ns) {
+	return false;
+      }
+      if (!bde_key.name.starts_with(prefix)) {
+	return false;
+      }
+      /* skip the marker entry itself (lower_bound is inclusive) */
+      if (bde.key.name == lmdb_marker) {
+	return true;
+      }
 
-  ret = shadow->list(dpp, params, num_parts + 1, results, y);
+      std::unique_ptr<MultipartPart> part =
+	std::make_unique<POSIXMultipartPart>(this);
+      auto* ppart = static_cast<POSIXMultipartPart*>(part.get());
+
+      /* strip the meta prefix to get the bare part name for load */
+      std::string part_name = bde_key.name.substr(meta.size() + 1);
+      rgw_obj_key pkey(part_name);
+      ret = ppart->load(dpp, y, driver, pkey);
+      if (ret == 0) {
+	last_num = part->get_num();
+	parts[part->get_num()] = std::move(part);
+	++found;
+      }
+      return found < num_parts;
+    });
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: list_parts: shadow->list failed ret="
+    ldpp_dout(dpp, 0) << "ERROR: list_parts failed ret="
       << ret << " upload=" << get_upload_id() << dendl;
     return ret;
   }
-  if (results.objs.empty()) {
-    ldpp_dout(dpp, 0) << "WARNING: list_parts: 0 results for upload="
-      << get_upload_id() << " shadow=" << shadow->get_name()
-      << " marker=" << params.marker.name << dendl;
-  }
-  for (rgw_bucket_dir_entry& ent : results.objs) {
-    std::unique_ptr<MultipartPart> part = std::make_unique<POSIXMultipartPart>(this);
-    POSIXMultipartPart* ppart = static_cast<POSIXMultipartPart*>(part.get());
-
-    rgw_obj_key key(ent.key);
-    // Parts are namespaced in the bucket listing
-    key.ns.clear();
-    ret = ppart->load(dpp, y, driver, key);
-    if (ret == 0) {
-      /* Skip anything that's not a part */
-      last_num = part->get_num();
-      parts[part->get_num()] = std::move(part);
-    }
-    if (parts.size() == (ulong)num_parts)
-      break;
-  }
 
   if (truncated)
-    *truncated = results.is_truncated;
+    *truncated = (found == num_parts);
 
   if (next_marker)
     *next_marker = last_num;
@@ -5260,7 +5302,19 @@ int POSIXMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
     return ret;
   }
 
-  driver->get_bucket_cache()->invalidate_bucket(dpp, shadow->get_name(), true);
+  /* remove part entries from the parent bucket's cache */
+  std::string meta = get_meta();
+  POSIXBucket* pb = static_cast<POSIXBucket*>(bucket);
+  shadow->get_dir()->for_each(dpp, [&](const char *name) {
+    if (name[0] == '.') {
+      return 0;
+    }
+    rgw_obj_key key(meta + "/" + name, std::string(), mp_ns);
+    cls_rgw_obj_key idx_key;
+    key.get_index_key(&idx_key);
+    driver->get_bucket_cache()->remove_entry(dpp, pb->get_name(), idx_key);
+    return 0;
+  });
   shadow->remove(dpp, true, y);
 
   return 0;
@@ -5454,8 +5508,18 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
     }
   }
 
-  // save shadow name before rename changes info.bucket.name
-  std::string shadow_cache_name = shadow->get_name();
+  /* remove part entries from the parent bucket's cache before rename */
+  {
+    std::string meta = get_meta();
+    POSIXBucket* pb = static_cast<POSIXBucket*>(bucket);
+    for (auto& [pnum, etag] : part_etags) {
+      std::string pname = MP_OBJ_PART_PFX + fmt::format("{:0>5}", pnum);
+      rgw_obj_key key(meta + "/" + pname, std::string(), mp_ns);
+      cls_rgw_obj_key idx_key;
+      key.get_index_key(&idx_key);
+      driver->get_bucket_cache()->remove_entry(dpp, pb->get_name(), idx_key);
+    }
+  }
 
   // Rename to target_obj
   ret = shadow->rename(dpp, y, target_obj);
@@ -5472,10 +5536,39 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
     if (ret < 0) {
       return ret;
     }
+  } else {
+    /* non-versioned: add final object to the parent bucket's cache */
+    to->get_obj_attrs(null_yield, dpp);
+    struct statx obj_stx;
+    if (statx(sb->get_dir()->get_fd(),
+	      target_obj->get_name().c_str(),
+	      AT_SYMLINK_NOFOLLOW, STATX_ALL, &obj_stx) == 0) {
+      std::string obj_name = target_obj->get_key().get_index_key_name();
+      rgw_bucket_dir_entry new_bde{};
+      new_bde.key.name = obj_name;
+      new_bde.ver.pool = 1;
+      new_bde.ver.epoch = 1;
+      new_bde.exists = true;
+      new_bde.meta.category = RGWObjCategory::Main;
+      /* ofs is the SAL complete() output parameter that accumulates
+       * part->get_size() for each part — it equals the total object
+       * size after the parts loop above */
+      const auto& total_size = ofs;
+      new_bde.meta.size = total_size;
+      new_bde.meta.accounted_size = total_size;
+      struct timespec ts{obj_stx.stx_mtime.tv_sec, obj_stx.stx_mtime.tv_nsec};
+      new_bde.meta.mtime = ceph::real_clock::from_timespec(ts);
+      new_bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
+      {
+	ACLOwner acl_owner;
+	if (decode_acl_owner(target_obj->get_attrs(), acl_owner) >= 0) {
+	  new_bde.meta.owner = to_string(acl_owner.id);
+	  new_bde.meta.owner_display_name = acl_owner.display_name;
+	}
+      }
+      driver->get_bucket_cache()->add_entry(dpp, sb->get_name(), new_bde);
+    }
   }
-
-  // remove staging directory listing cache entry (frees LMDB DBI slot)
-  driver->get_bucket_cache()->invalidate_bucket(dpp, shadow_cache_name, true);
 
   return 0;
 }
@@ -5570,7 +5663,8 @@ std::unique_ptr<Writer> POSIXMultipartUpload::get_writer(
 
   return std::make_unique<POSIXMultipartWriter>(dpp, y, shadow.get(), part_key,
                                                 driver, owner,
-                                                ptail_placement_rule, part_num);
+                                                ptail_placement_rule, part_num,
+						get_meta(), bucket->get_name());
 }
 
 int POSIXMultipartWriter::prepare(optional_yield y)
@@ -5647,6 +5741,25 @@ int POSIXMultipartWriter::complete(
   if (ret < 0) {
     ldpp_dout(rctx.dpp, 20) << "ERROR: failed closing file" << dendl;
     return ret;
+  }
+
+  /* add part entry to the parent bucket's cache */
+  {
+    std::string pname = MP_OBJ_PART_PFX + fmt::format("{:0>5}", part_num);
+    rgw_obj_key key(upload_meta + "/" + pname, std::string(), mp_ns);
+    rgw_bucket_dir_entry bde{};
+    key.get_index_key(&bde.key);
+    bde.ver.pool = 1;
+    bde.ver.epoch = 1;
+    bde.exists = true;
+    bde.meta.category = RGWObjCategory::MultiMeta;
+    bde.meta.size = accounted_size;
+    bde.meta.accounted_size = accounted_size;
+    bde.meta.mtime = set_mtime;
+    bde.meta.etag = etag;
+    ldpp_dout(rctx.dpp, 10) << "mp_writer: add_entry bucket="
+      << parent_bucket_name << " key=" << bde.key.name << dendl;
+    driver->get_bucket_cache()->add_entry(rctx.dpp, parent_bucket_name, bde);
   }
 
   return 0;
