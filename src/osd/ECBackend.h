@@ -162,7 +162,8 @@ class ECBackend : public ECCommon {
      uint32_t op_flags,
      std::map<uint64_t, uint64_t> *out_map,
      ceph::buffer::list *out_bl,
-     Context *on_complete);
+     Context *on_complete,
+     const interval_set<uint64_t> &force_allocated_extents = {});
 
   int objects_mapext_async(
      const hobject_t &hoid,
@@ -171,7 +172,8 @@ class ECBackend : public ECCommon {
      uint64_t object_size,
      uint32_t op_flags,
      std::map<uint64_t, uint64_t> *out_map,
-     Context *on_complete);
+     Context *on_complete,
+     const interval_set<uint64_t> &force_allocated_extents = {});
 
   /**
    * Async read mechanism

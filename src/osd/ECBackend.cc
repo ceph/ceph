@@ -1746,7 +1746,7 @@ struct ECMapextCompleter final : ECCommon::ReadCompleter {
       result = res.r;
       return;
     }
-    lgeneric_subdout(g_ceph_context, osd, 20) << __func__ << ": hoid=" << hoid
+    ldpp_dout(dpp, 20) << __func__ << ": hoid=" << hoid
       << " sparse_extents_read (per shard, shard-space)="
       << res.sparse_extents_read << dendl;
     if (needs_reconstruct) {

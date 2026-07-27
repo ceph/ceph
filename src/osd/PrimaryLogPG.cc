@@ -6205,7 +6205,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
       int r = pgbackend->objects_sparse_read_async(
         soid, offset, length, size, op.flags,
         &sparse_ctx->ext_map, &sparse_ctx->data_bl,
-        sparse_ctx);
+        sparse_ctx, oi.force_allocated_extents.get_intervals());
       if (r == -EOPNOTSUPP) {
         // legacy EC: fall back to translating sparse read to a normal async read
         delete sparse_ctx;
@@ -6474,7 +6474,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
             this, ctx, &osd_op.rval, &osd_op.outdata);
           int r = pgbackend->objects_mapext_async(
             soid, op.extent.offset, op.extent.length, oi.size, op.flags,
-            &mapext_ctx->ext_map, mapext_ctx);
+            &mapext_ctx->ext_map, mapext_ctx,
+            oi.force_allocated_extents.get_intervals());
          if (r < 0) {
             delete mapext_ctx;
             result = r;
