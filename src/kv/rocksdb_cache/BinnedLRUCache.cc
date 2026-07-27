@@ -498,6 +498,60 @@ rocksdb::Status BinnedLRUCacheShard::Insert(const rocksdb::Slice& key, uint32_t 
   return s;
 }
 
+#if CEPH_ROCKSDB_SINCE(8, 1)
+rocksdb::Cache::Handle* BinnedLRUCacheShard::CreateStandalone(
+    const rocksdb::Slice& key, uint32_t hash, rocksdb::Cache::ObjectPtr value,
+    const rocksdb::Cache::CacheItemHelper* helper, size_t charge,
+    bool allow_uncharged) {
+  // Allocate up front, as Insert() does, so that a throwing allocation cannot
+  // leave the accounting below committed with no handle to release it. Never
+  // enters the hash table, so Lookup() cannot find it; the returned handle
+  // holds the only reference and Release() frees it.
+  auto e = new BinnedLRUHandle();
+  e->value = value;
+  e->helper = helper;
+  e->charge = charge;
+  e->key_length = key.size();
+  e->key_data = new char[e->key_length];
+  e->flags = 0;
+  e->hash = hash;
+  e->refs = 1;
+  e->next = e->prev = nullptr;
+  e->SetInCache(false);
+  std::copy_n(key.data(), e->key_length, e->key_data);
+
+  BinnedLRUHandle* deleted = nullptr;
+  bool ok = true;
+  {
+    std::lock_guard l(mutex_);
+    EvictFromLRU(charge, deleted);
+    if (usage_ - lru_usage_ + charge > capacity_ && strict_capacity_limit_) {
+      if (allow_uncharged) {
+        e->charge = 0;  // hand one back anyway, with GetCharge() == 0
+      } else {
+        ok = false;
+      }
+    }
+    if (ok) {
+      usage_ += e->charge;
+      // Release() drops l_elems for any last reference, so count it here too
+      stats[l_elems]++;
+      // set so age_bin is never null; the charge is not binned, as the entry
+      // stays off the LRU list
+      e->age_bin = age_bins.front();
+    }
+  }
+
+  FreeDeleted(deleted);  // outside the mutex, as Insert() does
+  if (!ok) {
+    delete[] e->key_data;
+    delete e;
+    return nullptr;
+  }
+  return reinterpret_cast<rocksdb::Cache::Handle*>(e);
+}
+#endif
+
 void BinnedLRUCacheShard::Erase(const rocksdb::Slice& key, uint32_t hash) {
   BinnedLRUHandle* e;
   bool last_reference = false;
@@ -728,6 +782,20 @@ BinnedLRUCache::GetCacheItemHelper(Handle* handle) const
 {
   return reinterpret_cast<const BinnedLRUHandle*>(handle)->helper;
 }
+
+#if CEPH_ROCKSDB_SINCE(9, 7)
+void BinnedLRUCache::ApplyToHandle(
+    rocksdb::Cache* /*cache*/, Handle* handle,
+    const std::function<void(const rocksdb::Slice& key,
+                             rocksdb::Cache::ObjectPtr value, size_t charge,
+                             const rocksdb::Cache::CacheItemHelper* helper)>&
+        callback)
+{
+  // the handle need only be layout compatible, so "cache" is unused
+  auto h = reinterpret_cast<BinnedLRUHandle*>(handle);
+  callback(h->key(), h->value, h->charge, h->helper);
+}
+#endif
 
 size_t BinnedLRUCache::TEST_GetLRUSize() {
   size_t lru_size_of_all_shards = 0;

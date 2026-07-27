@@ -246,6 +246,13 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
                         size_t charge,
                         rocksdb::Cache::Handle** handle,
                         rocksdb::Cache::Priority priority) override;
+#if CEPH_ROCKSDB_SINCE(8, 1)
+  virtual rocksdb::Cache::Handle* CreateStandalone(
+      const rocksdb::Slice& key, uint32_t hash,
+      rocksdb::Cache::ObjectPtr value,
+      const rocksdb::Cache::CacheItemHelper* helper,
+      size_t charge, bool allow_uncharged) override;
+#endif
   virtual rocksdb::Cache::Handle* Lookup(const rocksdb::Slice& key, uint32_t hash) override;
   virtual bool Ref(rocksdb::Cache::Handle* handle) override;
   virtual bool Release(rocksdb::Cache::Handle* handle,
@@ -390,6 +397,17 @@ class BinnedLRUCache : public ShardedCache {
   virtual void DisownData() override;
   virtual const rocksdb::Cache::CacheItemHelper* GetCacheItemHelper(
       Handle* handle) const override;
+#if CEPH_ROCKSDB_SINCE(9, 7)
+  // here rather than in ShardedCache: reporting the key needs the handle
+  // layout
+  virtual void ApplyToHandle(
+      rocksdb::Cache* cache, Handle* handle,
+      const std::function<void(const rocksdb::Slice& key,
+                               rocksdb::Cache::ObjectPtr value,
+                               size_t charge,
+                               const rocksdb::Cache::CacheItemHelper* helper)>&
+          callback) override;
+#endif
   //  Retrieves number of elements in LRU, for unit test purpose only
   size_t TEST_GetLRUSize();
   // Sets the high pri pool ratio
