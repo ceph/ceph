@@ -2433,9 +2433,19 @@ private:
   int fsid_fd = -1;  ///< open handle (locked) to $path/fsid
   bool mounted = false;
 
+  // Whether a caller may tolerate undecodable onodes during allocation recovery
+  enum class alloc_recovery_policy_t {
+    strict,
+    tolerate_corrupt_onodes,
+  };
+
   // store open_db options:
   bool db_was_opened_read_only = true;
   bool need_to_destage_allocation_file = false;
+
+  alloc_recovery_policy_t alloc_recovery_policy = alloc_recovery_policy_t::strict;
+  std::atomic<uint64_t> alloc_recovery_skipped_onodes = {0};
+  bool _alloc_recovery_tolerates_corruption() const;
 
   ///< rwlock to protect coll_map/new_coll_map
   ceph::shared_mutex coll_lock = ceph::make_shared_mutex("BlueStore::coll_lock");
@@ -2872,7 +2882,8 @@ private:
   * opens both DB and dependant super_meta, FreelistManager and allocator
   * in the proper order
   */
-  int _open_db_and_around(bool read_only, bool to_repair = false);
+  int _open_db_and_around(bool read_only, bool to_repair = false,
+            alloc_recovery_policy_t policy = alloc_recovery_policy_t::strict);
   void _close_db_and_around();
   void _close_around_db();
 

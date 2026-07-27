@@ -33,9 +33,9 @@
 #include "include/ceph_assert.h"
 
 // Decode-failure tolerance for BlueStore fsck/repair (tracker #77325).
-// Regular I/O keeps crashing on corrupt decode (coredump/backtrace);
-// fsck opts in via throwing_guard, turning decode assert failures into
-// ceph::buffer::malformed_input which fsck catches.
+// Regular I/O still crashes on corrupt decode; a caller can opt in via
+// throwing_guard to get ceph::buffer::malformed_input instead, so it can
+// catch and report the failure rather than aborting.
 namespace bluestore_decode {
 extern thread_local bool throw_on_failure;
 struct throwing_guard {

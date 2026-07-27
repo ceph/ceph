@@ -241,9 +241,10 @@ class BlueStore::OnodeScanMT {
     uint64_t count_interval = 100'000;
     Decoder_AllocationsAndStatFS edecoder(store, stats, *sbmap,
                                           store.min_alloc_size_order);
-    // Same read-only gating as read_allocation_from_onodes: tolerate a corrupt
-    // onode only when the rebuilt allocation won't be committed.
+    // Same gating as read_allocation_from_onodes: only read-only fsck may
+    // tolerate an undecodable onode here.
     bool current_onode_valid = false;
+    const bool tolerate = store._alloc_recovery_tolerates_corruption();
     it->lower_bound(start_key);
     // skip to first key that is beginning of Onode
     while (it->valid() && is_extent_shard_key(it->key())) {
@@ -275,7 +276,7 @@ class BlueStore::OnodeScanMT {
                        &stats.actual_pool_vstatfs[oid.hobj.get_logical_pool()]);
         current_onode_valid = false;
         try {
-          bluestore_decode::throwing_guard g(store.db_was_opened_read_only);
+          bluestore_decode::throwing_guard g(tolerate);
           Onode dummy_on(cct);
           Onode::decode_raw(
             &dummy_on,
@@ -285,9 +286,8 @@ class BlueStore::OnodeScanMT {
           current_onode_valid = true;
           ++stats.onode_count;
         } catch (const ceph::buffer::error& e) {
-          if (!store.db_was_opened_read_only) {
-            throw;
-          }
+          if (!tolerate) { throw; }
+          ++store.alloc_recovery_skipped_onodes;
           derr << __func__ << " skipping undecodable onode "
               << pretty_binary_string(key) << ": " << e.what() << dendl;
           continue;
@@ -317,18 +317,13 @@ class BlueStore::OnodeScanMT {
           continue;
         }
         try {
-          bluestore_decode::throwing_guard g(
-            store.db_was_opened_read_only);
+          bluestore_decode::throwing_guard g(tolerate);
           edecoder.decode_some(it->value(), nullptr);
           ++stats.shard_count;
         } catch (const ceph::buffer::error& e) {
-          if (!store.db_was_opened_read_only) {
-            throw;
-          }
-          derr << __func__
-              << " skipping undecodable extent shard "
-              << pretty_binary_string(key) << ": "
-              << e.what() << dendl;
+          if (!tolerate) { throw; }
+          derr << __func__ << " skipping undecodable extent shard "
+              << pretty_binary_string(key) << ": " << e.what() << dendl;
           continue;
         }
       }

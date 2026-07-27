@@ -7778,6 +7778,19 @@ bool BlueStore::is_statfs_recoverable() const
   return has_null_manager();
 }
 
+bool BlueStore::_alloc_recovery_tolerates_corruption() const
+{
+  auto level = cct->_conf.get_val<std::string>(
+    "bluestore_accept_corrupted_onode_recovery");
+  if (level == "never") {
+    return false;
+  }
+  // "read-only": only the fsck analysis path may skip undecodable onodes.
+  // Its recovered allocation is never destaged, so a skipped onode cannot
+  // wrongly free its blocks.
+  return alloc_recovery_policy == alloc_recovery_policy_t::tolerate_corrupt_onodes;
+}
+
 bool BlueStore::test_mount_in_use()
 {
   // most error conditions mean the mount is not in use (e.g., because
@@ -7993,8 +8006,12 @@ int BlueStore::_is_bluefs(bool create, bool* ret)
 * opens both DB and dependant super_meta, FreelistManager and allocator
 * in the proper order
 */
-int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
+int BlueStore::_open_db_and_around(bool read_only, bool to_repair,
+                                   alloc_recovery_policy_t policy)
 {
+  alloc_recovery_policy = policy;
+  alloc_recovery_skipped_onodes = 0;
+
   dout(5) << __func__ << "::NCB::read_only=" << read_only << ", to_repair=" << to_repair << dendl;
   {
     string type;
@@ -11096,7 +11113,10 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair, bluestore_stats_t 
 
   // in deep mode we need R/W write access to be able to replay deferred ops
   const bool read_only = !(repair || depth == FSCK_DEEP);
-  int r = _open_db_and_around(read_only);
+  int r = _open_db_and_around(read_only, false,
+    read_only ? alloc_recovery_policy_t::tolerate_corrupt_onodes
+              : alloc_recovery_policy_t::strict);
+
   if (r < 0) {
     return r;
   }
@@ -11163,6 +11183,11 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair, bluestore_
           << " start sb_tracker_hash_size:" << sb_hash_size
           << dendl;
   int64_t errors = 0;
+  if (uint64_t skipped = alloc_recovery_skipped_onodes.load(); skipped > 0) {
+    derr << __func__ << " " << skipped
+         << " onode(s) skipped during allocation recovery" << dendl;
+    errors += skipped;
+  }
   int64_t warnings = 0;
   unsigned repaired = 0;
 
@@ -20953,6 +20978,8 @@ void BlueStore::ExtentDecoderPartial::reset(const ghobject_t _oid,
 
 int BlueStore::read_allocation_from_onodes(SimpleBitmap *sbmap, read_alloc_stats_t& stats)
 {
+  const bool tolerate = _alloc_recovery_tolerates_corruption();
+
   sb_info_space_efficient_map_t sb_info;
   // iterate over all shared blobs
   auto it = db->get_iterator(PREFIX_SHARED_BLOB, KeyValueDB::ITERATOR_NOCACHE);
@@ -21008,9 +21035,9 @@ int BlueStore::read_allocation_from_onodes(SimpleBitmap *sbmap, read_alloc_stats
                                 sb_info,
                                 min_alloc_size_order);
 
-  // Tolerate corrupt onodes only under read-only fsck: the rebuilt allocation
-  // is never destaged there, so skipping one can't wrongly free its blocks.
-  // Read-write (mount/repair) re-throws and stays fatal.
+  // Tolerate undecodable onodes only when the caller opted in; only read-only
+  // fsck does, since its recovered allocation is never destaged. Every other
+  // caller aborts as before.
   bool current_onode_valid = false;
 
   // iterate over all ONodes stored in RocksDB
@@ -21035,7 +21062,7 @@ int BlueStore::read_allocation_from_onodes(SimpleBitmap *sbmap, read_alloc_stats
         &stats.actual_pool_vstatfs[oid.hobj.get_logical_pool()]);
       current_onode_valid = false;
       try {
-        bluestore_decode::throwing_guard g(db_was_opened_read_only);
+        bluestore_decode::throwing_guard g(tolerate);
         Onode dummy_on(cct);
         Onode::decode_raw(&dummy_on,
           it->value(),
@@ -21044,9 +21071,8 @@ int BlueStore::read_allocation_from_onodes(SimpleBitmap *sbmap, read_alloc_stats
         current_onode_valid = true;
         ++stats.onode_count;
       } catch (const ceph::buffer::error& e) {
-        if (!db_was_opened_read_only) {
-          throw;
-        }
+        if (!tolerate) { throw; }
+        ++alloc_recovery_skipped_onodes;
         derr << __func__ << " skipping undecodable onode "
              << pretty_binary_string(key) << ": " << e.what() << dendl;
         continue;
@@ -21074,13 +21100,11 @@ int BlueStore::read_allocation_from_onodes(SimpleBitmap *sbmap, read_alloc_stats
         continue;
       }
       try {
-        bluestore_decode::throwing_guard g(db_was_opened_read_only);
+        bluestore_decode::throwing_guard g(tolerate);
         edecoder.decode_some(it->value(), nullptr);
         ++stats.shard_count;
       } catch (const ceph::buffer::error& e) {
-        if (!db_was_opened_read_only) {
-          throw;
-        }
+        if (!tolerate) { throw; }
         derr << __func__ << " skipping undecodable extent shard "
              << pretty_binary_string(key) << ": " << e.what() << dendl;
         continue;

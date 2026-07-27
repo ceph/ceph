@@ -281,6 +281,11 @@
   on a devdax namespace (a character device such as ``/dev/dax0.0``) will no
   longer start, because no remaining backend can open one; reconfigure the
   namespace to fsdax with ``ndctl`` or re-provision them before upgrading.
+* BlueStore: fsck no longer aborts on an undecodable onode; it reports the object
+  and continues. Post-crash allocation recovery tolerates corruption only during
+  read-only fsck, gated by the new ``bluestore_accept_corrupted_onode_recovery``
+  option (``never`` or ``read-only``, default ``read-only``); mount, repair, and
+  ``ceph-bluestore-tool trim`` still abort.
 
 >=20.0.0
 

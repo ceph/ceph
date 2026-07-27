@@ -11942,7 +11942,7 @@ static bufferlist make_bad_onode_val(BadKind kind)
 }
 
 // One victim object per corruption shape, all in one store: fsck reports
-// them all without aborting, repair fixes, healthy objects survive.
+// them all without aborting.
 TEST_P(CorruptedOnodesTest, Fsck_TolerateCorruptedOnodes)
 {
   SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
@@ -12050,7 +12050,10 @@ TEST_P(CorruptedOnodesTest, Fsck_ExtentDecodeThrow_DoesNotLeakExtent)
 
 TEST_P(CorruptedOnodesTest, Fsck_ToleratesCorruptionDuringAllocationRecovery)
 {
+  g_ceph_context->_conf._clear_safe_to_start_threads();
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "ssd");
   SetVal(g_conf(), "bluestore_allocation_recovery_threads", "0"); // single-threaded
+  // SetVal(g_conf(), "bluestore_allocation_recovery_threads", "4"); // multi-threaded
   g_conf().apply_changes(nullptr);
   prepare_store(); mount();
   auto* bs = dynamic_cast<BlueStore*>(store.get()); ceph_assert(bs);
@@ -12065,9 +12068,12 @@ TEST_P(CorruptedOnodesTest, Fsck_ToleratesCorruptionDuringAllocationRecovery)
   cleanup_store();
 }
 
-TEST_P(CorruptedOnodesTest, Fsck_ToleratesCorruptionDuringAllocationRecoveryMT)
+TEST_P(CorruptedOnodesTest, ColdOpen_StillAssertsOnCorruptOnode)
 {
-  SetVal(g_conf(), "bluestore_allocation_recovery_threads", "4"); // multi-threaded
+  g_ceph_context->_conf._clear_safe_to_start_threads();
+  GTEST_FLAG_SET(death_test_style, "threadsafe");   // mount() leaves threads running
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "ssd");
+  SetVal(g_conf(), "bluestore_allocation_recovery_threads", "0");
   g_conf().apply_changes(nullptr);
   prepare_store(); mount();
   auto* bs = dynamic_cast<BlueStore*>(store.get()); ceph_assert(bs);
@@ -12076,7 +12082,9 @@ TEST_P(CorruptedOnodesTest, Fsck_ToleratesCorruptionDuringAllocationRecoveryMT)
   umount();
   SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "1");
   g_conf().apply_changes(nullptr);
-  EXPECT_GT(store->fsck(false), 0);
+  // cold_open() is ceph-bluestore-tool trim's entry point: read-only, but it
+  // discards space based on the recovered allocation, so it must not tolerate.
+  ASSERT_DEATH(bs->cold_open(), "FAILED ceph_assert");
   SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
   g_conf().apply_changes(nullptr);
   cleanup_store();
