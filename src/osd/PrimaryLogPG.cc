@@ -13740,18 +13740,28 @@ void PrimaryLogPG::_on_activate_committed(HBHandle *handle)
       &pool_migration_info,
       handle,
       hobject_t());
+
+    // Missing objects are not in the object store, so scan_range_migration
+    // does not find them. If we only used the scan result for the interval,
+    // next_pool_migration() would skip any missing objects. Merge every
+    // non-deleted missing object into pool_migration_info.objects now.
+    for (const auto &[hoid, item] :
+         recovery_state.get_pg_log().get_missing().get_items()) {
+      if (hoid >= pool_migration_info.end) {
+        break;
+      }
+      if (!recovery_state.get_missing_loc().is_deleted(hoid)) {
+        dout(20) << __func__ << " merging missing object " << hoid
+                 << " into pool_migration_info" << dendl;
+        pool_migration_info.objects.insert({hoid, item.need});
+      }
+    }
+
     pool_migration_info.trim();
     update_migration_watermark(earliest_pool_migration());
-    //If there are no missing objects pool_migration_info is returning the same
-    //answer as earliest_pool_migration on the primary. It doesn't work on the
-    //other shards because projected_last_update isn't being set on those shards
-    dout(10) << __func__ << " " << pool_migration_info.begin << " " << pool_migration_watermark << dendl;
-    // pool_migration_info.begin can differ from pool_migration_watermark when there are
-    // missing objects that come before the scanned objects. The watermark is set to the earliest
-    // object (including missing), while pool_migration_info.begin is the first scanned object.
-    // This is expected behavior during degraded states, so don't assert.
-    dout(20) << __func__ << " num_missing = " << recovery_state.get_pg_log().get_missing().num_missing() << dendl;
-    if (is_primary() && !recovery_state.get_pg_log().get_missing().num_missing()) {
+    dout(10) << __func__ << " pool_migration_info.begin=" << pool_migration_info.begin
+             << " pool_migration_watermark=" << pool_migration_watermark << dendl;
+    if (is_primary()) {
       ceph_assert(pool_migration_info.begin == pool_migration_watermark);
     }
     new_pool_migration_interval = true;
