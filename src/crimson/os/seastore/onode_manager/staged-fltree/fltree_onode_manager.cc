@@ -292,55 +292,28 @@ FLTreeOnodeManager::list_onodes_ret FLTreeOnodeManager::list_onodes(
 {
   LOG_PREFIX(FLTreeOnodeManager::list_onodes);
   DEBUGT("start {}, end {}, limit {}", trans, start, end, limit);
-  return tree.lower_bound(trans, start
-  ).si_then([this, &trans, end, limit] (auto&& cursor) {
-    using crimson::os::seastore::onode::full_key_t;
-    return seastar::do_with(
-        limit,
-        std::move(cursor),
-        list_onodes_bare_ret(),
-        [this, &trans, end] (auto& to_list, auto& current_cursor, auto& ret) {
-      return trans_intr::repeat(
-          [this, &trans, end, &to_list, &current_cursor, &ret] ()
-          -> eagain_ifuture<seastar::stop_iteration> {
-	LOG_PREFIX(FLTreeOnodeManager::list_onodes);
-        if (current_cursor.is_end()) {
-	  DEBUGT("reached the onode tree end", trans);
-          std::get<1>(ret) = ghobject_t::get_max();
-          return seastar::make_ready_future<seastar::stop_iteration>(
-            seastar::stop_iteration::yes);
-        } else if (current_cursor.get_ghobj() >= end) {
-	  DEBUGT("reached the end {} > {}",
-	    trans, current_cursor.get_ghobj(), end);
-          std::get<1>(ret) = end;
-          return seastar::make_ready_future<seastar::stop_iteration>(
-            seastar::stop_iteration::yes);
-        }
-        if (to_list == 0) {
-	  DEBUGT("reached the limit", trans);
-          std::get<1>(ret) = current_cursor.get_ghobj();
-          return seastar::make_ready_future<seastar::stop_iteration>(
-            seastar::stop_iteration::yes);
-        }
-	auto ghobj = current_cursor.get_ghobj();
-	DEBUGT("found onode for {}", trans, ghobj);
-        std::get<0>(ret).emplace_back(std::move(ghobj));
-        return tree.get_next(trans, current_cursor
-        ).si_then([&to_list, &current_cursor] (auto&& next_cursor) mutable {
-          // we intentionally hold the current_cursor during get_next() to
-          // accelerate tree lookup.
-          --to_list;
-          current_cursor = next_cursor;
-          return seastar::make_ready_future<seastar::stop_iteration>(
-	        seastar::stop_iteration::no);
-        });
-      }).si_then([&ret] () mutable {
-        return seastar::make_ready_future<list_onodes_bare_ret>(
-            std::move(ret));
-       //  return ret;
-      });
-    });
-  });
+  std::vector<ghobject_t> objects;
+  auto cursor = co_await tree.lower_bound(trans, start);
+  for (auto to_list = limit; ; --to_list) {
+    if (cursor.is_end()) {
+      DEBUGT("reached the onode tree end", trans);
+      co_return list_onodes_bare_ret{std::move(objects), ghobject_t::get_max()};
+    }
+    auto ghobj = cursor.get_ghobj();
+    if (ghobj >= end) {
+      DEBUGT("reached the end {} >= {}", trans, ghobj, end);
+      co_return list_onodes_bare_ret{std::move(objects), end};
+    }
+    if (to_list == 0) {
+      DEBUGT("reached the limit", trans);
+      co_return list_onodes_bare_ret{std::move(objects), std::move(ghobj)};
+    }
+    DEBUGT("found onode for {}", trans, ghobj);
+    objects.emplace_back(std::move(ghobj));
+    // we intentionally hold the current cursor during get_next() to
+    // accelerate tree lookup.
+    cursor = co_await tree.get_next(trans, cursor);
+  }
 }
 
 FLTreeOnodeManager::~FLTreeOnodeManager() {}
