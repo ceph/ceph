@@ -21,10 +21,7 @@ describe('NvmeofGatewayGroupComponent', () => {
     await TestBed.configureTestingModule({
       imports: [HttpClientModule, SharedModule, TabsModule, GridModule],
       declarations: [NvmeofGatewayGroupComponent],
-      providers: [
-        provideAnimations(),
-        { provide: NvmeofService, useValue: nvmeofServiceSpy }
-      ]
+      providers: [provideAnimations(), { provide: NvmeofService, useValue: nvmeofServiceSpy }]
     }).compileComponents();
 
     fixture = TestBed.createComponent(NvmeofGatewayGroupComponent);
