@@ -26,22 +26,24 @@
       }
 
       .cds--toast-notification__subtitle {
+        /* stylelint-disable-next-line property-no-vendor-prefix */
+        -webkit-box-orient: vertical;
         display: -webkit-box;
         -webkit-line-clamp: 3;
-        -webkit-box-orient: vertical;
         overflow: hidden;
         overflow-wrap: break-word;
 
         .toast-message {
+          /* stylelint-disable-next-line property-no-vendor-prefix */
+          -webkit-box-orient: vertical;
           display: -webkit-box;
           -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
           overflow: hidden;
         }
 
         .toast-duplicate-count {
-          display: block;
           color: $text-secondary;
+          display: block;
           margin-top: $spacing-02;
         }
       }
@@ -71,8 +73,8 @@
 
       .toast-caption-container .toast-view-more {
         color: $link-primary;
-        text-decoration: none;
         margin-inline-start: auto;
+        text-decoration: none;
 
         &:hover {
           text-decoration: underline;
