@@ -19,7 +19,8 @@ from . import(
     get_secret_key,
     get_config_host2,
     get_config_port2,
-    is_s3_backend
+    is_s3_backend,
+    get_s3vector_backend
     )
 
 
@@ -130,6 +131,7 @@ def another_user(tenant=None):
             aws_secret_access_key=secret_key,
             region_name=get_config_zonegroup())
 
+    client.uid = uid
     return client
 
 
@@ -2583,4 +2585,136 @@ def test_sal_error_propagation():
     _ensure_s3_bucket_for_vector_bucket(bucket_name)
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+
+@pytest.mark.vector_bucket_test
+def test_cross_owner_vector_bucket():
+    """When the S3 bucket owner differs from the vector bucket owner,
+    operations should fail without a bucket policy and succeed with one."""
+    if not is_s3_backend():
+        pytest.skip("cross-owner test only applies to S3/SAL backends")
+
+    # user A (config user) creates the S3 bucket
+    s3conn = connection('s3')
+    bucket_name = gen_bucket_name()
+    _create_s3bucket(s3conn, bucket_name)
+
+    # user B creates a vector bucket with the same name
+    other = another_user()
+    result = other.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # without a bucket policy, user B should fail to create an index
+    index_name = 'cross-owner-idx'
+    try:
+        other.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                           dataType='float32', dimension=4, distanceMetric='cosine')
+        assert False, "create_index should have failed without bucket policy"
+    except other.exceptions.ClientError as err:
+        log.info("create_index correctly failed without bucket policy: %s", err)
+        assert err.response['ResponseMetadata']['HTTPStatusCode'] >= 400
+
+    # user A sets a bucket policy granting user B full access
+    policy = json.dumps({
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Effect": "Allow",
+            "Principal": {"AWS": [f"arn:aws:iam:::user/{other.uid}"]},
+            "Action": "s3:*",
+            "Resource": [
+                f"arn:aws:s3:::{bucket_name}",
+                f"arn:aws:s3:::{bucket_name}/*"
+            ]
+        }]
+    })
+    s3conn.put_bucket_policy(Bucket=bucket_name, Policy=policy)
+
+    # now user B should be able to create an index and write/query vectors
+    result = other.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                                dataType='float32', dimension=4, distanceMetric='cosine')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = generate_vectors(2, 4)
+    result = other.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    result = other.query_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                 queryVector=vectors[0]['data'], topK=2)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == 2
+
+    # cleanup
+    _ = other.delete_vector_bucket(vectorBucketName=bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+
+@pytest.mark.vector_bucket_test
+def test_versioned_s3_bucket():
+    """Vector bucket backed by an S3 bucket with versioning enabled."""
+    if not is_s3_backend():
+        pytest.skip("versioned bucket test only applies to S3/SAL backends")
+    if get_s3vector_backend() == 'rgw':
+        pytest.skip("versioned buckets not supported with RGW backend (null version IDs)")
+
+    conn = connection()
+    s3conn = connection('s3')
+    bucket_name = gen_bucket_name()
+
+    # create an S3 bucket and enable versioning
+    _create_s3bucket(s3conn, bucket_name)
+    s3conn.put_bucket_versioning(Bucket=bucket_name,
+                                 VersioningConfiguration={'Status': 'Enabled'})
+
+    # create a vector bucket, index, and write/query vectors
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'versioned-idx'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                               dataType='float32', dimension=4, distanceMetric='cosine')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = generate_vectors(3, 4)
+    # upsert the same vectors multiple times to exercise overwrites with versioning
+    for i in range(3):
+        result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # get vectors
+    vector_keys = [v['key'] for v in vectors]
+    result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                              keys=vector_keys, returnData=True)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == 3
+
+    # query vectors
+    query_vector = generate_data(4, 0)
+    result = conn.query_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                queryVector=query_vector, topK=3)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == 3
+
+    # delete vectors
+    result = conn.delete_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                 keys=vector_keys)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # verify they are gone
+    result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                              keys=vector_keys)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == 0
+
+    # cleanup - delete vector bucket, then purge all versions and delete markers
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    paginator = s3conn.get_paginator('list_object_versions')
+    for page in paginator.paginate(Bucket=bucket_name):
+        objects = []
+        for v in page.get('Versions', []):
+            objects.append({'Key': v['Key'], 'VersionId': v['VersionId']})
+        for dm in page.get('DeleteMarkers', []):
+            objects.append({'Key': dm['Key'], 'VersionId': dm['VersionId']})
+        if objects:
+            s3conn.delete_objects(Bucket=bucket_name, Delete={'Objects': objects})
+    s3conn.delete_bucket(Bucket=bucket_name)
 
