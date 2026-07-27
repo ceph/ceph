@@ -74,6 +74,20 @@ using ceph::bufferlist;
 using ceph::bufferptr;
 using ceph::Formatter;
 
+#if ROCKSDB_MAJOR >= 8
+/*
+ * ConfigOptions defaults input_strings_escaped to true, where the pre-v8
+ * overloads taking the flag directly defaulted it to false, hence spelling
+ * it out.
+ */
+static rocksdb::ConfigOptions make_config_options()
+{
+  rocksdb::ConfigOptions config_options;
+  config_options.input_strings_escaped = false;
+  return config_options;
+}
+#endif
+
 static const char* sharding_def_dir = "sharding";
 static const char* sharding_def_file = "sharding/def";
 static const char* sharding_recreate = "sharding/recreate_columns";
@@ -946,7 +960,12 @@ int RocksDBStore::update_column_family_options(const std::string& base_name,
 	    << " options=" << more_options << dendl;
     return r;
   }
+#if ROCKSDB_MAJOR >= 8
+  status = rocksdb::GetColumnFamilyOptionsFromMap(
+    make_config_options(), *cf_opt, options_map, cf_opt);
+#else
   status = rocksdb::GetColumnFamilyOptionsFromMap(*cf_opt, options_map, cf_opt);
+#endif
   if (!status.ok()) {
     dout(5) << __func__ << " invalid column family optionsp; column family="
 	    << base_name << " options=" << more_options << dendl;
@@ -1011,7 +1030,12 @@ int RocksDBStore::apply_block_cache_options(const std::string& column_name,
   }
 
   rocksdb::BlockBasedTableOptions column_bbt_opts;
+#if ROCKSDB_MAJOR >= 8
+  status = GetBlockBasedTableOptionsFromMap(
+    make_config_options(), bbt_opts, cache_options_map, &column_bbt_opts);
+#else
   status = GetBlockBasedTableOptionsFromMap(bbt_opts, cache_options_map, &column_bbt_opts);
+#endif
   if (!status.ok()) {
     dout(5) << __func__ << " invalid block cache options; column=" << column_name
 	    << " options=" << block_cache_opt << dendl;
