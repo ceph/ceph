@@ -9,7 +9,9 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { ReactiveFormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
+import { PoolService } from '~/app/shared/api/pool.service';
+import { CephfsService } from '~/app/shared/api/cephfs.service';
 import {
   CheckboxModule,
   ComboBoxModule,
@@ -23,6 +25,8 @@ describe('CephfsVolumeFormComponent', () => {
   let fixture: ComponentFixture<CephfsVolumeFormComponent>;
   let formHelper: FormHelper;
   let orchService: OrchestratorService;
+  let poolService: PoolService;
+  let cephfsService: CephfsService;
 
   configureTestBed({
     imports: [
@@ -44,6 +48,8 @@ describe('CephfsVolumeFormComponent', () => {
     component = fixture.componentInstance;
     formHelper = new FormHelper(component.form);
     orchService = TestBed.inject(OrchestratorService);
+    poolService = TestBed.inject(PoolService);
+    cephfsService = TestBed.inject(CephfsService);
     spyOn(orchService, 'status').and.returnValue(of({ available: true }));
     fixture.detectChanges();
   });
@@ -134,5 +140,33 @@ describe('CephfsVolumeFormComponent', () => {
       fixture.detectChanges();
       expect(submitButton.nativeElement.disabled).toBeFalsy();
     });
+  });
+
+  describe('pool list error handling when creating', () => {
+    beforeEach(() => {
+      component.editing = false;
+      spyOn(cephfsService, 'getUsedPools').and.returnValue(of([]));
+    });
+
+    it('should treat a 403 on pool list as an empty list', fakeAsync(() => {
+      spyOn(poolService, 'getList').and.returnValue(throwError({ status: 403 }));
+      component.ngOnInit();
+      tick();
+      expect(component.pools).toEqual([]);
+    }));
+
+    it('should propagate non-403 errors from pool list', fakeAsync(() => {
+      const err = { status: 500 };
+      spyOn(poolService, 'getList').and.returnValue(throwError(err));
+      let errorHandled = false;
+      const origSetErrors = component.form.setErrors.bind(component.form);
+      spyOn(component.form, 'setErrors').and.callFake((errors: any) => {
+        if (errors?.cdSubmitButton) errorHandled = true;
+        origSetErrors(errors);
+      });
+      component.ngOnInit();
+      tick();
+      expect(errorHandled).toBeTruthy();
+    }));
   });
 });
