@@ -38,7 +38,7 @@ export class RolesPageHelper extends PageHelper {
     cy.get('cds-number[formControlName="max_session_duration"] input')
       .clear()
       .type(maxSessionDuration.toString());
-    cy.get('cds-modal').contains('button', 'Edit').click();
+    cy.get('cds-modal').contains('button', 'Save').click();
     cy.get('cds-modal').should('not.exist');
 
     this.getRolesTableCell(this.columnIndex.roleName, name)

@@ -1,19 +1,38 @@
 <cds-modal size="md" [open]="open" [hasScrollingContent]="false" (overlaySelected)="closeModal()">
   <cds-modal-header (closeSelect)="closeModal()">
-    <h4 cdsModalHeaderLabel class="cds--type-label-01">{{ accountName }}</h4>
-    <h3 cdsModalHeaderHeading i18n>{{ mode }} role</h3>
+    @if (isEdit) {
+      <h4 cdsModalHeaderLabel class="cds--type-label-01" i18n>Role</h4>
+      <h3 cdsModalHeaderHeading i18n>Edit session duration</h3>
+      <p class="cds--modal-header__description cds--type-body-01 cds-mt-3" i18n>
+        Update the maximum session duration for this role.
+      </p>
+    } @else {
+      <h4 cdsModalHeaderLabel class="cds--type-label-01" i18n>User account</h4>
+      <h3 cdsModalHeaderHeading i18n>Create role</h3>
+      <p class="cds--modal-header__description cds--type-body-01 cds-mt-3" i18n>
+        Role grants temporary permissions to trusted users, applications, or services.
+      </p>
+    }
   </cds-modal-header>
 
   <form class="form" #formDir="ngForm" [formGroup]="form">
     <div cdsModalContent>
+      @if (!isEdit) {
+      <!-- Account -->
+      <div class="form-item">
+        <label class="cds--label cds--type-label-01" i18n>Account</label>
+        <p class="cds--type-body-01">{{ accountName }}</p>
+      </div>
+
       <!-- Role Name -->
       <div class="form-item">
         <cds-text-label
           label="Role name"
           for="role_name"
-          cdRequiredField="Role name"
           [invalid]="roleName.isInvalid"
           [invalidText]="roleNameError"
+          helperText="Unique name used to identify this role within the account."
+          i18n-helperText
           >Role name
           <input
             cdsText
@@ -23,7 +42,7 @@
             id="role_name"
             name="role_name"
             formControlName="role_name"
-            placeholder="Placeholder text"
+            placeholder="Enter a role name (e.g. BackupServiceRole)"
             [invalid]="roleName.isInvalid"
             [autofocus]="true"
             modal-primary-focus
@@ -36,17 +55,44 @@
         </ng-template>
       </div>
 
+      <!-- Role (Edit only) -->
+      } @else {
+      <div class="form-item">
+        <label class="cds--label cds--type-label-01" i18n>Role</label>
+        <p class="cds--type-body-01">
+          <cds-tooltip-definition
+            align="right"
+            [description]="accountTooltip"
+            [openOnHover]="true"
+            [caret]="true"
+            [highContrast]="true"
+            [dropShadow]="true"
+            [autoAlign]="true"
+          >
+            {{ form.getValue('role_name') }}
+          </cds-tooltip-definition>
+        </p>
+        <ng-template #accountTooltip>
+          <div>
+            User account:<br />
+            <strong>{{ accountName }}</strong>
+          </div>
+        </ng-template>
+      </div>
+      }
+
       <!-- Path & Assume Role Policy Document (Create only) -->
       @if (!isEdit) {
       <!-- Path -->
       <div class="form-item">
         <cds-text-label
-          label="Path"
+          label="Role path"
           for="role_path"
-          cdRequiredField="Path"
           [invalid]="rolePath.isInvalid"
           [invalidText]="pathError"
-          >Path
+          helperText='Specifies the hierarchy or namespace for the role. Use "/" for the root path.'
+          i18n-helperText
+          >Role path
           <input
             cdsText
             cdValidate
@@ -55,7 +101,7 @@
             id="role_path"
             name="role_path"
             formControlName="role_path"
-            placeholder="Placeholder text"
+            placeholder="Enter path (/applications/)"
             [invalid]="rolePath.isInvalid"
           />
         </cds-text-label>
@@ -72,7 +118,8 @@
           labelInputID="role_assume_policy_doc"
           [invalid]="policyDoc.isInvalid"
           [invalidText]="policyError"
-          cdRequiredField="Trust Policy"
+          helperText="Defines which principals can assume this role. Enter a valid JSON policy document."
+          i18n-helperText
           >Trust policy
           <textarea
             cdsTextArea
@@ -81,7 +128,7 @@
             id="role_assume_policy_doc"
             name="role_assume_policy_doc"
             formControlName="role_assume_policy_doc"
-            placeholder="Placeholder text"
+            placeholder="Enter a JSON trust policy document"
             rows="8"
             cols="200"
             [invalid]="policyDoc.isInvalid"
@@ -98,11 +145,11 @@
       </div>
       }
 
-      <!-- Max Session Duration (Edit only) -->
+      <!-- Maximum Session Duration (Edit only) -->
       @if (isEdit) {
       <div class="form-item">
         <cds-number
-          label="Max Session Duration (Hours)"
+          label="Maximum session duration (hours)"
           cdValidate
           #maxSessionDuration="cdValidate"
           [invalid]="maxSessionDuration.isInvalid"
@@ -129,7 +176,7 @@
     <cd-form-button-panel
       (submitActionEvent)="onSubmit()"
       [form]="form"
-      [submitText]="mode"
+      [submitText]="isEdit ? 'Save' : 'Create'"
       [modalForm]="true"
     ></cd-form-button-panel>
   </form>
