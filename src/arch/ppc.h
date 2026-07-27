@@ -9,6 +9,8 @@
 #ifndef CEPH_ARCH_PPC_H
 #define CEPH_ARCH_PPC_H
 
+#include "acconfig.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
