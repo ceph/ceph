@@ -51,7 +51,8 @@ describe('RbdSnapshotListComponent', () => {
     },
     getPermissions: () => {
       return new Permissions({ 'rbd-image': ['read', 'update', 'create', 'delete'] });
-    }
+    },
+    set: (_key: string, _value: any) => {}
   };
 
   configureTestBed({
@@ -114,9 +115,9 @@ describe('RbdSnapshotListComponent', () => {
       fixture.detectChanges();
       modalService = TestBed.inject(ModalCdsService);
       const actionLabelsI18n = TestBed.inject(ActionLabelsI18n);
-      rbdService = new RbdService(null, null);
-      notificationService = new NotificationService(null, null, null);
-      authStorageService = new AuthStorageService();
+      rbdService = TestBed.inject(RbdService);
+      notificationService = TestBed.inject(NotificationService);
+      authStorageService = TestBed.inject(AuthStorageService);
       authStorageService.set(USER, { 'rbd-image': ['create', 'read', 'update', 'delete'] });
       component = new RbdSnapshotListComponent(
         authStorageService,
@@ -131,17 +132,19 @@ describe('RbdSnapshotListComponent', () => {
         null,
         modalService
       );
-      spyOn(rbdService, 'deleteSnapshot').and.returnValue(observableThrowError({ status: 500 }));
-      spyOn(notificationService, 'notifyTask').and.stub();
-      spyOn(modalService, 'stopLoadingSpinner').and.stub();
+      jest
+        .spyOn(rbdService, 'deleteSnapshot')
+        .mockReturnValue(observableThrowError({ status: 500 }));
+      jest.spyOn(notificationService, 'notifyTask').mockImplementation(() => 0);
     });
 
     it('should call stopLoadingSpinner if the request fails', fakeAsync(() => {
       const modalRef: any = { snapshotForm: 'deletionForm' };
-      spyOn(modalService, 'show').and.callFake((_modalComp: any, config: any) => {
+      jest.spyOn(modalService, 'show').mockImplementation((_modalComp: any, config: any) => {
         modalRef.submitAction = config.submitAction;
         return modalRef;
       });
+      jest.spyOn(modalService, 'stopLoadingSpinner').mockImplementation(() => {});
 
       component.updateSelection(new CdTableSelection([{ name: 'someName' }]));
       component.deleteSnapshotModal();
@@ -223,11 +226,11 @@ describe('RbdSnapshotListComponent', () => {
       component.poolName = 'pool01';
       component.rbdName = 'image01';
       modalRef = {
-        setEditing: jasmine.createSpy('setEditing'),
-        setSnapName: jasmine.createSpy('setSnapName'),
+        setEditing: jest.fn(),
+        setSnapName: jest.fn(),
         onSubmit: new Subject<string>()
       };
-      spyOn(TestBed.inject(ModalCdsService), 'show').and.returnValue(modalRef);
+      jest.spyOn(TestBed.inject(ModalCdsService), 'show').mockReturnValue(modalRef);
     });
 
     it('should display old snapshot name', () => {
@@ -241,9 +244,9 @@ describe('RbdSnapshotListComponent', () => {
       component.openCreateSnapshotModal();
       expect(modalRef.setEditing).not.toHaveBeenCalled();
       expect(modalRef.setSnapName).toHaveBeenCalled();
-      expect(modalRef.setSnapName.calls.mostRecent().args[0]).toMatch(
-        RegExp(`^${component.rbdName}_[\\d-]+T[\\d.:]+[\\+-][\\d:]+$`)
-      );
+      expect(
+        modalRef.setSnapName.mock.calls[modalRef.setSnapName.mock.calls.length - 1][0]
+      ).toMatch(RegExp(`^${component.rbdName}_[\\d-]+T[\\d.:]+[\\+-][\\d:]+$`));
     });
   });
 

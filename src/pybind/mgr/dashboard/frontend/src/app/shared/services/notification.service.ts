@@ -1,5 +1,5 @@
-import { Injectable, NgZone } from '@angular/core';
-
+import { Injectable, NgZone, SecurityContext } from '@angular/core';
+import { DomSanitizer } from '@angular/platform-browser';
 import _ from 'lodash';
 import { BehaviorSubject } from 'rxjs';
 import {
@@ -52,7 +52,8 @@ export class NotificationService {
   constructor(
     private taskMessageService: TaskMessageService,
     private cdDatePipe: CdDatePipe,
-    private ngZone: NgZone
+    private ngZone: NgZone,
+    private sanitizer: DomSanitizer
   ) {
     this._loadReadMap();
     this._loadStoredNotifications();
@@ -261,10 +262,25 @@ export class NotificationService {
     const carbonType = this.NOTIFICATION_TYPE_MAP[notification.type] || 'info';
     const lowContrast = notification.options?.lowContrast || false;
 
+    const sanitizedTitle =
+      this.sanitizer.sanitize(SecurityContext.HTML, notification.title || '') ||
+      notification.title ||
+      '';
+
+    const sanitizedSubtitle =
+      this.sanitizer.sanitize(SecurityContext.HTML, notification.message || '') ||
+      notification.message ||
+      '';
+
+    const captionHtml = this._renderTimeAndApplicationHtml(notification);
+
+    const sanitizedCaption =
+      this.sanitizer.sanitize(SecurityContext.HTML, captionHtml) || captionHtml;
+
     const toast: ToastContent = {
-      title: notification.title,
-      subtitle: notification.message || '',
-      caption: this._renderTimeAndApplicationHtml(notification),
+      ttitle: sanitizedTitle,
+      subtitle: sanitizedSubtitle,
+      caption: sanitizedCaption,
       type: carbonType,
       lowContrast: lowContrast,
       showClose: true,
@@ -288,8 +304,9 @@ export class NotificationService {
   }
 
   private _renderTimeAndApplicationHtml(notification: CdNotification): string {
-    let html = `<div class="toast-caption-container">
-      <small class="date">${this.cdDatePipe.transform(notification.timestamp)}</small>`;
+    let html = `<div class="toast-caption-container"><small class="date">${this.cdDatePipe.transform(
+      notification.timestamp
+    )}</small>`;
 
     html += '</div>';
     return html;
