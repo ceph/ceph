@@ -253,6 +253,8 @@ def task(ctx,config):
 
     s3vtests_conf = {}
 
+    s3vector_backend = ctx.config.get('overrides', {}).get('ceph', {}).get('conf', {}).get('client', {}).get('rgw_s3vector_backend', 'rgw')
+
     for client in clients:
         endpoint = ctx.rgw.role_endpoints.get(client)
         assert endpoint, 's3vtests: no rgw endpoint for {}'.format(client)
@@ -265,6 +267,7 @@ def task(ctx,config):
                     'port':endpoint.port,
                     'host':endpoint.dns_name,
                     'zonegroup':ctx.rgw.zonegroup,
+                    's3vector_backend':s3vector_backend,
                     },
                 's3 main':{}
             }
