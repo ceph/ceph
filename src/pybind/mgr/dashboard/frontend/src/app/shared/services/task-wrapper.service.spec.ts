@@ -60,15 +60,29 @@ describe('TaskWrapperService', () => {
     });
 
     it('should simulate a synchronous task', () => {
-      callWrapTaskAroundCall(200, 'sync').subscribe({ complete: () => (passed = true) });
+      let nextResponse: { status: number } | undefined;
+      callWrapTaskAroundCall(200, 'sync').subscribe({
+        next: (resp) => {
+          nextResponse = resp;
+        },
+        complete: () => (passed = true)
+      });
       expect(service._handleExecutingTasks).not.toHaveBeenCalled();
+      expect(nextResponse).toEqual({ status: 200 });
       expect(passed).toBeTruthy();
       expect(summaryService.addRunningTask).not.toHaveBeenCalled();
     });
 
     it('should simulate a asynchronous task', () => {
-      callWrapTaskAroundCall(202, 'async').subscribe({ complete: () => (passed = true) });
+      let nextResponse: { status: number } | undefined;
+      callWrapTaskAroundCall(202, 'async').subscribe({
+        next: (resp) => {
+          nextResponse = resp;
+        },
+        complete: () => (passed = true)
+      });
       expect(service._handleExecutingTasks).toHaveBeenCalled();
+      expect(nextResponse).toEqual({ status: 202 });
       expect(passed).toBeTruthy();
       expect(summaryService.addRunningTask).toHaveBeenCalledTimes(1);
     });

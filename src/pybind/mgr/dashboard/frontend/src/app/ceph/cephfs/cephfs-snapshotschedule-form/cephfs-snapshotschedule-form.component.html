@@ -54,18 +54,77 @@
                 *ngIf="snapScheduleForm.showError('startDate', formDir, 'required')"
                 i18n>This field is required.</span>
 
-        <!-- Repeat interval -->
-        <div class="form-item form-item-append"
-             cdsRow>
-          <div cdsCol>
-            <cds-number [id]="'repeatInterval'"
-                        [name]="'repeatInterval'"
-                        [formControlName]="'repeatInterval'"
-                        [label]="'Schedule'"
+    <!--Start date -->
+    <cd-date-time-picker
+      name="Start Date"
+      helperText="The time zone is assumed to be UTC"
+      [control]="snapScheduleForm.get('startDate')"
+      [disabled]="isEdit"></cd-date-time-picker>
+    <span class="invalid-feedback"
+          *ngIf="snapScheduleForm.showError('startDate', formDir, 'required')"
+          i18n>This field is required.</span>
+
+    <!-- Repeat interval -->
+    <div class="form-item form-item-append"
+         cdsRow>
+      <div cdsCol>
+        <cds-number [id]="'repeatInterval'"
+                    [name]="'repeatInterval'"
+                    [formControlName]="'repeatInterval'"
+                    [label]="'Schedule'"
+                    [min]="1"
+                    [invalid]="!snapScheduleForm.controls.repeatInterval.valid && (snapScheduleForm.controls.repeatInterval.dirty || snapScheduleForm.controls.repeatInterval.touched)"
+                    [invalidText]="repeatIntervalError"
+                    (valueChange)="onScheduleIntervalChange($event)"
+                    cdRequiredField="Schedule"></cds-number>
+      </div>
+      <div cdsCol>
+        <cds-select id="repeatFrequency"
+                    name="repeatFrequency"
+                    formControlName="repeatFrequency"
+                    label="Frequency"
+                    [invalid]="!snapScheduleForm.controls.repeatFrequency.valid && (snapScheduleForm.controls.repeatFrequency.dirty || snapScheduleForm.controls.repeatFrequency.touched)"
+                    [invalidText]="repeatFrequencyError"
+                    (valueChange)="onScheduleFrequencyChange($event)"
+                    *ngIf="repeatFrequencies">
+          <option *ngFor="let freq of repeatFrequencies"
+                  [value]="freq[1]">{{ freq[0] }}
+          </option>
+        </cds-select>
+        <ng-template #repeatFrequencyError>
+          <span class="invalid-feedback"
+                *ngIf="snapScheduleForm.showError('repeatFrequency', formDir, 'notUnique')"
+                i18n>This schedule already exists for the selected directory.</span>
+        </ng-template>
+        <ng-template #repeatIntervalError>
+          <span class="invalid-feedback"
+                *ngIf="snapScheduleForm.showError('repeatInterval', formDir, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="snapScheduleForm.showError('repeatInterval', formDir, 'min')"
+                i18n>Choose a value greater than 0.</span>
+          <span class="invalid-feedback"
+                *ngIf="snapScheduleForm.showError('repeatInterval', formDir, 'notUnique')"
+                i18n>This schedule already exists for the selected directory.</span>
+        </ng-template>
+      </div>
+    </div>
+
+    <!-- Retention policies -->
+    <ng-container formArrayName="retentionPolicies"
+                  *ngFor="let retentionPolicy of retentionPolicies.controls; index as i">
+      <ng-container [formGroupName]="i">
+        <div cdsRow
+             class="form-item form-item-append">
+          <div cdsCol
+               [columnNumbers]="{lg: 8}">
+            <cds-number [id]="'retentionInterval' + i"
+                        [name]="'retentionInterval' + i"
+                        [formControlName]="'retentionInterval'"
+                        [label]="'Retention policy'"
                         [min]="1"
-                        [invalid]="!snapScheduleForm.controls.repeatInterval.valid && (snapScheduleForm.controls.repeatInterval.dirty)"
-                        [invalidText]="repeatIntervalError"
-                        cdRequiredField="Schedule"></cds-number>
+                        [invalid]="snapScheduleForm.controls['retentionPolicies'].controls[i].get('retentionFrequency')?.hasError('notUnique') && (snapScheduleForm.controls['retentionPolicies'].controls[i].get('retentionFrequency')?.dirty || snapScheduleForm.controls['retentionPolicies'].controls[i].get('retentionFrequency')?.touched)"
+                        [invalidText]="retentionPolicyError"></cds-number>
           </div>
           <div cdsCol>
             <cds-select id="repeatFrequency"
@@ -94,6 +153,13 @@
             </ng-template>
           </div>
         </div>
+        <ng-template #retentionPolicyError>
+          <span class="invalid-feedback"
+                *ngIf="snapScheduleForm.controls['retentionPolicies'].controls[i].get('retentionFrequency')?.hasError('notUnique') && (snapScheduleForm.controls['retentionPolicies'].controls[i].get('retentionFrequency')?.dirty || snapScheduleForm.controls['retentionPolicies'].controls[i].get('retentionFrequency')?.touched)"
+                i18n>This retention policy already exists for the selected directory.</span>
+        </ng-template>
+      </ng-container>
+    </ng-container>
 
         <!-- Retention policies -->
         <ng-container formArrayName="retentionPolicies"
