@@ -49,6 +49,7 @@ describe('NotificationAreaComponent', () => {
     mockDataSource = new BehaviorSubject<CdNotification[]>(mockNotifications);
     const spy = {
       remove: jasmine.createSpy('remove'),
+      removeById: jasmine.createSpy('removeById').and.returnValue(true),
       dataSource: mockDataSource,
       data$: mockDataSource.asObservable(),
       getNotificationsSnapshot: () => mockDataSource.getValue()

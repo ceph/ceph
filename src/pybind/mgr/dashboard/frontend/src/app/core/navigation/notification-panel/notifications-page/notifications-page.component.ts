@@ -8,6 +8,7 @@ import {
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Location } from '@angular/common';
+import { ActivatedRoute } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { CdNotification } from '~/app/shared/models/cd-notification';
@@ -38,15 +39,24 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
     this.notifications().find((n) => n.id === this.selectedNotificationID())
   );
 
+  hasNoNotifications = computed(() => this.notifications().length === 0);
+
+  allRead = computed(() => {
+    const map = this.readMap();
+    return this.notifications().every((n) => map[n.id]);
+  });
+
   private sub: Subscription;
   private interval: number;
+  private _pendingId: string | null = null;
 
   constructor(
     private notificationService: NotificationService,
     private prometheusAlertService: PrometheusAlertService,
     private prometheusNotificationService: PrometheusNotificationService,
     private authStorageService: AuthStorageService,
-    private location: Location
+    private location: Location,
+    private route: ActivatedRoute
   ) {
     this.readMap = toSignal(this.notificationService.readMap$, {
       initialValue: {} as Record<string, boolean>
@@ -71,7 +81,16 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
           })
         )
       );
+
+      this._tryPreselect(notifications);
     });
+
+    this.sub.add(
+      this.route.queryParams.subscribe((params) => {
+        this._pendingId = params['id'] || null;
+        this._tryPreselect(this.notificationService.getNotificationsSnapshot(), true);
+      })
+    );
   }
 
   ngOnDestroy(): void {
@@ -83,6 +102,10 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
 
   goBack(): void {
     this.location.back();
+  }
+
+  markAllAsRead(): void {
+    this.notificationService.markAllAsRead();
   }
 
   clearAll(): void {
@@ -97,9 +120,7 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
 
   removeNotification(notification: DisplayNotification, event: MouseEvent): void {
     event.stopPropagation();
-    const index = this.notifications().findIndex((n) => n.id === notification.id);
-    if (index > -1) {
-      this.notificationService.remove(index);
+    if (this.notificationService.removeById(notification.id)) {
       if (this.selectedNotificationID() === notification.id) {
         this.selectedNotificationID.set(null);
       }
@@ -109,6 +130,16 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
   onNotificationDeleted(notificationId: string): void {
     if (this.selectedNotificationID() === notificationId) {
       this.selectedNotificationID.set(null);
+    }
+  }
+
+  private _tryPreselect(notifications: CdNotification[], force = false): void {
+    if (!this._pendingId || (!force && this.selectedNotificationID())) return;
+    const match = notifications.find((n) => n.id === this._pendingId);
+    if (match) {
+      this.selectedNotificationID.set(this._pendingId);
+      this.notificationService.markAsRead(this._pendingId);
+      this._pendingId = null;
     }
   }
 
