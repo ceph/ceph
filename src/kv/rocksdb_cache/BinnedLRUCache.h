@@ -56,7 +56,10 @@ std::shared_ptr<rocksdb::Cache> NewBinnedLRUCache(
     bool strict_capacity_limit = false,
     double high_pri_pool_ratio = 0.0);
 
-struct BinnedLRUHandle {
+// Derives from rocksdb::Cache::Handle, the opaque type RocksDB hands back to
+// its callers, so that converting between the two needs no reinterpret_cast.
+// The base is empty, so this does not change the layout.
+struct BinnedLRUHandle : public rocksdb::Cache::Handle {
   std::shared_ptr<uint64_t> age_bin;
   rocksdb::Cache::ObjectPtr value;
   const rocksdb::Cache::CacheItemHelper* helper;

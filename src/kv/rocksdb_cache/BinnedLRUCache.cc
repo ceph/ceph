@@ -359,11 +359,11 @@ rocksdb::Cache::Handle* BinnedLRUCacheShard::Lookup(const rocksdb::Slice& key, u
     e->SetHit();
     stats[l_hits]++;
   }
-  return reinterpret_cast<rocksdb::Cache::Handle*>(e);
+  return e;
 }
 
 bool BinnedLRUCacheShard::Ref(rocksdb::Cache::Handle* h) {
-  BinnedLRUHandle* handle = reinterpret_cast<BinnedLRUHandle*>(h);
+  BinnedLRUHandle* handle = static_cast<BinnedLRUHandle*>(h);
   std::lock_guard<std::mutex> l(mutex_);
   if (handle->InCache() && handle->refs == 1) {
     LRU_Remove(handle);
@@ -383,7 +383,7 @@ bool BinnedLRUCacheShard::Release(rocksdb::Cache::Handle* handle, bool force_era
   if (handle == nullptr) {
     return false;
   }
-  BinnedLRUHandle* e = reinterpret_cast<BinnedLRUHandle*>(handle);
+  BinnedLRUHandle* e = static_cast<BinnedLRUHandle*>(handle);
   bool last_reference = false;
   {
     std::lock_guard<std::mutex> l(mutex_);
@@ -485,7 +485,7 @@ rocksdb::Status BinnedLRUCacheShard::Insert(const rocksdb::Slice& key, uint32_t 
       if (handle == nullptr) {
         LRU_Insert(e);
       } else {
-        *handle = reinterpret_cast<rocksdb::Cache::Handle*>(e);
+        *handle = e;
       }
       s = rocksdb::Status::OK();
     }
@@ -548,7 +548,7 @@ rocksdb::Cache::Handle* BinnedLRUCacheShard::CreateStandalone(
     delete e;
     return nullptr;
   }
-  return reinterpret_cast<rocksdb::Cache::Handle*>(e);
+  return e;
 }
 #endif
 
@@ -618,7 +618,7 @@ std::string BinnedLRUCacheShard::GetPrintableOptions() const {
 const rocksdb::Cache::CacheItemHelper*
 BinnedLRUCacheShard::GetCacheItemHelper(rocksdb::Cache::Handle* h) const
 {
-  auto* handle = reinterpret_cast<BinnedLRUHandle*>(h);
+  auto* handle = static_cast<BinnedLRUHandle*>(h);
   return handle->helper;
 }
 
@@ -759,15 +759,15 @@ const CacheShard* BinnedLRUCache::GetShard(int shard) const {
 }
 
 rocksdb::Cache::ObjectPtr BinnedLRUCache::Value(Handle* handle) {
-  return reinterpret_cast<const BinnedLRUHandle*>(handle)->value;
+  return static_cast<const BinnedLRUHandle*>(handle)->value;
 }
 
 size_t BinnedLRUCache::GetCharge(Handle* handle) const {
-  return reinterpret_cast<const BinnedLRUHandle*>(handle)->charge;
+  return static_cast<const BinnedLRUHandle*>(handle)->charge;
 }
 
 uint32_t BinnedLRUCache::GetHash(Handle* handle) const {
-  return reinterpret_cast<const BinnedLRUHandle*>(handle)->hash;
+  return static_cast<const BinnedLRUHandle*>(handle)->hash;
 }
 
 void BinnedLRUCache::DisownData() {
@@ -780,7 +780,7 @@ void BinnedLRUCache::DisownData() {
 const rocksdb::Cache::CacheItemHelper*
 BinnedLRUCache::GetCacheItemHelper(Handle* handle) const
 {
-  return reinterpret_cast<const BinnedLRUHandle*>(handle)->helper;
+  return static_cast<const BinnedLRUHandle*>(handle)->helper;
 }
 
 #if CEPH_ROCKSDB_SINCE(9, 7)
@@ -792,7 +792,7 @@ void BinnedLRUCache::ApplyToHandle(
         callback)
 {
   // the handle need only be layout compatible, so "cache" is unused
-  auto h = reinterpret_cast<BinnedLRUHandle*>(handle);
+  auto h = static_cast<BinnedLRUHandle*>(handle);
   callback(h->key(), h->value, h->charge, h->helper);
 }
 #endif
