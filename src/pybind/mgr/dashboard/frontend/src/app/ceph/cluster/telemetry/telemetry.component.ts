@@ -296,7 +296,7 @@ export class TelemetryComponent extends CdForm implements OnInit {
           $localize`An Error occurred while updating the Telemetry module configuration.\
              Please Try again`
         );
-        // Reset the 'Update' button.
+        // Reset the submit button.
         this.previewForm.setErrors({ cdSubmitButton: true });
       },
       () => {
