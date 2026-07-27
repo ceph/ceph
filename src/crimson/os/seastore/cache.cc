@@ -3,6 +3,7 @@
 
 #include "crimson/os/seastore/cache.h"
 
+#include <set>
 #include <sstream>
 #include <string_view>
 
@@ -247,6 +248,8 @@ void Cache::register_metrics(store_index_t store_index)
       auto& efforts = get_by_src(stats.invalidated_efforts_by_src, src);
       for (auto& [ext, ext_label] : labels_by_ext) {
         auto& counter = get_by_ext(efforts.num_trans_invalidated, ext);
+        auto& mergeable_counter = get_by_ext(efforts.num_lba_conflicts_mergeable, ext);
+        auto& overlapping_counter = get_by_ext(efforts.num_lba_conflicts_overlapping, ext);
         std::vector<sm::label_instance> merged_labels = src_label;
         merged_labels.insert(merged_labels.end(), ext_label.begin(), ext_label.end());
         metrics.add_group(
@@ -256,6 +259,18 @@ void Cache::register_metrics(store_index_t store_index)
               "trans_invalidated_by_extent",
               counter,
               sm::description("total number of transactions invalidated by extents"),
+              merged_labels
+            ),
+            sm::make_counter(
+              "lba_conflicts_mergeable",
+              mergeable_counter,
+              sm::description("of trans_invalidated_by_extent, how many were LBA mutate-vs-mutate conflicts on disjoint (mergeable) keys"),
+              merged_labels
+            ),
+            sm::make_counter(
+              "lba_conflicts_overlapping",
+              overlapping_counter,
+              sm::description("of trans_invalidated_by_extent, how many were LBA mutate-vs-mutate conflicts on overlapping keys"),
               merged_labels
             ),
           }
@@ -981,13 +996,94 @@ void Cache::commit_replace_extent(
     add_to_dirty(next, &t_src);
   }
 
-  invalidate_extent(t, *prev);
+  invalidate_extent(t, *prev, next.get());
 
+}
+
+namespace {
+// returns the set of laddr keys touched by whichever transaction owns
+// this specific node copy (its edits are recorded in its delta_buffer).
+// nullopt if `node_own_copy` isn't an LBA leaf/internal node.
+std::optional<std::set<laddr_t>> get_touched_lba_keys(
+    CachedExtent &node_own_copy) {
+  std::set<laddr_t> keys;
+  switch (node_own_copy.get_type()) {
+  case extent_types_t::LADDR_LEAF:
+    static_cast<lba::LBALeafNode&>(node_own_copy).delta_buffer.for_each(
+      [&keys](auto &d) { keys.insert(laddr_t(d.key)); });
+    return keys;
+  case extent_types_t::LADDR_INTERNAL:
+    static_cast<lba::LBAInternalNode&>(node_own_copy).delta_buffer.for_each(
+      [&keys](auto &d) { keys.insert(laddr_t(d.key)); });
+    return keys;
+  default:
+    return std::nullopt;
+  }
+}
+}
+
+std::optional<bool> Cache::check_lba_conflict_mergeable(
+    CachedExtent &committer_node_own_copy,
+    Transaction &conflicting_txn)
+{
+  // original_node: the shared, stable node before the committer's edits.
+  auto &original_node = *committer_node_own_copy.get_prior_instance();
+
+  // trans_spec_view_t::cmp_t(): comparator needed to find specific trans id because this is not a simple map
+  
+  auto it = original_node.mutation_pending_extents.find(
+    conflicting_txn.get_trans_id(), trans_spec_view_t::cmp_t());
+  if (it == original_node.mutation_pending_extents.end()) {
+    // conflicting_txn never made its own edits on this node -- it was a
+    // read-only conflict, not what we're measuring here.
+    return std::nullopt;
+  }
+
+  // conflicting_txn's own edited copy of the same node, found by looking
+  // up its transaction id above.
+  auto &conflicting_txn_node_own_copy = static_cast<CachedExtent&>(*it);
+
+  auto committer_keys = get_touched_lba_keys(committer_node_own_copy);
+  auto conflicting_txn_keys = get_touched_lba_keys(conflicting_txn_node_own_copy);
+  if (!committer_keys || !conflicting_txn_keys) {
+    return std::nullopt;
+  }
+
+  for (auto &key : *conflicting_txn_keys) {
+    //boolean test if key in comiiter_keys
+    if (committer_keys->count(key)) {
+      return false;
+    }
+  }
+  // disjoint keys
+  return true;
+}
+
+void Cache::count_lba_conflict_mergeability(
+    CachedExtent &committer_node_own_copy,
+    Transaction &conflicting_txn)
+{
+  auto mergeable = check_lba_conflict_mergeable(
+    committer_node_own_copy, conflicting_txn);
+  if (!mergeable) {
+    return;
+  }
+
+  auto& efforts = get_by_src(stats.invalidated_efforts_by_src,
+                              conflicting_txn.get_src());
+  if (*mergeable) {
+    ++get_by_ext(efforts.num_lba_conflicts_mergeable,
+                 committer_node_own_copy.get_type());
+  } else {
+    ++get_by_ext(efforts.num_lba_conflicts_overlapping,
+                 committer_node_own_copy.get_type());
+  }
 }
 
 void Cache::invalidate_extent(
     Transaction& t,
-    CachedExtent& extent)
+    CachedExtent& extent,
+    CachedExtent* committer_node_own_copy)
 {
   if (!extent.may_conflict()) {
     assert(extent.read_transactions.empty());
@@ -1006,6 +1102,9 @@ void Cache::invalidate_extent(
       }
       assert(!i.t->is_weak());
       account_conflict(t.get_src(), i.t->get_src());
+      if (committer_node_own_copy) {
+        count_lba_conflict_mergeability(*committer_node_own_copy, *i.t);
+      }
       mark_transaction_conflicted(*i.t, extent);
       invalidated_trans.emplace_back(i.t);
     }

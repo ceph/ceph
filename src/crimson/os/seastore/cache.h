@@ -1795,6 +1795,12 @@ private:
     io_stat_t fresh;
     io_stat_t fresh_ool_written;
     counter_by_extent_t<uint64_t> num_trans_invalidated;
+    // step 2 measurement (LBA no_conflict_publish investigation): subset of
+    // the above that are LBA-node mutate-vs-mutate conflicts, split by
+    // whether the two transactions touched disjoint (mergeable) or
+    // overlapping key sets. Excludes read-only conflicts (out of scope).
+    counter_by_extent_t<uint64_t> num_lba_conflicts_mergeable;
+    counter_by_extent_t<uint64_t> num_lba_conflicts_overlapping;
     uint64_t total_trans_invalidated = 0;
     uint64_t num_ool_records = 0;
     uint64_t ool_record_bytes = 0;
@@ -1994,7 +2000,27 @@ void stage_visibility_handoff(Transaction& t,
                               CachedExtentRef prev);
 
   /// Invalidate extent and mark affected transactions
-  void invalidate_extent(Transaction& t, CachedExtent& extent);
+  ///
+  /// `committer_node_own_copy`, when set, is the committer's own edited
+  /// copy of `extent` (i.e. `next` in a commit_replace_extent replace) --
+  /// used to measure LBA conflict mergeability against each conflicted
+  /// reader. Left null for retires, which have no replacement copy.
+  void invalidate_extent(
+    Transaction& t,
+    CachedExtent& extent,
+    CachedExtent* committer_node_own_copy = nullptr);
+
+  /// step 2 measurement: did `conflicting_txn` touch different keys than
+  /// the committer did on `committer_node`? (nullopt = not applicable)
+  std::optional<bool> check_lba_conflict_mergeable(
+    CachedExtent &committer_node_own_copy,
+    Transaction &conflicting_txn);
+
+  /// step 2 measurement: check mergeability of committer_node_own_copy
+  /// against conflicting_txn, and bump the matching counter.
+  void count_lba_conflict_mergeability(
+    CachedExtent &committer_node_own_copy,
+    Transaction &conflicting_txn);
 
   /// Mark a valid transaction as conflicted
   void mark_transaction_conflicted(
