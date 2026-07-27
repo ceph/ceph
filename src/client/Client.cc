@@ -7822,7 +7822,8 @@ relookup:
           ldout(cct, 25) << __func__ << " valid shared_gen match" << dendl;
 	  goto hit_dn;
         }
-	if (!dn->inode && (dir->flags & I_COMPLETE)) {
+	if (!dn->inode && (dir->flags & I_COMPLETE) &&
+	    dir->snapid == CEPH_NOSNAP) {
 	  ldout(cct, 10) << __func__ << " concluded ENOENT locally for "
 			 << *dir << " dn '" << dname << "'" << dendl;
 	  return -ENOENT;
@@ -7846,8 +7847,12 @@ relookup:
     }
   } else {
     // can we conclude ENOENT locally?
+    // For snapped directories, I_COMPLETE only covers the head view;
+    // snap dentries may not be in the local cache.  Skip the local
+    // ENOENT shortcut and ask the MDS instead.
     if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED, true) &&
-	(dir->flags & I_COMPLETE)) {
+	(dir->flags & I_COMPLETE) &&
+	dir->snapid == CEPH_NOSNAP) {
       ldout(cct, 10) << __func__ << " concluded ENOENT locally for " << *dir << " dn '" << dname << "'" << dendl;
       return -ENOENT;
     }
