@@ -51,17 +51,17 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit() {
-    this.createForm();
-
     this.route.params.subscribe((params) => {
       if (params['name']) {
         this.editing = true;
         this.gatewayGroupName = params['name'];
         this.action = this.actionLabels.EDIT;
+        this.createForm();
         this.loadGatewayGroupData(params['name']);
       } else {
         this.editing = false;
         this.action = this.actionLabels.CREATE;
+        this.createForm();
       }
     });
   }
@@ -109,10 +109,6 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
         encryptionConfigControl.setValue(encryptionKeyControl.value, { emitEvent: false });
       }
     });
-
-    if (this.editing) {
-      this.groupForm.get('groupName')?.disable();
-    }
   }
 
   loadGatewayGroupData(groupName: string) {
