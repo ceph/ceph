@@ -1,22 +1,22 @@
 .notifications-page {
   --cd-notification-item-icon-offset: calc(-1 * var(--cds-spacing-02));
 
+  background-color: var(--cds-background);
   display: grid;
   grid-template-rows: auto 1fr;
   height: calc(100vh - 3rem);
-  background-color: var(--cds-background);
 
   &__header {
+    align-items: center;
+    background-color: var(--cds-layer-01);
     display: grid;
     grid-template-columns: 1fr auto 1fr;
-    align-items: center;
     padding: var(--cds-spacing-04) var(--cds-spacing-06);
-    background-color: var(--cds-layer-01);
   }
 
   &__header-action {
-    display: inline-flex;
     align-items: center;
+    display: inline-flex;
     gap: var(--cds-spacing-02);
 
     &:last-child {
@@ -25,9 +25,9 @@
   }
 
   &__header-title {
-    text-align: center;
     color: var(--cds-text-primary);
     margin: 0;
+    text-align: center;
   }
 
   &__body {
@@ -37,13 +37,13 @@
   }
 
   &__list {
-    overflow-y: auto;
     background-color: var(--cds-layer-01);
+    overflow-y: auto;
   }
 
   &__item {
-    padding: var(--cds-spacing-03) var(--cds-spacing-05);
     cursor: pointer;
+    padding: var(--cds-spacing-03) var(--cds-spacing-05);
     transition: background-color 0.15s ease;
 
     &:hover {
@@ -60,15 +60,15 @@
   }
 
   &__item .cd-notification-item__title {
-    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   &__detail {
+    background-color: var(--cds-layer-01);
     overflow-y: auto;
     padding: var(--cds-spacing-06) var(--cds-spacing-07);
-    background-color: var(--cds-layer-01);
   }
 
   &__detail-header cd-notification-item {
@@ -80,17 +80,17 @@
   }
 
   &__detail-text {
-    margin: 0;
     color: var(--cds-text-primary);
+    margin: 0;
   }
 
   &__empty {
+    align-items: center;
+    color: var(--cds-text-secondary);
     display: flex;
     flex-direction: column;
-    align-items: center;
     justify-content: center;
     padding: var(--cds-spacing-09) 0;
-    color: var(--cds-text-secondary);
   }
 
   &__empty cd-icon svg {
