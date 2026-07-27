@@ -504,7 +504,22 @@ seastar::future<> SeaStore::Shard::mount_managers()
   ).handle_error(
     crimson::ct_error::assert_all(
       "Invalid error in mount_managers"
-  ));
+  )).then([this] {
+    // POC: the collection -> onode tree map is in-memory only, so a store that
+    // already holds PG collections cannot be routed after a restart. Meta is
+    // exempt -- the OSD mkfs's in one run and starts in the next.
+    return list_collections();
+  }).then([FNAME](auto colls) {
+    auto pg_colls = std::count_if(
+      colls.begin(), colls.end(),
+      [](const auto &p) { return p.first.is_pg(); });
+    if (pg_colls) {
+      ERROR("{} PG collections already exist", pg_colls);
+      ceph_abort_msg("remount not supported with per-collection onode trees "
+                     "(POC): the collection -> tree routing table is in-memory "
+                     "only; re-mkfs instead");
+    }
+  });
 }
 
 seastar::future<> SeaStore::umount()
@@ -2737,32 +2752,8 @@ SeaStore::Shard::_split_collection(
   const coll_t &cid,
   int bits)
 {
-  return transaction_manager->read_collection_root(
-    *ctx.transaction
-  ).si_then([=, this, &ctx](auto _cmroot) {
-    return seastar::do_with(
-      _cmroot,
-      [=, this, &ctx](auto &cmroot) {
-        return collection_manager->update(
-          cmroot,
-          *ctx.transaction,
-          cid,
-          bits
-        ).si_then([this, &ctx, &cmroot] {
-          if (cmroot.must_update()) {
-            transaction_manager->write_collection_root(
-              *ctx.transaction,
-              cmroot);
-          }
-        });
-      }
-    );
-  }).handle_error_interruptible(
-    tm_iertr::pass_further{},
-    crimson::ct_error::assert_all(
-      "Invalid error in SeaStoreS::_create_collection"
-    )
-  );
+  // POC: split would have to repartition the parent's onodes into the children's trees
+  ceph_abort_msg("PG split not supported with per-collection onode trees (POC)");
 }
 
 SeaStore::Shard::tm_ret
@@ -2772,16 +2763,8 @@ SeaStore::Shard::_merge_collection(
   coll_t dest_cid,
   int bits)
 {
-  auto cmroot = co_await transaction_manager->read_collection_root(
-    *ctx.transaction);
-  co_await collection_manager->update(cmroot, *ctx.transaction, dest_cid, bits)
-    .handle_error_interruptible(
-      tm_iertr::pass_further{},
-      crimson::ct_error::assert_all("unexpected error from update in _merge_collection"));
-  co_await collection_manager->remove(cmroot, *ctx.transaction, cid)
-    .handle_error_interruptible(
-      tm_iertr::pass_further{},
-      crimson::ct_error::assert_all("unexpected error from remove in _merge_collection"));
+  // POC: merge would have to fold one collection's onode tree into another
+  ceph_abort_msg("PG merge not supported with per-collection onode trees (POC)");
 }
 
 SeaStore::Shard::tm_ret
