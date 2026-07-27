@@ -4,6 +4,10 @@
 #include "include/denc.h"
 #include "include/intarith.h"
 
+#ifdef CRIMSON_DETAILED_SAMPLING
+#include <seastar/core/lowres_clock.hh>
+#endif
+
 #include "crimson/common/coroutine.h"
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/transaction_manager.h"
@@ -644,11 +648,18 @@ TransactionManager::do_submit_transaction(
 
   SUBTRACET(seastore_t, "write delayed ool extents", tref);
   auto ool_start = std::chrono::steady_clock::now();
+#ifdef CRIMSON_DETAILED_SAMPLING
+  auto ool_start_lr = seastar::lowres_clock::now();
+#endif
   co_await epm->write_delayed_ool_extents(
     tref, dispatch_result.alloc_map
   );
   tref.get_phase_durations().ool_write +=
     std::chrono::steady_clock::now() - ool_start;
+#ifdef CRIMSON_DETAILED_SAMPLING
+  tref.get_phase_durations().ool_write_seg_delayed +=
+    seastar::lowres_clock::now() - ool_start_lr;
+#endif
 
   auto allocated_extents = tref.get_valid_pre_alloc_list();
   auto lba_start = std::chrono::steady_clock::now();
