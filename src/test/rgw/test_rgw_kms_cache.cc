@@ -269,10 +269,10 @@ class TestSSEKMSWithTestingKMS : public ::testing::Test {
 
 TEST_F(
     TestSSEKMSWithTestingKMS, TestReconstituteActualKeyFromKMSBasicsDefault) {
-  EXPECT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).second, 0);
+  EXPECT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).first, 0);
   ASSERT_TRUE(cct->_conf->rgw_crypt_s3_kms_cache_enabled);
   test_do_reconstitue();
-  EXPECT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).second, 1);
+  EXPECT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).first, 1);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::hit)), 0);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::miss)), 1);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::size)), 1);
@@ -286,59 +286,59 @@ TEST_F(
     TestSSEKMSWithTestingKMS,
     TestReconstituteActualKeyFromKMSBasicsWithoutCache) {
   cct->_conf.set_val("rgw_crypt_s3_kms_cache_enabled", "false");
-  EXPECT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).second, 1);
+  EXPECT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).first, 1);
   test_do_reconstitue();
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::hit)), 0);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::miss)), 0);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::size)), 0);
   ASSERT_FALSE(cct->_conf->rgw_crypt_s3_kms_cache_enabled);
-  EXPECT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).second, 2);
+  EXPECT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).first, 2);
 }
 
 TEST_F(
     TestSSEKMSWithTestingKMS, TestReconstituteActualKeyFromKMSBasicsWithCache) {
-  ASSERT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).second, 2);
+  ASSERT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).first, 2);
 
   cct->_conf.set_val("rgw_crypt_s3_kms_cache_enabled", "true");
   test_do_reconstitue();
-  EXPECT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).second, 3);
+  EXPECT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).first, 3);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::hit)), 0);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::miss)), 1);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::size)), 1);
 
   test_do_reconstitue();
-  EXPECT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).second, 3);
+  EXPECT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).first, 3);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::hit)), 1);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::miss)), 1);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::size)), 1);
 
   test_do_reconstitue();
-  EXPECT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).second, 3);
+  EXPECT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).first, 3);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::hit)), 2);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::miss)), 1);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::size)), 1);
 }
 
 TEST_F(TestSSEKMSWithTestingKMS, TestRuntimeEnableDisable) {
-  ASSERT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).second, 3);
+  ASSERT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).first, 3);
 
   cct->_conf.set_val("rgw_crypt_s3_kms_cache_enabled", "true");
   test_do_reconstitue();
-  EXPECT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).second, 4);
+  EXPECT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).first, 4);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::hit)), 0);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::miss)), 1);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::size)), 1);
 
   cct->_conf.set_val("rgw_crypt_s3_kms_cache_enabled", "false");
   test_do_reconstitue();
-  EXPECT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).second, 5);
+  EXPECT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).first, 5);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::hit)), 0);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::miss)), 1);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::size)), 1);
 
   cct->_conf.set_val("rgw_crypt_s3_kms_cache_enabled", "true");
   test_do_reconstitue();
-  EXPECT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).second, 5);
+  EXPECT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).first, 5);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::hit)), 1);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::miss)), 1);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::size)), 1);
@@ -346,7 +346,7 @@ TEST_F(TestSSEKMSWithTestingKMS, TestRuntimeEnableDisable) {
   cct->_conf.set_val("rgw_crypt_s3_kms_cache_enabled", "false");
   uut->clear_cache();
   test_do_reconstitue();
-  EXPECT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).second, 6);
+  EXPECT_EQ(perfcounter->get_tavg_ns(l_rgw_kms_fetch_lat).first, 6);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::hit)), 0);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::miss)), 0);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::size)), 0);

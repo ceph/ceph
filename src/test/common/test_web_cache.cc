@@ -13,7 +13,7 @@
 #include "common/ceph_context.h"
 #include "common/ceph_time.h"
 #include "common/dout.h"
-#include "common/JSONFormatter.h"
+#include "common/Formatter.h"
 #include "common/web_cache.h"
 #include "gtest/gtest.h"
 #include "include/ceph_assert.h"
