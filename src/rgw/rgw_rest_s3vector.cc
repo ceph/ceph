@@ -45,6 +45,57 @@ protected:
     return 0;
   }
 
+  // check that the authenticated user has permission to access the
+  // backing S3 bucket. only needed for the RGW backend, which writes
+  // through SAL and bypasses S3 API permission checks
+  int verify_s3_bucket_permission(const std::string& bucket_name,
+                                  uint64_t s3_op, optional_yield y) {
+    CephContext* cct = s->cct;
+    const auto& conf = cct->_conf;
+    const std::string backend_str = conf.get_val<std::string>("rgw_s3vector_backend");
+    rgw::s3vector::BackendType backend_type;
+    if (rgw::s3vector::get_backend_type(backend_str, backend_type) < 0) {
+      ldpp_dout(this, 1) << "ERROR: s3vector unrecognized backend type: " << backend_str << dendl;
+      return -EINVAL;
+    }
+    if (!rgw::s3vector::is_rgw_backend(backend_type)) {
+      return 0;
+    }
+
+    std::unique_ptr<rgw::sal::Bucket> s3_bucket;
+    int ret = driver->load_bucket(this,
+        rgw_bucket(s->bucket_tenant, bucket_name), &s3_bucket, y);
+    if (ret < 0) {
+      return 0;
+    }
+
+    RGWAccessControlPolicy bucket_acl;
+    auto& attrs = s3_bucket->get_attrs();
+    auto aiter = attrs.find(RGW_ATTR_ACL);
+    if (aiter != attrs.end()) {
+      auto iter = aiter->second.cbegin();
+      try {
+        bucket_acl.decode(iter);
+      } catch (buffer::error&) {
+        ldpp_dout(this, 0) << "ERROR: could not decode bucket ACL for " << bucket_name << dendl;
+        return -EIO;
+      }
+    } else {
+      bucket_acl.create_default(s3_bucket->get_info().owner, "");
+    }
+
+    auto bucket_policy = get_iam_policy_from_attr(
+        cct, s3_bucket->get_attrs(), s->bucket_tenant);
+
+    if (!verify_bucket_permission(this, s,
+        rgw::ARN(s3_bucket->get_key()),
+        s->user_acl, bucket_acl, bucket_policy,
+        s->iam_identity_policies, s->session_policies, s3_op)) {
+      return -EACCES;
+    }
+    return 0;
+  }
+
   void send_validation_error_response() {
     s->err.http_ret = 400;
     s->err.err_code = "ValidationException";
@@ -80,11 +131,12 @@ public:
 private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector CreateIndex" << dendl;
-    // policy TODO: implement permission check
+    // policy TODO: implement vector bucket permission check
     /*if (!verify_bucket_permission(this, s, rgw::IAM::s3vectorsCreateIndex)) {
       return -EACCES;
     }*/
-    return 0;
+    return verify_s3_bucket_permission(
+        configuration.vector_bucket_name, rgw::IAM::s3All, y);
   }
 
   const char* name() const override { return "s3vector_create_index"; }
@@ -280,11 +332,12 @@ public:
 private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector DeleteIndex" << dendl;
-    // policy TODO: implement permission check
+    // policy TODO: implement vector bucket permission check
     /*if (!verify_bucket_permission(this, s, rgw::IAM::s3vectorsDeleteIndex)) {
       return -EACCES;
     }*/
-    return 0;
+    return verify_s3_bucket_permission(
+        configuration.vector_bucket_name, rgw::IAM::s3All, y);
   }
 
   const char* name() const override { return "s3vector_delete_index"; }
@@ -421,11 +474,12 @@ public:
 private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector PutVectors" << dendl;
-    // policy TODO: implement permission check
+    // policy TODO: implement vector bucket permission check
     /*if (!verify_bucket_permission(this, s, rgw::IAM::s3vectorsPutVectors)) {
       return -EACCES;
     }*/
-    return 0;
+    return verify_s3_bucket_permission(
+        configuration.vector_bucket_name, rgw::IAM::s3All, y);
   }
 
   const char* name() const override { return "s3vector_put_vectors"; }
@@ -472,11 +526,12 @@ public:
 private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector GetVectors" << dendl;
-    // policy TODO: implement permission check
+    // policy TODO: implement vector bucket permission check
     /*if (!verify_bucket_permission(this, s, rgw::IAM::s3vectorsGetVectors)) {
       return -EACCES;
     }*/
-    return 0;
+    return verify_s3_bucket_permission(
+        configuration.vector_bucket_name, rgw::IAM::s3All, y);
   }
 
   const char* name() const override { return "s3vector_get_vectors"; }
@@ -529,11 +584,12 @@ public:
 private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector ListVectors" << dendl;
-    // policy TODO: implement permission check
+    // policy TODO: implement vector bucket permission check
     /*if (!verify_bucket_permission(this, s, rgw::IAM::s3vectorsListVectors)) {
       return -EACCES;
     }*/
-    return 0;
+    return verify_s3_bucket_permission(
+        configuration.vector_bucket_name, rgw::IAM::s3All, y);
   }
 
   const char* name() const override { return "s3vector_list_vectors"; }
@@ -945,11 +1001,12 @@ public:
 private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector DeleteVectors" << dendl;
-    // policy TODO: implement permission check
+    // policy TODO: implement vector bucket permission check
     /*if (!verify_bucket_permission(this, s, rgw::IAM::s3vectorsDeleteVectors)) {
       return -EACCES;
     }*/
-    return 0;
+    return verify_s3_bucket_permission(
+        configuration.vector_bucket_name, rgw::IAM::s3All, y);
   }
 
   const char* name() const override { return "s3vector_delete_vectors"; }
@@ -985,11 +1042,12 @@ public:
 private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector QueryVectors" << dendl;
-    // policy TODO: implement permission check
+    // policy TODO: implement vector bucket permission check
     /*if (!verify_bucket_permission(this, s, rgw::IAM::s3vectorsQueryVectors)) {
       return -EACCES;
     }*/
-    return 0;
+    return verify_s3_bucket_permission(
+        configuration.vector_bucket_name, rgw::IAM::s3All, y);
   }
 
   const char* name() const override { return "s3vector_query_vectors"; }
