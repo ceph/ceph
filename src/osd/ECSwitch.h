@@ -290,12 +290,13 @@ public:
     uint32_t op_flags,
     std::map<uint64_t, uint64_t> *out_map,
     ceph::buffer::list *out_bl,
-    Context *on_complete) override
+    Context *on_complete,
+    const interval_set<uint64_t> &force_allocated_extents = {}) override
   {
     if (is_optimized()) {
       return optimized.objects_sparse_read_async(
         hoid, offset, length, object_size, op_flags, out_map, out_bl,
-        on_complete);
+        on_complete, force_allocated_extents);
     }
     return -EOPNOTSUPP;
   }
@@ -307,11 +308,13 @@ public:
     uint64_t object_size,
     uint32_t op_flags,
     std::map<uint64_t, uint64_t> *out_map,
-    Context *on_complete) override
+    Context *on_complete,
+    const interval_set<uint64_t> &force_allocated_extents = {}) override
   {
     if (is_optimized()) {
       return optimized.objects_mapext_async(
-        hoid, offset, length, object_size, op_flags, out_map, on_complete);
+        hoid, offset, length, object_size, op_flags, out_map, on_complete,
+        force_allocated_extents);
     }
     return -EOPNOTSUPP;
   }
