@@ -682,9 +682,16 @@ TransactionManager::do_submit_transaction(
   auto num_extents = allocated_extents.size();
   SUBTRACET(seastore_t, "process {} allocated extents", tref, num_extents);
   ool_start = std::chrono::steady_clock::now();
+#ifdef CRIMSON_DETAILED_SAMPLING
+  ool_start_lr = seastar::lowres_clock::now();
+#endif
   co_await epm->write_preallocated_ool_extents(tref, allocated_extents);
   tref.get_phase_durations().ool_write +=
     std::chrono::steady_clock::now() - ool_start;
+#ifdef CRIMSON_DETAILED_SAMPLING
+  tref.get_phase_durations().ool_write_rbm +=
+    seastar::lowres_clock::now() - ool_start_lr;
+#endif
 
   SUBTRACET(seastore_t, "entering prepare", tref);
   auto prepare_enter_start = std::chrono::steady_clock::now();
