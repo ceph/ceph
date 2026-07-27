@@ -6,10 +6,20 @@ function(build_pmdk enable_ndctl)
     set(source_dir_args
       SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/pmdk")
   else()
+    # ceph/pmdk 1.10 predates RISC-V support (its Makefile.inc aborts with
+    # "unsupported architecture: riscv64"). daos-stack/pmdk carries that
+    # support, so use it on riscv64.
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "^riscv64$")
+      set(pmdk_git_repository https://github.com/daos-stack/pmdk.git)
+      set(pmdk_git_tag "2.1.3")
+    else()
+      set(pmdk_git_repository https://github.com/ceph/pmdk.git)
+      set(pmdk_git_tag "1.10")
+    endif()
     set(source_dir_args
       SOURCE_DIR ${CMAKE_BINARY_DIR}/src/pmdk
-      GIT_REPOSITORY https://github.com/ceph/pmdk.git
-      GIT_TAG "1.10"
+      GIT_REPOSITORY ${pmdk_git_repository}
+      GIT_TAG ${pmdk_git_tag}
       GIT_SHALLOW TRUE
       GIT_CONFIG advice.detachedHead=false)
   endif()
@@ -30,11 +40,14 @@ function(build_pmdk enable_ndctl)
   endif()
 
   set(pmdk_cflags "-Wno-error -fno-lto")
+  # daos-stack pmdk turns the "no NDCTL -> can't detect dirty shutdowns / bad
+  # blocks" warnings into hard build errors; acknowledge them so libpmemobj
+  # builds without NDCTL (matches the long-standing ceph/pmdk 1.10 behavior).
   include(ExternalProject)
   ExternalProject_Add(pmdk_ext
       ${source_dir_args}
       CONFIGURE_COMMAND ""
-      BUILD_COMMAND ${make_cmd} CC=${CMAKE_C_COMPILER} "EXTRA_CFLAGS=${pmdk_cflags}" NDCTL_ENABLE=${ndctl} BUILD_EXAMPLES=n BUILD_BENCHMARKS=n DOC=n
+      BUILD_COMMAND ${make_cmd} CC=${CMAKE_C_COMPILER} "EXTRA_CFLAGS=${pmdk_cflags}" NDCTL_ENABLE=${ndctl} BUILD_EXAMPLES=n BUILD_BENCHMARKS=n DOC=n PMEMOBJ_IGNORE_DIRTY_SHUTDOWN=y PMEMOBJ_IGNORE_BAD_BLOCKS=y
       BUILD_IN_SOURCE 1
       BUILD_BYPRODUCTS "<SOURCE_DIR>/src/${PMDK_LIB_DIR}/libpmem.a" "<SOURCE_DIR>/src/${PMDK_LIB_DIR}/libpmemobj.a"
       INSTALL_COMMAND "")
