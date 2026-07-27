@@ -1,0 +1,7 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw_s3vector_backend: s3
+        rgw_s3vector_s3_endpoint: http://localhost:80
+        rgw_s3vector_s3_allow_http: true
