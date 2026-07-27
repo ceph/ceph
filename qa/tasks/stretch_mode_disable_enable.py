@@ -87,22 +87,20 @@ class TestStretchMode(MgrTestCase):
             pg_num=16,
             pool_type=DEFAULT_POOL_TYPE,
             crush_rule=DEFAULT_POOL_CRUSH_RULE,
-            size=None,
-            min_size=None
+            num_zones=None,
+            replica=None
         ):
         """
-        Create a pool, set its size and pool if specified.
+        Create a pool, with the number of zones and the replicas per zone if
+        specified. A pool with more than one zone has no settable size.
         """
-        self.mgr_cluster.mon_manager.raw_cluster_cmd(
-            'osd', 'pool', 'create', pool_name, str(pg_num), pool_type, crush_rule)
-
-        if size is not None:
-            self.mgr_cluster.mon_manager.raw_cluster_cmd(
-                'osd', 'pool', 'set', pool_name, 'size', str(size))
-
-        if min_size is not None:
-            self.mgr_cluster.mon_manager.raw_cluster_cmd(
-                'osd', 'pool', 'set', pool_name, 'min_size', str(min_size))
+        args = ['osd', 'pool', 'create', pool_name, str(pg_num), pool_type,
+                crush_rule]
+        if num_zones is not None:
+            args += ['--num_zones', str(num_zones)]
+        if replica is not None:
+            args += ['--replica', str(replica)]
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(*args)
 
     def _write_some_data(self, t):
         """
@@ -471,7 +469,9 @@ class TestStretchMode(MgrTestCase):
         2. Degraded Stretch Mode
         """
         # Create a pool
-        self._setup_pool(self.POOL, 16, 'replicated', self.STRETCH_CRUSH_RULE, 4, 2)
+        # 2 zones of 2 replicas, as enable_stretch_mode makes them
+        self._setup_pool(self.POOL, 16, 'replicated', self.STRETCH_CRUSH_RULE,
+                         num_zones=2, replica=2)
         # Write some data to the pool
         self._write_some_data(self.WRITE_PERIOD)
         # disable stretch mode without --yes-i-really-mean-it (expects -EPERM 1)
