@@ -64,6 +64,8 @@ struct fltree_onode_manager_test_t
   using iterator_t = typename KVPool<onode_item_t>::iterator_t;
 
   FLTreeOnodeManagerRef manager;
+  // the manager keys its trees by collection; this test uses a single one
+  const coll_t cid{spg_t{pg_t{0, 0}}};
 
   seastar::future<> set_up_fut() final {
     return tm_setup();
@@ -119,7 +121,7 @@ struct fltree_onode_manager_test_t
     with_transaction([this, &it, f=std::move(f)] (auto& t) {
       auto p_kv = *it;
       auto onode = with_trans_intr(t, [&](auto &t) {
-        return manager->get_or_create_onode(t, p_kv->key);
+        return manager->get_or_create_onode(t, cid, p_kv->key);
       }).unsafe_get();
       std::invoke(f, t, *onode, p_kv->value);
     });
@@ -129,7 +131,7 @@ struct fltree_onode_manager_test_t
     with_transaction([this, &it] (auto& t) {
       auto p_kv = *it;
       auto onode = with_trans_intr(t, [&](auto &t) {
-        return manager->get_onode(t,  p_kv->key);
+        return manager->get_onode(t, cid, p_kv->key);
       }).unsafe_get();
       p_kv->value.validate(*onode);
     });
@@ -139,7 +141,7 @@ struct fltree_onode_manager_test_t
     with_transaction([this, &it] (auto& t) {
       auto p_kv = *it;
       auto exist = with_trans_intr(t, [&](auto &t) {
-        return manager->contains_onode(t, p_kv->key);
+        return manager->contains_onode(t, cid, p_kv->key);
       }).unsafe_get();
       ceph_assert(exist == false);
     });
@@ -168,7 +170,7 @@ struct fltree_onode_manager_test_t
     with_onodes_process(start, end,
         [this, f=std::move(f)] (auto& t, auto& oids, auto& items) {
       auto onodes = with_trans_intr(t, [&](auto &t) {
-        return manager->get_or_create_onodes(t, oids);
+        return manager->get_or_create_onodes(t, cid, oids);
       }).unsafe_get();
       for (auto tup : boost::combine(onodes, items)) {
         OnodeRef onode;
@@ -188,7 +190,7 @@ struct fltree_onode_manager_test_t
         onode_item_t* p_item;
         boost::tie(oid, p_item) = tup;
         auto onode = with_trans_intr(t, [&](auto &t) {
-          return manager->get_onode(t, oid);
+          return manager->get_onode(t, cid, oid);
         }).unsafe_get();
         p_item->validate(*onode);
       }
@@ -201,7 +203,7 @@ struct fltree_onode_manager_test_t
         [this] (auto& t, auto& oids, auto& items) {
       for (auto& oid : oids) {
         auto exist = with_trans_intr(t, [&](auto &t) {
-          return manager->contains_onode(t, oid);
+          return manager->contains_onode(t, cid, oid);
         }).unsafe_get();
         ceph_assert(exist == false);
       }
@@ -220,7 +222,7 @@ struct fltree_onode_manager_test_t
       assert(oids[0] < end);
       while (start != end) {
         auto [list_ret, list_end] = with_trans_intr(t, [&](auto &t) {
-          return manager->list_onodes(t, start, end, LIST_LIMIT);
+          return manager->list_onodes(t, cid, start, end, LIST_LIMIT);
         }).unsafe_get();
         listed_oids.insert(listed_oids.end(), list_ret.begin(), list_ret.end());
         start = list_end;
@@ -253,7 +255,7 @@ TEST_P(fltree_onode_manager_test_t, 1_single)
     with_onode_write(iter, [this](auto& t, auto& onode, auto& item) {
       OnodeRef onode_ref = &onode;
       with_trans_intr(t, [&](auto &t) {
-        return manager->erase_onode(t, onode_ref);
+        return manager->erase_onode(t, cid, onode_ref);
       }).unsafe_get();
     });
     validate_erased(iter);
@@ -303,7 +305,7 @@ TEST_P(fltree_onode_manager_test_t, 2_synthetic)
         [this](auto& t, auto& onode, auto& item) {
       OnodeRef onode_ref = &onode;
       with_trans_intr(t, [&](auto &t) {
-        return manager->erase_onode(t, onode_ref);
+        return manager->erase_onode(t, cid, onode_ref);
       }).unsafe_get();
     });
     restart();

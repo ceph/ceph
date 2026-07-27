@@ -154,20 +154,22 @@ void FLTreeOnode::Recorder::encode_update(
 
 FLTreeOnodeManager::contains_onode_ret FLTreeOnodeManager::contains_onode(
   Transaction &trans,
+  const coll_t &cid,
   const ghobject_t &hoid)
 {
-  return tree.contains(trans, hoid);
+  return tree_for(cid).contains(trans, hoid);
 }
 
 FLTreeOnodeManager::get_onode_ret FLTreeOnodeManager::get_onode(
   Transaction &trans,
+  const coll_t &cid,
   const ghobject_t &hoid)
 {
   LOG_PREFIX(FLTreeOnodeManager::get_onode);
-  return tree.find(
+  return tree_for(cid).find(
     trans, hoid
-  ).si_then([this, &hoid, &trans, FNAME](auto cursor) -> get_onode_ret {
-    if (cursor == tree.end()) {
+  ).si_then([&hoid, &trans, FNAME](auto cursor) -> get_onode_ret {
+    if (cursor.is_end()) {
       DEBUGT("no entry for {}", trans, hoid);
       return crimson::ct_error::enoent::make();
     }
@@ -197,9 +199,11 @@ ghobj_cmp_t compare_ghobj(ghobject_t &identity, const ghobject_t &base) {
 FLTreeOnodeManager::get_or_create_onode_ret
 FLTreeOnodeManager::get_or_create_onode(
   Transaction &trans,
+  const coll_t &cid,
   const ghobject_t &hoid)
 {
   LOG_PREFIX(FLTreeOnodeManager::get_or_create_onode);
+  auto &tree = tree_for(cid);
   auto [cursor, created] = co_await tree.insert(
     trans, hoid,
     OnodeTree::tree_value_config_t{sizeof(onode_layout_t)});
@@ -255,16 +259,17 @@ FLTreeOnodeManager::get_or_create_onode(
 FLTreeOnodeManager::get_or_create_onodes_ret
 FLTreeOnodeManager::get_or_create_onodes(
   Transaction &trans,
+  const coll_t &cid,
   const std::vector<ghobject_t> &hoids)
 {
   return seastar::do_with(
     std::vector<OnodeRef>(),
-    [this, &hoids, &trans](auto &ret) {
+    [this, &hoids, &trans, &cid](auto &ret) {
       ret.reserve(hoids.size());
       return trans_intr::do_for_each(
         hoids,
-        [this, &trans, &ret](auto &hoid) {
-          return get_or_create_onode(trans, hoid
+        [this, &trans, &cid, &ret](auto &hoid) {
+          return get_or_create_onode(trans, cid, hoid
           ).si_then([&ret](auto &&onoderef) {
             ret.push_back(std::move(onoderef));
           });
@@ -276,22 +281,25 @@ FLTreeOnodeManager::get_or_create_onodes(
 
 FLTreeOnodeManager::erase_onode_ret FLTreeOnodeManager::erase_onode(
   Transaction &trans,
+  const coll_t &cid,
   OnodeRef &onode)
 {
   auto &flonode = static_cast<FLTreeOnode&>(*onode);
   assert(flonode.is_alive());
   flonode.mark_delete();
-  return tree.erase(trans, flonode);
+  return tree_for(cid).erase(trans, flonode);
 }
 
 FLTreeOnodeManager::list_onodes_ret FLTreeOnodeManager::list_onodes(
   Transaction &trans,
+  const coll_t &cid,
   const ghobject_t& start,
   const ghobject_t& end,
   uint64_t limit)
 {
   LOG_PREFIX(FLTreeOnodeManager::list_onodes);
   DEBUGT("start {}, end {}, limit {}", trans, start, end, limit);
+  auto &tree = tree_for(cid);
   std::vector<ghobject_t> objects;
   auto cursor = co_await tree.lower_bound(trans, start);
   for (auto to_list = limit; ; --to_list) {

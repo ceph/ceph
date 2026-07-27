@@ -306,7 +306,7 @@ public:
             LOG_PREFIX(SeaStoreS::repeat_with_onode);
             SUBDEBUGT(seastore, "{} cid={} oid={} ...",
                       t, tname, ch->get_cid(), oid);
-            return onode_manager->get_onode(t, oid
+            return onode_manager->get_onode(t, ch->get_cid(), oid
             ).si_then([&](auto onode) {
               return seastar::do_with(std::move(onode), [&](auto& onode) {
                 return f(t, *onode);

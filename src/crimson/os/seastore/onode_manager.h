@@ -12,6 +12,7 @@
 #include "include/buffer_fwd.h"
 #include "include/ceph_assert.h"
 #include "common/hobject.h"
+#include "osd/osd_types.h"
 
 #include "crimson/common/errorator.h"
 #include "crimson/os/seastore/onode.h"
@@ -31,6 +32,7 @@ public:
   using contains_onode_ret = contains_onode_iertr::future<bool>;
   virtual contains_onode_ret contains_onode(
     Transaction &trans,
+    const coll_t &cid,
     const ghobject_t &hoid) = 0;
 
   using get_onode_iertr = base_iertr::extend<
@@ -39,6 +41,7 @@ public:
     OnodeRef>;
   virtual get_onode_ret get_onode(
     Transaction &trans,
+    const coll_t &cid,
     const ghobject_t &hoid) = 0;
 
   using get_or_create_onode_iertr = base_iertr::extend<
@@ -47,6 +50,7 @@ public:
     OnodeRef>;
   virtual get_or_create_onode_ret get_or_create_onode(
     Transaction &trans,
+    const coll_t &cid,
     const ghobject_t &hoid) = 0;
 
   using get_or_create_onodes_iertr = base_iertr::extend<
@@ -55,12 +59,14 @@ public:
     std::vector<OnodeRef>>;
   virtual get_or_create_onodes_ret get_or_create_onodes(
     Transaction &trans,
+    const coll_t &cid,
     const std::vector<ghobject_t> &hoids) = 0;
 
   using erase_onode_iertr = base_iertr;
   using erase_onode_ret = erase_onode_iertr::future<>;
   virtual erase_onode_ret erase_onode(
     Transaction &trans,
+    const coll_t &cid,
     OnodeRef &onode) = 0;
 
   using list_onodes_iertr = base_iertr;
@@ -68,6 +74,7 @@ public:
   using list_onodes_ret = list_onodes_iertr::future<list_onodes_bare_ret>;
   virtual list_onodes_ret list_onodes(
     Transaction &trans,
+    const coll_t &cid,
     const ghobject_t& start,
     const ghobject_t& end,
     uint64_t limit) = 0;
