@@ -54,4 +54,11 @@ export class RgwUserAccountsService {
   ) {
     return this.http.put(`${this.url}/${account_id}/quota`, payload);
   }
+
+  exists(account_name: string): Observable<boolean> {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.append('account_name', account_name);
+      return this.http.get<boolean>(`${this.url}/exists`, { params });
+    });
+  }
 }
