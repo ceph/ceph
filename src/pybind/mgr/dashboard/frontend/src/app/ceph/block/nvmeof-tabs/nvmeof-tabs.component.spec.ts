@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed, fakeAsync, flush, tick } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ActivatedRoute, Event as RouterEvent, NavigationEnd, Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -487,6 +487,7 @@ describe('NvmeofTabsComponent', () => {
 
       expect(component.showSetupCards).toBe(true);
       expect(component.isAllConfigured).toBe(false);
+      flush();
     }));
   });
 });
