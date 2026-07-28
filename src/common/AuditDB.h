@@ -28,7 +28,8 @@ using sqlite3_ptr = std::unique_ptr<sqlite3, decltype(&sqlite3_close)>;
 
 struct AuditEntry {
   int64_t     seq{0};
-  time_t      init_time{0};
+  time_t      record_time{0};
+  std::string event_id;
   std::string json_dump;
 };
 
@@ -55,11 +56,14 @@ struct AuditQuery {
   std::optional<time_t> since;
   std::optional<time_t> until;
 
-  // json_dump field filters
-   std::vector<JsonFilter> json_filters;
+  // event_id filtering — return only rows belonging to this event
+  std::optional<std::string> event_id;
 
-  // sorting — only structural columns: "seq" or "init_time"
-  std::string order_by = "init_time";
+  // json_dump field filters
+  std::vector<JsonFilter> json_filters;
+
+  // sorting — only structural columns: "seq" or "record_time"
+  std::string order_by = "record_time";
   bool        ascending{false};
 
   // pagination
@@ -81,7 +85,7 @@ enum class AuditDBErr {
   sqlite_step_failed,
   /** SELECT MAX(seq) had no rows / NULL (get_last_committed_seq only) */
   empty_table,
-  /** INSERT/UPDATE step returned DONE but `sqlite3_changes` != 1 */
+  /** INSERT step returned DONE but `sqlite3_changes` != 1 */
   row_count_mismatch,
   /** `sqlite3_vfs_find("ceph")` returned null (VFS not registered) */
   ceph_vfs_not_found,
@@ -102,7 +106,9 @@ enum class AuditDBErr {
      *  underscore, or equals the reserved name `schema_version`). */
   invalid_table_name,
   seq_not_allowed_standalone,
-  seq_required
+  seq_required,
+  /** a non-nullopt event_id was provided but is an empty string */
+  invalid_event_id
 };
 
 /**
@@ -136,8 +142,8 @@ public:
      * of audit db, so there exists only one table per db. Validation runs in
      * @ref init; on failure @ref init returns `invalid_table_name`.
      * @param is_standalone this is mostly for setting up the insert_stmt, if it is
-     * daemon, the first_phase_commit() will be provided a seq, for standalone
-     * tools - sqlite would assign the next available integer
+     * a daemon, commit() will be provided a seq, for standalone tools SQLite
+     * assigns the next available integer
      */
   explicit AuditDB(
       CephContext* cct,
@@ -222,15 +228,20 @@ public:
 
   /**
      * @brief Insert a new audit record (daemon mode). The caller supplies
-     * @p seq from its own monotonic counter.
+     * @p seq from its own monotonic counter. If @p event_id is not provided,
+     * a new UUID is generated automatically. The event_id used is returned
+     * so the caller can pass it to a subsequent commit() to group rows into
+     * the same logical event.
      *
      * Use this overload on instances constructed with `is_standalone == false`.
      *
      * @param seq monotonic record id; must be > 0 and unique within the table.
-     * @param init_time record timestamp in seconds since epoch; must be > 0.
+     * @param record_time timestamp when this row is recorded; must be > 0.
      * @param json_dump caller-constructed JSON payload; must be non-empty.
+     * @param event_id if provided, used as-is; if nullopt, a UUID is generated.
      *
-     * @return void on success; on failure @ref AuditDBError with one of:
+     * @return the event_id of the inserted row on success; on failure
+     * @ref AuditDBError with one of:
      * - `not_initialised` — @ref init not called or failed.
      * - `seq_not_allowed_standalone` — called on a standalone instance.
      * - `invalid_seq` — @p seq <= 0.
@@ -239,22 +250,26 @@ public:
      * - `sqlite_bind_failed` — parameter binding failed.
      * - `row_count_mismatch` — INSERT returned DONE but no row was added.
      */
-  std::expected<void, AuditDBError> commit(
+  std::expected<std::string, AuditDBError> commit(
       int64_t seq,
-      time_t init_time,
-      const std::string& json_dump);
+      time_t record_time,
+      const std::string& json_dump,
+      std::optional<std::string> event_id = std::nullopt);
 
   /**
-     * @brief Insert a new audit record (standalone mode). SQLite assigns
-     * the seq, which is returned to the caller.
+     * @brief Insert a new audit record (standalone mode). SQLite assigns the
+     * seq. If @p event_id is not provided, a new UUID is generated
+     * automatically. The event_id used is returned so the caller can pass it
+     * to a subsequent commit() to group rows into the same logical event.
      *
      * Use this overload on instances constructed with `is_standalone == true`.
      *
-     * @param init_time record timestamp in seconds since epoch; must be > 0.
+     * @param record_time timestamp when this row is recorded; must be > 0.
      * @param json_dump caller-constructed JSON payload; must be non-empty.
+     * @param event_id if provided, used as-is; if nullopt, a UUID is generated.
      *
-     * @return the seq assigned by SQLite on success. On failure @ref
-     * AuditDBError with one of:
+     * @return the event_id of the inserted row on success; on failure
+     * @ref AuditDBError with one of:
      * - `not_initialised` — @ref init not called or failed.
      * - `seq_required` — called on a daemon instance (use the seq overload).
      * - `sqlite_step_failed` — INSERT failed; `detail` carries the SQLite
@@ -262,31 +277,10 @@ public:
      * - `sqlite_bind_failed` — parameter binding failed.
      * - `row_count_mismatch` — INSERT returned DONE but no row was added.
      */
-  std::expected<int64_t, AuditDBError> commit(
-      time_t init_time,
-      const std::string& json_dump);
-
-  /**
-     * @brief Replace the @p json_dump of an existing row identified by @p seq.
-     * Both daemon and standalone instances may call this.
-     *
-     * The caller constructs the complete new JSON payload and passes it in.
-     * AuditDB stores it verbatim without parsing or merging.
-     *
-     * @param seq row to update; must be > 0 and already exist in the table.
-     * @param json_dump new JSON payload; must be non-empty.
-     *
-     * @return void on success; on failure @ref AuditDBError with one of:
-     * - `not_initialised` — @ref init not called or failed.
-     * - `invalid_seq` — @p seq <= 0.
-     * - `sqlite_step_failed` — UPDATE failed; `detail` carries the SQLite
-     *   extended result code.
-     * - `sqlite_bind_failed` — parameter binding failed.
-     * - `row_count_mismatch` — no row with @p seq exists.
-     */
-  std::expected<void, AuditDBError> update(
-      int64_t seq,
-      const std::string& json_dump);
+  std::expected<std::string, AuditDBError> commit(
+      time_t record_time,
+      const std::string& json_dump,
+      std::optional<std::string> event_id = std::nullopt);
 
   /**
      * @brief query audit log entries matching the given filters
@@ -320,7 +314,7 @@ public:
      * @brief delete audit entries older than the given timestamp and
      * reclaim disk space via incremental vacuum
      *
-     * @param older_than entries with init_time before this are deleted
+     * @param older_than entries with record_time before this are deleted
      * @param max_delete max rows to delete per call; anything <= 0 means no
      * limit on how many rows may be removed. Use > 0 to cap deletions.
      * @return rows deleted on success (including 0); on failure
@@ -363,7 +357,6 @@ private:
   std::atomic<bool> initialised{false};
   sqlite3* db_handle = nullptr;
   sqlite3_stmt* insert_stmt = nullptr;
-  sqlite3_stmt* update_stmt = nullptr;
 
   /**
      * Finalize prepared statements and close the DB handle. Safe when
@@ -379,14 +372,16 @@ private:
      *
      * @param seq if set, bound as the explicit row id (daemon mode);
      *            if nullopt, SQLite assigns the next rowid (standalone mode).
-     * @param init_time record timestamp in seconds since epoch.
+     * @param record_time timestamp when this row is recorded.
+     * @param event_id UUID string to store; already resolved by caller.
      * @param json_dump caller-constructed JSON payload.
      *
-     * @return the seq of the inserted row on success.
+     * @return the event_id of the inserted row on success.
      */
-  std::expected<int64_t, AuditDBError> do_commit(
+  std::expected<std::string, AuditDBError> do_commit(
       std::optional<int64_t> seq,
-      time_t init_time,
+      time_t record_time,
+      const std::string& event_id,
       const std::string& json_dump);
 
   /**

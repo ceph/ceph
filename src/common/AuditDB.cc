@@ -12,6 +12,7 @@
 #include "include/rados/librados.hpp"
 
 #include "AuditDB.h"
+#include "include/uuid.h"
 
 #define dout_subsys ceph_subsys_audit_logging
 #define adout(cct, lvl) ldout((cct), (lvl)) << "audit_logging: " << __func__ << ": "
@@ -20,8 +21,7 @@
 namespace {
 enum class PreparePhase : std::uint8_t {
   Insert,
-  InsertAutoSeq,
-  Update
+  InsertAutoSeq
 };
 
 std::once_flag sqlite_vfs_init_flag;
@@ -42,7 +42,7 @@ flag_to_op(int flags)
 bool
 is_valid_order_column(const std::string& col)
 {
-  return col == "seq" || col == "init_time";
+  return col == "seq" || col == "record_time";
 }
 
 // `table_name` is concatenated as-is into every DDL/DML statement
@@ -126,7 +126,8 @@ create_table(CephContext* cct, sqlite3*& db_handle, const std::string& table)
         "CREATE TABLE IF NOT EXISTS " + table +
         " ("
         "seq INTEGER PRIMARY KEY, "
-        "init_time INTEGER NOT NULL CHECK (init_time > 0), "
+        "record_time INTEGER NOT NULL CHECK (record_time > 0), "
+        "event_id TEXT NOT NULL, "
         "json_dump TEXT NOT NULL"
         ");";
   }
@@ -143,8 +144,10 @@ create_table(CephContext* cct, sqlite3*& db_handle, const std::string& table)
 
   if (table != "schema_version") {
     const std::string indexes =
-        "CREATE INDEX IF NOT EXISTS idx_audit_init_time ON " + table +
-        "(init_time);";
+        "CREATE INDEX IF NOT EXISTS idx_audit_record_time ON " + table +
+        "(record_time);"
+        "CREATE INDEX IF NOT EXISTS idx_audit_event_id ON " + table +
+        "(event_id);";
     err_msg = nullptr;
     rc = sqlite3_exec(db_handle, indexes.c_str(), nullptr, nullptr, &err_msg);
     if (rc != SQLITE_OK) {
@@ -195,26 +198,16 @@ prepare_sqlite3_stmt(
   std::string sql;
   if (phase == PreparePhase::Insert) {
     sql = "INSERT INTO " + table +
-          " (seq, init_time, json_dump) "
-          "VALUES (?, ?, ?);";
-  } else if (phase == PreparePhase::InsertAutoSeq) {
-    sql = "INSERT INTO " + table +
-          " (init_time, json_dump) "
-          "VALUES (?, ?);";
+          " (seq, record_time, event_id, json_dump) "
+          "VALUES (?, ?, ?, ?);";
   } else {
-    sql = "UPDATE " + table +
-          " SET json_dump = ? "
-          "WHERE seq = ?;";
+    sql = "INSERT INTO " + table +
+          " (record_time, event_id, json_dump) "
+          "VALUES (?, ?, ?);";
   }
   int rc = sqlite3_prepare_v2(db_handle, sql.c_str(), -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    std::string what;
-    if (phase == PreparePhase::Insert || phase == PreparePhase::InsertAutoSeq) {
-      what = "insert_stmt";
-    } else {
-      what = "update_stmt";
-    }
-    aderr(cct) << what << " prepare failed: " << sqlite3_errmsg(db_handle) << dendl;
+    aderr(cct) << "insert_stmt prepare failed: " << sqlite3_errmsg(db_handle) << dendl;
     if (stmt) {
       sqlite3_finalize(stmt);
       stmt = nullptr;
@@ -249,12 +242,16 @@ build_where(
     int_binds.push_back({bind_idx++, *q.before_seq});
   }
   if (q.since) {
-    add_condition("init_time >= ?");
+    add_condition("record_time >= ?");
     int_binds.push_back({bind_idx++, static_cast<int64_t>(*q.since)});
   }
   if (q.until) {
-    add_condition("init_time < ?");
+    add_condition("record_time < ?");
     int_binds.push_back({bind_idx++, static_cast<int64_t>(*q.until)});
+  }
+  if (q.event_id) {
+    add_condition("event_id = ?");
+    text_binds.push_back({bind_idx++, *q.event_id});
   }
   for (const auto& f : q.json_filters) {
     add_condition("CAST(json_extract(json_dump, ?) AS TEXT) = ?");
@@ -284,6 +281,14 @@ bind_params(
       return rc;
   }
   return SQLITE_OK;
+}
+
+std::string
+generate_event_uuid()
+{
+  uuid_d u;
+  u.generate_random();
+  return u.to_string();
 }
 
 void vacuum(CephContext* cct, sqlite3*& db_handle)
@@ -352,10 +357,6 @@ AuditDB::release_sqlite_handles()
   if (insert_stmt) {
     sqlite3_finalize(insert_stmt);
     insert_stmt = nullptr;
-  }
-  if (update_stmt) {
-    sqlite3_finalize(update_stmt);
-    update_stmt = nullptr;
   }
   if (db_handle) {
     sqlite3_close(db_handle);
@@ -431,16 +432,9 @@ AuditDB::init()
     return e;
   }
 
-  // prepare phase-one statement
+  // prepare insert statement
   if (auto e = prepare_sqlite3_stmt(cct, db_handle, insert_stmt, table_name,
     is_standalone ? PreparePhase::InsertAutoSeq : PreparePhase::Insert);
-      !e) {
-    return e;
-  }
-
-  // prepare phase-two statement
-  if (auto e = prepare_sqlite3_stmt(
-          cct, db_handle, update_stmt, table_name, PreparePhase::Update);
       !e) {
     return e;
   }
@@ -570,9 +564,10 @@ AuditDB::delete_db_file(
   return {};
 }
 
-std::expected<int64_t, AuditDBError>
+std::expected<std::string, AuditDBError>
 AuditDB::do_commit(std::optional<int64_t> seq,
-                   time_t init_time,
+                   time_t record_time,
+                   const std::string& event_id,
                    const std::string& json_dump)
 {
   if (!initialised) {
@@ -587,13 +582,14 @@ AuditDB::do_commit(std::optional<int64_t> seq,
 
   int idx = 1;
   int rc = 0;
-  int64_t result_seq = 0;
 
   if (seq.has_value()) {
     rc = sqlite3_bind_int64(insert_stmt, idx++, *seq);
     if (rc != SQLITE_OK) goto bind_fail;
   }
-  rc = sqlite3_bind_int64(insert_stmt, idx++, static_cast<int64_t>(init_time));
+  rc = sqlite3_bind_int64(insert_stmt, idx++, static_cast<int64_t>(record_time));
+  if (rc != SQLITE_OK) goto bind_fail;
+  rc = sqlite3_bind_text(insert_stmt, idx++, event_id.c_str(), -1, SQLITE_TRANSIENT);
   if (rc != SQLITE_OK) goto bind_fail;
   rc = sqlite3_bind_text(insert_stmt, idx++, json_dump.c_str(), -1, SQLITE_TRANSIENT);
   if (rc != SQLITE_OK) goto bind_fail;
@@ -614,9 +610,8 @@ AuditDB::do_commit(std::optional<int64_t> seq,
     return std::unexpected(AuditDBError{AuditDBErr::row_count_mismatch, 0});
   }
 
-  result_seq = seq.value_or(sqlite3_last_insert_rowid(db_handle));
-  adout(cct, 20) << "seq=" << result_seq << dendl;
-  return result_seq;
+  adout(cct, 20) << "event_id=" << event_id << dendl;
+  return event_id;
 
 bind_fail:
   aderr(cct) << "commit bind failed: rc=" << rc
@@ -624,8 +619,9 @@ bind_fail:
   return std::unexpected(AuditDBError{AuditDBErr::sqlite_bind_failed, rc});
 }
 
-std::expected<void, AuditDBError>
-AuditDB::commit(int64_t seq, time_t init_time, const std::string& json_dump)
+std::expected<std::string, AuditDBError>
+AuditDB::commit(int64_t seq, time_t record_time, const std::string& json_dump,
+                std::optional<std::string> event_id)
 {
   std::lock_guard<ceph::mutex> l(lock);
 
@@ -633,62 +629,37 @@ AuditDB::commit(int64_t seq, time_t init_time, const std::string& json_dump)
     return std::unexpected(
         AuditDBError{AuditDBErr::seq_not_allowed_standalone, -EINVAL});
   }
-  if (auto r = do_commit(seq, init_time, json_dump); !r) {
-    return std::unexpected(r.error());
+
+  if (event_id && event_id->empty()) {
+    return std::unexpected(
+    AuditDBError{
+      AuditDBErr::invalid_event_id,
+      -EINVAL});
   }
-  return {};
+  const std::string e_id = event_id.value_or(generate_event_uuid());
+
+  return do_commit(seq, record_time, e_id, json_dump);
 }
 
-std::expected<int64_t, AuditDBError>
-AuditDB::commit(time_t init_time, const std::string& json_dump)
+std::expected<std::string, AuditDBError>
+AuditDB::commit(time_t record_time, const std::string& json_dump,
+                std::optional<std::string> event_id)
 {
   std::lock_guard<ceph::mutex> l(lock);
 
   if (!is_standalone) {
     return std::unexpected(AuditDBError{AuditDBErr::seq_required, -EINVAL});
   }
-  return do_commit(std::nullopt, init_time, json_dump);
-}
 
-std::expected<void, AuditDBError>
-AuditDB::update(int64_t seq, const std::string& json_dump)
-{
-  std::lock_guard<ceph::mutex> l(lock);
-
-  if (!initialised) {
-    return std::unexpected(AuditDBError{AuditDBErr::not_initialised, 0});
+  if (event_id && event_id->empty()) {
+    return std::unexpected(
+    AuditDBError{
+      AuditDBErr::invalid_event_id,
+      -EINVAL});
   }
-  if (seq <= 0) {
-    return std::unexpected(AuditDBError{AuditDBErr::invalid_seq, 0});
-  }
-
-  sqlite3_reset(update_stmt);
-  sqlite3_clear_bindings(update_stmt);
-
-  int rc = sqlite3_bind_text(update_stmt, 1, json_dump.c_str(), -1, SQLITE_TRANSIENT);
-  if (rc != SQLITE_OK) goto bind_fail;
-  rc = sqlite3_bind_int64(update_stmt, 2, seq);
-  if (rc != SQLITE_OK) goto bind_fail;
-
-  rc = sqlite3_step(update_stmt);
-  if (rc != SQLITE_DONE) {
-    aderr(cct) << "update failed: rc=" << rc
-               << " err=" << sqlite3_errmsg(db_handle) << dendl;
-    return std::unexpected(AuditDBError{AuditDBErr::sqlite_step_failed, rc});
-  }
-
-  if (sqlite3_changes(db_handle) != 1) {
-    aderr(cct) << "update: seq=" << seq << " not found" << dendl;
-    return std::unexpected(AuditDBError{AuditDBErr::row_count_mismatch, 0});
-  }
-
-  adout(cct, 20) << "seq=" << seq << dendl;
-  return {};
-
-bind_fail:
-  aderr(cct) << "update bind failed: rc=" << rc
-             << " err=" << sqlite3_errmsg(db_handle) << dendl;
-  return std::unexpected(AuditDBError{AuditDBErr::sqlite_bind_failed, rc});
+  const std::string e_id = event_id ? *event_id : generate_event_uuid();
+  
+  return do_commit(std::nullopt, record_time, e_id, json_dump);
 }
 
 std::expected<std::vector<AuditEntry>, AuditDBError>
@@ -703,7 +674,7 @@ AuditDB::query(const AuditQuery& q)
   std::vector<AuditEntry> results;
 
   std::string order_col = is_valid_order_column(q.order_by) ? q.order_by
-                                                            : "init_time";
+                                                            : "record_time";
   std::string direction = q.ascending ? "ASC" : "DESC";
 
   std::vector<std::pair<int, int64_t>> int_binds;
@@ -711,7 +682,7 @@ AuditDB::query(const AuditQuery& q)
   std::string where = build_where(q, int_binds, text_binds);
 
   std::string sql =
-      "SELECT seq, init_time, json_dump FROM " +
+      "SELECT seq, record_time, event_id, json_dump FROM " +
       table_name + where + " ORDER BY " + order_col + " " + direction +
       " LIMIT ?;";
 
@@ -743,9 +714,12 @@ AuditDB::query(const AuditQuery& q)
 
   while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
     AuditEntry entry;
-    entry.seq       = sqlite3_column_int64(stmt, 0);
-    entry.init_time = static_cast<time_t>(sqlite3_column_int64(stmt, 1));
+    entry.seq         = sqlite3_column_int64(stmt, 0);
+    entry.record_time = static_cast<time_t>(sqlite3_column_int64(stmt, 1));
     if (const auto* p = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2))) {
+      entry.event_id = p;
+    }
+    if (const auto* p = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3))) {
       entry.json_dump = p;
     }
     results.push_back(std::move(entry));
@@ -865,9 +839,9 @@ AuditDB::trim(time_t older_than, int64_t max_delete)
   // max_delete > 0: apply LIMIT; anything <= 0 deletes all matching rows
   if (max_delete > 0) {
     sql = "DELETE FROM " + table_name + " WHERE seq IN (SELECT seq FROM " +
-          table_name + " WHERE init_time < ? ORDER BY seq ASC LIMIT ?);";
+          table_name + " WHERE record_time < ? ORDER BY seq ASC LIMIT ?);";
   } else {
-    sql = "DELETE FROM " + table_name + " WHERE init_time < ?;";
+    sql = "DELETE FROM " + table_name + " WHERE record_time < ?;";
   }
 
   sqlite3_stmt* stmt = nullptr;
