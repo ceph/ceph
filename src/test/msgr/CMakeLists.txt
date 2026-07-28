@@ -31,6 +31,17 @@ add_executable(unittest_frames_v2 test_frames_v2.cc)
 add_ceph_unittest(unittest_frames_v2)
 target_link_libraries(unittest_frames_v2 os global ${UNITTEST_LIBS})
 
+# unittest_psp_netlink_mock. The mock backend is built here rather
+# than into libceph-common: it is a test double with failure-injection
+# knobs and has no business in a shipped library.
+if(HAVE_PSP)
+  add_executable(unittest_psp_netlink_mock
+    test_psp_netlink_mock.cc
+    ${PROJECT_SOURCE_DIR}/src/msg/async/PSPNetlinkMock.cc)
+  add_ceph_unittest(unittest_psp_netlink_mock)
+  target_link_libraries(unittest_psp_netlink_mock global ${UNITTEST_LIBS})
+endif()
+
 add_executable(unittest_comp_registry
   test_comp_registry.cc
   $<TARGET_OBJECTS:unit-main>

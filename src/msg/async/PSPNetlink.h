@@ -66,8 +66,24 @@ class NetlinkBackend {
 // HAVE_PSP is defined.
 std::unique_ptr<NetlinkBackend> make_real_backend();
 
-// Forward decl for the CI mock backend.
-struct MockConfig;
+// Knobs for the CI-only mock backend. The mock is deterministic
+// and stateful per-instance: each MockBackend acts as one "host"
+// with its own tx/rx slot accounting. Failure-injection counters
+// decrement on use so tests can script "next N calls fail."
+struct MockConfig {
+  std::string ifname = "mock0";
+  bool psp_supported = true;
+  uint32_t versions_mask = 0x1;           // AES-GCM-128 by default
+  uint32_t tx_capacity = 64;
+  uint32_t rx_capacity = 64;
+
+  // Failure injection (decrement on use). 0 = no failures.
+  uint32_t fail_next_alloc_rx_assoc = 0;
+  uint32_t fail_next_install_tx_assoc = 0;
+  bool fail_get_dev_caps = false;
+};
+
+
 std::unique_ptr<NetlinkBackend> make_mock_backend(const MockConfig&);
 
 }  // namespace ceph::msgr::psp
