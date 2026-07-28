@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { TestBed } from '@angular/core/testing';
 
 import { NumberFormatterService } from './number-formatter.service';
@@ -5,8 +6,9 @@ import { NumberFormatterService } from './number-formatter.service';
 describe('FormatToService', () => {
   let service: NumberFormatterService;
 
+  configureTestBed({});
+
   beforeEach(() => {
-    TestBed.configureTestingModule({});
     service = TestBed.inject(NumberFormatterService);
   });
 

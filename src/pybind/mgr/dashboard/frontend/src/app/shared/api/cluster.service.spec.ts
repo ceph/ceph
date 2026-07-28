@@ -13,8 +13,9 @@ describe('ClusterService', () => {
     providers: [ClusterService]
   });
 
+  configureTestBed({});
+
   beforeEach(() => {
-    TestBed.configureTestingModule({});
     service = TestBed.inject(ClusterService);
     httpTesting = TestBed.inject(HttpTestingController);
   });

@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RgwTopicFormComponent } from './rgw-topic-form.component';
 import { RgwTopicService } from '~/app/shared/api/rgw-topic.service';
@@ -32,34 +33,29 @@ describe('RgwTopicFormComponent', () => {
       }
     }
   };
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [RgwTopicFormComponent],
-      imports: [
-        ReactiveFormsModule,
-        RouterTestingModule,
-        HttpClientTestingModule,
-        SharedModule,
-        SelectModule,
-        GridModule,
-        InputModule
-      ],
-      providers: [
-        RgwTopicService,
-        TextAreaJsonFormatterService,
-        {
-          provide: ActionLabelsI18n,
-          useValue: { CREATE: 'Create', EDIT: 'Edit', Delete: 'Delete' }
-        },
-        {
-          provide: NotificationService,
-          useValue: mockNotificationService
-        },
-        { provide: 'Router', useValue: mockRouter },
-        { provide: 'ActivatedRoute', useValue: mockActivatedRoute }
-      ],
-      schemas: [NO_ERRORS_SCHEMA]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [RgwTopicFormComponent],
+    imports: [
+      ReactiveFormsModule,
+      RouterTestingModule,
+      HttpClientTestingModule,
+      SharedModule,
+      SelectModule,
+      GridModule,
+      InputModule
+    ],
+    providers: [
+      RgwTopicService,
+      TextAreaJsonFormatterService,
+      {
+        provide: ActionLabelsI18n,
+        useValue: { CREATE: 'Create', EDIT: 'Edit', Delete: 'Delete' }
+      },
+      { provide: NotificationService, useFactory: () => mockNotificationService },
+      { provide: 'Router', useValue: mockRouter },
+      { provide: 'ActivatedRoute', useValue: mockActivatedRoute }
+    ],
+    schemas: [NO_ERRORS_SCHEMA]
   });
 
   beforeEach(() => {

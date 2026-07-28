@@ -6,6 +6,7 @@ import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { CephfsFilesystemSelectorComponent } from './cephfs-filesystem-selector.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 const createDetail = (
   id: number,
@@ -26,22 +27,20 @@ const createDetail = (
 describe('CephfsFilesystemSelectorComponent', () => {
   let component: CephfsFilesystemSelectorComponent;
   let fixture: ComponentFixture<CephfsFilesystemSelectorComponent>;
-  let cephfsServiceMock: jest.Mocked<Pick<CephfsService, 'list' | 'getCephfs'>>;
+  let cephfsServiceMock: jest.Mocked<Pick<CephfsService, 'list' | 'getCephfs'>> = {
+    list: jest.fn(),
+    getCephfs: jest.fn()
+  };
+
+  configureTestBed({
+    declarations: [CephfsFilesystemSelectorComponent],
+    providers: [{ provide: CephfsService, useFactory: () => cephfsServiceMock }, DimlessBinaryPipe],
+    schemas: [NO_ERRORS_SCHEMA]
+  });
 
   beforeEach(async () => {
-    cephfsServiceMock = {
-      list: jest.fn(),
-      getCephfs: jest.fn()
-    };
-
     cephfsServiceMock.list.mockReturnValue(of([]));
     cephfsServiceMock.getCephfs.mockReturnValue(of(null));
-
-    await TestBed.configureTestingModule({
-      declarations: [CephfsFilesystemSelectorComponent],
-      providers: [{ provide: CephfsService, useValue: cephfsServiceMock }, DimlessBinaryPipe],
-      schemas: [NO_ERRORS_SCHEMA]
-    }).compileComponents();
 
     fixture = TestBed.createComponent(CephfsFilesystemSelectorComponent);
     component = fixture.componentInstance;

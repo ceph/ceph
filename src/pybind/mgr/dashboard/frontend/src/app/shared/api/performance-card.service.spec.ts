@@ -12,17 +12,18 @@ describe('PerformanceCardService', () => {
     imports: [HttpClientTestingModule]
   });
 
-  beforeEach(() => {
-    TestBed.configureTestingModule({
-      providers: [
-        {
-          provide: PrometheusService,
-          useValue: {
-            getRangeQueriesData: jest.fn()
-          }
+  configureTestBed({
+    providers: [
+      {
+        provide: PrometheusService,
+        useValue: {
+          getRangeQueriesData: jest.fn()
         }
-      ]
-    });
+      }
+    ]
+  });
+
+  beforeEach(() => {
     service = TestBed.inject(PerformanceCardService);
   });
 

@@ -59,7 +59,7 @@ describe('ModuleStatusGuardService', () => {
     imports: [RouterTestingModule.withRoutes(routes), SharedModule],
     providers: [
       ModuleStatusGuardService,
-      { provide: HttpClient, useValue: fakeService },
+      { provide: HttpClient, useFactory: () => fakeService },
       CdDatePipe
     ],
     declarations: [FooComponent]

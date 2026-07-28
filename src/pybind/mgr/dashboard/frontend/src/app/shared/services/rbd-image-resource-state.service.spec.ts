@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { TestBed } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
 import { take } from 'rxjs/operators';
@@ -11,14 +12,17 @@ describe('RbdImageResourceStateService', () => {
   let service: RbdImageResourceStateService;
   let rbdServiceSpy: any;
 
+  configureTestBed({
+    providers: [
+      RbdImageResourceStateService,
+      { provide: RbdService, useFactory: () => rbdServiceSpy }
+    ]
+  });
+
   beforeEach(() => {
     rbdServiceSpy = {
       get: jest.fn()
     };
-
-    TestBed.configureTestingModule({
-      providers: [RbdImageResourceStateService, { provide: RbdService, useValue: rbdServiceSpy }]
-    });
 
     service = TestBed.inject(RbdImageResourceStateService);
   });

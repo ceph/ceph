@@ -11,6 +11,7 @@ import { NvmeofStateService } from '../nvmeof-state.service';
 import { NvmeofTabsComponent } from './nvmeof-tabs.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { NvmeofSetupCardsComponent } from '../nvmeof-setup-cards/nvmeof-setup-cards.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 type SetupState = {
   hasGatewayGroups: boolean;
@@ -22,12 +23,16 @@ describe('NvmeofTabsComponent', () => {
   let component: NvmeofTabsComponent;
   let fixture: ComponentFixture<NvmeofTabsComponent>;
   let router: Router;
-  let nvmeofServiceSpy: any;
+
   let queryParams$: BehaviorSubject<any>;
   let refresh$: Subject<void>;
   let routerEvents$: Subject<RouterEvent>;
+
   let currentSetupState: SetupState;
   let routerUrl = '/block/nvmeof/gateways';
+
+  // Instantiate the spy object at the describe level so it exists when configureTestBed evaluates
+  const nvmeofServiceSpy: any = { fetchSetupState: jest.fn() };
 
   const setQueryParams = (params: any) => queryParams$.next(params);
   const emitRefresh = () => refresh$.next();
@@ -39,48 +44,58 @@ describe('NvmeofTabsComponent', () => {
     nvmeofServiceSpy.fetchSetupState.mockReturnValue(of(currentSetupState));
   };
 
+  configureTestBed({
+    declarations: [NvmeofTabsComponent],
+    imports: [
+      HttpClientTestingModule,
+      RouterTestingModule,
+      SharedModule,
+      TabsModule,
+      NvmeofSetupCardsComponent
+    ],
+    providers: [
+      { provide: NvmeofService, useFactory: () => nvmeofServiceSpy },
+      {
+        provide: ActivatedRoute,
+        // useFactory defers execution until the test actually runs and queryParams$ exists
+        useFactory: () => ({ queryParams: queryParams$.asObservable() })
+      }
+    ]
+  });
+
   beforeEach(async () => {
+    // Create fresh subjects for every single test to guarantee zero state leakage
     queryParams$ = new BehaviorSubject<any>({ group: 'grp1' });
     refresh$ = new Subject<void>();
+    routerEvents$ = new Subject<RouterEvent>();
+
     routerUrl = '/block/nvmeof/gateways';
     currentSetupState = { hasGatewayGroups: true, hasSubsystems: true, hasNamespaces: true };
-    nvmeofServiceSpy = {
-      fetchSetupState: jest.fn().mockImplementation(() => of(currentSetupState))
-    };
 
-    TestBed.configureTestingModule({
-      declarations: [NvmeofTabsComponent],
-      imports: [
-        HttpClientTestingModule,
-        RouterTestingModule,
-        SharedModule,
-        TabsModule,
-        NvmeofSetupCardsComponent
-      ],
-      providers: [
-        { provide: NvmeofService, useValue: nvmeofServiceSpy },
-        { provide: ActivatedRoute, useValue: { queryParams: queryParams$.asObservable() } }
-      ]
-    })
-      .overrideComponent(NvmeofTabsComponent, {
-        set: {
-          providers: [
-            {
-              provide: NvmeofStateService,
-              useValue: {
-                refresh$: refresh$.asObservable(),
-                requestRefresh: jest.fn()
-              }
-            }
-          ]
-        }
-      })
-      .compileComponents();
+    nvmeofServiceSpy.fetchSetupState.mockClear();
+    nvmeofServiceSpy.fetchSetupState.mockReturnValue(of(currentSetupState));
+
+    // Override must happen inside beforeEach but before compileComponents
+    TestBed.overrideComponent(NvmeofTabsComponent, {
+      set: {
+        providers: [
+          {
+            provide: NvmeofStateService,
+            useFactory: () => ({
+              refresh$: refresh$.asObservable(),
+              requestRefresh: jest.fn()
+            })
+          }
+        ]
+      }
+    });
+
+    await TestBed.compileComponents();
 
     fixture = TestBed.createComponent(NvmeofTabsComponent);
     component = fixture.componentInstance;
     router = TestBed.inject(Router);
-    routerEvents$ = new Subject<RouterEvent>();
+
     Object.defineProperty(router, 'events', {
       configurable: true,
       get: () => routerEvents$.asObservable()

@@ -15,6 +15,7 @@ import {
   RadioModule,
   TagModule
 } from 'carbon-components-angular';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('NvmeofSubsystemsStepTwoComponent', () => {
   let component: NvmeofSubsystemsStepTwoComponent;
@@ -22,24 +23,24 @@ describe('NvmeofSubsystemsStepTwoComponent', () => {
   let form: CdFormGroup;
   const mockGroupName = 'default';
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [NvmeofSubsystemsStepTwoComponent],
-      providers: [NgbActiveModal],
-      imports: [
-        HttpClientTestingModule,
-        NgbTypeaheadModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        SharedModule,
-        FileUploaderModule,
-        InputModule,
-        GridModule,
-        RadioModule,
-        TagModule
-      ]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [NvmeofSubsystemsStepTwoComponent],
+    providers: [NgbActiveModal],
+    imports: [
+      HttpClientTestingModule,
+      NgbTypeaheadModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      SharedModule,
+      FileUploaderModule,
+      InputModule,
+      GridModule,
+      RadioModule,
+      TagModule
+    ]
+  });
 
+  beforeEach(() => {
     fixture = TestBed.createComponent(NvmeofSubsystemsStepTwoComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

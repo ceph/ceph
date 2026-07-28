@@ -10,6 +10,7 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('RgwAccountRolesListComponent', () => {
   let component: RgwAccountRolesListComponent;
@@ -17,20 +18,20 @@ describe('RgwAccountRolesListComponent', () => {
   let rgwRoleService: RgwRoleService;
   let notificationService: NotificationService;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule, RouterTestingModule, SharedModule],
-      declarations: [RgwAccountRolesListComponent],
-      providers: [
-        {
-          provide: AuthStorageService,
-          useValue: {
-            getPermissions: () => ({ rgw: { create: true, update: true, delete: true } })
-          }
+  configureTestBed({
+    imports: [HttpClientTestingModule, RouterTestingModule, SharedModule],
+    declarations: [RgwAccountRolesListComponent],
+    providers: [
+      {
+        provide: AuthStorageService,
+        useValue: {
+          getPermissions: () => ({ rgw: { create: true, update: true, delete: true } })
         }
-      ]
-    }).compileComponents();
+      }
+    ]
+  });
 
+  beforeEach(() => {
     fixture = TestBed.createComponent(RgwAccountRolesListComponent);
     component = fixture.componentInstance;
     rgwRoleService = TestBed.inject(RgwRoleService);

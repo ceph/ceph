@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Component, CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
@@ -48,12 +49,10 @@ describe('NotificationItemComponent', () => {
   let hostComponent: TestHostComponent;
   let notificationService: NotificationService;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [SharedModule, HttpClientTestingModule],
-      declarations: [NotificationItemComponent, TestHostComponent],
-      schemas: [CUSTOM_ELEMENTS_SCHEMA]
-    }).compileComponents();
+  configureTestBed({
+    imports: [SharedModule, HttpClientTestingModule],
+    declarations: [NotificationItemComponent, TestHostComponent],
+    schemas: [CUSTOM_ELEMENTS_SCHEMA]
   });
 
   beforeEach(() => {

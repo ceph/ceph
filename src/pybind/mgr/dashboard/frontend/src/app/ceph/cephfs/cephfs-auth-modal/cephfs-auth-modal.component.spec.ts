@@ -7,26 +7,27 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 import { CheckboxModule, InputModule, ModalModule } from 'carbon-components-angular';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('CephfsAuthModalComponent', () => {
   let component: CephfsAuthModalComponent;
   let fixture: ComponentFixture<CephfsAuthModalComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [CephfsAuthModalComponent],
-      imports: [
-        HttpClientTestingModule,
-        SharedModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        NgbTypeaheadModule,
-        ModalModule,
-        InputModule,
-        CheckboxModule
-      ]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [CephfsAuthModalComponent],
+    imports: [
+      HttpClientTestingModule,
+      SharedModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      NgbTypeaheadModule,
+      ModalModule,
+      InputModule,
+      CheckboxModule
+    ]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(CephfsAuthModalComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

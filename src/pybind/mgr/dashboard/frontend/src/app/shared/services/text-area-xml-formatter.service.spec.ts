@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { TestBed } from '@angular/core/testing';
 
 import { TextAreaXmlFormatterService } from './text-area-xml-formatter.service';
@@ -5,8 +6,9 @@ import { TextAreaXmlFormatterService } from './text-area-xml-formatter.service';
 describe('TextAreaXmlFormatterService', () => {
   let service: TextAreaXmlFormatterService;
 
+  configureTestBed({});
+
   beforeEach(() => {
-    TestBed.configureTestingModule({});
     service = TestBed.inject(TextAreaXmlFormatterService);
   });
 

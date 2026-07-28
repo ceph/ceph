@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NotificationFooterComponent } from './notification-footer.component';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -11,12 +12,10 @@ describe('NotificationFooterComponent', () => {
   let component: NotificationFooterComponent;
   let fixture: ComponentFixture<NotificationFooterComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [NotificationFooterComponent],
-      providers: [{ provide: NotificationService, useClass: MockNotificationService }],
-      schemas: [CUSTOM_ELEMENTS_SCHEMA]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [NotificationFooterComponent],
+    providers: [{ provide: NotificationService, useClass: MockNotificationService }],
+    schemas: [CUSTOM_ELEMENTS_SCHEMA]
   });
 
   beforeEach(() => {

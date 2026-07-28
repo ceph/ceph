@@ -52,11 +52,11 @@ describe('NvmeofGatewayNodeAddModalComponent', () => {
     imports: [SharedModule, HttpClientTestingModule, RouterTestingModule],
     declarations: [NvmeofGatewayNodeAddModalComponent],
     providers: [
-      { provide: HostService, useValue: mockHostService },
-      { provide: NvmeofService, useValue: mockNvmeofService },
-      { provide: CephServiceService, useValue: mockCephServiceService },
-      { provide: NotificationService, useValue: mockNotificationService },
-      { provide: TaskMessageService, useValue: mockTaskMessageService },
+      { provide: HostService, useFactory: () => mockHostService },
+      { provide: NvmeofService, useFactory: () => mockNvmeofService },
+      { provide: CephServiceService, useFactory: () => mockCephServiceService },
+      { provide: NotificationService, useFactory: () => mockNotificationService },
+      { provide: TaskMessageService, useFactory: () => mockTaskMessageService },
       { provide: 'groupName', useValue: 'group1' },
       { provide: 'usedHostnames', useValue: ['host1'] },
       { provide: 'serviceSpec', useValue: mockServiceSpec }

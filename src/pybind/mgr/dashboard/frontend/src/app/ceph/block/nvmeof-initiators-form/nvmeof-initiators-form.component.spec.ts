@@ -13,41 +13,40 @@ import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { ALLOW_ALL_HOST, HOST_TYPE } from '~/app/shared/models/nvmeof';
 
 import { NvmeofInitiatorsFormComponent } from './nvmeof-initiators-form.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('NvmeofInitiatorsFormComponent', () => {
   let component: NvmeofInitiatorsFormComponent;
   let fixture: ComponentFixture<NvmeofInitiatorsFormComponent>;
   let nvmeofService: NvmeofService;
-  const mockTimestamp = 1720693470789;
   const mockGroupName = 'default';
 
-  beforeEach(async () => {
-    spyOn(Date, 'now').and.returnValue(mockTimestamp);
-    await TestBed.configureTestingModule({
-      declarations: [NvmeofInitiatorsFormComponent],
-      schemas: [NO_ERRORS_SCHEMA],
-      providers: [
-        NgbActiveModal,
-        {
-          provide: ActivatedRoute,
-          useValue: {
-            queryParamMap: of(convertToParamMap({ group: 'test-group' })),
-            params: of({ subsystem_nqn: 'nqn.test' }),
-            parent: {
-              params: of({ subsystem_nqn: 'nqn.test' })
-            }
+  configureTestBed({
+    declarations: [NvmeofInitiatorsFormComponent],
+    schemas: [NO_ERRORS_SCHEMA],
+    providers: [
+      NgbActiveModal,
+      {
+        provide: ActivatedRoute,
+        useValue: {
+          queryParamMap: of(convertToParamMap({ group: 'test-group' })),
+          params: of({ subsystem_nqn: 'nqn.test' }),
+          parent: {
+            params: of({ subsystem_nqn: 'nqn.test' })
           }
         }
-      ],
-      imports: [
-        HttpClientTestingModule,
-        NgbTypeaheadModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        SharedModule
-      ]
-    }).compileComponents();
+      }
+    ],
+    imports: [
+      HttpClientTestingModule,
+      NgbTypeaheadModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      SharedModule
+    ]
+  });
 
+  beforeEach(() => {
     fixture = TestBed.createComponent(NvmeofInitiatorsFormComponent);
     component = fixture.componentInstance;
     component.ngOnInit();

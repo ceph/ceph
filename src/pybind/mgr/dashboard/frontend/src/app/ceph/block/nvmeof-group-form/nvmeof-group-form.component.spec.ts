@@ -17,7 +17,7 @@ import { CheckboxModule, GridModule, InputModule, SelectModule } from 'carbon-co
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
-import { FormHelper } from '~/testing/unit-test-helper';
+import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
 
 describe('NvmeofGroupFormComponent', () => {
   let component: NvmeofGroupFormComponent;
@@ -29,26 +29,24 @@ describe('NvmeofGroupFormComponent', () => {
   let nvmeofService: NvmeofService;
   let router: Router;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [NvmeofGroupFormComponent],
-      providers: [NgbActiveModal],
-      imports: [
-        HttpClientTestingModule,
-        NgbTypeaheadModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        SharedModule,
-        CheckboxModule,
-        GridModule,
-        InputModule,
-        SelectModule
-      ],
-      schemas: [CUSTOM_ELEMENTS_SCHEMA]
-    })
-      .overrideTemplate(NvmeofGroupFormComponent, '')
-      .compileComponents();
+  configureTestBed({
+    declarations: [NvmeofGroupFormComponent],
+    providers: [NgbActiveModal],
+    imports: [
+      HttpClientTestingModule,
+      NgbTypeaheadModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      SharedModule,
+      CheckboxModule,
+      GridModule,
+      InputModule,
+      SelectModule
+    ],
+    schemas: [CUSTOM_ELEMENTS_SCHEMA]
+  });
 
+  beforeEach(() => {
     fixture = TestBed.createComponent(NvmeofGroupFormComponent);
     component = fixture.componentInstance;
     taskWrapperService = TestBed.inject(TaskWrapperService);

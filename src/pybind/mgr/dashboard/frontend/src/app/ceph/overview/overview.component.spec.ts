@@ -20,13 +20,20 @@ import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { OverviewStorageService } from '~/app/shared/api/storage-overview.service';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 
 describe('OverviewComponent', () => {
   let component: OverviewComponent;
   let fixture: ComponentFixture<OverviewComponent>;
 
-  let mockHealthService: { getHealthSnapshot: jest.Mock; getTelemetryStatus: jest.Mock };
-  let mockRefreshIntervalService: { intervalData$: Subject<void> };
+  let mockHealthService: { getHealthSnapshot: jest.Mock; getTelemetryStatus: jest.Mock } = {
+    getHealthSnapshot: jest.fn(),
+    getTelemetryStatus: jest.fn().mockReturnValue(of(false))
+  };
+  let mockRefreshIntervalService: { intervalData$: Subject<void> } = {
+    intervalData$: new Subject<void>()
+  };
   let mockOverviewStorageService: {
     getTrendData: jest.Mock;
     getAverageConsumption: jest.Mock;
@@ -36,6 +43,37 @@ describe('OverviewComponent', () => {
     mapStorageChartData: jest.Mock;
     getThresholdStatus: jest.Mock;
     getRawCapacityThresholds: jest.Mock;
+  } = {
+    getTrendData: jest.fn().mockReturnValue(
+      of({
+        TOTAL_RAW_USED: [
+          [0, '512'],
+          [60, '1024']
+        ]
+      })
+    ),
+    getAverageConsumption: jest.fn().mockReturnValue(of('12 GiB/day')),
+    getTimeUntilFull: jest.fn().mockReturnValue(of('30 days')),
+    getStorageBreakdown: jest.fn().mockReturnValue(
+      of({
+        result: [
+          { metric: { application: 'Block' }, value: [0, '1024'] },
+          { metric: { application: 'Filesystem' }, value: [0, '2048'] }
+        ]
+      })
+    ),
+    formatBytesForChart: jest.fn().mockReturnValue([3, 'GiB']),
+    mapStorageChartData: jest.fn().mockReturnValue([
+      { group: 'Block', value: 1 },
+      { group: 'File system', value: 2 }
+    ]),
+    getThresholdStatus: jest.fn().mockReturnValue(null),
+    getRawCapacityThresholds: jest.fn().mockReturnValue(
+      of({
+        osdFullRatio: 0.99,
+        osdNearfullRatio: 0.85
+      })
+    )
   };
 
   const mockAuthStorageService = {
@@ -54,69 +92,32 @@ describe('OverviewComponent', () => {
 
   let mockPrometheusService: {
     refreshPrometheusUsable: jest.Mock;
+  } = {
+    refreshPrometheusUsable: jest.fn().mockReturnValue(of(true))
   };
 
+  configureTestBed({
+    imports: [OverviewComponent, HttpClientTestingModule],
+    providers: [
+      provideRouter([]),
+      { provide: HealthService, useFactory: () => mockHealthService },
+      { provide: RefreshIntervalService, useFactory: () => mockRefreshIntervalService },
+      { provide: OverviewStorageService, useFactory: () => mockOverviewStorageService },
+      { provide: PrometheusService, useFactory: () => mockPrometheusService },
+      { provide: AuthStorageService, useFactory: () => mockAuthStorageService },
+      { provide: MgrModuleService, useFactory: () => mockMgrModuleService },
+      { provide: HardwareService, useFactory: () => mockHardwareService }
+    ]
+  });
+
   beforeEach(async () => {
-    mockPrometheusService = {
-      refreshPrometheusUsable: jest.fn().mockReturnValue(of(true))
-    };
+    mockRefreshIntervalService.intervalData$ = new Subject<void>();
 
-    mockHealthService = {
-      getHealthSnapshot: jest.fn(),
-      getTelemetryStatus: jest.fn().mockReturnValue(of(false))
-    };
-    mockRefreshIntervalService = { intervalData$: new Subject<void>() };
+    TestBed.overrideComponent(OverviewComponent, {
+      set: { template: '' }
+    });
 
-    mockOverviewStorageService = {
-      getTrendData: jest.fn().mockReturnValue(
-        of({
-          TOTAL_RAW_USED: [
-            [0, '512'],
-            [60, '1024']
-          ]
-        })
-      ),
-      getAverageConsumption: jest.fn().mockReturnValue(of('12 GiB/day')),
-      getTimeUntilFull: jest.fn().mockReturnValue(of('30 days')),
-      getStorageBreakdown: jest.fn().mockReturnValue(
-        of({
-          result: [
-            { metric: { application: 'Block' }, value: [0, '1024'] },
-            { metric: { application: 'Filesystem' }, value: [0, '2048'] }
-          ]
-        })
-      ),
-      formatBytesForChart: jest.fn().mockReturnValue([3, 'GiB']),
-      mapStorageChartData: jest.fn().mockReturnValue([
-        { group: 'Block', value: 1 },
-        { group: 'File system', value: 2 }
-      ]),
-      getThresholdStatus: jest.fn().mockReturnValue(null),
-      getRawCapacityThresholds: jest.fn().mockReturnValue(
-        of({
-          osdFullRatio: 0.99,
-          osdNearfullRatio: 0.85
-        })
-      )
-    };
-
-    await TestBed.configureTestingModule({
-      imports: [OverviewComponent],
-      providers: [
-        provideRouter([]),
-        { provide: HealthService, useValue: mockHealthService },
-        { provide: RefreshIntervalService, useValue: mockRefreshIntervalService },
-        { provide: OverviewStorageService, useValue: mockOverviewStorageService },
-        { provide: PrometheusService, useValue: mockPrometheusService },
-        { provide: AuthStorageService, useValue: mockAuthStorageService },
-        { provide: MgrModuleService, useValue: mockMgrModuleService },
-        { provide: HardwareService, useValue: mockHardwareService }
-      ]
-    })
-      .overrideComponent(OverviewComponent, {
-        set: { template: '' }
-      })
-      .compileComponents();
+    await TestBed.compileComponents();
 
     fixture = TestBed.createComponent(OverviewComponent);
     component = fixture.componentInstance;
@@ -129,7 +130,7 @@ describe('OverviewComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('healthCardVm$ should emit HealthCardVM correctly', (done) => {
+  it('healthCardVm$ should emit HealthCardVM correctly', fakeAsync(() => {
     const mockData: HealthSnapshotMap = {
       fsid: 'fsid-123',
       health: {
@@ -199,15 +200,14 @@ describe('OverviewComponent', () => {
       );
 
       expect(vm.overallSystemSev).toEqual(expect.any(String));
-
-      sub.unsubscribe();
-      done();
     });
 
     mockRefreshIntervalService.intervalData$.next();
-  });
+    tick();
+    sub.unsubscribe();
+  }));
 
-  it('healthCardVm$ should compute overallSystemSev as worst subsystem severity', (done) => {
+  it('healthCardVm$ should compute overallSystemSev as worst subsystem severity', fakeAsync(() => {
     const mockData: HealthSnapshotMap = {
       fsid: 'fsid-999',
       health: { status: 'HEALTH_OK', checks: {} },
@@ -232,14 +232,14 @@ describe('OverviewComponent', () => {
 
     const sub = component.healthCardVm$.subscribe((vm) => {
       expect(vm.overallSystemSev).toBe(SeverityIconMap[2]);
-      sub.unsubscribe();
-      done();
     });
 
     mockRefreshIntervalService.intervalData$.next();
-  });
+    tick();
+    sub.unsubscribe();
+  }));
 
-  it('healthCardVm$ should not emit if healthService throws (EMPTY)', (done) => {
+  it('healthCardVm$ should not emit if healthService throws (EMPTY)', fakeAsync(() => {
     mockHealthService.getHealthSnapshot.mockReturnValue(throwError(() => new Error('API Error')));
 
     let emitted = false;
@@ -248,15 +248,15 @@ describe('OverviewComponent', () => {
       next: () => (emitted = true),
       complete: () => {
         expect(emitted).toBe(false);
-        done();
       }
     });
 
     mockRefreshIntervalService.intervalData$.next();
+    tick();
     mockRefreshIntervalService.intervalData$.complete();
-  });
+  }));
 
-  it('storageCardVm$ should emit storage view model with mapped fields', fakeAsync((done) => {
+  it('storageCardVm$ should emit storage view model with mapped fields', fakeAsync(() => {
     const mockData: HealthSnapshotMap = {
       fsid: 'fsid-storage',
       health: { status: 'HEALTH_OK', checks: {} },
@@ -306,17 +306,16 @@ describe('OverviewComponent', () => {
 
       expect(mockOverviewStorageService.formatBytesForChart).toHaveBeenCalledWith(3236978688);
       expect(mockOverviewStorageService.mapStorageChartData).toHaveBeenCalled();
-
-      sub.unsubscribe();
-      done();
     });
 
     tick(0);
     mockRefreshIntervalService.intervalData$.next();
+    tick();
     discardPeriodicTasks();
+    sub.unsubscribe();
   }));
 
-  it('storageCardVm$ should emit safe defaults before storage side streams resolve', (done) => {
+  it('storageCardVm$ should emit safe defaults before storage side streams resolve', fakeAsync(() => {
     const mockData: HealthSnapshotMap = {
       fsid: 'fsid-storage',
       health: { status: 'HEALTH_OK', checks: {} },
@@ -345,13 +344,12 @@ describe('OverviewComponent', () => {
       expect(vm.usedCapacity).toBe(100);
       expect(vm.breakdownData).toEqual([]);
       expect(vm.isBreakdownLoaded).toBe(false);
-
-      sub.unsubscribe();
-      done();
     });
 
     mockRefreshIntervalService.intervalData$.next();
-  });
+    tick();
+    sub.unsubscribe();
+  }));
 
   it('should toggle panel open/close', () => {
     expect(component.isHealthPanelOpen).toBe(false);

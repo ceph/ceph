@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { TestBed } from '@angular/core/testing';
 
 import { CrudFormAdapterService } from './crud-form-adapter.service';
@@ -6,10 +7,11 @@ import { RouterTestingModule } from '@angular/router/testing';
 describe('CrudFormAdapterService', () => {
   let service: CrudFormAdapterService;
 
+  configureTestBed({
+    imports: [RouterTestingModule]
+  });
+
   beforeEach(() => {
-    TestBed.configureTestingModule({
-      imports: [RouterTestingModule]
-    });
     service = TestBed.inject(CrudFormAdapterService);
   });
 

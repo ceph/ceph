@@ -108,7 +108,7 @@ describe('NvmeofGatewayNodeComponent', () => {
       TagModule
     ],
     providers: [
-      { provide: AuthStorageService, useValue: fakeAuthStorageService },
+      { provide: AuthStorageService, useFactory: () => fakeAuthStorageService },
       {
         provide: ActivatedRoute,
         useValue: {

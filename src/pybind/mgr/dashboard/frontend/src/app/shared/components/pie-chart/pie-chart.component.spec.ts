@@ -1,8 +1,8 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { PieChartComponent } from './pie-chart.component';
 import { ChartsModule } from '@carbon/charts-angular';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy } from '@angular/core';
 import { By } from '@angular/platform-browser';
 
 describe('PieChartComponent', () => {
@@ -14,16 +14,11 @@ describe('PieChartComponent', () => {
     { group: 'B', value: 70 }
   ];
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [PieChartComponent, ChartsModule, CommonModule]
-    })
-      // disable OnPush for test environment
-      .overrideComponent(PieChartComponent, {
-        set: { changeDetection: ChangeDetectionStrategy.Default }
-      })
-      .compileComponents();
+  configureTestBed({
+    imports: [PieChartComponent, ChartsModule, CommonModule]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(PieChartComponent);
     component = fixture.componentInstance;
   });

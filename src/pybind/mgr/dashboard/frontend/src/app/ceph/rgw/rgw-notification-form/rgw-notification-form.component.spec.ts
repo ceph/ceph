@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RgwNotificationFormComponent } from './rgw-notification-form.component';
 import { CdLabelComponent } from '~/app/shared/components/cd-label/cd-label.component';
@@ -30,32 +31,32 @@ describe('RgwNotificationFormComponent', () => {
   let fixture: ComponentFixture<RgwNotificationFormComponent>;
   let rgwBucketService: MockRgwBucketService;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [RgwNotificationFormComponent, CdLabelComponent],
-      imports: [
-        ReactiveFormsModule,
-        HttpClientTestingModule,
-        RadioModule,
-        SelectModule,
-        NumberModule,
-        InputModule,
-        ComponentsModule,
-        ModalModule,
-        ComboBoxModule,
-        ReactiveFormsModule,
-        ComponentsModule,
-        InputModule,
-        RouterTestingModule
-      ],
-      schemas: [NO_ERRORS_SCHEMA],
-      providers: [
-        ModalService,
-        { provide: 'bucket', useValue: { bucket: 'bucket1', owner: 'dashboard' } },
-        { provide: RgwBucketService, useClass: MockRgwBucketService }
-      ]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [RgwNotificationFormComponent, CdLabelComponent],
+    imports: [
+      ReactiveFormsModule,
+      HttpClientTestingModule,
+      RadioModule,
+      SelectModule,
+      NumberModule,
+      InputModule,
+      ComponentsModule,
+      ModalModule,
+      ComboBoxModule,
+      ReactiveFormsModule,
+      ComponentsModule,
+      InputModule,
+      RouterTestingModule
+    ],
+    schemas: [NO_ERRORS_SCHEMA],
+    providers: [
+      ModalService,
+      { provide: 'bucket', useValue: { bucket: 'bucket1', owner: 'dashboard' } },
+      { provide: RgwBucketService, useClass: MockRgwBucketService }
+    ]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(RgwNotificationFormComponent);
     component = fixture.componentInstance;
     rgwBucketService = TestBed.inject(RgwBucketService) as unknown as MockRgwBucketService;

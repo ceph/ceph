@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { VerticalNavigationComponent } from './vertical-navigation.component';
@@ -7,11 +8,11 @@ describe('VerticalNavigationComponent', () => {
   let component: VerticalNavigationComponent;
   let fixture: ComponentFixture<VerticalNavigationComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [VerticalNavigationComponent]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [VerticalNavigationComponent]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(VerticalNavigationComponent);
     component = fixture.componentInstance;
     component.items = ['item1', 'item2', 'item3'];

@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { TestBed } from '@angular/core/testing';
 
 import { CdTableServerSideService } from './cd-table-server-side.service';
@@ -5,8 +6,9 @@ import { CdTableServerSideService } from './cd-table-server-side.service';
 describe('CdTableServerSideService', () => {
   let service: CdTableServerSideService;
 
+  configureTestBed({});
+
   beforeEach(() => {
-    TestBed.configureTestingModule({});
     service = TestBed.inject(CdTableServerSideService);
   });
 

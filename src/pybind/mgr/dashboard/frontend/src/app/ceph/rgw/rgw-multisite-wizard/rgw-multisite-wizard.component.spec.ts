@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { RgwMultisiteWizardComponent } from './rgw-multisite-wizard.component';
@@ -63,6 +64,53 @@ describe('RgwMultisiteWizardComponent', () => {
   let summarySubscribeSpy: jasmine.Spy;
   let mgrModuleUpdateCompleted$: Subject<void>;
 
+  configureTestBed({
+    declarations: [RgwMultisiteWizardComponent],
+    imports: [HttpClientTestingModule, SharedModule, ReactiveFormsModule, RouterTestingModule],
+    schemas: [NO_ERRORS_SCHEMA, CUSTOM_ELEMENTS_SCHEMA],
+    providers: [
+      NgbActiveModal,
+      {
+        provide: RgwDaemonService,
+        useFactory: () => ({ list: daemonSpy, get: daemonGetSpy })
+      },
+      {
+        provide: MultiClusterService,
+        useFactory: () => ({ getCluster: multiClusterSpy })
+      },
+      {
+        provide: RgwRealmService,
+        useFactory: () => ({ list: realmListSpy })
+      },
+      {
+        provide: RgwMultisiteService,
+        useFactory: () => ({
+          setUpMultisiteReplication: setupReplicationSpy,
+          setRestartGatewayMessage: jasmine.createSpy('setRestartGatewayMessage'),
+          getRgwModuleStatus: rgwModuleStatusSpy
+        })
+      },
+      {
+        provide: MgrModuleService,
+        useFactory: () => ({
+          get updateCompleted$() {
+            return mgrModuleUpdateCompleted$.asObservable();
+          },
+          updateModuleState: jasmine.createSpy('updateModuleState'),
+          list: jasmine.createSpy('list').and.returnValue(of([]))
+        })
+      },
+      {
+        provide: SummaryService,
+        useFactory: () => ({ subscribe: summarySubscribeSpy })
+      },
+      {
+        provide: NotificationService,
+        useFactory: () => ({ show: jasmine.createSpy('show') })
+      }
+    ]
+  });
+
   beforeEach(async () => {
     mgrModuleUpdateCompleted$ = new Subject<void>();
 
@@ -75,51 +123,6 @@ describe('RgwMultisiteWizardComponent', () => {
     rgwModuleStatusSpy = jasmine.createSpy('getRgwModuleStatus').and.returnValue(of(true));
     setupReplicationSpy = jasmine.createSpy('setUpMultisiteReplication').and.returnValue(of([]));
     summarySubscribeSpy = jasmine.createSpy('subscribe').and.returnValue({ unsubscribe: () => {} });
-
-    await TestBed.configureTestingModule({
-      declarations: [RgwMultisiteWizardComponent],
-      imports: [HttpClientTestingModule, SharedModule, ReactiveFormsModule, RouterTestingModule],
-      schemas: [NO_ERRORS_SCHEMA, CUSTOM_ELEMENTS_SCHEMA],
-      providers: [
-        NgbActiveModal,
-        {
-          provide: RgwDaemonService,
-          useValue: { list: daemonSpy, get: daemonGetSpy }
-        },
-        {
-          provide: MultiClusterService,
-          useValue: { getCluster: multiClusterSpy }
-        },
-        {
-          provide: RgwRealmService,
-          useValue: { list: realmListSpy }
-        },
-        {
-          provide: RgwMultisiteService,
-          useValue: {
-            setUpMultisiteReplication: setupReplicationSpy,
-            setRestartGatewayMessage: jasmine.createSpy('setRestartGatewayMessage'),
-            getRgwModuleStatus: rgwModuleStatusSpy
-          }
-        },
-        {
-          provide: MgrModuleService,
-          useValue: {
-            updateCompleted$: mgrModuleUpdateCompleted$,
-            updateModuleState: jasmine.createSpy('updateModuleState'),
-            list: jasmine.createSpy('list').and.returnValue(of([]))
-          }
-        },
-        {
-          provide: SummaryService,
-          useValue: { subscribe: summarySubscribeSpy }
-        },
-        {
-          provide: NotificationService,
-          useValue: { show: jasmine.createSpy('show') }
-        }
-      ]
-    }).compileComponents();
 
     fixture = TestBed.createComponent(RgwMultisiteWizardComponent);
     component = fixture.componentInstance;

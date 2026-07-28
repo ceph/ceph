@@ -19,7 +19,7 @@
     "i18n:merge": "npx i18ntool merge -c i18n.config.json",
     "i18n:token": "npx i18ntool config token",
     "test": "jest --watch",
-    "test:ci": "jest --clearCache && JEST_SILENT_REPORTER_DOTS=true jest --detectOpenHandles --coverage --reporters jest-silent-reporter",
+    "test:ci": "jest --clearCache && JEST_SILENT_REPORTER_DOTS=true jest --runInBand --forceExit --coverage --reporters jest-silent-reporter",
     "pree2e": "rm -f cypress/reports/results-*.xml || true",
     "e2e": "start-test 4200 'cypress open'",
     "pree2e:ci": "npm run pree2e",

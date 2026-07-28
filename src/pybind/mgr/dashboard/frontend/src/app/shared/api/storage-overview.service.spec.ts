@@ -25,8 +25,8 @@ describe('OverviewStorageService', () => {
   configureTestBed({
     imports: [HttpClientTestingModule],
     providers: [
-      { provide: PrometheusService, useValue: prometheusServiceMock },
-      { provide: FormatterService, useValue: formatterServiceMock }
+      { provide: PrometheusService, useFactory: () => prometheusServiceMock },
+      { provide: FormatterService, useFactory: () => formatterServiceMock }
     ]
   });
 

@@ -21,17 +21,12 @@ describe('RgwTopicListComponent', () => {
     imports: [BrowserAnimationsModule, RouterTestingModule, HttpClientTestingModule, SharedModule]
   });
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [
-        BrowserAnimationsModule,
-        SharedModule,
-        HttpClientTestingModule,
-        RouterTestingModule
-      ],
-      declarations: [RgwTopicListComponent, RgwTopicResourceSidebarComponent]
-    }).compileComponents();
+  configureTestBed({
+    imports: [BrowserAnimationsModule, SharedModule, HttpClientTestingModule, RouterTestingModule],
+    declarations: [RgwTopicListComponent, RgwTopicResourceSidebarComponent]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(RgwTopicListComponent);
     component = fixture.componentInstance;
     rgwtTopicService = TestBed.inject(RgwTopicService);

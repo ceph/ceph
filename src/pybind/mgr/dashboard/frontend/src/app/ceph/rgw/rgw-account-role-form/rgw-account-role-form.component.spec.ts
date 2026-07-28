@@ -6,17 +6,18 @@ import { ReactiveFormsModule } from '@angular/forms';
 
 import { RgwAccountRoleFormComponent } from './rgw-account-role-form.component';
 import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('RgwAccountRoleFormComponent', () => {
   let component: RgwAccountRoleFormComponent;
   let fixture: ComponentFixture<RgwAccountRoleFormComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule, RouterTestingModule, SharedModule, ReactiveFormsModule],
-      declarations: [RgwAccountRoleFormComponent]
-    }).compileComponents();
+  configureTestBed({
+    imports: [HttpClientTestingModule, RouterTestingModule, SharedModule, ReactiveFormsModule],
+    declarations: [RgwAccountRoleFormComponent]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(RgwAccountRoleFormComponent);
     component = fixture.componentInstance;
     component.accountId = 'test-account';

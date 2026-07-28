@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { expect as jestExpect } from '@jest/globals';
@@ -11,11 +12,11 @@ describe('CertificateAuthorityFormComponent', () => {
   let fixture: ComponentFixture<CertificateAuthorityFormComponent>;
   let formBuilder: CdFormBuilder;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [ReactiveFormsModule, CertificateAuthorityFormComponent]
-    }).compileComponents();
+  configureTestBed({
+    imports: [ReactiveFormsModule, CertificateAuthorityFormComponent]
+  });
 
+  beforeEach(async () => {
     formBuilder = new CdFormBuilder();
     fixture = TestBed.createComponent(CertificateAuthorityFormComponent);
     component = fixture.componentInstance;

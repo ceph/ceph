@@ -107,7 +107,7 @@ describe('OsdListComponent', () => {
       RouterTestingModule
     ],
     providers: [
-      { provide: AuthStorageService, useValue: fakeAuthStorageService },
+      { provide: AuthStorageService, useFactory: () => fakeAuthStorageService },
       TableActionsComponent,
       ModalService
     ]

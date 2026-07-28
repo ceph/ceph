@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { SetupStepCardComponent } from './setup-step-card.component';
@@ -11,11 +12,11 @@ describe('SetupStepCardComponent', () => {
   const SUCCESS_MESSAGE = 'Example configured successfully.';
   const INFO_MESSAGE = 'Example not configured yet.';
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [SetupStepCardComponent]
-    }).compileComponents();
+  configureTestBed({
+    imports: [SetupStepCardComponent]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(SetupStepCardComponent);
     component = fixture.componentInstance;
     component.stepNumber = 1;

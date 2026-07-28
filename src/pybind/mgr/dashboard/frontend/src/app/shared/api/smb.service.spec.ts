@@ -25,8 +25,9 @@ describe('SmbService', () => {
     imports: [SharedModule]
   });
 
+  configureTestBed({});
+
   beforeEach(() => {
-    TestBed.configureTestingModule({});
     service = TestBed.inject(SmbService);
     httpTesting = TestBed.inject(HttpTestingController);
     notificationShowSpy = spyOn(TestBed.inject(NotificationService), 'show');

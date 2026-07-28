@@ -49,7 +49,7 @@ describe('InventoryDevicesComponent', () => {
       RouterTestingModule
     ],
     providers: [
-      { provide: AuthStorageService, useValue: fakeAuthStorageService },
+      { provide: AuthStorageService, useFactory: () => fakeAuthStorageService },
       TableActionsComponent
     ],
     declarations: [InventoryDevicesComponent]

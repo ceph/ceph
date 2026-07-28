@@ -8,6 +8,7 @@ import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { NvmeofSubsystem } from '~/app/shared/models/nvmeof';
 
 import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('NvmeofGatewaySubsystemComponent', () => {
   let component: NvmeofGatewaySubsystemComponent;
@@ -50,38 +51,35 @@ describe('NvmeofGatewaySubsystemComponent', () => {
   const mockInitiators1 = [{ nqn: 'host1' }, { nqn: 'host2' }];
   const mockInitiators2 = [{ nqn: 'host3' }];
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [NvmeofGatewaySubsystemComponent],
-      imports: [HttpClientTestingModule, SharedModule],
-      providers: [
-        {
-          provide: NvmeofService,
-          useValue: {
-            listSubsystems: jest.fn(() => of(mockSubsystems)),
-            getInitiators: jest.fn((nqn) => {
-              if (nqn === 'nqn.2014-08.org.nvmexpress:uuid:1111') {
-                return of(mockInitiators1);
-              }
-              return of(mockInitiators2);
-            })
-          }
-        },
-        {
-          provide: ActivatedRoute,
-          useValue: {
-            parent: {
-              params: of({ group: 'group1' })
+  configureTestBed({
+    declarations: [NvmeofGatewaySubsystemComponent],
+    imports: [HttpClientTestingModule, SharedModule],
+    providers: [
+      {
+        provide: NvmeofService,
+        useValue: {
+          listSubsystems: jest.fn(() => of(mockSubsystems)),
+          getInitiators: jest.fn((nqn) => {
+            if (nqn === 'nqn.2014-08.org.nvmexpress:uuid:1111') {
+              return of(mockInitiators1);
             }
+            return of(mockInitiators2);
+          })
+        }
+      },
+      {
+        provide: ActivatedRoute,
+        useValue: {
+          parent: {
+            params: of({ group: 'group1' })
           }
         }
-      ]
-    }).compileComponents();
-
-    nvmeofService = TestBed.inject(NvmeofService);
+      }
+    ]
   });
 
   beforeEach(() => {
+    nvmeofService = TestBed.inject(NvmeofService);
     fixture = TestBed.createComponent(NvmeofGatewaySubsystemComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

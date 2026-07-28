@@ -4,6 +4,7 @@ import { of, throwError } from 'rxjs';
 
 import { NvmeofGatewayGroupFilterComponent } from './nvmeof-gateway-group-filter.component';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 const MOCK_GROUPS_RESPONSE = [
   [
@@ -15,35 +16,29 @@ const MOCK_GROUPS_RESPONSE = [
 describe('NvmeofGatewayGroupFilterComponent', () => {
   let fixture: ComponentFixture<NvmeofGatewayGroupFilterComponent>;
   let component: NvmeofGatewayGroupFilterComponent;
-  let nvmeofService: Partial<NvmeofService>;
-  let routerSpy: Partial<Router>;
-  let activatedRoute: Partial<ActivatedRoute>;
+  let nvmeofService: Partial<NvmeofService> = {
+    listGatewayGroups: jest.fn().mockReturnValue(of(MOCK_GROUPS_RESPONSE)),
+    formatGwGroupsList: jest.fn().mockReturnValue([{ content: 'grp1' }, { content: 'grp2' }])
+  };
+  let routerSpy: Partial<Router> = {
+    navigate: jest.fn().mockResolvedValue(true)
+  };
+  let activatedRoute: Partial<ActivatedRoute> = {
+    snapshot: {
+      queryParams: {}
+    } as any
+  };
 
-  beforeEach(async () => {
-    nvmeofService = {
-      listGatewayGroups: jest.fn().mockReturnValue(of(MOCK_GROUPS_RESPONSE)),
-      formatGwGroupsList: jest.fn().mockReturnValue([{ content: 'grp1' }, { content: 'grp2' }])
-    };
+  configureTestBed({
+    imports: [NvmeofGatewayGroupFilterComponent],
+    providers: [
+      { provide: NvmeofService, useFactory: () => nvmeofService },
+      { provide: Router, useFactory: () => routerSpy },
+      { provide: ActivatedRoute, useFactory: () => activatedRoute }
+    ]
+  });
 
-    routerSpy = {
-      navigate: jest.fn().mockResolvedValue(true)
-    };
-
-    activatedRoute = {
-      snapshot: {
-        queryParams: {}
-      } as any
-    };
-
-    await TestBed.configureTestingModule({
-      imports: [NvmeofGatewayGroupFilterComponent],
-      providers: [
-        { provide: NvmeofService, useValue: nvmeofService },
-        { provide: Router, useValue: routerSpy },
-        { provide: ActivatedRoute, useValue: activatedRoute }
-      ]
-    }).compileComponents();
-
+  beforeEach(() => {
     fixture = TestBed.createComponent(NvmeofGatewayGroupFilterComponent);
     component = fixture.componentInstance;
   });

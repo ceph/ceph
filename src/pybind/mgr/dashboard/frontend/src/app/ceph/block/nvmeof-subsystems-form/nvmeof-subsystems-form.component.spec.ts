@@ -25,6 +25,7 @@ import { AUTHENTICATION, HOST_TYPE } from '~/app/shared/models/nvmeof';
 import { NvmeofSubsystemsStepTwoComponent } from './nvmeof-subsystem-step-2/nvmeof-subsystem-step-2.component';
 import { NvmeofSubsystemsStepFourComponent } from './nvmeof-subsystem-step-4/nvmeof-subsystem-step-4.component';
 import { of } from 'rxjs';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('NvmeofSubsystemsFormComponent', () => {
   let component: NvmeofSubsystemsFormComponent;
@@ -43,40 +44,40 @@ describe('NvmeofSubsystemsFormComponent', () => {
     authType: AUTHENTICATION.Bidirectional
   };
 
+  configureTestBed({
+    declarations: [
+      NvmeofSubsystemsFormComponent,
+      NvmeofSubsystemsStepOneComponent,
+      NvmeofSubsystemsStepThreeComponent,
+      NvmeofSubsystemsStepTwoComponent,
+      NvmeofSubsystemsStepFourComponent
+    ],
+    providers: [
+      NgbActiveModal,
+      {
+        provide: ActivatedRoute,
+        useValue: {
+          queryParams: of({ group: mockGroupName })
+        }
+      }
+    ],
+    imports: [
+      HttpClientTestingModule,
+      NgbTypeaheadModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      SharedModule,
+      InputModule,
+      GridModule,
+      RadioModule,
+      TagModule,
+      FileUploaderModule,
+      ComboBoxModule
+    ]
+  });
+
   beforeEach(async () => {
     spyOn(Date, 'now').and.returnValue(mockTimestamp);
-    await TestBed.configureTestingModule({
-      declarations: [
-        NvmeofSubsystemsFormComponent,
-        NvmeofSubsystemsStepOneComponent,
-        NvmeofSubsystemsStepThreeComponent,
-        NvmeofSubsystemsStepTwoComponent,
-        NvmeofSubsystemsStepFourComponent
-      ],
-      providers: [
-        NgbActiveModal,
-        {
-          provide: ActivatedRoute,
-          useValue: {
-            queryParams: of({ group: mockGroupName })
-          }
-        }
-      ],
-      imports: [
-        HttpClientTestingModule,
-        NgbTypeaheadModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        SharedModule,
-        InputModule,
-        GridModule,
-        RadioModule,
-        TagModule,
-        FileUploaderModule,
-        ComboBoxModule
-      ]
-    }).compileComponents();
-
     fixture = TestBed.createComponent(NvmeofSubsystemsFormComponent);
     component = fixture.componentInstance;
     component.ngOnInit();

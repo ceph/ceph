@@ -12,8 +12,9 @@ describe('DirectoryStoreService', () => {
     providers: [CephfsService]
   });
 
+  configureTestBed({});
+
   beforeEach(() => {
-    TestBed.configureTestingModule({});
     service = TestBed.inject(DirectoryStoreService);
   });
 

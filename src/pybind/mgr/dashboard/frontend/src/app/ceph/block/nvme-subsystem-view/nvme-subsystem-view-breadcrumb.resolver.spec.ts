@@ -6,7 +6,6 @@ describe('NvmeSubsystemViewBreadcrumbResolver', () => {
   let resolver: NvmeSubsystemViewBreadcrumbResolver;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({});
     resolver = TestBed.inject(NvmeSubsystemViewBreadcrumbResolver);
   });
 

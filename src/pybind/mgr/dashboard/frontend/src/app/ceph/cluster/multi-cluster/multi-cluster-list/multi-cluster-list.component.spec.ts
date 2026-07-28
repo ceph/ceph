@@ -7,18 +7,19 @@ import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { ActivatedRoute } from '@angular/router';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('MultiClusterListComponent', () => {
   let component: MultiClusterListComponent;
   let fixture: ComponentFixture<MultiClusterListComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule, NgbNavModule, SharedModule],
-      declarations: [MultiClusterListComponent],
-      providers: [CdDatePipe, TableActionsComponent, { provide: ActivatedRoute, useValue: {} }]
-    }).compileComponents();
+  configureTestBed({
+    imports: [HttpClientTestingModule, NgbNavModule, SharedModule],
+    declarations: [MultiClusterListComponent],
+    providers: [CdDatePipe, TableActionsComponent, { provide: ActivatedRoute, useValue: {} }]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(MultiClusterListComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

@@ -7,6 +7,7 @@ import { CephfsMirroringErrorComponent } from './cephfs-mirroring-error.componen
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { RouterTestingModule } from '@angular/router/testing';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('CephfsMirroringErrorComponent', () => {
   let component: CephfsMirroringErrorComponent;
@@ -23,18 +24,18 @@ describe('CephfsMirroringErrorComponent', () => {
     updateCompleted$: { subscribe: jest.fn().mockReturnValue({ unsubscribe: jest.fn() }) }
   };
 
+  configureTestBed({
+    declarations: [CephfsMirroringErrorComponent],
+    imports: [SharedModule, RouterTestingModule],
+    providers: [
+      { provide: Router, useFactory: () => routerMock },
+      { provide: MgrModuleService, useFactory: () => mgrModuleServiceMock }
+    ],
+    schemas: [NO_ERRORS_SCHEMA]
+  });
+
   beforeEach(async () => {
     jest.clearAllMocks();
-
-    await TestBed.configureTestingModule({
-      declarations: [CephfsMirroringErrorComponent],
-      imports: [SharedModule, RouterTestingModule],
-      providers: [
-        { provide: Router, useValue: routerMock },
-        { provide: MgrModuleService, useValue: mgrModuleServiceMock }
-      ],
-      schemas: [NO_ERRORS_SCHEMA]
-    }).compileComponents();
 
     fixture = TestBed.createComponent(CephfsMirroringErrorComponent);
     component = fixture.componentInstance;

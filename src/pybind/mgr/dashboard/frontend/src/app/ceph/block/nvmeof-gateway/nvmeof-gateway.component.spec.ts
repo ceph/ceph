@@ -9,34 +9,35 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { ComboBoxModule, GridModule, TabsModule } from 'carbon-components-angular';
 import { of } from 'rxjs';
 import { BreadcrumbService } from '~/app/shared/services/breadcrumb.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('NvmeofGatewayComponent', () => {
   let component: NvmeofGatewayComponent;
   let fixture: ComponentFixture<NvmeofGatewayComponent>;
   let breadcrumbService: BreadcrumbService;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [NvmeofGatewayComponent],
-      imports: [
-        HttpClientModule,
-        RouterTestingModule,
-        SharedModule,
-        ComboBoxModule,
-        GridModule,
-        TabsModule
-      ],
-      providers: [
-        BreadcrumbService,
-        {
-          provide: ActivatedRoute,
-          useValue: {
-            queryParams: of({})
-          }
+  configureTestBed({
+    declarations: [NvmeofGatewayComponent],
+    imports: [
+      HttpClientModule,
+      RouterTestingModule,
+      SharedModule,
+      ComboBoxModule,
+      GridModule,
+      TabsModule
+    ],
+    providers: [
+      BreadcrumbService,
+      {
+        provide: ActivatedRoute,
+        useValue: {
+          queryParams: of({})
         }
-      ]
-    }).compileComponents();
+      }
+    ]
+  });
 
+  beforeEach(() => {
     fixture = TestBed.createComponent(NvmeofGatewayComponent);
     component = fixture.componentInstance;
     breadcrumbService = TestBed.inject(BreadcrumbService);

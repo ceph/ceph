@@ -67,7 +67,7 @@ describe('HostsComponent', () => {
       TagModule
     ],
     providers: [
-      { provide: AuthStorageService, useValue: fakeAuthStorageService },
+      { provide: AuthStorageService, useFactory: () => fakeAuthStorageService },
       TableActionsComponent
     ]
   });

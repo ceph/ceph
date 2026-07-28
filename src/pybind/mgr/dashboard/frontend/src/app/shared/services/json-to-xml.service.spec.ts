@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { TestBed } from '@angular/core/testing';
 
 import { JsonToXmlService } from './json-to-xml.service';
@@ -5,8 +6,9 @@ import { JsonToXmlService } from './json-to-xml.service';
 describe('JsonToXmlService', () => {
   let service: JsonToXmlService;
 
+  configureTestBed({});
+
   beforeEach(() => {
-    TestBed.configureTestingModule({});
     service = TestBed.inject(JsonToXmlService);
   });
 

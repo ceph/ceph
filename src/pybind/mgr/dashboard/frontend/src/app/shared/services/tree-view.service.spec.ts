@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { TestBed } from '@angular/core/testing';
 
 import { TreeViewService } from './tree-view.service';
@@ -7,8 +8,9 @@ import _ from 'lodash';
 describe('TreeViewService', () => {
   let service: TreeViewService;
 
+  configureTestBed({});
+
   beforeEach(() => {
-    TestBed.configureTestingModule({});
     service = TestBed.inject(TreeViewService);
   });
 

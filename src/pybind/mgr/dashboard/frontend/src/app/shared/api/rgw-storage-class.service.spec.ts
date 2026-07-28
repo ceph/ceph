@@ -14,8 +14,9 @@ describe('RgwStorageClassService', () => {
     providers: [RgwStorageClassService],
     imports: [HttpClientTestingModule]
   });
+  configureTestBed({});
+
   beforeEach(() => {
-    TestBed.configureTestingModule({});
     service = TestBed.inject(RgwStorageClassService);
     httpTesting = TestBed.inject(HttpTestingController);
   });

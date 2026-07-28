@@ -11,29 +11,30 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 import { SharedModule } from '~/app/shared/shared.module';
 import { CheckboxModule, GridModule, InputModule, SelectModule } from 'carbon-components-angular';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('MultiClusterFormComponent', () => {
   let component: MultiClusterFormComponent;
   let fixture: ComponentFixture<MultiClusterFormComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [
-        SharedModule,
-        CommonModule,
-        FormsModule,
-        CheckboxModule,
-        GridModule,
-        ReactiveFormsModule,
-        InputModule,
-        SelectModule,
-        RouterTestingModule,
-        HttpClientTestingModule
-      ],
-      declarations: [MultiClusterFormComponent],
-      providers: [NgbActiveModal, NotificationService, CdDatePipe, DatePipe]
-    }).compileComponents();
+  configureTestBed({
+    imports: [
+      SharedModule,
+      CommonModule,
+      FormsModule,
+      CheckboxModule,
+      GridModule,
+      ReactiveFormsModule,
+      InputModule,
+      SelectModule,
+      RouterTestingModule,
+      HttpClientTestingModule
+    ],
+    declarations: [MultiClusterFormComponent],
+    providers: [NgbActiveModal, NotificationService, CdDatePipe, DatePipe]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(MultiClusterFormComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

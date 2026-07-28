@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed, waitForAsync } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -17,15 +17,20 @@ import {
   GROUP_NAME_TOKEN
 } from './nvmeof-edit-authentication.component';
 import { NvmeofSubsystemsStepThreeComponent } from '../nvmeof-subsystems-form/nvmeof-subsystem-step-3/nvmeof-subsystem-step-3.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('NvmeofEditAuthenticationComponent', () => {
   let component: NvmeofEditAuthenticationComponent;
   let fixture: ComponentFixture<NvmeofEditAuthenticationComponent>;
   let nvmeofService: jest.Mocked<
     Pick<NvmeofService, 'getInitiators' | 'getSubsystem' | 'updateAuthenticationKey'>
-  >;
-  let notificationService: { show: jest.Mock };
-  let modalService: { dismissAll: jest.Mock };
+  > = {
+    getInitiators: jest.fn().mockReturnValue(of([])),
+    getSubsystem: jest.fn().mockReturnValue(of({ has_dhchap_key: false })),
+    updateAuthenticationKey: jest.fn().mockReturnValue(of(undefined))
+  };
+  let notificationService: { show: jest.Mock } = { show: jest.fn() };
+  let modalService: { dismissAll: jest.Mock } = { dismissAll: jest.fn() };
 
   const mockSubsystemNQN = 'nqn.2014-08.org.nvmexpress:uuid:f81d4fae-7dec-11d0-a765-00a0c91e6bf6';
   const mockGroupName = 'default';
@@ -35,41 +40,31 @@ describe('NvmeofEditAuthenticationComponent', () => {
   ];
   const mockHostsWithKey = [{ nqn: 'nqn.2014-08.org.nvmexpress:uuid:host-1', use_dhchap: true }];
 
-  beforeEach(waitForAsync(() => {
-    nvmeofService = {
-      getInitiators: jest.fn().mockReturnValue(of([])),
-      getSubsystem: jest.fn().mockReturnValue(of({ has_dhchap_key: false })),
-      updateAuthenticationKey: jest.fn().mockReturnValue(of(undefined))
-    };
-    notificationService = { show: jest.fn() };
-    modalService = { dismissAll: jest.fn() };
-
-    TestBed.configureTestingModule({
-      declarations: [NvmeofEditAuthenticationComponent, NvmeofSubsystemsStepThreeComponent],
-      imports: [
-        ReactiveFormsModule,
-        HttpClientTestingModule,
-        RouterTestingModule,
-        SharedModule,
-        GridModule,
-        InputModule,
-        RadioModule,
-        TagModule
-      ],
-      providers: [
-        { provide: NvmeofService, useValue: nvmeofService },
-        { provide: NotificationService, useValue: notificationService },
-        { provide: ModalCdsService, useValue: modalService },
-        { provide: SUBSYSTEM_NQN_TOKEN, useValue: mockSubsystemNQN },
-        { provide: GROUP_NAME_TOKEN, useValue: mockGroupName }
-      ]
-    }).compileComponents();
-  }));
+  configureTestBed({
+    declarations: [NvmeofEditAuthenticationComponent, NvmeofSubsystemsStepThreeComponent],
+    imports: [
+      ReactiveFormsModule,
+      HttpClientTestingModule,
+      RouterTestingModule,
+      SharedModule,
+      GridModule,
+      InputModule,
+      RadioModule,
+      TagModule
+    ],
+    providers: [
+      { provide: NvmeofService, useFactory: () => nvmeofService },
+      { provide: NotificationService, useFactory: () => notificationService },
+      { provide: ModalCdsService, useFactory: () => modalService },
+      { provide: SUBSYSTEM_NQN_TOKEN, useFactory: () => mockSubsystemNQN },
+      { provide: GROUP_NAME_TOKEN, useFactory: () => mockGroupName }
+    ]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(NvmeofEditAuthenticationComponent);
     component = fixture.componentInstance;
-    fixture.detectChanges(); // runs ngOnInit + ngAfterViewInit
+    fixture.detectChanges();
   });
 
   it('should create', () => {
@@ -115,6 +110,7 @@ describe('NvmeofEditAuthenticationComponent', () => {
       nvmeofService.getSubsystem.mockReturnValue(of({ has_dhchap_key: true }));
       nvmeofService.getInitiators.mockReturnValue(of(mockHostsWithKey));
       component.ngOnInit();
+      fixture.detectChanges();
       expect(component.initialAuthType).toBe(AUTHENTICATION.Bidirectional);
       component.authStep.initialAuthType = component.initialAuthType;
       expect(component.authStep.formGroup.get('authType')?.value).toBe(
@@ -126,6 +122,7 @@ describe('NvmeofEditAuthenticationComponent', () => {
       nvmeofService.getSubsystem.mockReturnValue(of({ has_dhchap_key: false }));
       nvmeofService.getInitiators.mockReturnValue(of(mockHostsWithKey));
       component.ngOnInit();
+      fixture.detectChanges();
       expect(component.initialAuthType).toBe(AUTHENTICATION.Unidirectional);
       expect(component.authStep.formGroup.get('authType')?.value).toBe(
         AUTHENTICATION.Unidirectional
@@ -168,6 +165,14 @@ describe('NvmeofEditAuthenticationComponent', () => {
   });
 
   describe('onSubmit', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      nvmeofService.updateAuthenticationKey.mockReturnValue(of(undefined));
+      fixture = TestBed.createComponent(NvmeofEditAuthenticationComponent);
+      component = fixture.componentInstance;
+      fixture.detectChanges();
+    });
+
     it('should not call updateAuthenticationKey when form is invalid', () => {
       const form = component.authStep?.formGroup;
       if (form) {
@@ -231,7 +236,7 @@ describe('NvmeofEditAuthenticationComponent', () => {
       component.onSubmit();
     });
 
-    it('should mark form with submission error on API failure', (done) => {
+    it('should mark form with submission error on API failure', fakeAsync(() => {
       const form = component.authStep?.formGroup;
       form?.get('authType')?.setValue(AUTHENTICATION.Unidirectional);
       nvmeofService.updateAuthenticationKey.mockReturnValue(
@@ -239,15 +244,16 @@ describe('NvmeofEditAuthenticationComponent', () => {
       );
 
       component.onSubmit();
+      tick();
+      fixture.detectChanges();
 
       setTimeout(() => {
         expect(component.isSubmitLoading).toBe(false);
         expect(form?.hasError('cdSubmitButton')).toBe(true);
         expect(notificationService.show).not.toHaveBeenCalled();
         expect(modalService.dismissAll).not.toHaveBeenCalled();
-        done();
       }, 0);
-    });
+    }));
 
     it('should clear isSubmitLoading after error', (done) => {
       const form = component.authStep?.formGroup;

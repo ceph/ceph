@@ -26,7 +26,7 @@ describe('NotificationsComponent', () => {
   configureTestBed({
     imports: [HttpClientTestingModule],
     declarations: [NotificationsComponent],
-    providers: [{ provide: NotificationService, useValue: notificationServiceMock }],
+    providers: [{ provide: NotificationService, useFactory: () => notificationServiceMock }],
     schemas: [CUSTOM_ELEMENTS_SCHEMA]
   });
 

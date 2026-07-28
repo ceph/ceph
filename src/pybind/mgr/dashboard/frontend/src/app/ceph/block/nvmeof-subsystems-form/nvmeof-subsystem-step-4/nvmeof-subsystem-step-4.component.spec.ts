@@ -9,24 +9,25 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { NvmeofSubsystemsStepFourComponent } from './nvmeof-subsystem-step-4.component';
 import { GridModule } from 'carbon-components-angular';
 import { AUTHENTICATION, HOST_TYPE } from '~/app/shared/models/nvmeof';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('NvmeofSubsystemsStepFourComponent', () => {
   let component: NvmeofSubsystemsStepFourComponent;
   let fixture: ComponentFixture<NvmeofSubsystemsStepFourComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [NvmeofSubsystemsStepFourComponent],
-      providers: [NgbActiveModal],
-      imports: [
-        HttpClientTestingModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        SharedModule,
-        GridModule
-      ]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [NvmeofSubsystemsStepFourComponent],
+    providers: [NgbActiveModal],
+    imports: [
+      HttpClientTestingModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      SharedModule,
+      GridModule
+    ]
+  });
 
+  beforeEach(() => {
     fixture = TestBed.createComponent(NvmeofSubsystemsStepFourComponent);
     component = fixture.componentInstance;
     component.group = 'default';

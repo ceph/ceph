@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CUSTOM_ELEMENTS_SCHEMA, SimpleChange } from '@angular/core';
 import { DatePipe } from '@angular/common';
@@ -22,30 +23,33 @@ describe('AreaChartComponent', () => {
     }
   ];
 
+  const numberFormatterMock = {
+    formatFromTo: jest.fn().mockReturnValue('1.00'),
+    bytesPerSecondLabels: [
+      'B/s',
+      'KiB/s',
+      'MiB/s',
+      'GiB/s',
+      'TiB/s',
+      'PiB/s',
+      'EiB/s',
+      'ZiB/s',
+      'YiB/s'
+    ],
+    bytesLabels: ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'YiB'],
+    unitlessLabels: ['', 'k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y']
+  };
+
+  configureTestBed({
+    imports: [ChartsModule, AreaChartComponent],
+    providers: [
+      DatePipe,
+      { provide: NumberFormatterService, useFactory: () => numberFormatterMock }
+    ],
+    schemas: [CUSTOM_ELEMENTS_SCHEMA]
+  });
+
   beforeEach(async () => {
-    const numberFormatterMock = {
-      formatFromTo: jest.fn().mockReturnValue('1.00'),
-      bytesPerSecondLabels: [
-        'B/s',
-        'KiB/s',
-        'MiB/s',
-        'GiB/s',
-        'TiB/s',
-        'PiB/s',
-        'EiB/s',
-        'ZiB/s',
-        'YiB/s'
-      ],
-      bytesLabels: ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'YiB'],
-      unitlessLabels: ['', 'k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y']
-    };
-
-    await TestBed.configureTestingModule({
-      imports: [ChartsModule, AreaChartComponent],
-      providers: [DatePipe, { provide: NumberFormatterService, useValue: numberFormatterMock }],
-      schemas: [CUSTOM_ELEMENTS_SCHEMA]
-    }).compileComponents();
-
     fixture = TestBed.createComponent(AreaChartComponent);
     component = fixture.componentInstance;
     numberFormatterService = TestBed.inject(NumberFormatterService);

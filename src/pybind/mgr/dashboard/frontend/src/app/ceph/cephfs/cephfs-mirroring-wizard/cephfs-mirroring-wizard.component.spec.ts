@@ -12,40 +12,36 @@ import {
 import { WizardStepModel } from '~/app/shared/models/wizard-steps';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { RadioModule } from 'carbon-components-angular';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('CephfsMirroringWizardComponent', () => {
-  let component: CephfsMirroringWizardComponent;
-  let fixture: ComponentFixture<CephfsMirroringWizardComponent>;
-  let wizardStepsService: jest.Mocked<WizardStepsService>;
-  let router: jest.Mocked<Router>;
-
   const mockSteps: WizardStepModel[] = [
     { stepIndex: 0, isComplete: false },
     { stepIndex: 1, isComplete: false }
   ];
+  let component: CephfsMirroringWizardComponent;
+  let fixture: ComponentFixture<CephfsMirroringWizardComponent>;
+  let wizardStepsService: jest.Mocked<WizardStepsService> = {
+    setTotalSteps: jest.fn(),
+    setCurrentStep: jest.fn(),
+    steps$: new BehaviorSubject<WizardStepModel[]>(mockSteps)
+  } as unknown as jest.Mocked<WizardStepsService>;
+  let router: jest.Mocked<Router> = {
+    navigate: jest.fn()
+  } as unknown as jest.Mocked<Router>;
 
-  beforeEach(async () => {
-    wizardStepsService = {
-      setTotalSteps: jest.fn(),
-      setCurrentStep: jest.fn(),
-      steps$: new BehaviorSubject<WizardStepModel[]>(mockSteps)
-    } as unknown as jest.Mocked<WizardStepsService>;
+  configureTestBed({
+    imports: [ReactiveFormsModule, RadioModule],
+    declarations: [CephfsMirroringWizardComponent],
+    providers: [
+      FormBuilder,
+      { provide: WizardStepsService, useFactory: () => wizardStepsService },
+      { provide: Router, useFactory: () => router }
+    ],
+    schemas: [NO_ERRORS_SCHEMA]
+  });
 
-    router = {
-      navigate: jest.fn()
-    } as unknown as jest.Mocked<Router>;
-
-    await TestBed.configureTestingModule({
-      imports: [ReactiveFormsModule, RadioModule],
-      declarations: [CephfsMirroringWizardComponent],
-      providers: [
-        FormBuilder,
-        { provide: WizardStepsService, useValue: wizardStepsService },
-        { provide: Router, useValue: router }
-      ],
-      schemas: [NO_ERRORS_SCHEMA]
-    }).compileComponents();
-
+  beforeEach(() => {
     fixture = TestBed.createComponent(CephfsMirroringWizardComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

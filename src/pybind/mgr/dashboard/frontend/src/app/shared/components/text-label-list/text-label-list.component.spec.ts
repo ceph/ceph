@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { TextLabelListComponent } from './text-label-list.component';
 import { By } from '@angular/platform-browser';
@@ -6,11 +7,11 @@ describe('TextLabelListComponent', () => {
   let component: TextLabelListComponent;
   let fixture: ComponentFixture<TextLabelListComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [TextLabelListComponent]
-    }).compileComponents();
+  configureTestBed({
+    imports: [TextLabelListComponent]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(TextLabelListComponent);
     component = fixture.componentInstance;
     component.registerOnChange(jasmine.createSpy('onChange'));

@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RgwMultisiteSyncFlowModalComponent } from './rgw-multisite-sync-flow-modal.component';
 
@@ -24,31 +25,31 @@ describe('RgwMultisiteSyncFlowModalComponent', () => {
   let fixture: ComponentFixture<RgwMultisiteSyncFlowModalComponent>;
   let multisiteServiceMock: MultisiteServiceMock;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [RgwMultisiteSyncFlowModalComponent],
-      imports: [
-        HttpClientTestingModule,
-        PipesModule,
-        ReactiveFormsModule,
-        CommonModule,
-        SelectModule,
-        ModalModule,
-        ComboBoxModule
-      ],
-      schemas: [NO_ERRORS_SCHEMA, CUSTOM_ELEMENTS_SCHEMA],
-      providers: [
-        { provide: RgwMultisiteService, useClass: MultisiteServiceMock },
-        { provide: 'groupType', useValue: FlowType.symmetrical },
-        { provide: 'groupExpandedRow', useValue: { groupName: 'new', bucket: 'bucket1' } },
-        {
-          provide: 'flowSelectedRow',
-          useValue: { id: 'symmetrical', zones: ['zone1-zg1-realm1'] }
-        },
-        { provide: 'action', useValue: 'create' }
-      ]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [RgwMultisiteSyncFlowModalComponent],
+    imports: [
+      HttpClientTestingModule,
+      PipesModule,
+      ReactiveFormsModule,
+      CommonModule,
+      SelectModule,
+      ModalModule,
+      ComboBoxModule
+    ],
+    schemas: [NO_ERRORS_SCHEMA, CUSTOM_ELEMENTS_SCHEMA],
+    providers: [
+      { provide: RgwMultisiteService, useClass: MultisiteServiceMock },
+      { provide: 'groupType', useValue: FlowType.symmetrical },
+      { provide: 'groupExpandedRow', useValue: { groupName: 'new', bucket: 'bucket1' } },
+      {
+        provide: 'flowSelectedRow',
+        useValue: { id: 'symmetrical', zones: ['zone1-zg1-realm1'] }
+      },
+      { provide: 'action', useValue: 'create' }
+    ]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(RgwMultisiteSyncFlowModalComponent);
     multisiteServiceMock = TestBed.inject(RgwMultisiteService) as unknown as MultisiteServiceMock;
     component = fixture.componentInstance;

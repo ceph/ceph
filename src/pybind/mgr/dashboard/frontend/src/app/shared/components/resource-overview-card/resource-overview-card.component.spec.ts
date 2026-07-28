@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { beforeEach, describe, expect, it } from '@jest/globals';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
@@ -10,13 +11,13 @@ describe('OverviewComponent', () => {
   let component: OverviewComponent;
   let fixture: ComponentFixture<OverviewComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [OverviewComponent],
-      imports: [PipesModule],
-      schemas: [NO_ERRORS_SCHEMA]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [OverviewComponent],
+    imports: [PipesModule],
+    schemas: [NO_ERRORS_SCHEMA]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(OverviewComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

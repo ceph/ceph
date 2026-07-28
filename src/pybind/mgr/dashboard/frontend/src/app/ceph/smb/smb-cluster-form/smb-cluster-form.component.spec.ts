@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { SmbClusterFormComponent } from './smb-cluster-form.component';
@@ -17,22 +18,22 @@ describe('SmbClusterFormComponent', () => {
   let component: SmbClusterFormComponent;
   let fixture: ComponentFixture<SmbClusterFormComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [
-        BrowserAnimationsModule,
-        SharedModule,
-        HttpClientTestingModule,
-        RouterTestingModule,
-        ReactiveFormsModule,
-        GridModule,
-        InputModule,
-        SelectModule,
-        ComboBoxModule
-      ],
-      declarations: [SmbClusterFormComponent]
-    }).compileComponents();
+  configureTestBed({
+    imports: [
+      BrowserAnimationsModule,
+      SharedModule,
+      HttpClientTestingModule,
+      RouterTestingModule,
+      ReactiveFormsModule,
+      GridModule,
+      InputModule,
+      SelectModule,
+      ComboBoxModule
+    ],
+    declarations: [SmbClusterFormComponent]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(SmbClusterFormComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

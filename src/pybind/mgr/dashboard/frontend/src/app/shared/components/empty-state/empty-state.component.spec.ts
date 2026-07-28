@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { EmptyStateComponent } from './empty-state.component';
@@ -7,11 +8,11 @@ describe('ProductiveCardComponent', () => {
   let component: EmptyStateComponent;
   let fixture: ComponentFixture<EmptyStateComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [EmptyStateComponent, GridModule, LayerModule, TilesModule]
-    }).compileComponents();
+  configureTestBed({
+    imports: [EmptyStateComponent, GridModule, LayerModule, TilesModule]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(EmptyStateComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

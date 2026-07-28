@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NotificationPanelComponent } from './notification-panel.component';
 
@@ -5,10 +6,8 @@ describe('NotificationPanelComponent', () => {
   let component: NotificationPanelComponent;
   let fixture: ComponentFixture<NotificationPanelComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [NotificationPanelComponent]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [NotificationPanelComponent]
   });
 
   beforeEach(() => {

@@ -11,8 +11,9 @@ describe('CephfsSubvolumeGroupService', () => {
     providers: [CephfsSubvolumeGroupService]
   });
 
+  configureTestBed({});
+
   beforeEach(() => {
-    TestBed.configureTestingModule({});
     service = TestBed.inject(CephfsSubvolumeGroupService);
   });
 

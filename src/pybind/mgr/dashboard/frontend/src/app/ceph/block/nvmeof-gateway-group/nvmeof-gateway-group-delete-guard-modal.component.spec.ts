@@ -3,25 +3,24 @@ import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { NvmeofGatewayGroupDeleteGuardModalComponent } from './nvmeof-gateway-group-delete-guard-modal.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('NvmeofGatewayGroupDeleteGuardModalComponent', () => {
   let component: NvmeofGatewayGroupDeleteGuardModalComponent;
   let fixture: ComponentFixture<NvmeofGatewayGroupDeleteGuardModalComponent>;
   let router: Router;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [RouterTestingModule],
-      declarations: [NvmeofGatewayGroupDeleteGuardModalComponent],
-      providers: [
-        { provide: 'gatewayName', useValue: 'gateway-dev' },
-        {
-          provide: 'connectedSubsystems',
-          useValue: [{ nqn: 'subsystem-1' }, { nqn: 'subsystem-2' }]
-        }
-      ],
-      schemas: [NO_ERRORS_SCHEMA]
-    }).compileComponents();
+  configureTestBed({
+    imports: [RouterTestingModule],
+    declarations: [NvmeofGatewayGroupDeleteGuardModalComponent],
+    providers: [
+      { provide: 'gatewayName', useValue: 'gateway-dev' },
+      {
+        provide: 'connectedSubsystems',
+        useValue: [{ nqn: 'subsystem-1' }, { nqn: 'subsystem-2' }]
+      }
+    ],
+    schemas: [NO_ERRORS_SCHEMA]
   });
 
   beforeEach(() => {

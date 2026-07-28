@@ -9,7 +9,7 @@ import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SharedModule } from '~/app/shared/shared.module';
 import { NvmeofNamespacesFormComponent } from './nvmeof-namespaces-form.component';
-import { FormHelper, Mocks } from '~/testing/unit-test-helper';
+import { configureTestBed, FormHelper, Mocks } from '~/testing/unit-test-helper';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { RbdService } from '~/app/shared/api/rbd.service';
@@ -106,38 +106,36 @@ describe('NvmeofNamespacesFormComponent', () => {
   let router: Router;
   let form: CdFormGroup;
   let formHelper: FormHelper;
-  let activatedRouteStub: ActivatedRouteStub;
   const MOCK_RANDOM_STRING = 1720693470789;
   const MOCK_SUBSYSTEM = 'nqn.2021-11.com.example:subsystem';
   const MOCK_GROUP = 'default';
   const MOCK_NSID = String(MOCK_NS_RESPONSE['nsid']);
+  let activatedRouteStub: ActivatedRouteStub = new ActivatedRouteStub(
+    { subsystem_nqn: MOCK_SUBSYSTEM, nsid: MOCK_NSID },
+    { group: MOCK_GROUP }
+  );
 
-  beforeEach(async () => {
-    activatedRouteStub = new ActivatedRouteStub(
-      { subsystem_nqn: MOCK_SUBSYSTEM, nsid: MOCK_NSID },
-      { group: MOCK_GROUP }
-    );
-    await TestBed.configureTestingModule({
-      declarations: [NvmeofNamespacesFormComponent],
-      providers: [
-        NgbActiveModal,
-        { provide: PoolService, useClass: MockPoolsService },
-        { provide: ActivatedRoute, useValue: activatedRouteStub },
-        { provide: TaskWrapperService, useClass: MockTaskWrapperService }
-      ],
-      imports: [
-        HttpClientTestingModule,
-        NgbTypeaheadModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        SharedModule,
-        NumberModule,
-        RadioModule,
-        ComboBoxModule,
-        SelectModule
-      ]
-    }).compileComponents();
-
+  configureTestBed({
+    declarations: [NvmeofNamespacesFormComponent],
+    providers: [
+      NgbActiveModal,
+      { provide: PoolService, useClass: MockPoolsService },
+      { provide: ActivatedRoute, useFactory: () => activatedRouteStub },
+      { provide: TaskWrapperService, useClass: MockTaskWrapperService }
+    ],
+    imports: [
+      HttpClientTestingModule,
+      NgbTypeaheadModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      SharedModule,
+      NumberModule,
+      RadioModule,
+      ComboBoxModule,
+      SelectModule
+    ]
+  });
+  beforeEach(() => {
     fixture = TestBed.createComponent(NvmeofNamespacesFormComponent);
     component = fixture.componentInstance;
   });

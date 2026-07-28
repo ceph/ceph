@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
@@ -7,10 +8,11 @@ describe('RgwRoleService', () => {
   let service: RgwRoleService;
   let httpTesting: HttpTestingController;
 
+  configureTestBed({
+    imports: [HttpClientTestingModule]
+  });
+
   beforeEach(() => {
-    TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule]
-    });
     service = TestBed.inject(RgwRoleService);
     httpTesting = TestBed.inject(HttpTestingController);
   });

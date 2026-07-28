@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { TestBed } from '@angular/core/testing';
 
 import { ComboBoxService } from './combo-box.service';
@@ -5,8 +6,9 @@ import { ComboBoxService } from './combo-box.service';
 describe('ComboBoxService', () => {
   let service: ComboBoxService;
 
+  configureTestBed({});
+
   beforeEach(() => {
-    TestBed.configureTestingModule({});
     service = TestBed.inject(ComboBoxService);
   });
 

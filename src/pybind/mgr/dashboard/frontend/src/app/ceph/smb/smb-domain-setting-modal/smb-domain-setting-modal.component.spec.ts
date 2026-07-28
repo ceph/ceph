@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { SmbDomainSettingModalComponent } from './smb-domain-setting-modal.component';
@@ -17,23 +18,23 @@ describe('SmbDomainSettingModalComponent', () => {
   let component: SmbDomainSettingModalComponent;
   let fixture: ComponentFixture<SmbDomainSettingModalComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [SmbDomainSettingModalComponent],
-      imports: [
-        SharedModule,
-        ReactiveFormsModule,
-        HttpClientTestingModule,
-        RouterTestingModule,
-        NgbTypeaheadModule,
-        ModalModule,
-        InputModule,
-        SelectModule
-      ],
-      schemas: [NO_ERRORS_SCHEMA, CUSTOM_ELEMENTS_SCHEMA],
-      providers: [NgbActiveModal, { provide: 'domainSettingsObject', useValue: [[]] }]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [SmbDomainSettingModalComponent],
+    imports: [
+      SharedModule,
+      ReactiveFormsModule,
+      HttpClientTestingModule,
+      RouterTestingModule,
+      NgbTypeaheadModule,
+      ModalModule,
+      InputModule,
+      SelectModule
+    ],
+    schemas: [NO_ERRORS_SCHEMA, CUSTOM_ELEMENTS_SCHEMA],
+    providers: [NgbActiveModal, { provide: 'domainSettingsObject', useValue: [[]] }]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(SmbDomainSettingModalComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

@@ -9,7 +9,7 @@ import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SharedModule } from '~/app/shared/shared.module';
 import { NvmeofSubsystemsStepOneComponent } from './nvmeof-subsystem-step-1.component';
-import { FormHelper } from '~/testing/unit-test-helper';
+import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { ComboBoxModule, GridModule, InputModule, RadioModule } from 'carbon-components-angular';
 
@@ -25,23 +25,21 @@ describe('NvmeofSubsystemsStepOneComponent', () => {
   let formHelper: FormHelper;
   const mockGroupName = 'default';
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [NvmeofSubsystemsStepOneComponent],
-      imports: [
-        HttpClientTestingModule,
-        SharedModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        NgbTypeaheadModule,
-        InputModule,
-        GridModule,
-        ComboBoxModule,
-        RadioModule
-      ],
-      providers: [NgbActiveModal],
-      schemas: [NO_ERRORS_SCHEMA]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [NvmeofSubsystemsStepOneComponent],
+    imports: [
+      HttpClientTestingModule,
+      SharedModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      NgbTypeaheadModule,
+      InputModule,
+      GridModule,
+      ComboBoxModule,
+      RadioModule
+    ],
+    providers: [NgbActiveModal],
+    schemas: [NO_ERRORS_SCHEMA]
   });
 
   beforeEach(() => {

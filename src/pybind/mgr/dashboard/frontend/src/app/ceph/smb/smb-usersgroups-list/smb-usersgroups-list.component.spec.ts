@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { SmbUsersgroupsListComponent } from './smb-usersgroups-list.component';
@@ -10,12 +11,12 @@ describe('SmbUsersgroupsListComponent', () => {
   let component: SmbUsersgroupsListComponent;
   let fixture: ComponentFixture<SmbUsersgroupsListComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [SmbUsersgroupsListComponent],
-      imports: [SharedModule, HttpClientTestingModule, RouterTestingModule]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [SmbUsersgroupsListComponent],
+    imports: [SharedModule, HttpClientTestingModule, RouterTestingModule]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(SmbUsersgroupsListComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
