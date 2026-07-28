@@ -74,6 +74,7 @@ seastar::future<> CyanStore::determine_storage_shard_count()
       store_shard_nums++;
     }
   }
+  logger().info("CyanStore detected {} storage shards", store_shard_nums);
   if (store_shard_nums == 0) {
     // If no collections files found, assume the configurable
     store_shard_nums = crimson::common::local_conf()->seastore_mkfs_partition_count;
@@ -200,11 +201,19 @@ CyanStore::Shard::Shard(
   : path(path),
     store_shard_desc(store_shard_desc)
 {
+  logger().debug("CyanStore::Shard() on storage shard index={}, reactor={},"
+		 " local storage shard index within the same reactor={}",
+		 store_shard_desc.global_index(),
+		 seastar::this_shard_id(),
+		 store_shard_desc.local_index);
+  //ceph_assert(store_shard_desc.local_index == reactor_local_stores_num++);
   ceph_assert(store_shard_desc.local_index < max_local_store_num);
 }
 
 seastar::future<> CyanStore::Shard::mkfs()
 {
+  logger().debug("CyanStore::Shard::mkfs on storage shard index={}, reactor={}",
+		 store_shard_desc.global_index(), seastar::this_shard_id());
   std::string fn =
     path + "/collections" + std::to_string(store_shard_desc.global_index());
   ceph::bufferlist bl;
@@ -240,6 +249,8 @@ CyanStore::get_default_device_class()
 
 CyanStore::mount_ertr::future<> CyanStore::Shard::mount()
 {
+  logger().debug("CyanStore::Shard::mount on storage shard index={}, reactor={}",
+		 store_shard_desc.global_index(), seastar::this_shard_id());
   static const char read_file_errmsg[]{"read_file"};
   ceph::bufferlist bl;
   std::string fn =
