@@ -1936,13 +1936,18 @@ class AgentCache():
         return True
 
     def agent_config_successfully_delivered(self, daemon_spec: CephadmDaemonDeploySpec) -> None:
-        # agent successfully received new config. Update config/deps
-        assert daemon_spec.service_name == 'agent'
+        # agent successfully received new config (HTTP ACK or successful SSH
+        # deploy/reconfig). Only call this after confirmed delivery so
+        # last_deps tracks what the agent actually has.
+        assert daemon_spec.daemon_type == 'agent'
         self.update_agent_config_deps(
             daemon_spec.host, daemon_spec.deps, datetime_now())
         self.agent_timestamp[daemon_spec.host] = datetime_now()
         self.agent_counter[daemon_spec.host] = 1
         self.save_agent(daemon_spec.host)
+        self.mgr.log.debug(
+            f'Marked agent config delivered for {daemon_spec.host} '
+            f'(deps={daemon_spec.deps})')
 
 
 class EventStore():
