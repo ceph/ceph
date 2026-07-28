@@ -218,6 +218,9 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
     {txn_stage_t::THROTTLER_WAIT,        sm::label_instance("stage", "throttler_wait")},
     {txn_stage_t::BUILD,                 sm::label_instance("stage", "build")},
     {txn_stage_t::BUILD_GET_ONODE,       sm::label_instance("stage", "build_get_onode")},
+    {txn_stage_t::BUILD_UPDATE_ONODE_SIZE, sm::label_instance("stage", "build_update_onode_size")},
+    {txn_stage_t::BUILD_COPY_ON_WRITE,   sm::label_instance("stage", "build_copy_on_write")},
+    {txn_stage_t::BUILD_OBJ_WRITE,       sm::label_instance("stage", "build_obj_write")},
     {txn_stage_t::SUBMIT_TOTAL,          sm::label_instance("stage", "submit_total")},
     {txn_stage_t::SUBMIT_RESERVE,        sm::label_instance("stage", "submit_reserve")},
     {txn_stage_t::SUBMIT_OOL_WRITE,      sm::label_instance("stage", "submit_ool_write")},
@@ -1919,6 +1922,9 @@ seastar::future<> SeaStore::Shard::run_one_batch(
         {txn_stage_t::THROTTLER_WAIT,        throttler_wait},
         {txn_stage_t::BUILD,                 ctx.build_time},
         {txn_stage_t::BUILD_GET_ONODE,       ctx.get_onode_time},
+        {txn_stage_t::BUILD_UPDATE_ONODE_SIZE, ctx.update_onode_size_time},
+        {txn_stage_t::BUILD_COPY_ON_WRITE,   ctx.copy_on_write_time},
+        {txn_stage_t::BUILD_OBJ_WRITE,       ctx.obj_write_time},
         {txn_stage_t::SUBMIT_TOTAL,          ctx.submit_time},
         {txn_stage_t::SUBMIT_RESERVE,        pd.reserve},
         {txn_stage_t::SUBMIT_OOL_WRITE,      pd.ool_write},
@@ -2473,17 +2479,22 @@ SeaStore::Shard::_write(
   }
   const auto &object_size = onode.get_layout().size;
   if (offset + len > object_size) {
+    auto t0 = seastar::lowres_clock::now();
     onode.update_onode_size(
       *ctx.transaction,
       std::max<uint64_t>(offset + len, object_size));
+    ctx.update_onode_size_time += seastar::lowres_clock::now() - t0;
   }
   return seastar::do_with(
     std::move(_bl),
     ObjectDataHandler(max_object_size),
     [=, this, &ctx, &onode](auto &bl, auto &objhandler)
   {
+    auto cow_start = seastar::lowres_clock::now();
     return _maybe_copy_on_write(ctx, onode, objhandler
-    ).si_then([&ctx, &onode, &objhandler, offset, &bl, this] {
+    ).si_then([&ctx, &onode, &objhandler, offset, &bl, this, cow_start] {
+      ctx.copy_on_write_time += seastar::lowres_clock::now() - cow_start;
+      auto write_start = seastar::lowres_clock::now();
       return objhandler.write(
 	ObjectDataHandler::context_t{
 	  *transaction_manager,
@@ -2491,7 +2502,11 @@ SeaStore::Shard::_write(
 	  onode,
 	},
 	offset,
-	bl);
+	bl
+      ).si_then([&ctx, write_start] {
+	ctx.obj_write_time += seastar::lowres_clock::now() - write_start;
+	return ObjectDataHandler::write_iertr::now();
+      });
     });
   });
 }

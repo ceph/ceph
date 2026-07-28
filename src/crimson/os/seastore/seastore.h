@@ -52,6 +52,10 @@ enum class txn_stage_t : uint8_t {
     THROTTLER_WAIT = 0, // waiting for a throttler slot
     BUILD,             // building the transaction (_do_transaction_step loop)
     BUILD_GET_ONODE,   // onode_manager get/get_or_create calls within BUILD
+    // Sub-phases of BUILD within _write:
+    BUILD_UPDATE_ONODE_SIZE, // onode.update_onode_size on extending writes
+    BUILD_COPY_ON_WRITE,     // _maybe_copy_on_write
+    BUILD_OBJ_WRITE,         // ObjectDataHandler::write
     SUBMIT_TOTAL,      // the whole submit_transaction (pipeline + journal write)
     // Sub-phases of submit_transaction:
     SUBMIT_RESERVE,        // enter(reserve_projected_usage) + epm reserve_projected_usage
@@ -270,6 +274,9 @@ public:
 
       seastar::lowres_clock::duration build_time{0};
       seastar::lowres_clock::duration get_onode_time{0};
+      seastar::lowres_clock::duration update_onode_size_time{0};
+      seastar::lowres_clock::duration copy_on_write_time{0};
+      seastar::lowres_clock::duration obj_write_time{0};
       seastar::lowres_clock::duration submit_time{0};
 
       void reset_preserve_handle(TransactionManager &tm) {
