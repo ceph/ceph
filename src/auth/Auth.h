@@ -130,7 +130,18 @@ struct AuthConnectionMeta {
   bool is_mode_crc() const {
     return con_mode == CEPH_CON_MODE_CRC;
   }
+  // Is this connection confidential? Governs policy that cares only
+  // that the payload is encrypted (e.g. compression-vs-secure).
   bool is_mode_secure() const {
+    return con_mode == CEPH_CON_MODE_SECURE;
+  }
+  // Does *this process* encrypt each frame itself? Governs the data
+  // path: crypto_onwire handler setup and the MSG_ZEROCOPY exclusion
+  // (in-process AEAD already copies the payload, so there is no copy
+  // left to elide). Identical to is_mode_secure() today; the two are
+  // kept apart because a kernel-offloaded mode would be confidential
+  // without doing in-process AEAD, and only this one would flip.
+  bool is_mode_in_process_aead() const {
     return con_mode == CEPH_CON_MODE_SECURE;
   }
 

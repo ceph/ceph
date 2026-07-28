@@ -47,6 +47,28 @@ class ConnectedSocketImpl {
   virtual void close() = 0;
   virtual int fd() const = 0;
   virtual void set_priority(int sd, int prio, int domain) = 0;
+
+  // MSG_ZEROCOPY send support. The default implementations make
+  // this a no-op for stacks/paths that do not implement it (RDMA,
+  // DPDK, the Windows Posix path); only PosixConnectedSocketImpl
+  // overrides them.
+  struct zerocopy_drain {
+    uint64_t completed = 0;       // completion notifications retired
+    uint64_t fallback = 0;        // kernel degraded to a copy
+    uint64_t retired_bytes = 0;   // pinned bytes released
+  };
+  // Disable MSG_ZEROCOPY for this connection (e.g. secure mode).
+  virtual void set_zerocopy_eligible(bool) {}
+  // Payload bytes of the most recent send() pinned for MSG_ZEROCOPY
+  // (awaiting kernel completion) rather than copied.
+  virtual size_t last_send_zerocopy_bytes() const { return 0; }
+  // MSG_ZEROCOPY sendmsg() calls the most recent send() submitted.
+  virtual unsigned last_send_zerocopy_submitted() const { return 0; }
+  // Bytes / count still pinned awaiting kernel completion.
+  virtual uint64_t pinned_zerocopy_bytes() const { return 0; }
+  virtual unsigned pending_zerocopy_count() const { return 0; }
+  // Drain MSG_ERRQUEUE completions and retire pinned buffers.
+  virtual zerocopy_drain drain_zerocopy_completions() { return {}; }
 };
 
 class ConnectedSocket;
@@ -142,6 +164,27 @@ class ConnectedSocket {
     _csi->set_priority(sd, prio, domain);
   }
 
+  // MSG_ZEROCOPY forwards (safe when _csi is null).
+  void set_zerocopy_eligible(bool e) {
+    if (_csi) _csi->set_zerocopy_eligible(e);
+  }
+  size_t last_send_zerocopy_bytes() const {
+    return _csi ? _csi->last_send_zerocopy_bytes() : 0;
+  }
+  unsigned last_send_zerocopy_submitted() const {
+    return _csi ? _csi->last_send_zerocopy_submitted() : 0;
+  }
+  uint64_t pinned_zerocopy_bytes() const {
+    return _csi ? _csi->pinned_zerocopy_bytes() : 0;
+  }
+  unsigned pending_zerocopy_count() const {
+    return _csi ? _csi->pending_zerocopy_count() : 0;
+  }
+  ConnectedSocketImpl::zerocopy_drain drain_zerocopy_completions() {
+    return _csi ? _csi->drain_zerocopy_completions()
+                : ConnectedSocketImpl::zerocopy_drain{};
+  }
+
   explicit operator bool() const {
     return _csi.get();
   }
@@ -226,9 +269,9 @@ enum {
   l_msgr_send_encrypted_bytes,
 
   // copy / zero-copy accounting on the send path.
-  // _copied and _iov_segments are driven today (every send is a
-  // copying send); the zerocopy_* counters are registered here but
-  // stay zero until the MSG_ZEROCOPY send path lands.
+  // _copied and _iov_segments are driven by the copying send path;
+  // the zerocopy_* counters are driven at the socket event sites of
+  // the MSG_ZEROCOPY send path (PosixStack).
   l_msgr_send_bytes_copied,
   l_msgr_send_bytes_zerocopy,
   l_msgr_send_iov_segments,

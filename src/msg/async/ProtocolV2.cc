@@ -1344,6 +1344,16 @@ CtPtr ProtocolV2::ready() {
   {
     std::lock_guard<std::mutex> l(connection->write_lock);
     can_write = true;
+    // MSG_ZEROCOPY is pointless and adds pin-lifetime risk when the
+    // payload is already copied during in-process encryption
+    // (crypto_onwire): there is no copy left to elide. Exclude this
+    // connection once, here, where both client and server converge
+    // after auth. Keyed on in-process AEAD rather than "is secure" so
+    // that a future kernel-offloaded mode - confidential, but with
+    // the copy back on the table - is not excluded by accident.
+    if (auth_meta->is_mode_in_process_aead()) {
+      connection->cs.set_zerocopy_eligible(false);
+    }
     if (!out_queue.empty()) {
       connection->center->dispatch_event_external(connection->write_handler);
     }

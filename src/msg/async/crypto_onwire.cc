@@ -283,7 +283,9 @@ ceph::crypto::onwire::rxtx_t ceph::crypto::onwire::rxtx_t::create_handler_pair(
   bool new_nonce_format,
   bool crossed)
 {
-  if (auth_meta.is_mode_secure()) {
+  // In-process AEAD, not merely "confidential": a kernel-offloaded
+  // mode is confidential but installs no handler pair here.
+  if (auth_meta.is_mode_in_process_aead()) {
     ceph_assert_always(auth_meta.connection_secret.length() >= \
       sizeof(key_t) + 2 * sizeof(nonce_t));
     const char* secbuf = auth_meta.connection_secret.c_str();
