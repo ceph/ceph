@@ -736,6 +736,11 @@ public:
     Transaction &t,
     journal_seq_t seq,
     size_t max_bytes) final;
+  
+  std::optional<std::pair<lognode_deltas_t, size_t>> get_pending_lognode_delta_by_oid(
+    ghobject_t oid, bool force = false) {
+    return cache->get_pending_lognode_delta_by_oid(oid, force);
+  }
 
   using ExtentCallbackInterface::rewrite_extent_ret;
   rewrite_extent_ret rewrite_extent(

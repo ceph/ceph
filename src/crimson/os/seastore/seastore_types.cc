@@ -571,6 +571,26 @@ std::ostream& operator<<(std::ostream& out, const record_group_t& rg)
              << ")";
 }
 
+void lognode_delta_t::encode(ceph::buffer::list& bl) const {
+  ENCODE_START(1, 1, bl);
+  encode(op, bl);
+  encode(buffer, bl);
+  encode(oid, bl);
+  encode(committed_seq, bl);
+  encode(trans_id, bl);
+  ENCODE_FINISH(bl);
+}
+
+void lognode_delta_t::decode(ceph::buffer::list::const_iterator& p) {
+  DECODE_START(1, p);
+  decode(op, p);
+  decode(buffer, p);
+  decode(oid, p);
+  decode(committed_seq, p);
+  decode(trans_id, p);
+  DECODE_FINISH(p);
+}
+
 ceph::bufferlist encode_record(
   record_t&& record,
   extent_len_t block_size,

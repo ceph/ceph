@@ -73,6 +73,9 @@ public:
   omap_set_keys_ret omap_set_keys(omap_root_t &log_root,
     Transaction &t, std::map<std::string, ceph::bufferlist>&& _kvs) final;
 
+  omap_set_keys_ret _omap_set_keys(omap_root_t &log_root,
+    Transaction &t, std::map<std::string, ceph::bufferlist>&& _kvs);
+
   // see omap_set_keys
   omap_set_key_ret omap_set_key(
     omap_root_t &log_root,
@@ -133,6 +136,12 @@ public:
     Transaction &t,
     const std::string &first,
     const std::string &last) final;
+
+  omap_rm_key_range_ret _omap_rm_key_range(
+    omap_root_t &log_root,
+    Transaction &t,
+    const std::string &first,
+    const std::string &last);
 
   /**
    * omap_rm_key
@@ -342,6 +351,8 @@ public:
     Transaction &t, LogNodeRef tail,
     const std::string &key, const ceph::bufferlist &value);
 
+  omap_set_keys_ret merge_deltas(omap_root_t &log_root, Transaction &t,
+    lognode_deltas_t &deltas);
 
   TransactionManager &tm;
 };

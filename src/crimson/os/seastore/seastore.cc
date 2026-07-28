@@ -1869,6 +1869,9 @@ SeaStore::Shard::_do_transaction_step(
 	auto root = select_log_omap_root(*onode);
         DEBUGT("op OMAP_SETKEYS, oid={}, omap size={}, type={} ...",
                *ctx.transaction, oid, aset.size(), root.get_type());
+	if (root.get_type() == omap_type_t::LOG) {
+	  root.associated_oid = oid;
+	}
         return omaptree_set_keys(
           *ctx.transaction,
           std::move(root),
@@ -1890,6 +1893,9 @@ SeaStore::Shard::_do_transaction_step(
 	auto root = select_log_omap_root(*onode);
         DEBUGT("op OMAP_RMKEYS, oid={}, omap size={}, type={} ...",
                *ctx.transaction, oid, keys.size(), root.get_type());
+	if (root.get_type() == omap_type_t::LOG) {
+	  root.associated_oid = oid;
+	}
         return omaptree_rm_keys(
           *ctx.transaction,
           std::move(root),
@@ -1904,6 +1910,9 @@ SeaStore::Shard::_do_transaction_step(
 	auto root = select_log_omap_root(*onode);
         DEBUGT("op OMAP_RMKEYRANGE, oid={}, first={}, last={}, type={}...",
                *ctx.transaction, oid, first, last, root.get_type());
+	if (root.get_type() == omap_type_t::LOG) {
+	  root.associated_oid = oid;
+	}
         return omaptree_rm_keyrange(
           *ctx.transaction,
           std::move(root),

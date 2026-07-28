@@ -1018,6 +1018,10 @@ private:
   backref_entryrefs_by_seq_t backref_entryrefs_by_seq;
   backref_entry_mset_t backref_entry_mset;
 
+  std::map<journal_seq_t, std::vector<ghobject_t>> pending_lognode_deltas_by_seq;
+  std::map<ghobject_t, lognode_deltas_t> pending_lognode_deltas_by_oid;
+  std::map<ghobject_t, size_t> pending_lognode_deltas_by_oid_reserved;
+
   using backref_entry_query_mset_t = std::multiset<
       backref_entry_t, backref_entry_t::cmp_t>;
   backref_entry_query_mset_t get_backref_entries_in_range(
@@ -1497,6 +1501,53 @@ public:
     Transaction &t,
     journal_seq_t seq,
     size_t max_bytes);
+
+#define PENDING_MAX_NODE_DELTAS 18
+  std::optional<std::pair<lognode_deltas_t, size_t>> get_pending_lognode_delta_by_oid(
+    ghobject_t oid, bool force = false) {
+    LOG_PREFIX(Cache::get_pending_lognode_delta_by_oid);
+    auto oid_iter = pending_lognode_deltas_by_oid.find(oid);
+    if (oid_iter == pending_lognode_deltas_by_oid.end()) {
+      return std::nullopt;
+    }
+    if (oid_iter->second.size() < PENDING_MAX_NODE_DELTAS && force == false) {
+      return std::nullopt;
+    }
+    // If the transaction fails, reissue the conflicting transaction with reserved set to 1. 
+    // This causes it to be handled as a normal transaction, after which reserved is reset to 0
+    // in complete_commit
+    if (pending_lognode_deltas_by_oid_reserved[oid] >= 1) {
+      return std::nullopt;
+    }
+    lognode_deltas_t d;
+    bool prev_has_delete = false;
+    bool prev_has_insert = false;
+    size_t idx = 1, last_idx_to_delete = 0;
+    transaction_id_t prev_id = oid_iter->second.begin()->trans_id;
+    for (auto &p : oid_iter->second) {
+      if (prev_has_delete && p.op == lognode_delta_t::op_t::INSERT) {
+	break;
+      }
+      if (prev_has_insert && p.op == lognode_delta_t::op_t::DELETE &&
+	  prev_id < p.trans_id) {
+	break;
+      }
+      if (p.op == lognode_delta_t::op_t::DELETE) {
+	prev_has_delete = true;
+      }
+      if (p.op == lognode_delta_t::op_t::INSERT) {
+	prev_has_insert = true;
+      }
+      d.push_back(p);
+      last_idx_to_delete = idx++;
+      prev_id = p.trans_id;
+      SUBDEBUG(seastore_cache, "oid:{}, oid queue size:{}, tid:{}, commit_seq:{}", oid,
+	pending_lognode_deltas_by_oid[oid].size(),  p.trans_id, p.committed_seq);
+    }
+    ceph_assert(d.size() > 0);
+    pending_lognode_deltas_by_oid_reserved[oid] = 1;
+    return std::make_pair(std::move(d), last_idx_to_delete);
+  }
 
   /// returns std::nullopt if no pending alloc-infos
   std::optional<journal_seq_t> get_oldest_backref_dirty_from() const {

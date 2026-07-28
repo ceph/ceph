@@ -579,6 +579,7 @@ public:
     }
     get_handle().exit();
     views.clear();
+    lognode_deltas.clear();
   }
 
   bool did_reset() const {
@@ -687,6 +688,10 @@ public:
 
   cache_hint_t get_cache_hint() const {
     return cache_hint;
+  }
+
+  void add_lognode_delta(lognode_delta_t &&delta) {
+    lognode_deltas.emplace_back(std::move(delta));
   }
 
   btree_cursor_stats_t cursor_stats;
@@ -919,6 +924,8 @@ private:
   backref_entry_refs_t backref_entries;
 
   cache_hint_t cache_hint = CACHE_HINT_TOUCH;
+
+  lognode_deltas_t lognode_deltas;
 };
 using TransactionRef = Transaction::Ref;
 

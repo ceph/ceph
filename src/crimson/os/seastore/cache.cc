@@ -1775,6 +1775,41 @@ record_t Cache::prepare_record(
     record.push_back(std::move(delta));
   }
 
+  for (auto &b : t.lognode_deltas) {
+    bufferlist bl;
+    encode(b, bl);
+    delta_info_t delta;
+    delta.type = extent_types_t::LOG_NODE_INFO;
+    delta.bl = std::move(bl);
+    record.push_back(std::move(delta));
+
+    auto oid = b.oid;
+    DEBUGT("last_idx_to_delete:{} oid queue length:{}, oid:{}", t,
+      b.last_idx_to_delete, pending_lognode_deltas_by_oid[oid].size(), oid);
+    if (b.last_idx_to_delete > 0) {
+      auto &seqs_by_oid = pending_lognode_deltas_by_oid[oid];
+      ceph_assert(b.last_idx_to_delete <= seqs_by_oid.size());
+      std::optional<journal_seq_t> old_seq;
+      for (auto it = seqs_by_oid.begin();
+	   it != seqs_by_oid.begin() + b.last_idx_to_delete;
+	   ++it) {
+	const auto committed_seq = it->committed_seq;
+	if (!old_seq || *old_seq != committed_seq) {
+	  auto map_it = pending_lognode_deltas_by_seq.find(committed_seq);
+	  if (map_it != pending_lognode_deltas_by_seq.end()) {
+	    auto& oids = map_it->second;
+	    std::erase(oids, b.oid);
+	    if (oids.empty()) {
+	      pending_lognode_deltas_by_seq.erase(map_it);
+	    }
+	  }
+	  old_seq = committed_seq;
+	}
+      }
+      seqs_by_oid.erase(seqs_by_oid.begin(), seqs_by_oid.begin() + b.last_idx_to_delete);
+    }
+  }
+
   if (is_background_transaction(trans_src)) {
     assert(journal_head != JOURNAL_SEQ_NULL);
     assert(journal_dirty_tail != JOURNAL_SEQ_NULL);
@@ -2119,6 +2154,25 @@ void Cache::complete_commit(
     if (!i->is_valid()) {
       epm.mark_space_free(i->get_paddr(), i->get_length());
     }
+  }
+
+  if (t.lognode_deltas.size()) {
+    auto oid = t.lognode_deltas.begin()->oid;
+    for (auto &p : t.lognode_deltas) {
+      p.committed_seq = start_seq;
+      pending_lognode_deltas_by_seq[start_seq].push_back(oid);
+    }
+    // clear reserved
+    pending_lognode_deltas_by_oid_reserved[oid] = 0;
+    auto &seqs_by_oid = pending_lognode_deltas_by_oid[oid];
+    seqs_by_oid.insert(
+      seqs_by_oid.end(),
+      t.lognode_deltas.begin(),
+      t.lognode_deltas.end());   // copy
+    DEBUGT("lognode deltas start_seq:{}, oid:{}, oid queue length:{}, \
+      seq queue length {}", t, start_seq, t.lognode_deltas.begin()->oid, 
+      pending_lognode_deltas_by_oid[oid].size(),
+      pending_lognode_deltas_by_seq.size());
   }
 
   if (!can_drop_backref()) {
