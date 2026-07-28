@@ -62,6 +62,7 @@
 #include "rgw_bl_rados.h"
 #include "rgw_http_errors.h"
 #include "rgw_multipart_meta_filter.h"
+#include "rgw_user_ctl.h"
 
 #undef fork // fails to compile RGWPeriod::fork() below
 

@@ -58,7 +58,7 @@ extern "C" {
 
 #include "rgw/async_utils.h"
 
-#include "rgw_user.h"
+#include "rgw_user_ctl.h"
 #include "rgw_otp.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"

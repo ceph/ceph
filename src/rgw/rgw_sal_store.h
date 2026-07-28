@@ -16,6 +16,7 @@
 #pragma once
 
 #include "rgw_sal.h"
+#include "include/random.h"
 
 /**
  * @brief State for a StoreObject
@@ -275,7 +276,7 @@ class StoreBucket : public Bucket {
     }
     virtual void set_cache_request() override {};
 
-    friend class BucketList;
+    friend struct BucketList;
 };
 
 class StoreVectorBucket : public VectorBucket {

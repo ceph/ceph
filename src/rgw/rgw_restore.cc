@@ -36,9 +36,6 @@
 
 #include "fmt/format.h"
 
-#include "services/svc_sys_obj.h"
-#include "services/svc_zone.h"
-#include "services/svc_tier_rados.h"
 #include "common/ceph_time.h"
 
 #define dout_context g_ceph_context
