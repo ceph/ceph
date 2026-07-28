@@ -165,7 +165,7 @@ void C_WriteRequest<T>::finish_req(int r) {
     update_req_stats(now);
     return;
   }
-  pwl.release_write_lanes(this);
+  pwl.dispatch_deferred_writes();
   ceph_assert(m_resources.allocated);
   m_resources.allocated = false;
   this->release_cell(); /* TODO: Consider doing this in appending state */
@@ -214,7 +214,6 @@ void C_WriteRequest<T>::setup_log_operations(DeferredContexts &on_exit) {
                                  << "], op_set=" << op_set.get() << dendl;
     ceph_assert(m_resources.allocated);
     /* op_set->operations initialized differently for plain write or write same */
-    auto allocation = m_resources.buffers.begin();
     uint64_t buffer_offset = 0;
     for (auto &extent : this->image_extents) {
       /* operation->on_write_persist connected to m_prior_log_entries_persisted Gather */
@@ -229,11 +228,10 @@ void C_WriteRequest<T>::setup_log_operations(DeferredContexts &on_exit) {
       if (!op_set->persist_on_flush) {
         pwl.inc_last_op_sequence_num();
       }
-      operation->init(true, allocation, current_sync_gen,
+      operation->init(true, current_sync_gen,
                       pwl.get_last_op_sequence_num(), this->bl, buffer_offset, op_set->persist_on_flush);
       buffer_offset += operation->log_entry->write_bytes();
       ldout(pwl.get_context(), 20) << "operation=[" << *operation << "]" << dendl;
-      allocation++;
     }
   }
     /* All extent ops subs created */
@@ -241,11 +239,6 @@ void C_WriteRequest<T>::setup_log_operations(DeferredContexts &on_exit) {
   op_set->extent_ops_persist->activate();
 
   pwl.add_into_log_map(log_entries, this);
-}
-
-template <typename T>
-void C_WriteRequest<T>::copy_cache() {
-  pwl.copy_bl_to_buffer(&m_resources, op_set);
 }
 
 template <typename T>
@@ -271,10 +264,8 @@ void C_WriteRequest<T>::schedule_append() {
 /**
  * Attempts to allocate log resources for a write. Returns true if successful.
  *
- * Resources include 1 lane per extent, 1 log entry per extent, and the payload
- * data space for each extent.
- *
- * Lanes are released after the write persists via release_write_lanes()
+ * Resources include 1 log entry per extent, and the payload data space for
+ * each extent.
  */
 template <typename T>
 bool C_WriteRequest<T>::alloc_resources() {
@@ -379,8 +370,7 @@ void C_FlushRequest<T>::dispatch() {
 template <typename T>
 void C_FlushRequest<T>::setup_buffer_resources(
     uint64_t *bytes_cached, uint64_t *bytes_dirtied, uint64_t *bytes_allocated,
-    uint64_t *number_lanes, uint64_t *number_log_entries,
-    uint64_t *number_unpublished_reserves) {
+    uint64_t *number_log_entries) {
   *number_log_entries = 1;
 }
 
@@ -467,8 +457,7 @@ void C_DiscardRequest<T>::dispatch() {
 template <typename T>
 void C_DiscardRequest<T>::setup_buffer_resources(
     uint64_t *bytes_cached, uint64_t *bytes_dirtied, uint64_t *bytes_allocated,
-    uint64_t *number_lanes, uint64_t *number_log_entries,
-    uint64_t *number_unpublished_reserves) {
+    uint64_t *number_log_entries) {
   *number_log_entries = 1;
   /* No bytes are allocated for a discard, but we count the discarded bytes
    * as dirty.  This means it's possible to have more bytes dirty than

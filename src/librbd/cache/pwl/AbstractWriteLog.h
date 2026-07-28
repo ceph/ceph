@@ -120,7 +120,7 @@ public:
 
   CephContext * get_context();
   void release_guarded_request(BlockGuardCell *cell);
-  void release_write_lanes(C_BlockIORequestT *req);
+  void dispatch_deferred_writes(void);
   virtual bool alloc_resources(C_BlockIORequestT *req) = 0;
   virtual void setup_schedule_append(
       pwl::GenericLogOperationsVector &ops, bool do_early_flush,
@@ -146,18 +146,9 @@ public:
   uint64_t get_current_sync_gen() {
     return m_current_sync_gen;
   }
-  unsigned int get_free_lanes() {
-    return m_free_lanes;
-  }
-  uint32_t get_free_log_entries() {
-    return m_free_log_entries;
-  }
   void add_into_log_map(pwl::GenericWriteLogEntries &log_entries,
                         C_BlockIORequestT *req);
   virtual void complete_user_request(Context *&user_req, int r) = 0;
-  virtual void copy_bl_to_buffer(
-      WriteRequestResources *resources,
-      std::unique_ptr<WriteLogOperationSet> &op_set) {}
 
 private:
  typedef std::list<pwl::C_WriteRequest<This> *> C_WriteRequests;
@@ -209,8 +200,6 @@ private:
 
   /* Writes that have left the block guard, but are waiting for resources */
   C_BlockIORequests m_deferred_ios;
-  /* Throttle writes concurrently allocating & replicating */
-  unsigned int m_free_lanes = pwl::MAX_CONCURRENT_WRITES;
 
   SafeTimer *m_timer = nullptr; /* Used with m_timer_lock */
   mutable ceph::mutex *m_timer_lock = nullptr; /* Used with and by m_timer */
@@ -237,7 +226,7 @@ private:
 
   void flush_dirty_entries(Context *on_finish);
   bool can_flush_entry(const std::shared_ptr<pwl::GenericLogEntry> log_entry);
-  bool handle_flushed_sync_point(
+  void handle_flushed_sync_point(
       std::shared_ptr<pwl::SyncPointLogEntry> log_entry);
   void sync_point_writer_flushed(
       std::shared_ptr<pwl::SyncPointLogEntry> log_entry);
@@ -264,9 +253,6 @@ protected:
 
   std::string m_log_pool_name;
   uint64_t m_log_pool_size;
-
-  uint32_t m_total_log_entries = 0;
-  uint32_t m_free_log_entries = 0;
 
   std::atomic<uint64_t> m_bytes_allocated = {0}; /* Total bytes allocated in write buffers */
   uint64_t m_bytes_cached = 0;    /* Total bytes used in write buffers */
@@ -324,8 +310,6 @@ protected:
 
   PerfCounters *m_perfcounter = nullptr;
 
-  unsigned int m_unpublished_reserves = 0;
-
   ContextWQ m_work_queue;
 
   void wake_up();
@@ -351,13 +335,11 @@ protected:
   void process_writeback_dirty_entries();
   bool can_retire_entry(const std::shared_ptr<pwl::GenericLogEntry> log_entry);
 
-  void dispatch_deferred_writes(void);
   void complete_op_log_entries(pwl::GenericLogOperations &&ops, const int r);
 
   bool check_allocation(
       C_BlockIORequestT *req, uint64_t bytes_cached, uint64_t bytes_dirtied,
-      uint64_t bytes_allocated, uint32_t num_lanes, uint32_t num_log_entries,
-      uint32_t num_unpublished_reserves);
+      uint64_t bytes_allocated);
   void append_scheduled(
       pwl::GenericLogOperations &ops, bool &ops_remain, bool &appending);
 
@@ -375,26 +357,15 @@ protected:
   virtual void complete_read(
       std::vector<std::shared_ptr<GenericWriteLogEntry>> &log_entries_to_read,
       std::vector<bufferlist*> &bls_to_read, Context *ctx) = 0;
-  virtual void write_data_to_buffer(
-      std::shared_ptr<pwl::WriteLogEntry> ws_entry,
-      pwl::WriteLogCacheEntry *cache_entry) {}
   virtual void release_ram(
       const std::shared_ptr<pwl::GenericLogEntry> log_entry) {}
   virtual void alloc_op_log_entries(pwl::GenericLogOperations &ops) {}
   virtual bool retire_entries(const unsigned long int frees_per_tx) {
     return false;
   }
-  virtual void schedule_flush_and_append(
-      pwl::GenericLogOperationsVector &ops) {}
-  virtual void persist_last_flushed_sync_gen() {}
-  virtual void reserve_cache(C_BlockIORequestT *req, bool &alloc_succeeds,
-                             bool &no_space) {}
   virtual void construct_flush_entries(pwl::GenericLogEntries entries_to_flush,
 					DeferredContexts &post_unlock,
 					bool has_write_entry) = 0;
-  virtual uint64_t get_max_extent() {
-    return 0;
-  }
   void update_image_cache_state(void);
   void write_image_cache_state(std::unique_lock<ceph::mutex>& locker);
   void handle_write_image_cache_state(int r);
