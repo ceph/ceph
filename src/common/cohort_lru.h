@@ -87,7 +87,10 @@ namespace cohort {
 
     public:
 
-      Object() : lru_refcnt(0) {}
+      Object() : lru_refcnt(0) {
+	active.clear();
+	evicting.clear();
+      }
 
       uint32_t get_refcnt() const { return lru_refcnt; }
 
@@ -98,7 +101,7 @@ namespace cohort {
       virtual ~Object() {}
 
     private:
-      template <typename LK>
+      template <typename LK, typename YP>
       friend class LRU;
 
       template <typename T, typename TTree, typename CLT, typename CEQ,
@@ -115,7 +118,11 @@ namespace cohort {
       virtual ~ObjectFactory() {};
     };
 
-    template <typename LK>
+    struct NullYieldPolicy {
+      static void yield_at(const char*) {}
+    };
+
+    template <typename LK, typename YieldPolicy = NullYieldPolicy>
     class LRU
     {
     private:
@@ -175,6 +182,7 @@ namespace cohort {
 	    ++(o->lru_refcnt);
 	    (void) o->evicting.test_and_set();
 	    lane_lock.unlock();
+	    YieldPolicy::yield_at("evict_block_post_unlock");
 	    if (o->reclaim(newobj_fac)) {
 	      lane_lock.lock();
 	      --(o->lru_refcnt);
@@ -242,11 +250,18 @@ namespace cohort {
 	if (o->evicting.test()) {
 	  return false;
 	}
+	YieldPolicy::yield_at("ref_pre_refcnt_bump");
 	++(o->lru_refcnt);
         if (flags & FLAG_INITIAL) {
+          YieldPolicy::yield_at("ref_pre_lane_lock");
           Lane& lane = lane_of(o);
           lane.lock.lock();
 	  if (! o->active.test()) {
+	    if (! o->lru_hook.is_linked()) {
+	      --(o->lru_refcnt);
+	      lane.lock.unlock();
+	      return false;
+	    }
 	    Object::Queue::iterator it =
 	      Object::Queue::s_iterator_to(*o);
 	    lane.q.erase(it);
@@ -298,11 +313,14 @@ namespace cohort {
                 lane.q.erase(it);
               }
               lane.q.push_front(*o);
-              /* hiwat check -- evict LRU entry if lane is over capacity;
-               * LMDB cleanup is deferred to the next get_bucket() */
+              /* hiwat check -- evict LRU tail using the same protocol
+               * as evict_block(): set evicting and unlink under the
+               * lane lock, then cleanup+delete out of line */
               if (lane.q.size() > lane_hiwat) {
                 Object *o2 = &(lane.q.back());
-                if (can_reclaim(o2)) {
+                if (o2 != o && can_reclaim(o2)) {
+                  ++(o2->lru_refcnt);
+                  (void) o2->evicting.test_and_set();
                   Object::Queue::iterator it2 =
                     Object::Queue::s_iterator_to(*o2);
                   lane.q.erase(it2);
