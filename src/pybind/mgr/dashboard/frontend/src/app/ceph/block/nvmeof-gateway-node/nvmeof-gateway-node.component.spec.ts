@@ -494,11 +494,7 @@ describe('NvmeofGatewayNodeComponent', () => {
       actionDescription: 'remove',
       hideDefaultWarning: true,
       impact: DeletionImpact.high,
-
-      bodyContext: {
-        deletionMessage:
-          'Removing <strong>host1</strong> will detach it from the gateway group and stop handling new I/O requests. Active connections may be disrupted.<br><br>You can re-add this node later if required.'
-      },
+      hasAssociatedResources: true,
       submitActionObservable: jasmine.any(Function)
     });
 
