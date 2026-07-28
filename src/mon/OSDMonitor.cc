@@ -9560,6 +9560,16 @@ int OSDMonitor::prepare_new_pool(string& name,
       return r;
     }
   }
+  if (osdmap.stretch_mode_enabled) {
+    // a pool created here becomes a stretch pool, so it needs a rule stretch
+    // mode can resolve a surviving bucket from, like any other
+    if (int r = check_stretch_device_class(
+	  _get_pending_crush(), crush_rule,
+	  crush_rule_name.empty() ? stringify(crush_rule) : crush_rule_name,
+	  osdmap.stretch_mode_bucket, false, *ss); r < 0) {
+      return r;
+    }
+  }
 
   uint32_t stripe_width = 0;
   // a pool over zones is always FastEC
@@ -11216,6 +11226,18 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
         return r;
       }
     }
+    // only degraded stretch mode records a mandatory member, so only a
+    // cluster-wide stretch mode makes a device class fatal here. An individual
+    // stretch pool peers on the bucket count alone, which shadow buckets
+    // satisfy as well as real ones.
+    if (osdmap.stretch_mode_enabled && p.is_stretch_pool() &&
+	!cmd_getval_or<bool>(cmdmap, "yes_i_really_mean_it", false)) {
+      if (int r = check_stretch_device_class(_get_pending_crush(), id, val,
+					    p.peering_crush_bucket_barrier,
+					    true, ss); r < 0) {
+	return r;
+      }
+    }
     if (id != p.crush_rule) {
       maybe_remove_unused_crush_rule(pool, p.crush_rule);
     }
@@ -11806,6 +11828,16 @@ int OSDMonitor::prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
   if (!crush.rule_valid_for_pool_type(crush_rule, p.get_type())) {
     ss << "crush rule " << crush_rule << " type does not match pool";
     return -EINVAL;
+  }
+  // An individual stretch pool peers on the bucket count alone, which shadow
+  // buckets satisfy as well as real ones, so a device class is only a problem
+  // once the cluster is in stretch mode and records a mandatory member too.
+  if (osdmap.stretch_mode_enabled && !sure) {
+    if (int r = check_stretch_device_class(_get_pending_crush(), crush_rule,
+					   crush_rule_str, bucket_barrier,
+					   true, ss); r < 0) {
+      return r;
+    }
   }
 
   // Extract num_zones from the CRUSH rule topology
@@ -19277,7 +19309,16 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
     ceph_assert(!commit || !exceeds_threshold);
     return;
   }
-  // TODO: check CRUSH rules for pools so that we are appropriately divided
+  if (!new_crush_rule.empty()) {
+    if (int r = check_stretch_device_class(crush, new_rule, new_crush_rule,
+                                          dividing_id, false, ss); r < 0) {
+      *errcode = r;
+      ceph_assert(!commit);
+      return;
+    }
+  }
+  // TODO: check that the rule actually reaches every dividing bucket, so that
+  // we are appropriately divided
   if (commit) {
     for (auto pool : pools) {
       if (!new_crush_rule.empty()) {
@@ -19626,6 +19667,10 @@ int OSDMonitor::validate_enable_stretch_mode(
     if (crush.get_rule_type(rule) != pg_pool_t::TYPE_REPLICATED) {
       *ss << "crush rule " << new_crush_rule << " is not a replicated rule";
       return -EINVAL;
+    }
+    if (int r = check_stretch_device_class(crush, rule, new_crush_rule,
+                                          *dividing_id, false, *ss); r < 0) {
+      return r;
     }
     int r = validate_stretch_mode_new_pool(crush, rule, 2, *dividing_id, pools,
                                            dividing_bucket, ss);
@@ -20027,6 +20072,31 @@ bool OSDMonitor::check_for_dead_crush_zones(const map<string,set<string>>& dead_
   dout(10) << "We determined CRUSH buckets " << *really_down_buckets
 	   << " and mons " << *really_down_mons << " are really down" << dendl;
   return really_down;
+}
+
+int OSDMonitor::check_stretch_device_class(const CrushWrapper& crush, int rule,
+                                         const string& rule_name, int barrier,
+                                         bool overridable, ostream& ss)
+{
+  // A rule with a device class takes from that class's shadow tree, so an OSD
+  // resolves to a shadow bucket such as "zone1~ssd" while degraded stretch mode
+  // records the surviving zone as the real "zone1". The two never compare equal,
+  // and every PG of a pool on such a rule fails to peer once a zone is lost.
+  // See https://tracker.ceph.com/issues/67414
+  auto rule_class = crush.get_rule_device_class(rule);
+  if (!rule_class) {
+    return 0;
+  }
+  ss << "crush rule " << rule_name << " selects devices of class "
+     << crush.get_class_name(*rule_class)
+     << ", which stretch mode does not support";
+  if (!overridable) {
+    return -EINVAL;
+  }
+  ss << ": this pool's PGs would fail to peer if a "
+     << crush.get_type_name(barrier)
+     << " were lost. Pass --yes-i-really-mean-it to proceed anyway.";
+  return -EPERM;
 }
 
 void OSDMonitor::trigger_degraded_stretch_mode(const set<int>& dead_buckets,
