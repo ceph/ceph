@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
@@ -318,7 +319,10 @@ void pretty_print(const RGWDataSyncEnv* env, const S& fmt, T&& ...t) {
 /// down when latency rises.
 class LatencyConcurrencyControl : public LatencyMonitor {
   static constexpr auto dout_subsys = ceph_subsys_rgw;
-  ceph::coarse_mono_time last_warning;
+
+  enum class State { Normal, Throttled, Overloaded };
+  State state = State::Normal;
+
 public:
   CephContext* cct;
 
@@ -331,23 +335,42 @@ public:
   /// bucket), accept a number of concurrent operations to spawn and,
   /// if latency is high, cut it in half. If latency is really high,
   /// cut it to 1.
+  ///
+  /// State transitions are logged once so users can see when
+  /// concurrency is reduced and when it recovers.
   int64_t adj_concurrency(int64_t concurrency) {
     using namespace std::literals;
     auto threshold = (cct->_conf->rgw_sync_lease_period * 1s) / 12;
 
     if (avg_latency() >= 2 * threshold) [[unlikely]] {
-      auto now = ceph::coarse_mono_clock::now();
-      if (now - last_warning > 5min) {
+      if (state != State::Overloaded) [[unlikely]] {
         ldout(cct, -1)
-            << "WARNING: The OSD cluster is overloaded and struggling to "
-            << "complete ops. You need more capacity to serve this level "
-	    << "of demand." << dendl;
-	last_warning = now;
+            << "WARNING: sync lock latency is critically high, reducing concurrency."
+            << " avg_latency_ms=" << std::chrono::duration_cast<std::chrono::milliseconds>(avg_latency()).count()
+            << " threshold_ms=" << std::chrono::duration_cast<std::chrono::milliseconds>(threshold).count()
+            << " concurrency=1" << dendl;
+        state = State::Overloaded;
       }
       return 1;
     } else if (avg_latency() >= threshold) [[unlikely]] {
-      return concurrency / 2;
+      if (state != State::Throttled) [[unlikely]] {
+        ldout(cct, -1)
+            << "WARNING: sync lock latency elevated, halving concurrency."
+            << " avg_latency_ms=" << std::chrono::duration_cast<std::chrono::milliseconds>(avg_latency()).count()
+            << " threshold_ms=" << std::chrono::duration_cast<std::chrono::milliseconds>(threshold).count()
+            << " concurrency=" << std::max(int64_t{1}, concurrency / 2) << dendl;
+        state = State::Throttled;
+      }
+      return std::max(int64_t{1}, concurrency / 2);
     } else [[likely]] {
+      if (state != State::Normal) [[unlikely]] {
+        ldout(cct, 1)
+            << "sync lock latency recovered, restoring full concurrency."
+            << " avg_latency_ms=" << std::chrono::duration_cast<std::chrono::milliseconds>(avg_latency()).count()
+            << " threshold_ms=" << std::chrono::duration_cast<std::chrono::milliseconds>(threshold).count()
+            << " concurrency=" << concurrency << dendl;
+        state = State::Normal;
+      }
       return concurrency;
     }
   }

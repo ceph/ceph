@@ -17,6 +17,7 @@
 #include "include/filepath.h"
 #include "gtest/gtest.h"
 #include "include/cephfs/libcephfs.h"
+#include "include/ceph_fs.h"
 #include "mds/mdstypes.h"
 #include "include/stat.h"
 #include <errno.h>
@@ -45,6 +46,11 @@
 #include <thread>
 #include <random>
 #include <regex>
+
+// Darwin or windows fails to define this
+#ifndef O_RSYNC
+#define O_RSYNC 0x0
+#endif
 
 using namespace std;
 
@@ -2794,6 +2800,431 @@ TEST(LibCephFS, SnapInfo) {
   ceph_shutdown(cmount);
 }
 
+// Test that ceph_do_snap_md_op() in create mode successfully adds new k-v
+// pairs to snapshot metadata.
+TEST(LibCephFS, SnapMdCreateAdds) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_parse_env(cmount, NULL), 0);
+  ASSERT_EQ(do_ceph_mount(cmount, NULL), 0);
+
+  char dir_path[64];
+  char snap_name[64];
+  char snap_path[PATH_MAX];
+  sprintf(dir_path, "/dir0_%d-2", getpid());
+  sprintf(snap_name, "snap_%d_2", getpid());
+  sprintf(snap_path, "%s/.snap/%s", dir_path, snap_name);
+
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path, 0755));
+  // snapshot with custom metadata
+  struct snap_metadata snap_meta[] = {{"foo", "bar"},
+                                      {"this", "that"},
+                                      {"abcde", "12345"}};
+  ASSERT_EQ(0, ceph_mksnap(cmount, dir_path, snap_name, 0755, snap_meta,
+                           std::size(snap_meta)));
+
+  // actual test.
+  ASSERT_EQ(0, ceph_do_snap_md_op(cmount, snap_path, "foo2", "bar2",
+                                  CEPH_SNAP_MD_OP_CREATE));
+
+  // get latest snap metadata
+  struct snap_info info;
+  ASSERT_EQ(0, ceph_get_snap_info(cmount, snap_path, &info));
+  ASSERT_GT(info.id, 1);
+  ASSERT_EQ(info.nr_snap_metadata, 4);
+
+  // verify snap metadata
+  struct snap_metadata snap_meta2[] = {{"foo", "bar"}, {"foo2", "bar2"},
+                                       {"this", "that"}, {"abcde", "12345"}};
+  for (size_t i = 0; i < info.nr_snap_metadata; ++i) {
+    auto k = std::string(info.snap_metadata[i].key);
+    auto v = std::string(info.snap_metadata[i].value);
+
+    bool found = false;
+    for (size_t j = 0;  j < std::size(snap_meta2); ++j) {
+      if (k == snap_meta2[j].key and v == snap_meta2[j].value) {
+        found = true;
+        break;
+      }
+    }
+
+    ASSERT_EQ(found, true);
+  }
+
+  // teardown
+  ceph_free_snap_info_buffer(&info);
+  ASSERT_EQ(0, ceph_rmsnap(cmount, dir_path, snap_name));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path));
+  ceph_shutdown(cmount);
+}
+
+
+// Test that ceph_do_snap_md_op() in create mode successfully updates new k-v
+// pairs to snapshot metadata.
+TEST(LibCephFS, SnapMdCreateUpdates) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_parse_env(cmount, NULL), 0);
+  ASSERT_EQ(do_ceph_mount(cmount, NULL), 0);
+
+  char dir_path[64];
+  char snap_name[64];
+  char snap_path[PATH_MAX];
+  sprintf(dir_path, "/dir0_%d-2", getpid());
+  sprintf(snap_name, "snap_%d_2", getpid());
+  sprintf(snap_path, "%s/.snap/%s", dir_path, snap_name);
+
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path, 0755));
+  // snapshot with custom metadata
+  struct snap_metadata snap_meta[] = {{"foo", "bar"},
+                                      {"this", "that"},
+                                      {"abcde", "12345"}};
+  ASSERT_EQ(0, ceph_mksnap(cmount, dir_path, snap_name, 0755, snap_meta,
+                           std::size(snap_meta)));
+
+  // actual test.
+  ASSERT_EQ(0, ceph_do_snap_md_op(cmount, snap_path, "foo", "bar2",
+                                  CEPH_SNAP_MD_OP_CREATE));
+
+  // get latest snap metadata
+  struct snap_info info;
+  ASSERT_EQ(0, ceph_get_snap_info(cmount, snap_path, &info));
+  ASSERT_GT(info.id, 1);
+  ASSERT_EQ(info.nr_snap_metadata, 3);
+
+  // verify snap metadata
+  struct snap_metadata snap_meta2[] = {{"foo", "bar2"}, {"this", "that"},
+                                       {"abcde", "12345"}};
+  for (size_t i = 0; i < info.nr_snap_metadata; ++i) {
+    auto k = std::string(info.snap_metadata[i].key);
+    auto v = std::string(info.snap_metadata[i].value);
+
+    bool found = false;
+    for (size_t j = 0;  j < std::size(snap_meta2); ++j) {
+      if (k == snap_meta2[j].key and v == snap_meta2[j].value) {
+        found = true;
+        break;
+      }
+    }
+
+    ASSERT_EQ(found, true);
+  }
+
+  // teardown
+  ceph_free_snap_info_buffer(&info);
+  ASSERT_EQ(0, ceph_rmsnap(cmount, dir_path, snap_name));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path));
+  ceph_shutdown(cmount);
+}
+
+
+// Test that k-v pair is added successfully by ceph_do_snap_md_op() in
+// EXCL mode.
+TEST(LibCephFS, SnapMdExclAdds) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_parse_env(cmount, NULL), 0);
+  ASSERT_EQ(do_ceph_mount(cmount, NULL), 0);
+
+  char dir_path[64];
+  char snap_name[64];
+  char snap_path[PATH_MAX];
+  sprintf(dir_path, "/dir0_%d-1", getpid());
+  sprintf(snap_name, "snap_%d_1", getpid());
+  sprintf(snap_path, "%s/.snap/%s", dir_path, snap_name);
+
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path, 0755));
+  // snapshot with custom metadata
+  struct snap_metadata snap_meta[] = {{"foo", "bar"}, {"this", "that"},
+                                      {"abcde", "12345"}};
+  ASSERT_EQ(0, ceph_mksnap(cmount, dir_path, snap_name, 0755, snap_meta,
+                           std::size(snap_meta)));
+
+  // actual test.
+  ASSERT_EQ(0,
+            ceph_do_snap_md_op(cmount, snap_path, "foo2", "bar2",
+                               CEPH_SNAP_MD_OP_CREATE | CEPH_SNAP_MD_OP_EXCL));
+
+  // get latest snap metadata
+  struct snap_info info;
+  ASSERT_EQ(0, ceph_get_snap_info(cmount, snap_path, &info));
+  ASSERT_GT(info.id, 1);
+  ASSERT_EQ(info.nr_snap_metadata, 4);
+
+  // verify snap metadata
+  struct snap_metadata snap_meta2[] = {{"foo", "bar"}, {"foo2", "bar2"},
+                                       {"this", "that"}, {"abcde", "12345"}};
+  for (size_t i = 0; i < info.nr_snap_metadata; ++i) {
+    auto k = std::string(info.snap_metadata[i].key);
+    auto v = std::string(info.snap_metadata[i].value);
+
+    bool found = false;
+    for (size_t j = 0;  j < std::size(snap_meta2); ++j) {
+      if (k == snap_meta2[j].key and v == snap_meta2[j].value) {
+        found = true;
+        break;
+      }
+    }
+
+    ASSERT_EQ(found, true);
+  }
+
+  // teardown
+  ceph_free_snap_info_buffer(&info);
+  ASSERT_EQ(0, ceph_rmsnap(cmount, dir_path, snap_name));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path));
+  ceph_shutdown(cmount);
+}
+
+
+// Test that k-v pair update is rejected successfully by ceph_do_snap_md_op() in
+// EXCL mode.
+TEST(LibCephFS, SnapMdExclRejectsUpdate) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_parse_env(cmount, NULL), 0);
+  ASSERT_EQ(do_ceph_mount(cmount, NULL), 0);
+
+  char dir_path[64];
+  char snap_name[64];
+  char snap_path[PATH_MAX];
+  sprintf(dir_path, "/dir0_%d-1", getpid());
+  sprintf(snap_name, "snap_%d_1", getpid());
+  sprintf(snap_path, "%s/.snap/%s", dir_path, snap_name);
+
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path, 0755));
+  // snapshot with custom metadata
+  struct snap_metadata snap_meta[] = {{"foo", "bar"}, {"this", "that"},
+                                      {"abcde", "12345"}};
+  ASSERT_EQ(0, ceph_mksnap(cmount, dir_path, snap_name, 0755, snap_meta,
+                           std::size(snap_meta)));
+
+  // actual test.
+  ASSERT_EQ(-EINVAL,
+            ceph_do_snap_md_op(cmount, snap_path, "foo", "bar2",
+                               CEPH_SNAP_MD_OP_CREATE | CEPH_SNAP_MD_OP_EXCL));
+
+  // get latest snap metadata
+  struct snap_info info;
+  ASSERT_EQ(0, ceph_get_snap_info(cmount, snap_path, &info));
+  ASSERT_GT(info.id, 1);
+  ASSERT_EQ(info.nr_snap_metadata, 3);
+
+  // verify snap metadata
+  for (size_t i = 0; i < info.nr_snap_metadata; ++i) {
+    auto k = std::string(info.snap_metadata[i].key);
+    auto v = std::string(info.snap_metadata[i].value);
+
+    bool found = false;
+    for (size_t j = 0;  j < std::size(snap_meta); ++j) {
+      if (k == snap_meta[j].key and v == snap_meta[j].value) {
+        found = true;
+        break;
+      }
+    }
+
+    ASSERT_EQ(found, true);
+  }
+
+  // teardown
+  ceph_free_snap_info_buffer(&info);
+  ASSERT_EQ(0, ceph_rmsnap(cmount, dir_path, snap_name));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path));
+  ceph_shutdown(cmount);
+}
+
+
+// Test that ceph_do_snap_md_op() in remove mode successfully removes k-v
+// pairs from snapshot metadata.
+TEST(LibCephFS, SnapMdRemove) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_parse_env(cmount, NULL), 0);
+  ASSERT_EQ(do_ceph_mount(cmount, NULL), 0);
+
+  char dir_path[64];
+  char snap_name[64];
+  char snap_path[PATH_MAX];
+  sprintf(dir_path, "/dir0_%d-3", getpid());
+  sprintf(snap_name, "snap_%d_3", getpid());
+  sprintf(snap_path, "%s/.snap/%s", dir_path, snap_name);
+
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path, 0755));
+  // snapshot with custom metadata
+  struct snap_metadata snap_meta[] = {{"foo", "bar"},
+                                      {"this", "that"},
+                                      {"abcde", "12345"}};
+  ASSERT_EQ(0, ceph_mksnap(cmount, dir_path, snap_name, 0755, snap_meta,
+                           std::size(snap_meta)));
+
+  // actual test.
+  ASSERT_EQ(0, ceph_do_snap_md_op(cmount, snap_path, "foo", "bar",
+                                  CEPH_SNAP_MD_OP_REMOVE));
+
+  // get latest snap metadata
+  struct snap_info info;
+  ASSERT_EQ(0, ceph_get_snap_info(cmount, snap_path, &info));
+  ASSERT_GT(info.id, 1);
+  ASSERT_EQ(info.nr_snap_metadata, 2);
+
+  // verify snap metadata
+  for (size_t i = 0; i < info.nr_snap_metadata; ++i) {
+    auto k = std::string(info.snap_metadata[i].key);
+    auto v = std::string(info.snap_metadata[i].value);
+
+    assert(k != "foo");
+    assert(v != "bar");
+
+    bool found = false;
+    for (size_t j = 1; j < std::size(snap_meta); ++j) {
+      if (k == snap_meta[j].key and v == snap_meta[j].value) {
+        found = true;
+        break;
+      }
+    }
+
+    ASSERT_EQ(found, true);
+  }
+
+  // teardown
+  ASSERT_EQ(0, ceph_rmsnap(cmount, dir_path, snap_name));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path));
+  ceph_shutdown(cmount);
+}
+
+// Test all snap MD operations with empty strings.
+TEST(LibCephFS, SnapMdOpEmptyStrings) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_parse_env(cmount, NULL), 0);
+  ASSERT_EQ(do_ceph_mount(cmount, NULL), 0);
+
+  char dir_path[64];
+  char snap_name[64];
+  char snap_path[PATH_MAX];
+  sprintf(dir_path, "/dir0_%d-4", getpid());
+  sprintf(snap_name, "snap_%d_4", getpid());
+  sprintf(snap_path, "%s/.snap/%s", dir_path, snap_name);
+
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path, 0755));
+  // snapshot with custom metadata
+  struct snap_metadata snap_meta[] = {{"foo", "bar"}, {"this", "that"},
+                                      {"abcde", "12345"}};
+  ASSERT_EQ(0, ceph_mksnap(cmount, dir_path, snap_name, 0755, snap_meta,
+                           std::size(snap_meta)));
+
+  // actual testing begins...
+  ASSERT_EQ(0, ceph_do_snap_md_op(cmount, snap_path, "", "",
+                                  CEPH_SNAP_MD_OP_CREATE));
+  ASSERT_EQ(0, ceph_do_snap_md_op(cmount, snap_path, "", "1",
+                                  CEPH_SNAP_MD_OP_CREATE));
+
+  ASSERT_EQ(0,
+            ceph_do_snap_md_op(cmount, snap_path, "1", "",
+                               CEPH_SNAP_MD_OP_CREATE | CEPH_SNAP_MD_OP_EXCL));
+
+  ASSERT_EQ(0, ceph_do_snap_md_op(cmount, snap_path, "", "",
+                                  CEPH_SNAP_MD_OP_REMOVE));
+  ASSERT_EQ(0, ceph_do_snap_md_op(cmount, snap_path, "1", "",
+                                  CEPH_SNAP_MD_OP_REMOVE));
+
+  // get latest snap metadata
+  struct snap_info info;
+  ASSERT_EQ(0, ceph_get_snap_info(cmount, snap_path, &info));
+  ASSERT_GT(info.id, 1);
+  ASSERT_EQ(info.nr_snap_metadata, 3);
+
+  // verify snap metadata
+  for (size_t i = 0; i < info.nr_snap_metadata; ++i) {
+    auto k = std::string(info.snap_metadata[i].key);
+    auto v = std::string(info.snap_metadata[i].value);
+
+    bool found = false;
+    for (size_t j = 0; j < std::size(snap_meta); ++j) {
+      if (k == snap_meta[j].key and v == snap_meta[j].value) {
+        found = true;
+        break;
+      }
+    }
+
+    ASSERT_EQ(found, true);
+  }
+
+  // teardown
+  ASSERT_EQ(0, ceph_rmsnap(cmount, dir_path, snap_name));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path));
+  ceph_shutdown(cmount);
+}
+
+// Test that ceph_do_snap_md_op() disallows inapproriate ops depending on
+// mode.
+TEST(LibCephFS, SnapMdNegTest) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_parse_env(cmount, NULL), 0);
+  ASSERT_EQ(do_ceph_mount(cmount, NULL), 0);
+
+  char dir_path[64];
+  char snap_name[64];
+  char snap_path[PATH_MAX];
+  sprintf(dir_path, "/dir0_%d-5", getpid());
+  sprintf(snap_name, "snap_%d_5", getpid());
+  sprintf(snap_path, "%s/.snap/%s", dir_path, snap_name);
+
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path, 0755));
+  // snapshot with custom metadata
+  struct snap_metadata snap_meta[] = {{"foo", "bar"},
+                                      {"this", "that"},
+                                      {"abcde", "12345"}};
+  ASSERT_EQ(0, ceph_mksnap(cmount, dir_path, snap_name, 0755, snap_meta,
+                           std::size(snap_meta)));
+
+  // actual test -
+  // attempt create in EXCL mode.
+  ASSERT_EQ(-EINVAL,
+            ceph_do_snap_md_op(cmount, snap_path, "foo", "bar2",
+                               CEPH_SNAP_MD_OP_CREATE | CEPH_SNAP_MD_OP_EXCL));
+  // attempt remove for an unexisting key.
+  ASSERT_EQ(-EINVAL, ceph_do_snap_md_op(cmount, snap_path, "foo2", "bar2",
+                                        CEPH_SNAP_MD_OP_REMOVE));
+  // run ceph_do_snap_md_op() in invalid mode/with invalid op_flag.
+  ASSERT_EQ(-EINVAL, ceph_do_snap_md_op(cmount, snap_path, "foo123", "bar123",
+                                        5));
+
+  struct snap_info info;
+  ASSERT_EQ(0, ceph_get_snap_info(cmount, snap_path, &info));
+  ASSERT_GT(info.id, 1);
+  ASSERT_EQ(info.nr_snap_metadata, 3);
+
+  // verify snap metadata
+  for (size_t i = 0; i < info.nr_snap_metadata; ++i) {
+    auto k = std::string(info.snap_metadata[i].key);
+    auto v = std::string(info.snap_metadata[i].value);
+
+    bool found = false;
+    for (size_t j = 0; j < std::size(snap_meta); ++j) {
+      if (k == snap_meta[j].key and v == snap_meta[j].value) {
+        found = true;
+        break;
+      }
+    }
+
+    ASSERT_EQ(found, true);
+  }
+
+  // teardown
+  ASSERT_EQ(0, ceph_rmsnap(cmount, dir_path, snap_name));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path));
+  ceph_shutdown(cmount);
+}
+
 TEST(LibCephFS, LookupInoMDSDir) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
@@ -4610,4 +5041,126 @@ TEST(LibCephFS, ConcurrentWriteAndFsync) {
 
   ASSERT_EQ(0, ceph_unmount(cmount));
   ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, ZeroSizeBufferAsyncReadFsync) {
+  pid_t mypid = getpid();
+  struct ceph_mount_info *cmount;
+  UserPerm *perms = NULL;
+  Inode *root, *file;
+  struct ceph_statx stx = {0};
+  struct Fh *fh;
+  char filename[PATH_MAX]; 
+  const size_t BUFSIZE = (128 * 1024 * 1024) / sizeof(uint64_t);
+  
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_parse_env(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+
+  sprintf(filename, "test_zerosizebufferasyncreadfsync%u", mypid);
+
+  perms = ceph_userperm_new(0, 0, 0, NULL);
+  ASSERT_EQ(ceph_ll_lookup_root(cmount, &root), 0);
+  ASSERT_EQ(ceph_ll_create(cmount, root, filename, 0777,
+                           O_RDWR | O_CREAT | O_TRUNC | O_RSYNC,
+                           &file, &fh, &stx, CEPH_STATX_INO, 0, perms), 0);
+
+  // using a 128MiB buffer and construct the write io_info struct
+  auto out_buf = std::make_unique<uint64_t[]>(BUFSIZE);
+  std::fill(out_buf.get(), out_buf.get() + BUFSIZE, 65);
+  struct ceph_ll_io_info w_io_info;
+  struct iovec w_iov;
+  w_io_info.callback = io_callback;
+  w_io_info.iov = &w_iov;
+  w_io_info.iovcnt = 1;
+  w_io_info.off = 0;
+  w_io_info.fh = fh;
+  w_io_info.result = 0;
+  w_iov.iov_base = out_buf.get();
+  w_iov.iov_len = BUFSIZE * sizeof(uint64_t);
+  w_io_info.write = true;
+  w_io_info.fsync = false;
+
+  // using a zero-sized buffer and contruct read in_info struct
+  auto in_buf = std::make_unique<uint64_t[]>(0);
+  struct ceph_ll_io_info r_io_info;
+  struct iovec r_iov;
+  r_io_info.callback = io_callback;
+  r_io_info.iov = &r_iov;
+  r_io_info.iovcnt = 1;
+  r_io_info.off = 0;
+  r_io_info.fh = fh;
+  r_io_info.result = 0;
+  r_iov.iov_base = in_buf.get();
+  r_iov.iov_len = 0;
+  r_io_info.write = false;
+  r_io_info.fsync = true;
+                           
+  // do a buffered write
+  write_done = false;
+  ASSERT_EQ(ceph_ll_nonblocking_readv_writev(cmount, &w_io_info), 0);
+
+  // async-fsync read while async write is ongoing so that client flushes the
+  // file inode which is having dirty_or_tx (a requirement to flush the inode)
+  // set in it's object set.
+  read_done = false;
+  ASSERT_EQ(ceph_ll_nonblocking_readv_writev(cmount, &r_io_info), 0);
+
+  std::cout << ": waiting for write to finish" << std::endl;
+  {
+    std::unique_lock lock(mtx);
+    cond.wait(lock, []{
+      return write_done;
+    });
+  }
+  std::cout << ": write finished" << std::endl;
+  ASSERT_EQ(w_io_info.result, BUFSIZE * sizeof(uint64_t));
+
+  std::cout << ": waiting for read to finish" << std::endl;
+  {
+    std::unique_lock lock(mtx);
+    cond.wait(lock, []{
+      return read_done;
+    });
+  }
+  std::cout << ": read finished" << std::endl;
+  ASSERT_EQ(r_io_info.result, 0);
+
+  // do a buffered write
+  w_io_info.result = 0;
+  write_done = false;
+  ASSERT_EQ(ceph_ll_nonblocking_readv_writev(cmount, &w_io_info), 0);
+
+  // async-fsync-dataonly read while async write is ongoing so that client
+  // flushes the file inode which is having dirty_or_tx (a requirement to flush
+  // the inode) set in it's object set.
+  r_io_info.result = 0;
+  read_done = false;
+  r_io_info.syncdataonly = true;
+  ASSERT_EQ(ceph_ll_nonblocking_readv_writev(cmount, &r_io_info), 0);
+
+  std::cout << ": waiting for write to finish" << std::endl;
+  {
+    std::unique_lock lock(mtx);
+    cond.wait(lock, []{
+      return write_done;
+    });
+  }
+  std::cout << ": write finished" << std::endl;
+  ASSERT_EQ(w_io_info.result, BUFSIZE * sizeof(uint64_t));
+
+  std::cout << ": waiting for read to finish" << std::endl;
+  {
+    std::unique_lock lock(mtx);
+    cond.wait(lock, []{
+      return read_done;
+    });
+  }
+  std::cout << ": read finished" << std::endl;
+  ASSERT_EQ(r_io_info.result, 0);
+
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ceph_release(cmount);
+  ceph_userperm_destroy(perms);
 }

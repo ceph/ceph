@@ -110,7 +110,7 @@ int WebTokenEngine::load_provider(const DoutPrefixProvider* dpp, optional_yield 
     idp_url.erase(pos, 7);
   }
 
-  return driver->load_oidc_provider(dpp, y, tenant, idp_url, info);
+  return driver->load_oidc_provider(dpp, y, tenant, idp_url, info, nullptr);
 }
 
 bool
@@ -583,6 +583,12 @@ bool WebTokenEngine::verify_oidc_thumbprint(const DoutPrefixProvider* dpp, const
     return true;
   }
 
+  if (thumbprints.empty()) {
+    ldpp_dout(dpp, 5) << "No thumbprints registered with oidc provider,"
+                         " skipping JWKS url verification" << dendl;
+    return true;
+  }
+
   // Fetch and verify cert according to https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_create_oidc_verify-thumbprint.html
   const auto hostname = get_top_level_domain_from_host(dpp, cert_url);
   ldpp_dout(dpp, 20) << "Validating hostname: " << hostname << dendl;
@@ -647,7 +653,14 @@ WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::dec
             if (JSONDecoder::decode_json("x5c", x5c, &k_parser)) {
               string cert;
               bool found_valid_cert = false;
-              bool skip_thumbprint_verification = cct->_conf.get_val<bool>("rgw_enable_jwks_url_verification");
+              bool skip_thumbprint_verification = cct->_conf.get_val<bool>(
+                  "rgw_enable_jwks_url_verification");
+              if (!skip_thumbprint_verification && thumbprints.empty()) {
+                ldpp_dout(dpp, 0) << "x5c cert validation requires registered "
+                                     "thumbprints, but thumbprint list is empty"
+                                  << dendl;
+                throw std::system_error(EINVAL, std::system_category());
+              }
               for (auto& it : x5c) {
                 cert = "-----BEGIN CERTIFICATE-----\n" + it + "\n-----END CERTIFICATE-----";
                 ldpp_dout(dpp, 20) << "Certificate is: " << cert.c_str() << dendl;
@@ -844,7 +857,7 @@ int RGWREST_STS::verify_permission(optional_yield y)
 
     const rgw::IAM::Policy p(s->cct, policy_tenant, policy, false);
     if (!s->principal_tags.empty()) {
-      auto res = p.eval(s->env, *s->auth.identity, rgw::IAM::stsTagSession, boost::none);
+      auto res = p.eval(this, s->env, *s->auth.identity, rgw::IAM::stsTagSession, boost::none);
       if (res != rgw::IAM::Effect::Allow) {
         ldout(s->cct, 0) << "evaluating policy for stsTagSession returned deny/pass" << dendl;
         return -EPERM;
@@ -857,7 +870,7 @@ int RGWREST_STS::verify_permission(optional_yield y)
       op = rgw::IAM::stsAssumeRole;
     }
 
-    auto res = p.eval(s->env, *s->auth.identity, op, boost::none);
+    auto res = p.eval(this, s->env, *s->auth.identity, op, boost::none);
     if (res != rgw::IAM::Effect::Allow) {
       ldout(s->cct, 0) << "evaluating policy for op: " << op << " returned deny/pass" << dendl;
       return -EPERM;

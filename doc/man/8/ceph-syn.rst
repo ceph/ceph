@@ -34,12 +34,12 @@ Options
 .. option:: -c ceph.conf, --conf=ceph.conf
 
    Use *ceph.conf* configuration file instead of the default
-   ``/etc/ceph/ceph.conf`` to determine monitor addresses during
+   ``/etc/ceph/ceph.conf`` to determine Monitor addresses during
    startup.
 
 .. option:: -m monaddress[:port]
 
-   Connect to specified monitor (instead of looking through
+   Connect to specified Monitor (instead of looking through
    ``ceph.conf``).
 
 .. option:: --num_client num
@@ -58,7 +58,7 @@ Workloads
 Each workload should be preceded by ``--syn`` on the command
 line. This is not a complete list.
 
-:command:`mknap` *path* *snapname*
+:command:`mksnap` *path* *snapname*
   Create a snapshot called *snapname* on *path*.
 
 :command:`rmsnap` *path* *snapname*
@@ -73,7 +73,7 @@ line. This is not a complete list.
 
 :command:`readfile` *sizeinmb* *blocksize*
   Read file, named after our client id, that is *sizeinmb* MB by
-  writing *blocksize* chunks.
+  reading *blocksize* chunks.
 
 :command:`rw` *sizeinmb* *blocksize*
   Write file, then read it back, as above.

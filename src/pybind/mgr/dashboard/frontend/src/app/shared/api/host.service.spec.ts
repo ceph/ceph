@@ -3,14 +3,28 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { CdTableFetchDataContext } from '../models/cd-table-fetch-data-context';
+import { OrchestratorService } from './orchestrator.service';
+import { DeviceService } from '../services/device.service';
 import { HostService } from './host.service';
 
 describe('HostService', () => {
   let service: HostService;
   let httpTesting: HttpTestingController;
 
+  const deviceServiceStub = {
+    prepareDevice: (device: any) => device
+  };
+
+  const orchestratorServiceStub = {
+    getTableActionDisableDesc: jasmine.createSpy('getTableActionDisableDesc').and.returnValue(false)
+  };
+
   configureTestBed({
-    providers: [HostService],
+    providers: [
+      HostService,
+      { provide: DeviceService, useValue: deviceServiceStub },
+      { provide: OrchestratorService, useValue: orchestratorServiceStub }
+    ],
     imports: [HttpClientTestingModule]
   });
 

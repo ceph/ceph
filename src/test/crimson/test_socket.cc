@@ -11,6 +11,7 @@
 #include <seastar/core/when_all.hh>
 #include <seastar/util/later.hh>
 
+#include "crimson/common/config_proxy.h" // for local_conf()
 #include "crimson/common/log.h"
 #include "crimson/net/Errors.h"
 #include "crimson/net/Fwd.h"

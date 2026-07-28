@@ -326,8 +326,48 @@ For example:
   ]
 
 One entry per mirror-daemon instance is displayed, along with information
-including configured peers and basic statistics. For more detailed statistics,
-use the admin socket interface as detailed below.
+including configured peers and basic statistics.
+
+**Directory snapshot sync metrics (mgr)**
+
+The mirroring module implements ``ceph fs snapshot mirror status``. The
+``cephfs-mirror`` daemon persists per-directory sync statistics to the
+``cephfs_mirror`` object omap in the metadata pool so the Manager can expose
+them through the Ceph CLI without an admin socket on a mirror daemon host. The
+``metrics_status`` handler reads that omap, applies stale detection and default
+idle metrics for newly mirrored directories, and returns JSON in the same nested
+``metrics/<dir>/peer/<uuid>`` format as ``fs mirror peer status``. When
+``snapshot_mirror_metrics_cache_enabled`` is true (default TTL 15 seconds via
+``snapshot_mirror_metrics_cache_ttl``), responses are served from a complete
+cache (full file system snapshot) and, for single-directory queries, a partial
+per-directory cache that avoids full omap scans on complete-cache miss. When
+caching is disabled, each query reads omap directly. Omap entries are marked
+``stale`` when the persisted ``_instance_id`` is not among live mirror instances
+or does not match the directory's tracked instance while persisted state is not
+``idle``.
+
+Each omap value includes metadata fields written by ``cephfs-mirror``:
+
+- ``_instance_id`` — RADOS client instance of the writer; used for stale
+  detection and stripped from CLI output.
+- ``metrics_updated_at`` — wall-clock time of the last omap write. Exposed in
+  ``ceph fs snapshot mirror status`` output only; omitted from admin socket
+  ``fs mirror peer status``, which reads live in-memory state and does not
+  need a separate persist timestamp. Operators use this field to judge how
+  fresh omap-backed metrics are, given ``cephfs_mirror_tick_interval`` omap
+  persist cadence and Manager caching (``snapshot_mirror_metrics_cache_enabled``
+  and ``snapshot_mirror_metrics_cache_ttl``).
+
+Omap entries are removed when a directory is removed from mirroring. All metric
+fields are written to omap; on daemon restart only ``last_synced_snap`` metadata
+is loaded back. Per-session counters (``snaps_synced``, ``snaps_deleted``,
+``snaps_renamed``) are persisted but not loaded and therefore start at zero each
+session.
+
+See :ref:`Directory snapshot sync metrics<cephfs_mirroring_mgr_snapshot_status>`
+and :ref:`Snapshot sync metric fields<cephfs_mirroring_sync_metric_fields>` in
+:doc:`/cephfs/cephfs-mirroring` for command syntax, examples, and operator
+guidance.
 
 CephFS mirror daemons provide admin socket commands for querying mirror status.
 To list the available commands for ``mirror status``, run the following
@@ -393,19 +433,34 @@ status. Commands of this kind take the form ``filesystem-name@filesystem-id peer
 ::
 
   {
-    "/d0": {
-        "state": "idle",
-        "last_synced_snap": {
-            "id": 120,
-            "name": "snap1",
-            "sync_duration": 0.079997898999999997,
-            "sync_time_stamp": "274900.558797s"
-        },
-        "snaps_synced": 2,
-        "snaps_deleted": 0,
-        "snaps_renamed": 0
+    "metrics": {
+        "/d0": {
+            "peer": {
+                "a2dc7784-e7a1-4723-b103-03ee8d8768f8": {
+                    "state": "idle",
+                    "last_synced_snap": {
+                        "id": 120,
+                        "name": "snap1",
+                        "crawl_duration": "2s",
+                        "datasync_queue_wait_duration": "1s",
+                        "sync_duration": "33s",
+                        "sync_time_stamp": "274900.558797s",
+                        "sync_bytes": "149.94 MiB",
+                        "sync_files": 5000
+                    },
+                    "snaps_synced": 2,
+                    "snaps_deleted": 0,
+                    "snaps_renamed": 0
+                }
+            }
+        }
     }
   }
+
+Several fields in the status output are formatted for readability rather than reported as raw
+numbers. See :ref:`Value formatting <cephfs_mirror_peer_status_formatting>` in
+:doc:`/cephfs/cephfs-mirroring` for duration, data size, throughput, percentage, count, and
+timestamp formats.
 
 Synchronization stats such as ``snaps_synced``, ``snaps_deleted`` and
 ``snaps_renamed`` are reset when the daemon is restarted or (when multiple
@@ -418,6 +473,49 @@ A directory can be in one of the following states::
   - `idle`: The directory is currently not being synchronized
   - `syncing`: The directory is currently being synchronized
   - `failed`: The directory has hit upper limit of consecutive failures
+
+::
+
+  {
+    "metrics": {
+        "/d0": {
+            "peer": {
+                "a2dc7784-e7a1-4723-b103-03ee8d8768f8": {
+                    "state": "syncing",
+                    "current_syncing_snap": {
+                        "id": 121,
+                        "name": "snap2",
+                        "sync-mode": "full",
+                        "avg_read_throughput_bytes": "13.03 MiB/s",
+                        "avg_write_throughput_bytes": "24.24 MiB/s",
+                        "crawl": {
+                            "state": "completed",
+                            "duration": "2s"
+                        },
+                        "datasync_queue_wait": {
+                            "state": "complete",
+                            "duration": "1s"
+                        },
+                        "bytes": {
+                            "sync_bytes": "60.40 MiB",
+                            "total_bytes": "149.94 MiB",
+                            "sync_percent": "40.29%"
+                        },
+                        "files": {
+                            "sync_files": 2013,
+                            "total_files": 5000,
+                            "sync_percent": "40.26%"
+                        },
+                        "eta": "7s"
+                    },
+                    "snaps_synced": 2,
+                    "snaps_deleted": 0,
+                    "snaps_renamed": 0
+                }
+            }
+        }
+    }
+  }
 
 When a directory hits a configured number of consecutive synchronization
 failures, the mirror daemon marks it as ``failed``. Synchronization for these
@@ -439,23 +537,37 @@ status:
 ::
 
   {
-    "/d0": {
-        "state": "idle",
-        "last_synced_snap": {
-            "id": 120,
-            "name": "snap1",
-            "sync_duration": 0.079997898999999997,
-            "sync_time_stamp": "274900.558797s"
+    "metrics": {
+        "/d0": {
+            "peer": {
+                "a2dc7784-e7a1-4723-b103-03ee8d8768f8": {
+                    "state": "idle",
+                    "last_synced_snap": {
+                        "id": 120,
+                        "name": "snap1",
+                        "crawl_duration": "2s",
+                        "datasync_queue_wait_duration": "1s",
+                        "sync_duration": "33s",
+                        "sync_time_stamp": "274900.558797s",
+                        "sync_bytes": "149.94 MiB",
+                        "sync_files": 5000
+                    },
+                    "snaps_synced": 2,
+                    "snaps_deleted": 0,
+                    "snaps_renamed": 0
+                }
+            }
         },
-        "snaps_synced": 2,
-        "snaps_deleted": 0,
-        "snaps_renamed": 0
-    },
-    "/f0": {
-        "state": "failed",
-        "snaps_synced": 0,
-        "snaps_deleted": 0,
-        "snaps_renamed": 0
+        "/f0": {
+            "peer": {
+                "a2dc7784-e7a1-4723-b103-03ee8d8768f8": {
+                    "state": "failed",
+                    "snaps_synced": 0,
+                    "snaps_deleted": 0,
+                    "snaps_renamed": 0
+                }
+            }
+        }
     }
   }
 

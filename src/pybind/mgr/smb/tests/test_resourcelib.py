@@ -271,6 +271,7 @@ class BigBiz:
     address: List[str]
     ceo: Worker
     units: Optional[List[Unit]] = None
+    departments: Optional[Dict[str, str]] = None
 
 
 @smb.resourcelib.resource('smallbiz')
@@ -449,6 +450,54 @@ def test_explicit_none_in_data():
         'address': ['1 MegaLo Drive', 'Mango', 'TX', '22020'],
         'ceo': {'name': 'D. B. Bawes', 'age': 61},
         'units': None,
+        'departments': {
+            'marketing': 'Tells stuff',
+            'sales': 'Sells stuff',
+        },
     }
     obj = BigBiz._resource_config.object_from_simplified(data)
     assert obj.units is None
+
+
+def test_invalid_str_in_list_field():
+    data = {
+        'resource_type': 'smallbiz',
+        'name': 'Le Shoppe',
+        'address': '12 Fashion Way, Urbia  WA  01209',
+        'people': [
+            {'name': 'Madelyn', 'age': 39},
+            {'age': 39},
+        ],
+    }
+    with pytest.raises(smb.resourcelib.InvalidObjectTypeFieldError):
+        smb.resourcelib.load(data)
+
+
+def test_invalid_dict_in_list_field():
+    data = {
+        'resource_type': 'smallbiz',
+        'name': 'Le Shoppe',
+        'address': {'nope': 'wrong'},
+        'people': [
+            {'name': 'Madelyn', 'age': 39},
+            {'age': 39},
+        ],
+    }
+    with pytest.raises(smb.resourcelib.InvalidObjectTypeFieldError):
+        smb.resourcelib.load(data)
+
+
+def test_invalid_list_in_dict_field():
+    data = {
+        'resource_type': 'bigbiz',
+        'name': 'MegaLoMart',
+        'address': ['1 MegaLo Drive', 'Mango', 'TX', '22020'],
+        'ceo': {'name': 'D. B. Bawes', 'age': 61},
+        'units': None,
+        'departments': [
+            {'marketing': 'Tells stuff'},
+            {'sales': 'Sells stuff'},
+        ],
+    }
+    with pytest.raises(smb.resourcelib.InvalidObjectTypeFieldError):
+        smb.resourcelib.load(data)

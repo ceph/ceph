@@ -409,6 +409,16 @@ void ExtentCommitter::commit_state() {
   extent.on_state_commit();
 }
 
+void ExtentCommitter::maybe_sync_copied_lba_key() {
+  ceph_assert(extent.is_logical());
+  auto &lextent = static_cast<LogicalChildNode&>(extent);
+  auto &prior = *extent.prior_instance;
+  for (auto &item : prior.read_transactions) {
+    item.t->maybe_sync_copied_lba_key(
+      lextent.get_laddr(), lextent.get_paddr());
+  }
+}
+
 void ExtentCommitter::commit_and_share_paddr() {
   auto &prior = *extent.prior_instance;
   auto old_paddr = prior.get_prior_paddr_and_reset();
@@ -458,6 +468,10 @@ void ExtentCommitter::_share_prior_data_to_mutations() {
           }
         }
       });
+      // "me" is the actual prev of mextent, so before mextent enters
+      // the "prepare" pipeline phase, its last_committed_crc should be
+      // that of "me"'s
+      mextent.set_last_committed_crc(me.get_last_committed_crc());
     } else {
       auto &mextent = static_cast<CachedExtent&>(mext);
       TRACE("{} -> {}", extent, mextent);
@@ -465,6 +479,7 @@ void ExtentCommitter::_share_prior_data_to_mutations() {
         0, extent.get_length(), mextent.get_bptr().c_str());
       mextent.on_data_commit();
       mextent.reapply_delta();
+      mextent.set_last_committed_crc(extent.get_last_committed_crc());
     }
   }
 }
@@ -492,32 +507,12 @@ void ExtentCommitter::_share_prior_data_to_pending_versions()
 }
 
 void CachedExtent::new_committer(Transaction &t) {
-  ceph_assert(is_rewrite_transaction(t.get_src()));
+  ceph_assert(should_use_no_conflict_publish(t, this->get_type()));
   ceph_assert(!committer);
   committer = new ExtentCommitter(*this, t);
   assert(prior_instance);
   assert(!prior_instance->committer);
   prior_instance->committer = committer;
-}
-
-void ExtentCommitter::block_trans(Transaction &t) {
-  LOG_PREFIX(ExtentCommitter::block_trans);
-  auto &prior = *extent.prior_instance;
-  for (auto &item : prior.read_transactions) {
-    TRACET("blocking trans {} for rewriting {}",
-      t, item.t->get_trans_id(), *item.ref);
-    item.t->need_wait_rewrite = true;
-  }
-}
-
-void ExtentCommitter::unblock_trans(Transaction &t) {
-  LOG_PREFIX(ExtentCommitter::unblock_trans);
-  auto &prior = *extent.prior_instance;
-  for (auto &item : prior.read_transactions) {
-    TRACET("unblocking trans {} for rewriting {}",
-      t, item.t->get_trans_id(), *item.ref);
-    item.t->need_wait_rewrite = false;
-  }
 }
 
 }

@@ -24,17 +24,18 @@ These mirrors are available on the following locations:
 - **US-West: US West Coast**: http://us-west.ceph.com/
 - **CN: China**: http://mirrors.ustc.edu.cn/ceph/
 
-You can replace all download.ceph.com URLs with any of the mirrors, for example:
+You can replace all ``download.ceph.com`` URLs with any of the mirrors,
+for example:
 
-- http://download.ceph.com/tarballs/
-- http://download.ceph.com/debian-hammer/
-- http://download.ceph.com/rpm-hammer/
+- https://download.ceph.com/tarballs/
+- https://download.ceph.com/debian-tentacle/
+- https://download.ceph.com/rpm-tentacle/
 
 Change this to:
 
-- http://eu.ceph.com/tarballs/
-- http://eu.ceph.com/debian-hammer/
-- http://eu.ceph.com/rpm-hammer/
+- https://eu.ceph.com/tarballs/
+- https://eu.ceph.com/debian-tentacle/
+- https://eu.ceph.com/rpm-tentacle/
 
 
 Mirroring
@@ -62,4 +63,4 @@ set for all mirrors. These can be found on `GitHub`_.
 If you want to apply for an official mirror, please contact the ceph-users mailinglist.
 
 
-.. _GitHub: https://github.com/ceph/ceph/tree/master/mirroring
+.. _GitHub: https://github.com/ceph/ceph/tree/main/mirroring

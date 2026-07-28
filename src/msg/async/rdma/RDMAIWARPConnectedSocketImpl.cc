@@ -13,13 +13,43 @@ RDMAIWARPConnectedSocketImpl::RDMAIWARPConnectedSocketImpl(CephContext *cct, std
   : RDMAConnectedSocketImpl(cct, ib, rdma_dispatcher, w), cm_con_handler(new C_handle_cm_connection(this))
 {
   status = IDLE;
-  notify_fd = eventfd(0, EFD_CLOEXEC|EFD_NONBLOCK);
+  // Take ownership of the CM id/channel *before* creating the notify eventfd, so
+  // that if eventfd() fails (e.g. under fd exhaustion) the destructor still frees
+  // them (it only does so for status >= RDMA_ID_CREATED).  Every failure path
+  // calls close_notify() so a later delete cannot block on close_condition.
   if (info) {
     is_server = true;
     cm_id = info->cm_id;
     cm_channel = info->cm_channel;
     status = RDMA_ID_CREATED;
     peer_qpn = info->qp_num;
+  } else {
+    is_server = false;
+    cm_channel = rdma_create_event_channel();
+    if (!cm_channel) {
+      lderr(cct) << __func__ << " failed to create cm event channel: " << cpp_strerror(errno) << dendl;
+      close_notify();
+      return;
+    }
+    if (rdma_create_id(cm_channel, &cm_id, NULL, RDMA_PS_TCP)) {
+      lderr(cct) << __func__ << " failed to create cm id: " << cpp_strerror(errno) << dendl;
+      rdma_destroy_event_channel(cm_channel);
+      cm_channel = nullptr;
+      close_notify();
+      return;
+    }
+    status = RDMA_ID_CREATED;
+    ldout(cct, 20) << __func__ << " successfully created cm id: " << cm_id << dendl;
+  }
+
+  notify_fd = eventfd(0, EFD_CLOEXEC|EFD_NONBLOCK);
+  if (notify_fd < 0) {
+    lderr(cct) << __func__ << " failed to create eventfd: " << cpp_strerror(errno) << dendl;
+    close_notify();
+    return;
+  }
+
+  if (info) {
     if (alloc_resource()) {
       close_notify();
       return;
@@ -31,12 +61,6 @@ RDMAIWARPConnectedSocketImpl::RDMAIWARPConnectedSocketImpl(CephContext *cct, std
     status = RESOURCE_ALLOCATED;
     qp->get_local_cm_meta().peer_qpn = peer_qpn;
     qp->get_peer_cm_meta().local_qpn = peer_qpn;
-  } else {
-    is_server = false;
-    cm_channel = rdma_create_event_channel();
-    rdma_create_id(cm_channel, &cm_id, NULL, RDMA_PS_TCP);
-    status = RDMA_ID_CREATED;
-    ldout(cct, 20) << __func__ << " successfully created cm id: " << cm_id << dendl;
   }
 }
 

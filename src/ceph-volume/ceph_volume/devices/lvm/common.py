@@ -86,16 +86,23 @@ common_args: Dict[str, Any] = {
     },
     '--dmcrypt-format-opts': {
         'default': None,
-        'type': Optional[str],
+        'type': str,
     },
     '--dmcrypt-open-opts': {
         'default': None,
-        'type': Optional[str],
+        'type': str,
     },
     '--with-tpm': {
         'dest': 'with_tpm',
         'help': 'Whether encrypted OSDs should be enrolled with TPM.',
         'action': 'store_true'
+    },
+    '--tpm2-pcrs': {
+        'dest': 'tpm2_pcrs',
+        'help': ('PCRs for systemd-cryptenroll --tpm2-pcrs when using --with-tpm '
+                 '(default binds to Secure Boot policy, see systemd-cryptenroll(1)).'),
+        'default': '7',
+        'type': str,
     },
     '--no-systemd': {
         'dest': 'no_systemd',

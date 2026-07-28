@@ -324,7 +324,7 @@ public:
 
   void notify_on_change(bool is_primary);
 
-  load_obc_iertr::future<> load_obc(
+  void load_obc(
     ObjectContextRef obc,
     PGBackend::loaded_object_md_t::ref);
 

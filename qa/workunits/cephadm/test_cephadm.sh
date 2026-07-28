@@ -12,7 +12,6 @@ FSID='00000000-0000-0000-0000-0000deadbeef'
 IMAGE_MAIN=${IMAGE_MAIN:-'quay.ceph.io/ceph-ci/ceph:main'}
 IMAGE_REEF=${IMAGE_REEF:-'quay.ceph.io/ceph-ci/ceph:reef'}
 IMAGE_SQUID=${IMAGE_SQUID:-'quay.ceph.io/ceph-ci/ceph:squid'}
-IMAGE_DEFAULT=${IMAGE_MAIN}
 
 OSD_IMAGE_NAME="${SCRIPT_NAME%.*}_osd.img"
 OSD_IMAGE_SIZE='6G'
@@ -45,6 +44,20 @@ fi
 if ! [ -x "$CEPHADM" ]; then
     echo "cephadm not found. Please set \$CEPHADM"
     exit 1
+fi
+
+# Derive IMAGE_DEFAULT from cephadm's own release so that stable branches
+# pull a matching container instead of always using ceph:main.
+# See https://tracker.ceph.com/issues/75821
+if [ -z "$IMAGE_DEFAULT" ]; then
+    _ver=$("$CEPHADM" version 2>/dev/null || true)
+    _release=$(echo "$_ver" | awk '{print $5}')
+    _type=$(echo "$_ver" | awk '{gsub(/[()]/, "", $6); print $6}')
+    if [ -n "$_release" ] && [ "$_type" != "dev" ]; then
+        IMAGE_DEFAULT="quay.ceph.io/ceph-ci/ceph:${_release}"
+    else
+        IMAGE_DEFAULT=${IMAGE_MAIN}
+    fi
 fi
 
 # add image to args

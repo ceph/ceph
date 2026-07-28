@@ -2,6 +2,7 @@ if(ALLOCATOR STREQUAL "tcmalloc")
   add_library(heap_profiler STATIC
     heap_profiler.cc)
   target_link_libraries(heap_profiler
+    legacy-option-headers
     gperftools::tcmalloc)
 else()
   add_library(heap_profiler STATIC

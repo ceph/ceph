@@ -60,7 +60,7 @@ Storage, Filesystem, native API), Ceph stores all data as RADOS objects within
 :ref:`rados_pools`.  Ceph users must have access to a given pool in order to read and
 write data, and Ceph users must have execute permissions in order to use Ceph's
 administrative commands. The following concepts will help you understand
-Ceph['s] user management.
+Ceph's user management.
 
 .. _rados-ops-user:
 
@@ -72,8 +72,8 @@ Creating users allows you to control who (or what) can access your Ceph Storage
 Cluster, its pools, and the data within those pools.
 
 Ceph has the concept of a ``type`` of user. For purposes of user management,
-the type will always be ``client``. Ceph identifies users in a "period-
-delimited form" that consists of the user type and the user ID: for example,
+the type will always be ``client``. Ceph identifies users in a "period-delimited
+form" that consists of the user type and the user ID: for example,
 ``TYPE.ID``, ``client.admin``, or ``client.user1``. The reason for user typing
 is that the Cephx protocol is used not only by clients but also non-clients,
 such as Ceph Monitors, OSDs, and Metadata Servers. Distinguishing the user type
@@ -222,8 +222,8 @@ The following entries describe access capabilities.
 
 ``class-read``
 
-:Descriptions: Gives the user the capability to call class read methods.
-               Subset of ``x``.
+:Description: Gives the user the capability to call class read methods.
+              Subset of ``x``.
 
 
 ``class-write``

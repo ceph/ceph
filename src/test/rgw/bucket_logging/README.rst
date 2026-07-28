@@ -33,6 +33,19 @@ From within the ``src/test/rgw/bucket_logging`` directory:
 
    BUCKET_LOGGING_TESTS_CONF=bucket_logging_tests.conf tox
 
+By default, the tests run against ``Standard`` bucket logging mode. To run the
+suite against ``Journal`` mode instead, pass the ``--logging-type`` flag:
+
+.. code-block:: bash
+
+   BUCKET_LOGGING_TESTS_CONF=bucket_logging_tests.conf tox -- --logging-type=Journal
+
+Journal mode is a Ceph extension to the S3 bucket logging API. Running the
+tests in Journal mode requires the boto3 ``LoggingType`` field, which is
+provided by ``examples/rgw/boto3/service-2.sdk-extras.json``. Copy that file
+to ``~/.aws/models/s3/2006-03-01/`` before running with ``--logging-type=Journal``;
+otherwise the suite exits early with a clear error.
+
 Test Coverage
 =============
 

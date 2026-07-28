@@ -51,26 +51,39 @@ StoreTool::StoreTool(const string& type,
 }
 
 
+#ifdef WITH_BLUESTORE
+void close_delete_bluestore(ObjectStore* store)
+{
+  auto bluestore = dynamic_cast<BlueStore*>(store);
+  ceph_assert(bluestore);
+  bluestore->close_db_environment();
+  delete bluestore;
+}
+
 int StoreTool::load_bluestore(const string& path, bool read_only, bool to_repair)
 {
-#ifdef WITH_BLUESTORE
-    auto bluestore = new BlueStore(g_ceph_context, path);
-    KeyValueDB *db_ptr;
-    int r = bluestore->open_db_environment(&db_ptr, read_only, to_repair);
-    if (r < 0) {
+  auto bluestore = new BlueStore(g_ceph_context, path);
+  KeyValueDB *db_ptr;
+  int r = bluestore->open_db_environment(&db_ptr, read_only, to_repair);
+  if (r < 0) {
      return -EINVAL;
-    }
-    db = decltype(db){db_ptr, Deleter((ObjectStore*)bluestore)};
-    return 0;
+  }
+  db = decltype(db){db_ptr, Deleter(bluestore, close_delete_bluestore)};
+  return 0;
+}
 #else
+
+int StoreTool::load_bluestore(const string& path, bool read_only, bool to_repair)
+{
     cerr << "bluestore not compiled in" << std::endl;
     return -1;
-#endif // WITH_BLUESTORE
 }
+#endif // WITH_BLUESTORE
 
 
 uint32_t StoreTool::traverse(const string& prefix,
                              const bool do_crc,
+                             const bool pretty_binary_key,
                              const bool do_value_dump,
                              ostream *out)
 {
@@ -88,8 +101,13 @@ uint32_t StoreTool::traverse(const string& prefix,
     if (!prefix.empty() && (rk.first != prefix))
       break;
 
-    if (out)
-      *out << url_escape(rk.first) << "\t" << url_escape(rk.second);
+    if (out) {
+      if (pretty_binary_key) {
+        *out << url_escape(rk.first) << "\t" << pretty_binary_string(rk.second);
+      } else {
+        *out << url_escape(rk.first) << "\t" << url_escape(rk.second);
+      }
+    }
     if (do_crc) {
       bufferlist bl;
       bl.append(rk.first);
@@ -118,9 +136,9 @@ uint32_t StoreTool::traverse(const string& prefix,
 }
 
 void StoreTool::list(const string& prefix, const bool do_crc,
-                     const bool do_value_dump)
+                     const bool pretty_binary_key, const bool do_value_dump)
 {
-  traverse(prefix, do_crc, do_value_dump,& std::cout);
+  traverse(prefix, do_crc, pretty_binary_key, do_value_dump,& std::cout);
 }
 
 bool StoreTool::exists(const string& prefix)

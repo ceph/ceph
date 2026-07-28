@@ -96,6 +96,31 @@ public:
     in_progress.reset();
   }
 
+  /// Flush all pending writes/removals into a Transaction, then reset.
+  /// This ensures in-flight cached state is persisted before the cache
+  /// is cleared (e.g. on PG interval change).
+  void flush_and_reset(Transaction<K, V> *t) {
+    std::map<K, V> to_set;
+    std::set<K> to_remove;
+    K key{};
+    std::pair<K, boost::optional<V>> cached;
+    while (in_progress.get_next(key, &cached)) {
+      if (cached.second) {
+        to_set[cached.first] = cached.second.get();
+      } else {
+        to_remove.insert(cached.first);
+      }
+      key = cached.first;
+    }
+    if (!to_set.empty()) {
+      t->set_keys(to_set);
+    }
+    if (!to_remove.empty()) {
+      t->remove_keys(to_remove);
+    }
+    in_progress.reset();
+  }
+
   /// Fetch first key/value std::pair after specified key
   int get_next(
     K key,               ///< [in] key after which to get next

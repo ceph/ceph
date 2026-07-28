@@ -1,0 +1,37 @@
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+  - client.0
+openstack:
+  - volumes:
+      count: 3
+      size: 10 # GB
+tasks:
+- install:
+- ceph:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr_pool false --force
+    log-ignorelist:
+      - but it is still running
+      - overall HEALTH_
+      - \(RECENT_CRASH\)
+      - \(OSD_DOWN\)
+      - \(OSD_.*DOWN\)
+      - \(PG_DEGRADED\)
+      - \(PG_
+      - Reduced data availability
+    conf:
+      osd:
+        osd min pg log entries: 5
+        crimson cpu num: 2
+        crimson memory: 16G
+      global:
+- workunit:
+    clients:
+      client.0:
+        - crimson/test_coredump.sh

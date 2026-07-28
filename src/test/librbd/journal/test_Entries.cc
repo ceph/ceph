@@ -3,6 +3,7 @@
 
 #include "test/librbd/test_fixture.h"
 #include "test/librbd/test_support.h"
+#include "common/Cond.h"
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
 #include "librbd/api/Io.h"

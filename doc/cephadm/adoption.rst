@@ -6,7 +6,7 @@ Converting an Existing Cluster to Cephadm
 
 It is possible to convert some existing clusters so that they can be managed
 with ``cephadm``. This statement applies to some clusters that were deployed
-with ``ceph-deploy``, ``ceph-ansible``, or ``DeepSea``.
+with ``ceph-deploy`` (a legacy deployment tool), ``ceph-ansible``, or ``DeepSea``.
 
 This section of the documentation explains how to determine whether your
 clusters can be converted to a state in which they can be managed by

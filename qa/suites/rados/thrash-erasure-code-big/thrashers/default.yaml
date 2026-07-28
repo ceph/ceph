@@ -5,6 +5,7 @@ overrides:
     - objects unfound and apparently lost
     - slow request
     - \(POOL_APP_NOT_ENABLED\)
+    - \(DEPRECATED_EC_PLUGIN\)
     conf:
       osd:
         osd debug reject backfill probability: .1

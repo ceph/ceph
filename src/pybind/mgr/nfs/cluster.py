@@ -2,7 +2,7 @@ import ipaddress
 import logging
 import re
 import socket
-from typing import cast, Dict, List, Any, Union, Optional, TYPE_CHECKING
+from typing import cast, Dict, List, Any, Optional, TYPE_CHECKING, Union
 
 from mgr_module import NFS_POOL_NAME as POOL_NAME
 from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec, IngressSpec
@@ -18,8 +18,18 @@ from .utils import (
     available_clusters,
     conf_obj_name,
     restart_nfs_service,
-    user_conf_obj_name)
-from .export import NFSRados
+    user_conf_obj_name,
+    USER_CONF_PREFIX,
+    qos_conf_obj_name)
+from .rados_utils import NFSRados
+from .ganesha_conf import format_block, GaneshaConfParser
+from .qos_conf import (
+    QOS,
+    QOSType,
+    QOSBandwidthControl,
+    QOSOpsControl,
+    QOSParams,
+    validate_clust_qos_msg_interval)
 
 if TYPE_CHECKING:
     from nfs.module import Module
@@ -54,6 +64,91 @@ def create_ganesha_pool(mgr: 'MgrModule') -> None:
         log.debug("Successfully created nfs-ganesha pool %s", POOL_NAME)
 
 
+def config_cluster_qos_from_dict(
+    mgr: 'MgrModule',
+    cluster_id: str,
+    qos_dict: Dict[str, Union[str, bool, int]],
+    update_existing_obj: bool = False,
+) -> None:
+    qos_type = qos_dict.get(QOSParams.qos_type.value)
+    if not qos_type:
+        raise NFSInvalidOperation('qos_type is not specified in qos dict')
+    qos_type = QOSType[str(qos_type)]
+    clust_qos_msg_interval = int(qos_dict.get(QOSParams.clust_qos_msg_interval.value, 0))
+    enable_bw_ctrl = qos_dict.get(QOSParams.enable_bw_ctrl.value)
+    combined_bw_ctrl = qos_dict.get(QOSParams.combined_bw_ctrl.value)
+    enable_iops_ctrl = qos_dict.get(QOSParams.enable_iops_ctrl.value)
+    bw_obj = ops_obj = None
+    if enable_bw_ctrl:
+        bw_obj = QOSBandwidthControl(
+            bool(enable_bw_ctrl),
+            bool(combined_bw_ctrl),
+            export_writebw=str(qos_dict.get(QOSParams.export_writebw.value, "0")),
+            export_readbw=str(qos_dict.get(QOSParams.export_readbw.value, "0")),
+            client_writebw=str(qos_dict.get(QOSParams.client_writebw.value, "0")),
+            client_readbw=str(qos_dict.get(QOSParams.client_readbw.value, "0")),
+            export_rw_bw=str(qos_dict.get(QOSParams.export_rw_bw.value, "0")),
+            client_rw_bw=str(qos_dict.get(QOSParams.client_rw_bw.value, "0")),
+        )
+        bw_obj.qos_bandwidth_checks(qos_type)
+    if enable_iops_ctrl:
+        ops_obj = QOSOpsControl(
+            bool(enable_iops_ctrl),
+            max_export_iops=int(qos_dict.get(QOSParams.max_export_iops.value, 0)),
+            max_client_iops=int(qos_dict.get(QOSParams.max_client_iops.value, 0)),
+        )
+        ops_obj.qos_ops_checks(qos_type)
+
+    write_cluster_qos_obj(
+        mgr=mgr,
+        cluster_id=cluster_id,
+        qos_obj=None,
+        enable_qos=True,
+        clust_qos_msg_interval=clust_qos_msg_interval,
+        qos_type=qos_type,
+        bw_obj=bw_obj,
+        ops_obj=ops_obj,
+        update_existing_obj=update_existing_obj
+    )
+
+
+def write_cluster_qos_obj(
+    mgr: 'MgrModule',
+    cluster_id: str,
+    qos_obj: Optional[QOS],
+    enable_qos: bool,
+    clust_qos_msg_interval: int = 0,
+    qos_type: Optional[QOSType] = None,
+    bw_obj: Optional[QOSBandwidthControl] = None,
+    ops_obj: Optional[QOSOpsControl] = None,
+    update_existing_obj: bool = False
+) -> None:
+    qos_obj_exists = False
+    if not qos_obj:
+        log.debug(f"Creating new QoS block for cluster {cluster_id}")
+        qos_obj = QOS(True, enable_qos, clust_qos_msg_interval, qos_type, bw_obj, ops_obj)
+    else:
+        log.debug(f"Updating existing QoS block for cluster {cluster_id}")
+        qos_obj_exists = True
+        qos_obj.enable_qos = enable_qos
+        qos_obj.clust_qos_msg_interval = validate_clust_qos_msg_interval(clust_qos_msg_interval)
+        qos_obj.qos_type = qos_type
+        if bw_obj:
+            qos_obj.bw_obj = bw_obj
+        if ops_obj:
+            qos_obj.ops_obj = ops_obj
+
+    qos_config = format_block(qos_obj.to_qos_block())
+    rados_obj = NFSRados(mgr.rados, cluster_id)
+    if not qos_obj_exists and not update_existing_obj:
+        rados_obj.write_obj(qos_config, qos_conf_obj_name(cluster_id),
+                            conf_obj_name(cluster_id))
+    else:
+        rados_obj.update_obj(qos_config, qos_conf_obj_name(cluster_id),
+                             conf_obj_name(cluster_id), should_notify=False)
+    log.debug(f"Successfully saved {cluster_id}s QOS bandwidth control config: \n {qos_config}")
+
+
 class NFSCluster:
     def __init__(self, mgr: 'Module') -> None:
         self.mgr = mgr
@@ -65,6 +160,8 @@ class NFSCluster:
             virtual_ip: Optional[str] = None,
             ingress_mode: Optional[IngressType] = None,
             port: Optional[int] = None,
+            cluster_qos_config: Optional[Dict[str, Union[str, bool, int]]] = None,
+            enable_nfsv3: bool = False,
             ssl: bool = False,
             ssl_cert: Optional[str] = None,
             ssl_key: Optional[str] = None,
@@ -73,6 +170,12 @@ class NFSCluster:
             tls_debug: bool = False,
             tls_min_version: Optional[str] = None,
             tls_ciphers: Optional[str] = None,
+            ip_addrs: Optional[Dict[str, str]] = None,
+            monitoring_ip_addrs: Optional[Dict[str, str]] = None,
+            monitoring_port: Optional[int] = None,
+            enable_rdma: bool = False,
+            rdma_port: Optional[int] = None,
+            ingress_placement: Optional[str] = None,
     ) -> None:
         if not port:
             port = 2049   # default nfs port
@@ -83,9 +186,12 @@ class NFSCluster:
                 ingress_mode = IngressType.default
             ingress_mode = ingress_mode.canonicalize()
             pspec = PlacementSpec.from_string(placement)
+            ingress_pspec = PlacementSpec.from_string(ingress_placement) if ingress_placement else None
             if ingress_mode == IngressType.keepalive_only:
                 # enforce count=1 for nfs over keepalive only
                 pspec.count = 1
+                if ingress_pspec:
+                    ingress_pspec.count = 1
 
             ganesha_port = 10000 + port  # semi-arbitrary, fix me someday
             frontend_port: Optional[int] = port
@@ -107,6 +213,8 @@ class NFSCluster:
                                   port=ganesha_port,
                                   virtual_ip=virtual_ip_for_ganesha,
                                   enable_haproxy_protocol=enable_haproxy_protocol,
+                                  cluster_qos_config=cluster_qos_config,
+                                  enable_nfsv3=enable_nfsv3,
                                   ssl=ssl,
                                   ssl_cert=ssl_cert,
                                   ssl_key=ssl_key,
@@ -114,13 +222,18 @@ class NFSCluster:
                                   tls_ktls=tls_ktls,
                                   tls_debug=tls_debug,
                                   tls_min_version=tls_min_version,
-                                  tls_ciphers=tls_ciphers)
+                                  tls_ciphers=tls_ciphers,
+                                  ip_addrs=ip_addrs,
+                                  monitoring_ip_addrs=monitoring_ip_addrs,
+                                  monitoring_port=monitoring_port,
+                                  enable_rdma=enable_rdma,
+                                  rdma_port=rdma_port)
             completion = self.mgr.apply_nfs(spec)
             orchestrator.raise_if_exception(completion)
             ispec = IngressSpec(service_type='ingress',
                                 service_id='nfs.' + cluster_id,
                                 backend_service='nfs.' + cluster_id,
-                                placement=pspec,
+                                placement=ingress_pspec or pspec,
                                 frontend_port=frontend_port,
                                 monitor_port=7000 + port,   # semi-arbitrary, fix me someday
                                 virtual_ip=virtual_ip,
@@ -133,6 +246,8 @@ class NFSCluster:
             spec = NFSServiceSpec(service_type='nfs', service_id=cluster_id,
                                   placement=PlacementSpec.from_string(placement),
                                   port=port,
+                                  cluster_qos_config=cluster_qos_config,
+                                  enable_nfsv3=enable_nfsv3,
                                   ssl=ssl,
                                   ssl_cert=ssl_cert,
                                   ssl_key=ssl_key,
@@ -140,7 +255,12 @@ class NFSCluster:
                                   tls_ktls=tls_ktls,
                                   tls_debug=tls_debug,
                                   tls_min_version=tls_min_version,
-                                  tls_ciphers=tls_ciphers)
+                                  tls_ciphers=tls_ciphers,
+                                  ip_addrs=ip_addrs,
+                                  monitoring_ip_addrs=monitoring_ip_addrs,
+                                  monitoring_port=monitoring_port,
+                                  enable_rdma=enable_rdma,
+                                  rdma_port=rdma_port)
             completion = self.mgr.apply_nfs(spec)
             orchestrator.raise_if_exception(completion)
         log.debug("Successfully deployed nfs daemons with cluster id %s and placement %s",
@@ -164,6 +284,8 @@ class NFSCluster:
             ingress: Optional[bool] = None,
             ingress_mode: Optional[IngressType] = None,
             port: Optional[int] = None,
+            cluster_qos_config: Optional[Dict[str, Union[str, bool, int]]] = None,
+            enable_nfsv3: bool = False,
             ssl: bool = False,
             ssl_cert: Optional[str] = None,
             ssl_key: Optional[str] = None,
@@ -172,6 +294,12 @@ class NFSCluster:
             tls_debug: bool = False,
             tls_min_version: Optional[str] = None,
             tls_ciphers: Optional[str] = None,
+            ip_addrs: Optional[Dict[str, str]] = None,
+            monitoring_ip_addrs: Optional[Dict[str, str]] = None,
+            monitoring_port: Optional[int] = None,
+            enable_rdma: bool = False,
+            rdma_port: Optional[int] = None,
+            ingress_placement: Optional[str] = None,
     ) -> None:
         try:
             if virtual_ip:
@@ -195,9 +323,29 @@ class NFSCluster:
             self.create_empty_rados_obj(cluster_id)
 
             if cluster_id not in available_clusters(self.mgr):
-                self._call_orch_apply_nfs(cluster_id, placement, virtual_ip, ingress_mode, port,
-                                          ssl, ssl_cert, ssl_key, ssl_ca_cert, tls_ktls, tls_debug,
-                                          tls_min_version, tls_ciphers)
+                self._call_orch_apply_nfs(
+                    cluster_id,
+                    placement,
+                    virtual_ip,
+                    ingress_mode,
+                    port,
+                    cluster_qos_config=cluster_qos_config,
+                    enable_nfsv3=enable_nfsv3,
+                    ssl=ssl,
+                    ssl_cert=ssl_cert,
+                    ssl_key=ssl_key,
+                    ssl_ca_cert=ssl_ca_cert,
+                    tls_ktls=tls_ktls,
+                    tls_debug=tls_debug,
+                    tls_min_version=tls_min_version,
+                    tls_ciphers=tls_ciphers,
+                    ip_addrs=ip_addrs,
+                    monitoring_ip_addrs=monitoring_ip_addrs,
+                    monitoring_port=monitoring_port,
+                    enable_rdma=enable_rdma,
+                    rdma_port=rdma_port,
+                    ingress_placement=ingress_placement
+                )
                 return
             raise NonFatalError(f"{cluster_id} cluster already exists")
         except Exception as e:
@@ -228,56 +376,119 @@ class NFSCluster:
             raise ErrorResponse.wrap(e)
 
     def _show_nfs_cluster_info(self, cluster_id: str) -> Dict[str, Any]:
+        """
+        Retrieve and format NFS cluster information including daemon status,
+        placement, and ingress configuration.
+        """
+        # Get all NFS daemons
         completion = self.mgr.list_daemons(daemon_type='nfs')
-        # Here completion.result is a list DaemonDescription objects
-        clusters = orchestrator.raise_if_exception(completion)
-        backends: List[Dict[str, Union[Any]]] = []
+        all_nfs_daemons = orchestrator.raise_if_exception(completion)
 
-        for cluster in clusters:
-            if cluster_id == cluster.service_id():
-                assert cluster.hostname
-                try:
-                    if cluster.ip:
-                        ip = cluster.ip
-                    else:
-                        c = self.mgr.get_hosts()
-                        orchestrator.raise_if_exception(c)
-                        hosts = [h for h in c.result or []
-                                 if h.hostname == cluster.hostname]
-                        if hosts:
-                            ip = resolve_ip(hosts[0].addr)
-                        else:
-                            # sigh
-                            ip = resolve_ip(cluster.hostname)
-                    backends.append({
-                        "hostname": cluster.hostname,
-                        "ip": ip,
-                        "port": cluster.ports[0] if cluster.ports else None
-                    })
-                except orchestrator.OrchestratorError:
-                    continue
+        # Filter daemons for this cluster
+        cluster_daemons = [d for d in all_nfs_daemons if d.service_id() == cluster_id]
 
-        r: Dict[str, Any] = {
-            'virtual_ip': None,
-            'backend': backends,
-        }
-        sc = self.mgr.describe_service(service_type='ingress')
-        services = orchestrator.raise_if_exception(sc)
-        for i in services:
-            spec = cast(IngressSpec, i.spec)
-            if spec.backend_service == f'nfs.{cluster_id}':
-                r['virtual_ip'] = i.virtual_ip.split('/')[0] if i.virtual_ip else None
-                if i.ports:
-                    r['port'] = i.ports[0]
-                    if len(i.ports) > 1:
-                        r['monitor_port'] = i.ports[1]
+        # Cache hosts data to avoid O(n) orchestrator calls
+        hosts_map = {}
+        try:
+            hosts_completion = self.mgr.get_hosts()
+            hosts = orchestrator.raise_if_exception(hosts_completion)
+            hosts_map = {h.hostname: h for h in hosts}
+        except orchestrator.OrchestratorError:
+            log.debug("Failed to get hosts for IP resolution")
+
+        # Determine ingress configuration
+        ingress_mode: Optional[IngressType] = None
+        virtual_ip: Optional[str] = None
+        ingress_port: Optional[int] = None
+        monitor_port: Optional[int] = None
+
+        sc = self.mgr.describe_service(
+            service_type='ingress',
+            service_name=f'ingress.nfs.{cluster_id}'
+        )
+        try:
+            ingress_services = orchestrator.raise_if_exception(sc)
+            if ingress_services:
+                svc = ingress_services[0]
+                spec = cast(IngressSpec, svc.spec)
+                virtual_ip = svc.virtual_ip.split('/')[0] if svc.virtual_ip else None
                 if spec.keepalive_only:
                     ingress_mode = IngressType.keepalive_only
                 elif spec.enable_haproxy_protocol:
                     ingress_mode = IngressType.haproxy_protocol
                 else:
                     ingress_mode = IngressType.haproxy_standard
-                r['ingress_mode'] = ingress_mode.value
+                if svc.ports:
+                    ingress_port = svc.ports[0]
+                    if len(svc.ports) > 1:
+                        monitor_port = svc.ports[1]
+        except orchestrator.OrchestratorError:
+            log.debug(f"No ingress service found for NFS cluster {cluster_id}")
+
+        # Build backend list with daemon information
+        backends: List[Dict[str, Any]] = []
+        for daemon in cluster_daemons:
+            if not daemon.hostname:
+                continue
+
+            try:
+                if daemon.ip:
+                    ip = daemon.ip
+                elif daemon.hostname in hosts_map:
+                    ip = resolve_ip(hosts_map[daemon.hostname].addr)
+                else:
+                    ip = resolve_ip(daemon.hostname)
+
+                status = orchestrator.DaemonDescriptionStatus.to_str(daemon.status)
+
+                backends.append({
+                    "hostname": daemon.hostname,
+                    "ip": ip,
+                    "port": daemon.ports[0] if daemon.ports and len(daemon.ports) > 0 else None,
+                    "status": status
+                })
+            except orchestrator.OrchestratorError:
+                log.warning(
+                    "Failed to get info for NFS daemon"
+                    f" on {daemon.hostname} in cluster {cluster_id}")
+                continue
+
+        backends.sort(key=lambda x: x["hostname"])
+
+        deployment_type = "standalone"
+        placement = None
+
+        nfs_sc = self.mgr.describe_service(
+            service_type='nfs',
+            service_name=f'nfs.{cluster_id}'
+        )
+        nfs_services = orchestrator.raise_if_exception(nfs_sc)
+        for svc in nfs_services:
+            if svc.spec.service_id == cluster_id:
+                placement = svc.spec.placement
+                break
+
+        if ingress_mode:
+            if placement and placement.count and placement.count > 1:
+                deployment_type = "active-active"
+            elif len(backends) > 1:
+                deployment_type = "active-active"
+            else:
+                deployment_type = "active-passive"
+
+        r: Dict[str, Any] = {
+            'deployment_type': deployment_type,
+            'virtual_ip': virtual_ip,
+            'backend': backends,
+            'placement': placement.to_json() if placement else {},
+        }
+
+        if ingress_mode:
+            r['ingress_mode'] = ingress_mode.value
+        if ingress_port is not None:
+            r['port'] = ingress_port
+        if monitor_port is not None:
+            r['monitor_port'] = monitor_port
 
         log.debug("Successfully fetched %s info: %s", cluster_id, r)
         return r
@@ -316,7 +527,7 @@ class NFSCluster:
         try:
             if cluster_id in available_clusters(self.mgr):
                 rados_obj = self._rados(cluster_id)
-                if rados_obj.check_user_config():
+                if rados_obj.check_config(USER_CONF_PREFIX):
                     raise NonFatalError("NFS-Ganesha User Config already exists")
                 rados_obj.write_obj(nfs_config, user_conf_obj_name(cluster_id),
                                     conf_obj_name(cluster_id))
@@ -334,7 +545,7 @@ class NFSCluster:
         try:
             if cluster_id in available_clusters(self.mgr):
                 rados_obj = self._rados(cluster_id)
-                if not rados_obj.check_user_config():
+                if not rados_obj.check_config(USER_CONF_PREFIX):
                     raise NonFatalError("NFS-Ganesha User Config does not exist")
                 rados_obj.remove_obj(user_conf_obj_name(cluster_id),
                                      conf_obj_name(cluster_id))
@@ -350,3 +561,218 @@ class NFSCluster:
     def _rados(self, cluster_id: str) -> NFSRados:
         """Return a new NFSRados object for the given cluster id."""
         return NFSRados(self.mgr.rados, cluster_id)
+
+    def get_cluster_qos_config(self, cluster_id: str) -> Optional[QOS]:
+        """Return QOS object for the given cluster id."""
+        rados_obj = self._rados(cluster_id)
+        conf = rados_obj.read_obj(qos_conf_obj_name(cluster_id))
+        if conf:
+            qos_block = GaneshaConfParser(conf).parse()
+            qos_obj = QOS.from_qos_block(qos_block[0], True)
+            return qos_obj
+        return None
+
+    def update_cluster_qos_obj(self,
+                               cluster_id: str,
+                               qos_obj: Optional[QOS],
+                               enable_qos: bool,
+                               clust_qos_msg_interval: int = 0,
+                               qos_type: Optional[QOSType] = None,
+                               bw_obj: Optional[QOSBandwidthControl] = None,
+                               ops_obj: Optional[QOSOpsControl] = None) -> None:
+        """Update cluster QOS config"""
+        write_cluster_qos_obj(
+            mgr=self.mgr,
+            cluster_id=cluster_id,
+            qos_obj=qos_obj,
+            enable_qos=enable_qos,
+            clust_qos_msg_interval=clust_qos_msg_interval,
+            qos_type=qos_type,
+            bw_obj=bw_obj,
+            ops_obj=ops_obj
+        )
+
+    def update_cluster_qos(self,
+                           cluster_id: str,
+                           qos_obj: Optional[QOS],
+                           enable_qos: bool,
+                           clust_qos_msg_interval: int = 0,
+                           qos_type: Optional[QOSType] = None,
+                           bw_obj: Optional[QOSBandwidthControl] = None,
+                           ops_obj: Optional[QOSOpsControl] = None) -> None:
+        try:
+            if cluster_id in available_clusters(self.mgr):
+                self.update_cluster_qos_obj(cluster_id, qos_obj, enable_qos,
+                                            clust_qos_msg_interval, qos_type, bw_obj, ops_obj)
+                restart_nfs_service(self.mgr, cluster_id)
+                return
+            raise ClusterNotFound()
+        except NotImplementedError:
+            raise ManualRestartRequired(f"NFS-Ganesha QoS config added successfully for {cluster_id}")
+
+    def validate_qos_type(self,
+                          qos_obj: QOS,
+                          qos_type: QOSType,
+                          bw_obj: Optional[QOSBandwidthControl] = None,
+                          ops_obj: Optional[QOSOpsControl] = None) -> None:
+        if not qos_obj or not (bw_obj or ops_obj):
+            return
+        # if qos is not enabled then we can set new directly
+        if not (qos_obj.enable_qos and qos_obj.qos_type):
+            return
+
+        other_qos_obj: Any = None
+        if bw_obj:
+            other_qos_obj = qos_obj.ops_obj
+            is_other_enable = qos_obj.ops_obj.enable_iops_ctrl if qos_obj.ops_obj else False
+            is_this_enable = qos_obj.bw_obj.enable_bw_ctrl if qos_obj.bw_obj else False
+            ctrl_type = "IOPS"
+        else:
+            other_qos_obj = qos_obj.bw_obj
+            is_other_enable = qos_obj.bw_obj.enable_bw_ctrl if qos_obj.bw_obj else False
+            is_this_enable = qos_obj.ops_obj.enable_iops_ctrl if qos_obj.ops_obj else False
+            ctrl_type = "Bandwidth"
+
+        if other_qos_obj and is_other_enable:
+            # if earlier only other qos control is enabled
+            if not is_this_enable and qos_obj.qos_type != qos_type:
+                raise Exception(f"{ctrl_type} control is using {qos_obj.qos_type.name} QoS type, please update that QoS type for {ctrl_type} first.")
+            # if both qos control are enabled, the user will need to disable one first to change qos type
+            elif is_this_enable and qos_obj.qos_type != qos_type:
+                raise Exception(f"{ctrl_type} control is using {qos_obj.qos_type.name} QoS type, please disable {ctrl_type} control to update QoS type and then enable {ctrl_type} control again with new QoS type")
+
+    def enable_cluster_qos_bw(self,
+                              cluster_id: str,
+                              qos_type: QOSType,
+                              bw_obj: QOSBandwidthControl
+                              ) -> None:
+        """
+        There are 2 cases to consider:
+        1. If combined bandwith control is disabled
+            a. If qos_type is pershare, then export_writebw and export_readbw parameters are compulsory
+            b. If qos_type is perclient, then client_writebw and client_readbw parameters are compulsory
+            c. If qos_type is pershare_perclient then export_writebw, export_readbw, client_writebw and
+               client_readbw are compulsory parameters
+        2. If combined bandwidth control is enabled
+            a. If qos_type is pershare, then export_rw_bw parameter is compulsory
+            b. If qos_type is perclient, then client_rw_bw parameter is compulsory
+            c. If qos_type is pershare_perclient, then export_rw_bw and client_rw_bw parameters are compulsory
+        """
+        try:
+            qos_obj = self.get_cluster_qos_config(cluster_id)
+            if qos_obj:
+                self.validate_qos_type(qos_obj, qos_type, bw_obj=bw_obj)
+            bw_obj.qos_bandwidth_checks(qos_type)
+            self.update_cluster_qos(
+                cluster_id,
+                qos_obj,
+                True,
+                qos_type=qos_type,
+                bw_obj=bw_obj
+            )
+            log.info(f"QoS bandwidth control has been successfully enabled for cluster {cluster_id}. "
+                     "If the qos_type is changed during this process, ensure that the bandwidth "
+                     "values for all exports are updated accordingly.")
+            return
+        except Exception as e:
+            log.exception(f"Setting NFS-Ganesha QoS bandwidth control config failed for {cluster_id}")
+            raise ErrorResponse.wrap(e)
+
+    def get_cluster_qos(self, cluster_id: str, ret_bw_in_bytes: bool = False) -> Dict[str, Any]:
+        try:
+            if cluster_id in available_clusters(self.mgr):
+                qos_obj = self.get_cluster_qos_config(cluster_id)
+                return qos_obj.to_dict(ret_bw_in_bytes) if qos_obj else {}
+            raise ClusterNotFound()
+        except Exception as e:
+            log.exception(f"Fetching NFS-Ganesha QoS bandwidth control config failed for {cluster_id}")
+            raise ErrorResponse.wrap(e)
+
+    def disable_cluster_qos_bw(self, cluster_id: str) -> None:
+        try:
+            qos_obj = self.get_cluster_qos_config(cluster_id)
+            status = False
+            qos_type = None
+            clust_qos_msg_interval = 0
+            if qos_obj:
+                status = qos_obj.get_enable_qos_val(disable_bw=True)
+                if status:
+                    qos_type = qos_obj.qos_type
+                    if qos_obj.clust_qos_msg_interval:
+                        clust_qos_msg_interval = qos_obj.clust_qos_msg_interval
+            self.update_cluster_qos(cluster_id, qos_obj, status,
+                                    clust_qos_msg_interval, qos_type=qos_type, bw_obj=QOSBandwidthControl())
+            log.info("Cluster-level QoS bandwidth control has been successfully disabled for "
+                     f"cluster {cluster_id}. As a result, export-level bandwidth control will "
+                     "no longer have any effect, even if enabled.")
+            return
+        except Exception as e:
+            log.exception(f"Setting NFS-Ganesha QoS bandwidth control config failed for {cluster_id}")
+            raise ErrorResponse.wrap(e)
+
+    def enable_cluster_qos_ops(self, cluster_id: str, qos_type: QOSType, ops_obj: QOSOpsControl) -> None:
+        try:
+            qos_obj = self.get_cluster_qos_config(cluster_id)
+            if qos_obj:
+                self.validate_qos_type(qos_obj, qos_type, ops_obj=ops_obj)
+            ops_obj.qos_ops_checks(qos_type)
+            self.update_cluster_qos(
+                cluster_id,
+                qos_obj,
+                True,
+                qos_type=qos_type,
+                ops_obj=ops_obj
+            )
+            log.info(f"QOS IOPS control has been successfully enabled for cluster {cluster_id}. "
+                     "If the qos_type is changed during this process, ensure that ops count "
+                     "values for all exports are updated accordingly.")
+            return
+        except Exception as e:
+            log.exception(f"Setting NFS-Ganesha QOS IOPS control config failed for {cluster_id}")
+            raise ErrorResponse.wrap(e)
+
+    def disable_cluster_qos_ops(self, cluster_id: str) -> None:
+        try:
+            qos_obj = self.get_cluster_qos_config(cluster_id)
+            status = False
+            qos_type = None
+            clust_qos_msg_interval = 0
+            if qos_obj:
+                status = qos_obj.get_enable_qos_val(disable_ops=True)
+                if status:
+                    qos_type = qos_obj.qos_type
+                    if qos_obj.clust_qos_msg_interval:
+                        clust_qos_msg_interval = qos_obj.clust_qos_msg_interval
+            self.update_cluster_qos(cluster_id, qos_obj, status,
+                                    clust_qos_msg_interval, qos_type=qos_type, ops_obj=QOSOpsControl())
+            log.info("Cluster-level QoS IOPS control has been successfully disabled for "
+                     f"cluster {cluster_id}. As a result, export-level ops control will "
+                     "no longer have any effect, even if enabled.")
+            return
+        except Exception as e:
+            log.exception(f"Setting NFS-Ganesha QoS IOPS control config failed for {cluster_id}")
+            raise ErrorResponse.wrap(e)
+
+    def cluster_qos_set_config(
+        self,
+        cluster_id: str,
+        msg_interval: int = 0
+    ) -> None:
+        try:
+            qos_obj = self.get_cluster_qos_config(cluster_id)
+            if not qos_obj:
+                err_msg = f'No existing QoS configuration found for cluster {cluster_id}.'
+                log.error(err_msg)
+                raise Exception(err_msg)
+
+            self.update_cluster_qos(
+                cluster_id=cluster_id,
+                qos_obj=qos_obj,
+                enable_qos=qos_obj.enable_qos,
+                clust_qos_msg_interval=msg_interval,
+                qos_type=qos_obj.qos_type
+            )
+            log.info("Cluster-level QoS config updated successfully for cluster %s", cluster_id)
+        except Exception as e:
+            log.exception("Failed to update cluster-level QoS config for cluster %s", cluster_id)
+            raise ErrorResponse.wrap(e)

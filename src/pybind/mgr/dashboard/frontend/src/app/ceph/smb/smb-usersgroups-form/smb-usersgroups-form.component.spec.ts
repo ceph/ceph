@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { SmbUsersgroupsFormComponent } from './smb-usersgroups-form.component';
-import { ToastrModule } from 'ngx-toastr';
+
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { FormGroup, ReactiveFormsModule } from '@angular/forms';
@@ -38,7 +38,7 @@ describe('SmbUsersgroupsFormComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [ToastrModule.forRoot(), SharedModule, ReactiveFormsModule],
+      imports: [SharedModule, ReactiveFormsModule],
       declarations: [SmbUsersgroupsFormComponent],
       providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])]
     }).compileComponents();

@@ -33,9 +33,7 @@ RGWSyncErrorLogger::RGWSyncErrorLogger(rgw::sal::RadosStore* _store, const strin
   }
 }
 string RGWSyncErrorLogger::get_shard_oid(const string& oid_prefix, int shard_id) {
-  char buf[oid_prefix.size() + 16];
-  snprintf(buf, sizeof(buf), "%s.%d", oid_prefix.c_str(), shard_id);
-  return string(buf);
+  return fmt::format("{}.{}", oid_prefix, shard_id);
 }
 
 RGWCoroutine *RGWSyncErrorLogger::log_error_cr(const DoutPrefixProvider *dpp, const string& source_zone, const string& section, const string& name, uint32_t error_code, const string& message) {
@@ -392,10 +390,7 @@ string RGWMetaSyncEnv::status_oid()
 
 string RGWMetaSyncEnv::shard_obj_name(int shard_id)
 {
-  char buf[mdlog_sync_status_shard_prefix.size() + 16];
-  snprintf(buf, sizeof(buf), "%s.%d", mdlog_sync_status_shard_prefix.c_str(), shard_id);
-
-  return string(buf);
+  return fmt::format("{}.{}", mdlog_sync_status_shard_prefix, shard_id);
 }
 
 class RGWAsyncReadMDLogEntries : public RGWAsyncRadosRequest {
@@ -1050,9 +1045,7 @@ public:
 
 static string full_sync_index_shard_oid(int shard_id)
 {
-  char buf[mdlog_sync_full_sync_index_prefix.size() + 16];
-  snprintf(buf, sizeof(buf), "%s.%d", mdlog_sync_full_sync_index_prefix.c_str(), shard_id);
-  return string(buf);
+  return fmt::format("{}.{}", mdlog_sync_full_sync_index_prefix, shard_id);
 }
 
 class RGWReadRemoteMetadataCR : public RGWCoroutine {
@@ -1367,6 +1360,28 @@ int RGWMetaSyncSingleEntryCR::operate(const DoutPrefixProvider *dpp) {
     retcode = 0;
     for (tries = 0; tries < NUM_TRANSIENT_ERROR_RETRIES; tries++) {
       if (sync_status != -ENOENT) {
+        if (section == "bucket.instance" &&
+            cct->_conf->rgw_inject_delay_sec > 0 &&
+            std::string_view(cct->_conf->rgw_inject_delay_pattern) ==
+                "delay_meta_sync_bucket_instance_store") {
+          yield {
+            utime_t dur;
+            dur.set_from_double(cct->_conf->rgw_inject_delay_sec);
+            tn->log(0, SSTR("injecting a delay of " << dur << "s for bucket.instance metadata store"));
+            wait(dur);
+          }
+        }
+        if (section == "bucket" &&
+            cct->_conf->rgw_inject_delay_sec > 0 &&
+            std::string_view(cct->_conf->rgw_inject_delay_pattern) ==
+                "delay_meta_sync_bucket_entrypoint_store") {
+          yield {
+            utime_t dur;
+            dur.set_from_double(cct->_conf->rgw_inject_delay_sec);
+            tn->log(0, SSTR("injecting a delay of " << dur << "s for bucket entrypoint metadata store"));
+            wait(dur);
+          }
+        }
         tn->log(10, SSTR("storing local metadata entry: " << section << ":" << key));
         yield call(new RGWMetaStoreEntryCR(sync_env, raw_key, md_bl));
       } else {

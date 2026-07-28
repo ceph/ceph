@@ -15,7 +15,10 @@ export class IdentityComponent implements OnInit {
   username: string;
   icons = Icons;
 
-  constructor(private authStorageService: AuthStorageService, private authService: AuthService) {}
+  constructor(
+    private authStorageService: AuthStorageService,
+    private authService: AuthService
+  ) {}
 
   ngOnInit() {
     this.username = this.authStorageService.getUsername();

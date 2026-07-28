@@ -34,12 +34,24 @@ export AWS_SECRET_ACCESS_KEY=$(echo $userinfo | jq -r .keys[0].secret_key)
 aws s3 mb s3://testmigrate
 aws s3api put-object --bucket testmigrate --key obj
 
+# put bucket and object acls before migration
+aws s3api put-bucket-acl --bucket testmigrate --acl private
+aws s3api put-object-acl --bucket testmigrate --key obj --acl private
+
 # create an account and migrate the user as account root
 accountid=$(radosgw-admin account create | jq -r .id)
 radosgw-admin user modify --uid test-account-migration --account-root --account-id=$accountid
 
 # verify the migrated user still has access
 aws s3api head-object --bucket testmigrate --key obj
+
+# verify get/put acl backward compatibility after migration.
+# the bucket/object acl owner is still the old user id, but the
+# requester now authenticates as the account id. both should work.
+aws s3api get-bucket-acl --bucket testmigrate
+aws s3api get-object-acl --bucket testmigrate --key obj
+aws s3api put-bucket-acl --bucket testmigrate --acl private
+aws s3api put-object-acl --bucket testmigrate --key obj --acl private
 
 # replace account-root flag with managed policy
 aws iam attach-user-policy --region us-east-1 --user-name MigratedUser \

@@ -16,6 +16,7 @@
 #pragma once
 
 #include <boost/intrusive/list.hpp>
+#include <utility>
 #include <fmt/format.h>
 
 #include "common/sharedptr_registry.hpp"
@@ -24,6 +25,7 @@
 #include "ECTypes.h"
 #include "messages/MOSDPGPushReply.h"
 #include "msg/MessageRef.h"
+#include "osd/ECOmapJournal.h"
 #if WITH_CRIMSON
 #include "crimson/osd/object_context.h"
 #include "os/Transaction.h"
@@ -51,6 +53,10 @@ struct PGLog;
 struct RecoveryMessages;
 
 struct ECCommon {
+  ECOmapJournal ec_omap_journal;
+
+  explicit ECCommon(const DoutPrefixProvider& dpp) : ec_omap_journal(dpp) {}
+
   struct ec_extent_t {
     int err;
     extent_map emap;
@@ -95,15 +101,21 @@ struct ECCommon {
     extent_set extents;
     std::optional<std::vector<std::pair<int, int>>> subchunk;
     pg_shard_t pg_shard;
+    bool omap_source = false;
     bool operator==(const shard_read_t &other) const;
 
     void print(std::ostream &os) const {
       os << "shard_read_t(extents=[" << extents << "]"
           << ", subchunk=" << subchunk
           << ", pg_shard=" << pg_shard
+          << ", omap_source=" << omap_source
           << ")";
     }
   };
+
+  enum class WantAttrs : bool { No = false, Yes = true };
+  enum class WantOmapHeader : bool { No = false, Yes = true };
+  enum class WantOmapKeys : bool { No = false, Yes = true };
 
   struct read_request_t {
     const std::list<ec_align_t> to_read;
@@ -112,26 +124,40 @@ struct ECCommon {
     ECUtil::shard_extent_set_t zeros_for_decode;
     shard_id_map<shard_read_t> shard_reads;
     bool want_attrs = false;
+    bool want_omap_header = false;
+    bool want_omap_keys = false;
+    std::string omap_read_from;
+    uint64_t omap_max_bytes = 0;
     uint64_t object_size;
 
     read_request_t(
         const std::list<ec_align_t> &to_read,
         const ECUtil::shard_extent_set_t &shard_want_to_read,
-        bool want_attrs, uint64_t object_size) :
+        WantAttrs want_attrs, WantOmapHeader want_omap_header, WantOmapKeys want_omap_keys,
+        std::string omap_read_from, uint64_t omap_max_bytes, uint64_t object_size) :
       to_read(to_read),
       flags(to_read.front().flags),
       shard_want_to_read(shard_want_to_read),
       zeros_for_decode(shard_want_to_read.get_max_shards()),
       shard_reads(shard_want_to_read.get_max_shards()),
-      want_attrs(want_attrs),
+      want_attrs(static_cast<bool>(want_attrs)),
+      want_omap_header(static_cast<bool>(want_omap_header)),
+      want_omap_keys(static_cast<bool>(want_omap_keys)),
+      omap_read_from(std::move(omap_read_from)),
+      omap_max_bytes(omap_max_bytes),
       object_size(object_size) {}
 
     read_request_t(const ECUtil::shard_extent_set_t &shard_want_to_read,
-               bool want_attrs, uint64_t object_size) :
+                   WantAttrs want_attrs, WantOmapHeader want_omap_header, WantOmapKeys want_omap_keys,
+                   std::string omap_read_from, uint64_t omap_max_bytes, uint64_t object_size) :
       shard_want_to_read(shard_want_to_read),
       zeros_for_decode(shard_want_to_read.get_max_shards()),
       shard_reads(shard_want_to_read.get_max_shards()),
-      want_attrs(want_attrs),
+      want_attrs(static_cast<bool>(want_attrs)),
+      want_omap_header(static_cast<bool>(want_omap_header)),
+      want_omap_keys(static_cast<bool>(want_omap_keys)),
+      omap_read_from(std::move(omap_read_from)),
+      omap_max_bytes(omap_max_bytes),
       object_size(object_size) {}
 
     bool operator==(const read_request_t &other) const;
@@ -143,6 +169,10 @@ struct ECCommon {
           << ", zeros_for_decode=" << zeros_for_decode
           << ", shard_reads=" << shard_reads
           << ", want_attrs=" << want_attrs
+          << ", want_omap_header=" << want_omap_header
+          << ", want_omap_keys=" << want_omap_keys
+          << ", omap_read_from=" << omap_read_from
+          << ", omap_max_bytes=" << omap_max_bytes
           << ")";
     }
   };
@@ -177,6 +207,9 @@ struct ECCommon {
     int r;
     std::map<pg_shard_t, int> errors;
     std::optional<std::map<std::string, ceph::buffer::list, std::less<>>> attrs;
+    std::optional<ceph::buffer::list> omap_header;
+    std::optional<std::map<std::string, ceph::buffer::list>> omap_entries;
+    bool omap_complete;
     ECUtil::shard_extent_map_t buffers_read;
     ECUtil::shard_extent_set_t processed_read_requests;
     shard_id_set zero_length_reads;
@@ -192,6 +225,17 @@ struct ECCommon {
       } else {
         os << ", noattrs";
       }
+      if (omap_header) {
+        os << ", omap_header=" << *(omap_header);
+      } else {
+        os << ", no_omap_header";
+      }
+      if (omap_entries) {
+        os << ", omap_entries_len=" << omap_entries->size();
+      } else {
+        os << ", no_omap_entries";
+      }
+      os << ", omap_complete=" << omap_complete;
       os << ", buffers_read=" << buffers_read;
       os << ", processed_read_requests=" << processed_read_requests;
       os << ", zero_length_reads=" << zero_length_reads << ")";
@@ -410,7 +454,21 @@ struct ECCommon {
         read_result_t &read_result,
         read_request_t &read_request,
         bool for_recovery,
-        bool want_attrs);
+        bool want_attrs,
+        bool want_omap_header,
+        bool want_omap_keys);
+
+    /**
+     * Ensures a primary-capable shard with clean omap is present in shard_reads.
+     *
+     * @param error_shards Optional set of shards with errors to exclude
+     * @return 0 on success, -EIO if no suitable shard found
+     */
+    int ensure_primary_shard_for_omap(
+        const hobject_t &hoid,
+        read_request_t &read_request,
+        bool for_recovery,
+        const std::optional<std::set<pg_shard_t>> &error_shards = std::nullopt);
 
     void get_all_avail_shards(
         const hobject_t &hoid,
@@ -547,7 +605,8 @@ struct ECCommon {
           shard_id_map<ceph::os::Transaction> *transactions,
           DoutPrefixProvider *dpp,
           const OSDMapRef &osdmap,
-          bool &first_write_in_interval) = 0;
+          bool &first_write_in_interval,
+          ECOmapJournal &ec_omap_journal) = 0;
 
       virtual bool skip_transaction(
           std::set<shard_id_t> &pending_roll_forward,
@@ -586,7 +645,13 @@ struct ECCommon {
     void backend_read(hobject_t oid, ECUtil::shard_extent_set_t const &request,
                       uint64_t object_size) override {
       std::map<hobject_t, read_request_t> to_read;
-      to_read.emplace(oid, read_request_t(request, false, object_size));
+      to_read.emplace(
+        oid,
+        read_request_t(
+          request, WantAttrs::No, WantOmapHeader::No, WantOmapKeys::No,
+          "", 0, object_size
+        )
+      );
 
       objects_read_async_no_cache(
         std::move(to_read),
@@ -776,6 +841,9 @@ struct ECCommon {
       // must be filled if state == WRITING
       std::optional<ECUtil::shard_extent_map_t> returned_data;
       std::map<std::string, ceph::buffer::list, std::less<>> xattrs;
+      std::optional<ceph::buffer::list> omap_header;
+      std::optional<std::map<std::string, ceph::buffer::list>> omap_entries;
+      
       ObjectContextRef obc;
       std::set<pg_shard_t> waiting_on_pushes;
 

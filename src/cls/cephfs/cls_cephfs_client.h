@@ -4,6 +4,7 @@
 #include "include/rados/librados_fwd.hpp"
 #include "mds/mdstypes.h"
 #include "cls_cephfs.h"
+#include "cls_cephfs_types.h"
 
 struct inode_backtrace_t;
 class AccumulateArgs;
@@ -25,7 +26,6 @@ class ClsCephFSClient
       inode_backtrace_t *backtrace,
       file_layout_t *layout,
       std::string *symlink,
-      inodeno_t *remote_inode,
       AccumulateResult *result);
 
   static int delete_inode_accumulate_result(

@@ -6,7 +6,6 @@ import { of } from 'rxjs';
 
 import { NvmeSubsystemViewComponent } from './nvme-subsystem-view.component';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-
 describe('NvmeSubsystemViewComponent', () => {
   let component: NvmeSubsystemViewComponent;
   let fixture: ComponentFixture<NvmeSubsystemViewComponent>;
@@ -21,16 +20,14 @@ describe('NvmeSubsystemViewComponent', () => {
     queryParams: of(mockQueryParams)
   };
 
-  beforeEach(
-    waitForAsync(() => {
-      TestBed.configureTestingModule({
-        declarations: [NvmeSubsystemViewComponent],
-        imports: [RouterTestingModule, HttpClientTestingModule],
-        providers: [{ provide: ActivatedRoute, useValue: mockActivatedRoute }],
-        schemas: [CUSTOM_ELEMENTS_SCHEMA]
-      }).compileComponents();
-    })
-  );
+  beforeEach(waitForAsync(() => {
+    TestBed.configureTestingModule({
+      declarations: [NvmeSubsystemViewComponent],
+      imports: [RouterTestingModule, HttpClientTestingModule],
+      providers: [{ provide: ActivatedRoute, useValue: mockActivatedRoute }],
+      schemas: [CUSTOM_ELEMENTS_SCHEMA]
+    }).compileComponents();
+  }));
 
   beforeEach(() => {
     fixture = TestBed.createComponent(NvmeSubsystemViewComponent);

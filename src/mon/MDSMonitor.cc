@@ -33,6 +33,8 @@
 #include "common/perf_counters.h"
 #include "common/config.h"
 #include "common/cmdparse.h"
+#include "common/debug.h"
+#include "common/errno.h"
 #include "messages/MMDSMap.h"
 #include "messages/MFSMap.h"
 #include "messages/MFSMapUser.h"
@@ -43,6 +45,7 @@
 #include "include/ceph_assert.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
+#include "include/util.h" // for dump_services()
 #include "mds/cephfs_features.h"
 #include "mds/mdstypes.h"
 #include "mds/cephfs_features.h" // for CEPHFS_FEATURE_*

@@ -326,7 +326,6 @@ class PSTopicS3:
     def __init__(self, conn, topic_name, region, endpoint_args=None, opaque_data=None, policy_text=None):
         self.conn = conn
         self.topic_name = topic_name.strip()
-        assert self.topic_name
         self.topic_arn = ''
         self.attributes = {}
         if endpoint_args is not None:

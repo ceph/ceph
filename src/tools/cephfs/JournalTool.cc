@@ -72,7 +72,9 @@ void JournalTool::usage()
     << "\n"
     << "Special options\n"
     << "  --alternate-pool <name>     Alternative metadata pool to target\n"
-    << "                              when using recover_dentries.\n";
+    << "                              when using recover_dentries.\n"
+    << "  --max-rss <bytes>           Maximum RSS allowed per batch during\n"
+    << "                              event recover_dentries.\n";
 
   generic_client_usage();
 }
@@ -454,6 +456,9 @@ int JournalTool::main_event(std::vector<const char*> &argv)
   }
 
   std::string output_path = "dump";
+  uint64_t batch_size = 0;
+  uint64_t batch_bytes = 0;
+  JournalScanner::EventCallback flush = nullptr;
   while(arg != argv.end()) {
     std::string arg_str;
     if (ceph_argparse_witharg(argv, arg, &arg_str, "--path", (char*)NULL)) {
@@ -464,6 +469,16 @@ int JournalTool::main_event(std::vector<const char*> &argv)
       int r = rados.ioctx_create(arg_str.c_str(), output);
       ceph_assert(r == 0);
       other_pool = true;
+    } else if (ceph_argparse_witharg(argv, arg, &arg_str, "--max-rss",
+				     nullptr)) {
+      std::string parse_err;
+      /* an estimate based on calculating journal event sizes, a decoded event 
+      holds ~3x its encoded stream */
+      batch_size = strict_strtoll(arg_str.c_str(), 0, &parse_err) / 3;
+      if (!parse_err.empty()) {
+        derr << "Invalid --max-rss value '" << arg_str << "': " << parse_err << dendl;
+        return -EINVAL;
+      }
     } else {
       cerr << "Unknown argument: '" << *arg << "'" << std::endl;
       return -EINVAL;
@@ -482,45 +497,74 @@ int JournalTool::main_event(std::vector<const char*> &argv)
       return r;
     }
   } else if (command == "recover_dentries") {
-    r = js.scan();
-    if (r) {
+    std::set<inodeno_t> consumed_inos;
+    progress_tracker->set_operation_name("Processing events");
+    
+    // decode the journal first to check if the journal pointer and header are valid
+    r = js.scan(false);
+    if (r < 0) {
       derr << "Failed to scan journal (" << cpp_strerror(r) << ")" << dendl;
       return r;
     }
-
-    /**
-     * Iterate over log entries, attempting to scavenge from each one
-     */
-    std::set<inodeno_t> consumed_inos;
-    uint64_t event_count = js.events.size();
-    progress_tracker->set_operation_name("Processing events");
-    progress_tracker->start(event_count);
-
-
-    for (JournalScanner::EventMap::iterator i = js.events.begin();
-         i != js.events.end(); ++i) {
-      auto& le = i->second.log_event;
-      EMetaBlob const *mb = le->get_metablob();
-      if (mb) {
-        int scav_r = recover_dentries(*mb, dry_run, &consumed_inos);
-        if (scav_r) {
-          dout(1) << "Error processing event 0x" << std::hex << i->first << std::dec
-                  << ": " << cpp_strerror(scav_r) << ", continuing..." << dendl;
-          if (r == 0) {
-            r = scav_r;
-          }
-          // Our goal is to read all we can, so don't stop on errors, but
-          // do record them for possible later output
-          js.errors.insert(std::make_pair(i->first,
-                JournalScanner::EventError(scav_r, cpp_strerror(r))));
-        }
-      }
-
-      progress_tracker->increment();
-      progress_tracker->display_progress();
+    if (!js.pointer_present) {
+      derr << "Cannot recover dentries: journal pointer is missing" << dendl;
+      return 0;
+    }
+    // if header_valid is false, header_present is also false
+    if (!js.header_valid) {
+      derr << "Cannot recover dentries: journal header is missing or invalid" << dendl;
+      return 0;
     }
 
-      progress_tracker->display_final_summary();
+    // start the progress tracker with the diff b/w write and expire position
+    progress_tracker->start(js.header->write_pos - js.header->expire_pos);
+
+    auto flush_events = [&]() {
+      for (auto it = js.events.begin(); it != js.events.end(); ) {
+        const auto& le = it->second.log_event;
+        EMetaBlob const *mb = le->get_metablob();
+        if (mb) {
+          int scav_r = recover_dentries(*mb, dry_run, &consumed_inos);
+          if (scav_r) {
+            dout(1) << "Error processing event 0x" << std::hex << it->first << std::dec
+                    << ": " << cpp_strerror(scav_r) << ", continuing..." << dendl;
+            js.errors.insert(std::make_pair(it->first,
+                  JournalScanner::EventError(scav_r, cpp_strerror(scav_r))));
+          }
+        }
+        it = js.events.erase(it);
+        progress_tracker->increment();
+        progress_tracker->display_progress();
+      }
+      batch_bytes = 0;
+    };
+
+    if (batch_size) {
+      std::cout << "Batch size: " << batch_size << " bytes" << std::endl;
+
+      flush = [&](uint64_t offset, JournalScanner::EventRecord& er) {
+        batch_bytes += er.raw_size;
+        bool flushable = er.log_event
+            // factor in mds_debug_subtrees conf
+            && (er.log_event->get_type() == EVENT_SUBTREEMAP || er.log_event->get_type() == EVENT_SUBTREEMAP_TEST)
+            && batch_bytes >= batch_size;
+        js.events.insert_or_assign(offset, std::move(er));
+        if (flushable) {
+          flush_events();
+        }
+      };
+    }
+
+    r = js.scan_events(flush);
+
+    flush_events();
+
+    if (r) {
+      derr << "Failed to scan events (" << cpp_strerror(r) << ")" << dendl;
+      return r;
+    }
+
+    progress_tracker->display_final_summary();
 
 
     /**
@@ -966,12 +1010,6 @@ int JournalTool::recover_dentries(
                << "' with lump fnode version " << lump.fnode->version
                << "vs existing fnode version " << old_fnode_version << dendl;
           write_dentry = old_fnode_version < lump.fnode->version;
-	} else if (dentry_type == 'R' || dentry_type == 'r') {
-          dout(10) << "Existing hardlink referent full inode in slot to be (maybe) "
-               << "written by a remote inode from the journal dn '" << rb.dn.c_str()
-               << "' with lump fnode version " << lump.fnode->version
-               << "vs existing fnode version " << old_fnode_version << dendl;
-          write_dentry = old_fnode_version < lump.fnode->version;
         } else if (dentry_type == 'I' || dentry_type == 'i') {
           dout(10) << "Existing full inode in slot to be (maybe) written "
                << "by a remote inode from the journal dn '" << rb.dn.c_str()
@@ -986,46 +1024,22 @@ int JournalTool::recover_dentries(
       }
 
       if ((other_pool || write_dentry) && !dry_run) {
-        dout(4) << "writing r|l (referent|just remote) dentry " << key
-	  << " into frag " << frag_oid.name << " rb.referent_ino "
-          << rb.referent_ino << " referent_inode " << rb.referent_inode
-	  << "rb.ino " << rb.ino << dendl;
+        dout(4) << "writing L dentry " << key << " into frag "
+          << frag_oid.name << dendl;
 
-	if (rb.referent_ino != 0) {
-          dout(4) << "writing 'r' (referent remote) dentry " << key
-	    << " into frag " << frag_oid.name << dendl;
+        // Compose: Dentry format is dnfirst, [I|L], ino, d_type, alternate_name
+        bufferlist dentry_bl;
+        encode(rb.dnfirst, dentry_bl);
+        encode('l', dentry_bl);
+        ENCODE_START(2, 1, dentry_bl);
+        encode(rb.ino, dentry_bl);
+        encode(rb.d_type, dentry_bl);
+        encode(rb.alternate_name, dentry_bl);
+        ENCODE_FINISH(dentry_bl);
 
-          // Compose: Dentry format is dnfirst, r, alternate_name, InodeStore
-          bufferlist dentry_bl;
-          encode(rb.dnfirst, dentry_bl);
-          encode('r', dentry_bl);
-          ENCODE_START(2, 1, dentry_bl);
-          encode(rb.alternate_name, dentry_bl);
-	  encode_remotebit_as_referent_inode(rb, &dentry_bl);
-          ENCODE_FINISH(dentry_bl);
-
-          // Record for writing to RADOS
-          write_vals[key] = dentry_bl;
-          consumed_inos->insert(rb.referent_ino);
-          consumed_inos->insert(rb.ino);
-	} else {
-          dout(4) << "writing l dentry " << key << " into frag "
-            << frag_oid.name << dendl;
-
-          // Compose: Dentry format is dnfirst, l, ino, d_type, alternate_name
-          bufferlist dentry_bl;
-          encode(rb.dnfirst, dentry_bl);
-          encode('l', dentry_bl);
-          ENCODE_START(2, 1, dentry_bl);
-          encode(rb.ino, dentry_bl);
-          encode(rb.d_type, dentry_bl);
-          encode(rb.alternate_name, dentry_bl);
-          ENCODE_FINISH(dentry_bl);
-
-          // Record for writing to RADOS
-          write_vals[key] = dentry_bl;
-          consumed_inos->insert(rb.ino);
-	}
+        // Record for writing to RADOS
+        write_vals[key] = dentry_bl;
+        consumed_inos->insert(rb.ino);
       }
     }
 
@@ -1271,20 +1285,6 @@ void JournalTool::encode_fullbit_as_inode(
   new_inode.snap_blob = fb.snapbl;
   new_inode.symlink = fb.symlink;
   new_inode.old_inodes = fb.old_inodes;
-
-  // Serialize InodeStore
-  new_inode.encode(*out_bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
-}
-
-void JournalTool::encode_remotebit_as_referent_inode(
-  const EMetaBlob::remotebit &rb,
-  bufferlist *out_bl)
-{
-  ceph_assert(out_bl != NULL);
-
-  // Compose InodeStore
-  InodeStore new_inode;
-  new_inode.inode = rb.referent_inode;
 
   // Serialize InodeStore
   new_inode.encode(*out_bl, CEPH_FEATURES_SUPPORTED_DEFAULT);

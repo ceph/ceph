@@ -21,6 +21,8 @@ PerfCountersRef build(CephContext *cct, const std::string& name)
   b.add_time_avg(l_poll, "poll_latency", "Average latency of replication log requests");
   b.add_u64_counter(l_poll_err, "poll_errors", "Number of replication log request errors");
 
+  b.add_time_avg(l_lock, "lock_latency", "Average latency of sync lock operations");
+
   auto logger = PerfCountersRef{ b.create_perf_counters(), cct };
   cct->get_perfcounters_collection()->add(logger.get());
   return logger;

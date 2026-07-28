@@ -2,6 +2,8 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import * as _ from 'lodash';
+import { throwError as observableThrowError } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 
 @Injectable({
   providedIn: 'root'
@@ -11,7 +13,14 @@ export class FeedbackService {
   baseUIURL = 'api/feedback';
 
   isKeyExist() {
-    return this.http.get('ui-api/feedback/api_key/exist');
+    return this.http.get('ui-api/feedback/api_key/exist').pipe(
+      catchError((error) => {
+        if (_.isFunction(error.preventDefault)) {
+          error.preventDefault();
+        }
+        return observableThrowError(() => error);
+      })
+    );
   }
 
   createIssue(

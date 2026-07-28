@@ -2,6 +2,8 @@
 name: "Pull Request Checklist"
 on:
   pull_request:
+    branches:
+      - main
     types:
       - edited
       - opened

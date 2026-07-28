@@ -84,9 +84,6 @@
 /* Defined if you have libaio */
 #cmakedefine HAVE_LIBAIO
 
-/* Defined if you have libdml */
-#cmakedefine HAVE_LIBDML
-
 /* Defined if you have liburing */
 #cmakedefine HAVE_LIBURING
 
@@ -113,9 +110,6 @@
 
 /* DPDK conditional compilation */
 #cmakedefine HAVE_DPDK
-
-/* PMEM_DEVICE (OSD) conditional compilation */
-#cmakedefine HAVE_BLUESTORE_PMEM
 
 /* Define if you have tcmalloc */
 #cmakedefine HAVE_LIBTCMALLOC
@@ -256,6 +250,9 @@
 /* nasm can also build the isa-l:avx512 */
 #cmakedefine HAVE_NASM_X64_AVX512
 
+/* nasm can also build the isa-l:avx512 & vpclmulqdq */
+#cmakedefine HAVE_NASM_X64_AVX512_VPCLMUL
+
 /* Define if the erasure code isa-l plugin is compiled */
 #cmakedefine WITH_EC_ISA_PLUGIN
 
@@ -300,6 +297,9 @@
 
 /* Define if you have RISC-V ZVBC extension */
 #cmakedefine HAVE_RISCV_ZVBC 1
+
+/* Define if you have RISC-V ZBC extension */
+#cmakedefine HAVE_RISCV_ZBC 1
 
 /* Define if you have struct stat.st_mtimespec.tv_nsec */
 #cmakedefine HAVE_STAT_ST_MTIMESPEC_TV_NSEC
@@ -373,7 +373,7 @@
 #cmakedefine WITH_RADOSGW_POSIX
 
 /* Backend RADOS for Rados Gateway */
-#cmakedefine WITH_RADOSGW_RADOS
+/* #cmakedefine WITH_RADOSGW_RADOS */
 
 /* Defined if std::map::merge() is supported */
 #cmakedefine HAVE_STDLIB_MAP_SPLICING

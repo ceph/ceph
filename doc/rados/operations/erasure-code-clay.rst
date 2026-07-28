@@ -2,6 +2,11 @@
 CLAY code plugin
 ================
 
+.. deprecated:: Umbrella
+   
+The CLAY plugin is deprecated. Support for this plugin will be removed in
+the Vampire release.
+
 CLAY (short for coupled-layer) codes are erasure codes designed to bring about significant savings 
 in terms of network bandwidth and disk IO when a failed node/OSD/rack is being repaired. Let:
 
@@ -17,7 +22,7 @@ However, in the case of the *clay* plugin *d* is configurable within the limits:
 
 By default, the clay code plugin picks *d=k+m-1* as it provides the greatest savings in terms 
 of network bandwidth and disk IO. In the case of the *clay* plugin configured with 
-*k=8*, *m=4* and *d=11* when a single OSD fails, d=11 osds are contacted and 
+*k=8*, *m=4* and *d=11* when a single OSD fails, d=11 OSDs are contacted and 
 250MiB is downloaded from each of them, resulting in a total download of 11 X 250MiB = 2.75GiB 
 amount of information. More general parameters are provided below. The benefits are substantial 
 when the repair is carried out for a rack that stores information on the order of 
@@ -237,4 +242,4 @@ can recover from the failure of any ``m`` OSDs.
 	+-----------------+----------------------------------+----------------------------------+
 
 
-where ``S`` is the amount of data stored of single OSD being recovered.
+where ``S`` is the amount of data stored on a single OSD being recovered.

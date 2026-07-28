@@ -140,6 +140,7 @@ std::string_view to_string(RGWObjCategory c)
     case RGWObjCategory::Shadow: return "rgw.shadow";
     case RGWObjCategory::MultiMeta: return "rgw.multimeta";
     case RGWObjCategory::CloudTiered: return "rgw.cloudtiered";
+    case RGWObjCategory::MultiPart: return "rgw.multipart";
     default: return "unknown";
   }
 }
@@ -188,6 +189,8 @@ list<rgw_bucket_dir_entry_meta> rgw_bucket_dir_entry_meta::generate_test_instanc
   m.owner = "owner";
   m.owner_display_name = "display name";
   m.content_type = "content/type";
+  m.restore_status = 2; // CloudRestored
+  m.restore_expiry_date = ceph::real_time{std::chrono::seconds(1234567890)};
   o.push_back(std::move(m));
   o.emplace_back();
   return o;
@@ -209,6 +212,8 @@ void rgw_bucket_dir_entry_meta::dump(Formatter *f) const
   encode_json("accounted_size", accounted_size, f);
   encode_json("user_data", user_data, f);
   encode_json("appendable", appendable, f);
+  encode_json("restore_status", static_cast<int>(restore_status), f);
+  encode_json("restore_expiry_date", restore_expiry_date, f);
 }
 
 void rgw_bucket_dir_entry_meta::decode_json(JSONObj *obj) {
@@ -227,6 +232,10 @@ void rgw_bucket_dir_entry_meta::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("accounted_size", accounted_size, obj);
   JSONDecoder::decode_json("user_data", user_data, obj);
   JSONDecoder::decode_json("appendable", appendable, obj);
+  int rs_val = 0;
+  JSONDecoder::decode_json("restore_status", rs_val, obj);
+  restore_status = static_cast<uint8_t>(rs_val);
+  JSONDecoder::decode_json("restore_expiry_date", restore_expiry_date, obj);
 }
 
 list<rgw_bucket_dir_entry> rgw_bucket_dir_entry::generate_test_instances()
@@ -558,6 +567,9 @@ void rgw_bucket_olh_log_entry::dump(Formatter *f) const
     case CLS_RGW_OLH_OP_REMOVE_INSTANCE:
       op_str = "remove_instance";
       break;
+    case CLS_RGW_OLH_OP_STALE:
+      op_str = "stale_olh_op";
+      break;
     default:
       op_str = "unknown";
   }
@@ -578,6 +590,8 @@ void rgw_bucket_olh_log_entry::decode_json(JSONObj *obj)
     op = CLS_RGW_OLH_OP_UNLINK_OLH;
   } else if (op_str == "remove_instance") {
     op = CLS_RGW_OLH_OP_REMOVE_INSTANCE;
+  } else if (op_str == "stale_olh_op") {
+    op = CLS_RGW_OLH_OP_STALE;
   } else {
     op = CLS_RGW_OLH_OP_UNKNOWN;
   }
@@ -728,8 +742,7 @@ list<rgw_bucket_dir> rgw_bucket_dir::generate_test_instances()
 
   list<rgw_bucket_dir_header> l = rgw_bucket_dir_header::generate_test_instances();
 
-  uint8_t i = 0;
-  for (auto iter = l.begin(); iter != l.end(); ++iter, ++i) {
+  for (auto iter = l.begin(); iter != l.end(); ++iter) {
     rgw_bucket_dir d;
     rgw_bucket_dir_header& h = *iter;
     d.header = h;

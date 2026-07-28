@@ -7,7 +7,6 @@
 #include "rgw_auth_s3.h"
 #include "rgw_http_errors.h"
 
-#include "common/armor.h"
 #include "common/strtol.h"
 #include "include/str_list.h"
 #include "rgw_crypt_sanitize.h"
@@ -26,17 +25,16 @@ int RGWHTTPSimpleRequest::get_status()
   return status;
 }
 
-int RGWHTTPSimpleRequest::handle_header(const string& name, const string& val) 
+int RGWHTTPSimpleRequest::handle_header(std::string_view name, std::string_view val)
 {
   if (name == "CONTENT_LENGTH") {
-    string err;
-    long len = strict_strtol(val.c_str(), 10, &err);
-    if (!err.empty()) {
+    auto len = ceph::parse<std::size_t>(val);
+    if (!len) {
       ldpp_dout(this, 0) << "ERROR: failed converting content length (" << val << ") to int " << dendl;
       return -EINVAL;
     }
 
-    max_response = len;
+    max_response = *len;
   }
 
   return 0;
@@ -46,63 +44,59 @@ int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
 {
   unique_lock guard(out_headers_lock);
 
-  char line[len + 1];
-  char *s = (char *)ptr, *end = (char *)ptr + len;
-  char *p = line;
+  std::string_view line(static_cast<const char*>(ptr), len);
   ldpp_dout(this, 30) << "receive_http_header" << dendl;
 
-  while (s != end) {
-    if (*s == '\r') {
-      s++;
-      continue;
-    }
-    if (*s == '\n') {
-      if (p == line) {
-        // End of headers (empty line "\r\n")
-        ldpp_dout(this, 30) << "All headers received" << dendl;
-        return handle_headers(out_headers, http_status);
-      }
-      *p = '\0';
-      ldpp_dout(this, 30) << "received header: " << line << dendl;
-      // TODO: fill whatever data required here
-      char *l = line;
-      char *tok = strsep(&l, " \t:");
-      if (tok && l) {
-        while (*l == ' ')
-          l++;
-
-        if (strcmp(tok, "HTTP") == 0 || strncmp(tok, "HTTP/", 5) == 0) {
-          http_status = atoi(l);
-          if (http_status == 100) /* 100-continue response */
-            continue;
-          status = rgw_http_error_to_errno(http_status);
-        } else {
-          /* convert header field name to upper case */
-          char *src = tok;
-          char buf[len + 1];
-          size_t i;
-          for (i = 0; i < len && *src; ++i, ++src) {
-            switch (*src) {
-              case '-':
-                buf[i] = '_';
-                break;
-              default:
-                buf[i] = toupper(*src);
-            }
-          }
-          buf[i] = '\0';
-          out_headers[buf] = l;
-          int r = handle_header(buf, l);
-          if (r < 0)
-            return r;
-        }
-      }
-      p = line;
-    }
-    if (s != end)
-      *p++ = *s++;
+  if (line == "\r\n" || line == "\n") {
+    // End of headers (empty line "\r\n")
+    ldpp_dout(this, 30) << "All headers received" << dendl;
+    return handle_headers(out_headers, http_status);
   }
 
+  if (line.ends_with("\r\n")) {
+    line.remove_suffix(2);
+  } else if (line.ends_with("\n")) {
+    line.remove_suffix(1);
+  }
+  ldpp_dout(this, 30) << "received header: " << line << dendl;
+
+  auto trim = [](std::string_view & v) {
+    auto n = v.find_first_not_of(" \t");
+    if (n == v.npos) {
+      v = std::string_view{};
+    } else {
+      v.remove_prefix(n);
+    }
+  };
+  trim(line);
+  if (line.empty()) {
+    return 0;
+  }
+
+  auto sep = line.find_first_of(" \t:");
+  if (sep == line.npos) {
+    return 0;
+  }
+  auto left = line.substr(0, sep);
+  auto right = line.substr(sep + 1, line.npos);
+  trim(right);
+
+  if (left == "HTTP" || left.starts_with("HTTP/")) {
+    // First line
+    sep = right.find_first_of(" \t");
+    auto status_tok = right.substr(0, sep);
+    // .value_or(0) mimics atol's behavior on receiving no digits.
+    http_status = ceph::parse<std::uint16_t>(status_tok).value_or(0);
+    if (http_status == 100) {
+      return 0;
+    }
+    status = rgw_http_error_to_errno(http_status);
+  } else {
+    std::string header_name;
+    uppercase_dash_transform(left, std::back_inserter(header_name));
+    out_headers[header_name] = std::string{right};
+    return handle_header(header_name, right);
+  }
   return 0;
 }
 
@@ -431,16 +425,8 @@ auto RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const 
   string params_str;
   get_params_str(new_info.args.get_params(), params_str);
 
-  string new_url = url;
-  string& resource = new_info.request_uri;
-  string new_resource = resource;
-  if (new_url[new_url.size() - 1] == '/' && resource[0] == '/') {
-    new_url = new_url.substr(0, new_url.size() - 1);
-  } else if (resource[0] != '/') {
-    new_resource = "/";
-    new_resource.append(resource);
-  }
-  new_url.append(new_resource + params_str);
+  endpoint.set_path(new_info.request_uri);
+  endpoint.set_query(params_str);
 
   bufferlist::iterator bliter;
 
@@ -452,7 +438,6 @@ auto RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const 
   }
 
   method = new_info.method;
-  url = new_url;
 
   std::ignore = process(dpp, y);
 
@@ -570,7 +555,7 @@ RGWRESTGenerateHTTPHeaders::RGWRESTGenerateHTTPHeaders(CephContext *_cct, RGWEnv
 }
 
 void RGWRESTGenerateHTTPHeaders::init(const string& _method, const string& host,
-                                      const string& resource_prefix, const string& _url,
+                                      const string& resource_prefix, const RGWEndpoint& _endpoint,
                                       const string& resource, const param_vec_t& params,
                                       std::optional<string> api_name)
 {
@@ -587,7 +572,9 @@ void RGWRESTGenerateHTTPHeaders::init(const string& _method, const string& host,
                           url_encode(iter->second, encode_slash));
   }
 
-  url = _url + resource + params_str;
+  endpoint = _endpoint;
+  endpoint.set_path(resource);
+  endpoint.set_query(params_str);
 
   const std::string date_str = get_gmt_date_str();
   new_env->set("HTTP_DATE", date_str.c_str());
@@ -691,32 +678,30 @@ void RGWRESTStreamS3PutObj::send_init(const rgw_obj& obj)
 {
   string resource_str;
   string resource;
-  string new_url = url;
+  RGWEndpoint new_endpoint = endpoint;
   string new_host = host;
 
    const auto& bucket_name = obj.bucket.name;
 
   if (host_style == VirtualStyle) {
     resource_str = obj.get_oid();
-
-    new_url = protocol + "://" + bucket_name + "." + host;
     new_host = bucket_name + "." + new_host;
+    new_endpoint.set_host(new_host);
   } else {
     resource_str = bucket_name + "/" + obj.get_oid();
   }
+  new_endpoint.add_trailing_slash();
 
   //do not encode slash in object key name
   url_encode(resource_str, resource, false);
 
-  if (new_url[new_url.size() - 1] != '/')
-    new_url.append("/");
-
-  ldpp_dout(this, 20) << __func__ << "(): host = " << host << " , resource = " << resource << " , new_host = " << new_host << " , new_url = " << new_url  << dendl;
+  ldpp_dout(this, 20) << __func__ << "(): host = " << host << " , resource = " << resource
+    << " , new_host = " << new_host << " , new_endpoint = " << new_endpoint  << dendl;
 
   method = "PUT";
-  headers_gen.init(method, new_host, resource_prefix, new_url, resource, params, api_name);
+  headers_gen.init(method, new_host, resource_prefix, new_endpoint, resource, params, api_name);
 
-  url = headers_gen.get_url();
+  endpoint = headers_gen.get_endpoint();
 }
 
 void RGWRESTStreamS3PutObj::send_ready(const DoutPrefixProvider *dpp, RGWAccessKey& key, map<string, bufferlist>& rgw_attrs)
@@ -831,10 +816,10 @@ int RGWRESTStreamRWRequest::send_prepare(const DoutPrefixProvider *dpp, RGWAcces
 int RGWRESTStreamRWRequest::do_send_prepare(const DoutPrefixProvider *dpp, RGWAccessKey *key, map<string, string>& extra_headers, const string& resource,
                                          bufferlist *send_data)
 {
-  string new_url = url;
-  if (!new_url.empty() && new_url.back() != '/')
-    new_url.append("/");
-  
+  RGWEndpoint new_endpoint = endpoint;
+
+  new_endpoint.add_trailing_slash();
+
   string new_resource;
   string bucket_name;
   string old_resource = resource;
@@ -855,23 +840,23 @@ int RGWRESTStreamRWRequest::do_send_prepare(const DoutPrefixProvider *dpp, RGWAc
   }
 
   if (host_style == VirtualStyle) {
-    new_url = protocol + "://" + bucket_name + "." + host;
+    new_host = bucket_name + "." + host;
+    new_endpoint.set_host(new_host);
     if(pos == string::npos) {
       new_resource = "";
     } else {
       new_resource = new_resource.substr(pos+1);
     }
-    new_host = bucket_name + "." + host;
   }
-
-  if (new_url[new_url.size() - 1] != '/')
-    new_url.append("/");
+  new_endpoint.add_trailing_slash();
 
   headers_gen.emplace(cct, &new_env, &new_info);
 
-  ldpp_dout(this, 20) << __func__ << "(): host = " << host << " , resource = " << resource << " , new_host = " << new_host << " , new_url = " << new_url  << " , new_resource = " << new_resource << dendl;
+  ldpp_dout(this, 20) << __func__ << "(): host = " << host << " , resource = " << resource
+    << " , new_host = " << new_host << " , new_endpoint = " << new_endpoint
+    << " , new_resource = " << new_resource << dendl;
 
-  headers_gen->init(method, new_host, resource_prefix, new_url, new_resource, params, api_name);
+  headers_gen->init(method, new_host, resource_prefix, new_endpoint, new_resource, params, api_name);
 
   headers_gen->set_http_attrs(extra_headers);
 
@@ -886,7 +871,7 @@ int RGWRESTStreamRWRequest::do_send_prepare(const DoutPrefixProvider *dpp, RGWAc
   }
 
   method = new_info.method;
-  url = headers_gen->get_url();
+  endpoint = headers_gen->get_endpoint();
 
   return 0;
 }
@@ -977,21 +962,13 @@ int RGWHTTPStreamRWRequest::complete_request(const DoutPrefixProvider* dpp,
   for (auto iter = out_headers.begin(); pattrs && iter != out_headers.end(); ++iter) {
     const string& attr_name = iter->first;
     if (attr_name.compare(0, sizeof(RGW_HTTP_RGWX_ATTR_PREFIX) - 1, RGW_HTTP_RGWX_ATTR_PREFIX) == 0) {
-      string name = attr_name.substr(sizeof(RGW_HTTP_RGWX_ATTR_PREFIX) - 1);
-      const char *src = name.c_str();
-      char buf[name.size() + 1];
-      char *dest = buf;
-      for (; *src; ++src, ++dest) {
-        switch(*src) {
-          case '_':
-            *dest = '-';
-            break;
-          default:
-            *dest = tolower(*src);
-        }
-      }
-      *dest = '\0';
-      (*pattrs)[buf] = iter->second;
+      std::string name;
+      name.reserve(attr_name.size() - (sizeof(RGW_HTTP_RGWX_ATTR_PREFIX) - 1));
+      lowercase_dash_transform(
+          std::string_view{attr_name}.substr(
+              sizeof(RGW_HTTP_RGWX_ATTR_PREFIX) - 1),
+          std::back_inserter(name));
+      (*pattrs)[std::move(name)] = iter->second;
     }
   }
 
@@ -1010,17 +987,16 @@ int RGWHTTPStreamRWRequest::handle_headers(const map<string, string>& headers, i
   return 0;
 }
 
-int RGWHTTPStreamRWRequest::handle_header(const string& name, const string& val)
+int RGWHTTPStreamRWRequest::handle_header(std::string_view name, std::string_view val)
 {
   if (name == "RGWX_EMBEDDED_METADATA_LEN") {
-    string err;
-    long len = strict_strtol(val.c_str(), 10, &err);
-    if (!err.empty()) {
+    auto len = ceph::parse<std::uint64_t>(val);
+    if (!len) {
       ldpp_dout(this, 0) << "ERROR: failed converting embedded metadata len (" << val << ") to int " << dendl;
       return -EINVAL;
     }
 
-    cb->set_extra_data_len(len);
+    cb->set_extra_data_len(*len);
   }
   return 0;
 }

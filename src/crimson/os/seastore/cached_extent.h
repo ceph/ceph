@@ -279,8 +279,6 @@ public:
   ExtentCommitter(CachedExtent &extent, Transaction &t)
     : extent(extent), t(t) {}
 
-  void block_trans(Transaction &);
-  void unblock_trans(Transaction &);
   // commit all extent states to the prior instance,
   // except poffset and extent content
   void commit_state();
@@ -296,6 +294,7 @@ public:
 
   void commit_and_share_paddr();
 
+  void maybe_sync_copied_lba_key();
 private:
   // the rewritten extent
   CachedExtent &extent;
@@ -655,7 +654,7 @@ public:
 
   /// Returns true iff extent is stable and not io-pending
   bool is_stable_ready() const {
-    return is_stable() && (!is_pending_io() || io_wait->rewriting);
+    return is_stable() && (!is_pending_io() || io_wait->stable_view);
   }
 
   /// Returns true if extent can not be mutated,
@@ -687,11 +686,6 @@ public:
   /// Returns true if extent or prior_instance has been invalidated
   bool has_been_invalidated() const {
     return !is_valid() || (prior_instance && !prior_instance->is_valid());
-  }
-
-  /// Returns true if extent is a placeholder
-  bool is_placeholder() const {
-    return is_retired_placeholder_type(get_type());
   }
 
   bool is_pending_io() const {
@@ -963,15 +957,22 @@ private:
   std::optional<paddr_t> prior_poffset = std::nullopt;
 
   struct io_wait_t {
-    seastar::shared_promise<> pr;
-    extent_state_t from_state;
-    bool rewriting = false;
+    seastar::shared_promise<> pr;  /// completes when the I/O finishes
+    extent_state_t from_state;     /// state before entering the wait
+
+    /**
+      * If true, treat the extent as "stable-ready" for visibility checks
+      * even while I/O is pending. Used by:
+      *  See: stage_visibility_handoff()
+      */
+    bool stable_view = false;
   };
+
   std::optional<io_wait_t> io_wait;
 
-  void set_io_wait(extent_state_t new_state, bool rewriting) {
+  void set_io_wait(extent_state_t new_state, bool stable_view) {
     ceph_assert(!io_wait);
-    io_wait.emplace(seastar::shared_promise<>(), state, rewriting);
+    io_wait.emplace(seastar::shared_promise<>(), state, stable_view);
     state = new_state;
     assert(is_data_stable());
   }
@@ -1010,6 +1011,8 @@ private:
   ExtentCommitterRef committer;
 
   void new_committer(Transaction &t);
+
+  seastar::shared_mutex commit_lock;
 
 protected:
   trans_view_set_t mutation_pending_extents;
@@ -1086,17 +1089,6 @@ protected:
       length(0),
       loaded_length(0) {
     assert(is_fully_loaded());
-    // must call init() to fully initialize
-  }
-
-  struct retired_placeholder_construct_t {};
-  CachedExtent(retired_placeholder_construct_t, extent_len_t _length)
-    : state(extent_state_t::CLEAN),
-      length(_length),
-      loaded_length(0),
-      buffer_space(std::in_place) {
-    assert(!is_fully_loaded());
-    assert(is_aligned(length, CEPH_PAGE_SIZE));
     // must call init() to fully initialize
   }
 

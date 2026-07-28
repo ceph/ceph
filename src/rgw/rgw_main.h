@@ -106,9 +106,11 @@ class AppMain {
     IOContextPoolHolder& operator=(const IOContextPoolHolder&) = delete;
 
     ceph::async::io_context_pool& get();
+    ceph::async::io_context_pool& operator*() { return get(); }
+    ceph::async::io_context_pool* operator->() { return std::addressof(get()); }
   };
 
-  IOContextPoolHolder context_pool_holder;
+  IOContextPoolHolder context_pool;
 public:
   AppMain(const DoutPrefixProvider* dpp);
   ~AppMain();
@@ -138,6 +140,7 @@ public:
   int init_frontends2(RGWLib* rgwlib = nullptr);
   void init_tracepoints();
   void init_lua();
+  void init_kms_cache();
 #ifdef WITH_RADOSGW_RADOS
   void init_dedup();
 #endif

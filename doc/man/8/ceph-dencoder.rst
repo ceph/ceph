@@ -15,7 +15,7 @@ Synopsis
 Description
 ===========
 
-**ceph-dencoder** is a utility to encode, decode, and dump ceph data
+**ceph-dencoder** is a utility to encode, decode, and dump Ceph data
 structures.  It is used for debugging and for testing inter-version
 compatibility.
 

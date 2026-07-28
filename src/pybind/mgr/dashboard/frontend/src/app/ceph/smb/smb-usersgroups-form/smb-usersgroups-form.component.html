@@ -2,10 +2,12 @@
   cdsCol
   [columnNumbers]="{ md: 4 }"
 >
-  <form name="form"
-        #formDir="ngForm"
-        [formGroup]="form"
-        novalidate>
+  <form
+    name="form"
+    #formDir="ngForm"
+    [formGroup]="form"
+    novalidate
+  >
     <div
       i18n="form title"
       class="form-header"
@@ -37,7 +39,7 @@
         i18n-helperText
         [invalid]="form.controls.usersGroupsId.invalid && form.controls.usersGroupsId.dirty"
         [invalidText]="usersgroupsError"
-      >Users and groups access resource name
+        >Users and groups access resource name
         <input
           cdsText
           type="text"
@@ -73,11 +75,14 @@
         <option
           [value]="null"
           i18n
-        >-- List of clusters --
+        >
+          -- List of clusters --
         </option>
         <option
           *ngFor="let cluster of clusters"
-          [value]="cluster.cluster_id">{{ cluster.cluster_id }}
+          [value]="cluster.cluster_id"
+        >
+          {{ cluster.cluster_id }}
         </option>
       </cds-select>
     </div>
@@ -99,16 +104,20 @@
             <cds-text-label
               for="name"
               i18n
-              [invalid]="form.controls['users'].controls[i].controls.name.invalid &&
-                          form.controls['users'].controls[i].controls.name.dirty"
+              [invalid]="
+                form.controls['users'].controls[i].controls.name.invalid &&
+                form.controls['users'].controls[i].controls.name.dirty
+              "
               [invalidText]="usersNameError"
-            >Username
+              >Username
               <input
                 cdsText
                 type="text"
                 formControlName="name"
-                [invalid]="form.controls['users'].controls[i].controls.name.invalid &&
-                          form.controls['users'].controls[i].controls.name.dirty"
+                [invalid]="
+                  form.controls['users'].controls[i].controls.name.invalid &&
+                  form.controls['users'].controls[i].controls.name.dirty
+                "
               />
             </cds-text-label>
             <ng-template #usersNameError>
@@ -126,26 +135,30 @@
             <cds-password-label
               for="password"
               i18n
-              [invalid]="form.controls['users'].controls[i].controls.password.invalid &&
-                          form.controls['users'].controls[i].controls.password.dirty"
+              [invalid]="
+                form.controls['users'].controls[i].controls.password.invalid &&
+                form.controls['users'].controls[i].controls.password.dirty
+              "
               [invalidText]="usersPasswordError"
-            >Password
-            <input
-              cdsPassword
-              type="password"
-              label="Password"
-              formControlName="password"
-              [invalid]="form.controls['users'].controls[i].controls.password.invalid &&
-                          form.controls['users'].controls[i].controls.password.dirty"
-            >
-          </cds-password-label>
-          <ng-template #usersPasswordError>
-            <span
-              class="invalid-feedback"
-              i18n
-              >This field is required.</span
-            >
-          </ng-template>
+              >Password
+              <input
+                cdsPassword
+                type="password"
+                label="Password"
+                formControlName="password"
+                [invalid]="
+                  form.controls['users'].controls[i].controls.password.invalid &&
+                  form.controls['users'].controls[i].controls.password.dirty
+                "
+              />
+            </cds-password-label>
+            <ng-template #usersPasswordError>
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            </ng-template>
           </div>
           <div
             cdsCol
@@ -158,13 +171,13 @@
               size="sm"
               (click)="removeUser(i)"
             >
-            <svg
-              cdsIcon="trash-can"
-              size="32"
-              class="cds--btn__icon">
-            </svg>
-          </cds-icon-button>
-        </div>
+              <svg
+                cdsIcon="trash-can"
+                size="32"
+                class="cds--btn__icon"
+              ></svg>
+            </cds-icon-button>
+          </div>
         </div>
       </ng-container>
     </ng-container>
@@ -175,13 +188,14 @@
         type="button"
         (click)="addUser()"
         i18n
-      >Add User
+      >
+        Add User
         <svg
           cdsIcon="add"
           size="32"
           class="cds--btn__icon"
-          icon>
-        </svg>
+          icon
+        ></svg>
       </button>
     </div>
 
@@ -199,48 +213,52 @@
             cdsCol
             [columnNumbers]="{ lg: 14 }"
           >
-          <cds-text-label
-            for="name"
-            i18n
-          >Group
-            <input
-              cdsText
-              type="text"
-              formControlName="name"
-            />
-          </cds-text-label>
+            <cds-text-label
+              for="name"
+              i18n
+              >Group
+              <input
+                cdsText
+                type="text"
+                formControlName="name"
+              />
+            </cds-text-label>
           </div>
           <div
             cdsCol
             [columnNumbers]="{ lg: 1 }"
-            class="item-action-btn spacing">
+            class="item-action-btn spacing"
+          >
             <cds-icon-button
               kind="danger"
               size="sm"
               (click)="removeGroup(i)"
             >
-            <svg
-              cdsIcon="trash-can"
-              size="32"
-              class="cds--btn__icon">
-            </svg>
-          </cds-icon-button>
+              <svg
+                cdsIcon="trash-can"
+                size="32"
+                class="cds--btn__icon"
+              ></svg>
+            </cds-icon-button>
           </div>
         </div>
       </ng-container>
     </ng-container>
 
     <div class="form-item">
-      <button cdsButton="tertiary"
-              type="button"
-              (click)="addGroup()"
-              i18n>
+      <button
+        cdsButton="tertiary"
+        type="button"
+        (click)="addGroup()"
+        i18n
+      >
         Add Group
         <svg
           cdsIcon="add"
           size="32"
           class="cds--btn__icon"
-          icon></svg>
+          icon
+        ></svg>
       </button>
     </div>
 
@@ -248,6 +266,7 @@
       (submitActionEvent)="submit()"
       [form]="form"
       [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
-      wrappingClass="text-right"></cd-form-button-panel>
-    </form>
-  </div>
+      wrappingClass="text-right"
+    ></cd-form-button-panel>
+  </form>
+</div>

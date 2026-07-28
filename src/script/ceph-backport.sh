@@ -294,7 +294,9 @@ function cherry_pick_phase {
         git checkout -b "$local_branch" FETCH_HEAD
     fi
 
-    git fetch "$CEPH_UPSTREAM" "$merge_commit_sha"
+    if ! git cat-file -e "${merge_commit_sha}^{commit}" 2>/dev/null; then
+        git fetch "$CEPH_UPSTREAM" "$merge_commit_sha"
+    fi
 
     set +x
     maybe_restore_set_x

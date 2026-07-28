@@ -4,10 +4,11 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
-import { throwError } from 'rxjs';
+
+import { throwError, of as observableOf } from 'rxjs';
 
 import { FeedbackService } from '~/app/shared/api/feedback.service';
+import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
 import { FeedbackComponent } from './feedback.component';
@@ -18,6 +19,7 @@ describe('FeedbackComponent', () => {
   let component: FeedbackComponent;
   let fixture: ComponentFixture<FeedbackComponent>;
   let feedbackService: FeedbackService;
+  let mgrModuleService: MgrModuleService;
   let formHelper: FormHelper;
 
   configureTestBed({
@@ -26,7 +28,6 @@ describe('FeedbackComponent', () => {
       HttpClientTestingModule,
       RouterTestingModule,
       ReactiveFormsModule,
-      ToastrModule.forRoot(),
       SharedModule,
       SelectModule
     ],
@@ -38,6 +39,7 @@ describe('FeedbackComponent', () => {
     fixture = TestBed.createComponent(FeedbackComponent);
     component = fixture.componentInstance;
     feedbackService = TestBed.inject(FeedbackService);
+    mgrModuleService = TestBed.inject(MgrModuleService);
     fixture.detectChanges();
   });
 
@@ -73,5 +75,41 @@ describe('FeedbackComponent', () => {
     component.onSubmit();
 
     formHelper.expectError('api_key', 'invalidApiKey');
+  });
+
+  it('should enable feedback module with force', () => {
+    spyOn(mgrModuleService, 'updateModuleState');
+    spyOn(mgrModuleService.updateCompleted$, 'subscribe').and.callThrough();
+
+    component.enableFeedbackModule();
+
+    expect(mgrModuleService.updateModuleState).toHaveBeenCalledWith(
+      'feedback',
+      false,
+      null,
+      null,
+      'Enabled Feedback Module',
+      false,
+      undefined,
+      true
+    );
+    expect(mgrModuleService.updateCompleted$.subscribe).toHaveBeenCalled();
+  });
+
+  it('should refresh feedback state after module enablement', () => {
+    spyOn(feedbackService, 'isKeyExist').and.returnValues(
+      throwError({ status: 404 }),
+      observableOf(true)
+    );
+    spyOn(mgrModuleService, 'updateModuleState');
+
+    component.ngOnInit();
+    expect(component.isFeedbackEnabled).toEqual(false);
+
+    component.enableFeedbackModule();
+    mgrModuleService.updateCompleted$.next();
+
+    expect(component.isFeedbackEnabled).toEqual(true);
+    expect(component.feedbackForm.enabled).toEqual(true);
   });
 });

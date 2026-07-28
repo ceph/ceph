@@ -1262,3 +1262,115 @@ TEST_F(TestClient, LlreadvLlwritevQuotaFull) {
   client->ll_rmdir(diri, dirname, myperm);
   ASSERT_TRUE(client->ll_put(diri));
 }
+
+TEST_F(TestClient, LlreadvLlwritevZeroSizeBufferFsync) {
+  /*
+  Test that zero-length async-fsync read call don't hit zero length assertion
+  with two scenarios:
+  a) async I/O with fsync enabled and sync metadata+data
+  b) asynx I/O with fsync enabled and sync data only */
+
+  int64_t rc;
+  const size_t BUFSIZE = 128 * 1024 * 1024;
+  Inode *root = nullptr, *file = nullptr;
+  Fh *fh = nullptr;
+  struct ceph_statx stx;
+  root = client->get_root();
+  ASSERT_NE(root, (Inode *)NULL);
+
+  int mypid = getpid();
+  char fname[256];
+  sprintf(fname, "test_llreadvllwritevfsyncfile%u", mypid);
+  ASSERT_EQ(0, client->ll_createx(root, fname, 0666,
+                                  O_RDWR | O_CREAT | O_TRUNC | O_RSYNC,
+                                  &file, &fh, &stx, 0, 0, myperm));
+
+  struct statvfs statbuf;
+  rc = client->ll_statfs(root, &statbuf, myperm);
+  ASSERT_EQ(rc, 0);
+  int64_t available_space = statbuf.f_bavail * statbuf.f_bsize;
+  ASSERT_GT(available_space, 4 * BUFSIZE);
+
+  auto out_buf_0 = std::make_unique<char[]>(BUFSIZE);
+  memset(out_buf_0.get(), 65, BUFSIZE);
+  auto out_buf_1 = std::make_unique<char[]>(BUFSIZE);
+  memset(out_buf_1.get(), 66, BUFSIZE);
+
+  struct iovec iov_out_buffered[2] = {
+    {out_buf_0.get(), BUFSIZE},
+    {out_buf_1.get(), BUFSIZE},
+  };
+  struct iovec iov_out_buffered_dataonly[2] = {
+    {out_buf_0.get(), BUFSIZE},
+    {out_buf_1.get(), BUFSIZE}
+  };
+
+  char in_buf_0[0];
+  char in_buf_1[0];
+  struct iovec iov_in_fsync_sync_all[2] = {
+    {in_buf_0, sizeof(in_buf_0)},
+    {in_buf_1, sizeof(in_buf_1)},
+  };
+  struct iovec iov_in_dataonly_fysnc[2] = {
+    {in_buf_0, sizeof(in_buf_0)},
+    {in_buf_1, sizeof(in_buf_1)}
+  };
+
+  // fsync - true, syncdataonly - false
+  C_SaferCond writefinish_fsync("test-nonblocking-writefinish-fsync-sync-all");
+  C_SaferCond readfinish_fsync("test-nonblocking-readfinish-fsync-sync-all");
+
+  bufferlist bl;
+  ssize_t bytes_to_write = 0, bytes_written = 0, bytes_read = 0;
+
+  bytes_to_write = iov_out_buffered[0].iov_len
+                   + iov_out_buffered[1].iov_len;
+
+  // do a buffered write
+  rc = client->ll_preadv_pwritev(fh, iov_out_buffered, 2, 0, true,
+                                 &writefinish_fsync, nullptr);
+  ASSERT_EQ(rc, 0);
+
+  // async-fsync read while async write is ongoing so that client flushes the
+  // file inode which is having dirty_or_tx (a requirement to flush the inode)
+  // set in it's object set.
+  rc = client->ll_preadv_pwritev(fh, iov_in_fsync_sync_all, 2, 0, false,
+                                 &readfinish_fsync, &bl, true, false);
+  ASSERT_EQ(rc, 0);
+
+  bytes_written = writefinish_fsync.wait();
+  ASSERT_EQ(bytes_written, bytes_to_write);
+  bytes_read = readfinish_fsync.wait();
+  ASSERT_EQ(bytes_read, 0);
+
+  C_SaferCond writefinish_fsync_data_only("test-nonblocking-writefinish-fsync-syncdataonly");
+  C_SaferCond readfinish_fsync_data_only("test-nonblocking-readfinish-fsync-syndataonly");
+
+
+  bytes_to_write = iov_out_buffered_dataonly[0].iov_len
+                   + iov_out_buffered_dataonly[1].iov_len;
+
+  // do a buffered write
+  rc = client->ll_preadv_pwritev(fh, iov_out_buffered_dataonly, 2, (BUFSIZE * 2) + 1,
+                                 true, &writefinish_fsync_data_only,
+                                 nullptr);
+  ASSERT_EQ(rc, 0);
+
+  bl.clear();
+
+  // async-fsync (dataonly) read while async write is ongoing so that client
+  // flushes the file inode which is having dirty_or_tx (a requirement to flush
+  // the inode) set in it's object set.
+  rc = client->ll_preadv_pwritev(fh, iov_in_dataonly_fysnc, 2, (BUFSIZE * 2) + 1,
+                                 false, &readfinish_fsync_data_only, &bl,
+                                 true, true);
+  ASSERT_EQ(rc, 0);
+
+  bytes_written = writefinish_fsync_data_only.wait();
+  ASSERT_EQ(bytes_written, bytes_to_write);
+  bytes_read = readfinish_fsync_data_only.wait();
+  ASSERT_EQ(bytes_read, 0);
+
+  client->ll_release(fh);
+  ASSERT_EQ(0, client->ll_unlink(root, fname, myperm));
+}

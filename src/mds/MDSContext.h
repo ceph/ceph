@@ -46,7 +46,7 @@ template<template<typename> class A>
   using que_alloc = std::deque<MDSContext*, A<MDSContext*>>;
   using que = que_alloc<std::allocator>;
 
-  void finish(int r) override;
+  void complete(int r) override;
   virtual MDSRank *get_mds() = 0;
 };
 

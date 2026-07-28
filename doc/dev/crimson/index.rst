@@ -40,13 +40,21 @@ The following options can be used with ``vstart.sh``.
 
 ``--osd-args``
     Pass extra command line options to ``crimson-osd`` or ``ceph-osd``.
-    This is useful for passing Seastar options to ``crimson-osd``. For
-    example, one can supply ``--osd-args "--memory 2G"`` to set the amount of
-    memory to use. Please refer to the output of::
+    This option is useful for passing either:
 
-      crimson-osd --help-seastar
+    #.  Seastar options, i.e., to indicate CPU core options, native backend options, etc.
+    #.  Object Store options, i.e. Seastore, to indicate the main backend device type.
+        For example, one can supply ``--osd-args "--memory 2G"`` to set the
+        amount of memory to use.
 
-    for additional Seastar-specific command line options.
+.. note::
+    #. Please refer to `src/common/options/crimson.yaml.in` for valid `osd-args` options (in particular for Seastore).
+    #. Please refer to the output of::
+
+          crimson-osd --help-seastar
+
+       for additional Seastar-specific command line options.
+
 
 ``--crimson-smp``
     The number of cores to use for each OSD.
@@ -84,6 +92,17 @@ To start a cluster with a single Crimson node, run::
   $  MGR=1 MON=1 OSD=1 MDS=0 RGW=0 ../src/vstart.sh \
     --without-dashboard --bluestore --crimson \
     --redirect-output
+
+
+To start a cluster with a single OSD using some Seastore options, in
+particular selecting the device type backend as Random Block Manager (RBM) for NVMe,
+run::
+
+  $ MDS=0 MON=1 OSD=1 MGR=1 taskset -ac '0-95' /ceph/src/vstart.sh --new -x \
+  --localhost --without-dashboard --redirect-output --seastore --osd-args \
+  "--seastore_max_concurrent_transactions=128 --seastore_cachepin_type=LRU \
+  --seastore_main_device_type=RANDOM_BLOCK_SSD" --seastore-devs  /dev/nvme0n1 \
+  --crimson  --crimson-smp 1 --no-restart
 
 Another SeaStore example::
 
@@ -234,7 +253,17 @@ In order to use ``fio`` to test ``crimson-store-nbd``, perform the below steps.
 
 CBT
 ---
-We can use `cbt`_ for performance tests::
+We can use `cbt`_ for performance tests. Benchmark workloads are checked in under
+``src/test/crimson/cbt/`` as teuthology-style YAML files. Before ``run-cbt.sh``
+invokes CBT, ``t2c.py`` translates the teuthology ``tasks`` list into a
+CBT-ready configuration: it extracts the ``cbt`` task, fills in cluster paths
+(``ceph.conf``, ``ceph``/``rados`` binaries, PID directory), and writes the
+result to a temporary YAML file consumed by ``cbt.py``.
+
+Unit tests for the translator live in ``src/test/crimson/cbt/test_t2c.py`` and
+are registered with ``make check`` via ``add_ceph_test``.
+
+::
 
   $ git checkout main
   $ make crimson-osd
@@ -391,3 +420,5 @@ Code Walkthroughs
    BackfillMachine <backfillmachine>
    SeaStore <seastore>
    PoseidonStore <poseidonstore>
+   PG Merge Synchronization <pgmerging>
+   The Logical Address in SeaStore <seastore_laddr>

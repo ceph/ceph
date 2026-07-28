@@ -5,6 +5,7 @@
 
 #include <boost/asio/detached.hpp>
 #include <boost/redis/connection.hpp>
+#include <boost/version.hpp>
 #include <condition_variable>
 #include <deque>
 #include <memory>
@@ -40,7 +41,11 @@ public:
 	if (!m_is_pool_connected) {
 		for(auto& it:m_pool) {
 	    		auto conn = it;
+#if BOOST_VERSION >= 108900
+	    		conn->async_run(m_cfg, boost::asio::consign(boost::asio::detached, conn));
+#else
 	    		conn->async_run(m_cfg, {}, boost::asio::consign(boost::asio::detached, conn));
+#endif
 		}
 	    m_is_pool_connected = true;
 	}

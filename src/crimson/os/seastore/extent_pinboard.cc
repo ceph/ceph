@@ -40,7 +40,6 @@ class ExtentQueue {
     CachedExtent &extent,
     const Transaction::src_t* p_src) {
     assert(extent.is_stable_clean());
-    assert(!extent.is_placeholder());
     assert(extent.is_linked_to_list());
     assert(list.size() > 0);
     auto extent_loaded_length = extent.get_loaded_length();
@@ -100,7 +99,6 @@ public:
     CachedExtent &extent,
     const Transaction::src_t* p_src) {
     assert(extent.is_stable_clean());
-    assert(!extent.is_placeholder());
     assert(!extent.is_linked_to_list());
 
     // absent, add to top (back)
@@ -126,7 +124,6 @@ public:
     CachedExtent &extent,
     const Transaction::src_t* p_src) {
     assert(extent.is_stable_clean());
-    assert(!extent.is_placeholder());
     assert(extent.is_linked_to_list());
 
     // present, move to top (back)
@@ -143,7 +140,6 @@ public:
     assert(extent.is_data_stable());
     assert(extent.is_linked_to_list());
     assert(extent.is_stable_clean());
-    assert(!extent.is_placeholder());
 
     // present, increase size
     assert(list.size() > 0);

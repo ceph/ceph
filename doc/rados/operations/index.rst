@@ -44,6 +44,8 @@ CRUSH algorithm.
 	upmap
         read-balancer
         balancer
+	require-min-compat-client
+	require-osd-release
 	crush-map
 	crush-map-edits
 	stretch-mode
@@ -57,7 +59,7 @@ CRUSH algorithm.
 
 Low-level cluster operations consist of starting, stopping, and restarting a
 particular daemon within a cluster; changing the settings of a particular
-daemon or subsystem; and, adding a daemon to the cluster or removing a	daemon
+daemon or subsystem; and, adding a daemon to the cluster or removing a daemon
 from the cluster. The most common use cases for low-level operations include
 growing or shrinking the Ceph cluster and replacing legacy or failed hardware
 with new hardware.

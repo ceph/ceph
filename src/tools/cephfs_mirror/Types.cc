@@ -3,6 +3,8 @@
 
 #include "Types.h"
 
+#include <iostream>
+
 namespace cephfs {
 namespace mirror {
 

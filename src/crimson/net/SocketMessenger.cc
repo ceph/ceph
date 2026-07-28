@@ -23,6 +23,7 @@
 #include <fmt/std.h>
 
 #include "auth/Auth.h"
+#include "crimson/common/config_proxy.h" // for local_conf()
 #include "Errors.h"
 #include "Socket.h"
 

@@ -170,12 +170,12 @@ struct OMapInnerNode
     return is_mutation_pending() ? &delta_buffer : nullptr;
   }
 
-  get_value_ret get_value(omap_context_t oc, const std::string &key) final;
+  get_value_ret get_value(omap_context_t oc, std::string key) final;
 
   insert_ret insert(
     omap_context_t oc,
-    const std::string &key,
-    const ceph::bufferlist &value) final;
+    std::string key,
+    ceph::bufferlist value) final;
 
   bool exceeds_max_kv_limit(
     const std::string &key,
@@ -185,7 +185,7 @@ struct OMapInnerNode
 
   rm_key_ret rm_key(
     omap_context_t oc,
-    const std::string &key) final;
+    std::string key) final;
 
   rm_key_range_ret rm_key_range(
     omap_context_t oc,
@@ -434,12 +434,12 @@ struct OMapLeafNode
   }
 
   get_value_ret get_value(
-    omap_context_t oc, const std::string &key) final;
+    omap_context_t oc, std::string key) final;
 
   insert_ret insert(
     omap_context_t oc,
-    const std::string &key,
-    const ceph::bufferlist &value) final;
+    std::string key,
+    ceph::bufferlist value) final;
 
   bool exceeds_max_kv_limit(
     const std::string &key,
@@ -448,7 +448,7 @@ struct OMapLeafNode
   }
 
   rm_key_ret rm_key(
-    omap_context_t oc, const std::string &key) final;
+    omap_context_t oc, std::string key) final;
 
   rm_key_range_ret rm_key_range(
     omap_context_t oc,
@@ -551,7 +551,7 @@ omap_load_extent(
     }
   ).handle_error_interruptible(
     omap_load_extent_iertr::pass_further{},
-    crimson::ct_error::assert_all{ "Invalid error in omap_load_extent" }
+    crimson::ct_error::assert_all( "Invalid error in omap_load_extent" )
   ).si_then([](auto maybe_indirect_extent) {
     assert(!maybe_indirect_extent.is_indirect());
     assert(!maybe_indirect_extent.is_clone);

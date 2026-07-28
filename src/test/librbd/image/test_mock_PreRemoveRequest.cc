@@ -193,7 +193,7 @@ public:
     }
 
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                               exec_internal(mock_image_ctx.header_oid, _, StrEq("rbd"),
                                     StrEq("image_group_get"), _, _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));

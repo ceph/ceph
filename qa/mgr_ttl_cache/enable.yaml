@@ -1,5 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      mgr:
-        mgr ttl cache expire seconds: 5

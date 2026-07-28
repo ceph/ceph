@@ -23,7 +23,7 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { getFsalFromRoute, getPathfromFsal } from '../utils';
-import { SUPPORTED_FSAL } from '../models/nfs.fsal';
+import { RGW_USER_EXPORT_PATH, SUPPORTED_FSAL } from '../models/nfs.fsal';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 
@@ -109,15 +109,23 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
     const editAction: CdTableAction = {
       permission: 'update',
       icon: Icons.edit,
-      routerLink: () => [
-        `/${prefix}/nfs/edit/${getNfsUri()}`,
-        {
-          rgw_export_type:
-            this.fsal === SUPPORTED_FSAL.RGW && !_.isEmpty(this.selection?.first()?.path)
-              ? RgwExportType.BUCKET
-              : RgwExportType.USER
+      routerLink: () => {
+        const currentPrefix = getPathfromFsal(this.fsal);
+        const editUrl = `/${currentPrefix}/nfs/edit/${getNfsUri()}`;
+        if (this.fsal !== SUPPORTED_FSAL.RGW) {
+          return editUrl;
         }
-      ],
+        return [
+          editUrl,
+          {
+            rgw_export_type:
+              !_.isEmpty(this.selection?.first()?.path) &&
+              this.selection?.first()?.path !== RGW_USER_EXPORT_PATH
+                ? RgwExportType.BUCKET
+                : RgwExportType.USER
+          }
+        ];
+      },
       name: this.actionLabels.EDIT
     };
 
@@ -235,7 +243,7 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
 
     this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
       impact: DeletionImpact.high,
-      itemDescription: $localize`NFS export`,
+      itemDescription: $localize`NFS share`,
       itemNames: [`${cluster_id}:${export_id}`],
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({

@@ -90,6 +90,8 @@ enum {
 using cctptr = boost::intrusive_ptr<CephContext>;
 using rsptr = std::shared_ptr<librados::Rados>;
 
+static void cephsqlite_atexit();
+
 struct cephsqlite_appdata {
   ~cephsqlite_appdata() {
     {
@@ -212,12 +214,18 @@ private:
       lderr(cct) << "cannot connect: " << cpp_strerror(rc) << dendl;
       return rc;
     }
+    /* This **must** occur after OpenSSL registers any atexit handlers (**sigh**). */
+    std::call_once(atexit_registered, []() {
+      std::atexit(cephsqlite_atexit);
+    });
     auto s = _cluster->get_addrs();
     ldout(cct, 5) << "completed connection to RADOS with address " << s << dendl;
     cluster = std::move(_cluster);
+
     return 0;
   }
 
+  std::once_flag atexit_registered;
   ceph::mutex cluster_mutex = ceph::make_mutex("libcephsqlite");;
   cctptr cct;
   rsptr cluster;
@@ -923,10 +931,6 @@ LIBCEPHSQLITE_API int sqlite3_cephsqlite_init(sqlite3* db, char** err, const sql
       free(vfs);
       return rc;
     }
-  }
-
-  if (int rc = std::atexit(cephsqlite_atexit); rc) {
-    return SQLITE_INTERNAL;
   }
 
   if (int rc = sqlite3_auto_extension((void(*)(void))autoreg); rc) {

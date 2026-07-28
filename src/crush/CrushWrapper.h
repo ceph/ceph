@@ -787,7 +787,7 @@ public:
   /**
    * enumerate all subtrees by type
    */
-  void get_subtree_of_type(int type, std::vector<int> *subtrees);
+  void get_subtree_of_type(int type, std::vector<int> *subtrees) const;
 
 
   /**

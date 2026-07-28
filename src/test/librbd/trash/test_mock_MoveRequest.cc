@@ -62,7 +62,7 @@ struct TestMockTrashMoveRequest : public TestMockFixture {
                         const utime_t& end_time,
                         int r) {
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(StrEq("rbd_trash"), _, StrEq("rbd"), StrEq("trash_add"),
+                exec_internal(StrEq("rbd_trash"), _, StrEq("rbd"), StrEq("trash_add"),
                      _, _, _, _))
       .WillOnce(WithArg<4>(Invoke([=](bufferlist& in_bl) {
                              std::string id;
@@ -96,7 +96,7 @@ struct TestMockTrashMoveRequest : public TestMockFixture {
     encode(id, in_bl);
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(StrEq("rbd_directory"), _, StrEq("rbd"), StrEq("dir_remove_image"),
+                exec_internal(StrEq("rbd_directory"), _, StrEq("rbd"), StrEq("dir_remove_image"),
                      ContentsEqual(in_bl), _, _, _))
       .WillOnce(Return(r));
   }

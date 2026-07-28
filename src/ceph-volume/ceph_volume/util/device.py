@@ -236,7 +236,8 @@ class Device(object):
         if lv:
             self.lv_api = lv
             self.lvs = [lv]
-            self.path = lv.lv_path
+            if disk.path_is_block_device(lv.lv_path):
+                self.path = lv.lv_path
             self.vg_name = lv.vg_name
             self.lv_name = lv.name
             self.ceph_device_lvm = lvm.is_ceph_device(lv)
@@ -319,7 +320,10 @@ class Device(object):
         src/common/blkdev.cc
         """
 
-        udev_data = disk.UdevData(self.path)
+        try:
+            udev_data = disk.UdevData(self.path)
+        except RuntimeError:
+            return ''
         env = udev_data.environment
         parts: list[str] = []
         model = env.get('ID_MODEL', '')

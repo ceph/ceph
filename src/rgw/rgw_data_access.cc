@@ -41,13 +41,13 @@ public:
   }
   void finish(std::string *etag) {
     char etag_buf[S];
-    char etag_buf_str[S * 2 + 16];
 
     hash.Final((unsigned char *)etag_buf);
-    buf_to_hex((const unsigned char *)etag_buf, S,
-	       etag_buf_str);
-
-    *etag = etag_buf_str;
+    if (etag) {
+      etag->clear();
+      etag->reserve(S * 2);
+      buf_to_hex(etag_buf, std::back_inserter(*etag));
+    }
   }
 };
 

@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
 from ceph_node_proxy.config import CephadmConfig, get_node_proxy_config
-from ceph_node_proxy.util import DEFAULTS, write_tmp_file
+from ceph_node_proxy.util import DEFAULTS, _deep_merge, write_tmp_file
 
 if TYPE_CHECKING:
     from ceph_node_proxy.main import NodeProxyManager
@@ -18,9 +18,12 @@ def create_node_proxy_manager(cephadm_config: CephadmConfig) -> "NodeProxyManage
         cephadm_config.root_cert_pem,
         prefix_name="cephadm-endpoint-root-cert-",
     )
+    defaults = DEFAULTS
+    if cephadm_config.system:
+        defaults = _deep_merge(DEFAULTS, {"system": cephadm_config.system})
     config = get_node_proxy_config(
         path=cephadm_config.node_proxy_config_path,
-        defaults=DEFAULTS,
+        defaults=defaults,
     )
 
     manager = NodeProxyManager(

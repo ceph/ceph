@@ -32,31 +32,29 @@ def download(ctx, config):
     assert isinstance(config, dict)
     log.info('Downloading s3-tests...')
     testdir = teuthology.get_testdir(ctx)
+    s3tests_branch = ctx.config.get('suite_branch') or ctx.config.get('branch')
+    s3tests_repo = ctx.config.get('suite_repo') or teuth_config.get_ceph_qa_suite_git_url()
+    s3tests_sha1 = ctx.config.get('suite_sha1')
+    if not s3tests_branch:
+        raise ValueError(
+            "Could not determine what branch to use for ceph suite.")
     for (client, client_config) in config.items():
-        s3tests_branch = client_config.get('force-branch', None)
-        if not s3tests_branch:
-            raise ValueError(
-                "Could not determine what branch to use for s3-tests. Please add 'force-branch: {s3-tests branch name}' to the .yaml config for this s3tests task.")
-
         log.info("Using branch '%s' for s3tests", s3tests_branch)
-        sha1 = client_config.get('sha1')
-        git_remote = client_config.get('git_remote', teuth_config.ceph_git_base_url)
         ctx.cluster.only(client).run(
             args=[
-                'git', 'clone',
-                '-b', s3tests_branch,
-                git_remote + 's3-tests.git',
-                '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client),
+                'git', 'clone', '-b', s3tests_branch,
+                s3tests_repo, '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client),
                 ],
             )
-        if sha1 is not None:
+        if s3tests_sha1 is not None:
             ctx.cluster.only(client).run(
                 args=[
                     'cd', '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client),
                     run.Raw('&&'),
-                    'git', 'reset', '--hard', sha1,
+                    'git', 'reset', '--hard', s3tests_sha1,
                     ],
                 )
+
         if client_config.get('boto3_extensions'):
             ctx.cluster.only(client).run(
                     args=['mkdir',
@@ -94,12 +92,13 @@ def download(ctx, config):
                         )
 
 
-def _config_user(s3tests_conf, section, user, email):
+def _config_user(s3tests_conf, section, user, email, account):
     """
     Configure users for this section by stashing away keys, ids, and
     email addresses.
     """
     s3tests_conf[section].setdefault('user_id', user)
+    s3tests_conf[section].setdefault('account_id', account)
     s3tests_conf[section].setdefault('email', email)
     s3tests_conf[section].setdefault('display_name', 'Mr.{user}'.format(user=user))
     s3tests_conf[section].setdefault('access_key',
@@ -156,9 +155,9 @@ def create_users(ctx, config, s3tests_conf):
                 if section == 's3 tenant':
                     args += ['--tenant', 'testx']
                 ctx.cluster.only(client).run(args=args)
-                _config_user(conf, section, account_id, account_email)
+                _config_user(conf, section, account_id, account_email, account_id)
             else:
-                _config_user(conf, section, user_id, user_email)
+                _config_user(conf, section, user_id, user_email, None)
 
             # for keystone users, read ec2 credentials into s3tests.conf instead
             # of creating a local user
@@ -403,6 +402,12 @@ def configure(ctx, config):
                 cloud_read_through_restore_days = client_rgw_config.get('cloud_read_through_restore_days')
                 if (cloud_read_through_restore_days != None):
                     s3tests_conf['s3 cloud']['read_through_restore_days'] = cloud_read_through_restore_days
+                cloud_target_by_bucket = client_rgw_config.get('cloud_target_by_bucket')
+                if (cloud_target_by_bucket != None):
+                    s3tests_conf['s3 cloud']['target_by_bucket'] = cloud_target_by_bucket
+                cloud_target_by_bucket_prefix = client_rgw_config.get('cloud_target_by_bucket_prefix')
+                if (cloud_target_by_bucket_prefix != None):
+                    s3tests_conf['s3 cloud']['target_by_bucket_prefix'] = cloud_target_by_bucket_prefix
 
         (remote,) = ctx.cluster.only(client).remotes.keys()
         conf_fp = BytesIO()
@@ -457,7 +462,7 @@ def run_tests(ctx, config):
         client_config = client_config or {}
         (remote,) = ctx.cluster.only(client).remotes.keys()
         args = [
-            'cd', '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client), run.Raw('&&'),
+            'cd', '{tdir}/s3-tests-{client}/src/test/rgw/s3-tests'.format(tdir=testdir, client=client), run.Raw('&&'),
             'S3TEST_CONF={tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client),
             'BOTO_CONFIG={tdir}/boto-{client}.cfg'.format(tdir=testdir, client=client)
             ]
@@ -481,6 +486,8 @@ def run_tests(ctx, config):
             attrs += ['not fails_with_subdomain']
         if not client_config.get('with-sse-s3'):
             attrs += ['not sse_s3']
+        if not client_config.get('s3control', False):
+            attrs += ["not s3control"]
 
         attrs += client_config.get('extra_attrs', [])
         if 'bucket_logging' not in attrs:

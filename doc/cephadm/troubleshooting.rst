@@ -305,6 +305,8 @@ For more detail on operations of this kind, see
 :ref:`deploy_additional_monitors`.
 
 
+.. _cephadm-admin-socket:
+
 Accessing the Admin Socket
 ==========================
 
@@ -329,6 +331,9 @@ Each Ceph daemon provides an admin socket that allows runtime option setting and
 
       [ceph: root@mon1 /]# ceph --admin-daemon /var/run/ceph/ceph-<daemon-name>.asok config show
       [ceph: root@mon1 /]# ceph --admin-daemon /var/run/ceph/ceph-<daemon-name>.asok help
+
+The admin socket is also available under the directory ``/var/run/ceph/<fsid>``
+on the host system.
 
 
 Running Various Ceph Tools

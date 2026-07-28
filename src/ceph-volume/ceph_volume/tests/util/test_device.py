@@ -313,11 +313,13 @@ class TestDevice(object):
         assert not disk.available
 
     @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
+    @patch('ceph_volume.util.device.disk.path_is_block_device', return_value=True)
     @patch('ceph_volume.util.device.os.path.realpath')
     @patch('ceph_volume.util.device.os.path.islink')
     def test_reject_lv_symlink_to_device(self,
                                          m_os_path_islink,
                                          m_os_path_realpath,
+                                         m_path_is_block_device,
                                          device_info,
                                          fake_call):
         m_os_path_islink.return_value = True
@@ -327,6 +329,26 @@ class TestDevice(object):
         device_info(lv=lv,lsblk=lsblk)
         disk = device.Device("/dev/vg/lv")
         assert disk.path == '/dev/vg/lv'
+        m_path_is_block_device.assert_called_with('/dev/vg/lv')
+
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
+    @patch('ceph_volume.util.device.disk.path_is_block_device', return_value=False)
+    @patch('ceph_volume.util.device.os.path.realpath')
+    @patch('ceph_volume.util.device.os.path.islink')
+    def test_lv_keeps_mapper_path_when_lv_path_missing(self,
+                                                       m_os_path_islink,
+                                                       m_os_path_realpath,
+                                                       m_path_is_block_device,
+                                                       device_info,
+                                                       fake_call):
+        m_os_path_islink.return_value = False
+        m_os_path_realpath.return_value = '/dev/mapper/vg-var_rmeta_0'
+        lv = {"lv_path": "/dev/vg/var_rmeta_0", "vg_name": "vg", "name": "var_rmeta_0", "tags": {}}
+        lsblk = {"TYPE": "lvm", "NAME": "vg-var_rmeta_0"}
+        device_info(lv=lv, lsblk=lsblk)
+        disk = device.Device("/dev/mapper/vg-var_rmeta_0")
+        assert disk.path == '/dev/mapper/vg-var_rmeta_0'
+        m_path_is_block_device.assert_called_with('/dev/vg/var_rmeta_0')
 
     @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_reject_smaller_than_5gb(self, fake_call, device_info):

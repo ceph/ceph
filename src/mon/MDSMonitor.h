@@ -28,10 +28,12 @@
 #include "PaxosService.h"
 #include "mds/MDSMap.h"
 #include "messages/MMDSBeacon.h"
+#include "mon/mon_types.h" // for Metadata
 #include "CommandHandler.h"
 
 class Monitor;
 class FileSystemCommandHandler;
+struct Subscription;
 
 class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHandler {
  public:

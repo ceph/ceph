@@ -15,6 +15,7 @@
 
 #include "rgw_perf_counters.h"
 #include <boost/redis/config.hpp>
+#include <boost/version.hpp>
 #include <memory>
 #include "rgw_sal_d4n.h"
 
@@ -77,7 +78,11 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
     return -EDESTADDRREQ;
   }
 
+#if BOOST_VERSION >= 108900
+  conn->async_run(cfg, net::consign(net::detached, conn));
+#else
   conn->async_run(cfg, {}, net::consign(net::detached, conn));
+#endif
 
   FilterDriver::initialize(cct, dpp);
 

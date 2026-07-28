@@ -81,7 +81,7 @@ struct cache_test_t : public seastar_test_suite_t {
 	cache->complete_commit(*t, prev, seq /* TODO */);
         return prev;
       },
-      crimson::ct_error::assert_all{"failed to submit"}
+      crimson::ct_error::assert_all("failed to submit")
      );
   }
 
@@ -131,7 +131,7 @@ struct cache_test_t : public seastar_test_suite_t {
         });
       });
     }).handle_error(
-      crimson::ct_error::assert_all{"failed to submit"}
+      crimson::ct_error::assert_all("failed to submit")
     );
   }
 
@@ -142,7 +142,7 @@ struct cache_test_t : public seastar_test_suite_t {
       epm.reset();
       cache.reset();
     }).handle_error(
-      Cache::close_ertr::assert_all{}
+      Cache::close_ertr::assert_all("unexpected error")
     );
   }
 };

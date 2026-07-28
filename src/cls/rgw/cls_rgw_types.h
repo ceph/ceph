@@ -14,6 +14,10 @@
 
 #include "rgw/rgw_basic_types.h"
 
+#include "include/rados/cls_traits.hpp"
+
+#include "cls_rgw_const.h"
+
 #define CEPH_RGW_REMOVE 'r' // value 114
 #define CEPH_RGW_UPDATE 'u' // value 117
 #define CEPH_RGW_DIR_SUGGEST_LOG_OP  0x80
@@ -185,12 +189,13 @@ enum class RGWObjCategory : uint8_t {
 
   Main      = 1,  // b-i entries for standard objs
 
-  Shadow    = 2,  // presumably intended for multipart shadow
-                  // uploads; not currently used in the codebase
+  Shadow    = 2,  // unused, reserved for backward compatibility
 
   MultiMeta = 3,  // b-i entries for multipart upload metadata objs
 
   CloudTiered = 4, // b-i entries which are tiered to external cloud
+
+  MultiPart = 5,   // b-i entries for multipart upload part head objs
 };
 
 std::string_view to_string(RGWObjCategory c);
@@ -211,9 +216,11 @@ struct rgw_bucket_dir_entry_meta {
   std::string user_data;
   std::string storage_class;
   bool appendable = false;
+  uint8_t restore_status = 0; // maps to RGWRestoreStatus enum
+  ceph::real_time restore_expiry_date; // zero when N/A
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(7, 3, bl);
+    ENCODE_START(8, 3, bl);
     encode(category, bl);
     encode(size, bl);
     encode(mtime, bl);
@@ -225,11 +232,13 @@ struct rgw_bucket_dir_entry_meta {
     encode(user_data, bl);
     encode(storage_class, bl);
     encode(appendable, bl);
+    encode(restore_status, bl);
+    encode(restore_expiry_date, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(8, 3, 3, bl);
     decode(category, bl);
     decode(size, bl);
     decode(mtime, bl);
@@ -248,6 +257,10 @@ struct rgw_bucket_dir_entry_meta {
       decode(storage_class, bl);
     if (struct_v >= 7)
       decode(appendable, bl);
+    if (struct_v >= 8) {
+      decode(restore_status, bl);
+      decode(restore_expiry_date, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
@@ -517,6 +530,8 @@ enum OLHLogOp {
   CLS_RGW_OLH_OP_UNLINK_OLH      = 2, /* object does not exist */
   // remove a specific instance of an object, such as <obj_name>.<obj_version>
   CLS_RGW_OLH_OP_REMOVE_INSTANCE = 3,
+  // a stale op to be used to cleanup olh.pending attribute of the olh object
+  CLS_RGW_OLH_OP_STALE           = 4,
 };
 
 struct rgw_bucket_olh_log_entry {

@@ -512,7 +512,6 @@ struct FixedKVInternalNode
   }
 
   void merge_content_to_pending_versions(Transaction &t) {
-    ceph_assert(is_rewrite_transaction(t.get_src()));
     this->for_each_copy_dest_set(t, [this, &t](auto &copy_dests) {
       this->merge_content_to(t, copy_dests.dests_by_key);
     });
@@ -544,8 +543,10 @@ struct FixedKVInternalNode
       }
       if (pending_version.get_last_committed_crc()) {
         // if pending_version has already calculated its crc,
-        // calculate it again.
-        pending_version.set_last_committed_crc(pending_version.calc_crc32c());
+        // calculate it again and keep the on-page checksum in sync.
+        auto crc = pending_version.calc_crc32c();
+        pending_version.set_last_committed_crc(crc);
+        pending_version.update_in_extent_chksum_field(crc);
       }
     }
   }
@@ -730,7 +731,8 @@ struct FixedKVLeafNode
 
   virtual void update(
     internal_const_iterator_t iter,
-    VAL val) = 0;
+    VAL val,
+    modification_t mod) = 0;
   virtual internal_const_iterator_t insert(
     internal_const_iterator_t iter,
     NODE_KEY addr,

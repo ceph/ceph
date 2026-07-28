@@ -10,7 +10,7 @@ import {
   USERSGROUPS_RESOURCE
 } from '~/app/ceph/smb/smb.model';
 import { NotificationService } from '../services/notification.service';
-import { ToastrModule } from 'ngx-toastr';
+
 import { NotificationType } from '../enum/notification-type.enum';
 import { SharedModule } from '../shared.module';
 import { USER } from '~/app/shared/constants/app.constants';
@@ -22,7 +22,7 @@ describe('SmbService', () => {
 
   configureTestBed({
     providers: [SmbService, provideHttpClient(), provideHttpClientTesting()],
-    imports: [ToastrModule.forRoot(), SharedModule]
+    imports: [SharedModule]
   });
 
   beforeEach(() => {

@@ -11,7 +11,7 @@
 #include "os/bluestore/bluestore_types.h"
 #include "include/mempool.h"
 
-class BtreeAllocator : public AllocatorBase {
+class BtreeAllocator : public AllocatorBase, public AllocatorPerf {
   struct range_seg_t {
     uint64_t start;   ///< starting offset of this segment
     uint64_t end;     ///< ending offset (non-inclusive)

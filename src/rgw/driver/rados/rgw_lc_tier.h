@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <functional>
+
 #include "rgw_lc.h"
 #include "rgw_rest_conn.h"
 #include "rgw_rados.h"
@@ -39,15 +41,20 @@ struct RGWLCCloudTierCtx {
 
   bool is_multipart_upload{false};
   bool target_bucket_created{true};
+  bool target_by_bucket{false};
+
+  optional_yield y;
 
   RGWLCCloudTierCtx(CephContext* _cct, const DoutPrefixProvider *_dpp,
       rgw_bucket_dir_entry& _o, rgw::sal::Driver *_driver,
       RGWBucketInfo &_binfo, rgw::sal::Object *_obj,
       RGWRESTConn& _conn, std::string& _bucket,
-      std::string& _storage_class) :
+      std::string& _storage_class, bool _target_by_bucket,
+      optional_yield _y) :
     cct(_cct), dpp(_dpp), o(_o), driver(_driver), bucket_info(_binfo),
     obj(_obj), conn(_conn), target_bucket_name(_bucket),
-    target_storage_class(_storage_class) {}
+    target_storage_class(_storage_class),
+    target_by_bucket(_target_by_bucket), y(_y) {}
 };
 
 /* Transition object to cloud endpoint */
@@ -70,7 +77,11 @@ int rgw_cloud_tier_restore_object(RGWLCCloudTierCtx& tier_ctx,
 int cloud_tier_restore(const DoutPrefixProvider *dpp,
                        RGWRESTConn& dest_conn, const rgw_obj& dest_obj,
                        std::optional<uint64_t> days,
-                       RGWZoneGroupTierS3Glacier& glacier_params);
+                       RGWZoneGroupTierS3Glacier& glacier_params,
+                       optional_yield y);
 
 bool is_restore_in_progress(const DoutPrefixProvider *dpp,
                             std::map<std::string, std::string>& headers);
+
+int retry_on_transient_error(optional_yield y, const DoutPrefixProvider *dpp, CephContext *cct,
+                  const char *op_name, std::function<int()> op);

@@ -3,10 +3,20 @@
 import mmap
 import os
 import subprocess
+import sys
 
 def main():
     path = "testfile"
+
     fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_DIRECT, 0o644)
+
+    try:
+        if os.getxattr(path, "ceph.fscrypt.auth"):
+            os.close(fd)
+            print("fscrypt enabled dir, skipping!")
+            sys.exit(0)
+    except OSError:
+        pass
 
     ino = os.fstat(fd).st_ino
     obj_name = "{ino:x}.00000000".format(ino=ino)

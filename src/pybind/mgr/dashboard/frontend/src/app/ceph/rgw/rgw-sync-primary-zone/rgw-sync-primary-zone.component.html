@@ -1,27 +1,43 @@
 <ul class="pb-5">
   <li>
-    <svg [cdsIcon]="icons.reweight"
-         [size]="icons.size20"
-         class="cds-icon--size-07"></svg>
+    <svg
+      [cdsIcon]="icons.reweight"
+      [size]="icons.size20"
+      class="cds-icon--size-07"
+    ></svg>
   </li>
-  <li class="mt-2"><cds-tag class="tag-info">{{realm}}</cds-tag></li>
-  <li>
-    <svg [cdsIcon]="icons.down"
-         class=" cds-icon--size-07"></svg>
-  </li>
-  <li>
-    <i [ngClass]="[icons.large2x, icons.cubes]"
-       class="mt-2"></i>
-  </li>
-  <p class="mt-2"> <cds-tag class="tag-info">{{zonegroup}}</cds-tag></p>
-  <li>
-    <svg [cdsIcon]="icons.down"
-         class="cds-icon--size-07"></svg>
+  <li class="mt-2">
+    <cds-tag class="tag-info">{{ realm }}</cds-tag>
   </li>
   <li>
-    <svg [cdsIcon]="icons.deploy"
-         [size]="icons.size20"
-         class="cds-icon--size-07 cds-icon"></svg>
+    <svg
+      [cdsIcon]="icons.down"
+      class="cds-icon--size-07"
+    ></svg>
   </li>
-  <li class="mt-2"><cds-tag class="tag-info">{{zone}}</cds-tag></li>
+  <li class="mt-2">
+    <cd-icon
+      type="clusterIcon"
+      [size]="icons.size32"
+    ></cd-icon>
+  </li>
+  <p class="mt-2">
+    <cds-tag class="tag-info">{{ zonegroup }}</cds-tag>
+  </p>
+  <li>
+    <svg
+      [cdsIcon]="icons.down"
+      class="cds-icon--size-07"
+    ></svg>
+  </li>
+  <li>
+    <svg
+      [cdsIcon]="icons.deploy"
+      [size]="icons.size20"
+      class="cds-icon--size-07 cds-icon"
+    ></svg>
+  </li>
+  <li class="mt-2">
+    <cds-tag class="tag-info">{{ zone }}</cds-tag>
+  </li>
 </ul>

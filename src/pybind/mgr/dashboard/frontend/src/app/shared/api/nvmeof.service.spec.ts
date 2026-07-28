@@ -174,9 +174,13 @@ describe('NvmeofService', () => {
 
     it('should call deleteSubsystem', () => {
       service.deleteSubsystem(mockNQN, mockGroupName).subscribe();
-      const req = httpTesting.expectOne(
-        `${API_PATH}/subsystem/${mockNQN}?gw_group=${mockGroupName}`
-      );
+      const req = httpTesting.expectOne((request) => {
+        return (
+          request.url === `${API_PATH}/subsystem/${mockNQN}` &&
+          request.params.get('gw_group') === mockGroupName &&
+          request.params.get('force') === 'true'
+        );
+      });
       expect(req.request.method).toBe('DELETE');
     });
     it('should call isSubsystemPresent', () => {
@@ -329,22 +333,6 @@ describe('NvmeofService', () => {
       service.getHostsForGroup('default').subscribe((hosts: any[]) => {
         expect(hosts.length).toBe(2);
         expect(hosts.map((h: any) => h.hostname)).toEqual(['host1', 'host3']);
-        done();
-      });
-
-      const req = httpTesting.expectOne(`${API_PATH}/gateway/group`);
-      req.flush(mockGroups);
-    });
-
-    it('should filter hosts by array label placement', (done) => {
-      const mockGroups = [
-        [{ spec: { group: 'default' }, placement: { hosts: [], label: ['nvmeof', 'storage'] } }]
-      ];
-      mockHostService.getAllHosts.mockReturnValue(of(allHosts));
-
-      service.getHostsForGroup('default').subscribe((hosts: any[]) => {
-        expect(hosts.length).toBe(1);
-        expect(hosts[0].hostname).toBe('host3');
         done();
       });
 

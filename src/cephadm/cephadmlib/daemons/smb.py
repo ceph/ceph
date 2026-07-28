@@ -43,7 +43,6 @@ from ..exceptions import Error
 from ..host_facts import list_networks
 from ..net_utils import EndPoint
 
-
 logger = logging.getLogger()
 
 # sambacc provided commands we will need (when clustered)
@@ -245,6 +244,7 @@ class Config:
     debug_delay: int = 0
     join_sources: List[str] = dataclasses.field(default_factory=list)
     user_sources: List[str] = dataclasses.field(default_factory=list)
+    extra_config_uris: List[str] = dataclasses.field(default_factory=list)
     custom_dns: List[str] = dataclasses.field(default_factory=list)
     smb_port: int = 0
     ctdb_port: int = 0
@@ -267,6 +267,7 @@ class Config:
 
     def config_uris(self) -> List[str]:
         uris = [self.source_config]
+        uris.extend(self.extra_config_uris or [])
         uris.extend(self.user_sources or [])
         if self.clustered:
             # When clustered, we inject certain clustering related config vars
@@ -702,6 +703,7 @@ class SMB(ContainerDaemonForm):
         source_config = configs.get('config_uri', '')
         join_sources = configs.get('join_sources', [])
         user_sources = configs.get('user_sources', [])
+        extra_config_uris = configs.get('extra_config_uris', [])
         custom_dns = configs.get('custom_dns', [])
         instance_features = configs.get('features', [])
         files = data_utils.dict_get(configs, 'files', {})
@@ -768,6 +770,7 @@ class SMB(ContainerDaemonForm):
             source_config=source_config,
             join_sources=join_sources,
             user_sources=user_sources,
+            extra_config_uris=extra_config_uris,
             custom_dns=custom_dns,
             # major features
             domain_member=Features.DOMAIN.value in instance_features,
@@ -1000,7 +1003,7 @@ class SMB(ContainerDaemonForm):
             ctdb_volatile = str(data_dir / 'ctdb/volatile')
             ctdb_etc = str(data_dir / 'ctdb/etc')
             mounts[ctdb_persistent] = '/var/lib/ctdb/persistent:z'
-            mounts[ctdb_run] = '/var/run/ctdb:z'
+            mounts[ctdb_run] = '/run/samba/ctdb:z'
             mounts[ctdb_volatile] = '/var/lib/ctdb/volatile:z'
             mounts[ctdb_etc] = '/etc/ctdb:z'
             # create a shared smb.conf file for our clustered instances.
@@ -1055,7 +1058,7 @@ class SMB(ContainerDaemonForm):
         etc_samba_ctr = ddir / 'etc-samba-container'
         file_utils.makedirs(etc_samba_ctr, uid, gid, 0o770)
         file_utils.makedirs(ddir / 'lib-samba', uid, gid, 0o755)
-        file_utils.makedirs(ddir / 'run', uid, gid, 0o770)
+        file_utils.makedirs(ddir / 'run', uid, gid, 0o755)
         if self._files:
             file_utils.populate_files(data_dir, self._files, uid, gid)
         if self._tls_files:
@@ -1067,6 +1070,8 @@ class SMB(ContainerDaemonForm):
             file_utils.makedirs(ddir / 'ctdb/run', uid, gid, 0o770)
             file_utils.makedirs(ddir / 'ctdb/volatile', uid, gid, 0o770)
             file_utils.makedirs(ddir / 'ctdb/etc', uid, gid, 0o770)
+            file_utils.makedirs(ddir / 'run/ctdb', uid, gid, 0o770)
+            file_utils.makedirs(ddir / 'lib-samba/lock/ctdb', uid, gid, 0o770)
             self._write_ctdb_stub_config(etc_samba_ctr / 'ctdb.json')
             self._write_smb_conf_stub(ddir / 'ctdb/smb.conf')
             if self._cfg.bind_to:

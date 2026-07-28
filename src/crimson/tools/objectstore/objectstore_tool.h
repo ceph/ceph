@@ -25,6 +25,7 @@ public:
   StoreTool(std::unique_ptr<crimson::os::FuturizedStore> store): store(std::move(store)) {}
 
   seastar::future<> stop();
+  seastar::future<> do_gc();
   void set_shard_id(seastar::shard_id shard_id) { this->shard_id = shard_id; }
   
   // PG operations

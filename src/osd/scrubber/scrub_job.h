@@ -217,13 +217,11 @@ class ScrubJob {
    */
   void adjust_shallow_schedule(
     utime_t last_scrub,
-    const Scrub::sched_conf_t& app_conf,
-    utime_t scrub_clock_now);
+    const Scrub::sched_conf_t& app_conf);
 
   void adjust_deep_schedule(
     utime_t last_deep,
-    const Scrub::sched_conf_t& app_conf,
-    utime_t scrub_clock_now);
+    const Scrub::sched_conf_t& app_conf);
 
   /**
    * For the level specified, set the 'not-before' time to 'now+delay',
@@ -237,20 +235,6 @@ class ScrubJob {
       scrub_level_t level,
       delay_cause_t delay_cause,
       utime_t scrub_clock_now);
-
- /**
-   * recalculate the scheduling parameters for the periodic scrub targets.
-   * Used whenever the "external state" of the PG changes, e.g. when made
-   * primary - or indeed when the configuration changes.
-   *
-   * Does not modify ripe targets.
-   * (why? for example, a 'scrub pg' command following a 'deepscrub pg'
-   * would otherwise push the deep scrub to the future).
-   */
-  void on_periods_change(
-      const sched_params_t& suggested,
-      const Scrub::sched_conf_t& aconf,
-      utime_t scrub_clock_now) {}
 
   /**
    * the operator requested a scrub (shallow, deep or repair).
@@ -288,16 +272,6 @@ class ScrubJob {
   std::ostream& gen_prefix(std::ostream& out, std::string_view fn) const;
   std::string log_msg_prefix;
 
-  // the comparison operator is used to sort the scrub jobs in the queue.
-  // Note that it would not be needed in the next iteration of this code, as
-  // the queue would *not* hold the full ScrubJob objects, but rather -
-  // SchedTarget(s).
-  std::partial_ordering operator<=>(const ScrubJob& rhs) const
-  {
-    return cmp_entries(
-      ceph_clock_now(), shallow_target.queued_element(),
-      deep_target.queued_element());
-  };
 
 
  /*
@@ -306,8 +280,6 @@ class ScrubJob {
  * Some types of scrubs are exempt from some or all of the preconditions and
  * limitations that apply to regular scrubs. The following table
  * details the specific set of exemptions per 'urgency' level:
- * (note: regular scrubs that are overdue are also allowed a specific
- * set of exemptions. Those will be covered elsewhere).
  *
  * The relevant limitations are:
  * - reservation: the scrub must reserve replicas;
@@ -316,6 +288,8 @@ class ScrubJob {
  *   if continued into the forbidden times, by having a longer sleep time;
  *   (note that this is only applicable to the wq scheduler).
  * - load: the scrub must not be initiated if the OSD is under heavy CPU load;
+ * - trims: the scrub must not be initiated if the OSD has too many snap-trim
+ *   jobs pending;
  * - noscrub: the scrub is aborted if the 'noscrub' flag (or the
  *  'nodeep-scrub' flag for deep scrubs) is set;
  * - randomization: the scrub's target time is extended by a random
@@ -335,11 +309,12 @@ class ScrubJob {
  *  | limitation |  must-  | after-repair |repairing| operator | must-repair |
  *  |            |  scrub  |(aft recovery)|(errors) | request  |             |
  *  +------------+---------+--------------+---------+----------+-------------+
- *  | reservation|    yes! |      no      |    no?  |     no   |      no     |
- *  | dow/time   |    yes  |     yes      |    no   |     no   |      no     |
+ *  | reservation|    yes  |      no      |    no   |     no   |      no     |
+ *  | dow/time   |    yes  |      yes     |    no   |     no   |      no     |
  *  | ext-sleep  |    no   |      no      |    no   |     no   |      no     |
  *  | load       |    yes  |      no      |    no   |     no   |      no     |
- *  | noscrub    |    yes  |      no      |    Yes  |     no   |      no     |
+ *  | trims      |    yes  |      yes     |    no   |     no   |      no     |
+ *  | noscrub    |    yes  |      no      |    no   |     no   |      no     |
  *  | max-scrubs |    yes  |      yes     |    Yes  |     no   |      no     |
  *  | backoff    |    yes  |      no      |    no   |     no   |      no     |
  *  | recovery   |    yes  |      yes     |    Yes  |     no   |      no     |
@@ -356,6 +331,8 @@ class ScrubJob {
   static bool observes_extended_sleep(urgency_t urgency);
 
   static bool observes_load_limit(urgency_t urgency);
+
+  static bool observes_trims_load(urgency_t urgency);
 
   static bool requires_reservation(urgency_t urgency);
 

@@ -165,7 +165,7 @@ Advanced
 
 :command:`rbytes`
     Report the recursive size of the directory contents for st_size on
-    directories.  Default: off
+    directories. May confuse programs such as rsync.  Default: off
 
 :command:`norbytes`
     Do not report the recursive size of the directory contents for
@@ -228,6 +228,11 @@ Advanced
 
     - ``balance``: When a replicated pool receives a read request, pick a random
       OSD from the PG's acting set to serve it (since 5.8).
+
+      When an erasure-coded pool receives a read request, pick the shard that
+      stores the data, giving a performance uplift over routing the request via
+      the primary (requires Umbrella server and client; kernel client support is
+      planned for a future release).
 
       This mode is safe for general use only since Octopus (i.e. after `ceph osd
       require-osd-release octopus`). Otherwise it should be limited to read-only

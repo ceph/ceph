@@ -208,7 +208,7 @@ class UnixSocket:
 
 @pytest.mark.basic_test
 def test_script_management():
-    contexts = ['prerequest', 'postrequest', 'background', 'getdata', 'putdata']
+    contexts = ['prerequest', 'postauth', 'postrequest', 'background', 'getdata', 'putdata']
     scripts = {}
     for context in contexts:
         script = 'print("hello from ' + context + '")'
@@ -232,7 +232,7 @@ def test_script_management():
 def test_script_management_with_tenant():
     tenant = 'mytenant'
     conn2 = another_user(tenant)
-    contexts = ['prerequest', 'postrequest', 'getdata', 'putdata']
+    contexts = ['prerequest', 'postauth', 'postrequest', 'getdata', 'putdata']
     scripts = {}
     for context in contexts:
         for t in ['', tenant]:
@@ -297,7 +297,7 @@ end
     # cleanup
     conn.delete_object(Bucket=bucket_name, Key=key)
     conn.delete_bucket(Bucket=bucket_name)
-    contexts = ['prerequest', 'postrequest', 'getdata', 'putdata']
+    contexts = ['prerequest', 'postauth', 'postrequest', 'getdata', 'putdata']
     for context in contexts:
         result = admin(['script', 'rm', '--context', context])
         assert result[1] == 0
@@ -323,7 +323,7 @@ end
 RGWDebugLog("op was: "..Request.RGWOp)
 '''
 
-    contexts = ['prerequest', 'postrequest', 'getdata', 'putdata']
+    contexts = ['prerequest', 'postauth', 'postrequest', 'getdata', 'putdata']
     for context in contexts:
         footer = '\nRGWDebugLog("context was: '+context+'\\n\\n")'
         result = put_script(script+footer, context)
@@ -349,7 +349,7 @@ RGWDebugLog("op was: "..Request.RGWOp)
     # cleanup
     delete_all_objects(conn, bucket_name)
     conn.delete_bucket(Bucket=bucket_name)
-    contexts = ['prerequest', 'postrequest', 'getdata', 'putdata']
+    contexts = ['prerequest', 'postauth', 'postrequest', 'getdata', 'putdata']
     for context in contexts:
         result = admin(['script', 'rm', '--context', context])
         assert result[1] == 0
@@ -406,7 +406,7 @@ RGWDebugLog("payload size of chunk of: " .. full_name .. " is: " .. #Data)
     # cleanup
     delete_all_objects(conn, bucket_name)
     conn.delete_bucket(Bucket=bucket_name)
-    contexts = ['prerequest', 'postrequest', 'background', 'getdata', 'putdata']
+    contexts = ['prerequest', 'postauth', 'postrequest', 'background', 'getdata', 'putdata']
     for context in contexts:
         result = admin(['script', 'rm', '--context', context])
         assert result[1] == 0
@@ -477,7 +477,7 @@ end
         socket_server.shutdown()
         delete_all_objects(conn, bucket_name)
         conn.delete_bucket(Bucket=bucket_name)
-        contexts = ['prerequest', 'postrequest', 'background', 'getdata', 'putdata']
+        contexts = ['prerequest', 'postauth', 'postrequest', 'background', 'getdata', 'putdata']
         for context in contexts:
             result = admin(['script', 'rm', '--context', context])
             assert result[1] == 0
@@ -504,6 +504,38 @@ def test_interrupt_request():
         pass
 
     out, err = admin(['script', 'rm', '--context', 'prerequest'])
+    assert err == 0
+
+    try:
+        conn.get_object(Bucket=bucket_name, Key=key)
+        pytest.fail("The object was written to the bucket despite the error.")
+    except Exception as e:
+        assert e.response['Error']['Code'] == 'NoSuchKey'
+        log.info("Successfully confirmed that the request was interrupted.")
+
+    conn.delete_bucket(Bucket=bucket_name)
+
+@pytest.mark.example_test
+def test_interrupt_request_postauth():
+    script = '''
+        return RGW_ABORT_REQUEST
+    '''
+
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    conn.create_bucket(Bucket=bucket_name)
+    
+    result = put_script(script, "postauth")
+    assert result[1] == 0
+    key = "hello"
+    
+    try:
+        conn.put_object(Body="this should be blocked".encode("ascii"), Bucket=bucket_name, Key=key)
+        pytest.fail("The put_object operation was not blocked by the Lua script.")
+    except Exception as e:
+        pass
+
+    out, err = admin(['script', 'rm', '--context', 'postauth'])
     assert err == 0
 
     try:

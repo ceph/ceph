@@ -50,7 +50,7 @@ struct range_seg_t {
   boost::intrusive::avl_set_member_hook<> size_hook;
 };
 
-class AvlAllocator : public AllocatorBase {
+class AvlAllocator : public AllocatorBase, public AllocatorPerf {
   struct dispose_rs {
     void operator()(range_seg_t* p)
     {

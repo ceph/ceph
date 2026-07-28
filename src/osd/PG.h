@@ -1144,6 +1144,9 @@ protected:
     void trim(const pg_log_entry_t &entry) override {
       pg->get_pgbackend()->trim(entry, t);
     }
+    void trim_after_remove(const pg_log_entry_t &entry) override {
+      pg->get_pgbackend()->trim_after_remove(entry, t);
+    }
     void partial_write(pg_info_t *info, eversion_t previous_version,
                        const pg_log_entry_t &entry
       ) override {

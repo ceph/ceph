@@ -2,6 +2,10 @@
 name: "Check for Incompatible Licenses"
 on: [pull_request]
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   pull_request:
     name: "Check for Incompatible Licenses"

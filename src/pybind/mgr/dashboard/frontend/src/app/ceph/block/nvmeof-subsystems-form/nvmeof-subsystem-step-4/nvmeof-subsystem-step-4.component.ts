@@ -26,7 +26,10 @@ export class NvmeofSubsystemsStepFourComponent implements OnInit, TearsheetStep 
   HOST_TYPE = HOST_TYPE;
   AUTHENTICATION = AUTHENTICATION;
 
-  constructor(public actionLabels: ActionLabelsI18n, public activeModal: NgbActiveModal) {}
+  constructor(
+    public actionLabels: ActionLabelsI18n,
+    public activeModal: NgbActiveModal
+  ) {}
 
   ngOnInit() {
     this.formGroup = new CdFormGroup({});
@@ -45,7 +48,7 @@ export class NvmeofSubsystemsStepFourComponent implements OnInit, TearsheetStep 
   }
 
   get authTypeLabel(): string {
-    if (this.authType === AUTHENTICATION.None) return NO_AUTH;
+    if (this.authType === AUTHENTICATION.None || this.hostDchapKeyCount === 0) return NO_AUTH;
     return this.authType === AUTHENTICATION.Bidirectional
       ? $localize`Bidirectional`
       : $localize`Unidirectional`;

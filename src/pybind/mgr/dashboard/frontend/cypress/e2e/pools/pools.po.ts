@@ -29,7 +29,6 @@ export class PoolPageHelper extends PageHelper {
       cy.get('[data-testid="rbd-mirroring-check"] input[type="checkbox"]').check({ force: true });
     }
     cy.get('cd-submit-button').click();
-    this.navigateBack();
   }
 
   edit_pool_pg(name: string, new_pg: number, wait = true, mirroring = false) {

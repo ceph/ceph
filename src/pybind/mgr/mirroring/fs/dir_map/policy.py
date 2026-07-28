@@ -102,8 +102,15 @@ class Policy:
             if dir_state:
                 return {'instance_id': dir_state.instance_id,
                         'mapped_time': dir_state.mapped_time,
-                        'purging': dir_state.purging}
+                        'purging': dir_state.purging,
+                        'state': dir_state.state}
             return None
+
+    def get_tracked_instance_id(self, dir_path):
+        lookup = self.lookup(dir_path)
+        if not lookup:
+            return None
+        return lookup.get('instance_id')
 
     def map(self, dir_path, dir_state):
         log.debug(f'mapping {dir_path}')

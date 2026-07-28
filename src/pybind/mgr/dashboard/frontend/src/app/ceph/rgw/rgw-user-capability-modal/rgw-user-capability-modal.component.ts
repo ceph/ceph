@@ -30,7 +30,10 @@ export class RgwUserCapabilityModalComponent extends BaseModal {
   resource: string;
   action: string;
 
-  constructor(private formBuilder: CdFormBuilder, public actionLabels: ActionLabelsI18n) {
+  constructor(
+    private formBuilder: CdFormBuilder,
+    public actionLabels: ActionLabelsI18n
+  ) {
     super();
     this.resource = $localize`capability`;
     this.createForm();

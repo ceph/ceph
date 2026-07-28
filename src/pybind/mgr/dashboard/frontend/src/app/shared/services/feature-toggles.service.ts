@@ -12,7 +12,6 @@ export class FeatureTogglesMap {
   cephfs = true;
   rgw = true;
   nfs = true;
-  dashboard = true;
 }
 export type Features = keyof FeatureTogglesMap;
 export type FeatureTogglesMap$ = Observable<FeatureTogglesMap>;
@@ -25,7 +24,10 @@ export class FeatureTogglesService {
   readonly REFRESH_INTERVAL: number = 30000;
   private featureToggleMap$: FeatureTogglesMap$;
 
-  constructor(private http: HttpClient, private timerService: TimerService) {
+  constructor(
+    private http: HttpClient,
+    private timerService: TimerService
+  ) {
     this.featureToggleMap$ = this.timerService.get(
       () => this.http.get<FeatureTogglesMap>(this.API_URL),
       this.REFRESH_INTERVAL

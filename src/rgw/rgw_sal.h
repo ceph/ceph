@@ -290,6 +290,16 @@ class DataProcessorFactory {
   virtual RGWGetObj_Filter* get_filter() = 0;
   virtual bool need_copy_data() = 0;
   virtual void finalize_attrs(Attrs& attrs) { /* default implementation does nothing */ }
+
+  /*
+   * Override the accounted size for the bucket index.  Called after
+   * finalize_attrs().  Returns the logical object size when the
+   * factory knows better than the default heuristic, e.g. after
+   * decompressing data whose recompression was a no-op.
+   */
+  virtual uint64_t get_accounted_size(uint64_t default_size) {
+    return default_size;
+  }
 };
 
 /**
@@ -679,12 +689,14 @@ class Driver {
     virtual int store_oidc_provider(const DoutPrefixProvider* dpp,
                                     optional_yield y,
                                     const RGWOIDCProviderInfo& info,
-                                    bool exclusive) = 0;
+                                    bool exclusive,
+                                    RGWObjVersionTracker* objv_tracker) = 0;
     virtual int load_oidc_provider(const DoutPrefixProvider* dpp,
                                    optional_yield y,
                                    std::string_view tenant,
                                    std::string_view url,
-                                   RGWOIDCProviderInfo& info) = 0;
+                                   RGWOIDCProviderInfo& info,
+                                   RGWObjVersionTracker* objv_tracker) = 0;
     virtual int delete_oidc_provider(const DoutPrefixProvider* dpp,
                                      optional_yield y,
                                      std::string_view tenant,
@@ -1087,6 +1099,8 @@ class Bucket {
     virtual int remove_logging_object(const std::string& obj_name, const std::string& prefix, optional_yield y, const DoutPrefixProvider *dpp) = 0;
     /** Write a record to the pending bucket logging object */
     virtual int write_logging_object(const std::string& obj_name, const std::string& record, const std::string& prefix, optional_yield y, const DoutPrefixProvider *dpp, bool async_completion) = 0;
+    /** Mark this as a cache request */
+    virtual void set_cache_request() = 0;
 
     /* dang - This is temporary, until the API is completed */
     virtual rgw_bucket& get_key() = 0;
@@ -1455,6 +1469,8 @@ class Object {
     virtual bool have_instance(void) = 0;
     /** Clear the instance on this object */
     virtual void clear_instance() = 0;
+    /** Mark this as a cache request */
+    virtual void set_cache_request() = 0;
 
     /** Print the User to @a out */
     virtual void print(std::ostream& out) const = 0;
@@ -1540,6 +1556,9 @@ public:
 
   /** Get the Object that represents this upload */
   virtual std::unique_ptr<rgw::sal::Object> get_meta_obj() = 0;
+
+  /** True if this store persists per-part GCM salts; gates AEAD UploadPart salt emission. */
+  virtual bool supports_crypt_part_salts() const { return false; }
 
   /** Initialize this upload */
   virtual int init(const DoutPrefixProvider* dpp, optional_yield y, ACLOwner& owner, rgw_placement_rule& dest_placement, rgw::sal::Attrs& attrs) = 0;
@@ -2051,10 +2070,5 @@ public:
       -> std::unique_ptr<rgw::sal::ConfigStore>;
 
 };
-
-#ifdef WITH_RADOSGW_RADOS
-std::optional<neorados::RADOS>
-make_neorados(CephContext* cct, boost::asio::io_context& io_context);
-#endif
 
 /** @} */

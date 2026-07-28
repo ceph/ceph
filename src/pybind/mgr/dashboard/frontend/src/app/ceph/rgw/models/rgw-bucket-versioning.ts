@@ -1,4 +1,5 @@
 export enum RgwBucketVersioning {
   ENABLED = 'Enabled',
-  SUSPENDED = 'Suspended'
+  SUSPENDED = 'Suspended',
+  OFF = 'Off'
 }

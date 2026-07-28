@@ -4,9 +4,7 @@
   [hasScrollingContent]="false"
   (overlaySelected)="closeModal()"
 >
-  <cds-modal-header
-    (closeSelect)="closeModal()"
-  >
+  <cds-modal-header (closeSelect)="closeModal()">
     <h3
       cdsModalHeaderHeading
       i18n
@@ -15,9 +13,7 @@
     </h3>
   </cds-modal-header>
 
-  <ng-container
-    class="modal-content"
-  >
+  <ng-container class="modal-content">
     <form
       [formGroup]="form"
       novalidate
@@ -26,9 +22,7 @@
         cdsModalContent
         class="modal-wrapper"
       >
-        <div
-          class="form-item"
-        >
+        <div class="form-item">
           <cds-text-label
             [invalid]="!form.controls.name.valid && form.controls.name.dirty"
             [invalidText]="nameError"
@@ -43,40 +37,36 @@
             />
           </cds-text-label>
 
-          <ng-template
-            #nameError
-          >
+          <ng-template #nameError>
             @if (form.showError('name', formDir, 'required')) {
-            <span
-              class="invalid-feedback"
-              i18n
-            >
-              This field is required!
-            </span>
+              <span
+                class="invalid-feedback"
+                i18n
+              >
+                This field is required!
+              </span>
             }
             @if (form.showError('name', formDir, 'pattern')) {
-            <span
-              class="invalid-feedback"
-              i18n
-            >
-              The name can only consist of alphanumeric characters, dashes and underscores.
-            </span>
+              <span
+                class="invalid-feedback"
+                i18n
+              >
+                The name can only consist of alphanumeric characters, dashes and underscores.
+              </span>
             }
             @if (form.showError('name', formDir, 'uniqueName')) {
-            <span
-              class="invalid-feedback"
-              i18n
-            >
-              The chosen erasure code profile name is already in use.
-            </span>
+              <span
+                class="invalid-feedback"
+                i18n
+              >
+                The chosen erasure code profile name is already in use.
+              </span>
             }
           </ng-template>
         </div>
 
         <!-- Root -->
-        <div
-          class="form-item"
-        >
+        <div class="form-item">
           <cds-dropdown
             label="Root"
             id="root"
@@ -86,29 +76,22 @@
             [invalidText]="rootError"
             i18n
           >
-            <cds-dropdown-list
-              [items]="buckets"
-            >
-            </cds-dropdown-list>
+            <cds-dropdown-list [items]="buckets"> </cds-dropdown-list>
           </cds-dropdown>
-          <ng-template
-            #rootError
-          >
+          <ng-template #rootError>
             @if (form.showError('root', formDir, 'required')) {
-            <span
-              class="invalid-feedback"
-              i18n
-            >
-              This field is required!
-            </span>
+              <span
+                class="invalid-feedback"
+                i18n
+              >
+                This field is required!
+              </span>
             }
           </ng-template>
         </div>
 
         <!-- Failure Domain -->
-        <div
-          class="form-item"
-        >
+        <div class="form-item">
           <cds-select
             label="Failure domain type"
             id="failure_domain"
@@ -119,24 +102,14 @@
             i18n
           >
             @if (!failureDomains) {
-            <option
-              value=""
-            >
-              Loading...
-            </option>
+              <option value="">Loading...</option>
             }
             @for (domain of failureDomainKeys; track domain) {
-            <option
-              [value]="domain"
-            >
-              {{ domain }} ( {{failureDomains[domain].length}} )
-            </option>
+              <option [value]="domain">{{ domain }} ( {{ failureDomains[domain].length }} )</option>
             }
           </cds-select>
 
-          <ng-template
-            #failureDomainError
-          >
+          <ng-template #failureDomainError>
             <span
               class="invalid-feedback"
               i18n
@@ -147,9 +120,7 @@
         </div>
 
         <!-- Class -->
-        <div
-          class="form-item"
-        >
+        <div class="form-item">
           <cds-select
             label="Device class"
             id="device_class"
@@ -159,23 +130,15 @@
             [helperText]="tooltips.device_class"
             i18n
           >
-            <option
-              value=""
-            >
-              All devices
-            </option>
+            <option value="">All devices</option>
             @for (deviceClass of devices; track deviceClass) {
-            <option
-              [value]="deviceClass"
-            >
-              {{ deviceClass }}
-            </option>
+              <option [value]="deviceClass">
+                {{ deviceClass }}
+              </option>
             }
           </cds-select>
 
-          <ng-template
-            #deviceClassError
-          >
+          <ng-template #deviceClassError>
             <span
               class="invalid-feedback"
               i18n

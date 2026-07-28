@@ -46,7 +46,11 @@ Area Network (SAN).
 
    The iSCSI gateway is in maintenance as of November 2022. This means that
    it is no longer in active development and will not be updated to add
-   new features. 
+   new features. It remains documented for existing deployments.
+
+   New deployments should prefer accessing RBD images directly from clients
+   (``librbd``, QEMU, Kubernetes CSI and similar) or the :doc:`NVMe-oF gateway
+   <nvmeof-overview>` for NVMe-based access.
 
 .. toctree::
   :maxdepth: 1

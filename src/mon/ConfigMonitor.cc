@@ -11,6 +11,7 @@
 #include "messages/MConfig.h"
 #include "messages/MGetConfig.h"
 #include "messages/MMonCommand.h"
+#include "common/debug.h"
 #include "common/JSONFormatter.h"
 #include "common/TextTable.h"
 #include "common/cmdparse.h"
@@ -18,6 +19,7 @@
 #include "crush/CrushWrapper.h"
 
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/algorithm/string/trim.hpp>
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -295,6 +297,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
   } else if (prefix == "config get") {
     string who, name;
     cmd_getval(cmdmap, "who", who);
+    boost::algorithm::trim(who);
 
     EntityName entity;
     if (!entity.from_str(who) &&

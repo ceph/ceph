@@ -50,6 +50,10 @@ int retry_raced_user_write(const DoutPrefixProvider* dpp, optional_yield y,
       r = f();
     }
   }
+  if (r == -ECANCELED) {
+    // map ECANCELED to 409 ConcurrentModification
+    return -ERR_CONCURRENT_MODIFICATION;
+  }
   return r;
 }
 
@@ -70,6 +74,10 @@ int retry_raced_group_write(const DoutPrefixProvider* dpp, optional_yield y,
       r = f();
     }
   }
+  if (r == -ECANCELED) {
+    // map ECANCELED to 409 ConcurrentModification
+    return -ERR_CONCURRENT_MODIFICATION;
+  }
   return r;
 }
 
@@ -87,6 +95,10 @@ int retry_raced_role_write(const DoutPrefixProvider* dpp, optional_yield y,
     if (r >= 0) {
       r = f();
     }
+  }
+  if (r == -ECANCELED) {
+    // map ECANCELED to 409 ConcurrentModification
+    return -ERR_CONCURRENT_MODIFICATION;
   }
   return r;
 }

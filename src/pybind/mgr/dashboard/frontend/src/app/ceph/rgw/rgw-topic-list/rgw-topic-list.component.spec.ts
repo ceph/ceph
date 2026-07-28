@@ -3,11 +3,10 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RgwTopicListComponent } from './rgw-topic-list.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
-import { RgwTopicDetailsComponent } from '../rgw-topic-details/rgw-topic-details.component';
+import { RgwTopicResourceSidebarComponent } from '../rgw-topic-resource-sidebar/rgw-topic-resource-sidebar.component';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 import { RgwTopicService } from '~/app/shared/api/rgw-topic.service';
 
@@ -18,7 +17,7 @@ describe('RgwTopicListComponent', () => {
   let rgwTopicServiceListSpy: jasmine.Spy;
 
   configureTestBed({
-    declarations: [RgwTopicListComponent, RgwTopicDetailsComponent],
+    declarations: [RgwTopicListComponent, RgwTopicResourceSidebarComponent],
     imports: [BrowserAnimationsModule, RouterTestingModule, HttpClientTestingModule, SharedModule]
   });
 
@@ -28,10 +27,9 @@ describe('RgwTopicListComponent', () => {
         BrowserAnimationsModule,
         SharedModule,
         HttpClientTestingModule,
-        ToastrModule.forRoot(),
         RouterTestingModule
       ],
-      declarations: [RgwTopicListComponent]
+      declarations: [RgwTopicListComponent, RgwTopicResourceSidebarComponent]
     }).compileComponents();
 
     fixture = TestBed.createComponent(RgwTopicListComponent);

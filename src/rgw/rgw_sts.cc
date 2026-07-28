@@ -26,9 +26,6 @@
 #include "rgw_iam_policy.h"
 #include "rgw_sts.h"
 #include "rgw_sal.h"
-#ifdef WITH_RADOSGW_RADOS
-#include "rgw_sal_rados.h"
-#endif
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -282,7 +279,7 @@ int AssumeRoleRequest::validate_input(const DoutPrefixProvider *dpp) const
       return -EINVAL;
     }
   }
-  if (! tokenCode.empty() && tokenCode.size() == TOKEN_CODE_SIZE) {
+  if (! tokenCode.empty() && tokenCode.size() != TOKEN_CODE_SIZE) {
     ldpp_dout(dpp, 0) << "Either token code is empty or token code size is invalid: " << tokenCode.size() << dendl;
     return -EINVAL;
   }
@@ -405,16 +402,16 @@ AssumeRoleResponse STSService::assumeRole(const DoutPrefixProvider *dpp,
   AssumeRoleResponse response;
   response.packedPolicySize = 0;
 
-  //Get the role info which is being assumed
-  boost::optional<rgw::ARN> r_arn = rgw::ARN::parse(req.getRoleARN());
-  if (r_arn == boost::none) {
-    ldpp_dout(dpp, 0) << "Error in parsing role arn: " << req.getRoleARN() << dendl;
-    response.retCode = -EINVAL;
+  auto [ret, r] = getRoleInfo(dpp, req.getRoleARN(), y);
+  if (ret < 0) {
+    response.retCode = ret;
     return response;
   }
 
-  string roleId = role->get_id();
-  uint64_t roleMaxSessionDuration = role->get_max_session_duration();
+  boost::optional<rgw::ARN> r_arn = rgw::ARN::parse(req.getRoleARN());
+
+  string roleId = r->get_id();
+  uint64_t roleMaxSessionDuration = r->get_max_session_duration();
   req.setMaxDuration(roleMaxSessionDuration);
 
   //Validate input

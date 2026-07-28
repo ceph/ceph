@@ -163,7 +163,7 @@ std::span<std::byte const> py_bytes_as_span(PyObject *bytes)
   assert(PyBytes_CheckExact(bytes));
   Py_ssize_t length;
   char *buf;
-  int r = PyBytes_AsStringAndSize(
+  [[maybe_unused]] int r = PyBytes_AsStringAndSize(
     bytes, &buf, &length);
   assert(r == 0);
   return std::span<std::byte const>((const std::byte*)buf, size_t(length));
@@ -183,7 +183,7 @@ std::vector<std::byte> py_bytes_as_vec(PyObject *bytes)
   assert(PyBytes_CheckExact(bytes));
   Py_ssize_t length;
   char *buf;
-  int r = PyBytes_AsStringAndSize(
+  [[maybe_unused]] int r = PyBytes_AsStringAndSize(
     bytes, &buf, &length);
   assert(r == 0);
   return std::vector<std::byte>{
@@ -287,6 +287,10 @@ std::pair<int, std::string> PyModuleConfig::set_config(
   }
 }
 
+  PyModule::PyModule(const std::string &module_name_)
+    : module_name(module_name_)
+  { }
+
 PyObject* PyModule::init_ceph_logger()
 {
   auto py_logger = PyModule_Create(&ceph_logger_module);
@@ -295,9 +299,33 @@ PyObject* PyModule::init_ceph_logger()
   return py_logger;
 }
 
+// module-independent sink for the Python root-logger fallback; the Python
+// side maps the record's level to a ceph debug level, so the usual
+// subsystem gating applies per record
+static PyObject*
+ceph_mgr_log(PyObject *self, PyObject *args)
+{
+  int level = 0;
+  char *record = nullptr;
+  if (!PyArg_ParseTuple(args, "is:mgr_log", &level, &record)) {
+    return nullptr;
+  }
+  if (level < 0) {
+    level = 0;
+  }
+#undef dout_prefix
+#define dout_prefix *_dout
+  dout(ceph::dout::need_dynamic(level)) << record << dendl;
+#undef dout_prefix
+#define dout_prefix *_dout << "mgr[py] "
+  Py_RETURN_NONE;
+}
+
 PyObject* PyModule::init_ceph_module()
 {
   static PyMethodDef module_methods[] = {
+    {"mgr_log", ceph_mgr_log, METH_VARARGS,
+     "log a preformatted record to the mgr daemon log at a debug level"},
     {nullptr, nullptr, 0, nullptr}
   };
   static PyModuleDef ceph_module_def = {
@@ -371,7 +399,7 @@ int PyModule::load(PyThreadState *pMainThreadState)
 
     int r;
 
-    pPickleModule = PyImport_ImportModuleNoBlock("pickle");
+    pPickleModule = PyImport_ImportModule("pickle");
     if (!pPickleModule) {
       derr << "Unable to load pickle" << dendl;
       return -EINVAL;
@@ -792,3 +820,18 @@ PyModule::~PyModule()
   }
 }
 
+int PyModule::perf_counter_build(CephContext *cct) {
+  ceph_assert(perfcounter == nullptr);
+  PerfCountersBuilder pcb(cct, "mgr_module_" + get_name(), l_pym_first, l_pym_last);
+  pcb.add_u64_avg(l_pym_notify_avg_usec, "notify_avg_usec", "Average time spent in notify calls", "nsec", 0);
+  pcb.add_u64_avg(l_pym_cmd_avg_usec, "cmd_avg_usec", "Average time spent in command calls", "csec", 0);
+  pcb.add_u64(l_pym_alive, "alive", "Is the module alive?", "aliv", 0, uint64_t(1));
+  pcb.add_u64(l_pym_cpu_usage, "cpu_usage", "CPU usage in percent", "cpu", 0, uint64_t(100));
+  pcb.add_u64(l_pym_mem_rss_change, "mem_rss_change", "Memory RSS change in bytes", "", 0);
+  pcb.add_u64(l_pym_mem_rss_current, "mem_rss_current", "Memory RSS current in bytes", "", 0);
+  pcb.add_u64(l_pym_serve_cpu_usage, "serve_cpu_usage", "Serve thread CPU usage in percent", "cpu", 0, uint64_t(100));
+  perfcounter = std::unique_ptr<PerfCounters>(pcb.create_perf_counters());
+  cct->get_perfcounters_collection()->add(perfcounter.get());
+
+  return 0;
+}

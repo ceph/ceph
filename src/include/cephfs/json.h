@@ -75,6 +75,4 @@ void inode_t<Allocator>::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("quota", quota, obj, true);
   JSONDecoder::decode_json("last_scrub_stamp", last_scrub_stamp, obj, true);
   JSONDecoder::decode_json("last_scrub_version", last_scrub_version, obj, true);
-  JSONDecoder::decode_json("remote_ino", remote_ino.val, obj, true);
-  JSONDecoder::decode_json("referent_inodes", referent_inodes, obj, true);
 }

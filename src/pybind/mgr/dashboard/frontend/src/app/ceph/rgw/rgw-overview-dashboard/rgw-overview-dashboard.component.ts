@@ -16,9 +16,11 @@ import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { RgwPromqls as queries } from '~/app/shared/enum/dashboard-promqls.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
+import { ChartPoint } from '~/app/shared/models/area-chart-point';
 import { catchError, shareReplay, switchMap, takeUntil, tap } from 'rxjs/operators';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { PerformanceCardService } from '~/app/shared/api/performance-card.service';
 
 @Component({
   selector: 'cd-rgw-overview-dashboard',
@@ -51,6 +53,9 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
     AVG_GET_LATENCY: [],
     AVG_PUT_LATENCY: []
   };
+  requestsChartData: ChartPoint[] = [];
+  latencyChartData: ChartPoint[] = [];
+  bandwidthChartData: ChartPoint[] = [];
   timerGetPrometheusDataSub: Subscription;
   chartTitles = ['Metadata Sync', 'Data Sync'];
   realm: string;
@@ -76,7 +81,8 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
     private rgwBucketService: RgwBucketService,
     private prometheusService: PrometheusService,
     private rgwMultisiteService: RgwMultisiteService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private performanceCardService: PerformanceCardService
   ) {
     this.permissions = this.authStorageService.getPermissions();
   }
@@ -158,6 +164,18 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe((results) => {
         this.queriesResults = results;
+        this.requestsChartData = this.performanceCardService.toSeries(
+          results?.RGW_REQUEST_PER_SECOND || [],
+          $localize`Requests/sec`
+        );
+        this.latencyChartData = this.performanceCardService.mergeSeries(
+          this.performanceCardService.toSeries(results?.AVG_GET_LATENCY || [], 'GET'),
+          this.performanceCardService.toSeries(results?.AVG_PUT_LATENCY || [], 'PUT')
+        );
+        this.bandwidthChartData = this.performanceCardService.mergeSeries(
+          this.performanceCardService.toSeries(results?.GET_BANDWIDTH || [], 'GET'),
+          this.performanceCardService.toSeries(results?.PUT_BANDWIDTH || [], 'PUT')
+        );
       });
   }
 

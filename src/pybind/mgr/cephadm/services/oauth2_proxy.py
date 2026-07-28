@@ -2,7 +2,7 @@ import logging
 from typing import List, Any, Tuple, Dict, cast, Optional, TYPE_CHECKING
 from copy import copy
 
-from orchestrator import DaemonDescription
+from orchestrator import DaemonDescription, DaemonDescriptionStatus
 from ceph.deployment.service_spec import OAuth2ProxySpec, MgmtGatewaySpec, ServiceSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec
 from .service_registry import register_cephadm_service
@@ -34,7 +34,8 @@ class OAuth2ProxyService(CephadmService):
             for service in ['mgmt-gateway']
             for d in mgr.cache.get_daemons_by_service(service)
         ]
-        return deps
+        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
+        return sorted(deps + parent_deps)
 
     def get_service_ips_and_hosts(self, service_name: str) -> List[str]:
         entries = set()
@@ -64,10 +65,12 @@ class OAuth2ProxyService(CephadmService):
         svc_spec = cast(OAuth2ProxySpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         allowlist_domains = copy(svc_spec.allowlist_domains) or []
         allowlist_domains += self.get_service_ips_and_hosts('mgmt-gateway')
+        email_domains = copy(svc_spec.email_domains) or []
         context = {
             'spec': svc_spec,
             'cookie_secret': svc_spec.cookie_secret,
             'allowlist_domains': allowlist_domains,
+            'email_domains': email_domains,
             'redirect_url': svc_spec.redirect_url or self.get_redirect_url()
         }
 
@@ -81,3 +84,23 @@ class OAuth2ProxyService(CephadmService):
         }
 
         return daemon_config, sorted(OAuth2ProxyService.get_dependencies(self.mgr))
+
+    def post_remove(self, daemon: DaemonDescription, is_failed_deploy: bool) -> None:
+        """
+        Called after an oauth2-proxy daemon is removed.
+        Disables Dashboard OAuth2 SSO if no other oauth2-proxy daemons remain running.
+        """
+        remaining_running = any(
+            dd.status == DaemonDescriptionStatus.running and dd.name() != daemon.name()
+            for dd in self.mgr.cache.get_daemons_by_service('oauth2-proxy')
+        )
+        if not remaining_running:
+            try:
+                if 'dashboard' in self.mgr.get('mgr_map')['modules'] \
+                        and self.mgr.get_module_option_ex('dashboard', 'sso_oauth2'):
+                    logger.warning('Last oauth2-proxy daemon removed, disabling Dashboard OAuth2 SSO')
+                    self.mgr.remote('dashboard', 'disable_oauth2_sso')
+            except Exception as e:
+                logger.warning('Failed to disable OAuth2 SSO after oauth2-proxy removal: %s', e)
+
+        super().post_remove(daemon, is_failed_deploy=is_failed_deploy)

@@ -18,6 +18,7 @@
 #include "include/compat.h"
 #include "common/errno.h"
 #include <cerrno>
+#include <tuple>
 #include "Event.h"
 
 #ifdef HAVE_DPDK
@@ -55,7 +56,7 @@ class C_handle_notify : public EventCallback {
   void do_request(uint64_t fd_or_id) override {
 #ifdef __linux__
     eventfd_t value;
-    read(fd_or_id, &value, sizeof(value));
+    std::ignore = read(fd_or_id, &value, sizeof(value));
 #else
     char c[256];
     int r = 0;
@@ -252,6 +253,7 @@ void EventCenter::set_owner()
 int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
 {
   ceph_assert(in_thread());
+  ceph_assert(fd >= 0);
   int r = 0;
   if (fd >= nevent) {
     int new_size = nevent << 2;

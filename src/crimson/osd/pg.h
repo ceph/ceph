@@ -8,6 +8,10 @@
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 #include <seastar/core/future.hh>
 #include <seastar/core/shared_future.hh>
+#include <seastar/core/semaphore.hh>
+#include <seastar/core/sharded.hh>
+
+#include <fmt/ostream.h>
 
 #include "common/dout.h"
 #include "common/ostream_temp.h"
@@ -26,6 +30,7 @@
 #include "osd/DynamicPerfStats.h"
 
 #include "crimson/common/interruptible_future.h"
+#include "crimson/common/gated.h"
 #include "crimson/common/log.h"
 #include "crimson/common/type_helpers.h"
 #include "crimson/os/futurized_collection.h"
@@ -63,6 +68,16 @@ namespace crimson::net {
 namespace crimson::os {
   class FuturizedStore;
 }
+
+namespace crimson::osd {
+class PG;
+}
+
+// declared ahead of the class so the consteval {fmt} check can see it from
+// PG's own inline logging methods (which format *this) above the class.
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::osd::PG> : fmt::ostream_formatter {};
+#endif
 
 namespace crimson::osd {
 class OpsExecuter;
@@ -170,8 +185,6 @@ public:
   const std::set<pg_shard_t> &get_acting_recovery_backfill_shards() const override {
     return get_acting_recovery_backfill();
   }
-
-  bool should_send_op(pg_shard_t peer, const hobject_t &hoid) override;
 
   spg_t primary_spg_t() const override {
     return spg_t(get_info().pgid.pgid, get_primary().shard);
@@ -546,7 +559,11 @@ public:
   }
   Context *on_clean() final;
   void on_activate_committed() final {
-    if (!is_primary()) {
+    // As in on_activate_complete(): ActivateCommitted may have left
+    // the PG in PG_STATE_PEERED (acting_set_writeable() returned
+    // false) rather than PG_STATE_ACTIVE.  Only unblock when we
+    // actually became ACTIVE.
+    if (!is_primary() && peering_state.is_active()) {
       wait_for_active_blocker.unblock();
     }
   }
@@ -561,12 +578,83 @@ public:
   std::pair<ghobject_t, bool>
   do_delete_work(ceph::os::Transaction &t, ghobject_t _next) final;
 
-  // merge/split not ready
-  void clear_ready_to_merge() final {}
-  void set_not_ready_to_merge_target(pg_t pgid, pg_t src) final {}
-  void set_not_ready_to_merge_source(pg_t pgid) final {}
-  void set_ready_to_merge_target(eversion_t lu, epoch_t les, epoch_t lec) final {}
-  void set_ready_to_merge_source(eversion_t lu) final {}
+  // Per-PG rendezvous used to collect source PGs converging on this PG
+  // during a merge. Producers (source-side coroutines on other shards)
+  // push entries via add_merge_source(); the target-side coroutine waits
+  // via collect_merge_sources(n).
+  using merge_source_entry_t =
+    std::pair<core_id_t, crimson::local_shared_foreign_ptr<Ref<PG>>>;
+  using merge_source_map_t = std::map<spg_t, merge_source_entry_t>;
+
+  // Producer side: called on the target's shard with the foreign PG
+  // already wrapped. The first registration for a given source signals
+  // the semaphore; duplicate registrations (e.g. from replay) are no-ops.
+  void add_merge_source(
+    spg_t source,
+    core_id_t birth_shard,
+    seastar::foreign_ptr<Ref<PG>> source_pg);
+
+  // Consumer side: wait until `n` distinct sources have arrived, then
+  // return them and clear the rendezvous state.  Returns an empty map if
+  // reset_merge_rendezvous() breaks the wait (e.g. PG stop or merge cancel).
+  seastar::future<merge_source_map_t> collect_merge_sources(std::size_t n);
+
+  // Drop in-flight handoffs and reset the semaphore.  Call on PG stop or
+  // after Seastore cross-shard cancel so a failed try cannot leave stale
+  // sources for the next epoch.
+  void reset_merge_rendezvous();
+
+  void merge_from(
+      merge_source_map_t& sources,
+      PeeringCtx &rctx,
+      unsigned split_bits,
+      const pg_merge_meta_t& last_pg_merge_meta);
+
+  void clear_ready_to_merge() final {
+    LOG_PREFIX(PG::clear_ready_to_merge);
+    SUBDEBUGDPP(osd, "", *this);
+    merge_notify_gate.dispatch_in_background(
+      "clear_ready_to_merge", *this,
+      [this] {
+        return shard_services.clear_ready_to_merge(pgid.pgid);
+      });
+  }
+  void set_not_ready_to_merge_target(pg_t pgid, pg_t src) final {
+    LOG_PREFIX(PG::set_not_ready_to_merge_target);
+    SUBDEBUGDPP(osd, "", *this);
+    merge_notify_gate.dispatch_in_background(
+      "set_not_ready_to_merge_target", *this,
+      [this, pgid, src] {
+        return shard_services.set_not_ready_to_merge_target(pgid, src);
+      });
+  }
+  void set_not_ready_to_merge_source(pg_t pgid) final {
+    LOG_PREFIX(PG::set_not_ready_to_merge_source);
+    SUBDEBUGDPP(osd, "", *this);
+    merge_notify_gate.dispatch_in_background(
+      "set_not_ready_to_merge_source", *this,
+      [this, pgid] {
+        return shard_services.set_not_ready_to_merge_source(pgid);
+      });
+  }
+  void set_ready_to_merge_target(eversion_t lu, epoch_t les, epoch_t lec) final {
+    LOG_PREFIX(PG::set_ready_to_merge_target);
+    SUBDEBUGDPP(osd, "", *this);
+    merge_notify_gate.dispatch_in_background(
+      "set_ready_to_merge_target", *this,
+      [this, lu, les, lec] {
+        return shard_services.set_ready_to_merge_target(pgid.pgid, lu, les, lec);
+      });
+  }
+  void set_ready_to_merge_source(eversion_t lu) final {
+    LOG_PREFIX(PG::set_ready_to_merge_source);
+    SUBDEBUGDPP(osd, "", *this);
+    merge_notify_gate.dispatch_in_background(
+      "set_ready_to_merge_source", *this,
+      [this, lu] {
+        return shard_services.set_ready_to_merge_source(pgid.pgid, lu);
+      });
+  }
 
   void on_active_actmap() final;
   void on_active_advmap(const OSDMapRef &osdmap) final;
@@ -619,6 +707,9 @@ public:
       // TODO
     }
     void trim(const pg_log_entry_t &entry) override {
+      // TODO
+    }
+    void trim_after_remove(const pg_log_entry_t &entry) override {
       // TODO
     }
     void partial_write(pg_info_t *info,
@@ -690,13 +781,16 @@ public:
   bool is_backfilling() const final {
     return peering_state.is_backfilling();
   }
+  bool is_deleted() const {
+    return peering_state.is_deleted();
+  }
   uint64_t get_last_user_version() const {
     return get_info().last_user_version;
   }
   bool get_need_up_thru() const {
     return peering_state.get_need_up_thru();
   }
-  bool should_send_op(pg_shard_t peer, const hobject_t &hoid) const;
+  bool should_send_op(pg_shard_t peer, const hobject_t &hoid) final;
   epoch_t get_same_interval_since() const {
     return get_info().history.same_interval_since;
   }
@@ -909,6 +1003,14 @@ private:
   interruptible_future<seastar::stop_iteration> trim_snap(
     snapid_t to_trim,
     bool needs_pause);
+  /// Re-trigger snap trimming after scrub completion. Snap trimming is
+  /// deferred while the PG is scrubbing; call this from notify_scrub_end()
+  /// to resume. Spawns a SnapTrimInitiate operation to avoid nesting
+  /// interrupt conditions.
+  void kick_snap_trim();
+  /// Initiate the snap trim loop with all state checks. Called from
+  /// SnapTrimInitiate and on_active_actmap().
+  void initiate_snap_trim();
 
 private:
   PG_OSDMapGate osdmap_gate;
@@ -1132,6 +1234,20 @@ private:
   // continuations here.
   bool stopping = false;
 
+  // Rendezvous state owned by the target PG of a pending merge.
+  // sources is keyed by source pgid so re-registration is naturally
+  // idempotent; arrivals is signaled exactly once per first insert.
+  struct merge_rendezvous_t {
+    merge_source_map_t sources;
+    seastar::semaphore arrivals{0};
+  };
+  merge_rendezvous_t merge_rendezvous;
+
+  // PeeringListener merge callbacks must remain void, but they trigger async
+  // mon notifies in ShardServices. Gate them here so failures are logged and
+  // PG::stop() waits for them to drain.
+  crimson::common::Gated merge_notify_gate;
+
   PGActivationBlocker wait_for_active_blocker;
   PglogBasedRecovery* pglog_based_recovery_op = nullptr;
 
@@ -1151,6 +1267,7 @@ private:
   friend class WatchTimeoutRequest;
   friend class SnapTrimEvent;
   friend class SnapTrimObjSubEvent;
+  friend class SnapTrimInitiate;
   friend ECBackend;
 private:
 
@@ -1251,7 +1368,3 @@ struct PG::do_osd_ops_params_t {
 std::ostream& operator<<(std::ostream&, const PG& pg);
 
 }
-
-#if FMT_VERSION >= 90000
-template <> struct fmt::formatter<crimson::osd::PG> : fmt::ostream_formatter {};
-#endif

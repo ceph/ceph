@@ -5,7 +5,6 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
 import { RoleService } from '~/app/shared/api/role.service';
@@ -37,7 +36,6 @@ describe('RoleFormComponent', () => {
       RouterTestingModule.withRoutes(routes),
       HttpClientTestingModule,
       ReactiveFormsModule,
-      ToastrModule.forRoot(),
       SharedModule
     ],
     declarations: [RoleFormComponent, FakeComponent]
@@ -82,6 +80,10 @@ describe('RoleFormComponent', () => {
 
     it('should set mode', () => {
       expect(component.mode).toBeUndefined();
+    });
+
+    it('should set submit action to Create Role', () => {
+      expect(component.submitAction).toBe('Create Role');
     });
 
     it('should submit', () => {
@@ -138,6 +140,10 @@ describe('RoleFormComponent', () => {
 
     it('should set mode', () => {
       expect(component.mode).toBe('editing');
+    });
+
+    it('should set submit action to Save changes', () => {
+      expect(component.submitAction).toBe('Save changes');
     });
 
     it('should submit', () => {

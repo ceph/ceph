@@ -75,6 +75,8 @@ IOHandler::sweep_out_pending_msgs_to_sent(
   bool require_ack)
 {
   std::size_t num_msgs = out_pending_msgs.size();
+  const unsigned max_bufs =
+      local_conf().get_val<uint64_t>("crimson_osd_max_send_buffers");
   ceph::bufferlist bl;
 
 #ifdef UNIT_TESTS_BUILT
@@ -108,15 +110,10 @@ IOHandler::sweep_out_pending_msgs_to_sent(
 #endif
   }
 
-  std::for_each(
-      out_pending_msgs.begin(),
-      out_pending_msgs.begin()+num_msgs,
-      [this, &bl
-#ifdef UNIT_TESTS_BUILT
-        , &tags
-#endif
-      ](const MessageFRef& msg) {
-    // set priority
+  std::size_t num_swept = 0;
+  for (std::size_t i = 0; i < num_msgs; ++i) {
+    auto& msg = out_pending_msgs[i];
+
     msg->get_header().src = conn.messenger.get_myname();
 
     msg->encode(conn.features, 0);
@@ -144,15 +141,21 @@ IOHandler::sweep_out_pending_msgs_to_sent(
     auto tag = MessageFrame::tag;
     tags.push_back(tag);
 #endif
-  });
+    ++num_swept;
+    if (bl.get_num_buffers() >= max_bufs) {
+      break;
+    }
+  }
 
   if (!conn.policy.lossy) {
     out_sent_msgs.insert(
         out_sent_msgs.end(),
         std::make_move_iterator(out_pending_msgs.begin()),
-        std::make_move_iterator(out_pending_msgs.end()));
+        std::make_move_iterator(out_pending_msgs.begin() + num_swept));
   }
-  out_pending_msgs.clear();
+  out_pending_msgs.erase(
+      out_pending_msgs.begin(),
+      out_pending_msgs.begin() + num_swept);
 
 #ifdef UNIT_TESTS_BUILT
   return sweep_ret{std::move(bl), tags};
@@ -1266,6 +1269,7 @@ IOHandler::close_io(
   } else {
     return shard_states->close(
     ).then([this] {
+      std::ignore = this; // as we are 'assert'ing, not ceph_assert'ing
       assert(shard_states->assert_closed_and_exit());
     });
   }
@@ -1291,6 +1295,14 @@ IOHandler::shard_states_t::notify_out_dispatching_stopped(
                     conn, what, io_state);
     }
   }
+}
+
+void
+IOHandler::shard_states_t::abort_wrong_io_state(SocketConnection &conn)
+{
+  logger().error("{} try_enter_out_dispatching() got wrong io_state {}",
+                 conn, io_state);
+  ceph_abort_msg("impossible");
 }
 
 seastar::future<>

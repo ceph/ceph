@@ -11,11 +11,21 @@
 
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager.h"
 
+#include <fmt/ostream.h>
+
 /**
  * dummy.h
  *
  * Dummy backend implementations for test purposes.
  */
+
+namespace crimson::os::seastore::onode {
+class DummyNodeExtent;
+}
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::onode::DummyNodeExtent> : fmt::ostream_formatter {};
+#endif
 
 namespace crimson::os::seastore::onode {
 
@@ -89,7 +99,7 @@ class DummyNodeExtentManager final: public NodeExtentManager {
   }
 
   alloc_iertr::future<NodeExtentRef> alloc_extent(
-      Transaction& t, laddr_t hint, extent_len_t len) override {
+      Transaction& t, laddr_hint_t hint, extent_len_t len) override {
     SUBTRACET(seastore_onode, "allocating {}B with hint {} ...", t, len, hint);
     if constexpr (SYNC) {
       return alloc_extent_sync(t, len);
@@ -151,7 +161,7 @@ class DummyNodeExtentManager final: public NodeExtentManager {
     assert(len % ALIGNMENT == 0);
     auto r = ceph::buffer::create_aligned(len, ALIGNMENT);
     auto addr = laddr_t::from_byte_offset(
-      reinterpret_cast<laddr_t::Unsigned>(r->get_data()));
+      reinterpret_cast<loffset_t>(r->get_data()));
     auto bp = ceph::bufferptr(std::move(r));
     auto extent = Ref<DummyNodeExtent>(new DummyNodeExtent(std::move(bp)));
     extent->set_laddr(addr);
@@ -191,7 +201,3 @@ class DummyNodeExtentManager final: public NodeExtentManager {
 };
 
 }
-
-#if FMT_VERSION >= 90000
-template <> struct fmt::formatter<crimson::os::seastore::onode::DummyNodeExtent> : fmt::ostream_formatter {};
-#endif

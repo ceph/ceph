@@ -129,7 +129,9 @@ class CephService(object):
     @classmethod
     def get_pool_list_with_stats(cls, application=None):
         # pylint: disable=too-many-locals
-        pools = cls.get_pool_list(application)
+        # copy each pool: get_pool_list returns mgr's cached osd_map dicts, and
+        # stamping pg_status/stats below would otherwise leak into stats=False callers
+        pools = [dict(pool) for pool in cls.get_pool_list(application)]
 
         pools_w_stats = []
 
@@ -166,8 +168,10 @@ class CephService(object):
             return ecp
 
         ret = []
+        # copy each ecp: mgr.get('osd_map') returns cached dicts, and _serialize_ecp
+        # mutates name/k/m in place, which would pollute the shared cache otherwise
         for name, ecp in mgr.get('osd_map').get('erasure_code_profiles', {}).items():
-            ret.append(_serialize_ecp(name, ecp))
+            ret.append(_serialize_ecp(name, dict(ecp)))
         return ret
 
     @classmethod
@@ -289,10 +293,10 @@ class CephService(object):
         return tokens_info
 
     @classmethod
-    def import_realm_token(cls, realm_token, zone_name, port, placement_spec):
+    def import_realm_token(cls, realm_token, zone_name, port, placement_spec, tier_type=None):
         tokens_info = mgr.remote('rgw', 'import_realm_token', zone_name=zone_name,
                                  realm_token=realm_token, port=port, placement=placement_spec,
-                                 start_radosgw=True)
+                                 tier_type=tier_type, start_radosgw=True)
         return tokens_info
 
     @classmethod

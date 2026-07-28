@@ -97,9 +97,9 @@ CyanStore::mount_ertr::future<> CyanStore::mount()
   return shard_stores.invoke_on_all([](auto &local_store) {
     return seastar::do_for_each(local_store.mshard_stores, [](auto& mshard_store) {
       return mshard_store->mount().handle_error(
-        crimson::ct_error::assert_all{
+        crimson::ct_error::assert_all(
           "Invalid error in CyanStore::mount"
-        });
+        ));
     });
   });
 }
@@ -179,7 +179,7 @@ CyanStore::mkfs_ertr::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
       }
     }
   }).safe_then([this]{
-    return write_meta("type", "memstore");
+    return write_meta("type", "cyanstore");
   }).safe_then([this] {
     return shard_stores.invoke_on_all([](auto &local_store) {
       return seastar::do_for_each(local_store.mshard_stores, [](auto& mshard_store) {
@@ -583,6 +583,7 @@ seastar::future<> CyanStore::Shard::do_transaction_no_callbacks(
       }
       break;
       case Transaction::OP_TOUCH:
+      case Transaction::OP_TOUCH_TEMP:
       case Transaction::OP_CREATE:
       {
         coll_t cid = i.get_cid(op->cid);
@@ -673,6 +674,13 @@ seastar::future<> CyanStore::Shard::do_transaction_no_callbacks(
       {
         coll_t cid = i.get_cid(op->cid);
         r = _remove_collection(cid);
+      }
+      break;
+      case Transaction::OP_MERGE_COLLECTION:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        coll_t dest_cid = i.get_cid(op->dest_cid);
+        r = _merge_collection(cid, dest_cid, op->split_bits);
       }
       break;
       case Transaction::OP_SETALLOCHINT:
@@ -1041,6 +1049,29 @@ int CyanStore::Shard::_create_collection(const coll_t& cid, int bits)
   result.first->second = p->second;
   result.first->second->bits = bits;
   new_coll_map.erase(p);
+  return 0;
+}
+
+int CyanStore::Shard::_merge_collection(
+  const coll_t& cid,
+  const coll_t& dest_cid,
+  int bits)
+{
+  logger().debug("{} cid={} dest_cid={} bits={}", __func__, cid, dest_cid, bits);
+  auto src = _get_collection(cid);
+  if (!src) {
+    return -ENOENT;
+  }
+  auto dest = _get_collection(dest_cid);
+  if (!dest) {
+    return -ENOENT;
+  }
+  for (auto& [oid, obj] : src->object_map) {
+    dest->object_map.emplace(oid, obj);
+    dest->object_hash.emplace(oid, obj);
+  }
+  dest->bits = bits;
+  coll_map.erase(cid);
   return 0;
 }
 

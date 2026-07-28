@@ -638,6 +638,8 @@ false. Examples:
       - argument: "--annotation=com.example.note=a simple example"
 
 
+.. _cephadm-container-mount:
+
 Mounting Files with Extra Container Arguments
 ---------------------------------------------
 
@@ -803,6 +805,13 @@ For example:
 .. prompt:: bash #
 
     ceph orch rm rgw.myrgw
+
+The same command accepts ``--force`` and ``--force-delete-data``. Use
+``ceph orch rm <service-name> --force --force-delete-data`` when you want
+cephadm to remove on-disk data for supported daemon types instead of relocating
+it under ``<fsid>/removed/``. The latter flag requires ``--force``. The same
+pair of flags applies to ``ceph orch daemon rm <daemon-name>`` when removing
+individual daemons.
 
 
 .. _cephadm-spec-unmanaged:

@@ -19,18 +19,23 @@
 #include <atomic>
 #include <map>
 #include <set>
+#include <string>
+#include <vector>
 
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
-#include "include/types.h"
+#include "include/utime.h"
+#include "include/types.h" // for version_t
 #include "PaxosService.h"
 
 #include "common/config_fwd.h"
+#include "common/debug.h"
 #include "common/LogEntry.h"
 #include "include/str_map.h"
 
 class MLog;
+struct Subscription;
 
 static const std::string LOG_META_CHANNEL = "$channel";
 

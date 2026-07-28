@@ -27,7 +27,16 @@ leak:^PyMem_Calloc
 leak:^PyUnicode_New
 # python3.9, 3.10, 3.11
 leak:^PyMem_Malloc
-# python3.12 doesn't leak anything
+leak:^PyDict_Copy
+leak:^_PyObject_GC_NewVar
+# Catch unsymbolised interpreter frames in the standalone python binary used by
+# the bin/ceph wrapper and in the libpython embedded by C++ unittests such as
+# unittest_mgr_pyformatter / unittest_mgr_pyutil.  Not all CPython internal
+# helpers are exported in .dynsym, so the function-name matches above don't
+# cover everything; this substring-matches the module path in the stack frame.
+leak:python3.10
+leak:python3.12
+leak:python3.13
 # python3.13
 leak:^PyModule_ExecDef
 
@@ -38,3 +47,30 @@ leak:^ceph::ErasureCodePluginRegistry::load
 # SQLite internal allocations
 # These are indirect leaks from SQLite's internal memory management
 leak:libsqlite3.so
+
+# boost.thread main-thread TLS; freed only when a boost-created thread exits, so
+# still reachable at exit. Benign.
+leak:boost::detail::make_external_thread_data
+
+# OpenSSL one-time init; ForkDeathTest children _exit() without OPENSSL_cleanup.
+leak:^OPENSSL_init_crypto
+
+# Still-reachable OpenSSL / libcryptsetup state with no API to free at exit;
+# seen in the librbd encryption and migration unittests under ASan.
+#
+# libcryptsetup OpenSSL cipher/per-thread state that survives crypt_free().
+leak:libcryptsetup
+# OpenSSL DRBG global state, freed only by OPENSSL_cleanup (never called here).
+leak:^RAND_bytes_ex
+leak:^RAND_priv_bytes_ex
+# OpenSSL per-thread error stack/strings, freed only by OPENSSL_thread_stop.
+leak:^ossl_err_get_state_int
+leak:^ERR_add_error_vdata
+
+# unittest-seastore stops the seastar reactor (SeastarRunner, on its own thread)
+# without draining its pending tasks, so a few cached extents those tasks still
+# held are leaked at shutdown. Three anchors for the three seastore subsystems
+# they come from.
+leak:crimson::os::seastore::Cache::
+leak:crimson::os::seastore::omap_manager
+leak:crimson::os::seastore::FixedKVBtree

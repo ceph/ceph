@@ -448,10 +448,15 @@ struct transaction_manager_test_t :
 
   TestBlockRef alloc_extent(
     test_transaction_t &t,
-    laddr_t hint,
+    laddr_t addr,
     extent_len_t len,
     char contents) {
     auto extents = with_trans_intr(*(t.t), [&](auto& trans) {
+      laddr_hint_t hint;
+      hint.addr = addr;
+      hint.condition = laddr_conflict_condition_t::all_at_object_content;
+      hint.policy = laddr_conflict_policy_t::gen_random;
+      hint.block_size = laddr_t::UNIT_SIZE;
       return tm->alloc_data_extents<TestBlock>(trans, hint, len);
     }).unsafe_get();
     assert(extents.size() == 1);
@@ -459,7 +464,7 @@ struct transaction_manager_test_t :
     extent_len_t allocated_len = 0;
     extent->set_contents(contents);
     EXPECT_FALSE(test_mappings.contains(extent->get_laddr(), t.mapping_delta));
-    test_mappings.alloced(hint, *extent, t.mapping_delta);
+    test_mappings.alloced(addr, *extent, t.mapping_delta);
     allocated_len += extent->get_length();
     EXPECT_EQ(len, allocated_len);
     return extent;
@@ -467,10 +472,15 @@ struct transaction_manager_test_t :
 
   std::vector<TestBlockRef> alloc_extents(
     test_transaction_t &t,
-    laddr_t hint,
+    laddr_t addr,
     extent_len_t len,
     char contents) {
     auto extents = with_trans_intr(*(t.t), [&](auto& trans) {
+      laddr_hint_t hint;
+      hint.addr = addr;
+      hint.condition = laddr_conflict_condition_t::all_at_object_content;
+      hint.policy = laddr_conflict_policy_t::gen_random;
+      hint.block_size = laddr_t::UNIT_SIZE;
       return tm->alloc_data_extents<TestBlock>(trans, hint, len);
     }).unsafe_get();
     size_t length = 0;
@@ -479,7 +489,7 @@ struct transaction_manager_test_t :
       extent->set_contents(contents);
       length += extent->get_length();
       EXPECT_FALSE(test_mappings.contains(extent->get_laddr(), t.mapping_delta));
-      test_mappings.alloced(hint, *extent, t.mapping_delta);
+      test_mappings.alloced(addr, *extent, t.mapping_delta);
       exts.push_back(extent->template cast<TestBlock>());
     }
     EXPECT_EQ(len, length);
@@ -488,12 +498,17 @@ struct transaction_manager_test_t :
 
   void alloc_extents_deemed_fail(
     test_transaction_t &t,
-    laddr_t hint,
+    laddr_t addr,
     extent_len_t len,
     char contents)
   {
     std::cout << __func__ << std::endl;
     auto fut = with_trans_intr(*(t.t), [&](auto& trans) {
+      laddr_hint_t hint;
+      hint.addr = addr;
+      hint.condition = laddr_conflict_condition_t::all_at_object_content;
+      hint.policy = laddr_conflict_policy_t::gen_random;
+      hint.block_size = laddr_t::UNIT_SIZE;
       return tm->alloc_data_extents<TestBlock>(trans, hint, len);
     });
     fut.unsafe_wait();
@@ -587,9 +602,12 @@ struct transaction_manager_test_t :
       [](const crimson::ct_error::eagain &e) {
 	return seastar::make_ready_future<TestBlockRef>();
       },
-      crimson::ct_error::assert_all{
+      [](const crimson::ct_error::enoent &e) {
+	return seastar::make_ready_future<TestBlockRef>();
+      },
+      crimson::ct_error::assert_all(
 	"get_extent got invalid error"
-      }
+      )
     ).get();
     if (t.t->is_conflicted()) {
       return nullptr;
@@ -617,9 +635,12 @@ struct transaction_manager_test_t :
       [](const crimson::ct_error::eagain &e) {
 	return seastar::make_ready_future<TestBlockRef>();
       },
-      crimson::ct_error::assert_all{
+      [](const crimson::ct_error::enoent &e) {
+	return seastar::make_ready_future<TestBlockRef>();
+      },
+      crimson::ct_error::assert_all(
 	"get_extent got invalid error"
-      }
+      )
     ).get();
     if (t.t->is_conflicted()) {
       return nullptr;
@@ -646,9 +667,9 @@ struct transaction_manager_test_t :
       [](const crimson::ct_error::eagain &e) {
 	return seastar::make_ready_future<TestBlockRef>();
       },
-      crimson::ct_error::assert_all{
+      crimson::ct_error::assert_all(
 	"read_pin got invalid error"
-      }
+      )
     ).get();
     if (ext) {
       if (indirect) {
@@ -745,9 +766,12 @@ struct transaction_manager_test_t :
       [](const crimson::ct_error::eagain &e) {
 	return seastar::make_ready_future<std::optional<LBAMapping>>();
       },
-      crimson::ct_error::assert_all{
+      [](const crimson::ct_error::enoent &e) {
+	return seastar::make_ready_future<std::optional<LBAMapping>>();
+      },
+      crimson::ct_error::assert_all(
 	"get_extent got invalid error"
-      }
+      )
     ).get();
     if (pin) {
       EXPECT_EQ(offset, pin->get_key());
@@ -830,9 +854,9 @@ struct transaction_manager_test_t :
       [](const crimson::ct_error::eagain &e) {
 	return seastar::make_ready_future<bool>(false);
       },
-      crimson::ct_error::assert_all{
+      crimson::ct_error::assert_all(
 	"try_submit_transaction hit invalid error"
-      }
+      )
     ).then([this](auto ret) {
       return epm->run_background_work_until_halt(
       ).then([ret] { return ret; });
@@ -867,8 +891,13 @@ struct transaction_manager_test_t :
 		boost::make_counting_iterator(0),
 		boost::make_counting_iterator(num),
 		[&t, this, size](auto) {
+		  laddr_hint_t hint;
+		  hint.addr = L_ADDR_MIN;
+		  hint.condition = laddr_conflict_condition_t::all_at_object_content;
+		  hint.policy = laddr_conflict_policy_t::gen_random;
+		  hint.block_size = laddr_t::UNIT_SIZE;
 		  return tm->alloc_data_extents<TestBlock>(
-		    *(t.t), L_ADDR_MIN, size
+		    *(t.t), hint, size
 		  ).si_then([&t, this, size](auto extents) {
 		    extent_len_t length = 0;
 		    for (auto &extent : extents) {
@@ -896,9 +925,9 @@ struct transaction_manager_test_t :
         return epm->background_process.trimmer->trim();
       }
     }).handle_error(
-      crimson::ct_error::assert_all{
+      crimson::ct_error::assert_all(
 	"Invalid error in SeaStore::list_collections"
-      }
+      )
     );
   }
 
@@ -1066,9 +1095,8 @@ struct transaction_manager_test_t :
         extent_types_t::BACKREF_LEAF,
 	extent_types_t::LOG_NODE
       };
-      // exclude DINK_LADDR_LEAF, RETIRED_PLACEHOLDER,
-      //         ALLOC_INFO, JOURNAL_TAIL
-      assert(all_extent_types.size() == EXTENT_TYPES_MAX - 4);
+      // exclude DINK_LADDR_LEAF, ALLOC_INFO, JOURNAL_TAIL
+      assert(all_extent_types.size() == EXTENT_TYPES_MAX - 3);
 
       std::vector<rewrite_gen_t> all_generations;
       for (auto i = INIT_GENERATION; i <= epm->dynamic_max_rewrite_generation; i++) {
@@ -1267,7 +1295,11 @@ struct transaction_manager_test_t :
             o_len - new_offset - new_len)
         }
       ).si_then([this, new_offset, new_len, o_laddr, &t, &bl](auto ret) {
-        return tm->alloc_data_extents<TestBlock>(t, (o_laddr + new_offset).checked_to_laddr(), new_len
+        return tm->alloc_data_extents<TestBlock>(
+	  t,
+	  laddr_hint_t::create_as_fixed(
+	    (o_laddr + new_offset).checked_to_laddr()),
+	  new_len
         ).si_then([this, ret = std::move(ret), new_len,
                    new_offset, o_laddr, &t, &bl](auto extents) mutable {
 	  assert(extents.size() == 1);
@@ -1301,7 +1333,11 @@ struct transaction_manager_test_t :
             o_len - new_offset - new_len)
         }
       ).si_then([this, new_offset, new_len, o_laddr, &t, &bl](auto ret) {
-        return tm->alloc_data_extents<TestBlock>(t, (o_laddr + new_offset).checked_to_laddr(), new_len
+        return tm->alloc_data_extents<TestBlock>(
+	  t,
+	  laddr_hint_t::create_as_fixed(
+	    (o_laddr + new_offset).checked_to_laddr()),
+	  new_len
         ).si_then([this, ret = std::move(ret), new_offset, new_len,
                    o_laddr, &t, &bl](auto extents) mutable {
 	  assert(extents.size() == 1);
@@ -1330,7 +1366,11 @@ struct transaction_manager_test_t :
             new_offset)
         }
       ).si_then([this, new_offset, new_len, o_laddr, &t, &bl](auto ret) {
-        return tm->alloc_data_extents<TestBlock>(t, (o_laddr + new_offset).checked_to_laddr(), new_len
+        return tm->alloc_data_extents<TestBlock>(
+	  t,
+	  laddr_hint_t::create_as_fixed(
+	    (o_laddr + new_offset).checked_to_laddr()),
+	  new_len
         ).si_then([this, ret = std::move(ret), new_len, o_laddr, &t, &bl]
           (auto extents) mutable {
 	  assert(extents.size() == 1);
@@ -1472,12 +1512,12 @@ struct transaction_manager_test_t :
   void test_clone_and_remap_pin() {
     run_async([this] {
       disable_max_extent_size();
-      laddr_t l_offset = get_laddr_hint(32 << 10);
+      laddr_t l_offset = L_ADDR_MIN.with_local_clone_id(10);
       size_t l_len = 32 << 10;
-      laddr_t r_offset = get_laddr_hint(64 << 10);
+      laddr_t r_offset = L_ADDR_MIN.with_local_clone_id(20);
       size_t r_len = 32 << 10;
-      laddr_t l_clone_offset = get_laddr_hint(96 << 10);
-      laddr_t r_clone_offset = get_laddr_hint(128 << 10);
+      laddr_t l_clone_offset = L_ADDR_MIN.with_local_clone_id(30);
+      laddr_t r_clone_offset = L_ADDR_MIN.with_local_clone_id(40);
       {
 	auto t = create_transaction();
 	auto lext = alloc_extent(t, l_offset, l_len);
@@ -1647,6 +1687,10 @@ struct transaction_manager_test_t :
 	    }
 
 	    auto t = create_transaction();
+	    if (!test_mappings.contains(offset, t.mapping_delta)) {
+	      early_exit++;
+	      return;
+	    }
             auto last_pin = try_get_pin(t, offset);
 	    if (!last_pin || last_pin->get_length() != length) {
 	      early_exit++;
@@ -1857,10 +1901,10 @@ TEST_P(tm_random_block_device_test_t, scatter_allocation)
     laddr_t ADDR = get_laddr_hint(0xFF * 4096);
     epm->prefill_fragmented_devices();
     auto t = create_transaction();
-    for (int i = 0; i < 1989; i++) {
+    for (int i = 0; i < 1974; i++) {
       auto extents = alloc_extents(t, (ADDR + i * 16384).checked_to_laddr(), 16384, 'a');
     }
-    alloc_extents_deemed_fail(t, (ADDR + 1991 * 16384).checked_to_laddr(), 16384, 'a');
+    alloc_extents_deemed_fail(t, (ADDR + 1974 * 16384).checked_to_laddr(), 16384, 'a');
     check_mappings(t);
     check();
     submit_transaction(std::move(t));

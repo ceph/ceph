@@ -8,7 +8,7 @@ from threading import Thread
 from contextlib import contextmanager
 from io import StringIO
 from shlex import quote
-from typing import TYPE_CHECKING, Optional, List, Tuple, Dict, Iterator, TypeVar, Awaitable, Union
+from typing import TYPE_CHECKING, Optional, List, Tuple, Dict, Iterator, TypeVar, Awaitable, Union, Any
 from orchestrator import OrchestratorError
 
 try:
@@ -111,6 +111,7 @@ class Executables(RemoteExecutable, enum.Enum):
     SYSCTL = RemoteExecutable('sysctl')
     TOUCH = RemoteExecutable('touch')
     TRUE = RemoteExecutable('true')
+    INVOKER = RemoteExecutable('/usr/libexec/cephadm_invoker.py')
 
     def __str__(self) -> str:
         return self.value
@@ -142,45 +143,78 @@ class EventLoopThread(Thread):
 
 class SSHManager:
 
+    # Retry count for connection/channel errors - easy to change
+    SSH_RETRY_COUNT = 3
+
+    # SSH Channel Open Error codes (from RFC 4254)
+    # Only retry on transient/recoverable errors
+    CHANNEL_OPEN_RECOVERABLE_CODES = {
+        2,  # OPEN_CONNECT_FAILED - connection to target failed (may be transient)
+        4,  # OPEN_RESOURCE_SHORTAGE - server lacks resources (may clear up)
+    }
+
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
         self.cons: Dict[str, "SSHClientConnection"] = {}
+
+    def _is_conn_valid(self, conn: "SSHClientConnection") -> bool:
+        """Safely check if an AsyncSSH connection is still valid and usable."""
+        try:
+            if conn is None:
+                return False
+            if hasattr(conn, "is_connected") and not conn.is_connected():
+                return False
+            if hasattr(conn, "is_closing") and conn.is_closing():
+                return False
+            if hasattr(conn, "is_closed") and callable(conn.is_closed) and conn.is_closed():
+                return False
+            return True
+        except Exception:
+            return False
 
     async def _remote_connection(self,
                                  host: str,
                                  addr: Optional[str] = None,
                                  ) -> "SSHClientConnection":
-        if not self.cons.get(host) or host not in self.mgr.inventory:
-            if not addr and host in self.mgr.inventory:
-                addr = self.mgr.inventory.get_addr(host)
+        existing_conn = self.cons.get(host)
+        # Check if we have a valid existing connection
+        if existing_conn and host in self.mgr.inventory and self._is_conn_valid(existing_conn):
+            self.mgr.offline_hosts_remove(host)
+            return existing_conn
 
-            if not addr:
-                raise OrchestratorError("host address is empty")
+        if existing_conn and not self._is_conn_valid(existing_conn):
+            logger.debug(f'Existing connection to {host} is invalid, creating new connection')
+            await self._reset_con(host)
 
-            assert self.mgr.ssh_user
-            n = self.mgr.ssh_user + '@' + addr
-            logger.debug("Opening connection to {} with ssh options '{}'".format(
-                n, self.mgr._ssh_options))
+        if not addr and host in self.mgr.inventory:
+            addr = self.mgr.inventory.get_addr(host)
+        if not addr:
+            raise OrchestratorError("host address is empty")
 
-            asyncssh.set_log_level('DEBUG')
-            asyncssh.set_debug_level(3)
+        assert self.mgr.ssh_user
+        n = self.mgr.ssh_user + '@' + addr
+        logger.debug("Opening connection to {} with ssh options '{}'".format(
+            n, self.mgr._ssh_options))
 
-            with self.redirect_log(host, addr):
-                try:
-                    ssh_options = asyncssh.SSHClientConnectionOptions(
-                        keepalive_interval=self.mgr.ssh_keepalive_interval,
-                        keepalive_count_max=self.mgr.ssh_keepalive_count_max
-                    )
-                    conn = await asyncssh.connect(addr, username=self.mgr.ssh_user, client_keys=[self.mgr.tkey.name],
-                                                  known_hosts=None, config=[self.mgr.ssh_config_fname],
-                                                  preferred_auth=['publickey'], options=ssh_options)
-                except OSError:
-                    raise
-                except asyncssh.Error:
-                    raise
-                except Exception:
-                    raise
-            self.cons[host] = conn
+        asyncssh.set_log_level('DEBUG')
+        asyncssh.set_debug_level(3)
+
+        with self.redirect_log(host, addr):
+            try:
+                ssh_options = asyncssh.SSHClientConnectionOptions(
+                    keepalive_interval=self.mgr.ssh_keepalive_interval,
+                    keepalive_count_max=self.mgr.ssh_keepalive_count_max
+                )
+                conn = await asyncssh.connect(addr, username=self.mgr.ssh_user, client_keys=[self.mgr.tkey.name],
+                                              known_hosts=None, config=[self.mgr.ssh_config_fname],
+                                              preferred_auth=['publickey'], options=ssh_options)
+            except OSError:
+                raise
+            except asyncssh.Error:
+                raise
+            except Exception:
+                raise
+        self.cons[host] = conn
 
         self.mgr.offline_hosts_remove(host)
 
@@ -200,19 +234,25 @@ class SSHManager:
             log_content = log_string.getvalue()
             msg = f"Can't communicate with remote host `{addr}`, possibly because the host is not reachable or python3 is not installed on the host. {str(e)}"
             logger.exception(msg)
+            if log_content:
+                logger.debug(f'SSH log for {host} ({addr}): {log_content}')
             raise HostConnectionError(msg, host, addr)
         except asyncssh.Error as e:
             self.mgr.offline_hosts.add(host)
             log_content = log_string.getvalue()
-            msg = f'Failed to connect to {host} ({addr}). {str(e)}' + '\n' + f'Log: {log_content}'
-            logger.debug(msg)
+            msg = f'Failed to connect to {host} ({addr}). {str(e)}'
+            logger.exception(msg)
+            if log_content:
+                logger.debug(f'SSH log for {host} ({addr}): {log_content}')
             raise HostConnectionError(msg, host, addr)
         except Exception as e:
             self.mgr.offline_hosts.add(host)
             log_content = log_string.getvalue()
-            logger.exception(str(e))
-            raise HostConnectionError(
-                f'Failed to connect to {host} ({addr}): {repr(e)}' + '\n' f'Log: {log_content}', host, addr)
+            msg = f'Failed to connect to {host} ({addr}): {repr(e)}'
+            logger.exception(msg)
+            if log_content:
+                logger.debug(f'SSH log for {host} ({addr}): {log_content}')
+            raise HostConnectionError(msg, host, addr)
         finally:
             log_string.flush()
             asyncssh_logger.removeHandler(ch)
@@ -224,15 +264,41 @@ class SSHManager:
         with self.mgr.async_timeout_handler(host, f'ssh {host} (addr {addr})'):
             return self.mgr.wait_async(self._remote_connection(host, addr))
 
+    def _enforce_sudo_hardening(
+        self,
+        host: str,
+        cmd_components: RemoteCommand
+    ) -> None:
+        """
+        Enforce that commands are wrapped with invoker when SSH hardening
+        is enabled.
+        """
+        if not self.mgr.sudo_hardening:
+            return
+
+        is_wrapped = (
+            isinstance(cmd_components.exe, RemoteExecutable)
+            and str(cmd_components.exe) == str(Executables.INVOKER)
+        )
+        if not is_wrapped:
+            msg = (f'SSH hardening is enabled but command is not '
+                   f'wrapped with invoker for host {host}. '
+                   f'Command: {cmd_components}')
+            logger.error(msg)
+            raise OrchestratorError(msg)
+
     async def _execute_command(self,
                                host: str,
                                cmd_components: RemoteCommand,
-                               stdin: Optional[str] = None,
+                               stdin: Optional[Union[str, bytes]] = None,
                                addr: Optional[str] = None,
                                log_command: Optional[bool] = True,
                                ) -> Tuple[str, str, int]:
 
         conn = await self._remote_connection(host, addr)
+        # Enforce invoker usage if SSH hardening is enabled
+        self._enforce_sudo_hardening(host, cmd_components)
+
         use_sudo = (self.mgr.ssh_user != 'root')
         rcmd = RemoteSudoCommand.wrap(cmd_components, use_sudo=use_sudo)
         try:
@@ -241,28 +307,89 @@ class SSHManager:
             address = host
         if log_command:
             logger.debug(f'Running command: {rcmd}')
-        try:
-            r = await conn.run(str(rcmd), input=stdin)
-        # handle these Exceptions otherwise you might get a weird error like
-        # TypeError: __init__() missing 1 required positional argument: 'reason' (due to the asyncssh error interacting with raise_if_exception)
-        except asyncssh.ChannelOpenError as e:
-            # SSH connection closed or broken, will create new connection next call
-            logger.debug(f'Connection to {host} failed. {str(e)}')
-            await self._reset_con(host)
-            self.mgr.offline_hosts.add(host)
-            raise HostConnectionError(f'Unable to reach remote host {host}. {str(e)}', host, address)
-        except asyncssh.ProcessError as e:
-            msg = f"Cannot execute the command '{rcmd}' on the {host}. {str(e.stderr)}."
-            logger.debug(msg)
-            await self._reset_con(host)
-            self.mgr.offline_hosts.add(host)
-            raise HostConnectionError(msg, host, address)
-        except Exception as e:
-            msg = f"Generic error while executing command '{rcmd}' on the host {host}. {str(e)}."
-            logger.debug(msg)
-            await self._reset_con(host)
-            self.mgr.offline_hosts.add(host)
-            raise HostConnectionError(msg, host, address)
+
+        # Retry logic for transient connection/channel errors
+        for attempt in range(self.SSH_RETRY_COUNT):
+            try:
+                run_kw: Dict[str, Any] = {}
+                if stdin is not None:
+                    run_kw['input'] = stdin
+                    # Bytes stdin: use encoding=None (else asyncssh expects str).
+                    if isinstance(stdin, bytes):
+                        run_kw['encoding'] = None
+                r = await conn.run(str(rcmd), **run_kw)
+                break  # Success, exit retry loop
+            # Handle retryable exceptions (connection/channel errors)
+            # Note: handle these Exceptions otherwise you might get a weird error like
+            # TypeError: __init__() missing 1 required positional argument: 'reason'
+            # (due to the asyncssh error interacting with raise_if_exception)
+
+            # Retryable exception types for SSH command execution
+            except (
+                asyncssh.ChannelOpenError,
+                asyncssh.ConnectionLost,
+                asyncssh.DisconnectError,
+                asyncio.TimeoutError,
+                OSError,
+            ) as e:
+                error_type = type(e).__name__
+                logger.exception('Command exection failed with %s', error_type)
+                # For ChannelOpenError, check if the error code is recoverable
+                if isinstance(e, asyncssh.ChannelOpenError):
+                    error_code = getattr(e, 'code', None)
+                    logger.debug(
+                        f'{error_type} (code={error_code}) on attempt '
+                        f'{attempt + 1}/{self.SSH_RETRY_COUNT} '
+                        f'for host {host}: {str(e)}')
+                    # Check if this error code is recoverable/retryable
+                    if error_code not in self.CHANNEL_OPEN_RECOVERABLE_CODES:
+                        # Non-recoverable error code, don't retry
+                        logger.debug(
+                            f'ChannelOpenError code {error_code} is not recoverable, '
+                            f'not retrying for host {host}')
+                        await self._reset_con(host)
+                        self.mgr.offline_hosts.add(host)
+                        raise HostConnectionError(
+                            f'Unable to reach remote host {host}. {str(e)}',
+                            host, address)
+                else:
+                    logger.debug(
+                        f'{error_type} on attempt {attempt + 1}/{self.SSH_RETRY_COUNT} '
+                        f'for host {host}: {str(e)}')
+
+                # Reset connection and get a new one for retry
+                await self._reset_con(host)
+                if attempt < self.SSH_RETRY_COUNT - 1:
+                    # Not the last attempt, try to get a new connection
+                    try:
+                        conn = await self._remote_connection(host, addr)
+                    except Exception as conn_e:
+                        logger.debug(
+                            f'Failed to re-establish connection to {host} '
+                            f'on retry: {str(conn_e)}')
+                        # Continue to next attempt, connection will be retried
+                        continue
+                else:
+                    # Last attempt failed, raise the error
+                    self.mgr.offline_hosts.add(host)
+                    raise HostConnectionError(
+                        f'Unable to reach remote host {host} after '
+                        f'{self.SSH_RETRY_COUNT} attempts. {str(e)}',
+                        host, address)
+            except asyncssh.ProcessError as e:
+                msg = f"ProcessError cannot execute the command '{rcmd}' on the {host}. {str(e.stderr)}."
+                logger.exception(msg)
+                await self._reset_con(host)
+                self.mgr.offline_hosts.add(host)
+                raise HostConnectionError(msg, host, address)
+            except Exception as e:
+                error_type = type(e).__name__
+                msg = (f"Generic error {error_type} while executing command '{rcmd}' "
+                       f"on the host {host}. {str(e)}.")
+                logger.exception(msg)
+                await self._reset_con(host)
+                self.mgr.offline_hosts.add(host)
+                raise HostConnectionError(msg, host, address)
 
         def _rstrip(v: Union[bytes, str, None]) -> str:
             if not v:
@@ -283,7 +410,7 @@ class SSHManager:
     def execute_command(self,
                         host: str,
                         cmd: RemoteCommand,
-                        stdin: Optional[str] = None,
+                        stdin: Optional[Union[str, bytes]] = None,
                         addr: Optional[str] = None,
                         log_command: Optional[bool] = True
                         ) -> Tuple[str, str, int]:
@@ -293,7 +420,7 @@ class SSHManager:
     async def _check_execute_command(self,
                                      host: str,
                                      cmd: RemoteCommand,
-                                     stdin: Optional[str] = None,
+                                     stdin: Optional[Union[str, bytes]] = None,
                                      addr: Optional[str] = None,
                                      log_command: Optional[bool] = True
                                      ) -> str:
@@ -307,7 +434,7 @@ class SSHManager:
     def check_execute_command(self,
                               host: str,
                               cmd: RemoteCommand,
-                              stdin: Optional[str] = None,
+                              stdin: Optional[Union[str, bytes]] = None,
                               addr: Optional[str] = None,
                               log_command: Optional[bool] = True,
                               ) -> str:
@@ -323,6 +450,9 @@ class SSHManager:
                                  gid: Optional[int] = None,
                                  addr: Optional[str] = None,
                                  ) -> None:
+        """This method will be used to only write cephadm binary when sudo_hardening is disbaled.
+        Other host files are written via ``cephadm deploy-file`` on the target host.
+        """
         try:
             cephadm_tmp_dir = f"/tmp/cephadm-{self.mgr._cluster_fsid}"
             dirname = os.path.dirname(path)
@@ -349,13 +479,14 @@ class SSHManager:
                 conn = await self._remote_connection(host, addr)
                 async with conn.start_sftp_client() as sftp:
                     await sftp.put(f.name, tmp_path)
-            if uid is not None and gid is not None and mode is not None:
+            if uid is not None and gid is not None:
                 # shlex quote takes str or byte object, not int
                 chown = RemoteCommand(
                     Executables.CHOWN,
                     ['-R', str(uid) + ':' + str(gid), tmp_path]
                 )
                 await self._check_execute_command(host, chown, addr=addr)
+            if mode is not None:
                 chmod = RemoteCommand(Executables.CHMOD, [oct(mode)[2:], tmp_path])
                 await self._check_execute_command(host, chmod, addr=addr)
             mv = RemoteCommand(Executables.MV, ['-Z', tmp_path, path])
@@ -365,18 +496,41 @@ class SSHManager:
             logger.exception(msg)
             raise OrchestratorError(msg)
 
-    def write_remote_file(self,
-                          host: str,
-                          path: str,
-                          content: bytes,
-                          mode: Optional[int] = None,
-                          uid: Optional[int] = None,
-                          gid: Optional[int] = None,
-                          addr: Optional[str] = None,
-                          ) -> None:
-        with self.mgr.async_timeout_handler(host, f'writing file {path}'):
-            self.mgr.wait_async(self._write_remote_file(
-                host, path, content, mode, uid, gid, addr))
+    async def _deploy_cephadm_binary_via_invoker(
+        self,
+        host: str,
+        cephadm_path: str,
+        cephadm_content: bytes,
+        addr: Optional[str] = None
+    ) -> None:
+        """
+        Deploy cephadm binary using the invoker for secure operations.
+        This creates a temp file locally, copies it to remote host, then
+        calls the invoker to perform all deployment operations.
+        """
+        with NamedTemporaryFile(prefix='cephadm-deploy-', delete=False) as local_tmp:
+            local_tmp.write(cephadm_content)
+            local_tmp.flush()
+            local_tmp_path = local_tmp.name
+
+        try:
+            remote_tmp_path = f'/tmp/cephadm-{self.mgr._cluster_fsid}.new'
+
+            conn = await self._remote_connection(host, addr)
+            async with conn.start_sftp_client() as sftp:
+                await sftp.put(local_tmp_path, remote_tmp_path)
+
+            invoker_cmd = RemoteCommand(
+                Executables.INVOKER,
+                ['deploy_binary', remote_tmp_path, cephadm_path]
+            )
+            await self._execute_command(host, invoker_cmd, addr=addr)
+
+        finally:
+            try:
+                os.unlink(local_tmp_path)
+            except OSError:
+                pass
 
     async def _reset_con(self, host: str) -> None:
         conn = self.cons.get(host)

@@ -38,14 +38,15 @@ static inline std::ostream& operator<<(std::ostream& out,
   std::string user;
   std::string password;
   parse_url_authority(e.push_endpoint, host, user, password);
-  return out << "notification id: '" << e.event.configurationId
-             << "', topic: '" << e.arn_topic
-             << "', endpoint: '" << host
-             << "', endpoint_user: '" << user
-             << "', bucket_owner: '" << e.event.bucket_ownerIdentity
-             << "', bucket: '" << e.event.bucket_name
-             << "', object: '" << e.event.object_key
-             << "', event type: '" << e.event.eventName << "'";
+  return out << "notification id=" << e.event.configurationId
+             << " topic=" << e.arn_topic << " endpoint=" << host
+             << " endpoint_user=" << user
+             << " bucket_owner=" << e.event.bucket_ownerIdentity
+             << " bucket=" << e.event.bucket_name
+             << " object=" << e.event.object_key
+             << " object_versionId=" << e.event.object_versionId
+             << " x_amz_request_id=" << e.event.x_amz_request_id
+             << " event type=" << e.event.eventName;
 }
 
 struct persistency_tracker {
@@ -258,13 +259,14 @@ private:
     ret = push_endpoint->send(this, event_entry.event, yield);
     if (ret < 0) {
       ldpp_dout(this, 5) << "WARNING: push entry marker: " << entry.marker
-                         << " failed. error: " << ret
+                         << " failed."
                          << " (will retry) for event with " << event_entry
-                         << dendl;
+                         << " ret=" << ret << dendl;
       return EntryProcessingResult::Failure;
     }
     ldpp_dout(this, 5) << "INFO: push entry marker: " << entry.marker
-                       << " ok for event with " << event_entry << dendl;
+                       << " ok for event with " << event_entry << " ret=" << ret
+                       << dendl;
     if (perfcounter)
       perfcounter->inc(l_rgw_pubsub_push_ok);
     return EntryProcessingResult::Successful;
@@ -1394,7 +1396,7 @@ reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
   metadata_fetched_from_attributes(false),
   user_id(to_string(_s->owner.id)),
   user_tenant(_s->user->get_id().tenant),
-  req_id(_s->req_id),
+  req_id(_s->trans_id),
   yield(y)
 {
   filter_amz_meta(x_meta_map, _s->info.x_meta_map);

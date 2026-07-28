@@ -16,13 +16,9 @@
 #ifndef CEPH_CONNECTION_H
 #define CEPH_CONNECTION_H
 
-#include <stdlib.h>
-#include <ostream>
-
 #include "auth/Auth.h"
 #include "common/RefCountedObj.h"
 #include "common/config.h"
-#include "common/debug.h"
 #include "common/ref.h"
 #include "common/ceph_mutex.h"
 #include "include/ceph_assert.h" // Because intusive_ptr clobbers our assert...

@@ -6,13 +6,7 @@ global:
 {% if not secure %}
   http_config:
     tls_config:
-{% if security_enabled %}
-      ca_file: root_cert.pem
-      cert_file: alertmanager.crt
-      key_file: alertmanager.key
-{% else %}
       insecure_skip_verify: true
-{% endif %}
 {% endif %}
 
 route:
@@ -53,6 +47,14 @@ receivers:
   webhook_configs:
 {% for url in dashboard_urls %}
   - url: '{{ url }}/api/prometheus_receiver'
+  {% if enable_mtls %}
+    http_config:
+      tls_config:
+        insecure_skip_verify: false
+        ca_file: root_cert.pem
+        cert_file: alertmanager.crt
+        key_file: alertmanager.key
+  {% endif %}
 {% endfor %}
 {% if snmp_gateway_urls %}
 - name: 'snmp-gateway'

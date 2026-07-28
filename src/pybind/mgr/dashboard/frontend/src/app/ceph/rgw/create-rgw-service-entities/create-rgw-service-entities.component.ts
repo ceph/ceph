@@ -75,6 +75,9 @@ export class CreateRgwServiceEntitiesComponent extends CdForm implements OnInit 
     this.zone.system_key = new SystemKey();
     this.zone.system_key.access_key = '';
     this.zone.system_key.secret_key = '';
+    this.zone.tier_type = '';
+    this.zone.sync_from = '';
+    this.zone.sync_from_all = true;
     this.rgwRealmService
       .create(this.realm, true)
       .toPromise()

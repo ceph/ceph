@@ -733,18 +733,17 @@ CLS_INIT(user)
   cls_method_handle_t h_user_reset_stats;
   cls_method_handle_t h_user_reset_stats2;
 
-  cls_register("user", &h_class);
+  using namespace cls::user;
+  cls_register(ClassId::name, &h_class);
+  ClassRegistrar<ClassId> cls(h_class);
 
-  /* log */
-  cls_register_cxx_method(h_class, "set_buckets_info", CLS_METHOD_RD | CLS_METHOD_WR,
-                          cls_user_set_buckets_info, &h_user_set_buckets_info);
-  cls_register_cxx_method(h_class, "complete_stats_sync", CLS_METHOD_RD | CLS_METHOD_WR,
-                          cls_user_complete_stats_sync, &h_user_complete_stats_sync);
-  cls_register_cxx_method(h_class, "remove_bucket", CLS_METHOD_RD | CLS_METHOD_WR, cls_user_remove_bucket, &h_user_remove_bucket);
-  cls_register_cxx_method(h_class, "list_buckets", CLS_METHOD_RD, cls_user_list_buckets, &h_user_list_buckets);
-  cls_register_cxx_method(h_class, "get_header", CLS_METHOD_RD, cls_user_get_header, &h_user_get_header);
-  cls_register_cxx_method(h_class, "reset_user_stats", CLS_METHOD_RD | CLS_METHOD_WR, cls_user_reset_stats, &h_user_reset_stats);
-  cls_register_cxx_method(h_class, "reset_user_stats2", CLS_METHOD_RD | CLS_METHOD_WR, cls_user_reset_stats2, &h_user_reset_stats2);
+  cls.register_cxx_method(method::set_buckets_info,      cls_user_set_buckets_info,    &h_user_set_buckets_info);
+  cls.register_cxx_method(method::complete_stats_sync,   cls_user_complete_stats_sync, &h_user_complete_stats_sync);
+  cls.register_cxx_method(method::remove_bucket,         cls_user_remove_bucket,       &h_user_remove_bucket);
+  cls.register_cxx_method(method::list_buckets,          cls_user_list_buckets,        &h_user_list_buckets);
+  cls.register_cxx_method(method::get_header,            cls_user_get_header,          &h_user_get_header);
+  cls.register_cxx_method(method::reset_user_stats,      cls_user_reset_stats,         &h_user_reset_stats);
+  cls.register_cxx_method(method::reset_user_stats2,     cls_user_reset_stats2,        &h_user_reset_stats2);
 
   // account
   cls_method_handle_t h_account_resource_add;
@@ -752,12 +751,8 @@ CLS_INIT(user)
   cls_method_handle_t h_account_resource_rm;
   cls_method_handle_t h_account_resource_list;
 
-  cls_register_cxx_method(h_class, "account_resource_add", CLS_METHOD_RD | CLS_METHOD_WR,
-                          cls_account_resource_add, &h_account_resource_add);
-  cls_register_cxx_method(h_class, "account_resource_get", CLS_METHOD_RD,
-                          cls_account_resource_get, &h_account_resource_get);
-  cls_register_cxx_method(h_class, "account_resource_rm", CLS_METHOD_RD | CLS_METHOD_WR,
-                          cls_account_resource_rm, &h_account_resource_rm);
-  cls_register_cxx_method(h_class, "account_resource_list", CLS_METHOD_RD,
-                          cls_account_resource_list, &h_account_resource_list);
+  cls.register_cxx_method(method::account_resource_add,  cls_account_resource_add,     &h_account_resource_add);
+  cls.register_cxx_method(method::account_resource_get,  cls_account_resource_get,     &h_account_resource_get);
+  cls.register_cxx_method(method::account_resource_rm,   cls_account_resource_rm,      &h_account_resource_rm);
+  cls.register_cxx_method(method::account_resource_list, cls_account_resource_list,    &h_account_resource_list);
 }

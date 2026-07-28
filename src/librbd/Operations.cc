@@ -3,6 +3,7 @@
 
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/Operations.h"
+#include "common/Cond.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"

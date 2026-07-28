@@ -1,108 +1,108 @@
   $ crushtool -c "$TESTDIR/show-choose-tries.txt" -o "$TESTDIR/show-choose-tries.crushmap"
   $ FIRSTN_RULESET=0
   $ crushtool -i "$TESTDIR/show-choose-tries.crushmap" --test --show-choose-tries --rule $FIRSTN_RULESET --x 1 --num-rep 2
-   0:         1
-   1:         1
-   2:         0
-   3:         0
-   4:         0
-   5:         0
-   6:         0
-   7:         0
-   8:         0
-   9:         0
-  10:         0
-  11:         0
-  12:         0
-  13:         0
-  14:         0
-  15:         0
-  16:         0
-  17:         0
-  18:         0
-  19:         0
-  20:         0
-  21:         0
-  22:         0
-  23:         0
-  24:         0
-  25:         0
-  26:         0
-  27:         0
-  28:         0
-  29:         0
-  30:         0
-  31:         0
-  32:         0
-  33:         0
-  34:         0
-  35:         0
-  36:         0
-  37:         0
-  38:         0
-  39:         0
-  40:         0
-  41:         0
-  42:         0
-  43:         0
-  44:         0
-  45:         0
-  46:         0
-  47:         0
-  48:         0
-  49:         0
+  tries 1:         1
+  tries 2:         1
+  tries 3:         0
+  tries 4:         0
+  tries 5:         0
+  tries 6:         0
+  tries 7:         0
+  tries 8:         0
+  tries 9:         0
+  tries 10:         0
+  tries 11:         0
+  tries 12:         0
+  tries 13:         0
+  tries 14:         0
+  tries 15:         0
+  tries 16:         0
+  tries 17:         0
+  tries 18:         0
+  tries 19:         0
+  tries 20:         0
+  tries 21:         0
+  tries 22:         0
+  tries 23:         0
+  tries 24:         0
+  tries 25:         0
+  tries 26:         0
+  tries 27:         0
+  tries 28:         0
+  tries 29:         0
+  tries 30:         0
+  tries 31:         0
+  tries 32:         0
+  tries 33:         0
+  tries 34:         0
+  tries 35:         0
+  tries 36:         0
+  tries 37:         0
+  tries 38:         0
+  tries 39:         0
+  tries 40:         0
+  tries 41:         0
+  tries 42:         0
+  tries 43:         0
+  tries 44:         0
+  tries 45:         0
+  tries 46:         0
+  tries 47:         0
+  tries 48:         0
+  tries 49:         0
+  tries 50:         0
   $ INDEP_RULESET=1
   $ crushtool -i "$TESTDIR/show-choose-tries.crushmap" --test --show-choose-tries --rule $INDEP_RULESET --x 1 --num-rep 1
-   0:         0
-   1:         1
-   2:         0
-   3:         0
-   4:         0
-   5:         0
-   6:         0
-   7:         0
-   8:         0
-   9:         0
-  10:         0
-  11:         0
-  12:         0
-  13:         0
-  14:         0
-  15:         0
-  16:         0
-  17:         0
-  18:         0
-  19:         0
-  20:         0
-  21:         0
-  22:         0
-  23:         0
-  24:         0
-  25:         0
-  26:         0
-  27:         0
-  28:         0
-  29:         0
-  30:         0
-  31:         0
-  32:         0
-  33:         0
-  34:         0
-  35:         0
-  36:         0
-  37:         0
-  38:         0
-  39:         0
-  40:         0
-  41:         0
-  42:         0
-  43:         0
-  44:         0
-  45:         0
-  46:         0
-  47:         0
-  48:         0
-  49:         0
+  tries 1:         0
+  tries 2:         1
+  tries 3:         0
+  tries 4:         0
+  tries 5:         0
+  tries 6:         0
+  tries 7:         0
+  tries 8:         0
+  tries 9:         0
+  tries 10:         0
+  tries 11:         0
+  tries 12:         0
+  tries 13:         0
+  tries 14:         0
+  tries 15:         0
+  tries 16:         0
+  tries 17:         0
+  tries 18:         0
+  tries 19:         0
+  tries 20:         0
+  tries 21:         0
+  tries 22:         0
+  tries 23:         0
+  tries 24:         0
+  tries 25:         0
+  tries 26:         0
+  tries 27:         0
+  tries 28:         0
+  tries 29:         0
+  tries 30:         0
+  tries 31:         0
+  tries 32:         0
+  tries 33:         0
+  tries 34:         0
+  tries 35:         0
+  tries 36:         0
+  tries 37:         0
+  tries 38:         0
+  tries 39:         0
+  tries 40:         0
+  tries 41:         0
+  tries 42:         0
+  tries 43:         0
+  tries 44:         0
+  tries 45:         0
+  tries 46:         0
+  tries 47:         0
+  tries 48:         0
+  tries 49:         0
+  tries 50:         0
   $ rm -f "$TESTDIR/show-choose-tries.crushmap"
 # Local Variables:
 # compile-command: "cd ../../.. ; make -j4 crushtool && test/run-cli-tests"

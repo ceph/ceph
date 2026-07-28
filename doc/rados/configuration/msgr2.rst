@@ -6,7 +6,7 @@ Messenger v2
 What is it
 ----------
 
-The messenger v2 protocol, or msgr2, is the second major revision on
+The messenger v2 protocol, or msgr2, is the second major revision of
 Ceph's on-wire protocol.  It brings with it several key features:
 
 * A *secure* mode that encrypts all data passing over the network
@@ -38,7 +38,7 @@ Starting with Nautilus, we now have three different address types:
   port speaking the legacy v1 protocol.  Any address that was
   previously shown with any prefix is now shown as a ``v1:`` address.
 * **TYPE_ANY** ``any:1.2.3.4:578/89012`` identifies a client that can
-  speak either version of the protocol. Prior to nautilus, clients would appear as
+  speak either version of the protocol. Prior to Nautilus, clients would appear as
   ``1.2.3.4:0/123456``, where the port of 0 indicates they are clients
   and do not accept incoming connections.  Starting with Nautilus,
   these clients are now internally represented by a **TYPE_ANY**
@@ -63,7 +63,7 @@ like::
 The bracketed list or vector of addresses means that the same daemon can be
 reached on multiple ports (and protocols).  Any client or other daemon
 connecting to that daemon will use the v2 protocol (listed first) if
-possible; otherwise it will back to the legacy v1 protocol.  Legacy
+possible; otherwise it will fall back to the legacy v1 protocol.  Legacy
 clients will only see the v1 addresses and will continue to connect as
 they did before, with the v1 protocol.
 
@@ -211,7 +211,7 @@ Updating ceph.conf and mon_host
 Prior to Nautilus, a CLI user or daemon will normally discover the
 monitors via the ``mon_host`` option in ``/etc/ceph/ceph.conf``.  The
 syntax for this option has expanded starting with Nautilus to allow
-support the new bracketed list format.  For example, an old line
+support for the new bracketed list format.  For example, an old line
 like::
 
   mon_host = 10.0.0.1:6789,10.0.0.2:6789,10.0.0.3:6789

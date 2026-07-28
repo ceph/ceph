@@ -26,3 +26,11 @@ roles:
   - client.4
   - ceph.nvmeof.nvmeof.d
 
+overrides:
+  ceph:
+    conf:
+      mon:
+        # cephadm can take up to 5 minutes to bring up remaining mons
+        mon down mkfs grace: 300
+        mon nvmeofgw beacon grace: 10
+        nvmeof mon client connect panic: 60

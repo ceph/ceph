@@ -11,7 +11,7 @@ using namespace librados;
 typedef RadosTestPP LibRadosStatPP;
 typedef RadosTestECPP LibRadosStatECPP;
 
-TEST_F(LibRadosStatPP, StatPP) {
+TEST_P(LibRadosStatPP, StatPP) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
@@ -24,7 +24,7 @@ TEST_F(LibRadosStatPP, StatPP) {
   ASSERT_EQ(-ENOENT, ioctx.stat("nonexistent", &size, &mtime));
 }
 
-TEST_F(LibRadosStatPP, Stat2Mtime2PP) {
+TEST_P(LibRadosStatPP, Stat2Mtime2PP) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
@@ -54,12 +54,12 @@ TEST_F(LibRadosStatPP, Stat2Mtime2PP) {
   ASSERT_EQ(-ENOENT, ioctx.stat2("nonexistent", &size, &ts2));
 }
 
-TEST_F(LibRadosStatPP, ClusterStatPP) {
+TEST_P(LibRadosStatPP, ClusterStatPP) {
   cluster_stat_t cstat;
   ASSERT_EQ(0, cluster.cluster_stat(cstat));
 }
 
-TEST_F(LibRadosStatPP, PoolStatPP) {
+TEST_P(LibRadosStatPP, PoolStatPP) {
   std::string n = ioctx.get_pool_name();
   ASSERT_EQ(n, pool_name);
   char buf[128];
@@ -72,7 +72,7 @@ TEST_F(LibRadosStatPP, PoolStatPP) {
   ASSERT_EQ(0, cluster.get_pool_stats(v, stats));
 }
 
-TEST_F(LibRadosStatECPP, StatPP) {
+TEST_P(LibRadosStatECPP, StatPP) {
   SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -86,13 +86,13 @@ TEST_F(LibRadosStatECPP, StatPP) {
   ASSERT_EQ(-ENOENT, ioctx.stat("nonexistent", &size, &mtime));
 }
 
-TEST_F(LibRadosStatECPP, ClusterStatPP) {
+TEST_P(LibRadosStatECPP, ClusterStatPP) {
   SKIP_IF_CRIMSON();
   cluster_stat_t cstat;
   ASSERT_EQ(0, cluster.cluster_stat(cstat));
 }
 
-TEST_F(LibRadosStatECPP, PoolStatPP) {
+TEST_P(LibRadosStatECPP, PoolStatPP) {
   SKIP_IF_CRIMSON();
   std::string n = ioctx.get_pool_name();
   ASSERT_EQ(n, pool_name);
@@ -106,7 +106,7 @@ TEST_F(LibRadosStatECPP, PoolStatPP) {
   ASSERT_EQ(0, cluster.get_pool_stats(v, stats));
 }
 
-TEST_F(LibRadosStatPP, StatPPNS) {
+TEST_P(LibRadosStatPP, StatPPNS) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
@@ -136,7 +136,7 @@ TEST_F(LibRadosStatPP, StatPPNS) {
   ASSERT_EQ(-ENOENT, ioctx.stat("foo2", &size, &mtime));
 }
 
-TEST_F(LibRadosStatECPP, StatPPNS) {
+TEST_P(LibRadosStatECPP, StatPPNS) {
   SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -165,4 +165,11 @@ TEST_F(LibRadosStatECPP, StatPPNS) {
   ASSERT_EQ(sizeof(buf2), size);
   ASSERT_EQ(-ENOENT, ioctx.stat("nonexistent", &size, &mtime));
   ASSERT_EQ(-ENOENT, ioctx.stat("foo2", &size, &mtime));
+
+  // Enable cleanup and clean the "nspace" namespace used by this test
+  cleanup = true;
+  cleanup_namespace(ioctx, "nspace");
 }
+
+INSTANTIATE_TEST_SUITE_P_REPLICA(LibRadosStatPP);
+INSTANTIATE_TEST_SUITE_P_EC(LibRadosStatECPP);

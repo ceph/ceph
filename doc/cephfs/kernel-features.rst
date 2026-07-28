@@ -8,9 +8,9 @@ in the kernel driver.
 
 Inline data
 -----------
-Inline data was introduced by the Firefly release. This feature is being
-deprecated in mainline CephFS, and may be removed from a future kernel
-release.
+Inline data was introduced by the Firefly release. This feature has been
+deprecated since the Octopus release: enabling it triggers a health warning,
+and it will be removed in a future release.
 
 Linux kernel clients >= 3.19 can read inline data and convert existing
 inline data to RADOS objects when file data is modified. At present,

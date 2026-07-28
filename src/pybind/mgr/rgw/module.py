@@ -449,8 +449,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         """Bootstrap new rgw zone that syncs with zone on another cluster in the same realm"""
 
         try:
-            created_zones = self.rgw_zone_create(zone_name, realm_token, port, placement,
-                                                 start_radosgw, zone_endpoints, self.secondary_zone_period_retry_limit, inbuf)
+            created_zones = self.rgw_zone_create(zone_name=zone_name,
+                                                 realm_token=realm_token,
+                                                 port=port,
+                                                 placement=placement,
+                                                 start_radosgw=start_radosgw,
+                                                 zone_endpoints=zone_endpoints,
+                                                 secondary_zone_period_retry_limit=self.secondary_zone_period_retry_limit,
+                                                 inbuf=inbuf)
             return HandleCommandResult(retval=0, stdout=f"Zones {', '.join(created_zones)} created successfully")
         except RGWAMException as e:
             return HandleCommandResult(retval=e.retcode, stderr=f'Failed to create zone: {str(e)}')
@@ -460,6 +466,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                         realm_token: Optional[str] = None,
                         port: Optional[int] = None,
                         placement: Optional[Union[str, Dict[str, Any]]] = None,
+                        tier_type: Optional[str] = None,
                         start_radosgw: Optional[bool] = True,
                         zone_endpoints: Optional[str] = None,
                         secondary_zone_period_retry_limit: Optional[int] = None,
@@ -489,7 +496,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         try:
             created_zones = []
             for rgw_spec in rgw_specs:
-                RGWAM(self.env).zone_create(rgw_spec, start_radosgw, secondary_zone_period_retry_limit)
+                RGWAM(self.env).zone_create(rgw_spec, start_radosgw,
+                                            secondary_zone_period_retry_limit,
+                                            tier_type)
                 if rgw_spec.rgw_zone is not None:
                     created_zones.append(rgw_spec.rgw_zone)
                     return created_zones
@@ -530,8 +539,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                            realm_token: Optional[str] = None,
                            port: Optional[int] = None,
                            placement: Optional[dict] = None,
+                           tier_type: Optional[str] = None,
                            start_radosgw: Optional[bool] = True,
                            zone_endpoints: Optional[str] = None) -> None:
         placement_spec = placement.get('placement') if placement else None
-        self.rgw_zone_create(zone_name, realm_token, port, placement_spec, start_radosgw,
+        self.rgw_zone_create(zone_name, realm_token, port, placement_spec, tier_type, start_radosgw,
                              zone_endpoints, secondary_zone_period_retry_limit=5)

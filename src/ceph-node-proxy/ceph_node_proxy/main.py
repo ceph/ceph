@@ -11,7 +11,7 @@ from urllib.error import HTTPError
 from ceph_node_proxy.api import NodeProxyApi
 from ceph_node_proxy.bootstrap import create_node_proxy_manager
 from ceph_node_proxy.config import load_cephadm_config
-from ceph_node_proxy.registry import get_system_class
+from ceph_node_proxy.registry import create_node_backend
 from ceph_node_proxy.reporter import Reporter
 from ceph_node_proxy.util import DEFAULTS, Config, get_logger, http_req
 
@@ -104,8 +104,9 @@ class NodeProxyManager:
             raise SystemExit(1)
         try:
             vendor = self.config.get("system", {}).get("vendor", "generic")
-            system_cls = get_system_class(vendor)
-            self.system = system_cls(
+            self.log.info("Using Redfish vendor: %s", vendor)
+            self.system = create_node_backend(
+                vendor,
                 host=oob_details["host"],
                 port=oob_details["port"],
                 username=oob_details["username"],

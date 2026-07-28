@@ -78,15 +78,10 @@ OpsExecuter::call_ierrorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
   }
 
   const auto flags = method->get_flags();
-  if (!obc->obs.exists && (flags & CLS_METHOD_WR) == 0) {
-    return crimson::ct_error::enoent::make();
-  }
 
-#if 0
   if (flags & CLS_METHOD_WR) {
-    ctx->user_modify = true;
+    check_init_op_params(modified_by::user);
   }
-#endif
 
   logger().debug("calling method {}.{}, num_read={}, num_write={}",
                  cname, mname, num_read, num_write);
@@ -811,8 +806,8 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
     if (!pg.get_pgpool().info.supports_omap()) {
       return crimson::ct_error::operation_not_supported::make();
     }*/
-    return do_write_op([&osd_op](auto& backend, auto& os, auto& txn) {
-      return backend.omap_remove_key(os, osd_op, txn);
+    return do_write_op([&osd_op, this](auto& backend, auto& os, auto& txn) {
+      return backend.omap_remove_key(os, osd_op, txn, *osd_op_params, delta_stats);
     });
   case CEPH_OSD_OP_OMAPCLEAR:
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {

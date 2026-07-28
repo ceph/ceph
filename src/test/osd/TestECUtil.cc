@@ -21,11 +21,84 @@
 #include "osd/osd_types.h"
 #include "common/ceph_argparse.h"
 #include "osd/ECTransaction.h"
-
 using namespace std;
 using namespace ECUtil;
 
-// FIXME: Once PRs are in, we should move the other ECUtil tests are moved here.
+namespace {
+
+void verify_offset_cache(const shard_extent_map_t& sem)
+{
+  shard_extent_map_t cached = sem;
+  cached.compute_ro_range();
+  ASSERT_EQ(cached, sem);
+}
+
+} // anonymous namespace
+
+TEST(ECUtil, stripe_info_t)
+{
+  const uint64_t swidth = 4096;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+
+  stripe_info_t s(k, m, swidth);
+  ASSERT_EQ(s.get_stripe_width(), swidth);
+
+  ASSERT_EQ(s.ro_offset_to_next_chunk_offset(0), 0u);
+  ASSERT_EQ(s.ro_offset_to_next_chunk_offset(1), s.get_chunk_size());
+  ASSERT_EQ(s.ro_offset_to_next_chunk_offset(swidth - 1),
+	    s.get_chunk_size());
+
+  ASSERT_EQ(s.ro_offset_to_prev_chunk_offset(0), 0u);
+  ASSERT_EQ(s.ro_offset_to_prev_chunk_offset(swidth), s.get_chunk_size());
+  ASSERT_EQ(s.ro_offset_to_prev_chunk_offset((swidth * 2) - 1),
+	    s.get_chunk_size());
+
+  ASSERT_EQ(s.ro_offset_to_next_stripe_ro_offset(0), 0u);
+  ASSERT_EQ(s.ro_offset_to_next_stripe_ro_offset(swidth - 1),
+	    s.get_stripe_width());
+
+  ASSERT_EQ(s.ro_offset_to_prev_stripe_ro_offset(swidth), s.get_stripe_width());
+  ASSERT_EQ(s.ro_offset_to_prev_stripe_ro_offset(swidth), s.get_stripe_width());
+  ASSERT_EQ(s.ro_offset_to_prev_stripe_ro_offset((swidth * 2) - 1),
+	    s.get_stripe_width());
+
+  ASSERT_EQ(s.aligned_ro_offset_to_chunk_offset(2*swidth),
+	    2*s.get_chunk_size());
+  ASSERT_EQ(s.shard_offset_to_ro_offset(shard_id_t(0), 2*s.get_chunk_size()),
+	    2*s.get_stripe_width());
+
+  // Stripe 1 + 1 chunk for 10 stripes needs to read 11 stripes starting
+  // from 1 because there is a partial stripe at the start and end
+  ASSERT_EQ(s.chunk_aligned_ro_range_to_shard_ro_range(swidth+s.get_chunk_size(), 10*swidth),
+	    make_pair(s.get_chunk_size(), 11*s.get_chunk_size()));
+
+  // Stripe 1 + 0 chunks for 10 stripes needs to read 10 stripes starting
+  // from 1 because there are no partial stripes
+  ASSERT_EQ(s.chunk_aligned_ro_range_to_shard_ro_range(swidth, 10*swidth),
+	    make_pair(s.get_chunk_size(), 10*s.get_chunk_size()));
+
+  // Stripe 0 + 1 chunk for 10 stripes needs to read 11 stripes starting
+  // from 0 because there is a partial stripe at the start and end
+  ASSERT_EQ(s.chunk_aligned_ro_range_to_shard_ro_range(s.get_chunk_size(), 10*swidth),
+	    make_pair<uint64_t>(0, 11*s.get_chunk_size()));
+
+  // Stripe 0 + 1 chunk for (10 stripes + 1 chunk) needs to read 11 stripes
+  // starting from 0 because there is a partial stripe at the start and end
+  ASSERT_EQ(s.chunk_aligned_ro_range_to_shard_ro_range(s.get_chunk_size(),
+							  10*swidth + s.get_chunk_size()),
+	    make_pair<uint64_t>(0, 11*s.get_chunk_size()));
+
+  // Stripe 0 + 2 chunks for (10 stripes + 2 chunks) needs to read 11 stripes
+  // starting from 0 because there is a partial stripe at the start
+  ASSERT_EQ(s.chunk_aligned_ro_range_to_shard_ro_range(2*s.get_chunk_size(),
+    10*swidth + 2*s.get_chunk_size()),
+    make_pair<uint64_t>(0, 11*s.get_chunk_size()));
+
+  ASSERT_EQ(s.ro_offset_len_to_stripe_ro_offset_len(swidth-10, (uint64_t)20),
+            make_pair((uint64_t)0, 2*swidth));
+}
+
 
 TEST(ECUtil, stripe_info_t_chunk_mapping)
 {
@@ -989,28 +1062,31 @@ TEST(ECUtil, slice)
   {
     auto slice_map = sem.slice_map(512, 1024);
     ASSERT_EQ(4, slice_map.get_extent_maps().size());
-    ASSERT_EQ(512, slice_map.get_start_offset());
-    ASSERT_EQ(512+1024, slice_map.get_end_offset());
+    verify_offset_cache(slice_map);
+  }
 
-    for (int i=1; i<5; i++) {
-      ASSERT_EQ(512, slice_map.get_extent_map(shard_id_t(i)).get_start_off());
-      ASSERT_EQ(512+1024, slice_map.get_extent_map(shard_id_t(i)).get_end_off());
-    }
+  {
+    shard_extent_map_t single(&sinfo);
+    single.insert_in_shard(shard_id_t(1), 512, bl1k);
+
+    auto slice_map = single.slice_map(512, 1024);
+    ASSERT_EQ(1, slice_map.get_extent_maps().size());
+    verify_offset_cache(slice_map);
+  }
+
+  {
+    shard_extent_map_t single(&sinfo);
+    single.insert_in_shard(shard_id_t(1), 512, bl1k);
+
+    auto slice_map = single.slice_map(0, 4096);
+    ASSERT_EQ(1, slice_map.get_extent_maps().size());
+    verify_offset_cache(slice_map);
   }
 
   {
     auto slice_map = sem.slice_map(0, 4096);
     ASSERT_EQ(4, slice_map.get_extent_maps().size());
-    ASSERT_EQ(5, slice_map.get_start_offset());
-    ASSERT_EQ(4096, slice_map.get_end_offset());
-    ASSERT_EQ(512, slice_map.get_extent_map(shard_id_t(1)).get_start_off());
-    ASSERT_EQ(512 + 1024, slice_map.get_extent_map(shard_id_t(1)).get_end_off());
-    ASSERT_EQ(5, slice_map.get_extent_map(shard_id_t(2)).get_start_off());
-    ASSERT_EQ(4096, slice_map.get_extent_map(shard_id_t(2)).get_end_off());
-    ASSERT_EQ(256, slice_map.get_extent_map(shard_id_t(3)).get_start_off());
-    ASSERT_EQ(4096, slice_map.get_extent_map(shard_id_t(3)).get_end_off());
-    ASSERT_EQ(5, slice_map.get_extent_map(shard_id_t(4)).get_start_off());
-    ASSERT_EQ(4096, slice_map.get_extent_map(shard_id_t(4)).get_end_off());
+    verify_offset_cache(slice_map);
   }
 
   {

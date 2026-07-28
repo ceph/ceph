@@ -20,7 +20,7 @@
  *
  *
  */
-class Btree2Allocator : public AllocatorBase {
+class Btree2Allocator : public AllocatorBase, public AllocatorPerf {
   enum {
     RANGE_SIZE_BUCKET_COUNT = 14,
   };

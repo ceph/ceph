@@ -822,6 +822,29 @@ To enable SSO:
 
    ceph dashboard sso enable oauth2
 
+Automatic SSO Disable on Service Failure
+"""""""""""""""""""""""""""""""""""""""""
+
+OAuth2 SSO depends on ``oauth2-proxy`` service being active.
+Cephadm continuously monitors this service and will **automatically disable OAuth2 SSO**
+in the Dashboard if the service goes down or is removed.
+A warning is recorded in the Ceph log when this happens:
+
+.. code-block:: text
+
+   OAuth2 SSO has been automatically disabled because oauth2-proxy is no longer running.
+
+Once the required services are back up and running, SSO must be **re-enabled manually**:
+
+.. prompt:: bash $
+
+   ceph dashboard sso enable oauth2
+
+.. note::
+
+   Enabling OAuth2 SSO is blocked if cephadm detects that ``oauth2-proxy`` is not currently running. Deploy and start this service before
+   attempting to enable SSO.
+
 .. _dashboard-alerting:
 
 Enabling Prometheus Alerting
@@ -1153,7 +1176,8 @@ The list of system roles are:
 - **cluster-manager**: allows full permissions for the *hosts*, *osd*,
   *monitor*, *manager*, and *config-opt* scopes.
 - **pool-manager**: allows full permissions for the *pool* scope.
-- **cephfs-manager**: allows full permissions for the *cephfs* scope.
+- **cephfs-manager**: allows full permissions for the *cephfs* scope, and
+  *read* permission for the *hosts* and *pool* scopes.
 
 The list of available roles can be retrieved with the following command:
 

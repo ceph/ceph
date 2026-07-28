@@ -1,0 +1,6 @@
+tasks:
+- tox: [client.0]
+- bucket-logging-tests:
+    client.0:
+      rgw_server: client.0
+      logging_type: Journal

@@ -1,0 +1,5 @@
+tasks:
+- tox: [ client.0 ]
+- keycloak:
+    client.0:
+      keycloak_version: 11.0.0
