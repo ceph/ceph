@@ -25,6 +25,8 @@
 
 #include "include/ceph_assert.h"
 
+class OSDMap;
+
 namespace ceph::osd::scheduler {
 
 using client = uint64_t;
@@ -62,6 +64,11 @@ public:
     ceph_assert(0 == "impossible for wpq");
     return 0.0;
   }
+
+  // Notify the scheduler of a new OSDMap.  Called under the shard
+  // lock whenever the shard's map advances; schedulers that classify
+  // ops by pool properties override this.
+  virtual void update_from_osdmap(const OSDMap &map) {}
 
   // Destructor
   virtual ~OpScheduler() {};
