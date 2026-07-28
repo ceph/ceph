@@ -185,6 +185,7 @@ constexpr std::string_view usage[] = {
     "\t\t zero2 <off> <len> <off> <len>",
     "\t\t writeandzero <write_off> <write_len> <zero_off> <zero_len>",
     "\t\t zeroandtruncate <zero_off> <zero_len> <truncate_size>",
+    "\t\t mapext <off> <len>",
     "\t\t injecterror <io_type> <shard> <type> <good_count> <fail_count>",
     "\t\t clearinject <io_type> <shard> <type>",
     "\t\t sleep",
@@ -1520,6 +1521,10 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
       uint64_t zero_length = get_numeric_token();
       uint64_t truncate_size = get_numeric_token();
       ioop = ZeroAndTruncateOp::generate(zero_offset, zero_length, truncate_size);
+    } else if (op == "mapext") {
+      uint64_t offset = get_numeric_token();
+      uint64_t length = get_numeric_token();
+      ioop = ceph::io_exerciser::MapextOp::generate(offset, length);
     } else if (op == "failedwrite") {
       uint64_t offset = get_numeric_token();
       uint64_t length = get_numeric_token();

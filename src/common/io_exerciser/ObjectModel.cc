@@ -2,6 +2,7 @@
 #include "IoOp.h"
 
 #include <algorithm>
+#include <map>
 #include <execution>
 #include <iterator>
 #include <random>
@@ -27,6 +28,25 @@ std::vector<int> ObjectModel::get_seed_offsets(int seed) const {
   }
 
   return offsets;
+}
+
+std::map<uint64_t, uint64_t> ObjectModel::get_expected_extent_map() const {
+  ceph_assert(primary_created);
+  std::map<uint64_t, uint64_t> extent_map;
+  uint64_t size = primary_contents.size();
+  uint64_t i = 0;
+  while (i < size) {
+    if (primary_contents[i] != 0) {
+      uint64_t start = i;
+      while (i < size && primary_contents[i] != 0) {
+        ++i;
+      }
+      extent_map.emplace(start * block_size, (i - start) * block_size);
+    } else {
+      ++i;
+    }
+  }
+  return extent_map;
 }
 
 std::string ObjectModel::to_string(int mask) const {
@@ -402,6 +422,15 @@ void ObjectModel::applyIoOp(IoOp& op) {
                 0);
       // Truncate
       primary_contents.resize(ztOp.truncate_size);
+      num_io++;
+    } break;
+    case OpType::Mapext: {
+      MapextOp& mop = static_cast<MapextOp&>(op);
+      ceph_assert(primary_created);
+      ceph_assert(mop.offset[0] + mop.length[0] <= primary_contents.size());
+      // Not allowed: mapext overlapping with a parallel write
+      ceph_assert(!writes.intersects(mop.offset[0], mop.length[0]));
+      reads.union_insert(mop.offset[0], mop.length[0]);
       num_io++;
     } break;
     default:
