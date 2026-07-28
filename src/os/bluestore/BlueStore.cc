@@ -18129,6 +18129,8 @@ int BlueStore::_do_write_v2_compressed(
     *_dout << i.offset << "~" << i.length << " ";
   }
   *_dout << std::dec << dendl;
+  uint32_t changes_start = regions.front().offset;
+  uint32_t changes_end = regions.back().offset + regions.back().length;
   for (const auto& i : regions) {
     ceph::buffer::list data_bl;
     if (i.offset <= offset && offset < i.offset + i.length) {
@@ -18157,15 +18159,17 @@ int BlueStore::_do_write_v2_compressed(
     disk_for_compressed = estimator->split_and_compress(data_bl, bd);
     disk_for_raw = p2roundup(i.offset + i.length, au_size) - p2align(i.offset, au_size);
     BlueStore::Writer wr(this, txc, &wctx, o);
+    wr.left_affected_range = changes_start;
+    wr.right_affected_range = changes_end;
     if (disk_for_compressed < disk_for_raw) {
       wr.do_write_with_blobs(i.offset, i.offset + i.length, i.offset + i.length, bd);
     } else {
       wr.do_write(i.offset, data_bl);
     }
+    changes_start = wr.left_affected_range;
+    changes_end = wr.right_affected_range;
   }
   estimator->finish();
-  uint32_t changes_start = regions.front().offset;
-  uint32_t changes_end = regions.back().offset + regions.back().length;
   o->extent_map.compress_extent_map(changes_start, changes_end - changes_start);
   o->extent_map.dirty_range(changes_start, changes_end - changes_start);
   o->extent_map.maybe_reshard(changes_start, changes_end);
