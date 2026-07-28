@@ -1856,38 +1856,6 @@ int RGWOp::init_quota()
   return 0;
 }
 
-static bool validate_cors_rule_method(const DoutPrefixProvider *dpp, RGWCORSRule *rule, const char *req_meth) {
-  if (!req_meth) {
-    ldpp_dout(dpp, 5) << "req_meth is null" << dendl;
-    return false;
-  }
-
-  uint8_t flags = get_multi_cors_method_flags(req_meth);
-
-  if (rule->get_allowed_methods() & flags) {
-    ldpp_dout(dpp, 10) << "Method " << req_meth << " is supported" << dendl;
-  } else {
-    ldpp_dout(dpp, 5) << "Method " << req_meth << " is not supported" << dendl;
-    return false;
-  }
-
-  return true;
-}
-
-static bool validate_cors_rule_header(const DoutPrefixProvider *dpp, RGWCORSRule *rule, const char *req_hdrs) {
-  if (req_hdrs) {
-    vector<string> hdrs;
-    get_str_vec(req_hdrs, hdrs);
-    for (const auto& hdr : hdrs) {
-      if (!rule->is_header_allowed(hdr.c_str(), hdr.length())) {
-        ldpp_dout(dpp, 5) << "Header " << hdr << " is not registered in this rule" << dendl;
-        return false;
-      }
-    }
-  }
-  return true;
-}
-
 int RGWOp::read_bucket_cors()
 {
   bufferlist bl;
@@ -2000,9 +1968,15 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
     return false;
   }
 
-  /* CORS 6.2.2. */
-  RGWCORSRule *rule = bucket_cors.host_name_rule(orig);
-  auto is_allowed_to_generate_rule_cors_header = [this, &origin, &method, &headers, &exp_headers, &max_age] (RGWCORSRule *rule) {
+  /* CORS 6.2.2–6.2.5: first rule matching origin, method, and preflight headers. */
+  const char *req_meth = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
+  if (!req_meth) {
+    req_meth = s->info.method;
+  }
+  const char *req_hdrs = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_HEADERS");
+
+  RGWCORSRule *rule = bucket_cors.match_rule(orig, req_meth, req_hdrs);
+  auto is_allowed_to_generate_rule_cors_header = [this, &origin, &method, &headers, &exp_headers, &max_age, req_meth, req_hdrs] (RGWCORSRule *rule) {
     if (!rule)
       return false;
 
@@ -2019,21 +1993,9 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
       origin = "*";
 
     /* CORS 6.2.3. */
-    const char *req_meth = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
-    if (!req_meth) {
-      req_meth = s->info.method;
-    }
-
     if (req_meth) {
       method = req_meth;
-      /* CORS 6.2.5. */
-      if (!validate_cors_rule_method(this, rule, req_meth)) {
-        return false;
-      }
     }
-
-    /* CORS 6.2.4. */
-    const char *req_hdrs = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_HEADERS");
 
     /* CORS 6.2.6. */
     get_cors_response_headers(this, rule, req_hdrs, headers, exp_headers, max_age);
@@ -2045,7 +2007,9 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
     return true;
   }
 
-  if (optional_global_cors.has_value() && is_allowed_to_generate_rule_cors_header(&(*optional_global_cors))) {
+  if (optional_global_cors.has_value() &&
+      optional_global_cors->matches(orig, req_meth, req_hdrs) &&
+      is_allowed_to_generate_rule_cors_header(&(*optional_global_cors))) {
     return true;
   }
 
@@ -7253,17 +7217,10 @@ void RGWOptionsCORS::get_response_params(string& hdrs, string& exp_hdrs, unsigne
 }
 
 int RGWOptionsCORS::validate_cors_request(RGWCORSConfiguration *cc) {
-  rule = cc->host_name_rule(origin);
+  rule = cc->match_rule(origin, req_meth, req_hdrs);
   if (!rule) {
-    ldpp_dout(this, 10) << "There is no cors rule present for " << origin << dendl;
-    return -ENOENT;
-  }
-
-  if (!validate_cors_rule_method(this, rule, req_meth)) {
-    return -ENOENT;
-  }
-
-  if (!validate_cors_rule_header(this, rule, req_hdrs)) {
+    ldpp_dout(this, 10) << "no CORS rule matching origin=" << origin
+                        << " method=" << req_meth << dendl;
     return -ENOENT;
   }
 
@@ -7273,21 +7230,9 @@ int RGWOptionsCORS::validate_cors_request(RGWCORSConfiguration *cc) {
 int RGWOptionsCORS::validate_global_cors_request(RGWCORSRule *global_cors_rule) {
   ldpp_dout(this, 20) << "Validating request with global CORS" << dendl;
   rule = global_cors_rule;
-  if (!rule) {
-    ldpp_dout(this, 10) << "There is no global cors rule present" << dendl;
-    return -ENOENT;
-  }
-
-  if (!rule->is_origin_present(origin)) {
-    ldpp_dout(this, 10) << "There is no cors rule present for " << origin << dendl;
-    return -ENOENT;
-  }
-
-  if (!validate_cors_rule_method(this, rule, req_meth)) {
-    return -ENOENT;
-  }
-
-  if (!validate_cors_rule_header(this, rule, req_hdrs)) {
+  if (!rule || !rule->matches(origin, req_meth, req_hdrs)) {
+    ldpp_dout(this, 10) << "no global CORS rule matching origin=" << origin
+                        << " method=" << req_meth << dendl;
     return -ENOENT;
   }
 
