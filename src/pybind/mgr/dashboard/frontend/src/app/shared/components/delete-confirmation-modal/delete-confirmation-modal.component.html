@@ -47,11 +47,19 @@
           </ng-container>
           <ng-template #highImpactDeletion>
             <p class="cds--type-body-01">
-            @if (bodyContext?.deletionMessage) {
-            <span [innerHTML]="bodyContext.deletionMessage"></span>
-            } @else {
-            <ng-container i18n>Deleting <strong>{{ itemNames[0] }}</strong> will remove all associated {{itemDescription}}.This action cannot be undone.</ng-container>
-            }
+              @if (bodyContext?.deletionMessage) {
+                <span [innerHTML]="bodyContext.deletionMessage"></span>
+              } @else if (hasAssociatedResources) {
+                <ng-container i18n>
+                  Deleting <strong>{{ itemNames[0] }}</strong> will remove all associated
+                  {{ itemDescription }}. This action cannot be undone.
+                </ng-container>
+              } @else {
+                <ng-container i18n>
+                  Deleting <strong>{{ itemNames[0] }}</strong> permanently deletes the pool. This
+                  action cannot be undone.
+                </ng-container>
+              }
             </p>
             <ng-template #labelTemplate>
               <span i18n

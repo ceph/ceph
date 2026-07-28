@@ -281,8 +281,9 @@
         type="info"
         *ngIf="bucketForm.getValue('lock_enabled')"
         class="me-1"
-        i18n-title>
-          Bucket Versioning can't be disabled when Object Locking is enabled.
+        i18n-alertTitle
+      >
+        Bucket Versioning can't be disabled when Object Locking is enabled.
       </cd-alert-panel>
       <cd-alert-panel
         type="warning"
