@@ -149,8 +149,10 @@ int OpInfo::set_from_op(
     }
 
     // set PGOP flag if there are PG ops
-    if (ceph_osd_op_type_pg(iter->op.op))
+    if (ceph_osd_op_type_pg(iter->op.op)) {
       set_pg_op();
+      set_primary_only();
+    }
 
     if (ceph_osd_op_mode_cache(iter->op.op))
       set_cache();
