@@ -109,6 +109,9 @@ namespace ceph::libfdb::concepts {
 template <typename StringViewLikeT>
 concept stringview_convertible = std::convertible_to<StringViewLikeT, std::string_view>;
 
+template <typename KeyViewT>
+concept libfdb_key_view = std::same_as<std::remove_cvref_t<KeyViewT>, std::string_view>;
+
 template <typename IteratorT>
 concept key_value_iterator =
  std::input_iterator<IteratorT> and
@@ -138,6 +141,34 @@ concept supported_invocation_result =
 // so this is doing a more important job than it may appear to be:
 template <typename T>
 concept selector = ceph::libfdb::detail::is_any_of<T, ceph::libfdb::select>;
+
+} // namespace ceph::libfdb::concepts
+
+namespace ceph::libfdb::detail {
+
+constexpr std::string_view libfdb_key_view(const concepts::stringview_convertible auto& key)
+{
+ return std::string_view(key);
+}
+
+template <typename KeyT>
+concept libfdb_key_like =
+ requires(const KeyT& key) {
+  { libfdb_key_view(key) } -> std::same_as<std::string_view>;
+ };
+
+template <libfdb_key_like KeyT>
+constexpr std::string_view as_libfdb_key_view(const KeyT& key)
+{
+ return libfdb_key_view(key);
+}
+
+} // namespace ceph::libfdb::detail
+
+namespace ceph::libfdb::concepts {
+
+template <typename KeyT>
+concept libfdb_key = ceph::libfdb::detail::libfdb_key_like<KeyT>;
 
 } // namespace ceph::libfdb::concepts
 
@@ -207,9 +238,15 @@ struct future_value final
  friend class ceph::libfdb::transaction;
 };
 
-inline auto as_fdb_span(std::string_view sv)
-{ 
- return std::span<const std::uint8_t>((const std::uint8_t *)sv.data(), sv.size()); 
+inline auto as_fdb_span(concepts::libfdb_key_view auto key)
+{
+ return std::span<const std::uint8_t>((const std::uint8_t *)key.data(), key.size());
+}
+
+inline auto as_fdb_span(const concepts::libfdb_key auto& key)
+requires (!concepts::libfdb_key_view<decltype(key)>)
+{
+ return as_fdb_span(as_libfdb_key_view(key));
 }
 
 /* Prefix selectors assume user keys do not start with 0xFF. Appending 0xFF
@@ -241,17 +278,17 @@ struct range_endpoint final
  std::string key;
  bool inclusive;
 
- explicit range_endpoint(std::string_view key_, bool inclusive_)
-  : key(key_), inclusive(inclusive_)
+ explicit range_endpoint(const concepts::libfdb_key auto& key_, bool inclusive_)
+  : key(detail::as_libfdb_key_view(key_)), inclusive(inclusive_)
  {}
 };
 
-inline range_endpoint inclusive(std::string_view key)
+inline range_endpoint inclusive(const concepts::libfdb_key auto& key)
 {
  return range_endpoint(key, true);
 }
 
-inline range_endpoint exclusive(std::string_view key)
+inline range_endpoint exclusive(const concepts::libfdb_key auto& key)
 {
  return range_endpoint(key, false);
 }
@@ -289,21 +326,22 @@ struct select final
     end_inclusive(end.inclusive)
  {}
 
- select(std::string_view begin_key_, std::string_view end_key_)
+ select(const concepts::libfdb_key auto& begin_key_,
+        const concepts::libfdb_key auto& end_key_)
   : select(inclusive(begin_key_), exclusive(end_key_))
  {}
 
- select(std::string_view begin_key_, range_endpoint end)
+ select(const concepts::libfdb_key auto& begin_key_, range_endpoint end)
   : select(inclusive(begin_key_), std::move(end))
  {}
 
- select(range_endpoint begin, std::string_view end_key_)
+ select(range_endpoint begin, const concepts::libfdb_key auto& end_key_)
   : select(std::move(begin), exclusive(end_key_))
  {}
 
- select(std::string_view prefix)
-  : begin_key(prefix),
-    end_key(detail::make_range_end_key_for_prefix(prefix))
+ select(const concepts::libfdb_key auto& prefix)
+  : begin_key(detail::as_libfdb_key_view(prefix)),
+    end_key(detail::make_range_end_key_for_prefix(detail::as_libfdb_key_view(prefix)))
  {}
 
 };
@@ -611,26 +649,43 @@ class transaction final
  // keep these handles mostly-opaque (this has proven to be a good idea as I've a few times shuffled internal details
  // with no disruption to the user interface surface):
  private:
- friend inline void set(transaction_handle, const std::string_view, const auto&, const commit_after_op);
- friend inline void set(database_handle, std::string_view, const auto&);
- friend inline void set(transaction_handle, std::string_view, const ceph::libfdb::concepts::stringview_convertible auto&, const commit_after_op);
- friend inline void set(database_handle, std::string_view, const ceph::libfdb::concepts::stringview_convertible auto&);
+ friend inline void set(transaction_handle,
+                        const concepts::libfdb_key auto&,
+                        const auto&,
+                        const commit_after_op);
+ friend inline void set(database_handle, const concepts::libfdb_key auto&, const auto&);
+ friend inline void set(transaction_handle,
+                        const concepts::libfdb_key auto&,
+                        const ceph::libfdb::concepts::stringview_convertible auto&,
+                        const commit_after_op);
+ friend inline void set(database_handle,
+                        const concepts::libfdb_key auto&,
+                        const ceph::libfdb::concepts::stringview_convertible auto&);
 
  template <typename OutputTargetOrFnT>
  requires concepts::value_callback<std::remove_reference_t<OutputTargetOrFnT>> ||
           concepts::value_output<OutputTargetOrFnT&&>
  friend inline bool get(ceph::libfdb::transaction_handle,
-                        std::string_view,
+                        const concepts::libfdb_key auto&,
                         OutputTargetOrFnT&&,
                         const commit_after_op);
- friend inline bool get(ceph::libfdb::transaction_handle, const ceph::libfdb::select&, auto, const commit_after_op);
+ friend inline bool get(ceph::libfdb::transaction_handle,
+                        const ceph::libfdb::select&,
+                        auto,
+                        const commit_after_op);
 
- friend inline void erase(ceph::libfdb::transaction_handle, std::string_view, const commit_after_op);
- friend inline void erase(ceph::libfdb::transaction_handle, const ceph::libfdb::select&, const commit_after_op);
- friend inline void erase(ceph::libfdb::database_handle, std::string_view);
+ friend inline void erase(ceph::libfdb::transaction_handle,
+                          const concepts::libfdb_key auto&,
+                          const commit_after_op);
+ friend inline void erase(ceph::libfdb::transaction_handle,
+                          const ceph::libfdb::select&,
+                          const commit_after_op);
+ friend inline void erase(ceph::libfdb::database_handle, const concepts::libfdb_key auto&);
  friend inline void erase(ceph::libfdb::database_handle, const ceph::libfdb::select&);
 
- friend inline bool key_exists(transaction_handle txn, std::string_view k, const commit_after_op commit_after);
+ friend inline bool key_exists(transaction_handle txn,
+                               const concepts::libfdb_key auto& k,
+                               const commit_after_op commit_after);
 
  friend inline bool commit(transaction_handle& txn);
  friend inline fdb_error_t ceph::libfdb::detail::do_commit(transaction_handle& txn);
@@ -868,9 +923,7 @@ inline auto decode_pairs(std::span<const FDBKeyValue> pairs)
 template <typename ValueT, typename AssocT>
 inline AssocT collect_pairs(std::span<const FDBKeyValue> pairs)
 {
- AssocT out;
- std::ranges::copy(decode_pairs<ValueT>(pairs), std::inserter(out, std::end(out)));
- return out;
+ return decode_pairs<ValueT>(pairs) | std::ranges::to<AssocT>();
 }
 
 template <typename AssocT>
@@ -895,8 +948,9 @@ template <typename OutIterT>
 requires std::output_iterator<OutIterT, std::pair<std::string, std::string>>
 inline bool get_value_range_from_transaction(transaction& txn, const select& key_range, OutIterT out_iter)
 {
- auto flattened = detail::generate_FDB_pairs(txn, key_range) | std::views::join;
- std::ranges::transform(flattened, out_iter, to_decoded_kv_pair<std::string>);
+ std::ranges::transform(detail::generate_FDB_pairs(txn, key_range) | std::views::join,
+                        out_iter,
+                        to_decoded_kv_pair<std::string>);
 
  return true;
 }

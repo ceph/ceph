@@ -1,15 +1,15 @@
 # libfdb Examples
 
-"Take a thousand days of practice for forging, and ten thousand days of practice for refining." 
+"Take a thousand days of practice for forging, and ten thousand days of practice for refining."
     -- Miyamoto Musashi, Go Rin No Sho (~1645)
 
 Welcome, traveller! Grab your favorite walking stick, and let us journey into
-the realm of libfdb! 
+the realm of libfdb!
 
 While this is not proper documentation, hopefully this "cookbook-stye" set
 of mini-examples will help you on your libfdb path.
 
-Errata: Please report errata, or contact with examples you would like to see! 
+Errata: Please report errata, or contact with examples you would like to see!
 
 These examples use a short namespace alias for readability and also to save
 typing with one's poor fingers! Yoikes!
@@ -67,10 +67,11 @@ auto dbh = lfdb::create_database();
 ```
 
 ```cpp
-/* Open a database with database and network options. Flag-only options use
- * lfdb::option_flag because they have no value. Network options are applied
- * only during the first FoundationDB network initialization; later calls to
- * create_database() cannot change them. */
+/* Open a database with explicit database and network options. Explicit database
+ * options are used as passed. Flag-only options use lfdb::option_flag because
+ * they have no value. Network options are applied only during the first
+ * FoundationDB network initialization; later calls to create_database() cannot
+ * change them. */
 lfdb::database_options dbopts{
   { FDB_DB_OPTION_TRANSACTION_TIMEOUT, std::int64_t{5000} },
 };
@@ -164,6 +165,182 @@ auto people = lfdb::select { "person/" };
 ```
 
 Using a key beginning with 0xFF will result in unpredictable behavior.
+
+## Content Layer
+
+Raw FoundationDB keys are byte strings ordered lexicographically. That is powerful,
+but it also means an ad hoc key format can accidentally make common scans awkward
+or wrong. The Content layer is a small key compiler: compose domain segments, get
+one compiled byte key, and pass that key to the ordinary libfdb operations.
+
+Use a namespace alias for readability:
+
+```cpp
+namespace fdbc = ceph::libfdb::layer::content;
+```
+
+### Normal Interface: Operators
+
+The canonical way to build a keyspace is similar to writing a path
+```cpp
+const std::string bucket_id = "bucket.8409.12";
+const std::string version = "v0000000000000017";
+const std::string object_name = "photos/2026/beach.jpg";
+
+const auto object_head =
+  fdbc::keyspace("d4n") / "cache" / "object" / bucket_id / version / object_name;
+
+lfdb::set(dbh, object_head, object_metadata);
+```
+
+...the result, in object_head above, is a compiled key that follows FoundationDB rules.
+
+Content keys are meant to flow into libfdb operations directly; callers should not
+need to extract bytes from them.
+
+Exact lookup uses the compiled key:
+
+```cpp
+std::string metadata;
+
+if (lfdb::get(dbh, object_head, metadata)) {
+  /* cache hit */
+}
+```
+
+Build deeper keys by adding more segments:
+
+```cpp
+const auto block_key =
+  object_head
+  / "block"
+  / fmt::format("{:020}", offset)
+  / fmt::format("{:020}", length);
+
+lfdb::set(dbh, block_key, block_data);
+```
+
+The fixed-width numeric strings are deliberate for now: Content layer string
+segments preserve bytewise ordering, so numeric values represented as strings
+must sort lexicographically the same way they sort numerically. A future typed
+numeric segment should make that mechanical.
+
+Here is the same idea applied to a D4N-style block directory key. The legacy
+form had to URL-encode delimiter characters by hand; the Content layer treats
+bucket, object, block id, and size as separate key segments.
+
+```cpp
+fdbc::compiled_key BlockDirectory::build_index(CacheBlock *block)
+{
+  return fdbc::keyspace("d4n") / "block" / block->cacheObj.bucketName /
+         block->cacheObj.objName / fmt::format("{:020}", block->blockID) /
+         fmt::format("{:020}", block->size);
+}
+```
+
+Scan all cached blocks for one object by selecting the object-block prefix:
+
+```cpp
+const auto object_blocks =
+  fdbc::keyspace("d4n") / "block" / bucket_id / object_name;
+
+for (auto&& block : lfdb::block_generator<CacheBlock>(
+       dbh, fdbc::prefix(object_blocks))) {
+  // consume block
+}
+```
+
+### Normal Interface: Functions
+
+The function form is the same normal interface when a call expression is clearer
+than a chain:
+
+```cpp
+const auto object_head = fdbc::key("d4n",
+                                   "cache",
+                                   "object",
+                                   bucket_id,
+                                   version,
+                                   object_name);
+
+const auto block_key = fdbc::key("d4n",
+                                 "cache",
+                                 "object",
+                                 bucket_id,
+                                 version,
+                                 object_name,
+                                 "block",
+                                 fmt::format("{:020}", offset),
+                                 fmt::format("{:020}", length));
+```
+
+### Detailed Interface: Assembly
+
+`assemble()` is the explicit compiler entry point used under the nicer interfaces.
+Use it when you want the validation/lowering step to be visible, for example in
+tests, generated schemas, or other code that builds key layouts as data.
+
+```cpp
+const auto object_head = fdbc::assemble("d4n",
+                                        "cache",
+                                        "object",
+                                        bucket_id,
+                                        version,
+                                        object_name);
+```
+
+Invalid segment types are rejected at compile time, and invalid keyspace values
+throw during assembly:
+
+```cpp
+static_assert(fdbc::key_segments<std::string_view, std::string_view>);
+static_assert(!fdbc::key_segments<int>);
+
+const auto d4n_objects = fdbc::assemble("d4n", "cache", "object");
+```
+
+The lowering code is written to be constexpr-friendly, but the current compiled
+target owns a `std::string`. A future fixed-size/literal compiled target would
+let literal-only assembly produce a fully constexpr key.
+
+### Selecting Content Keys
+
+Use `fdbc::prefix()` for a full prefix range. It returns a normal `lfdb::select`,
+so it works with the ordinary range-read APIs:
+
+```cpp
+/* All cached D4N records for one object version. */
+const auto object_records =
+  fdbc::keyspace("d4n")
+  / "cache"
+  / "object"
+  / bucket_id
+  / version
+  / object_name;
+
+std::vector<std::pair<std::string, std::string>> records;
+
+lfdb::get(dbh, fdbc::prefix(object_records), std::back_inserter(records));
+```
+
+For a subrange, compose the lower and upper bounds and use the ordinary selector
+constructors:
+
+```cpp
+const auto first_block =
+  object_records / "block" / fmt::format("{:020}", first_offset);
+
+const auto last_block =
+  object_records / "block" / fmt::format("{:020}", last_offset);
+
+auto blocks = lfdb::select { first_block, last_block };
+
+lfdb::get(dbh, blocks, std::back_inserter(records));
+```
+
+The explicit selector is half-open: the begin key is included and the end key is
+excluded. Use `lfdb::inclusive()` or `lfdb::exclusive()` when the boundary shape
+needs to be different.
 
 ## Explicit Key Ranges
 
