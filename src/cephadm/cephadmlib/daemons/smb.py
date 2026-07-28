@@ -374,8 +374,11 @@ class SMBDContainer(SambaContainerCommon):
         args = super().args()
         args.append('run')
         if self.cfg.clustered:
-            auth_kind = 'nsswitch' if self.cfg.domain_member else 'users'
-            args.append(f'--setup={auth_kind}')
+            if self.cfg.domain_member:
+                args.append('--setup=nsswitch')
+            else:
+                args.append('--setup=nsswitch_auto')
+                args.append('--setup=users')
             args.append('--setup=smb_ctdb')
             args.append('--wait-for=ctdb')
         args.append('smbd')
@@ -451,11 +454,17 @@ class ConfigWatchContainer(SambaContainerCommon):
         return 'configwatch'
 
     def args(self) -> List[str]:
-        return super().args() + [
-            'update-config',
-            '--watch',
-            f'--signal-pids-dir={_WANT_SIGNAL_DIR}',
-        ]
+        args = super().args()
+        args.append('run')
+        if self.cfg.clustered:
+            if self.cfg.domain_member:
+                args.append('--setup=nsswitch')
+            else:
+                args.append('--setup=nsswitch_auto')
+            args.append('--wait-for=ctdb')
+        args.append(f'--config-watch-signal-pids-dir={_WANT_SIGNAL_DIR}')
+        args.append('configwatch')
+        return args
 
 
 class SMBMetricsContainer(ContainerCommon):
