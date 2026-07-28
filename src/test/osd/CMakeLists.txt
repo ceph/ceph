@@ -215,6 +215,15 @@ target_link_libraries(unittest_mclock_scheduler
   global osd dmclock os
 )
 
+# unittest_bfq_scheduler
+add_executable(unittest_bfq_scheduler
+  TestBfqScheduler.cc
+)
+add_ceph_unittest(unittest_bfq_scheduler)
+target_link_libraries(unittest_bfq_scheduler
+  global osd os
+)
+
 # unittest_scheduler_isolation
 add_executable(unittest_scheduler_isolation
   TestSchedulerIsolation.cc
@@ -244,6 +253,7 @@ target_link_libraries(unittest_ec_omap_journal osd global ${BLKID_LIBRARIES})
 # Not including unittest_osdmap, as it is slow. It is tested elsewhere.
 set(OSD_UNITTESTS
   unittest_backend_basics
+  unittest_bfq_scheduler
   unittest_ec_omap_journal
   unittest_ec_transaction
   unittest_ec_transaction_l
