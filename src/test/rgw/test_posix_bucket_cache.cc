@@ -956,8 +956,80 @@ TEST_F(BucketCacheRaceBarrier, HiwatAndEvictBlockUnderYield)
 }
 
 
-/* TODO: deterministic evict_block race test — deferred.
- * See ~/dev/rgw/bucketcache-lru-race-fixes-and-flow-control.md */
+/* evict_block race test: evict_block leaves the victim linked in
+ * lane.q while dropping lane lock for reclaim().  A racing ref()
+ * can pass evicting.test() (narrow window), then move the entry
+ * to active.  evict_block re-takes lane lock and tries push_front
+ * on an entry already in active → safe_link assertion crash.
+ *
+ * The RandomYieldPolicy widens the evict_block_post_unlock and
+ * ref_pre_refcnt_bump windows to increase the probability of
+ * triggering the race.  With many threads and a tiny cache, the
+ * evict_block path fires on every insert. */
+class BucketCacheRaceEvictBlock
+  : public testing::Test, protected BucketCacheRaceBase {
+protected:
+  static std::vector<std::string> bvec;
+
+  static void SetUpTestSuite() {
+    bvec.clear();
+    for (int p = 0; p < 2; ++p) {
+      for (int i = 0; i < 8; ++i) {
+	std::string name = name_for_partition(
+	  p, 2, fmt::format("eb{}", p));
+	name = fmt::format("{}_{}", name, i);
+	bvec.push_back(name);
+	make_bucket_dir(name);
+      }
+    }
+  }
+};
+
+std::vector<std::string> BucketCacheRaceEvictBlock::bvec;
+
+TEST_F(BucketCacheRaceEvictBlock, EvictBlockUnlinkRace)
+{
+  /* tiny cache: hiwat=2, 1 lane — every 3rd distinct bucket forces
+   * evict_block.  16 buckets across 2 partitions, 12 threads. */
+  test_cache = new TestBucketCache{
+    &sal_driver, bucket_root, database_root,
+    2 /* max_buckets */, 1 /* lanes */, 2 /* partitions */, 1 /* lmdb */};
+
+  const int n_threads = 128;
+  const int iterations = 3000;
+  std::atomic<int> errors{0};
+
+  auto work_fn = [&](int tid) {
+    auto list_fn = [](const rgw_bucket_dir_entry&) -> bool { return true; };
+    for (int i = 0; i < iterations; ++i) {
+      int idx = (tid + i) % bvec.size();
+      MockSalBucket sb{bvec[idx]};
+      std::string marker{""};
+      int ret = test_cache->list_bucket(dpp, null_yield, &sb, marker, list_fn);
+      if (ret != 0) {
+	errors++;
+      }
+    }
+  };
+
+  std::vector<std::thread> threads;
+  for (int i = 0; i < n_threads; ++i) {
+    threads.emplace_back(work_fn, i);
+  }
+  for (auto& t : threads) {
+    t.join();
+  }
+
+  auto total_evictions = test_cache->recycle_count + test_cache->cleanup_count;
+  std::cout << fmt::format(
+    "EvictBlockRace: evictions={} errors={}", total_evictions, errors.load())
+    << std::endl;
+  ASSERT_GT(total_evictions, 0);
+  ASSERT_EQ(errors.load(), 0);
+
+  delete test_cache;
+  test_cache = nullptr;
+}
 
 int main (int argc, char *argv[])
 {
