@@ -18,6 +18,7 @@
 #include "osd/scheduler/OpScheduler.h"
 
 #include "common/WeightedPriorityQueue.h"
+#include "osd/scheduler/BfqScheduler.h"
 #include "osd/scheduler/mClockScheduler.h"
 
 namespace ceph::osd::scheduler {
@@ -42,6 +43,10 @@ OpSchedulerRef make_scheduler(
     // default is 'mclock_scheduler'
     return std::make_unique<
       mClockScheduler>(cct, whoami, num_shards, shard_id, is_rotational,
+        op_queue_cut_off);
+  } else if (op_queue_type_t::BfqScheduler == osd_scheduler) {
+    return std::make_unique<
+      BfqScheduler>(cct, whoami, num_shards, shard_id, is_rotational,
         op_queue_cut_off);
   } else {
     ceph_abort_msg("Invalid choice of wq");
