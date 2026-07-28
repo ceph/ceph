@@ -40,15 +40,11 @@ enum {
   l_librbd_pwl_wr_req,             // write requests
   l_librbd_pwl_wr_bytes,           // bytes written
   l_librbd_pwl_wr_req_def,         // write requests deferred for resources
-  l_librbd_pwl_wr_req_def_lanes,   // write requests deferred for lanes
-  l_librbd_pwl_wr_req_def_log,     // write requests deferred for log entries
-  l_librbd_pwl_wr_req_def_buf,     // write requests deferred for buffer space
   l_librbd_pwl_wr_req_overlap,     // write requests detained for overlap
   l_librbd_pwl_wr_req_queued,      // write requests queued for prior barrier
 
   // Write log operations (1 .. n per request that appends to the log)
   l_librbd_pwl_log_ops,            // log append ops
-  l_librbd_pwl_log_op_bytes,       // average bytes written per log op
 
   /*
 
@@ -139,11 +135,6 @@ enum {
   l_librbd_pwl_invalidate_cache,
   l_librbd_pwl_invalidate_discard_cache,
 
-  l_librbd_pwl_append_tx_t,
-  l_librbd_pwl_retire_tx_t,
-  l_librbd_pwl_append_tx_t_hist,
-  l_librbd_pwl_retire_tx_t_hist,
-
   l_librbd_pwl_last,
 };
 
@@ -170,26 +161,19 @@ const int IN_FLIGHT_FLUSH_BYTES_LIMIT = (1 * 1024 * 1024);
 const uint64_t MAX_WRITES_PER_SYNC_POINT = 256;
 const uint64_t MAX_BYTES_PER_SYNC_POINT = (1024 * 1024 * 8);
 
-const uint32_t MIN_WRITE_ALLOC_SIZE = 512;
 const uint32_t MIN_WRITE_ALLOC_SSD_SIZE = 4096;
 const uint32_t LOG_STATS_INTERVAL_SECONDS = 5;
 
 /**** Write log entries ****/
 const unsigned long int MAX_ALLOC_PER_TRANSACTION = 8;
 const unsigned long int MAX_FREE_PER_TRANSACTION = 1;
-const unsigned int MAX_CONCURRENT_WRITES = (1024 * 1024);
 
 const uint64_t DEFAULT_POOL_SIZE = 1u<<30;
 const uint64_t MIN_POOL_SIZE = DEFAULT_POOL_SIZE;
 const uint64_t POOL_SIZE_ALIGN = 1 << 20;
-constexpr double USABLE_SIZE = (7.0 / 10);
-const uint64_t BLOCK_ALLOC_OVERHEAD_BYTES = 16;
 const uint8_t SSD_LAYOUT_VERSION = 1;
-const uint64_t MAX_LOG_ENTRIES = (1024 * 1024);
 const double AGGRESSIVE_RETIRE_HIGH_WATER = 0.75;
 const double RETIRE_HIGH_WATER = 0.50;
-const double RETIRE_LOW_WATER = 0.40;
-const int RETIRE_BATCH_TIME_LIMIT_MS = 250;
 const uint64_t CONTROL_BLOCK_MAX_LOG_ENTRIES = 32;
 const uint64_t SPAN_MAX_DATA_LEN = (16 * 1024 * 1024);
 
@@ -342,12 +326,6 @@ struct WriteLogPoolRoot {
 
   void dump(ceph::Formatter *f) const;
   static std::list<WriteLogPoolRoot> generate_test_instances();
-};
-
-struct WriteBufferAllocation {
-  unsigned int allocation_size = 0;
-  bool allocated = false;
-  utime_t allocation_lat;
 };
 
 static inline io::Extent image_extent(const BlockExtent& block_extent) {
