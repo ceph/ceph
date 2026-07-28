@@ -100,6 +100,7 @@ TEST(IoSequence, NoReadWhileWholeObjectWriteInFlight) {
           case OpType::Read2:
           case OpType::Read3:
           case OpType::SparseRead:
+          case OpType::Mapext:
           case OpType::Consistency:
             EXPECT_FALSE(in_flight[primary])
                 << seq << " seed " << seed << " step " << step;
