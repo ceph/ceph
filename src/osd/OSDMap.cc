@@ -4796,6 +4796,20 @@ int OSDMap::validate_crush_rules(CrushWrapper *newcrush,
       *ss << "pool " << i.first << " type does not match rule " << ruleno;
       return -EINVAL;
     }
+    // A device class hands back a shadow bucket that never matches the
+    // surviving zone recorded on the pool, and only a cluster-wide stretch mode
+    // records that bucket, so an individual stretch pool is left alone. Refuse
+    // only maps that introduce the class: a cluster already in that state has
+    // to stay able to edit its way out.
+    if (stretch_mode_enabled && pool.is_stretch_pool()) {
+      auto newclass = newcrush->get_rule_device_class(ruleno);
+      if (newclass && !crush->get_rule_device_class(ruleno)) {
+        *ss << "pool " << i.first << " is a stretch pool and rule " << ruleno
+            << " selects devices of class " << newcrush->get_class_name(*newclass)
+            << ", which stretch mode does not support";
+        return -EINVAL;
+      }
+    }
   }
   return 0;
 }

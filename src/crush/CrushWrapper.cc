@@ -345,6 +345,19 @@ void CrushWrapper::find_takes_by_rule(int rule, set<int> *roots) const
   }
 }
 
+std::optional<int> CrushWrapper::get_rule_device_class(int rule) const
+{
+  set<int> takes;
+  find_takes_by_rule(rule, &takes);
+  for (auto take : takes) {
+    int id, cls;
+    if (split_id_class(take, &id, &cls) == 0 && cls >= 0) {
+      return cls;
+    }
+  }
+  return std::nullopt;
+}
+
 void CrushWrapper::find_roots(set<int> *roots) const
 {
   for (int i = 0; i < crush->max_buckets; i++) {
