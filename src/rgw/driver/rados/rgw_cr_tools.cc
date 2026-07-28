@@ -5,7 +5,7 @@
 
 #include "rgw_cr_tools.h"
 #include "rgw_bucket.h"
-#include "rgw_user.h"
+#include "rgw_user_ctl.h"
 #include "rgw_op.h"
 #include "rgw_acl_s3.h"
 #include "rgw_zone.h"

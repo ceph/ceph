@@ -17,13 +17,11 @@
 #include <limits.h>
 
 #include <iostream>
-#include <map>
 
 #include "common/XMLFormatter.h"
-#include "include/types.h"
 
 #include "rgw_cors_s3.h"
-#include "driver/rados/rgw_user.h"
+#include "rgw_user.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
