@@ -988,3 +988,8 @@ errorcode32_t is converting, internally, the error code from host to ceph, when 
 when decoding, resulting having LINUX codes on the wire, and HOST code on the receiver.
 All CEPHFS_E* defines have been removed across Ceph (including the python binding).
 Relevant tracker: https://tracker.ceph.com/issues/64611
+* RADOS: A new ``BLUESTORE_NO_DB_SHARDING`` health warning reports OSDs whose
+  RocksDB database does not use column family sharding, i.e. OSDs created
+  prior to Pacific that have not been resharded yet with
+  ``ceph-bluestore-tool reshard``. This warning can be disabled with the new
+  ``bluestore_warn_on_no_db_sharding`` option.
