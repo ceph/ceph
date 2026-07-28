@@ -226,8 +226,13 @@ seastar::future<> SeaStore::determine_storage_shard_count()
   auto tuple = co_await read_meta("mkfs_done");
   auto [done, value] = tuple;
   if (done == -1) {
-    INFO("seastore not mkfs yet");
-    store_shard_nums = seastar::smp::count;
+    // If no collections files found, assume the configurable
+    store_shard_nums = crimson::common::local_conf()->seastore_mkfs_partition_count;
+    if (store_shard_nums == 0) {
+      // If no value configured, assume seastar::smp::count shards
+      store_shard_nums = seastar::smp::count;
+    }
+    INFO("seastore not mkfs yet, shards count will be {}", store_shard_nums);
   } else {
     INFO("seastore mkfs done");
 #if 1

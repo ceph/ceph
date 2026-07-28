@@ -293,3 +293,11 @@ options:
   desc: disable osd shards changes upon restart.
   flags:
   - startup
+- name: seastore_mkfs_partition_count
+  type: uint
+  level: advanced
+  default: 0
+  with_legacy: true
+  desc: define number of partitions (storage shards) on SeaStore's --mkfs
+  flags:
+  - startup

@@ -75,8 +75,17 @@ seastar::future<> CyanStore::determine_storage_shard_count()
     }
   }
   if (store_shard_nums == 0) {
-    // If no collections files found, assume seastar::smp::count shards
-    store_shard_nums = seastar::smp::count;
+    // If no collections files found, assume the configurable
+    store_shard_nums = crimson::common::local_conf()->seastore_mkfs_partition_count;
+    if (store_shard_nums == 0) {
+      // If no value configured, assume seastar::smp::count shards
+      store_shard_nums = seastar::smp::count;
+      logger().info("Defaulting CyanStore::store_shard_nums to {}",
+		    store_shard_nums);
+    } else {
+      logger().info("CyanStore::store_shard_nums manually set to {}",
+		    store_shard_nums);
+    }
   }
   return seastar::now();
 }
