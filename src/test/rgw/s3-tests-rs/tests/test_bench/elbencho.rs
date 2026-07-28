@@ -49,6 +49,22 @@ impl ElbenchoOpts {
         }
     }
 
+    fn soak_small_objects(_bench: &BenchConfig) -> Self {
+        Self {
+            label: "soak_small_objects",
+            threads: env_or("BENCH_THREADS", "300")
+                .parse().unwrap_or(300),
+            num_dirs: env_or("BENCH_NUM_DIRS", "1")
+                .parse().unwrap_or(1),
+            num_files: env_or("BENCH_NUM_FILES", "100")
+                .parse().unwrap_or(100),
+            file_size: env_or("BENCH_FILE_SIZE", "512k"),
+            block_size: env_or("BENCH_BLOCK_SIZE", "512k"),
+            bucket: "benchsmallsoak1",
+            phases: &["-w"],
+        }
+    }
+
     fn soak_saturation(bench: &BenchConfig) -> Self {
         Self {
             label: "soak_saturation",
@@ -212,6 +228,13 @@ fn bench_smoke_mixed_sizes() {
 fn bench_soak_saturation() {
     let cfg = get_config();
     run_elbencho(&ElbenchoOpts::soak_saturation(&cfg.bench));
+}
+
+#[test]
+#[ignore = "bench: requires elbencho, long-running"]
+fn bench_soak_small_objects() {
+    let cfg = get_config();
+    run_elbencho(&ElbenchoOpts::soak_small_objects(&cfg.bench));
 }
 
 #[test]
