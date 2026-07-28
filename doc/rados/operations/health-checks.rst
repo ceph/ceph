@@ -879,6 +879,45 @@ To disable this alert, run the following command:
 
    ceph config set global bluestore_warn_on_no_per_pg_omap false
 
+BLUESTORE_FREE_FRAGMENTATION
+____________________________
+
+The free space of one or more BlueStore OSDs is highly fragmented. The
+fragmentation score is a value between 0 (no fragmentation) and 1 (maximum
+fragmentation), and this warning is raised by OSDs whose score exceeds
+``bluestore_warn_on_free_fragmentation`` (default: ``0.8``). The score is
+recomputed every ``bluestore_fragmentation_check_period`` seconds (default:
+``3600``).
+
+High free space fragmentation is usually the result of a long OSD lifetime
+with many small writes and deletes. When free space is highly fragmented,
+BlueStore can no longer allocate large contiguous extents, which increases
+allocation overhead and write latency.
+
+To display the current fragmentation score of an OSD, run the following
+command:
+
+.. prompt:: bash #
+
+   ceph daemon osd.123 bluestore allocator score block
+
+Fragmentation cannot be reduced in place: if it becomes problematic, the OSD
+can be redeployed (destroyed and re-created) so that its data is rewritten
+contiguously by the subsequent backfill.
+
+To adjust the threshold at which this alert is raised, run the following
+command:
+
+.. prompt:: bash #
+
+   ceph config set osd bluestore_warn_on_free_fragmentation 0.9
+
+To disable this alert, set the threshold to ``1``:
+
+.. prompt:: bash #
+
+   ceph config set osd bluestore_warn_on_free_fragmentation 1
+
 
 BLUESTORE_DISK_SIZE_MISMATCH
 ____________________________
