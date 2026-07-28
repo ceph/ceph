@@ -1,54 +1,96 @@
-@use 'sass:map';
-@use './src/styles/vendor/variables' as vv;
+:host {
+  display: block;
+  width: 100%;
+}
 
-$dark-secondary: darken(vv.$secondary, 4%);
+.login-grid-column {
+  width: 100%;
+  min-width: 25rem;
+  max-width: 53rem;
+}
 
-::ng-deep cd-login {
-  .form-group {
-    background-color: $dark-secondary;
-    border-left: 4px solid vv.$white;
-    height: auto;
-    margin-bottom: 2rem;
+.ceph-input-block {
+  width: 100%;
+  background-color: var(--cds-layer-02, #29323a);
+  border-left: 4px solid var(--cds-text-primary, #fff);
+  transition: border-color 0.2s ease;
+  display: flex;
+  flex-direction: column;
 
-    &:focus-within {
-      border-left: 4px solid map.get(vv.$theme-colors, 'accent');
-    }
-  }
-
-  .btn-password,
-  .btn-password:focus,
-  .form-control,
-  .form-control:focus {
-    background-color: $dark-secondary;
-    border: 0;
-    box-shadow: none;
-    color: vv.$body-color-bright;
-    filter: none;
-    outline: none;
-  }
-
-  label {
-    color: vv.$gray-500;
-  }
-
-  .btn-password:focus {
-    outline-color: vv.$primary;
+  &:focus-within {
+    border-left-color: #008799;
   }
 }
 
-// This will override the colors applied by chrome
-@keyframes autofill {
+.ceph-label {
+  color: var(--cds-text-secondary, #a8b2b8);
+}
+
+.pwd-wrapper {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.login-container-form .ceph-input-block .ceph-input {
+  background-color: transparent;
+  border: none;
+  color: var(--cds-text-primary, #fff);
+  box-shadow: none;
+  width: 100%;
+  flex-grow: 1;
+
+  &:focus {
+    outline: none;
+  }
+}
+
+.pwd-toggle-btn {
+  background: transparent;
+  border: none;
+  color: var(--cds-text-secondary, #a8b2b8);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    color: var(--cds-text-primary, #fff);
+  }
+
+  &:focus {
+    outline: 2px solid #008799;
+  }
+}
+
+/* Override Carbon's primary button to use Ceph Teal */
+::ng-deep .ceph-submit-btn {
+  background-color: #008799 !important;
+  border-color: #008799 !important;
+  color: #fff !important;
+
+  &:hover {
+    background-color: #006e7d !important;
+  }
+
+  &:disabled {
+    background-color: #008799 !important;
+    border-color: #008799 !important;
+    opacity: 0.65;
+    color: #fff !important;
+  }
+}
+
+@keyframes autofill-dark {
   to {
-    background-color: $dark-secondary;
-    color: vv.$body-color-bright;
+    background-color: #29323a;
+    color: #fff;
   }
 }
 
 input:-webkit-autofill {
   animation-fill-mode: both;
-  animation-name: autofill;
-  border-radius: 0;
-  box-shadow: 0 0 0 1000px $dark-secondary inset;
-  -webkit-text-fill-color: vv.$body-color-bright;
-  transition-property: none;
+  animation-name: autofill-dark;
+  -webkit-text-fill-color: #fff;
+  box-shadow: 0 0 0 1000px #29323a inset;
 }
