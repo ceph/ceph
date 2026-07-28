@@ -17,5 +17,6 @@
  #define CEPH_RGW_FDB_H
 
 #include "interface.h"
+#include "content.h"
 
 #endif
