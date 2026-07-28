@@ -19,7 +19,6 @@ class GuardedRequestFunctionContext;
 
 struct WriteRequestResources {
   bool allocated = false;
-  std::vector<WriteBufferAllocation> buffers;
 };
 
 /**
@@ -64,8 +63,6 @@ public:
 
   virtual void dispatch()  = 0;
 
-  virtual void copy_cache() {};
-
   virtual const char *get_name() const {
     return "C_BlockIORequest";
   }
@@ -74,22 +71,13 @@ public:
     return image_extents.size();
   }
 
-  std::vector<WriteBufferAllocation>& get_resources_buffers() {
-    return m_resources.buffers;
-  }
-
   void set_allocated(bool allocated) {
-    if (allocated) {
-      m_resources.allocated = true;
-    } else {
-      m_resources.buffers.clear();
-    }
+    m_resources.allocated = allocated;
   }
 
   virtual void setup_buffer_resources(
       uint64_t *bytes_cached, uint64_t *bytes_dirtied, uint64_t *bytes_allocated,
-      uint64_t *number_lanes, uint64_t *number_log_entries,
-      uint64_t *number_unpublished_reserves) = 0;
+      uint64_t *number_log_entries) = 0;
 
 protected:
   utime_t m_arrived_time;
@@ -151,7 +139,6 @@ public:
 
   void dispatch() override;
 
-  void copy_cache() override;
 
   virtual std::shared_ptr<WriteLogOperation> create_operation(uint64_t offset,
                                                               uint64_t len);
@@ -212,9 +199,7 @@ public:
 
   void setup_buffer_resources(
       uint64_t *bytes_cached, uint64_t *bytes_dirtied,
-      uint64_t *bytes_allocated, uint64_t *number_lanes,
-      uint64_t *number_log_entries,
-      uint64_t *number_unpublished_reserves) override;
+      uint64_t *bytes_allocated, uint64_t *number_log_entries) override;
 private:
   std::shared_ptr<SyncPointLogOperation> op;
   ceph::mutex &m_lock;
@@ -263,8 +248,7 @@ public:
   }
   void setup_buffer_resources(
       uint64_t *bytes_cached, uint64_t *bytes_dirtied, uint64_t *bytes_allocated,
-      uint64_t *number_lanes, uint64_t *number_log_entries,
-      uint64_t *number_unpublished_reserves) override;
+      uint64_t *number_log_entries) override;
 private:
   uint32_t m_discard_granularity_bytes;
   ceph::mutex &m_lock;
