@@ -1223,9 +1223,7 @@ static ceph::spinlock debug_lock;
     auto p_prev = _buffers.before_begin();
     while (p != std::end(_buffers)) {
       // keep anything that's already align and sized aligned
-      if (p->is_aligned(align_memory) && 
-          p->is_n_align_sized(align_size) && 
-          p->length()) {
+      if (p->is_aligned(align_memory) && p->is_n_align_sized(align_size)) {
         /*cout << " segment " << (void*)p->c_str()
   	     << " offset " << ((unsigned long)p->c_str() & (align - 1))
   	     << " length " << p->length()
@@ -1256,8 +1254,7 @@ static ceph::spinlock debug_lock;
       } while (p != std::end(_buffers) &&
   	     (!p->is_aligned(align_memory) ||
   	      !p->is_n_align_sized(align_size) ||
-  	      (offset % align_size) ||
-  	      !p->length()));
+  	      (offset % align_size)));
       if (!(unaligned.is_contiguous() && unaligned._buffers.front().is_aligned(align_memory))) {
         unaligned.rebuild(
           ptr_node::create(
