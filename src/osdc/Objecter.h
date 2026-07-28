@@ -2997,8 +2997,9 @@ private:
               extra_read_flags.load(std::memory_order_relaxed) |
               CEPH_OSD_FLAG_READ;
 
-    // If the op is rwordered, strip out the balanced and localized flags.
-    if (flags & CEPH_OSD_FLAG_RWORDERED) {
+    // If the op is rwordered or a PG op, strip out the balanced and localized
+    // flags since those ops must be handled by the primary OSD.
+    if (flags & (CEPH_OSD_FLAG_RWORDERED | CEPH_OSD_FLAG_PGOP)) {
       ret &= ~(CEPH_OSD_FLAG_BALANCE_READS | CEPH_OSD_FLAG_LOCALIZE_READS);
     }
     return ret;
