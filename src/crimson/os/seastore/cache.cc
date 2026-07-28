@@ -156,6 +156,7 @@ void Cache::register_metrics(store_index_t store_index)
     {src_t::TRIM_ALLOC, {sm::label_instance("src", "TRIM_ALLOC")}},
     {src_t::CLEANER_MAIN, {sm::label_instance("src", "CLEANER_MAIN")}},
     {src_t::CLEANER_COLD, {sm::label_instance("src", "CLEANER_COLD")}},
+    {src_t::TRIM_LOG, {sm::label_instance("src", "TRIM_LOG")}},
   };
   assert(labels_by_src.size() == (std::size_t)src_t::MAX);
 
@@ -1842,7 +1843,15 @@ record_t Cache::prepare_record(
       alloc_tail = *maybe_alloc_tail;
     }
     ceph_assert(alloc_tail != JOURNAL_SEQ_NULL);
-    auto tails = journal_tail_delta_t{alloc_tail, dirty_tail};
+    auto maybe_log_tail = get_oldest_log_dirty_from();
+    journal_seq_t log_tail;
+    if (!maybe_log_tail.has_value()) {
+      log_tail = journal_head;
+    } else {
+      log_tail = *maybe_log_tail;
+    }
+
+    auto tails = journal_tail_delta_t{alloc_tail, dirty_tail, log_tail};
     SUBDEBUGT(seastore_t, "update tails as delta {}", t, tails);
     bufferlist bl;
     encode(tails, bl);
@@ -2156,7 +2165,7 @@ void Cache::complete_commit(
     }
   }
 
-  if (t.lognode_deltas.size()) {
+  if (t.lognode_deltas.size() && t.get_src() != Transaction::src_t::TRIM_LOG) {
     auto oid = t.lognode_deltas.begin()->oid;
     for (auto &p : t.lognode_deltas) {
       p.committed_seq = start_seq;
@@ -2173,6 +2182,11 @@ void Cache::complete_commit(
       seq queue length {}", t, start_seq, t.lognode_deltas.begin()->oid, 
       pending_lognode_deltas_by_oid[oid].size(),
       pending_lognode_deltas_by_seq.size());
+  } else if (t.get_src() == Transaction::src_t::TRIM_LOG) {
+    assert(t.lognode_deltas.size() > 0);
+    auto oid = t.lognode_deltas.begin()->oid;
+    // clear reserved
+    pending_lognode_deltas_by_oid_reserved[oid] = 0;
   }
 
   if (!can_drop_backref()) {
@@ -2257,6 +2271,7 @@ Cache::replay_delta(
   const delta_info_t &delta,
   const journal_seq_t &dirty_tail,
   const journal_seq_t &alloc_tail,
+  const journal_seq_t &log_tail,
   sea_time_point modify_time)
 {
   LOG_PREFIX(Cache::replay_delta);
@@ -2297,6 +2312,21 @@ Cache::replay_delta(
     // this delta should have been dealt with during segment cleaner mounting
     return replay_delta_ertr::make_ready_future<std::pair<bool, CachedExtentRef>>(
       std::make_pair(false, nullptr));
+  }
+  
+  // replay log
+  if (delta.type == extent_types_t::LOG_NODE_INFO) {
+    if (journal_seq < log_tail) {
+      DEBUG("journal_seq {} < log_tail {}, don't replay {}",
+	journal_seq, log_tail, delta);
+      return replay_delta_ertr::make_ready_future<std::pair<bool, CachedExtentRef>>(
+	std::make_pair(false, nullptr));
+    }
+    lognode_delta_t d;
+    auto iter = delta.bl.cbegin();
+    decode(d, iter);
+    pending_lognode_deltas_by_seq[journal_seq].push_back(d.oid);
+    pending_lognode_deltas_by_oid[d.oid].emplace_back(std::move(d));
   }
 
   // replay alloc
@@ -2447,6 +2477,27 @@ Cache::replay_delta(
 	std::make_pair(true, extent));
     });
   }
+}
+
+std::vector<ghobject_t>
+Cache::get_next_dirty_log_node_by_oid(
+  journal_seq_t seq)
+{
+  LOG_PREFIX(Cache::get_next_dirty_log_node_by_oid);
+  std::vector<ghobject_t> cand;
+  for (auto& [entry_seq, oids] : pending_lognode_deltas_by_seq) {
+    if (entry_seq > seq) {
+      break;
+    }
+    DEBUG(
+      "entry_seq={}, target_seq={}, oids={}, first oid={}",
+      entry_seq,
+      seq,
+      oids.size()
+    );
+    cand.insert(cand.end(), oids.begin(), oids.end());
+  }
+  return cand;
 }
 
 Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(

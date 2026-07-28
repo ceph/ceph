@@ -365,6 +365,7 @@ std::ostream &operator<<(std::ostream &out, const journal_tail_delta_t &delta)
   return out << "journal_tail_delta_t("
              << "alloc_tail=" << delta.alloc_tail
              << ", dirty_tail=" << delta.dirty_tail
+             << ", log_tail=" << delta.log_tail
              << ")";
 }
 
@@ -447,6 +448,8 @@ std::ostream &operator<<(std::ostream &os, transaction_type_t type)
     return os << "TRIM_DIRTY";
   case transaction_type_t::TRIM_ALLOC:
     return os << "TRIM_ALLOC";
+  case transaction_type_t::TRIM_LOG:
+    return os << "TRIM_LOG";
   case transaction_type_t::CLEANER_MAIN:
     return os << "CLEANER_MAIN";
   case transaction_type_t::CLEANER_COLD:

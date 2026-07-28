@@ -351,6 +351,7 @@ public:
     Transaction &t, LogNodeRef tail,
     const std::string &key, const ceph::bufferlist &value);
 
+  omap_set_keys_ret flush_logs(omap_root_t &log_root, Transaction &t);
   omap_set_keys_ret merge_deltas(omap_root_t &log_root, Transaction &t,
     lognode_deltas_t &deltas);
 

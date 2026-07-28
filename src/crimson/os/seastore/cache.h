@@ -1382,6 +1382,7 @@ public:
     const delta_info_t &delta,
     const journal_seq_t &dirty_tail,
     const journal_seq_t &alloc_tail,
+    const journal_seq_t &log_tail,
     sea_time_point modify_time);
 
   /**
@@ -1501,6 +1502,26 @@ public:
     Transaction &t,
     journal_seq_t seq,
     size_t max_bytes);
+
+  std::vector<ghobject_t> get_next_dirty_log_node_by_oid(
+    journal_seq_t seq);
+
+  std::optional<journal_seq_t> get_oldest_log_dirty_from() const {
+    LOG_PREFIX(Cache::get_oldest_log_dirty_from);
+    if (pending_lognode_deltas_by_seq.size()) {
+      SUBDEBUG(seastore_cache, "dirty_log_oldest: {}", pending_lognode_deltas_by_seq.begin()->first);
+      return pending_lognode_deltas_by_seq.begin()->first;
+    } 
+    return std::nullopt;
+  }
+
+  bool has_pending_lognode_deltas() const {
+    return pending_lognode_deltas_by_seq.size() > 0;
+  }
+
+  std::optional<size_t> pending_lognode_delta_size(ghobject_t oid) {
+    return pending_lognode_deltas_by_oid[oid].size();
+  }
 
 #define PENDING_MAX_NODE_DELTAS 18
   std::optional<std::pair<lognode_deltas_t, size_t>> get_pending_lognode_delta_by_oid(

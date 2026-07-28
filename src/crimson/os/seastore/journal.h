@@ -97,6 +97,7 @@ public:
       const delta_info_t&,
       const journal_seq_t&, // dirty_tail
       const journal_seq_t&, // alloc_tail
+      const journal_seq_t&, // log_tail
       sea_time_point modify_time)>;
   virtual replay_ret replay(
     delta_handler_t &&delta_handler) = 0;

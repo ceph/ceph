@@ -187,6 +187,10 @@ public:
 
     omap_root_t select_log_omap_root(Onode& onode) const;
 
+    base_iertr::future<> pgoid_do_handle_log_flush(Transaction& t, const ghobject_t oid);
+    base_ertr::future<> pgoid_log_flush(const ghobject_t oid);
+    base_ertr::future<> handle_log_flush(journal_seq_t target);
+
   // only exposed to SeaStore
   public:
     base_ertr::future<> umount();

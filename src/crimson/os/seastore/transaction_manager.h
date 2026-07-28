@@ -742,6 +742,18 @@ public:
     return cache->get_pending_lognode_delta_by_oid(oid, force);
   }
 
+  using ExtentCallbackInterface::get_next_dirty_log_node_by_oid_ret;
+  get_next_dirty_log_node_by_oid_ret get_next_dirty_log_node_by_oid(
+    journal_seq_t seq) final;
+
+  bool has_pending_lognode_deltas() final {
+    return cache->has_pending_lognode_deltas();
+  }
+
+  std::optional<size_t> pending_lognode_delta_size(ghobject_t oid) {
+    return cache->pending_lognode_delta_size(oid); 
+  }
+
   using ExtentCallbackInterface::rewrite_extent_ret;
   rewrite_extent_ret rewrite_extent(
     Transaction &t,
