@@ -10,7 +10,7 @@
 #include "svc_sys_obj.h"
 #include "svc_sys_obj_cache.h"
 
-#include "rgw_user.h"
+#include "rgw_user_ctl.h"
 #include "rgw_account.h"
 #include "rgw_bucket.h"
 #include "rgw_metadata_lister.h"

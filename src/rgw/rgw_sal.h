@@ -26,12 +26,12 @@
 #include "rgw_lua.h"
 #include "rgw_notify_event_type.h"
 #include "rgw_req_context.h"
-#include "include/random.h"
 #include "include/function2.hpp"
 
 // FIXME: following subclass dependencies
-#include "driver/rados/rgw_user.h"
 #include "driver/rados/rgw_datalog_notify.h"
+
+#define RGW_NO_SHARD -1
 
 struct RGWBucketEnt;
 class RGWRESTMgr;
@@ -44,10 +44,10 @@ using RGWBucketSyncPolicyHandlerRef = std::shared_ptr<RGWBucketSyncPolicyHandler
 class RGWDataSyncStatusManager;
 class RGWSyncModuleInstance;
 typedef std::shared_ptr<RGWSyncModuleInstance> RGWSyncModuleInstanceRef;
-class RGWCompressionInfo;
+struct RGWCompressionInfo;
 struct rgw_pubsub_topics;
 struct rgw_pubsub_bucket_topics;
-class RGWZonePlacementInfo;
+struct RGWZonePlacementInfo;
 struct rgw_pubsub_topic;
 struct RGWOIDCProviderInfo;
 struct RGWRoleInfo;
@@ -152,7 +152,7 @@ namespace rgw { namespace sal {
 
 #define RGW_SAL_VERSION 1
 
-struct MPSerializer;
+class MPSerializer;
 class GCChain;
 class RGWRole;
 

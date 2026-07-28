@@ -17,6 +17,7 @@
 
 #include "include/scope_guard.h"
 #include "include/function2.hpp"
+#include "include/ceph_hash.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/async/spawn_throttle.h"
 #include "common/Formatter.h"
