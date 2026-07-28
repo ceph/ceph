@@ -23,6 +23,7 @@
 #include "include/rados.h"
 
 #include "crimson/common/errorator.h"
+#include "common/hobject.h"
 
 #ifndef SEASTORE_LADDR_USE_BOOST_U128
 #define SEASTORE_LADDR_USE_BOOST_U128 0
@@ -1968,8 +1969,9 @@ enum class extent_types_t : uint8_t {
   BACKREF_INTERNAL = 14,
   BACKREF_LEAF = 15,
   LOG_NODE = 16,
+  LOG_NODE_INFO = 17,
   // None and the number of valid extent_types_t
-  NONE = 17,
+  NONE = 18,
 };
 using extent_types_le_t = uint8_t;
 constexpr auto EXTENT_TYPES_MAX = static_cast<uint8_t>(extent_types_t::NONE);
@@ -2352,6 +2354,10 @@ struct omap_root_t {
   laddr_hint_t hint = LADDR_HINT_NULL;
   bool mutated = false;
   omap_type_t type = omap_type_t::NONE;
+  // The LOG entry can not indenfy PG metadata object.
+  // Carry the OID so journal deltas and pending queues are associated
+  // with the correct PG when LogManager handles an OMAP operation.
+  std::optional<ghobject_t> associated_oid;
 
   omap_root_t() = default;
   omap_root_t(laddr_t addr, depth_t depth, laddr_hint_t hint, omap_type_t type)
@@ -2628,6 +2634,24 @@ struct alloc_delta_t {
     DENC_FINISH(p);
   }
 };
+
+struct lognode_delta_t {
+  enum class op_t : uint_fast8_t {
+    INSERT,
+    DELETE,
+  } op;
+  bufferlist buffer;
+  ghobject_t oid;
+  journal_seq_t committed_seq;
+  transaction_id_t trans_id = 0;
+  // Number of pending deltas applied to the LogNode tree by merge_deltas().
+  // Used to remove the corresponding entries from the pending queues.
+  uint64_t last_idx_to_delete = 0;
+
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& p);
+};
+using lognode_deltas_t = std::vector<lognode_delta_t>;
 
 struct extent_info_t {
   extent_types_t type = extent_types_t::NONE;
@@ -3625,6 +3649,7 @@ WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_header_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::alloc_blk_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::alloc_delta_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_tail_t)
+WRITE_CLASS_ENCODER(crimson::os::seastore::lognode_delta_t)
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<crimson::os::seastore::cache_access_stats_printer_t> : fmt::ostream_formatter {};

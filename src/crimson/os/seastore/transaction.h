@@ -630,6 +630,7 @@ public:
     copied_lba_keys.clear();
     update_copied_lba_key = nullptr;
     touched_prefix.clear();
+    lognode_deltas.clear();
   }
 
   bool did_reset() const {
@@ -754,6 +755,10 @@ public:
 
   void touch_laddr_prefix(laddr_t laddr) {
     touched_prefix.insert(laddr.get_object_prefix());
+  }
+
+  void add_lognode_delta(lognode_delta_t &&delta) {
+    lognode_deltas.emplace_back(std::move(delta));
   }
 
   std::unordered_set<laddr_t> &get_touched_laddr_prefix() {
@@ -1042,6 +1047,7 @@ private:
 
   std::map<laddr_t, lmapping_t> copied_lba_keys;
   update_copied_lba_key_func_t update_copied_lba_key;
+  lognode_deltas_t lognode_deltas;
 };
 using TransactionRef = Transaction::Ref;
 
