@@ -111,6 +111,36 @@ LogManager::merge_deltas(
   co_return;
 }
 
+
+// Apply pending LogNode changes to the LogNode list.
+// Add a FLUSH delta with the number of processed operations,
+// so Cache can remove them from the pending queues.
+LogManager::omap_set_keys_ret
+LogManager::flush_logs(
+  omap_root_t &log_root,
+  Transaction &t) 
+{
+  auto pending = tm.get_pending_lognode_delta_by_oid(*log_root.associated_oid, true);
+  size_t last_idx_to_delete = 0;
+  if (!pending) {
+    co_return;
+  }
+  auto& deltas = pending->first;
+  last_idx_to_delete = pending->second;
+  co_await merge_deltas(log_root, t, deltas);
+
+  lognode_delta_t delta;
+  assert(log_root.associated_oid);
+  delta.oid = *log_root.associated_oid;
+  delta.op = lognode_delta_t::op_t::FLUSH;
+  if (last_idx_to_delete > 0) {
+    delta.last_idx_to_delete = last_idx_to_delete;
+  }
+  delta.trans_id = t.get_trans_id();
+  t.add_lognode_delta(std::move(delta));
+  co_return;
+}
+
 LogManager::omap_set_keys_ret
 LogManager::omap_set_keys(
   omap_root_t &log_root,

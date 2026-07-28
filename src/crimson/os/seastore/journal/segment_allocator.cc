@@ -71,26 +71,32 @@ SegmentAllocator::do_open(bool is_mkfs)
     segment_id_t segment_id = sref->get_segment_id();
     journal_seq_t dirty_tail;
     journal_seq_t alloc_tail;
+    journal_seq_t log_tail;
     if (type == segment_type_t::JOURNAL) {
       dirty_tail = trimmer->get_dirty_tail();
       alloc_tail = trimmer->get_alloc_tail();
+      log_tail = trimmer->get_log_tail();
       if (is_mkfs) {
         ceph_assert(dirty_tail == JOURNAL_SEQ_NULL);
         ceph_assert(alloc_tail == JOURNAL_SEQ_NULL);
+        ceph_assert(log_tail == JOURNAL_SEQ_NULL);
         auto mkfs_seq = journal_seq_t{
           new_segment_seq,
           paddr_t::make_seg_paddr(segment_id, 0)
         };
         dirty_tail = mkfs_seq;
         alloc_tail = mkfs_seq;
+        log_tail = mkfs_seq;
       } else {
         ceph_assert(dirty_tail != JOURNAL_SEQ_NULL);
         ceph_assert(alloc_tail != JOURNAL_SEQ_NULL);
+        ceph_assert(log_tail != JOURNAL_SEQ_NULL);
       }
     } else { // OOL
       ceph_assert(!is_mkfs);
       dirty_tail = JOURNAL_SEQ_NULL;
       alloc_tail = JOURNAL_SEQ_NULL;
+      log_tail = JOURNAL_SEQ_NULL;
     }
     auto header = segment_header_t{
       timepoint_to_mod(seastar::lowres_system_clock::now()),
@@ -98,6 +104,7 @@ SegmentAllocator::do_open(bool is_mkfs)
       segment_id,
       dirty_tail,
       alloc_tail,
+      log_tail,
       current_segment_nonce,
       type,
       category,

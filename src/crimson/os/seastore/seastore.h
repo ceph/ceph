@@ -221,6 +221,10 @@ public:
     seastar::future<> inject_data_error(const ghobject_t& o) override final;
     seastar::future<> inject_mdata_error(const ghobject_t& o) override final;
 
+    base_iertr::future<> pgoid_do_handle_log_flush(Transaction& t, const ghobject_t oid);
+    base_ertr::future<> pgoid_log_flush(const ghobject_t oid);
+    base_ertr::future<> handle_log_flush(journal_seq_t target);
+
   // only exposed to SeaStore
   public:
     base_ertr::future<> umount();
