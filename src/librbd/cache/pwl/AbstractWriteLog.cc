@@ -71,7 +71,7 @@ AbstractWriteLog<I>::AbstractWriteLog(
     m_lock(ceph::make_mutex(pwl::unique_lock_name(
       "librbd::cache::pwl::AbstractWriteLog::m_lock", this))),
     m_blocks_to_log_entries(image_ctx.cct),
-    m_work_queue("librbd::cache::pwl::ReplicatedWriteLog::work_queue",
+    m_work_queue("librbd::cache::pwl::AbstractWriteLog::work_queue",
                  ceph::make_timespan(
                    image_ctx.config.template get_val<uint64_t>(
 		     "rbd_op_thread_timeout")),
@@ -832,7 +832,7 @@ void AbstractWriteLog<I>::read(Extents&& image_extents,
           map_entry.log_entry->ram_entry.image_offset_bytes;
         /* Offset into the log entry buffer of this read hit */
         uint64_t read_buffer_offset = map_entry_buffer_offset + entry_offset;
-        /* Create buffer object referring to pmem pool for this read hit */
+        /* Create buffer object referring to the cache pool for this read hit */
         collect_read_extents(
             read_buffer_offset, map_entry, log_entries_to_read, bls_to_read,
             entry_hit_length, hit_extent, read_ctx);
@@ -876,8 +876,7 @@ void AbstractWriteLog<I>::write(Extents &&image_extents,
   ceph_assert(m_initialized);
 
   /* Split image extents larger than 1M. This isn't strictly necessary but
-   * makes libpmemobj allocator's job easier and reduces pmemobj_defrag() cost.
-   * We plan to manage pmem space and allocation by ourselves in the future.
+   * keeps individual allocations small.
    */
   Extents split_image_extents;
   uint64_t max_extent_size = get_max_extent();
@@ -1271,10 +1270,9 @@ void AbstractWriteLog<I>::release_guarded_request(BlockGuardCell *released_cell)
 
 template <typename I>
 void AbstractWriteLog<I>::append_scheduled(GenericLogOperations &ops, bool &ops_remain,
-                                         bool &appending, bool isRWL)
+                                         bool &appending)
 {
-  const unsigned long int OPS_APPENDED = isRWL ? MAX_ALLOC_PER_TRANSACTION
-    : MAX_WRITES_PER_SYNC_POINT;
+  const unsigned long int OPS_APPENDED = MAX_WRITES_PER_SYNC_POINT;
   {
     std::lock_guard locker(m_lock);
     if (!appending && m_appending) {
@@ -1295,12 +1293,6 @@ void AbstractWriteLog<I>::append_scheduled(GenericLogOperations &ops, bool &ops_
       ops_remain = true; /* Always check again before leaving */
       ldout(m_image_ctx.cct, 20) << "appending " << ops.size() << ", remain "
                                  << m_ops_to_append.size() << dendl;
-    } else if (isRWL) {
-      ops_remain = false;
-      if (appending) {
-        appending = false;
-        m_appending = false;
-      }
     }
   }
 }
