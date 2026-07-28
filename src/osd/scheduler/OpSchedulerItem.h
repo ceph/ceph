@@ -96,14 +96,14 @@ private:
   /**
    * qos_cost
    *
-   * Set by mClockScheduler iff queued into mclock proper and not the
-   * high/immediate queues.  Represents mClockScheduler's adjusted
-   * cost value.
+   * Set by the QoS schedulers (mclock, bfq) iff queued into the fair
+   * queue proper and not the high/immediate queues.  Represents the
+   * scheduler's adjusted cost value.
    */
   uint32_t qos_cost = 0;
 
-  /// True iff queued via mclock proper, not the high/immediate queues
-  bool was_queued_via_mclock() const {
+  /// True iff queued via a fair queue proper, not the high/immediate queues
+  bool was_queued_via_qos() const {
     return qos_cost > 0;
   }
 
@@ -181,7 +181,7 @@ public:
 
     out << " prio " << item.get_priority();
 
-    if (item.was_queued_via_mclock()) {
+    if (item.was_queued_via_qos()) {
       out << " qos_cost " << item.qos_cost;
     }
 
@@ -679,7 +679,7 @@ struct fmt::formatter<ceph::osd::scheduler::OpSchedulerItem> {
     // matching existing op_scheduler_item_t::operator<<() format
     using class_t =
 	std::underlying_type_t<SchedulerClass>;
-    const auto qos_cost = opsi.was_queued_via_mclock()
+    const auto qos_cost = opsi.was_queued_via_qos()
 			      ? fmt::format(" qos_cost {}", opsi.qos_cost)
 			      : "";
     const auto pushes =

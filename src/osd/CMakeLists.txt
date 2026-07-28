@@ -33,6 +33,7 @@ set(osd_srcs
   Session.cc
   SnapMapper.cc
   osd_types.cc
+  scheduler/BfqScheduler.cc
   scheduler/OpScheduler.cc
   scheduler/OpSchedulerItem.cc
   scheduler/mClockScheduler.cc
