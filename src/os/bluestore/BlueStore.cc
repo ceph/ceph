@@ -5906,6 +5906,7 @@ std::vector<std::string> BlueStore::get_tracked_keys() const noexcept
     "bluestore_warn_on_legacy_statfs"s,
     "bluestore_warn_on_no_per_pool_omap"s,
     "bluestore_warn_on_no_per_pg_omap"s,
+    "bluestore_warn_on_legacy_min_alloc_size"s,
     "bluestore_max_defer_interval"s,
     "bluestore_onode_segment_size"s,
     "bluestore_allocator_lookup_policy"s,
@@ -5924,6 +5925,9 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("bluestore_warn_on_no_per_pool_omap") ||
       changed.count("bluestore_warn_on_no_per_pg_omap")) {
     _check_no_per_pg_or_pool_omap_alert();
+  }
+  if (changed.count("bluestore_warn_on_legacy_min_alloc_size")) {
+    _check_legacy_min_alloc_size_alert();
   }
 
   if (changed.count("bluestore_csum_type")) {
@@ -12565,6 +12569,30 @@ void BlueStore::_check_no_per_pg_or_pool_omap_alert()
   no_per_pool_omap_alert = per_pool;
 }
 
+void BlueStore::_check_legacy_min_alloc_size_alert()
+{
+  // 64 KiB was the default allocation unit for HDD-backed OSDs
+  // deployed prior to Pacific; the current default is 4 KiB.
+  // Flash-backed OSDs are not checked: pre-Pacific SSD defaults were
+  // never that large, so a large allocation unit on flash is usually
+  // a deliberate choice, e.g. to align with the coarse indirection
+  // unit of some QLC NVMe devices.
+  constexpr uint64_t legacy_min_alloc_size = 64 * 1024;
+  string s;
+  if (bdev && _use_rotational_settings() &&
+      min_alloc_size >= legacy_min_alloc_size &&
+      cct->_conf->bluestore_warn_on_legacy_min_alloc_size) {
+    ostringstream ss;
+    ss << "legacy min_alloc_size 0x" << std::hex << min_alloc_size
+       << std::dec
+       << " detected, suggest to redeploy this OSD to benefit from"
+       << " a smaller allocation unit";
+    s = ss.str();
+  }
+  std::lock_guard l(qlock);
+  legacy_min_alloc_size_alert = s;
+}
+
 // ---------------
 // cache
 
@@ -14518,6 +14546,8 @@ int BlueStore::_open_super_meta()
 	     << std::dec << dendl;
     logger->set(l_bluestore_alloc_unit, min_alloc_size);
   }
+
+  _check_legacy_min_alloc_size_alert();
 
   _set_per_pool_omap();
 
@@ -19817,6 +19847,11 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
     alerts.emplace(
       "BLUESTORE_NO_PER_POOL_OMAP",
       no_per_pool_omap_alert);
+  }
+  if (!legacy_min_alloc_size_alert.empty()) {
+    alerts.emplace(
+      "BLUESTORE_LEGACY_MIN_ALLOC_SIZE",
+      legacy_min_alloc_size_alert);
   }
   string s0(failed_cmode);
 
