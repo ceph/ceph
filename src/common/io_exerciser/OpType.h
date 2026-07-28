@@ -37,6 +37,7 @@ enum class OpType {
   FailedWrite,           // A write which should fail
   FailedWrite2,          // Two writes in one op which should fail
   FailedWrite3,          // Three writes in one op which should fail
+  Mapext,                // Query allocated extent map
   Copy,                  // Copy from primary to secondary object
   InjectReadError,       // Op to tell OSD to inject read errors
   InjectWriteError,      // Op to tell OSD to inject write errors
@@ -73,6 +74,8 @@ struct fmt::formatter<ceph::io_exerciser::OpType> {
         return fmt::format_to(ctx.out(), "Consistency");
       case ceph::io_exerciser::OpType::Swap:
         return fmt::format_to(ctx.out(), "Swap");
+      case ceph::io_exerciser::OpType::Mapext:
+        return fmt::format_to(ctx.out(), "Mapext");
       case ceph::io_exerciser::OpType::Copy:
         return fmt::format_to(ctx.out(), "Copy");
       case ceph::io_exerciser::OpType::Read:

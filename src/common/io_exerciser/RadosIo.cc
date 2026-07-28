@@ -1,6 +1,7 @@
 #include "RadosIo.h"
 
 #include <fmt/format.h>
+#include <map>
 #include <json_spirit/json_spirit.h>
 
 #include <ranges>
@@ -8,16 +9,22 @@
 #include "DataGenerator.h"
 #include "IoOp.h"
 #include "common/ceph_json.h"
+#include "common/debug.h"
+#include "common/dout.h"
 #include "common/io_exerciser/IoSequence.h"
 #include "common/json/OSDStructures.h"
 #include "librados/librados_asio.h"
 
 #include <boost/asio/io_context.hpp>
 
+#define dout_subsys ceph_subsys_rados
+#define dout_context g_ceph_context
+
 using RadosIo = ceph::io_exerciser::RadosIo;
 using ConsistencyChecker = ceph::consistency::ConsistencyChecker;
 
 using GenerationType = ceph::io_exerciser::data_generation::GenerationType;
+using MapextOp = ceph::io_exerciser::MapextOp;
 
 namespace {
 template <typename S>
@@ -238,6 +245,8 @@ void RadosIo::applyIoOp(IoOp& op) {
     case OpType::Zero:
       [[fallthrough]];
     case OpType::Zero2:
+      [[fallthrough]];
+    case OpType::Mapext:
       applyReadWriteOp(op);
       break;
     case OpType::TruncateWrite:
@@ -402,6 +411,102 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
     num_io++;
   };
 
+  auto applyMapextOp = [this]<OpType opType, int N>(
+                           ReadWriteOp<opType, N> mop) {
+    // Shared state kept alive until the async callback fires.
+    struct MapextOpState {
+      std::map<uint64_t, uint64_t> actual_map;
+      std::array<uint64_t, N> offset;
+      std::array<uint64_t, N> length;
+      int prval{0};
+    };
+    auto state = std::make_shared<MapextOpState>();
+    state->offset = mop.offset;
+    state->length = mop.length;
+
+    librados::ObjectReadOperation rop;
+    rop.mapext(mop.offset[0] * block_size, mop.length[0] * block_size,
+               &state->actual_map, &state->prval);
+
+    auto mapext_cb = [this, state](boost::system::error_code ec,
+                                   version_t ver, bufferlist bl) {
+      ceph_assert(ec == boost::system::errc::success);
+      ceph_assert(state->prval >= 0);
+
+      // Compute expected extent map from the model and filter to the
+      // queried [offset_bytes, offset_bytes+length_bytes) range.
+      const uint64_t off_bytes = state->offset[0] * block_size;
+      const uint64_t end_bytes = off_bytes + state->length[0] * block_size;
+      std::map<uint64_t, uint64_t> expected;
+      for (auto& [ext_off, ext_len] : om->get_expected_extent_map()) {
+        const uint64_t ext_end = ext_off + ext_len;
+        if (ext_off >= end_bytes || ext_end <= off_bytes) {
+          continue;  // outside query range
+        }
+        const uint64_t clamp_off = std::max(ext_off, off_bytes);
+        const uint64_t clamp_end = std::min(ext_end, end_bytes);
+        expected.emplace(clamp_off, clamp_end - clamp_off);
+      }
+
+      if (state->actual_map != expected) {
+        auto fmt_extents = [](const std::map<uint64_t, uint64_t>& m) {
+          if (m.empty()) return std::string("(none)");
+          std::string s;
+          for (auto& [o, l] : m) {
+            if (!s.empty()) s += ", ";
+            s += fmt::format("[{}+{})", o, l);
+          }
+          return s;
+        };
+
+        std::string msg;
+        msg += "Mapext mismatch!\n";
+        msg += fmt::format("  Query range : [{}+{})\n",
+                           off_bytes, state->length[0] * block_size);
+        msg += fmt::format("  Actual   ({}): {}\n",
+                           state->actual_map.size(),
+                           fmt_extents(state->actual_map));
+        msg += fmt::format("  Expected ({}): {}\n",
+                           expected.size(),
+                           fmt_extents(expected));
+
+        // Show extents present in actual but not in expected (unexpected)
+        std::map<uint64_t, uint64_t> unexpected;
+        for (auto& [o, l] : state->actual_map) {
+          if (expected.find(o) == expected.end() || expected.at(o) != l) {
+            unexpected.emplace(o, l);
+          }
+        }
+        if (!unexpected.empty()) {
+          msg += fmt::format("  Unexpected extents (in actual, not in expected): {}\n",
+                             fmt_extents(unexpected));
+        }
+
+        // Show extents present in expected but not in actual (missing)
+        std::map<uint64_t, uint64_t> missing;
+        for (auto& [o, l] : expected) {
+          if (state->actual_map.find(o) == state->actual_map.end() ||
+              state->actual_map.at(o) != l) {
+            missing.emplace(o, l);
+          }
+        }
+        if (!missing.empty()) {
+          msg += fmt::format("  Missing extents (in expected, not in actual): {}\n",
+                             fmt_extents(missing));
+        }
+
+        lderr(g_ceph_context) << msg << dendl;
+        ceph_abort_msg("Mapext result does not match expected extent map");
+      }
+
+      finish_io();
+    };
+
+    librados::async_operate(asio.get_executor(), io, primary_oid,
+                            std::move(rop), 0, nullptr, mapext_cb);
+    num_io++;
+  };
+
   switch (op.getOpType()) {
     case OpType::Read: {
       start_io();
@@ -475,6 +580,12 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
       start_io();
       DoubleZeroOp& zeroOp = static_cast<DoubleZeroOp&>(op);
       applyZeroOp(zeroOp);
+      break;
+    }
+    case OpType::Mapext: {
+      start_io();
+      MapextOp& mop = static_cast<MapextOp&>(op);
+      applyMapextOp(mop);
       break;
     }
 

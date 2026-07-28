@@ -53,6 +53,7 @@ enum class Sequence {
   SEQUENCE_SEQ18,
   SEQUENCE_SEQ19,
   SEQUENCE_SEQ20,
+  SEQUENCE_SEQ21,
 
   SEQUENCE_END,
   SEQUENCE_BEGIN = SEQUENCE_SEQ0
@@ -382,6 +383,19 @@ class Seq20 : public IoSequence {
   Sequence get_id() const override;
   std::string get_name() const override;
   std::unique_ptr<IoOp> _next() override;
+};
+
+class Seq21 : public IoSequence {
+ public:
+  Seq21(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
+
+  Sequence get_id() const override;
+  std::string get_name() const override;
+  std::unique_ptr<IoOp> _next() override;
+
+ private:
+  int stage;             // current stage index (0-8)
+  bool barrier_pending;  // true when the next call should emit a BarrierOp
 };
 
 class Seq15 : public IoSequence {
