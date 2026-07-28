@@ -5,9 +5,10 @@
 #include "include/interval_set.h"
 #include "include/random.h"
 
+#include <map>
+#include <random>
 #include <string>
 #include <vector>
-#include <random>
 
 /* Overview
  *
@@ -50,6 +51,8 @@ class ObjectModel : public Model {
 
   int get_seed(uint64_t offset) const;
   std::vector<int> get_seed_offsets(int seed) const;
+
+  std::map<uint64_t, uint64_t> get_expected_extent_map() const;
 
   std::string to_string(int mask = -1) const;
 

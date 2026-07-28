@@ -74,6 +74,9 @@ std::ostream& ceph::io_exerciser::operator<<(std::ostream& os,
     case Sequence::SEQUENCE_SEQ20:
       os << "SEQUENCE_SEQ20";
       break;
+    case Sequence::SEQUENCE_SEQ21:
+      os << "SEQUENCE_SEQ21";
+      break;
     case Sequence::SEQUENCE_END:
       os << "SEQUENCE_END";
       break;
@@ -133,6 +136,8 @@ std::unique_ptr<IoSequence> IoSequence::generate_sequence(
       return std::make_unique<Seq19>(obj_size_range, seed, check_consistency);
     case Sequence::SEQUENCE_SEQ20:
       return std::make_unique<Seq20>(obj_size_range, seed, check_consistency);
+    case Sequence::SEQUENCE_SEQ21:
+      return std::make_unique<Seq21>(obj_size_range, seed, check_consistency);
     default:
       break;
   }
@@ -1227,4 +1232,100 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq20::_next() {
   donebarrier = false;
   donerecreate = false;
   return ZeroAndTruncateOp::generate(zero_offset, zero_length, truncate_size);
+}
+
+ceph::io_exerciser::Seq21::Seq21(std::pair<int, int> obj_size_range, int seed,
+                                 bool check_consistency)
+    : IoSequence(obj_size_range, seed, check_consistency),
+      stage(0),
+      barrier_pending(false) {
+  // Require at least 4 blocks so quarter/half operations are meaningful.
+  set_min_object_size(4);
+  select_random_object_size();
+  // obj_size is the protected member from IoSequence, set by select_random_object_size()
+}
+
+Sequence ceph::io_exerciser::Seq21::get_id() const {
+  return Sequence::SEQUENCE_SEQ21;
+}
+
+std::string ceph::io_exerciser::Seq21::get_name() const {
+  return "Mapext verification: write, zero (create hole), write into hole, "
+         "truncate — verifying mapext after each stage";
+}
+
+std::unique_ptr<ceph::io_exerciser::IoOp>
+ceph::io_exerciser::Seq21::_next() {
+  // Each logical stage emits a BarrierOp on the first call (via barrier_pending),
+  // then the actual op on the subsequent call, ensuring writes are visible before
+  // the following MapextOp checks the extent map.
+
+  if (barrier_pending) {
+    barrier_pending = false;
+    return BarrierOp::generate();
+  }
+
+  switch (stage) {
+    case 0:
+      // Full write of the whole object.
+      stage = 1;
+      barrier_pending = true;
+      return SingleWriteOp::generate(0, obj_size);
+
+    case 1:
+      // First mapext: expect the full object to be allocated.
+      stage = 2;
+      barrier_pending = true;
+      return MapextOp::generate(0, obj_size);
+
+    case 2: {
+      // Zero the middle half of the object (block-aligned).
+      // offset = obj_size/4, length = obj_size/2
+      // Both are block-multiples, so 4K-aligned when block_size=4096.
+      uint64_t zero_off = obj_size / 4;
+      uint64_t zero_len = obj_size / 2;
+      stage = 3;
+      barrier_pending = true;
+      return ZeroOp::generate(zero_off, zero_len);
+    }
+
+    case 3:
+      // Second mapext: expect two allocated extents with a hole in the middle.
+      stage = 4;
+      barrier_pending = true;
+      return MapextOp::generate(0, obj_size);
+
+    case 4: {
+      // Write back into the first half of the zeroed region.
+      uint64_t write_off = obj_size / 4;
+      uint64_t write_len = obj_size / 4;
+      stage = 5;
+      barrier_pending = true;
+      return SingleWriteOp::generate(write_off, write_len);
+    }
+
+    case 5:
+      // Third mapext: zeroed tail quarter is still a hole.
+      stage = 6;
+      barrier_pending = true;
+      return MapextOp::generate(0, obj_size);
+
+    case 6:
+      // Truncate to half the object size.
+      stage = 7;
+      barrier_pending = true;
+      return TruncateOp::generate(obj_size / 2);
+
+    case 7:
+      // Fourth mapext: query only [0, obj_size/2).
+      stage = 8;
+      barrier_pending = true;
+      return MapextOp::generate(0, obj_size / 2);
+
+    case 8:
+    default:
+      done = true;
+      remove = true;
+      return BarrierOp::generate();
+  }
 }
