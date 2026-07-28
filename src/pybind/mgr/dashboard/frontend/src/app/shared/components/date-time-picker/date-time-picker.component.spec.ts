@@ -39,6 +39,23 @@ describe('DateTimePickerComponent', () => {
     expect(component.control.value).toBe('2022-02-22 00:00:00');
   }));
 
+  it('should update control value if datetime is in the past', fakeAsync(() => {
+    component.control = new FormControl('2022-02-20 15:30:00');
+    fixture.detectChanges();
+    tick();
+    expect(component.control.value).toBe('2022-02-22 00:00:00');
+  }));
+
+  it('should keep past datetime when disabled', fakeAsync(() => {
+    component.control = new FormControl('2022-02-20 15:30:00');
+    component.disabled = true;
+    fixture.detectChanges();
+    tick();
+    expect(component.control.value).toBe('2022-02-20 15:30:00');
+    expect(component.time).toBe('03:30');
+    expect(component.ampm).toBe('PM');
+  }));
+
   it('should init with only date enabled', () => {
     component.control = new FormControl();
     component.hasTime = false;
