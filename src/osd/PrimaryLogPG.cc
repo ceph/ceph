@@ -14239,7 +14239,7 @@ uint64_t PrimaryLogPG::recover_backfill(
 	  spg_t(info.pgid.pgid, bt.shard),
 	  pbi.end, hobject_t());
 
-	if (cct->_conf->osd_op_queue == "mclock_scheduler") {
+	if (op_queue_type_uses_qos_cost(cct->_conf->osd_op_queue)) {
 	  /* This guard preserves legacy WeightedPriorityQueue behavior for
 	   * now, but should be removed after Reef */
 	  m->set_priority(recovery_state.get_recovery_op_priority());
@@ -14425,7 +14425,7 @@ uint64_t PrimaryLogPG::recover_backfill(
       m = reqs[peer] = new MOSDPGBackfillRemove(
 	spg_t(info.pgid.pgid, peer.shard),
 	get_osdmap_epoch());
-      if (cct->_conf->osd_op_queue == "mclock_scheduler") {
+      if (op_queue_type_uses_qos_cost(cct->_conf->osd_op_queue)) {
 	/* This guard preserves legacy WeightedPriorityQueue behavior for
 	   * now, but should be removed after Reef */
 	m->set_priority(recovery_state.get_recovery_op_priority());
@@ -14515,7 +14515,7 @@ uint64_t PrimaryLogPG::recover_backfill(
       m->last_backfill = pinfo.last_backfill;
       m->stats = pinfo.stats;
 
-      if (cct->_conf->osd_op_queue == "mclock_scheduler") {
+      if (op_queue_type_uses_qos_cost(cct->_conf->osd_op_queue)) {
 	/* This guard preserves legacy WeightedPriorityQueue behavior for
 	 * now, but should be removed after Reef */
 	m->set_priority(recovery_state.get_recovery_op_priority());
