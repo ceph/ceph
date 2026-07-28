@@ -2261,11 +2261,13 @@ std::ostream &operator<<(std::ostream &out, const delta_info_t &delta);
 struct journal_tail_delta_t {
   journal_seq_t alloc_tail;
   journal_seq_t dirty_tail;
+  journal_seq_t log_tail;
 
   DENC(journal_tail_delta_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.alloc_tail, p);
     denc(v.dirty_tail, p);
+    denc(v.log_tail, p);
     DENC_FINISH(p);
   }
 };
@@ -2636,6 +2638,7 @@ struct lognode_delta_t {
   enum class op_t : uint_fast8_t {
     INSERT,
     DELETE,
+    FLUSH,
   } op;
   bufferlist buffer;
   ghobject_t oid;
@@ -2689,6 +2692,7 @@ struct segment_header_t {
 
   journal_seq_t dirty_tail;
   journal_seq_t alloc_tail;
+  journal_seq_t log_tail;
   segment_nonce_t segment_nonce;
 
   segment_type_t type;
@@ -2707,6 +2711,7 @@ struct segment_header_t {
     denc(v.physical_segment_id, p);
     denc(v.dirty_tail, p);
     denc(v.alloc_tail, p);
+    denc(v.log_tail, p);
     denc(v.segment_nonce, p);
     denc(v.type, p);
     denc(v.category, p);
@@ -2753,6 +2758,7 @@ enum class transaction_type_t : uint8_t {
   CLEANER_COLD,
   PROMOTE,
   DEMOTE,
+  TRIM_LOG,
   MAX
 };
 
@@ -2786,7 +2792,8 @@ constexpr bool is_rewrite_transaction(transaction_type_t type) {
 
 constexpr bool is_trim_transaction(transaction_type_t type) {
   return (type == transaction_type_t::TRIM_DIRTY ||
-      type == transaction_type_t::TRIM_ALLOC);
+      type == transaction_type_t::TRIM_ALLOC ||
+      type == transaction_type_t::TRIM_LOG);
 }
 
 constexpr bool is_modify_transaction(transaction_type_t type) {

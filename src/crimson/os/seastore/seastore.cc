@@ -3411,6 +3411,11 @@ void SeaStore::Shard::init_managers()
       *transaction_manager);
   onode_manager = std::make_unique<crimson::os::seastore::onode::FLTreeOnodeManager>(
       *transaction_manager, *collection_manager);
+  transaction_manager->get_epm()->set_post_trim_callback(
+    [this] (journal_seq_t target) {
+      return handle_log_flush(target);
+    }
+  );
 }
 
 double SeaStore::Shard::reset_report_interval() const
@@ -4000,6 +4005,109 @@ SeaStore::Shard::omaptree_rm_key(
   } else {
     return run(BtreeOMapManager(*transaction_manager));
   }
+}
+
+base_iertr::future<>
+SeaStore::Shard::pgoid_do_handle_log_flush(
+  Transaction& t, const ghobject_t oid)
+{
+  LOG_PREFIX(SeaStoreS::pgoid_do_handle_log_flush);
+  ceph_assert(oid.is_pgmeta());
+  pg_t pgid(
+      oid.hobj.get_hash(),
+      oid.hobj.pool
+  );
+  spg_t spgid(pgid, oid.shard_id);
+  coll_t cid(spgid);
+  auto onode = co_await onode_manager->get_onode(t, cid, oid
+  ).handle_error_interruptible(
+    crimson::ct_error::enoent::handle([this, &oid, FNAME] {
+      // The PG may have been merged into another PG while the
+      // background flush was pending. In this case, the source
+      // PG's pgmeta onode has already been removed, so there
+      // is no need to flush it.
+      DEBUG("Cannot find oid:{}", oid);
+      transaction_manager->delete_lognode_delta(oid);
+      return seastar::make_ready_future<OnodeRef>(nullptr);
+    }),
+    crimson::ct_error::assert_all(
+      "Invalid error in onode_manager->get_onode"
+  ));
+  DEBUG("enter with oid:{}", oid);
+  if (!onode) {
+    DEBUG("pgmeta onode {} no longer exists, skip flush", oid);
+    co_return;
+  }
+  auto root = select_log_omap_root(*onode);
+  assert(root.get_type() == omap_type_t::LOG);
+  root.associated_oid = oid;
+  LogManager log_manager(*transaction_manager);
+  co_await log_manager.flush_logs(root, t
+  ).handle_error_interruptible(
+    crimson::ct_error::assert_all(
+      "Invalid error in log_manager.sync_log"
+    )
+  );
+  if (t.lognode_deltas.empty()) {
+    // Pending deltas may be reserved by another transaction.
+    co_return;
+  }
+  if (root.must_update()) {
+    omaptree_update_root(t, root, *onode);
+  }
+  co_await transaction_manager->submit_transaction(t);
+}
+
+base_ertr::future<> SeaStore::Shard::pgoid_log_flush(const ghobject_t oid)
+{
+  assert(store_active);
+  LOG_PREFIX(SeaStoreS::pgoid_log_flush);
+  return ::crimson::repeat([this, FNAME, oid] {
+    auto entries = transaction_manager->pending_lognode_delta_size(oid);
+    if (!entries || *entries == 0) {
+      return base_ertr::make_ready_future<
+	seastar::stop_iteration>(seastar::stop_iteration::yes);
+    }
+    DEBUG("pendings:{}", *entries);
+    return repeat_eagain([this, oid] {
+      return transaction_manager->with_transaction_intr(
+	Transaction::src_t::TRIM_LOG,
+	"trim_log",
+	CACHE_HINT_NOCACHE,
+	[this, oid](auto& t) -> base_iertr::future<>  {
+	return pgoid_do_handle_log_flush(t, oid);
+      });
+    }).safe_then([] {
+      return seastar::stop_iteration::no;
+    });
+  });
+}
+
+base_ertr::future<> SeaStore::Shard::handle_log_flush(journal_seq_t target)
+{
+  assert(store_active);
+  LOG_PREFIX(SeaStoreS::handle_log_flush);
+  return ::crimson::repeat([this, FNAME, target] {
+    auto oids =
+      transaction_manager->get_next_dirty_log_node_by_oid(
+      target);
+    DEBUG("the number of oids {} target {}", oids.size(), target);
+    if (oids.size() == 0) {
+      return base_ertr::make_ready_future<
+	seastar::stop_iteration>(seastar::stop_iteration::yes);
+    }
+    return seastar::do_with(
+      std::move(oids),
+      [this](auto& oids) {
+      return crimson::do_for_each(
+	oids,
+	[this](auto &oid) {
+	return pgoid_log_flush(oid);
+      }).safe_then([] {
+	return seastar::stop_iteration::no;
+      });
+    });
+  });
 }
 
 }
