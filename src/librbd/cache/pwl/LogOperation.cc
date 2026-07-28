@@ -148,7 +148,7 @@ void GenericWriteLogOperation::appending() {
   }
 }
 
-/* Called when the write log operation is completed in all log replicas */
+/* Called when the write log operation is completed */
 void GenericWriteLogOperation::complete(int result) {
   appending();
   Context *on_persist = nullptr;

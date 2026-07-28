@@ -25,7 +25,7 @@ enum {
   l_librbd_pwl_rd_bytes,         // bytes read
   l_librbd_pwl_rd_latency,       // average req completion latency
 
-  // Read requests completed from RWL (no misses)
+  // Read requests completed from PWL (no misses)
   l_librbd_pwl_rd_hit_req,       // read requests
   l_librbd_pwl_rd_hit_bytes,     // bytes read
   l_librbd_pwl_rd_hit_latency,   // average req completion latency
@@ -53,7 +53,7 @@ enum {
    +------------------------------+------+-------------------------------+
    | Phase                        | Name | Description                   |
    +------------------------------+------+-------------------------------+
-   | Arrive at RWL                | arr  |Arrives as a request           |
+   | Arrive at PWL                | arr  |Arrives as a request           |
    +------------------------------+------+-------------------------------+
    | Allocate resources           | all  |time spent in block guard for  |
    |                              |      |overlap sequencing occurs      |
@@ -64,8 +64,8 @@ enum {
    |                              |      |resources occurs before this   |
    |                              |      |point                          |
    +------------------------------+------+-------------------------------+
-   | Payload buffer persist and   | buf  |time spent queued for          |
-   |replicate                     |      |replication occurs before here |
+   | Payload buffer persist       | buf  |time spent queued for the      |
+   |                              |      |persist occurs before here     |
    +------------------------------+------+-------------------------------+
    | Payload buffer persist       | bufc |bufc - buf is just the persist |
    |complete                      |      |time                           |
@@ -76,8 +76,8 @@ enum {
    | Append complete              | appc |appc - app is just the time    |
    |                              |      |spent in the append operation  |
    +------------------------------+------+-------------------------------+
-   | Complete                     | cmp  |write persisted, replicated,   |
-   |                              |      |and globally visible           |
+   | Complete                     | cmp  |write persisted and globally   |
+   |                              |      |visible                        |
    +------------------------------+------+-------------------------------+
 
   */
@@ -108,10 +108,10 @@ enum {
   l_librbd_pwl_log_op_dis_to_cmp_t_hist, // Histogram of dispatch to persist completion elapsed time
 
   l_librbd_pwl_log_op_buf_to_app_t, // data buf persist + append wait time
-  l_librbd_pwl_log_op_buf_to_bufc_t,// data buf persist / replicate elapsed time
+  l_librbd_pwl_log_op_buf_to_bufc_t,// data buf persist elapsed time
   l_librbd_pwl_log_op_buf_to_bufc_t_hist,// data buf persist time vs bytes histogram
   l_librbd_pwl_log_op_app_to_cmp_t, // log entry append + completion wait time
-  l_librbd_pwl_log_op_app_to_appc_t, // log entry append / replicate elapsed time
+  l_librbd_pwl_log_op_app_to_appc_t, // log entry append elapsed time
   l_librbd_pwl_log_op_app_to_appc_t_hist, // log entry append time (vs. op bytes) histogram
 
   l_librbd_pwl_discard,

@@ -181,7 +181,7 @@ void InitRequest<I>::handle_set_feature_bit(int r) {
     shutdown_image_cache();
   }
 
-  // Register RWL dispatch
+  // Register PWL dispatch
   auto image_dispatch = new cache::WriteLogImageDispatch<I>(
     &m_image_ctx, m_image_cache, m_plugin_api);
 
