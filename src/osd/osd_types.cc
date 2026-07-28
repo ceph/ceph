@@ -7027,7 +7027,7 @@ ostream& operator<<(ostream& out, const PushReplyOp &op)
 
 uint64_t PushReplyOp::cost(CephContext *cct) const
 {
-  if (cct->_conf->osd_op_queue == "mclock_scheduler") {
+  if (op_queue_type_uses_qos_cost(cct->_conf->osd_op_queue)) {
     /* In general, we really never want to throttle PushReplyOp messages.
      * As long as the object is smaller than osd_recovery_max_chunk (8M at
      * time of writing this comment, so this is basically always true),
@@ -7120,7 +7120,7 @@ ostream& operator<<(ostream& out, const PullOp &op)
 
 uint64_t PullOp::cost(CephContext *cct) const
 {
-  if (cct->_conf->osd_op_queue == "mclock_scheduler") {
+  if (op_queue_type_uses_qos_cost(cct->_conf->osd_op_queue)) {
     return std::clamp<uint64_t>(
       recovery_progress.estimate_remaining_data_to_recover(recovery_info),
       1,
@@ -7731,6 +7731,8 @@ std::string_view get_op_queue_type_name(const op_queue_type_t &q)
       return "mclock_scheduler";
     case op_queue_type_t::PrioritizedQueue:
       return "PrioritizedQueue";
+    case op_queue_type_t::BfqScheduler:
+      return "bfq";
     default:
       return "unknown";
   }
@@ -7745,7 +7747,20 @@ std::optional<op_queue_type_t> get_op_queue_type_by_name(
     return op_queue_type_t::mClockScheduler;
   } else if (s == "PrioritizedQueue") {
     return op_queue_type_t::PrioritizedQueue;
+  } else if (s == "bfq") {
+    return op_queue_type_t::BfqScheduler;
   } else {
     return std::nullopt;
   }
+}
+
+bool op_queue_type_uses_qos_cost(const op_queue_type_t &q)
+{
+  return q == op_queue_type_t::mClockScheduler ||
+    q == op_queue_type_t::BfqScheduler;
+}
+
+bool op_queue_type_uses_qos_cost(const std::string_view &s)
+{
+  return s == "mclock_scheduler" || s == "bfq";
 }
