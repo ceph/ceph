@@ -687,9 +687,13 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 
 ceph::async::io_context_pool& rgw::AppMain::IOContextPoolHolder::get() {
   if (!pool_) {
+    auto cct = dpp_->get_cct();
+    auto ncontexts = static_cast<std::int16_t>(
+      cct->_conf.get_val<uint64_t>("rgw_io_context_count"));
     pool_.emplace(
-        dpp_->get_cct()->_conf->rgw_thread_pool_size,
-        [] { is_asio_thread = true; });
+        cct->_conf->rgw_thread_pool_size,
+        [] { is_asio_thread = true; },
+	ncontexts);
   }
   return *pool_;
 }

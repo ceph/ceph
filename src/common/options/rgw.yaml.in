@@ -1289,6 +1289,18 @@ options:
   see_also:
   - rgw_max_concurrent_requests
   with_legacy: true
+- name: rgw_io_context_count
+  type: uint
+  level: advanced
+  desc: Number of boost::asio io_context instances for the beast frontend.
+  long_desc: Each io_context has its own scheduler mutex, reducing contention
+    under high thread counts.  Threads are distributed round-robin across
+    contexts.  0 means use a single context (current default behavior).
+  default: 0
+  services:
+  - rgw
+  see_also:
+  - rgw_thread_pool_size
 - name: rgw_num_control_oids
   type: int
   level: advanced

@@ -414,7 +414,8 @@ class AsioFrontend {
   RGWProcessEnv& env;
   boost::intrusive_ptr<CephContext> cct{env.driver->ctx()};
   RGWFrontendConfig* conf;
-  boost::asio::io_context& context;
+  ceph::async::io_context_pool& context_pool;
+  boost::asio::io_context& context; /* primary, for timers and accept */
   std::string uri_prefix;
   ceph::timespan request_timeout = std::chrono::milliseconds(REQUEST_TIMEOUT);
   size_t header_limit = 16384;
@@ -465,8 +466,10 @@ class AsioFrontend {
  public:
   AsioFrontend(RGWProcessEnv& env, RGWFrontendConfig* conf,
 	       dmc::SchedulerCtx& sched_ctx,
-	       boost::asio::io_context& context)
-    : env(env), conf(conf), context(context),
+	       ceph::async::io_context_pool& context_pool)
+    : env(env), conf(conf),
+      context_pool(context_pool),
+      context(context_pool.get_primary_context()),
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
       ssl_reload_timer(context),
 #endif
@@ -1164,6 +1167,19 @@ void AsioFrontend::on_accept(Listener& l, tcp::socket stream)
   boost::system::error_code ec;
   stream.set_option(tcp::no_delay(l.use_nodelay), ec);
 
+  /* pick a round-robin io_context for this connection and migrate
+   * the accepted socket to its reactor */
+  auto& conn_ctx = context_pool.get_io_context();
+  auto protocol = stream.local_endpoint(ec).protocol();
+  auto fd = stream.release(ec);
+  tcp::socket target_socket(conn_ctx);
+  target_socket.assign(protocol, fd, ec);
+  if (ec) {
+    ldout(ctx(), 0) << "socket migration failed: " << ec.message() << dendl;
+    ::close(fd);
+    return;
+  }
+
   // spawn a coroutine to handle the connection
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
   if (l.use_ssl) {
@@ -1172,8 +1188,8 @@ void AsioFrontend::on_accept(Listener& l, tcp::socket stream)
 #else
     const auto ssl_ctx = std::atomic_load_explicit(&ssl_context, std::memory_order_acquire);
 #endif
-    boost::asio::spawn(make_strand(context), std::allocator_arg, make_stack_allocator(),
-      [this, s=std::move(stream), ssl_ctx] (boost::asio::yield_context yield) mutable {
+    boost::asio::spawn(make_strand(conn_ctx), std::allocator_arg, make_stack_allocator(),
+      [this, &conn_ctx, s=std::move(target_socket), ssl_ctx] (boost::asio::yield_context yield) mutable {
         auto conn = boost::intrusive_ptr{new Connection(std::move(s), yield.get_executor())};
         auto c = connections.add(*conn);
         // wrap the tcp stream in an ssl stream
@@ -1190,7 +1206,7 @@ void AsioFrontend::on_accept(Listener& l, tcp::socket stream)
           return;
         }
         conn->buffer.consume(bytes);
-        handle_connection(context, env, stream, timeout, header_limit,
+        handle_connection(conn_ctx, env, stream, timeout, header_limit,
                           conn->buffer, true, pause_mutex, scheduler.get(),
                           uri_prefix, ec, yield);
 
@@ -1207,13 +1223,13 @@ void AsioFrontend::on_accept(Listener& l, tcp::socket stream)
 #else
   {
 #endif // WITH_RADOSGW_BEAST_OPENSSL
-    boost::asio::spawn(make_strand(context), std::allocator_arg, make_stack_allocator(),
-      [this, s=std::move(stream)] (boost::asio::yield_context yield) mutable {
+    boost::asio::spawn(make_strand(conn_ctx), std::allocator_arg, make_stack_allocator(),
+      [this, &conn_ctx, s=std::move(target_socket)] (boost::asio::yield_context yield) mutable {
         auto conn = boost::intrusive_ptr{new Connection(std::move(s), yield.get_executor())};
         auto c = connections.add(*conn);
         auto timeout = timeout_timer{yield.get_executor(), request_timeout, conn};
         boost::system::error_code ec;
-        handle_connection(context, env, conn->socket, timeout, header_limit,
+        handle_connection(conn_ctx, env, conn->socket, timeout, header_limit,
                           conn->buffer, false, pause_mutex, scheduler.get(),
                           uri_prefix, ec, yield);
         conn->socket.shutdown(tcp::socket::shutdown_both, ec);
@@ -1317,15 +1333,15 @@ class RGWAsioFrontend::Impl : public AsioFrontend {
  public:
   Impl(RGWProcessEnv& env, RGWFrontendConfig* conf,
        rgw::dmclock::SchedulerCtx& sched_ctx,
-       boost::asio::io_context& context)
-    : AsioFrontend(env, conf, sched_ctx, context) {}
+       ceph::async::io_context_pool& context_pool)
+    : AsioFrontend(env, conf, sched_ctx, context_pool) {}
 };
 
 RGWAsioFrontend::RGWAsioFrontend(RGWProcessEnv& env,
                                  RGWFrontendConfig* conf,
 				 rgw::dmclock::SchedulerCtx& sched_ctx,
-				 boost::asio::io_context& context)
-  : impl(new Impl(env, conf, sched_ctx, context))
+				 ceph::async::io_context_pool& context_pool)
+  : impl(new Impl(env, conf, sched_ctx, context_pool))
 {
 }
 
