@@ -2070,6 +2070,13 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
       osd->handle_misdirected_op(this, op);
       return;
     }
+    // some requests such as watch/notify/notify_ack can only be handled by the primary,
+    // fail these with EAGAIN to get the client to retry against the primary.
+    if (!is_primary() && op->is_primary_only()) {
+      dout(10) << __func__ << " op must be processed by primary, returning EAGAIN" << dendl;
+      osd->reply_op_error(op, -EAGAIN);
+      return;
+    }
   } else {
     // normal case; must be primary
     if (!is_primary()) {

@@ -3167,6 +3167,23 @@ public:
     return tid;
   }
 
+  ceph_tid_t read_primary(
+    const object_t& oid, const object_locator_t& oloc,
+    ObjectOperation& op,
+    snapid_t snapid, ceph::buffer::list *pbl, int flags,
+    Context *onack, version_t *objver = NULL,
+    int *data_offset = NULL,
+    uint64_t features = 0) {
+    int mask = ~(CEPH_OSD_FLAG_BALANCE_READS | CEPH_OSD_FLAG_LOCALIZE_READS);
+    Op *o = prepare_read_op(oid, oloc, op, snapid, pbl, flags, mask, onack,
+                            objver, data_offset);
+    if (features)
+      o->features = features;
+    ceph_tid_t tid;
+    op_submit(o, &tid);
+    return tid;
+  }
+
   void read(const object_t& oid, const object_locator_t& oloc,
 	    ObjectOperation&& op, snapid_t snapid, ceph::buffer::list *pbl,
 	    int flags, Op::OpComp onack,
@@ -3174,6 +3191,32 @@ public:
 	    uint64_t features = 0, ZTracer::Trace *parent_trace = nullptr,
 	    uint64_t subsystem = 0) {
     Op *o = new Op(oid, oloc, std::move(op.ops), get_read_flags(flags),
+		   std::move(onack), objver,
+		   data_offset, parent_trace, subsystem);
+    o->priority = op.priority;
+    o->snapid = snapid;
+    o->outbl = pbl;
+    // XXX
+    if (!o->outbl && op.size() == 1 && op.out_bl[0] && op.out_bl[0]->length()) {
+      o->outbl = op.out_bl[0];
+    }
+    o->out_bl.swap(op.out_bl);
+    o->out_handler.swap(op.out_handler);
+    o->out_rval.swap(op.out_rval);
+    o->out_ec.swap(op.out_ec);
+    if (features)
+      o->features = features;
+    op.clear();
+    op_submit(o);
+  }
+  void read_primary(const object_t& oid, const object_locator_t& oloc,
+	    ObjectOperation&& op, snapid_t snapid, ceph::buffer::list *pbl,
+	    int flags, Op::OpComp onack,
+	    version_t *objver = nullptr, int *data_offset = nullptr,
+	    uint64_t features = 0, ZTracer::Trace *parent_trace = nullptr,
+	    uint64_t subsystem = 0) {
+    int mask = ~(CEPH_OSD_FLAG_BALANCE_READS | CEPH_OSD_FLAG_LOCALIZE_READS);
+    Op *o = new Op(oid, oloc, std::move(op.ops), get_read_flags(flags) & mask,
 		   std::move(onack), objver,
 		   data_offset, parent_trace, subsystem);
     o->priority = op.priority;

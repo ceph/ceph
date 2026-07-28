@@ -865,7 +865,10 @@ auto Objecter::linger_register(const object_t& oid,
   info->target.base_oloc = oloc;
   if (info->target.base_oloc.key == oid)
     info->target.base_oloc.key.clear();
-  info->target.flags = flags;
+  // linger ops (watch, notify, notify_ack) must be handled by the primary;
+  // strip any replica-read flags so Objecter does not route them to a replica.
+  info->target.flags = flags &
+                       ~(CEPH_OSD_FLAG_BALANCE_READS | CEPH_OSD_FLAG_LOCALIZE_READS);
   info->watch_valid_thru = ceph::coarse_mono_clock::now();
   ldout(cct, 10) << __func__ << " info " << info
 		 << " linger_id " << info->linger_id

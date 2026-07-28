@@ -1630,7 +1630,8 @@ void RADOS::notify_ack_(Object o, IOContext _ioc,
   ObjectOperation op;
   op.notify_ack(notify_id, cookie, bl);
 
-  impl->objecter->read(*oid, ioc->oloc, std::move(op), ioc->snap_seq,
+  // notify_ack must go to the primary OSD
+  impl->objecter->read_primary(*oid, ioc->oloc, std::move(op), ioc->snap_seq,
 		       nullptr, ioc->extra_op_flags, std::move(c));
 }
 
