@@ -12284,6 +12284,31 @@ void BlueStore::inject_bluefs_file(std::string_view dir, std::string_view name, 
   bluefs->close_writer(p_handle);
 }
 
+// Applies selected reshard scheme.
+// The function modifies onode and writes it directly to db
+// without sequencer; requires prior operations to onodes be
+// fully committed to db.
+void BlueStore::debug_force_reshard(
+  coll_t cid, ghobject_t oid,
+  BlueStore::ExtentMap::ReshardPlan& rp)
+{
+  OnodeRef o;
+  CollectionRef c = _get_collection(cid);
+  ceph_assert(c);
+  {
+    std::unique_lock l{ c->lock }; // just to avoid internal asserts
+    o = c->get_onode(oid, false);
+    ceph_assert(o);
+    o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
+  }
+  KeyValueDB::Transaction txn;
+  txn = db->get_transaction();
+  o->extent_map.request_reshard(0, OBJECT_MAX_SIZE);
+  o->extent_map.reshard_action(rp, db, txn);
+  _record_onode(o, txn);
+  db->submit_transaction_sync(txn);
+}
+
 int BlueStore::compact()
 {
   int r = 0;
