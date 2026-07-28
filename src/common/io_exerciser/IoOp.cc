@@ -34,6 +34,7 @@ using SingleFailedWriteTruncateOp = ceph::io_exerciser::SingleFailedWriteTruncat
 using DoubleFailedWriteTruncateOp = ceph::io_exerciser::DoubleFailedWriteTruncateOp;
 using ZeroOp = ceph::io_exerciser::ZeroOp;
 using DoubleZeroOp = ceph::io_exerciser::DoubleZeroOp;
+using MapextOp = ceph::io_exerciser::MapextOp;
 using WriteAndZeroOp = ceph::io_exerciser::WriteAndZeroOp;
 using ZeroAndTruncateOp = ceph::io_exerciser::ZeroAndTruncateOp;
 
@@ -196,6 +197,8 @@ std::string ceph::io_exerciser::ReadWriteOp<opType, numIOs>::to_string(
       [[fallthrough]];
     case OpType::Zero2:
       return fmt::format("Zero{} ({})", numIOs, offset_length_desc);
+    case OpType::Mapext:
+      return fmt::format("Mapext ({})", offset_length_desc);
     default:
       ceph_abort_msg(
           fmt::format("Unsupported op type by ReadWriteOp ({})", opType));
@@ -386,6 +389,13 @@ ZeroOp::ZeroOp(uint64_t offset, uint64_t length)
 
 std::unique_ptr<ZeroOp> ZeroOp::generate(uint64_t offset, uint64_t length) {
   return std::make_unique<ZeroOp>(offset, length);
+}
+
+MapextOp::MapextOp(uint64_t offset, uint64_t length)
+    : ReadWriteOp<OpType::Mapext, 1>({offset}, {length}) {}
+
+std::unique_ptr<MapextOp> MapextOp::generate(uint64_t offset, uint64_t length) {
+  return std::make_unique<MapextOp>(offset, length);
 }
 
 DoubleZeroOp::DoubleZeroOp(uint64_t offset1, uint64_t length1,

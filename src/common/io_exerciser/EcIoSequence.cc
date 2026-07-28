@@ -67,6 +67,8 @@ std::unique_ptr<IoSequence> EcIoSequence::generate_sequence(
       return std::make_unique<Seq10>(obj_size_range, seed, km, mappinglayers, check_consistency);
     case Sequence::SEQUENCE_SEQ19:
       return std::make_unique<Seq19>(obj_size_range, seed, km, mappinglayers, check_consistency);
+    case Sequence::SEQUENCE_SEQ24:
+      return std::make_unique<Seq24>(obj_size_range, seed, check_consistency);
     default:
       ceph_abort_msg("Unrecognised sequence");
   }
