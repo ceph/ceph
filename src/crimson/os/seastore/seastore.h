@@ -50,6 +50,9 @@ enum class op_type_t : uint8_t {
 
 enum class txn_stage_t : uint8_t {
     THROTTLER_WAIT = 0, // waiting for a throttler slot
+    // Per-batch: time from first txn arriving while this collection is
+    // already in-flight until that next batch starts. Outside BUILD.
+    COLLECTION_BUSY,
     BUILD,             // building the transaction (_do_transaction_step loop)
     BUILD_GET_ONODE,   // onode_manager get/get_or_create calls within BUILD
     // Sub-phases of BUILD within _write:
@@ -80,6 +83,9 @@ public:
   };
   std::deque<batch_entry_t> pending_txns;
   bool collection_in_flight = false;
+  // Set when the first txn arrives while collection_in_flight; cleared
+  // (and sampled) when the next batch starts. See COLLECTION_BUSY.
+  std::optional<seastar::lowres_clock::time_point> blocked_since;
 };
 
 /**
@@ -289,7 +295,10 @@ public:
     ceph::os::Transaction build_next_batch(
       SeastoreCollection& coll,
       std::vector<seastar::promise<>>& pending_txns_promises);
-    seastar::future<> run_one_batch(CollectionRef ch, ceph::os::Transaction&& t);
+    seastar::future<> run_one_batch(
+      CollectionRef ch,
+      ceph::os::Transaction&& t,
+      seastar::lowres_clock::duration collection_busy);
 
     TransactionManager::read_extent_iertr::future<std::optional<unsigned>>
     get_coll_bits(CollectionRef ch, Transaction &t) const;
