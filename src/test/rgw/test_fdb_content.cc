@@ -76,6 +76,9 @@ std::string materialized_key(const content::compiled_key& key)
 
 TEST_CASE("content keys compile string segments", "[fdb][content]")
 {
+ STATIC_REQUIRE(7 == content::keyspace("tenant").size());
+ STATIC_REQUIRE(21 == content::key("tenant", "bucket", "object").size());
+
  const auto key = content::keyspace("tenant") / "bucket" / "object";
  const auto expected = std::string("tenant\0bucket\0object\0", 21);
 
@@ -85,6 +88,9 @@ TEST_CASE("content keys compile string segments", "[fdb][content]")
 
 TEST_CASE("content key function composition matches operator composition", "[fdb][content]")
 {
+ STATIC_REQUIRE(content::key("tenant", "bucket") ==
+                (content::keyspace("tenant") / "bucket"));
+
  const auto via_operator = content::keyspace("tenant") / "bucket" / "object";
  const auto via_function = content::key("tenant", "bucket", "object");
 
@@ -128,6 +134,8 @@ TEST_CASE("content key assembly constrains only the root segment",
 
 TEST_CASE("content key string segments escape embedded nulls", "[fdb][content]")
 {
+ STATIC_REQUIRE(5 == content::detail::encoded_string_segment_size("a\0b"sv));
+
  constexpr char segment_bytes[] = { 'a', '\0', 'b' };
  const auto key = content::keyspace(std::string_view(segment_bytes, sizeof(segment_bytes)));
  const auto expected = std::string("a\0\xFF""b\0", 5);
@@ -135,8 +143,7 @@ TEST_CASE("content key string segments escape embedded nulls", "[fdb][content]")
  CHECK_THAT(materialized_key(key), Catch::Matchers::RangeEquals(expected));
 }
 
-TEST_CASE("content key string segments may grow past the lower-bound reserve",
-          "[fdb][content]")
+TEST_CASE("content key string segments escape multiple embedded nulls", "[fdb][content]")
 {
  constexpr char segment_bytes[] = { 'a', '\0', 'b', '\0', 'c' };
  const auto segment = std::string_view(segment_bytes, sizeof(segment_bytes));
