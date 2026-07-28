@@ -5583,10 +5583,26 @@ namespace {
     COMPRESSION_MAX_BLOB_SIZE, COMPRESSION_MIN_BLOB_SIZE,
     CSUM_TYPE, CSUM_MAX_BLOCK, CSUM_MIN_BLOCK, FINGERPRINT_ALGORITHM,
     PG_AUTOSCALE_MODE, PG_NUM_MIN, TARGET_SIZE_BYTES, TARGET_SIZE_RATIO,
-    PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM, 
+    PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM,
     DEDUP_CDC_CHUNK_SIZE, POOL_EIO, BULK, PG_NUM_MAX, READ_RATIO,
     EC_OPTIMIZATIONS, EC_DATA_SHARD_COUNT, EC_CODING_SHARD_COUNT,
-    SUPPORTS_OMAP };
+    SUPPORTS_OMAP, EFFECTIVE_RATIO, PLANNED_PG_NUM, PG_AUTOSCALE_PLAN };
+
+  // the simple-autoscaling plan state is derived, never stored: 'learn'
+  // until a pool has an effective_ratio, 'pending' while a stamped plan
+  // differs from pg_num, 'current' once they agree
+  std::string pool_pg_autoscale_plan(const pg_pool_t& p)
+  {
+    if (!p.opts.is_set(pool_opts_t::EFFECTIVE_RATIO)) {
+      return "learn";
+    }
+    int64_t planned = 0;
+    p.opts.get(pool_opts_t::PLANNED_PG_NUM, &planned);
+    if (planned > 0 && planned != (int64_t)p.get_pg_num_target()) {
+      return "pending";
+    }
+    return "current";
+  }
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -6324,6 +6340,115 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       }
     }
     r = 0;
+  } else if ((prefix == "osd pool create" || prefix == "osd pool set") &&
+	     cmd_getval_or<bool>(cmdmap, "dry_run", false)) {
+    // --dry-run: report what effective_ratio would plan and the
+    // pg_num it implies, without changing anything
+    double frac = 0.0;
+    unsigned size = 0;
+    uint32_t num_osds = 0;
+    bool scoped = false;  // whether num_osds reflects the pool's CRUSH rule
+    auto count_rule_osds = [&](int rule_id) -> uint32_t {
+      set<int> roots;
+      osdmap.crush->find_takes_by_rule(rule_id, &roots);
+      set<int> rule_osds;
+      for (auto root : roots) {
+	set<int> leaves;
+	osdmap.crush->get_leaves(osdmap.crush->get_item_name(root), &leaves);
+	rule_osds.insert(leaves.begin(), leaves.end());
+      }
+      return rule_osds.size();
+    };
+    if (prefix == "osd pool set") {
+      string var, val;
+      cmd_getval(cmdmap, "var", var);
+      cmd_getval(cmdmap, "val", val);
+      if (var != "effective_ratio") {
+	ss << "--dry-run is only supported for effective_ratio";
+	r = -EINVAL;
+	goto reply;
+      }
+      string poolstr;
+      cmd_getval(cmdmap, "pool", poolstr);
+      int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr.c_str());
+      if (pool_id < 0) {
+	ss << "unrecognized pool '" << poolstr << "'";
+	r = -ENOENT;
+	goto reply;
+      }
+      string floaterr;
+      frac = strict_strtod(val.c_str(), &floaterr);
+      if (floaterr.length()) {
+	ss << "error parsing float value '" << val << "': " << floaterr;
+	r = -EINVAL;
+	goto reply;
+      }
+      const pg_pool_t *pp = osdmap.get_pg_pool(pool_id);
+      size = pp->get_size();
+      num_osds = count_rule_osds(pp->get_crush_rule());
+      scoped = true;
+    } else {
+      if (!cmd_getval(cmdmap, "effective_ratio", frac)) {
+	ss << "--dry-run requires --effective-ratio";
+	r = -EINVAL;
+	goto reply;
+      }
+      // read-only estimate: size comes from the erasure profile (k+m) or
+      // the replicated default; the OSD count is scoped to the named CRUSH
+      // rule if it already exists, else it covers the whole map
+      string profile;
+      cmd_getval(cmdmap, "erasure_code_profile", profile);
+      if (profile.length() && osdmap.has_erasure_code_profile(profile)) {
+	auto& ecp = osdmap.get_erasure_code_profile(profile);
+	auto k = ecp.find("k");
+	auto m = ecp.find("m");
+	if (k != ecp.end() && m != ecp.end()) {
+	  size = atoi(k->second.c_str()) + atoi(m->second.c_str());
+	}
+      } else {
+	int64_t repl_size = 0;
+	cmd_getval(cmdmap, "size", repl_size);
+	size = repl_size ? repl_size :
+	  g_conf().get_val<uint64_t>("osd_pool_default_size");
+      }
+      string rule_name;
+      cmd_getval(cmdmap, "rule", rule_name);
+      int rule_id = rule_name.empty() ? -ENOENT :
+	osdmap.crush->get_rule_id(rule_name);
+      if (rule_id >= 0) {
+	num_osds = count_rule_osds(rule_id);
+	scoped = true;
+      } else {
+	num_osds = osdmap.get_num_osds();
+      }
+    }
+    if (frac < 0.0 || frac > 1.0) {
+      ss << "effective_ratio must be between 0.0 and 1.0";
+      r = -ERANGE;
+      goto reply;
+    }
+    {
+      uint64_t target = g_conf().get_val<uint64_t>("mon_target_pg_per_osd");
+      uint64_t reserve = std::lround(frac * target);
+      ss << "dry run: effective_ratio " << frac << " is " << reserve
+	 << " PG replicas per OSD (of mon_target_pg_per_osd " << target << ")";
+      if (size && num_osds) {
+	uint64_t ideal = reserve * num_osds / size;
+	uint64_t lo = 1;
+	while (lo * 2 <= std::max<uint64_t>(ideal, 1)) {
+	  lo *= 2;
+	}
+	uint64_t quant = (ideal - lo <= lo * 2 - ideal) ? lo : lo * 2;
+	ss << "; across " << num_osds
+	   << (scoped ? " OSDs under the pool's CRUSH rule" : " OSDs")
+	   << " at pool size " << size << " the ideal pg_num is " << ideal
+	   << ", quantizing to " << quant
+	   << ". The realized pg_num is chosen by the pg_autoscaler subject"
+	   << " to budget fit, overlap proration, pg_num_min/max and the"
+	   << " per-pool minimum; see 'ceph osd pool autoscale-status'";
+      }
+      r = 0;
+    }
   } else if (prefix == "osd pool get") {
     string poolstr;
     cmd_getval(cmdmap, "pool", poolstr);
@@ -6382,10 +6507,13 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"csum_min_block", CSUM_MIN_BLOCK},
       {"fingerprint_algorithm", FINGERPRINT_ALGORITHM},
       {"pg_autoscale_mode", PG_AUTOSCALE_MODE},
+      {"pg_autoscale_plan", PG_AUTOSCALE_PLAN},
       {"pg_num_min", PG_NUM_MIN},
       {"pg_num_max", PG_NUM_MAX},
       {"target_size_bytes", TARGET_SIZE_BYTES},
       {"target_size_ratio", TARGET_SIZE_RATIO},
+      {"effective_ratio", EFFECTIVE_RATIO},
+      {"planned_pg_num", PLANNED_PG_NUM},
       {"pg_autoscale_bias", PG_AUTOSCALE_BIAS},
       {"dedup_tier", DEDUP_TIER},
       {"dedup_chunk_algorithm", DEDUP_CHUNK_ALGORITHM},
@@ -6437,6 +6565,10 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
         selected_choices = subtract_second_from_first(selected_choices,
 						      ONLY_REPLICA_CHOICES);
       }
+      if (!osdmap.test_flag(CEPH_OSDMAP_SIMPLEAUTOSCALE)) {
+	selected_choices = subtract_second_from_first(selected_choices,
+						      {PG_AUTOSCALE_PLAN});
+      }
     } else /* var != "all" */  {
       choices_map_t::const_iterator found = ALL_CHOICES.find(var);
       if (found == ALL_CHOICES.end()) {
@@ -6447,6 +6579,14 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       }
 
       osd_pool_get_choices selected = found->second;
+
+      if (selected == PG_AUTOSCALE_PLAN &&
+	  !osdmap.test_flag(CEPH_OSDMAP_SIMPLEAUTOSCALE)) {
+	ss << "simple autoscaling is not enabled (the simpleautoscale flag "
+	   << "is not set)";
+	r = -EINVAL;
+	goto reply;
+      }
 
       if (!p->is_tier() &&
 	  ONLY_TIER_CHOICES.find(selected) != ONLY_TIER_CHOICES.end()) {
@@ -6526,6 +6666,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    f->dump_string("pg_autoscale_mode",
 			   pg_pool_t::get_pg_autoscale_mode_name(
 			     p->pg_autoscale_mode));
+	    break;
+	  case PG_AUTOSCALE_PLAN:
+	    f->dump_string("pg_autoscale_plan", pool_pg_autoscale_plan(*p));
 	    break;
 	  case HASHPSPOOL:
 	  case POOL_EIO:
@@ -6643,6 +6786,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case DEDUP_CHUNK_ALGORITHM:
 	  case DEDUP_CDC_CHUNK_SIZE:
           case READ_RATIO:
+	  case EFFECTIVE_RATIO:
+	  case PLANNED_PG_NUM:
 	    {
 	      pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
 	      if (p->opts.is_set(key)) {
@@ -6703,6 +6848,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case PG_AUTOSCALE_MODE:
 	    ss << "pg_autoscale_mode: " << pg_pool_t::get_pg_autoscale_mode_name(
 	      p->pg_autoscale_mode) <<"\n";
+	    break;
+	  case PG_AUTOSCALE_PLAN:
+	    ss << "pg_autoscale_plan: " << pool_pg_autoscale_plan(*p) << "\n";
 	    break;
 	  case HIT_SET_PERIOD:
 	    ss << "hit_set_period: " << p->hit_set_period << "\n";
@@ -6824,6 +6972,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case DEDUP_CHUNK_ALGORITHM:
 	  case DEDUP_CDC_CHUNK_SIZE:
           case READ_RATIO:
+	  case EFFECTIVE_RATIO:
+	  case PLANNED_PG_NUM:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
 		break;
@@ -7631,7 +7781,7 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
   bool force_create = false;
   int ret = 0;
   ret = prepare_new_pool(m->name, m->crush_rule, rule_name,
-			 0, 0, 0, 0, 0, 0, 0.0,
+			 0, 0, 0, 0, 0, 0, 0.0, 0.0,
 			 erasure_code_profile,
 			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, {}, bulk,
 			 cct->_conf.get_val<bool>("osd_pool_default_crimson"),
@@ -8272,6 +8422,8 @@ int OSDMonitor::check_pg_num(int64_t pool,
  * @param pg_num_min min pg_num
  * @param pg_num_max max pg_num
  * @param repl_size Replication factor, or 0 for default
+ * @param effective_ratio Share (0,1] of the PG budget for simple-mode
+ *        provisioning, or 0 for none
  * @param erasure_code_profile The profile name in OSDMap to be used for erasure code
  * @param pool_type TYPE_ERASURE, or TYPE_REP
  * @param expected_num_objects expected number of objects on the pool
@@ -8292,6 +8444,7 @@ int OSDMonitor::prepare_new_pool(string& name,
                                  const uint64_t repl_size,
 				 const uint64_t target_size_bytes,
 				 const float target_size_ratio,
+				 const double effective_ratio,
 				 const string &erasure_code_profile,
                                  const unsigned pool_type,
                                  const uint64_t expected_num_objects,
@@ -8308,10 +8461,10 @@ int OSDMonitor::prepare_new_pool(string& name,
     // "off"
     pg_autoscale_mode = "off";
   }
-
   if (name.length() == 0)
     return -EINVAL;
 
+  const bool pg_num_specified = pg_num != 0;
   if (pg_num == 0) {
     pg_num = g_conf().get_val<uint64_t>("osd_pool_default_pg_num");
   }
@@ -8350,6 +8503,18 @@ int OSDMonitor::prepare_new_pool(string& name,
     *ss << "'fast_read' can only apply to erasure coding pool";
     return -EINVAL;
   }
+  if (effective_ratio > 0.0 &&
+      (target_size_ratio > 0.0 || target_size_bytes > 0)) {
+    *ss << "'effective_ratio' cannot be combined with 'target_size_ratio' "
+	<< "or 'target_size_bytes'";
+    return -EINVAL;
+  }
+  if (effective_ratio > 0.0 &&
+      osdmap.require_osd_release < ceph_release_t::umbrella) {
+    *ss << "must set require_osd_release to umbrella or later before "
+	<< "declaring an effective_ratio";
+    return -EINVAL;
+  }
   int r;
   r = prepare_pool_crush_rule(pool_type, erasure_code_profile,
 				 crush_rule_name, &crush_rule, ss);
@@ -8363,6 +8528,30 @@ int OSDMonitor::prepare_new_pool(string& name,
   if (r) {
     dout(10) << "prepare_pool_size returns " << r << dendl;
     return r;
+  }
+  if (effective_ratio > 0.0 && !pg_num_specified &&
+      osdmap.test_flag(CEPH_OSDMAP_SIMPLEAUTOSCALE)) {
+    // under the simpleautoscale flag a pool born with an effective_ratio
+    // starts at its planned pg_num (pg_autoscale_plan 'current'), so a
+    // greenfield create needs no acceptance round-trip; without the flag
+    // the ratio is stored but inert (pre-staged for a later transition)
+    uint64_t pg_target = g_conf().get_val<uint64_t>("mon_target_pg_per_osd");
+    uint64_t replicas = std::lround(
+      effective_ratio * pg_target * get_osd_num_by_crush(crush_rule));
+    uint64_t ideal = size ? replicas / size : 0;
+    uint64_t q = 1;
+    while (q * 2 <= std::max<uint64_t>(ideal, 1)) {
+      q *= 2;
+    }
+    if (ideal > q && ideal - q > q * 2 - ideal) {
+      q *= 2;
+    }
+    if (q > g_conf().get_val<uint64_t>("mon_max_pool_pg_num")) {
+      *ss << "effective_ratio " << effective_ratio << " implies pg_num " << q
+	  << " which exceeds mon_max_pool_pg_num";
+      return -ERANGE;
+    }
+    pg_num = pgp_num = q;
   }
   if (g_conf()->mon_osd_crush_smoke_test) {
     CrushWrapper newcrush = _get_pending_crush();
@@ -8537,6 +8726,9 @@ int OSDMonitor::prepare_new_pool(string& name,
       osdmap.require_osd_release >= ceph_release_t::nautilus) {
     // only store for nautilus+, just to be consistent and tidy.
     pi->opts.set(pool_opts_t::TARGET_SIZE_RATIO, target_size_ratio);
+  }
+  if (effective_ratio > 0.0) {
+    pi->opts.set(pool_opts_t::EFFECTIVE_RATIO, effective_ratio);
   }
 
   pi->cache_target_dirty_ratio_micro =
@@ -9115,6 +9307,11 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     uint64_t flag = pg_pool_t::get_flag_by_name(var);
     // make sure we only compare against 'n' if we didn't receive a string
     if (val == "true" || (interr.empty() && n == 1)) {
+      if (var == "bulk" && osdmap.test_flag(CEPH_OSDMAP_SIMPLEAUTOSCALE)) {
+	ss << "bulk is a legacy autoscaler knob; not applicable while the "
+	   << "simpleautoscale flag is set";
+	return -EINVAL;
+      }
       p.set_flag(flag);
     } else if (val == "false" || (interr.empty() && n == 0)) {
       p.unset_flag(flag);
@@ -9443,9 +9640,46 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
            << "later before setting target_size_bytes";
         return -EINVAL;
       }
+      if (n > 0 && osdmap.test_flag(CEPH_OSDMAP_SIMPLEAUTOSCALE)) {
+	ss << "target_size_bytes is a legacy autoscaler knob; not applicable "
+	   << "while the simpleautoscale flag is set";
+	return -EINVAL;
+      }
     } else if (var == "target_size_ratio") {
       if (f < 0.0) {
 	ss << "target_size_ratio cannot be negative";
+	return -EINVAL;
+      }
+      if (f > 0.0 && osdmap.test_flag(CEPH_OSDMAP_SIMPLEAUTOSCALE)) {
+	ss << "target_size_ratio is a legacy autoscaler knob; not applicable "
+	   << "while the simpleautoscale flag is set";
+	return -EINVAL;
+      }
+    } else if (var == "effective_ratio") {
+      if (floaterr.length()) {
+	ss << "error parsing float value '" << val << "': " << floaterr;
+	return -EINVAL;
+      }
+      if (f < 0.0 || f > 1.0) {
+	ss << "effective_ratio must be between 0.0 and 1.0";
+	return -ERANGE;
+      }
+      if (f > 0.0 &&
+	  osdmap.require_osd_release < ceph_release_t::umbrella) {
+	ss << "must set require_osd_release to umbrella or later before "
+	   << "declaring an effective_ratio";
+	return -EINVAL;
+      }
+      // stored as the declared fraction of the PG budget; may be
+      // pre-staged at any time but is inert until the simpleautoscale
+      // flag makes the pg_autoscaler plan from it
+    } else if (var == "planned_pg_num") {
+      if (interr.length()) {
+	ss << "error parsing int value '" << val << "': " << interr;
+	return -EINVAL;
+      }
+      if (n < 0) {
+	ss << "planned_pg_num cannot be negative";
 	return -EINVAL;
       }
     } else if (var == "pg_num_min") {
@@ -9483,6 +9717,11 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     } else if (var == "pg_autoscale_bias") {
       if (f < 0.0 || f > 1000.0) {
 	ss << "pg_autoscale_bias must be between 0 and 1000";
+	return -EINVAL;
+      }
+      if (f != 1.0 && osdmap.test_flag(CEPH_OSDMAP_SIMPLEAUTOSCALE)) {
+	ss << "pg_autoscale_bias is a legacy autoscaler knob; not applicable "
+	   << "while the simpleautoscale flag is set";
 	return -EINVAL;
       }
     } else if (var == "dedup_tier") {
@@ -12415,6 +12654,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
     } else if (key == "noautoscale") {
       return prepare_set_flag(op, CEPH_OSDMAP_NOAUTOSCALE);
+    } else if (key == "simpleautoscale") {
+      if (osdmap.require_osd_release < ceph_release_t::umbrella) {
+	ss << "must set require_osd_release to umbrella or later before "
+	   << "setting simpleautoscale";
+	err = -EPERM;
+	goto reply_no_propose;
+      }
+      return prepare_set_flag(op, CEPH_OSDMAP_SIMPLEAUTOSCALE);
     } else {
       ss << "unrecognized flag '" << key << "'";
       err = -EINVAL;
@@ -12449,6 +12696,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       return prepare_unset_flag(op, CEPH_OSDMAP_NOSNAPTRIM);
     else if (key == "noautoscale")
       return prepare_unset_flag(op, CEPH_OSDMAP_NOAUTOSCALE);
+    else if (key == "simpleautoscale")
+      return prepare_unset_flag(op, CEPH_OSDMAP_SIMPLEAUTOSCALE);
     else {
       ss << "unrecognized flag '" << key << "'";
       err = -EINVAL;
@@ -14121,8 +14370,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     cmd_getval(cmdmap, "size", repl_size);
     int64_t target_size_bytes = 0;
     double target_size_ratio = 0.0;
+    double effective_ratio = 0.0;
     cmd_getval(cmdmap, "target_size_bytes", target_size_bytes);
     cmd_getval(cmdmap, "target_size_ratio", target_size_ratio);
+    cmd_getval(cmdmap, "effective_ratio", effective_ratio);
 
     string pg_autoscale_mode;
     cmd_getval(cmdmap, "autoscale_mode", pg_autoscale_mode);
@@ -14138,6 +14389,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 			   rule_name,
 			   pg_num, pgp_num, pg_num_min, pg_num_max,
                            repl_size, target_size_bytes, target_size_ratio,
+			   effective_ratio,
 			   erasure_code_profile, pool_type,
                            (uint64_t)expected_num_objects,
                            fast_read,
@@ -14255,6 +14507,177 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (err < 0)
       goto reply_no_propose;
 
+    getline(ss, rs);
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
+						   get_last_committed() + 1));
+    return true;
+  } else if (prefix == "osd pool autoscale-accept") {
+    // simple autoscaling's acceptance verb: apply the pg_num plans the
+    // pg_autoscaler stamped as planned_pg_num and clear the stamps - for
+    // one pool, several, or --all - in one osdmap transaction, so a
+    // reviewed plan-set commits in a single epoch. The mgr invokes the
+    // same command to auto-accept plans on mode 'on' pools.
+    if (!osdmap.test_flag(CEPH_OSDMAP_SIMPLEAUTOSCALE)) {
+      ss << "simple autoscaling is not enabled (the simpleautoscale flag "
+	 << "is not set)";
+      err = -EPERM;
+      goto reply_no_propose;
+    }
+    {
+      vector<string> pool_names;
+      cmd_getval(cmdmap, "pools", pool_names);
+      bool accept_all = false;
+      cmd_getval(cmdmap, "all", accept_all);
+      if (pool_names.empty() && !accept_all) {
+	ss << "specify one or more pools, or --all";
+	err = -EINVAL;
+	goto reply_no_propose;
+      }
+      if (!pool_names.empty() && accept_all) {
+	ss << "specify pools or --all, not both";
+	err = -EINVAL;
+	goto reply_no_propose;
+      }
+      bool force = false;
+      cmd_getval(cmdmap, "yes_i_really_mean_it", force);
+
+      // resolve targets: --all covers every pool the planner manages
+      // (mode 'off' pools are ignored, matching the planner)
+      std::vector<std::pair<int64_t,string>> targets;
+      if (accept_all) {
+	for (auto& [id, pool] : osdmap.get_pools()) {
+	  if (pool.pg_autoscale_mode == pg_pool_t::pg_autoscale_mode_t::OFF) {
+	    continue;
+	  }
+	  targets.emplace_back(id, osdmap.get_pool_name(id));
+	}
+      } else {
+	for (auto& name : pool_names) {
+	  int64_t pool_id = osdmap.lookup_pg_pool_name(name.c_str());
+	  if (pool_id < 0) {
+	    ss << "unrecognized pool '" << name << "'";
+	    err = -ENOENT;
+	    goto reply_no_propose;
+	  }
+	  targets.emplace_back(pool_id, name);
+	}
+      }
+
+      // validate everything before staging anything, so acceptance is
+      // all-or-nothing
+      struct accept_t {
+	int64_t pool_id;
+	string name;
+	int64_t planned;
+	uint32_t current;
+      };
+      std::vector<accept_t> accepts;
+      std::list<string> need_confirm;
+      for (auto& [pool_id, name] : targets) {
+	pg_pool_t p = *osdmap.get_pg_pool(pool_id);
+	if (pending_inc.new_pools.count(pool_id))
+	  p = pending_inc.new_pools[pool_id];
+	int64_t planned = 0;
+	p.opts.get(pool_opts_t::PLANNED_PG_NUM, &planned);
+	if (planned <= 0) {
+	  // idempotent: nothing pending is not an error
+	  continue;
+	}
+	// accepting a plan that merges away half or more of the PGs of a
+	// pool holding significant data deserves explicit confirmation
+	if (planned <= (int64_t)p.get_pg_num_target() / 2 && !force) {
+	  uint64_t bytes_threshold = cct->_conf.get_val<Option::size_t>(
+	    "mon_osd_pool_pg_merge_confirm_bytes");
+	  const pool_stat_t *pstat = mon.mgrstatmon()->get_pool_stat(pool_id);
+	  uint64_t stored = pstat ? pstat->stats.sum.num_bytes : 0;
+	  if (stored > bytes_threshold) {
+	    ostringstream os;
+	    os << name << " (pg_num " << p.get_pg_num_target() << " -> "
+	       << planned << ", " << byte_u_t(stored) << " stored)";
+	    need_confirm.push_back(os.str());
+	    continue;
+	  }
+	}
+	accepts.push_back({pool_id, name, planned, p.get_pg_num_target()});
+      }
+      if (!need_confirm.empty()) {
+	ss << "accepting would merge away half or more of the PGs of: ";
+	bool first = true;
+	for (auto& s : need_confirm) {
+	  ss << (first ? "" : "; ") << s;
+	  first = false;
+	}
+	ss << "; pass --yes-i-really-mean-it to proceed";
+	err = -EPERM;
+	goto reply_no_propose;
+      }
+      if (accepts.empty()) {
+	if (accept_all) {
+	  ss << "no plans pending";
+	} else if (targets.size() == 1) {
+	  ss << "pool '" << targets[0].second
+	     << "' has no plan pending; pg_num is current";
+	} else {
+	  ss << "no plans pending on the given pools";
+	}
+	err = 0;
+	goto reply_no_propose;
+      }
+
+      // apply through the regular pg_num path so all of its checks and
+      // machinery apply; every pool stages into this one pending_inc, so
+      // the accepted plans commit in a single osdmap epoch. Snapshot the
+      // staging first: any failure rolls every pool back.
+      std::map<int64_t, std::optional<pg_pool_t>> saved;
+      for (auto& a : accepts) {
+	if (pending_inc.new_pools.count(a.pool_id))
+	  saved.emplace(a.pool_id, pending_inc.new_pools[a.pool_id]);
+	else
+	  saved.emplace(a.pool_id, std::nullopt);
+      }
+      auto rollback = [&] {
+	for (auto& [id, prior] : saved) {
+	  if (prior)
+	    pending_inc.new_pools[id] = *prior;
+	  else
+	    pending_inc.new_pools.erase(id);
+	}
+      };
+      for (auto& a : accepts) {
+	cmdmap_t accept_cmd;
+	accept_cmd["prefix"] = string("osd pool set");
+	accept_cmd["pool"] = a.name;
+	accept_cmd["var"] = string("pg_num");
+	accept_cmd["val"] = stringify(a.planned);
+	accept_cmd["yes_i_really_mean_it"] = force;
+	err = prepare_command_pool_set(accept_cmd, ss);
+	if (err == -EAGAIN) {
+	  rollback();
+	  goto wait;
+	}
+	if (err < 0) {
+	  ss << " (accepting pool '" << a.name << "'; nothing was applied)";
+	  rollback();
+	  goto reply_no_propose;
+	}
+	if (!pending_inc.new_pools.count(a.pool_id)) {
+	  // the plan matched pg_num exactly, so the set staged nothing;
+	  // stage the pool just to clear the stamp
+	  pending_inc.new_pools[a.pool_id] = *osdmap.get_pg_pool(a.pool_id);
+	}
+	pg_pool_t &np = pending_inc.new_pools[a.pool_id];
+	np.opts.unset(pool_opts_t::PLANNED_PG_NUM);
+	np.last_change = pending_inc.epoch;
+      }
+      ss.str("");  // replace the pool-set chatter with the acceptance
+      ss << "accepted " << accepts.size() << " plan(s): ";
+      bool first = true;
+      for (auto& a : accepts) {
+	ss << (first ? "" : ", ") << a.name << " pg_num " << a.current
+	   << " -> " << a.planned;
+	first = false;
+      }
+    }
     getline(ss, rs);
     wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 						   get_last_committed() + 1));

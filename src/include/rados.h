@@ -173,6 +173,7 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSDMAP_NOSNAPTRIM       (1<<21) /* disable snap trimming */
 #define CEPH_OSDMAP_PGLOG_HARDLIMIT  (1<<22) /* put a hard limit on pg log length */
 #define CEPH_OSDMAP_NOAUTOSCALE      (1<<23)  /* block pg autoscale */
+#define CEPH_OSDMAP_SIMPLEAUTOSCALE  (1<<24)  /* simple (ratio-driven) autoscaling: plan from effective_ratio, learn missing ratios, reject legacy autoscaler knobs */
 
 /* these are hidden in 'ceph status' view */
 #define CEPH_OSDMAP_SEMIHIDDEN_FLAGS (CEPH_OSDMAP_REQUIRE_JEWEL|	\
