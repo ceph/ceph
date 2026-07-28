@@ -95,8 +95,7 @@ public:
 private:
   void synchronize_last_beacon();
   void process_gw_down(const NvmeGwId &gw_id,
-     const NvmeGroupKey& group_key, bool &propose_pending,
-     gw_availability_t avail);
+     const NvmeGroupKey& group_key, bool &propose_pending);
   bool get_gw_by_addr(const  entity_addr_t &sub_addr,
        NvmeGwId &gw_id, NvmeGroupKey& group_key);
   epoch_t get_ack_map_epoch(bool gw_created, const NvmeGroupKey& group_key);
