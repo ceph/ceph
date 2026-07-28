@@ -1960,11 +1960,11 @@ public:
 		       target_oloc.nspace);
     }
 
-    hobject_t get_hobj(pg_t pgid, snapid_t snapid) {
+    hobject_t get_hobj(pg_t pg_id) {
       return hobject_t(target_oid,
 		       target_oloc.key,
-		       snapid,
-		       target_oloc.hash >= 0 ? target_oloc.hash : pgid.ps(),
+		       CEPH_NOSNAP,
+		       target_oloc.hash >= 0 ? target_oloc.hash : pg_id.ps(),
 		       target_oloc.pool,
 		       target_oloc.nspace);
     }
