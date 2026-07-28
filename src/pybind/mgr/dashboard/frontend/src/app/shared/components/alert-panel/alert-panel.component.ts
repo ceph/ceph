@@ -24,13 +24,11 @@ export class AlertPanelComponent implements OnInit {
   actionTpl: TemplateRef<any>;
 
   @Input()
-  title = '';
+  alertTitle = '';
   @Input()
   type: 'warning' | 'error' | 'info' | 'success' | 'danger';
   @Input()
   showTitle = true;
-  @Input()
-  size: 'slim' | 'normal' = 'normal';
   @Input()
   dismissible = false;
   @Input()
@@ -64,19 +62,19 @@ export class AlertPanelComponent implements OnInit {
     const type: NotificationType = this.type === 'danger' ? 'error' : this.type;
     switch (this.type) {
       case 'warning':
-        this.title = this.title || $localize`Warning`;
+        this.alertTitle = this.alertTitle || $localize`Warning`;
         break;
       case 'error':
-        this.title = this.title || $localize`Error`;
+        this.alertTitle = this.alertTitle || $localize`Error`;
         break;
       case 'info':
-        this.title = this.title || $localize`Information`;
+        this.alertTitle = this.alertTitle || $localize`Information`;
         break;
       case 'success':
-        this.title = this.title || $localize`Success`;
+        this.alertTitle = this.alertTitle || $localize`Success`;
         break;
       case 'danger':
-        this.title = this.title || $localize`Danger`;
+        this.alertTitle = this.alertTitle || $localize`Danger`;
         break;
     }
 
@@ -85,7 +83,7 @@ export class AlertPanelComponent implements OnInit {
       template: this.alertContent,
       actionsTemplate: this.actionTpl,
       showClose: this.dismissible,
-      title: this.showTitle ? this.title : '',
+      title: this.showTitle ? this.alertTitle : '',
       lowContrast: this.lowContrast,
       variant: this.variant
     };

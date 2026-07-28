@@ -84,3 +84,22 @@
     {{ row.pool_name }}
   </a>
 </ng-template>
+
+<ng-template #poolEnableTpl>
+  <p
+    class="cds--type-body-01 cds--mb-05"
+    i18n
+  >
+    To delete this pool, first enable pool deletion.
+  </p>
+</ng-template>
+
+<ng-template #poolNoPermsTpl>
+  <p
+    class="cds--type-body-01 cds--mb-05"
+    i18n
+  >
+    Pool deletion is currently disabled.<br />
+    You do not have permissions to enable. Please contact administrator.
+  </p>
+</ng-template>

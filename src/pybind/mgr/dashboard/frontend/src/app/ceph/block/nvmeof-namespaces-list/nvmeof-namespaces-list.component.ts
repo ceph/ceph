@@ -264,9 +264,7 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
       bodyTemplate: this.deleteTpl,
       itemNames: [namespace.nsid],
       actionDescription: 'delete',
-      bodyContext: {
-        deletionMessage: $localize`Deleting the namespace <strong>${namespace.nsid}</strong> will permanently remove all resources, services, and configurations within it. This action cannot be undone.`
-      },
+      hasAssociatedResources: true,
       submitActionObservable: () =>
         this.taskWrapper
           .wrapTaskAroundCall({
