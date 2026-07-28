@@ -156,13 +156,15 @@ void print_query_result_formatted(
     const std::vector<AuditEntry>& entries) {
   if (format == "plain") {
     TextTable table;
+    table.define_column("event_id", TextTable::LEFT, TextTable::LEFT);
     table.define_column("seq", TextTable::LEFT, TextTable::LEFT);
-    table.define_column("init_time", TextTable::LEFT, TextTable::LEFT);
+    table.define_column("record_time", TextTable::LEFT, TextTable::LEFT);
     table.define_column("data", TextTable::LEFT, TextTable::LEFT);
-    
+
     for (const auto& e : entries) {
-      table << e.seq
-            << format_time(e.init_time)
+      table << e.event_id
+            << e.seq
+            << format_time(e.record_time)
             << e.json_dump
             << TextTable::endrow;
     }
@@ -184,11 +186,14 @@ void print_query_result_formatted(
 
       json_spirit::Object entry;
       entry.push_back(json_spirit::Pair(
+          "event_id",
+          e.event_id));
+      entry.push_back(json_spirit::Pair(
           "seq",
           static_cast<int64_t>(e.seq)));
       entry.push_back(json_spirit::Pair(
-          "init_time",
-          format_time(e.init_time)));
+          "record_time",
+          format_time(e.record_time)));
       entry.push_back(json_spirit::Pair(
           "data",
           data));
@@ -308,7 +313,7 @@ void apply_cli_opts(const po::variables_map& vm, AuditCliConfig& config) {
       throw std::invalid_argument("--recent must be a nonnegative number.");
     }
     config.query.limit = n;
-    config.query.order_by = "init_time";
+    config.query.order_by = "record_time";
     config.query.ascending = false;
   }
 
@@ -326,10 +331,14 @@ void apply_cli_opts(const po::variables_map& vm, AuditCliConfig& config) {
     }
   }
 
+  if (vm.count("event-id")) {
+    config.query.event_id = vm["event-id"].as<std::string>();
+  }
+
   if (vm.count("order-by")) {
     const std::string& order_by = vm["order-by"].as<std::string>();
-    if (order_by != "seq" && order_by != "init_time") {
-      throw std::invalid_argument("--order-by must be seq or init_time.");
+    if (order_by != "seq" && order_by != "record_time") {
+      throw std::invalid_argument("--order-by must be seq or record_time.");
     }
     config.query.order_by = order_by;
   }
@@ -419,13 +428,15 @@ int main(int argc, const char** argv) {
         "Return entries from the last N hours before now. "
         "Accepts decimals (e.g. 0.5 for the last 30 minutes).")
     ("recent", po::value<int64_t>(),
-        "Return the N most recent entries, ordered by init_time descending.")
+        "Return the N most recent entries, ordered by record_time descending.")
+    ("event-id", po::value<std::string>(),
+        "Return only entries belonging to this event_id (UUID).")
     ("filter", po::value<std::vector<std::string>>()->composing(),
         "Filter results by a field inside the json_dump column. "
         "Format: field=value. Repeatable for multiple filters "
         "(e.g. --filter status=ok --filter cmd=data-scan).")
     ("order-by", po::value<std::string>(),
-        "Column to sort results by. Valid values: seq, init_time.")
+        "Column to sort results by. Valid values: seq, record_time.")
     ("order", po::value<std::string>()->default_value("DESC"),
         "Sort direction: ASC or DESC (default: DESC).")
     ("count", po::bool_switch(&config.count_mode),
