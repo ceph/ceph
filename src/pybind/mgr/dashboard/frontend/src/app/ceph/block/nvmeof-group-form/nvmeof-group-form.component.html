@@ -102,17 +102,12 @@
             >
               <div cdsCol>
                 <div class="cds--stack cds--stack-horizontal">
-                  <label
-                    class="cds--type-label-01"
+                  <cds-label
+                    class="cds--type-label-01 cds-mr-2"
                     for="enableEncryption"
                     i18n
-                    >Enable encryption</label
-                  >
-                  <cds-tag
-                    type="green"
-                    size="sm"
-                    i18n
-                    >Recommended</cds-tag
+                    cdOptionalField="Enable encryption"
+                    >Enable encryption</cds-label
                   >
                 </div>
                 <cds-checkbox
@@ -159,6 +154,7 @@
                     helperText="Provide the encryption key used for securing the gateway group."
                     i18n
                     i18n-helperText
+                    cdOptionalField="Encryption key"
                   >
                     Encryption key
                     <textarea
@@ -171,12 +167,6 @@
                     >
                     </textarea>
                   </cds-textarea-label>
-                  <span
-                    class="invalid-feedback"
-                    *ngIf="groupForm.showError('encryptionKey', formDir, 'required')"
-                    i18n
-                    >This field is required.</span
-                  >
                 </div>
               </div>
             }
@@ -192,11 +182,12 @@
             >
               <div cdsCol>
                 <div class="cds--stack cds--stack-horizontal cds-mb-3">
-                  <label
+                  <cds-label
                     class="cds--type-label-01"
                     for="enableMtls"
+                    cdOptionalField="Enable Mutual TLS (mTLS)"
                     i18n
-                    >Enable Mutual TLS (mTLS)</label
+                    >Enable Mutual TLS (mTLS)</cds-label
                   >
                 </div>
                 <cds-checkbox
@@ -321,6 +312,7 @@
               i18n
               i18n-helperText
               helperText="Upload a Root CA certificate file, or paste the Root CA certificate PEM content directly."
+              cdOptionalField="Root CA Certificate Input"
             >
               Root CA Certificate Input
             </cds-text-label>
@@ -357,12 +349,6 @@
               >
               </textarea>
             </cds-textarea-label>
-            <span
-              class="invalid-feedback"
-              *ngIf="groupForm.showError('rootCACert', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
           </div>
         </div>
 
@@ -377,6 +363,7 @@
               i18n
               i18n-helperText
               helperText="Upload a client certificate file, or paste the client certificate PEM content directly."
+              cdOptionalField="Client Certificate Input"
             >
               Client Certificate Input
             </cds-text-label>
@@ -413,12 +400,6 @@
               >
               </textarea>
             </cds-textarea-label>
-            <span
-              class="invalid-feedback"
-              *ngIf="groupForm.showError('clientCert', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
           </div>
         </div>
 
@@ -433,6 +414,7 @@
               i18n
               i18n-helperText
               helperText="Upload a client key file, or paste the client key PEM content directly."
+              cdOptionalField="Client Key Input"
             >
               Client Key Input
             </cds-text-label>
@@ -469,12 +451,6 @@
               >
               </textarea>
             </cds-textarea-label>
-            <span
-              class="invalid-feedback"
-              *ngIf="groupForm.showError('clientKey', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
           </div>
         </div>
 
@@ -489,6 +465,7 @@
               i18n
               i18n-helperText
               helperText="Upload a server certificate file, or paste the server certificate PEM content directly."
+              cdOptionalField="Server Certificate Input"
             >
               Server Certificate Input
             </cds-text-label>
@@ -525,12 +502,6 @@
               >
               </textarea>
             </cds-textarea-label>
-            <span
-              class="invalid-feedback"
-              *ngIf="groupForm.showError('serverCert', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
           </div>
         </div>
 
@@ -545,6 +516,7 @@
               i18n
               i18n-helperText
               helperText="Upload a server key file, or paste the server key PEM content directly."
+              cdOptionalField="Server Key Input"
             >
               Server Key Input
             </cds-text-label>
@@ -581,12 +553,6 @@
               >
               </textarea>
             </cds-textarea-label>
-            <span
-              class="invalid-feedback"
-              *ngIf="groupForm.showError('serverKey', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
           </div>
         </div>
       }
