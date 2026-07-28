@@ -152,11 +152,11 @@ void AbstractWriteLog<I>::perf_start(std::string name) {
   plb.add_u64_counter(l_librbd_pwl_rd_bytes, "rd_bytes", "Data size in reads");
   plb.add_time_avg(l_librbd_pwl_rd_latency, "rd_latency", "Latency of reads");
 
-  plb.add_u64_counter(l_librbd_pwl_rd_hit_req, "hit_rd", "Reads completely hitting RWL");
-  plb.add_u64_counter(l_librbd_pwl_rd_hit_bytes, "rd_hit_bytes", "Bytes read from RWL");
+  plb.add_u64_counter(l_librbd_pwl_rd_hit_req, "hit_rd", "Reads completely hitting PWL");
+  plb.add_u64_counter(l_librbd_pwl_rd_hit_bytes, "rd_hit_bytes", "Bytes read from PWL");
   plb.add_time_avg(l_librbd_pwl_rd_hit_latency, "hit_rd_latency", "Latency of read hits");
 
-  plb.add_u64_counter(l_librbd_pwl_rd_part_hit_req, "part_hit_rd", "reads partially hitting RWL");
+  plb.add_u64_counter(l_librbd_pwl_rd_part_hit_req, "part_hit_rd", "reads partially hitting PWL");
 
   plb.add_u64_counter_histogram(
     l_librbd_pwl_syncpoint_hist, "syncpoint_logentry_bytes_histogram",
@@ -224,20 +224,20 @@ void AbstractWriteLog<I>::perf_start(std::string name) {
 
   plb.add_time_avg(
     l_librbd_pwl_log_op_buf_to_app_t, "op_buf_to_app_t",
-    "Average buffer persist to log append time (write data persist/replicate + wait for append time)");
+    "Average buffer persist to log append time (write data persist + wait for append time)");
   plb.add_time_avg(
     l_librbd_pwl_log_op_buf_to_bufc_t, "op_buf_to_bufc_t",
-    "Average buffer persist time (write data persist/replicate time)");
+    "Average buffer persist time (write data persist time)");
   plb.add_u64_counter_histogram(
     l_librbd_pwl_log_op_buf_to_bufc_t_hist, "op_buf_to_bufc_t_bytes_histogram",
     op_hist_x_axis_config, op_hist_y_axis_config,
     "Histogram of write buffer persist time (nanoseconds) vs. bytes written");
   plb.add_time_avg(
     l_librbd_pwl_log_op_app_to_cmp_t, "op_app_to_cmp_t",
-    "Average log append to persist complete time (log entry append/replicate + wait for complete time)");
+    "Average log append to persist complete time (log entry append + wait for complete time)");
   plb.add_time_avg(
     l_librbd_pwl_log_op_app_to_appc_t, "op_app_to_appc_t",
-    "Average log append to persist complete time (log entry append/replicate time)");
+    "Average log append to persist complete time (log entry append time)");
   plb.add_u64_counter_histogram(
     l_librbd_pwl_log_op_app_to_appc_t_hist, "op_app_to_appc_t_bytes_histogram",
     op_hist_x_axis_config, op_hist_y_axis_config,
@@ -247,7 +247,7 @@ void AbstractWriteLog<I>::perf_start(std::string name) {
   plb.add_u64_counter(l_librbd_pwl_discard_bytes, "discard_bytes", "Bytes discarded");
   plb.add_time_avg(l_librbd_pwl_discard_latency, "discard_lat", "Discard latency");
 
-  plb.add_u64_counter(l_librbd_pwl_aio_flush, "aio_flush", "AIO flush (flush to RWL)");
+  plb.add_u64_counter(l_librbd_pwl_aio_flush, "aio_flush", "AIO flush (flush to PWL)");
   plb.add_u64_counter(l_librbd_pwl_aio_flush_def, "aio_flush_def", "AIO flushes deferred for resources");
   plb.add_time_avg(l_librbd_pwl_aio_flush_latency, "aio_flush_lat", "AIO flush latency");
 
@@ -260,10 +260,10 @@ void AbstractWriteLog<I>::perf_start(std::string name) {
   plb.add_time_avg(l_librbd_pwl_cmp_latency, "cmp_lat", "Compare and Write latency");
   plb.add_u64_counter(l_librbd_pwl_cmp_fails, "cmp_fails", "Compare and Write compare fails");
 
-  plb.add_u64_counter(l_librbd_pwl_internal_flush, "internal_flush", "Flush RWL (write back to OSD)");
+  plb.add_u64_counter(l_librbd_pwl_internal_flush, "internal_flush", "Flush PWL (write back to OSD)");
   plb.add_time_avg(l_librbd_pwl_writeback_latency, "writeback_lat", "write back to OSD latency");
-  plb.add_u64_counter(l_librbd_pwl_invalidate_cache, "invalidate", "Invalidate RWL");
-  plb.add_u64_counter(l_librbd_pwl_invalidate_discard_cache, "discard", "Discard and invalidate RWL");
+  plb.add_u64_counter(l_librbd_pwl_invalidate_cache, "invalidate", "Invalidate PWL");
+  plb.add_u64_counter(l_librbd_pwl_invalidate_discard_cache, "discard", "Discard and invalidate PWL");
 
   m_perfcounter = plb.create_perf_counters();
   m_image_ctx.cct->get_perfcounters_collection()->add(m_perfcounter);
@@ -731,10 +731,10 @@ void AbstractWriteLog<I>::read(Extents&& image_extents,
   Context *ctx = new LambdaContext(
     [this, read_ctx, fadvise_flags](int r) {
       if (read_ctx->miss_extents.empty()) {
-      /* All of this read comes from RWL */
+      /* All of this read comes from PWL */
         read_ctx->complete(0);
       } else {
-      /* Pass the read misses on to the layer below RWL */
+      /* Pass the read misses on to the layer below PWL */
         m_image_writeback.aio_read(
             std::move(read_ctx->miss_extents), &read_ctx->miss_bl,
             fadvise_flags, read_ctx);
@@ -745,7 +745,7 @@ void AbstractWriteLog<I>::read(Extents&& image_extents,
    * The strategy here is to look up all the WriteLogMapEntries that overlap
    * this read, and iterate through those to separate this read into hits and
    * misses. A new Extents object is produced here with Extents for each miss
-   * region. The miss Extents is then passed on to the read cache below RWL. We
+   * region. The miss Extents is then passed on to the read cache below PWL. We
    * also produce an ImageExtentBufs for all the extents (hit or miss) in this
    * read. When the read from the lower cache layer completes, we iterate
    * through the ImageExtentBufs and insert buffers for each cache hit at the
@@ -812,12 +812,12 @@ void AbstractWriteLog<I>::read(Extents&& image_extents,
           map_entry.log_entry->ram_entry.image_offset_bytes;
         /* Offset into the log entry buffer of this read hit */
         uint64_t read_buffer_offset = map_entry_buffer_offset + entry_offset;
-        /* Create buffer object referring to the cache pool for this read hit */
+        /* Create buffer object referring to the PWL pool for this read hit */
         collect_read_extents(
             read_buffer_offset, map_entry, log_entries_to_read, bls_to_read,
             entry_hit_length, hit_extent, read_ctx);
       }
-      /* Exclude RWL hit range from buffer and extent */
+      /* Exclude PWL hit range from buffer and extent */
       extent_offset += entry_hit_length;
       ldout(cct, 20) << map_entry << dendl;
     }
@@ -964,7 +964,7 @@ void AbstractWriteLog<I>::flush(io::FlushSource flush_source, Context *on_finish
          * Create a new sync point if there have been writes since the last
          * one.
          *
-         * We do not flush the caches below the RWL here.
+         * We do not flush the caches below the PWL here.
          */
         flush_new_sync_point_if_needed(flush_req, post_unlock);
       }
@@ -1077,7 +1077,7 @@ void AbstractWriteLog<I>::compare_and_write(Extents &&image_extents,
           }
         });
 
-      /* Read phase of comp-and-write must read through RWL */
+      /* Read phase of comp-and-write must read through PWL */
       Extents image_extents_copy = cw_req->image_extents;
       read(std::move(image_extents_copy), &cw_req->read_bl, cw_req->fadvise_flags, read_complete_ctx);
     });
@@ -1916,10 +1916,10 @@ void AbstractWriteLog<I>::flush_new_sync_point_if_needed(C_FlushRequestT *flush_
 }
 
 /*
- * RWL internal flush - will actually flush the RWL.
+ * PWL internal flush - will actually flush the PWL.
  *
  * User flushes should arrive at aio_flush(), and only flush prior
- * writes to all log replicas.
+ * writes to the log.
  *
  * Librbd internal flushes will arrive at flush(invalidate=false,
  * discard=false), and traverse the block guard to ensure in-flight writes are
@@ -2036,7 +2036,7 @@ void AbstractWriteLog<I>::internal_flush(bool invalidate, Context *on_finish) {
                 ldout(m_image_ctx.cct, 6) << "Invalidating" << dendl;
                 m_invalidating = true;
               }
-              /* Discards all RWL entries */
+              /* Discards all PWL entries */
               while (retire_entries(MAX_ALLOC_PER_TRANSACTION)) { }
               next_ctx->complete(0);
             } else {
@@ -2056,7 +2056,7 @@ void AbstractWriteLog<I>::internal_flush(bool invalidate, Context *on_finish) {
         /* Even if we're throwing everything away, but we want the last entry to
          * be a sync point so we can cleanly resume.
          *
-         * Also, the blockguard only guarantees the replication of this op
+         * Also, the blockguard only guarantees that this op
          * can't overlap with prior ops. It doesn't guarantee those are all
          * completed and eligible for flush & retire, which we require here.
          */

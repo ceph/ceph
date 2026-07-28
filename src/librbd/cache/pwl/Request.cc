@@ -308,7 +308,7 @@ void C_WriteRequest<T>::dispatch()
   } else {
     /* The prior sync point is done, so we'll schedule append here. If this is
      * persist-on-write, and probably still the caller's thread, we'll use this
-     * caller's thread to perform the persist & replication of the payload
+     * caller's thread to perform the persist of the payload
      * buffer. */
     m_do_early_flush =
       !(this->detained || this->m_queued || this->m_deferred || op_set->persist_on_flush);

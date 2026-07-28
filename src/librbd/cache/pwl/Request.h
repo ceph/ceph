@@ -26,7 +26,7 @@ struct WriteRequestResources {
  * overlapping operations.
  * This is the custodian of the BlockGuard cell for this IO, and the
  * state information about the progress of this IO. This object lives
- * until the IO is persisted in all (live) log replicas.  User request
+ * until the IO is persisted in the log.  User request
  * may be completed from here before the IO persists.
  */
 template <typename T>
@@ -100,7 +100,7 @@ private:
 /**
  * This is the custodian of the BlockGuard cell for this write. Block
  * guard is not released until the write persists everywhere (this is
- * how we guarantee to each log replica that they will never see
+ * how we guarantee that the log will never see
  * overlapping writes).
  */
 template <typename T>
