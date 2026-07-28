@@ -17,12 +17,17 @@
  * Helper for cephfs standalone tools: ensure `.audit` pool, open an audit DB in
  * standalone mode (SQLite-assigned seq), and pair begin/end commits.
  *
+ * Both rows share the same JSON schema:
+ *   { cmd, cmd_args, init_time, comp_time, status, retval }
+ * The first row (from @ref log_begin) stores null for comp_time/status/retval.
+ * The second row (from @ref log_end or the destructor abort) fills all fields.
+ * Both rows carry the same event_id so they can be queried as a pair.
+ *
  * If @ref log_begin succeeded and @ref log_end was not called, the destructor
- * records a second-phase row with status `"aborted"` (process exit without
- * completion).
+ * inserts an abort row with status `"aborted"` and retval `-ECANCELED`.
  *
  * The caller must keep @p rados connected for the lifetime of this object.
- * 
+ *
  * @note best-effort logging; tools should be prepared to skip audit on failure.
  */
 class ToolsAuditLogger {
@@ -79,10 +84,10 @@ public:
   ToolsAuditLogger& operator=(const ToolsAuditLogger&) = delete;
 
   /**
-   * Record the start of a tool invocation. Builds a JSON payload containing
-   * cmd and cmd_args and inserts a new row via @ref AuditDB::commit.
-   * Stores seq, cmd, cmd_args, and init_time for use by @ref log_end.
-   * Ignored if a begin is already in flight without a matching @ref log_end.
+   * Insert the first row for this invocation. JSON payload contains the full
+   * schema with comp_time/status/retval as null. The returned event_id is
+   * stored internally and passed to @ref log_end so both rows share the same
+   * event. Ignored if a begin is already in flight.
    */
   void log_begin(
       const std::string& cmd,
@@ -90,9 +95,9 @@ public:
       time_t init_time);
 
   /**
-   * Record the completion of a tool invocation. Builds a JSON
-   * payload containing cmd, cmd_args, init_time, comp_time, status, and
-   * retval, then updates the existing row via @ref AuditDB::update.
+   * Insert the completion row for this invocation. JSON payload contains the
+   * full schema with all fields populated. Uses the event_id stored by
+   * @ref log_begin so both rows belong to the same event.
    */
   void log_end(time_t comp_time, const std::string& status, int32_t retval);
 
@@ -109,9 +114,10 @@ private:
   std::string db_uri;
   std::string table_name;
   std::unique_ptr<AuditDB> db;
-  int64_t     seq_in_flight{0};
   bool        begin_recorded{false};
-  // stored at log_begin time so log_end can reconstruct the full JSON
+  // stored at log_begin time so log_end can pass the same event_id and
+  // reconstruct the full JSON payload
+  std::string event_id_in_flight;
   std::string cmd_in_flight;
   std::string cmd_args_in_flight;
   time_t      init_time_in_flight{0};

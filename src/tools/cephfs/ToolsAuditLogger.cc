@@ -76,7 +76,6 @@ ToolsAuditLogger::ToolsAuditLogger(
 ToolsAuditLogger::~ToolsAuditLogger()
 {
   if (is_ready() && begin_recorded) {
-    // comp_time must satisfy comp_time >= init_time (schema CHECK)
     log_end(std::time(nullptr), "aborted", -ECANCELED);
   }
 }
@@ -95,7 +94,7 @@ void ToolsAuditLogger::log_begin(
     return;
   }
   if (begin_recorded) {
-    lderr(cct) << "called while previous begin (seq=" << seq_in_flight
+    lderr(cct) << "called while previous begin (event_id=" << event_id_in_flight
                << ") still in flight; dropping" << dendl;
     return;
   }
@@ -112,10 +111,11 @@ void ToolsAuditLogger::log_begin(
   std::ostringstream ss;
   jf.flush(ss);
   std::string json = ss.str();
+
+  // commit with no event_id — AuditDB generates a fresh UUID and returns it
   auto r = db->commit(init_time, json);
-  
   if (r.has_value()) {
-    seq_in_flight       = *r;
+    event_id_in_flight  = *r;
     cmd_in_flight       = cmd;
     cmd_args_in_flight  = cmd_args;
     init_time_in_flight = init_time;
@@ -146,15 +146,17 @@ void ToolsAuditLogger::log_end(
   std::ostringstream ss;
   jf.flush(ss);
   std::string json = ss.str();
-  auto r = db->update(seq_in_flight, json);
+
+  // commit with the same event_id to append this row to the same event
+  auto r = db->commit(comp_time, json, event_id_in_flight);
   if (r.has_value()) {
     begin_recorded      = false;
-    seq_in_flight       = 0;
+    event_id_in_flight  = {};
     cmd_in_flight       = {};
     cmd_args_in_flight  = {};
     init_time_in_flight = 0;
   } else {
-    lderr(cct) << "failed: seq=" << seq_in_flight
+    lderr(cct) << "failed: event_id=" << event_id_in_flight
                << " code=" << static_cast<int>(r.error().code)
                << " detail=" << r.error().detail << dendl;
   }
