@@ -89,6 +89,7 @@ set(librgw_common_srcs
   rgw_period_puller.cc
   rgw_s3_filter.cc
   rgw_pubsub.cc
+  rgw_pubsub_push.cc
   rgw_cr_rest.cc
   rgw_op.cc
   rgw_policy_s3.cc
@@ -219,7 +220,6 @@ list(APPEND librgw_rados_srcs
   driver/rados/rgw_obj_manifest.cc
   driver/rados/rgw_object_expirer_core.cc
   driver/rados/rgw_otp.cc
-  rgw_pubsub_push.cc
   driver/rados/rgw_putobj_processor.cc
   driver/rados/rgw_rados.cc
   driver/rados/rgw_reshard.cc
@@ -241,7 +241,7 @@ list(APPEND librgw_rados_srcs
   driver/rados/rgw_trim_bilog.cc
   driver/rados/rgw_trim_datalog.cc
   driver/rados/rgw_trim_mdlog.cc
-  driver/rados/rgw_user.cc
+  driver/rados/rgw_user_ctl.cc
   driver/rados/oidc.cc
   driver/rados/oidcs.cc
   driver/rados/role.cc
@@ -535,14 +535,19 @@ if(WITH_RADOSGW_STANDALONE)
     PUBLIC "-UWITH_RADOSGW_D4N"
     PUBLIC "-UWITH_RADOSGW_RADOS"
     PUBLIC "-UWITH_RADOSGW_MOTR"
-    PUBLIC "-UWITH_RADOSGW_DAOS"
-    PUBLIC "-UWITH_RADOSGW_AMQP_ENDPOINT")
+    PUBLIC "-UWITH_RADOSGW_DAOS")
 
   if(WITH_RADOSGW_KAFKA_ENDPOINT)
     # used by rgw_kafka.cc
     target_link_libraries(rgw_common_standalone
       PRIVATE
       RDKafka::RDKafka)
+  endif()
+  if(WITH_RADOSGW_AMQP_ENDPOINT)
+    # used by rgw_amqp.cc
+    target_link_libraries(rgw_common_standalone
+      PRIVATE
+      RabbitMQ::RabbitMQ)
   endif()
   if(WITH_OPENLDAP)
     target_link_libraries(rgw_common_standalone
@@ -868,7 +873,6 @@ endif()
 
 if(WITH_RADOSGW_STANDALONE)
   list(APPEND rgw_standalone_admin_srcs
-    driver/rados/rgw_user.cc
     driver/rados/rgw_bucket.cc
     driver/rados/rgw_obj_manifest.cc)
 

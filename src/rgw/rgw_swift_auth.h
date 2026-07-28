@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "rgw_common.h"
-#include "driver/rados/rgw_user.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
 #include "rgw_auth.h"

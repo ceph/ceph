@@ -44,7 +44,6 @@
 #include "rgw_auth_s3.h"
 #include "rgw_acl.h"
 #include "rgw_policy_s3.h"
-#include "driver/rados/rgw_user.h"
 #include "rgw_cors.h"
 #include "rgw_cors_s3.h"
 #include "rgw_tag_s3.h"

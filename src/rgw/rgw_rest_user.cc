@@ -4,7 +4,6 @@
 #include "common/ceph_json.h"
 
 #include "rgw_op.h"
-#include "rgw_user.h"
 #include "rgw_process_env.h"
 #include "rgw_rest_user.h"
 #include "rgw_sal.h"

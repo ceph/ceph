@@ -19,6 +19,7 @@
 #include "common/ceph_json.h"
 #include "common/dout.h"
 #include "cls/user/cls_user_client.h"
+#include "rgw_tools.h"
 #include "rgw_sal.h"
 
 namespace rgwrados::groups {

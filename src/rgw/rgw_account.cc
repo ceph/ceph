@@ -25,6 +25,8 @@
 #include "rgw_oidc_provider.h"
 #include "rgw_quota.h"
 #include "rgw_role.h"
+#include "rgw_formats.h"
+#include "rgw_user.h"
 #include "rgw_sal.h"
 
 #define dout_subsys ceph_subsys_rgw

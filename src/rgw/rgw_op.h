@@ -41,7 +41,7 @@
 
 struct rgw_crypt_src_identity;
 #include "rgw_sal.h"
-#include "driver/rados/rgw_user.h"
+#include "rgw_user.h"
 #include "rgw_bucket.h"
 #include "rgw_acl.h"
 #include "rgw_cors.h"

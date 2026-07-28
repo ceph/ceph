@@ -26,7 +26,7 @@
 #include "rgw_sal.h"
 #include "rgw_quota.h"
 #include "rgw_bucket.h"
-#include "driver/rados/rgw_user.h"
+#include "rgw_user.h"
 
 #include "services/svc_sys_obj.h"
 

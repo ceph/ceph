@@ -20,6 +20,7 @@
 #include "cls/rgw/cls_rgw_types.h"
 #include "rgw_sal.h"
 #include "rgw_restore_waiter.h"
+#include "rgw_formats.h"
 
 #include <atomic>
 #include <tuple>
