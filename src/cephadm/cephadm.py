@@ -1692,6 +1692,7 @@ def command_agent(ctx: CephadmContext) -> None:
 @executes_early
 def command_version(ctx):
     # type: (CephadmContext) -> int
+    import importlib
     import zipimport
     import zipfile
     import types
