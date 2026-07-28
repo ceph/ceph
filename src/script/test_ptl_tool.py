@@ -192,11 +192,11 @@ def test_merge_pr_or_abort_conflict_aborts_and_exits(ptl_tool, caplog):
 
 # ---------------------------------------------------------------------------
 # audit_tracker_and_relabel(): the --qe-label prompt's 'a' option. Verifies a
-# matched tracker is QA Approved before offering to swap its PR label for a
-# caller-chosen set of "done" labels (TESTED + ready-to-merge by default) on
-# every open PR still carrying it. Mutates real GitHub labels when actually
-# applied, so every path that could reach session.delete/session.post is
-# tested for exactly when those calls should (and should not) happen.
+# matched tracker is QA Approved before swapping its PR label for the
+# hardcoded 'needs-merge' label on every open PR still carrying it.  Mutates
+# real GitHub labels when actually applied, so every path that could reach
+# session.delete/session.post is tested for exactly when those calls should
+# (and should not) happen.
 # ---------------------------------------------------------------------------
 
 def _fake_issue(ptl_tool, status_name="QA Approved", issue_id=78399, owned_prs=(100, 111, 222, 333)):
@@ -264,40 +264,13 @@ def test_audit_no_open_prs_is_a_noop(ptl_tool, monkeypatch):
     session.post.assert_not_called()
 
 
-def test_audit_cancel_at_target_labels_prompt(ptl_tool, monkeypatch):
-    """Backing out at the second prompt (after PRs were already fetched and
-    shown) must still change nothing."""
-    issue = _fake_issue(ptl_tool)
-    session = mock.Mock()
-    _patch_get(ptl_tool, monkeypatch, [(111, "some PR")])
-    with mock.patch("builtins.input", side_effect=["", "q"]):
-        result = ptl_tool.audit_tracker_and_relabel(session, issue, "wip-yuri-testing")
-    assert result == "cancelled"
-    session.delete.assert_not_called()
-    session.post.assert_not_called()
-
-
-def test_audit_rejects_empty_target_labels(ptl_tool, monkeypatch):
-    """Input that's non-blank but parses to zero labels (e.g. ',,,') must
-    be rejected before the plan/confirm step, not silently treated as
-    'strip the old label and add nothing'."""
-    issue = _fake_issue(ptl_tool)
-    session = mock.Mock()
-    _patch_get(ptl_tool, monkeypatch, [(111, "some PR")])
-    with mock.patch("builtins.input", side_effect=["", ",,,"]):
-        result = ptl_tool.audit_tracker_and_relabel(session, issue, "wip-yuri-testing")
-    assert result == "cancelled"
-    session.delete.assert_not_called()
-    session.post.assert_not_called()
-
-
 def test_audit_dry_run_never_calls_session_write_methods(ptl_tool, monkeypatch):
     """--dry-run must show the full plan but never touch delete/post, same
     guarantee as post_consolidated_review's own dry-run test above."""
     issue = _fake_issue(ptl_tool)
     session = mock.Mock()
     _patch_get(ptl_tool, monkeypatch, [(111, "PR one"), (222, "PR two")])
-    with mock.patch("builtins.input", side_effect=["", ""]):
+    with mock.patch("builtins.input", side_effect=[""]):
         result = ptl_tool.audit_tracker_and_relabel(
             session, issue, "wip-yuri-testing", dry_run=True
         )
@@ -312,7 +285,7 @@ def test_audit_declining_final_confirm_changes_nothing(ptl_tool, monkeypatch):
     issue = _fake_issue(ptl_tool)
     session = mock.Mock()
     _patch_get(ptl_tool, monkeypatch, [(111, "some PR")])
-    with mock.patch("builtins.input", side_effect=["", "", "n"]):
+    with mock.patch("builtins.input", side_effect=["", "n"]):
         result = ptl_tool.audit_tracker_and_relabel(session, issue, "wip-yuri-testing")
     assert result == "cancelled"
     session.delete.assert_not_called()
@@ -327,7 +300,7 @@ def test_audit_default_label_accepted_on_blank_input(ptl_tool, monkeypatch):
     _patch_get(ptl_tool, monkeypatch, [(111, "t")])
     session.delete.return_value = FakeResponse(200)
     session.post.return_value = FakeResponse(200)
-    with mock.patch("builtins.input", side_effect=["", "", "y"]):
+    with mock.patch("builtins.input", side_effect=["", "y"]):
         result = ptl_tool.audit_tracker_and_relabel(session, issue, "wip-yuri-testing")
     assert result == "completed"
     del_url = session.delete.call_args.args[0]
@@ -345,26 +318,11 @@ def test_audit_custom_label_overrides_default(ptl_tool, monkeypatch):
     ))
     session.delete.return_value = FakeResponse(200)
     session.post.return_value = FakeResponse(200)
-    with mock.patch("builtins.input", side_effect=["wip-someone-else-testing", "", "y"]):
+    with mock.patch("builtins.input", side_effect=["wip-someone-else-testing", "y"]):
         result = ptl_tool.audit_tracker_and_relabel(session, issue, "wip-yuri-testing")
     assert result == "completed"
     del_url = session.delete.call_args.args[0]
     assert "labels/wip-someone-else-testing" in del_url
-
-
-def test_audit_custom_target_labels_override_default(ptl_tool, monkeypatch):
-    """Typing target labels at the second prompt must be used verbatim
-    instead of TESTED/ready-to-merge."""
-    issue = _fake_issue(ptl_tool)
-    session = mock.Mock()
-    _patch_get(ptl_tool, monkeypatch, [(111, "some PR")])
-    session.delete.return_value = FakeResponse(200)
-    session.post.return_value = FakeResponse(200)
-    with mock.patch("builtins.input", side_effect=["", "backport-approved, needs-cherry-pick", "y"]):
-        result = ptl_tool.audit_tracker_and_relabel(session, issue, "wip-yuri-testing")
-    assert result == "completed"
-    posted = session.post.call_args.kwargs["json"]
-    assert posted == {"labels": ["backport-approved", "needs-cherry-pick"]}
 
 
 def test_audit_applies_to_every_pr_when_confirmed(ptl_tool, monkeypatch):
@@ -375,13 +333,13 @@ def test_audit_applies_to_every_pr_when_confirmed(ptl_tool, monkeypatch):
     _patch_get(ptl_tool, monkeypatch, [(111, "PR one"), (222, "PR two"), (333, "PR three")])
     session.delete.return_value = FakeResponse(200)
     session.post.return_value = FakeResponse(200)
-    with mock.patch("builtins.input", side_effect=["", "", "y"]):
+    with mock.patch("builtins.input", side_effect=["", "y"]):
         result = ptl_tool.audit_tracker_and_relabel(session, issue, "wip-yuri-testing")
     assert result == "completed"
     assert session.delete.call_count == 3
     assert session.post.call_count == 3
     posted = session.post.call_args.kwargs["json"]
-    assert posted == {"labels": ["TESTED", "ready-to-merge"]}
+    assert posted == {"labels": ["needs-merge"]}
 
 
 def test_audit_post_failure_for_one_pr_skips_its_delete_but_continues_others(ptl_tool, monkeypatch, caplog):
@@ -393,7 +351,7 @@ def test_audit_post_failure_for_one_pr_skips_its_delete_but_continues_others(ptl
     _patch_get(ptl_tool, monkeypatch, [(111, "bad PR"), (222, "good PR")])
     session.post.side_effect = [FakeResponse(500, "server error"), FakeResponse(200)]
     session.delete.return_value = FakeResponse(200)
-    with mock.patch("builtins.input", side_effect=["", "", "y"]):
+    with mock.patch("builtins.input", side_effect=["", "y"]):
         with caplog.at_level(logging.ERROR, logger=ptl_tool.log.name):
             result = ptl_tool.audit_tracker_and_relabel(session, issue, "wip-yuri-testing")
     assert result == "completed"
@@ -413,13 +371,13 @@ def test_audit_delete_failure_after_post_success_does_not_undo_new_labels(ptl_to
     _patch_get(ptl_tool, monkeypatch, [(111, "some PR")])
     session.post.return_value = FakeResponse(200)
     session.delete.return_value = FakeResponse(500, "server error")
-    with mock.patch("builtins.input", side_effect=["", "", "y"]):
+    with mock.patch("builtins.input", side_effect=["", "y"]):
         with caplog.at_level(logging.ERROR, logger=ptl_tool.log.name):
             result = ptl_tool.audit_tracker_and_relabel(session, issue, "wip-yuri-testing")
     assert result == "completed"
     session.post.assert_called_once()
     posted = session.post.call_args.kwargs["json"]
-    assert posted == {"labels": ["TESTED", "ready-to-merge"]}
+    assert posted == {"labels": ["needs-merge"]}
     assert any("failed to remove" in r.message and "#111" in r.message for r in caplog.records)
 
 
@@ -431,7 +389,7 @@ def test_audit_exits_nonzero_when_no_pr_actually_updated(ptl_tool, monkeypatch, 
     session = mock.Mock()
     _patch_get(ptl_tool, monkeypatch, [(111, "PR one"), (222, "PR two")])
     session.post.return_value = FakeResponse(403, "Resource not accessible")
-    with mock.patch("builtins.input", side_effect=["", "", "y"]):
+    with mock.patch("builtins.input", side_effect=["", "y"]):
         with caplog.at_level(logging.ERROR, logger=ptl_tool.log.name):
             with pytest.raises(SystemExit) as exc_info:
                 ptl_tool.audit_tracker_and_relabel(session, issue, "wip-yuri-testing")
@@ -447,7 +405,7 @@ def test_audit_delete_404_is_treated_as_already_gone(ptl_tool, monkeypatch):
     _patch_get(ptl_tool, monkeypatch, [(111, "some PR")])
     session.delete.return_value = FakeResponse(404)
     session.post.return_value = FakeResponse(200)
-    with mock.patch("builtins.input", side_effect=["", "", "y"]):
+    with mock.patch("builtins.input", side_effect=["", "y"]):
         result = ptl_tool.audit_tracker_and_relabel(session, issue, "wip-yuri-testing")
     assert result == "completed"
     session.post.assert_called_once()
@@ -463,7 +421,7 @@ def test_audit_delete_404_logs_distinctly_from_a_real_removal(ptl_tool, monkeypa
     _patch_get(ptl_tool, monkeypatch, [(111, "some PR")])
     session.post.return_value = FakeResponse(200)
     session.delete.return_value = FakeResponse(404)
-    with mock.patch("builtins.input", side_effect=["", "", "y"]):
+    with mock.patch("builtins.input", side_effect=["", "y"]):
         with caplog.at_level(logging.INFO, logger=ptl_tool.log.name):
             result = ptl_tool.audit_tracker_and_relabel(session, issue, "wip-yuri-testing")
     assert result == "completed"
@@ -484,7 +442,7 @@ def test_audit_post_failure_logs_status_and_body(ptl_tool, monkeypatch, caplog):
     _patch_get(ptl_tool, monkeypatch, [(111, "bad PR"), (222, "good PR")])
     session.post.side_effect = [FakeResponse(403, "Resource not accessible"), FakeResponse(200)]
     session.delete.return_value = FakeResponse(200)
-    with mock.patch("builtins.input", side_effect=["", "", "y"]):
+    with mock.patch("builtins.input", side_effect=["", "y"]):
         with caplog.at_level(logging.ERROR, logger=ptl_tool.log.name):
             result = ptl_tool.audit_tracker_and_relabel(session, issue, "wip-yuri-testing")
     assert result == "completed"
@@ -726,7 +684,7 @@ def test_audit_requests_only_open_prs(ptl_tool, monkeypatch):
         return iter([[{"number": 111, "title": "t", "pull_request": {}}]])
 
     monkeypatch.setattr(ptl_tool, "get", fake_get)
-    with mock.patch("builtins.input", side_effect=["", ""]):
+    with mock.patch("builtins.input", side_effect=[""]):
         result = ptl_tool.audit_tracker_and_relabel(
             session, issue, "wip-yuri-testing", dry_run=True
         )
@@ -746,7 +704,7 @@ def test_audit_skips_non_pr_items_in_mixed_response(ptl_tool, monkeypatch, capsy
         {"number": 222, "title": "PR two", "pull_request": {}},
     ]
     monkeypatch.setattr(ptl_tool, "get", lambda *a, **k: iter([items]))
-    with mock.patch("builtins.input", side_effect=["", ""]):
+    with mock.patch("builtins.input", side_effect=[""]):
         result = ptl_tool.audit_tracker_and_relabel(
             session, issue, "wip-yuri-testing", dry_run=True
         )
@@ -767,7 +725,7 @@ def test_audit_delete_url_quotes_label_with_special_characters(ptl_tool, monkeyp
     _patch_get(ptl_tool, monkeypatch, [(111, "some PR")])
     session.post.return_value = FakeResponse(200)
     session.delete.return_value = FakeResponse(200)
-    with mock.patch("builtins.input", side_effect=["wip yuri/testing", "", "y"]):
+    with mock.patch("builtins.input", side_effect=["wip yuri/testing", "y"]):
         result = ptl_tool.audit_tracker_and_relabel(session, issue, "wip-yuri-testing")
     assert result == "completed"
     del_url = session.delete.call_args.args[0]
@@ -785,7 +743,7 @@ def test_audit_handles_non_ascii_pr_titles(ptl_tool, monkeypatch, capsys):
     session = mock.Mock()
     items = [{"number": 111, "title": "fix café 🎉 crash", "pull_request": {}}]
     monkeypatch.setattr(ptl_tool, "get", lambda *a, **k: iter([items]))
-    with mock.patch("builtins.input", side_effect=["", ""]):
+    with mock.patch("builtins.input", side_effect=[""]):
         result = ptl_tool.audit_tracker_and_relabel(
             session, issue, "wip-yuri-testing", dry_run=True
         )
@@ -804,7 +762,7 @@ def test_audit_excludes_labeled_prs_not_in_tracker_description(ptl_tool, monkeyp
     issue = _fake_issue(ptl_tool, owned_prs=(111,))
     session = mock.Mock()
     _patch_get(ptl_tool, monkeypatch, [(111, "owned PR"), (222, "unrelated later PR")])
-    with mock.patch("builtins.input", side_effect=["", ""]):
+    with mock.patch("builtins.input", side_effect=[""]):
         result = ptl_tool.audit_tracker_and_relabel(
             session, issue, "wip-yuri-testing", dry_run=True
         )

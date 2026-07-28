@@ -442,11 +442,11 @@ def audit_tracker_and_relabel(session, redmine_issue, default_label, dry_run=Fal
     """
     Interactive helper for the --qe-label ticket-decision prompt's 'a'
     option: confirm the matched tracker is actually QA Approved, then
-    offer to swap its PR label for a caller-chosen set of "done" labels
-    (TESTED + ready-to-merge by default) on every open PR still carrying
-    it. Mirrors the already-verified relabel_tested()/sync_approved()
-    logic in the ptl-tool-helper skill's check-wip-labels.sh, done here
-    natively so ptl-tool.py doesn't depend on that separate script.
+    swap its PR label for the hardcoded 'needs-merge' label on every
+    open PR still carrying it. Mirrors the already-verified
+    relabel_tested()/sync_approved() logic in the ptl-tool-helper
+    skill's check-wip-labels.sh, done here natively so ptl-tool.py
+    doesn't depend on that separate script.
 
     Returns one of:
       'not_approved' -- ticket isn't QA Approved yet, caller should
@@ -525,14 +525,7 @@ def audit_tracker_and_relabel(session, redmine_issue, default_label, dry_run=Fal
         safe_title = title.encode('ascii', 'replace').decode('ascii')
         print(f"  #{num}  {safe_title}")
 
-    targets_in = input("Labels to apply instead [TESTED,ready-to-merge] (comma-separated, or 'q' to cancel): ").strip()
-    if targets_in.lower() == 'q':
-        print("Audit cancelled.")
-        return 'cancelled'
-    target_labels = [t.strip() for t in targets_in.split(',') if t.strip()] if targets_in else ["TESTED", "ready-to-merge"]
-    if not target_labels:
-        print("No target labels given (input was empty after parsing) -- nothing to apply. Audit cancelled.")
-        return 'cancelled'
+    target_labels = ["needs-merge"]
 
     print(f"\nPlan: remove '{label}', add {', '.join(target_labels)} on {len(prs)} PR(s) above.")
     if dry_run:
