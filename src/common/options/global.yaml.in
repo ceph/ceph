@@ -1716,6 +1716,18 @@ options:
   - mon
   see_also:
   - ms_bind_msgr2
+- name: mon_warn_on_mixed_min_alloc_size
+  type: bool
+  level: advanced
+  desc: Raise the BLUESTORE_MIXED_MIN_ALLOC_SIZE health warning if BlueStore OSDs
+    of the same CRUSH device class use different allocation units (min_alloc_size)
+  long_desc: A mix of allocation units within a device class usually indicates
+    that only part of the OSDs deployed prior to the Pacific release (64 KiB
+    allocation unit on HDDs) have been redeployed with the current 4 KiB default,
+    leading to non-uniform space usage and performance across OSDs.
+  default: true
+  services:
+  - mon
 - name: mon_warn_on_slow_ping_time
   type: float
   level: advanced

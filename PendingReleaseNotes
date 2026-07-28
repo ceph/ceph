@@ -1103,3 +1103,7 @@ Relevant tracker: https://tracker.ceph.com/issues/71677
   allocation unit (``min_alloc_size``). It can be disabled with the new
   ``bluestore_warn_on_legacy_min_alloc_size`` option, globally or per
   OSD / device class using a configuration mask.
+* RADOS: A new ``BLUESTORE_MIXED_MIN_ALLOC_SIZE`` health warning reports
+  CRUSH device classes in which OSDs use different BlueStore allocation
+  units (``min_alloc_size``). It can be disabled with the new
+  ``mon_warn_on_mixed_min_alloc_size`` option.

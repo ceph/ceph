@@ -919,6 +919,38 @@ To disable this alert entirely, run the following command:
 
    ceph config set global bluestore_warn_on_legacy_min_alloc_size false
 
+BLUESTORE_MIXED_MIN_ALLOC_SIZE
+______________________________
+
+OSDs that belong to the same CRUSH device class use different BlueStore
+allocation units (``min_alloc_size``). This usually indicates that only some
+of the OSDs created prior to the Pacific release (which used a 64 KiB
+allocation unit on HDDs) have been redeployed with the current 4 KiB default.
+Although such a mix is not harmful to data safety, it leads to non-uniform
+space usage and performance across otherwise identical OSDs.
+
+To display the allocation unit of each OSD, run the following command:
+
+.. prompt:: bash #
+
+   ceph osd metadata | jq '.[] | {id, bluestore_min_alloc_size}'
+
+The mix is resolved by redeploying the OSDs that still use a legacy
+allocation unit, as described under ``BLUESTORE_LEGACY_MIN_ALLOC_SIZE``.
+
+Note that mixing devices with different optimal allocation units — for
+example, QLC NVMe devices with a 64 KiB indirection unit alongside TLC
+devices deployed with the 4 KiB default — is best handled by assigning them
+to distinct CRUSH device classes. Since this check compares OSDs within a
+device class only, doing so also prevents this warning from being raised for
+such deliberate configurations.
+
+To disable this alert, run the following command:
+
+.. prompt:: bash #
+
+   ceph config set mon mon_warn_on_mixed_min_alloc_size false
+
 
 BLUESTORE_DISK_SIZE_MISMATCH
 ____________________________

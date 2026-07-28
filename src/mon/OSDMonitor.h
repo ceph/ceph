@@ -652,6 +652,8 @@ private:
   int load_metadata(int osd, std::map<std::string, std::string>& m,
 		    std::ostream *err);
   void count_metadata(const std::string& field, ceph::Formatter *f);
+  void check_mixed_min_alloc_size(const OSDMap& next_map,
+				  health_check_map_t *checks);
 
   void reencode_incremental_map(ceph::buffer::list& bl, uint64_t features);
   void reencode_full_map(ceph::buffer::list& bl, uint64_t features);
