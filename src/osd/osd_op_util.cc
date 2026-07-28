@@ -98,6 +98,8 @@ void OpInfo::set_returnvec() { set_rmw_flags(CEPH_OSD_RMW_FLAG_RETURNVEC); }
 void OpInfo::set_read_data() { set_rmw_flags(CEPH_OSD_RMW_FLAG_READ_DATA); }
 void OpInfo::set_ec_direct_read() { set_rmw_flags(CEPH_OSD_RMW_FLAG_EC_DIRECT_READ); }
 void OpInfo::set_ec_sync_read() { set_rmw_flags(CEPH_OSD_RMW_FLAG_EC_SYNC_READ); }
+void OpInfo::set_primary_only() { set_rmw_flags(CEPH_OSD_RMW_FLAG_PRIMARY_ONLY); }
+bool OpInfo::is_primary_only() const { return check_rmw(CEPH_OSD_RMW_FLAG_PRIMARY_ONLY); }
 
 
 int OpInfo::set_from_op(
@@ -240,6 +242,7 @@ int OpInfo::set_from_op(
     case CEPH_OSD_OP_NOTIFY:
     case CEPH_OSD_OP_NOTIFY_ACK:
       {
+        set_primary_only();
         set_promote();
         break;
       }
