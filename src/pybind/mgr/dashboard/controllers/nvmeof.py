@@ -1263,7 +1263,8 @@ else:
             "nvmeof namespace add",
             model.NamespaceCreation,
             alias="nvmeof ns add",
-            success_message_template="Adding namespace {nsid} to {nqn}: Successful"
+            success_message_template="Adding namespace {nsid} to {nqn}: Successful",
+            deprecated_params={"size": "--size is deprecated, please use --rbd-image-size"}
         )
         @EndpointDoc(
             "Create a new NVMeoF namespace.",
