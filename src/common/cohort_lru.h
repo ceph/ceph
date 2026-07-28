@@ -181,25 +181,29 @@ namespace cohort {
 	    }
 	    ++(o->lru_refcnt);
 	    (void) o->evicting.test_and_set();
+	    /* unlink before releasing lane lock so a racing
+	     * ref(FLAG_INITIAL) sees is_linked()=false and
+	     * retries instead of moving the entry to active */
+	    lane.q.erase(it);
 	    lane_lock.unlock();
 	    YieldPolicy::yield_at("evict_block_post_unlock");
 	    if (o->reclaim(newobj_fac)) {
 	      lane_lock.lock();
 	      --(o->lru_refcnt);
 	      if (o->lru_refcnt != SENTINEL_REFCNT) {
+		/* a FLAG_NONE ref raced in — put back on q */
 		lane.q.push_front(*o);
 		o->evicting.clear();
 		break; /* try next lane */
 	      }
-	      Object::Queue::iterator eit =
-		Object::Queue::s_iterator_to(*o);
-	      lane.q.erase(eit);
 	      last_evict_recycled.store(true, std::memory_order_relaxed);
 	      return o;
 	    } else {
               --(o->lru_refcnt);
               o->evicting.clear();
 	      lane_lock.lock();
+	      /* reclaim failed — put back on q */
+	      lane.q.push_front(*o);
 	    }
 	  } /* each entry in lane */
 	} /* each lane */
