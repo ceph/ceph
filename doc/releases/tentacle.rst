@@ -692,14 +692,14 @@ Cephadm
 
 * A new cephadm-managed ``mgmt-gateway`` service provides a single, TLS-terminated
   entry point for Ceph management endpoints such as the Dashboard and the monitoring
-  stack. The gateway is implemented as an nginx-based reverse proxy that fronts Prometheus,
+  stack. The gateway is implemented as an NGINX-based reverse proxy that fronts Prometheus,
   Grafana, and Alertmanager, so users no longer need to connect to those daemons directly or
   know which hosts they run on. When combined with the new ``oauth2-proxy`` service, which
   integrates with external identity providers using the OpenID Connect (OIDC) / OAuth 2.0
   protocols, the gateway can enforce centralized authentication and single sign-on (SSO) for
   both the Ceph Dashboard and the rest of the monitoring stack.
 * High availability for the Ceph Dashboard and the Prometheus-based monitoring stack is now
-  provided via the cephadm-managed ``mgmt-gateway``. nginx high-availability mechanisms allow
+  provided via the cephadm-managed ``mgmt-gateway``. NGINX high-availability mechanisms allow
   the mgmt-gateway to detect healthy instances of the Dashboard, Prometheus, Grafana, and Alertmanager,
   route traffic accordingly, and handle manager failover transparently. When deployed with a virtual
   IP and multiple ``mgmt-gateway`` instances, this architecture keeps management access available
