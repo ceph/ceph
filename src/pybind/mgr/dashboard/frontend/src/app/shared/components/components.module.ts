@@ -56,6 +56,7 @@ import { ConfigOptionComponent } from './config-option/config-option.component';
 import { ConfirmationModalComponent } from './confirmation-modal/confirmation-modal.component';
 import { Copy2ClipboardButtonComponent } from './copy2clipboard-button/copy2clipboard-button.component';
 import { DeleteConfirmationModalComponent } from './delete-confirmation-modal/delete-confirmation-modal.component';
+import { DeleteGuardModalComponent } from './delete-guard-modal/delete-guard-modal.component';
 import { CustomLoginBannerComponent } from './custom-login-banner/custom-login-banner.component';
 import { DateTimePickerComponent } from './date-time-picker/date-time-picker.component';
 import { DocComponent } from './doc/doc.component';
@@ -183,6 +184,7 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
     LoadingPanelComponent,
     ModalComponent,
     DeleteConfirmationModalComponent,
+    DeleteGuardModalComponent,
     ConfirmationModalComponent,
     LanguageSelectorComponent,
     GrafanaComponent,

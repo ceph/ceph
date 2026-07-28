@@ -10,7 +10,7 @@ import { provideAnimations } from '@angular/platform-browser/animations';
 import { Router } from '@angular/router';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
-import { NvmeofGatewayGroupDeleteGuardModalComponent } from './nvmeof-gateway-group-delete-guard-modal.component';
+import { DeleteGuardModalComponent } from '~/app/shared/components/delete-guard-modal/delete-guard-modal.component';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { NvmeofStateService } from '../nvmeof-state.service';
 
@@ -307,9 +307,21 @@ describe('NvmeofGatewayGroupComponent', () => {
       component.deleteGatewayGroupModal();
 
       expect(nvmeofService.listSubsystems).toHaveBeenCalledWith('default');
-      expect(modalService.show).toHaveBeenCalledWith(NvmeofGatewayGroupDeleteGuardModalComponent, {
-        gatewayName: 'default',
-        connectedSubsystems: [{ nqn: 'subsystem-1' }, { nqn: 'subsystem-2' }]
+      expect(modalService.show).toHaveBeenCalledWith(DeleteGuardModalComponent, {
+        resourceName: 'default',
+        resourceType: 'gateway group',
+        connectedItems: [
+          {
+            name: 'subsystem-1',
+            route: ['/block/nvmeof/subsystems', 'subsystem-1', 'overview'],
+            queryParams: { group: 'default' }
+          },
+          {
+            name: 'subsystem-2',
+            route: ['/block/nvmeof/subsystems', 'subsystem-2', 'overview'],
+            queryParams: { group: 'default' }
+          }
+        ]
       });
     });
 

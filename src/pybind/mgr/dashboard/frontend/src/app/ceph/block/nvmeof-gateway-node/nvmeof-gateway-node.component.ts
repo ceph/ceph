@@ -224,9 +224,7 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
       actionDescription: $localize`remove`,
       hideDefaultWarning: true,
       impact: DeletionImpact.high,
-      bodyContext: {
-        deletionMessage: $localize`Removing <strong>${hostname}</strong> will detach it from the gateway group and stop handling new I/O requests. Active connections may be disrupted.<br><br>You can re-add this node later if required.`
-      },
+      hasAssociatedResources: true,
       submitActionObservable: () => {
         const updatedSpec = this.buildRemoveGatewaySpecPayload(hostname);
         if (!updatedSpec) {

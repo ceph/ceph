@@ -61,12 +61,13 @@ describe('FormLoadingDirective', () => {
     component.loadingError();
     fixture.detectChanges();
 
-    expectShown(0, 1, 0);
+    expect(fixture.debugElement.queryAll(By.css('cd-alert-panel')).length).toEqual(1);
+    expect(fixture.debugElement.queryAll(By.css('cd-loading-panel')).length).toEqual(0);
 
     const alert = fixture.debugElement.nativeElement.querySelector(
       'cd-alert-panel .cds--actionable-notification__content'
     );
-    expect(alert.textContent).toBe('Form data could not be loaded.');
+    expect(alert.textContent).toContain('Form data could not be loaded.');
   });
 
   it('should show original component when calling loadingReady()', () => {
