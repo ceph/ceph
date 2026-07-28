@@ -1328,11 +1328,14 @@ void PeeringState::proc_lease(const pg_lease_t& l)
     readable_until_ub_from_primary = l.readable_until_ub;
   }
 
+  std::optional<ceph::signedspan> peer_clock_delta_lb, peer_clock_delta_ub;
+  hb_stamps[0]->get_peer_clock_delta(&peer_clock_delta_lb, &peer_clock_delta_ub);
+
   ceph::signedspan ru = ceph::signedspan::zero();
   if (l.readable_until != ceph::signedspan::zero() &&
-      hb_stamps[0]->peer_clock_delta_ub) {
-    ru = l.readable_until - *hb_stamps[0]->peer_clock_delta_ub;
-    psdout(20) << " peer_clock_delta_ub " << *hb_stamps[0]->peer_clock_delta_ub
+      peer_clock_delta_ub) {
+    ru = l.readable_until - *peer_clock_delta_ub;
+    psdout(20) << " peer_clock_delta_ub " << *peer_clock_delta_ub
 	       << " -> ru " << ru << dendl;
   }
   if (ru > readable_until) {
@@ -1343,9 +1346,9 @@ void PeeringState::proc_lease(const pg_lease_t& l)
   }
 
   ceph::signedspan ruub;
-  if (hb_stamps[0]->peer_clock_delta_lb) {
-    ruub = l.readable_until_ub - *hb_stamps[0]->peer_clock_delta_lb;
-    psdout(20) << " peer_clock_delta_lb " << *hb_stamps[0]->peer_clock_delta_lb
+  if (peer_clock_delta_lb) {
+    ruub = l.readable_until_ub - *peer_clock_delta_lb;
+    psdout(20) << " peer_clock_delta_lb " << *peer_clock_delta_lb
 	       << " -> ruub " << ruub << dendl;
   } else {
     ruub = pl->get_mnow() + l.interval;
