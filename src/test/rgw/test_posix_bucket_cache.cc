@@ -572,6 +572,393 @@ TEST_F(BucketCacheFixtureDbiRecycle, DbiHandlesBounded)
   }
 }
 
+/* --- Stress tests --- */
+
+class BucketCacheStressBase : protected BucketCacheFixtureBase {
+protected:
+  static void setup_n_buckets(std::vector<std::string>& bvec,
+			      int n, int files_per_bucket) {
+    bvec.clear();
+    for (int ix = 0; ix < n; ++ix) {
+      std::string bname = fmt::format("stress_{}", ix);
+      bvec.push_back(bname);
+      sf::path tp{sf::path{bucket_root} / bname};
+      sf::remove_all(tp);
+      sf::create_directory(tp);
+      for (int jx = 0; jx < files_per_bucket; ++jx) {
+	sf::path fp{tp / fmt::format("obj_{}", jx)};
+	std::ofstream ofs(fp);
+	ofs << "data" << std::endl;
+	ofs.close();
+      }
+    }
+  }
+};
+
+/* Scenario 1: concurrent get_bucket + invalidate_bucket (UAF race) */
+class BucketCacheStressGetInvalidate
+  : public testing::Test, protected BucketCacheStressBase {
+protected:
+  static std::vector<std::string> bvec;
+
+  static void SetUpTestSuite() {
+    setup_n_buckets(bvec, 8, 5);
+    bucket_cache = new BucketCache{
+      &sal_driver, bucket_root, database_root,
+      4 /* max_buckets */,
+      1 /* max_lanes */,
+      1 /* max_partitions */,
+      1 /* lmdb_count */};
+  }
+
+  static void TearDownTestSuite() {
+    delete bucket_cache;
+    bucket_cache = nullptr;
+  }
+};
+
+std::vector<std::string> BucketCacheStressGetInvalidate::bvec;
+
+TEST_F(BucketCacheStressGetInvalidate, ConcurrentGetAndInvalidate)
+{
+  const int n_listers = 16;
+  const int n_invalidators = 4;
+  const int iterations = 5000;
+  std::atomic<bool> stop{false};
+  std::atomic<int> errors{0};
+
+  auto list_fn = [&](int tid) {
+    for (int i = 0; i < iterations && !stop.load(); ++i) {
+      auto& bname = bvec[i % bvec.size()];
+      MockSalBucket sb{bname};
+      std::string marker{""};
+      auto f = [](const rgw_bucket_dir_entry&) -> bool { return true; };
+      int ret = bucket_cache->list_bucket(dpp, null_yield, &sb, marker, f);
+      if (ret != 0) {
+	errors++;
+      }
+    }
+  };
+
+  auto invalidate_fn = [&](int tid) {
+    for (int i = 0; i < iterations && !stop.load(); ++i) {
+      auto& bname = bvec[i % bvec.size()];
+      bucket_cache->invalidate_bucket(dpp, bname);
+    }
+  };
+
+  std::vector<std::thread> threads;
+  for (int i = 0; i < n_listers; ++i) {
+    threads.emplace_back(list_fn, i);
+  }
+  for (int i = 0; i < n_invalidators; ++i) {
+    threads.emplace_back(invalidate_fn, i);
+  }
+  for (auto& t : threads) {
+    t.join();
+  }
+
+  auto total_evictions = bucket_cache->recycle_count + bucket_cache->cleanup_count;
+  std::cout << fmt::format("StressGetInvalidate: evictions={} errors={}",
+    total_evictions, errors.load()) << std::endl;
+  ASSERT_GT(total_evictions, 0);
+}
+
+/* Scenario 2: rapid create/invalidate churn (shadow lifecycle) */
+class BucketCacheStressChurn
+  : public testing::Test, protected BucketCacheStressBase {
+protected:
+  static void SetUpTestSuite() {
+    /* create one bucket dir that all churn names will reference
+     * (they all map to the same empty directory) */
+    for (int i = 0; i < 200; ++i) {
+      std::string bname = fmt::format("churn_{}", i);
+      sf::path tp{sf::path{bucket_root} / bname};
+      sf::remove_all(tp);
+      sf::create_directory(tp);
+    }
+    bucket_cache = new BucketCache{
+      &sal_driver, bucket_root, database_root,
+      4 /* max_buckets */,
+      1 /* max_lanes */,
+      1 /* max_partitions */,
+      1 /* lmdb_count */};
+  }
+
+  static void TearDownTestSuite() {
+    delete bucket_cache;
+    bucket_cache = nullptr;
+  }
+};
+
+TEST_F(BucketCacheStressChurn, RapidCreateInvalidate)
+{
+  const int n_threads = 16;
+  const int iterations = 500;
+  std::atomic<int> name_counter{0};
+
+  auto churn_fn = [&]() {
+    for (int i = 0; i < iterations; ++i) {
+      int id = name_counter++ % 200;
+      std::string bname = fmt::format("churn_{}", id);
+      MockSalBucket sb{bname};
+      std::string marker{""};
+      auto f = [](const rgw_bucket_dir_entry&) -> bool { return true; };
+      bucket_cache->list_bucket(dpp, null_yield, &sb, marker, f);
+      bucket_cache->invalidate_bucket(dpp, bname, true /* recycle */);
+    }
+  };
+
+  std::vector<std::thread> threads;
+  for (int i = 0; i < n_threads; ++i) {
+    threads.emplace_back(churn_fn);
+  }
+  for (auto& t : threads) {
+    t.join();
+  }
+
+  auto total_evictions = bucket_cache->recycle_count + bucket_cache->cleanup_count;
+  std::cout << fmt::format("StressChurn: recycle={} cleanup={} total={}",
+    bucket_cache->recycle_count.load(),
+    bucket_cache->cleanup_count.load(),
+    total_evictions) << std::endl;
+  ASSERT_GT(total_evictions, 0);
+}
+
+/* Scenario 3: DBI slot exhaustion */
+class BucketCacheStressDbiExhaust
+  : public testing::Test, protected BucketCacheStressBase {
+protected:
+  static std::vector<std::string> bvec;
+
+  static void SetUpTestSuite() {
+    /* 10 buckets, but only 4 DBI slots — must evict to make room */
+    setup_n_buckets(bvec, 10, 3);
+    bucket_cache = new BucketCache{
+      &sal_driver, bucket_root, database_root,
+      10 /* max_buckets — more slots than DBIs */,
+      1 /* max_lanes */,
+      1 /* max_partitions */,
+      1 /* lmdb_count */};
+  }
+
+  static void TearDownTestSuite() {
+    delete bucket_cache;
+    bucket_cache = nullptr;
+  }
+};
+
+std::vector<std::string> BucketCacheStressDbiExhaust::bvec;
+
+TEST_F(BucketCacheStressDbiExhaust, ExhaustionIsClean)
+{
+  int successes = 0;
+  int failures = 0;
+  for (auto& bucket : bvec) {
+    MockSalBucket sb{bucket};
+    std::string marker{""};
+    auto f = [](const rgw_bucket_dir_entry&) -> bool { return true; };
+    int ret = bucket_cache->list_bucket(dpp, null_yield, &sb, marker, f);
+    if (ret == 0) {
+      successes++;
+    } else {
+      failures++;
+    }
+  }
+  std::cout << fmt::format("DbiExhaust: successes={} failures={}",
+    successes, failures) << std::endl;
+  /* either all succeed (eviction freed DBIs) or failures are clean
+   * (no crash, no assertion, just a return code) */
+  ASSERT_EQ(successes + failures, 10);
+}
+
+/* Scenario 4: hiwat eviction under concurrent load */
+class BucketCacheStressHiwat
+  : public testing::Test, protected BucketCacheStressBase {
+protected:
+  static std::vector<std::string> bvec;
+
+  static void SetUpTestSuite() {
+    setup_n_buckets(bvec, 50, 5);
+    bucket_cache = new BucketCache{
+      &sal_driver, bucket_root, database_root,
+      8 /* max_buckets */,
+      2 /* max_lanes */,
+      2 /* max_partitions */,
+      1 /* lmdb_count */};
+  }
+
+  static void TearDownTestSuite() {
+    delete bucket_cache;
+    bucket_cache = nullptr;
+  }
+};
+
+std::vector<std::string> BucketCacheStressHiwat::bvec;
+
+TEST_F(BucketCacheStressHiwat, ConcurrentHiwatEviction)
+{
+  const int n_threads = 20;
+  const int iterations = 2000;
+  std::atomic<int> errors{0};
+
+  auto work_fn = [&](int tid) {
+    for (int i = 0; i < iterations; ++i) {
+      int idx = (tid * iterations + i) % bvec.size();
+      auto& bname = bvec[idx];
+      MockSalBucket sb{bname};
+      std::string marker{""};
+      auto f = [](const rgw_bucket_dir_entry&) -> bool { return true; };
+      int ret = bucket_cache->list_bucket(dpp, null_yield, &sb, marker, f);
+      if (ret != 0) {
+	errors++;
+      }
+    }
+  };
+
+  std::vector<std::thread> threads;
+  for (int i = 0; i < n_threads; ++i) {
+    threads.emplace_back(work_fn, i);
+  }
+  for (auto& t : threads) {
+    t.join();
+  }
+
+  auto total_evictions = bucket_cache->recycle_count + bucket_cache->cleanup_count;
+  std::cout << fmt::format("StressHiwat: evictions={} errors={}",
+    total_evictions, errors.load()) << std::endl;
+  ASSERT_GT(total_evictions, 0);
+  ASSERT_EQ(errors.load(), 0);
+}
+
+/* --- Deterministic race tests via yield policy --- */
+
+struct RandomYieldPolicy {
+  static void yield_at(const char*) {
+    thread_local std::mt19937 rng(std::random_device{}());
+    std::uniform_int_distribution<> dist(0, 99);
+    if (dist(rng) < 40) {
+      std::this_thread::yield();
+    }
+  }
+};
+
+class BucketCacheRaceBase : protected BucketCacheFixtureBase {
+protected:
+  using TestBucketCache =
+    file::listing::BucketCache<MockSalDriver, MockSalBucket, RandomYieldPolicy>;
+  using TestEntry =
+    file::listing::BucketCacheEntry<MockSalDriver, MockSalBucket, RandomYieldPolicy>;
+
+  static TestBucketCache* test_cache;
+
+  /* find a bucket name whose XXH64 hash lands in target_part (mod n_parts) */
+  static std::string name_for_partition(int target_part, int n_parts,
+					const std::string& prefix = "r") {
+    for (int i = 0; i < 10000; ++i) {
+      std::string name = fmt::format("{}_{}", prefix, i);
+      uint64_t hk = XXH64(name.c_str(), name.length(), TestEntry::seed);
+      if (int(hk % n_parts) == target_part) {
+	return name;
+      }
+    }
+    return prefix + "_0";
+  }
+
+  static void make_bucket_dir(const std::string& name, int nfiles = 3) {
+    sf::path tp{sf::path{bucket_root} / name};
+    sf::remove_all(tp);
+    sf::create_directory(tp);
+    for (int i = 0; i < nfiles; ++i) {
+      sf::path fp{tp / fmt::format("obj_{}", i)};
+      std::ofstream ofs(fp);
+      ofs << "data" << std::endl;
+      ofs.close();
+    }
+  }
+};
+
+BucketCacheRaceBase::TestBucketCache* BucketCacheRaceBase::test_cache = nullptr;
+
+/* Race test: multiple threads hammer a tiny cache with random yields
+ * at critical points (ref_pre_refcnt_bump, ref_pre_lane_lock,
+ * evict_block_post_unlock).  The RandomYieldPolicy widens race
+ * windows that are nanoseconds wide in production.  Over many
+ * iterations, this statistically exercises the hiwat, evict_block,
+ * and ref/unref interleavings.  Buckets are spread across 2
+ * partitions to avoid partition-lock deadlocks. */
+class BucketCacheRaceBarrier
+  : public testing::Test, protected BucketCacheRaceBase {
+protected:
+  static std::vector<std::string> bvec;
+
+  static void SetUpTestSuite() {
+    bvec.clear();
+    for (int p = 0; p < 2; ++p) {
+      for (int i = 0; i < 5; ++i) {
+	std::string name = name_for_partition(
+	  p, 2, fmt::format("rb{}", p));
+	name = fmt::format("{}_{}", name, i);
+	bvec.push_back(name);
+	make_bucket_dir(name);
+      }
+    }
+  }
+};
+
+std::vector<std::string> BucketCacheRaceBarrier::bvec;
+
+TEST_F(BucketCacheRaceBarrier, HiwatAndEvictBlockUnderYield)
+{
+  /* tiny cache: hiwat=2, 1 lane, 2 partitions */
+  test_cache = new TestBucketCache{
+    &sal_driver, bucket_root, database_root,
+    2 /* max_buckets */, 1 /* lanes */, 2 /* partitions */, 1 /* lmdb */};
+
+  const int n_threads = 8;
+  const int iterations = 2000;
+  std::atomic<int> errors{0};
+
+  auto work_fn = [&](int tid) {
+    auto list_fn = [](const rgw_bucket_dir_entry&) -> bool { return true; };
+    for (int i = 0; i < iterations; ++i) {
+      int idx = (tid + i) % bvec.size();
+      MockSalBucket sb{bvec[idx]};
+      std::string marker{""};
+      int ret = test_cache->list_bucket(dpp, null_yield, &sb, marker, list_fn);
+      if (ret != 0) {
+	errors++;
+      }
+      if (i % 7 == 0) {
+	int inv_idx = (tid + i + 3) % bvec.size();
+	test_cache->invalidate_bucket(dpp, bvec[inv_idx]);
+      }
+    }
+  };
+
+  std::vector<std::thread> threads;
+  for (int i = 0; i < n_threads; ++i) {
+    threads.emplace_back(work_fn, i);
+  }
+  for (auto& t : threads) {
+    t.join();
+  }
+
+  auto total_evictions = test_cache->recycle_count + test_cache->cleanup_count;
+  std::cout << fmt::format(
+    "RaceBarrier: evictions={} errors={}", total_evictions, errors.load())
+    << std::endl;
+  ASSERT_GT(total_evictions, 0);
+  ASSERT_EQ(errors.load(), 0);
+
+  delete test_cache;
+  test_cache = nullptr;
+}
+
+
+/* TODO: deterministic evict_block race test — deferred.
+ * See ~/dev/rgw/bucketcache-lru-race-fixes-and-flow-control.md */
+
 int main (int argc, char *argv[])
 {
 

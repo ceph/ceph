@@ -82,10 +82,12 @@ namespace sf = std::filesystem;
 typedef bi::link_mode<bi::safe_link> link_mode; /* XXX normal */
 typedef bi::avl_set_member_hook<link_mode> member_hook_t;
 
-template <typename D, typename B>
+template <typename D, typename B,
+	  typename YP = cohort::lru::NullYieldPolicy>
 struct BucketCache;
 
-template <typename D, typename B>
+template <typename D, typename B,
+	  typename YP = cohort::lru::NullYieldPolicy>
 struct BucketCacheEntry : public cohort::lru::Object
 {
   using lock_guard = std::lock_guard<std::mutex>;
@@ -97,7 +99,7 @@ struct BucketCacheEntry : public cohort::lru::Object
 
   static constexpr uint64_t seed = 8675309;
 
-  BucketCache<D, B>* bc;
+  BucketCache<D, B, YP>* bc;
   std::string name;
   std::shared_ptr<LMDBSafe::MDBEnv> env;
   LMDBSafe::MDBDbi dbi;
@@ -110,7 +112,7 @@ struct BucketCacheEntry : public cohort::lru::Object
   uint32_t flags;
 
 public:
-  BucketCacheEntry(BucketCache<D, B>* bc, const std::string& name, uint64_t hk)
+  BucketCacheEntry(BucketCache<D, B, YP>* bc, const std::string& name, uint64_t hk)
     : bc(bc), name(name), env{nullptr}, hk(hk), flags(FLAG_NONE) {}
 
   void set_env(std::shared_ptr<LMDBSafe::MDBEnv>& _env, LMDBSafe::MDBDbi& _dbi) {
@@ -120,18 +122,35 @@ public:
 
   void lru_cleanup() override {
     bc->cleanup_count++;
-    if (env) {
-      try {
-	auto txn = env->getRWTransaction();
-	mdb_drop(*txn, dbi, 0);
-	txn->commit();
-	bc->lmdbs.recycle_dbi(this);
-      } catch (const std::exception& e) {
-	lsubdout(bc->driver->ctx(), rgw, 0)
-	  << "BucketCache: hiwat dbi recycle failed for "
-	  << name << ": " << e.what() << dendl;
+    /* follow the same protocol as reclaim(): mark deleted and recycle
+     * DBI under mtx, then remove the AVL node with FLAG_LOCK after
+     * releasing mtx — never mtx → partition lock (deadlock) */
+    {
+      auto lock = lock_guard{mtx};
+      if (deleted()) {
+	return;
       }
-      env.reset();
+      flags |= FLAG_DELETED;
+      if (bc->un) {
+	bc->un->remove_watch(name);
+      }
+      if (env) {
+	try {
+	  auto txn = env->getRWTransaction();
+	  mdb_drop(*txn, dbi, 0);
+	  txn->commit();
+	  bc->lmdbs.recycle_dbi(this);
+	} catch (const std::exception& e) {
+	  lsubdout(bc->driver->ctx(), rgw, 0)
+	    << "BucketCache: hiwat dbi recycle failed for "
+	    << name << ": " << e.what() << dendl;
+	}
+	env.reset();
+      }
+    } /* mtx released */
+
+    if (name_hook.is_linked()) {
+      bc->cache.remove(hk, this, bucket_avl_cache::FLAG_LOCK);
     }
   }
 
@@ -149,13 +168,13 @@ public:
   class Factory : public cohort::lru::ObjectFactory
   {
   public:
-    BucketCache<D, B>* bc;
+    BucketCache<D, B, YP>* bc;
     const std::string& name;
     uint64_t hk;
     uint32_t flags;
 
     Factory() = delete;
-    Factory(BucketCache<D, B> *bc, const std::string& name)
+    Factory(BucketCache<D, B, YP> *bc, const std::string& name)
       : bc(bc), name(name), flags(FLAG_NONE) {
       hk = XXH64(name.c_str(), name.length(), BucketCacheEntry::seed);
     }
@@ -198,7 +217,7 @@ public:
       { return lhs.name == k; }
   };
 
-  typedef cohort::lru::LRU<std::mutex> bucket_lru;
+  typedef cohort::lru::LRU<std::mutex, YP> bucket_lru;
 
   typedef bi::member_hook<BucketCacheEntry, member_hook_t, &BucketCacheEntry::name_hook> name_hook_t;
   typedef bi::avltree<BucketCacheEntry, bi::compare<BucketCacheEntryLT>, name_hook_t> bucket_avl_t;
@@ -206,7 +225,7 @@ public:
 			     std::mutex> bucket_avl_cache;
 
   bool reclaim(const cohort::lru::ObjectFactory* newobj_fac) {
-    auto factory = dynamic_cast<const BucketCacheEntry<D, B>::Factory*>(newobj_fac);
+    auto factory = dynamic_cast<const BucketCacheEntry<D, B, YP>::Factory*>(newobj_fac);
     if (factory == nullptr) {
         return false;
     }
@@ -274,7 +293,7 @@ static constexpr int FILL_CACHE_FLAG_FIXUP_CURRENT = 0x0001;
 using list_bucket_each_t =
   const fu2::unique_function<bool(const rgw_bucket_dir_entry&) const>;
 
-template <typename D, typename B>
+template <typename D, typename B, typename YP>
 struct BucketCache : public Notifiable
 {
   using lock_guard = std::lock_guard<std::mutex>;
@@ -289,8 +308,8 @@ struct BucketCache : public Notifiable
 
   /* the bucket lru cache keeps track of the buckets whose listings are
    * being cached in lmdb databases and updated from notify */
-  typename BucketCacheEntry<D, B>::bucket_lru lru;
-  typename BucketCacheEntry<D, B>::bucket_avl_cache cache;
+  typename BucketCacheEntry<D, B, YP>::bucket_lru lru;
+  typename BucketCacheEntry<D, B, YP>::bucket_avl_cache cache;
   sf::path rp;
 
   /* the lmdb handle cache maintains a vector of lmdb environments,
@@ -339,15 +358,15 @@ struct BucketCache : public Notifiable
       }
     }
 
-    uint8_t partition_ix(BucketCacheEntry<D, B>* bucket) {
+    uint8_t partition_ix(BucketCacheEntry<D, B, YP>* bucket) {
       return bucket->hk % lmdb_count;
     }
 
-    inline std::shared_ptr<LMDBSafe::MDBEnv>& get_sp_env(BucketCacheEntry<D, B>* bucket)  {
+    inline std::shared_ptr<LMDBSafe::MDBEnv>& get_sp_env(BucketCacheEntry<D, B, YP>* bucket)  {
       return parts[partition_ix(bucket)].env;
     }
 
-    inline LMDBSafe::MDBEnv& get_env(BucketCacheEntry<D, B>* bucket) {
+    inline LMDBSafe::MDBEnv& get_env(BucketCacheEntry<D, B, YP>* bucket) {
       return *(get_sp_env(bucket));
     }
 
@@ -355,7 +374,7 @@ struct BucketCache : public Notifiable
      * partition; reuses a recycled handle if available, otherwise
      * opens a new one; returns nullopt on failure (e.g. MDB_DBS_FULL) */
     std::optional<LMDBSafe::MDBDbi> get_dbi(
-      BucketCacheEntry<D, B>* bucket,
+      BucketCacheEntry<D, B, YP>* bucket,
       std::function<LMDBSafe::MDBDbi()> open_fn)
     {
       auto& part = parts[partition_ix(bucket)];
@@ -390,7 +409,7 @@ struct BucketCache : public Notifiable
     /* move a dbi from the active map to the free pool for reuse;
      * the caller must have already cleared the database with
      * mdb_drop(dbi, 0) */
-    void recycle_dbi(BucketCacheEntry<D, B>* bucket) {
+    void recycle_dbi(BucketCacheEntry<D, B, YP>* bucket) {
       auto& part = parts[partition_ix(bucket)];
       std::lock_guard lk(part.mtx);
       auto it = part.dbi_map.find(bucket->name);
@@ -467,7 +486,7 @@ public:
      * The drain() method safely removes all entries
      * from the AVL cache partitions and calls the supplied lambda on each,
      * allowing proper cleanup without accessing private members. */
-    cache.drain([this](BucketCacheEntry<D, B>* entry) {
+    cache.drain([this](BucketCacheEntry<D, B, YP>* entry) {
       lru.unref(entry, cohort::lru::FLAG_NONE);
     }, cache.FLAG_LOCK);
   }
@@ -476,21 +495,21 @@ public:
   static constexpr uint32_t FLAG_CREATE   = 0x0001;
   static constexpr uint32_t FLAG_LOCK     = 0x0002;
 
-  typedef std::tuple<BucketCacheEntry<D, B>*, uint32_t> GetBucketResult;
+  typedef std::tuple<BucketCacheEntry<D, B, YP>*, uint32_t> GetBucketResult;
 
   GetBucketResult get_bucket(const DoutPrefixProvider* dpp, const std::string& name, uint32_t flags)
     {
       /* this fn returns a bucket locked appropriately, having atomically
        * found or inserted the required BucketCacheEntry in_avl*/
-      BucketCacheEntry<D, B>* b{nullptr};
-      typename BucketCacheEntry<D, B>::Factory fac(this, name);
-      typename BucketCacheEntry<D, B>::bucket_avl_cache::Latch lat;
+      BucketCacheEntry<D, B, YP>* b{nullptr};
+      typename BucketCacheEntry<D, B, YP>::Factory fac(this, name);
+      typename BucketCacheEntry<D, B, YP>::bucket_avl_cache::Latch lat;
       uint32_t iflags{cohort::lru::FLAG_INITIAL};
       GetBucketResult result{nullptr, 0};
 
     retry:
       b = cache.find_latch(fac.hk /* partition selector */,
-			   name /* key */, lat /* serializer */, BucketCacheEntry<D, B>::bucket_avl_cache::FLAG_LOCK);
+			   name /* key */, lat /* serializer */, BucketCacheEntry<D, B, YP>::bucket_avl_cache::FLAG_LOCK);
       /* LATCHED */
       if (b) {
 	b->mtx.lock();
@@ -505,14 +524,14 @@ public:
 	/* LOCKED */
       } else {
 	/* BucketCacheEntry not in cache */
-	if (! (flags & BucketCache<D, B>::FLAG_CREATE)) {
+	if (! (flags & BucketCache<D, B, YP>::FLAG_CREATE)) {
           /* the caller does not want to instantiate a new cache
 	   * entry (i.e., only wants to notify on an existing one) */
         lat.lock->unlock();
         return result;
         }
 	/* we need to create it */
-	b = static_cast<BucketCacheEntry<D, B>*>(
+	b = static_cast<BucketCacheEntry<D, B, YP>*>(
 	  lru.insert(&fac, cohort::lru::Edge::MRU, iflags));
 	if (b) [[likely]] {
 	  ldpp_dout(dpp, 2) << "BucketCache: "
@@ -540,15 +559,15 @@ public:
 
 	  if (! (iflags & cohort::lru::FLAG_RECYCLE)) [[likely]] {
 	    /* inserts at cached insert iterator, releasing latch */
-	    cache.insert_latched(b, lat, BucketCacheEntry<D, B>::bucket_avl_cache::FLAG_UNLOCK);
+	    cache.insert_latched(b, lat, BucketCacheEntry<D, B, YP>::bucket_avl_cache::FLAG_UNLOCK);
 	  } else {
 	    /* recycle invalidated the cached insert position, but the latch's
 	     * partition lock still guards this partition; hold it across the
 	     * insert so we don't race concurrent tree ops, then release it */
-	    cache.insert(fac.hk, b, BucketCacheEntry<D, B>::bucket_avl_cache::FLAG_NONE);
+	    cache.insert(fac.hk, b, BucketCacheEntry<D, B, YP>::bucket_avl_cache::FLAG_NONE);
 	    lat.lock->unlock(); /* !LATCHED */
 	  }
-	  get<1>(result) |= BucketCache<D, B>::FLAG_CREATE;
+	  get<1>(result) |= BucketCache<D, B, YP>::FLAG_CREATE;
 	} else {
 	  /* XXX lru allocate failed? seems impossible--that would mean that
 	   * fallback to the allocator also failed, and maybe we should abend */
@@ -557,7 +576,7 @@ public:
 	}
       } /* have BucketCacheEntry */
 
-      if (! (flags & BucketCache<D, B>::FLAG_LOCK)) {
+      if (! (flags & BucketCache<D, B, YP>::FLAG_LOCK)) {
 	b->mtx.unlock();
       }
       get<0>(result) = b;
@@ -573,7 +592,7 @@ public:
     return k_str;
   }
 
-  int fill(const DoutPrefixProvider* dpp, BucketCacheEntry<D, B>* bucket,
+  int fill(const DoutPrefixProvider* dpp, BucketCacheEntry<D, B, YP>* bucket,
 	    B* sal_bucket, uint32_t flags, optional_yield y) /* assert: LOCKED */
   {
     try {
@@ -708,7 +727,7 @@ public:
       } /* FILL_CACHE_FLAG_FIXUP_CURRENT */
 
       txn->commit();
-      bucket->flags |= BucketCacheEntry<D, B>::FLAG_FILLED;
+      bucket->flags |= BucketCacheEntry<D, B, YP>::FLAG_FILLED;
       un->add_watch(bucket->name, bucket);
       return rc;
     } catch (const std::exception& e) {
@@ -727,7 +746,7 @@ public:
     GetBucketResult gbr;
     try {
       gbr = get_bucket(dpp, sal_bucket->get_name(),
-		   BucketCache<D, B>::FLAG_LOCK | BucketCache<D, B>::FLAG_CREATE);
+		   BucketCache<D, B, YP>::FLAG_LOCK | BucketCache<D, B, YP>::FLAG_CREATE);
     } catch (const std::exception& e) {
       ldpp_dout(dpp, 0) << "BucketCache: get_bucket failed for "
 	<< sal_bucket->get_name() << ": " << e.what() << dendl;
@@ -741,10 +760,10 @@ public:
     }
     auto unref_guard = make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
     unique_lock ulk{b->mtx, std::adopt_lock};
-    if (! (b->flags & BucketCacheEntry<D, B>::FLAG_FILLED)) {
+    if (! (b->flags & BucketCacheEntry<D, B, YP>::FLAG_FILLED)) {
       /* bulk load into lmdb cache */
       ldpp_dout(dpp, 2) << "BucketCache: filling bucket=" << sal_bucket->get_name()
-	<< (flags & BucketCache<D, B>::FLAG_CREATE ? " (new entry)" : " (refill)") << dendl;
+	<< (flags & BucketCache<D, B, YP>::FLAG_CREATE ? " (new entry)" : " (refill)") << dendl;
       rc = fill(dpp, b, sal_bucket, FLAG_NONE, y);
     }
     /* display them */
@@ -824,14 +843,14 @@ public:
     using namespace LMDBSafe;
 
     int rc{0};
-    GetBucketResult gbr = get_bucket(nullptr, bname, BucketCache<D, B>::FLAG_LOCK);
+    GetBucketResult gbr = get_bucket(nullptr, bname, BucketCache<D, B, YP>::FLAG_LOCK);
     auto [b /* BucketCacheEntry */, flags] = gbr;
     if (b) {
       auto unref_guard = make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
       unique_lock ulk{b->mtx, std::adopt_lock};
       if ((b->name != bname) ||
 	  (opaque && (b != opaque)) ||
-	  (! (b->flags & BucketCacheEntry<D, B>::FLAG_FILLED))) {
+	  (! (b->flags & BucketCacheEntry<D, B, YP>::FLAG_FILLED))) {
 	/* do nothing */
 	return 0;
       }
@@ -894,7 +913,7 @@ public:
                 << " bucket=" << b->name << dendl;
               mdb_drop(*txn, b->dbi, 0);
               txn->commit();
-              b->flags &= ~BucketCacheEntry<D, B>::FLAG_FILLED;
+              b->flags &= ~BucketCacheEntry<D, B, YP>::FLAG_FILLED;
               ulk.unlock();
               return 0; /* don't process any more events in this batch */
             }
@@ -920,7 +939,7 @@ public:
     ldpp_dout(dpp, 10) << "BucketCache: add_entry bucket=" << bname
       << " key=" << bde.key.name << dendl;
 
-    GetBucketResult gbr = get_bucket(dpp, bname, BucketCache<D, B>::FLAG_LOCK);
+    GetBucketResult gbr = get_bucket(dpp, bname, BucketCache<D, B, YP>::FLAG_LOCK);
     auto [b /* BucketCacheEntry */, flags] = gbr;
     if (b) {
       auto unref_guard = make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
@@ -974,7 +993,7 @@ public:
     ldpp_dout(dpp, 10) << "BucketCache: remove_entry bucket=" << bname
       << " key=" << key.name << " instance=" << key.instance << dendl;
 
-    GetBucketResult gbr = get_bucket(dpp, bname, BucketCache<D, B>::FLAG_LOCK);
+    GetBucketResult gbr = get_bucket(dpp, bname, BucketCache<D, B, YP>::FLAG_LOCK);
     auto [b /* BucketCacheEntry */, flags] = gbr;
     if (b) {
       auto unref_guard = make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
@@ -1020,7 +1039,7 @@ public:
 			bool recycle = false) {
     using namespace LMDBSafe;
 
-    GetBucketResult gbr = get_bucket(dpp, bname, BucketCache<D, B>::FLAG_LOCK);
+    GetBucketResult gbr = get_bucket(dpp, bname, BucketCache<D, B, YP>::FLAG_LOCK);
     auto [b /* BucketCacheEntry */, flags] = gbr;
     if (b) {
       auto unref_guard = make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
@@ -1040,7 +1059,7 @@ public:
       if (recycle) {
 	lmdbs.recycle_dbi(b);
       }
-      b->flags &= ~BucketCacheEntry<D, B>::FLAG_FILLED;
+      b->flags &= ~BucketCacheEntry<D, B, YP>::FLAG_FILLED;
 
       ulk.unlock();
     } /* b */
