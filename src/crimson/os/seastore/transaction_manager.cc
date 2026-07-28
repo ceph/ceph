@@ -604,6 +604,11 @@ TransactionManager::relocate_shadow_extent(
     )->template cast<LogicalChildNode>();
   } else {
     extent = co_await std::move(v.get_child_fut());
+    if (extent->is_stable_dirty()) {
+      // the extent is dirty, skip it.
+      DEBUGT("skipping dirty extent: {}", t, *extent);
+      co_return LogicalChildNodeRef();
+    }
     cache->retire_extent(t, extent);
   }
   if (auto shadow = extent->get_shadow(); shadow) {
@@ -1607,6 +1612,10 @@ TransactionManager::demote_region(
     if (it.has_shadow_val()) {
       DEBUGT("demote shadow {}", t, it);
       auto extent = co_await relocate_shadow_extent(t, it);
+      if (!extent) {
+        DEBUGT("{} can't be demoted", t, it);
+        continue;
+      }
       ret.demoted_size += extent->get_length();
       auto cursor = co_await lba_manager->demote_extent(
         t, *it.direct_cursor, *extent);
