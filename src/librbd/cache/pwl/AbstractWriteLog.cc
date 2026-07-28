@@ -71,7 +71,7 @@ AbstractWriteLog<I>::AbstractWriteLog(
     m_lock(ceph::make_mutex(pwl::unique_lock_name(
       "librbd::cache::pwl::AbstractWriteLog::m_lock", this))),
     m_blocks_to_log_entries(image_ctx.cct),
-    m_work_queue("librbd::cache::pwl::ReplicatedWriteLog::work_queue",
+    m_work_queue("librbd::cache::pwl::WriteLog::work_queue",
                  ceph::make_timespan(
                    image_ctx.config.template get_val<uint64_t>(
 		     "rbd_op_thread_timeout")),
@@ -213,11 +213,11 @@ void AbstractWriteLog<I>::perf_start(std::string name) {
   plb.add_time_avg(
     l_librbd_pwl_nowait_wr_caller_latency, "caller_wr_latency_nw",
     "Latency of write completion to callerfor writes not deferred for free space");
-  plb.add_time_avg(l_librbd_pwl_log_op_alloc_t, "op_alloc_t", "Average buffer pmemobj_reserve() time");
+  plb.add_time_avg(l_librbd_pwl_log_op_alloc_t, "op_alloc_t", "Average buffer allocation time");
   plb.add_u64_counter_histogram(
     l_librbd_pwl_log_op_alloc_t_hist, "op_alloc_t_bytes_histogram",
     op_hist_x_axis_config, op_hist_y_axis_config,
-    "Histogram of buffer pmemobj_reserve() time (nanoseconds) vs. bytes written");
+    "Histogram of buffer allocation time (nanoseconds) vs. bytes written");
   plb.add_time_avg(l_librbd_pwl_log_op_dis_to_buf_t, "op_dis_to_buf_t", "Average dispatch to buffer persist time");
   plb.add_time_avg(l_librbd_pwl_log_op_dis_to_app_t, "op_dis_to_app_t", "Average dispatch to log append time");
   plb.add_time_avg(l_librbd_pwl_log_op_dis_to_cmp_t, "op_dis_to_cmp_t", "Average dispatch to persist completion time");
@@ -831,7 +831,7 @@ void AbstractWriteLog<I>::read(Extents&& image_extents,
           map_entry.log_entry->ram_entry.image_offset_bytes;
         /* Offset into the log entry buffer of this read hit */
         uint64_t read_buffer_offset = map_entry_buffer_offset + entry_offset;
-        /* Create buffer object referring to pmem pool for this read hit */
+        /* Create buffer object referring to the cache pool for this read hit */
         collect_read_extents(
             read_buffer_offset, map_entry, log_entries_to_read, bls_to_read,
             entry_hit_length, hit_extent, read_ctx);
@@ -875,8 +875,7 @@ void AbstractWriteLog<I>::write(Extents &&image_extents,
   ceph_assert(m_initialized);
 
   /* Split image extents larger than 1M. This isn't strictly necessary but
-   * makes libpmemobj allocator's job easier and reduces pmemobj_defrag() cost.
-   * We plan to manage pmem space and allocation by ourselves in the future.
+   * keeps individual allocations small.
    */
   Extents split_image_extents;
   uint64_t max_extent_size = get_max_extent();
@@ -1270,10 +1269,9 @@ void AbstractWriteLog<I>::release_guarded_request(BlockGuardCell *released_cell)
 
 template <typename I>
 void AbstractWriteLog<I>::append_scheduled(GenericLogOperations &ops, bool &ops_remain,
-                                         bool &appending, bool isRWL)
+                                         bool &appending)
 {
-  const unsigned long int OPS_APPENDED = isRWL ? MAX_ALLOC_PER_TRANSACTION
-    : MAX_WRITES_PER_SYNC_POINT;
+  const unsigned long int OPS_APPENDED = MAX_WRITES_PER_SYNC_POINT;
   {
     std::lock_guard locker(m_lock);
     if (!appending && m_appending) {
@@ -1294,12 +1292,6 @@ void AbstractWriteLog<I>::append_scheduled(GenericLogOperations &ops, bool &ops_
       ops_remain = true; /* Always check again before leaving */
       ldout(m_image_ctx.cct, 20) << "appending " << ops.size() << ", remain "
                                  << m_ops_to_append.size() << dendl;
-    } else if (isRWL) {
-      ops_remain = false;
-      if (appending) {
-        appending = false;
-        m_appending = false;
-      }
     }
   }
 }

@@ -160,9 +160,6 @@ EOM
     if [ $WITH_CRIMSON ]; then
         cmake_opts+=" -DWITH_CRIMSON=ON"
     fi
-    if [ $WITH_RBD_RWL ]; then
-        cmake_opts+=" -DWITH_RBD_RWL=ON"
-    fi
     cmake_opts+=" -DWITH_RBD_SSD_CACHE=ON"
 
     cmake_opts+=" $(detect_ceph_dev_pkgs)"

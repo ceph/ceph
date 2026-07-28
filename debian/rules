@@ -33,11 +33,6 @@ extraopts += -DWITH_CEPHFS_SHELL=ON
 extraopts += -DWITH_SYSTEMD=ON -DCEPH_SYSTEMD_ENV_DIR=/etc/default
 extraopts += -DWITH_GRAFANA=ON
 extraopts += -DCEPHADM_BUNDLED_DEPENDENCIES=deb
-ifeq ($(DEB_HOST_ARCH), amd64)
-  extraopts += -DWITH_RBD_RWL=ON
-else
-  extraopts += -DWITH_RBD_RWL=OFF
-endif
 extraopts += -DWITH_RBD_SSD_CACHE=ON
 # assumes that ceph is exmpt from multiarch support, so we override the libdir.
 extraopts += -DCMAKE_INSTALL_LIBDIR=/usr/lib
@@ -49,7 +44,6 @@ ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
 endif
 ifneq (,$(filter with_system_libs,$(DEB_BUILD_OPTIONS)))
   extraopts += -DWITH_SYSTEM_BOOST=ON
-  extraopts += -DWITH_SYSTEM_PMDK=ON
 endif
 ifeq ($(SCCACHE), true)
 extraopts += -DWITH_SCCACHE=ON

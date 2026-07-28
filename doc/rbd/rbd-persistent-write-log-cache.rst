@@ -15,10 +15,8 @@ internally so that writes that get flushed back to the cluster are always
 crash consistent. Even if the client cache is lost entirely, the disk image is
 still consistent but the data will appear to be stale.
 
-This cache can be used with PMEM or SSD as a cache device. For PMEM, the cache
-mode is called ``replica write log (rwl)``. At present, only local cache is
-supported, and the replica function is under development. For SSD, the cache
-mode is called ``ssd``.
+This cache uses an SSD as its cache device, in a mode called ``ssd``. At
+present only a local cache is supported.
 
 Usage
 =====
@@ -48,19 +46,12 @@ To enable the PWL cache, set the following configuration settings::
         rbd_persistent_cache_mode = {cache-mode}
         rbd_plugins = pwl_cache
 
-Value of {cache-mode} can be ``rwl``, ``ssd`` or ``disabled``. By default the
-cache is disabled.
-
-The ``rwl`` cache mode depends on libpmem library (part of PMDK). It should
-be universally available on x86_64 architecture and may also be available on
-ppc64le and aarch64 architectures on some distributions. It is not available
-on s390x architecture.
+Value of {cache-mode} can be ``ssd`` or ``disabled``. By default the cache is
+disabled.
 
 Here are some cache configuration settings:
 
-- ``rbd_persistent_cache_path`` A file folder to cache data. This folder must
-  have DAX enabled (see `DAX`_) when using ``rwl`` mode to avoid performance
-  degradation.
+- ``rbd_persistent_cache_path`` A file folder to cache data.
 
 - ``rbd_persistent_cache_size`` The cache size per image. The minimum cache
   size is 1 GB.
@@ -135,4 +126,3 @@ For example::
         $ rbd persistent-cache invalidate rbd/foo
 
 .. _commands: ../../man/8/rbd#commands
-.. _DAX: https://www.kernel.org/doc/Documentation/filesystems/dax.txt

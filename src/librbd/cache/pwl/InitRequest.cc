@@ -11,10 +11,6 @@
 #include "librbd/cache/pwl/ImageCacheState.h"
 #include "librbd/cache/WriteLogImageDispatch.h"
 #include "librbd/cache/ImageWriteback.h"
-#ifdef WITH_RBD_RWL
-#include "librbd/cache/pwl/rwl/WriteLog.h"
-#endif
-
 #ifdef WITH_RBD_SSD_CACHE
 #include "librbd/cache/pwl/ssd/WriteLog.h"
 #endif
@@ -87,15 +83,6 @@ void InitRequest<I>::get_image_cache_state() {
 
   auto mode = cache_state->get_image_cache_mode();
   switch (mode) {
-    #ifdef WITH_RBD_RWL
-    case cache::IMAGE_CACHE_TYPE_RWL:
-      m_image_cache =
-        new librbd::cache::pwl::rwl::WriteLog<I>(m_image_ctx,
-                                                 cache_state,
-                                                 m_image_writeback,
-                                                 m_plugin_api);
-      break;
-    #endif
     #ifdef WITH_RBD_SSD_CACHE
     case cache::IMAGE_CACHE_TYPE_SSD:
       m_image_cache =
@@ -105,6 +92,22 @@ void InitRequest<I>::get_image_cache_state() {
                                                  m_plugin_api);
       break;
     #endif
+    case cache::IMAGE_CACHE_TYPE_RWL:
+      // the PMEM backend is gone, but an image shut down uncleanly still
+      // records this mode, and its cache cannot be read back
+      lderr(m_image_ctx.cct) << "image has a PMEM (rwl) write log cache, which "
+                             << "is no longer supported. To discard it, run "
+                             << "'rbd persistent-cache invalidate' from a "
+                             << "client configured with "
+                             << "rbd_persistent_cache_mode=ssd and "
+                             << "rbd_plugins=pwl_cache. Without the plugin the "
+                             << "command reports success without discarding "
+                             << "anything." << dendl;
+      delete cache_state;
+      cache_state = nullptr;
+      save_result(-EOPNOTSUPP);
+      finish();
+      return;
     default:
       delete cache_state;
       cache_state = nullptr;

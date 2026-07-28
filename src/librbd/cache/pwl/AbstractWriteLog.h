@@ -359,8 +359,7 @@ protected:
       uint64_t bytes_allocated, uint32_t num_lanes, uint32_t num_log_entries,
       uint32_t num_unpublished_reserves);
   void append_scheduled(
-      pwl::GenericLogOperations &ops, bool &ops_remain, bool &appending,
-      bool isRWL=false);
+      pwl::GenericLogOperations &ops, bool &ops_remain, bool &appending);
 
   virtual void process_work() = 0;
   virtual void append_scheduled_ops(void) = 0;

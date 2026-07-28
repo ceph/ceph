@@ -6,10 +6,6 @@
 
 #include "acconfig.h"
 
-#ifdef WITH_RBD_RWL
-#include "libpmemobj.h"
-#endif
-
 #include <vector>
 #include "librbd/BlockGuard.h"
 #include "librbd/io/Types.h"
@@ -107,8 +103,8 @@ enum {
   l_librbd_pwl_nowait_wr_caller_latency,  // average req completion (to caller) latency
 
   /* Log operation times */
-  l_librbd_pwl_log_op_alloc_t,      // elapsed time of pmemobj_reserve()
-  l_librbd_pwl_log_op_alloc_t_hist, // Histogram of elapsed time of pmemobj_reserve()
+  l_librbd_pwl_log_op_alloc_t,      // elapsed time of buffer allocation
+  l_librbd_pwl_log_op_alloc_t_hist, // Histogram of elapsed time of buffer allocation
 
   l_librbd_pwl_log_op_dis_to_buf_t, // dispatch to buffer persist elapsed time
   l_librbd_pwl_log_op_dis_to_app_t, // dispatch to log append elapsed time
@@ -156,7 +152,7 @@ enum {
   WRITE_LOG_CACHE_ENTRY_SYNC_POINT = 1U << 1, /* No data. No write sequence number.
                                                  Marks sync point for this sync gen number */
   WRITE_LOG_CACHE_ENTRY_SEQUENCED = 1U << 2,  /* write sequence number is valid */
-  WRITE_LOG_CACHE_ENTRY_HAS_DATA = 1U << 3,   /* write_data field is valid (else ignore) */
+  WRITE_LOG_CACHE_ENTRY_HAS_DATA = 1U << 3,   /* entry has data (else ignore) */
   WRITE_LOG_CACHE_ENTRY_DISCARD = 1U << 4,    /* has_data will be 0 if this is a discard */
   WRITE_LOG_CACHE_ENTRY_WRITESAME = 1U << 5,  /* ws_datalen indicates length of data at write_bytes */
 };
@@ -188,7 +184,6 @@ const uint64_t MIN_POOL_SIZE = DEFAULT_POOL_SIZE;
 const uint64_t POOL_SIZE_ALIGN = 1 << 20;
 constexpr double USABLE_SIZE = (7.0 / 10);
 const uint64_t BLOCK_ALLOC_OVERHEAD_BYTES = 16;
-const uint8_t RWL_LAYOUT_VERSION = 1;
 const uint8_t SSD_LAYOUT_VERSION = 1;
 const uint64_t MAX_LOG_ENTRIES = (1024 * 1024);
 const double AGGRESSIVE_RETIRE_HIGH_WATER = 0.75;
@@ -211,23 +206,11 @@ public:
   void add(Context* ctx);
 };
 
-/* Pmem structures */
-#ifdef WITH_RBD_RWL
-POBJ_LAYOUT_BEGIN(rbd_pwl);
-POBJ_LAYOUT_ROOT(rbd_pwl, struct WriteLogPoolRoot);
-POBJ_LAYOUT_TOID(rbd_pwl, uint8_t);
-POBJ_LAYOUT_TOID(rbd_pwl, struct WriteLogCacheEntry);
-POBJ_LAYOUT_END(rbd_pwl);
-#endif
-
 struct WriteLogCacheEntry {
   uint64_t sync_gen_number = 0;
   uint64_t write_sequence_number = 0;
   uint64_t image_offset_bytes;
   uint64_t write_bytes;
-  #ifdef WITH_RBD_RWL
-  TOID(uint8_t) write_data;
-  #endif
   #ifdef WITH_RBD_SSD_CACHE
   uint64_t write_data_pos = 0; /* SSD data offset */
   #endif
@@ -329,15 +312,6 @@ struct WriteLogCacheEntry {
 };
 
 struct WriteLogPoolRoot {
-  #ifdef WITH_RBD_RWL
-  union {
-    struct {
-      uint8_t layout_version;
-    };
-    uint64_t _u64;
-  } header;
-  TOID(struct WriteLogCacheEntry) log_entries;   /* contiguous array of log entries */
-  #endif
   #ifdef WITH_RBD_SSD_CACHE
   uint64_t layout_version = 0;
   uint64_t cur_sync_gen = 0;    /* TODO: remove it when changing disk format */
@@ -372,10 +346,6 @@ struct WriteLogPoolRoot {
 
 struct WriteBufferAllocation {
   unsigned int allocation_size = 0;
-  #ifdef WITH_RBD_RWL
-  pobj_action buffer_alloc_action;
-  TOID(uint8_t) buffer_oid = OID_NULL;
-  #endif
   bool allocated = false;
   utime_t allocation_lat;
 };

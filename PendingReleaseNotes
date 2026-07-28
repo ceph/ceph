@@ -1,3 +1,44 @@
+* BlueStore: The experimental PMEM device backend has been removed, together
+  with the ``pmem`` value of the ``bdev_type`` option and the DML/DSA offload
+  path. The hardware it targeted, Intel Optane DC persistent memory, was
+  discontinued in 2022.
+
+  Existing OSDs backed by persistent memory in fsdax mode (a block device such
+  as ``/dev/pmem0``) keep working on the default ``aio`` backend over the same
+  data. Remove any explicit ``bdev_type = pmem`` from their configuration. OSDs
+  on a devdax namespace (a character device such as ``/dev/dax0.0``) will no
+  longer start, because no remaining backend can open one; reconfigure the
+  namespace to fsdax with ``ndctl`` or re-provision them before upgrading.
+
+* RBD: The PMEM backend of the persistent write log cache has been removed,
+  together with the ``rwl`` value of the ``rbd_persistent_cache_mode`` option
+  and the ``WITH_RBD_RWL`` build option. It targeted the same discontinued
+  Intel Optane DC persistent memory as the BlueStore backend above, and with
+  both gone Ceph no longer builds against PMDK at all.
+
+  The ``ssd`` cache mode is unaffected, but ``rwl`` was enabled in the shipped
+  x86_64 packages, so drain any cache it left **before** upgrading, and in this
+  order. While still running the old version, close or unmap each image that
+  has one: a clean shutdown flushes the cache and removes it, after which
+  ``rbd status`` no longer reports a dirty cache. If the client crashed and the
+  workload will not be restarted, use ``rbd persistent-cache flush`` instead.
+  Only then change ``rbd_persistent_cache_mode`` and upgrade.
+
+  Changing the mode first strands the cache instead. Either way the image then
+  fails to acquire its exclusive lock, so all of its I/O fails: with the cache
+  disabled, one that still records a dirty cache is refused outright, and with
+  the cache enabled, one whose metadata records a dirty ``rwl`` cache is
+  refused because the backend that could replay it is gone. Recovering means
+  setting the mode to ``ssd``, giving the client ``rbd_plugins = pwl_cache``,
+  and running ``rbd persistent-cache invalidate``, which discards the cache
+  along with whatever it had not flushed.
+
+  A stale ``rwl`` in ceph.conf or the Monitor config store is merely ignored,
+  and such an image simply runs without a cache. Note that ``ceph config set
+  ... rwl`` now fails, which may break automation.
+
+>=21.0.0
+
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
   this option could be changed at runtime, but changes had no effect on opened file
