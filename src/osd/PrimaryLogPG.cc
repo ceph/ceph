@@ -532,6 +532,17 @@ void PrimaryLogPG::on_global_recover(
       waiting_for_degraded_object.erase(degraded_object_entry);
     }
 
+    for (auto it = waiting_for_degraded_object.begin();
+         it != waiting_for_degraded_object.end(); ) {
+      if (it->first.is_snap() && it->first.get_head() == soid) {
+        dout(20) << " kicking snap migration waiters on " << it->first << dendl;
+        requeue_ops(it->second);
+        it = waiting_for_degraded_object.erase(it);
+      } else {
+        ++it;
+      }
+    }
+
     // Check if quiescing and all migrations have drained
     if (pool_migration_quiesce_reason != PoolMigrationQuiesceReason::NONE &&
         pool_migrations_in_flight.empty()) {
@@ -719,8 +730,12 @@ bool PrimaryLogPG::is_degraded_or_backfilling_object(const hobject_t& soid)
     // being migrated. If its a write to a new object add it to the
     // blocked writes set
     if (pool_migration_watermark <= soid &&
-	last_pool_migration_started.get_head() >= soid) {
+        last_pool_migration_started.get_head() >= soid) {
       pool_migration_blocked_writes.insert(soid);
+      return true;
+    }
+    // Object is a snap of a head object in the process of being migrated
+    if (soid.is_snap() && pool_migrations_in_flight.count(soid.get_head())) {
       return true;
     }
   }
@@ -2437,7 +2452,10 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
       osd->reply_op_error(op, -EIO);
       return;
     }
-    if (m->get_hobj() < pool_migration_watermark) {
+    bool migrated = m->get_hobj().is_snap() ?
+                    m->get_hobj().get_head() < pool_migration_watermark.get_head() :
+                    m->get_hobj() < pool_migration_watermark;
+    if (migrated) {
       // object has been migrated to the target pool - request
       // Op is redirected and provide client with updated
       // migration watermark
@@ -2453,6 +2471,22 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
 			       pool_migration_watermark);
       reply->set_redirect(redir);
       m->get_connection()->send_message(reply);
+      return;
+    }
+  }
+
+  if (m->get_hobj().is_snap() && pool_migrations_in_flight.count(head)) {
+    bool is_migration_copy = false;
+    for (auto&& osd_op : m->ops) {
+      if (osd_op.op.op == CEPH_OSD_OP_COPY_GET) {
+        is_migration_copy = true;
+        break;
+      }
+    }
+    if (!is_migration_copy) {
+      dout(20) << __func__ << " delaying op to snap " << m->get_hobj()
+               << " while HEAD is being migrated " << dendl;
+      wait_for_degraded_object(m->get_hobj(), op);
       return;
     }
   }
