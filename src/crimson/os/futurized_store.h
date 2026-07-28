@@ -200,6 +200,10 @@ public:
       uint32_t op_flags = 0) = 0;
 
     virtual seastar::future<unsigned> get_max_attr_name_length() const = 0;
+
+    virtual seastar::future<> with_store_do_transaction(
+      boost::intrusive_ptr<FuturizedCollection> ch, // TODO: move back to `FuturizedStore::Shard::CollectionRef ch,`
+      ceph::os::Transaction&& txn);
   };
 
 public:
@@ -262,10 +266,13 @@ namespace crimson::os {
 // scaffolding
 using BackendStore = FuturizedStore::Shard&;
 
-extern seastar::future<> with_store_do_transaction(
+static inline seastar::future<> with_store_do_transaction(
   FuturizedStore::Shard& shard,
   boost::intrusive_ptr<FuturizedCollection> ch, // TODO: move back to `FuturizedStore::Shard::CollectionRef ch,`
-  ceph::os::Transaction&& txn);
+  ceph::os::Transaction&& txn)
+{
+  return shard.with_store_do_transaction(std::move(ch), std::move(txn));
+}
 
 template<auto MemberFunc, typename... Args>
 auto with_store(FuturizedStore::Shard& shard, Args&&... args)

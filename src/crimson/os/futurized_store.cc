@@ -51,24 +51,18 @@ FuturizedStore::create(const std::string& type,
   }
 }
 
-seastar::future<> with_store_do_transaction(
-  FuturizedStore::Shard& shard,
+seastar::future<> FuturizedStore::Shard::with_store_do_transaction(
   boost::intrusive_ptr<FuturizedCollection> ch, // TODO: move back to `FuturizedStore::Shard::CollectionRef ch,`
   ceph::os::Transaction&& txn)
 {
-  if (crimson::common::get_conf<bool>("seastore_require_partition_count_match_reactor_count")) {
-    std::unique_ptr<Context> on_commit(
-      ceph::os::Transaction::collect_all_contexts(txn));
-    return shard.do_transaction_no_callbacks(
-      std::move(ch), std::move(txn)
-    ).then([on_commit=std::move(on_commit)]() mutable {
-      auto c = on_commit.release();
-      if (c) c->complete(0);
-      return seastar::now();
-    });
-  } else {
-    return crimson::os::_RelayStore::Shard::with_store_do_transaction(
-      static_cast<crimson::os::_RelayStore::Shard&>(shard), ch, std::move(txn));
-  }
+  std::unique_ptr<Context> on_commit(
+    ceph::os::Transaction::collect_all_contexts(txn));
+  return do_transaction_no_callbacks(
+    std::move(ch), std::move(txn)
+  ).then([on_commit=std::move(on_commit)]() mutable {
+    auto c = on_commit.release();
+    if (c) c->complete(0);
+    return seastar::now();
+  });
 }
 }
