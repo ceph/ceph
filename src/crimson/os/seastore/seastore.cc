@@ -227,6 +227,7 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
 
   std::pair<txn_stage_t, sm::label_instance> labels_by_stage[] = {
     {txn_stage_t::THROTTLER_WAIT,        sm::label_instance("stage", "throttler_wait")},
+    {txn_stage_t::COLLECTION_BUSY,       sm::label_instance("stage", "collection_busy")},
     {txn_stage_t::BUILD,                 sm::label_instance("stage", "build")},
     {txn_stage_t::BUILD_GET_ONODE,       sm::label_instance("stage", "build_get_onode")},
     {txn_stage_t::BUILD_UPDATE_ONODE_SIZE, sm::label_instance("stage", "build_update_onode_size")},
@@ -1965,6 +1966,9 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
     coll.collection_in_flight = true;
     DEBUG("cid={} gate closed, starting dispatch", coll.get_cid());
     std::ignore = dispatch_collection(_ch);
+  } else if (!coll.blocked_since) {
+    // First waiter behind an in-flight batch — start COLLECTION_BUSY.
+    coll.blocked_since = seastar::lowres_clock::now();
   }
   return fut;
 }
@@ -2008,9 +2012,20 @@ seastar::future<> SeaStore::Shard::dispatch_collection(CollectionRef ch)
   while (!coll.pending_txns.empty()) {
     std::vector<seastar::promise<>> pending_txns_promises;
     auto merged = build_next_batch(coll, pending_txns_promises);
+    seastar::lowres_clock::duration collection_busy{0};
+    if (coll.blocked_since) {
+      collection_busy =
+        seastar::lowres_clock::now() - *coll.blocked_since;
+      coll.blocked_since.reset();
+    }
+    // Leftover waiters (batch boundary) are still blocked on this collection.
+    if (!coll.pending_txns.empty()) {
+      coll.blocked_since = seastar::lowres_clock::now();
+    }
     DEBUG("draining {} txns from cid={}, committing batch ({} ops)",
           pending_txns_promises.size(), coll.get_cid(), merged.get_num_ops());
-    co_await run_one_batch(ch, std::move(merged));
+    co_await run_one_batch(
+      ch, std::move(merged), collection_busy);
     DEBUG("committed batch of {} txns for cid={}",
           pending_txns_promises.size(), coll.get_cid());
     for (auto& p : pending_txns_promises) {
@@ -2019,11 +2034,13 @@ seastar::future<> SeaStore::Shard::dispatch_collection(CollectionRef ch)
   }
   DEBUG("cid={} drained, gate open", coll.get_cid());
   coll.collection_in_flight = false;
+  coll.blocked_since.reset();
 }
 
 seastar::future<> SeaStore::Shard::run_one_batch(
   CollectionRef _ch,
-  ceph::os::Transaction&& _t)
+  ceph::os::Transaction&& _t,
+  seastar::lowres_clock::duration collection_busy)
 {
   LOG_PREFIX(SeaStoreS::run_one_batch);
   ++(shard_stats.pending_io_num);
@@ -2112,7 +2129,10 @@ seastar::future<> SeaStore::Shard::run_one_batch(
   add_conflict_replay_sample(ctx.transaction->get_num_replays());
   {
     auto& pd = ctx.transaction->get_phase_durations();
-    auto total = seastar::lowres_clock::now() - ctx.begin_timestamp;
+    // Include collection_busy so slow/very_slow tiers reflect end-to-end-ish
+    // cost (wait behind prior batch + this batch's build/submit).
+    auto total = (seastar::lowres_clock::now() - ctx.begin_timestamp)
+      + collection_busy;
     auto total_ms = std::chrono::duration_cast<
       std::chrono::duration<double, std::milli>>(total).count();
 
@@ -2120,6 +2140,7 @@ seastar::future<> SeaStore::Shard::run_one_batch(
       std::pair<txn_stage_t, seastar::lowres_clock::duration>, STAGE_MAX>
       stage_samples = {{
         {txn_stage_t::THROTTLER_WAIT,        throttler_wait},
+        {txn_stage_t::COLLECTION_BUSY,       collection_busy},
         {txn_stage_t::BUILD,                 ctx.build_time},
         {txn_stage_t::BUILD_GET_ONODE,       ctx.get_onode_time},
         {txn_stage_t::BUILD_UPDATE_ONODE_SIZE, ctx.update_onode_size_time},
