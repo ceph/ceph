@@ -327,6 +327,12 @@ class SambaContainerCommon(ContainerCommon):
         # variable. This can be dropped once sambacc no longer needs it,
         # possibly after the next sambacc release.
         environ['SAMBACC_CTDB'] = 'ctdb-is-experimental'
+        environ[
+            'SAMBACC_PASSWD_LOCATION'
+        ] = '/etc/passwd:/var/lib/samba/passwd:/lib/passwd'
+        environ[
+            'SAMBACC_GROUP_LOCATION'
+        ] = '/etc/group:/var/lib/samba/group:/lib/group'
         if self.cfg.ceph_config_entity:
             environ['SAMBACC_CEPH_ID'] = f'name={self.cfg.ceph_config_entity}'
         if self.cfg.rank >= 0:
