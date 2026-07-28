@@ -111,6 +111,7 @@ Current Members
  * Neha Ojha <nojha@redhat.com>
  * Patrick Donnelly <pdonnell@ibm.com>
  * Radoslaw Zarzynski <rzarzyns@redhat.com>
+ * Redouane Kachach <rkachach@redhat.com>
  * Venky Shankar <vshankar@redhat.com>
  * Vikhyat Umrao <vikhyat@ibm.com>
  * Xie Xingguo <xie.xingguo@zte.com.cn>
