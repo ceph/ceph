@@ -1422,6 +1422,58 @@ omap_root_t SeaStore::Shard::select_log_omap_root(Onode& onode) const
   return get_omap_root(omap_type_t::OMAP, onode);
 }
 
+template <typename Result, typename ReadFunc>
+SeaStore::Shard::read_errorator::future<Result>
+SeaStore::Shard::repeat_with_onode_after_lognode_flush(
+  CollectionRef ch,
+  const ghobject_t& oid,
+  Transaction::src_t src,
+  const char* op_name,
+  op_type_t op_type,
+  uint32_t op_flags,
+  ReadFunc&& read_func)
+{
+  using read_func_t = std::decay_t<ReadFunc>;
+  using checked_result_t = std::optional<Result>;
+  return seastar::do_with(
+    read_func_t(std::forward<ReadFunc>(read_func)),
+    [this, ch, oid, src, op_name, op_type, op_flags](auto& read_func) {
+      return repeat_with_onode<checked_result_t>(
+        ch, oid, src, op_name, op_type, op_flags,
+        [this, &read_func](
+          auto& t,
+          auto& onode) -> base_iertr::future<checked_result_t> {
+          auto root = select_log_omap_root(onode);
+          if (root.get_type() == omap_type_t::LOG &&
+              transaction_manager->has_pending_lognode_deltas()) {
+            return base_iertr::make_ready_future<
+              checked_result_t>(std::nullopt);
+          }
+          return read_func(t, onode
+          ).si_then([](Result result) {
+	    return checked_result_t{std::move(result)};
+          });
+        }
+      ).safe_then(
+        [this, ch, oid, src, op_name, op_type, op_flags, &read_func](
+          checked_result_t result) mutable -> read_errorator::future<Result> {
+          if (result) {
+            return read_errorator::make_ready_future<Result>(
+              std::move(*result));
+          }
+	  return pgoid_log_flush(oid
+          ).safe_then(
+            [this, ch, oid, src, op_name, op_type, op_flags, &read_func]() mutable {
+              return repeat_with_onode<Result>(
+                ch, oid, src, op_name, op_type, op_flags, [this, &read_func](
+                  auto& t, auto& onode) {
+                  return read_func(t, onode);
+              });
+          });
+      });
+  });
+}
+
 SeaStore::Shard::read_errorator::future<SeaStore::Shard::omap_values_t>
 SeaStore::Shard::omap_get_values(
   CollectionRef ch,
@@ -1433,7 +1485,7 @@ SeaStore::Shard::omap_get_values(
   ++(shard_stats.read_num);
   ++(shard_stats.pending_read_num);
 
-  return repeat_with_onode<omap_values_t>(
+  return repeat_with_onode_after_lognode_flush<omap_values_t>(
     ch,
     oid,
     Transaction::src_t::READ,
@@ -1469,7 +1521,7 @@ SeaStore::Shard::omap_iterate(
     [this, ch, &oid, callback, op_flags, on_conflict] (
     auto &start_from, auto &conflict_counter)
   {
-    return repeat_with_onode<ObjectStore::omap_iter_ret_t>(
+    return repeat_with_onode_after_lognode_flush<ObjectStore::omap_iter_ret_t>(
       ch,
       oid,
       Transaction::src_t::READ,

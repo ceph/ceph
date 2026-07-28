@@ -190,6 +190,16 @@ public:
     base_iertr::future<> pgoid_do_handle_log_flush(Transaction& t, const ghobject_t oid);
     base_ertr::future<> pgoid_log_flush(const ghobject_t oid);
     base_ertr::future<> handle_log_flush(journal_seq_t target);
+    template <typename Result, typename ReadFunc>
+    read_errorator::future<Result>
+    repeat_with_onode_after_lognode_flush(
+      CollectionRef ch,
+      const ghobject_t& oid,
+      Transaction::src_t src,
+      const char* op_name,
+      op_type_t op_type,
+      uint32_t op_flags,
+      ReadFunc&& read_func);
 
   // only exposed to SeaStore
   public:
