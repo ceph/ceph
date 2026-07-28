@@ -5910,6 +5910,11 @@ std::vector<std::string> BlueStore::get_tracked_keys() const noexcept
     "bluestore_warn_on_legacy_statfs"s,
     "bluestore_warn_on_no_per_pool_omap"s,
     "bluestore_warn_on_no_per_pg_omap"s,
+    "bluestore_warn_on_legacy_min_alloc_size"s,
+    "bluestore_min_alloc_size"s,
+    "bluestore_min_alloc_size_hdd"s,
+    "bluestore_min_alloc_size_ssd"s,
+    "bluestore_use_optimal_io_size_for_min_alloc_size"s,
     "bluestore_max_defer_interval"s,
     "bluestore_onode_segment_size"s,
     "bluestore_allocator_lookup_policy"s,
@@ -5928,6 +5933,13 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("bluestore_warn_on_no_per_pool_omap") ||
       changed.count("bluestore_warn_on_no_per_pg_omap")) {
     _check_no_per_pg_or_pool_omap_alert();
+  }
+  if (changed.count("bluestore_warn_on_legacy_min_alloc_size") ||
+      changed.count("bluestore_min_alloc_size") ||
+      changed.count("bluestore_min_alloc_size_hdd") ||
+      changed.count("bluestore_min_alloc_size_ssd") ||
+      changed.count("bluestore_use_optimal_io_size_for_min_alloc_size")) {
+    _check_legacy_min_alloc_size_alert();
   }
 
   if (changed.count("bluestore_csum_type")) {
@@ -8827,21 +8839,7 @@ int BlueStore::mkfs()
   // choose min_alloc_size
   dout(5) << __func__ << " optimal_io_size 0x" << std::hex << optimal_io_size
 	  << " block_size: 0x" << block_size << std::dec << dendl;
-  if ((cct->_conf->bluestore_use_optimal_io_size_for_min_alloc_size) && (optimal_io_size != 0)) {
-    dout(5) << __func__ << " optimal_io_size 0x" << std::hex << optimal_io_size
-		<< " for min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
-    min_alloc_size = optimal_io_size;
-  }
-  else if (cct->_conf->bluestore_min_alloc_size) {
-    min_alloc_size = cct->_conf->bluestore_min_alloc_size;
-  } else {
-    ceph_assert(bdev);
-    if (_use_rotational_settings()) {
-      min_alloc_size = cct->_conf->bluestore_min_alloc_size_hdd;
-    } else {
-      min_alloc_size = cct->_conf->bluestore_min_alloc_size_ssd;
-    }
-  }
+  min_alloc_size = _get_default_min_alloc_size();
   _validate_bdev();
 
   // make sure min_alloc_size is power of 2 aligned.
@@ -12627,6 +12625,54 @@ void BlueStore::_check_no_per_pg_or_pool_omap_alert()
   no_per_pool_omap_alert = per_pool;
 }
 
+uint64_t BlueStore::_get_default_min_alloc_size()
+{
+  // the allocation unit that mkfs() would select for a new OSD on
+  // this device with the current configuration
+  if (cct->_conf->bluestore_use_optimal_io_size_for_min_alloc_size &&
+      optimal_io_size != 0) {
+    return optimal_io_size;
+  } else if (cct->_conf->bluestore_min_alloc_size) {
+    return cct->_conf->bluestore_min_alloc_size;
+  } else {
+    ceph_assert(bdev);
+    if (_use_rotational_settings()) {
+      return cct->_conf->bluestore_min_alloc_size_hdd;
+    } else {
+      return cct->_conf->bluestore_min_alloc_size_ssd;
+    }
+  }
+}
+
+void BlueStore::_check_legacy_min_alloc_size_alert()
+{
+  // Warn if this OSD uses an allocation unit that differs from the
+  // one a newly deployed OSD would get on the same device with the
+  // current configuration, e.g. the legacy 64 KiB unit of HDD-backed
+  // OSDs deployed prior to Pacific (current default: 4 KiB), which
+  // causes increased space amplification. Deliberate choices (an
+  // explicitly configured bluestore_min_alloc_size or a value derived
+  // from the device optimal IO size, e.g. to align with the coarse
+  // indirection unit of some QLC NVMe devices) are part of the
+  // configuration the on-disk value is compared against and do not
+  // raise the alert.
+  string s;
+  if (bdev && cct->_conf->bluestore_warn_on_legacy_min_alloc_size) {
+    uint64_t default_min_alloc_size = _get_default_min_alloc_size();
+    if (default_min_alloc_size > 0 &&
+	min_alloc_size != default_min_alloc_size) {
+      ostringstream ss;
+      ss << "min_alloc_size " << byte_u_t(min_alloc_size)
+	 << " differs from the expected default "
+	 << byte_u_t(default_min_alloc_size)
+	 << ", suggest to redeploy this OSD";
+      s = ss.str();
+    }
+  }
+  std::lock_guard l(qlock);
+  legacy_min_alloc_size_alert = s;
+}
+
 // ---------------
 // cache
 
@@ -14580,6 +14626,8 @@ int BlueStore::_open_super_meta()
 	     << std::dec << dendl;
     logger->set(l_bluestore_alloc_unit, min_alloc_size);
   }
+
+  _check_legacy_min_alloc_size_alert();
 
   _set_per_pool_omap();
 
@@ -19879,6 +19927,11 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
     alerts.emplace(
       "BLUESTORE_NO_PER_POOL_OMAP",
       no_per_pool_omap_alert);
+  }
+  if (!legacy_min_alloc_size_alert.empty()) {
+    alerts.emplace(
+      "BLUESTORE_LEGACY_MIN_ALLOC_SIZE",
+      legacy_min_alloc_size_alert);
   }
   string s0(failed_cmode);
 

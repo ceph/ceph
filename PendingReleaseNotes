@@ -1144,3 +1144,9 @@ Relevant tracker: https://tracker.ceph.com/issues/71677
   seconds, which matches the previously hardcoded behaviour.
 
   Relevant tracker: https://tracker.ceph.com/issues/78727
+* RADOS: A new ``BLUESTORE_LEGACY_MIN_ALLOC_SIZE`` health warning reports
+  OSDs that use an allocation unit (``min_alloc_size``) that differs from
+  the one a newly deployed OSD would use on the same device, e.g. HDD-backed
+  OSDs deployed prior to the Pacific release with a 64 KiB allocation unit.
+  It can be disabled with the new ``bluestore_warn_on_legacy_min_alloc_size``
+  option, globally or per OSD / device class using a configuration mask.
