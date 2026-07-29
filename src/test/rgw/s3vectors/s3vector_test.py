@@ -184,13 +184,29 @@ def _delete_s3_bucket_for_vector_bucket(bucket_name):
             log.warning("Failed to delete S3 bucket '%s': %s", bucket_name, str(err))
 
 
+def _delete_all_indexes(conn, bucket_name):
+    """
+    Delete all indexes of a vector bucket. must be done before the vector bucket
+    itself is deleted, since deleting a vector bucket with indexes is not allowed
+    """
+    result = conn.list_indexes(vectorBucketName=bucket_name)
+    for index in result['indexes']:
+        _ = conn.delete_index(vectorBucketName=bucket_name, indexName=index['indexName'])
+
+
+def _delete_vector_bucket(conn, bucket_name):
+    """Delete a vector bucket together with all of its indexes"""
+    _delete_all_indexes(conn, bucket_name)
+    return conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
 def _delete_all_vector_buckets(conn):
     result = conn.list_vector_buckets()
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     for bucket in result['vectorBuckets']:
         bucket_name = bucket['vectorBucketName']
         try:
-            _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+            _ = _delete_vector_bucket(conn, bucket_name)
         except conn.exceptions.ClientError as err:
             log.warning("Failed to delete vector bucket '%s': %s", bucket_name, str(err))
         _delete_s3_bucket_for_vector_bucket(bucket_name)
@@ -261,6 +277,36 @@ def test_delete_vector_bucket():
     result = conn.list_vector_buckets()
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     assert len(result['vectorBuckets']) == 0
+    # cleanup
+    _delete_all_vector_buckets(conn)
+
+
+@pytest.mark.vector_bucket_test
+def test_delete_vector_bucket_with_indexes():
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    index_name = 'test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name, dataType='float32', dimension=128, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    # deleting a vector bucket which still has indexes should fail with a conflict
+    with pytest.raises(conn.exceptions.ClientError) as exc_info:
+        conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    assert exc_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 409
+    assert exc_info.value.response['Error']['Code'] == 'BucketNotEmpty'
+    # the vector bucket and its index should still exist
+    result = conn.get_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    result = conn.get_index(vectorBucketName=bucket_name, indexName=index_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    # once the index is deleted, the vector bucket could be deleted
+    result = conn.delete_index(vectorBucketName=bucket_name, indexName=index_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    result = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
     # cleanup
     _delete_all_vector_buckets(conn)
 
@@ -492,7 +538,7 @@ def test_create_index():
     invalid_bucket_name = bucket_name + '-invalid'
     pytest.raises(conn.exceptions.ClientError, conn.create_index, vectorBucketName=invalid_bucket_name, indexName=index_name, dataType='float32', dimension=128, distanceMetric='euclidean')
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.index_test
@@ -556,7 +602,7 @@ def test_create_index_invalid_filterable_keys():
         }, **common)
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.index_test
@@ -585,7 +631,7 @@ def test_get_index():
     invalid_bucket_name = bucket_name + '-invalid'
     pytest.raises(conn.exceptions.ClientError, conn.get_index, vectorBucketName=invalid_bucket_name, indexName=index_name)
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.index_test
@@ -626,7 +672,7 @@ def test_non_filterable_metadata_keys():
     log.info('test_non_filterable_metadata_keys: verified nonFilterableMetadataKeys round-trip')
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.index_test
@@ -733,7 +779,7 @@ def test_filterable_metadata_keys():
     log.info('test_filterable_metadata_keys: verified filterable metadata round-trip')
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.index_test
@@ -842,7 +888,7 @@ def test_filterable_metadata_list_keys():
     log.info('test_filterable_metadata_list_keys: verified list-type filterable metadata round-trip')
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.index_test
@@ -871,7 +917,7 @@ def test_metadata_dots_in_names_rejected():
         metadataConfiguration={'nonFilterableMetadataKeys': ['user.name']})
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.index_test
@@ -896,7 +942,7 @@ def test_delete_index():
     with pytest.raises(conn.exceptions.ClientError):
         result = conn.get_index(vectorBucketName=bucket_name, indexName=index_name)
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.index_test
@@ -924,7 +970,7 @@ def test_list_indexes():
     invalid_bucket_name = bucket_name + '-invalid'
     pytest.raises(conn.exceptions.ClientError, conn.list_indexes, vectorBucketName=invalid_bucket_name)
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
 
 
 def assert_put_vectors_validation_error(conn, expected_paths, **kwargs):
@@ -1149,7 +1195,7 @@ def test_put_vectors():
     result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
 
 
 def update_vectors_thread(conn, bucket_name, index_name, dimension, allow_extra=False):
@@ -1194,7 +1240,7 @@ def test_update_vectors():
         t.join()
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
 
 
 @pytest.mark.vector_test
@@ -1218,7 +1264,7 @@ def test_update_vectors_single_index():
         t.join()
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -1257,7 +1303,7 @@ def test_put_vectors_dimension_mismatch():
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     assert len(result.get('vectors', [])) == 0
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -1286,7 +1332,7 @@ def test_get_vectors():
     log.info('test_get_vectors: successfully verified %d vectors with data', len(returned_vectors))
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -1315,7 +1361,7 @@ def test_get_vectors_without_data():
              len(returned_vectors))
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -1347,7 +1393,7 @@ def test_list_vectors():
              len(all_retrieved_vectors), page_count)
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -1378,7 +1424,7 @@ def test_list_vectors_with_data():
              len(all_retrieved_vectors))
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -1409,7 +1455,7 @@ def test_list_vectors_without_data():
              len(all_retrieved_vectors))
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -1442,7 +1488,7 @@ def test_list_vectors_pagination():
              len(all_retrieved_vectors), page_count)
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -1475,7 +1521,7 @@ def test_list_vectors_exact_pagination():
              len(all_retrieved_vectors), page_count)
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -1516,7 +1562,7 @@ def test_delete_vectors():
         f"remaining vector keys don't match expected. got {set(remaining_keys)}, expected {set(expected_remaining_keys)}"
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -1546,7 +1592,7 @@ def test_query_vectors():
         log.info(result['vectors'])
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -1577,7 +1623,7 @@ def test_query_vectors_with_distance():
         log.info(result['vectors'])
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -1642,7 +1688,7 @@ def test_put_and_get_vectors_metadata():
     log.info('test_put_and_get_vectors_metadata: verified metadata for %d vectors', len(all_vectors))
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -1685,7 +1731,7 @@ def test_list_vectors_with_metadata():
             f"vector {vector['key']} should not have 'metadata' field when returnMetadata=False"
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -1731,7 +1777,7 @@ def test_query_vectors_with_metadata():
             f"vector {vector['key']} should not have 'metadata' field when returnMetadata=False"
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -1787,7 +1833,7 @@ def test_put_vectors_malformed_metadata():
     assert len(result.get('vectors', [])) == 0
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -1840,7 +1886,7 @@ def test_put_vectors_null_metadata_value():
     assert len(result.get('vectors', [])) == 0
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -1867,7 +1913,7 @@ def test_put_vectors_dots_in_metadata_field_names():
         vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -1957,7 +2003,7 @@ def test_put_vectors_missing_filterable_fields():
     assert md['info']['year'] == 1990
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -2038,7 +2084,7 @@ def test_put_vectors_invalid_filterable_types():
         }])
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -2171,7 +2217,7 @@ def test_put_vectors_must_exist():
     assert len(result['vectors']) == 2
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -2284,7 +2330,7 @@ def test_query_vectors_filter():
         filter={'$or': [{'genre': 'rock'}, {'color': 'red'}]})
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -2347,7 +2393,7 @@ def test_query_vectors_post_filtering():
     assert query_keys({'$or': [{'genre': 'rock'}, {'color': 'blue'}]}, top_k=10, post_filtering=True) == ['v0', 'v1', 'v3']
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -2382,7 +2428,7 @@ def test_query_vectors_filter_nonfilterable():
     assert exc_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 400
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -2432,7 +2478,7 @@ def test_query_vectors_filter_json_metadata():
     assert query_keys({'active': True}) == ['v0', 'v2']
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -2503,7 +2549,7 @@ def test_query_vectors_filter_errors():
     expect_error({'color': ['red', 'blue']})
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -2565,7 +2611,7 @@ def test_query_vectors_post_filter_topk():
         assert 'distance' not in v, "distance should not be in response when not requested"
 
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     set_rgw_config_option('rgw_s3vector_topk_post_filter_factor', 1)
 
 
@@ -2613,7 +2659,7 @@ def test_sal_error_propagation():
 
     # cleanup - recreate backing bucket so delete_vector_bucket can clean up
     _ensure_s3_bucket_for_vector_bucket(bucket_name)
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 
@@ -2674,7 +2720,7 @@ def test_cross_owner_vector_bucket():
     assert len(result['vectors']) == 2
 
     # cleanup
-    _ = other.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(other, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 
@@ -2736,7 +2782,7 @@ def test_versioned_s3_bucket():
     assert len(result['vectors']) == 0
 
     # cleanup - delete vector bucket, then purge all versions and delete markers
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
     paginator = s3conn.get_paginator('list_object_versions')
     for page in paginator.paginate(Bucket=bucket_name):
         objects = []
