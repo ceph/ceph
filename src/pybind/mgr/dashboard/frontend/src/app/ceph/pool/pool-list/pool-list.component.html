@@ -16,11 +16,9 @@
         [data]="pools"
         [columns]="columns"
         selectionType="single"
-        [hasDetails]="true"
         [status]="tableStatus"
         [autoReload]="-1"
         (fetchData)="taskListService.fetch()"
-        (setExpandedRow)="setExpandedRow($event)"
         (updateSelection)="updateSelection($event)"
       >
         <cd-table-actions
@@ -31,14 +29,6 @@
           [tableActions]="tableActions"
         >
         </cd-table-actions>
-        <cd-pool-details
-          *cdTableDetail
-          id="pool-list-details"
-          [selection]="expandedRow"
-          [permissions]="permissions"
-          [cacheTiers]="cacheTiers"
-        >
-        </cd-pool-details>
       </cd-table>
     </ng-template>
   </ng-container>
@@ -80,4 +70,17 @@
     decimals="2"
   >
   </cd-usage-bar>
+</ng-template>
+
+<ng-template
+  #poolNameTpl
+  let-row="data.row"
+>
+  <a
+    cdsLink
+    [routerLink]="[viewUrl, row.pool_name | encodeUri]"
+    (click)="$event.stopPropagation()"
+  >
+    {{ row.pool_name }}
+  </a>
 </ng-template>

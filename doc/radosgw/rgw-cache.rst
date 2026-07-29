@@ -8,10 +8,10 @@ RGW Data Caching and CDN
 
 .. contents::
 
-This feature adds to RGW the ability to securely cache objects and offload the workload from the cluster, using Nginx.
-After an object is accessed the first time it will be stored in the Nginx cache directory.
+This feature adds to RGW the ability to securely cache objects and offload the workload from the cluster, using NGINX.
+After an object is accessed the first time it will be stored in the NGINX cache directory.
 When data is already cached, it need not be fetched from RGW. A permission check will be made against RGW to ensure the requesting user has access.
-This feature is based on the Nginx modules ``ngx_http_auth_request_module`` and `nginx-aws-auth-module <https://github.com/kaltura/nginx-aws-auth-module>`_, and OpenResty for Lua capabilities.
+This feature is based on the NGINX modules ``ngx_http_auth_request_module`` and `nginx-aws-auth-module <https://github.com/kaltura/nginx-aws-auth-module>`_, and OpenResty for Lua capabilities.
 
 Currently this feature will cache only AWSv4 requests (only S3 requests), caching-in the output of the first GET request
 and caching-out on subsequent GET requests, passing through transparently PUT, POST, HEAD, DELETE and COPY requests.
@@ -27,9 +27,9 @@ New APIs
 There are 2 new APIs for this feature:
 
 - **Auth API:** The cache uses this to validate that a user can access the cached data.
-- **Cache API:** Adds the ability to override the ``Range`` header securely so that Nginx can use its own `smart cache <https://www.nginx.com/blog/smart-efficient-byte-range-caching-nginx/>`_ on top of S3.
+- **Cache API:** Adds the ability to override the ``Range`` header securely so that NGINX can use its own `smart cache <https://www.nginx.com/blog/smart-efficient-byte-range-caching-nginx/>`_ on top of S3.
   Using this API gives the ability to read ahead objects when client is asking a specific range from the object.
-  On subsequent accesses to the cached object, Nginx will satisfy requests for already-cached ranges from the cache. Uncached ranges will be read from RGW (and cached).
+  On subsequent accesses to the cached object, NGINX will satisfy requests for already-cached ranges from the cache. Uncached ranges will be read from RGW (and cached).
 
 Auth API
 ~~~~~~~~
@@ -58,7 +58,7 @@ If both checks succeed it will use the ``X-Amz-Cache`` to revalidate that the us
 During this flow the RGW will override the ``Range`` header.
 
 
-Using Nginx with RGW
+Using NGINX with RGW
 --------------------
 
 Download the source of OpenResty:
@@ -67,7 +67,7 @@ Download the source of OpenResty:
 
    wget https://openresty.org/download/openresty-1.15.8.3.tar.gz
 
-Use git to clone the Nginx AWS authentication module:
+Use git to clone the NGINX AWS authentication module:
 
 .. prompt:: bash $
 
@@ -90,9 +90,9 @@ Compile OpenResty, make sure that you have ``pcre`` library and ``openssl`` libr
    sudo gmake install
    sudo ln -sf /usr/local/openresty/bin/openresty /usr/bin/nginx
 
-Put in-place your Nginx configuration files and edit them according to your environment:
+Put in-place your NGINX configuration files and edit them according to your environment:
 
-Example Nginx configuration files are available at
+Example NGINX configuration files are available at
 https://github.com/ceph/ceph/tree/main/examples/rgw/rgw-cache
 
 - ``nginx.conf`` should go to ``/etc/nginx/nginx.conf``.
@@ -123,16 +123,16 @@ And modify the example ``server`` values to point to the RGWs URIs:
 
    radosgw-admin user create --uid=cacheuser --display-name="cache user" --caps="amz-cache=read" --access-key <access> --secret <secret>
 
-It is possible to use `Nginx slicing <https://docs.nginx.com/nginx/admin-guide/content-cache/content-caching/#byte-range-caching>`_ which is suitable for streaming purposes.
+It is possible to use `NGINX slicing <https://docs.nginx.com/nginx/admin-guide/content-cache/content-caching/#byte-range-caching>`_ which is suitable for streaming purposes.
 
 To enable slicing you should use ``nginx-slicing.conf`` instead of ``nginx-default.conf``.
 
 
 If you do not want to use prefetch caching, it is possible to replace ``nginx-default.conf`` with ``nginx-noprefetch.conf``.
-If prefetch caching is disabled Nginx will cache each range request separately and possible overlap in the range requests will be fetched more than once. For example, if a client is sending a range request of 0-4095 and then 0-4096 both requests are fetched completely from RGW.
+If prefetch caching is disabled NGINX will cache each range request separately and possible overlap in the range requests will be fetched more than once. For example, if a client is sending a range request of 0-4095 and then 0-4096 both requests are fetched completely from RGW.
 
 
-Run Nginx (OpenResty):
+Run NGINX (OpenResty):
 
 .. prompt:: bash #
 

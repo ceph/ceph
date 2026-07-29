@@ -381,7 +381,7 @@ public:
     });
   }
   virtual read_ertr::future<uint32_t> get_shard_nums() {
-    return read_ertr::make_ready_future<uint32_t>(seastar::smp::count);
+    return read_ertr::make_ready_future<uint32_t>(seastar::this_smp_shard_count());
   }
 };
 

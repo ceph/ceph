@@ -5,7 +5,7 @@ import _ from 'lodash';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { RbdService } from '../api/rbd.service';
 import { NotificationType } from '../enum/notification-type.enum';
-import { CdNotificationConfig } from '../models/cd-notification';
+import { CdNotification, CdNotificationConfig } from '../models/cd-notification';
 import { FinishedTask } from '../models/finished-task';
 import { CdDatePipe } from '../pipes/cd-date.pipe';
 import { NotificationService } from './notification.service';
@@ -157,15 +157,25 @@ describe('NotificationService', () => {
       flush();
     }));
 
-    it('combines different notifications with the same title', fakeAsync(() => {
+    it('deduplicates notifications with the same title, type, and message', fakeAsync(() => {
       service.show(NotificationType.error, '502 - Bad Gateway', 'Error occurred in path a');
-      tick(60);
+      tick(600);
+      service.show(NotificationType.error, '502 - Bad Gateway', 'Error occurred in path a');
+      tick(600);
+      const notifications = service['dataSource'].getValue();
+      expect(notifications.length).toBe(1);
+      expect(notifications[0].title).toBe('502 - Bad Gateway');
+      expect(notifications[0].occurrences).toBe(2);
+      flush();
+    }));
+
+    it('does not deduplicate notifications with different messages', fakeAsync(() => {
+      service.show(NotificationType.error, '502 - Bad Gateway', 'Error occurred in path a');
+      tick(600);
       service.show(NotificationType.error, '502 - Bad Gateway', 'Error occurred in path b');
-      expectSavedNotificationToHave({
-        type: NotificationType.error,
-        title: '502 - Bad Gateway',
-        message: '<ul><li>Error occurred in path a</li><li>Error occurred in path b</li></ul>'
-      });
+      tick(600);
+      const notifications = service['dataSource'].getValue();
+      expect(notifications.length).toBe(2);
       flush();
     }));
 
@@ -285,5 +295,66 @@ describe('NotificationService', () => {
       expect(toasts[0].caption).not.toContain('Prometheus');
       flush();
     }));
+  });
+
+  describe('Active toast limit', () => {
+    it('should show only the latest 2 toasts', fakeAsync(() => {
+      for (let i = 0; i < 5; i++) {
+        service.show(NotificationType.error, `Error ${i}`, `Message ${i}`);
+        tick(600);
+      }
+      const toasts = service['activeToastsSource'].getValue();
+      expect(toasts.length).toBe(2);
+      expect(toasts[0].title).toBe('Error 4');
+      expect(toasts[1].title).toBe('Error 3');
+      flush();
+    }));
+  });
+
+  describe('Read state', () => {
+    it('should mark a notification as read', () => {
+      const config = new CdNotificationConfig(NotificationType.info, 'Test');
+      const notification = new CdNotification(config);
+      service.save(notification);
+
+      expect(service['hasUnreadSource'].getValue()).toBe(true);
+      service.markAsRead(notification.id);
+      expect(service['hasUnreadSource'].getValue()).toBe(false);
+    });
+
+    it('should mark all notifications as read', () => {
+      const n1 = new CdNotification(new CdNotificationConfig(NotificationType.info, 'A'));
+      const n2 = new CdNotification(new CdNotificationConfig(NotificationType.error, 'B'));
+      service.save(n1);
+      service.save(n2);
+
+      expect(service['hasUnreadSource'].getValue()).toBe(true);
+      service.markAllAsRead();
+      expect(service['hasUnreadSource'].getValue()).toBe(false);
+    });
+
+    it('should clear read state when a notification gets a new occurrence', () => {
+      const n1 = new CdNotification(new CdNotificationConfig(NotificationType.error, 'Err', 'msg'));
+      service.save(n1);
+      service.markAsRead(n1.id);
+      expect(service['hasUnreadSource'].getValue()).toBe(false);
+
+      const n2 = new CdNotification(new CdNotificationConfig(NotificationType.error, 'Err', 'msg'));
+      service.save(n2);
+      expect(service['hasUnreadSource'].getValue()).toBe(true);
+      expect(service['dataSource'].getValue()[0].occurrences).toBe(2);
+    });
+
+    it('should remove by id', () => {
+      const n1 = new CdNotification(new CdNotificationConfig(NotificationType.info, 'A'));
+      service.save(n1);
+      expect(service['dataSource'].getValue().length).toBe(1);
+      expect(service.removeById(n1.id)).toBe(true);
+      expect(service['dataSource'].getValue().length).toBe(0);
+    });
+
+    it('should return false when removing non-existent id', () => {
+      expect(service.removeById('nonexistent')).toBe(false);
+    });
   });
 });

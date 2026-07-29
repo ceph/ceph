@@ -4713,7 +4713,7 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   if (if_nomatch) {
     if (strcmp(if_nomatch, "*") == 0) {
       // test the object is not existing
-      if (!exists) {
+      if (exists) {
 	return -ERR_PRECONDITION_FAILED;
       }
     } else {

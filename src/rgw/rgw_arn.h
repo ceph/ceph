@@ -5,6 +5,8 @@
 #include <string>
 #include <boost/optional.hpp>
 
+#include <fmt/ostream.h>
+
 class rgw_obj;
 class rgw_bucket;
 
@@ -119,3 +121,4 @@ struct hash<::rgw::Service> {
 };
 } // namespace std
 
+template <> struct fmt::formatter<rgw::ARN> : ostream_formatter {};

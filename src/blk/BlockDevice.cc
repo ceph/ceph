@@ -28,10 +28,6 @@
 #include "spdk/NVMEDevice.h"
 #endif
 
-#if defined(HAVE_BLUESTORE_PMEM)
-#include "pmem/PMEMDevice.h"
-#endif
-
 #include "common/debug.h"
 #include "common/EventTrace.h"
 #include "common/errno.h"
@@ -106,11 +102,6 @@ BlockDevice::detect_device_type(const std::string& path)
     return block_device_t::spdk;
   }
 #endif
-#if defined(HAVE_BLUESTORE_PMEM)
-  if (PMEMDevice::support(path)) {
-    return block_device_t::pmem;
-  }
-#endif
 #if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   return block_device_t::aio;
 #else
@@ -131,11 +122,6 @@ BlockDevice::device_type_from_name(const std::string& blk_dev_name)
     return block_device_t::spdk;
   }
 #endif
-#if defined(HAVE_BLUESTORE_PMEM)
-  if (blk_dev_name == "pmem") {
-    return block_device_t::pmem;
-  }
-#endif
   return block_device_t::unknown;
 }
 
@@ -152,10 +138,6 @@ BlockDevice* BlockDevice::create_with_type(block_device_t device_type,
 #if defined(HAVE_SPDK)
   case block_device_t::spdk:
     return new NVMEDevice(cct, cb, cbpriv);
-#endif
-#if defined(HAVE_BLUESTORE_PMEM)
-  case block_device_t::pmem:
-    return new PMEMDevice(cct, cb, cbpriv);
 #endif
   default:
     ceph_abort_msg("unsupported device");

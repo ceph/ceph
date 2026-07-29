@@ -36,7 +36,9 @@ RUN DISTRO=$DISTRO \
     FOR_MAKE_CHECK=${FOR_MAKE_CHECK} \
     bash -x ${CEPH_CTR_SRC}/buildcontainer-setup.sh
 RUN \
-    if [ $(uname -m) != ppc64le ]; then \
+    if rpm --quiet --query sccache 2>/dev/null || { command -v dnf >/dev/null 2>&1 && dnf install -y sccache 2>/dev/null; }; then \
+    echo "sccache provided by distro packages"; \
+    elif [ $(uname -m) != ppc64le ]; then \
     SCCACHE_ARCH="$(uname -m)"; \
     if [ "$SCCACHE_ARCH" = riscv64 ]; then SCCACHE_ARCH=riscv64gc; fi; \
     SCCACHE_URL="${SCCACHE_REPO}/releases/download/${SCCACHE_VERSION}/sccache-${SCCACHE_VERSION}-${SCCACHE_ARCH}-unknown-linux-musl.tar.gz"; \

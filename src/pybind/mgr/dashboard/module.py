@@ -106,7 +106,8 @@ class CherryPyConfig(object):
             'tools.gzip.on': True,
             'tools.gzip.mime_types': [
                 'text/html', 'text/plain', 'application/json',
-                'application/*+json', 'application/javascript', 'text/css'
+                'application/*+json', 'application/javascript',
+                'text/javascript', 'text/css'
             ],
             'tools.json_in.on': True,
             'tools.json_in.force': True,

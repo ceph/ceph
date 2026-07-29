@@ -654,17 +654,28 @@ class ClusterConfigHandler:
             elif isinstance(result.src, resources.ExternalCephCluster):
                 chg_extc_ids.add(result.src.external_ceph_cluster_id)
 
-        # TODO: here's a lazy bit. if any join auths or users/groups changed we
-        # will regen all clusters because these can be shared by >1 cluster.
-        # In future, make this only pick clusters using the named resources.
-        if (
-            chg_join_ids
-            or chg_ug_ids
-            or chg_tls_ids
-            or chg_extc_ids
-            or chg_rgw_cred_ids
-        ):
+        # rgw credentials are referenced by shares, not clusters, so
+        # narrowing this would mean reading every share in the store.
+        # not worth it for an infrequent change. Keeping the broad regen
+        # until we find a better approach for rgw credentials.
+        if chg_rgw_cred_ids:
             chg_cluster_ids.update(ClusterEntry.ids(self.internal_store))
+        elif chg_join_ids or chg_ug_ids or chg_tls_ids or chg_extc_ids:
+            # these resource types can be shared by >1 cluster. only pick
+            # clusters that actually reference a changed one.
+            for cluster_id in ClusterEntry.ids(self.internal_store):
+                try:
+                    cluster = self._cluster_entry(cluster_id).get_cluster()
+                except KeyError:
+                    continue
+                if (
+                    set(auth_refs(cluster)) & chg_join_ids
+                    or set(ug_refs(cluster)) & chg_ug_ids
+                    or set(tls_refs(cluster)) & chg_tls_ids
+                    or set(ext_cluster_refs(cluster)) & chg_extc_ids
+                ):
+                    chg_cluster_ids.add(cluster_id)
+
         return chg_cluster_ids
 
     def _save_cluster_settings(

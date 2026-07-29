@@ -40,6 +40,7 @@ using boost::none;
 
 using rgw::auth::Identity;
 using rgw::auth::Principal;
+using rgw::auth::PrincipalIdentity;
 
 using rgw::ARN;
 using rgw::IAM::Effect;
@@ -143,81 +144,6 @@ using rgw::IAM::allValue;
 
 using rgw::IAM::get_managed_policy;
 
-class FakeIdentity : public Identity {
-  const Principal id;
-public:
-
-  explicit FakeIdentity(Principal&& id) : id(std::move(id)) {}
-
-  ACLOwner get_aclowner() const override {
-    ceph_abort();
-    return {};
-  }
-
-  uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
-    ceph_abort();
-    return 0;
-  };
-
-  bool is_admin() const override {
-    ceph_abort();
-    return false;
-  }
-
-  bool is_owner_of(const rgw_owner& owner) const override {
-    ceph_abort();
-    return false;
-  }
-
-  bool is_root() const override {
-    ceph_abort();
-    return false;
-  }
-
-  virtual uint32_t get_perm_mask() const override {
-    ceph_abort();
-    return 0;
-  }
-
-  string get_acct_name() const override {
-    abort();
-    return string{};
-  }
-
-  string get_subuser() const override {
-    abort();
-    return string{};
-  }
-
-  const std::string& get_tenant() const override {
-    ceph_abort();
-    static std::string empty;
-    return empty;
-  }
-
-  const std::optional<RGWAccountInfo>& get_account() const override {
-    ceph_abort();
-    static std::optional<RGWAccountInfo> empty;
-    return empty;
-  }
-
-  void to_str(std::ostream& out) const override {
-    out << id;
-  }
-
-  bool is_identity(const Principal& p) const override {
-    return id.is_wildcard() || p.is_wildcard() || p == id;
-  }
-
-  uint32_t get_identity_type() const override {
-    return TYPE_RGW;
-  }
-
-  std::optional<rgw::ARN> get_caller_identity() const override {
-    return std::nullopt;
-  }
-};
-
 class PolicyTest : public ::testing::Test {
 protected:
   intrusive_ptr<CephContext> cct;
@@ -271,18 +197,15 @@ TEST_F(PolicyTest, Eval1) {
 
   ARN arn1(Partition::aws, Service::s3,
 		       "", arbitrary_tenant, "example_bucket");
-  EXPECT_EQ(p.eval(e, none, s3ListBucket, arn1),
-	    Effect::Allow);
+  EXPECT_EQ(p.eval(e, none, s3ListBucket, arn1), Effect::Allow);
 
   ARN arn2(Partition::aws, Service::s3,
 		       "", arbitrary_tenant, "example_bucket");
-  EXPECT_EQ(p.eval(e, none, s3PutBucketAcl, arn2),
-	    Effect::Pass);
+  EXPECT_EQ(p.eval(e, none, s3PutBucketAcl, arn2), Effect::Pass);
 
   ARN arn3(Partition::aws, Service::s3,
 		       "", arbitrary_tenant, "erroneous_bucket");
-  EXPECT_EQ(p.eval(e, none, s3ListBucket, arn3),
-	    Effect::Pass);
+  EXPECT_EQ(p.eval(e, none, s3ListBucket, arn3), Effect::Pass);
 
 }
 
@@ -333,37 +256,30 @@ TEST_F(PolicyTest, Eval2) {
   auto p  = Policy(cct.get(), &arbitrary_tenant, example2, true);
   Environment e;
 
-  auto trueacct = FakeIdentity(
+  auto trueacct = PrincipalIdentity(
     Principal::account("ACCOUNT-ID-WITHOUT-HYPHENS"));
 
-  auto notacct = FakeIdentity(
+  auto notacct = PrincipalIdentity(
     Principal::account("some-other-account"));
   for (auto i = 0ULL; i < s3All; ++i) {
     ARN arn1(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "mybucket");
-    EXPECT_EQ(p.eval(e, trueacct, i, arn1),
-	      Effect::Allow);
+    EXPECT_EQ(p.eval(e, trueacct, i, arn1), Effect::Allow);
     ARN arn2(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "mybucket/myobject");
-    EXPECT_EQ(p.eval(e, trueacct, i, arn2),
-	      Effect::Allow);
+    EXPECT_EQ(p.eval(e, trueacct, i, arn2), Effect::Allow);
     ARN arn3(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "mybucket");
-    EXPECT_EQ(p.eval(e, notacct, i, arn3),
-	      Effect::Pass);
+    EXPECT_EQ(p.eval(e, notacct, i, arn3), Effect::Pass);
     ARN arn4(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "mybucket/myobject");
-    EXPECT_EQ(p.eval(e, notacct, i, arn4),
-	      Effect::Pass);
+    EXPECT_EQ(p.eval(e, notacct, i, arn4), Effect::Pass);
     ARN arn5(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "notyourbucket");
-    EXPECT_EQ(p.eval(e, trueacct, i, arn5),
-	      Effect::Pass);
+    EXPECT_EQ(p.eval(e, trueacct, i, arn5), Effect::Pass);
     ARN arn6(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "notyourbucket/notyourobject");
-    EXPECT_EQ(p.eval(e, trueacct, i, arn6),
-	      Effect::Pass);
-
+    EXPECT_EQ(p.eval(e, trueacct, i, arn6), Effect::Pass);
   }
 }
 
@@ -535,13 +451,11 @@ TEST_F(PolicyTest, Eval3) {
 
   ARN arn1(Partition::aws, Service::s3,
 		       "", arbitrary_tenant, "mybucket");
-  EXPECT_EQ(p.eval(em, none, s3PutBucketPolicy, arn1),
-	    Effect::Allow);
+  EXPECT_EQ(p.eval(em, none, s3PutBucketPolicy, arn1), Effect::Allow);
 
   ARN arn2(Partition::aws, Service::s3,
 		       "", arbitrary_tenant, "mybucket");
-  EXPECT_EQ(p.eval(em, none, s3PutBucketPolicy, arn2),
-	    Effect::Allow);
+  EXPECT_EQ(p.eval(em, none, s3PutBucketPolicy, arn2), Effect::Allow);
 
 
   for (auto op = 0ULL; op < s3All; ++op) {
@@ -550,20 +464,16 @@ TEST_F(PolicyTest, Eval3) {
     }
     ARN arn3(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data");
-    EXPECT_EQ(p.eval(em, none, op, arn3),
-	      Effect::Pass);
+    EXPECT_EQ(p.eval(em, none, op, arn3), Effect::Pass);
     ARN arn4(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data");
-    EXPECT_EQ(p.eval(tr, none, op, arn4),
-	      s3allow[op] ? Effect::Allow : Effect::Pass);
+    EXPECT_EQ(p.eval(tr, none, op, arn4), s3allow[op] ? Effect::Allow : Effect::Pass);
     ARN arn5(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data");
-    EXPECT_EQ(p.eval(fa, none, op, arn5),
-	      Effect::Pass);
+    EXPECT_EQ(p.eval(fa, none, op, arn5), Effect::Pass);
     ARN arn6(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data/moo");
-    EXPECT_EQ(p.eval(em, none, op, arn6),
-	      Effect::Pass);
+    EXPECT_EQ(p.eval(em, none, op, arn6), Effect::Pass);
     ARN arn7(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data/moo");
     EXPECT_EQ(p.eval(tr, none, op, arn7),
@@ -574,16 +484,13 @@ TEST_F(PolicyTest, Eval3) {
 	      Effect::Pass);
     ARN arn9(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "really-confidential-data");
-    EXPECT_EQ(p.eval(em, none, op, arn9),
-	      Effect::Pass);
+    EXPECT_EQ(p.eval(em, none, op, arn9), Effect::Pass);
     ARN arn10(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "really-confidential-data");
-    EXPECT_EQ(p.eval(tr, none, op, arn10),
-	      Effect::Pass);
+    EXPECT_EQ(p.eval(tr, none, op, arn10), Effect::Pass);
     ARN arn11(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "really-confidential-data");
-    EXPECT_EQ(p.eval(fa, none, op, arn11),
-	      Effect::Pass);
+    EXPECT_EQ(p.eval(fa, none, op, arn11), Effect::Pass);
     ARN arn12(Partition::aws, Service::s3,
 			 "", arbitrary_tenant,
 			 "really-confidential-data/moo");
@@ -596,7 +503,6 @@ TEST_F(PolicyTest, Eval3) {
 			 "", arbitrary_tenant,
 			 "really-confidential-data/moo");
     EXPECT_EQ(p.eval(fa, none, op, arn14), Effect::Pass);
-
   }
 }
 
@@ -636,13 +542,11 @@ TEST_F(PolicyTest, Eval4) {
 
   ARN arn1(Partition::aws, Service::iam,
 		       "", arbitrary_tenant, "role/example_role");
-  EXPECT_EQ(p.eval(e, none, iamCreateRole, arn1),
-	    Effect::Allow);
+  EXPECT_EQ(p.eval(e, none, iamCreateRole, arn1), Effect::Allow);
 
   ARN arn2(Partition::aws, Service::iam,
 		       "", arbitrary_tenant, "role/example_role");
-  EXPECT_EQ(p.eval(e, none, iamDeleteRole, arn2),
-	    Effect::Pass);
+  EXPECT_EQ(p.eval(e, none, iamDeleteRole, arn2), Effect::Pass);
 }
 
 TEST_F(PolicyTest, Parse5) {
@@ -681,18 +585,15 @@ TEST_F(PolicyTest, Eval5) {
 
   ARN arn1(Partition::aws, Service::iam,
 		       "", arbitrary_tenant, "role/example_role");
-  EXPECT_EQ(p.eval(e, none, iamCreateRole, arn1),
-	    Effect::Allow);
+  EXPECT_EQ(p.eval(e, none, iamCreateRole, arn1), Effect::Allow);
 
   ARN arn2(Partition::aws, Service::iam,
 		       "", arbitrary_tenant, "role/example_role");
-  EXPECT_EQ(p.eval(e, none, s3ListBucket, arn2),
-	    Effect::Pass);
+  EXPECT_EQ(p.eval(e, none, s3ListBucket, arn2), Effect::Pass);
 
   ARN arn3(Partition::aws, Service::iam,
 		       "", "", "role/example_role");
-  EXPECT_EQ(p.eval(e, none, iamCreateRole, arn3),
-	    Effect::Pass);
+  EXPECT_EQ(p.eval(e, none, iamCreateRole, arn3), Effect::Pass);
 }
 
 TEST_F(PolicyTest, Parse6) {
@@ -731,13 +632,11 @@ TEST_F(PolicyTest, Eval6) {
 
   ARN arn1(Partition::aws, Service::iam,
 		       "", arbitrary_tenant, "user/A");
-  EXPECT_EQ(p.eval(e, none, iamCreateRole, arn1),
-	    Effect::Allow);
+  EXPECT_EQ(p.eval(e, none, iamCreateRole, arn1), Effect::Allow);
 
   ARN arn2(Partition::aws, Service::iam,
 		       "", arbitrary_tenant, "user/A");
-  EXPECT_EQ(p.eval(e, none, s3ListBucket, arn2),
-	    Effect::Allow);
+  EXPECT_EQ(p.eval(e, none, s3ListBucket, arn2), Effect::Allow);
 }
 
 TEST_F(PolicyTest, Parse7) {
@@ -777,27 +676,24 @@ TEST_F(PolicyTest, Eval7) {
   auto p  = Policy(cct.get(), &arbitrary_tenant, example7, true);
   Environment e;
 
-  auto subacct = FakeIdentity(
+  auto subacct = PrincipalIdentity(
     Principal::user(std::move(""), "A:subA"));
-  auto parentacct = FakeIdentity(
+  auto parentacct = PrincipalIdentity(
     Principal::user(std::move(""), "A"));
-  auto sub2acct = FakeIdentity(
+  auto sub2acct = PrincipalIdentity(
     Principal::user(std::move(""), "A:sub2A"));
 
   ARN arn1(Partition::aws, Service::s3,
 		       "", arbitrary_tenant, "mybucket/*");
-  EXPECT_EQ(p.eval(e, subacct, s3ListBucket, arn1),
-	    Effect::Allow);
-  
+  EXPECT_EQ(p.eval(e, subacct, s3ListBucket, arn1), Effect::Allow);
+
   ARN arn2(Partition::aws, Service::s3,
 		       "", arbitrary_tenant, "mybucket/*");
-  EXPECT_EQ(p.eval(e, parentacct, s3ListBucket, arn2),
-	    Effect::Pass);
+  EXPECT_EQ(p.eval(e, parentacct, s3ListBucket, arn2), Effect::Pass);
 
   ARN arn3(Partition::aws, Service::s3,
 		       "", arbitrary_tenant, "mybucket/*");
-  EXPECT_EQ(p.eval(e, sub2acct, s3ListBucket, arn3),
-	    Effect::Pass);
+  EXPECT_EQ(p.eval(e, sub2acct, s3ListBucket, arn3), Effect::Pass);
 }
 
 
@@ -1277,49 +1173,49 @@ TEST_F(IPPolicyTest, EvalIPAddress) {
   blocklistedIP.emplace("aws:SourceIp", "192.168.1.1");
   blocklistedIPv6.emplace("aws:SourceIp", "2001:0db8:85a3:0000:0000:8a2e:0370:7334");
 
-  auto trueacct = FakeIdentity(
+  auto trueacct = PrincipalIdentity(
     Principal::account("ACCOUNT-ID-WITHOUT-HYPHENS"));
   // Without an IP address in the environment then evaluation will always pass
   ARN arn1(Partition::aws, Service::s3,
 			    "", arbitrary_tenant, "example_bucket");
   EXPECT_EQ(allowp.eval(e, trueacct, s3ListBucket, arn1),
-	    Effect::Pass);
+            Effect::Pass);
   ARN arn2(Partition::aws, Service::s3,
       "", arbitrary_tenant, "example_bucket/myobject");
   EXPECT_EQ(fullp.eval(e, trueacct, s3ListBucket, arn2),
-	    Effect::Pass);
+            Effect::Pass);
 
   ARN arn3(Partition::aws, Service::s3,
 			    "", arbitrary_tenant, "example_bucket");
   EXPECT_EQ(allowp.eval(allowedIP, trueacct, s3ListBucket, arn3),
-	    Effect::Allow);
+            Effect::Allow);
   ARN arn4(Partition::aws, Service::s3,
 			    "", arbitrary_tenant, "example_bucket");
   EXPECT_EQ(allowp.eval(blocklistedIPv6, trueacct, s3ListBucket, arn4),
-	    Effect::Pass);
+            Effect::Pass);
 
   ARN arn5(Partition::aws, Service::s3,
 			   "", arbitrary_tenant, "example_bucket");
   EXPECT_EQ(denyp.eval(allowedIP, trueacct, s3ListBucket, arn5),
-	    Effect::Deny);
+            Effect::Deny);
   ARN arn6(Partition::aws, Service::s3,
 			   "", arbitrary_tenant, "example_bucket/myobject");
   EXPECT_EQ(denyp.eval(allowedIP, trueacct, s3ListBucket, arn6),
-	    Effect::Deny);
+            Effect::Deny);
 
   ARN arn7(Partition::aws, Service::s3,
 			   "", arbitrary_tenant, "example_bucket");
   EXPECT_EQ(denyp.eval(blocklistedIP, trueacct, s3ListBucket, arn7),
-	    Effect::Pass);
+            Effect::Pass);
   ARN arn8(Partition::aws, Service::s3,
 			   "", arbitrary_tenant, "example_bucket/myobject");
   EXPECT_EQ(denyp.eval(blocklistedIP, trueacct, s3ListBucket, arn8),
-	    Effect::Pass);
+            Effect::Pass);
 
   ARN arn9(Partition::aws, Service::s3,
 			   "", arbitrary_tenant, "example_bucket");
   EXPECT_EQ(denyp.eval(blocklistedIPv6, trueacct, s3ListBucket, arn9),
-	    Effect::Pass);
+            Effect::Pass);
   ARN arn10(Partition::aws, Service::s3,
 			   "", arbitrary_tenant, "example_bucket/myobject");
   EXPECT_EQ(denyp.eval(blocklistedIPv6, trueacct, s3ListBucket, arn10),
@@ -1555,20 +1451,20 @@ TEST(Condition, ArnLike)
     Condition ArnLike{TokenID::ArnLike, key.data(), key.size(), false};
     ArnLike.vals.push_back("arn:aws:s3:::bucket");
 
-    EXPECT_FALSE(ArnLike.eval({}));
-    EXPECT_TRUE(ArnLike.eval({{key, "arn:aws:s3:::bucket"}}));
-    EXPECT_FALSE(ArnLike.eval({{key, "arn:aws:s3:::BUCKET"}}));
-    EXPECT_FALSE(ArnLike.eval({{key, "arn:aws:s3:::user"}}));
+    EXPECT_FALSE(ArnLike.eval({}, nullptr));
+    EXPECT_TRUE(ArnLike.eval({{key, "arn:aws:s3:::bucket"}}, nullptr));
+    EXPECT_FALSE(ArnLike.eval({{key, "arn:aws:s3:::BUCKET"}}, nullptr));
+    EXPECT_FALSE(ArnLike.eval({{key, "arn:aws:s3:::user"}}, nullptr));
   }
   {
     Condition ArnLike{TokenID::ArnLike, key.data(), key.size(), false};
     ArnLike.vals.push_back("arn:aws:s3:::b*");
 
-    EXPECT_FALSE(ArnLike.eval({}));
-    EXPECT_TRUE(ArnLike.eval({{key, "arn:aws:s3:::b"}}));
-    EXPECT_TRUE(ArnLike.eval({{key, "arn:aws:s3:::bucket"}}));
-    EXPECT_FALSE(ArnLike.eval({{key, "arn:aws:s3:::BUCKET"}}));
-    EXPECT_FALSE(ArnLike.eval({{key, "arn:aws:s3:::user"}}));
+    EXPECT_FALSE(ArnLike.eval({}, nullptr));
+    EXPECT_TRUE(ArnLike.eval({{key, "arn:aws:s3:::b"}}, nullptr));
+    EXPECT_TRUE(ArnLike.eval({{key, "arn:aws:s3:::bucket"}}, nullptr));
+    EXPECT_FALSE(ArnLike.eval({{key, "arn:aws:s3:::BUCKET"}}, nullptr));
+    EXPECT_FALSE(ArnLike.eval({{key, "arn:aws:s3:::user"}}, nullptr));
   }
 }
 
@@ -1589,7 +1485,7 @@ protected:
 TEST_F(ConditionTest, StringNotEqualsLogic)
 {
   std::string key = "aws:UserName";
-  
+
   // Test case: value matches one of multiple condition values
   // Should return false because value equals at least one condition value
   {
@@ -1599,11 +1495,11 @@ TEST_F(ConditionTest, StringNotEqualsLogic)
     stringNotEquals.vals.push_back("charlie");
 
     // Input "bob" matches second condition value, should return false
-    EXPECT_FALSE(stringNotEquals.eval({{key, "bob"}}));
-    // Input "alice" matches first condition value, should return false  
-    EXPECT_FALSE(stringNotEquals.eval({{key, "alice"}}));
+    EXPECT_FALSE(stringNotEquals.eval({{key, "bob"}}, nullptr));
+    // Input "alice" matches first condition value, should return false
+    EXPECT_FALSE(stringNotEquals.eval({{key, "alice"}}, nullptr));
   }
-  
+
   // Test case: value doesn't match any condition values
   // Should return true because value differs from all condition values
   {
@@ -1613,7 +1509,7 @@ TEST_F(ConditionTest, StringNotEqualsLogic)
     stringNotEquals.vals.push_back("charlie");
 
     // Input "david" doesn't match any condition value, should return true
-    EXPECT_TRUE(stringNotEquals.eval({{key, "david"}}));
+    EXPECT_TRUE(stringNotEquals.eval({{key, "david"}}, nullptr));
   }
 }
 
@@ -1630,11 +1526,11 @@ TEST_F(ConditionTest, NumericNotEqualsLogic)
     numericNotEquals.vals.push_back("30");
 
     // Input "20" matches second condition value, should return false
-    EXPECT_FALSE(numericNotEquals.eval({{key, "20"}}));
+    EXPECT_FALSE(numericNotEquals.eval({{key, "20"}}, nullptr));
     // Input "10" matches first condition value, should return false
-    EXPECT_FALSE(numericNotEquals.eval({{key, "10"}}));
+    EXPECT_FALSE(numericNotEquals.eval({{key, "10"}}, nullptr));
   }
-  
+
   // Test case: value doesn't match any condition values
   // Should return true because value differs from all condition values
   {
@@ -1644,14 +1540,14 @@ TEST_F(ConditionTest, NumericNotEqualsLogic)
     numericNotEquals.vals.push_back("30");
 
     // Input "40" doesn't match any condition value, should return true
-    EXPECT_TRUE(numericNotEquals.eval({{key, "40"}}));
+    EXPECT_TRUE(numericNotEquals.eval({{key, "40"}}, nullptr));
   }
 }
 
 TEST_F(ConditionTest, DateNotEqualsLogic)
 {
   std::string key = "aws:CurrentTime";
-  
+
   // Test case: value matches one of multiple condition values
   // Should return false because value equals at least one condition value
   {
@@ -1661,9 +1557,9 @@ TEST_F(ConditionTest, DateNotEqualsLogic)
     dateNotEquals.vals.push_back("2023-12-01T00:00:00Z");
 
     // Input matches second condition value, should return false
-    EXPECT_FALSE(dateNotEquals.eval({{key, "2023-06-01T00:00:00Z"}}));
+    EXPECT_FALSE(dateNotEquals.eval({{key, "2023-06-01T00:00:00Z"}}, nullptr));
   }
-  
+
   // Test case: value doesn't match any condition values
   // Should return true because value differs from all condition values
   {
@@ -1673,14 +1569,14 @@ TEST_F(ConditionTest, DateNotEqualsLogic)
     dateNotEquals.vals.push_back("2023-12-01T00:00:00Z");
 
     // Input doesn't match any condition value, should return true
-    EXPECT_TRUE(dateNotEquals.eval({{key, "2024-01-01T00:00:00Z"}}));
+    EXPECT_TRUE(dateNotEquals.eval({{key, "2024-01-01T00:00:00Z"}}, nullptr));
   }
 }
 
 TEST_F(ConditionTest, NotIpAddressLogic)
 {
   std::string key = "aws:SourceIp";
-  
+
   // Test case: value matches one of multiple condition values
   // Should return false because value equals at least one condition value
   {
@@ -1690,11 +1586,11 @@ TEST_F(ConditionTest, NotIpAddressLogic)
     notIpAddress.vals.push_back("172.16.0.1");
 
     // Input matches second condition value, should return false
-    EXPECT_FALSE(notIpAddress.eval({{key, "10.0.0.1"}}));
+    EXPECT_FALSE(notIpAddress.eval({{key, "10.0.0.1"}}, nullptr));
     // Input matches first condition value, should return false
-    EXPECT_FALSE(notIpAddress.eval({{key, "192.168.1.1"}}));
+    EXPECT_FALSE(notIpAddress.eval({{key, "192.168.1.1"}}, nullptr));
   }
-  
+
   // Test case: value doesn't match any condition values
   // Should return true because value differs from all condition values
   {
@@ -1704,14 +1600,14 @@ TEST_F(ConditionTest, NotIpAddressLogic)
     notIpAddress.vals.push_back("172.16.0.1");
 
     // Input doesn't match any condition value, should return true
-    EXPECT_TRUE(notIpAddress.eval({{key, "8.8.8.8"}}));
+    EXPECT_TRUE(notIpAddress.eval({{key, "8.8.8.8"}}, nullptr));
   }
 }
 
 TEST_F(ConditionTest, ArnNotEqualsLogic)
 {
   std::string key = "aws:SourceArn";
-  
+
   // Test case: value matches one of multiple condition values
   // Should return false because value equals at least one condition value
   {
@@ -1721,9 +1617,9 @@ TEST_F(ConditionTest, ArnNotEqualsLogic)
     arnNotEquals.vals.push_back("arn:aws:s3:::bucket3");
 
     // Input matches second condition value, should return false
-    EXPECT_FALSE(arnNotEquals.eval({{key, "arn:aws:s3:::bucket2"}}));
+    EXPECT_FALSE(arnNotEquals.eval({{key, "arn:aws:s3:::bucket2"}}, nullptr));
   }
-  
+
   // Test case: value doesn't match any condition values
   // Should return true because value differs from all condition values
   {
@@ -1733,14 +1629,15 @@ TEST_F(ConditionTest, ArnNotEqualsLogic)
     arnNotEquals.vals.push_back("arn:aws:s3:::bucket3");
 
     // Input doesn't match any condition value, should return true
-    EXPECT_TRUE(arnNotEquals.eval({{key, "arn:aws:s3:::other-bucket"}}));
+    EXPECT_TRUE(arnNotEquals.eval({{key, "arn:aws:s3:::other-bucket"}},
+                                  nullptr));
   }
 }
 
 TEST_F(ConditionTest, StringNotLikeLogic)
 {
   std::string key = "s3:prefix";
-  
+
   // Test case: value matches one of multiple condition patterns
   // Should return false because value matches at least one condition pattern
   {
@@ -1750,11 +1647,11 @@ TEST_F(ConditionTest, StringNotLikeLogic)
     stringNotLike.vals.push_back("temp/*");
 
     // Input matches second condition pattern, should return false
-    EXPECT_FALSE(stringNotLike.eval({{key, "admin/config.txt"}}));
+    EXPECT_FALSE(stringNotLike.eval({{key, "admin/config.txt"}}, nullptr));
     // Input matches first condition pattern, should return false
-    EXPECT_FALSE(stringNotLike.eval({{key, "user/profile.jpg"}}));
+    EXPECT_FALSE(stringNotLike.eval({{key, "user/profile.jpg"}}, nullptr));
   }
-  
+
   // Test case: value doesn't match any condition patterns
   // Should return true because value differs from all condition patterns
   {
@@ -1764,7 +1661,7 @@ TEST_F(ConditionTest, StringNotLikeLogic)
     stringNotLike.vals.push_back("temp/*");
 
     // Input doesn't match any condition pattern, should return true
-    EXPECT_TRUE(stringNotLike.eval({{key, "public/document.pdf"}}));
+    EXPECT_TRUE(stringNotLike.eval({{key, "public/document.pdf"}}, nullptr));
   }
 }
 
@@ -1777,8 +1674,8 @@ TEST_F(ConditionTest, Null)
     Condition isNull{TokenID::Null, key.data(), key.size(), false};
     isNull.vals.push_back("true");
 
-    EXPECT_TRUE(isNull.eval({}));
-    EXPECT_FALSE(isNull.eval({{key, "admin/config.txt"}}));
+    EXPECT_TRUE(isNull.eval({}, nullptr));
+    EXPECT_FALSE(isNull.eval({{key, "admin/config.txt"}}, nullptr));
   }
 
   {
@@ -1786,8 +1683,8 @@ TEST_F(ConditionTest, Null)
     Condition notNull{TokenID::Null, key.data(), key.size(), false};
     notNull.vals.push_back("false");
 
-    EXPECT_FALSE(notNull.eval({}));
-    EXPECT_TRUE(notNull.eval({{key, "admin/config.txt"}}));
+    EXPECT_FALSE(notNull.eval({}, nullptr));
+    EXPECT_TRUE(notNull.eval({{key, "admin/config.txt"}}, nullptr));
   }
 }
 
@@ -1799,32 +1696,32 @@ TEST_F(ConditionTest, KeyStoneRoleStringEquals)
   cond.vals.push_back("testrole");
 
   // No roles
-  EXPECT_FALSE(cond.eval({}));
+  EXPECT_FALSE(cond.eval({}, nullptr));
 
   // Single matching role
-  EXPECT_TRUE(cond.eval({{key, "testrole"}}));
+  EXPECT_TRUE(cond.eval({{key, "testrole"}}, nullptr));
 
   // Single non-matching role
-  EXPECT_FALSE(cond.eval({{key, "member"}}));
+  EXPECT_FALSE(cond.eval({{key, "member"}}, nullptr));
 
   //Multiple roles in env,one matches
   Environment multi_env;
   multi_env.emplace(key, "member");
   multi_env.emplace(key, "testrole");
   multi_env.emplace(key, "reader");
-  EXPECT_TRUE(cond.eval(multi_env));
+  EXPECT_TRUE(cond.eval(multi_env, nullptr));
 
   //Multiple roles in env, no match
   Environment no_match_env;
   no_match_env.emplace(key, "member");
   no_match_env.emplace(key, "reader");
-  EXPECT_FALSE(cond.eval(no_match_env));
+  EXPECT_FALSE(cond.eval(no_match_env, nullptr));
 
   // Multiple identical roles (redundancy check)
   Environment duplicate_env;
   duplicate_env.emplace(key, "testrole");
   duplicate_env.emplace(key, "testrole");
-  EXPECT_TRUE(cond.eval(duplicate_env));
+  EXPECT_TRUE(cond.eval(duplicate_env, nullptr));
 }
 
 TEST_F(ConditionTest, KeyStoneRoleNotStringEquals)
@@ -1835,26 +1732,26 @@ TEST_F(ConditionTest, KeyStoneRoleNotStringEquals)
   cond.vals.push_back("admin");
 
   // No roles
-  EXPECT_FALSE(cond.eval({}));
+  EXPECT_FALSE(cond.eval({}, nullptr));
 
   // Role matches
-  EXPECT_FALSE(cond.eval({{key, "admin"}}));
+  EXPECT_FALSE(cond.eval({{key, "admin"}}, nullptr));
 
   // Role doesn't match
-  EXPECT_TRUE(cond.eval({{key, "member"}}));
+  EXPECT_TRUE(cond.eval({{key, "member"}}, nullptr));
 
   // Multiple roles in env, one matches -> false
   Environment multi_env;
   multi_env.emplace(key, "member");
   multi_env.emplace(key, "admin");
   EXPECT_FALSE(multi_env.count(key) == 0);
-  EXPECT_FALSE(cond.eval(multi_env));
+  EXPECT_FALSE(cond.eval(multi_env, nullptr));
 
   // Multiple roles, none match -> true
   Environment no_match_env;
   no_match_env.emplace(key, "member");
   no_match_env.emplace(key, "reader");
-  EXPECT_TRUE(cond.eval(no_match_env));
+  EXPECT_TRUE(cond.eval(no_match_env, nullptr));
 }
 
 TEST_F(ConditionTest, KeyStoneRolePolicyParsing)
@@ -1893,18 +1790,18 @@ TEST_F(ConditionTest, KeyStoneRolePolicyParsing)
   // Eval with matching role in environment
   Environment match_env;
   match_env.emplace("keystone:role", "testrole");
-  EXPECT_TRUE(p->statements[0].conditions[0].eval(match_env));
+  EXPECT_TRUE(p->statements[0].conditions[0].eval(match_env, nullptr));
 
   // Eval with non-matching role
   Environment nomatch_env;
   nomatch_env.emplace("keystone:role", "member");
-  EXPECT_FALSE(p->statements[0].conditions[0].eval(nomatch_env));
+  EXPECT_FALSE(p->statements[0].conditions[0].eval(nomatch_env, nullptr));
 
   // Eval with multiple roles, one matching
   Environment multi_env;
   multi_env.emplace("keystone:role", "member");
   multi_env.emplace("keystone:role", "testrole");
-  EXPECT_TRUE(p->statements[0].conditions[0].eval(multi_env));
+  EXPECT_TRUE(p->statements[0].conditions[0].eval(multi_env, nullptr));
 }
 
 TEST_F(ConditionTest, KeystoneUserIdStringEquals)
@@ -1913,7 +1810,7 @@ TEST_F(ConditionTest, KeystoneUserIdStringEquals)
   Condition cond{TokenID::StringEquals, key.data(), key.size(), false};
   cond.vals.push_back("user-123");
 
-  EXPECT_FALSE(cond.eval({}));
-  EXPECT_TRUE(cond.eval({{key, "user-123"}}));
-  EXPECT_FALSE(cond.eval({{key, "user-456"}}));
+  EXPECT_FALSE(cond.eval({}, nullptr));
+  EXPECT_TRUE(cond.eval({{key, "user-123"}}, nullptr));
+  EXPECT_FALSE(cond.eval({{key, "user-456"}}, nullptr));
 }

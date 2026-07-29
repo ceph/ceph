@@ -117,13 +117,13 @@ if(WITH_SCCACHE)
         ERROR_VARIABLE sccache_dist_status_error
         GET "${sccache_dist_status}" SchedulerStatus 1 num_cpus
       )
-      string(FIND "${sccache_dist_status}" "disabled" find_result)
-      if(find_result EQUAL -1)
+      if(sccache_dist_status_error)
+        message(WARNING "Using sccache, but it is not configured for distributed "
+          "compilation: ${sccache_dist_status_error}")
+      else()
         message(STATUS "Using sccache with distributed compilation. Effective cores: ${sccache_cores}")
         set(NINJA_MAX_COMPILE_JOBS ${sccache_cores})
         set(NINJA_MAX_LINK_JOBS ${sccache_cores})
-      else()
-        message(WARNING "Using sccache, but it is not configured for distributed complilation")
       endif()
     else()
       message(WARNING "Using sccache, but cannot determine maximum job value since cmake version is <3.19")
@@ -223,7 +223,6 @@ if(LINUX)
 elseif(FREEBSD)
   set(HAVE_UDEV OFF)
   set(HAVE_LIBAIO OFF)
-  set(HAVE_LIBDML OFF)
   set(HAVE_BLKID OFF)
   set(HAVE_KEYUTILS OFF)
 else()
@@ -304,13 +303,6 @@ if(WITH_LIBURING)
   endif()
 endif()
 
-CMAKE_DEPENDENT_OPTION(WITH_BLUESTORE_PMEM "Enable PMDK libraries" OFF
-  "WITH_BLUESTORE" OFF)
-if(WITH_BLUESTORE_PMEM)
-  find_package(dml)
-  set(HAVE_LIBDML ${DML_FOUND})
-endif()
-
 CMAKE_DEPENDENT_OPTION(WITH_RBD_MIRROR "Enable build for rbd-mirror daemon executable" OFF
     "WITH_RBD" OFF)
 
@@ -325,7 +317,7 @@ CMAKE_DEPENDENT_OPTION(WITH_RBD_SSD_CACHE "Enable librbd persistent write back c
     "WITH_RBD" OFF)
 
 CMAKE_DEPENDENT_OPTION(WITH_SYSTEM_PMDK "Require and build with system PMDK" OFF
-  "WITH_RBD_RWL OR WITH_BLUESTORE_PMEM" OFF)
+  "WITH_RBD_RWL" OFF)
 
 CMAKE_DEPENDENT_OPTION(WITH_RBD_UBBD "Enable ubbd support for rbd device utility" OFF
     "WITH_RBD" OFF)
@@ -333,10 +325,6 @@ CMAKE_DEPENDENT_OPTION(WITH_RBD_UBBD "Enable ubbd support for rbd device utility
 if(WITH_RBD_UBBD)
   include(BuildUBBD)
   build_ubbd()
-endif()
-
-if(WITH_BLUESTORE_PMEM)
-  set(HAVE_BLUESTORE_PMEM ON)
 endif()
 
 CMAKE_DEPENDENT_OPTION(WITH_SPDK "Enable SPDK" OFF
@@ -356,10 +344,10 @@ if(WITH_SPDK)
 endif(WITH_SPDK)
 
 if(WITH_BLUESTORE)
-  if(NOT AIO_FOUND AND NOT HAVE_POSIXAIO AND NOT WITH_SPDK AND NOT WITH_BLUESTORE_PMEM)
+  if(NOT AIO_FOUND AND NOT HAVE_POSIXAIO AND NOT WITH_SPDK)
     message(SEND_ERROR "WITH_BLUESTORE is ON, "
       "but none of the bluestore backends is enabled. "
-      "Please install libaio, or enable WITH_SPDK or WITH_BLUESTORE_PMEM (experimental)")
+      "Please install libaio, or enable WITH_SPDK")
   endif()
 endif()
 
@@ -589,11 +577,13 @@ option(WITH_RADOSGW_AMQP_ENDPOINT "RADOS Gateway's pubsub support for AMQP push 
 option(WITH_RADOSGW_KAFKA_ENDPOINT "RADOS Gateway's pubsub support for Kafka push endpoint" ON)
 option(WITH_SYSTEM_RDKAFKA "build against system librdkafka instead of the bundled submodule" OFF)
 option(WITH_RADOSGW_LUA_PACKAGES "RADOS Gateway's support for dynamically adding lua packagess" ON)
+option(WITH_RADOSGW_FDB "FoundationDB support for RADOS Gateway (experimental)" OFF)
 option(WITH_RADOSGW_DBSTORE "DBStore backend for RADOS Gateway" ON)
 option(WITH_RADOSGW_MOTR "CORTX-Motr backend for RADOS Gateway" OFF)
 option(WITH_RADOSGW_DAOS "DAOS backend for RADOS Gateway" OFF)
 option(WITH_RADOSGW_D4N "D4N wrapper for RADOS Gateway" ON)
-option(WITH_RADOSGW_FDB "FoundationDB support for RADOS Gateway (experimental)" OFF)
+option(WITH_RADOSGW_POSIX "POSIX backend for RADOS Gateway" ON)
+cmake_dependent_option(WITH_RADOSGW_STANDALONE "Standalone RADOS Gateway" ON WITH_RADOSGW_POSIX OFF)
 option(WITH_RADOSGW_RADOS "RADOS backend for Rados Gateway" ON)
 option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" ON)
 option(WITH_RADOSGW_ARROW_FLIGHT "Build arrow flight when not using system-provided arrow" OFF)

@@ -5,6 +5,7 @@
 
 #include <random>
 #include <fmt/ranges.h>
+#include <seastar/core/coroutine.hh>
 #include <seastar/core/future-util.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/shared_future.hh>
@@ -1076,10 +1077,10 @@ Client::run_command(std::string&& cmd,
   m->set_tid(tid);
   m->cmd = {std::move(cmd)};
   m->set_data(std::move(bl));
-  auto& command = mon_commands.emplace_back(crimson::make_message<MMonCommand>(*m));
-  return send_message(std::move(m)).then([&result=command.result] {
-    return result.get_future();
-  });
+  auto fut = mon_commands.emplace_back(crimson::make_message<MMonCommand>(*m))
+                 .result.get_future();
+  co_await send_message(std::move(m));
+  co_return co_await std::move(fut);
 }
 
 seastar::future<> Client::send_message(MessageURef m)

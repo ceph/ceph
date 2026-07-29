@@ -639,10 +639,7 @@ class FSPerfStats(object):
         return FilterSpec(mds_ranks, client_id, client_ip)
 
     def get_perf_data(self, cmd):
-        try:
-            filter_spec = self.extract_query_filters(cmd)
-        except ValueError as e:
-            return -errno.EINVAL, "", str(e)
+        filter_spec = self.extract_query_filters(cmd)
 
         counters = {}
         with self.lock:

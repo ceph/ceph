@@ -32,8 +32,6 @@
 #include "rgw_string.h"
 #include "rgw_multi.h"
 #include "rgw_sal.h"
-#include "rgw_lc_tier.h"
-#include "rgw_notify.h"
 #include "common/dout.h"
 
 #include "fmt/format.h"

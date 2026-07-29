@@ -51,6 +51,9 @@ using DoubleWriteOp = ceph::io_exerciser::DoubleWriteOp;
 using TripleWriteOp = ceph::io_exerciser::TripleWriteOp;
 using SingleAppendOp = ceph::io_exerciser::SingleAppendOp;
 using TruncateOp = ceph::io_exerciser::TruncateOp;
+using SingleTruncateWriteOp = ceph::io_exerciser::SingleTruncateWriteOp;
+using DoubleTruncateWriteOp = ceph::io_exerciser::DoubleTruncateWriteOp;
+using TripleTruncateWriteOp = ceph::io_exerciser::TripleTruncateWriteOp;
 using SingleFailedWriteOp = ceph::io_exerciser::SingleFailedWriteOp;
 using DoubleFailedWriteOp = ceph::io_exerciser::DoubleFailedWriteOp;
 using TripleFailedWriteOp = ceph::io_exerciser::TripleFailedWriteOp;
@@ -1465,6 +1468,28 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
       ioop = SingleAppendOp::generate(length);
     } else if (op == "truncate") {
       ioop = TruncateOp::generate(get_numeric_token());
+    } else if (op == "truncatewrite") {
+      uint64_t size = get_numeric_token();
+      uint64_t offset = get_numeric_token();
+      uint64_t length = get_numeric_token();
+      ioop = SingleTruncateWriteOp::generate(size, offset, length);
+    } else if (op == "truncatewrite2") {
+      uint64_t size = get_numeric_token();
+      uint64_t offset1 = get_numeric_token();
+      uint64_t length1 = get_numeric_token();
+      uint64_t offset2 = get_numeric_token();
+      uint64_t length2 = get_numeric_token();
+      ioop = DoubleTruncateWriteOp::generate(size, offset1, length1, offset2, length2);
+    } else if (op == "truncatewrite3") {
+      uint64_t size = get_numeric_token();
+      uint64_t offset1 = get_numeric_token();
+      uint64_t length1 = get_numeric_token();
+      uint64_t offset2 = get_numeric_token();
+      uint64_t length2 = get_numeric_token();
+      uint64_t offset3 = get_numeric_token();
+      uint64_t length3 = get_numeric_token();
+      ioop = TripleTruncateWriteOp::generate(size, offset1, length1, offset2, length2,
+                                             offset3, length3);
     } else if (op == "failedwrite") {
       uint64_t offset = get_numeric_token();
       uint64_t length = get_numeric_token();
