@@ -151,12 +151,13 @@ export class ApiInterceptorService implements HttpInterceptor {
     return this.notificationService.show(() => {
       let message = '';
       if (_.isPlainObject(resp.error) && _.isString(resp.error.detail)) {
-        message = resp.error.detail; // Error was triggered by the backend.
+        message = resp.error.detail;
       } else if (_.isString(resp.error)) {
         message = resp.error;
       } else if (_.isString(resp.message)) {
         message = resp.message;
       }
+
       return new CdNotificationConfig(
         NotificationType.error,
         `${resp.status} - ${resp.statusText}`,
