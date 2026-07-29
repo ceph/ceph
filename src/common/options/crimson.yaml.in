@@ -417,3 +417,10 @@ options:
   level: dev
   desc: Seconds of the period to force process background tasks
   default: 5
+- name: seastore_measure_lba_conflict_mergeability
+  type: bool
+  level: dev
+  desc: For every LBA tree conflict check if the two txns touch disjoint keys, track via seastore counters
+  default: false
+  flags:
+  - startup
