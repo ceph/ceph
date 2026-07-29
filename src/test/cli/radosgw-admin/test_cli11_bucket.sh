@@ -378,9 +378,10 @@ check "list: --bucket-id --hello_world (dash, space-form value untouched)" 0 '"d
 check "list: --bucket_id --hello_world (underscore, space-form value untouched)" 0 '"demo"' \
   bucket list --bucket_id --hello_world
 
-# unknown flag keeps the user's own spelling (not rewritten, not recognized)
-check "list: unrecognized underscore flag: value strands" 1 \
-  "ERROR: unexpected argument: '1'" \
+# unknown flag keeps the user's own spelling (not rewritten, not recognized);
+# the legacy flag loop rejects it by name before its value is looked at
+check "list: unrecognized underscore flag rejected by name" 22 \
+  "ERROR: invalid flag --banana_flag" \
   bucket list --banana_flag 1
 
 # valueless (binary) flag: underscore and dash spellings both succeed
@@ -1726,9 +1727,9 @@ check "check: --fix false (space, bool consumed)"           0 "" \
 # truthy -EINVAL silently; we keep the truthy result and add a warning).
 check "check: --fix=banana (warn-and-accept)"               0 "Warning: invalid value 'banana' for --fix, treating as set" \
   bucket check --fix=banana
-# "--fix banana" (space + non-bool) DIVERGES from legacy, which left banana as a
-# stray (exit 1); expected(0,1) consumes it, so it matches the "=banana" form.
-check "check: --fix banana (space non-bool, warn-accept)"   0 "Warning: invalid value 'banana' for --fix, treating as set" \
+# "--fix banana" (space + non-bool): the legacy flag loop leaves banana behind,
+# so it is reported as a stray word after the loop (exit 1), matching legacy.
+check "check: --fix banana (space non-bool, left as stray)"  1 "ERROR: unexpected argument: 'banana'" \
   bucket check --fix banana
 # parse-safety on an UNMIGRATED command: must not throw (old add_flag(int) gave
 # exit 104). Legacy ignores --fix here; we stay exit 0. (A spurious warning is
@@ -2361,6 +2362,93 @@ check "glued short before command rejected" 22 "invalid flag -ibanana" -ibanana 
 # help wins: CLI11 parses the glued token natively and help returns before
 # the legacy loop runs
 check "glued short + --cli11-help wins" 0 "" bucket list -ibanana --cli11-help
+
+# ============================================================
+echo ""
+echo "=== legacy-only flags, eaten command words, stray tokens ==="
+# ============================================================
+# Flags CLI11 does not know are consumed by the legacy flag loop, which takes
+# the next token as the value whatever it is. When that token is a command
+# word, the words left in `args` no longer match the path CLI11 parsed and the
+# command is parsed again from them -- the same words legacy's find_command
+# would resolve.
+
+# legacy-only flag: value consumed, command runs, user init fails on the key
+check_cluster "list: legacy-only --access-key consumed"        22 "user.init failed" -- \
+  bucket --access-key foo list
+check_cluster "list: legacy-only --access-key twice"           22 "user.init failed" -- \
+  bucket --access-key foo list --access-key foo2
+check "list: unknown flag after legacy-only flag"              22 "ERROR: invalid flag --backet" \
+  bucket --access-key foo --backet name list
+check_warns "list: legacy-only flag with misplaced --bucket"   22 "user.init failed" "$WARN_BUCKET_POS" -- \
+  bucket --access-key foo --bucket name list
+
+# eaten command word: whatever survives the loop is parsed again
+check_cluster "stats: eaten 'list', sibling command survives"  22 "user.init failed" -- \
+  bucket --access-key list stats
+check_cluster "stats: eaten 'list', underscore spelling"       22 "user.init failed" -- \
+  bucket --access_key list stats
+check_cluster "list: eaten 'list', duplicate survives"         22 "user.init failed" -- \
+  bucket --access-key list list
+check "bucket: eaten 'list', stray word survives"              1 "$ERR_SUBCOMMAND" \
+  bucket --access-key list banana
+# a migrated flag eats the word during the first parse, so no command is matched
+check "bucket: migrated --format eats the command word"        1 "$ERR_SUBCOMMAND" \
+  bucket --format list
+
+# unknown flags: the loop rejects them by name
+check "list: unknown flag before --max-entries"                22 "ERROR: invalid flag --banana" \
+  bucket list --banana --max-entries=5
+check "list: unknown flag before --bucket"                     22 "ERROR: invalid flag --banana" \
+  bucket list --banana --bucket bananana
+# the first parse rejects the int value before the loop reaches the unknown flag
+check "list: unknown flag with unparsable int value"           22 "Could not convert" \
+  bucket list --banana --max-entries=abc
+# unknown command: --bucket takes '--banana', leaving 'banana' unresolvable
+check "unknown command: legacy flag takes the next token"      1 "ERROR: Unrecognized argument: 'banana'" \
+  banana --bucket --banana
+check "unknown command: unparsable int value"                  22 "Could not convert" \
+  banana --max-entries=abc --banana
+
+# single-dash spellings are not flags
+check "list: -uid rejected"                                    22 "ERROR: invalid flag -uid" \
+  bucket list -uid u1 extra
+check "list: -uid=u1 rejected"                                 22 "ERROR: invalid flag -uid=u1" \
+  bucket list -uid=u1 extra
+# stray words after a consumed flag value
+check "list: stray word after --uid value"                     1 "ERROR: unexpected argument: 'extra'" \
+  bucket list --uid u1 extra
+check "list: stray word after --uid= value"                    1 "ERROR: unexpected argument: 'extra'" \
+  bucket list --uid=u1 extra
+check "list: repeated command word"                            1 "ERROR: unexpected argument: 'list'" \
+  bucket list list
+check "list: empty stray word"                                 1 "ERROR: unexpected argument: ''" \
+  bucket list ""
+
+# binary flag, space form: the loop consumes the value only when it is an exact
+# bool, so anything else is left behind as a stray
+check "list: --allow-unordered banana (left as stray)"         1 "ERROR: unexpected argument: 'banana'" \
+  bucket list --allow-unordered banana
+check "list: --allow-unordered '' (left as stray)"             1 "ERROR: unexpected argument: ''" \
+  bucket list --allow-unordered ""
+check_cluster "list: --allow-unordered 1 (bool consumed)"      0 "" -- \
+  bucket list --allow-unordered 1
+
+# empty values are consumed like any other value
+check_cluster "list: legacy-only --access-key '' consumed"     0 "" -- \
+  bucket --access-key "" list
+check_cluster "list: --bucket '' lists all buckets"            0 "" -- \
+  bucket list --bucket ""
+
+# migrated flags stay parse-safe on unmigrated commands
+check_cluster "reshard list: --max-entries=5"                  0 "" -- \
+  reshard list --max-entries=5
+check "reshard list: --max-entries=abc rejected"               22 "Could not convert" \
+  reshard list --max-entries=abc
+check_cluster "reshard list: --bucket takes the next token"    0 "" -- \
+  reshard list --bucket --banana
+check_cluster "reshard list: --bucket name"                    0 "" -- \
+  reshard list --bucket name
 
 # ============================================================
 echo ""
