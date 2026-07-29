@@ -191,6 +191,14 @@ add_ceph_unittest(unittest_ec_acting_stretch)
 target_link_libraries(unittest_ec_acting_stretch osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
 add_dependencies(unittest_ec_acting_stretch ec_isa ec_jerasure)
 
+# unittest_stretch_ec_min_size
+add_executable(unittest_stretch_ec_min_size
+  TestStretchECMinSize.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_stretch_ec_min_size)
+target_link_libraries(unittest_stretch_ec_min_size osd global ${BLKID_LIBRARIES})
+
 # unittest_hitset
 add_executable(unittest_hitset
   hitset.cc
