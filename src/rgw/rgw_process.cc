@@ -176,6 +176,42 @@ bool rate_limit(rgw::sal::Driver* driver, req_state* s) {
   return (limit_user || limit_bucket);
 }
 
+static int execute_post_auth_lua_script(RGWOp * const op, req_state * const s)
+{
+  if (op->get_type() == RGW_OP_GET_HEALTH_CHECK) {
+    return 0;
+  }
+
+  const auto [script, rc] = rgw::lua::read_script_or_bytecode(
+    s, s->penv.lua.manager.get(), s->bucket_tenant, s->yield,
+    rgw::lua::context::postAuth);
+  if (rc == -ENOENT) {
+    return 0;
+  }
+
+  if (rc < 0) {
+    ldpp_dout(op, 5) <<
+      "WARNING: failed to execute post authorization script. "
+      "error: " << rc << dendl;
+    return 0;
+  }
+
+  int script_return_code = 0;
+  const auto execute_rc = rgw::lua::request::execute(
+    s->penv.rest, s->penv.olog.get(), s, op, script, script_return_code);
+  if (execute_rc < 0) {
+    ldpp_dout(op, 5) <<
+      "WARNING: failed to execute post authorization script. "
+      "error: " << execute_rc << dendl;
+  }
+
+  if (script_return_code == -EPERM) {
+    return script_return_code;
+  }
+
+  return 0;
+}
+
 int rgw_process_authenticated(RGWHandler_REST * const handler,
                               RGWOp *& op,
                               RGWRequest * const req,
@@ -270,33 +306,11 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
     return -ERR_RATE_LIMITED;
   }
 
-  bool is_health_request = (op->get_type() == RGW_OP_GET_HEALTH_CHECK);
-  {
-    if (!is_health_request) {
-      std::string script;
-      auto rc = rgw::lua::read_script(s, s->penv.lua.manager.get(),
-                                      s->bucket_tenant, s->yield,
-                                      rgw::lua::context::postAuth, script);
-      if (rc == -ENOENT) {
-        // no script, nothing to do
-      } else if (rc < 0) {
-        ldpp_dout(op, 5) <<
-          "WARNING: failed to execute post authorization script. "
-          "error: " << rc << dendl;
-      } else {
-        int script_return_code = 0;
-        rc = rgw::lua::request::execute(s->penv.rest, s->penv.olog.get(), s, op, script, script_return_code);
-        if (rc < 0) {
-          ldpp_dout(op, 5) <<
-            "WARNING: failed to execute post authorization script. "
-            "error: " << rc << dendl;
-        }
-        if (script_return_code == -EPERM) {
-          return script_return_code;
-        }
-      }
-    }
+  ret = execute_post_auth_lua_script(op, s);
+  if (ret < 0) {
+    return ret;
   }
+
   ldpp_dout(op, 2) << "executing" << dendl;
   {
     auto span = tracing::rgw::tracer.add_span("execute", s->trace);

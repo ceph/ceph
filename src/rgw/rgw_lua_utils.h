@@ -497,16 +497,31 @@ int Pairs(lua_State* L) {
 }
 
 
-template<typename MapType=std::map<std::string, std::string>,
-  MetaTableClosure NewIndex=EmptyMetaTable::NewIndexClosure>
+template <typename MapType>
+concept has_transparent_string_lookup = requires {
+  typename MapType::key_compare::is_transparent;
+};
+
+template <typename MapType>
+auto find_string_map_entry(MapType& map, const std::string_view key)
+{
+  if constexpr (has_transparent_string_lookup<MapType>) {
+    return map.find(key);
+  }
+
+  return map.find(std::string { key });
+}
+
+template <typename MapType = std::map<std::string, std::string>,
+  MetaTableClosure NewIndex = EmptyMetaTable::NewIndexClosure>
 struct StringMapMetaTable : public EmptyMetaTable {
   static int IndexClosure(lua_State* L) {
     std::ignore = table_name_upvalue(L);
     const auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 
-    const char* index = luaL_checkstring(L, 2);
+    const std::string_view index = luaL_checkstring(L, 2);
 
-    const auto it = map->find(std::string(index));
+    const auto it = find_string_map_entry(*map, index);
     if (it == map->end()) {
       lua_pushnil(L);
     } else {
@@ -535,4 +550,3 @@ struct StringMapMetaTable : public EmptyMetaTable {
 int lua_execute(lua_State* L, const DoutPrefixProvider* dpp, const rgw::lua::LuaCodeType& code);
 
 } // namespace rgw::lua
-

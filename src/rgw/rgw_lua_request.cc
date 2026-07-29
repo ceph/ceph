@@ -656,11 +656,13 @@ struct HTTPMetaTable : public EmptyMetaTable {
     const auto index = luaL_checkstring(L, 2);
 
     if (strcasecmp(index, "Parameters") == 0) {
-      create_metatable<StringMapMetaTable<>>(L, name, index, false, &(info->args.get_params()));
+      create_metatable<StringMapMetaTable<RGWHTTPArgs::name_value_map>>(
+          L, name, index, false, &(info->args.get_params()));
     } else if (strcasecmp(index, "Resources") == 0) {
       // TODO: add non-const api to get resources
-      create_metatable<StringMapMetaTable<>>(L, name, index, false,
-          const_cast<std::map<std::string, std::string>*>(&(info->args.get_sub_resources())));
+      create_metatable<StringMapMetaTable<RGWHTTPArgs::name_value_map>>(
+          L, name, index, false,
+          const_cast<RGWHTTPArgs::name_value_map *>(&(info->args.get_sub_resources())));
     } else if (strcasecmp(index, "Metadata") == 0) {
       create_metatable<StringMapMetaTable<meta_map_t, StringMapWriteableNewIndex<meta_map_t>>>(L, name, index, 
           false, &(info->x_meta_map));
@@ -901,4 +903,3 @@ int execute(
 }
 
 } // namespace rgw::lua::request
-
