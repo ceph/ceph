@@ -31,14 +31,16 @@
 
 #include <boost/container/flat_map.hpp>
 
-#include <map>
-#include <list>
-#include <chrono>
-#include <vector>
-#include <ranges>
-#include <iterator>
 #include <algorithm>
+#include <array>
+#include <chrono>
+#include <iterator>
+#include <list>
+#include <map>
+#include <ranges>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 using Catch::Matchers::AllMatch;
 
@@ -62,14 +64,76 @@ namespace content = ceph::libfdb::layer::content;
 // Be nice to Catch2's template-test macros:
 using string_pair = std::pair<std::string, std::string>;
 
+struct pair_identity final
+{
+ const string_pair& operator()(const string_pair& kv) const noexcept
+ {
+  return kv;
+ }
+};
+
+TEST_CASE("libfdb concepts describe supported API shapes", "[fdb][concepts]")
+{
+ using string_pair_vector = std::vector<string_pair>;
+ using bad_key_vector = std::vector<std::pair<int, std::string>>;
+ using transformed_pair_range = decltype(std::declval<string_pair_vector&>() |
+                                         std::views::transform(pair_identity {}));
+
+ STATIC_REQUIRE(lfdb::concepts::key_value_iterator<string_pair_vector::iterator>);
+ STATIC_REQUIRE(lfdb::concepts::key_value_range<string_pair_vector>);
+ STATIC_REQUIRE(lfdb::concepts::key_value_forward_range<string_pair_vector>);
+ STATIC_REQUIRE(lfdb::concepts::key_value_forward_range<transformed_pair_range>);
+ STATIC_REQUIRE_FALSE(lfdb::concepts::key_value_iterator<bad_key_vector::iterator>);
+
+ STATIC_REQUIRE(lfdb::concepts::string_pair_output_range<string_pair_vector>);
+ STATIC_REQUIRE(lfdb::concepts::string_pair_output_range<std::map<std::string, std::string>>);
+
+ STATIC_REQUIRE(lfdb::concepts::decoded_value_sink<std::string&>);
+ STATIC_REQUIRE(lfdb::concepts::decoded_value_sink<char(&)[9]>);
+ STATIC_REQUIRE_FALSE(lfdb::concepts::decoded_value_sink<const std::string&>);
+ STATIC_REQUIRE_FALSE(lfdb::concepts::decoded_value_sink<std::string>);
+}
+
+TEST_CASE("query prefix handles byte-string keyspace edges", "[fdb][query]")
+{
+ namespace lq = ceph::libfdb::query;
+
+ const auto max_keyspace_prefix = std::string(1, static_cast<char>(0xFF));
+ const auto before_max_keyspace_prefix = std::string(1, static_cast<char>(0xFE));
+
+ CHECK_FALSE(lq::byte_string_domain::successor(max_keyspace_prefix));
+ CHECK(max_keyspace_prefix == lq::successor(before_max_keyspace_prefix));
+
+ CHECK(lq::is_universal(lq::prefix("")));
+ CHECK(lq::is_empty(lq::prefix(max_keyspace_prefix)));
+ CHECK(lq::is_empty(lq::prefix(max_keyspace_prefix + "metadata")));
+}
+
+struct position_insert_iterator
+{
+ using difference_type = std::ptrdiff_t;
+
+ std::vector<string_pair> *out;
+ std::size_t pos = 0;
+
+ position_insert_iterator& operator*() noexcept { return *this; }
+ position_insert_iterator& operator++() noexcept { return *this; }
+ position_insert_iterator& operator++(int) noexcept { return *this; }
+
+ position_insert_iterator& operator=(string_pair kv) {
+  out->insert(std::next(std::begin(*out), pos), std::move(kv));
+  ++pos;
+
+  return *this;
+ }
+};
+
 // Collect values in selection to out_values:
 auto key_counter(auto txn, const auto& selector, auto& out_values) -> auto {
  out_values.clear();
 
- lfdb::get(txn, selector, 
-           std::inserter(out_values, std::end(out_values)));
-
- return out_values.size();
+ return lfdb::get(txn, selector,
+                  std::inserter(out_values, std::end(out_values)));
 };
 
 auto key_count(auto& dbh, const auto& selector) {
@@ -85,6 +149,21 @@ inline auto write_monotonic_kvs(lfdb::database_handle dbh, const int N, std::str
   lfdb::set(lfdb::make_transaction(dbh), k, v, lfdb::commit_after_op::commit);
 
  return kvs;
+}
+
+inline void write_raw_fdb_value(lfdb::database_handle dbh,
+                                std::string_view key,
+                                std::span<const std::uint8_t> value)
+{
+ auto txn = lfdb::make_transaction(dbh);
+
+ fdb_transaction_set(txn->raw_handle(),
+                     reinterpret_cast<const std::uint8_t *>(key.data()),
+                     static_cast<int>(std::size(key)),
+                     value.data(),
+                     static_cast<int>(std::size(value)));
+
+ REQUIRE(lfdb::commit(txn));
 }
 
 inline auto decode_raw_fdb_pairs(std::span<const FDBKeyValue> pairs)
@@ -302,8 +381,13 @@ TEMPLATE_PRODUCT_TEST_CASE("multi-key ops", "[rgw][fdb]",
 
   auto txn = lfdb::make_transaction(j);
 
-  lfdb::get(txn, lfdb::select { make_key(0), make_key(100) }, std::back_inserter(out_values), lfdb::commit_after_op::no_commit);
+  const auto nread =
+   lfdb::get(txn,
+             lfdb::select { make_key(0), make_key(100) },
+             std::back_inserter(out_values),
+             lfdb::commit_after_op::no_commit);
 
+  CHECK(100 == nread);
   CHECK(100 == out_values.size());
 
   // Maybe not the world's most creative test, but the idea is to try getting some random keys:
@@ -317,12 +401,44 @@ TEMPLATE_PRODUCT_TEST_CASE("multi-key ops", "[rgw][fdb]",
 
   auto txn = lfdb::make_transaction(j);
 
-  CHECK(lfdb::get(txn,
-                  lfdb::select { make_key(0), make_key(100) },
-                  out_values,
-                  lfdb::commit_after_op::no_commit));
+  CHECK(100 == lfdb::get(txn,
+                         lfdb::select { make_key(0), make_key(100) },
+                         out_values,
+                         lfdb::commit_after_op::no_commit));
 
   CHECK(100 == out_values.size());
+ }
+
+ SECTION("range overloads", "[fdb]") {
+  j.drop_test_namespace();
+
+  const TestType in_values {
+   string_pair { make_key(0), make_value(0) },
+   string_pair { make_key(1), make_value(1) },
+   string_pair { make_key(2), make_value(2) }
+  };
+
+  lfdb::set(j, in_values);
+
+  TestType out_values;
+  CHECK(3 == lfdb::get(j, { make_key_prefix() }, out_values));
+  CHECK_THAT(out_values, Catch::Matchers::RangeEquals(in_values));
+
+  auto txn = lfdb::make_transaction(j);
+  const TestType txn_values {
+   string_pair { make_key(3), make_value(3) },
+   string_pair { make_key(4), make_value(4) },
+   string_pair { make_key(5), make_value(5) }
+  };
+
+  lfdb::set(txn, txn_values, lfdb::commit_after_op::commit);
+
+  TestType query_values;
+  CHECK(6 == lfdb::get(j, lfdb::query::prefix(make_key_prefix()), query_values));
+  CHECK_THAT(query_values | std::views::take(3),
+             Catch::Matchers::RangeEquals(in_values));
+  CHECK_THAT(query_values | std::views::drop(3),
+             Catch::Matchers::RangeEquals(txn_values));
  }
 }
 
@@ -349,16 +465,19 @@ TEST_CASE("check selectors", "[fdb][rgw]") {
  REQUIRE(nentries == key_count(dbh, select_all));
 
  std::vector<std::pair<std::string, std::string>> out;
- lfdb::get(dbh, select_all, std::back_inserter(out));
+ const auto nread = lfdb::get(dbh, select_all, std::back_inserter(out));
 
  // These /are/ the droids you're looking for:
+ CHECK(nentries == nread);
  CHECK(nentries == out.size());
  CHECK(make_key(0) == out.front().first);
  CHECK(make_key(nentries - 1) == out.back().first);
 
  auto keys_in = [&dbh](lfdb::select selector) {
   std::vector<std::pair<std::string, std::string>> entries;
-  lfdb::get(dbh, selector, std::back_inserter(entries));
+  const auto nread = lfdb::get(dbh, selector, std::back_inserter(entries));
+
+  CHECK(nread == std::size(entries));
 
   return entries
        | std::views::transform([](const auto& kv) { return kv.first; })
@@ -376,7 +495,7 @@ TEST_CASE("check selectors", "[fdb][rgw]") {
 
  auto reverse_open_closed = lfdb::select { lfdb::exclusive(make_key(3)), lfdb::inclusive(make_key(6)) };
  reverse_open_closed.options.reverse_order = true;
- reverse_open_closed.options.stride = 2;
+ reverse_open_closed.options.result_limit = 2;
  CHECK_THAT(keys_in(reverse_open_closed),
             Catch::Matchers::RangeEquals(std::vector { make_key(6), make_key(5), make_key(4) }));
 
@@ -396,25 +515,330 @@ TEST_CASE("check selectors", "[fdb][rgw]") {
 
  std::map<std::string, std::string> out_map;
 
- CHECK(lfdb::get(dbh, select_all, out_map));
+ CHECK(nentries == lfdb::get(dbh, select_all, out_map));
  CHECK(nentries == out_map.size());
  CHECK(make_value(0) == out_map.at(make_key(0)));
 
  lfdb::set(dbh, test_key("keyx"), "outside");
  out.clear();
- lfdb::get(dbh, lfdb::select { make_key_prefix() }, std::back_inserter(out));
+ CHECK(nentries == lfdb::get(dbh,
+                             lfdb::select { make_key_prefix() },
+                             std::back_inserter(out)));
  CHECK(nentries == out.size());
 
  // Get exactly no entries:
  out.clear();
- lfdb::get(dbh, lfdb::select { make_key(0), make_key(0) }, std::back_inserter(out));
+ CHECK(0 == lfdb::get(dbh,
+                      lfdb::select { make_key(0), make_key(0) },
+                      std::back_inserter(out)));
  CHECK(0 == out.size());
 
  // Get exactly one entry: 
  out.clear();
- lfdb::get(dbh, lfdb::select { make_key(1), make_key(2) }, std::back_inserter(out));
+ CHECK(1 == lfdb::get(dbh,
+                      lfdb::select { make_key(1), make_key(2) },
+                      std::back_inserter(out)));
  REQUIRE(1 == out.size());
  CHECK(make_key(1) == out.front().first);
+}
+
+TEST_CASE("query algebra expressions execute through fdb operations", "[fdb][query]")
+{
+ namespace lq = ceph::libfdb::query;
+
+ janitor dbh;
+
+ const int nentries = 10;
+ const auto select_all = lfdb::select { make_key(0), make_key(nentries) };
+
+ dbh.drop_test_namespace();
+ REQUIRE(0 == key_count(dbh, select_all));
+
+ write_monotonic_kvs(dbh, nentries);
+ REQUIRE(nentries == key_count(dbh, select_all));
+
+ const auto without_middle =
+  lq::difference(lq::between(make_key(0), make_key(nentries)),
+                 lq::between(make_key(3), make_key(7)));
+
+ std::vector<std::pair<std::string, std::string>> out;
+ CHECK(6 == lfdb::get(dbh, without_middle, std::back_inserter(out)));
+
+ CHECK_THAT(out | std::views::keys | std::ranges::to<std::vector<std::string>>(),
+            Catch::Matchers::RangeEquals(std::vector {
+             make_key(0), make_key(1), make_key(2),
+             make_key(7), make_key(8), make_key(9)
+            }));
+
+ lfdb::erase(dbh, without_middle);
+ CHECK(4 == key_count(dbh, select_all));
+}
+
+TEST_CASE("managed range get publishes output only after a successful read", "[fdb][query]")
+{
+ janitor dbh;
+
+ const auto prefix = make_key_prefix("publish");
+
+ const auto good_key = make_key(0, "publish");
+ const auto bad_key = make_key(1, "publish");
+
+ const std::vector<string_pair> original {
+  { "already", "present" }
+ };
+
+ lfdb::set(dbh, good_key, "good");
+
+ const std::array<std::uint8_t, 1> invalid_serialized_value { 0xFF };
+ write_raw_fdb_value(dbh, bad_key, invalid_serialized_value);
+
+ SECTION("container output")
+ {
+  auto out = original;
+
+  CHECK_THROWS_AS(lfdb::get(dbh, lfdb::select { prefix }, out),
+                  lfdb::libfdb_exception);
+  CHECK_THAT(out, Catch::Matchers::RangeEquals(original));
+ }
+
+ SECTION("output iterator")
+ {
+  auto out = original;
+
+  CHECK_THROWS_AS(lfdb::get(dbh, lfdb::select { prefix }, std::back_inserter(out)),
+                  lfdb::libfdb_exception);
+  CHECK_THAT(out, Catch::Matchers::RangeEquals(original));
+ }
+}
+
+TEST_CASE("managed range get appends materialized results after success", "[fdb][query]")
+{
+ janitor dbh;
+
+ const auto prefix = make_key_prefix("publish-success");
+
+ const auto first_key = make_key(0, "publish-success");
+ const auto second_key = make_key(1, "publish-success");
+
+ std::map<std::string, std::string> out {
+  { "already", "present" }
+ };
+
+ lfdb::set(dbh, first_key, "zero");
+ lfdb::set(dbh, second_key, "one");
+
+ CHECK(2 == lfdb::get(dbh, lfdb::select { prefix }, out));
+
+ CHECK("present" == out.at("already"));
+ CHECK("zero" == out.at(first_key));
+ CHECK("one" == out.at(second_key));
+}
+
+TEST_CASE("query algebra examples execute against fdb", "[fdb][query][example]")
+{
+ namespace lq = ceph::libfdb::query;
+
+ janitor dbh;
+
+ auto keys_in = [&dbh](const auto& query) {
+  std::vector<std::pair<std::string, std::string>> entries;
+  const auto nread = lfdb::get(dbh, query, std::back_inserter(entries));
+
+  CHECK(nread == std::size(entries));
+
+  return entries
+       | std::views::keys
+       | std::ranges::to<std::vector<std::string>>();
+ };
+ auto keys_from_transaction_scan = [&dbh](auto query) {
+  auto txn = lfdb::make_transaction(dbh);
+
+  return lfdb::scan(txn, std::move(query))
+       | std::views::keys
+       | std::ranges::to<std::vector<std::string>>();
+ };
+ auto keys_from_managed_scan = [&dbh](auto query) {
+  return lfdb::scan(dbh, std::move(query))
+       | std::views::keys
+       | std::ranges::to<std::vector<std::string>>();
+ };
+ auto keys_from_blocks = [&dbh](auto query) {
+  std::vector<std::string> keys;
+
+  for (const auto& block : lfdb::blocks(dbh, std::move(query))) {
+   std::ranges::copy(block | std::views::keys, std::back_inserter(keys));
+  }
+
+  return keys;
+ };
+
+ SECTION("prefix and cursor queries read the intended record keys")
+ {
+  const auto base = test_key("collection-a/records/");
+  const auto record_key = [&base](std::string_view record_name) {
+   return base + std::string(record_name);
+  };
+  const auto record_query = [&base](std::string_view prefix,
+                                    std::string_view cursor = {},
+                                    const bool cursor_inclusive = true) {
+   const auto prefix_key = base + std::string(prefix);
+   auto query = lq::prefix(prefix_key);
+
+   if (cursor.empty()) {
+    return query;
+   }
+
+   const auto cursor_key = base + std::string(cursor);
+   const auto lower = cursor_inclusive ? lq::closed(cursor_key)
+                                       : lq::open(cursor_key);
+
+   return lq::intersection(query,
+                           lq::between(lower, lq::open(lq::successor(prefix_key))));
+  };
+
+  for (const auto record_name : { "abandoned/9999"sv,
+                                  "active/0001"sv,
+                                  "active/0007"sv,
+                                  "active/0010"sv,
+                                  "expired/0001"sv }) {
+   lfdb::set(dbh, record_key(record_name), record_name);
+  }
+
+  CHECK_THAT(keys_in(record_query("active/")),
+             Catch::Matchers::RangeEquals(std::vector {
+              record_key("active/0001"),
+              record_key("active/0007"),
+              record_key("active/0010")
+             }));
+  CHECK_THAT(keys_in(record_query("active/", "active/0007", false)),
+             Catch::Matchers::RangeEquals(std::vector {
+              record_key("active/0010")
+             }));
+  CHECK_THAT(keys_in(record_query("active/", "abandoned/9999")),
+             Catch::Matchers::RangeEquals(std::vector {
+              record_key("active/0001"),
+              record_key("active/0007"),
+              record_key("active/0010")
+             }));
+  CHECK(lq::is_empty_expression(record_query("active/", "expired/0001")));
+ }
+
+ SECTION("set operations read and erase multiple real intervals")
+ {
+  for (const auto key : { "cache/hot/a"sv,
+                          "cache/hot/b"sv,
+                          "cache/warm/a"sv,
+                          "cache/cold/a"sv,
+                          "cache/hot/private/a"sv }) {
+   lfdb::set(dbh, test_key(key), key);
+  }
+
+  const auto active_cache =
+   lq::set_union(lq::prefix(test_key("cache/hot/")),
+                 lq::prefix(test_key("cache/warm/")));
+  const auto active_cache_keys = std::vector {
+   test_key("cache/hot/a"),
+   test_key("cache/hot/b"),
+   test_key("cache/hot/private/a"),
+   test_key("cache/warm/a")
+  };
+
+  CHECK_THAT(keys_in(active_cache),
+             Catch::Matchers::RangeEquals(active_cache_keys));
+
+  std::vector<string_pair> positioned_entries;
+  CHECK(std::size(active_cache_keys) ==
+        lfdb::get(dbh, active_cache, position_insert_iterator { &positioned_entries }));
+  CHECK_THAT(positioned_entries | std::views::keys | std::ranges::to<std::vector<std::string>>(),
+             Catch::Matchers::RangeEquals(active_cache_keys));
+
+  CHECK_THAT(keys_from_transaction_scan(active_cache),
+             Catch::Matchers::RangeEquals(active_cache_keys));
+  CHECK_THAT(keys_from_managed_scan(active_cache),
+             Catch::Matchers::RangeEquals(active_cache_keys));
+  CHECK_THAT(keys_from_blocks(active_cache),
+             Catch::Matchers::RangeEquals(active_cache_keys));
+
+  const auto visible_hot =
+   lq::difference(lq::prefix(test_key("cache/hot/")),
+                  lq::prefix(test_key("cache/hot/private/")));
+  CHECK_THAT(keys_in(visible_hot),
+             Catch::Matchers::RangeEquals(std::vector {
+              test_key("cache/hot/a"),
+              test_key("cache/hot/b")
+             }));
+
+  const auto visible_window =
+   lq::intersection(visible_hot,
+                    lq::between(test_key("cache/hot/b"),
+                                 test_key("cache/hot/z")));
+  CHECK_THAT(keys_in(visible_window),
+             Catch::Matchers::RangeEquals(std::vector {
+              test_key("cache/hot/b")
+             }));
+
+  lfdb::erase(dbh, active_cache);
+  CHECK_THAT(keys_in(lfdb::select { test_key("cache/") }),
+             Catch::Matchers::RangeEquals(std::vector {
+              test_key("cache/cold/a")
+             }));
+ }
+
+ SECTION("query intervals feed managed scans end-to-end")
+ {
+  const auto base = test_key("versions/");
+  const auto version_key = [&base](std::string_view score, std::string_view version) {
+   return base + std::string(score) + "/" + std::string(version);
+  };
+
+  lfdb::set(dbh, version_key("0000000000001.000000", "v1"), "v1");
+  lfdb::set(dbh, version_key("0000000000002.000000", "v2"), "v2");
+  lfdb::set(dbh, version_key("0000000000003.000000", "v3"), "v3");
+  lfdb::set(dbh, version_key("0000000000004.000000", "v4"), "v4");
+
+  const auto begin_prefix = base + "0000000000002.000000/";
+  const auto end_prefix = base + "0000000000003.000000/";
+  const auto score_range = lq::between(begin_prefix, lq::successor(end_prefix));
+
+  std::vector<std::string> keys;
+  for (const auto& block : lfdb::blocks(dbh, score_range)) {
+   std::ranges::copy(block | std::views::keys, std::back_inserter(keys));
+  }
+
+  CHECK_THAT(keys,
+             Catch::Matchers::RangeEquals(std::vector {
+              version_key("0000000000002.000000", "v2"),
+              version_key("0000000000003.000000", "v3")
+             }));
+ }
+}
+
+TEST_CASE("legacy generator names delegate to scan vocabulary", "[fdb]")
+{
+ janitor dbh;
+
+ const auto kvs_in = write_monotonic_kvs(dbh, 10, "legacy-generator");
+ const auto selector = lfdb::select { make_key(0, "legacy-generator"),
+                                      make_key(10, "legacy-generator") };
+
+ auto txn = lfdb::make_transaction(dbh);
+
+ const auto scan_keys = lfdb::scan(txn, selector)
+                      | std::views::keys
+                      | std::ranges::to<std::vector<std::string>>();
+ const auto pair_generator_keys = lfdb::pair_generator(txn, selector)
+                                | std::views::keys
+                                | std::ranges::to<std::vector<std::string>>();
+
+ std::vector<std::string> block_generator_keys;
+ for (const auto& block : lfdb::block_generator(dbh, selector)) {
+  std::ranges::copy(block | std::views::keys,
+                    std::back_inserter(block_generator_keys));
+ }
+
+ CAPTURE(kvs_in);
+ CHECK_THAT(pair_generator_keys, Catch::Matchers::RangeEquals(scan_keys));
+ CHECK_THAT(block_generator_keys, Catch::Matchers::RangeEquals(scan_keys));
 }
 
 TEST_CASE("fdb conversions (built-in)", "[fdb][rgw]") {
@@ -523,28 +947,28 @@ TEST_CASE("read_query_window", "[fdb]")
 {
  janitor j;
 
- const std::size_t stride = 5;
+ const std::size_t result_limit = 5;
  const std::size_t nkeys = 12;
 
  const auto kvs_in = write_monotonic_kvs(j, nkeys);
 
  SECTION("reads one bounded forward window") {
   auto selector = lfdb::select { make_key(0), make_key(nkeys) };
-  selector.options.stride = stride;
+  selector.options.result_limit = result_limit;
 
   auto txn = lfdb::make_transaction(j);
   auto window = ceph::libfdb::detail::read_query_window(*txn, selector, 1);
   const auto out = decode_raw_fdb_pairs(window.result_pairs);
 
   REQUIRE_FALSE(out.empty());
-  CHECK(out.size() <= stride);
+  CHECK(out.size() <= result_limit);
   CHECK(window.more_available);
   CHECK_THAT(out, Catch::Matchers::RangeEquals(first_keys(kvs_in, out.size())));
  }
 
  SECTION("reads one bounded reverse window") {
   auto selector = lfdb::select { make_key(0), make_key(nkeys) };
-  selector.options.stride = stride;
+  selector.options.result_limit = result_limit;
   selector.options.reverse_order = true;
 
   auto txn = lfdb::make_transaction(j);
@@ -552,14 +976,14 @@ TEST_CASE("read_query_window", "[fdb]")
   const auto out = decode_raw_fdb_pairs(window.result_pairs);
 
   REQUIRE_FALSE(out.empty());
-  CHECK(out.size() <= stride);
+  CHECK(out.size() <= result_limit);
   CHECK(window.more_available);
   CHECK_THAT(out, Catch::Matchers::RangeEquals(last_keys_reversed(kvs_in, out.size())));
  }
 
  SECTION("reports terminal windows") {
   auto selector = lfdb::select { make_key(0), make_key(1) };
-  selector.options.stride = stride;
+  selector.options.result_limit = result_limit;
 
   auto txn = lfdb::make_transaction(j);
   auto window = ceph::libfdb::detail::read_query_window(*txn, selector, 1);
@@ -575,7 +999,7 @@ TEST_CASE("generate_FDB_pairs", "[fdb]")
 {
  janitor j;
 
- const std::size_t stride = 5;
+ const std::size_t result_limit = 5;
  const std::size_t nkeys = 12;
 
  const auto kvs_in = write_monotonic_kvs(j, nkeys);
@@ -590,7 +1014,7 @@ TEST_CASE("generate_FDB_pairs", "[fdb]")
 
  SECTION("drains paged forward windows") {
   auto selector = lfdb::select { make_key(0), make_key(nkeys) };
-  selector.options.stride = stride;
+  selector.options.result_limit = result_limit;
 
   const auto pages = collect_pages(selector);
   const auto out = pages | std::views::join | std::ranges::to<std::vector<string_pair>>();
@@ -598,15 +1022,15 @@ TEST_CASE("generate_FDB_pairs", "[fdb]")
   CAPTURE(pages.size());
   CAPTURE(out.size());
   CHECK(1 < pages.size());
-  CHECK(std::ranges::all_of(pages, [stride](const auto& page) {
-   return page.size() <= stride;
+  CHECK(std::ranges::all_of(pages, [result_limit](const auto& page) {
+   return page.size() <= result_limit;
   }));
   CHECK_THAT(out, Catch::Matchers::RangeEquals(first_keys(kvs_in, nkeys)));
  }
 
  SECTION("drains paged reverse windows") {
   auto selector = lfdb::select { make_key(0), make_key(nkeys) };
-  selector.options.stride = stride;
+  selector.options.result_limit = result_limit;
   selector.options.reverse_order = true;
 
   const auto pages = collect_pages(selector);
@@ -615,8 +1039,8 @@ TEST_CASE("generate_FDB_pairs", "[fdb]")
   CAPTURE(pages.size());
   CAPTURE(out.size());
   CHECK(1 < pages.size());
-  CHECK(std::ranges::all_of(pages, [stride](const auto& page) {
-   return page.size() <= stride;
+  CHECK(std::ranges::all_of(pages, [result_limit](const auto& page) {
+   return page.size() <= result_limit;
   }));
   CHECK_THAT(out, Catch::Matchers::RangeEquals(last_keys_reversed(kvs_in, nkeys)));
  }
@@ -675,7 +1099,7 @@ TEST_CASE("basic generators", "[fdb]") {
 
  SECTION("pair_generator forward, paged") {
     auto selector = lfdb::select { make_key(0), make_key(nkeys) };
-    selector.options.stride = 5; // one of the most prime of prime numbers
+    selector.options.result_limit = 5; // one of the most prime of prime numbers
 
     auto txn = lfdb::make_transaction(j);
     const auto out = lfdb::pair_generator(txn, selector)
@@ -698,7 +1122,7 @@ TEST_CASE("basic generators", "[fdb]") {
  SECTION("pair_generator reverse, paged") {
     auto selector = lfdb::select { make_key(0), make_key(nkeys) };
     selector.options.reverse_order = true;
-    selector.options.stride = 5; // one of the most prime of prime numbers
+    selector.options.result_limit = 5; // one of the most prime of prime numbers
 
     auto txn = lfdb::make_transaction(j);
     const auto out = lfdb::pair_generator(txn, selector)
@@ -763,7 +1187,7 @@ TEST_CASE("generators honor selector endpoints", "[fdb]") {
  };
 
  auto selector = lfdb::select { lfdb::exclusive(make_key(3, prefix)), lfdb::inclusive(make_key(6, prefix)) };
- selector.options.stride = 2;
+ selector.options.result_limit = 2;
 
  const auto forward_keys = std::vector { make_key(4, prefix), make_key(5, prefix), make_key(6, prefix) };
  CHECK_THAT(collect_pair_keys(selector), Catch::Matchers::RangeEquals(forward_keys));
@@ -1111,13 +1535,23 @@ TEST_CASE("block_generator should correctly handle value types") {
 
     REQUIRE(from_pairs == expected);
 
+    const auto from_transaction_collect =
+     lfdb::collect<ValueT, std::map<std::string, ValueT>>(txn, selector);
+
+    REQUIRE(from_transaction_collect == expected);
+
     std::map<std::string, ValueT> from_blocks;
-    for (auto&& block : lfdb::block_generator<ValueT>(dbh, selector)) {
+    for (auto&& block : lfdb::blocks<ValueT>(dbh, selector)) {
       from_blocks.insert(std::begin(block), std::end(block));
     }
 
     REQUIRE(from_blocks == expected);
     REQUIRE(from_blocks == from_pairs);
+
+    const auto from_database_collect =
+     lfdb::collect<ValueT, std::map<std::string, ValueT>>(dbh, selector);
+
+    REQUIRE(from_database_collect == expected);
   };
 
   check_generators("generator-values/string",
@@ -1159,11 +1593,12 @@ TEST_CASE("block_generator should correctly handle value types") {
 }
 
 
-#include "test/catch2_compat.h"
+// Adapted from Catch2 documentation:
+#include <catch2/catch_session.hpp>
 
 int main(int argc, char **argv) 
 {
-  const auto result = ceph::test::run_catch2(argc, argv);
+  int result = Catch::Session().run(argc, argv);
 
   // Make sure that FoundationDB is shut down once and only once:
   ceph::libfdb::shutdown_libfdb(); 
