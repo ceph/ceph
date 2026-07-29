@@ -36,6 +36,7 @@ void PerfHistogramCommon::dump_formatted_axis(
     default:
       ceph_abort_msg("Invalid scale type");
   }
+  f->dump_string("unit", axis_unit_name(ac.m_unit));
 
   {
     // Dump concrete ranges for axis buckets
