@@ -524,6 +524,14 @@ class SqliteMirroringStore(SqliteStore):
             return super().get_object(key)
         log.debug("Mirroring get_object: mirror=%r", mirror)
         obj = super().get_object(key)
+        if (
+            self._pending_mirror_ops is not None
+            and key in self._pending_mirror_ops
+        ):
+            _, pending_obj_for_mirror = self._pending_mirror_ops[key]
+            if pending_obj_for_mirror is None:
+                return obj
+            return mirror.merge(obj, pending_obj_for_mirror)
         try:
             mirror_obj = mirror.store[key].get()
         except KeyError:
