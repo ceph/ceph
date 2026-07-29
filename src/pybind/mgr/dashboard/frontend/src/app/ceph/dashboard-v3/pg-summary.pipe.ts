@@ -16,7 +16,7 @@ export class PgSummaryPipe implements PipeTransform {
   transform(value: any): any {
     if (!value) return null;
     const categoryPgAmount: Record<string, number> = {};
-    value.statuses.forEach((status: PgStateCount) => {
+    value?.statuses?.forEach((status: PgStateCount) => {
       const categoryType = this.pgCategoryService.getTypeByStates(status?.state_name);
       if (!categoryPgAmount?.[categoryType]) {
         categoryPgAmount[categoryType] = 0;

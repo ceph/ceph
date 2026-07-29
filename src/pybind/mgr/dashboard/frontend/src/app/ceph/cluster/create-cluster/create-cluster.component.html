@@ -27,7 +27,7 @@
         <span class="cds--type-body-compact-01"
               i18n>
           <cd-icon type="success"
-                   [size]="icons.size20">
+                   [size]="iconSize.size20">
           </cd-icon>
           The cluster control plane is ready.
         </span>
@@ -37,7 +37,7 @@
         <span class="cds--type-fluid-heading-03"
               i18n>
           <cd-icon type="ibmCloudBareMetalServer"
-                   [size]="icons.size20">
+                   [size]="iconSize.size20">
           </cd-icon>
           Add storage to begin using your cluster.
         </span>
@@ -57,7 +57,7 @@
             Storage requirements
           </span>
           <cd-icon type="infoCircle"
-                   [size]="icons.size20">
+                   [size]="iconSize.size20">
           </cd-icon>
         </div>
       </cds-tile>
@@ -67,7 +67,7 @@
         <div cdsStack="horizontal"
              gap="4">
           <cd-icon type="ibmCloudDedicatedHost"
-                   [size]="icons.size20">
+                   [size]="iconSize.size20">
           </cd-icon>
           <div cdsStack="vertical"
                gap="1">
@@ -87,7 +87,7 @@
         <div cdsStack="horizontal"
              gap="4">
           <cd-icon type="vmdkDisk"
-                   [size]="icons.size20">
+                   [size]="iconSize.size20">
           </cd-icon>
 
           <div cdsStack="vertical"
@@ -109,7 +109,7 @@
         <div cdsStack="horizontal"
              gap="4">
           <cd-icon type="clusterIcon"
-                   [size]="icons.size20">
+                   [size]="iconSize.size20">
           </cd-icon>
 
           <div cdsStack="vertical"
@@ -144,10 +144,11 @@
                 i18n>
           Add storage
           <cd-icon
-            [cdsIcon]="icons.add"
-            [size]="icons.size20"
-            class="cds--btn__icon">
-          </cd-icon>
+              type="add"
+              [size]="iconSize.size20"
+              customClass="cds--btn__icon"
+            >
+            </cd-icon>
         </button>
         <button cdsButton="tertiary"
                 (click)="skipClusterCreation()"
@@ -155,10 +156,11 @@
                 i18n>
           View cluster overview
           <cd-icon
-            [cdsIcon]="icons.right"
-            [size]="icons.size20"
-            class="cds--btn__icon">
-          </cd-icon>
+              type="right"
+              [size]="iconSize.size20"
+              customClass="cds--btn__icon"
+            >
+            </cd-icon>
         </button>
       </div>
     </div>
