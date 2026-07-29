@@ -124,19 +124,23 @@
               Occurrences: {{ selected.occurrences }}
             </p>
           }
-          <p class="notifications-page__detail-text cds--type-body-01">
-            {{ selected.displayPreview }}
-          </p>
+          <p
+            class="notifications-page__detail-text cds--type-body-01"
+            [innerHTML]="selected.displayDetail | sanitizeHtml"
+          ></p>
           @if (selected.prometheusAlert?.sourceUrl) {
             <a
               cdsLink
-              class="cds-mt-5"
+              class="notifications-page__prometheus-link cds-mt-5"
               [href]="selected.prometheusAlert.sourceUrl"
               target="_blank"
               rel="noopener noreferrer"
-              i18n
             >
-              View in Prometheus
+              <span i18n>View in Prometheus</span>
+              <cd-icon
+                type="launch"
+                [useDefault]="true"
+              ></cd-icon>
             </a>
           }
         </div>

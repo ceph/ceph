@@ -65,6 +65,7 @@
         display: flex;
         justify-content: flex-start;
         width: 100%;
+        gap: $spacing-03;
       }
 
       .toast-caption-container .date {
