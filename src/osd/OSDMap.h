@@ -881,6 +881,16 @@ public:
   bool subtree_is_down(int id, std::set<int> *down_cache) const;
   bool containing_subtree_is_down(CephContext *cct, int osd, int subtree_type, std::set<int> *down_cache) const;
 
+  void get_stretch_zones(const pg_pool_t& pool,
+                         std::map<int, std::set<int>>* zone_osds) const;
+  unsigned stretch_num_acting_below_min_size(const pg_pool_t& pool, const std::vector<int>& acting) const;
+
+  /// Whether async recovery may leave the PG the acting set candidate_want,
+  /// which lacks one OSD of the set it wants: each zone of a stretch pool,
+  /// or else the whole set, keeps min_size OSDs.
+  bool async_recovery_can_shrink(const pg_pool_t& pool,
+                                 const std::vector<int>& candidate_want) const;
+
   bool subtree_type_is_down(CephContext *cct, int id, int subtree_type, std::set<int> *down_in_osds, std::set<int> *up_in_osds,
                             std::set<int> *subtree_up, std::unordered_map<int, std::set<int> > *subtree_type_down) const;
 
