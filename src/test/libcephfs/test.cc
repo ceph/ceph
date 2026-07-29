@@ -4748,15 +4748,23 @@ TEST(LibCephFS, PerfCountersStruct) {
   ASSERT_EQ(0, ceph_create(&cmount, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+
+  // NULL out-pointer must be rejected before mount.
+  ASSERT_EQ(-EINVAL, ceph_get_perf_counters_struct(cmount, NULL));
+
+  // unmounted handle must return -ENOTCONN
+  struct ceph_perf_counters_t *s = NULL;
+  ASSERT_EQ(-ENOTCONN, ceph_get_perf_counters_struct(cmount, &s));
+  ASSERT_EQ(nullptr, s);
+
   ASSERT_EQ(0, ceph_mount(cmount, "/"));
 
-  struct ceph_perf_counters_t *s = NULL;
+  // NULL pointer must be rejected after mount too.
+  ASSERT_EQ(-EINVAL, ceph_get_perf_counters_struct(cmount, NULL));
+
   ASSERT_EQ(0, ceph_get_perf_counters_struct(cmount, &s));
   ASSERT_NE(nullptr, s);
   ASSERT_GT(s->num_counters, 0);
-
-  // NULL pointer must be rejected.
-  ASSERT_EQ(-EINVAL, ceph_get_perf_counters_struct(cmount, NULL));
 
   // Every entry must have a non-empty name and a non-negative value.
   for (int i = 0; i < s->num_counters; i++) {
@@ -4770,7 +4778,10 @@ TEST(LibCephFS, PerfCountersStruct) {
         << "unknown type at slot " << i;
   }
 
- 
+  // Find the well-known counters by name and verify type.
+  // rdops and wrops must be 0 on a fresh mount; mdops is not checked for
+  // zero because mount() itself issues at least one metadata op (GETATTR
+  // on the mount root).
   struct { const char *name; int kind; bool check_zero; } expected[] = {
     { "mdops",    CEPH_PERF_KIND_U64,  false },
     { "rdops",    CEPH_PERF_KIND_U64,  true  },

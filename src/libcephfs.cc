@@ -2667,6 +2667,9 @@ extern "C" int ceph_get_perf_counters_struct(struct ceph_mount_info *cmount,
   *out = NULL;
 
   Client *client = cmount->get_client();
+  if (!client) {
+    return -ENOTCONN;
+  }
   PerfCounters *logger = client->get_logger();
   if (!logger) {
     return -ENOTCONN;
