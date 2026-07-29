@@ -2802,6 +2802,47 @@ wait_for_group_snap_not_present()
     wait_for_test_group_snap_present "${cluster}" "${group_spec}" "${group_snap_id}" 0
 }
 
+# count the group snapshots with the given mirror state ie "primary", "non-primary" or "demoted"
+get_group_snap_mirror_state_count()
+{
+    local cluster=$1
+    local group_spec=$2
+    local mirror_state=$3
+    local -n _group_snap_count=$4
+
+    run_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format"
+    _group_snap_count="$(xmlstarlet sel -t -v "count(//group_snaps/group_snap[namespace/state='${mirror_state}'])" < "$CMD_STDOUT")"
+}
+
+test_group_snap_mirror_state_count()
+{
+    local cluster=$1
+    local group_spec=$2
+    local mirror_state=$3
+    local expected_snap_count=$4
+    local current_snap_count
+
+    get_group_snap_mirror_state_count "${cluster}" "${group_spec}" "${mirror_state}" current_snap_count
+    test "${expected_snap_count}" = "${current_snap_count}" || { fail; return 1; }
+}
+
+wait_for_group_snap_mirror_state_count()
+{
+    local cluster=$1
+    local group_spec=$2
+    local mirror_state=$3
+    local expected_snap_count=$4
+    local s
+
+    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32; do
+        sleep ${s}
+        test_group_snap_mirror_state_count "${cluster}" "${group_spec}" "${mirror_state}" "${expected_snap_count}" && return 0
+    done
+
+    fail "wait for count of ${mirror_state} group snaps to be ${expected_snap_count} failed on ${cluster}"
+    return 1
+}
+
 test_group_snap_sync_state()
 {
     local cluster=$1

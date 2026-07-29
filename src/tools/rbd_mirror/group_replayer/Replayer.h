@@ -34,13 +34,14 @@ public:
       librados::IoCtx &remote_io_ctx,
       const std::string &global_group_id,
       const std::string& local_mirror_uuid,
+      const std::string& local_mirror_peer_uuid,
       PoolMetaCache* pool_meta_cache,
       std::string local_group_id,
       std::string remote_group_id,
       GroupCtx *local_group_ctx,
       std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> *image_replayers) {
     return new Replayer(threads, local_io_ctx, remote_io_ctx, global_group_id,
-        local_mirror_uuid, pool_meta_cache, local_group_id, remote_group_id,
+        local_mirror_uuid, local_mirror_peer_uuid, pool_meta_cache, local_group_id, remote_group_id,
         local_group_ctx, image_replayers);
   }
 
@@ -50,6 +51,7 @@ public:
       librados::IoCtx &remote_io_ctx,
       const std::string &global_group_id,
       const std::string& local_mirror_uuid,
+      const std::string& local_mirror_peer_uuid,
       PoolMetaCache* pool_meta_cache,
       std::string local_group_id,
       std::string remote_group_id,
@@ -248,6 +250,7 @@ private:
   librados::IoCtx &m_remote_io_ctx;
   std::string m_global_group_id;
   std::string m_local_mirror_uuid;
+  std::string m_local_mirror_peer_uuid;
   std::string m_remote_mirror_uuid;
   PoolMetaCache* m_pool_meta_cache;
   std::string m_local_group_id;
