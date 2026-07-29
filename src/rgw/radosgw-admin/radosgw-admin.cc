@@ -5,6 +5,7 @@
  * Copyright (C) 2025 IBM
  */
 
+#include <algorithm>
 #include <cerrno>
 #include <functional>
 #include <string>
@@ -4255,6 +4256,16 @@ int main(int argc, const char **argv)
   bool cli11_need_gc = false;
   bool cli11_allows_tenant_no_uid = false;
   bool cli11_non_master_op = false;
+  // Names accepted at each level of the parsed CLI11 command path (canonical name
+  // plus aliases), matched against the surviving words after the legacy flag loop.
+  struct PathLevel {
+    std::vector<std::string> accepted_names;
+  };
+  std::vector<PathLevel> cli11_path;
+
+  // Outlives the block below so the command can be parsed again after the
+  // legacy flag loop.
+  CLI::App app{"radosgw-admin"};
 
   {
     // Feed CLI11 the ceph-stripped args: rgw_global_init() above already removed
@@ -4306,7 +4317,6 @@ int main(int argc, const char **argv)
       }
     }
 
-    CLI::App app{"radosgw-admin"};
     // TODO: keep while CLI11 and legacy parsing coexist. After full migration,
     // decide whether to preserve legacy acceptance of known-but-irrelevant
     // options while still rejecting truly unknown options, or intentionally
@@ -5615,15 +5625,19 @@ int main(int argc, const char **argv)
         warn_wrong_position_and_unrelated_option(&app);
         warn_duplicates(&app);
 
-        // Reject stray positional args for any CLI11-parsed command.
-        // With allow_extras() on root, CLI11 ignores unknown args — this check
-        // catches them manually. TODO: remove once allow_extras() is gone (at
-        // that point CLI11 itself rejects unknown arguments).
-        for (const auto& arg : app.remaining(true)) {
-          if (!arg.empty() && arg[0] != '-') {
-            cerr << "ERROR: unexpected argument: '" << arg << "'" << std::endl;
-            return 1;
-          }
+        // Record the command path CLI11 matched: command words only, no flags
+        // or stray words. Flags CLI11 does not recognize yet are consumed only
+        // by the legacy flag loop, so the words left in `args` after the loop
+        // are checked against this path to catch what the two parsers read
+        // differently.
+        // TODO: remove once all flags are migrated and the legacy flag loop is
+        // gone; `args` then always matches what CLI11 parsed.
+        for (CLI::App* n = &app; !n->get_subcommands().empty(); ) {
+          n = n->get_subcommands().front();
+          PathLevel level;
+          level.accepted_names = n->get_aliases();
+          level.accepted_names.push_back(n->get_name());
+          cli11_path.push_back(std::move(level));
         }
       }
     }
@@ -6238,6 +6252,76 @@ int main(int argc, const char **argv)
       return EINVAL;
     } else {
       ++i;
+    }
+  }
+
+  // `args` holds the words the legacy flag loop did not consume. Check them
+  // against the command path CLI11 parsed: a word past the end of the path is
+  // a stray; any other mismatch means the words name a different command and
+  // are parsed again. For example, all three lines below matched path
+  // [bucket, list]. CLI11 does not know `--access-key`, so it matched `list`
+  // as a command word; the legacy loop took `list` as the flag's value.
+  //   line                             args                     result
+  //   bucket list banana               [bucket, list, banana]   stray
+  //   bucket --access-key list stats   [bucket, stats]          parsed again
+  //   bucket --access-key list         [bucket]                 parsed again
+  // TODO: remove once all flags are migrated and the legacy flag loop is
+  // gone; `args` then always matches the path CLI11 parsed. Keep the
+  // `remaining()` check below, which goes away with allow_extras() instead.
+  if (cli11_parsed) {
+    std::size_t path_index = 0;
+    bool path_intact = true;
+    for (const char* raw : args) {
+      const std::string_view word(raw);
+      // No path level is left to match this word against: a stray word.
+      if (path_index == cli11_path.size()) {
+        cerr << "ERROR: unexpected argument: '" << word << "'" << std::endl;
+        return 1;
+      }
+      const auto& accepted = cli11_path[path_index].accepted_names;
+      if (std::find(accepted.begin(), accepted.end(), word) != accepted.end()) {
+        ++path_index;
+        continue;
+      }
+      path_intact = false;
+      break;
+    }
+    if (path_index < cli11_path.size()) {
+      path_intact = false;
+    }
+
+    if (!path_intact) {
+      // Clear what the first parse's command callback set; the re-parse sets
+      // them again. State set by a new command callback belongs here too.
+      cli11_action = nullptr;
+      cli11_readonly = false;
+      cli11_need_gc = false;
+      cli11_allows_tenant_no_uid = false;
+      cli11_non_master_op = false;
+
+      std::vector<const char*> reparse_argv;
+      reparse_argv.reserve(args.size() + 1);
+      reparse_argv.push_back(argv[0]);
+      reparse_argv.insert(reparse_argv.end(), args.begin(), args.end());
+      try {
+        app.parse(static_cast<int>(reparse_argv.size()), reparse_argv.data());
+      } catch (const CLI::ParseError& e) {
+        app.exit(e);
+        return to_legacy_exit_code(e);
+      }
+      // A parse that matches no subcommand still succeeds, so check for one
+      // and let legacy dispatch handle the line if none was found.
+      cli11_parsed = !app.get_subcommands().empty();
+
+      // Whatever the re-parse did not claim is a stray word: the legacy loop
+      // already took every flag it owns off the line.
+      // TODO: remove once allow_extras() is gone; CLI11 then rejects unknown
+      // arguments itself.
+      const auto extras = app.remaining(true);
+      if (!extras.empty()) {
+        cerr << "ERROR: unexpected argument: '" << extras.front() << "'" << std::endl;
+        return 1;
+      }
     }
   }
 
