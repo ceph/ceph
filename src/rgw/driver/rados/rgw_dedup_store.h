@@ -207,6 +207,8 @@ namespace rgw::dedup {
       uint8_t       rec_version;     // allows changing record format
       record_flags_t flags;           // 1 Byte flags
       uint8_t       pad[4];
+      uint32_t      mtime_sec;       // bucket-index mtime, LE on disk
+      uint32_t      mtime_nsec;
     }s;
     std::string obj_name;
     // TBD: find pool name making it easier to get ioctx
@@ -220,7 +222,7 @@ namespace rgw::dedup {
     bufferlist  compression_bl;
   };
   static_assert(BLAKE3_OUT_LEN == sizeof(disk_record_t::packed_rec_t::hash));
-  static_assert(sizeof(disk_record_t::packed_rec_t) == sizeof(uint64_t)*12);
+  static_assert(sizeof(disk_record_t::packed_rec_t) == sizeof(uint64_t)*13);
   std::ostream &operator<<(std::ostream &stream, const disk_record_t & rec);
 
   static constexpr unsigned BLOCK_MAGIC = 0xFACE;

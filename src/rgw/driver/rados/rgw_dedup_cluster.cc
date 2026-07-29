@@ -100,9 +100,9 @@ namespace rgw::dedup {
       if (ret == 0) {
         ret = -ENODATA;
       }
-      ldpp_dout(dpp, 10) << __func__ << "::" << (caller ? caller : "")
-                         << "::failed ctl_ioctx.getxattr() with: "
-                         << cpp_strerror(-ret) << ", ret=" << ret << dendl;
+      ldpp_dout(dpp, 5) << __func__ << "::" << (caller ? caller : "")
+                        << "::failed ctl_ioctx.getxattr(RGW_DEDUP_ATTR_EPOCH) with: "
+                        << cpp_strerror(-ret) << ", ret=" << ret << dendl;
       return ret;
     }
   }
@@ -1012,8 +1012,9 @@ namespace rgw::dedup {
                                        const DoutPrefixProvider *dpp)
   {
     dedup_epoch_t epoch;
-    int ret = get_epoch(store, dpp, &epoch, nullptr);
+    int ret = get_epoch(store, dpp, &epoch, "radosgw-admin dedup stats");
     if (ret != 0) {
+      ldpp_dout(dpp, 10) << __func__ << "::failed get_epoch(), ret=" << ret << dendl;
       return ret;
     }
 
