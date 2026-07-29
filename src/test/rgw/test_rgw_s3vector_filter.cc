@@ -36,6 +36,19 @@ protected:
   }
 };
 
+// ---- empty filter ----
+
+TEST_F(S3VectorFilterTest, EmptyFilterMatchesAll) {
+  // an empty filter has no conditions, so no expression is built and every vector matches
+  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, false}};
+  auto result = build(R"({})", keys);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->column_expr, nullptr);
+  EXPECT_EQ(result->json_expr, nullptr);
+  EXPECT_TRUE(errors.empty());
+  free_exprs(*result);
+}
+
 // ---- implicit $eq ----
 
 TEST_F(S3VectorFilterTest, ImplicitEqOnColumn) {
@@ -84,6 +97,40 @@ TEST_F(S3VectorFilterTest, BooleanEqOnColumn) {
   free_exprs(*result);
 }
 
+// ---- value conversion on columns ----
+// the declared type of the column decides how the value is read, so the JSON type
+// of the value in the filter does not have to match it
+
+TEST_F(S3VectorFilterTest, QuotedNumberOnNumberColumn) {
+  std::vector<filterable_metadata_key_t> keys = {{"year", FilterableMetadataType::NUMBER, false}};
+  auto result = build(R"({"year": {"$eq": "2021"}})", keys);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_NE(result->column_expr, nullptr);
+  EXPECT_EQ(result->json_expr, nullptr);
+  EXPECT_TRUE(errors.empty());
+  free_exprs(*result);
+}
+
+TEST_F(S3VectorFilterTest, NumberOnStringColumn) {
+  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, false}};
+  auto result = build(R"({"genre": {"$eq": 42}})", keys);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_NE(result->column_expr, nullptr);
+  EXPECT_EQ(result->json_expr, nullptr);
+  EXPECT_TRUE(errors.empty());
+  free_exprs(*result);
+}
+
+TEST_F(S3VectorFilterTest, QuotedBooleanOnBooleanColumn) {
+  std::vector<filterable_metadata_key_t> keys = {{"active", FilterableMetadataType::BOOLEAN, false}};
+  auto result = build(R"({"active": {"$eq": "true"}})", keys);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_NE(result->column_expr, nullptr);
+  EXPECT_EQ(result->json_expr, nullptr);
+  EXPECT_TRUE(errors.empty());
+  free_exprs(*result);
+}
+
 // ---- explicit operators on JSON metadata ----
 
 TEST_F(S3VectorFilterTest, ExplicitEqOnJson) {
@@ -118,6 +165,17 @@ TEST_F(S3VectorFilterTest, ExistsOnNullableColumn) {
   ASSERT_TRUE(result.has_value());
   EXPECT_NE(result->column_expr, nullptr);
   EXPECT_EQ(result->json_expr, nullptr);
+  free_exprs(*result);
+}
+
+TEST_F(S3VectorFilterTest, ExistsOnListColumn) {
+  // $exists is the only operator supported on a list-type column
+  std::vector<filterable_metadata_key_t> keys = {{"tags", FilterableMetadataType::STRING_LIST, false}};
+  auto result = build(R"({"tags": {"$exists": true}})", keys);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_NE(result->column_expr, nullptr);
+  EXPECT_EQ(result->json_expr, nullptr);
+  EXPECT_TRUE(errors.empty());
   free_exprs(*result);
 }
 
@@ -193,6 +251,36 @@ TEST_F(S3VectorFilterTest, NinOnColumn) {
   EXPECT_NE(result->column_expr, nullptr);
   EXPECT_EQ(result->json_expr, nullptr);
   free_exprs(*result);
+}
+
+TEST_F(S3VectorFilterTest, MixedTypesInListOnColumnAccepted) {
+  // unlike a JSON metadata field, list elements of a column are converted to the
+  // declared type of the column, so a mixed-type list is accepted
+  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, false}};
+  auto result = build(R"({"genre": {"$in": ["rock", 42]}})", keys);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_NE(result->column_expr, nullptr);
+  EXPECT_EQ(result->json_expr, nullptr);
+  EXPECT_TRUE(errors.empty());
+  free_exprs(*result);
+}
+
+TEST_F(S3VectorFilterTest, QuotedNumbersInListOnColumnAccepted) {
+  std::vector<filterable_metadata_key_t> keys = {{"year", FilterableMetadataType::NUMBER, false}};
+  auto result = build(R"({"year": {"$in": ["2020", 2021]}})", keys);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_NE(result->column_expr, nullptr);
+  EXPECT_EQ(result->json_expr, nullptr);
+  EXPECT_TRUE(errors.empty());
+  free_exprs(*result);
+}
+
+TEST_F(S3VectorFilterTest, InvalidNumberInListOnColumnRejected) {
+  // a list element that cannot be converted to the column type is still rejected
+  std::vector<filterable_metadata_key_t> keys = {{"year", FilterableMetadataType::NUMBER, false}};
+  auto result = build(R"({"year": {"$in": [2020, "recent"]}})", keys);
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
 }
 
 TEST_F(S3VectorFilterTest, InOnJson) {
@@ -554,9 +642,32 @@ TEST_F(S3VectorFilterTest, ListTypeFilteringRejected) {
   EXPECT_FALSE(errors.empty());
 }
 
+TEST_F(S3VectorFilterTest, ListTypeInListRejected) {
+  // $in goes through a different path than the comparison operators, and is
+  // rejected on a list-type column as well
+  std::vector<filterable_metadata_key_t> keys = {{"tags", FilterableMetadataType::STRING_LIST, false}};
+  auto result = build(R"({"tags": {"$in": ["live", "remaster"]}})", keys);
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
 TEST_F(S3VectorFilterTest, ArrayValueInJsonEqRejected) {
   // array value in $eq on a JSON field — not supported yet
   auto result = build(R"({"tags": {"$eq": ["a", "b"]}})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
+TEST_F(S3VectorFilterTest, ImplicitEqWithArrayRejected) {
+  // implicit equality with an array value is not permitted
+  auto result = build(R"({"tags": ["a", "b"]})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
+TEST_F(S3VectorFilterTest, ImplicitEqWithArrayOnColumnRejected) {
+  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, false}};
+  auto result = build(R"({"genre": ["rock", "jazz"]})", keys);
   EXPECT_FALSE(result.has_value());
   EXPECT_FALSE(errors.empty());
 }

@@ -601,6 +601,36 @@ def test_create_index_invalid_filterable_keys():
             'filterableMetadataKeys': [{'name': 'genre'}]
         }, **common)
 
+    # up to 10 filterable keys are allowed
+    result = conn.create_index(indexName='max-filterable',
+        metadataConfiguration={'filterableMetadataKeys': [
+            {'name': f'key-{i}'} for i in range(10)
+        ]}, **common)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # more than 10 filterable keys are rejected
+    assert_create_index_validation_error(conn,
+        'metadataConfiguration.filterableMetadataKeys',
+        indexName='too-many-filterable',
+        metadataConfiguration={'filterableMetadataKeys': [
+            {'name': f'key-{i}'} for i in range(11)
+        ]}, **common)
+
+    # up to 10 non-filterable keys are allowed
+    result = conn.create_index(indexName='max-nonfilterable',
+        metadataConfiguration={'nonFilterableMetadataKeys': [
+            f'key-{i}' for i in range(10)
+        ]}, **common)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # more than 10 non-filterable keys are rejected
+    assert_create_index_validation_error(conn,
+        'metadataConfiguration.nonFilterableMetadataKeys',
+        indexName='too-many-nonfilterable',
+        metadataConfiguration={'nonFilterableMetadataKeys': [
+            f'key-{i}' for i in range(11)
+        ]}, **common)
+
     # cleanup
     _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
@@ -941,6 +971,11 @@ def test_delete_index():
     # try to get the index
     with pytest.raises(conn.exceptions.ClientError):
         result = conn.get_index(vectorBucketName=bucket_name, indexName=index_name)
+    # deleting an index that does not exist is not an error
+    result = conn.delete_index(vectorBucketName=bucket_name, indexName=index_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    result = conn.delete_index(vectorBucketName=bucket_name, indexName='no-such-index')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     # cleanup
     _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
@@ -1331,6 +1366,18 @@ def test_get_vectors():
 
     log.info('test_get_vectors: successfully verified %d vectors with data', len(returned_vectors))
 
+    # keys that do not exist in the index are omitted from the response
+    result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                              keys=['vec-0', 'no-such-key'])
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert [v['key'] for v in result['vectors']] == ['vec-0']
+
+    # a request in which no key matches is still a success, with an empty list
+    result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                              keys=['no-such-key', 'no-such-key-either'])
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert result['vectors'] == []
+
     # cleanup
     _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
@@ -1391,6 +1438,20 @@ def test_list_vectors():
     assert page_count == 1, f"expected 1 pages but got {page_count}"
     log.info('test_list_vectors: successfully verified %d vectors across %d pages',
              len(all_retrieved_vectors), page_count)
+
+    # segmented listing is not implemented: a single segment lists the entire index
+    result = conn.list_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                               maxResults=max_results, segmentCount=1, segmentIndex=0)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == total_vectors
+
+    # and any other segment is rejected
+    for segment_count, segment_index in ((2, 0), (2, 1), (16, 15)):
+        with pytest.raises(conn.exceptions.ClientError) as exc_info:
+            conn.list_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                              maxResults=max_results,
+                              segmentCount=segment_count, segmentIndex=segment_index)
+        assert exc_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 400
 
     # cleanup
     _ = _delete_vector_bucket(conn, bucket_name)
@@ -1590,6 +1651,16 @@ def test_query_vectors():
         assert len(result['vectors']) == top_k
         assert result['distanceMetric'] == 'euclidean'
         log.info(result['vectors'])
+
+    # topK must be between 1 and 10000. note that a topK below 1 is rejected by the
+    # client itself, so only the upper limit can be verified here
+    query_vector = generate_data(dimension, 0)
+    query_args = dict(vectorBucketName=bucket_name, indexName=index_name, queryVector=query_vector)
+    result = conn.query_vectors(topK=10000, **query_args)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    with pytest.raises(conn.exceptions.ClientError) as exc_info:
+        conn.query_vectors(topK=10001, **query_args)
+    assert exc_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 400
 
     # cleanup
     _ = _delete_vector_bucket(conn, bucket_name)
@@ -1914,6 +1985,61 @@ def test_put_vectors_dots_in_metadata_field_names():
 
     # cleanup
     _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+@pytest.mark.vector_test
+def test_put_vectors_metadata_limits():
+    """Test the limits on the number of metadata fields and on the metadata size."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                               dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # 50 metadata fields are allowed
+    vectors = [
+        {'key': 'v0', 'data': generate_data(dimension, 0),
+         'metadata': json.dumps({f'key-{i}': i for i in range(50)})},
+    ]
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # more than 50 metadata fields are rejected
+    vectors = [
+        {'key': 'v1', 'data': generate_data(dimension, 1),
+         'metadata': json.dumps({f'key-{i}': i for i in range(51)})},
+    ]
+    assert_put_vectors_validation_error(conn,
+        'vectors[0].metadata',
+        vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+
+    # nested fields are not counted, only the top level ones
+    nested = {f'key-{i}': i for i in range(49)}
+    nested['info'] = {f'nested-{i}': i for i in range(50)}
+    vectors = [
+        {'key': 'v2', 'data': generate_data(dimension, 2), 'metadata': json.dumps(nested)},
+    ]
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # metadata of more than 40KB is rejected
+    vectors = [
+        {'key': 'v3', 'data': generate_data(dimension, 3),
+         'metadata': json.dumps({'big': 'x'*(40*1024)})},
+    ]
+    assert_put_vectors_validation_error(conn,
+        'vectors[0].metadata',
+        vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+
+    # cleanup
+    _ = conn.delete_index(vectorBucketName=bucket_name, indexName=index_name)
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
@@ -2477,8 +2603,164 @@ def test_query_vectors_filter_json_metadata():
     # boolean field
     assert query_keys({'active': True}) == ['v0', 'v2']
 
+    # the JSON type of the value in the filter decides how the metadata field is
+    # read, so a value of the wrong type never matches
+    assert query_keys({'priority': '10'}) == []
+    assert query_keys({'color': {'$eq': 42}}) == []
+    assert query_keys({'active': {'$eq': 'true'}}) == []
+
     # cleanup
     _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+@pytest.mark.vector_test
+def test_query_vectors_missing_json_metadata():
+    """Test filtering on JSON metadata fields that some of the vectors do not have."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName=index_name,
+        dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # v2 has metadata without a "color" field, and v3 has no metadata at all
+    vectors = [
+        {'key': 'v0', 'data': generate_data(dimension, 0),
+         'metadata': json.dumps({'color': 'red'})},
+        {'key': 'v1', 'data': generate_data(dimension, 1),
+         'metadata': json.dumps({'color': 'blue'})},
+        {'key': 'v2', 'data': generate_data(dimension, 2),
+         'metadata': json.dumps({'shape': 'round'})},
+        {'key': 'v3', 'data': generate_data(dimension, 3)},
+    ]
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    query_vector = generate_data(dimension, 0)
+    top_k = 10
+
+    def query_keys(filter_expr):
+        result = conn.query_vectors(
+            vectorBucketName=bucket_name, indexName=index_name,
+            queryVector=query_vector, topK=top_k, filter=filter_expr)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        return sorted([v['key'] for v in result['vectors']])
+
+    assert query_keys({'color': 'red'}) == ['v0']
+
+    # a condition on a field that the vector does not have never matches,
+    # including the negative operators
+    assert query_keys({'color': {'$ne': 'red'}}) == ['v1']
+    assert query_keys({'color': {'$nin': ['red']}}) == ['v1']
+
+    # $exists tells the vectors without the field apart. a vector with no
+    # metadata at all has no fields, so it matches $exists=false as well
+    assert query_keys({'color': {'$exists': True}}) == ['v0', 'v1']
+    assert query_keys({'color': {'$exists': False}}) == ['v2', 'v3']
+
+    # to include the vectors without the field in a negative condition, it
+    # should be combined with $exists
+    assert query_keys({'$or': [{'color': {'$ne': 'red'}},
+                               {'color': {'$exists': False}}]}) == ['v1', 'v2', 'v3']
+
+    # cleanup
+    _ = conn.delete_index(vectorBucketName=bucket_name, indexName=index_name)
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+@pytest.mark.vector_test
+def test_query_vectors_missing_filterable_fields():
+    """Test filtering on filterable metadata keys that some of the vectors do not have."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # "genre" is nullable, so it is null for vectors whose metadata did not have it
+    index_name = 'test-index'
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName=index_name,
+        dataType='float32', dimension=dimension, distanceMetric='euclidean',
+        metadataConfiguration={'filterableMetadataKeys': [
+            {'name': 'genre', 'type': 'String'},
+            {'name': 'year', 'type': 'Number'},
+        ]})
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # v2 has metadata without a "genre" field, and v3 has no metadata at all
+    vectors = [
+        {'key': 'v0', 'data': generate_data(dimension, 0),
+         'metadata': json.dumps({'genre': 'rock', 'year': 2020})},
+        {'key': 'v1', 'data': generate_data(dimension, 1),
+         'metadata': json.dumps({'genre': 'jazz', 'year': 2019})},
+        {'key': 'v2', 'data': generate_data(dimension, 2),
+         'metadata': json.dumps({'year': 2018})},
+        {'key': 'v3', 'data': generate_data(dimension, 3)},
+    ]
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    query_vector = generate_data(dimension, 0)
+    top_k = 10
+
+    def query_keys(filter_expr, index=index_name):
+        result = conn.query_vectors(
+            vectorBucketName=bucket_name, indexName=index,
+            queryVector=query_vector, topK=top_k, filter=filter_expr)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        return sorted([v['key'] for v in result['vectors']])
+
+    assert query_keys({'genre': 'rock'}) == ['v0']
+
+    # a condition on a column that is null for the vector never matches,
+    # including the negative operators
+    assert query_keys({'genre': {'$ne': 'rock'}}) == ['v1']
+    assert query_keys({'genre': {'$nin': ['rock']}}) == ['v1']
+
+    # $exists on a nullable column tells the vectors without the field apart
+    assert query_keys({'genre': {'$exists': True}}) == ['v0', 'v1']
+    assert query_keys({'genre': {'$exists': False}}) == ['v2', 'v3']
+
+    # to include the vectors without the field in a negative condition, it
+    # should be combined with $exists
+    assert query_keys({'$or': [{'genre': {'$ne': 'rock'}},
+                               {'genre': {'$exists': False}}]}) == ['v1', 'v2', 'v3']
+
+    # a column declared with mustExist is never null, so $exists=true matches
+    # every vector of the index, and $exists=false matches none
+    must_exist_index = 'test-index-must-exist'
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName=must_exist_index,
+        dataType='float32', dimension=dimension, distanceMetric='euclidean',
+        metadataConfiguration={'filterableMetadataKeys': [
+            {'name': 'genre', 'type': 'String', 'mustExist': True},
+        ]})
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = [
+        {'key': 'v0', 'data': generate_data(dimension, 0),
+         'metadata': json.dumps({'genre': 'rock'})},
+        {'key': 'v1', 'data': generate_data(dimension, 1),
+         'metadata': json.dumps({'genre': 'jazz'})},
+    ]
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=must_exist_index, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    assert query_keys({'genre': {'$exists': True}}, index=must_exist_index) == ['v0', 'v1']
+    assert query_keys({'genre': {'$exists': False}}, index=must_exist_index) == []
+
+    # cleanup
+    _ = conn.delete_index(vectorBucketName=bucket_name, indexName=must_exist_index)
+    _ = conn.delete_index(vectorBucketName=bucket_name, indexName=index_name)
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test

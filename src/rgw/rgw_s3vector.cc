@@ -736,6 +736,12 @@ namespace rgw::s3vector {
   static constexpr const char* key_and_metadata_columns[] = {key_field, metadata_field};
   static constexpr int num_key_columns = 1;
 
+  static constexpr unsigned int max_top_k = 10000;
+  static constexpr size_t max_metadata_size = 40*1024;
+  static constexpr size_t max_metadata_keys = 50;
+  static constexpr size_t max_nonfilterable_metadata_keys = 10;
+  static constexpr size_t max_filterable_metadata_keys = 10;
+
   std::pair<const char* const*, unsigned long> get_select_columns(bool return_data, bool return_metadata) {
     if (return_data && return_metadata) {
       return {table_columns_with_metadata, 3};
@@ -887,6 +893,23 @@ namespace rgw::s3vector {
       return;
     }
 
+    // validate the number of non/filterable metadata keys
+    if (configuration.filterable_metadata_keys.size() > max_filterable_metadata_keys) {
+      errors.push_back({"metadataConfiguration.filterableMetadataKeys",
+          fmt::format("must not have more than {} keys, got {}",
+            max_filterable_metadata_keys, configuration.filterable_metadata_keys.size())});
+    }
+    if (configuration.non_filterable_metadata_keys.size() > max_nonfilterable_metadata_keys) {
+      errors.push_back({"metadataConfiguration.nonFilterableMetadataKeys",
+          fmt::format("must not have more than {} keys, got {}",
+            max_nonfilterable_metadata_keys, configuration.non_filterable_metadata_keys.size())});
+    }
+    if (!errors.empty()) {
+      lancedb_connection_free(conn);
+      ctx->result = -EINVAL;
+      return;
+    }
+
     // validate metadata key names
     for (unsigned int i = 0; i < configuration.filterable_metadata_keys.size(); ++i) {
       const auto& name = configuration.filterable_metadata_keys[i].name;
@@ -1027,14 +1050,20 @@ namespace rgw::s3vector {
     }
     char* error_message;
     if (const LanceDBError result = lancedb_connection_drop_table(conn,
-          configuration.index_name.c_str(), nullptr, &error_message); result != LANCEDB_SUCCESS) {
+          configuration.index_name.c_str(), nullptr, &error_message);
+        result == LANCEDB_TABLE_NOT_FOUND) {
+      ldpp_dout(dpp, 10) << "INFO: s3vector index: " << configuration.index_name << " does not exist" << dendl;
+      lancedb_free_string(error_message);
+    } else if (result != LANCEDB_SUCCESS) {
       ldpp_dout(dpp, 1) << "ERROR: s3vector failed to delete index: " << configuration.index_name << ". error: " << error_message  << dendl;
       lancedb_free_string(error_message);
       lancedb_connection_free(conn);
       return lancedb_error_to_errno(result);
+    } else { // successfully deleted the index
+      // we are not failing the operation if we cannot notify the background process on index removal
+      notify_index_remove(dpp, configuration.vector_bucket_name, configuration.index_name);
     }
-    // we are not failing the operation if we cannot notify the background process on index removal
-    notify_index_remove(dpp, configuration.vector_bucket_name, configuration.index_name);
+    lancedb_connection_free(conn);
     return 0;
   }
 
@@ -1682,11 +1711,26 @@ namespace rgw::s3vector {
         errors.push_back({fmt::format("vectors[{}].metadata", vi), "invalid JSON"});
         break;
       }
+      if (has_metadata && vector.metadata.size() > max_metadata_size) {
+        ldpp_dout(dpp, 1) << "ERROR: s3vector metadata of size: " << vector.metadata.size() <<
+          " is too large for key: " << vector.key << dendl;
+        errors.push_back({fmt::format("vectors[{}].metadata", vi),
+          fmt::format("size ({}) must not exceed {} bytes", vector.metadata.size(), max_metadata_size)});
+        break;
+      }
       if (has_metadata) {
         bool invalid_field = false;
+        size_t num_fields = 0;
         for (auto it = parser.find_first(); !it.end(); ++it) {
           auto* field = *it;
           const auto& name = field->get_name();
+          if (++num_fields > max_metadata_keys) {
+            ldpp_dout(dpp, 1) << "ERROR: s3vector too many metadata fields for key: " << vector.key << dendl;
+            errors.push_back({fmt::format("vectors[{}].metadata", vi),
+              fmt::format("must not have more than {} fields", max_metadata_keys)});
+            invalid_field = true;
+            break;
+          }
           if (name.find('.') != std::string::npos) {
             ldpp_dout(dpp, 1) << "ERROR: s3vector metadata field name '" << name << "' must not contain '.' in key: " << vector.key << dendl;
             errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, name), "field name must not contain '.'"});
@@ -2217,25 +2261,19 @@ namespace rgw::s3vector {
       throw JSONDecoder::err(fmt::format("maxResults must be between 1 and 1000, got {}", max_results));
     }
 
-    // according to the AWS spec the "nextToken" should be a string
+    // according to the AWS spec the "nextToken" should be a string, between 1 and 2048 characters, and be opaque to the client
     // however, in lancedb, fetching all vectors in pages is done using offsets
-    /* if (!next_token.empty() && (next_token.length() < 1 || next_token.length() > 2048)) {
-      throw JSONDecoder::err(fmt::format("nextToken length must be between 1 and 2048, got {}", next_token.length()));
-    }*/
-
     if (!next_token.empty()) {
       decode_from_chars(offset, next_token);
     }
 
-    if (segment_count > 0) {
-      if (segment_count < 1 || segment_count > 16) {
-        throw JSONDecoder::err(fmt::format("segmentCount must be between 1 and 16, got {}", segment_count));
-      }
-      if (segment_index >= segment_count) {
-        throw JSONDecoder::err(fmt::format("segmentIndex must be between 0 and segmentCount-1 ({}), got {}", segment_count - 1, segment_index));
-      }
-    } else if (segment_index > 0) {
-      throw JSONDecoder::err("segmentIndex requires segmentCount to be specified");
+    // segmented listing is not implemented
+    // if implemented the segment_count shoud be between 1 and 16, and the segment_index should be between 0 and segment_count-1
+    if (segment_count > 1) {
+      throw JSONDecoder::err(fmt::format("segmented listing is not supported. segmentCount must be 1, got {}", segment_count));
+    }
+    if (segment_index != 0) {
+      throw JSONDecoder::err(fmt::format("segmented listing is not supported. segmentIndex must be 0, got {}", segment_index));
     }
   }
 
@@ -2419,8 +2457,8 @@ namespace rgw::s3vector {
     JSONDecoder::decode_json("topK", top_k, obj, true);
     JSONDecoder::decode_json("postFiltering", post_filtering, obj);
 
-    if (top_k < 1) {
-      throw JSONDecoder::err(fmt::format("topK must be at least 1, got {}", top_k));
+    if (top_k < 1 || top_k > max_top_k) {
+      throw JSONDecoder::err(fmt::format("topK must be between 1 and {}, got {}", max_top_k, top_k));
     }
 
     if (query_vector.empty()) {
