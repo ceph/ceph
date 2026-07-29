@@ -2080,7 +2080,7 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   lc->initialize(cct, this);
 
   if (use_lc_thread) { 
-    ret = userDB->createLCTables(dpp);
+    ret = db->createLCTables(dpp);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "Failed to create LC tables, ret=" << ret << dendl;
       return ret;
@@ -2111,7 +2111,7 @@ int POSIXDriver::get_user_by_access_key(const DoutPrefixProvider* dpp, const std
   rgw::sal::Attrs attrs;
   RGWObjVersionTracker objv_tracker;
 
-  int ret = userDB->get_user(dpp, std::string("access_key"), key, uinfo, &attrs,
+  int ret = db->get_user(dpp, std::string("access_key"), key, uinfo, &attrs,
       &objv_tracker);
 
   if (ret < 0)
@@ -2135,7 +2135,7 @@ int POSIXDriver::get_user_by_email(const DoutPrefixProvider* dpp, const std::str
   rgw::sal::Attrs attrs;
   RGWObjVersionTracker objv_tracker;
 
-  int ret = userDB->get_user(dpp, std::string("email"), email, uinfo, &attrs,
+  int ret = db->get_user(dpp, std::string("email"), email, uinfo, &attrs,
       &objv_tracker);
 
   if (ret < 0)
@@ -2167,7 +2167,7 @@ int POSIXDriver::load_account_by_id(const DoutPrefixProvider* dpp,
 {
   RGWObjVersionTracker objv_tracker;
 
-  int ret = accountDB->get_account(dpp, std::string("account_id"), std::string(id), info, &attrs,
+  int ret = db->get_account(dpp, std::string("account_id"), std::string(id), info, &attrs,
       &objv_tracker);
 
   if (ret < 0)
@@ -2187,7 +2187,7 @@ int POSIXDriver::load_account_by_name(const DoutPrefixProvider* dpp,
 {
   RGWObjVersionTracker objv_tracker;
 
-  int ret = accountDB->get_account(dpp, std::string("name"), std::string(name), info, &attrs,
+  int ret = db->get_account(dpp, std::string("name"), std::string(name), info, &attrs,
       &objv_tracker);
 
   if (ret < 0)
@@ -2206,7 +2206,7 @@ int POSIXDriver::load_account_by_email(const DoutPrefixProvider* dpp,
 {
   RGWObjVersionTracker objv_tracker;
 
-  int ret = accountDB->get_account(dpp, std::string("email"), std::string(email), info, &attrs,
+  int ret = db->get_account(dpp, std::string("email"), std::string(email), info, &attrs,
       &objv_tracker);
 
   if (ret < 0)
@@ -2223,7 +2223,7 @@ int POSIXDriver::store_account(const DoutPrefixProvider* dpp,
 			  const Attrs& attrs,
 			  RGWObjVersionTracker& objv)
 {
-  int ret = accountDB->store_account(dpp, info, exclusive, &attrs, &objv);
+  int ret = db->store_account(dpp, info, exclusive, &attrs, &objv);
 
   if (ret < 0)
     return ret;
@@ -2236,7 +2236,7 @@ int POSIXDriver::delete_account(const DoutPrefixProvider* dpp,
 			     const RGWAccountInfo& info,
 			     RGWObjVersionTracker& objv)
 {
-  int ret = accountDB->remove_account(dpp, info, &objv);
+  int ret = db->remove_account(dpp, info, &objv);
 
   if (ret < 0)
     return ret;
@@ -2252,7 +2252,7 @@ int POSIXDriver::load_owner_by_email(const DoutPrefixProvider* dpp,
 				    rgw_owner& owner)
 {
   RGWUserInfo uinfo;
-  int ret = get_user_db()->get_user(dpp, "email", std::string{email},
+  int ret = get_db()->get_user(dpp, "email", std::string{email},
 				   uinfo, nullptr, nullptr);
   if (ret < 0) {
     return ret;
@@ -2505,7 +2505,7 @@ int POSIXBucket::create(const DoutPrefixProvider* dpp,
 
 int POSIXUser::read_attrs(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return driver->get_user_db()->get_user(dpp, std::string("user_id"), this->get_id().id, this->get_info(), &(this->get_attrs()),
+  return driver->get_db()->get_user(dpp, std::string("user_id"), this->get_id().id, this->get_info(), &(this->get_attrs()),
         &(this->get_version_tracker()));
 }
 
@@ -2522,18 +2522,18 @@ int POSIXUser::merge_and_store_attrs(const DoutPrefixProvider* dpp,
 
 int POSIXUser::load_user(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return driver->get_user_db()->get_user(dpp, std::string("user_id"), this->get_id().id, this->get_info(), &(this->get_attrs()),
+  return driver->get_db()->get_user(dpp, std::string("user_id"), this->get_id().id, this->get_info(), &(this->get_attrs()),
            &(this->get_version_tracker()));
 }
 
 int POSIXUser::store_user(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info)
 {
-  return driver->get_user_db()->store_user(dpp, this->get_info(), exclusive, &(this->get_attrs()), &(this->get_version_tracker()), old_info);
+  return driver->get_db()->store_user(dpp, this->get_info(), exclusive, &(this->get_attrs()), &(this->get_version_tracker()), old_info);
 }
 
 int POSIXUser::remove_user(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return driver->get_user_db()->remove_user(dpp, this->get_info(), &(this->get_version_tracker()));
+  return driver->get_db()->remove_user(dpp, this->get_info(), &(this->get_version_tracker()));
 }
 
 int POSIXUser::verify_mfa(const std::string& mfa_str, bool* verified, const DoutPrefixProvider *dpp, optional_yield y)
@@ -2665,7 +2665,7 @@ int POSIXDriver::meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle
   int ret;
   keys.clear();
   if (h->section == "user") {
-    ret = get_user_db()->list_users(dpp, h->marker, max, keys, truncated);
+    ret = get_db()->list_users(dpp, h->marker, max, keys, truncated);
     if (ret < 0) {
       return ret;
     }
@@ -4766,45 +4766,45 @@ int POSIXLifecycle::get_entry(const DoutPrefixProvider* dpp, optional_yield y,
                               const std::string& oid, const std::string& marker,
                               LCEntry& entry)
 {
-  return driver->get_user_db()->get_entry(oid, marker, entry);
+  return driver->get_db()->get_entry(oid, marker, entry);
 }
 
 int POSIXLifecycle::get_next_entry(const DoutPrefixProvider* dpp, optional_yield y,
 				   const std::string& oid, const std::string& marker,
                                    LCEntry& entry)
 {
-  return driver->get_user_db()->get_next_entry(oid, marker, entry);
+  return driver->get_db()->get_next_entry(oid, marker, entry);
 }
 
 int POSIXLifecycle::set_entry(const DoutPrefixProvider* dpp, optional_yield y,
                               const std::string& oid, const LCEntry& entry)
 {
-  return driver->get_user_db()->set_entry(oid, entry);
+  return driver->get_db()->set_entry(oid, entry);
 }
 
 int POSIXLifecycle::list_entries(const DoutPrefixProvider* dpp, optional_yield y,
 				const std::string& oid, const std::string& marker,
                                 uint32_t max_entries, std::vector<LCEntry>& entries)
 {
-  return driver->get_user_db()->list_entries(oid, marker, max_entries, entries);
+  return driver->get_db()->list_entries(oid, marker, max_entries, entries);
 }
 
 int POSIXLifecycle::rm_entry(const DoutPrefixProvider* dpp, optional_yield y,
                              const std::string& oid, const LCEntry& entry)
 {
-  return driver->get_user_db()->rm_entry(oid, entry);
+  return driver->get_db()->rm_entry(oid, entry);
 }
 
 int POSIXLifecycle::get_head(const DoutPrefixProvider* dpp, optional_yield y,
                              const std::string& oid, LCHead& head)
 {
-  return driver->get_user_db()->get_head(oid, head);
+  return driver->get_db()->get_head(oid, head);
 }
 
 int POSIXLifecycle::put_head(const DoutPrefixProvider* dpp, optional_yield y,
                              const std::string& oid, const LCHead& head)
 {
-  return driver->get_user_db()->put_head(oid, head);
+  return driver->get_db()->put_head(oid, head);
 }
 
 std::unique_ptr<LCSerializer> POSIXLifecycle::get_serializer(const std::string& lock_name,
@@ -4824,7 +4824,7 @@ rgw::sal::Driver* newPOSIXDriver(CephContext *cct)
 
   int ret = -1;
   const static std::string tenant = "default_ns";
-  if ((ret = driver->get_user_db()->Initialize("", -1)) < 0) {
+  if ((ret = driver->get_db()->Initialize("", -1)) < 0) {
     ldout(cct, 0) << "User DB initialization failed for tenant("<<tenant<<")" << dendl;
     return nullptr;
   }
