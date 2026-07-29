@@ -114,7 +114,8 @@ TEST_F(TestGroupReplayer, PruneCreatingMirrorSnapshot) {
   instance_watcher = InstanceWatcher<>::create(
     m_local_io_ctx, *m_threads->asio_engine, instance_replayer, nullptr);
   replayer = Replayer<>::create(m_threads, m_local_io_ctx, m_remote_io_ctx,
-    "global-group", "local-uuid", &pool_meta_cache, group_id, group_id,
+    "global-group", "local-uuid", "local mirror peer uuid", &pool_meta_cache,
+    group_id, group_id,
     &group_ctx, instance_watcher, &images);
   C_SaferCond ctx;
   replayer->init(&ctx);
