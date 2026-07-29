@@ -520,9 +520,18 @@ class VolumeClient(CephfsClient["Module"]):
                         subvol_info_dict = subvolume.info()
                         subvol_info_dict["mon_addrs"] = mon_addr_lst
                         subvol_info_dict["flavor"] = subvolume.VERSION
+                        subvol_info_dict["quarantine"] = "disabled"
                         ret = 0, json.dumps(subvol_info_dict, indent=4, sort_keys=True), ""
         except VolumeException as ve:
-            ret = self.volume_exception_to_retval(ve)
+            if ve.errno == -errno.EACCES:
+                subvol_info_dict = {
+                    "name": subvolname,
+                    "group": groupname if groupname else "_nogroup",
+                    "quarantine": "enabled",
+                }
+                ret = 0, json.dumps(subvol_info_dict, indent=4, sort_keys=True), ""
+            else:
+                ret = self.volume_exception_to_retval(ve)
         return ret
 
     @volume_exception_to_retval

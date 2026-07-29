@@ -499,14 +499,25 @@ class TestQuarantineSubvolumeOps(QuarantineTestBase):
             pass
         super().tearDown()
 
-    def test_quarantine_info_blocked(self):
-        """subvolume info fails on a quarantined subvolume."""
+    def test_quarantine_info_shows_disabled(self):
+        """subvolume info shows quarantine: disabled before quarantine."""
+        out = self._fs_cmd("subvolume", "info",
+                           self.volname, self.SUBVOLUME_NAME)
+        info = json.loads(out)
+        self.assertEqual(info["quarantine"], "disabled")
+        self.assertIn("bytes_used", info)
+        log.info("subvolume info shows quarantine disabled")
+
+    def test_quarantine_info_returns_minimal(self):
+        """subvolume info returns minimal info with quarantine status when
+        the subvolume is quarantined."""
         self.enable_and_wait(sleep_secs=1)
-        with self.assertRaises(CommandFailedError) as ctx:
-            self._fs_cmd("subvolume", "info",
-                         self.volname, self.SUBVOLUME_NAME)
-        self.assertEqual(ctx.exception.exitstatus, errno.EACCES)
-        log.info("subvolume info correctly blocked")
+        out = self._fs_cmd("subvolume", "info",
+                           self.volname, self.SUBVOLUME_NAME)
+        info = json.loads(out)
+        self.assertEqual(info["quarantine"], "enabled")
+        self.assertNotIn("bytes_used", info)
+        log.info("subvolume info returns quarantine status: %s", info)
 
     def test_quarantine_getpath_blocked(self):
         """subvolume getpath fails on a quarantined subvolume."""
@@ -688,6 +699,70 @@ class TestQuarantineMultipleSubvolumes(QuarantineTestBase):
                 except Exception:
                     pass
 
+    def test_subvolume_info_quarantine_lifecycle(self):
+        """Full lifecycle: both subvolumes show full info, quarantine one,
+        verify one full + one minimal, then lift quarantine and get full
+        info back for both."""
+        # Before quarantine: ls shows both
+        ls_out = self._fs_cmd("subvolume", "ls", self.volname)
+        log.info("BEFORE quarantine - subvolume ls: %s", ls_out.strip())
+
+        # Before quarantine: both show full info with quarantine: disabled
+        info1 = json.loads(self._fs_cmd("subvolume", "info",
+                                        self.volname, self.SUBVOL1))
+        info2 = json.loads(self._fs_cmd("subvolume", "info",
+                                        self.volname, self.SUBVOL2))
+        log.info("BEFORE quarantine - subvol1 info: %s", json.dumps(info1, indent=2))
+        log.info("BEFORE quarantine - subvol2 info: %s", json.dumps(info2, indent=2))
+        self.assertEqual(info1["quarantine"], "disabled")
+        self.assertEqual(info2["quarantine"], "disabled")
+        self.assertIn("bytes_used", info1)
+        self.assertIn("bytes_used", info2)
+        self.assertIn("path", info1)
+        self.assertIn("path", info2)
+
+        # Quarantine subvol1 only
+        self.enable_and_wait(subvol_name=self.SUBVOL1)
+
+        # During quarantine: ls still shows both
+        ls_out = self._fs_cmd("subvolume", "ls", self.volname)
+        log.info("DURING quarantine - subvolume ls: %s", ls_out.strip())
+
+        # During quarantine: subvol1 minimal, subvol2 full
+        info1 = json.loads(self._fs_cmd("subvolume", "info",
+                                        self.volname, self.SUBVOL1))
+        info2 = json.loads(self._fs_cmd("subvolume", "info",
+                                        self.volname, self.SUBVOL2))
+        log.info("DURING quarantine - subvol1 info: %s", json.dumps(info1, indent=2))
+        log.info("DURING quarantine - subvol2 info: %s", json.dumps(info2, indent=2))
+        self.assertEqual(info1["quarantine"], "enabled")
+        self.assertNotIn("bytes_used", info1)
+        self.assertNotIn("path", info1)
+        self.assertEqual(info2["quarantine"], "disabled")
+        self.assertIn("bytes_used", info2)
+        self.assertIn("path", info2)
+
+        # Lift quarantine
+        self.disable_and_wait(subvol_name=self.SUBVOL1)
+
+        # After quarantine: ls shows both
+        ls_out = self._fs_cmd("subvolume", "ls", self.volname)
+        log.info("AFTER quarantine - subvolume ls: %s", ls_out.strip())
+
+        # After quarantine: both show full info again
+        info1 = json.loads(self._fs_cmd("subvolume", "info",
+                                        self.volname, self.SUBVOL1))
+        info2 = json.loads(self._fs_cmd("subvolume", "info",
+                                        self.volname, self.SUBVOL2))
+        log.info("AFTER quarantine - subvol1 info: %s", json.dumps(info1, indent=2))
+        log.info("AFTER quarantine - subvol2 info: %s", json.dumps(info2, indent=2))
+        self.assertEqual(info1["quarantine"], "disabled")
+        self.assertEqual(info2["quarantine"], "disabled")
+        self.assertIn("bytes_used", info1)
+        self.assertIn("bytes_used", info2)
+        self.assertIn("path", info1)
+        self.assertIn("path", info2)
+
 
 # ---------------------------------------------------------------------------
 # Mgr operations on quarantined subvolumes
@@ -734,20 +809,18 @@ class TestQuarantineMgrOps(QuarantineTestBase):
         except CommandFailedError:
             log.info("resize correctly blocked")
 
-    def test_quarantine_blocks_info(self):
-        """subvolume info fails on a quarantined subvolume because the mgr
-        client cannot access .meta without quarantine caps."""
+    def test_quarantine_info_returns_minimal(self):
+        """subvolume info returns minimal info with quarantine status."""
         self.enable_and_wait()
-        try:
-            self._fs_cmd("subvolume", "info",
-                         self.volname, self.SUBVOLUME_NAME)
-            self.fail("subvolume info should have failed on quarantined subvol")
-        except CommandFailedError:
-            log.info("subvolume info correctly blocked")
+        out = self._fs_cmd("subvolume", "info",
+                           self.volname, self.SUBVOLUME_NAME)
+        info = json.loads(out)
+        self.assertEqual(info["quarantine"], "enabled")
+        self.assertNotIn("bytes_used", info)
+        log.info("subvolume info returns quarantine status")
 
     def test_quarantine_blocks_getpath(self):
-        """subvolume getpath fails on a quarantined subvolume because the mgr
-        client cannot access .meta without quarantine caps."""
+        """subvolume getpath fails on a quarantined subvolume."""
         self.enable_and_wait()
         try:
             self._fs_cmd("subvolume", "getpath",
