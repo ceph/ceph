@@ -17,6 +17,7 @@ describe('CephfsSetupMirroringComponent', () => {
     list: jest.fn().mockReturnValue(of([])),
     listDaemonStatus: jest.fn().mockReturnValue(of([])),
     enableMirror: jest.fn().mockReturnValue(of(null)),
+    disableMirror: jest.fn().mockReturnValue(of(null)),
     createBootstrapPeer: jest.fn().mockReturnValue(of(null))
   };
 
@@ -33,7 +34,9 @@ describe('CephfsSetupMirroringComponent', () => {
     cephfsServiceMock.list.mockReturnValue(of([]));
     cephfsServiceMock.listDaemonStatus.mockReturnValue(of([]));
     cephfsServiceMock.enableMirror.mockReturnValue(of(null));
+    cephfsServiceMock.disableMirror.mockReturnValue(of(null));
     cephfsServiceMock.createBootstrapPeer.mockReturnValue(of(null));
+    taskWrapperMock.wrapTaskAroundCall.mockImplementation(({ call }) => call);
 
     await TestBed.configureTestingModule({
       declarations: [CephfsSetupMirroringComponent],
@@ -212,6 +215,45 @@ describe('CephfsSetupMirroringComponent', () => {
       component.onSetupMirroring();
 
       expect(component.isSubmitting).toBe(false);
+      expect(setErrorsSpy).toHaveBeenCalledWith({ cdSubmitButton: true });
+      expect(emitSpy).not.toHaveBeenCalled();
+    });
+
+    it('should disable mirroring when bootstrap peer import fails', () => {
+      const emitSpy = jest.spyOn(component.mirroringSetup, 'emit');
+      const setErrorsSpy = jest.spyOn(component.setupForm, 'setErrors');
+      cephfsServiceMock.createBootstrapPeer.mockReturnValue(
+        throwError(() => new Error('import failed'))
+      );
+      component.setupForm.setValue({ filesystem: 'myfs', token: 'eyJrZXkiOiJ2YWx1ZSJ9' });
+
+      component.onSetupMirroring();
+
+      expect(cephfsServiceMock.enableMirror).toHaveBeenCalledWith('myfs');
+      expect(cephfsServiceMock.createBootstrapPeer).toHaveBeenCalledWith(
+        'myfs',
+        'eyJrZXkiOiJ2YWx1ZSJ9'
+      );
+      expect(cephfsServiceMock.disableMirror).toHaveBeenCalledWith('myfs');
+      expect(component.isSubmitting).toBe(false);
+      expect(setErrorsSpy).toHaveBeenCalledWith({ cdSubmitButton: true });
+      expect(emitSpy).not.toHaveBeenCalled();
+    });
+
+    it('should still surface the import error if disable mirroring also fails', () => {
+      const emitSpy = jest.spyOn(component.mirroringSetup, 'emit');
+      const setErrorsSpy = jest.spyOn(component.setupForm, 'setErrors');
+      cephfsServiceMock.createBootstrapPeer.mockReturnValue(
+        throwError(() => new Error('import failed'))
+      );
+      cephfsServiceMock.disableMirror.mockReturnValue(
+        throwError(() => new Error('disable failed'))
+      );
+      component.setupForm.setValue({ filesystem: 'myfs', token: 'eyJrZXkiOiJ2YWx1ZSJ9' });
+
+      component.onSetupMirroring();
+
+      expect(cephfsServiceMock.disableMirror).toHaveBeenCalledWith('myfs');
       expect(setErrorsSpy).toHaveBeenCalledWith({ cdSubmitButton: true });
       expect(emitSpy).not.toHaveBeenCalled();
     });

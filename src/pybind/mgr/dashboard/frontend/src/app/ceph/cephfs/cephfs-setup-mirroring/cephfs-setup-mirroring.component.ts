@@ -1,7 +1,7 @@
 import { Component, OnInit, Output, EventEmitter, inject } from '@angular/core';
 import { Validators } from '@angular/forms';
-import { concat, forkJoin, of } from 'rxjs';
-import { catchError, finalize, last } from 'rxjs/operators';
+import { concat, forkJoin, of, throwError } from 'rxjs';
+import { catchError, finalize, last, switchMap } from 'rxjs/operators';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
@@ -69,7 +69,15 @@ export class CephfsSetupMirroringComponent extends CdForm implements OnInit {
         service_type: 'cephfs-mirror'
       }),
       this.cephfsService.enableMirror(filesystem),
-      this.cephfsService.createBootstrapPeer(filesystem, token.replace(/\s/g, ''))
+      this.cephfsService.createBootstrapPeer(filesystem, token.replace(/\s/g, '')).pipe(
+        catchError((err) =>
+          // otherwise empty peer list is created
+          this.cephfsService.disableMirror(filesystem).pipe(
+            catchError(() => of(null)),
+            switchMap(() => throwError(() => err))
+          )
+        )
+      )
     ).pipe(last());
 
     this.taskWrapper
