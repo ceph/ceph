@@ -169,6 +169,7 @@ export const ICON_TYPE = {
   checkMarkOutline: 'checkmark--outline',
   arrowRight: 'arrow--right',
   arrowUpRight: ' arrow--up-right',
+  right: 'arrow--right',
   inProgress: 'in-progress',
   arrowDown: 'arrow--down',
   warning: 'warning',
@@ -183,7 +184,10 @@ export const ICON_TYPE = {
   cloudMonitoring: 'cloud--monitoring',
   trash: 'trash-can',
   temperature: 'temperature',
-  left: 'arrow--left'
+  left: 'arrow--left',
+  ibmCloudDedicatedHost: 'ibm-cloud--dedicated-host',
+  ibmCloudBareMetalServer: 'ibm-cloud--bare-metal-server',
+  clusterIcon: 'web-services--cluster'
 } as const;
 
 export const EMPTY_STATE_IMAGE = {
