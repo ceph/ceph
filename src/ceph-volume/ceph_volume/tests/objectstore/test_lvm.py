@@ -149,7 +149,9 @@ class TestLvm:
         assert self.lvm.prepare_data_device('block', 'abcd') == m_create_lv.return_value
         assert self.lvm.args.data_size == 102400
 
+    @patch('ceph_volume.objectstore.lvm.nvme_utils.is_namespace', Mock(return_value=True))
     @patch('ceph_volume.objectstore.lvm.nvme_utils.preformat', Mock(return_value=True))
+    @patch('ceph_volume.api.lvm.get_device_vgs', Mock(return_value=[]))
     @patch('ceph_volume.util.disk.is_device', Mock(return_value=True))
     @patch('ceph_volume.api.lvm.create_lv')
     def test_prepare_data_device_preformats_nvme_and_skips_mkfs_discard(self,
@@ -167,6 +169,66 @@ class TestLvm:
                                           lv_uuid='abcd')
         self.lvm.prepare_data_device('block', 'abcd')
         assert self.lvm.skip_mkfs_discard is True
+
+    @patch('ceph_volume.objectstore.lvm.nvme_utils.is_namespace', Mock(return_value=True))
+    @patch('ceph_volume.objectstore.lvm.nvme_utils.preformat')
+    @patch('ceph_volume.api.lvm.get_device_vgs')
+    @patch('ceph_volume.util.disk.is_device', Mock(return_value=True))
+    @patch('ceph_volume.api.lvm.create_lv')
+    def test_prepare_data_device_skips_preformat_when_vg_exists(self,
+                                                                m_create_lv: MagicMock,
+                                                                m_get_device_vgs: MagicMock,
+                                                                m_preformat: MagicMock,
+                                                                factory: Callable[..., Namespace]) -> None:
+        # With --osds-per-device > 1, the second prepare call runs on an NVMe
+        # namespace that already holds the VG (and OSD) created by the first
+        # call. Reformatting it would destroy the VG, so preformat() must be
+        # skipped -- but the namespace was already discarded by the first call,
+        # so BlueStore's mkfs-time discard is skipped as well.
+        args = factory(data='/dev/nvme0n1',
+                       data_slots=2,
+                       data_size=0)
+        self.lvm.args = args
+        self.lvm.objectstore = 'bluestore'
+        m_get_device_vgs.return_value = [MagicMock(vg_name='ceph-e0ee86a4')]
+        m_create_lv.return_value = Volume(lv_name='lv_foo',
+                                          lv_path='/fake-path',
+                                          vg_name='vg_foo',
+                                          lv_tags='',
+                                          lv_uuid='abcd')
+        self.lvm.prepare_data_device('block', 'abcd')
+        m_preformat.assert_not_called()
+        assert self.lvm.skip_mkfs_discard is True
+
+    @patch('ceph_volume.objectstore.lvm.nvme_utils.is_namespace', Mock(return_value=False))
+    @patch('ceph_volume.objectstore.lvm.nvme_utils.preformat')
+    @patch('ceph_volume.api.lvm.get_device_vgs')
+    @patch('ceph_volume.util.disk.is_device', Mock(return_value=True))
+    @patch('ceph_volume.api.lvm.create_lv')
+    def test_prepare_data_device_keeps_mkfs_discard_for_non_nvme_with_vg(self,
+                                                                         m_create_lv: MagicMock,
+                                                                         m_get_device_vgs: MagicMock,
+                                                                         m_preformat: MagicMock,
+                                                                         factory: Callable[..., Namespace]) -> None:
+        # A reused non-NVMe device may also carry a VG, but it was never
+        # preformatted (preformat only touches whole NVMe namespaces), so
+        # nothing discarded it: BlueStore's mkfs-time discard must NOT be
+        # skipped here.
+        args = factory(data='/dev/sdb',
+                       data_slots=2,
+                       data_size=0)
+        self.lvm.args = args
+        self.lvm.objectstore = 'bluestore'
+        m_get_device_vgs.return_value = [MagicMock(vg_name='ceph-e0ee86a4')]
+        m_create_lv.return_value = Volume(lv_name='lv_foo',
+                                          lv_path='/fake-path',
+                                          vg_name='vg_foo',
+                                          lv_tags='',
+                                          lv_uuid='abcd')
+        self.lvm.prepare_data_device('block', 'abcd')
+        m_preformat.assert_not_called()
+        m_get_device_vgs.assert_not_called()
+        assert self.lvm.skip_mkfs_discard is False
 
     @patch('ceph_volume.util.disk.is_device', Mock(return_value=False))
     @patch('ceph_volume.util.disk.is_partition', Mock(return_value=False))
