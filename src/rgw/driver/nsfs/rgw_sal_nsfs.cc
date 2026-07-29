@@ -1625,43 +1625,8 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
   int ret = for_each(dpp, [this, &cb, &dpp, &y, &path_prefix, flags](const char *name) {
     std::unique_ptr<FSEnt> ent;
 
-    if (name[0] == '.') {
-      static const std::string mp_pre{"." + mp_ns + "_"};
-      std::string_view sv{name};
-      if (sv == NSFS_FOLDER_OBJECT_NAME) {
-	/* fall through to folder-object handling below */
-      } else if (sv.starts_with(mp_pre)) {
-	/* .multipart_<upload_id> staging directory: read the .meta
-	 * xattr to recover the full meta (oid.upload_id), then
-	 * enumerate parts into the parent bucket's cache */
-	MPDirectory mpdir(std::string(sv), this, ctx);
-	int ret = mpdir.open(dpp);
-	if (ret < 0) {
-	  return 0;
-	}
-	/* read meta from the .meta file's mp_upload xattr */
-	File meta_file(".meta", &mpdir, ctx);
-	ret = meta_file.stat(dpp);
-	if (ret < 0) {
-	  return 0;
-	}
-	Attrs attrs;
-	ret = meta_file.read_attrs(dpp, y, attrs);
-	if (ret < 0) {
-	  return 0;
-	}
-	NSFSMPObj mp_info;
-	ret = decode_attr(attrs, RGW_NSFS_ATTR_MPUPLOAD, mp_info);
-	if (ret < 0) {
-	  return 0;
-	}
-	std::string meta = mp_info.meta;
-	ldpp_dout(dpp, 10) << "fill_cache: walking staging dir="
-	  << sv << " meta=" << meta << dendl;
-	return mpdir.fill_cache(dpp, y, cb, FSEnt::FLAG_NONE, meta + "/");
-      } else {
-	return 0;
-      }
+    if (name[0] == '.' && name != NSFS_FOLDER_OBJECT_NAME) {
+      return 0;
     }
 
     int ret = get_ent(dpp, y, name, std::string(), ent);
@@ -1966,14 +1931,9 @@ int MPDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
                             fill_cache_cb_t &cb, uint32_t flags,
                             const std::string& path_prefix)
 {
-  /* when called with a path_prefix, we're filling parts into the
-   * parent bucket's cache — skip the FSEnt entry for the staging
-   * directory itself and only enumerate children */
-  if (path_prefix.empty()) {
-    int ret = FSEnt::fill_cache(dpp, y, cb, FSEnt::FLAG_NONE, path_prefix);
-    if (ret < 0)
-      return ret;
-  }
+  int ret = FSEnt::fill_cache(dpp, y, cb, FSEnt::FLAG_NONE, path_prefix);
+  if (ret < 0)
+    return ret;
 
   return Directory::fill_cache(dpp, y, cb, FSEnt::FLAG_NONE, path_prefix);
 }
@@ -6152,55 +6112,37 @@ int NSFSMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
     return ret;
   }
 
-  std::string meta = get_meta();
-  std::string prefix = meta + "/" + MP_OBJ_PART_PFX;
-  rgw_obj_key marker_key(prefix + fmt::format("{:0>5}", marker),
-			 std::string(), mp_ns);
-  std::string lmdb_marker = marker_key.get_index_key_name();
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
 
-  NSFSBucket* pb = static_cast<NSFSBucket*>(bucket);
-  ldpp_dout(dpp, 10) << "list_parts: bucket=" << pb->get_name()
-    << " meta=" << meta << " lmdb_marker=" << lmdb_marker << dendl;
-  int found = 0;
-  ret = driver->get_bucket_cache()->list_bucket(
-    dpp, y, pb, lmdb_marker,
-    [&](const rgw_bucket_dir_entry& bde) -> bool {
-      rgw_obj_key bde_key{bde.key};
-      ldpp_dout(dpp, 15) << "list_parts: visit key=" << bde.key.name
-	<< " ns=" << bde_key.ns << dendl;
-      if (bde_key.ns != mp_ns) {
-	return false;
-      }
-      if (!bde_key.name.starts_with(prefix)) {
-	return false;
-      }
-      /* skip the marker entry itself (lower_bound is inclusive) */
-      if (bde.key.name == lmdb_marker) {
-	return true;
-      }
+  params.prefix = MP_OBJ_PART_PFX;
+  params.marker = MP_OBJ_PART_PFX + fmt::format("{:0>5}", marker);
+  params.marker.ns = mp_ns;
+  params.ns = mp_ns;
 
-      std::unique_ptr<MultipartPart> part =
-	std::make_unique<NSFSMultipartPart>(this);
-      auto* ppart = static_cast<NSFSMultipartPart*>(part.get());
-
-      std::string part_name = bde_key.name.substr(meta.size() + 1);
-      rgw_obj_key pkey(part_name);
-      ret = ppart->load(dpp, y, driver, pkey);
-      if (ret == 0) {
-	last_num = part->get_num();
-	parts[part->get_num()] = std::move(part);
-	++found;
-      }
-      return found < num_parts;
-    });
+  ret = shadow->list(dpp, params, num_parts + 1, results, y);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: list_parts failed ret="
-      << ret << " upload=" << get_upload_id() << dendl;
     return ret;
+  }
+  for (rgw_bucket_dir_entry& ent : results.objs) {
+    std::unique_ptr<MultipartPart> part = std::make_unique<NSFSMultipartPart>(this);
+    NSFSMultipartPart* ppart = static_cast<NSFSMultipartPart*>(part.get());
+
+    rgw_obj_key key(ent.key);
+    // Parts are namespaced in the bucket listing
+    key.ns.clear();
+    ret = ppart->load(dpp, y, driver, key);
+    if (ret == 0) {
+      /* Skip anything that's not a part */
+      last_num = part->get_num();
+      parts[part->get_num()] = std::move(part);
+    }
+    if (parts.size() == (ulong)num_parts)
+      break;
   }
 
   if (truncated)
-    *truncated = (found == num_parts);
+    *truncated = results.is_truncated;
 
   if (next_marker)
     *next_marker = last_num;
@@ -6219,19 +6161,7 @@ int NSFSMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, 
     return ret;
   }
 
-  /* remove part entries from the parent bucket's cache */
-  std::string meta = get_meta();
-  NSFSBucket* pb = static_cast<NSFSBucket*>(bucket);
-  shadow->get_dir()->for_each(dpp, [&](const char *name) {
-    if (name[0] == '.') {
-      return 0;
-    }
-    rgw_obj_key key(meta + "/" + name, std::string(), mp_ns);
-    cls_rgw_obj_key idx_key;
-    key.get_index_key(&idx_key);
-    driver->get_bucket_cache()->remove_entry(dpp, pb->get_name(), idx_key);
-    return 0;
-  });
+  driver->get_bucket_cache()->invalidate_bucket(dpp, shadow->get_name(), true);
   shadow->remove(dpp, true, y);
 
   return 0;
@@ -6620,48 +6550,9 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
       bcache->add_entry(dpp, pb->get_name(), new_bde);
     }
   }
-  if (!versioned) {
-    /* non-versioned: add final object to the parent bucket's cache */
-    struct statx new_stx;
-    if (statx(leaf_fd, leaf_name.c_str(), AT_SYMLINK_NOFOLLOW,
-              STATX_ALL, &new_stx) == 0) {
-      auto* bcache = driver->get_bucket_cache();
-      std::string obj_name = target_obj->get_key().get_index_key_name();
-      rgw_bucket_dir_entry new_bde{};
-      new_bde.key.name = obj_name;
-      new_bde.ver.pool = 1;
-      new_bde.ver.epoch = 1;
-      new_bde.exists = true;
-      new_bde.meta.category = RGWObjCategory::Main;
-      new_bde.meta.size = new_stx.stx_size;
-      new_bde.meta.accounted_size = new_stx.stx_size;
-      new_bde.meta.mtime = from_statx_timestamp(new_stx.stx_mtime);
-      new_bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
-      new_bde.meta.etag = synthesize_etag(new_stx);
-      {
-        ACLOwner acl_owner;
-        if (decode_acl_owner(target_obj->get_attrs(), acl_owner) >= 0) {
-          new_bde.meta.owner = to_string(acl_owner.id);
-          new_bde.meta.owner_display_name = acl_owner.display_name;
-        }
-      }
-      bcache->add_entry(dpp, pb->get_name(), new_bde);
-    }
-  }
 
-  /* remove part entries from the parent bucket's cache */
-  {
-    std::string meta = get_meta();
-    for (auto& [pnum, etag] : part_etags) {
-      std::string pname = MP_OBJ_PART_PFX + fmt::format("{:0>5}", pnum);
-      rgw_obj_key key(meta + "/" + pname, std::string(), mp_ns);
-      cls_rgw_obj_key idx_key;
-      key.get_index_key(&idx_key);
-      driver->get_bucket_cache()->remove_entry(dpp, pb->get_name(), idx_key);
-    }
-  }
-
-  // remove staging directory
+  // remove staging directory and its listing cache entry
+  driver->get_bucket_cache()->invalidate_bucket(dpp, shadow->get_name(), true);
   shadow->get_dir()->close();
   delete_directory(pb->get_dir()->get_fd(),
                    get_fname().c_str(), true, dpp);
@@ -6758,8 +6649,7 @@ std::unique_ptr<Writer> NSFSMultipartUpload::get_writer(
 
   return std::make_unique<NSFSMultipartWriter>(dpp, y, shadow.get(), part_key,
                                                 driver, owner,
-                                                ptail_placement_rule, part_num,
-						get_meta(), bucket->get_name());
+                                                ptail_placement_rule, part_num);
 }
 
 int NSFSMultipartWriter::prepare(optional_yield y)
@@ -6835,25 +6725,6 @@ int NSFSMultipartWriter::complete(
   if (ret < 0) {
     ldpp_dout(rctx.dpp, 20) << "ERROR: failed closing file" << dendl;
     return ret;
-  }
-
-  /* add part entry to the parent bucket's cache */
-  {
-    std::string pname = MP_OBJ_PART_PFX + fmt::format("{:0>5}", part_num);
-    rgw_obj_key key(upload_meta + "/" + pname, std::string(), mp_ns);
-    rgw_bucket_dir_entry bde{};
-    key.get_index_key(&bde.key);
-    bde.ver.pool = 1;
-    bde.ver.epoch = 1;
-    bde.exists = true;
-    bde.meta.category = RGWObjCategory::MultiMeta;
-    bde.meta.size = accounted_size;
-    bde.meta.accounted_size = accounted_size;
-    bde.meta.mtime = set_mtime;
-    bde.meta.etag = etag;
-    ldpp_dout(rctx.dpp, 10) << "mp_writer: add_entry bucket="
-      << parent_bucket_name << " key=" << bde.key.name << dendl;
-    driver->get_bucket_cache()->add_entry(rctx.dpp, parent_bucket_name, bde);
   }
 
   return 0;
