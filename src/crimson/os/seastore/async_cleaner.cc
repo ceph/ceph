@@ -1584,6 +1584,14 @@ SegmentCleaner::mount_ret SegmentCleaner::mount()
       crimson::ct_error::assert_all("unexpected error")
     );
     if (header == NULL_SEGMENT_HEADER) {
+      co_await sm_group->release_segment(segment_id
+      ).handle_error(
+        crimson::ct_error::invarg::handle([](auto) {
+          return mount_ertr::now();
+        }),
+        crimson::ct_error::input_output_error::pass_further{},
+        crimson::ct_error::assert_all("unexpected error")
+      );
       continue;
     }
     DEBUG("segment_id={} -- {}", segment_id, header);
