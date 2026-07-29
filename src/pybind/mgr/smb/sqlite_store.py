@@ -455,8 +455,8 @@ class SqliteMirroringStore(SqliteStore):
     ) -> None:
         super().__init__(backend, tables)
         self._mirrors: Dict[str, Mirror] = {m.namespace: m for m in mirrors}
-        self._pending_mirror_removals: Optional[
-            List[Tuple[Mirror, EntryKey]]
+        self._pending_mirror_ops: Optional[
+            Dict[EntryKey, Tuple[Mirror, Optional[Simplified]]]
         ] = None
 
     def _mirror(self, key: EntryKey) -> Optional[Mirror]:
@@ -471,17 +471,12 @@ class SqliteMirroringStore(SqliteStore):
             super().set_object(key, obj)
             return
         log.debug("Mirroring set_object: mirror=%r", mirror)
-        if self._pending_mirror_removals is not None:
-            # cancel any earlier queued removal for this key given
-            # we're about to write fresh data for it
-            self._pending_mirror_removals = [
-                item
-                for item in self._pending_mirror_removals
-                if item[1] != key
-            ]
         obj_for_store = mirror.filter_object(obj)
         obj_for_mirror = mirror.filter_mirror_object(obj)
-        mirror.store[key].set(obj_for_mirror)
+        if self._pending_mirror_ops is not None:
+            self._pending_mirror_ops[key] = (mirror, obj_for_mirror)
+        else:
+            mirror.store[key].set(obj_for_mirror)
         super().set_object(key, obj_for_store)
 
     def remove(self, key: EntryKey) -> bool:
@@ -493,30 +488,33 @@ class SqliteMirroringStore(SqliteStore):
         log.debug("Mirroring remove: mirror=%r", mirror)
         removed = super().remove(key)
         if removed:
-            if self._pending_mirror_removals is not None:
-                self._pending_mirror_removals.append((mirror, key))
+            if self._pending_mirror_ops is not None:
+                self._pending_mirror_ops[key] = (mirror, None)
             else:
                 mirror.store.remove(key)
         return removed
 
     @contextlib.contextmanager
     def transaction(self) -> Iterator[None]:
-        """Flushes any mirror-side removals queued by remove() only
-        after the sqlite transaction commits successfully, and discards
-        them if it doesn't.
+        """Defers mirror-side writes and removals queued by set_object()
+        and remove() until the sqlite transaction commits successfully,
+        and discards them if it doesn't.
         """
         with super().transaction():
-            self._pending_mirror_removals = []
+            self._pending_mirror_ops = {}
             try:
                 yield None
             except Exception:
-                self._pending_mirror_removals = None
+                self._pending_mirror_ops = None
                 raise
             else:
-                pending = self._pending_mirror_removals
-                self._pending_mirror_removals = None
-        for mirror, key in pending:
-            mirror.store.remove(key)
+                pending = self._pending_mirror_ops
+                self._pending_mirror_ops = None
+        for key, (mirror, obj_for_mirror) in pending.items():
+            if obj_for_mirror is None:
+                mirror.store.remove(key)
+            else:
+                mirror.store[key].set(obj_for_mirror)
 
     def get_object(self, key: EntryKey) -> Simplified:
         """Fetch a simplified object from the store."""
