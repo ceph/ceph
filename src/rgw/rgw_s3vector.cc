@@ -1294,15 +1294,26 @@ namespace rgw::s3vector {
       ctx->result = -EIO;
       return;
     }
-    // force delete TODO: fail deletion if tables exists, unless a "force" flag is used
+    // a vector bucket that still has indexes cannot be deleted
+    char** table_names;
+    size_t name_count;
     char* error_message;
-    if (LanceDBError err = lancedb_connection_drop_all_tables(conn, nullptr, &error_message); err != LANCEDB_SUCCESS) {
-      ldpp_dout(dpp, 1) << "ERROR: failed to drop content of s3vector bucket in: " << bucket_name << ". error: " << error_message << dendl;
+    if (const LanceDBError err = lancedb_connection_table_names(conn, &table_names, &name_count, &error_message); err != LANCEDB_SUCCESS) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to list indexes of s3vector bucket: " << bucket_name << ". error: " << error_message << dendl;
       lancedb_free_string(error_message);
       lancedb_connection_free(conn);
-      ctx->result = -EIO;
+      ctx->result = lancedb_error_to_errno(err);
       return;
     }
+    if (name_count > 0) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector bucket: " << bucket_name << " cannot be deleted, it still has " <<
+        name_count << " indexes" << dendl;
+      lancedb_free_table_names(table_names, name_count);
+      lancedb_connection_free(conn);
+      ctx->result = -ENOTEMPTY;
+      return;
+    }
+    lancedb_free_table_names(table_names, name_count);
     ldpp_dout(dpp, 20) << "INFO: deleting in-memory session (if it exists) for bucket: " << bucket_name << dendl;
     rgw::s3vector::notify_session_delete(dpp, bucket_name);
     lancedb_connection_free(conn);
