@@ -86,7 +86,10 @@ class Lvm(BaseObjectStore):
         if disk.is_partition(device) or disk.is_device(device):
             if device_type == 'block' and self.objectstore == 'bluestore':
                 # NVMe preformat already discards, skip mkfs discard.
-                if nvme_utils.preformat(device):
+                # Only preformat when no ceph VG already exists on the device.
+                # With --osds-per-device > 1, the first OSD creates the VG;
+                # subsequent OSDs reuse it, so reformatting would destroy it.
+                if not api.get_device_vgs(device, 'ceph') and nvme_utils.preformat(device):
                     self.skip_mkfs_discard = True
             # we must create a vg, and then a single lv
             lv_name_prefix = "osd-{}".format(device_type)
