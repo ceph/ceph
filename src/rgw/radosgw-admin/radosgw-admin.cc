@@ -8629,6 +8629,11 @@ next:
     std::list<rgw_cls_bi_entry> entries;
     bool is_truncated;
     const auto& index = bucket->get_info().layout.current_index;
+    if (index.layout.type == rgw::BucketIndexType::Indexless) {
+      cerr << "Error: indexless bucket has no index to list" << std::endl;
+      return EINVAL;
+    }
+
     const int max_shards = rgw::num_shards(index);
     if (max_entries < 0) {
       max_entries = 1000;
