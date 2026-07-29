@@ -31,6 +31,7 @@
 #include "include/msgr.h" // for CEPH_ENTITY_TYPE_CLIENT
 #include "gtest/gtest.h"
 
+#include <common/perf_histogram.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <map>
@@ -818,6 +819,7 @@ TEST(PerfCounters, Histograms2D) {
                     "quant_size": 1000,
                     "buckets": 4,
                     "scale_type": "log2",
+                    "unit": "none",
                     "ranges": [
                         {
                             "max": -1
@@ -841,6 +843,7 @@ TEST(PerfCounters, Histograms2D) {
                     "quant_size": 512,
                     "buckets": 4,
                     "scale_type": "log2",
+                    "unit": "none",
                     "ranges": [
                         {
                             "max": -1
@@ -858,6 +861,10 @@ TEST(PerfCounters, Histograms2D) {
                         }
                     ]
                 }
+            ],
+            "sum": [
+                13999,
+                1053795
             ],
             "values": [
                 [
@@ -894,6 +901,7 @@ TEST(PerfCounters, Histograms2D) {
                     "quant_size": 1,
                     "buckets": 4,
                     "scale_type": "linear",
+                    "unit": "none",
                     "ranges": [
                         {
                             "max": -1
@@ -917,6 +925,7 @@ TEST(PerfCounters, Histograms2D) {
                     "quant_size": 250000,
                     "buckets": 4,
                     "scale_type": "log2",
+                    "unit": "none",
                     "ranges": [
                         {
                             "max": -1
@@ -934,6 +943,10 @@ TEST(PerfCounters, Histograms2D) {
                         }
                     ]
                 }
+            ],
+            "sum": [
+                10,
+                1201100
             ],
             "values": [
                 [
@@ -970,6 +983,7 @@ TEST(PerfCounters, Histograms2D) {
                     "quant_size": 10,
                     "buckets": 3,
                     "scale_type": "linear",
+                    "unit": "none",
                     "ranges": [
                         {
                             "max": -1
@@ -989,6 +1003,7 @@ TEST(PerfCounters, Histograms2D) {
                     "quant_size": 4096,
                     "buckets": 2,
                     "scale_type": "log2",
+                    "unit": "none",
                     "ranges": [
                         {
                             "max": -1
@@ -998,6 +1013,10 @@ TEST(PerfCounters, Histograms2D) {
                         }
                     ]
                 }
+            ],
+            "sum": [
+                59,
+                1052671
             ],
             "values": [
                 [
@@ -1022,6 +1041,7 @@ TEST(PerfCounters, Histograms2D) {
                     "quant_size": 50,
                     "buckets": 4,
                     "scale_type": "linear",
+                    "unit": "none",
                     "ranges": [
                         {
                             "max": 99
@@ -1045,6 +1065,7 @@ TEST(PerfCounters, Histograms2D) {
                     "quant_size": 4,
                     "buckets": 3,
                     "scale_type": "log2",
+                    "unit": "none",
                     "ranges": [
                         {
                             "max": 7
@@ -1058,6 +1079,10 @@ TEST(PerfCounters, Histograms2D) {
                         }
                     ]
                 }
+            ],
+            "sum": [
+                1374,
+                127
             ],
             "values": [
                 [
@@ -1088,3 +1113,417 @@ TEST(PerfCounters, Histograms2D) {
 
   g_ceph_context->get_perfcounters_collection()->clear();
 }
+
+enum {
+  TEST_PERFCOUNTERS_HIST_ELEMENT_FIRST = 400,
+  TEST_PERFCOUNTERS_HIST_BYTES,
+  TEST_PERFCOUNTERS_HIST_TIME,
+  TEST_PERFCOUNTERS_HIST_TIME_PROM,
+  TEST_PERFCOUNTERS_HIST_COUNT,
+  TEST_PERFCOUNTERS_HIST_ELEMENT_LAST,
+};
+
+static PerfCounters* setup_test_1d_histograms(CephContext* cct) {
+  PerfCountersBuilder bld(cct, "test_perfcounter_hist",
+      TEST_PERFCOUNTERS_HIST_ELEMENT_FIRST,
+      TEST_PERFCOUNTERS_HIST_ELEMENT_LAST);
+  bld.add_u64_counter_histogram(TEST_PERFCOUNTERS_HIST_BYTES, "bytes",
+                                PerfHistogramCommon::axis_config_d::bytes("bytes", 512, 4));
+  bld.add_time_histogram(TEST_PERFCOUNTERS_HIST_TIME, "latency",
+                         PerfHistogramCommon::axis_config_d::latency("lat", 1000, 4));
+  bld.add_time_histogram(TEST_PERFCOUNTERS_HIST_TIME_PROM, "web_latency",
+                         PerfHistogramCommon::axis_config_d::web_latency("weblat", 6));
+  bld.add_u64_counter_histogram(TEST_PERFCOUNTERS_HIST_COUNT, "counter",
+                                PerfHistogramCommon::axis_config_d::count("count", 4, 100));
+
+  PerfCounters* counters = bld.create_perf_counters();
+  cct->get_perfcounters_collection()->add(counters);
+  return counters;
+}
+
+TEST(PerfCounters, Histograms1D) {
+  PerfCounters* p = setup_test_1d_histograms(g_ceph_context);
+  AdminSocketClient client(get_rand_socket_path());
+  std::string msg;
+  ASSERT_EQ("", client.do_request(R"({ "prefix": "perf histogram dump", "format": "raw" })", &msg));
+  ASSERT_EQ(R"({
+    "test_perfcounter_hist": {
+        "bytes": {
+            "axes": [
+                {
+                    "name": "bytes",
+                    "min": 0,
+                    "quant_size": 512,
+                    "buckets": 4,
+                    "scale_type": "log2",
+                    "unit": "bytes",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0,
+                            "max": 511
+                        },
+                        {
+                            "min": 512,
+                            "max": 1023
+                        },
+                        {
+                            "min": 1024
+                        }
+                    ]
+                }
+            ],
+            "sum": [
+                0
+            ],
+            "values": [
+                0,
+                0,
+                0,
+                0
+            ]
+        },
+        "latency": {
+            "axes": [
+                {
+                    "name": "lat",
+                    "min": 0,
+                    "quant_size": 1000,
+                    "buckets": 4,
+                    "scale_type": "log2",
+                    "unit": "nanoseconds",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0,
+                            "max": 999
+                        },
+                        {
+                            "min": 1000,
+                            "max": 1999
+                        },
+                        {
+                            "min": 2000
+                        }
+                    ]
+                }
+            ],
+            "sum": [
+                0
+            ],
+            "values": [
+                0,
+                0,
+                0,
+                0
+            ]
+        },
+        "web_latency": {
+            "axes": [
+                {
+                    "name": "weblat",
+                    "min": 0,
+                    "quant_size": 1000000,
+                    "buckets": 6,
+                    "scale_type": "log2",
+                    "unit": "nanoseconds",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0,
+                            "max": 999999
+                        },
+                        {
+                            "min": 1000000,
+                            "max": 1999999
+                        },
+                        {
+                            "min": 2000000,
+                            "max": 3999999
+                        },
+                        {
+                            "min": 4000000,
+                            "max": 7999999
+                        },
+                        {
+                            "min": 8000000
+                        }
+                    ]
+                }
+            ],
+            "sum": [
+                0
+            ],
+            "values": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+            ]
+        },
+        "counter": {
+            "axes": [
+                {
+                    "name": "count",
+                    "min": 0,
+                    "quant_size": 100,
+                    "buckets": 4,
+                    "scale_type": "linear",
+                    "unit": "none",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0,
+                            "max": 99
+                        },
+                        {
+                            "min": 100,
+                            "max": 199
+                        },
+                        {
+                            "min": 200
+                        }
+                    ]
+                }
+            ],
+            "sum": [
+                0
+            ],
+            "values": [
+                0,
+                0,
+                0,
+                0
+            ]
+        }
+    }
+}
+)", msg);
+
+  ASSERT_EQ("", client.do_request(R"({ "prefix": "perf histogram schema", "format": "raw" })", &msg));
+  ASSERT_EQ(R"({
+    "test_perfcounter_hist": {
+        "bytes": {
+            "type": 26,
+            "metric_type": "counter",
+            "value_type": "integer-1d-histogram",
+            "description": "",
+            "nick": "",
+            "priority": 0,
+            "units": "none"
+        },
+        "latency": {
+            "type": 25,
+            "metric_type": "counter",
+            "value_type": "real-1d-histogram",
+            "description": "",
+            "nick": "",
+            "priority": 0,
+            "units": "none"
+        },
+        "web_latency": {
+            "type": 25,
+            "metric_type": "counter",
+            "value_type": "real-1d-histogram",
+            "description": "",
+            "nick": "",
+            "priority": 0,
+            "units": "none"
+        },
+        "counter": {
+            "type": 26,
+            "metric_type": "counter",
+            "value_type": "integer-1d-histogram",
+            "description": "",
+            "nick": "",
+            "priority": 0,
+            "units": "none"
+        }
+    }
+}
+)", msg);
+
+  p->hinc(TEST_PERFCOUNTERS_HIST_BYTES, 511);
+  p->hinc(TEST_PERFCOUNTERS_HIST_BYTES, 1500);
+  p->htinc(TEST_PERFCOUNTERS_HIST_TIME, utime_t(500ms));
+  p->htinc(TEST_PERFCOUNTERS_HIST_TIME, 505ms);
+  p->htinc(TEST_PERFCOUNTERS_HIST_TIME_PROM, 100ms);
+  p->htinc(TEST_PERFCOUNTERS_HIST_TIME_PROM, 5ms);
+  p->hinc(TEST_PERFCOUNTERS_HIST_COUNT, 100);
+
+  ASSERT_EQ("", client.do_request(R"({ "prefix": "perf histogram dump", "format": "raw" })", &msg));
+  ASSERT_EQ(R"({
+    "test_perfcounter_hist": {
+        "bytes": {
+            "axes": [
+                {
+                    "name": "bytes",
+                    "min": 0,
+                    "quant_size": 512,
+                    "buckets": 4,
+                    "scale_type": "log2",
+                    "unit": "bytes",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0,
+                            "max": 511
+                        },
+                        {
+                            "min": 512,
+                            "max": 1023
+                        },
+                        {
+                            "min": 1024
+                        }
+                    ]
+                }
+            ],
+            "sum": [
+                2011
+            ],
+            "values": [
+                0,
+                1,
+                0,
+                1
+            ]
+        },
+        "latency": {
+            "axes": [
+                {
+                    "name": "lat",
+                    "min": 0,
+                    "quant_size": 1000,
+                    "buckets": 4,
+                    "scale_type": "log2",
+                    "unit": "nanoseconds",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0,
+                            "max": 999
+                        },
+                        {
+                            "min": 1000,
+                            "max": 1999
+                        },
+                        {
+                            "min": 2000
+                        }
+                    ]
+                }
+            ],
+            "sum": [
+                1005000000
+            ],
+            "values": [
+                0,
+                0,
+                0,
+                2
+            ]
+        },
+        "web_latency": {
+            "axes": [
+                {
+                    "name": "weblat",
+                    "min": 0,
+                    "quant_size": 1000000,
+                    "buckets": 6,
+                    "scale_type": "log2",
+                    "unit": "nanoseconds",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0,
+                            "max": 999999
+                        },
+                        {
+                            "min": 1000000,
+                            "max": 1999999
+                        },
+                        {
+                            "min": 2000000,
+                            "max": 3999999
+                        },
+                        {
+                            "min": 4000000,
+                            "max": 7999999
+                        },
+                        {
+                            "min": 8000000
+                        }
+                    ]
+                }
+            ],
+            "sum": [
+                105000000
+            ],
+            "values": [
+                0,
+                0,
+                0,
+                0,
+                1,
+                1
+            ]
+        },
+        "counter": {
+            "axes": [
+                {
+                    "name": "count",
+                    "min": 0,
+                    "quant_size": 100,
+                    "buckets": 4,
+                    "scale_type": "linear",
+                    "unit": "none",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0,
+                            "max": 99
+                        },
+                        {
+                            "min": 100,
+                            "max": 199
+                        },
+                        {
+                            "min": 200
+                        }
+                    ]
+                }
+            ],
+            "sum": [
+                100
+            ],
+            "values": [
+                0,
+                0,
+                1,
+                0
+            ]
+        }
+    }
+}
+)", msg);
+}
+

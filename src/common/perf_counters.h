@@ -119,6 +119,18 @@ public:
     const char *description=nullptr,
     const char* nick = nullptr,
     int prio=0, int unit=UNIT_NONE);
+  void add_u64_counter_histogram(
+    int key, const char* name,
+    PerfHistogramCommon::axis_config_d x_axis_config,
+    const char *description=nullptr,
+    const char* nick = nullptr,
+    int prio=0, int unit=UNIT_NONE);
+  void add_time_histogram(
+    int key, const char* name,
+    PerfHistogramCommon::axis_config_d x_axis_config,
+    const char *description=nullptr,
+    const char* nick = nullptr,
+    int prio=0);
 
   void set_prio_default(int prio_)
   {
@@ -131,7 +143,7 @@ private:
   PerfCountersBuilder& operator=(const PerfCountersBuilder &rhs);
   void add_impl(int idx, const char *name,
                 const char *description, const char *nick, int prio, int ty, int unit=UNIT_NONE,
-                std::unique_ptr<PerfHistogram<>> histogram = nullptr);
+                std::unique_ptr<PerfHistogramCommon> histogram = nullptr);
 
   PerfCounters *m_perf_counters;
 
@@ -185,7 +197,7 @@ public:
       avgcount2 = avgcount.load();
 
       if (other.histogram) {
-        histogram.reset(new PerfHistogram<>(*other.histogram));
+        histogram = other.histogram->clone();
       }
     }
 
@@ -199,7 +211,7 @@ public:
     std::atomic<uint64_t> max_u64_inc = { 0 };
     std::atomic<uint64_t> avgcount = { 0 };
     std::atomic<uint64_t> avgcount2 = { 0 };
-    std::unique_ptr<PerfHistogram<>> histogram;
+    std::unique_ptr<PerfHistogramCommon> histogram;
 
     void reset()
     {
@@ -269,6 +281,9 @@ public:
   utime_t tget(int idx) const;
 
   void hinc(int idx, int64_t x, int64_t y);
+  void hinc(int idx, int64_t x);
+  void htinc(int idx, ceph::timespan x);
+  void htinc(int idx, utime_t x);
 
   void reset();
   void dump_formatted(
@@ -312,6 +327,8 @@ private:
                               const std::string &counter = "") const;
 
   typedef std::vector<perf_counter_data_any_d> perf_counter_data_vec_t;
+
+  perf_counter_data_any_d* histogram_get(int idx, perfcounter_type_d type, int dims);
 
   CephContext *m_cct;
   int m_lower_bound;

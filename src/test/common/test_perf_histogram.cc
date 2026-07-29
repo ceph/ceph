@@ -139,6 +139,9 @@ TEST(PerfHistogram, Copy) {
       }
     }
   }
+  for (int i = 0; i < 2; i++) {
+    ASSERT_EQ(h1.get_sum(i), h2.get_sum(i));
+  }
 }
 
 TEST(PerfHistogram, SimpleValues) {
@@ -245,4 +248,36 @@ TEST(PerfHistogram, AxisAddressing) {
         break;
     }
   }
+}
+
+TEST(PerfHistogram, SumPerDimensionAndBucketIndependent)
+{
+  const auto x_axis = PerfHistogramCommon::axis_config_d{
+      "x", PerfHistogramCommon::SCALE_LINEAR, 100, 10, 5};
+  const auto y_axis = PerfHistogramCommon::axis_config_d{
+      "y", PerfHistogramCommon::SCALE_LINEAR, 0, 1, 5};
+  PerfHistogramAccessor<2> h{x_axis, y_axis};
+  h.inc(50, 1);
+  h.inc(105, 2);
+  h.inc(108, 3);
+  h.inc(10000, 4);
+
+  ASSERT_EQ(h.get_sum(0), 50 + 105 + 108 + 10000);
+  ASSERT_EQ(h.get_sum(1), 1 + 2 + 3 + 4);
+  h.reset();
+  ASSERT_EQ(h.get_sum(0), 0);
+  ASSERT_EQ(h.get_sum(1), 0);
+}
+
+TEST(PerfHistogram, IncBucketDoesNotSum)
+{
+  PerfHistogramAccessor<2> h{x_axis, y_axis};
+  // inc_bucket increments counts at bucket indices. This means we
+  // have no observed values and cannot increment the sum
+  h.inc_bucket(1, 1);
+  h.inc_bucket(2, 3);
+
+  ASSERT_EQ(1UL, h.read_bucket(1,1));
+  ASSERT_EQ(h.get_sum(0), 0);
+  ASSERT_EQ(h.get_sum(1), 0);
 }

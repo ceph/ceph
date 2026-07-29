@@ -32,25 +32,66 @@ public:
     SCALE_LOG2 = 2,
   };
 
+  enum axis_unit_d : uint8_t {
+    AXIS_UNIT_NONE,
+    AXIS_UNIT_NANOSECONDS,
+    AXIS_UNIT_BYTES,
+  };
+
+  static const char* axis_unit_name(axis_unit_d u) {
+    switch (u) {
+      case AXIS_UNIT_NANOSECONDS: return "nanoseconds";
+      case AXIS_UNIT_BYTES: return "bytes";
+      case AXIS_UNIT_NONE:
+      default: return "none";
+    }
+  }
+
   struct axis_config_d {
     const char *m_name = nullptr;
     scale_type_d m_scale_type = SCALE_LINEAR;
     int64_t m_min = 0;
     int64_t m_quant_size = 0;
     int32_t m_buckets = 0;
+    axis_unit_d m_unit = AXIS_UNIT_NONE;
     axis_config_d() = default;
     axis_config_d(const char* name,
 		  scale_type_d scale_type,
 		  int64_t min,
 		  int64_t quant_size,
-		  int32_t buckets)
+		  int32_t buckets,
+                  axis_unit_d unit = AXIS_UNIT_NONE)
       : m_name(name),
 	m_scale_type(scale_type),
 	m_min(min),
 	m_quant_size(quant_size),
-	m_buckets(buckets)
+	m_buckets(buckets),
+        m_unit(unit)
     {}
+
+    static constexpr axis_config_d latency(const char* name, int64_t quant_ns = 100, int buckets = 32) {
+      return {name, SCALE_LOG2, 0, quant_ns, buckets, AXIS_UNIT_NANOSECONDS};
+    }
+    // Prometheus-style buckets
+    static constexpr axis_config_d web_latency(const char* name, int buckets = 16) {
+      return {name, SCALE_LOG2, 0, 1'000'000 /*1ms floor*/, buckets, AXIS_UNIT_NANOSECONDS};
+    }
+    static constexpr axis_config_d bytes(const char* name, int64_t quant_bytes=512, int buckets = 32) {
+      return {name, SCALE_LOG2, 0, quant_bytes, buckets, AXIS_UNIT_BYTES};
+    }
+    static constexpr axis_config_d count(
+        const char* name, int buckets, int64_t quant = 1) {
+      return {name, SCALE_LINEAR, 0, quant, buckets, AXIS_UNIT_NONE};
+    }
   };
+
+  virtual ~PerfHistogramCommon() = default;
+  virtual int dims() const = 0;
+  virtual void reset() = 0;
+  virtual uint64_t get_sum(int dim = 0) const = 0;
+  virtual void dump_formatted(ceph::Formatter* f) const = 0;
+  virtual void observe(int64_t x, int64_t y) = 0;
+  virtual std::unique_ptr<PerfHistogramCommon> clone() const = 0;
 
 protected:
   /// Dump configuration of one axis to a formatter
@@ -99,13 +140,37 @@ public:
     for (int64_t i = 0; i < size; i++) {
       m_rawData[i] = other.m_rawData[i].load();
     }
+    for (int i = 0; i < DIM; i++) {
+      m_sum[i] = other.m_sum[i].load();
+    }
   }
 
+  std::unique_ptr<PerfHistogramCommon> clone() const override {
+    return std::make_unique<PerfHistogram<DIM>>(*this);
+  }
+
+  int dims() const override { return DIM; }
+
+  uint64_t get_sum(int dim) const override { return m_sum[dim].load(); }
+
   /// Set all histogram values to 0
-  void reset() {
+  void reset() override {
     auto size = get_raw_size();
     for (auto i = size; --i >= 0;) {
       m_rawData[i] = 0;
+    }
+    for (auto& s : m_sum) {
+      s = 0;
+    }
+  }
+
+  void observe(int64_t x, int64_t y) override {
+    if constexpr (DIM == 1) {
+      inc(x);
+    } else if constexpr (DIM == 2) {
+      inc(x, y);
+    } else {
+      ceph_abort_msg("observe only supports 1D/2D histograms");
     }
   }
 
@@ -114,6 +179,8 @@ public:
   void inc(T... axis) {
     auto index = get_raw_index_for_value(axis...);
     m_rawData[index]++;
+    int i = 0;
+    ((m_sum[i++] += axis), ...);
   }
 
   /// Increase counter for given axis buckets by one
@@ -131,11 +198,16 @@ public:
   }
 
   /// Dump data to a Formatter object
-  void dump_formatted(ceph::Formatter *f) const {
+  void dump_formatted(ceph::Formatter *f) const override {
     // Dump axes configuration
     f->open_array_section("axes");
     for (auto &ac : m_axes_config) {
       dump_formatted_axis(f, ac);
+    }
+    f->close_section();
+    f->open_array_section("sum");
+    for (int i = 0; i < DIM; i++) {
+      f->dump_unsigned("sum", m_sum[i].load());
     }
     f->close_section();
 
@@ -147,6 +219,9 @@ protected:
   /// Raw data stored as linear space, internal indexes are calculated on
   /// demand.
   std::unique_ptr<std::atomic<uint64_t>[]> m_rawData;
+
+  /// Running sum of observed values along the histogram's value axis.
+  std::array<std::atomic<uint64_t>, DIM> m_sum{};
 
   /// Configuration of axes
   std::array<axis_config_d, DIM> m_axes_config;
