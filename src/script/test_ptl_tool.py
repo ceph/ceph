@@ -662,3 +662,118 @@ def test_check_pr_approvals_normalizes_non_ascii_title_without_crashing(ptl_tool
     out = capsys.readouterr().out
     assert "caf?" in out
     assert "é" not in out
+
+
+# ---------------------------------------------------------------------------
+# ApprovalCheck: gates --final-merge/--audit specifically (via
+# verify_pr_readiness()'s BaseAuditCheck framework), unlike check_pr_approvals()
+# above which used to run -- unconditionally, and only interactively -- on
+# every --pr-label/--integration/--qe-label batch merge. Per review feedback
+# on PR #70549 (https://github.com/ceph/ceph/pull/70549#pullrequestreview-4813309786),
+# that was too disruptive for ordinary QA batch runs; only a final upstream
+# merge of an unapproved PR should actually be gated.
+# ---------------------------------------------------------------------------
+
+def _single_pr_graphql_response(review_decision):
+    return FakeJSONResponse(200, {"data": {"repository": {"pullRequest": {"reviewDecision": review_decision}}}})
+
+
+def _audit_ctx(ptl_tool, session, pr=100, ci_mode=False):
+    report = ptl_tool.AuditReport()
+    args = mock.Mock(ci_mode=ci_mode)
+    ctx = ptl_tool.AuditContext(
+        G=mock.Mock(), session=session, R=mock.Mock(), pr=pr, pr_commits=[],
+        tip=mock.Mock(), base="squid", args=args, report=report,
+    )
+    return ctx, report
+
+
+def test_approval_check_approved_pr_is_noop(ptl_tool):
+    session = mock.Mock()
+    session.post.return_value = _single_pr_graphql_response("APPROVED")
+    ctx, report = _audit_ctx(ptl_tool, session)
+    with mock.patch("builtins.input") as fake_input:
+        ptl_tool.ApprovalCheck().run(ctx)
+    fake_input.assert_not_called()
+    assert not report.has_errors()
+
+
+def test_approval_check_ci_mode_adds_error_without_prompting(ptl_tool):
+    session = mock.Mock()
+    session.post.return_value = _single_pr_graphql_response("REVIEW_REQUIRED")
+    ctx, report = _audit_ctx(ptl_tool, session, ci_mode=True)
+    with mock.patch("builtins.input") as fake_input:
+        ptl_tool.ApprovalCheck().run(ctx)
+    fake_input.assert_not_called()
+    assert report.has_errors()
+
+
+def test_approval_check_interactive_record_failure_adds_to_report(ptl_tool):
+    session = mock.Mock()
+    session.post.return_value = _single_pr_graphql_response("REVIEW_REQUIRED")
+    ctx, report = _audit_ctx(ptl_tool, session)
+    with mock.patch("builtins.input", return_value="r"):
+        ptl_tool.ApprovalCheck().run(ctx)
+    assert report.has_errors()
+
+
+def test_approval_check_interactive_proceed_does_not_fail_report(ptl_tool):
+    session = mock.Mock()
+    session.post.return_value = _single_pr_graphql_response("REVIEW_REQUIRED")
+    ctx, report = _audit_ctx(ptl_tool, session)
+    with mock.patch("builtins.input", return_value="p"):
+        ptl_tool.ApprovalCheck().run(ctx)
+    assert not report.has_errors()
+
+
+def test_approval_check_interactive_skip_to_merge_raises(ptl_tool):
+    session = mock.Mock()
+    session.post.return_value = _single_pr_graphql_response("REVIEW_REQUIRED")
+    ctx, report = _audit_ctx(ptl_tool, session)
+    with mock.patch("builtins.input", return_value="m"):
+        with pytest.raises(ptl_tool.SkipToMerge):
+            ptl_tool.ApprovalCheck().run(ctx)
+
+
+def test_approval_check_invalid_choice_reprompts(ptl_tool, capsys):
+    session = mock.Mock()
+    session.post.return_value = _single_pr_graphql_response("REVIEW_REQUIRED")
+    ctx, report = _audit_ctx(ptl_tool, session)
+    with mock.patch("builtins.input", side_effect=["bogus", "p"]):
+        ptl_tool.ApprovalCheck().run(ctx)
+    assert "Invalid choice" in capsys.readouterr().out
+
+
+def test_approval_check_graphql_error_response_exits(ptl_tool):
+    session = mock.Mock()
+    session.post.return_value = FakeResponse(401, "Bad credentials")
+    ctx, report = _audit_ctx(ptl_tool, session)
+    with pytest.raises(SystemExit):
+        ptl_tool.ApprovalCheck().run(ctx)
+
+
+def test_approval_check_missing_pr_node_raises_systemexit(ptl_tool):
+    session = mock.Mock()
+    session.post.return_value = FakeJSONResponse(200, {"data": {"repository": {"pullRequest": None}}})
+    ctx, report = _audit_ctx(ptl_tool, session)
+    with pytest.raises(SystemExit):
+        ptl_tool.ApprovalCheck().run(ctx)
+
+
+def test_verify_pr_readiness_includes_approval_check_regardless_of_base(ptl_tool):
+    """ApprovalCheck must run for a final merge into main too, not just backports
+    (unlike CommitParityCheck/ConflictSimulationCheck/RedmineLinkageCheck, which
+    are backport-specific and skipped when base == 'main')."""
+    session = mock.Mock()
+    session.post.return_value = _single_pr_graphql_response("REVIEW_REQUIRED")
+    # ci_mode's post-audit-failure path also calls _hide_previous_bot_reviews(),
+    # which paginates PR reviews via GET before posting the consolidated
+    # review -- give it an empty, well-formed page so it's a no-op.
+    session.get.return_value = FakeJSONResponse(200, [], "")
+    session.get.return_value.headers = {}
+    G = mock.Mock()
+    args = mock.Mock(ci_mode=True, audit=True, dry_run=True)
+    with mock.patch.object(ptl_tool, "MergeConflictCheck") as FakeMergeCheck:
+        FakeMergeCheck.return_value.run.return_value = None
+        passed = ptl_tool.verify_pr_readiness(G, session, mock.Mock(), 100, [], mock.Mock(), "main", args)
+    assert passed is False  # ApprovalCheck's ci-mode failure should have been picked up
