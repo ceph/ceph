@@ -420,12 +420,14 @@ private:
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
+    op_ret = rgw::s3vector::delete_vector_bucket(configuration, driver, s->user.get(), &s->bucket_tenant, this, y);
+    if (op_ret < 0) {
+      return;
+    }
     op_ret = bucket->remove(this, false, y);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "ERROR: failed to delete s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
-      return;
     }
-    op_ret = rgw::s3vector::delete_vector_bucket(configuration, driver, s->user.get(), &s->bucket_tenant, this, y);
   }
 };
 
