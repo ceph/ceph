@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { InlineMessageComponent } from './inline-message.component';
 import { ButtonModule, IconModule, LayoutModule } from 'carbon-components-angular';
@@ -5,12 +6,12 @@ import { ButtonModule, IconModule, LayoutModule } from 'carbon-components-angula
 describe('InlineMessageComponent', () => {
   let component: InlineMessageComponent;
   let fixture: ComponentFixture<InlineMessageComponent>;
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [InlineMessageComponent],
-      imports: [LayoutModule, IconModule, ButtonModule]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [InlineMessageComponent],
+    imports: [LayoutModule, IconModule, ButtonModule]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(InlineMessageComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

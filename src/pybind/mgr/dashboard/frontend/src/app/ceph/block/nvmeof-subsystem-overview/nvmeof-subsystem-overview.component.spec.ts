@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testin
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
-import { of, Subject } from 'rxjs';
+import { of, Subject, BehaviorSubject } from 'rxjs';
 
 import { NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { GridModule, TilesModule } from 'carbon-components-angular';
@@ -11,7 +11,8 @@ import { NvmeofSubsystemOverviewComponent } from './nvmeof-subsystem-overview.co
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { URLVerbs } from '~/app/shared/constants/app.constants';
 import { SharedModule } from '~/app/shared/shared.module';
-import { NvmeofSubsystem, NvmeofSubsystemInitiator } from '~/app/shared/models/nvmeof';
+import { NvmeofSubsystem } from '~/app/shared/models/nvmeof';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('NvmeofSubsystemOverviewComponent', () => {
   let component: NvmeofSubsystemOverviewComponent;
@@ -20,6 +21,9 @@ describe('NvmeofSubsystemOverviewComponent', () => {
   let router: Router;
   let activatedRoute: ActivatedRoute;
   let routerEvents$: Subject<any>;
+
+  let parentParams$: BehaviorSubject<any>;
+  let queryParams$: BehaviorSubject<any>;
 
   const mockSubsystem: NvmeofSubsystem = {
     nqn: 'nqn.2016-06.io.spdk:cnode1',
@@ -37,90 +41,54 @@ describe('NvmeofSubsystemOverviewComponent', () => {
     network_mask: []
   };
 
-  const defaultActivatedRoute = {
-    parent: { params: of({ subsystem_nqn: 'nqn.2016-06.io.spdk:cnode1' }) },
-    queryParams: of({ group: 'group1' })
+  let nvmeofServiceMock = {
+    getSubsystem: jest.fn().mockReturnValue(of(mockSubsystem)),
+    getInitiators: jest.fn().mockReturnValue(of([]))
   };
 
-  /**
-   * Creates a TestBed configuration with custom service overrides.
-   * Avoids repeating the full module declaration in tests that need different mock data.
-   */
-  function createTestBed(
-    initiators: NvmeofSubsystemInitiator[],
-    subsystem: NvmeofSubsystem = mockSubsystem,
-    activatedRoute: object = defaultActivatedRoute
-  ): Promise<ComponentFixture<NvmeofSubsystemOverviewComponent>> {
-    return TestBed.configureTestingModule({
-      declarations: [NvmeofSubsystemOverviewComponent],
-      imports: [
-        HttpClientTestingModule,
-        RouterTestingModule,
-        SharedModule,
-        NgbTooltipModule,
-        TilesModule,
-        GridModule
-      ],
-      providers: [
-        { provide: ActivatedRoute, useValue: activatedRoute },
-        {
-          provide: NvmeofService,
-          useValue: {
-            getSubsystem: jest.fn().mockReturnValue(of(subsystem)),
-            getInitiators: jest.fn().mockReturnValue(of(initiators))
-          }
-        }
-      ]
-    })
-      .compileComponents()
-      .then(() => {
-        const f = TestBed.createComponent(NvmeofSubsystemOverviewComponent);
-        f.detectChanges();
-        tick();
-        f.detectChanges();
-        return f;
-      });
-  }
-
-  beforeEach(async () => {
-    routerEvents$ = new Subject<any>();
-
-    await TestBed.configureTestingModule({
-      declarations: [NvmeofSubsystemOverviewComponent],
-      imports: [
-        HttpClientTestingModule,
-        RouterTestingModule,
-        SharedModule,
-        NgbTooltipModule,
-        TilesModule,
-        GridModule
-      ],
-      providers: [
-        { provide: ActivatedRoute, useValue: defaultActivatedRoute },
-        {
-          provide: NvmeofService,
-          useValue: {
-            getSubsystem: jest.fn().mockReturnValue(of(mockSubsystem)),
-            getInitiators: jest.fn().mockReturnValue(of([]))
-          }
-        },
-        {
-          provide: Router,
-          useValue: {
-            events: routerEvents$.asObservable(),
-            navigate: jest.fn().mockResolvedValue(true)
-          }
-        }
-      ]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [NvmeofSubsystemOverviewComponent],
+    imports: [
+      HttpClientTestingModule,
+      RouterTestingModule,
+      SharedModule,
+      NgbTooltipModule,
+      TilesModule,
+      GridModule
+    ],
+    providers: [
+      {
+        provide: ActivatedRoute,
+        useFactory: () => ({
+          parent: { params: parentParams$.asObservable() },
+          queryParams: queryParams$.asObservable()
+        })
+      },
+      { provide: NvmeofService, useFactory: () => nvmeofServiceMock }
+    ]
   });
 
   beforeEach(() => {
+    jest.clearAllMocks();
+
+    // Reset route streams for each test
+    parentParams$ = new BehaviorSubject({ subsystem_nqn: 'nqn.2016-06.io.spdk:cnode1' });
+    queryParams$ = new BehaviorSubject({ group: 'group1' });
+
+    nvmeofServiceMock.getSubsystem.mockReturnValue(of(mockSubsystem));
+    nvmeofServiceMock.getInitiators.mockReturnValue(of([]));
+
+    routerEvents$ = new Subject<any>();
+
     fixture = TestBed.createComponent(NvmeofSubsystemOverviewComponent);
     component = fixture.componentInstance;
     nvmeofService = TestBed.inject(NvmeofService);
     router = TestBed.inject(Router);
     activatedRoute = TestBed.inject(ActivatedRoute);
+
+    Object.defineProperty(router, 'events', { get: () => routerEvents$.asObservable() });
+    jest.spyOn(router, 'navigate').mockResolvedValue(true);
+
     fixture.detectChanges();
   });
 
@@ -148,13 +116,21 @@ describe('NvmeofSubsystemOverviewComponent', () => {
     expect(component.subsystem.subtype).toBe('NVMe');
   }));
 
-  it('should not fetch when subsystemNQN is missing', fakeAsync(async () => {
-    TestBed.resetTestingModule();
-    const noNqnRoute = { parent: { params: of({}) }, queryParams: of({ group: 'group1' }) };
-    const f = await createTestBed([], mockSubsystem, noNqnRoute);
-    const newService = TestBed.inject(NvmeofService);
-    expect(newService.getSubsystem).not.toHaveBeenCalled();
-    expect(f.componentInstance.subsystem).toBeUndefined();
+  it('should not fetch when subsystemNQN is missing', fakeAsync(() => {
+    // Clear the call history from the initial fixture.detectChanges()
+    nvmeofServiceMock.getSubsystem.mockClear();
+
+    // Push empty params to simulate missing NQN
+    parentParams$.next({});
+
+    // Force a fresh component lifecycle
+    fixture = TestBed.createComponent(NvmeofSubsystemOverviewComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    tick();
+
+    expect(nvmeofServiceMock.getSubsystem).not.toHaveBeenCalled();
+    expect(component.subsystem).toBeUndefined();
   }));
 
   it('should render detail labels in the template', fakeAsync(() => {
@@ -185,24 +161,38 @@ describe('NvmeofSubsystemOverviewComponent', () => {
 
     const hostAccessText = fixture.nativeElement.textContent;
     expect(hostAccessText).toContain('Allow all hosts');
-    // has_dhchap_key=true but no initiators with use_dhchap → No authentication
     expect(hostAccessText).toContain('No authentication');
     expect(hostAccessText).toContain('Edit');
   }));
 
-  it('should display Bidirectional when subsystem and host both have keys', fakeAsync(async () => {
-    TestBed.resetTestingModule();
-    const f = await createTestBed([{ nqn: 'nqn.host-1', use_dhchap: true }]);
-    expect(f.nativeElement.textContent).toContain('Bi-directional');
+  it('should display Bidirectional when subsystem and host both have keys', fakeAsync(() => {
+    nvmeofServiceMock.getInitiators.mockReturnValue(of([{ nqn: 'nqn.host-1', use_dhchap: true }]));
+
+    fixture = TestBed.createComponent(NvmeofSubsystemOverviewComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    tick();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Bi-directional');
   }));
 
-  it('should display Unidirectional when only host has a key', fakeAsync(async () => {
-    TestBed.resetTestingModule();
-    const f = await createTestBed([{ nqn: 'nqn.host-1', use_dhchap: true }], {
-      ...mockSubsystem,
-      has_dhchap_key: false
-    });
-    expect(f.nativeElement.textContent).toContain('Unidirectional');
+  it('should display Unidirectional when only host has a key', fakeAsync(() => {
+    nvmeofServiceMock.getInitiators.mockReturnValue(of([{ nqn: 'nqn.host-1', use_dhchap: true }]));
+    nvmeofServiceMock.getSubsystem.mockReturnValue(
+      of({
+        ...mockSubsystem,
+        has_dhchap_key: false
+      })
+    );
+
+    fixture = TestBed.createComponent(NvmeofSubsystemOverviewComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    tick();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Unidirectional');
   }));
 
   it('should open host access edit modal route when edit is clicked', () => {
@@ -220,7 +210,7 @@ describe('NvmeofSubsystemOverviewComponent', () => {
   });
 
   it('should refresh subsystem on non-modal navigation end', () => {
-    (nvmeofService.getSubsystem as jest.Mock).mockClear();
+    nvmeofServiceMock.getSubsystem.mockClear();
 
     routerEvents$.next(new NavigationEnd(1, '/nvmeof/(modal:add)', '/nvmeof/(modal:add)'));
     expect(nvmeofService.getSubsystem).not.toHaveBeenCalled();

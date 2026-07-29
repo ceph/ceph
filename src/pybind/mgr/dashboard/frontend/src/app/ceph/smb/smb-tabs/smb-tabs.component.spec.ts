@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { SmbTabsComponent } from './smb-tabs.component';
@@ -7,11 +8,11 @@ describe('SmbTabsComponent', () => {
   let component: SmbTabsComponent;
   let fixture: ComponentFixture<SmbTabsComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [SmbTabsComponent]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [SmbTabsComponent]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(SmbTabsComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

@@ -3,15 +3,16 @@ import { ActivatedRouteSnapshot } from '@angular/router';
 
 import { RbdImageResourceBreadcrumbResolver } from './rbd-image-resource-breadcrumb.resolver';
 import { ImageSpec } from '~/app/shared/models/image-spec';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('RbdImageResourceBreadcrumbResolver', () => {
   let resolver: RbdImageResourceBreadcrumbResolver;
 
-  beforeEach(() => {
-    TestBed.configureTestingModule({
-      providers: [RbdImageResourceBreadcrumbResolver]
-    });
+  configureTestBed({
+    providers: [RbdImageResourceBreadcrumbResolver]
+  });
 
+  beforeEach(() => {
     resolver = TestBed.inject(RbdImageResourceBreadcrumbResolver);
     jest.spyOn(resolver as any, 'getFullPath').mockReturnValue('/mock/full/path');
   });

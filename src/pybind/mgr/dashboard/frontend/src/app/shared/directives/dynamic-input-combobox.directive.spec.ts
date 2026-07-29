@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { DEBOUNCE_TIMER, DynamicInputComboboxDirective } from './dynamic-input-combobox.directive';
 import { Subject } from 'rxjs';
@@ -22,11 +23,11 @@ describe('DynamicInputComboboxDirective', () => {
   let fixture: ComponentFixture<MockComponent>;
   let directive: DynamicInputComboboxDirective;
 
-  beforeEach(() => {
-    TestBed.configureTestingModule({
-      declarations: [DynamicInputComboboxDirective, MockComponent]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [DynamicInputComboboxDirective, MockComponent]
+  });
 
+  beforeEach(() => {
     fixture = TestBed.createComponent(MockComponent);
 
     directive = fixture.debugElement.children[0].injector.get(DynamicInputComboboxDirective);

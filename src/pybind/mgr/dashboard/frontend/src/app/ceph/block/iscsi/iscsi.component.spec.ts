@@ -36,7 +36,7 @@ describe('IscsiComponent', () => {
       DimlessPipe,
       FormatterService,
       IscsiBackstorePipe,
-      { provide: IscsiService, useValue: fakeService }
+      { provide: IscsiService, useFactory: () => fakeService }
     ]
   });
 

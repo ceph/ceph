@@ -9,6 +9,7 @@ import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { NvmeofStateService } from '../nvmeof-state.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('NvmeofSubsystemNamespacesListComponent', () => {
   let component: NvmeofSubsystemNamespacesListComponent;
@@ -42,34 +43,32 @@ describe('NvmeofSubsystemNamespacesListComponent', () => {
     }
   }
 
-  beforeEach(async () => {
-    const refresh$ = new Subject<void>();
-    await TestBed.configureTestingModule({
-      declarations: [NvmeofSubsystemNamespacesListComponent],
-      imports: [HttpClientTestingModule, RouterTestingModule, SharedModule],
-      providers: [
-        {
-          provide: ActivatedRoute,
-          useValue: {
-            parent: {
-              params: of({ subsystem_nqn: 'nqn.2016-06.io.spdk:cnode1', group: 'group1' })
-            },
-            queryParams: of({ group: 'group1' })
-          }
-        },
-        {
-          provide: NvmeofService,
-          useValue: {
-            listNamespaces: jest.fn().mockReturnValue(of(mockNamespaces))
-          }
-        },
-        { provide: AuthStorageService, useClass: MockAuthStorageService },
-        {
-          provide: NvmeofStateService,
-          useValue: { refresh$: refresh$.asObservable(), requestRefresh: jest.fn() }
+  const refresh$ = new Subject<void>();
+  configureTestBed({
+    declarations: [NvmeofSubsystemNamespacesListComponent],
+    imports: [HttpClientTestingModule, RouterTestingModule, SharedModule],
+    providers: [
+      {
+        provide: ActivatedRoute,
+        useValue: {
+          parent: {
+            params: of({ subsystem_nqn: 'nqn.2016-06.io.spdk:cnode1', group: 'group1' })
+          },
+          queryParams: of({ group: 'group1' })
         }
-      ]
-    }).compileComponents();
+      },
+      {
+        provide: NvmeofService,
+        useValue: {
+          listNamespaces: jest.fn().mockReturnValue(of(mockNamespaces))
+        }
+      },
+      { provide: AuthStorageService, useClass: MockAuthStorageService },
+      {
+        provide: NvmeofStateService,
+        useValue: { refresh$: refresh$.asObservable(), requestRefresh: jest.fn() }
+      }
+    ]
   });
 
   beforeEach(() => {

@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed, waitForAsync } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -10,6 +10,7 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { NvmeofEditHostKeyModalComponent } from './nvmeof-edit-host-key-modal.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('NvmeofEditHostKeyModalComponent', () => {
   let component: NvmeofEditHostKeyModalComponent;
@@ -29,20 +30,18 @@ describe('NvmeofEditHostKeyModalComponent', () => {
     wrapTaskAroundCall: jasmine.createSpy('wrapTaskAroundCall').and.callFake(({ call }) => call)
   };
 
-  beforeEach(waitForAsync(() => {
-    TestBed.configureTestingModule({
-      declarations: [NvmeofEditHostKeyModalComponent],
-      imports: [ReactiveFormsModule, HttpClientTestingModule, RouterTestingModule, SharedModule],
-      providers: [
-        { provide: NvmeofService, useValue: nvmeofServiceSpy },
-        { provide: TaskWrapperService, useValue: taskWrapperServiceSpy },
-        { provide: 'subsystemNQN', useValue: mockSubsystemNQN },
-        { provide: 'hostNQN', useValue: mockHostNQN },
-        { provide: 'group', useValue: mockGroup },
-        { provide: 'dhchapKey', useValue: '' }
-      ]
-    }).compileComponents();
-  }));
+  configureTestBed({
+    declarations: [NvmeofEditHostKeyModalComponent],
+    imports: [ReactiveFormsModule, HttpClientTestingModule, RouterTestingModule, SharedModule],
+    providers: [
+      { provide: NvmeofService, useFactory: () => nvmeofServiceSpy },
+      { provide: TaskWrapperService, useFactory: () => taskWrapperServiceSpy },
+      { provide: 'subsystemNQN', useValue: mockSubsystemNQN },
+      { provide: 'hostNQN', useValue: mockHostNQN },
+      { provide: 'group', useValue: mockGroup },
+      { provide: 'dhchapKey', useValue: '' }
+    ]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(NvmeofEditHostKeyModalComponent);

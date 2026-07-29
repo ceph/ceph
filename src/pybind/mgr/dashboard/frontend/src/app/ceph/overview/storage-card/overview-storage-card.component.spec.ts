@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { OverviewStorageCardComponent } from './overview-storage-card.component';
 import { FormatterService } from '~/app/shared/services/formatter.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('OverviewStorageCardComponent', () => {
   let component: OverviewStorageCardComponent;
@@ -12,7 +13,17 @@ describe('OverviewStorageCardComponent', () => {
     convertToUnit: jest.Mock;
   };
 
-  beforeEach(async () => {
+  configureTestBed({
+    imports: [OverviewStorageCardComponent, HttpClientTestingModule],
+    providers: [
+      {
+        provide: FormatterService,
+        useFactory: () => mockFormatterService
+      }
+    ]
+  });
+
+  beforeEach(() => {
     mockFormatterService = {
       formatToBinary: jest.fn((value: number) => {
         if (value === 1024) return [20, 'TiB'];
@@ -26,11 +37,6 @@ describe('OverviewStorageCardComponent', () => {
         return value;
       })
     };
-
-    await TestBed.configureTestingModule({
-      imports: [OverviewStorageCardComponent, HttpClientTestingModule],
-      providers: [{ provide: FormatterService, useValue: mockFormatterService }]
-    }).compileComponents();
 
     fixture = TestBed.createComponent(OverviewStorageCardComponent);
     component = fixture.componentInstance;

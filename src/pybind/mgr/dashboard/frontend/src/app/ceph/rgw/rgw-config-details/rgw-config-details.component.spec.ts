@@ -1,16 +1,17 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { RgwConfigDetailsComponent } from './rgw-config-details.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('RgwConfigDetailsComponent', () => {
   let component: RgwConfigDetailsComponent;
   let fixture: ComponentFixture<RgwConfigDetailsComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [RgwConfigDetailsComponent]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [RgwConfigDetailsComponent]
+  });
 
+  beforeEach(() => {
     fixture = TestBed.createComponent(RgwConfigDetailsComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

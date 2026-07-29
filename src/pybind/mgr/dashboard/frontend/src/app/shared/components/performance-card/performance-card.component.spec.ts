@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { PerformanceCardComponent } from './performance-card.component';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
@@ -22,51 +23,51 @@ describe('PerformanceCardComponent', () => {
     ]
   };
 
+  const prometheusServiceMock = {
+    lastHourDateObject: { start: 1000, end: 2000, step: 14 }
+  };
+
+  const performanceCardServiceMock = {
+    getChartData: jest.fn().mockReturnValue(of(mockChartData))
+  };
+
+  const numberFormatterMock = {
+    formatFromTo: jest.fn().mockReturnValue('1.00'),
+    bytesPerSecondLabels: [
+      'B/s',
+      'KiB/s',
+      'MiB/s',
+      'GiB/s',
+      'TiB/s',
+      'PiB/s',
+      'EiB/s',
+      'ZiB/s',
+      'YiB/s'
+    ],
+    bytesLabels: ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'YiB'],
+    unitlessLabels: ['', 'k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y']
+  };
+
+  const datePipeMock = {
+    transform: jest.fn().mockReturnValue('01 Jan, 00:00:00')
+  };
+
+  const authStorageServiceMock = {
+    getPermissions: jest.fn().mockReturnValue(new Permissions({ 'config-opt': ['read'] }))
+  };
+
+  configureTestBed({
+    imports: [HttpClientTestingModule, PerformanceCardComponent],
+    providers: [
+      { provide: PrometheusService, useFactory: () => prometheusServiceMock },
+      { provide: PerformanceCardService, useFactory: () => performanceCardServiceMock },
+      { provide: NumberFormatterService, useFactory: () => numberFormatterMock },
+      { provide: DatePipe, useFactory: () => datePipeMock },
+      { provide: AuthStorageService, useFactory: () => authStorageServiceMock }
+    ]
+  });
+
   beforeEach(async () => {
-    const prometheusServiceMock = {
-      lastHourDateObject: { start: 1000, end: 2000, step: 14 }
-    };
-
-    const performanceCardServiceMock = {
-      getChartData: jest.fn().mockReturnValue(of(mockChartData))
-    };
-
-    const numberFormatterMock = {
-      formatFromTo: jest.fn().mockReturnValue('1.00'),
-      bytesPerSecondLabels: [
-        'B/s',
-        'KiB/s',
-        'MiB/s',
-        'GiB/s',
-        'TiB/s',
-        'PiB/s',
-        'EiB/s',
-        'ZiB/s',
-        'YiB/s'
-      ],
-      bytesLabels: ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'YiB'],
-      unitlessLabels: ['', 'k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y']
-    };
-
-    const datePipeMock = {
-      transform: jest.fn().mockReturnValue('01 Jan, 00:00:00')
-    };
-
-    const authStorageServiceMock = {
-      getPermissions: jest.fn().mockReturnValue(new Permissions({ 'config-opt': ['read'] }))
-    };
-
-    await TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule, PerformanceCardComponent],
-      providers: [
-        { provide: PrometheusService, useValue: prometheusServiceMock },
-        { provide: PerformanceCardService, useValue: performanceCardServiceMock },
-        { provide: NumberFormatterService, useValue: numberFormatterMock },
-        { provide: DatePipe, useValue: datePipeMock },
-        { provide: AuthStorageService, useValue: authStorageServiceMock }
-      ]
-    }).compileComponents();
-
     fixture = TestBed.createComponent(PerformanceCardComponent);
     component = fixture.componentInstance;
   });

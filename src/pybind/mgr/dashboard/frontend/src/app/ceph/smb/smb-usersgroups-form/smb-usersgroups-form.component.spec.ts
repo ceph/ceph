@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { SmbUsersgroupsFormComponent } from './smb-usersgroups-form.component';
@@ -36,13 +37,13 @@ describe('SmbUsersgroupsFormComponent', () => {
   let createUsersGroups: jasmine.Spy;
   let getUsersGroups: jasmine.Spy;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [SharedModule, ReactiveFormsModule],
-      declarations: [SmbUsersgroupsFormComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])]
-    }).compileComponents();
+  configureTestBed({
+    imports: [SharedModule, ReactiveFormsModule],
+    declarations: [SmbUsersgroupsFormComponent],
+    providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(SmbUsersgroupsFormComponent);
     component = fixture.componentInstance;
     component.ngOnInit();

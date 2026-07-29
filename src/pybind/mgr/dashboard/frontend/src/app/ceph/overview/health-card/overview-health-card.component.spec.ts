@@ -16,6 +16,7 @@ import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { HardwareNameMapping } from '~/app/shared/enum/hardware.enum';
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 const MOCK_HW_SUMMARY = {
   total: {
@@ -74,31 +75,31 @@ describe('OverviewHealthCardComponent', () => {
     getTelemetryStatus: jest.fn(() => of(false))
   };
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [
-        OverviewHealthCardComponent,
-        CommonModule,
-        ProductiveCardComponent,
-        SkeletonModule,
-        ButtonModule,
-        RouterModule,
-        ComponentsModule,
-        LinkModule,
-        PipesModule
-      ],
-      providers: [
-        { provide: SummaryService, useValue: summaryServiceMock },
-        { provide: UpgradeService, useValue: upgradeServiceMock },
-        { provide: AuthStorageService, useValue: mockAuthStorageService },
-        { provide: MgrModuleService, useValue: mockMgrModuleService },
-        { provide: HardwareService, useValue: mockHardwareService },
-        { provide: HealthService, useValue: mockHealthService },
-        { provide: PrometheusAlertService, useValue: { totalAlerts$: of(0), alerts: [] } },
-        provideRouter([])
-      ]
-    }).compileComponents();
+  configureTestBed({
+    imports: [
+      OverviewHealthCardComponent,
+      CommonModule,
+      ProductiveCardComponent,
+      SkeletonModule,
+      ButtonModule,
+      RouterModule,
+      ComponentsModule,
+      LinkModule,
+      PipesModule
+    ],
+    providers: [
+      { provide: SummaryService, useFactory: () => summaryServiceMock },
+      { provide: UpgradeService, useFactory: () => upgradeServiceMock },
+      { provide: AuthStorageService, useFactory: () => mockAuthStorageService },
+      { provide: MgrModuleService, useFactory: () => mockMgrModuleService },
+      { provide: HardwareService, useFactory: () => mockHardwareService },
+      { provide: HealthService, useFactory: () => mockHealthService },
+      { provide: PrometheusAlertService, useValue: { totalAlerts$: of(0), alerts: [] } },
+      provideRouter([])
+    ]
+  });
 
+  beforeEach(() => {
     fixture = TestBed.createComponent(OverviewHealthCardComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
@@ -222,41 +223,40 @@ describe('OverviewHealthCardComponent (all healthy)', () => {
     },
     host: { flawed: 0 }
   };
+  configureTestBed({
+    imports: [
+      OverviewHealthCardComponent,
+      CommonModule,
+      ProductiveCardComponent,
+      SkeletonModule,
+      ButtonModule,
+      RouterModule,
+      ComponentsModule,
+      LinkModule,
+      PipesModule
+    ],
+    providers: [
+      {
+        provide: SummaryService,
+        useValue: { summaryData$: of({ version: 'ceph version 18.0.0 reef (dev)' }) }
+      },
+      { provide: UpgradeService, useValue: { listCached: jest.fn(() => of(null)) } },
+      {
+        provide: AuthStorageService,
+        useValue: { getPermissions: jest.fn(() => ({ configOpt: { read: true } })) }
+      },
+      {
+        provide: MgrModuleService,
+        useValue: { getConfig: jest.fn(() => of({ hw_monitoring: true })) }
+      },
+      { provide: HardwareService, useValue: { getSummary: jest.fn(() => of(healthyMock)) } },
+      { provide: HealthService, useValue: { getTelemetryStatus: jest.fn(() => of(false)) } },
+      { provide: PrometheusAlertService, useValue: { totalAlerts$: of(0), alerts: [] } },
+      provideRouter([])
+    ]
+  });
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [
-        OverviewHealthCardComponent,
-        CommonModule,
-        ProductiveCardComponent,
-        SkeletonModule,
-        ButtonModule,
-        RouterModule,
-        ComponentsModule,
-        LinkModule,
-        PipesModule
-      ],
-      providers: [
-        {
-          provide: SummaryService,
-          useValue: { summaryData$: of({ version: 'ceph version 18.0.0 reef (dev)' }) }
-        },
-        { provide: UpgradeService, useValue: { listCached: jest.fn(() => of(null)) } },
-        {
-          provide: AuthStorageService,
-          useValue: { getPermissions: jest.fn(() => ({ configOpt: { read: true } })) }
-        },
-        {
-          provide: MgrModuleService,
-          useValue: { getConfig: jest.fn(() => of({ hw_monitoring: true })) }
-        },
-        { provide: HardwareService, useValue: { getSummary: jest.fn(() => of(healthyMock)) } },
-        { provide: HealthService, useValue: { getTelemetryStatus: jest.fn(() => of(false)) } },
-        { provide: PrometheusAlertService, useValue: { totalAlerts$: of(0), alerts: [] } },
-        provideRouter([])
-      ]
-    }).compileComponents();
-
+  beforeEach(() => {
     fixture = TestBed.createComponent(OverviewHealthCardComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
@@ -300,40 +300,40 @@ describe('OverviewHealthCardComponent (warn only)', () => {
     host: { flawed: 1 }
   };
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [
-        OverviewHealthCardComponent,
-        CommonModule,
-        ProductiveCardComponent,
-        SkeletonModule,
-        ButtonModule,
-        RouterModule,
-        ComponentsModule,
-        LinkModule,
-        PipesModule
-      ],
-      providers: [
-        {
-          provide: SummaryService,
-          useValue: { summaryData$: of({ version: 'ceph version 18.0.0 reef (dev)' }) }
-        },
-        { provide: UpgradeService, useValue: { listCached: jest.fn(() => of(null)) } },
-        {
-          provide: AuthStorageService,
-          useValue: { getPermissions: jest.fn(() => ({ configOpt: { read: true } })) }
-        },
-        {
-          provide: MgrModuleService,
-          useValue: { getConfig: jest.fn(() => of({ hw_monitoring: true })) }
-        },
-        { provide: HardwareService, useValue: { getSummary: jest.fn(() => of(warnMock)) } },
-        { provide: HealthService, useValue: { getTelemetryStatus: jest.fn(() => of(false)) } },
-        { provide: PrometheusAlertService, useValue: { totalAlerts$: of(0), alerts: [] } },
-        provideRouter([])
-      ]
-    }).compileComponents();
+  configureTestBed({
+    imports: [
+      OverviewHealthCardComponent,
+      CommonModule,
+      ProductiveCardComponent,
+      SkeletonModule,
+      ButtonModule,
+      RouterModule,
+      ComponentsModule,
+      LinkModule,
+      PipesModule
+    ],
+    providers: [
+      {
+        provide: SummaryService,
+        useValue: { summaryData$: of({ version: 'ceph version 18.0.0 reef (dev)' }) }
+      },
+      { provide: UpgradeService, useValue: { listCached: jest.fn(() => of(null)) } },
+      {
+        provide: AuthStorageService,
+        useValue: { getPermissions: jest.fn(() => ({ configOpt: { read: true } })) }
+      },
+      {
+        provide: MgrModuleService,
+        useValue: { getConfig: jest.fn(() => of({ hw_monitoring: true })) }
+      },
+      { provide: HardwareService, useValue: { getSummary: jest.fn(() => of(warnMock)) } },
+      { provide: HealthService, useValue: { getTelemetryStatus: jest.fn(() => of(false)) } },
+      { provide: PrometheusAlertService, useValue: { totalAlerts$: of(0), alerts: [] } },
+      provideRouter([])
+    ]
+  });
 
+  beforeEach(() => {
     fixture = TestBed.createComponent(OverviewHealthCardComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
@@ -362,40 +362,39 @@ describe('OverviewHealthCardComponent (hw disabled)', () => {
   let component: OverviewHealthCardComponent;
   let fixture: ComponentFixture<OverviewHealthCardComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [
-        OverviewHealthCardComponent,
-        CommonModule,
-        ProductiveCardComponent,
-        SkeletonModule,
-        ButtonModule,
-        RouterModule,
-        ComponentsModule,
-        LinkModule,
-        PipesModule
-      ],
-      providers: [
-        {
-          provide: SummaryService,
-          useValue: { summaryData$: of({ version: 'ceph version 18.0.0 reef (dev)' }) }
-        },
-        { provide: UpgradeService, useValue: { listCached: jest.fn(() => of(null)) } },
-        {
-          provide: AuthStorageService,
-          useValue: { getPermissions: jest.fn(() => ({ configOpt: { read: true } })) }
-        },
-        {
-          provide: MgrModuleService,
-          useValue: { getConfig: jest.fn(() => of({ hw_monitoring: false })) }
-        },
-        { provide: HardwareService, useValue: { getSummary: jest.fn(() => of(null)) } },
-        { provide: HealthService, useValue: { getTelemetryStatus: jest.fn(() => of(false)) } },
-        { provide: PrometheusAlertService, useValue: { totalAlerts$: of(0), alerts: [] } },
-        provideRouter([])
-      ]
-    }).compileComponents();
-
+  configureTestBed({
+    imports: [
+      OverviewHealthCardComponent,
+      CommonModule,
+      ProductiveCardComponent,
+      SkeletonModule,
+      ButtonModule,
+      RouterModule,
+      ComponentsModule,
+      LinkModule,
+      PipesModule
+    ],
+    providers: [
+      {
+        provide: SummaryService,
+        useValue: { summaryData$: of({ version: 'ceph version 18.0.0 reef (dev)' }) }
+      },
+      { provide: UpgradeService, useValue: { listCached: jest.fn(() => of(null)) } },
+      {
+        provide: AuthStorageService,
+        useValue: { getPermissions: jest.fn(() => ({ configOpt: { read: true } })) }
+      },
+      {
+        provide: MgrModuleService,
+        useValue: { getConfig: jest.fn(() => of({ hw_monitoring: false })) }
+      },
+      { provide: HardwareService, useValue: { getSummary: jest.fn(() => of(null)) } },
+      { provide: HealthService, useValue: { getTelemetryStatus: jest.fn(() => of(false)) } },
+      { provide: PrometheusAlertService, useValue: { totalAlerts$: of(0), alerts: [] } },
+      provideRouter([])
+    ]
+  });
+  beforeEach(() => {
     fixture = TestBed.createComponent(OverviewHealthCardComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
@@ -419,38 +418,37 @@ describe('OverviewHealthCardComponent (hw disabled)', () => {
 describe('OverviewHealthCardComponent (no permissions)', () => {
   let component: OverviewHealthCardComponent;
   let fixture: ComponentFixture<OverviewHealthCardComponent>;
+  configureTestBed({
+    imports: [
+      OverviewHealthCardComponent,
+      CommonModule,
+      ProductiveCardComponent,
+      SkeletonModule,
+      ButtonModule,
+      RouterModule,
+      ComponentsModule,
+      LinkModule,
+      PipesModule
+    ],
+    providers: [
+      {
+        provide: SummaryService,
+        useValue: { summaryData$: of({ version: 'ceph version 18.0.0 reef (dev)' }) }
+      },
+      { provide: UpgradeService, useValue: { listCached: jest.fn(() => of(null)) } },
+      {
+        provide: AuthStorageService,
+        useValue: { getPermissions: jest.fn(() => ({ configOpt: { read: false } })) }
+      },
+      { provide: MgrModuleService, useValue: { getConfig: jest.fn(() => of({})) } },
+      { provide: HardwareService, useValue: { getSummary: jest.fn(() => of(null)) } },
+      { provide: HealthService, useValue: { getTelemetryStatus: jest.fn(() => of(false)) } },
+      { provide: PrometheusAlertService, useValue: { totalAlerts$: of(0), alerts: [] } },
+      provideRouter([])
+    ]
+  });
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [
-        OverviewHealthCardComponent,
-        CommonModule,
-        ProductiveCardComponent,
-        SkeletonModule,
-        ButtonModule,
-        RouterModule,
-        ComponentsModule,
-        LinkModule,
-        PipesModule
-      ],
-      providers: [
-        {
-          provide: SummaryService,
-          useValue: { summaryData$: of({ version: 'ceph version 18.0.0 reef (dev)' }) }
-        },
-        { provide: UpgradeService, useValue: { listCached: jest.fn(() => of(null)) } },
-        {
-          provide: AuthStorageService,
-          useValue: { getPermissions: jest.fn(() => ({ configOpt: { read: false } })) }
-        },
-        { provide: MgrModuleService, useValue: { getConfig: jest.fn(() => of({})) } },
-        { provide: HardwareService, useValue: { getSummary: jest.fn(() => of(null)) } },
-        { provide: HealthService, useValue: { getTelemetryStatus: jest.fn(() => of(false)) } },
-        { provide: PrometheusAlertService, useValue: { totalAlerts$: of(0), alerts: [] } },
-        provideRouter([])
-      ]
-    }).compileComponents();
-
+  beforeEach(() => {
     fixture = TestBed.createComponent(OverviewHealthCardComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

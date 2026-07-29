@@ -11,6 +11,7 @@ import { NvmeofSubsystemsStepThreeComponent } from './nvmeof-subsystem-step-3.co
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { GridModule, InputModule, RadioModule, TagModule } from 'carbon-components-angular';
 import { AUTHENTICATION } from '~/app/shared/models/nvmeof';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('NvmeofSubsystemsStepThreeComponent', () => {
   let component: NvmeofSubsystemsStepThreeComponent;
@@ -19,23 +20,23 @@ describe('NvmeofSubsystemsStepThreeComponent', () => {
   let form: CdFormGroup;
   const mockGroupName = 'default';
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [NvmeofSubsystemsStepThreeComponent],
-      providers: [NgbActiveModal],
-      imports: [
-        HttpClientTestingModule,
-        NgbTypeaheadModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        SharedModule,
-        GridModule,
-        RadioModule,
-        TagModule,
-        InputModule
-      ]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [NvmeofSubsystemsStepThreeComponent],
+    providers: [NgbActiveModal],
+    imports: [
+      HttpClientTestingModule,
+      NgbTypeaheadModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      SharedModule,
+      GridModule,
+      RadioModule,
+      TagModule,
+      InputModule
+    ]
+  });
 
+  beforeEach(() => {
     fixture = TestBed.createComponent(NvmeofSubsystemsStepThreeComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

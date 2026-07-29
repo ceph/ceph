@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { TestBed } from '@angular/core/testing';
 import { convertToParamMap } from '@angular/router';
 import { of } from 'rxjs';
@@ -8,29 +9,29 @@ import { RgwAccountDetailsResolver } from './rgw-account-details.resolver';
 describe('RgwAccountDetailsResolver', () => {
   let resolver: RgwAccountDetailsResolver;
 
-  beforeEach(() => {
-    TestBed.configureTestingModule({
-      providers: [
-        RgwAccountDetailsResolver,
-        {
-          provide: RgwUserAccountsService,
-          useValue: {
-            list: () =>
-              of([
-                {
-                  id: 'RGW11111111111111111',
-                  name: 'account1'
-                },
-                {
-                  id: 'RGW22222222222222222',
-                  name: 'account2'
-                }
-              ])
-          }
+  configureTestBed({
+    providers: [
+      RgwAccountDetailsResolver,
+      {
+        provide: RgwUserAccountsService,
+        useValue: {
+          list: () =>
+            of([
+              {
+                id: 'RGW11111111111111111',
+                name: 'account1'
+              },
+              {
+                id: 'RGW22222222222222222',
+                name: 'account2'
+              }
+            ])
         }
-      ]
-    });
+      }
+    ]
+  });
 
+  beforeEach(() => {
     resolver = TestBed.inject(RgwAccountDetailsResolver);
   });
 

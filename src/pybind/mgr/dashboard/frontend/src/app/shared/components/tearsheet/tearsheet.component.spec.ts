@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Component, ViewChild } from '@angular/core';
 import { By } from '@angular/platform-browser';
@@ -52,17 +53,15 @@ describe('TearsheetComponent', () => {
   let hostComponent: MockHostComponent;
   let tearsheetComponent: TearsheetComponent;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [TearsheetComponent, TearsheetStepComponent, MockHostComponent],
-      imports: [SharedModule],
-      providers: [
-        {
-          provide: ActivatedRoute,
-          useValue: { outlet: 'modal' }
-        }
-      ]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [TearsheetComponent, TearsheetStepComponent, MockHostComponent],
+    imports: [SharedModule],
+    providers: [
+      {
+        provide: ActivatedRoute,
+        useValue: { outlet: 'modal' }
+      }
+    ]
   });
 
   beforeEach(() => {

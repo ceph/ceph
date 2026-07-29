@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { ProductiveCardComponent } from './productive-card.component';
@@ -7,11 +8,11 @@ describe('ProductiveCardComponent', () => {
   let component: ProductiveCardComponent;
   let fixture: ComponentFixture<ProductiveCardComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [ProductiveCardComponent, GridModule, LayerModule, TilesModule]
-    }).compileComponents();
+  configureTestBed({
+    imports: [ProductiveCardComponent, GridModule, LayerModule, TilesModule]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(ProductiveCardComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

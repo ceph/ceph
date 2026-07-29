@@ -30,11 +30,11 @@ describe('ToastComponent', () => {
     providers: [
       {
         provide: NotificationService,
-        useValue: mockNotificationService
+        useFactory: () => mockNotificationService
       },
       {
         provide: Router,
-        useValue: mockRouter
+        useFactory: () => mockRouter
       }
     ]
   });

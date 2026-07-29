@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
@@ -7,12 +8,12 @@ describe('PageHeaderComponent', () => {
   let component: PageHeaderComponent;
   let fixture: ComponentFixture<PageHeaderComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [PageHeaderComponent],
-      schemas: [NO_ERRORS_SCHEMA]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [PageHeaderComponent],
+    schemas: [NO_ERRORS_SCHEMA]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(PageHeaderComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

@@ -14,6 +14,7 @@ import { NvmeofSubsystemsComponent } from './nvmeof-subsystems.component';
 import { NvmeofSubsystemsDetailsComponent } from '../nvmeof-subsystems-details/nvmeof-subsystems-details.component';
 import { NvmeofGatewayGroupFilterComponent } from '../nvmeof-gateway-group-filter/nvmeof-gateway-group-filter.component';
 import { NvmeofStateService } from '../nvmeof-state.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 const mockSubsystems = [
   {
@@ -83,39 +84,35 @@ class MockTaskWrapperService {}
 describe('NvmeofSubsystemsComponent', () => {
   let component: NvmeofSubsystemsComponent;
   let fixture: ComponentFixture<NvmeofSubsystemsComponent>;
-  let queryParams$: BehaviorSubject<Record<string, string>>;
+  let queryParams$: BehaviorSubject<Record<string, string>> = new BehaviorSubject({});
   const activatedRouteMock = {
-    queryParams: null as any,
+    queryParams: queryParams$.asObservable(),
     snapshot: { queryParams: {} as Record<string, string> }
   };
+  const refresh$ = new Subject<void>();
 
-  beforeEach(async () => {
-    const refresh$ = new Subject<void>();
-    queryParams$ = new BehaviorSubject<Record<string, string>>({});
-    activatedRouteMock.queryParams = queryParams$.asObservable();
-    activatedRouteMock.snapshot.queryParams = queryParams$.value;
+  configureTestBed({
+    declarations: [NvmeofSubsystemsComponent, NvmeofSubsystemsDetailsComponent],
+    imports: [
+      HttpClientModule,
+      RouterTestingModule,
+      SharedModule,
+      NvmeofGatewayGroupFilterComponent
+    ],
+    providers: [
+      { provide: NvmeofService, useClass: MockNvmeOfService },
+      { provide: AuthStorageService, useClass: MockAuthStorageService },
+      { provide: ModalCdsService, useClass: MockModalService },
+      { provide: TaskWrapperService, useClass: MockTaskWrapperService },
+      { provide: ActivatedRoute, useFactory: () => activatedRouteMock },
+      {
+        provide: NvmeofStateService,
+        useValue: { refresh$: refresh$.asObservable(), requestRefresh: jest.fn() }
+      }
+    ]
+  });
 
-    await TestBed.configureTestingModule({
-      declarations: [NvmeofSubsystemsComponent, NvmeofSubsystemsDetailsComponent],
-      imports: [
-        HttpClientModule,
-        RouterTestingModule,
-        SharedModule,
-        NvmeofGatewayGroupFilterComponent
-      ],
-      providers: [
-        { provide: NvmeofService, useClass: MockNvmeOfService },
-        { provide: AuthStorageService, useClass: MockAuthStorageService },
-        { provide: ModalCdsService, useClass: MockModalService },
-        { provide: TaskWrapperService, useClass: MockTaskWrapperService },
-        { provide: ActivatedRoute, useValue: activatedRouteMock },
-        {
-          provide: NvmeofStateService,
-          useValue: { refresh$: refresh$.asObservable(), requestRefresh: jest.fn() }
-        }
-      ]
-    }).compileComponents();
-
+  beforeEach(() => {
     const router = TestBed.inject(Router);
     jest.spyOn(router, 'navigate').mockImplementation((_commands, extras?) => {
       const group = extras?.queryParams?.['group'];

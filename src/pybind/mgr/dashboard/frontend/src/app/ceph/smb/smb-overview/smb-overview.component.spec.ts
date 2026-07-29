@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { SmbOverviewComponent } from './smb-overview.component';
@@ -9,13 +10,13 @@ describe('SmbOverviewComponent', () => {
   let component: SmbOverviewComponent;
   let fixture: ComponentFixture<SmbOverviewComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [SharedModule],
-      declarations: [SmbOverviewComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting()]
-    }).compileComponents();
+  configureTestBed({
+    imports: [SharedModule],
+    declarations: [SmbOverviewComponent],
+    providers: [provideHttpClient(), provideHttpClientTesting()]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(SmbOverviewComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

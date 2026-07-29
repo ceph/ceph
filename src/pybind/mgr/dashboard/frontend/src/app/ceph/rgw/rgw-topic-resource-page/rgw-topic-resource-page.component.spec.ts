@@ -1,7 +1,8 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
-import { ActivatedRoute, convertToParamMap } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { of } from 'rxjs';
 
 import { ComponentsModule } from '~/app/shared/components/components.module';
@@ -11,10 +12,6 @@ import { RgwTopicService } from '~/app/shared/api/rgw-topic.service';
 import { Topic } from '~/app/shared/models/topic.model';
 
 describe('RgwTopicResourcePageComponent', () => {
-  let component: RgwTopicResourcePageComponent;
-  let fixture: ComponentFixture<RgwTopicResourcePageComponent>;
-  let rgwTopicServiceSpy: { getTopic: jest.Mock };
-
   const mockTopic: Topic = {
     name: 'test-topic',
     owner: 'test-user',
@@ -35,29 +32,27 @@ describe('RgwTopicResourcePageComponent', () => {
     key: 'test-key',
     opaqueData: ''
   };
+  let component: RgwTopicResourcePageComponent;
+  let fixture: ComponentFixture<RgwTopicResourcePageComponent>;
+  let rgwTopicServiceSpy: { getTopic: jest.Mock } = {
+    getTopic: jest.fn().mockReturnValue(of(mockTopic))
+  };
+
+  configureTestBed({
+    declarations: [RgwTopicResourcePageComponent],
+    imports: [ComponentsModule, HttpClientTestingModule, PipesModule, RouterTestingModule],
+    providers: [
+      { provide: RgwTopicService, useFactory: () => rgwTopicServiceSpy },
+      {
+        provide: ActivatedRoute,
+        useValue: {
+          data: of({ section: 'overview' })
+        }
+      }
+    ]
+  });
 
   beforeEach(async () => {
-    rgwTopicServiceSpy = {
-      getTopic: jest.fn().mockReturnValue(of(mockTopic))
-    };
-
-    await TestBed.configureTestingModule({
-      declarations: [RgwTopicResourcePageComponent],
-      imports: [ComponentsModule, HttpClientTestingModule, PipesModule, RouterTestingModule],
-      providers: [
-        { provide: RgwTopicService, useValue: rgwTopicServiceSpy },
-        {
-          provide: ActivatedRoute,
-          useValue: {
-            data: of({ section: 'overview' }),
-            parent: {
-              paramMap: of(convertToParamMap({ name: 'test-topic' }))
-            }
-          }
-        }
-      ]
-    }).compileComponents();
-
     fixture = TestBed.createComponent(RgwTopicResourcePageComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

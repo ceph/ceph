@@ -6,6 +6,7 @@ import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.s
 import { provideHttpClient } from '@angular/common/http';
 import { provideRouter, RouterModule } from '@angular/router';
 import { take } from 'rxjs/operators';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 class MockPrometheusAlertService {
   private totalSub = new BehaviorSubject<number>(0);
@@ -28,19 +29,26 @@ class MockPrometheusAlertService {
 describe('OverviewAlertsCardComponent', () => {
   let component: OverviewAlertsCardComponent;
   let fixture: ComponentFixture<OverviewAlertsCardComponent>;
-  let mockSvc: MockPrometheusAlertService;
+  let mockSvc: MockPrometheusAlertService = new MockPrometheusAlertService();
+
+  configureTestBed({
+    imports: [OverviewAlertsCardComponent, RouterModule],
+    providers: [
+      provideRouter([]),
+      provideHttpClient(),
+      { provide: PrometheusAlertService, useFactory: () => mockSvc }
+    ]
+  });
 
   beforeEach(async () => {
-    mockSvc = new MockPrometheusAlertService();
-
-    await TestBed.configureTestingModule({
+    configureTestBed({
       imports: [OverviewAlertsCardComponent, RouterModule],
       providers: [
         provideRouter([]),
         provideHttpClient(),
-        { provide: PrometheusAlertService, useValue: mockSvc }
+        { provide: PrometheusAlertService, useFactory: () => mockSvc }
       ]
-    }).compileComponents();
+    });
 
     fixture = TestBed.createComponent(OverviewAlertsCardComponent);
     component = fixture.componentInstance;

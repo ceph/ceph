@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { Component, DebugElement, ChangeDetectionStrategy } from '@angular/core';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
@@ -45,11 +46,9 @@ describe('ValidateDirective', () => {
   let formGroupDir: FormGroupDirective;
   let control: FormControl;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [ValidateDirective, TestHostComponent],
-      imports: [ReactiveFormsModule]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [ValidateDirective, TestHostComponent],
+    imports: [ReactiveFormsModule]
   });
 
   beforeEach(() => {

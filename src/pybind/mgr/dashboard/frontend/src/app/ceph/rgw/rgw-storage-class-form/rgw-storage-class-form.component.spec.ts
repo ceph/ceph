@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
@@ -26,24 +27,24 @@ describe('RgwStorageClassFormComponent', () => {
   let fixture: ComponentFixture<RgwStorageClassFormComponent>;
   let router: Router;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [
-        BrowserAnimationsModule,
-        SharedModule,
-        HttpClientTestingModule,
-        RouterTestingModule,
-        ReactiveFormsModule,
-        GridModule,
-        InputModule,
-        CoreModule,
-        SelectModule,
-        ComboBoxModule,
-        CheckboxModule
-      ],
-      declarations: [RgwStorageClassFormComponent]
-    }).compileComponents();
+  configureTestBed({
+    imports: [
+      BrowserAnimationsModule,
+      SharedModule,
+      HttpClientTestingModule,
+      RouterTestingModule,
+      ReactiveFormsModule,
+      GridModule,
+      InputModule,
+      CoreModule,
+      SelectModule,
+      ComboBoxModule,
+      CheckboxModule
+    ],
+    declarations: [RgwStorageClassFormComponent]
+  });
 
+  beforeEach(async () => {
     spyOn(TestBed.inject(RgwZonegroupService), 'getAllZonegroupsInfo').and.returnValue(
       of({ zonegroups: [], default_zonegroup: '' })
     );

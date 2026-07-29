@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { RgwStorageClassListComponent } from './rgw-storage-class-list.component';
@@ -11,13 +12,13 @@ describe('RgwStorageClassListComponent', () => {
   let component: RgwStorageClassListComponent;
   let fixture: ComponentFixture<RgwStorageClassListComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule, SharedModule, RouterTestingModule],
-      providers: [NgbActiveModal],
-      declarations: [RgwStorageClassListComponent]
-    }).compileComponents();
+  configureTestBed({
+    imports: [HttpClientTestingModule, SharedModule, RouterTestingModule],
+    providers: [NgbActiveModal],
+    declarations: [RgwStorageClassListComponent]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(RgwStorageClassListComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

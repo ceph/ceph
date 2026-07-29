@@ -3,17 +3,18 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CephfsSubvolumeSnapshotsListComponent } from './cephfs-subvolume-snapshots-list.component';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('CephfsSubvolumeSnapshotsListComponent', () => {
   let component: CephfsSubvolumeSnapshotsListComponent;
   let fixture: ComponentFixture<CephfsSubvolumeSnapshotsListComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [CephfsSubvolumeSnapshotsListComponent],
-      imports: [HttpClientTestingModule, SharedModule]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [CephfsSubvolumeSnapshotsListComponent],
+    imports: [HttpClientTestingModule, SharedModule]
+  });
 
+  beforeEach(() => {
     fixture = TestBed.createComponent(CephfsSubvolumeSnapshotsListComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

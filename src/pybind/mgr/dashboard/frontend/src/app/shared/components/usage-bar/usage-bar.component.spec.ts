@@ -17,7 +17,7 @@ describe('UsageBarComponent', () => {
   configureTestBed({
     imports: [PipesModule, NgbTooltipModule],
     declarations: [UsageBarComponent],
-    providers: [{ provide: ElementRef, useValue: mockElementRef }, CssHelper]
+    providers: [{ provide: ElementRef, useFactory: () => mockElementRef }, CssHelper]
   });
 
   beforeEach(() => {

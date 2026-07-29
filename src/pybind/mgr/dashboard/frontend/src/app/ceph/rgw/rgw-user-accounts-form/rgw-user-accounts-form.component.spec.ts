@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed, fakeAsync, tick, flush } from '@angular/core/testing';
 
 import { RgwUserAccountsFormComponent } from './rgw-user-accounts-form.component';
@@ -24,22 +25,22 @@ describe('RgwUserAccountsFormComponent', () => {
   let fixture: ComponentFixture<RgwUserAccountsFormComponent>;
   let rgwUserAccountsService: MockRgwUserAccountsService;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [RgwUserAccountsFormComponent],
-      imports: [
-        ComponentsModule,
-        HttpClientTestingModule,
-        PipesModule,
-        RouterTestingModule.withRoutes([
-          { path: 'rgw/accounts', component: RgwUserAccountsComponent }
-        ]),
-        ModalModule,
-        ReactiveFormsModule
-      ],
-      providers: [{ provide: RgwUserAccountsService, useClass: MockRgwUserAccountsService }]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [RgwUserAccountsFormComponent],
+    imports: [
+      ComponentsModule,
+      HttpClientTestingModule,
+      PipesModule,
+      RouterTestingModule.withRoutes([
+        { path: 'rgw/accounts', component: RgwUserAccountsComponent }
+      ]),
+      ModalModule,
+      ReactiveFormsModule
+    ],
+    providers: [{ provide: RgwUserAccountsService, useClass: MockRgwUserAccountsService }]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(RgwUserAccountsFormComponent);
     rgwUserAccountsService = TestBed.inject(
       RgwUserAccountsService

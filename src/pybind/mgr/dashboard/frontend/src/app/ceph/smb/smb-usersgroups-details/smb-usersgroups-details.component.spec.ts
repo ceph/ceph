@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { SmbUsersgroupsDetailsComponent } from './smb-usersgroups-details.component';
@@ -6,11 +7,11 @@ describe('SmbUsersgroupsDetailsComponent', () => {
   let component: SmbUsersgroupsDetailsComponent;
   let fixture: ComponentFixture<SmbUsersgroupsDetailsComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [SmbUsersgroupsDetailsComponent]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [SmbUsersgroupsDetailsComponent]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(SmbUsersgroupsDetailsComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

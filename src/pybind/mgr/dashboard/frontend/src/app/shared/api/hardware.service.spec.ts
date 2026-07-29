@@ -12,8 +12,9 @@ describe('HardwareService', () => {
     imports: [HttpClientTestingModule]
   });
 
+  configureTestBed({});
+
   beforeEach(() => {
-    TestBed.configureTestingModule({});
     service = TestBed.inject(HardwareService);
   });
 

@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
@@ -35,36 +36,36 @@ describe('RgwTopicResourceSidebarComponent', () => {
   let component: RgwTopicResourceSidebarComponent;
   let fixture: ComponentFixture<RgwTopicResourceSidebarComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [RgwTopicResourceSidebarComponent],
-      providers: [
-        {
-          provide: ActivatedRoute,
-          useValue: {
-            paramMap: of(convertToParamMap({ name: 'topic:ownerName:testHttp' }))
-          }
-        },
-        {
-          provide: RgwTopicService,
-          useValue: {
-            getTopic: () =>
-              of({
-                name: 'testHttp',
-                owner: 'ownerName',
-                arn: 'arnValue',
-                dest: mockDestination,
-                policy: '{}',
-                key: 'topic:ownerName:testHttp',
-                opaqueData: 'test@12345',
-                subscribed_buckets: []
-              } as Topic)
-          }
+  configureTestBed({
+    declarations: [RgwTopicResourceSidebarComponent],
+    providers: [
+      {
+        provide: ActivatedRoute,
+        useValue: {
+          paramMap: of(convertToParamMap({ name: 'topic:ownerName:testHttp' }))
         }
-      ],
-      schemas: [NO_ERRORS_SCHEMA]
-    }).compileComponents();
+      },
+      {
+        provide: RgwTopicService,
+        useValue: {
+          getTopic: () =>
+            of({
+              name: 'testHttp',
+              owner: 'ownerName',
+              arn: 'arnValue',
+              dest: mockDestination,
+              policy: '{}',
+              key: 'topic:ownerName:testHttp',
+              opaqueData: 'test@12345',
+              subscribed_buckets: []
+            } as Topic)
+        }
+      }
+    ],
+    schemas: [NO_ERRORS_SCHEMA]
+  });
 
+  beforeEach(() => {
     fixture = TestBed.createComponent(RgwTopicResourceSidebarComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

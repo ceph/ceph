@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { RgwMultisiteSyncPolicyComponent } from './rgw-multisite-sync-policy.component';
@@ -15,17 +16,17 @@ describe('RgwMultisiteSyncPolicyComponent', () => {
   let component: RgwMultisiteSyncPolicyComponent;
   let fixture: ComponentFixture<RgwMultisiteSyncPolicyComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [
-        RgwMultisiteSyncPolicyComponent,
-        RgwMultisiteTabsComponent,
-        RgwMultisiteSyncPolicyDetailsComponent
-      ],
-      imports: [HttpClientModule, PipesModule, ModalModule, SharedModule, RouterTestingModule],
-      providers: [TitleCasePipe]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [
+      RgwMultisiteSyncPolicyComponent,
+      RgwMultisiteTabsComponent,
+      RgwMultisiteSyncPolicyDetailsComponent
+    ],
+    imports: [HttpClientModule, PipesModule, ModalModule, SharedModule, RouterTestingModule],
+    providers: [TitleCasePipe]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(RgwMultisiteSyncPolicyComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

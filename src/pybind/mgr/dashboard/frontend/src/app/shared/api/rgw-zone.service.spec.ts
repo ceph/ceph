@@ -11,8 +11,9 @@ describe('RgwZoneService', () => {
     imports: [HttpClientTestingModule]
   });
 
+  configureTestBed({});
+
   beforeEach(() => {
-    TestBed.configureTestingModule({});
     service = TestBed.inject(RgwZoneService);
   });
 

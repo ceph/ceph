@@ -2,16 +2,17 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterModule } from '@angular/router';
 
 import { NvmeofSetupCardsComponent } from './nvmeof-setup-cards.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('NvmeofSetupCardsComponent', () => {
   let component: NvmeofSetupCardsComponent;
   let fixture: ComponentFixture<NvmeofSetupCardsComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [NvmeofSetupCardsComponent, RouterModule.forRoot([])]
-    }).compileComponents();
+  configureTestBed({
+    imports: [NvmeofSetupCardsComponent, RouterModule.forRoot([])]
+  });
 
+  beforeEach(() => {
     fixture = TestBed.createComponent(NvmeofSetupCardsComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

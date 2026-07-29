@@ -11,36 +11,37 @@ import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete
 import { NvmeofGatewayGroupDeleteGuardModalComponent } from './nvmeof-gateway-group-delete-guard-modal.component';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { NvmeofStateService } from '../nvmeof-state.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('NvmeofGatewayGroupComponent', () => {
   let component: NvmeofGatewayGroupComponent;
   let fixture: ComponentFixture<NvmeofGatewayGroupComponent>;
   let nvmeofService: any;
+  let nvmeofServiceSpy = {
+    listGatewayGroups: jest.fn().mockReturnValue(of([])),
+    listSubsystems: jest.fn().mockReturnValue(of([]))
+  };
+  let nvmeofStateServiceMock = {
+    refresh$: new Subject<void>(),
+    requestRefresh: jest.fn()
+  };
 
-  beforeEach(async () => {
-    const nvmeofServiceSpy = {
-      listGatewayGroups: jest.fn().mockReturnValue(of([])),
-      listSubsystems: jest.fn().mockReturnValue(of([]))
-    };
-    const nvmeofStateServiceMock = {
-      refresh$: new Subject<void>(),
-      requestRefresh: jest.fn()
-    };
+  configureTestBed({
+    imports: [HttpClientModule, SharedModule, TabsModule, GridModule, ModalModule],
+    declarations: [NvmeofGatewayGroupComponent],
+    providers: [
+      { provide: NvmeofService, useFactory: () => nvmeofServiceSpy },
+      {
+        provide: ModalCdsService,
+        useValue: { show: jest.fn() }
+      },
+      { provide: NvmeofStateService, useFactory: () => nvmeofStateServiceMock }
+    ],
+    schemas: [NO_ERRORS_SCHEMA]
+  });
 
-    await TestBed.configureTestingModule({
-      imports: [HttpClientModule, SharedModule, TabsModule, GridModule, ModalModule],
-      declarations: [NvmeofGatewayGroupComponent],
-      providers: [
-        { provide: NvmeofService, useValue: nvmeofServiceSpy },
-        {
-          provide: ModalCdsService,
-          useValue: { show: jest.fn() }
-        },
-        { provide: NvmeofStateService, useValue: nvmeofStateServiceMock }
-      ],
-      schemas: [NO_ERRORS_SCHEMA]
-    }).compileComponents();
-
+  beforeEach(() => {
+    jest.clearAllMocks();
     fixture = TestBed.createComponent(NvmeofGatewayGroupComponent);
     component = fixture.componentInstance;
     nvmeofService = TestBed.inject(NvmeofService);

@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
-import { ReactiveFormsModule } from '@angular/forms';
+import { ReactiveFormsModule, FormsModule } from '@angular/forms';
+import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
 
 import { CephfsMirroringEntityComponent } from './cephfs-mirroring-entity.component';
@@ -8,6 +9,7 @@ import { ClusterService } from '~/app/shared/api/cluster.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('CephfsMirroringEntityComponent', () => {
   let component: CephfsMirroringEntityComponent;
@@ -16,6 +18,18 @@ describe('CephfsMirroringEntityComponent', () => {
   let clusterServiceMock: any;
   let cephfsServiceMock: any;
   let taskWrapperServiceMock: any;
+
+  configureTestBed({
+    declarations: [CephfsMirroringEntityComponent],
+    imports: [ReactiveFormsModule, FormsModule],
+    schemas: [NO_ERRORS_SCHEMA],
+    providers: [
+      CdFormBuilder,
+      { provide: ClusterService, useFactory: () => clusterServiceMock },
+      { provide: CephfsService, useFactory: () => cephfsServiceMock },
+      { provide: TaskWrapperService, useFactory: () => taskWrapperServiceMock }
+    ]
+  });
 
   beforeEach(async () => {
     clusterServiceMock = {
@@ -31,20 +45,11 @@ describe('CephfsMirroringEntityComponent', () => {
       wrapTaskAroundCall: jest.fn()
     };
 
-    await TestBed.configureTestingModule({
-      declarations: [CephfsMirroringEntityComponent],
-      imports: [ReactiveFormsModule],
-      providers: [
-        CdFormBuilder,
-        { provide: ClusterService, useValue: clusterServiceMock },
-        { provide: CephfsService, useValue: cephfsServiceMock },
-        { provide: TaskWrapperService, useValue: taskWrapperServiceMock }
-      ]
-    })
-      .overrideComponent(CephfsMirroringEntityComponent, {
-        set: { template: '' }
-      })
-      .compileComponents();
+    TestBed.overrideComponent(CephfsMirroringEntityComponent, {
+      set: { template: '' }
+    });
+
+    await TestBed.compileComponents();
 
     fixture = TestBed.createComponent(CephfsMirroringEntityComponent);
     component = fixture.componentInstance;

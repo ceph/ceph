@@ -13,6 +13,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { ALLOW_ALL_HOST } from '~/app/shared/models/nvmeof';
 
 import { NvmeofInitiatorsListComponent } from './nvmeof-initiators-list.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 const mockInitiators = [
   {
@@ -51,39 +52,33 @@ describe('NvmeofInitiatorsListComponent', () => {
   let component: NvmeofInitiatorsListComponent;
   let fixture: ComponentFixture<NvmeofInitiatorsListComponent>;
   let nvmeofService: NvmeofService;
-  let routeParams$: Subject<any>;
-  let queryParams$: Subject<any>;
-  let routerEvents$: Subject<any>;
+  let routeParams$: Subject<any> = new Subject<any>();
+  let queryParams$: Subject<any> = new Subject<any>();
+  let routerEvents$: Subject<any> = new Subject<any>();
 
-  beforeEach(async () => {
-    routeParams$ = new Subject<any>();
-    queryParams$ = new Subject<any>();
-    routerEvents$ = new Subject<any>();
-
-    await TestBed.configureTestingModule({
-      declarations: [NvmeofInitiatorsListComponent],
-      imports: [HttpClientModule, RouterTestingModule, SharedModule],
-      providers: [
-        { provide: NvmeofService, useClass: MockNvmeOfService },
-        { provide: AuthStorageService, useClass: MockAuthStorageService },
-        { provide: ModalCdsService, useClass: MockModalCdsService },
-        { provide: TaskWrapperService, useClass: MockTaskWrapperService },
-        {
-          provide: ActivatedRoute,
-          useValue: {
-            parent: { params: routeParams$.asObservable() },
-            queryParams: queryParams$.asObservable()
-          }
-        },
-        {
-          provide: Router,
-          useValue: {
-            events: routerEvents$.asObservable(),
-            navigate: jasmine.createSpy('navigate')
-          }
+  configureTestBed({
+    declarations: [NvmeofInitiatorsListComponent],
+    imports: [HttpClientModule, RouterTestingModule, SharedModule],
+    providers: [
+      { provide: NvmeofService, useClass: MockNvmeOfService },
+      { provide: AuthStorageService, useClass: MockAuthStorageService },
+      { provide: ModalCdsService, useClass: MockModalCdsService },
+      { provide: TaskWrapperService, useClass: MockTaskWrapperService },
+      {
+        provide: ActivatedRoute,
+        useValue: {
+          parent: { params: routeParams$.asObservable() },
+          queryParams: queryParams$.asObservable()
         }
-      ]
-    }).compileComponents();
+      },
+      {
+        provide: Router,
+        useValue: {
+          events: routerEvents$.asObservable(),
+          navigate: jasmine.createSpy('navigate')
+        }
+      }
+    ]
   });
 
   beforeEach(() => {

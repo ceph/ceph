@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { SmbJoinAuthListComponent } from './smb-join-auth-list.component';
@@ -10,12 +11,12 @@ describe('SmbJoinAuthListComponent', () => {
   let component: SmbJoinAuthListComponent;
   let fixture: ComponentFixture<SmbJoinAuthListComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [SmbJoinAuthListComponent],
-      imports: [SharedModule, HttpClientTestingModule, RouterTestingModule]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [SmbJoinAuthListComponent],
+    imports: [SharedModule, HttpClientTestingModule, RouterTestingModule]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(SmbJoinAuthListComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

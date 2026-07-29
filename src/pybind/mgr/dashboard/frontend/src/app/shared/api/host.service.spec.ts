@@ -22,8 +22,8 @@ describe('HostService', () => {
   configureTestBed({
     providers: [
       HostService,
-      { provide: DeviceService, useValue: deviceServiceStub },
-      { provide: OrchestratorService, useValue: orchestratorServiceStub }
+      { provide: DeviceService, useFactory: () => deviceServiceStub },
+      { provide: OrchestratorService, useFactory: () => orchestratorServiceStub }
     ],
     imports: [HttpClientTestingModule]
   });

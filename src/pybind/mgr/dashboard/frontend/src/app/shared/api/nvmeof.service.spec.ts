@@ -26,8 +26,8 @@ describe('NvmeofService', () => {
   configureTestBed({
     providers: [
       NvmeofService,
-      { provide: HostService, useValue: mockHostService },
-      { provide: OrchestratorService, useValue: mockOrchService }
+      { provide: HostService, useFactory: () => mockHostService },
+      { provide: OrchestratorService, useFactory: () => mockOrchService }
     ],
     imports: [HttpClientTestingModule]
   });

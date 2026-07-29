@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { of } from 'rxjs';
@@ -9,26 +10,26 @@ describe('RgwUserAccountsResourceSidebarComponent', () => {
   let component: RgwUserAccountsResourceSidebarComponent;
   let fixture: ComponentFixture<RgwUserAccountsResourceSidebarComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [RgwUserAccountsResourceSidebarComponent],
-      providers: [
-        {
-          provide: ActivatedRoute,
-          useValue: {
-            paramMap: of(convertToParamMap({ accountName: 'account1' })),
-            data: of({
-              account: {
-                id: 'RGW11111111111111111',
-                name: 'account1'
-              }
-            })
-          }
+  configureTestBed({
+    declarations: [RgwUserAccountsResourceSidebarComponent],
+    providers: [
+      {
+        provide: ActivatedRoute,
+        useValue: {
+          paramMap: of(convertToParamMap({ accountName: 'account1' })),
+          data: of({
+            account: {
+              id: 'RGW11111111111111111',
+              name: 'account1'
+            }
+          })
         }
-      ],
-      schemas: [NO_ERRORS_SCHEMA]
-    }).compileComponents();
+      }
+    ],
+    schemas: [NO_ERRORS_SCHEMA]
+  });
 
+  beforeEach(() => {
     fixture = TestBed.createComponent(RgwUserAccountsResourceSidebarComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

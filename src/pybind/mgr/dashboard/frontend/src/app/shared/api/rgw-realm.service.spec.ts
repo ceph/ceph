@@ -11,8 +11,9 @@ describe('RgwRealmService', () => {
     imports: [HttpClientTestingModule]
   });
 
+  configureTestBed({});
+
   beforeEach(() => {
-    TestBed.configureTestingModule({});
     service = TestBed.inject(RgwRealmService);
   });
 

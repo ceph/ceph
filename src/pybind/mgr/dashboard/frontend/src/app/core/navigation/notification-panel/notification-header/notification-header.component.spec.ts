@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NotificationHeaderComponent } from './notification-header.component';
 import { NotificationService } from '../../../../shared/services/notification.service';
@@ -8,25 +9,24 @@ describe('NotificationHeaderComponent', () => {
   let component: NotificationHeaderComponent;
   let fixture: ComponentFixture<NotificationHeaderComponent>;
   let notificationService: NotificationService;
-  let muteStateSubject: BehaviorSubject<boolean>;
+  let muteStateSubject: BehaviorSubject<boolean> = new BehaviorSubject<boolean>(false);
+
+  configureTestBed({
+    declarations: [NotificationHeaderComponent],
+    imports: [ToggleModule, GridModule],
+    providers: [
+      {
+        provide: NotificationService,
+        useValue: {
+          muteState$: muteStateSubject.asObservable(),
+          removeAll: jasmine.createSpy('removeAll'),
+          suspendToasties: jasmine.createSpy('suspendToasties')
+        }
+      }
+    ]
+  });
 
   beforeEach(async () => {
-    muteStateSubject = new BehaviorSubject<boolean>(false);
-    await TestBed.configureTestingModule({
-      declarations: [NotificationHeaderComponent],
-      imports: [ToggleModule, GridModule],
-      providers: [
-        {
-          provide: NotificationService,
-          useValue: {
-            muteState$: muteStateSubject.asObservable(),
-            removeAll: jasmine.createSpy('removeAll'),
-            suspendToasties: jasmine.createSpy('suspendToasties')
-          }
-        }
-      ]
-    }).compileComponents();
-
     fixture = TestBed.createComponent(NotificationHeaderComponent);
     component = fixture.componentInstance;
     notificationService = TestBed.inject(NotificationService);

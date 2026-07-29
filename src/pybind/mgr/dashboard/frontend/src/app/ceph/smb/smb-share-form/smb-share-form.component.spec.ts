@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { SmbShareFormComponent } from './smb-share-form.component';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
@@ -21,25 +22,25 @@ describe('SmbShareFormComponent', () => {
   let component: SmbShareFormComponent;
   let fixture: ComponentFixture<SmbShareFormComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [
-        BrowserAnimationsModule,
-        SharedModule,
-        HttpClientTestingModule,
-        RouterTestingModule,
-        ReactiveFormsModule,
-        GridModule,
-        InputModule,
-        NumberModule,
-        SelectModule,
-        ComboBoxModule,
-        CheckboxModule
-      ],
-      declarations: [SmbShareFormComponent],
-      providers: [SmbService, TaskWrapperService]
-    }).compileComponents();
+  configureTestBed({
+    imports: [
+      BrowserAnimationsModule,
+      SharedModule,
+      HttpClientTestingModule,
+      RouterTestingModule,
+      ReactiveFormsModule,
+      GridModule,
+      InputModule,
+      NumberModule,
+      SelectModule,
+      ComboBoxModule,
+      CheckboxModule
+    ],
+    declarations: [SmbShareFormComponent],
+    providers: [SmbService, TaskWrapperService]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(SmbShareFormComponent);
     component = fixture.componentInstance;
     component.ngOnInit();

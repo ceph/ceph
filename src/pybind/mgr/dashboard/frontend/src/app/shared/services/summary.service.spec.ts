@@ -37,7 +37,7 @@ describe('SummaryService', () => {
     providers: [
       SummaryService,
       AuthStorageService,
-      { provide: HttpClient, useValue: httpClientSpy }
+      { provide: HttpClient, useFactory: () => httpClientSpy }
     ]
   });
 

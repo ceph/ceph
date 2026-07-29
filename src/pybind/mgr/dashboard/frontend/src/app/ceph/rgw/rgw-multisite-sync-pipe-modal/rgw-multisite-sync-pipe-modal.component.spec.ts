@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { RgwMultisiteSyncPipeModalComponent } from './rgw-multisite-sync-pipe-modal.component';
@@ -22,35 +23,35 @@ describe('RgwMultisiteSyncPipeModalComponent', () => {
   let fixture: ComponentFixture<RgwMultisiteSyncPipeModalComponent>;
   let multisiteServiceMock: MultisiteServiceMock;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [RgwMultisiteSyncPipeModalComponent],
-      imports: [
-        HttpClientTestingModule,
-        PipesModule,
-        ReactiveFormsModule,
-        CommonModule,
-        ComboBoxModule
-      ],
-      schemas: [NO_ERRORS_SCHEMA, CUSTOM_ELEMENTS_SCHEMA],
-      providers: [
-        NgbActiveModal,
-        { provide: RgwMultisiteService, useClass: MultisiteServiceMock },
-        { provide: 'groupType', useValue: FlowType.symmetrical },
-        { provide: 'groupExpandedRow', useValue: { groupName: 'new', bucket: 'bucket1' } },
-        {
-          provide: 'pipeSelectedRow',
-          useValue: {
-            source: { zones: ['zone1-zg1-realm1'], bucket: 'bucket1' },
-            dest: { zones: ['zone2-zg1-realm1'], bucket: 'bucket1' },
-            id: 'pipe1',
-            params: { user: 'dashboard', mode: USER }
-          }
-        },
-        { provide: 'action', useValue: 'create' }
-      ]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [RgwMultisiteSyncPipeModalComponent],
+    imports: [
+      HttpClientTestingModule,
+      PipesModule,
+      ReactiveFormsModule,
+      CommonModule,
+      ComboBoxModule
+    ],
+    schemas: [NO_ERRORS_SCHEMA, CUSTOM_ELEMENTS_SCHEMA],
+    providers: [
+      NgbActiveModal,
+      { provide: RgwMultisiteService, useClass: MultisiteServiceMock },
+      { provide: 'groupType', useValue: FlowType.symmetrical },
+      { provide: 'groupExpandedRow', useValue: { groupName: 'new', bucket: 'bucket1' } },
+      {
+        provide: 'pipeSelectedRow',
+        useValue: {
+          source: { zones: ['zone1-zg1-realm1'], bucket: 'bucket1' },
+          dest: { zones: ['zone2-zg1-realm1'], bucket: 'bucket1' },
+          id: 'pipe1',
+          params: { user: 'dashboard', mode: USER }
+        }
+      },
+      { provide: 'action', useValue: 'create' }
+    ]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(RgwMultisiteSyncPipeModalComponent);
     multisiteServiceMock = TestBed.inject(RgwMultisiteService) as unknown as MultisiteServiceMock;
     component = fixture.componentInstance;

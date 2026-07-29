@@ -9,6 +9,7 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { of } from 'rxjs';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 const mockListeners = [
   {
@@ -40,18 +41,18 @@ describe('NvmeofListenersListComponent', () => {
   let component: NvmeofListenersListComponent;
   let fixture: ComponentFixture<NvmeofListenersListComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [NvmeofListenersListComponent],
-      imports: [HttpClientModule, RouterTestingModule, SharedModule],
-      providers: [
-        { provide: NvmeofService, useClass: MockNvmeOfService },
-        { provide: AuthStorageService, useClass: MockAuthStorageService },
-        { provide: ModalService, useClass: MockModalService },
-        { provide: TaskWrapperService, useClass: MockTaskWrapperService }
-      ]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [NvmeofListenersListComponent],
+    imports: [HttpClientModule, RouterTestingModule, SharedModule],
+    providers: [
+      { provide: NvmeofService, useClass: MockNvmeOfService },
+      { provide: AuthStorageService, useClass: MockAuthStorageService },
+      { provide: ModalService, useClass: MockModalService },
+      { provide: TaskWrapperService, useClass: MockTaskWrapperService }
+    ]
+  });
 
+  beforeEach(() => {
     fixture = TestBed.createComponent(NvmeofListenersListComponent);
     component = fixture.componentInstance;
     component.ngOnInit();

@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { NgbNav, NgbNavChangeEvent } from '@ng-bootstrap/ng-bootstrap';
 import { CUSTOM_ELEMENTS_SCHEMA, NO_ERRORS_SCHEMA } from '@angular/core';
 
@@ -9,12 +10,10 @@ class NgbNavMock {
 }
 
 describe('StatefulTabDirective', () => {
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [StatefulTabDirective],
-      providers: [{ provide: NgbNav, useClass: NgbNavMock }],
-      schemas: [NO_ERRORS_SCHEMA, CUSTOM_ELEMENTS_SCHEMA]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [StatefulTabDirective],
+    providers: [{ provide: NgbNav, useClass: NgbNavMock }],
+    schemas: [NO_ERRORS_SCHEMA, CUSTOM_ELEMENTS_SCHEMA]
   });
 
   it('should create an instance', () => {

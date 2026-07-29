@@ -59,7 +59,7 @@ describe('ServicesComponent', () => {
       HttpClientTestingModule,
       RouterTestingModule
     ],
-    providers: [{ provide: AuthStorageService, useValue: fakeAuthStorageService }]
+    providers: [{ provide: AuthStorageService, useFactory: () => fakeAuthStorageService }]
   });
 
   beforeEach(() => {

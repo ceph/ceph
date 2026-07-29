@@ -15,6 +15,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { NvmeofSubsystemsDetailsComponent } from '../nvmeof-subsystems-details/nvmeof-subsystems-details.component';
 import { NvmeofNamespacesListComponent } from './nvmeof-namespaces-list.component';
 import { NvmeofGatewayGroupFilterComponent } from '../nvmeof-gateway-group-filter/nvmeof-gateway-group-filter.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 const mockNamespaces = [
   {
@@ -85,42 +86,38 @@ class MockTaskWrapperService {}
 describe('NvmeofNamespacesListComponent', () => {
   let component: NvmeofNamespacesListComponent;
   let fixture: ComponentFixture<NvmeofNamespacesListComponent>;
-  let queryParams$: BehaviorSubject<Record<string, string>>;
   let modalService: MockModalCdsService;
   let nvmeofService: MockNvmeOfService;
+  let queryParams$: BehaviorSubject<Record<string, string>> = new BehaviorSubject({});
   const activatedRouteMock = {
-    queryParams: null as any,
+    queryParams: queryParams$.asObservable(),
     snapshot: { queryParams: {} as Record<string, string> }
   };
+  const refresh$ = new Subject<void>();
 
-  beforeEach(async () => {
-    const refresh$ = new Subject<void>();
-    queryParams$ = new BehaviorSubject<Record<string, string>>({});
-    activatedRouteMock.queryParams = queryParams$.asObservable();
-    activatedRouteMock.snapshot.queryParams = queryParams$.value;
+  configureTestBed({
+    declarations: [NvmeofNamespacesListComponent, NvmeofSubsystemsDetailsComponent],
+    imports: [
+      HttpClientModule,
+      RouterTestingModule,
+      SharedModule,
+      NvmeofGatewayGroupFilterComponent
+    ],
+    providers: [
+      { provide: NvmeofService, useClass: MockNvmeOfService },
+      { provide: AuthStorageService, useClass: MockAuthStorageService },
+      { provide: ModalCdsService, useClass: MockModalCdsService },
+      { provide: TaskWrapperService, useClass: MockTaskWrapperService },
+      { provide: ActivatedRoute, useFactory: () => activatedRouteMock },
+      {
+        provide: NvmeofStateService,
+        useValue: { refresh$: refresh$.asObservable(), requestRefresh: jest.fn() }
+      }
+    ],
+    schemas: [CUSTOM_ELEMENTS_SCHEMA]
+  });
 
-    await TestBed.configureTestingModule({
-      declarations: [NvmeofNamespacesListComponent, NvmeofSubsystemsDetailsComponent],
-      imports: [
-        HttpClientModule,
-        RouterTestingModule,
-        SharedModule,
-        NvmeofGatewayGroupFilterComponent
-      ],
-      providers: [
-        { provide: NvmeofService, useClass: MockNvmeOfService },
-        { provide: AuthStorageService, useClass: MockAuthStorageService },
-        { provide: ModalCdsService, useClass: MockModalCdsService },
-        { provide: TaskWrapperService, useClass: MockTaskWrapperService },
-        { provide: ActivatedRoute, useValue: activatedRouteMock },
-        {
-          provide: NvmeofStateService,
-          useValue: { refresh$: refresh$.asObservable(), requestRefresh: jest.fn() }
-        }
-      ],
-      schemas: [CUSTOM_ELEMENTS_SCHEMA]
-    }).compileComponents();
-
+  beforeEach(() => {
     const router = TestBed.inject(Router);
     jest.spyOn(router, 'navigate').mockImplementation((_commands, extras?) => {
       const group = extras?.queryParams?.['group'];

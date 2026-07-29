@@ -1,21 +1,20 @@
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
-import { ComponentFixture, TestBed, waitForAsync } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { SideNavModule, ThemeModule } from 'carbon-components-angular';
 
 import { RouterTestingModule } from '@angular/router/testing';
 import { NvmeGatewayViewComponent } from './nvme-gateway-view.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('NvmeGatewayViewComponent', () => {
   let component: NvmeGatewayViewComponent;
   let fixture: ComponentFixture<NvmeGatewayViewComponent>;
 
-  beforeEach(waitForAsync(() => {
-    TestBed.configureTestingModule({
-      declarations: [NvmeGatewayViewComponent],
-      imports: [RouterTestingModule, SideNavModule, ThemeModule],
-      schemas: [CUSTOM_ELEMENTS_SCHEMA]
-    }).compileComponents();
-  }));
+  configureTestBed({
+    declarations: [NvmeGatewayViewComponent],
+    imports: [RouterTestingModule, SideNavModule, ThemeModule],
+    schemas: [CUSTOM_ELEMENTS_SCHEMA]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(NvmeGatewayViewComponent);

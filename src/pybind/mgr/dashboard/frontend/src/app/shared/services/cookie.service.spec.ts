@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { TestBed } from '@angular/core/testing';
 
 import { CookiesService } from './cookie.service';
@@ -5,8 +6,9 @@ import { CookiesService } from './cookie.service';
 describe('CookieService', () => {
   let service: CookiesService;
 
+  configureTestBed({});
+
   beforeEach(() => {
-    TestBed.configureTestingModule({});
     service = TestBed.inject(CookiesService);
   });
 

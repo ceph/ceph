@@ -74,7 +74,7 @@ describe('RbdSnapshotListComponent', () => {
       CoreModule
     ],
     providers: [
-      { provide: AuthStorageService, useValue: fakeAuthStorageService },
+      { provide: AuthStorageService, useFactory: () => fakeAuthStorageService },
       TaskListService,
       ModalService,
       PlaceholderService,

@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BehaviorSubject, Subscription } from 'rxjs';
 import { Location } from '@angular/common';
@@ -21,8 +22,23 @@ describe('NotificationsPageComponent', () => {
   let dataSourceSubject: BehaviorSubject<CdNotification[]>;
   let readMapSubject: BehaviorSubject<Record<string, boolean>>;
   let notificationService: any;
-  let mockLocation: any;
+  let mockLocation: any = { back: jasmine.createSpy('back') };
   let queryParamsSubject: BehaviorSubject<any>;
+
+  const mockPrometheusAlertService = {
+    refresh: jasmine.createSpy('refresh')
+  };
+
+  const mockPrometheusNotificationService = {
+    refresh: jasmine.createSpy('refresh')
+  };
+
+  const mockAuthStorageService = {
+    getPermissions: jasmine.createSpy('getPermissions').and.returnValue({
+      prometheus: { read: false },
+      configOpt: { read: false }
+    })
+  };
 
   const createMockNotificationService = () => {
     dataSourceSubject = new BehaviorSubject<CdNotification[]>([]);
@@ -56,21 +72,6 @@ describe('NotificationsPageComponent', () => {
     };
   };
 
-  const mockPrometheusAlertService = {
-    refresh: jasmine.createSpy('refresh')
-  };
-
-  const mockPrometheusNotificationService = {
-    refresh: jasmine.createSpy('refresh')
-  };
-
-  const mockAuthStorageService = {
-    getPermissions: jasmine.createSpy('getPermissions').and.returnValue({
-      prometheus: { read: false },
-      configOpt: { read: false }
-    })
-  };
-
   const createMockNotification = (overrides: any): CdNotification => {
     return {
       id: overrides.id,
@@ -89,7 +90,36 @@ describe('NotificationsPageComponent', () => {
     } as CdNotification;
   };
 
-  beforeEach(async () => {
+  configureTestBed({
+    imports: [GridModule, IconModule, LinkModule, SharedModule],
+    declarations: [NotificationsPageComponent],
+    providers: [
+      {
+        provide: NotificationService,
+        useFactory: () => notificationService
+      },
+      { provide: PrometheusAlertService, useFactory: () => mockPrometheusAlertService },
+      {
+        provide: PrometheusNotificationService,
+        useFactory: () => mockPrometheusNotificationService
+      },
+      { provide: AuthStorageService, useFactory: () => mockAuthStorageService },
+      { provide: Location, useFactory: () => mockLocation },
+      {
+        provide: ActivatedRoute,
+        useFactory: () => ({
+          snapshot: { queryParams: {} },
+          queryParams: queryParamsSubject.asObservable()
+        })
+      }
+    ],
+    schemas: [CUSTOM_ELEMENTS_SCHEMA]
+  });
+
+  beforeEach(() => {
+    localStorage.removeItem('cdNotificationsRead');
+    queryParamsSubject = new BehaviorSubject<any>({});
+
     mockNotifications = [
       createMockNotification({
         id: '1',
@@ -117,35 +147,8 @@ describe('NotificationsPageComponent', () => {
       })
     ];
 
-    mockLocation = { back: jasmine.createSpy('back') };
-    const mockNotificationService = createMockNotificationService();
-    notificationService = mockNotificationService;
-    queryParamsSubject = new BehaviorSubject<any>({});
+    notificationService = createMockNotificationService();
 
-    localStorage.removeItem('cdNotificationsRead');
-
-    await TestBed.configureTestingModule({
-      imports: [GridModule, IconModule, LinkModule, SharedModule],
-      declarations: [NotificationsPageComponent],
-      providers: [
-        { provide: NotificationService, useValue: mockNotificationService },
-        { provide: PrometheusAlertService, useValue: mockPrometheusAlertService },
-        { provide: PrometheusNotificationService, useValue: mockPrometheusNotificationService },
-        { provide: AuthStorageService, useValue: mockAuthStorageService },
-        { provide: Location, useValue: mockLocation },
-        {
-          provide: ActivatedRoute,
-          useValue: {
-            snapshot: { queryParams: {} },
-            queryParams: queryParamsSubject.asObservable()
-          }
-        }
-      ],
-      schemas: [CUSTOM_ELEMENTS_SCHEMA]
-    }).compileComponents();
-  });
-
-  beforeEach(() => {
     fixture = TestBed.createComponent(NotificationsPageComponent);
     component = fixture.componentInstance;
     dataSourceSubject.next(mockNotifications);
@@ -247,7 +250,7 @@ describe('NotificationsPageComponent', () => {
 
     it('should persist read state to localStorage via service', () => {
       component.onNotificationSelect(component.notifications()[0]);
-      const stored = JSON.parse(localStorage.getItem('cdNotificationsRead'));
+      const stored = JSON.parse(localStorage.getItem('cdNotificationsRead')!);
       expect(stored['1']).toBe(true);
     });
 

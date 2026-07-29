@@ -48,10 +48,7 @@ describe('HostResourcePageComponent', () => {
           snapshot: { data: { section: 'overview' } }
         }
       },
-      {
-        provide: HostService,
-        useValue: hostServiceSpy
-      },
+      { provide: HostService, useFactory: () => hostServiceSpy },
       {
         provide: AuthStorageService,
         useValue: {

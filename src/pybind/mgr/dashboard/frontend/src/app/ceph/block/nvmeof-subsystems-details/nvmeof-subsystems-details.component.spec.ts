@@ -7,17 +7,18 @@ import { Permissions } from '~/app/shared/models/permissions';
 import { SharedModule } from '~/app/shared/shared.module';
 import { NvmeofSubsystemsDetailsComponent } from './nvmeof-subsystems-details.component';
 import { DEFAULT_MAX_NAMESPACE_PER_SUBSYSTEM } from '~/app/shared/api/nvmeof.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('NvmeofSubsystemsDetailsComponent', () => {
   let component: NvmeofSubsystemsDetailsComponent;
   let fixture: ComponentFixture<NvmeofSubsystemsDetailsComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [NvmeofSubsystemsDetailsComponent],
-      imports: [BrowserAnimationsModule, SharedModule, HttpClientTestingModule, NgbNavModule]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [NvmeofSubsystemsDetailsComponent],
+    imports: [BrowserAnimationsModule, SharedModule, HttpClientTestingModule, NgbNavModule]
+  });
 
+  beforeEach(() => {
     fixture = TestBed.createComponent(NvmeofSubsystemsDetailsComponent);
     component = fixture.componentInstance;
     component.selection = {

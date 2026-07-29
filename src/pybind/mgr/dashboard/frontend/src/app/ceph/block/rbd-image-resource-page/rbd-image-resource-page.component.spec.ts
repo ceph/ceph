@@ -10,12 +10,23 @@ import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
 import { RbdFormModel } from '../rbd-form/rbd-form.model';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('RbdImageResourcePageComponent', () => {
   let component: RbdImageResourcePageComponent;
   let fixture: ComponentFixture<RbdImageResourcePageComponent>;
-  let rbdConfigurationServiceSpy: jest.Mocked<RbdConfigurationService>;
-  let imageSubject: BehaviorSubject<RbdFormModel | null>;
+  let rbdConfigurationServiceSpy: jest.Mocked<RbdConfigurationService> = {
+    getOptionByName: jest.fn().mockReturnValue({ displayName: 'RBD Cache', type: 'boolean' })
+  } as any;
+  let imageSubject: BehaviorSubject<RbdFormModel | null> = new BehaviorSubject<RbdFormModel | null>(
+    null
+  );
+  const rbdImageResourceStateServiceMock = {
+    image$: imageSubject.asObservable()
+  };
+  const activatedRouteMock = {
+    snapshot: { data: { section: 'overview' } }
+  };
 
   const baseMockImage: any = {
     name: 'test-image',
@@ -63,34 +74,17 @@ describe('RbdImageResourcePageComponent', () => {
     }
   }
 
-  beforeEach(async () => {
-    imageSubject = new BehaviorSubject<RbdFormModel | null>(null);
-
-    // Create Jest mocks for services
-    const rbdImageResourceStateServiceMock = {
-      image$: imageSubject.asObservable()
-    };
-
-    rbdConfigurationServiceSpy = {
-      getOptionByName: jest.fn().mockReturnValue({ displayName: 'RBD Cache', type: 'boolean' })
-    } as any;
-
-    const activatedRouteMock = {
-      snapshot: { data: { section: 'overview' } }
-    };
-
-    await TestBed.configureTestingModule({
-      declarations: [RbdImageResourcePageComponent],
-      providers: [
-        { provide: ActivatedRoute, useValue: activatedRouteMock },
-        { provide: RbdImageResourceStateService, useValue: rbdImageResourceStateServiceMock },
-        { provide: RbdConfigurationService, useValue: rbdConfigurationServiceSpy },
-        { provide: DimlessBinaryPipe, useClass: MockDimlessBinaryPipe },
-        { provide: DimlessPipe, useClass: MockDimlessPipe },
-        { provide: CdDatePipe, useClass: MockCdDatePipe }
-      ],
-      schemas: [NO_ERRORS_SCHEMA]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [RbdImageResourcePageComponent],
+    providers: [
+      { provide: ActivatedRoute, useFactory: () => activatedRouteMock },
+      { provide: RbdImageResourceStateService, useFactory: () => rbdImageResourceStateServiceMock },
+      { provide: RbdConfigurationService, useFactory: () => rbdConfigurationServiceSpy },
+      { provide: DimlessBinaryPipe, useClass: MockDimlessBinaryPipe },
+      { provide: DimlessPipe, useClass: MockDimlessPipe },
+      { provide: CdDatePipe, useClass: MockCdDatePipe }
+    ],
+    schemas: [NO_ERRORS_SCHEMA]
   });
 
   beforeEach(() => {

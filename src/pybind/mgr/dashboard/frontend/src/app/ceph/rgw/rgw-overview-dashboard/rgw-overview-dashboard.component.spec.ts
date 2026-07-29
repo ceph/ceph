@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { of, BehaviorSubject, combineLatest } from 'rxjs';
 import { RgwOverviewDashboardComponent } from './rgw-overview-dashboard.component';
@@ -62,37 +63,38 @@ describe('RgwOverviewDashboardComponent', () => {
     zones: ['zone4', 'zone5', 'zone6', 'zone7']
   };
 
-  beforeEach(() => {
-    TestBed.configureTestingModule({
-      declarations: [
-        RgwOverviewDashboardComponent,
-        CardComponent,
-        CardRowComponent,
-        DimlessBinaryPipe
-      ],
-      schemas: [NO_ERRORS_SCHEMA],
-      providers: [
-        { provide: RgwDaemonService, useValue: { list: jest.fn() } },
-        { provide: RgwRealmService, useValue: { list: jest.fn() } },
-        { provide: RgwZonegroupService, useValue: { list: jest.fn() } },
-        { provide: RgwZoneService, useValue: { list: jest.fn() } },
-        {
-          provide: RgwBucketService,
-          useValue: {
-            fetchAndTransformBuckets: jest.fn(),
-            totalNumObjects$: totalNumObjectsSubject.asObservable(),
-            totalUsedCapacity$: totalUsedCapacitySubject.asObservable(),
-            averageObjectSize$: averageObjectSizeSubject.asObservable(),
-            getTotalBucketsAndUsersLength: jest.fn()
-          }
-        },
-        {
-          provide: ActivatedRoute,
-          useValue: { params: { subscribe: (fn: Function) => fn(params) } }
+  configureTestBed({
+    declarations: [
+      RgwOverviewDashboardComponent,
+      CardComponent,
+      CardRowComponent,
+      DimlessBinaryPipe
+    ],
+    schemas: [NO_ERRORS_SCHEMA],
+    providers: [
+      { provide: RgwDaemonService, useValue: { list: jest.fn() } },
+      { provide: RgwRealmService, useValue: { list: jest.fn() } },
+      { provide: RgwZonegroupService, useValue: { list: jest.fn() } },
+      { provide: RgwZoneService, useValue: { list: jest.fn() } },
+      {
+        provide: RgwBucketService,
+        useValue: {
+          fetchAndTransformBuckets: jest.fn(),
+          totalNumObjects$: totalNumObjectsSubject.asObservable(),
+          totalUsedCapacity$: totalUsedCapacitySubject.asObservable(),
+          averageObjectSize$: averageObjectSizeSubject.asObservable(),
+          getTotalBucketsAndUsersLength: jest.fn()
         }
-      ],
-      imports: [HttpClientTestingModule, SharedModule, CommonModule]
-    }).compileComponents();
+      },
+      {
+        provide: ActivatedRoute,
+        useValue: { params: { subscribe: (fn: Function) => fn(params) } }
+      }
+    ],
+    imports: [HttpClientTestingModule, SharedModule, CommonModule]
+  });
+
+  beforeEach(() => {
     fixture = TestBed.createComponent(RgwOverviewDashboardComponent);
     component = fixture.componentInstance;
     listDaemonsSpy = jest

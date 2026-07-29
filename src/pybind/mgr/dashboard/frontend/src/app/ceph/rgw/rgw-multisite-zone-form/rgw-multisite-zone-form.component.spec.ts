@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RgwMultisiteZoneFormComponent } from './rgw-multisite-zone-form.component'; // Adjust path as necessary
@@ -19,32 +20,32 @@ describe('RgwMultisiteZoneFormComponent', () => {
   let rgwZoneService: RgwZoneService;
   let rgwZoneServiceSpy: jasmine.Spy;
 
-  beforeEach(() => {
-    TestBed.configureTestingModule({
-      imports: [
-        SharedModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        HttpClientTestingModule,
-        ModalModule,
-        InputModule,
-        CheckboxModule,
-        SelectModule
-      ],
-      providers: [
-        NgbActiveModal,
-        { provide: 'multisiteInfo', useValue: [[]] },
-        { provide: 'info', useValue: { data: { name: 'null' } } },
-        { provide: 'defaultsInfo', useValue: { defaultZonegroupName: 'zonegroup1' } },
-        {
-          provide: ActionLabelsI18n,
-          useValue: { CREATE: 'create', EDIT: 'edit', DELETE: 'delete' }
-        }
-      ],
-      schemas: [NO_ERRORS_SCHEMA],
-      declarations: [RgwMultisiteZoneFormComponent]
-    }).compileComponents();
+  configureTestBed({
+    imports: [
+      SharedModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      HttpClientTestingModule,
+      ModalModule,
+      InputModule,
+      CheckboxModule,
+      SelectModule
+    ],
+    providers: [
+      NgbActiveModal,
+      { provide: 'multisiteInfo', useValue: [[]] },
+      { provide: 'info', useValue: { data: { name: 'null' } } },
+      { provide: 'defaultsInfo', useValue: { defaultZonegroupName: 'zonegroup1' } },
+      {
+        provide: ActionLabelsI18n,
+        useValue: { CREATE: 'create', EDIT: 'edit', DELETE: 'delete' }
+      }
+    ],
+    schemas: [NO_ERRORS_SCHEMA],
+    declarations: [RgwMultisiteZoneFormComponent]
+  });
 
+  beforeEach(() => {
     fixture = TestBed.createComponent(RgwMultisiteZoneFormComponent);
     component = fixture.componentInstance;
     rgwZoneService = TestBed.inject(RgwZoneService);

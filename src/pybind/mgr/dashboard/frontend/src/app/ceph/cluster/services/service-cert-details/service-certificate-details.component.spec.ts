@@ -10,6 +10,7 @@ import {
   CephServiceCertificate
 } from '~/app/shared/models/service.interface';
 import { ServiceCertificateDetailsComponent } from './service-certificate-details.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('ServiceCertificateDetailsComponent', () => {
   let component: ServiceCertificateDetailsComponent;
@@ -32,13 +33,13 @@ describe('ServiceCertificateDetailsComponent', () => {
     ...override
   });
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [ServiceCertificateDetailsComponent, IconComponent],
-      imports: [ComponentsModule],
-      schemas: [NO_ERRORS_SCHEMA]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [ServiceCertificateDetailsComponent, IconComponent],
+    imports: [ComponentsModule],
+    schemas: [NO_ERRORS_SCHEMA]
+  });
 
+  beforeEach(() => {
     fixture = TestBed.createComponent(ServiceCertificateDetailsComponent);
     component = fixture.componentInstance;
   });

@@ -52,8 +52,8 @@ describe('NvmeofNamespaceExpandModalComponent', () => {
       NumberModule
     ],
     providers: [
-      { provide: NvmeofService, useValue: mockNvmeofService },
-      { provide: ActivatedRoute, useValue: activatedRouteStub }
+      { provide: NvmeofService, useFactory: () => mockNvmeofService },
+      { provide: ActivatedRoute, useFactory: () => activatedRouteStub }
     ]
   });
 

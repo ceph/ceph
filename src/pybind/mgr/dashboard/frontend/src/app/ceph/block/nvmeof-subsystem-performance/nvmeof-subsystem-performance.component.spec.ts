@@ -8,6 +8,7 @@ import { NvmeofSubsystemPerformanceComponent } from './nvmeof-subsystem-performa
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { Permissions } from '~/app/shared/models/permissions';
 import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('NvmeofSubsystemPerformanceComponent', () => {
   let component: NvmeofSubsystemPerformanceComponent;
@@ -15,28 +16,26 @@ describe('NvmeofSubsystemPerformanceComponent', () => {
 
   const mockPermissions = new Permissions({ grafana: ['read'] });
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [NvmeofSubsystemPerformanceComponent],
-      imports: [HttpClientTestingModule, RouterTestingModule, SharedModule],
-      providers: [
-        {
-          provide: ActivatedRoute,
-          useValue: {
-            parent: {
-              params: of({ subsystem_nqn: 'nqn.2016-06.io.spdk:cnode1' })
-            },
-            queryParams: of({ group: 'group1' })
-          }
-        },
-        {
-          provide: AuthStorageService,
-          useValue: {
-            getPermissions: jest.fn().mockReturnValue(mockPermissions)
-          }
+  configureTestBed({
+    declarations: [NvmeofSubsystemPerformanceComponent],
+    imports: [HttpClientTestingModule, RouterTestingModule, SharedModule],
+    providers: [
+      {
+        provide: ActivatedRoute,
+        useValue: {
+          parent: {
+            params: of({ subsystem_nqn: 'nqn.2016-06.io.spdk:cnode1' })
+          },
+          queryParams: of({ group: 'group1' })
         }
-      ]
-    }).compileComponents();
+      },
+      {
+        provide: AuthStorageService,
+        useValue: {
+          getPermissions: jest.fn().mockReturnValue(mockPermissions)
+        }
+      }
+    ]
   });
 
   beforeEach(() => {

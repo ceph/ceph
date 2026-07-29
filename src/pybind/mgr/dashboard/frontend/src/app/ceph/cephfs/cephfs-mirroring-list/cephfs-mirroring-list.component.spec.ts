@@ -5,6 +5,7 @@ import { CephfsMirroringListComponent } from './cephfs-mirroring-list.component'
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { Daemon, MirroringRow } from '~/app/shared/models/cephfs.model';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('CephfsMirroringListComponent', () => {
   let component: CephfsMirroringListComponent;
@@ -14,13 +15,13 @@ describe('CephfsMirroringListComponent', () => {
     listDaemonStatus: jest.fn()
   };
 
-  beforeEach(async () => {
-    jest.clearAllMocks();
+  configureTestBed({
+    declarations: [CephfsMirroringListComponent],
+    providers: [ActionLabelsI18n, { provide: CephfsService, useFactory: () => cephfsServiceMock }]
+  });
 
-    await TestBed.configureTestingModule({
-      declarations: [CephfsMirroringListComponent],
-      providers: [ActionLabelsI18n, { provide: CephfsService, useValue: cephfsServiceMock }]
-    }).compileComponents();
+  beforeEach(() => {
+    jest.clearAllMocks();
 
     fixture = TestBed.createComponent(CephfsMirroringListComponent);
     component = fixture.componentInstance;

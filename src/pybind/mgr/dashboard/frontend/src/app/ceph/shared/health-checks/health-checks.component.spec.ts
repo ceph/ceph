@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { HealthChecksComponent } from './health-checks.component';
@@ -9,13 +10,13 @@ describe('HealthChecksComponent', () => {
   let component: HealthChecksComponent;
   let fixture: ComponentFixture<HealthChecksComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [HealthChecksComponent, HealthColorPipe],
-      providers: [CssHelper],
-      schemas: [CUSTOM_ELEMENTS_SCHEMA]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [HealthChecksComponent, HealthColorPipe],
+    providers: [CssHelper],
+    schemas: [CUSTOM_ELEMENTS_SCHEMA]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(HealthChecksComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

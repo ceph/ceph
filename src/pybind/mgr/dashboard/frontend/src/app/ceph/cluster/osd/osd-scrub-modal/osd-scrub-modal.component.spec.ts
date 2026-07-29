@@ -33,8 +33,8 @@ describe('OsdScrubModalComponent', () => {
     providers: [
       NgbActiveModal,
       JoinPipe,
-      { provide: OsdService, useValue: fakeService },
-      { provide: NotificationService, useValue: fakeService }
+      { provide: OsdService, useFactory: () => fakeService },
+      { provide: NotificationService, useFactory: () => fakeService }
     ]
   });
 

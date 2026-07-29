@@ -2,15 +2,17 @@ import { TestBed } from '@angular/core/testing';
 import { ActivatedRouteSnapshot } from '@angular/router';
 
 import { NvmeGatewayViewBreadcrumbResolver } from './nvme-gateway-view-breadcrumb.resolver';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('NvmeGatewayViewBreadcrumbResolver', () => {
   let resolver: NvmeGatewayViewBreadcrumbResolver;
   let route: ActivatedRouteSnapshot;
 
+  configureTestBed({
+    providers: [NvmeGatewayViewBreadcrumbResolver]
+  });
+
   beforeEach(() => {
-    TestBed.configureTestingModule({
-      providers: [NvmeGatewayViewBreadcrumbResolver]
-    });
     resolver = TestBed.inject(NvmeGatewayViewBreadcrumbResolver);
     route = new ActivatedRouteSnapshot();
   });

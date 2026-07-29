@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { TestBed } from '@angular/core/testing';
 
 import { TextAreaJsonFormatterService } from './text-area-json-formatter.service';
@@ -5,8 +6,9 @@ import { TextAreaJsonFormatterService } from './text-area-json-formatter.service
 describe('TextAreaJsonFormatterService', () => {
   let service: TextAreaJsonFormatterService;
 
+  configureTestBed({});
+
   beforeEach(() => {
-    TestBed.configureTestingModule({});
     service = TestBed.inject(TextAreaJsonFormatterService);
   });
 

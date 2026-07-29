@@ -1,9 +1,9 @@
+import { configureTestBed, RgwHelper } from '~/testing/unit-test-helper';
 import { TestBed } from '@angular/core/testing';
 
 import { RgwUserAccountsService } from './rgw-user-accounts.service';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { Account } from '~/app/ceph/rgw/models/rgw-user-accounts';
-import { RgwHelper } from '~/testing/unit-test-helper';
 
 const mockAccountData: Account[] = [
   {
@@ -62,11 +62,12 @@ describe('RgwUserAccountsService', () => {
   let service: RgwUserAccountsService;
   let httpTesting: HttpTestingController;
 
+  configureTestBed({
+    providers: [RgwUserAccountsService],
+    imports: [HttpClientTestingModule]
+  });
+
   beforeEach(() => {
-    TestBed.configureTestingModule({
-      providers: [RgwUserAccountsService],
-      imports: [HttpClientTestingModule]
-    });
     service = TestBed.inject(RgwUserAccountsService);
     httpTesting = TestBed.inject(HttpTestingController);
     RgwHelper.selectDaemon();

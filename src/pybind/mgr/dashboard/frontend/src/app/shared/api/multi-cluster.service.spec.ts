@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { TestBed } from '@angular/core/testing';
 
 import { MultiClusterService } from './multi-cluster.service';
@@ -5,10 +6,11 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 describe('MultiClusterService', () => {
   let service: MultiClusterService;
 
+  configureTestBed({
+    imports: [HttpClientTestingModule]
+  });
+
   beforeEach(() => {
-    TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule]
-    });
     service = TestBed.inject(MultiClusterService);
   });
 

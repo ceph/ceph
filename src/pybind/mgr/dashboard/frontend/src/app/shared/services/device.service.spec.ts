@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { TestBed } from '@angular/core/testing';
 
 import moment from 'moment';
@@ -8,8 +9,9 @@ import { DeviceService } from './device.service';
 describe('DeviceService', () => {
   let service: DeviceService;
 
+  configureTestBed({});
+
   beforeEach(() => {
-    TestBed.configureTestingModule({});
     service = TestBed.inject(DeviceService);
   });
 

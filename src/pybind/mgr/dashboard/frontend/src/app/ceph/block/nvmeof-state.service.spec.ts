@@ -4,26 +4,27 @@ import { Subject } from 'rxjs';
 
 import { NvmeofStateService } from './nvmeof-state.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('NvmeofStateService', () => {
   let service: NvmeofStateService;
-  let summaryData$: Subject<any>;
-  let summaryServiceSpy: any;
+  let summaryData$ = new Subject<any>();
+  let summaryServiceSpy = {
+    subscribe: jest.fn().mockImplementation((callback: (s: any) => void) => {
+      return summaryData$.subscribe(callback);
+    })
+  };
+
+  configureTestBed({
+    providers: [
+      NvmeofStateService,
+      { provide: SummaryService, useFactory: () => summaryServiceSpy }
+    ]
+  });
 
   const emitSummary = (tasks: any[]) => summaryData$.next({ finished_tasks: tasks });
 
   beforeEach(() => {
-    summaryData$ = new Subject<any>();
-    summaryServiceSpy = {
-      subscribe: jest.fn().mockImplementation((callback: (s: any) => void) => {
-        return summaryData$.subscribe(callback);
-      })
-    };
-
-    TestBed.configureTestingModule({
-      providers: [NvmeofStateService, { provide: SummaryService, useValue: summaryServiceSpy }]
-    });
-
     service = TestBed.inject(NvmeofStateService);
   });
 

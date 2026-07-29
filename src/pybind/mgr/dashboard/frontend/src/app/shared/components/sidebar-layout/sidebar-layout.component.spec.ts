@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 import { SideNavModule, ThemeModule } from 'carbon-components-angular';
@@ -7,11 +8,9 @@ describe('SidebarLayoutComponent', () => {
   let component: SidebarLayoutComponent;
   let fixture: ComponentFixture<SidebarLayoutComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [SidebarLayoutComponent],
-      imports: [RouterTestingModule, SideNavModule, ThemeModule]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [SidebarLayoutComponent],
+    imports: [RouterTestingModule, SideNavModule, ThemeModule]
   });
 
   beforeEach(() => {

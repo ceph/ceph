@@ -1,3 +1,4 @@
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RgwStorageClassDetailsComponent } from './rgw-storage-class-details.component';
 import { StorageClassDetails } from '../models/rgw-storage-class.model';
@@ -24,17 +25,12 @@ describe('RgwStorageClassDetailsComponent', () => {
     acl_mappings: []
   };
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [
-        BrowserAnimationsModule,
-        SharedModule,
-        HttpClientTestingModule,
-        RouterTestingModule
-      ],
-      declarations: [RgwStorageClassDetailsComponent]
-    }).compileComponents();
+  configureTestBed({
+    imports: [BrowserAnimationsModule, SharedModule, HttpClientTestingModule, RouterTestingModule],
+    declarations: [RgwStorageClassDetailsComponent]
+  });
 
+  beforeEach(async () => {
     fixture = TestBed.createComponent(RgwStorageClassDetailsComponent);
     component = fixture.componentInstance;
     component.selection = mockSelection;
