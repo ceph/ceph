@@ -541,7 +541,7 @@ void DaemonServer::fetch_missing_metadata(const DaemonKey& key,
   if (!daemon_state.is_updating(key) &&
       (key.type == "osd" || key.type == "mds" || key.type == "mon")) {
     std::ostringstream oss;
-    auto c = new MetadataUpdate(daemon_state, key);
+    auto c = new MetadataUpdate(daemon_state, cluster_state, key);
     if (key.type == "osd") {
       oss << "{\"prefix\": \"osd metadata\", \"id\": "
 	  << key.name<< "}";
@@ -3667,7 +3667,7 @@ void DaemonServer::got_mgr_map()
   cluster_state.with_mgrmap([&](const MgrMap& mgrmap) {
       auto md_update = [&] (DaemonKey key) {
         std::ostringstream oss;
-        auto c = new MetadataUpdate(daemon_state, key);
+        auto c = new MetadataUpdate(daemon_state, cluster_state, key);
 	// FIXME remove post-nautilus: include 'id' for luminous mons
         oss << "{\"prefix\": \"mgr metadata\", \"who\": \""
 	    << key.name << "\", \"id\": \"" << key.name << "\"}";
