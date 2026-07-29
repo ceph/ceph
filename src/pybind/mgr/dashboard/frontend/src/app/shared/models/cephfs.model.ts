@@ -51,8 +51,11 @@ export interface MirroringRow {
   client_name: string;
   directory_count: number;
   filesystem_id?: number;
+  peer_uuid?: string;
   peerId?: string;
   id?: string;
+  bytes_replicated?: string;
+  last_sync?: string;
 }
 
 export type CephfsPool = {
@@ -235,6 +238,31 @@ export type MirrorStatusMetrics = Record<string, MirrorDirMetrics>;
 
 export interface MirrorStatusResponse {
   metrics?: MirrorStatusMetrics;
+}
+
+export type MirrorCheckpointStatus = 'created' | 'complete' | 'failed' | 'unknown';
+
+export interface MirrorCheckpoint {
+  snap_id: number;
+  snap_name: string;
+  status: MirrorCheckpointStatus;
+  created_at: string;
+  updated_at: string;
+  error_msg?: string;
+}
+
+export interface MirrorCheckpointListResponse {
+  dir_root: string;
+  checkpoints: MirrorCheckpoint[];
+}
+
+export interface MirrorCheckpointMutationResponse {
+  status: string;
+  message: string;
+  dir_root: string;
+  snap_id?: number;
+  snap_name?: string;
+  checkpoint_status?: string;
 }
 
 export interface DaemonOverviewInfo {

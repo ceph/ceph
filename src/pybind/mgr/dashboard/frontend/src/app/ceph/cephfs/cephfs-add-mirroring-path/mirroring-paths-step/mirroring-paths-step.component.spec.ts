@@ -6,6 +6,7 @@ import { of } from 'rxjs';
 import { MirroringPathsStepComponent } from './mirroring-paths-step.component';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { createPathEntry } from '../mirroring-path.model';
+import { FS_ROOT_PATH_SENTINEL } from '../mirroring-path-utils';
 
 describe('MirroringPathsStepComponent', () => {
   let component: MirroringPathsStepComponent;
@@ -19,6 +20,12 @@ describe('MirroringPathsStepComponent', () => {
 
   function mockLsDirTree(): void {
     cephfsServiceMock.lsDir.mockImplementation((_id: number, path: string) => {
+      if (path === '/') {
+        return of([
+          { name: 'mirror', parent: '/' },
+          { name: 'volumes', parent: '/' }
+        ]);
+      }
       if (path === '/volumes') {
         return of([{ name: 'g1', parent: '/volumes' }]);
       }
@@ -30,6 +37,22 @@ describe('MirroringPathsStepComponent', () => {
       }
       return of([]);
     });
+  }
+
+  function selectVolumesG1Sv1(): void {
+    component.onLevelChange(0, 0, 'volumes');
+    tick();
+    component.onLevelChange(0, 1, 'g1');
+    tick();
+    component.onLevelChange(0, 2, 'sv1');
+  }
+
+  function selectVolumesG1Sv2(): void {
+    component.onLevelChange(0, 0, 'volumes');
+    tick();
+    component.onLevelChange(0, 1, 'g1');
+    tick();
+    component.onLevelChange(0, 2, 'sv2');
   }
 
   beforeEach(async () => {
@@ -78,10 +101,12 @@ describe('MirroringPathsStepComponent', () => {
     component.ngOnInit();
     tick();
 
-    component.onLevelChange(0, 0, 'g1');
+    component.onLevelChange(0, 0, 'volumes');
+    tick();
+    component.onLevelChange(0, 1, 'g1');
     tick();
 
-    expect(component.paths[0].levels[1].options).toEqual(['sv2']);
+    expect(component.paths[0].levels[2].options).toEqual(['sv2']);
   }));
 
   it('should expose inline validation when only already mirrored paths are selected', fakeAsync(() => {
@@ -93,10 +118,7 @@ describe('MirroringPathsStepComponent', () => {
     component.ngOnInit();
     tick();
 
-    component.onLevelChange(0, 0, 'g1');
-    tick();
-    component.paths[0].levels[1].options = ['sv1'];
-    component.onLevelChange(0, 1, 'sv1');
+    selectVolumesG1Sv1();
     component.pathsControl.markAsTouched();
 
     expect(component.pathsControl.hasError('alreadyMirrored')).toBe(true);
@@ -110,7 +132,7 @@ describe('MirroringPathsStepComponent', () => {
     expect(cephfsServiceMock.listMirrorDirectories).not.toHaveBeenCalled();
   });
 
-  it('should load root options and tracked paths on init', fakeAsync(() => {
+  it('should load filesystem root options and tracked paths on init', fakeAsync(() => {
     mockLsDirTree();
     cephfsServiceMock.listMirrorDirectories.mockReturnValue(of([]));
 
@@ -119,9 +141,13 @@ describe('MirroringPathsStepComponent', () => {
     component.ngOnInit();
     tick();
 
-    expect(cephfsServiceMock.lsDir).toHaveBeenCalledWith(1, '/volumes', 1);
+    expect(cephfsServiceMock.lsDir).toHaveBeenCalledWith(1, '/', 1);
     expect(cephfsServiceMock.listMirrorDirectories).toHaveBeenCalledWith('testfs');
-    expect(component.paths[0].levels[0].options).toEqual(['g1']);
+    expect(component.paths[0].levels[0].options).toEqual([
+      FS_ROOT_PATH_SENTINEL,
+      'mirror',
+      'volumes'
+    ]);
   }));
 
   it('should resolve fsId from cephfsService when fsId input is not set', fakeAsync(() => {
@@ -134,7 +160,7 @@ describe('MirroringPathsStepComponent', () => {
 
     expect(cephfsServiceMock.list).toHaveBeenCalled();
     expect(component.fsId).toBe(5);
-    expect(cephfsServiceMock.lsDir).toHaveBeenCalledWith(5, '/volumes', 1);
+    expect(cephfsServiceMock.lsDir).toHaveBeenCalledWith(5, '/', 1);
   }));
 
   it('should add and remove path entries', fakeAsync(() => {
@@ -169,9 +195,7 @@ describe('MirroringPathsStepComponent', () => {
     component.ngOnInit();
     tick();
 
-    component.onLevelChange(0, 0, 'g1');
-    tick();
-    component.onLevelChange(0, 1, 'sv2');
+    selectVolumesG1Sv2();
 
     expect(component.getSubmitPaths()).toEqual({
       toAdd: ['/volumes/g1/sv2'],
@@ -188,9 +212,7 @@ describe('MirroringPathsStepComponent', () => {
     component.ngOnInit();
     tick();
 
-    component.onLevelChange(0, 0, 'g1');
-    tick();
-    component.onLevelChange(0, 1, 'sv1');
+    selectVolumesG1Sv1();
     expect(component.getSubmitPaths().toAdd).toEqual(['/volumes/g1/sv1']);
 
     cephfsServiceMock.listMirrorDirectories.mockReturnValue(of(['/volumes/g1/sv1']));
@@ -205,6 +227,66 @@ describe('MirroringPathsStepComponent', () => {
     expect(component.getSubmitPaths().alreadyMirrored).toEqual(['/volumes/g1/sv1']);
   }));
 
+  it('should allow sibling subvolume paths across multiple rows', fakeAsync(() => {
+    mockLsDirTree();
+    cephfsServiceMock.listMirrorDirectories.mockReturnValue(of([]));
+
+    component.fsName = 'testfs';
+    component.fsId = 1;
+    component.ngOnInit();
+    tick();
+
+    selectVolumesG1Sv1();
+    tick();
+
+    component.addPath();
+    tick();
+
+    expect(component.paths[1].levels[0].options).toEqual([
+      FS_ROOT_PATH_SENTINEL,
+      'mirror',
+      'volumes'
+    ]);
+
+    component.onLevelChange(1, 0, 'volumes');
+    tick();
+    component.onLevelChange(1, 1, 'g1');
+    tick();
+    expect(component.paths[1].levels[2].options).toEqual(['sv2']);
+    component.onLevelChange(1, 2, 'sv2');
+
+    expect(component.getSubmitPaths()).toEqual({
+      toAdd: ['/volumes/g1/sv1', '/volumes/g1/sv2'],
+      alreadyMirrored: []
+    });
+  }));
+
+  it('should allow selecting top-level directories such as /mirror', fakeAsync(() => {
+    mockLsDirTree();
+    cephfsServiceMock.listMirrorDirectories.mockReturnValue(of([]));
+
+    component.fsName = 'testfs';
+    component.fsId = 1;
+    component.ngOnInit();
+    tick();
+
+    component.onLevelChange(0, 0, 'mirror');
+    expect(component.getSubmitPaths().toAdd).toEqual(['/mirror']);
+  }));
+
+  it('should show a warning when the filesystem root path is selected', fakeAsync(() => {
+    mockLsDirTree();
+    component.fsName = 'testfs';
+    component.fsId = 1;
+    component.ngOnInit();
+    tick();
+
+    component.onLevelChange(0, 0, FS_ROOT_PATH_SENTINEL);
+
+    expect(component.showRootWarning).toBe(true);
+    expect(component.canAddAnotherPath).toBe(false);
+  }));
+
   it('should add tracked path locally after successful submit', fakeAsync(() => {
     mockLsDirTree();
 
@@ -213,9 +295,7 @@ describe('MirroringPathsStepComponent', () => {
     component.ngOnInit();
     tick();
 
-    component.onLevelChange(0, 0, 'g1');
-    tick();
-    component.onLevelChange(0, 1, 'sv2');
+    selectVolumesG1Sv2();
     expect(component.getSubmitPaths().toAdd).toEqual(['/volumes/g1/sv2']);
 
     component.addTrackedPath('/volumes/g1/sv2');

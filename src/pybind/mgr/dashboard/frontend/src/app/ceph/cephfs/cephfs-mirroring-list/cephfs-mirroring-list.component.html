@@ -9,23 +9,18 @@
     >Jump in</span
   >
   <div
-    cdsCol
-    [columnNumbers]="{ sm: 4, md: 4, lg: 8 }"
+    cdsStack="horizontal"
+    [gap]="4"
   >
-    <div
-      cdsStack="horizontal"
-      [gap]="4"
-    >
-      @for (tile of jumpInTiles; track tile.title) {
-        <cd-clickable-tile
-          [title]="tile.title"
-          [description]="tile.description"
-          [icon]="tile.icon"
-          (tileClick)="tile.action()"
-        >
-        </cd-clickable-tile>
-      }
-    </div>
+    @for (tile of jumpInTiles; track tile.title) {
+      <cd-clickable-tile
+        [title]="tile.title"
+        [description]="tile.description"
+        [icon]="tile.icon"
+        (tileClick)="tile.action()"
+      >
+      </cd-clickable-tile>
+    }
   </div>
 </div>
 
