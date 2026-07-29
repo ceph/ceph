@@ -115,6 +115,7 @@ Replayer<I>::Replayer(
     librados::IoCtx &remote_io_ctx,
     const std::string &global_group_id,
     const std::string& local_mirror_uuid,
+    const std::string& local_mirror_peer_uuid,
     PoolMetaCache* pool_meta_cache,
     std::string local_group_id,
     std::string remote_group_id,
@@ -126,6 +127,7 @@ Replayer<I>::Replayer(
     m_remote_io_ctx(remote_io_ctx),
     m_global_group_id(global_group_id),
     m_local_mirror_uuid(local_mirror_uuid),
+    m_local_mirror_peer_uuid(local_mirror_peer_uuid),
     m_pool_meta_cache(pool_meta_cache),
     m_local_group_id(local_group_id),
     m_remote_group_id(remote_group_id),
@@ -134,7 +136,8 @@ Replayer<I>::Replayer(
     m_image_replayers(image_replayers),
     m_lock(ceph::make_mutex(librbd::util::unique_lock_name(
       "rbd::mirror::group_replayer::Replayer", this))) {
-  dout(10) << m_global_group_id <<  dendl;
+  dout(10) << m_global_group_id << ", local_mirror_peer_uuid="
+           << m_local_mirror_peer_uuid << dendl;
 }
 
 template <typename I>
@@ -608,32 +611,41 @@ void Replayer<I>::handle_load_local_group_snapshots(int r) {
     // last mirror snap
     m_last_local_snap = &local_snap;
 
-    // After relocation, the group replayer must also prune older primary
-    // snapshots. Otherwise, after detach, the standalone image replayer can
-    // select an old primary or demotion snapshot whose matching snapshot has
-    // already been removed from the new primary, and report split-brain.
-    if (!m_prune_group_snap &&
-        is_mirror_group_snapshot_complete(local_snap.state,
-                                          mirror_ns->complete)) {
-      m_prune_group_snap = &local_snap;
-    }
-
+    // Also consider older primary snapshots left after relocation.
     if (mirror_ns->is_non_primary()) {
       if (is_mirror_group_snapshot_complete(local_snap.state,
                                             mirror_ns->complete)) {
         // complete non-primary snapshot
         last_complete_local_snap = &local_snap;
+
+        // oldest complete non-primary snapshot
+        if (!m_prune_group_snap) {
+          m_prune_group_snap = &local_snap;
+        }
       } else if (m_check_creating_snaps &&
-                 local_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_CREATING) {
+        local_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_CREATING) {
         prune_creating_group_snaps->push_back(local_snap);
+      }
+    } else if (mirror_ns->is_primary()) {
+      // primary snapshot
+      if (is_mirror_group_snapshot_complete(local_snap.state,
+                                            mirror_ns->complete)) {
+        last_complete_local_snap = &local_snap;
+        if (!m_prune_group_snap) {
+          const auto& peer_uuids = mirror_ns->mirror_peer_uuids;
+          if (peer_uuids.empty() ||
+              (mirror_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED &&
+                peer_uuids.size() == 1 &&
+                peer_uuids.count(m_local_mirror_peer_uuid) == 1)) {
+            m_prune_group_snap = &local_snap;
+          }
+        }
       }
     }
   }
 
-  // Keep the newest complete non-primary snapshot as the sync point. Do not
-  // prune primary history until a newer non-primary snapshot is fully synced.
-  if (last_complete_local_snap == nullptr ||
-      m_prune_group_snap == last_complete_local_snap) {
+  // Retain the newest complete mirror snapshot as the local sync point.
+  if (m_prune_group_snap == last_complete_local_snap) {
     m_prune_group_snap = nullptr;
   }
 
