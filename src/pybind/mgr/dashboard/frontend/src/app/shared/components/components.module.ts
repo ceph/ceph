@@ -135,6 +135,8 @@ import WebServicesCluster20 from '@carbon/icons/es/web-services--cluster/20';
 import WebServicesCluster32 from '@carbon/icons/es/web-services--cluster/32';
 import CloudMonitoring16 from '@carbon/icons/es/cloud--monitoring/16';
 import Temperature16 from '@carbon/icons/es/temperature/16';
+import Add16 from '@carbon/icons/es/add/16';
+import TrashCan16 from '@carbon/icons/es/trash-can/16';
 
 import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
 import { PageHeaderComponent } from './page-header/page-header.component';
@@ -333,7 +335,9 @@ export class ComponentsModule {
       WebServicesCluster20,
       WebServicesCluster32,
       CloudMonitoring16,
-      Temperature16
+      Temperature16,
+      Add16,
+      TrashCan16
     ]);
   }
 }
