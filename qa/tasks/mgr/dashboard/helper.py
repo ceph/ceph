@@ -36,6 +36,9 @@ class DashboardTestCase(MgrTestCase):
     REQUIRE_FILESYSTEM = True
     CLIENTS_REQUIRED = 1
     CEPHFS = False
+    # assigned by setup_mgrs() while the mgrs are down, so setUpClass
+    # bounces the mgrs once instead of twice
+    MODULE_PORTS = [("dashboard", "ssl_server_port", 7789)]
     ORCHESTRATOR = False
     ORCHESTRATOR_TEST_DATA = {
         'inventory': [
@@ -212,8 +215,10 @@ class DashboardTestCase(MgrTestCase):
 
     @classmethod
     def setUpClass(cls):
+        # setup_mgrs() assigns the dashboard port (MODULE_PORTS) while
+        # the mgrs are down, so no second _assign_ports() bounce is
+        # needed here
         super(DashboardTestCase, cls).setUpClass()
-        cls._assign_ports("dashboard", "ssl_server_port")
         cls._load_module("dashboard")
         cls.update_base_uri()
 
