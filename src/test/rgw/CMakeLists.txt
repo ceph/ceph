@@ -130,7 +130,8 @@ target_link_libraries(unittest_rgw_cors ${rgw_libs})
 
 # unittest_rgw_rest
 add_executable(unittest_rgw_rest
-  test_rgw_rest.cc)
+  test_rgw_rest.cc
+  $<TARGET_OBJECTS:unit-main>)
 add_ceph_unittest(unittest_rgw_rest)
 target_include_directories(unittest_rgw_rest
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")

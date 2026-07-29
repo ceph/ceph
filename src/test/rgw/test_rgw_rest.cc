@@ -13,10 +13,15 @@
 #include "gtest/gtest.h"
 
 #include <memory>
+#include <string_view>
 #include <utility>
 
+#include "common/ceph_context.h"
 #include "rgw_common.h"
+#include "rgw_process_env.h"
 #include "rgw_rest.h"
+
+void parse_post_action(std::string_view post_body, req_state *s);
 
 namespace {
 
@@ -39,6 +44,12 @@ RGWRESTMgr *register_test_default_mgr(RGWRESTMgr& mgr)
 
   return out;
 }
+
+struct ParserState final {
+  RGWProcessEnv penv;
+  RGWEnv env;
+  req_state state { g_ceph_context, penv, &env, 0 };
+};
 
 TEST(RGWRest, HttpArgsTracksSubresources)
 {
@@ -220,6 +231,83 @@ TEST(RGWRest, RestManagerCreatesIntermediateManagers)
   EXPECT_NE(&mgr, intermediate);
   EXPECT_NE(v1, intermediate);
   EXPECT_EQ("/status", out_uri);
+}
+
+TEST(RGWRest, PostActionParserDecodesOrdinaryArguments)
+{
+  ParserState parser;
+
+  parse_post_action("Action=CreateTopic&Name=topic+one&Policy=%7B%7D", &parser.state);
+
+  EXPECT_EQ("CreateTopic", parser.state.info.args.get("Action"));
+  EXPECT_EQ("topic one", parser.state.info.args.get("Name"));
+  EXPECT_EQ("{}", parser.state.info.args.get("Policy"));
+  EXPECT_TRUE(parser.state.info.args.exists("PayloadHash"));
+}
+
+TEST(RGWRest, PostActionParserPreservesExistingPayloadHash)
+{
+  ParserState parser;
+  parser.state.info.args.append("PayloadHash", "already-present");
+
+  parse_post_action("Action=ListTopics", &parser.state);
+
+  EXPECT_EQ("ListTopics", parser.state.info.args.get("Action"));
+  EXPECT_EQ("already-present", parser.state.info.args.get("PayloadHash"));
+}
+
+TEST(RGWRest, PostActionParserAggregatesAttributesByIndex)
+{
+  ParserState parser;
+
+  parse_post_action("Action=CreateTopic&Attributes.entry.2.value=value+two&"
+                    "Attributes.entry.1.key=first&Attributes.entry.2.key=second&"
+                    "Attributes.entry.1.value=value+one", &parser.state);
+
+  EXPECT_EQ("CreateTopic", parser.state.info.args.get("Action"));
+  EXPECT_EQ("value one", parser.state.info.args.get("first"));
+  EXPECT_EQ("value two", parser.state.info.args.get("second"));
+}
+
+TEST(RGWRest, PostActionParserPreservesDotsInAttributeValues)
+{
+  ParserState parser;
+
+  parse_post_action("Action=CreateTopic&Attributes.entry.1.key=endpoint&"
+                    "Attributes.entry.1.value=https%3A%2F%2Fexample.com%2Fa.b.c",
+                    &parser.state);
+
+  EXPECT_EQ("https://example.com/a.b.c", parser.state.info.args.get("endpoint"));
+}
+
+TEST(RGWRest, PostActionParserPreservesMalformedAttributeEntryBehavior)
+{
+  ParserState parser;
+
+  parse_post_action("Action=CreateTopic&Attributes.entry.1.unknown=value", &parser.state);
+
+  EXPECT_TRUE(parser.state.info.args.exists(""));
+  EXPECT_EQ("", parser.state.info.args.get(""));
+}
+
+TEST(RGWRest, PostActionParserAlwaysAddsPayloadHash)
+{
+  ParserState parser;
+
+  parse_post_action("", &parser.state);
+
+  EXPECT_FALSE(parser.state.info.args.exists("Action"));
+  EXPECT_TRUE(parser.state.info.args.exists("PayloadHash"));
+}
+
+TEST(RGWRest, PostActionParserUsesBroadActionGate)
+{
+  ParserState parser;
+
+  parse_post_action("NotAction=CreateTopic&Name=topic", &parser.state);
+
+  EXPECT_EQ("CreateTopic", parser.state.info.args.get("NotAction"));
+  EXPECT_EQ("topic", parser.state.info.args.get("Name"));
 }
 
 } // namespace

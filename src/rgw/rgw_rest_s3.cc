@@ -2,10 +2,12 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <boost/algorithm/string/case_conv.hpp>
+#include <charconv>
 #include <cstdint>
 #include <errno.h>
 #include <algorithm>
 #include <array>
+#include <ranges>
 #include <string.h>
 #include <string_view>
 
@@ -6073,112 +6075,83 @@ int RGWHandler_Auth_S3::init(rgw::sal::Driver* driver, req_state *state,
 }
 
 namespace {
-// utility classes and functions for handling parameters with the following format:
+// Utility functions for handling parameters with the following format:
 // Attributes.entry.{N}.{key|value}={VALUE}
 // N - any unsigned number
 // VALUE - url encoded string
 
-// and Attribute is holding key and value
-// ctor and set are done according to the "type" argument
-// if type is not "key" or "value" its a no-op
-class Attribute {
-  std::string key;
-  std::string value;
-public:
-  Attribute(const std::string& type, const std::string& key_or_value) {
-    set(type, key_or_value);
-  }
-  void set(const std::string& type, const std::string& key_or_value) {
-    if (type == "key") {
-      key = key_or_value;
-    } else if (type == "value") {
-      value = key_or_value;
-    }
-  }
-  const std::string& get_key() const { return key; }
-  const std::string& get_value() const { return value; }
-};
+using namespace std::literals::string_view_literals;
 
-using AttributeMap = std::map<unsigned, Attribute>;
+using attribute_map = std::map<unsigned, std::pair<std::string, std::string>>;
 
-// aggregate the attributes into a map
-// the key and value are associated by the index (N)
-// no assumptions are made on the order in which these parameters are added
-void update_attribute_map(const std::string& input, AttributeMap& map) {
-  const boost::char_separator<char> sep(".");
-  const boost::tokenizer tokens(input, sep);
-  auto token = tokens.begin();
-  if (*token != "Attributes") {
-      return;
-  }
-  ++token;
-
-  if (*token != "entry") {
-      return;
-  }
-  ++token;
-
-  unsigned idx;
-  try {
-    idx = std::stoul(*token);
-  } catch (const std::invalid_argument&) {
+// Collect key/value pairs by index; values may contain dots.
+void update_attribute_map(std::string_view key, std::string decoded,
+                          attribute_map& attributes)
+{
+  constexpr auto prefix = "Attributes.entry."sv;
+  if (!key.starts_with(prefix)) {
     return;
   }
-  ++token;
 
-  std::string key_or_value = "";
-  // get the rest of the string regardless of dots
-  // this is to allow dots in the value
-  while (token != tokens.end()) {
-    key_or_value.append(*token+".");
-    ++token;
+  const auto indexed = key.substr(prefix.size());
+  const auto end_index = indexed.find('.');
+  if (std::string_view::npos == end_index) {
+    return;
   }
-  // remove last separator
-  key_or_value.pop_back();
 
-  auto pos = key_or_value.find("=");
-  if (pos != std::string::npos) {
-    const auto key_or_value_lhs = key_or_value.substr(0, pos);
-    constexpr bool in_query = true; // replace '+' with ' '
-    const auto key_or_value_rhs = url_decode(key_or_value.substr(pos + 1, key_or_value.size() - 1), in_query);
-    const auto map_it = map.find(idx);
-    if (map_it == map.end()) {
-      // new entry
-      map.emplace(std::make_pair(idx, Attribute(key_or_value_lhs, key_or_value_rhs)));
-    } else {
-      // existing entry
-      map_it->second.set(key_or_value_lhs, key_or_value_rhs);
-    }
+  unsigned idx;
+  const auto index_text = indexed.substr(0, end_index);
+  const auto begin = index_text.data();
+  const auto end = begin + index_text.size();
+  const auto [next, err] = std::from_chars(begin, end, idx);
+
+  if (std::errc {} != err || end != next) {
+    return;
+  }
+
+  const auto type = indexed.substr(end_index + 1);
+  auto& [attr_key, attr_value] = attributes[idx];
+
+  if ("key" == type) {
+    attr_key = std::move(decoded);
+    return;
+  }
+
+  if ("value" == type) {
+    attr_value = std::move(decoded);
   }
 }
 }
 
-void parse_post_action(const std::string& post_body, req_state* s)
+void parse_post_action(std::string_view post_body, req_state *s)
 {
-  if (post_body.size() > 0) {
-    if (post_body.find("Action") != string::npos) {
-      const boost::char_separator<char> sep("&");
-      const boost::tokenizer<boost::char_separator<char>> tokens(post_body, sep);
-      AttributeMap map;
-      for (const auto& t : tokens) {
-        const auto pos = t.find("=");
-        if (pos != string::npos) {
-          const auto key = t.substr(0, pos);
-          if (boost::starts_with(key, "Attributes.")) {
-            update_attribute_map(t, map);
-          } else {
-            constexpr bool in_query = true; // replace '+' with ' '
-            s->info.args.append(t.substr(0, pos),
-                              url_decode(t.substr(pos+1, t.size() -1), in_query));
-          }
-        }
+  if (!post_body.empty() && std::string_view::npos != post_body.find("Action")) {
+    attribute_map attributes;
+    for (const auto token : post_body | std::views::split('&')) {
+      const std::string_view text { std::begin(token), std::end(token) };
+      const auto separator = text.find('=');
+      if (std::string_view::npos == separator) {
+        continue;
       }
-      // update the regular args with the content of the attribute map
-      for (const auto& attr : map) {
-          s->info.args.append(attr.second.get_key(), attr.second.get_value());
+
+      const auto key = text.substr(0, separator);
+      constexpr bool in_query = true; // replace '+' with ' '
+      auto decoded = url_decode(text.substr(separator + 1), in_query);
+
+      if (key.starts_with("Attributes."sv)) {
+        update_attribute_map(key, std::move(decoded), attributes);
+        continue;
       }
+
+      s->info.args.append(std::string { key }, decoded);
+    }
+
+    // update the regular args with the content of the attribute map
+    for (const auto& [key, value] : std::views::values(attributes)) {
+      s->info.args.append(key, value);
     }
   }
+
   // PayloadHash is present if request is fwd from secondary site in multisite
   // environment, so then do not calculate and append.
   if (!s->info.args.exists("PayloadHash")) {
@@ -6265,7 +6238,7 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Driver* driver,
       if (ret < 0) {
         return nullptr;
       }
-      parse_post_action(data.to_str(), s);
+      parse_post_action(std::string_view { data.c_str(), data.length() }, s);
       if (enable_sts && RGWHandler_REST_STS::action_exists(s)) {
         return new RGWHandler_REST_STS(auth_registry);
       }
