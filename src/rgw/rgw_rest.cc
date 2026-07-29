@@ -10,9 +10,8 @@
 #include "ceph_ver.h"
 #include "common/HTMLFormatter.h"
 #include "common/XMLFormatter.h"
-#include "common/split.h"
 #include "common/utf8.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "rgw_common.h"
 #include "rgw_zone.h"
 #include "rgw_auth_s3.h"
@@ -148,7 +147,7 @@ void rgw_rest_init(CephContext *cct, const rgw::sal::ZoneGroup& zone_group)
   }
 
   list<string> extended_http_attrs;
-  get_str_list(cct->_conf->rgw_extended_http_attrs, extended_http_attrs);
+  ceph::split_str(cct->_conf->rgw_extended_http_attrs, extended_http_attrs);
 
   list<string>::iterator iter;
   for (iter = extended_http_attrs.begin(); iter != extended_http_attrs.end(); ++iter) {
@@ -170,7 +169,7 @@ void rgw_rest_init(CephContext *cct, const rgw::sal::ZoneGroup& zone_group)
 
   std::list<std::string> rgw_dns_names;
   std::string rgw_dns_names_str = cct->_conf->rgw_dns_name;
-  get_str_list(rgw_dns_names_str, ", ", rgw_dns_names);
+  ceph::split_str(rgw_dns_names_str, ", ", rgw_dns_names);
   hostnames_set.insert(rgw_dns_names.begin(), rgw_dns_names.end());
 
   std::list<std::string> names;
@@ -1984,7 +1983,7 @@ RGWRESTMgr* RGWRESTMgr::get_resource_mgr(req_state* const s,
 
 void RGWREST::register_x_headers(const string& s_headers)
 {
-  std::vector<std::string> hdrs = get_str_vec(s_headers);
+  std::vector<std::string> hdrs = ceph::split_str(s_headers);
   for (auto& hdr : hdrs) {
     boost::algorithm::to_upper(hdr); // XXX
     (void) x_headers.insert(hdr);
@@ -2007,7 +2006,7 @@ int rgw_rest_transform_s3_vhost_style(req_state* s)
   // S3 API.
   // Map the listing of rgw_enable_apis in REVERSE order, so that items near
   // the front of the list have a higher number assigned (and -1 for items not in the list).
-  const auto apis = ceph::split(g_conf()->rgw_enable_apis);
+  const auto apis = ceph::split_view(g_conf()->rgw_enable_apis);
   int api_priority_s3 = -1;
   int api_priority_s3website = -1;
   auto api_s3website_priority_rawpos = std::find(apis.begin(), apis.end(), "s3website");

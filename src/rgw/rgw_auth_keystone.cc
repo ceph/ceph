@@ -12,7 +12,7 @@
 #include "common/errno.h"
 #include "common/ceph_json.h"
 #include "include/types.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 
 #include "rgw_common.h"
 #include "rgw_keystone.h"
@@ -248,9 +248,9 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
    * also thread-safe. */
   static const struct RolesCacher {
     explicit RolesCacher(CephContext* const cct) {
-      get_str_vec(cct->_conf->rgw_keystone_accepted_roles, plain);
-      get_str_vec(cct->_conf->rgw_keystone_accepted_admin_roles, admin);
-      get_str_vec(cct->_conf->rgw_keystone_accepted_reader_roles, reader);
+      ceph::split_str(cct->_conf->rgw_keystone_accepted_roles, plain);
+      ceph::split_str(cct->_conf->rgw_keystone_accepted_admin_roles, admin);
+      ceph::split_str(cct->_conf->rgw_keystone_accepted_reader_roles, reader);
 
       /* Let's suppose that having an admin role implies also a regular one. */
       plain.insert(std::end(plain), std::begin(admin), std::end(admin));
@@ -263,7 +263,7 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
   static const struct ServiceTokenRolesCacher {
     explicit ServiceTokenRolesCacher(CephContext* const cct) {
-      get_str_vec(cct->_conf->rgw_keystone_service_token_accepted_roles, plain);
+      ceph::split_str(cct->_conf->rgw_keystone_service_token_accepted_roles, plain);
     }
 
     std::vector<std::string> plain;
@@ -710,8 +710,8 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
    * also thread-safe. */
   static const struct RolesCacher {
     explicit RolesCacher(CephContext* const cct) {
-      get_str_vec(cct->_conf->rgw_keystone_accepted_roles, plain);
-      get_str_vec(cct->_conf->rgw_keystone_accepted_admin_roles, admin);
+      ceph::split_str(cct->_conf->rgw_keystone_accepted_roles, plain);
+      ceph::split_str(cct->_conf->rgw_keystone_accepted_admin_roles, admin);
 
       /* Let's suppose that having an admin role implies also a regular one. */
       plain.insert(std::end(plain), std::begin(admin), std::end(admin));

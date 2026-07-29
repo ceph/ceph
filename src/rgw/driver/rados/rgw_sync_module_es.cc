@@ -17,7 +17,7 @@
 
 #include "services/svc_zone.h"
 
-#include "include/str_list.h"
+#include "include/str_lib.h"
 
 #include <boost/asio/yield.hpp>
 
@@ -43,7 +43,7 @@ class ItemList {
   void parse(const string& str) {
     list<string> l;
 
-    get_str_list(str, ",", l);
+    ceph::split_str(str, ",", l);
 
     for (auto& entry : l) {
       entry = rgw_trim_whitespace(entry);

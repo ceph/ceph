@@ -1808,7 +1808,7 @@ class DB {
     int from_oid(const std::string& oid, std::string& bucket, std::string& obj_name, std::string& obj_id,
         std::string& obj_instance,
         std::string& mp_str, uint64_t& partnum) {
-      // TODO: use ceph::split() from common/split.h
+      // TODO: use ceph::split_str() from include/str_lib.h
       // XXX: doesn't this break if obj_name has underscores in it?
       std::vector<std::string> result;
       boost::split(result, oid, boost::is_any_of("_"));

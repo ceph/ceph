@@ -63,7 +63,7 @@ void AuthRegistry::_parse_method_list(const string& s,
 				      std::vector<uint32_t> *v)
 {
   std::list<std::string> sup_list;
-  get_str_list(s, sup_list);
+  ceph::split_str(s, sup_list);
   if (sup_list.empty()) {
     lderr(cct) << "WARNING: empty auth protocol list" << dendl;
   }
@@ -90,7 +90,7 @@ void AuthRegistry::_parse_mode_list(const string& s,
 				    std::vector<uint32_t> *v)
 {
   std::list<std::string> sup_list;
-  get_str_list(s, sup_list);
+  ceph::split_str(s, sup_list);
   if (sup_list.empty()) {
     lderr(cct) << "WARNING: empty auth protocol list" << dendl;
   }

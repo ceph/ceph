@@ -23,7 +23,7 @@
 
 #include "include/types.h"
 #include "common/debug.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
 
@@ -99,7 +99,7 @@ int RGWCORSRule::create_rule(const char *allow_origins, const char *allow_header
       nr_invalid_names++;
     }
   };
-  for_each_substr(allow_origins, ";,= \t", add_host);
+  for_each_substr(allow_origins, add_host);
   if (o.empty() || nr_invalid_names > 0) {
     return -EINVAL;
   }
@@ -113,17 +113,16 @@ int RGWCORSRule::create_rule(const char *allow_origins, const char *allow_header
         nr_invalid_headers++;
       }
     };
-    for_each_substr(allow_headers, ";,= \t", add_header);
+    for_each_substr(allow_headers, add_header);
     if (h.empty() || nr_invalid_headers > 0) {
       return -EINVAL;
     }
   }
 
   if (expose_headers) {
-    for_each_substr(expose_headers, ";,= \t",
-        [&e] (auto expose_header) {
-          e.emplace_back(std::string(expose_header));
-        });
+    for_each_substr(expose_headers, [&e] (auto expose_header) {
+      e.emplace_back(std::string(expose_header));
+    });
   }
   if (max_age) {
     char *end = NULL;
@@ -175,7 +174,7 @@ static bool is_string_in_set(set<string>& s, string h) {
       list<string> ssplit;
       unsigned flen = 0;
       
-      get_str_list((*it), "* \t", ssplit);
+      ceph::split_str((*it), "* \t", ssplit);
       if (off != 0) {
         if (ssplit.empty())
           continue;
@@ -261,7 +260,7 @@ bool RGWCORSRule::matches_preflight_headers(const char *req_hdrs)
     return true;
   }
   vector<string> hdrs;
-  get_str_vec(req_hdrs, hdrs);
+  ceph::split_str(req_hdrs, hdrs);
   for (const auto& hdr : hdrs) {
     if (!is_header_allowed(hdr.c_str(), hdr.length())) {
       dout(5) << "Header " << hdr << " is not registered in this rule" << dendl;

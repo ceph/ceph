@@ -11,7 +11,7 @@
 #include "common/ceph_json.h"
 #include "common/debug.h"
 #include "common/dout.h"
-#include "common/split.h"
+#include "include/str_lib.h"
 #include "common/strtol.h" // for strict_iecstrtoll()
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
@@ -80,7 +80,7 @@ void validate(boost::any& v, const std::vector<std::string>& values,
               Pair* target_type, int) {
   po::validators::check_first_occurrence(v);
   const std::string& s = po::validators::get_single_string(values);
-  auto part = ceph::split(s).begin();
+  auto part = ceph::split_view(s).begin();
   std::string parse_error;
   int first = strict_iecstrtoll(*part++, &parse_error);
   int second = strict_iecstrtoll(*part, &parse_error);
@@ -95,7 +95,7 @@ void validate(boost::any& v, const std::vector<std::string>& values,
               SequencePair* target_type, int) {
   po::validators::check_first_occurrence(v);
   const std::string& s = po::validators::get_single_string(values);
-  auto part = ceph::split(s).begin();
+  auto part = ceph::split_view(s).begin();
   std::string parse_error;
   int first = strict_iecstrtoll(*part++, &parse_error);
   int second = strict_iecstrtoll(*part, &parse_error);
@@ -1318,7 +1318,7 @@ std::string ceph::io_sequence::tester::TestRunner::get_token(bool allow_eof) {
       dout(0) << line << dendl;
       continue;
     }
-    split = ceph::split(line);
+    split = ceph::split_view(line);
     tokens = split.begin();
   }
   return std::string(*tokens++);

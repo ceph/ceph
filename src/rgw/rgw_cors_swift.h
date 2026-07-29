@@ -19,7 +19,7 @@
 #include <string>
 #include <vector>
 #include <include/types.h>
-#include <include/str_list.h>
+#include <include/str_lib.h>
 
 #include "rgw_cors.h"
 

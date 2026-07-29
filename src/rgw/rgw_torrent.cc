@@ -4,7 +4,7 @@
 #include "rgw_torrent.h"
 #include <ctime>
 #include <fmt/format.h>
-#include "common/split.h"
+#include "include/str_lib.h"
 #include "rgw_sal.h"
 
 #define ANNOUNCE           "announce"
@@ -76,7 +76,7 @@ int rgw_read_torrent_file(const DoutPrefixProvider* dpp,
 
   bencode_dict(bl);
 
-  auto trackers = ceph::split(conf->rgw_torrent_tracker, ",");
+  auto trackers = ceph::split_view(conf->rgw_torrent_tracker, ",");
   if (auto i = trackers.begin(); i != trackers.end()) {
     bencode_key(ANNOUNCE, bl);
     bencode_key(*i, bl);

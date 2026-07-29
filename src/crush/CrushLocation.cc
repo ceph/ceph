@@ -10,7 +10,7 @@
 #include "common/SubProcess.h"
 #include "include/common_fwd.h"
 #include "include/compat.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 
 #include <boost/algorithm/string/trim.hpp>
 
@@ -29,7 +29,7 @@ int CrushLocation::_parse(const std::string& s)
 {
   std::multimap<std::string,std::string> new_crush_location;
   std::vector<std::string> lvec;
-  get_str_vec(s, ";, \t", lvec);
+  ceph::split_str(s, ";, \t", lvec);
   int r = CrushWrapper::parse_loc_multimap(lvec, &new_crush_location);
   if (r < 0) {
     lderr(cct) << "warning: crush_location '" << cct->_conf->crush_location

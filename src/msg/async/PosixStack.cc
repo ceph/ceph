@@ -26,7 +26,7 @@
 #include "PosixStack.h"
 
 #include "include/buffer.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "common/errno.h"
 #include "common/strtol.h"
 #include "common/dout.h"

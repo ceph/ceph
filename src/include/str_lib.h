@@ -126,22 +126,22 @@ class spliterator {
 //
 // Ranged-for loop example:
 //
-//   for (std::string_view s : split(input)) {
+//   for (std::string_view s : split_view(input)) {
 //     ...
 //
 // Container initialization example:
 //
-//   auto parts = split(input);
+//   auto parts = split_view(input);
 //
 //   std::vector<std::string> strings;
 //   strings.assign(parts.begin(), parts.end());
 //
-class split {
+class split_view {
   std::string_view str; // full string
   std::string_view delims; // delimiters
  public:
-  constexpr split(std::string_view str,
-                  std::string_view delims = spliterator::default_delims)
+  constexpr split_view(std::string_view str,
+                       std::string_view delims = spliterator::default_delims)
     : str(str), delims(delims) {}
 
   using iterator = spliterator;

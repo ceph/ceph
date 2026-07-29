@@ -23,6 +23,7 @@
 #include "include/types.h" // for operator<<(std::vector)
 #include "json_spirit/json_spirit.h"
 
+#include <list>
 #include <ostream>
 #include <sstream>
 
@@ -536,7 +537,7 @@ bool arg_in_range(T value, const arg_desc_t& desc, std::ostream& os) {
   if (range == desc.end()) {
     return true;
   }
-  auto min_max = get_str_list(string(range->second), "|");
+  auto min_max = ceph::split_str<std::list>(string(range->second), "|");
   auto min = str_to_num<T>(min_max.front());
   auto max = std::numeric_limits<T>::max();
   if (min_max.size() > 1) {

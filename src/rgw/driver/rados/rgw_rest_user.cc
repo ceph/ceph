@@ -9,7 +9,7 @@
 #include "rgw_rest_user.h"
 #include "rgw_sal.h"
 
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "include/ceph_assert.h"
 
 #include "services/svc_zone.h"
@@ -267,7 +267,7 @@ void RGWOp_User_Create::execute(optional_yield y)
 
   if (!placement_tags_str.empty()) {
     list<string> placement_tags_list;
-    get_str_list(placement_tags_str, ",", placement_tags_list);
+    ceph::split_str(placement_tags_str, ",", placement_tags_list);
     op_state.set_placement_tags(placement_tags_list);
   }
 
@@ -425,7 +425,7 @@ void RGWOp_User_Modify::execute(optional_yield y)
 
   if (!placement_tags_str.empty()) {
     list<string> placement_tags_list;
-    get_str_list(placement_tags_str, ",", placement_tags_list);
+    ceph::split_str(placement_tags_str, ",", placement_tags_list);
     op_state.set_placement_tags(placement_tags_list);
   }
   

@@ -26,7 +26,7 @@
 #include "ExtBlkDevPlugin.h"
 #include "common/errno.h"
 #include "include/dlfcn_compat.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "include/ceph_assert.h"
 #include "common/ceph_context.h"
 #include "common/debug.h"
@@ -200,7 +200,7 @@ namespace ceph {
       dout(10) << "starting preload of extblkdev plugins: " << plugins << dendl;
 
       list<string> plugins_list;
-      get_str_list(plugins, plugins_list);
+      ceph::split_str(plugins, plugins_list);
 
       auto registry = cct->get_plugin_registry();
       {

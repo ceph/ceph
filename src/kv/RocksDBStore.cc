@@ -34,7 +34,7 @@
 #include "common/strtol.h"
 #include "include/common_fwd.h"
 #include "include/scope_guard.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "include/stringify.h"
 #include "include/str_map.h"
 #include "include/utime.h"
@@ -520,7 +520,7 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
   try {
     if (kv_options.count("db_paths")) {
       list<string> paths;
-      get_str_list(kv_options["db_paths"], "; \t", paths);
+      ceph::split_str(kv_options["db_paths"], "; \t", paths);
       for (auto& p : paths) {
 	size_t pos = p.find(',');
 	if (pos == std::string::npos) {

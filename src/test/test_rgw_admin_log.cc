@@ -27,7 +27,7 @@ extern "C"{
 #include <curl/curl.h>
 }
 #include "common/ceph_crypto.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "common/ceph_json.h"
 #include "common/code_environment.h"
 #include "common/ceph_argparse.h"
@@ -308,7 +308,7 @@ int run_rgw_admin(string& cmd, string& resp) {
   if (pid == 0) {
     /* child */
     list<string> l;
-    get_str_list(cmd, " \t", l);
+    ceph::split_str(cmd, " \t", l);
     // One extra for argv[0] and one for the NULL.
     std::vector<char*> argv(l.size() + 2);
     unsigned loop = 1;

@@ -22,9 +22,8 @@
 #include "common/Timer.h"
 #include "common/TracepointProvider.h"
 #include "common/numa.h"
-#include "common/split.h"
 #include "include/compat.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "include/stringify.h"
 #include "rgw_kms_cache.h"
 #include "rgw_main.h"
@@ -105,7 +104,7 @@ void rgw::AppMain::init_frontends1(bool nfs)
   std::vector<std::string> frontends;
   std::string rgw_frontends_str = g_conf().get_val<string>(fe_key);
   g_conf().early_expand_meta(rgw_frontends_str, &cerr);
-  get_str_vec(rgw_frontends_str, ",", frontends);
+  ceph::split_str(rgw_frontends_str, ",", frontends);
 
   /* default frontends */
   if (nfs) {
@@ -275,7 +274,7 @@ void rgw::AppMain::cond_init_apis()
    rgw_rest_init(g_ceph_context, env.driver->get_zone()->get_zonegroup());
 
   if (have_http_frontend) {
-    const auto apis = ceph::split(g_conf()->rgw_enable_apis);
+    const auto apis = ceph::split_view(g_conf()->rgw_enable_apis);
 
     std::set<std::string> apis_set;
     apis_set.insert(apis.begin(), apis.end());
@@ -409,7 +408,7 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
   vector<string> frontends_def;
   std::string frontend_defs_str =
     g_conf().get_val<string>("rgw_frontend_defaults");
-  get_str_vec(frontend_defs_str, ",", frontends_def);
+  ceph::split_str(frontend_defs_str, ",", frontends_def);
 
   service_map_meta["pid"] = stringify(getpid());
 

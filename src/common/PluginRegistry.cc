@@ -219,7 +219,7 @@ int ErasureCodePluginRegistry::preload(const std::string &plugins,
 {
   std::lock_guard l(lock);
   list<string> plugins_list;
-  get_str_list(plugins, plugins_list);
+  ceph::split_str(plugins, plugins_list);
   for (list<string>::iterator i = plugins_list.begin();
        i != plugins_list.end();
        ++i) {

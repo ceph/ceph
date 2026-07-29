@@ -11,7 +11,7 @@
 
 #include "common/ceph_crypto.h"
 #include "common/dout.h"
-#include "common/split.h"
+#include "include/str_lib.h"
 #include "common/Formatter.h"
 #include "common/utf8.h"
 #include "common/ceph_json.h"
@@ -382,7 +382,7 @@ static std::string content_encoding_without_aws_chunked(std::string_view value)
   std::string result;
   result.reserve(value.size());
 
-  for (std::string_view part : ceph::split(value, ", ")) {
+  for (std::string_view part : ceph::split_view(value, ", ")) {
     if (part == "aws-chunked") {
       continue;
     }
@@ -826,8 +826,8 @@ int RGWGetObj_ObjStore_S3::override_range_hdr(const rgw::auth::StrategyRegistry&
   const char hdrs_split[2] = {(char)178,'\0'};
   const char kv_split[2] = {(char)177,'\0'};
   const char* cache_hdr = rgw_env->get("HTTP_X_AMZ_CACHE");
-  for (std::string_view hdr : ceph::split(cache_hdr, hdrs_split)) {
-    auto kv = ceph::split(hdr, kv_split);
+  for (std::string_view hdr : ceph::split_view(cache_hdr, hdrs_split)) {
+    auto kv = ceph::split_view(hdr, kv_split);
     auto k = kv.begin();
     if (std::distance(k, kv.end()) != 2) {
       return -EINVAL;
@@ -1907,7 +1907,7 @@ int RGWListBucket_ObjStore_S3::get_common_params()
   // Parse x-amz-optional-object-attributes header.
   const char* opt_attrs = s->info.env->get("HTTP_X_AMZ_OPTIONAL_OBJECT_ATTRIBUTES");
   if (opt_attrs) {
-    auto tokens = ceph::split(opt_attrs, ", ");
+    auto tokens = ceph::split_view(opt_attrs, ", ");
     fetch_restore_status =
         std::find(tokens.begin(), tokens.end(), "RestoreStatus") != tokens.end();
   }
@@ -5151,11 +5151,11 @@ int RGWConfigBucketMetaSearch_ObjStore_S3::get_params(optional_yield y)
   }
 
   list<string> expressions;
-  get_str_list(iter->second, ",", expressions);
+  ceph::split_str(iter->second, ",", expressions);
 
   for (auto& expression : expressions) {
     vector<string> args;
-    get_str_vec(expression, ";", args);
+    ceph::split_str(expression, ";", args);
 
     if (args.empty()) {
       s->err.message = "invalid empty expression";

@@ -21,7 +21,7 @@
 
 #include "rgw_client_io.h"
 #include "rgw_http_client.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -487,7 +487,7 @@ ExternalTokenEngine::authenticate(const DoutPrefixProvider* dpp,
   std::string swift_user;
   try {
     std::vector<std::string> swift_groups;
-    get_str_vec(validator.get_header_value("X-Auth-Groups"),
+    ceph::split_str(validator.get_header_value("X-Auth-Groups"),
                 ",", swift_groups);
 
     if (0 == swift_groups.size()) {

@@ -12,7 +12,7 @@
 
 #include "common/armor.h"
 #include "common/utf8.h"
-#include "common/split.h"
+#include "include/str_lib.h"
 #include "include/timegm.h"
 #include "rgw_rest_s3.h"
 #include "rgw_auth_s3.h"
@@ -1419,7 +1419,7 @@ using split_func_t =
 
 static inline void split_header(const std::string_view hdr, split_func_t f)
 {
-  auto kv = ceph::split(hdr, ":");
+  auto kv = ceph::split_view(hdr, ":");
   auto k = kv.begin();
   if (k != kv.end()) {
     auto v = std::next(k);
@@ -1436,7 +1436,7 @@ inline void AWSv4ComplMulti::extract_trailing_headers(
   using std::get;
   size_t consumed = 0;
   /* spliterate x_amz_trailer */
-  auto kv = ceph::split(x_amz_trailer, ",");
+  auto kv = ceph::split_view(x_amz_trailer, ",");
   for (auto k = kv.begin(); k != kv.end(); k = std::next(k)) {
     /* extract trailer;  if there's more than one trailer, don't rely on their
      * order in x-amz-trailer */

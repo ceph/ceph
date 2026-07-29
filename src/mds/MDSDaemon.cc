@@ -20,7 +20,7 @@
 #include "include/compat.h"
 #include "include/Context.h"
 #include "include/types.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "include/util.h"
 
 #include "common/Clock.h"
@@ -207,7 +207,7 @@ void MDSDaemon::asok_command(
       string heapcmd;
       cmd_getval(cmdmap, "heapcmd", heapcmd);
       vector<string> heapcmd_vec;
-      get_str_vec(heapcmd, heapcmd_vec);
+      ceph::split_str(heapcmd, heapcmd_vec);
       string value;
       if (cmd_getval(cmdmap, "value", value)) {
 	heapcmd_vec.push_back(value);
@@ -221,7 +221,7 @@ void MDSDaemon::asok_command(
     string arg;
     cmd_getval(cmdmap, "arg", arg);
     vector<string> argvec;
-    get_str_vec(arg, argvec);
+    ceph::split_str(arg, argvec);
     cpu_profiler_handle_command(argvec, ss);
     r = 0;
   } else {

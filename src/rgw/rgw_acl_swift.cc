@@ -9,7 +9,7 @@
 #include <boost/algorithm/string/predicate.hpp>
 
 #include "common/ceph_json.h"
-#include "common/split.h"
+#include "include/str_lib.h"
 #include "rgw_common.h"
 #include "driver/rados/rgw_user.h"
 #include "rgw_acl_swift.h"
@@ -181,7 +181,7 @@ int create_container_policy(const DoutPrefixProvider *dpp,
   auto& acl = policy.get_acl();
 
   if (read_list) {
-    for (std::string_view uid : ceph::split(read_list, " ,")) {
+    for (std::string_view uid : ceph::split_view(read_list, " ,")) {
       auto grant = parse_grant(dpp, driver, std::string{uid}, SWIFT_PERM_READ);
       if (!grant) {
         ldpp_dout(dpp, 4) << "ERROR: failed to parse read acl grant "
@@ -193,7 +193,7 @@ int create_container_policy(const DoutPrefixProvider *dpp,
     rw_mask |= SWIFT_PERM_READ;
   }
   if (write_list) {
-    for (std::string_view uid : ceph::split(write_list, " ,")) {
+    for (std::string_view uid : ceph::split_view(write_list, " ,")) {
       auto grant = parse_grant(dpp, driver, std::string{uid}, SWIFT_PERM_WRITE);
       if (!grant) {
         ldpp_dout(dpp, 4) << "ERROR: failed to parse write acl grant "

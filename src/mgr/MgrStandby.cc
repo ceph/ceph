@@ -19,7 +19,7 @@
 #include "common/signal.h"
 #include "common/cmdparse.h"
 #include "include/compat.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "perfglue/heap_profiler.h"
 
 #include "include/stringify.h"
@@ -162,7 +162,7 @@ int MgrStandby::asok_command(std::string_view cmd, const cmdmap_t& cmdmap,
     std::string heapcmd;
     cmd_getval(cmdmap, "heapcmd", heapcmd);
     std::vector<std::string> cmd_vec;
-    get_str_vec(heapcmd, cmd_vec);
+    ceph::split_str(heapcmd, cmd_vec);
     std::string val;
     if (cmd_getval(cmdmap, "value", val)) {
       cmd_vec.push_back(val);

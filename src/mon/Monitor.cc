@@ -83,7 +83,7 @@
 #include "include/stringify.h"
 #include "include/color.h"
 #include "include/ceph_fs.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "include/util.h" // for collect_sys_info(), dump_services()
 
 #include "OSDMonitor.h"
@@ -534,7 +534,7 @@ will start to track new ops received afterwards.";
       goto abort;
     }
     std::vector<std::string> cmd_vec;
-    get_str_vec(cmd, cmd_vec);
+    ceph::split_str(cmd, cmd_vec);
     string val;
     if (cmd_getval(cmdmap, "value", val)) {
       cmd_vec.push_back(val);
@@ -953,7 +953,7 @@ int Monitor::preinit()
   if (!has_ever_joined) {
     // impose initial quorum restrictions?
     list<string> initial_members;
-    get_str_list(g_conf()->mon_initial_members, initial_members);
+    ceph::split_str(g_conf()->mon_initial_members, initial_members);
 
     if (!initial_members.empty()) {
       dout(1) << " initial_members " << initial_members << ", filtering seed monmap" << dendl;
@@ -3616,7 +3616,7 @@ void Monitor::handle_command(MonOpRequestRef op)
   string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
-  get_str_vec(prefix, fullcmd);
+  ceph::split_str(prefix, fullcmd);
 
   // make sure fullcmd is not empty.
   // invalid prefix will cause empty vector fullcmd.
@@ -3968,7 +3968,7 @@ void Monitor::handle_command(MonOpRequestRef op)
 
     vector<string> tagsvec;
     cmd_getval(cmdmap, "tags", tagsvec);
-    string tagstr = str_join(tagsvec, " ");
+    string tagstr = ceph::str_join(tagsvec, " ");
     if (!tagstr.empty())
       tagstr = tagstr.substr(0, tagstr.find_last_of(' '));
     f->dump_string("tag", tagstr);

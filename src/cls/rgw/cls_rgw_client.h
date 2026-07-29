@@ -5,7 +5,7 @@
 
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "include/rados/librados.hpp"
 #include "cls_rgw_ops.h"
 #include "cls_rgw_const.h"
@@ -87,7 +87,7 @@ public:
   int from_string(std::string_view composed_marker, int shard_id) {
     value_by_shards.clear();
     std::vector<std::string> shards;
-    get_str_vec(composed_marker, SHARDS_SEPARATOR.c_str(), shards);
+    ceph::split_str(composed_marker, SHARDS_SEPARATOR.c_str(), shards);
     if (shards.size() > 1 && shard_id >= 0) {
       return -EINVAL;
     }

@@ -24,7 +24,7 @@
 #include "common/Clock.h"
 #include "common/convenience.h"
 #include "common/strtol.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "include/timegm.h"
 #include "rgw_crypt_sanitize.h"
 #include "rgw_bucket_sync.h"
@@ -1951,7 +1951,7 @@ static int rgw_parse_list_of_flags(struct rgw_name_to_flag *mapping,
 			    const string& str, uint32_t *perm)
 {
   list<string> strs;
-  get_str_list(str, strs);
+  ceph::split_str(str, strs);
   list<string>::iterator iter;
   uint32_t v = 0;
   for (iter = strs.begin(); iter != strs.end(); ++iter) {

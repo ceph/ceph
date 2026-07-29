@@ -16,7 +16,7 @@
 #include "AuthMethodList.h"
 #include "common/debug.h"
 #include "include/ceph_fs.h" // for CEPH_AUTH_*
-#include "include/str_list.h"
+#include "include/str_lib.h"
 
 #include <algorithm> // for std::find()
 
@@ -26,7 +26,7 @@ const static int dout_subsys = ceph_subsys_auth;
 AuthMethodList::AuthMethodList(CephContext *cct, std::string str)
 {
   std::list<std::string> sup_list;
-  get_str_list(str, sup_list);
+  ceph::split_str(str, sup_list);
   if (sup_list.empty()) {
     lderr(cct) << "WARNING: empty auth protocol list" << dendl;
   }
