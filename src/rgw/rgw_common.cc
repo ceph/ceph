@@ -126,7 +126,7 @@ static constexpr auto http_arg_specs = std::to_array<http_arg_spec>({
   { "website"sv, RGWHTTPArgs::http_arg::website, sub_resource },
 });
 
-const http_arg_spec* find_http_arg(std::string_view name)
+const http_arg_spec *find_http_arg(std::string_view name)
 {
   const auto i = std::ranges::find(
     http_arg_specs,
@@ -134,6 +134,12 @@ const http_arg_spec* find_http_arg(std::string_view name)
     &http_arg_spec::name);
 
   return std::end(http_arg_specs) == i ? nullptr : std::to_address(i);
+}
+
+bool is_admin_subresource(std::string_view name)
+{
+  const auto info = find_http_arg(name);
+  return info && http_arg_kind::admin_subresource == info->kind;
 }
 
 } // namespace
@@ -1030,6 +1036,12 @@ void RGWHTTPArgs::remove(const string& name)
   if (subres_iter != std::end(sub_resources)) {
     sub_resources.erase(subres_iter);
   }
+
+  if (is_admin_subresource(name)) {
+    admin_subresource_added = std::ranges::any_of(sub_resources, [](const auto& arg) {
+      return is_admin_subresource(arg.first);
+    });
+  }
 }
 
 void RGWHTTPArgs::append(const string& name, const string& val)
@@ -1075,7 +1087,7 @@ bool RGWHTTPArgs::exists(std::string_view name) const
     return present_args.test(index(info->id));
   }
 
-  return val_map.find(std::string { name }) != std::end(val_map);
+  return val_map.find(name) != std::end(val_map);
 }
 
 bool RGWHTTPArgs::sub_resource_exists(std::string_view name) const
@@ -1084,59 +1096,64 @@ bool RGWHTTPArgs::sub_resource_exists(std::string_view name) const
     return present_sub_resources.test(index(info->id));
   }
 
-  return sub_resources.find(std::string { name }) != std::end(sub_resources);
+  return sub_resources.find(name) != std::end(sub_resources);
 }
 
-const string& RGWHTTPArgs::get(const string& name, bool *exists) const
+const string& RGWHTTPArgs::get(const std::string_view name, bool *exists) const
 {
-  auto iter = val_map.find(name);
-  bool e = (iter != std::end(val_map));
-  if (exists)
+  const auto iter = val_map.find(name);
+  const bool e = (iter != std::end(val_map));
+  if (exists) {
     *exists = e;
-  if (e)
+  }
+
+  if (e) {
     return iter->second;
+  }
+
   return empty_str;
 }
 
 boost::optional<const std::string&>
-RGWHTTPArgs::get_optional(const std::string& name) const
+RGWHTTPArgs::get_optional(const std::string_view name) const
 {
-  bool exists;
-  const std::string& value = get(name, &exists);
-  if (exists) {
+  bool exists = false;
+  if (const std::string& value = get(name, &exists); exists) {
     return value;
-  } else {
-    return boost::none;
   }
+
+  return boost::none;
 }
 
-int RGWHTTPArgs::get_bool(const string& name, bool *val, bool *exists) const
+int RGWHTTPArgs::get_bool(const std::string_view name, bool *val, bool *exists) const
 {
-  map<string, string>::const_iterator iter;
-  iter = val_map.find(name);
-  bool e = (iter != val_map.end());
-  if (exists)
+  const auto iter = val_map.find(name);
+  const bool e = (iter != val_map.end());
+  if (exists) {
     *exists = e;
-
-  if (e) {
-    const char *s = iter->second.c_str();
-
-    if (strcasecmp(s, "false") == 0) {
-      *val = false;
-    } else if (strcasecmp(s, "true") == 0) {
-      *val = true;
-    } else {
-      return -EINVAL;
-    }
   }
 
-  return 0;
+  if (!e) {
+    return 0;
+  }
+
+  const char *const s = iter->second.c_str();
+  if (strcasecmp(s, "false") == 0) {
+    *val = false;
+    return 0;
+  }
+
+  if (strcasecmp(s, "true") == 0) {
+    *val = true;
+    return 0;
+  }
+
+  return -EINVAL;
 }
 
-int RGWHTTPArgs::get_bool(const char *name, bool *val, bool *exists) const
+int RGWHTTPArgs::get_bool(const char *const name, bool *val, bool *exists) const
 {
-  string s(name);
-  return get_bool(s, val, exists);
+  return get_bool(std::string_view { name }, val, exists);
 }
 
 void RGWHTTPArgs::get_bool(const char *name, bool *val, bool def_val) const
@@ -1168,7 +1185,7 @@ int RGWHTTPArgs::get_int(const char *name, int *val, int def_val) const
   return 0;
 }
 
-string RGWHTTPArgs::sys_get(const string& name, bool * const exists) const
+string RGWHTTPArgs::sys_get(const std::string_view name, bool * const exists) const
 {
   const auto iter = sys_val_map.find(name);
   const bool e = (iter != sys_val_map.end());

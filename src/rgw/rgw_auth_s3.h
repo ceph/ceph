@@ -493,13 +493,25 @@ public:
 
 void rgw_create_s3_canonical_header(
   const DoutPrefixProvider *dpp,
-  const char *method,
-  const char *content_md5,
-  const char *content_type,
-  const char *date,
+  const std::string_view method,
+  const std::string_view content_md5,
+  const std::string_view content_type,
+  const std::string_view date,
   const meta_map_t& meta_map,
   const meta_map_t& qs_map,
-  const char *request_uri,
+  const std::string_view request_uri,
+  const RGWHTTPArgs::name_value_map& sub_resources,
+  std::string& dest_str);
+
+void rgw_create_s3_canonical_header(
+  const DoutPrefixProvider *dpp,
+  const char *const method,
+  const char *const content_md5,
+  const char *const content_type,
+  const char *const date,
+  const meta_map_t& meta_map,
+  const meta_map_t& qs_map,
+  const char *const request_uri,
   const std::map<std::string, std::string>& sub_resources,
   std::string& dest_str);
 bool rgw_create_s3_canonical_header(const DoutPrefixProvider *dpp,

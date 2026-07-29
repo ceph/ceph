@@ -62,6 +62,11 @@ struct BucketLoggingOpCase final {
   std::string_view name;
 };
 
+static_assert(requires(const RGWHTTPArgs::name_value_map& args,
+                       std::string_view name) {
+  args.find(name);
+});
+
 TEST(RGWRest, HttpArgsTracksSubresources)
 {
   RGWHTTPArgs args;
@@ -93,6 +98,35 @@ TEST(RGWRest, HttpArgsPreservesSingleAdminSubresource)
   EXPECT_FALSE(args.sub_resource_exists("key"));
 }
 
+TEST(RGWRest, HttpArgsRemoveReopensAdminSubresourceSlot)
+{
+  RGWHTTPArgs args;
+  args.append("subuser", "one");
+  args.remove("subuser");
+  args.append("key", "two");
+
+  EXPECT_FALSE(args.sub_resource_exists("subuser"));
+  EXPECT_TRUE(args.sub_resource_exists("key"));
+}
+
+TEST(RGWRest, HttpArgsSetResetsCachedState)
+{
+  RGWHTTPArgs args;
+  args.append("subuser", "one");
+  args.append("response-content-type", "text/plain");
+  args.append("rgwx-control", "system");
+
+  args.set("?key=two");
+  ASSERT_EQ(0, args.parse(nullptr));
+
+  bool exists = true;
+  EXPECT_FALSE(args.sub_resource_exists("subuser"));
+  EXPECT_TRUE(args.sub_resource_exists("key"));
+  EXPECT_FALSE(args.has_response_modifier());
+  EXPECT_EQ("", args.sys_get("rgwx-control", &exists));
+  EXPECT_FALSE(exists);
+}
+
 TEST(RGWRest, HttpArgsParsesQueryAndLowercasesAmzNames)
 {
   RGWHTTPArgs args;
@@ -105,6 +139,21 @@ TEST(RGWRest, HttpArgsParsesQueryAndLowercasesAmzNames)
   EXPECT_TRUE(exists);
   EXPECT_TRUE(args.sub_resource_exists("uploadId"));
   EXPECT_EQ("secret", args.get("password"));
+}
+
+TEST(RGWRest, HttpArgsFindsUncachedArgsByStringView)
+{
+  RGWHTTPArgs args;
+  args.append("plain", "value");
+
+  const std::string storage = "xxplainyy";
+  const std::string_view name { storage.data() + 2, 5 };
+
+  EXPECT_TRUE(args.exists(name));
+  EXPECT_EQ("value", args.get(name));
+  const auto value = args.get_optional(name);
+  ASSERT_TRUE(value);
+  EXPECT_EQ("value", *value);
 }
 
 TEST(RGWRest, HttpArgsTracksCachedOrdinaryArgs)

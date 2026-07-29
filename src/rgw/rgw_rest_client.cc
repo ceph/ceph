@@ -162,11 +162,11 @@ static void append_param(string& dest, const string& name, const string& val)
   }
 }
 
-static void do_get_params_str(const param_vec_t& params, map<string, string>& extra_args, string& dest)
+template <typename Map>
+static void do_get_params_str(const param_vec_t& params, const Map& extra_args, string& dest)
 {
-  map<string, string>::iterator miter;
-  for (miter = extra_args.begin(); miter != extra_args.end(); ++miter) {
-    append_param(dest, miter->first, miter->second);
+  for (const auto& [name, value] : extra_args) {
+    append_param(dest, name, value);
   }
   for (auto iter = params.begin(); iter != params.end(); ++iter) {
     append_param(dest, iter->first, iter->second);
@@ -423,7 +423,7 @@ auto RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const 
   }
 
   string params_str;
-  get_params_str(new_info.args.get_params(), params_str);
+  do_get_params_str(params, new_info.args.get_params(), params_str);
 
   endpoint.set_path(new_info.request_uri);
   endpoint.set_query(params_str);
@@ -562,7 +562,7 @@ void RGWRESTGenerateHTTPHeaders::init(const string& _method, const string& host,
   scope_from_api_name(this, cct, host, api_name, &region, service);
 
   string params_str;
-  map<string, string>& args = new_info->args.get_params();
+  auto& args = new_info->args.get_params();
   do_get_params_str(params, args, params_str);
 
   /* merge params with extra args so that we can sign correctly */

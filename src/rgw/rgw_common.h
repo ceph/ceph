@@ -460,12 +460,13 @@ class RGWHTTPArgs {
     website,
     count,
   };
+  using name_value_map = std::map<std::string, std::string, std::less<>>;
 
  private:
   std::string str, empty_str;
-  std::map<std::string, std::string> val_map;
-  std::map<std::string, std::string> sys_val_map;
-  std::map<std::string, std::string> sub_resources;
+  name_value_map val_map;
+  name_value_map sys_val_map;
+  name_value_map sub_resources;
   std::bitset<static_cast<size_t>(http_arg::count)> present_args;
   std::bitset<static_cast<size_t>(http_arg::count)> present_sub_resources;
   bool has_resp_modifier = false;
@@ -485,9 +486,11 @@ class RGWHTTPArgs {
   /** Set the arguments; as received */
   void set(const std::string& s) {
     has_resp_modifier = false;
+    admin_subresource_added = false;
     present_args.reset();
     present_sub_resources.reset();
     val_map.clear();
+    sys_val_map.clear();
     sub_resources.clear();
     str = s;
   }
@@ -496,16 +499,16 @@ class RGWHTTPArgs {
   void append(const std::string& name, const std::string& val);
   void remove(const std::string& name);
   /** Get the value for a specific argument parameter */
-  const std::string& get(const std::string& name, bool *exists = NULL) const;
+  const std::string& get(std::string_view name, bool *exists = NULL) const;
   boost::optional<const std::string&>
-  get_optional(const std::string& name) const;
-  int get_bool(const std::string& name, bool *val, bool *exists) const;
-  int get_bool(const char *name, bool *val, bool *exists) const;
+  get_optional(std::string_view name) const;
+  int get_bool(std::string_view name, bool *val, bool *exists) const;
+  int get_bool(const char *const name, bool *val, bool *exists) const;
   void get_bool(const char *name, bool *val, bool def_val) const;
   int get_int(const char *name, int *val, int def_val) const;
 
   /** Get the value for specific system argument parameter */
-  std::string sys_get(const std::string& name, bool *exists = nullptr) const;
+  std::string sys_get(std::string_view name, bool *exists = nullptr) const;
 
   /** see if a parameter is contained in this RGWHTTPArgs */
   bool exists(std::string_view name) const;
@@ -518,19 +521,19 @@ class RGWHTTPArgs {
            sub_resource_exists(http_arg::version_id);
   }
 
-  std::map<std::string, std::string>& get_params() {
+  name_value_map& get_params() {
     return val_map;
   }
-  const std::map<std::string, std::string>& get_params() const {
+  const name_value_map& get_params() const {
     return val_map;
   }
-  std::map<std::string, std::string>& get_sys_params() {
+  name_value_map& get_sys_params() {
     return sys_val_map;
   }
-  const std::map<std::string, std::string>& get_sys_params() const {
+  const name_value_map& get_sys_params() const {
     return sys_val_map;
   }
-  const std::map<std::string, std::string>& get_sub_resources() const {
+  const name_value_map& get_sub_resources() const {
     return sub_resources;
   }
   unsigned get_num_params() const {
@@ -546,7 +549,7 @@ class RGWHTTPArgs {
     return present_sub_resources.test(index(name));
   }
   void set_system() { /* make all system params visible */
-    std::map<std::string, std::string>::iterator iter;
+    name_value_map::iterator iter;
     for (iter = sys_val_map.begin(); iter != sys_val_map.end(); ++iter) {
       val_map[iter->first] = iter->second;
     }
