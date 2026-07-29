@@ -4435,6 +4435,58 @@ options:
   default: false
   services:
   - rgw
+- name: rgw_posix_multipart_cache_max
+  type: uint
+  level: advanced
+  desc: Maximum in-memory multipart cache entries
+  long_desc: Maximum number of in-progress multipart uploads to cache
+    in memory.  Broader is better than deeper.  Uploads beyond this
+    count are still functional but may not benefit from cache
+    acceleration.  In volatile mode, evicted entries lose metadata.
+  default: 4096
+  services:
+  - rgw
+- name: rgw_posix_multipart_cache_lanes
+  type: uint
+  level: advanced
+  desc: Number of lanes in multipart cache LRU
+  default: 7
+  services:
+  - rgw
+- name: rgw_posix_multipart_cache_partitions
+  type: uint
+  level: advanced
+  desc: Number of partitions in multipart cache AVL tree
+  default: 7
+  services:
+  - rgw
+- name: rgw_posix_multipart_cache_max_parts
+  type: uint
+  level: advanced
+  desc: Per-entry part cap for proactive multipart caching
+  long_desc: Maximum number of parts to cache per in-progress upload
+    via proactive insertion.  Uploads exceeding this fall back to xattr
+    writes for overflowing parts (even in writeback/volatile mode).
+    Controls the memory tradeoff between breadth (more uploads cached)
+    and depth (more parts per upload cached).
+  default: 512
+  services:
+  - rgw
+- name: rgw_posix_multipart_cache_policy
+  type: str
+  level: advanced
+  desc: Multipart cache write policy
+  long_desc: Controls when part metadata xattrs are written to disk.
+    "writethrough" (default) always writes xattrs; the cache is a pure
+    acceleration layer.  "writeback" skips xattrs on part upload and
+    flushes dirty parts to disk on cache eviction; survives eviction
+    but not crashes.  "volatile" skips xattrs and discards on eviction;
+    fastest, but eviction or crash before complete loses metadata for
+    in-cache-only parts.  In all modes, parts beyond max_parts fall
+    back to xattr writes.
+  default: writethrough
+  services:
+  - rgw
 - name: rgw_nsfs_base_path
   type: str
   level: advanced

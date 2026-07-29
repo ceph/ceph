@@ -24,6 +24,7 @@
 #include <memory>
 #include "common/dout.h"
 #include "bucket_cache.h"
+#include "multipart_cache.h"
 #include "user_cache.h"
 #include "posixDB.h"
 
@@ -40,6 +41,7 @@ using DeleteResult = rgw::sal::Object::DeleteOp::Result;
 namespace posix {
 
 using BucketCache = file::listing::BucketCache<POSIXDriver, POSIXBucket>;
+using MultipartCache = file::listing::MultipartCache<>;
 
 /* integration w/bucket listing cache */
 using fill_cache_cb_t = file::listing::fill_cache_cb_t;
@@ -494,6 +496,7 @@ protected:
   std::unique_ptr<rgw::store::POSIXUserDB> userDB;
   POSIXZone zone;
   std::unique_ptr<posix::BucketCache> bucket_cache;
+  std::unique_ptr<posix::MultipartCache> multipart_cache;
   std::unique_ptr<rgw::posix::SyncFsThread> syncfs_thread;
   UserCache user_cache;
   std::string base_path;
@@ -837,6 +840,7 @@ public:
   posix::Directory* get_root_dir() { return root_dir.get(); }
   const std::string& get_base_path() const { return base_path; }
   posix::BucketCache* get_bucket_cache() { return bucket_cache.get(); }
+  posix::MultipartCache* get_multipart_cache() { return multipart_cache.get(); }
   UserCache& get_user_cache() { return user_cache; }
 
   /* called by posix::BucketCache layer when a new object is discovered
@@ -1348,7 +1352,10 @@ public:
   virtual ~POSIXMultipartPart() = default;
 
   virtual uint32_t get_num() { return info.num; }
-  virtual uint64_t get_size() { return part_file->get_size(); }
+  virtual uint64_t get_size() {
+    if (info.size) return info.size;
+    return part_file ? part_file->get_size() : 0;
+  }
   virtual const std::string& get_etag() { return info.etag; }
   virtual ceph::real_time& get_mtime() { return info.mtime; }
   virtual const std::optional<rgw::cksum::Cksum>& get_cksum() {
@@ -1472,6 +1479,7 @@ private:
   uint64_t part_num;
   std::unique_ptr<posix::Directory> upload_dir;
   std::unique_ptr<posix::File> part_file;
+  file::listing::MultipartCacheKey mp_cache_key;
 
 public:
   POSIXMultipartWriter(const DoutPrefixProvider *dpp,
@@ -1481,14 +1489,16 @@ public:
                     POSIXDriver* _driver,
                     const ACLOwner& _owner,
                     const rgw_placement_rule *_ptail_placement_rule,
-                    uint64_t _part_num) :
+                    uint64_t _part_num,
+		    file::listing::MultipartCacheKey&& _mp_cache_key) :
     StoreWriter(dpp, y),
     driver(_driver),
     owner(_owner),
     ptail_placement_rule(_ptail_placement_rule),
     part_num(_part_num),
     upload_dir(_shadow_bucket->get_dir()->clone()),
-    part_file(std::make_unique<posix::File>(posix::get_key_fname(_key, false), upload_dir.get(), _driver->ctx()))
+    part_file(std::make_unique<posix::File>(posix::get_key_fname(_key, false), upload_dir.get(), _driver->ctx())),
+    mp_cache_key(std::move(_mp_cache_key))
   { upload_dir->open(dpp); }
   virtual ~POSIXMultipartWriter() = default;
 

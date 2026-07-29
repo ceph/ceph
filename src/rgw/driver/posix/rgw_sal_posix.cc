@@ -2167,6 +2167,59 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
       g_conf().get_val<int64_t>("rgw_posix_cache_lmdb_count"),
       g_conf().get_val<bool>("rgw_posix_inotify")));
 
+  /* multipart upload cache */
+  {
+    auto mp_max = g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_max");
+    auto mp_lanes = g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_lanes");
+    auto mp_parts = g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_partitions");
+    auto mp_max_parts = g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_max_parts");
+    auto mp_pol_str = g_conf().get_val<std::string>("rgw_posix_multipart_cache_policy");
+
+    auto mp_policy = file::listing::MultipartCachePolicy::writethrough;
+    if (mp_pol_str == "writeback") {
+      mp_policy = file::listing::MultipartCachePolicy::writeback;
+    } else if (mp_pol_str == "volatile") {
+      mp_policy = file::listing::MultipartCachePolicy::volatile_;
+    }
+
+    file::listing::stabilize_fn_t stabilize;
+    if (mp_policy == file::listing::MultipartCachePolicy::writeback) {
+      stabilize = [this](const file::listing::MultipartCacheKey& key,
+	  const boost::container::flat_map<uint32_t,
+	    file::listing::MultipartPartInfo>& parts) {
+	std::optional<std::string> ns{mp_ns};
+	auto staging_name = bucket_fname(key.upload_meta, ns);
+	int dir_fd = ::openat(root_fd, (key.bucket_name + "/" +
+	  staging_name).c_str(), O_RDONLY | O_DIRECTORY);
+	if (dir_fd < 0) {
+	  return;
+	}
+	for (auto& [num, pi] : parts) {
+	  auto fname = MP_OBJ_PART_PFX + fmt::format("{:0>5}", num);
+	  int pfd = ::openat(dir_fd, fname.c_str(), O_RDWR);
+	  if (pfd < 0) continue;
+	  POSIXUploadPartInfo upi;
+	  upi.num = pi.num;
+	  upi.size = pi.size;
+	  upi.etag = pi.etag;
+	  upi.mtime = pi.mtime;
+	  upi.cksum = pi.cksum;
+	  bufferlist bl;
+	  encode(upi, bl);
+	  std::string xn = "user.rgw." + std::string(RGW_POSIX_ATTR_MPUPLOAD);
+	  ::fsetxattr(pfd, xn.c_str(), bl.c_str(), bl.length(), 0);
+	  ::close(pfd);
+	}
+	::close(dir_fd);
+      };
+    }
+
+    multipart_cache.reset(
+      new posix::MultipartCache(
+	mp_max, mp_lanes, mp_parts, mp_max_parts,
+	mp_policy, std::move(stabilize)));
+  }
+
   /* user info cache */
   user_cache.set_max_size(dpp, g_conf().get_val<uint64_t>("rgw_posix_cache_max_users"));
 
@@ -5196,55 +5249,78 @@ int POSIXMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext 
 				      int *next_marker, bool *truncated, optional_yield y,
 				      bool assume_unsorted)
 {
-  int ret;
-  int last_num = 0;
-
-  ret = load(dpp);
+  int ret = load(dpp);
   if (ret < 0) {
     return ret;
   }
 
-  rgw::sal::Bucket::ListParams params;
-  rgw::sal::Bucket::ListResults results;
-
-  params.prefix = MP_OBJ_PART_PFX;
-  params.marker = MP_OBJ_PART_PFX + fmt::format("{:0>5}", marker);
-  params.marker.ns = mp_ns;
-  params.ns = mp_ns;
-
-  ret = shadow->list(dpp, params, num_parts + 1, results, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: list_parts: shadow->list failed ret="
-      << ret << " upload=" << get_upload_id() << dendl;
-    return ret;
+  auto* mc = driver->get_multipart_cache();
+  if (!mc) {
+    return -ENOENT;
   }
-  if (results.objs.empty()) {
-    ldpp_dout(dpp, 0) << "WARNING: list_parts: 0 results for upload="
-      << get_upload_id() << " shadow=" << shadow->get_name()
-      << " marker=" << params.marker.name << dendl;
-  }
-  for (rgw_bucket_dir_entry& ent : results.objs) {
-    std::unique_ptr<MultipartPart> part = std::make_unique<POSIXMultipartPart>(this);
-    POSIXMultipartPart* ppart = static_cast<POSIXMultipartPart*>(part.get());
 
-    rgw_obj_key key(ent.key);
-    // Parts are namespaced in the bucket listing
-    key.ns.clear();
-    ret = ppart->load(dpp, y, driver, key);
-    if (ret == 0) {
-      /* Skip anything that's not a part */
-      last_num = part->get_num();
-      parts[part->get_num()] = std::move(part);
-    }
-    if (parts.size() == (ulong)num_parts)
-      break;
+  file::listing::MultipartCacheKey cache_key{
+    bucket->get_name(), mp_obj.meta};
+
+  auto result = mc->list_parts(
+    cache_key, marker, num_parts,
+    [this, dpp, y](
+      boost::container::flat_map<uint32_t, file::listing::MultipartPartInfo>& pm) {
+      auto* dir = shadow->get_dir();
+      dir->for_each(dpp,
+	[&](const char* name) -> int {
+	  std::string sname(name);
+	  if (!sname.starts_with(MP_OBJ_PART_PFX)) {
+	    return 0;
+	  }
+	  uint32_t pnum = 0;
+	  try {
+	    pnum = std::stoul(sname.substr(MP_OBJ_PART_PFX.length()));
+	  } catch (...) {
+	    return 0;
+	  }
+	  if (pm.contains(pnum)) {
+	    return 0;
+	  }
+	  auto pf = std::make_unique<posix::File>(sname, dir, driver->ctx());
+	  if (pf->stat(dpp, y) < 0) {
+	    return 0;
+	  }
+	  file::listing::MultipartPartInfo pi;
+	  pi.num = pnum;
+	  pi.size = pf->get_size();
+
+	  Attrs attrs;
+	  if (pf->read_attrs(dpp, y, attrs) == 0) {
+	    POSIXUploadPartInfo upi;
+	    if (decode_attr(attrs, RGW_POSIX_ATTR_MPUPLOAD, upi) == 0) {
+	      pi.etag = std::move(upi.etag);
+	      pi.mtime = upi.mtime;
+	      pi.cksum = std::move(upi.cksum);
+	      if (upi.size) pi.size = upi.size;
+	    }
+	  }
+	  pm[pnum] = std::move(pi);
+	  return 0;
+	});
+    });
+
+  for (auto& pi : result.parts) {
+    auto part = std::make_unique<POSIXMultipartPart>(this);
+    auto* ppart = static_cast<POSIXMultipartPart*>(part.get());
+    ppart->info.num = pi.num;
+    ppart->info.size = pi.size;
+    ppart->info.etag = std::move(pi.etag);
+    ppart->info.mtime = pi.mtime;
+    ppart->info.cksum = std::move(pi.cksum);
+    parts[pi.num] = std::move(part);
   }
 
   if (truncated)
-    *truncated = results.is_truncated;
+    *truncated = result.truncated;
 
   if (next_marker)
-    *next_marker = last_num;
+    *next_marker = result.next_marker;
 
   return 0;
 }
@@ -5260,7 +5336,9 @@ int POSIXMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
     return ret;
   }
 
-  driver->get_bucket_cache()->invalidate_bucket(dpp, shadow->get_name(), true);
+  if (auto* mc = driver->get_multipart_cache()) {
+    mc->remove({bucket->get_name(), mp_obj.meta});
+  }
   shadow->remove(dpp, true, y);
 
   return 0;
@@ -5474,8 +5552,10 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
     }
   }
 
-  // remove staging directory listing cache entry (frees LMDB DBI slot)
-  driver->get_bucket_cache()->invalidate_bucket(dpp, shadow_cache_name, true);
+  // remove multipart cache entry
+  if (auto* mc = driver->get_multipart_cache()) {
+    mc->remove({bucket->get_name(), mp_obj.meta});
+  }
 
   return 0;
 }
@@ -5568,9 +5648,13 @@ std::unique_ptr<Writer> POSIXMultipartUpload::get_writer(
 
   load(dpp);
 
+  file::listing::MultipartCacheKey cache_key{
+    bucket->get_name(), mp_obj.meta};
+
   return std::make_unique<POSIXMultipartWriter>(dpp, y, shadow.get(), part_key,
                                                 driver, owner,
-                                                ptail_placement_rule, part_num);
+                                                ptail_placement_rule, part_num,
+						std::move(cache_key));
 }
 
 int POSIXMultipartWriter::prepare(optional_yield y)
@@ -5632,14 +5716,20 @@ int POSIXMultipartWriter::complete(
   info.cksum = cksum;
   info.mtime = set_mtime;
 
-  bufferlist bl;
-  encode(info, bl);
-  attrs[RGW_POSIX_ATTR_MPUPLOAD] = bl;
+  auto* mc = driver->get_multipart_cache();
+  bool added = mc ? mc->add_part(mp_cache_key,
+    {static_cast<uint32_t>(part_num), accounted_size, etag, set_mtime, cksum}) : false;
 
-  ret = part_file->write_attrs(rctx.dpp, rctx.y, attrs, /*extra_attrs=*/nullptr);
-  if (ret < 0) {
-    ldpp_dout(rctx.dpp, 20) << "ERROR: failed writing attrs for " << part_file->get_name() << dendl;
-    return ret;
+  if (!added || mc->policy == file::listing::MultipartCachePolicy::writethrough) {
+    bufferlist bl;
+    encode(info, bl);
+    attrs[RGW_POSIX_ATTR_MPUPLOAD] = bl;
+
+    ret = part_file->write_attrs(rctx.dpp, rctx.y, attrs, /*extra_attrs=*/nullptr);
+    if (ret < 0) {
+      ldpp_dout(rctx.dpp, 20) << "ERROR: failed writing attrs for " << part_file->get_name() << dendl;
+      return ret;
+    }
   }
 
   part_file->set_sync_on_close(false);
