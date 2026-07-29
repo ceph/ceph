@@ -149,8 +149,9 @@ constexpr compiled_key assemble(const Segments&... segments)
   detail::require_valid_keyspace(detail::first_segment_view(segments...));
 
   std::string out;
-  out.reserve((detail::minimum_encoded_string_segment_size(detail::segment_view(segments)) +
-               ... + std::size_t{0}));
+  out.reserve(
+    (detail::minimum_encoded_string_segment_size(detail::segment_view(segments)) +
+     ... + std::size_t{0}));
 
   (detail::append_string_segment(out, detail::segment_view(segments)), ...);
 
