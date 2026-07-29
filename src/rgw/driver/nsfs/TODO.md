@@ -166,27 +166,26 @@ Commits `24554c6`, `fab6ed1`.
 See STATUS.md for the current s3tests-rs scorecard and feature
 completeness assessment.
 
-### Lifecycle
+### Lifecycle — IMPLEMENTED
 
-Not implemented. `get_lifecycle()`/`get_rgwlc()` return nullptr.
-Requires a timer/worker framework. Accounts for 74 lifecycle test
-failures plus 2 versioning and 2 bucket_policy failures that depend
-on lifecycle execution.
+`NSFSLifecycle` class implemented.  `RGWLC` is instantiated at
+driver init (`rgw_sal_nsfs.cc:2089`).  Multipart lifecycle
+expiration support added (commit `4c1bfee28d8`).
+
+### S3 Notifications — IMPLEMENTED
+
+`NSFSNotification` implements `publish_reserve`/`publish_commit`
+with topic filtering and event matching (commit `2e0439a210d`).
 
 ### Bucket logging
 
 Not implemented. Requires log object assembly and flush
-infrastructure. 188 test failures.
-
-### SNS / notifications
-
-`NSFSNotification` is a stub. Topic management returns -ENOTSUP.
-8 test failures.
+infrastructure.
 
 ### SSE-C multipart
 
-4 test failures. Encryption attributes are stored but no actual
-SSE-C crypto is performed during multipart upload assembly.
+Encryption attributes are stored but no actual SSE-C crypto is
+performed during multipart upload assembly.
 
 ### Atomicity / locking design review
 
@@ -195,11 +194,37 @@ This is correct but coarse. A broader review of locking granularity and
 its interaction with the BucketCache inotify invalidation path is
 warranted. See DESIGN.md cache invalidation section.
 
+## NooBaa on-disk format variance
+
+See `NOOBAA_VARIANCE.md` for a detailed analysis of on-disk format
+differences between NooBaa NSFS and our Ceph NSFS driver.
+
+Key divergences:
+
+- **xattr namespace:** `user.noobaa.*` (string values) vs
+  `user.nsfs.*` (Ceph binary encoding).  No cross-compatibility.
+- **Multipart data model:** NooBaa uses shared data files per unique
+  part size (enabling zero-copy `link()` assembly).  We use one file
+  per part with `copy_file_range()` assembly.
+- **"gpfs_linkat splice":** DESIGN.md's GPFS integration table uses
+  this phrase, but `gpfs_linkat` is an enhanced `linkat()` (hard link
+  create/replace), not a data-concatenation operation.  The zero-copy
+  assembly requires the shared-data-file model at the application
+  level.  See NOOBAA_VARIANCE.md §4 for the full history.
+
+### Corrective actions (future round of work)
+
+1. Fix DESIGN.md terminology: "gpfs_linkat splice" → "shared-data-file
+   model + `link()`/`gpfs_linkat`"
+2. Wire `assemble_parts()` through `FSStrategy` virtual interface
+3. Evaluate shared-data-file model for zero-copy assembly
+4. Evaluate xattr compatibility layer if NooBaa migration is a goal
+
 ## Future milestones (out of scope for now)
 
 - GPFS integration (`gpfs_linkatif`, `gpfs_unlinkat`, `O_TMPFILE`, fd pre-staging)
+- GPFS multipart assembly via shared-data-file model (see NOOBAA_VARIANCE.md §9)
 - Handle cache (LRU for Directory objects)
 - `force_md5_etag` config option
-- Bucket lifecycle management
 - Bucket logging
-- SNS / notifications
+- NooBaa on-disk format compatibility layer
