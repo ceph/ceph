@@ -505,18 +505,18 @@ class SqliteMirroringStore(SqliteStore):
         after the sqlite transaction commits successfully, and discards
         them if it doesn't.
         """
-        self._pending_mirror_removals = []
-        try:
-            with super().transaction():
+        with super().transaction():
+            self._pending_mirror_removals = []
+            try:
                 yield None
-        except Exception:
-            self._pending_mirror_removals = None
-            raise
-        else:
-            pending = self._pending_mirror_removals
-            self._pending_mirror_removals = None
-            for mirror, key in pending:
-                mirror.store.remove(key)
+            except Exception:
+                self._pending_mirror_removals = None
+                raise
+            else:
+                pending = self._pending_mirror_removals
+                self._pending_mirror_removals = None
+        for mirror, key in pending:
+            mirror.store.remove(key)
 
     def get_object(self, key: EntryKey) -> Simplified:
         """Fetch a simplified object from the store."""
