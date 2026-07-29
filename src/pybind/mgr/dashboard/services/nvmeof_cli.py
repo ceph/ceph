@@ -494,12 +494,25 @@ class NvmeofCLICommand(DBCLICommand):
             logger.warning("Success message template failed for %s", self.prefix, exc_info=True)
             return None
 
+    def _check_required_params(self, cmd_dict: Dict[str, Any]) -> Optional[str]:
+        for index, name in enumerate(self.arg_spec):
+            if name in self.KNOWN_ARGS:
+                continue
+            if index >= self.first_default:
+                break
+            if cmd_dict.get(name) is None:
+                return f"missing required parameter: --{name}"
+        return None
+
     def call(self,
              mgr: Any,
              cmd_dict: Dict[str, Any],
              inbuf: Optional[str] = None) -> HandleCommandResult:
         deprecated_warnings = ''
         try:
+            missing = self._check_required_params(cmd_dict)
+            if missing:
+                return HandleCommandResult(-errno.EINVAL, '', missing)
             out_format = cmd_dict.get('format')
             args_map = self._args_map_from_argspec(cmd_dict, inbuf)
 
