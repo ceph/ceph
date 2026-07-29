@@ -205,18 +205,57 @@ See `the Ceph Tracker wiki page that explains how to write the release notes <ht
 
    .. prompt:: bash
 
-      merfi gpg /opt/repos/ceph/squid-19.2.2/debian/
+      sign-debs ceph squid
 
    Example::
 
+      + project=ceph
+      + releases=(squid)
+      + distro_versions=(jessie)
+      + for release in "${releases[@]}"
+      + for distro_version in "${distro_versions[@]}"
+      + for path in /opt/repos/ceph/squid*
+      + '[' -d /opt/repos/ceph/squid-19.2.2/debian/jessie ']'
+      + needs_signing=0
+      + gpg --verify /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/Release.gpg /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/Release
+      + needs_signing=1
+      + break
+      + '[' 1 -eq 0 ']'
+      + echo 'Signing: /opt/repos/ceph/squid-19.2.2/debian/jessie'
+      Signing: /opt/repos/ceph/squid-19.2.2/debian/jessie
+      + merfi gpg /opt/repos/ceph/squid-19.2.2/debian/jessie
       --> Starting path collection, looking for files to sign
-      --> 1 repos found
+      --> 2 repos found
       --> signing: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/Release
       --> Running command: gpg --batch --yes --armor --detach-sig --output Release.gpg Release
       --> Running command: gpg --batch --yes --clearsign --output InRelease Release
       --> signing: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/jammy/Release
       --> Running command: gpg --batch --yes --armor --detach-sig --output Release.gpg Release
       --> Running command: gpg --batch --yes --clearsign --output InRelease Release
+      + gpg --verify /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/Release.gpg /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/Release
+      gpg: Signature made Thu May 14 12:00:00 2026 UTC
+      gpg:                using RSA key 460F3994
+      gpg: Good signature from "Ceph Release Key <security@ceph.com>"
+      + echo 'verifying: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/Release.gpg'
+      verifying: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/Release.gpg
+      + gpg --verify /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/InRelease
+      gpg: Signature made Thu May 14 12:00:00 2026 UTC
+      gpg:                using RSA key 460F3994
+      gpg: Good signature from "Ceph Release Key <security@ceph.com>"
+      + echo 'verifying: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/InRelease'
+      verifying: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/InRelease
+      + gpg --verify /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/jammy/Release.gpg /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/jammy/Release
+      gpg: Signature made Thu May 14 12:00:00 2026 UTC
+      gpg:                using RSA key 460F3994
+      gpg: Good signature from "Ceph Release Key <security@ceph.com>"
+      + echo 'verifying: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/jammy/Release.gpg'
+      verifying: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/jammy/Release.gpg
+      + gpg --verify /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/jammy/InRelease
+      gpg: Signature made Thu May 14 12:00:00 2026 UTC
+      gpg:                using RSA key 460F3994
+      gpg: Good signature from "Ceph Release Key <security@ceph.com>"
+      + echo 'verifying: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/jammy/InRelease'
+      verifying: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/jammy/InRelease
 
       etc...
 

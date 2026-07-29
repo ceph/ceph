@@ -129,6 +129,11 @@ class GatewayStub(object):
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_delete_host_req.SerializeToString,
                 response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
                 )
+        self.namespace_unpin = channel.unary_unary(
+                '/Gateway/namespace_unpin',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_unpin_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+                )
         self.add_host = channel.unary_unary(
                 '/Gateway/add_host',
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.add_host_req.SerializeToString,
@@ -405,6 +410,13 @@ class GatewayServicer(object):
 
     def namespace_delete_host(self, request, context):
         """Deletes a host from a namespace
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def namespace_unpin(self, request, context):
+        """Unpins a namespace load balancing group
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -687,6 +699,11 @@ def add_GatewayServicer_to_server(servicer, server):
             'namespace_delete_host': grpc.unary_unary_rpc_method_handler(
                     servicer.namespace_delete_host,
                     request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_delete_host_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
+            ),
+            'namespace_unpin': grpc.unary_unary_rpc_method_handler(
+                    servicer.namespace_unpin,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_unpin_req.FromString,
                     response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
             ),
             'add_host': grpc.unary_unary_rpc_method_handler(
@@ -1201,6 +1218,23 @@ class Gateway(object):
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/namespace_delete_host',
             dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_delete_host_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def namespace_unpin(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/namespace_unpin',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_unpin_req.SerializeToString,
             dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

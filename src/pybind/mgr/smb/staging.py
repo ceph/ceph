@@ -376,9 +376,26 @@ def _check_share_resource(
 
     # Handle RGW shares
     if share.rgw is not None:
+        # Check if cluster uses external Ceph cluster
+        cluster = staging.get_cluster(share.cluster_id)
+        is_external_cluster = (
+            cluster.external_ceph_cluster is not None
+            and cluster.external_ceph_cluster.ref
+        )
+
         # If credential_ref is not provided, auto-create credential
         if not share.rgw.credential_ref:
-            # Fetch credentials from RGW
+            # For external clusters, require explicit credential_ref
+            if is_external_cluster:
+                raise ErrorResult(
+                    share,
+                    msg=(
+                        "RGW shares with external clusters require explicit 'credential_ref'. "
+                        "Create an RGWCredential resource and reference it in the share."
+                    ),
+                )
+
+            # Fetch credentials from RGW (LOCAL cluster only)
             try:
                 (
                     fetched_user_id,
@@ -455,14 +472,17 @@ def _check_share_resource(
                         'other_cluster_id': cred.linked_to_cluster,
                     },
                 )
-        # Validate bucket exists
-        if not rgw.validate_rgw_bucket(
-            staging._tool_execer, share.rgw.bucket
-        ):
-            raise ErrorResult(
-                share,
-                msg=f"RGW bucket '{share.rgw.bucket}' does not exist or is not accessible",
-            )
+        # Validate bucket exists (skip for external clusters)
+        if not is_external_cluster:
+            if not rgw.validate_rgw_bucket(
+                staging._tool_execer, share.rgw.bucket
+            ):
+                raise ErrorResult(
+                    share,
+                    msg=f"RGW bucket '{share.rgw.bucket}' does not exist or is not accessible",
+                )
+        # For external clusters, skip bucket validation
+        # User must ensure bucket exists on external cluster
 
         name_used_by = _share_name_in_use(staging, share)
         if name_used_by:

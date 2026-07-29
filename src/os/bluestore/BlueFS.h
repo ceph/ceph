@@ -903,6 +903,7 @@ public:
   int unlink(std::string_view dirname, std::string_view filename);
   int mkdir(std::string_view dirname);
   int rmdir(std::string_view dirname);
+
   bool wal_is_rotational();
   bool db_is_rotational();
 
@@ -1085,6 +1086,8 @@ private:
 
   struct RebalanceToDB : public SpilloverCleanerLogic {
     std::vector<std::pair<std::string, FileRef>> pending;
+    std::vector<std::pair<std::string, int>> skipped;
+    utime_t last_scan_time;
     std::deque<std::string> history;
     static constexpr size_t max_history = 100;
     size_t idx = 0;

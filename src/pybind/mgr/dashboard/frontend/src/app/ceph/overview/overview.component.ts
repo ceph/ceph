@@ -99,7 +99,12 @@ export class OverviewComponent {
   );
 
   readonly hasNoOSDs$ = this.healthData$.pipe(
-    map((data: HealthSnapshotMap) => (data?.osdmap?.num_osds ?? 0) === 0),
+    map((data: HealthSnapshotMap) => {
+      if (data?.osdmap == null) {
+        return false;
+      }
+      return data.osdmap.num_osds === 0;
+    }),
     shareReplay({ bufferSize: 1, refCount: true })
   );
 

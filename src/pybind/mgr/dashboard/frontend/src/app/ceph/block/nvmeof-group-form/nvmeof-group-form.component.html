@@ -42,6 +42,7 @@
               formControlName="groupName"
               cdRequiredField="Gateway group name"
               [invalid]="groupName.isInvalid"
+              [readonly]="editing"
             />
           </cds-text-label>
           <span

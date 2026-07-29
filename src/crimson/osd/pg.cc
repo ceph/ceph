@@ -350,7 +350,7 @@ unsigned PG::get_target_pg_log_entries() const
   const unsigned local_num_pgs = shard_services.get_num_local_pgs();
   const unsigned local_target =
     local_conf().get_val<uint64_t>("osd_target_pg_log_entries_per_osd") /
-    seastar::smp::count;
+    seastar::this_smp_shard_count();
   const unsigned min_pg_log_entries =
     local_conf().get_val<uint64_t>("osd_min_pg_log_entries");
   if (local_num_pgs > 0 && local_target > 0) {

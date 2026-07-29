@@ -74,9 +74,6 @@
 #include "rgw_rest_iam.h"
 #include "rgw_rest_bucket_logging.h"
 #include "rgw_sts.h"
-#ifdef WITH_RADOSGW_RADOS
-#include "rgw_sal_rados.h"
-#endif
 #include "rgw_cksum_pipe.h"
 #include "rgw_s3select.h"
 
@@ -122,8 +119,14 @@ static inline std::string get_s3_expiration_header(
   req_state* s,
   const ceph::real_time& mtime)
 {
+  /* Use the client-supplied request key (s->object_key), not the
+   * OLH-resolved key. OLH resolution fills in the current version's instance
+   * id even when the client did not request a specific version, which would
+   * otherwise make every versioned-bucket response look like a versionId
+   * request. s3_expiration_header() keys its current-version decision off an
+   * empty instance. */
   return rgw::lc::s3_expiration_header(
-    s, s->object->get_key(), s->tagset, mtime, s->bucket_attrs);
+    s, s->object_key, s->tagset, mtime, s->bucket_attrs);
 }
 
 static inline bool get_s3_multipart_abort_header(
@@ -4552,7 +4555,7 @@ void RGWPutBucketOwnershipControls_ObjStore_S3::send_response()
     set_req_state_err(s, op_ret);
   }
   dump_errno(s);
-  end_header(s);
+  end_header(s, this);
 }
 
 void RGWGetBucketOwnershipControls_ObjStore_S3::send_response()
@@ -4582,7 +4585,7 @@ void RGWDeleteBucketOwnershipControls_ObjStore_S3::send_response()
 
   set_req_state_err(s, op_ret);
   dump_errno(s);
-  end_header(s);
+  end_header(s, this);
 }
 
 void RGWGetRequestPayment_ObjStore_S3::send_response()
@@ -4664,7 +4667,7 @@ void RGWSetRequestPayment_ObjStore_S3::send_response()
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
-  end_header(s);
+  end_header(s, this);
 }
 
 int RGWInitMultipart_ObjStore_S3::get_params(optional_yield y)
@@ -5265,7 +5268,7 @@ void RGWPutObjRetention_ObjStore_S3::send_response()
     set_req_state_err(s, op_ret);
   }
   dump_errno(s);
-  end_header(s);
+  end_header(s, this);
 }
 
 void RGWGetObjRetention_ObjStore_S3::send_response()
@@ -5290,7 +5293,7 @@ void RGWPutObjLegalHold_ObjStore_S3::send_response()
     set_req_state_err(s, op_ret);
   }
   dump_errno(s);
-  end_header(s);
+  end_header(s, this);
 }
 
 void RGWGetObjLegalHold_ObjStore_S3::send_response()
@@ -5335,7 +5338,7 @@ void RGWPutBucketPublicAccessBlock_ObjStore_S3::send_response()
     set_req_state_err(s, op_ret);
   }
   dump_errno(s);
-  end_header(s);
+  end_header(s, this);
 }
 
 void RGWGetBucketPublicAccessBlock_ObjStore_S3::send_response()

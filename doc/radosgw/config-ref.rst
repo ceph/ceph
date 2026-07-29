@@ -152,6 +152,14 @@ thread running:
 
 .. confval:: rgw_enable_gc_threads
 
+Dedup Settings
+==============
+
+At least one RGW in each zone must have the dedup background thread running
+for dedup operations to function:
+
+.. confval:: rgw_enable_dedup_threads
+
 Multisite Settings
 ==================
 

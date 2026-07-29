@@ -43,7 +43,6 @@ from ..exceptions import Error
 from ..host_facts import list_networks
 from ..net_utils import EndPoint
 
-
 logger = logging.getLogger()
 
 # sambacc provided commands we will need (when clustered)
@@ -1004,7 +1003,7 @@ class SMB(ContainerDaemonForm):
             ctdb_volatile = str(data_dir / 'ctdb/volatile')
             ctdb_etc = str(data_dir / 'ctdb/etc')
             mounts[ctdb_persistent] = '/var/lib/ctdb/persistent:z'
-            mounts[ctdb_run] = '/var/run/ctdb:z'
+            mounts[ctdb_run] = '/run/samba/ctdb:z'
             mounts[ctdb_volatile] = '/var/lib/ctdb/volatile:z'
             mounts[ctdb_etc] = '/etc/ctdb:z'
             # create a shared smb.conf file for our clustered instances.
@@ -1071,6 +1070,8 @@ class SMB(ContainerDaemonForm):
             file_utils.makedirs(ddir / 'ctdb/run', uid, gid, 0o770)
             file_utils.makedirs(ddir / 'ctdb/volatile', uid, gid, 0o770)
             file_utils.makedirs(ddir / 'ctdb/etc', uid, gid, 0o770)
+            file_utils.makedirs(ddir / 'run/ctdb', uid, gid, 0o770)
+            file_utils.makedirs(ddir / 'lib-samba/lock/ctdb', uid, gid, 0o770)
             self._write_ctdb_stub_config(etc_samba_ctr / 'ctdb.json')
             self._write_smb_conf_stub(ddir / 'ctdb/smb.conf')
             if self._cfg.bind_to:

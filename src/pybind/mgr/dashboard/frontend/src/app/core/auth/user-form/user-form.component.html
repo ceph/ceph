@@ -20,6 +20,8 @@
         <cds-text-label
           labelInputID="username"
           cdRequiredField="Username"
+          helperText="Username can only contain letters, numbers, '.', '_', '@', '+' or '-'."
+          i18n-helperText
           [invalid]="!userForm.controls.username.valid && userForm.controls.username.dirty"
           [invalidText]="usernameError"
           i18n
@@ -30,6 +32,7 @@
             i18n-placeholder
             id="username"
             formControlName="username"
+            maxlength="256"
             [invalid]="!userForm.controls.username.valid && userForm.controls.username.dirty"
             autofocus
             ngbTooltip="White spaces at the beginning and end will be trimmed"
@@ -41,8 +44,17 @@
           <span *ngIf="userForm.showError('username', formDir, 'required')">
             <ng-container i18n> This field is required. </ng-container>
           </span>
+          <span *ngIf="userForm.showError('username', formDir, 'maxlength')">
+            <ng-container i18n> Username must not exceed 256 characters. </ng-container>
+          </span>
           <span *ngIf="userForm.showError('username', formDir, 'notUnique')">
             <ng-container i18n> The username already exists. </ng-container>
+          </span>
+          <span
+            *ngIf="userForm.showError('username', formDir, 'pattern')"
+            i18n
+          >
+            Username can only contain letters, numbers, '.', '_', '&#64;', '+' or '-'.
           </span>
         </ng-template>
       </div>
@@ -217,6 +229,7 @@
       <div
         class="form-item"
         *ngIf="allRoles"
+        [class.roles-clear-disabled]="isAdminRoleProtected"
       >
         <cds-combo-box
           label="Roles"
@@ -233,10 +246,12 @@
           [cdRequiredField]="!isSSO ? 'Roles' : ''"
           [invalid]="!userForm.controls.roles.valid && userForm.controls.roles.dirty"
           [invalidText]="rolesError"
+          (clear)="onRolesClear()"
           i18n
         >
           <cds-dropdown-list></cds-dropdown-list>
         </cds-combo-box>
+
         <ng-template #rolesError>
           <span
             class="invalid-feedback"
@@ -276,7 +291,7 @@
       <cd-form-button-panel
         (submitActionEvent)="submit()"
         [form]="userForm"
-        [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+        [submitText]="submitAction"
         wrappingClass="text-right"
       >
       </cd-form-button-panel>

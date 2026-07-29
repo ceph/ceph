@@ -1931,6 +1931,10 @@ class NvmeofServiceSpec(ServiceSpec):
                  iobuf_options: Optional[Dict[str, int]] = None,
                  qos_timeslice_in_usecs: Optional[int] = 0,
                  notifications_interval: Optional[int] = 60,
+                 cnc_enable: bool = True,
+                 cnc_rate_limiter_bytes: Optional[int] = 100000000,
+                 cnc_chunk_blocks: Optional[int] = 512,
+                 cnc_parallel_chunks: Optional[int] = 8,
                  discovery_addr: Optional[str] = None,
                  discovery_addr_map: Optional[Dict[str, str]] = None,
                  discovery_port: Optional[int] = None,
@@ -2140,6 +2144,14 @@ class NvmeofServiceSpec(ServiceSpec):
         self.qos_timeslice_in_usecs = qos_timeslice_in_usecs
         #: ``notifications_interval`` read SPDK notifications interval, in seconds
         self.notifications_interval = notifications_interval
+        #: ``cnc_enable`` enable CNC feature in SPDK
+        self.cnc_enable = cnc_enable
+        #: ``cnc_rate_limiter_bytes`` CNC rate limiter in bytes
+        self.cnc_rate_limiter_bytes = cnc_rate_limiter_bytes
+        #: ``cnc_chunk_blocks`` CNC chunk blocks
+        self.cnc_chunk_blocks = cnc_chunk_blocks
+        #: ``cnc_parallel_chunks`` CNC parallel chunk
+        self.cnc_parallel_chunks = cnc_parallel_chunks
         #: ``discovery_addr`` address of the discovery service
         self.discovery_addr = discovery_addr
         #: ``discovery_addr_map`` per node address map of the discovery service
@@ -2263,6 +2275,10 @@ class NvmeofServiceSpec(ServiceSpec):
         self.verify_spdk_ceph_connection_allocation()
         verify_non_negative_int(self.qos_timeslice_in_usecs, "QOS timeslice")
         verify_non_negative_int(self.notifications_interval, "SPDK notifications interval")
+        verify_boolean(self.cnc_enable, "Enable CNC")
+        verify_non_negative_int(self.cnc_rate_limiter_bytes, "CNC rate limiter")
+        verify_non_negative_int(self.cnc_chunk_blocks, "CNC chunk blocks")
+        verify_non_negative_int(self.cnc_parallel_chunks, "CNC parallel chunks")
 
         verify_non_negative_number(self.spdk_ping_interval_in_seconds, "SPDK ping interval")
         if (
@@ -4041,14 +4057,18 @@ class SMBExternalCephCluster:
         fsid: str,
         mon_host: str,
         # default user and key
-        user: str,
-        key: str,
+        user: Optional[str] = None,
+        key: Optional[str] = None,
+        rgw_user: Optional[str] = None,
+        rgw_key: Optional[str] = None,
     ) -> None:
         self.alias = alias
         self.fsid = fsid
         self.mon_host = mon_host
         self.user = user
         self.key = key
+        self.rgw_user = rgw_user
+        self.rgw_key = rgw_key
         self.validate()
 
     def validate(self) -> None:
@@ -4058,25 +4078,60 @@ class SMBExternalCephCluster:
             raise SpecValidationError('an fsid value is required')
         if not self.mon_host:
             raise SpecValidationError('a mon_host value is required')
-        if not self.user:
-            raise SpecValidationError('a default user name is required')
-        if not self.key:
-            raise SpecValidationError('a default key is required')
+
+        # Validate CephFS credentials (user+key pair)
+        has_user = self.user is not None and self.user != ''
+        has_key = self.key is not None and self.key != ''
+        if has_user != has_key:
+            raise SpecValidationError(
+                'CephFS credentials must be provided as a complete pair: '
+                'both user and key are required if either is specified'
+            )
+
+        # Validate RGW credentials (rgw_user+rgw_key pair)
+        has_rgw_user = self.rgw_user is not None and self.rgw_user != ''
+        has_rgw_key = self.rgw_key is not None and self.rgw_key != ''
+        if has_rgw_user != has_rgw_key:
+            raise SpecValidationError(
+                'RGW credentials must be provided as a complete pair: '
+                'both rgw_user and rgw_key are required if either is specified'
+            )
+
+        # Ensure at least one complete credential pair is provided
+        has_cephfs_creds = has_user and has_key
+        has_rgw_creds = has_rgw_user and has_rgw_key
+        if not has_cephfs_creds and not has_rgw_creds:
+            raise SpecValidationError(
+                'at least one complete credential pair is required: '
+                'either (user+key) for CephFS or (rgw_user+rgw_key) for RGW'
+            )
 
     def __repr__(self) -> str:
-        _names = ['alias', 'fsid', 'mon_host', 'user', 'key']
+        _names = ['alias', 'fsid', 'mon_host', 'user', 'key', 'rgw_user', 'rgw_key']
         fields = ', '.join(f'{n}={getattr(self, n, "")!r}' for n in _names)
         return f'{self.__class__.__name__}({fields})'
 
     def to_simplified(self) -> Dict[str, Any]:
         """Return a serializable representation of SMBExternalCephCluster."""
-        return {
+        result: Dict[str, Any] = {
             'alias': self.alias,
             'fsid': self.fsid,
             'mon_host': self.mon_host,
-            'user': self.user,
-            'key': self.key,
         }
+
+        # Only include CephFS credentials if they are set
+        if self.user:
+            result['user'] = self.user
+        if self.key:
+            result['key'] = self.key
+
+        # Only include RGW credentials if they are set
+        if self.rgw_user:
+            result['rgw_user'] = self.rgw_user
+        if self.rgw_key:
+            result['rgw_key'] = self.rgw_key
+
+        return result
 
     def to_json(self) -> Dict[str, Any]:
         """Return a JSON-compatible dict."""

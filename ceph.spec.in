@@ -125,6 +125,7 @@
 # not x86_64
 %bcond_with system_qat
 %endif
+%bcond_with system_rdkafka
 %if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} || 0%{?openEuler}
 %global weak_deps 1
 %endif
@@ -338,7 +339,11 @@ BuildRequires:  pkgconfig(yaml-cpp) >= 0.6
 BuildRequires:  pkgconfig(librabbitmq)
 %endif
 %if 0%{with kafka_endpoint}
-BuildRequires:  pkgconfig(rdkafka) >= 1.1.0
+%if 0%{with system_rdkafka}
+BuildRequires:  librdkafka-devel >= 2.11
+%else
+BuildRequires:  cyrus-sasl-devel
+%endif
 %endif
 %if 0%{with lua_packages}
 Requires:  lua-devel
@@ -379,13 +384,6 @@ BuildRequires:	pkgconfig(nlohmann_json)
 BuildRequires:  pkgconfig(libevent)
 %endif
 %if 0%{with system_pmdk}
-%if 0%{?suse_version}
-BuildRequires:  pkgconfig(libndctl) >= 63
-%else
-BuildRequires:  pkgconfig(libndctl) >= 63
-BuildRequires:  pkgconfig(libdaxctl) >= 63
-%endif
-BuildRequires:  pkgconfig(libpmem)
 BuildRequires:  pkgconfig(libpmemobj) >= 1.8
 %endif
 %if 0%{with system_arrow}
@@ -1163,11 +1161,27 @@ Requires:	mailcap
 %if 0%{?weak_deps}
 Recommends:	gawk
 %endif
+%if 0%{with kafka_endpoint} && !0%{with system_rdkafka}
+Provides:	bundled(librdkafka) = 2.12.1
+%endif
 %description radosgw
 RADOS is a distributed object store used by the Ceph distributed
 storage system.  This package provides a REST gateway to the
 object store that aims to implement a superset of Amazon's S3
 service as well as the OpenStack Object Storage ("Swift") API.
+
+%package rgw-standalone
+Summary:	Rados REST gateway for filesystems
+%if 0%{?suse_version}
+Group:		System/Filesystems
+%endif
+Conflicts:	ceph-common
+Conflicts:	radosgw
+%description rgw-standalone
+This package provides an Object REST gateway (S3 and Swift) on
+top of a filesystem that aims to implement a superset of Amazon's S3
+service as well as the OpenStack Object Storage ("Swift") API.
+It does not require or provide any of the rest of the Ceph services.
 
 %package -n cephfs-top
 Summary:    top(1) like utility for Ceph Filesystem
@@ -1822,6 +1836,9 @@ cmake .. \
 %if 0%{with system_pmdk}
     -DWITH_SYSTEM_PMDK:BOOL=ON \
 %endif
+%if 0%{with system_rdkafka}
+    -DWITH_SYSTEM_RDKAFKA:BOOL=ON \
+%endif
 %if 0%{without jaeger}
     -DWITH_JAEGER:BOOL=OFF \
 %endif
@@ -2099,6 +2116,7 @@ exit 0
 %{_bindir}/ceph-authtool
 %{_bindir}/ceph-conf
 %{_bindir}/ceph-dencoder
+%{_bindir}/ceph-diff-sorted
 %{_bindir}/ceph-rbdnamer
 %{_bindir}/ceph-syn
 %{_bindir}/cephfs-data-scan
@@ -2619,9 +2637,19 @@ fi
 %{_bindir}/radosgw-token
 %{_bindir}/radosgw-es
 %{_bindir}/radosgw-object-expirer
+%{_bindir}/rgw-gap-list
+%{_bindir}/rgw-gap-list-comparator
+%{_bindir}/rgw-orphan-list
 %{_bindir}/rgw-policy-check
+%{_bindir}/rgw-policy-test
+%{_bindir}/rgw-restore-bucket-index
+%{_mandir}/man8/ceph-diff-sorted.8*
 %{_mandir}/man8/radosgw.8*
+%{_mandir}/man8/rgw-gap-list.8*
+%{_mandir}/man8/rgw-orphan-list.8*
 %{_mandir}/man8/rgw-policy-check.8*
+%{_mandir}/man8/rgw-policy-test.8*
+%{_mandir}/man8/rgw-restore-bucket-index.8*
 %dir %{_localstatedir}/lib/ceph/radosgw
 %{_unitdir}/ceph-radosgw@.service
 %{_unitdir}/ceph-radosgw.target
@@ -2660,6 +2688,19 @@ if [ $1 -ge 1 ] ; then
     /usr/bin/systemctl try-restart ceph-radosgw@\*.service > /dev/null 2>&1 || :
   fi
 fi
+
+%files rgw-standalone
+%dir %{_docdir}/ceph
+%doc %{_docdir}/ceph/sample.ceph.conf
+%dir %{_libdir}/ceph
+%{_libdir}/ceph/libceph-common.so.*
+%{_bindir}/rgw-standalone
+%{_bindir}/rgw-standalone-admin
+%dir %{_localstatedir}/lib/ceph/radosgw
+
+%post rgw-standalone -p /sbin/ldconfig
+
+%postun rgw-standalone -p /sbin/ldconfig
 
 %files osd
 %{_bindir}/ceph-clsinfo

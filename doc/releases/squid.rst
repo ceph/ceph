@@ -4,6 +4,86 @@ Squid
 
 Squid is the 19th stable release of Ceph.
 
+v19.2.5 Squid
+=============
+This is the fifth backport release in the Squid series.
+We recommend that all users update to this release.
+
+Release Date
+------------
+
+July 14, 2026
+
+Notable Changes
+---------------
+
+MDS (Metadata Server)
+---------------------
+
+- Fixed a segmentation fault relating to MDSContext completion and request queuing.
+
+OSD (Object Storage Daemon)
+---------------------------
+
+- Rollback & Vector Fixes: Corrected rollback logic for partial write object information (OI) and optimized Erasure Coding (EC) by ensuring Twiddle creates a full-sized vector.
+
+RGW (RADOS Gateway)
+-------------------
+
+- TLS 1.3 Ciphersuites: Introduced the ssl_ciphersuites configuration option for the Beast front-end to support TLS 1.3 cipher customizations.
+- S3 PutObject ACLs Fix: Fixed a bug where PutObject requests were erroneously rejected under BlockPublicAcls due to an incorrect comparison return value from canned_acl.compare().
+- Multisite Sync Robustness: Resolved an infinite loop scenario in RGWBucketFullSyncCR when a source bucket was deleted mid-sync by introducing a mechanism to clear stateful data in reused bucket_list_result objects.
+- SNS Policy Evaluation: Updated ListTopics to use the account root ARN for policy evaluation when invoked by a non-root account user, preventing unexpected implicit denies from identity-based policies.
+- Presigned URLs: Fixed an internal server error occurring during the authentication process of presigned URLs.
+- Prerequest Hook: Restructured the order of execution so that the prerequest hook now runs after the authorization process has completed.
+- Object Tagging: Added handling for plain-text object tags during execution of RGWObjTags::decode().
+- Beast Frontend Stability: Applied a strand executor to the Beast timeout timer to avoid concurrent socket access and potential race conditions.
+- Bucket Statistics: Added a fix for bucket stats execution when the underlying bucket index does not exist.
+
+Changelog
+---------
+
+* [Stretch Mode] mon: restrict changing mon election strategy post stretch mode (`pr#65458 <https://github.com/ceph/ceph/pull/65458>`_, Kamoltat Sirivadhna)
+* Check if `HTTP_X_AMZ_COPY_SOURCE` header is empty (`pr#66028 <https://github.com/ceph/ceph/pull/66028>`_, Suyash Dongre)
+* Fix multifs auth caps check (`pr#65359 <https://github.com/ceph/ceph/pull/65359>`_, Kotresh HR)
+* librbd/migration/QCOWFormat: avoid use-after-free in execute_request() (`pr#68187 <https://github.com/ceph/ceph/pull/68187>`_, Ilya Dryomov)
+* librbd: avoid losing sparseness in read_parent() (`pr#68462 <https://github.com/ceph/ceph/pull/68462>`_, Ilya Dryomov)
+* mds: add ref counting to LogSegment (`pr#68443 <https://github.com/ceph/ceph/pull/68443>`_, Milind Changire)
+* mds: use SimpleLock::WAIT_ALL for wait mask (`pr#68320 <https://github.com/ceph/ceph/pull/68320>`_, Patrick Donnelly)
+* mgr/snap_schedule: restrict retention period multipliers set (`pr#67267 <https://github.com/ceph/ceph/pull/67267>`_, Milind Changire)
+* mgr/vol: don't delete user-created pool in "volume create" command (`pr#63068 <https://github.com/ceph/ceph/pull/63068>`_, Rishabh Dave)
+* mgr/volumes: allow disabling async job thread (`pr#62433 <https://github.com/ceph/ceph/pull/62433>`_, Rishabh Dave)
+* mgr: ensure that all modules have started before advertising active mgr (`pr#68248 <https://github.com/ceph/ceph/pull/68248>`_, Laura Flores)
+* mon/AuthMonitor: add osd w cap for superuser client (`pr#68318 <https://github.com/ceph/ceph/pull/68318>`_, Venky Shankar, Patrick Donnelly)
+* os/bluestore: introduce allocator lookup policy (`pr#66840 <https://github.com/ceph/ceph/pull/66840>`_, Igor Fedotov)
+* pybind/mgr/volumes: fix typo in casesensitive vxattr (`pr#63023 <https://github.com/ceph/ceph/pull/63023>`_, Patrick Donnelly, Xavi Hernandez)
+* python-common/cryptotools: stop using the removed X509Req API (`pr#69752 <https://github.com/ceph/ceph/pull/69752>`_, Kefu Chai)
+* qa/multisite: switch to boto3 (`pr#68919 <https://github.com/ceph/ceph/pull/68919>`_, Shilpa Jagannath)
+* qa/radosgw_admin: replace boto2 with boto3 (`pr#68849 <https://github.com/ceph/ceph/pull/68849>`_, Adam C. Emerson, Casey Bodley)
+* qa/rgw/upgrade: symlinks are explicit about distro versions (`pr#68058 <https://github.com/ceph/ceph/pull/68058>`_, Casey Bodley)
+* qa/rgw: remove ragweed from verify subsuite (`pr#69114 <https://github.com/ceph/ceph/pull/69114>`_, Casey Bodley)
+* qa/rgw: Revive crypt kmip (`pr#68372 <https://github.com/ceph/ceph/pull/68372>`_, Kyr Shatskyy)
+* qa/suites/rados: temporarily disable ceph-post-file test (`pr#68611 <https://github.com/ceph/ceph/pull/68611>`_, Laura Flores)
+* qa/tasks/keystone: restart mariadb for rocky and alma linux too (`pr#67543 <https://github.com/ceph/ceph/pull/67543>`_, Kyr Shatskyy)
+* qa/tasks/keystone: upgrade keystone to 2025.2 (`pr#67756 <https://github.com/ceph/ceph/pull/67756>`_, Kyr Shatskyy)
+* qa/workunits/rbd: drop racy assert in test_tasks_recovery() (`pr#68189 <https://github.com/ceph/ceph/pull/68189>`_, Ilya Dryomov)
+* qa: allow multiple mgr sessions during eviction test (`pr#68321 <https://github.com/ceph/ceph/pull/68321>`_, Patrick Donnelly)
+* qa: fix setting rbd_sparse_read_threshold_bytes in test_migration_clone() (`pr#68616 <https://github.com/ceph/ceph/pull/68616>`_, Ilya Dryomov)
+* qa: Remove cephadm e2e tests from teuthology (`pr#68819 <https://github.com/ceph/ceph/pull/68819>`_, Afreen Misbah)
+* qa: resolve py3.12 regression for random.sample (`pr#68319 <https://github.com/ceph/ceph/pull/68319>`_, Patrick Donnelly)
+* rgw/auth: fix internal server error for presigned urls (`pr#69049 <https://github.com/ceph/ceph/pull/69049>`_, Tobias Urdin)
+* rgw/beast: add ssl_ciphersuites option for tls 1.3 (`pr#69179 <https://github.com/ceph/ceph/pull/69179>`_, Casey Bodley)
+* rgw/beast: use strand executor for timeout timer to prevent concurrent socket access (`pr#68507 <https://github.com/ceph/ceph/pull/68507>`_, Oguzhan Ozmen)
+* RGW/multisite: fix bucket-full-sync infinite loop caused by stale bucket_list_result reuse (`pr#67921 <https://github.com/ceph/ceph/pull/67921>`_, Oguzhan Ozmen)
+* rgw/s3: fix PutObject's canned_acl comparisons for BlockPublicAcls (`pr#69481 <https://github.com/ceph/ceph/pull/69481>`_, Casey Bodley)
+* rgw/sns: ListTopics uses account root arn for policy evaluation (`pr#69274 <https://github.com/ceph/ceph/pull/69274>`_, Casey Bodley)
+* rgw: `account rm --purge-data` can delete users/roles/groups/oidcs too (`pr#68060 <https://github.com/ceph/ceph/pull/68060>`_, Casey Bodley)
+* RGW: Change prerequest hook to run after authorization process (`pr#67711 <https://github.com/ceph/ceph/pull/67711>`_, Emin Sunacoglu)
+* rgw: fix 'bucket stats' when bucket index doesn't exist (`pr#68504 <https://github.com/ceph/ceph/pull/68504>`_, Casey Bodley)
+* RGW: handle plain-text object tags in RGWObjTags::decode() (`pr#67926 <https://github.com/ceph/ceph/pull/67926>`_, Oguzhan Ozmen)
+* rgw: read_obj_policy() consults s3:prefix when deciding between 403/404 (`pr#68652 <https://github.com/ceph/ceph/pull/68652>`_, Casey Bodley)
+* suites/rados/cephadm: add still running warning to the ignore list (`pr#62532 <https://github.com/ceph/ceph/pull/62532>`_, Nitzan Mordechai)
+* test/rgw: remove depracated boto dependency (`pr#68470 <https://github.com/ceph/ceph/pull/68470>`_, Yuval Lifshitz)
 
 v19.2.4 Squid
 =============

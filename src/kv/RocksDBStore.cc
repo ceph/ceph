@@ -8,6 +8,7 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <unordered_map>
 #include <errno.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -1548,71 +1549,6 @@ void RocksDBStore::get_statistics(Formatter *f)
   }
 }
 
-struct RocksDBStore::RocksWBHandler: public rocksdb::WriteBatch::Handler {
-  RocksWBHandler(const RocksDBStore& db) : db(db) {}
-  const RocksDBStore& db;
-  std::stringstream seen;
-  int num_seen = 0;
-
-  void dump(const char* op_name,
-	    uint32_t column_family_id,
-	    const rocksdb::Slice& key_in,
-	    const rocksdb::Slice* value = nullptr) {
-    string prefix;
-    string key;
-    ssize_t size = value ? value->size() : -1;
-    seen << std::endl << op_name << "(";
-
-    if (column_family_id == 0) {
-      db.split_key(key_in, &prefix, &key);
-    } else {
-      auto it = db.cf_ids_to_prefix.find(column_family_id);
-      ceph_assert(it != db.cf_ids_to_prefix.end());
-      prefix = it->second;
-      key = key_in.ToString();
-    }
-    seen << " prefix = " << prefix;
-    seen << " key = " << pretty_binary_string(key);
-    if (size != -1)
-      seen << " value size = " << std::to_string(size);
-    seen << ")";
-    num_seen++;
-  }
-  void Put(const rocksdb::Slice& key,
-	   const rocksdb::Slice& value) override {
-    dump("Put", 0, key, &value);
-  }
-  rocksdb::Status PutCF(uint32_t column_family_id, const rocksdb::Slice& key,
-			const rocksdb::Slice& value) override {
-    dump("PutCF", column_family_id, key, &value);
-    return rocksdb::Status::OK();
-  }
-  void SingleDelete(const rocksdb::Slice& key) override {
-    dump("SingleDelete", 0, key);
-  }
-  rocksdb::Status SingleDeleteCF(uint32_t column_family_id, const rocksdb::Slice& key) override {
-    dump("SingleDeleteCF", column_family_id, key);
-    return rocksdb::Status::OK();
-  }
-  void Delete(const rocksdb::Slice& key) override {
-    dump("Delete", 0, key);
-  }
-  rocksdb::Status DeleteCF(uint32_t column_family_id, const rocksdb::Slice& key) override {
-    dump("DeleteCF", column_family_id, key);
-    return rocksdb::Status::OK();
-  }
-  void Merge(const rocksdb::Slice& key,
-	     const rocksdb::Slice& value) override {
-    dump("Merge", 0, key, &value);
-  }
-  rocksdb::Status MergeCF(uint32_t column_family_id, const rocksdb::Slice& key,
-			  const rocksdb::Slice& value) override {
-    dump("MergeCF", column_family_id, key, &value);
-    return rocksdb::Status::OK();
-  }
-  bool Continue() override { return num_seen < 50; }
-};
-
 int RocksDBStore::submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Transaction t) 
 {
   // enable rocksdb breakdown
@@ -1626,16 +1562,16 @@ int RocksDBStore::submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Tra
     static_cast<RocksDBTransactionImpl *>(t.get());
   woptions.disableWAL = disableWAL;
   lgeneric_subdout(cct, rocksdb, 30) << __func__;
-  RocksWBHandler bat_txc(*this);
+  RocksWBHandler bat_txc(*this, true);
   _t->bat.Iterate(&bat_txc);
-  *_dout << " Rocksdb transaction: " << bat_txc.seen.str() << dendl;
+  *_dout << " Rocksdb transaction: " << bat_txc.get_seen() << dendl;
   
   rocksdb::Status s = db->Write(woptions, &_t->bat);
   if (!s.ok()) {
-    RocksWBHandler rocks_txc(*this);
+    RocksWBHandler rocks_txc(*this, true);
     _t->bat.Iterate(&rocks_txc);
     derr << __func__ << " error: " << s.ToString() << " code = " << s.code()
-         << " Rocksdb transaction: " << rocks_txc.seen.str() << dendl;
+         << " Rocksdb transaction: " << rocks_txc.get_seen() << dendl;
   }
 
   if (cct->_conf->rocksdb_perf) {
@@ -1651,10 +1587,10 @@ int RocksDBStore::submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Tra
 	static_cast<double>(rocksdb::get_perf_context()->write_delay_time)/1000000000);
     write_pre_and_post_process_time.set_from_double(
 	static_cast<double>(rocksdb::get_perf_context()->write_pre_and_post_process_time)/1000000000);
-    logger->tinc(l_rocksdb_write_memtable_time, write_memtable_time);
-    logger->tinc(l_rocksdb_write_delay_time, write_delay_time);
-    logger->tinc(l_rocksdb_write_wal_time, write_wal_time);
-    logger->tinc(l_rocksdb_write_pre_and_post_process_time, write_pre_and_post_process_time);
+    logger->tinc_with_max(l_rocksdb_write_memtable_time, write_memtable_time);
+    logger->tinc_with_max(l_rocksdb_write_delay_time, write_delay_time);
+    logger->tinc_with_max(l_rocksdb_write_wal_time, write_wal_time);
+    logger->tinc_with_max(l_rocksdb_write_pre_and_post_process_time, write_pre_and_post_process_time);
   }
 
   return s.ok() ? 0 : -1;
@@ -1669,7 +1605,7 @@ int RocksDBStore::submit_transaction(KeyValueDB::Transaction t)
   int result = submit_common(woptions, t);
 
   utime_t lat = ceph_clock_now() - start;
-  logger->tinc(l_rocksdb_submit_latency, lat);
+  logger->tinc_with_max(l_rocksdb_submit_latency, lat);
   
   return result;
 }
@@ -1684,7 +1620,7 @@ int RocksDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
   int result = submit_common(woptions, t);
   
   utime_t lat = ceph_clock_now() - start;
-  logger->tinc(l_rocksdb_submit_sync_latency, lat);
+  logger->tinc_with_max(l_rocksdb_submit_sync_latency, lat);
 
   return result;
 }
@@ -1713,6 +1649,15 @@ void RocksDBStore::RocksDBTransactionImpl::put_bat(
 	    rocksdb::SliceParts(&key_slice, 1),
             prepare_sliceparts(to_set_bl, &value_slices));
   }
+}
+
+string RocksDBStore::RocksDBTransactionImpl::get_summary_string(
+  bool verbose) const
+{
+  ceph_assert(db);
+  RocksWBHandler bat_txc(*db, verbose);
+  bat.Iterate(&bat_txc);
+  return bat_txc.get_seen();
 }
 
 void RocksDBStore::RocksDBTransactionImpl::set(
@@ -1968,7 +1913,7 @@ int RocksDBStore::get(
     }
   }
   utime_t lat = ceph_clock_now() - start;
-  logger->tinc(l_rocksdb_get_latency, lat);
+  logger->tinc_with_max(l_rocksdb_get_latency, lat);
   return 0;
 }
 
@@ -2003,7 +1948,7 @@ int RocksDBStore::get(
     ceph_abort_msg(s.getState());
   }
   utime_t lat = ceph_clock_now() - start;
-  logger->tinc(l_rocksdb_get_latency, lat);
+  logger->tinc_with_max(l_rocksdb_get_latency, lat);
   return r;
 }
 
@@ -2040,7 +1985,7 @@ int RocksDBStore::get(
     ceph_abort_msg(s.getState());
   }
   utime_t lat = ceph_clock_now() - start;
-  logger->tinc(l_rocksdb_get_latency, lat);
+  logger->tinc_with_max(l_rocksdb_get_latency, lat);
   return r;
 }
 
@@ -4117,4 +4062,84 @@ void RocksDBStore::util_divide_key_range(
   chunks.emplace_back(base->key, key_to);
   dout(10) << "produced chunk size=" << full_size - base->size << " "
     << pretty_binary_string(base->key) << " " << pretty_binary_string(key_to) << dendl;
+}
+
+void RocksWBHandler::_finalize_seen(bool sorted)
+{
+  if (verbose) {
+    if (num_skipped) {
+      seen << std::endl << "<...>*" << num_skipped;
+    }
+  } else {
+    seen.clear();
+    bool first = true;
+    auto _add = [&](const std::string& k, size_t c) {
+      if (!first) {
+	seen << ",";
+      } else {
+	first = false;
+      }
+      seen << k;
+      if (c > 1) {
+	seen << "*" << c;
+      }
+    };
+    if (sorted) {
+      std::map<std::string, size_t> sorted_seen_counts;
+      for (auto& [k, c] : seen_counts) {
+	sorted_seen_counts.emplace(k, c);
+      }
+      for (auto& [k, c] : sorted_seen_counts) {
+	_add(k, c);
+      }
+    } else {
+      for(auto& [k, c] : seen_counts) {
+        _add(k,c);
+      }
+    }
+    if (num_skipped) {
+      if (!first) {
+	seen << ",";
+      }
+      seen << "...*" << num_skipped;
+    }
+  }
+}
+
+void RocksWBHandler::_dump(const char* op_name, const char* op_short,
+	    uint32_t column_family_id,
+	    const rocksdb::Slice& key_in,
+	    const rocksdb::Slice* value)
+{
+  if (num_seen >= max) {
+    num_skipped++;
+    return;
+  }
+  string prefix;
+  string key;
+  if (column_family_id == 0) {
+    db.split_key(key_in, &prefix, &key);
+  } else {
+    auto it = db.cf_ids_to_prefix.find(column_family_id);
+    ceph_assert(it != db.cf_ids_to_prefix.end());
+    prefix = it->second;
+    key = key_in.ToString();
+  }
+  if (verbose) {
+    ssize_t size = value ? value->size() : -1;
+    seen << std::endl << op_name << "(";
+
+    seen << "prefix = " << prefix;
+    seen << ", key = " << pretty_binary_string(key);
+    if (size != -1)
+      seen << ", val len = " << std::to_string(size);
+    seen << ")";
+  } else {
+    string k = op_short;
+    k += ":";
+    k += prefix;
+    auto [it, found] = seen_counts.emplace(k, 0);
+    it->second++;
+  }
+  num_seen++;
 }

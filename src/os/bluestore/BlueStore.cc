@@ -7534,6 +7534,13 @@ int BlueStore::_init_alloc()
     }
     if (restore_allocator(alloc, &num, &bytes) == 0) {
       dout(5) << __func__ << "::NCB::restore_allocator() completed successfully alloc=" << alloc << dendl;
+      if (before_expansion_bdev_size > 0 &&
+          before_expansion_bdev_size < bdev_label.size) {
+        // we grow the allocation range, must reflect it in the allocation file
+        alloc->init_add_free(before_expansion_bdev_size,
+                             bdev_label.size - before_expansion_bdev_size);
+        need_to_destage_allocation_file = true;
+      }
     } else {
       // This must mean that we had an unplanned shutdown and didn't manage to destage the allocator
       dout(0) << __func__ << "::NCB::restore_allocator() failed! Run Full Recovery from ONodes (might take a while) ..." << dendl;
@@ -7544,13 +7551,6 @@ int BlueStore::_init_alloc()
 	derr << __func__ << "::NCB::If no HW fault is found, please report failure and consider redeploying OSD" << dendl;
 	return -ENOTRECOVERABLE;
       }
-    }
-    if (before_expansion_bdev_size > 0 &&
-        before_expansion_bdev_size < bdev_label.size) {
-      // we grow the allocation range, must reflect it in the allocation file
-      alloc->init_add_free(before_expansion_bdev_size,
-                           bdev_label.size - before_expansion_bdev_size);
-      need_to_destage_allocation_file = true;    
     }
   }
   before_expansion_bdev_size = 0;
@@ -7681,12 +7681,13 @@ int BlueStore::_lock_fsid()
   return 0;
 }
 
-bool BlueStore::is_rotational()
+bool BlueStore::_is_main_rotational()
 {
   if (bdev) {
     return bdev->is_rotational();
   }
 
+  // Do open main devicet if not yet opened.
   bool rotational = true;
   int r = _open_path();
   if (r < 0)
@@ -7713,37 +7714,58 @@ bool BlueStore::is_rotational()
   return rotational;
 }
 
+bool BlueStore::is_rotational()
+{
+  return _use_rotational_settings();
+}
+
 bool BlueStore::is_journal_rotational()
 {
   if (!bluefs) {
-    dout(5) << __func__ << " bluefs disabled, default to store media type"
+    dout(5) << __func__ << " bluefs disabled, default to main device type"
             << dendl;
-    return is_rotational();
+    return _use_rotational_settings();
   }
-  dout(10) << __func__ << " " << (int)bluefs->wal_is_rotational() << dendl;
-  return bluefs->wal_is_rotational();
+  if (cct->_conf->bluestore_debug_enforce_settings == "ssd" ||
+             cct->_conf->bluestore_debug_enforce_settings == "hybrid") {
+    dout(10) << __func__ << " overriden to ssd mode." << dendl;
+    return false;
+  }
+  bool r = bluefs->wal_is_rotational();
+  dout(10) << __func__ << " " << (int)r << dendl;
+  return r;
 }
 
 bool BlueStore::is_db_rotational()
 {
   if (!bluefs) {
-    dout(5) << __func__ << " bluefs disabled, default to store media type"
+    dout(5) << __func__ << " bluefs disabled, default to main device type"
             << dendl;
-    return is_rotational();
+    return _use_rotational_settings();
   }
-  dout(10) << __func__ << " " << (int)bluefs->db_is_rotational() << dendl;
-  return bluefs->db_is_rotational();
+  if (cct->_conf->bluestore_debug_enforce_settings == "ssd" ||
+             cct->_conf->bluestore_debug_enforce_settings == "hybrid") {
+    dout(10) << __func__ << " overriden to ssd mode." << dendl;
+    return false;
+  }
+  bool r = bluefs->db_is_rotational();
+  dout(10) << __func__ << " " << (int)r << dendl;
+  return r;
 }
 
 bool BlueStore::_use_rotational_settings()
 {
-  if (cct->_conf->bluestore_debug_enforce_settings == "hdd") {
-    return true;
-  }
   if (cct->_conf->bluestore_debug_enforce_settings == "ssd") {
+    dout(10) << __func__ << " overriden to ssd." << dendl;
     return false;
   }
-  return bdev->is_rotational();
+  if (cct->_conf->bluestore_debug_enforce_settings == "hybrid") {
+    dout(10) << __func__ << " overriden to hdd." << dendl;
+    return true;
+  }
+  bool r = _is_main_rotational();
+  dout(0) << __func__ << " returns " << r << dendl;
+  return r;
 }
 
 bool BlueStore::is_statfs_recoverable() const
@@ -15014,11 +15036,13 @@ void BlueStore::_txc_committed_kv(TransContext *txc)
     mono_clock::now() - txc->start,
     cct->_conf->bluestore_log_op_age,
     [&](auto lat) {
+      bool v = cct->_conf->bluestore_log_op_verbose_kv_txc;
       return ", txc = " + stringify(txc) +
              ", txc bytes = " + stringify(txc->bytes) +
              ", txc ios = " + stringify(txc->ios) +
              ", txc cost = " + stringify(txc->cost) +
              ", txc onodes = " + stringify(txc->onodes.size()) +
+             ", DB ops = '" + stringify(txc->t->get_summary_string(v)) + "'"
              ", DB updates = " + stringify(txc->t->get_count()) +
              ", DB bytes = " + stringify(txc->t->get_size_bytes()) +
              ", cost max = " + stringify(throttle.bytes_observed_max) +
@@ -18325,10 +18349,18 @@ int BlueStore::_do_remove(
     nogen.hobj.snap = CEPH_NOSNAP;
   OnodeRef h = c->get_onode(nogen, false);
 
-  if (!h || !h->exists) {
-    return 0;
+  if (h && h->exists) {
+    return _maybe_unshare_on_remove(txc, c, h, std::move(maybe_unshared_blobs));
   }
+  return 0;
+}
 
+int BlueStore::_maybe_unshare_on_remove(
+  TransContext *txc,
+  CollectionRef& c,
+  OnodeRef& h,
+  std::set<SharedBlob*>&& maybe_unshared_blobs)
+{
   //Populate the extent map structure from DB; required for shared blob processing below.
   h->extent_map.fault_range(db, 0, h->onode.size);
   // Set maybe_unshared_blobs contains those shared blobs that have all nref=1.
@@ -18341,33 +18373,29 @@ int BlueStore::_do_remove(
   // that is not yet loaded! We must have had inspected it to even check nrefs.
   dout(20) << __func__ << " checking for unshareable blobs on " << h
 	   << " " << h->oid << dendl;
-  map<SharedBlob*,bluestore_extent_ref_map_t> expect;
+  map<const Blob*, bluestore_extent_ref_map_t> expect;
   for (auto& e : h->extent_map.extent_map) {
-    const bluestore_blob_t& b = e.blob->get_blob();
-    SharedBlob *sb = e.blob->get_shared_blob().get();
-    if (b.is_shared() &&
-	sb->loaded &&
-	maybe_unshared_blobs.count(sb)) {
-      if (b.is_compressed()) {
-	expect[sb].get(0, b.get_ondisk_size());
-      } else {
-	// todo: it seems to be an overkill to go through map()
-	b.map(e.blob_offset, e.length, [&](uint64_t off, uint64_t len) {
-	    expect[sb].get(off, len);
-	    return 0;
-	  });
+    const Blob* B = e.blob.get();
+    const bluestore_blob_t& b = B->get_blob();
+    SharedBlob *sb = B->get_shared_blob().get();
+    if (b.is_shared() && sb->loaded && maybe_unshared_blobs.count(sb)) {
+      for (const auto& e: b.get_extents()) {
+        if (e.is_valid()) {
+          expect[B].get(e.offset, e.length);
+        }
       }
+      maybe_unshared_blobs.erase(sb);
     }
   }
 
   // expect has now refs set exactly as .head is using it
   vector<SharedBlob*> unshared_blobs;
-  unshared_blobs.reserve(maybe_unshared_blobs.size());
-  for (auto& p : expect) {
-    dout(20) << " ? " << *p.first << " vs " << p.second << dendl;
-    if (p.first->persistent->ref_map == p.second) {
+  unshared_blobs.reserve(expect.size());
+  for (const auto& [B, expect_refs] : expect) {
+    SharedBlob* sb = B->get_shared_blob().get();
+    dout(20) << __func__ << " ? " << *sb << " vs " << expect_refs << dendl;
+    if (sb->persistent->ref_map == expect_refs) {
       // yup, .head is only one that is using the shared blob now
-      SharedBlob *sb = p.first;
       dout(20) << __func__ << "  unsharing " << *sb << dendl;
       unshared_blobs.push_back(sb);
       txc->unshare_blob(sb);

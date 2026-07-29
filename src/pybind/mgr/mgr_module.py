@@ -702,15 +702,33 @@ class CPlusPlusHandler(logging.Handler):
             self._module._ceph_log(self.format(record))
 
 
-class MgrRootHandler(CPlusPlusHandler):
-    def __init__(self, module_inst: 'MgrModuleLoggingMixin') -> None:
-        super().__init__(module_inst)
+class MgrRootHandler(logging.Handler):
+    # fallback for third-party libraries logging to the root logger; emits
+    # via the module-independent ceph_module.mgr_log, so it holds no module
+    # reference to go stale.  installed once; its level follows debug_mgr.
+    def __init__(self) -> None:
+        super().__init__()
         self.setFormatter(logging.Formatter(
             "[mgr %(levelname)-4s %(name)s] %(message)s"
         ))
 
-    def set_module(self, module_inst: 'MgrModuleLoggingMixin') -> None:
-        self._module = module_inst
+    @staticmethod
+    def _ceph_log_level(levelno: int) -> int:
+        # inverse of _ceph_log_level_to_python.  INFO -> 2 keeps it in the
+        # log file at the default debug_mgr=2/5; DEBUG -> 20 keeps floods
+        # out unless raised, e.g. 2/20 for in-memory capture only.
+        if levelno >= logging.ERROR:
+            return 0
+        if levelno >= logging.WARNING:
+            return 1
+        if levelno >= logging.INFO:
+            return 2
+        return 20
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if record.levelno >= self.level:
+            ceph_module.mgr_log(self._ceph_log_level(record.levelno),
+                                self.format(record))
 
 
 class ClusterLogHandler(logging.Handler):
@@ -748,7 +766,6 @@ class FileHandler(logging.FileHandler):
 
 class MgrModuleLoggingMixin(object):
     module_name: str
-    _root_log_handler: Optional[MgrRootHandler] = None
 
     def _configure_logging(self,
                            mgr_level: str,
@@ -771,20 +788,11 @@ class MgrModuleLoggingMixin(object):
         self.log_to_cluster = log_to_cluster
 
         root = logging.getLogger()
-        root_handler = None
-        for handler in root.handlers:
-            if isinstance(handler, MgrRootHandler):
-                root_handler = handler
-                break
-        if root_handler is None:
-            root_handler = MgrRootHandler(self)
-            root.addHandler(root_handler)
-        else:
-            root_handler.set_module(self)
-        self._root_log_handler = root_handler
-        # Module loggers rely on handler thresholds, so keep root permissive
-        # and apply the mgr fallback threshold on MgrRootHandler itself.
-        root.setLevel(logging.NOTSET)
+        if self._mgr_root_handler() is None:
+            # keep root permissive; the fallback handler gates on its own
+            # level, set from debug_mgr in _set_log_level()
+            root.addHandler(MgrRootHandler())
+            root.setLevel(logging.NOTSET)
 
         self._module_logger.addHandler(self._mgr_log_handler)
         if log_to_file:
@@ -807,13 +815,41 @@ class MgrModuleLoggingMixin(object):
         self.log_to_file = False
         self.log_to_cluster = False
 
+    @staticmethod
+    def _mgr_root_handler() -> Optional['MgrRootHandler']:
+        root = logging.getLogger()
+        return next((h for h in root.handlers
+                     if isinstance(h, MgrRootHandler)), None)
+
+    @staticmethod
+    def _debug_mgr_gather_to_python(log_level: str) -> str:
+        # records are emitted at their own mapped levels, so forward
+        # everything the C++ side could gather: gate on the higher of the
+        # two debug_mgr levels, not just the file level
+        gather = 0
+        if log_level:
+            try:
+                gather = max(int(level) for level in log_level.split("/", 1))
+            except ValueError:
+                pass
+        if gather >= 20:
+            return "DEBUG"
+        if gather >= 2:
+            return "INFO"
+        if gather >= 1:
+            return "WARNING"
+        return "ERROR"
+
     def _set_log_level(self,
                        mgr_level: str,
                        module_level: str,
                        cluster_level: str) -> None:
         self._cluster_log_handler.setLevel(cluster_level.upper())
-        if self._root_log_handler is not None:
-            self._root_log_handler.setLevel(self._ceph_log_level_to_python(mgr_level))
+        # set before the early returns below so a debug_mgr change applies
+        # even when the module level is unchanged
+        root_handler = self._mgr_root_handler()
+        if root_handler is not None:
+            root_handler.setLevel(self._debug_mgr_gather_to_python(mgr_level))
 
         module_level = module_level.upper() if module_level else ''
         if not self._module_level:

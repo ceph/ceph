@@ -867,7 +867,7 @@ void RGWCreateBucket_ObjStore_SWIFT::send_response()
 
   dump_errno(s);
   /* Propose ending HTTP header with 0 Content-Length header. */
-  end_header(s, NULL, NULL, 0);
+  end_header(s, this, NULL, 0);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
@@ -1612,7 +1612,7 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
     dump_errno(s);
 
     if (s->is_err()) {
-      end_header(s, NULL);
+      end_header(s, this);
       return 0;
     }
   }
@@ -1622,7 +1622,7 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
   }
 
   if (s->is_err()) {
-    end_header(s, NULL);
+    end_header(s, this);
     return 0;
   }
 

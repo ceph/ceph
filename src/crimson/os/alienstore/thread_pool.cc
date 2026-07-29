@@ -18,7 +18,7 @@ ThreadPool::ThreadPool(size_t n_threads,
                        size_t queue_sz,
                        const std::optional<seastar::resource::cpuset>& cpus)
   : n_threads(n_threads),
-    queue_size{round_up_to(queue_sz, seastar::smp::count)},
+    queue_size{round_up_to(queue_sz, seastar::this_smp_shard_count())},
     pending_queues(n_threads)
 {
   auto queue_max_wait = std::chrono::seconds(local_conf()->threadpool_empty_queue_max_wait);
@@ -82,7 +82,7 @@ void ThreadPool::loop(std::chrono::milliseconds queue_max_wait, size_t shard)
 
 seastar::future<> ThreadPool::start()
 {
-  auto slots_per_shard = queue_size / seastar::smp::count;
+  auto slots_per_shard = queue_size / seastar::this_smp_shard_count();
   return submit_queue.start(slots_per_shard);
 }
 

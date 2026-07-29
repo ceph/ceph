@@ -120,6 +120,7 @@ import Plug16 from '@carbon/icons/es/plug/16';
 import VmdkDisk16 from '@carbon/icons/es/vmdk-disk/16';
 import WarningAlt16 from '@carbon/icons/es/warning--alt/16';
 import CheckMarkOutline16 from '@carbon/icons/es/checkmark--outline/16';
+import ArrowRight16 from '@carbon/icons/es/arrow--right/16';
 import ArrowUpRight16 from '@carbon/icons/es/arrow--up-right/16';
 import InProgress16 from '@carbon/icons/es/in-progress/16';
 import ArrowDown16 from '@carbon/icons/es/arrow--down/16';
@@ -133,6 +134,7 @@ import Locked16 from '@carbon/icons/es/locked/16';
 import WebServicesCluster20 from '@carbon/icons/es/web-services--cluster/20';
 import WebServicesCluster32 from '@carbon/icons/es/web-services--cluster/32';
 import CloudMonitoring16 from '@carbon/icons/es/cloud--monitoring/16';
+import Temperature16 from '@carbon/icons/es/temperature/16';
 
 import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
 import { PageHeaderComponent } from './page-header/page-header.component';
@@ -317,6 +319,7 @@ export class ComponentsModule {
       VmdkDisk16,
       WarningAlt16,
       CheckMarkOutline16,
+      ArrowRight16,
       ArrowUpRight16,
       InProgress16,
       ArrowDown16,
@@ -329,7 +332,8 @@ export class ComponentsModule {
       Locked16,
       WebServicesCluster20,
       WebServicesCluster32,
-      CloudMonitoring16
+      CloudMonitoring16,
+      Temperature16
     ]);
   }
 }

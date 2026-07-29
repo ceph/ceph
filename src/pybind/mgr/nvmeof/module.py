@@ -3,7 +3,6 @@ from typing import Any
 
 from .cli import NVMeoFCLICommand
 from mgr_module import MgrModule
-import rbd
 
 logger = logging.getLogger(__name__)
 
@@ -30,31 +29,21 @@ class NVMeoF(MgrModule):
             self.create_pool(pool_name)
             logger.info(f"Pool '{pool_name}' created.")
         except Exception:
-            logger.error(f"Error creating pool '{pool_name}", exc_info=True)
+            logger.error(f"Error creating pool '{pool_name}'", exc_info=True)
             raise
 
-    def _enable_rbd_application(self, pool_name: str) -> None:
+    def _enable_application(self, pool_name: str, application_name: str) -> None:
         try:
-            self.appify_pool(pool_name, 'rbd')
-            logger.info(f"'rbd' application enabled on pool '{pool_name}'.")
+            self.appify_pool(pool_name, application_name)
+            logger.info(f"'{application_name}' application enabled on pool '{pool_name}'.")
         except Exception:
             logger.error(
-                f"Failed to enable 'rbd' application on '{pool_name}'",
+                f"Failed to enable '{application_name}' application on '{pool_name}'",
                 exc_info=True
             )
-            raise
-
-    def _rbd_pool_init(self, pool_name: str) -> None:
-        try:
-            with self.rados.open_ioctx(pool_name) as ioctx:
-                rbd.RBD().pool_init(ioctx, False)
-            logger.info(f"RBD pool_init completed on '{pool_name}'.")
-        except Exception:
-            logger.error(f"Failed to initialize RBD pool '{pool_name}'", exc_info=True)
             raise
 
     def create_pool_if_not_exists(self) -> None:
         if not self._pool_exists(POOL_NAME):
             self._create_pool(POOL_NAME)
-        self._enable_rbd_application(POOL_NAME)
-        self._rbd_pool_init(POOL_NAME)
+            self._enable_application(POOL_NAME, 'nvmeof-meta')

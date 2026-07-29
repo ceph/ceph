@@ -10,11 +10,6 @@ if(HAVE_LIBAIO OR HAVE_POSIXAIO)
     aio/aio.cc)
 endif()
 
-if(WITH_BLUESTORE_PMEM)
-  list(APPEND libblk_srcs
-    pmem/PMEMDevice.cc)
-endif()
-
 if(WITH_SPDK)
   list(APPEND libblk_srcs
     spdk/NVMEDevice.cc)
@@ -34,15 +29,6 @@ endif(HAVE_LIBAIO)
 if(WITH_SPDK)
   target_link_libraries(blk
     PRIVATE spdk::spdk)
-endif()
-
-if(WITH_BLUESTORE_PMEM)
-  if(HAVE_LIBDML)
-    target_link_libraries(blk PRIVATE dml::dml dml::dmlhl)
-  endif()
-
-  target_link_libraries(blk
-    PRIVATE pmdk::pmem)
 endif()
 
 if(WITH_EVENTTRACE)

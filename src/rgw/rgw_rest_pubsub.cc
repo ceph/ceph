@@ -825,7 +825,8 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
           "verify-ssl",    "use-ssl",         "ca-location", "amqp-ack-level",
           "amqp-exchange", "kafka-ack-level", "mechanism",   "cloudevents",
           "user-name",     "password",
-          "ssl-certificate-location", "ssl-key-location", "ssl-key-password"};
+          "ssl-certificate-location", "ssl-key-location", "ssl-key-password",
+          "sasl-kerberos-service-name", "sasl-kerberos-principal", "sasl-kerberos-keytab"};
       if (std::find(args.begin(), args.end(), attribute_name) != args.end()) {
         replace_str(attribute_name, s->info.args.get("AttributeValue"));
         return 0;

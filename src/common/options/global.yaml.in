@@ -4407,6 +4407,7 @@ options:
     sleep state for this duration. Once the idle period expires, it wakes up, scans
     for spillover files, and resumes migration if needed.
   default: 1200
+  min: 0
   see_also:
   - bluefs_spillover_cleaner
   flags:
@@ -4424,6 +4425,8 @@ options:
   default: 0.1
   flags:
   - runtime
+  min: 0.01
+  max: 1.0
   with_legacy: true
 - name: bluefs_debug_force_slow
   type: bool
@@ -5870,17 +5873,25 @@ options:
   desc: Log a collection list operation if it is slower than this age (seconds)
   default: 1_min
   with_legacy: true
+- name: bluestore_log_op_verbose_kv_txc
+  type: bool
+  level: advanced
+  desc: Enable verbose dump of slow KV transaction(s)
+  default: false
+  with_legacy: true
 - name: bluestore_debug_enforce_settings
   type: str
   level: dev
   desc: Enforces specific hardware profile settings
-  long_desc: '''hdd'' enforces settings intended for BlueStore on a rotational
-    drive. ''ssd'' enforces settings intended for BlueStore on an SSD. ''default''
-    indicates that BlueStore is to use settings based on the detected hardware.'
+  long_desc: '''hybrid'' enforces osd settings applicable to hybrid
+    (AKA main=hdd, db/wal=ssd) disk setup.
+    ''ssd'' enforces osd settings applicable to all-flash disk setup.
+    ''default'' specifies automatic settings selection based on real
+    detected hardware.'
   default: default
   enum_values:
   - default
-  - hdd
+  - hybrid
   - ssd
   with_legacy: true
 - name: bluestore_allocator_lookup_policy
@@ -6981,7 +6992,6 @@ options:
   enum_values:
   - aio
   - spdk
-  - pmem
 - name: bdev_stalled_read_warn_lifetime
   type: uint
   level: advanced

@@ -2,11 +2,17 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <string.h>
+#include <algorithm>
+#include <chrono>
 #include <iostream>
 #include <map>
+#include <thread>
+
+#include <boost/asio/steady_timer.hpp>
 
 #include "common/XMLFormatter.h"
 #include <common/errno.h>
+#include "include/random.h"
 #include "rgw_lc.h"
 #include "rgw_lc_tier.h"
 #include "rgw_string.h"
@@ -24,6 +30,46 @@
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
+
+int retry_on_transient_error(optional_yield y, const DoutPrefixProvider *dpp,
+                  CephContext *cct, const char *op_name,
+                  std::function<int()> op)
+{
+  const int max_attempts = cct->_conf.get_val<int64_t>("rgw_cloud_tier_retry_limit");
+  const int64_t initial_ms = cct->_conf.get_val<int64_t>("rgw_cloud_tier_retry_delay_ms");
+  const int64_t max_ms = cct->_conf.get_val<int64_t>("rgw_cloud_tier_retry_max_ms");
+
+  int ret = 0;
+  for (int i = 0; i < max_attempts; i++) {
+    ret = op();
+    // 503 -> -EBUSY and 500 -> -ERR_INTERNAL_ERROR are transient on S3 backends
+    if (ret != -EBUSY && ret != -ERR_INTERNAL_ERROR) return ret;
+    if (i == max_attempts - 1) {
+      ldpp_dout(dpp, 0) << op_name << ": exhausted " << max_attempts
+                        << " transient-error retries (ret=" << ret << "), giving up" << dendl;
+      return ret;
+    }
+
+    int64_t base = std::min(initial_ms << std::min(i, 30), max_ms);
+    int delay_ms = base - ceph::util::generate_random_number<int>(0, base / 10);
+
+    ldpp_dout(dpp, 1) << op_name << ": transient error (ret=" << ret << "), attempt "
+                      << (i + 1) << "/" << max_attempts << "; retrying after "
+                      << delay_ms << "ms" << dendl;
+
+    if (y) {
+      auto& yc = y.get_yield_context();
+      boost::asio::steady_timer t(yc.get_executor());
+      t.expires_after(std::chrono::milliseconds(delay_ms));
+      boost::system::error_code ec;
+      t.async_wait(yc[ec]);
+      if (ec) return ret;
+    } else {
+      std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+    }
+  }
+  return ret;
+}
 
 struct rgw_lc_multipart_part_info {
   int part_num{0};
@@ -283,44 +329,44 @@ int rgw_cloud_tier_restore_object(RGWLCCloudTierCtx& tier_ctx,
   dest_bucket.name = tier_ctx.target_bucket_name;
   target_obj_name = make_target_obj_name(tier_ctx);
 
-  if (!in_progress) { // first time. Send RESTORE req.
+  rgw_obj dest_obj(dest_bucket, rgw_obj_key(target_obj_name));
 
-    rgw_obj dest_obj(dest_bucket, rgw_obj_key(target_obj_name));
-    ret = cloud_tier_restore(tier_ctx.dpp, tier_ctx.conn, dest_obj, days, glacier_params, tier_ctx.y);
-
-    ldpp_dout(tier_ctx.dpp, 20) << __func__ << "Restoring object=" << target_obj_name << "returned ret = " << ret << dendl;
-
-    if (ret < 0 ) {
-      ldpp_dout(tier_ctx.dpp, -1) << __func__ << "ERROR: failed to restore object=" << dest_obj << "; ret = " << ret << dendl;
-      return ret;
-    }
-    in_progress = true;
-  }
-
-  // now send HEAD request and verify if restore is complete on glacier/tape endpoint
-  static constexpr int MAX_RETRIES = 2;
-  uint32_t retries = 0;
-  do {
-    ret = rgw_cloud_tier_get_object(tier_ctx, true, headers, nullptr, etag,
-                                    accounted_size, attrs, nullptr);
-
-    if (ret < 0) {
-      ldpp_dout(tier_ctx.dpp, 0) << __func__ << "ERROR: failed to fetch HEAD from cloud for obj=" << tier_ctx.obj << " , ret = " << ret << dendl;
-      return ret;
+  ret = retry_on_transient_error(tier_ctx.y, tier_ctx.dpp, tier_ctx.cct, __func__, [&]() -> int {
+    if (!in_progress) { // first time. Send RESTORE req.
+      ret = cloud_tier_restore(tier_ctx.dpp, tier_ctx.conn, dest_obj, days, glacier_params, tier_ctx.y);
+      ldpp_dout(tier_ctx.dpp, 20) << __func__ << "Restoring object=" << target_obj_name << "returned ret = " << ret << dendl;
+      if (ret < 0 ) {
+        ldpp_dout(tier_ctx.dpp, -1) << __func__ << "ERROR: failed to restore object=" << dest_obj << "; ret = " << ret << dendl;
+        return ret;
+      }
+      in_progress = true;
     }
 
-    in_progress = is_restore_in_progress(tier_ctx.dpp, headers);
-
-  } while(retries++ < MAX_RETRIES && in_progress);
+    // now send HEAD request and verify if restore is complete on glacier/tape endpoint
+    static constexpr int MAX_RETRIES = 2;
+    uint32_t retries = 0;
+    do {
+      ret = rgw_cloud_tier_get_object(tier_ctx, true, headers, nullptr, etag,
+                                      accounted_size, attrs, nullptr);
+      if (ret < 0) {
+        ldpp_dout(tier_ctx.dpp, 0) << __func__ << "ERROR: failed to fetch HEAD from cloud for obj=" << tier_ctx.obj << " , ret = " << ret << dendl;
+        return ret;
+      }
+      in_progress = is_restore_in_progress(tier_ctx.dpp, headers);
+    } while(retries++ < MAX_RETRIES && in_progress);
+    return 0;
+  });
+  if (ret < 0) return ret;
 
   if (in_progress) {
     ldpp_dout(tier_ctx.dpp, 20) << __func__ << "Restoring object=" << target_obj_name << " still in progress; returning " << dendl;
     return 0;
-  } 
+  }
 
-  // now do the actual GET
-  ret = rgw_cloud_tier_get_object(tier_ctx, false, headers, pset_mtime, etag,
-                                  accounted_size, attrs, cb);
+  ret = retry_on_transient_error(tier_ctx.y, tier_ctx.dpp, tier_ctx.cct, __func__, [&]() {
+    return rgw_cloud_tier_get_object(tier_ctx, false, headers, pset_mtime,
+                                     etag, accounted_size, attrs, cb);
+  });
 
   ldpp_dout(tier_ctx.dpp, 20) << __func__ << "(): fetching object from cloud bucket:" << dest_bucket << ", object: " << target_obj_name << " returned ret:" << ret << dendl;
 
@@ -988,29 +1034,22 @@ static int cloud_tier_send_multipart_part(RGWLCCloudTierCtx& tier_ctx,
 
   tier_ctx.obj->set_atomic(true);
 
-  /* TODO: Define readf, writef as stack variables. For some reason,
-   * when used as stack variables (esp., readf), the transition seems to
-   * be taking lot of time eventually erroring out at times. */
-  std::shared_ptr<RGWLCStreamRead> readf;
-  readf.reset(new RGWLCStreamRead(tier_ctx.cct, tier_ctx.dpp,
-        tier_ctx.obj, tier_ctx.o.meta.mtime, tier_ctx.y));
-
-  std::shared_ptr<RGWLCCloudStreamPut> writef;
-  writef.reset(new RGWLCCloudStreamPut(tier_ctx.dpp, obj_properties, tier_ctx.conn,
-               dest_obj, tier_ctx.y));
-
-  /* Prepare Read from source */
   end = part_info.ofs + part_info.size - 1;
-  readf->set_multipart(part_info.size, part_info.ofs, end);
-
-  /* Prepare write */
-  writef->set_multipart(upload_id, part_info.part_num, part_info.size);
-
-  /* actual Read & Write */
-  ret = cloud_tier_transfer_object(tier_ctx.dpp, readf.get(), writef.get());
-  if (ret < 0) {
-    return ret;
-  }
+  std::shared_ptr<RGWLCCloudStreamPut> writef;
+  // per-part retry: the outer retry restarts from part 1 since upload state
+  // doesn't persist which parts have been sent
+  ret = retry_on_transient_error(tier_ctx.y, tier_ctx.dpp, tier_ctx.cct, __func__, [&]() {
+    auto rf = std::make_shared<RGWLCStreamRead>(tier_ctx.cct, tier_ctx.dpp,
+          tier_ctx.obj, tier_ctx.o.meta.mtime, tier_ctx.y);
+    auto wf = std::make_shared<RGWLCCloudStreamPut>(tier_ctx.dpp,
+          obj_properties, tier_ctx.conn, dest_obj, tier_ctx.y);
+    rf->set_multipart(part_info.size, part_info.ofs, end);
+    wf->set_multipart(upload_id, part_info.part_num, part_info.size);
+    int r = cloud_tier_transfer_object(tier_ctx.dpp, rf.get(), wf.get());
+    if (r == 0) writef = wf;
+    return r;
+  });
+  if (ret < 0) return ret;
 
   if (!(writef->get_etag(petag))) {
     ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to get etag from PUT request" << dendl;
@@ -1072,6 +1111,7 @@ int cloud_tier_restore(const DoutPrefixProvider *dpp, RGWRESTConn& dest_conn,
   ret = dest_conn.send_resource(dpp, "POST", resource, params, nullptr,
                                 out_bl, &bl, nullptr, y);
 
+  if (ret == -EBUSY) return ret;
   if (ret < 0) {
     ldpp_dout(dpp, 0) << __func__ << "ERROR: failed to send Restore request to cloud for obj=" << dest_obj << " , ret = " << ret << dendl;
   } else {
@@ -1125,6 +1165,7 @@ static int cloud_tier_abort_multipart(const DoutPrefixProvider *dpp,
       out_bl, &bl, nullptr, y);
 
 
+  if (ret == -EBUSY) return ret;
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to abort multipart upload for dest object=" << dest_obj << " (ret=" << ret << ")" << dendl;
     return ret;
@@ -1160,6 +1201,7 @@ static int cloud_tier_init_multipart(const DoutPrefixProvider *dpp,
   ret = dest_conn.send_resource(dpp, "POST", resource, params, &attrs,
       out_bl, &bl, nullptr, y);
 
+  if (ret == -EBUSY) return ret;
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to initialize multipart upload for dest object=" << dest_obj << dendl;
     return ret;
@@ -1287,7 +1329,9 @@ static int cloud_tier_abort_multipart_upload(RGWLCCloudTierCtx& tier_ctx,
       const std::string& upload_id) {
   int ret;
 
-  ret = cloud_tier_abort_multipart(tier_ctx.dpp, tier_ctx.conn, dest_obj, upload_id, tier_ctx.y);
+  ret = retry_on_transient_error(tier_ctx.y, tier_ctx.dpp, tier_ctx.cct, __func__, [&]() {
+    return cloud_tier_abort_multipart(tier_ctx.dpp, tier_ctx.conn, dest_obj, upload_id, tier_ctx.y);
+  });
 
   if (ret < 0) {
     ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to abort multipart upload dest obj=" << dest_obj << " upload_id=" << upload_id << " ret=" << ret << dendl;
@@ -1414,6 +1458,7 @@ static int cloud_tier_multipart_transfer(RGWLCCloudTierCtx& tier_ctx) {
             cur_part_info,
             &cur_part_info.etag);
 
+    if (ret == -EBUSY) return ret;
     if (ret < 0) {
       ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to send multipart part of obj=" << tier_ctx.obj << ", sync via multipart upload, upload_id=" << status.upload_id << " part number " << cur_part << " (error: " << cpp_strerror(-ret) << ")" << dendl;
       cloud_tier_abort_multipart_upload(tier_ctx, dest_obj, status_obj, status.upload_id);
@@ -1423,6 +1468,7 @@ static int cloud_tier_multipart_transfer(RGWLCCloudTierCtx& tier_ctx) {
   }
 
   ret = cloud_tier_complete_multipart(tier_ctx.dpp, tier_ctx.conn, dest_obj, status.upload_id, parts, tier_ctx.y);
+  if (ret == -EBUSY) return ret;
   if (ret < 0) {
     ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to complete multipart upload of obj=" << tier_ctx.obj << " (error: " << cpp_strerror(-ret) << ")" << dendl;
     cloud_tier_abort_multipart_upload(tier_ctx, dest_obj, status_obj, status.upload_id);
@@ -1526,7 +1572,15 @@ static int cloud_tier_create_bucket(RGWLCCloudTierCtx& tier_ctx) {
   ret = tier_ctx.conn.send_resource(tier_ctx.dpp, "PUT", resource, nullptr, nullptr,
                                     out_bl, &bl, nullptr, tier_ctx.y);
 
-  if (ret < 0 ) {
+  /*
+   * Transient remote errors (503 -> -EBUSY, 500 -> -ERR_INTERNAL_ERROR) are
+   * retried by the caller's retry_on_transient_error wrapper, so surface them
+   * as-is rather than flattening to -EIO.
+   */
+  if (ret == -EBUSY || ret == -ERR_INTERNAL_ERROR) {
+    return ret;
+  }
+  if (ret < 0) {
     ldpp_dout(tier_ctx.dpp, 0) << "create target bucket : " << tier_ctx.target_bucket_name << " returned ret:" << ret << dendl;
   }
   if (out_bl.length() > 0) {
@@ -1552,14 +1606,17 @@ static int cloud_tier_create_bucket(RGWLCCloudTierCtx& tier_ctx) {
 
     if (result.code != "BucketAlreadyOwnedByYou" && result.code != "BucketAlreadyExists") {
       ldpp_dout(tier_ctx.dpp, 0) << "ERROR: Creating target bucket failed with error: " << result.code << dendl;
-      return -EIO;
+      return (ret < 0) ? ret : -EIO;
     }
+    // benign "already owned/exists" response
+    return 0;
   }
 
-  return 0;
+  // no response body: propagate any transport error instead of masking as success
+  return ret;
 }
 
-int rgw_cloud_tier_transfer_object(RGWLCCloudTierCtx& tier_ctx, std::set<std::string>& cloud_targets) {
+static int do_cloud_tier_transfer_object(RGWLCCloudTierCtx& tier_ctx, std::set<std::string>& cloud_targets) {
   int ret = 0;
 
   // check if target bucket is in local cache
@@ -1569,8 +1626,10 @@ int rgw_cloud_tier_transfer_object(RGWLCCloudTierCtx& tier_ctx, std::set<std::st
   if (!tier_ctx.target_bucket_created) {
     // not in cache; check if bucket exists on remote
     ret = cloud_tier_bucket_exists(tier_ctx);
+    if (ret == -EBUSY) return ret;
     if (ret == -ENOENT) {
       ret = cloud_tier_create_bucket(tier_ctx);
+      if (ret == -EBUSY) return ret;
       if (ret < 0) {
         ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to create target bucket on the cloud endpoint ret=" << ret << dendl;
         return ret;
@@ -1590,6 +1649,7 @@ int rgw_cloud_tier_transfer_object(RGWLCCloudTierCtx& tier_ctx, std::set<std::st
   bool already_tiered = false;
   ret = cloud_tier_check_object(tier_ctx, already_tiered);
 
+  if (ret == -EBUSY) return ret;
   if (ret < 0) {
     ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to check object on the cloud endpoint ret=" << ret << dendl;
   }
@@ -1618,4 +1678,9 @@ int rgw_cloud_tier_transfer_object(RGWLCCloudTierCtx& tier_ctx, std::set<std::st
   }
 
   return ret;
+}
+
+int rgw_cloud_tier_transfer_object(RGWLCCloudTierCtx& tier_ctx, std::set<std::string>& cloud_targets) {
+  return retry_on_transient_error(tier_ctx.y, tier_ctx.dpp, tier_ctx.cct, __func__,
+      [&]() { return do_cloud_tier_transfer_object(tier_ctx, cloud_targets); });
 }

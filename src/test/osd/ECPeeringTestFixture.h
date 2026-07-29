@@ -245,5 +245,16 @@ public:
     const std::vector<std::string>& obj_names,
     int target_osd,
     const std::vector<std::string>& expected_data);
+
+private:
+  /**
+   * Implementation function for parallel recovery that runs within event loop context.
+   * This is called by the public wrapper function after scheduling on the primary OSD.
+   */
+  void do_run_parallel_recovery_and_verify_callbacks_impl(
+    const std::vector<std::string>& obj_names,
+    int target_osd,
+    const std::vector<std::string>& expected_data,
+    int instance);
 };
 

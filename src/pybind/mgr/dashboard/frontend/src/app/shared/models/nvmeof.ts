@@ -53,6 +53,7 @@ export interface NvmeofSubsystemNamespace {
   bdev_name: string;
   rbd_image_name: string;
   rbd_pool_name: string;
+  rados_namespace_name?: string; // empty string or absent means default RADOS namespace
   load_balancing_group: number;
   rbd_image_size: number | string;
   block_size: number;
@@ -62,6 +63,11 @@ export interface NvmeofSubsystemNamespace {
   w_mbytes_per_second: number | string;
   subsystem_nqn?: string; // Field from JSON (mapped from ns_subsystem_nqn if needed)
 }
+
+export type RadosNamespace = {
+  namespace: string;
+  num_images: number;
+};
 
 export interface NvmeofGatewayGroup extends CephServiceSpec {
   name: string;

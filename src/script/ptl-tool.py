@@ -69,6 +69,8 @@ except ImportError:
 
 try:
     import requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
 except ImportError:
     MISSING_DEPS.append("requests")
 
@@ -354,7 +356,11 @@ class AuditReport:
                     payload['event'] = 'COMMENT'
 
                 endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/pulls/{pr}/reviews"
-                session.post(endpoint, auth=GithubBearerAuth(), json=payload)
+                r = session.post(endpoint, auth=GithubBearerAuth(), json=payload)
+                if r.status_code in (200, 201):
+                    log.info(f"Successfully posted consolidated review to PR #{pr}")
+                else:
+                    log.error(f"Failed to post consolidated review to PR #{pr}: {r.status_code} {r.text}")
 
 class GithubBearerAuth(requests.auth.AuthBase):
     def __call__(self, r):
@@ -396,6 +402,22 @@ def get_pr_tracker_string(session, pr, response=None):
     title = response["title"].strip().replace('|', '&#124;')
     pr_link = f'"PR #{pr}":{response["html_url"]}'
     return f'| {pr_link} | {author} | {labels_str} | {title} |'
+
+def verify_redmine_auth(R):
+    """
+    Makes a cheap authenticated call to confirm the configured Redmine API key
+    actually works. Raises SystemExit with an actionable message if it doesn't,
+    so callers can bail out before merging PRs or pushing branches rather than
+    discovering a bad key only when manage_qa_tracker() tries to use it.
+    """
+    try:
+        R.user.get('current')
+    except (redminelib.exceptions.AuthError, redminelib.exceptions.ForbiddenError) as e:
+        raise SystemExit(
+            f"Redmine authentication failed against {REDMINE_ENDPOINT}: {e}\n"
+            "Check that ~/.redmine_key (or PTL_TOOL_REDMINE_API_KEY) contains a valid, "
+            "unexpired API key. Failing now, before any PRs are merged or branches pushed."
+        )
 
 def get(session, url, params=None, paging=True):
     if params is None:
@@ -714,7 +736,7 @@ class CommitParityCheck(BaseAuditCheck):
         bp_commits_mapped = set()
         
         valid_ref = None
-        for ref in ['main', 'origin/main', 'upstream/main']:
+        for ref in ['upstream/heads/main', 'upstream/main', 'origin/heads/main', 'origin/main', 'main']:
             try:
                 G.git.rev_parse('--verify', ref)
                 valid_ref = ref
@@ -1341,7 +1363,36 @@ class ConflictSimulationCheck(BaseAuditCheck):
                             continue
                 else:
                     log.info(f"Applying branch-specific commit {commit.hexsha[:8]} ...")
-                    wt_repo.git(c=SANDBOX_CFG).cherry_pick("--allow-empty", commit.hexsha)
+                    try:
+                        wt_repo.git(c=SANDBOX_CFG).cherry_pick("--allow-empty", commit.hexsha)
+                    except git.exc.GitCommandError:
+                        log.error(f"Failed to apply branch-specific commit {commit.hexsha[:8]}! The PR likely has conflicts with the base branch and needs a rebase.")
+                        wt_repo.git.cherry_pick('--abort')
+
+                        if args.ci_mode:
+                            md_text = f"### Automated PR Review - Rebase Required\n\nBranch-specific commit `{commit.hexsha[:8]}` failed to apply cleanly to the base branch during simulation. The PR likely has conflicts and needs a rebase."
+                            report.add("Simulation Failure", md_text)
+                            raise SkipToMerge()
+
+                        while True:
+                            ans = input("How do you want to handle this? [p/m/r/o/q] (p=proceed simulation anyway, m=skip to merge, r=add to review and skip simulation, o=open PR in browser, q=quit) ").strip().lower()
+                            if ans == 'o':
+                                url = f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/pull/{pr}"
+                                open_in_browser([url])
+                                print(f"Opened {url} in browser.")
+                            elif ans == 'm':
+                                raise SkipToMerge()
+                            elif ans == 'r':
+                                md_text = f"### Automated PR Review - Rebase Required\n\nBranch-specific commit `{commit.hexsha[:8]}` failed to apply cleanly to the base branch during simulation. The PR likely has conflicts and needs a rebase."
+                                report.add("Simulation Failure", md_text)
+                                report.record_failure()
+                                raise SkipToMerge()
+                            elif ans == 'q':
+                                sys.exit(1)
+                            elif ans == 'p':
+                                break
+                            else:
+                                print("Invalid choice. Please enter p, m, r, o, or q.")
             
             if recorded_deviations:
                 md_text = """
@@ -1483,7 +1534,7 @@ class RedmineLinkageCheck(BaseAuditCheck):
             
             if not main_trackers:
                 log.warning(f"Failed to find any main trackers for PR #{orig_pr} ({pr_url})")
-                irregularities.append(f"**Orphaned Main PR:** Could not find a Redmine tracker for `main` PR #{orig_pr}. Please create a ticket, set its 'Pull Request ID', populate the 'Backports' field, and ensure it is in the 'Pending Backport' state.")
+                irregularities.append(f"**Orphaned Main PR:** Could not find a Redmine tracker for `main` PR #{orig_pr}. Please create a ticket, set its 'Pull Request ID', populate the 'Backport' field, and ensure it is in the 'Pending Backport' state.")
                 continue
             
             for main_tracker in main_trackers:
@@ -1505,7 +1556,7 @@ class RedmineLinkageCheck(BaseAuditCheck):
     
                 if not bp_trackers:
                     log.warning(f"No backport trackers found for main tracker #{main_tracker.id} ({REDMINE_ENDPOINT}/issues/{main_tracker.id}) targeting base '{base}'")
-                    irregularities.append(f"**Missing Backport Tracker:** Main tracker [#{main_tracker.id}]({REDMINE_ENDPOINT}/issues/{main_tracker.id}) does not have a backport tracker for `{base}`. Please adjust the 'Backports' field on the main tracker appropriately and remove 'backport_processed' from 'Tags (freeform)'.")
+                    irregularities.append(f"**Missing Backport Tracker:** Main tracker [#{main_tracker.id}]({REDMINE_ENDPOINT}/issues/{main_tracker.id}) does not have a backport tracker for `{base}`. Please adjust the 'Backport' field on the main tracker appropriately and remove 'backport_processed' from 'Tags (freeform)'.")
                     continue
                 
                 for bp_tracker in bp_trackers:
@@ -1807,8 +1858,12 @@ def manage_qa_tracker(args, R, session, branch, prs, tag, qa_tracker_description
             **New Branch:** `{branch}`
 
             **Previous QA Links:**
-            * "Shaman Build":https://shaman.ceph.com/builds/ceph/{old_branch}/
-            * "Pulpito / Teuthology Results":https://pulpito.ceph.com/?branch={old_branch}
+            * Shaman Build: "{old_branch}":https://shaman.ceph.com/builds/ceph/{old_branch}/
+            * Pulpito / Teuthology Results: "{old_branch}":https://pulpito.ceph.com/?branch={old_branch}
+
+            **New QA Links:**
+            * Shaman Build: "{branch}":https://shaman.ceph.com/builds/ceph/{branch}/
+            * Pulpito / Teuthology Results: "{branch}":https://pulpito.ceph.com/?branch={branch}
 
             """
         notes = textwrap.dedent(notes)
@@ -1898,6 +1953,14 @@ def build_branch(args):
     merge_branch_name = args.merge_branch_name
 
     session = requests.Session()
+    retries = Retry(
+        total=3,
+        backoff_factor=1,
+        status_forcelist=[500, 502, 503, 504],
+        raise_on_status=False
+    )
+    session.mount("https://", HTTPAdapter(max_retries=retries))
+    session.mount("http://", HTTPAdapter(max_retries=retries))
 
     if label:
         # Check the label format
@@ -1915,6 +1978,7 @@ def build_branch(args):
     if args.create_qa or args.update_qa or args.audit or args.final_merge or args.qe_label:
         log.info("connecting to %s", REDMINE_ENDPOINT)
         R = Redmine(REDMINE_ENDPOINT, username=REDMINE_USER, key=REDMINE_API_KEY)
+        verify_redmine_auth(R)
         log.debug("connected")
 
     prs = args.prs
@@ -2126,12 +2190,44 @@ def build_branch(args):
 
         G.git.merge(tip.hexsha, '--no-ff', m=message)
 
-        if new_contributors:
-            # Check out the PR, add a commit adding to .githubmap
+        if new_contributors and base == 'main':
             log.info("adding new contributors to githubmap in merge commit")
-            with open(git_dir + "/.githubmap", "a") as f:
-                for c in new_contributors:
-                    f.write("%s %s\n" % (c, new_contributors[c]))
+            githubmap_path = os.path.join(git_dir, ".githubmap")
+
+            headers = []
+            entries = []
+
+            # Read existing file and separate headers from data entries
+            with open(githubmap_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("#"):
+                        headers.append(line + "\n")
+                    elif line:
+                        # Read it again because our last read of githubmap may be out-of-date
+                        entries.append(line + "\n")
+
+            # Format and append new contributors
+            for c in new_contributors:
+                new_line = f"{c} {new_contributors[c]}\n"
+                entries.append(new_line)
+
+            # Perform a stable, case-insensitive sort on the data entries.
+            # Empty/whitespace-only lines are pushed to the bottom of the block,
+            # while actual entries are sorted by their first word (the GitHub handle).
+            def sort_key(line):
+                # Sort actual lines first, case-insensitively by the handle (the first word)
+                handle = line.split()[0]
+                handle = "".join(char.lower() for char in handle if char.isalnum())
+                return handle
+
+            entries.sort(key=sort_key)
+
+            # Write back the preserved headers and sorted data entries
+            with open(githubmap_path, "w", encoding="utf-8") as f:
+                f.writelines(headers)
+                f.writelines(entries)
+
             G.index.add([".githubmap"])
             G.git.commit("--amend", "--no-edit")
 
@@ -2217,8 +2313,10 @@ def build_branch(args):
     if args.push_ci or (not args.no_push_ci and do_qa):
         if not args.dry_run:
             G.git.push(CI_REMOTE_URL, branch) # for shaman
+            log.info("Pushed branch %s to %s (git push %s %s)" % (branch, CI_REMOTE_URL, CI_REMOTE_URL, branch))
             if created_branch and not args.no_tag:
                 G.git.push(CI_REMOTE_URL, tag.name) # for archival
+                log.info("Pushed tag %s to %s (git push %s %s)" % (tag.name, CI_REMOTE_URL, CI_REMOTE_URL, tag.name))
         else:
             log.info("[DRY RUN] Would push branch %s to %s" % (branch, CI_REMOTE_URL))
             if created_branch and not args.no_tag:

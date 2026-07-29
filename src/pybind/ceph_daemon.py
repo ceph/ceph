@@ -33,17 +33,21 @@ READ_CHUNK_SIZE = 4096
 
 def admin_socket(asok_path: str,
                  cmd: List[str],
-                 format: Optional[str] = '') -> bytes:
+                 format: Optional[str] = '',
+                 timeout: Optional[float] = 10) -> bytes:
     """
     Send a daemon (--admin-daemon) command 'cmd'.  asok_path is the
     path to the admin socket; cmd is a list of strings; format may be
     set to one of the formatted forms to get output in that form
     (daemon commands don't support 'plain' output).
+    timeout is the socket timeout in seconds (default 10, matching the
+    AdminSocketClient); pass None for no timeout (blocking forever).
     """
 
     def do_sockio(path: str, cmd_bytes: bytes) -> bytes:
         """ helper: do all the actual low-level stream I/O """
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
         sock.connect(path)
         try:
             sock.sendall(cmd_bytes + b'\0')

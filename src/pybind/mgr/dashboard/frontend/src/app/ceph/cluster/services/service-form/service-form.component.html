@@ -292,8 +292,8 @@
             [invalid]="
               serviceForm.controls.realm_name.invalid && serviceForm.controls.realm_name.dirty
             "
-            [invalidText]="authModeError"
-            helperText="Active-directory authentication for domain member servers and User authentication for Stand-alone servers configuration."
+            [invalidText]="realmNameError"
+            helperText="Select the realm to associate with this gateway. Leave this field blank for a single-site deployment."
             i18n-helperText
           >
             @if (realmList.length === 0) {
@@ -304,13 +304,13 @@
                 -- No realm available --
               </option>
             }
-            @for (realm of realmList; track realm) {
+            @for (realm of realmList; track realm.name) {
               <option [value]="realm.name">
                 {{ realm.name }}
               </option>
             }
           </cds-select>
-          <ng-template #authModeError>
+          <ng-template #realmNameError>
             @if (serviceForm.showError('realm_name', frm, 'required')) {
               <span
                 class="invalid-feedback"
@@ -327,7 +327,7 @@
             formControlName="zonegroup_name"
             label="Zonegroup"
           >
-            @for (zonegroup of zonegroupList; track zonegroup) {
+            @for (zonegroup of filteredZonegroupList; track zonegroup.name) {
               <option [value]="zonegroup.name">
                 {{ zonegroup.name }}
               </option>
@@ -341,13 +341,24 @@
             formControlName="zone_name"
             label="Zone"
           >
-            @for (zone of zoneList; track zone) {
+            @for (zone of filteredZoneList; track zone.name) {
               <option [value]="zone.name">
                 {{ zone.name }}
               </option>
             }
           </cds-select>
         </div>
+
+        @if (editing && showRgwRealmChangedInfo) {
+          <cd-alert-panel
+            type="info"
+            spacingClass="mb-3"
+            i18n
+          >
+            The RGW daemons for this service must be restarted to apply the updated realm,
+            zonegroup, or zone configuration.
+          </cd-alert-panel>
+        }
       }
 
       <!-- unmanaged -->
@@ -979,7 +990,7 @@
             id="snmp_version"
             label="Version"
             cdRequiredField="Version"
-            helperText="Active-directory authentication for domain member servers and User authentication for Stand-alone servers configuration."
+            helperText="Select the SNMP protocol version for the monitoring gateway."
             i18n-helperText
             [invalid]="
               serviceForm.controls.snmp_version.invalid && serviceForm.controls.snmp_version.dirty
@@ -1655,6 +1666,10 @@
               id="ssl"
               i18n
               >SSL
+              <cd-help-text>
+                Secure client connections by using SSL. When enabled, provide a certificate and the
+                corresponding private key.
+              </cd-help-text>
             </cds-checkbox>
           </div>
         }
@@ -1666,7 +1681,14 @@
             serviceForm.controls.service_type.value
           )
         ) {
-          <ng-container *ngTemplateOutlet="certificateAuthorityManagement"></ng-container>
+          <cd-certificate-authority-form
+            [formGroup]="serviceForm"
+            [editing]="editing"
+            [currentCertificate]="currentCertificate"
+            [showCertSourceChangeWarning]="showCertSourceChangeWarning"
+            (certificateTypeChange)="onCertificateTypeChange($event)"
+          >
+          </cd-certificate-authority-form>
         }
 
         <!-- ssl_cert - Only show when SSL is enabled AND certificate type is external -->
@@ -1678,9 +1700,11 @@
                 context: {
                   controlName: 'ssl_cert',
                   title: 'Certificate Input',
+                  placeholder: 'Paste the certificate in PEM format',
                   helperText:
-                    'Uploaded files will populate the certificate details automatically. Or paste the PEM content directly in the text area.',
-                  description: 'Upload a .crt file, or paste the certificate PEM content directly.',
+                    'Uploading a certificate file automatically populates this field. Alternatively, paste the certificate in PEM format.',
+                  description:
+                    'Upload a certificate (.crt) file or paste the certificate in PEM format.',
                   invalidTemplate: invalidSslCertError,
                   isRequired: false
                 }
@@ -1712,6 +1736,8 @@
                 context: {
                   controlName: 'ssl_key',
                   title: 'Private Key Input',
+                  placeholder:
+                    'Uploading a private key file automatically populates this field. Alternatively, paste the private key in PEM format.',
                   helperText:
                     'Uploaded files will populate the private key details automatically. Or paste the PEM content directly in the text area.',
                   description: 'Upload a .key file, or paste the private key PEM content directly.',
@@ -1750,6 +1776,7 @@
                   context: {
                     controlName: 'ssl_ca_cert',
                     title: 'CA Certificate Input',
+                    placeholder: 'Paste the certificate in PEM format',
                     helperText:
                       'Uploaded files will populate the CA certificate details automatically. Or paste the PEM content directly in the text area.',
                     description:
@@ -1898,7 +1925,14 @@
           </fieldset>
         </div>
         @if (serviceForm.controls.enable_mtls.value) {
-          <ng-container *ngTemplateOutlet="certificateAuthorityManagement"></ng-container>
+          <cd-certificate-authority-form
+            [formGroup]="serviceForm"
+            [editing]="editing"
+            [currentCertificate]="currentCertificate"
+            [showCertSourceChangeWarning]="showCertSourceChangeWarning"
+            (certificateTypeChange)="onCertificateTypeChange($event)"
+          >
+          </cd-certificate-authority-form>
 
           @if (serviceForm.controls.certificateType.value === CertificateType.external) {
             <!-- root_ca_cert -->
@@ -1909,6 +1943,7 @@
                   context: {
                     controlName: 'root_ca_cert',
                     title: 'Root CA Certificate Input',
+                    placeholder: 'Paste the certificate in PEM format',
                     helperText:
                       'Uploaded files will populate the Root CA certificate details automatically. Or paste the PEM content directly in the text area.',
                     description:
@@ -1937,6 +1972,7 @@
                   context: {
                     controlName: 'client_cert',
                     title: 'Client Certificate Input',
+                    placeholder: 'Paste the certificate in PEM format',
                     helperText:
                       'Uploaded files will populate the client certificate details automatically. Or paste the PEM content directly in the text area.',
                     description:
@@ -1965,6 +2001,8 @@
                   context: {
                     controlName: 'client_key',
                     title: 'Client Key Input',
+                    placeholder:
+                      'Uploading a private key file automatically populates this field. Alternatively, paste the private key in PEM format.',
                     helperText:
                       'Uploaded files will populate the client key details automatically. Or paste the PEM content directly in the text area.',
                     description:
@@ -1993,6 +2031,7 @@
                   context: {
                     controlName: 'server_cert',
                     title: 'Gateway Server Certificate Input',
+                    placeholder: 'Paste the certificate in PEM format',
                     helperText:
                       'Uploaded files will populate the gateway server certificate details automatically. Or paste the PEM content directly in the text area.',
                     description:
@@ -2021,6 +2060,8 @@
                   context: {
                     controlName: 'server_key',
                     title: 'Gateway Server Key Input',
+                    placeholder:
+                      'Uploading a private key file automatically populates this field. Alternatively, paste the private key in PEM format.',
                     helperText:
                       'Uploaded files will populate the gateway server key details automatically. Or paste the PEM content directly in the text area.',
                     description:
@@ -2048,7 +2089,7 @@
   <cd-form-button-panel
     (submitActionEvent)="onSubmit()"
     [form]="serviceForm"
-    [submitText]="(action | titlecase) + ' ' + resource"
+    [submitText]="submitAction"
     [modalForm]="true"
   ></cd-form-button-panel>
 </cds-modal>
@@ -2064,174 +2105,6 @@
   </span>
 </ng-template>
 
-<ng-template #certificateAuthorityManagement>
-  <div [formGroup]="serviceForm">
-    <!-- Current Certificate Section - Only shown in Edit mode when certificate exists -->
-    @if (editing && currentCertificate?.has_certificate) {
-      <div class="form-item">
-        <legend
-          class="cds--label cds--type-heading-compact-01"
-          i18n
-        >
-          Current Certificate
-        </legend>
-        <div class="row">
-          <div class="col-6">
-            <legend
-              class="cds--label"
-              i18n
-            >
-              Certificate
-            </legend>
-            <div>{{ currentCertificate.cert_name }}</div>
-          </div>
-          <div class="col-6">
-            <legend
-              class="cds--label"
-              i18n
-            >
-              Valid Until
-            </legend>
-            <div>
-              {{ currentCertificate.expiry_date | cdDate }} •
-              {{ currentCertificate.days_to_expiration }} <span i18n>days left</span>
-            </div>
-          </div>
-        </div>
-        <div class="row mt-3">
-          <div class="col-6">
-            <legend
-              class="cds--label"
-              i18n
-            >
-              Status
-            </legend>
-            <div class="align-items-center">
-              <cd-icon
-                [type]="statusIconMap[currentCertificate.status] || statusIconMap['default']"
-              ></cd-icon>
-              @switch (currentCertificate.status) {
-                @case ('valid') {
-                  <span i18n>Valid</span>
-                }
-                @case ('expiring') {
-                  <span i18n>Expiring soon</span>
-                }
-                @case ('expired') {
-                  <span i18n>Expired</span>
-                }
-                @case ('not_configured') {
-                  <span i18n>Not configured</span>
-                }
-                @case ('invalid') {
-                  <span i18n>Invalid</span>
-                }
-                @default {
-                  {{ currentCertificate.status }}
-                }
-              }
-            </div>
-          </div>
-          <div class="col-6">
-            <legend
-              class="cds--label"
-              i18n
-            >
-              Issuer
-            </legend>
-            <div>
-              @if (currentCertificate.signed_by === 'cephadm') {
-                <span i18n>Internal (Cephadm CA)</span>
-              } @else {
-                {{ currentCertificate.issuer || 'External' }}
-              }
-            </div>
-          </div>
-        </div>
-      </div>
-    }
-
-    <!-- Certificate Authority Selection -->
-    <div class="form-item">
-      <label
-        class="cds--label cds--type-heading-compact-01"
-        for="certificateType"
-        i18n
-        >Choose Certificate Authority</label
-      >
-      <cds-radio-group
-        formControlName="certificateType"
-        orientation="horizontal"
-        helperText="Select how certificates will be signed for this service. Choose internal to use the cluster's CA, or external to upload certificates signed by your organization."
-        i18n-helperText
-      >
-        <cds-radio
-          [value]="CertificateType.internal"
-          (change)="onCertificateTypeChange(CertificateType.internal)"
-          i18n
-        >
-          Internal
-        </cds-radio>
-        <cds-radio
-          [value]="CertificateType.external"
-          (change)="onCertificateTypeChange(CertificateType.external)"
-          i18n
-        >
-          External
-        </cds-radio>
-      </cds-radio-group>
-    </div>
-
-    @if (showCertSourceChangeWarning) {
-      <cd-alert-panel
-        type="warning"
-        spacingClass="mb-3"
-        i18n
-      >
-        Changing the certificate source will redeploy the service daemons to apply the new
-        certificate configuration.
-      </cd-alert-panel>
-    }
-
-    @if (serviceForm.controls.certificateType.value === CertificateType.internal) {
-      <cd-alert-panel
-        type="info"
-        spacingClass="mb-3"
-        i18n
-      >
-        Certificate will be generated automatically by Cephadm CA for internal certificate type.
-      </cd-alert-panel>
-      <div class="form-item">
-        <cd-text-label-list
-          formControlName="custom_sans"
-          label="Custom SAN Entries"
-          i18n-label
-          helperText="Optional list of Subject Alternative Names (hostnames, IPs, or DNS names) to include in the auto-generated certificate."
-          i18n-helperText
-        >
-        </cd-text-label-list>
-      </div>
-      @if (
-        serviceForm.controls.service_type.value === 'rgw' &&
-        serviceForm.controls.virtual_host_enabled.value
-      ) {
-        <div class="form-item">
-          <cds-checkbox
-            i18n-label
-            formControlName="wildcard_enabled"
-          >
-            Include wildcard certificate for bucket subdomains
-            <cd-help-text i18n>
-              Add wildcard certificates (*.domain) to allow SSL for all bucket subdomains. Required
-              for virtual-host style with SSL.
-            </cd-help-text>
-          </cds-checkbox>
-        </div>
-      }
-    }
-  </div>
-</ng-template>
-
 <ng-template
   #fileUploaderTextarea
   let-controlName="controlName"
@@ -2240,6 +2113,7 @@
   let-description="description"
   let-invalidTemplate="invalidTemplate"
   let-isRequired="isRequired"
+  let-placeholder="placeholder"
 >
   <cds-textarea-label
     [attr.cdRequiredField]="isRequired ? title : null"
@@ -2262,7 +2136,7 @@
       cdsTextArea
       [id]="controlName"
       [theme]="'dark'"
-      placeholder="Paste certificate or private key PEM content"
+      [placeholder]="placeholder"
       [formControl]="serviceForm.controls[controlName]"
       cols="50"
       rows="5"

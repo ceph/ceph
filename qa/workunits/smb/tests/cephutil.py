@@ -56,6 +56,9 @@ def cephadm_shell_cmd(
         f'/home/{smb_cfg.ssh_user}/cephtest/cephadm',
         'shell',
     ]
+    volumes = kwargs.pop('volumes', [])
+    for v in volumes:
+        cmd.extend(['-v', v])
     cmd += list(args)
     proc = subprocess.run(cmd, **kwargs)
     if load is LoadJSON.BOTH:

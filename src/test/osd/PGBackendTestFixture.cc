@@ -396,7 +396,9 @@ int PGBackendTestFixture::do_transaction_and_complete(
   return completion_result;
 }
 
-int PGBackendTestFixture::create_and_write(
+// Helper function that performs the actual write logic
+// Must be called within event loop context on the primary OSD
+int PGBackendTestFixture::do_create_and_write_impl(
   const std::string& obj_name,
   const std::string& data)
 {
@@ -408,7 +410,7 @@ int PGBackendTestFixture::create_and_write(
   pg_t->create(hoid);
 
   // Use persistent OBC so attr_cache is maintained across operations
-  ObjectContextRef obc = get_or_create_obc(hoid, false, 0);
+  ObjectContextRef obc = get_object_context(hoid, true);
   pg_t->obc_map[hoid] = obc;
 
   // Note: We do NOT pre-seed attr_cache here. For a new object, attr_cache
@@ -420,7 +422,11 @@ int PGBackendTestFixture::create_and_write(
 
   bufferlist bl;
   bl.append(data);
-  pg_t->write(hoid, 0, bl.length(), bl);
+  
+  // Only perform write if data is non-empty (PGTransaction requires len > 0)
+  if (bl.length() > 0) {
+    pg_t->write(hoid, 0, bl.length(), bl);
+  }
 
   object_stat_sum_t delta_stats;
   delta_stats.num_objects = 1;
@@ -497,31 +503,115 @@ int PGBackendTestFixture::create_and_write(
   return result;
 }
 
-ObjectContextRef PGBackendTestFixture::get_object_context(
-  const hobject_t& hoid)
+// Public interface that schedules the write on the primary OSD
+int PGBackendTestFixture::create_and_write(
+  const std::string& obj_name,
+  const std::string& data)
 {
-  PGBackend* primary_backend = get_primary_backend();
+  // Get the primary OSD from the OSDMap
+  int primary_osd = osdmap->get_pg_acting_primary(pgid);
+  ceph_assert(primary_osd >= 0);
+  
+  int result = -1;
+  event_loop->schedule_transaction(primary_osd, [this, &result, obj_name, data]() {
+    result = do_create_and_write_impl(obj_name, data);
+  });
+  event_loop->run_until_idle();
+  
+  return result;
+}
+
+void PGBackendTestFixture::set_object_context(
+  const hobject_t& hoid,
+  ObjectContextRef obc)
+{
+  int osd = event_loop->get_current_executing_osd();
+  ceph_assert(osd != -1);
+  object_contexts[osd][hoid] = obc;
+}
+
+void PGBackendTestFixture::clear_object_contexts()
+{
+  int osd = event_loop->get_current_executing_osd();
+  ceph_assert(osd != -1);
+  object_contexts[osd].clear();
+}
+
+ObjectContextRef PGBackendTestFixture::get_object_context(
+  const hobject_t& hoid,
+  bool can_create,
+  const std::map<std::string, ceph::buffer::list, std::less<>> *attrs)
+{
+  int osd = event_loop->get_current_executing_osd();
+  ceph_assert(osd != -1);
+  
+  // Check cache first (matches PrimaryLogPG::get_object_context line 11968)
+  auto it = object_contexts[osd].find(hoid);
+  if (it != object_contexts[osd].end()) {
+    return it->second;
+  }
+
+  // Check disk for object info (matches PrimaryLogPG lines 11977-11982)
+  bufferlist bv;
+  if (attrs) {
+    auto it_oi = attrs->find(OI_ATTR);
+    ceph_assert(it_oi != attrs->end());
+    bv = it_oi->second;
+  } else {
+    PGBackend* primary_backend = get_primary_backend();
+    int r = primary_backend->objects_get_attr(hoid, OI_ATTR, &bv);
+    
+    if (r < 0) {
+      if (!can_create) {
+        // Object doesn't exist and can't create (matches PrimaryLogPG lines 11985-11989)
+        return ObjectContextRef();
+      }
+      
+      // Create new object context (matches PrimaryLogPG lines 11992-12004)
+      object_info_t oi(hoid);
+      ObjectContextRef obc = std::make_shared<ObjectContext>();
+      obc->obs.oi = oi;
+      obc->obs.exists = false;
+      obc->ssc = nullptr;
+      set_object_context(hoid, obc);
+      return obc;
+    }
+  }
+
+  // Decode object_info (matches PrimaryLogPG lines 12008-12015)
+  object_info_t oi;
+  try {
+    bufferlist::const_iterator bliter = bv.begin();
+    decode(oi, bliter);
+  } catch (...) {
+    return ObjectContextRef();
+  }
+  
+  // Create OBC and populate from disk (matches PrimaryLogPG lines 12019-12022)
   ObjectContextRef obc = std::make_shared<ObjectContext>();
-  obc->obs.oi = object_info_t(hoid);
-  obc->obs.exists = false;
+  obc->obs.oi = oi;
+  obc->obs.exists = true;
   obc->ssc = nullptr;
   
-  // Try to read the ObjectInfo from the store
-  ghobject_t ghoid(hoid, ghobject_t::NO_GEN, primary_backend->get_parent()->whoami_shard().shard);
-  ceph::buffer::ptr value_ptr;
-  int r = store->getattr(ch, ghoid, OI_ATTR, value_ptr);
-  ceph_assert(r >= 0 && value_ptr.length() > 0);
-
-  bufferlist bl;
-  bl.append(value_ptr);
-  auto p = bl.cbegin();
-  obc->obs.oi.decode(p);
-  obc->obs.exists = true;
+  // For EC pools, load all attributes (matches PrimaryLogPG lines 12031-12040)
+  if (pool_type == EC) {
+    if (attrs) {
+      obc->attr_cache = *attrs;
+    } else {
+      PGBackend* primary_backend = get_primary_backend();
+      int r = primary_backend->objects_get_attrs(hoid, &obc->attr_cache);
+      ceph_assert(r == 0);
+    }
+  }
+  
+  // Cache the OBC (matches PrimaryLogPG line 12019 lookup_or_create)
+  set_object_context(hoid, obc);
   
   return obc;
 }
 
-int PGBackendTestFixture::write(
+// Helper function for write implementation
+int PGBackendTestFixture::do_write_impl(
   const std::string& obj_name,
   uint64_t offset,
   const std::string& data,
@@ -530,7 +620,7 @@ int PGBackendTestFixture::write(
   hobject_t hoid = make_test_object(obj_name);
   PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
 
-  ObjectContextRef obc = get_or_create_obc(hoid, true, object_size);
+  ObjectContextRef obc = get_object_context(hoid, false);
   pg_t->obc_map[hoid] = obc;
 
   // Track outstanding write
@@ -606,6 +696,137 @@ int PGBackendTestFixture::write(
   return result;
 }
 
+// Public interface that schedules the write on the primary OSD
+int PGBackendTestFixture::write(
+  const std::string& obj_name,
+  uint64_t offset,
+  const std::string& data,
+  uint64_t object_size)
+{
+  // Get the primary OSD from the OSDMap
+  int primary_osd = osdmap->get_pg_acting_primary(pgid);
+  ceph_assert(primary_osd >= 0);
+  
+  int result = -1;
+  event_loop->schedule_transaction(primary_osd, [this, &result, obj_name, offset, data, object_size]() {
+    result = do_write_impl(obj_name, offset, data, object_size);
+  });
+  event_loop->run_until_idle();
+  
+  return result;
+}
+
+int PGBackendTestFixture::do_write_impl(
+  const std::string& obj_name,
+  uint64_t object_size,
+  std::optional<uint64_t> truncate_size,
+  const std::vector<std::pair<uint64_t, std::string>>& writes)
+{
+  hobject_t hoid = make_test_object(obj_name);
+  PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
+
+  ObjectContextRef obc = get_object_context(hoid, true);
+  if (obc && !obc->obs.exists) {
+    obc->obs.oi.size = object_size;
+  }
+  pg_t->obc_map[hoid] = obc;
+
+  // Track outstanding write
+  outstanding_writes[hoid]++;
+
+  // Apply truncate if specified
+  if (truncate_size.has_value()) {
+    pg_t->truncate(hoid, truncate_size.value());
+  }
+
+  // Apply all writes
+  uint64_t new_size = truncate_size.value_or(object_size);
+  for (const auto& [offset, data] : writes) {
+    bufferlist bl;
+    bl.append(data);
+    pg_t->write(hoid, offset, bl.length(), bl);
+    new_size = std::max(new_size, offset + bl.length());
+  }
+
+  object_stat_sum_t delta_stats;
+  if (new_size > object_size) {
+    delta_stats.num_bytes = new_size - object_size;
+  } else if (new_size < object_size) {
+    delta_stats.num_bytes = -(int64_t)(object_size - new_size);
+  } else {
+    delta_stats.num_bytes = 0;
+  }
+
+  // Prior version comes from the object's current version
+  eversion_t prior_version = obc->obs.oi.version;
+  eversion_t at_version = get_next_version();
+
+  // Build the NEW OI
+  object_info_t new_oi = obc->obs.oi;
+  new_oi.version = at_version;
+  new_oi.prior_version = prior_version;
+  new_oi.size = new_size;
+
+  // Encode new OI into PGTransaction
+  {
+    bufferlist oi_bl;
+    new_oi.encode(oi_bl,
+      osdmap->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+    pg_t->setattr(hoid, OI_ATTR, oi_bl);
+  }
+
+  // Update OBC obs to new state BEFORE submitting
+  obc->obs.oi = new_oi;
+
+  std::vector<pg_log_entry_t> log_entries;
+  pg_log_entry_t entry;
+  entry.op = pg_log_entry_t::MODIFY;
+  entry.soid = hoid;
+  entry.version = at_version;
+  entry.prior_version = prior_version;
+  log_entries.push_back(entry);
+
+  // Create completion lambda for write-specific cleanup
+  auto write_complete = [this, hoid, obc, prior_version, object_size](int r) {
+    // Decrement outstanding writes counter
+    if (outstanding_writes[hoid] > 0) {
+      outstanding_writes[hoid]--;
+      if (outstanding_writes[hoid] == 0) {
+        outstanding_writes.erase(hoid);
+      }
+    }
+
+    if (r != 0 && r != -EINPROGRESS) {
+      // Roll back OBC on failure
+      obc->obs.oi.version = prior_version;
+      obc->obs.oi.size = object_size;
+      obc->attr_cache.clear();
+      outstanding_writes.erase(hoid);
+    }
+  };
+
+  return do_transaction_and_complete(
+    hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries), write_complete);
+}
+
+int PGBackendTestFixture::write(
+  const std::string& obj_name,
+  uint64_t object_size,
+  std::optional<uint64_t> truncate_size,
+  const std::vector<std::pair<uint64_t, std::string>>& writes)
+{
+  int primary_osd = osdmap->get_pg_acting_primary(pgid);
+  ceph_assert(primary_osd >= 0);
+
+  int result = -1;
+  event_loop->schedule_transaction(primary_osd, [this, &result, obj_name, object_size, truncate_size, &writes]() {
+    result = do_write_impl(obj_name, object_size, truncate_size, writes);
+  });
+  event_loop->run_until_idle();
+
+  return result;
+}
+
 int PGBackendTestFixture::read_object(
   const std::string& obj_name,
   uint64_t offset,
@@ -669,6 +890,124 @@ int PGBackendTestFixture::read_object(
   }
 }
 
+void PGBackendTestFixture::visualize_miscompare(
+  const std::string& obj_name,
+  const char* expected_buf,
+  const char* read_buf,
+  size_t size,
+  const std::string& phase)
+{
+  bool mismatch_found = false;
+  size_t first_mismatch = 0;
+  size_t last_mismatch = 0;
+  
+  // Find mismatches
+  for (size_t i = 0; i < size; i++) {
+    if (read_buf[i] != expected_buf[i]) {
+      if (!mismatch_found) {
+        first_mismatch = i;
+        mismatch_found = true;
+      }
+      last_mismatch = i;
+    }
+  }
+  
+  if (!mismatch_found) {
+    return;  // No mismatches to visualize
+  }
+  
+  std::cout << "\n=== MISCOMPARE DETECTED in " << phase << " ===" << std::endl;
+  std::cout << "Object: " << obj_name << std::endl;
+  if (pool_type == EC) {
+    std::cout << "Config: k=" << k << " m=" << m << " stripe_unit=" << stripe_unit << std::endl;
+  } else {
+    std::cout << "Config: Replicated pool, size=" << num_replicas << std::endl;
+  }
+  std::cout << "Miscompare range: [" << first_mismatch << ", " << last_mismatch << "]" << std::endl;
+  std::cout << "Total mismatches: " << (last_mismatch - first_mismatch + 1) << " bytes" << std::endl;
+  
+  // Show detailed hex+ASCII dump around first mismatch
+  size_t dump_start = (first_mismatch > 64) ? (first_mismatch - 64) : 0;
+  size_t dump_end = std::min(last_mismatch + 64, size);
+  
+  std::cout << "\nHex+ASCII dump around first mismatch [" << dump_start << ", " << dump_end << "):" << std::endl;
+  std::cout << "Offset   Hex                                              ASCII" << std::endl;
+  
+  std::string last_line_hex;
+  std::string last_line_ascii;
+  int repeat_count = 0;
+  
+  for (size_t i = dump_start; i < dump_end; i += 16) {
+    // Build hex representation
+    std::ostringstream hex_stream;
+    for (size_t j = 0; j < 16 && (i + j) < dump_end; j++) {
+      unsigned char c = read_buf[i + j];
+      bool mismatch = (c != expected_buf[i + j]);
+      if (mismatch) hex_stream << "\033[1;31m";
+      hex_stream << std::setw(2) << std::setfill('0') << std::hex << (int)c;
+      if (mismatch) hex_stream << "\033[0m";
+      hex_stream << " ";
+    }
+    std::string hex_line = hex_stream.str();
+    
+    // Build ASCII representation
+    std::ostringstream ascii_stream;
+    for (size_t j = 0; j < 16 && (i + j) < dump_end; j++) {
+      char c = read_buf[i + j];
+      bool mismatch = (c != expected_buf[i + j]);
+      if (mismatch) ascii_stream << "\033[1;31m";
+      ascii_stream << (isprint(c) ? c : '.');
+      if (mismatch) ascii_stream << "\033[0m";
+    }
+    std::string ascii_line = ascii_stream.str();
+    
+    // Check if this line is identical to the last line
+    if (hex_line == last_line_hex && ascii_line == last_line_ascii && i > dump_start) {
+      repeat_count++;
+      continue;
+    }
+    
+    // Print any accumulated repeats
+    if (repeat_count > 0) {
+      std::cout << "         * " << repeat_count << " identical line(s) omitted *" << std::endl;
+      repeat_count = 0;
+    }
+    
+    // Print current line
+    std::cout << std::setw(8) << std::setfill('0') << std::hex << i << " "
+              << std::setw(48) << std::left << hex_line << " " << ascii_line
+              << std::dec << std::endl;
+    
+    last_line_hex = hex_line;
+    last_line_ascii = ascii_line;
+  }
+  
+  // Print any remaining repeats
+  if (repeat_count > 0) {
+    std::cout << "         * " << repeat_count << " identical line(s) omitted *" << std::endl;
+  }
+  
+  // Show expected vs read comparison
+  std::cout << "\nExpected vs Read (first 128 bytes of miscompare):" << std::endl;
+  size_t compare_len = std::min(size_t(128), last_mismatch - first_mismatch + 1);
+  
+  std::cout << "Expected: ";
+  for (size_t i = 0; i < compare_len; i++) {
+    char c = expected_buf[first_mismatch + i];
+    std::cout << (isprint(c) ? c : '.');
+  }
+  std::cout << std::endl;
+  
+  std::cout << "Read:     ";
+  for (size_t i = 0; i < compare_len; i++) {
+    char c = read_buf[first_mismatch + i];
+    if (c != expected_buf[first_mismatch + i]) std::cout << "\033[1;31m";
+    std::cout << (isprint(c) ? c : '.');
+    if (c != expected_buf[first_mismatch + i]) std::cout << "\033[0m";
+  }
+  std::cout << std::endl;
+}
+
 void PGBackendTestFixture::verify_object(
   const std::string& obj_name,
   const std::string& expected_data,
@@ -682,8 +1021,22 @@ void PGBackendTestFixture::verify_object(
   EXPECT_EQ(read_data.length(), expected_data.length()) << "Read data length should match";
   
   if (read_data.length() == expected_data.length()) {
-    std::string read_string(read_data.c_str(), read_data.length());
-    EXPECT_EQ(read_string, expected_data) << "Data should match";
+    const char* read_buf = read_data.c_str();
+    const char* expected_buf = expected_data.c_str();
+    
+    // Check for mismatches
+    bool has_mismatch = false;
+    for (size_t i = 0; i < expected_data.length(); i++) {
+      if (read_buf[i] != expected_buf[i]) {
+        has_mismatch = true;
+        break;
+      }
+    }
+    
+    if (has_mismatch) {
+      visualize_miscompare(obj_name, expected_buf, read_buf, expected_data.length(), "verify_object");
+      FAIL() << "Data mismatch detected";
+    }
   }
 }
 
@@ -765,12 +1118,7 @@ void PGBackendTestFixture::update_osdmap(
     }
   }
 
-  // Step 3: Clear all attr_caches before on_change()
-  // The cached OI attributes may be stale after a peering event.
-  // Also drop any stale outstanding write tracking: once we enter a new
-  // interval, blocked/in-flight writes from the previous interval should no
-  // longer prevent OBC reloading for rollback/recovery verification.
-  clear_all_attr_caches();
+  // Step 3: Clear outstanding writes. FIXME: This belongs in the pg
   outstanding_writes.clear();
 
   // Step 4: Schedule on_change() calls as event loop actions
@@ -778,8 +1126,9 @@ void PGBackendTestFixture::update_osdmap(
   for (auto& [instance, be] : backends) {
     if (be) {
       PGBackend* backend_ptr = be.get();
-      event_loop->schedule_peering_event(instance, [backend_ptr]() {
+      event_loop->schedule_peering_event(instance, [this, backend_ptr]() {
         backend_ptr->on_change();
+        clear_object_contexts();
       });
     }
   }
@@ -796,19 +1145,8 @@ void PGBackendTestFixture::cleanup_data_dir()
   }
 }
 
-void PGBackendTestFixture::clear_all_attr_caches()
-{
-  // Clear attr_cache for all objects. This is called on on_change() to
-  // invalidate cached attributes that might be stale after a peering event.
-  for (auto& [hoid, obc] : object_contexts) {
-    if (obc) {
-      obc->attr_cache.clear();
-    }
-  }
-}
-
-
-int PGBackendTestFixture::write_attribute(
+// Helper function for write_attribute implementation
+int PGBackendTestFixture::do_write_attribute_impl(
   const std::string& obj_name,
   const std::string& attr_name,
   const std::string& attr_value,
@@ -817,7 +1155,7 @@ int PGBackendTestFixture::write_attribute(
   hobject_t hoid = make_test_object(obj_name);
   PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
   
-  ObjectContextRef obc = get_or_create_obc(hoid, true, 0);
+  ObjectContextRef obc = get_object_context(hoid, false);
   pg_t->obc_map[hoid] = obc;
   
   outstanding_writes[hoid]++;
@@ -878,6 +1216,26 @@ int PGBackendTestFixture::write_attribute(
   
   int result = do_transaction_and_complete(
     hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries), write_complete);
+  
+  return result;
+}
+
+// Public interface that schedules the write on the primary OSD
+int PGBackendTestFixture::write_attribute(
+  const std::string& obj_name,
+  const std::string& attr_name,
+  const std::string& attr_value,
+  bool force_all_shards)
+{
+  // Get the primary OSD from the OSDMap
+  int primary_osd = osdmap->get_pg_acting_primary(pgid);
+  ceph_assert(primary_osd >= 0);
+  
+  int result = -1;
+  event_loop->schedule_transaction(primary_osd, [this, &result, obj_name, attr_name, attr_value, force_all_shards]() {
+    result = do_write_attribute_impl(obj_name, attr_name, attr_value, force_all_shards);
+  });
+  event_loop->run_until_idle();
   
   return result;
 }

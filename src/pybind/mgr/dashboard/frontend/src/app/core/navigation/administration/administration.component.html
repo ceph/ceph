@@ -3,38 +3,45 @@
   [flip]="true"
   description=""
 >
-  <li class="cds--overflow-menu-options__option mb-2">
-    <button
-      routerLink="/user-management"
-      class="cds--overflow-menu-options__btn"
-      type="button"
-      i18n
-    >
-      User management
-    </button>
-  </li>
-  <li
-    class="cds--overflow-menu-options__option mb-2"
-    *ngIf="configOptPermission.read"
-  >
-    <button
-      routerLink="/telemetry"
-      class="cds--overflow-menu-options__btn"
-      type="button"
-      i18n
-    >
-      Telemetry configuration
-    </button>
-  </li>
+  @if (userPermission.create || userPermission.update || userPermission.delete) {
+    <li class="cds--overflow-menu-options__option mb-2">
+      <button
+        routerLink="/user-management"
+        class="cds--overflow-menu-options__btn"
+        type="button"
+        i18n
+      >
+        User management
+      </button>
+    </li>
+  }
+  @if (configOptPermission.read) {
+    <li class="cds--overflow-menu-options__option mb-2">
+      <button
+        routerLink="/telemetry"
+        class="cds--overflow-menu-options__btn"
+        type="button"
+        i18n
+      >
+        Telemetry configuration
+      </button>
+    </li>
+  }
 </cds-overflow-menu>
 
 <ng-template #customTrigger>
-  <svg
-    cdsIcon="settings"
-    size="20"
-    title="Settings"
-    *ngIf="userPermission.read"
-  ></svg>
+  @if (
+    userPermission.create ||
+    userPermission.update ||
+    userPermission.delete ||
+    configOptPermission.read
+  ) {
+    <svg
+      cdsIcon="settings"
+      size="20"
+      title="Settings"
+    ></svg>
+  }
   <span
     i18n
     class="d-md-none"

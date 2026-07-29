@@ -443,16 +443,17 @@ void PeerReplayer::update_directory_current_sync_perf_counters(
     perf->set(l_cephfs_mirror_directory_current_eta_seconds, 0);
   };
 
-  if (sync_stat.failed) {
+  switch (get_dir_sync_state(sync_stat)) {
+  case DirSyncState::Failed:
     perf->set(l_cephfs_mirror_directory_dir_state, 2);
     clear_current();
     return;
-  }
-
-  if (!sync_stat.current_syncing_snap) {
+  case DirSyncState::Idle:
     perf->set(l_cephfs_mirror_directory_dir_state, 0);
     clear_current();
     return;
+  case DirSyncState::Syncing:
+    break;
   }
 
   perf->set(l_cephfs_mirror_directory_dir_state, 1);
@@ -972,7 +973,8 @@ void PeerReplayer::remove_persisted_dir_sync_stat(const std::string &dir_root) {
 
 void PeerReplayer::add_live_sync_metrics_to_persist(json_spirit::mObject &obj,
                                                     SnapSyncStat &sync_stat) {
-  if (sync_stat.current_syncing_snap) {
+  switch (get_dir_sync_state(sync_stat)) {
+  case DirSyncState::Syncing: {
     json_spirit::mObject snap;
     snap["id"] =
       json_spirit::mValue(static_cast<boost::uint64_t>(sync_stat.current_syncing_snap->first));
@@ -1055,13 +1057,17 @@ void PeerReplayer::add_live_sync_metrics_to_persist(json_spirit::mObject &obj,
 
     obj["state"] = json_spirit::mValue("syncing");
     obj["current_syncing_snap"] = json_spirit::mValue(snap);
-  } else if (sync_stat.failed) {
+    break;
+  }
+  case DirSyncState::Failed:
     obj["state"] = json_spirit::mValue("failed");
     if (sync_stat.last_failed_reason) {
       obj["failure_reason"] = json_spirit::mValue(*sync_stat.last_failed_reason);
     }
-  } else {
+    break;
+  case DirSyncState::Idle:
     obj["state"] = json_spirit::mValue("idle");
+    break;
   }
 }
 
@@ -2468,7 +2474,7 @@ int PeerReplayer::SnapDiffSync::init_sync() {
   int r = ceph_fstatx(m_local, m_fh->c_fd, &tstx,
                       CEPH_STATX_MODE | CEPH_STATX_UID | CEPH_STATX_GID |
                       CEPH_STATX_SIZE | CEPH_STATX_ATIME | CEPH_STATX_MTIME,
-                      AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW);
+                      AT_SYMLINK_NOFOLLOW);
   if (r < 0) {
     derr << ": failed to stat snap=" << m_current.first << ": " << cpp_strerror(r)
          << dendl;
@@ -2635,7 +2641,7 @@ int PeerReplayer::SnapDiffSync::get_entry(std::string *epath, struct ceph_statx 
         r = ceph_statxat(m_local, m_fh->c_fd, _epath.c_str(), &estx,
                          CEPH_STATX_MODE | CEPH_STATX_UID | CEPH_STATX_GID |
                          CEPH_STATX_SIZE | CEPH_STATX_ATIME | CEPH_STATX_MTIME,
-                         AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW);
+                         AT_SYMLINK_NOFOLLOW);
         if (r < 0) {
           derr << ": failed to stat epath=" << epath << ", r=" << r << dendl;
           return r;
@@ -2811,7 +2817,7 @@ int PeerReplayer::RemoteSync::init_sync() {
   int r = ceph_fstatx(m_local, m_fh->c_fd, &tstx,
                       CEPH_STATX_MODE | CEPH_STATX_UID | CEPH_STATX_GID |
                       CEPH_STATX_SIZE | CEPH_STATX_ATIME | CEPH_STATX_MTIME,
-                      AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW);
+                      AT_SYMLINK_NOFOLLOW);
   if (r < 0) {
     derr << ": failed to stat snap=" << m_current.first << ": " << cpp_strerror(r)
          << dendl;
@@ -2878,7 +2884,7 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
         r = ceph_statxat(m_local, m_fh->c_fd, _epath.c_str(), &cstx,
                          CEPH_STATX_MODE | CEPH_STATX_UID | CEPH_STATX_GID |
                          CEPH_STATX_SIZE | CEPH_STATX_ATIME | CEPH_STATX_MTIME,
-                         AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW);
+                         AT_SYMLINK_NOFOLLOW);
         if (r < 0) {
           derr << ": failed to stat epath=" << _epath << ": " << cpp_strerror(r)
                << dendl;
@@ -3736,14 +3742,17 @@ double PeerReplayer::compute_eta(const PeerReplayer::SnapSyncStat& sync_stat) {
 }
 
 void PeerReplayer::dump_sync_stat(Formatter *f, const SnapSyncStat &sync_stat) {
-  if (sync_stat.failed) {
+  switch (get_dir_sync_state(sync_stat)) {
+  case DirSyncState::Failed:
     f->dump_string("state", "failed");
     if (sync_stat.last_failed_reason) {
       f->dump_string("failure_reason", *sync_stat.last_failed_reason);
     }
-  } else if (!sync_stat.current_syncing_snap) {
+    break;
+  case DirSyncState::Idle:
     f->dump_string("state", "idle");
-  } else {
+    break;
+  case DirSyncState::Syncing:
     f->dump_string("state", "syncing");
     f->open_object_section("current_syncing_snap");
     f->dump_unsigned("id", (*sync_stat.current_syncing_snap).first);
@@ -3815,6 +3824,7 @@ void PeerReplayer::dump_sync_stat(Formatter *f, const SnapSyncStat &sync_stat) {
     else
       f->dump_string("eta", format_time(compute_eta(sync_stat)));
     f->close_section(); //current_syncing_snap
+    break;
   }
   if (sync_stat.last_synced_snap) {
     f->open_object_section("last_synced_snap");

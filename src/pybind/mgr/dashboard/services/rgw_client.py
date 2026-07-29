@@ -371,6 +371,20 @@ class RgwClient(RestClient):
         return RgwClient.instance(daemon_name=daemon_name)
 
     @staticmethod
+    def get_cached_user_instance(daemon_name: str, userid: str) -> Optional['RgwClient']:
+        """
+        Get a cached user instance if it exists.
+
+        :param daemon_name: The daemon name
+        :param userid: The user ID
+        :return: The cached RgwClient instance or None if not found
+        """
+        if daemon_name in RgwClient._user_instances and \
+           userid in RgwClient._user_instances[daemon_name]:
+            return RgwClient._user_instances[daemon_name][userid]
+        return None
+
+    @staticmethod
     def drop_instance(instance: Optional['RgwClient'] = None):
         """
         Drop a cached instance or all.

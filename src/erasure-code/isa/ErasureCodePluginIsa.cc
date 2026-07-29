@@ -81,7 +81,13 @@ int __erasure_code_init(char *plugin_name, char *directory)
   auto plugin = std::make_unique<ErasureCodePluginIsa>();
   int r = instance.add(plugin_name, plugin.get());
   if (r == 0) {
-    plugin.release();  
+    plugin.release();
   }
   return r;
 }
+
+#ifdef WITH_CRIMSON
+[[maybe_unused]] static int _isa_builtin =
+  ceph::ErasureCodePluginRegistry::register_builtin(
+    "isa", []{ return new ErasureCodePluginIsa(); });
+#endif

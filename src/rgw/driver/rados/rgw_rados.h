@@ -1273,6 +1273,7 @@ public:
                rgw::sal::DataProcessorFactory *dp_factory,
                const DoutPrefixProvider *dpp,
                optional_yield y,
+               uint64_t src_accounted_size = 0,
                bool log_op = true);
 
   int transition_obj(RGWObjectCtx& obj_ctx,
@@ -1629,8 +1630,8 @@ public:
                      librados::ObjectWriteOperation *op);
   int gc_operate(const DoutPrefixProvider *dpp, std::string& oid, librados::ObjectReadOperation&& op, bufferlist *pbl, optional_yield y);
 
-  int list_gc_objs(int *index, std::string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated, bool& processing_queue);
-  int process_gc(bool expired_only, optional_yield y);
+  int list_gc_objs(int& index, std::string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool& truncated, bool& processing_queue, std::optional<int> shard_id = std::nullopt);
+  int process_gc(bool expired_only, optional_yield y, std::optional<int> shard_id = std::nullopt);
   bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y);
 
   int process_lc(const std::unique_ptr<rgw::sal::Bucket>& optional_bucket);

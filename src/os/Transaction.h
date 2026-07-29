@@ -393,6 +393,8 @@ public:
   }
   uint32_t get_fadvise_flags() { return data.fadvise_flags; }
 
+  uint64_t get_data_features() const { return data_features; }
+
   void swap(Transaction& other) noexcept {
     std::swap(data, other.data);
     std::swap(on_applied, other.on_applied);

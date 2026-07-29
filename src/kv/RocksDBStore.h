@@ -82,6 +82,7 @@ inline rocksdb::Slice make_slice(const std::optional<std::string>& bound) {
 /**
  * Uses RocksDB to implement the KeyValueDB interface
  */
+struct RocksWBHandler;
 class RocksDBStore : public KeyValueDB {
   CephContext *cct;
   PerfCounters *logger;
@@ -100,6 +101,7 @@ class RocksDBStore : public KeyValueDB {
   friend class ShardMergeIteratorImpl;
   friend class CFIteratorImpl;
   friend class WholeMergeIteratorImpl;
+  friend struct RocksWBHandler;
   /*
    *  See RocksDB's definition of a column family(CF) and how to use it.
    *  The interfaces of KeyValueDB is extended, when a column family is created.
@@ -315,7 +317,6 @@ public:
   int64_t estimate_range_size(const std::string& prefix,
                               const std::string& key_from,
                               const std::string& key_to) override;
-  struct RocksWBHandler;
   class RocksDBTransactionImpl : public KeyValueDB::TransactionImpl {
   public:
     rocksdb::WriteBatch bat;
@@ -328,6 +329,7 @@ public:
       rocksdb::ColumnFamilyHandle *cf,
       const std::string &k,
       const ceph::bufferlist &to_set_bl);
+
   public:
     size_t get_count() const override {
       return bat.Count();
@@ -335,6 +337,7 @@ public:
     size_t get_size_bytes() const override {
       return bat.GetDataSize();
     }
+    std::string get_summary_string(bool verbose) const override;
     void set(
       const std::string &prefix,
       const std::string &k,
@@ -596,6 +599,70 @@ public:
     float accepted_variance,          // +/- fluctuation of produced chunk size,
                                       // there is a limit to prediction quality, recommended 0.05.
     std::vector<keyrange_t>& chunks) override;
+};
+
+class RocksWBHandler : public rocksdb::WriteBatch::Handler
+{
+  const RocksDBStore& db;
+  std::stringstream seen;
+  size_t num_seen = 0;
+  size_t num_skipped = 0;
+  bool verbose = true;
+  size_t max = 0;
+  std::unordered_map<std::string, size_t> seen_counts;
+
+  void _finalize_seen(bool sorted);
+  void _dump(const char* op_name, const char* op_short,
+	     uint32_t column_family_id,
+	     const rocksdb::Slice& key_in,
+	     const rocksdb::Slice* value = nullptr);
+public:
+  RocksWBHandler(const RocksDBStore& db, bool verbose, size_t _max = 0)
+   : db(db), verbose(verbose), max(_max) {
+     if (max == 0) {
+       max = verbose ? 128 : 64;
+     }
+   }
+
+  std::string get_seen(bool sorted = false) {
+    _finalize_seen(sorted);
+    return seen.str();
+  }
+  void Put(const rocksdb::Slice& key,
+	   const rocksdb::Slice& value) override {
+    _dump("Put", "P", 0, key, &value);
+  }
+  rocksdb::Status PutCF(uint32_t column_family_id, const rocksdb::Slice& key,
+			const rocksdb::Slice& value) override {
+    _dump("PutCF", "PF", column_family_id, key, &value);
+    return rocksdb::Status::OK();
+  }
+  void SingleDelete(const rocksdb::Slice& key) override {
+    _dump("SingleDelete", "d", 0, key);
+  }
+  rocksdb::Status SingleDeleteCF(uint32_t column_family_id, const rocksdb::Slice& key) override {
+    _dump("SingleDeleteCF", "df", column_family_id, key);
+    return rocksdb::Status::OK();
+  }
+  void Delete(const rocksdb::Slice& key) override {
+    _dump("Delete", "D", 0, key);
+  }
+  rocksdb::Status DeleteCF(uint32_t column_family_id, const rocksdb::Slice& key) override {
+    _dump("DeleteCF", "DF", column_family_id, key);
+    return rocksdb::Status::OK();
+  }
+  void Merge(const rocksdb::Slice& key,
+	     const rocksdb::Slice& value) override {
+    _dump("Merge", "M", 0, key, &value);
+  }
+  rocksdb::Status MergeCF(uint32_t column_family_id, const rocksdb::Slice& key,
+			  const rocksdb::Slice& value) override {
+    _dump("MergeCF", "MF", column_family_id, key, &value);
+    return rocksdb::Status::OK();
+  }
+  bool Continue() override {
+    return true;
+  }
 };
 
 #endif

@@ -1,7 +1,8 @@
 @let data = data$ | async;
 @let hwEnabled = enabled$ | async;
-@let hwSections = sections$ | async;
+@let hwData = hardwareData$ | async;
 @let telemetryEnabled = telemetryEnabled$ | async;
+@let pgAlertCount = pgAlertCount$ | async;
 
 @let colorClass = 'overview-health-card-status--' + vm?.clusterHealth?.icon;
 
@@ -156,7 +157,7 @@
           class="cds-ml-3"
           [caret]="true"
           description="Health incidents represent Ceph health check warnings that indicate abnormal conditions requiring intervention and persist until the condition is resolved."
-          i8n-description
+          i18n-description
         >
           <cd-icon type="help"></cd-icon>&nbsp;|
         </cds-tooltip>
@@ -193,12 +194,12 @@
       <cds-skeleton-text [lines]="1"></cds-skeleton-text>
     }
     <!-- HARDWARE TAB -->
-    @if (hwEnabled && hwSections) {
+    @if (hwEnabled && hwData?.sections) {
       <div
         class="overview-health-card-tab"
         [class.overview-health-card-tab-selected]="activeSection === 'hardware'"
       >
-        <div class="cds-mb-1"><cd-icon [type]="vm?.overallSystemSev"></cd-icon></div>
+        <div class="cds-mb-1"><cd-icon [type]="hwData.overallSeverity"></cd-icon></div>
         <cds-tooltip-definition
           [highContrast]="true"
           [openOnHover]="true"
@@ -294,16 +295,25 @@
     <!-- HARDWARE TAB CONTENT -->
     <ng-container *ngSwitchCase="'hardware'">
       <div class="overview-health-card-tab-content">
-        <p
-          class="overview-health-card-secondary-text cds--type-body-compact-01"
-          i18n
-        >
-          Some cluster components are degraded and may require attention.
-        </p>
+        @if (hwData?.overallSeverity && hwData.overallSeverity !== 'success') {
+          <p
+            class="overview-health-card-secondary-text cds--type-body-compact-01"
+            i18n
+          >
+            Some hardware components are degraded and may require attention.
+          </p>
+        } @else {
+          <p
+            class="overview-health-card-secondary-text cds--type-body-compact-01"
+            i18n
+          >
+            All hardware components are operating normally.
+          </p>
+        }
 
-        @if (hwEnabled && hwSections) {
+        @if (hwEnabled && hwData?.sections) {
           <div class="overview-health-card-hardware-sections">
-            @for (section of sections; track $index; let isLast = $last) {
+            @for (section of hwData.sections; track $index; let isLast = $last) {
               <div
                 class="overview-health-card-hardware-section"
                 [class.border-subtle-right]="!isLast"
@@ -311,23 +321,19 @@
                 @for (row of section; track row.key) {
                   <div class="overview-health-card-hardware-row">
                     <span class="overview-health-card-icon-and-text">
-                      <cd-icon [type]="row.key"></cd-icon>
+                      <cd-icon [type]="row.icon"></cd-icon>
                       <span class="cds--type-body-compact-01">
                         {{ row.label }}
                       </span>
                     </span>
 
                     <span class="overview-health-card-hardware-status">
-                      @if (row.error > 0) {
-                        <cd-icon type="warningAlt"></cd-icon>
+                      @for (status of row.statusCounts; track status.icon) {
+                        <cd-icon [type]="status.icon"></cd-icon>
                         <span class="cds--type-body-compact-01">
-                          {{ row.error }}
+                          {{ status.count }}
                         </span>
                       }
-                      <cd-icon type="checkMarkOutline"></cd-icon>
-                      <span class="cds--type-body-compact-01">
-                        {{ row.ok }}
-                      </span>
                     </span>
                   </div>
                 }
@@ -352,19 +358,34 @@
           <p class="overview-health-card-secondary-text cds--type-label-01">
             {{ vm?.resiliencyHealth?.description }}
           </p>
-          <button
-            cdsButton="tertiary"
-            size="sm"
-            type="button"
-            (click)="onViewPGStatesClick()"
+          <div
+            cdsStack="horizontal"
+            [gap]="4"
+            class="cds-mt-4"
           >
-            <span
-              i18n
-              class="cds-ml-3"
-              >See all PGs states</span
+            @if (pgAlertCount > 0) {
+              <a
+                cdsButton="primary"
+                size="sm"
+                class="overview-health-card-resiliency-btn"
+                [routerLink]="['/monitoring/active-alerts']"
+                [queryParams]="{ search: 'CephPG' }"
+              >
+                <span i18n>View alerts ({{ pgAlertCount }})</span>
+                <cd-icon type="arrowRight"></cd-icon>
+              </a>
+            }
+            <button
+              cdsButton="tertiary"
+              size="sm"
+              class="overview-health-card-resiliency-btn"
+              type="button"
+              (click)="onViewPGStatesClick()"
             >
-            <cd-icon type="arrowUpRight"></cd-icon>
-          </button>
+              <span i18n>See all PGs states</span>
+              <cd-icon type="arrowUpRight"></cd-icon>
+            </button>
+          </div>
         </div>
         @if (vm?.pgs?.activeCleanChartData && vm?.pgs?.activeCleanChartOptions) {
           <div class="overview-health-card-tab-content-item-row">
@@ -376,7 +397,7 @@
             <div class="overview-health-card-resiliency-chart-text">
               <p
                 i18n
-                class="cds--type-helper-text-01 overview-health-card-secondary-text"
+                class="cds--type-helper-text-01 overview-health-card-secondary-text cds-mt-2 cds-mb-3"
               >
                 <em>Data resiliency</em> reflects data availability and replication (% of placement
                 groups that are active and clean).
@@ -398,10 +419,7 @@
                   let isLast = $last
                 ) {
                   @if (item.count) {
-                    <p
-                      [class.cds-mb-0]="isLast"
-                      class="cds-mb-2"
-                    >
+                    <p class="cds-mb-0">
                       <span class="cds--type-label-01 cds-mr-1">{{ item?.state }}:</span>
                       <span class="cds--type-label-01 overview-health-card-bold"
                         >{{ item.count }} %</span

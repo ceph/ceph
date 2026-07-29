@@ -49,6 +49,7 @@ with_libvirt "kcli delete plan -y ceph || true"
 # Build dashboard frontend (required to start the module).
 cd ${CEPH_DEV_FOLDER}/src/pybind/mgr/dashboard/frontend
 export NG_CLI_ANALYTICS=false
+export IBM_TELEMETRY_DISABLED=true
 if [[ -n "$JENKINS_HOME" ]]; then
     npm cache clean --force
 fi
