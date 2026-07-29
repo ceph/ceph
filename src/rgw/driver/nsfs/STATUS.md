@@ -1,11 +1,14 @@
-# NSFS Driver — Status (2026-06-08)
+# NSFS Driver — Status (2026-07-29)
 
-Branch: `wip-posix-nsfs`
+Branch: `rgw-standalone-mark-perf`
 
 ## s3tests-rs Scorecard
 
-Tested against a local-XFS vstart cluster with `--features fails_on_nsfs`.
-722 tests total, 583 passed, 139 failed, 54 skipped.
+Current baseline: `-P baseline --features fails_on_nsfs` → **634/0**.
+
+Previous (2026-06-08, `wip-posix-nsfs`): 583 passed, 139 failed.
+Improvement driven by lifecycle, notifications, sync policy, and
+various bug fixes since the original scaffolding.
 
 | Module | Score | Notes |
 |--------|-------|-------|
@@ -65,25 +68,21 @@ round-tripped. SSE-C (customer-provided keys) fails on multipart
 upload — 4 tests fail. No actual crypto is performed; the test KMS
 backend handles SSE-S3/SSE-KMS transparently at the op layer.
 
+### Implemented since initial status
+
+**Lifecycle:** `NSFSLifecycle` class, `RGWLC` timer/worker
+instantiated at driver init.  Multipart lifecycle expiration
+support added.
+
+**S3 Notifications:** `NSFSNotification` implements full
+`publish_reserve`/`publish_commit` with topic filtering and
+event matching.
+
 ### Not implemented
 
-**Lifecycle (8/82):** `get_lifecycle()` and `get_rgwlc()` return
-nullptr. The lifecycle subsystem requires a timer/worker framework
-that doesn't exist in the nsfs driver. The 8 passing tests are
-configuration-only (GET/PUT lifecycle config via bucket attrs).
-The 2 versioning failures (`test_delete_marker_expiration`) and
-2 bucket_policy failures (`test_lifecyclev2_expiration`) are also
-lifecycle-dependent.
-
-**Bucket logging (13/201):** All logging-specific bucket methods
-are inherited stubs. Bucket logging requires infrastructure for log
-object assembly and flush that is rados-specific in the current RGW
-design. The 13 passing tests are likely configuration-only.
-
-**SNS / notifications (0/8):** `NSFSNotification` is a stub
-(publish returns 0). Topic management methods return -ENOTSUP.
-Notifications require a message bus integration that doesn't exist
-for nsfs.
+**Bucket logging:** All logging-specific bucket methods are inherited
+stubs. Bucket logging requires infrastructure for log object assembly
+and flush that is rados-specific in the current RGW design.
 
 ### SAL interface stubs
 
