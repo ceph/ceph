@@ -3,4 +3,4 @@ tasks:
     client.0:
       boto3_extensions: True
       rgw_server: client.0
-      extra_attrs: ["bucket_logging"]
+      extra_attrs: ["bucket_logging", "not bucket_logging_benchmark"]
