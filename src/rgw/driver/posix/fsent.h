@@ -16,6 +16,7 @@
 #pragma once
 #include "rgw_sal.h"
 #include "bucket_cache.h"
+#include "multipart_cache.h"
 #include "common/errno.h"
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -69,6 +70,7 @@ static inline std::string gen_rand_instance_name()
 namespace posix {
 
 using BucketCache = file::listing::BucketCache<POSIXDriver, POSIXBucket>;
+using MultipartCache = file::listing::MultipartCache<>;
 
 static inline bool get_attr(Attrs& attrs, const char* name, bufferlist& bl)
 {
