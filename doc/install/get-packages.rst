@@ -123,7 +123,7 @@ For RPMs::
 The major releases of Ceph are summarized at: :ref:`Releases <ceph-releases-index>`
 
 .. tip:: For non-US users: There might be a mirror close to you where
-         to download Ceph from. For more information see: `Ceph Mirrors`_.
+         to download Ceph from. For more information see: :ref:`install-mirrors`.
 
 Debian Packages
 ~~~~~~~~~~~~~~~
@@ -168,7 +168,7 @@ of Debian and Ubuntu releases supported.
    echo deb https://download.ceph.com/debian-testing/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 .. tip:: For non-US users: There might be a mirror close to you where
-         to download Ceph from. For more information see: `Ceph Mirrors`_.
+         to download Ceph from. For more information see: :ref:`install-mirrors`.
 
 
 RPM Packages
@@ -234,7 +234,7 @@ You can download the RPMs directly from
    https://download.ceph.com/rpm-testing
 
 .. tip:: For non-US users: There might be a mirror close to you where
-         to download Ceph from. For more information see: `Ceph Mirrors`_.
+         to download Ceph from. For more information see: :ref:`install-mirrors`.
 
 openSUSE Leap 15.1
 ^^^^^^^^^^^^^^^^^^
@@ -389,4 +389,3 @@ line to get the short codename.
 
 .. _the testing Debian repository: https://download.ceph.com/debian-testing/dists
 .. _the shaman page: https://shaman.ceph.com
-.. _Ceph Mirrors: ../mirrors
