@@ -1097,8 +1097,16 @@ bool Cache::are_keys_disjoint(
     const std::set<laddr_t> &a,
     const std::set<laddr_t> &b)
 {
-  for (auto &key : b) {
-    if (a.count(key)) {
+  // both sets are sorted, so walk them together instead of searching one
+  // set on every element of the other.
+  auto ai = a.begin();
+  auto bi = b.begin();
+  while (ai != a.end() && bi != b.end()) {
+    if (*ai < *bi) {
+      ++ai;
+    } else if (*bi < *ai) {
+      ++bi;
+    } else {
       return false;
     }
   }

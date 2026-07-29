@@ -1805,7 +1805,11 @@ private:
     // same measurement as the two counters above, but for the retire path:
     // a leaf retired due to this transaction's own edit to it (e.g. a
     // split), checked against another transaction's own edit on the same
-    // original leaf.
+    // original leaf. "mergeable" here only means the two edits touched
+    // disjoint keys -- it does not mean the merge is trivial. after a
+    // split, the other transaction's edit would still need to be
+    // redirected to whichever new child node now owns its key range,
+    // which this measurement does not attempt.
     counter_by_extent_t<uint64_t> num_lba_retire_conflicts_mergeable;
     counter_by_extent_t<uint64_t> num_lba_retire_conflicts_overlapping;
     uint64_t total_trans_invalidated = 0;
