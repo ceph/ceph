@@ -12,7 +12,8 @@ names and implementation details remain subject to review.
 Related discussion: `PR #70008
 <https://github.com/ceph/ceph/pull/70008>`_ and `Tracker #78006
 <http://tracker.ceph.com/issues/78006>`_. User-facing rate-limit behavior
-today is described in :ref:`radosgw-rate-limit-management`.
+today is described in :ref:`radosgw-rate-limit-management`. Zone-feature
+migration follows :ref:`radosgw-zone-features`.
 
 -------
 Problem
@@ -52,8 +53,10 @@ Goals:
   gateways;
 * retain the current ``RGWRateLimitInfo`` data model, admin commands,
   request classification, and HTTP error behavior;
-* tolerate gateway joins, leaves, and individual restarts; and
-* remain optional, with the existing local behavior as the default.
+* tolerate gateway joins, leaves, and individual restarts;
+* remain optional, with the existing local behavior as the default; and
+* enable the distributed mode only through an explicit zone feature after
+  all gateways in the zone support it.
 
 Non-goals:
 
@@ -62,7 +65,8 @@ Non-goals:
   failures;
 * cross-zone or cross-zonegroup rate limits;
 * durable runtime state across a simultaneous restart of all gateways;
-* an external Redis or Valkey dependency; and
+* an external Redis or Valkey dependency;
+* dynamic resharding of demand objects in the first implementation; and
 * a solution for request concurrency, OSD backpressure, or RGW memory
   pressure.
 
@@ -112,8 +116,8 @@ Coordination objects
 The coordinator uses:
 
 * one membership object for gateway heartbeats; and
-* a configurable number of demand objects selected by a stable hash of
-  the rate-limit key.
+* a fixed number of demand objects selected by a stable hash of the
+  rate-limit key.
 
 Every participating gateway watches the membership object and all demand
 objects. Sharding limits payload size and allows report processing to
@@ -125,6 +129,15 @@ a different lifetime and failure policy, and
 with a cache invalidation. That behavior is not meaningful for demand
 reports.
 
+Demand-object shard count is not chosen by trial alone. It is a function
+of the maximum useful notify/omap payload size and the number of active
+user and bucket keys that must be reported. The first implementation
+does not reshard these objects at runtime. The deployment publishes a
+hard cap on the number of concurrently tracked keys in distributed mode.
+When that cap is exceeded, additional keys (or the whole gateway, if the
+cap cannot be applied per key) fall back to local enforcement for those
+keys until operators raise capacity or reduce the tracked set.
+
 Membership
 ~~~~~~~~~~
 
@@ -133,6 +146,17 @@ gateway creates a random instance identifier at startup and periodically
 publishes a heartbeat. Peers maintain a soft-state membership table and
 expire an instance after a configurable number of missed report
 intervals.
+
+Membership leave is soft-state, not a leader-owned delete:
+
+* heartbeats are published to the membership object and delivered through
+  watch-notify;
+* each peer expires a missing instance in its in-memory table after the
+  missed-interval threshold;
+* no single RGW is responsible for removing another instance from the
+  membership object; and
+* optional explicit leave notifies may be added for faster convergence,
+  but expiry remains the source of truth.
 
 As a result:
 
@@ -146,8 +170,8 @@ As a result:
 
 Membership is local to a zone. Mixed operation, where some gateways use
 the distributed mode and others enforce the full local limit, is not
-supported. Operators must upgrade all gateways in the zone before
-enabling this mode.
+supported. Operators enable the mode only through the zone-feature
+procedure described below.
 
 Demand reports
 ~~~~~~~~~~~~~~
@@ -159,11 +183,19 @@ after a bucket rejection is reflected in the net value. Bandwidth demand
 is based on bytes observed by the existing read and write accounting
 hooks.
 
+Hot-path recording must not introduce a write mutex around admission.
+Request threads update demand through atomic counters or a lock-free
+handoff into the coordinator. Applying a new local allocation ``L_i``
+similarly avoids a global lock on the request path (for example atomic
+replacement of per-entry refill and burst parameters).
+
 Only keys with an enabled limit and recent activity are reported.
 Reports are batched by demand-object shard and bounded by entry count
-and encoded size. If a queue or payload limit is reached, the
-coordinator drops demand detail and retains the base allocation
-described below.
+and encoded size. Batching uses an in-process coordinator queue or
+buffer in each RGW; it is not a CLS queue and is not on the HTTP
+admission path. If that in-memory queue or the notify payload limit is
+reached, the coordinator drops demand detail and retains the base
+allocation described below.
 
 Messages use Ceph's versioned ``encode()`` and ``decode()`` conventions
 and include a sender instance identifier, sequence number, reporting
@@ -233,12 +265,42 @@ deployments must choose between availability and tighter enforcement:
 
 ``hold``
   Keep the last known allocation and do not redistribute expired
-  shares. This avoids expanding the effective limit, but can
-  underutilize capacity after a gateway failure.
+  shares. This reduces expansion when a peer disappears, but does not
+  provide a hard global bound. In particular, when a new gateway joins
+  before membership and allocations reconverge, the sum of local shares
+  can temporarily exceed ``B``. ``hold`` also underutilizes capacity
+  after a gateway failure until operators or later intervals correct
+  the membership view.
 
 Startup before the first membership view follows the same policy. The
 selected policy, current mode, peer count, age of the last successful
 report, and notification errors must be visible in logs and metrics.
+
+--------------------------
+Rollout and Zone Feature
+--------------------------
+
+Distributed rate limiting is opt-in. Until the feature is enabled, every
+gateway continues to use the existing local limiter and the existing
+``RGWRateLimitInfo`` configuration without change.
+
+The implementation adds a zone feature (see
+:ref:`radosgw-zone-features`). The intended rollout is:
+
+#. Upgrade all RGWs (and required OSDs, if any new object-class
+   dependency is introduced later) in the zone, then mark the feature
+   supported on the zone.
+#. Keep ``rgw_ratelimit_backend`` at ``local`` so behavior remains
+   unchanged.
+#. When every zone that participates in the zonegroup supports the
+   feature, enable it on the zonegroup and commit a period update.
+#. Only then select the distributed backend on the gateways that should
+   participate, and restart those gateways as required.
+
+Until that enablement completes, local rate limits already configured by
+operators keep working exactly as today. Mixed fleets, where some
+gateways run distributed mode and others still apply the full local
+budget, are not supported.
 
 -------------
 Configuration
@@ -248,11 +310,15 @@ The exact option names are provisional. The implementation is expected
 to need options equivalent to:
 
 * ``rgw_ratelimit_backend`` (default ``local``): select ``local`` or the
-  proposed ``distributed`` mode;
+  proposed ``distributed`` mode. The first shipping step exposes only
+  ``local`` until the zone feature and distributed path are ready;
 * ``rgw_ratelimit_gossip_interval``: heartbeat and demand-report
-  interval, chosen from testing;
-* ``rgw_ratelimit_gossip_num_shards``: number of dedicated demand
-  objects, chosen from testing; and
+  interval;
+* ``rgw_ratelimit_gossip_num_shards``: fixed number of dedicated demand
+  objects, sized from payload limits and the tracked-key cap rather than
+  from ad-hoc testing alone;
+* ``rgw_ratelimit_gossip_max_tracked_keys``: hard cap that triggers
+  per-key or gateway fallback to local enforcement; and
 * ``rgw_ratelimit_gossip_failure_mode`` (default ``local``): select
   ``local`` or ``hold`` after coordination expires.
 
@@ -267,7 +333,9 @@ Multisite
 Configuration can continue to replicate through existing RGW metadata
 and period mechanisms. Runtime membership, demand, and allocation do not
 cross zone boundaries. Each zone therefore enforces an independent
-approximation of the configured limit.
+approximation of the configured limit. Zone-feature support and
+enablement follow the same per-zone and zonegroup rules as other RGW
+features.
 
 -----------------------
 Alternatives Considered
@@ -277,8 +345,11 @@ Alternatives Considered
   a distributed write before each admission decision and move
   RGW-specific policy into the OSD. Not proposed for the request path.
 * **Generic CLS counters:** keep token-bucket policy in RGW, but still
-  require a RADOS operation when used for each request. Possible later
-  for persistence experiments; not required by this design.
+  require a RADOS operation when used for each request. Not proposed for
+  admission. A later experiment may record counters asynchronously after
+  the client response is sent, which would raise cluster IOPS without
+  adding that latency to the request. That path is for persistence
+  research only and does not replace watch-notify coordination.
 * **External Redis or Valkey:** shared counters and persistence, but
   normally add a network operation to each request and introduce another
   operational dependency.
@@ -297,14 +368,19 @@ Implementation should include:
 * protocol tests for versioning, malformed payloads, duplicate and
   out-of-order messages, payload bounds, peer expiry, and restart with a
   new instance identifier;
+* concurrency tests that show request-path demand accounting and
+  allocation updates do not take a write mutex on the admission path;
 * multi-RGW tests that compare aggregate accepted traffic with the
   configured budget, verify redistribution from idle gateways, exercise
   join/leave/restart/partition, inject notify timeouts for both failure
-  modes, and verify that local mode is unchanged and that request
-  threads issue no RADOS coordination operations; and
+  modes, verify overshoot during join under ``hold``, verify that local
+  mode is unchanged, and verify that request threads issue no RADOS
+  coordination operations;
+* capacity tests that relate shard count and the tracked-key hard cap to
+  payload size and fallback-to-local behavior; and
 * scale tests that report request latency and throughput relative to the
   local limiter, RADOS notification rate and bytes, convergence time,
   overshoot, underutilization, and coordinator CPU and memory.
 
-The reporting interval and default shard count will be chosen from those
-results.
+Default gossip interval values will still be refined from those results
+after the capacity model for shards and tracked keys is fixed.
