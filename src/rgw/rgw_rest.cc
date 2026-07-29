@@ -5,7 +5,12 @@
 #include <errno.h>
 #include <limits.h>
 
+#include <algorithm>
+#include <ranges>
+#include <string_view>
+
 #include <boost/algorithm/string.hpp>
+#include <boost/container/flat_map.hpp>
 #include <boost/tokenizer.hpp>
 #include "ceph_ver.h"
 #include "common/HTMLFormatter.h"
@@ -129,16 +134,51 @@ static const struct generic_attr generic_attrs[] = {
   { "HTTP_X_ROBOTS_TAG",        RGW_ATTR_X_ROBOTS_TAG },
 };
 
+namespace {
+
+struct api_priority final {
+  int s3 = -1;
+  int s3website = -1;
+};
+
+api_priority make_api_priority(std::string_view enabled_apis)
+{
+  auto apis = ceph::split(enabled_apis);
+
+  api_priority out;
+
+  auto priority = static_cast<int>(std::ranges::distance(apis));
+
+  for (const auto api : apis) {
+    if ("s3" == api) {
+      out.s3 = priority;
+    }
+
+    if ("s3website" == api) {
+      out.s3website = priority;
+    }
+
+    --priority;
+  }
+
+  return out;
+}
+
+} // namespace
+
 map<string, string> rgw_to_http_attrs;
-static map<string, string> generic_attrs_map;
+static boost::container::flat_map<string, string> generic_attrs_map;
 map<int, const char *> http_status_names;
 
 /* avoid duplicate hostnames in hostnames lists */
 static set<string> hostnames_set;
 static set<string> hostnames_s3website_set;
+static api_priority rgw_api_priority;
 
 void rgw_rest_init(CephContext *cct, const rgw::sal::ZoneGroup& zone_group)
 {
+  rgw_api_priority = make_api_priority(cct->_conf->rgw_enable_apis);
+
   for (const auto& rgw2http : base_rgw_to_http_attrs)  {
     rgw_to_http_attrs[rgw2http.rgw_attr] = rgw2http.http_attr;
   }
@@ -198,21 +238,6 @@ void rgw_rest_init(CephContext *cct, const rgw::sal::ZoneGroup& zone_group)
    */
 }
 
-static bool str_ends_with_nocase(const string& s, const string& suffix, size_t *pos)
-{
-  size_t len = suffix.size();
-  if (len > (size_t)s.size()) {
-    return false;
-  }
-
-  ssize_t p = s.size() - len;
-  if (pos) {
-    *pos = p;
-  }
-
-  return boost::algorithm::iends_with(s, suffix);
-}
-
 static bool rgw_find_host_in_domains(const string& host, string *domain, string *subdomain,
                                      const set<string>& valid_hostnames_set)
 {
@@ -222,9 +247,10 @@ static bool rgw_find_host_in_domains(const string& host, string *domain, string 
    * which is much faster than a suffix match.
    */
   for (iter = valid_hostnames_set.begin(); iter != valid_hostnames_set.end(); ++iter) {
-    size_t pos;
-    if (!str_ends_with_nocase(host, *iter, &pos))
+    if (!boost::algorithm::iends_with(host, *iter))
       continue;
+
+    const auto pos = host.size() - iter->size();
 
     if (pos == 0) {
       *domain = host;
@@ -1831,26 +1857,34 @@ int RGWHandler_REST::validate_object_name(const string& object)
   return 0;
 }
 
-static http_op op_from_method(const char *method)
+static http_op op_from_method(const char* const method)
 {
-  if (!method)
+  if (!method) {
     return OP_UNKNOWN;
-  if (strcmp(method, "GET") == 0)
-    return OP_GET;
-  if (strcmp(method, "PUT") == 0)
-    return OP_PUT;
-  if (strcmp(method, "DELETE") == 0)
-    return OP_DELETE;
-  if (strcmp(method, "HEAD") == 0)
-    return OP_HEAD;
-  if (strcmp(method, "POST") == 0)
-    return OP_POST;
-  if (strcmp(method, "COPY") == 0)
-    return OP_COPY;
-  if (strcmp(method, "OPTIONS") == 0)
-    return OP_OPTIONS;
+  }
 
-  return OP_UNKNOWN;
+  using namespace std::string_view_literals;
+
+  static constexpr std::array http_methods = {
+    std::pair { "GET"sv, OP_GET },
+    std::pair { "PUT"sv, OP_PUT },
+    std::pair { "DELETE"sv, OP_DELETE },
+    std::pair { "HEAD"sv, OP_HEAD },
+    std::pair { "POST"sv, OP_POST },
+    std::pair { "COPY"sv, OP_COPY },
+    std::pair { "OPTIONS"sv, OP_OPTIONS },
+  };
+
+  const auto iter = std::ranges::find(
+    http_methods,
+    std::string_view { method },
+    &decltype(http_methods)::value_type::first);
+
+  if (http_methods.end() == iter) {
+    return OP_UNKNOWN;
+  }
+
+  return iter->second;
 }
 
 int RGWHandler_REST::init_permissions(RGWOp* op, optional_yield y)
@@ -1958,20 +1992,20 @@ void RGWRESTMgr::register_default_mgr(RGWRESTMgr *mgr)
 }
 
 RGWRESTMgr* RGWRESTMgr::get_resource_mgr(req_state* const s,
-                                         const std::string& uri,
+                                         const std::string_view uri,
                                          std::string* const out_uri)
 {
   *out_uri = uri;
 
-  multimap<size_t, string>::reverse_iterator iter;
-
-  for (iter = resources_by_size.rbegin(); iter != resources_by_size.rend(); ++iter) {
-    string& resource = iter->second;
-    if (uri.compare(0, iter->first, resource) == 0 &&
-	(uri.size() == iter->first ||
-	 uri[iter->first] == '/')) {
-      std::string suffix = uri.substr(iter->first);
-      return resource_mgrs[resource]->get_resource_mgr(s, suffix, out_uri);
+  for (auto iter = resources_by_size.rbegin();
+       iter != resources_by_size.rend();
+       ++iter) {
+    const std::string_view resource = iter->second;
+    if (uri.starts_with(resource) &&
+        (uri.size() == iter->first || '/' == uri[iter->first])) {
+      const auto suffix = uri.substr(iter->first);
+      return resource_mgrs.find(iter->second)->second->get_resource_mgr(
+        s, suffix, out_uri);
     }
   }
 
@@ -2002,29 +2036,19 @@ RGWRESTMgr::~RGWRESTMgr()
 
 int rgw_rest_transform_s3_vhost_style(req_state* s)
 {
-  // We need to know if this RGW instance is running the s3website API with a
-  // higher priority than regular S3 API, or possibly in place of the regular
-  // S3 API.
-  // Map the listing of rgw_enable_apis in REVERSE order, so that items near
-  // the front of the list have a higher number assigned (and -1 for items not in the list).
-  const auto apis = ceph::split(g_conf()->rgw_enable_apis);
-  int api_priority_s3 = -1;
-  int api_priority_s3website = -1;
-  auto api_s3website_priority_rawpos = std::find(apis.begin(), apis.end(), "s3website");
-  auto api_s3_priority_rawpos = std::find(apis.begin(), apis.end(), "s3");
-  if (api_s3_priority_rawpos != apis.end()) {
-    api_priority_s3 = std::distance(api_s3_priority_rawpos, apis.end());
-  }
-  if (api_s3website_priority_rawpos != apis.end()) {
-    api_priority_s3website = std::distance(api_s3website_priority_rawpos, apis.end());
-  }
+  const auto api_priority_s3 = rgw_api_priority.s3;
+  const auto api_priority_s3website = rgw_api_priority.s3website;
   ldpp_dout(s, 10) << "rgw api priority: s3=" << api_priority_s3 << " s3website=" << api_priority_s3website << dendl;
-  bool s3website_enabled = api_priority_s3website >= 0;
+  const bool s3website_enabled = 0 <= api_priority_s3website;
+  const bool s3website_takes_precedence =
+    s3website_enabled && api_priority_s3website > api_priority_s3;
 
   req_info& info = s->info;
-  if (info.host.size()) {
+  const bool has_host = info.host.size();
+  bool request_uri_updated = false;
+  if (has_host) {
     ssize_t pos;
-    if (info.host.find('[') == 0) {
+    if (0 == info.host.find('[')) {
       pos = info.host.find(']');
       if (pos >=1) {
         info.host = info.host.substr(1, pos-1);
@@ -2113,13 +2137,13 @@ int rgw_rest_transform_s3_vhost_style(req_state* s)
     if (subdomain.empty()
         && (domain.empty() || domain != info.host)
         && !looks_like_ip_address(info.host.c_str())
-        && RGWHandler_REST::validate_bucket_name(info.host) == 0
+        && 0 == RGWHandler_REST::validate_bucket_name(info.host)
         && !(hostnames_set.empty() && hostnames_s3website_set.empty())) {
       subdomain.append(info.host);
       in_hosted_domain = 1;
     }
 
-    if (s3website_enabled && api_priority_s3website > api_priority_s3) {
+    if (s3website_takes_precedence) {
       in_hosted_domain_s3website = 1;
     }
 
@@ -2135,6 +2159,7 @@ int rgw_rest_transform_s3_vhost_style(req_state* s)
         encoded_bucket.append("/");
       encoded_bucket.append(s->info.request_uri);
       s->info.request_uri = encoded_bucket;
+      request_uri_updated = true;
     }
 
     if (!domain.empty()) {
@@ -2150,7 +2175,9 @@ int rgw_rest_transform_s3_vhost_style(req_state* s)
       << " s->info.domain=" << s->info.domain
       << " s->info.request_uri=" << s->info.request_uri
       << dendl;
-  } else if (s3website_enabled && api_priority_s3website > api_priority_s3) {
+  }
+
+  if (!has_host && s3website_takes_precedence) {
     // If the Host header is missing, but the s3website API is enabled and has
     // a higher priority than the regular S3 API, then we should still treat
     // the request as a website request.
@@ -2161,10 +2188,12 @@ int rgw_rest_transform_s3_vhost_style(req_state* s)
     s->info.domain = s->cct->_conf->rgw_dns_name;
   }
 
-  s->decoded_uri = url_decode(s->info.request_uri);
-  /* Validate for being free of the '\0' buried in the middle of the string. */
-  if (std::strlen(s->decoded_uri.c_str()) != s->decoded_uri.length()) {
-    return -ERR_ZERO_IN_URL;
+  if (request_uri_updated) {
+    s->decoded_uri = url_decode(s->info.request_uri);
+    /* Validate for being free of the '\0' buried in the middle of the string. */
+    if (std::strlen(s->decoded_uri.c_str()) != s->decoded_uri.length()) {
+      return -ERR_ZERO_IN_URL;
+    }
   }
 
   return 0;
@@ -2257,12 +2286,10 @@ int RGWREST::preprocess(req_state *s, rgw::io::BasicClient* cio)
     return -EINVAL;
   }
 
-  map<string, string>::iterator giter;
-  for (giter = generic_attrs_map.begin(); giter != generic_attrs_map.end();
-       ++giter) {
-    const char *env = info.env->get(giter->first.c_str());
+  for (const auto& [http_header, rgw_attr] : generic_attrs_map) {
+    const char *env = info.env->get(http_header.c_str());
     if (env) {
-      s->generic_attrs[giter->second] = env;
+      s->generic_attrs[rgw_attr] = env;
     }
   }
 
