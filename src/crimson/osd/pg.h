@@ -807,6 +807,20 @@ public:
   }
 
   void complete_write(eversion_t v, eversion_t lc) {
+    // Crimson can finish different client writes out of at_version order
+    // (repop replies / local vs remote). PeeringState::complete_write()
+    // assigns pg_committed_to and last_complete_ondisk unconditionally, so a
+    // late older completion would move those watermarks backwards and can
+    // trip ceph_assert(trim_to <= get_pg_committed_to()) in log_operation().
+    // A higher all-shard commit already covers every lower version, so drop
+    // the stale completion instead of applying it.
+    // See https://tracker.ceph.com/issues/72342
+    if (v < peering_state.get_pg_committed_to()) {
+      LOG_PREFIX(PG::complete_write);
+      SUBDEBUGDPP(osd, "dropping stale completion v {} lc {} pct {}",
+		  *this, v, lc, peering_state.get_pg_committed_to());
+      return;
+    }
     peering_state.complete_write(v, lc);
   }
 
