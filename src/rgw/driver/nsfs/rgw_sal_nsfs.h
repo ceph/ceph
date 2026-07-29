@@ -24,6 +24,7 @@
 #include <memory>
 #include "common/dout.h"
 #include "../posix/bucket_cache.h"
+#include "../posix/multipart_cache.h"
 #include "../posix/posixDB.h"
 #include "../posix/user_cache.h"
 #include "fs_strategy.h"
@@ -39,6 +40,7 @@ class NSFSObject;
 namespace nsfs {
 
 using BucketCache = file::listing::BucketCache<NSFSDriver, NSFSBucket>;
+using MultipartCache = file::listing::MultipartCache<>;
 
 /* integration w/bucket listing cache */
 using fill_cache_cb_t = file::listing::fill_cache_cb_t;
@@ -399,6 +401,7 @@ protected:
   std::unique_ptr<rgw::store::POSIXUserDB> userDB;
   NSFSZone zone;
   std::unique_ptr<nsfs::BucketCache> bucket_cache;
+  std::unique_ptr<nsfs::MultipartCache> multipart_cache;
   std::unique_ptr<rgw::posix::SyncFsThread> syncfs_thread;
   UserCache user_cache;
   std::unique_ptr<nsfs::FSStrategy> fs_strategy;
@@ -743,6 +746,7 @@ public:
   nsfs::Directory* get_root_dir() { return root_dir.get(); }
   const std::string& get_base_path() const { return base_path; }
   nsfs::BucketCache* get_bucket_cache() { return bucket_cache.get(); }
+  nsfs::MultipartCache* get_multipart_cache() { return multipart_cache.get(); }
   UserCache& get_user_cache() { return user_cache; }
   nsfs::FSStrategy* get_fs_strategy() { return fs_strategy.get(); }
 
@@ -1201,25 +1205,30 @@ WRITE_CLASS_ENCODER(NSFSMPObj)
 
 struct NSFSUploadPartInfo {
   uint32_t num{0};
+  uint64_t size{0};
   std::string etag;
   ceph::real_time mtime;
   std::optional<rgw::cksum::Cksum> cksum;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(num, bl);
     encode(etag, bl);
     encode(mtime, bl);
     encode(cksum, bl);
+    encode(size, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 1, 1, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 1, 1, bl);
     decode(num, bl);
     decode(etag, bl);
     decode(mtime, bl);
     if (struct_v > 1) {
       decode(cksum, bl);
+    }
+    if (struct_v > 2) {
+      decode(size, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -1240,7 +1249,10 @@ public:
   virtual ~NSFSMultipartPart() = default;
 
   virtual uint32_t get_num() { return info.num; }
-  virtual uint64_t get_size() { return part_file->get_size(); }
+  virtual uint64_t get_size() {
+    if (info.size) return info.size;
+    return part_file ? part_file->get_size() : 0;
+  }
   virtual const std::string& get_etag() { return info.etag; }
   virtual ceph::real_time& get_mtime() { return info.mtime; }
   virtual const std::optional<rgw::cksum::Cksum>& get_cksum() {
@@ -1364,6 +1376,7 @@ private:
   uint64_t part_num;
   std::unique_ptr<nsfs::Directory> upload_dir;
   std::unique_ptr<nsfs::File> part_file;
+  file::listing::MultipartCacheKey mp_cache_key;
 
 public:
   NSFSMultipartWriter(const DoutPrefixProvider *dpp,
@@ -1373,14 +1386,16 @@ public:
                     NSFSDriver* _driver,
                     const ACLOwner& _owner,
                     const rgw_placement_rule *_ptail_placement_rule,
-                    uint64_t _part_num) :
+                    uint64_t _part_num,
+		    file::listing::MultipartCacheKey&& _mp_cache_key) :
     StoreWriter(dpp, y),
     driver(_driver),
     owner(_owner),
     ptail_placement_rule(_ptail_placement_rule),
     part_num(_part_num),
     upload_dir(_shadow_bucket->get_dir()->clone()),
-    part_file(std::make_unique<nsfs::File>(nsfs::get_key_fname(_key, false), upload_dir.get(), _driver->ctx()))
+    part_file(std::make_unique<nsfs::File>(nsfs::get_key_fname(_key, false), upload_dir.get(), _driver->ctx())),
+    mp_cache_key(std::move(_mp_cache_key))
   { upload_dir->open(dpp); }
   virtual ~NSFSMultipartWriter() = default;
 
