@@ -8,7 +8,6 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { BehaviorSubject, of, throwError } from 'rxjs';
 
 import { HostService } from '~/app/shared/api/host.service';
-import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { FormatterService } from '~/app/shared/services/formatter.service';
@@ -115,7 +114,7 @@ describe('HostResourcePageComponent', () => {
         expect.objectContaining({ values: ['_admin', 'storage'] })
       );
       expect(getField('Status')).toEqual(
-        expect.objectContaining({ value: 'Maintenance', status: ICON_TYPE.warning })
+        expect.objectContaining({ value: 'Maintenance', status: 'warningAltFilled' })
       );
       expect(getField('Model')).toEqual(expect.objectContaining({ value: 'PowerEdge R750' }));
       expect(getField('CPUs')).toEqual(expect.objectContaining({ value: '2' }));

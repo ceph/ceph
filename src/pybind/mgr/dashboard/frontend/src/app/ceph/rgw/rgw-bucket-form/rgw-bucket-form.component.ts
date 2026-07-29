@@ -17,7 +17,7 @@ import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { RgwSiteService } from '~/app/shared/api/rgw-site.service';
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { ActionLabelsI18n, AppConstants, URLVerbs } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
@@ -69,7 +69,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
   isVersioningAlreadyEnabled = false;
   isMfaDeleteAlreadyEnabled = false;
   initialVersioningStatus: string | null = null;
-  icons = Icons;
+  icons = ICON_TYPE;
   kmsConfigured = false;
   s3Configured = false;
   tags: Record<string, string>[] = [];

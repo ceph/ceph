@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { DocService } from '~/app/shared/services/doc.service';
@@ -17,7 +17,7 @@ import { FeedbackComponent } from '~/app/ceph/shared/feedback/feedback.component
 })
 export class DashboardHelpComponent implements OnInit {
   docsUrl: string;
-  icons = Icons;
+  icons = ICON_TYPE;
   configOptPermission: Permission;
 
   constructor(

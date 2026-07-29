@@ -4,7 +4,7 @@ import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { RgwRoleService } from '~/app/shared/api/rgw-role.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
@@ -88,20 +88,20 @@ export class RgwAccountRolesListComponent implements OnInit, OnChanges {
     this.tableActions = [
       {
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         click: () => this.openRoleForm(false),
         name: this.actionLabels.CREATE,
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
       },
       {
         permission: 'update',
-        icon: Icons.edit,
+        icon: ICON_TYPE.edit,
         click: () => this.openRoleForm(true),
         name: this.actionLabels.EDIT
       },
       {
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: ICON_TYPE.close,
         click: () => this.deleteRole(),
         name: this.actionLabels.DELETE,
         disable: () => !this.selection.hasSelection

@@ -2,7 +2,7 @@ import { Component, Input, OnChanges, OnInit, SimpleChanges } from '@angular/cor
 
 import _ from 'lodash';
 
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
@@ -38,7 +38,7 @@ export class TableActionsComponent implements OnChanges, OnInit {
   // Array with all visible actions
   dropDownActions: CdTableAction[] = [];
 
-  icons = Icons;
+  icons = ICON_TYPE;
 
   ngOnInit() {
     this.removeActionsWithNoPermissions();

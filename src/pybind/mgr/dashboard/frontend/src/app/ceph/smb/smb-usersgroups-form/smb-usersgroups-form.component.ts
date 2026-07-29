@@ -12,7 +12,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { Observable } from 'rxjs';
 import { SmbService } from '~/app/shared/api/smb.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -33,7 +33,7 @@ export class SmbUsersgroupsFormComponent extends CdForm implements OnInit, OnDes
   action: string;
   resource: string;
   editing: boolean;
-  icons = Icons;
+  icons = ICON_TYPE;
   hideUploader: boolean = false;
 
   smbClusters$: Observable<SMBCluster[]>;

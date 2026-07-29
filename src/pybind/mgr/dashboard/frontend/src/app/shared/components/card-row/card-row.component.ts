@@ -1,5 +1,5 @@
 import { Component, Input, OnChanges } from '@angular/core';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { HardwareNameMapping } from '~/app/shared/enum/hardware.enum';
 
 @Component({
@@ -25,7 +25,7 @@ export class CardRowComponent implements OnChanges {
   dropdownData: any;
 
   hwNames = HardwareNameMapping;
-  icons = Icons;
+  icons = ICON_TYPE;
   total: number = null;
   dropdownTotalError: number = 0;
   dropdownToggled: boolean = false;

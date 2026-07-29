@@ -14,7 +14,7 @@ import { UserService } from '~/app/shared/api/user.service';
 import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
 import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
 import { ActionLabelsI18n, USER } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
@@ -57,7 +57,7 @@ export class UserFormComponent extends CdForm implements OnInit {
   passwordPolicyHelpText = '';
   passwordStrengthLevelClass: string;
   passwordValuation: string;
-  icons = Icons;
+  icons = ICON_TYPE;
   pwdExpirationSettings: CdPwdExpirationSettings;
   pwdExpirationFormat = 'YYYY-MM-DD';
   selectedRole: string[];

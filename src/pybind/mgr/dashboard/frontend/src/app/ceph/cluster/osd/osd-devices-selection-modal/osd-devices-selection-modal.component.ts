@@ -13,7 +13,7 @@ import _ from 'lodash';
 import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
 import { InventoryDevicesComponent } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-devices.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdTableColumnFiltersChange } from '~/app/shared/models/cd-table-column-filters-change';
@@ -32,7 +32,7 @@ export class OsdDevicesSelectionModalComponent implements AfterViewInit {
   @Output()
   submitAction = new EventEmitter<CdTableColumnFiltersChange>();
 
-  icons = Icons;
+  icons = ICON_TYPE;
   filterColumns: (string | number)[] = [];
 
   hostname: string;

@@ -173,11 +173,11 @@ export class NvmeofSubsystemOverviewComponent implements OnInit, OnDestroy {
   }
 
   getAuthStatusIcon(authStatus: string): keyof typeof ICON_TYPE {
-    return authStatus === NO_AUTH ? 'error' : 'success';
+    return authStatus === NO_AUTH ? 'error' : 'checkmarkFilled';
   }
 
   getStatusIcon(detail: SubsystemDetail): keyof typeof ICON_TYPE {
-    return detail.value ? 'success' : 'error';
+    return detail.value ? 'checkmarkFilled' : 'error';
   }
 
   getColNumbers(detail: SubsystemDetail): { sm: number; md: number; lg: number } {

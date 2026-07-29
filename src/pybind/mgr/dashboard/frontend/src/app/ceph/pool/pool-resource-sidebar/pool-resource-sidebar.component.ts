@@ -11,7 +11,7 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { SidebarItem } from '~/app/shared/components/sidebar-layout/sidebar-layout.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Permissions } from '~/app/shared/models/permissions';
@@ -136,14 +136,14 @@ export class PoolResourceSidebarComponent implements OnInit, OnDestroy {
       {
         name: this.actionLabels.EDIT,
         permission: 'update',
-        icon: Icons.edit,
+        icon: ICON_TYPE.edit,
         click: () => this.editPool(),
         disable: (selection: CdTableSelection) => !selection?.hasSingleSelection
       },
       {
         name: this.actionLabels.DELETE,
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: ICON_TYPE.close,
         click: () => this.deletePool(),
         disable: (selection: CdTableSelection) => this.getDeleteDisable(selection)
       }

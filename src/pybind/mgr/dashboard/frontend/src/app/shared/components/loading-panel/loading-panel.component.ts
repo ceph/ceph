@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 
 @Component({
   selector: 'cd-loading-panel',
@@ -9,5 +9,5 @@ import { Icons } from '~/app/shared/enum/icons.enum';
   standalone: false
 })
 export class LoadingPanelComponent {
-  icons = Icons;
+  icons = ICON_TYPE;
 }

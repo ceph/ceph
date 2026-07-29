@@ -1,5 +1,4 @@
 <cd-rbd-tabs></cd-rbd-tabs>
-
 <cd-table
   [data]="images"
   columnMode="flex"
@@ -31,12 +30,10 @@
       <svg
         class="cds--btn__icon"
         cdsIcon="close"
-        size="16"
       ></svg>
     </button>
   </div>
 </cd-table>
-
 <ng-template
   #expiresTpl
   let-row="data.row"
@@ -47,7 +44,6 @@
     i18n
     >Expired at</ng-container
   >
-
   <ng-container
     *ngIf="!row.cdIsExpired"
     i18n
@@ -56,7 +52,6 @@
 
   {{ value | cdDate }}
 </ng-template>
-
 <ng-template
   #deleteTpl
   let-expiresAt="expiresAt"

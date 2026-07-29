@@ -14,7 +14,7 @@ import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 
 import { RgwPromqls as queries } from '~/app/shared/enum/dashboard-promqls.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE, IconSize } from '~/app/shared/enum/icons.enum'
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { ChartPoint } from '~/app/shared/models/area-chart-point';
 import { catchError, shareReplay, switchMap, takeUntil, tap } from 'rxjs/operators';
@@ -29,7 +29,8 @@ import { PerformanceCardService } from '~/app/shared/api/performance-card.servic
   standalone: false
 })
 export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
-  icons = Icons;
+  icons = ICON_TYPE;
+  IconSize = IconSize;
 
   interval = new Subscription();
   permissions: Permissions;

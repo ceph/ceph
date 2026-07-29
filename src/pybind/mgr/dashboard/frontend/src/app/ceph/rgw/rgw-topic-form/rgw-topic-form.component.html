@@ -18,7 +18,6 @@
         </span>
       </cd-help-text>
     </div>
-
     <div
       class="form-item form-item-append"
       cdsRow
@@ -67,7 +66,6 @@
           >
         </ng-template>
       </div>
-
       <!-- owner -->
       <div cdsCol>
         <cds-select
@@ -111,7 +109,6 @@
         </ng-template>
       </div>
     </div>
-
     <ng-container *ngIf="selectedOption">
       <div
         class="form-item form-item-append"
@@ -137,7 +134,6 @@
               [invalid]="topicForm.controls.name.invalid && topicForm.controls.name.dirty"
             />
           </cds-text-label>
-
           <ng-template #nameError>
             <span
               class="invalid-feedback"
@@ -167,7 +163,6 @@
             Generate push endpoint
             <cd-help-text> Configure the endpoint URL to receive push notifications</cd-help-text>
           </legend>
-
           <!-- Enable SSL -->
           <div
             cdsCol
@@ -185,7 +180,6 @@
               </cd-help-text>
             </cds-checkbox>
           </div>
-
           <!-- Verify ssl -->
           <div
             cdsCol
@@ -202,7 +196,6 @@
               >
             </cds-checkbox>
           </div>
-
           <!-- Cloud Event-->
           <div
             cdsCol
@@ -219,7 +212,6 @@
           </div>
         </fieldset>
       </div>
-
       <div
         cdsRow
         class="form-item form-item-append"
@@ -254,7 +246,6 @@
             >
           </ng-template>
         </div>
-
         <!-- Port-->
         <div cdsCol>
           <cds-number
@@ -287,7 +278,6 @@
           </ng-template>
         </div>
       </div>
-
       <div
         cdsRow
         *ngIf="selectedOption === hostProtocols.AMQP || selectedOption === hostProtocols.KAFKA"
@@ -311,7 +301,6 @@
             />
           </cds-text-label>
         </div>
-
         <!-- password-->
         <div
           cdsCol
@@ -350,7 +339,6 @@
           </ng-template>
         </div>
       </div>
-
       <!--Vhost-->
       <div
         cdsRow
@@ -375,7 +363,6 @@
           </cds-text-label>
         </div>
       </div>
-
       <div
         cdsRow
         class="form-item form-item-append"
@@ -452,7 +439,6 @@
             </div>
           </ng-container>
         </div>
-
         <div
           class="form-item form-item-append"
           cdsRow
@@ -496,7 +482,6 @@
               />
             </cds-text-label>
           </div>
-
           <!-- mechanism-->
           <div
             cdsCol
@@ -557,7 +542,6 @@
               </option>
             </cds-select>
           </div>
-
           <!-- kafka-brokers-->
           <div
             cdsCol
@@ -596,7 +580,6 @@
               settings</cd-help-text
             >
           </legend>
-
           <!-- Persistent-->
           <div
             cdsCol
@@ -634,7 +617,6 @@
               />
             </cds-text-label>
           </div>
-
           <!-- Time to live-->
           <div cdsCol>
             <cds-number
@@ -648,7 +630,6 @@
               >Time to live
             </cds-number>
           </div>
-
           <!-- Max retries-->
           <div cdsCol>
             <cds-number
@@ -663,7 +644,6 @@
               Max retries
             </cds-number>
           </div>
-
           <!-- Retry sleep duration-->
           <div cdsCol>
             <cds-number
@@ -679,7 +659,6 @@
             </cds-number>
           </div>
         </div>
-
         <div
           cdsRow
           class="form-item form-item-append"
@@ -716,7 +695,7 @@
                     Policy examples
                     <svg
                       cdsIcon="launch"
-                      size="16"
+
                       class="cds--btn__icon"
                     ></svg>
                   </button>
@@ -730,7 +709,7 @@
                     Policy generator
                     <svg
                       cdsIcon="launch"
-                      size="16"
+
                       class="cds--btn__icon"
                     ></svg>
                   </button>

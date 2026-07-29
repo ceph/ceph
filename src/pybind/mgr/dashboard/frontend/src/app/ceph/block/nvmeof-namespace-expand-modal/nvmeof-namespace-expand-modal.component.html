@@ -19,7 +19,6 @@
       Expand namespace
     </h3>
   </cds-modal-header>
-
   <section cdsModalContent>
     <div
       class="cds--type-body-01 cds-mb-3"
@@ -27,12 +26,11 @@
     >
       Increase the NVMe namespace storage capacity by resizing the backing image.
     </div>
-
     <div class="cds--type-body-01 cds-mb-5">
       <div class="cds-mb-3">
         <svg
           [cdsIcon]="icons.datastore"
-          size="16"
+
           class="cds-mr-3"
         ></svg>
         <strong><span i18n>namespace</span>-{{ nsid }}</strong>
@@ -42,7 +40,6 @@
         <span i18n>Current size:</span> {{ currentBytes | dimlessBinary }}
       </div>
     </div>
-
     <form
       name="nsForm"
       #formDir="ngForm"
@@ -70,7 +67,6 @@
         </ng-template>
       </div>
     </form>
-
     <ng-template
       #validationErrors
       let-control="control"
@@ -80,7 +76,6 @@
       }
     </ng-template>
   </section>
-
   <cd-form-button-panel
     (submitActionEvent)="onSubmit()"
     [submitText]="expandText"

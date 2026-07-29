@@ -15,7 +15,7 @@ import _ from 'lodash';
 
 import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
 import { OsdService } from '~/app/shared/api/osd.service';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { CdTableColumnFiltersChange } from '~/app/shared/models/cd-table-column-filters-change';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { ModalService } from '~/app/shared/services/modal.service';
@@ -63,7 +63,7 @@ export class OsdDevicesSelectionGroupsComponent implements OnInit, OnChanges {
   @Output()
   cleared = new EventEmitter<DevicesSelectionClearEvent>();
 
-  icons = Icons;
+  icons = ICON_TYPE;
   devices: InventoryDevice[] = [];
   capacity = 0;
   appliedFilters = new Array();

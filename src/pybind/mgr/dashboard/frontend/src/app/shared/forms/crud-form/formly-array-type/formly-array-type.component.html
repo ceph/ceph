@@ -12,7 +12,6 @@
   >
     {{ props.description }}
   </p>
-
   <div
     *ngFor="let field of field.fieldGroup; let i = index"
     class="d-flex"
@@ -35,7 +34,7 @@
         (click)="remove(i)"
         *ngIf="field.props.removable !== false"
       >
-        <i [ngClass]="icons.trash"></i>
+        <i [ngClass]="icons.trashCan"></i>
       </button>
     </div>
   </div>
@@ -53,7 +52,6 @@
       Add {{ props.label }}
     </button>
   </div>
-
   <span
     class="invalid-feedback"
     role="alert"

@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { Observable } from 'rxjs';
 
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { Permission } from '~/app/shared/models/permissions';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -24,7 +24,7 @@ export class UpgradeStartModalComponent implements OnInit {
   upgradeInfoError$: Observable<any>;
   upgradeInfo$: Observable<UpgradeInfoInterface>;
   upgradeForm: CdFormGroup;
-  icons = Icons;
+  icons = ICON_TYPE;
   versions: string[];
 
   showImageField = false;

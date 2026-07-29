@@ -32,7 +32,6 @@
         Nodes to run NVMe-oF target pods/services
       </p>
     </div>
-
     <!-- Table on white background -->
     <cd-table
       (fetchData)="getHosts($event)"
@@ -44,14 +43,12 @@
       [autoReload]="false"
     >
     </cd-table>
-
     <ng-template
       #addrTemplate
       let-value="data.value"
     >
       <span>{{ value || '-' }}</span>
     </ng-template>
-
     <ng-template
       #statusTemplate
       let-value="data.value"
@@ -63,12 +60,11 @@
         gap="3"
       >
         @if (value === HostStatus.AVAILABLE) {
-          <cd-icon type="success"></cd-icon>
+          <cd-icon type="checkmarkFilled"></cd-icon>
         }
         <span>{{ value | titlecase }}</span>
       </div>
     </ng-template>
-
     <ng-template
       #labelsTemplate
       let-value="data.value"

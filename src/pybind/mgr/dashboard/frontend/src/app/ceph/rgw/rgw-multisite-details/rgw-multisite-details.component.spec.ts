@@ -12,7 +12,7 @@ import { NgbNavModule, NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { RgwMultisiteRealmFormComponent } from '../rgw-multisite-realm-form/rgw-multisite-realm-form.component';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission, Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -124,7 +124,7 @@ describe('RgwMultisiteDetailsComponent', () => {
       tableActionsComponent.dropDownOnly = 'Actions';
       tableActionsComponent.dropDownOnlyBtnColor = 'tertiary';
       tableActionsComponent.tableActions = [
-        { permission: 'create', icon: Icons.add, name: 'Create Realm', click: () => undefined }
+        { permission: 'create', icon: ICON_TYPE.add, name: 'Create Realm', click: () => undefined }
       ];
       tableActionsComponent.selection = new CdTableSelection();
       tableActionsComponent.disabled = disabled;

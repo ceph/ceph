@@ -26,7 +26,6 @@
     </div>
   </cd-alert-panel>
 </div>
-
 <div class="cds-mt-5">
   <cd-table
     [data]="(filesystems$ | async) ?? []"
@@ -47,10 +46,10 @@
         gap="2"
       >
         @if (value === 'Active') {
-          <cd-icon type="success"></cd-icon>
+          <cd-icon type="checkmarkFilled"></cd-icon>
         }
         @if (value === 'Warning') {
-          <cd-icon type="warning"></cd-icon>
+          <cd-icon type="warningAltFilled"></cd-icon>
         }
         @if (value === 'Inactive') {
           <cd-icon type="error"></cd-icon>
@@ -58,7 +57,6 @@
         <span class="cds--type-body-compact-01 cds-pt-2px">{{ mdsStatusLabels[value] }}</span>
       </div>
     </ng-template>
-
     <ng-template
       #mirroringStatus
       let-value="data.value"
@@ -69,15 +67,14 @@
         gap="2"
       >
         @if (value === 'Enabled') {
-          <cd-icon type="success"></cd-icon>
+          <cd-icon type="checkmarkFilled"></cd-icon>
         }
         @if (value === 'Disabled') {
-          <cd-icon type="warning"></cd-icon>
+          <cd-icon type="warningAltFilled"></cd-icon>
         }
         <span class="cds--type-body-compact-01 cds-pt-2px">{{ mirroringStatusLabels[value] }}</span>
       </div>
     </ng-template>
-
     <ng-template
       let-row="row"
       let-col="col"

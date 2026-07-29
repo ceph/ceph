@@ -5,7 +5,7 @@ import _ from 'lodash';
 import { USER } from '~/app/shared/constants/app.constants';
 
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE, IconSize } from '~/app/shared/enum/icons.enum'
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { BooleanTextPipe } from '~/app/shared/pipes/boolean-text.pipe';
 import { IscsiBackstorePipe } from '~/app/shared/pipes/iscsi-backstore.pipe';
@@ -39,7 +39,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
 
   @ViewChild('treeNodeTemplate', { static: true }) labelTpl: TemplateRef<any>;
 
-  icons = Icons;
+  icons = ICON_TYPE;
   columns: CdTableColumn[];
   data: any;
   metadata: any = {};
@@ -97,26 +97,26 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
       target: {
         expanded: _.join(
           this.selectedItem.cdExecuting
-            ? [Icons.size24, Icons.spinner]
-            : [Icons.size24, Icons.bullseye],
+            ? [IconSize.size24, ICON_TYPE.loading]
+            : [IconSize.size24, ICON_TYPE.target],
           ' '
         )
       },
       initiators: {
-        expanded: _.join([Icons.size24, Icons.user], ' '),
-        leaf: _.join([Icons.user], ' ')
+        expanded: _.join([IconSize.size24, ICON_TYPE.user], ' '),
+        leaf: _.join([ICON_TYPE.user], ' ')
       },
       groups: {
-        expanded: _.join([Icons.size24, Icons.users], ' '),
-        leaf: _.join([Icons.users], ' ')
+        expanded: _.join([IconSize.size24, ICON_TYPE.userMultiple], ' '),
+        leaf: _.join([ICON_TYPE.userMultiple], ' ')
       },
       disks: {
-        expanded: _.join([Icons.size24, Icons.disk], ' '),
-        leaf: _.join([Icons.disk], ' ')
+        expanded: _.join([IconSize.size24, ICON_TYPE.hardDrive], ' '),
+        leaf: _.join([ICON_TYPE.hardDrive], ' ')
       },
       portals: {
-        expanded: _.join([Icons.size24, Icons.server], ' '),
-        leaf: _.join([Icons.server], ' ')
+        expanded: _.join([IconSize.size24, ICON_TYPE.serverRack], ' '),
+        leaf: _.join([ICON_TYPE.serverRack], ' ')
       }
     };
 

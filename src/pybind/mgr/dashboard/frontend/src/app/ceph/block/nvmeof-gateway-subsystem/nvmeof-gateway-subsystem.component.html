@@ -17,7 +17,6 @@
   >
   </cd-table>
 </div>
-
 <ng-template
   #authTpl
   let-row="data.row"
@@ -27,9 +26,9 @@
     gap="4"
   >
     @if (row.auth === authType.NO_AUTH) {
-      <cd-icon type="warning"></cd-icon>
+      <cd-icon type="warningAltFilled"></cd-icon>
     } @else {
-      <cd-icon type="success"></cd-icon>
+      <cd-icon type="checkmarkFilled"></cd-icon>
     }
     <span class="cds-ml-3">{{ row.auth }}</span>
   </div>

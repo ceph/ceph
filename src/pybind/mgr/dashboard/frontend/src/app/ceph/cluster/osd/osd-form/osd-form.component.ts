@@ -18,7 +18,7 @@ import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { OsdService } from '~/app/shared/api/osd.service';
 import { FormButtonPanelComponent } from '~/app/shared/components/form-button-panel/form-button-panel.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -96,7 +96,7 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
 
   @Output() cancelled: EventEmitter<void> = new EventEmitter();
 
-  icons = Icons;
+  icons = ICON_TYPE;
 
   form!: CdFormGroup;
   columns: Array<CdTableColumn> = [];

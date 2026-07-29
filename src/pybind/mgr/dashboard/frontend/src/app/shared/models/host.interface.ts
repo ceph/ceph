@@ -1,7 +1,6 @@
 import { HostStatus } from '../enum/host-status.enum';
-import { ICON_TYPE } from '../enum/icons.enum';
 
-export type OverviewStatusIcon = 'danger' | 'info-circle' | 'success' | 'warning';
+export type OverviewStatusIcon = 'warningFilled' | 'informationFilled' | 'checkmarkFilled' | 'warningAltFilled';
 export interface Host {
   ceph_version: string;
   services: Array<{ type: string; id: string }>;
@@ -37,17 +36,17 @@ export interface HostStatusConfig {
 export const STATUS_MAP: Record<string, HostStatusConfig> = {
   available: {
     status: HostStatus.AVAILABLE,
-    icon: ICON_TYPE.success,
+    icon: 'checkmarkFilled',
     label: $localize`Available`
   },
   maintenance: {
     status: HostStatus.MAINTENANCE,
-    icon: ICON_TYPE.warning,
+    icon: 'warningAltFilled',
     label: $localize`Maintenance`
   },
   offline: {
     status: HostStatus.OFFLINE,
-    icon: ICON_TYPE.danger,
+    icon: 'warningFilled',
     label: $localize`Offline`
   }
 };

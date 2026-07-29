@@ -11,7 +11,7 @@ import {
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { catchError, map, switchMap } from 'rxjs/operators';
 import { forkJoin, of, Observable } from 'rxjs';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
@@ -39,7 +39,7 @@ export class CephfsFilesystemSelectorComponent implements OnInit {
   columns: CdTableColumn[] = [];
   filesystems$: Observable<FilesystemRow[]> = of([]);
   selection = new CdTableSelection();
-  icons = Icons;
+  icons = ICON_TYPE;
   @Output() filesystemSelected = new EventEmitter<FilesystemRow | null>();
   mdsStatusLabels: Record<MdsStatus, string> = {
     Active: $localize`Active`,

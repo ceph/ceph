@@ -33,7 +33,6 @@
     </cd-table>
   </div>
 </div>
-
 <ng-template
   #quotaUsageTpl
   let-row="data.row"
@@ -45,7 +44,6 @@
     [title]="row.name"
     decimals="2"
   ></cd-usage-bar>
-
   <ng-template #noLimitTpl>
     <span
       ngbTooltip="Quota limit is not set"
@@ -56,14 +54,12 @@
     >
   </ng-template>
 </ng-template>
-
 <ng-template
   #typeTpl
   let-value="data.value"
 >
   <cd-label [value]="value"></cd-label>
 </ng-template>
-
 <ng-template
   #modeToHumanReadableTpl
   let-value="data.value"
@@ -76,41 +72,35 @@
     {{ result.content }}
   </cds-tag>
 </ng-template>
-
 <ng-template
   #nameTpl
   let-row="data.row"
 >
   <span class="fw-bold">{{ row.name }}</span>
-
   <span *ngIf="row?.info?.state === 'complete'; else snapshotRetainedTpl">
     <i
-      [ngClass]="[icons.success, icons.size24]"
+      [ngClass]="[icons.checkmarkFilled, '24']"
       ngbTooltip="{{ row.name }} is ready to use"
       class="text-success"
     ></i>
   </span>
-
   <ng-template #snapshotRetainedTpl>
     <i
-      [ngClass]="[icons.warning, icons.size24]"
+      [ngClass]="[icons.warningAltFilled, '24']"
       class="text-warning"
       ngbTooltip="{{ row.name }} is removed after retaining the snapshots"
     ></i>
   </ng-template>
-
   <cd-label
     [value]="row?.info?.type"
     *ngIf="row?.info?.type !== 'subvolume'"
   ></cd-label>
-
   <cd-label
     value="namespaced"
     *ngIf="row?.info?.pool_namespace"
     [tooltipText]="row?.info?.pool_namespace"
   ></cd-label>
 </ng-template>
-
 <ng-template
   #removeTmpl
   let-form="form"

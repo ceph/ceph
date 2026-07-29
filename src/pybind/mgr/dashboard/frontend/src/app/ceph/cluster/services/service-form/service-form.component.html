@@ -98,7 +98,6 @@
             </option>
           }
         </cds-select>
-
         <ng-template #invalidServiceTypeError>
           @if (serviceForm.showError('service_type', frm, 'required')) {
             <span
@@ -109,7 +108,6 @@
           }
         </ng-template>
       </div>
-
       <!-- backend_service -->
       @if (serviceForm.controls.service_type.value === 'ingress') {
         <div class="form-item">
@@ -320,7 +318,6 @@
             }
           </ng-template>
         </div>
-
         <div class="form-item">
           <cds-select
             id="zonegroup_name"
@@ -334,7 +331,6 @@
             }
           </cds-select>
         </div>
-
         <div class="form-item">
           <cds-select
             id="zone_name"
@@ -383,7 +379,6 @@
           </cds-checkbox>
         </fieldset>
       </div>
-
       <!-- Placement -->
       @if (!serviceForm.controls.unmanaged.value) {
         <div class="form-item">
@@ -678,7 +673,6 @@
             }
           </ng-template>
         </div>
-
         <!-- api_password -->
         <div class="form-item">
           <cds-password-label
@@ -743,7 +737,6 @@
             }
           </ng-template>
         </div>
-
         <div class="form-item">
           <cds-text-label
             cdRequiredField="Config URI"
@@ -806,7 +799,6 @@
             }
           </fieldset>
         </div>
-
         <div class="form-item">
           <cd-text-label-list
             formControlName="custom_dns"
@@ -817,7 +809,6 @@
           >
           </cd-text-label-list>
         </div>
-
         <div class="form-item">
           <cd-text-label-list
             formControlName="join_sources"
@@ -828,7 +819,6 @@
           >
           </cd-text-label-list>
         </div>
-
         <div class="form-item">
           <cd-text-label-list
             formControlName="user_sources"
@@ -840,7 +830,6 @@
           >
           </cd-text-label-list>
         </div>
-
         <div class="form-item">
           <cd-text-label-list
             formControlName="include_ceph_users"
@@ -1136,7 +1125,6 @@
               }
             </ng-template>
           </div>
-
           <!-- Privacy protocol for snmp V3 -->
           <div class="form-item">
             <cds-select
@@ -1953,7 +1941,6 @@
                 }
               </ng-template>
             </div>
-
             <!-- client_cert -->
             <div class="form-item">
               <ng-container
@@ -1981,7 +1968,6 @@
                 }
               </ng-template>
             </div>
-
             <!-- client_key -->
             <div class="form-item">
               <ng-container
@@ -2009,7 +1995,6 @@
                 }
               </ng-template>
             </div>
-
             <!-- server_cert -->
             <div class="form-item">
               <ng-container
@@ -2037,7 +2022,6 @@
                 }
               </ng-template>
             </div>
-
             <!-- server_key -->
             <div class="form-item">
               <ng-container
@@ -2077,7 +2061,6 @@
     [modalForm]="true"
   ></cd-form-button-panel>
 </cds-modal>
-
 <ng-template #cipherListLink>
   <span>
     Default cipher list used:
@@ -2088,7 +2071,6 @@
     >
   </span>
 </ng-template>
-
 <ng-template
   #fileUploaderTextarea
   let-controlName="controlName"

@@ -7,7 +7,7 @@ import { map } from 'rxjs/operators';
 
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { LogsService } from '~/app/shared/api/logs.service';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 
 @Component({
   selector: 'cd-logs',
@@ -37,7 +37,7 @@ export class LogsComponent implements OnInit, OnDestroy {
   contentData: any;
   clog: Array<any>;
   audit_log: Array<any>;
-  icons = Icons;
+  icons = ICON_TYPE;
   clogText: string;
   auditLogText: string;
   lokiServiceStatus$: Observable<boolean>;

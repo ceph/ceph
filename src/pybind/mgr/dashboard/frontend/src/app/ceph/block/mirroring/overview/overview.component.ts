@@ -5,7 +5,7 @@ import { Subscription } from 'rxjs';
 
 import { Pool } from '~/app/ceph/pool/pool';
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE, IconSize } from '~/app/shared/enum/icons.enum'
 import { ViewCacheStatus } from '~/app/shared/enum/view-cache-status.enum';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
@@ -36,7 +36,8 @@ export class OverviewComponent implements OnInit, OnDestroy {
   private subs = new Subscription();
   editing = false;
 
-  icons = Icons;
+  icons = ICON_TYPE;
+  IconSize = IconSize;
 
   constructor(
     private authStorageService: AuthStorageService,

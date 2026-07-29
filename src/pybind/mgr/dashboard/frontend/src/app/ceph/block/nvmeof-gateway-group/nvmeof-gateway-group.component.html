@@ -24,14 +24,12 @@
     </div>
   </cd-table>
 </ng-container>
-
 <ng-template
   #dateTpl
   let-created="data.value"
 >
   <span *ngIf="created">{{ created | date: 'EEE d MMM, yyyy' }}</span>
 </ng-template>
-
 <ng-template
   #customTableItemTemplate
   let-value="data.value"
@@ -44,7 +42,6 @@
     {{ value }}
   </a>
 </ng-template>
-
 <ng-template
   #gatewayStatusTpl
   let-gateway="data.value"
@@ -55,7 +52,7 @@
   >
     @if (gateway.running > 0) {
       <span [ngClass]="gateway.error > 0 ? 'cds-mr-3' : ''">
-        <cd-icon type="success"></cd-icon>
+        <cd-icon type="checkmarkFilled"></cd-icon>
         <span class="cds-ml-3">{{ gateway.running }}</span>
       </span>
     }
@@ -68,7 +65,6 @@
     }
   </div>
 </ng-template>
-
 <ng-template
   #deleteTpl
   let-groupName="groupName"

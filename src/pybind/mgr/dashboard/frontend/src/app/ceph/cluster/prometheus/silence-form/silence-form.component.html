@@ -20,7 +20,6 @@
           >=</i
         >
       </span>
-
       <ng-container *ngIf="config.attribute !== 'isRegex'">
         <input
           type="text"
@@ -32,7 +31,6 @@
         />
       </ng-container>
     </ng-container>
-
     <!-- Matcher actions -->
     <button
       type="button"
@@ -44,7 +42,7 @@
     >
       <svg
         [cdsIcon]="icons.edit"
-        [size]="icons.size16"
+
         class="cds-info-color"
       ></svg>
     </button>
@@ -57,15 +55,14 @@
       (click)="deleteMatcher(index)"
     >
       <svg
-        [cdsIcon]="icons.trash"
-        [size]="icons.size16"
+        [cdsIcon]="icons.trashCan"
+
         class="cds-info-color"
       ></svg>
     </button>
   </div>
   <span class="help-block"></span>
 </ng-template>
-
 <div class="cd-col-form">
   <form
     #formDir="ngForm"
@@ -83,7 +80,6 @@
           >Editing a silence will expire the old silence and recreate it as a new silence</cd-helper
         >
       </div>
-
       <!-- Creator -->
       <div class="card-body">
         <div class="form-group row">
@@ -109,7 +105,6 @@
             >
           </div>
         </div>
-
         <!-- Comment -->
         <div class="form-group row">
           <label
@@ -135,7 +130,6 @@
             >
           </div>
         </div>
-
         <!-- Start time -->
         <div class="form-group row">
           <label
@@ -169,7 +163,6 @@
             >
           </div>
         </div>
-
         <!-- Duration -->
         <div class="form-group row">
           <label
@@ -194,7 +187,6 @@
             >
           </div>
         </div>
-
         <!-- End time -->
         <div class="form-group row">
           <label
@@ -221,7 +213,6 @@
             >
           </div>
         </div>
-
         <!-- Matchers -->
         <fieldset>
           <legend
@@ -230,7 +221,6 @@
           >
             Matchers
           </legend>
-
           <div class="cd-col-form-offset">
             <h5
               *ngIf="matchers.length === 0"
@@ -238,13 +228,11 @@
             >
               <strong i18n>A silence requires at least one matcher</strong>
             </h5>
-
             <span *ngFor="let matcher of matchers; let i = index">
               <ng-container
                 *ngTemplateOutlet="matcherTpl; context: { index: i, matcher: matcher }"
               ></ng-container>
             </span>
-
             <div class="row">
               <div class="col-12">
                 <button
@@ -256,14 +244,12 @@
                 >
                   <svg
                     [cdsIcon]="icons.add"
-                    [size]="icons.size16"
                   ></svg>
                   <ng-container i18n>Add matcher</ng-container>
                 </button>
               </div>
             </div>
           </div>
-
           <div
             *ngIf="matchers.length && matcherMatch"
             class="cd-col-form-offset {{ matcherMatch.cssClass }}"
@@ -275,7 +261,6 @@
           </div>
         </fieldset>
       </div>
-
       <div class="card-footer">
         <div class="text-right">
           <cd-form-button-panel
@@ -288,14 +273,12 @@
     </div>
   </form>
 </div>
-
 <ng-template #popStart>
   <cd-date-time-picker
     [control]="form.get('startsAt')"
     [hasSeconds]="false"
   ></cd-date-time-picker>
 </ng-template>
-
 <ng-template #popEnd>
   <cd-date-time-picker
     [control]="form.get('endsAt')"

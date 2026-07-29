@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 
 import { AuthService } from '~/app/shared/api/auth.service';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
 @Component({
@@ -13,7 +13,7 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 export class IdentityComponent implements OnInit {
   sso: boolean;
   username: string;
-  icons = Icons;
+  icons = ICON_TYPE;
 
   constructor(
     private authStorageService: AuthStorageService,

@@ -6,7 +6,7 @@ import _ from 'lodash';
 
 import { UserService } from '~/app/shared/api/user.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -28,7 +28,7 @@ export class UserPasswordFormComponent {
   passwordPolicyHelpText = '';
   passwordStrengthLevelClass: string;
   passwordValuation: string;
-  icons = Icons;
+  icons = ICON_TYPE;
   INVALID_TEXTS = {
     required: 'This field is required',
     notmatch: 'The old and new passwords must be different',

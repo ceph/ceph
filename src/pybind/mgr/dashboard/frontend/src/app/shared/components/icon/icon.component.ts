@@ -6,7 +6,7 @@ import {
   SimpleChanges,
   ViewEncapsulation
 } from '@angular/core';
-import { ICON_TYPE, Icons, IconSize } from '../../enum/icons.enum';
+import { ICON_TYPE, IconSize } from '../../enum/icons.enum';
 
 @Component({
   selector: 'cd-icon',
@@ -19,7 +19,6 @@ export class IconComponent implements OnInit, OnChanges {
   @Input() type!: keyof typeof ICON_TYPE;
   @Input() size: IconSize = IconSize.size16;
   @Input() customClass: string = '';
-  // No CSS class will be applied.
   @Input() useDefault: boolean = false;
 
   icon: string;
@@ -35,6 +34,6 @@ export class IconComponent implements OnInit, OnChanges {
   }
 
   private updateIcon() {
-    this.icon = Icons[this.type];
+    this.icon = ICON_TYPE[this.type];
   }
 }

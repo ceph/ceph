@@ -36,7 +36,7 @@
   >
     <div class="select-menu-item-icon">
       <i
-        [ngClass]="[icons.check]"
+        [ngClass]="[icons.checkmark]"
         aria-hidden="true"
         *ngIf="option.selected"
       ></i>
@@ -79,7 +79,6 @@
     </span>
   </div>
 </ng-template>
-
 <a
   class="select-menu-edit float-start"
   [ngClass]="elemClass"
@@ -89,14 +88,12 @@
 >
   <ng-content></ng-content>
 </a>
-
 <span
   class="form-text text-muted float-start"
   *ngIf="data.length === 0 && !(!customBadges && options.length === 0)"
 >
   {{ messages.empty }}
 </span>
-
 <span
   class="form-text text-muted float-start"
   *ngIf="!customBadges && options.length === 0"

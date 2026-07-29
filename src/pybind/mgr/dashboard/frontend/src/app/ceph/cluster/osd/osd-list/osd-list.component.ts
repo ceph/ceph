@@ -23,7 +23,7 @@ import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete
 import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
@@ -83,7 +83,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   bsModalRef: NgbModalRef;
   columns: CdTableColumn[];
   clusterWideActions: CdTableAction[];
-  icons = Icons;
+  icons = ICON_TYPE;
   osdSettings = new OsdSettings();
   count = 0;
 
@@ -133,7 +133,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
       {
         name: this.actionLabels.CREATE,
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         click: () => {
           if (this.inlineCreate) {
             this.createAction.emit();
@@ -147,20 +147,20 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
       {
         name: this.actionLabels.EDIT,
         permission: 'update',
-        icon: Icons.edit,
+        icon: ICON_TYPE.edit,
         click: () => this.editAction()
       },
       {
         name: this.actionLabels.FLAGS,
         permission: 'update',
-        icon: Icons.flag,
+        icon: ICON_TYPE.flag,
         click: () => this.configureFlagsIndivAction(),
         disable: () => !this.hasOsdSelected
       },
       {
         name: this.actionLabels.SCRUB,
         permission: 'update',
-        icon: Icons.analyse,
+        icon: ICON_TYPE.stethoscope,
         click: () => this.scrubAction(false),
         disable: () => !this.hasOsdSelected,
         canBePrimary: (selection: CdTableSelection) => selection.hasSelection
@@ -168,7 +168,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
       {
         name: this.actionLabels.DEEP_SCRUB,
         permission: 'update',
-        icon: Icons.deepCheck,
+        icon: ICON_TYPE.settings,
         click: () => this.scrubAction(true),
         disable: () => !this.hasOsdSelected
       },
@@ -177,28 +177,28 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         permission: 'update',
         click: () => this.reweight(),
         disable: () => !this.hasOsdSelected || !this.selection.hasSingleSelection,
-        icon: Icons.reweight
+        icon: ICON_TYPE.scales
       },
       {
         name: this.actionLabels.MARK_OUT,
         permission: 'update',
         click: () => this.showConfirmationModal($localize`out`, this.osdService.markOut),
         disable: () => this.isNotSelectedOrInState('out'),
-        icon: Icons.left
+        icon: ICON_TYPE.arrowLeft
       },
       {
         name: this.actionLabels.MARK_IN,
         permission: 'update',
         click: () => this.showConfirmationModal($localize`in`, this.osdService.markIn),
         disable: () => this.isNotSelectedOrInState('in'),
-        icon: Icons.right
+        icon: ICON_TYPE.arrowRight
       },
       {
         name: this.actionLabels.MARK_DOWN,
         permission: 'update',
         click: () => this.showConfirmationModal($localize`down`, this.osdService.markDown),
         disable: () => this.isNotSelectedOrInState('down'),
-        icon: Icons.down
+        icon: ICON_TYPE.arrowDown
       },
       {
         name: this.actionLabels.MARK_LOST,
@@ -215,7 +215,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
             this.osdService.markLost
           ),
         disable: () => this.isNotSelectedOrInState('up'),
-        icon: Icons.flatten
+        icon: ICON_TYPE.unlink
       },
       {
         name: this.actionLabels.PURGE,
@@ -235,7 +235,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
             }
           ),
         disable: () => this.isNotSelectedOrInState('up'),
-        icon: Icons.erase
+        icon: ICON_TYPE.erase
       },
       {
         name: this.actionLabels.DESTROY,
@@ -255,14 +255,14 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
             }
           ),
         disable: () => this.isNotSelectedOrInState('up'),
-        icon: Icons.clearFilters
+        icon: ICON_TYPE.closeFilled
       },
       {
         name: this.actionLabels.DELETE,
         permission: 'delete',
         click: () => this.delete(),
         disable: (selection: CdTableSelection) => this.getDisable('delete', selection),
-        icon: Icons.destroy
+        icon: ICON_TYPE.close
       }
     ];
   }
@@ -271,21 +271,21 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
     this.clusterWideActions = [
       {
         name: $localize`Flags`,
-        icon: Icons.flag,
+        icon: ICON_TYPE.flag,
         click: () => this.configureFlagsAction(),
         permission: 'read',
         visible: () => this.permissions.osd.read
       },
       {
         name: $localize`Recovery Priority`,
-        icon: Icons.deepCheck,
+        icon: ICON_TYPE.settings,
         click: () => this.configureQosParamsAction(),
         permission: 'read',
         visible: () => this.permissions.configOpt.read
       },
       {
         name: $localize`PG scrub`,
-        icon: Icons.analyse,
+        icon: ICON_TYPE.stethoscope,
         click: () => this.configurePgScrubAction(),
         permission: 'read',
         visible: () => this.permissions.configOpt.read

@@ -1,5 +1,4 @@
 <cd-rgw-user-tabs></cd-rgw-user-tabs>
-
 <cd-table
   #table
   [autoReload]="false"
@@ -27,7 +26,6 @@
   >
   </cd-rgw-user-details>
 </cd-table>
-
 <ng-template
   #userSizeTpl
   let-row="data.row"
@@ -38,14 +36,12 @@
     [used]="row.stats.size_actual"
   >
   </cd-usage-bar>
-
   <ng-template
     #noSizeQuota
     i18n
     >No Limit</ng-template
   >
 </ng-template>
-
 <ng-template
   #userObjectTpl
   let-row="data.row"
@@ -57,14 +53,12 @@
     [isBinary]="false"
   >
   </cd-usage-bar>
-
   <ng-template
     #noObjectQuota
     i18n
     >No Limit</ng-template
   >
 </ng-template>
-
 <ng-template
   #usernameTpl
   let-row="data.row"
@@ -79,7 +73,7 @@
       >
         <svg
           [cdsIcon]="icons.userAccessLocked"
-          [size]="icons.size16"
+
           class="account-root-icon"
         ></svg>
       </cds-tooltip>

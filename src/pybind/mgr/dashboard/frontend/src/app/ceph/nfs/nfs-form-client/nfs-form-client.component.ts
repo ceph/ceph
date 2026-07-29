@@ -5,7 +5,7 @@ import _ from 'lodash';
 import validator from 'validator';
 
 import { NfsService } from '~/app/shared/api/nfs.service';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 
@@ -26,7 +26,7 @@ export class NfsFormClientComponent implements OnInit {
 
   nfsSquash: any[] = [];
   nfsAccessType: any[] = [];
-  icons = Icons;
+  icons = ICON_TYPE;
   clientsFormArray: UntypedFormArray;
 
   constructor(private nfsService: NfsService) {}

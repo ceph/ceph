@@ -11,7 +11,7 @@ import { PoolService } from '~/app/shared/api/pool.service';
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import {
@@ -123,7 +123,7 @@ export class RbdFormComponent extends CdForm implements OnInit {
   private rbdImage = new ReplaySubject(1);
   private routerUrl: string;
 
-  icons = Icons;
+  icons = ICON_TYPE;
   currentImageMirrorMode = '';
   showMirrorDisableMessage = false;
 

@@ -1,5 +1,5 @@
 import { Component, Input } from '@angular/core';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { Permissions } from '~/app/shared/models/permissions';
 
@@ -16,7 +16,7 @@ export class HealthChecksComponent {
   @Input()
   legacyHealthChecks = false;
 
-  icons = Icons;
+  icons = ICON_TYPE;
 
   permissions: Permissions;
 

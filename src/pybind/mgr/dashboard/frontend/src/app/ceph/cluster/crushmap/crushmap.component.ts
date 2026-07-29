@@ -5,7 +5,7 @@ import { Node } from 'carbon-components-angular/treeview/tree-node.types';
 import { Observable, Subscription } from 'rxjs';
 
 import { CrushRuleService } from '~/app/shared/api/crush-rule.service';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { TimerService } from '~/app/shared/services/timer.service';
 
 export interface CrushmapInfo {
@@ -44,7 +44,7 @@ export class CrushmapComponent implements OnDestroy, OnInit {
   @ViewChild('tree') tree: TreeViewComponent;
   @ViewChild('tag') labelTpl: TemplateRef<any>;
 
-  icons = Icons;
+  icons = ICON_TYPE;
   loadingIndicator = true;
   nodes: Node[] = [];
   metadata: any;

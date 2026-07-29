@@ -12,7 +12,6 @@
       {{ action | titlecase }} {{ resource | upperFirst }}
     </h3>
   </cds-modal-header>
-
   <div
     cdsModalContent
     class="modal-wrapper"
@@ -67,7 +66,6 @@
           }
         </ng-template>
       </div>
-
       <!-- Plugin -->
       <div class="form-item">
         <cds-select
@@ -94,7 +92,6 @@
             </option>
           }
         </cds-select>
-
         <ng-template #pluginError>
           <span
             class="invalid-feedback"
@@ -103,13 +100,11 @@
             This field is required!
           </span>
         </ng-template>
-
         <ng-template #pluginLabelTpl>
           Plugin
           <cd-helper [html]="tooltips.plugins[plugin].description"> </cd-helper>
         </ng-template>
       </div>
-
       <!-- Data Chunk k -->
       <div class="form-item">
         <cds-number
@@ -189,7 +184,6 @@
           }
         </ng-template>
       </div>
-
       <!-- Coding chunks (m) -->
       <div class="form-item">
         <cds-number
@@ -244,7 +238,6 @@
           }
         </ng-template>
       </div>
-
       <!-- Durability estimator (c) -->
       @if (plugin === 'shec') {
         <div class="form-item">
@@ -302,7 +295,6 @@
             >
             </cds-number>
           </div>
-
           <div
             cdsCol
             [columnNumbers]="{ lg: 1 }"
@@ -317,7 +309,7 @@
               >
                 <svg
                   cdsIcon="unlocked"
-                  size="16"
+
                   class="cds--btn__icon"
                 ></svg>
               </cds-icon-button>
@@ -330,7 +322,7 @@
               >
                 <svg
                   cdsIcon="locked"
-                  size="16"
+
                   class="cds--btn__icon"
                 ></svg>
               </cds-icon-button>
@@ -377,7 +369,6 @@
               </span>
             }
           </ng-template>
-
           <ng-template #labelTpl>
             Helper chunks (d)
             <cd-helper [html]="tooltips.plugins.clay.d"> </cd-helper>
@@ -406,11 +397,9 @@
             i18n-helperText
           >
           </cds-number>
-
           <ng-template #lHelper>
             <span> Locality groups: {{ lrcGroups }} </span>
           </ng-template>
-
           <ng-template #lError>
             @if (form.showError('l', formDir, 'required')) {
               <span
@@ -437,7 +426,6 @@
               </span>
             }
           </ng-template>
-
           <ng-template #localityLabelTpl>
             Locality (l)
             <cd-helper [html]="tooltips.plugins.lrc.l"> </cd-helper>
@@ -467,7 +455,6 @@
           }
         </cds-select>
       </div>
-
       <!-- Crush num failure domain -->
       <div
         cdsrow
@@ -499,7 +486,6 @@
           </ng-container>
         </ng-template>
       </div>
-
       <!-- Crush osds per failure domain -->
       <div
         cdsrow
@@ -531,7 +517,6 @@
           </ng-container>
         </ng-template>
       </div>
-
       <ng-template
         #crushFailureDomainValidationErrors
         let-control="control"
@@ -570,7 +555,6 @@
           }
         }
       </ng-template>
-
       <!-- Crush locality -->
       @if (plugin === PLUGIN.LRC) {
         <div class="form-item">
@@ -630,7 +614,6 @@
             </option>
           }
         </cds-select>
-
         <ng-template
           #crushDeviceClassLabelTpl
           i18n

@@ -6,7 +6,7 @@ import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -116,7 +116,7 @@ export class NvmeofInitiatorsListComponent implements OnInit, OnDestroy {
       {
         name: this.actionLabels.ADD,
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         click: () => this.openAddInitiatorForm(),
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection,
         disable: () => this.hasAllHostsAllowed()
@@ -124,7 +124,7 @@ export class NvmeofInitiatorsListComponent implements OnInit, OnDestroy {
       {
         name: $localize`Edit host key`,
         permission: 'update',
-        icon: Icons.edit,
+        icon: ICON_TYPE.edit,
         click: () => this.editHostKeyModal(),
         disable: () => this.selection.selected.length !== 1,
         canBePrimary: (selection: CdTableSelection) => selection.selected.length === 1
@@ -132,7 +132,7 @@ export class NvmeofInitiatorsListComponent implements OnInit, OnDestroy {
       {
         name: this.actionLabels.REMOVE,
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: ICON_TYPE.close,
         click: () => this.removeInitiatorModal(),
         disable: () => !this.selection.hasSelection,
         canBePrimary: (selection: CdTableSelection) => selection.hasSelection

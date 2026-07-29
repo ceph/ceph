@@ -13,22 +13,16 @@ Also  using 'fill' as that is coming from carbon (see above example).
 Using `color` in css and seyting svg will fill="currentColor does not work.
 */
 
-.success-icon {
+.checkmarkFilled-icon {
   fill: theme.$support-success !important;
 }
 
-.danger-icon {
+.warningFilled-icon {
   fill: theme.$support-error !important;
 }
 
-//@TODO: this naming needs to be changed
-// Do this after converting Icons enum to const
-.infoCircle-icon {
+.informationFilled-icon {
   fill: theme.$support-info !important;
-}
-
-.warning-icon {
-  fill: theme.$support-caution-major !important;
 }
 
 .warningAltFilled-icon {
@@ -43,11 +37,11 @@ Using `color` in css and seyting svg will fill="currentColor does not work.
   fill: theme.$support-info !important;
 }
 
-.deploy-icon {
+.cube-icon {
   fill: theme.$layer-selected-disabled !important;
 }
 
-.emptySearch-icon {
+.search-icon {
   fill: theme.$layer-selected-disabled !important;
 }
 
@@ -55,7 +49,7 @@ Using `color` in css and seyting svg will fill="currentColor does not work.
   fill: theme.$support-caution-major !important;
 }
 
-.checkMarkOutline-icon {
+.checkmarkOutline-icon {
   fill: theme.$support-success !important;
 }
 

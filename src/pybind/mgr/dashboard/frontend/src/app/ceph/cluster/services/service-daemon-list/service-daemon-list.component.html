@@ -1,9 +1,7 @@
 <cd-orchestrator-doc-panel *ngIf="showDocPanel"></cd-orchestrator-doc-panel>
-
 <div *ngIf="flag === 'hostDetails'; else serviceDetailsTpl">
   <ng-container *ngTemplateOutlet="serviceDaemonDetailsTpl"></ng-container>
 </div>
-
 <ng-template #serviceDetailsTpl>
   @switch (mode) {
     @case ('daemons') {
@@ -23,7 +21,6 @@
     }
   }
 </ng-template>
-
 <ng-template
   #statusTpl
   let-row="data.row"
@@ -35,7 +32,6 @@
     {{ row.status_desc }}
   </cds-tag>
 </ng-template>
-
 <ng-template
   #listTpl
   let-events="data.value"
@@ -53,15 +49,15 @@
       ><br />
       <span *ngIf="event.level === 'INFO'">
         <svg
-          [cdsIcon]="icons.infoCircle"
-          [size]="icons.size16"
+          [cdsIcon]="icons.informationFilled"
+
           class="cds-info-color"
         ></svg>
       </span>
       <span *ngIf="event.level === 'ERROR'">
         <svg
-          [cdsIcon]="icons.warning"
-          [size]="icons.size16"
+          [cdsIcon]="icons.warningAltFilled"
+
           class="cds-warning-color"
         ></svg>
       </span>
@@ -74,7 +70,6 @@
     </div>
   </ng-template>
 </ng-template>
-
 <ng-template #serviceDaemonDetailsTpl>
   <cd-table
     *ngIf="hasOrchestrator"
@@ -97,7 +92,6 @@
     </cd-table-actions>
   </cd-table>
 </ng-template>
-
 <ng-template
   #cpuTpl
   let-row="data.row"

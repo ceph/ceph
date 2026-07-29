@@ -10,7 +10,7 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { NvmeofSubsystemNamespace } from '~/app/shared/models/nvmeof';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { FormButtonPanelComponent } from '~/app/shared/components/form-button-panel/form-button-panel.component';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 
@@ -30,7 +30,7 @@ export class NvmeofNamespaceExpandModalComponent implements OnInit {
   currentSizeGiB: number;
   imageName: string;
   expandText: string = $localize`Expand`;
-  icons = Icons;
+  icons = ICON_TYPE;
   INVALID_TEXTS: Record<string, string> = {
     required: $localize`This field is required.`,
     minSize: $localize`Value must be greater than the current image size.`

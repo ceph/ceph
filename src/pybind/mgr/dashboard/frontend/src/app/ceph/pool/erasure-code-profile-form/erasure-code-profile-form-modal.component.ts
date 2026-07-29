@@ -19,7 +19,7 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
 import { CrushNodeSelectionClass } from '~/app/shared/classes/crush.node.selection.class';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
@@ -53,7 +53,7 @@ export class ErasureCodeProfileFormModalComponent
     ISA: 'isa' // Intel Storage Acceleration - default
   };
   plugin = this.PLUGIN.ISA;
-  icons = Icons;
+  icons = ICON_TYPE;
 
   form: CdFormGroup;
   plugins: string[];

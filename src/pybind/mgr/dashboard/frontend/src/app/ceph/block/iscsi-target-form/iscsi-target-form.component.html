@@ -15,7 +15,6 @@
       >
         {{ action | titlecase }} {{ resource | upperFirst }}
       </div>
-
       <div class="card-body">
         <!-- Target IQN -->
         <div class="form-group row">
@@ -42,26 +41,22 @@
                 (click)="targetSettingsModal()"
               >
                 <svg
-                  [cdsIcon]="icons.deepCheck"
-                  [size]="icons.size16"
+                  [cdsIcon]="icons.settings"
                 ></svg>
               </button>
             </div>
-
             <span
               class="invalid-feedback"
               *ngIf="targetForm.showError('target_iqn', formDir, 'required')"
               i18n
               >This field is required.</span
             >
-
             <span
               class="invalid-feedback"
               *ngIf="targetForm.showError('target_iqn', formDir, 'pattern')"
               i18n
               >IQN has wrong pattern.</span
             >
-
             <span
               class="invalid-feedback"
               *ngIf="targetForm.showError('target_iqn', formDir, 'iqn')"
@@ -82,7 +77,6 @@
                 >More information</a
               >
             </span>
-
             <span
               class="form-text text-muted"
               *ngIf="hasAdvancedSettings(targetForm.getValue('target_controls'))"
@@ -92,7 +86,6 @@
             <hr />
           </div>
         </div>
-
         <!-- Portals -->
         <div class="form-group row">
           <label
@@ -116,13 +109,11 @@
                   (click)="removePortal(i, portal)"
                 >
                   <svg
-                    [cdsIcon]="icons.destroy"
-                    [size]="icons.size16"
+                    [cdsIcon]="icons.close"
                   ></svg>
                 </button>
               </div>
             </ng-container>
-
             <div class="row">
               <div class="col-md-12">
                 <cd-select
@@ -134,13 +125,11 @@
                 >
                   <svg
                     [cdsIcon]="icons.add"
-                    [size]="icons.size16"
                   ></svg>
                   <ng-container i18n>Add portal</ng-container>
                 </cd-select>
               </div>
             </div>
-
             <input
               class="form-control"
               type="hidden"
@@ -148,18 +137,15 @@
               name="portals"
               formControlName="portals"
             />
-
             <span
               class="invalid-feedback"
               *ngIf="targetForm.showError('portals', formDir, 'minGateways')"
               i18n
               >At least {{ minimum_gateways }} gateways are required.</span
             >
-
             <hr />
           </div>
         </div>
-
         <!-- Images -->
         <div class="form-group row">
           <label
@@ -189,8 +175,7 @@
                   (click)="imageSettingsModal(image)"
                 >
                   <svg
-                    [cdsIcon]="icons.deepCheck"
-                    [size]="icons.size16"
+                    [cdsIcon]="icons.settings"
                   ></svg>
                 </button>
                 <button
@@ -199,12 +184,10 @@
                   (click)="removeImage(i, image)"
                 >
                   <svg
-                    [cdsIcon]="icons.destroy"
-                    [size]="icons.size16"
+                    [cdsIcon]="icons.close"
                   ></svg>
                 </button>
               </div>
-
               <span class="form-text text-muted">
                 <ng-container
                   *ngIf="backstores.length > 1"
@@ -212,7 +195,6 @@
                   >Backstore:
                   {{ imagesSettings[image].backstore | iscsiBackstore }}.&nbsp;</ng-container
                 >
-
                 <ng-container
                   *ngIf="
                     hasAdvancedSettings(imagesSettings[image][imagesSettings[image].backstore])
@@ -222,7 +204,6 @@
                 >
               </span>
             </ng-container>
-
             <input
               class="form-control"
               type="hidden"
@@ -230,21 +211,18 @@
               name="disks"
               formControlName="disks"
             />
-
             <span
               class="invalid-feedback"
               *ngIf="targetForm.showError('disks', formDir, 'dupLunId')"
               i18n
               >Duplicated LUN numbers.</span
             >
-
             <span
               class="invalid-feedback"
               *ngIf="targetForm.showError('disks', formDir, 'dupWwn')"
               i18n
               >Duplicated WWN.</span
             >
-
             <div class="row">
               <div class="col-md-12">
                 <cd-select
@@ -256,17 +234,14 @@
                 >
                   <svg
                     [cdsIcon]="icons.add"
-                    [size]="icons.size16"
                   ></svg>
                   <ng-container i18n>Add image</ng-container>
                 </cd-select>
               </div>
             </div>
-
             <hr />
           </div>
         </div>
-
         <!-- acl_enabled -->
         <div class="form-group row">
           <div class="cd-col-form-offset">
@@ -285,11 +260,9 @@
                 >ACL authentication</label
               >
             </div>
-
             <hr />
           </div>
         </div>
-
         <!-- Target level authentication was introduced in ceph-iscsi config v11 -->
         <div
           formGroupName="auth"
@@ -312,14 +285,12 @@
                 name="target_user"
                 formControlName="user"
               />
-
               <span
                 class="invalid-feedback"
                 *ngIf="targetForm.showError('user', formDir, 'required')"
                 i18n
                 >This field is required.</span
               >
-
               <span
                 class="invalid-feedback"
                 *ngIf="targetForm.showError('user', formDir, 'pattern')"
@@ -329,7 +300,6 @@
               >
             </div>
           </div>
-
           <!-- Target password -->
           <div class="form-group row">
             <label
@@ -357,14 +327,12 @@
                 ></button>
                 <cd-copy-2-clipboard-button source="target_password"> </cd-copy-2-clipboard-button>
               </div>
-
               <span
                 class="invalid-feedback"
                 *ngIf="targetForm.showError('password', formDir, 'required')"
                 i18n
                 >This field is required.</span
               >
-
               <span
                 class="invalid-feedback"
                 *ngIf="targetForm.showError('password', formDir, 'pattern')"
@@ -374,7 +342,6 @@
               >
             </div>
           </div>
-
           <!-- Target mutual_user -->
           <div class="form-group row">
             <label
@@ -392,14 +359,12 @@
                 name="target_mutual_user"
                 formControlName="mutual_user"
               />
-
               <span
                 class="invalid-feedback"
                 *ngIf="targetForm.showError('mutual_user', formDir, 'required')"
                 i18n
                 >This field is required.</span
               >
-
               <span
                 class="invalid-feedback"
                 *ngIf="targetForm.showError('mutual_user', formDir, 'pattern')"
@@ -409,7 +374,6 @@
               >
             </div>
           </div>
-
           <!-- Target mutual_password -->
           <div class="form-group row">
             <label
@@ -428,7 +392,6 @@
                   name="target_mutual_password"
                   formControlName="mutual_password"
                 />
-
                 <button
                   type="button"
                   class="btn btn-light"
@@ -439,14 +402,12 @@
                 <cd-copy-2-clipboard-button source="target_mutual_password">
                 </cd-copy-2-clipboard-button>
               </div>
-
               <span
                 class="invalid-feedback"
                 *ngIf="targetForm.showError('mutual_password', formDir, 'required')"
                 i18n
                 >This field is required.</span
               >
-
               <span
                 class="invalid-feedback"
                 *ngIf="targetForm.showError('mutual_password', formDir, 'pattern')"
@@ -457,7 +418,6 @@
             </div>
           </div>
         </div>
-
         <!-- Initiators -->
         <div
           class="form-group row"
@@ -505,21 +465,18 @@
                       cdTrim
                       (blur)="updatedInitiatorSelector()"
                     />
-
                     <span
                       class="invalid-feedback"
                       *ngIf="initiator.showError('client_iqn', formDir, 'notUnique')"
                       i18n
                       >Initiator IQN needs to be unique.</span
                     >
-
                     <span
                       class="invalid-feedback"
                       *ngIf="initiator.showError('client_iqn', formDir, 'required')"
                       i18n
                       >This field is required.</span
                     >
-
                     <span
                       class="invalid-feedback"
                       *ngIf="initiator.showError('client_iqn', formDir, 'pattern')"
@@ -528,7 +485,6 @@
                     >
                   </div>
                 </div>
-
                 <ng-container formGroupName="auth">
                   <!-- Initiator: User -->
                   <div class="form-group row">
@@ -552,7 +508,6 @@
                         i18n
                         >This field is required.</span
                       >
-
                       <span
                         class="invalid-feedback"
                         *ngIf="initiator.showError('user', formDir, 'pattern')"
@@ -562,7 +517,6 @@
                       >
                     </div>
                   </div>
-
                   <!-- Initiator: Password -->
                   <div class="form-group row">
                     <label
@@ -580,7 +534,6 @@
                           autocomplete="new-password"
                           type="password"
                         />
-
                         <button
                           type="button"
                           class="btn btn-light"
@@ -597,7 +550,6 @@
                         i18n
                         >This field is required.</span
                       >
-
                       <span
                         class="invalid-feedback"
                         *ngIf="initiator.showError('password', formDir, 'pattern')"
@@ -607,7 +559,6 @@
                       >
                     </div>
                   </div>
-
                   <!-- Initiator: mutual_user -->
                   <div class="form-group row">
                     <label
@@ -624,14 +575,12 @@
                         autocomplete="off"
                         type="text"
                       />
-
                       <span
                         class="invalid-feedback"
                         *ngIf="initiator.showError('mutual_user', formDir, 'required')"
                         i18n
                         >This field is required.</span
                       >
-
                       <span
                         class="invalid-feedback"
                         *ngIf="initiator.showError('mutual_user', formDir, 'pattern')"
@@ -641,7 +590,6 @@
                       >
                     </div>
                   </div>
-
                   <!-- Initiator: mutual_password -->
                   <div class="form-group row">
                     <label
@@ -659,7 +607,6 @@
                           autocomplete="new-password"
                           type="password"
                         />
-
                         <button
                           type="button"
                           class="btn btn-light"
@@ -676,7 +623,6 @@
                         i18n
                         >This field is required.</span
                       >
-
                       <span
                         class="invalid-feedback"
                         *ngIf="initiator.showError('mutual_password', formDir, 'pattern')"
@@ -687,7 +633,6 @@
                     </div>
                   </div>
                 </ng-container>
-
                 <!-- Initiator: Images -->
                 <div class="form-group row">
                   <label
@@ -711,19 +656,16 @@
                           (click)="removeInitiatorImage(initiator, li, ii, image)"
                         >
                           <svg
-                            [cdsIcon]="icons.destroy"
-                            [size]="icons.size16"
+                            [cdsIcon]="icons.close"
                           ></svg>
                         </button>
                       </div>
                     </ng-container>
-
                     <span
                       *ngIf="initiator.getValue('cdIsInGroup')"
                       i18n
                       >Initiator belongs to a group. Images will be configure in the group.</span
                     >
-
                     <div
                       class="row"
                       *ngIf="!initiator.getValue('cdIsInGroup')"
@@ -737,7 +679,6 @@
                         >
                           <svg
                             [cdsIcon]="icons.add"
-                            [size]="icons.size16"
                           ></svg>
                           <ng-container i18n>Add image</ng-container>
                         </cd-select>
@@ -747,7 +688,6 @@
                 </div>
               </div>
             </div>
-
             <div class="row">
               <div class="col-md-12">
                 <span
@@ -756,7 +696,6 @@
                   i18n
                   >No items added.</span
                 >
-
                 <button
                   (click)="addInitiator(); (false)"
                   class="btn btn-light float-end"
@@ -764,17 +703,14 @@
                 >
                   <svg
                     [cdsIcon]="icons.add"
-                    [size]="icons.size16"
                   ></svg>
                   <ng-container i18n>Add initiator</ng-container>
                 </button>
               </div>
             </div>
-
             <hr />
           </div>
         </div>
-
         <!-- Groups -->
         <div
           class="form-group row"
@@ -822,7 +758,6 @@
                     />
                   </div>
                 </div>
-
                 <!-- Group: members -->
                 <div class="form-group row">
                   <label
@@ -846,13 +781,11 @@
                           (click)="removeGroupInitiator(group, i, gi)"
                         >
                           <svg
-                            [cdsIcon]="icons.destroy"
-                            [size]="icons.size16"
+                            [cdsIcon]="icons.close"
                           ></svg>
                         </button>
                       </div>
                     </ng-container>
-
                     <div class="row">
                       <div class="col-md-12">
                         <cd-select
@@ -864,17 +797,14 @@
                         >
                           <svg
                             [cdsIcon]="icons.add"
-                            [size]="icons.size16"
                           ></svg>
                           <ng-container i18n>Add initiator</ng-container>
                         </cd-select>
                       </div>
                     </div>
-
                     <hr />
                   </div>
                 </div>
-
                 <!-- Group: disks -->
                 <div class="form-group row">
                   <label
@@ -898,13 +828,11 @@
                           (click)="removeGroupDisk(group, i, gi)"
                         >
                           <svg
-                            [cdsIcon]="icons.destroy"
-                            [size]="icons.size16"
+                            [cdsIcon]="icons.close"
                           ></svg>
                         </button>
                       </div>
                     </ng-container>
-
                     <div class="row">
                       <div class="col-md-12">
                         <cd-select
@@ -915,19 +843,16 @@
                         >
                           <svg
                             [cdsIcon]="icons.add"
-                            [size]="icons.size16"
                           ></svg>
                           <ng-container i18n>Add image</ng-container>
                         </cd-select>
                       </div>
                     </div>
-
                     <hr />
                   </div>
                 </div>
               </div>
             </div>
-
             <div class="row">
               <div class="col-md-12">
                 <span
@@ -936,7 +861,6 @@
                   i18n
                   >No items added.</span
                 >
-
                 <button
                   (click)="addGroup(); (false)"
                   class="btn btn-light float-end"
@@ -944,7 +868,6 @@
                 >
                   <svg
                     [cdsIcon]="icons.add"
-                    [size]="icons.size16"
                   ></svg>
                   <ng-container i18n>Add group</ng-container>
                 </button>

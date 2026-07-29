@@ -45,7 +45,6 @@
             </span>
           </ng-template>
         </div>
-
         <div
           *ngIf="joinAuths$ | async as joinAuths"
           class="form-item"
@@ -137,7 +136,7 @@
               Create AD access resource
               <svg
                 cdsIcon="launch"
-                size="16"
+
                 class="cds--btn__icon"
               ></svg>
             </button>
@@ -145,7 +144,6 @@
         </div>
       </form>
     </div>
-
     <cd-form-button-panel
       (submitActionEvent)="submit()"
       [form]="domainSettingsForm"

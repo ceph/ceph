@@ -58,7 +58,6 @@
     </div>
   </ng-container>
 </ng-template>
-
 <ng-template #nametpl>
   <div cdstabledata>
     <span title="{{ cluster }}">
@@ -68,7 +67,6 @@
     </span>
   </div>
 </ng-template>
-
 <ng-template #loadingTpl>
   <div class="container h-75">
     <div class="row h-100 justify-content-center align-items-center">
@@ -89,7 +87,6 @@
     </div>
   </div>
 </ng-template>
-
 <ng-container *ngIf="managedByConfig$ | async as managedByConfig">
   <div
     class="container-fluid h-100 p-4"
@@ -162,28 +159,28 @@
                   class="text-danger"
                   *ngIf="queriesResults.HEALTH_ERROR_COUNT[0][1] !== '0'"
                 >
-                  <i [ngClass]="icons.danger"></i>
+                  <i [ngClass]="icons.warningFilled"></i>
                   {{ queriesResults.HEALTH_ERROR_COUNT[0][1] }}
                 </h3>
                 <h3
                   class="text-warning"
                   *ngIf="queriesResults.HEALTH_WARNING_COUNT[0][1] !== '0'"
                 >
-                  <i [ngClass]="icons.warning"></i>
+                  <i [ngClass]="icons.warningAltFilled"></i>
                   {{ queriesResults.HEALTH_WARNING_COUNT[0][1] }}
                 </h3>
                 <h3
                   class="text-danger"
                   *ngIf="queriesResults.HEALTH_ERROR_COUNT[0][1] !== '0'"
                 >
-                  <i [ngClass]="icons.danger"></i>
+                  <i [ngClass]="icons.warningFilled"></i>
                   {{ queriesResults.HEALTH_ERROR_COUNT[0][1] }}
                 </h3>
                 <h3
                   class="text-success"
                   *ngIf="queriesResults.HEALTH_OK_COUNT[0][1] !== '0'"
                 >
-                  <i [ngClass]="icons.success"></i>
+                  <i [ngClass]="icons.checkmarkFilled"></i>
                   {{ queriesResults.HEALTH_OK_COUNT[0][1] }}
                 </h3>
               </span>
@@ -209,14 +206,14 @@
                   class="text-danger"
                   *ngIf="queriesResults['CRITICAL_ALERTS_COUNT'][0][1] !== '0'"
                 >
-                  <i [ngClass]="icons.danger"></i>
+                  <i [ngClass]="icons.warningFilled"></i>
                   {{ queriesResults['CRITICAL_ALERTS_COUNT'][0][1] }}
                 </h3>
                 <h3
                   class="text-warning"
                   *ngIf="queriesResults['WARNING_ALERTS_COUNT'][0][1] !== '0'"
                 >
-                  <i [ngClass]="icons.warning"></i>
+                  <i [ngClass]="icons.warningAltFilled"></i>
                   {{ queriesResults['WARNING_ALERTS_COUNT'][0][1] }}
                 </h3>
               </span>
@@ -232,7 +229,7 @@
               <span class="text-center">
                 <h3 [ngClass]="{ 'text-danger': connectionErrorsCount > 0 }">
                   <i
-                    [ngClass]="icons.danger"
+                    [ngClass]="icons.warningFilled"
                     *ngIf="connectionErrorsCount > 0"
                   ></i>
                   {{ connectionErrorsCount }}
@@ -251,7 +248,6 @@
               </span>
             </cd-card>
           </div>
-
           <div class="row pt-3">
             <cd-card
               cardTitle="Capacity"
@@ -279,7 +275,6 @@
             </cd-card>
           </div>
         </div>
-
         <div class="col-sm-8 ps-2">
           <cd-card
             [cardTitle]="'Top ' + COUNT_OF_UTILIZATION_CHARTS + ' Cluster Utilization'"
@@ -329,7 +324,6 @@
           </cd-card>
         </div>
       </cd-card-group>
-
       <cd-card-group>
         <div class="col-lg-12 mt-3 m-0 p-0 ps-4 pe-4">
           <cd-table
@@ -341,7 +335,6 @@
           </cd-table>
         </div>
       </cd-card-group>
-
       <cd-card-group>
         <div class="col-lg-12 mb-4 m-0 p-0 ps-4 pe-4">
           <div class="row">
@@ -396,7 +389,6 @@
     </ng-container>
   </div>
 </ng-container>
-
 <ng-template
   #clusterUsageTpl
   let-row="data.row"

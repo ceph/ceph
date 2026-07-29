@@ -34,7 +34,6 @@
               >
               <span class="cds--type-body-compact-01">{{ version }}</span>
             </div>
-
             <!-- New Version / Upgrade Status -->
             <div
               class="detail-item"
@@ -67,7 +66,6 @@
                     >View Details...</a
                   >
                 </div>
-
                 <ng-template #inProgress>
                   <span
                     class="cds--type-body-compact-01"
@@ -79,7 +77,6 @@
                 </ng-template>
               </ng-container>
             </div>
-
             <!-- Cluster Status -->
             <div
               class="detail-item"
@@ -97,7 +94,7 @@
                   [ngStyle]="healthData.health.status | healthColor"
                 >
                   {{ healthData.health.status | healthLabel | titlecase }}
-                  <cd-icon type="warning"></cd-icon>
+                  <cd-icon type="warningAltFilled"></cd-icon>
                 </a>
               </ng-container>
               <ng-template #healthOk>
@@ -109,7 +106,6 @@
                 </span>
               </ng-template>
             </div>
-
             <!-- MGR Count -->
             <div
               class="detail-item"
@@ -122,14 +118,13 @@
               >
               <span class="cds--type-body-compact-01">
                 <cd-icon
-                  type="success"
+                  type="checkmarkFilled"
                   *ngIf="(healthData.mgr_map | mgrSummary)?.total > 1; else warningIcon"
                 >
                 </cd-icon>
                 {{ (healthData.mgr_map | mgrSummary)?.total }}
               </span>
             </div>
-
             <!-- Cluster FSID -->
             <div
               class="detail-item"
@@ -142,7 +137,6 @@
               >
               <span class="cds--type-body-compact-01">{{ fsid }}</span>
             </div>
-
             <!-- Release Image -->
             <div class="detail-item">
               <span
@@ -163,13 +157,12 @@
                 </span>
                 <ng-template #showError>
                   <span class="cds--type-body-compact-01 text-danger">
-                    <cd-icon type="danger"></cd-icon>
+                    <cd-icon type="warningFilled"></cd-icon>
                     <span i18n>Failed to fetch</span>
                   </span>
                 </ng-template>
               </ng-template>
             </div>
-
             <!-- Registry -->
             <div class="detail-item">
               <span
@@ -190,7 +183,7 @@
                 </span>
                 <ng-template #showRegistryError>
                   <span class="cds--type-body-compact-01 text-danger">
-                    <cd-icon type="danger"></cd-icon>
+                    <cd-icon type="warningFilled"></cd-icon>
                     <span i18n>Failed to fetch</span>
                   </span>
                 </ng-template>
@@ -200,7 +193,6 @@
         </cds-tile>
       </div>
     </div>
-
     <div
       cdsRow
       class="cds-mb-5"
@@ -230,7 +222,6 @@
         </cds-tile>
       </div>
     </div>
-
     <div
       cdsRow
       class="cds-mb-5"
@@ -257,7 +248,6 @@
         </cds-tile>
       </div>
     </div>
-
     <ng-template #upgradeStatusTpl>
       <div
         cdsStack
@@ -301,14 +291,13 @@
     </ng-template>
   </ng-container>
 </main>
-
 <ng-template #noUpgradesAvailable>
   <span
     class="cds--type-body-compact-01"
     id="no-upgrades-available"
     i18n
   >
-    <cd-icon type="success"></cd-icon>
+    <cd-icon type="checkmarkFilled"></cd-icon>
     Cluster is up-to-date
   </span>
   <a
@@ -320,15 +309,13 @@
     >Upgrade using custom image...</a
   >
 </ng-template>
-
 <ng-template #warningIcon>
   <cd-icon
-    type="warning"
+    type="warningAltFilled"
     title="To upgrade, you need minimum 2 mgr daemons."
   >
   </cd-icon>
 </ng-template>
-
 <ng-template #checkingForUpgradeStatus>
   <div
     cdsStack
@@ -351,7 +338,6 @@
     </button>
   </div>
 </ng-template>
-
 <ng-template #loadingDetails>
   <div
     class="w-50"
@@ -365,7 +351,6 @@
     </span>
   </div>
 </ng-template>
-
 <ng-template #upgradeStatusError>
   <div
     cdsStack
@@ -378,7 +363,7 @@
       id="upgrade-status-error"
       i18n
     >
-      <cd-icon type="danger"></cd-icon>
+      <cd-icon type="warningFilled"></cd-icon>
       {{ errorMessage }}
     </span>
     <a
@@ -391,7 +376,6 @@
     >
   </div>
 </ng-template>
-
 <ng-template #upgradeProgress>
   <div
     cdsStack

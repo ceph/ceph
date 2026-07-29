@@ -1,5 +1,5 @@
 import { Component, Input } from '@angular/core';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 
 @Component({
   selector: 'cd-rgw-sync-metadata-info',
@@ -8,7 +8,7 @@ import { Icons } from '~/app/shared/enum/icons.enum';
   standalone: false
 })
 export class RgwSyncMetadataInfoComponent {
-  icons = Icons;
+  icons = ICON_TYPE;
   align = 'top';
   @Input()
   metadataSyncInfo: any = {};

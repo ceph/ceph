@@ -6,8 +6,7 @@
         <div class="col-md-2 text-center">
           <span class="text-info">
             <svg
-              [cdsIcon]="icons.circle"
-              [size]="icons.size16"
+              [cdsIcon]="icons.dotMark"
             ></svg>
           </span>
         </div>
@@ -26,18 +25,15 @@
               <small class="date float-start">
                 {{ executingTask.begin_time | cdDate }}
               </small>
-
               <span class="float-end"> {{ executingTask.progress || 0 }} % </span>
             </p>
           </div>
         </div>
       </div>
     </div>
-
     <hr />
   </div>
 </ng-template>
-
 <ng-template #notificationsTpl>
   <ng-container *ngIf="notifications.length > 0">
     <button
@@ -46,15 +42,12 @@
       (click)="removeAll(); $event.stopPropagation()"
     >
       <svg
-        [cdsIcon]="icons.trash"
-        [size]="icons.size16"
+        [cdsIcon]="icons.trashCan"
       ></svg>
       &nbsp;
       <ng-container i18n>Clear notifications</ng-container>
     </button>
-
     <hr />
-
     <div
       *ngFor="let notification of notifications; let i = index"
       [ngClass]="notification.borderClass"
@@ -64,7 +57,7 @@
           <div class="col-md-2 text-center">
             <cd-icon
               [type]="notification.iconClass"
-              [size]="icons.size24"
+              size="24"
               [customClass]="notification.textClass"
             ></cd-icon>
           </div>
@@ -78,8 +71,7 @@
                 (click)="remove(i); $event.stopPropagation()"
               >
                 <svg
-                  [cdsIcon]="icons.trash"
-                  [size]="icons.size16"
+                  [cdsIcon]="icons.trashCan"
                 ></svg>
               </button>
               <button
@@ -95,8 +87,7 @@
                 (click)="silence(notification)"
               >
                 <svg
-                  [cdsIcon]="icons.mute"
-                  [size]="icons.size16"
+                  [cdsIcon]="icons.notificationOff"
                 ></svg>
               </button>
               <button
@@ -112,11 +103,9 @@
                 (click)="expire(notification)"
               >
                 <svg
-                  [cdsIcon]="icons.bell"
-                  [size]="icons.size16"
+                  [cdsIcon]="icons.notification"
                 ></svg>
               </button>
-
               <h6 class="card-title bold">{{ notification.title }}</h6>
               <p
                 class="card-text"
@@ -145,12 +134,10 @@
           </div>
         </div>
       </div>
-
       <hr />
     </div>
   </ng-container>
 </ng-template>
-
 <ng-template #emptyTpl>
   <div *ngIf="notifications.length === 0 && executingTasks.length === 0">
     <div
@@ -161,7 +148,6 @@
     </div>
   </div>
 </ng-template>
-
 <div
   class="card"
   (clickOutside)="closeSidebar()"
@@ -169,7 +155,6 @@
 >
   <div class="card-header">
     <ng-container i18n>Tasks and Notifications</ng-container>
-
     <button
       class="btn-close float-end"
       tabindex="-1"
@@ -178,7 +163,6 @@
       (click)="closeSidebar()"
     ></button>
   </div>
-
   <ngx-simplebar [options]="simplebar">
     <div class="card-body">
       <ng-container *ngTemplateOutlet="tasksTpl"></ng-container>

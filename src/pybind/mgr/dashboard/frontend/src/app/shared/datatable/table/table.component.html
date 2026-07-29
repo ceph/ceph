@@ -82,7 +82,7 @@
           >
             <svg
               [cdsIcon]="icons.filter"
-              [size]="icons.size16"
+
               class="cds--toolbar-action__icon"
             ></svg>
           </cds-icon-button>
@@ -134,7 +134,6 @@
                         />
                       </cds-text-label>
                     </div>
-
                     <!-- filter values column -->
                     <div
                       cdsCol
@@ -192,7 +191,6 @@
                         />
                       </cds-text-label>
                     </div>
-
                     <div
                       cdsCol
                       [columnNumbers]="{ sm: 4, md: 3, lg: 7 }"
@@ -245,7 +243,6 @@
                 }
               }
             </div>
-
             <div class="filter--footer">
               <button
                 cdsButton="secondary"
@@ -256,7 +253,6 @@
               >
                 <ng-container i18n>Clear all</ng-container>
               </button>
-
               <button
                 cdsButton="primary"
                 size="lg"
@@ -286,8 +282,7 @@
         *ngIf="fetchData?.observers?.length > 0"
       >
         <svg
-          [cdsIcon]="icons.refresh"
-          [size]="icons.size16"
+          [cdsIcon]="icons.renew"
           [ngClass]="{ 'cds--toolbar-action__icon': true, reload: loadingIndicator }"
         ></svg>
       </cds-icon-button>
@@ -304,7 +299,7 @@
       >
         <svg
           [cdsIcon]="icons.dataTable"
-          [size]="icons.size16"
+
           class="cds--toolbar-action__icon"
         ></svg>
       </button>
@@ -356,7 +351,6 @@
         @if (activeFilters.length > 3) {
           <cds-tooltip [description]="remainingFiltersTpl">
             <cds-tag> +{{ activeFilters.length - 3 }} </cds-tag>
-
             <ng-template #remainingFiltersTpl>
               <div
                 cdsStack="vertical"
@@ -474,7 +468,6 @@
   >
   </cds-pagination>
 </cds-table-container>
-
 <ng-template #noDataTemplate>
   <tbody>
     <tr cdstablerow>
@@ -512,7 +505,6 @@
     </tr>
   </tbody>
 </ng-template>
-
 <ng-template
   #rowDetailTpl
   let-row="data"
@@ -534,7 +526,6 @@
     </div>
   }
 </ng-template>
-
 <ng-template
   #defaultValueTpl
   let-value="data.value"
@@ -543,7 +534,6 @@
 >
   <span [ngClass]="column?.cellClass">{{ value }}</span>
 </ng-template>
-
 <ng-template #tableActionTpl>
   <cds-overflow-menu
     *ngIf="tableActions?.dropDownActions.length > 1 && selectionType !== 'multiClick'"
@@ -569,7 +559,6 @@
     </ng-container>
   </cds-overflow-menu>
 </ng-template>
-
 <!-- cell templates that can be accessed from outside -->
 <ng-template
   #tableCellBoldTpl
@@ -577,7 +566,6 @@
 >
   <strong>{{ value }}</strong>
 </ng-template>
-
 <ng-template
   #sparklineTpl
   let-row="data.row"
@@ -590,7 +578,6 @@
     ></cd-sparkline>
   </div>
 </ng-template>
-
 <ng-template
   #routerLinkTpl
   let-row="data.row"
@@ -602,16 +589,14 @@
     >{{ value }}</a
   >
 </ng-template>
-
 <ng-template
   #checkIconTpl
   let-value="data.value"
 >
   @if (value | boolean) {
-    <cd-icon type="check"></cd-icon>
+    <cd-icon type="checkmark"></cd-icon>
   }
 </ng-template>
-
 <ng-template
   #perSecondTpl
   let-row="data.row"
@@ -619,7 +604,6 @@
 >
   {{ value | dimless }} /s
 </ng-template>
-
 <ng-template
   #executingTpl
   let-column="data.column"
@@ -659,7 +643,6 @@
     </cds-tag>
   </span>
 </ng-template>
-
 <ng-template
   #tagTpl
   let-column="data.column"
@@ -695,7 +678,6 @@
     <span *ngIf="!last">&nbsp;</span>
   </span>
 </ng-template>
-
 <ng-template
   #mapTpl
   let-column="data.column"
@@ -703,7 +685,6 @@
 >
   <span>{{ value | map: column?.customTemplateConfig }}</span>
 </ng-template>
-
 <ng-template
   #tooltipTpl
   let-column="data.column"
@@ -728,7 +709,6 @@
     </cds-tag>
   </span>
 </ng-template>
-
 <ng-template
   #truncateTpl
   let-column="data.column"
@@ -743,7 +723,6 @@
     }}</span
   >
 </ng-template>
-
 <ng-template
   #rowDetailsTpl
   let-row="data.row"
@@ -761,7 +740,6 @@
   >
   </a>
 </ng-template>
-
 <ng-template
   #timeAgoTpl
   let-value="data.value"
@@ -772,7 +750,6 @@
     >{{ value | relativeDate }}</span
   >
 </ng-template>
-
 <ng-template
   #pathTpl
   let-value="data.value"
@@ -786,7 +763,6 @@
   >
   </cd-copy-2-clipboard-button>
 </ng-template>
-
 <ng-template
   #copyTpl
   let-value="data.value"
@@ -800,7 +776,6 @@
   >
   </cd-copy-2-clipboard-button>
 </ng-template>
-
 <ng-template
   #editingTpl
   let-value="data.value"
@@ -865,7 +840,7 @@
               type="button"
               (click)="saveCellItem(row, column?.prop)"
             >
-              <cd-icon type="check"></cd-icon>
+              <cd-icon type="checkmark"></cd-icon>
             </cds-icon-button>
             <cds-icon-button
               kind="ghost"
@@ -905,7 +880,6 @@
     </div>
   }
 </ng-template>
-
 <ng-template
   #redirectTpl
   let-value="data.value"

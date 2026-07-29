@@ -11,7 +11,7 @@ import { FlowType, RgwZonegroup, Zone } from '../models/rgw-multisite';
 import { of } from 'rxjs';
 import { SelectOption } from '~/app/shared/components/select/select-option.model';
 import _ from 'lodash';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { BaseModal } from 'carbon-components-angular';
@@ -30,7 +30,7 @@ export class RgwMultisiteSyncFlowModalComponent extends BaseModal implements OnI
   syncPolicyPipeForm: CdFormGroup;
   currentFormGroupContext: CdFormGroup;
   flowType = FlowType;
-  icons = Icons;
+  icons = ICON_TYPE;
   zones: ComboBoxItem[] = [];
 
   constructor(

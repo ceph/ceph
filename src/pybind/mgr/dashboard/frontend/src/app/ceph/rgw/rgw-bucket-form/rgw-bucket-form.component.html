@@ -15,7 +15,6 @@
     >
       {{ action | titlecase }} {{ resource | upperFirst }}
     </div>
-
     <!-- Id -->
     <div
       class="form-item"
@@ -34,7 +33,6 @@
         />
       </cds-text-label>
     </div>
-
     <!-- Name -->
     <div class="form-item">
       <cds-text-label
@@ -108,7 +106,6 @@
         >
       </ng-template>
     </div>
-
     <!-- Accounts -->
     @if (accounts.length && accountUsers.length > 0) {
       <div class="form-item">
@@ -221,7 +218,6 @@
         >
           Versioning
         </legend>
-
         <cds-checkbox
           name="versioning"
           formControlName="versioning"
@@ -235,7 +231,6 @@
         </cds-checkbox>
       </div>
     </fieldset>
-
     <!-- Multi-Factor Authentication -->
     <fieldset *ngIf="editing">
       <!-- MFA Delete -->
@@ -246,7 +241,6 @@
         >
           Multi-Factor Authentication
         </legend>
-
         <cds-checkbox
           name="mfa-delete"
           formControlName="mfa-delete"
@@ -327,7 +321,6 @@
         </ng-template>
       </div>
     </fieldset>
-
     <!-- Object Locking -->
     <fieldset *ngIf="!editing || (editing && bucketForm.getValue('lock_enabled'))">
       <div class="form-item">
@@ -359,7 +352,6 @@
           </cd-help-text>
         </cds-checkbox>
       </div>
-
       <!-- Object Locking mode -->
       <div
         *ngIf="bucketForm.getValue('lock_enabled')"
@@ -448,7 +440,6 @@
         specified period.
       </cd-alert-panel>
     </fieldset>
-
     <!-- Encryption -->
     <fieldset>
       <div class="form-item">
@@ -479,7 +470,6 @@
           </cd-help-text>
         </cds-checkbox>
       </div>
-
       <div *ngIf="bucketForm.getValue('encryption_enabled')">
         <div class="form-item">
           <cds-radio-group formControlName="encryption_type">
@@ -495,7 +485,6 @@
             >
           </cds-radio-group>
         </div>
-
         <div *ngIf="bucketForm.getValue('encryption_type') === 'aws:kms'">
           <div class="form-item">
             <cds-select
@@ -539,7 +528,6 @@
               >
             </ng-template>
           </div>
-
           <div class="form-item">
             <cds-text-label
               for="keyId"
@@ -568,7 +556,6 @@
         </div>
       </div>
     </fieldset>
-
     <!-- Replication -->
     <fieldset>
       <div class="form-item">
@@ -603,7 +590,6 @@
             >Enable
             <cd-help-text>Enables replication for the objects in the bucket.</cd-help-text>
           </cds-checkbox>
-
           <cd-alert-panel
             type="info"
             class="me-1"
@@ -618,7 +604,6 @@
         </ng-container>
       </div>
     </fieldset>
-
     <!-- Tags -->
     <fieldset>
       <legend
@@ -631,7 +616,6 @@
       <span *ngFor="let tag of tags; let i = index">
         <ng-container *ngTemplateOutlet="tagTpl; context: { index: i, tag: tag }"></ng-container>
       </span>
-
       <div cdsRow>
         <div cdsCol>
           <cds-tooltip
@@ -649,7 +633,7 @@
               <ng-container i18n>Add tag</ng-container>
               <svg
                 [cdsIcon]="icons.add"
-                [size]="icons.size16"
+
                 class="cds--btn__icon"
               ></svg>
             </button>
@@ -657,7 +641,6 @@
         </div>
       </div>
     </fieldset>
-
     <!-- Policies -->
     <fieldset>
       <div class="form-item">
@@ -667,7 +650,6 @@
         >
           Policies
         </legend>
-
         <!-- Bucket policy -->
         <cds-textarea-label
           for="id"
@@ -714,7 +696,7 @@
                 Policy examples
                 <svg
                   [cdsIcon]="icons.launch"
-                  [size]="icons.size16"
+
                   class="cds--btn__icon"
                 ></svg>
               </button>
@@ -728,7 +710,7 @@
                 Policy generator
                 <svg
                   [cdsIcon]="icons.launch"
-                  [size]="icons.size16"
+
                   class="cds--btn__icon"
                 ></svg>
               </button>
@@ -745,8 +727,8 @@
               >
                 Clear
                 <svg
-                  [cdsIcon]="icons.destroy"
-                  [size]="icons.size16"
+                  [cdsIcon]="icons.close"
+
                   class="cds--btn__icon"
                 ></svg>
               </button>
@@ -754,7 +736,6 @@
           </div>
         </div>
       </div>
-
       <!-- Lifecycle -->
       <div
         *ngIf="editing"
@@ -808,7 +789,7 @@
                 Policy examples
                 <svg
                   [cdsIcon]="icons.launch"
-                  [size]="icons.size16"
+
                   class="cds--btn__icon"
                 ></svg>
               </button>
@@ -825,8 +806,8 @@
               >
                 Clear
                 <svg
-                  [cdsIcon]="icons.destroy"
-                  [size]="icons.size16"
+                  [cdsIcon]="icons.close"
+
                   class="cds--btn__icon"
                 ></svg>
               </button>
@@ -834,7 +815,6 @@
           </div>
         </div>
       </div>
-
       <div class="form-item">
         <!-- ACL -->
         <cds-text-label i18n
@@ -908,7 +888,6 @@
         </div>
       </div>
     </fieldset>
-
     <!--Advanced-->
     <cd-form-advanced-fieldset>
       <!-- Placement target -->
@@ -946,7 +925,6 @@
           </option>
         </cds-select>
       </div>
-
       <!-- Bucket Rate Limit -->
       <cd-rgw-rate-limit
         [type]="'bucket'"
@@ -956,7 +934,6 @@
       >
       </cd-rgw-rate-limit>
     </cd-form-advanced-fieldset>
-
     <cd-form-button-panel
       (submitActionEvent)="submit()"
       [form]="bucketForm"
@@ -965,7 +942,6 @@
     ></cd-form-button-panel>
   </form>
 </div>
-
 <ng-template
   #tagTpl
   let-tag="tag"
@@ -982,7 +958,6 @@
         readonly
       />
     </ng-container>
-
     <!-- Tag actions -->
     <cds-icon-button
       kind="tertiary"
@@ -991,7 +966,7 @@
     >
       <svg
         [cdsIcon]="icons.edit"
-        [size]="icons.size16"
+
         class="cds-info-color cds--btn__icon"
       ></svg>
     </cds-icon-button>
@@ -1001,14 +976,13 @@
       (click)="deleteTag(index)"
     >
       <svg
-        [cdsIcon]="icons.trash"
-        [size]="icons.size16"
+        [cdsIcon]="icons.trashCan"
+
         class="cds-info-color cds--btn__icon"
       ></svg>
     </cds-icon-button>
   </div>
 </ng-template>
-
 <ng-template #loadingTpl>
   <cd-loading-panel i18n>Checking multi-site status...</cd-loading-panel>
 </ng-template>

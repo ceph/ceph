@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/c
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { Observable, Subscription } from 'rxjs';
 import { MultiClusterService } from '~/app/shared/api/multi-cluster.service';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
@@ -62,7 +62,7 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
 
   private subs = new Subscription();
   dashboardClustersMap: Map<string, string> = new Map<string, string>();
-  icons = Icons;
+  icons = ICON_TYPE;
   loading = true;
   bsModalRef: NgbModalRef;
   isMultiCluster = true;

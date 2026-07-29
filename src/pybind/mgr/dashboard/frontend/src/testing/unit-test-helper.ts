@@ -13,7 +13,7 @@ import { RgwDaemon } from '~/app/ceph/rgw/models/rgw-daemon';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -346,7 +346,7 @@ export class PrometheusHelper {
   }
 
   createLink(url: string) {
-    return `<a href="${url}" target="_blank"><svg cdsIcon="${Icons.lineChart}" size="${Icons.size16}" ></svg></a>`;
+    return `<a href="${url}" target="_blank"><svg cdsIcon="${ICON_TYPE.analytics}"></svg></a>`;
   }
 }
 

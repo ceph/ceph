@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { FinishedTask } from '~/app/shared/models/finished-task';
@@ -106,7 +106,7 @@ export class NvmeofSubsystemNamespacesListComponent implements OnInit, OnDestroy
       {
         name: this.actionLabels.ADD,
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         click: () =>
           this.router.navigate(['block/nvmeof/namespaces/create'], {
             queryParams: {
@@ -120,7 +120,7 @@ export class NvmeofSubsystemNamespacesListComponent implements OnInit, OnDestroy
       {
         name: $localize`Expand`,
         permission: 'update',
-        icon: Icons.edit,
+        icon: ICON_TYPE.edit,
         click: (row: NvmeofSubsystemNamespace) => {
           const namespace = row || this.selection.first();
           this.router.navigate(
@@ -142,7 +142,7 @@ export class NvmeofSubsystemNamespacesListComponent implements OnInit, OnDestroy
       {
         name: this.actionLabels.DELETE,
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: ICON_TYPE.close,
         click: () => this.deleteNamespaceModal()
       }
     ];

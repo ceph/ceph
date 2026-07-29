@@ -7,7 +7,7 @@
       <div class="blank-page">
         <i
           class="mx-auto d-block"
-          [ngClass]="[icons.size24, icons.wrench]"
+          [ngClass]="['24', icons.tools]"
         >
         </i>
         <div class="mt-4 text-center">
@@ -26,7 +26,6 @@
     </div>
   </ng-container>
 </ng-template>
-
 <ng-container *ngIf="managedByConfig$ | async as managedByConfig">
   <div *ngIf="managedByConfig['MANAGED_BY_CLUSTERS'].length === 0; else emptyCluster">
     <nav
@@ -74,7 +73,6 @@
     <div [ngbNavOutlet]="nav"></div>
   </div>
 </ng-container>
-
 <ng-template
   #urlTpl
   let-row="data.row"
@@ -87,7 +85,6 @@
     <cd-icon type="launch"></cd-icon>
   </a>
 </ng-template>
-
 <ng-template
   #durationTpl
   let-column="data.column"
@@ -101,7 +98,7 @@
       title="Cluster's token is about to expire"
       [class.icon-danger-color]="row.remainingDays < 2"
       [class.icon-warning-color]="row.remainingDays < 8"
-      class="{{ icons.warning }}"
+      class="{{ icons.warningAltFilled }}"
     ></i>
     <span title="{{ row.expiryDate }}">{{
       row.remainingTimeWithoutSeconds / 1000 | duration
@@ -117,7 +114,7 @@
     <i
       i18n-title
       title="Cluster's token has expired"
-      class="{{ icons.danger }}"
+      class="{{ icons.warningFilled }}"
     ></i>
     <span class="text-danger">Token expired</span>
   </span>

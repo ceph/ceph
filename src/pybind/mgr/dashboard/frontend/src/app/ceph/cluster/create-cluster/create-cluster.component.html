@@ -16,7 +16,6 @@
             class="ceph-logo"
           />
         </div>
-
         <div class="mb-4">
           <span
             class="cds--type-fluid-heading-05"
@@ -24,7 +23,6 @@
             >Welcome to {{ projectConstants.projectName }}
           </span>
         </div>
-
         <div class="mb-2">
           <span
             class="cds--type-fluid-heading-04"
@@ -32,21 +30,19 @@
             >Your Ceph cluster is initialized and running.
           </span>
         </div>
-
         <div class="mb-5">
           <span
             class="cds--type-body-compact-01"
             i18n
           >
             <cd-icon
-              type="success"
-              [size]="icons.size20"
+              type="checkmarkFilled"
+              [size]="IconSize.size20"
             >
             </cd-icon>
             The cluster control plane is ready.
           </span>
         </div>
-
         <div class="mb-2">
           <span
             class="cds--type-fluid-heading-03"
@@ -54,13 +50,12 @@
           >
             <cd-icon
               type="ibmCloudBareMetalServer"
-              [size]="icons.size20"
+              [size]="IconSize.size20"
             >
             </cd-icon>
             Add storage to begin using your cluster.
           </span>
         </div>
-
         <div class="mb-2">
           <span
             class="cds--type-body-01"
@@ -69,7 +64,6 @@
             storage and data services now, or skip and configure them later.</span
           >
         </div>
-
         <cds-tile
           class="border-subtle no-border-bottom"
           [cdsLayer]="1"
@@ -85,13 +79,12 @@
               Storage requirements
             </span>
             <cd-icon
-              type="infoCircle"
-              [size]="icons.size20"
+              type="informationFilled"
+              [size]="IconSize.size20"
             >
             </cd-icon>
           </div>
         </cds-tile>
-
         <cds-tile
           class="border-subtle mb-3"
           [cdsLayer]="2"
@@ -102,7 +95,7 @@
           >
             <cd-icon
               type="ibmCloudDedicatedHost"
-              [size]="icons.size20"
+              [size]="IconSize.size20"
             >
             </cd-icon>
             <div
@@ -123,19 +116,16 @@
               </span>
             </div>
           </div>
-
           <hr />
-
           <div
             cdsStack="horizontal"
             gap="4"
           >
             <cd-icon
               type="vmdkDisk"
-              [size]="icons.size20"
+              [size]="IconSize.size20"
             >
             </cd-icon>
-
             <div
               cdsStack="vertical"
               gap="1"
@@ -146,7 +136,6 @@
               >
                 Disks
               </span>
-
               <span
                 class="cds--type-body-compact-01 text-secondary"
                 i18n
@@ -155,19 +144,16 @@
               </span>
             </div>
           </div>
-
           <hr />
-
           <div
             cdsStack="horizontal"
             gap="4"
           >
             <cd-icon
               type="clusterIcon"
-              [size]="icons.size20"
+              [size]="IconSize.size20"
             >
             </cd-icon>
-
             <div
               cdsStack="vertical"
               gap="1"
@@ -178,7 +164,6 @@
               >
                 Data services (optional)
               </span>
-
               <span
                 class="cds--type-body-compact-01 text-secondary"
                 i18n
@@ -188,7 +173,6 @@
             </div>
           </div>
         </cds-tile>
-
         <div class="mb-3">
           <cd-alert-panel
             type="info"
@@ -200,7 +184,6 @@
             </span>
           </cd-alert-panel>
         </div>
-
         <div class="mb-5">
           <button
             cdsButton="primary"
@@ -213,7 +196,7 @@
             Add storage
             <cd-icon
               [cdsIcon]="icons.add"
-              [size]="icons.size20"
+              [size]="IconSize.size20"
               class="cds--btn__icon"
             >
             </cd-icon>
@@ -227,8 +210,8 @@
           >
             View cluster overview
             <cd-icon
-              [cdsIcon]="icons.right"
-              [size]="icons.size20"
+              [cdsIcon]="icons.arrowRight"
+              [size]="IconSize.size20"
               class="cds--btn__icon"
             >
             </cd-icon>
@@ -271,7 +254,6 @@
     >You are about to skip the storage setup process. You'll need to
     <strong>navigate through the menu to add hosts and services.</strong></span
   >
-
   <div
     class="cds-mt-4"
     i18n

@@ -9,7 +9,7 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import moment from 'moment';
 import { ExecutingTask } from '~/app/shared/models/executing-task';
 import { TaskMessageService } from '~/app/shared/services/task-message.service';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { Router } from '@angular/router';
 
 @Component({
@@ -25,7 +25,7 @@ export class NotificationAreaComponent implements OnInit, OnDestroy {
   private subs = new Subscription();
   last_task = '';
   mutex = new Mutex();
-  icons = Icons;
+  icons = ICON_TYPE;
   executingTasks: ExecutingTask[] = [];
 
   constructor(

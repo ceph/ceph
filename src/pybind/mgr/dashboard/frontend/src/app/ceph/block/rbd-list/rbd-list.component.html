@@ -1,5 +1,4 @@
 <cd-rbd-tabs></cd-rbd-tabs>
-
 <cd-table
   #table
   [data]="images"
@@ -26,7 +25,6 @@
   >
   </cd-table-actions>
 </cd-table>
-
 <ng-template
   #parentTpl
   let-value="data.value"
@@ -37,7 +35,6 @@
   >
   <span *ngIf="!value">-</span>
 </ng-template>
-
 <ng-template
   #mirroringTpl
   let-value="data.value"
@@ -75,7 +72,6 @@
     </cds-tag>
   </ng-template>
 </ng-template>
-
 <ng-template
   #ScheduleTpl
   let-value="data.value"
@@ -88,7 +84,6 @@
     {{ value[2] | cdDate }}
   </cds-tag>
 </ng-template>
-
 <ng-template
   #flattenTpl
   let-value
@@ -102,7 +97,6 @@
   <strong>{{ value.child }}</strong
   >.
 </ng-template>
-
 <ng-template
   #deleteTpl
   let-hasSnapshots="hasSnapshots"
@@ -123,7 +117,6 @@
     </ng-container>
   </div>
 </ng-template>
-
 <ng-template
   #removingStatTpl
   let-column="data.column"
@@ -157,12 +150,11 @@
     *ngIf="row.source && row.source === 'REMOVING'"
     i18n-title
     title="RBD in status 'Removing'"
-    [cdsIcon]="icons.warning"
-    [size]="icons.size16"
+    [cdsIcon]="icons.warningAltFilled"
+
     class="cds-warning-color"
   ></svg>
 </ng-template>
-
 <ng-template #forcePromoteConfirmation>
   <cd-alert-panel type="warning">{{ errorMessage }}</cd-alert-panel>
   <div
@@ -172,7 +164,6 @@
     <strong> Do you want to force the operation? </strong>
   </div>
 </ng-template>
-
 <ng-template
   #imageUsageTpl
   let-row="data.row"
@@ -194,7 +185,6 @@
     </cd-usage-bar>
   </ng-template>
 </ng-template>
-
 <ng-template #usageTooltip>
   <div
     i18n

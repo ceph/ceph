@@ -3,7 +3,7 @@ import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@an
 import _ from 'lodash';
 
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
@@ -42,7 +42,7 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
   tableAction: CdTableAction[] = [];
   permissions: Permissions;
 
-  icons = Icons;
+  icons = ICON_TYPE;
 
   constructor(
     private rgwUserService: RgwUserService,
@@ -74,7 +74,7 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
         name: $localize`Show`,
         permission: 'read',
         click: () => this.showKeyModal(),
-        icon: Icons.show
+        icon: ICON_TYPE.view
       }
     ];
 

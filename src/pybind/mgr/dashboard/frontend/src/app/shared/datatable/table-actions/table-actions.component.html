@@ -15,7 +15,6 @@
     <svg
       class="cds--btn__icon"
       cdsIcon="add"
-      size="16"
     ></svg>
   </button>
   <ng-container *ngIf="primaryDropDown">
@@ -49,7 +48,6 @@
     </ng-template>
   </ng-container>
 </ng-container>
-
 <ng-template #caret>
   <button
     [cdsButton]="currentAction.buttonKind"
@@ -62,7 +60,6 @@
     ></svg>
   </button>
 </ng-template>
-
 <ng-template #dropDownOnlyTpl>
   <cds-overflow-menu
     [customTrigger]="customTrigger"
@@ -89,7 +86,6 @@
     </ng-container>
   </cds-overflow-menu>
 </ng-template>
-
 <ng-template #customTrigger>
   <button
     [cdsButton]="dropDownOnlyBtnColor"

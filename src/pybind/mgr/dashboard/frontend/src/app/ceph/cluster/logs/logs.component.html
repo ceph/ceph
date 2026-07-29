@@ -146,10 +146,8 @@
       </ng-template>
     </ng-container>
   </nav>
-
   <div [ngbNavOutlet]="nav"></div>
 </div>
-
 <ng-template #logFiltersTpl>
   <div
     class="row mb-3 cds-mt-5"
@@ -177,7 +175,6 @@
           </option>
         </select>
       </div>
-
       <div class="col-md-3 me-3">
         <label
           for="logs-keyword"
@@ -189,10 +186,8 @@
           <span class="input-group-text">
             <svg
               [cdsIcon]="icons.search"
-              [size]="icons.size16"
             ></svg>
           </span>
-
           <input
             class="form-control"
             id="logs-keyword"
@@ -200,7 +195,6 @@
             [(ngModel)]="search"
             (keyup)="filterLogs()"
           />
-
           <button
             type="button"
             class="btn btn-light"
@@ -208,13 +202,11 @@
             title="Clear"
           >
             <svg
-              [cdsIcon]="icons.destroy"
-              [size]="icons.size16"
+              [cdsIcon]="icons.close"
             ></svg>
           </button>
         </div>
       </div>
-
       <div class="col-md-3 me-3">
         <label
           for="logs-date"
@@ -241,13 +233,11 @@
             title="Clear"
           >
             <svg
-              [cdsIcon]="icons.destroy"
-              [size]="icons.size16"
+              [cdsIcon]="icons.close"
             ></svg>
           </button>
         </div>
       </div>
-
       <div class="col-md-5">
         <label
           i18n
@@ -263,9 +253,7 @@
             [(ngModel)]="startTime"
             (ngModelChange)="filterLogs()"
           ></ngb-timepicker>
-
           <span class="mt-2">&nbsp;&mdash;&nbsp;</span>
-
           <ngb-timepicker
             [spinners]="false"
             [(ngModel)]="endTime"
@@ -276,7 +264,6 @@
     </div>
   </div>
 </ng-template>
-
 <ng-template #noEntriesTpl>
   <span i18n>No log entries found. Please try to select different filter options.</span>
   <span>&nbsp;</span>
@@ -287,7 +274,6 @@
     >Reset filter.</a
   >
 </ng-template>
-
 <ng-template #daemonLogsTpl>
   <cd-alert-panel
     type="info"

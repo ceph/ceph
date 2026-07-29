@@ -1,5 +1,5 @@
 import { Component, Input } from '@angular/core';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE, IconSize } from '~/app/shared/enum/icons.enum'
 
 @Component({
   selector: 'cd-rgw-sync-primary-zone',
@@ -8,7 +8,8 @@ import { Icons } from '~/app/shared/enum/icons.enum';
   standalone: false
 })
 export class RgwSyncPrimaryZoneComponent {
-  icons = Icons;
+  icons = ICON_TYPE;
+  IconSize = IconSize;
 
   @Input()
   realm: string;

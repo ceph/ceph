@@ -25,7 +25,7 @@ import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -82,7 +82,7 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
 
   errorThreshold = 0.9;
 
-  icons = Icons;
+  icons = ICON_TYPE;
 
   daemons: Daemon[] = [];
   services: Array<CephServiceSpec> = [];
@@ -136,28 +136,28 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
     this.tableActions = [
       {
         permission: 'update',
-        icon: Icons.start,
+        icon: ICON_TYPE.play,
         click: () => this.daemonAction(DaemonAction.START),
         name: this.actionLabels.START,
         disable: () => this.actionDisabled(DaemonAction.START)
       },
       {
         permission: 'update',
-        icon: Icons.stop,
+        icon: ICON_TYPE.stopFilledAlt,
         click: () => this.daemonAction(DaemonAction.STOP),
         name: this.actionLabels.STOP,
         disable: () => this.actionDisabled(DaemonAction.STOP)
       },
       {
         permission: 'update',
-        icon: Icons.restart,
+        icon: ICON_TYPE.renew,
         click: () => this.daemonAction(DaemonAction.RESTART),
         name: this.actionLabels.RESTART,
         disable: () => this.actionDisabled(DaemonAction.RESTART)
       },
       {
         permission: 'update',
-        icon: Icons.deploy,
+        icon: ICON_TYPE.cube,
         click: () => this.daemonAction(DaemonAction.REDEPLOY),
         name: this.actionLabels.REDEPLOY,
         disable: () => this.actionDisabled(DaemonAction.REDEPLOY)

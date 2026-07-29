@@ -18,7 +18,7 @@ import {
   SMBCluster
 } from '../smb.model';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 
 import { FormArray, FormControl, UntypedFormControl, Validators } from '@angular/forms';
 import { CdForm } from '~/app/shared/forms/cd-form';
@@ -57,7 +57,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   selectedHosts: string[] = [];
   action: string;
   resource: string;
-  icons = Icons;
+  icons = ICON_TYPE;
   domainSettingsObject: DomainSettings;
   isEdit = false;
   cluster_id: string;

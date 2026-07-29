@@ -9,7 +9,7 @@ import {
 } from '@angular/core';
 import { NotificationContent, NotificationType } from 'carbon-components-angular';
 
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 
 @Component({
   selector: 'cd-alert-panel',
@@ -56,7 +56,7 @@ export class AlertPanelComponent implements OnInit {
   @Output()
   action = new EventEmitter();
 
-  icons = Icons;
+  icons = ICON_TYPE;
 
   notificationContent: NotificationContent;
 

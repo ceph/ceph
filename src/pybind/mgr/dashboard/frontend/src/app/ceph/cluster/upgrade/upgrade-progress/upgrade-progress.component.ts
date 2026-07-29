@@ -3,7 +3,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Observable, ReplaySubject, Subscription } from 'rxjs';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { Permission } from '~/app/shared/models/permissions';
@@ -26,7 +26,7 @@ import { UpgradeStatusInterface } from '~/app/shared/models/upgrade.interface';
 })
 export class UpgradeProgressComponent implements OnInit, OnDestroy {
   permission: Permission;
-  icons = Icons;
+  icons = ICON_TYPE;
   modalRef: NgbModalRef;
   interval = new Subscription();
   executingTask: ExecutingTask;

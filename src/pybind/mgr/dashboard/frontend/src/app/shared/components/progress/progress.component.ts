@@ -1,5 +1,5 @@
 import { Component, Input } from '@angular/core';
-import { Icons } from '../../enum/icons.enum';
+import { ICON_TYPE } from '../../enum/icons.enum'
 
 @Component({
   selector: 'cd-progress',
@@ -8,7 +8,7 @@ import { Icons } from '../../enum/icons.enum';
   standalone: false
 })
 export class ProgressComponent {
-  icons = Icons;
+  icons = ICON_TYPE;
   @Input() value: number;
   @Input() label: string;
   @Input() status: string;

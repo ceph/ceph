@@ -10,13 +10,11 @@
     @for (task of executingTasks; track task.begin_time) {
       <div class="notification-wrapper">
         <div class="notification-item task-item">
-          <cd-icon type="infoCircle"></cd-icon>
-
+          <cd-icon type="informationFilled"></cd-icon>
           <div class="notification-content">
             <div class="notification-title">
               {{ task.description }}
             </div>
-
             <cds-progress-bar
               [max]="100"
               [value]="task.progress || 0"
@@ -25,17 +23,14 @@
               size="small"
             >
             </cds-progress-bar>
-
             <div class="task-row">
               <span class="notification-timestamp">
                 {{ task.begin_time | relativeDate }}
               </span>
-
               <span class="task-progress cds--type-label-01"> {{ task.progress || 0 }} % </span>
             </div>
           </div>
         </div>
-
         <div class="border-subtle-bottom"></div>
       </div>
     }

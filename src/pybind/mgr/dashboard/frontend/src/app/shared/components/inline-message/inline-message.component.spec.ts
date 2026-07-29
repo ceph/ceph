@@ -53,7 +53,7 @@ describe('InlineMessageComponent', () => {
     expect(component.isTruncated).toBe(false);
   });
 
-  it('should have icons property set to Icons enum', () => {
+  it('should have icons property set to ICON_TYPE', () => {
     expect(component.icons).toBeDefined();
   });
 });

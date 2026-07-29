@@ -1,5 +1,4 @@
 <cd-iscsi-tabs></cd-iscsi-tabs>
-
 <cd-alert-panel
   type="info"
   *ngIf="available === false"
@@ -10,14 +9,12 @@
     >Please consult the&nbsp;<cd-doc section="iscsi"></cd-doc>&nbsp;on how to configure and enable
     the iSCSI Targets management functionality.</ng-container
   >
-
   <ng-container *ngIf="status">
     <br />
     <span i18n>Available information:</span>
     <pre>{{ status }}</pre>
   </ng-container>
 </cd-alert-panel>
-
 <cd-table
   #table
   *ngIf="available === true"
@@ -42,20 +39,17 @@
       [tableActions]="tableActions"
     >
     </cd-table-actions>
-
     <button
       class="btn btn-light"
       type="button"
       (click)="configureDiscoveryAuth()"
     >
       <svg
-        [cdsIcon]="icons.key"
-        [size]="icons.size16"
+        [cdsIcon]="icons.password"
       ></svg>
       <ng-container i18n>Discovery authentication</ng-container>
     </button>
   </div>
-
   <ng-container *ngIf="expandedRow">
     <cd-iscsi-target-details
       *cdTableDetail

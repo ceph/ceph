@@ -4,7 +4,7 @@ import { Subscription, timer as observableTimer } from 'rxjs';
 
 import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
 import { InventoryDevice } from './inventory-devices/inventory-device.model';
 
@@ -23,7 +23,7 @@ export class InventoryComponent implements OnChanges, OnInit, OnDestroy {
   private reloadInterval = 5000;
   private firstRefresh = true;
 
-  icons = Icons;
+  icons = ICON_TYPE;
 
   orchStatus: OrchestratorStatus;
   showDocPanel = false;

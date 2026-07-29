@@ -11,7 +11,7 @@ import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -47,7 +47,7 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
   action: string;
   resource: string;
   editing: boolean;
-  icons = Icons;
+  icons = ICON_TYPE;
   hosts: any;
   labels: any;
   hasOrchestrator: boolean;

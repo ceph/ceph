@@ -1,7 +1,5 @@
 import { Pipe, PipeTransform } from '@angular/core';
 
-import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
-
 export type OverviewFieldStatusType = 'success' | 'warning' | 'danger' | 'info';
 export type OverviewFieldStatus = OverviewFieldStatusType | null | undefined;
 
@@ -12,19 +10,19 @@ export interface OverviewStatusMeta {
 
 const OVERVIEW_STATUS_MAP: Record<OverviewFieldStatusType, OverviewStatusMeta> = {
   success: {
-    icon: ICON_TYPE.success,
+    icon: 'checkmarkFilled',
     textClass: 'cd-status-text--success'
   },
   warning: {
-    icon: ICON_TYPE.warning,
+    icon: 'warningAltFilled',
     textClass: 'cd-status-text--warning'
   },
   danger: {
-    icon: ICON_TYPE.danger,
+    icon: 'warningFilled',
     textClass: 'cd-status-text--danger'
   },
   info: {
-    icon: ICON_TYPE.infoCircle,
+    icon: 'informationFilled',
     textClass: 'cd-status-text--info'
   }
 };

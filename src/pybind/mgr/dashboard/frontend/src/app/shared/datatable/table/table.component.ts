@@ -22,7 +22,7 @@ import { BehaviorSubject, Observable, of, Subject, Subscription } from 'rxjs';
 
 import { TableStatus } from '~/app/shared/classes/table-status';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { Icons, IconSize, EMPTY_STATE_IMAGE } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE, IconSize, EMPTY_STATE_IMAGE } from '~/app/shared/enum/icons.enum'
 
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import {
@@ -409,7 +409,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       .replace(/^./, (match) => match.toUpperCase());
   }
 
-  icons = Icons;
+  icons = ICON_TYPE;
   iconSize = IconSize;
   cellTemplates: {
     [key: string]: TemplateRef<any>;

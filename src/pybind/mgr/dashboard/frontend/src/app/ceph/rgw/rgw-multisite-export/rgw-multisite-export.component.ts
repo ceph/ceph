@@ -5,7 +5,7 @@ import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { RgwRealmToken } from '../models/rgw-multisite';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { CdForm } from '~/app/shared/forms/cd-form';
 
 @Component({
@@ -18,7 +18,7 @@ export class RgwMultisiteExportComponent extends CdForm implements OnInit, After
   exportTokenForm: CdFormGroup;
   realms: RgwRealmToken[];
   tokenValid = false;
-  icons = Icons;
+  icons = ICON_TYPE;
 
   constructor(
     public activeModal: NgbActiveModal,

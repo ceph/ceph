@@ -59,12 +59,10 @@
     </span>
   </div>
 </li>
-
 <div *ngIf="dropdownToggled">
   <hr />
   <ng-container *ngTemplateOutlet="dropdownTemplate"></ng-container>
 </div>
-
 <ng-template #defaultSummary>
   @if (data === null) {
     <ng-container *ngTemplateOutlet="loadingTpl"></ng-container>
@@ -80,7 +78,7 @@
       <span *ngIf="data.categoryPgAmount?.clean">
         {{ data.categoryPgAmount?.clean }}
       </span>
-      <cd-icon type="success"> </cd-icon>
+      <cd-icon type="checkmarkFilled"> </cd-icon>
     </span>
     <span
       *ngIf="data.info"
@@ -89,7 +87,7 @@
       <span *ngIf="data.info">
         {{ data.info }}
       </span>
-      <cd-icon type="infoCircle"> </cd-icon>
+      <cd-icon type="informationFilled"> </cd-icon>
     </span>
     <span
       *ngIf="data.warn || data.categoryPgAmount?.warning"
@@ -101,7 +99,7 @@
       <span *ngIf="data.categoryPgAmount?.warning">
         {{ data.categoryPgAmount?.warning }}
       </span>
-      <cd-icon type="warning"> </cd-icon>
+      <cd-icon type="warningAltFilled"> </cd-icon>
     </span>
     <span
       *ngIf="data.error || data.categoryPgAmount?.unknown"
@@ -113,7 +111,7 @@
       <span *ngIf="data.categoryPgAmount?.unknown">
         {{ data.categoryPgAmount?.unknown }}
       </span>
-      <cd-icon type="danger"> </cd-icon>
+      <cd-icon type="warningFilled"> </cd-icon>
     </span>
     <span
       *ngIf="data.categoryPgAmount?.working"
@@ -129,14 +127,13 @@
     </span>
   }
 </ng-template>
-
 <ng-template #osdSummary>
   @if (data === null) {
     <ng-container *ngTemplateOutlet="loadingTpl"></ng-container>
   } @else {
     <span *ngIf="data.up === data.in">
       {{ data.up }}
-      <cd-icon type="success"> </cd-icon>
+      <cd-icon type="checkmarkFilled"> </cd-icon>
     </span>
     <span *ngIf="data.up !== data.in">
       {{ data.up }}
@@ -179,7 +176,6 @@
     </span>
   }
 </ng-template>
-
 <ng-template #iscsiSummary>
   @if (data === null || total === null) {
     <ng-container *ngTemplateOutlet="loadingTpl"></ng-container>
@@ -188,7 +184,7 @@
       {{ data?.up }}
       <cd-icon
         *ngIf="data?.up || data?.up === 0"
-        type="success"
+        type="checkmarkFilled"
       >
       </cd-icon>
     </span>
@@ -197,16 +193,15 @@
       class="ms-2"
     >
       {{ data?.down }}
-      <cd-icon type="danger"> </cd-icon>
+      <cd-icon type="warningFilled"> </cd-icon>
     </span>
   }
 </ng-template>
-
 <ng-template #simplifiedSummary>
   @if (data === 0 || data) {
     <span *ngIf="!dropdownTotalError; else showErrorNum">
       {{ data }}
-      <cd-icon type="success"></cd-icon>
+      <cd-icon type="checkmarkFilled"></cd-icon>
     </span>
   } @else {
     <ng-container *ngTemplateOutlet="loadingTpl"></ng-container>
@@ -214,19 +209,17 @@
   <ng-template #showErrorNum>
     <span *ngIf="data - dropdownTotalError > 0">
       {{ data - dropdownTotalError }}
-      <cd-icon type="success"></cd-icon>
+      <cd-icon type="checkmarkFilled"></cd-icon>
     </span>
     <span>
       {{ dropdownTotalError }}
-      <cd-icon type="danger"></cd-icon>
+      <cd-icon type="warningFilled"></cd-icon>
     </span>
   </ng-template>
 </ng-template>
-
 <ng-template #loadingTpl>
   <cds-inline-loading></cds-inline-loading>
 </ng-template>
-
 <ng-template #noLinkTitle>
   @if (data !== null || total) {
     <span
@@ -242,7 +235,6 @@
     <span>{{ title }}</span>
   }
 </ng-template>
-
 <ng-template #dropdownTemplate>
   <ng-container *ngFor="let data of dropdownData?.total.category | keyvalue">
     <li class="list-group-item">
@@ -263,7 +255,7 @@
           {{ data.value.ok }}
           <cd-icon
             *ngIf="data.value.ok"
-            type="success"
+            type="checkmarkFilled"
           >
           </cd-icon>
         </span>
@@ -272,7 +264,7 @@
           class="me-4 ms-2"
         >
           {{ data.value.error }}
-          <cd-icon type="danger"> </cd-icon>
+          <cd-icon type="warningFilled"> </cd-icon>
         </span>
       </div>
     </li>

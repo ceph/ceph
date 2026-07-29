@@ -3,7 +3,7 @@ import { ActivatedRoute } from '@angular/router';
 
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { PrometheusListHelper } from '~/app/shared/helpers/prometheus-list-helper';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
@@ -39,7 +39,7 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
   tableActions: CdTableAction[];
   permission: Permission;
   selection = new CdTableSelection();
-  icons = Icons;
+  icons = ICON_TYPE;
   expandedInnerRow: any;
   multilineTextKeys = ['description', 'impact', 'fix'];
 
@@ -86,7 +86,7 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
         canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
         disable: (selection: CdTableSelection) =>
           !selection.hasSingleSelection || selection.first().cdExecuting,
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         routerLink: () =>
           '/monitoring' + this.urlBuilder.getCreateFrom(this.selection.first().fingerprint),
         name: $localize`Create Silence`

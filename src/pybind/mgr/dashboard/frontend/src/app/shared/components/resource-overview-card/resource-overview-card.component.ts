@@ -12,7 +12,7 @@ export interface OverviewField {
   /* Selects how the field value should be presented in the UI. */
   type?: 'text' | 'status' | 'tags';
   /* Visual tone used by status rendering (icon/text styling). */
-  status?: 'success' | 'warning' | 'danger' | 'info-circle';
+  status?: 'checkmarkFilled' | 'warningAltFilled' | 'warningFilled' | 'informationFilled';
   /* Fallback text shown when the value is empty. */
   emptyText?: string;
 }

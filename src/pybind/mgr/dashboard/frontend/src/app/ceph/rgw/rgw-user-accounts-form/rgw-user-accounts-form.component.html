@@ -15,14 +15,12 @@
       >
         {{ action | titlecase }} {{ resource | lowercase }}
       </div>
-
       <h4
         class="cds--type-heading-03 cds-mb-4"
         i18n
       >
         Account details
       </h4>
-
       <!-- Account Name -->
       <div class="form-item">
         <cds-text-label
@@ -79,7 +77,6 @@
           />
         </cds-text-label>
       </div>
-
       <!-- Email -->
       <div class="form-item">
         <cds-text-label
@@ -106,7 +103,6 @@
           </span>
         </ng-template>
       </div>
-
       <div class="form-item cds-mt-5 cds-mb-3">
         <h4
           class="cds--type-heading-03"
@@ -130,19 +126,18 @@
             <svg
               cdsIcon="chevron--down"
               *ngIf="!showAdvanced"
-              size="16"
+
               class="cds--btn__icon"
             ></svg>
             <svg
               cdsIcon="chevron--up"
               *ngIf="showAdvanced"
-              size="16"
+
               class="cds--btn__icon"
             ></svg>
           </button>
         </div>
       </div>
-
       <div *ngIf="showAdvanced">
         <h5
           class="cds--type-heading-02 cds-mb-2"
@@ -157,7 +152,6 @@
           Set the mode and maximum allowed values for each resource type. Select Custom to specify a
           limit.
         </p>
-
         <div
           class="form-item form-item-append"
           cdsRow
@@ -175,7 +169,6 @@
             ></ng-container>
           </div>
         </div>
-
         <div
           class="form-item form-item-append"
           cdsRow
@@ -193,7 +186,6 @@
             ></ng-container>
           </div>
         </div>
-
         <div
           class="form-item form-item-append"
           cdsRow
@@ -211,7 +203,6 @@
             ></ng-container>
           </div>
         </div>
-
         <div
           class="form-item form-item-append"
           cdsRow
@@ -229,7 +220,6 @@
             ></ng-container>
           </div>
         </div>
-
         <div
           class="form-item form-item-append"
           cdsRow
@@ -253,7 +243,6 @@
             ></ng-container>
           </div>
         </div>
-
         <h5
           class="cds--type-heading-02 cds-mb-2 cds-mt-5"
           i18n
@@ -267,7 +256,6 @@
           Define storage usage limits for the account and the buckets it owns. Quotas help control
           capacity consumption and enforce resource allocation policies.
         </p>
-
         <!-- Account Quota -->
         <div class="form-item">
           <ng-container
@@ -287,7 +275,6 @@
           >
           </ng-container>
         </div>
-
         <!-- Bucket Quota -->
         <div class="form-item">
           <ng-container
@@ -317,7 +304,6 @@
     </form>
   </ng-container>
 </div>
-
 <ng-template
   #selectModeTemplate
   [formGroup]="accountForm"
@@ -336,7 +322,6 @@
     <option value="1">Custom</option>
   </cds-select>
 </ng-template>
-
 <ng-template
   #accountMaxValueTemplate
   let-formControl="formControl"
@@ -352,7 +337,6 @@
     [invalid]="!accountForm.controls[formControl].valid && accountForm.controls[formControl].dirty"
     [invalidText]="maxValError"
   ></cds-number>
-
   <cds-text-label
     *ngIf="accountForm.get(formControl + '_mode').value != '1'"
     label="Maximum {{ formControl.replace('max_', '').replace('_', ' ') }}"
@@ -369,7 +353,6 @@
       [disabled]="true"
     />
   </cds-text-label>
-
   <ng-template #maxValError>
     <span
       *ngIf="accountForm.showError(formControl, formDir, 'required')"
@@ -391,7 +374,6 @@
     >
   </ng-template>
 </ng-template>
-
 <ng-template
   #quotaTemplate
   let-quotaType="quotaType"

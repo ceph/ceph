@@ -8,7 +8,7 @@ import {
   computed,
   Input
 } from '@angular/core';
-import { EMPTY_STATE_IMAGE, Icons, IconSize } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE, EMPTY_STATE_IMAGE, IconSize } from '~/app/shared/enum/icons.enum'
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import {
   METRIC_UNIT_MAP,
@@ -54,7 +54,7 @@ export class PerformanceCardComponent implements OnInit, OnDestroy {
   });
   performanceTypes = PerformanceType;
   metricUnitMap = METRIC_UNIT_MAP;
-  icons = Icons;
+  icons = ICON_TYPE;
   iconSize = IconSize;
   emptyState = EMPTY_STATE_IMAGE;
 

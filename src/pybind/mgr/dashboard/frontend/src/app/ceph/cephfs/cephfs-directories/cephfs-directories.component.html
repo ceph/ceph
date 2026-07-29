@@ -9,8 +9,7 @@
           (click)="refreshAllDirectories()"
         >
           <svg
-            [cdsIcon]="icons.refresh"
-            [size]="icons.size16"
+            [cdsIcon]="icons.renew"
           ></svg>
         </button>
       </div>
@@ -63,7 +62,6 @@
             </cd-table-actions>
           </cd-table>
         </ng-container>
-
         <legend i18n>Snapshots</legend>
         <cd-table
           [data]="selectedDir.snapshots"
@@ -85,7 +83,6 @@
     </div>
   </div>
 </div>
-
 <ng-template
   #origin
   let-row="data.row"

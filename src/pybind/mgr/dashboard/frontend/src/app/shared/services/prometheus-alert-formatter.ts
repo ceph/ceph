@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 
 import _ from 'lodash';
 
-import { Icons } from '../enum/icons.enum';
+import { ICON_TYPE } from '../enum/icons.enum'
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';
 import {
@@ -99,7 +99,7 @@ export class PrometheusAlertFormatter {
   }
 
   private appendSourceLink(alert: PrometheusCustomAlert, message: string): string {
-    return `${message} <a href="${alert.url}" target="_blank"><svg cdsIcon="${Icons.lineChart}" size="${Icons.size16}" ></svg></a>`;
+    return `${message} <a href="${alert.url}" target="_blank"><svg cdsIcon="${ICON_TYPE.analytics}"></svg></a>`;
   }
 
   private mapStatusToSeverity(status: string): string {

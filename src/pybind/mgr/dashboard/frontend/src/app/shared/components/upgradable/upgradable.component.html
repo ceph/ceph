@@ -17,7 +17,6 @@
     </ng-template>
   </ng-container>
 </div>
-
 <ng-template #isUpgradable>
   <div
     *ngIf="upgradeInfo$ | async as info"
@@ -29,7 +28,7 @@
       tabindex="0"
       (keydown.enter)="upgradeModal()"
     >
-      <i [ngClass]="icons.up"></i>
+      <i [ngClass]="icons.arrowUp"></i>
       Upgrade available
     </h5>
   </div>

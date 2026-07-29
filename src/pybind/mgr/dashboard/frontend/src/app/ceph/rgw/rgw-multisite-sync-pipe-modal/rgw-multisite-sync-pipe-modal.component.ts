@@ -9,7 +9,7 @@ import { RgwDaemon } from '../models/rgw-daemon';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
 import _ from 'lodash';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -44,7 +44,7 @@ export class RgwMultisiteSyncPipeModalComponent extends BaseModal implements OnI
   editing: boolean;
   sourceZones: ComboBoxItem[] = [];
   destZones: ComboBoxItem[] = [];
-  icons = Icons;
+  icons = ICON_TYPE;
   allBucketSelectedHelpText = ALL_BUCKET_SELECTED_HELP_TEXT;
 
   constructor(

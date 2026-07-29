@@ -19,7 +19,6 @@
           <cd-nvmeof-gateway-group-filter (groupChange)="groupHandler.onGroupChange($event)">
           </cd-nvmeof-gateway-group-filter>
         </div>
-
         <div class="table-actions">
           <cd-table-actions
             [permission]="permissions.nvmeof"
@@ -29,7 +28,6 @@
           >
           </cd-table-actions>
         </div>
-
         <cd-nvmeof-subsystems-details
           *cdTableDetail
           [selection]="expandedRow"
@@ -41,7 +39,6 @@
     </ng-container>
   </div>
 </div>
-
 <ng-template
   #customTableItemTemplate
   let-value="data.value"
@@ -56,7 +53,6 @@
     {{ value }}
   </a>
 </ng-template>
-
 <ng-template
   #authenticationTpl
   let-row="data.row"
@@ -66,14 +62,13 @@
     gap="4"
   >
     @if (row.auth === authType.NO_AUTH) {
-      <cd-icon type="warning"></cd-icon>
+      <cd-icon type="warningAltFilled"></cd-icon>
     } @else {
-      <cd-icon type="success"></cd-icon>
+      <cd-icon type="checkmarkFilled"></cd-icon>
     }
     <span class="cds-ml-3">{{ row.auth }}</span>
   </div>
 </ng-template>
-
 <ng-template
   #encryptionTpl
   let-row="data.row"
@@ -83,7 +78,7 @@
     gap="4"
   >
     @if (row.enable_ha) {
-      <cd-icon type="success"></cd-icon>
+      <cd-icon type="checkmarkFilled"></cd-icon>
       <span
         class="cds-ml-3"
         i18n
@@ -99,7 +94,5 @@
     }
   </div>
 </ng-template>
-
 <ng-template #deleteTpl></ng-template>
-
 <router-outlet name="modal"></router-outlet>

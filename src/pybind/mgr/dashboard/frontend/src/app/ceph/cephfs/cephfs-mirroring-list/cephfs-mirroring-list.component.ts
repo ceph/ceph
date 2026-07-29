@@ -10,7 +10,7 @@ import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Daemon, MirroringRow } from '~/app/shared/models/cephfs.model';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { Permission } from '~/app/shared/models/permissions';
 
@@ -57,7 +57,7 @@ export class CephfsMirroringListComponent implements OnInit {
 
     const createAction: CdTableAction = {
       permission: 'create',
-      icon: Icons.add,
+      icon: ICON_TYPE.add,
       routerLink: () => this.urlBuilder.getCreate(),
       name: this.actionLabels.CREATE,
       canBePrimary: (selection: CdTableSelection) => !selection.hasSelection

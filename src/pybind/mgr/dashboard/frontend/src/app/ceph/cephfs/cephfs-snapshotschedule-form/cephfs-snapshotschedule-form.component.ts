@@ -20,7 +20,7 @@ import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.servic
 import { DirectoryStoreService } from '~/app/shared/api/directory-store.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { DEFAULT_SUBVOLUME_GROUP } from '~/app/shared/constants/cephfs.constant';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { RepeatFrequency } from '~/app/shared/enum/repeat-frequency.enum';
 import { RetentionFrequency } from '~/app/shared/enum/retention-frequency.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
@@ -46,7 +46,7 @@ const DEBOUNCE_TIMER = 300;
 export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnInit {
   subvol!: string;
   group!: string;
-  icons = Icons;
+  icons = ICON_TYPE;
   repeatFrequencies = Object.entries(RepeatFrequency);
   retentionFrequencies = Object.entries(RetentionFrequency);
   retentionPoliciesToRemove: RetentionPolicy[] = [];

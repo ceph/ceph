@@ -4,7 +4,7 @@ import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
@@ -99,7 +99,7 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
       {
         name: this.actionLabels.CREATE,
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         click: () => {
           this.router.navigate(['block/nvmeof/namespaces/create'], {
             queryParams: {
@@ -114,7 +114,7 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
       {
         name: $localize`Expand`,
         permission: 'update',
-        icon: Icons.edit,
+        icon: ICON_TYPE.edit,
         click: (row: NvmeofSubsystemNamespace) => {
           const namespace = row || this.selection.first();
           this.ngZone.run(() => {
@@ -138,7 +138,7 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
       {
         name: this.actionLabels.DELETE,
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: ICON_TYPE.close,
         click: () => this.deleteNamespaceModal()
       }
     ];

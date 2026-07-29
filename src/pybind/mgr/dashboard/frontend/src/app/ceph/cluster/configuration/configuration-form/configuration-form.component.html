@@ -19,7 +19,6 @@
         >
           <h3 i18n>Edit {{ configForm.getValue('name') }}</h3>
         </div>
-
         <!-- Name -->
         <div
           cdsRow
@@ -39,7 +38,6 @@
             />
           </cds-text-label>
         </div>
-
         <!-- Long description -->
         @if (response?.long_desc) {
           <div
@@ -161,7 +159,6 @@
             </div>
           }
         </div>
-
         <!-- Client-specific configuration entries -->
         <div
           cdsRow
@@ -169,7 +166,6 @@
         >
           <h3 i18n>Client Configuration</h3>
         </div>
-
         <div
           cdsRow
           class="form-item"
@@ -185,7 +181,6 @@
             <span i18n>.</span>
           </p>
         </div>
-
         <div formArrayName="clientEntries">
           @for (entry of clientEntries.controls; track entry; let i = $index) {
             <div
@@ -230,7 +225,6 @@
                   ></ng-container>
                 </ng-template>
               </div>
-
               <div
                 cdsCol
                 [columnNumbers]="{ lg: 4 }"
@@ -247,7 +241,6 @@
                   "
                 ></ng-container>
               </div>
-
               <div
                 cdsCol
                 class="item-action-btn"
@@ -282,14 +275,13 @@
             >
               <svg
                 cdsIcon="add"
-                size="16"
+
                 class="cds--btn__icon"
               ></svg>
               Add Client Entry
             </button>
           </div>
         </div>
-
         <div cdsRow>
           <cd-form-button-panel
             (submitActionEvent)="forceUpdate ? openCriticalConfirmModal() : submit()"
@@ -303,7 +295,6 @@
     </div>
   </form>
 </ng-container>
-
 <!-- Reusable template for configuration fields -->
 <ng-template
   #configFieldTemplate
@@ -397,7 +388,6 @@
     }
   }
 </ng-template>
-
 <ng-template
   #validationErrors
   let-control="control"

@@ -19,7 +19,7 @@ import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { Icons, IconSize } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE, IconSize } from '~/app/shared/enum/icons.enum'
 import { NvmeofSubsystem } from '~/app/shared/models/nvmeof';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
@@ -76,7 +76,7 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
   private lastGroupCount = 0;
 
   viewUrl = `/${BASE_URL}/view`;
-  icons = Icons;
+  icons = ICON_TYPE;
 
   iconSize = IconSize;
 
@@ -120,7 +120,7 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
     ];
     const createAction: CdTableAction = {
       permission: 'create',
-      icon: Icons.add,
+      icon: ICON_TYPE.add,
       disable: () => (this.nodesAvailable ? false : $localize`Gateway nodes are not available`),
       routerLink: () => this.urlBuilder.getCreate(),
       name: this.actionLabels.CREATE,
@@ -129,7 +129,7 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
 
     const editAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.edit,
+      icon: ICON_TYPE.edit,
       routerLink: () => this.urlBuilder.getEdit(this.selection.first()?.name),
       name: this.actionLabels.EDIT,
       canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection
@@ -137,7 +137,7 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
 
     const viewAction: CdTableAction = {
       permission: 'read',
-      icon: Icons.eye,
+      icon: ICON_TYPE.view,
       routerLink: () => `${this.viewUrl}/${this.selection.first()?.name}`,
       name: $localize`View details`,
       canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection
@@ -145,7 +145,7 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
 
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: Icons.destroy,
+      icon: ICON_TYPE.close,
       click: () => this.deleteGatewayGroupModal(),
       name: this.actionLabels.DELETE,
       canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection

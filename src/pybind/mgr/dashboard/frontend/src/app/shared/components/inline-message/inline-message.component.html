@@ -15,12 +15,11 @@
         (click)="close()"
       >
         <svg
-          [size]="icons.size16"
-          [cdsIcon]="icons.destroy"
+
+          [cdsIcon]="icons.close"
         ></svg>
       </cds-icon-button>
     </div>
-
     <div
       class="inline-tip-body"
       [cdsStack]="'horizontal'"
@@ -28,9 +27,8 @@
     >
       <svg
         [cdsIcon]="icons.idea"
-        [size]="icons.size20"
+        [size]="IconSize.size20"
       ></svg>
-
       <div
         [cdsStack]="'vertical'"
         [gap]="1"

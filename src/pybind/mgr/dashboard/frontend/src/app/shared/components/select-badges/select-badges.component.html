@@ -11,11 +11,10 @@
 >
   <svg
     [cdsIcon]="icons.edit"
-    [size]="icons.size20"
+    [size]="IconSize.size20"
     class="cds-info-color"
   ></svg>
 </cd-select>
-
 <span *ngFor="let dataItem of data">
   <cds-tag class="tag-dark me-2">
     <span class="me-2">{{ dataItem }}</span>
@@ -26,8 +25,8 @@
       (keydown.enter)="cdSelect.removeItem(dataItem)"
     >
       <svg
-        [cdsIcon]="icons.destroy"
-        [size]="icons.size20"
+        [cdsIcon]="icons.close"
+        [size]="IconSize.size20"
         class="cds-white"
       ></svg>
     </a>

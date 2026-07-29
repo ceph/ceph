@@ -8,7 +8,7 @@ import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete
 import { ActionLabelsI18n, USER } from '~/app/shared/constants/app.constants';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -44,7 +44,7 @@ export class UserListComponent implements OnInit {
   expirationWarningAlert: number;
   expirationDangerAlert: number;
   selection = new CdTableSelection();
-  icons = Icons;
+  icons = ICON_TYPE;
 
   modalRef: NgbModalRef;
 
@@ -61,13 +61,13 @@ export class UserListComponent implements OnInit {
     this.permission = this.authStorageService.getPermissions().user;
     const addAction: CdTableAction = {
       permission: 'create',
-      icon: Icons.add,
+      icon: ICON_TYPE.add,
       routerLink: () => this.urlBuilder.getCreate(),
       name: this.actionLabels.CREATE
     };
     const editAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.edit,
+      icon: ICON_TYPE.edit,
       routerLink: () =>
         this.selection.first() &&
         this.urlBuilder.getEdit(encodeURIComponent(this.selection.first().username)),
@@ -75,7 +75,7 @@ export class UserListComponent implements OnInit {
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: Icons.destroy,
+      icon: ICON_TYPE.close,
       click: () => this.deleteUserModal(),
       name: this.actionLabels.DELETE
     };

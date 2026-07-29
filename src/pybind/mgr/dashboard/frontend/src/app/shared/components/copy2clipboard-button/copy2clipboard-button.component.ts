@@ -2,7 +2,7 @@ import { Component, EventEmitter, HostListener, Input, Output } from '@angular/c
 
 import { detect } from 'detect-browser';
 
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
 
@@ -40,7 +40,7 @@ export class Copy2ClipboardButtonComponent {
   @Output()
   toastError = new EventEmitter<void>();
 
-  icons = Icons;
+  icons = ICON_TYPE;
 
   constructor(private notificationService: NotificationService) {}
 

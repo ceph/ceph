@@ -18,7 +18,7 @@ import { Host, HostStatusConfig, STATUS_MAP, getStatus } from '~/app/shared/mode
 import { SidebarItem } from '~/app/shared/components/sidebar-layout/sidebar-layout.component';
 import { ActionLabels, ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { HostStatus } from '~/app/shared/enum/host-status.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
@@ -163,21 +163,21 @@ export class HostSidebarComponent implements OnInit, OnDestroy {
       {
         name: this.actionLabels.EDIT,
         permission: 'update',
-        icon: Icons.edit,
+        icon: ICON_TYPE.edit,
         click: () => this.editAction(),
         disable: (selection: CdTableSelection) => this.getDisable(ActionLabels.EDIT, selection)
       },
       {
         name: this.draining ? this.actionLabels.STOP_DRAIN : this.actionLabels.START_DRAIN,
         permission: 'update',
-        icon: Icons.exit,
+        icon: ICON_TYPE.logout,
         click: () => this.hostDrain(this.draining),
         disable: (selection: CdTableSelection) => this.getDisable(ActionLabels.DRAIN, selection)
       },
       {
         name: this.actionLabels.REMOVE,
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: ICON_TYPE.close,
         click: () => this.deleteAction(),
         disable: (selection: CdTableSelection) => this.getDisable(ActionLabels.REMOVE, selection)
       },
@@ -186,7 +186,7 @@ export class HostSidebarComponent implements OnInit, OnDestroy {
           ? this.actionLabels.EXIT_MAINTENANCE
           : this.actionLabels.ENTER_MAINTENANCE,
         permission: 'update',
-        icon: this.enableMaintenanceBtn ? Icons.exit : Icons.enter,
+        icon: this.enableMaintenanceBtn ? ICON_TYPE.logout : ICON_TYPE.login,
         click: () => this.hostMaintenance(),
         disable: (selection: CdTableSelection) =>
           this.getDisable(ActionLabels.MAINTENANCE, selection) || this.isExecuting

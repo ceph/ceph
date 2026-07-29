@@ -1,7 +1,6 @@
 <div class="row">
   <div class="col-6 card-tree">
     <legend i18n>iSCSI Topology</legend>
-
     <cds-tree-view
       #tree
       [tree]="nodes"
@@ -15,7 +14,6 @@
       {{ node?.data?.cdIcon }}
       <svg
         [cdsIcon]="node?.data?.cdIcon"
-        [size]="icons.size16"
       ></svg>
       <span>{{ node?.name }}</span>
       &nbsp;
@@ -29,13 +27,11 @@
       </cds-tag>
     </ng-template>
   </div>
-
   <div
     class="col-6 metadata"
     *ngIf="data"
   >
     <legend>{{ title }}</legend>
-
     <cd-table
       #detailTable
       [data]="data"
@@ -46,7 +42,6 @@
     </cd-table>
   </div>
 </div>
-
 <ng-template
   #highlightTpl
   let-row="data.row"

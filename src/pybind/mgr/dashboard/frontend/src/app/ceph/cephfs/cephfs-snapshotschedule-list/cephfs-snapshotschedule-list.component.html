@@ -9,7 +9,6 @@
 >
   In order to access the snapshot scheduler feature, the snap_scheduler module must be enabled
 </cd-alert-panel>
-
 <ng-template
   #pathTpl
   let-row="data.row"
@@ -21,23 +20,20 @@
   >
     {{ row.pathForSelection?.split?.('@')?.[0] | path }}
   </span>
-
   <span *ngIf="row.active; else inactiveStatusTpl">
     <i
-      [ngClass]="[icons.success, icons.size24]"
+      [ngClass]="[icons.checkmarkFilled, '24']"
       ngbTooltip="{{ row.pathForSelection?.split?.('@')?.[0] }} is active"
       class="text-success"
     ></i>
   </span>
-
   <ng-template #inactiveStatusTpl>
     <i
-      [ngClass]="[icons.warning, icons.size24]"
+      [ngClass]="[icons.warningAltFilled, '24']"
       class="text-warning"
       ngbTooltip="{{ row.pathForSelection?.split?.('@')?.[0] }} has been deactivated"
     ></i>
   </ng-template>
-
   <ng-template #fullpathForSelectionTpl>
     <cd-copy-2-clipboard-button
       *ngIf="row.pathForSelection"
@@ -49,7 +45,6 @@
     </cd-copy-2-clipboard-button>
   </ng-template>
 </ng-template>
-
 <ng-template
   #retentionTpl
   let-row="data.row"
@@ -58,7 +53,6 @@
     <li *ngFor="let ret of row.retentionCopy">{{ ret }}</li>
   </ul>
 </ng-template>
-
 <ng-template
   #subvolTpl
   let-row="data.row"
@@ -67,9 +61,7 @@
     {{ row.subvol }}
   </span>
 </ng-template>
-
 <ng-template #noDataTpl>-</ng-template>
-
 <cd-table
   [data]="snapshotSchedules$ | async"
   *ngIf="snapScheduleModuleStatus$ | async"

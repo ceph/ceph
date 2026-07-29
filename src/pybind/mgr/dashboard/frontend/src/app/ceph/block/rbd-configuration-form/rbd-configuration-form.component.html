@@ -3,7 +3,6 @@
   [formGroup]="form.get('configuration')"
 >
   <legend i18n>RBD Configuration</legend>
-
   <div *ngFor="let section of rbdConfigurationService.sections">
     <h5 class="cd-header">
       <legend
@@ -14,8 +13,8 @@
       >
         {{ section.heading }}&nbsp;
         <svg
-          [cdsIcon]="!sectionVisibility[section.class] ? icons.addCircle : icons.minusCircle"
-          [size]="icons.size20"
+          [cdsIcon]="!sectionVisibility[section.class] ? icons.addFilled : icons.subtractAlt"
+          [size]="IconSize.size20"
         ></svg>
       </legend>
     </h5>

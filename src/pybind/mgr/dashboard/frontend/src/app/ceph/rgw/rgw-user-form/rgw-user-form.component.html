@@ -64,7 +64,6 @@
           <div i18n>Ownership of all of the user's buckets will be transferred to the account.</div>
         </ng-template>
       </div>
-
       <!-- Account Root user -->
       <div
         *ngIf="userForm.getValue('account_id')"
@@ -126,7 +125,6 @@
         >
       </ng-template>
     </div>
-
     <!-- Show Tenant -->
     <div class="form-item">
       <cds-checkbox
@@ -137,7 +135,6 @@
         >Show Tenant
       </cds-checkbox>
     </div>
-
     <!-- Tenant -->
     <div
       class="form-item"
@@ -174,7 +171,6 @@
         >
       </ng-template>
     </div>
-
     <!-- Full name -->
     <div class="form-item">
       <cds-text-label
@@ -207,7 +203,6 @@
         >
       </ng-template>
     </div>
-
     <!-- Email address -->
     <div class="form-item">
       <cds-text-label
@@ -239,7 +234,6 @@
         >
       </ng-template>
     </div>
-
     <!-- Max. buckets -->
     <div class="form-item">
       <cds-select
@@ -295,7 +289,6 @@
         >
       </ng-template>
     </div>
-
     <!-- Suspended -->
     <div class="form-item">
       <cds-checkbox
@@ -306,7 +299,6 @@
         <cd-help-text>Suspending the user disables the user and subuser.</cd-help-text>
       </cds-checkbox>
     </div>
-
     <!-- System User -->
     <div class="form-item">
       <cds-checkbox
@@ -360,7 +352,6 @@
       >
         S3 key
       </legend>
-
       <!-- Auto-generate key -->
       <div class="form-item">
         <cds-checkbox
@@ -370,7 +361,6 @@
           >Auto-generate key</cds-checkbox
         >
       </div>
-
       <!-- Access key -->
       <div
         class="form-item form-item-append"
@@ -406,7 +396,6 @@
           >
         </ng-template>
       </div>
-
       <!-- Secret key -->
       <div
         class="form-item form-item-append"
@@ -443,7 +432,6 @@
         </ng-template>
       </div>
     </fieldset>
-
     <!-- Subusers -->
     <fieldset *ngIf="editing">
       <div class="form-item">
@@ -463,7 +451,6 @@
             >There are no subusers.</span
           >
         </span>
-
         <ng-container *ngFor="let subuser of subusers; let i = index">
           <div
             cdsRow
@@ -499,7 +486,7 @@
             >
               <svg
                 [cdsIcon]="icons.edit"
-                [size]="icons.size32"
+                [size]="IconSize.size32"
                 class="cds--btn__icon"
               ></svg>
             </cds-icon-button>
@@ -511,8 +498,8 @@
               (click)="deleteSubuser(i)"
             >
               <svg
-                [cdsIcon]="icons.trash"
-                [size]="icons.size32"
+                [cdsIcon]="icons.trashCan"
+                [size]="IconSize.size32"
                 class="cds--btn__icon"
               >
                 >
@@ -536,7 +523,7 @@
               >
               <svg
                 [cdsIcon]="icons.add"
-                [size]="icons.size32"
+                [size]="IconSize.size32"
                 class="cds--btn__icon"
               ></svg>
             </button>
@@ -544,7 +531,6 @@
         </div>
       </div>
     </fieldset>
-
     <!-- Keys -->
     <fieldset *ngIf="editing">
       <div class="form-item">
@@ -554,7 +540,6 @@
         >
           Keys
         </legend>
-
         <!-- S3 keys -->
         <h6>S3</h6>
         <span
@@ -567,7 +552,6 @@
             >There are no keys.</span
           >
         </span>
-
         <span *ngFor="let key of s3Keys; let i = index">
           <div
             class="form-item-append"
@@ -592,7 +576,7 @@
             >
               <svg
                 [cdsIcon]="icons.edit"
-                [size]="icons.size16"
+
                 class="cds--btn__icon"
               ></svg>
             </cds-icon-button>
@@ -604,15 +588,14 @@
               (click)="deleteS3Key(i)"
             >
               <svg
-                [cdsIcon]="icons.trash"
-                [size]="icons.size32"
+                [cdsIcon]="icons.trashCan"
+                [size]="IconSize.size32"
                 class="cds--btn__icon"
               ></svg>
             </cds-icon-button>
           </div>
           <span class="form-text text-muted"></span>
         </span>
-
         <div
           class="form-item"
           cdsRow
@@ -629,16 +612,14 @@
               >
               <svg
                 [cdsIcon]="icons.add"
-                [size]="icons.size32"
+                [size]="IconSize.size32"
                 class="cds--btn__icon"
               ></svg>
             </button>
           </div>
         </div>
-
         <hr />
       </div>
-
       <!-- Swift keys -->
       <div class="form-item">
         <h6>Swift</h6>
@@ -652,7 +633,6 @@
             >There are no keys.</span
           >
         </span>
-
         <span *ngFor="let key of swiftKeys; let i = index">
           <div
             class="form-item-append"
@@ -676,8 +656,8 @@
               (click)="showSwiftKeyModal(i)"
             >
               <svg
-                [cdsIcon]="icons.show"
-                [size]="icons.size16"
+                [cdsIcon]="icons.view"
+
                 class="cds--btn__icon"
               ></svg>
             </cds-icon-button>
@@ -685,7 +665,6 @@
         </span>
       </div>
     </fieldset>
-
     <!-- Capabilities -->
     <fieldset *ngIf="editing">
       <div class="form-item">
@@ -705,7 +684,6 @@
             >There are no capabilities.</span
           >
         </span>
-
         <span *ngFor="let cap of capabilities; let i = index">
           <div
             class="form-item-append"
@@ -741,7 +719,7 @@
             >
               <svg
                 [cdsIcon]="icons.edit"
-                [size]="icons.size16"
+
                 class="cds--btn__icon"
               ></svg>
             </cds-icon-button>
@@ -753,15 +731,14 @@
               (click)="deleteCapability(i)"
             >
               <svg
-                [cdsIcon]="icons.trash"
-                [size]="icons.size32"
+                [cdsIcon]="icons.trashCan"
+                [size]="IconSize.size32"
                 class="cds--btn__icon"
               ></svg>
             </cds-icon-button>
           </div>
           <span class="form-text text-muted"></span>
         </span>
-
         <div
           class="form-item"
           cdsRow
@@ -783,7 +760,7 @@
               >
               <svg
                 [cdsIcon]="icons.add"
-                [size]="icons.size32"
+                [size]="IconSize.size32"
                 class="cds--btn__icon"
               ></svg>
             </button>
@@ -791,7 +768,6 @@
         </div>
       </div>
     </fieldset>
-
     <!-- User quota -->
     <fieldset>
       <div class="form-item">
@@ -801,7 +777,6 @@
         >
           User quota
         </legend>
-
         <!-- Enabled -->
         <cds-checkbox
           formControlName="user_quota_enabled"
@@ -810,7 +785,6 @@
           >Enabled
         </cds-checkbox>
       </div>
-
       <!-- Unlimited size -->
       <div
         class="form-item"
@@ -823,7 +797,6 @@
           >Unlimited size</cds-checkbox
         >
       </div>
-
       <!-- Maximum size -->
       <div
         class="form-item"
@@ -875,7 +848,6 @@
           >
         </ng-template>
       </div>
-
       <!-- Unlimited objects -->
       <div
         class="form-item"
@@ -888,7 +860,6 @@
           >Unlimited objects</cds-checkbox
         >
       </div>
-
       <!-- Maximum objects -->
       <div
         class="form-item"
@@ -926,7 +897,6 @@
         </ng-template>
       </div>
     </fieldset>
-
     <!-- Bucket quota -->
     <fieldset>
       <div class="form-item">
@@ -936,7 +906,6 @@
         >
           Bucket quota
         </legend>
-
         <!-- Enabled -->
         <cds-checkbox
           formControlName="bucket_quota_enabled"
@@ -945,7 +914,6 @@
           >Enabled</cds-checkbox
         >
       </div>
-
       <!-- Unlimited size -->
       <div
         class="form-item"
@@ -958,7 +926,6 @@
           >Unlimited size</cds-checkbox
         >
       </div>
-
       <!-- Maximum size -->
       <div
         class="form-item"
@@ -1010,7 +977,6 @@
           >
         </ng-template>
       </div>
-
       <!-- Unlimited objects -->
       <div
         class="form-item"
@@ -1023,7 +989,6 @@
           >Unlimited objects</cds-checkbox
         >
       </div>
-
       <!-- Maximum objects -->
       <div
         class="form-item"
@@ -1061,7 +1026,6 @@
         </ng-template>
       </div>
     </fieldset>
-
     <!-- Advanced Section -->
     <cd-form-advanced-fieldset>
       <!-- User Rate Limit -->
@@ -1073,7 +1037,6 @@
       >
       </cd-rgw-rate-limit>
     </cd-form-advanced-fieldset>
-
     <cd-form-button-panel
       (submitActionEvent)="onSubmit()"
       [form]="userForm"

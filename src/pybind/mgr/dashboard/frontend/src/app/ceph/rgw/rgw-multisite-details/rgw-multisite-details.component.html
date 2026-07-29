@@ -110,26 +110,25 @@
               >
                 <span *ngIf="node?.data?.show_warning">
                   <svg
-                    [cdsIcon]="icons.danger"
-                    [size]="icons.size16"
+                    [cdsIcon]="icons.warningFilled"
                     [title]="node?.data?.warning_message"
                     class="cds-danger-color"
                   ></svg>
                 </span>
                 <svg
                   *ngIf="node?.data?.icon === 'scales'"
-                  [cdsIcon]="icons.reweight"
-                  [size]="icons.size20"
+                  [cdsIcon]="icons.scales"
+                  [size]="IconSize.size20"
                 ></svg>
                 <svg
                   *ngIf="node?.data?.icon === 'cube'"
-                  [cdsIcon]="icons.deploy"
-                  [size]="icons.size20"
+                  [cdsIcon]="icons.cube"
+                  [size]="IconSize.size20"
                 ></svg>
                 <svg
                   *ngIf="node?.data?.icon === 'web-services--cluster'"
-                  [cdsIcon]="icons.clusterIcon"
-                  [size]="icons.size20"
+                  [cdsIcon]="icons.webServicesCluster"
+                  [size]="IconSize.size20"
                 ></svg>
                 {{ node?.data?.name }}
               </span>
@@ -175,7 +174,7 @@
                 >
                   <svg
                     [cdsIcon]="icons.edit"
-                    [size]="icons.size16"
+
                     class="cds-info-color"
                   ></svg>
                 </button>
@@ -192,8 +191,8 @@
                     (click)="delete(node)"
                   >
                     <svg
-                      [cdsIcon]="icons.destroy"
-                      [size]="icons.size16"
+                      [cdsIcon]="icons.close"
+
                       class="cds-info-color"
                     ></svg>
                   </button>
@@ -219,5 +218,4 @@
     </div>
   </div>
 </div>
-
 <router-outlet name="modal"></router-outlet>

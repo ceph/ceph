@@ -53,21 +53,18 @@
     </cd-table-actions>
   </cd-table>
 </div>
-
 <ng-template
   #hostNameTpl
   let-value="data.value"
 >
   <span class="cds-ml-2">{{ value }}</span>
 </ng-template>
-
 <ng-template
   #addrTpl
   let-value="data.value"
 >
   <span>{{ value || '-' }}</span>
 </ng-template>
-
 <ng-template
   #statusTpl
   let-value="data.value"
@@ -79,7 +76,7 @@
       [gap]="4"
     >
       @if (value === HostStatus.AVAILABLE || value === HostStatus.RUNNING) {
-        <cd-icon type="success"></cd-icon>
+        <cd-icon type="checkmarkFilled"></cd-icon>
       } @else {
         <cd-icon type="error"></cd-icon>
       }
@@ -89,7 +86,6 @@
     <span>-</span>
   }
 </ng-template>
-
 <ng-template
   #labelsTpl
   let-value="data.value"

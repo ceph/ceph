@@ -34,13 +34,13 @@
               @if (!editing) {
                 <svg
                   [cdsIcon]="icons.edit"
-                  [size]="icons.size32"
+                  [size]="IconSize.size32"
                   class="cds--btn__icon"
                 ></svg>
               } @else {
                 <svg
-                  [cdsIcon]="icons.check"
-                  [size]="icons.size32"
+                  [cdsIcon]="icons.checkmark"
+                  [size]="IconSize.size32"
                   class="cds--btn__icon"
                 ></svg>
               }
@@ -72,7 +72,6 @@
               <svg
                 class="cds--btn__icon"
                 [cdsIcon]="action.icon"
-                size="16"
               ></svg>
             </button>
           }
@@ -81,7 +80,6 @@
     </div>
   </div>
 </form>
-
 <div class="row">
   <div class="col-sm-6">
     <legend i18n>Daemons</legend>
@@ -89,16 +87,13 @@
       <cd-mirroring-daemons> </cd-mirroring-daemons>
     </div>
   </div>
-
   <div class="col-sm-6">
     <legend i18n>Pools</legend>
-
     <div>
       <cd-mirroring-pools> </cd-mirroring-pools>
     </div>
   </div>
 </div>
-
 <div class="row">
   <div class="col-md-12">
     <legend i18n>Images</legend>

@@ -42,10 +42,10 @@
           <span i18n>Telemetry</span>
           <span>
             @if (telemetryEnabled) {
-              <cd-icon type="success"></cd-icon>&nbsp;
+              <cd-icon type="checkmarkFilled"></cd-icon>&nbsp;
               <span i18n>on</span>
             } @else {
-              <cd-icon type="infoCircle"></cd-icon>&nbsp;
+              <cd-icon type="informationFilled"></cd-icon>&nbsp;
               <span i18n>off</span>
             }
           </span>
@@ -124,7 +124,6 @@
   }
 
   <!-----------------------------------TABS -------------------------------------->
-
   <div
     cdsStack="horizontal"
     [gap]="4"
@@ -250,7 +249,6 @@
       <cds-skeleton-text [lines]="1"></cds-skeleton-text>
     }
   </div>
-
   <!-- TAB CONTENT -->
   <div [ngSwitch]="activeSection">
     <!-- SYSTEM TAB CONTENT -->
@@ -326,7 +324,6 @@
                         {{ row.label }}
                       </span>
                     </span>
-
                     <span class="overview-health-card-hardware-status">
                       @for (status of row.statusCounts; track status.icon) {
                         <cd-icon [type]="status.icon"></cd-icon>

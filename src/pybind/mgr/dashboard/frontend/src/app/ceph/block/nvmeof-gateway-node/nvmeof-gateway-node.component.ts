@@ -18,7 +18,7 @@ import _ from 'lodash';
 
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { HostStatus } from '~/app/shared/enum/host-status.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -84,7 +84,7 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
   selectionType: 'single' | 'multiClick' | 'none' = 'single';
 
   selection = new CdTableSelection();
-  icons = Icons;
+  icons = ICON_TYPE;
   HostStatus = HostStatus;
   private tableContext: CdTableFetchDataContext | undefined;
   count = 0;
@@ -188,7 +188,7 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
     this.tableActions = [
       {
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         click: () => this.addGateway(),
         name: $localize`Add`,
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection,
@@ -196,7 +196,7 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
       },
       {
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: ICON_TYPE.close,
         click: () => this.removeGateway(),
         name: $localize`Remove`,
         disable: (selection: CdTableSelection) => !selection.hasSelection

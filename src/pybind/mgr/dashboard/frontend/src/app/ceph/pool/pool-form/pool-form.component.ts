@@ -15,7 +15,7 @@ import { CrushNodeSelectionClass } from '~/app/shared/classes/crush.node.selecti
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { SelectOption } from '~/app/shared/components/select/select-option.model';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
@@ -117,7 +117,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
   action: string;
   resource: string;
   submitAction: string;
-  icons = Icons;
+  icons = ICON_TYPE;
   pgAutoscaleModes: string[];
   crushUsage: string[] = undefined; // Will only be set if a rule is used by some pool
   ecpUsage: string[] = undefined; // Will only be set if a rule is used by some pool

@@ -3,7 +3,7 @@ import { AbstractControl, UntypedFormGroup, FormGroupDirective, NgForm } from '@
 
 import _ from 'lodash';
 
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 
 /**
  * This component will render a submit button with the given label.
@@ -56,7 +56,7 @@ export class SubmitButtonComponent implements OnInit {
   submitAction = new EventEmitter();
 
   loading = false;
-  icons = Icons;
+  icons = ICON_TYPE;
 
   constructor(private elRef: ElementRef) {}
 

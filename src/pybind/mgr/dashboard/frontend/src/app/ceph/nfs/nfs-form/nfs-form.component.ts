@@ -17,7 +17,7 @@ import { Directory, NfsService } from '~/app/shared/api/nfs.service';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { RgwSiteService } from '~/app/shared/api/rgw-site.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -55,7 +55,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
   export_id: string = null;
 
   allClusters: { cluster_id: string }[] = null;
-  icons = Icons;
+  icons = ICON_TYPE;
 
   allFsNames: any[] = null;
 

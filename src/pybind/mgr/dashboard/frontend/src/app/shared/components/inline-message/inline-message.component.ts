@@ -1,5 +1,5 @@
 import { Component, Input } from '@angular/core';
-import { Icons } from '../../enum/icons.enum';
+import { ICON_TYPE, IconSize } from '../../enum/icons.enum'
 
 @Component({
   selector: 'cd-inline-message',
@@ -21,7 +21,8 @@ export class InlineMessageComponent {
   onClose?: () => void = () => {};
 
   isTruncated = false;
-  icons = Icons;
+  icons = ICON_TYPE;
+  IconSize = IconSize;
   isDismissed = false;
 
   close() {

@@ -12,7 +12,7 @@ import { debounceTime, distinctUntilChanged, switchMap, catchError } from 'rxjs/
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { DirectoryStoreService } from '~/app/shared/api/directory-store.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum'
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { FinishedTask } from '~/app/shared/models/finished-task';
@@ -36,7 +36,7 @@ export class CephfsAuthModalComponent extends CdForm implements OnInit, AfterVie
   form: CdFormGroup;
   action: string;
   resource: string;
-  icons = Icons;
+  icons = ICON_TYPE;
   readonly defaultdir: string = '/';
 
   clientPermissions = [

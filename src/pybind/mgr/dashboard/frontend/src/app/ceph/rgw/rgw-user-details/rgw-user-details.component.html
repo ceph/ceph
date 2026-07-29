@@ -18,7 +18,6 @@
         ></cd-table-actions>
       </cd-table>
     </div>
-
     <legend i18n>Details</legend>
     <table
       class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md"
@@ -142,7 +141,6 @@
         </tr>
       </tbody>
     </table>
-
     <ng-container *ngIf="selection.account && selection.account?.id">
       <legend i18n>Account Details</legend>
       <table
@@ -194,7 +192,6 @@
         </tbody>
       </table>
     </ng-container>
-
     <!-- User quota -->
     <div *ngIf="user.user_quota">
       <legend i18n>User quota</legend>
@@ -250,7 +247,6 @@
         </tbody>
       </table>
     </div>
-
     <!-- Bucket quota -->
     <div *ngIf="user.bucket_quota">
       <legend i18n>Bucket quota</legend>

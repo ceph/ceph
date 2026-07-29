@@ -15,8 +15,8 @@
       @if (zone.syncstatus?.includes('failed') || zone.syncstatus?.includes('error')) {
         <span class="sync-info__status">
           <svg
-            [cdsIcon]="icons.danger"
-            [size]="icons.size16"
+            [cdsIcon]="icons.warningFilled"
+
             class="cds-danger-color"
           ></svg>
           <a
