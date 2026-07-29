@@ -3881,6 +3881,8 @@ TEST_F(OSDMapTest, LegacyStretchPoolDecode) {
         EXPECT_EQ(3u, q->get_replica());
         EXPECT_EQ(3u, q->get_size());
         EXPECT_EQ(2u, q->get_min_size());
+        EXPECT_EQ(0u, o->stretch_num_acting_below_min_size(*q, {0, 1}));
+        EXPECT_EQ(1u, o->stretch_num_acting_below_min_size(*q, {0}));
       }
     }
   }

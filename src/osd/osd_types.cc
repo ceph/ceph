@@ -2555,7 +2555,7 @@ bool pg_pool_t::stretch_set_can_peer(const set<int>& want, const OSDMap& osdmap,
   for (int osdid : want) {
     int ancestor = crush->get_parent_of_type(osdid, barrier_id,
 					     crush_rule);
-    ancestors.insert(ancestor);
+    ancestors.insert(crush->get_non_shadow_id(ancestor));
   }
   if (ancestors.size() < barrier_count) {
     if (out) {
@@ -4895,7 +4895,9 @@ bool PastIntervals::check_new_interval(
 	i.primary != -1 &&
 	num_acting >= old_pg_pool.min_size &&
 	(!old_pg_pool.is_stretch_pool() ||
-	 old_pg_pool.stretch_set_can_peer(old_acting, *lastmap, out)) &&
+         // as PeeringState::acting_set_writeable(), with the interval's pool
+         (old_pg_pool.stretch_set_can_peer(old_acting, *lastmap, out) &&
+          !lastmap->stretch_num_acting_below_min_size(old_pg_pool, old_acting))) &&
         could_have_gone_active(old_acting_shards)) {
       if (out)
 	*out << __func__ << " " << i
