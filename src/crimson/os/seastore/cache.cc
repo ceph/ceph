@@ -250,6 +250,10 @@ void Cache::register_metrics(store_index_t store_index)
         auto& counter = get_by_ext(efforts.num_trans_invalidated, ext);
         auto& mergeable_counter = get_by_ext(efforts.num_lba_conflicts_mergeable, ext);
         auto& overlapping_counter = get_by_ext(efforts.num_lba_conflicts_overlapping, ext);
+        auto& retire_mergeable_counter =
+          get_by_ext(efforts.num_lba_retire_conflicts_mergeable, ext);
+        auto& retire_overlapping_counter =
+          get_by_ext(efforts.num_lba_retire_conflicts_overlapping, ext);
         std::vector<sm::label_instance> merged_labels = src_label;
         merged_labels.insert(merged_labels.end(), ext_label.begin(), ext_label.end());
         metrics.add_group(
@@ -271,6 +275,18 @@ void Cache::register_metrics(store_index_t store_index)
               "lba_conflicts_overlapping",
               overlapping_counter,
               sm::description("of trans_invalidated_by_extent, how many were LBA mutate-vs-mutate conflicts on overlapping keys"),
+              merged_labels
+            ),
+            sm::make_counter(
+              "lba_retire_conflicts_mergeable",
+              retire_mergeable_counter,
+              sm::description("of trans_invalidated_by_extent, how many were retire-path (leaf split) LBA mutate-vs-mutate conflicts on disjoint (mergeable) keys"),
+              merged_labels
+            ),
+            sm::make_counter(
+              "lba_retire_conflicts_overlapping",
+              retire_overlapping_counter,
+              sm::description("of trans_invalidated_by_extent, how many were retire-path (leaf split) LBA mutate-vs-mutate conflicts on overlapping keys"),
               merged_labels
             ),
           }
@@ -930,6 +946,21 @@ void Cache::commit_retire_extent(
   remove_extent(ref, &t_src);
 
   ref->dirty_from = JOURNAL_SEQ_NULL;
+
+  // find the node and get the set of keys touched by other txns, then pass that set of keys
+  // to check if there is a conflict with committer's set of keys. these are keys captured
+  // earlier, not a live lookup ,by now conflict handling may have already unlinked the
+  // other txn's own edit, even though it's still valid to compare against.
+  auto notebook_it = t.keys_touched_in_retired_leaf.find(ref.get());
+  if (notebook_it != t.keys_touched_in_retired_leaf.end()) {
+    auto &notebook = notebook_it->second;
+    for (auto &[other_trans_id, other_edit] : notebook.other_keys) {
+      count_lba_retire_conflict_mergeability(
+        ref->get_type(), notebook.committer_keys, other_edit.keys,
+        other_edit.src);
+    }
+  }
+
   invalidate_extent(t, *ref);
 }
 
@@ -1022,61 +1053,118 @@ std::optional<std::set<laddr_t>> get_touched_lba_keys(
 }
 }
 
-std::optional<bool> Cache::check_lba_conflict_mergeable(
-    CachedExtent &committer_node_own_copy,
-    Transaction &conflicting_txn)
+void Cache::capture_retired_leaf_keys(Transaction &t, CachedExtent &ref) {
+  if (ref.get_type() != extent_types_t::LADDR_LEAF ||
+      !ref.is_mutation_pending()) {
+    return;
+  }
+  auto keys = get_touched_lba_keys(ref);
+  if (!keys) {
+    return;
+  }
+
+  // snapshot of the committing txn's own keys, plus the keys touched by any
+  // other txn currently working on this same original leaf. we capture them
+  // now so we can reference them later, after conflict handling may have
+  // wiped out those other txns and their delta buffers.
+  auto &original_node = *ref.get_prior_instance();
+  auto &notebook = t.keys_touched_in_retired_leaf[&original_node];
+  notebook.committer_keys = std::move(*keys);
+
+  for (auto &node_copy : original_node.mutation_pending_extents) {
+    auto &txn_copy = static_cast<CachedExtent&>(node_copy);
+    if (&txn_copy == &ref) {
+      continue;
+    }
+    auto txn_keys = get_touched_lba_keys(txn_copy);
+    if (!txn_keys) {
+      continue;
+    }
+    // txn_copy only knows its own transaction id, not a live Transaction*,
+    // so look it up via read_transactions (every editor is also a reader)
+    // just to grab its src for counter labeling below.
+    for (auto &&r : original_node.read_transactions) {
+      if (r.t->get_trans_id() == txn_copy.pending_for_transaction) {
+        notebook.other_keys[txn_copy.pending_for_transaction] =
+          {std::move(*txn_keys), r.t->get_src()};
+        break;
+      }
+    }
+  }
+}
+
+bool Cache::are_keys_disjoint(
+    const std::set<laddr_t> &a,
+    const std::set<laddr_t> &b)
 {
-  // original_node: the shared, stable node before the committer's edits.
-  auto &original_node = *committer_node_own_copy.get_prior_instance();
-
-  // trans_spec_view_t::cmp_t(): comparator needed to find specific trans id because this is not a simple map
-  
-  auto it = original_node.mutation_pending_extents.find(
-    conflicting_txn.get_trans_id(), trans_spec_view_t::cmp_t());
-  if (it == original_node.mutation_pending_extents.end()) {
-    // conflicting_txn never made its own edits on this node -- it was a
-    // read-only conflict, not what we're measuring here.
-    return std::nullopt;
-  }
-
-  // conflicting_txn's own edited copy of the same node, found by looking
-  // up its transaction id above.
-  auto &conflicting_txn_node_own_copy = static_cast<CachedExtent&>(*it);
-
-  auto committer_keys = get_touched_lba_keys(committer_node_own_copy);
-  auto conflicting_txn_keys = get_touched_lba_keys(conflicting_txn_node_own_copy);
-  if (!committer_keys || !conflicting_txn_keys) {
-    return std::nullopt;
-  }
-
-  for (auto &key : *conflicting_txn_keys) {
-    //boolean test if key in comiiter_keys
-    if (committer_keys->count(key)) {
+  for (auto &key : b) {
+    if (a.count(key)) {
       return false;
     }
   }
-  // disjoint keys
   return true;
+}
+
+std::optional<std::set<laddr_t>> Cache::find_own_edit_keys(
+    CachedExtent &original_node,
+    Transaction &txn)
+{
+  // trans_spec_view_t::cmp_t(): comparator needed to find specific trans id because this is not a simple map
+  auto it = original_node.mutation_pending_extents.find(
+    txn.get_trans_id(), trans_spec_view_t::cmp_t());
+  if (it == original_node.mutation_pending_extents.end()) {
+    // txn never made its own edits on this node. it was a read-only
+    // conflict, not what we're measuring here.
+    return std::nullopt;
+  }
+
+  // txn's own edited copy of the same node, found by looking up its
+  // transaction id above.
+  auto &txn_node_own_copy = static_cast<CachedExtent&>(*it);
+  return get_touched_lba_keys(txn_node_own_copy);
 }
 
 void Cache::count_lba_conflict_mergeability(
     CachedExtent &committer_node_own_copy,
     Transaction &conflicting_txn)
 {
-  auto mergeable = check_lba_conflict_mergeable(
-    committer_node_own_copy, conflicting_txn);
-  if (!mergeable) {
+  auto committer_keys = get_touched_lba_keys(committer_node_own_copy);
+  if (!committer_keys) {
+    return;
+  }
+
+  auto &original_node = *committer_node_own_copy.get_prior_instance();
+  auto other_keys = find_own_edit_keys(original_node, conflicting_txn);
+  if (!other_keys) {
     return;
   }
 
   auto& efforts = get_by_src(stats.invalidated_efforts_by_src,
                               conflicting_txn.get_src());
-  if (*mergeable) {
+  if (are_keys_disjoint(*committer_keys, *other_keys)) {
     ++get_by_ext(efforts.num_lba_conflicts_mergeable,
                  committer_node_own_copy.get_type());
   } else {
     ++get_by_ext(efforts.num_lba_conflicts_overlapping,
                  committer_node_own_copy.get_type());
+  }
+}
+
+void Cache::count_lba_retire_conflict_mergeability(
+    extent_types_t ext_type,
+    const std::set<laddr_t> &committer_keys,
+    const std::set<laddr_t> &other_keys,
+    Transaction::src_t conflicting_txn_src)
+{
+  // committer_keys and other_keys were already snapshotted at retire time
+  // (capture_retired_leaf_keys), so we already have both sets of keys in
+  // hand and don't need to look anything up live here.
+  auto& efforts = get_by_src(stats.invalidated_efforts_by_src,
+                              conflicting_txn_src);
+  if (are_keys_disjoint(committer_keys, other_keys)) {
+    ++get_by_ext(efforts.num_lba_retire_conflicts_mergeable, ext_type);
+  } else {
+    ++get_by_ext(efforts.num_lba_retire_conflicts_overlapping, ext_type);
   }
 }
 

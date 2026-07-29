@@ -918,6 +918,20 @@ private:
    */
   retired_extent_set_t retired_set;
 
+  /// notebook: original leaf -> keys we touched in it, plus keys every other
+  /// transaction with its own pending edit on that same leaf had touched,
+  /// snapshotted at retire time, before either side's delta_buffer can
+  /// be unlinked by conflict handling.
+  struct retired_leaf_notebook_t {
+    struct other_edit_t {
+      std::set<laddr_t> keys;
+      transaction_type_t src;
+    };
+    std::set<laddr_t> committer_keys;
+    std::map<transaction_id_t, other_edit_t> other_keys;
+  };
+  std::map<CachedExtent*, retired_leaf_notebook_t> keys_touched_in_retired_leaf;
+
   /// stats to collect when commit or invalidate
   tree_stats_t onode_tree_stats;
   tree_stats_t omap_tree_stats; // exclude omap tree depth
