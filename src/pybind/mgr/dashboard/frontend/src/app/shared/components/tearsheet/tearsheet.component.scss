@@ -110,6 +110,8 @@
 
   > div {
     flex: 1;
+    min-height: 0;
+    min-block-size: 0;
   }
 }
 

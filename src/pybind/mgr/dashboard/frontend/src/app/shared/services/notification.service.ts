@@ -25,6 +25,13 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#39;');
 }
 
+function toPlainText(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -310,7 +317,7 @@ export class NotificationService {
     const lowContrast = notification.options?.lowContrast || false;
 
     const escapedTitle = escapeHtml(notification.title || '');
-    const escapedMessage = escapeHtml(notification.message || '');
+    const escapedMessage = escapeHtml(toPlainText(notification.message || ''));
     const existing = this.activeToasts.find(
       (t) =>
         t.title === escapedTitle && t.type === carbonType && t.originalSubtitle === escapedMessage
