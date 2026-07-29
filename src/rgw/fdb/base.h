@@ -44,6 +44,7 @@
 #include <functional>
 #include <filesystem>
 #include <type_traits>
+#include <initializer_list>
 
 #ifdef __cpp_lib_flat_map
  #include <flat_map>
@@ -58,7 +59,13 @@
 // Wrangle some forward declarations:
 namespace ceph::libfdb {
 
-struct select;
+namespace query {
+
+struct interval;
+
+} // namespace query
+
+using select = query::interval;
 
 class database;
 class transaction;
@@ -73,9 +80,6 @@ extern transaction_handle make_transaction(database_handle dbh);
 // MOAR forward declarations-- "pay no attention to that man behind the curtain": 
 namespace ceph::libfdb::detail {
 
-template <typename T, typename ...Ts>
-concept is_any_of = (std::is_same_v<T, Ts> || ...);
-
 struct future_value;
 
 template <typename ValueT = std::string>
@@ -86,6 +90,10 @@ inline fdb_error_t do_commit(transaction_handle& txn);
 inline void transaction_set_kv_bytes(const transaction_handle& txn,
                                      std::span<const std::uint8_t> k,
                                      std::span<const std::uint8_t> v);
+inline void transaction_clear_key_bytes(const transaction_handle& txn,
+                                        std::span<const std::uint8_t> k);
+inline void transaction_clear_range(const transaction_handle& txn,
+                                    const ceph::libfdb::select& key_range);
 
 inline future_value block_until_ready(future_value&& fv);
 inline fdb_error_t get_future_error(const future_value& fv);
@@ -95,10 +103,11 @@ inline future_value get_range_future_from_transaction(ceph::libfdb::transaction&
 // A generator that produces successive spans for a range:
 inline std::generator<std::span<const FDBKeyValue>> generate_FDB_pairs(ceph::libfdb::transaction& txn, ceph::libfdb::select key_range);
 
-// Stores a successively-generated of kv pair results to an iterator:
+// Stores generated key/value pair results to an iterator and returns the
+// number of pairs emitted:
 template <typename OutIterT>
 requires std::output_iterator<OutIterT, std::pair<std::string, std::string>>
-inline bool get_value_range_from_transaction(ceph::libfdb::transaction& txn, const ceph::libfdb::select& key_range, OutIterT out_iter);
+inline std::size_t get_value_range_from_transaction(ceph::libfdb::transaction& txn, const ceph::libfdb::select& key_range, OutIterT& out_iter);
 
 } // namespace ceph::libfdb::detail
 
@@ -111,36 +120,6 @@ concept stringview_convertible = std::convertible_to<StringViewLikeT, std::strin
 
 template <typename KeyViewT>
 concept libfdb_key_view = std::same_as<std::remove_cvref_t<KeyViewT>, std::string_view>;
-
-template <typename IteratorT>
-concept key_value_iterator =
- std::input_iterator<IteratorT> and
- requires(const std::iter_value_t<IteratorT>& kv) {
-  kv.first;
-  kv.second;
- };
-
-template <typename FnT>
-concept value_callback =
- std::invocable<FnT&, std::span<const std::uint8_t>>;
-
-template <typename T>
-concept value_output =
- !value_callback<std::remove_reference_t<T>> &&
- std::is_lvalue_reference_v<T>;
-
-template <typename T>
-concept storable_invocation_result =
- !std::is_void_v<T> && !std::is_reference_v<T>;
-
-template <typename T>
-concept supported_invocation_result =
- std::is_void_v<T> || storable_invocation_result<T>;
-
-// There's a high likelihood that we're going to get more sophisticated selectors, 
-// so this is doing a more important job than it may appear to be:
-template <typename T>
-concept selector = ceph::libfdb::detail::is_any_of<T, ceph::libfdb::select>;
 
 } // namespace ceph::libfdb::concepts
 
@@ -170,6 +149,48 @@ namespace ceph::libfdb::concepts {
 template <typename KeyT>
 concept libfdb_key = ceph::libfdb::detail::libfdb_key_like<KeyT>;
 
+template <typename IteratorT>
+concept key_value_iterator =
+ std::input_iterator<IteratorT> and
+ requires(const std::iter_value_t<IteratorT>& kv) {
+  requires libfdb_key<decltype(kv.first)>;
+  kv.second;
+ };
+
+template <typename RangeT>
+concept key_value_range =
+ std::ranges::input_range<RangeT> and
+ key_value_iterator<std::ranges::iterator_t<RangeT>>;
+
+template <typename IteratorT>
+concept string_pair_output_iterator =
+ std::output_iterator<IteratorT, std::pair<std::string, std::string>>;
+
+template <typename RangeT>
+concept string_pair_output_range =
+ not std::is_array_v<std::remove_reference_t<RangeT>> and
+ std::ranges::range<RangeT> and
+ requires(RangeT& out) {
+  requires string_pair_output_iterator<decltype(std::inserter(out, std::end(out)))>;
+ };
+
+template <typename FnT>
+concept value_callback =
+ std::invocable<FnT&, std::span<const std::uint8_t>>;
+
+template <typename T>
+concept value_output =
+ not value_callback<std::remove_reference_t<T>> and
+ std::is_lvalue_reference_v<T>;
+
+template <typename T>
+concept storable_invocation_result =
+ not std::is_void_v<T> and not std::is_reference_v<T>;
+
+template <typename T>
+concept supported_invocation_result =
+ std::is_void_v<T> or storable_invocation_result<T>;
+
 } // namespace ceph::libfdb::concepts
 
 // libfdb_exception: How to deal, when Bad Things(TM) happen:
@@ -186,7 +207,7 @@ struct libfdb_exception final : std::runtime_error
 
  bool retryable() const noexcept
  {
-  return 0 < fdb_error_value &&
+  return 0 < fdb_error_value and
          fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE, fdb_error_value);
  }
 
@@ -249,102 +270,13 @@ requires (!concepts::libfdb_key_view<decltype(key)>)
  return as_fdb_span(as_libfdb_key_view(key));
 }
 
-/* Prefix selectors assume user keys do not start with 0xFF. Appending 0xFF
-would exclude valid keys (beginning with prefix + 0xFF), so we build the 
-next-in-lexicographic-order key instead. Callers can still specify an 
-explicit full range if they need something special: */
-inline std::string make_range_end_key_for_prefix(std::string_view prefix)
-{
- if (prefix.empty()) {
-  return "\xFF";
- }
-
- if (0xFF == static_cast<unsigned char>(prefix.front())) {
-  throw libfdb_exception("requested prefix has no (finite) end key");
- }
-
- auto i = prefix.find_last_not_of(static_cast<char>(0xFF));
- auto end_key = std::string(prefix.substr(0, i + 1));
-
- end_key.back() = static_cast<char>(static_cast<unsigned char>(end_key.back()) + 1);
-
- return end_key;
-}
-
 } // namespace ceph::libfdb::detail
 
-struct range_endpoint final
-{
- std::string key;
- bool inclusive;
+} // namespace ceph::libfdb
 
- explicit range_endpoint(const concepts::libfdb_key auto& key_, bool inclusive_)
-  : key(detail::as_libfdb_key_view(key_)), inclusive(inclusive_)
- {}
-};
+#include "query.h"
 
-inline range_endpoint inclusive(const concepts::libfdb_key auto& key)
-{
- return range_endpoint(key, true);
-}
-
-inline range_endpoint exclusive(const concepts::libfdb_key auto& key)
-{
- return range_endpoint(key, false);
-}
-
-/* lfdb::select is for handling batch queries-- there are two constructors to consider:
-    - single-key select creates the range containing all keys with that prefix;
-    - passing a start and end key creates a half-open lexicographic key range: [begin_key, end_key);
-    - wrap endpoints with inclusive() or exclusive() when you need a different shape. */
-struct select final
-{
- std::string begin_key, end_key;
- bool begin_inclusive = true;
- bool end_inclusive = false;
-
- struct {
-  int stride = 0; // "unlimited"
-  int target_bytes = 0; // "unlimited"
-
-  bool reverse_order = false;	// should we return results in reverse order?
-
-  // Some parts of the documentation claim FDB_STREAMING_MODE_ITERATOR is the default, other parts
-  // don't... examples tend to use FDB_STREAMING_MODE_WANT_ALL, but they operate on fairly small amounts
-  // of data. It's pretty hard to understand what the Right Thing(TM) to do is, the sure the answer may
-  // evolve as I learn more; this particular mode starts with small batches and then grows to larger
-  // increments as more data is sent and seems to be generally well-behaved:
-  FDBStreamingMode streaming_mode = FDB_STREAMING_MODE_ITERATOR; 
-
- } options;
-
- public:
- select(range_endpoint begin, range_endpoint end)
-  : begin_key(std::move(begin.key)),
-    end_key(std::move(end.key)),
-    begin_inclusive(begin.inclusive),
-    end_inclusive(end.inclusive)
- {}
-
- select(const concepts::libfdb_key auto& begin_key_,
-        const concepts::libfdb_key auto& end_key_)
-  : select(inclusive(begin_key_), exclusive(end_key_))
- {}
-
- select(const concepts::libfdb_key auto& begin_key_, range_endpoint end)
-  : select(inclusive(begin_key_), std::move(end))
- {}
-
- select(range_endpoint begin, const concepts::libfdb_key auto& end_key_)
-  : select(std::move(begin), exclusive(end_key_))
- {}
-
- select(const concepts::libfdb_key auto& prefix)
-  : begin_key(detail::as_libfdb_key_view(prefix)),
-    end_key(detail::make_range_end_key_for_prefix(detail::as_libfdb_key_view(prefix)))
- {}
-
-};
+namespace ceph::libfdb {
 
 // Helpers for selectors:
 namespace detail {
@@ -414,9 +346,7 @@ inline auto as_fdb_option_args(const auto& option)
 inline void apply_options(const auto& option_map, auto&& set_option)
 {
  std::ranges::for_each(option_map, [&set_option](const auto& option) {
-    auto args = as_fdb_option_args(option);
-
-    if (auto r = std::apply(set_option, args); 0 != r) {
+    if (auto r = std::apply(set_option, as_fdb_option_args(option)); 0 != r) {
       throw libfdb_exception(fmt::format("while setting option {}; {}",
                              static_cast<int>(option.first),
                              libfdb_exception::make_fdb_error_string(r)));
@@ -599,7 +529,7 @@ class transaction final
  }
 
  public:
- explicit operator bool() const noexcept { return dbh && nullptr != raw_handle(); }
+ explicit operator bool() const noexcept { return dbh and nullptr != raw_handle(); }
 
  public:
  FDBTransaction *raw_handle() const noexcept { return txn_handle.get(); }
@@ -611,14 +541,6 @@ class transaction final
                         (const uint8_t*)v.data(), v.size());
  }
 
- // JFW: it's not as easy to wedge an output_range into here as it appears, perhaps
- // needs to be revisited; I'm binding it to what's actually used in practice for now:
- template <typename OutIterT>
- requires std::output_iterator<OutIterT, std::pair<std::string, std::string>>
- bool get(const ceph::libfdb::select& key_range, OutIterT out_iter) {
-    return ceph::libfdb::detail::get_value_range_from_transaction(*this, key_range, out_iter);
- }
- 
  bool get(const std::span<const std::uint8_t> k, concepts::value_callback auto&& val_collector) {
     return get_single_value_from_transaction(k, val_collector);
  }
@@ -628,7 +550,7 @@ class transaction final
                           (const std::uint8_t *)k.data(), k.size());
  }
 
- void erase(const ceph::libfdb::concepts::selector auto& key_range) {
+ void erase(const ceph::libfdb::select& key_range) {
     const auto half_open_range = detail::as_half_open_select(key_range);
 
     fdb_transaction_clear_range(raw_handle(),
@@ -649,39 +571,13 @@ class transaction final
  // keep these handles mostly-opaque (this has proven to be a good idea as I've a few times shuffled internal details
  // with no disruption to the user interface surface):
  private:
- friend inline void set(transaction_handle,
-                        const concepts::libfdb_key auto&,
-                        const auto&,
-                        const commit_after_op);
- friend inline void set(database_handle, const concepts::libfdb_key auto&, const auto&);
- friend inline void set(transaction_handle,
-                        const concepts::libfdb_key auto&,
-                        const ceph::libfdb::concepts::stringview_convertible auto&,
-                        const commit_after_op);
- friend inline void set(database_handle,
-                        const concepts::libfdb_key auto&,
-                        const ceph::libfdb::concepts::stringview_convertible auto&);
-
  template <typename OutputTargetOrFnT>
- requires concepts::value_callback<std::remove_reference_t<OutputTargetOrFnT>> ||
+ requires concepts::value_callback<std::remove_reference_t<OutputTargetOrFnT>> or
           concepts::value_output<OutputTargetOrFnT&&>
  friend inline bool get(ceph::libfdb::transaction_handle,
                         const concepts::libfdb_key auto&,
                         OutputTargetOrFnT&&,
                         const commit_after_op);
- friend inline bool get(ceph::libfdb::transaction_handle,
-                        const ceph::libfdb::select&,
-                        auto,
-                        const commit_after_op);
-
- friend inline void erase(ceph::libfdb::transaction_handle,
-                          const concepts::libfdb_key auto&,
-                          const commit_after_op);
- friend inline void erase(ceph::libfdb::transaction_handle,
-                          const ceph::libfdb::select&,
-                          const commit_after_op);
- friend inline void erase(ceph::libfdb::database_handle, const concepts::libfdb_key auto&);
- friend inline void erase(ceph::libfdb::database_handle, const ceph::libfdb::select&);
 
  friend inline bool key_exists(transaction_handle txn,
                                const concepts::libfdb_key auto& k,
@@ -692,6 +588,10 @@ class transaction final
  friend inline void ceph::libfdb::detail::transaction_set_kv_bytes(const transaction_handle&,
                                                                    std::span<const std::uint8_t>,
                                                                    std::span<const std::uint8_t>);
+ friend inline void ceph::libfdb::detail::transaction_clear_key_bytes(const transaction_handle&,
+                                                                      std::span<const std::uint8_t>);
+ friend inline void ceph::libfdb::detail::transaction_clear_range(const transaction_handle&,
+                                                                 const ceph::libfdb::select&);
 
 };
 
@@ -703,6 +603,18 @@ inline void transaction_set_kv_bytes(const transaction_handle& txn,
                                      std::span<const std::uint8_t> v)
 {
  txn->set(k, v);
+}
+
+inline void transaction_clear_key_bytes(const transaction_handle& txn,
+                                        std::span<const std::uint8_t> k)
+{
+ txn->erase(k);
+}
+
+inline void transaction_clear_range(const transaction_handle& txn,
+                                    const ceph::libfdb::select& key_range)
+{
+ txn->erase(key_range);
 }
 
 } // namespace detail
@@ -946,13 +858,16 @@ inline query_window_result<AssocT> materialize_query_window(transaction& txn, se
 
 template <typename OutIterT>
 requires std::output_iterator<OutIterT, std::pair<std::string, std::string>>
-inline bool get_value_range_from_transaction(transaction& txn, const select& key_range, OutIterT out_iter)
+inline std::size_t get_value_range_from_transaction(transaction& txn, const select& key_range, OutIterT& out_iter)
 {
- std::ranges::transform(detail::generate_FDB_pairs(txn, key_range) | std::views::join,
-                        out_iter,
-                        to_decoded_kv_pair<std::string>);
+ std::size_t nread = 0;
 
- return true;
+ for (const auto& kv : detail::generate_FDB_pairs(txn, key_range) | std::views::join) {
+  *out_iter++ = to_decoded_kv_pair<std::string>(kv);
+  ++nread;
+ }
+
+ return nread;
 }
 
 inline bool retry_after_error(ceph::libfdb::transaction_handle& txn, const fdb_error_t r)
@@ -966,9 +881,7 @@ inline bool retry_after_error(ceph::libfdb::transaction_handle& txn, const fdb_e
   throw ceph::libfdb::libfdb_exception(r);
  }
 
- auto on_error_future = wait_for_on_error(txn->raw_handle(), r);
-
- if (fdb_error_t on_error_r = get_future_error(on_error_future); 0 != on_error_r) {
+ if (fdb_error_t on_error_r = get_future_error(wait_for_on_error(txn->raw_handle(), r)); 0 != on_error_r) {
   throw ceph::libfdb::libfdb_exception(r);
  }
 
@@ -1035,8 +948,8 @@ inline future_value get_range_future_from_transaction(ceph::libfdb::transaction&
                       end_offset,                                               // end offset (a shift AFTER end is matched)
 
                       // How should results be grouped/chunked:
-                      options.stride,                                           // limit (0 == unlimited)
-                      options.target_bytes,                                     // target bytes (0 == unlimited)
+                      options.result_limit,                                     // FDB range-read limit (0 == unlimited)
+                      options.target_bytes,                                     // FDB range-read target bytes (0 == unlimited)
                       options.streaming_mode,                                   // streaming mode (e.g.: FDB_STREAMING_MODE_WANT_ALL)
                       iteration,                                                // iteration # (produced side effect)
 
