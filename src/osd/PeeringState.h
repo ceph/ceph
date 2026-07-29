@@ -936,7 +936,8 @@ public:
       boost::statechart::custom_reaction< StartTargetPoolMigration >,
       boost::statechart::custom_reaction< StopTargetPoolMigration >,
       boost::statechart::custom_reaction< RemotePoolMigrationRevokedTooFull>,
-      boost::statechart::custom_reaction< RemotePoolMigrationRevoked>
+      boost::statechart::custom_reaction< RemotePoolMigrationRevoked>,
+      boost::statechart::custom_reaction< RemotePoolMigrationRejectedTooFull>
       > reactions;
     boost::statechart::result react(const QueryState& q);
     boost::statechart::result react(const QueryUnfound& q);
@@ -996,6 +997,9 @@ public:
       return discard_event();
     }
     boost::statechart::result react(const RemotePoolMigrationRevoked& evt) {
+      return discard_event();
+    }
+    boost::statechart::result react(const RemotePoolMigrationRejectedTooFull& evt) {
       return discard_event();
     }
     void all_activated_and_committed();
