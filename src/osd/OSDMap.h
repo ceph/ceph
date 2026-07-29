@@ -881,6 +881,18 @@ public:
   bool subtree_is_down(int id, std::set<int> *down_cache) const;
   bool containing_subtree_is_down(CephContext *cct, int osd, int subtree_type, std::set<int> *down_cache) const;
 
+  void get_stretch_zones(const pg_pool_t& pool,
+                         std::map<int, std::set<int>>* zone_osds) const;
+  /// How many OSDs acting lacks to reach min_size: in each zone of a
+  /// stretch pool, or else in the whole set.
+  unsigned num_acting_below_min_size(const pg_pool_t& pool, const std::vector<int>& acting) const;
+
+  /// Whether a PG of pool with this acting set can go active and serve
+  /// writes: it lacks no OSD to min_size, and a stretch pool's set can peer.
+  bool acting_set_writeable(const pg_pool_t& pool,
+                            const std::vector<int>& acting,
+                            std::ostream *out = nullptr) const;
+
   bool subtree_type_is_down(CephContext *cct, int id, int subtree_type, std::set<int> *down_in_osds, std::set<int> *up_in_osds,
                             std::set<int> *subtree_up, std::unordered_map<int, std::set<int> > *subtree_type_down) const;
 

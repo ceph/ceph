@@ -1599,7 +1599,7 @@ min_size in Each State
 
 ``min_size`` is per zone (:ref:`Pool Fields <ecsc-pool-fields>`). Peering interprets it according to
 the stretch mode state rather than the Monitor changing it on each transition
-(``OSDMap::stretch_num_acting_below_min_size``, :ref:`Stretch Set Validation
+(``OSDMap::num_acting_below_min_size``, :ref:`Stretch Set Validation
 <ecsc-stretch-set-validation>`):
 
 - In healthy stretch mode every zone needs at least ``min_size`` OSDs in the acting set.
@@ -2746,7 +2746,7 @@ a rule that takes its zones with a device class (``step take <zone> class <class
 Erasure coded pools need no extra check here.
 
 Each zone's OSDs are checked against the per-zone ``min_size`` instead
-(``OSDMap::stretch_num_acting_below_min_size``): in healthy stretch mode every zone needs at least
+(``OSDMap::num_acting_below_min_size``): in healthy stretch mode every zone needs at least
 ``min_size`` OSDs, and in degraded and recovery stretch mode only the surviving zone, the mandatory
 member, is counted (:ref:`min_size in Each State <ecsc-min-size-in-each-state>`). Two layouts are
 counted over the whole acting set, which needs ``min_size × num_zones`` OSDs: a stretched pool with
@@ -2758,7 +2758,11 @@ the buckets of the zone type that have OSDs under the rule's ``take`` roots, not
 acting set uses, so the "exactly ``num_zones`` zone buckets" of :ref:`The CRUSH Rule of a Pool
 <ecsc-the-rule-of-a-pool>` matters for peering too. A shadow bucket of a device class counts as
 its zone (``get_non_shadow_id()``), so a rule that takes a zone with two device classes counts
-it once.
+it once. For a pool that is not stretched it counts the OSDs of the acting set against
+``min_size``, so peering, the recovery and backfill priorities, past intervals and the Manager's
+ok-to-stop ask it alone, and judge a stretched pool by its zones only. ``acting_set_writeable()``
+adds ``stretch_set_can_peer`` to it for the acting sets of peering, async recovery and past
+intervals.
 
 
 .. _ecsc-scrub-behavior:
@@ -2895,7 +2899,7 @@ Each rule is judged from the OSDMap of the epoch being judged, so every daemon g
 answer for the same epoch:
 
 * **What** ``min_size`` **counts** follows ``num_zones``: a total over all copies for one zone, the
-  copies in each zone for more (``OSDMap::stretch_num_acting_below_min_size()``). Before the commit
+  copies in each zone for more (``OSDMap::num_acting_below_min_size()``). Before the commit
   every pool has one zone.
 * **How buckets are counted** follows the flag. Without it, ``stretch_set_can_peer()`` and
   ``calc_replicated_acting_stretch()`` count as earlier releases do: each shadow bucket of a
@@ -3191,7 +3195,7 @@ the Primary.
       <ecsc-peering>`).
    d. **is_recoverable and is_readable**: ``ECRecPred`` and ``ECReadPred`` map each shard of the
       larger shard set to its relative shard; the per-zone ``min_size`` is checked by
-      ``OSDMap::stretch_num_acting_below_min_size`` (:ref:`Stretch Set Validation
+      ``OSDMap::num_acting_below_min_size`` (:ref:`Stretch Set Validation
       <ecsc-stretch-set-validation>`).
 
 5. **Primary write fan-out to all shards**: the Primary encodes and sends ``num_zones × (k+m)``
