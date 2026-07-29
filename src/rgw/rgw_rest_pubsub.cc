@@ -1092,7 +1092,7 @@ void RGWPSDeleteTopicOp::execute(optional_yield y) {
 }
 
 using op_generator = RGWOp*(*)(bufferlist);
-static const std::unordered_map<std::string, op_generator> op_generators = {
+static const std::unordered_map<std::string_view, op_generator> op_generators = {
     {"CreateTopic", [](bufferlist bl) -> RGWOp* { return new RGWPSCreateTopicOp(std::move(bl)); }},
     {"DeleteTopic", [](bufferlist bl) -> RGWOp* { return new RGWPSDeleteTopicOp(std::move(bl)); }},
     {"ListTopics", [](bufferlist bl) -> RGWOp* { return new RGWPSListTopicsOp; }},
@@ -1104,10 +1104,10 @@ static const std::unordered_map<std::string, op_generator> op_generators = {
 
 bool RGWHandler_REST_PSTopic_AWS::action_exists(const req_info& info)
 {
-  if (info.args.exists("Action")) {
-    const std::string action_name = info.args.get("Action");
-    return op_generators.contains(action_name);
+  if (const auto action_name = info.args.get_optional("Action")) {
+    return op_generators.contains(*action_name);
   }
+
   return false;
 }
 bool RGWHandler_REST_PSTopic_AWS::action_exists(const req_state* s)
@@ -1120,16 +1120,17 @@ RGWOp *RGWHandler_REST_PSTopic_AWS::op_post()
   s->dialect = "sns";
   s->prot_flags = RGW_REST_STS;
 
-  if (s->info.args.exists("Action")) {
-    const std::string action_name = s->info.args.get("Action");
-    const auto action_it = op_generators.find(action_name);
+  if (const auto action_name = s->info.args.get_optional("Action")) {
+    const auto action_it = op_generators.find(*action_name);
     if (action_it != op_generators.end()) {
       return action_it->second(std::move(bl_post_body));
     }
-    ldpp_dout(s, 10) << "unknown action '" << action_name << "' for Topic handler" << dendl;
-  } else {
-    ldpp_dout(s, 10) << "missing action argument in Topic handler" << dendl;
+
+    ldpp_dout(s, 10) << "unknown action '" << *action_name << "' for Topic handler" << dendl;
+    return nullptr;
   }
+
+  ldpp_dout(s, 10) << "missing action argument in Topic handler" << dendl;
   return nullptr;
 }
 
@@ -1702,4 +1703,3 @@ RGWOp* RGWHandler_REST_PSNotifs_S3::create_put_op() {
 RGWOp* RGWHandler_REST_PSNotifs_S3::create_delete_op() {
   return new RGWPSDeleteNotifOp();
 }
-

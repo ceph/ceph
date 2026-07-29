@@ -842,7 +842,7 @@ public:
                                const std::string& frontend_prefix) override;
 
   RGWRESTMgr* get_resource_mgr_as_default(req_state* const s,
-                                          const std::string& uri,
+                                          std::string_view uri,
                                           std::string* our_uri) override;
 };
 

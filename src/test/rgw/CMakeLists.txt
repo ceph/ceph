@@ -128,6 +128,13 @@ add_executable(unittest_rgw_cors
 add_ceph_unittest(unittest_rgw_cors)
 target_link_libraries(unittest_rgw_cors ${rgw_libs})
 
+# unittest_rgw_rest
+add_executable(unittest_rgw_rest
+  test_rgw_rest.cc)
+add_ceph_unittest(unittest_rgw_rest)
+target_include_directories(unittest_rgw_rest
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_rest ${rgw_libs})
 
 # unittest_rgw_bucket_sync_cache
 add_executable(unittest_rgw_bucket_sync_cache test_rgw_bucket_sync_cache.cc)

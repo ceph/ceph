@@ -2,9 +2,13 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <errno.h>
-#include <vector>
 #include <algorithm>
+#include <array>
+#include <memory>
+#include <ranges>
 #include <string>
+#include <string_view>
+#include <vector>
 #include <boost/tokenizer.hpp>
 
 #include "common/ceph_json.h"
@@ -35,6 +39,104 @@
 #define dout_context g_ceph_context
 
 static constexpr auto dout_subsys = ceph_subsys_rgw;
+
+namespace {
+
+using namespace std::string_view_literals;
+
+static constexpr std::array sensitive_keywords = {
+  "password"sv
+};
+
+enum struct http_arg_kind {
+  ordinary,
+  sub_resource,
+  response_modifier,
+  admin_subresource,
+};
+
+struct http_arg_spec final {
+  std::string_view name;
+  RGWHTTPArgs::http_arg id;
+  http_arg_kind kind = http_arg_kind::ordinary;
+};
+
+using enum http_arg_kind;
+
+static constexpr auto http_arg_specs = std::to_array<http_arg_spec>({
+  { "acl"sv, RGWHTTPArgs::http_arg::acl, sub_resource },
+  { "append"sv, RGWHTTPArgs::http_arg::append, sub_resource },
+  { "attributes"sv, RGWHTTPArgs::http_arg::attributes },
+  { "bulk-delete"sv, RGWHTTPArgs::http_arg::bulk_delete },
+  { "caps"sv, RGWHTTPArgs::http_arg::caps, admin_subresource },
+  { "cors"sv, RGWHTTPArgs::http_arg::cors, sub_resource },
+  { "delete"sv, RGWHTTPArgs::http_arg::delete_, sub_resource },
+  { "encryption"sv, RGWHTTPArgs::http_arg::encryption },
+  { "end-date"sv, RGWHTTPArgs::http_arg::end_date, sub_resource },
+  { "extract-archive"sv, RGWHTTPArgs::http_arg::extract_archive },
+  { "format"sv, RGWHTTPArgs::http_arg::format },
+  { "index"sv, RGWHTTPArgs::http_arg::index, admin_subresource },
+  { "key"sv, RGWHTTPArgs::http_arg::key, admin_subresource },
+  { "layout"sv, RGWHTTPArgs::http_arg::layout },
+  { "legal-hold"sv, RGWHTTPArgs::http_arg::legal_hold },
+  { "lifecycle"sv, RGWHTTPArgs::http_arg::lifecycle, sub_resource },
+  { "list"sv, RGWHTTPArgs::http_arg::list, admin_subresource },
+  { "location"sv, RGWHTTPArgs::http_arg::location, sub_resource },
+  { "logging"sv, RGWHTTPArgs::http_arg::logging, sub_resource },
+  { "mdsearch"sv, RGWHTTPArgs::http_arg::mdsearch },
+  { "multipart-manifest"sv, RGWHTTPArgs::http_arg::multipart_manifest },
+  { "notification"sv, RGWHTTPArgs::http_arg::notification, sub_resource },
+  { "object"sv, RGWHTTPArgs::http_arg::object, admin_subresource },
+  { "object-lock"sv, RGWHTTPArgs::http_arg::object_lock },
+  { "ownershipControls"sv, RGWHTTPArgs::http_arg::ownership_controls },
+  { "partNumber"sv, RGWHTTPArgs::http_arg::part_number, sub_resource },
+  { "policy"sv, RGWHTTPArgs::http_arg::policy, admin_subresource },
+  { "policyStatus"sv, RGWHTTPArgs::http_arg::policy_status, sub_resource },
+  { "position"sv, RGWHTTPArgs::http_arg::position, sub_resource },
+  { "publicAccessBlock"sv, RGWHTTPArgs::http_arg::public_access_block, sub_resource },
+  { "quota"sv, RGWHTTPArgs::http_arg::quota, admin_subresource },
+  { "replication"sv, RGWHTTPArgs::http_arg::replication },
+  { "requestPayment"sv, RGWHTTPArgs::http_arg::request_payment, sub_resource },
+  { "response-cache-control"sv,
+    RGWHTTPArgs::http_arg::response_cache_control, response_modifier },
+  { "response-content-disposition"sv,
+    RGWHTTPArgs::http_arg::response_content_disposition, response_modifier },
+  { "response-content-encoding"sv,
+    RGWHTTPArgs::http_arg::response_content_encoding, response_modifier },
+  { "response-content-language"sv,
+    RGWHTTPArgs::http_arg::response_content_language, response_modifier },
+  { "response-content-type"sv,
+    RGWHTTPArgs::http_arg::response_content_type, response_modifier },
+  { "response-expires"sv,
+    RGWHTTPArgs::http_arg::response_expires, response_modifier },
+  { "restore"sv, RGWHTTPArgs::http_arg::restore },
+  { "retention"sv, RGWHTTPArgs::http_arg::retention },
+  { "select-type"sv, RGWHTTPArgs::http_arg::select_type },
+  { "start-date"sv, RGWHTTPArgs::http_arg::start_date, sub_resource },
+  { "subuser"sv, RGWHTTPArgs::http_arg::subuser, admin_subresource },
+  { "sync"sv, RGWHTTPArgs::http_arg::sync, admin_subresource },
+  { "tagging"sv, RGWHTTPArgs::http_arg::tagging, sub_resource },
+  { "torrent"sv, RGWHTTPArgs::http_arg::torrent, sub_resource },
+  { "uploadId"sv, RGWHTTPArgs::http_arg::upload_id, sub_resource },
+  { "uploads"sv, RGWHTTPArgs::http_arg::uploads, sub_resource },
+  { "usage"sv, RGWHTTPArgs::http_arg::usage, sub_resource },
+  { "versionId"sv, RGWHTTPArgs::http_arg::version_id, sub_resource },
+  { "versioning"sv, RGWHTTPArgs::http_arg::versioning, sub_resource },
+  { "versions"sv, RGWHTTPArgs::http_arg::versions, sub_resource },
+  { "website"sv, RGWHTTPArgs::http_arg::website, sub_resource },
+});
+
+const http_arg_spec* find_http_arg(std::string_view name)
+{
+  const auto i = std::ranges::find(
+    http_arg_specs,
+    name,
+    &http_arg_spec::name);
+
+  return std::end(http_arg_specs) == i ? nullptr : std::to_address(i);
+}
+
+} // namespace
 
 using rgw::ARN;
 using rgw::IAM::Effect;
@@ -861,8 +963,7 @@ int NameVal::parse()
 
 int RGWHTTPArgs::parse(const DoutPrefixProvider *dpp)
 {
-  int pos = 0;
-  bool end = false;
+  std::string::size_type pos = 0;
 
   if (str.empty())
     return 0;
@@ -870,13 +971,10 @@ int RGWHTTPArgs::parse(const DoutPrefixProvider *dpp)
   if (str[pos] == '?')
     pos++;
 
-  while (!end) {
-    int fpos = str.find('&', pos);
-    if (fpos  < pos) {
-       end = true;
-       fpos = str.size(); 
-    }
-    std::string nameval = url_decode(str.substr(pos, fpos - pos), true);
+  while (pos <= str.size()) {
+    const auto fpos = str.find('&', pos);
+    const auto end = std::string::npos == fpos ? str.size() : fpos;
+    std::string nameval = url_decode(str.substr(pos, end - pos), true);
     NameVal nv(std::move(nameval));
     int ret = nv.parse();
     if (ret >= 0) {
@@ -884,28 +982,28 @@ int RGWHTTPArgs::parse(const DoutPrefixProvider *dpp)
       if (name.find("X-Amz-") != string::npos) {
         std::for_each(name.begin(),
           name.end(),
-          [](char &c){
+          [](char& c) {
             if (c != '-') {
               c = ::tolower(static_cast<unsigned char>(c));
             }
         });
       }
       string& val = nv.get_val();
-      static constexpr std::initializer_list<const char*>
-          sensitive_keyword_list = {"password"};
-      bool is_sensitive = false;
-      for (const auto& key : sensitive_keyword_list) {
-        if (name.find(key) != std::string::npos) {
-          is_sensitive = true;
-          break;
-        }
-      }
+      const bool is_sensitive = std::ranges::any_of(
+        sensitive_keywords,
+        [&name] (const auto key) {
+          return std::string_view { name }.find(key) != std::string_view::npos;
+        });
       ldpp_dout(dpp, 10) << "name: " << name
                          << " val: " << (is_sensitive ? "****" : val) << dendl;
       append(name, val);
     }
 
-    pos = fpos + 1;  
+    if (std::string::npos == fpos) {
+      return 0;
+    }
+
+    pos = fpos + 1;
   }
 
   return 0;
@@ -913,6 +1011,11 @@ int RGWHTTPArgs::parse(const DoutPrefixProvider *dpp)
 
 void RGWHTTPArgs::remove(const string& name)
 {
+  if (const auto info = find_http_arg(name)) {
+    present_args.reset(index(info->id));
+    present_sub_resources.reset(index(info->id));
+  }
+
   auto val_iter = val_map.find(name);
   if (val_iter != std::end(val_map)) {
     val_map.erase(val_iter);
@@ -931,62 +1034,57 @@ void RGWHTTPArgs::remove(const string& name)
 
 void RGWHTTPArgs::append(const string& name, const string& val)
 {
-  if (name.compare(0, sizeof(RGW_SYS_PARAM_PREFIX) - 1, RGW_SYS_PARAM_PREFIX) == 0) {
-    sys_val_map[name] = val;
-  } else {
-    val_map[name] = val;
+  const std::string_view name_view = name;
+  auto& target_map =
+    0 == name.compare(0, sizeof(RGW_SYS_PARAM_PREFIX) - 1, RGW_SYS_PARAM_PREFIX) ?
+    sys_val_map :
+    val_map;
+  target_map[name] = val;
+
+  // When object-exclusive subresources are added, update
+  // RGWHTTPArgs::exist_obj_excl_sub_resource().
+  if (const auto info = find_http_arg(name_view)) {
+    present_args.set(index(info->id));
+
+    switch (info->kind) {
+      default:
+        return;
+      case http_arg_kind::sub_resource:
+        sub_resources[name] = val;
+        present_sub_resources.set(index(info->id));
+        return;
+      case http_arg_kind::response_modifier:
+        sub_resources[name] = val;
+        present_sub_resources.set(index(info->id));
+        has_resp_modifier = true;
+        return;
+      case http_arg_kind::admin_subresource:
+        if (!admin_subresource_added) {
+          sub_resources[name] = "";
+          present_sub_resources.set(index(info->id));
+          admin_subresource_added = true;
+        }
+        return;
+    }
+  }
+}
+
+bool RGWHTTPArgs::exists(std::string_view name) const
+{
+  if (const auto info = find_http_arg(name)) {
+    return present_args.test(index(info->id));
   }
 
-// when sub_resources exclusive by object are added, please remember to update obj_sub_resource in RGWHTTPArgs::exist_obj_excl_sub_resource().
-  if ((name.compare("acl") == 0) ||
-      (name.compare("cors") == 0) ||
-      (name.compare("notification") == 0) ||
-      (name.compare("location") == 0) ||
-      (name.compare("logging") == 0) ||
-      (name.compare("usage") == 0) ||
-      (name.compare("lifecycle") == 0) ||
-      (name.compare("delete") == 0) ||
-      (name.compare("uploads") == 0) ||
-      (name.compare("partNumber") == 0) ||
-      (name.compare("uploadId") == 0) ||
-      (name.compare("versionId") == 0) ||
-      (name.compare("start-date") == 0) ||
-      (name.compare("end-date") == 0) ||
-      (name.compare("versions") == 0) ||
-      (name.compare("versioning") == 0) ||
-      (name.compare("website") == 0) ||
-      (name.compare("requestPayment") == 0) ||
-      (name.compare("torrent") == 0) ||
-      (name.compare("tagging") == 0) ||
-      (name.compare("append") == 0) ||
-      (name.compare("position") == 0) ||
-      (name.compare("policyStatus") == 0) ||
-      (name.compare("publicAccessBlock") == 0)) {
-    sub_resources[name] = val;
-  } else if (name[0] == 'r') { // root of all evil
-    if ((name.compare("response-content-type") == 0) ||
-        (name.compare("response-content-language") == 0) ||
-        (name.compare("response-expires") == 0) ||
-        (name.compare("response-cache-control") == 0) ||
-        (name.compare("response-content-disposition") == 0) ||
-        (name.compare("response-content-encoding") == 0)) {
-      sub_resources[name] = val;
-      has_resp_modifier = true;
-    }
-  } else if  ((name.compare("subuser") == 0) ||
-              (name.compare("key") == 0) ||
-              (name.compare("caps") == 0) ||
-              (name.compare("index") == 0) ||
-              (name.compare("policy") == 0) ||
-              (name.compare("quota") == 0) ||
-              (name.compare("list") == 0) ||
-              (name.compare("object") == 0) ||
-              (name.compare("sync") == 0)) {
-    if (!admin_subresource_added) {
-      sub_resources[name] = "";
-      admin_subresource_added = true;
-    }
+  return val_map.find(std::string { name }) != std::end(val_map);
+}
+
+bool RGWHTTPArgs::sub_resource_exists(std::string_view name) const
+{
+  if (const auto info = find_http_arg(name)) {
+    return present_sub_resources.test(index(info->id));
   }
+
+  return sub_resources.find(std::string { name }) != std::end(sub_resources);
 }
 
 const string& RGWHTTPArgs::get(const string& name, bool *exists) const

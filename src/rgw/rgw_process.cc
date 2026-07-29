@@ -359,6 +359,18 @@ int process_request(const RGWProcessEnv& penv,
                                                *penv.auth_registry,
                                                frontend_prefix,
                                                client_io, &mgr, &init_error);
+
+  // RAII handlers to keep these around during process_request():
+  auto put_handler_guard = make_scope_guard([rest, &handler] {
+    rest->put_handler(handler);
+  });
+
+  auto put_op_guard = make_scope_guard([&handler, &op] {
+    if (handler) {
+      handler->put_op(op);
+    }
+  });
+
   rgw::dmclock::SchedulerCompleter c;
 
   if (init_error != 0) {
@@ -557,10 +569,6 @@ done:
           << " request_id=" << s->trans_id
           << " ======"
           << dendl;
-
-  if (handler)
-    handler->put_op(op);
-  rest->put_handler(handler);
 
   return (ret < 0 ? ret : s->err.ret);
 } /* process_request */

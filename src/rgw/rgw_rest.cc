@@ -1733,33 +1733,37 @@ int RGWHandler_REST::allocate_formatter(req_state *s,
 					bool configurable)
 {
   s->format = RGWFormat::BAD_FORMAT; // set to invalid value to allocation happens anyway
-  auto type = default_type;
   if (configurable) {
-    string format_str = s->info.args.get("format");
-    if (format_str.compare("xml") == 0) {
-      type = RGWFormat::XML;
-    } else if (format_str.compare("json") == 0) {
-      type = RGWFormat::JSON;
-    } else if (format_str.compare("html") == 0) {
-      type = RGWFormat::HTML;
-    } else {
-      const char *accept = s->info.env->get("HTTP_ACCEPT");
-      if (accept) {
-        // trim at first ;
-        std::string_view format = accept;
-        format = format.substr(0, format.find(';'));
+    const std::string& format = s->info.args.get("format");
+    if ("xml" == format) {
+      return RGWHandler_REST::reallocate_formatter(s, RGWFormat::XML);
+    }
 
-        if (format == "text/xml" || format == "application/xml") {
-          type = RGWFormat::XML;
-        } else if (format == "application/json") {
-          type = RGWFormat::JSON;
-        } else if (format == "text/html") {
-          type = RGWFormat::HTML;
-        }
-      }
+    if ("json" == format) {
+      return RGWHandler_REST::reallocate_formatter(s, RGWFormat::JSON);
+    }
+
+    if ("html" == format) {
+      return RGWHandler_REST::reallocate_formatter(s, RGWFormat::HTML);
+    }
+
+    const std::string_view accept = s->info.env->get("HTTP_ACCEPT", "");
+    const auto accepted_format = accept.substr(0, accept.find(';'));
+
+    if ("text/xml" == accepted_format || "application/xml" == accepted_format) {
+      return RGWHandler_REST::reallocate_formatter(s, RGWFormat::XML);
+    }
+
+    if ("application/json" == accepted_format) {
+      return RGWHandler_REST::reallocate_formatter(s, RGWFormat::JSON);
+    }
+
+    if ("text/html" == accepted_format) {
+      return RGWHandler_REST::reallocate_formatter(s, RGWFormat::HTML);
     }
   }
-  return RGWHandler_REST::reallocate_formatter(s, type);
+
+  return RGWHandler_REST::reallocate_formatter(s, default_type);
 }
 
 int RGWHandler_REST::reallocate_formatter(req_state *s, const RGWFormat type)
@@ -1775,26 +1779,23 @@ int RGWHandler_REST::reallocate_formatter(req_state *s, const RGWFormat type)
   s->formatter = nullptr;
   s->format = type;
 
-  const string& mm = s->info.args.get("multipart-manifest");
-  const bool multipart_delete = (mm.compare("delete") == 0);
-  const bool swift_bulkupload = s->prot_flags & RGW_REST_SWIFT &&
-                                s->info.args.exists("extract-archive");
+  using enum RGWHTTPArgs::http_arg;
+
+  const bool is_multipart_delete =
+    "delete" == s->info.args.get("multipart-manifest");
+  const bool is_swift_bulkupload = (s->prot_flags & RGW_REST_SWIFT) &&
+                                   s->info.args.exists(extract_archive);
+  const bool use_plain_compat_syntax = s->info.args.exists(bulk_delete) ||
+                                       is_multipart_delete ||
+                                       is_swift_bulkupload;
+
   switch (s->format) {
     case RGWFormat::PLAIN:
-      {
-        const bool use_kv_syntax = s->info.args.exists("bulk-delete") ||
-                                   multipart_delete || swift_bulkupload;
-        s->formatter = new RGWFormatter_Plain(use_kv_syntax);
-        break;
-      }
+      s->formatter = new RGWFormatter_Plain(use_plain_compat_syntax);
+      break;
     case RGWFormat::XML:
-      {
-        const bool lowercase_underscore = s->info.args.exists("bulk-delete") ||
-                                          multipart_delete || swift_bulkupload;
-
-        s->formatter = new XMLFormatter(false, lowercase_underscore);
-        break;
-      }
+      s->formatter = new XMLFormatter(false, use_plain_compat_syntax);
+      break;
     case RGWFormat::JSON:
       s->formatter = new JSONFormatter(false);
       break;
@@ -1954,16 +1955,15 @@ int RGWHandler_REST::read_permissions(RGWOp* op_obj, optional_yield y)
 
 void RGWRESTMgr::register_resource(string resource, RGWRESTMgr *mgr)
 {
+  register_resource(std::move(resource), std::unique_ptr<RGWRESTMgr> { mgr });
+}
+
+void RGWRESTMgr::register_resource(string resource, std::unique_ptr<RGWRESTMgr> mgr)
+{
   string r = "/";
   r.append(resource);
 
-  /* do we have a resource manager registered for this entry point? */
-  map<string, RGWRESTMgr *>::iterator iter = resource_mgrs.find(r);
-  if (iter != resource_mgrs.end()) {
-    delete iter->second;
-  }
-  resource_mgrs[r] = mgr;
-  resources_by_size.insert(pair<size_t, string>(r.size(), r));
+  add_resource_route(r, std::move(mgr));
 
   /* now build default resource managers for the path (instead of nested entry points)
    * e.g., if the entry point is /auth/v1.0/ then we'd want to create a default
@@ -1975,10 +1975,9 @@ void RGWRESTMgr::register_resource(string resource, RGWRESTMgr *mgr)
   while (pos != r.size() - 1 && pos != string::npos) {
     string s = r.substr(0, pos);
 
-    iter = resource_mgrs.find(s);
-    if (iter == resource_mgrs.end()) { /* only register it if one does not exist */
-      resource_mgrs[s] = new RGWRESTMgr; /* a default do-nothing manager */
-      resources_by_size.insert(pair<size_t, string>(s.size(), s));
+    const auto route = std::ranges::find(resource_mgrs, s, &resource_route::resource);
+    if (std::end(resource_mgrs) == route) {
+      add_resource_route(s, std::make_unique<RGWRESTMgr>());
     }
 
     pos = r.find('/', pos + 1);
@@ -1987,25 +1986,44 @@ void RGWRESTMgr::register_resource(string resource, RGWRESTMgr *mgr)
 
 void RGWRESTMgr::register_default_mgr(RGWRESTMgr *mgr)
 {
-  delete default_mgr;
-  default_mgr = mgr;
+  register_default_mgr(std::unique_ptr<RGWRESTMgr> { mgr });
 }
 
-RGWRESTMgr* RGWRESTMgr::get_resource_mgr(req_state* const s,
+void RGWRESTMgr::register_default_mgr(std::unique_ptr<RGWRESTMgr> mgr)
+{
+  default_mgr = std::move(mgr);
+}
+
+void RGWRESTMgr::add_resource_route(std::string resource, std::unique_ptr<RGWRESTMgr> mgr)
+{
+  const auto route = std::ranges::find(resource_mgrs, resource, &resource_route::resource);
+  if (std::end(resource_mgrs) != route) {
+    route->mgr = std::move(mgr);
+    return;
+  }
+
+  resource_mgrs.push_back(resource_route {
+    .resource = std::move(resource),
+    .mgr = std::move(mgr),
+  });
+
+  std::ranges::sort(resource_mgrs, [] (const auto& lhs, const auto& rhs) {
+    return lhs.resource.size() > rhs.resource.size();
+  });
+}
+
+RGWRESTMgr *RGWRESTMgr::get_resource_mgr(req_state *const s,
                                          const std::string_view uri,
-                                         std::string* const out_uri)
+                                         std::string *const out_uri)
 {
   *out_uri = uri;
 
-  for (auto iter = resources_by_size.rbegin();
-       iter != resources_by_size.rend();
-       ++iter) {
-    const std::string_view resource = iter->second;
+  for (const auto& route : resource_mgrs) {
+    const std::string_view resource = route.resource;
     if (uri.starts_with(resource) &&
-        (uri.size() == iter->first || '/' == uri[iter->first])) {
-      const auto suffix = uri.substr(iter->first);
-      return resource_mgrs.find(iter->second)->second->get_resource_mgr(
-        s, suffix, out_uri);
+        (uri.size() == resource.size() || '/' == uri[resource.size()])) {
+      const auto suffix = uri.substr(resource.size());
+      return route.mgr->get_resource_mgr(s, suffix, out_uri);
     }
   }
 
@@ -2025,14 +2043,7 @@ void RGWREST::register_x_headers(const string& s_headers)
   }
 }
 
-RGWRESTMgr::~RGWRESTMgr()
-{
-  map<string, RGWRESTMgr *>::iterator iter;
-  for (iter = resource_mgrs.begin(); iter != resource_mgrs.end(); ++iter) {
-    delete iter->second;
-  }
-  delete default_mgr;
-}
+RGWRESTMgr::~RGWRESTMgr() = default;
 
 int rgw_rest_transform_s3_vhost_style(req_state* s)
 {
