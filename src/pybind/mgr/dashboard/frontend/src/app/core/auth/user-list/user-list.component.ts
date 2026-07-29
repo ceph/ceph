@@ -77,7 +77,10 @@ export class UserListComponent implements OnInit {
       permission: 'delete',
       icon: Icons.destroy,
       click: () => this.deleteUserModal(),
-      name: this.actionLabels.DELETE
+      name: this.actionLabels.DELETE,
+      disable: () => this.isLastAdmin()
+        ? $localize`Cannot delete the last user with administrator role`
+        : false
     };
     this.tableActions = [addAction, editAction, deleteAction];
   }
@@ -142,6 +145,20 @@ export class UserListComponent implements OnInit {
       });
       this.users = users;
     });
+  }
+
+  isLastAdmin(): boolean {
+    if (!this.selection.hasSingleSelection || !this.users) {
+      return false;
+    }
+    const selected = this.selection.first();
+    if (!selected.roles?.includes('administrator')) {
+      return false;
+    }
+    const enabledAdmins = this.users.filter(
+      (u) => u.enabled && u.roles?.includes('administrator')
+    );
+    return enabledAdmins.length <= 1;
   }
 
   updateSelection(selection: CdTableSelection) {
