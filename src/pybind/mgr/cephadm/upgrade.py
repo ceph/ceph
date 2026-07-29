@@ -1683,20 +1683,35 @@ class CephadmUpgrade:
                     raise
 
     def _verify_all_mds_upgraded(self, target_version: str) -> bool:
-        ret, out_ver, err = self.mgr.check_mon_command({
-            'prefix': 'versions',
-        })
-        j = json.loads(out_ver)
-        mds_versions = j.get('mds', {})
-        all_upgraded = True
-        for version, count in mds_versions.items():
-            short_version = version.split(' ')[2]
-            if short_version != target_version:
+        deadline = time.time() + 10
+        while True:
+            ret, out_ver, err = self.mgr.check_mon_command({
+                'prefix': 'versions',
+            })
+            j = json.loads(out_ver)
+            mds_versions = j.get('mds', {})
+            all_upgraded = True
+            for version, count in mds_versions.items():
+                short_version = version.split(' ')[2]
+                if short_version != target_version:
+                    logger.warning(
+                        'Upgrade: %d mds daemon(s) are %s != target %s' %
+                        (count, short_version, target_version))
+                    all_upgraded = False
+
+            if all_upgraded:
+                return True
+
+            if time.time() >= deadline:
                 logger.warning(
-                    'Upgrade: %d mds daemon(s) are %s != target %s' %
-                    (count, short_version, target_version))
-                all_upgraded = False
-        return all_upgraded
+                    'Upgrade: timed out waiting for all mds daemons to report '
+                    'target version %s' % target_version)
+                return False
+
+            logger.info(
+                'Upgrade: Waiting for mds daemons to report target version %s, '
+                'retrying...' % target_version)
+            time.sleep(2)
 
     def _complete_mds_upgrade(self) -> None:
         assert self.upgrade_state is not None
