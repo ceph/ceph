@@ -182,7 +182,14 @@ class Context:
                 f' {len(matches)} sockets found',
                 hints=['select clusters using the --cluster option'],
             )
-        return matches[0]
+        socket = matches[0]
+        # workaround for socket length issues in gRPC library. Because the path
+        # will typically include a long(ish) UUID and a possibly long service
+        # name we can changedir to the parent and only pass the file name along
+        # to grpc. This should be safe as this tool doesn't do much file system
+        # ops beyond this point.
+        os.chdir(socket.parent)
+        return socket.relative_to(socket.parent)
 
     def _ceph_keyrings(self, searchdir: pathlib.Path) -> list[pathlib.Path]:
         try:
