@@ -1804,6 +1804,64 @@ class MergeConflictCheck(BaseAuditCheck):
                     else:
                         print("Invalid choice. Please enter p, r, m, q, or o.")
 
+class ApprovalCheck(BaseAuditCheck):
+    """
+    Verifies GitHub's own reviewDecision (not REVIEW_REQUIRED) before a PR is
+    finally merged. reviewDecision is a computed field GitHub only exposes
+    over GraphQL (the same one `gh pr list --json reviewDecision` reads),
+    not over REST -- get_pr_info()'s REST /pulls/{pr} response has no
+    equivalent field (only requested_reviewers / review_comments*, neither
+    of which reflect an approve/changes-requested decision).
+
+    Only wired into verify_pr_readiness(), which itself only runs under
+    --final-merge/--audit -- ordinary --pr-label/--integration/--qe-label
+    batch merges never reach this check.
+    """
+    @property
+    def name(self) -> str:
+        return "Review Approval"
+
+    def run(self, ctx: AuditContext) -> None:
+        session, pr, report, args = ctx.session, ctx.pr, ctx.report, ctx.args
+        log.info("Checking review approval status for PR #%d...", pr)
+
+        query = 'query {{ repository(owner: "{owner}", name: "{repo}") {{ pullRequest(number: {pr}) {{ reviewDecision }} }} }}'.format(
+            owner=BASE_PROJECT, repo=BASE_REPO, pr=pr
+        )
+        resp = session.post("https://api.github.com/graphql", auth=GithubBearerAuth(), json={'query': query})
+        if resp.status_code != 200:
+            raise SystemExit(f"Failed to fetch review decision for PR #{pr}: {resp.status_code} {resp.text}")
+        data = resp.json()
+        if data.get('errors'):
+            raise SystemExit(f"GraphQL errors fetching review decision for PR #{pr}: {data['errors']}")
+
+        node = data['data']['repository'].get('pullRequest')
+        if node is None:
+            raise SystemExit(f"Could not fetch review status for PR #{pr} (GraphQL returned no data for it)")
+
+        if node.get('reviewDecision') != 'REVIEW_REQUIRED':
+            return
+
+        log.error(f"PR #{pr} is not approved (reviewDecision=REVIEW_REQUIRED).")
+        md_text = "### Automated PR Review - Approval Required\n\n"
+        md_text += "This PR has not been approved yet. Please request a review before it can be finally merged."
+        if args.ci_mode:
+            report.add("Review Approval", md_text)
+        else:
+            while True:
+                ans = input(f"PR #{pr} is not approved! [p/r/m] (p=proceed/skip check, r=add to review, m=skip to merge): ").strip().lower()
+                if ans == 'p':
+                    log.warning(f"Skipping approval check for PR #{pr}.")
+                    break
+                elif ans == 'r':
+                    report.add("Review Approval", md_text)
+                    report.record_failure()
+                    break
+                elif ans == 'm':
+                    raise SkipToMerge()
+                else:
+                    print("Invalid choice. Please enter p, r, or m.")
+
 def write_ci_summary(pr: int, passed: bool, exit_code: int = 1):
     if not passed:
         print(f"::error title=Backport Audit Failed::PTL tool detected parity or conflict issues (exit code {exit_code}). See PR review comments or check this step's logs for details.", file=sys.stderr)
@@ -1832,8 +1890,9 @@ def verify_pr_readiness(G, session, R, pr, pr_commits, tip, base, args):
     
     checks: List[BaseAuditCheck] = [
         MergeConflictCheck(),
+        ApprovalCheck(),
     ]
-    
+
     if base != 'main':
         checks.append(CommitParityCheck())
         if not args.skip_conflict_check:
@@ -2123,7 +2182,7 @@ def build_branch(args):
                 prs.append(n)
     log.info("Will merge PRs: {}".format(prs))
 
-    if args.pr_label is not None and prs:
+    if args.check_approvals and args.pr_label is not None and prs:
         prs = check_pr_approvals(session, prs, args.pr_label, dry_run=args.dry_run, ci_mode=args.ci_mode)
 
     # PRE-FLIGHT: Validate base consistency and auto-detect base from PRs if necessary
@@ -2509,6 +2568,7 @@ def main():
     group.add_argument('--audit', dest='audit', action='store_true', help='run parity and conflict simulations')
     group.add_argument('--skip-conflict-check', dest='skip_conflict_check', action='store_true', help='skip conflict resolution simulation')
     group.add_argument('--ci-mode', dest='ci_mode', action='store_true', help='run non-interactively and post multiple separate reviews for failures')
+    group.add_argument('--check-approvals', dest='check_approvals', action='store_true', help='interactively triage unapproved PRs in a --pr-label batch (accept/remove-label/ignore) before merging; unrelated to the automatic approval gate --final-merge/--audit already run')
 
     def parse_pr(value):
         m = re.search(r'/pull/(\d+)', value)
