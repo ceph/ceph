@@ -67,9 +67,11 @@ export class LoginComponent implements OnInit {
   login() {
     localStorage.setItem('cluster_api_url', window.location.origin);
     this.authService.login(this.model).subscribe(() => {
-      const urlPath = this.postInstalled ? '/' : '/add-storage';
+      const permissions = this.authStorageService.getPermissions();
+      const canSetupCluster = !this.postInstalled && permissions.configOpt?.update;
+      const urlPath = canSetupCluster ? '/add-storage' : '/';
       let url = _.get(this.route.snapshot.queryParams, 'returnUrl', urlPath);
-      if (!this.postInstalled && this.route.snapshot.queryParams['returnUrl'] === '/overview') {
+      if (canSetupCluster && this.route.snapshot.queryParams['returnUrl'] === '/overview') {
         url = '/add-storage';
       }
       if (url === '/add-storage') {
