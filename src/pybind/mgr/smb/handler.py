@@ -1653,13 +1653,18 @@ def _store_transaction(store: ConfigStore) -> Iterator[None]:
 
 
 def _reconcile_store(store: ConfigStore) -> None:
-    """Fix any mismatches between the store and its mirror copy, if the store supports it."""
+    """Fix any mismatches between the store and its mirror copy, if the
+    store supports it.
+    """
     reconcile = getattr(store, 'reconcile', None)
     if not reconcile:
         log.debug("No reconcile support for store")
         return
     log.debug("Reconciling store")
-    reconcile()
+    try:
+        reconcile()
+    except Exception:
+        log.exception("reconcile() failed; continuing")
 
 
 def _has_proxied_vfs(change_group: ClusterChangeGroup) -> bool:
