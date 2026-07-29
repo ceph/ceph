@@ -28,9 +28,7 @@ import { UpgradeService } from '~/app/shared/api/upgrade.service';
 import { catchError, filter, map, shareReplay, startWith, switchMap } from 'rxjs/operators';
 import {
   HealthCardTabSection,
-  HealthCardVM,
-  HardwareCardVM,
-  buildHardwareCardVM
+  HealthCardVM
 } from '~/app/shared/models/overview';
 import { AlertmanagerAlert, AlertState } from '~/app/shared/models/prometheus-alerts';
 import { HardwareService } from '~/app/shared/api/hardware.service';
