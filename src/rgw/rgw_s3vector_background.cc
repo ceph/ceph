@@ -144,8 +144,8 @@ private:
   std::shared_mutex tables_mutex;
   std::unordered_map<table_name_t, table_state_t, boost::hash<table_name_t>> tables;
   std::mutex active_builds_mutex;
-  std::unordered_set<table_name_t, boost::hash<table_name_t>> active_builds;
-  std::atomic<int> active_rebuild_count{0};
+  std::unordered_set<table_name_t, boost::hash<table_name_t>> active_builds;//to check locally if a table is already being rebuilt by this RGW instance(a cheap check before acquiring the distributed lock) 
+  std::atomic<int> active_rebuild_count{0};//how many rebuilds are currently active, in order to control the number of concurrent tasks.
   MessageQueue messages;
   static constexpr auto idle_sleep = std::chrono::milliseconds(1000); // 1s
 
@@ -624,6 +624,20 @@ private:
   // Core table processing: stats check → lock → build → cleanup
   // ============================================================================
 
+  void restore_counters(const table_name_t& table_name,
+                        uint64_t inserts, uint64_t deletes) {
+    std::shared_lock sl(tables_mutex);
+    auto it = tables.find(table_name);
+    if (it != tables.end()) {
+      if (inserts > 0) {
+        it->second.insert_count.fetch_add(inserts, std::memory_order_relaxed);
+      }
+      if (deletes > 0) {
+        it->second.delete_count.fetch_add(deletes, std::memory_order_relaxed);
+      }
+    }
+  }
+
   int process_table(const table_name_t& table_name,
                     uint64_t local_inserts, uint64_t local_deletes,
                     boost::asio::yield_context yield) {
@@ -638,6 +652,7 @@ private:
             << bucket_name << "." << index_name << ", skipping"
             << " (local_inserts=" << local_inserts
             << ", local_deletes=" << local_deletes << ")" << dendl;
+        restore_counters(table_name, local_inserts, local_deletes);
         return 1;
       }
     }
@@ -675,7 +690,7 @@ private:
       }
     } table_guard{table, conn};
 
-    // step 4: get index stats
+    // step 4: get index stats(lanceDB index stats are global ground truth, no lock needed, it does not reflect deleted rows)
     auto stats_result = get_vector_index_stats(table);
     if (!stats_result.ok) {
       ldpp_dout(this, 1) << "ERROR: failed to get index stats for "
@@ -716,13 +731,7 @@ private:
     if (lock_token.empty()) {
       ldpp_dout(this, 5) << "INFO: lock held by another process for "
           << bucket_name << "." << index_name << ", skipping" << dendl;
-      if (local_deletes > 0) {
-        std::shared_lock sl(tables_mutex);
-        auto it = tables.find(table_name);
-        if (it != tables.end()) {
-          it->second.delete_count.fetch_add(local_deletes, std::memory_order_relaxed);
-        }
-      }
+      restore_counters(table_name, local_inserts, local_deletes);
       return 1;
     }
 
@@ -831,6 +840,7 @@ private:
     } else {
       ldpp_dout(this, 1) << "ERROR: vector index build FAILED for "
           << bucket_name << "." << index_name << dendl;
+      restore_counters(table_name, local_inserts, local_deletes);
     }
 
     return build_ret;
@@ -965,9 +975,22 @@ private:
                 << table_name.first << "." << table_name.second
                 << " (active_rebuilds=" << active_rebuild_count.load(std::memory_order_relaxed)
                 << ", rc=" << rc << ")" << dendl;
+            //the rebuild coroutine is finished, decrement the active rebuild count to allow other tables to be processed.
             active_rebuild_count.fetch_sub(1, std::memory_order_relaxed);
-          }, [] (std::exception_ptr eptr) {
-            if (eptr) std::rethrow_exception(eptr);
+          }, [this, table_name = name, inserts, deletes] (std::exception_ptr eptr) {
+            if (eptr) {
+              try {
+                std::rethrow_exception(eptr);
+              } catch (const std::exception& e) {
+                ldpp_dout(this, 0) << "ERROR: rebuild coroutine exception for "
+                    << table_name.first << "." << table_name.second
+                    << ": " << e.what() << dendl;
+              }
+              //it need to restore the counters if the coroutine fails with an exception, otherwise the inserts and deletes will be lost and the table will not rebuilt until the next mutation occurs. 
+              restore_counters(table_name, inserts, deletes);
+            }
+            // decrement the active rebuild count even if the coroutine fails with an exception, to avoid deadlock and allow other tables to be processed.
+            active_rebuild_count.fetch_sub(1, std::memory_order_relaxed);
           });
         }
       }// end of scan tables for pending mutations 
