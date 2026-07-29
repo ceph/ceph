@@ -12,14 +12,17 @@
 
 #include "gtest/gtest.h"
 
+#include <array>
 #include <memory>
 #include <string_view>
 #include <utility>
 
 #include "common/ceph_context.h"
 #include "rgw_common.h"
+#include "rgw_op.h"
 #include "rgw_process_env.h"
 #include "rgw_rest.h"
+#include "rgw_rest_bucket_logging.h"
 
 void parse_post_action(std::string_view post_body, req_state *s);
 
@@ -49,6 +52,14 @@ struct ParserState final {
   RGWProcessEnv penv;
   RGWEnv env;
   req_state state { g_ceph_context, penv, &env, 0 };
+};
+
+using CreateBucketLoggingOp = RGWOp *(*)();
+
+struct BucketLoggingOpCase final {
+  CreateBucketLoggingOp create;
+  RGWOpType type;
+  std::string_view name;
 };
 
 TEST(RGWRest, HttpArgsTracksSubresources)
@@ -231,6 +242,40 @@ TEST(RGWRest, RestManagerCreatesIntermediateManagers)
   EXPECT_NE(&mgr, intermediate);
   EXPECT_NE(v1, intermediate);
   EXPECT_EQ("/status", out_uri);
+}
+
+TEST(RGWRest, BucketLoggingFactoriesCreateControlOps)
+{
+  const std::array cases {
+    BucketLoggingOpCase {
+      RGWHandler_REST_BucketLogging_S3::create_get_op,
+      RGW_OP_GET_BUCKET_LOGGING,
+      "get_bucket_logging",
+    },
+    BucketLoggingOpCase {
+      RGWHandler_REST_BucketLogging_S3::create_put_op,
+      RGW_OP_PUT_BUCKET_LOGGING,
+      "put_bucket_logging",
+    },
+    BucketLoggingOpCase {
+      RGWHandler_REST_BucketLogging_S3::create_post_op,
+      RGW_OP_POST_BUCKET_LOGGING,
+      "post_bucket_logging",
+    },
+  };
+
+  ParserState parser;
+
+  for (const auto& test_case : cases) {
+    const auto op = std::unique_ptr<RGWOp> { test_case.create() };
+    ASSERT_NE(nullptr, op);
+
+    op->init(nullptr, &parser.state, nullptr);
+
+    EXPECT_EQ(test_case.type, op->get_type());
+    EXPECT_EQ(test_case.name, op->name());
+    EXPECT_FALSE(op->always_do_bucket_logging());
+  }
 }
 
 TEST(RGWRest, PostActionParserDecodesOrdinaryArguments)

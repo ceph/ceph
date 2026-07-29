@@ -316,6 +316,7 @@ add_executable(unittest_rgw_string test_rgw_string.cc)
 add_ceph_unittest(unittest_rgw_string)
 target_include_directories(unittest_rgw_string
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_string ${rgw_libs})
 
 # unittest_rgw_dmclock_queue
 add_executable(unittest_rgw_dmclock_scheduler test_rgw_dmclock_scheduler.cc $<TARGET_OBJECTS:unit-main>)

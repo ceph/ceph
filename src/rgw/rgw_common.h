@@ -1952,7 +1952,7 @@ extern bool verify_object_permission(const DoutPrefixProvider* dpp, req_state *s
 extern bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, req_state *s,
 					       int perm);
 extern int verify_object_lock(
-  const DoutPrefixProvider* dpp,
+  const DoutPrefixProvider *dpp,
   const rgw::sal::Attrs& attrs,
   const bool bypass_perm,
   const bool bypass_governance_mode);

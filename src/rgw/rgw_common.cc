@@ -1801,36 +1801,70 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, req_state *s, uint6
 }
 
 
-int verify_object_lock(const DoutPrefixProvider* dpp, const rgw::sal::Attrs& attrs, const bool bypass_perm, const bool bypass_governance_mode) {
-  auto aiter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
-  if (aiter != attrs.end()) {
+template <typename T>
+static int rgw_decode_object_lock_attr(const DoutPrefixProvider *dpp,
+                                       const bufferlist& attr,
+                                       T& decoded,
+                                       const char *type)
+{
+  try {
+    decode(decoded, attr);
+  } catch (buffer::error& err) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to decode " << type << dendl;
+    return -EIO;
+  }
+
+  return 0;
+}
+
+static bool rgw_object_retention_blocks_delete(const RGWObjectRetention& retention,
+                                               const bool bypass_perm,
+                                               const bool bypass_governance_mode)
+{
+  if (ceph::real_clock::to_time_t(retention.get_retain_until_date()) <= ceph_clock_now()) {
+    return false;
+  }
+
+  return retention.get_mode() != "GOVERNANCE" ||
+    !bypass_perm ||
+    !bypass_governance_mode;
+}
+
+int verify_object_lock(const DoutPrefixProvider *dpp,
+                       const rgw::sal::Attrs& attrs,
+                       const bool bypass_perm,
+                       const bool bypass_governance_mode)
+{
+  if (auto aiter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
+      aiter != attrs.end()) {
     RGWObjectRetention obj_retention;
-    try {
-      decode(obj_retention, aiter->second);
-    } catch (buffer::error& err) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to decode RGWObjectRetention" << dendl;
-      return -EIO;
+    const int ret = rgw_decode_object_lock_attr(dpp, aiter->second, obj_retention,
+                                                "RGWObjectRetention");
+    if (ret < 0) {
+      return ret;
     }
-    if (ceph::real_clock::to_time_t(obj_retention.get_retain_until_date()) > ceph_clock_now()) {
-      if (obj_retention.get_mode().compare("GOVERNANCE") != 0 || !bypass_perm || !bypass_governance_mode) {
-        return -EACCES;
-      }
+
+    if (rgw_object_retention_blocks_delete(obj_retention,
+                                           bypass_perm,
+                                           bypass_governance_mode)) {
+      return -EACCES;
     }
   }
-  aiter = attrs.find(RGW_ATTR_OBJECT_LEGAL_HOLD);
-  if (aiter != attrs.end()) {
+
+  if (auto aiter = attrs.find(RGW_ATTR_OBJECT_LEGAL_HOLD);
+      aiter != attrs.end()) {
     RGWObjectLegalHold obj_legal_hold;
-    try {
-      decode(obj_legal_hold, aiter->second);
-    } catch (buffer::error& err) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to decode RGWObjectLegalHold" << dendl;
-      return -EIO;
+    const int ret = rgw_decode_object_lock_attr(dpp, aiter->second, obj_legal_hold,
+                                                "RGWObjectLegalHold");
+    if (ret < 0) {
+      return ret;
     }
+
     if (obj_legal_hold.is_enabled()) {
       return -EACCES;
     }
   }
-  
+
   return 0;
 }
 

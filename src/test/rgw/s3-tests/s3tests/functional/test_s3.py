@@ -19147,6 +19147,76 @@ def _bucket_logging_conf_update(logging_type, update_value, concurrency):
 @pytest.mark.bucket_logging
 @pytest.mark.bucket_logging_cleanup
 @pytest.mark.fails_on_aws
+def test_bucket_logging_target_change_flushes_old_target():
+    if not _has_bucket_logging_extension():
+        pytest.skip('ceph extension to bucket logging not supported at client')
+
+    client = get_client()
+    src_bucket_name = get_new_bucket_name()
+    get_new_bucket_resource(name=src_bucket_name)
+    old_log_bucket_name = get_new_bucket_name()
+    get_new_bucket_resource(name=old_log_bucket_name)
+    new_log_bucket_name = get_new_bucket_name()
+    get_new_bucket_resource(name=new_log_bucket_name)
+
+    old_prefix = 'old-log/'
+    new_prefix = 'new-log/'
+    _set_log_bucket_policy(client, old_log_bucket_name, [src_bucket_name], [old_prefix])
+    _set_log_bucket_policy(client, new_log_bucket_name, [src_bucket_name], [new_prefix])
+
+    logging_enabled = {'TargetBucket': old_log_bucket_name,
+                       'ObjectRollTime': expected_object_roll_time*10,
+                       'LoggingType': 'Journal',
+                       'TargetPrefix': old_prefix}
+    response = client.put_bucket_logging(Bucket=src_bucket_name, BucketLoggingStatus={
+        'LoggingEnabled': logging_enabled,
+    })
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    src_names = ['old-target-object' + str(j) for j in range(3)]
+    for name in src_names:
+        client.put_object(Bucket=src_bucket_name, Key=name, Body=randcontent())
+
+    response = client.list_objects_v2(Bucket=old_log_bucket_name)
+    assert _get_keys(response) == []
+
+    logging_enabled['TargetBucket'] = new_log_bucket_name
+    logging_enabled['TargetPrefix'] = new_prefix
+    result = client.put_bucket_logging(Bucket=src_bucket_name, BucketLoggingStatus={
+        'LoggingEnabled': logging_enabled,
+    })
+    flushed_obj = _verify_flushed_on_put(result)
+    assert flushed_obj.startswith(old_prefix)
+
+    response = client.list_objects_v2(Bucket=old_log_bucket_name)
+    keys = _get_keys(response)
+    assert keys == [flushed_obj]
+
+    response = client.get_object(Bucket=old_log_bucket_name, Key=flushed_obj)
+    body = _get_body(response)
+    assert _verify_records(body, src_bucket_name, 'REST.PUT.OBJECT', src_names,
+                           'Journal', len(src_names), exact_match=True)
+
+    response = client.list_objects_v2(Bucket=new_log_bucket_name)
+    assert _get_keys(response) == []
+
+    new_key = 'new-target-object'
+    client.put_object(Bucket=src_bucket_name, Key=new_key, Body=randcontent())
+    flushed_obj = _flush_logs(client, src_bucket_name)
+    response = client.list_objects_v2(Bucket=new_log_bucket_name)
+    keys = _get_keys(response)
+    assert keys == [flushed_obj]
+    assert flushed_obj.startswith(new_prefix)
+
+    response = client.get_object(Bucket=new_log_bucket_name, Key=flushed_obj)
+    body = _get_body(response)
+    assert _verify_records(body, src_bucket_name, 'REST.PUT.OBJECT', [new_key],
+                           'Journal', 1, exact_match=True)
+
+
+@pytest.mark.bucket_logging
+@pytest.mark.bucket_logging_cleanup
+@pytest.mark.fails_on_aws
 def test_bucket_logging_conf_updating_roll_s():
     _bucket_logging_conf_update('Standard', 'roll_time', False)
 
