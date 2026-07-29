@@ -149,7 +149,9 @@ public:
   void retire_extent(Transaction &t, CachedExtentRef ref) {
     LOG_PREFIX(Cache::retire_extent);
     SUBDEBUGT(seastore_cache, "retire extent -- {}", t, *ref);
-    capture_retired_leaf_keys(t, *ref);
+    if (measure_lba_conflict_mergeability) {
+      capture_retired_leaf_keys(t, *ref);
+    }
     t.add_present_to_retired_set(ref);
   }
 
@@ -1786,6 +1788,7 @@ private:
   friend class crimson::os::seastore::BackrefManager;
 
   ExtentPinboardRef pinboard;
+  bool measure_lba_conflict_mergeability = false;
 
   btree_cursor_stats_t cursor_stats;
   struct invalid_trans_efforts_t {
