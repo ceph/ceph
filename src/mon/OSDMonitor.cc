@@ -27,9 +27,11 @@
 #include "mon/OSDMonitor.h"
 #include "mon/Monitor.h"
 #include "mon/MonMap.h"
+#include "mon/MonmapMonitor.h"
 #include "mon/MDSMonitor.h"
 #include "mon/MgrStatMonitor.h"
 #include "mon/AuthMonitor.h"
+#include "mon/ConfigMonitor.h"
 #include "mon/KVMonitor.h"
 #include "mon/Paxos.h"
 
@@ -95,6 +97,7 @@
 #include "perfglue/heap_profiler.h"
 
 #include "auth/cephx/CephxKeyServer.h"
+#include "osd/ECUtil.h"
 #include "osd/OSDCap.h"
 #include "osd/BloomHitSet.h"
 #include "osd/ExplicitHashHitSet.h"
@@ -1522,8 +1525,13 @@ void OSDMonitor::prime_pg_temp(
   if (acting.empty())
     return;  // if previously empty now we can be no worse off
   const pg_pool_t *pool = next.get_pg_pool(pgid.pool());
-  if (pool && acting.size() < pool->min_size)
+  // acting.size() counts the holes of an EC acting set, as before
+  bool below_min_size = pool &&
+    (pool->is_stretch_pool() ? next.num_acting_below_min_size(*pool, acting)
+                             : acting.size() < pool->min_size);
+  if (below_min_size) {
     return;  // can be no worse off than before
+  }
 
   if (next_up == next_acting) {
     acting.clear();
@@ -16142,7 +16150,6 @@ void OSDMonitor::trigger_degraded_stretch_mode(const set<int>& dead_buckets,
       pg_pool_t& newp = *pending_inc.get_new_pool(pgi.first, &pgi.second);
       newp.peering_crush_bucket_count = new_site_count;
       newp.peering_crush_mandatory_member = remaining_site;
-      newp.min_size = pgi.second.min_size / 2; // only support 2 zones now
       newp.set_last_force_op_resend(pending_inc.epoch);
     }
   }
@@ -16248,7 +16255,6 @@ void OSDMonitor::trigger_healthy_stretch_mode()
       pg_pool_t& newp = *pending_inc.get_new_pool(pgi.first, &pgi.second);
       newp.peering_crush_bucket_count = osdmap.stretch_bucket_count;
       newp.peering_crush_mandatory_member = CRUSH_ITEM_NONE;
-      newp.min_size = g_conf().get_val<uint64_t>("mon_stretch_pool_min_size");
       newp.set_last_force_op_resend(pending_inc.epoch);
     }
   }

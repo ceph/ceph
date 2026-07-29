@@ -533,6 +533,75 @@ bool OSDMap::containing_subtree_is_down(CephContext *cct, int id, int subtree_ty
   }
 }
 
+void OSDMap::get_stretch_zones(const pg_pool_t& pool,
+                               map<int, set<int>>* zone_osds) const
+{
+  set<int> rule_roots;
+  crush->find_takes_by_rule(pool.crush_rule, &rule_roots);
+  for (int root : rule_roots) {
+    vector<int> zones;
+    // A device-class rule takes a shadow root, whose zones are shadow buckets
+    crush->get_children_of_type(root, pool.peering_crush_bucket_barrier, &zones,
+                                false);
+    for (int zone : zones) {
+      vector<int> osds;
+      crush->get_children_of_type(zone, 0, &osds);
+      // A zone with no OSDs the rule can use cannot hold any of the pool.
+      // A rule can take a zone with several device classes.
+      if (!osds.empty()) {
+        (*zone_osds)[crush->get_non_shadow_id(zone)].insert(osds.begin(),
+                                                            osds.end());
+      }
+    }
+  }
+}
+
+unsigned OSDMap::num_acting_below_min_size(const pg_pool_t& pool,
+                                           const vector<int>& acting) const
+{
+  if (!pool.is_stretch_pool()) {
+    const unsigned num_acting = std::count_if(
+      acting.begin(), acting.end(), [](int osd) {
+        return osd != CRUSH_ITEM_NONE;
+      });
+    return num_acting < pool.min_size ? pool.min_size - num_acting : 0;
+  }
+  // Special case for 3-zone clusters with 2 peering crush buckets, and pools
+  // of one zone (stretch values from an older 'osd pool stretch set')
+  if (pool.num_zones < 2 ||
+      (pool.num_zones == 3 && pool.peering_crush_bucket_count == 2)) {
+    const auto cluster_min_size = pool.min_size * pool.num_zones;
+    const auto cluster_acting = std::count_if(
+      acting.begin(), acting.end(), [](int osd) {
+        return osd != CRUSH_ITEM_NONE;
+      });
+    return cluster_acting < cluster_min_size
+      ? cluster_min_size - cluster_acting
+      : 0;
+  } else {
+    // General case for stretch pools with num_zones < 3
+    map<int, set<int>> zones;
+    get_stretch_zones(pool, &zones);
+    int deficit = 0;
+    for (const auto& [zone, zone_osd_set] : zones) {
+      if (pool.peering_crush_mandatory_member != CRUSH_ITEM_NONE &&
+          zone != (int)pool.peering_crush_mandatory_member) {
+        continue;
+      }
+      unsigned zone_acting = 0;
+      for (int osd : acting) {
+        if (osd != CRUSH_ITEM_NONE && zone_osd_set.find(osd) != zone_osd_set.end()) {
+          ++zone_acting;
+        }
+      }
+      if (zone_acting < pool.min_size) {
+        deficit += (pool.min_size - zone_acting);
+      }
+    }
+    return deficit;
+  }
+}
+
 bool OSDMap::subtree_type_is_down(
   CephContext *cct,
   int id,
@@ -3255,6 +3324,14 @@ bool OSDMap::undo_pre_tentacle_primaryfirst(spg_t *pgid) const
   }
   pgid->reset_shard(pgtemp_undo_primaryfirst(*pool, pgid->pgid, pgid->shard));
   return true;
+}
+
+bool OSDMap::acting_set_writeable(const pg_pool_t& pool,
+                                  const std::vector<int>& acting,
+                                  std::ostream *out) const
+{
+  return num_acting_below_min_size(pool, acting) == 0 &&
+    pool.stretch_set_can_peer(acting, *this, out);
 }
 
 void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,

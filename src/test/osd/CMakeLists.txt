@@ -188,6 +188,14 @@ add_executable(unittest_ec_with_crush
 add_ceph_unittest(unittest_ec_with_crush)
 target_link_libraries(unittest_ec_with_crush osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
 add_dependencies(unittest_ec_with_crush erasure_code_plugins)
+# unittest_stretch_ec_min_size
+add_executable(unittest_stretch_ec_min_size
+  TestStretchECMinSize.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_stretch_ec_min_size)
+target_link_libraries(unittest_stretch_ec_min_size osd global ${BLKID_LIBRARIES})
+
 # unittest_hitset
 add_executable(unittest_hitset
   hitset.cc

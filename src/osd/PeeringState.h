@@ -2523,8 +2523,7 @@ public:
    * applicable stretch cluster constraints.
    */
   bool acting_set_writeable() {
-    return (actingset.size() >= pool.info.min_size) &&
-      (pool.info.stretch_set_can_peer(acting, *get_osdmap(), NULL));
+    return get_osdmap()->acting_set_writeable(pool.info, acting);
   }
 
   /**
