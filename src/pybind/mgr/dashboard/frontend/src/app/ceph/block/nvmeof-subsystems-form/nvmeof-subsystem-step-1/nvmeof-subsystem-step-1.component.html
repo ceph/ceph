@@ -120,7 +120,7 @@
           <cds-text-label
             i18n
             [invalid]="subnetMaskRef.isInvalid"
-            [invalidText]="subnetMaskInvalidText"
+            [invalidText]="requiredFieldInvalidText"
             helperText="Listeners from this subnet-masks will be use."
             i18n-helperText
           >
@@ -138,7 +138,7 @@
               [invalid]="subnetMaskRef.isInvalid"
             />
           </cds-text-label>
-          <ng-template #subnetMaskInvalidText>
+          <ng-template #requiredFieldInvalidText>
             <span i18n>This field is required.</span>
           </ng-template>
         </div>

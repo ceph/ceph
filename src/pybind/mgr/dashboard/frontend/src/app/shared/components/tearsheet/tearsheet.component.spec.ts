@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Component, ViewChild } from '@angular/core';
 import { By } from '@angular/platform-browser';
+import { FormControl, FormGroup, Validators } from '@angular/forms';
 import { SharedModule } from '../../shared.module';
 import { TearsheetStepComponent } from '../tearsheet-step/tearsheet-step.component';
 import { TearsheetComponent, TearsheetOverflowScroll } from './tearsheet.component';
@@ -47,6 +48,51 @@ class MockHostComponent {
   tearsheet!: TearsheetComponent;
 }
 
+@Component({
+  selector: 'cd-mock-form-step',
+  template: '',
+  standalone: false
+})
+class MockFormStepComponent {
+  formGroup = new FormGroup({
+    parent: new FormGroup({
+      child: new FormControl('', Validators.required)
+    })
+  });
+}
+
+@Component({
+  template: `
+    <cd-tearsheet
+      [steps]="steps"
+      [title]="title"
+      [description]="description"
+    >
+      <cd-tearsheet-step>
+        <cd-mock-form-step #tearsheetStep></cd-mock-form-step>
+      </cd-tearsheet-step>
+      <cd-tearsheet-step>
+        <div>Step 2</div>
+      </cd-tearsheet-step>
+    </cd-tearsheet>
+  `,
+  standalone: false
+})
+class MockFormHostComponent {
+  steps = [
+    { label: 'Step 1', complete: false },
+    { label: 'Step 2', complete: false }
+  ];
+  title = 'Form Host';
+  description = 'Form Host Description';
+
+  @ViewChild(TearsheetComponent)
+  tearsheet!: TearsheetComponent;
+
+  @ViewChild(MockFormStepComponent)
+  formStep!: MockFormStepComponent;
+}
+
 describe('TearsheetComponent', () => {
   let hostFixture: ComponentFixture<MockHostComponent>;
   let hostComponent: MockHostComponent;
@@ -54,7 +100,13 @@ describe('TearsheetComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [TearsheetComponent, TearsheetStepComponent, MockHostComponent],
+      declarations: [
+        TearsheetComponent,
+        TearsheetStepComponent,
+        MockHostComponent,
+        MockFormStepComponent,
+        MockFormHostComponent
+      ],
       imports: [SharedModule],
       providers: [
         {
@@ -177,6 +229,25 @@ describe('TearsheetComponent', () => {
       const nextBtn = buttons.find((btn) => btn.nativeElement.textContent.trim() === 'Next');
       expect(nextBtn).toBeTruthy();
       expect(nextBtn?.nativeElement.disabled).toBe(true);
+    });
+  });
+
+  describe('nested form validation on next', () => {
+    it('should mark nested controls dirty and touched on next', () => {
+      const formHostFixture = TestBed.createComponent(MockFormHostComponent);
+      formHostFixture.detectChanges();
+      const formHost = formHostFixture.componentInstance;
+
+      const childControl = formHost.formStep.formGroup.get('parent.child');
+      expect(childControl).toBeTruthy();
+      expect(childControl?.dirty).toBe(false);
+      expect(childControl?.touched).toBe(false);
+
+      formHost.tearsheet.onNext();
+
+      expect(childControl?.dirty).toBe(true);
+      expect(childControl?.touched).toBe(true);
+      expect(childControl?.hasError('required')).toBe(true);
     });
   });
 
