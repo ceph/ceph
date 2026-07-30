@@ -17,8 +17,12 @@ jobs:
     name: "Check for Incompatible Licenses"
     runs-on: ubuntu-latest
     steps:
-    - name: Check Pull Request
-      uses: JJ/github-pr-contains-action@526dfe784d8604ea1c39b6c26609074de95b1ffd  # releases/v14.1
-      with:
-        github-token: ${{github.token}}
-        diffDoesNotContain: "GNU General Public License"
+    - name: Check PR Diff for License
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        DIFF=$(gh pr diff ${{ github.event.pull_request.number }} -R ${{ github.repository }})
+        if echo "$DIFF" | grep -qi "GNU General Public License"; then
+          echo "Error: Incompatible license 'GNU General Public License' found in PR diff."
+          exit 1
+        fi
