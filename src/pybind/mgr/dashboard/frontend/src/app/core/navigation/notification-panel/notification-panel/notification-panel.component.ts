@@ -4,6 +4,7 @@ import { Component, ElementRef, HostListener, inject } from '@angular/core';
 import { NotificationService } from '~/app/shared/services/notification.service';
 
 @Component({
+  standalone: false,
   selector: 'cd-notification-panel',
   templateUrl: './notification-panel.component.html',
   styleUrls: ['./notification-panel.component.scss'],

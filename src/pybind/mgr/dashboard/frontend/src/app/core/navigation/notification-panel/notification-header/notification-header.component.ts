@@ -3,6 +3,7 @@ import { Subscription } from 'rxjs';
 import { NotificationService } from '~/app/shared/services/notification.service';
 
 @Component({
+  standalone: false,
   selector: 'cd-notification-header',
   templateUrl: './notification-header.component.html',
   styleUrls: ['./notification-header.component.scss']
