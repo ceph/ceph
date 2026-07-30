@@ -270,10 +270,6 @@ class ExtentPinboardLRU : public ExtentPinboard {
   ExtentQueue lru;
   seastar::metrics::metric_group metrics;
 
-  // hit and miss indicates if an extent is linked when touching it
-  uint64_t hit = 0;
-  uint64_t miss = 0;
-
 public:
   ExtentPinboardLRU(std::size_t capacity) : lru(capacity) {
     LOG_PREFIX(ExtentPinboardLRU::ExtentPinboardLRU);
@@ -294,6 +290,7 @@ public:
 
   void register_metrics(store_index_t store_index) final {
     namespace sm = seastar::metrics;
+    auto shard_label = sm::label_instance("shard_store_index", std::to_string(store_index));
     metrics.add_group(
       "cache",
       {
@@ -303,7 +300,7 @@ public:
             return get_current_size_bytes();
           },
           sm::description("total bytes pinned by the lru"),
-          {sm::label_instance("shard_store_index", std::to_string(store_index))}
+          {shard_label}
         ),
         sm::make_counter(
           "lru_num_extents",
@@ -311,17 +308,7 @@ public:
             return get_current_num_extents();
           },
           sm::description("total extents pinned by the lru"),
-          {sm::label_instance("shard_store_index", std::to_string(store_index))}
-        ),
-        sm::make_counter(
-          "lru_hit", hit,
-          sm::description("total count of the extents that are linked to lru when touching them"),
-          {sm::label_instance("shard_store_index", std::to_string(store_index))}
-        ),
-        sm::make_counter(
-          "lru_miss", miss,
-          sm::description("total count of the extents that are not linked to lru when touching them"),
-          {sm::label_instance("shard_store_index", std::to_string(store_index))}
+          {shard_label}
         ),
       }
     );
@@ -347,10 +334,10 @@ public:
     extent_len_t /*load_length*/) final {
     if (extent.is_linked_to_list()) {
       lru.move_to_top(extent, p_src);
-      hit++;
+      ++get_by_ext(hits_by_ext, extent.get_type());
     } else {
       lru.add_to_top(extent, p_src);
-      miss++;
+      ++get_by_ext(misses_by_ext, extent.get_type());
     }
   }
 
@@ -546,7 +533,7 @@ public:
 	// hot until it is evicted to the warm out queue and accessed once
 	// again.
       }
-      hit++;
+      ++get_by_ext(hits_by_ext, type);
     } else if (!is_logical_type(extent.get_type())) {
       // put physical extents to hot queue directly
       ceph_assert(state == extent_2q_state_t::Fresh);
@@ -554,7 +541,7 @@ public:
       auto trimmed_extents = hot.add_to_top(extent, p_src);
       on_update_hot(trimmed_extents);
       hit_queue(overall_hits.absent, p_src, type);
-      miss++;
+      ++get_by_ext(misses_by_ext, type);
     } else { // the logical extent which is not in warm_in and not in hot
       ceph_assert(state == extent_2q_state_t::Fresh);
       auto lext = extent.cast<LogicalCachedExtent>();
@@ -579,7 +566,7 @@ public:
 	  hit_queue(overall_hits.sequential_absent, p_src, type);
 	}
       }
-      miss++;
+      ++get_by_ext(misses_by_ext, type);
     }
     auto end = load_start + load_length;
     assert(end != 0);
@@ -720,9 +707,6 @@ private:
   mutable hit_stats_t overall_hits;
   mutable hit_stats_t last_hits;
 
-  // hit and miss indicates if an extent is linked when touching it
-  uint64_t hit = 0;
-  uint64_t miss = 0;
 };
 
 void ExtentPinboardTwoQ::get_stats(
@@ -805,6 +789,7 @@ void ExtentPinboardTwoQ::get_stats(
 
 void ExtentPinboardTwoQ::register_metrics(store_index_t store_index) {
   namespace sm = seastar::metrics;
+  auto shard_label = sm::label_instance("shard_store_index", std::to_string(store_index));
   metrics.add_group(
     "cache",
     {
@@ -814,7 +799,7 @@ void ExtentPinboardTwoQ::register_metrics(store_index_t store_index) {
           return warm_in.get_current_size_bytes();
         },
         sm::description("total bytes pinned by the 2q warm_in queue"),
-        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+        {shard_label}
       ),
       sm::make_counter(
         "2q_warm_in_num_extents",
@@ -822,7 +807,7 @@ void ExtentPinboardTwoQ::register_metrics(store_index_t store_index) {
           return warm_in.get_current_num_extents();
         },
         sm::description("total extents pinned by the 2q warm_in queue"),
-        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+        {shard_label}
       ),
       sm::make_counter(
         "2q_hot_size_bytes",
@@ -830,7 +815,7 @@ void ExtentPinboardTwoQ::register_metrics(store_index_t store_index) {
           return hot.get_current_size_bytes();
         },
         sm::description("total bytes pinned by the 2q hot queue"),
-        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+        {shard_label}
       ),
       sm::make_counter(
         "2q_hot_num_extents",
@@ -838,17 +823,7 @@ void ExtentPinboardTwoQ::register_metrics(store_index_t store_index) {
           return hot.get_current_num_extents();
         },
         sm::description("total extents pinned by the 2q hot queue"),
-        {sm::label_instance("shard_store_index", std::to_string(store_index))}
-      ),
-      sm::make_counter(
-        "2q_hit", hit,
-        sm::description("total count of the extents that are linked to 2Q when touching them"),
-        {sm::label_instance("shard_store_index", std::to_string(store_index))}
-      ),
-      sm::make_counter(
-        "2q_miss", miss,
-        sm::description("total count of the extents that are not linked to 2Q when touching them"),
-        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+        {shard_label}
       ),
     }
   );
