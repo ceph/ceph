@@ -1,12 +1,15 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
-import { Subscription, merge, of } from 'rxjs';
+import { Subscription, merge, of, timer } from 'rxjs';
 import { filter, switchMap, tap } from 'rxjs/operators';
 
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { NvmeofStateService } from '../nvmeof-state.service';
 
 const NVMEOF_PATH = 'block/nvmeof';
+
+/** How long to keep showing success cards after gateway/subsystem/namespace exist. */
+export const SETUP_CARDS_HIDE_DELAY_MS = 5000;
 
 enum TABS {
   gateways = 'gateways',
@@ -36,6 +39,8 @@ export class NvmeofTabsComponent implements OnInit, OnDestroy {
   hasNamespaces = false;
   isAllConfigured = false;
   private setupSubscription?: Subscription;
+  private hideSetupCardsSubscription?: Subscription;
+  private setupCardsDismissed = false;
 
   constructor(
     private router: Router,
@@ -55,6 +60,39 @@ export class NvmeofTabsComponent implements OnInit, OnDestroy {
     const primaryPath = `/${primarySegments.join('/')}`;
 
     this.showTabsShell = TAB_ROUTES.includes(primaryPath);
+  }
+
+  private scheduleHideSetupCards(): void {
+    if (this.hideSetupCardsSubscription || this.setupCardsDismissed) {
+      return;
+    }
+    this.hideSetupCardsSubscription = timer(SETUP_CARDS_HIDE_DELAY_MS).subscribe(() => {
+      this.showSetupCards = false;
+      this.setupCardsDismissed = true;
+      this.hideSetupCardsSubscription = undefined;
+    });
+  }
+
+  private cancelHideSetupCards(): void {
+    this.hideSetupCardsSubscription?.unsubscribe();
+    this.hideSetupCardsSubscription = undefined;
+  }
+
+  private updateSetupCardsVisibility(): void {
+    if (this.isAllConfigured) {
+      if (this.setupCardsDismissed) {
+        this.showSetupCards = false;
+        return;
+      }
+      // Keep success state visible briefly, then dismiss the banner.
+      this.showSetupCards = true;
+      this.scheduleHideSetupCards();
+      return;
+    }
+
+    this.setupCardsDismissed = false;
+    this.cancelHideSetupCards();
+    this.showSetupCards = true;
   }
 
   ngOnInit(): void {
@@ -80,11 +118,12 @@ export class NvmeofTabsComponent implements OnInit, OnDestroy {
         this.hasSubsystems = hasSubsystems;
         this.hasNamespaces = hasNamespaces;
         this.isAllConfigured = hasGatewayGroups && hasSubsystems && hasNamespaces;
-        this.showSetupCards = true;
+        this.updateSetupCardsVisibility();
       });
   }
 
   ngOnDestroy(): void {
+    this.cancelHideSetupCards();
     this.setupSubscription?.unsubscribe();
   }
 

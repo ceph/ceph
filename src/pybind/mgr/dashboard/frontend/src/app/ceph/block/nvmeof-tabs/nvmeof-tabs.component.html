@@ -12,13 +12,11 @@
   </fieldset>
 
   @if (showSetupCards) {
-    <cd-nvmeof-setup-cards
-      [hasGatewayGroups]="hasGatewayGroups"
-      [hasSubsystems]="hasSubsystems"
-      [hasNamespaces]="hasNamespaces"
-      [isAllConfigured]="isAllConfigured"
-    >
-    </cd-nvmeof-setup-cards>
+  <cd-nvmeof-setup-cards
+                         [hasGatewayGroups]="hasGatewayGroups"
+                         [hasSubsystems]="hasSubsystems"
+                         [hasNamespaces]="hasNamespaces">
+  </cd-nvmeof-setup-cards>
   }
 
   <section class="cds-mt-5">
