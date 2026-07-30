@@ -1100,9 +1100,11 @@ def deploy_daemon(
 ) -> None:
     endpoints = endpoints or []
     daemon_type = ident.daemon_type
+    allow_port_reuse = bool(fetch_configs(ctx).get('allow_port_reuse', False))
+
     # only check port in use if fresh deployment since service
     # we are redeploying/reconfiguring will already be using the port
-    if deployment_type == DeploymentType.DEFAULT:
+    if deployment_type == DeploymentType.DEFAULT and not allow_port_reuse:
         if any([port_in_use(ctx, e) for e in endpoints]):
             if daemon_type == 'mgr':
                 # non-fatal for mgr when we are in mgr_standby_modules=false, but we can't

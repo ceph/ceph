@@ -1199,6 +1199,13 @@ class ServiceSpec(object):
         # point.
         return []
 
+    def allow_port_reuse(self) -> bool:
+        """
+        Whether colocated daemons may reuse the same frontend port.
+        Returns False by default; override in subclasses that support port reuse.
+        """
+        return False
+
     def get_virtual_ip(self) -> Optional[str]:
         return None
 
@@ -1776,6 +1783,57 @@ class RGWSpec(ServiceSpec):
 
         return ports
 
+    def allow_port_reuse(self) -> bool:
+        """
+        Override to enable port reuse when so_reuseport is enabled.
+        When so_reuseport=1, multiple RGW instances can share the same port.
+
+        Returns:
+            bool: True if so_reuseport=1 is set in rgw_frontend_extra_args, False otherwise.
+        """
+        if self.rgw_frontend_extra_args:
+            return any(
+                arg.startswith("so_reuseport=1")
+                for arg in self.rgw_frontend_extra_args
+            )
+        return False
+
+    def _is_so_reuseport_setting_valid(self) -> bool:
+        """
+        Validate that rgw_frontend_extra_args does not contain both so_reuseport=0 and so_reuseport=1.
+        They are mutually exclusive.
+
+        Returns:
+            bool: True if the settings are valid, False if so_reuseport is set with both 0 and 1.
+        """
+        has_reuseport_eq_true = False
+        has_reuseport_eq_false = False
+
+        for arg in self.rgw_frontend_extra_args or []:
+            if not arg.startswith("so_reuseport="):
+                continue
+            value = arg.split("=", 1)[1].strip()
+            if value == '1':
+                has_reuseport_eq_true = True
+            elif value == '0':
+                has_reuseport_eq_false = True
+
+        return not (has_reuseport_eq_false and has_reuseport_eq_true)
+
+    def _validate_rgw_frontend_extra_args(self) -> None:
+        """
+        Validate the rgw_frontend_extra_args for valid options.
+        """
+        if self.rgw_frontend_extra_args is None:
+            return
+
+        if not self._is_so_reuseport_setting_valid():
+            raise SpecValidationError(
+                'Invalid RGW spec: rgw_frontend_extra_args contains both '
+                'so_reuseport=0 and so_reuseport=1; these options are '
+                'mutually exclusive.'
+            )
+
     def validate(self) -> None:
 
         if self.ssl:
@@ -1839,6 +1897,8 @@ class RGWSpec(ServiceSpec):
                 D3NCacheSpec.from_json(self.d3n_cache)
             except D3NCacheError as e:
                 raise SpecValidationError(str(e))
+
+        self._validate_rgw_frontend_extra_args()
 
 
 yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)

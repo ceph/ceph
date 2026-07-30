@@ -1432,6 +1432,10 @@ class RgwService(CephService):
                 ssl_cert = '\n'.join(ssl_cert)
             deps.append(f'ssl-cert:{utils.config_hash(ssl_cert)}')
 
+        rgw_extra_args = getattr(rgw_spec, 'rgw_frontend_extra_args', None)
+        if rgw_extra_args:
+            deps.append(f'rgw_frontend_extra_args:{utils.config_hash(" ".join(rgw_extra_args))}')
+
         parent_deps = super().get_dependencies(mgr, spec, daemon_type)
         return sorted(deps + parent_deps)
 
@@ -1844,6 +1848,9 @@ class RgwService(CephService):
 
         if hasattr(svc_spec, 'rgw_exit_timeout_secs') and svc_spec.rgw_exit_timeout_secs:
             config['rgw_exit_timeout_secs'] = svc_spec.rgw_exit_timeout_secs
+
+        if svc_spec.allow_port_reuse():
+            config['allow_port_reuse'] = True
 
         if svc_spec.qat:
             config['qat'] = svc_spec.qat
