@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Input, Output, ViewEncapsulation } from '@angular/core';
+import { Component, Input, ViewEncapsulation } from '@angular/core';
 import { RouterModule } from '@angular/router';
-import { LayoutModule, LayerModule, LinkModule, TilesModule } from 'carbon-components-angular';
+import { LayoutModule, LayerModule, TilesModule } from 'carbon-components-angular';
 import { ProductiveCardComponent } from '~/app/shared/components/productive-card/productive-card.component';
 import { SetupStepCardComponent } from '~/app/shared/components/setup-step-card/setup-step-card.component';
 
@@ -17,7 +17,6 @@ import { SetupStepCardComponent } from '~/app/shared/components/setup-step-card/
     LayoutModule,
     LayerModule,
     TilesModule,
-    LinkModule,
     ProductiveCardComponent,
     SetupStepCardComponent
   ]
@@ -26,8 +25,6 @@ export class NvmeofSetupCardsComponent {
   @Input() hasGatewayGroups = false;
   @Input() hasSubsystems = false;
   @Input() hasNamespaces = false;
-  @Input() isAllConfigured = false;
-  @Output() viewStatus = new EventEmitter<void>();
 
   readonly cards = {
     gateway: {
