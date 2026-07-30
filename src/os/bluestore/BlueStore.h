@@ -2871,6 +2871,7 @@ private:
   */
   int _open_db_and_around(bool read_only, bool to_repair = false);
   void _close_db_and_around();
+  int _maybe_reshard_db();
   void _close_around_db();
 
   int _prepare_db_environment(bool create, bool read_only,

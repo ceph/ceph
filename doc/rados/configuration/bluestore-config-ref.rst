@@ -367,8 +367,27 @@ OSD and run the following command:
         --sharding="m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L P" \
         reshard
 
+Alternatively, OSDs can be resharded automatically when they start: if
+``bluestore_reshard_db_on_mount`` is set to ``true``, an OSD whose RocksDB
+database is not sharded yet will reshard it to the layout defined by
+``bluestore_rocksdb_cfs`` before mounting the store. This makes it possible to
+convert all OSDs in a cluster by setting the option globally and performing a
+rolling restart of the OSDs, instead of running ``ceph-bluestore-tool``
+manually on each node:
+
+    .. prompt:: bash #
+
+       ceph config set osd bluestore_reshard_db_on_mount true
+
+Depending on the amount of metadata, resharding may take from minutes to
+hours, during which the OSD is down. OSDs that already use sharding are not
+affected. A resharding interrupted by a crash or power loss is automatically
+resumed the next time the OSD starts, as long as the option is set. Consider
+unsetting the option once all OSDs have been resharded.
+
 .. confval:: bluestore_rocksdb_cf
 .. confval:: bluestore_rocksdb_cfs
+.. confval:: bluestore_reshard_db_on_mount
 
 Throttling
 ==========
