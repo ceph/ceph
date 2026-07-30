@@ -452,6 +452,26 @@ public:
 };
 
 /**
+ * Needed for tracked-metric column names, which
+ * (via format_metric_key()) contain commas inside their label list, e.g.
+ * "cache_trans_invalidated_by_extent{ext=LADDR_LEAF,shard=0,...}" -- left
+ * unquoted, those commas would be misread as extra column separators and
+ * desync the header from the data rows.
+ */
+std::string csv_quote(const std::string &s) {
+  std::string out = "\"";
+  for (char c : s) {
+    if (c == '"') {
+      out += "\"\"";
+    } else {
+      out += c;
+    }
+  }
+  out += "\"";
+  return out;
+}
+
+/**
  * Writes the collected per-shard bucket results to a CSV file, one row per
  * bucket. Each shard's buckets are written out in order (shard 0's buckets,
  * then shard 1's, etc.), tagged with a shard column so rows stay
@@ -460,11 +480,13 @@ public:
  * Columns are derived from whatever tracked-metric keys are actually
  * present in the data (snapshot_metric_values() emits one key per
  * label-instance, e.g. "cache_trans_invalidated_by_extent{ext=LADDR_LEAF,...}"),
- * rather than from the raw --track-metrics names.
+ * rather than from the raw --track-metrics names. Metric column names are
+ * CSV-quoted since they contain commas (see csv_quote()).
  */
 void write_bucket_csv(
   const std::string &path,
-  const std::vector<results_t> &per_shard_results) {
+  const std::vector<results_t> &per_shard_results,
+  unsigned bucket_sample_period) {
   std::ofstream csv(path);
 
   std::set<std::string> metric_keys;
@@ -476,9 +498,9 @@ void write_bucket_csv(
     }
   }
 
-  csv << "shard,bucket_index,ios_completed,avg_latency_s";
+  csv << "shard,bucket_index,time_s,ios_completed,avg_latency_s";
   for (const auto &name : metric_keys) {
-    csv << "," << name;
+    csv << "," << csv_quote(name);
   }
   csv << "\n";
 
@@ -489,7 +511,8 @@ void write_bucket_csv(
       double avg_latency = bucket.ios_completed > 0
         ? bucket.total_latency.count() / bucket.ios_completed
         : 0.0;
-      csv << s << "," << b << "," << bucket.ios_completed << "," << avg_latency;
+      csv << s << "," << b << "," << (b * bucket_sample_period) << ","
+          << bucket.ios_completed << "," << avg_latency;
       for (const auto &name : metric_keys) {
         csv << ",";
         if (b < r.tracked_metrics_buckets.size()) {
@@ -1371,7 +1394,9 @@ int main(int argc, char **argv) {
         f.flush(std::cout);
 
         if (!common_options.csv_output.empty()) {
-          write_bucket_csv(common_options.csv_output, per_shard_results);
+          write_bucket_csv(
+            common_options.csv_output, per_shard_results,
+            common_options.bucket_sample_period);
         }
 
         co_await store->umount();
