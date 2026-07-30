@@ -151,6 +151,13 @@
 %global _find_debuginfo_dwz_opts %{nil}
 %endif
 %bcond_with sccache
+# link with mold (from EPEL) on distros whose toolchain supports
+# -fuse-ld=mold; --without mold for buildroots that lack EPEL
+%if 0%{?rhel} >= 9
+%bcond_without mold
+%else
+%bcond_with mold
+%endif
 %if 0%{?rhel} && 0%{?rhel} >= 10
 %bcond_without pypkg
 %else
@@ -259,6 +266,9 @@ BuildRequires:	checkpolicy
 BuildRequires:	selinux-policy-devel
 %endif
 BuildRequires:	gperf
+%if %{with mold}
+BuildRequires:  mold
+%endif
 BuildRequires:  cmake > 3.5
 BuildRequires:	pkgconfig(fuse3)
 BuildRequires:	git
@@ -1863,6 +1873,11 @@ cmake .. \
     -DWITH_JAEGER:BOOL=OFF \
 %endif
     -DWITH_GRAFANA:BOOL=ON \
+%if %{with mold}
+    -DWITH_MOLD=ON \
+%else
+    -DWITH_MOLD=OFF \
+%endif
 %if %{with sccache}
     -DWITH_SCCACHE=ON \
 %endif
