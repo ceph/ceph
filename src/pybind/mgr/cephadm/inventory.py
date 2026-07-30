@@ -946,8 +946,9 @@ class HostCache():
                         j.get('networks_and_interfaces', {}))
 
                 for name, d in j.get('daemons', {}).items():
-                    self.daemons[host][name] = \
-                        orchestrator.DaemonDescription.from_json(d)
+                    dd = orchestrator.DaemonDescription.from_json(d)
+                    dd.hostname = host
+                    self.daemons[host][name] = dd
                 # still want to check old device location for upgrade scenarios
                 for d in j.get('devices', []):
                     self.devices[host].append(inventory.Device.from_json(d))
