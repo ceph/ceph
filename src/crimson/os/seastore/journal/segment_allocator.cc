@@ -164,9 +164,20 @@ SegmentAllocator::roll_ertr::future<>
 SegmentAllocator::roll()
 {
   ceph_assert(can_write());
+#ifdef CRIMSON_DETAILED_SAMPLING
+  const auto close_start = seastar::lowres_clock::now();
+  return close_segment().safe_then([this, close_start] {
+    last_roll_parts.close = seastar::lowres_clock::now() - close_start;
+    const auto open_start = seastar::lowres_clock::now();
+    return do_open(false).safe_then([this, open_start](auto) {
+      last_roll_parts.open = seastar::lowres_clock::now() - open_start;
+    });
+  });
+#else
   return close_segment().safe_then([this] {
     return do_open(false).discard_result();
   });
+#endif
 }
 
 journal_seq_t
