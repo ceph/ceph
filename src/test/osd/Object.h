@@ -291,13 +291,13 @@ public:
   AppendGenerator(
     uint64_t off,
     uint64_t alignment,
-    uint64_t min_append_size,
+    uint64_t _min_append_size,
     uint64_t _max_append_size,
     uint64_t max_append_multiple) :
     off(off), alignment(alignment),
-    min_append_size(round_up(min_append_size, alignment)),
+    min_append_size(round_up(_min_append_size, alignment)),
     max_append_size(round_up(_max_append_size, alignment)) {
-    if (_max_append_size == min_append_size)
+    if (max_append_size == min_append_size)
       max_append_size += alignment;
     max_append_total = max_append_multiple * max_append_size;
   }
