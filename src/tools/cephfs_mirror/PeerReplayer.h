@@ -4,8 +4,10 @@
 #ifndef CEPHFS_MIRROR_PEER_REPLAYER_H
 #define CEPHFS_MIRROR_PEER_REPLAYER_H
 
+#include "common/Clock.h"
 #include "common/Formatter.h"
 #include "common/Thread.h"
+#include "include/utime.h"
 #include "mds/FSMap.h"
 #include "ServiceDaemon.h"
 #include "Types.h"
@@ -410,7 +412,7 @@ private:
     uint64_t synced_snap_count = 0;
     uint64_t deleted_snap_count = 0;
     uint64_t renamed_snap_count = 0;
-    monotime last_synced = clock::zero();
+    utime_t last_synced;
     boost::optional<double> last_sync_duration;
     boost::optional<double> last_sync_crawl_duration;
     boost::optional<double> last_sync_datasync_queue_wait_duration;
@@ -485,7 +487,7 @@ private:
 
   void _reset_last_synced_snap_stat(const std::string &dir_root) {
     auto &sync_stat = m_snap_sync_stats.at(dir_root);
-    sync_stat.last_synced = clock::zero();
+    sync_stat.last_synced = utime_t();
     sync_stat.last_sync_duration.reset();
     sync_stat.last_sync_crawl_duration.reset();
     sync_stat.last_sync_datasync_queue_wait_duration.reset();
@@ -579,7 +581,7 @@ private:
     std::scoped_lock locker(m_lock);
     _set_last_synced_snap(dir_root, snap_id, snap_name);
     auto &sync_stat = m_snap_sync_stats.at(dir_root);
-    sync_stat.last_synced = clock::now();
+    sync_stat.last_synced = ceph_clock_now();
     sync_stat.last_sync_duration = duration;
     sync_stat.last_sync_crawl_duration = sync_stat.crawl_duration;
     //For empty snapshot sync, datasync_queue_wait_duration is 0

@@ -444,7 +444,7 @@ status. Commands of this kind take the form ``filesystem-name@filesystem-id peer
                         "crawl_duration": "2s",
                         "datasync_queue_wait_duration": "1s",
                         "sync_duration": "33s",
-                        "sync_time_stamp": "274900.558797s",
+                        "sync_time_stamp": "2026-07-15T12:00:00.558797+0530",
                         "sync_bytes": "149.94 MiB",
                         "sync_files": 5000
                     },
@@ -548,7 +548,7 @@ status:
                         "crawl_duration": "2s",
                         "datasync_queue_wait_duration": "1s",
                         "sync_duration": "33s",
-                        "sync_time_stamp": "274900.558797s",
+                        "sync_time_stamp": "2026-07-15T12:00:00.558797+0530",
                         "sync_bytes": "149.94 MiB",
                         "sync_files": 5000
                     },
