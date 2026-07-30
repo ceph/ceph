@@ -693,6 +693,11 @@ private:
     }
     dump_errno(s);
     end_header(s, this, "application/json");
+
+    if (op_ret < 0) {
+      return;
+    }
+
     // convert BucketList to AWS S3 Vector Buckets format
     JSONFormatter f;
     f.open_object_section("");
@@ -784,6 +789,11 @@ private:
     }
     dump_errno(s);
     end_header(s, this, "application/json");
+
+    if (op_ret < 0) {
+      return;
+    }
+
     // convert BucketList to AWS S3 Vector Buckets format
     JSONFormatter f;
     f.open_object_section("");
