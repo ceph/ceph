@@ -5594,6 +5594,7 @@ cdef class ImageIterator(object):
             elif ret == -errno.ERANGE:
                 self.num_images *= 2
             else:
+                self.num_images = 0
                 raise make_ex(ret, 'error listing images.')
 
     def __iter__(self):
@@ -5648,6 +5649,7 @@ cdef class LockOwnerIterator(object):
                 self.num_lock_owners = 0
                 break
             elif ret != -errno.ERANGE:
+                self.num_lock_owners = 0
                 raise make_ex(ret, 'error listing lock owners for image %s' % image.name)
 
     def __iter__(self):
@@ -5852,6 +5854,7 @@ cdef class TrashIterator(object):
                 self.num_entries = ret
                 break
             elif ret != -errno.ERANGE:
+                self.num_entries = 0
                 raise make_ex(ret, 'error listing trash entries')
 
     __source_string = ['USER', 'MIRRORING']
@@ -5916,6 +5919,7 @@ cdef class ChildIterator(object):
             if ret >= 0:
                 break
             elif ret != -errno.ERANGE:
+                self.num_children = 0
                 raise make_ex(ret, 'error listing children.')
 
     def __iter__(self):
@@ -5967,6 +5971,7 @@ cdef class WatcherIterator(object):
             if ret >= 0:
                 break
             elif ret != -errno.ERANGE:
+                self.num_watchers = 0
                 raise make_ex(ret, 'error listing watchers.')
 
     def __iter__(self):
@@ -6068,6 +6073,7 @@ cdef class GroupImageIterator(object):
             if ret >= 0:
                 break
             elif ret != -errno.ERANGE:
+                self.num_images = 0
                 raise make_ex(ret, 'error listing images for group %s' % group.name, group_errno_to_exception)
 
     def __iter__(self):
