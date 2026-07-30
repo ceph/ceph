@@ -4327,6 +4327,11 @@ int main(int argc, const char **argv)
     // INHERITABLE, so every subcommand created below copies it at construction. This
     // must be set before the first add_subcommand call.
     app.fallthrough();
+    // At most one command word may be matched here, so a repeated one is left over
+    // and reported instead of entering the same command twice. No minimum: a command
+    // CLI11 does not know yet must still reach the legacy parsing below. Every
+    // command created below inherits the same maximum, and may set its own.
+    app.require_subcommand(show_cli11_help ? 0 : -1);
 
     constexpr std::string_view tenant_desc = "tenant name";  // shared across command families
     // radosgw-admin's own global flags (category 1, identity) — owned by CLI11 on the

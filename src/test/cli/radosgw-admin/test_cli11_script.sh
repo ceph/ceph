@@ -294,6 +294,8 @@ check "get: stray before script"         1 "ERROR: unexpected argument: 'foo'" \
   foo script get --context prerequest
 check "get: stray between script and get" 1 "ERROR: unexpected argument: 'extra'" \
   script extra get --context prerequest
+check "get: repeated top-level command word" 1 "ERROR: unexpected argument: 'script'" \
+  script script get --context prerequest
 
 # unrecognized flag
 check "get: unrecognized flag"  22 "ERROR: invalid flag --fakeflag" \

@@ -2422,6 +2422,16 @@ check "list: stray word after --uid= value"                    1 "ERROR: unexpec
   bucket list --uid=u1 extra
 check "list: repeated command word"                            1 "ERROR: unexpected argument: 'list'" \
   bucket list list
+check "list: repeated top-level command word"                  1 "ERROR: unexpected argument: 'bucket'" \
+  bucket bucket list
+check "list: top-level command word repeated twice"            1 "ERROR: unexpected argument: 'bucket'" \
+  bucket bucket bucket list
+check "list: repeated top-level command word (alias first)"    1 "ERROR: unexpected argument: 'bucket'" \
+  buckets bucket list
+check "list: top-level command word after the command"         1 "ERROR: unexpected argument: 'bucket'" \
+  bucket list bucket list
+check "logging list: repeated command word"                    1 "ERROR: unexpected argument: 'logging'" \
+  bucket logging logging list
 check "list: empty stray word"                                 1 "ERROR: unexpected argument: ''" \
   bucket list ""
 
@@ -2439,6 +2449,16 @@ check_cluster "list: legacy-only --access-key '' consumed"     0 "" -- \
   bucket --access-key "" list
 check_cluster "list: --bucket '' lists all buckets"            0 "" -- \
   bucket list --bucket ""
+
+# commands CLI11 does not know are parsed by the legacy code
+check "unmigrated: bucket sync status reaches legacy"          22 "ERROR: bucket not specified" \
+  bucket sync status
+check "unmigrated: user info reaches legacy"                   22 "ERROR: --uid or --access-key required" \
+  user info
+check "unknown command reaches legacy"                         1 "ERROR: Unrecognized argument: 'banana'" \
+  banana list
+check "unknown command repeated reaches legacy"                1 "ERROR: Unrecognized argument: 'banana'" \
+  banana banana list
 
 # migrated flags stay parse-safe on unmigrated commands
 check_cluster "reshard list: --max-entries=5"                  0 "" -- \
