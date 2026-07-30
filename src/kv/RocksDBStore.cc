@@ -1109,9 +1109,21 @@ int RocksDBStore::verify_sharding(const rocksdb::Options& opt,
  if (existing_cfs.size() != rocksdb_cfs.size()) {
    std::vector<std::string> columns_from_stored;
    sharding_def_to_columns(stored_sharding_def, columns_from_stored);
-   derr << __func__ << " extra columns in rocksdb. rocksdb columns = " << rocksdb_cfs
-	<< " target columns = " << columns_from_stored << dendl;
-   return -EIO;
+   if (is_reshard_interrupted(stored_sharding_text)) {
+     // An interrupted resharding left column families that are not part of
+     // the stored sharding definition: the (partially populated) target
+     // columns of the resharding. Do not treat them as an error. Opening
+     // the database read-write is still refused by the resharding lock
+     // check in do_open(), while a read-only open is valid on a subset of
+     // column families and gives access to the not-yet-moved keys.
+     dout(5) << __func__ << " resharding in progress, ignoring extra columns"
+	     << " in rocksdb. rocksdb columns = " << rocksdb_cfs
+	     << " stored sharding = " << columns_from_stored << dendl;
+   } else {
+     derr << __func__ << " extra columns in rocksdb. rocksdb columns = " << rocksdb_cfs
+	  << " target columns = " << columns_from_stored << dendl;
+     return -EIO;
+   }
  }
   return 0;
 }
@@ -3856,23 +3868,33 @@ int RocksDBStore::reshard(const std::string& new_sharding, const RocksDBStore::r
   return r;
 }
 
-bool RocksDBStore::get_sharding(std::string& sharding) {
-  rocksdb::Status status;
-  std::string stored_sharding_text;
-  bool result = false;
+int RocksDBStore::read_sharding_def(std::string& sharding)
+{
   sharding.clear();
-
-  status = env->FileExists(sharding_def_file);
-  if (status.ok()) {
-    status = rocksdb::ReadFileToString(env,
-				       sharding_def_file,
-				       &stored_sharding_text);
-    if(status.ok()) {
-      result = true;
-      sharding = stored_sharding_text;
-    }
+  rocksdb::Status status = env->FileExists(sharding_def_file);
+  if (status.IsNotFound()) {
+    return 0;
   }
-  return result;
+  if (!status.ok()) {
+    derr << __func__ << " cannot access " << sharding_def_file << dendl;
+    return -EIO;
+  }
+  status = rocksdb::ReadFileToString(env, sharding_def_file, &sharding);
+  if (!status.ok()) {
+    derr << __func__ << " cannot read from " << sharding_def_file << dendl;
+    sharding.clear();
+    return -EIO;
+  }
+  return 1;
+}
+
+bool RocksDBStore::get_sharding(std::string& sharding) {
+  return read_sharding_def(sharding) == 1;
+}
+
+bool RocksDBStore::is_reshard_interrupted(const std::string& sharding)
+{
+  return sharding.find(resharding_column_lock) != std::string::npos;
 }
 
 // Find a key that is lexicographically between low and high.

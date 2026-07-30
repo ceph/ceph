@@ -590,6 +590,15 @@ public:
   };
   int reshard(const std::string& new_sharding, const resharding_ctrl* ctrl = nullptr);
   bool get_sharding(std::string& sharding);
+  /// Read the stored sharding definition.
+  /// Returns 1 and fills @sharding if a definition is stored, 0 if no
+  /// definition is stored (non-sharded db), -EIO if a definition exists
+  /// but cannot be read.
+  int read_sharding_def(std::string& sharding);
+  /// Check whether a sharding definition, as returned by get_sharding(),
+  /// indicates an interrupted resharding that must be completed (by calling
+  /// reshard() again) before the database can be opened read-write.
+  static bool is_reshard_interrupted(const std::string& sharding);
   void util_divide_key_range(
     const std::string& prefix,        // Table to operate on.
     const std::string& starting_key,  // Included if exists.
