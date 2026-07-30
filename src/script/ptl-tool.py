@@ -127,15 +127,19 @@ except FileNotFoundError:
 REDMINE_API_KEY = os.getenv("PTL_TOOL_REDMINE_API_KEY", REDMINE_API_KEY)
 SPECIAL_BRANCHES = ('main', 'luminous', 'jewel', 'HEAD')
 SUPPORTED_QA_TAGS = {
+    'build/ops',
     'cephadm',
     'cephfs',
+    'common',
     'core',
+    'crimson',
     'dashboard',
     'libcephsqlite',
     'nvme',
     'orch',
     'rbd',
     'rgw',
+    'tests',
     'upgrades',
 }
 TEST_BRANCH = os.getenv("PTL_TOOL_TEST_BRANCH", "wip-{user}-testing-%Y%m%d.%H%M%S")
