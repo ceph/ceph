@@ -13,6 +13,7 @@ import { ToastContent } from 'carbon-components-angular';
 import { NotificationService } from '../../services/notification.service';
 
 @Component({
+  standalone: false,
   selector: 'cd-toast',
   templateUrl: './notification-toast.component.html',
   styleUrls: ['./notification-toast.component.scss'],
