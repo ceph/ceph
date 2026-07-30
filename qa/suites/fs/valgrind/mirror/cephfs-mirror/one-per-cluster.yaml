@@ -5,3 +5,4 @@ tasks:
 - cephfs-mirror:
     client: client.mirror
     valgrind: [--tool=memcheck, --leak-check=full]
+    run_in_foreground: True
