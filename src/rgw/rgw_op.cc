@@ -2853,7 +2853,54 @@ void RGWGetObj::execute(optional_yield y)
   }
 
   attr_iter = attrs.find(RGW_ATTR_SLO_MANIFEST);
-  if (attr_iter != attrs.end() && !skip_manifest) {
+  if (attr_iter != attrs.end()) {
+    // skip_manifest == true means the client requested ?multipart-manifest=get,
+    // i.e., return the raw manifest JSON instead of assembling segments.
+    if (skip_manifest) {
+      is_slo = true;
+      RGWSLOInfo slo_info;
+      try {
+        auto bliter = attr_iter->second.cbegin();
+        decode(slo_info, bliter);
+      } catch (buffer::error& err) {
+        ldpp_dout(this, 0) << "ERROR: failed to decode slo manifest" << dendl;
+        op_ret = -EIO;
+        goto done_err;
+      }
+
+      // Reconstruct JSON: [{"path":"...","etag":"...","size_bytes":N}, ...]
+      ceph::JSONFormatter jf(false);
+      jf.open_array_section("");
+      for (const auto& entry : slo_info.entries) {
+        jf.open_object_section("");
+        encode_json("path", entry.path, &jf);
+        encode_json("etag", entry.etag, &jf);
+        encode_json("size_bytes", entry.size_bytes, &jf);
+        jf.close_section();
+      }
+      jf.close_section();
+
+      bufferlist manifest_bl;
+      jf.flush(manifest_bl);
+
+      // Set response metadata
+      total_len = manifest_bl.length();
+      s->obj_size = total_len;
+
+      // Override content-type to application/json
+      bufferlist ct_bl;
+      ct_bl.append("application/json");
+      attrs[RGW_ATTR_CONTENT_TYPE] = ct_bl;
+
+      op_ret = send_response_data(manifest_bl, 0, manifest_bl.length());
+      if (op_ret < 0) {
+        ldpp_dout(this, 0) << "ERROR: failed to send_response_data ret="
+                           << op_ret << dendl;
+      }
+      return;
+    }
+
+    // Normal SLO path: transparently assemble segments
     is_slo = true;
     op_ret = handle_slo_manifest(attr_iter->second, y);
     if (op_ret < 0) {
