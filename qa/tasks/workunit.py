@@ -387,6 +387,7 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                 raise RuntimeError('Spec did not match any workunits: {spec!r}'.format(spec=spec))
             for workunit in to_run:
                 log.info('Running workunit %s...', workunit)
+                client_keyring = f'/etc/ceph/{cluster}.client.{id_}.keyring'
                 args = [
                     'mkdir', '-p', '--', scratch_tmp,
                     run.Raw('&&'),
@@ -395,8 +396,10 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                     run.Raw('CEPH_CLI_TEST_DUP_COMMAND=1'),
                     run.Raw('CEPH_REF={ref}'.format(ref=refspec)),
                     run.Raw('TESTDIR="{tdir}"'.format(tdir=testdir)),
-                    run.Raw('CEPH_ARGS="--cluster {0}"'.format(cluster)),
-                    run.Raw('CEPH_ID="{id}"'.format(id=id_)),
+                    run.Raw(f'CEPH_CLIENT_ID={id_}'), # used by src/test/librados/test_cxx.cc
+                    run.Raw(f'CEPH_ARGS="--cluster={cluster} --name=client.{id_} --debug-ms=1 --debug-auth=20 --debug-monc=20 --log-to-stderr=true"'),
+                    run.Raw(f'CEPH_KEYRING="{client_keyring}"'),
+                    run.Raw(f'CEPH_ID="{id_}"'), # used by rbd
                     run.Raw('PATH=$PATH:/usr/sbin'),
                     run.Raw('CEPH_BASE={dir}'.format(dir=clonedir)),
                     run.Raw('CEPH_ROOT={dir}'.format(dir=clonedir)),
