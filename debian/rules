@@ -21,6 +21,9 @@ endif
 ifneq ($(filter pkg.ceph.system-rdkafka,$(DEB_BUILD_PROFILES)),)
   extraopts += -DWITH_SYSTEM_RDKAFKA=ON
 endif
+# every deb release built from this branch has mold (a Build-Depends)
+# and a toolchain with -fuse-ld=mold support (GCC >= 12)
+extraopts += -DWITH_MOLD=ON
 
 extraopts += -DWITH_JAEGER=ON
 extraopts += -DWITH_SYSTEM_JERASURE=ON
