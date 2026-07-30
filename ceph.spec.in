@@ -2639,24 +2639,15 @@ fi
 %{_libexecdir}/rbd-nbd/rbd-nbd_quiesce
 
 %files radosgw
-%{_bindir}/ceph-diff-sorted
 %{_bindir}/radosgw
 %{_bindir}/radosgw-token
 %{_bindir}/radosgw-es
 %{_bindir}/radosgw-object-expirer
-%{_bindir}/rgw-gap-list
-%{_bindir}/rgw-gap-list-comparator
-%{_bindir}/rgw-orphan-list
 %{_bindir}/rgw-policy-check
 %{_bindir}/rgw-policy-test
-%{_bindir}/rgw-restore-bucket-index
-%{_mandir}/man8/ceph-diff-sorted.8*
 %{_mandir}/man8/radosgw.8*
-%{_mandir}/man8/rgw-gap-list.8*
-%{_mandir}/man8/rgw-orphan-list.8*
 %{_mandir}/man8/rgw-policy-check.8*
 %{_mandir}/man8/rgw-policy-test.8*
-%{_mandir}/man8/rgw-restore-bucket-index.8*
 %dir %{_localstatedir}/lib/ceph/radosgw
 %{_unitdir}/ceph-radosgw@.service
 %{_unitdir}/ceph-radosgw.target
