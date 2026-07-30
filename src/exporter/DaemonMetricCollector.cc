@@ -2,7 +2,9 @@
 
 #include <boost/asio/io_context.hpp>
 #include <boost/json/src.hpp>
+#include <algorithm>
 #include <chrono>
+#include <fmt/format.h>
 #include <filesystem>
 #include <iostream>
 #include <map>
@@ -76,7 +78,7 @@ template <class T>
 void add_metric(std::unique_ptr<MetricsBuilder> &builder, T value,
                 std::string name, std::string description, std::string mtype,
                 labels_t labels) {
-  builder->add(std::to_string(value), name, description, mtype, labels);
+  builder->add(std::to_string(value), name, description, mtype, labels, "");
 }
 
 void add_double_or_int_metric(std::unique_ptr<MetricsBuilder> &builder,
@@ -173,6 +175,85 @@ void DaemonMetricCollector::parse_asok_metrics(
   }
 }
 
+static double unit_divisor(std::string_view unit) {
+  return unit == "nanoseconds" ? 1e9 : 1.0;
+}
+
+static std::string unit_suffix(std::string_view unit) {
+  if (unit == "nanoseconds") {
+    return "_seconds";
+  }
+  if (unit == "bytes") {
+    return "_bytes";
+  }
+  return "";
+}
+
+void DaemonMetricCollector::dump_histogram_metric(json_value perf_values,
+                                                  const std::string& name,
+                                                  const std::string& description,
+                                                  labels_t labels) {
+  if (!perf_values.is_object()) {
+    dout(1) << "perf_values is not an object for histogram: " << name << dendl;
+    return;
+  }
+  const auto histogram = perf_values.as_object();
+  if (!histogram.contains("axes") || !histogram.contains("values")) {
+    dout(1) << "Missing 'axes' or 'values' for histogram: " << name << dendl;
+    return;
+  }
+  const auto axes = histogram.at("axes").as_array();
+  if (axes.size() != 1) {
+    dout(10) << "skipping " << axes.size() << "D histogram: " << name << dendl;
+    return;
+  }
+  const auto axis = axes.at(0).as_object();
+  if (!axis.contains("ranges")) {
+    dout(1) << "Missing 'ranges' for histogram: " << name << dendl;
+    return;
+  }
+  const auto ranges = axis.at("ranges").as_array();
+  const auto values = histogram.at("values").as_array();
+  if (ranges.size() != values.size()) {
+    dout(1) << "Bucket count mismatch for histogram: " << name << dendl;
+    return;
+  }
+
+  const std::string unit =
+      axis.contains("unit")
+          ? boost_string_to_std(axis.at("unit").as_string())
+                         : std::string("none");
+  const double divisor = unit_divisor(unit);
+  const std::string base_name = name + unit_suffix(unit);
+
+  uint64_t cumulative = 0;
+  for (size_t i = 0; i < values.size(); i++) {
+    cumulative += values.at(i).to_number<uint64_t>();
+
+    const auto range = ranges.at(i).as_object();
+    const std::string le =
+        range.contains("max")
+            ? fmt::format(
+                "{}", std::max(0.0, range.at("max").to_number<double>() / divisor))
+            : std::string("+Inf");
+
+    labels_t bucket_labels = labels;
+    bucket_labels["le"] = quote(le);
+    builder->add(std::to_string(cumulative), base_name, description,
+        "histogram", bucket_labels, "_bucket");
+  }
+
+  if (histogram.contains("sum")) {
+    const auto sums = histogram.at("sum").as_array();
+    if (!sums.empty()) {
+      builder->add(fmt::format("{}", sums.at(0).to_number<double>() / divisor),
+          base_name, description, "histogram", labels, "_sum");
+    }
+  }
+  builder->add(std::to_string(cumulative), base_name, description, "histogram",
+      labels, "_count");
+}
+
 /*
 perf_values can be either a int/double or a json_object. Since
    json_value is a wrapper of both we use that class.
@@ -203,6 +284,11 @@ void DaemonMetricCollector::dump_asok_metric(json_object perf_info,
     }
     std::string description =
         boost_string_to_std(perf_info["description"].as_string());
+
+    if (type & PERFCOUNTER_HISTOGRAM) {
+      dump_histogram_metric(perf_values, name, description, labels);
+      return;
+    }
 
     if (type & PERFCOUNTER_LONGRUNAVG) {
       if (!perf_values.is_object()) {
@@ -267,14 +353,15 @@ void DaemonMetricCollector::dump_asok_metrics(bool sort_metrics, int64_t counter
         continue;
       }
     }
+    bool histograms = g_conf().get_val<bool>("exporter_histograms");
     std::string counter_dump_response = dump_response.size() > 0 ? dump_response :
-      asok_request(sock_client, "counter dump", daemon_name);
+       asok_request(sock_client, fmt::format("{{\"prefix\": \"counter dump\", \"histograms\": {}}}", histograms), daemon_name);
     if (counter_dump_response.size() == 0) {
         failures++;
         continue;
     }
     std::string counter_schema_response = schema_response.size() > 0 ? schema_response :
-        asok_request(sock_client, "counter schema", daemon_name);
+       asok_request(sock_client, fmt::format("{{\"prefix\": \"counter schema\", \"histograms\": {}}}", histograms), daemon_name);
     if (counter_schema_response.size() == 0) {
       failures++;
       continue;
@@ -285,7 +372,7 @@ void DaemonMetricCollector::dump_asok_metrics(bool sort_metrics, int64_t counter
                          prio_limit, daemon_name);
 
       std::string config_show = !config_show_response ? "" :
-        asok_request(sock_client, "config show", daemon_name);
+        asok_request(sock_client, "{\"prefix\": \"config show\"}", daemon_name);
       if (config_show.size() == 0) {
         failures++;
         continue;
@@ -404,13 +491,12 @@ void DaemonMetricCollector::get_process_metrics(
 }
 
 std::string DaemonMetricCollector::asok_request(AdminSocketClient &asok,
-                                                std::string command,
-                                                std::string daemon_name) {
-  std::string request("{\"prefix\": \"" + command + "\"}");
+                                                const std::string& request,
+                                                const std::string& daemon_name) {
   std::string response;
   std::string err = asok.do_request(request, &response);
   if (err.length() > 0 || response.substr(0, 5) == "ERROR") {
-    dout(1) << "command " << command << "failed for daemon " << daemon_name
+    dout(1) << "command " << request << " failed for daemon " << daemon_name
             << "with error: " << err << dendl;
     return "";
   }
@@ -500,13 +586,13 @@ void DaemonMetricCollector::update_sockets() {
 
 void OrderedMetricsBuilder::add(std::string value, std::string name,
                                 std::string description, std::string mtype,
-                                labels_t labels) {
+                                labels_t labels, std::string suffix) {
   if (metrics.find(name) == metrics.end()) {
     Metric metric(name, mtype, description);
     metrics[name] = std::move(metric);
   }
   Metric &metric = metrics[name];
-  metric.add(labels, value);
+  metric.add(labels, value, suffix);
 }
 
 std::string OrderedMetricsBuilder::dump() {
@@ -516,20 +602,41 @@ std::string OrderedMetricsBuilder::dump() {
   return out;
 }
 
-void UnorderedMetricsBuilder::add(std::string value, std::string name,
-                                  std::string description, std::string mtype,
-                                  labels_t labels) {
-  Metric metric(name, mtype, description);
-  metric.add(labels, value);
-  out += metric.dump() + "\n\n";
+// Samples are emitted as they arrive rather than sorted and grouped, but
+// consecutive samples sharing a name are accumulated into one family so that
+// multi-series metrics such as histograms emit a single HELP/TYPE header.
+void UnorderedMetricsBuilder::flush_pending() {
+  if (!has_pending) {
+    return;
+  }
+  out += pending.dump() + "\n\n";
+  has_pending = false;
 }
 
-std::string UnorderedMetricsBuilder::dump() { return out; }
+void UnorderedMetricsBuilder::add(std::string value, std::string name,
+                                  std::string description, std::string mtype,
+                                  labels_t labels, std::string suffix) {
+  if (has_pending && name != pending_name) {
+    flush_pending();
+  }
+  if (!has_pending) {
+    pending = Metric(name, mtype, description);
+    pending_name = name;
+    has_pending = true;
+  }
+  pending.add(labels, value, suffix);
+}
 
-void Metric::add(labels_t labels, std::string value) {
+std::string UnorderedMetricsBuilder::dump() {
+  flush_pending();
+  return out;
+}
+
+void Metric::add(labels_t labels, std::string value, std::string suffix) {
   metric_entry entry;
   entry.labels = labels;
   entry.value = value;
+  entry.suffix = suffix;
   entries.push_back(entry);
 }
 
@@ -547,7 +654,8 @@ std::string Metric::dump() {
       }
       i++;
     }
-    metric_ss << name << "{" << labels_ss.str() << "} " << entry.value;
+    metric_ss << name << entry.suffix << "{" << labels_ss.str() << "} "
+              << entry.value;
     if (&entry != &entries.back()) {
       metric_ss << "\n";
     }

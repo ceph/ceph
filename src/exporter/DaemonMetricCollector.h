@@ -60,11 +60,14 @@ private:
   void dump_asok_metric(boost::json::object perf_info,
                         boost::json::value perf_values, std::string name,
                         labels_t labels);
+  void dump_histogram_metric(boost::json::value perf_values,
+                             const std::string &name,
+                             const std::string &description, labels_t labels);
   void parse_asok_metrics(std::string &counter_dump_response,
                           std::string &counter_schema_response,
                           int64_t prio_limit, const std::string &daemon_name);
   void get_process_metrics(std::vector<std::pair<std::string, int>> daemon_pids);
-  std::string asok_request(AdminSocketClient &asok, std::string command, std::string daemon_name);
+  std::string asok_request(AdminSocketClient &asok, const std::string& request, const std::string& daemon_name);
 };
 
 class Metric {
@@ -72,6 +75,10 @@ private:
   struct metric_entry {
     labels_t labels;
     std::string value;
+    // Non-empty only for multi-series families such as histograms,
+    // where HELP and TYPE sit on the bare family name and the samples
+    // carry _bucket/_sum/_count.
+    std::string suffix;
   };
   std::string name;
   std::string mtype;
@@ -83,7 +90,7 @@ public:
       : name(name), mtype(mtype), description(description) {}
   Metric(const Metric &) = default;
   Metric() = default;
-  void add(labels_t labels, std::string value);
+  void add(labels_t labels, std::string value, std::string suffix);
   std::string dump();
 };
 
@@ -92,7 +99,8 @@ public:
   virtual ~MetricsBuilder() = default;
   virtual std::string dump() = 0;
   virtual void add(std::string value, std::string name, std::string description,
-                   std::string mtype, labels_t labels) = 0;
+                   std::string mtype, labels_t labels,
+                   std::string suffix) = 0;
 
 protected:
   std::string out;
@@ -105,14 +113,21 @@ private:
 public:
   std::string dump();
   void add(std::string value, std::string name, std::string description,
-           std::string mtype, labels_t labels);
+           std::string mtype, labels_t labels, std::string suffix);
 };
 
 class UnorderedMetricsBuilder : public MetricsBuilder {
+private:
+  Metric pending;
+  std::string pending_name;
+  bool has_pending = false;
+
+  void flush_pending();
+
 public:
-  std::string dump();
+  std::string dump() override;
   void add(std::string value, std::string name, std::string description,
-           std::string mtype, labels_t labels);
+           std::string mtype, labels_t labels, std::string suffix) override;
 };
 
 DaemonMetricCollector &collector_instance();

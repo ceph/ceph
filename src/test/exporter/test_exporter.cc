@@ -4,6 +4,7 @@
 #include "common/admin_socket.h"
 #include "common/admin_socket_client.h"
 #include <gmock/gmock.h>
+#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "common/ceph_context.h"
 #include "global/global_context.h"
@@ -1558,3 +1559,261 @@ TEST(Exporter, HealthMetrics) {
     // Test an admin socket answering: metric value should be "1"
     verifyMetricValue("1", true);
 }
+
+TEST(Exporter, dump_asok_metrics_histogram) {
+  std::map<std::string, AdminSocketClient> clients;
+  std::string daemon = "ceph-client-histograms";
+  AdminSocketClient client("/tmp/" + daemon + ".asok");
+  clients.insert({daemon, std::move(client)});
+
+  DaemonMetricCollector &collector = collector_instance();
+  collector.clients = clients;
+  collector.metrics = "";
+
+  // A 4 bucket log2 time histogram: underflow, [0,1ms), [1ms,2ms), overflow.
+  std::string counterDump = R"(
+  {
+    "rgw_op_hist": [
+        {
+            "labels": {
+                "op": "put_obj"
+            },
+            "counters": {
+                "lat": {
+                    "axes": [
+                        {
+                            "name": "lat",
+                            "min": 0,
+                            "quant_size": 1000000,
+                            "buckets": 4,
+                            "scale_type": "log2",
+                            "unit": "nanoseconds",
+                            "ranges": [
+                                { "max": -1 },
+                                { "min": 0, "max": 999999 },
+                                { "min": 1000000, "max": 1999999 },
+                                { "min": 2000000 }
+                            ]
+                        }
+                    ],
+                    "sum": [ 7500000 ],
+                    "values": [ 0, 3, 2, 1 ]
+                }
+            }
+        }
+    ]
+  })";
+
+  std::string counterSchema = R"(
+  {
+    "rgw_op_hist": [
+        {
+            "labels": {
+                "op": "put_obj"
+            },
+            "counters": {
+                "lat": {
+                    "type": 25,
+                    "metric_type": "counter",
+                    "value_type": "real-1d-histogram",
+                    "description": "Request latency distribution",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                }
+            }
+        }
+    ]
+  })";
+
+  collector.dump_asok_metrics(true, 0, false, counterDump, counterSchema, false);
+
+  std::string expectedMetrics = R"(
+# HELP ceph_rgw_op_hist_lat_seconds Request latency distribution
+# TYPE ceph_rgw_op_hist_lat_seconds histogram
+ceph_rgw_op_hist_lat_seconds_bucket{ceph_daemon="client-histograms",le="0",op="put_obj"} 0
+ceph_rgw_op_hist_lat_seconds_bucket{ceph_daemon="client-histograms",le="0.000999999",op="put_obj"} 3
+ceph_rgw_op_hist_lat_seconds_bucket{ceph_daemon="client-histograms",le="0.001999999",op="put_obj"} 5
+ceph_rgw_op_hist_lat_seconds_bucket{ceph_daemon="client-histograms",le="+Inf",op="put_obj"} 6
+ceph_rgw_op_hist_lat_seconds_sum{ceph_daemon="client-histograms",op="put_obj"} 0.0075
+ceph_rgw_op_hist_lat_seconds_count{ceph_daemon="client-histograms",op="put_obj"} 6
+)";
+
+  ASSERT_THAT(collector.metrics, ::testing::HasSubstr(expectedMetrics)) << collector.metrics;
+
+  // A Prometheus-style custom axis time histogram
+  counterDump = R"(
+  {
+    "rgw_op_hist": [
+  {
+    "labels": {
+      "op": "put_obj"
+    },
+    "counters": {
+      "lat": {
+        "axes": [
+          {
+            "name": "lat",
+            "min": 0,
+            "quant_size": 0,
+            "buckets": 13,
+            "scale_type": "custom",
+            "unit": "nanoseconds",
+            "ranges": [
+              {
+                "max": -1
+              },
+              {
+                "min": 0,
+                "max": 5000000
+              },
+              {
+                "min": 5000001,
+                "max": 10000000
+              },
+              {
+                "min": 10000001,
+                "max": 25000000
+              },
+              {
+                "min": 25000001,
+                "max": 50000000
+              },
+              {
+                "min": 50000001,
+                "max": 100000000
+              },
+              {
+                "min": 100000001,
+                "max": 250000000
+              },
+              {
+                "min": 250000001,
+                "max": 500000000
+              },
+              {
+                "min": 500000001,
+                "max": 1000000000
+              },
+              {
+                "min": 1000000001,
+                "max": 2500000000
+              },
+              {
+                "min": 2500000001,
+                "max": 5000000000
+              },
+              {
+                "min": 5000000001,
+                "max": 10000000000
+              },
+              {
+                "min": 10000000001
+              }
+            ]
+         }
+        ],
+        "sum": [
+          63001606
+        ],
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          2,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    }
+  }
+]
+})";
+
+  counterSchema = R"(
+  {
+    "rgw_op_hist": [
+        {
+            "labels": {
+                "op": "hug_obj"
+            },
+            "counters": {
+                "lat": {
+                    "type": 25,
+                    "metric_type": "counter",
+                    "value_type": "real-1d-histogram",
+                    "description": "Request latency distribution",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                }
+            }
+        }
+    ]
+  })";
+
+  collector.dump_asok_metrics(true, 0, false, counterDump, counterSchema, false);
+
+  expectedMetrics = R"(
+# HELP ceph_rgw_op_hist_lat_seconds Request latency distribution
+# TYPE ceph_rgw_op_hist_lat_seconds histogram
+ceph_rgw_op_hist_lat_seconds_bucket{ceph_daemon="client-histograms",le="0",op="hug_obj"} 0
+ceph_rgw_op_hist_lat_seconds_bucket{ceph_daemon="client-histograms",le="0.005",op="hug_obj"} 0
+ceph_rgw_op_hist_lat_seconds_bucket{ceph_daemon="client-histograms",le="0.01",op="hug_obj"} 0
+ceph_rgw_op_hist_lat_seconds_bucket{ceph_daemon="client-histograms",le="0.025",op="hug_obj"} 0
+ceph_rgw_op_hist_lat_seconds_bucket{ceph_daemon="client-histograms",le="0.05",op="hug_obj"} 2
+ceph_rgw_op_hist_lat_seconds_bucket{ceph_daemon="client-histograms",le="0.1",op="hug_obj"} 2
+ceph_rgw_op_hist_lat_seconds_bucket{ceph_daemon="client-histograms",le="0.25",op="hug_obj"} 2
+ceph_rgw_op_hist_lat_seconds_bucket{ceph_daemon="client-histograms",le="0.5",op="hug_obj"} 2
+ceph_rgw_op_hist_lat_seconds_bucket{ceph_daemon="client-histograms",le="1",op="hug_obj"} 2
+ceph_rgw_op_hist_lat_seconds_bucket{ceph_daemon="client-histograms",le="2.5",op="hug_obj"} 2
+ceph_rgw_op_hist_lat_seconds_bucket{ceph_daemon="client-histograms",le="5",op="hug_obj"} 2
+ceph_rgw_op_hist_lat_seconds_bucket{ceph_daemon="client-histograms",le="10",op="hug_obj"} 2
+ceph_rgw_op_hist_lat_seconds_bucket{ceph_daemon="client-histograms",le="+Inf",op="hug_obj"} 2
+ceph_rgw_op_hist_lat_seconds_sum{ceph_daemon="client-histograms",op="hug_obj"} 0.063001606
+ceph_rgw_op_hist_lat_seconds_count{ceph_daemon="client-histograms",op="hug_obj"} 2
+)";
+
+  ASSERT_THAT(collector.metrics, ::testing::HasSubstr(expectedMetrics)) << collector.metrics;
+
+  // 2D histogram are currently unsupported by the exporter
+  std::string twoDimDump = R"(
+  {
+    "rgw_op_hist": [
+        {
+            "labels": { "op": "put_obj" },
+            "counters": {
+                "lat": {
+                    "axes": [
+                        {
+                            "name": "size", "min": 0, "quant_size": 4096,
+                            "buckets": 2, "scale_type": "log2", "unit": "bytes",
+                            "ranges": [ { "max": -1 }, { "min": 0 } ]
+                        },
+                        {
+                            "name": "lat", "min": 0, "quant_size": 1000000,
+                            "buckets": 2, "scale_type": "log2",
+                            "unit": "nanoseconds",
+                            "ranges": [ { "max": -1 }, { "min": 0 } ]
+                        }
+                    ],
+                    "sum": [ 4096, 7500000 ],
+                    "values": [ [ 0, 0 ], [ 0, 1 ] ]
+                }
+            }
+        }
+    ]
+  })";
+
+  collector.metrics = "";
+  collector.dump_asok_metrics(true, 5, false, twoDimDump, counterSchema, false);
+  ASSERT_EQ(std::string::npos, collector.metrics.find("ceph_rgw_op_hist"));
+}
+
