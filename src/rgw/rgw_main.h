@@ -62,12 +62,18 @@ namespace dedup{ class Background; }
 #endif
 namespace sal { class ConfigStore; }
 
+enum class FrontendType {
+  HTTP,    // Default HTTP frontend (beast/civetweb)
+  NFS,     // NFS frontend (rgw-nfs)
+  SMB      // SMB frontend (rgw-smb)
+};
+
 class RGWLib;
 class AppMain {
   /* several components should be initalized only if librgw is
     * also serving HTTP */
   bool have_http_frontend{false};
-  bool nfs{false};
+  FrontendType frontend_type{FrontendType::HTTP};
 
   std::vector<RGWFrontend*> fes;
   std::vector<RGWFrontendConfig*> fe_configs;
@@ -113,7 +119,13 @@ class AppMain {
   };
 
   IOContextPoolHolder context_pool;
+
 public:
+  // Helper methods for frontend type handling
+  bool is_non_http_frontend() const;
+  std::string get_config_prefix() const;
+  std::string get_daemon_type() const;
+
   AppMain(const DoutPrefixProvider* dpp);
   ~AppMain();
 
@@ -131,7 +143,7 @@ public:
     return ldh.get();
   }
 
-  void init_frontends1(bool nfs = false);
+  void init_frontends1(FrontendType type = FrontendType::HTTP);
   void init_numa();
   int init_storage();
   void init_perfcounters();

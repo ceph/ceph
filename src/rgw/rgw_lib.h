@@ -40,8 +40,8 @@ namespace rgw {
 
     void set_fe(RGWLibFrontend* fe);
 
-    int init();
-    int init(std::vector<const char *>& args);
+    int init(FrontendType frontend_type);
+    int init(std::vector<const char *>& args, FrontendType frontend_type);
     int stop();
   };
 

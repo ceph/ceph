@@ -146,20 +146,51 @@ void rgw::AppMain::unregister_heap_profiler_hook()
   }
 }
 
-void rgw::AppMain::init_frontends1(bool nfs) 
+
+// Helper methods for frontend type handling
+bool rgw::AppMain::is_non_http_frontend() const {
+  return frontend_type == FrontendType::NFS ||
+         frontend_type == FrontendType::SMB;
+}
+
+std::string rgw::AppMain::get_config_prefix() const {
+  switch (frontend_type) {
+    case FrontendType::NFS: return "rgw_nfs";
+    case FrontendType::SMB: return "rgw_smb";
+    case FrontendType::HTTP:
+    default: return "rgw";
+  }
+}
+
+std::string rgw::AppMain::get_daemon_type() const {
+  switch (frontend_type) {
+    case FrontendType::NFS: return "rgw-nfs";
+    case FrontendType::SMB: return "rgw-smb";
+    case FrontendType::HTTP:
+    default: return "rgw";
+  }
+}
+
+
+void rgw::AppMain::init_frontends1(FrontendType type)
 {
-  this->nfs = nfs;
-  std::string fe_key = (nfs) ? "rgw_nfs_frontends" : "rgw_frontends";
+  this->frontend_type = type;
+
+  std::string fe_key = (frontend_type == FrontendType::HTTP)
+                       ? "rgw_frontends"
+                       : get_config_prefix() + "_frontends";
+
   std::vector<std::string> frontends;
   std::string rgw_frontends_str = g_conf().get_val<string>(fe_key);
   g_conf().early_expand_meta(rgw_frontends_str, &cerr);
   get_str_vec(rgw_frontends_str, ",", frontends);
 
   /* default frontends */
-  if (nfs) {
-    const auto is_rgw_nfs = [](const auto& s){return s == "rgw-nfs";};
-    if (std::find_if(frontends.begin(), frontends.end(), is_rgw_nfs) == frontends.end()) {
-      frontends.push_back("rgw-nfs");
+  if (is_non_http_frontend()) {
+    std::string default_fe = get_daemon_type();
+    auto is_default = [&default_fe](const auto& s){return s == default_fe;};
+    if (std::find_if(frontends.begin(), frontends.end(), is_default) == frontends.end()) {
+      frontends.push_back(default_fe);
     }
   } else {
     if (frontends.empty()) {
@@ -223,7 +254,7 @@ void rgw::AppMain::init_frontends1(bool nfs)
 
 void rgw::AppMain::init_numa()
 {
-  if (nfs) {
+  if (is_non_http_frontend()) {
     return;
   }
 
@@ -264,25 +295,35 @@ int rgw::AppMain::init_storage()
   }
   env.site = &site;
 
-  auto run_gc =
-    (g_conf()->rgw_enable_gc_threads &&
-      ((!nfs) || (nfs && g_conf()->rgw_nfs_run_gc_threads)));
+  // Helper lambda to get thread config flag based on frontend type
+  auto get_thread_flag = [this](const char* thread_type) -> bool {
+    if (frontend_type == FrontendType::HTTP) {
+      return true;  // HTTP always runs threads if enabled
+    }
 
-  auto run_lc =
-    (g_conf()->rgw_enable_lc_threads &&
-      ((!nfs) || (nfs && g_conf()->rgw_nfs_run_lc_threads)));
+    if (frontend_type == FrontendType::NFS) {
+      if (strcmp(thread_type, "gc") == 0) return g_conf()->rgw_nfs_run_gc_threads;
+      if (strcmp(thread_type, "lc") == 0) return g_conf()->rgw_nfs_run_lc_threads;
+      if (strcmp(thread_type, "restore") == 0) return g_conf()->rgw_nfs_run_restore_threads;
+      if (strcmp(thread_type, "quota") == 0) return g_conf()->rgw_nfs_run_quota_threads;
+      if (strcmp(thread_type, "sync") == 0) return g_conf()->rgw_nfs_run_sync_thread;
+      return false;
+    } else if (frontend_type == FrontendType::SMB) {
+      if (strcmp(thread_type, "gc") == 0) return g_conf()->rgw_smb_run_gc_threads;
+      if (strcmp(thread_type, "lc") == 0) return g_conf()->rgw_smb_run_lc_threads;
+      if (strcmp(thread_type, "restore") == 0) return g_conf()->rgw_smb_run_restore_threads;
+      if (strcmp(thread_type, "quota") == 0) return g_conf()->rgw_smb_run_quota_threads;
+      if (strcmp(thread_type, "sync") == 0) return g_conf()->rgw_smb_run_sync_thread;
+      return false;
+    }
+    return true;  // Default to true
+  };
 
-  auto run_restore =
-    (g_conf()->rgw_enable_restore_threads &&
-      ((!nfs) || (nfs && g_conf()->rgw_nfs_run_restore_threads)));
-
-  auto run_quota =
-    (g_conf()->rgw_enable_quota_threads &&
-      ((!nfs) || (nfs && g_conf()->rgw_nfs_run_quota_threads)));
-
-  auto run_sync =
-    (g_conf()->rgw_run_sync_thread &&
-      ((!nfs) || (nfs && g_conf()->rgw_nfs_run_sync_thread)));
+  auto run_gc = g_conf()->rgw_enable_gc_threads && get_thread_flag("gc");
+  auto run_lc = g_conf()->rgw_enable_lc_threads && get_thread_flag("lc");
+  auto run_restore = g_conf()->rgw_enable_restore_threads && get_thread_flag("restore");
+  auto run_quota = g_conf()->rgw_enable_quota_threads && get_thread_flag("quota");
+  auto run_sync = g_conf()->rgw_run_sync_thread && get_thread_flag("sync");
 
   DriverManager::Config cfg = DriverManager::get_config(false, g_ceph_context);
   env.driver = DriverManager::get_storage(dpp, dpp->get_cct(),
@@ -534,7 +575,7 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
                 : nullopt);
       }
     }
-    else if (framework == "rgw-nfs") {
+    else if ((framework == "rgw-nfs") || (framework == "rgw-smb")) {
       fe = new RGWLibFrontend(env, config);
       if (rgwlib) {
         rgwlib->set_fe(static_cast<RGWLibFrontend*>(fe));
@@ -574,7 +615,7 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
     fes.push_back(fe);
   }
 
-  std::string daemon_type = (nfs) ? "rgw-nfs" : "rgw";
+  std::string daemon_type = get_daemon_type();
   r = env.driver->register_to_service_map(dpp, daemon_type, service_map_meta);
   if (r < 0) {
     derr << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
@@ -654,9 +695,21 @@ void rgw::AppMain::init_lua()
 #ifdef WITH_RADOSGW_RADOS
 void rgw::AppMain::init_dedup()
 {
-  auto run_dedup =
-    (g_conf()->rgw_enable_dedup_threads &&
-      ((!nfs) || (nfs && g_conf()->rgw_nfs_run_dedup_threads)));
+  // Helper lambda to get dedup thread config flag based on frontend type
+  auto get_dedup_flag = [this]() -> bool {
+    if (frontend_type == FrontendType::HTTP) {
+      return true;  // HTTP always runs dedup threads if enabled
+    }
+
+    if (frontend_type == FrontendType::NFS) {
+      return g_conf()->rgw_nfs_run_dedup_threads;
+    } else if (frontend_type == FrontendType::SMB) {
+      return g_conf()->rgw_smb_run_dedup_threads;
+    }
+    return true;  // Default to true
+  };
+
+  auto run_dedup = g_conf()->rgw_enable_dedup_threads && get_dedup_flag();
 
   if (!run_dedup) {
     return;
