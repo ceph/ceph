@@ -342,3 +342,10 @@ options:
   desc: disable osd shards changes upon restart.
   flags:
   - startup
+- name: seastore_measure_lba_conflict_mergeability
+  type: bool
+  level: dev
+  desc: For every LBA tree conflict check if the two txns touch disjoint keys, track via seastore counters
+  default: false
+  flags:
+  - startup
