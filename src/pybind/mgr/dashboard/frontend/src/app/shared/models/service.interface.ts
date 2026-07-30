@@ -21,6 +21,7 @@ export interface CephServiceSpec {
   service_id: string;
   unmanaged: boolean;
   status: CephServiceStatus;
+  certificate?: CephServiceCertificate;
   spec: CephServiceAdditionalSpec;
   placement: CephServicePlacement;
   events?: string[];
@@ -77,6 +78,7 @@ export interface CephServiceAdditionalSpec {
   oidc_issuer_url: string;
   enable_auth: boolean;
   encryption_key?: string;
+  custom_sans?: string[];
   qat: QatSepcs;
 }
 

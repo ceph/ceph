@@ -11,6 +11,7 @@ import { FeatureTogglesGuardService } from '~/app/shared/services/feature-toggle
 import { ModuleStatusGuardService } from '~/app/shared/services/module-status-guard.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { TextLabelListComponent } from '~/app/shared/components/text-label-list/text-label-list.component';
+import { CertificateAuthorityFormComponent } from '~/app/shared/components/certificate-authority-form/certificate-authority-form.component';
 import { IscsiSettingComponent } from './iscsi-setting/iscsi-setting.component';
 import { IscsiTabsComponent } from './iscsi-tabs/iscsi-tabs.component';
 import { IscsiTargetDetailsComponent } from './iscsi-target-details/iscsi-target-details.component';
@@ -148,7 +149,8 @@ import { NvmeofEditAuthenticationComponent } from './nvmeof-edit-authentication/
     TilesModule,
     NvmeofSetupCardsComponent,
     NvmeofGatewayGroupFilterComponent,
-    TextLabelListComponent
+    TextLabelListComponent,
+    CertificateAuthorityFormComponent
   ],
   declarations: [
     RbdListComponent,

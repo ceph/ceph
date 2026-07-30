@@ -63,13 +63,8 @@
           >
           <span
             class="invalid-feedback"
-            *ngIf="
-              groupForm.get('groupName')?.hasError('invalidChars') &&
-              (groupForm.get('groupName')?.dirty || groupForm.get('groupName')?.touched)
-            "
-            i18n
-            >Special characters are not allowed.</span
-          >
+            *ngIf="groupForm.get('groupName')?.hasError('invalidChars') && (groupForm.get('groupName')?.dirty || groupForm.get('groupName')?.touched)"
+            i18n>Special characters are not allowed.</span>
         </div>
       </div>
 
@@ -147,29 +142,29 @@
             }
 
             @if (groupForm.controls.enableEncryption.value) {
-              <div
-                cdsRow
-                class="form-item"
-              >
-                <div cdsCol>
-                  <cds-textarea-label
-                    labelInputID="encryptionKey"
-                    helperText="Provide the encryption key used for securing the gateway group."
-                    i18n
-                    i18n-helperText
-                    cdOptionalField="Encryption key"
-                  >
-                    Encryption key
-                    <textarea
-                      cdsTextArea
-                      id="encryptionKey"
-                      formControlName="encryptionKey"
-                      rows="4"
-                      cols="100"
-                    >
-                    </textarea>
-                  </cds-textarea-label>
-                </div>
+            <div cdsRow
+                 class="form-item">
+              <div cdsCol>
+                <cds-textarea-label
+                  labelInputID="encryptionKey"
+                  helperText="Provide the encryption key used for securing the gateway group."
+                  i18n
+                  i18n-helperText>
+                  Encryption key
+                  <textarea
+                    class="nvmeof-group-form__textarea--full"
+                    cdsTextArea
+                    id="encryptionKey"
+                    formControlName="encryptionKey"
+                    rows="4"
+                    cols="100">
+                  </textarea>
+                </cds-textarea-label>
+                @if (groupForm.showError('encryptionKey', formDir, 'required')) {
+                <span
+                  class="invalid-feedback"
+                  i18n>This field is required.</span>
+                }
               </div>
             }
           </cds-tile>
@@ -225,132 +220,71 @@
             }
 
             @if (groupForm.controls.enableMtls.value) {
-              <div
-                cdsRow
-                class="form-item"
-              >
-                <div cdsCol>
-                  <span
-                    class="cds--label fw-bold"
-                    i18n
-                    >Choose Certificate Authority</span
-                  >
-                  <cds-radio-group
-                    formControlName="certificateType"
-                    orientation="horizontal"
-                    helperText="Select how certificates will be signed for this service. Choose internal to use the cluster's CA, or external to upload certificates signed by your organization."
-                    i18n-helperText
-                  >
-                    <cds-radio
-                      value="internal"
-                      [checked]="
-                        groupForm.controls.certificateType.value === CertificateType.internal
-                      "
-                      (change)="onCertificateTypeChange(CertificateType.internal)"
-                      i18n
-                    >
-                      Internal
-                    </cds-radio>
-                    <cds-radio
-                      value="external"
-                      [checked]="
-                        groupForm.controls.certificateType.value === CertificateType.external
-                      "
-                      (change)="onCertificateTypeChange(CertificateType.external)"
-                      i18n
-                    >
-                      External
-                    </cds-radio>
-                  </cds-radio-group>
-                </div>
+            <div cdsRow
+                 class="form-item">
+              <div cdsCol>
+                <cd-certificate-authority-form
+                  [formGroup]="groupForm"
+                  [editing]="editing"
+                  [currentCertificate]="currentCertificate"
+                  [showCertSourceChangeWarning]="showCertSourceChangeWarning"
+                  (certificateTypeChange)="onCertificateTypeChange($event)"
+                >
+                </cd-certificate-authority-form>
               </div>
             }
           </cds-tile>
         </div>
       </div>
 
-      @if (
-        groupForm.controls.enableMtls.value &&
-        groupForm.controls.certificateType.value === CertificateType.internal
-      ) {
-        <div
-          cdsRow
-          class="form-item"
-        >
-          <div cdsCol>
-            <cd-alert-panel
-              type="info"
-              spacingClass="mb-3"
-              i18n
-            >
-              Certificate will be generated automatically by Cephadm CA for internal certificate
-              type.
-            </cd-alert-panel>
-            <cd-text-label-list
-              formControlName="custom_sans"
-              label="Custom SAN Entries"
-              i18n-label
-              helperText="Optional list of Subject Alternative Names (hostnames, IPs, or DNS names) to include in the auto-generated certificate."
-              i18n-helperText
-            >
-            </cd-text-label-list>
+      @if (groupForm.controls.enableMtls.value && groupForm.controls.certificateType.value === CertificateType.external) {
+      <!-- Root CA Certificate Input -->
+      <div cdsRow
+           class="form-item">
+        <div cdsCol>
+          <cds-text-label
+            labelInputID="rootCACert"
+            i18n
+            i18n-helperText
+            helperText="Upload a Root CA certificate file, or paste the Root CA certificate PEM content directly."
+            cdOptionalField="Root CA Certificate Input">
+            Root CA Certificate Input
+          </cds-text-label>
+          <div class="cds-mb-2">
+            <button
+              cdsButton="tertiary"
+              type="button"
+              (click)="rootCAFileInput.click()"
+              i18n>
+              Upload File
+            </button>
+            <input
+              #rootCAFileInput
+              type="file"
+              accept=".pem,.crt,.cer"
+              hidden
+              (change)="onFileUpload($event, 'rootCACert')"
+            />
           </div>
-        </div>
-      }
-
-      @if (
-        groupForm.controls.enableMtls.value &&
-        groupForm.controls.certificateType.value === CertificateType.external
-      ) {
-        <!-- Root CA Certificate Input -->
-        <div
-          cdsRow
-          class="form-item"
-        >
-          <div cdsCol>
-            <cds-text-label
-              labelInputID="rootCACert"
-              i18n
-              i18n-helperText
-              helperText="Upload a Root CA certificate file, or paste the Root CA certificate PEM content directly."
-              cdOptionalField="Root CA Certificate Input"
-            >
-              Root CA Certificate Input
-            </cds-text-label>
-            <div class="cds-mb-2">
-              <button
-                cdsButton="tertiary"
-                type="button"
-                (click)="rootCAFileInput.click()"
-                i18n
-              >
-                Upload File
-              </button>
-              <input
-                #rootCAFileInput
-                type="file"
-                accept=".pem,.crt,.cer"
-                hidden
-                (change)="onFileUpload($event, 'rootCACert')"
-              />
-            </div>
-            <cds-textarea-label
-              labelInputID="rootCACertText"
-              helperText="Uploaded files will populate the Root CA certificate details automatically. Or paste the PEM content directly in the text area."
-              i18n-helperText
-            >
-              <textarea
-                cdsTextArea
-                id="rootCACertText"
-                formControlName="rootCACert"
-                placeholder="Paste certificate or private key PEM content"
-                i18n-placeholder
-                cols="100"
-                rows="4"
-              >
-              </textarea>
-            </cds-textarea-label>
-          </div>
+          <cds-textarea-label
+            labelInputID="rootCACertText"
+            helperText="Uploaded files will populate the Root CA certificate details automatically. Or paste the PEM content directly in the text area."
+            i18n-helperText>
+            <textarea cdsTextArea
+                      id="rootCACertText"
+                      formControlName="rootCACert"
+                      class="nvmeof-group-form__textarea--full"
+                      placeholder="Paste certificate or private key PEM content"
+                      i18n-placeholder
+                      cols="100"
+                      rows="4">
+            </textarea>
+          </cds-textarea-label>
+          @if (groupForm.showError('rootCACert', formDir, 'required')) {
+          <span
+            class="invalid-feedback"
+            i18n>This field is required.</span>
+          }
         </div>
 
         <!-- Client Certificate Input -->
@@ -402,6 +336,25 @@
               </textarea>
             </cds-textarea-label>
           </div>
+          <cds-textarea-label
+            labelInputID="clientCertText"
+            helperText="Uploaded files will populate the client certificate details automatically. Or paste the PEM content directly in the text area."
+            i18n-helperText>
+            <textarea cdsTextArea
+                      id="clientCertText"
+                      formControlName="clientCert"
+                      class="nvmeof-group-form__textarea--full"
+                      placeholder="Paste certificate or private key PEM content"
+                      i18n-placeholder
+                      cols="100"
+                      rows="4">
+            </textarea>
+          </cds-textarea-label>
+          @if (groupForm.showError('clientCert', formDir, 'required')) {
+          <span
+            class="invalid-feedback"
+            i18n>This field is required.</span>
+          }
         </div>
 
         <!-- Client Key Input -->
@@ -453,6 +406,25 @@
               </textarea>
             </cds-textarea-label>
           </div>
+          <cds-textarea-label
+            labelInputID="clientKeyText"
+            helperText="Uploaded files will populate the client key details automatically. Or paste the PEM content directly in the text area."
+            i18n-helperText>
+            <textarea cdsTextArea
+                      id="clientKeyText"
+                      formControlName="clientKey"
+                      class="nvmeof-group-form__textarea--full"
+                      placeholder="Paste certificate or private key PEM content"
+                      i18n-placeholder
+                      cols="100"
+                      rows="4">
+            </textarea>
+          </cds-textarea-label>
+          @if (groupForm.showError('clientKey', formDir, 'required')) {
+          <span
+            class="invalid-feedback"
+            i18n>This field is required.</span>
+          }
         </div>
 
         <!-- Server Certificate Input -->
@@ -504,6 +476,25 @@
               </textarea>
             </cds-textarea-label>
           </div>
+          <cds-textarea-label
+            labelInputID="serverCertText"
+            helperText="Uploaded files will populate the server certificate details automatically. Or paste the PEM content directly in the text area."
+            i18n-helperText>
+            <textarea cdsTextArea
+                      id="serverCertText"
+                      formControlName="serverCert"
+                      class="nvmeof-group-form__textarea--full"
+                      placeholder="Paste certificate or private key PEM content"
+                      i18n-placeholder
+                      cols="100"
+                      rows="4">
+            </textarea>
+          </cds-textarea-label>
+          @if (groupForm.showError('serverCert', formDir, 'required')) {
+          <span
+            class="invalid-feedback"
+            i18n>This field is required.</span>
+          }
         </div>
 
         <!-- Server Key Input -->
@@ -555,6 +546,25 @@
               </textarea>
             </cds-textarea-label>
           </div>
+          <cds-textarea-label
+            labelInputID="serverKeyText"
+            helperText="Uploaded files will populate the server key details automatically. Or paste the PEM content directly in the text area."
+            i18n-helperText>
+            <textarea cdsTextArea
+                      id="serverKeyText"
+                      formControlName="serverKey"
+                      class="nvmeof-group-form__textarea--full"
+                      placeholder="Paste certificate or private key PEM content"
+                      i18n-placeholder
+                      cols="100"
+                      rows="4">
+            </textarea>
+          </cds-textarea-label>
+          @if (groupForm.showError('serverKey', formDir, 'required')) {
+          <span
+            class="invalid-feedback"
+            i18n>This field is required.</span>
+          }
         </div>
       }
 
