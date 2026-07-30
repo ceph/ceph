@@ -5589,6 +5589,9 @@ extern "C" int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps,
     return -EINVAL;
   }
   // FIPS zeroization audit 20191117: this memset is not security related.
+  // rbd_snap_list_end() walks the array until it encounters a NULL name.
+  // Zero-initializing the array ensures cleanup is safe even if this function
+  // returns an error before all entries are initialized.
   memset(snaps, 0, sizeof(*snaps) * *max_snaps);
 
   int r = librbd::api::Snapshot<>::list(ictx, cpp_snaps);
