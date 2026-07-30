@@ -2389,8 +2389,7 @@ bool DaemonServer::_handle_command(
         cmdctx->reply(-EAGAIN, ss);
       }
       if (!pg_offline_report.ok_to_stop()) {
-        ss << "unsafe to upgrade OSD(s) at this time (at least "
-           << pg_offline_report.not_ok.size()
+        ss << "unsafe to upgrade OSD(s) at this time (one or more"
            << " PG(s) will become offline if any OSD out of the "
            << osds_in_crush_bucket.size() << " in CRUSH bucket '"
            << crush_bucket_name << "' is stopped)";
