@@ -237,15 +237,12 @@ export class NvmeofInitiatorsListComponent implements OnInit, OnDestroy {
       hostNQNs.splice(allowAllHostIndex, 1);
       itemNames = [...hostNQNs, $localize`Allow any host(*)`];
     }
-    const hostName = itemNames[0];
     const deleteModalRef = this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription: $localize`host`,
       impact: DeletionImpact.high,
       itemNames,
       actionDescription: 'remove',
-      bodyContext: {
-        deletionMessage: $localize`Removing <strong>${hostName}</strong> will disconnect it and revoke its permissions for the <strong>${this.subsystemNQN}</strong> subsystem.`
-      },
+      hasAssociatedResources: true,
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
           task: new FinishedTask('nvmeof/initiator/remove', {

@@ -109,7 +109,7 @@ import { NvmeSubsystemViewBreadcrumbResolver } from './nvme-subsystem-view/nvme-
 import { NvmeSubsystemViewComponent } from './nvme-subsystem-view/nvme-subsystem-view.component';
 import { NvmeofSubsystemPerformanceComponent } from './nvmeof-subsystem-performance/nvmeof-subsystem-performance.component';
 import { NvmeofTabsComponent } from './nvmeof-tabs/nvmeof-tabs.component';
-import { NvmeofGatewayGroupDeleteGuardModalComponent } from './nvmeof-gateway-group/nvmeof-gateway-group-delete-guard-modal.component';
+
 import { NvmeofSetupCardsComponent } from './nvmeof-setup-cards/nvmeof-setup-cards.component';
 import { NvmeofGatewayGroupFilterComponent } from './nvmeof-gateway-group-filter/nvmeof-gateway-group-filter.component';
 import { NvmeofEditAuthenticationComponent } from './nvmeof-edit-authentication/nvmeof-edit-authentication.component';
@@ -207,7 +207,6 @@ import { NvmeofEditAuthenticationComponent } from './nvmeof-edit-authentication/
     NvmeofSubsystemOverviewComponent,
     NvmeofSubsystemPerformanceComponent,
     NvmeofTabsComponent,
-    NvmeofGatewayGroupDeleteGuardModalComponent,
     NvmeofEditAuthenticationComponent
   ],
 

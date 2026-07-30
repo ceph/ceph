@@ -6,7 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 
 import { RbdConfigurationListComponent } from '~/app/ceph/block/rbd-configuration-list/rbd-configuration-list.component';
 import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
@@ -104,7 +104,7 @@ describe('PoolListComponent', () => {
       spyOn(configurationService, 'get').and.returnValue(of(configOption));
       fixture = TestBed.createComponent(PoolListComponent);
       component = fixture.componentInstance;
-      expect(component.monAllowPoolDelete).toBe(true);
+      expect(component.monAllowPoolDelete$.value).toBe(true);
     });
 
     it('should set value correctly if mon_allow_pool_delete flag is set to false', () => {
@@ -120,7 +120,7 @@ describe('PoolListComponent', () => {
       spyOn(configurationService, 'get').and.returnValue(of(configOption));
       fixture = TestBed.createComponent(PoolListComponent);
       component = fixture.componentInstance;
-      expect(component.monAllowPoolDelete).toBe(false);
+      expect(component.monAllowPoolDelete$.value).toBe(false);
     });
 
     it('should set value correctly if mon_allow_pool_delete flag is not set', () => {
@@ -130,14 +130,14 @@ describe('PoolListComponent', () => {
       spyOn(configurationService, 'get').and.returnValue(of(configOption));
       fixture = TestBed.createComponent(PoolListComponent);
       component = fixture.componentInstance;
-      expect(component.monAllowPoolDelete).toBe(false);
+      expect(component.monAllowPoolDelete$.value).toBe(false);
     });
 
-    it('should set value correctly w/o config-opt read privileges', () => {
+    it('should set value to false w/o config-opt read privileges', () => {
       configOptRead = false;
       fixture = TestBed.createComponent(PoolListComponent);
       component = fixture.componentInstance;
-      expect(component.monAllowPoolDelete).toBe(true);
+      expect(component.monAllowPoolDelete$.value).toBe(false);
     });
   });
 
@@ -480,21 +480,30 @@ describe('PoolListComponent', () => {
     });
   });
 
-  describe('getDisableDesc', () => {
+  describe('enablePoolDeletion', () => {
+    let configurationService: ConfigurationService;
+
     beforeEach(() => {
-      component.selection.selected = [{ pool_name: 'foo' }];
+      configurationService = TestBed.inject(ConfigurationService);
     });
 
-    it('should return message if mon_allow_pool_delete flag is set to false', () => {
-      component.monAllowPoolDelete = false;
-      expect(component.getDisableDesc()).toBe(
-        'Pool deletion is disabled by the mon_allow_pool_delete configuration setting.'
-      );
+    it('should call configurationService.create and update monAllowPoolDelete$', () => {
+      spyOn(configurationService, 'create').and.returnValue(of(null));
+      component.monAllowPoolDelete$.next(false);
+      component.enablePoolDeletion();
+      expect(configurationService.create).toHaveBeenCalledWith({
+        name: 'mon_allow_pool_delete',
+        value: [{ section: 'mon', value: true }],
+        force_update: false
+      });
+      expect(component.monAllowPoolDelete$.value).toBe(true);
     });
 
-    it('should return false if mon_allow_pool_delete flag is set to true', () => {
-      component.monAllowPoolDelete = true;
-      expect(component.getDisableDesc()).toBeFalsy();
+    it('should not update monAllowPoolDelete$ on error', () => {
+      spyOn(configurationService, 'create').and.returnValue(throwError(() => 'fail'));
+      component.monAllowPoolDelete$.next(false);
+      component.enablePoolDeletion();
+      expect(component.monAllowPoolDelete$.value).toBe(false);
     });
   });
 });
