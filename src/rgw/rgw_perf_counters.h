@@ -119,6 +119,12 @@ enum {
   l_rgw_lc_per_bucket_last
 };
 
+enum {
+  l_rgw_op_hist_first = 19000,
+  l_rgw_op_hist_lat,
+  l_rgw_op_hist_last,
+};
+
 namespace rgw::op_counters {
 
 struct CountersContainer {
@@ -159,3 +165,10 @@ std::shared_ptr<PerfCounters> get(const std::string& bucket_name,
                                   const std::string& tenant);
 
 } // namespace rgw::lc_counters
+
+namespace rgw::op_hist {
+
+PerfCounters* get(CephContext* cct, RGWOpType type, const char* op_name);
+void htinc(PerfCounters* counters, int idx, ceph::timespan amt);
+
+} // namespace rgw::op_hist
