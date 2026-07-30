@@ -1042,7 +1042,8 @@ int RocksDBStore::verify_sharding(const rocksdb::Options& opt,
 				  std::vector<rocksdb::ColumnFamilyDescriptor>& existing_cfs,
 				  std::vector<std::pair<size_t, RocksDBStore::ColumnFamily> >& existing_cfs_shard,
 				  std::vector<rocksdb::ColumnFamilyDescriptor>& missing_cfs,
-				  std::vector<std::pair<size_t, RocksDBStore::ColumnFamily> >& missing_cfs_shard)
+				  std::vector<std::pair<size_t, RocksDBStore::ColumnFamily> >& missing_cfs_shard,
+				  std::vector<std::string>& extra_cfs)
 {
   rocksdb::Status status;
   std::string stored_sharding_text;
@@ -1104,15 +1105,69 @@ int RocksDBStore::verify_sharding(const rocksdb::Options& opt,
       }
     }
   }
-  existing_cfs.emplace_back("default", opt);
+  // repair() may have left a request to recreate missing column families;
+  // read it here as it also drives the handling of extra column families,
+  // do_open() reads it again to recreate the missing ones
+  std::string sharding_recreate_text;
+  rocksdb::ReadFileToString(opt.env, sharding_recreate, &sharding_recreate_text);
+  bool recreate_mode = sharding_recreate_text == "1";
+  bool resharding = is_reshard_interrupted(stored_sharding_text);
 
- if (existing_cfs.size() != rocksdb_cfs.size()) {
-   std::vector<std::string> columns_from_stored;
-   sharding_def_to_columns(stored_sharding_def, columns_from_stored);
-   derr << __func__ << " extra columns in rocksdb. rocksdb columns = " << rocksdb_cfs
-	<< " target columns = " << columns_from_stored << dendl;
-   return -EIO;
- }
+  if (recreate_mode && resharding) {
+    derr << __func__ << " cannot repair column families while resharding is"
+	 << " in progress, complete or continue resharding first" << dendl;
+    return -EIO;
+  }
+
+  // column families present in rocksdb but not part of the stored sharding
+  // definition
+  for (const auto& full_name : rocksdb_cfs) {
+    if (full_name == rocksdb::kDefaultColumnFamilyName) {
+      continue;
+    }
+    bool found = false;
+    for (const auto& e : existing_cfs) {
+      if (e.name == full_name) {
+	found = true;
+	break;
+      }
+    }
+    if (!found) {
+      extra_cfs.push_back(full_name);
+    }
+  }
+  if (!extra_cfs.empty()) {
+    std::vector<std::string> columns_from_stored;
+    sharding_def_to_columns(stored_sharding_def, columns_from_stored);
+    if (resharding) {
+      // An interrupted resharding left column families that are not part of
+      // the stored sharding definition: the (partially populated) target
+      // columns of the resharding. Do not treat them as an error. Opening
+      // the database read-write is still refused by the resharding lock
+      // check in do_open(), while a read-only open is valid on a subset of
+      // column families and gives access to the not-yet-moved keys.
+      dout(5) << __func__ << " resharding in progress, ignoring extra columns"
+	      << " in rocksdb. rocksdb columns = " << rocksdb_cfs
+	      << " stored sharding = " << columns_from_stored << dendl;
+      extra_cfs.clear();
+    } else if (recreate_mode) {
+      // typically column families resurrected by rocksdb::RepairDB(), which
+      // rebuilds the manifest from the data files it finds; report them to
+      // do_open() so they get opened (a read-write open must list all
+      // existing column families) and dropped, allowing repair to complete
+      dout(1) << __func__ << " extra columns in rocksdb will be dropped."
+	      << " rocksdb columns = " << rocksdb_cfs
+	      << " target columns = " << columns_from_stored << dendl;
+      for (const auto& full_name : extra_cfs) {
+	existing_cfs.emplace_back(full_name, rocksdb::ColumnFamilyOptions(opt));
+      }
+    } else {
+      derr << __func__ << " extra columns in rocksdb. rocksdb columns = " << rocksdb_cfs
+	   << " target columns = " << columns_from_stored << dendl;
+      return -EIO;
+    }
+  }
+  existing_cfs.emplace_back("default", opt);
   return 0;
 }
 
@@ -1165,9 +1220,11 @@ int RocksDBStore::do_open(ostream &out,
     std::vector<rocksdb::ColumnFamilyDescriptor> missing_cfs;
     std::vector<std::pair<size_t, RocksDBStore::ColumnFamily> > missing_cfs_shard;
 
+    std::vector<std::string> extra_cfs;
     r = verify_sharding(opt,
 			existing_cfs, existing_cfs_shard,
-			missing_cfs, missing_cfs_shard);
+			missing_cfs, missing_cfs_shard,
+			extra_cfs);
     if (r < 0) {
       return r;
     }
@@ -1219,7 +1276,8 @@ int RocksDBStore::do_open(ostream &out,
 	derr << status.ToString() << dendl;
 	return -EINVAL;
       }
-      ceph_assert(existing_cfs.size() == existing_cfs_shard.size() + 1);
+      ceph_assert(existing_cfs.size() ==
+		  existing_cfs_shard.size() + extra_cfs.size() + 1);
       ceph_assert(handles.size() == existing_cfs.size());
       dout(10) << __func__ << " existing_cfs=" << existing_cfs.size() << dendl;
       for (size_t i = 0; i < existing_cfs_shard.size(); i++) {
@@ -1231,6 +1289,22 @@ int RocksDBStore::do_open(ostream &out,
       }
       default_cf = handles[handles.size() - 1];
       must_close_default_cf = true;
+
+      // drop the extra column families accepted by verify_sharding() in
+      // recreate (repair) mode; their handles directly follow the sharded
+      // ones
+      for (size_t i = existing_cfs_shard.size();
+	   i < existing_cfs_shard.size() + extra_cfs.size(); i++) {
+	dout(1) << __func__ << " dropping extra column family "
+		<< existing_cfs[i].name << dendl;
+	status = db->DropColumnFamily(handles[i]);
+	if (!status.ok()) {
+	  derr << __func__ << " failed to drop extra column family "
+	       << existing_cfs[i].name << ": " << status.ToString() << dendl;
+	  return -EINVAL;
+	}
+	db->DestroyColumnFamilyHandle(handles[i]);
+      }
 
       if (missing_cfs.size() > 0 &&
 	  std::find_if(missing_cfs.begin(), missing_cfs.end(),
@@ -1254,6 +1328,9 @@ int RocksDBStore::do_open(ostream &out,
 			    missing_cfs_shard[i].first,
 			    cf);
 	}
+      }
+      if (recreate_mode) {
+	// repair completed, consume the recreate request marker
 	opt.env->DeleteFile(sharding_recreate);
       }
     }
@@ -3856,23 +3933,33 @@ int RocksDBStore::reshard(const std::string& new_sharding, const RocksDBStore::r
   return r;
 }
 
-bool RocksDBStore::get_sharding(std::string& sharding) {
-  rocksdb::Status status;
-  std::string stored_sharding_text;
-  bool result = false;
+int RocksDBStore::read_sharding_def(std::string& sharding)
+{
   sharding.clear();
-
-  status = env->FileExists(sharding_def_file);
-  if (status.ok()) {
-    status = rocksdb::ReadFileToString(env,
-				       sharding_def_file,
-				       &stored_sharding_text);
-    if(status.ok()) {
-      result = true;
-      sharding = stored_sharding_text;
-    }
+  rocksdb::Status status = env->FileExists(sharding_def_file);
+  if (status.IsNotFound()) {
+    return 0;
   }
-  return result;
+  if (!status.ok()) {
+    derr << __func__ << " cannot access " << sharding_def_file << dendl;
+    return -EIO;
+  }
+  status = rocksdb::ReadFileToString(env, sharding_def_file, &sharding);
+  if (!status.ok()) {
+    derr << __func__ << " cannot read from " << sharding_def_file << dendl;
+    sharding.clear();
+    return -EIO;
+  }
+  return 1;
+}
+
+bool RocksDBStore::get_sharding(std::string& sharding) {
+  return read_sharding_def(sharding) == 1;
+}
+
+bool RocksDBStore::is_reshard_interrupted(const std::string& sharding)
+{
+  return sharding.find(resharding_column_lock) != std::string::npos;
 }
 
 // Find a key that is lexicographically between low and high.
