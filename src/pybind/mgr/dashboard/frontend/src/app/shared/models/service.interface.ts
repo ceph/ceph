@@ -24,6 +24,7 @@ export interface CephServiceSpec {
   spec: CephServiceAdditionalSpec;
   placement: CephServicePlacement;
   events?: string[];
+  certificate?: CephServiceCertificate;
 }
 
 // Type for service spec update payload (excludes read-only status field)
