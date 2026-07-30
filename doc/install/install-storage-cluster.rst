@@ -1,3 +1,5 @@
+.. _install_storage_cluster:
+
 ==============================
  Install Ceph Storage Cluster
 ==============================
@@ -79,6 +81,7 @@ Once you have added either release or development packages, or added a
 
    sudo yum install ceph
 
+.. _install-storage-cluster-build:
 
 Installing a Build
 ==================
