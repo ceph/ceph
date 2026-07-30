@@ -21,6 +21,13 @@ endif
 ifneq ($(filter pkg.ceph.system-rdkafka,$(DEB_BUILD_PROFILES)),)
   extraopts += -DWITH_SYSTEM_RDKAFKA=ON
 endif
+# link with mold: focal is the only release whose toolchain cannot
+# (gcc-11 lacks -fuse-ld=mold); mold itself comes from install-deps.sh
+ifeq ($(DEB_DISTRIBUTION),focal)
+  extraopts += -DWITH_MOLD=OFF
+else
+  extraopts += -DWITH_MOLD=ON
+endif
 
 extraopts += -DWITH_JAEGER=ON
 extraopts += -DWITH_SYSTEM_JERASURE=ON

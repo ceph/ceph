@@ -465,6 +465,12 @@ else
                 $SUDO apt-get install -y gcc
                 ;;
         esac
+        # mold is used by WITH_MOLD=ON package builds (see debian/rules).
+        # It cannot be a Build-Depends because debian/control is shared
+        # across releases and focal has no mold package.
+        if apt-cache show mold >/dev/null 2>&1; then
+            $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y mold
+        fi
         if ! test -r debian/control ; then
             echo debian/control is not a readable file
             exit 1
