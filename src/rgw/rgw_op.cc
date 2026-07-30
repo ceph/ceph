@@ -2575,20 +2575,33 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
   return send_response_data(bl, bl_ofs, bl_len);
 }
 
-int RGWGetObj::get_lua_filter(std::unique_ptr<RGWGetObj_Filter>* filter, RGWGetObj_Filter* cb) {
-  const auto [script, rc] = rgw::lua::read_script_or_bytecode(s, s->penv.lua.manager.get(),
-                                                              s->bucket_tenant, s->yield, rgw::lua::context::getData);
-  if (rc == -ENOENT) {
-    // no script, nothing to do
+template <typename LuaFilterT, typename BaseFilterT>
+static int make_lua_data_filter(req_state * const s,
+                                const DoutPrefixProvider * const dpp,
+                                const rgw::lua::context ctx,
+                                std::unique_ptr<BaseFilterT>& filter,
+                                BaseFilterT * const cb)
+{
+  const auto [script, rc] = rgw::lua::read_script_or_bytecode(
+    s, s->penv.lua.manager.get(), s->bucket_tenant, s->yield, ctx);
+
+  if (-ENOENT == rc) {
     return 0;
   }
 
   if (rc < 0) {
-    ldpp_dout(this, 5) << "WARNING: failed to read data script. error: " << rc << dendl;
+    ldpp_dout(dpp, 5) << "WARNING: failed to read data script. error: " << rc << dendl;
     return rc;
   }
-  filter->reset(new rgw::lua::RGWGetObjFilter(s, script, cb));
+
+  filter = std::make_unique<LuaFilterT>(s, script, cb);
   return 0;
+}
+
+int RGWGetObj::get_lua_filter(std::unique_ptr<RGWGetObj_Filter>* filter, RGWGetObj_Filter* cb)
+{
+  return make_lua_data_filter<rgw::lua::RGWGetObjFilter>(
+    s, this, rgw::lua::context::getData, *filter, cb);
 }
 
 bool RGWGetObj::prefetch_data()
@@ -4566,18 +4579,10 @@ auto RGWPutObj::get_torrent_filter(rgw::sal::DataProcessor* cb)
   return RGWPutObj_Torrent{cb, max_len, piece_len};
 }
 
-int RGWPutObj::get_lua_filter(std::unique_ptr<rgw::sal::DataProcessor>* filter, rgw::sal::DataProcessor* cb) {
-  const auto [script, rc] = rgw::lua::read_script_or_bytecode(s, s->penv.lua.manager.get(),
-                                                              s->bucket_tenant, s->yield, rgw::lua::context::putData);
-  if (rc == -ENOENT) {
-    // no script, nothing to do
-    return 0;
-  } else if (rc < 0) {
-    ldpp_dout(this, 5) << "WARNING: failed to read data script. error: " << rc << dendl;
-    return rc;
-  }
-  filter->reset(new rgw::lua::RGWPutObjFilter(s, script, cb));
-  return 0;
+int RGWPutObj::get_lua_filter(std::unique_ptr<rgw::sal::DataProcessor>* filter, rgw::sal::DataProcessor* cb)
+{
+  return make_lua_data_filter<rgw::lua::RGWPutObjFilter>(
+    s, this, rgw::lua::context::putData, *filter, cb);
 }
 
 void RGWPutObj::execute(optional_yield y)

@@ -5710,7 +5710,7 @@ RGWOp *RGWHandler_REST_Obj_S3::get_obj_op(bool get_data)
   return get_obj_op;
 }
 
-RGWOp *RGWHandler_REST_Obj_S3::op_get()
+RGWOp *RGWHandler_REST_Obj_S3::get_common_read_op()
 {
   using enum RGWHTTPArgs::http_arg;
 
@@ -5721,6 +5721,17 @@ RGWOp *RGWHandler_REST_Obj_S3::op_get()
   if (s->info.args.exists(upload_id)) {
     return new RGWListMultipart_ObjStore_S3;
   }
+
+  return nullptr;
+}
+
+RGWOp *RGWHandler_REST_Obj_S3::op_get()
+{
+  if (auto op = get_common_read_op(); op) {
+    return op;
+  }
+
+  using enum RGWHTTPArgs::http_arg;
 
   if (s->info.args.exists(layout)) {
     return new RGWGetObjLayout_ObjStore_S3;
@@ -5747,14 +5758,8 @@ RGWOp *RGWHandler_REST_Obj_S3::op_get()
 
 RGWOp *RGWHandler_REST_Obj_S3::op_head()
 {
-  using enum RGWHTTPArgs::http_arg;
-
-  if (is_acl_op()) {
-    return new RGWGetACLs_ObjStore_S3;
-  }
-
-  if (s->info.args.exists(upload_id)) {
-    return new RGWListMultipart_ObjStore_S3;
+  if (auto op = get_common_read_op(); op) {
+    return op;
   }
 
   return get_obj_op(false);
@@ -6307,7 +6312,9 @@ bool RGWHandler_REST_S3Website::web_dir() const {
 
   if (subdir_name.empty()) {
     return false;
-  } else if (subdir_name.back() == '/' && subdir_name.size() > 1) {
+  }
+
+  if (subdir_name.back() == '/' && subdir_name.size() > 1) {
     subdir_name.pop_back();
   }
 

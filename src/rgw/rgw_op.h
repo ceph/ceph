@@ -19,6 +19,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <string_view>
 #include <set>
 #include <map>
 #include <vector>
@@ -1764,7 +1765,7 @@ public:
     return static_cast<uint16_t>(1u << (value ? value - 1 : 0));
   }
 
-  static uint16_t recognize_attrs(const std::string& hdr, const uint16_t deflt = 0);
+  static uint16_t recognize_attrs(std::string_view hdr, const uint16_t deflt = 0);
 
   RGWGetObjAttrs() : RGWGetObj()
   {

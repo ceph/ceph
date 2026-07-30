@@ -1,8 +1,12 @@
 #pragma once
 
+#include <algorithm>
+#include <array>
+#include <concepts>
 #include <type_traits>
 #include <variant>
 #include <string.h>
+#include <iterator>
 #include <memory>
 #include <map>
 #include <string>
@@ -11,17 +15,18 @@
 #include <lua.hpp>
 #include <chrono>
 
+#include <boost/algorithm/string/predicate.hpp>
+
 #include "include/common_fwd.h"
 #include "rgw_perf_counters.h"
 #include <common/ceph_time.h>
 #include "rgw_lua_types.h"
 
-// a helper type traits structs for detecting std::variant
-template<class>
-struct is_variant : std::false_type {};
-template<class... Ts> 
-struct is_variant<std::variant<Ts...>> : 
-    std::true_type {};
+template <typename ValueT>
+inline constexpr bool is_variant_v = false;
+
+template <typename... Ts>
+inline constexpr bool is_variant_v<std::variant<Ts...>> = true;
 
 class DoutPrefixProvider;
 
@@ -43,6 +48,14 @@ static inline const char* pushstring(lua_State* L, std::string_view str)
   return lua_pushlstring(L, str.data(), str.size());
 }
 
+inline std::string_view lua_checkstring_view(lua_State * const L, const int arg)
+{
+  std::size_t size = 0;
+  const auto text = luaL_checklstring(L, arg, &size);
+
+  return {text, size};
+}
+
 inline void pushvalue(lua_State* L, const std::string& value) {
   pushstring(L, value);
 }
@@ -57,6 +70,26 @@ inline void pushvalue(lua_State* L, double value) {
 
 inline void pushvalue(lua_State* L, bool value) {
   lua_pushboolean(L, value);
+}
+
+template <typename ValueT>
+void push_lua_value(lua_State* L, const ValueT& value)
+{
+  if constexpr (std::same_as<ValueT, bool>) {
+    lua_pushboolean(L, value);
+  } else if constexpr (std::integral<ValueT>) {
+    lua_pushinteger(L, value);
+  } else if constexpr (std::floating_point<ValueT>) {
+    lua_pushnumber(L, value);
+  } else if constexpr (std::is_convertible_v<ValueT, std::string_view>) {
+    pushstring(L, std::string_view {value});
+  } else if constexpr (is_variant_v<ValueT>) {
+    std::visit([L](const auto& item) {
+      push_lua_value(L, item);
+    }, value);
+  } else {
+    pushvalue(L, value);
+  }
 }
 
 inline void unsetglobal(lua_State* L, const char* name) 
@@ -116,6 +149,24 @@ constexpr auto ONE_RETURNVAL    = 1;
 constexpr auto TWO_RETURNVALS   = 2;
 constexpr auto THREE_RETURNVALS = 3;
 constexpr auto FOUR_RETURNVALS  = 4;
+
+inline void push_nil(lua_State * const L)
+{
+  lua_pushnil(L);
+}
+
+inline int return_nil(lua_State * const L)
+{
+  push_nil(L);
+  return ONE_RETURNVAL;
+}
+
+inline int return_nil_pair(lua_State * const L)
+{
+  push_nil(L);
+  push_nil(L);
+  return TWO_RETURNVALS;
+}
 
 // create_metatable() is a utility functions to create a metatable
 // and tie it to an unnamed table
@@ -235,7 +286,7 @@ void create_metatable(lua_State* L, const std::string_view parent_name, const st
   if (ptr) {
     create_metatable<MetaTable>(L, parent_name, field_name, toplevel, reinterpret_cast<void*>(ptr.get()));
   } else {
-    lua_pushnil(L);
+    push_nil(L);
   }
 }
 // following struct may be used as a base class for other MetaTable classes
@@ -264,6 +315,51 @@ struct EmptyMetaTable {
                       index.c_str(), table.c_str());
   }
 };
+
+inline const char* table_name_upvalue(lua_State* L);
+
+template <typename TargetT>
+struct lua_field {
+  std::string_view name;
+  int (*push)(lua_State *L, std::string_view table_name,
+              std::string_view field_name, TargetT& target);
+};
+
+template <typename TargetT, auto Member>
+int lua_push_member(lua_State *L, std::string_view,
+                    std::string_view, TargetT& target)
+{
+  push_lua_value(L, target.*Member);
+  return ONE_RETURNVAL;
+}
+
+template <typename TargetT, auto Getter>
+int lua_push_getter(lua_State *L, std::string_view,
+                    std::string_view, TargetT& target)
+{
+  push_lua_value(L, (target.*Getter)());
+  return ONE_RETURNVAL;
+}
+
+template <typename TargetT, std::size_t N>
+int lua_dispatch_fields(lua_State * const L,
+                        TargetT& target,
+                        const std::array<lua_field<TargetT>, N>& fields)
+{
+  const std::string_view table_name = table_name_upvalue(L);
+  const auto field_name = lua_checkstring_view(L, 2);
+
+  const auto field = std::ranges::find_if(fields, [field_name](const auto& f) {
+    return boost::iequals(field_name, f.name);
+  });
+
+  if (field == std::end(fields)) {
+    return EmptyMetaTable::error_unknown_field(
+      L, std::string {field_name}, std::string {table_name});
+  }
+
+  return field->push(L, table_name, field_name, target);
+}
 
 // create a debug log action
 // it expects CephContext to be captured
@@ -394,38 +490,60 @@ void update_erased_iterator(lua_State* L, const std::string_view name, const typ
   }
 }
 
+template <typename MapType>
+concept has_transparent_string_lookup = requires {
+  typename MapType::key_compare::is_transparent;
+};
+
+template <typename MapType>
+auto find_string_map_entry(MapType& map, const std::string_view key)
+{
+  if constexpr (has_transparent_string_lookup<MapType>) {
+    return map.find(key);
+  }
+
+  return map.find(std::string { key });
+}
+
 // __newindex implementation for any map type holding strings
-// or other types constructable from "char*"
+// or other types constructible from std::string_view
 // this function allow deletion of an entry by setting "nil" to the entry
 // it also limits the size of the entry: key + value cannot exceed MAX_LUA_VALUE_SIZE
 // and limits the number of entries in the map, to not exceed MAX_LUA_KEY_ENTRIES
 template<typename MapType=std::map<std::string, std::string>>
 int StringMapWriteableNewIndex(lua_State* L) {
-  static_assert(std::is_constructible<typename MapType::key_type, const char*>());
-  static_assert(std::is_constructible<typename MapType::mapped_type, const char*>());
+  static_assert(std::is_constructible_v<typename MapType::key_type, std::string_view>);
+  static_assert(std::is_constructible_v<typename MapType::mapped_type, std::string_view>);
+
   const auto name = table_name_upvalue(L);
   const auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
   ceph_assert(map);
 
-  const char* index = luaL_checkstring(L, 2);
+  const auto index = lua_checkstring_view(L, 2);
 
-  if (lua_isnil(L, 3) == 0) {
-    const char* value = luaL_checkstring(L, 3);
-    if (strnlen(value, MAX_LUA_VALUE_SIZE) + strnlen(index, MAX_LUA_VALUE_SIZE)
-        > MAX_LUA_VALUE_SIZE) {
-      return luaL_error(L, "Lua maximum size of entry limit exceeded");
-    } else if (map->size() > MAX_LUA_KEY_ENTRIES) {
-      return luaL_error(L, "Lua max number of entries limit exceeded");
-    } else {
-      map->insert_or_assign(index, value);
-    }
-  } else {
-    // erase the element. since in lua: "t[index] = nil" is removing the entry at "t[index]"
-    if (const auto it = map->find(index); it != map->end()) {
-      // index was found
+  if (lua_isnil(L, 3)) {
+    // In Lua, "t[index] = nil" removes the entry at "t[index]".
+    if (const auto it = find_string_map_entry(*map, index); it != map->end()) {
       update_erased_iterator<MapType>(L, name, it, map->erase(it));
     }
+
+    return NO_RETURNVAL;
   }
+
+  const auto value = lua_checkstring_view(L, 3);
+
+  if (MAX_LUA_VALUE_SIZE < std::size(index) + std::size(value)) {
+    return luaL_error(L, "Lua maximum size of entry limit exceeded");
+  }
+
+  const auto existing = find_string_map_entry(*map, index);
+
+  if (existing == map->end() && MAX_LUA_KEY_ENTRIES <= std::size(*map)) {
+    return luaL_error(L, "Lua max number of entries limit exceeded");
+  }
+
+  map->insert_or_assign(typename MapType::key_type { index },
+                        typename MapType::mapped_type { value });
 
   return NO_RETURNVAL;
 }
@@ -456,27 +574,26 @@ int next(lua_State* L) {
 
   if (*next_it == map->end()) {
     // index of the last element was provided
-    lua_pushnil(L);
-    lua_pushnil(L);
-    return TWO_RETURNVALS;
+    return return_nil_pair(L);
     // return nil, nil
   }
 
   // key (userdata iterator) is already on the stack
   // push the value
-	using ValueType = typename MapType::mapped_type;
-	auto& value = (*next_it)->second;
-  if constexpr(std::is_constructible<std::string, ValueType>()) {
+  using ValueType = typename MapType::mapped_type;
+  auto& value = (*next_it)->second;
+  if constexpr(std::is_constructible_v<std::string, ValueType>) {
     // as an std::string
     pushstring(L, value);
-  } else if constexpr(is_variant<ValueType>()) {
+  } else if constexpr (is_variant_v<ValueType>) {
     // as an std::variant
-    std::visit([L](auto&& value) { pushvalue(L, value); }, value);
+    push_lua_value(L, value);
   } else {
     // as a metatable
     create_metatable<ValueMetaType>(L, name, (*next_it)->first,
         false, &(value));
   }
+
   // return key, value
   return TWO_RETURNVALS;
 }
@@ -496,22 +613,6 @@ int Pairs(lua_State* L) {
     return TWO_RETURNVALS;
 }
 
-
-template <typename MapType>
-concept has_transparent_string_lookup = requires {
-  typename MapType::key_compare::is_transparent;
-};
-
-template <typename MapType>
-auto find_string_map_entry(MapType& map, const std::string_view key)
-{
-  if constexpr (has_transparent_string_lookup<MapType>) {
-    return map.find(key);
-  }
-
-  return map.find(std::string { key });
-}
-
 template <typename MapType = std::map<std::string, std::string>,
   MetaTableClosure NewIndex = EmptyMetaTable::NewIndexClosure>
 struct StringMapMetaTable : public EmptyMetaTable {
@@ -519,14 +620,14 @@ struct StringMapMetaTable : public EmptyMetaTable {
     std::ignore = table_name_upvalue(L);
     const auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 
-    const std::string_view index = luaL_checkstring(L, 2);
+    const auto index = lua_checkstring_view(L, 2);
 
     const auto it = find_string_map_entry(*map, index);
     if (it == map->end()) {
-      lua_pushnil(L);
-    } else {
-      pushstring(L, it->second);
+      return return_nil(L);
     }
+
+    push_lua_value(L, it->second);
     return ONE_RETURNVAL;
   }
 
@@ -544,6 +645,82 @@ struct StringMapMetaTable : public EmptyMetaTable {
     lua_pushinteger(L, map->size());
 
     return ONE_RETURNVAL;
+  }
+};
+
+template <typename ContainerT, typename ElementMetaTableT = void, auto PushElement = nullptr>
+struct IndexedContainerMetaTable : public EmptyMetaTable {
+  using Type = ContainerT;
+
+  static int IndexClosure(lua_State* L)
+  {
+    const auto name = table_name_upvalue(L);
+    auto container = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
+    ceph_assert(container);
+
+    const auto index = luaL_checkinteger(L, 2);
+
+    if (index < 0 || static_cast<std::size_t>(index) >= std::size(*container)) {
+      return return_nil(L);
+    }
+
+    push_indexed_value<ElementMetaTableT>(
+      L, name, static_cast<std::size_t>(index), (*container)[index]);
+    return ONE_RETURNVAL;
+  }
+
+  static int PairsClosure(lua_State* L)
+  {
+    return Pairs<Type, stateless_iter>(L);
+  }
+
+  static int stateless_iter(lua_State* L)
+  {
+    const auto name = table_name_upvalue(L);
+    auto container = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
+    ceph_assert(container);
+
+    std::size_t next_index = 0;
+    if (!lua_isnil(L, -1)) {
+      next_index = static_cast<std::size_t>(luaL_checkinteger(L, -1)) + 1;
+    }
+
+    if (next_index >= std::size(*container)) {
+      return return_nil_pair(L);
+    }
+
+    lua_pushinteger(L, next_index);
+    push_indexed_value<ElementMetaTableT>(
+      L, name, next_index, (*container)[next_index]);
+    return TWO_RETURNVALS;
+  }
+
+  static int LenClosure(lua_State* L)
+  {
+    const auto container = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    ceph_assert(container);
+
+    lua_pushinteger(L, std::size(*container));
+    return ONE_RETURNVAL;
+  }
+
+private:
+  template <typename MetaTableT, typename ValueT>
+  static void push_indexed_value(lua_State * const L,
+                                 const std::string_view name,
+                                 const std::size_t index,
+                                 ValueT& value)
+  {
+    if constexpr (std::same_as<MetaTableT, void>) {
+      if constexpr (PushElement == nullptr) {
+        push_lua_value(L, value);
+      } else {
+        PushElement(L, name, index, value);
+      }
+    } else {
+      create_metatable<MetaTableT>(
+        L, name, std::to_string(index), false, &value);
+    }
   }
 };
 

@@ -1022,20 +1022,9 @@ void RGWHTTPArgs::remove(const string& name)
     present_sub_resources.reset(index(info->id));
   }
 
-  auto val_iter = val_map.find(name);
-  if (val_iter != std::end(val_map)) {
-    val_map.erase(val_iter);
-  }
-
-  auto sys_val_iter = sys_val_map.find(name);
-  if (sys_val_iter != std::end(sys_val_map)) {
-    sys_val_map.erase(sys_val_iter);
-  }
-
-  auto subres_iter = sub_resources.find(name);
-  if (subres_iter != std::end(sub_resources)) {
-    sub_resources.erase(subres_iter);
-  }
+  val_map.erase(name);
+  sys_val_map.erase(name);
+  sub_resources.erase(name);
 
   if (is_admin_subresource(name)) {
     admin_subresource_added = std::ranges::any_of(sub_resources, [](const auto& arg) {
@@ -1046,34 +1035,36 @@ void RGWHTTPArgs::remove(const string& name)
 
 void RGWHTTPArgs::append(const string& name, const string& val)
 {
-  const std::string_view name_view = name;
   auto& target_map =
     0 == name.compare(0, sizeof(RGW_SYS_PARAM_PREFIX) - 1, RGW_SYS_PARAM_PREFIX) ?
     sys_val_map :
     val_map;
   target_map[name] = val;
 
+  const auto add_subresource = [&](const http_arg_spec& info,
+                                   const std::string& value) {
+    sub_resources[name] = value;
+    present_sub_resources.set(index(info.id));
+  };
+
   // When object-exclusive subresources are added, update
   // RGWHTTPArgs::exist_obj_excl_sub_resource().
-  if (const auto info = find_http_arg(name_view)) {
+  if (const auto info = find_http_arg(name)) {
     present_args.set(index(info->id));
 
     switch (info->kind) {
       default:
         return;
       case http_arg_kind::sub_resource:
-        sub_resources[name] = val;
-        present_sub_resources.set(index(info->id));
+        add_subresource(*info, val);
         return;
       case http_arg_kind::response_modifier:
-        sub_resources[name] = val;
-        present_sub_resources.set(index(info->id));
+        add_subresource(*info, val);
         has_resp_modifier = true;
         return;
       case http_arg_kind::admin_subresource:
         if (!admin_subresource_added) {
-          sub_resources[name] = "";
-          present_sub_resources.set(index(info->id));
+          add_subresource(*info, empty_str);
           admin_subresource_added = true;
         }
         return;
@@ -1117,9 +1108,8 @@ const string& RGWHTTPArgs::get(const std::string_view name, bool *exists) const
 boost::optional<const std::string&>
 RGWHTTPArgs::get_optional(const std::string_view name) const
 {
-  bool exists = false;
-  if (const std::string& value = get(name, &exists); exists) {
-    return value;
+  if (const auto iter = val_map.find(name); iter != std::end(val_map)) {
+    return iter->second;
   }
 
   return boost::none;

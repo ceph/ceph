@@ -3,7 +3,6 @@
 
 #include <algorithm>
 #include <array>
-#include <string>
 #include <string_view>
 
 #include <boost/algorithm/string/predicate.hpp>
@@ -14,7 +13,7 @@
 #include "rgw_op_internal.h"
 #include "rgw_sal.h"
 
-uint16_t RGWGetObjAttrs::recognize_attrs(const std::string& hdr, const uint16_t deflt)
+uint16_t RGWGetObjAttrs::recognize_attrs(const std::string_view hdr, const uint16_t deflt)
 {
   struct AttrName {
     std::string_view name;
@@ -34,6 +33,7 @@ uint16_t RGWGetObjAttrs::recognize_attrs(const std::string& hdr, const uint16_t 
     const auto attr = std::ranges::find_if(attr_names, [&k](const AttrName& attr) {
       return boost::iequals(k, attr.name);
     });
+
     if (attr != attr_names.end()) {
       attrs |= attr->flag;
     }
