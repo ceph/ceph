@@ -260,6 +260,8 @@ void Objecter::handle_conf_change(const ConfigProxy& conf,
     extra_read_flags = CEPH_OSD_FLAG_LOCALIZE_READS;
   } else if (read_policy == "balance") {
     extra_read_flags = CEPH_OSD_FLAG_BALANCE_READS;
+  } else {
+    extra_read_flags = 0;
   }
 }
 
