@@ -62,12 +62,26 @@ namespace dedup{ class Background; }
 #endif
 namespace sal { class ConfigStore; }
 
+// Distinguishes how the RGW instance was constructed
+enum class InstanceType {
+  Daemon,   // Standalone daemon process (e.g., radosgw)
+  Library   // Library instance (e.g., librgw for NFS/SMB)
+};
+
+// Identifies the protocol/frontend being served
+enum class ProtocolType {
+  HTTP_S3,  // HTTP/S3 frontend (beast/civetweb) - daemon only
+  NFS,      // NFS protocol - library only
+  SMB       // SMB protocol - library only
+};
+
 class RGWLib;
 class AppMain {
   /* several components should be initalized only if librgw is
     * also serving HTTP */
   bool have_http_frontend{false};
-  bool nfs{false};
+  InstanceType instance_type{InstanceType::Daemon};
+  ProtocolType protocol_type{ProtocolType::HTTP_S3};
 
   std::vector<RGWFrontend*> fes;
   std::vector<RGWFrontendConfig*> fe_configs;
@@ -113,7 +127,14 @@ class AppMain {
   };
 
   IOContextPoolHolder context_pool;
+
 public:
+  // Helper methods for instance and protocol handling
+  bool is_library_instance() const;
+  bool is_http_protocol() const;
+  std::string get_config_prefix() const;
+  std::string get_frontend_name() const;
+
   AppMain(const DoutPrefixProvider* dpp);
   ~AppMain();
 
@@ -131,7 +152,8 @@ public:
     return ldh.get();
   }
 
-  void init_frontends1(bool nfs = false);
+  void init_frontends1(InstanceType inst_type = InstanceType::Daemon,
+                       ProtocolType proto_type = ProtocolType::HTTP_S3);
   void init_numa();
   int init_storage();
   void init_perfcounters();
