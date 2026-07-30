@@ -1,8 +1,7 @@
 ---
 name: "Check for missing .qa links"
 on:
-  pull_request:
-    # Run CI check only for branches which are active and a target for a PR
+  pull_request_target:
     branches:
       - main
       - umbrella
@@ -11,7 +10,6 @@ on:
     types:
       - opened
       - synchronize
-      - edited
       - reopened
 permissions:
   contents: read
@@ -36,6 +34,6 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           path: pull_request
 
-      - name: verify .qa links
-        run: ../main/src/script/verify-qa
-        working-directory: pull_request/
+      - name: Run verification script
+        run: |
+          ./main/src/script/verify-qa ./pull_request
