@@ -367,6 +367,13 @@ public:
 	if (pin.mapping.is_indirect()) {
 	  pin.mapping = co_await complete_mapping(t, std::move(pin.mapping));
 	}
+	// see read_pin: repair lazily-detected staleness in place; the
+	// loop-exit check shares a continuation with the use below
+        // (i.e. the check cannot go stale between here and the
+        // get_extent_if_linked() call)
+	while (t.is_lazy_read() && !pin.mapping.is_viewable()) {
+	  co_await pin.mapping.co_refresh();
+	}
 	SUBTRACET(seastore_tm, "{} {}~{}",
 	  t, pin.mapping, pin.partial_off, pin.partial_len);
 	auto ret = get_extent_if_linked(t, *(pin.mapping.direct_cursor));
@@ -387,13 +394,17 @@ public:
 	    pin.mapping.get_intermediate_length(),
 	    pin.maybe_get_direct_partial_off(),
 	    pin.partial_len,
-	    [laddr=pin.mapping.get_intermediate_base(),
+	    [this, &t, laddr=pin.mapping.get_intermediate_base(),
 	     maybe_init=std::move(maybe_init),
 	     child_pos=std::move(ret.get_child_pos())]
 	    (T &extent) mutable {
 	      assert(extent.is_logical());
 	      assert(!extent.has_laddr());
 	      assert(!extent.has_been_invalidated());
+	      if (unlikely(t.is_lazy_read() && child_pos.is_stale())) {
+		// see pin_to_extent: never link into an invalidated leaf
+		cache->throw_lazy_read_stale(t, *child_pos.get_parent());
+	      }
 	      child_pos.link_child(&extent);
 	      extent.set_laddr(laddr);
 	      maybe_init(extent);
@@ -451,6 +462,13 @@ public:
     SUBDEBUGT(seastore_tm, "{} {} 0x{:x}~0x{:x} direct_off=0x{:x} ...",
               t, T::TYPE, pin, partial_off, partial_len, direct_partial_off);
 
+    // Lazy readers: a concurrent commit may have replaced the cursor's
+    // leaf since the refresh above; repair in place (the cursor's laddr
+    // allows re-search).  The loop-exit check and the use below share one
+    // continuation, so the check cannot go stale in between.
+    while (t.is_lazy_read() && !pin.is_viewable()) {
+      co_await pin.co_refresh();
+    }
 
     // checking the lba child must be atomic with creating
     // and linking the absent child
@@ -1375,7 +1393,15 @@ private:
     Transaction &t,
     LBACursor &cursor)
   {
-    ceph_assert(cursor.is_viewable());
+    if (t.is_lazy_read()) {
+      // last line of defense: callers repair via refresh loops before
+      // getting here, but a commit may land between continuations
+      if (unlikely(!cursor.is_viewable())) {
+        cache->throw_lazy_read_stale(t, *cursor.parent);
+      }
+    } else {
+      ceph_assert(cursor.is_viewable());
+    }
     ceph_assert(cursor.ctx.trans.get_trans_id()
 		== t.get_trans_id());
     assert(!cursor.is_end());
@@ -1391,6 +1417,8 @@ private:
     LBACursorRef cursor,
     extent_types_t type)
   {
+    // background-transaction path (see cursor_to_extent_by_type)
+    assert(!t.is_lazy_read());
     assert(cursor->is_direct());
     // Note: pin might be a clone
     auto v = get_extent_if_linked(t, *cursor);
@@ -1642,7 +1670,10 @@ private:
     static_assert(is_logical_type(T::TYPE));
     // must be user-oriented required by maybe_init
     assert(is_user_transaction(t.get_src()));
-    assert(pin.is_viewable());
+    // Lazy readers may read from a superseded snapshot: the leaf buffer is
+    // preserved and (paddr, len, checksum) is self-consistent, so content
+    // reads are safe; structural use (link_child) is guarded below.
+    assert(pin.is_viewable() || t.is_lazy_read());
     auto direct_length = pin.get_intermediate_length();
     if (full_extent_integrity_check) {
       direct_partial_off = 0;
@@ -1663,12 +1694,17 @@ private:
       partial_len,
       // extent_init_func
       seastar::coroutine::lambda(
-        [laddr=pin.get_intermediate_base(),
+        [this, &t, laddr=pin.get_intermediate_base(),
         maybe_init=std::move(maybe_init),
         child_pos=std::move(child_pos)] (T &extent) mutable {
           assert(extent.is_logical());
           assert(!extent.has_laddr());
           assert(!extent.has_been_invalidated());
+          if (unlikely(t.is_lazy_read() && child_pos.is_stale())) {
+            // defensive: link_child into an invalidated leaf would
+            // corrupt the successor's child tracking
+            cache->throw_lazy_read_stale(t, *child_pos.get_parent());
+          }
           child_pos.link_child(&extent);
           extent.set_laddr(laddr);
           maybe_init(extent);

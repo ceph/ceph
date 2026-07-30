@@ -22,6 +22,12 @@ public:
   btreenode_pos_t get_pos() {
     return pos;
   }
+  /// true if the tracked stable parent has been invalidated by a
+  /// concurrent commit (only possible for lazy-read transactions)
+  bool is_stale() const {
+    ceph_assert(stable_parent);
+    return !stable_parent->is_valid();
+  }
   template <typename ChildT>
   void link_child(ChildT *c) {
     get_parent()->link_child(c, pos);
@@ -267,6 +273,18 @@ public:
     Transaction &, CachedExtent&) = 0;
   virtual CachedExtentRef peek_extent_viewable_by_trans(
     Transaction &t, CachedExtentRef extent) = 0;
+  /**
+   * For lazy-read transactions (Transaction::is_lazy_read()), throws the
+   * standard transaction-conflict interruption if 'extent' has been
+   * invalidated by a concurrent commit; no-op otherwise.
+   *
+   * NOTE: a staleness check is only valid within a single seastar
+   * continuation -- any co_await/si_then boundary invalidates it.  Callers
+   * must re-check at the top of every continuation that resumes holding a
+   * node reference captured across an await.
+   */
+  virtual void maybe_throw_lazy_read_stale(
+    Transaction &t, CachedExtent &extent) = 0;
   virtual ~ExtentTransViewRetriever() {}
 protected:
   virtual get_child_iertr::future<CachedExtentRef> get_extent_viewable_by_trans(
@@ -1097,6 +1115,9 @@ public:
     ExtentTransViewRetriever &etvr)
   {
     auto &me = down_cast();
+    // an INVALID extent has its parent_tracker reset; lazy readers must
+    // retry instead of tripping the asserts below
+    etvr.maybe_throw_lazy_read_stale(t, me);
     if (this->has_parent_tracker()) {
       return this->_get_parent_node(t, etvr, me.get_begin());
     } else {
@@ -1142,7 +1163,11 @@ private:
   {
     return etvr.maybe_wait_accessible(
       t, *this->peek_parent_node()
-    ).si_then([&t, key, this] {
+    ).si_then([&t, key, this, &etvr] {
+      // this (child) may have been invalidated by a concurrent commit
+      // while awaiting maybe_wait_accessible(); re-check before touching
+      // the (possibly reset) parent tracker.
+      etvr.maybe_throw_lazy_read_stale(t, down_cast());
       auto parent = this->peek_parent_node();
       return parent->resolve_transaction(t, key).second;
     });

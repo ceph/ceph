@@ -222,6 +222,12 @@ BtreeLBAManager::get_cursor(
  * get_cursor (by extent): navigates from the data extent up to its parent
  * leaf node via get_parent_node(), then constructs a cursor at the extent's
  * laddr.  Avoids a full root-to-leaf tree traversal.
+ *
+ * Note: logical extents are always registered in the read_set (they are
+ * not covered by lazy-read conflict detection), so under lazy mode an
+ * invalidated extent still conflicts the reader eagerly and this path
+ * never observes it; the get_parent_node() call is additionally guarded
+ * for lazy readers.
  */
 BtreeLBAManager::get_cursor_ret
 BtreeLBAManager::get_cursor(

@@ -66,6 +66,17 @@ bool BtreeCursor<key_t, val_t, ParentT>::is_viewable() const {
   return viewable;
 }
 
+template <typename key_t, typename val_t, typename ParentT>
+void BtreeCursor<key_t, val_t, ParentT>::check_viewable() const {
+  if (ctx.trans.is_lazy_read() && unlikely(!is_viewable())) {
+    // lazy READ: non-viewable implies the parent leaf was
+    // invalidated by a concurrent commit -- retry via eagain.
+    // Non-lazy transactions have the node in their read set, so
+    // the conflict is caught at submit time.
+    ctx.cache.throw_lazy_read_stale(ctx.trans, *parent);
+  }
+}
+
 template struct BtreeCursor<laddr_t, lba::lba_map_val_t, lba::LBALeafNode>;
 template struct BtreeCursor<paddr_t, backref::backref_map_val_t, backref::BackrefLeafNode>;
 

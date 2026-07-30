@@ -435,25 +435,25 @@ struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t, LBALeafNode> {
   using Base = BtreeCursor<laddr_t, lba::lba_map_val_t, LBALeafNode>;
   using Base::BtreeCursor;
   bool is_indirect() const {
-    assert(is_viewable());
+    assert(is_viewable() || ctx.trans.is_lazy_read());
     return !is_end() && iter.get_val().pladdr.is_laddr();
   }
   bool is_direct() const {
-    assert(is_viewable());
+    assert(is_viewable() || ctx.trans.is_lazy_read());
     return !is_end() && iter.get_val().pladdr.is_paddr();
   }
   laddr_t get_laddr() const {
     return key;
   }
   paddr_t get_paddr() const {
-    assert(is_viewable());
+    assert(is_viewable() || ctx.trans.is_lazy_read());
     assert(!is_indirect());
     assert(!is_end());
     auto ret = iter.get_val().pladdr.get_paddr();
     return ret.maybe_relative_to(parent->get_paddr());
   }
   laddr_t get_intermediate_key() const {
-    assert(is_viewable());
+    assert(is_viewable() || ctx.trans.is_lazy_read());
     assert(is_indirect());
     assert(!is_end());
     if (likely(!hobject_t::is_temp_pool(get_key().get_pool()))) {
@@ -465,22 +465,22 @@ struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t, LBALeafNode> {
     }
   }
   checksum_t get_checksum() const {
-    assert(is_viewable());
+    assert(is_viewable() || ctx.trans.is_lazy_read());
     assert(!is_end());
     return iter.get_val().checksum;
   }
   bool contains(laddr_t laddr) const {
-    assert(is_viewable());
+    assert(is_viewable() || ctx.trans.is_lazy_read());
     return get_laddr() <= laddr && get_laddr() + get_length() > laddr;
   }
   extent_ref_count_t get_refcount() const {
-    assert(is_viewable());
+    assert(is_viewable() || ctx.trans.is_lazy_read());
     assert(!is_end());
     return iter.get_val().refcount;
   }
 
   extent_types_t get_extent_type() const {
-    assert(is_viewable());
+    assert(is_viewable() || ctx.trans.is_lazy_read());
     assert(!is_end());
     assert(iter.get_val().type != extent_types_t::NONE);
     return iter.get_val().type;
