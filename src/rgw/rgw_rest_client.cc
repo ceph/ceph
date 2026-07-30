@@ -8,7 +8,6 @@
 #include "rgw_http_errors.h"
 
 #include "common/strtol.h"
-#include "include/str_list.h"
 #include "rgw_crypt_sanitize.h"
 
 #define dout_context g_ceph_context
@@ -280,18 +279,26 @@ static string extract_region_name(std::string_view s)
   return std::string{s};
 }
 
-static std::string_view next_host_label(std::string_view& host)
+static std::string_view next_dot_token(std::string_view& str)
 {
-  const auto sep = host.find('.');
-  const auto label = host.substr(0, sep);
-
-  if (sep == host.npos) {
-    host = {};
-    return label;
+  const auto first = str.find_first_not_of('.');
+  if (first == str.npos) {
+    str = {};
+    return {};
   }
 
-  host.remove_prefix(sep + 1);
-  return label;
+  str.remove_prefix(first);
+
+  const auto sep = str.find('.');
+  const auto token = str.substr(0, sep);
+
+  if (sep == str.npos) {
+    str = {};
+    return token;
+  }
+
+  str.remove_prefix(sep + 1);
+  return token;
 }
 
 static bool identify_scope(const DoutPrefixProvider *dpp,
@@ -310,7 +317,7 @@ static bool identify_scope(const DoutPrefixProvider *dpp,
 
   auto labels = std::string_view{host};
   while (!labels.empty()) {
-    const auto s = next_host_label(labels);
+    const auto s = next_dot_token(labels);
     if (s == "s3" ||
         s == "execute-api" ||
         s == "iam") {
@@ -321,7 +328,7 @@ static bool identify_scope(const DoutPrefixProvider *dpp,
         ldpp_dout(dpp, 0) << "WARNING: cannot identify region name from host name: " << host << dendl;
         return false;
       }
-      const auto next = next_host_label(labels);
+      const auto next = next_dot_token(labels);
       if (next == "amazonaws") {
         *region = "us-east-1";
         return true;
@@ -598,8 +605,8 @@ static bool is_x_amz(const string& s) {
 
 void RGWRESTGenerateHTTPHeaders::set_extra_headers(const map<string, string>& extra_headers)
 {
-  for (auto iter : extra_headers) {
-    const string& name = lowercase_dash_http_attr(iter.first);
+  for (const auto& iter : extra_headers) {
+    const auto name = lowercase_dash_http_attr(iter.first);
     new_env->set(name, iter.second.c_str());
     if (is_x_amz(name)) {
       new_info->x_meta_map[name] = iter.second;
@@ -739,36 +746,40 @@ void RGWRESTStreamS3PutObj::put_obj_init(const DoutPrefixProvider *dpp, RGWAcces
   send_ready(dpp, key, attrs);
 }
 
-void set_str_from_headers(map<string, string>& out_headers, const string& header_name, string& str)
+static const string& get_header_value_or_empty(const map<string, string>& out_headers,
+                                               const string& header_name)
 {
-  map<string, string>::iterator iter = out_headers.find(header_name);
+  const auto iter = out_headers.find(header_name);
   if (iter != out_headers.end()) {
-    str = iter->second;
-  } else {
-    str.clear();
+    return iter->second;
   }
+
+  static const string empty;
+  return empty;
 }
 
-static int parse_rgwx_mtime(const DoutPrefixProvider *dpp, CephContext *cct, const string& s, ceph::real_time *rt)
+static int parse_rgwx_mtime(const DoutPrefixProvider *dpp,
+                            const string& s,
+                            ceph::real_time *rt)
 {
   string err;
-  vector<string> vec;
+  auto tokens = std::string_view{s};
+  const auto secs_str = next_dot_token(tokens);
 
-  get_str_vec(s, ".", vec);
-
-  if (vec.empty()) {
+  if (secs_str.empty()) {
     return -EINVAL;
   }
 
-  long secs = strict_strtol(vec[0].c_str(), 10, &err);
+  const long secs = strict_strtol(secs_str, 10, &err);
   long nsecs = 0;
   if (!err.empty()) {
     ldpp_dout(dpp, 0) << "ERROR: failed converting mtime (" << s << ") to real_time " << dendl;
     return -EINVAL;
   }
 
-  if (vec.size() > 1) {
-    nsecs = strict_strtol(vec[1].c_str(), 10, &err);
+  const auto nsecs_str = next_dot_token(tokens);
+  if (!nsecs_str.empty()) {
+    nsecs = strict_strtol(nsecs_str, 10, &err);
     if (!err.empty()) {
       ldpp_dout(dpp, 0) << "ERROR: failed converting mtime (" << s << ") to real_time " << dendl;
       return -EINVAL;
@@ -782,11 +793,12 @@ static int parse_rgwx_mtime(const DoutPrefixProvider *dpp, CephContext *cct, con
 
 static void send_prepare_convert(const rgw_obj& obj, string *resource)
 {
-  string urlsafe_bucket, urlsafe_object;
-  url_encode(obj.bucket.get_key(':', 0), urlsafe_bucket);
+  resource->clear();
+  url_encode(obj.bucket.get_key(':', 0), *resource);
+  resource->append("/");
+
   // do not encode slash. It leads to 404 errors when fetching objects inside folders.
-  url_encode(obj.key.name, urlsafe_object, false);
-  *resource = urlsafe_bucket + "/" + urlsafe_object;
+  url_encode(obj.key.name, *resource, false);
 }
 
 int RGWRESTStreamRWRequest::send_request(const DoutPrefixProvider *dpp, RGWAccessKey& key, map<string, string>& extra_headers, const rgw_obj& obj, RGWHTTPManager *mgr)
@@ -934,14 +946,13 @@ int RGWHTTPStreamRWRequest::complete_request(const DoutPrefixProvider* dpp,
   unique_lock guard(out_headers_lock);
 
   if (etag) {
-    set_str_from_headers(out_headers, "ETAG", *etag);
+    *etag = get_header_value_or_empty(out_headers, "ETAG");
   }
   if (status >= 0) {
     if (mtime) {
-      string mtime_str;
-      set_str_from_headers(out_headers, "RGWX_MTIME", mtime_str);
+      const auto& mtime_str = get_header_value_or_empty(out_headers, "RGWX_MTIME");
       if (!mtime_str.empty()) {
-        int ret = parse_rgwx_mtime(this, cct, mtime_str, mtime);
+        int ret = parse_rgwx_mtime(this, mtime_str, mtime);
         if (ret < 0) {
           return ret;
         }
@@ -950,10 +961,9 @@ int RGWHTTPStreamRWRequest::complete_request(const DoutPrefixProvider* dpp,
       }
     }
     if (psize) {
-      string size_str;
-      set_str_from_headers(out_headers, "RGWX_OBJECT_SIZE", size_str);
+      const auto& size_str = get_header_value_or_empty(out_headers, "RGWX_OBJECT_SIZE");
       string err;
-      *psize = strict_strtoll(size_str.c_str(), 10, &err);
+      *psize = strict_strtoll(size_str, 10, &err);
       if (!err.empty()) {
         ldpp_dout(this, 0) << "ERROR: failed parsing embedded metadata object size (" << size_str << ") to int " << dendl;
         return -EIO;
