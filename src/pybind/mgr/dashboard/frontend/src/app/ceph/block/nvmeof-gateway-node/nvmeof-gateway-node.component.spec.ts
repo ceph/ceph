@@ -1,7 +1,7 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { ActivatedRoute } from '@angular/router';
-import { BehaviorSubject, of, throwError } from 'rxjs';
+import { BehaviorSubject, Subject, of, throwError } from 'rxjs';
 
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -240,7 +240,7 @@ describe('NvmeofGatewayNodeComponent', () => {
     expect(context.error).toHaveBeenCalled();
   }));
 
-  it('should not re-fetch if already loading', fakeAsync(() => {
+  it('should not re-fetch if already loading (queues pendingHostReload instead)', fakeAsync(() => {
     component.isLoadingHosts = true;
     spyOn(nvmeofService, 'getAvailableHosts');
 
@@ -248,7 +248,131 @@ describe('NvmeofGatewayNodeComponent', () => {
 
     tick(100);
     expect(nvmeofService.getAvailableHosts).not.toHaveBeenCalled();
+    expect((component as any).pendingHostReload).toBe(true);
   }));
+
+  describe('pendingHostReload race condition', () => {
+    const mockTable = () =>
+      ({
+        refreshBtn: jasmine.createSpy('refreshBtn'),
+        model: null,
+        updateSelection: { emit: jasmine.createSpy('emit') }
+      }) as any;
+
+    it('should set pendingHostReload when getHosts is called while a fetch is in-flight', fakeAsync(() => {
+      const delayed$ = new Subject<any>();
+      spyOn(nvmeofService, 'getAvailableHosts').and.returnValue(delayed$.asObservable());
+
+      component.getHosts(new CdTableFetchDataContext(() => undefined));
+      expect(component.isLoadingHosts).toBe(true);
+
+      // Second call while in-flight must not start another request
+      component.getHosts(new CdTableFetchDataContext(() => undefined));
+      expect((component as any).pendingHostReload).toBe(true);
+      expect(nvmeofService.getAvailableHosts).toHaveBeenCalledTimes(1);
+
+      delayed$.next([]);
+      delayed$.complete();
+      tick();
+    }));
+
+    it('should clear pendingHostReload flag and proceed with a fresh fetch', fakeAsync(() => {
+      spyOn(nvmeofService, 'getAvailableHosts').and.returnValue(of([]));
+      component.preSelectedHostnames = [];
+      component.getHosts(new CdTableFetchDataContext(() => undefined));
+      tick(100);
+      expect(component.isLoadingHosts).toBe(false);
+      expect((component as any).pendingHostReload).toBe(false);
+    }));
+
+    it('should apply preselection after the retry fetch completes', fakeAsync(() => {
+      component.mode = 'selector' as any;
+      component.preSelectedHostnames = ['gateway-node-1'];
+      component.table = mockTable();
+
+      spyOn(nvmeofService, 'fetchHostsAndGroups').and.returnValue(
+        of({ groups: [[]], hosts: mockGatewayNodes } as any)
+      );
+
+      component.getHosts(new CdTableFetchDataContext(() => undefined));
+      tick(100);
+
+      const hostnames = component.hosts.map((h) => h.hostname);
+      expect(hostnames).toContain('gateway-node-1');
+      expect(component.selection.selected.map((h: any) => h.hostname)).toEqual(['gateway-node-1']);
+    }));
+
+    it('should not re-invoke getHosts when destroyed while pendingHostReload is true', fakeAsync(() => {
+      const delayed$ = new Subject<any>();
+      spyOn(nvmeofService, 'getAvailableHosts').and.returnValue(delayed$.asObservable());
+
+      component.getHosts(new CdTableFetchDataContext(() => undefined));
+      expect(component.isLoadingHosts).toBe(true);
+
+      // Queue a reload while the first request is still in-flight
+      component.getHosts(new CdTableFetchDataContext(() => undefined));
+      expect((component as any).pendingHostReload).toBe(true);
+
+      // Spy after setup so we only catch a post-destroy finalize() retry.
+      const getHostsSpy = spyOn(component, 'getHosts').and.callThrough();
+
+      // Destroy must clear the flag before unsubscribe so finalize() does not
+      // start a new subscription on the destroyed component.
+      component.ngOnDestroy();
+      tick();
+
+      expect((component as any).pendingHostReload).toBe(false);
+      expect(getHostsSpy).not.toHaveBeenCalled();
+    }));
+
+    it('should discard stale create-mode response and re-fetch with preselection when it arrives mid-flight', fakeAsync(() => {
+      // Race: table mounts and starts create-mode fetch (no preselection yet).
+      // Parent then loads the service and sets preSelectedHostnames → refresh
+      // while the first request is still in-flight.
+      component.mode = 'selector' as any;
+      component.preSelectedHostnames = [];
+      component.table = mockTable();
+
+      const firstFetch$ = new Subject<any>();
+      const getAvailableSpy = spyOn(nvmeofService, 'getAvailableHosts').and.returnValue(
+        firstFetch$.asObservable()
+      );
+      const fetchHostsAndGroupsSpy = spyOn(nvmeofService, 'fetchHostsAndGroups').and.returnValue(
+        of({ groups: [[]], hosts: mockGatewayNodes } as any)
+      );
+
+      // 1) Initial create-mode fetch starts (available hosts only)
+      component.getHosts(new CdTableFetchDataContext(() => undefined));
+      expect(component.isLoadingHosts).toBe(true);
+      expect(getAvailableSpy).toHaveBeenCalledTimes(1);
+      expect(fetchHostsAndGroupsSpy).not.toHaveBeenCalled();
+
+      // 2) Preselection arrives mid-flight (simulates parent populateFormFromService
+      //    → ngOnChanges → table.refreshBtn → getHosts)
+      component.preSelectedHostnames = ['gateway-node-1'];
+      component.getHosts(new CdTableFetchDataContext(() => undefined));
+      expect((component as any).pendingHostReload).toBe(true);
+      // Still only the original in-flight request
+      expect(getAvailableSpy).toHaveBeenCalledTimes(1);
+
+      // 3) Stale create-mode response arrives — must be discarded
+      firstFetch$.next([mockGatewayNodes[2]]); // unrelated available host
+      firstFetch$.complete();
+      tick();
+
+      // 4) Retry uses edit-mode fetch and applies preselection without needing
+      //    another ngOnChanges cycle
+      expect(fetchHostsAndGroupsSpy).toHaveBeenCalledTimes(1);
+      expect((component as any).pendingHostReload).toBe(false);
+      expect(component.isLoadingHosts).toBe(false);
+
+      const hostnames = component.hosts.map((h) => h.hostname);
+      expect(hostnames).toContain('gateway-node-1');
+      // Stale create-mode payload must not be what we kept
+      expect(component.hosts).not.toEqual([mockGatewayNodes[2]]);
+      expect(component.selection.selected.map((h: any) => h.hostname)).toEqual(['gateway-node-1']);
+    }));
+  });
 
   it('should unsubscribe on component destroy', fakeAsync(() => {
     spyOn(hostService, 'list').and.returnValue(of([]));
