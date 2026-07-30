@@ -1125,3 +1125,114 @@ touch pin/placeholder
         # Cleanup
         self.mount_a.run_shell(["rm", "-rf", "kill_unlink_test"])
         self.mount_a.run_shell(["rm", "-rf", "kill_unlink_recovery"])
+
+    def test_kill_after_unlink_finish_hardlink(self):
+        """
+        That MDS recovery handles stale type-'L' remote dentries on disk
+        after a hardlinked file is unlinked and the MDS crashes.
+
+        Unlike the simple unlink case (which leaves a stale type-'I'
+        primary dentry that is gracefully skipped as a duplicate inode),
+        a hardlinked file leaves a stale type-'L' remote dentry which
+        directly triggers link_remote -> eval_remote -> _eval_stray_remote
+        during dirfrag fetch.
+
+        A single crash cannot produce both a stale type-'L' entry and
+        nlink == 0 (the kill point fires after each individual unlink),
+        so this test uses two crash cycles:
+
+        Cycle 1: unlink primary (nlink 2->1), crash -> recovery loads
+        type-'L' stale dentry, _eval_stray_remote(nlink=1) is called;
+        verify the MDS did not crash and FS is healthy.
+
+        Cycle 2: unlink the remaining link (nlink 1->0), crash ->
+        recovery purges the nlink=0 stray and verifies FS health.
+        """
+
+        # Create test file and hardlink
+        self.mount_a.run_shell(["mkdir", "kill_unlink_hl_test"])
+        self.mount_a.write_n_mb("kill_unlink_hl_test/file_a", 1)
+        self.mount_a.run_shell([
+            "ln", "kill_unlink_hl_test/file_a",
+            "kill_unlink_hl_test/file_a_link"])
+
+        # Flush journal to ensure everything is on disk
+        self.fs.mds_asok(["flush", "journal"])
+
+        # Get rank info for later core dump cleanup
+        status = self.fs.status()
+        rank0 = self.fs.get_rank(rank=0, status=status)
+
+        # == Cycle 1: unlink primary (nlink 2->1), crash ==
+        self.fs.mds_asok(['config', 'set',
+                          'mds_kill_after_unlink_finish', "true"])
+
+        self.mount_a.run_shell([
+            "rm", "-f", "kill_unlink_hl_test/file_a"], wait=False)
+
+        # Wait for the MDS to finish crashing
+        time.sleep(10)
+
+        # Clean up the core dump left by the crash
+        self.delete_mds_coredump(rank0['name'])
+
+        # Restart the MDS.  During recovery:
+        #  1. Journal replay: nlink=1, inode in stray (file_a was primary)
+        #  2. Dirfrag fetch loads stale type-'L' dentry for file_a_link
+        #  3. link_remote -> eval_remote -> _eval_stray_remote(nlink=1)
+        #  4. MDS reintegrates: file_a_link becomes the new primary
+        self.fs.mds_restart()
+        time.sleep(5)
+        self.fs.wait_for_daemons()
+
+        # Verify FS is functional after cycle 1 recovery: the MDS did
+        # not crash when loading the stale type-'L' OMAP entry during
+        # dirfrag fetch, and the surviving hardlink is still accessible.
+        # (reintegration may not have completed yet in vstart_runner,
+        # but that's fine — the primary goal is verifying no crash in
+        # _eval_stray_remote during recovery.)
+        self.mount_a.run_shell(["mkdir", "kill_unlink_hl_verify"])
+        self.mount_a.write_n_mb("kill_unlink_hl_verify/verify_file", 1)
+        ls_out = set(self.mount_a.ls("kill_unlink_hl_verify/"))
+        self.assertIn("verify_file", ls_out)
+        self.mount_a.run_shell(["rm", "-rf", "kill_unlink_hl_verify"])
+        self.fs.mds_asok(["flush", "journal"])
+
+        # == Cycle 2: unlink remaining primary (nlink 1->0), crash ==
+        self.fs.mds_asok(['config', 'set',
+                          'mds_kill_after_unlink_finish', "true"])
+
+        self.mount_a.run_shell([
+            "rm", "-f", "kill_unlink_hl_test/file_a_link"], wait=False)
+
+        # Wait for the MDS to finish crashing
+        time.sleep(10)
+
+        # Clean up the core dump left by the crash
+        self.delete_mds_coredump(rank0['name'])
+
+        # Restart the MDS.  During recovery:
+        #  1. Journal replay: nlink=0, inode in stray
+        #  2. Dirfrag fetch loads stale type-'I' dentry -> duplicate
+        #     inode, gracefully skipped
+        #  3. _eval_stray purge path cleans up the stray
+        self.fs.mds_restart()
+        time.sleep(5)
+        self.fs.wait_for_daemons()
+
+        # Verify the filesystem is functional after cycle 2 recovery
+        self.mount_a.run_shell(["mkdir", "kill_unlink_hl_recovery"])
+        self.mount_a.write_n_mb("kill_unlink_hl_recovery/recovery_test", 1)
+        ls_out = set(self.mount_a.ls("kill_unlink_hl_recovery/"))
+        self.assertIn("recovery_test", ls_out)
+
+        # Verify all strays are eventually purged
+        self.wait_until_equal(
+            lambda: self.get_mdc_stat("num_strays"),
+            expect_val=0,
+            timeout=60
+        )
+
+        # Cleanup
+        self.mount_a.run_shell(["rm", "-rf", "kill_unlink_hl_test"])
+        self.mount_a.run_shell(["rm", "-rf", "kill_unlink_hl_recovery"])

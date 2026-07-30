@@ -8788,14 +8788,16 @@ void Server::_unlink_local_finish(const MDRequestRef& mdr,
   // This reproduces the stale remote dentry crash in _eval_stray_remote
   // on recovery (tracker 62663).
   //
-  // Test procedure:
+  // Test procedure (hardlink scenario):
   //   1. set mds_kill_after_unlink_finish = true
   //   2. create a file with primary + remote hardlinks (nlink >= 2)
-  //   3. unlink all hardlinks (nlink drops to 0)
-  //   4. the last unlink triggers this assertion; MDS crashes
-  //   5. restart MDS → journal replay restores nlink=0 + stray location
-  //   6. stale remote dentry on disk triggers eval_remote →
-  //      _eval_stray_remote → fixed code handles nlink==0 without crash
+  //   3. unlink the primary → nlink drops to 1, MDS crashes
+  //   4. restart MDS → journal replay restores nlink=1 + stray location,
+  //      stale type-'L' remote dentry on disk triggers eval_remote →
+  //      _eval_stray_remote(nlink=1) → reintegrates; FS is healthy
+  //   5. set mds_kill_after_unlink_finish = true again
+  //   6. unlink the remaining primary link → nlink drops to 0, MDS crashes
+  //   7. restart MDS → nlink=0 stray is purged; verify FS functional
   if (unlikely(g_conf()->mds_kill_after_unlink_finish)) {
     ceph_abort_msg(
         "mds_kill_after_unlink_finish is set; "
