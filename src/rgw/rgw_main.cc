@@ -110,7 +110,7 @@ int main(int argc, char *argv[])
 
   LinuxKeyringSecret::initialize_process_keyring();
 
-  main.init_frontends1(false /* nfs */);
+  main.init_frontends1(rgw::InstanceType::Daemon, rgw::ProtocolType::HTTP_S3);
   main.init_numa();
 
   if (g_conf()->daemonize) {
