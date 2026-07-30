@@ -11,6 +11,7 @@ Run with:
     /tmp/ptl-test-venv/bin/pip install GitPython python-redmine requests pytest
     /tmp/ptl-test-venv/bin/pytest src/script/test_ptl_tool.py -v
 """
+import builtins
 import importlib.util
 import logging
 import sys
@@ -136,3 +137,83 @@ def test_post_consolidated_review_noop_when_no_issues(ptl_tool):
     session = mock.Mock()
     report.post_consolidated_review(session, pr=12345, dry_run=False)
     session.post.assert_not_called()
+
+
+def test_log_flag_adds_filehandler(ptl_tool, tmp_path, monkeypatch):
+    """Without a label, the log file should be the generic ptl-tool.log in cwd."""
+    logger = ptl_tool.log
+    handlers_before = list(logger.handlers)
+    monkeypatch.chdir(tmp_path)
+    try:
+        ret = ptl_tool.add_file_log_handler(logger)
+
+        file_handlers = [
+            h for h in logger.handlers
+            if isinstance(h, logging.FileHandler)
+        ]
+        assert len(file_handlers) == 1
+        expected = str(tmp_path / 'ptl-tool.log')
+        assert file_handlers[0].baseFilename == expected
+        assert ret == expected
+    finally:
+        logger.handlers = handlers_before
+
+
+def test_log_flag_uses_label_for_filename(ptl_tool, tmp_path, monkeypatch):
+    """When a label is provided, the log file should be <label>.log in cwd."""
+    logger = ptl_tool.log
+    handlers_before = list(logger.handlers)
+    monkeypatch.chdir(tmp_path)
+    try:
+        ptl_tool.add_file_log_handler(logger, label='wip-bharath8-testing')
+
+        file_handlers = [
+            h for h in logger.handlers
+            if isinstance(h, logging.FileHandler)
+        ]
+        assert len(file_handlers) == 1
+        assert file_handlers[0].baseFilename == str(
+            tmp_path / 'wip-bharath8-testing.log')
+    finally:
+        logger.handlers = handlers_before
+
+
+def test_prompt_logged_exactly_once(ptl_tool, tmp_path, monkeypatch):
+    """logged_input() must record the prompt exactly once in the log file."""
+    logger = ptl_tool.log
+    handlers_before = list(logger.handlers)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(builtins, "input", lambda prompt='': 'the-answer')
+    try:
+        log_path = ptl_tool.add_file_log_handler(logger, label="prompt-once")
+        result = ptl_tool.logged_input("ask> ")
+        assert result == "the-answer"
+    finally:
+        logger.handlers = handlers_before
+
+    contents = Path(log_path).read_text()
+    assert "ask> the-answer" in contents
+    assert contents.count("ask> ") == 1
+
+
+def test_logged_input_records_prompt_and_response_with_filehandler(ptl_tool, tmp_path, monkeypatch):
+    """logged_input() should capture both prompt text and typed response."""
+    logger = ptl_tool.log
+    handlers_before = list(logger.handlers)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(builtins, "input", lambda prompt='': 'user-answer')
+    try:
+        log_path = ptl_tool.add_file_log_handler(logger, label="capture")
+        result = ptl_tool.logged_input("prompt> ")
+        assert result == "user-answer"
+    finally:
+        logger.handlers = handlers_before
+
+    contents = Path(log_path).read_text()
+    assert "prompt> user-answer" in contents
+
+
+def test_logged_input_without_filehandler_preserves_behavior(ptl_tool, monkeypatch):
+    """Without a FileHandler, logged_input() should behave like plain input()."""
+    monkeypatch.setattr(builtins, "input", lambda prompt='': 'plain-answer')
+    assert ptl_tool.logged_input("plain> ") == "plain-answer"
