@@ -1134,6 +1134,7 @@ TEST_P(StoreTest, WriteMustExistSuccess) {
   int r;
   coll_t cid;
   ghobject_t hoid(hobject_t("test_obj", "", CEPH_NOSNAP, 0, 0, ""));
+  auto ch = store->create_new_collection(cid);
   // Create object
   {
     ObjectStore::Transaction t;
@@ -1157,6 +1158,11 @@ TEST_P(StoreTest, WriteMustExistFailure) {
   int r;
   coll_t cid;
   ghobject_t hoid(hobject_t("nonexistent_obj", "", CEPH_NOSNAP, 0, 0, ""));
+  auto ch = store->create_new_collection(cid);
+
+  SetVal(g_conf(), "objectstore_debug_throw_on_failed_txc", "true");
+  g_conf().apply_changes(nullptr);
+
   // Create collection but not the object
   {
     ObjectStore::Transaction t;
@@ -1164,14 +1170,18 @@ TEST_P(StoreTest, WriteMustExistFailure) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  // Write with MUST_EXIST should fail as no object is write
+  // Write with MUST_EXIST should fail with ENOENT since the object does not exist
   {
     ObjectStore::Transaction t;
     bufferlist bl;
     bl.append("test_data");
     t.write(cid, hoid, 0, bl.length(), bl, CEPH_OSD_OP_FLAG_MUST_EXIST);
-    r = queue_transaction(store, ch, std::move(t));
-    ASSERT_EQ(r, -ENOENT);
+    try {
+      queue_transaction(store, ch, std::move(t));
+      FAIL() << "write with MUST_EXIST on non-existent object should have thrown ENOENT";
+    } catch (int err) {
+      ASSERT_EQ(err, -ENOENT);
+    }
   }
 }
 
@@ -1180,6 +1190,7 @@ TEST_P(StoreTest, WriteMustExistWithFadvise) {
   int r;
   coll_t cid;
   ghobject_t hoid(hobject_t("test_obj", "", CEPH_NOSNAP, 0, 0, ""));
+  auto ch = store->create_new_collection(cid);
   {
     ObjectStore::Transaction t;
     t.create_collection(cid, 0);
