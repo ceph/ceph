@@ -65,7 +65,8 @@ class HealthTest(DashboardTestCase):
         'ever_allowed_features': int,
         'root': int,
         'qdb_leader': int,
-        'qdb_cluster': JList(int)
+        'qdb_cluster': JList(int),
+        'standby_enable_host_anti_affinity': bool
     })
 
     def test_minimal_health(self):
