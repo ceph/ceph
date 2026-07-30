@@ -1705,3 +1705,66 @@ TEST(PerfCounters, Histograms1D) {
 )", msg);
 }
 
+
+enum {
+  TEST_PERFCOUNTERS_MIXED_FIRST = 900,
+  TEST_PERFCOUNTERS_MIXED_SCALAR,
+  TEST_PERFCOUNTERS_MIXED_HIST,
+  TEST_PERFCOUNTERS_MIXED_LAST,
+};
+
+// Test the histogram selection logic
+static void setup_test_mixed_counters(CephContext* cct) {
+  PerfCountersBuilder bld(cct, "test_perfcounter_mixed",
+      TEST_PERFCOUNTERS_MIXED_FIRST, TEST_PERFCOUNTERS_MIXED_LAST);
+  bld.add_u64_counter(TEST_PERFCOUNTERS_MIXED_SCALAR, "scalar_counter",
+                      "A plain scalar counter");
+  bld.add_time_histogram(TEST_PERFCOUNTERS_MIXED_HIST, "hist_counter",
+                         PerfHistogramCommon::axis_config_d::web_latency("lat"),
+                         "A latency histogram");
+  cct->get_perfcounters_collection()->add(bld.create_perf_counters());
+}
+
+TEST(PerfCounters, HistogramSelection) {
+  g_ceph_context->get_perfcounters_collection()->clear();
+  setup_test_mixed_counters(g_ceph_context);
+
+  AdminSocketClient client(get_rand_socket_path());
+  std::string msg;
+
+  auto has = [](const std::string& haystack, const char* needle) {
+    return haystack.find(needle) != std::string::npos;
+  };
+
+  // `perf histogram dump` predates the flag and must stay histogram-only
+  ASSERT_EQ("", client.do_request(
+      R"({ "prefix": "perf histogram dump", "format": "raw" })", &msg));
+  ASSERT_FALSE(has(msg, "scalar_counter"));
+  ASSERT_TRUE(has(msg, "hist_counter"));
+  ASSERT_EQ("", client.do_request(
+      R"({ "prefix": "perf dump", "format": "raw" })", &msg));
+  ASSERT_TRUE(has(msg, "scalar_counter"));
+  ASSERT_FALSE(has(msg, "hist_counter"));
+
+  // plain `counter dump` does not dump histograms by default
+  ASSERT_EQ("", client.do_request(
+      R"({ "prefix": "counter dump", "format": "raw" })", &msg));
+  ASSERT_TRUE(has(msg, "scalar_counter"));
+  ASSERT_FALSE(has(msg, "hist_counter"));
+  ASSERT_EQ("", client.do_request(
+      R"({ "prefix": "counter schema", "format": "raw" })", &msg));
+  ASSERT_TRUE(has(msg, "scalar_counter"));
+  ASSERT_FALSE(has(msg, "hist_counter"));
+
+  // --histograms adds histograms to the scalar output
+  ASSERT_EQ("", client.do_request(
+      R"({ "prefix": "counter dump", "histograms": true, "format": "raw" })", &msg));
+  ASSERT_TRUE(has(msg, "scalar_counter"));
+  ASSERT_TRUE(has(msg, "hist_counter"));
+  ASSERT_EQ("", client.do_request(
+      R"({ "prefix": "counter schema", "histograms": true, "format": "raw" })", &msg));
+  ASSERT_TRUE(has(msg, "scalar_counter"));
+  ASSERT_TRUE(has(msg, "hist_counter"));
+
+  g_ceph_context->get_perfcounters_collection()->clear();
+}

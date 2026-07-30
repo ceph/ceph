@@ -63,6 +63,13 @@ enum class select_labeled_t {
   unlabeled
 };
 
+/// Used to specify how histogram counters relate to the dump
+enum class select_histograms_t {
+  exclude,  // scalar counters only
+  only,     // histogram counters only
+  include   // both
+};
+
 /* Class for constructing a PerfCounters object.
  *
  * This class performs some validation that the parameters we have supplied are
@@ -291,13 +298,15 @@ public:
       bool schema,
       select_labeled_t dump_labeled,
       const std::string &counter = "") const {
-    dump_formatted_generic(f, schema, false, dump_labeled, counter);
+    dump_formatted_generic(f, schema, select_histograms_t::exclude,
+                           dump_labeled, counter);
   }
   void dump_formatted_histograms(
       ceph::Formatter *f,
       bool schema,
       const std::string &counter = "") const {
-    dump_formatted_generic(f, schema, true, select_labeled_t::unlabeled, counter);
+    dump_formatted_generic(f, schema, select_histograms_t::only,
+                           select_labeled_t::unlabeled, counter);
   }
   std::pair<uint64_t, uint64_t> get_tavg_ns(int idx) const;
 
@@ -322,7 +331,8 @@ private:
 	     int lower_bound, int upper_bound);
   PerfCounters(const PerfCounters &rhs);
   PerfCounters& operator=(const PerfCounters &rhs);
-  void dump_formatted_generic(ceph::Formatter *f, bool schema, bool histograms,
+  void dump_formatted_generic(ceph::Formatter *f, bool schema,
+                              select_histograms_t histograms,
                               select_labeled_t dump_labeled,
                               const std::string &counter = "") const;
 
@@ -382,10 +392,11 @@ public:
       ceph::Formatter *f,
       bool schema,
       select_labeled_t dump_labeled,
+      select_histograms_t histograms,
       const std::string &logger = "",
       const std::string &counter = "") const {
     dump_formatted_generic(
-	f, schema, false, dump_labeled, logger, counter);
+	f, schema, histograms, dump_labeled, logger, counter);
   }
 
   void dump_formatted_histograms(
@@ -394,7 +405,8 @@ public:
       const std::string &logger = "",
       const std::string &counter = "") const {
     dump_formatted_generic(
-	f, schema, true, select_labeled_t::unlabeled, logger, counter);
+	f, schema, select_histograms_t::only, select_labeled_t::unlabeled,
+	logger, counter);
   }
 
   // A reference to a perf_counter_data_any_d, with an accompanying
@@ -415,7 +427,7 @@ private:
   void dump_formatted_generic(
       Formatter *f,
       bool schema,
-      bool histograms,
+      select_histograms_t histograms,
       select_labeled_t dump_labeled,
       const std::string &logger,
       const std::string &counter) const;

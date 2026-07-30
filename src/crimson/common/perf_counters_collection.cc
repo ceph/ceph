@@ -21,10 +21,12 @@ PerfCountersCollectionImpl* PerfCountersCollection:: get_perf_collection()
 
 void PerfCountersCollection::dump_formatted(ceph::Formatter *f, bool schema,
                                             select_labeled_t dump_labeled,
+                                            select_histograms_t histograms,
                                             const std::string &logger,
                                             const std::string &counter)
 {
-  perf_collection->dump_formatted(f, schema, dump_labeled, logger, counter);
+  perf_collection->dump_formatted(f, schema, dump_labeled, histograms, logger,
+                                  counter);
 }
 
 PerfCountersCollection::ShardedPerfCountersCollection PerfCountersCollection::sharded_perf_coll;

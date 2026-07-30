@@ -113,13 +113,13 @@ bool PerfCountersCollectionImpl::reset(std::string_view name)
  * @param counter name of counter within subsystem, e.g. "num_strays",
  *                may be empty.
  * @param schema if true, output schema instead of current data.
- * @param histograms if true, dump histogram values,
- *                   if false dump all non-histogram counters
+ * @param histograms whether to dump only histogram counters, only scalar counters,
+ *                   or both
  */
 void PerfCountersCollectionImpl::dump_formatted_generic(
     Formatter *f,
     bool schema,
-    bool histograms,
+    select_histograms_t histograms,
     select_labeled_t dump_labeled,
     const std::string &logger,
     const std::string &counter) const
@@ -497,7 +497,7 @@ void PerfCounters::reset()
  * counter format".
  */
 void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
-    bool histograms, select_labeled_t dump_labeled,
+    select_histograms_t histograms, select_labeled_t dump_labeled,
     const std::string &counter) const
 {
   // 'labeled_2nd_lvl_section' is only used in the context of dumping
@@ -537,9 +537,9 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
       continue;
     }
 
-    // Switch between normal and histogram view
-    bool is_histogram = (d->type & PERFCOUNTER_HISTOGRAM) != 0;
-    if (is_histogram != histograms) {
+    const bool is_histogram = (d->type & PERFCOUNTER_HISTOGRAM) != 0;
+    if ((histograms == select_histograms_t::exclude && is_histogram) ||
+        (histograms == select_histograms_t::only && !is_histogram)) {
       continue;
     }
 
