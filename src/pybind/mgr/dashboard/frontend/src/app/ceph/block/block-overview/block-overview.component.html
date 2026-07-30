@@ -1,0 +1,251 @@
+<main
+  cdsGrid
+  [useCssGrid]="true"
+  [fullWidth]="true"
+  [narrow]="true"
+  class="block-overview cds-mt-5"
+>
+  <!-- Tile 1: Overview Card (Summary Fields) -->
+  <div
+    cdsCol
+    class="cds-mb-5"
+    [columnNumbers]="{ lg: 16, md: 16, sm: 16 }"
+  >
+    <cd-resource-overview-card
+      title="Block Storage"
+      i18n-title
+      [fields]="overviewFields"
+      [columns]="4"
+    ></cd-resource-overview-card>
+  </div>
+
+  <!-- Tile 2: Capacity & Data Protection Tile -->
+  <div
+    cdsCol
+    class="cds-mb-5"
+    [columnNumbers]="{ lg: 16, md: 16, sm: 16 }"
+  >
+    <cds-tile class="block-overview__tile">
+      <div
+        cdsGrid
+        [useCssGrid]="true"
+        [narrow]="true"
+        [fullWidth]="true"
+        class="block-overview__split"
+      >
+        <!-- Capacity Panel -->
+        <div
+          cdsCol
+          [columnNumbers]="{ lg: 8, md: 4 }"
+        >
+          <h4
+            class="cds--type-heading-compact-01 cds-mb-3"
+            i18n
+          >
+            Capacity
+          </h4>
+          <span
+            class="cds--type-label-01 cds-mb-3"
+            i18n
+            >Storage utilization</span
+          >
+
+          <div class="cds-mt-5 cds-mb-5">
+            <cd-usage-bar
+              [total]="model.totalProvisionedBytes"
+              [used]="model.totalUsedBytes"
+            ></cd-usage-bar>
+          </div>
+
+          <div
+            cdsGrid
+            [useCssGrid]="true"
+            [narrow]="true"
+            [fullWidth]="true"
+            class="block-overview__stat-grid"
+          >
+            <div
+              cdsCol
+              [columnNumbers]="{ lg: 8, md: 4 }"
+            >
+              <span
+                class="cds--type-label-01 block-overview__stat-label"
+                i18n
+                >Total Provisioned</span
+              >
+              <span class="cds--type-body-compact-01">{{ model.provisionedCapacity }}</span>
+            </div>
+            <div
+              cdsCol
+              [columnNumbers]="{ lg: 8, md: 4 }"
+            >
+              <span
+                class="cds--type-label-01 block-overview__stat-label"
+                i18n
+                >Used</span
+              >
+              <span class="cds--type-body-compact-01"
+                >{{ model.usedCapacity }} ({{ model.usagePercent }})</span
+              >
+            </div>
+          </div>
+        </div>
+
+        <!-- Data Protection Panel -->
+        <div
+          cdsCol
+          [columnNumbers]="{ lg: 8, md: 4 }"
+          class="block-overview__right-panel"
+        >
+          <h4
+            class="cds--type-heading-compact-01 cds-mb-3"
+            i18n
+          >
+            Data Protection
+          </h4>
+          <span
+            class="cds--type-label-01 cds-mb-3"
+            i18n
+            >Mirroring and snapshots</span
+          >
+
+          <div class="cds-mt-5">
+            <div
+              cdsGrid
+              [useCssGrid]="true"
+              [narrow]="true"
+              [fullWidth]="true"
+              class="block-overview__stat-grid"
+            >
+              <div
+                cdsCol
+                [columnNumbers]="{ lg: 8, md: 4 }"
+              >
+                <span
+                  class="cds--type-label-01 block-overview__stat-label"
+                  i18n
+                  >Total Images</span
+                >
+                <span class="cds--type-body-compact-01">{{ model.totalImages }}</span>
+              </div>
+              <div
+                cdsCol
+                [columnNumbers]="{ lg: 8, md: 4 }"
+              >
+                <span
+                  class="cds--type-label-01 block-overview__stat-label"
+                  i18n
+                  >Total Snapshots</span
+                >
+                <span class="cds--type-body-compact-01">{{ model.totalSnapshots }}</span>
+              </div>
+              <div
+                cdsCol
+                [columnNumbers]="{ lg: 8, md: 4 }"
+              >
+                <span
+                  class="cds--type-label-01 block-overview__stat-label"
+                  i18n
+                  >Mirroring Warnings</span
+                >
+                <span class="cds--type-body-compact-01">{{ model.mirroringWarnings }}</span>
+              </div>
+              <div
+                cdsCol
+                [columnNumbers]="{ lg: 8, md: 4 }"
+              >
+                <span
+                  class="cds--type-label-01 block-overview__stat-label"
+                  i18n
+                  >Mirroring Errors</span
+                >
+                <span class="cds--type-body-compact-01">{{ model.mirroringErrors }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </cds-tile>
+  </div>
+
+  <!-- Tile 3: I/O Performance Tile -->
+  <div
+    cdsCol
+    class="cds-mb-5"
+    [columnNumbers]="{ lg: 16, md: 16, sm: 16 }"
+  >
+    <cd-productive-card
+      headerTitle="Performance"
+      i18n-headerTitle
+    >
+      <ng-template #header>
+        <h2
+          class="cds--type-heading-compact-02"
+          i18n
+        >
+          Performance
+        </h2>
+        <div
+          cdsStack="horizontal"
+          gap="2"
+        >
+          <cd-time-picker
+            [dropdownSize]="'sm'"
+            label="Time Span"
+            (selectedTime)="loadPerformanceData($event)"
+          ></cd-time-picker>
+        </div>
+      </ng-template>
+
+      <div
+        cdsGrid
+        [useCssGrid]="true"
+        [narrow]="true"
+        [fullWidth]="true"
+        class="cds-mt-5 cds-mb-5 block-overview__split"
+      >
+        <!-- IOPS Chart -->
+        <div
+          cdsCol
+          [columnNumbers]="{ lg: 5, md: 5, sm: 16 }"
+        >
+          <cd-area-chart
+            chartTitle="Client IOPS"
+            i18n-chartTitle
+            chartKey="iops"
+            dataUnit="ops"
+            [rawData]="model.iopsChartData"
+          ></cd-area-chart>
+        </div>
+
+        <!-- Latency Chart -->
+        <div
+          cdsCol
+          [columnNumbers]="{ lg: 5, md: 5, sm: 16 }"
+        >
+          <cd-area-chart
+            chartTitle="Latency"
+            i18n-chartTitle
+            chartKey="latency"
+            dataUnit="ms"
+            [rawData]="model.latencyChartData"
+          ></cd-area-chart>
+        </div>
+
+        <!-- Throughput Chart -->
+        <div
+          cdsCol
+          [columnNumbers]="{ lg: 5, md: 5, sm: 16 }"
+        >
+          <cd-area-chart
+            chartTitle="Client Throughput"
+            i18n-chartTitle
+            chartKey="throughput"
+            dataUnit="B/s"
+            [rawData]="model.throughputChartData"
+          ></cd-area-chart>
+        </div>
+      </div>
+    </cd-productive-card>
+  </div>
+</main>

@@ -1,0 +1,29 @@
+@use '@carbon/layout';
+
+.block-overview {
+  max-width: 100%;
+}
+
+.block-overview__tile {
+  display: block;
+}
+
+.block-overview__split {
+  row-gap: layout.$spacing-05;
+}
+
+.block-overview__right-panel {
+  border-left: 1px solid var(--cds-border-subtle-01);
+  padding-left: layout.$spacing-06;
+}
+
+.block-overview__stat-grid {
+  row-gap: layout.$spacing-05;
+  column-gap: layout.$spacing-05;
+}
+
+.block-overview__stat-label {
+  display: block;
+  color: var(--cds-text-secondary);
+  margin-bottom: layout.$spacing-02;
+}

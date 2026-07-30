@@ -113,6 +113,10 @@ import { NvmeofGatewayGroupDeleteGuardModalComponent } from './nvmeof-gateway-gr
 import { NvmeofSetupCardsComponent } from './nvmeof-setup-cards/nvmeof-setup-cards.component';
 import { NvmeofGatewayGroupFilterComponent } from './nvmeof-gateway-group-filter/nvmeof-gateway-group-filter.component';
 import { NvmeofEditAuthenticationComponent } from './nvmeof-edit-authentication/nvmeof-edit-authentication.component';
+import { BlockOverviewComponent } from './block-overview/block-overview.component';
+import { ProductiveCardComponent } from '~/app/shared/components/productive-card/productive-card.component';
+import { AreaChartComponent } from '~/app/shared/components/area-chart/area-chart.component';
+import { TimePickerComponent } from '~/app/shared/components/time-picker/time-picker.component';
 
 @NgModule({
   imports: [
@@ -152,7 +156,10 @@ import { NvmeofEditAuthenticationComponent } from './nvmeof-edit-authentication/
     ThemeModule,
     NvmeofSetupCardsComponent,
     NvmeofGatewayGroupFilterComponent,
-    TextLabelListComponent
+    TextLabelListComponent,
+    ProductiveCardComponent,
+    AreaChartComponent,
+    TimePickerComponent
   ],
   declarations: [
     RbdListComponent,
@@ -208,7 +215,8 @@ import { NvmeofEditAuthenticationComponent } from './nvmeof-edit-authentication/
     NvmeofSubsystemPerformanceComponent,
     NvmeofTabsComponent,
     NvmeofGatewayGroupDeleteGuardModalComponent,
-    NvmeofEditAuthenticationComponent
+    NvmeofEditAuthenticationComponent,
+    BlockOverviewComponent
   ],
 
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]
@@ -234,7 +242,12 @@ export class BlockModule {
     components)
 */
 const routes: Routes = [
-  { path: '', redirectTo: 'rbd', pathMatch: 'full' },
+  { path: '', redirectTo: 'overview', pathMatch: 'full' },
+  {
+    path: 'overview',
+    component: BlockOverviewComponent,
+    data: { breadcrumbs: 'Overview' }
+  },
   {
     path: 'rbd',
     canActivate: [FeatureTogglesGuardService, ModuleStatusGuardService],
