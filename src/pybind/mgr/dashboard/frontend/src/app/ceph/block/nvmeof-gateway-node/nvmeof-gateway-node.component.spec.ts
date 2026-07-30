@@ -423,6 +423,43 @@ describe('NvmeofGatewayNodeComponent', () => {
     expect(component.hosts[0].hostname).toBe('gateway-node-1');
   }));
 
+  it('should show Encryption and mTLS status from encryption_key and enable_auth', fakeAsync(() => {
+    (component as any).route.snapshot.data = { mode: 'details' };
+    component.ngOnInit();
+    component.groupName = 'group1';
+
+    spyOn(nvmeofService, 'fetchHostsAndGroups').and.returnValue(
+      of({
+        groups: [
+          [
+            {
+              service_id: 'nvmeof.group1',
+              spec: {
+                group: 'group1',
+                encryption_key: 'test-encryption-key',
+                enable_auth: false
+              },
+              placement: { hosts: ['gateway-node-1'] }
+            }
+          ]
+        ],
+        hosts: mockGatewayNodes
+      } as any)
+    );
+
+    fixture.detectChanges();
+    component.getHosts(new CdTableFetchDataContext(() => undefined));
+    tick(100);
+
+    const encryptionDetail = component.gatewayDetails.find((d) => d.label === 'Encryption');
+    const mtlsDetail = component.gatewayDetails.find((d) => d.label === 'mTLS');
+
+    expect(encryptionDetail.value).toBe('Enabled');
+    expect(encryptionDetail.statusIcon).toBe('success');
+    expect(mtlsDetail.value).toBe('Disabled');
+    expect(mtlsDetail.statusIcon).toBe('error');
+  }));
+
   it('should set selectionType to multiClick in selector mode', () => {
     (component as any).route.snapshot.data = { mode: 'selector' };
     component.ngOnInit();
