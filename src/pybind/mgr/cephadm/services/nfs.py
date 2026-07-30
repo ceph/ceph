@@ -578,13 +578,13 @@ class NFSService(CephService):
         spec: Optional[ServiceSpec],
         curr_deps: List[str],
         last_deps: List[str],
-    ) -> utils.Action:
+    ) -> utils.NextDaemonStep:
         """Given the scheduled_action, service spec, daemon_type, and
         current and previous dependency lists return the next action that
         this service would prefer cephadm take.
         """
         if curr_deps == last_deps:
-            return scheduled_action
+            return utils.NextDaemonStep(scheduled_action)
         sym_diff = set(curr_deps).symmetric_difference(last_deps)
         logger.info(
             'Reconfigure wanted %s: deps %r -> %r (diff %r)',
@@ -598,4 +598,4 @@ class NFSService(CephService):
         only_kmip_updated = all(s.startswith('kmip') for s in sym_diff)
         if not only_kmip_updated:
             action = utils.Action.REDEPLOY
-        return action
+        return utils.NextDaemonStep(action)
