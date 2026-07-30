@@ -3909,9 +3909,9 @@ std::vector<std::string> normalize_cli11_tokens(
   return tokens;
 }
 
-// Maps CLI11 parse error exit codes to the corresponding legacy exit codes.
+// Maps CLI11 parse error exit codes to the corresponding errno exit codes.
 // Only the numeric exit code is remapped; the error message is left unchanged.
-int to_legacy_exit_code(const CLI::ParseError& e) {
+int to_errno_exit_code(const CLI::ParseError& e) {
   switch (e.get_exit_code()) {
     case static_cast<int>(CLI::ExitCodes::ConversionError):  // CLI11: 104 - option value failed conversion
       return EINVAL;
@@ -5609,7 +5609,7 @@ int main(int argc, const char **argv)
         warn_wrong_position_and_unrelated_option(&app);
         warn_duplicates(&app);
         app.exit(e);                    // prints CLI11's own message
-        return to_legacy_exit_code(e);  // remaps just the exit code
+        return to_errno_exit_code(e);   // remaps just the exit code
       }
 
       // Handles --cli11-help when parse succeeded (no subcommand, or all args provided).
@@ -6307,7 +6307,7 @@ int main(int argc, const char **argv)
         app.parse(static_cast<int>(reparse_argv.size()), reparse_argv.data());
       } catch (const CLI::ParseError& e) {
         app.exit(e);
-        return to_legacy_exit_code(e);
+        return to_errno_exit_code(e);
       }
       // A parse that matches no subcommand still succeeds, so check for one
       // and let legacy dispatch handle the line if none was found.
