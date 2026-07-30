@@ -32,14 +32,13 @@ int RequestLog(lua_State* L)
   const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(THIRD_UPVAL)));
   const auto op(reinterpret_cast<RGWOp*>(lua_touserdata(L, lua_upvalueindex(FOURTH_UPVAL))));
 
-  if (!s) {
+  if (s) {
+    const auto rc = rgw_log_op(rest, s, op, olog);
+    lua_pushinteger(L, rc);
+  } else {
     ldpp_dout(s, 1) << "Lua ERROR: missing request state, cannot use ops log"  << dendl;
     lua_pushinteger(L, -EINVAL);
-    return ONE_RETURNVAL;
   }
-
-  const auto rc = rgw_log_op(rest, s, op, olog);
-  lua_pushinteger(L, rc);
 
   return ONE_RETURNVAL;
 }
@@ -82,48 +81,40 @@ int AddEvent(lua_State* L)  {
   }
 
   const auto args = lua_gettop(L);
-  if (1 == args) {
+  if (args == 1) {
     const auto log = luaL_checkstring(L, 1);
     s->trace->AddEvent(log);
-    return 0;
-  }
+  } else if (args == 2) {
+    const auto event_name = luaL_checkstring(L, 1);
+    std::unordered_map<const char*, jspan_attribute> event_values;
+    lua_pushnil(L);
+    while (lua_next(L, 2) != 0) {
+      if (lua_type(L, -2) != LUA_TSTRING) {
+        // skip pair if key is not a string
+        lua_pop(L, 1);
+        continue;
+      }
 
-  if (2 != args) {
-    return 0;
-  }
-
-  const auto event_name = luaL_checkstring(L, 1);
-  std::unordered_map<const char*, jspan_attribute> event_values;
-  push_nil(L);
-  while (0 != lua_next(L, 2)) {
-    if (LUA_TSTRING != lua_type(L, -2)) {
-      // skip pair if key is not a string
-      lua_pop(L, 1);
-      continue;
-    }
-
-    const auto key = luaL_checkstring(L, -2);
-    const auto value_type = lua_type(L, -1);
-    switch (value_type) {
-      case LUA_TSTRING:
-        event_values.emplace(key, lua_tostring(L, -1));
-        break;
-
-      case LUA_TNUMBER:
-        if (lua_isinteger(L, -1)) {
-          event_values.emplace(key, static_cast<int64_t>(lua_tointeger(L, -1)));
+      const auto key = luaL_checkstring(L, -2);
+      const auto value_type = lua_type(L, -1);
+      switch (value_type) {
+        case LUA_TSTRING:
+          event_values.emplace(key, lua_tostring(L, -1));
           break;
-        }
 
-        event_values.emplace(key, static_cast<double>(lua_tonumber(L, -1)));
-        break;
+        case LUA_TNUMBER:
+          if (lua_isinteger(L, -1)) {
+            event_values.emplace(key, static_cast<int64_t>(lua_tointeger(L, -1)));
+          } else {
+            event_values.emplace(key, static_cast<double>(lua_tonumber(L, -1)));
+          }
+          break;
+      }
+      lua_pop(L, 1);
     }
-
     lua_pop(L, 1);
+    s->trace->AddEvent(event_name, event_values);
   }
-
-  lua_pop(L, 1);
-  s->trace->AddEvent(event_name, event_values);
   return 0;
 }
 
@@ -320,95 +311,60 @@ struct BucketMetaTable : public EmptyMetaTable {
     const auto index = lua_checkstring_view(L, 2);
 
     if (rgw::sal::Bucket::empty(bucket)) {
-      if (!boost::iequals(index, "Name")) {
-        return return_nil(L);
+      if (boost::iequals(index, "Name")) {
+        pushstring(L, s->init_state.url_bucket);
+      } else {
+        push_nil(L);
       }
-
-      pushstring(L, s->init_state.url_bucket);
-      return ONE_RETURNVAL;
-    }
-
-    if (boost::iequals(index, "Tenant")) {
+    } else if (boost::iequals(index, "Tenant")) {
       pushstring(L, bucket->get_tenant());
-      return ONE_RETURNVAL;
-    }
-
-    if (boost::iequals(index, "Name")) {
+    } else if (boost::iequals(index, "Name")) {
       pushstring(L, bucket->get_name());
-      return ONE_RETURNVAL;
-    }
-
-    if (boost::iequals(index, "Marker")) {
+    } else if (boost::iequals(index, "Marker")) {
       pushstring(L, bucket->get_marker());
-      return ONE_RETURNVAL;
-    }
-
-    if (boost::iequals(index, "Id")) {
+    } else if (boost::iequals(index, "Id")) {
       pushstring(L, bucket->get_bucket_id());
-      return ONE_RETURNVAL;
-    }
-
-    if (boost::iequals(index, "ZoneGroupId")) {
+    } else if (boost::iequals(index, "ZoneGroupId")) {
       pushstring(L, bucket->get_info().zonegroup);
-      return ONE_RETURNVAL;
-    }
-
-    if (boost::iequals(index, "CreationTime")) {
+    } else if (boost::iequals(index, "CreationTime")) {
       pushtime(L, bucket->get_creation_time());
-      return ONE_RETURNVAL;
-    }
-
-    if (boost::iequals(index, "MTime")) {
+    } else if (boost::iequals(index, "MTime")) {
       pushtime(L, bucket->get_modification_time());
-      return ONE_RETURNVAL;
-    }
-
-    if (boost::iequals(index, "Tags")) {
+    } else if (boost::iequals(index, "Tags")) {
       const auto it = find_string_map_entry(s->bucket_attrs, RGW_ATTR_TAGS);
 
-      if (it == s->bucket_attrs.end()) {
-        return return_nil(L);
+      if (it != s->bucket_attrs.end()) {
+        create_metatable<BucketTagsTable>(L, name, index, false, &(it->second));
+      } else {
+        push_nil(L);
       }
-
-      create_metatable<BucketTagsTable>(L, name, index, false, &(it->second));
-      return ONE_RETURNVAL;
-    }
-
-    if (boost::iequals(index, "Quota")) {
+    } else if (boost::iequals(index, "Quota")) {
       create_metatable<QuotaMetaTable>(L, name, index, false, &(bucket->get_info().quota));
-      return ONE_RETURNVAL;
-    }
-
-    if (boost::iequals(index, "PlacementRule")) {
+    } else if (boost::iequals(index, "PlacementRule")) {
       create_metatable<PlacementRuleMetaTable>(L, name, index, false, &(bucket->get_info().placement_rule));
-      return ONE_RETURNVAL;
-    }
-
-    if (boost::iequals(index, "User")) {
+    } else if (boost::iequals(index, "User")) {
       const rgw_owner& owner = bucket->get_owner();
       const auto u = std::get_if<rgw_user>(&owner);
 
-      if (!u) {
-        return return_nil(L);
+      if (u) {
+        create_metatable<UserMetaTable>(L, name, index, false, const_cast<rgw_user*>(u));
+      } else {
+        push_nil(L);
       }
-
-      create_metatable<UserMetaTable>(L, name, index, false, const_cast<rgw_user*>(u));
-      return ONE_RETURNVAL;
-    }
-
-    if (boost::iequals(index, "Account")) {
+    } else if (boost::iequals(index, "Account")) {
       const rgw_owner& owner = bucket->get_owner();
       const auto a = std::get_if<rgw_account_id>(&owner);
 
-      if (!a) {
-        return return_nil(L);
+      if (a) {
+        pushstring(L, *a);
+      } else {
+        push_nil(L);
       }
-
-      pushstring(L, *a);
-      return ONE_RETURNVAL;
+    } else {
+      return error_unknown_field(L, std::string {index}, name);
     }
 
-    return error_unknown_field(L, std::string {index}, name);
+    return ONE_RETURNVAL;
   }
   
   static int NewIndexClosure(lua_State* L) {
@@ -418,12 +374,14 @@ struct BucketMetaTable : public EmptyMetaTable {
 
     const auto index = lua_checkstring_view(L, 2);
 
-    if (!rgw::sal::Bucket::empty(bucket) || !boost::iequals(index, "Name")) {
-      return error_unknown_field(L, std::string {index}, name);
+    if (rgw::sal::Bucket::empty(bucket)) {
+      if (boost::iequals(index, "Name")) {
+        s->init_state.url_bucket = luaL_checkstring(L, 3);
+        return NO_RETURNVAL;
+      }
     }
 
-    s->init_state.url_bucket = luaL_checkstring(L, 3);
-    return NO_RETURNVAL;
+    return error_unknown_field(L, std::string {index}, name);
   }
 };
 
@@ -908,13 +866,11 @@ int execute(
     }
     rc = rgw::lua::lua_execute(L, s, code);
 
-    if (0 == rc) {
+    if (!rc) {
       if (lua_isinteger(L, -1)) {
         script_return_code = static_cast<int>(lua_tointeger(L, -1));
         ldpp_dout(s, 20) << "Lua script executed successfully and returned code: " << script_return_code << dendl;
-      }
-
-      if (!lua_isinteger(L, -1)) {
+      } else {
         ldpp_dout(s, 20) << "Lua script executed, but did not return an integer. Ignoring return code." << dendl;
       }
     }
