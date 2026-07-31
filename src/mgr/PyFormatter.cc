@@ -140,6 +140,6 @@ PyObject* PyJSONFormatter::get()
   std::ostringstream ss;
   flush(ss);
   std::string s = ss.str();
-  PyObject* obj = PyBytes_FromStringAndSize(std::move(s.c_str()), s.size());
+  PyObject* obj = PyBytes_FromStringAndSize(s.c_str(), s.size());
   return obj;
 }

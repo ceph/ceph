@@ -369,8 +369,9 @@ public:
                                                                                   cct(_cct),
                                                                                   gc(_gc) {
     max_aio = cct->_conf->rgw_gc_max_concurrent_io;
-    remove_tags.resize(min(static_cast<int>(cct->_conf->rgw_gc_max_objs), rgw_shards_max()));
-    tag_io_size.resize(min(static_cast<int>(cct->_conf->rgw_gc_max_objs), rgw_shards_max()));
+    // must match obj_names[] / transitioned_objects_cache sized in initialize()
+    remove_tags.resize(gc->get_max_objs());
+    tag_io_size.resize(gc->get_max_objs());
   }
 
   ~RGWGCIOManager() {

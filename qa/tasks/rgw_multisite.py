@@ -200,6 +200,11 @@ class Cluster(multisite.Cluster):
             assert r == 0
         return s, r
 
+    def ceph_admin(self, args=None, **kwargs):
+        """ ceph command """
+        cluster_manager = self.ctx.managers[self.name]
+        return cluster_manager.raw_cluster_cmd(*args, **kwargs)
+
 class Gateway(multisite.Gateway):
     """ Controls a radosgw instance using its daemon """
     def __init__(self, role, remote, daemon, *args, **kwargs):

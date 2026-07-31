@@ -106,6 +106,7 @@ image_replayer::Replayer* StateBuilder<I>::create_replayer(
     Threads<I>* threads,
     InstanceWatcher<I>* instance_watcher,
     const std::string& local_mirror_uuid,
+    const std::string& local_mirror_peer_uuid,
     PoolMetaCache* pool_meta_cache,
     ReplayerListener* replayer_listener) {
   return Replayer<I>::create(

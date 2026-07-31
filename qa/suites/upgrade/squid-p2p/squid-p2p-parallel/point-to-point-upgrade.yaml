@@ -70,12 +70,12 @@ openstack:
     count: 3
     size: 30 # GB
 tasks:
-- print: "****  done squid about to install v19.2.0"
+- print: "****  done squid about to install v19.2.1"
 - install:
-    tag: v19.2.0
+    tag: v19.2.1
     # line below can be removed its from jewel test
     #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev', 'librgw2']
-- print: "**** done v19.2.0 install"
+- print: "**** done v19.2.1 install"
 - ceph:
    fs: xfs
    add_osds_to_crush: true

@@ -776,6 +776,11 @@ struct dirfrag_t {
     }
   }
 
+  void dump(ceph::Formatter *f) const {
+    f->dump_unsigned("ino", ino);
+    f->dump_unsigned("frag", frag);
+  }
+
   void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     encode(ino, bl);

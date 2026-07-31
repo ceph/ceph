@@ -54,6 +54,7 @@
 #include "MDSTableServer.h"
 
 #include "Locker.h"
+#include "LogSegmentRef.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
@@ -67,6 +68,7 @@ using std::pair;
 using std::set;
 using std::string;
 using std::vector;
+
 
 // -----------------------
 // LogSegment
@@ -209,8 +211,8 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
   if (!open_files.empty()) {
     ceph_assert(!mds->mdlog->is_capped()); // hmm FIXME
     EOpen *le = 0;
-    LogSegment *ls = mds->mdlog->get_current_segment();
-    ceph_assert(ls != this);
+    auto&& ls = mds->mdlog->get_current_segment();
+    ceph_assert(ls.get() != this);
     elist<CInode*>::iterator p = open_files.begin(member_offset(CInode, item_open_file));
     while (!p.end()) {
       CInode *in = *p;
@@ -456,7 +458,7 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
   }
 }
 
-void EMetaBlob::update_segment(LogSegment *ls)
+void EMetaBlob::update_segment(LogSegmentRef const &ls)
 {
   // dirty inode mtimes
   // -> handled directly by Server.cc, replay()
@@ -1191,7 +1193,7 @@ void EMetaBlob::generate_test_instances(std::list<EMetaBlob*>& ls)
   ls.push_back(new EMetaBlob());
 }
 
-void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, int type, MDPeerUpdate *peerup)
+void EMetaBlob::replay(MDSRank *mds, LogSegmentRef const& logseg, int type, MDPeerUpdate *peerup)
 {
   dout(10) << "EMetaBlob.replay " << lump_map.size() << " dirlumps by " << client_name << dendl;
 
@@ -1694,7 +1696,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, int type, MDPeerUpdate 
       mds->heartbeat_reset();
   }
   for (const auto& p : truncate_finish) {
-    LogSegment *ls = mds->mdlog->get_segment(p.second);
+    auto&& ls = mds->mdlog->get_segment(p.second);
     if (ls) {
       CInode *in = mds->mdcache->get_inode(p.first);
       ceph_assert(in);
@@ -1783,7 +1785,7 @@ void EPurged::update_segment()
 void EPurged::replay(MDSRank *mds)
 {
   if (inos.size()) {
-    LogSegment *ls = mds->mdlog->get_segment(seq);
+    auto&& ls = mds->mdlog->get_segment(seq);
     if (ls)
       ls->purging_inodes.subtract(inos);
 
@@ -1851,6 +1853,9 @@ void ESession::replay(MDSRank *mds)
       session = mds->sessionmap.get_or_add_session(client_inst);
       mds->sessionmap.set_state(session, Session::STATE_OPEN);
       session->set_client_metadata(client_metadata);
+      if (session->info.auth_name.to_str().empty()) {
+        session->info.auth_name = auth_name;
+      }
       dout(10) << " opened session " << session->info.inst << dendl;
     } else {
       session = mds->sessionmap.get_session(client_inst.name);
@@ -1900,7 +1905,7 @@ void ESession::replay(MDSRank *mds)
 
 void ESession::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(6, 5, bl);
+  ENCODE_START(7, 5, bl);
   encode(stamp, bl);
   encode(client_inst, bl, features);
   encode(open, bl);
@@ -1909,12 +1914,13 @@ void ESession::encode(bufferlist &bl, uint64_t features) const
   encode(inotablev, bl);
   encode(client_metadata, bl);
   encode(inos_to_purge, bl);
+  encode(auth_name, bl);
   ENCODE_FINISH(bl);
 }
 
 void ESession::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 3, 3, bl);
   if (struct_v >= 2)
     decode(stamp, bl);
   decode(client_inst, bl);
@@ -1929,6 +1935,9 @@ void ESession::decode(bufferlist::const_iterator &bl)
   }
   if (struct_v >= 6){
     decode(inos_to_purge, bl);
+  }
+  if (struct_v >= 7) {
+    decode(auth_name, bl);
   }
     
   DECODE_FINISH(bl);

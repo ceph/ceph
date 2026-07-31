@@ -967,6 +967,7 @@ $DAEMONOPTS
 
         bluestore fsck on mount = true
         bluestore block create = true
+        
 $BLUESTORE_OPTS
 
         ; kstore

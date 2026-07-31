@@ -112,7 +112,9 @@ DaemonServer::DaemonServer(MonClient *monc_,
       mds_perf_metric_collector_listener(this),
       mds_perf_metric_collector(mds_perf_metric_collector_listener),
       op_tracker(g_ceph_context, g_ceph_context->_conf->mgr_enable_op_tracker,
-                                 g_ceph_context->_conf->mgr_num_op_tracker_shard)
+                                 g_ceph_context->_conf->mgr_num_op_tracker_shard),
+      stats_autotuner(std::make_unique<StatsAutotuner>(
+        g_conf().get_val<int64_t>("mgr_stats_period")))
 {
   g_conf().add_observer(this);
   /* define op size and time for mgr daemon */
@@ -411,11 +413,42 @@ void DaemonServer::maybe_ready(int32_t osd_id)
 void DaemonServer::tick()
 {
   dout(10) << dendl;
+  auto tick_period = g_conf().get_val<std::chrono::seconds>("mgr_tick_period").count();
+  utime_t now = ceph_clock_now();
+
+  if (g_conf().get_val<bool>("mgr_stats_period_autotune") &&
+      stats_autotuner->should_check_now(now, tick_period)) {
+    dout(20) << "checking whether to adjust stats period" << dendl;
+    maybe_adjust_stats_period();
+  }
   send_report();
   adjust_pgs();
 
   schedule_tick_locked(
     g_conf().get_val<std::chrono::seconds>("mgr_tick_period").count());
+}
+
+void DaemonServer::maybe_adjust_stats_period() {
+  int64_t queue_depth = msgr->get_dispatch_queue_len();
+  int64_t current_period = g_conf().get_val<int64_t>("mgr_stats_period");
+  int64_t queue_threshold = g_conf().get_val<int64_t>("mgr_stats_period_autotune_queue_threshold");
+  auto result = stats_autotuner->evaluate_adjustment(queue_depth, current_period, queue_threshold);
+
+  if (result.new_period != current_period) {
+    dout(10) << "Adjusting mgr_stats_period from " << current_period
+      << " to " << result.new_period << " seconds ("
+      << result.reason_str()
+      << ")" << dendl;
+
+    std::stringstream ss;
+    int r = cct->_conf.set_val("mgr_stats_period", std::to_string(result.new_period), &ss);
+    if (r != 0) {
+      derr << "Failed to update mgr_stats_period: " << ss.str() << dendl;
+      return;
+    }
+    stats_autotuner->record_our_change(result.new_period);  // Track that we made this change
+    cct->_conf.apply_changes(nullptr);
+  }
 }
 
 // Currently modules do not set health checks in response to events delivered to
@@ -2550,14 +2583,27 @@ bool DaemonServer::_handle_command(
     return true;
   }
 
+  // Validate that the module is enabled
+  auto& py_handler_name = py_command.module_name;
+  PyModuleRef module = py_modules.get_module(py_handler_name);
+  ceph_assert(module);
+  if (!module->is_enabled()) {
+    ss << "Module '" << py_handler_name << "' is not enabled (required by "
+          "command '" << prefix << "'): use `ceph mgr module enable "
+          << py_handler_name << "` to enable it";
+    dout(4) << ss.str() << dendl;
+    cmdctx->reply(-EOPNOTSUPP, ss);
+    return true;
+  }
+
   // Validate that the module is active
   auto& mod_name = py_command.module_name;
   if (!py_modules.is_module_active(mod_name)) {
-    ss << "Module '" << mod_name << "' is not enabled/loaded (required by "
-          "command '" << prefix << "'): use `ceph mgr module enable "
-          << mod_name << "` to enable it";
+    ss << "Module '" << mod_name << "' did not initialize in time (required by "
+          "command '" << prefix << "'): see https://docs.ceph.com/en/latest/rados/operations/health-checks/#mgr-module-error "
+	  "for troubleshooting tips.";
     dout(4) << ss.str() << dendl;
-    cmdctx->reply(-EOPNOTSUPP, ss);
+    cmdctx->reply(-ETIMEDOUT, ss);
     return true;
   }
 
@@ -2566,24 +2612,11 @@ bool DaemonServer::_handle_command(
   dout(10) << "passing through command '" << prefix << "' size " << cmdctx->cmdmap.size() << dendl;
   Finisher& mod_finisher = py_modules.get_active_module_finisher(mod_name);
 
-  mod_finisher.queue(new LambdaContext([this, cmdctx, session, py_command, prefix, op]
+  mod_finisher.queue(new LambdaContext([this, cmdctx, session, py_command, prefix, op, py_handler_name, module]
                                        (int r_) mutable {
     std::stringstream ss;
 
     dout(10) << "dispatching command '" << prefix << "' size " << cmdctx->cmdmap.size() << dendl;
-
-    // Validate that the module is enabled
-    auto& py_handler_name = py_command.module_name;
-    PyModuleRef module = py_modules.get_module(py_handler_name);
-    ceph_assert(module);
-    if (!module->is_enabled()) {
-      ss << "Module '" << py_handler_name << "' is not enabled (required by "
-            "command '" << prefix << "'): use `ceph mgr module enable "
-            << py_handler_name << "` to enable it";
-      dout(4) << ss.str() << dendl;
-      cmdctx->reply(-EOPNOTSUPP, ss);
-      return;
-    }
 
     // Hack: allow the self-test method to run on unhealthy modules.
     // Fix this in future by creating a special path for self test rather
@@ -3189,6 +3222,12 @@ void DaemonServer::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("mgr_stats_threshold") || changed.count("mgr_stats_period")) {
     dout(4) << "Updating stats threshold/period on "
             << daemon_connections.size() << " clients" << dendl;
+    if (changed.count("mgr_stats_period")) {
+      int64_t new_period = g_conf().get_val<int64_t>("mgr_stats_period");
+      if (stats_autotuner->was_changed_by_user(new_period)) {
+        stats_autotuner->set_baseline_period(new_period); // user changed
+      }
+    }
     // Send a fresh MMgrConfigure to all clients, so that they can follow
     // the new policy for transmitting stats
     finisher.queue(new LambdaContext([this](int r) {

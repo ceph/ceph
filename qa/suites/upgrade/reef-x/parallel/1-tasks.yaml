@@ -11,7 +11,7 @@ tasks:
 - print: "**** done install task..."
 - print: "**** done start installing reef cephadm ..."
 - cephadm:
-    image: quay.ceph.io/ceph-ci/ceph:reef
+    image: quay.io/ceph/ceph:v18.2.8
     compiled_cephadm_branch: reef
     conf:
       osd:

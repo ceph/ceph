@@ -154,7 +154,7 @@ class SubvolumeV2(SubvolumeV1):
         self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_PATH, qpath)
         self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_STATE, initial_state.value)
 
-    def create(self, size, isolate_nspace, pool, mode, uid, gid, earmark):
+    def create(self, size, isolate_nspace, pool, mode, uid, gid, earmark, normalization, casesensitive):
         subvolume_type = SubvolumeTypes.TYPE_NORMAL
         try:
             initial_state = SubvolumeOpSm.get_init_state(subvolume_type)
@@ -176,7 +176,9 @@ class SubvolumeV2(SubvolumeV1):
                 'data_pool': pool,
                 'pool_namespace': self.namespace if isolate_nspace else None,
                 'quota': size,
-                'earmark': earmark
+                'earmark': earmark,
+                'normalization': normalization,
+                'casesensitive': casesensitive,
             }
             self.set_attrs(subvol_path, attrs)
 
@@ -339,14 +341,14 @@ class SubvolumeV2(SubvolumeV1):
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
-    def trash_incarnation_dir(self):
+    def trash_incarnation_dir(self, subvol_path):
         """rename subvolume (uuid component) to trash"""
         self.create_trashcan()
         try:
-            bname = os.path.basename(self.path)
+            bname = os.path.basename(subvol_path)
             tpath = os.path.join(self.trash_dir, bname)
-            log.debug("trash: {0} -> {1}".format(self.path, tpath))
-            self.fs.rename(self.path, tpath)
+            log.debug(f"trash: {subvol_path} -> {tpath}")
+            self.fs.rename(subvol_path, tpath)
             self._link_dir(tpath, bname)
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
@@ -376,13 +378,20 @@ class SubvolumeV2(SubvolumeV1):
                 self.auth_mdata_mgr.delete_subvolume_metadata_file(self.group.groupname, self.subvolname)
                 return
         if self.state != SubvolumeStates.STATE_RETAINED:
-            self.trash_incarnation_dir()
-            self.metadata_mgr.remove_section(MetadataManager.USER_METADATA_SECTION)
-            self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_PATH, "")
-            self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_STATE, SubvolumeStates.STATE_RETAINED.value)
-            self.metadata_mgr.flush()
-            # Delete the volume meta file, if it's not already deleted
-            self.auth_mdata_mgr.delete_subvolume_metadata_file(self.group.groupname, self.subvolname)
+            try:
+                # save subvol path for later use(renaming subvolume to trash) before deleting path section from .meta
+                subvol_path = self.path
+                self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_PATH, "")
+                self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_STATE, SubvolumeStates.STATE_RETAINED.value)
+                self.metadata_mgr.remove_section(MetadataManager.USER_METADATA_SECTION)
+                self.metadata_mgr.flush()
+                self.trash_incarnation_dir(subvol_path)
+                # Delete the volume meta file, if it's not already deleted
+                self.auth_mdata_mgr.delete_subvolume_metadata_file(self.group.groupname, self.subvolname)
+            except MetadataMgrException as e:
+                log.error(f"failed to write config: {e}")
+                raise VolumeException(e.args[0], e.args[1])
+
 
     def info(self):
         if self.state != SubvolumeStates.STATE_RETAINED:

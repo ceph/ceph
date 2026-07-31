@@ -44,11 +44,14 @@ Create a volume by running the following command:
 
 .. prompt:: bash #
 
-   ceph fs volume create <vol_name> [placement]
+   ceph fs volume create <vol_name> [placement] [--data-pool <data-pool-name>] [--meta-pool <metadata-pool-name>]
 
-This creates a CephFS file system and its data and metadata pools. This command
-can also deploy MDS daemons for the filesystem using a Ceph Manager orchestrator
-module (for example Rook). See :doc:`/mgr/orchestrator`.
+This creates a CephFS file system and its data and metadata pools. Alternately,
+if the data pool and/or metadata pool needed for creating a CephFS volume
+already exist, these pool names can be passed to this command so that the
+volume is created using these existing pools. This command can also deploy MDS
+daemons for the filesystem using a Ceph Manager orchestrator module (for
+example Rook). See :doc:`/mgr/orchestrator`.
 
 ``<vol_name>`` is the volume name (an arbitrary string). ``[placement]`` is an
 optional string that specifies the :ref:`orchestrator-cli-placement-spec` for
@@ -276,7 +279,7 @@ Use a command of the following form to create a subvolume:
 
 .. prompt:: bash #
 
-   ceph fs subvolume create <vol_name> <subvol_name> [--size <size_in_bytes>] [--group_name <subvol_group_name>] [--pool_layout <data_pool_name>] [--uid <uid>] [--gid <gid>] [--mode <octal_mode>] [--namespace-isolated] [--earmark <earmark>]
+   ceph fs subvolume create <vol_name> <subvol_name> [--size <size_in_bytes>] [--group_name <subvol_group_name>] [--pool_layout <data_pool_name>] [--uid <uid>] [--gid <gid>] [--mode <octal_mode>] [--namespace-isolated] [--earmark <earmark>] [--normalization <form>] [--casesensitive <bool>]
 
 
 The command succeeds even if the subvolume already exists.
@@ -316,6 +319,29 @@ Valid Earmarks
    be aware that user permissions and ACLs associated with the previous scope might still apply. Ensure that
    any necessary permissions are updated as needed to maintain proper access control.
 
+When creating a subvolume you can also specify an unicode normalization form by
+using the ``--normalization`` option. This will be used to internally mangle
+file names so that unicode characters that can be represented by different
+unicode code point sequences are all mapped to the representation, which means
+that they will all access the same file. However, users will continue to see
+the same name that they used when the file was created.
+
+The valid values for the unicode normalization form are:
+
+    - nfd: canonical decomposition (default)
+    - nfc: canonical decomposition, followed by canonical composition
+    - nfkd: compatibility decomposition
+    - nfkc: compatibility decomposition, followed by canonical composition
+
+To learn more about unicode normalization forms see https://unicode.org/reports/tr15
+
+It's also possible to configure a subvolume for case insensitive access when
+the ``--casesensitive=0`` option is used. When this option is added, file
+names that only differ in the case of its characters will be mapped to the same
+file. The case of the file name used when the file was created is preserved.
+
+.. note:: Setting ``--casesensitive=0`` option implicitly enables
+   unicode normalization on the subvolume.
 
 Removing a subvolume
 ~~~~~~~~~~~~~~~~~~~~
@@ -963,6 +989,32 @@ Configure the maximum number of concurrent clone operations. The default is 4:
 .. prompt:: bash #
 
    ceph config set mgr mgr/volumes/max_concurrent_clones <value>
+
+Pause the threads that asynchronously purge trashed subvolumes. This option is
+useful during cluster recovery scenarios:
+
+.. prompt:: bash #
+
+    ceph config set mgr mgr/volumes/pause_purging true
+
+To resume purging threads:
+
+.. prompt:: bash #
+
+    ceph config set mgr mgr/volumes/pause_purging false
+
+Pause the threads that asynchronously clone subvolume snapshots. This option is
+useful during cluster recovery scenarios:
+
+.. prompt:: bash #
+
+    ceph config set mgr mgr/volumes/pause_cloning true
+
+To resume cloning threads:
+
+.. prompt:: bash #
+
+    ceph config set mgr mgr/volumes/pause_cloning false
 
 Configure the ``snapshot_clone_no_wait`` option:
 

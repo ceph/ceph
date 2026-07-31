@@ -113,8 +113,16 @@ static inline std::string get_s3_expiration_header(
   req_state* s,
   const ceph::real_time& mtime)
 {
+  /* Build the client-supplied request key rather than reusing the
+   * OLH-resolved key from s->object. OLH resolution fills in the current
+   * version's instance id even when the client did not request a specific
+   * version, which would otherwise make every versioned-bucket response look
+   * like a versionId request. s3_expiration_header() keys its current-version
+   * decision off an empty instance, so pass the object name with the requested
+   * versionId (empty for a plain request). */
   return rgw::lc::s3_expiration_header(
-    s, s->object->get_key(), s->tagset, mtime, s->bucket_attrs);
+    s, rgw_obj_key(s->object->get_key().name, s->info.args.get("versionId")),
+    s->tagset, mtime, s->bucket_attrs);
 }
 
 static inline bool get_s3_multipart_abort_header(
@@ -3980,6 +3988,18 @@ int RGWInitMultipart_ObjStore_S3::get_params(optional_yield y)
   if (ret < 0)
     return ret;
 
+  auto tag_str = s->info.env->get("HTTP_X_AMZ_TAGGING");
+  if(tag_str) {
+    ret = obj_tags.set_from_string(tag_str);
+    if (ret < 0) {
+      ldpp_dout(this, 0) << "setting obj tags failed with " << ret << dendl;
+      if (ret == -ERR_INVALID_TAG) {
+        ret = -EINVAL; // s3 returns only -EINVAL for PUT requests
+      }
+      return ret;
+    }
+  }
+
   //handle object lock
   auto obj_lock_mode_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_MODE");
   auto obj_lock_date_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE");
@@ -5644,7 +5664,18 @@ AWSSignerV4::prepare(const DoutPrefixProvider *dpp,
   if (opt_content) {
     content_hash = rgw::auth::s3::calc_v4_payload_hash(opt_content->to_str());
     extra_headers["x-amz-content-sha256"] = content_hash;
-
+  } else {
+    // check if the header was already set (e.g. from a forwarded request)
+    const char* existing_hash = info.env->get("HTTP_X_AMZ_CONTENT_SHA256");
+    if (existing_hash) {
+      // use existing header value
+      extra_headers["x-amz-content-sha256"] = existing_hash;
+    } else {
+    /* Some S3-compatible services require x-amz-content-sha256 header to always
+     * be present and included in the signature, even for unsigned payload.
+     * AWS S3 specification states that this header is required for all requests. */
+    extra_headers["x-amz-content-sha256"] = AWS4_UNSIGNED_PAYLOAD_HASH;
+    }
   }
 
   /* craft canonical headers */

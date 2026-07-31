@@ -407,7 +407,6 @@ def ceph_log(ctx, config):
 
     update_archive_setting(ctx, 'log', '/var/log/ceph')
 
-
     try:
         yield
 
@@ -418,20 +417,37 @@ def ceph_log(ctx, config):
 
     finally:
         log.info('Checking cluster log for badness...')
+
+        log_path = '/var/log/ceph/{fsid}/ceph.log'.format(fsid=fsid)
+
+        def _ceph_log_exists():
+            try:
+                ctx.ceph[cluster_name].bootstrap_remote.run(
+                    args=['sudo', 'test', '-f', log_path],
+                )
+                return True
+            except CommandFailedError:
+                return False
+
         def first_in_ceph_log(pattern, excludes, only_match):
             """
-            Find the first occurrence of the pattern specified in the Ceph log,
-            Returns None if none found.
+            Find the first occurrence of the pattern specified in the Ceph log.
 
-            :param pattern: Pattern scanned for.
-            :param excludes: Patterns to ignore.
-            :return: First line of text (or None if not found)
+            Returns:
+                - matching line as a string if found
+                - None if the file does not exist or no match is found
+
+            Raises:
+                - CommandFailedError if the scan command itself fails unexpectedly
             """
+            if not _ceph_log_exists():
+                log.warning('Skipping cluster log scan: %s does not exist', log_path)
+                return None
+
             args = [
                 'sudo',
-                'egrep', pattern,
-                '/var/log/ceph/{fsid}/ceph.log'.format(
-                    fsid=fsid),
+                'grep', '-E', pattern,
+                log_path,
             ]
             if only_match:
                 args.extend([run.Raw('|'), 'egrep', '|'.join(only_match)])
@@ -441,18 +457,33 @@ def ceph_log(ctx, config):
             args.extend([
                 run.Raw('|'), 'head', '-n', '1',
             ])
+
             r = ctx.ceph[cluster_name].bootstrap_remote.run(
                 stdout=BytesIO(),
                 args=args,
                 stderr=StringIO(),
+                check_status=False,
             )
-            stdout = r.stdout.getvalue().decode()
+
+            stdout = r.stdout.getvalue().decode(errors='replace')
+            stderr = r.stderr.getvalue().strip()
+            exitstatus = getattr(r, 'exitstatus', None)
+
             if stdout:
                 return stdout
-            stderr = r.stderr.getvalue()
-            if stderr:
-                return stderr
-            return None
+
+            # No stdout and no stderr means no match.
+            if not stderr:
+                return None
+
+            # stderr is a grep/pipeline execution problem, not a log match.
+            raise CommandFailedError(
+                'error scanning cluster log {}: {}{}'.format(
+                    log_path,
+                    stderr,
+                    '' if exitstatus is None else ' (exitstatus={})'.format(exitstatus),
+                )
+            )
 
         # NOTE: technically the first and third arg to first_in_ceph_log
         # are serving a similar purpose here of being something we
@@ -461,21 +492,32 @@ def ceph_log(ctx, config):
         # we match even if the test yaml specifies nothing else, and then the
         # log-only-match options are for when a test only wants to fail on
         # a specific subset of log lines that '\[ERR\]|\[WRN\]|\[SEC\]' matches
-        if first_in_ceph_log('\[ERR\]|\[WRN\]|\[SEC\]',
-                             config.get('log-ignorelist'),
-                             config.get('log-only-match')) is not None:
-            log.warning('Found errors (ERR|WRN|SEC) in cluster log')
-            ctx.summary['success'] = False
-            # use the most severe problem as the failure reason
+        try:
+            if first_in_ceph_log(
+                r'\[ERR\]|\[WRN\]|\[SEC\]',
+                config.get('log-ignorelist'),
+                config.get('log-only-match'),
+            ) is not None:
+                log.warning('Found errors (ERR|WRN|SEC) in cluster log')
+                ctx.summary['success'] = False
+                # use the most severe problem as the failure reason
+                if 'failure_reason' not in ctx.summary:
+                    for pattern in [r'\[SEC\]', r'\[ERR\]', r'\[WRN\]']:
+                        match = first_in_ceph_log(
+                            pattern,
+                            config.get('log-ignorelist'),
+                            config.get('log-only-match'),
+                        )
+                        if match is not None:
+                            ctx.summary['failure_reason'] = \
+                                '"{match}" in cluster log'.format(
+                                    match=match.rstrip('\n'),
+                                )
+                            break
+        except CommandFailedError as e:
+            log.warning('Unable to scan cluster log safely: %s', e)
             if 'failure_reason' not in ctx.summary:
-                for pattern in ['\[SEC\]', '\[ERR\]', '\[WRN\]']:
-                    match = first_in_ceph_log(pattern, config['log-ignorelist'], config.get('log-only-match'))
-                    if match is not None:
-                        ctx.summary['failure_reason'] = \
-                            '"{match}" in cluster log'.format(
-                                match=match.rstrip('\n'),
-                            )
-                        break
+                ctx.summary['failure_reason'] = 'cluster log scan failed'
 
         if ctx.archive is not None and \
                 not (ctx.config.get('archive-on-error') and ctx.summary['success']):
@@ -523,8 +565,11 @@ def ceph_log(ctx, config):
                 except OSError:
                     pass
                 try:
-                    teuthology.pull_directory(remote, '/var/log/ceph',  # everything
-                                              os.path.join(sub, 'log'))
+                    teuthology.pull_directory(
+                        remote,
+                        '/var/log/ceph',
+                        os.path.join(sub, 'log'),
+                    )
                 except ReadError:
                     pass
 

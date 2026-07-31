@@ -1348,9 +1348,10 @@ int RGWBucketAdminOp::sync_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpStat
   return bucket.sync(op_state, dpp, y, err_msg);
 }
 
-static int bucket_stats(rgw::sal::Driver* driver,
+static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
                         const std::string& tenant_name,
-                        const std::string& bucket_name, Formatter* formatter,
+                        const std::string& bucket_name,
+                        Formatter* formatter,
                         const DoutPrefixProvider* dpp, optional_yield y) {
   std::unique_ptr<rgw::sal::Bucket> bucket;
   map<RGWObjCategory, RGWStorageStats> stats;
@@ -1362,20 +1363,24 @@ static int bucket_stats(rgw::sal::Driver* driver,
   }
 
   const RGWBucketInfo& bucket_info = bucket->get_info();
+  const auto& index = bucket_info.get_current_index();
 
-  const auto& index = bucket->get_info().get_current_index();
-  if (is_layout_indexless(index)) {
-    cerr << "error, indexless buckets do not maintain stats; bucket=" <<
-      bucket->get_name() << std::endl;
-    return -EINVAL;
-  }
+  // buckets won't have a local bucket index for stats unless they:
+  // - reside on the local zonegroup
+  // - are not indexless
+  const bool local_zonegroup = (site.get_zonegroup().id == bucket_info.zonegroup);
+  const bool has_index = local_zonegroup &&
+      index.layout.type == rgw::BucketIndexType::Normal;
 
   std::string bucket_ver, master_ver;
   std::string max_marker;
-  ret = bucket->read_stats(dpp, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
-  if (ret < 0) {
-    cerr << "error getting bucket stats bucket=" << bucket->get_name() << " ret=" << ret << std::endl;
-    return ret;
+
+  if (has_index) {
+    ret = bucket->read_stats(dpp, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
+    if (ret < 0) {
+      cerr << "error getting bucket stats bucket=" << bucket->get_name() << " ret=" << ret << std::endl;
+      return ret;
+    }
   }
 
   utime_t ut(bucket->get_modification_time());
@@ -1393,19 +1398,21 @@ static int bucket_stats(rgw::sal::Driver* driver,
   ::encode_json("explicit_placement", bucket->get_key().explicit_placement, formatter);
   formatter->dump_string("id", bucket->get_bucket_id());
   formatter->dump_string("marker", bucket->get_marker());
-  formatter->dump_stream("index_type") << bucket->get_info().layout.current_index.layout.type;
-  formatter->dump_int("index_generation", bucket->get_info().layout.current_index.gen);
-  formatter->dump_int("num_shards",
-		      bucket->get_info().layout.current_index.layout.normal.num_shards);
+  formatter->dump_stream("index_type") << index.layout.type;
+  formatter->dump_int("index_generation", index.gen);
   formatter->dump_bool("object_lock_enabled", bucket_info.obj_lock_enabled());
   formatter->dump_bool("mfa_enabled", bucket_info.mfa_enabled());
   ::encode_json("owner", bucket->get_info().owner, formatter);
-  formatter->dump_string("ver", bucket_ver);
-  formatter->dump_string("master_ver", master_ver);
+
+  if (has_index) {
+    formatter->dump_int("num_shards", index.layout.normal.num_shards);
+    formatter->dump_string("ver", bucket_ver);
+    formatter->dump_string("master_ver", master_ver);
+    formatter->dump_string("max_marker", max_marker);
+    dump_bucket_usage(stats, formatter);
+  }
   ut.gmtime(formatter->dump_stream("mtime"));
   ctime_ut.gmtime(formatter->dump_stream("creation_time"));
-  formatter->dump_string("max_marker", max_marker);
-  dump_bucket_usage(stats, formatter);
   encode_json("bucket_quota", bucket->get_info().quota, formatter);
 
   // bucket tags
@@ -1539,6 +1546,7 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Driver* driver,
 static int list_owner_bucket_info(const DoutPrefixProvider* dpp,
                                   optional_yield y,
                                   rgw::sal::Driver* driver,
+                                  const rgw::SiteConfig& site,
                                   const rgw_owner& owner,
                                   const std::string& tenant,
                                   const std::string& marker,
@@ -1591,7 +1599,7 @@ static int list_owner_bucket_info(const DoutPrefixProvider* dpp,
 
     for (const auto& ent : listing.buckets) {
       if (show_stats) {
-        bucket_stats(driver, tenant, ent.bucket.name, formatter, dpp, y);
+        bucket_stats(driver, site, tenant, ent.bucket.name, formatter, dpp, y);
       } else {
         formatter->dump_string("bucket", ent.bucket.name);
       }
@@ -1621,6 +1629,7 @@ static int list_owner_bucket_info(const DoutPrefixProvider* dpp,
 }
 
 int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
+			   const rgw::SiteConfig& site,
 			   RGWBucketAdminOpState& op_state,
 			   RGWFormatterFlusher& flusher,
 			   optional_yield y,
@@ -1643,7 +1652,7 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
   const bool show_stats = op_state.will_fetch_stats();
   const rgw_user& user_id = op_state.get_user_id();
   if (!bucket_name.empty()) {
-    ret = bucket_stats(driver, user_id.tenant, bucket_name, formatter, dpp, y);
+    ret = bucket_stats(driver, site, user_id.tenant, bucket_name, formatter, dpp, y);
     if (ret < 0) {
       return ret;
     }
@@ -1658,10 +1667,10 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
     if (!info.account_id.empty()) {
       ldpp_dout(dpp, 1) << "Listing buckets in user account "
           << info.account_id << dendl;
-      ret = list_owner_bucket_info(dpp, y, driver, info.account_id, uid.tenant,
+      ret = list_owner_bucket_info(dpp, y, driver, site, info.account_id, uid.tenant,
                                    op_state.marker, op_state.max_entries, show_stats, flusher);
     } else {
-      ret = list_owner_bucket_info(dpp, y, driver, uid, uid.tenant,
+      ret = list_owner_bucket_info(dpp, y, driver, site, uid, uid.tenant,
                                    op_state.marker, op_state.max_entries, show_stats, flusher);
     }
     if (ret < 0) {
@@ -1680,7 +1689,7 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
       return ret;
     }
 
-    ret = list_owner_bucket_info(dpp, y, driver, account_id, info.tenant,
+    ret = list_owner_bucket_info(dpp, y, driver, site, account_id, info.tenant,
                                  op_state.marker, op_state.max_entries, show_stats, flusher);
     if (ret < 0) {
       return ret;
@@ -1698,7 +1707,7 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
 						   &truncated);
       for (auto& bucket_name : buckets) {
         if (show_stats) {
-          bucket_stats(driver, user_id.tenant, bucket_name, formatter, dpp, y);
+          bucket_stats(driver, site, user_id.tenant, bucket_name, formatter, dpp, y);
 	} else {
           formatter->dump_string("bucket", bucket_name);
 	}

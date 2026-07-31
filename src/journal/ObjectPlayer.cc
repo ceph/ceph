@@ -58,12 +58,8 @@ ObjectPlayer::ObjectPlayer(librados::IoCtx &ioctx,
 }
 
 ObjectPlayer::~ObjectPlayer() {
-  {
-    std::lock_guard timer_locker{m_timer_lock};
-    std::lock_guard locker{m_lock};
-    ceph_assert(!m_fetch_in_progress);
-    ceph_assert(m_watch_ctx == nullptr);
-  }
+  ceph_assert(!m_fetch_in_progress);
+  ceph_assert(m_watch_ctx == nullptr);
 }
 
 void ObjectPlayer::fetch(Context *on_finish) {

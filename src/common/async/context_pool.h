@@ -17,7 +17,6 @@
 #define CEPH_COMMON_ASYNC_CONTEXT_POOL_H
 
 #include <concepts>
-#include <cstddef>
 #include <cstdint>
 #include <mutex>
 #include <optional>
@@ -53,7 +52,7 @@ public:
   }
   template<std::invocable<> Init>
   io_context_pool(std::int64_t threadcnt, Init&& init) noexcept {
-    start(threadcnt, std::move(init));
+    start(threadcnt, std::forward<Init>(init));
   }
   ~io_context_pool() {
     stop();
@@ -79,8 +78,8 @@ public:
       ioctx.restart();
       for (std::int16_t i = 0; i < threadcnt; ++i) {
 	threadvec.emplace_back(make_named_thread("io_context_pool",
-						 [this, init=std::move(init)] {
-						   std::move(init)();
+						 [this, init] {
+						   init();
 						   ioctx.run();
 						 }));
       }

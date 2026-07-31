@@ -411,13 +411,19 @@ private:
       ceph_assert(false);
     }
 
+    requests.pop_front();
+    bool more = !requests.empty();
+
     // complete the L2 cache request
+    // expect to be destroyed after posting completion if there are no
+    // more requests
     boost::asio::post(*qcow_format->m_image_ctx->asio_engine,
                       [r, ctx=request.on_finish]() { ctx->complete(r); });
-    requests.pop_front();
 
     // process next request (if any)
-    dispatch_request();
+    if (more) {
+      dispatch_request();
+    }
   }
 
   int l2_table_lookup(uint64_t l2_offset,

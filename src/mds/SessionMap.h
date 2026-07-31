@@ -383,7 +383,7 @@ public:
     completed_requests_dirty = false;
   }
 
-  int check_access(CInode *in, unsigned mask, int caller_uid, int caller_gid,
+  int check_access(std::string_view fs_name, CInode *in, unsigned mask, int caller_uid, int caller_gid,
 		   const std::vector<uint64_t> *gid_list, int new_uid, int new_gid);
 
   bool fs_name_capable(std::string_view fs_name, unsigned mask) const {

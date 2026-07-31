@@ -1,3 +1,18 @@
+>=19.2.6
+
+* RBD: It's possible to specify source cluster's ``mon_host`` and ``key`` for
+  ``native`` format migration via the migration spec now.  This eliminates the
+  dependency on ``<cluster-name>.conf`` file in a known location which is
+  rather rigid and also challenging to disseminate in some environments.  The
+  key can be embedded in the migration spec or just referenced from there while
+  stored in the MON config-key store.
+* MGR: The Manager now automatically increases ``mgr_stats_period`` when its
+  message queue is congested, reducing daemon reporting frequency to prevent
+  overload. The period recovers automatically once the queue clears. This
+  behavior is controlled by the new ``mgr_stats_period_autotune`` (default:
+  ``true``) and ``mgr_stats_period_autotune_queue_threshold`` (default: ``100``)
+  config options.
+
 >=20.0.0
 
 * RGW: Lua scripts will not run against health checks.
@@ -41,6 +56,14 @@
   the module commands when coresponding Ceph service is down/degraded.
 
 * CephFS: Modifying the FS setting variable "max_mds" when a cluster is
+* CephFS: It is now possible to pause the threads that asynchronously purge
+  the deleted subvolumes by using the config option
+  "mgr/volumes/pause_purging".
+* CephFS: It is now possible to pause the threads that asynchronously clone
+  the subvolume snapshots by using the config option
+  "mgr/volumes/pause_cloning".
+
+* CephFS: Modifying the setting "max_mds" when a cluster is
   unhealthy now requires users to pass the confirmation flag
   (--yes-i-really-mean-it). This has been added as a precaution to tell the
   users that modifying "max_mds" may not help with troubleshooting or recovery
@@ -58,6 +81,16 @@
   fuse client for `fallocate` for the default case (i.e. mode == 0) since
   CephFS does not support disk space reservation. The only flags supported are
   `FALLOC_FL_KEEP_SIZE` and `FALLOC_FL_PUNCH_HOLE`.
+* pybind/rados: Fixes WriteOp.zero() in the original reversed order of arguments
+  `offset` and `length`. When pybind calls WriteOp.zero(), the argument passed
+  does not match rados_write_op_zero, and offset and length are swapped, which
+  results in an unexpected response.
+
+>=19.2.4
+
+* RGW: For `radosgw-admin account rm`, the `--purge-data` option previously applied only
+  to buckets and objects, but now deletes account users, roles, groups, and oidc-providers
+  too instead of failing with ENOTEMPTY.
 
 >=19.2.2
 
@@ -93,6 +126,9 @@
 * MGR: MGR's always-on modulues/plugins can now be force-disabled. This can be
   necessary in cases where MGR(s) needs to be prevented from being flooded by
   the module commands when coresponding Ceph service is down/degraded.
+* CephFS: The ``ceph fs volume create`` command now allows users to pass
+  metadata and data pool names to be used for creating the volume. If either
+  is not passed or if either is a non-empty pool, the command will abort.
 
 * CephFS: The ``ceph fs subvolume snapshot getpath`` command now allows users
   to get the path of a snapshot of a subvolume. If the snapshot is not present

@@ -13,9 +13,12 @@ overrides:
       - out of quorum
       - PG_AVAILABILITY
       - PG_DEGRADED
+      - PG_DAMAGED
       - Reduced data availability
       - Degraded data redundancy
       - pg .* is stuck inactive
+      - pg .* is stuck peering
+      - pg .* is stuck undersized
       - pg .* is .*degraded
       - FS_DEGRADED
       - OSDMAP_FLAGS
@@ -25,6 +28,9 @@ overrides:
       - MDS_UP_LESS_THAN_MAX
       - filesystem is offline
       - with fewer MDS than max_mds
+      - CEPHADM_FAILED_DAEMON
+      - failed cephadm daemon
+      - osd.* is in unknown state
 tasks:
 - install:
     branch: quincy
@@ -32,7 +38,7 @@ tasks:
       - ceph-volume
 
 - cephadm:
-    image: quay.ceph.io/ceph-ci/ceph:quincy
+    image: quay.io/ceph/ceph:v17.2.8
     cephadm_branch: quincy
     cephadm_git_url: https://github.com/ceph/ceph
     conf:

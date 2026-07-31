@@ -1977,6 +1977,7 @@ void Client::dump_mds_sessions(Formatter *f, bool cap_dump)
 
 void Client::dump_mds_requests(Formatter *f)
 {
+  f->open_array_section("requests");
   for (map<ceph_tid_t, MetaRequest*>::iterator p = mds_requests.begin();
        p != mds_requests.end();
        ++p) {
@@ -1984,6 +1985,7 @@ void Client::dump_mds_requests(Formatter *f)
     p->second->dump(f);
     f->close_section();
   }
+  f->close_section();
 }
 
 int Client::verify_reply_trace(int r, MetaSession *session,
@@ -6077,11 +6079,17 @@ int Client::mds_check_access(std::string& path, const UserPerm& perms, int mask)
     }
   }
 
+  // drop any leading /
+  while (path.length() && path[0] == '/') {
+    path = path.substr(1);
+  }
+
+  std::string_view fs_name = mdsmap->get_fs_name();
   for (auto& s: cap_auths) {
-    ldout(cct, 20) << __func__ << " auth match path " << s.match.path << " r: " << s.readable
-                   << " w: " << s.writeable << dendl;
+    ldout(cct, 20) << __func__ << " auth match fsname " << s.match.fs_name << " auth match path "
+                   << s.match.path << " r: " << s.readable << " w: " << s.writeable << dendl;
     ldout(cct, 20) << " match.uid " << s.match.uid << dendl;
-    if (s.match.match(path, perms.uid(), perms.gid(), &gid_list)) {
+    if (s.match.match(fs_name, path, perms.uid(), perms.gid(), &gid_list)) {
       ldout(cct, 20) << " is matched" << dendl;
       // always follow the last auth caps' permision
       root_squash_perms = true;
@@ -8107,6 +8115,10 @@ bool Client::make_absolute_path_string(const InodeRef& in, std::string& path)
     return false;
   }
 
+  // Make sure this function returns path with single leading '/'
+  if (path.length() && path[0] == '/' && path[1] == '/')
+    path = path.substr(1);
+
   return true;
 }
 
@@ -8154,8 +8166,6 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     std::string path;
     if (make_absolute_path_string(in, path)) {
       ldout(cct, 20) << " absolute path: " << path << dendl;
-      if (path.length())
-        path = path.substr(1);    // drop leading /
       res = mds_check_access(path, perms, MAY_WRITE);
       if (res) {
         goto out;
@@ -9436,25 +9446,22 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
 						  dirp->offset, dentry_off_lt());
 
   string dn_name;
-  while (true) {
+  for (unsigned idx = pd - dir->readdir_cache.begin();
+       idx < dir->readdir_cache.size();
+       ++idx) {
     int mask = caps;
     if (!dirp->inode->is_complete_and_ordered())
       return -EAGAIN;
-    if (pd == dir->readdir_cache.end())
-      break;
-    Dentry *dn = *pd;
+    Dentry *dn = dir->readdir_cache[idx];
     if (dn->inode == NULL) {
       ldout(cct, 15) << " skipping null '" << dn->name << "'" << dendl;
-      ++pd;
       continue;
     }
     if (dn->cap_shared_gen != dir->parent_inode->shared_gen) {
       ldout(cct, 15) << " skipping mismatch shared gen '" << dn->name << "'" << dendl;
-      ++pd;
       continue;
     }
 
-    int idx = pd - dir->readdir_cache.begin();
     if (dn->inode->is_dir() && cct->_conf->client_dirsize_rbytes) {
       mask |= CEPH_STAT_RSTAT;
     }
@@ -9468,9 +9475,8 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
       return -EAGAIN;
     }
     
-    // the content of readdir_cache may change after _getattr(), so pd may be invalid iterator    
-    pd = dir->readdir_cache.begin() + idx;
-    if (pd >= dir->readdir_cache.end() || *pd != dn)
+    // the content of readdir_cache may change after _getattr()
+    if (idx >= dir->readdir_cache.size() || dir->readdir_cache[idx] != dn)
       return -EAGAIN;
 
     struct ceph_statx stx;
@@ -9480,8 +9486,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
     uint64_t next_off = dn->offset + 1;
     auto dname = _unwrap_name(*diri, dn->name, dn->alternate_name);
     fill_dirent(&de, dname.c_str(), stx.stx_mode, stx.stx_ino, next_off);
-    ++pd;
-    if (pd == dir->readdir_cache.end())
+    if (idx + 1 == dir->readdir_cache.size())
       next_off = dir_result_t::END;
 
     Inode *in = NULL;
@@ -9492,6 +9497,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
 
     dn_name = dn->name; // fill in name while we have lock
 
+    // the content of readdir_cache may change after unlocking
     client_lock.unlock();
     r = cb(p, &de, &stx, next_off, in);  // _next_ offset
     client_lock.lock();
@@ -10520,8 +10526,6 @@ int Client::_open(const InodeRef& in, int flags, mode_t mode, Fh **fhp,
     std::string path;
     if (make_absolute_path_string(in, path)) {
       ldout(cct, 20) << __func__ << " absolute path: " << path << dendl;
-      if (path.length())
-        path = path.substr(1);    // drop leading /
       result = mds_check_access(path, perms, mask);
       if (result) {
         return result;
@@ -10579,8 +10583,17 @@ int Client::_open(const InodeRef& in, int flags, mode_t mode, Fh **fhp,
 
   // success?
   if (result >= 0) {
-    if (fhp)
+    if (fhp) {
       *fhp = _create_fh(in.get(), flags, cmode, perms);
+      // ceph_flags_sys2wire/ceph_flags_to_mode() calls above transforms O_DIRECTORY flag
+      // into CEPH_FILE_MODE_PIN mode. Although this mode is used at server size
+      // we [ab]use it here to determine whether we should pin inode to prevent from
+      // undesired cache eviction.
+      if (cmode == CEPH_FILE_MODE_PIN) {
+        ldout(cct, 20) << " pinning ll_get() call for " << *in << dendl;
+        _ll_get(in.get());
+      }
+    }
   } else {
     in->put_open_ref(cmode);
   }
@@ -10637,6 +10650,10 @@ int Client::_close(int fd)
   Fh *fh = get_filehandle(fd);
   if (!fh)
     return -EBADF;
+  if (fh->mode == CEPH_FILE_MODE_PIN) {
+    ldout(cct, 20) << " unpinning ll_put() call for " << *(fh->inode.get()) << dendl;
+    _ll_put(fh->inode.get(), 1);
+  }
   int err = _release_fh(fh);
   fd_map.erase(fd);
   put_fd(fd);
@@ -11887,8 +11904,12 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
       cond_iofinish = new C_SaferCond();
       filer_iofinish.reset(cond_iofinish);
     } else {
-      //Register a wrapper callback for the C_Write_Finisher which takes 'client_lock'
-      filer_iofinish.reset(new C_Lock_Client_Finisher(this, iofinish.get()));
+      //Register a wrapper callback C_Lock_Client_Finisher for the C_Write_Finisher which takes 'client_lock'.
+      //Use C_OnFinisher for callbacks. The op_cancel_writes has to be called without 'client_lock' held because
+      //the callback registered here needs to take it. This would cause incorrect lock order i.e., objecter->rwlock
+      //taken by objecter's op_cancel and then 'client_lock' taken by callback. To fix the lock order, queue
+      //the callback using the finisher
+      filer_iofinish.reset(new C_OnFinisher(new C_Lock_Client_Finisher(this, iofinish.get()), &objecter_finisher));
     }
 
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);

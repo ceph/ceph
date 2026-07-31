@@ -1870,7 +1870,7 @@ cdef class WriteOp(object):
             uint64_t _offset = offset
 
         with nogil:
-            rados_write_op_zero(self.write_op, _length, _offset)
+            rados_write_op_zero(self.write_op, _offset, _length)
 
     def truncate(self, offset: int):
         """

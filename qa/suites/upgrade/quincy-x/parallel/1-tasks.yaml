@@ -11,7 +11,7 @@ tasks:
 - print: "**** done install task..."
 - print: "**** done start installing quincy cephadm ..."
 - cephadm:
-    image: quay.ceph.io/ceph-ci/ceph:quincy
+    image: quay.io/ceph/ceph:v17.2.8
     cephadm_branch: quincy
     cephadm_git_url: https://github.com/ceph/ceph
     conf:

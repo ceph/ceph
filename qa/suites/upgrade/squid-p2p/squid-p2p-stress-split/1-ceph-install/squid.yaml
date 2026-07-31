@@ -1,13 +1,13 @@
 meta:
 - desc: |
-   install ceph/squid v19.2.0
+   install ceph/squid v19.2.1
    Overall upgrade path is - squid-latest.point -1 => squid-latest
 tasks:
 - install:
-    tag: v19.2.0
+    tag: v19.2.1
     exclude_packages: ['librados3']
     extra_packages: ['librados2']
-- print: "**** done install squid v19.2.0"
+- print: "**** done install squid v19.2.1"
 - ceph:
 - exec:
     osd.0:

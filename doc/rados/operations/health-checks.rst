@@ -314,6 +314,39 @@ However, if you believe the error is transient, you may restart your manager
 daemon(s) or use ``ceph mgr fail`` on the active daemon in order to force
 failover to another daemon.
 
+**Module failed to initialize**
+
+If the ``ceph health detail`` looks something like this, it means that some
+modules took too long to initialize after a Manager failover, and are unable to process
+commands:
+
+.. code-block:: console
+
+   HEALTH_ERR 4 mgr modules have failed
+   [ERR] MGR_MODULE_ERROR: 14 mgr modules have failed
+       Module 'rbd_support' has failed: Module failed to initialize.
+       Module 'status' has failed: Module failed to initialize.
+       Module 'telemetry' has failed: Module failed to initialize.
+       Module 'volumes' has failed: Module failed to initialize.
+
+
+You can also see these modules listed under ``pending_modules``
+in the output of the following command:
+
+.. prompt:: bash $
+
+   ceph tell mgr mgr_status
+
+To troubleshoot, you may run ``ceph mgr fail`` to reboot
+module initialization.
+
+Note that the health error may clear on its own since modules
+will continue to initialize in the background.
+
+If the modules are still failing to initialize, please file a bug
+report under the `"mgr" project <https://tracker.ceph.com/projects/mgr>`_
+for further assistance.
+
 OSDs
 ----
 
@@ -1660,17 +1693,21 @@ until the condition is fixed.
 We encourage you to fix this by removing additional dividing buckets or bump the
 number of dividing buckets to 2.
 
-UNEVEN_WEIGHTS_STRETCH_MODE
-___________________________
+STRETCH_MODE_BUCKET_WEIGHT_IMBALANCE
+____________________________________
 
-The 2 dividing buckets must have equal weights when stretch mode is enabled.
-This warning suggests that the 2 dividing buckets have uneven weights after
-stretch mode is enabled. This is not immediately fatal, however, you can expect
-Ceph to be confused when trying to process transitions between dividing buckets.
+The two dividing buckets must have weights within a fractional difference 
+when stretch mode is enabled. This is determined by the configuration option
+``mon_stretch_max_bucket_weight_delta`` (default: 0.1).
 
-We encourage you to fix this by making the weights even on both dividing buckets.
+This is not immediately fatal, however, you can expect Ceph to experience performance bottlenecks
+and imbalanced PG distribution if the aggregate CRUSH weights of the buckets differ significantly,
+as the smaller bucket will carry a higher I/O load per OSD.
+
+We encourage you to fix this by making the weights of the dividing buckets more even.
 This can be done by making sure the combined weight of the OSDs on each dividing
-bucket are the same.
+bucket are within the fractional difference defined by
+``mon_stretch_max_bucket_weight_delta``.
 
 NONEXISTENT_MON_CRUSH_LOC_STRETCH_MODE
 ______________________________________

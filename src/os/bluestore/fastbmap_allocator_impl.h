@@ -699,7 +699,7 @@ protected:
   void _allocate_l2(uint64_t length,
     uint64_t min_length,
     uint64_t max_length,
-    uint64_t hint,
+    int64_t hint,
     
     uint64_t* allocated,
     interval_vector_t* res)
@@ -724,7 +724,7 @@ protected:
     if (available < min_length) {
       return;
     }
-    if (hint != 0) {
+    if (hint != -1) {
       last_pos = (hint / (d * l2_granularity)) < l2.size() ? p2align(hint / l2_granularity, d) : 0;
     }
     auto l2_pos = last_pos;
