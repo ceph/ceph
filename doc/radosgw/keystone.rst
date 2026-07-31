@@ -51,6 +51,49 @@ only use implicit tenants, and the other protocol will
 never use implicit tenants.  Some older versions of Ceph
 only supported implicit tenants with Swift.
 
+Project-scoped reader role
+--------------------------
+
+By default any Keystone user accepted by the gateway is granted full control
+over its project's object storage. ``rgw keystone accepted project reader
+roles`` designates one or more Keystone roles as *project-scoped readers*
+(the Swift ``project_reader_roles`` equivalent)::
+
+   rgw keystone accepted roles = member
+   rgw keystone accepted project reader roles = objectstore_viewer
+
+When the reader role is the only access-granting role a user holds, the user
+is capped to read-only within its Keystone project: it may read objects and
+inspect bucket configuration (ACLs, policy, versioning, location, ...), but
+not write. Every user of a project maps to the same RGW account (the project
+itself), so a reader lists and reads every bucket the project owns through the
+normal owner-scoped paths, and cannot reach another project (a different
+owner). This scoping is by ownership and holds regardless of ``rgw keystone
+implicit tenants``, which only controls the bucket-name namespace: with it
+off, a reader reaching another project's bucket gets ``403`` (the bucket is
+in the shared namespace, visible but not owned); with it on, it gets ``404``
+(the bucket is in a separate namespace and not visible). Either way the
+reader stays confined to its own project.
+
+Note the following:
+
+- **A project reader role admits the user on its own.** It need not also
+  appear in ``rgw keystone accepted roles`` (mirroring Swift's
+  ``project_reader_roles``): a user whose only granting role is a project
+  reader role is admitted and capped to read-only.
+
+- **The cap is a floor, not a hard ceiling.** A bucket policy that names the
+  user (via a ``keystone:userid`` / ``keystone:role`` condition or a principal
+  ARN) can still grant specific actions such as writes on specific buckets;
+  an explicit policy ``Deny`` can likewise remove access. Only bucket creation
+  and Swift account-metadata writes are refused up front regardless of policy.
+
+- **A role that grants more than read overrides the cap.** If the same user
+  also holds ``admin`` or any other role in ``rgw keystone accepted roles``
+  (for example ``member``), that role wins and the user receives full control.
+  To keep a user read-only, assign it *only* the reader role. Roles that are
+  in no accepted list at all are ignored and do not affect the cap.
+
 Configuring Keystone Service and Endpoints
 ------------------------------------------
 
