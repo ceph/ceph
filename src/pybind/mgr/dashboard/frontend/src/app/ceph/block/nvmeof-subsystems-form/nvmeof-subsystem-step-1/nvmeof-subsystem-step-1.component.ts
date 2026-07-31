@@ -84,8 +84,14 @@ export class NvmeofSubsystemsStepOneComponent implements OnInit, TearsheetStep {
     const subnetMaskValidators = [
       CdValidators.composeIf({ listenerMode: this.LISTENER_MODE.AUTO_FETCH }, [Validators.required])
     ];
+    // Empty array is a valid value for Validators.required in some paths; require
+    // at least one selected listener when Add manually is active.
+    const requireListeners = CdValidators.custom(
+      'required',
+      (value: ListenerItem[] | null | undefined) => !value || value.length === 0
+    );
     const listenersValidators = [
-      CdValidators.composeIf({ listenerMode: this.LISTENER_MODE.MANUAL }, [Validators.required])
+      CdValidators.composeIf({ listenerMode: this.LISTENER_MODE.MANUAL }, [requireListeners])
     ];
 
     if (this.listenersOnly) {
