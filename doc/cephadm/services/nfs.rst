@@ -49,9 +49,14 @@ Alternatively, an NFS service can be applied using a YAML specification.
         - host2
     spec:
       port: 12345
+      monitoring_port: 567
+      enable_nfsv3: true
+
 
 In this example, we run the server on the non-default ``port`` of
 12345 (instead of the default 2049) on ``host1`` and ``host2``.
+By default, only the NFSv4 protocol is enabled. NFSv3 can be enabled by setting
+``enable_nfsv3`` to ``true`` in the service specification.
 
 The specification can then be applied by running the following command:
 
