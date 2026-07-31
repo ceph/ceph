@@ -11,3 +11,8 @@ tasks:
         mon osdmap full prune min: 15
         mon osdmap full prune interval: 2
         mon osdmap full prune txsize: 2
+overrides:
+  ceph:
+    conf:
+      osd:
+        seastore logical bucket cache test stress: true

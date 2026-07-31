@@ -66,9 +66,57 @@ std::ostream &operator<<(std::ostream &out, CachedExtent::extent_state_t state)
   }
 }
 
+std::ostream &operator<<(std::ostream &out, const extent_pin_state_t &s) {
+  switch (s) {
+  case extent_pin_state_t::Fresh:
+    return out << "Fresh";
+  case extent_pin_state_t::PendingPromote:
+    return out << "PendingPromote";
+  case extent_pin_state_t::Promoting:
+    return out << "Promoting";
+  case extent_pin_state_t::WarmIn:
+    return out << "WarmIn";
+  case extent_pin_state_t::Hot:
+    return out << "Hot";
+  case extent_pin_state_t::Max:
+    return out << "Max";
+  default:
+    __builtin_unreachable();
+    return out;
+  }
+}
+
 std::ostream &operator<<(std::ostream &out, const CachedExtent &ext)
 {
   return ext.print(out);
+}
+
+trans_spec_view_t::trans_spec_view_t(
+  Transaction &t) : t(&t) {}
+
+bool trans_spec_view_t::cmp_t::operator()(
+  const trans_spec_view_t &lhs,
+  const trans_spec_view_t &rhs) const
+{
+  transaction_id_t l = ((lhs.t == nullptr) ? 0 : lhs.t->get_trans_id());
+  transaction_id_t r = ((rhs.t == nullptr) ? 0 : rhs.t->get_trans_id());
+  return l < r;
+}
+
+bool trans_spec_view_t::cmp_t::operator()(
+  const transaction_id_t &lhs,
+  const trans_spec_view_t &rhs) const
+{
+  transaction_id_t r = ((rhs.t == nullptr) ? 0 : rhs.t->get_trans_id());
+  return lhs < r;
+}
+
+bool trans_spec_view_t::cmp_t::operator()(
+  const trans_spec_view_t &lhs,
+  const transaction_id_t &rhs) const
+{
+  transaction_id_t l = ((lhs.t == nullptr) ? 0 : lhs.t->get_trans_id());
+  return l < rhs;
 }
 
 CachedExtent::~CachedExtent()
@@ -104,6 +152,44 @@ CachedExtent* CachedExtent::maybe_get_transactional_view(Transaction &t) {
   }
 
   return this;
+}
+
+bool CachedExtent::is_pending_in_trans(transaction_id_t id) const {
+  auto trans_id = ((t == nullptr) ? 0 : t->get_trans_id());
+  return is_pending() && trans_id == id;
+}
+
+std::ostream &CachedExtent::print(std::ostream &out) const {
+  std::string prior_poffset_str = prior_poffset
+    ? fmt::format("{}", *prior_poffset)
+    : "nullopt";
+  out << "CachedExtent(addr=" << this
+      << ", type=" << get_type()
+      << ", trans=" << ((t == nullptr) ? 0 : t->get_trans_id())
+      << ", version=" << version
+      << ", dirty_from=" << dirty_from
+      << ", modify_time=" << sea_time_point_printer_t{modify_time}
+      << ", paddr=" << get_paddr()
+      << ", prior_paddr=" << prior_poffset_str
+      << std::hex << ", length=0x" << get_length()
+      << ", loaded=0x" << get_loaded_length() << std::dec
+      << ", state=" << state
+      << ", pin_state=" << pin_state
+      << ", last_committed_crc=" << last_committed_crc
+      << ", refcount=" << use_count()
+      << ", user_hint=" << user_hint
+      << ", write_policy=" << write_policy
+      << ", rewrite_gen=" << rewrite_gen_printer_t{rewrite_generation}
+      << ", pending_io=";
+  if (is_pending_io()) {
+    out << io_wait->from_state;
+  } else {
+    out << "N/A";
+  }
+  if (is_valid() && is_fully_loaded() && !is_stable_clean_pending()) {
+    print_detail(out);
+  }
+  return out << ")";
 }
 
 std::ostream &LogicalCachedExtent::print_detail(std::ostream &out) const
@@ -392,13 +478,17 @@ void ExtentCommitter::commit_state() {
   SUBTRACET(seastore_cache, "{} prior={}",
     t, extent, *extent.prior_instance);
   auto &prior = *extent.prior_instance;
-  prior.pending_for_transaction = extent.pending_for_transaction;
+  prior.t = extent.t;
   prior.modify_time = extent.modify_time;
   prior.last_committed_crc = extent.last_committed_crc;
   prior.dirty_from = extent.dirty_from;
   prior.length = extent.length;
-  prior.loaded_length = extent.loaded_length;
-  prior.buffer_space = std::move(extent.buffer_space);
+  // XXX: at present, zero loaded_length extents here
+  // must have been created by promoting/demoting them.
+  if (likely(extent.loaded_length != 0)) {
+    assert(prior.loaded_length == extent.loaded_length);
+    prior.buffer_space = std::move(extent.buffer_space);
+  }
   // XXX: We can go ahead and change the prior's version because
   // transactions don't hold a local view of the version field,
   // unlike FixedKVLeafNode::modifications
@@ -414,8 +504,29 @@ void ExtentCommitter::maybe_sync_copied_lba_key() {
   auto &lextent = static_cast<LogicalChildNode&>(extent);
   auto &prior = *extent.prior_instance;
   for (auto &item : prior.read_transactions) {
-    item.t->maybe_sync_copied_lba_key(
-      lextent.get_laddr(), lextent.get_paddr());
+    switch (t.get_src()) {
+    case transaction_type_t::PROMOTE:
+      {
+        auto &shadow = *lextent.get_shadow();
+        item.t->maybe_sync_copied_lba_key(
+          lextent.get_laddr(),
+          lextent.get_paddr(),
+          shadow.get_paddr());
+        break;
+      }
+    case transaction_type_t::DEMOTE:
+      item.t->maybe_sync_copied_lba_key(
+        lextent.get_laddr(),
+        lextent.get_paddr(),
+        P_ADDR_NULL);
+      break;
+    default:
+      item.t->maybe_sync_copied_lba_key(
+        lextent.get_laddr(),
+        lextent.get_paddr(),
+        std::nullopt);
+      break;
+    }
   }
 }
 
@@ -464,7 +575,7 @@ void ExtentCommitter::_share_prior_data_to_mutations() {
           if (it != merged.end()) {
             TRACE("{} -> {}, {} -> {}",
               me, mextent, (pladdr_t)buf.val.pladdr, it->second);
-            buf.val.pladdr = pladdr_le_t(it->second);
+            buf.val = lba::lba_map_val_le_t(it->second);
           }
         }
       });
@@ -513,6 +624,50 @@ void CachedExtent::new_committer(Transaction &t) {
   assert(prior_instance);
   assert(!prior_instance->committer);
   prior_instance->committer = committer;
+}
+
+void ExtentCommitter::commit_shadow_demote(Transaction &t) {
+  LOG_PREFIX(ExtentCommitter::commit_shadow_demote);
+  assert(t.get_src() == transaction_type_t::DEMOTE);
+  auto &prior = *extent.prior_instance->template cast<LogicalChildNode>();
+  auto shadow = prior.get_shadow();
+  assert(shadow);
+  for (auto &trans_view : prior.retired_transactions) {
+    assert(trans_view.t != nullptr);
+    auto view_tid = trans_view.t->get_trans_id();
+    if (view_tid == t.get_trans_id()) {
+      continue;
+    }
+    TRACET("removing shadow {} from retired_set of t.{}", t, *shadow, view_tid);
+    [[maybe_unused]] bool removed =
+      trans_view.t->remove_from_retired_set(*shadow);
+    assert(removed);
+    trans_view.t->remove_shadow_from_write_set(
+      shadow->get_paddr(), shadow->get_length());
+  }
+}
+
+void ExtentCommitter::commit_shadow_promote(Transaction &t) {
+  LOG_PREFIX(ExtentCommitter::commit_shadow_promote);
+  assert(t.get_src() == transaction_type_t::PROMOTE);
+  assert(extent.is_logical());
+  auto &lprior = static_cast<LogicalChildNode&>(*extent.prior_instance);
+  ceph_assert(lprior.get_pin_state() == extent_pin_state_t::Promoting);
+  auto &lext = static_cast<LogicalChildNode&>(extent);
+  auto shadow = lext.get_shadow();
+  assert(shadow);
+  assert(shadow->is_shadow_extent());
+  lprior.set_shadow(shadow);
+  for (auto &trans_view : lprior.retired_transactions) {
+    assert(trans_view.t != nullptr);
+    auto view_tid = trans_view.t->get_trans_id();
+    if (view_tid == t.get_trans_id()) {
+      continue;
+    }
+    TRACET("adding shadow {} from t.{}", t, *shadow, view_tid);
+    trans_view.t->add_absent_to_retired_set(shadow);
+  }
+  lprior.set_pin_state(extent_pin_state_t::Fresh);
 }
 
 }
