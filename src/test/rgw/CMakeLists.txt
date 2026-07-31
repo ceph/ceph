@@ -129,6 +129,14 @@ add_ceph_unittest(unittest_rgw_cors)
 target_link_libraries(unittest_rgw_cors ${rgw_libs})
 
 
+# unittest_rgw_frontend_type
+add_executable(unittest_rgw_frontend_type
+  test_rgw_frontend_type.cc
+  $<TARGET_OBJECTS:unit-main>)
+add_ceph_unittest(unittest_rgw_frontend_type)
+target_link_libraries(unittest_rgw_frontend_type ${rgw_libs} heap_profiler)
+
+
 # unittest_rgw_bucket_sync_cache
 add_executable(unittest_rgw_bucket_sync_cache test_rgw_bucket_sync_cache.cc)
 add_ceph_unittest(unittest_rgw_bucket_sync_cache)
