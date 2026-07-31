@@ -87,6 +87,8 @@ if(WITH_MOLD)
     endif()
   endforeach()
   set(USING_MOLD_LINKER TRUE CACHE INTERNAL "")
+else()
+  set(USING_MOLD_LINKER FALSE CACHE INTERNAL "")
 endif()
 
 option(WITH_CCACHE "Build with ccache.")
