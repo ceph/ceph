@@ -15678,6 +15678,12 @@ void PrimaryLogPG::pool_migration_target_delete(const pg_t &source_pg, const hob
   uint64_t deleted = 0;
   bool done = false;
 
+  // Track all heads whose clones are not deleted (below watermark).
+  // A clone without a head triggers recovery asserts, so we must not delete
+  // any head that still has a clone. The head will be migrated again,
+  // this is fine.
+  std::set<hobject_t> skipped_clone_heads;
+
   while (current < pg_end && !done) {
     vector<hobject_t> objects;
     hobject_t next;
@@ -15709,9 +15715,18 @@ void PrimaryLogPG::pool_migration_target_delete(const pg_t &source_pg, const hob
       // Create a version of the target object with the source pool number for comparison.
       hobject_t obj_in_source_pool = obj;
       obj_in_source_pool.pool = watermark.pool;
-      
+
       if (obj_in_source_pool < watermark) {
         dout(20) << __func__ << " skipping " << obj << " (< watermark " << watermark << ")" << dendl;
+        if (obj.is_snap()) {
+          skipped_clone_heads.insert(obj.get_head());
+        }
+        continue;
+      }
+
+      if (obj.is_head() && skipped_clone_heads.contains(obj)) {
+        dout(20) << __func__ << " skipping head " << obj
+                 << " because its clone below watermark was retained" << dendl;
         continue;
       }
 
