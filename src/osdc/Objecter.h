@@ -1171,6 +1171,7 @@ struct ObjectOperation {
     uint64_t *out_truncate_seq;
     uint64_t *out_truncate_size;
     std::map<std::pair<uint64_t, entity_name_t>, watch_info_t> *out_watchers;
+    std::map<uint64_t, uint64_t> *out_extent_map;
     int *prval;
     C_ObjectOperation_copyget(object_copy_cursor_t *c,
 			      uint64_t *s,
@@ -1188,6 +1189,7 @@ struct ObjectOperation {
 			      uint64_t *otseq,
 			      uint64_t *otsize,
                               std::map<std::pair<uint64_t, entity_name_t>, watch_info_t> *owatchers,
+                              std::map<uint64_t, uint64_t> *oextent_map,
 			      int *r)
       : cursor(c),
 	out_size(s), out_mtime(m),
@@ -1199,6 +1201,7 @@ struct ObjectOperation {
 	out_truncate_seq(otseq),
 	out_truncate_size(otsize),
         out_watchers(owatchers),
+        out_extent_map(oextent_map),
 	prval(r) {}
     void finish(int r) override {
       using ceph::decode;
@@ -1246,6 +1249,9 @@ struct ObjectOperation {
 	  *out_truncate_size = copy_reply.truncate_size;
         if (out_watchers)
           *out_watchers = copy_reply.watchers;
+	if (out_extent_map)
+	  out_extent_map->insert(copy_reply.extent_map.begin(),
+				 copy_reply.extent_map.end());
 	*cursor = copy_reply.cursor;
       } catch (const ceph::buffer::error& e) {
 	if (prval)
@@ -1272,6 +1278,7 @@ struct ObjectOperation {
 		uint64_t *truncate_seq,
 		uint64_t *truncate_size,
                 std::map<std::pair<uint64_t, entity_name_t>, watch_info_t> *out_watchers,
+                std::map<uint64_t, uint64_t> *out_extent_map,
 		int *prval) {
     using ceph::encode;
     OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_GET);
@@ -1288,7 +1295,7 @@ struct ObjectOperation {
 				    out_omap_digest, out_reqids,
 				    out_reqid_return_codes, truncate_seq,
 				    truncate_size, out_watchers,
-                                    prval);
+                                    out_extent_map, prval);
     out_bl[p] = &h->bl;
     set_handler(h);
   }

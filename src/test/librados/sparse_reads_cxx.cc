@@ -1463,21 +1463,20 @@ TEST_F(ECSparseReadTest, CopyFromPreservesFAEForZeroBlocks) {
 
 // Cross-pool copy_from tests exercising FAE behaviour across pool types.
 //
-// A single test creates three auxiliary pools once and shares them across all
+// A single test creates two auxiliary pools once and shares them across all
 // sub-scenarios (each scoped in its own {} block):
 //
-//   rep_ioctx  — replicated pool (no FAE tracking)
-//   ec_noflag_ioctx — Fast EC pool without FLAG_PRESERVE_ALLOCATION
-//                     (FAE zero-detection is disabled)
+//   rep_ioctx     — replicated pool (no FAE tracking)
+//   classic_ioctx — classic EC pool (no FLAG_EC_OPTIMIZATIONS, no FAE tracking)
 //
-// ioctx (from ECOnlyTestFixture) = Fast EC WITH FLAG_PRESERVE_ALLOCATION.
+// ioctx (from ECOnlyTestFixture) = Fast EC with FLAG_EC_OPTIMIZATIONS.
 //
 // Sub-scenarios:
-//  A. replica src  → EC(flag) dst  : dst gets FAE via zero detection
-//  B. EC(flag) src → replica dst   : dst has no FAE (replicated pool)
-//  C. EC(flag) src → EC(noflag) dst: dst has no FAE (flag not set on dst pool)
-//  D. EC(noflag) src → EC(flag) dst: dst gets FAE via zero detection;
-//                                    src has no FAE (flag not set on src pool)
+//  A. replica src    → FastEC dst  : dst gets FAE via zero detection
+//  B. FastEC src     → replica dst : dst has no FAE (replicated pool)
+//  C. FastEC src     → classic dst : dst has no FAE (no ec_optimizations)
+//  D. classic EC src → FastEC dst  : dst gets FAE via zero detection;
+//                                    src has no FAE (no ec_optimizations)
 TEST_F(ECSparseReadTest, CopyFromCrossPoolFAEBehaviour) {
   // -----------------------------------------------------------------------
   // Pool setup — created once for all sub-scenarios.
@@ -1487,15 +1486,13 @@ TEST_F(ECSparseReadTest, CopyFromCrossPoolFAEBehaviour) {
   librados::IoCtx rep_ioctx;
   ASSERT_EQ(0, rados.ioctx_create(rep_pool_name.c_str(), rep_ioctx));
 
-  const std::string ec_noflag_pool_name = get_temp_pool_name("cfcp_ec_noflag_");
-  ASSERT_EQ("", create_ec_pool_pp(ec_noflag_pool_name, rados, /*fast_ec=*/true));
-  ASSERT_EQ("", set_allow_ec_overwrites_pp(ec_noflag_pool_name, rados, true));
-  // Explicitly leave FLAG_PRESERVE_ALLOCATION off on this pool.
-  ASSERT_EQ("", set_pool_flags_pp(
-    ec_noflag_pool_name, rados, pg_pool_t::FLAG_PRESERVE_ALLOCATION, false));
+  // Classic EC pool: no FLAG_EC_OPTIMIZATIONS, so copy_from must never set FAE.
+  const std::string classic_pool_name = get_temp_pool_name("cfcp_classic_ec_");
+  ASSERT_EQ("", create_ec_pool_pp(classic_pool_name, rados, /*fast_ec=*/false));
+  ASSERT_EQ("", set_allow_ec_overwrites_pp(classic_pool_name, rados, true));
   rados.wait_for_latest_osdmap();
-  librados::IoCtx ec_noflag_ioctx;
-  ASSERT_EQ(0, rados.ioctx_create(ec_noflag_pool_name.c_str(), ec_noflag_ioctx));
+  librados::IoCtx classic_ioctx;
+  ASSERT_EQ(0, rados.ioctx_create(classic_pool_name.c_str(), classic_ioctx));
 
   bufferlist zero_bl = create_zero_buffer(4096);
   const std::map<uint64_t, uint64_t> zero_extents = {{0, 4096}};
@@ -1518,9 +1515,9 @@ TEST_F(ECSparseReadTest, CopyFromCrossPoolFAEBehaviour) {
   };
 
   // -----------------------------------------------------------------------
-  // A. Replica source → EC(flag) destination
-  //    Replica pools never set FAE.  The EC destination must recalculate FAE
-  //    from zero detection during the copy write.
+  // A. Replica source → FastEC destination
+  //    Replica pools never set FAE.  The FastEC destination must recalculate
+  //    FAE from zero detection during the copy write.
   // -----------------------------------------------------------------------
   {
     const std::string src = "cfcp_a_src";
@@ -1535,15 +1532,15 @@ TEST_F(ECSparseReadTest, CopyFromCrossPoolFAEBehaviour) {
 
     auto dst_fae = get_force_allocated_extents(dst);
     ASSERT_TRUE(dst_fae.has_value())
-        << "A: EC(flag) dst FAE not set after copy from replica";
+        << "A: FastEC dst FAE not set after copy from replica";
     ASSERT_EQ(zero_interval, dst_fae->get_intervals())
-        << "A: EC(flag) dst FAE does not cover [0, 4096)";
+        << "A: FastEC dst FAE does not cover [0, 4096)";
     verify_sparse_read(dst, 0, 4096, zero_extents, zero_bl);
   }
 
   // -----------------------------------------------------------------------
-  // B. EC(flag) source → replica destination
-  //    The EC source has FAE; the replica destination must have none.
+  // B. FastEC source → replica destination
+  //    The FastEC source has FAE; the replica destination must have none.
   // -----------------------------------------------------------------------
   {
     const std::string src = "cfcp_b_src";
@@ -1551,7 +1548,7 @@ TEST_F(ECSparseReadTest, CopyFromCrossPoolFAEBehaviour) {
 
     ASSERT_EQ(0, ioctx.write(src, zero_bl, zero_bl.length(), 0));
     ASSERT_TRUE(get_force_allocated_extents(src).has_value())
-        << "B: EC(flag) source FAE not set — pool missing FLAG_PRESERVE_ALLOCATION";
+        << "B: FastEC source FAE not set";
 
     ObjectWriteOperation op;
     op.copy_from(src, ioctx, 0, 0);
@@ -1567,9 +1564,9 @@ TEST_F(ECSparseReadTest, CopyFromCrossPoolFAEBehaviour) {
   }
 
   // -----------------------------------------------------------------------
-  // C. EC(flag) source → EC(noflag) destination
-  //    The source has FAE but the destination pool has the flag off, so the
-  //    destination OSD must not run zero detection and must not set FAE.
+  // C. FastEC source → classic EC destination
+  //    Classic EC has no FLAG_EC_OPTIMIZATIONS, so copy_from must not compute
+  //    FAE on the destination regardless of the source FAE.
   // -----------------------------------------------------------------------
   {
     const std::string src = "cfcp_c_src";
@@ -1577,43 +1574,42 @@ TEST_F(ECSparseReadTest, CopyFromCrossPoolFAEBehaviour) {
 
     ASSERT_EQ(0, ioctx.write(src, zero_bl, zero_bl.length(), 0));
     ASSERT_TRUE(get_force_allocated_extents(src).has_value())
-        << "C: EC(flag) source FAE not set — pool missing FLAG_PRESERVE_ALLOCATION";
+        << "C: FastEC source FAE not set";
 
     ObjectWriteOperation op;
     op.copy_from(src, ioctx, 0, 0);
-    ASSERT_EQ(0, ec_noflag_ioctx.operate(dst, &op));
+    ASSERT_EQ(0, classic_ioctx.operate(dst, &op));
 
-    assert_no_fae(ec_noflag_ioctx, dst, "C: EC(noflag) destination");
+    assert_no_fae(classic_ioctx, dst, "C: classic EC destination");
 
     bufferlist read_bl;
     ASSERT_EQ((int)zero_bl.length(),
-              ec_noflag_ioctx.read(dst, read_bl, zero_bl.length(), 0));
+              classic_ioctx.read(dst, read_bl, zero_bl.length(), 0));
     ASSERT_TRUE(read_bl.contents_equal(zero_bl))
-        << "C: EC(noflag) destination data mismatch";
+        << "C: classic EC destination data mismatch";
   }
 
   // -----------------------------------------------------------------------
-  // D. EC(noflag) source → EC(flag) destination
-  //    The source pool has the flag off so the source has no FAE.  The
-  //    destination pool has the flag on, so the destination OSD runs zero
-  //    detection and must set FAE from the written data.
+  // D. Classic EC source → FastEC destination
+  //    Classic EC never sets FAE on the source.  The FastEC destination must
+  //    recalculate FAE from zero detection during the copy write.
   // -----------------------------------------------------------------------
   {
     const std::string src = "cfcp_d_src";
     const std::string dst = "cfcp_d_dst";
 
-    ASSERT_EQ(0, ec_noflag_ioctx.write(src, zero_bl, zero_bl.length(), 0));
-    assert_no_fae(ec_noflag_ioctx, src, "D: EC(noflag) source");
+    ASSERT_EQ(0, classic_ioctx.write(src, zero_bl, zero_bl.length(), 0));
+    assert_no_fae(classic_ioctx, src, "D: classic EC source");
 
     ObjectWriteOperation op;
-    op.copy_from(src, ec_noflag_ioctx, 0, 0);
+    op.copy_from(src, classic_ioctx, 0, 0);
     ASSERT_EQ(0, ioctx.operate(dst, &op));
 
     auto dst_fae = get_force_allocated_extents(dst);
     ASSERT_TRUE(dst_fae.has_value())
-        << "D: EC(flag) dst FAE not set after copy from EC(noflag)";
+        << "D: FastEC dst FAE not set after copy from classic EC";
     ASSERT_EQ(zero_interval, dst_fae->get_intervals())
-        << "D: EC(flag) dst FAE does not cover [0, 4096)";
+        << "D: FastEC dst FAE does not cover [0, 4096)";
     verify_sparse_read(dst, 0, 4096, zero_extents, zero_bl);
   }
 
@@ -1622,8 +1618,8 @@ TEST_F(ECSparseReadTest, CopyFromCrossPoolFAEBehaviour) {
   // -----------------------------------------------------------------------
   rep_ioctx.close();
   destroy_pool_pp(rep_pool_name, rados);
-  ec_noflag_ioctx.close();
-  destroy_ec_pool_pp(ec_noflag_pool_name, rados);
+  classic_ioctx.close();
+  destroy_ec_pool_pp(classic_pool_name, rados);
 }
 
 // ---------------------------------------------------------------------------

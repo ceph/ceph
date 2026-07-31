@@ -109,7 +109,7 @@ public:
     bool whiteout; ///< Source object is whiteout
     bool clone_trimmed_on_target; ///< All clone snaps trimmed on target; skip the copy-from write
     std::map<std::pair<uint64_t, entity_name_t>, watch_info_t> watchers;
-
+    force_allocated_extents_t force_allocated_extents;
     bool is_data_digest() {
       return flags & object_copy_data_t::FLAG_DATA_DIGEST;
     }
@@ -151,6 +151,7 @@ public:
     ceph::buffer::list omap_header;
     ceph::buffer::list omap_data;
     int rval;
+    std::map<uint64_t, uint64_t> extent_map;
 
     object_copy_cursor_t temp_cursor;
 
