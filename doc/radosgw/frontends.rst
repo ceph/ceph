@@ -169,6 +169,88 @@ Options
 :Default: ``0``
 
 
+
+
+RGW-SMB Frontend
+================
+
+The ``rgw-smb`` frontend provides direct SMB protocol access to RGW buckets,
+similar to how ``rgw-nfs`` provides NFS access. This is a specialized daemon
+type distinct from the standard HTTP frontends.
+
+.. note::
+   The ``rgw-smb`` frontend is different from the SMB manager module. The SMB
+   manager module provides SMB access to CephFS volumes via Samba containers,
+   while the ``rgw-smb`` frontend provides direct SMB protocol access to RGW
+   object storage. See :doc:`/mgr/smb` for information about the SMB manager module.
+
+Configuration
+-------------
+
+The ``rgw-smb`` frontend is configured through the daemon type specification
+rather than the :confval:`rgw_frontends` configuration option used by HTTP frontends.
+
+.. important::
+   **HTTP and SMB/NFS Frontends are NOT Mutually Exclusive**
+
+   When RGW is started with a non-default frontend type (``rgw-smb`` or ``rgw-nfs``),
+   it will **not** start an HTTP listener by default. However, HTTP and SMB/NFS
+   frontends can run together in the same daemon instance. You can enable HTTP
+   access alongside SMB/NFS by configuring additional HTTP frontends using the
+   frontend-specific :confval:`rgw_smb_frontends` or :confval:`rgw_nfs_frontends`
+   configuration option.
+
+Daemon Type Configuration:
+
+- **Daemon type**: ``rgw-smb``
+- **Config prefix**: ``rgw_smb_`` (underscore format for configuration keys)
+- **Service name**: ``rgw-smb`` (hyphen format for daemon names)
+
+Options
+-------
+
+``rgw_smb_frontends``
+
+:Description: Additional frontends to enable alongside the SMB frontend.
+              Syntax is identical to :confval:`rgw_frontends`. This allows running
+              both SMB and HTTP frontends from the same daemon instance.
+
+:Type: String
+:Default: rgw-smb
+
+Running Multiple Frontends
+---------------------------
+
+The ``rgw-smb`` daemon can run multiple frontend types simultaneously. This is
+useful when you need to provide both SMB access and HTTP-based S3/Swift API
+access from the same RGW instance.
+
+**Example Configuration:**
+
+.. code-block:: ini
+
+   [client.rgw.smb-gateway]
+   # Enable SMB frontend (default for rgw-smb daemon type)
+   # Also enable HTTP frontend for S3/Swift API access
+   rgw_smb_frontends = beast endpoint=0.0.0.0:8080 ssl_endpoint=0.0.0.0:8443 ssl_certificate=/path/to/cert.pem
+
+In this configuration:
+
+- The SMB frontend is enabled by default (daemon type is ``rgw-smb``)
+- An HTTP frontend (Beast) is added to provide S3/Swift API access on port 8080 (HTTP) and 8443 (HTTPS)
+- Both frontends share the same RGW backend and can access the same buckets and objects
+
+.. note::
+   When running multiple frontends, ensure that:
+
+   - Port numbers do not conflict
+   - Network security policies allow access to all configured ports
+   - SSL certificates are properly configured for HTTPS endpoints
+   - Authentication mechanisms are appropriate for each protocol
+
+See :doc:`/mgr/smb` for detailed configuration and deployment information.
+
+
 Generic Options
 ===============
 
