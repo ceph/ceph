@@ -9679,24 +9679,43 @@ struct C_Copyfrom : public Context {
 };
 
 struct C_CopyFrom_AsyncReadCb : public Context {
+  PrimaryLogPG *pg;
+  PrimaryLogPG::OpContext *opctx;
   OSDOp *osd_op;
   object_copy_data_t reply_obj;
   uint64_t features;
   size_t len;
-  C_CopyFrom_AsyncReadCb(OSDOp *osd_op, uint64_t features) :
-    osd_op(osd_op), features(features), len(0) {}
+  uint64_t data_offset_start = 0; // cursor.data_offset before the read advance
+  // Populated by the sparse-read path (Fast EC); empty for the legacy path.
+  std::map<uint64_t, uint64_t> ext_map;
+  ceph::buffer::list data_bl;
+  bool sparse_read = false;
+  C_CopyFrom_AsyncReadCb(PrimaryLogPG *pg, PrimaryLogPG::OpContext *ctx,
+                         OSDOp *osd_op, uint64_t features) :
+    pg(pg), opctx(ctx), osd_op(osd_op), features(features), len(0) {}
   void finish(int r) override {
     osd_op->rval = r;
-    if (r < 0) {
-      return;
+    if (r >= 0) {
+      if (sparse_read) {
+        // Sparse path: data_bl contains only the non-hole bytes; ext_map has
+        // the object-space extent map.
+        reply_obj.data.swap(data_bl);
+        reply_obj.extent_map = std::move(ext_map);
+        reply_obj.cursor.data_offset = data_offset_start + reply_obj.data.length();
+      } else {
+        // Legacy path: reply_obj.data was written directly; truncate to len.
+        ceph_assert(len > 0);
+        ceph_assert(len <= reply_obj.data.length());
+        bufferlist bl;
+        bl.substr_of(reply_obj.data, 0, len);
+        reply_obj.data.swap(bl);
+      }
+      encode(reply_obj, osd_op->outdata, features);
     }
 
-    ceph_assert(len > 0);
-    ceph_assert(len <= reply_obj.data.length());
-    bufferlist bl;
-    bl.substr_of(reply_obj.data, 0, len);
-    reply_obj.data.swap(bl);
-    encode(reply_obj, osd_op->outdata, features);
+    if (sparse_read) {
+      opctx->finish_read(pg);
+    }
   }
 };
 
@@ -9747,7 +9766,7 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::const_iterator& bp,
   object_copy_data_t _reply_obj;
   C_CopyFrom_AsyncReadCb *cb = nullptr;
   if (pool.info.is_erasure()) {
-    cb = new C_CopyFrom_AsyncReadCb(&osd_op, features);
+    cb = new C_CopyFrom_AsyncReadCb(this, ctx, &osd_op, features);
   }
   object_copy_data_t &reply_obj = cb ? cb->reply_obj : _reply_obj;
   // size, mtime
@@ -9796,24 +9815,48 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::const_iterator& bp,
     if (cursor.data_offset < oi.size) {
       uint64_t max_read = std::min(oi.size - cursor.data_offset, (uint64_t)left);
       if (cb) {
-	async_read_started = true;
-	ctx->pending_async_reads.push_back(
-	  make_pair(
-	    boost::make_tuple(cursor.data_offset, max_read, osd_op.op.flags),
-	    make_pair(&bl, cb)));
-	cb->len = max_read;
-
-        ctx->op_finishers[ctx->current_osd_subop_num].reset(
-          new ReadFinisher(osd_op));
-	result = -EINPROGRESS;
-
-	dout(10) << __func__ << ": async_read noted for " << soid << dendl;
+        async_read_started = true;
+        // Fast EC: try sparse read to get data + extent map in one pass.
+        int sparse_r = pgbackend->objects_sparse_read_async(
+          oi.soid, cursor.data_offset, max_read, oi.size, osd_op.op.flags,
+          &cb->ext_map, &cb->data_bl, cb,
+          oi.force_allocated_extents.get_intervals());
+        if (sparse_r == 0) {
+          // Sparse read accepted: completion will fire cb->finish().
+          cb->sparse_read = true;
+          cb->data_offset_start = cursor.data_offset;
+          ctx->op_finishers[ctx->current_osd_subop_num].reset(
+            new ReadFinisher(osd_op));
+          ctx->inflightreads = 1;
+          in_progress_async_reads.push_back(make_pair(ctx->op, ctx));
+          result = -EINPROGRESS;
+          dout(10) << __func__ << ": ec sparse_read async noted for " << soid << dendl;
+        } else if (sparse_r == -EOPNOTSUPP) {
+          // Classic EC: fall back to the legacy async read path.
+          ctx->pending_async_reads.push_back(
+            make_pair(
+              boost::make_tuple(cursor.data_offset, max_read, osd_op.op.flags),
+              make_pair(&bl, cb)));
+          cb->len = max_read;
+          ctx->op_finishers[ctx->current_osd_subop_num].reset(
+            new ReadFinisher(osd_op));
+          result = -EINPROGRESS;
+          dout(10) << __func__ << ": async_read noted for " << soid << dendl;
+        } else {
+          delete cb;
+          cb = nullptr;
+          return sparse_r;
+        }
       } else {
- result = pgbackend->objects_read_sync(
-   oi.soid, cursor.data_offset, max_read, osd_op.op.flags, &bl,
-   oi.size, ctx->op->coro_handles);
-	if (result < 0)
-	  return result;
+        result = pgbackend->objects_read_sync(
+          oi.soid, cursor.data_offset, max_read, osd_op.op.flags, &bl,
+          oi.size, ctx->op->coro_handles);
+        if (result < 0)
+          return result;
+        // Replicated pool: get extent map via synchronous fiemap.
+        osd->store->fiemap(ch,
+          ghobject_t(oi.soid, ghobject_t::NO_GEN, whoami_shard().shard),
+          cursor.data_offset, max_read, reply_obj.extent_map);
       }
       left -= max_read;
       cursor.data_offset += max_read;
@@ -10034,17 +10077,18 @@ void PrimaryLogPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
     ceph_assert(cop->cursor.is_initial());
   }
   op.copy_get(&cop->cursor, get_copy_chunk_size(),
-	      &cop->results.object_size, &cop->results.mtime,
-	      &cop->attrs, &cop->data, &cop->omap_header, &cop->omap_data,
-	      &cop->results.snaps, &cop->results.snap_seq,
-	      &cop->results.flags,
-	      &cop->results.source_data_digest,
-	      &cop->results.source_omap_digest,
-	      &cop->results.reqids,
-	      &cop->results.reqid_return_codes,
-	      &cop->results.truncate_seq,
-	      &cop->results.truncate_size,
-	      &cop->rval);
+              &cop->results.object_size, &cop->results.mtime,
+              &cop->attrs, &cop->data, &cop->omap_header, &cop->omap_data,
+              &cop->results.snaps, &cop->results.snap_seq,
+              &cop->results.flags,
+              &cop->results.source_data_digest,
+              &cop->results.source_omap_digest,
+              &cop->results.reqids,
+              &cop->results.reqid_return_codes,
+              &cop->results.truncate_seq,
+              &cop->results.truncate_size,
+              &cop->extent_map,
+              &cop->rval);
   op.set_last_op_flags(cop->src_obj_fadvise_flags);
 
   C_Copyfrom *fin = new C_Copyfrom(this, obc->obs.oi.soid,
@@ -10230,8 +10274,8 @@ void PrimaryLogPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
 
   if (!cop->temp_cursor.attr_complete) {
     for (map<string,bufferlist>::iterator p = cop->attrs.begin();
-	 p != cop->attrs.end();
-	 ++p) {
+         p != cop->attrs.end();
+         ++p) {
       cop->results.attrs[string("_") + p->first] = p->second;
     }
     cop->attrs.clear();
@@ -10525,13 +10569,40 @@ void PrimaryLogPG::_write_copy_chunk(CopyOpRef cop, PGTransaction *t)
 	       cop->cursor.data_offset);
       }
     }
-    if (cop->data.length()) {
+    const bool track_fae = pool.info.is_erasure() &&
+                           pool.info.allows_ecoptimizations();
+    if (!cop->extent_map.empty()) {
+      // Sparse path: write only the extents that have data, leaving holes.
+      // cop->data holds the non-hole bytes packed sequentially
+      const uint64_t chunk_start = cop->temp_cursor.data_offset;
+      uint64_t bl_pos = 0;
+      for (auto& [ext_off, ext_len] : cop->extent_map) {
+        if (ext_off + ext_len <= chunk_start) {
+          bl_pos += ext_len;
+          continue;
+        }
+        bufferlist slice;
+        slice.substr_of(cop->data, bl_pos, ext_len);
+        t->write(cop->results.temp_oid, ext_off, ext_len, slice,
+                 cop->dest_obj_fadvise_flags);
+        if (track_fae) {
+          cop->results.force_allocated_extents.union_of(
+            detect_zero_blocks(slice, ext_off));
+        }
+        bl_pos += ext_len;
+      }
+    } else if (cop->data.length()) {
+      // Non-sparse path (Classic EC or old peer): single contiguous write.
       t->write(
-	cop->results.temp_oid,
-	cop->temp_cursor.data_offset,
-	cop->data.length(),
-	cop->data,
-	cop->dest_obj_fadvise_flags);
+        cop->results.temp_oid,
+        cop->temp_cursor.data_offset,
+        cop->data.length(),
+        cop->data,
+        cop->dest_obj_fadvise_flags);
+      if (track_fae) {
+        cop->results.force_allocated_extents.union_of(
+          detect_zero_blocks(cop->data, cop->temp_cursor.data_offset));
+      }
     }
     cop->data.clear();
   }
@@ -10580,6 +10651,8 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
     ctx->discard_temp_oid = cb->results->temp_oid;
   }
   cb->results->fill_in_final_tx(ctx->op_t.get());
+
+  obs.oi.force_allocated_extents = cb->results->force_allocated_extents;
 
   // CopyFromCallback fills this in for us
   obs.oi.user_version = ctx->user_at_version;

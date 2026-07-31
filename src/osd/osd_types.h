@@ -5733,6 +5733,121 @@ struct object_copy_cursor_t {
 };
 WRITE_CLASS_ENCODER(object_copy_cursor_t)
 
+// Block granularity for force-allocated extent tracking (4 KiB, aligned with
+// EC operations, LUKS2, and fscrypt block sizes).
+static constexpr uint64_t FAE_BLOCK_SIZE = 4096;
+
+// Approximate byte cost of one std::map node used by the bitmap merge/split
+// heuristic (key + value + 3 pointers + colour, rounded to a cache line).
+static constexpr uint32_t FAE_MAP_NODE_BYTES = 48;
+
+// One bitmap entry in the bitmap map.  The map key is the FAE_BLOCK_SIZE-
+// aligned byte offset of the first block; `span_blocks` is how many blocks
+// this bitmap covers; `words` is the packed bitmap (one bit per block, LSB =
+// lowest block).  An empty `words` vector is the single-block fast-path:
+// it represents exactly one set block at the key offset.
+struct fae_bitmap_t {
+  uint64_t span_blocks = 0;
+  std::vector<uint64_t> words;
+
+  // Number of set bits.
+  uint32_t popcount() const;
+  // True when every bit in [bit_start, bit_start+bit_len) is clear.
+  bool range_empty(const uint64_t bit_start, const uint64_t bit_len) const;
+};
+
+// Tracks which 4 KiB blocks of an erasure-coded object must be treated as
+// force-allocated (non-sparse) even though they contain only zeroes.
+//
+// Internally the set is a std::map<uint64_t, fae_bitmap_t> where each key is
+// a block-aligned byte offset and each value is a bitmap covering one
+// or more contiguous blocks.  The map stays locally optimal: adjacent bitmaps
+// are merged when the merge costs fewer bytes than two separate map nodes,
+// and a bitmap is split when a gap inside it is large enough to justify the
+// extra map node.
+//
+// Deferred decode: decode() stores raw bytes and sets dirty_=false; bitmaps_
+// is populated lazily on first access via materialise().  encode() skips
+// re-encoding when !dirty_ and raw_ is non-empty (zero-copy fast path).
+//
+// All byte offsets/lengths accepted by the mutating methods are rounded
+// outward to FAE_BLOCK_SIZE boundaries internally.
+struct force_allocated_extents_t {
+  void add(const uint64_t offset, const uint64_t length);
+  void remove(const uint64_t offset, const uint64_t length);
+  void truncate(const uint64_t new_size);
+  void clear() { materialise(); dirty_ = true; raw_.clear(); bitmaps_.clear(); }
+  void insert_exact(const uint64_t offset, const uint64_t length);
+  void union_of(const force_allocated_extents_t& o);
+
+  bool empty() const { materialise(); return bitmaps_.empty(); }
+  bool operator==(const force_allocated_extents_t& o) const;
+  bool operator!=(const force_allocated_extents_t& o) const {
+    return !(*this == o);
+  }
+  bool intersects(const uint64_t offset, const uint64_t length) const;
+  uint32_t num_intervals() const;
+  uint64_t size() const;
+  bool contains(const uint64_t pos) const;
+  bool contains(const uint64_t offset, const uint64_t length) const;
+
+  struct const_iterator {
+    using value_type        = std::pair<uint64_t, uint64_t>;
+    using difference_type   = std::ptrdiff_t;
+    using pointer           = const value_type*;
+    using reference         = const value_type&;
+    using iterator_category = std::forward_iterator_tag;
+
+    const_iterator() = default;
+    explicit const_iterator(
+      std::map<uint64_t, fae_bitmap_t>::const_iterator map_it,
+      std::map<uint64_t, fae_bitmap_t>::const_iterator map_end);
+
+    reference operator*()  const { return current_; }
+    pointer   operator->() const { return &current_; }
+    const_iterator& operator++();
+    const_iterator  operator++(int) { auto t = *this; ++(*this); return t; }
+    bool operator==(const const_iterator& o) const {
+      return map_it_ == o.map_it_ && bit_ == o.bit_;
+    }
+    bool operator!=(const const_iterator& o) const { return !(*this == o); }
+
+  private:
+    void advance_to_set_bit();
+    std::map<uint64_t, fae_bitmap_t>::const_iterator map_it_;
+    std::map<uint64_t, fae_bitmap_t>::const_iterator map_end_;
+    uint64_t   bit_ = 0;
+    value_type current_{};
+  };
+
+  const_iterator begin() const;
+  const_iterator end()   const;
+
+  interval_set<uint64_t> get_intervals() const;
+
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& p);
+  void dump(ceph::Formatter *f) const;
+  static std::list<force_allocated_extents_t> generate_test_instances();
+
+private:
+  mutable std::map<uint64_t, fae_bitmap_t> bitmaps_;
+  mutable ceph::buffer::list raw_;   ///< cached encoded bytes (deferred decode)
+  mutable bool dirty_ = true;        ///< true when bitmaps_ is authoritative
+
+  // Parse raw_ into bitmaps_ on first access, then clear raw_.
+  void materialise() const;
+
+  static uint32_t bitmap_cost(const fae_bitmap_t& c);
+  std::map<uint64_t, fae_bitmap_t>::iterator
+    try_merge_with_right(std::map<uint64_t, fae_bitmap_t>::iterator it);
+  std::map<uint64_t, fae_bitmap_t>::iterator
+    try_split_at(std::map<uint64_t, fae_bitmap_t>::iterator it);
+};
+WRITE_CLASS_ENCODER(force_allocated_extents_t)
+
+std::ostream& operator<<(std::ostream&, const force_allocated_extents_t&);
+
 /**
  * object_copy_data_t
  *
@@ -5775,6 +5890,9 @@ struct object_copy_data_t {
 
   uint64_t truncate_seq;
   uint64_t truncate_size;
+
+  /// sparse extent map of the source data (offset -> length); empty = not provided
+  std::map<uint64_t, uint64_t> extent_map;
 
 public:
   object_copy_data_t() :
@@ -6094,120 +6212,6 @@ inline static const bool should_whiteout(
 
 #define OI_ATTR "_"
 #define SS_ATTR "snapset"
-// Block granularity for force-allocated extent tracking (4 KiB, aligned with
-// EC operations, LUKS2, and fscrypt block sizes).
-static constexpr uint64_t FAE_BLOCK_SIZE = 4096;
-
-// Approximate byte cost of one std::map node used by the bitmap merge/split
-// heuristic (key + value + 3 pointers + colour, rounded to a cache line).
-static constexpr uint32_t FAE_MAP_NODE_BYTES = 48;
-
-// One bitmap entry in the bitmap map.  The map key is the FAE_BLOCK_SIZE-
-// aligned byte offset of the first block; `span_blocks` is how many blocks
-// this bitmap covers; `words` is the packed bitmap (one bit per block, LSB =
-// lowest block).  An empty `words` vector is the single-block fast-path:
-// it represents exactly one set block at the key offset.
-struct fae_bitmap_t {
-  uint64_t span_blocks = 0;
-  std::vector<uint64_t> words;
-
-  // Number of set bits.
-  uint32_t popcount() const;
-  // True when every bit in [bit_start, bit_start+bit_len) is clear.
-  bool range_empty(const uint64_t bit_start, const uint64_t bit_len) const;
-};
-
-// Tracks which 4 KiB blocks of an erasure-coded object must be treated as
-// force-allocated (non-sparse) even though they contain only zeroes.
-//
-// Internally the set is a std::map<uint64_t, fae_bitmap_t> where each key is
-// a block-aligned byte offset and each value is a bitmap covering one
-// or more contiguous blocks.  The map stays locally optimal: adjacent bitmaps
-// are merged when the merge costs fewer bytes than two separate map nodes,
-// and a bitmap is split when a gap inside it is large enough to justify the
-// extra map node.
-//
-// Deferred decode: decode() stores raw bytes and sets dirty_=false; bitmaps_
-// is populated lazily on first access via materialise().  encode() skips
-// re-encoding when !dirty_ and raw_ is non-empty (zero-copy fast path).
-//
-// All byte offsets/lengths accepted by the mutating methods are rounded
-// outward to FAE_BLOCK_SIZE boundaries internally.
-struct force_allocated_extents_t {
-  void add(const uint64_t offset, const uint64_t length);
-  void remove(const uint64_t offset, const uint64_t length);
-  void truncate(const uint64_t new_size);
-  void clear() { materialise(); dirty_ = true; raw_.clear(); bitmaps_.clear(); }
-  void insert_exact(const uint64_t offset, const uint64_t length);
-  void union_of(const force_allocated_extents_t& o);
-
-  bool empty() const { materialise(); return bitmaps_.empty(); }
-  bool operator==(const force_allocated_extents_t& o) const;
-  bool operator!=(const force_allocated_extents_t& o) const {
-    return !(*this == o);
-  }
-  bool intersects(const uint64_t offset, const uint64_t length) const;
-  uint32_t num_intervals() const;
-  uint64_t size() const;
-  bool contains(const uint64_t pos) const;
-  bool contains(const uint64_t offset, const uint64_t length) const;
-
-  struct const_iterator {
-    using value_type        = std::pair<uint64_t, uint64_t>;
-    using difference_type   = std::ptrdiff_t;
-    using pointer           = const value_type*;
-    using reference         = const value_type&;
-    using iterator_category = std::forward_iterator_tag;
-
-    const_iterator() = default;
-    explicit const_iterator(
-      std::map<uint64_t, fae_bitmap_t>::const_iterator map_it,
-      std::map<uint64_t, fae_bitmap_t>::const_iterator map_end);
-
-    reference operator*()  const { return current_; }
-    pointer   operator->() const { return &current_; }
-    const_iterator& operator++();
-    const_iterator  operator++(int) { auto t = *this; ++(*this); return t; }
-    bool operator==(const const_iterator& o) const {
-      return map_it_ == o.map_it_ && bit_ == o.bit_;
-    }
-    bool operator!=(const const_iterator& o) const { return !(*this == o); }
-
-  private:
-    void advance_to_set_bit();
-    std::map<uint64_t, fae_bitmap_t>::const_iterator map_it_;
-    std::map<uint64_t, fae_bitmap_t>::const_iterator map_end_;
-    uint64_t   bit_ = 0;
-    value_type current_{};
-  };
-
-  const_iterator begin() const;
-  const_iterator end()   const;
-
-  interval_set<uint64_t> get_intervals() const;
-
-  void encode(ceph::buffer::list& bl) const;
-  void decode(ceph::buffer::list::const_iterator& p);
-  void dump(ceph::Formatter *f) const;
-  static std::list<force_allocated_extents_t> generate_test_instances();
-
-private:
-  mutable std::map<uint64_t, fae_bitmap_t> bitmaps_;
-  mutable ceph::buffer::list raw_;   ///< cached encoded bytes (deferred decode)
-  mutable bool dirty_ = true;        ///< true when bitmaps_ is authoritative
-
-  // Parse raw_ into bitmaps_ on first access, then clear raw_.
-  void materialise() const;
-
-  static uint32_t bitmap_cost(const fae_bitmap_t& c);
-  std::map<uint64_t, fae_bitmap_t>::iterator
-    try_merge_with_right(std::map<uint64_t, fae_bitmap_t>::iterator it);
-  std::map<uint64_t, fae_bitmap_t>::iterator
-    try_split_at(std::map<uint64_t, fae_bitmap_t>::iterator it);
-};
-WRITE_CLASS_ENCODER(force_allocated_extents_t)
-
-std::ostream& operator<<(std::ostream&, const force_allocated_extents_t&);
 
 struct watch_info_t {
   uint64_t cookie;

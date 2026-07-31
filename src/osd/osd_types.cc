@@ -5651,7 +5651,7 @@ list<object_copy_cursor_t> object_copy_cursor_t::generate_test_instances()
 
 void object_copy_data_t::encode(ceph::buffer::list& bl, uint64_t features) const
 {
-  ENCODE_START(8, 5, bl);
+  ENCODE_START(9, 5, bl);
   encode(size, bl);
   encode(mtime, bl);
   encode(attrs, bl);
@@ -5668,12 +5668,13 @@ void object_copy_data_t::encode(ceph::buffer::list& bl, uint64_t features) const
   encode(truncate_seq, bl);
   encode(truncate_size, bl);
   encode(reqid_return_codes, bl);
+  encode(extent_map, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_copy_data_t::decode(ceph::buffer::list::const_iterator& bl)
 {
-  DECODE_START(8, bl);
+  DECODE_START(9, bl);
   if (struct_v < 5) {
     // old
     decode(size, bl);
@@ -5733,6 +5734,9 @@ void object_copy_data_t::decode(ceph::buffer::list::const_iterator& bl)
     }
     if (struct_v >= 8) {
       decode(reqid_return_codes, bl);
+    }
+    if (struct_v >= 9) {
+      decode(extent_map, bl);
     }
   }
   DECODE_FINISH(bl);
@@ -6598,6 +6602,7 @@ void object_info_t::copy_user_bits(const object_info_t& other)
   user_version = other.user_version;
   data_digest = other.data_digest;
   omap_digest = other.omap_digest;
+  force_allocated_extents = other.force_allocated_extents;
 }
 
 void object_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
