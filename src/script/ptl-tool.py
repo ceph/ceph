@@ -1885,7 +1885,7 @@ class ApprovalCheck(BaseAuditCheck):
 
         log.error(f"PR #{pr} is not approved (reviewDecision=REVIEW_REQUIRED).")
         md_text = "### Automated PR Review - Approval Required\n\n"
-        md_text += "This PR has not been approved yet. Please request a review before it can be finally merged."
+        md_text += "This PR has not been approved yet. Please request a review from the component lead before it can be finally tested and merged."
         if args.ci_mode:
             report.add("Review Approval", md_text)
         else:
