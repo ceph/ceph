@@ -1,6 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <cmath>
+#include <cstdint>
+#include <limits>
 #include <stack>
 #include <vector>
 #include <fcntl.h>
@@ -110,17 +113,6 @@ std::map<std::string, std::string> decode_snap_metadata(snap_metadata *snap_meta
 
 std::string peer_config_key(const std::string &fs_name, const std::string &uuid) {
   return PEER_CONFIG_KEY_PREFIX + "/" + fs_name + "/" + uuid;
-}
-
-bool get_json_value(const json_spirit::mObject& obj,
-                    const std::string& key,
-                    json_spirit::mValue *val) {
-  auto it = obj.find(key);
-  if (it != obj.end()) {
-    *val = it->second;
-    return true;
-  }
-  return false;
 }
 
 struct C_PersistSyncStatAio : Context {
@@ -806,40 +798,55 @@ std::string PeerReplayer::peer_sync_stat_omap_key(std::string_view dir_root) con
 
 void PeerReplayer::apply_persisted_dir_sync_stat(SnapSyncStat &sync_stat,
                                                  const bufferlist &bl) {
-  json_spirit::mValue root;
-  if (!json_spirit::read(bl.to_str(), root) || root.type() != json_spirit::obj_type) {
-    return;
-  }
+  try {
+    json_spirit::mValue root;
+    if (!json_spirit::read(bl.to_str(), root) || root.type() != json_spirit::obj_type) {
+      return;
+    }
 
-  auto &obj = root.get_obj();
-  json_spirit::mValue v;
+    auto &obj = root.get_obj();
+    json_spirit::mValue v;
 
-  if (get_json_value(obj, "last_synced_snap", &v) && v.type() == json_spirit::obj_type) {
-    auto &last_synced_snap = v.get_obj();
-    if (get_json_value(last_synced_snap, "id", &v)) {
-      uint64_t snap_id = v.get_uint64();
-      if (get_json_value(last_synced_snap, "name", &v)) {
-        sync_stat.last_synced_snap = std::make_pair(snap_id, v.get_str());
+    // Copy the object out of v before reading nested fields. get_json_value()
+    // would otherwise overwrite v and leave a dangling reference into its Object.
+    if (get_json_value(obj, "last_synced_snap", &v) && v.type() == json_spirit::obj_type) {
+      const json_spirit::mObject last_synced_snap = v.get_obj();
+      uint64_t snap_id;
+      std::string snap_name;
+      if (get_json_uint64(last_synced_snap, "id", &snap_id) &&
+          get_json_string(last_synced_snap, "name", &snap_name)) {
+        sync_stat.last_synced_snap = std::make_pair(snap_id, snap_name);
+      }
+      double value;
+      if (get_json_real(last_synced_snap, "crawl_duration", &value)) {
+        sync_stat.last_sync_crawl_duration = value;
+      }
+      if (get_json_real(last_synced_snap, "datasync_queue_wait_duration", &value)) {
+        sync_stat.last_sync_datasync_queue_wait_duration = value;
+      }
+      if (get_json_real(last_synced_snap, "sync_duration", &value)) {
+        sync_stat.last_sync_duration = value;
+      }
+      if (get_json_real(last_synced_snap, "sync_time_stamp", &value)) {
+        // set_from_double() casts into __u32; reject non-finite / out-of-range.
+        if (std::isfinite(value) &&
+            value >= 0.0 &&
+            value <= static_cast<double>(std::numeric_limits<uint32_t>::max())) {
+          sync_stat.last_synced.set_from_double(value);
+        } else {
+          derr << ": persisted sync_time_stamp out of range; ignoring" << dendl;
+        }
+      }
+      uint64_t uval;
+      if (get_json_uint64(last_synced_snap, "sync_bytes", &uval)) {
+        sync_stat.last_sync_bytes = uval;
+      }
+      if (get_json_uint64(last_synced_snap, "sync_files", &uval)) {
+        sync_stat.last_sync_files = uval;
       }
     }
-    if (get_json_value(last_synced_snap, "crawl_duration", &v)) {
-      sync_stat.last_sync_crawl_duration = v.get_real();
-    }
-    if (get_json_value(last_synced_snap, "datasync_queue_wait_duration", &v)) {
-      sync_stat.last_sync_datasync_queue_wait_duration = v.get_real();
-    }
-    if (get_json_value(last_synced_snap, "sync_duration", &v)) {
-      sync_stat.last_sync_duration = v.get_real();
-    }
-    if (get_json_value(last_synced_snap, "sync_time_stamp", &v)) {
-      sync_stat.last_synced.set_from_double(v.get_real());
-    }
-    if (get_json_value(last_synced_snap, "sync_bytes", &v)) {
-      sync_stat.last_sync_bytes = v.get_uint64();
-    }
-    if (get_json_value(last_synced_snap, "sync_files", &v)) {
-      sync_stat.last_sync_files = v.get_uint64();
-    }
+  } catch (const std::exception &e) {
+    derr << ": failed to apply persisted sync stat: " << e.what() << dendl;
   }
 }
 
