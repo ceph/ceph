@@ -1794,9 +1794,9 @@ struct perm_state : public perm_state_base {
 };
 
 /* A Keystone identity whose role tier caps its implicit permissions
- * (currently the project reader). The identity-type check matters: Swift
- * read-only subusers of local users also carry a reduced perm_mask but
- * must not be treated as capped Keystone identities. */
+ * (a project reader or an implicit-deny role). The identity-type check
+ * matters: Swift read-only subusers of local users also carry a reduced
+ * perm_mask but must not be treated as capped Keystone identities. */
 bool is_capped_keystone_identity(uint32_t perm_mask,
                                  const rgw::auth::Identity& identity);
 

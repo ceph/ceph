@@ -97,6 +97,45 @@ Note the following:
   To keep a user read-only, assign it *only* the reader role. Roles that are
   in no accepted list at all are ignored and do not affect the cap.
 
+Implicit-deny roles
+-------------------
+
+``rgw keystone implicit deny roles`` designates Keystone roles
+that authenticate a user without granting any implicit permissions::
+
+   rgw keystone accepted roles = member
+   rgw keystone implicit deny roles = objectstore_authenticated
+
+A user whose only access-granting role is such a role is denied every
+operation by default. Access must be granted explicitly through a bucket
+policy or IAM policy (for example with a ``keystone:userid`` or
+``keystone:role`` condition), and an explicit ``Allow`` then applies only to
+the buckets and objects the policy names. Unlike a project reader, a user
+with only an implicit-deny role cannot list the buckets of its project;
+bucket creation and Swift account-metadata writes are always refused.
+
+The project-reader notes above apply here as well: the role admits the user
+on its own (no co-listing in ``rgw keystone accepted roles`` needed), an
+explicit policy ``Deny`` always wins, and any role granting more (``admin``,
+a project reader role, or another accepted role such as ``member``) takes
+precedence over the implicit-deny cap.
+
+.. note:: These tiers cap what a request may do at authorization time. They
+   apply to the default Keystone mapping, where each project maps to a plain
+   tenant-scoped gateway user reaching the gateway over S3 or Swift. They do
+   **not** apply in the following cases:
+
+   - **The librgw frontend (NFS-Ganesha).** It authorizes every request with
+     full control, so a gateway reached over that path is not capped. Assign
+     these roles only where clients use S3 or Swift.
+   - **Keystone users associated with an** :doc:`RGW account <account>`.
+     Access for an account is governed entirely by IAM policy (evaluated
+     before the permission mask), so the tiers place no cap there. Use them
+     with the default (non-account) mapping.
+   - **The** ``radosgw-admin`` **command and the admin REST API.** These are
+     backend administration paths that do not authenticate a Keystone user,
+     so they are not subject to these roles at all.
+
 Ocata (and Later)
 -----------------
 
