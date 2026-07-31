@@ -57,6 +57,7 @@ Cluster with one API and then retrieve that data with the other API.
    Admin Ops API <adminops>
    Python Binding <api>
    Export over NFS <nfs>
+   Share over SMB <smb>
    OpenStack Keystone Integration <keystone>
    OpenStack Barbican Integration <barbican>
    HashiCorp Vault Integration <vault>
