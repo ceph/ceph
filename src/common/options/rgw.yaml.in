@@ -1007,6 +1007,19 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_keystone_implicit_deny_roles
+  type: str
+  level: advanced
+  desc: Keystone roles granting no implicit permissions.
+  long_desc: >-
+    Keystone roles that authenticate a user without granting any implicit
+    permissions. A role here admits the user on its own; a user whose only
+    access-granting role is such a role is authenticated but denied every
+    operation by default, so access must be granted explicitly through a
+    bucket policy or IAM policy.
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_keystone_token_cache_size
   type: int
   level: advanced

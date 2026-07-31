@@ -31,6 +31,12 @@
   policy naming the user can still grant additional access. The reader role
   admits the user on its own; it need not also be in
   ``rgw_keystone_accepted_roles``.
+* RGW: New config option ``rgw_keystone_implicit_deny_roles``.
+  A Keystone user whose only access-granting role is one of the configured
+  implicit-deny roles is authenticated but granted no implicit permissions.
+  Access must be granted explicitly through a bucket policy or IAM policy, and
+  applies only to the buckets and objects the policy names. The role admits the
+  user on its own.
 * ceph-volume: Raw BlueStore OSD preparation now pre-formats NVMe devices and
   skips the slower BlueStore discard phase,reducing mkfs time on
   very large namespaces.
