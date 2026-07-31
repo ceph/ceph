@@ -396,6 +396,7 @@ auto RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const 
   }
 
   new_env.set("HTTP_DATE", date_str.c_str());
+  new_env.set("HTTP_HOST", host.c_str());
   const char* const content_md5 = info.env->get("HTTP_CONTENT_MD5");
   if (content_md5) {
     new_env.set("HTTP_CONTENT_MD5", content_md5);
