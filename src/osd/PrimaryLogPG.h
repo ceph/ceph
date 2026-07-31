@@ -106,6 +106,7 @@ public:
     std::map<std::string, ceph::buffer::list, std::less<>> attrs; // xattrs
     uint64_t truncate_seq;
     uint64_t truncate_size;
+    force_allocated_extents_t force_allocated_extents;
     bool is_data_digest() {
       return flags & object_copy_data_t::FLAG_DATA_DIGEST;
     }
@@ -146,6 +147,7 @@ public:
     ceph::buffer::list omap_header;
     ceph::buffer::list omap_data;
     int rval;
+    std::map<uint64_t, uint64_t> extent_map;
 
     object_copy_cursor_t temp_cursor;
 
