@@ -152,13 +152,14 @@ public:
   class Role {
   public:
     Role() : is_admin(false), is_system_reader(false), is_project_reader(false),
-             is_accepted(false) { }
+             is_implicit_deny(false), is_accepted(false) { }
     Role(const Role &r) {
       id = r.id;
       name = r.name;
       is_admin = r.is_admin;
       is_system_reader = r.is_system_reader;
       is_project_reader = r.is_project_reader;
+      is_implicit_deny = r.is_implicit_deny;
       is_accepted = r.is_accepted;
     }
     std::string id;
@@ -166,6 +167,7 @@ public:
     bool is_admin;
     bool is_system_reader;
     bool is_project_reader;
+    bool is_implicit_deny;
     bool is_accepted;
     void decode_json(JSONObj *obj);
     uint32_t perm_mask() const;
@@ -220,7 +222,8 @@ public:
   void update_roles(const std::vector<std::string> & plain,
                     const std::vector<std::string> & admin,
                     const std::vector<std::string> & system_reader,
-                    const std::vector<std::string> & project_reader);
+                    const std::vector<std::string> & project_reader,
+                    const std::vector<std::string> & implicit_deny);
 };
 
 

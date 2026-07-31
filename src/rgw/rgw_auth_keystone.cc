@@ -156,7 +156,8 @@ TokenEngine::get_creds_info(const TokenEngine::token_envelope_t& token
   }
 
   /* Role-tier cap: read-only when every granting role is a
-   * project_reader, full control otherwise. */
+   * project_reader, no implicit permissions at all when every granting
+   * role is implicit_deny, full control otherwise. */
   const uint32_t perm_mask = token.effective_perm_mask();
 
   /* Build keystone scope info if ops logging is enabled */
@@ -256,15 +257,18 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
       get_str_vec(cct->_conf->rgw_keystone_accepted_admin_roles, admin);
       get_str_vec(cct->_conf->rgw_keystone_accepted_reader_roles, system_reader);
       get_str_vec(cct->_conf->rgw_keystone_accepted_project_reader_roles, project_reader);
+      get_str_vec(cct->_conf->rgw_keystone_implicit_deny_roles, implicit_deny);
 
       plain.insert(std::end(plain), std::begin(admin), std::end(admin));
       plain.insert(std::end(plain), std::begin(project_reader), std::end(project_reader));
+      plain.insert(std::end(plain), std::begin(implicit_deny), std::end(implicit_deny));
     }
 
     std::vector<std::string> plain;
     std::vector<std::string> admin;
     std::vector<std::string> system_reader;
     std::vector<std::string> project_reader;
+    std::vector<std::string> implicit_deny;
   } roles(cct);
 
   static const struct ServiceTokenRolesCacher {
@@ -367,7 +371,7 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
     return result_t::deny(-EACCES);
   }
   t->update_roles(roles.plain, roles.admin, roles.system_reader,
-                  roles.project_reader);
+                  roles.project_reader, roles.implicit_deny);
 
   /* Verify expiration. */
   if (t->expired()) {
@@ -676,7 +680,8 @@ EC2Engine::get_creds_info(const EC2Engine::token_envelope_t& token,
   }
 
   /* Role-tier cap: read-only when every granting role is a
-   * project_reader, full control otherwise. */
+   * project_reader, no implicit permissions at all when every granting
+   * role is implicit_deny, full control otherwise. */
   const uint32_t perm_mask = token.effective_perm_mask();
 
   /* Build keystone scope info if ops logging is enabled */
@@ -725,20 +730,23 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
       get_str_vec(cct->_conf->rgw_keystone_accepted_admin_roles, admin);
       get_str_vec(cct->_conf->rgw_keystone_accepted_reader_roles, system_reader);
       get_str_vec(cct->_conf->rgw_keystone_accepted_project_reader_roles, project_reader);
+      get_str_vec(cct->_conf->rgw_keystone_implicit_deny_roles, implicit_deny);
 
-      /* Admit the project-reader tier on its own, the same way an admin role
-       * is admitted. A user whose only role is a project reader is still
-       * accepted, and its role flag caps it to read-only. system_reader is
-       * not merged here: it grants cross-cluster read and also needs an
-       * admin role. */
+      /* Admit the project-reader and implicit-deny tiers on their own, the
+       * same way an admin role is admitted. A user whose only role is one of
+       * these is still accepted, and its role flag caps what it may do.
+       * system_reader is not merged here: it grants cross-cluster read and
+       * also needs an admin role. */
       plain.insert(std::end(plain), std::begin(admin), std::end(admin));
       plain.insert(std::end(plain), std::begin(project_reader), std::end(project_reader));
+      plain.insert(std::end(plain), std::begin(implicit_deny), std::end(implicit_deny));
     }
 
     std::vector<std::string> plain;
     std::vector<std::string> admin;
     std::vector<std::string> system_reader;
     std::vector<std::string> project_reader;
+    std::vector<std::string> implicit_deny;
   } accepted_roles(cct);
 
   /* When we handle a HTTP OPTIONS call we must ignore the signature */
@@ -788,7 +796,8 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
     t->update_roles(accepted_roles.plain,
                     accepted_roles.admin,
                     accepted_roles.system_reader,
-                    accepted_roles.project_reader);
+                    accepted_roles.project_reader,
+                    accepted_roles.implicit_deny);
 
     auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
                                               get_creds_info(*t, accepted_roles.admin, std::string(access_key_id)));

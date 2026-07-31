@@ -292,7 +292,8 @@ int TokenEnvelope::parse(const DoutPrefixProvider *dpp,
 void TokenEnvelope::update_roles(const std::vector<std::string> & plain,
                                  const std::vector<std::string> & admin,
                                  const std::vector<std::string> & system_reader,
-                                 const std::vector<std::string> & project_reader)
+                                 const std::vector<std::string> & project_reader,
+                                 const std::vector<std::string> & implicit_deny)
 {
   for (auto& iter: roles) {
     for (const auto& r : plain) {
@@ -319,12 +320,19 @@ void TokenEnvelope::update_roles(const std::vector<std::string> & plain,
         break;
       }
     }
+    for (const auto& r : implicit_deny) {
+      if (fnmatch(r.c_str(), iter.name.c_str(), 0) == 0) {
+        iter.is_implicit_deny = true;
+        break;
+      }
+    }
   }
 }
 
 /* perm_mask granted by this single role:
  *   admin or any other accepted role (e.g. member) -> full control
  *   project_reader                                 -> read-only (data + config)
+ *   implicit_deny                                  -> nothing on its own
  *   role in no accepted list                       -> nothing
  */
 uint32_t TokenEnvelope::Role::perm_mask() const
@@ -332,6 +340,7 @@ uint32_t TokenEnvelope::Role::perm_mask() const
   if (is_admin)          return RGW_PERM_FULL_CONTROL;
   if (!is_accepted)      return RGW_PERM_NONE;
   if (is_project_reader) return RGW_PERM_READ | RGW_PERM_READ_ACP;
+  if (is_implicit_deny)  return RGW_PERM_NONE;
   return RGW_PERM_FULL_CONTROL;   /* accepted, no tier -> full control */
 }
 
