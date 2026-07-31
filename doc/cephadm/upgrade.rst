@@ -89,7 +89,7 @@ Starting the Upgrade
       MDS daemon(s) from ``up:standby`` to ``up:active``.
 
    When a cluster has more than one CephFS filesystem, cephadm upgrades the
-   MDS daemons one filesystem at a time by default: it prepares (fails, or
+   MDS daemons one filesystem at a time by default. It prepares (fails, or
    scales down to ``max_mds 1``) a single filesystem, upgrades its MDS
    daemons, restores that filesystem, and only then proceeds to the next one.
    Because MDS daemons are upgraded serially in any case, this does not slow
