@@ -175,5 +175,75 @@ std::string snapshot_path(CephContext *cct, const std::string &dir_root,
   return snapshot_dir_path(cct, dir_root) + "/" + snap_name;
 }
 
+bool get_json_value(const json_spirit::mObject& obj,
+                    const std::string& key,
+                    json_spirit::mValue *val) {
+  auto it = obj.find(key);
+  if (it != obj.end()) {
+    *val = it->second;
+    return true;
+  }
+  return false;
+}
+
+bool get_json_string(const json_spirit::mObject& obj,
+                     const std::string& key,
+                     std::string *val) {
+  json_spirit::mValue v;
+  if (!get_json_value(obj, key, &v)) {
+    return false;
+  }
+  if (v.type() != json_spirit::str_type) {
+    derr << ": persisted sync stat key '" << key
+         << "' has type " << v.type()
+         << " (expected string); ignoring" << dendl;
+    return false;
+  }
+  *val = v.get_str();
+  return true;
+}
+
+bool get_json_uint64(const json_spirit::mObject& obj,
+                     const std::string& key,
+                     uint64_t *val) {
+  json_spirit::mValue v;
+  if (!get_json_value(obj, key, &v)) {
+    return false;
+  }
+  if (v.type() != json_spirit::int_type) {
+    derr << ": persisted sync stat key '" << key
+         << "' has type " << v.type()
+         << " (expected int); ignoring" << dendl;
+    return false;
+  }
+  // json_spirit reports signed and unsigned as int_type; get_uint64()
+  // would cast a negative value to a huge uint64_t.
+  if (!v.is_uint64() && v.get_int64() < 0) {
+    derr << ": persisted sync stat key '" << key
+         << "' has negative value; ignoring" << dendl;
+    return false;
+  }
+  *val = v.get_uint64();
+  return true;
+}
+
+bool get_json_real(const json_spirit::mObject& obj,
+                   const std::string& key,
+                   double *val) {
+  json_spirit::mValue v;
+  if (!get_json_value(obj, key, &v)) {
+    return false;
+  }
+  if (v.type() != json_spirit::int_type &&
+      v.type() != json_spirit::real_type) {
+    derr << ": persisted sync stat key '" << key
+         << "' has type " << v.type()
+         << " (expected int or real); ignoring" << dendl;
+    return false;
+  }
+  *val = v.get_real();
+  return true;
+}
+
 } // namespace mirror
 } // namespace cephfs
