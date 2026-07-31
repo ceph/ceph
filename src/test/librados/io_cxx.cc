@@ -992,6 +992,123 @@ TEST_P(LibRadosIoPP, CmpExtMismatchPP) {
   ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
 }
 
+TEST_P(LibRadosIoPP, ZeroAndTruncateSameRequest) {
+  constexpr size_t obj_size = 4096;
+  constexpr size_t smaller = 2048;
+  constexpr size_t larger = 8192;
+
+  auto write_4k_object = [&](const char* oid) {
+      char buf[obj_size];
+      memset(buf, 0, sizeof(buf));
+      bufferlist bl;
+      bl.append(buf, sizeof(buf));
+      ObjectWriteOperation op;
+      op.write(0, bl);
+      ASSERT_TRUE(AssertOperateWithoutSplitOp(0, oid, &op));
+  };
+
+  auto stat_object = [&](const char* oid, int rc) {
+      ObjectReadOperation op;
+      op.stat(nullptr, nullptr, nullptr);
+      ASSERT_TRUE(AssertOperateWithoutSplitOp(rc, oid, &op, nullptr,
+					      librados::OPERATION_BALANCE_READS));
+  };
+
+  auto expect_object = [&](const char* oid, size_t expected_size) {
+      char buf[expected_size];
+      memset(buf, 0, sizeof(buf));
+      bufferlist bl;
+      ObjectReadOperation op;
+      op.read(0, expected_size, nullptr, nullptr);
+      ASSERT_TRUE(AssertOperateWithoutSplitOp(0, oid, &op, &bl,
+					      librados::OPERATION_BALANCE_READS));
+      ASSERT_EQ(expected_size, bl.length());
+      ASSERT_EQ(0, memcmp(bl.c_str(), buf, sizeof(buf)));
+  };
+
+  {
+    write_4k_object("zero_trunc_2k");
+    ObjectWriteOperation op;
+    op.zero(0, obj_size);
+    op.truncate(smaller);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "zero_trunc_2k", &op));
+    expect_object("zero_trunc_2k", smaller);
+  }
+
+  {
+    write_4k_object("zero_trunc_4k");
+    ObjectWriteOperation op;
+    op.zero(0, obj_size);
+    op.truncate(obj_size);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "zero_trunc_4k", &op));
+    expect_object("zero_trunc_4k", obj_size);
+  }
+
+  {
+    write_4k_object("zero_trunc_8k");
+    ObjectWriteOperation op;
+    op.zero(0, obj_size);
+    op.truncate(larger);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "zero_trunc_8k", &op));
+    expect_object("zero_trunc_8k", larger);
+  }
+
+  {
+    write_4k_object("trunc0_trunc2k");
+    ObjectWriteOperation op;
+    op.truncate(0);
+    op.truncate(smaller);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "trunc0_trunc2k", &op));
+    expect_object("trunc0_trunc2k", smaller);
+  }
+
+  {
+    write_4k_object("trunc0_trunc4k");
+    ObjectWriteOperation op;
+    op.truncate(0);
+    op.truncate(obj_size);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "trunc0_trunc4k", &op));
+    expect_object("trunc0_trunc4k", obj_size);
+  }
+
+  {
+    write_4k_object("trunc0_trunc8k");
+    ObjectWriteOperation op;
+    op.truncate(0);
+    op.truncate(larger);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "trunc0_trunc8k", &op));
+    expect_object("trunc0_trunc8k", larger);
+  }
+
+  {
+    // Truncate to 0 on a non-existent object is successful but doesn't create
+    // the object. See comments on https://tracker.ceph.com/issues/78340 and
+    // commit 86cab4aecc40
+    ObjectWriteOperation op;
+    op.truncate(0);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "missing_trunc0", &op));
+    stat_object("missing_trunc0", -ENOENT);
+  }
+
+  {
+    // Slightly surprisingly truncate to 4K on a non-existent object is successful
+    // but doesn't create the object.
+    ObjectWriteOperation op;
+    op.truncate(obj_size);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "missing_trunc4k", &op));
+    stat_object("missing_trunc4k", -ENOENT);
+  }
+
+  {
+    // Similarly for multiple truncates on a non-existent object
+    ObjectWriteOperation op;
+    op.truncate(0);
+    op.truncate(obj_size);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "missing_trunc0_trunc4k", &op));
+    stat_object("missing_trunc0_trunc4k", -ENOENT);
+  }
+}
+
 TEST_P(LibRadosIoECPP, CmpExtPP) {
   SKIP_IF_CRIMSON();
   bufferlist bl;
@@ -1050,6 +1167,126 @@ TEST_P(LibRadosIoECPP, CmpExtMismatchPP) {
   read.read(0, bl.length(), nullptr, nullptr);
   ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &read, &bl, balanced_read_flags));
   ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
+}
+
+TEST_P(LibRadosIoECPP, ZeroAndTruncateSameRequest) {
+  SKIP_IF_CRIMSON();
+  set_allow_ec_overwrites();
+
+  constexpr size_t chunk_size = 4096;
+  constexpr size_t obj_size = 4096;
+  constexpr size_t smaller = 2048;
+  constexpr size_t larger = 8192;
+
+  auto write_4k_object = [&](const char* oid) {
+      char buf[obj_size];
+      memset(buf, 0, sizeof(buf));
+      bufferlist bl;
+      bl.append(buf, sizeof(buf));
+      ObjectWriteOperation op;
+      op.write(0, bl);
+      ASSERT_TRUE(AssertOperateWithoutSplitOp(0, oid, &op));
+  };
+
+  auto stat_object = [&](const char* oid, int rc) {
+      ObjectReadOperation op;
+      op.stat(nullptr, nullptr, nullptr);
+      ASSERT_TRUE(AssertOperateWithoutSplitOp(rc, oid, &op, nullptr, balanced_read_flags));
+  };
+
+  auto expect_object = [&](const char* oid, size_t expected_size) {
+      char buf[expected_size];
+      memset(buf, 0, sizeof(buf));
+      bufferlist bl;
+      ObjectReadOperation op;
+      op.read(0, expected_size, nullptr, nullptr);
+      int expected_ops = (int)((expected_size + chunk_size - 1) / chunk_size);
+      ASSERT_TRUE(AssertOperateWithSplitOp(0, expected_ops, oid, &op, &bl, balanced_read_flags));
+      ASSERT_EQ(expected_size, bl.length());
+      ASSERT_EQ(0, memcmp(bl.c_str(), buf, sizeof(buf)));
+  };
+
+  {
+    write_4k_object("zero_trunc_2k");
+    ObjectWriteOperation op;
+    op.zero(0, obj_size);
+    op.truncate(smaller);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "zero_trunc_2k", &op));
+    expect_object("zero_trunc_2k", smaller);
+  }
+
+  {
+    write_4k_object("zero_trunc_4k");
+    ObjectWriteOperation op;
+    op.zero(0, obj_size);
+    op.truncate(obj_size);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "zero_trunc_4k", &op));
+    expect_object("zero_trunc_4k", obj_size);
+  }
+
+  {
+    write_4k_object("zero_trunc_8k");
+    ObjectWriteOperation op;
+    op.zero(0, obj_size);
+    op.truncate(larger);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "zero_trunc_8k", &op));
+    expect_object("zero_trunc_8k", larger);
+  }
+
+  {
+    write_4k_object("trunc0_trunc2k");
+    ObjectWriteOperation op;
+    op.truncate(0);
+    op.truncate(smaller);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "trunc0_trunc2k", &op));
+    expect_object("trunc0_trunc2k", smaller);
+  }
+
+  {
+    write_4k_object("trunc0_trunc4k");
+    ObjectWriteOperation op;
+    op.truncate(0);
+    op.truncate(obj_size);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "trunc0_trunc4k", &op));
+    expect_object("trunc0_trunc4k", obj_size);
+  }
+
+  {
+    write_4k_object("trunc0_trunc8k");
+    ObjectWriteOperation op;
+    op.truncate(0);
+    op.truncate(larger);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "trunc0_trunc8k", &op));
+    expect_object("trunc0_trunc8k", larger);
+  }
+
+  {
+    // Truncate to 0 on a non-existent object is successful but doesn't create
+    // the object. See comments on https://tracker.ceph.com/issues/78340 and
+    // commit 86cab4aecc40
+    ObjectWriteOperation op;
+    op.truncate(0);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "missing_trunc0", &op));
+    stat_object("missing_trunc0", -ENOENT);
+  }
+
+  {
+    // Slightly surprisingly truncate to 4K on a non-existent object is successful
+    // but doesn't create the object.
+    ObjectWriteOperation op;
+    op.truncate(obj_size);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "missing_trunc4k", &op));
+    stat_object("missing_trunc4k", -ENOENT);
+  }
+
+  {
+    // Similarly for multiple truncates on a non-existent object
+    ObjectWriteOperation op;
+    op.truncate(0);
+    op.truncate(obj_size);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "missing_trunc0_trunc4k", &op));
+    stat_object("missing_trunc0_trunc4k", -ENOENT);
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P_REPLICA(LibRadosIoPP);
