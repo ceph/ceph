@@ -147,7 +147,7 @@ std::unique_ptr<IoSequence> IoSequence::generate_sequence(
 IoSequence::IoSequence(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
     : min_obj_size(obj_size_range.first),
       max_obj_size(obj_size_range.second),
-      create(true),
+      create(false),
       barrier(false),
       done(false),
       remove(false),
@@ -266,6 +266,8 @@ std::unique_ptr<IoOp> IoSequence::next() {
 
 ceph::io_exerciser::Seq0::Seq0(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
     : IoSequence(obj_size_range, seed, check_consistency), offset(0) {
+  // Seq0 is read-only: the object must be explicitly created before any read.
+  create = true;
   select_random_object_size();
   length = 1 + rng(obj_size - 1);
 }
@@ -298,6 +300,9 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq0::_next() {
 
 ceph::io_exerciser::Seq1::Seq1(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
     : IoSequence(obj_size_range, seed, check_consistency) {
+  // Seq1 may issue a read as its first op (random read/write mix), so the
+  // object must be explicitly created up front.
+  create = true;
   select_random_object_size();
   count = 3 * obj_size;
 }
@@ -329,7 +334,10 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq1::_next() {
 }
 
 ceph::io_exerciser::Seq2::Seq2(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
-    : IoSequence(obj_size_range, seed, check_consistency), offset(0), length(0) {}
+    : IoSequence(obj_size_range, seed, check_consistency), offset(0), length(0) {
+  // Seq2 is read-only: the object must be explicitly created before any read.
+  create = true;
+}
 
 Sequence ceph::io_exerciser::Seq2::get_id() const {
   return Sequence::SEQUENCE_SEQ2;
@@ -355,6 +363,8 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq2::_next() {
 
 ceph::io_exerciser::Seq3::Seq3(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
     : IoSequence(obj_size_range, seed, check_consistency), offset1(0), offset2(0) {
+  // Seq3 is read-only: the object must be explicitly created before any read.
+  create = true;
   set_min_object_size(2);
 }
 
@@ -382,6 +392,8 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq3::_next() {
 
 ceph::io_exerciser::Seq4::Seq4(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
     : IoSequence(obj_size_range, seed, check_consistency), offset1(0), offset2(1) {
+  // Seq4 is read-only: the object must be explicitly created before any read.
+  create = true;
   set_min_object_size(3);
 }
 
@@ -497,6 +509,9 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq6::_next() {
 
 ceph::io_exerciser::Seq7::Seq7(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
     : IoSequence(obj_size_range, seed, check_consistency) {
+  // Seq7 opens every write iteration with a read-back; the !doneread guard fires
+  // unconditionally on the first _next() call, before any write.
+  create = true;
   set_min_object_size(2);
   offset = obj_size;
 }
@@ -537,6 +552,9 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq7::_next() {
 
 ceph::io_exerciser::Seq8::Seq8(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
     : IoSequence(obj_size_range, seed, check_consistency), offset1(0), offset2(1) {
+  // Seq8 opens every write iteration with a read-back; the !doneread guard fires
+  // unconditionally on the first _next() call, before any write.
+  create = true;
   set_min_object_size(3);
 }
 
@@ -576,7 +594,11 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq8::_next() {
 }
 
 ceph::io_exerciser::Seq9::Seq9(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
-    : IoSequence(obj_size_range, seed, check_consistency), offset(0), length(0) {}
+    : IoSequence(obj_size_range, seed, check_consistency), offset(0), length(0) {
+  // Seq9 opens every write iteration with a read-back; the !doneread guard fires
+  // unconditionally on the first _next() call, before any write.
+  create = true;
+}
 
 Sequence ceph::io_exerciser::Seq9::get_id() const {
   return Sequence::SEQUENCE_SEQ9;
@@ -616,7 +638,11 @@ ceph::io_exerciser::Seq11::Seq11(std::pair<int, int> obj_size_range, int seed, b
     : IoSequence(obj_size_range, seed, check_consistency),
       count(0),
       doneread(false),
-      donebarrier(false) {}
+      donebarrier(false) {
+  // Seq11 reads back obj_size * (count + 1) blocks after 16 appends; the +1
+  // accounts for the initial object content written by CreateOp.
+  create = true;
+}
 
 Sequence ceph::io_exerciser::Seq11::get_id() const {
   return Sequence::SEQUENCE_SEQ11;
@@ -646,7 +672,11 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq11::_next() {
 }
 
 ceph::io_exerciser::Seq12::Seq12(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
-    : IoSequence(obj_size_range, seed, check_consistency), count(0), overlap(1), doneread(false) {}
+    : IoSequence(obj_size_range, seed, check_consistency), count(0), overlap(1), doneread(false) {
+  // Seq12 reads back obj_size * (count + 1) blocks; the +1 accounts for the
+  // initial object content written by CreateOp.
+  create = true;
+}
 
 Sequence ceph::io_exerciser::Seq12::get_id() const {
   return Sequence::SEQUENCE_SEQ12;
@@ -683,6 +713,9 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq12::_next() {
 
 ceph::io_exerciser::Seq13::Seq13(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
     : IoSequence(obj_size_range, seed, check_consistency), count(0), gap(1), doneread(false) {
+  // Seq13 reads back obj_size * (count + 1) blocks; the +1 accounts for the
+  // initial object content written by CreateOp.
+  create = true;
   set_min_object_size(2);
 }
 
@@ -970,6 +1003,9 @@ ceph::io_exerciser::Seq17::Seq17(std::pair<int, int> obj_size_range, int seed,
     : IoSequence(obj_size_range, seed, check_consistency),
       offset1(0),
       offset2(0) {
+  // Seq16 reads back current_size == obj_size after each WriteAndZero op, so
+  // the full obj_size-block object must exist up front.
+  create = true;
   set_min_object_size(2);
   select_random_object_size();
 }
@@ -1033,6 +1069,9 @@ ceph::io_exerciser::Seq18::Seq18(std::pair<int, int> obj_size_range, int seed,
     : IoSequence(obj_size_range, seed, check_consistency),
       offset(0),
       length(1) {
+  // Seq17 reads back current_size after each ZeroOp; current_size can equal
+  // obj_size, so the full obj_size-block object must exist up front.
+  create = true;
   set_min_object_size(2);
   select_random_object_size();
 }
@@ -1095,6 +1134,9 @@ ceph::io_exerciser::Seq19::Seq19(std::pair<int, int> obj_size_range, int seed,
       length1(1),
       offset2(1),
       length2(1) {
+  // Seq18 reads back current_size after each DoubleZeroOp; current_size can
+  // equal obj_size, so the full obj_size-block object must exist up front.
+  create = true;
   set_min_object_size(2);
   select_random_object_size();
 }
@@ -1175,6 +1217,10 @@ ceph::io_exerciser::Seq20::Seq20(std::pair<int, int> obj_size_range, int seed,
       zero_offset(0),
       zero_length(1),
       truncate_size(0) {
+  // Seq19 reads back current_size (== truncate_size) after each op; the zero
+  // sub-op operates within the pre-existing obj_size-block object, so it must
+  // exist up front.
+  create = true;
   set_min_object_size(2);
   select_random_object_size();
 }
