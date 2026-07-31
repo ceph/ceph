@@ -8,6 +8,7 @@
 #include <ostream>
 
 #include "common/fmt_common.h"
+#include <fmt/ranges.h>
 #include "crimson/os/seastore/onode_manager/staged-fltree/fwd.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_types.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/value.h"
@@ -444,6 +445,13 @@ std::ostream& operator<<(
 
 
 namespace fmt {
+// staged_position_t has static begin()/end() factory methods unrelated to
+// iteration; fmt's range auto-detection picks them up and tries to
+// dereference the (non-dereferenceable) result, so opt out explicitly.
+template <crimson::os::seastore::onode::match_stage_t S>
+struct is_range<crimson::os::seastore::onode::staged_position_t<S>, char>
+  : std::false_type {};
+
 template <crimson::os::seastore::onode::match_stage_t S>
 struct formatter<crimson::os::seastore::onode::staged_position_t<S>> {
   constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
