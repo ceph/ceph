@@ -109,7 +109,7 @@ public:
     bool whiteout; ///< Source object is whiteout
     bool clone_trimmed_on_target; ///< All clone snaps trimmed on target; skip the copy-from write
     std::map<std::pair<uint64_t, entity_name_t>, watch_info_t> watchers;
-
+    force_allocated_extents_t force_allocated_extents;
     bool is_data_digest() {
       return flags & object_copy_data_t::FLAG_DATA_DIGEST;
     }
@@ -151,7 +151,11 @@ public:
     ceph::buffer::list omap_header;
     ceph::buffer::list omap_data;
     int rval;
-
+    std::map<uint64_t, uint64_t> extent_map;
+    // Whether to track force_allocated_extents on the destination. Decided
+    // once in start_copy() so that every chunk and finish_copyfrom() agree
+    // even if the pool flags change part way through the copy.
+    bool track_fae = false;
     object_copy_cursor_t temp_cursor;
 
     /*
@@ -1507,11 +1511,13 @@ protected:
    * @param src: The source object
    * @param oloc: the source object locator
    * @param version: the version of the source object to copy (0 for any)
+   * @param track_fae: whether to track force_allocated_extents on the
+   *                   destination
    */
   void start_copy(CopyCallback *cb, ObjectContextRef obc, hobject_t src,
 		  object_locator_t oloc, version_t version, unsigned flags,
 		  bool mirror_snapset, unsigned src_obj_fadvise_flags,
-		  unsigned dest_obj_fadvise_flags);
+		  unsigned dest_obj_fadvise_flags, bool track_fae);
   void migration_copy_from_check(hobject_t soid);
   void process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r);
   void _write_copy_chunk(CopyOpRef cop, PGTransaction *t);
