@@ -847,6 +847,17 @@ int RGWREST_STS::verify_permission(optional_yield y)
     s->err.message = "Role chaining is not supported";
     return -EPERM;
   }
+  // A capped Keystone identity (e.g. a project reader) must not assume a
+  // role. AssumeRole does not scope access, it replaces the identity with a
+  // role identity (TYPE_ROLE) that has its own permissions and no perm_mask,
+  // so it would remove the cap entirely. Refuse up front; the role's trust
+  // policy, evaluated below, can never re-grant what the cap forbids.
+  if (s->auth.identity && is_capped_keystone_identity(s->perm_mask, *s->auth.identity)) {
+    ldpp_dout(this, 4) << "read-only Keystone identity may not assume a role"
+                       << dendl;
+    return -EPERM;
+  }
+
   STS::STSService _sts(s->cct, driver, s->user->get_id(), s->auth.identity.get());
   sts = std::move(_sts);
 

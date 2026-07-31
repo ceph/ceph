@@ -289,23 +289,65 @@ int TokenEnvelope::parse(const DoutPrefixProvider *dpp,
  * Maybe one day we'll have the parser find this in Keystone replies.
  * But for now, we use the confguration to augment the list of roles.
  */
-void TokenEnvelope::update_roles(const std::vector<std::string> & admin,
-                                 const std::vector<std::string> & reader)
+void TokenEnvelope::update_roles(const std::vector<std::string> & plain,
+                                 const std::vector<std::string> & admin,
+                                 const std::vector<std::string> & system_reader,
+                                 const std::vector<std::string> & project_reader)
 {
   for (auto& iter: roles) {
+    for (const auto& r : plain) {
+      if (fnmatch(r.c_str(), iter.name.c_str(), 0) == 0) {
+        iter.is_accepted = true;
+        break;
+      }
+    }
     for (const auto& r : admin) {
       if (fnmatch(r.c_str(), iter.name.c_str(), 0) == 0) {
         iter.is_admin = true;
         break;
       }
     }
-    for (const auto& r : reader) {
+    for (const auto& r : system_reader) {
       if (fnmatch(r.c_str(), iter.name.c_str(), 0) == 0) {
-        iter.is_reader = true;
+        iter.is_system_reader = true;
+        break;
+      }
+    }
+    for (const auto& r : project_reader) {
+      if (fnmatch(r.c_str(), iter.name.c_str(), 0) == 0) {
+        iter.is_project_reader = true;
         break;
       }
     }
   }
+}
+
+/* perm_mask granted by this single role:
+ *   admin or any other accepted role (e.g. member) -> full control
+ *   project_reader                                 -> read-only (data + config)
+ *   role in no accepted list                       -> nothing
+ */
+uint32_t TokenEnvelope::Role::perm_mask() const
+{
+  if (is_admin)          return RGW_PERM_FULL_CONTROL;
+  if (!is_accepted)      return RGW_PERM_NONE;
+  if (is_project_reader) return RGW_PERM_READ | RGW_PERM_READ_ACP;
+  return RGW_PERM_FULL_CONTROL;   /* accepted, no tier -> full control */
+}
+
+/* Effective perm_mask for the token: the union of every role's grant, so the
+ * most-permissive accepted role wins. Defaults to
+ * RGW_PERM_NONE: a token carrying no accepted role gets no
+ * implicit access. In practice the engines reject such a token before this
+ * is called (TokenEngine/EC2Engine::authenticate()); the NONE default is
+ * defense in depth, never an implicit full-control grant. */
+uint32_t TokenEnvelope::effective_perm_mask() const
+{
+  uint32_t mask = RGW_PERM_NONE;
+  for (const auto& role : roles) {
+    mask |= role.perm_mask();
+  }
+  return mask;
 }
 
 bool TokenCache::find(const std::string& token_id,
