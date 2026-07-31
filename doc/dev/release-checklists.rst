@@ -161,3 +161,5 @@ First stable release
 - [ ] activate latest release in readthedocs, as described in `the readthedocs
   documentation <https://docs.readthedocs.io/en/stable/versions.html>`_ 
 - [ ] add release and supported distros to tables in `doc/start/os-recommendations.rst`
+- [ ] doc/releases/releases.yml: add `actual_eol` attribute set to the current date in the X-4 release
+- [ ] doc/releases/index.rst: move the X-4 release from the `Active Releases` section to `Archived Releases` and update the two lists of active releases in the `Release timeline` section
