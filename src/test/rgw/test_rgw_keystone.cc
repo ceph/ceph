@@ -41,8 +41,9 @@ using rgw::auth::Principal;
 // permission mask. update_roles() puts a flag on each role that is in
 // one of the config lists. effective_perm_mask() then looks at the
 // flags: a normal user gets full control; a user whose only accepted
-// role is the reader role gets read-only. A role that is in no list
-// must have no effect.
+// role is the reader role gets read-only; a user whose only accepted
+// role is an implicit-deny role gets no permissions at all
+// (mask 0). A role that is in no list must have no effect.
 // ---------------------------------------------------------------------
 
 // Make a test token with the given role names, then flag the roles
@@ -58,36 +59,47 @@ static rgw::keystone::TokenEnvelope make_keystone_token(
   }
   // same lists the auth engines read from the config; an admin role
   // also counts as accepted
-  t.update_roles({"member", "objectstore_viewer", "admin"},  // plain
+  t.update_roles({"member", "objectstore_viewer", "objectstore_authed",
+                  "admin"},                                  // plain
                  {"admin"},                                  // admin
                  {},                                         // system_reader
-                 {"objectstore_viewer"});                    // project_reader
+                 {"objectstore_viewer"},                     // project_reader
+                 {"objectstore_authed"});                    // implicit_deny
   return t;
 }
 
 TEST(KeystoneProjectReader, UpdateRolesFlags)
 {
   auto t = make_keystone_token({"objectstore_viewer", "member", "admin",
-                                "unlisted_role"});
+                                "objectstore_authed", "unlisted_role"});
   for (const auto& r : t.roles) {
     if (r.name == "objectstore_viewer") {
       EXPECT_TRUE(r.is_project_reader);
       EXPECT_TRUE(r.is_accepted);
       EXPECT_FALSE(r.is_admin);
+      EXPECT_FALSE(r.is_implicit_deny);
     } else if (r.name == "member") {
       EXPECT_TRUE(r.is_accepted);
       EXPECT_FALSE(r.is_project_reader);
       EXPECT_FALSE(r.is_admin);
+      EXPECT_FALSE(r.is_implicit_deny);
     } else if (r.name == "admin") {
       EXPECT_TRUE(r.is_admin);
       EXPECT_TRUE(r.is_accepted);
       EXPECT_FALSE(r.is_project_reader);
+      EXPECT_FALSE(r.is_implicit_deny);
+    } else if (r.name == "objectstore_authed") {
+      EXPECT_TRUE(r.is_implicit_deny);
+      EXPECT_TRUE(r.is_accepted);
+      EXPECT_FALSE(r.is_project_reader);
+      EXPECT_FALSE(r.is_admin);
     } else if (r.name == "unlisted_role") {
       // this role is in no list, so all flags must stay off
       EXPECT_FALSE(r.is_accepted);
       EXPECT_FALSE(r.is_admin);
       EXPECT_FALSE(r.is_project_reader);
       EXPECT_FALSE(r.is_system_reader);
+      EXPECT_FALSE(r.is_implicit_deny);
     }
   }
 }
@@ -136,6 +148,43 @@ TEST(KeystoneProjectReader, NoReaderRole)
             make_keystone_token({"unlisted_role"}).effective_perm_mask());
   EXPECT_EQ(RGW_PERM_NONE,
             make_keystone_token({}).effective_perm_mask());
+}
+
+TEST(KeystoneImplicitDeny, AuthedOnly)
+{
+  // only the implicit-deny role: no permissions at all
+  EXPECT_EQ(RGW_PERM_NONE,
+            make_keystone_token({"objectstore_authed"}).effective_perm_mask());
+}
+
+TEST(KeystoneImplicitDeny, UnrelatedRoleIgnored)
+{
+  // an extra unknown role must not lift the cap
+  EXPECT_EQ(RGW_PERM_NONE,
+            make_keystone_token({"objectstore_authed", "unlisted_role"})
+                .effective_perm_mask());
+}
+
+TEST(KeystoneImplicitDeny, ReaderWins)
+{
+  // the most permissive accepted role wins: reader beats implicit-deny
+  EXPECT_EQ(RGW_PERM_READ | RGW_PERM_READ_ACP,
+            make_keystone_token({"objectstore_authed", "objectstore_viewer"})
+                .effective_perm_mask());
+}
+
+TEST(KeystoneImplicitDeny, MemberWins)
+{
+  EXPECT_EQ(RGW_PERM_FULL_CONTROL,
+            make_keystone_token({"objectstore_authed", "member"})
+                .effective_perm_mask());
+}
+
+TEST(KeystoneImplicitDeny, AdminWins)
+{
+  EXPECT_EQ(RGW_PERM_FULL_CONTROL,
+            make_keystone_token({"objectstore_authed", "admin"})
+                .effective_perm_mask());
 }
 
 // ---------------------------------------------------------------------
@@ -252,8 +301,8 @@ protected:
 TEST_F(KeystoneCapEnforcement, MaskDeniesWriteWithoutPolicy)
 {
   const rgw::IAM::Environment env = {{"keystone:userid", USERID}};
-  // no policy: the read-only mask blocks the write, and a zero mask
-  // blocks it too
+  // no policy: the read-only mask blocks the write, and the
+  // implicit-deny mask (0) blocks it too
   EXPECT_FALSE(put_allowed(RGW_PERM_READ, env, boost::none));
   EXPECT_FALSE(put_allowed(RGW_PERM_NONE, env, boost::none));
 }
