@@ -9,7 +9,7 @@ import signal
 import time
 import functools
 
-from io import StringIO
+from io import BytesIO, StringIO
 from collections import deque
 from datetime import datetime
 
@@ -3307,6 +3307,78 @@ class TestMirroring(CephFSTestCase):
             self.primary_fs_name, f'/{dir_name}', peer_uuid)
         self.assertEqual(after['last_synced_snap']['name'],
                          before['last_synced_snap']['name'])
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def _sync_stat_omap_key(self, fs_name, peer_uuid, dir_path):
+        return f'sync_stat/{fs_name}/{peer_uuid}/{dir_path.lstrip("/")}'
+
+    def _get_sync_stat_omap(self, peer_uuid, dir_path):
+        key = self._sync_stat_omap_key(self.primary_fs_name, peer_uuid, dir_path)
+        raw = self.fs.radosmo(['getomapval', 'cephfs_mirror', key, '-'])
+        return key, json.loads(raw)
+
+    def _set_sync_stat_omap(self, key, stat):
+        payload = json.dumps(stat).encode('utf-8')
+        self.fs.radosm(['setomapval', 'cephfs_mirror', key],
+                       stdin=BytesIO(payload))
+
+    def test_cephfs_mirror_survives_corrupt_sync_stat_omap(self):
+        """Mirror daemon must not crash when loading corrupt sync-stat omap.
+
+        Stop the daemon, rewrite last_synced_snap with bad types/values
+        (strings, negative ints, out-of-range timestamp) that must be
+        ignored rather than restoring bogus stats or aborting, then
+        restart. The daemon should come back and keep syncing.
+        """
+        self.setup_mount_b(mds_perm='rw')
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        peer_spec = "client.mirror_remote@ceph"
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec,
+                      self.secondary_fs_name)
+
+        dir_name = 'corrupt_sync_stat_dir'
+        self.mount_a.run_shell(['mkdir', dir_name])
+        self.mount_a.create_n_files(f'{dir_name}/file', 50, sync=True)
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+
+        snap0 = 'snap0'
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/{snap0}'])
+        self.check_peer_status_idle(self.primary_fs_name, self.primary_fs_id,
+                                    peer_spec, f'/{dir_name}', snap0, 1)
+
+        peer_uuid = self.get_peer_uuid(peer_spec)
+        key, stat = self._get_sync_stat_omap(peer_uuid, f'/{dir_name}')
+        self.assertIn('last_synced_snap', stat)
+        self.assertEqual(stat['last_synced_snap']['name'], snap0)
+
+        self.stop_mirror_daemon()
+
+        # Intentionally corrupt last_synced_snap. Pre-fix, bad string
+        # types could abort; negatives must not become huge uint64 values;
+        # out-of-range timestamps must not reach utime_t::set_from_double().
+        last = dict(stat['last_synced_snap'])
+        last['id'] = -1
+        last['sync_bytes'] = -1
+        last['sync_files'] = -1
+        last['sync_duration'] = '59s'
+        last['sync_time_stamp'] = 1e100
+        last['crawl_duration'] = '1m 30s'
+        stat['last_synced_snap'] = last
+        log.debug(f'corrupting sync-stat omap key={key} value={stat}')
+        self._set_sync_stat_omap(key, stat)
+
+        self.start_mirror_daemon()
+        self.wait_for_mirror_daemon_recovery(
+            self.primary_fs_name, self.primary_fs_id, f'/{dir_name}', peer_uuid)
+
+        # Daemon stayed up through acquire + apply_persisted_dir_sync_stat.
+        # Sync a new snap to prove replayer is healthy after ignoring bad fields.
+        # snaps_synced starts at 0 after restart (omap load only restores
+        # last_synced_snap fields), so the new snap is session count 1.
+        snap1 = 'snap1'
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/{snap1}'])
+        self.check_peer_status_idle(self.primary_fs_name, self.primary_fs_id,
+                                    peer_spec, f'/{dir_name}', snap1, 1)
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 
     def test_mgr_snapshot_mirror_status_after_directory_remove(self):
