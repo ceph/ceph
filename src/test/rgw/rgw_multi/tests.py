@@ -506,14 +506,29 @@ def disable_bucket_sync(zone, bucket_name):
     cmd = ['bucket', 'sync', 'disable', '--bucket', bucket_name] + zone.zone_args()
     zone.cluster.admin(cmd)
 
-def check_buckets_sync_status_obj_not_exist(zone, buckets):
+def check_buckets_sync_disabled(zonegroup, buckets):
+    """ verify that no zone is actively (full or incremental) syncing the
+    given buckets from any other zone, ie that bucket sync is disabled.
+    this polls because it can take a few seconds for the disabled state to
+    propagate via metadata sync """
+    active_states = ('full-sync', 'incremental-sync')
+    zones = zonegroup.zones
     for _ in range(config.checkpoint_retries):
-        cmd = ['log', 'list'] + zone.zone_arg()
-        log_list, ret = zone.cluster.admin(cmd, check_retcode=False, read_only=True)
-        for bucket in buckets:
-            if log_list.find(':'+bucket+":") >= 0:
+        still_syncing = False
+        for zone in zones:
+            for source_zone in zones:
+                if source_zone == zone:
+                    continue
+                for bucket_name in buckets:
+                    state = get_bucket_sync_state(zone, source_zone, bucket_name)
+                    if state in active_states:
+                        still_syncing = True
+                        break
+                if still_syncing:
+                    break
+            if still_syncing:
                 break
-        else:
+        if not still_syncing:
             return
         time.sleep(config.checkpoint_delay)
     assert False
@@ -1617,11 +1632,19 @@ def test_zonegroup_rename():
     new_zg = ZoneGroup(new_name, master_zg.period)
     old_zg = ZoneGroup(old_name, master_zg.period)
     for zone in master_zg.zones:
-        _, r = new_zg.get(zone.cluster, check_retcode=False)
+        for _ in range(config.checkpoint_retries):
+            _, r = new_zg.get(zone.cluster, check_retcode=False)
+            if r == 0:
+                break
+            time.sleep(config.checkpoint_delay)
         assert r == 0, \
             "new zonegroup name '%s' not found on zone %s" % (new_name, zone.name)
 
-        _, r = old_zg.get(zone.cluster, check_retcode=False)
+        for _ in range(config.checkpoint_retries):
+            _, r = old_zg.get(zone.cluster, check_retcode=False)
+            if r == errno.ENOENT:
+                break
+            time.sleep(config.checkpoint_delay)
         assert r == errno.ENOENT, \
             "old zonegroup name '%s' still present on zone %s (r=%d)" % (old_name, zone.name, r)
 
@@ -1674,9 +1697,9 @@ def test_bucket_sync_disable():
 
     for bucket_name in buckets:
         disable_bucket_sync(realm.meta_master_zone(), bucket_name)
+    zonegroup_meta_checkpoint(zonegroup)
 
-    for zone in zonegroup.zones:
-        check_buckets_sync_status_obj_not_exist(zone, buckets)
+    check_buckets_sync_disabled(zonegroup, buckets)
 
     zonegroup_data_checkpoint(zonegroup_conns)
 
