@@ -97,7 +97,10 @@ void ObjectModel::applyIoOp(IoOp& op) {
        &num_io = num_io,
        &reads = reads,
        &writes = writes]<OpType opType, int N>(ReadWriteOp<opType, N> writeOp) {
-        ceph_assert(primary_created);
+        // Auto-create the object on first write, mirroring librados semantics.
+        if (!primary_created) {
+          primary_created = true;
+        }
         for (int i = 0; i < N; i++) {
           // Not allowed: write overlapping with parallel read or write
           ceph_assert(!reads.intersects(writeOp.offset[i], writeOp.length[i]));
@@ -121,7 +124,10 @@ void ObjectModel::applyIoOp(IoOp& op) {
        &num_io = num_io,
        &reads = reads,
        &writes = writes]<OpType opType, int N>(ReadWriteOp<opType, N> writeOp) {
-        ceph_assert(primary_created);
+        // Auto-create the object on first write, mirroring librados semantics.
+        if (!primary_created) {
+          primary_created = true;
+        }
         for (int i = 0; i < N; i++) {
           // Not allowed: write overlapping with parallel read or write
           ceph_assert(!reads.intersects(writeOp.offset[i], writeOp.length[i]));
@@ -239,23 +245,19 @@ void ObjectModel::applyIoOp(IoOp& op) {
     } break;
 
     case OpType::Write: {
-      ceph_assert(primary_created);
       SingleWriteOp& writeOp = static_cast<SingleWriteOp&>(op);
       verify_write_and_record_and_generate_seed(writeOp);
     } break;
     case OpType::Write2: {
-      ceph_assert(primary_created);
       DoubleWriteOp& writeOp = static_cast<DoubleWriteOp&>(op);
       verify_write_and_record_and_generate_seed(writeOp);
     } break;
     case OpType::Write3: {
-      ceph_assert(primary_created);
       TripleWriteOp& writeOp = static_cast<TripleWriteOp&>(op);
       verify_write_and_record_and_generate_seed(writeOp);
     } break;
 
     case OpType::Append: {
-      ceph_assert(primary_created);
       SingleAppendOp& appendOp = static_cast<SingleAppendOp&>(op);
       appendOp.offset[0] = primary_contents.size();
       verify_write_and_record_and_generate_seed(appendOp);
@@ -365,17 +367,18 @@ void ObjectModel::applyIoOp(IoOp& op) {
       verify_failed_write_and_record(writeOp);
     } break;
     case OpType::Zero: {
-      ceph_assert(primary_created);
       ZeroOp& zeroOp = static_cast<ZeroOp&>(op);
       verify_zero_and_record(zeroOp);
     } break;
     case OpType::Zero2: {
-      ceph_assert(primary_created);
       DoubleZeroOp& zeroOp = static_cast<DoubleZeroOp&>(op);
       verify_zero_and_record(zeroOp);
     } break;
     case OpType::WriteAndZero: {
-      ceph_assert(primary_created);
+      // Auto-create the object on first write, mirroring librados semantics.
+      if (!primary_created) {
+        primary_created = true;
+      }
       WriteAndZeroOp& wzOp = static_cast<WriteAndZeroOp&>(op);
       // Check and record both ranges
       ceph_assert(!reads.intersects(wzOp.write_offset, wzOp.write_length));
@@ -406,7 +409,10 @@ void ObjectModel::applyIoOp(IoOp& op) {
       num_io++;
     } break;
     case OpType::ZeroAndTruncate: {
-      ceph_assert(primary_created);
+      // Auto-create the object on first write, mirroring librados semantics.
+      if (!primary_created) {
+        primary_created = true;
+      }
       ZeroAndTruncateOp& ztOp = static_cast<ZeroAndTruncateOp&>(op);
       // Check and record zero range
       ceph_assert(!reads.intersects(ztOp.zero_offset, ztOp.zero_length));
