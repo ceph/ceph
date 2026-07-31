@@ -14,6 +14,7 @@
 #include <catch2/catch_template_test_macros.hpp>
 
 #include "common/container_concepts.h"
+#include "test/catch2_compat.h"
 
 #include <algorithm>
 #include <array>
@@ -24,6 +25,7 @@
 #include <map>
 #include <ranges>
 #include <set>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -585,3 +587,33 @@ TEST_CASE("has_* member capability predicates match member availability",
 // Put the X-macro machinery back into the original packaging:
 #undef CEPH_CHECK_HAS_MEMBER_CAPABILITY
 #undef CEPH_HAS_MEMBER_CAPABILITY_CASES
+
+TEST_CASE("Catch2 gtest compatibility XML keeps only testcase children",
+          "[concepts]")
+{
+  std::istringstream in {
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+    "<testsuites>\n"
+    "  <testsuite name=\"unittest_concepts.exe\" tests=\"1\">\n"
+    "    <properties>\n"
+    "      <property name=\"random-seed\" value=\"1\"/>\n"
+    "    </properties>\n"
+    "    <testcase classname=\"unittest_concepts.exe.global\" "
+    "name=\"concepts pass\" time=\"0.000\" status=\"run\"/>\n"
+    "    <system-out/>\n"
+    "    <system-err/>\n"
+    "  </testsuite>\n"
+    "</testsuites>\n"
+  };
+  std::ostringstream out;
+
+  ceph::test::detail::sanitize_catch2_junit_for_gtest2subunit(in, out);
+
+  const auto xml = out.str();
+
+  CHECK(std::string::npos == xml.find("properties"));
+  CHECK(std::string::npos == xml.find("<system-out"));
+  CHECK(std::string::npos == xml.find("<system-err"));
+  CHECK(std::string::npos != xml.find("<testcase"));
+  CHECK(std::string::npos != xml.find("concepts pass"));
+}
