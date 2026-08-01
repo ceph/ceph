@@ -17,6 +17,9 @@ import { InventoryComponent } from './ceph/cluster/inventory/inventory.component
 import { LogsComponent } from './ceph/cluster/logs/logs.component';
 import { MgrModuleFormComponent } from './ceph/cluster/mgr-modules/mgr-module-form/mgr-module-form.component';
 import { MgrModuleListComponent } from './ceph/cluster/mgr-modules/mgr-module-list/mgr-module-list.component';
+import { MgrModuleResourceBreadcrumbResolver } from './ceph/cluster/mgr-modules/mgr-module-resource-page/mgr-module-resource-breadcrumb.resolver';
+import { MgrModuleResourcePageComponent } from './ceph/cluster/mgr-modules/mgr-module-resource-page/mgr-module-resource-page.component';
+import { MgrModuleResourceSidebarComponent } from './ceph/cluster/mgr-modules/mgr-module-resource-sidebar/mgr-module-resource-sidebar.component';
 import { MonitorComponent } from './ceph/cluster/monitor/monitor.component';
 import { OsdFormComponent } from './ceph/cluster/osd/osd-form/osd-form.component';
 import { OsdListComponent } from './ceph/cluster/osd/osd-list/osd-list.component';
@@ -449,6 +452,22 @@ const routes: Routes = [
             data: {
               breadcrumbs: StartCaseBreadcrumbsResolver
             }
+          },
+          {
+            path: ':name',
+            component: MgrModuleResourceSidebarComponent,
+            data: {
+              breadcrumbs: MgrModuleResourceBreadcrumbResolver,
+              showBreadcrumbsLayout: false
+            },
+            children: [
+              { path: '', redirectTo: 'overview', pathMatch: 'full' },
+              {
+                path: 'overview',
+                component: MgrModuleResourcePageComponent,
+                data: { breadcrumbs: 'Overview', section: 'overview' }
+              }
+            ]
           }
         ]
       },
