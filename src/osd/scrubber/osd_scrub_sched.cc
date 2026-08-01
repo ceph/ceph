@@ -110,7 +110,7 @@ void ScrubQueue::register_with_osd(
 	  break;
 	}
 
-	update_job(scrub_job, suggested, true /* resets not_before */);
+	update_job_without_lock(scrub_job, suggested, true /* resets not_before */);
 	to_scrub.push_back(scrub_job);
 	scrub_job->in_queues = true;
 	scrub_job->state = qu_state_t::registered;
@@ -124,7 +124,7 @@ void ScrubQueue::register_with_osd(
 	// at any minute
 	std::lock_guard lck{jobs_lock};
 
-	update_job(scrub_job, suggested, true /* resets not_before */);
+	update_job_without_lock(scrub_job, suggested, true /* resets not_before */);
 	if (scrub_job->state == qu_state_t::not_registered) {
 	  dout(5) << " scrub job state changed to 'not registered'" << dendl;
 	  to_scrub.push_back(scrub_job);
@@ -147,6 +147,14 @@ void ScrubQueue::update_job(Scrub::ScrubJobRef scrub_job,
 			    const sched_params_t& suggested,
                             bool reset_nb)
 {
+  std::lock_guard lck{jobs_lock};
+  update_job_without_lock(scrub_job, suggested, reset_nb);
+}
+
+void ScrubQueue::update_job_without_lock(Scrub::ScrubJobRef scrub_job,
+			    const sched_params_t& suggested,
+                            bool reset_nb)
+{
   // adjust the suggested scrub time according to OSD-wide status
   auto adjusted = adjust_target_time(suggested);
   scrub_job->high_priority = suggested.is_must == must_scrub_t::mandatory;
@@ -165,6 +173,7 @@ void ScrubQueue::delay_on_failure(
 		  "pg[{}] delay_on_failure: delay:{} now:{:s}",
 		  sjob->pgid, delay, now_is)
 	   << dendl;
+  std::lock_guard lck{jobs_lock};
   sjob->delay_on_failure(delay, delay_cause, now_is);
 }
 

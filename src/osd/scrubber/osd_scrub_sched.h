@@ -219,13 +219,14 @@ class ScrubQueue {
    *  'scheduled_at' time. This is used whenever the scrub-job schedule is
    *  updated not as a result of a scrub attempt failure.
    *
-   *  locking: not using the jobs_lock
+   *  locking: using the jobs_lock
    */
   void update_job(
       Scrub::ScrubJobRef sjob,
       const sched_params_t& suggested,
       bool reset_notbefore);
 
+  // locking: using the jobs_lock
   void delay_on_failure(
       Scrub::ScrubJobRef sjob,
       std::chrono::seconds delay,
@@ -316,6 +317,16 @@ class ScrubQueue {
    */
   Scrub::scrub_schedule_t adjust_target_time(
     const Scrub::sched_params_t& recomputed_params) const;
+
+  /**
+   * Same as update_job(), to use when jobs_lock is already held
+   *
+   * locking: expects jobs_lock to be held by the caller
+   */
+  void update_job_without_lock(
+      Scrub::ScrubJobRef scrub_job,
+      const sched_params_t& suggested,
+      bool reset_nb);
 
 protected: // used by the unit-tests
   /**

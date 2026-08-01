@@ -7,6 +7,8 @@
 
 #include <algorithm>
 #include <map>
+#include <atomic>
+#include <thread>
 
 #include "common/async/context_pool.h"
 #include "common/ceph_argparse.h"
@@ -450,3 +452,65 @@ TEST_F(TestScrubSched, ready_list)
   EXPECT_EQ(4, ripe_jobs.size());
   debug_print_jobs("ready_list", ripe_jobs);
 }
+
+// regression test for issue 78874
+// collect_ripe_jobs() from osd tick threads reads the jobs
+// schedules while update_job() and delay_on_failure() from PG threads
+// rewrite them
+TEST_F(TestScrubSched, schedule_writers_vs_ready_to_scrub_race)
+{
+  constexpr unsigned num_jobs = 100;
+  constexpr int num_ticks = 1'000;
+  const utime_t tick_time{epoch_2000, 0};
+
+  sched_params_t periodic;
+
+  // choose a time far enough before tick_time so that the jobs are always ripe
+  periodic.proposed_time = tick_time - utime_t{1'000'000, 0};
+  periodic.min_interval = 100.0;
+  periodic.max_interval = 200.0;
+
+  sched_params_t operator_requested;
+  operator_requested.proposed_time = PgScrubber::scrub_must_stamp();
+  operator_requested.is_must = Scrub::must_scrub_t::mandatory;
+
+  std::vector<ScrubJobRef> jobs;
+  for (unsigned i = 0; i < num_jobs; ++i) {
+    auto& job = jobs.emplace_back(
+        ceph::make_ref<Scrub::ScrubJob>(
+          g_ceph_context, spg_t{pg_t{i, 1}},
+          m_osd_num));
+    m_sched->register_with_osd(job, periodic);
+  }
+  ASSERT_EQ(
+      num_jobs,
+      m_sched->ready_to_scrub(Scrub::OSDRestrictions{}, tick_time).size());
+
+  // keep scheduling and delaying scrub jobs
+  std::atomic_bool done{false};
+  std::thread updater{[&] {
+    bool flip = false;
+    while (!done) {
+      const auto reason = flip ? operator_requested : periodic;
+      for (const auto& job : jobs) {
+        m_sched->delay_on_failure(
+            job,
+            std::chrono::seconds::zero(),
+            Scrub::delay_cause_t::none,
+            tick_time);
+        m_sched->update_job(job, reason, true);
+      }
+      flip = !flip;
+    }
+  }};
+
+  for (int i = 0; i < num_ticks; ++i) {
+    EXPECT_EQ(
+        num_jobs,
+        m_sched->ready_to_scrub(Scrub::OSDRestrictions{}, tick_time).size());
+  }
+
+  done = true;
+  updater.join();
+}
+
