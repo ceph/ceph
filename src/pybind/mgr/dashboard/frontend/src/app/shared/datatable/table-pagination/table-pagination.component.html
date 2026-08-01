@@ -1,25 +1,27 @@
-<nav class="pagination"
-     aria-label="Pagination"
-     i18n-aria-label>
+<nav
+  class="pagination"
+  aria-label="Pagination"
+  i18n-aria-label
+>
   <button
     class="pagination__btn pagination__btn_first"
     aria-label="Go to first page"
     i18n-aria-label
     [disabled]="!canPrevious()"
     (click)="selectPage(1)"
+    type="button"
   >
-    <i class="fa fa-angle-double-left"
-       aria-hidden="true"></i>
+    <cd-icon type="angleDoubleLeft"></cd-icon>
   </button>
   <button
     class="pagination__btn pagination__btn_prev"
     aria-label="Go to previous page"
     i18n-aria-label
     [disabled]="!canPrevious()"
+    type="button"
     (click)="prevPage()"
   >
-    <i class="fa fa-angle-left"
-       aria-hidden="true"></i>
+    <cd-icon type="leftArrow"></cd-icon>
   </button>
   <div class="pagination__pages">
     <input
@@ -41,9 +43,9 @@
     i18n-aria-label
     (click)="nextPage()"
     [disabled]="!canNext()"
+    type="button"
   >
-    <i class="fa fa-angle-right"
-       aria-hidden="true"></i>
+    <cd-icon type="rightArrow"></cd-icon>
   </button>
   <button
     class="pagination__btn pagination__btn_last"
@@ -51,8 +53,8 @@
     i18n-aria-label
     [disabled]="!canNext()"
     (click)="selectPage(totalPages)"
+    type="button"
   >
-    <i class="fa fa-angle-double-right"
-       aria-hidden="true"></i>
+    <cd-icon type="angleDoubleRight"></cd-icon>
   </button>
 </nav>

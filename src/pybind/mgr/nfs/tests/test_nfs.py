@@ -6,14 +6,16 @@ from typing import Optional, Tuple, Iterator, List, Any
 from contextlib import contextmanager
 from unittest import mock
 from unittest.mock import MagicMock
+import mgr_util
 from mgr_module import MgrModule, NFS_POOL_NAME
 
 from rados import ObjectNotFound
 
-from ceph.deployment.service_spec import NFSServiceSpec
+from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec
 from ceph.utils import with_units_to_int, bytes_to_human
 from nfs import Module
 from nfs.export import ExportMgr, normalize_path
+from nfs.utils import cephfs_client_for_mgr
 from nfs.ganesha_conf import GaneshaConfParser, Export
 from nfs.qos_conf import (
     RawBlock,
@@ -126,7 +128,7 @@ EXPORT {
     Path = /;
     Pseudo = /cephfs_b/;
     Access_Type = RW;
-    Protocols = 4;
+    Protocols = 3, 4;
     Attr_Expiration_Time = 0;
 
     FSAL {
@@ -491,7 +493,7 @@ NFS_CORE_PARAM {
         assert export.pseudo == "/cephfs_b/"
         assert export.access_type == "RW"
         assert export.squash == "no_root_squash"
-        assert export.protocols == [4]
+        assert export.protocols == [3, 4]
         assert export.fsal.name == "CEPH"
         assert export.fsal.user_id == "nfs.foo.b.lgudhr"
         assert export.fsal.fs_name == "b"
@@ -1122,7 +1124,7 @@ NFS_CORE_PARAM {
         assert export.pseudo == "/mybucket"
         assert export.access_type == "none"
         assert export.squash == "none"
-        assert export.protocols == [3, 4]
+        assert export.protocols == [4]
         assert export.transports == ["TCP"]
         assert export.fsal.name == "RGW"
         assert export.fsal.user_id == "bucket_owner_user"
@@ -1166,7 +1168,7 @@ NFS_CORE_PARAM {
         assert export.pseudo == "/mybucket"
         assert export.access_type == "none"
         assert export.squash == "none"
-        assert export.protocols == [3, 4]
+        assert export.protocols == [4]
         assert export.transports == ["TCP"]
         assert export.fsal.name == "RGW"
         assert export.fsal.access_key_id == "the_access_key"
@@ -1208,7 +1210,7 @@ NFS_CORE_PARAM {
         assert export.pseudo == "/mybucket"
         assert export.access_type == "none"
         assert export.squash == "none"
-        assert export.protocols == [3, 4]
+        assert export.protocols == [4]
         assert export.transports == ["TCP"]
         assert export.fsal.name == "RGW"
         assert export.fsal.access_key_id == "the_access_key"
@@ -1257,7 +1259,7 @@ NFS_CORE_PARAM {
         assert export.pseudo == "/cephfs2"
         assert export.access_type == "none"
         assert export.squash == "none"
-        assert export.protocols == [3, 4]
+        assert export.protocols == [4]
         assert export.transports == ["TCP"]
         assert export.fsal.name == "CEPH"
         assert export.fsal.user_id == "nfs.foo.myfs.86ca58ef"
@@ -1389,7 +1391,7 @@ EXPORT {
         assert export.pseudo == "/cephfs3"
         assert export.access_type == "RW"
         assert export.squash == "root"
-        assert export.protocols == [3, 4]
+        assert export.protocols == [4]
         assert export.fsal.name == "CEPH"
         assert export.fsal.user_id == "nfs.foo.myfs.86ca58ef"
         assert export.fsal.cephx_key == "thekeyforclientabc"
@@ -1430,7 +1432,12 @@ EXPORT {
         cluster = NFSCluster(nfs_mod)
 
         out = cluster.show_nfs_cluster_info(self.cluster_id)
-        assert out == {"foo": {"virtual_ip": None, "backend": []}}
+        assert out == {"foo": {
+            "deployment_type": "standalone",
+            "virtual_ip": None,
+            "backend": [],
+            "placement": {}
+        }}
 
     def test_cluster_info(self):
         self._do_mock_test(self._do_test_cluster_info)
@@ -1791,6 +1798,30 @@ EXPORT {
         self._do_mock_test(self._do_test_export_qos_bw_ops, qos_type, clust_bw_params, clust_ops_params, export_bw_params, export_ops_params)
 
 
+class TestNFSClusterIngressPlacement:
+    cluster_id = 'mynfs'
+    virtual_ip = '192.168.1.100/24'
+    nfs_placement = '2 host1 host2'
+    ingress_placement = '3 host3 host4 host5'
+
+    def test_create_nfs_cluster_passes_ingress_placement(self):
+        mgr = MagicMock()
+        cluster = NFSCluster(mgr)
+        with mock.patch('nfs.cluster.create_ganesha_pool'), \
+                mock.patch.object(cluster, 'create_empty_rados_obj'), \
+                mock.patch('nfs.cluster.available_clusters', return_value=[]), \
+                mock.patch.object(cluster, '_call_orch_apply_nfs') as mock_apply:
+            cluster.create_nfs_cluster(
+                cluster_id=self.cluster_id,
+                placement='host1',
+                virtual_ip=self.virtual_ip,
+                ingress=True,
+                ingress_placement=self.ingress_placement,
+            )
+            mock_apply.assert_called_once()
+            assert mock_apply.call_args.kwargs['ingress_placement'] == self.ingress_placement
+
+
 @pytest.mark.parametrize(
     "path,expected",
     [
@@ -1826,3 +1857,30 @@ def test_ganesha_validate_access_type():
         _validate_access_type(ok)
     with pytest.raises(NFSInvalidOperation):
         _validate_access_type("any")
+
+
+class TestCephfsClientForMgr:
+    @pytest.fixture(autouse=True)
+    def clear_cephfs_client_cache(self):
+        cephfs_client_for_mgr.cache_clear()
+        yield
+        cephfs_client_for_mgr.cache_clear()
+
+    def test_cephfs_client_for_mgr_returns_same_instance(self):
+        mgr = MagicMock()
+        with mock.patch('nfs.utils.CephfsClient') as mock_cephfs_cls:
+            mock_cephfs_cls.return_value = MagicMock()
+            first = cephfs_client_for_mgr(mgr)
+            second = cephfs_client_for_mgr(mgr)
+            assert first is second
+            mock_cephfs_cls.assert_called_once_with(mgr)
+
+    def test_multiple_earmark_resolvers_share_cached_cephfs_client(self):
+        mgr = MagicMock()
+        with mock.patch('nfs.utils.CephfsClient') as mock_cephfs_cls:
+            mock_cephfs_cls.return_value = MagicMock()
+            cached = cephfs_client_for_mgr(mgr)
+            r1 = mgr_util.CephFSEarmarkResolver(mgr=mgr, client=cached)
+            r2 = mgr_util.CephFSEarmarkResolver(mgr=mgr, client=cephfs_client_for_mgr(mgr))
+            assert r1._cephfs_client is r2._cephfs_client
+            mock_cephfs_cls.assert_called_once_with(mgr)

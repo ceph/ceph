@@ -3,8 +3,6 @@ import { HttpClientTestingModule, HttpTestingController } from '@angular/common/
 import { fakeAsync, TestBed, tick, flush } from '@angular/core/testing';
 import { Router } from '@angular/router';
 
-import { ToastrService } from 'ngx-toastr';
-
 import { AppModule } from '~/app/app.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { NotificationType } from '../enum/notification-type.enum';
@@ -70,7 +68,6 @@ describe('ApiInterceptorService', () => {
     providers: [
       NotificationService,
       {
-        provide: ToastrService,
         useValue: {
           error: () => true
         }
@@ -112,12 +109,37 @@ describe('ApiInterceptorService', () => {
       );
     });
 
-    it('should redirect 403', () => {
+    it('should redirect 403 for api/ requests', () => {
       runRouterTest(
         {
           status: 403
         },
-        [['error'], {'state': {'header': 'Access Denied', 'icon': 'fa fa-lock', 'message': 'Sorry, you don’t have permission to view this page or resource.', 'source': 'forbidden'}}] // prettier-ignore
+        [['error'], {'state': {'header': 'Access Denied', 'icon': 'locked', 'message': "Sorry, you don't have permission to view this page or resource.", 'source': 'forbidden'}}] // prettier-ignore
+      );
+    });
+
+    it('should not redirect 403 for unscoped ui-api/ background check requests', () => {
+      const uiApiUrl = 'ui-api/prometheus/prometheus-api-host';
+      httpClient.get(uiApiUrl).subscribe(
+        () => true,
+        (_resp) => undefined
+      );
+      httpTesting.expectOne(uiApiUrl).error(new ErrorEvent('abc'), { status: 403 });
+      httpTesting.verify();
+      expect(router.navigate).not.toHaveBeenCalled();
+    });
+
+    it('should redirect 403 for scoped ui-api/ requests', () => {
+      const scopedUiApiUrl = 'ui-api/osd/deployment_options';
+      httpClient.get(scopedUiApiUrl).subscribe(
+        () => true,
+        (_resp) => undefined
+      );
+      httpTesting.expectOne(scopedUiApiUrl).error(new ErrorEvent('abc'), { status: 403 });
+      httpTesting.verify();
+      expect(router.navigate).toHaveBeenCalledWith(
+        ['error'],
+        { state: { header: 'Access Denied', icon: 'locked', message: "Sorry, you don't have permission to view this page or resource.", source: 'forbidden' } } // prettier-ignore
       );
     });
 
@@ -224,7 +246,7 @@ describe('ApiInterceptorService', () => {
     it('should use different application icon (default Ceph) in error message', fakeAsync(() => {
       const msg = 'Cannot connect to Alertmanager';
       httpError(undefined, { status: 500 }, (resp) => {
-        (resp.application = 'Prometheus'), (resp.message = msg);
+        ((resp.application = 'Prometheus'), (resp.message = msg));
       });
       expectSaveToHaveBeenCalled(true);
       flush();

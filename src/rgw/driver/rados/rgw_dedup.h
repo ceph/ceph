@@ -18,6 +18,7 @@
 #include "rgw_dedup_utils.h"
 #include "rgw_dedup_table.h"
 #include "rgw_dedup_cluster.h"
+#include "rgw_dedup_filter.h"
 #include "rgw_realm_reloader.h"
 #include <string>
 #include <unordered_map>
@@ -259,6 +260,7 @@ namespace rgw::dedup {
     bool     d_split_head             = true;
     uint32_t d_head_object_size       = (4ULL * 1024 * 1024);
     control_t d_ctl;
+    dedup_filter_t d_filter;
     uint64_t d_watch_handle = 0;
     DedupWatcher d_watcher_ctx;
 

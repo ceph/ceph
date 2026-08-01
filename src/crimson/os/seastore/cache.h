@@ -103,8 +103,7 @@ class SegmentProvider;
  * - TRACE: DEBUG details
  * - seastore_t logs
  */
-class Cache : public ExtentTransViewRetriever,
-	      public RetiredExtentPlaceholderInvalidater {
+class Cache : public ExtentTransViewRetriever {
 public:
   Cache(ExtentPlacementManager &epm, store_index_t store_index);
   ~Cache();
@@ -142,7 +141,6 @@ public:
     LOG_PREFIX(Cache::reset_transaction_preserve_handle);
     if (t.did_reset()) {
       SUBDEBUGT(seastore_t, "reset", t);
-      ++(get_by_src(stats.trans_created_by_src, t.get_src()));
     }
     t.reset_preserve_handle();
   }
@@ -154,14 +152,22 @@ public:
     t.add_present_to_retired_set(ref);
   }
 
-  /// Declare paddr retired in t
-  using retire_extent_iertr = base_iertr;
-  using retire_extent_ret = base_iertr::future<>;
-  retire_extent_ret retire_extent_addr(
-    Transaction &t, paddr_t addr, extent_len_t length);
-
-  CachedExtentRef retire_absent_extent_addr(
-    Transaction &t, laddr_t laddr, paddr_t addr, extent_len_t length);
+  template <typename T, typename Func>
+  TCachedExtentRef<T> retire_absent_extent_addr(
+    Transaction &t,
+    laddr_t laddr,
+    paddr_t paddr,
+    extent_len_t length,
+    Func &&extent_init_func) {
+    LOG_PREFIX(Cache::retire_absent_extent_addr);
+    SUBDEBUGT(seastore_cache, "retire {}~0x{:x} laddr={}",
+      t, paddr, length, laddr);
+    auto ext = alloc_absent_extent<T>(
+      t, paddr, length, 0, length, std::move(extent_init_func));
+    SUBDEBUGT(seastore_cache, "retire {}", t, *ext);
+    retire_extent(t, ext);
+    return ext;
+  }
 
   /**
    * get_root
@@ -260,14 +266,6 @@ public:
       return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
     }
 
-    if (is_retired_placeholder_type(ret->get_type())) {
-      // retired_placeholder is not really cached yet
-      SUBDEBUGT(seastore_cache,
-        "{} {}~0x{:x} ~0x{:x} is absent(placeholder) in cache",
-        t, type, paddr, len, ret->get_length());
-      return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
-    }
-
     if (ret->get_length() != len) {
       SUBDEBUGT(seastore_cache,
         "{} {}~0x{:x} is present in cache with inconsistent length 0x{:x} -- {}",
@@ -297,7 +295,7 @@ public:
           ret->cast<CachedExtent>(), 0, ret->get_length(), &t_src));
     }
 
-    // present in cache(fully loaded) and is not a retired_placeholder
+    // present in cache(fully loaded)
     SUBDEBUGT(seastore_cache,
       "{} {}~0x{:x} is present in cache -- {}",
       t, type, paddr, len, *ret);
@@ -366,18 +364,6 @@ public:
     }
   }
 
-  void invalidate_retired_placeholder(
-    Transaction &t,
-    CachedExtent &retired_placeholder,
-    CachedExtent &extent) {
-    // replace placeholder in transactions
-    while (!retired_placeholder.read_transactions.empty()) {
-      auto t = retired_placeholder.read_transactions.begin()->t;
-      t->replace_placeholder(retired_placeholder, extent);
-    }
-    retired_placeholder.set_invalid(t);
-  }
-
   /*
    * prepare_absent_extent
    *
@@ -392,41 +378,19 @@ public:
     extent_len_t partial_off,
     extent_len_t partial_len,
     Func &&extent_init_func) {
-    LOG_PREFIX(Cached::prepare_absent_extent);
-
-#ifndef NDEBUG
-    {
-      CachedExtentRef ret;
-      auto r = t.get_extent(offset, &ret);
-      if (r != Transaction::get_extent_ret::ABSENT) {
-	SUBERRORT(seastore_cache, "unexpected non-absent extent {}", t, *ret);
-	ceph_abort();
-      }
-    }
-#endif
-
-    SUBTRACET(seastore_cache, "{} {}~0x{:x}", t, T::TYPE, offset, length);
-    ceph_assert(!booting);
+    auto ret = alloc_absent_extent<T>(
+      t,
+      offset,
+      length,
+      partial_off,
+      partial_len,
+      std::forward<Func>(extent_init_func));
     const auto t_src = t.get_src();
-
-    // partial read
-    TCachedExtentRef<T> ret = CachedExtent::make_cached_extent_ref<T>(length);
-    ret->init(CachedExtent::extent_state_t::CLEAN,
-	      offset,
-	      PLACEMENT_HINT_NULL,
-	      NULL_GENERATION,
-	      TRANS_ID_NULL);
-    SUBDEBUGT(seastore_cache,
-	"{} {}~0x{:x} is absent, add extent and reading range 0x{:x}~0x{:x} ... -- {}",
-	t, T::TYPE, offset, length, partial_off, partial_len, *ret);
-    add_extent(ret);
-    extent_init_func(*ret);
     cache_access_stats_t& access_stats = get_by_ext(
       get_by_src(stats.access_by_src_ext, t_src),
       T::TYPE);
     ++access_stats.load_absent;
     ++stats.access.load_absent;
-    t.add_to_read_set(CachedExtentRef(ret));
     touch_extent_by_range(
       *ret, &t_src, t.get_cache_hint(),
       partial_off, partial_len);
@@ -550,7 +514,6 @@ public:
     assert(extent.is_fully_loaded());
     const auto t_src = t.get_src();
     auto ext_type = extent.get_type();
-    assert(!is_retired_placeholder_type(ext_type));
     cache_access_stats_t& access_stats = get_by_ext(
       get_by_src(stats.access_by_src_ext, t_src),
       ext_type);
@@ -609,6 +572,41 @@ public:
     }
   }
 
+  CachedExtentRef get_extent_viewable_by_trans_sync(
+    Transaction &t,
+    CachedExtentRef extent) final {
+    assert(extent->is_valid());
+
+    CachedExtent* p_extent = nullptr;
+    if (extent->is_stable()) {
+      p_extent = extent->maybe_get_transactional_view(t);
+      ceph_assert(p_extent);
+      if (p_extent != extent.get()) {
+        assert(p_extent->is_pending_in_trans(t.get_trans_id()));
+        assert(!p_extent->is_pending_io());
+        if (p_extent->is_mutable()) {
+          assert(p_extent->is_fully_loaded());
+          assert(!p_extent->is_pending_io());
+        } else {
+          assert(p_extent->is_exist_clean());
+        }
+      } else {
+        // stable from trans-view
+        assert(!p_extent->is_pending_in_trans(t.get_trans_id()));
+      }
+    } else {
+      assert(!extent->is_pending_io() || extent->is_exist_clean());
+      assert(extent->is_pending_in_trans(t.get_trans_id()));
+      if (extent->is_mutable()) {
+        assert(extent->is_fully_loaded());
+      } else {
+        assert(extent->is_exist_clean());
+      }
+      p_extent = extent.get();
+    }
+    return p_extent;
+  }
+
   get_extent_iertr::future<CachedExtentRef>
   get_extent_viewable_by_trans(
     Transaction &t,
@@ -618,12 +616,6 @@ public:
 
     const auto t_src = t.get_src();
     auto ext_type = extent->get_type();
-    // FIXME: retired-placeholder isn't linked in the lba tree yet.
-    //   We think it's still working because:
-    //   1. A retired-placeholder must be an ObjectDataBlock
-    //   2. Per rados object, no read is possible during write,
-    //      and write cannot be parallel
-    assert(!is_retired_placeholder_type(ext_type));
     cache_access_stats_t& access_stats = get_by_ext(
       get_by_src(stats.access_by_src_ext, t_src),
       ext_type);
@@ -694,8 +686,6 @@ public:
       }
     }
 
-    // user should not see RETIRED_PLACEHOLDER extents
-    ceph_assert(!is_retired_placeholder_type(p_extent->get_type()));
     // for logical extents, handle partial load in TM::read_pin(),
     // also see read_extent_maybe_partial() and get_absent_extent()
     assert(is_logical_type(p_extent->get_type()) ||
@@ -752,8 +742,16 @@ public:
     }
   }
 
+  ExtentPlacementManager& get_epm() {
+    return epm;
+  }
+
   extent_len_t get_block_size() const {
     return epm.get_block_size();
+  }
+
+  ExtentPinboard *get_extent_pinboard() {
+    return pinboard.get();
   }
 
 // Interfaces only for tests.
@@ -764,7 +762,12 @@ public:
   }
 
   bool can_drop_backref() const {
-    return epm.is_pure_rbm();
+    return epm.is_pure_rbm() && !force_backref;
+  }
+
+  void update_read_ratio(Transaction &t) {
+    stats.read_hit_hot += t.read_hit_hot;
+    stats.read_hit_cold += t.read_hit_cold;
   }
 
 private:
@@ -833,6 +836,48 @@ private:
   }
 
   /**
+   */
+  template <typename T, typename Func>
+  TCachedExtentRef<T> alloc_absent_extent(
+    Transaction &t,
+    paddr_t offset,
+    extent_len_t length,
+    extent_len_t partial_off,
+    extent_len_t partial_len,
+    Func &&extent_init_func) {
+    LOG_PREFIX(Cache::alloc_absent_extent);
+#ifndef NDEBUG
+    {
+      CachedExtentRef ret;
+      auto r = t.get_extent(offset, &ret);
+      if (r != Transaction::get_extent_ret::ABSENT) {
+	SUBERRORT(seastore_cache, "unexpected non-absent extent {}", t, *ret);
+	ceph_abort();
+      }
+    }
+#endif
+
+    SUBTRACET(seastore_cache, "{} {}~0x{:x}", t, T::TYPE, offset, length);
+    ceph_assert(!booting);
+
+    // partial read
+    TCachedExtentRef<T> ret = CachedExtent::make_cached_extent_ref<T>(length);
+    ret->init(CachedExtent::extent_state_t::CLEAN,
+	      offset,
+	      PLACEMENT_HINT_NULL,
+	      NULL_GENERATION,
+	      nullptr,
+	      write_policy_t::WRITE_BACK);
+    SUBDEBUGT(seastore_cache,
+	"{} {}~0x{:x} is absent, add extent and reading range 0x{:x}~0x{:x} ... -- {}",
+	t, T::TYPE, offset, length, partial_off, partial_len, *ret);
+    add_extent(ret);
+    extent_init_func(*ret);
+    t.add_to_read_set(ret);
+    return ret;
+  }
+
+  /**
    * do_get_caching_extent
    *
    * returns ref to extent at offset~length of type T either from
@@ -861,7 +906,8 @@ private:
                 offset,
                 PLACEMENT_HINT_NULL,
                 NULL_GENERATION,
-		TRANS_ID_NULL);
+		nullptr,
+		write_policy_t::WRITE_BACK);
       SUBDEBUG(seastore_cache,
           "{} {}~0x{:x} is absent, add extent and reading range 0x{:x}~0x{:x} ... -- {}",
           T::TYPE, offset, length, partial_off, partial_len, *ret);
@@ -875,32 +921,6 @@ private:
     }
 
     // extent PRESENT in cache
-    if (is_retired_placeholder_type(cached->get_type())) {
-      // partial read
-      TCachedExtentRef<T> ret = CachedExtent::make_cached_extent_ref<T>(length);
-      ret->init(CachedExtent::extent_state_t::CLEAN,
-                offset,
-                PLACEMENT_HINT_NULL,
-                NULL_GENERATION,
-		TRANS_ID_NULL);
-      SUBDEBUG(seastore_cache,
-          "{} {}~0x{:x} is absent(placeholder), add extent and reading range 0x{:x}~0x{:x} ... -- {}",
-          T::TYPE, offset, length, partial_off, partial_len, *ret);
-      extent_init_func(*ret);
-      on_cache(*ret);
-      extents_index.replace(*ret, *cached);
-
-      // replace placeholder in transactions
-      while (!cached->read_transactions.empty()) {
-        auto t = cached->read_transactions.begin()->t;
-        t->replace_placeholder(*cached, *ret);
-      }
-
-      cached->state = CachedExtent::extent_state_t::INVALID;
-      return read_extent<T>(
-	std::move(ret), partial_off, partial_len, p_src);
-    }
-
     auto ret = TCachedExtentRef<T>(static_cast<T*>(cached.get()));
     on_cache(*ret);
     if (ret->is_range_loaded(partial_off, partial_len)) {
@@ -1060,6 +1080,24 @@ private:
     return res;
   }
 
+  std::optional<backref_entry_t> get_cached_backref_entry(paddr_t addr) {
+    auto it = backref_entry_mset.lower_bound(
+      addr,
+      backref_entry_t::cmp_t());
+    if (it == backref_entry_mset.end()) {
+      return std::nullopt;
+    }
+    while (it->paddr == addr) {
+      auto &backref_entry = *it;
+      ++it;
+      if (it == backref_entry_mset.end() ||
+          it->paddr != addr) {
+        return backref_entry;
+      }
+    }
+    return std::nullopt;
+  }
+
   const backref_entry_mset_t& get_backref_entry_mset() {
     return backref_entry_mset;
   }
@@ -1137,6 +1175,7 @@ public:
     }
   }
 
+  using alloc_option_t = ExtentPlacementManager::alloc_option_t;
   /**
    * alloc_new_non_data_extent
    *
@@ -1147,25 +1186,20 @@ public:
   TCachedExtentRef<T> alloc_new_non_data_extent(
     Transaction &t,         ///< [in, out] current transaction
     extent_len_t length,    ///< [in] length
-    placement_hint_t hint,  ///< [in] user hint
-#ifdef UNIT_TESTS_BUILT
-    rewrite_gen_t gen,      ///< [in] rewrite generation
-    std::optional<paddr_t> epaddr = std::nullopt ///< [in] paddr fed by callers
-#else
-    rewrite_gen_t gen
-#endif
+    alloc_option_t opt      ///< [in] allocation options
   ) {
     LOG_PREFIX(Cache::alloc_new_non_data_extent);
-    SUBTRACET(seastore_cache, "allocate {} 0x{:x}B, hint={}, gen={}",
-              t, T::TYPE, length, hint, rewrite_gen_printer_t{gen});
-#ifdef UNIT_TESTS_BUILT
-    auto result = epm.alloc_new_non_data_extent(t, T::TYPE, length, hint, gen, epaddr);
-#else
-    auto result = epm.alloc_new_non_data_extent(t, T::TYPE, length, hint, gen);
-#endif
+    SUBTRACET(seastore_cache, "allocate {} 0x{:x}B, opt.hint={}, gen={}",
+              t, T::TYPE, length, opt.hint, rewrite_gen_printer_t{opt.gen});
+    auto result = epm.alloc_new_non_data_extent(t, T::TYPE, length, opt);
     if (!result) {
-      SUBERRORT(seastore_cache, "insufficient space", t);
-      std::rethrow_exception(crimson::ct_error::enospc::exception_ptr());
+      if (epm.is_full()) {
+        SUBERRORT(seastore_cache, "insufficient space", t);
+        std::rethrow_exception(crimson::ct_error::enospc::exception_ptr());
+      } else {
+        SUBERRORT(seastore_cache, "insufficient space, wait for demoting", t);
+        std::rethrow_exception(crimson::ct_error::eagain::exception_ptr());
+      }
     }
     auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result->bp));
     assert(is_rewrite_generation(
@@ -1173,14 +1207,15 @@ public:
       epm.dynamic_max_rewrite_generation));
     ret->init(CachedExtent::extent_state_t::INITIAL_WRITE_PENDING,
               result->paddr,
-              hint,
+              opt.hint,
               result->gen,
-	      t.get_trans_id());
+	      &t,
+	      write_policy_t::WRITE_BACK);
     t.add_fresh_extent(ret);
     SUBDEBUGT(seastore_cache,
               "allocated {} 0x{:x}B extent at {}, hint={}, gen={} -- {}",
               t, T::TYPE, length, result->paddr,
-              hint, rewrite_gen_printer_t{result->gen}, *ret);
+              opt.hint, rewrite_gen_printer_t{result->gen}, *ret);
     return ret;
   }
   /**
@@ -1193,25 +1228,20 @@ public:
   std::vector<TCachedExtentRef<T>> alloc_new_data_extents(
     Transaction &t,         ///< [in, out] current transaction
     extent_len_t length,    ///< [in] length
-    placement_hint_t hint,  ///< [in] user hint
-#ifdef UNIT_TESTS_BUILT
-    rewrite_gen_t gen,      ///< [in] rewrite generation
-    std::optional<paddr_t> epaddr = std::nullopt ///< [in] paddr fed by callers
-#else
-    rewrite_gen_t gen
-#endif
+    alloc_option_t opt      ///< [in] allocation options
   ) {
     LOG_PREFIX(Cache::alloc_new_data_extents);
     SUBTRACET(seastore_cache, "allocate {} 0x{:x}B, hint={}, gen={}",
-              t, T::TYPE, length, hint, rewrite_gen_printer_t{gen});
-#ifdef UNIT_TESTS_BUILT
-    auto results = epm.alloc_new_data_extents(t, T::TYPE, length, hint, gen, epaddr);
-#else
-    auto results = epm.alloc_new_data_extents(t, T::TYPE, length, hint, gen);
-#endif
+              t, T::TYPE, length, opt.hint, rewrite_gen_printer_t{opt.gen});
+    auto results = epm.alloc_new_data_extents(t, T::TYPE, length, opt);
     if (results.empty()) {
-      SUBERRORT(seastore_cache, "insufficient space", t);
-      std::rethrow_exception(crimson::ct_error::enospc::exception_ptr());
+      if (epm.is_full()) {
+        SUBERRORT(seastore_cache, "insufficient space", t);
+        std::rethrow_exception(crimson::ct_error::enospc::exception_ptr());
+      } else {
+        SUBERRORT(seastore_cache, "insufficient space, wait for demoting", t);
+        std::rethrow_exception(crimson::ct_error::eagain::exception_ptr());
+      }
     }
     std::vector<TCachedExtentRef<T>> extents;
     for (auto &result : results) {
@@ -1221,14 +1251,15 @@ public:
 	epm.dynamic_max_rewrite_generation));
       ret->init(CachedExtent::extent_state_t::INITIAL_WRITE_PENDING,
                 result.paddr,
-                hint,
+                opt.hint,
                 result.gen,
-                t.get_trans_id());
+                &t,
+		opt.write_policy);
       t.add_fresh_extent(ret);
       SUBDEBUGT(seastore_cache,
                 "allocated {} 0x{:x}B extent at {}, hint={}, gen={} -- {}",
                 t, T::TYPE, length, result.paddr,
-                hint, rewrite_gen_printer_t{result.gen}, *ret);
+                opt.hint, rewrite_gen_printer_t{result.gen}, *ret);
       extents.emplace_back(std::move(ret));
     }
     return extents;
@@ -1245,20 +1276,15 @@ public:
     Transaction &t,
     laddr_t remap_laddr,
     paddr_t remap_paddr,
+    extent_len_t remap_offset,
     extent_len_t remap_length,
-    laddr_t original_laddr,
-    std::optional<ceph::bufferptr> &original_bptr) {
+    const std::optional<ceph::bufferptr> &original_bptr) {
     LOG_PREFIX(Cache::alloc_remapped_extent);
-    assert(remap_laddr >= original_laddr);
     TCachedExtentRef<T> ext;
     if (original_bptr.has_value()) {
       // shallow copy the buffer from original extent
-      auto remap_offset = remap_laddr.get_byte_distance<
-	extent_len_t>(original_laddr);
-
       auto nbp = ceph::bufferptr(buffer::create_page_aligned(remap_length));
       original_bptr->copy_out(remap_offset, remap_length, nbp.c_str());
-
       // ExtentPlacementManager::alloc_new_extent will make a new
       // (relative/temp) paddr, so make extent directly
       ext = CachedExtent::make_cached_extent_ref<T>(std::move(nbp));
@@ -1270,7 +1296,8 @@ public:
 	      remap_paddr,
 	      PLACEMENT_HINT_NULL,
 	      NULL_GENERATION,
-              t.get_trans_id());
+              &t,
+	      write_policy_t::WRITE_BACK);
 
     auto extent = ext->template cast<T>();
     extent->set_laddr(remap_laddr);
@@ -1279,6 +1306,15 @@ public:
       t, T::TYPE, remap_length, remap_laddr, original_bptr.has_value(), *extent);
     return extent;
   }
+
+  CachedExtentRef alloc_remapped_extent_by_type(
+    Transaction &t,
+    extent_types_t type,
+    laddr_t remap_laddr,
+    paddr_t remap_paddr,
+    extent_len_t remap_offset,
+    extent_len_t remap_length,
+    const std::optional<ceph::bufferptr> &original_bptr);
 
   /**
    * alloc_new_non_data_extent_by_type
@@ -1290,7 +1326,9 @@ public:
     extent_types_t type,   ///< [in] type tag
     extent_len_t length,   ///< [in] length
     placement_hint_t hint, ///< [in] user hint
-    rewrite_gen_t gen      ///< [in] rewrite generation
+    rewrite_gen_t gen,     ///< [in] rewrite generation
+    paddr_t paddr_hint,
+    bool is_tracked
     );
 
   /**
@@ -1302,9 +1340,21 @@ public:
     Transaction &t,        ///< [in, out] current transaction
     extent_types_t type,   ///< [in] type tag
     extent_len_t length,   ///< [in] length
-    placement_hint_t hint, ///< [in] user hint
-    rewrite_gen_t gen      ///< [in] rewrite generation
+    alloc_option_t opt     ///< [in] allocation options
     );
+
+  /**
+   * retire_absent_extent_addr_by_type
+   *
+   * Construct a fresh extent, and add it to the retired_set of the transaction.
+   */
+  CachedExtentRef retire_absent_extent_addr_by_type(
+    Transaction &t,
+    laddr_t laddr,
+    paddr_t addr,
+    extent_len_t length,
+    extent_types_t type,
+    extent_init_func_t &&extent_init_func);
 
   /**
    * Allocates mutable buffer from extent_set on offset~len
@@ -1456,9 +1506,9 @@ public:
       });
     }).handle_error_interruptible(
       init_cached_extents_iertr::pass_further{},
-      crimson::ct_error::assert_all{
+      crimson::ct_error::assert_all(
         "Invalid error in Cache::init_cached_extents"
-      }
+      )
     ).si_then([this, FNAME, &t] {
       SUBINFOT(seastore_cache,
           "finish with {}(0x{:x}B) extents, {} dirty, dirty_from={}, alloc_from={}",
@@ -1679,6 +1729,9 @@ public:
       read_extent_futs, [](auto &fut) { return std::move(fut); });
   }
 
+  bool is_on_cold_tier(paddr_t paddr) const {
+    return epm.is_cold_device(paddr.get_device_id());
+  }
 private:
   void touch_extent_fully(
       CachedExtent &ext,
@@ -1700,15 +1753,21 @@ private:
       extent_len_t load_length)
   {
     assert(ext.get_paddr().is_absolute());
+    if (ext.is_shadow_extent()) {
+      return;
+    }
     if (hint == CACHE_HINT_NOCACHE && is_logical_type(ext.get_type())) {
       return;
     }
-    if (ext.is_stable_clean() && !ext.is_placeholder()) {
+    if (ext.is_stable_clean()) {
       pinboard->move_to_top(ext, p_src, load_start, load_length);
     }
   }
 
   ExtentPlacementManager& epm;
+  // when delta-based overwrite is enabled, RANDOM_BLOCK data extents may be
+  // mutated in place, leaving their LBA-leaf crc stale; see _read_extent().
+  const bool delta_based_overwrite_enabled;
   RootBlockRef root;               ///< ref to current root
   ExtentIndex extents_index;             ///< set of live extents
 
@@ -1716,6 +1775,8 @@ private:
   std::vector<SegmentProvider*> segment_providers_by_device_id;
 
   transaction_id_t next_id = 0;
+
+  const bool force_backref = false;
 
   /**
    * dirty
@@ -1850,8 +1911,15 @@ private:
     std::array<uint64_t, NUM_SRC_COMB> trans_conflicts_by_srcs;
     counter_by_src_t<uint64_t> trans_conflicts_by_unknown;
 
+    uint64_t write_hit_hot = 0;
+    uint64_t write_hit_cold = 0;
+    uint64_t read_hit_hot = 0;
+    uint64_t read_hit_cold = 0;
+
     rewrite_stats_t trim_rewrites;
     rewrite_stats_t reclaim_rewrites;
+    rewrite_stats_t promote_rewrites;
+    rewrite_stats_t demote_rewrites;
   } stats;
 
   mutable dirty_io_stats_t last_dirty_io;
@@ -1859,6 +1927,8 @@ private:
     last_dirty_io_by_src_ext;
   mutable rewrite_stats_t last_trim_rewrites;
   mutable rewrite_stats_t last_reclaim_rewrites;
+  mutable rewrite_stats_t last_promote_rewrites;
+  mutable rewrite_stats_t last_demote_rewrites;
   mutable cache_access_stats_t last_access;
   mutable counter_by_src_t<uint64_t> last_cache_absent_by_src;
   mutable counter_by_src_t<counter_by_extent_t<cache_access_stats_t> >
@@ -1880,6 +1950,10 @@ private:
 	     src2 == Transaction::src_t::CLEANER_MAIN));
     assert(!(src1 == Transaction::src_t::CLEANER_COLD &&
 	     src2 == Transaction::src_t::CLEANER_COLD));
+    assert(!(src1 == Transaction::src_t::PROMOTE &&
+	     src2 == Transaction::src_t::PROMOTE));
+    assert(!(src1 == Transaction::src_t::DEMOTE &&
+	     src2 == Transaction::src_t::DEMOTE));
     assert(!(src1 == Transaction::src_t::TRIM_ALLOC &&
              src2 == Transaction::src_t::TRIM_ALLOC));
 
@@ -1916,7 +1990,6 @@ private:
   /// Add extent to extents handling dirty and refcounting
   ///
   /// Note, it must follows with add_to_dirty() or touch_extent().
-  /// The only exception is RetiredExtentPlaceholder.
   void add_extent(CachedExtentRef ref);
 
   /// Mark exising extent ref dirty -- mainly for replay
@@ -2041,14 +2114,26 @@ void stage_visibility_handoff(Transaction& t,
               offset, length, *extent);
 
             if (pin_crc != CRC_NULL) {
-              SUBDEBUG(seastore_cache, "read extent 0x{:x}~0x{:x} veryfing integrity -- {}",
-                offset, length, *extent);
-              // We must check the integrity here prior to complete_io.
-              // Previously, concurrent transaction could have checked
-              // crc of non matching extent data.
-              // See: https://tracker.ceph.com/issues/73790
-              assert(extent->is_fully_loaded());
-              check_full_extent_integrity(extent->last_committed_crc, pin_crc);
+              // a RANDOM_BLOCK data extent that delta-based overwrite may have
+              // mutated in place has a stale LBA-leaf crc: its content and its
+              // leaf crc are updated through separate, non-atomic paths, so a
+              // cold read can see the new content against the old leaf crc.
+              // such extents are verified via the delta chain instead (see
+              // replay_delta()), so skip the leaf-crc check for them.
+              bool inplace_delta_overwrite =
+                delta_based_overwrite_enabled &&
+                extent->get_paddr().is_absolute_random_block() &&
+                can_inplace_rewrite(extent->get_type());
+              if (!inplace_delta_overwrite) {
+                SUBDEBUG(seastore_cache, "read extent 0x{:x}~0x{:x} verifying integrity -- {}",
+                  offset, length, *extent);
+                // We must check the integrity here prior to complete_io.
+                // Previously, concurrent transaction could have checked
+                // crc of non matching extent data.
+                // See: https://tracker.ceph.com/issues/73790
+                assert(extent->is_fully_loaded());
+                check_full_extent_integrity(extent->last_committed_crc, pin_crc);
+              }
             }
           } else {
             extent->last_committed_crc = CRC_NULL;
@@ -2064,9 +2149,9 @@ void stage_visibility_handoff(Transaction& t,
           std::move(extent));
       },
       get_extent_ertr::pass_further{},
-      crimson::ct_error::assert_all{
+      crimson::ct_error::assert_all(
         "Cache::read_extent: invalid error"
-      }
+      )
     );
   }
 
@@ -2166,9 +2251,9 @@ void stage_visibility_handoff(Transaction& t,
       futs, [](auto &fut) { return std::move(fut);
     }).handle_error(
       get_extent_ertr::pass_further{},
-      crimson::ct_error::assert_all{
+      crimson::ct_error::assert_all(
 	"Cache::read_extent: invalid error"
-      }
+      )
     );
     for (auto &ext : extents_read) {
       auto &extent = ext.extent;
@@ -2203,7 +2288,6 @@ void stage_visibility_handoff(Transaction& t,
     }
   }
 
-  // Extents in cache may contain placeholders
   CachedExtentRef query_cache(paddr_t offset) {
     if (auto iter = extents_index.find_offset(offset);
         iter != extents_index.end()) {

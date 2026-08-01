@@ -170,7 +170,7 @@
     datalog list                     list data log
     datalog trim                     trim data log
     datalog status                   read data log status
-    datalog type                     change datalog type to --log_type={fifo,omap}
+    datalog type                     change datalog type to --log_type=fifo
     datalog semaphore list           List recovery semaphores
     datalog semaphore reset          Reset recovery semaphore (use marker)
     orphans find                     deprecated -- init and run search for leaked rados objects (use job-id, pool)
@@ -269,6 +269,8 @@
                                          mdlog list
                                          data sync status
                                          sync error trim
+                                         gc list
+                                         gc process
                                        required for:
                                          mdlog trim
      --gen=<gen-id>                    optional for:
@@ -363,6 +365,12 @@
      --max-bucket-index-ops        specify max bucket-index requests per second allowed for an RGW during dedup, 0 means unlimited
      --max-metadata-ops            specify max metadata requests per second allowed for an RGW during dedup, 0 means unlimited
      --stat                        display dedup throttle setting
+  
+  Dedup filter options:
+     --allow-bucket-list=<file>    file with bucket names to allow in dedup (mutually exclusive with --deny-bucket-list)
+     --deny-bucket-list=<file>     file with bucket names to deny in dedup (mutually exclusive with --allow-bucket-list)
+     --allow-storage-class-list=<file> file with storage class names to allow in dedup (mutually exclusive with --deny-storage-class-list)
+     --deny-storage-class-list=<file>  file with storage class names to deny in dedup (mutually exclusive with --allow-storage-class-list)
   
   Quota options:
      --max-objects                 specify max objects (negative value to disable)

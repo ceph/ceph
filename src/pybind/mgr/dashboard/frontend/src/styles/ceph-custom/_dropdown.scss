@@ -14,11 +14,6 @@
   cursor: pointer;
 }
 
-.dropdown-menu > li > a > i.fa {
-  /** Add space between icon and text */
-  margin-right: 5px;
-}
-
 .dropdown-menu > .active > a {
   background-color: vv.$primary;
   color: vv.$gray-200;

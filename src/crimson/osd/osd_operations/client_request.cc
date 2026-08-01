@@ -313,7 +313,7 @@ ClientRequest::recover_missing_snaps(
     }
     return seastar::now();
   }).handle_error_interruptible(
-    crimson::ct_error::assert_all(fmt::format("{} {} error", *pg, FNAME).c_str())
+    crimson::ct_error::assert_all("{} {} error", std::cref(*pg), FNAME)
   );
   co_await std::move(resolve_oids);
 
@@ -624,7 +624,7 @@ bool ClientRequest::is_misdirected_replica_read(const PG& pg) const
       flags & CEPH_OSD_FLAG_BALANCE_READS ||
       flags & CEPH_OSD_FLAG_LOCALIZE_READS) {
     if (op_info.rwordered()) {
-      DEBUGDPP("{}: dropping - rwoedered with balanced/localize read {}", pg, *this);
+      DEBUGDPP("dropping - reordered with balanced/localize read {}", pg, *this);
       return true;
     }
     if (!op_info.may_read()) {

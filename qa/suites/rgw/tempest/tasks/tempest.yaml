@@ -7,7 +7,7 @@ overrides:
 tasks:
 - tempest:
     client.0:
-      sha1: 34.1.0
+      sha1: 45.0.0
       force-branch: master
       use-keystone-role: client.0
       auth:

@@ -382,16 +382,20 @@ namespace rgw::dedup {
     this->ingress_corrupted_etag += other.ingress_corrupted_etag;
     this->ingress_skip_too_small_bytes += other.ingress_skip_too_small_bytes;
     this->ingress_skip_too_small += other.ingress_skip_too_small;
+    this->ingress_skip_filtered_bucket += other.ingress_skip_filtered_bucket;
+    this->ingress_skip_filtered_storage_class += other.ingress_skip_filtered_storage_class;
 
     return *this;
   }
   //---------------------------------------------------------------------------
-  void worker_stats_t::dump(Formatter *f) const
+  void worker_stats_t::dump(Formatter *f, unsigned num_shards) const
   {
     // main section
     {
       Formatter::ObjectSection main(*f, "main");
-
+      if (num_shards) {
+        f->dump_unsigned("Num Work-Shards", num_shards);
+      }
       f->dump_unsigned("Ingress Objs count", this->ingress_obj);
       f->dump_unsigned("Accum byte size Ingress Objs", this->ingress_obj_bytes);
       f->dump_unsigned("Egress Records count", this->egress_records);
@@ -438,6 +442,19 @@ namespace rgw::dedup {
                          this->ingress_skip_too_small);
         f->dump_unsigned("Ingress skip: too small bytes",
                          this->ingress_skip_too_small_bytes);
+      }
+
+      if (this->ingress_skip_filtered_bucket) {
+        auto skip_filtered_count = this->ingress_skip_filtered_bucket;
+        if (num_shards) {
+          // buckets are scanned once per worker-shard
+          skip_filtered_count /= num_shards;
+        }
+        f->dump_unsigned("Ingress skip: filtered bucket", skip_filtered_count);
+      }
+      if (this->ingress_skip_filtered_storage_class) {
+        f->dump_unsigned("Ingress skipped filtered storage class, num objects skipped",
+                         this->ingress_skip_filtered_storage_class);
       }
     }
 
@@ -489,6 +506,8 @@ namespace rgw::dedup {
 
     encode(w.ingress_skip_too_small_bytes, bl);
     encode(w.ingress_skip_too_small, bl);
+    encode(w.ingress_skip_filtered_bucket, bl);
+    encode(w.ingress_skip_filtered_storage_class, bl);
 
     encode(w.duration, bl);
     ENCODE_FINISH(bl);
@@ -516,6 +535,8 @@ namespace rgw::dedup {
     decode(w.ingress_corrupted_etag, bl);
     decode(w.ingress_skip_too_small_bytes, bl);
     decode(w.ingress_skip_too_small, bl);
+    decode(w.ingress_skip_filtered_bucket, bl);
+    decode(w.ingress_skip_filtered_storage_class, bl);
 
     decode(w.duration, bl);
     DECODE_FINISH(bl);

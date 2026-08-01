@@ -1,6 +1,16 @@
 ---
 name: "Check for Incompatible Licenses"
-on: [pull_request]
+on:
+  pull_request_target:
+    branches:
+      - main
+      - umbrella
+      - tentacle
+      - squid
+
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
   pull_request:

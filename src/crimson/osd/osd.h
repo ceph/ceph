@@ -91,8 +91,6 @@ class OSD final : public crimson::net::Dispatcher,
   //< since when there is no more pending pg creates from mon
   epoch_t last_pg_create_epoch = 0;
 
-  ceph::mono_time startup_time;
-
   seastar::shared_mutex handle_osd_map_lock;
 
   OSDSuperblock superblock;
@@ -127,9 +125,17 @@ class OSD final : public crimson::net::Dispatcher,
 
   std::unique_ptr<Heartbeat> heartbeat;
   seastar::timer<seastar::lowres_clock> tick_timer;
+  uint_fast16_t trim_queue_length_countdown = 0;
+  /// caching the total snap trim queue length across all PGs,
+  /// updated periodically by the tick_timer
+  uint64_t snap_trim_queue_total = 0;
 
   seastar::timer<seastar::lowres_clock> stats_timer;
   std::vector<ShardServices::shard_stats_t> shard_stats;
+  // collect per-shard stats and log reactor utilization; a member coroutine
+  // so its captures (this) live in the frame, since it runs as a detached
+  // gated task a capturing lambda coroutine would dangle (see report_osd_stats).
+  seastar::future<> report_osd_stats();
 
   std::vector<std::string> get_tracked_keys() const noexcept final;
   void handle_conf_change(const ConfigProxy& conf,

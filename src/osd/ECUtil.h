@@ -768,8 +768,9 @@ public:
 
   uint64_t shard_offset_to_ro_offset(shard_id_t shard, uint64_t offset) const {
     raw_shard_id_t raw_shard = get_raw_shard(shard);
-    auto result = std::lldiv(offset, chunk_size);
-    return result.quot * stripe_width + (int)raw_shard * chunk_size + result.rem;
+    uint64_t stripes = (offset / chunk_size);
+    uint64_t chunk_offset = (offset % chunk_size);
+    return stripes * stripe_width + (int)raw_shard * chunk_size + chunk_offset;
   }
 
   std::pair<uint64_t, uint64_t> chunk_aligned_ro_range_to_shard_ro_range(

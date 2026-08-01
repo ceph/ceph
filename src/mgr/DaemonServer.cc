@@ -125,7 +125,9 @@ DaemonServer::DaemonServer(MonClient *monc_,
       mds_perf_metric_collector_listener(this),
       mds_perf_metric_collector(mds_perf_metric_collector_listener),
       op_tracker(g_ceph_context, g_ceph_context->_conf->mgr_enable_op_tracker,
-                                 g_ceph_context->_conf->mgr_num_op_tracker_shard)
+                                 g_ceph_context->_conf->mgr_num_op_tracker_shard),
+      stats_autotuner(std::make_unique<StatsAutotuner>(
+        g_conf().get_val<int64_t>("mgr_stats_period")))
 {
   g_conf().add_observer(this);
   /* define op size and time for mgr daemon */
@@ -174,6 +176,8 @@ int DaemonServer::init(uint64_t gid, entity_addrvec_t client_addrs)
 			   entity_name_t::MGR(gid),
 			   "mgr",
 			   Messenger::get_random_nonce());
+  msgr->set_dispatch_throttle_size(
+      g_conf().get_val<Option::size_t>("mgr_dispatch_throttle_bytes"));
   msgr->set_default_policy(Messenger::Policy::stateless_server(0));
   // throttle policy
   msgr->set_policy(entity_name_t::TYPE_OSD,
@@ -424,11 +428,42 @@ void DaemonServer::maybe_ready(int32_t osd_id)
 void DaemonServer::tick()
 {
   dout(10) << dendl;
+  auto tick_period = g_conf().get_val<std::chrono::seconds>("mgr_tick_period").count();
+  utime_t now = ceph_clock_now();
+
+  if (g_conf().get_val<bool>("mgr_stats_period_autotune") &&
+      stats_autotuner->should_check_now(now, tick_period)) {
+    dout(20) << "checking whether to adjust stats period" << dendl;
+    maybe_adjust_stats_period();
+  }
   send_report();
   adjust_pgs();
 
   schedule_tick_locked(
     g_conf().get_val<std::chrono::seconds>("mgr_tick_period").count());
+}
+
+void DaemonServer::maybe_adjust_stats_period() {
+  int64_t queue_depth = msgr->get_dispatch_queue_len();
+  int64_t current_period = g_conf().get_val<int64_t>("mgr_stats_period");
+  int64_t queue_threshold = g_conf().get_val<int64_t>("mgr_stats_period_autotune_queue_threshold");
+  auto result = stats_autotuner->evaluate_adjustment(queue_depth, current_period, queue_threshold);
+
+  if (result.new_period != current_period) {
+    dout(10) << "Adjusting mgr_stats_period from " << current_period
+      << " to " << result.new_period << " seconds ("
+      << result.reason_str()
+      << ")" << dendl;
+
+    std::stringstream ss;
+    int r = cct->_conf.set_val("mgr_stats_period", std::to_string(result.new_period), &ss);
+    if (r != 0) {
+      derr << "Failed to update mgr_stats_period: " << ss.str() << dendl;
+      return;
+    }
+    stats_autotuner->record_our_change(result.new_period);  // Track that we made this change
+    cct->_conf.apply_changes(nullptr);
+  }
 }
 
 // Currently modules do not set health checks in response to events delivered to
@@ -506,7 +541,7 @@ void DaemonServer::fetch_missing_metadata(const DaemonKey& key,
   if (!daemon_state.is_updating(key) &&
       (key.type == "osd" || key.type == "mds" || key.type == "mon")) {
     std::ostringstream oss;
-    auto c = new MetadataUpdate(daemon_state, key);
+    auto c = new MetadataUpdate(daemon_state, cluster_state, key);
     if (key.type == "osd") {
       oss << "{\"prefix\": \"osd metadata\", \"id\": "
 	  << key.name<< "}";
@@ -1243,6 +1278,7 @@ int DaemonServer::_populate_crush_bucket_osds(
   } else if (bucket_type_str == "host" || bucket_type_str == "osd") {
     bucket_names.push_back(item_name);
   }
+
   // The following struct is to help re-order the
   // osds based on the number of pgs on them.
   struct pgs_per_osd {
@@ -1250,10 +1286,8 @@ int DaemonServer::_populate_crush_bucket_osds(
     size_t num_pgs;
   };
   std::vector<pgs_per_osd> child_bucket_pgs_per_osd;
-  // get osds under each child bucket
+  // get osds under each child bucket and associate with their PG counts
   for (const auto &name : bucket_names) {
-    // Clear the items for the current child bucket
-    child_bucket_pgs_per_osd.clear();
     std::set<int> tmp_bucket_osds;
     r = osdmap.get_osds_by_bucket_name(name, &tmp_bucket_osds);
     if (r < 0) {
@@ -1267,39 +1301,27 @@ int DaemonServer::_populate_crush_bucket_osds(
       dout(20) << os.str() << dendl;
       return r;
     }
-
-    // Special case when bucket contains only 1 osd
-    if (tmp_bucket_osds.size() == 1) {
-      for (const auto &osd : tmp_bucket_osds) {
-        crush_bucket_osds.push_back(osd);
-      }
-      dout(20) << "picked osd: " << tmp_bucket_osds
-               << " from bucket: " << name << dendl;
-      continue;
-    }
-    /**
-     * The osds in this bucket are further re-ordered based on the
-     * number of pgs (ascending) they host. This helps optimize
-     * the result of _check_offlines_pgs() down the line.
-     */
     for (const auto &osd : tmp_bucket_osds) {
       child_bucket_pgs_per_osd.push_back({osd, pgmap.get_num_pg_by_osd(osd)});
-    }
-    // Sort once after all data is added
-    std::sort(child_bucket_pgs_per_osd.begin(), child_bucket_pgs_per_osd.end(),
-              [](const pgs_per_osd& a, const pgs_per_osd& b) {
-        return std::tie(a.num_pgs, a.osd_id) < std::tie(b.num_pgs, b.osd_id);
-    });
-    /**
-     * The sorted osds are finally pushed to the passed crush_bucket_osds
-     * vector where osds are maintained according to the child order.
-     */
-    for (const auto &item : child_bucket_pgs_per_osd) {
-      crush_bucket_osds.push_back(item.osd_id);
     }
     dout(20) << "picked osds: " << tmp_bucket_osds
              << " from bucket: " << name << dendl;
   }
+
+  /**
+   * Sort all collected osds globally based on the number of pgs (ascending)
+   * they host and update the crush_bucket_osds vector with the same order.
+   */
+  std::sort(child_bucket_pgs_per_osd.begin(), child_bucket_pgs_per_osd.end(),
+            [](const pgs_per_osd& a, const pgs_per_osd& b) {
+      return std::tie(a.num_pgs, a.osd_id) < std::tie(b.num_pgs, b.osd_id);
+  });
+  crush_bucket_osds.reserve(
+    crush_bucket_osds.size() + child_bucket_pgs_per_osd.size());
+  for (const auto &item : child_bucket_pgs_per_osd) {
+    crush_bucket_osds.push_back(item.osd_id);
+  }
+
   return r;
 }
 
@@ -2367,9 +2389,10 @@ bool DaemonServer::_handle_command(
         cmdctx->reply(-EAGAIN, ss);
       }
       if (!pg_offline_report.ok_to_stop()) {
-        ss << "unsafe to upgrade osd(s) at this time ("
-           << pg_offline_report.not_ok.size()
-           << " PGs are or would become offline)";
+        ss << "unsafe to upgrade OSD(s) at this time (one or more"
+           << " PG(s) will become offline if any OSD out of the "
+           << osds_in_crush_bucket.size() << " in CRUSH bucket '"
+           << crush_bucket_name << "' is stopped)";
         cmdctx->reply(-EBUSY, ss);
       }
       // ok_to_upgrade() would be false in case all osds are upgraded
@@ -3644,7 +3667,7 @@ void DaemonServer::got_mgr_map()
   cluster_state.with_mgrmap([&](const MgrMap& mgrmap) {
       auto md_update = [&] (DaemonKey key) {
         std::ostringstream oss;
-        auto c = new MetadataUpdate(daemon_state, key);
+        auto c = new MetadataUpdate(daemon_state, cluster_state, key);
 	// FIXME remove post-nautilus: include 'id' for luminous mons
         oss << "{\"prefix\": \"mgr metadata\", \"who\": \""
 	    << key.name << "\", \"id\": \"" << key.name << "\"}";
@@ -3685,6 +3708,12 @@ void DaemonServer::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("mgr_stats_threshold") || changed.count("mgr_stats_period")) {
     dout(4) << "Updating stats threshold/period on "
             << daemon_connections.size() << " clients" << dendl;
+    if (changed.count("mgr_stats_period")) {
+      int64_t new_period = g_conf().get_val<int64_t>("mgr_stats_period");
+      if (stats_autotuner->was_changed_by_user(new_period)) {
+        stats_autotuner->set_baseline_period(new_period); // user changed
+      }
+    }
     // Send a fresh MMgrConfigure to all clients, so that they can follow
     // the new policy for transmitting stats
     finisher.queue(new LambdaContext([this](int r) {

@@ -8,7 +8,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal, NgbModalModule, NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
-import { ToastrModule } from 'ngx-toastr';
+
 import { Observable, of } from 'rxjs';
 
 import { DashboardNotFoundError } from '~/app/core/error/error';
@@ -135,7 +135,6 @@ describe('PoolFormComponent', () => {
       BrowserAnimationsModule,
       HttpClientTestingModule,
       RouterTestingModule.withRoutes(routes),
-      ToastrModule.forRoot(),
       NgbNavModule,
       PoolModule,
       SharedModule,
@@ -173,6 +172,23 @@ describe('PoolFormComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  describe('submit label', () => {
+    it('should set submit label to Create Pool in create mode', () => {
+      expect(component.submitAction).toBe('Create Pool');
+    });
+
+    it('should set submit label to Save changes in edit mode', () => {
+      fixture.destroy();
+      Object.defineProperty(router, 'url', {
+        get: () => '/pool/edit/somePoolName',
+        configurable: true
+      });
+      setUpPoolComponent();
+
+      expect(component.submitAction).toBe('Save changes');
+    });
   });
 
   describe('throws error for not allowed users', () => {
@@ -1065,21 +1081,116 @@ describe('PoolFormComponent', () => {
       fixtureHelper.expectIdElementsVisible(['erasureProfile', 'ecp-info-block'], true);
     });
 
+    it('should order profile details consistently with the creation form', () => {
+      component.selectedEcp = {
+        name: 'ecp1',
+        plugin: 'lrc',
+        k: 4,
+        m: 2,
+        l: 3,
+        'crush-failure-domain': 'host',
+        'crush-locality': 'rack'
+      } as ErasureCodeProfile;
+      expect(component.getEcpProfileDetails()).toEqual([
+        ['Plugin', 'lrc'],
+        ['Data chunks (k)', 4],
+        ['Coding chunks (m)', 2],
+        ['Locality (l)', 3],
+        ['Crush failure domain', 'host'],
+        ['Crush locality', 'rack']
+      ]);
+    });
+
+    it('should only show plugin-eligible fields with values in profile details', () => {
+      component.selectedEcp = {
+        name: 'ecp1',
+        plugin: 'shec',
+        k: 4,
+        m: 3,
+        c: 2,
+        l: 3,
+        d: 5,
+        scalar_mds: 'jerasure',
+        'crush-failure-domain': 'host',
+        'crush-num-failure-domains': 0,
+        'crush-osds-per-failure-domain': 0
+      } as ErasureCodeProfile;
+      expect(component.getEcpProfileDetails()).toEqual([
+        ['Plugin', 'shec'],
+        ['Data chunks (k)', 4],
+        ['Coding chunks (m)', 3],
+        ['Durability estimator (c)', 2],
+        ['Crush failure domain', 'host']
+      ]);
+    });
+
     it('should select the newly created profile', () => {
       spyOn(ecpService, 'list').and.callFake(() => of(infoReturn.erasure_code_profiles));
       expect(form.getValue('erasureProfile')).toBe('ecp1');
       const name = 'awesomeProfile';
       const modalCdsService = TestBed.inject(ModalCdsService);
-      // Mock the show method to return a mock component with submitAction
-      spyOn(modalCdsService, 'show').and.returnValue({
-        submitAction: of({ name })
-      } as any);
       const ecp2 = new ErasureCodeProfile();
       ecp2.name = name;
+      ecp2.plugin = 'isa';
+      ecp2.k = 4;
+      ecp2.m = 2;
+      spyOn(modalCdsService, 'show').and.returnValue({
+        submitAction: of(ecp2)
+      } as any);
       infoReturn.erasure_code_profiles.push(ecp2);
       component.addErasureCodeProfile();
-      // Form stores erasureProfile as string name, not full object
       expect(form.getValue('erasureProfile')).toBe(name);
+      expect(component.selectedEcp).toEqual(ecp2);
+    });
+
+    it('should select the newly created profile before it appears in the listing', () => {
+      const name = 'pendingProfile';
+      const ecp2 = new ErasureCodeProfile();
+      ecp2.name = name;
+      ecp2.plugin = 'jerasure';
+      ecp2.k = 4;
+      ecp2.m = 2;
+      spyOn(ecpService, 'list').and.callFake(() => of([infoReturn.erasure_code_profiles[0]]));
+      const modalCdsService = TestBed.inject(ModalCdsService);
+      spyOn(modalCdsService, 'show').and.returnValue({
+        submitAction: of(ecp2)
+      } as any);
+      component.addErasureCodeProfile();
+      expect(form.getValue('erasureProfile')).toBe(name);
+      expect(component.selectedEcp).toEqual(ecp2);
+      expect(component.ecProfiles.some((profile) => profile.name === name)).toBe(true);
+    });
+
+    it('should update the dropdown immediately without waiting for the listing API', () => {
+      const name = 'instantProfile';
+      const ecp2 = new ErasureCodeProfile();
+      ecp2.name = name;
+      ecp2.plugin = 'isa';
+      ecp2.k = 4;
+      ecp2.m = 2;
+      let emitList: (value: ErasureCodeProfile[]) => void;
+      spyOn(ecpService, 'list').and.returnValue(
+        new Observable((subscriber) => {
+          emitList = (profiles) => {
+            subscriber.next(profiles);
+            subscriber.complete();
+          };
+        })
+      );
+      const modalCdsService = TestBed.inject(ModalCdsService);
+      spyOn(modalCdsService, 'show').and.returnValue({
+        submitAction: of(ecp2)
+      } as any);
+
+      component.addErasureCodeProfile();
+
+      expect(component.ecProfiles.some((profile) => profile.name === name)).toBe(true);
+      expect(form.getValue('erasureProfile')).toBe(name);
+      expect(component.selectedEcp).toEqual(ecp2);
+
+      emitList([infoReturn.erasure_code_profiles[0], ecp2]);
+      expect(form.getValue('erasureProfile')).toBe(name);
+      expect(component.ecProfiles.some((profile) => profile.name === name)).toBe(true);
     });
 
     describe('ecp deletion', () => {
@@ -1087,6 +1198,16 @@ describe('PoolFormComponent', () => {
       let deleteSpy: jasmine.Spy;
       let modalSpy: jasmine.Spy;
       let submitActionObservable: () => Observable<any>;
+
+      const mockDeletionModalShow = () => {
+        const modalCdsService = TestBed.inject(ModalCdsService);
+        const existingShowSpy = modalCdsService.show as jasmine.Spy;
+        modalSpy = existingShowSpy?.and ? existingShowSpy : spyOn(modalCdsService, 'show');
+        modalSpy.and.callFake((_deletionClass: any, config: any) => {
+          submitActionObservable = config.submitActionObservable;
+          return {} as any;
+        });
+      };
 
       const callEcpDeletion = () => {
         component.deleteErasureCodeProfile();
@@ -1102,21 +1223,29 @@ describe('PoolFormComponent', () => {
       };
 
       beforeEach(() => {
-        const modalCdsService = TestBed.inject(ModalCdsService);
-        modalSpy = spyOn(modalCdsService, 'show').and.callFake(
-          (_deletionClass: any, config: any) => {
-            submitActionObservable = config.submitActionObservable;
-            return {} as any;
-          }
-        );
-        deleteSpy = spyOn(ecpService, 'delete').and.callFake((name: string) => {
+        mockDeletionModalShow();
+
+        const listSpy = ecpService.list as jasmine.Spy;
+        if (listSpy?.and) {
+          listSpy.and.callFake(() => of(infoReturn.erasure_code_profiles));
+        }
+
+        const existingDeleteSpy = ecpService.delete as jasmine.Spy;
+        deleteSpy = existingDeleteSpy?.and ? existingDeleteSpy : spyOn(ecpService, 'delete');
+        deleteSpy.and.callFake((name: string) => {
           const profiles = infoReturn.erasure_code_profiles;
           const index = _.findIndex(profiles, (profile) => profile.name === name);
           profiles.splice(index, 1);
           return of({ status: 202 });
         });
+
         taskWrapper = TestBed.inject(TaskWrapperService);
-        spyOn(taskWrapper, 'wrapTaskAroundCall').and.callThrough();
+        const wrapSpy = taskWrapper.wrapTaskAroundCall as jasmine.Spy;
+        if (wrapSpy?.and) {
+          wrapSpy.and.callThrough();
+        } else {
+          spyOn(taskWrapper, 'wrapTaskAroundCall').and.callThrough();
+        }
 
         const ecp2 = new ErasureCodeProfile();
         ecp2.name = 'someEcpName';
@@ -1125,6 +1254,9 @@ describe('PoolFormComponent', () => {
         const ecp3 = new ErasureCodeProfile();
         ecp3.name = 'aDifferentEcpName';
         infoReturn.erasure_code_profiles.push(ecp3);
+
+        component.ecProfiles = [...infoReturn.erasure_code_profiles];
+        component.form.get('erasureProfile').enable({ emitEvent: false });
       });
 
       it('should delete two different erasure code profiles', () => {
@@ -1499,15 +1631,9 @@ describe('PoolFormComponent', () => {
           form.get(controlName).markAsPristine();
 
         beforeEach(() => {
-          [
-            'algorithm',
-            'maxBlobSize',
-            'minBlobSize',
-            'mode',
-            'pgNum',
-            'ratio',
-            'name'
-          ].forEach((name) => markControlAsPreviouslySet(name));
+          ['algorithm', 'maxBlobSize', 'minBlobSize', 'mode', 'pgNum', 'ratio', 'name'].forEach(
+            (name) => markControlAsPreviouslySet(name)
+          );
           fixture.detectChanges();
         });
 

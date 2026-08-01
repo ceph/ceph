@@ -349,6 +349,7 @@ def _workunit_commands(
 def workunit(ctx, config):
     """Workunit wrapper with special behaviors for smb."""
     from . import workunit
+    from teuthology import misc
 
     _config = copy.deepcopy(config)
     clients = _config.get('clients') or {}
@@ -375,6 +376,7 @@ def workunit(ctx, config):
     )
     _ssh_keys_config = config.get('ssh_keys', {})
     _config['enable_ssh_keys'] = _ssh_keys_config not in (False, None)
+    _config['testdir'] = misc.get_testdir(ctx)
     log.info('Passing workunit config: %r', _config)
     with contextlib.ExitStack() as estack:
         if _config['enable_ssh_keys']:
@@ -415,6 +417,8 @@ def write_metadata_file(ctx, config, *, roles=None):
             _node_info(ctx, node, client_name=node)
             for node in config.get('clients')
         ]
+    if config.get('testdir'):
+        obj['testdir'] = config['testdir']
     data = json.dumps(obj)
     log.debug('smb metadata: %r', obj)
 

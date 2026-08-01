@@ -27,6 +27,16 @@ options:
   - startup
   min: 0
   max: 32
+- name: crimson_memory
+  type: size
+  level: advanced
+  default: 0
+  desc: Total memory to use for the seastar allocator per OSD.
+  long_desc: Total memory to use for the seastar allocator per OSD.
+             Maps to seastar's --memory flag. 0 means use seastar's default
+             (all available memory minus a reserve).
+  flags:
+  - startup
 
 # Reactor options:
 
@@ -106,6 +116,17 @@ options:
   flags:
   - startup
 
+- name: crimson_osd_max_send_buffers
+  type: uint
+  level: advanced
+  default: 1024
+  min: 1
+  max: 65535
+  desc: Maximum buffer fragments to batch in a single outgoing network write
+  long_desc: Limits how many buffer::ptr entries are batched into one seastar
+             packet during the outgoing message sweep. Prevents overflow of the
+             seastar packet fragment counter (uint16_t).
+
 - name: crimson_allow_pg_split
   type: bool
   level: advanced
@@ -133,6 +154,13 @@ options:
   desc: CPU cores on which POSIX threads alienized to seastar will run in cpuset(7) format
   flags:
   - startup
+- name: seastore_logical_bucket_cache_test_stress
+  type: bool
+  level: dev
+  desc: Enable SeaStore Logical Bucket Cache stress mode. When enabled, SeaStore exercises cold-tier
+        cache paths by forcing promotion/demotion activity and probabilistic write-through behavior.
+        Intended for testing only.
+  default: false
 
 # Seastore options
 
@@ -177,11 +205,6 @@ options:
   type: uint
   level: dev
   desc: default logical address space reservation for seastore objects' data
-  default: 16777216
-- name: seastore_default_object_metadata_reservation
-  type: uint
-  level: dev
-  desc: default logical address space reservation for seastore objects' metadata
   default: 16777216
 # TODO: implement sub-extent checksum and deprecate this configuration.
 - name: seastore_full_integrity_check
@@ -229,15 +252,46 @@ options:
   level: advanced
   desc: maximum concurrent transactions that seastore allows (per reactor)
   default: 128
-- name: seastore_main_device_type
+- name: seastore_hot_device_type
   type: str
   level: dev
-  desc: The main device type seastore uses (SSD or RANDOM_BLOCK_SSD)
+  desc: The type of the devices in the hot (or only) tier, valid values are HDD, SSD, RANDOM_BLOCK_SSD and RANDOM_BLOCK_HDD
   default: SSD
+- name: seastore_hot_backend_type
+  type: str
+  level: dev
+  desc: The back end used by the devices in the hot (or only) tier, valid values are SEGMENTED and RANDOM_BLOCK
+  default: SEGMENTED
+- name: seastore_hot_backend_bw_throttle
+  type: size
+  level: advanced
+  desc: Size in bytes per second written to the hot devices, 0 indicates no limit
+  default: 0
+- name: seastore_cold_devices_count
+  type: uint
+  level: dev
+  desc: create cold devices during mkfs
+  default: 0
+- name: seastore_cold_device_type
+  type: str
+  level: dev
+  desc: The cold device type SeaStore uses, valid values are RANDOM_BLOCK_SSD, RANDOM_BLOCK_HDD, SSD and HDD.
+        This is only effective when there are two tiers, a hot one and a cold one.
+  default: RANDOM_BLOCK_HDD
+- name: seastore_cold_backend_type
+  type: str
+  level: dev
+  desc: The backend used by cold devices (SEGMENTED or RANDOM_BLOCK)
+  default: RANDOM_BLOCK
+- name: seastore_cold_backend_bw_throttle
+  type: size
+  level: advanced
+  desc: Size in bytes per second written to cold devices, 0 indicates no limit
+  default: 100_M
 - name: seastore_cbjournal_size
   type: size
   level: dev
-  desc: Total size to use for CircularBoundedJournal if created, it is valid only if seastore_main_device_type is RANDOM_BLOCK
+  desc: Total size to use for CircularBoundedJournal if created, it is valid only if seastore_hot_device_type is RANDOM_BLOCK
   default: 5_G
 - name: seastore_multiple_tiers_stop_evict_ratio
   type: float
@@ -274,6 +328,39 @@ options:
   - greedy
   - cost_benefit
   - benefit
+- name: seastore_segment_cleaner_gc_autotune
+  type: bool
+  level: advanced
+  desc: When the configured gc formula (cost_benefit or benefit) picks a segment
+        whose free-space fraction (1 - utilization) is at least
+        seastore_segment_cleaner_gc_autotune_ratio times smaller than the
+        lowest-utilization candidate, override the pick with the greedy choice.
+  long_desc: COST_BENEFIT and BENEFIT weight segment age, which is the right
+             call when age predicts dead-byte accumulation (journaling / LIFO
+             workloads). Under random-write at high alive_ratio dead bytes
+             spread uniformly across segments, age stops predicting deadness,
+             and the formula can pick a high-util old segment whose reclaim
+             frees several times less space than the lowest-util candidate.
+             When this option is enabled the cleaner detects the mis-selection
+             at runtime and overrides the formula's pick with the greedy
+             choice. Disable to honor the configured formula unconditionally.
+             Ignored when seastore_segment_cleaner_gc_formula = greedy.
+  default: true
+- name: seastore_segment_cleaner_gc_autotune_ratio
+  type: float
+  level: advanced
+  desc: Override threshold for the gc auto-tune. The configured formula's
+        pick is overridden with the greedy candidate when greedy's free
+        fraction is at least this ratio times the formula's pick's free
+        fraction.
+  long_desc: Higher is more conservative (override fires less often, the
+             configured formula's age weighting is preserved more
+             aggressively). Lower is more aggressive (override fires more
+             often, behaviour converges toward pure greedy). The default
+             (2.0) captures the random-write failure regime while staying
+             clear of normal-operation fluctuations.
+  default: 2.0
+  min: 1.0
 - name: seastore_data_delta_based_overwrite
   type: size
   level: dev
@@ -293,3 +380,38 @@ options:
   desc: disable osd shards changes upon restart.
   flags:
   - startup
+- name: seastore_cache_promotion_size
+  type: size
+  level: advanced
+  desc: Size in bytes of extents to be promoted from cold devices, set 0 to disable promotion
+  default: 2_M
+- name: seastore_logical_bucket_capacity
+  type: size
+  level: advanced
+  desc: Size in bytes of memory used by logical bucket
+  default: 200_M
+- name: seastore_logical_bucket_proceed_size_per_cycle
+  type: size
+  level: advanced
+  desc: Size in bytes of extents to be demoted from logical bucket
+  default: 2_M
+- name: seastore_write_through_size
+  type: size
+  level: dev
+  desc: Select write through policy when data length is greater than this value.
+  default: 512_K
+- name: seastore_test_workload_write_through_probability
+  type: float
+  level: dev
+  desc: The percentage of writes that are applied directly to slow devices
+  default: 0.5
+- name: seastore_test_workload_2Q_promote_probability
+  type: float
+  level: dev
+  desc: The probability of promoting the extents evicted from the warm_in queue to faster devices
+  default: 0.5
+- name: seastore_test_workload_force_process_background_tasks_period
+  type: uint
+  level: dev
+  desc: Seconds of the period to force process background tasks
+  default: 5

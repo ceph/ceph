@@ -1,6 +1,7 @@
 import logging
 import json
 import socket
+from dataclasses import dataclass
 from enum import Enum
 from functools import wraps
 from typing import (
@@ -90,6 +91,16 @@ class Action(str, Enum):
 
     def __str__(self) -> str:
         return self.value
+
+
+@dataclass(frozen=True)
+class NextDaemonStep:
+    """Result of CephadmService.choose_next_action: high-level action plus
+    optional reconfig hints (e.g. HAProxy reload via signal instead of restart).
+    """
+    action: Action
+    skip_restart_for_reconfig: bool = False
+    send_signal_to_daemon: Optional[str] = None
 
 
 def name_to_config_section(name: str) -> ConfEntity:

@@ -153,7 +153,7 @@ void PrepareLocalImageRequest<I>::handle_get_mirror_info(int r) {
     derr << "unsupported mirror image mode " << m_mirror_image.mode << " "
          << "for image " << m_global_image_id << dendl;
     finish(-EOPNOTSUPP);
-    break;
+    return;
   }
 
   dout(10) << "local_image_id=" << m_local_image_id << ", "

@@ -1,6 +1,8 @@
   $ ceph-kvstore-tool --help
   Usage: ceph-kvstore-tool <rocksdb|bluestore-kv> <store path> command [args...]
   
+  Options:
+    --pretty-binary-key    Use/dump binary keys in a print pretty format
   Commands:
     list [prefix]
     list-crc [prefix]

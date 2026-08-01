@@ -54,6 +54,8 @@ Linux Kernel
   full-time maintainer. As of July 2025 there are no plans to remove this
   client but the future is uncertain.
 
+.. _start-platforms:
+
 Platforms
 =========
 

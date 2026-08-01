@@ -103,7 +103,8 @@ struct Peer {
        librados::IoCtx& io_ctx,
        const RemotePoolMeta& remote_pool_meta,
        MirrorStatusUpdater<I>* mirror_status_updater)
-    : io_ctx(io_ctx),
+    : uuid(uuid),
+      io_ctx(io_ctx),
       remote_pool_meta(remote_pool_meta),
       mirror_status_updater(mirror_status_updater) {
   }
@@ -115,7 +116,8 @@ struct Peer {
 
 template <typename I>
 std::ostream& operator<<(std::ostream& os, const Peer<I>& peer) {
-  return os << peer.remote_pool_meta;
+  return os << "uuid=" << peer.uuid << ", remote_pool_meta="
+            << peer.remote_pool_meta;
 }
 
 struct PeerSpec {
@@ -154,7 +156,7 @@ struct PeerSpec {
       return cluster_name < rhs.cluster_name;
     } else if (client_name != rhs.client_name) {
       return client_name < rhs.client_name;
-    } else if (mon_host < rhs.mon_host) {
+    } else if (mon_host != rhs.mon_host) {
       return mon_host < rhs.mon_host;
     } else {
       return key < rhs.key;

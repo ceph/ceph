@@ -10,11 +10,12 @@ overrides:
         rgw crypt require ssl: false
         rgw sts key: abcdefghijklmnop
         rgw s3 auth use sts: true
+        rgw lc counters cache: true
         rgw lc debug interval: 10
   rgw:
     storage classes:
-      LUKEWARM:
-      FROZEN:
+      LUKEWARM: [--compression, zstd]
+      FROZEN: [--compression, zlib]
   s3tests:
     accounts:
       iam root: RGW88888888888888888

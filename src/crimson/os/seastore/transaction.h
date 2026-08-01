@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <iostream>
 
 #include <boost/intrusive/list.hpp>
@@ -127,10 +128,6 @@ public:
   get_extent_ret get_extent(paddr_t addr, CachedExtentRef *out) {
     assert(addr.is_real_location() || addr.is_root());
     auto [result, ext] = do_get_extent(addr);
-    // placeholder in read-set must be in the retired-set
-    // at the same time, user should not see a placeholder.
-    assert(result != get_extent_ret::PRESENT ||
-           !is_retired_placeholder_type(ext->get_type()));
     if (out && result == get_extent_ret::PRESENT) {
       *out = ext;
     }
@@ -165,7 +162,7 @@ public:
       ref->set_invalid(*this);
       write_set.erase(*ref);
       assert(ref->prior_instance);
-      retired_set.emplace(ref->prior_instance, trans_id);
+      retired_set.emplace(ref->prior_instance, *this);
       assert(read_set.count(ref->prior_instance->get_paddr(), extent_cmp_t{}));
       ref->reset_prior_instance();
     } else {
@@ -174,7 +171,7 @@ public:
       // XXX: prevent double retire -- retired_set.count(ref->get_paddr()) == 0
       // If it's already in the set, insert here will be a noop,
       // which is what we want.
-      retired_set.emplace(ref, trans_id);
+      retired_set.emplace(ref, *this);
     }
   }
 
@@ -316,48 +313,6 @@ public:
     }
   }
 
-  void replace_placeholder(CachedExtent& placeholder, CachedExtent& extent) {
-    LOG_PREFIX(Transaction::replace_placeholder);
-    ceph_assert(!is_weak());
-
-    assert(is_retired_placeholder_type(placeholder.get_type()));
-    assert(!is_retired_placeholder_type(extent.get_type()));
-    assert(!is_root_type(extent.get_type()));
-    assert(extent.get_paddr() == placeholder.get_paddr());
-    assert(extent.get_paddr().is_absolute());
-    {
-      auto where = read_set.find(placeholder.get_paddr(), extent_cmp_t{});
-      if (unlikely(where == read_set.end())) {
-	SUBERRORT(seastore_t,
-	  "unable to find placeholder {}", *this, placeholder);
-	ceph_abort();
-      }
-      if (unlikely(where->ref.get() != &placeholder)) {
-	SUBERRORT(seastore_t,
-	  "inconsistent placeholder, current: {}; should-be: {}",
-	  *this, *where->ref.get(), placeholder);
-	ceph_abort();
-      }
-      placeholder.read_transactions.erase(
-	read_trans_set_t<Transaction>::s_iterator_to(*where));
-      where = read_set.erase(where);
-      // Note, the retired-placeholder is not removed from read_items after replace.
-      read_items.emplace_back(this, &extent);
-      auto it = read_set.insert_before(where, read_items.back());
-      extent.read_transactions.insert(const_cast<read_set_item_t<Transaction>&>(*it));
-#ifndef NDEBUG
-      num_replace_placeholder++;
-#endif
-    }
-    {
-      auto where = retired_set.find(&placeholder);
-      assert(where != retired_set.end());
-      assert(where->extent.get() == &placeholder);
-      where = retired_set.erase(where);
-      retired_set.emplace_hint(where, &extent, trans_id);
-    }
-  }
-
   auto get_delayed_alloc_list() {
     std::list<CachedExtentRef> ret;
     for (auto& extent : delayed_alloc_list) {
@@ -409,6 +364,21 @@ public:
     }
   }
 
+  bool remove_from_retired_set(CachedExtent &ext) {
+    auto it = retired_set.find(ext.get_paddr());
+    if (it == retired_set.end()) {
+      return false;
+    }
+    auto &extent = it->extent;
+    if (extent->get_paddr() != ext.get_paddr()) {
+      return false;
+    } else {
+      assert(ext.get_length() == extent->get_length());
+      retired_set.erase(it);
+      return true;
+    }
+  }
+
   std::pair<bool, bool> pre_stable_extent_paddr_mod(
     read_set_item_t<Transaction> &item)
   {
@@ -438,7 +408,7 @@ public:
     bool retired) {
     read_set.insert(item);
     if (retired) {
-      retired_set.emplace(item.ref, trans_id);
+      retired_set.emplace(item.ref, *this);
     }
   }
   void maybe_update_pending_paddr(
@@ -461,20 +431,41 @@ public:
       auto &mextent = *i;
       write_set.erase(mextent);
       extent_len_t off = 0;
-      if (new_paddr.is_absolute_segmented()) {
-        assert(mextent.get_paddr().as_seg_paddr().get_segment_id()
-          == old_paddr.as_seg_paddr().get_segment_id());
+      if (old_paddr.is_absolute_segmented()) {
+        assert(mextent.get_paddr().as_seg_paddr().get_segment_id() ==
+          old_paddr.as_seg_paddr().get_segment_id());
+        assert(mextent.get_paddr().as_seg_paddr().get_segment_off() >=
+          old_paddr.as_seg_paddr().get_segment_off());
         assert(mextent.get_paddr().as_seg_paddr().get_segment_off()
-          >= old_paddr.as_seg_paddr().get_segment_off());
-        off = mextent.get_paddr().as_seg_paddr().get_segment_off()
-          - old_paddr.as_seg_paddr().get_segment_off();
+                + mextent.get_length() <=
+          old_paddr.as_seg_paddr().get_segment_off() + len);
+        off = mextent.get_paddr().as_seg_paddr().get_segment_off() -
+          old_paddr.as_seg_paddr().get_segment_off();
       } else {
-        assert(new_paddr.is_absolute_random_block());
+        assert(mextent.get_paddr().is_absolute_random_block());
         off = mextent.get_paddr().as_blk_paddr().get_device_off() -
           old_paddr.as_blk_paddr().get_device_off();
       }
       mextent.set_paddr(new_paddr + off);
       write_set.insert(mextent);
+    }
+  }
+  void remove_shadow_from_write_set(
+    const paddr_t &shadow_paddr, extent_len_t len) {
+    std::vector<CachedExtent*> exts;
+    for (auto [bottom, top] = write_set.get_overlap(shadow_paddr, len);
+         bottom != top;
+         bottom++) {
+      auto &mextent = *bottom;
+      if (mextent.is_initial_pending()) {
+        assert(!mextent.is_shadow_extent());
+        continue;
+      }
+      assert(mextent.is_shadow_extent() && mextent.is_exist_clean());
+      exts.emplace_back(&mextent);
+    }
+    for (auto i :exts) {
+      write_set.erase(*i);
     }
   }
 
@@ -487,6 +478,26 @@ public:
   template <typename F>
   auto for_each_existing_block(F &&f) {
     std::for_each(existing_block_list.begin(), existing_block_list.end(), f);
+  }
+
+  template <typename F>
+  void for_each_mutated_extent(F &&f) {
+    std::for_each(
+      retired_set.begin(),
+      retired_set.end(),
+      [&f](auto &link) {
+        std::invoke(f, *link.extent);
+      });
+    std::for_each(
+      mutated_block_list.begin(),
+      mutated_block_list.end(),
+      [&f](auto &e) {
+        if (!e->is_valid() ||
+            e->is_exist_mutation_pending()) {
+          return;
+        }
+        std::invoke(f, *e->get_prior_instance());
+      });
   }
 
   const io_stat_t& get_fresh_block_stats() const {
@@ -508,6 +519,25 @@ public:
 
   bool is_conflicted() const {
     return conflicted;
+  }
+
+  // Number of times this transaction was conflicted and replayed before
+  // finally committing. do_transaction_no_callbacks() (user MUTATE writes)
+  std::size_t get_num_replays() const {
+    return num_replays;
+  }
+
+  // Time spent in each sub-phase of submit_transaction, accumulated across retries
+  struct phase_durations_t {
+    std::chrono::steady_clock::duration reserve{0};         // enter reserve + epm reserve
+    std::chrono::steady_clock::duration ool_write{0};       // delayed + preallocated OOL writes
+    std::chrono::steady_clock::duration lba_update{0};      // update_lba_mappings
+    std::chrono::steady_clock::duration prepare_enter{0};   // enter(prepare) pipeline stage
+    std::chrono::steady_clock::duration prepare_record{0};  // prepare_record
+    std::chrono::steady_clock::duration journal{0};         // journal->submit_record (post-lock)
+  };
+  phase_durations_t &get_phase_durations() {
+    return phase_durations;
   }
 
   auto &get_handle() {
@@ -546,7 +576,16 @@ public:
   friend class crimson::os::seastore::SeaStore;
   friend class TransactionConflictCondition;
 
+  uint64_t write_hit_hot = 0;
+  uint64_t write_hit_cold = 0;
+  uint64_t read_hit_hot = 0;
+  uint64_t read_hit_cold = 0;
+
   void reset_preserve_handle() {
+    write_hit_hot = 0;
+    write_hit_cold = 0;
+    read_hit_hot = 0;
+    read_hit_cold = 0;
     root.reset();
     offset = 0;
     delayed_temp_offset = 0;
@@ -573,13 +612,16 @@ public:
     ool_write_stats = {};
     rewrite_stats = {};
     conflicted = false;
-    need_wait_visibility = false;
+    force_rewrite_conflict = false;
     assert(backref_entries.empty());
     if (!has_reset) {
       has_reset = true;
     }
     get_handle().exit();
     views.clear();
+    copied_lba_keys.clear();
+    update_copied_lba_key = nullptr;
+    touched_prefix.clear();
   }
 
   bool did_reset() const {
@@ -592,13 +634,19 @@ public:
     uint64_t num_erases = 0;
     uint64_t num_updates = 0;
     int64_t extents_num_delta = 0;
+    uint64_t lookup_count = 0;
+    uint64_t nodes_visited = 0;
+    uint64_t string_cmp_count = 0;
 
     bool is_clear() const {
       return (depth == 0 &&
               num_inserts == 0 &&
               num_erases == 0 &&
               num_updates == 0 &&
-	      extents_num_delta == 0);
+	      extents_num_delta == 0 &&
+              lookup_count == 0 &&
+              nodes_visited == 0 &&
+              string_cmp_count == 0);
     }
   };
   tree_stats_t& get_onode_tree_stats() {
@@ -690,10 +738,52 @@ public:
     return cache_hint;
   }
 
+  void touch_laddr_prefix(laddr_t laddr) {
+    touched_prefix.insert(laddr.get_object_prefix());
+  }
+
+  std::unordered_set<laddr_t> &get_touched_laddr_prefix() {
+    return touched_prefix;
+  }
+
   btree_cursor_stats_t cursor_stats;
 
- bool need_wait_visibility = false;
+  bool force_rewrite_conflict = false;
 
+  struct lmapping_t {
+    laddr_t dest = L_ADDR_NULL;
+    extent_len_t len = 0;
+  };
+  using update_copied_lba_key_func_t =
+    std::function<void (laddr_t, paddr_t,
+                  extent_len_t, std::optional<paddr_t>)>;
+  void new_lba_key_copied(
+    laddr_t src,
+    laddr_t dest,
+    extent_len_t len,
+    update_copied_lba_key_func_t &&func) {
+    copied_lba_keys.emplace(src, lmapping_t{dest, len});
+    if (!update_copied_lba_key) {
+      update_copied_lba_key = std::move(func);
+    }
+  }
+  void maybe_sync_copied_lba_key(
+    laddr_t laddr, paddr_t paddr, std::optional<paddr_t> shadow) {
+    if (likely(copied_lba_keys.empty())) {
+      return;
+    }
+    assert(update_copied_lba_key);
+    auto it = copied_lba_keys.find(laddr);
+    if (it == copied_lba_keys.end()) {
+      return;
+    }
+    laddr_t key = it->second.dest;
+    extent_len_t len = it->second.len;
+    update_copied_lba_key(key, paddr, len, shadow);
+  }
+  RootBlockRef peek_root() {
+    return root;
+  }
 private:
   friend class Cache;
   friend Ref make_test_transaction();
@@ -701,9 +791,6 @@ private:
   void clear_read_set() {
     read_items.clear();
     assert(read_set.empty());
-#ifndef NDEBUG
-    num_replace_placeholder = 0;
-#endif
     // Automatically unlink this transaction from CachedExtent::read_transactions
   }
 
@@ -839,9 +926,6 @@ private:
    */
   read_extent_set_t<Transaction> read_set; ///< set of extents read by paddr
   std::list<read_set_item_t<Transaction>> read_items;
-#ifndef NDEBUG
-  size_t num_replace_placeholder = 0;
-#endif
 
   uint64_t fresh_backref_extents = 0; // counter of new backref extents
 
@@ -896,6 +980,8 @@ private:
    */
   retired_extent_set_t retired_set;
 
+  std::unordered_set<laddr_t> touched_prefix;
+
   /// stats to collect when commit or invalidate
   tree_stats_t onode_tree_stats;
   tree_stats_t omap_tree_stats; // exclude omap tree depth
@@ -905,6 +991,10 @@ private:
   rewrite_stats_t rewrite_stats;
 
   bool conflicted = false;
+
+  std::size_t num_replays = 0;
+
+  phase_durations_t phase_durations;
 
   bool has_reset = false;
 
@@ -921,6 +1011,9 @@ private:
   backref_entry_refs_t backref_entries;
 
   cache_hint_t cache_hint = CACHE_HINT_TOUCH;
+
+  std::map<laddr_t, lmapping_t> copied_lba_keys;
+  update_copied_lba_key_func_t update_copied_lba_key;
 };
 using TransactionRef = Transaction::Ref;
 
@@ -935,6 +1028,32 @@ inline TransactionRef make_test_transaction() {
     ++next_id,
     CACHE_HINT_TOUCH)
   );
+}
+/**
+ * should_use_no_conflict_publish()
+ *
+ * Returns true when this (transaction source, extent type) pair should take
+ * the no-conflict publish path (i.e avoid invalidate-and-retry and use the
+ * committer + visibility hand-off).
+ *
+ * Currently true for:
+ *  - rewrite (background) transactions, for any non-root extent
+ *
+ *  To be expanded to:
+ *  - user (txn_manager) transactions that mutate LBA nodes
+ *  - Onode/Omap nodes
+ */
+constexpr bool should_use_no_conflict_publish(const Transaction &t,
+                                              extent_types_t ext_type) {
+  // keep classic handling for ROOT
+  if (is_root_type(ext_type)) {
+    return false;
+  }
+
+  // TODO: Extend this as support grows (e.g. Onode/OMAP nodes).
+  //       is_user_transaction(txn_type) && is_lba_node(ext_type)
+
+  return !t.force_rewrite_conflict && is_rewrite_transaction(t.get_src());
 }
 
 }

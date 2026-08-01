@@ -40,6 +40,7 @@
 #include "rgw_aio_throttle.h"
 #include "rgw_bucket.h"
 #include "rgw_bucket_logging.h"
+#include "rgw_crypt.h"
 #include "rgw_bl_rados.h"
 #include "rgw_lc.h"
 #include "rgw_lc_tier.h"
@@ -54,6 +55,7 @@
 #include "rgw_rest_conn.h"
 #include "rgw_rest_log.h"
 #include "rgw_rest_metadata.h"
+#include "rgw_rest_dedup.h"
 #include "rgw_rest_ratelimit.h"
 #include "rgw_rest_realm.h"
 #include "rgw_rest_user.h"
@@ -2577,6 +2579,7 @@ void RadosStore::register_admin_apis(RGWRESTMgr* mgr)
   mgr->register_resource("config", new RGWRESTMgr_Config);
   mgr->register_resource("realm", new RGWRESTMgr_Realm);
   mgr->register_resource("ratelimit", new RGWRESTMgr_Ratelimit);
+  mgr->register_resource("dedup", new RGWRESTMgr_Dedup);
 }
 
 std::unique_ptr<LuaManager> RadosStore::get_lua_manager(const std::string& luarocks_path)
@@ -4265,9 +4268,6 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
            const char *if_nomatch)
 {
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
-  std::string etag;
-  bufferlist etag_bl;
   MD5 hash;
   // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
   hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
@@ -4281,6 +4281,17 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   uint64_t min_part_size = cct->_conf->rgw_multipart_min_part_size;
   auto etags_iter = part_etags.begin();
   rgw::sal::Attrs& attrs = target_obj->get_attrs();
+
+  // Check if this is AEAD encryption to track plaintext size
+  bool is_aead = false;
+  uint64_t plaintext_ofs = 0;
+  auto mode_iter = attrs.find(RGW_ATTR_CRYPT_MODE);
+  if (mode_iter != attrs.end()) {
+    std::string crypt_mode = mode_iter->second.to_str();
+    is_aead = is_aead_mode(crypt_mode);
+  }
+  // AEAD: (S3 part number, GCM salt) per selected part, in manifest-segment order.
+  std::vector<std::pair<uint32_t, std::string>> part_keys;
 
   do {
     ret = list_parts(dpp, cct, max_parts, marker, &marker, &truncated, y);
@@ -4397,20 +4408,31 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
 
       ofs += obj_part.size;
       accounted_size += obj_part.accounted_size;
+
+      // Track plaintext size for AEAD encryption
+      if (is_aead) {
+        part_keys.push_back({obj_part.num, obj_part.crypt_salt});
+        if (part_compressed) {
+          // For compressed parts, use the uncompressed size directly
+          plaintext_ofs += obj_part.accounted_size;
+        } else {
+          plaintext_ofs += aead_encrypted_to_plaintext_size(obj_part.size);
+        }
+      }
     }
   } while (truncated);
   hash.Final((unsigned char *)final_etag);
 
-  buf_to_hex((unsigned char *)final_etag, sizeof(final_etag), final_etag_str);
-  snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2],
-	   sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,
-           "-%lld", (long long)part_etags.size());
-  etag = final_etag_str;
-  ldpp_dout(dpp, 10) << "calculated etag: " << etag << dendl;
-
-  etag_bl.append(etag);
-
-  attrs[RGW_ATTR_ETAG] = etag_bl;
+  bufferlist etag_bl;
+  append_bl(etag_bl, CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16, [&](auto iter) {
+    auto start = iter;
+    iter = buf_to_hex(final_etag, iter);
+    iter = fmt::format_to(iter, "-{}", part_etags.size());
+    ldpp_dout(dpp, 10) << "calculated etag: " << std::string_view{start, iter}
+                       << dendl;
+    return iter;
+  });
+  attrs[RGW_ATTR_ETAG] = std::move(etag_bl);
 
   rgw_placement_rule* ru;
   ru = &placement;
@@ -4433,6 +4455,22 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
     bufferlist tmp;
     encode(cs_info, tmp);
     attrs[RGW_ATTR_COMPRESSION] = tmp;
+  }
+
+  // For AEAD encryption: store total plaintext size (calculated during loop)
+  if (is_aead) {
+    bufferlist bl;
+    bl.append(std::to_string(plaintext_ofs));
+    attrs[RGW_ATTR_CRYPT_ORIGINAL_SIZE] = std::move(bl);
+
+    // Store (S3 part number, GCM salt) pairs (collected in selection order
+    // above) for correct key derivation during decrypt.
+    bufferlist part_keys_bl;
+    using ceph::encode;
+    encode(part_keys, part_keys_bl);
+    attrs[RGW_ATTR_CRYPT_PART_NUMS] = std::move(part_keys_bl);
+    ldpp_dout(dpp, 20) << "Stored CRYPT_PART_NUMS with " << part_keys.size()
+                       << " parts" << dendl;
   }
 
   target_obj->set_atomic(true);
@@ -5361,7 +5399,7 @@ bool RadosZone::is_writeable()
 bool RadosZone::get_redirect_endpoint(std::string* endpoint)
 {
   if (local_zone)
-    return store->svc()->zone->get_redirect_zone_endpoint(endpoint);
+    return store->svc()->zone->get_redirect_zone_endpoint_url(endpoint);
 
   endpoint = &rgw_zone.redirect_zone;
   return true;
@@ -5985,6 +6023,20 @@ int RadosRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
 }
 
 } // namespace rgw::sal
+
+std::optional<neorados::RADOS>
+make_neorados(CephContext* cct, boost::asio::io_context& io_context) {
+  try {
+    auto neorados = neorados::RADOS::make_with_cct(boost::intrusive_ptr{cct},
+                                                   io_context,
+                                                   ceph::async::use_blocked);
+    return neorados;
+  } catch (const std::exception& e) {
+    ldout(cct, 0) << "Failed constructing neroados handle: " << e.what()
+		  << dendl;
+  }
+  return std::nullopt;
+}
 
 extern "C" {
 

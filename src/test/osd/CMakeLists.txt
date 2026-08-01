@@ -140,7 +140,7 @@ add_executable(unittest_backend_basics
   )
 add_ceph_unittest(unittest_backend_basics)
 target_link_libraries(unittest_backend_basics osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
-add_dependencies(unittest_backend_basics ec_isa ec_jerasure)
+add_dependencies(unittest_backend_basics ${EC_ISA_LIB} ec_jerasure)
 # unittest_ecfailover_with_peering
 add_executable(unittest_ecfailover_with_peering
   TestECFailoverWithPeering.cc
@@ -151,7 +151,7 @@ add_executable(unittest_ecfailover_with_peering
   )
 add_ceph_unittest(unittest_ecfailover_with_peering)
 target_link_libraries(unittest_ecfailover_with_peering osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
-add_dependencies(unittest_ecfailover_with_peering ec_isa ec_jerasure)
+add_dependencies(unittest_ecfailover_with_peering ${EC_ISA_LIB} ec_jerasure)
 # unittest_hitset
 add_executable(unittest_hitset
   hitset.cc
@@ -215,10 +215,18 @@ target_link_libraries(unittest_mclock_scheduler
   global osd dmclock os
 )
 
+# unittest ECOmapJournal
+add_executable(unittest_ec_omap_journal
+  test_ec_omap_journal.cc
+)
+add_ceph_unittest(unittest_ec_omap_journal)
+target_link_libraries(unittest_ec_omap_journal osd global ${BLKID_LIBRARIES})
+
 # osd_unittests: custom target that builds and runs all OSD unit tests
 # Not including unittest_osdmap, as it is slow. It is tested elsewhere.
 set(OSD_UNITTESTS
   unittest_backend_basics
+  unittest_ec_omap_journal
   unittest_ec_transaction
   unittest_ec_transaction_l
   unittest_ecbackend

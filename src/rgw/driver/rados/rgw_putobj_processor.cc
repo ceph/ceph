@@ -557,11 +557,19 @@ int MultipartObjectProcessor::complete(
   obj_op.meta.mtime = mtime;
   obj_op.meta.owner = owner;
   obj_op.meta.bucket_owner = bucket_info.owner;
+  obj_op.meta.category = RGWObjCategory::MultiPart;
   obj_op.meta.delete_at = delete_at;
   obj_op.meta.zones_trace = zones_trace;
   obj_op.meta.modify_tail = true;
   obj_op.meta.if_match = if_match;
   obj_op.meta.if_nomatch = if_nomatch;
+
+  // Move the transient GCM salt onto the part info and drop it from attrs (never on the head).
+  std::string part_salt;
+  if (auto i = attrs.find(RGW_ATTR_CRYPT_PART_SALT); i != attrs.end()) {
+    part_salt = i->second.to_str();
+    attrs.erase(i);
+  }
 
   r = obj_op.write_meta(actual_size, accounted_size, attrs, rctx,
                         writer.get_trace(), flags & rgw::sal::FLAG_LOG_OP);
@@ -586,6 +594,7 @@ int MultipartObjectProcessor::complete(
   info.accounted_size = accounted_size;
   info.modified = real_clock::now();
   info.manifest = manifest;
+  info.crypt_salt = std::move(part_salt);
 
   bool compressed;
   r = rgw_compression_info_from_attrset(attrs, compressed, info.cs_info);
@@ -807,18 +816,20 @@ int AppendObjectProcessor::complete(
     hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
     char petag[CEPH_CRYPTO_MD5_DIGESTSIZE];
     char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
-    char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
     hex_to_buf(cur_etag.c_str(), petag, CEPH_CRYPTO_MD5_DIGESTSIZE);
     hash.Update((const unsigned char *)petag, sizeof(petag));
     hex_to_buf(etag.c_str(), petag, CEPH_CRYPTO_MD5_DIGESTSIZE);
     hash.Update((const unsigned char *)petag, sizeof(petag));
     hash.Final((unsigned char *)final_etag);
-    buf_to_hex((unsigned char *)final_etag, sizeof(final_etag), final_etag_str);
-    snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2],  sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,
-             "-%lld", (long long)cur_part_num);
+
     bufferlist etag_bl;
-    etag_bl.append(final_etag_str, strlen(final_etag_str) + 1);
-    attrs[RGW_ATTR_ETAG] = etag_bl;
+    append_bl(etag_bl, CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16, [&](auto iter) {
+      iter = buf_to_hex(final_etag, iter);
+      iter = fmt::format_to(iter, "-{}", cur_part_num);
+      *iter++ = '\0';
+      return iter;
+    });
+    attrs[RGW_ATTR_ETAG] = std::move(etag_bl);
   }
   r = obj_op.write_meta(actual_size + cur_size,
 			accounted_size + *cur_accounted_size,

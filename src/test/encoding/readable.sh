@@ -14,7 +14,6 @@ fi
 
 failed=0
 numtests=0
-pids=""
 
 if [ -x ./ceph-dencoder ]; then
   CEPH_DENCODER=./ceph-dencoder
@@ -24,9 +23,20 @@ fi
 
 # ASAN builds need setarch -R to disable ASLR so each process can find a
 # contiguous 16+ TB shadow memory region. See https://clang.llvm.org/docs/AddressSanitizer.html
+# Use bare `setarch -R` (no arch): the arch-qualified form also sets the
+# personality, which fails where setarch can't (e.g. riscv64). Check it works
+# before wrapping, and just run ceph-dencoder unwrapped if it doesn't.
 if ldd $(command -v $CEPH_DENCODER) 2>/dev/null | grep -q libasan; then
-  echo "ASAN build detected: wrapping ceph-dencoder with 'setarch \$(uname -m) -R'"
-  CEPH_DENCODER="setarch $(uname -m) -R $CEPH_DENCODER"
+  if setarch -R true >/dev/null 2>&1; then
+    echo "ASAN build detected: wrapping ceph-dencoder with 'setarch -R'"
+    CEPH_DENCODER="setarch -R $CEPH_DENCODER"
+  else
+    echo "ASAN build detected but 'setarch -R' is unavailable; running ceph-dencoder without ASLR disable"
+  fi
+
+  # Per-object leak checks dominate runtime here (~10s vs ~1s each on riscv64)
+  # and this test only checks encode/decode, so disable them; keep other checks.
+  export ASAN_OPTIONS="${ASAN_OPTIONS:+$ASAN_OPTIONS:}detect_leaks=0"
 fi
 
 myversion=$($CEPH_DENCODER version)
@@ -36,7 +46,6 @@ if [ -z "$myversion" ]; then
   exit 1
 fi
 DEBUG=0
-WAITALL_DELAY=.1
 debug() { if [ "$DEBUG" -gt 0 ]; then echo "DEBUG: $*" >&2; fi }
 
 version_le() {
@@ -67,7 +76,9 @@ versions_span() {
 
 test_object() {
     local type=$1
-    local output_file=$2
+    local vdir=$2
+    local arversion=$3
+    local output_file=$4
     local failed=0
     local numtests=0
 
@@ -134,6 +145,8 @@ test_object() {
             else
               echo "skipping forward incompat $type version $arversion, decoder >= $forward_version incompatible with objects < $forward_version (current decoder is $myversion)"
             fi
+            echo "failed=$failed" > $output_file
+            echo "numtests=$numtests" >> $output_file
             rm -f $tmp1 $tmp2
             return
           fi
@@ -146,6 +159,8 @@ test_object() {
         # Use sort -V for proper version comparison (handles 19.5 vs 19.10 correctly)
         if version_lt "$myversion" "$backward_incompat"; then
           echo "skipping backward incompat $type version $arversion, requires decoder >= $backward_incompat, current decoder is $myversion"
+          echo "failed=$failed" > $output_file
+          echo "numtests=$numtests" >> $output_file
           rm -f $tmp1 $tmp2
           return
         fi
@@ -240,51 +255,9 @@ test_object() {
     echo "numtests=$numtests" >> $output_file
 }
 
-waitall() { # PID...
-   ## Wait for children to exit and indicate whether all exited with 0 status.
-   local errors=0
-   while :; do
-     debug "Processes remaining: $*"
-     for pid in "$@"; do
-       shift
-       if kill -0 "$pid" 2>/dev/null; then
-         debug "$pid is still alive."
-         set -- "$@" "$pid"
-       elif wait "$pid"; then
-         debug "$pid exited with zero exit status."
-       else
-         debug "$pid exited with non-zero exit status."
-         errors=$(($errors + 1))
-       fi
-     done
-     [ $# -eq 0 ] && break
-     sleep ${WAITALL_DELAY:-1}
-    done
-   [ $errors -eq 0 ]
-}
-
 ######
 # MAIN
 ######
-
-do_join() {
-        waitall $pids
-        pids=""
-        # Reading the output of jobs to compute failed & numtests
-        # Tests are run in parallel but sum should be done sequentialy to avoid
-        # races between threads
-        while [ "$running_jobs" -ge 0 ]; do
-            if [ -f $output_file.$running_jobs ]; then
-                read_failed=$(grep "^failed=" $output_file.$running_jobs | cut -d "=" -f 2)
-                read_numtests=$(grep "^numtests=" $output_file.$running_jobs | cut -d "=" -f 2)
-                rm -f $output_file.$running_jobs
-                failed=$(($failed + $read_failed))
-                numtests=$(($numtests + $read_numtests))
-            fi
-            running_jobs=$(($running_jobs - 1))
-        done
-        running_jobs=0
-}
 
 # Determine the number of parallel jobs to run.  Default to the number of
 # logical processors, or $MAX_PARALLEL_JOBS if set.
@@ -295,33 +268,48 @@ else
 fi
 max_parallel_jobs=${MAX_PARALLEL_JOBS:-${NPROC}}
 
-output_file=$(mktemp /tmp/output_file-XXXXXXXXX)
+# Sliding window of up to $max_parallel_jobs jobs, each writing its tally to its
+# own $resultdir file; when full, reap one finished job before spawning the next.
+resultdir=$(mktemp -d /tmp/readable-results-XXXXXXXXX)
+trap 'rm -rf "$resultdir"' EXIT
 running_jobs=0
+jobid=0
 
 for arversion in $(ls $dir/archive | sort -V); do
   vdir="$dir/archive/$arversion"
-  #echo $vdir
 
   if [ ! -d "$vdir/objects" ]; then
     continue;
   fi
 
   for type in $(ls $vdir/objects); do
-    test_object $type $output_file.$running_jobs &
-    pids="$pids $!"
-    running_jobs=$(($running_jobs + 1))
-
-    # Once we spawned enough jobs, let's wait them to complete
-    # Every spawned job have almost the same execution time so
-    # it's not a big deal having them not ending at the same time
-    if [ "$running_jobs" -eq "$max_parallel_jobs" ]; then
-	do_join
+    if [ "$running_jobs" -ge "$max_parallel_jobs" ]; then
+      wait -n || true
+      running_jobs=$(($running_jobs - 1))
     fi
-    rm -f ${output_file}*
+    test_object "$type" "$vdir" "$arversion" "$resultdir/$jobid" &
+    running_jobs=$(($running_jobs + 1))
+    jobid=$(($jobid + 1))
   done
 done
 
-do_join
+# wait for the remaining in-flight jobs
+wait
+
+# Sum results sequentially. A missing result file means the job died before
+# recording its tally, so count it as a failure rather than skipping it.
+for ((i = 0; i < jobid; i++)); do
+  f="$resultdir/$i"
+  if [ ! -f "$f" ]; then
+    echo "**** result file for job $i is missing; the job likely died before recording its result ****"
+    failed=$(($failed + 1))
+    continue
+  fi
+  read_failed=$(grep "^failed=" "$f" | cut -d "=" -f 2)
+  read_numtests=$(grep "^numtests=" "$f" | cut -d "=" -f 2)
+  failed=$(($failed + $read_failed))
+  numtests=$(($numtests + $read_numtests))
+done
 
 if [ $failed -gt 0 ]; then
   echo "FAILED $failed / $numtests tests."

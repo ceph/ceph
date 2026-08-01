@@ -16,7 +16,7 @@ usage() {
 $0 [containerfile] (defaults to 'Containerfile')
 For a CI build (from ceph-ci.git, built and pushed to shaman):
 CI_CONTAINER: must be 'true'
-FROM_IMAGE: defaults to quay.io/centos/centos9:stream
+FROM_IMAGE: defaults to docker.io/rockylinux/rockylinux:10
 FLAVOR (OSD flavor, default or crimson)
 BRANCH (of Ceph. <remote>/<ref>)
 CEPH_SHA1 (of Ceph)
@@ -125,7 +125,7 @@ CONTAINER_BUILD_ARGS=(
     --squash
     -f "$CFILE"
     -t build.sh.output
-    --build-arg FROM_IMAGE="${FROM_IMAGE:-quay.io/centos/centos:stream9}"
+    --build-arg FROM_IMAGE="${FROM_IMAGE:-docker.io/rockylinux/rockylinux:10}"
     --build-arg CEPH_SHA1="${CEPH_SHA1}"
     --build-arg CEPH_GIT_REPO="${CEPH_GIT_REPO}"
     --build-arg CEPH_REF="${BRANCH:-main}"

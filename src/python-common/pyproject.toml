@@ -19,6 +19,9 @@ email = "dev@ceph.io"
 Homepage = "https://ceph.io"
 Repository = "https://github.com/ceph/ceph"
 
+[project.scripts]
+ceph-smb-ctl = "ceph.smb.ctl.__main__:main"
+
 [build-system]
 requires = ["setuptools >= 61.0"]
 build-backend = "setuptools.build_meta"

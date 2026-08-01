@@ -1,14 +1,14 @@
 @use '@carbon/styles/scss/spacing';
 
+:host {
+  flex-shrink: 0;
+}
+
 .notification-header {
-  position: sticky;
-  top: 0;
-  z-index: 2;
+  flex-shrink: 0;
   padding: spacing.$spacing-03 spacing.$spacing-05;
   background-color: var(--cds-layer-01);
   border-block-end: 1px solid var(--cds-border-subtle-01);
-  inset-block-start: 0;
-  height: var(--header-height);
 
   &__title {
     margin-top: 0.4rem;

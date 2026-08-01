@@ -20,6 +20,8 @@
 #include "mgr/Gil.h"
 
 #include "PyModule.h"
+#include "mgr/ThreadMonitor.h"
+#include <future>
 
 /**
  * Implement the pattern of calling serve() on a module in a thread,
@@ -36,16 +38,18 @@ protected:
   PyObject *pClassInstance = nullptr;
 
   LogChannelRef clog;
-
+  pid_t m_native_tid = 0;
+  ThreadMonitor* m_thread_monitor = nullptr;
   class PyModuleRunnerThread : public Thread
   {
     PyModuleRunner *mod;
-
+    std::atomic<pid_t> runner_tid{0};
   public:
     explicit PyModuleRunnerThread(PyModuleRunner *mod_)
       : mod(mod_) {}
 
     void *entry() override;
+    pid_t get_tid() const { return runner_tid.load(); }
   };
 
   bool is_dead() const { return dead; }
@@ -64,10 +68,12 @@ public:
 
   PyModuleRunner(
       const PyModuleRef &py_module_,
-      LogChannelRef clog_)
+      LogChannelRef clog_,
+      ThreadMonitor* monitor_ = nullptr)
     : 
       py_module(py_module_),
       clog(clog_),
+      m_thread_monitor(monitor_),
       thread(this)
   {
     // Shortened name for use as thread name, because thread names
@@ -82,6 +88,8 @@ public:
   PyModuleRunnerThread thread;
 
   std::string const &get_name() const { return py_module->get_name(); }
+  void set_native_tid(pid_t tid) { m_native_tid = tid; }
+  pid_t get_native_tid() const { return m_native_tid; }
 
 private:
   bool dead = false;

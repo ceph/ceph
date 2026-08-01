@@ -71,6 +71,31 @@ teuthology using the `cram task`_.
 .. _`cram`: https://bitheap.org/cram/
 .. _`cram task`: https://github.com/ceph/ceph/blob/master/qa/tasks/cram.py
 
+Running CLI tools tests
+-----------------------
+
+A convenience script is provided to run CLI tests easily without having to manually set up the environment.
+From the Ceph source tree root directory:
+
+  .. prompt:: bash $
+
+     # Run all CLI tests
+     ./src/script/run-cli-tests.sh
+
+     # Run with custom build directory
+     ./src/script/run-cli-tests.sh -b /path/to/build
+
+Alternatively, you can run the tests directly from the build directory by setting up your PATH:
+
+  .. prompt:: bash $
+
+     cd build
+     PATH="$PWD/bin:$PATH" ../src/test/run-cli-tests
+
+The test suite includes tests for: ``ceph-authtool``, ``ceph-conf``, 
+``ceph-kvstore-tool``, ``crushtool``, ``monmaptool``, ``osdmaptool``, 
+``radosgw-admin``, and ``rbd``.
+
 Tox-based testing of Python modules
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Some of the Python modules in Ceph use `tox <https://tox.readthedocs.io/en/latest/>`_ 

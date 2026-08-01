@@ -1,0 +1,61 @@
+@use '@carbon/layout';
+
+.cd-overview-card {
+  display: block;
+}
+
+.cd-overview-section {
+  + .cd-overview-section {
+    border-top: 1px solid var(--cds-border-subtle-01);
+  }
+}
+
+.cd-overview-grid {
+  row-gap: layout.$spacing-05;
+  column-gap: layout.$spacing-05;
+}
+
+.cd-overview-heading {
+  padding-inline-start: layout.$spacing-06;
+}
+
+.cd-overview-item {
+  min-width: 0;
+}
+
+.cd-overview-label {
+  display: block;
+  color: var(--cds-text-secondary);
+}
+
+.cd-overview-value {
+  overflow-wrap: break-word;
+}
+
+.cd-overview-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: layout.$spacing-03;
+}
+
+.cd-overview-status {
+  display: inline-flex;
+  align-items: center;
+  gap: layout.$spacing-02;
+}
+
+.cd-status-text--success {
+  color: var(--cds-support-success);
+}
+
+.cd-status-text--warning {
+  color: var(--cds-support-caution-major);
+}
+
+.cd-status-text--danger {
+  color: var(--cds-support-error);
+}
+
+.cd-status-text--info {
+  color: var(--cds-support-info);
+}

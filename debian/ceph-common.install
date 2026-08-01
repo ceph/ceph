@@ -23,6 +23,7 @@ usr/bin/rgw-gap-list
 usr/bin/rgw-gap-list-comparator
 usr/bin/rgw-orphan-list
 usr/bin/rgw-policy-check
+usr/bin/rgw-policy-test
 usr/bin/rgw-restore-bucket-index
 usr/bin/rbd
 usr/bin/rbdmap
@@ -44,6 +45,7 @@ usr/share/man/man8/mount.ceph.8
 usr/share/man/man8/rados.8
 usr/share/man/man8/radosgw-admin.8
 usr/share/man/man8/rgw-policy-check.8
+usr/share/man/man8/rgw-policy-test.8
 usr/share/man/man8/rgw-gap-list.8
 usr/share/man/man8/rbd.8
 usr/share/man/man8/rbdmap.8

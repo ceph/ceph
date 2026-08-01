@@ -231,6 +231,14 @@ class Endpoint:
         )
 
 
+def is_absent_member(item: Dict[str, Any]) -> bool:
+    status = item.get("Status")
+    if not isinstance(status, dict):
+        return False
+    state = status.get("State")
+    return isinstance(state, str) and state.lower() == "absent"
+
+
 def build_data(
     data: Dict[str, Any],
     fields: List[str],
@@ -247,6 +255,10 @@ def build_data(
             except KeyError:
                 log.debug(f"Could not find field: {field} in data: {d}")
                 out[to_snake_case(field)] = None
+        if out.get("reading") is None and "ReadingCelsius" in d:
+            out["reading"] = d["ReadingCelsius"]
+            if out.get("reading_units") is None:
+                out["reading_units"] = "Cel"
         return out
 
     try:
@@ -256,8 +268,9 @@ def build_data(
             data_items = [{"MemberId": k, **v} for k, v in data.items()]
         log.debug(f"build_data: data_items count={len(data_items)}")
         for d in data_items:
+            if is_absent_member(d):
+                continue
             member_id = d.get("MemberId")
-            result[member_id] = {}
             result[member_id] = process_data(member_id, fields, d)
     except (KeyError, TypeError, AttributeError) as e:
         log.error(f"Can't build data: {e}")

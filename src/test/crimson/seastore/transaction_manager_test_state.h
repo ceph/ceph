@@ -94,7 +94,7 @@ public:
         });
       });
     }).handle_error(
-      crimson::ct_error::assert_all{}
+      crimson::ct_error::assert_all("unexpected error")
     );
   }
 
@@ -144,7 +144,7 @@ public:
   seastar::future<> setup() final {
     rb_device = random_block_device::create_test_ephemeral();
     device_config_t config = get_rbm_ephemeral_device_config(0, 1);
-    return rb_device->mkfs(config).handle_error(crimson::ct_error::assert_all{});
+    return rb_device->mkfs(config).handle_error(crimson::ct_error::assert_all("unexpected error"));
   }
 
   void remount() final {}
@@ -211,7 +211,7 @@ protected:
     return teardown().then([this] {
       devices->remount();
       return _init().then([this] {
-        return _mount().handle_error(crimson::ct_error::assert_all{});
+        return _mount().handle_error(crimson::ct_error::assert_all("unexpected error"));
       });
     }).then([FNAME] {
       SUBINFO(test, "finish");
@@ -249,7 +249,7 @@ protected:
       ).safe_then([this] {
 	return restart_fut();
       }).handle_error(
-	crimson::ct_error::assert_all{}
+	crimson::ct_error::assert_all("unexpected error")
       ).then([FNAME] {
 	SUBINFO(test, "finish");
       });
@@ -311,14 +311,14 @@ protected:
 
   virtual seastar::future<> _teardown() {
     return tm->close().handle_error(
-      crimson::ct_error::assert_all{"Error in teardown"}
+      crimson::ct_error::assert_all("Error in teardown")
     );
   }
 
   virtual FuturizedStore::mount_ertr::future<> _mount() {
     return tm->mount(
     ).handle_error(
-      crimson::ct_error::assert_all{"Error in mount"}
+      crimson::ct_error::assert_all("Error in mount")
     ).then([this] {
       return epm->stop_background();
     }).then([this] {
@@ -329,7 +329,7 @@ protected:
   virtual FuturizedStore::mkfs_ertr::future<> _mkfs() {
     return tm->mkfs(
     ).handle_error(
-      crimson::ct_error::assert_all{"Error in mkfs"}
+      crimson::ct_error::assert_all("Error in mkfs")
     );
   }
 

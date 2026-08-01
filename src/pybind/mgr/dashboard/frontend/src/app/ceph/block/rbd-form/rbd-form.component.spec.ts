@@ -5,7 +5,6 @@ import { By } from '@angular/platform-browser';
 import { ActivatedRoute, Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastrModule } from 'ngx-toastr';
 import { NEVER, of } from 'rxjs';
 import { delay } from 'rxjs/operators';
 
@@ -63,7 +62,6 @@ describe('RbdFormComponent', () => {
       HttpClientTestingModule,
       ReactiveFormsModule,
       RouterTestingModule,
-      ToastrModule.forRoot(),
       SharedModule,
       CheckboxModule,
       InputModule,
@@ -116,7 +114,7 @@ describe('RbdFormComponent', () => {
         flags_names,
         application_metadata,
         type
-      } as Pool);
+      }) as Pool;
 
     beforeEach(() => {
       createAction = spyOn(component, 'createAction').and.returnValue(of(null));
@@ -135,7 +133,7 @@ describe('RbdFormComponent', () => {
       ];
       spyOn(TestBed.inject(PoolService), 'list').and.callFake(() => of(mock.pools));
       rbdServiceGetSpy = spyOn(TestBed.inject(RbdService), 'get');
-      mock.rbd = ({ pool_name: 'foo', pool_image: 'bar' } as any) as RbdFormResponseModel;
+      mock.rbd = { pool_name: 'foo', pool_image: 'bar' } as any as RbdFormResponseModel;
       rbdServiceGetSpy.and.returnValue(of(mock.rbd));
       component.mode = undefined;
     });
@@ -489,8 +487,9 @@ describe('RbdFormComponent', () => {
         const journal = fixture.debugElement.query(By.css('#journal')).nativeElement;
         journal.click();
         fixture.detectChanges();
-        const exclusiveLocks = fixture.debugElement.query(By.css('#exclusive-lock_input'))
-          .nativeElement;
+        const exclusiveLocks = fixture.debugElement.query(
+          By.css('#exclusive-lock_input')
+        ).nativeElement;
         expect(exclusiveLocks.checked).toBe(true);
         expect(exclusiveLocks.disabled).toBe(true);
       });

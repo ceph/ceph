@@ -158,10 +158,28 @@ inline std::string to_string(const Records& records) {
   return str_records;
 }
 
+// Per-record input metadata for log_record(). Full definition lives in
+// rgw_bucket_logging_types.h; callers that only pass it by reference need
+// just this forward declaration.
+struct record_input;
+
 // log a bucket logging record according to the configuration
 int log_record(rgw::sal::Driver* driver,
     const sal::Object* obj,
     req_state* s,
+    const std::string& op_name,
+    const std::string& etag,
+    size_t size,
+    const configuration& conf,
+    const DoutPrefixProvider *dpp,
+    optional_yield y,
+    bool async_completion,
+    bool log_source_bucket);
+
+// no-req_state variant of the log_record(req_state*, ..., configuration&) overload above
+int log_record(rgw::sal::Driver* driver,
+    const sal::Object* obj,
+    const record_input& input,
     const std::string& op_name,
     const std::string& etag,
     size_t size,
@@ -181,7 +199,7 @@ int rollover_logging_object(const configuration& conf,
     std::string& obj_name,
     const DoutPrefixProvider *dpp,
     const std::string& region,
-    const std::unique_ptr<rgw::sal::Bucket>& source_bucket,
+    rgw::sal::Bucket* source_bucket,
     optional_yield y,
     bool must_commit,
     RGWObjVersionTracker* objv_tracker,
@@ -201,6 +219,19 @@ int log_record(rgw::sal::Driver* driver,
     LoggingType type,
     const sal::Object* obj,
     req_state* s,
+    const std::string& op_name,
+    const std::string& etag,
+    size_t size,
+    const DoutPrefixProvider *dpp,
+    optional_yield y,
+    bool async_completion,
+    bool log_source_bucket);
+
+// no-req_state variant of the log_record(LoggingType, ..., req_state*) overload above
+int log_record(rgw::sal::Driver* driver,
+    LoggingType type,
+    const sal::Object* obj,
+    const record_input& input,
     const std::string& op_name,
     const std::string& etag,
     size_t size,
@@ -250,6 +281,17 @@ int verify_target_bucket_policy(const DoutPrefixProvider* dpp,
     rgw::sal::Bucket* target_bucket,
     const rgw::ARN& target_resource_arn,
     req_state* s,
+    std::string* err_message = nullptr);
+
+// no-req_state variant of the verify_target_bucket_policy(req_state*) overload above.
+// source_bucket_arn and source_account are the ARN of the source bucket
+// and the id of its owner; they are used as aws:SourceArn / aws:SourceAccount when evaluating the target (log) bucket's policy
+int verify_target_bucket_policy(const DoutPrefixProvider* dpp,
+    rgw::sal::Bucket* target_bucket,
+    const rgw::ARN& target_resource_arn,
+    CephContext* cct,
+    std::string source_bucket_arn,
+    std::string source_account,
     std::string* err_message = nullptr);
 
 // verify that target bucket does not have:

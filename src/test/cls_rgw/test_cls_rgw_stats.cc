@@ -552,7 +552,7 @@ void simulator::complete_multipart(const operation& op)
           << " size=" << part_size << dendl;
     } else {
       rgw_bucket_dir_entry_meta meta;
-      meta.category = op.meta.category;
+      meta.category = RGWObjCategory::MultiPart;
       meta.size = meta.accounted_size = part_size;
 
       int r = index_complete(ioctx, oid, part_key, op.tag, op.type,

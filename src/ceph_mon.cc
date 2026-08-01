@@ -19,6 +19,7 @@
 #include <fcntl.h>
 
 #include <iostream>
+#include <optional>
 #include <sstream>
 #include <string>
 
@@ -42,6 +43,7 @@
 #include "common/Throttle.h"
 #include "common/Timer.h"
 #include "common/errno.h"
+#include "common/strtol.h"
 #include "common/Preforker.h"
 
 #include "global/global_init.h"
@@ -213,7 +215,7 @@ static void usage()
        << "  --force-sync\n"
        << "        force a sync from another mon by wiping local data (BE CAREFUL)\n"
        << "  --yes-i-really-mean-it\n"
-       << "        mandatory safeguard for --force-sync\n"
+       << "        mandatory safeguard for --force-sync and --restore-backup\n"
        << "  --compact\n"
        << "        compact the monitor store\n"
        << "  --osdmap <filename>\n"
@@ -224,8 +226,14 @@ static void usage()
        << "        extract the monmap from the local monitor store and exit\n"
        << "  --mon-data <directory>\n"
        << "        where the mon store and keyring are located\n"
-       << "  --set-crush-location <bucket>=<foo>"
-       << "        sets monitor's crush bucket location (only for stretch mode)"
+       << "  --set-crush-location <bucket>=<foo>\n"
+       << "        sets monitor's crush bucket location (only for stretch mode)\n"
+       << "  --restore-backup <directory>\n"
+       << "        restore the backup from location and exit (requires --yes-i-really-mean-it)\n"
+       << "  --backup-version <version>\n"
+       << "        BackupEngine version ID (uint32); defaults to the latest backup when omitted\n"
+       << "  --list-backups <directory>\n"
+       << "        list available backups\n"
        << std::endl;
   generic_server_usage();
 }
@@ -265,6 +273,8 @@ int main(int argc, const char **argv)
   bool force_sync = false;
   bool yes_really = false;
   std::string osdmapfn, inject_monmap, extract_monmap, crush_loc;
+  std::string restore_backup_location, list_backup_location;
+  std::optional<uint32_t> restore_backup_version;
 
   auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
@@ -337,6 +347,18 @@ int main(int argc, const char **argv)
       extract_monmap = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--set-crush-location", (char*)NULL)) {
       crush_loc = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--list-backups", (char*)NULL)) {
+      list_backup_location = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--restore-backup", (char*)NULL)) {
+      restore_backup_location = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--backup-version", (char*)NULL)) {
+      std::string parse_err;
+      long long v = strict_strtoll(val.c_str(), 10, &parse_err);
+      if (!parse_err.empty() || v < 0 || v > UINT32_MAX) {
+        cerr << "invalid --backup-version '" << val << "'" << std::endl;
+        exit(1);
+      }
+      restore_backup_version = static_cast<uint32_t>(v);
     } else {
       ++i;
     }
@@ -359,6 +381,51 @@ int main(int argc, const char **argv)
 
   if (g_conf()->name.get_id().empty()) {
     cerr << "must specify id (--id <id> or --name mon.<id>)" << std::endl;
+    exit(1);
+  }
+
+  // -- list backups --
+  if (!list_backup_location.empty()) {
+    cout << "list backup from location '" << list_backup_location << "'" << std::endl << std::endl;
+    auto backup_infos = MonitorDBStore::list_backups(
+      cct.get(), g_conf()->mon_data, list_backup_location);
+    if (!backup_infos) {
+      cerr << "failed to enumerate backups at '" << list_backup_location
+           << "' (see log for details)" << std::endl;
+      exit(1);
+    }
+    if (backup_infos->empty()) {
+      cout << "no backups found at '" << list_backup_location << "'" << std::endl;
+      exit(0);
+    }
+    cout << "ID:\tTime:\t\t\t\tSize:" << std::endl;
+    for (const KeyValueDB::BackupStats& bi : *backup_infos) {
+      cout << bi.id << "\t";
+      bi.timestamp.asctime(cout);
+      cout << "\t" << byte_u_t(bi.size) << std::endl;
+    }
+    exit(0);
+  }
+
+  // -- restore backup --
+  if (!restore_backup_location.empty()) {
+    if (!yes_really) {
+      cerr << "restoring will overwrite the monitor store at '" << g_conf()->mon_data
+           << "'. Pass --yes-i-really-mean-it to proceed." << std::endl;
+      exit(1);
+    }
+    cerr << "restoring backup from location '" << restore_backup_location << "' to '"
+         << g_conf()->mon_data << "'" << std::endl;
+    if (MonitorDBStore::restore_backup(cct.get(), g_conf()->mon_data, restore_backup_location, restore_backup_version)) {
+        cout << "successfully restored backup. Start ceph-mon normally" << std::endl;
+        exit(0);
+    }
+    cerr << "restore failed. Check the backup path and version (use --list-backups to enumerate)." << std::endl;
+    exit(1);
+  }
+
+  if (restore_backup_version.has_value()) {
+    cerr << "--backup-version requires --restore-backup" << std::endl;
     exit(1);
   }
 
@@ -537,7 +604,7 @@ int main(int argc, const char **argv)
       exit(1);
     }
     store.close();
-    dout(0) << argv[0] << ": created monfs at " << g_conf()->mon_data 
+    dout(0) << argv[0] << ": created monfs at " << g_conf()->mon_data
 	    << " for " << g_conf()->name << dendl;
     return 0;
   }

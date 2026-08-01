@@ -1,5 +1,8 @@
 Feature: Hosts Overview Dashboard
 
+  Background:
+    Given the dashboard is `hosts-overview`
+
 Scenario: "Test network load succeeds"
   Given the following series:
     | metrics | values |

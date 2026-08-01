@@ -5,7 +5,7 @@ set -x
 export PATH=/root/bin:$PATH
 mkdir /root/bin
 
-export CEPHADM_IMAGE='quay.ceph.io/ceph-ci/ceph:main'
+export CEPHADM_IMAGE="${CEPHADM_IMAGE:-quay.ceph.io/ceph-ci/ceph:main}"
 
 CEPHADM="/root/bin/cephadm"
 CEPHADM_SRC="/mnt/{{ ceph_dev_folder }}/src/cephadm/cephadm"
@@ -28,9 +28,15 @@ bootstrap_extra_options='--allow-fqdn-hostname --dashboard-password-noupdate'
 # {% if expanded_cluster is not defined %}
 #   bootstrap_extra_options+=" ${bootstrap_extra_options_not_expanded}"
 # {% endif %}
+
+shell_image=''
+
 quick_install_options=''
 {% if quick_install is defined %}
-  quick_install_options="--image localhost:5000/ceph"
+  export CEPHADM_IMAGE="${CEPHADM_IMAGE:-quay.ceph.io/ceph-ci/ceph:main}"
+  quick_install_options="--image localhost:5000/ceph" 
+  shell_image="--image localhost:5000/ceph"
+
 {% endif %}
 
 if [[ ${NODES} -lt 2 ]]; then
@@ -49,8 +55,13 @@ fi
 
 $CEPHADM ${quick_install_options} bootstrap --mon-ip $mon_ip --initial-dashboard-password {{ admin_password }} ${bootstrap_extra_options}
 
-fsid=$(cat /etc/ceph/ceph.conf | grep fsid | awk '{ print $3}')
-cephadm_shell="$CEPHADM shell --fsid ${fsid} -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring"
+fsid=$(awk '/fsid/ {print $3}' /etc/ceph/ceph.conf)
+cephadm_shell="$CEPHADM ${shell_image} shell --fsid ${fsid} -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring"
+
+{% if quick_install is defined %}
+  ${cephadm_shell} ceph config set global container_image localhost:5000/ceph
+{% endif %}
+
 
 for number in $(seq 1 $((NODES - 1))); do
   LAST_OCTET=$((NODE_IP_OFFSET + $number))

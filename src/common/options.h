@@ -167,7 +167,7 @@ struct Option {
   const level_t level;
 
   std::string desc;
-  std::string long_desc;
+  const char *long_desc = "";
 
   unsigned flags = 0;
 

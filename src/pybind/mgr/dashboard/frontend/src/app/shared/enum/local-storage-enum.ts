@@ -1,3 +1,3 @@
 export enum LocalStorage {
-  DASHBOARD_USRENAME = 'dashboard_username'
+  DASHBOARD_USERNAME = 'dashboard_username'
 }

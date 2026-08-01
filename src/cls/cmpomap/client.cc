@@ -18,7 +18,7 @@
 
 namespace cls::cmpomap {
 
-int cmp_vals(librados::ObjectReadOperation& op,
+int cmp_vals(librados::ObjectOperation& op,
              Mode mode, Op comparison, ComparisonMap values,
              std::optional<ceph::bufferlist> default_value)
 {

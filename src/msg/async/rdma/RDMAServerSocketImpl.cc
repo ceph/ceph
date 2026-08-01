@@ -111,15 +111,23 @@ int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt
   out->set_sockaddr((sockaddr*)&ss);
   net.set_priority(sd, opt.priority, out->get_family());
 
+  RDMAWorker *rw = dynamic_cast<RDMAWorker*>(w);
   RDMAConnectedSocketImpl* server;
   //Worker* w = dispatcher->get_stack()->get_worker();
-  server = new RDMAConnectedSocketImpl(cct, ib, dispatcher, dynamic_cast<RDMAWorker*>(w));
-  if (!server->get_qp()) {
-    lderr(cct) << __func__ << " server->qp is null" << dendl;
-    // cann't use delete server here, destructor will fail.
-    server->cleanup();
+  server = new RDMAConnectedSocketImpl(cct, ib, dispatcher, rw);
+  // Construction can fail under fd pressure (eventfd) or on queue pair creation.
+  // Such a socket has fd() < 0 and/or a null qp; handing it back on the success
+  // path would trip ceph_assert(socket.fd() >= 0) in AsyncConnection::accept.
+  // Return an honest errno (fd-first, so eventfd exhaustion maps to -EMFILE rather
+  // than -EIO) and free the half-built socket on its owning worker thread, where
+  // ~RDMAConnectedSocketImpl's center.in_thread() assertion holds.
+  if (server->fd() < 0 || !server->get_qp()) {
+    int err = server->fd() < 0 ? -EMFILE : -EIO;
+    lderr(cct) << __func__ << " failed to create connected socket: "
+               << cpp_strerror(err) << dendl;
+    rw->center.submit_to(rw->center.get_id(), [server]() { delete server; }, false);
     ::close(sd);
-    return -1;
+    return err;
   }
   server->set_accept_fd(sd);
   ldout(cct, 20) << __func__ << " accepted a new QP, tcp_fd: " << sd << dendl;

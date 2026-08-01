@@ -37,7 +37,8 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 })
 export class CephfsSnapshotscheduleListComponent
   extends CdForm
-  implements OnInit, OnChanges, OnDestroy {
+  implements OnInit, OnChanges, OnDestroy
+{
   @Input() fsName!: string;
   @Input() id!: number;
 

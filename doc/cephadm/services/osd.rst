@@ -1207,11 +1207,11 @@ This example applies to two hosts: ``ceph01`` and ``ceph04``.
    and any other daemons that the host ran before its operating system was
    reinstalled.
 
-   To be clea: ``cephadm`` attempts to deploy missing daemons to all
+   To be clear: ``cephadm`` attempts to deploy missing daemons to all
    hosts managed by cephadm, when ``cephadm``
    determines that the hosts are online. In this context, "online" means
    "present in the output of the ``ceph orch host ls`` command and with a
-   status that is not ``offline`` or ``maintenance``. If it is necessary to log
+   status that is not ``offline`` or ``maintenance``". If it is necessary to log
    in to the registry in order to pull the images for the missing daemons, then
    deployment of the missing daemons will fail until the process of logging
    in to the registry has been completed.

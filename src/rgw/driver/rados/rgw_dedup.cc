@@ -2292,10 +2292,14 @@ namespace rgw::dedup {
     p_worker_stats->ingress_obj_bytes += ondisk_byte_size;
 
     // We limit dedup to objects from the same storage_class
-    // TBD-Future:
-    // Should we use a skip-list of storage_classes we should skip (like glacier) ?
     const std::string& storage_class =
       rgw_placement_rule::get_canonical_storage_class(entry.meta.storage_class);
+    if (!d_filter.allow_storage_class(storage_class)) {
+      ldpp_dout(dpp, 20) << __func__ << "::skip storage_class (filter): "
+                         << storage_class << dendl;
+      p_worker_stats->ingress_skip_filtered_storage_class++;
+      return 0;
+    }
     if (storage_class == RGW_STORAGE_CLASS_STANDARD) {
       p_worker_stats->default_storage_class_objs++;
       p_worker_stats->default_storage_class_objs_bytes += ondisk_byte_size;
@@ -2538,12 +2542,12 @@ namespace rgw::dedup {
     storage_class_idx_t sc_idx = remapper.remap(RGW_STORAGE_CLASS_STANDARD, dpp,
                                                 &p_stats->failed_map_overflow);
     ceph_assert(sc_idx != remapper_t::NULL_IDX);
-    uint32_t slab_count_arr[num_work_shards];
+    std::vector<uint32_t> slab_count_arr(num_work_shards);
     // first load all etags to hashtable to find dedups
     // the entries come from bucket-index and got minimal info (etag, size)
     for (work_shard_t worker_id = 0; worker_id < num_work_shards; worker_id++) {
       process_all_slabs(p_table, STEP_BUILD_TABLE, md5_shard, worker_id,
-                        slab_count_arr+worker_id, p_stats, nullptr, &remapper);
+                        slab_count_arr.data()+worker_id, p_stats, nullptr, &remapper);
       if (unlikely(d_ctl.should_stop())) {
         ldpp_dout(dpp, 5) << __func__ << "::STEP_BUILD_TABLE::STOPPED\n" << dendl;
         return -ECANCELED;
@@ -2575,7 +2579,7 @@ namespace rgw::dedup {
       disk_block_seq_t disk_block_seq(dpp, arr, num_work_shards, md5_shard, &wstat);
       for (work_shard_t worker_id = 0; worker_id < num_work_shards; worker_id++) {
         process_all_slabs(p_table, STEP_READ_ATTRIBUTES, md5_shard, worker_id,
-                          slab_count_arr+worker_id, p_stats, &disk_block_seq, &remapper);
+                          slab_count_arr.data()+worker_id, p_stats, &disk_block_seq, &remapper);
         if (unlikely(d_ctl.should_stop())) {
           ldpp_dout(dpp, 5) << __func__ << "::STEP_READ_ATTRIBUTES::STOPPED\n" << dendl;
           return -ECANCELED;
@@ -2677,6 +2681,11 @@ namespace rgw::dedup {
             goto err;
           }
           ldpp_dout(dpp, 20) <<__func__ << "::bucket=" << bucket << dendl;
+          if (!d_filter.allow_bucket(bucket.name)) {
+            ldpp_dout(dpp, 10) << __func__ << "::skip bucket (filter): "
+                               << bucket.name << dendl;
+            continue;
+          }
           ret = read_bucket_stats(bucket, &d_all_buckets_obj_count,
                                   &d_all_buckets_obj_size);
           if (unlikely(ret != 0)) {
@@ -2746,6 +2755,12 @@ namespace rgw::dedup {
             continue;
           }
           ldpp_dout(dpp, 20) <<__func__ << "::bucket=" << bucket << dendl;
+          if (!d_filter.allow_bucket(bucket.name)) {
+            ldpp_dout(dpp, 10) << __func__ << "::worker_id=" << worker_id
+                               << "::skip bucket (filter): " << bucket.name << dendl;
+            p_worker_stats->ingress_skip_filtered_bucket++;
+            continue;
+          }
           ret = ingress_bucket_objects_single_shard(disk_arr, bucket, worker_id,
                                                     num_work_shards, p_worker_stats);
           if (unlikely(ret != 0)) {
@@ -2934,14 +2949,22 @@ namespace rgw::dedup {
   //-------------------------------------------------------------------------------
   //    64M      ||     32       ||    64MB ||   64MB/32 =  2.00M *  32 =    64M ||
   //   256M      ||     64       ||   128MB ||  128MB/32 =  4.00M *  64 =   256M ||
-  //  1024M( 1G) ||    128       ||   256MB ||  256MB/32 =  8.00M * 128 =  1024M ||
-  //  4096M( 4G) ||    256       ||   512MB ||  512MB/32 = 16M.00 * 256 =  4096M ||
-  // 16384M(16G) ||    512       ||  1024MB || 1024MB/32 = 32M.00 * 512 = 16384M ||
+  //  1024M(  1G)||    128       ||   256MB ||  256MB/32 =  8.00M * 128 =  1024M ||
+  //  4096M(  4G)||    256       ||   512MB ||  512MB/32 = 16M.00 * 256 =  4096M ||
+  //-------------------------------------------------------------------------------
+  // 16384M( 16G)||    512       ||  1024MB || 1024MB/32 = 32M.00 * 512 = 16384M ||
+  // 65536M( 64G)||   1024       ||  2048MB || 2048MB/32 = 64M.00 *1024 = 65536M ||
+  //262144M(256G)||   2048       ||  4096MB || 4096MB/32 =128M.00 *2048 =262144M ||
   //-------------||--------------||---------||-----------------------------------||
+  //   > 256G    ||  REJECTED    ||   N/A   || Pool exceeds max supported size   ||
+  //=============||==============||=========||===================================||
+
   static md5_shard_t calc_num_md5_shards(uint64_t obj_count)
   {
-    // create headroom by allocating space for a 10% bigger system
-    obj_count = obj_count + (obj_count/10);
+    // create headroom by allocating space for a 20% bigger system
+    // NOTE: all thresholds below compare against the inflated obj_count,
+    // not the raw count reported by pool stats.
+    obj_count = obj_count + (obj_count/5);
 
     uint64_t M = 1024 * 1024;
     if (obj_count < 1*M) {
@@ -2969,11 +2992,25 @@ namespace rgw::dedup {
       return 128;
     }
     else if (obj_count < 4*1024*M) {
-      // less than 4096M objects -> use 256 shards (512MB)
+      // less than   4B objects -> use 256 shards (512MB)
       return 256;
     }
-    else {
+    else if (obj_count < 16*1024*M) {
+      // less than  16B objects -> use 512 shards (1GB)
       return 512;
+    }
+    else if (obj_count < 64*1024*M) {
+      // less than  64B objects -> use 1024 shards (2GB)
+      return 1024;
+    }
+    else if (obj_count < 256*1024*M) {
+      // less than 256B objects -> use 2048 shards (4GB)
+      return 2048;
+    }
+    else {
+      // Dedup supports systems with up-to ~213 billion user objects per-pool
+      // With headroom that translates to about 256B objects
+      return MD5_SHARD_HARD_LIMIT + 1;
     }
   }
 
@@ -2986,10 +3023,17 @@ namespace rgw::dedup {
     }
 
     md5_shard_t num_md5_shards = calc_num_md5_shards(d_all_buckets_obj_count);
+    if (num_md5_shards > MD5_SHARD_HARD_LIMIT) {
+      derr << __func__ << "::Pool has too many objects: ("
+           << d_all_buckets_obj_count << ") Max supported is 213 billion" << dendl;
+      return -EOVERFLOW;
+    }
+
     num_md5_shards = std::min(num_md5_shards, MAX_MD5_SHARD);
     num_md5_shards = std::max(num_md5_shards, MIN_MD5_SHARD);
     work_shard_t num_work_shards = num_md5_shards;
     num_work_shards = std::min(num_work_shards, MAX_WORK_SHARD);
+    num_work_shards = std::max(num_work_shards, MIN_WORK_SHARD);
 
     ldpp_dout(dpp, 5) << __func__ << "::obj_count=" <<d_all_buckets_obj_count
                       << "::num_md5_shards=" << num_md5_shards
@@ -2997,7 +3041,7 @@ namespace rgw::dedup {
     // init handles and create the dedup_pool
     ret = init_rados_access_handles(true);
     if (ret != 0) {
-      derr << "dedup_bg::resume() failed init_rados_access_handles() ret="
+      derr << __func__ << "::failed init_rados_access_handles() ret="
            << ret << "::" << cpp_strerror(-ret) << dendl;
       return ret;
     }
@@ -3118,6 +3162,23 @@ namespace rgw::dedup {
       break;
     case URGENT_MSG_RESTART:
       if (!d_ctl.dedup_exec) {
+        // Decode optional filter
+        try {
+          bool has_filter = false;
+          ceph::decode(has_filter, bl_iter);
+          if (has_filter) {
+            decode(d_filter, bl_iter);
+            ldpp_dout(dpp, 5) << __func__ << "::RESTART with filter" << dendl;
+          }
+          else {
+            d_filter = dedup_filter_t{};
+          }
+        } catch (buffer::error& err) {
+          ldpp_dout(dpp, 1) << __func__ << "::ERROR: bad URGENT_MSG_RESTART" << dendl;
+          cluster::ack_notify(store, dpp, &d_ctl, notify_id, cookie, -EINVAL);
+          return;
+        }
+
         d_ctl.remote_restart_req = true;
         d_cond.notify_all();
       }

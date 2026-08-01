@@ -64,6 +64,14 @@ if [ -e CMakeCache.txt ]; then
     CEPH_ROOT=$(get_cmake_variable ceph_SOURCE_DIR)
     CEPH_BUILD_DIR=`pwd`
     [ -z "$MGR_PYTHON_PATH" ] && MGR_PYTHON_PATH=$CEPH_ROOT/src/pybind/mgr
+
+    # Point the sanitizers at the in-tree suppression files so vstart daemons
+    # ignore the same still-reachable third-party leaks AddCephTest.cmake suppresses for
+    # unittests. Without this `ceph-mon --mkfs` aborts on LeakSanitizer.
+    if [ "$(get_cmake_variable WITH_ASAN)" = "ON" ]; then
+        [ -z "$ASAN_OPTIONS" ] && export ASAN_OPTIONS="suppressions=$CEPH_ROOT/qa/asan.supp,detect_odr_violation=0"
+        [ -z "$LSAN_OPTIONS" ] && export LSAN_OPTIONS="suppressions=$CEPH_ROOT/qa/lsan.supp,print_suppressions=0"
+    fi
 fi
 
 # use CEPH_BUILD_ROOT to vstart from a 'make install'
@@ -179,7 +187,6 @@ rgw_compression=""
 rgw_store="rados"
 lockdep=${LOCKDEP:-1}
 spdk_enabled=0 # disable SPDK by default
-pmem_enabled=0
 io_uring_enabled=0
 with_jaeger=0
 force_addr=0
@@ -199,7 +206,10 @@ declare -a bluestore_db_devs
 declare -a bluestore_wal_devs
 declare -a secondary_block_devs
 declare -a cpu_table
-secondary_block_devs_type="SSD"
+seastore_hot_device_type="SSD"
+seastore_hot_backend_type="SEGMENTED"
+seastore_cold_device_type="SSD"
+seastore_cold_backend_type="SEGMENTED"
 
 VSTART_SEC="client.vstart.sh"
 
@@ -251,7 +261,6 @@ options:
 	--multimds <count> allow multimds with maximum active count
 	--without-dashboard: do not run using mgr dashboard
 	--bluestore-spdk: enable SPDK and with a comma-delimited list of PCI-IDs of NVME device (e.g, 0000:81:00.0)
-	--bluestore-pmem: enable PMEM and with path to a file mapped to PMEM
 	--msgr1: use msgr1 only
 	--msgr2: use msgr2 only
 	--msgr21: use msgr2 and msgr1
@@ -270,7 +279,10 @@ options:
 	--seastore-device-size: set total size of seastore
 	--seastore-devs: comma-separated list of blockdevs to use for seastore
 	--seastore-secondary-devs: comma-separated list of secondary blockdevs to use for seastore
-	--seastore-secondary-devs-type: device type of all secondary blockdevs. HDD, SSD(default), ZNS or RANDOM_BLOCK_SSD
+	--seastore-main-device-type: device type of main blockdevs. (SSD or RANDOM_BLOCK_SSD)
+	--seastore-main-backend-type: the driver used by main blockdevs (SEGMENTED or RANDOM_BLOCK)
+	--seastore-secondary-device-type: device type of all secondary blockdevs. HDD, SSD(default), ZNS or RANDOM_BLOCK_SSD
+	--seastore-secondary-backend-type: the driver used by secondary blockdevs (SEGMENTED or RANDOM_BLOCK)
 	--crimson-smp: number of cores to use for crimson
 	--crimson-alien-num-threads: number of alien-tp threads
 	--crimson-reactor-physical-only: use only one cpu per physical core for seastar reactors
@@ -605,12 +617,24 @@ case $1 in
         parse_block_devs --seastore-devs "$2"
         shift
         ;;
+    --seastore-main-device-type)
+        seastore_hot_device_type="$2"
+        shift
+        ;;
+    --seastore-main-backend-type)
+        seastore_hot_backend_type="$2"
+        shift
+        ;;
     --seastore-secondary-devs)
         parse_secondary_devs --seastore-devs "$2"
         shift
         ;;
-    --seastore-secondary-devs-type)
-        secondary_block_devs_type="$2"
+    --seastore-secondary-device-type)
+        seastore_cold_device_type="$2"
+        shift
+        ;;
+    --seastore-secondary-backend-type)
+        seastore_cold_backend_type="$2"
         shift
         ;;
     --crimson-smp)
@@ -647,12 +671,6 @@ case $1 in
         [ -z "$2" ] && usage_exit
         IFS=',' read -r -a bluestore_spdk_dev <<< "$2"
         spdk_enabled=1
-        shift
-        ;;
-    --bluestore-pmem)
-        [ -z "$2" ] && usage_exit
-        bluestore_pmem_file="$2"
-        pmem_enabled=1
         shift
         ;;
     --bluestore-devs)
@@ -903,7 +921,7 @@ EOF
         osd max object namespace len = 64"
     fi
     if [ "$objectstore" == "bluestore" ]; then
-        if [ "$spdk_enabled" -eq 1 ] || [ "$pmem_enabled" -eq 1 ]; then
+        if [ "$spdk_enabled" -eq 1 ]; then
             BLUESTORE_OPTS="        bluestore_block_db_path = \"\"
         bluestore_block_db_size = 0
         bluestore_block_db_create = false
@@ -936,6 +954,11 @@ EOF
         SEASTORE_OPTS="
         seastore device size = $seastore_size"
       fi
+      SEASTORE_OPTS+="
+        seastore_hot_device_type=$seastore_hot_device_type
+        seastore_hot_backend_type=$seastore_hot_backend_type
+        seastore_cold_device_type=$seastore_cold_device_type
+        seastore_cold_backend_type=$seastore_cold_backend_type"
     fi
 
     wconf <<EOF
@@ -1157,6 +1180,7 @@ start_mon() {
 [mon.$f]
         host = $HOSTNAME
         mon data = $CEPH_DEV_DIR/mon.$f
+        mon backup path = $CEPH_DEV_DIR/mon.$f-backup
 EOF
             count=$(($count + 2))
         done
@@ -1282,10 +1306,6 @@ EOF
                 wconf <<EOF
         bluestore_block_path = spdk:${bluestore_spdk_dev[$osd]}
 EOF
-            elif [ "$pmem_enabled" -eq 1 ]; then
-                wconf <<EOF
-        bluestore_block_path = ${bluestore_pmem_file}
-EOF
             fi
             rm -rf $CEPH_DEV_DIR/osd$osd || true
             if command -v btrfs > /dev/null; then
@@ -1306,8 +1326,8 @@ EOF
             fi
             if [ -n "${secondary_block_devs[$osd]}" ]; then
                 dd if=/dev/zero of=${secondary_block_devs[$osd]} bs=1M count=1
-                mkdir -p $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1
-                ln -s ${secondary_block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1/block
+                mkdir -p $CEPH_DEV_DIR/osd$osd/block.1
+                ln -s ${secondary_block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.1/block
             fi
             if [ "$objectstore" == "bluestore" ]; then
                 wconf <<EOF
@@ -1473,6 +1493,19 @@ EOF
     fi
 }
 
+create_fs_volume() {
+    local name=$1
+    if [ "$CEPH_NUM_MGR" -gt 0 ]; then
+        ceph_adm fs volume create ${name}
+    else
+        local meta_pool="cephfs.${name}.meta"
+        local data_pool="cephfs.${name}.data"
+        ceph_adm osd pool create "$meta_pool"
+        ceph_adm osd pool create "$data_pool" --bulk
+        ceph_adm fs new ${name} "$meta_pool" "$data_pool"
+    fi
+}
+
 start_mds() {
     local mds=0
     for name in a b c d e f g h i j k l m n o p
@@ -1523,12 +1556,15 @@ EOF
                 ceph_adm fs flag set enable_multiple true --yes-i-really-mean-it
             fi
 
-	    # wait for volume module to load
-	    while ! ceph_adm fs volume ls ; do sleep 1 ; done
+            if [ "$CEPH_NUM_MGR" -gt 0 ]; then
+                # wait for volume module to load
+                while ! ceph_adm fs volume ls ; do sleep 1 ; done
+            fi
+
             local fs=0
             for name in a b c d e f g h i j k l m n o p
             do
-                ceph_adm fs volume create ${name}
+                create_fs_volume ${name}
                 ceph_adm fs authorize ${name} "client.fs_${name}" / rwp >> "$keyring_fn"
                 fs=$(($fs + 1))
                 [ $fs -eq $CEPH_NUM_FS ] && break
@@ -1582,6 +1618,7 @@ start_ganesha() {
             Enable_RQUOTA = false;
             Protocols = 4;
             NFS_Port = $port;
+            allow_set_io_flusher_fail = true;
         }
 
         MDCACHE {
@@ -1589,20 +1626,20 @@ start_ganesha() {
         }
 
         NFSv4 {
-           RecoveryBackend = rados_cluster;
+           RecoveryBackend = "\"rados_cluster\"";
            Minor_Versions = 1, 2;
         }
 
         RADOS_KV {
-           pool = '$pool_name';
-           namespace = $namespace;
-           UserId = $test_user;
+           pool = "\"$pool_name\"";
+           namespace = "\"$namespace\"";
+           UserId = "\"$test_user\"";
            nodeid = $name;
         }
 
         RADOS_URLS {
-	   Userid = $test_user;
-	   watch_url = '$url';
+	   Userid = "\"$test_user\"";
+	   watch_url = "\"$url\"";
         }
 
 	%url $url" > "$ganesha_dir/ganesha-$name.conf"

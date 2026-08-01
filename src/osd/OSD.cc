@@ -2424,7 +2424,7 @@ OSD::OSD(CephContext *cct_,
   dev_path(dev), journal_path(jdev),
   store_is_rotational(store->is_rotational()),
   trace_endpoint("0.0.0.0", 0, "osd"),
-  asok_hook(NULL),
+  asok_hook(nullptr),
   m_osd_pg_epoch_max_lag_factor(cct->_conf.get_val<double>(
 				  "osd_pg_epoch_max_lag_factor")),
   osd_compat(get_osd_compat_set()),
@@ -2441,7 +2441,7 @@ OSD::OSD(CephContext *cct_,
   heartbeat_dispatcher(this),
   op_tracker(cct, cct->_conf->osd_enable_op_tracker,
                   cct->_conf->osd_num_op_tracker_shard),
-  test_ops_hook(NULL),
+  test_ops_hook(nullptr),
   op_shardedwq(
     this,
     ceph::make_timespan(cct->_conf->osd_op_thread_timeout),
@@ -2760,7 +2760,7 @@ int OSD::asok_route_to_pg(
   } catch (const TOPNSPC::common::bad_cmd_get& e) {
     (*target_pg)->unlock();
     ss << e.what();
-    on_finish(ret, ss.str(), outbl);
+    on_finish(-EINVAL, ss.str(), outbl);
     return -EINVAL;
   }
 }
@@ -3419,9 +3419,9 @@ will start to track new ops received afterwards.";
       f->dump_format_unquoted("15min", "%s", fixed_u_to_string(sitem.times[2],3).c_str());
       f->close_section();  // average
       f->open_object_section("min");
-      f->dump_format_unquoted("1min", "%s", fixed_u_to_string(sitem.max[0],3).c_str());
-      f->dump_format_unquoted("5min", "%s", fixed_u_to_string(sitem.max[1],3).c_str());
-      f->dump_format_unquoted("15min", "%s", fixed_u_to_string(sitem.max[2],3).c_str());
+      f->dump_format_unquoted("1min", "%s", fixed_u_to_string(sitem.min[0],3).c_str());
+      f->dump_format_unquoted("5min", "%s", fixed_u_to_string(sitem.min[1],3).c_str());
+      f->dump_format_unquoted("15min", "%s", fixed_u_to_string(sitem.min[2],3).c_str());
       f->close_section();  // min
       f->open_object_section("max");
       f->dump_format_unquoted("1min", "%s", fixed_u_to_string(sitem.max[0],3).c_str());
@@ -4651,6 +4651,15 @@ int OSD::shutdown()
       tick_timer_without_osd_lock.shutdown();
     }
 
+    // unregister commands
+    cct->get_admin_socket()->unregister_commands(asok_hook);
+    delete asok_hook;
+    asok_hook = nullptr;
+
+    cct->get_admin_socket()->unregister_commands(test_ops_hook);
+    delete test_ops_hook;
+    test_ops_hook = nullptr;
+
     osd_lock.unlock();
     utime_t  start_time_osd_drain = ceph_clock_now();
 
@@ -4705,11 +4714,11 @@ int OSD::shutdown()
   // unregister commands
   cct->get_admin_socket()->unregister_commands(asok_hook);
   delete asok_hook;
-  asok_hook = NULL;
+  asok_hook = nullptr;
 
   cct->get_admin_socket()->unregister_commands(test_ops_hook);
   delete test_ops_hook;
-  test_ops_hook = NULL;
+  test_ops_hook = nullptr;
 
   osd_lock.unlock();
 
@@ -6469,6 +6478,12 @@ void OSD::tick_without_osd_lock()
   }
 
   if (is_active()) {
+    constexpr uint_fast16_t snap_trim_scan_interval = 5;
+    if (++trim_queue_length_countdown >= snap_trim_scan_interval) {
+      trim_queue_length_countdown = 0;
+      service.snap_trim_queue_total =
+	service.calc_snap_trim_queue_total();
+    }
     service.get_scrub_services().initiate_scrub(service.is_recovery_active());
     service.promote_throttle_recalibrate();
     resume_creating_pg();
@@ -7890,6 +7905,22 @@ std::optional<PGLockWrapper> OSDService::get_locked_pg(spg_t pgid)
 }
 
 
+uint64_t OSDService::calc_snap_trim_queue_total()
+{
+  std::vector<spg_t> pgids;
+  osd->_get_pgids(&pgids);
+  uint64_t total = 0;
+  for (auto& pgid : pgids) {
+    if (auto locked_pg = get_locked_pg(pgid)) {
+      const auto& pg = locked_pg->pg();
+      if (pg->is_primary()) {
+	total += pg->get_snap_trimq_size();
+      }
+    }
+  }
+  return total;
+}
+
 MPGStats* OSD::collect_pg_stats()
 {
   dout(15) << __func__ << dendl;
@@ -8015,7 +8046,8 @@ vector<DaemonHealthMetric> OSD::get_health_metrics()
                                  [](std::pair<uint64_t, int> p1, std::pair<uint64_t, int> p2) {
                                    return p1.second < p2.second;
                                  });
-          if (osdmap->get_pools().find(slow_pool_it->first) != osdmap->get_pools().end()) {
+          if (slow_pool_it != slow_op_pools.end() &&
+              osdmap->get_pools().find(slow_pool_it->first) != osdmap->get_pools().end()) {
             string pool_name = osdmap->get_pool_name(slow_pool_it->first);
             ss << "] most affected pool [ '"
                << pool_name
@@ -8606,6 +8638,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
   bool do_shutdown = false;
   bool do_restart = false;
   bool network_error = false;
+  bool need_rebind = false;
   OSDMapRef osdmap = get_osdmap();
 
   // advance through the new maps
@@ -8778,22 +8811,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 
 	start_waiting_for_healthy();
 
-	set<int> avoid_ports;
-#if defined(__FreeBSD__)
-        // prevent FreeBSD from grabbing the client_messenger port during
-        // rebinding. In which case a cluster_meesneger will connect also
-	// to the same port
-	client_messenger->get_myaddrs().get_ports(&avoid_ports);
-#endif
-	cluster_messenger->get_myaddrs().get_ports(&avoid_ports);
-
-	int r = cluster_messenger->rebind(avoid_ports);
-	if (r != 0) {
-	  do_shutdown = true;  // FIXME: do_restart?
-          network_error = true;
-          derr << __func__ << " marked down:"
-	       << " rebind cluster_messenger failed" << dendl;
-        }
+	need_rebind = true;
 
 	hb_back_server_messenger->mark_down_all();
 	hb_front_server_messenger->mark_down_all();
@@ -8814,6 +8832,28 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 
   // yay!
   consume_map();
+
+  if (need_rebind) {
+    // Rebind cluster_messenger after consume_map() so that all shards
+    // have the updated OSDMap before peers can reconnect and retransmit
+    // messages. See https://tracker.ceph.com/issues/58417
+    set<int> avoid_ports;
+#if defined(__FreeBSD__)
+    // prevent FreeBSD from grabbing the client_messenger port during
+    // rebinding. In which case a cluster_messenger will connect also
+    // to the same port
+    client_messenger->get_myaddrs().get_ports(&avoid_ports);
+#endif
+    cluster_messenger->get_myaddrs().get_ports(&avoid_ports);
+
+    int r = cluster_messenger->rebind(avoid_ports);
+    if (r != 0) {
+      do_shutdown = true;  // FIXME: do_restart?
+      network_error = true;
+      derr << __func__ << " marked down:"
+	   << " rebind cluster_messenger failed" << dendl;
+    }
+  }
 
   if (is_active() || is_waiting_for_healthy())
     maybe_update_heartbeat_peers();

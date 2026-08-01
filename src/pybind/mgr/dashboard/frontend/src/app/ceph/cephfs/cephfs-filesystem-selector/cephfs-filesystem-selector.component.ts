@@ -82,9 +82,8 @@ export class CephfsFilesystemSelectorComponent implements OnInit {
         if (!listResponse?.length) {
           return of([]);
         }
-        const detailRequests = listResponse.map(
-          (fs): Observable<CephfsDetail | null> =>
-            this.cephfsService.getCephfs(fs.id).pipe(catchError(() => of(null)))
+        const detailRequests = listResponse.map((fs): Observable<CephfsDetail | null> =>
+          this.cephfsService.getCephfs(fs.id).pipe(catchError(() => of(null)))
         );
         return forkJoin(detailRequests).pipe(
           map((details: Array<CephfsDetail | null>) =>

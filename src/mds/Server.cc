@@ -268,6 +268,8 @@ void Server::create_logger()
                    "Request type remove snapshot latency");
   plb.add_time_avg(l_mdss_req_renamesnap_latency, "req_renamesnap_latency",
                    "Request type rename snapshot latency");
+  plb.add_time_avg(l_mdss_req_snap_md_op_latency, "req_snap_md_op_latency",
+                   "Request type snapshot metadata op latency");
   plb.add_time_avg(l_mdss_req_snapdiff_latency, "req_snapdiff_latency",
 		   "Request type snapshot difference latency");
     plb.add_time_avg(l_mdss_req_file_blockdiff_latency, "req_blockdiff_latency",
@@ -400,7 +402,7 @@ void Server::dispatch(const cref_t<Message> &m)
     handle_client_session(ref_cast<MClientSession>(m));
     return;
   case CEPH_MSG_CLIENT_REQUEST:
-    handle_client_request(ref_cast<MClientRequest>(m));
+    mds->mds_dmclock_scheduler->handle_client_request(ref_cast<MClientRequest>(m));
     return;
   case CEPH_MSG_CLIENT_REPLY:
     handle_client_reply(ref_cast<MClientReply>(m));
@@ -501,6 +503,7 @@ void Server::reclaim_session(Session *session, const cref_t<MClientReclaim> &m)
 	       << " != target auth_name " << target->info.auth_name << dendl;
       reply->set_result(-EPERM);
       mds->send_message_client(reply, session);
+      return;
     }
 
     ceph_assert(!target->reclaiming_from);
@@ -816,7 +819,8 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
         ceph_assert(r == 0);
         log_session_status("ACCEPTED", "");
       });
-      mdlog->submit_entry(new ESession(m->get_source_inst(), true, pv, client_metadata),
+      mdlog->submit_entry(new ESession(m->get_source_inst(), true, pv,
+      client_metadata, session->info.auth_name),
 				new C_MDS_session_finish(this, session, sseq, true, pv, fin));
       mdlog->flush();
     }
@@ -957,6 +961,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
 	     << ", noop" << dendl;
     // close must have been canceled (by an import?), or any number of other things..
   } else if (open) {
+    mds->mds_dmclock_scheduler->add_session(session);
     ceph_assert(session->is_opening());
     mds->sessionmap.set_state(session, Session::STATE_OPEN);
     mds->sessionmap.touch_session(session);
@@ -1017,6 +1022,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
         session->get_connection()->mark_disposable();
       }
 
+      mds->mds_dmclock_scheduler->remove_session(session);
       // reset session
       mds->send_message_client(make_message<MClientSession>(CEPH_SESSION_CLOSE), session);
       mds->sessionmap.set_state(session, Session::STATE_CLOSED);
@@ -1030,6 +1036,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
         mds->sessionmap.set_state(session, Session::STATE_CLOSED);
         session->set_connection(nullptr);
       }
+      mds->mds_dmclock_scheduler->remove_session(session);
       metrics_handler->remove_session(session);
       mds->sessionmap.remove_session(session);
     } else {
@@ -1118,6 +1125,7 @@ void Server::finish_force_open_sessions(map<client_t,pair<Session*,uint64_t> >& 
 	it.second.second = mds->sessionmap.set_state(session, Session::STATE_OPEN);
 	mds->sessionmap.touch_session(session);
         metrics_handler->add_session(session);
+        mds->mds_dmclock_scheduler->add_session(session);
 
 	auto reply = make_message<MClientSession>(CEPH_SESSION_OPEN);
 	if (session->info.has_feature(CEPHFS_FEATURE_MIMIC)) {
@@ -1536,7 +1544,8 @@ void Server::journal_close_session(Session *session, int state, Context *on_safe
   } else
     piv = 0;
   
-  auto le = new ESession(session->info.inst, false, pv, inos_to_free, piv, session->delegated_inos);
+  auto le = new ESession(session->info.inst, false, pv, inos_to_free, piv,
+    session->delegated_inos, session->info.auth_name);
   auto fin = new C_MDS_session_finish(this, session, sseq, false, pv, inos_to_free, piv,
 				      session->delegated_inos, mdlog->get_current_segment(), on_safe);
   mdlog->submit_entry(le, fin);
@@ -1679,6 +1688,7 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
 
   if (!m->has_more()) {
     metrics_handler->add_session(session);
+    mds->mds_dmclock_scheduler->add_session(session);
     // notify client of success with an OPEN
     auto reply = make_message<MClientSession>(CEPH_SESSION_OPEN);
     if (session->info.has_feature(CEPHFS_FEATURE_MIMIC)) {
@@ -2270,6 +2280,9 @@ void Server::perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t l
     break;
   case CEPH_MDS_OP_RENAMESNAP:
     code = l_mdss_req_renamesnap_latency;
+    break;
+  case CEPH_MDS_OP_SNAP_METADATA:
+    code = l_mdss_req_snap_md_op_latency;
     break;
   case CEPH_MDS_OP_READDIR_SNAPDIFF:
     code = l_mdss_req_snapdiff_latency;
@@ -2934,6 +2947,9 @@ void Server::dispatch_client_request(const MDRequestRef& mdr)
     break;
   case CEPH_MDS_OP_RENAMESNAP:
     handle_client_renamesnap(mdr);
+    break;
+  case CEPH_MDS_OP_SNAP_METADATA:
+    handle_client_snap_md_op(mdr);
     break;
   case CEPH_MDS_OP_READDIR_SNAPDIFF:
     handle_client_readdir_snapdiff(mdr);
@@ -7698,6 +7714,7 @@ void Server::handle_client_symlink(const MDRequestRef& mdr)
   if (req->get_alternate_name().size() > alternate_name_max) {
     dout(10) << " alternate_name longer than " << alternate_name_max << dendl;
     respond_to_request(mdr, -ENAMETOOLONG);
+    return;
   }
   dn->set_alternate_name(req->get_alternate_name());
 
@@ -11776,13 +11793,13 @@ void Server::_rmsnap_finish(const MDRequestRef& mdr, CInode *diri, snapid_t snap
   diri->purge_stale_snap_data(diri->snaprealm->get_snaps());
 }
 
-struct C_MDS_renamesnap_finish : public ServerLogContext {
+struct C_MDS_SnapMutateGeneric_finish : public ServerLogContext {
   CInode *diri;
   snapid_t snapid;
-  C_MDS_renamesnap_finish(Server *s, const MDRequestRef& r, CInode *di, snapid_t sn) :
+  C_MDS_SnapMutateGeneric_finish(Server *s, const MDRequestRef& r, CInode *di, snapid_t sn) :
     ServerLogContext(s, r), diri(di), snapid(sn) {}
   void finish(int r) override {
-    server->_renamesnap_finish(mdr, diri, snapid);
+    server->_snap_mutate_generic_finish(mdr, diri, snapid);
   }
 };
 
@@ -11888,14 +11905,16 @@ void Server::handle_client_renamesnap(const MDRequestRef& mdr)
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, diri);
 
   // journal the snaprealm changes
-  submit_mdlog_entry(le, new C_MDS_renamesnap_finish(this, mdr, diri, snapid),
+  submit_mdlog_entry(le, new C_MDS_SnapMutateGeneric_finish(this, mdr, diri, snapid),
                      mdr, __func__);
   mdlog->flush();
 }
 
-void Server::_renamesnap_finish(const MDRequestRef& mdr, CInode *diri, snapid_t snapid)
+// Finisher method for updating any snapshot metadata, be it custom user metadata
+// or snapshot name
+void Server::_snap_mutate_generic_finish(const MDRequestRef& mdr, CInode *diri, snapid_t snapid)
 {
-  dout(10) << "_renamesnap_finish " << *mdr << " " << snapid << dendl;
+  dout(10) << __func__ << " " << *mdr << " " << snapid << dendl;
 
   mdr->apply();
 
@@ -11913,6 +11932,122 @@ void Server::_renamesnap_finish(const MDRequestRef& mdr, CInode *diri, snapid_t 
   mdr->tracei = diri;
   mdr->snapid = snapid;
   respond_to_request(mdr, 0);
+}
+
+void Server::handle_client_snap_md_op(const MDRequestRef& mdr)
+{
+  const cref_t<MClientRequest> &req = mdr->client_request;
+
+  CInode* diri = rdlock_path_pin_ref(mdr, false, true);
+  if (!diri)
+    return;
+
+  if (!diri->is_dir()) {
+    respond_to_request(mdr, -ENOTDIR);
+    return;
+  }
+
+  std::string_view snapname = req->get_filepath().last_dentry();
+
+  if (req->get_caller_uid() < g_conf()->mds_snap_min_uid ||
+      req->get_caller_uid() > g_conf()->mds_snap_max_uid) {
+    dout(20) << __func__ << " " << snapname << " on " << *diri <<
+                " denied to uid " << req->get_caller_uid() << dendl;
+    respond_to_request(mdr, -EPERM);
+    return;
+  }
+
+  dout(10) << __func__ << " for " << snapname << " on " << *diri << dendl;
+  // does this snap exist?
+  if (snapname.length() == 0 || snapname[0] == '_') {
+    respond_to_request(mdr, -EINVAL);
+    return;
+  }
+
+  if (!diri->snaprealm || !diri->snaprealm->exists(snapname)) {
+    respond_to_request(mdr, -ENOENT);
+    return;
+  }
+
+  string md_key;
+  string md_val;
+  // setting initial value to an invalid mode to ensure no valid mode is
+  // assumed by default due to any unexpected errors from any code from the
+  // following try-catch blocks. the invalid mode would cause
+  // will_md_op_succeed() to reply negatively, preventing accidental changes
+  // to the snap MD.
+  unsigned int op_flag = 3;
+  if (req->get_data().length()) {
+    try {
+      auto iter = req->get_data().cbegin();
+      decode(md_key, iter);
+      decode(md_val, iter);
+      decode(op_flag, iter);
+    } catch (const ceph::buffer::error &e) {
+      dout(20) << __func__ << " : no metadata in payload" << dendl;
+      respond_to_request(mdr, -EBADMSG);
+      return;
+    }
+  }
+
+  snapid_t snapid = diri->snaprealm->resolve_snapname(snapname, diri->ino());
+  dout(10) << __func__ << " snapid " << snapid << dendl;
+
+  // NOTE: check if metadata op will succeed before intiating the transaction or
+  // projecting the inode so that there is not need to roll back.
+  bool will_succeed = diri->snaprealm->will_md_op_succeed(snapid, md_key,
+                                                          md_val, op_flag);
+  if (!will_succeed) {
+    dout(10) << __func__ << " will_metadata_op_succeed() failed with md_key="
+             << md_key << ", md_val=" << md_val << " and op_flag=" << op_flag
+             << dendl;
+    respond_to_request(mdr, -EINVAL);
+    return;
+  }
+
+  // get stid
+  if (!mdr->more()->stid) {
+    mds->snapclient->prepare_update(diri->ino(), snapid, snapname, utime_t(),
+                                   &mdr->more()->stid,
+                                   new C_MDS_RetryRequest(mdcache, mdr));
+    return;
+  }
+  version_t stid = mdr->more()->stid;
+  dout(10) << __func__ << " stid = " << stid << dendl;
+
+  // project the inode.
+  auto pi = diri->project_inode(mdr, false, true);
+  pi.inode->ctime = mdr->get_op_stamp();
+  if (mdr->get_op_stamp() > pi.inode->rstat.rctime)
+    pi.inode->rstat.rctime = mdr->get_op_stamp();
+  pi.inode->version = diri->pre_dirty();
+
+  // update snap md.
+  auto& snapnode = *(pi.snapnode);
+  auto it = snapnode.snaps.find(snapid);
+  if (it == snapnode.snaps.end()) {
+    respond_to_request(mdr, -ENOENT);
+    return;
+  } else {
+    auto& snapinfo = (*it).second;
+    snapinfo.stamp = mdr->get_op_stamp();
+    snapinfo.do_md_op(md_key, md_val, op_flag);
+  }
+  snapnode.last_modified = mdr->get_op_stamp();
+  snapnode.change_attr++;
+
+  // journal inode changes.
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, "snap_metadata_op");
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+  le->metablob.add_table_transaction(TABLE_SNAP, stid);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
+  mdcache->journal_dirty_inode(mdr.get(), &le->metablob, diri);
+
+  // journal the snaprealm changes
+  auto finisher = new C_MDS_SnapMutateGeneric_finish(this, mdr, diri, snapid);
+  submit_mdlog_entry(le, finisher, mdr, __func__);
+  mdlog->flush();
 }
 
 class C_MDS_file_blockdiff_finish : public ServerContext {
@@ -12109,6 +12244,7 @@ void Server::handle_client_readdir_snapdiff(const MDRequestRef& mdr)
       mdr->snapid_diff_other == CEPH_NOSNAP) {
     dout(10) << "reply to " << *req << " snapdiff -EINVAL" << dendl;
     respond_to_request(mdr, -EINVAL);
+    return;
   }
 
   unsigned max = req->head.args.snapdiff.max_entries;

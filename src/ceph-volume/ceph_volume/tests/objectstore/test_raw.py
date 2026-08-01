@@ -170,10 +170,14 @@ class TestRaw:
         m_nvme.assert_called_once_with(args.data)
 
     @patch('ceph_volume.conf.cluster', 'ceph')
+    @patch(
+        'ceph_volume.objectstore.raw.RawOsdCryptMappers.backing_device_path',
+        return_value='',
+    )
     @patch('ceph_volume.objectstore.raw.prepare_utils.link_wal')
     @patch('ceph_volume.objectstore.raw.prepare_utils.link_db')
     @patch('ceph_volume.objectstore.raw.prepare_utils.link_block')
-    @patch('os.path.exists')
+    @patch('os.path.lexists')
     @patch('os.unlink')
     @patch('ceph_volume.objectstore.raw.prepare_utils.create_osd_path')
     @patch('ceph_volume.objectstore.raw.process.run')
@@ -185,6 +189,7 @@ class TestRaw:
                        m_link_block,
                        m_link_db,
                        m_link_wal,
+                       m_backing_device_path,
                        monkeypatch,
                        factory):
         args = factory(no_tmpfs=False)
@@ -198,7 +203,9 @@ class TestRaw:
         m_unlink.return_value = MagicMock()
         monkeypatch.setattr(system, 'chown', lambda path: 0)
         monkeypatch.setattr(system, 'path_is_mounted', lambda path: 0)
-        self.raw_bs._activate('1', True)
+        self.raw_bs.osd_id = '1'
+        self.raw_bs.osd_fsid = 'test-fsid'
+        self.raw_bs._activate()
         calls = [call('/var/lib/ceph/osd/ceph-1/block'),
                  call('/var/lib/ceph/osd/ceph-1/block.db'),
                  call('/var/lib/ceph/osd/ceph-1/block.wal')]
@@ -290,6 +297,6 @@ class TestRaw:
             rawbluestore.osd_id = '0'
             rawbluestore._activate = MagicMock()
             rawbluestore.activate()
-            assert rawbluestore._activate.mock_calls == [call(0, 'db32a338-b640-4cbc-af17-f63808b1c36e')]
+            rawbluestore._activate.assert_called_once_with()
             assert rawbluestore.block_device_path == '/dev/mapper/ceph-db32a338-b640-4cbc-af17-f63808b1c36e-sdb-block-dmcrypt'
             assert rawbluestore.db_device_path == '/dev/mapper/ceph-db32a338-b640-4cbc-af17-f63808b1c36e-sdc-db-dmcrypt'

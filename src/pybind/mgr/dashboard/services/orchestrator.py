@@ -182,9 +182,11 @@ class UpgradeManager(ResourceManager):
     @wait_api_result
     def start(self, image: str, version: str, daemon_types: Optional[List[str]] = None,
               host_placement: Optional[str] = None, services: Optional[List[str]] = None,
-              limit: Optional[int] = None) -> str:
-        return self.api.upgrade_start(image, version, daemon_types, host_placement, services,
-                                      limit)
+              limit: Optional[int] = None, bucket_type: Optional[str] = None,
+              bucket_name: Optional[str] = None) -> str:
+        return self.api.upgrade_start(
+            image, version, daemon_types, host_placement, services, limit,
+            bucket_type, bucket_name)
 
     @wait_api_result
     def pause(self) -> str:
@@ -207,6 +209,10 @@ class HardwareManager(ResourceManager):
 
 
 class CertStoreManager(ResourceManager):
+
+    @wait_api_result
+    def get_nvmeof_tls_bundle(self, service_name: str, daemon_name: str) -> Dict[str, str]:
+        return self.api.get_nvmeof_tls_bundle(service_name, daemon_name)
 
     @wait_api_result
     def get_cert(self, entity: str, service_name: Optional[str] = None,
@@ -244,6 +250,18 @@ class MonitoringManager(ResourceManager):
     def get_security_config(self) -> Dict[str, str]:
         """Get security config information"""
         return self.api.get_security_config()
+
+    @wait_api_result
+    def set_prometheus_remote_write(self, remote_write_url: str,
+                                    remote_write_allowed_metrics: List[str]) -> str:
+        """Set Prometheus remote write configuration"""
+        return self.api.set_prometheus_remote_write(remote_write_url,
+                                                    remote_write_allowed_metrics)
+
+    @wait_api_result
+    def remove_prometheus_remote_write(self, remote_write_url: str) -> str:
+        """Remove Prometheus remote write configuration"""
+        return self.api.remove_prometheus_remote_write(remote_write_url)
 
 
 class OrchClient(object):

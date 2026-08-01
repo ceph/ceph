@@ -72,7 +72,7 @@ CircularJournalSpace::write(ceph::bufferlist&& to_write) {
   return device_write_bl(target, to_write
   ).handle_error(
     write_ertr::pass_further{},
-    crimson::ct_error::assert_all{ "Invalid error" }
+    crimson::ct_error::assert_all( "Invalid error" )
   );
 }
 
@@ -117,9 +117,9 @@ CircularJournalSpace::open_ret CircularJournalSpace::open(bool is_mkfs) {
     co_await write_header(
     ).handle_error(
       open_ertr::pass_further{},
-      crimson::ct_error::assert_all{
+      crimson::ct_error::assert_all(
         "Invalid error write_header"
-      }
+      )
     );
 
     co_return get_written_to();
@@ -166,7 +166,7 @@ CircularJournalSpace::device_write_bl(
   co_await device->writev(offset, bl
   ).handle_error(
     submit_ertr::pass_further{},
-    crimson::ct_error::assert_all{ "Invalid error device->write" }
+    crimson::ct_error::assert_all( "Invalid error device->write" )
   );
 }
 
@@ -227,7 +227,7 @@ CircularJournalSpace::write_header()
   co_await device->write(device->get_shard_journal_start(), std::move(bp)
   ).handle_error(
     submit_ertr::pass_further{},
-    crimson::ct_error::assert_all{ "Invalid error device->write" }
+    crimson::ct_error::assert_all( "Invalid error device->write" )
   );
 }
 

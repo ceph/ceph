@@ -4,7 +4,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
+
 import { of as observableOf, throwError as observableThrowError } from 'rxjs';
 
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
@@ -28,8 +28,7 @@ describe('MgrModuleListComponent', () => {
       RouterTestingModule,
       SharedModule,
       HttpClientTestingModule,
-      NgbNavModule,
-      ToastrModule.forRoot()
+      NgbNavModule
     ],
     providers: [MgrModuleService]
   });
@@ -147,7 +146,7 @@ describe('MgrModuleListComponent', () => {
       tick(mgrModuleService.REFRESH_INTERVAL);
       tick(mgrModuleService.REFRESH_INTERVAL);
       tick(mgrModuleService.REFRESH_INTERVAL);
-      expect(mgrModuleService.enable).toHaveBeenCalledWith('foo');
+      expect(mgrModuleService.enable).toHaveBeenCalledWith('foo', false);
       expect(mgrModuleService.list).toHaveBeenCalledTimes(2);
       expect(component.table.refreshBtn).toHaveBeenCalled();
     }));

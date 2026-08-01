@@ -17,6 +17,7 @@
 #define CEPH_FINISHER_H
 
 #include <atomic>
+#include <future>
 #include <list>
 #include <mutex>
 #include <string>
@@ -49,6 +50,9 @@ class Finisher {
   bool         finisher_stop = false; ///< Set when the finisher should stop.
   bool         finisher_running = false; ///< True when the finisher is currently executing contexts.
   bool	       finisher_empty_wait = false; ///< True mean someone wait finisher empty.
+  std::atomic<pid_t> finisher_tid{0}; ///< TID of the finisher worker thread, set on startup
+  std::promise<void> tid_promise; ///< Fulfilled by the worker thread once it has started.
+  std::future<void>  started_future; ///< Becomes ready when the finisher thread is running; use on_started() to observe.
 
   /// Queue for contexts for which complete(0) will be called.
   std::vector<std::pair<Context*,int>> finisher_queue;
@@ -104,6 +108,7 @@ class Finisher {
 
   /// Start the worker thread.
   void start();
+  std::future<void>& on_started() { return started_future; }
 
   /** @brief Stop the worker thread.
    *
@@ -119,6 +124,7 @@ class Finisher {
   void wait_for_empty();
 
   bool is_empty();
+  pid_t get_tid() const { return finisher_tid; }
 
   std::string_view get_thread_name() const noexcept {
     return thread_name;

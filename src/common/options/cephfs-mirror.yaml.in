@@ -104,6 +104,17 @@ options:
   services:
   - cephfs-mirror
   min: 1
+- name: cephfs_mirror_tick_interval
+  type: secs
+  level: advanced
+  desc: interval for the per-peer mirroring tick thread
+  long_desc: interval in seconds for the per-peer tick thread that runs periodic
+    mirroring work. The value is re-read each iteration so configuration changes
+    take effect without restarting the daemon.
+  default: 5
+  services:
+  - cephfs-mirror
+  min: 1
 - name: cephfs_mirror_max_consecutive_failures_per_directory
   type: uint
   level: advanced

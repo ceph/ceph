@@ -1,0 +1,288 @@
+<cds-modal
+  size="md"
+  [open]="open"
+  [hasScrollingContent]="false"
+  (overlaySelected)="closeModal()"
+>
+  <cds-modal-header (closeSelect)="closeModal()">
+    @if (isEdit) {
+      <h4
+        cdsModalHeaderLabel
+        class="cds--type-label-01"
+        i18n
+      >
+        Role
+      </h4>
+      <h3
+        cdsModalHeaderHeading
+        i18n
+      >
+        Edit session duration
+      </h3>
+      <p
+        class="cds--modal-header__description cds--type-body-01 cds-mt-3"
+        i18n
+      >
+        Update the maximum session duration for this role.
+      </p>
+    } @else {
+      <h4
+        cdsModalHeaderLabel
+        class="cds--type-label-01"
+        i18n
+      >
+        User account
+      </h4>
+      <h3
+        cdsModalHeaderHeading
+        i18n
+      >
+        Create role
+      </h3>
+      <p
+        class="cds--modal-header__description cds--type-body-01 cds-mt-3"
+        i18n
+      >
+        Role grants temporary permissions to trusted users, applications, or services.
+      </p>
+    }
+  </cds-modal-header>
+
+  <form
+    class="form"
+    #formDir="ngForm"
+    [formGroup]="form"
+  >
+    <div cdsModalContent>
+      @if (!isEdit) {
+        <!-- Account -->
+        <div class="form-item">
+          <legend
+            class="cds--label cds--type-label-01"
+            i18n
+          >
+            Account
+          </legend>
+          <p class="cds--type-body-01">{{ accountName }}</p>
+        </div>
+
+        <!-- Role Name -->
+        <div class="form-item">
+          <cds-text-label
+            label="Role name"
+            for="role_name"
+            [invalid]="roleName.isInvalid"
+            [invalidText]="roleNameError"
+            helperText="Unique name used to identify this role within the account."
+            i18n-helperText
+            >Role name
+            <input
+              cdsText
+              cdValidate
+              #roleName="cdValidate"
+              type="text"
+              id="role_name"
+              name="role_name"
+              formControlName="role_name"
+              placeholder="Enter a role name (e.g. BackupServiceRole)"
+              [invalid]="roleName.isInvalid"
+              [autofocus]="true"
+              modal-primary-focus
+            />
+          </cds-text-label>
+          <ng-template #roleNameError>
+            @if (form.showError('role_name', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
+          </ng-template>
+        </div>
+
+        <!-- Role (Edit only) -->
+      } @else {
+        <div class="form-item">
+          <legend
+            class="cds--label cds--type-label-01"
+            i18n
+          >
+            Role
+          </legend>
+          <p class="cds--type-body-01">
+            <cds-tooltip-definition
+              align="right"
+              [description]="accountTooltip"
+              [openOnHover]="true"
+              [caret]="true"
+              [highContrast]="true"
+              [dropShadow]="true"
+              [autoAlign]="true"
+            >
+              {{ form.getValue('role_name') }}
+            </cds-tooltip-definition>
+          </p>
+          <ng-template #accountTooltip>
+            <div>
+              User account:<br />
+              <strong>{{ accountName }}</strong>
+            </div>
+          </ng-template>
+        </div>
+      }
+
+      <!-- Path & Assume Role Policy Document (Create only) -->
+      @if (!isEdit) {
+        <!-- Path -->
+        <div class="form-item">
+          <cds-text-label
+            label="Role path"
+            for="role_path"
+            [invalid]="rolePath.isInvalid"
+            [invalidText]="pathError"
+            helperText='Specifies the hierarchy or namespace for the role. Use "/" for the root path.'
+            i18n-helperText
+            >Role path
+            <input
+              cdsText
+              cdValidate
+              #rolePath="cdValidate"
+              type="text"
+              id="role_path"
+              name="role_path"
+              formControlName="role_path"
+              placeholder="Enter path (/applications/)"
+              [invalid]="rolePath.isInvalid"
+              [invalidText]="pathError"
+            />Path
+            <input
+              cdsText
+              cdValidate
+              #rolePath="cdValidate"
+              type="text"
+              id="role_path"
+              name="role_path"
+              formControlName="role_path"
+              placeholder="Placeholder text"
+              [invalid]="rolePath.isInvalid"
+            />
+          </cds-text-label>
+          <ng-template #pathError>
+            @if (form.showError('role_path', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
+          </ng-template>
+        </div>
+
+        <!-- Assume Role Policy Document -->
+        <div class="form-item">
+          <cds-textarea-label
+            labelInputID="role_assume_policy_doc"
+            [invalid]="policyDoc.isInvalid"
+            [invalidText]="policyError"
+            helperText="Defines which principals can assume this role. Enter a valid JSON policy document."
+            i18n-helperText
+            >Trust policy
+            <textarea
+              cdsTextArea
+              cdValidate
+              #policyDoc="cdValidate"
+              id="role_assume_policy_doc"
+              name="role_assume_policy_doc"
+              formControlName="role_assume_policy_doc"
+              placeholder="Enter a JSON trust policy document"
+              rows="8"
+              cols="200"
+              [invalid]="policyDoc.isInvalid"
+              [invalidText]="policyError"
+              cdRequiredField="Trust Policy"
+            >
+Trust policy
+            <textarea
+              cdsTextArea
+              cdValidate
+              #policyDoc="cdValidate"
+              id="role_assume_policy_doc"
+              name="role_assume_policy_doc"
+              formControlName="role_assume_policy_doc"
+              placeholder="Placeholder text"
+              rows="8"
+              cols="200"
+              [invalid]="policyDoc.isInvalid"
+              [invalidText]="policyError"
+            ></textarea>
+          </cds-textarea-label>
+          <ng-template #policyError>
+            @if (form.showError('role_assume_policy_doc', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
+            @if (form.showError('role_assume_policy_doc', formDir, 'json')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >Must be a valid JSON.</span
+              >
+            }
+          </ng-template>
+        </div>
+      }
+
+      <!-- Maximum Session Duration (Edit only) -->
+      @if (isEdit) {
+        <div class="form-item">
+          <cds-number
+            label="Maximum session duration (hours)"
+            cdValidate
+            #maxSessionDuration="cdValidate"
+            [invalid]="maxSessionDuration.isInvalid"
+            [invalidText]="durationError"
+            formControlName="max_session_duration"
+            min="1"
+            max="12"
+            i18n-label
+          >
+          </cds-number>
+          <ng-template #durationError>
+            @if (form.showError('max_session_duration', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
+            @if (form.showError('max_session_duration', formDir, 'min')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >Minimum value is 1 hour.</span
+              >
+            }
+            @if (form.showError('max_session_duration', formDir, 'max')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >Maximum value is 12 hours.</span
+              >
+            }
+          </ng-template>
+        </div>
+      }
+    </div>
+
+    <cd-form-button-panel
+      (submitActionEvent)="onSubmit()"
+      [form]="form"
+      [submitText]="isEdit ? 'Save' : 'Create'"
+      [modalForm]="true"
+    ></cd-form-button-panel>
+  </form>
+</cds-modal>

@@ -2,6 +2,8 @@ overrides:
   ceph:
     log-ignorelist:
     - \(POOL_APP_NOT_ENABLED\)
+    # \todo delete once scrub scheduling is enabled in Crimson:
+    - \(PG_NOT_DEEP_SCRUBBED\)
     conf:
       global:
         enable experimental unrecoverable data corrupting features: crimson
@@ -12,6 +14,8 @@ overrides:
         debug ms: 20
         seastore cachepin size pershard: 64M
         seastore max concurrent transactions: 8
+      client:
+        debug_objecter: 20
     crimson_compat: true
   workunit:
     env:

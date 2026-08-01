@@ -26,12 +26,14 @@ namespace crimson::mgr
 Client::Client(crimson::net::Messenger& msgr,
 	       WithStats& with_stats,
 	       set_perf_queries_cb_t cb_set,
-	       get_perf_report_cb_t cb_get)
+	       get_perf_report_cb_t cb_get,
+	       stats_warning_cb_t stats_warning_cb)
   : msgr{msgr},
     with_stats{with_stats},
     report_timer{[this] {report();}},
     set_perf_queries_cb(cb_set),
-    get_perf_report_cb(cb_get)
+    get_perf_report_cb(cb_get),
+    stats_warning_cb(std::move(stats_warning_cb))
 {}
 
 seastar::future<> Client::start()
@@ -214,11 +216,31 @@ void Client::report()
   LOG_PREFIX(Client::report);
   DEBUGDPP("", *this);
   _send_report();
+  if (stats_in_flight) {
+    ++stats_skip_count;
+    if (stats_skip_count >= STATS_ABANDON_THRESHOLD) {
+      WARNDPP("pg stats send stuck for {} ticks, abandoning and retrying",
+	      *this, stats_skip_count);
+      stats_in_flight = false;
+    } else {
+      WARNDPP("pg stats send still in flight, skipped (count={})",
+	      *this, stats_skip_count);
+      if (stats_warning_cb &&
+	  stats_skip_count % STATS_WARN_INTERVAL == 0) {
+	stats_warning_cb(stats_skip_count);
+      }
+      return;
+    }
+  }
+  stats_in_flight = true;
+  stats_skip_count = 0;
   gates.dispatch_in_background(__func__, *this, [this, FNAME] {
     DEBUGDPP("dispatching in background", *this);
     return with_stats.get_stats(
     ).then([this](auto &&pg_stats) {
       return send(std::move(pg_stats));
+    }).finally([this] {
+      stats_in_flight = false;
     });
   });
 }

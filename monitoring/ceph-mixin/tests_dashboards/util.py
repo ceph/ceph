@@ -23,8 +23,8 @@ def resolve_time_and_unit(time: str) -> Union[Tuple[int, str], Tuple[None, None]
 
 def get_dashboards_data() -> Dict[str, Any]:
     data: Dict[str, Any] = {'queries': {}, 'variables': {}, 'stats': {}}
-    for file in Path(__file__).parent.parent \
-                              .joinpath('dashboards_out').glob('*.json'):
+    for file in sorted(Path(__file__).parent.parent
+                       .joinpath('dashboards_out').glob('*.json')):
         with open(file, 'r') as f:
             dashboard_data = json.load(f)
             data['stats'][str(file)] = {'total': 0, 'tested': 0}
@@ -39,12 +39,21 @@ def add_dashboard_queries(data: Dict[str, Any], dashboard_data: Dict[str, Any], 
     Grafana panels can have more than one target/query, in order to identify each
     query in the panel we append the "legendFormat" of the target to the panel name.
     format: panel_name-legendFormat
+
+    Queries are grouped per dashboard (data['queries'][<dashboard>]) so that
+    different dashboards reusing a panel title/legend, e.g. "IOPS-Read", stay in
+    separate namespaces. Each .feature picks its dashboard so the lookup is
+    unambiguous.
     """
     if 'panels' not in dashboard_data:
         return
+    dashboard = Path(path).stem
+    queries = data['queries'].setdefault(dashboard, {})
     error = 0
     panel_ids_in_file = set()
-    for panel in dashboard_data['panels']:
+
+    def process_panel(panel, in_row=False):
+        nonlocal error
         if (
                 'title' in panel
                 and 'targets' in panel
@@ -55,13 +64,24 @@ def add_dashboard_queries(data: Dict[str, Any], dashboard_data: Dict[str, Any], 
                 title = panel['title']
                 legend_format = target['legendFormat'] if 'legendFormat' in target else ""
                 query_id = f'{title}-{legend_format}'
-                if query_id in panel_ids_in_file and legend_format != '__auto':
-                    cprint((f'ERROR: Query in panel "{title}" with legend "{legend_format}"'
-                            f' already exists in the same file: "{path}"'), 'red')
-                    error = 1
-                data['queries'][query_id] = {'query': target['expr'], 'path': path}
+                # a repeated id within one dashboard is expected for a collapsed
+                # row; at top level it means a missing legendFormat
+                if query_id in panel_ids_in_file:
+                    if legend_format != '__auto' and not in_row:
+                        cprint((f'ERROR: Query in panel "{title}" with legend "{legend_format}"'
+                                f' already exists in the same file: "{path}"'), 'red')
+                        error = 1
+                    continue
+                queries[query_id] = {'query': target['expr'], 'path': path}
                 data['stats'][path]['total'] += 1
                 panel_ids_in_file.add(query_id)
+        # Recurse into row panels
+        if panel.get('type') == 'row' and 'panels' in panel:
+            for nested_panel in panel['panels']:
+                process_panel(nested_panel, in_row=True)
+
+    for panel in dashboard_data['panels']:
+        process_panel(panel)
     if error:
         raise ValueError('Missing legend_format in queries, please add a proper value.')
 

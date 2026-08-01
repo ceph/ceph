@@ -1417,7 +1417,7 @@ bool Client::_wrap_name(Inode& diri, std::string& dname, std::string& alternate_
     int r = fscrypt_denc->get_encrypted_fname(dname, &_enc_name, &_alt_name, false);
     if (r < 0) {
       ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
-      return r;
+      return false;
     }
     dname = std::move(_enc_name);
     if (alternate_name.empty()) {
@@ -1428,7 +1428,7 @@ bool Client::_wrap_name(Inode& diri, std::string& dname, std::string& alternate_
       int r = fscrypt_denc->get_encrypted_fname(alternate_name, &_enc_name, &_alt_name, true);
       if (r < 0) {
         ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
-        return r;
+        return false;
       }
       alternate_name = std::move(_alt_name);
     }
@@ -3791,6 +3791,15 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
 void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
 {
   InodeRef in(dn->inode);
+  // Keep the dentry alive for the duration of this function.
+  // Without the O_DIRECTORY dentry pin (PR #60909), a directory dentry can
+  // remain at ref=1 while its inode->dir is still active. When trim_cache()
+  // evicts it, Dentry::unlink() calls put() for the dir pin, dropping ref
+  // to 0 and freeing the dentry while we still need it for detach/lru_remove.
+  // The DentryRef guard prevents use-after-free regardless of pin state.
+  // See: https://tracker.ceph.com/issues/74625
+  DentryRef dnref(dn);
+
   ldout(cct, 15) << "unlink dir " << dn->dir->parent_inode << " '" << dn->name << "' dn " << dn
 		 << " inode " << dn->inode << dendl;
 
@@ -3800,6 +3809,7 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
     dec_dentry_nr();
     ldout(cct, 20) << "unlink  inode " << in << " parents now " << in->dentries << dendl;
   }
+  ceph_assert(dn->ref > 1);
 
   if (keepdentry) {
     dn->lease_mds = -1;
@@ -7034,14 +7044,14 @@ int Client::mount(const std::string &mount_root, const UserPerm& perms,
 #if defined(__linux__)
   // dummy encryption?
   if (cct->_conf.get_val<bool>("client_fscrypt_dummy_encryption")) {
-    client_lock.unlock();
+    cl.unlock();
 
     r = fscrypt_dummy_encryption();
     if (r < 0) {
       return r;
     }
 
-    client_lock.lock();
+    cl.lock();
   }
 #endif
   /*
@@ -7356,13 +7366,15 @@ void Client::abort_conn()
 #if defined(__linux__)
 int Client::fscrypt_dummy_encryption() {
     // get add key
-    char key[FSCRYPT_KEY_IDENTIFIER_SIZE];
+    char key[FSCRYPT_MAX_KEY_SIZE];
     memset(key, 0, sizeof(key));
 
     char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
     int r = add_fscrypt_key(key, sizeof(key), keyid);
     if (r < 0) {
-      goto err;
+      // The key was not added, so keyid is not populated and there is
+      // nothing to remove.
+      return r;
     }
 
     // set dummy encryption policy
@@ -7376,6 +7388,7 @@ int Client::fscrypt_dummy_encryption() {
     memcpy(policy.master_key_identifier, keyid, FSCRYPT_KEY_IDENTIFIER_SIZE);
     r = ll_set_fscrypt_policy_v2(root.get(), policy);
     if (r < 0) {
+      ldout(cct, 0) << __func__ << "(): failed to set dummy encryption policy: r=" << r << dendl;
       goto err;
     }
 
@@ -7388,7 +7401,11 @@ int Client::fscrypt_dummy_encryption() {
     memcpy(key_spec.u.identifier, keyid, FSCRYPT_KEY_IDENTIFIER_SIZE);
     arg.removal_status_flags = 0;
     arg.key_spec = key_spec;
-    r = remove_fscrypt_key(&arg);
+    // Preserve the original failure; don't mask it with the removal result.
+    int r2 = remove_fscrypt_key(&arg);
+    if (r2 < 0) {
+      ldout(cct, 0) << __func__ << "(): failed to remove fscrypt key: r=" << r2 << dendl;
+    }
     return r;
 }
 #endif
@@ -14243,6 +14260,56 @@ int Client::rmsnap(const char *relpath, const char *name, const UserPerm& perms,
   }
   auto snapdir = open_snapdir(in.get());
   return _rmdir(snapdir.get(), name, perms, check_perms);
+}
+
+int Client::do_snap_md_op(const char* path, const string& md_key,
+                          const string& md_val, const unsigned int op_flag,
+                          const UserPerm &perms)
+{
+  if (op_flag != CEPH_SNAP_MD_OP_CREATE &&
+      op_flag != (CEPH_SNAP_MD_OP_CREATE | CEPH_SNAP_MD_OP_EXCL) &&
+      op_flag != CEPH_SNAP_MD_OP_REMOVE) {
+    return -EINVAL;
+  }
+
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
+  std::scoped_lock l(client_lock);
+
+  walk_dentry_result wdr;
+  if (int rc = path_walk(cwd, filepath(path), &wdr, perms, {}); rc < 0) {
+    return rc;
+  }
+
+  if (wdr.target->snapid == CEPH_NOSNAP) {
+    return -EINVAL;
+  }
+
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SNAP_METADATA);
+  req->set_filepath(wdr.getpath());
+  req->set_inode(wdr.diri);
+  req->set_dentry(wdr.dn);
+  req->dentry_drop = CEPH_CAP_FILE_SHARED;
+  req->dentry_unless = CEPH_CAP_FILE_EXCL;
+
+  bufferlist bl;
+  encode(md_key, bl);
+  encode(md_val, bl);
+  encode(op_flag, bl);
+  req->set_data(bl);
+
+  ldout(cct, 10) << __func__ << ": making request" << dendl;
+  int res = make_request(req, perms, &wdr.target);
+  ldout(cct, 10) << __func__ << ": result is " << res << dendl;
+
+  trim_cache();
+
+  ldout(cct, 8) << __func__ << "(" << wdr.getpath() << ", " << perms
+                << ") = " << res << dendl;
+
+  return res;
 }
 
 // =============================

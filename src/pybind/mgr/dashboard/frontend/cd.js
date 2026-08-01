@@ -20,8 +20,8 @@
 
 const fs = require('fs');
 
-const filename = './project.json';
-const backup = './project.backup.json';
+const filename = './angular.json';
+const backup = './angular.backup.json';
 
 if (process.argv.includes('--env')) {
   envBuild();

@@ -102,6 +102,9 @@ struct OSDRestrictions {
   /// the CPU load is high. No regular scrubs are allowed.
   bool cpu_overloaded:1{false};
 
+  /// long snap-trimming queues.
+  bool overload_of_snap_trimming:1{false};
+
   /// outside of allowed scrubbing hours/days
   bool restricted_time:1{false};
 
@@ -181,10 +184,11 @@ struct formatter<Scrub::OSDRestrictions> {
   template <typename FormatContext>
   auto format(const Scrub::OSDRestrictions& conds, FormatContext& ctx) const {
     return fmt::format_to(
-	ctx.out(), "<{}.{}.{}.{}.{}>",
+	ctx.out(), "<{}.{}.{}.{}.{}.{}>",
 	conds.max_concurrency_reached ? "max-scrubs" : "",
 	conds.random_backoff_active ? "backoff" : "",
 	conds.cpu_overloaded ? "high-load" : "",
+	conds.overload_of_snap_trimming ? "trim-overload" : "",
 	conds.restricted_time ? "time-restrict" : "",
 	conds.recovery_in_progress ? "recovery" : "");
   }

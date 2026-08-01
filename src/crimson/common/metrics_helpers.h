@@ -80,7 +80,7 @@ void dump_metric_value_map(
   F &&filter)
 {
   assert(f);
-  for (const auto& [full_name, metric_family]: seastar::scollectd::get_value_map()) {
+  for (const auto& [full_name, metric_family]: vmap) {
     if (!std::invoke(filter, full_name)) {
       continue;
     }

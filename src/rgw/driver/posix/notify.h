@@ -112,11 +112,13 @@ namespace file::listing {
     using wd_remove_map_t = ankerl::unordered_dense::map<std::string, int>;
 
     int wfd, efd;
-    std::thread thrd;
     std::mutex map_mutex;  // protects wd_callback_map and wd_remove_map
     wd_callback_map_t wd_callback_map;
     wd_remove_map_t wd_remove_map;
     std::atomic<bool> shutdown{false};
+    /* must be last: starting the thread (ev_loop) reaches every member
+     * above, which are constructed in declaration order */
+    std::thread thrd;
 
     class AlignedBuf
     {
@@ -204,6 +206,7 @@ namespace file::listing {
 	    } /* !overflow */
 	    if (evec.size() > 0) {
 	      n->notify(watch_name, watch_opaque, evec);
+	      evec.clear();
 	    }
 	  } /* events */
 	} /* n > 0 */

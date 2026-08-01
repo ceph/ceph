@@ -47,8 +47,7 @@ static int cls_rgw_gc_queue_init(cls_method_context_t hctx, bufferlist *in, buff
   CLS_LOG(10, "INFO: cls_rgw_gc_queue_init: queue size is %lu\n", op.size);
 
   init_op.queue_size = op.size;
-  const auto& conf = cls_get_config(hctx);
-  init_op.max_urgent_data_size = conf->rgw_gc_max_deferred_entries_size;
+  init_op.max_urgent_data_size = 0;
   encode(urgent_data, init_op.bl_urgent_data);
 
   return queue_init(hctx, init_op);
@@ -497,22 +496,6 @@ static int cls_rgw_gc_queue_update_entry(cls_method_context_t hctx, bufferlist *
     return -ENOSPC;
   }
 
-  // Due to Tracker 47866 we are no longer executing this code, as it
-  // appears to possibly create a GC entry for an object that has not
-  // been deleted. Instead we will log at level 0 to perhaps confirm
-  // that when and how often this bug would otherwise be hit.
-#if 0
-  cls_queue_enqueue_op enqueue_op;
-  bufferlist bl_data;
-  encode(op.info, bl_data);
-  enqueue_op.bl_data_vec.emplace_back(bl_data);
-  CLS_LOG(10, "INFO: cls_gc_update_entry: Data size is: %u \n", bl_data.length());
-  
-  ret = queue_enqueue(hctx, enqueue_op, head);
-  if (ret < 0) {
-    return ret;
-  }
-#else
   std::string first_chain = "<empty-chain>";
   if (! op.info.chain.objs.empty()) {
     first_chain = op.info.chain.objs.cbegin()->key.name;
@@ -521,7 +504,6 @@ static int cls_rgw_gc_queue_update_entry(cls_method_context_t hctx, bufferlist *
 	  "INFO: refrained from enqueueing GC entry during GC defer"
 	  " tag=%s, first_chain=%s\n",
 	  op.info.tag.c_str(), first_chain.c_str());
-#endif
 
   if (has_urgent_data) {
     head.bl_urgent_data.clear();

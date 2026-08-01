@@ -50,6 +50,8 @@ tasks:
               - "{{ctx.samba_ad_dc_ip}}"
             placement:
               count: 1
+            remote_control:
+              locally_enabled: true
           - resource_type: ceph.smb.join.auth
             auth_id: join1-admin
             auth:
@@ -91,7 +93,7 @@ tasks:
     timeout: 1h
     clients:
       client.0:
-        - [default, hosts_access, rate_limiting]
+        - [default, hosts_access, rate_limiting, ceph_smb_ctl_local]
 
 - cephadm.shell:
     host.a:

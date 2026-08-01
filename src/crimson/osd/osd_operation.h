@@ -107,6 +107,7 @@ enum class OperationTypeCode {
   scrub_scan,
   pgpct_request,
   ecrep_request,
+  snap_trim_initiate,
   last_op
 };
 
@@ -133,6 +134,7 @@ static constexpr const char* const OP_NAMES[] = {
   "scrub_scan",
   "pgpct_request",
   "ecrep_request",
+  "snap_trim_initiate",
 };
 
 // prevent the addition of OperationTypeCode-s with no matching OP_NAMES entry:
@@ -360,6 +362,13 @@ class OperationThrottler : public BlockerT<OperationThrottler>,
   friend BlockerT<OperationThrottler>;
   static constexpr const char* type_name = "OperationThrottler";
 
+  // Perf counters used to capture mClock throttling behavior per op class
+  std::unordered_map<SchedulerClass, uint64_t> throttled_ops;
+  std::unordered_map<SchedulerClass, uint64_t> total_wait_ms;
+  std::unordered_map<SchedulerClass, uint64_t> max_wait_ms;
+  std::unordered_map<SchedulerClass, seastar::metrics::histogram> wait_hist;
+  seastar::metrics::metric_groups metrics;
+
 public:
   OperationThrottler(ConfigProxy &conf);
   void start();
@@ -374,7 +383,11 @@ public:
     return !max_in_progress || in_progress < max_in_progress;
   }
 
-  class ThrottleReleaser {
+  // The returned guard's destructor is the mClock RequestCompletion
+  // (release_throttle), so it must be held for the throttled operation's whole
+  // lifetime.  Dropping it at acquisition frees the slot immediately and the
+  // operation never counts against max_in_progress.
+  class [[nodiscard("discarding the guard releases the throttle slot immediately")]] ThrottleReleaser {
     OperationThrottler *parent = nullptr;
   public:
     ThrottleReleaser(OperationThrottler *parent) : parent(parent) {}
@@ -390,14 +403,19 @@ public:
     }
   };
 
+  void record_throttle_wait(SchedulerClass op_class, uint64_t wait_ms);
   auto get_throttle(crimson::osd::scheduler::params_t params) {
+    auto start = seastar::steady_clock_type::now();
     return acquire_throttle(
       params
-    ).then([this] {
+    ).then([this, start, klass = params.klass] {
+      auto wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+      seastar::steady_clock_type::now() - start).count();
+      record_throttle_wait(klass, wait_ms);
       return ThrottleReleaser{this};
     });
   }
-
+  void register_metrics(const std::string &sched_type);
   void initialize_scheduler(CephContext* cct, ConfigProxy &conf, bool is_rotational, int whoami);
 private:
   void dump_detail(Formatter *f) const final;

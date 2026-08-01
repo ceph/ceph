@@ -633,6 +633,10 @@ and be marked active, ``min_size`` replicas will now need to be active under all
 (currently two) CRUSH buckets of type <dividing_bucket>.
 
 <tiebreaker_mon> is the tiebreaker Monitor to use if a network split happens.
+This parameter is optional. If not supplied, the system will automatically
+select a Monitor that is not in either data zone. If there are multiple
+Monitors outside the data zones, automatic selection will fail and you must
+explicitly specify the tiebreaker Monitor.
 
 <dividing_bucket> is the bucket type across which to stretch.
 This will typically be ``datacenter`` or other CRUSH hierarchy bucket type that
@@ -642,7 +646,7 @@ denotes physically or logically distant subdivisions.
 
 Usage::
 
-    ceph mon enable_stretch_mode <tiebreaker_mon> <new_crush_rule> <dividing_bucket>
+	ceph mon enable_stretch_mode {<tiebreaker_mon>} <new_crush_rule> <dividing_bucket>
 
 Subcommand ``remove`` removes Monitor named <name>.
 
@@ -752,10 +756,7 @@ Usage::
 
 Subcommand ``create`` creates new OSD (with optional UUID and ID).
 
-This command is DEPRECATED as of the Luminous release, and will be removed in
-a future release.
-
-Subcommand ``new`` should instead be used.
+This command is deprecated. Use ``ceph osd new`` instead.
 
 Usage::
 
@@ -1195,7 +1196,8 @@ Subcommand ``get`` gets pool parameter <var>.
 
 Usage::
 
-    ceph osd pool get <poolname> size|min_size|pg_num|pgp_num|crush_rule|write_fadvise_dontneed
+    ceph osd pool get <poolname> size|min_size|pg_num|pgp_num|crush_rule|hashpspool|
+    nodelete|nopgchange|nosizechange|write_fadvise_dontneed
 
 Only for tiered pools::
 
@@ -1248,7 +1250,7 @@ Usage::
 
     ceph osd pool set <poolname> size|min_size|pg_num|
     pgp_num|crush_rule|hashpspool|nodelete|nopgchange|nosizechange|
-    hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|debug_fake_ec_pool|
+    hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|
     target_max_bytes|target_max_objects|cache_target_dirty_ratio|
     cache_target_dirty_high_ratio|
     cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|

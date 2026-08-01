@@ -29,7 +29,6 @@ RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
     maybe_create = check_create_device(get_device_path(), size);
   }
 
-
   co_await std::move(maybe_create);
   auto st = co_await stat_device(
   ).safe_then([] (auto st) mutable {
@@ -44,9 +43,11 @@ RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
     );
   }
 
+  config.spec.id |= 0x80;
   const size_t cur_block_size = (*st).block_size;
   const size_t cur_total_size = (*st).size;
-  ceph_assert_always(journal_size > 0);
+  ceph_assert_always(journal_size > 0 ||
+                     config.spec.dtype == device_type_t::RANDOM_BLOCK_HDD);
   ceph_assert_always(cur_total_size >= journal_size);
   ceph_assert_always(shard_num > 0);
 
@@ -75,16 +76,16 @@ RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
     seastar::open_flags::rw | seastar::open_flags::dsync
   ).handle_error(
     mkfs_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-    "Invalid error open in RBMDevice::do_primary_mkfs"}
+    crimson::ct_error::assert_all(
+    "Invalid error open in RBMDevice::do_primary_mkfs")
   );
   co_await initialize_nvme_features();
   co_await write_rbm_superblock(
   ).handle_error(
     mkfs_ertr::pass_further{},
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
     "Invalid error write_rbm_superblock in RBMDevice::do_primary_mkfs"
-  });
+  ));
   co_await close();
 }
 
@@ -192,8 +193,8 @@ RBMDevice::mount_ret RBMDevice::do_shard_mount()
     seastar::open_flags::rw | seastar::open_flags::dsync
   ).handle_error(
     mkfs_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-    "Invalid error open in RBMDevice::do_shard_mount"}
+    crimson::ct_error::assert_all(
+    "Invalid error open in RBMDevice::do_shard_mount")
   );
 
   auto st = co_await stat_device(
@@ -213,19 +214,19 @@ RBMDevice::mount_ret RBMDevice::do_shard_mount()
   auto s = co_await read_rbm_superblock(RBM_START_ADDRESS
   ).handle_error(
     mount_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-    "Invalid error read_rbm_superblock in RBMDevice::do_shard_mount"}
+    crimson::ct_error::assert_all(
+    "Invalid error read_rbm_superblock in RBMDevice::do_shard_mount")
   );
   LOG_PREFIX(RBMDevice::do_shard_mount);
-  if(seastar::this_shard_id() + seastar::smp::count * store_index >= s.shard_num) {
+  if(seastar::this_shard_id() + seastar::this_smp_shard_count() * store_index >= s.shard_num) {
     INFO("{} shard_id {} out of range {}",
          device_id_printer_t{get_device_id()},
-         seastar::this_shard_id() + seastar::smp::count * store_index,
+         seastar::this_shard_id() + seastar::this_smp_shard_count() * store_index,
          s.shard_num);
     shard_status = false;
     co_return;
   }
-  shard_info = s.shard_infos[seastar::this_shard_id() + seastar::smp::count * store_index];
+  shard_info = s.shard_infos[seastar::this_shard_id() + seastar::this_smp_shard_count() * store_index];
   INFO("{} read {}", device_id_printer_t{get_device_id()}, shard_info);
   s.validate();
 }
@@ -235,22 +236,22 @@ read_ertr::future<uint32_t> RBMDevice::get_shard_nums()
   co_await open(get_device_path(),
     seastar::open_flags::rw | seastar::open_flags::dsync
   ).handle_error(
-    crimson::ct_error::assert_all{
-    "Invalid error open in RBMDevice::get_shard_nums"}
+    crimson::ct_error::assert_all(
+    "Invalid error open in RBMDevice::get_shard_nums")
   );
 
   auto st = co_await stat_device(
   ).handle_error(
-    crimson::ct_error::assert_all{
-      "Invalid error stat_device in RBMDevice::get_shard_nums"}
+    crimson::ct_error::assert_all(
+      "Invalid error stat_device in RBMDevice::get_shard_nums")
   );
 
   assert(st.block_size > 0);
   super.block_size = st.block_size;
   auto sb = co_await read_rbm_superblock(RBM_START_ADDRESS
   ).handle_error(
-    crimson::ct_error::assert_all{
-      "Invalid error in RBMDevice::get_shard_nums"}
+    crimson::ct_error::assert_all(
+      "Invalid error in RBMDevice::get_shard_nums")
   );
 
   co_return sb.shard_num;
@@ -259,7 +260,7 @@ read_ertr::future<uint32_t> RBMDevice::get_shard_nums()
 EphemeralRBMDeviceRef create_test_ephemeral(uint64_t journal_size, uint64_t data_size) {
   return EphemeralRBMDeviceRef(
     new EphemeralRBMDevice(
-      (journal_size + data_size) * seastar::smp::count +
+      (journal_size + data_size) * seastar::this_smp_shard_count() +
 	random_block_device::RBMDevice::get_shard_reserved_size(),
 	EphemeralRBMDevice::TEST_BLOCK_SIZE));
 }
@@ -359,7 +360,7 @@ EphemeralRBMDevice::mount_ret EphemeralRBMDevice::mount() {
 }
 
 EphemeralRBMDevice::mkfs_ret EphemeralRBMDevice::mkfs(device_config_t config) {
-  return do_primary_mkfs(config, seastar::smp::count, DEFAULT_TEST_CBJOURNAL_SIZE);
+  return do_primary_mkfs(config, seastar::this_smp_shard_count(), DEFAULT_TEST_CBJOURNAL_SIZE);
 }
 
 }

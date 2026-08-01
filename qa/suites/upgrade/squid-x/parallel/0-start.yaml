@@ -58,3 +58,6 @@ overrides:
       - OBJECT_UNFOUND
       - pg .* is stuck peering
       - OSD_HOST_DOWN
+      - POOL_FULL
+      - pool full
+      - pool\(s\) full

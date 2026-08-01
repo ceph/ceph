@@ -53,12 +53,99 @@ An SMB service can be applied using a specification. An example in YAML follows:
       include_ceph_users:
         - client.smb.fs.cluster.tango
 
+TLS/SSL Example
+---------------
+
+Here's an example SMB service specification with TLS/SSL configuration:
+
+.. code-block:: yaml
+
+   service_id: smbcluster
+   service_type: smb
+   cluster_id: tango
+   config_uri: rados://smb/foxtrot/config.json
+   placement:
+     hosts:
+       - host0
+   spec:
+     ssl_certificates:
+       remote_control:
+         enabled: true
+         certificate_source: inline
+         ssl_cert: |
+           -----BEGIN CERTIFICATE-----
+           ...
+           -----END CERTIFICATE-----
+
+         ssl_key: |
+           -----BEGIN PRIVATE KEY-----
+           ...
+           -----END PRIVATE KEY-----
+
+         ssl_ca_cert: |
+           -----BEGIN CERTIFICATE-----
+           ...
+           -----END CERTIFICATE-----
+       keybridge:
+         enabled: true
+         certificate_source: inline
+         ssl_cert: |
+           -----BEGIN CERTIFICATE-----
+           ...
+           -----END CERTIFICATE-----
+
+         ssl_key: |
+           -----BEGIN PRIVATE KEY-----
+           ...
+           -----END PRIVATE KEY-----
+
+         ssl_ca_cert: |
+           -----BEGIN CERTIFICATE-----
+           ...
+           -----END CERTIFICATE-----
+
+This example configures an SMB service with TLS encryption enabled using
+inline certificates.
+
+TLS/SSL Parameters
+~~~~~~~~~~~~~~~~~~
+
+The following parameters can be used to configure TLS/SSL encryption per sidecar
+for the SMB service:
+
+* ``enabled`` (boolean): Enable or disable SSL/TLS encryption. Default is ``false``.
+
+* ``certificate_source`` (string): Specifies the source of the TLS certificates.
+  Options include:
+
+  - ``cephadm-signed``: Use certificates signed by cephadm's internal CA
+  - ``inline``: Provide certificates directly in the specification using ``ssl_cert``,
+    ``ssl_key`` and ``ssl_ca_cert`` fields
+  - ``reference``: Users can register their own certificate and key with certmgr and
+    set the ``certificate_source`` to ``reference`` in the spec.
+
+* ``ssl_cert`` (string): The SSL certificate in PEM format. Required when using
+  ``inline`` certificate source.
+
+* ``ssl_key`` (string): The SSL private key in PEM format. Required when using
+  ``inline`` certificate source.
+
+* ``ssl_ca_cert`` (string): The SSL CA certificate in PEM format. Required when
+  using ``inline`` certificate source.
+
+.. note::
+   ``ssl_key``, ``ssl_cert`` and ``ssl_ca_cert`` can be set from the smb manager
+   module. If ``cert`` and ``key`` are specified in the resource_type
+   ``ceph.smb.tls.credential`` and applied from the smb manager will be automatically
+   configured as ssl_certificate is enabled and update ``ssl_key``, ``ssl_cert`` to
+   the certificate manager. ``ssl_ca_cert`` will be set if it is specified in the
+   resource_type ``ceph.smb.tls.credential``
+
 The specification can then be applied by running the following command:
 
 .. prompt:: bash #
 
    ceph orch apply -i smb.yaml
-
 
 Service Spec Options
 --------------------

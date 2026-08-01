@@ -35,7 +35,6 @@
 #include "crimson/common/log.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
-#include "crimson/os/cyanstore/cyan_store.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/osd/ec_backend.h"
 #include "crimson/osd/ec_recovery_backend.h"
@@ -351,7 +350,7 @@ unsigned PG::get_target_pg_log_entries() const
   const unsigned local_num_pgs = shard_services.get_num_local_pgs();
   const unsigned local_target =
     local_conf().get_val<uint64_t>("osd_target_pg_log_entries_per_osd") /
-    seastar::smp::count;
+    seastar::this_smp_shard_count();
   const unsigned min_pg_log_entries =
     local_conf().get_val<uint64_t>("osd_min_pg_log_entries");
   if (local_num_pgs > 0 && local_target > 0) {
@@ -507,6 +506,17 @@ PG::do_delete_work(ceph::os::Transaction &t, ghobject_t _next)
     t.remove(coll_ref->get_cid(), pgid.make_snapmapper_oid());
     t.remove(coll_ref->get_cid(), pgmeta_oid);
     t.remove_collection(coll_ref->get_cid());
+    /*
+     * Mark the PG as fully deleted *before* dispatching the final
+     * RMCOLL transaction.  A PGAdvanceMap may already have been queued
+     * (with a Ref<PG>) by an earlier broadcast_map_to_pgs while this
+     * PG was still in pg_map, and is now sitting behind these
+     * DeleteSome events on the peering pipeline.  Setting the deleted
+     * flag now lets that queued PGAdvanceMap detect the situation and
+     * skip itself instead of issuing ops on a collection that is
+     * about to disappear.
+     */
+    peering_state.set_delete_complete();
     (void) crimson::os::with_store_do_transaction(
       shard_services.get_store(store_index),
       coll_ref,
@@ -616,6 +626,12 @@ PG::interruptible_future<seastar::stop_iteration> PG::trim_snap(
 
 void PG::on_active_actmap()
 {
+  logger().debug("{}: {}", *this, __func__);
+  initiate_snap_trim();
+}
+
+void PG::initiate_snap_trim()
+{
   logger().debug("{}: {} snap_trimq={}", *this, __func__, snap_trimq);
   peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
   if (peering_state.is_active() && peering_state.is_clean()) {
@@ -630,7 +646,9 @@ void PG::on_active_actmap()
       logger().info("{}: {} scrubbing, deferring snap trim", *this, __func__);
       return;
     }
-    // loops until snap_trimq is empty or SNAPTRIM_ERROR.
+    if (snap_trimq.empty()) {
+      return;
+    }
     Ref<PG> pg_ref = this;
     std::ignore = interruptor::with_interruption([this] {
       return interruptor::repeat(
@@ -647,7 +665,7 @@ void PG::on_active_actmap()
           return trim_snap(to_trim, needs_pause);
         }
       ).then_interruptible([this] {
-        logger().debug("{}: PG::on_active_actmap() finished trimming",
+        logger().debug("{}: PG::initiate_snap_trim() finished trimming",
                        *this);
         peering_state.state_clear(PG_STATE_SNAPTRIM);
         peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
@@ -670,7 +688,7 @@ void PG::kick_snap_trim()
       && !snap_trimq.empty()
       && !peering_state.state_test(PG_STATE_SNAPTRIM)) {
     logger().info("{}: scrub complete, retriggering snap trim", *this);
-    on_active_actmap();
+    (void) shard_services.start_operation<SnapTrimInitiate>(this);
   }
 }
 
@@ -741,7 +759,7 @@ PG::interruptible_future<bool> PG::do_recover_missing(
   }
   DEBUGDPP(
     "reqid {} need to wait for recovery, {} version {}",
-    *this, reqid, soid);
+    *this, reqid, soid, ver);
   if (recovery_backend->is_recovering(soid)) {
     DEBUGDPP(
       "reqid {} object {} version {}, already recovering",
@@ -833,8 +851,8 @@ seastar::future<> PG::init(
       t.touch(coll_ref->get_cid(), pgid.make_snapmapper_oid());
     }
   },
-  ::crimson::ct_error::assert_all{fmt::format(
-    "{} {} unexpected eio", *this, __func__).c_str()}
+  ::crimson::ct_error::assert_all(
+    "{} {} unexpected eio", std::cref(*this), __func__)
 );
 }
 
@@ -1033,7 +1051,8 @@ PG::submit_transaction(
       std::move(osd_op_p),
       peering_state.get_last_peering_reset(),
       map_epoch,
-      std::move(log_entries));
+      std::move(log_entries),
+      get_log());
   co_return std::make_tuple(
     std::move(submitted),
     std::move(all_completed)
@@ -1505,7 +1524,7 @@ PG::interruptible_future<> PG::handle_rep_write_op(Ref<MOSDECSubOpWrite> m)
     r->op.from = pg_whoami;
     r->set_priority(CEPH_MSG_PRIO_HIGH);
     return shard_services.send_to_osd(get_primary().osd, std::move(r), get_osdmap_epoch());
-  }).handle_error_interruptible(crimson::ct_error::assert_all{});
+  }).handle_error_interruptible(crimson::ct_error::assert_all("unexpected error"));
 }
 
 PG::interruptible_future<> PG::handle_rep_write_reply(Ref<MOSDECSubOpWriteReply> m)
@@ -1520,7 +1539,7 @@ PG::interruptible_future<> PG::handle_rep_write_reply(Ref<MOSDECSubOpWriteReply>
   assert(ec_backend);
   return ec_backend->handle_rep_write_reply(
     std::move(m->op)
-  ).handle_error_interruptible(crimson::ct_error::assert_all{});
+  ).handle_error_interruptible(crimson::ct_error::assert_all("unexpected error"));
 }
 
 PG::interruptible_future<> PG::handle_rep_read_op(Ref<MOSDECSubOpRead> m)
@@ -1538,7 +1557,7 @@ PG::interruptible_future<> PG::handle_rep_read_op(Ref<MOSDECSubOpRead> m)
     reply->op = std::move(rep);
     return shard_services.send_to_osd(
       get_primary().osd, std::move(reply), get_osdmap_epoch());
-  }).handle_error_interruptible(crimson::ct_error::assert_all{});
+  }).handle_error_interruptible(crimson::ct_error::assert_all("unexpected error"));
 }
 
 PG::interruptible_future<> PG::do_update_log_missing(
@@ -1663,20 +1682,28 @@ seastar::future<> PG::stop()
 {
   logger().info("PG {} {}", pgid, __func__);
   stopping = true;
+
+  context_registry_on_change();
+  clear_primary_state();
+  if (is_primary()) {
+    clear_ready_to_merge();
+  }
+
+  reset_merge_rendezvous();
+
   cancel_local_background_io_reservation();
   cancel_remote_recovery_reservation();
   check_readable_timer.cancel();
   renew_lease_timer.cancel();
   backend->on_actingset_changed(false);
-  return osdmap_gate.stop().then([this] {
-    return wait_for_active_blocker.stop();
-  }).then([this] {
-    return recovery_handler->stop();
-  }).then([this] {
-    return recovery_backend->stop();
-  }).then([this] {
-    return backend->stop();
-  });
+
+  co_await merge_notify_gate.close();
+  co_await osdmap_gate.stop();
+  co_await wait_for_active_blocker.stop();
+  client_request_orderer.clear_and_cancel(*this);
+  co_await recovery_handler->stop();
+  co_await recovery_backend->stop();
+  co_await backend->stop();
 }
 
 void PG::on_change(ceph::os::Transaction &t) {
@@ -1701,7 +1728,8 @@ void PG::on_change(ceph::os::Transaction &t) {
   // is save and in time.
   peering_state.state_clear(PG_STATE_SNAPTRIM);
   peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
-  snap_mapper.reset_backend();
+  auto _t = osdriver.get_transaction(&t);
+  snap_mapper.flush_and_reset_backend(&_t);
   reset_pglog_based_recovery_op();
 }
 
@@ -2010,4 +2038,89 @@ void PG::PGLogEntryHandler::partial_write(pg_info_t *info,
                  __func__, info->partial_writes_last_complete);
 }
 
+void PG::add_merge_source(
+    spg_t source,
+    core_id_t birth_shard,
+    seastar::foreign_ptr<Ref<PG>> source_pg)
+{
+  LOG_PREFIX(PG::add_merge_source);
+  auto wrapped =
+    crimson::make_local_shared_foreign<Ref<PG>>(std::move(source_pg));
+  auto [_, inserted] = merge_rendezvous.sources.emplace(
+    source, std::make_pair(birth_shard, std::move(wrapped)));
+  if (inserted) {
+    DEBUG("target {} source {} arrived from shard {} ({} total)",
+          get_pgid(), source, birth_shard,
+          merge_rendezvous.sources.size());
+    merge_rendezvous.arrivals.signal(1);
+  } else {
+    DEBUG("target {} source {} already registered, ignoring",
+          get_pgid(), source);
+  }
+}
+
+seastar::future<PG::merge_source_map_t>
+PG::collect_merge_sources(std::size_t n)
+{
+  LOG_PREFIX(PG::collect_merge_sources);
+  DEBUG("target {} waiting for {} sources ({} already arrived)",
+        get_pgid(), n, merge_rendezvous.sources.size());
+  try {
+    co_await merge_rendezvous.arrivals.wait(n);
+  } catch (const seastar::broken_semaphore&) {
+    DEBUG("target {} merge rendezvous broken, aborting wait", get_pgid());
+    co_return merge_source_map_t{};
+  }
+  ceph_assert(merge_rendezvous.sources.size() == n);
+  auto sources = std::move(merge_rendezvous.sources);
+  merge_rendezvous.sources.clear();
+  co_return sources;
+}
+
+void PG::reset_merge_rendezvous()
+{
+  // Unblock any waiter in collect_merge_sources() with broken(); then
+  // replace the semaphore so the next merge attempt starts at zero signals.
+  merge_rendezvous.arrivals.broken();
+  merge_rendezvous = merge_rendezvous_t{};
+}
+
+void PG::merge_from(
+    merge_source_map_t& sources,
+    PeeringCtx &rctx,
+    unsigned split_bits,
+    const pg_merge_meta_t& last_pg_merge_meta)
+{
+  LOG_PREFIX(PG::merge_from);
+  DEBUG("target {}", get_pgid());
+
+  std::map<spg_t, PeeringState*> source_states;
+  for (auto& [pgid, entry] : sources) {
+    auto& src_pg = entry.second;
+    source_states.emplace(pgid, &src_pg->peering_state);
+  }
+
+  // Updates the target's PeeringState and stats (Synchronous)
+  peering_state.merge_from(source_states, rctx, split_bits, last_pg_merge_meta);
+
+  // We iterate through each source and move its objects into the target collection
+  for (auto& [pgid, entry] : sources) {
+    auto& src_pg = entry.second;
+    auto src_coll = src_pg->get_collection_ref()->get_cid();
+    auto dst_coll = coll_ref->get_cid();
+    DEBUG("merging source {}", pgid);
+
+    // Remove source-specific metadata objects that are no longer needed
+    // now that the collections are being collapsed.
+    rctx.transaction.remove(src_coll, src_pg->get_pgid().make_snapmapper_oid());
+    rctx.transaction.remove(src_coll, src_pg->pgmeta_oid);
+    // Move source collection into target collection.
+    rctx.transaction.merge_collection(src_coll, dst_coll, split_bits);
+  }
+
+  // Adjust the collection and snap_mapper to reflect the
+  // new, smaller PG count (reducing bitmask).
+  rctx.transaction.collection_set_bits(coll_ref->get_cid(), split_bits);
+  snap_mapper.update_bits(split_bits);
+}
 }

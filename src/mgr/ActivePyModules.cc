@@ -29,7 +29,7 @@
 #include "osd/OSDMap.h"
 #include "osd/osd_types.h"
 #include "mgr/MgrContext.h"
-#include "mgr/TTLCache.h"
+#include "mgr/MgrMapCache.h"
 #include "mgr/mgr_perf_counters.h"
 #include "messages/MMgrReport.h" // for class PerfCounterType
 
@@ -60,10 +60,11 @@ ActivePyModules::ActivePyModules(
   MonClient &mc, LogChannelRef clog_,
   LogChannelRef audit_clog_, Objecter &objecter_,
   Finisher &f, DaemonServer &server,
-  PyModuleRegistry &pmr)
+  PyModuleRegistry &pmr, ThreadMonitor *monitor_)
 : module_config(module_config_), daemon_state(ds), cluster_state(cs),
   monc(mc), clog(clog_), audit_clog(audit_clog_), objecter(objecter_),
   finisher(f),
+  m_thread_monitor(monitor_),
   cmd_finisher(g_ceph_context, "cmd_finisher", "cmdfin"),
   server(server), py_module_registry(pmr)
 {
@@ -75,7 +76,18 @@ ActivePyModules::ActivePyModules(
   cmd_finisher.start();
 }
 
-ActivePyModules::~ActivePyModules() = default;
+ActivePyModules::~ActivePyModules()
+{
+  dout(10) << "ActivePyModules destructor called" << dendl;
+
+  // Stop the thread monitor if it was started
+  if (m_thread_monitor) {
+    m_thread_monitor->stop_monitoring();
+  }
+
+  // Stop the finisher thread
+  cmd_finisher.stop();
+}
 
 void ActivePyModules::dump_server(const std::string &hostname,
                       const DaemonStateCollection &dmc,
@@ -185,41 +197,55 @@ PyObject *ActivePyModules::get_daemon_status_python(
   return f.get();
 }
 
-void ActivePyModules::update_cache_metrics() {
-    auto hit_miss_ratio = ttl_cache.get_hit_miss_ratio();
-    perfcounter->set(l_mgr_cache_hit, hit_miss_ratio.first);
-    perfcounter->set(l_mgr_cache_miss, hit_miss_ratio.second);
+int ActivePyModules::ceph_cache_map_erase(std::string_view what)
+{
+  if (!api_cache.exists(what)) {
+    dout(10) << " what: " << what << " not in cache" << dendl;
+    return -ENOENT;
+  } else if (!api_cache.is_cacheable(what)) {
+    dout(10) << " what: " << what << " not cacheable" << dendl;
+    return -EINVAL;
+  }
+  dout(10) << " what: " << what << dendl;
+  api_cache.erase(what);
+  return 0;
 }
 
-PyObject *ActivePyModules::cacheable_get_python(const std::string &what)
+PyObject *ActivePyModules::cacheable_get_python(std::string_view what, const bool get_mutable)
 {
-  uint64_t ttl_seconds = g_conf().get_val<uint64_t>("mgr_ttl_cache_expire_seconds");
-  if(ttl_seconds > 0) {
-    ttl_cache.set_ttl(ttl_seconds);
-    try{
-      PyObject* cached = ttl_cache.get(what);
-      update_cache_metrics();
+  const bool use_cache =
+    !get_mutable &&
+    api_cache.is_enabled() &&
+    api_cache.is_cacheable(what);
+  if (use_cache) {
+    PyObject* cached = api_cache.get(what);
+    if (cached) {
+      dout(20) << ": api cache hit for " << what << " hit/miss "
+               << api_cache.get_hits() << "/" << api_cache.get_misses()
+               << dendl;
       return cached;
-    } catch (std::out_of_range& e) {}
+    }
   }
 
-  PyObject *obj = get_python(what);
-  if(ttl_seconds && ttl_cache.is_cacheable(what)) {
-    ttl_cache.insert(what, obj);
+  PyObject *obj = get_python(what, get_mutable);
+  if (use_cache && obj) {
+    api_cache.insert(what, obj);
   }
-  update_cache_metrics();
   return obj;
 }
 
-PyObject *ActivePyModules::get_python(const std::string &what)
+PyObject *ActivePyModules::get_python(std::string_view what, const bool get_mutable)
 {
-  uint64_t ttl_seconds = g_conf().get_val<uint64_t>("mgr_ttl_cache_expire_seconds");
+  const bool use_cache =
+    !get_mutable &&
+    api_cache.is_enabled() &&
+    api_cache.is_cacheable(what) &&
+    PyGILState_Check();
 
-  PyFormatter pf;
-  PyJSONFormatter jf;
-  // Use PyJSONFormatter if TTL cache is enabled.
-  Formatter &f = ttl_seconds ? (Formatter&)jf : (Formatter&)pf;
-
+  PyFormatter py_formatter;
+  PyFormatterRO py_formatter_ro;
+  PyFormatter &f = use_cache ? (PyFormatter&)py_formatter_ro :
+                               py_formatter;
   if (what == "fs_map") {
     without_gil_t no_gil;
     cluster_state.with_fsmap([&](const FSMap &fsmap) {
@@ -392,7 +418,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
   } else if (what.size() > 7 &&
 	     what.substr(0, 7) == "device ") {
     without_gil_t no_gil;
-    string devid = what.substr(7);
+    string devid(what.substr(7));
     if (!daemon_state.with_device(devid,
       [&] (const DeviceState& dev) {
         with_gil_t with_gil{no_gil};
@@ -523,11 +549,8 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     derr << "Python module requested unknown data '" << what << "'" << dendl;
     Py_RETURN_NONE;
   }
-  if(ttl_seconds) {
-    return jf.get();
-  } else {
-    return pf.get();
-  }
+
+  return f.get();
 }
 
 void ActivePyModules::start_one(PyModuleRef py_module)
@@ -535,12 +558,12 @@ void ActivePyModules::start_one(PyModuleRef py_module)
   std::lock_guard l(lock);
 
   const auto name = py_module->get_name();
-  auto active_module = std::make_shared<ActivePyModule>(py_module, clog);
+  auto active_module = std::make_shared<ActivePyModule>(py_module, clog, m_thread_monitor);
 
   pending_modules.insert(name);
   // Send all python calls down a Finisher to avoid blocking
   // C++ code, and avoid any potential lock cycles.
-  finisher.queue(new LambdaContext([this, active_module, name](int) {
+  finisher.queue(new LambdaContext([this, active_module, name, py_module](int) {
     // Delay loading in testing scenarios
     auto delay = g_conf().get_val<std::chrono::milliseconds>("mgr_module_load_delay");
     std::string delayed_module = g_conf().get_val<std::string>("mgr_module_load_delay_name");
@@ -558,12 +581,16 @@ void ActivePyModules::start_one(PyModuleRef py_module)
     } else {
       auto em = modules.emplace(name, active_module);
       ceph_assert(em.second); // actually inserted
-
-      dout(4) << "Starting thread for " << name << dendl;
       active_module->thread.create(active_module->get_thread_name());
-      dout(4) << "Starting active module " << name <<" finisher thread "
-        << active_module->get_fin_thread_name() << dendl;
+      py_module->perf_counter_build(g_ceph_context);
       active_module->finisher.start();
+      active_module->finisher.on_started().wait();
+      active_module->set_native_tid(active_module->finisher.get_tid());
+      if (m_thread_monitor) {
+        m_thread_monitor->register_thread(active_module->get_native_tid(), 
+          active_module->thread.get_tid(),
+          name, py_module);
+      }
     }
 
     // Signal when we're finally done starting up modules
@@ -578,6 +605,9 @@ void ActivePyModules::notify_all(const std::string &notify_type,
                      const std::string &notify_id)
 {
   std::lock_guard l(lock);
+  
+  // invalidate api cache for this notify type
+  api_cache.invalidate(notify_type);
 
   dout(10) << __func__ << ": notify_all " << notify_type << dendl;
   for (auto& [name, module] : modules) {
@@ -1077,7 +1107,7 @@ PyObject* ActivePyModules::get_unlabeled_perf_schema_python(
     for (auto& [key, state] : daemons) {
       std::lock_guard l(state->lock);
       with_gil(no_gil, [&, key=ceph::to_string(key), state=state] {
-        f.open_object_section(key.c_str());
+        Formatter::ObjectSection daemon_section{f, key};
         for (auto ctr_inst_iter : state->perf_counters.instances) {
           const auto &counter_name = ctr_inst_iter.first;
 
@@ -1089,7 +1119,7 @@ PyObject* ActivePyModules::get_unlabeled_perf_schema_python(
 	    continue;
 	  }
 
-	  f.open_object_section(counter_name.c_str());
+	  Formatter::ObjectSection counter_section{f, counter_name};
 	  auto type = state->perf_counters.types[counter_name];
           f.dump_string("description", type.description);
           if (!type.nick.empty()) {
@@ -1098,9 +1128,7 @@ PyObject* ActivePyModules::get_unlabeled_perf_schema_python(
           f.dump_unsigned("type", type.type);
           f.dump_unsigned("priority", type.priority);
           f.dump_unsigned("units", type.unit);
-          f.close_section();
         }
-        f.close_section();
       });
     }
   } else {
@@ -1140,8 +1168,8 @@ PyObject* ActivePyModules::get_perf_schema_python(
     // Hence search for the last occurence of "." to get sub counter name
     size_t pos = type.path.rfind('.');
     std::string sub_counter_name = type.path.substr(pos + 1, type.path.length());
-    Formatter::ObjectSection counter_section(*f, sub_counter_name);
-    f->create_unique("description", type.description);
+    Formatter::ObjectSection counter_section{*f, sub_counter_name};
+    f->dump_string("description", type.description);
     if (!type.nick.empty()) {
       f->dump_string("nick", type.nick);
     }
@@ -1151,19 +1179,20 @@ PyObject* ActivePyModules::get_perf_schema_python(
   };
 
   auto dump_counter_with_labels = [&dump_sub_counter_information](
-				      PyFormatter *f, auto key_labels,
-				      auto type) {
-    f->open_object_section("");	 // counter should be enclosed by array
+  		      PyFormatter *f, auto key_labels,
+  		      auto type,
+  		      std::optional<Formatter::ObjectSection>& counter_object_section,
+  		      std::optional<Formatter::ObjectSection>& counters_section) {
+    counter_object_section.emplace(*f, "");  // counter should be enclosed by array
 
     for (Formatter::ObjectSection labels_section{*f, "labels"};
-	 const auto &label : key_labels) {
+      const auto &label : key_labels) {
       f->dump_string(label.first, label.second);
     }
 
-    f->open_object_section("counters");
+    counters_section.emplace(*f, "counters");
     dump_sub_counter_information(f, type);
   };
-
 
   if (!daemons.empty()) {
     for (auto &[key, state] : daemons) {
@@ -1171,9 +1200,11 @@ PyObject* ActivePyModules::get_perf_schema_python(
       with_gil(no_gil, [&, key = ceph::to_string(key), state = state] {
 	std::string key_name, prev_key_name;
 	perf_counter_label_pairs prev_key_labels;
-	Formatter::ObjectSection counter_section(
-	    f, key.c_str());  // Main Object Section
+	Formatter::ObjectSection counter_section{
+	    f, key.c_str()};  // Main Object Section
 	std::optional<Formatter::ArraySection> array_section;
+	std::optional<Formatter::ObjectSection> counter_object_section;
+	std::optional<Formatter::ObjectSection> counters_section;
 
 	for (const auto &[counter_name_with_labels, _] :
 	     state->perf_counters.instances) {
@@ -1241,22 +1272,20 @@ PyObject* ActivePyModules::get_perf_schema_python(
           */
 
 	  if (prev_key_name != key_name) {
-	    if (!prev_key_name.empty()) {
-	      f.close_section();  // close 'counters'
-	      f.close_section();  // close 'counter object' section
-	    }
+	    counters_section.reset();
+	    counter_object_section.reset();
 	    prev_key_name = key_name;
 	    prev_key_labels = key_labels;
 	    array_section.emplace(f, key_name);
-	    dump_counter_with_labels(&f, key_labels, type);
+	    dump_counter_with_labels(&f, key_labels, type, counter_object_section, counters_section);
 	  } else if (
 	      prev_key_name == key_name && prev_key_labels == key_labels) {
 	    dump_sub_counter_information(&f, type);
 	  } else if (
 	      prev_key_name == key_name && prev_key_labels != key_labels) {
-	    f.close_section();	// close previous 'counters' section
-	    f.close_section();	// close previous counter object section
-	    dump_counter_with_labels(&f, key_labels, type);
+	    counters_section.reset();
+	    counter_object_section.reset();
+	    dump_counter_with_labels(&f, key_labels, type, counter_object_section, counters_section);
 	  } else {
 	    dout(4)
 		<< fmt::format(
@@ -1265,8 +1294,6 @@ PyObject* ActivePyModules::get_perf_schema_python(
 		<< dendl;
 	  }
 	}
-	f.close_section();  // close 'counters'
-	f.close_section();  // close 'counter object' section
       });
     }
   } else {
@@ -1545,6 +1572,7 @@ void ActivePyModules::get_progress_events(std::map<std::string,ProgressEvent> *e
 void ActivePyModules::config_notify()
 {
   std::lock_guard l(lock);
+  api_cache.invalidate("config");
   for (auto& [name, module] : modules) {
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.

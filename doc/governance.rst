@@ -38,8 +38,7 @@ Membership
  * Candidates self-nominate or are nominated by other members
  * Discussion of how roles/responsibilities may be delegated
  * Ranked-choice vote by the steering committee
- * 2 year terms, with one member being elected in even years, and the
-   other two in odd years
+ * 1 year terms with all members elected yearly
  * Members may resign at any time, and the steering committee may vote
    to appoint a replacement for the rest of their term
  * members must involve >1 employer
@@ -48,8 +47,8 @@ Current Members
 ^^^^^^^^^^^^^^^
 
 * Dan van der Ster <dan.vanderster@clyso.com>
-* Josh Durgin <jdurgin@redhat.com>
 * Neha Ojha <nojha@redhat.com>
+* Patrick Donnelly <pdonnell@ibm.com>
 
 .. _csc:
 
@@ -86,6 +85,7 @@ Current Members
  * Adam King <adking@redhat.com>
  * Afreen Misbah <afreen@ibm.com>
  * Anthony D'Atri <anthony.datri@gmail.com>
+ * Aviv Caro <Aviv.Caro@ibm.com>
  * Casey Bodley <cbodley@redhat.com>
  * Dan van der Ster <dan.vanderster@clyso.com>
  * David Orman <ormandj@1111systems.com>
@@ -96,26 +96,26 @@ Current Members
  * Haomai Wang <haomai@xsky.com>
  * Igor Fedotov <igor.fedotov@croit.io>
  * Ilya Dryomov <idryomov@redhat.com>
- * Jeff Layton <jlayton@redhat.com>
  * Joseph Mundackal <jmundackal@bloomberg.net>
  * Josh Durgin <jdurgin@redhat.com>
  * João Eduardo Luis <joao@clyso.com>
- * Ken Dreyer <kdreyer@redhat.com>
- * Laura Flores <lflores@redhat.com>
+ * Kyle Bader <kbader@ibm.com>
+ * Laura Flores <lflores@ibm.com>
  * Mark Nelson <mark.nelson@clyso.com>
  * Matan Breizman <mbreizma@redhat.com>
  * Matt Benjamin <mbenjami@redhat.com>
  * Mike Perez <miperez@redhat.com>
  * Myoungwon Oh <ohmyoungwon@gmail.com>
+ * Sage McTaggart <sagemct@ibm.com>
  * Neha Ojha <nojha@redhat.com>
  * Patrick Donnelly <pdonnell@ibm.com>
  * Radoslaw Zarzynski <rzarzyns@redhat.com>
- * Sam Just <sjust@redhat.com>
+ * Redouane Kachach <rkachach@redhat.com>
  * Venky Shankar <vshankar@redhat.com>
  * Vikhyat Umrao <vikhyat@ibm.com>
  * Xie Xingguo <xie.xingguo@zte.com.cn>
  * Yaarit Hatuka <yhatuka@ibm.com>
- * Yehuda Sadeh <yehuda@redhat.com>
+ * Yehuda Sadeh <yehuda@ui.com>
  * Yingxin Cheng <yingxin.cheng@intel.com>
  * Yuri Weinstein <yweinste@redhat.com>
  * Zac Dover <zac.dover@proton.me>

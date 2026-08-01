@@ -197,36 +197,38 @@ void DeepCopyRequest<I>::handle_copy_image(int r) {
 
 template <typename I>
 void DeepCopyRequest<I>::send_copy_object_map() {
-  m_dst_image_ctx->owner_lock.lock_shared();
-  m_dst_image_ctx->image_lock.lock_shared();
+  // local ref so the unlocks don't touch 'this', which rollback() may free
+  I &dst_image_ctx = *m_dst_image_ctx;
+  dst_image_ctx.owner_lock.lock_shared();
+  dst_image_ctx.image_lock.lock_shared();
 
-  if (!m_dst_image_ctx->test_features(RBD_FEATURE_OBJECT_MAP,
-                                      m_dst_image_ctx->image_lock)) {
-    m_dst_image_ctx->image_lock.unlock_shared();
-    m_dst_image_ctx->owner_lock.unlock_shared();
+  if (!dst_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP,
+                                   dst_image_ctx.image_lock)) {
+    dst_image_ctx.image_lock.unlock_shared();
+    dst_image_ctx.owner_lock.unlock_shared();
     send_copy_metadata();
     return;
   }
   if (m_src_snap_id_end == CEPH_NOSNAP) {
-    m_dst_image_ctx->image_lock.unlock_shared();
-    m_dst_image_ctx->owner_lock.unlock_shared();
+    dst_image_ctx.image_lock.unlock_shared();
+    dst_image_ctx.owner_lock.unlock_shared();
     send_refresh_object_map();
     return;
   }
 
-  ceph_assert(m_dst_image_ctx->object_map != nullptr);
+  ceph_assert(dst_image_ctx.object_map != nullptr);
 
   ldout(m_cct, 20) << dendl;
 
   Context *finish_op_ctx = nullptr;
   int r;
-  if (m_dst_image_ctx->exclusive_lock != nullptr) {
-    finish_op_ctx = m_dst_image_ctx->exclusive_lock->start_op(&r);
+  if (dst_image_ctx.exclusive_lock != nullptr) {
+    finish_op_ctx = dst_image_ctx.exclusive_lock->start_op(&r);
   }
   if (finish_op_ctx == nullptr) {
     lderr(m_cct) << "lost exclusive lock" << dendl;
-    m_dst_image_ctx->image_lock.unlock_shared();
-    m_dst_image_ctx->owner_lock.unlock_shared();
+    dst_image_ctx.image_lock.unlock_shared();
+    dst_image_ctx.owner_lock.unlock_shared();
     finish(r);
     return;
   }
@@ -238,9 +240,9 @@ void DeepCopyRequest<I>::send_copy_object_map() {
     });
   ceph_assert(m_snap_seqs->count(m_src_snap_id_end) > 0);
   librados::snap_t copy_snap_id = (*m_snap_seqs)[m_src_snap_id_end];
-  m_dst_image_ctx->object_map->rollback(copy_snap_id, ctx);
-  m_dst_image_ctx->image_lock.unlock_shared();
-  m_dst_image_ctx->owner_lock.unlock_shared();
+  dst_image_ctx.object_map->rollback(copy_snap_id, ctx);
+  dst_image_ctx.image_lock.unlock_shared();
+  dst_image_ctx.owner_lock.unlock_shared();
 }
 
 template <typename I>

@@ -692,6 +692,17 @@ void RDMAWorker::initialize()
 int RDMAWorker::listen(entity_addr_t &sa, unsigned addr_slot,
 		       const SocketOptions &opt,ServerSocket *sock)
 {
+  // The rdma_cm path and the iwarp socket classes are coupled: only the iwarp
+  // classes implement rdma_cm, and they always use it.  Any other pairing leaves a
+  // socket half-built (the base ctor skips queue pair / eventfd creation when
+  // ms_async_rdma_cm=true, and a non-cm iwarp socket has no usable cm channel), so
+  // require the two to be enabled together and fail fast with a clear message.
+  if (cct->_conf->ms_async_rdma_cm != (cct->_conf->ms_async_rdma_type == "iwarp")) {
+    lderr(cct) << __func__ << " ms_async_rdma_cm and ms_async_rdma_type=iwarp must be "
+                  "enabled together" << dendl;
+    return -EOPNOTSUPP;
+  }
+
   ib->init();
   dispatcher->polling_start();
 
@@ -713,15 +724,45 @@ int RDMAWorker::listen(entity_addr_t &sa, unsigned addr_slot,
 
 int RDMAWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket)
 {
+  const bool iwarp = cct->_conf->ms_async_rdma_type == "iwarp";
+  // The rdma_cm (connection manager) path and the iwarp socket classes are coupled:
+  // only the iwarp classes implement rdma_cm, and they always use it.  Any other
+  // pairing leaves a socket half-built -- with ms_async_rdma_cm=true and a non-iwarp
+  // type the base ctor skips queue pair / eventfd creation (fd() == -1 on every
+  // connection); with an iwarp type and ms_async_rdma_cm=false the cm channel is
+  // never set up.  Require the two together and fail fast.
+  if (cct->_conf->ms_async_rdma_cm != iwarp) {
+    lderr(cct) << __func__ << " ms_async_rdma_cm and ms_async_rdma_type=iwarp must be "
+                  "enabled together" << dendl;
+    return -EOPNOTSUPP;
+  }
+
   ib->init();
   dispatcher->polling_start();
 
   RDMAConnectedSocketImpl* p;
-  if (cct->_conf->ms_async_rdma_type == "iwarp") {
+  if (iwarp) {
     p = new RDMAIWARPConnectedSocketImpl(cct, ib, dispatcher, this);
   } else {
     p = new RDMAConnectedSocketImpl(cct, ib, dispatcher, this);
   }
+
+  // Reject a socket whose construction failed before wiring it up, otherwise it
+  // reaches the messenger with fd() == -1.  fd-first so eventfd exhaustion maps to
+  // -EMFILE; the non-iwarp qp check then catches a queue pair failure that left a
+  // valid eventfd (an iwarp client legitimately has a null qp until its route is
+  // resolved, so it is excluded here).
+  if (p->fd() < 0) {
+    lderr(cct) << __func__ << " failed to create eventfd (fd limit reached?)" << dendl;
+    delete p;
+    return -EMFILE;
+  }
+  if (!iwarp && !p->get_qp()) {
+    lderr(cct) << __func__ << " failed to create queue pair" << dendl;
+    delete p;
+    return -EIO;
+  }
+
   int r = p->try_connect(addr, opts);
 
   if (r < 0) {

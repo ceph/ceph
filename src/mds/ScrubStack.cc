@@ -541,6 +541,7 @@ void ScrubStack::scrub_dirfrag(CDir *dir, bool *added_children, bool *done)
       }
       if (dnl->is_primary()) {
 	_enqueue(dnl->get_inode(), header, false);
+        *added_children = true;
       } else if (dnl->is_remote()) {
         identify_remote_link_damage(dn);
       }

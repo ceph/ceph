@@ -7,6 +7,11 @@ set(jerasure_utils_src
 add_library(jerasure_utils OBJECT ${jerasure_utils_src})
 target_link_libraries(jerasure_utils legacy-option-headers)
 
+# jerasure_init is ceph's own glue code for galois field initialization,
+# not part of the jerasure library itself.
+add_library(jerasure_init_objs OBJECT jerasure_init.cc)
+
+if(NOT WITH_SYSTEM_JERASURE)
 # Set the CFLAGS correctly for gf-complete based on SIMD compiler support
 set(GF_COMPILE_FLAGS)
 if(HAVE_ARMV8_SIMD)
@@ -67,9 +72,9 @@ if(HAVE_ARM_NEON OR HAVE_ARMV8_SIMD)
 endif()
 
 add_library(gf-complete_objs OBJECT ${gf-complete_srcs})
-set_target_properties(gf-complete_objs PROPERTIES 
+set_target_properties(gf-complete_objs PROPERTIES
   COMPILE_FLAGS "${SIMD_COMPILE_FLAGS}")
-set_target_properties(gf-complete_objs PROPERTIES 
+set_target_properties(gf-complete_objs PROPERTIES
   COMPILE_DEFINITIONS "${GF_COMPILE_FLAGS}")
 
 set(jerasure_srcs
@@ -77,21 +82,29 @@ set(jerasure_srcs
   jerasure/src/galois.c
   jerasure/src/jerasure.c
   jerasure/src/liberation.c
-  jerasure/src/reed_sol.c
-  jerasure_init.cc)
-add_library(jerasure_objs OBJECT ${jerasure_srcs}) 
-target_compile_options(jerasure_objs PRIVATE "-Wno-unused-but-set-variable")
+  jerasure/src/reed_sol.c)
+add_library(jerasure_lib_objs OBJECT ${jerasure_srcs})
+target_compile_options(jerasure_lib_objs PRIVATE "-Wno-unused-but-set-variable")
 
-set(ec_jerasure_objs
+# Provide the vendored jerasure + gf-complete as a single static library
+# target, using the same Jerasure::jerasure name that FindJerasure.cmake
+# provides for the system library case.
+add_library(jerasure_vendored STATIC
   $<TARGET_OBJECTS:gf-complete_objs>
-  $<TARGET_OBJECTS:jerasure_objs>
+  $<TARGET_OBJECTS:jerasure_lib_objs>)
+add_library(Jerasure::jerasure ALIAS jerasure_vendored)
+endif()
+
+# ec_jerasure plugin
+set(ec_jerasure_objs
+  $<TARGET_OBJECTS:jerasure_init_objs>
   $<TARGET_OBJECTS:jerasure_utils>
   $<TARGET_OBJECTS:erasure_code_objs>)
 
 add_library(ec_jerasure SHARED ${ec_jerasure_objs})
 set_target_properties(ec_jerasure PROPERTIES
   INSTALL_RPATH "")
-target_link_libraries(ec_jerasure ${EXTRALIBS})
+target_link_libraries(ec_jerasure Jerasure::jerasure ${EXTRALIBS})
 install(TARGETS ec_jerasure DESTINATION ${erasure_plugin_dir})
 
 # legacy libraries
@@ -100,6 +113,7 @@ foreach(flavor ${jerasure_legacy_flavors})
   add_library(${plugin_name} SHARED ${ec_jerasure_objs})
   set_target_properties(${plugin_name} PROPERTIES
     INSTALL_RPATH "")
+  target_link_libraries(${plugin_name} Jerasure::jerasure)
   install(TARGETS ${plugin_name} DESTINATION ${erasure_plugin_dir})
   add_dependencies(ec_jerasure ${plugin_name})
 endforeach()

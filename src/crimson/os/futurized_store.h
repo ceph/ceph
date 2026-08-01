@@ -45,7 +45,7 @@ public:
     const Shard& operator=(const Shard& o) = delete;
 
     bool is_shard_store_active(store_index_t store_index, uint32_t store_shard_nums) {
-      if(seastar::this_shard_id() + seastar::smp::count * store_index >= store_shard_nums) {
+      if(seastar::this_shard_id() + seastar::this_smp_shard_count() * store_index >= store_shard_nums) {
         // store_index is out of range {} - inactivating this store shard
         return false;
       }
@@ -243,6 +243,11 @@ public:
   virtual seastar::future<> report_stats() { return seastar::now(); }
 
   virtual uuid_d get_fsid() const  = 0;
+
+  /// Override to report a tighter per-object cap than osd_max_object_size.
+  virtual uint64_t get_max_object_size() const {
+    return crimson::common::local_conf()->osd_max_object_size;
+  }
 
   virtual seastar::future<> write_meta(const std::string& key,
 				       const std::string& value) = 0;

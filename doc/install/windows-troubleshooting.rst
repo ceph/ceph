@@ -1,5 +1,7 @@
 :orphan:
 
+.. _install-windows-troubleshooting:
+
 ===============================
 Troubleshooting Ceph on Windows
 ===============================

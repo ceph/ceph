@@ -54,9 +54,9 @@ EXPECTED = [
     ('sysctl', True, ssh_py),
     ('touch', True, ssh_py),
     ('true', True, ssh_py),
-    ('which', True, serve_py),
     # variable executables
-    ('python', False, serve_py),
+    ('self.mgr.cephadm_binary_path', False, serve_py),
+    ('/usr/libexec/cephadm_invoker.py', True, ssh_py),
 ]
 
 
@@ -104,6 +104,8 @@ def _names(node):
         return [f"<Subscript: {node.value}{node.slice}>"]
     if isinstance(node, ast.BinOp):
         return [f"<BinaryOp: {_names(node.left)} {_names(node.op)} {_names(node.right)}"]
+    if isinstance(node, ast.BoolOp):
+        return [f"<BoolOp: {node.op} {[_names(v) for v in node.values]}>"]
     if (
         isinstance(node, ast.Add)
         or isinstance(node, ast.Sub)

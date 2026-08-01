@@ -783,11 +783,10 @@ Per client instance `rbd device map` options:
   For msgr2.1 protocol this option is ignored.
 
 * cephx_require_signatures - Require msgr1 message signing feature (since 3.19,
-  default).  This option is deprecated and will be removed in the future as the
-  feature has been supported since the Bobtail release.
+  default).  This option is deprecated and will be removed in a future release.
 
 * nocephx_require_signatures - Don't require msgr1 message signing feature
-  (since 3.19).  This option is deprecated and will be removed in the future.
+  (since 3.19).  This option is deprecated and will be removed in a future release.
 
 * tcp_nodelay - Disable Nagle's algorithm on client sockets (since 4.0,
   default).
@@ -869,6 +868,11 @@ Per mapping (block device) `rbd device map` options:
 
 * read_from_replica=balance - When issued a read on a replicated pool, pick
   a random OSD for serving it (since 5.8).
+
+  When issued a read on an erasure-coded pool, pick the shard that stores the
+  data, giving a performance uplift over routing the request via the primary
+  (requires Umbrella server and client; kernel client support is planned for a
+  future release).
 
   This mode is safe for general use only since Octopus (i.e. after "ceph osd
   require-osd-release octopus").  Otherwise it should be limited to read-only

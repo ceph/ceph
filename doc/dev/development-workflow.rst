@@ -34,37 +34,37 @@ were not written prior to checking all integration tests, they can be
 committed to the stable branch and the result sent for publication
 without going through another run of integration tests.
 
+
 Release Cycle
 =============
 
 ::
 
-    Ceph              hammer                             infernalis
+    Ceph              squid                              tentacle
     Developer          CDS                                  CDS 
     Summit              |                                    |
                         |                                    |
     development         |                                    |
-    release             |  v0.88  v0.89  v0.90   ...         |  v9.0.0
-                   --v--^----^--v---^------^--v-     ---v----^----^---  2015       
+    release             | v19.0.0                ...         | v20.0.0
+                   --v--^----^--v---^------^--v-     ---v----^----^---  2024       
                      |          |             |         |
-    stable         giant        |             |      hammer
-    release        v0.87        |             |      v0.94
-                                |             |          
-    point                    firefly       dumpling
-    release                  v0.80.8       v0.67.12
+    stable         reef         |             |       squid
+    release        v18.2.0      |             |       v19.2.0
+                                |             |
+    point                    quincy          reef
+    release                  v17.2.7         v18.2.1
 
 
-Four times a year, the development roadmap is discussed online during
-the `Ceph Developer Summit <http://tracker.ceph.com/projects/ceph/wiki/Planning#Ceph-Developer-Summit>`_. A
-new stable release (hammer, infernalis, jewel ...) is published at the same
-frequency.  Every other release (firefly, hammer, jewel...) is a `Long Term
-Stable (LTS) <../../releases>`_.  See `Understanding the release cycle
+A new stable release (quincy, reef, squid ...) is published at the same
+frequency. Every release (quincy, reef, squid...) is a `Long Term Stable (LTS)
+<../../releases>`_.  See `Understanding the release cycle
 <../../releases#understanding-the-release-cycle>`_ for more information.
+
 
 Merging bug fixes or features
 =============================
 
-The development branch is ``master`` and the workflow followed by all
+The development branch is ``main`` and the workflow followed by all
 developers can be summarized as follows:
 
 * The developer prepares a series of commits
@@ -88,7 +88,7 @@ Resolving bug reports and implementing features
 ===============================================
 
 All bug reports and feature requests are in the `issue tracker
-<http://tracker.ceph.com>`_ and the workflow can be summarized as
+<https://tracker.ceph.com>`_ and the workflow can be summarized as
 follows:
 
 * The reporter creates the issue with priority ``Normal``
@@ -110,7 +110,7 @@ status of an open issue can be:
 
 For each ``Pending Backport`` issue, there exists at least one issue in the
 ``Backport`` tracker to record the work done to cherry pick the necessary
-commits from the master branch to the target stable branch. See `the backporter
+commits from the main branch to the target stable branch. See `the backporter
 manual
 <https://github.com/ceph/ceph/blob/main/SubmittingPatches-backports.rst>`_ for
 more information.
@@ -119,40 +119,40 @@ Running and interpreting teuthology integration tests
 =====================================================
 
 The :doc:`/dev/sepia` runs `teuthology
-<https://github.com/ceph/teuthology/>`_ integration tests `on a regular basis <http://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO_monitor_the_automated_tests_AKA_nightlies#Automated-tests-AKA-nightlies>`_ and the
-results are posted on `pulpito <http://pulpito.ceph.com/>`_ and the
+<https://github.com/ceph/teuthology/>`_ integration tests `on a regular basis <https://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO_monitor_the_automated_tests_AKA_nightlies#Automated-tests-AKA-nightlies>`_ and the
+results are posted on `pulpito <https://pulpito.ceph.com/>`_ and the
 `ceph-qa mailing list <https://ceph.com/irc/>`_.
 
 * The job failures are `analyzed by quality engineers and developers
-  <http://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO_monitor_the_automated_tests_AKA_nightlies#List-of-suites-and-watchers>`_
+  <https://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO_monitor_the_automated_tests_AKA_nightlies#List-of-suites-and-watchers>`_
 * If the cause is environmental (e.g. network connectivity), an issue
   is created in the `sepia lab project
-  <http://tracker.ceph.com/projects/lab/issues/new>`_
+  <https://tracker.ceph.com/projects/lab/issues/new>`_
 * If the bug is known, a pulpito URL to the failed job is added to the issue
 * If the bug is new, an issue is created
 
 The ``quality engineer`` is either a developer or a member of the QE
 team. There is at least one integration test suite per project:
 
-* `rgw <https://github.com/ceph/ceph/tree/master/qa/suites/rgw>`_ suite
-* `CephFS <https://github.com/ceph/ceph/tree/master/qa/suites/fs>`_ suite
-* `rados <https://github.com/ceph/ceph/tree/master/qa/suites/rados>`_ suite
-* `rbd <https://github.com/ceph/ceph/tree/master/qa/suites/rbd>`_ suite
+* `rgw <https://github.com/ceph/ceph/tree/main/qa/suites/rgw>`_ suite
+* `CephFS <https://github.com/ceph/ceph/tree/main/qa/suites/fs>`_ suite
+* `rados <https://github.com/ceph/ceph/tree/main/qa/suites/rados>`_ suite
+* `rbd <https://github.com/ceph/ceph/tree/main/qa/suites/rbd>`_ suite
 
 and many others such as
 
-* `upgrade <https://github.com/ceph/ceph/tree/master/qa/suites/upgrade>`_ suites
-* `power-cyle <https://github.com/ceph/ceph/tree/master/qa/suites/powercycle>`_ suite
+* `upgrade <https://github.com/ceph/ceph/tree/main/qa/suites/upgrade>`_ suites
+* `power-cycle <https://github.com/ceph/ceph/tree/main/qa/suites/powercycle>`_ suite
 * ...
 
 Preparing a new release
 =======================
 
 A release is prepared in a dedicated branch, different from the
-``master`` branch.
+``main`` branch.
 
-* For a stable releases it is the branch matching the release code
-  name (dumpling, firefly, etc.)
+* For a stable release it is the branch matching the release code
+  name (quincy, reef, etc.)
 * For a development release it is the ``next`` branch
 
 The workflow expected of all developers to stabilize the release
@@ -160,7 +160,7 @@ candidate is the same as the normal development workflow with the
 following differences:
 
 * The pull requests must target the stable branch or next instead of
-  master
+  main
 * The reviewer rejects pull requests that are not bug fixes
 * The ``Backport`` issues matching a teuthology test failure and set
   with priority ``Urgent`` must be fixed before the release
@@ -184,13 +184,12 @@ more.
 When a stable release is to be retired, it may be safer to
 recommend an upgrade to the next LTS release instead of
 proposing a new point release to fix a problem. For instance, the
-``dumpling`` v0.67.11 release has bugs related to backfilling which have
-been fixed in ``firefly`` v0.80.x. A backport fixing these backfilling
-bugs has been tested in the draft point release ``dumpling`` v0.67.12 but
-they are large enough to introduce a risk of regression. As ``dumpling``
+``quincy`` v17.2.6 release might have bugs related to backfilling which have
+been fixed in ``reef`` v18.2.x. A backport fixing these backfilling
+bugs might be tested in a draft point release but if
+they are large enough to introduce a risk of regression and the older release
 is to be retired, users suffering from this bug can
-upgrade to ``firefly`` to fix it. Unless users manifest themselves and ask
-for ``dumpling`` v0.67.12, this draft release may never be published.
+upgrade to the newer LTS to fix it.
 
 * The ``Ceph lead`` decides a new stable release must be published
 * The ``release master`` gets approval from all leads
@@ -208,13 +207,11 @@ for ``dumpling`` v0.67.12, this draft release may never be published.
 
 The person responsible for each role is:
 
-* Sage Weil is the ``Ceph lead``
-* Sage Weil is the ``release master`` for major stable releases
-  (``firefly`` 0.80, ``hammer`` 0.94 etc.)
-* Loic Dachary is the ``release master`` for stable point releases
-  (``firefly`` 0.80.10, ``hammer`` 0.94.1 etc.)
-* Yuri Weinstein is the ``quality engineer``
-* Alfredo Deza is the ``publisher``
+* The ``Ceph lead`` oversees the overall release schedule.
+* The ``release master`` for major stable releases ensures releases meet criteria.
+* The ``release master`` for stable point releases coordinates backports and publishes point releases.
+* The ``quality engineer`` verifies integration tests.
+* The ``publisher`` publishes the release artifacts.
 
 Cutting a new development release
 =================================
@@ -223,11 +220,26 @@ The publication workflow of a development release is the same as
 preparing a new release and cutting it, with the following
 differences:
 
-* The ``next`` branch is reset to the tip of ``master`` after
+* The ``next`` branch is reset to the tip of ``main`` after
   publication
 * The ``quality engineer`` is not required to run additional tests,
   the ``release master`` directly informs the ``publisher`` that the
   release is ready to be published.
+
+Automated Backport Auditing
+===========================
+
+All backport PRs undergo automated hygiene checks by the `releng-audit` GitHub Actions CI to ensure they meet strict quality standards. These checks include:
+
+* **Commit Parity:** Ensuring all commits in the backport accurately map to the original ``main`` PRs.
+* **Conflict Simulation:** Dry-running cherry-picks to detect undocumented conflicts or deviations.
+* **Redmine Linkage:** Verifying accurate tracking and release targeting in the issue tracker.
+
+Passing these checks automatically applies the ``releng-audit-pass`` label, which is required for the PR to be merged. If the audit fails, the ``releng-audit-fail`` label is applied and an "anti-spam" push shield halts further automated checks. After fixing the issues, you must manually remove the ``releng-audit-fail`` label or comment ``/audit retest`` to trigger a new audit.
+
+If the CI correctly flags a valid deviation (e.g., a complex but necessary manual conflict resolution), you can request an override. Ping the Component Lead or the ``#ceph-upstream-releases`` Slack channel to request a review. Any user with "maintain" or "admin" rights on the repository, or a member of the ``@ceph/ceph-release-manager`` team, can bypass the check by commenting ``/audit override`` or manually applying the ``releng-audit-override`` label.
+
+For the granular technical requirements and rules, see the `Cherry-picking rules <https://github.com/ceph/ceph/blob/main/SubmittingPatches-backports.rst#cherry-picking-rules>`_ in the backporter manual.
 
 Publishing point releases and backporting
 =========================================

@@ -4,7 +4,6 @@ import random
 import math
 import time
 import subprocess
-import urllib.request
 import hashlib
 from multiprocessing import Process
 import filecmp
@@ -17,6 +16,12 @@ from collections import namedtuple
 import boto3
 from boto3.s3.transfer import TransferConfig
 from dataclasses import dataclass
+import urllib.parse
+import urllib.request
+import urllib.error
+from botocore.auth import HmacV1Auth
+from botocore.credentials import Credentials
+from botocore.awsrequest import AWSRequest
 
 from . import(
     configfile,
@@ -90,6 +95,84 @@ def rados(args, **kwargs):
     cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_rados', 'noname'] + args
     return bash(cmd, **kwargs)
 
+#------------------------------------------------------------------
+# Rest API helper functions
+#------------------------------------------------------------------
+
+_dedup_caps_granted = False
+#------------------------------------------------------------------------
+def _ensure_dedup_caps():
+    """Grant 'dedup=*' caps to the test user (once) so REST calls pass
+       the RGWUserCaps check."""
+    global _dedup_caps_granted
+    if _dedup_caps_granted:
+        return
+    access_key = get_access_key()
+    result = admin(['user', 'info', '--access-key', access_key])
+    assert result[1] == 0, "failed to look up test user"
+    info = json.loads(result[0])
+    uid = info['user_id']
+    tenant = info.get('tenant', '')
+    if tenant:
+        uid = tenant + '$' + uid
+    result = admin(['caps', 'add', '--uid', uid, '--caps', 'dedup=*'])
+    assert result[1] == 0, "failed to add dedup caps"
+    log.debug("granted dedup=* caps to uid=%s", uid)
+    _dedup_caps_granted = True
+
+#-------------------------------------------------------------------------
+def _admin_rest_url():
+    hostname = get_config_host()
+    port_no = get_config_port()
+    scheme = 'https' if port_no in (443, 8443) else 'http'
+    return f'{scheme}://{hostname}:{port_no}/admin/dedup'
+
+#--------------------------------------------------------------------------
+def admin_rest(method, params):
+    """Send a signed GET/POST to /admin/dedup and return
+       (body, returncode) matching the tuple that ``admin()`` returns."""
+    _ensure_dedup_caps()
+    url = f'{_admin_rest_url()}?{urllib.parse.urlencode(params, doseq=True)}'
+
+    creds = Credentials(get_access_key(), get_secret_key())
+    aws_req = AWSRequest(method=method, url=url)
+    HmacV1Auth(creds).add_auth(aws_req)
+
+    req = urllib.request.Request(url, method=method,
+                                headers=dict(aws_req.headers))
+    try:
+        resp = urllib.request.urlopen(req, timeout=120)
+        body = resp.read().decode('utf-8')
+        return (body, 0)
+    except urllib.error.HTTPError as e:
+        body = e.read().decode('utf-8', errors='replace')
+        log.error("admin_rest %s [params=%s] HTTP %d: %s",
+                  method, params, e.code, body)
+        return (body, 1)
+
+#--------------------------------------------------------------
+def dedup_admin(subcmd, **kwargs):
+    """Invoke a dedup admin operation via REST API."""
+    is_read = subcmd in ('stats',) or (subcmd == 'throttle' and kwargs.pop('stat', False))
+    method = 'GET' if is_read else 'POST'
+    params = {'op': subcmd}
+    if subcmd == 'exec':
+        params['yes-i-really-mean-it'] = ''
+    for k, v in kwargs.items():
+        params[k.replace('_', '-')] = str(v)
+    log.debug("dedup_admin [REST %s]: params=%s", method, params)
+    return admin_rest(method, params)
+
+#--------------------------------------------------------------
+def dedup_admin_cli(subcmd, *args):
+    """Invoke a dedup admin operation via radosgw-admin CLI."""
+    cli_args = ['dedup', subcmd]
+    if subcmd == 'exec':
+        cli_args.append('--yes-i-really-mean-it')
+    cli_args += list(args)
+    log.debug("dedup_admin_cli: args=%s", cli_args)
+    return admin(cli_args)
+
 #-----------------------------------------------
 def gen_bucket_name():
     global num_buckets
@@ -110,6 +193,19 @@ def get_buckets(num_buckets):
 
 
 #==============================================
+#-------------------------------------------------------------------------------
+def verify_no_forgotten_buckets(conn):
+    bucket_count = 0
+    response = conn.list_buckets()
+    # The 'Buckets' key always exists in a successful response
+    for bucket in response['Buckets']:
+        log.warning("Forgotten bucket name = %s", bucket['Name'])
+        conn.delete_bucket(Bucket=bucket['Name'])
+        bucket_count += 1
+
+    return bucket_count == 0
+
+
 g_tenant_connections=[]
 g_tenants=[]
 g_simple_connection=[]
@@ -120,10 +216,12 @@ def close_all_connections():
 
     for conn in g_simple_connection:
         log.debug("close simple connection")
+        verify_no_forgotten_buckets(conn)
         conn.close()
 
     for conn in g_tenant_connections:
         log.debug("close tenant connection")
+        verify_no_forgotten_buckets(conn)
         conn.close()
 
 #-----------------------------------------------
@@ -544,11 +642,12 @@ def delete_bucket_with_all_objects(bucket_name, conn):
     conn.delete_bucket(Bucket=bucket_name)
 
 #-------------------------------------------------------------------------------
-def verify_pool_is_empty():
+def verify_pool_is_empty(conn, skip_bucket_check=False):
     result = admin(['gc', 'process', '--include-all'])
     assert result[1] == 0
     assert count_object_parts_in_all_buckets(False, 0) == 0
-
+    if not skip_bucket_check:
+        assert verify_no_forgotten_buckets(conn)
 
 #-------------------------------------------------------------------------------
 def cleanup(bucket_name, conn):
@@ -556,7 +655,7 @@ def cleanup(bucket_name, conn):
         log.debug("delete_all_objects for bucket <%s>",bucket_name)
         delete_bucket_with_all_objects(bucket_name, conn)
 
-    verify_pool_is_empty()
+    verify_pool_is_empty(conn)
 
 
 #-------------------------------------------------------------------------------
@@ -566,7 +665,9 @@ def cleanup_all_buckets(bucket_names, conns):
             log.debug("delete_all_objects for bucket <%s>",bucket_name)
             delete_bucket_with_all_objects(bucket_name, conn)
 
-    verify_pool_is_empty()
+    verify_pool_is_empty(conns[0], True)
+    for conn in conns:
+        assert verify_no_forgotten_buckets(conn)
 
 
 #-------------------------------------------------------------------------------
@@ -1353,7 +1454,7 @@ def read_dedup_stats(dry_run):
     dedup_ratio_estimate=Dedup_Ratio()
     dedup_ratio_actual=Dedup_Ratio()
 
-    result = admin(['dedup', 'stats'])
+    result = dedup_admin('stats')
     assert result[1] == 0
 
     jstats=json.loads(result[0])
@@ -1396,8 +1497,7 @@ def read_dedup_stats(dry_run):
 
 #-------------------------------------------------------------------------------
 def set_bucket_index_throttling(limit):
-    cmd = ['dedup', 'throttle', '--max-bucket-index-ops', str(limit)]
-    result = admin(cmd)
+    result = dedup_admin('throttle', max_bucket_index_ops=limit)
     assert result[1] == 0
     log.debug(result[0])
 
@@ -1409,10 +1509,10 @@ def exec_dedup_internal(expected_dedup_stats, dry_run, max_dedup_time):
 
     log.debug("sending exec_dedup request: dry_run=%d", dry_run)
     if dry_run:
-        result = admin(['dedup', 'estimate'])
+        result = dedup_admin('estimate')
         reset_full_dedup_stats(expected_dedup_stats)
     else:
-        result = admin(['dedup', 'exec', '--yes-i-really-mean-it'])
+        result = dedup_admin('exec')
 
     assert result[1] == 0
     log.debug("wait for dedup to complete")
@@ -1639,11 +1739,11 @@ def check_full_dedup_state():
     global full_dedup_state_was_checked
     global full_dedup_state_disabled
     log.debug("check_full_dedup_state:: sending FULL Dedup request")
-    result = admin(['dedup', 'exec', '--yes-i-really-mean-it'])
+    result = dedup_admin('exec')
     if result[1] == 0:
         log.debug("full dedup is enabled!")
         full_dedup_state_disabled = False
-        result = admin(['dedup', 'abort'])
+        result = dedup_admin('abort')
         assert result[1] == 0
     else:
         log.debug("full dedup is disabled, skip all full dedup tests")
@@ -1969,8 +2069,8 @@ def corrupt_etag(key, corruption, expected_dedup_stats):
     names=result[0].split()
     for name in names:
         log.debug("name=%s", name)
-        if key in name:
-            log.debug("key=%s is a substring of name=%s", key, name);
+        if name.endswith(key):
+            log.debug("key=%s is a suffix of name=%s", key, name);
             rados_name = name
             break;
 
@@ -2252,8 +2352,8 @@ def dedup_copy_internal(multi_buckets):
     finally:
         # cleanup must be executed even after a failure
         if multi_buckets:
-            for bucket_name in bucket_names:
-                cleanup(bucket_name, conn)
+            conns=[conn]*len(bucket_names)
+            cleanup_all_buckets(bucket_names, conns)
         else:
             cleanup(bucket_names[0], conn)
 
@@ -2289,12 +2389,16 @@ def test_copy_after_dedup():
     # create files in range [8MB, 32MB] aligned on RADOS_OBJ_SIZE
     gen_files_in_range(files, num_files, 8*MB, 32*MB)
 
-    bucket_cp= gen_bucket_name()
+    bucket_cp=gen_bucket_name()
     bucket_names=[]
+    conns=[]
+    conn=None
     try:
         conn = get_single_connection()
         conn.create_bucket(Bucket=bucket_cp)
         bucket_names=create_buckets(conn, max_copies_count)
+        # need a vector holding multiple copies of conns to support
+        #      upload_objects_multi()/verify_objects_multi()
         conns=[conn] * max_copies_count
         indices=[0] * len(files)
         ret=upload_objects_multi(files, conns, bucket_names, indices, config)
@@ -2323,7 +2427,7 @@ def test_copy_after_dedup():
         # object and linking to the existing tail-objects
         assert (expected_results + cp_head_count) == count_object_parts_in_all_buckets(False, 0)
         # delete the original objects and verify server-side-copy objects are valid
-        for (bucket_name, conn) in zip(bucket_names, conns):
+        for bucket_name in bucket_names:
             delete_bucket_with_all_objects(bucket_name, conn)
 
         result = admin(['gc', 'process', '--include-all'])
@@ -2333,13 +2437,20 @@ def test_copy_after_dedup():
 
         # At this point the original obejcts are all removed
         # Objects created by server-side-copy should keep the tail in place
-        # because of teh refcount
+        # because of the refcount
         verify_objects_copy(bucket_cp, files, conn, expected_results, config)
 
     finally:
         # cleanup must be executed even after a failure
-        delete_bucket_with_all_objects(bucket_cp, conn)
-        cleanup_all_buckets(bucket_names, conns)
+        if conn:
+            delete_bucket_with_all_objects(bucket_cp, conn)
+            if len(bucket_names) > 0:
+                cleanup_all_buckets(bucket_names, conns)
+
+            result = admin(['gc', 'process', '--include-all'])
+            assert result[1] == 0
+        else:
+            cleanup_local()
 
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
@@ -3141,29 +3252,6 @@ def test_dedup_large_scale():
 
 
 #-------------------------------------------------------------------------------
-@pytest.mark.basic_test
-def test_empty_bucket():
-    if full_dedup_is_disabled():
-        return
-
-    prepare_test()
-    log.debug("test_empty_bucket: connect to AWS ...")
-
-    max_copies_count=2
-    config = default_config
-
-    files=[]
-    try:
-        ret=gen_connections_multi2(max_copies_count)
-        tenants=ret[0]
-        bucket_names=ret[1]
-        conns=ret[2]
-    finally:
-        # cleanup must be executed even after a failure
-        cleanup_all_buckets(bucket_names, conns)
-
-
-#-------------------------------------------------------------------------------
 def inc_step_with_tenants(stats_base, files, conns, bucket_names, config):
     max_copies_count=len(conns)
     # upload more copies of the same files
@@ -3482,7 +3570,8 @@ def test_dedup_dry_large_scale_with_tenants():
     try:
         threads_simple_dedup_with_tenants(files, conns, bucket_names, config, True)
     except Exception:
-        log.warning("test_dedup_dry_large_scale: failed!!")
+        log.warning("test_dedup_dry_large_scale_with_tenants: failed!!")
+        assert 0, "abort test_dedup_dry_large_scale_with_tenants "
     finally:
         # cleanup must be executed even after a failure
         cleanup_all_buckets(bucket_names, conns)
@@ -3512,6 +3601,167 @@ def test_dedup_dry_large_scale():
     finally:
         # cleanup must be executed even after a failure
         cleanup(bucket_name, conn)
+
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_cli_operations():
+    """Exercise all dedup CLI subcommands: estimate, stats, exec, pause, resume,
+       abort, throttle."""
+    if full_dedup_is_disabled():
+        return
+
+    prepare_test()
+    bucket_name = gen_bucket_name()
+    conn = get_single_connection()
+    try:
+        files = []
+        gen_files(files, 16*KB, 3)
+        bucket = conn.create_bucket(Bucket=bucket_name)
+        indices = [0] * len(files)
+        upload_objects(bucket_name, files, indices, conn, default_config, True)
+
+        log.info("Test radosgw-admin dedup estimate");
+        result = dedup_admin_cli('estimate')
+        assert result[1] == 0, "CLI estimate failed"
+
+        dedup_time     = 0
+        dedup_timeout  = 3
+        max_dedup_time = 30
+        while True:
+            assert dedup_time < max_dedup_time
+            time.sleep(dedup_timeout)
+            dedup_time += dedup_timeout
+            ret = read_dedup_stats(dry_run=True)
+            if ret[0]:
+                break
+
+
+        log.info("Test radosgw-admin dedup stats");
+        result = dedup_admin_cli('stats')
+        assert result[1] == 0, "CLI stats after estimate failed"
+
+        log.info("Test radosgw-admin dedup exec");
+        result = dedup_admin_cli('exec')
+        assert result[1] == 0, "CLI exec failed"
+
+        log.info("Test radosgw-admin dedup throttle");
+        result = dedup_admin_cli('throttle', '--max-bucket-index-ops', '100')
+        assert result[1] == 0, "CLI throttle failed"
+
+        log.info("Test radosgw-admin dedup throttle stat");
+        result = dedup_admin_cli('throttle', '--stat')
+        assert result[1] == 0, "CLI throttle failed"
+
+        log.info("Test radosgw-admin dedup pause");
+        result = dedup_admin_cli('pause')
+        assert result[1] == 0, "CLI pause failed"
+
+        log.info("Test radosgw-admin dedup resume");
+        result = dedup_admin_cli('resume')
+        assert result[1] == 0, "CLI resume failed"
+
+        log.info("Test radosgw-admin dedup abort");
+        result = dedup_admin_cli('abort')
+        assert result[1] == 0, "CLI abort failed"
+
+        log.info("Test radosgw-admin dedup stats");
+        result = dedup_admin_cli('stats')
+        assert result[1] == 0, "CLI stats after abort failed"
+    finally:
+        cleanup(bucket_name, conn)
+
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_rest_pause_resume():
+    """Exercise pause and resume via REST API."""
+    if full_dedup_is_disabled():
+        return
+
+    prepare_test()
+    bucket_name = gen_bucket_name()
+    conn = get_single_connection()
+    try:
+        files = []
+        gen_files(files, 16*KB, 3)
+        bucket = conn.create_bucket(Bucket=bucket_name)
+        indices = [0] * len(files)
+        upload_objects(bucket_name, files, indices, conn, default_config, True)
+
+        result = dedup_admin('exec')
+        assert result[1] == 0, "REST exec failed"
+
+        result = dedup_admin('pause')
+        assert result[1] == 0, "REST pause failed"
+
+        result = dedup_admin('throttle', stat=True)
+        assert result[1] == 0, "REST throttle stat failed"
+
+        result = dedup_admin('resume')
+        assert result[1] == 0, "REST resume failed"
+
+        result = dedup_admin('abort')
+        assert result[1] == 0, "REST abort failed"
+
+        result = dedup_admin('stats')
+        assert result[1] == 0, "REST stats after pause/resume failed"
+    finally:
+        cleanup(bucket_name, conn)
+
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_rest_throttle():
+    """Verify REST throttle set/get preserves unmodified values."""
+    def parse_throttle(result):
+        raw = json.loads(result[0]) if result[0].strip() else {}
+        return raw.get('throttle', raw)
+
+    result = dedup_admin('throttle', stat=True)
+    assert result[1] == 0, "REST throttle initial stat failed"
+    orig = parse_throttle(result)
+    orig_bucket = orig.get('bucket_index_throttle', 0)
+    orig_metadata = orig.get('metadata_throttle', 0)
+    log.info("throttle initial: bucket_index=%s, metadata=%s",
+             orig_bucket, orig_metadata)
+
+    new_bucket=orig_bucket+17
+    new_metadata=orig_metadata+17
+    result = dedup_admin('throttle', max_bucket_index_ops=new_bucket)
+    assert result[1] == 0, "REST throttle set bucket-index failed"
+    body = parse_throttle(result)
+    log.info("throttle after set bucket_index=%d:",
+             body.get('bucket_index_throttle', 0))
+    assert body.get('bucket_index_throttle') == new_bucket
+    assert body.get('metadata_throttle', 0) == orig_metadata
+
+    result = dedup_admin('throttle', max_metadata_ops=new_metadata)
+    assert result[1] == 0, "REST throttle set metadata failed"
+    body = parse_throttle(result)
+    log.info("throttle after set metadata=%d",
+             body.get('metadata_throttle', 0))
+    assert body.get('bucket_index_throttle') == new_bucket
+    assert body.get('metadata_throttle') == new_metadata
+
+    result = dedup_admin('throttle', stat=True)
+    assert result[1] == 0, "REST throttle final stat failed"
+    body = parse_throttle(result)
+    assert body.get('bucket_index_throttle') == new_bucket
+    assert body.get('metadata_throttle') == new_metadata
+
+    kwargs = {}
+    kwargs['max_bucket_index_ops'] = orig_bucket
+    kwargs['max_metadata_ops'] = orig_metadata
+    result = dedup_admin('throttle', **kwargs)
+    assert result[1] == 0, "REST throttle restore failed"
+    body = parse_throttle(result)
+    log.info("throttle after restore: bucket_index_throttle=%d, metadata=%d",
+             body.get('bucket_index_throttle', 0),
+             body.get('metadata_throttle', 0))
+
+    log.info("throttle restored to: bucket_index=%s, metadata=%s",
+             orig_bucket, orig_metadata)
 
 
 #-------------------------------------------------------------------------------
@@ -3657,3 +3907,385 @@ def test_dedup_identical_copies_multipart_small():
     log.info("test_dedup_identical_copies_multipart:full test")
     __test_dedup_identical_copies(files, config, dry_run, verify, force_clean)
 
+
+#===============================================================================
+#           Test Group 1: Filter File Parsing / Name Validation
+#===============================================================================
+#-------------------------------------------------------------------------------
+def write_filter_list_file(filepath, lines):
+    """Write a filter list file with the given lines, one per line."""
+    with open(filepath, 'w') as f:
+        for line in lines:
+            f.write(line + '\n')
+
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_filter_bucket_list_parsing():
+    """Validate CLI parsing of bucket filter list files (allow/deny).
+    Verify that illegal files are rejected
+    """
+    prepare_test()
+    try:
+        # 1. Mutual exclusivity: --allow-bucket-list and --deny-bucket-list together.
+        allow_file = OUT_DIR + "allow_buckets.txt"
+        deny_file  = OUT_DIR + "deny_buckets.txt"
+        write_filter_list_file(allow_file, ['my-bucket-1'])
+        write_filter_list_file(deny_file,  ['my-bucket-2'])
+        result = admin(['dedup', 'estimate',
+                        '--allow-bucket-list', allow_file,
+                        '--deny-bucket-list',  deny_file])
+        assert result[1] != 0, "Expected failure when both allow and deny lists are given"
+        os.remove(allow_file)
+        os.remove(deny_file)
+
+        # 2. Non-existent file path.
+        result = admin(['dedup', 'estimate', '--allow-bucket-list',
+                        '/nonexistent/bucket_list.txt'])
+        assert result[1] != 0, "Expected failure for non-existent filter file"
+
+        # 3. Empty file
+        empty_file = OUT_DIR + "empty_buckets.txt"
+        with open(empty_file, "w") as f:
+            pass
+
+        result = admin(['dedup', 'estimate', '--allow-bucket-list', empty_file])
+        assert result[1] != 0, "Expected failure for empty filter file"
+
+        result = admin(['dedup', 'estimate', '--deny-bucket-list', empty_file])
+        assert result[1] != 0, "Expected failure for empty filter file"
+    finally:
+        cleanup_local()
+
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_filter_storage_class_list_parsing():
+    """Validate CLI parsing of storage_class filter list files (allow/deny).
+    Verify that illegal files are rejected
+    """
+    prepare_test()
+    try:
+        # 1. Mutual exclusivity: --allow-storage-class-list and --deny-storage-class-list together.
+        allow_file = OUT_DIR + "allow_storage_class.txt"
+        deny_file  = OUT_DIR + "deny_storage_class.txt"
+        write_filter_list_file(allow_file, ['STORAGECLASS1'])
+        write_filter_list_file(deny_file,  ['STORAGECLASS2'])
+        result = admin(['dedup', 'estimate',
+                        '--allow-storage-class-list', allow_file,
+                        '--deny-storage-class-list',  deny_file])
+        assert result[1] != 0, "Expected failure when both allow and deny lists are given"
+        os.remove(allow_file)
+        os.remove(deny_file)
+
+        # 2. Non-existent file path.
+        result = admin(['dedup', 'estimate', '--allow-storage-class-list',
+                        '/nonexistent/storage_class_list.txt'])
+        assert result[1] != 0, "Expected failure for non-existent filter file"
+
+        # 3. Empty file
+        empty_file = OUT_DIR + "empty_storage_class.txt"
+        with open(empty_file, "w") as f:
+            pass
+
+        result = admin(['dedup', 'estimate', '--allow-storage-class-list', empty_file])
+        assert result[1] != 0, "Expected failure for empty filter file"
+
+        result = admin(['dedup', 'estimate', '--deny-storage-class-list', empty_file])
+        assert result[1] != 0, "Expected failure for empty filter file"
+    finally:
+        cleanup_local()
+
+
+#-------------------------------------------------------------------------------
+def read_filter_skip_stats():
+    """Read ingress_skip_filtered_bucket/storage_class from dedup stats JSON."""
+    result = dedup_admin('stats')
+    assert result[1] == 0
+    jstats = json.loads(result[0])
+    worker_stats = jstats['worker_stats']
+    skipped = worker_stats['skipped']
+    skip_bucket = skipped.get('Ingress skip: filtered bucket', 0)
+    skip_sc     = skipped.get('Ingress skipped filtered storage class, num objects skipped', 0)
+    return (skip_bucket, skip_sc)
+
+#-------------------------------------------------------------------------------
+def exec_dedup_with_filter(dry_run, deny_bucket_list=None, allow_bucket_list=None,
+                           deny_storage_class_list=None, allow_storage_class_list=None,
+                           max_dedup_time=300):
+    cmd = ['dedup', 'estimate' if dry_run else 'exec']
+    if not dry_run:
+        cmd += ['--yes-i-really-mean-it']
+    if deny_bucket_list:
+        cmd += ['--deny-bucket-list', deny_bucket_list]
+    if allow_bucket_list:
+        cmd += ['--allow-bucket-list', allow_bucket_list]
+    if deny_storage_class_list:
+        cmd += ['--deny-storage-class-list', deny_storage_class_list]
+    if allow_storage_class_list:
+        cmd += ['--allow-storage-class-list', allow_storage_class_list]
+
+    result = admin(cmd)
+    assert result[1] == 0
+    dedup_time = 0
+    dedup_timeout = 3
+    while dedup_time < max_dedup_time:
+        time.sleep(dedup_timeout)
+        dedup_time += dedup_timeout
+        ret = read_dedup_stats(dry_run)
+        if ret[0]:  # completed
+            return ret
+
+    assert False
+
+
+
+#==============================================================================
+#          Test Group 2: Storage-Class list Filters
+#===============================================================================
+
+#-------------------------------------------------------------------------------
+def dedup_filter_allow_deny_storage_class_common(dry_run, filter_mode_allow):
+    """Verify that objects whose storage class is denied are skipped during estimate.
+    Denying STANDARD means every object is filtered
+    Allowing STANDARD means nothing is filtered
+    """
+    prepare_test()
+    config=default_config
+    filter_file = OUT_DIR + "deny_storage_class.txt"
+    bucket_name = gen_bucket_name()
+    conn=get_single_connection()
+    files=[]
+    num_files=7
+    base_size = 2*MB
+    log.debug("generate files: base size=%d MiB, max_size=%d MiB",
+              base_size/MB, (pow(2, num_files) * base_size)/MB)
+    gen_files(files, base_size, num_files)
+    expected_dedup_stats = Dedup_Stats() # start with an empty-stats
+    split_head_objs=0
+    rados_objects_total=0
+
+    try:
+        obj_count = 0
+        bucket = conn.create_bucket(Bucket=bucket_name)
+
+        for f in files:
+            filename=f[0]
+            obj_size=f[1]
+            num_copies=f[2]
+
+            if filter_mode_allow:
+                split_head_objs += calc_split_objs_count(obj_size, num_copies, config)
+                calc_expected_stats(expected_dedup_stats, obj_size, num_copies, config)
+            else:
+                rados_obj_count=calc_rados_obj_count(num_copies, obj_size, config)
+                rados_objects_total += (rados_obj_count * num_copies)
+
+            for i in range(0, num_copies):
+                key = gen_object_name(filename, i)
+                log.debug("upload: %s -> %s", OUT_DIR + filename, key)
+                obj_count += 1
+                conn.upload_file(OUT_DIR + filename, bucket_name, key, Config=config)
+
+
+        write_filter_list_file(filter_file, ['STANDARD'])
+        if filter_mode_allow:
+            ret = exec_dedup_with_filter(dry_run, allow_storage_class_list=filter_file)
+        else:
+            ret = exec_dedup_with_filter(dry_run, deny_storage_class_list=filter_file)
+
+        dedup_stats=ret[1]
+        dedup_ratio_estimate=ret[2]
+
+        (skip_bucket, skip_sc) = read_filter_skip_stats()
+        assert skip_bucket == 0
+        log.debug("filtered storage class, num objects skipped = %d", skip_sc)
+        if filter_mode_allow:
+            assert skip_sc == 0
+            if not dry_run:
+                # the number of left rados-object post-dedup should equal the expected_results
+                # since we didn't filter any object
+                expected_results=calc_expected_results(files, config)
+                expected_results += split_head_objs
+                log.debug("expected_results=%d, split_head_objs=%d", expected_results, split_head_objs)
+                assert expected_results == count_object_parts_in_all_buckets(False)
+        else:
+            assert skip_sc == obj_count
+            # the number of left rados-object post-dedup should equal the rados_obj_count
+            # pre-dedup count since all objects were filtered out
+            assert rados_objects_total == count_object_parts_in_all_buckets(False)
+
+        if dry_run:
+            reset_full_dedup_stats(expected_dedup_stats)
+
+        expected_dedup_stats.size_before_dedup = dedup_stats.size_before_dedup
+        assert dedup_stats == expected_dedup_stats
+    finally:
+        cleanup_local()
+        try:
+            delete_bucket_with_all_objects(bucket_name, conn)
+        except Exception as e:
+            log.warning("Failed to cleanup bucket %s: %s", bucket_name, e)
+
+        verify_pool_is_empty(conn)
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_filter_storage_class_estimate():
+    dry_run=True
+
+    log.info("dedup_filter_storage_class_estimate: filter_mode_allow")
+    dedup_filter_allow_deny_storage_class_common(dry_run, filter_mode_allow=True)
+
+    log.info("dedup_filter_bucket_estimate: filter_mode_deny")
+    dedup_filter_allow_deny_storage_class_common(dry_run, filter_mode_allow=False)
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_filter_storage_class_exec():
+    dry_run=False
+
+    log.info("dedup_filter_storage_class_exec: filter_mode_allow")
+    dedup_filter_allow_deny_storage_class_common(dry_run, filter_mode_allow=True)
+
+    log.info("dedup_filter_storage_class_exec: filter_mode_deny")
+    dedup_filter_allow_deny_storage_class_common(dry_run, filter_mode_allow=False)
+
+
+#==============================================================================
+#          Test Group 3: Bucket list Filters
+#===============================================================================
+
+#-------------------------------------------------------------------------------
+def dedup_filter_allow_deny_bucket_common(dry_run, filter_mode_allow):
+    """
+    Upload identical objects to 4 buckets. Deny bucket_a and bucket_b.
+    Verify:
+      - ingress_skip_filtered_bucket == 2  (two bucket skipped)
+      - dedup estimate reflects only bucket_c + bucket_d (2 visible copies)
+      - Rados pool has MORE tail objects than a full (unfiltered) dedup would leave,
+        because bucket_a and bucket_b tails were not deduplicated
+    """
+    prepare_test()
+    config=default_config
+    filter_file = OUT_DIR + 'filter_bucket_list.txt'
+    conn = get_single_connection()
+    files = []
+    num_files = 11
+    bucket_a = gen_bucket_name()
+    bucket_b = gen_bucket_name()
+    bucket_c = gen_bucket_name()
+    bucket_d = gen_bucket_name()
+
+    filtered_bucket_names = [bucket_a, bucket_b]
+    num_filtered=len(filtered_bucket_names)
+    visible_bucket_names = [bucket_c, bucket_d]
+    num_visible=len(visible_bucket_names)
+    bucket_names = filtered_bucket_names + visible_bucket_names
+    log.debug("filtered=%s, visible=%s, buckets=%s",
+              filtered_bucket_names, visible_bucket_names, bucket_names)
+
+    base_size = 16*KB
+    log.debug("generate files: base size=%d MiB, max_size=%d MiB",
+              base_size/MB, (pow(2, num_files) * base_size)/MB)
+    gen_files(files, base_size, num_files)
+
+    try:
+        if filter_mode_allow:
+            # forgotten buckets from previous tests will cause skip_bucket count
+            # to be too high in allow_mode (as they won't appear in the allow list)
+            verify_no_forgotten_buckets(conn)
+
+        for b in bucket_names:
+            conn.create_bucket(Bucket=b)
+
+        rados_filtered=0
+        for f in files:
+            filename=f[0]
+            obj_size=f[1]
+            rados_obj_count = calc_rados_obj_count(1, obj_size, config)
+            rados_filtered += (rados_obj_count * num_filtered)
+            for i, bkt in enumerate(filtered_bucket_names):
+                key = gen_object_name("filtered" + filename, i)
+                conn.upload_file(OUT_DIR + filename, bkt, key, Config=config)
+
+        log.debug("rados_filtered=%d", rados_filtered)
+        assert rados_filtered == count_object_parts_in_all_buckets(False, 0)
+
+        # Build expected stats for only the VISIBLE copies
+        expected_dedup_stats = Dedup_Stats()
+        rados_visible=0
+        rados_visible_post_dedup=0
+        split_head_objs=0
+        for f in files:
+            filename=f[0]
+            obj_size=f[1]
+            calc_expected_stats(expected_dedup_stats, obj_size, num_visible, config)
+            rados_obj_count = calc_rados_obj_count(1, obj_size, config)
+            split_head      = calc_split_objs_count(obj_size, num_visible, config)
+            split_head_objs += split_head
+            tail_count      =  ((rados_obj_count + split_head) - 1)
+            rados_visible_post_dedup += (tail_count + num_visible)
+            rados_visible += (rados_obj_count*num_visible)
+            for i, bkt in enumerate(visible_bucket_names):
+                key = gen_object_name("visible" + filename, i)
+                conn.upload_file(OUT_DIR + filename, bkt, key, Config=config)
+
+        log.debug("rados_visible=%d, split_head_objs=%d", rados_visible, split_head_objs)
+        assert (rados_filtered + rados_visible) == count_object_parts_in_all_buckets(False, 0)
+
+        if filter_mode_allow:
+            # Write the allow-list (only bucket_b and bucket_c are allowed)
+            write_filter_list_file(filter_file, visible_bucket_names)
+
+            # Run dedup with allow filter
+            ret = exec_dedup_with_filter(dry_run, allow_bucket_list=filter_file)
+        else:
+            # Write the deny-list (only bucket_a is denied)
+            write_filter_list_file(filter_file, filtered_bucket_names)
+
+            # Run dedup with deny filter
+            ret = exec_dedup_with_filter(dry_run, deny_bucket_list=filter_file)
+
+        if not dry_run:
+            result = admin(['gc', 'process', '--include-all'])
+            assert result[1] == 0
+            actual_rados = count_object_parts_in_all_buckets(False, 0)
+            log.debug("rados_filtered=%d, rados_visible_post_dedup=%d, combined=%d",
+                      rados_filtered, rados_visible_post_dedup,
+                      (rados_filtered + rados_visible_post_dedup))
+            assert actual_rados == (rados_filtered + rados_visible_post_dedup)
+
+        (skip_bucket, skip_sc) = read_filter_skip_stats()
+        assert skip_sc     == 0
+        assert skip_bucket == num_filtered
+    finally:
+        cleanup_local()
+        for b in bucket_names:
+            try:
+                delete_bucket_with_all_objects(b, conn)
+            except Exception as e:
+                log.warning("Failed to cleanup bucket %s: %s", b, e)
+
+        verify_pool_is_empty(conn)
+
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_filter_bucket_estimate():
+    dry_run=True
+    log.info("dedup_filter_bucket_estimate: filter_mode_deny")
+    dedup_filter_allow_deny_bucket_common(dry_run, filter_mode_allow=False)
+
+    log.info("dedup_filter_bucket_estimate: filter_mode_allow")
+    dedup_filter_allow_deny_bucket_common(dry_run, filter_mode_allow=True)
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_filter_bucket_exec():
+    dry_run=False
+    log.info("dedup_filter_bucket_exec: filter_mode_deny")
+    dedup_filter_allow_deny_bucket_common(dry_run, filter_mode_allow=False)
+
+    log.info("dedup_filter_bucket_exec: filter_mode_allow")
+    dedup_filter_allow_deny_bucket_common(dry_run, filter_mode_allow=True)

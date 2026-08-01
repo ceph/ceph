@@ -127,6 +127,13 @@ options:
   default: 15_min
   services:
   - mon
+- name: mon_nvmeofgw_failback_delay
+  type: secs
+  level: advanced
+  desc: Period in seconds to delay HA failback of the gateway
+  default: 0
+  services:
+  - mon
 - name: mon_nvmeofgw_wrong_map_ignore_sec
   type: uint
   level: advanced
@@ -1169,6 +1176,74 @@ options:
   flags:
   - no_mon_update
   with_legacy: true
+- name: mon_backup_path
+  type: str
+  level: advanced
+  desc: Path to Monitor database backups
+  fmt_desc: The Monitor's backup location.
+  default: /var/backups/ceph/mon/$cluster-$id
+  services:
+  - mon
+  flags:
+  - runtime
+- name: mon_backup_min_avail
+  type: int
+  level: advanced
+  desc: Only capture backups if at least this percentage of the target filesystem is free
+  default: 10
+  min: 0
+  max: 100
+  services:
+  - mon
+  flags:
+  - runtime
+- name: mon_backup_keep_last
+  type: uint
+  level: advanced
+  desc: Keep the last N backups
+  fmt_desc: Keep the last N backups of the Monitor database.
+  default: 6
+  services:
+  - mon
+  flags:
+  - runtime
+- name: mon_backup_keep_hourly
+  type: uint
+  level: advanced
+  desc: Number of hourly backups
+  default: 5
+  services:
+  - mon
+  flags:
+  - runtime
+- name: mon_backup_keep_daily
+  type: uint
+  level: advanced
+  desc: Number of daily backups
+  fmt_desc: Keep one backup per day, for the specified number of days.
+  default: 7
+  services:
+  - mon
+  flags:
+  - runtime
+- name: mon_backup_interval
+  type: secs
+  level: advanced
+  desc: Automatic backups every N seconds (0 disables)
+  default: 0
+  services:
+  - mon
+  flags:
+  - runtime
+- name: mon_backup_cleanup_interval
+  type: secs
+  level: advanced
+  desc: Trigger backup cleanup every N seconds (0 disables)
+  default: 0
+  services:
+  - mon
+  flags:
+  - runtime
 - name: mon_rocksdb_options
   type: str
   level: advanced

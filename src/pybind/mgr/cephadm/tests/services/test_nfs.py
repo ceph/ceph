@@ -1,10 +1,16 @@
 import contextlib
+from typing import cast
 from unittest.mock import MagicMock, patch, ANY
 
 import pytest
 
+from ceph.utils import datetime_now
+from orchestrator import DaemonDescriptionStatus
+
+from cephadm.serve import CephadmServe
 from cephadm.services.service_registry import service_registry
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+from cephadm import utils
 from cephadm.module import CephadmOrchestrator
 from ceph.deployment.service_spec import (
     NFSServiceSpec,
@@ -93,6 +99,37 @@ class TestNFS:
                 nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(daemon_spec)
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert "Bind_addr = 1.2.3.7" in ganesha_conf
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_bind_addr_virtual_ip(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'host1', addr='1.2.3.7'):
+            cephadm_module.cache.update_host_networks('host1', {
+                '1.2.3.0/24': {
+                    'if0': ['1.2.3.7']
+                }
+            })
+
+            nfs_spec = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['host1']),
+                virtual_ip='1.2.3.100',
+                enable_haproxy_protocol=False
+            )
+
+            with with_service(cephadm_module, nfs_spec, status_running=True) as _:
+                dds = wait(cephadm_module, cephadm_module.list_daemons())
+                daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(dds[0])
+
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(daemon_spec)
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+
+                assert "Bind_addr = 1.2.3.100" in ganesha_conf
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_ingress_without_haproxy_stats(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
@@ -259,7 +296,7 @@ class TestNFS:
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
                                 'server '
-                                + haproxy_generated_conf[1][0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
+                                + haproxy_generated_conf[1][1] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
                         }
                 }
                 gen_config_lines = [line.rstrip() for line in haproxy_generated_conf[0]['files']['haproxy.cfg'].splitlines()]
@@ -351,7 +388,7 @@ class TestNFS:
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
                                 'server '
-                                + haproxy_generated_conf[1][0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
+                                + haproxy_generated_conf[1][1] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
                         }
                 }
                 gen_config_lines = [line.rstrip() for line in haproxy_generated_conf[0]['files']['haproxy.cfg'].splitlines()]
@@ -521,7 +558,7 @@ class TestNFS:
                         ports=[2049, 9587, 20049],
                     ))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
-                assert "Protocols = 3, 4, nfsrdma, rpcrdma" in ganesha_conf
+                assert "Protocols = 4, nfsrdma, rpcrdma" in ganesha_conf
 
     @patch("cephadm.serve.CephadmServe._run_cephadm_json")
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -549,6 +586,7 @@ class TestNFS:
                 placement=PlacementSpec(hosts=['host1']),
                 enable_rdma=True,
                 rdma_port=1234,
+                enable_nfsv3=True,
             )
             with with_service(cephadm_module, nfs_spec) as _:
                 nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
@@ -584,9 +622,44 @@ class TestNFS:
                         service_name=nfs_spec.service_name(),
                     ))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
-                assert "Protocols = 3, 4" in ganesha_conf
+                assert "Protocols = 4" in ganesha_conf
                 assert "nfsrdma" not in ganesha_conf
                 assert "NFS_RDMA_Port" not in ganesha_conf
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_enable_nfsv3(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            # Test with enable_nfsv3=False (default)
+            nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['test']))
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0', service_name=nfs_spec.service_name()))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert "Protocols = 4;" in ganesha_conf
+
+            # Test with enable_nfsv3=True
+            nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['test']),
+                                      enable_nfsv3=True)
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0', service_name=nfs_spec.service_name()))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert "Protocols = 3, 4;" in ganesha_conf
+
+
+def test_nfs_placement_count_per_host_rejected():
+    spec = NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(hosts=['h1'], count_per_host=1),
+    )
+    with pytest.raises(SpecValidationError, match="count_per_host.*not supported"):
+        spec.validate()
 
 
 def test_nfs_colocation_ports_validation():
@@ -740,3 +813,100 @@ def test_ingress_for_nfs_choose_next_action(cephadm_module, mock_cephadm):
         # _daemon_action so we can check what action was chosen
         mock_cephadm.serve(cephadm_module)._check_daemons()
         mock_cephadm._daemon_action.assert_called_with(ANY, action="redeploy")
+
+
+@patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+@patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+@patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+def test_check_daemons_starts_keepalived_when_stopped_and_haproxy_running(
+    cephadm_module, mock_cephadm
+):
+    """Regression: serve loop must issue 'start' for keepalived when deps are ok
+    and colocated haproxy is running (keepalived is not systemd-enabled)."""
+    nfs_spec = NFSServiceSpec(
+        service_id="foo",
+        placement=PlacementSpec(hosts=['test']),
+        port=8765,
+    )
+    ingress_spec = IngressSpec(
+        service_id='bar',
+        backend_service='nfs.foo',
+        frontend_port=2468,
+        monitor_port=8642,
+        virtual_ip='1.2.3.0/24',
+        placement=PlacementSpec(hosts=['test']),
+        keepalived_password='abcde',
+    )
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(with_host(cephadm_module, "test"))
+        cephadm_module.cache.update_host_networks(
+            'test',
+            {
+                '1.2.3.0/24': {
+                    'if0': [
+                        '1.2.3.4',
+                        '1.2.3.1',
+                    ]
+                }
+            },
+        )
+        stack.enter_context(with_service(cephadm_module, nfs_spec))
+        stack.enter_context(with_service(cephadm_module, ingress_spec))
+
+        ingress_svc = service_registry.get_service('ingress')
+        ispec = cast(IngressSpec, cephadm_module.spec_store[ingress_spec.service_name()].spec)
+
+        for dd in list(cephadm_module.cache.get_daemons_by_service(ingress_spec.service_name())):
+            if dd.daemon_type == 'haproxy' and dd.hostname == 'test':
+                dd.status = DaemonDescriptionStatus.running
+            elif dd.daemon_type == 'keepalived' and dd.hostname == 'test':
+                dd.status = DaemonDescriptionStatus.stopped
+                assert dd.hostname is not None
+                deps = ingress_svc.sorted_dependencies(
+                    cephadm_module, ispec, 'keepalived'
+                )
+                cephadm_module.cache.update_daemon_config_deps(
+                    dd.hostname, dd.name(), deps, datetime_now()
+                )
+
+        mock_cephadm._daemon_action.reset_mock()
+        CephadmServe(cephadm_module)._check_daemons()
+
+        keepalived_started = any(
+            getattr(c.args[0], 'daemon_type', None) == 'keepalived'
+            and (len(c.args) > 1 and c.args[1] == 'start' or c.kwargs.get('action') == 'start')
+            for c in mock_cephadm._daemon_action.call_args_list
+        )
+        assert keepalived_started
+
+
+def test_nfs_choose_next_action_skips_legacy_default_deps():
+    nfs_svc = service_registry.get_service('nfs')
+    legacy_deps = [
+        'enable_rdma: False',
+        'rdma_port: None',
+        'tls_ktls: False',
+        'tls_debug: False',
+        'tls_min_version: None',
+        'tls_ciphers: None',
+    ]
+    step = nfs_svc.choose_next_action(
+        utils.Action.NO_ACTION,
+        'nfs',
+        None,
+        curr_deps=[],
+        last_deps=legacy_deps,
+    )
+    assert step.action is utils.Action.NO_ACTION
+
+
+def test_nfs_choose_next_action_detects_explicit_value_change():
+    nfs_svc = service_registry.get_service('nfs')
+    step = nfs_svc.choose_next_action(
+        utils.Action.NO_ACTION,
+        'nfs',
+        None,
+        curr_deps=['tls_ktls: True'],
+        last_deps=['tls_ktls: False'],
+    )
+    assert step.action is utils.Action.REDEPLOY

@@ -472,6 +472,19 @@ The objects transitioned to cloud can now be restored. For more information, ref
 :ref:`Restoring Objects from Cloud <radosgw-cloud-restore>`.
 
 
+Retry Behavior
+--------------
+When the remote cloud endpoint reports a transient error, RGW retries the
+request with backoff rather than failing the lifecycle action immediately.
+
+If the retry budget is exhausted the operation is not completed and is
+retried on the next lifecycle pass.
+
+.. confval:: rgw_cloud_tier_retry_limit
+.. confval:: rgw_cloud_tier_retry_delay_ms
+.. confval:: rgw_cloud_tier_retry_max_ms
+
+
 Future Work
 -----------
 

@@ -26,9 +26,6 @@
 #include "rgw_iam_policy.h"
 #include "rgw_sts.h"
 #include "rgw_sal.h"
-#ifdef WITH_RADOSGW_RADOS
-#include "rgw_sal_rados.h"
-#endif
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -282,7 +279,7 @@ int AssumeRoleRequest::validate_input(const DoutPrefixProvider *dpp) const
       return -EINVAL;
     }
   }
-  if (! tokenCode.empty() && tokenCode.size() == TOKEN_CODE_SIZE) {
+  if (! tokenCode.empty() && tokenCode.size() != TOKEN_CODE_SIZE) {
     ldpp_dout(dpp, 0) << "Either token code is empty or token code size is invalid: " << tokenCode.size() << dendl;
     return -EINVAL;
   }

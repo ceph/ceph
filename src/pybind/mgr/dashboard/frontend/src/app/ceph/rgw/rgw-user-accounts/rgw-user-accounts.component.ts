@@ -36,7 +36,7 @@ export class RgwUserAccountsComponent extends ListWithDetails implements OnInit 
   permission: Permission;
   tableActions: CdTableAction[] = [];
   columns: CdTableColumn[] = [];
-  accounts: Account[] = [];
+  accounts: (Account & { cdLink?: string })[] = [];
   selection: CdTableSelection = new CdTableSelection();
   declare staleTimeout: number;
 
@@ -58,7 +58,8 @@ export class RgwUserAccountsComponent extends ListWithDetails implements OnInit 
       {
         name: $localize`Name`,
         prop: 'name',
-        flexGrow: 1
+        flexGrow: 1,
+        cellTransformation: CellTemplate.routerLink
       },
       {
         name: $localize`Tenant`,
@@ -160,7 +161,10 @@ export class RgwUserAccountsComponent extends ListWithDetails implements OnInit 
     this.setTableRefreshTimeout();
     this.rgwUserAccountsService.list(true).subscribe({
       next: (accounts: Account[]) => {
-        this.accounts = accounts;
+        this.accounts = accounts.map((account) => ({
+          ...account,
+          cdLink: `/rgw/accounts/${encodeURIComponent(account.name)}/overview`
+        }));
       },
       error: () => {
         if (context) {

@@ -26,7 +26,10 @@ LogManager::LogManager(
   : tm(tm) {}
 
 LogManager::initialize_omap_ret
-LogManager::initialize_omap(Transaction &t, laddr_t hint, omap_type_t omap_type) 
+LogManager::initialize_omap(
+  Transaction &t,
+  laddr_hint_t hint,
+  omap_type_t omap_type)
 {
   LOG_PREFIX(LogManager::initialize_omap);
   DEBUGT("hint: {}", t, hint);
@@ -67,7 +70,7 @@ LogManager::omap_set_keys(
   auto resync_node = [&](LogNodeRef e)
     -> log_load_extent_iertr::future<CachedExtentRef> {
     CachedExtentRef node;
-    Transaction::get_extent_ret ret;
+    [[maybe_unused]] Transaction::get_extent_ret ret;
     // To find mutable extent in the same transaction
     ret = t.get_extent(e->get_paddr(), &node);
     assert(ret == Transaction::get_extent_ret::PRESENT);
@@ -150,7 +153,8 @@ LogManager::omap_set_keys(
 	  continue;
 	}
 	if (cur->expect_overflow(p.first, p.second.length(),
-	    !is_ow_key(p.first) ? cur->can_ow() : false)) {
+	    (!is_ow_key(p.first) && !cur->is_initial_pending())
+	      ? cur->can_ow() : false)) {
 	  // This means the first entry of the new LogNode is not _fastinfo
 	  if (!is_ow_key(p.first)) {
 	    // remove _fastinfo in old LogNode
@@ -377,7 +381,9 @@ std::ostream &LogNode::print_detail_l(std::ostream &out) const
       << ", num=" << this->get_size()
       << ", used_space=" << this->use_space()
       << ", capacity=" << this->get_capacity()
-      << ", last_pos=" << this->get_last_pos();
+      << ", last_pos=" << this->get_last_pos()
+      << ", first_key=" << this->iter_cbegin().get_key()
+      << ", last_key=" << this->get_last_key();
   if (has_laddr()) {
     out << ", begin=" << get_begin()
 	<< ", end=" << get_end();
@@ -405,7 +411,7 @@ LogManager::log_load_extent(
     }
   ).handle_error_interruptible(
     log_load_extent_iertr::pass_further{},
-    crimson::ct_error::assert_all{ "Invalid error in log_load_extent" }
+    crimson::ct_error::assert_all( "Invalid error in log_load_extent" )
   );
 
   assert(!maybe_indirect_extent.is_indirect());
@@ -569,7 +575,7 @@ LogManager::remove_node(Transaction &t, LogNodeRef mut, LogNodeRef prev)
   co_await tm.remove(t, mut->get_laddr()
   ).handle_error_interruptible(
     omap_rm_key_iertr::pass_further{},
-    crimson::ct_error::assert_all{"Invalid error in remove_node"}
+    crimson::ct_error::assert_all("Invalid error in remove_node")
   );
   auto mut_prev = tm.get_mutable_extent(t, prev)->template cast<LogNode>();
   assert(mut_prev);
@@ -825,16 +831,18 @@ LogManager::omap_clear(omap_root_t &root, Transaction &t)
   co_await tm.remove(t, co_await get_dup_addr_from_root(t, root.addr)
   ).handle_error_interruptible(
     omap_clear_iertr::pass_further{},
-    crimson::ct_error::assert_all{"Invalid error in omap_clear"}
+    crimson::ct_error::assert_all("Invalid error in omap_clear")
   );
   co_await tm.remove(t, root.get_location()
   ).handle_error_interruptible(
     omap_clear_iertr::pass_further{},
-    crimson::ct_error::assert_all{"Invalid error in omap_clear"}
+    crimson::ct_error::assert_all("Invalid error in omap_clear")
   );
   root.update(
     L_ADDR_NULL,
-    0, L_ADDR_MIN, root.get_type());
+    0,
+    laddr_hint_t::create_as_fixed(L_ADDR_MIN),
+    root.get_type());
   co_return;
 }
 

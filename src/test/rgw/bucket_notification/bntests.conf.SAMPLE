@@ -11,3 +11,8 @@ secret_key = h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==
 display_name = M. Tester
 user_id = testid
 email = tester@ceph.com
+
+[kerberos]
+service_name = kafka
+principal = rgw/<broker-fqdn/ip>@REALM.COM
+keytab = /etc/krb5-keytabs/rgw.service.keytab

@@ -24,6 +24,9 @@ using DoubleFailedWriteOp = ceph::io_exerciser::DoubleFailedWriteOp;
 using TripleFailedWriteOp = ceph::io_exerciser::TripleFailedWriteOp;
 using SingleAppendOp = ceph::io_exerciser::SingleAppendOp;
 using TruncateOp = ceph::io_exerciser::TruncateOp;
+using SingleTruncateWriteOp = ceph::io_exerciser::SingleTruncateWriteOp;
+using DoubleTruncateWriteOp = ceph::io_exerciser::DoubleTruncateWriteOp;
+using TripleTruncateWriteOp = ceph::io_exerciser::TripleTruncateWriteOp;
 
 namespace {
 std::string value_to_string(uint64_t v) {
@@ -117,6 +120,15 @@ ceph::io_exerciser::ReadWriteOp<opType, numIOs>::ReadWriteOp(
   }
 }
 
+template <OpType opType, int numIOs>
+ceph::io_exerciser::ReadWriteOp<opType, numIOs>::ReadWriteOp(
+    std::array<uint64_t, numIOs>&& offset,
+    std::array<uint64_t, numIOs>&& length,
+    std::optional<bool> balanced_read)
+    : ReadWriteOp<opType, numIOs>(std::move(offset), std::move(length)) {
+      this->balanced_read = balanced_read;
+    }
+
 ConsistencyOp::ConsistencyOp() : TestOp<OpType::Consistency>() {}
 
 std::unique_ptr<ConsistencyOp> ConsistencyOp::generate() {
@@ -175,35 +187,57 @@ std::string ceph::io_exerciser::ReadWriteOp<opType, numIOs>::to_string(
   }
 }
 
-SingleReadOp::SingleReadOp(uint64_t offset, uint64_t length)
-    : ReadWriteOp<OpType::Read, 1>({offset}, {length}) {}
+SingleReadOp::SingleReadOp(uint64_t offset, uint64_t length, std::optional<bool> balanced_read)
+    : ReadWriteOp<OpType::Read, 1>({offset}, {length}, balanced_read) {}
 
 std::unique_ptr<SingleReadOp> SingleReadOp::generate(uint64_t offset,
                                                      uint64_t length) {
-  return std::make_unique<SingleReadOp>(offset, length);
+  return std::make_unique<SingleReadOp>(offset, length, std::nullopt);
+}
+
+std::unique_ptr<SingleReadOp> SingleReadOp::generate(uint64_t offset,
+                                  uint64_t length, bool balanced_read) {
+  return std::make_unique<SingleReadOp>(offset, length, balanced_read);
 }
 
 DoubleReadOp::DoubleReadOp(uint64_t offset1, uint64_t length1, uint64_t offset2,
-                           uint64_t length2)
-    : ReadWriteOp<OpType::Read2, 2>({offset1, offset2}, {length1, length2}) {}
+                           uint64_t length2, std::optional<bool> balanced_read)
+    : ReadWriteOp<OpType::Read2, 2>({offset1, offset2}, {length1, length2}, balanced_read) {}
 
 std::unique_ptr<DoubleReadOp> DoubleReadOp::generate(uint64_t offset1,
                                                      uint64_t length1,
                                                      uint64_t offset2,
                                                      uint64_t length2) {
-  return std::make_unique<DoubleReadOp>(offset1, length1, offset2, length2);
+  return std::make_unique<DoubleReadOp>(offset1, length1, offset2, length2, std::nullopt);
+}
+
+std::unique_ptr<DoubleReadOp> DoubleReadOp::generate(uint64_t offset1,
+                                                     uint64_t length1,
+                                                     uint64_t offset2,
+                                                     uint64_t length2,
+                                                     bool balanced_read) {
+  return std::make_unique<DoubleReadOp>(offset1, length1, offset2, length2, balanced_read);
 }
 
 TripleReadOp::TripleReadOp(uint64_t offset1, uint64_t length1, uint64_t offset2,
-                           uint64_t length2, uint64_t offset3, uint64_t length3)
+                           uint64_t length2, uint64_t offset3, uint64_t length3,
+                           std::optional<bool> balanced_read)
     : ReadWriteOp<OpType::Read3, 3>({offset1, offset2, offset3},
-                                    {length1, length2, length3}) {}
+                                    {length1, length2, length3},
+                                    balanced_read) {}
 
 std::unique_ptr<TripleReadOp> TripleReadOp::generate(
     uint64_t offset1, uint64_t length1, uint64_t offset2, uint64_t length2,
     uint64_t offset3, uint64_t length3) {
   return std::make_unique<TripleReadOp>(offset1, length1, offset2, length2,
-                                        offset3, length3);
+                                        offset3, length3, std::nullopt);
+}
+
+std::unique_ptr<TripleReadOp> TripleReadOp::generate(
+    uint64_t offset1, uint64_t length1, uint64_t offset2, uint64_t length2,
+    uint64_t offset3, uint64_t length3, bool balanced_read) {
+  return std::make_unique<TripleReadOp>(offset1, length1, offset2, length2,
+                                        offset3, length3, balanced_read);
 }
 
 SingleWriteOp::SingleWriteOp(uint64_t offset, uint64_t length)
@@ -255,6 +289,68 @@ std::unique_ptr<TruncateOp> TruncateOp::generate(uint64_t size) {
 std::string TruncateOp::to_string(uint64_t block_size) const {
   return "Truncate (size=" + value_to_string(size * block_size) + ")";
 }
+
+template <OpType opType, int N>
+ceph::io_exerciser::TruncateWriteOp<opType, N>::TruncateWriteOp(
+    uint64_t size, std::array<uint64_t, N>&& offset,
+    std::array<uint64_t, N>&& length)
+    : TestOp<opType>(), size(size), offset(offset), length(length) {}
+
+template <OpType opType, int N>
+std::string ceph::io_exerciser::TruncateWriteOp<opType, N>::to_string(
+    uint64_t block_size) const {
+  std::string result = "TruncateWrite (size=" + value_to_string(size * block_size);
+  for (int i = 0; i < N; i++) {
+    result += ", offset" + (N > 1 ? std::to_string(i + 1) : "") + "=" +
+              value_to_string(offset[i] * block_size) + ", length" +
+              (N > 1 ? std::to_string(i + 1) : "") + "=" +
+              value_to_string(length[i] * block_size);
+  }
+  result += ")";
+  return result;
+}
+
+SingleTruncateWriteOp::SingleTruncateWriteOp(uint64_t size, uint64_t offset,
+                                             uint64_t length)
+    : TruncateWriteOp<OpType::TruncateWrite, 1>(size, {offset}, {length}) {}
+
+std::unique_ptr<SingleTruncateWriteOp> SingleTruncateWriteOp::generate(
+    uint64_t size, uint64_t offset, uint64_t length) {
+  return std::make_unique<SingleTruncateWriteOp>(size, offset, length);
+}
+
+DoubleTruncateWriteOp::DoubleTruncateWriteOp(uint64_t size, uint64_t offset1,
+                                             uint64_t length1, uint64_t offset2,
+                                             uint64_t length2)
+    : TruncateWriteOp<OpType::TruncateWrite2, 2>(size, {offset1, offset2},
+                                                  {length1, length2}) {}
+
+std::unique_ptr<DoubleTruncateWriteOp> DoubleTruncateWriteOp::generate(
+    uint64_t size, uint64_t offset1, uint64_t length1, uint64_t offset2,
+    uint64_t length2) {
+  return std::make_unique<DoubleTruncateWriteOp>(size, offset1, length1,
+                                                 offset2, length2);
+}
+
+TripleTruncateWriteOp::TripleTruncateWriteOp(uint64_t size, uint64_t offset1,
+                                             uint64_t length1, uint64_t offset2,
+                                             uint64_t length2, uint64_t offset3,
+                                             uint64_t length3)
+    : TruncateWriteOp<OpType::TruncateWrite3, 3>(
+          size, {offset1, offset2, offset3}, {length1, length2, length3}) {}
+
+std::unique_ptr<TripleTruncateWriteOp> TripleTruncateWriteOp::generate(
+    uint64_t size, uint64_t offset1, uint64_t length1, uint64_t offset2,
+    uint64_t length2, uint64_t offset3, uint64_t length3) {
+  return std::make_unique<TripleTruncateWriteOp>(size, offset1, length1,
+                                                 offset2, length2, offset3,
+                                                 length3);
+}
+
+// Explicit template instantiations
+template class ceph::io_exerciser::TruncateWriteOp<OpType::TruncateWrite, 1>;
+template class ceph::io_exerciser::TruncateWriteOp<OpType::TruncateWrite2, 2>;
+template class ceph::io_exerciser::TruncateWriteOp<OpType::TruncateWrite3, 3>;
 
 SingleFailedWriteOp::SingleFailedWriteOp(uint64_t offset, uint64_t length)
     : ReadWriteOp<OpType::FailedWrite, 1>({offset}, {length}) {}

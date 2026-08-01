@@ -12,7 +12,7 @@ import {
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 
 import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
-import { CRUDTableComponent } from '~/app/shared/datatable/crud-table/crud-table.component';
+
 import { FeatureTogglesGuardService } from '~/app/shared/services/feature-toggles-guard.service';
 import { ModuleStatusGuardService } from '~/app/shared/services/module-status-guard.service';
 
@@ -25,7 +25,10 @@ import { RgwConfigModalComponent } from './rgw-config-modal/rgw-config-modal.com
 import { RgwDaemonDetailsComponent } from './rgw-daemon-details/rgw-daemon-details.component';
 import { RgwDaemonListComponent } from './rgw-daemon-list/rgw-daemon-list.component';
 import { RgwUserCapabilityModalComponent } from './rgw-user-capability-modal/rgw-user-capability-modal.component';
-import { RgwUserDetailsComponent } from './rgw-user-details/rgw-user-details.component';
+import { RgwUserResourceSidebarComponent } from './rgw-user-resource-sidebar/rgw-user-resource-sidebar.component';
+import { RgwUserResourcePageComponent } from './rgw-user-resource-page/rgw-user-resource-page.component';
+import { RgwUserResourceBreadcrumbResolver } from './rgw-user-resource-page/rgw-user-resource-breadcrumb.resolver';
+import { RgwUserDetailsResolver } from './rgw-user-resource-page/rgw-user-details.resolver';
 import { RgwUserFormComponent } from './rgw-user-form/rgw-user-form.component';
 import { RgwUserListComponent } from './rgw-user-list/rgw-user-list.component';
 import { RgwUserS3KeyModalComponent } from './rgw-user-s3-key-modal/rgw-user-s3-key-modal.component';
@@ -37,7 +40,7 @@ import { DataTableModule } from '~/app/shared/datatable/datatable.module';
 import { RgwMultisiteRealmFormComponent } from './rgw-multisite-realm-form/rgw-multisite-realm-form.component';
 import { RgwMultisiteZonegroupFormComponent } from './rgw-multisite-zonegroup-form/rgw-multisite-zonegroup-form.component';
 import { RgwMultisiteZoneFormComponent } from './rgw-multisite-zone-form/rgw-multisite-zone-form.component';
-import { CrudFormComponent } from '~/app/shared/forms/crud-form/crud-form.component';
+
 import { RgwMultisiteZoneDeletionFormComponent } from './models/rgw-multisite-zone-deletion-form/rgw-multisite-zone-deletion-form.component';
 import { RgwMultisiteZonegroupDeletionFormComponent } from './models/rgw-multisite-zonegroup-deletion-form/rgw-multisite-zonegroup-deletion-form.component';
 import { RgwSystemUserComponent } from './rgw-system-user/rgw-system-user.component';
@@ -70,6 +73,7 @@ import {
   LoadingModule,
   ModalModule,
   ProgressIndicatorModule,
+  ProgressBarModule,
   CodeSnippetModule,
   InputModule,
   CheckboxModule,
@@ -85,7 +89,8 @@ import {
   ToggletipModule,
   IconService,
   LayoutModule,
-  SkeletonModule
+  SkeletonModule,
+  TilesModule
 } from 'carbon-components-angular';
 import EditIcon from '@carbon/icons/es/edit/16';
 import ScalesIcon from '@carbon/icons/es/scales/20';
@@ -95,15 +100,22 @@ import ShareIcon from '@carbon/icons/es/share/16';
 import ViewIcon from '@carbon/icons/es/view/16';
 import PasswordIcon from '@carbon/icons/es/password/16';
 import ArrowDownIcon from '@carbon/icons/es/arrow--down/16';
+import ChevronDownIcon from '@carbon/icons/es/chevron--down/16';
+import ChevronUpIcon from '@carbon/icons/es/chevron--up/16';
 import ProgressBarRoundIcon from '@carbon/icons/es/progress-bar--round/32';
 import ToolsIcon from '@carbon/icons/es/tools/32';
-import ParentChild from '@carbon/icons/es/parent-child/20';
 import UserAccessLocked from '@carbon/icons/es/user--access-locked/16';
 
+import { ProductiveCardComponent } from '~/app/shared/components/productive-card/productive-card.component';
+import { TimePickerComponent } from '~/app/shared/components/time-picker/time-picker.component';
+import { AreaChartComponent } from '~/app/shared/components/area-chart/area-chart.component';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { RgwUserAccountsComponent } from './rgw-user-accounts/rgw-user-accounts.component';
 import { RgwUserAccountsFormComponent } from './rgw-user-accounts-form/rgw-user-accounts-form.component';
-import { RgwUserAccountsDetailsComponent } from './rgw-user-accounts-details/rgw-user-accounts-details.component';
+import { RgwUserAccountsResourceSidebarComponent } from './rgw-user-accounts-resource-sidebar/rgw-user-accounts-resource-sidebar.component';
+import { RgwUserAccountsResourcePageComponent } from './rgw-user-accounts-resource-page/rgw-user-accounts-resource-page.component';
+import { RgwAccountDetailsResolver } from './rgw-user-accounts-resource-page/rgw-account-details.resolver';
+import { RgwAccountDetailsBreadcrumbResolver } from './rgw-user-accounts-resource-page/rgw-account-details-breadcrumb.resolver';
 import { RgwStorageClassDetailsComponent } from './rgw-storage-class-details/rgw-storage-class-details.component';
 import { RgwStorageClassFormComponent } from './rgw-storage-class-form/rgw-storage-class-form.component';
 import { RgwBucketTieringFormComponent } from './rgw-bucket-tiering-form/rgw-bucket-tiering-form.component';
@@ -112,10 +124,15 @@ import { RgwRateLimitComponent } from './rgw-rate-limit/rgw-rate-limit.component
 import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-limit-details.component';
 import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
 import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component';
-import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.component';
+import { RgwTopicResourceSidebarComponent } from './rgw-topic-resource-sidebar/rgw-topic-resource-sidebar.component';
+import { RgwTopicResourcePageComponent } from './rgw-topic-resource-page/rgw-topic-resource-page.component';
+import { RgwTopicResourceBreadcrumbResolver } from './rgw-topic-resource-page/rgw-topic-resource-breadcrumb.resolver';
 import { RgwTopicFormComponent } from './rgw-topic-form/rgw-topic-form.component';
 import { RgwBucketNotificationListComponent } from './rgw-bucket-notification-list/rgw-bucket-notification-list.component';
 import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notification-form.component';
+import { ComponentsModule } from '~/app/shared/components/components.module';
+import { RgwAccountRolesListComponent } from './rgw-account-roles-list/rgw-account-roles-list.component';
+import { RgwAccountRoleFormComponent } from './rgw-account-role-form/rgw-account-role-form.component';
 
 @NgModule({
   imports: [
@@ -137,6 +154,7 @@ import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notifi
     ModalModule,
     GridModule,
     ProgressIndicatorModule,
+    ProgressBarModule,
     CodeSnippetModule,
     ButtonModule,
     LoadingModule,
@@ -154,7 +172,12 @@ import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notifi
     RadioModule,
     SelectModule,
     LayoutModule,
-    SkeletonModule
+    SkeletonModule,
+    TilesModule,
+    ProductiveCardComponent,
+    TimePickerComponent,
+    AreaChartComponent,
+    ComponentsModule
   ],
   exports: [
     RgwDaemonDetailsComponent,
@@ -162,7 +185,8 @@ import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notifi
     RgwBucketListComponent,
     RgwBucketDetailsComponent,
     RgwUserListComponent,
-    RgwUserDetailsComponent,
+    RgwUserResourceSidebarComponent,
+    RgwUserResourcePageComponent,
     RgwStorageClassListComponent
   ],
   declarations: [
@@ -173,8 +197,8 @@ import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notifi
     RgwBucketListComponent,
     RgwBucketDetailsComponent,
     RgwUserListComponent,
-    RgwUserDetailsComponent,
-    RgwBucketFormComponent,
+    RgwUserResourceSidebarComponent,
+    RgwUserResourcePageComponent,
     RgwUserFormComponent,
     RgwUserSwiftKeyModalComponent,
     RgwUserS3KeyModalComponent,
@@ -209,7 +233,8 @@ import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notifi
     RgwMultisiteTabsComponent,
     RgwUserAccountsComponent,
     RgwUserAccountsFormComponent,
-    RgwUserAccountsDetailsComponent,
+    RgwUserAccountsResourceSidebarComponent,
+    RgwUserAccountsResourcePageComponent,
     RgwStorageClassListComponent,
     RgwStorageClassDetailsComponent,
     RgwStorageClassFormComponent,
@@ -217,10 +242,13 @@ import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notifi
     RgwBucketLifecycleListComponent,
     RgwRateLimitDetailsComponent,
     RgwTopicListComponent,
-    RgwTopicDetailsComponent,
+    RgwTopicResourceSidebarComponent,
+    RgwTopicResourcePageComponent,
     RgwTopicFormComponent,
     RgwBucketNotificationListComponent,
-    RgwNotificationFormComponent
+    RgwNotificationFormComponent,
+    RgwAccountRolesListComponent,
+    RgwAccountRoleFormComponent
   ],
   providers: [TitleCasePipe]
 })
@@ -235,9 +263,10 @@ export class RgwModule {
       ViewIcon,
       PasswordIcon,
       ArrowDownIcon,
+      ChevronDownIcon,
+      ChevronUpIcon,
       ProgressBarRoundIcon,
       ToolsIcon,
-      ParentChild,
       UserAccessLocked
     ]);
   }
@@ -264,6 +293,22 @@ const routes: Routes = [
         path: `${URLVerbs.EDIT}/:uid`,
         component: RgwUserFormComponent,
         data: { breadcrumbs: ActionLabels.EDIT }
+      },
+      {
+        path: ':uid',
+        component: RgwUserResourceSidebarComponent,
+        data: { breadcrumbs: RgwUserResourceBreadcrumbResolver },
+        resolve: {
+          user: RgwUserDetailsResolver
+        },
+        children: [
+          { path: '', redirectTo: 'overview', pathMatch: 'full' },
+          {
+            path: 'overview',
+            component: RgwUserResourcePageComponent,
+            data: { breadcrumbs: 'Overview', section: 'overview' }
+          }
+        ]
       }
     ]
   },
@@ -275,56 +320,37 @@ const routes: Routes = [
       {
         path: URLVerbs.CREATE,
         component: RgwUserAccountsFormComponent,
-        data: { breadcrumbs: ActionLabels.CREATE }
+        data: { breadcrumbs: $localize`Create account` }
       },
       {
         path: `${URLVerbs.EDIT}/:id`,
         component: RgwUserAccountsFormComponent,
         data: { breadcrumbs: ActionLabels.EDIT }
+      },
+      {
+        path: ':accountName',
+        component: RgwUserAccountsResourceSidebarComponent,
+        data: { breadcrumbs: RgwAccountDetailsBreadcrumbResolver },
+        resolve: {
+          account: RgwAccountDetailsResolver
+        },
+        children: [
+          { path: '', redirectTo: 'overview', pathMatch: 'full' },
+          {
+            path: 'overview',
+            component: RgwUserAccountsResourcePageComponent,
+            data: { breadcrumbs: 'Overview', section: 'overview' }
+          },
+          {
+            path: 'roles',
+            component: RgwUserAccountsResourcePageComponent,
+            data: { breadcrumbs: 'Roles', section: 'roles' }
+          }
+        ]
       }
     ]
   },
-  {
-    path: 'roles',
-    data: {
-      breadcrumbs: 'Roles',
-      resource: 'api.rgw.roles@1.0',
-      tabs: [
-        {
-          name: 'Users',
-          url: '/rgw/user'
-        },
-        {
-          name: 'Accounts',
-          url: '/rgw/accounts'
-        },
-        {
-          name: 'Roles',
-          url: '/rgw/roles'
-        }
-      ]
-    },
-    children: [
-      {
-        path: '',
-        component: CRUDTableComponent
-      },
-      {
-        path: URLVerbs.CREATE,
-        component: CrudFormComponent,
-        data: {
-          breadcrumbs: ActionLabels.CREATE
-        }
-      },
-      {
-        path: URLVerbs.EDIT,
-        component: CrudFormComponent,
-        data: {
-          breadcrumbs: ActionLabels.EDIT
-        }
-      }
-    ]
-  },
+
   {
     path: 'bucket',
     data: { breadcrumbs: 'Buckets' },
@@ -451,6 +477,29 @@ const routes: Routes = [
         path: `${URLVerbs.EDIT}/:name`,
         component: RgwTopicFormComponent,
         data: { breadcrumbs: ActionLabels.EDIT }
+      },
+      {
+        path: ':name',
+        component: RgwTopicResourceSidebarComponent,
+        data: { breadcrumbs: RgwTopicResourceBreadcrumbResolver },
+        children: [
+          { path: '', redirectTo: 'overview', pathMatch: 'full' },
+          {
+            path: 'overview',
+            component: RgwTopicResourcePageComponent,
+            data: { breadcrumbs: 'Overview', section: 'overview' }
+          },
+          {
+            path: 'policies',
+            component: RgwTopicResourcePageComponent,
+            data: { breadcrumbs: 'Policies', section: 'policies' }
+          },
+          {
+            path: 'subscribed-buckets',
+            component: RgwTopicResourcePageComponent,
+            data: { breadcrumbs: 'Subscribed buckets', section: 'subscribed-buckets' }
+          }
+        ]
       }
     ]
   }

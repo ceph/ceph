@@ -944,6 +944,14 @@ ID, as in the following example command:
 
    radosgw-admin usage show --show-log-entries=false
 
+.. note:: If ``usage show`` returns empty results even though usage logging is
+   enabled and the cluster is active, verify that ``rgw_usage_max_shards`` is
+   set consistently across all RGW daemons and for ``radosgw-admin``.
+   A mismatch causes reads to target different objects than where data was
+   written. Use ``ceph config set global rgw_usage_max_shards <N>`` to enforce
+   a consistent value. Alternatively, ``radosgw-admin`` supports the
+   ``--rgw-usage-max-shards`` command-line parameter.
+
 
 Trim Usage
 ----------
@@ -958,6 +966,15 @@ example commands:
    radosgw-admin usage trim --start-date=2010-01-01 --end-date=2010-12-31
    radosgw-admin usage trim --uid=johndoe	
    radosgw-admin usage trim --uid=johndoe --end-date=2013-12-31
+
+.. note:: If ``usage trim`` appears to have no effect (e.g., ``usage show`` still
+   returns data or omap keys are not reduced), verify that
+   ``rgw_usage_max_shards`` is set consistently across all RGW daemons and for
+   ``radosgw-admin``. A mismatch causes trim operations to target different
+   objects than where data was written. Use
+   ``ceph config set global rgw_usage_max_shards <N>`` to enforce a consistent
+   value. Alternatively, ``radosgw-admin`` supports the
+   ``--rgw-usage-max-shards`` command-line parameter.
 
 Usage Log Key Transition
 -------------------------

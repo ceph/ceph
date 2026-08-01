@@ -18,13 +18,14 @@ RADOS_TESTS=(
     api_service api_service_pp
     api_c_write_operations
     api_c_read_operations
+    api_omap_pp
     list_parallel
     open_pools_parallel
     delete_pools_parallel
 )
 
 NEORADOS_TESTS=(
-    cls cmd handler_error io ec_io list ec_list misc pool
+    cls cmd completions handler_error io ec_io list ec_list misc pool
     read_operations snapshots watch_notify write_operations
 )
 

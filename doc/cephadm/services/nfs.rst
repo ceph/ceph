@@ -60,6 +60,7 @@ Alternatively, an NFS service can be applied using a YAML specification.
         host2: 10.0.0.124
       monitoring_networks:
       - 192.168.124.0/24
+      enable_nfsv3: true
 
 
 In this example, we run the server on the non-default ``port`` of
@@ -78,6 +79,8 @@ IP address is assigned to the host, that IP address will be used. If the IP
 address is not present and ``monitoring_networks`` is specified, an IP address
 that matches one of the specified networks will be used. If neither condition
 is met, the default binding will happen on all available network interfaces.
+By default, only the NFSv4 protocol is enabled. NFSv3 can be enabled by setting
+``enable_nfsv3`` to ``true`` in the service specification.
 
 NFS over RDMA
 -------------
@@ -167,8 +170,8 @@ In this configuration, 4 daemons total are deployed (2 per host), distributed ac
      ``monitoring_port`` from the spec.
    * The number of entries in ``colocation_ports`` should be ``count - 1``,
      to cover the node down scenario (or ``count_per_host - 1`` when using ``count_per_host``).
-   * Each entry must specify both ``data_port`` and ``monitoring_port``. When
-     ``enable_rdma`` is true, each entry must also include ``rdma_port``.
+   * Each entry must specify ``data_port``, ``monitoring_port``, and ``qos_cluster_port``.
+     When ``enable_rdma`` is true, each entry must also include ``rdma_port``.
    * If ``colocation_ports`` is not specified, ports will be automatically
      incremented for colocated daemons (e.g., 2049 → 2050 → 2051 for data ports,
      and 9587 → 9588 → 9589 for monitoring ports).
@@ -279,6 +282,27 @@ The following parameters can be used to configure TLS/SSL encryption for the NFS
 .. note:: When ``ssl`` is enabled, a ``certificate_source`` must be specified.
    If using ``inline`` certificates, all three certificate fields (``ssl_cert``,
    ``ssl_key``, ``ssl_ca_cert``) must be provided.
+
+Cluster-level QoS can also be configured at deployment time by specifying
+``cluster_qos_config`` and ``cluster_qos_port`` in the service spec.
+See :ref:`mgr-nfs` (Cluster QoS management) for supported keys and
+parameter constraints.
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: mynfs
+    placement:
+      hosts:
+        - host1
+    spec:
+      port: 2049
+      cluster_qos_port: 31311
+      cluster_qos_config:
+        qos_type: PerShare
+        enable_bw_control: true
+        max_export_write_bw: 100MB
+        max_export_read_bw: 100MB
 
 The specification can then be applied by running the following command:
 

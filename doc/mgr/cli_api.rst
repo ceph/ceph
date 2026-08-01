@@ -52,3 +52,11 @@ For example, run the following command to benchmark the command to get
 .. prompt:: bash #
 
    ceph mgr cli_benchmark 100 10 get osd_map
+
+
+Flush the saved cache map for the Ceph Manager CLI. Use this command to refresh the cache
+and ensure the most up-to-date information is used:
+
+.. prompt:: bash #
+
+   ceph mgr cli cache flush <map-name>

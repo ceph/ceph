@@ -45,6 +45,7 @@ class SQLiteDB : public DB, virtual public DBOp {
     /* default value matches with sqliteDB style */
 
     int createTables(const DoutPrefixProvider *dpp) override;
+    int createAccountTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createBucketTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createUserTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createObjectTable(const DoutPrefixProvider *dpp, DBOpParams *params);
@@ -58,6 +59,7 @@ class SQLiteDB : public DB, virtual public DBOp {
 
     int createLCTables(const DoutPrefixProvider *dpp) override;
 
+    int DeleteAccountTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int DeleteBucketTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int DeleteUserTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int DeleteObjectTable(const DoutPrefixProvider *dpp, DBOpParams *params);
@@ -81,6 +83,60 @@ class SQLObjectOp : public ObjectOp {
     ~SQLObjectOp() {}
 
     int InitializeObjectOps(std::string db_name, const DoutPrefixProvider *dpp);
+};
+
+class SQLInsertAccount : public SQLiteDB, public InsertAccountOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL; // Prepared statement
+
+  public:
+    SQLInsertAccount(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLInsertAccount() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLRemoveAccount : public SQLiteDB, public RemoveAccountOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL; // Prepared statement
+
+  public:
+    SQLRemoveAccount(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLRemoveAccount() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLGetAccount : public SQLiteDB, public GetAccountOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL; // Prepared statement
+    sqlite3_stmt *name_stmt = NULL; // Prepared statement to query by account name
+    sqlite3_stmt *email_stmt = NULL; // Prepared statement to query by email
+
+  public:
+    SQLGetAccount(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLGetAccount() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+      if (name_stmt)
+        sqlite3_finalize(name_stmt);
+      if (email_stmt)
+        sqlite3_finalize(email_stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
 };
 
 class SQLInsertUser : public SQLiteDB, public InsertUserOp {
@@ -139,6 +195,23 @@ class SQLGetUser : public SQLiteDB, public GetUserOp {
     int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
     int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
 };
+
+class SQLListUsers : public SQLiteDB, public ListUsersOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL; // Prepared statement
+
+  public:
+    SQLListUsers(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLListUsers() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
 
 class SQLInsertBucket : public SQLiteDB, public InsertBucketOp {
   private:

@@ -2,6 +2,11 @@
 CLAY code plugin
 ================
 
+.. deprecated:: Umbrella
+   
+The CLAY plugin is deprecated. Support for this plugin will be removed in
+the Vampire release.
+
 CLAY (short for coupled-layer) codes are erasure codes designed to bring about significant savings 
 in terms of network bandwidth and disk IO when a failed node/OSD/rack is being repaired. Let:
 

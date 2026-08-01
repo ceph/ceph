@@ -42,7 +42,7 @@ extern "C" {
 
 #define LIBCEPHFS_VER_MAJOR 11
 #define LIBCEPHFS_VER_MINOR 0
-#define LIBCEPHFS_VER_EXTRA 0
+#define LIBCEPHFS_VER_EXTRA 1
 
 #define LIBCEPHFS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 #define LIBCEPHFS_VERSION_CODE LIBCEPHFS_VERSION(LIBCEPHFS_VER_MAJOR, LIBCEPHFS_VER_MINOR, LIBCEPHFS_VER_EXTRA)
@@ -860,6 +860,22 @@ int ceph_mksnap(struct ceph_mount_info *cmount, const char *path, const char *na
  * @returns 0 on success or a negative return code on error.
  */
 int ceph_rmsnap(struct ceph_mount_info *cmount, const char *path, const char *name);
+
+/**
+ * Add, update or remove snapshot metadata.
+ *
+ * @param cmount the ceph mount handle to use for making the directory.
+ * @param path the path of the snapshot. This must be either an absolute
+ *        path or a path relative to CWD.
+ * @param mds_key key for the key-value pair in snapshot metadata.
+ * @param mds_val value for the key-value pair in snapshot metadata.
+ * @param op_flag unsigned integer to indicate whether metadata op is create,
+ *        update or remove.
+ * @returns 0 on success or a negative return value on error.
+ */
+int ceph_do_snap_md_op(struct ceph_mount_info* cmount, const char* path,
+                       const char* md_key, const char* md_val,
+                       const unsigned int op_flag);
 
 /**
  * Create multiple directories at once.
@@ -2221,6 +2237,8 @@ int ceph_ll_getlk(struct ceph_mount_info *cmount,
 		  Fh *fh, struct flock *fl, uint64_t owner);
 int ceph_ll_setlk(struct ceph_mount_info *cmount,
 		  Fh *fh, struct flock *fl, uint64_t owner, int sleep);
+int ceph_ll_flock(struct ceph_mount_info *cmount,
+		  Fh *fh, int operation, uint64_t owner);
 
 int ceph_ll_lazyio(struct ceph_mount_info *cmount, Fh *fh, int enable);
 

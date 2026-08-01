@@ -837,6 +837,31 @@ class TestGetLVs(object):
         monkeypatch.setattr(api.process, 'call', lambda x,**kw: ('', '', 0))
         assert api.get_lvs() == []
 
+    def test_get_lvs_retries_without_devices_file_on_warning(self, monkeypatch):
+        retry_stdout = ['ceph.type=data;/dev/vg/lv;lv;vg;lv-uuid;1024']
+        calls = []
+
+        def fake_call(cmd, **kw):
+            calls.append(cmd)
+            if len(calls) == 1:
+                return (
+                    [],
+                    ['WARNING: devices file is missing /dev/mapper/eui.foo using multipath component /dev/nvme0n1.'],
+                    0,
+                )
+            return (retry_stdout, [], 0)
+
+        monkeypatch.setattr(api.process, 'call', fake_call)
+
+        lvs_ = api.get_lvs()
+
+        assert len(calls) == 2
+        assert '--config' in calls[1]
+        assert 'devices { use_devicesfile=0 }' in calls[1]
+        assert len(lvs_) == 1
+        assert lvs_[0].lv_name == 'lv'
+        assert lvs_[0].vg_name == 'vg'
+
 
 class TestGetSinglePV(object):
 

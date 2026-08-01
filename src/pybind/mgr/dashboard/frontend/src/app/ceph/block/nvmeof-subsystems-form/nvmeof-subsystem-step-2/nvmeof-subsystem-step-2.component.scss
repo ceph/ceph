@@ -1,8 +1,13 @@
+@use '@carbon/layout';
+
 .cd-nvmeof-subsystem-step-two {
   // Full width of the tearsheet content column; min-inline-size allows nested
   // Carbon grid rows to shrink instead of bleeding into the right influencer.
   min-inline-size: 0;
   inline-size: 100%;
+
+  // Aligns with exactly 10 columns of the standard 16-column Carbon grid layout (10/16).
+  --host-input-width: #{percentage(10 / 16)};
 
   &-manual-hosts {
     display: flex;
@@ -10,7 +15,7 @@
   }
 
   &-manual-hosts-input {
-    flex: 0.5;
+    flex: 0 0 var(--host-input-width);
     margin-right: var(--cds-spacing-05);
   }
 
@@ -20,6 +25,26 @@
 
   &-specific-hosts-tag {
     max-inline-size: 17rem;
+  }
+
+  &-csv-container {
+    inline-size: var(--host-input-width);
+  }
+
+  &-csv-input {
+    .cds--file__drop-container {
+      min-block-size: layout.$spacing-12 !important;
+    }
+  }
+
+  &-csv-error-panel {
+    display: block;
+    width: 100%;
+
+    .cds--inline-notification,
+    .cds--actionable-notification {
+      width: 100%;
+    }
   }
 
   &-influencer {

@@ -1,5 +1,7 @@
 LIBRADOS_PRIVATE {
 	global:
+		rados_*;
+		_rados_*;
 		extern "C++" {
 			"guard variable for boost::asio::detail::call_stack<boost::asio::detail::strand_executor_service::strand_impl, unsigned char>::top_";
 			"guard variable for boost::asio::detail::call_stack<boost::asio::detail::strand_service::strand_impl, unsigned char>::top_";

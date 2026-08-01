@@ -29,7 +29,6 @@ export class PoolPageHelper extends PageHelper {
       cy.get('[data-testid="rbd-mirroring-check"] input[type="checkbox"]').check({ force: true });
     }
     cy.get('cd-submit-button').click();
-    this.navigateBack();
   }
 
   edit_pool_pg(name: string, new_pg: number, wait = true, mirroring = false) {
@@ -63,6 +62,32 @@ export class PoolPageHelper extends PageHelper {
     cy.get('cd-rbd-configuration-form')
       .get('input[name=rbd_qos_bps_limit]')
       .should('have.value', bpsLimit);
+  }
+
+  private ensurePoolDeletionEnabled(name: string) {
+    this.clickRowActionButton(name, 'delete');
+    cy.get('cds-modal').then(($modal) => {
+      if ($modal.text().includes("Can't delete")) {
+        cy.get('cds-modal button').contains('Enable').click({ force: true });
+        cy.get('cds-modal').should('not.exist');
+      } else {
+        cy.get('cds-modal .cds--modal-close-button button').click({ force: true });
+        cy.get('cds-modal').should('not.exist');
+      }
+    });
+  }
+
+  delete(
+    name: string,
+    columnIndex?: number,
+    section?: string,
+    cdsModal = true,
+    isMultiselect = false,
+    shouldReload = false,
+    confirmInput = true
+  ) {
+    this.ensurePoolDeletionEnabled(name);
+    super.delete(name, columnIndex, section, cdsModal, isMultiselect, shouldReload, confirmInput);
   }
 
   private setApplications(apps: string[]) {

@@ -1,10 +1,9 @@
-import { ComponentFixture, TestBed, fakeAsync, tick, flush } from '@angular/core/testing';
+import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { PerformanceCardComponent } from './performance-card.component';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { of } from 'rxjs';
 import { PrometheusService } from '../../api/prometheus.service';
 import { PerformanceCardService } from '../../api/performance-card.service';
-import { MgrModuleService } from '../../api/mgr-module.service';
 import { PerformanceData } from '../../models/performance-data';
 import { DatePipe } from '@angular/common';
 import { NumberFormatterService } from '../../services/number-formatter.service';
@@ -14,8 +13,6 @@ import { Permissions } from '../../models/permissions';
 describe('PerformanceCardComponent', () => {
   let component: PerformanceCardComponent;
   let fixture: ComponentFixture<PerformanceCardComponent>;
-  let performanceCardService: PerformanceCardService;
-  let mgrModuleService: MgrModuleService;
 
   const mockChartData: PerformanceData = {
     iops: [{ timestamp: new Date(), values: { 'Read IOPS': 100, 'Write IOPS': 50 } }],
@@ -25,23 +22,13 @@ describe('PerformanceCardComponent', () => {
     ]
   };
 
-  const mockMgrModules = [
-    { name: 'prometheus', enabled: true },
-    { name: 'other', enabled: false }
-  ];
-
   beforeEach(async () => {
     const prometheusServiceMock = {
-      lastHourDateObject: { start: 1000, end: 2000, step: 14 },
-      ifPrometheusConfigured: jest.fn((fn) => fn())
+      lastHourDateObject: { start: 1000, end: 2000, step: 14 }
     };
 
     const performanceCardServiceMock = {
       getChartData: jest.fn().mockReturnValue(of(mockChartData))
-    };
-
-    const mgrModuleServiceMock = {
-      list: jest.fn().mockReturnValue(of(mockMgrModules))
     };
 
     const numberFormatterMock = {
@@ -74,7 +61,6 @@ describe('PerformanceCardComponent', () => {
       providers: [
         { provide: PrometheusService, useValue: prometheusServiceMock },
         { provide: PerformanceCardService, useValue: performanceCardServiceMock },
-        { provide: MgrModuleService, useValue: mgrModuleServiceMock },
         { provide: NumberFormatterService, useValue: numberFormatterMock },
         { provide: DatePipe, useValue: datePipeMock },
         { provide: AuthStorageService, useValue: authStorageServiceMock }
@@ -83,20 +69,11 @@ describe('PerformanceCardComponent', () => {
 
     fixture = TestBed.createComponent(PerformanceCardComponent);
     component = fixture.componentInstance;
-    performanceCardService = TestBed.inject(PerformanceCardService);
-    mgrModuleService = TestBed.inject(MgrModuleService);
   });
 
   it('should create', () => {
     expect(component).toBeTruthy();
   });
-
-  it('should initialize list signal from mgrModuleService', fakeAsync(() => {
-    tick();
-    expect(mgrModuleService.list).toHaveBeenCalled();
-    expect(component.list()).toEqual(mockMgrModules);
-    flush();
-  }));
 
   it('should call loadCharts on ngOnInit', () => {
     const loadChartsSpy = jest.spyOn(component, 'loadCharts');
@@ -106,73 +83,31 @@ describe('PerformanceCardComponent', () => {
 
   it('should load charts and update chartDataSignal', fakeAsync(() => {
     const time = { start: 1000, end: 2000, step: 14 };
+
     component.loadCharts(time);
-
-    expect(component.time).toEqual(time);
-    expect(performanceCardService.getChartData).toHaveBeenCalledWith(time);
-
     tick();
+
     expect(component.chartDataSignal()).toEqual(mockChartData);
   }));
 
-  it('should set emptyStateKey when prometheus is enabled', fakeAsync(() => {
+  it('should not load chart data when no storage', fakeAsync(() => {
+    component.storageEmptyState = true;
     const time = { start: 1000, end: 2000, step: 14 };
     component.loadCharts(time);
 
     tick();
-    expect(mgrModuleService.list).toHaveBeenCalled();
-    expect(component.emptyStateKey()).toBe('');
+
+    expect(component.chartDataSignal()).toBeNull();
   }));
 
-  it('should set emptyStateKey to prometheusDisabled when prometheus module is disabled', fakeAsync(async () => {
-    const mockMgrModulesDisabled = [
-      { name: 'prometheus', enabled: false },
-      { name: 'other', enabled: true }
-    ];
-    (mgrModuleService.list as jest.Mock).mockReturnValue(of(mockMgrModulesDisabled));
-
-    // Recreate component with new mock value
-    fixture = TestBed.createComponent(PerformanceCardComponent);
-    component = fixture.componentInstance;
-    fixture.detectChanges();
-    tick();
-
+  it('should not load chart data when prometheus is disabled', fakeAsync(() => {
+    component.prometheusEmptyState = true;
     const time = { start: 1000, end: 2000, step: 14 };
     component.loadCharts(time);
 
     tick();
-    expect(mgrModuleService.list).toHaveBeenCalled();
-    expect(component.emptyStateKey()).toBe('prometheusDisabled');
-  }));
 
-  it('should handle empty mgr modules list', fakeAsync(() => {
-    const mockMgrModulesEmpty: any[] = [];
-    (mgrModuleService.list as jest.Mock).mockReturnValue(of(mockMgrModulesEmpty));
-
-    // Recreate component with new mock value
-    fixture = TestBed.createComponent(PerformanceCardComponent);
-    component = fixture.componentInstance;
-    // Don't call detectChanges() as it triggers ngOnInit which calls loadCharts
-    // and loadCharts will crash with empty array
-    tick();
-
-    expect(mgrModuleService.list).toHaveBeenCalled();
-    expect(component.list()).toEqual([]);
-    flush();
-  }));
-
-  it('should set emptyStateKey to empty string when user lacks configOpt read', fakeAsync(() => {
-    const auth = TestBed.inject(AuthStorageService);
-    (auth.getPermissions as jest.Mock).mockReturnValue(new Permissions({}));
-
-    fixture = TestBed.createComponent(PerformanceCardComponent);
-    component = fixture.componentInstance;
-
-    const time = { start: 1000, end: 2000, step: 14 };
-    component.loadCharts(time);
-
-    tick();
-    expect(component.emptyStateKey()).toBe('');
+    expect(component.chartDataSignal()).toBeNull();
   }));
 
   it('should cleanup subscriptions on ngOnDestroy', () => {

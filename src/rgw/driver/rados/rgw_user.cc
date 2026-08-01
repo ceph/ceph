@@ -8,7 +8,9 @@
 #include "rgw_account.h"
 #include "rgw_bucket.h"
 #include "rgw_metadata.h"
+#ifdef WITH_RADOSGW_RADOS
 #include "rgw_metadata_lister.h"
+#endif
 #include "rgw_quota.h"
 #include "rgw_rest_iam.h" // validate_iam_user_name()
 
@@ -2692,6 +2694,7 @@ public:
   }
 };
 
+#ifdef WITH_RADOSGW_RADOS
 class RGWUserMetadataHandler : public RGWMetadataHandler {
   RGWSI_User *svc_user{nullptr};
  public:
@@ -2845,7 +2848,7 @@ std::string RGWUserMetadataHandler::get_marker(void *handle)
   auto lister = static_cast<RGWMetadataLister*>(handle);
   return lister->get_marker();
 }
-
+#endif
 
 RGWUserCtl::RGWUserCtl(RGWSI_Zone *zone_svc, RGWSI_User *user_svc)
 {
@@ -2975,11 +2978,13 @@ int RGWUserCtl::remove_info(const DoutPrefixProvider *dpp,
   return svc.user->remove_user_info(info, params.objv_tracker, y, dpp);
 }
 
+#ifdef WITH_RADOSGW_RADOS
 auto create_user_metadata_handler(RGWSI_User *user_svc)
     -> std::unique_ptr<RGWMetadataHandler>
 {
   return std::make_unique<RGWUserMetadataHandler>(user_svc);
 }
+#endif
 
 void rgw_user::dump(Formatter *f) const
 {

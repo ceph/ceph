@@ -20,7 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "jerasure/include/galois.h"
+#include "galois.h"
 
 void print_matrix(int *mat, int dim)
 {

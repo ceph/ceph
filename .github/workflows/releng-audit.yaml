@@ -1,0 +1,542 @@
+name: Backport Audit
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, unlabeled, labeled, reopened]
+    branches:
+      - umbrella
+      - tentacle
+      - squid
+  issue_comment:
+    types: [created]
+
+# Group concurrency by PR/Issue number to serialize executions and prevent race conditions
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: Execution and Routing
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      statuses: write
+    steps:
+      - id: router
+        name: Evaluate Workflow Routing
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          ORG_TOKEN: ${{ secrets.ORG_READ_PAT }}
+        with:
+          script: |
+            const eventName = context.eventName;
+            const payload = context.payload;
+            const actor = context.actor;
+            const isBot = actor === 'github-actions[bot]' || actor === 'github-actions';
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            
+            // Safely removes a label and logs execution, ignoring 404s if label is not attached
+            async function removeLabelSafely(labelName) {
+              try {
+                core.info(`[Router] Attempting to remove label '${labelName}'...`);
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: labelName
+                });
+                core.info(`[Router] Successfully removed label '${labelName}'.`);
+              } catch (e) {
+                if (e.status === 404) {
+                  core.info(`[Router] Label '${labelName}' was not present on PR (404 ignored).`);
+                } else {
+                  core.warning(`[Router] Failed to remove label '${labelName}': ${e.message}`);
+                }
+              }
+            }
+
+            // Verifies if the user has maintainer/admin collaborator permissions or is an active
+            // member of the ceph-release-manager team. Required for /audit override and test-branch.
+            async function checkAuthorization(username) {
+              core.info(`[Router] Checking collaborator permission level for @${username}...`);
+              let authorized = false;
+              try {
+                const { data: permData } = await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner: context.repo.owner, repo: context.repo.repo, username: username
+                });
+                core.info(`[Router] Collaborator permission level for @${username}: ${permData.permission}`);
+                authorized = (permData.permission === 'admin' || permData.permission === 'maintain');
+              } catch (e) { 
+                core.info(`[Router] Failed to fetch repo permissions: ${e.message}`); 
+              }
+
+              if (!authorized && context.repo.owner === 'ceph' && process.env.ORG_TOKEN) {
+                core.info(`[Router] @${username} does not have maintain/admin repo rights. Checking ceph-release-manager team membership...`);
+                try {
+                  const orgOctokit = github.getOctokit(process.env.ORG_TOKEN);
+                  const { data: teamData } = await orgOctokit.rest.teams.getMembershipForUserInOrg({
+                    org: 'ceph', team_slug: 'ceph-release-manager', username: username
+                  });
+                  core.info(`[Router] Org team membership state for @${username}: ${teamData.state}`);
+                  authorized = (teamData.state === 'active');
+                } catch (e) { 
+                  core.info(`[Router] Failed to fetch org team membership: ${e.message}`); 
+                }
+              }
+              core.info(`[Router] Authorization result for @${username}: ${authorized ? 'AUTHORIZED' : 'NOT AUTHORIZED'}`);
+              return authorized;
+            }
+
+            // Retrieves the HEAD SHA of the pull request. Falls back to an API lookup
+            // when triggered by issue_comment events where the PR object is omitted from payload.
+            async function getPrSha() {
+              let sha = context.payload.pull_request?.head?.sha;
+              if (!sha) {
+                core.info(`[Router] PR SHA not found in payload. Fetching from API for issue #${context.issue.number}...`);
+                try {
+                  const { data: pr } = await github.rest.pulls.get({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: context.issue.number
+                  });
+                  sha = pr.head.sha;
+                  core.info(`[Router] Successfully retrieved SHA from API: ${sha}`);
+                } catch (e) {
+                  core.error(`[Router] Failed to fetch PR details from API: ${e.message}`);
+                }
+              } else {
+                core.info(`[Router] Retrieved PR SHA from payload: ${sha}`);
+              }
+              if (sha) core.setOutput('pr_sha', sha);
+              return sha;
+            }
+
+            // Pushes a pending commit status to the PR HEAD SHA to provide visual feedback
+            // and block branch protection while the audit executes. For standard audit runs,
+            // strips pass/fail state labels before starting.
+            async function triggerAuditRun(description, statusContext = 'Backport Audit') {
+              core.info(`[Router] Initiating audit run trigger for context '${statusContext}': ${description}`);
+              const isStandard = (statusContext === 'Backport Audit');
+              if (isStandard) {
+                core.info('[Router] Clearing any previous labels before starting standard audit run...');
+                await removeLabelSafely('releng-audit-fail');
+                await removeLabelSafely('releng-audit-override');
+                await removeLabelSafely('releng-audit-pass');
+                await removeLabelSafely('releng-audit-queue');
+              }
+              const sha = await getPrSha();
+              if (!sha) {
+                core.error('[Router] Cannot initiate audit: PR SHA could not be retrieved.');
+                core.setOutput('run_audit', 'false');
+                return;
+              }
+              core.setOutput('status_context', statusContext);
+
+              if (isStandard) {
+                try {
+                  core.info(`[Router] Setting commit status to 'pending' on SHA ${sha}...`);
+                  await github.rest.repos.createCommitStatus({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    sha: sha,
+                    state: 'pending',
+                    context: statusContext,
+                    description: description,
+                    target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+                  });
+                  core.info(`[Router] Set pending commit status (${statusContext}) on SHA: ${sha}`);
+                } catch (e) {
+                  core.error(`[Router] Failed to set commit status: ${e.message}`);
+                }
+              } else {
+                core.info(`[Router] Non-standard audit run ('${statusContext}') — skipping pending commit status creation.`);
+              }
+              core.setOutput('run_audit', 'true');
+            }
+
+            // Pushes an immediate success commit status when an authorized override occurs,
+            // unblocking required branch protection rules without executing the audit script.
+            async function setOverrideStatus(actorName) {
+              core.info(`[Router] Setting override success commit status for @${actorName}...`);
+              try {
+                const sha = await getPrSha();
+                if (sha) {
+                  await github.rest.repos.createCommitStatus({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    sha: sha,
+                    state: 'success',
+                    context: 'Backport Audit',
+                    description: `Audit requirement overridden by @${actorName}`,
+                    target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+                  });
+                  core.info(`[Router] Set success (override) commit status on SHA: ${sha}`);
+                } else {
+                  core.error('[Router] Cannot set override commit status: SHA is undefined or could not be retrieved.');
+                }
+              } catch (e) {
+                core.error(`[Router] Failed to set override commit status: ${e.message}`);
+              }
+            }
+
+            // Performs the complete override state transition atomically: applies the override label,
+            // strips pass/fail labels, updates commit status to success, and posts a confirmation comment.
+            async function executeOverride(actorName, addLabel = true, postComment = true) {
+              core.info(`[Router] Executing override lifecycle for @${actorName} (addLabel=${addLabel}, postComment=${postComment})...`);
+              if (addLabel) {
+                try {
+                  core.info('[Router] Applying releng-audit-override label...');
+                  await github.rest.issues.addLabels({
+                    owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, labels: ['releng-audit-override']
+                  });
+                  core.info('[Router] Successfully added releng-audit-override label.');
+                } catch (e) {
+                  core.error(`[Router] Failed to add override label: ${e.message}`);
+                }
+              }
+              core.info('[Router] Stripping pass/fail labels as part of override execution...');
+              await removeLabelSafely('releng-audit-fail');
+              await removeLabelSafely('releng-audit-pass');
+              await setOverrideStatus(actorName);
+              if (postComment) {
+                try {
+                  core.info('[Router] Posting override confirmation comment...');
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number,
+                    body: `✅ **Audit Override Applied** by @${actorName}.\n\n[View workflow run](${runUrl})`
+                  });
+                  core.info('[Router] Successfully posted override confirmation comment.');
+                } catch (e) {
+                  core.error(`[Router] Failed to post override comment: ${e.message}`);
+                }
+              }
+            }
+
+            core.info(`[Router] Evaluating event: ${eventName}, action: ${payload.action || 'N/A'}`);
+
+            // ==========================================
+            // 1. HANDLE ISSUE COMMENTS (State Machine Drivers)
+            // ==========================================
+            // Issue comments (/audit commands) act strictly as state machine drivers.
+            // For standard commands (/audit retest, /audit override), we only apply labels
+            // here. This routes execution cleanly through the 'labeled' event handler,
+            // ensuring a single source of truth for audit triggers and override state changes.
+            if (eventName === 'issue_comment') {
+              if (!payload.issue.pull_request) {
+                core.info('[Router] Comment is not on a pull request. Skipping.');
+                core.setOutput('run_audit', 'false');
+                return;
+              }
+              
+              const commentBody = payload.comment.body.trim();
+              
+              if (commentBody.startsWith('/audit retest')) {
+                // Directly trigger the audit run instead of bouncing through an ephemeral label
+                core.info('[Router] /audit retest detected. Triggering immediate audit execution...');
+                try {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number,
+                    body: `🔄 **Audit Retest Triggered** by @${actor}.\n\n[View workflow run](${runUrl})`
+                  });
+                } catch (e) {
+                  core.error(`[Router] Failed to post retest comment: ${e.message}`);
+                }
+                await triggerAuditRun('Running backport audit...');
+              } else if (commentBody.startsWith('/audit override')) {
+                // Execute the full override lifecycle atomically within this run
+                core.info(`[Router] /audit override detected. Validating @${actor}...`);
+                if (await checkAuthorization(actor)) {
+                  core.info(`[Router] @${actor} is authorized. Executing override...`);
+                  await executeOverride(actor, true, true);
+                } else {
+                  core.error(`User @${actor} is not authorized to override audits.`);
+                }
+                core.setOutput('run_audit', 'false');
+              } else if (commentBody.startsWith('/audit test-branch')) {
+                // Test branch mode: Execute PTL tool from an alternative branch for testing/debugging.
+                // To prevent side effects on PR mergeability, this mode does NOT touch state labels
+                // and will report a success commit status even if issues are found (findings are posted as PR comments).
+                core.info(`[Router] /audit test-branch detected. Validating @${actor}...`);
+                if (await checkAuthorization(actor)) {
+                  const parts = commentBody.split(/\s+/);
+                  const testBranch = parts[2] || 'testing/releng-audit';
+                  
+                  try {
+                    core.info(`[Router] Validating test branch '${testBranch}' exists...`);
+                    await github.rest.repos.getBranch({ owner: context.repo.owner, repo: context.repo.repo, branch: testBranch });
+                    core.info(`[Router] Test branch '${testBranch}' verified.`);
+                  } catch (e) {
+                    core.error(`Test branch '${testBranch}' does not exist: ${e.message}`);
+                    await github.rest.issues.createComment({
+                      owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number,
+                      body: `❌ **Audit Test Mode Failed**\n\nBranch \`${testBranch}\` was not found in \`${context.repo.owner}/${context.repo.repo}\`.\n\n[View workflow run](${runUrl})`
+                    });
+                    core.setOutput('run_audit', 'false');
+                    return;
+                  }
+
+                  try {
+                    core.info('[Router] Posting test mode activation comment...');
+                    await github.rest.issues.createComment({
+                      owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number,
+                      body: `🧪 **Audit Test Mode Activated** by @${actor}.\n\nExecuting audit using tooling checked out from branch \`${testBranch}\`. *This run will not affect required PR commit statuses or state labels.*\n\n[View workflow run](${runUrl})`
+                    });
+                    core.info('[Router] Successfully posted test mode activation comment.');
+                  } catch (e) {
+                    core.error(`[Router] Failed to post test mode comment: ${e.message}`);
+                  }
+
+                  core.setOutput('checkout_ref', testBranch);
+                  await triggerAuditRun(`Running audit using branch ${testBranch}...`, `Audit Test Mode (${testBranch})`);
+                } else {
+                  core.error(`User @${actor} is not authorized to invoke test branches.`);
+                  core.setOutput('run_audit', 'false');
+                }
+              } else {
+                core.info('[Router] Comment is not a recognized /audit command. Skipping.');
+                core.setOutput('run_audit', 'false');
+              }
+
+              return;
+            }
+
+            // ==========================================
+            // 2. HANDLE PR EVENTS & LABELS
+            // ==========================================
+            const hasFailLabel = payload.pull_request?.labels.some(l => l.name === 'releng-audit-fail');
+            const hasPassLabel = payload.pull_request?.labels.some(l => l.name === 'releng-audit-pass');
+            const hasOverrideLabel = payload.pull_request?.labels.some(l => l.name === 'releng-audit-override');
+            const hasQueueLabel = payload.pull_request?.labels.some(l => l.name === 'releng-audit-queue');
+
+            core.info(`[Router] Current state labels -> Fail: ${hasFailLabel}, Pass: ${hasPassLabel}, Override: ${hasOverrideLabel}, Queue: ${hasQueueLabel}`);
+            core.setOutput('has_override', hasOverrideLabel ? 'true' : 'false');
+
+            // --- LABELED EVENTS ---
+            if (eventName === 'pull_request_target' && payload.action === 'labeled') {
+              const labelName = payload.label.name;
+              core.info(`[Router] Labeled event triggered for label '${labelName}' by @${actor}.`);
+
+              // The releng-audit-queue label acts as the primary trigger for manual retests
+              if (labelName === 'releng-audit-queue') {
+                core.info('[Router] Queue label detected. Stripping label and triggering audit...');
+                await removeLabelSafely('releng-audit-queue');
+                await triggerAuditRun('Running backport audit...');
+                return;
+              }
+
+              // Handle authorized overrides applied via label or /audit override comment
+              if (labelName === 'releng-audit-override') {
+                core.info(`[Router] Evaluating override label application by @${actor}...`);
+                if (!isBot && !(await checkAuthorization(actor))) {
+                  core.error(`[Router] User @${actor} is not authorized to apply releng-audit-override. Removing label...`);
+                  await removeLabelSafely(labelName);
+                  core.error(`User @${actor} is not authorized to override audits.`);
+                } else {
+                  core.info(`[Router] Override authorized for @${actor}. Executing override state transition...`);
+                  // Execute override state transition without re-adding label (addLabel = false).
+                  // Only post a confirmation comment if applied by a human user in the UI (!isBot).
+                  await executeOverride(actor, false, !isBot);
+                }
+                core.setOutput('run_audit', 'false');
+                return;
+              }
+
+              // Prevent unauthorized users from manually spoofing machine-owned state labels
+              if (!isBot && (labelName === 'releng-audit-pass' || labelName === 'releng-audit-fail')) {
+                core.warning(`[Router] User @${actor} cannot manually apply machine-owned label '${labelName}'. Removing...`);
+                await removeLabelSafely(labelName);
+                if (!hasOverrideLabel) {
+                  core.info('[Router] No override active. Triggering fresh audit run...');
+                  await triggerAuditRun('Running backport audit...');
+                } else {
+                  core.info('[Router] Override is active. Skipping fresh audit run.');
+                }
+                return;
+              }
+
+              core.info(`[Router] Labeled event for '${labelName}' requires no action. Skipping.`);
+              core.setOutput('run_audit', 'false');
+              return;
+            }
+
+            // --- SYNCHRONIZE (New Commits) ---
+            // When new commits are pushed, existing overrides are revoked and audits re-evaluate.
+            // If the PR is already failed, execution halts to avoid comment spam until re-requested.
+            if (eventName === 'pull_request_target' && payload.action === 'synchronize') {
+              core.info('[Router] Processing synchronize event (new commits pushed)...');
+              if (hasOverrideLabel) {
+                core.info('[Router] PR had active override label. Revoking override due to new commits...');
+                await removeLabelSafely('releng-audit-override');
+                core.setOutput('has_override', 'false');
+                try {
+                  core.info('[Router] Posting override removal notification comment...');
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number,
+                    body: `⚠️ **Audit Override Removed**\n\nNew commits were pushed to this PR, so the previous override has been removed.\n\n[View workflow run](${runUrl})`
+                  });
+                  core.info('[Router] Override removal notification posted.');
+                } catch (e) {
+                  core.error(`[Router] Failed to post override removal comment: ${e.message}`);
+                }
+              }
+
+              if (hasFailLabel) {
+                core.warning("[Router] PR is currently in a failed audit state. Halting automated execution on synchronize.");
+                core.info("PR is currently in a failed audit state. Remove the releng-audit-fail label or comment /audit retest to re-run.");
+                const sha = await getPrSha();
+                if (sha) {
+                  core.info(`[Router] Setting commit status to 'failure' on new SHA ${sha}...`);
+                  await github.rest.repos.createCommitStatus({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    sha: sha,
+                    state: 'failure',
+                    context: 'Backport Audit',
+                    description: 'PR is in a failed audit state. Remove releng-audit-fail label or comment /audit retest to re-run.',
+                    target_url: runUrl
+                  });
+                }
+                core.setOutput('run_audit', 'false');
+                return;
+              }
+
+              await triggerAuditRun('Running backport audit...');
+              return;
+            }
+
+            // --- UNLABELED ---
+            // If a user manually strips a status label, trigger a fresh audit evaluation
+            if (eventName === 'pull_request_target' && payload.action === 'unlabeled') {
+              const removed = payload.label.name;
+              core.info(`[Router] Processing unlabeled event: label '${removed}' was removed by @${actor}.`);
+              if (['releng-audit-fail', 'releng-audit-pass', 'releng-audit-override'].includes(removed) && !isBot) {
+                if (hasOverrideLabel && removed === 'releng-audit-fail') {
+                  core.info('[Router] PR has active override label; ignoring manual removal of releng-audit-fail.');
+                  core.setOutput('run_audit', 'false');
+                  return;
+                }
+                core.info(`[Router] Status label '${removed}' removed by human. Triggering fresh audit evaluation...`);
+                await triggerAuditRun('Running backport audit...');
+                return;
+              } else {
+                core.info(`[Router] Unlabeled event for '${removed}' requires no action.`);
+              }
+            }
+
+            // --- OPENED / REOPENED ---
+            if (eventName === 'pull_request_target' && (payload.action === 'opened' || payload.action === 'reopened')) {
+              core.info(`[Router] Processing PR ${payload.action} event...`);
+              if (payload.action === 'reopened' && hasOverrideLabel) {
+                core.info('[Router] PR reopened with previous override label. Removing stale override...');
+                await removeLabelSafely('releng-audit-override');
+                core.setOutput('has_override', 'false');
+              }
+              await triggerAuditRun('Running backport audit...');
+              return;
+            }
+
+            core.info('[Router] Event did not match any active execution triggers. Skipping audit.');
+            core.setOutput('run_audit', 'false');
+
+      - name: Checkout Trusted Base Repository
+        if: steps.router.outputs.run_audit == 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          ref: ${{ steps.router.outputs.checkout_ref || '' }}
+
+      - name: Fetch main for parity check
+        if: steps.router.outputs.run_audit == 'true'
+        # checkout only fetches the PR's base branch (e.g. squid/tentacle/umbrella).
+        # The parity check needs the main ref to walk the commit history graph and find the upstream
+        # merge commit for each cherry-pick, so fetch it explicitly as origin/main.
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+
+      - name: Setup Python
+        if: steps.router.outputs.run_audit == 'true'
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.13'
+
+      - name: Install Dependencies
+        if: steps.router.outputs.run_audit == 'true'
+        run: pip install GitPython python-redmine requests
+
+      - id: ptl_audit
+        name: Run PTL Audit
+        if: steps.router.outputs.run_audit == 'true'
+        env:
+          PTL_TOOL_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PTL_TOOL_REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY_BACKPORT_BOT }}
+          PTL_TOOL_BASE_PROJECT: ${{ github.repository_owner }}
+          PTL_TOOL_BASE_REPO: ${{ github.event.repository.name }}
+          PTL_TOOL_PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+        run: |
+          python src/script/ptl-tool.py --debug --ci-mode --audit
+
+      - name: Report Audit Status & Update State Labels
+        if: always() && steps.router.outputs.run_audit == 'true' && steps.router.outputs.pr_sha != ''
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const statusContext = '${{ steps.router.outputs.status_context }}' || 'Backport Audit';
+            if (statusContext !== 'Backport Audit') {
+              core.info(`[Reporter] Non-standard audit run ('${statusContext}') — skipping state labels and commit status reporting.`);
+              return;
+            }
+
+            const outcome = '${{ steps.ptl_audit.outcome }}';
+            const eventName = context.eventName;
+            core.info(`[Reporter] Evaluating final audit outcome: '${outcome}' for standard audit run (event: ${eventName})...`);
+
+            let state = 'failure';
+            let description = 'Backport audit failed. See review comments or workflow logs.';
+
+            if (outcome === 'success') {
+              state = 'success';
+              description = 'Backport audit completed successfully.';
+              core.info('[Reporter] Audit completed successfully. Applying releng-audit-pass label...');
+              try {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: context.issue.number || context.payload.pull_request.number,
+                  labels: ['releng-audit-pass']
+                });
+                core.info('[Reporter] Successfully applied releng-audit-pass label.');
+              } catch (e) {
+                core.error(`[Reporter] Failed to add pass label: ${e.message}`);
+              }
+            } else if (outcome === 'cancelled') {
+              state = 'error';
+              description = 'Backport audit execution was cancelled.';
+              core.warning('[Reporter] Audit execution was cancelled.');
+            } else {
+              // outcome === 'failure'
+              core.info('[Reporter] Audit detected failures. Applying releng-audit-fail label...');
+              try {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: context.issue.number || context.payload.pull_request.number,
+                  labels: ['releng-audit-fail']
+                });
+                core.info('[Reporter] Successfully applied releng-audit-fail label.');
+              } catch (e) {
+                core.error(`[Reporter] Failed to add fail label: ${e.message}`);
+              }
+            }
+
+            try {
+              core.info(`[Reporter] Creating final commit status '${state}' for context '${statusContext}' on SHA '${{ steps.router.outputs.pr_sha }}'...`);
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha: '${{ steps.router.outputs.pr_sha }}',
+                state: state,
+                context: statusContext,
+                description: description,
+                target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+              });
+              core.info(`[Reporter] Set ${state} commit status (${statusContext}) on SHA: ${{ steps.router.outputs.pr_sha }}`);
+            } catch (e) {
+              core.error(`[Reporter] Failed to set final commit status: ${e.message}`);
+            }

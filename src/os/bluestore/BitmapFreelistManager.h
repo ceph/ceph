@@ -96,6 +96,7 @@ public:
     std::vector<std::pair<std::string, std::string>>*) const override;
 
   bool validate(uint64_t min_alloc_size) const override;
+  int expand(uint64_t new_size, KeyValueDB* db) override;
 };
 
 #endif

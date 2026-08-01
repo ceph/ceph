@@ -1,5 +1,3 @@
-import { PrometheusRule } from './prometheus-alerts';
-
 export class AlertmanagerSilenceMatcher {
   name: string;
   value: any;
@@ -22,5 +20,5 @@ export class AlertmanagerSilence {
   status?: {
     state: 'expired' | 'active' | 'pending';
   };
-  silencedAlerts?: PrometheusRule[];
+  silencedAlerts?: string[];
 }

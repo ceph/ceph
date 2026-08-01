@@ -85,7 +85,13 @@ if(WITH_RADOSGW)
     list(APPEND rgw_libs amqp_mock)
   endif()
   if(WITH_RADOSGW_KAFKA_ENDPOINT)
-    list(APPEND rgw_libs kafka_stub)
+    # kafka_stub provides fake rd_kafka_* symbols for tests; needed
+    # whenever we link against a dynamic system librdkafka (either
+    # opted-in via WITH_SYSTEM_RDKAFKA, or as a fallback when the
+    # bundled submodule is not checked out).
+    if(WITH_SYSTEM_RDKAFKA OR NOT EXISTS "${CMAKE_SOURCE_DIR}/src/librdkafka/CMakeLists.txt")
+      list(APPEND rgw_libs kafka_stub)
+    endif()
   endif()
   add_subdirectory(rgw)
 endif(WITH_RADOSGW)
@@ -684,10 +690,6 @@ add_ceph_test(run-cli-tests ${CMAKE_CURRENT_SOURCE_DIR}/run-cli-tests)
 
 add_ceph_test(smoke.sh ${CMAKE_CURRENT_SOURCE_DIR}/smoke.sh)
 
-set_property(
-  TEST ${tox_tests}
-  PROPERTY ENVIRONMENT ${env_vars_for_tox_tests})
-
 # unittest_admin_socket
 add_executable(unittest_admin_socket
   admin_socket.cc
@@ -1083,7 +1085,22 @@ add_executable(unittest_ceph_assert
   ceph_assert.cc)
 add_ceph_unittest(unittest_ceph_assert)
 target_link_libraries(unittest_ceph_assert ceph-common global)
-endif()
+endif(NOT WIN32)
+
+find_package(benchmark QUIET)
+if (benchmark_FOUND)
+  add_executable(bench_lrus
+  bench_lrus.cc
+  )
+  target_link_libraries(bench_lrus ceph-common global-static benchmark::benchmark Boost::context)
+
+  add_executable(bench_secmem
+  bench_secmem.cc
+  )
+  target_link_libraries(bench_secmem ceph-common global-static benchmark::benchmark keyutils::keyutils)
+else()
+  message(STATUS "The google/benchmark library was not found. Skipping micro benchmark tests")
+endif(benchmark_FOUND)
 
 add_executable(test_nvmeof_gw_utils
   test_nvmeof_gw_utils.cc

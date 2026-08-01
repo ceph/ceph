@@ -40,6 +40,9 @@
 #include "os/ObjectStore.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "test/osd/OSDMapTestHelpers.h"
+#include "test/osd/ScrubTestFixture.h"
+#include "osd/scrubber/scrub_backend.h"
+#include "osd/scrubber/pg_scrubber.h"
 
 // Unified test fixture for EC and Replicated backend tests with ObjectStore.
 // Uses PoolType to branch between EC (ECSwitch) and Replicated (ReplicatedBackend).
@@ -77,7 +80,7 @@ protected:
   /// Keyed by hobject_t, values are shared_ptr so the same OBC is reused
   /// across sequential operations on the same object. This is critical for
   /// EC attr_cache continuity.
-  std::map<hobject_t, ObjectContextRef> object_contexts;
+  std::map<int, std::map<hobject_t, ObjectContextRef>> object_contexts;
   
   /// Track outstanding writes per object. When this reaches 0, we can safely
   /// clear attr_cache (as there are no in-flight writes that might have stale
@@ -86,7 +89,9 @@ protected:
   
   // OpTracker for wrapping messages in OpRequestRef
   std::shared_ptr<OpTracker> op_tracker;
-  
+  // Scrub infrastructure - initialized once and reused across scrub operations
+  std::unique_ptr<MockScrubBeListener> scrub_listener;
+  std::unique_ptr<MockSnapMapReader> snap_reader;
   ceph::ErasureCodeInterfaceRef ec_impl;
   std::map<int, std::unique_ptr<ECExtentCache::LRU>> lrus;
   int k = 4;  // data chunks
@@ -109,16 +114,7 @@ protected:
   // The epoch comes from osdmap, this tracks the second version number
   uint64_t next_version = 1;
   
-  class TestDpp : public NoDoutPrefix {
-  public:
-    TestDpp(CephContext *cct) : NoDoutPrefix(cct, ceph_subsys_osd) {}
-    
-    std::ostream& gen_prefix(std::ostream& out) const override {
-      out << "PGBackendTest: ";
-      return out;
-    }
-  };
-  std::unique_ptr<TestDpp> dpp;
+  std::unique_ptr<NoDoutPrefix> dpp;
 
 public:
   explicit PGBackendTestFixture(PoolType type = EC) : pool_type(type)
@@ -142,6 +138,7 @@ public:
   }
   
   void SetUp() override {
+    ceph::logging::Log::set_prefix_hook(&EventLoop::get_log_prefix);
     int r = ::mkdir(data_dir.c_str(), 0777);
     if (r < 0) {
       r = -errno;
@@ -158,8 +155,14 @@ public:
     g_conf().set_safe_to_start_threads();
     
     CephContext *cct = g_ceph_context;
-    dpp = std::make_unique<TestDpp>(cct);
-    event_loop = std::make_unique<EventLoop>(false);
+    
+    // Make dout statements flush immediately - we don't care about performance in tests
+    if (cct->_log) {
+      cct->_log->set_max_new(1);
+    }
+    
+    dpp = std::make_unique<NoDoutPrefix>(cct, ceph_subsys_osd);
+    event_loop = std::make_unique<EventLoop>(dpp.get());
     
     if (pool_type == EC) {
       setup_ec_pool();
@@ -208,12 +211,16 @@ public:
     }
 
     cleanup_data_dir();
+    ceph::logging::Log::set_prefix_hook(nullptr);
   }
   
 private:
   void setup_ec_pool();
   void setup_replicated_pool();
   void cleanup_data_dir();
+
+protected:
+  void initialize_scrub_infra();
 
 public:
   const pg_pool_t& get_pool() const {
@@ -278,61 +285,7 @@ public:
     obc->ssc = nullptr;
     return obc;
   }
-  
-  /// Get an existing OBC or create a new one.
-  /// Unlike make_object_context(), this method reuses OBCs for the same
-  /// object across operations, which is essential for attr_cache continuity
-  /// in EC pools.
-  /// @param primary_shard The shard ID to read attributes from (for EC pools)
-  ObjectContextRef get_or_create_obc(
-    const hobject_t& hoid,
-    bool exists = false,
-    uint64_t size = 0,
-    int primary_shard = 0)
-  {
-    auto it = object_contexts.find(hoid);
-    ObjectContextRef obc;
-
-    if (it != object_contexts.end()) {
-      obc = it->second;
-    } else {
-      obc = make_object_context(hoid, exists, size);
-      object_contexts[hoid] = obc;
-    }
-
-    // If the object exists and this is an EC pool, populate attr_cache with
-    // ALL attributes from disk if not already populated. This matches production
-    // behavior where the OBC is loaded with all xattrs from the object store.
-    // In EC, attributes are stored per-shard, so we must read from the specified shard.
-    if (exists && pool_type == EC && store && !chs.empty() && obc->attr_cache.empty()) {
-      auto writes_it = outstanding_writes.find(hoid);
-      bool has_outstanding_writes = (writes_it != outstanding_writes.end() && writes_it->second > 0);
-
-      // Cannot read from disk if there are outstanding writes - test bug
-      ceph_assert(!has_outstanding_writes);
-
-      // For EC pools, attributes are stored with the shard ID in the ghobject_t
-      ceph_assert(primary_shard >= 0 && primary_shard < (int)chs.size());
-      ObjectStore::CollectionHandle ch = chs[primary_shard];
-      if (ch) {
-        ghobject_t ghoid(hoid, ghobject_t::NO_GEN, shard_id_t(primary_shard));
-        std::map<std::string, ceph::buffer::ptr, std::less<>> attrs;
-        int r = store->getattrs(ch, ghoid, attrs);
-
-        if (r >= 0) {
-          // Successfully read all attributes from disk - populate the cache
-          for (auto& [key, value_ptr] : attrs) {
-            bufferlist bl;
-            bl.append(value_ptr);
-            obc->attr_cache[key] = std::move(bl);
-          }
-        }
-      }
-    }
-
-    return obc;
-  }
-  
+    
   /**
    * Set the next version number for auto-generation.
    * This can be used by tests after rollback to set the version to a specific value.
@@ -352,12 +305,36 @@ public:
   }
   
   /**
-   * Read ObjectInfo from the store for an existing object.
-   * Returns an ObjectContext with the decoded ObjectInfo, or a new
-   * ObjectContext with default values if the object doesn't exist.
+   * Set an object context for the given object.
+   * This encapsulates access to the per-OSD object_contexts map.
+   * Must be called within event loop context.
+   *
+   * @param hoid The object to set context for
+   * @param obc The object context to cache
+   */
+  void set_object_context(
+    const hobject_t& hoid,
+    ObjectContextRef obc);
+
+  /**
+   * Clear all object contexts for the current OSD.
+   * This encapsulates access to the per-OSD object_contexts map.
+   * Must be called within event loop context.
+   */
+  void clear_object_contexts();
+
+  /**
+   * Get or create an object context for the given object.
+   * This matches PrimaryLogPG::get_object_context behavior.
+   *
+   * @param hoid The object to get context for
+   * @param can_create If true, create a new OBC if object doesn't exist
+   * @param attrs Optional attributes to use instead of reading from disk
    */
   ObjectContextRef get_object_context(
-    const hobject_t& hoid);
+    const hobject_t& hoid,
+    bool can_create,
+    const std::map<std::string, ceph::buffer::list, std::less<>> *attrs = nullptr);
   
   int do_transaction_and_complete(
     const hobject_t& hoid,
@@ -366,6 +343,30 @@ public:
     const eversion_t& at_version,
     std::vector<pg_log_entry_t> log_entries,
     std::function<void(int)> on_write_complete = nullptr);
+  
+  // Helper functions that perform the actual write logic
+  // Must be called within event loop context on the primary OSD
+  int do_create_and_write_impl(
+    const std::string& obj_name,
+    const std::string& data);
+  
+  int do_write_impl(
+    const std::string& obj_name,
+    uint64_t offset,
+    const std::string& data,
+    uint64_t object_size);
+
+  int do_write_impl(
+    const std::string& obj_name,
+    uint64_t object_size,
+    std::optional<uint64_t> truncate_size,
+    const std::vector<std::pair<uint64_t, std::string>>& writes);
+  
+  int do_write_attribute_impl(
+    const std::string& obj_name,
+    const std::string& attr_name,
+    const std::string& attr_value,
+    bool force_all_shards);
   
   virtual int create_and_write(
     const std::string& obj_name,
@@ -378,6 +379,21 @@ public:
     uint64_t offset,
     const std::string& data,
     uint64_t object_size);
+
+  /**
+   * Write operation with optional truncate and multiple writes in a single transaction.
+   *
+   * @param obj_name Name of the object
+   * @param object_size Current size of the object
+   * @param truncate_size Optional truncate size (nullopt means no truncate)
+   * @param writes Vector of {offset, data} pairs to write
+   * @return Result code (0 on success, negative on error)
+   */
+  int write(
+    const std::string& obj_name,
+    uint64_t object_size,
+    std::optional<uint64_t> truncate_size,
+    const std::vector<std::pair<uint64_t, std::string>>& writes);
 
   int read_object(
     const std::string& obj_name,
@@ -399,6 +415,22 @@ public:
    * @param offset Offset to read from (default: 0)
    * @param context_msg Optional context message to append to assertion messages
    */
+  /**
+   * Visualize data miscompare with hex+ASCII dump and line compression.
+   *
+   * @param obj_name Name of the object being compared
+   * @param expected_buf Expected data buffer
+   * @param read_buf Actual read data buffer
+   * @param size Size of both buffers
+   * @param phase Description of when the comparison occurred (e.g., "After shard 1 failure")
+   */
+  void visualize_miscompare(
+    const std::string& obj_name,
+    const char* expected_buf,
+    const char* read_buf,
+    size_t size,
+    const std::string& phase);
+
   void verify_object(
     const std::string& obj_name,
     const std::string& expected_data,
@@ -461,13 +493,6 @@ public:
     std::optional<pg_shard_t> new_primary = std::nullopt);
 
   /**
-   * Clear attr_cache for all objects.
-   * Called on on_change() to invalidate cached attributes that might be stale
-   * after a peering event or OSDMap change.
-   */
-  void clear_all_attr_caches();
-
-  /**
    * Write attributes to an object with control over first_write_in_interval.
    *
    * This simulates different types of writes in EC pools:
@@ -505,6 +530,47 @@ public:
   object_info_t read_shard_object_info(
     const std::string& obj_name,
     int shard);
+
+  /**
+   * Scrub an object and verify it has no corruption.
+   *
+   * This utility method:
+   * 1. Builds scrub maps for all shards using be_scan_list()
+   * 2. Creates a ScrubBackend with mock listeners
+   * 3. Calls scrub_compare_maps() to check for inconsistencies
+   * 4. Returns true if corruption was detected, false otherwise
+   *
+   * The scrub infrastructure (mock listeners) is initialized once in SetUp()
+   * and reused across all scrub operations for efficiency.
+   *
+   * @param obj_name Name of the object to scrub
+   * @return true if corruption detected, false if object is consistent
+   */
+  bool scrub_object(const std::string& obj_name);
+
+  /**
+   * Corrupt the data for a specific shard of an object.
+   *
+   * This utility method directly writes zeros to the stored data for a given
+   * shard, simulating data corruption at the storage level. This is useful
+   * for testing scrub detection of corrupted data.
+   *
+   * @param obj The hobject_t identifying the object to corrupt
+   * @param shard The pg_shard_t identifying which shard to corrupt
+   */
+  void corrupt_shard_data(const hobject_t& obj, pg_shard_t shard);
+
+  /**
+   * Create a bufferlist filled with random data.
+   *
+   * This utility method generates a buffer of the specified size filled with
+   * random bytes. Useful for testing scenarios where random data is needed
+   * to avoid patterns that might mask bugs (e.g., XOR patterns in EC).
+   *
+   * @param size Size of the buffer to create in bytes
+   * @return A bufferlist containing random data
+   */
+  bufferlist create_random_buffer(size_t size);
 
 };
 

@@ -112,7 +112,7 @@ class BaseObjectStore:
     def unlink_bs_symlinks(self) -> None:
         for link_name in ['block', 'block.db', 'block.wal']:
             link_path = os.path.join(self.osd_path, link_name)
-            if os.path.exists(link_path):
+            if os.path.lexists(link_path):
                 os.unlink(os.path.join(self.osd_path, link_name))
 
     def prepare_osd_req(self, tmpfs: bool = True) -> None:

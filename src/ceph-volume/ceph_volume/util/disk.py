@@ -175,6 +175,14 @@ def _stat_is_device(stat_obj):
     return stat.S_ISBLK(stat_obj)
 
 
+def path_is_block_device(path: str) -> bool:
+    """True if ``path`` exists and is a block device (follows symlinks)."""
+    try:
+        return _stat_is_device(os.stat(path).st_mode)
+    except OSError:
+        return False
+
+
 def _lsblk_parser(line):
     """
     Parses lines in lsblk output. Requires output to be in pair mode (``-P`` flag). Lines
@@ -221,6 +229,114 @@ def lsblk(device, columns=None, abspath=False):
         return {}
 
     return result[0]
+
+
+class BackingDeviceRotation(object):
+    # Typical ceph-volume stacks are a few dm/LVM layers (eg: crypt over LV over disk).
+    # 32 leaves headroom for multipath/MD without unbounded sysfs recursion if slaves/
+    # forms a cycle or an unexpectedly deep mapper chain.
+    _SYSFS_SLAVES_WALK_MAX_DEPTH = 32
+
+    @staticmethod
+    def _kname_from_path(device: str) -> str:
+        if not device:
+            return ''
+        try:
+            return os.path.basename(os.path.realpath(device))
+        except OSError:
+            return ''
+
+    @staticmethod
+    def _kname_for_sysfs_walk(kname: str) -> str:
+        if not kname:
+            return ''
+        if os.path.isdir(os.path.join('/sys/block', kname)):
+            return kname
+        try:
+            parent = get_partitions().get(kname)
+        except OSError as exc:
+            logger.debug('failed to resolve partition parent for %s: %s', kname, exc)
+            parent = None
+        if parent:
+            return parent
+        return kname
+
+    @staticmethod
+    def _walk_sysfs_leaf_blocks(k: str, depth: int, found: set, seen: set) -> None:
+        k = BackingDeviceRotation._kname_for_sysfs_walk(k)
+        if not k or k in seen:
+            return
+        if depth >= BackingDeviceRotation._SYSFS_SLAVES_WALK_MAX_DEPTH:
+            logger.warning(
+                'sysfs slaves walk exceeded max depth %s at %s',
+                BackingDeviceRotation._SYSFS_SLAVES_WALK_MAX_DEPTH,
+                k,
+            )
+            return
+        seen.add(k)
+        sys_block = os.path.join('/sys/block', k)
+        if not os.path.isdir(sys_block):
+            return
+        slaves_dir = os.path.join(sys_block, 'slaves')
+        slave_names: List[str] = []
+        if os.path.isdir(slaves_dir):
+            try:
+                slave_names = os.listdir(slaves_dir)
+            except OSError as exc:
+                logger.debug(
+                    'failed to list sysfs slaves for %s: %s', slaves_dir, exc)
+                return
+        if not slave_names:
+            found.add(k)
+            return
+        for sn in slave_names:
+            BackingDeviceRotation._walk_sysfs_leaf_blocks(
+                sn,
+                depth + 1,
+                found,
+                seen,
+            )
+
+    @staticmethod
+    def _sysfs_leaf_block_knames(kname: str) -> List[str]:
+        found = set()
+        seen = set()
+        BackingDeviceRotation._walk_sysfs_leaf_blocks(kname, 0, found, seen)
+        return sorted(found)
+
+    @staticmethod
+    def _leaf_block_is_rotational(kname: str) -> bool:
+        kname = BackingDeviceRotation._kname_for_sysfs_walk(kname)
+        dev_path = os.path.join('/dev', kname)
+        if os.path.exists(dev_path):
+            try:
+                udev_data = UdevData(dev_path)
+                env = udev_data.environment
+                if env.get('ID_SSD') == '1':
+                    return False
+                rpm = env.get('ID_ATA_ROTATION_RATE_RPM', '')
+                if rpm.isdigit():
+                    return int(rpm) > 0
+            except (RuntimeError, OSError, ValueError) as exc:
+                logger.debug(
+                    'failed to read udev rotational hints for %s: %s',
+                    dev_path, exc)
+
+        sys_block = os.path.join('/sys/block', kname)
+        rota = get_file_contents(
+            os.path.join(sys_block, 'queue/rotational'), '1')
+        return rota == '1'
+
+    @staticmethod
+    def is_rotational(device: str) -> bool:
+        kname = BackingDeviceRotation._kname_from_path(device)
+        walk_root = BackingDeviceRotation._kname_for_sysfs_walk(kname)
+        leaves = BackingDeviceRotation._sysfs_leaf_block_knames(walk_root)
+        if not leaves:
+            return True
+        return any(
+            BackingDeviceRotation._leaf_block_is_rotational(leaf) for leaf in leaves)
+
 
 def lsblk_all(device: str = '',
               columns: Optional[List[str]] = None,
@@ -813,7 +929,22 @@ def get_devices(_sys_block_path='/sys/block', device=''):
     for block in block_devs:
         metadata: Dict[str, Any] = {}
         if block[2] == 'lvm':
-            block[1] = UdevData(block[1]).preferred_block_path
+            try:
+                udev_data = UdevData(block[1])
+            except RuntimeError as exc:
+                logger.debug(
+                    'get_devices(): skipping LVM device %s: %s', block[1], exc)
+                continue
+            if udev_data.is_internal_lv:
+                logger.debug(
+                    'get_devices(): skipping internal LVM LV %s', block[1])
+                continue
+            block[1] = udev_data.preferred_block_path
+            if not path_is_block_device(block[1]):
+                logger.debug(
+                    'get_devices(): skipping LVM device without accessible node %s',
+                    block[1])
+                continue
         devname = os.path.basename(block[0])
         diskname = block[1]
         if block[2] not in block_types:
@@ -1439,6 +1570,16 @@ class UdevData:
         return self.environment.get('DM_UUID', '').startswith('LVM')
 
     @property
+    def is_internal_lv(self) -> bool:
+        lv_name = self.environment.get('DM_LV_NAME', '')
+        if not lv_name:
+            return False
+        for marker in ('_rmeta_', '_rimage_', '_rtmeta_', '_rtimage_'):
+            if marker in lv_name:
+                return True
+        return bool(self.environment.get('DM_LV_LAYER', ''))
+
+    @property
     def slashed_path(self) -> str:
         """Get the LVM path structured with slashes.
 
@@ -1467,14 +1608,6 @@ class UdevData:
             result = f'/dev/mapper/{name}'
         return result
 
-    @staticmethod
-    def _path_is_block_device(path: str) -> bool:
-        """True if ``path`` exists and is a block device (follows symlinks)."""
-        try:
-            return _stat_is_device(os.stat(path).st_mode)
-        except OSError:
-            return False
-
     @property
     def preferred_block_path(self) -> str:
         """Return a device path that exists for typical open(2) / blkid usage.
@@ -1490,9 +1623,9 @@ class UdevData:
         if not self.is_lvm:
             return self.path
         slashed: str = self.slashed_path
-        if self._path_is_block_device(slashed):
+        if path_is_block_device(slashed):
             return slashed
         dashed: str = self.dashed_path
-        if self._path_is_block_device(dashed):
+        if path_is_block_device(dashed):
             return dashed
         return self.path

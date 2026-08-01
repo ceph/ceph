@@ -26,6 +26,7 @@
 
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
+#include "common/Formatter.h"
 #include "include/stringify.h"
 #include "include/Context.h"
 #include "osd/osd_types.h"

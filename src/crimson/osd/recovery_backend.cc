@@ -60,6 +60,12 @@ void RecoveryBackend::clean_up(ceph::os::Transaction& t,
   replica_push_targets.clear();
 
   for (auto& [soid, recovery_waiter] : recovering) {
+    for (auto& kv : recovery_waiter->pushing) {
+      kv.second.clone_lock_manager.release_locks();
+    }
+    if (recovery_waiter->pull_info) {
+      recovery_waiter->pull_info->clone_lock_manager.release_locks();
+    }
     if (recovery_waiter->obc) {
       recovery_waiter->obc->interrupt(
 	  ::crimson::common::actingset_changed(
@@ -255,7 +261,8 @@ RecoveryBackend::scan_for_backfill_primary(
       crimson::ct_error::enoent::handle([](auto) {
 	return false;
       }),
-      crimson::ct_error::assert_all(fmt::format("{} {} error when loading obc", pg, FNAME).c_str())
+      crimson::ct_error::assert_all("{} {} error when loading obc",
+                                        std::cref(pg), FNAME)
     );
     if (!found) {
       // if the object does not exist here, it must have been removed
@@ -330,7 +337,8 @@ RecoveryBackend::scan_for_backfill_replica(
       crimson::ct_error::enoent::handle([](auto) {
 	return false;
       }),
-      crimson::ct_error::assert_all(fmt::format("{} {} error when loading obc", pg, FNAME).c_str())
+      crimson::ct_error::assert_all("{} {} error when loading obc",
+                                        std::cref(pg), FNAME)
     );
     if (!found) {
       // if the object does not exist here, it must have been removed

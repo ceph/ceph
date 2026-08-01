@@ -98,11 +98,13 @@ Options
 :Type: String
 :Default: ``no_sslv2:no_sslv3:no_tlsv1:no_tlsv1_1``
 
-``ssl_ciphers``
+``ssl_ciphers`` and ``ssl_ciphersuites``
 
 :Description: Optional list of one or more cipher strings separated by colons.
               The format of the string is described in OpenSSL's ciphers(1)
-              manual.
+              manual. The ``ssl_ciphers`` option only applies to connections
+              using TLS v1.2 and below, while ``ssl_ciphersuites`` only applies
+              to TLS v1.3.
 
 :Type: String
 :Default: None

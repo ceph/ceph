@@ -13,7 +13,7 @@ from mgr_util import CephFSEarmarkResolver
 
 from .export import ExportMgr, AppliedExportResults
 from .cluster import NFSCluster
-from .utils import available_clusters
+from .utils import available_clusters, cephfs_client_for_mgr
 from .qos_conf import QOSType, QOSBandwidthControl, UserQoSType, QOSOpsControl
 
 log = logging.getLogger(__name__)
@@ -51,7 +51,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     ) -> Dict[str, Any]:
         """Create a CephFS export"""
         self.export_mgr.skip_notify_nfs_server = skip_notify_nfs_server
-        earmark_resolver = CephFSEarmarkResolver(self)
+        earmark_resolver = CephFSEarmarkResolver(
+            self, client=cephfs_client_for_mgr(self))
         return self.export_mgr.create_export(
             fsal_type='cephfs',
             fs_name=fsname,
@@ -111,14 +112,16 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.export_mgr.delete_export(cluster_id=cluster_id, pseudo_path=pseudo_path)
 
     @NFSCLICommand('nfs export delete', perm='rw')
-    @object_format.EmptyResponder()
+    @object_format.ErrorResponseHandler()
     def _cmd_nfs_export_delete(self,
                                cluster_id: str,
                                pseudo_path: str,
-                               skip_notify_nfs_server: bool = False) -> None:
+                               skip_notify_nfs_server: bool = False) -> Tuple[int, str, str]:
         """Delete a cephfs export (DEPRECATED)"""
         self.export_mgr.skip_notify_nfs_server = skip_notify_nfs_server
-        return self.export_mgr.delete_export(cluster_id=cluster_id, pseudo_path=pseudo_path)
+        self.export_mgr.delete_export(cluster_id=cluster_id, pseudo_path=pseudo_path)
+        return 0, "", ("`nfs export delete` is deprecated and will be removed "
+                       "in a future release, please `nfs export rm` instead.")
 
     @NFSCLICommand('nfs export ls', perm='r')
     @object_format.Responder()
@@ -145,8 +148,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                               cluster_id: str,
                               inbuf: str,
                               skip_notify_nfs_server: bool = False) -> AppliedExportResults:
-        earmark_resolver = CephFSEarmarkResolver(self)
         """Create or update an export by `-i <json_or_ganesha_export_file>`"""
+        earmark_resolver = CephFSEarmarkResolver(
+            self, client=cephfs_client_for_mgr(self))
         self.export_mgr.skip_notify_nfs_server = skip_notify_nfs_server
         return self.export_mgr.apply_export(cluster_id, export_config=inbuf,
                                             earmark_resolver=earmark_resolver)
@@ -160,8 +164,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 virtual_ip: Optional[str] = None,
                                 ingress_mode: Optional[IngressType] = None,
                                 port: Optional[int] = None,
+                                bind_addrs: Optional[str] = None,
+                                monitoring_addrs: Optional[str] = None,
+                                monitoring_port: Optional[int] = None,
                                 enable_rdma: bool = False,
                                 rdma_port: Optional[int] = None,
+                                enable_nfsv3: bool = False,
+                                ingress_placement: Optional[str] = None,
                                 inbuf: Optional[str] = None) -> None:
         """Create an NFS Cluster"""
         cluster_qos_config = None
@@ -179,10 +188,31 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             tls_debug = config.get('tls_debug')
             tls_ciphers = config.get('tls_ciphers')
 
+        # Parse bind_addrs and monitoring_addrs from CLI format
+        ip_addrs = None
+        if bind_addrs:
+            ip_addrs = {}
+            for pair in bind_addrs.split(','):
+                if ':' in pair:
+                    host, ip = pair.split(':', 1)
+                    ip_addrs[host.strip()] = ip.strip()
+
+        monitoring_ip_addrs = None
+        if monitoring_addrs:
+            monitoring_ip_addrs = {}
+            for pair in monitoring_addrs.split(','):
+                if ':' in pair:
+                    host, ip = pair.split(':', 1)
+                    monitoring_ip_addrs[host.strip()] = ip.strip()
+
         return self.nfs.create_nfs_cluster(cluster_id=cluster_id, placement=placement,
                                            virtual_ip=virtual_ip, ingress=ingress,
                                            ingress_mode=ingress_mode, port=port,
                                            cluster_qos_config=cluster_qos_config,
+                                           enable_nfsv3=enable_nfsv3,
+                                           ip_addrs=ip_addrs,
+                                           monitoring_ip_addrs=monitoring_ip_addrs,
+                                           monitoring_port=monitoring_port,
                                            ssl=ssl,
                                            ssl_cert=ssl_cert,
                                            ssl_key=ssl_key,
@@ -192,7 +222,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                            tls_min_version=tls_min_version,
                                            tls_ciphers=tls_ciphers,
                                            enable_rdma=enable_rdma,
-                                           rdma_port=rdma_port)
+                                           rdma_port=rdma_port,
+                                           ingress_placement=ingress_placement)
 
     @NFSCLICommand('nfs cluster rm', perm='rw')
     @object_format.EmptyResponder()
@@ -201,10 +232,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.nfs.delete_nfs_cluster(cluster_id=cluster_id)
 
     @NFSCLICommand('nfs cluster delete', perm='rw')
-    @object_format.EmptyResponder()
-    def _cmd_nfs_cluster_delete(self, cluster_id: str) -> None:
+    @object_format.ErrorResponseHandler()
+    def _cmd_nfs_cluster_delete(self, cluster_id: str) -> Tuple[int, str, str]:
         """Removes an NFS Cluster (DEPRECATED)"""
-        return self.nfs.delete_nfs_cluster(cluster_id=cluster_id)
+        self.nfs.delete_nfs_cluster(cluster_id=cluster_id)
+        return 0, "", ("`nfs cluster delete` is deprecated and will be removed "
+                       "in a future release, please `nfs cluster rm` instead.")
 
     @NFSCLICommand('nfs cluster ls', perm='r')
     @object_format.Responder()
@@ -240,7 +273,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def export_apply(self, cluster_id: str, export_config: str) -> AppliedExportResults:
         """Create or update an export by `export_config` which can be json string or ganesha export specification"""
-        earmark_resolver = CephFSEarmarkResolver(self)
+        earmark_resolver = CephFSEarmarkResolver(
+            self, client=cephfs_client_for_mgr(self))
         return self.export_mgr.apply_export(cluster_id, export_config=export_config,
                                             earmark_resolver=earmark_resolver)
 

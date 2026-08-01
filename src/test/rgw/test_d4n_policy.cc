@@ -114,7 +114,8 @@ class LFUDAPolicyFixture : public ::testing::Test {
       std::string oid = rgw::sal::get_key_in_cache(get_prefix(block->cacheObj.bucketName, block->cacheObj.objName, version), std::to_string(block->blockID), std::to_string(block->size));
 
       if (this->policyDriver->get_cache_policy()->exist_key(oid)) { /* Local copy */
-        policyDriver->get_cache_policy()->update(env->dpp, oid, 0, TEST_DATA_LENGTH, "", false, rgw::d4n::RefCount::NOOP, y);
+        policyDriver->get_cache_policy()->update(env->dpp, oid, 0, TEST_DATA_LENGTH, "", std::nullopt, rgw::d4n::RefCount::NOOP, y);
+        // The local weight will not update until the calls exceed 10000 in total
         return 0;
       } else {
         if (this->policyDriver->get_cache_policy()->eviction(dpp, block->size, y) < 0)
@@ -259,7 +260,7 @@ void rethrow(std::exception_ptr eptr) {
 TEST_F(LFUDAPolicyFixture, LocalGetBlockYield)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-    env->cct->_conf->rgw_lfuda_sync_frequency = 1;
+    env->cct->_conf->rgw_lfuda_sync_frequency = 6;
     dynamic_cast<rgw::d4n::LFUDAPolicy*>(policyDriver->get_cache_policy())->save_y(optional_yield{yield});
     policyDriver->get_cache_policy()->init(env->cct, env->dpp, io, driver);
 
@@ -270,19 +271,22 @@ TEST_F(LFUDAPolicyFixture, LocalGetBlockYield)
 
     ASSERT_EQ(lfuda(env->dpp, block, cacheDriver, yield), 0);
 
+	boost::asio::steady_timer timer(io);
+	timer.expires_after(std::chrono::seconds(5));
+	boost::system::error_code timer_ec;
+	timer.async_wait(yield[timer_ec]);
+
     cacheDriver->shutdown();
 
     boost::system::error_code ec;
     request req;
-    req.push("HGET", "RedisCache/testBucket#testName#0#9", RGW_CACHE_ATTR_LOCAL_WEIGHT);
     req.push("FLUSHALL");
 
-    response<std::string, boost::redis::ignore_t> resp;
+    response<boost::redis::ignore_t> resp;
 
     conn->async_exec(req, resp, yield[ec]);
 
     ASSERT_EQ((bool)ec, false);
-    EXPECT_EQ(std::get<0>(resp).value(), "2");
     conn->cancel();
     
     delete policyDriver; 

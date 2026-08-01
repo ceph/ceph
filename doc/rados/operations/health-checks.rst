@@ -2043,3 +2043,16 @@ Then, to check the ``w`` value for a particular profile, run a command of the fo
 
 The intended solution is to create a new pool with a correct ``w`` value and copy all the objects.
 Then delete the old pool before the data corruption can happen.
+
+DEPRECATED_EC_PLUGIN
+____________________
+
+One or more erasure code profiles are using deprecated plugins or techniques.
+The SHEC and CLAY plugins, as well as Jerasure techniques other than
+``reed_sol_van``, are deprecated as of the Umbrella release and will be
+removed in the Vampire release.
+
+To resolve this warning, migrate data from pools using deprecated erasure code
+configurations to new pools that use supported configurations. See
+:ref:`erasure-code-profiles` for details on supported erasure code plugins
+and techniques.

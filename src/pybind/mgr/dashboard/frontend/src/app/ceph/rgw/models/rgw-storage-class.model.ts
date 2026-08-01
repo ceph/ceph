@@ -226,7 +226,7 @@ export const STORAGE_CLASS_CONSTANTS = {
 
 export const DEFAULT_PLACEMENT = 'default-placement';
 
-export type TIER_TYPE = typeof TIER_TYPE[keyof typeof TIER_TYPE];
+export type TIER_TYPE = (typeof TIER_TYPE)[keyof typeof TIER_TYPE];
 
 export const TIER_TYPE_DISPLAY = {
   LOCAL: 'Local',
@@ -350,3 +350,5 @@ export const AclHelperText: AclMaps = {
 export const POOL = {
   PATH: '/pool/create'
 };
+
+export const FROM_STORAGE_CLASS = 'from-storage-class';

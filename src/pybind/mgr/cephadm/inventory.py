@@ -239,7 +239,7 @@ class SpecDescription(NamedTuple):
     spec: ServiceSpec
     rank_map: Optional[Dict[int, Dict[int, Optional[str]]]]
     created: datetime.datetime
-    deleted: Optional[datetime.datetime]
+    deleted: Optional[Tuple[datetime.datetime, bool]]
 
 
 class SpecStore():
@@ -250,7 +250,7 @@ class SpecStore():
         # service_name -> rank -> gen -> daemon_id
         self._rank_maps = {}    # type: Dict[str, Dict[int, Dict[int, Optional[str]]]]
         self.spec_created = {}  # type: Dict[str, datetime.datetime]
-        self.spec_deleted = {}  # type: Dict[str, datetime.datetime]
+        self.spec_deleted = {}  # type: Dict[str, Tuple[datetime.datetime, bool]]
         self.spec_preview = {}  # type: Dict[str, ServiceSpec]
         self._needs_configuration: Dict[str, bool] = {}
 
@@ -315,8 +315,11 @@ class SpecStore():
                 self.spec_created[service_name] = created
 
                 if 'deleted' in j:
-                    deleted = str_to_datetime(cast(str, j['deleted']))
-                    self.spec_deleted[service_name] = deleted
+                    deleted_ts = str_to_datetime(cast(str, j['deleted']))
+                    force_delete_data = cast(
+                        bool, j.get('force_delete_data', False)
+                    )
+                    self.spec_deleted[service_name] = (deleted_ts, force_delete_data)
 
                 if 'needs_configuration' in j:
                     self._needs_configuration[service_name] = cast(bool, j['needs_configuration'])
@@ -378,7 +381,9 @@ class SpecStore():
         if name in self._rank_maps:
             data['rank_map'] = self._rank_maps[name]
         if name in self.spec_deleted:
-            data['deleted'] = datetime_to_str(self.spec_deleted[name])
+            deleted_time, force_delete_data = self.spec_deleted[name]
+            data['deleted'] = datetime_to_str(deleted_time)
+            data['force_delete_data'] = force_delete_data
         if name in self._needs_configuration:
             data['needs_configuration'] = self._needs_configuration[name]
 
@@ -469,7 +474,7 @@ class SpecStore():
                         service_name=nvmeof_spec.service_name(),
                         user_made=True)
 
-    def rm(self, service_name: str) -> bool:
+    def rm(self, service_name: str, force_delete_data: bool = False) -> bool:
         if service_name not in self._specs:
             return False
 
@@ -477,7 +482,7 @@ class SpecStore():
             self.finally_rm(service_name)
             return True
 
-        self.spec_deleted[service_name] = datetime_now()
+        self.spec_deleted[service_name] = (datetime_now(), force_delete_data)
         self.save(self._specs[service_name], update_create=False)
         return True
 
@@ -849,6 +854,10 @@ class HostCache():
                     self.osdspec_last_applied[host][name] = str_to_datetime(ts)
 
                 for name, d in j.get('daemon_config_deps', {}).items():
+                    # drop potential leftover daemon_config_deps entries
+                    # assume if we didn't find a daemon entry, it's a leftover
+                    if name not in self.daemons.get(host, {}):
+                        continue
                     self.daemon_config_deps[host][name] = {
                         'deps': d.get('deps', []),
                         'last_config': str_to_datetime(d['last_config']),
@@ -1567,6 +1576,9 @@ class HostCache():
         if host in self.daemons:
             if name in self.daemons[host]:
                 del self.daemons[host][name]
+        if host in self.daemon_config_deps:
+            if name in self.daemon_config_deps[host]:
+                del self.daemon_config_deps[host][name]
 
     def daemon_cache_filled(self) -> bool:
         """
@@ -1630,6 +1642,12 @@ class NodeProxyCache:
         self.data: Dict[str, Any] = {}
         self.oob: Dict[str, Any] = {}
         self.keyrings: Dict[str, str] = {}
+
+    @staticmethod
+    def _host_firmware(host_data: Dict[str, Any]) -> Any:
+        if 'firmware' in host_data:
+            return host_data['firmware']
+        return host_data.get('firmwares', {})
 
     def load(self) -> None:
         _oob = self.mgr.get_store(f'{NODE_PROXY_CACHE_PREFIX}/oob', '{}')
@@ -1750,7 +1768,7 @@ class NodeProxyCache:
                 _result[host]['status'][component] = state
             _result[host]['sn'] = data['sn']
             _result[host]['host'] = data['host']
-            _result[host]['status']['firmwares'] = data['firmwares']
+            _result[host]['status']['firmware'] = self._host_firmware(data)
         return _result
 
     def common(self, endpoint: str, **kw: Any) -> Dict[str, Any]:
@@ -1778,7 +1796,7 @@ class NodeProxyCache:
                 raise KeyError(f'Invalid host {host} or component {endpoint}.')
         return _result
 
-    def firmwares(self, **kw: Any) -> Dict[str, Any]:
+    def firmware(self, **kw: Any) -> Dict[str, Any]:
         """
         Retrieves firmware information for a specific hostname or all hosts.
 
@@ -1793,7 +1811,7 @@ class NodeProxyCache:
         :rtype: Dict[str, Any]
         """
         hosts = self._resolve_hosts(**kw)
-        return {host: self.data[host]['firmwares'] for host in hosts}
+        return {host: self._host_firmware(self.data[host]) for host in hosts}
 
     def get_critical_from_host(self, hostname: str) -> Dict[str, Any]:
         if hostname not in self.data:

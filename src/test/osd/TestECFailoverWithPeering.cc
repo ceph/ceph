@@ -16,7 +16,6 @@
 #include <gtest/gtest.h>
 #include "test/osd/ECPeeringTestFixture.h"
 #include "test/osd/TestCommon.h"
-#include "osd/ECSwitch.h"
 
 using namespace std;
 
@@ -278,6 +277,64 @@ TEST_P(TestECFailoverWithPeering, RecoveryWithPeering) {
   EXPECT_TRUE(listener_ptr != nullptr) << "Peering listener should exist";
   EXPECT_TRUE(listener_ptr->activate_complete_called)
     << "on_activate_complete should have been called during peering";
+}
+
+TEST_P(TestECFailoverWithPeering, ZeroSizeObjectWithAttributesRecovery) {
+  //  ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
+  
+  const std::string obj_name = "test_primary_failover";
+  const std::string test_data;
+  
+  create_and_write(obj_name, test_data);
+  
+  // Mark OSD 0 (the initial primary) as down
+  // PeeringState will automatically determine the new primary
+  mark_osd_down(0);
+  
+  write_attribute(obj_name, "key", "value", false);
+  
+  // Determine the actual new primary from the OSDMap
+  int new_primary_shard = get_primary_shard_from_osdmap();
+  ASSERT_GE(new_primary_shard, 0) << "Should have a valid new primary after failover";
+  
+  // For an optimized EC pool (k=4, m=2), the new primary should be a coding shard (>= k)
+  // For a non-optimized pool, it would be shard 1
+  const pg_pool_t& pool = get_pool();
+  if (pool.allows_ecoptimizations()) {
+    ASSERT_GE(new_primary_shard, k)
+      << "New primary should be a coding shard (>= k) for optimized pool";
+  } else {
+    ASSERT_EQ(new_primary_shard, 1)
+      << "New primary should be shard 1 for non-optimized pool";
+  }
+  
+  ASSERT_TRUE(get_peering_listener(new_primary_shard)->backend_listener->pgb_is_primary())
+    << "Shard " << new_primary_shard << " should be new primary";
+  
+  ASSERT_FALSE(get_peering_listener(0)->backend_listener->pgb_is_primary())
+    << "Failed shard should not be primary";
+  
+  std::string state = get_state_name(new_primary_shard);
+  ASSERT_TRUE(state.find("Active") != std::string::npos)
+    << "New primary should be Active after failover, got: " << state;
+  
+  // Verify the PG reached Active state
+  ASSERT_TRUE(get_peering_state(new_primary_shard)->is_active())
+    << "New primary should be in Active state";
+  
+  mark_osd_up(0);
+  
+  run_recovery_and_verify_callbacks(obj_name, 0, test_data);
+  
+  // Verify that the attribute was recovered on shard 0
+  hobject_t hoid = make_test_object(obj_name);
+  ghobject_t ghoid = ghobject_t(hoid, ghobject_t::NO_GEN, shard_id_t(0));
+  
+  ceph::buffer::ptr attr_value;
+  int r = store->getattr(chs[0], ghoid, "key", attr_value);
+  ASSERT_GE(r, 0) << "Attribute 'key' should exist on recovered shard 0";
+  ASSERT_EQ(std::string(attr_value.c_str(), attr_value.length()), "value")
+    << "Attribute 'key' should have value 'value' after recovery";
 }
 
 // ---------------------------------------------------------------------------
@@ -805,6 +862,160 @@ TEST_P(
   // Now run the recovery - the target shard asserts it is being written with
   // the object version it is expecting. In the defect, this assert failed.
   run_recovery_and_verify_callbacks(obj_name, recovery_target_shard, pattern_p1);
+}
+
+/**
+ * Test rollback after a sequence of blocked full-stripe and chunk writes.
+ * This is a similar scenario to the previous test, but we force the shard
+ * to do a sync, rather than async recovery at the end.
+ * Recreate for tracker https://tracker.ceph.com/issues/75962
+ */
+TEST_P(
+  TestECFailoverWithPeering,
+  RollbackAfterMixedBlockedWritesWithOSDFailure3
+) {
+  if (m < 2) {
+    GTEST_SKIP() << "RollbackAfterMixedBlockedWritesWithOSDFailure requires m >= 2";
+  }
+  set_config("osd_async_recovery_min_cost", "0");
+
+  const int blocked_shard = k + 1;
+  const int recovery_target_shard = 1;
+  const std::string obj_name = "test_mixed_blocked_writes";
+  const size_t full_stripe_size = stripe_unit * k;
+  const std::string pattern_p1(full_stripe_size, 'A');
+  mark_osd_down(recovery_target_shard);
+  create_and_write_verify(obj_name, pattern_p1);
+  mark_osd_up(recovery_target_shard);
+  create_and_write_verify("dummy", pattern_p1);
+  suspend_primary_to_osd(blocked_shard);
+  int result = write_attribute(obj_name, "test_attr", "value2", false);
+  ASSERT_EQ(-EINPROGRESS, result);
+  mark_osd_down(2);
+  unsuspend_primary_to_osd(blocked_shard);
+  event_loop->run_until_idle();
+
+  run_recovery_and_verify_callbacks(obj_name, recovery_target_shard, pattern_p1);
+
+  set_config("osd_async_recovery_min_cost", "100");
+}
+
+TEST_P(TestECFailoverWithPeering, ScrubClean) {
+  ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
+
+  const std::string obj_name = "test_scrub_corruption";
+  uint64_t object_size = k * stripe_unit;
+
+  bufferlist bl = create_random_buffer(object_size);
+  std::string test_data(bl.c_str(), bl.length());
+
+  std::cout << "Writing full-stripe object (" << object_size << " bytes of random data)" << std::endl;
+  create_and_write_verify(obj_name, test_data);
+
+  std::cout << "Scrubbing object to verify data integrity" << std::endl;
+  bool corruption_detected = scrub_object(obj_name);
+
+  ASSERT_FALSE(corruption_detected)
+    << "scrub_object() should NOT detect corruption when data is valid";
+
+  std::cout << "=== ScrubDetectsCorruption test completed successfully ===" << std::endl;
+}
+
+TEST_P(TestECFailoverWithPeering, ScrubDetectsCorruption) {
+  ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
+
+  const uint64_t object_size = k * stripe_unit;
+  const std::vector<int> shard_offsets = {/*0, 1, */k};
+  const bool supports_crc = ec_plugin == "isa";
+
+  for (int zone = 0; zone < 1; ++zone) {
+    for (int shard_offset : shard_offsets) {
+      const int absolute_shard = shard_offset;
+      const std::string obj_name =
+        "test_obj_zone_" + std::to_string(zone) +
+        "_shard_" + std::to_string(shard_offset);
+
+      bufferlist bl = create_random_buffer(object_size);
+      std::string test_data(bl.c_str(), bl.length());
+
+      std::cout << "\n=== ScrubDetectsCorruption: testing zone " << zone
+                << ", shard offset " << shard_offset
+                << " (absolute shard " << absolute_shard << ") ===" << std::endl;
+
+      std::cout << "Writing object " << obj_name << " (" << object_size
+                << " bytes of random data)" << std::endl;
+      create_and_write_verify(obj_name, test_data);
+
+      std::cout << "Corrupting object " << obj_name
+                << " for zone iteration " << zone
+                << " on relative shard " << shard_offset
+                << " using absolute shard " << absolute_shard << std::endl;
+      hobject_t hoid = make_test_object(obj_name);
+      corrupt_shard_data(hoid,
+                         pg_shard_t(absolute_shard, shard_id_t(absolute_shard)));
+
+      std::cout << "Scrubbing object " << obj_name
+                << " to verify corruption detection for zone iteration " << zone
+                << ", shard offset " << shard_offset << std::endl;
+      bool corruption_detected = scrub_object(obj_name);
+
+      std::cout << "Zone iteration " << zone
+                << " corruption result for shard offset " << shard_offset
+                << ": " << (corruption_detected ? "detected" : "not detected")
+                << " (absolute shard " << absolute_shard
+                << ", supports_crc=" << (supports_crc ? "true" : "false")
+                << ")" << std::endl;
+
+      if (supports_crc) {
+        EXPECT_TRUE(corruption_detected)
+          << "scrub_object() should detect corruption for object " << obj_name
+          << " during zone iteration " << zone
+          << ", shard offset " << shard_offset
+          << " (absolute shard " << absolute_shard << ")";
+      } else {
+        EXPECT_FALSE(corruption_detected)
+            << "scrub_object() should not report corruption for object "
+            << obj_name << " when CRC-based detection is unsupported"
+            << " during zone iteration " << zone << ", shard offset "
+            << shard_offset << " (absolute shard " << absolute_shard << ")";
+      }
+    }
+  }
+
+  std::cout << "=== ScrubDetectsCorruption test completed successfully ===" << std::endl;
+}
+
+TEST_P(TestECFailoverWithPeering, ScrubPartialWrite) {
+  ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
+
+  const std::string obj_name = "test_scrub_partial_write";
+
+  uint64_t partial_size = stripe_unit / 2;
+
+  std::cout << "Creating partial write object with size " << partial_size
+            << " bytes (stripe_unit=" << stripe_unit << ", full stripe would be "
+            << (k * stripe_unit) << " bytes)" << std::endl;
+
+  bufferlist bl = create_random_buffer(partial_size);
+  std::string test_data(bl.c_str(), bl.length());
+
+  std::cout << "Writing partial object (" << partial_size << " bytes)" << std::endl;
+  create_and_write_verify(obj_name, test_data);
+
+  write(obj_name, 0, test_data, test_data.size());
+
+  // NOTE: Partial writes may expose scrub issues with EC pools
+  std::cout << "Scrubbing partial write object to test scrub behavior" << std::endl;
+  bool corruption_detected = scrub_object(obj_name);
+
+  std::cout << "Scrub result for partial write: "
+            << (corruption_detected ? "corruption detected" : "no corruption detected")
+            << std::endl;
+
+  EXPECT_FALSE(corruption_detected)
+    << "scrub_object() should NOT detect corruption on valid partial write";
+
+  std::cout << "=== ScrubPartialWrite test completed ===" << std::endl;
 }
 
 // ---------------------------------------------------------------------------

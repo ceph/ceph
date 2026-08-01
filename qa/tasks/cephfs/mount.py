@@ -306,7 +306,7 @@ class CephFSMountBase(object):
             # Setup the NAT
             gw = self._default_gateway()
 
-            self.run_shell_payload(f"""
+            self.run_shell_payload(rf"""
                 set -e
 
                 if command -v iptables >/dev/null 2>&1 && sudo iptables -t nat -A POSTROUTING -s {self.ceph_brx_net} -o {gw} -j MASQUERADE 2>/dev/null; then
@@ -1625,6 +1625,56 @@ class CephFSMountBase(object):
         proc = self._run_python(pyscript)
         proc.wait()
 
+    def compare_trees(self, src, dst):
+        """
+        Compare two directory trees. Compare based on file names and contents.
+
+        :param src:
+        :param dst:
+        :return:
+        """
+        pyscript = dedent("""
+            import os
+            import errno
+
+            def _md5hash_file(self, file):
+                md5 = hashlib.md5()
+                contents = ''
+                with open(file, 'r') as f:
+                    contents = f.read()
+                md5.update(contents)
+                return md5.hexdigest()
+
+            files = os.listdir('{src}')
+            for file in files:
+                src_file = '{src}/' + file
+                dst_file = '{dst}/' + file
+
+                exists = os.path.exists(dst_file)
+                lexists = os.path.lexists(dst_file)
+                if not exists and not lexists:
+                    log.debug('path_dne:=' + dst_file)
+                    raise
+
+                if os.path.islink('{src}'):
+                    #do link check
+                    if os.readlink(src_file) != os.readlink(dst_file):
+                        raise
+                elif os.path.isfile('{src}'):
+                    #check reported size
+                    rsize_match = os.path.getsize(src_file) == os.path.getsize(dst_file)
+                    if not rsize_match:
+                        raise
+
+                    #check contents
+                    src_hash = self._md5hash_file(src_file)
+                    dest_hash = self._md5hash_file(dst_file)
+                    if src_hash != dest_hash:
+                        raise
+            """).format(src=src, dst=dst)
+        proc = self._run_python(pyscript)
+        proc.wait()
+
     def touch_os(self, fs_path):
         """
         Create a dentry if it doesn't already exist. Uses the open method in the os module.
@@ -1826,6 +1876,9 @@ class CephFSMountBase(object):
             cmd.append(path)
         cmd.extend(["-type", "f", "-exec", "md5sum", "{}", "+"])
         checksum_text = self.run_shell(cmd).stdout.getvalue().strip()
+        # Handle empty directory
+        if not checksum_text:
+          return hashlib.md5(b'').hexdigest()
         checksum_sorted = sorted(checksum_text.split('\n'), key=lambda v: v.split()[1])
         return hashlib.md5(('\n'.join(checksum_sorted)).encode('utf-8')).hexdigest()
 

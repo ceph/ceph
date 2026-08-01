@@ -20,59 +20,11 @@ cost.
 For more information, see `https://ceph.com/foundation
 <https://ceph.com/foundation>`_.
 
-
 Members
 =======
 
-Diamond
--------
+Visit `https://ceph.io/en/foundation/members/ <https://ceph.io/en/foundation/members/>`_ to see the full list of Ceph Foundation Members
 
-* `45Drives <https://45drives.com/>`_
-* `Bloomberg <https://bloomberg.com>`_
-* `IBM <https://ibm.com>`_
-* `Clyso <https://www.clyso.com/en/>`_
-
-
-Platinum
---------
-
-* `Western Digital <https://westerndigital.com/>`_
-
-
-Gold
-----
-
-* `42on <https://www.42on.com/>`_
-* `OVH <https://www.ovh.com/>`_
-* `Samsung Electronics <https://samsung.com/>`_
-
-
-Silver
-------
-
-* `Canonical <https://www.canonical.com/>`_
-* `CloudFerro <https://cloudferro.com/>`_
-* `croit <http://www.croit.io/>`_
-* `Digital Ocean <http://digitalocean.com/>`_
-* `ISS <http://iss-integration.com/>`_
-* `Intel <http://www.intel.com/>`_
-* `OSNexus <https://osnexus.com/>`_
-* `Sony Interactive <https://sonyinteractive.com/>`_
-
-Associate
----------
-
-* `Boston University <http://www.bu.com/>`_
-* `Center for Research in Open Source Systems (CROSS) <http://cross.ucsc.edu/>`_
-* `CERN <https://home.cern/>`_
-* `FASRC <https://www.rc.fas.harvard.edu/>`_
-* `grnet <https://grnet.gr/>`_
-* `Monash University <http://www.monash.edu/>`_
-* `NRF SARAO <http://www.ska.ac.za/about/sarao/>`_
-* `Open Infrastructure Foundation <http://openinfra.dev>`_
-* `Science & Technology Facilities Councel (STFC) <https://stfc.ukri.org/>`_
-* `SWITCH <https://switch.ch/>`_
-* `University of Michigan <http://www.osris.org/>`_
 
 Governing Board
 ===============
@@ -97,21 +49,6 @@ engineering activities are managed through traditional open source
 processes and are overseen by the :ref:`csc`. For more
 information see :ref:`governance`.
 
-Members
--------
-
-* Brett Kelly (45Drives)
-* Enrico Bocchi (CERN) - Associate member representative
-* Dan van der Ster (Clyso) - Ceph Council representative
-* Joachim Kraftmayer (Clyso)
-* Josh Durgin (IBM) - Ceph Council representative
-* Matthew Leonard (Bloomberg)
-* Anthony Middleton (Linux Foundation) - Ceph Community Manager
-* Neha Ojha (IBM) - Ceph Council Representative
-* Steven Umbehocker (OSNexus) - General member representative
-* Pawel Sadowski (OVH)
-* Sungmin Lee (Samsung Electronics)
-* Vincent Hsu (IBM)
 
 Joining
 =======

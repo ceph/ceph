@@ -7,7 +7,6 @@
 
 #ifdef HAVE_ZNS
 #include "crimson/os/seastore/segment_manager/zbd.h"
-SET_SUBSYS(seastore_device);
 #endif
 
 
@@ -30,23 +29,17 @@ std::ostream& operator<<(std::ostream &out, Segment::segment_state_t s)
 
 seastar::future<crimson::os::seastore::SegmentManagerRef>
 SegmentManager::get_segment_manager(
-  const std::string &device, device_type_t dtype)
+    const std::string& device,
+    device_type_t dtype)
 {
+  const std::string device_block = device + "/block";
 #ifdef HAVE_ZNS
-  LOG_PREFIX(SegmentManager::get_segment_manager);
-  auto file = co_await seastar::open_file_dma(
-	device + "/block",
-	seastar::open_flags::rw);
-  ceph_assert(file);
-  uint32_t nr_zones = 0;
-  auto ret = co_await file.ioctl(BLKGETNRZONES, &nr_zones);
-  ceph_assert(ret == 0);
-  INFO("Found {} zones.", nr_zones);
-  if (nr_zones != 0) {
-    co_return std::make_unique<segment_manager::zbd::ZBDSegmentManager>(device + "/block");
+  if (dtype == device_type_t::ZBD) {
+    co_return std::make_unique<segment_manager::zbd::ZBDSegmentManager>(
+        device_block);
   }
 #endif
-  co_return std::make_unique<segment_manager::block::BlockSegmentManager>(device + "/block", dtype);
+  co_return std::make_unique<segment_manager::block::BlockSegmentManager>(
+      device_block, dtype);
 }
-
 } // namespace crimson::os::seastore

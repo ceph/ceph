@@ -38,5 +38,8 @@ UID_NOBODY = 65534
 GID_NOGROUP = 65534
 DAEMON_FAILED_ERROR = 17
 
+# Daemons not systemd-enabled on deploy; mgr starts them when appropriate.
+DISABLED_SERVICES = ['nfs', 'keepalived']
+
 # Host labels
 ADMIN_LABEL = '_admin'

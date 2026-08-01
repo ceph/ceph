@@ -33,10 +33,15 @@ from typing import (
 
 import yaml
 
-from ceph.deployment.hostspec import HostSpec, SpecValidationError, assert_valid_host
+from ceph.deployment.hostspec import (
+    HostSpec,
+    SpecValidationError,
+    normalize_hostname,
+    assert_valid_host,
+)
 from ceph.deployment.utils import unwrap_ipv6, valid_addr, verify_non_negative_int
 from ceph.deployment.utils import verify_positive_int, verify_non_negative_number
-from ceph.deployment.utils import verify_boolean, verify_enum, verify_int
+from ceph.deployment.utils import verify_boolean, verify_enum, verify_int, verify_non_empty_string
 from ceph.deployment.utils import parse_combined_pem_file, validate_port, validate_unique_ports
 from ceph.cephadm.d3n_types import D3NCacheSpec, D3NCacheError
 from ceph.utils import is_hex
@@ -127,6 +132,12 @@ class HostPlacementSpec(NamedTuple):
     def from_json(cls, data: Union[dict, str]) -> 'HostPlacementSpec':
         if isinstance(data, str):
             return cls.parse(data)
+        if isinstance(data, dict):
+            return cls(
+                normalize_hostname(data.get('hostname', '')),
+                data.get('network', ''),
+                data.get('name', '')
+            )
         return cls(**data)
 
     def to_json(self) -> str:
@@ -160,7 +171,8 @@ class HostPlacementSpec(NamedTuple):
 
         match_host = re.search(host_re, host)
         if match_host:
-            host_spec = host_spec._replace(hostname=match_host.group(1))
+            # Lowercase for case-insensitive matching
+            host_spec = host_spec._replace(hostname=normalize_hostname(match_host.group(1)))
 
         name_match = re.search(name_re, host)
         if name_match:
@@ -221,16 +233,18 @@ class HostPattern():
         self.pattern_type: PatternType = pattern_type
         self.compiled_regex = None
         if self.pattern_type == PatternType.regex and self.pattern:
-            self.compiled_regex = re.compile(self.pattern)
+            self.compiled_regex = re.compile(self.pattern, re.IGNORECASE)
 
     def filter_hosts(self, hosts: List[str]) -> List[str]:
         if not self.pattern:
             return []
         if not self.pattern_type or self.pattern_type == PatternType.fnmatch:
-            return fnmatch.filter(hosts, self.pattern)
+            # Case-insensitive fnmatch comparison
+            pattern_lower = self.pattern.lower()
+            return [h for h in hosts if fnmatch.fnmatch(h.lower(), pattern_lower)]
         elif self.pattern_type == PatternType.regex:
             if not self.compiled_regex:
-                self.compiled_regex = re.compile(self.pattern)
+                self.compiled_regex = re.compile(self.pattern, re.IGNORECASE)
             return [h for h in hosts if re.match(self.compiled_regex, h)]
         raise SpecValidationError(f'Got unexpected pattern_type: {self.pattern_type}')
 
@@ -356,11 +370,23 @@ class PlacementSpec(object):
     def set_hosts(self, hosts: Union[List[str], List[HostPlacementSpec]]) -> None:
         # To backpopulate the .hosts attribute when using labels or count
         # in the orchestrator backend.
-        if all([isinstance(host, HostPlacementSpec) for host in hosts]):
-            self.hosts = hosts  # type: ignore
+        if all(isinstance(h, HostPlacementSpec) for h in hosts):
+            # All items are HostPlacementSpec, normalize directly.
+            host_specs = cast(List[HostPlacementSpec], hosts)
+            self.hosts = [
+                HostPlacementSpec(
+                    normalize_hostname(h.hostname),
+                    h.network,
+                    h.name,
+                )
+                for h in host_specs
+            ]
         else:
-            self.hosts = [HostPlacementSpec.parse(x, require_network=False)  # type: ignore
-                          for x in hosts if x]
+            # Otherwise, parse from strings
+            self.hosts = [
+                HostPlacementSpec.parse(h, require_network=False)  # type: ignore
+                for h in hosts if h
+            ]
 
     # deprecated
     def filter_matching_hosts(self, _get_hosts_func: Callable) -> List[str]:
@@ -881,6 +907,7 @@ class ServiceSpec(object):
         'mgmt-gateway': {'user_cert_allowed': True, 'scope': 'global', 'requires_ca_cert': False},
         'nvmeof': {'user_cert_allowed': True, 'scope': 'service', 'requires_ca_cert': False},
         'nfs': {'user_cert_allowed': True, 'scope': 'service', 'requires_ca_cert': True},
+        'smb': {'user_cert_allowed': True, 'scope': 'service', 'requires_ca_cert': True},
 
         # Services that only support cephadm-signed certificates
         'agent': {'user_cert_allowed': False, 'scope': 'host', 'requires_ca_cert': False},
@@ -973,6 +1000,8 @@ class ServiceSpec(object):
                  preview_only: bool = False,
                  networks: Optional[List[str]] = None,
                  targets: Optional[List[str]] = None,
+                 remote_write_url: Optional[str] = None,
+                 remote_write_allowed_metrics: Optional[str] = None,
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
@@ -1021,6 +1050,8 @@ class ServiceSpec(object):
         #: :ref:`cephadm-rgw-networks` and :ref:`cephadm-mgr-networks`.
         self.networks: List[str] = networks or []
         self.targets: List[str] = targets or []
+        self.remote_write_url = remote_write_url
+        self.remote_write_allowed_metrics = remote_write_allowed_metrics
 
         self.config: Optional[Dict[str, str]] = None
         if config:
@@ -1393,6 +1424,7 @@ class NFSServiceSpec(ServiceSpec):
                  tls_min_version: Optional[str] = None,
                  tls_ciphers: Optional[str] = None,
                  colocation_ports: Optional[List[Dict[str, int]]] = None,
+                 enable_nfsv3: bool = False,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -1421,6 +1453,7 @@ class NFSServiceSpec(ServiceSpec):
         self.rdma_port = rdma_port
         self.cluster_qos_config = cluster_qos_config
         self.cluster_qos_port = cluster_qos_port
+        self.enable_nfsv3 = enable_nfsv3
 
         # colocation_ports is a list of port dicts for ADDITIONAL colocated daemons
         # The first daemon always uses port and monitoring_port from the spec
@@ -1502,6 +1535,11 @@ class NFSServiceSpec(ServiceSpec):
 
     def validate(self) -> None:
         super(NFSServiceSpec, self).validate()
+
+        if self.placement is not None and self.placement.count_per_host is not None:
+            raise SpecValidationError(
+                "Placement 'count_per_host' is not supported for nfs service."
+            )
 
         if self.virtual_ip and (self.ip_addrs or self.networks):
             raise SpecValidationError("Invalid NFS spec: Cannot set virtual_ip and "
@@ -1866,6 +1904,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  force_tls: Optional[bool] = False,
                  max_message_length_in_mb: Optional[int] = 4,
                  io_stats_enabled: Optional[bool] = True,
+                 degrade_namespace_on_kmip_error: Optional[bool] = True,
                  server_key: Optional[str] = None,
                  server_cert: Optional[str] = None,
                  client_key: Optional[str] = None,
@@ -1892,6 +1931,10 @@ class NvmeofServiceSpec(ServiceSpec):
                  iobuf_options: Optional[Dict[str, int]] = None,
                  qos_timeslice_in_usecs: Optional[int] = 0,
                  notifications_interval: Optional[int] = 60,
+                 cnc_enable: bool = True,
+                 cnc_rate_limiter_bytes: Optional[int] = 100000000,
+                 cnc_chunk_blocks: Optional[int] = 512,
+                 cnc_parallel_chunks: Optional[int] = 8,
                  discovery_addr: Optional[str] = None,
                  discovery_addr_map: Optional[Dict[str, str]] = None,
                  discovery_port: Optional[int] = None,
@@ -2025,6 +2068,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.max_message_length_in_mb = max_message_length_in_mb
         #: ``io_stats_enabled`` enables controller IO statistics
         self.io_stats_enabled = io_stats_enabled
+        #: ``degrade_namespace_on_kmip_error`` on a KMIP key error in update, create a degraded ns
+        self.degrade_namespace_on_kmip_error = degrade_namespace_on_kmip_error
         #: ``allowed_consecutive_spdk_ping_failures`` # of ping failures before aborting gateway
         self.allowed_consecutive_spdk_ping_failures = allowed_consecutive_spdk_ping_failures
         #: ``spdk_ping_interval_in_seconds`` sleep interval in seconds between SPDK pings
@@ -2099,6 +2144,14 @@ class NvmeofServiceSpec(ServiceSpec):
         self.qos_timeslice_in_usecs = qos_timeslice_in_usecs
         #: ``notifications_interval`` read SPDK notifications interval, in seconds
         self.notifications_interval = notifications_interval
+        #: ``cnc_enable`` enable CNC feature in SPDK
+        self.cnc_enable = cnc_enable
+        #: ``cnc_rate_limiter_bytes`` CNC rate limiter in bytes
+        self.cnc_rate_limiter_bytes = cnc_rate_limiter_bytes
+        #: ``cnc_chunk_blocks`` CNC chunk blocks
+        self.cnc_chunk_blocks = cnc_chunk_blocks
+        #: ``cnc_parallel_chunks`` CNC parallel chunk
+        self.cnc_parallel_chunks = cnc_parallel_chunks
         #: ``discovery_addr`` address of the discovery service
         self.discovery_addr = discovery_addr
         #: ``discovery_addr_map`` per node address map of the discovery service
@@ -2174,18 +2227,19 @@ class NvmeofServiceSpec(ServiceSpec):
         data = super().to_json()
         spec = data.setdefault('spec', {})
 
-        if self.ssl:
-            if self.server_cert and self.server_key:
-                spec['server_cert'] = self.server_cert
-                spec['server_key'] = self.server_key
-            else:
-                spec['ssl_cert'] = self.ssl_cert
-                spec['ssl_key'] = self.ssl_key
+        if self.certificate_source == CertificateSource.INLINE.value:
+            if self.ssl:
+                if self.server_cert and self.server_key:
+                    spec['server_cert'] = self.server_cert
+                    spec['server_key'] = self.server_key
+                else:
+                    spec['ssl_cert'] = self.ssl_cert
+                    spec['ssl_key'] = self.ssl_key
 
-        if self.enable_auth:
-            spec['client_cert'] = self.client_cert
-            spec['client_key'] = self.client_key
-            spec['root_ca_cert'] = self.root_ca_cert
+            if self.enable_auth:
+                spec['client_cert'] = self.client_cert
+                spec['client_key'] = self.client_key
+                spec['root_ca_cert'] = self.root_ca_cert
 
         return data
 
@@ -2221,6 +2275,10 @@ class NvmeofServiceSpec(ServiceSpec):
         self.verify_spdk_ceph_connection_allocation()
         verify_non_negative_int(self.qos_timeslice_in_usecs, "QOS timeslice")
         verify_non_negative_int(self.notifications_interval, "SPDK notifications interval")
+        verify_boolean(self.cnc_enable, "Enable CNC")
+        verify_non_negative_int(self.cnc_rate_limiter_bytes, "CNC rate limiter")
+        verify_non_negative_int(self.cnc_chunk_blocks, "CNC chunk blocks")
+        verify_non_negative_int(self.cnc_parallel_chunks, "CNC parallel chunks")
 
         verify_non_negative_number(self.spdk_ping_interval_in_seconds, "SPDK ping interval")
         if (
@@ -2273,6 +2331,7 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_boolean(self.force_tls, "Force TLS")
         verify_positive_int(self.max_message_length_in_mb, "Max protocol message length")
         verify_boolean(self.io_stats_enabled, "Enable IO statistics")
+        verify_boolean(self.degrade_namespace_on_kmip_error, "Degrade namespace on KMIP error")
         verify_non_negative_number(self.monitor_timeout, "Monitor timeout")
         verify_non_negative_int(self.port, "Port")
         verify_non_negative_int(self.discovery_port, "Discovery port")
@@ -2774,23 +2833,37 @@ class OAuth2ProxySpec(ServiceSpec):
 
     def validate(self) -> None:
         super(OAuth2ProxySpec, self).validate()
-        self._validate_non_empty_string(self.provider_display_name, "provider_display_name")
-        self._validate_non_empty_string(self.client_id, "client_id")
-        self._validate_non_empty_string(self.client_secret, "client_secret")
+
+        required_values = {
+            'provider_display_name': self.provider_display_name,
+            'oidc_issuer_url': self.oidc_issuer_url,
+            'client_id': self.client_id,
+            'client_secret': self.client_secret,
+        }
+        missing_required_fields = [
+            field for field, value in required_values.items()
+            if value is None or (isinstance(value, str) and not value.strip())
+        ]
+        if missing_required_fields:
+            raise SpecValidationError(
+                'Missing required fields for oauth2-proxy: '
+                + ', '.join(missing_required_fields)
+                + '.'
+            )
+        verify_non_empty_string(self.provider_display_name, "provider_display_name")
+        verify_non_empty_string(self.client_id, "client_id")
+        verify_non_empty_string(self.client_secret, "client_secret")
+
         self._validate_cookie_secret(self.cookie_secret)
         self._validate_url(self.oidc_issuer_url, "oidc_issuer_url")
         if self.redirect_url is not None:
             self._validate_url(self.redirect_url, "redirect_url")
         if self.scope is not None:
-            self._validate_non_empty_string(self.scope, "scope")
+            verify_non_empty_string(self.scope, "scope")
         if self.email_domains is not None:
             self._validate_domain_name(self.email_domains, "email_domains")
         if self.https_address is not None:
             self._validate_https_address(self.https_address)
-
-    def _validate_non_empty_string(self, value: Optional[str], field_name: str) -> None:
-        if not value or not isinstance(value, str) or not value.strip():
-            raise SpecValidationError(f"Invalid {field_name}: Must be a non-empty string.")
 
     def _validate_url(self, url: Optional[str], field_name: str) -> None:
         from urllib.parse import urlparse
@@ -3065,6 +3138,8 @@ class MonitoringSpec(ServiceSpec):
                  preview_only: bool = False,
                  port: Optional[int] = None,
                  targets: Optional[List[str]] = None,
+                 remote_write_url: Optional[str] = None,
+                 remote_write_allowed_metrics: Optional[str] = None,
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
@@ -3079,7 +3154,9 @@ class MonitoringSpec(ServiceSpec):
             preview_only=preview_only, config=config,
             networks=networks, extra_container_args=extra_container_args,
             extra_entrypoint_args=extra_entrypoint_args,
-            custom_configs=custom_configs, targets=targets)
+            custom_configs=custom_configs, targets=targets,
+            remote_write_url=remote_write_url,
+            remote_write_allowed_metrics=remote_write_allowed_metrics)
 
         self.service_type = service_type
         self.port = port
@@ -3252,6 +3329,8 @@ class PrometheusSpec(MonitoringSpec):
                  retention_time: Optional[str] = None,
                  retention_size: Optional[str] = None,
                  targets: Optional[List[str]] = None,
+                 remote_write_url: Optional[str] = None,
+                 remote_write_allowed_metrics: Optional[str] = None,
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
@@ -3263,7 +3342,8 @@ class PrometheusSpec(MonitoringSpec):
             ssl=ssl, certificate_source=certificate_source,
             preview_only=preview_only, config=config, networks=networks, port=port, targets=targets,
             extra_container_args=extra_container_args, extra_entrypoint_args=extra_entrypoint_args,
-            custom_configs=custom_configs)
+            custom_configs=custom_configs, remote_write_url=remote_write_url,
+            remote_write_allowed_metrics=remote_write_allowed_metrics)
 
         self.retention_time = retention_time.strip() if retention_time else None
         self.retention_size = retention_size.strip() if retention_size else None
@@ -3601,8 +3681,7 @@ class TunedProfileSpec():
         if 'profile_name' not in spec:
             raise SpecValidationError('Tuned profile spec must include "profile_name" field')
         data['profile_name'] = spec['profile_name']
-        if not isinstance(data['profile_name'], str):
-            raise SpecValidationError('"profile_name" field must be a string')
+        verify_non_empty_string(data['profile_name'], "profile_name")
         if 'placement' in spec:
             data['placement'] = PlacementSpec.from_json(spec['placement'])
         if 'settings' in spec:
@@ -3908,6 +3987,68 @@ class SMBClusterBindIPSpec:
         return out
 
 
+class SSLParameters:
+    def __init__(
+        self,
+        enabled: bool = False,
+        ssl_cert: Optional[str] = None,
+        ssl_key: Optional[str] = None,
+        ssl_ca_cert: Optional[str] = None,
+        certificate_source: Optional[str] = None,
+    ):
+        self.enabled = enabled
+        self.ssl_cert = ssl_cert
+        self.ssl_key = ssl_key
+        self.ssl_ca_cert = ssl_ca_cert
+        self.certificate_source = certificate_source
+        self.validate()
+
+    def validate(
+        self,
+        component: str = "ssl",
+        ca_cert_required: bool = False,
+    ) -> None:
+        if not self.enabled:
+            return
+        missing: list[Any] = []
+        if not self.certificate_source:
+            missing.append("certificate_source")
+        if self.certificate_source == 'inline':
+            if not self.ssl_cert:
+                missing.append("ssl_cert")
+            if not self.ssl_key:
+                missing.append("ssl_key")
+            if ca_cert_required and not self.ssl_ca_cert:
+                missing.append("ssl_ca_cert")
+        if missing:
+            raise ValueError(
+                f"[{component}] SSL is enabled "
+                f"but the following fields are missing: {', '.join(missing)}"
+            )
+
+    @classmethod
+    def from_dict(cls, data: Any) -> 'SSLParameters':
+        if not isinstance(data, dict):
+            return cls(enabled=False)
+
+        return cls(
+            enabled=data.get('enabled', False),
+            ssl_cert=data.get('ssl_cert'),
+            ssl_key=data.get('ssl_key'),
+            ssl_ca_cert=data.get('ssl_ca_cert'),
+            certificate_source=data.get('certificate_source'),
+        )
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            'enabled': self.enabled,
+            'ssl_cert': self.ssl_cert,
+            'ssl_key': self.ssl_key,
+            'ssl_ca_cert': self.ssl_ca_cert,
+            'certificate_source': self.certificate_source,
+        }
+
+
 class SMBExternalCephCluster:
     """Configure access to a non-local Ceph cluster for SMB services."""
     def __init__(
@@ -3916,14 +4057,18 @@ class SMBExternalCephCluster:
         fsid: str,
         mon_host: str,
         # default user and key
-        user: str,
-        key: str,
+        user: Optional[str] = None,
+        key: Optional[str] = None,
+        rgw_user: Optional[str] = None,
+        rgw_key: Optional[str] = None,
     ) -> None:
         self.alias = alias
         self.fsid = fsid
         self.mon_host = mon_host
         self.user = user
         self.key = key
+        self.rgw_user = rgw_user
+        self.rgw_key = rgw_key
         self.validate()
 
     def validate(self) -> None:
@@ -3933,25 +4078,60 @@ class SMBExternalCephCluster:
             raise SpecValidationError('an fsid value is required')
         if not self.mon_host:
             raise SpecValidationError('a mon_host value is required')
-        if not self.user:
-            raise SpecValidationError('a default user name is required')
-        if not self.key:
-            raise SpecValidationError('a default key is required')
+
+        # Validate CephFS credentials (user+key pair)
+        has_user = self.user is not None and self.user != ''
+        has_key = self.key is not None and self.key != ''
+        if has_user != has_key:
+            raise SpecValidationError(
+                'CephFS credentials must be provided as a complete pair: '
+                'both user and key are required if either is specified'
+            )
+
+        # Validate RGW credentials (rgw_user+rgw_key pair)
+        has_rgw_user = self.rgw_user is not None and self.rgw_user != ''
+        has_rgw_key = self.rgw_key is not None and self.rgw_key != ''
+        if has_rgw_user != has_rgw_key:
+            raise SpecValidationError(
+                'RGW credentials must be provided as a complete pair: '
+                'both rgw_user and rgw_key are required if either is specified'
+            )
+
+        # Ensure at least one complete credential pair is provided
+        has_cephfs_creds = has_user and has_key
+        has_rgw_creds = has_rgw_user and has_rgw_key
+        if not has_cephfs_creds and not has_rgw_creds:
+            raise SpecValidationError(
+                'at least one complete credential pair is required: '
+                'either (user+key) for CephFS or (rgw_user+rgw_key) for RGW'
+            )
 
     def __repr__(self) -> str:
-        _names = ['alias', 'fsid', 'mon_host', 'user', 'key']
+        _names = ['alias', 'fsid', 'mon_host', 'user', 'key', 'rgw_user', 'rgw_key']
         fields = ', '.join(f'{n}={getattr(self, n, "")!r}' for n in _names)
         return f'{self.__class__.__name__}({fields})'
 
     def to_simplified(self) -> Dict[str, Any]:
         """Return a serializable representation of SMBExternalCephCluster."""
-        return {
+        result: Dict[str, Any] = {
             'alias': self.alias,
             'fsid': self.fsid,
             'mon_host': self.mon_host,
-            'user': self.user,
-            'key': self.key,
         }
+
+        # Only include CephFS credentials if they are set
+        if self.user:
+            result['user'] = self.user
+        if self.key:
+            result['key'] = self.key
+
+        # Only include RGW credentials if they are set
+        if self.rgw_user:
+            result['rgw_user'] = self.rgw_user
+        if self.rgw_key:
+            result['rgw_key'] = self.rgw_key
+
+        return result
 
     def to_json(self) -> Dict[str, Any]:
         """Return a JSON-compatible dict."""
@@ -4050,6 +4230,8 @@ class SMBSpec(ServiceSpec):
         # not listed the default port will be used.
         custom_ports: Optional[Dict[str, int]] = None,
         bind_addrs: Optional[List[SMBClusterBindIPSpec]] = None,
+        ssl: Optional[bool] = None,
+        ssl_certificates: Optional[Dict[str, SSLParameters]] = None,
         # === remote control server ===
         remote_control_ssl_cert: Optional[str] = None,
         remote_control_ssl_key: Optional[str] = None,
@@ -4073,12 +4255,23 @@ class SMBSpec(ServiceSpec):
     ) -> None:
         if service_type != self.service_type:
             raise ValueError(f'invalid service_type: {service_type!r}')
+
+        self.ssl_certificates = {
+            name: (
+                value
+                if isinstance(value, SSLParameters)
+                else SSLParameters.from_dict(value)
+            )
+            for name, value in (ssl_certificates or {}).items()
+        }
+        any_ssl = any(p.enabled for p in self.ssl_certificates.values())
         super().__init__(
             self.service_type,
             service_id=service_id,
             placement=placement,
             count=count,
             config=config,
+            ssl=any_ssl,
             unmanaged=unmanaged,
             preview_only=preview_only,
             networks=networks,
@@ -4149,6 +4342,12 @@ class SMBSpec(ServiceSpec):
         for key in self.custom_ports or {}:
             if key not in self._valid_service_names:
                 raise ValueError(f'{key} is not a valid service name')
+        # TLS certificate validation
+        for feature_name, ssl_params in self.ssl_certificates.items():
+            ssl_params.validate(
+                component=feature_name,
+                ca_cert_required=feature_name in smbconst.CA_CERT_REQUIRED_FEATURES
+            )
 
     def _derive_cluster_uri(self, uri: str, objname: str) -> str:
         if not uri.startswith(('rados://', 'mem:')):
@@ -4202,6 +4401,10 @@ class SMBSpec(ServiceSpec):
             spec['ceph_cluster_configs'] = [
                 c.to_json() for c in spec['ceph_cluster_configs']
             ]
+        if spec and spec.get('ssl_certificates'):
+            spec['ssl_certificates'] = {
+                k: v.to_json() for k, v in self.ssl_certificates.items()
+            }
         return obj
 
 
@@ -4209,11 +4412,28 @@ class NodeProxySpec(ServiceSpec):
     def __init__(self,
                  service_type: str,
                  placement: Optional[PlacementSpec] = None,
+                 ssl: Optional[bool] = True,
+                 certificate_source: Optional[str] = None,
+                 unmanaged: bool = False,
+                 preview_only: bool = False,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
+                 custom_configs: Optional[List[CustomConfig]] = None,
                  ) -> None:
         assert service_type == 'node-proxy'
-        super(NodeProxySpec, self).__init__('node-proxy', placement=placement)
-        self.ssl: bool = True
+        super(NodeProxySpec, self).__init__(
+            'node-proxy',
+            placement=placement,
+            ssl=ssl,
+            certificate_source=certificate_source,
+            unmanaged=unmanaged,
+            preview_only=preview_only,
+            extra_container_args=extra_container_args,
+            extra_entrypoint_args=extra_entrypoint_args,
+            custom_configs=custom_configs,
+        )
         self.validate()
 
 
+yaml.add_representer(NodeProxySpec, ServiceSpec.yaml_representer)
 yaml.add_representer(SMBSpec, ServiceSpec.yaml_representer)

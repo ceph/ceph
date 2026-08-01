@@ -168,7 +168,7 @@ seastar::future<bufferlist> FSDriver::read(
       bl.append_zero(size);
       return seastar::make_ready_future<bufferlist>(std::move(bl));
     }),
-    crimson::ct_error::assert_all{"Unrecoverable error in FSDriver::read"}
+    crimson::ct_error::assert_all("Unrecoverable error in FSDriver::read")
   ).then([size](auto &&bl) {
     if (bl.length() < size) {
       bl.append_zero(size - bl.length());

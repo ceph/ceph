@@ -1,4 +1,5 @@
 set(cephfs_mirror_internal
+  Checkpoint.cc
   ClusterWatcher.cc
   Mirror.cc
   FSMirror.cc

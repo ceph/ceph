@@ -186,7 +186,7 @@ def set_backport(issue):
 
 def get_release(issue):
     for field in issue.custom_fields:
-        if field['name'] == 'Release':
+        if field['name'] == 'Ceph Release':
             return field['value']
 
 def update_relations(r, issue, dry_run):
@@ -363,9 +363,13 @@ def iterate_over_backports(r, issues, dry_run=False):
             continue
         if len(issue['backports']) == 0:
             logging.error(url(issue) + " the backport field is empty")
-        update_relations(r, issue, dry_run)
-        if not dry_run:
-            mark_as_processed(r, issue)
+        try:
+            update_relations(r, issue, dry_run)
+            if not dry_run:
+                mark_as_processed(r, issue)
+        except ServerError as e:
+            logging.error(f"Failed to fetch relations for issue {issue['id']} due to a Redmine ServerError: {e}")
+            continue
     print('                                     \r', end='', flush=True)
     logging.info("Processed {} issues".format(counter))
     return None

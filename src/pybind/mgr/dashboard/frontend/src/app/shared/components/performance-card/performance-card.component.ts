@@ -5,9 +5,10 @@ import {
   ViewEncapsulation,
   inject,
   signal,
-  computed
+  computed,
+  Input
 } from '@angular/core';
-import { Icons, IconSize } from '~/app/shared/enum/icons.enum';
+import { EMPTY_STATE_IMAGE, Icons, IconSize } from '~/app/shared/enum/icons.enum';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import {
   METRIC_UNIT_MAP,
@@ -17,15 +18,13 @@ import {
 } from '~/app/shared/models/performance-data';
 import { PerformanceCardService } from '../../api/performance-card.service';
 import { DropdownModule, GridModule, LayoutModule, ListItem } from 'carbon-components-angular';
-import { of, Subject, Subscription } from 'rxjs';
+import { Subject, Subscription } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { ProductiveCardComponent } from '../productive-card/productive-card.component';
 import { CommonModule } from '@angular/common';
 import { TimePickerComponent } from '../time-picker/time-picker.component';
 import { AreaChartComponent } from '../area-chart/area-chart.component';
-import { MgrModuleService } from '../../api/mgr-module.service';
-import { toSignal } from '@angular/core/rxjs-interop';
-import { AuthStorageService } from '../../services/auth-storage.service';
+import { EmptyStateComponent } from '../empty-state/empty-state.component';
 
 @Component({
   selector: 'cd-performance-card',
@@ -39,11 +38,15 @@ import { AuthStorageService } from '../../services/auth-storage.service';
     AreaChartComponent,
     TimePickerComponent,
     LayoutModule,
-    GridModule
+    GridModule,
+    EmptyStateComponent
   ],
   encapsulation: ViewEncapsulation.None
 })
 export class PerformanceCardComponent implements OnInit, OnDestroy {
+  @Input() prometheusEmptyState: boolean = false;
+  @Input() storageEmptyState: boolean = false;
+
   chartDataSignal = signal<PerformanceData | null>(null);
   chartDataLengthSignal = computed(() => {
     const data = this.chartDataSignal();
@@ -53,14 +56,7 @@ export class PerformanceCardComponent implements OnInit, OnDestroy {
   metricUnitMap = METRIC_UNIT_MAP;
   icons = Icons;
   iconSize = IconSize;
-  emptyStateText = {
-    prometheusNotAvailable: $localize`You must have prometheus configured to access this capability.`,
-    storageNotAvailable: $localize`You must have storage configured to access this capability.`,
-    prometheusDisabled: $localize`You must enable prometheus to access this capability.`
-  };
-  emptyStateKey = signal<
-    'prometheusNotAvailable' | 'storageNotAvailable' | 'prometheusDisabled' | ''
-  >('prometheusNotAvailable');
+  emptyState = EMPTY_STATE_IMAGE;
 
   private destroy$ = new Subject<void>();
 
@@ -87,17 +83,9 @@ export class PerformanceCardComponent implements OnInit, OnDestroy {
 
   private prometheusService = inject(PrometheusService);
   private performanceCardService = inject(PerformanceCardService);
-  private mgrModuleService = inject(MgrModuleService);
-  private readonly authStorageService = inject(AuthStorageService);
 
   time = { ...this.prometheusService.lastHourDateObject };
   private chartSub?: Subscription;
-
-  private readonly permissions = this.authStorageService.getPermissions();
-
-  readonly list = this.permissions?.configOpt?.read
-    ? toSignal(this.mgrModuleService.list(), { initialValue: [] })
-    : toSignal(of([]), { initialValue: [] });
 
   ngOnInit() {
     this.loadCharts(this.time);
@@ -108,33 +96,17 @@ export class PerformanceCardComponent implements OnInit, OnDestroy {
 
     this.chartSub?.unsubscribe();
 
+    if (this.storageEmptyState || this.prometheusEmptyState) {
+      this.chartDataSignal.set(null);
+      return;
+    }
+
     this.chartSub = this.performanceCardService
       .getChartData(time)
       .pipe(takeUntil(this.destroy$))
       .subscribe((data) => {
-        if (this.permissions?.configOpt?.read) {
-          this.followEmptyStateMsgCheck(data);
-        } else {
-          this.skipEmptyStateMsgCheck(data);
-        }
+        this.chartDataSignal.set(data);
       });
-  }
-
-  followEmptyStateMsgCheck(data: PerformanceData) {
-    let enabled$ = this.list().filter((a) => a.name === 'prometheus')[0].enabled;
-    this.chartDataSignal.set(data);
-    if (enabled$) {
-      this.emptyStateKey.set('');
-    } else if (!enabled$) {
-      this.emptyStateKey.set('prometheusDisabled');
-    } else {
-      this.emptyStateKey.set('storageNotAvailable');
-    }
-  }
-
-  skipEmptyStateMsgCheck(data: PerformanceData) {
-    this.chartDataSignal.set(data);
-    this.emptyStateKey.set('');
   }
 
   ngOnDestroy(): void {
