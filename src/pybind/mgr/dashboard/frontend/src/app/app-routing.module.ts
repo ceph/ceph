@@ -65,6 +65,9 @@ import { SmbClusterListComponent } from './ceph/smb/smb-cluster-list/smb-cluster
 import { SmbJoinAuthListComponent } from './ceph/smb/smb-join-auth-list/smb-join-auth-list.component';
 import { SmbUsersgroupsListComponent } from './ceph/smb/smb-usersgroups-list/smb-usersgroups-list.component';
 import { SmbOverviewComponent } from './ceph/smb/smb-overview/smb-overview.component';
+import { SmbUsersgroupsResourceSidebarComponent } from './ceph/smb/smb-usersgroups-resource-sidebar/smb-usersgroups-resource-sidebar.component';
+import { SmbUsersgroupsResourcePageComponent } from './ceph/smb/smb-usersgroups-resource-page/smb-usersgroups-resource-page.component';
+import { SmbUsergroupsResourceBreadcrumbResolver } from './ceph/smb/smb-usersgroups-resource-page/smb-usersgroups-resource-breadcrumb.resolver';
 import { MultiClusterFormComponent } from './ceph/cluster/multi-cluster/multi-cluster-form/multi-cluster-form.component';
 import { CephfsMirroringListComponent } from './ceph/cephfs/cephfs-mirroring-list/cephfs-mirroring-list.component';
 import { NotificationsPageComponent } from './core/navigation/notification-panel/notifications-page/notifications-page.component';
@@ -589,6 +592,19 @@ const routes: Routes = [
                   {
                     path: `${URLVerbs.EDIT}/:usersGroupsId`,
                     component: SmbUsersgroupsFormComponent
+                  },
+                  {
+                    path: ':users_groups_id',
+                    component: SmbUsersgroupsResourceSidebarComponent,
+                    data: { breadcrumbs: SmbUsergroupsResourceBreadcrumbResolver },
+                    children: [
+                      { path: '', redirectTo: 'overview', pathMatch: 'full' },
+                      {
+                        path: 'overview',
+                        component: SmbUsersgroupsResourcePageComponent,
+                        data: { breadcrumbs: 'Overview', section: 'overview' }
+                      }
+                    ]
                   }
                 ]
               },

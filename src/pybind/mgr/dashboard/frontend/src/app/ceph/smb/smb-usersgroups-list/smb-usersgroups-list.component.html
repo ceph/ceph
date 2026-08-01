@@ -2,14 +2,13 @@
 
 <ng-container *ngIf="usersGroups$ | async as usersGroups">
   <cd-table
-    headerTitle="Standalone access resoruces"
+    headerTitle="Standalone access resources"
     headerDescription="Logical management units for authorization on Standalone servers"
     [data]="usersGroups"
     columnMode="flex"
     [columns]="columns"
     selectionType="single"
-    [hasDetails]="true"
-    (setExpandedRow)="setExpandedRow($event)"
+    [hasDetails]="false"
     (fetchData)="loadUsersGroups()"
     (updateSelection)="updateSelection($event)"
   >
@@ -21,10 +20,6 @@
       >
       </cd-table-actions>
     </div>
-    <cd-smb-usersgroups-details
-      *cdTableDetail
-      [selection]="expandedRow"
-    ></cd-smb-usersgroups-details>
   </cd-table>
 </ng-container>
 
