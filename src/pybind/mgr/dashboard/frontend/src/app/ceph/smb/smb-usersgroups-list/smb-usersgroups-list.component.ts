@@ -1,5 +1,5 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
-import { catchError, switchMap } from 'rxjs/operators';
+import { catchError, switchMap, map } from 'rxjs/operators';
 import { BehaviorSubject, Observable, of } from 'rxjs';
 
 import _ from 'lodash';
@@ -22,6 +22,7 @@ import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 
 export const USERSGROUPS_PATH = 'cephfs/smb/standalone';
 
@@ -62,7 +63,8 @@ export class SmbUsersgroupsListComponent extends ListWithDetails implements OnIn
       {
         name: $localize`Name`,
         prop: 'users_groups_id',
-        flexGrow: 2
+        flexGrow: 2,
+        cellTransformation: CellTemplate.routerLink
       },
       {
         name: $localize`Number of users`,
@@ -110,6 +112,13 @@ export class SmbUsersgroupsListComponent extends ListWithDetails implements OnIn
     this.usersGroups$ = this.subject$.pipe(
       switchMap(() =>
         this.smbService.listUsersGroups().pipe(
+          map((usersGroups: SMBUsersGroups[]) => {
+            usersGroups.forEach((resource: SMBUsersGroups) => {
+              resource['cdLink'] =
+                `/${USERSGROUPS_PATH}/${encodeURIComponent(resource.users_groups_id)}/overview`;
+            });
+            return usersGroups;
+          }),
           catchError(() => {
             this.context.error();
             return of(null);
