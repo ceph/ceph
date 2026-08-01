@@ -3274,3 +3274,122 @@ class TestRmClusterConfigCleanup(fake_filesystem_unittest.TestCase):
 
         assert os.path.exists('/etc/ceph/ceph.conf')
         assert os.path.isdir('/etc/ceph/ceph.conf')
+
+
+class TestPrepareSsh:
+    """Regression tests for prepare_ssh call ordering.
+
+    Guard against the bug where 'cephadm set-user' was invoked before SSH
+    keys were registered, causing EINVAL from the mgr module which validates
+    that a public key must exist before the user can be changed.
+    """
+
+    def _record_calls(self):
+        """Returns (cli, calls) where cli records each cephadm subcommand."""
+        calls: list = []
+
+        def cli(args, **kwargs):
+            if len(args) >= 2 and args[0] == 'cephadm':
+                calls.append(args[1])
+            return 'ssh-rsa AAAA...' if args == ['cephadm', 'get-pub-key'] else ''
+
+        return cli, calls
+
+    def _strict_cli(self):
+        """Returns (cli, calls) where cli raises if set-user precedes key setup."""
+        calls: list = []
+        key_registered = False
+
+        def cli(args, **kwargs):
+            nonlocal key_registered
+            if len(args) >= 2 and args[0] == 'cephadm':
+                subcmd = args[1]
+                calls.append(subcmd)
+                if subcmd in ('set-pub-key', 'generate-key', 'set-signed-cert'):
+                    key_registered = True
+                if subcmd == 'set-user' and not key_registered:
+                    raise RuntimeError(
+                        'Error EINVAL: No SSH public key configured. '
+                        'Please generate or set SSH keys first using '
+                        'ceph cephadm generate-key or ceph cephadm set-pub-key.'
+                    )
+            return 'ssh-rsa AAAA...' if args == ['cephadm', 'get-pub-key'] else ''
+
+        return cli, calls
+
+    @mock.patch('cephadm.get_hostname', return_value='testhost')
+    @mock.patch('cephadm.authorize_ssh_key')
+    def test_set_user_ordered_after_provided_keys(self, _auth, _hostname):
+        """set-user must come after set-pub-key when custom keys are provided."""
+        import types
+        _cephadm = import_cephadm()
+
+        ctx = mock.MagicMock()
+        ctx.ssh_user = 'cephadm'
+        ctx.ssh_config = None
+        ctx.ssh_private_key = types.SimpleNamespace(name='/tmp/test-id_rsa')
+        ctx.ssh_public_key = types.SimpleNamespace(name='/tmp/test-id_rsa.pub')
+        ctx.ssh_signed_cert = None
+        ctx.mon_ip = '10.0.0.1'
+        ctx.mon_addrv = None
+        ctx.orphan_initial_daemons = True
+
+        cli, calls = self._record_calls()
+        _cephadm.prepare_ssh(ctx, cli, lambda: None)
+
+        assert 'set-pub-key' in calls, f'set-pub-key not called; order: {calls}'
+        assert 'set-user' in calls, f'set-user not called; order: {calls}'
+        assert calls.index('set-pub-key') < calls.index('set-user'), (
+            f'set-user (pos {calls.index("set-user")}) called before '
+            f'set-pub-key (pos {calls.index("set-pub-key")}). Order: {calls}'
+        )
+
+    @mock.patch('cephadm.get_hostname', return_value='testhost')
+    @mock.patch('cephadm.authorize_ssh_key')
+    def test_set_user_ordered_after_generated_key(self, _auth, _hostname):
+        """set-user must come after generate-key when no custom keys are provided."""
+        _cephadm = import_cephadm()
+
+        ctx = mock.MagicMock()
+        ctx.ssh_user = 'cephadm'
+        ctx.ssh_config = None
+        ctx.ssh_private_key = None
+        ctx.ssh_public_key = None
+        ctx.ssh_signed_cert = None
+        ctx.output_pub_ssh_key = '/tmp/ceph.pub'
+        ctx.mon_ip = '10.0.0.1'
+        ctx.mon_addrv = None
+        ctx.orphan_initial_daemons = True
+
+        cli, calls = self._record_calls()
+        with mock.patch('builtins.open', mock.mock_open()):
+            _cephadm.prepare_ssh(ctx, cli, lambda: None)
+
+        assert 'generate-key' in calls, f'generate-key not called; order: {calls}'
+        assert 'set-user' in calls, f'set-user not called; order: {calls}'
+        assert calls.index('generate-key') < calls.index('set-user'), (
+            f'set-user (pos {calls.index("set-user")}) called before '
+            f'generate-key (pos {calls.index("generate-key")}). Order: {calls}'
+        )
+
+    @mock.patch('cephadm.get_hostname', return_value='testhost')
+    @mock.patch('cephadm.authorize_ssh_key')
+    def test_set_user_with_mgr_validation_provided_keys(self, _auth, _hostname):
+        """Strict cli simulating RHCS 9.1 mgr EINVAL must not raise with patched order."""
+        import types
+        _cephadm = import_cephadm()
+
+        ctx = mock.MagicMock()
+        ctx.ssh_user = 'cephadm'
+        ctx.ssh_config = None
+        ctx.ssh_private_key = types.SimpleNamespace(name='/tmp/test-id_rsa')
+        ctx.ssh_public_key = types.SimpleNamespace(name='/tmp/test-id_rsa.pub')
+        ctx.ssh_signed_cert = None
+        ctx.mon_ip = '10.0.0.1'
+        ctx.mon_addrv = None
+        ctx.orphan_initial_daemons = True
+
+        cli, calls = self._strict_cli()
+        # With patched ordering this must not raise RuntimeError
+        _cephadm.prepare_ssh(ctx, cli, lambda: None)
+        assert 'set-user' in calls

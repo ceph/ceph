@@ -2421,8 +2421,6 @@ def prepare_ssh(
     cli: Callable, wait_for_mgr_restart: Callable
 ) -> None:
 
-    cli(['cephadm', 'set-user', ctx.ssh_user])
-
     if ctx.ssh_config:
         logger.info('Using provided ssh config...')
         mounts = {
@@ -2456,6 +2454,8 @@ def prepare_ssh(
             f.write(ssh_pub)
         logger.info('Wrote public SSH key to %s' % ctx.output_pub_ssh_key)
         authorize_ssh_key(ssh_pub, ctx.ssh_user)
+
+    cli(['cephadm', 'set-user', ctx.ssh_user])
 
     host = get_hostname()
     logger.info('Adding host %s...' % host)
