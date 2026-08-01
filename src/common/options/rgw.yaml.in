@@ -5001,10 +5001,13 @@ options:
   level: advanced
   desc: TTL in seconds for the S3 distributed lock object used during index rebuild
   long_desc: If the lock object age exceeds this value, it is considered stale
-    and can be reclaimed by another RGW instance. Should be greater than
-    rgw_s3vector_index_build_lease_seconds to avoid premature lock reclamation.
-  default: 900
-  min: 60
+    and can be reclaimed by another RGW instance. During active builds, the
+    main loop automatically refreshes the lock timestamp every TTL/3 seconds,
+    preventing premature reclamation regardless of build duration. A shorter
+    TTL (e.g. 120s) enables faster crash recovery. Lock refresh requires
+    rgw_s3vector_background_workers >= 2.
+  default: 120
+  min: 6
   services:
   - rgw
 - name: rgw_s3vector_index_type
@@ -5069,10 +5072,12 @@ options:
   level: advanced
   desc: Number of worker threads for the s3vectors background manager
   long_desc: Controls how many threads run the background io_context for vector
-    index rebuilds and session management. Multiple threads allow rebuild
-    coroutines to execute truly in parallel on different CPU cores. Each thread
-    runs io_context.run() and picks up ready coroutines from the strand queue.
-  default: 1
+    index rebuilds and session management. At least 2 workers are required so
+    that the main loop can refresh lock timestamps while rebuild coroutines
+    block their worker threads with the LanceDB FFI call. With only 1 worker,
+    lock refresh cannot run during builds and the lock TTL must exceed the
+    maximum expected build duration.
+  default: 2
   min: 1
   services:
   - rgw

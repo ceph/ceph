@@ -144,8 +144,16 @@ private:
   std::shared_mutex tables_mutex;
   std::unordered_map<table_name_t, table_state_t, boost::hash<table_name_t>> tables;
   std::mutex active_builds_mutex;
-  std::unordered_set<table_name_t, boost::hash<table_name_t>> active_builds;//to check locally if a table is already being rebuilt by this RGW instance(a cheap check before acquiring the distributed lock) 
+  std::unordered_set<table_name_t, boost::hash<table_name_t>> active_builds;//to check locally if a table is already being rebuilt by this RGW instance(a cheap check before acquiring the distributed lock)
   std::atomic<int> active_rebuild_count{0};//how many rebuilds are currently active, in order to control the number of concurrent tasks.
+
+  struct active_lock_t {
+    std::string token;
+    std::string etag;
+    ceph::coarse_real_clock::time_point last_refresh;
+    bool lock_lost = false;
+  };
+  std::map<table_name_t, active_lock_t> active_locks; // protected by active_builds_mutex
   MessageQueue messages;
   static constexpr auto idle_sleep = std::chrono::milliseconds(1000); // 1s
 
@@ -336,7 +344,8 @@ private:
   int put_lock_object(const std::string& vector_bucket_name,
                       const std::string& lock_key,
                       const std::string& token,
-                      optional_yield y) {
+                      optional_yield y,
+                      std::string* etag_out = nullptr) {
     std::unique_ptr<rgw::sal::Bucket> bucket;
     int ret = load_bucket_for_lock(vector_bucket_name, bucket, y);
     if (ret < 0) return ret;
@@ -381,7 +390,70 @@ private:
     if (canceled) {
       return -ERR_PRECONDITION_FAILED;
     }
+    if (ret == 0 && etag_out) {
+      *etag_out = etag;
+    }
     return ret;
+  }
+
+  struct refresh_result {
+    int ret;
+    std::string new_etag;
+  };
+
+  // Refresh (conditional overwrite) the lock object with a fresh timestamp.
+  // Uses if_match=current_etag to ensure only the lock holder can refresh.
+  // Returns the new ETag on success for subsequent refresh calls.
+  refresh_result refresh_lock_object(const std::string& vector_bucket_name,
+                                     const std::string& lock_key,
+                                     const std::string& token,
+                                     const std::string& current_etag,
+                                     optional_yield y) {
+    std::unique_ptr<rgw::sal::Bucket> bucket;
+    int ret = load_bucket_for_lock(vector_bucket_name, bucket, y);
+    if (ret < 0) return {ret, {}};
+
+    auto obj = bucket->get_object({lock_key});
+    std::string req_id = driver->zone_unique_id(driver->get_new_req_id());
+    ACLOwner owner;
+    owner.id = bucket->get_owner();
+    auto writer = driver->get_atomic_writer(this, y, obj.get(),
+        owner, nullptr, 0, req_id);
+
+    ret = writer->prepare(y);
+    if (ret < 0) return {ret, {}};
+
+    lock_body_t lock_body = make_lock_body(token);
+    std::string body = lock_body.to_json_str();
+    bufferlist bl;
+    bl.append(body);
+    const auto etag = TOPNSPC::crypto::digest<TOPNSPC::crypto::MD5>(bl).to_str();
+    ret = writer->process(std::move(bl), 0);
+    if (ret < 0) return {ret, {}};
+
+    ret = writer->process({}, body.size());
+    if (ret < 0) return {ret, {}};
+
+    std::map<std::string, bufferlist> attrs;
+    bufferlist etag_bl;
+    etag_bl.append(etag.c_str(), etag.size());
+    attrs[RGW_ATTR_ETAG] = std::move(etag_bl);
+
+    const req_context rctx{this, y, nullptr};
+    bool canceled = false;
+
+    ret = writer->complete(body.size(), etag,
+                           nullptr, ceph::real_clock::now(), attrs,
+                           rgw::cksum::no_cksum, ceph::real_time(),
+                           /*if_match=*/current_etag.c_str(),
+                           /*if_nomatch=*/nullptr,
+                           nullptr, nullptr, &canceled,
+                           rctx, 0);
+
+    if (canceled) {
+      return {-ERR_PRECONDITION_FAILED, {}};
+    }
+    return {ret, etag};
   }
 
   // DELETE lock object with conditional if_match (ETag).
@@ -468,14 +540,17 @@ private:
   //   - if PUT succeeds: lock acquired, return the token.
   //   - if PUT fails (PRECONDITION_FAILED): another instance won, return empty.
   //
-  // note: the lock TTL must exceed the maximum expected build duration.
-  // if the build takes longer, the lock appears stale and another instance may
-  // reclaim it. the release_lock token check prevents the original builder from
-  // deleting the new holder's lock. a future improvement is to add a heartbeat
-  // that refreshes the timestamp during long builds.
-  std::string try_acquire_lock(const std::string& bucket_name,
-                               const std::string& index_name,
-                               optional_yield y) {
+  // note: the main loop periodically refreshes the lock timestamp during builds,
+  // so the TTL does not need to exceed the build duration. if the builder crashes,
+  // refreshes stop and the lock becomes reclaimable after TTL expires.
+  struct lock_acquire_result {
+    std::string token;
+    std::string etag;
+  };
+
+  lock_acquire_result try_acquire_lock(const std::string& bucket_name,
+                                       const std::string& index_name,
+                                       optional_yield y) {
     const std::string lock_key = make_lock_key(index_name);
 
     // step 1: read existing lock
@@ -491,7 +566,6 @@ private:
       int64_t lock_ttl = cct->_conf.get_val<uint64_t>("rgw_s3vector_index_lock_ttl_seconds");
       int64_t age = now - existing_lock.timestamp;
 
-   //NOTE: (TODO) if the lock is stale, we could consider refreshing it (update timestamp), to protect against clock skew and transient delays that could cause false staleness detections.
       if (existing_lock.timestamp > 0 && age < lock_ttl) {
         ldpp_dout(this, 5) << "INFO: lock held for " << bucket_name << "." << index_name
             << " by " << existing_lock.token
@@ -513,11 +587,12 @@ private:
     // step 3: conditional create — only one caller wins
     // create-if-absent (atomic create)
     std::string token = generate_lock_token();
-    int ret = put_lock_object(bucket_name, lock_key, token, y);
+    std::string etag;
+    int ret = put_lock_object(bucket_name, lock_key, token, y, &etag);
     if (ret == 0) {
       ldpp_dout(this, 5) << "INFO: acquired lock for " << bucket_name
           << "." << index_name << " token=" << token << dendl;
-      return token;
+      return {std::move(token), std::move(etag)};
     }
 
     if (ret == -ERR_PRECONDITION_FAILED) {
@@ -727,17 +802,20 @@ private:
     // commits are not mutual-exclusive — concurrent writes cause CommitConflict)
     // and to protect the rebuild itself.
     optional_yield y(yield);
-    std::string lock_token = try_acquire_lock(bucket_name, index_name, y);
-    if (lock_token.empty()) {
+    auto lock_result = try_acquire_lock(bucket_name, index_name, y);
+    if (lock_result.token.empty()) {
       ldpp_dout(this, 5) << "INFO: lock held by another process for "
           << bucket_name << "." << index_name << ", skipping" << dendl;
       restore_counters(table_name, local_inserts, local_deletes);
       return 1;
     }
+    const std::string& lock_token = lock_result.token;
 
     {
       std::lock_guard lg(active_builds_mutex);
       active_builds.insert(table_name);
+      active_locks[table_name] = {lock_token, lock_result.etag,
+                                   ceph::coarse_real_clock::now(), false};
     }
 
     struct lock_guard_t {
@@ -751,6 +829,7 @@ private:
         {
           std::lock_guard lg(mgr->active_builds_mutex);
           mgr->active_builds.erase(table_name);
+          mgr->active_locks.erase(table_name);
         }
         mgr->release_lock(bucket_name, index_name, token, y);
       }
@@ -810,20 +889,36 @@ private:
 
     int build_ret = run_vector_index_build(table, distance_type);
 
-    // step 12: mark build complete in table metadata
-    build_state_t post_state;
-    if (int ret = read_build_state(table, post_state); ret < 0) {
-      ldpp_dout(this, 1) << "WARNING: failed to read build state after build for "
-          << bucket_name << "." << index_name << dendl;
+    // step 12: check if the lock was lost during the build (detected by main-loop refresh)
+    bool lock_lost = false;
+    {
+      std::lock_guard lg(active_builds_mutex);
+      auto it = active_locks.find(table_name);
+      if (it != active_locks.end()) {
+        lock_lost = it->second.lock_lost;
+      }
     }
-    post_state.build_in_progress = false;
-    post_state.build_started_at = 0;
-    if (build_ret == 0 && delete_rebuild) {
-      post_state.global_delete_count = 0;
-    }
-    if (int ret = write_build_state(table, post_state); ret < 0) {
-      ldpp_dout(this, 1) << "WARNING: failed to clear build state for "
-          << bucket_name << "." << index_name << dendl;
+
+    if (lock_lost) {
+      ldpp_dout(this, 1) << "WARNING: lock was lost during build for "
+          << bucket_name << "." << index_name
+          << " — skipping metadata update" << dendl;
+    } else {
+      // step 13: mark build complete in table metadata
+      build_state_t post_state;
+      if (int ret = read_build_state(table, post_state); ret < 0) {
+        ldpp_dout(this, 1) << "WARNING: failed to read build state after build for "
+            << bucket_name << "." << index_name << dendl;
+      }
+      post_state.build_in_progress = false;
+      post_state.build_started_at = 0;
+      if (build_ret == 0 && delete_rebuild) {
+        post_state.global_delete_count = 0;
+      }
+      if (int ret = write_build_state(table, post_state); ret < 0) {
+        ldpp_dout(this, 1) << "WARNING: failed to clear build state for "
+            << bucket_name << "." << index_name << dendl;
+      }
     }
 
     if (build_ret == 0) {
@@ -844,6 +939,44 @@ private:
     }
 
     return build_ret;
+  }
+
+  // ============================================================================
+  // Lock refresh: keep distributed locks alive during long builds
+  // ============================================================================
+
+  void refresh_active_locks(boost::asio::yield_context yield) {
+    std::lock_guard lg(active_builds_mutex);
+    if (active_locks.empty()) return;
+
+    const auto now = ceph::coarse_real_clock::now();
+    const uint64_t lock_ttl = cct->_conf.get_val<uint64_t>("rgw_s3vector_index_lock_ttl_seconds");
+    const auto refresh_interval = std::chrono::seconds(lock_ttl / 3);
+
+    for (auto& [name, lock] : active_locks) {
+      if (lock.lock_lost) continue;
+      if (now - lock.last_refresh < refresh_interval) continue;
+
+      const std::string lock_key = make_lock_key(name.second);
+      auto result = refresh_lock_object(name.first, lock_key,
+                                        lock.token, lock.etag,
+                                        optional_yield(yield));
+      if (result.ret == 0) {
+        lock.etag = result.new_etag;
+        lock.last_refresh = now;
+        ldpp_dout(this, 10) << "INFO: refreshed lock for "
+            << name.first << "." << name.second << dendl;
+      } else if (result.ret == -ERR_PRECONDITION_FAILED) {
+        lock.lock_lost = true;
+        ldpp_dout(this, 1) << "WARNING: lock lost (stolen) for "
+            << name.first << "." << name.second
+            << " during active build" << dendl;
+      } else {
+        ldpp_dout(this, 1) << "WARNING: failed to refresh lock for "
+            << name.first << "." << name.second
+            << " (ret=" << result.ret << "), will retry" << dendl;
+      }
+    }
   }
 
   // ============================================================================
@@ -945,6 +1078,12 @@ private:
                 << ", deletes=" << deletes << ")" << dendl;
             continue;
           }
+          {
+            std::lock_guard lg(active_builds_mutex);
+            if (active_builds.count(name)) {
+              continue;
+            }
+          }
 
           state.insert_count.fetch_sub(inserts, std::memory_order_relaxed);
           state.delete_count.fetch_sub(deletes, std::memory_order_relaxed);
@@ -975,8 +1114,6 @@ private:
                 << table_name.first << "." << table_name.second
                 << " (active_rebuilds=" << active_rebuild_count.load(std::memory_order_relaxed)
                 << ", rc=" << rc << ")" << dendl;
-            //the rebuild coroutine is finished, decrement the active rebuild count to allow other tables to be processed.
-            active_rebuild_count.fetch_sub(1, std::memory_order_relaxed);
           }, [this, table_name = name, inserts, deletes] (std::exception_ptr eptr) {
             if (eptr) {
               try {
@@ -986,14 +1123,15 @@ private:
                     << table_name.first << "." << table_name.second
                     << ": " << e.what() << dendl;
               }
-              //it need to restore the counters if the coroutine fails with an exception, otherwise the inserts and deletes will be lost and the table will not rebuilt until the next mutation occurs. 
               restore_counters(table_name, inserts, deletes);
             }
-            // decrement the active rebuild count even if the coroutine fails with an exception, to avoid deadlock and allow other tables to be processed.
             active_rebuild_count.fetch_sub(1, std::memory_order_relaxed);
           });
         }
-      }// end of scan tables for pending mutations 
+      }// end of scan tables for pending mutations
+
+      // 3. refresh distributed lock timestamps for active builds
+      refresh_active_locks(yield);
 
       if (!spawned_any) {
         ldpp_dout(this, 20) << "INFO: no tables to process" << dendl;
