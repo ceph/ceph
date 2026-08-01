@@ -906,6 +906,14 @@ def cluster(ctx, config):
     write_conf(ctx, conf_path, cluster_name)
 
     log.info('Creating admin key on %s...' % firstmon)
+    admin_keyring_path = f'/etc/ceph/{cluster_name}.client.admin.keyring'
+    ctx.cluster.only(firstmon).run(
+        args=[
+            *authtool,
+            '--create-keyring',
+            admin_keyring_path,
+        ],
+    )
     ctx.cluster.only(firstmon).run(
         args=[
             *authtool,
@@ -915,18 +923,34 @@ def cluster(ctx, config):
             '--cap', 'osd', 'allow *',
             '--cap', 'mds', 'allow *',
             '--cap', 'mgr', 'allow *',
+            admin_keyring_path,
+        ],
+    )
+    ctx.cluster.only(firstmon).run(
+        args=[
+            'sudo', 'chmod', '0644', admin_keyring_path,
+        ],
+    )
+    ctx.cluster.only(firstmon).run(
+        args=[
+            *authtool,
             keyring_path,
+            '--import-keyring',
+            admin_keyring_path,
         ],
     )
 
     log.info('Copying monmap to all nodes...')
     keyring = ctx.ceph[cluster_name].admin.read_file(keyring_path)
+    admin_keyring = ctx.ceph[cluster_name].admin.read_file(admin_keyring_path)
+    ctx.ceph[cluster_name].admin_keyring = admin_keyring
     monmap = ctx.ceph[cluster_name].admin.read_file(monmap_path)
 
     for rem in ctx.cluster.remotes.keys():
         # copy mon key and initial monmap
         log.info('Sending monmap to node {remote}'.format(remote=rem))
         rem.write_file(keyring_path, keyring, mode='0644', sudo=True)
+        rem.write_file(admin_keyring_path, admin_keyring, mode='0644', sudo=True)
         rem.write_file(monmap_path, monmap)
 
     log.info('Setting up mon nodes...')
@@ -1344,6 +1368,7 @@ def cluster(ctx, config):
                     '--',
                     conf_path,
                     keyring_path,
+                    f'/etc/ceph/{cluster_name}.client.admin.keyring',
                     data_dir,
                     monmap_path,
                     run.Raw('{tdir}/../*.pid'.format(tdir=testdir)),
@@ -1822,7 +1847,7 @@ def key_rotate(ctx, config):
                 remote = ctx.ceph[cluster_name].admin
             else:
                 (remote, ) = ctx.cluster.only(role).remotes.keys()
-                keyrings.append(f"/etc/ceph/ceph.client.{id_}.keyring")
+            keyrings.append(f"/etc/ceph/{cluster_name}.client.{id_}.keyring")
 
             log.info("rotating %s on %s", role, remote)
 
