@@ -861,6 +861,15 @@ else()
   endif()
 endif()
 include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
+if(WIN32 AND WITH_CATCH2)
+  foreach(catch2_target Catch2 Catch2WithMain)
+    if(TARGET ${catch2_target})
+      target_include_directories(${catch2_target} SYSTEM PRIVATE
+        ${PROJECT_BINARY_DIR}/include
+        ${Boost_INCLUDE_DIRS})
+    endif()
+  endforeach()
+endif()
 add_library(Boost::asio INTERFACE IMPORTED)
 if(WITH_LIBURING AND CMAKE_SYSTEM_VERSION VERSION_GREATER_EQUAL "5.10")
   # enable uring in boost::asio

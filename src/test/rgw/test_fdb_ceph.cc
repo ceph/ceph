@@ -755,11 +755,11 @@ BENCHMARK_ADVANCED("write simple records-- parallel, one transaction per block")
 
 }
 
-#include <catch2/catch_session.hpp>
+#include "test/catch2_compat.h"
 
 int main(int argc, char **argv) 
 {
-  int result = Catch::Session().run(argc, argv);
+  const auto result = ceph::test::run_catch2(argc, argv);
 
   // Make sure that FoundationDB is shut down once and only once:
   ceph::libfdb::shutdown_libfdb(); 

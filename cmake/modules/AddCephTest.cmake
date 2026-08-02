@@ -188,7 +188,10 @@ endif()
 if(${catch2_opt_NO_CATCH2_MAIN})
   LIST(APPEND tl_libs Catch2::Catch2)
 else()
-  LIST(APPEND tl_libs Catch2::Catch2WithMain)
+  # Accept the gtest XML flag used by the Windows test runner.
+  target_sources(unittest_${test_name}
+    PRIVATE ${CMAKE_SOURCE_DIR}/src/test/catch2_compat_main.cc)
+  LIST(APPEND tl_libs Catch2::Catch2)
 endif()
 
 target_link_libraries(unittest_${test_name} 
