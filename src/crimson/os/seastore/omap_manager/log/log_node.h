@@ -1015,6 +1015,10 @@ struct LogNode
     this->set_layout_buf(this->get_bptr().c_str(), this->get_bptr().length());
   }
 
+  void on_set_bptr() final {
+    this->set_layout_buf(this->get_bptr().c_str(), this->get_bptr().length());
+  }
+
   void init_range(std::string _begin, std::string _end) {
     assert(begin.empty());
     assert(end.empty());

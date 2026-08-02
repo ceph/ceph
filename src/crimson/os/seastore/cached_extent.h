@@ -421,6 +421,8 @@ public:
    */
   virtual void on_fully_loaded() {}
 
+  virtual void on_set_bptr() {}
+
   /**
    * on_clean_read
    *
@@ -1185,9 +1187,11 @@ protected:
   /// set bufferptr
   void set_bptr(ceph::bufferptr &&nptr) {
     ptr = nptr;
+    on_set_bptr();
   }
   void set_bptr(ceph::bufferptr &nptr) {
     ptr = nptr;
+    on_set_bptr();
   }
 
   /**
