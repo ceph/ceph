@@ -1040,6 +1040,15 @@ class HostCache():
         self.mgr.inventory.update_known_hostnames(hostnames[0], hostnames[1], hostnames[2])
         self.last_facts_update[host] = datetime_now()
 
+    def get_host_fips_enabled(self, host: str) -> Optional[bool]:
+        facts = self.get_facts(host)
+        value = facts.get('fips_enabled')
+
+        if isinstance(value, bool):
+            return value
+
+        return None
+
     def update_autotune(self, host: str) -> None:
         host = normalize_hostname(host)
         self.last_autotune[host] = datetime_now()
