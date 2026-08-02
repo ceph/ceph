@@ -393,7 +393,7 @@ struct get_index_stats_reply_t {
   void dump(ceph::Formatter* f) const;
 };
 
-int get_index_stats(const get_index_stats_t& configuration, DoutPrefixProvider* dpp, optional_yield y, get_index_stats_reply_t& reply);
+int get_index_stats(const get_index_stats_t& configuration, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, get_index_stats_reply_t& reply);
 
 /*
   {
@@ -588,8 +588,8 @@ inline constexpr const char* key_field = "key";
 inline constexpr const char* vector_index_name = "data_idx";
 
 // utility functions used by the background manager
-LanceDBConnection* connect(DoutPrefixProvider* dpp, const std::string& vector_bucket_name);
-LanceDBTable* open_table(DoutPrefixProvider* dpp, const std::string& vector_bucket_name, const std::string& index_name);
+LanceDBConnection* connect(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, const std::string& vector_bucket_name);
+LanceDBTable* open_table(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, const std::string& vector_bucket_name, const std::string& index_name);
 DistanceMetric get_distance_metric(const LanceDBTable* table, DoutPrefixProvider* dpp);
 LanceDBDistanceType to_lancedb_distance(DistanceMetric metric);
 

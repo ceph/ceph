@@ -742,7 +742,7 @@ private:
     }
 
     // step 3: open table
-    LanceDBConnection* conn = s3vector::connect(this, bucket_name);
+    LanceDBConnection* conn = s3vector::connect(this, driver, nullptr, nullptr, bucket_name);
     if (!conn) {
       ldpp_dout(this, 5) << "WARNING: cannot connect to database for "
           << bucket_name << ", skipping" << dendl;

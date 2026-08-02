@@ -890,7 +890,7 @@ private:
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::get_index_stats(configuration, this, y, reply);
+    op_ret = rgw::s3vector::get_index_stats(configuration, driver, s->user.get(), &s->bucket_tenant, this, y, reply);
   }
 
   void send_response() override {

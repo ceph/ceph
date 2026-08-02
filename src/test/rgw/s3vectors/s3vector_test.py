@@ -2230,6 +2230,7 @@ def test_background_index_rebuild():
     dimension = 32
     conn = connection()
     bucket_name = gen_bucket_name()
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
     result = conn.create_vector_bucket(vectorBucketName=bucket_name)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     index_name = 'rebuild-test-index'
@@ -2744,6 +2745,7 @@ def test_delete_vectors_triggers_rebuild():
     dimension = 32
     conn = connection()
     bucket_name = gen_bucket_name()
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
     result = conn.create_vector_bucket(vectorBucketName=bucket_name)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     index_name = 'delete-rebuild-index'
@@ -2999,6 +3001,7 @@ def test_below_threshold_no_rebuild():
     dimension = 16
     conn = connection()
     bucket_name = gen_bucket_name()
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
     result = conn.create_vector_bucket(vectorBucketName=bucket_name)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     index_name = 'no-rebuild-index'
@@ -3140,6 +3143,7 @@ def test_concurrent_rebuild_limit():
         log_start_offset = os.path.getsize(log_path)
 
         # create bucket and indexes
+        _ensure_s3_bucket_for_vector_bucket(bucket_name)
         result = conn.create_vector_bucket(vectorBucketName=bucket_name)
         assert result['ResponseMetadata']['HTTPStatusCode'] == 200
 
@@ -3288,6 +3292,7 @@ def test_lock_timestamp_refresh_during_rebuild():
     set_rgw_config_option('debug_rgw', 10)
 
     try:
+        _ensure_s3_bucket_for_vector_bucket(bucket_name)
         result = conn.create_vector_bucket(vectorBucketName=bucket_name)
         assert result['ResponseMetadata']['HTTPStatusCode'] == 200
         result = conn.create_index(
