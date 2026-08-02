@@ -2,9 +2,9 @@
 
 Overview
 --------
-The ``ceph-volume`` tool is a single purpose command line tool to deploy
-logical volumes as OSDs. It maintains an API similar to that of the older
-``ceph-disk`` tool when preparing, activating, and creating OSDs.
+The ``ceph-volume`` tool deploys and manages OSDs on logical volumes. It
+maintains an API similar to that of the older ``ceph-disk`` tool when
+preparing, activating, and creating OSDs.
 
 Unlike ``ceph-disk``, it does not interact with or rely on udev rules. Those
 rules allowed automatic detection of previously set up devices, which were in
@@ -53,7 +53,8 @@ Replacing ``ceph-disk``
 partitions and ``UDEV`` rules to label, discover, and activate devices. That
 approach was slow and hard to debug, and because it was tied to GPT partitions
 it could not work with technologies such as LVM. For these reasons
-``ceph-disk`` was deprecated in Ceph 13.0.0 and has since been removed.
+``ceph-disk`` was deprecated in the Mimic release and has since been
+removed.
 
 ``ceph-volume`` replaces it with a modular design: OSDs that were originally
 deployed with ``ceph-disk`` (plain disks with GPT partitions) are managed by
