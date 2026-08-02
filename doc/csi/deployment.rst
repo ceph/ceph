@@ -6,32 +6,34 @@
 
 There are several ways to deploy the Ceph-CSI drivers into a Kubernetes
 cluster. The `Ceph-CSI-Operator`_ is the recommended method for new
-deployments. Helm charts and raw manifests remain available, and Rook
-users get Ceph-CSI automatically.
+deployments. Helm charts and raw manifests remain available but are
+gradually being phased out in favor of the operator, and Rook
+deployments get Ceph-CSI automatically.
 
 .. note::
 
    If you deploy Ceph with `Rook`_, Rook installs and manages Ceph-CSI
-   for you. Do not deploy Ceph-CSI by hand in a Rook cluster.
+   for you. Current Rook releases do this through the
+   Ceph-CSI-Operator. Do not deploy Ceph-CSI by hand in a Rook cluster.
 
 
 Gather Ceph Cluster Information
 ===============================
 
 Whichever method you choose, the drivers need to know how to reach the
-Ceph cluster. Collect the cluster ``fsid`` and the monitor addresses:
+Ceph cluster. Collect the cluster ``fsid`` and the Monitor addresses:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph mon dump
 
-The monitor addresses are listed in the driver's cluster connection
+The Monitor addresses are listed in the driver's cluster connection
 configuration. The ``clusterID`` parameter that StorageClasses use to
 select a cluster must match the name of the corresponding
-``ClientProfile`` resource when deploying with the operator; Helm and
+``ClientProfile`` resource when deploying with the operator. Helm and
 raw manifest deployments conventionally use the cluster ``fsid`` as
-the ``clusterID``. Each backend page in this chapter describes the
-cephx user that the drivers authenticate with.
+the ``clusterID``. Each back end page in this chapter describes the
+CephX user that the drivers authenticate with.
 
 
 Ceph-CSI-Operator (Recommended)
@@ -39,7 +41,7 @@ Ceph-CSI-Operator (Recommended)
 
 The `Ceph-CSI-Operator`_ manages the deployment, configuration, and
 lifecycle of Ceph-CSI drivers through Kubernetes custom resources.
-Install the operator:
+To install the operator:
 
 .. prompt:: bash $
 
@@ -59,12 +61,11 @@ deploy the RBD driver:
 The CephFS and NFS drivers are deployed the same way, using the names
 ``cephfs.csi.ceph.com`` and ``nfs.csi.ceph.com``. Connection details
 for the Ceph cluster are supplied through the operator's
-``CephConnection`` and ``ClientProfile`` resources; cephx credentials
+``CephConnection`` and ``ClientProfile`` resources; CephX credentials
 are stored in Kubernetes Secrets referenced from the StorageClass. See
-the
-`operator quick start`_ and `operator installation guide`_ for complete
-walkthroughs, supported Kubernetes versions, and Helm-based installation
-of the operator itself.
+the `operator quick start`_ and `operator installation guide`_ pages
+for complete walkthroughs, supported Kubernetes versions, and
+Helm-based installation of the operator itself.
 
 
 Helm Charts

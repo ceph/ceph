@@ -11,29 +11,30 @@ dynamically as volumes are provisioned and destroyed. Pods mount the
 volumes with the ordinary NFS client, so the worker nodes need no Ceph
 client code at all. This makes the NFS driver a good fit for platforms
 where installing Ceph-specific components on every node is not
-practical.
+practical: for example, when the kernel or system vendor does not
+provide the CephFS client, or when nodes should not hold Ceph
+credentials.
 
 
 Prepare a File System and an NFS Cluster
 ========================================
 
 The NFS driver builds on the CephFS driver: provision a CephFS volume
-and a cephx user as described in :ref:`csi-cephfs`. Then create an NFS
+and a CephX user as described in :ref:`csi-cephfs`. Then create an NFS
 cluster to serve the exports:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph nfs cluster create mynfs
 
-Confirm that the cluster is up and note the address that clients will
-mount from:
+Confirm that the cluster is up and note the address for client mounts:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph nfs cluster info mynfs
 
 See :ref:`mgr-nfs` for placement options, high availability with an
-ingress service, and the rest of the NFS cluster management commands.
+ingress service, and additional NFS cluster management commands.
 
 
 Define a StorageClass
@@ -50,7 +51,7 @@ A minimal StorageClass for the NFS driver looks like this:
    provisioner: nfs.csi.ceph.com
    parameters:
      clusterID: <cluster id>
-     fsName: cephfs
+     fsName: mycephfs
      nfsCluster: mynfs
      server: <NFS cluster address>
    reclaimPolicy: Delete

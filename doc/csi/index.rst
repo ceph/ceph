@@ -18,7 +18,7 @@ Nomad, can use Ceph-CSI as well.
             +---------------------------------------------------+
             |         Kubernetes and other CSI platforms        |
             +---------------------------------------------------+
-            |                     Ceph CSI                      |
+            |                     Ceph-CSI                      |
             +------------------------+--------------------------+
                                      |
                                      | provisions and maps
@@ -42,8 +42,9 @@ different Ceph interface to containerized workloads:
      - Access model
      - Typical use
    * - RBD
-     - Block volumes. ``ReadWriteOnce`` file systems, ``ReadWriteMany``
-       raw block.
+     - Block volumes. ``ReadWriteOnce`` with a local file system such
+       as EXT4 or XFS; ``ReadWriteMany`` raw block for specialized
+       workloads.
      - Databases, virtual machines, and most single-writer workloads.
        See :ref:`csi-rbd`.
    * - CephFS
@@ -51,22 +52,31 @@ different Ceph interface to containerized workloads:
      - Workloads that share data across many pods. See :ref:`csi-cephfs`.
    * - NFS
      - CephFS subvolumes exported over NFS.
-     - Clients that cannot run Ceph client code. See :ref:`csi-nfs`.
+     - Clients that cannot run Ceph client code, and NAS-style export
+       of volumes to consumers outside the cluster. See :ref:`csi-nfs`.
    * - NVMe-oF
-     - Block volumes over standard NVMe/TCP initiators.
+     - Block volumes through standard NVMe/TCP initiators.
      - Under active development. See :ref:`csi-nvmeof`.
+
+.. warning::
+
+   RBD volumes are not safe for ``ReadWriteMany`` access unless the
+   workloads themselves coordinate access to the shared device to
+   avoid corruption. ``ReadWriteMany`` raw block is required for
+   virtual machine live migration, but few other workloads can use it
+   safely. For general-purpose shared access, use CephFS.
 
 
 Where the Documentation Lives
 =============================
 
-Ceph-CSI is developed and released independently of Ceph itself, and one
-Ceph-CSI release supports multiple Ceph releases. For that reason the
+Ceph-CSI is developed and released independently of Ceph itself, and
+each Ceph-CSI release supports multiple Ceph releases. For that reason the
 canonical driver documentation is maintained by the Ceph-CSI project and
 published at `ceph.github.io/ceph-csi`_.
 
 The pages in this chapter cover the Ceph side of a Ceph-CSI deployment:
-preparing pools, file systems, and cephx users, and choosing a deployment
+preparing pools, file systems, and CephX users, and choosing a deployment
 method. For driver internals, complete example manifests, version
 compatibility, and upgrade procedures, follow the links to the canonical
 documentation in each page.

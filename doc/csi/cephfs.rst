@@ -6,9 +6,9 @@
 
 The CephFS driver (``cephfs.csi.ceph.com``) provisions shared POSIX file
 systems backed by :ref:`CephFS<ceph-file-system>`. Volumes support
-``ReadWriteMany`` access, so many pods on many nodes can mount the same
-volume simultaneously. Each provisioned volume is a CephFS subvolume
-(see :ref:`fs-volumes-and-subvolumes`).
+``ReadWriteMany`` access, so multiple pods on multiple nodes can mount
+the same volume simultaneously. Each PersistentVolume (PV) is a CephFS
+subvolume (see :ref:`fs-volumes-and-subvolumes`).
 
 
 Prepare a File System
@@ -16,32 +16,32 @@ Prepare a File System
 
 Create a CephFS volume, or reuse an existing one:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
-   ceph fs volume create cephfs
+   ceph fs volume create mycephfs
 
 The driver stores provisioned volumes as subvolumes in a subvolume
-group. Create the group that your StorageClass will use (the Ceph-CSI
-default group name is ``csi``):
+group. Create the group that your StorageClass will use. The Ceph-CSI
+default group name is ``csi``:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
-   ceph fs subvolumegroup create cephfs csi
+   ceph fs subvolumegroup create mycephfs csi
 
 
-Create a cephx User
+Create a CephX User
 ===================
 
 Create a user for the driver, restricted to the file system and the
 subvolume group created above:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph auth get-or-create client.csi-cephfs \
        mgr 'allow rw' \
-       mon 'allow r fsname=cephfs' \
-       mds 'allow r fsname=cephfs path=/volumes, allow rws fsname=cephfs path=/volumes/csi' \
-       osd 'allow rwx tag cephfs metadata=cephfs, allow rw tag cephfs data=cephfs'
+       mon 'allow r fsname=mycephfs' \
+       mds 'allow r fsname=mycephfs path=/volumes, allow rws fsname=mycephfs path=/volumes/csi' \
+       osd 'allow rwx tag cephfs metadata=mycephfs, allow rw tag cephfs data=mycephfs'
 
 Record the generated key. It is stored in a Kubernetes ``Secret`` that
 the StorageClass references. See :doc:`/cephfs/client-auth` for
@@ -63,7 +63,7 @@ A minimal StorageClass for the CephFS driver looks like this:
    provisioner: cephfs.csi.ceph.com
    parameters:
      clusterID: <cluster id>
-     fsName: cephfs
+     fsName: mycephfs
    reclaimPolicy: Delete
    allowVolumeExpansion: true
 
