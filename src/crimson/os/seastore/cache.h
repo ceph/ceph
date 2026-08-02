@@ -2302,4 +2302,8 @@ void stage_visibility_handoff(Transaction& t,
 };
 using CacheRef = std::unique_ptr<Cache>;
 
+constexpr bool needs_deepcopy_on_mutate_exist(extent_types_t type) {
+  return type == extent_types_t::LOG_NODE;
+}
+
 }
