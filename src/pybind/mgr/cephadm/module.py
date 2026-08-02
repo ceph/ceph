@@ -101,7 +101,7 @@ from .inventory import (
 from .upgrade import CephadmUpgrade
 from .template import TemplateMgr
 from .utils import CEPH_IMAGE_TYPES, RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES, forall_hosts, \
-    cephadmNoImage, SpecialHostLabels
+    cephadmNoImage, SpecialHostLabels, is_fips_enabled
 from .configchecks import CephadmConfigChecks
 from .offline_watcher import OfflineHostWatcher
 from .tuned_profiles import TunedProfileUtils
@@ -1392,16 +1392,31 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         Generate a cluster SSH key (if not present)
         """
         if not self.ssh_pub or not self.ssh_key:
-            self.log.info('Generating ssh key...')
+            fips_enabled = is_fips_enabled()
+            key_type = 'rsa' if fips_enabled else 'ed25519'
+            self.log.info(
+                'Generating %s ssh key%s...',
+                key_type,
+                ' for FIPS mode' if fips_enabled else '',
+            )
             tmp_dir = TemporaryDirectory()
             path = tmp_dir.name + '/key'
+            args = [
+                '/usr/bin/ssh-keygen',
+                '-t', key_type,
+            ]
+
+            if fips_enabled:
+                args.extend(['-b', '4096'])
+
+            args.extend([
+                '-C', 'ceph-%s' % self._cluster_fsid,
+                '-N', '',
+                '-f', path,
+            ])
+            
             try:
-                subprocess.check_call([
-                    '/usr/bin/ssh-keygen',
-                    '-C', 'ceph-%s' % self._cluster_fsid,
-                    '-N', '',
-                    '-f', path
-                ])
+                subprocess.check_call(args)
                 with open(path, 'r') as f:
                     secret = f.read()
                 with open(path + '.pub', 'r') as f:

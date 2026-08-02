@@ -10,6 +10,7 @@ from io import StringIO
 from shlex import quote
 from typing import TYPE_CHECKING, Optional, List, Tuple, Dict, Iterator, TypeVar, Awaitable, Union, Any
 from orchestrator import OrchestratorError
+from .utils import is_fips_enabled
 
 try:
     import asyncssh
@@ -190,6 +191,18 @@ class SSHManager:
             addr = self.mgr.inventory.get_addr(host)
         if not addr:
             raise OrchestratorError("host address is empty")
+
+        if is_fips_enabled() and self.mgr.ssh_pub:
+            key_parts = self.mgr.ssh_pub.strip().split(maxsplit=1)
+            if key_parts and key_parts[0] == 'ssh-ed25519':
+                raise HostConnectionError(
+                    'The configured cephadm SSH identity uses ED25519, '
+                    'which is not supported when FIPS mode is enabled. '
+                    'Replace the cephadm SSH identity with an RSA key.',
+                    host,
+                    addr,
+                )
+
 
         assert self.mgr.ssh_user
         n = self.mgr.ssh_user + '@' + addr
