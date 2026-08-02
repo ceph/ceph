@@ -19,8 +19,9 @@ then
        --email librgw@example.com || echo "librgw user exists"
 
     # keyring override for teuthology env
-    if [ -z ${KEYRING} ]
-    then
+    if [ -n "$CEPH_KEYRING" ]; then
+      KEYRING="$CEPH_KEYRING"
+    elif [ -z ${KEYRING} ]; then
       KEYRING="/etc/ceph/ceph.keyring"
     fi
     K="-k ${KEYRING}"
