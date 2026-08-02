@@ -219,7 +219,7 @@ The KV design uses a dedicated `G` (GC) namespace:
 
 Because the move to `G` is in the same transaction as the KV mutation, there is no orphan window — every orphaned data reference is tracked. See [S3 Operations — GC Namespace](S3-Operations-Over-KV.md#gc-namespace-and-background-cleanup) for the full protocol.
 
-The `G` namespace supports both per-instance entries (`G:O`, `G:V`, `G:M`, `G:A` — fixed-length, one entry per deleted/overwritten instance) and directive entries (`G:P` — one entry to clean up all parts of an aborted upload; `G:F` — one entry to clean up all versions of an object). Directives reduce the number of `G` entries for bulk operations from thousands to one.
+The `G` namespace supports both per-instance entries (`G:O`, `G:V`, `G:U`, `G:A` — fixed-length, one entry per deleted/overwritten instance or multipart part) and directive entries (`G:M` — one entry to clean up all parts of a completed or aborted upload; `G:F` — one entry to clean up all versions of an object). Directives reduce the number of `G` entries for bulk operations from thousands to one.
 
 **Storage-tier idempotency.** KV and storage-tier operations cannot be atomic. Every storage-tier chunk embeds its `ref_tag`, enabling GC workers to verify ownership before freeing data. This makes all GC deletions idempotent — safe to retry after a crash at any point. For packed small objects, "freeing data" means a Logical-Punch-Hole rather than a physical delete. See [Storage-Tier-Requirements.md](Storage-Tier-Requirements.md).
 
