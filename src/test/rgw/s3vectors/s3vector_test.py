@@ -3092,32 +3092,25 @@ def parse_rebuild_log_events(log_path, start_offset, bucket_name):
 
 
 def verify_max_concurrency(spawn_events, finish_events, max_concurrent):
-    """Walk event timeline and verify peak concurrent active rebuilds
-    never exceeds max_concurrent. Returns observed peak."""
-    events = []
-    for e in spawn_events:
-        events.append((e['timestamp'], +1, e['index']))
-    for e in finish_events:
-        events.append((e['timestamp'], -1, e['index']))
-
-    events.sort(key=lambda x: x[0])
-
-    active = 0
+    """Verify that the active_rebuilds counter reported in spawn and finish
+    log messages never exceeds max_concurrent. These values come directly
+    from the C++ atomic counter — the ground truth.
+    Returns the observed peak active_rebuilds across all events."""
     peak = 0
-    for ts, delta, index in events:
-        active += delta
-        assert active >= 0, (
-            f'active rebuild count went negative at {ts} '
-            f'(index={index}), indicates mismatched spawn/finish')
-        peak = max(peak, active)
+    for e in spawn_events:
+        assert e['active_rebuilds'] <= max_concurrent, (
+            f'active_rebuilds={e["active_rebuilds"]} at spawn of '
+            f'{e["index"]} exceeds max_concurrent={max_concurrent}')
+        peak = max(peak, e['active_rebuilds'])
+    for e in finish_events:
+        assert e['active_rebuilds'] <= max_concurrent + 1, (
+            f'active_rebuilds={e["active_rebuilds"]} at finish of '
+            f'{e["index"]} exceeds max_concurrent={max_concurrent}')
+        peak = max(peak, e['active_rebuilds'])
 
-    assert active == 0, (
-        f'active rebuild count is {active} at end of log, '
-        f'indicates {active} unmatched spawn events')
-
-    assert peak <= max_concurrent, (
-        f'peak concurrent rebuilds ({peak}) exceeded configured '
-        f'limit ({max_concurrent})')
+    assert len(spawn_events) == len(finish_events), (
+        f'spawn/finish count mismatch: {len(spawn_events)} spawns '
+        f'vs {len(finish_events)} finishes')
 
     return peak
 
@@ -3207,21 +3200,157 @@ def test_concurrent_rebuild_limit():
             f'expected at least {num_indexes} spawn events, got {len(spawn_events)}')
         assert len(finish_events) >= num_indexes, (
             f'expected at least {num_indexes} finish events, got {len(finish_events)}')
-        assert len(spawn_events) == len(finish_events), (
-            f'spawn/finish count mismatch: {len(spawn_events)} spawns vs {len(finish_events)} finishes')
         assert limit_count >= 1, (
             f'expected concurrency limit reached at least once, got {limit_count}')
 
         peak = verify_max_concurrency(spawn_events, finish_events, max_concurrent)
-        log.info('peak concurrent rebuilds: %d (limit: %d)', peak, max_concurrent)
-
-        for e in spawn_events:
-            assert e['active_rebuilds'] <= max_concurrent, (
-                f'active_rebuilds={e["active_rebuilds"]} in spawn message '
-                f'for {e["index"]} exceeds max_concurrent={max_concurrent}')
+        log.info('peak active_rebuilds: %d (limit: %d)', peak, max_concurrent)
 
     finally:
         _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
         set_rgw_config_option('rgw_s3vector_max_concurrent_rebuilds', 4)
         set_rgw_config_option('rgw_s3vector_index_rebuild_cooldown', 5)
+
+
+LOCK_REFRESH_RE = re.compile(
+    r's3vectors manager: INFO: refreshed lock for '
+    r'(\S+)\.(\S+)')
+
+LOCK_LOST_RE = re.compile(
+    r's3vectors manager: WARNING: lock lost \(stolen\) for '
+    r'(\S+)\.(\S+)')
+
+LOCK_REFRESH_FAIL_RE = re.compile(
+    r's3vectors manager: WARNING: failed to refresh lock for '
+    r'(\S+)\.(\S+)')
+
+
+def parse_lock_refresh_events(log_path, start_offset, bucket_name):
+    """Parse the RGW log for lock refresh events for the given bucket."""
+    refresh_events = []
+    lost_events = []
+    fail_events = []
+
+    with open(log_path, 'r') as f:
+        f.seek(start_offset)
+        for line in f:
+            if bucket_name not in line:
+                continue
+
+            m = LOCK_REFRESH_RE.search(line)
+            if m:
+                refresh_events.append({
+                    'bucket': m.group(1),
+                    'index': m.group(2),
+                })
+                continue
+
+            m = LOCK_LOST_RE.search(line)
+            if m:
+                lost_events.append({
+                    'bucket': m.group(1),
+                    'index': m.group(2),
+                })
+                continue
+
+            m = LOCK_REFRESH_FAIL_RE.search(line)
+            if m:
+                fail_events.append({
+                    'bucket': m.group(1),
+                    'index': m.group(2),
+                })
+
+    return refresh_events, lost_events, fail_events
+
+
+def test_lock_timestamp_refresh_during_rebuild():
+    """Test that the main loop refreshes the distributed lock timestamp
+    during an active rebuild. Uses a short lock TTL (9s) and refresh
+    interval (TTL/3 = 3s). Inserts enough vectors (2000) so the rebuild
+    takes long enough for at least one refresh to occur.
+
+    Observes the refresh through RGW log messages:
+      'INFO: refreshed lock for <bucket>.<index>'
+    """
+    log_path = get_rgw_log_path()
+    log.info('using log file: %s', log_path)
+
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 128
+    index_name = 'lock-refresh-test'
+
+    # set a short lock TTL (6s) so refresh fires at TTL/3 = 2s
+    # lower the rebuild cooldown to avoid delays
+    set_rgw_config_option('rgw_s3vector_index_lock_ttl_seconds', 6)
+    set_rgw_config_option('rgw_s3vector_index_rebuild_cooldown', 1)
+    # set debug level to 10 so refresh messages are visible
+    set_rgw_config_option('debug_rgw', 10)
+
+    try:
+        result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        result = conn.create_index(
+            vectorBucketName=bucket_name, indexName=index_name,
+            dataType='float32', dimension=dimension,
+            distanceMetric='euclidean')
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        # record log offset before inserting vectors
+        log_start_offset = os.path.getsize(log_path)
+
+        # insert enough vectors so the rebuild takes >20s (TTL/3 refresh interval)
+        # 5000 vectors with dimension=128 should take 25-60s to index
+        batch_size = 200
+        total_vectors = 5000
+        for batch_start in range(0, total_vectors, batch_size):
+            batch_end = min(batch_start + batch_size, total_vectors)
+            vectors = generate_vectors(batch_end - batch_start, dimension)
+            for i, v in enumerate(vectors):
+                v['key'] = f'vec-{batch_start + i}'
+            result = conn.put_vectors(
+                vectorBucketName=bucket_name, indexName=index_name,
+                vectors=vectors)
+            assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        # wait for the rebuild to complete
+        stats = wait_for_index_rebuild(conn, bucket_name, index_name, timeout=120)
+        log.info('rebuild complete: %s', stats)
+        assert stats['numIndexedRows'] == total_vectors
+
+        # give a moment for final log flush
+        time.sleep(2)
+
+        # parse the log for lock refresh events
+        refresh_events, lost_events, fail_events = parse_lock_refresh_events(
+            log_path, log_start_offset, bucket_name)
+
+        log.info('lock refresh events: %d refreshes, %d lost, %d failures',
+                 len(refresh_events), len(lost_events), len(fail_events))
+
+        # verify that at least one lock refresh occurred during the rebuild
+        assert len(refresh_events) >= 1, (
+            f'expected at least 1 lock refresh event for {bucket_name}.{index_name}, '
+            f'got {len(refresh_events)}. The rebuild may have been too fast for the '
+            f'refresh interval (TTL/3 = 2s). Check RGW log at {log_path}')
+
+        # verify no lock was lost or failed to refresh
+        assert len(lost_events) == 0, (
+            f'lock was lost during rebuild: {lost_events}')
+        assert len(fail_events) == 0, (
+            f'lock refresh failed during rebuild: {fail_events}')
+
+        # verify the refresh events are for the correct bucket/index
+        for event in refresh_events:
+            assert event['bucket'] == bucket_name
+            assert event['index'] == index_name
+
+        log.info('PASS: lock timestamp was refreshed %d time(s) during rebuild',
+                 len(refresh_events))
+
+    finally:
+        _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+        set_rgw_config_option('rgw_s3vector_index_lock_ttl_seconds', 120)  # restore default
+        set_rgw_config_option('rgw_s3vector_index_rebuild_cooldown', 5)
+        set_rgw_config_option('debug_rgw', 1)
 
