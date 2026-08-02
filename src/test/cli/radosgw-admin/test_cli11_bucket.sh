@@ -2472,6 +2472,169 @@ check_cluster "reshard list: --bucket name"                    0 "" -- \
 
 # ============================================================
 echo ""
+echo "=== which token a flag takes as its value ==="
+# ============================================================
+# A binary flag is registered with expected(0,1), so CLI11 takes the next token
+# only when it is neither a command word nor flag-shaped. The legacy flag loop
+# is stricter: it takes the next token only when it is exactly true, 1, false
+# or 0, and otherwise erases the flag alone. A token CLI11 takes and the loop
+# leaves behind stays in `args` and is reported there.
+
+# a command word is never taken as a binary flag's value
+check_cluster "list: --fix before the command"                 0 "" -- \
+  bucket --fix list
+check_cluster "list: --fix before any command word"            0 "" -- \
+  --fix bucket list
+check_cluster "list: --fix before the command, bool value"     0 "" -- \
+  bucket --fix true list
+check_cluster "list: --allow-unordered before the command"     0 "" -- \
+  bucket --allow-unordered list
+check_cluster "list: --allow-unordered, bool value"            0 "" -- \
+  bucket --allow-unordered true list
+check_cluster "list: --fix=banana before the command"          0 "" -- \
+  bucket --fix=banana list
+check_cluster "list: --fix with a bool after the command"      0 "" -- \
+  bucket list --fix true
+
+# a non-bool word is taken by CLI11 and left on the line by the loop, so it is
+# reported as a stray
+check "list: --fix takes a word before the command"            1 "ERROR: unexpected argument: 'banana'" \
+  bucket --fix banana list
+check "list: --allow-unordered takes a word"                   1 "ERROR: unexpected argument: 'banana'" \
+  bucket --allow-unordered banana list
+check "list: --fix takes a word after the command"             1 "ERROR: unexpected argument: 'banana'" \
+  bucket list --fix banana
+check "check: --fix takes a word"                              1 "ERROR: unexpected argument: 'banana'" \
+  bucket check --fix banana
+# 'list' is still available as a command word here, so --fix does not take it
+# and the second one has no level left to match
+check "bucket: --fix before the command, 'list' repeated"      1 "ERROR: unexpected argument: 'list'" \
+  bucket --fix list list
+# here 'bucket' has already matched its one subcommand, so 'list' no longer
+# reads as a command word and --fix takes it
+check "list: --fix takes a repeated command word"              1 "ERROR: unexpected argument: 'list'" \
+  bucket list --fix list
+check "check: --fix takes 'list'"                              1 "ERROR: unexpected argument: 'list'" \
+  bucket check --fix list
+
+# flag-shaped tokens are not taken as a value; the loop rejects them by name
+check "list: --fix does not take a long flag"                  22 "ERROR: invalid flag --banana" \
+  bucket list --fix --banana
+check "list: --fix does not take a short flag"                 22 "ERROR: invalid flag -x" \
+  bucket list --fix -x
+# a lone dash is not flag-shaped to CLI11, so it is taken as the value, and a
+# number is taken when no option is spelled that way; the loop rejects both
+check "list: --fix takes a lone dash"                          22 "ERROR: invalid flag -" \
+  bucket list --fix -
+check "check: --fix takes a lone dash"                         22 "ERROR: invalid flag -" \
+  bucket check --fix -
+check "bucket: --fix takes a lone dash before the command"     22 "ERROR: invalid flag -" \
+  bucket --fix - list
+check "bucket: --allow-unordered takes a lone dash"            22 "ERROR: invalid flag -" \
+  bucket --allow-unordered - list
+check "list: --allow-unordered takes a lone dash"              22 "ERROR: invalid flag -" \
+  bucket list --allow-unordered -
+check "list: --fix takes a negative number"                    22 "ERROR: invalid flag -5" \
+  bucket list --fix -5
+
+# a flag that requires a value takes the next token whatever it is
+check_cluster "list: --format takes its value, command follows" 0 "" -- \
+  bucket --format json list
+check_cluster "stats: --format takes 'list', 'stats' is the command" 1 "unrecognized format: list" -- \
+  bucket --format list stats
+check_cluster "stats: --bucket takes the command word"         2 "" -- \
+  bucket --bucket list stats
+check_cluster "list: --bucket takes a lone dash"               2 "ERROR: could not init bucket" -- \
+  bucket --bucket - list
+check "bucket: --bucket takes a lone dash, no command left"    1 "$ERR_SUBCOMMAND" \
+  bucket --bucket -
+check_cluster "list: --bucket takes --max-entries as its value" 2 "ERROR: could not init bucket" -- \
+  bucket list --bucket --max-entries
+check "list: --max-entries takes --bucket as its value"        22 "Could not convert" \
+  bucket list --max-entries --bucket
+# a binary flag leaves the following flag alone, so it is the one left short
+check "list: --fix leaves --bucket without a value"            1 "--bucket: 1 required TEXT missing" \
+  bucket list --fix --bucket
+check "check: --fix leaves --bucket without a value"           1 "--bucket: 1 required TEXT missing" \
+  bucket check --fix --bucket
+
+# --categories is not registered in CLI11 at all, so only the loop takes its
+# value; when that value is a command word the command is parsed again
+check_cluster "list: --categories takes its value"             0 "" -- \
+  bucket --categories foo list
+check_cluster "list: --categories after the command"           0 "" -- \
+  bucket list --categories foo
+check "bucket: --categories takes the command word"            1 "$ERR_SUBCOMMAND" \
+  bucket --categories list
+check_cluster "stats: --categories takes 'list', 'stats' survives" 0 "" -- \
+  bucket --categories list stats
+
+# with no command word CLI11 matches nothing and the loop owns the line
+check "unknown flag with no command"                           22 "ERROR: invalid flag --banana" \
+  --banana
+check "--fix takes a lone dash with no command"                22 "ERROR: invalid flag -" \
+  --fix -
+
+# the position warning names the command the parse reached, so the same flag
+# warns differently depending on how far the line got
+check "list: --fix warns it is unrelated"                      1 \
+  "Warning: --fix is not a valid option for 'bucket list'" \
+  bucket list --fix banana
+check "list: --allow-unordered warns about its position"       1 \
+  "$WARN_ALLOW_UNORDERED_POS" \
+  bucket --allow-unordered banana list
+check "bucket: --bucket warns it is unrelated when no command matched" 1 \
+  "Warning: --bucket/-b is not a valid option for 'bucket'" \
+  bucket --bucket -
+check_warns "check: --fix before the command warns about its position" 0 "" \
+  "$WARN_FIX_POS" -- \
+  bucket --fix check --bucket demo
+# the value warning names the token CLI11 took, which the loop then leaves
+check "check: --fix warns about a non-bool value"              1 \
+  "Warning: invalid value 'banana' for --fix, treating as set" \
+  bucket check --fix banana
+check "list: --fix warns about a lone dash value"              22 \
+  "Warning: invalid value '-' for --fix, treating as set" \
+  bucket list --fix -
+
+# ============================================================
+echo ""
+echo "=== two errors on one line ==="
+# ============================================================
+# These lines carry two errors at once: CLI11 reports the missing subcommand,
+# the legacy flag loop reports the flag. Repairing either one leaves the other,
+# so each error is pinned on its own below.
+
+check "bucket: unknown flag and no subcommand"                 1 "$ERR_SUBCOMMAND" \
+  bucket --banana
+check "bucket: lone dash and no subcommand"                    1 "$ERR_SUBCOMMAND" \
+  bucket -
+check "bucket: --fix takes a dash and no subcommand"           1 "$ERR_SUBCOMMAND" \
+  bucket --fix -
+check "bucket: --allow-unordered takes a dash, no subcommand"  1 "$ERR_SUBCOMMAND" \
+  bucket --allow-unordered -
+check "list: unknown flag and --bucket without a value"        1 "--bucket: 1 required TEXT missing" \
+  bucket list --banana --bucket
+
+# each of those errors on its own. Removing a token is not enough to isolate a
+# missing subcommand -- the command word has to be supplied.
+check "bucket: no subcommand"                                  1 "$ERR_SUBCOMMAND" \
+  bucket
+check "bucket: --fix and no subcommand"                        1 "$ERR_SUBCOMMAND" \
+  bucket --fix
+check "check: lone dash on a complete command"                 22 "ERROR: invalid flag -" \
+  bucket check -
+check "bucket: lone dash before the command word"              22 "ERROR: invalid flag -" \
+  bucket - list
+check "list: lone dash after the command"                      22 "ERROR: invalid flag -" \
+  bucket list -
+check "list: unknown flag on a complete command"               22 "ERROR: invalid flag --banana" \
+  bucket list --banana
+check "list: --bucket without a value"                         1 "--bucket: 1 required TEXT missing" \
+  bucket list --bucket
+
+# ============================================================
+echo ""
 echo "=== integration: bucket list and stats (cluster) ==="
 # ============================================================
 
