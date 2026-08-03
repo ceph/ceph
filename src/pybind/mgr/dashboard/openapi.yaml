@@ -12941,6 +12941,7 @@ paths:
                   description: NVMeoF gateway group
                   type: string
                 nqn:
+                  default: ''
                   description: NVMeoF subsystem NQN
                   type: string
                 server_address:
@@ -12949,8 +12950,6 @@ paths:
                 traddr:
                   description: NVMeoF gateway address (deprecated)
                   type: string
-              required:
-              - nqn
               type: object
       responses:
         '200':

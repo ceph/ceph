@@ -336,8 +336,10 @@ else:
             "nvmeof gateway refresh_network", model.GwRefreshNetworkStatus,
             alias="nvmeof gw refresh_network",
             success_message_template=("Refreshed configured network masks for subsystem "
-                                      "{nqn} on this gateway: Successful{added}{removed}"),
+                                      "{nqn} on gateway {server_address}: "
+                                      "Successful{added}{removed}"),
             success_message_map={
+                "server_address": lambda v, f: v or f.get("traddr"),
                 "added": lambda v, _f: f"\nAdded: {', '.join(v)}" if v else "",
                 "removed": lambda v, _f: f"\nRemoved: {', '.join(v)}" if v else "",
             }
@@ -347,18 +349,19 @@ else:
             parameters={
                 "nqn": Param(str, "NVMeoF subsystem NQN"),
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
-                "server_address": Param(str, "NVMeoF gateway address", True, None),
+                "server_address": Param(str, "NVMeoF gateway address"),
                 "traddr": Param(str, "NVMeoF gateway address (deprecated)", True, None),
             },
         )
         @convert_to_model(model.GwRefreshNetworkStatus)
         @handle_nvmeof_error
-        def refresh_network(self, nqn: str, gw_group: Optional[str] = None,
+        def refresh_network(self, nqn: str = "", gw_group: Optional[str] = None,
                             server_address: Optional[str] = None,
                             traddr: Optional[str] = None):
             server_address = resolve_nvmeof_server_address(
                 server_address=server_address,
-                traddr=traddr
+                traddr=traddr,
+                require=True
             )
             return NVMeoFClient(
                 gw_group=gw_group,
