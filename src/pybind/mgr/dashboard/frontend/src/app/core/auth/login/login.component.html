@@ -1,10 +1,24 @@
-<div class="container"
-     *ngIf="isLoginActive">
-  <h1 class="sr-only">Ceph login</h1>
-  <form name="loginForm"
-        (ngSubmit)="login()"
-        #loginForm="ngForm"
-        novalidate>
+<div
+  class="container"
+  *ngIf="isLoginActive"
+>
+  <h1 class="cds--visually-hidden">Ceph login</h1>
+  <form
+    name="loginForm"
+    (ngSubmit)="login()"
+    #loginForm="ngForm"
+    novalidate
+  >
+    @if (errorMessage) {
+      <cd-alert-panel
+        type="danger"
+        [dismissible]="true"
+        (dismissed)="errorMessage = ''"
+        [showTitle]="false"
+      >
+        {{ errorMessage }}
+      </cd-alert-panel>
+    }
 
     <!-- Username -->
     <div class="form-group has-feedback d-flex flex-column py-3">
