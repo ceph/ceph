@@ -22,5 +22,7 @@ overrides:
       - osds down
       - MDS_INSUFFICIENT_STANDBY
       - insufficient standby
+      - fs has.*but wants
       - have.*want.*more
+      - fs .* is degraded
       - is offline because no MDS is active for it
