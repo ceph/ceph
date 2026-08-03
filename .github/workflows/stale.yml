@@ -11,7 +11,7 @@ jobs:
     # Stale PR checks need not run on forks
     if: github.repository == 'ceph/ceph'
     steps:
-      - uses: actions/stale@5bef64f19d7facfb25b37b414482c7164d639639 # v9.1.0
+      - uses: actions/stale@eb5cf3af3ac0a1aa4c9c45633dd1ae542a27a899 # v10.3.0
         with:
           # PAT for GitHub API authentication
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
