@@ -6,9 +6,10 @@ import { filter } from 'rxjs/operators';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import {
   NvmeofSubsystem,
-  NvmeofSubsystemInitiator,
   NO_AUTH,
-  getSubsystemAuthStatus
+  getSubsystemAuthStatus,
+  isSubsystemAllowAllHosts,
+  normalizeInitiators
 } from '~/app/shared/models/nvmeof';
 import { URLVerbs } from '~/app/shared/constants/app.constants';
 import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
@@ -86,14 +87,15 @@ export class NvmeofSubsystemOverviewComponent implements OnInit, OnDestroy {
       initiators: this.nvmeofService.getInitiators(this.subsystemNQN, this.groupName)
     }).subscribe(({ subsystem, initiators }) => {
       this.subsystem = subsystem as NvmeofSubsystem;
-      const initiatorList = initiators as
-        | NvmeofSubsystemInitiator[]
-        | { hosts?: NvmeofSubsystemInitiator[] };
-      this.buildDetails(getSubsystemAuthStatus(this.subsystem, initiatorList));
+      const initiatorList = normalizeInitiators(initiators);
+      this.buildDetails(
+        getSubsystemAuthStatus(this.subsystem, initiatorList),
+        isSubsystemAllowAllHosts(this.subsystem, initiatorList)
+      );
     });
   }
 
-  private buildDetails(authStatus: string) {
+  private buildDetails(authStatus: string, allowAllHosts: boolean) {
     this.details = [
       {
         label: $localize`Serial number`,
@@ -116,7 +118,7 @@ export class NvmeofSubsystemOverviewComponent implements OnInit, OnDestroy {
       },
       {
         label: $localize`Host access`,
-        value: this.subsystem.allow_any_host ?? false,
+        value: this.getHostAccessLabel(allowAllHosts),
         type: 'host-access',
         row: 2
       },
@@ -173,12 +175,13 @@ export class NvmeofSubsystemOverviewComponent implements OnInit, OnDestroy {
     return String(value);
   }
 
-  getAuthStatusIcon(authStatus: string): keyof typeof ICON_TYPE {
-    return authStatus === NO_AUTH ? 'error' : 'success';
+  /** Host access is configuration text, not a health state. */
+  getHostAccessLabel(allowAllHosts: boolean): string {
+    return allowAllHosts ? $localize`Allow all hosts` : $localize`Restrict to specific hosts`;
   }
 
-  getStatusIcon(detail: SubsystemDetail): keyof typeof ICON_TYPE {
-    return detail.value ? 'success' : 'error';
+  getAuthStatusIcon(authStatus: string): keyof typeof ICON_TYPE {
+    return authStatus === NO_AUTH ? 'error' : 'success';
   }
 
   getColNumbers(detail: SubsystemDetail): { sm: number; md: number; lg: number } {
