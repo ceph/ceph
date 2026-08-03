@@ -1521,6 +1521,9 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   int total_entries = 0;
   string old_mdlog_marker;
 
+  RGWPeriodHistory::Cursor hist_cursor;
+  std::string clone_period_id; // copy for RGWCloneMetaLogCoroutine's ref
+
   RGWSyncTraceNodeRef tn;
 public:
   RGWMetaSyncShardCR(RGWMetaSyncEnv *_sync_env, const rgw_pool& _pool,
@@ -1657,6 +1660,27 @@ public:
 
       /* lock succeeded, a retry now should avoid previous backoff status */
       *reset_backoff = true;
+
+      hist_cursor = sync_env->store->svc()->mdlog->get_period_history()->get_current();
+      while (hist_cursor) {
+        clone_period_id = hist_cursor.get_period().get_id();
+        yield call(new RGWCloneMetaLogCoroutine(
+            sync_env,
+            sync_env->store->svc()->mdlog->get_log(clone_period_id),
+            clone_period_id, shard_id, string(), nullptr));
+        if (retcode < 0) {
+          tn->log(0, SSTR("ERROR: failed to backfill mdlog during full sync"
+                          " period=" << clone_period_id
+                          << " retcode=" << retcode));
+          yield lease_cr->go_down();
+          drain_all();
+          return retcode;
+        }
+        if (!hist_cursor.has_prev()) {
+          break;
+        }
+        hist_cursor.prev();
+      }
 
       /* prepare marker tracker */
       set_marker_tracker(new RGWMetaSyncShardMarkerTrack(sync_env,
@@ -1877,7 +1901,7 @@ public:
                                                   mdlog_marker, &mdlog_marker));
 	}
         if (retcode < 0) {
-          tn->log(10, SSTR(*this << ": failed to fetch more log entries, retcode=" << retcode));
+          tn->log(10, SSTR(*this << ": failed to fetch mdlog entries during incremental sync, retcode=" << retcode));
           yield lease_cr->go_down();
           drain_all();
           *reset_backoff = false; // back off and try again later
