@@ -1913,6 +1913,27 @@ options:
   services:
   - mon
   with_legacy: true
+- name: mon_config_history_max_changesets
+  type: uint
+  level: advanced
+  desc: Number of configuration changesets to retain in the monitors' store
+  long_desc: Each 'ceph config set', 'ceph config rm', 'ceph config assimilate-conf'
+    and 'ceph config reset' records one changeset, which may cover several options.
+    The oldest changesets are trimmed once more than this many have accumulated,
+    which bounds the store growth that would otherwise trigger MON_DISK_BIG on
+    clusters where an autotuner rewrites options such as 'osd_memory_target'
+    continuously. Trimming is all-or-nothing per changeset, so 'ceph config log'
+    never reports a partial changeset. A trimmed changeset cannot be reverted to,
+    and 'ceph config reset' refuses to target one rather than silently reverting
+    only part of the history. A value of 0 retains no history at all; it does not
+    mean "unlimited".
+  fmt_desc: The maximum number of configuration changesets kept in the monitors'
+            store. Older changesets are removed in their entirety. A value of 0
+            retains no history at all -- it does not mean "unlimited".
+  default: 500
+  services:
+  - mon
+  with_legacy: true
 - name: mon_sync_timeout
   type: float
   level: advanced
