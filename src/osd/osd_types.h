@@ -1004,6 +1004,7 @@ WRITE_CLASS_ENCODER_FEATURES(objectstore_perf_stat_t)
 #define PG_STATE_MIGRATION_TOOFULL  (1ULL << 37) // PG migration can't proceed: too full
 #define PG_STATE_MIGRATION_UNFOUND  (1ULL << 38) // PG migration can't proceed: unreadable object
 #define PG_STATE_MIGRATION_ERROR    (1ULL << 39) // PG migration can't proceed: other error
+#define PG_STATE_BACKFILL_PAUSED    (1ULL << 40) // backfill is paused, due to pg_pool_t::FLAG_NOBACKFILL
 
 std::string pg_state_string(uint64_t state);
 std::string pg_vector_string(const std::vector<int32_t> &a);
