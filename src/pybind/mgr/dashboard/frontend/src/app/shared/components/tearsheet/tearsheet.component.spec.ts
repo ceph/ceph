@@ -89,7 +89,11 @@ class MockAsyncFormStepComponent {
 
 @Component({
   template: `
-    <cd-tearsheet [steps]="steps" [title]="title" [description]="description">
+    <cd-tearsheet
+      [steps]="steps"
+      [title]="title"
+      [description]="description"
+    >
       <cd-tearsheet-step>
         <cd-mock-async-form-step #tearsheetStep></cd-mock-async-form-step>
       </cd-tearsheet-step>
@@ -117,7 +121,11 @@ class MockAsyncFormHostComponent {
 
 @Component({
   template: `
-    <cd-tearsheet [steps]="steps" [title]="title" [description]="description">
+    <cd-tearsheet
+      [steps]="steps"
+      [title]="title"
+      [description]="description"
+    >
       <cd-tearsheet-step>
         <cd-mock-form-step #tearsheetStep></cd-mock-form-step>
       </cd-tearsheet-step>
