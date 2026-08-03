@@ -784,12 +784,13 @@ the exception that was originally thrown.  If your logic intends
 to handle certain errors cleanly, it is better to modify the remote method
 to return an error value instead of raising an exception.
 
-At time of writing, inter-module calls are implemented without
-copies or serialization, so when you return a python object, you're 
-returning a reference to that object to the calling module.  It
-is recommend *not* to rely on this reference passing, as in future the
-implementation may change to serialize arguments and return
-values.
+By default, all modules share one Python interpreter, so calls between
+them pass arguments and return values by reference rather than copying
+them - modifying such a value in place affects the other module's
+state directly. A module listed in the ``mgr_subinterpreter_modules`` config
+option runs in its own interpreter instead, and calls crossing that
+boundary are pickled, so arguments and return values must be
+serializable and are safely copied.
 
 
 Shutting down cleanly
