@@ -41,7 +41,7 @@ inline std::string create_pool_by_type(
     case PoolType::REPLICATED:
       return create_one_pool_pp(pool_name, cluster);
     case PoolType::FAST_EC: {
-      std::string result = create_one_ec_pool_pp(pool_name, cluster, true, true);
+      std::string result = create_one_ec_pool_pp(pool_name, cluster, true);
       if (result != "") {
         return result;
       }
@@ -50,7 +50,7 @@ inline std::string create_pool_by_type(
       return result;
     }
     case PoolType::LEGACY_EC:
-      return create_one_ec_pool_pp(pool_name, cluster, false, false);
+      return create_one_ec_pool_pp(pool_name, cluster, false);
     default:
       return "Unknown pool type";
   }

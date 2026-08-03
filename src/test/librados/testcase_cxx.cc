@@ -753,16 +753,6 @@ void RadosTestECOptimisedPP::turn_balancing_on()
   EXPECT_EQ(rc, 0);
 }
 
-void RadosTestECOptimisedPP::enable_omap()
-{
-  bufferlist inbl, outbl;
-  std::ostringstream oss;
-  oss << "{\"prefix\": \"osd pool set\", \"pool\": \"" << pool_name
-      << "\", \"var\": \"supports_omap\", \"val\": \"true\"}";
-  int ret = cluster.mon_command(oss.str(), std::move(inbl), &outbl, nullptr);
-  EXPECT_EQ(ret, 0);
-}
-
 int RadosTestECOptimisedPP::request_osd_map(
     std::string oid,
     ceph::messaging::osd::OSDMapReply* reply) {

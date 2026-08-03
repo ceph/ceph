@@ -952,9 +952,20 @@ void ECBackend::handle_sub_read_reply(
       const auto& to_read = rop.to_read.at(oid);
       const auto& complete = rop.complete.at(oid);
       bool attrs_satisfied = !to_read.want_attrs || complete.attrs;
-      bool omap_satisfied  = !get_parent()->get_pool().supports_omap() 
-                             || (!to_read.want_omap_header && !to_read.want_omap_keys)
-                             || (complete.omap_header && complete.omap_complete);
+
+      bool omap_satisfied = true;
+      if (get_parent()->get_pool().supports_omap()
+          && (to_read.want_omap_header || to_read.want_omap_keys)) {
+        for (const auto &[shard_id, shard_read] : to_read.shard_reads) {
+          if (shard_read.omap_source) {
+            if (complete.errors.contains(shard_read.pg_shard)) {
+              omap_satisfied = false;
+            }
+            break;
+          }
+        }
+      }
+
       if (attrs_satisfied && omap_satisfied) {
         err = ec_impl->minimum_to_decode(want_to_read, have, dummy_minimum,
                                                     nullptr);
@@ -1009,6 +1020,7 @@ void ECBackend::handle_sub_read_reply(
         rop.to_read.at(oid).shard_reads.clear();
         rop.to_read.at(oid).want_attrs = false;
         rop.to_read.at(oid).want_omap_header = false;
+        rop.to_read.at(oid).want_omap_keys = false;
         ++is_complete;
       }
     }

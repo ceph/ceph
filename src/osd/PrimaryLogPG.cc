@@ -8503,6 +8503,7 @@ inline int PrimaryLogPG::_delete_oid(
     oi.set_flag(object_info_t::FLAG_WHITEOUT);
     ctx->delta_stats.num_whiteouts++;
     t->create(soid);
+    ctx->use_replace_op = true;
     osd->logger->inc(l_osd_tier_whiteout);
     return 0;
   }

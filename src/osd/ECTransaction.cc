@@ -336,6 +336,9 @@ void ECTransaction::Generate::shards_written(const shard_id_set &shards) {
   }
 }
 
+// This function converts a truncate-to-zero operation into a delete+recreate,
+// which clears the object's omap data. Therefore, this function should not be
+// called for objects with omap data.
 void ECTransaction::Generate::zero_truncate_to_delete() {
   ceph_assert(obc);
 
@@ -746,7 +749,10 @@ ECTransaction::Generate::Generate(PGTransaction &t,
   }
 
   if (op.is_none() && op.truncate && op.truncate->first == 0) {
-    zero_truncate_to_delete();
+    // Skip zero_truncate_to_delete if object has omap data to preserve it
+    if (!obc || !obc->obs.oi.is_omap()) {
+      zero_truncate_to_delete();
+    }
   }
 
   if (op.delete_first) {

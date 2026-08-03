@@ -353,9 +353,8 @@
                 reduce the time it takes to read data from and to write to the
                 Ceph cluster. RGW bucket indexes are stored as omaps.
                 Erasure-coded pools, by default, cannot store RADOS omap data
-                structures. This functionality can be enabled in erasure-coded
-                pools with optimizations enabled by setting the
-                ``supports_omap`` flag to true.
+                structures. This functionality can be enabled in non-Crimson
+                erasure-coded pools by enabling EC optimizations.
                
                 Run the command ``ceph osd df`` to see the storage space used by
                 omaps on each OSD.
