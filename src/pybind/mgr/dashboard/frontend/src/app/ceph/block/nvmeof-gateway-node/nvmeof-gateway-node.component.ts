@@ -452,9 +452,9 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
       },
       {
         label: $localize`Encryption`,
-        value: serviceSpec.spec?.enable_auth ? $localize`Enabled` : $localize`Disabled`,
+        value: serviceSpec.spec?.encryption_key ? $localize`Enabled` : $localize`Disabled`,
         type: 'status',
-        statusIcon: serviceSpec.spec?.enable_auth ? 'success' : 'error'
+        statusIcon: serviceSpec.spec?.encryption_key ? 'success' : 'error'
       },
       {
         label: $localize`mTLS`,
