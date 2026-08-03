@@ -15,7 +15,7 @@ from cephadm.inventory import (
 )
 from cephadm.services.osd import OSD, OSDRemovalQueue, OsdIdClaims
 from cephadm.services.nvmeof import NvmeofService
-from cephadm.utils import SpecialHostLabels
+from cephadm.utils import SpecialHostLabels, cephadmNoImage
 
 try:
     from typing import List
@@ -2253,6 +2253,80 @@ class TestCephadm(object):
             cephadm_module.exit_host_maintenance(hostname)
 
         assert cephadm_module.inventory._inventory[hostname]['status'] == 'maintenance'
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command")
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    @mock.patch("cephadm.CephadmOrchestrator._host_ok_to_stop")
+    @mock.patch("cephadm.module.HostCache.get_daemons_by_type")
+    @mock.patch("cephadm.module.HostCache.get_daemon_types")
+    @mock.patch("cephadm.module.HostCache.get_hosts")
+    def test_maintenance_enter_disables_nvmeof_gateways(
+            self, _hosts, _get_daemon_types, _get_daemons_by_type, _host_ok,
+            _run_cephadm, _mon_command, cephadm_module: CephadmOrchestrator):
+        hostname = 'host1'
+        nvmeof_daemon = DaemonDescription(
+            daemon_type='nvmeof',
+            daemon_id='pool1.grp1.host1.abcd',
+            hostname=hostname,
+        )
+        _run_cephadm.side_effect = async_side_effect(
+            ([''], ['something\nsuccess - systemd target xxx disabled'], 0))
+        _host_ok.return_value = 0, 'it is okay'
+        _get_daemon_types.return_value = ['nvmeof']
+        _get_daemons_by_type.return_value = [nvmeof_daemon]
+        _hosts.return_value = [hostname, 'other_host']
+        _mon_command.return_value = (0, '', '')
+        cephadm_module.spec_store.all_specs['nvmeof.pool1.grp1'] = ServiceSpec(
+            service_type='nvmeof', service_id='pool1.grp1', pool='pool1', group='grp1')
+        cephadm_module.inventory.add_host(HostSpec(hostname))
+
+        retval = cephadm_module.enter_host_maintenance(hostname)
+        assert retval.result_str().startswith('Daemons for Ceph cluster')
+        _mon_command.assert_called_once_with({
+            'prefix': 'nvme-gw disable',
+            'id': 'client.nvmeof.pool1.grp1.host1.abcd',
+            'pool': 'pool1',
+            'group': 'grp1',
+        })
+        _run_cephadm.assert_called_once()
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command")
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    @mock.patch("cephadm.module.HostCache.get_daemon_types")
+    @mock.patch("cephadm.module.HostCache.get_daemons_by_type")
+    @mock.patch("cephadm.module.HostCache.get_hosts")
+    def test_maintenance_exit_enables_nvmeof_gateways(
+            self, _hosts, _get_daemons_by_type, _get_daemon_types,
+            _run_cephadm, _mon_command, cephadm_module: CephadmOrchestrator):
+        hostname = 'host1'
+        nvmeof_daemon = DaemonDescription(
+            daemon_type='nvmeof',
+            daemon_id='pool1.grp1.host1.abcd',
+            hostname=hostname,
+        )
+        _run_cephadm.side_effect = async_side_effect(([''], [
+            'something\nsuccess - systemd target xxx enabled and started'], 0))
+        _get_daemon_types.return_value = ['nvmeof']
+        _get_daemons_by_type.return_value = [nvmeof_daemon]
+        _hosts.return_value = [hostname, 'other_host']
+        _mon_command.return_value = (0, '', '')
+        cephadm_module.spec_store.all_specs['nvmeof.pool1.grp1'] = ServiceSpec(
+            service_type='nvmeof', service_id='pool1.grp1', pool='pool1', group='grp1')
+        cephadm_module.inventory.add_host(HostSpec(hostname, status='maintenance'))
+
+        retval = cephadm_module.exit_host_maintenance(hostname)
+        assert retval.result_str().startswith('Ceph cluster')
+        assert _run_cephadm.call_count == 2
+        _run_cephadm.assert_any_call(
+            hostname, cephadmNoImage, 'check-host', [], error_ok=False)
+        _run_cephadm.assert_any_call(
+            hostname, cephadmNoImage, 'host-maintenance', ['exit'], error_ok=True)
+        _mon_command.assert_called_once_with({
+            'prefix': 'nvme-gw enable',
+            'id': 'client.nvmeof.pool1.grp1.host1.abcd',
+            'pool': 'pool1',
+            'group': 'grp1',
+        })
 
     @mock.patch("cephadm.ssh.SSHManager._remote_connection")
     @mock.patch("cephadm.ssh.SSHManager._execute_command")
