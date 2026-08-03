@@ -223,6 +223,7 @@ enum {
   s3vectorsDeleteVectorBucketPolicy,
   s3vectorsDeleteVectors,
   s3vectorsGetIndex,
+  s3vectorsGetIndexStats,
   s3vectorsGetVectorBucket,
   s3vectorsGetVectorBucketPolicy,
   s3vectorsGetVectors,
