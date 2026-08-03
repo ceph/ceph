@@ -215,6 +215,24 @@ target_link_libraries(unittest_mclock_scheduler
   global osd dmclock os
 )
 
+# unittest_scheduler_isolation
+add_executable(unittest_scheduler_isolation
+  TestSchedulerIsolation.cc
+)
+add_ceph_unittest(unittest_scheduler_isolation)
+target_link_libraries(unittest_scheduler_isolation
+  global osd dmclock os
+)
+
+# ceph_bench_op_scheduler: isolation micro benchmarks across the op
+# schedulers; a manual tool, not part of the unit test suite
+add_executable(ceph_bench_op_scheduler
+  bench_op_scheduler.cc
+)
+target_link_libraries(ceph_bench_op_scheduler
+  global osd dmclock os
+)
+
 # unittest ECOmapJournal
 add_executable(unittest_ec_omap_journal
   test_ec_omap_journal.cc
@@ -243,6 +261,7 @@ set(OSD_UNITTESTS
   unittest_peeringstate
   unittest_pg_transaction
   unittest_pglog
+  unittest_scheduler_isolation
   unittest_scrubber_be
 )
 
