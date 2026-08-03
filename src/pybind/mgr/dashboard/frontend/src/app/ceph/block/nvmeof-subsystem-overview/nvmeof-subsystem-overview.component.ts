@@ -6,9 +6,10 @@ import { filter } from 'rxjs/operators';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import {
   NvmeofSubsystem,
-  NvmeofSubsystemInitiator,
   NO_AUTH,
-  getSubsystemAuthStatus
+  getSubsystemAuthStatus,
+  isSubsystemAllowAllHosts,
+  normalizeInitiators
 } from '~/app/shared/models/nvmeof';
 import { URLVerbs } from '~/app/shared/constants/app.constants';
 import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
@@ -26,6 +27,7 @@ export class NvmeofSubsystemOverviewComponent implements OnInit, OnDestroy {
   groupName: string;
   subsystem: NvmeofSubsystem;
   authStatus = NO_AUTH;
+  allowAllHosts = false;
   private subscriptions = new Subscription();
 
   constructor(
@@ -78,11 +80,15 @@ export class NvmeofSubsystemOverviewComponent implements OnInit, OnDestroy {
       initiators: this.nvmeofService.getInitiators(this.subsystemNQN, this.groupName)
     }).subscribe(({ subsystem, initiators }) => {
       this.subsystem = subsystem as NvmeofSubsystem;
-      const initiatorList = initiators as
-        | NvmeofSubsystemInitiator[]
-        | { hosts?: NvmeofSubsystemInitiator[] };
+      const initiatorList = normalizeInitiators(initiators);
       this.authStatus = getSubsystemAuthStatus(this.subsystem, initiatorList);
+      this.allowAllHosts = isSubsystemAllowAllHosts(this.subsystem, initiatorList);
     });
+  }
+
+  /** Host access is configuration text, not a health state. */
+  getHostAccessLabel(allowAllHosts: boolean): string {
+    return allowAllHosts ? $localize`Allow all hosts` : $localize`Restrict to specific hosts`;
   }
 
   getAuthStatusIcon(authStatus: string): keyof typeof ICON_TYPE {
