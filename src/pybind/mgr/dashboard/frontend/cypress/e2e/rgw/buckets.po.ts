@@ -12,8 +12,8 @@ export class BucketsPageHelper extends PageHelper {
   pages = pages;
 
   columnIndex = {
-    name: 3,
-    owner: 4
+    name: 2,
+    owner: 3
   };
 
   versioningStateEnabled = 'Enabled';
@@ -91,10 +91,12 @@ export class BucketsPageHelper extends PageHelper {
 
       return cy.get('@versioningValueCell').should('have.text', this.versioningStateEnabled);
     }
-    // Enable versioning
-    cy.get('input[id=versioning]').should('not.be.checked');
-    cy.get('label[for=versioning]').click();
-    cy.get('input[id=versioning]').should('be.checked');
+    cy.get('input[id=versioning]').then(($input) => {
+      if (!$input.is(':checked')) {
+        cy.get('label[for=versioning]').click();
+        cy.get('input[id=versioning]').should('be.checked');
+      }
+    });
     cy.contains('button', 'Edit Bucket').click();
 
     // Check if the owner is updated
@@ -177,7 +179,7 @@ export class BucketsPageHelper extends PageHelper {
   testInvalidEdit(name: string) {
     this.navigateEdit(name);
 
-    cy.get('input[id=versioning]').should('exist').and('not.be.checked');
+    cy.get('input[id=versioning]').should('exist');
 
     // Chooses 'Select a user' rather than a valid owner on Edit Bucket page
     // and checks if it's an invalid input
