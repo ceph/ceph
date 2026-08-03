@@ -665,7 +665,7 @@ int remove_notification_v2(const DoutPrefixProvider* dpp,
   rgw_pubsub_bucket_topics bucket_topics;
   auto ret = get_bucket_notifications(dpp, bucket, bucket_topics);
   if (ret < 0) {
-    return -ret;
+    return ret;
   }
   // no notifications on the bucket.
   if (bucket_topics.topics.empty()) {
