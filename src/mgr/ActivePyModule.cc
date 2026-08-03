@@ -149,6 +149,9 @@ std::optional<std::vector<std::byte>> ActivePyModule::dispatch_remote(
     bool *crash_dump)
 {
   ceph_assert(err != nullptr);
+  if (py_module->perfcounter) {
+    py_module->perfcounter->inc(PyModule::l_pym_remote_pickled);
+  }
   if (crash_dump != nullptr) {
     *crash_dump = true;
   }
@@ -232,6 +235,40 @@ std::optional<std::vector<std::byte>> ActivePyModule::dispatch_remote(
   std::vector<std::byte> pickled_ret_str = py_bytes_as_vec(pickled_ret);
   Py_DECREF(pickled_ret);
   return pickled_ret_str;
+}
+
+PyObject *ActivePyModule::dispatch_remote_direct(
+    const std::string &method,
+    PyObject *args,
+    PyObject *kwargs)
+{
+  assert_gil();
+  if (py_module->perfcounter) {
+    py_module->perfcounter->inc(PyModule::l_pym_remote_direct);
+  }
+
+  auto boundMethod = PyObject_GetAttrString(pClassInstance, method.c_str());
+  if (boundMethod == nullptr) {
+    PyErr_Clear();
+    PyErr_SetString(PyExc_NameError, "Method not found");
+    return nullptr;
+  }
+
+  dout(20) << "Calling " << py_module->get_name()
+           << "." << method << "..." << dendl;
+
+  auto ret = PyObject_Call(boundMethod, args, kwargs);
+  Py_DECREF(boundMethod);
+  if (ret == nullptr) {
+    const bool do_crash_dump = !PyErr_ExceptionMatches(PyExc_NotImplementedError);
+    std::string caller = "ActivePyModule::dispatch_remote_direct "s + method;
+    std::string formatted = handle_pyerror(do_crash_dump, get_name(), caller);
+    set_wrapped_remote_exception("Remote method threw exception: "s + formatted,
+                                  do_crash_dump);
+    return nullptr;
+  }
+  dout(20) << "Success calling '" << method << "'" << dendl;
+  return ret;
 }
 
 void ActivePyModule::config_notify()

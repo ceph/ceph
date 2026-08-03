@@ -42,6 +42,11 @@ std::string handle_pyerror(bool generate_crash_dump = false,
 
 std::string peek_pyerror();
 
+// Sets a Python RuntimeError with the given (already fully-worded) message,
+// and logs it at derr (do_crash_dump) or dout(10) otherwise.
+void set_wrapped_remote_exception(const std::string &msg,
+				   bool do_crash_dump);
+
 std::span<std::byte const> py_bytes_as_span(PyObject*);
 PyObject *py_bytes_from_span(std::span<std::byte const>);
 
@@ -179,6 +184,10 @@ public:
     return notify_types.count(notify_type);
   }
 
+  bool shares_interpreter(const PyModule &other) const {
+    return &other == this || (use_main_interpreter && other.use_main_interpreter);
+  }
+
   const std::string &get_name() const {
     return module_name;
   }
@@ -198,6 +207,8 @@ public:
     l_pym_mem_rss_change,
     l_pym_mem_rss_current,
     l_pym_serve_cpu_usage,
+    l_pym_remote_direct,
+    l_pym_remote_pickled,
     l_pym_last
   };
 

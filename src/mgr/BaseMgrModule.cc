@@ -864,30 +864,39 @@ ceph_dispatch_remote(BaseMgrModule *self, PyObject *args)
 
   // Early error handling, because if the module doesn't exist then we
   // won't be able to use its thread state to set python error state
-  // inside dispatch_remote().
-  if (!self->py_modules->module_exists(other_module)) {
+  // inside dispatch_remote(). Resolved once and reused below instead of
+  // looking the module up by name again for each subsequent decision.
+  auto target = self->py_modules->get_module(other_module);
+  if (!target) {
     derr << "no module '" << other_module << "'" << dendl;
     PyErr_SetString(PyExc_ImportError, "Module not found");
     return nullptr;
   }
 
+  // If the caller shares an interpreter with the target module, skip
+  // pickling entirely and call the method directly under the GIL we
+  // already hold.
+  if (self->this_module->py_module->shares_interpreter(*target->py_module)) {
+    return target->dispatch_remote_direct(method, remote_args, remote_kwargs);
+  }
+
   auto pmodule = self->this_module->py_module->pPickleModule;
   auto pickled_args = PyObject_CallMethod(pmodule, "dumps", "(O)", remote_args);
   if (pickled_args == nullptr) {
-    std::string caller = "ceph_dispatch_remote "s + " " + method;
-    std::string err = handle_pyerror(true, other_module, caller);
-    PyErr_SetString(PyExc_RuntimeError, err.c_str());
-    derr << err << dendl;
+    std::string caller = "ceph_dispatch_remote "s + method;
+    std::string msg = "Failed to serialize remote() arguments: "s
+      + handle_pyerror(true, other_module, caller);
+    set_wrapped_remote_exception(msg, true);
     return nullptr;
   }
   std::span<std::byte const> pickled_args_span = py_bytes_as_span(pickled_args);
 
   auto pickled_kwargs = PyObject_CallMethod(pmodule, "dumps", "(O)", remote_kwargs);
   if (pickled_kwargs == nullptr) {
-    std::string caller = "ceph_dispatch_remote "s + " " + method;
-    std::string err = handle_pyerror(true, other_module, caller);
-    PyErr_SetString(PyExc_RuntimeError, err.c_str());
-    derr << err << dendl;
+    std::string caller = "ceph_dispatch_remote "s + method;
+    std::string msg = "Failed to serialize remote() keyword arguments: "s
+      + handle_pyerror(true, other_module, caller);
+    set_wrapped_remote_exception(msg, true);
 
     Py_DECREF(pickled_args);
     return nullptr;
@@ -899,7 +908,7 @@ ceph_dispatch_remote(BaseMgrModule *self, PyObject *args)
   // both for checking for method existence and for executing method.
   PyThreadState *tstate = PyEval_SaveThread();
 
-  if (!self->py_modules->method_exists(other_module, method)) {
+  if (!target->method_exists(method)) {
     PyEval_RestoreThread(tstate);
     PyErr_SetString(PyExc_NameError, "Method not found");
 
@@ -911,8 +920,7 @@ ceph_dispatch_remote(BaseMgrModule *self, PyObject *args)
   std::string err;
   bool crash_dump = true;
   std::optional<std::vector<std::byte>> maybe_pickled_ret =
-    self->py_modules->dispatch_remote(
-      other_module,
+    target->dispatch_remote(
       method,
       pickled_args_span,
       pickled_kwargs_span,
@@ -927,27 +935,17 @@ ceph_dispatch_remote(BaseMgrModule *self, PyObject *args)
   Py_XDECREF(pickled_args);
 
   if (!maybe_pickled_ret) {
-    std::stringstream ss;
-    ss << "Remote method threw exception: " << err;
-    PyErr_SetString(PyExc_RuntimeError, ss.str().c_str());
-    // NotImplementedError is the documented way for a module to signal
-    // that it doesn't implement an optional method (see dispatch_remote()
-    // in ActivePyModule.cc); it isn't a fault, so don't log it as one.
-    if (crash_dump) {
-      derr << ss.str() << dendl;
-    } else {
-      dout(10) << ss.str() << dendl;
-    }
+    set_wrapped_remote_exception("Remote method threw exception: "s + err, crash_dump);
     return nullptr;
   }
 
   auto pickled_ret_bytes = py_bytes_from_vec(*maybe_pickled_ret);
   auto ret = PyObject_CallMethod(pmodule, "loads", "(O)", pickled_ret_bytes);
   if (ret == nullptr) {
-    std::string caller = "ceph_dispatch_remote "s + " " + method;
-    std::string err = handle_pyerror(true, other_module, caller);
-    PyErr_SetString(PyExc_RuntimeError, err.c_str());
-    derr << err << dendl;
+    std::string caller = "ceph_dispatch_remote "s + method;
+    std::string msg = "Failed to deserialize remote() return value: "s
+      + handle_pyerror(true, other_module, caller);
+    set_wrapped_remote_exception(msg, true);
   }
   Py_XDECREF(pickled_ret_bytes);
   return ret;

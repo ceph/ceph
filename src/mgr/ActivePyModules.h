@@ -241,20 +241,14 @@ public:
     return modules.count(name) > 0;
   }
 
-  bool method_exists(
-      const std::string &module_name,
-      const std::string &method_name) const
+  // Resolve a module by name once, for callers (like ceph_dispatch_remote)
+  // that need to make several decisions about the same target module
+  // without repeating the lookup for each one. nullptr if not found.
+  std::shared_ptr<ActivePyModule> get_module(const std::string &name) const
   {
-    return modules.at(module_name)->method_exists(method_name);
+    auto it = modules.find(name);
+    return it == modules.end() ? nullptr : it->second;
   }
-
-  std::optional<std::vector<std::byte>> dispatch_remote(
-      const std::string &other_module,
-      const std::string &method,
-      std::span<std::byte const> pickled_args,
-      std::span<std::byte const> pickled_kwargs,
-      std::string *err,
-      bool *crash_dump = nullptr);
 
   int init();
 
