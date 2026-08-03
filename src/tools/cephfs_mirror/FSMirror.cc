@@ -70,18 +70,13 @@ private:
 
 class MirrorAdminSocketHook : public AdminSocketHook {
 public:
-  MirrorAdminSocketHook(CephContext *cct, const Filesystem &filesystem, FSMirror *fs_mirror)
-    : admin_socket(cct->get_admin_socket()) {
-    int r;
-    std::string cmd;
-
-    // mirror status format is name@fscid
-    cmd = "fs mirror status " + stringify(filesystem.fs_name) + "@" + stringify(filesystem.fscid);
-    r = admin_socket->register_command(
-      cmd, this, "get filesystem mirror status");
-    if (r == 0) {
-      commands[cmd] = new StatusCommand(fs_mirror);
-    }
+  MirrorAdminSocketHook(CephContext *cct, const Filesystem &filesystem,
+                        FSMirror *fs_mirror)
+    : admin_socket(cct->get_admin_socket()),
+      // mirror status format is name@fscid
+      cmd("fs mirror status " + stringify(filesystem.fs_name) + "@" +
+          stringify(filesystem.fscid)),
+      fs_mirror(fs_mirror) {
   }
 
   ~MirrorAdminSocketHook() override {
@@ -89,6 +84,24 @@ public:
     for (auto &[command, cmdptr] : commands) {
       delete cmdptr;
     }
+  }
+
+  // Defer registration until FSMirror::init() finishes so early status
+  // polls cannot block the single-threaded admin socket on m_lock while
+  // connect/mount is still in progress.
+  void register_command() {
+    if (!commands.empty()) {
+      return;
+    }
+
+    int r = admin_socket->register_command(
+      cmd, this, "get filesystem mirror status");
+    if (r < 0) {
+      derr << ": failed to register admin socket command '" << cmd
+           << "': " << cpp_strerror(r) << dendl;
+      return;
+    }
+    commands[cmd] = new StatusCommand(fs_mirror);
   }
 
   int call(std::string_view command, const cmdmap_t& cmdmap,
@@ -102,6 +115,8 @@ private:
   typedef std::map<std::string, MirrorAdminSocketCommand*, std::less<>> Commands;
 
   AdminSocket *admin_socket;
+  std::string cmd;
+  FSMirror *fs_mirror;
   Commands commands;
 };
 
@@ -183,12 +198,20 @@ void FSMirror::reopen_logs() {
 void FSMirror::init(Context *on_finish) {
   dout(20) << dendl;
 
+  // Publish the status command only after init completes (success or
+  // failure). Registering in the constructor lets early polls block the
+  // admin-socket thread on m_lock for the duration of connect/mount.
+  Context *ctx = new LambdaContext([this, on_finish](int r) {
+                                     m_asok_hook->register_command();
+                                     on_finish->complete(r);
+                                   });
+
   std::scoped_lock locker(m_lock);
   int r = connect(g_ceph_context->_conf->name.to_str(),
                   g_ceph_context->_conf->cluster, &m_cluster, "", "", m_args);
   if (r < 0) {
     m_init_failed = true;
-    on_finish->complete(r);
+    ctx->complete(r);
     return;
   }
 
@@ -198,7 +221,7 @@ void FSMirror::init(Context *on_finish) {
     m_cluster.reset();
     derr << ": error accessing local pool (id=" << m_pool_id << "): "
          << cpp_strerror(r) << dendl;
-    on_finish->complete(r);
+    ctx->complete(r);
     return;
   }
 
@@ -207,14 +230,14 @@ void FSMirror::init(Context *on_finish) {
     m_init_failed = true;
     m_ioctx.close();
     m_cluster.reset();
-    on_finish->complete(r);
+    ctx->complete(r);
     return;
   }
 
   m_addrs = m_cluster->get_addrs();
   dout(10) << ": rados addrs=" << m_addrs << dendl;
 
-  init_instance_watcher(on_finish);
+  init_instance_watcher(ctx);
 }
 
 void FSMirror::shutdown(Context *on_finish) {
