@@ -26,6 +26,8 @@
   - The `rgw default data log backing` option is removed and it is no longer
     possible to create clusters with an omap based datalog.
   - `radosgw-admin datalog type` will only accept `--log_type=fifo`.
+* RGW: iam:RemoveClientIdFromOIDCProvider is now a recognized action for
+  policy, corrected from a typo of iam:RemoveCientIdFromOIDCProvider
 
 * MGR: The default values of ``mon_target_pg_per_osd`` and ``mon_max_pg_per_osd``
   have been increased from 100 and 250 to 200 and 500, respectively. These values
