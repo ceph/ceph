@@ -128,6 +128,7 @@ REDMINE_API_KEY = os.getenv("PTL_TOOL_REDMINE_API_KEY", REDMINE_API_KEY)
 SPECIAL_BRANCHES = ('main', 'luminous', 'jewel', 'HEAD')
 SUPPORTED_QA_TAGS = {
     'build/ops',
+    'ceph-volume',
     'cephadm',
     'cephfs',
     'common',
