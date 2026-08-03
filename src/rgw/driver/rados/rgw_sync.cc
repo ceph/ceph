@@ -1658,6 +1658,15 @@ public:
       /* lock succeeded, a retry now should avoid previous backoff status */
       *reset_backoff = true;
 
+      yield call(new RGWCloneMetaLogCoroutine(sync_env, mdlog, period,
+                                              shard_id, string(), nullptr));
+      if (retcode < 0) {
+        tn->log(0, SSTR("ERROR: failed to fetch mdlog entries during full sync, retcode=" << retcode));
+        yield lease_cr->go_down();
+        drain_all();
+        return retcode;
+      }
+
       /* prepare marker tracker */
       set_marker_tracker(new RGWMetaSyncShardMarkerTrack(sync_env,
                                                          sync_env->shard_obj_name(shard_id),
@@ -1877,7 +1886,7 @@ public:
                                                   mdlog_marker, &mdlog_marker));
 	}
         if (retcode < 0) {
-          tn->log(10, SSTR(*this << ": failed to fetch more log entries, retcode=" << retcode));
+          tn->log(10, SSTR(*this << ": failed to fetch mdlog entries during incremental sync, retcode=" << retcode));
           yield lease_cr->go_down();
           drain_all();
           *reset_backoff = false; // back off and try again later
