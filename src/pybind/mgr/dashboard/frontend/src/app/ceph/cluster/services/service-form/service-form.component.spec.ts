@@ -1149,5 +1149,39 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         expect(component.filteredZoneList.length).toBeGreaterThan(0);
       }));
     });
+
+    describe('no-realm scenario – virtual_host_enabled control state', () => {
+      beforeEach(fakeAsync(() => {
+        (rgwRealmService.getAllRealmsInfo as jasmine.Spy).and.returnValue(
+          of({ realms: [], default_realm: '' })
+        );
+
+        formHelper.setValue('service_type', 'rgw');
+        component.setRgwFields();
+        tick();
+      }));
+
+      it('should disable virtual_host_enabled when realms list is empty', () => {
+        expect(form.get('virtual_host_enabled').disabled).toBe(true);
+      });
+
+      it('should set virtual_host_enabled value to false when realms list is empty', () => {
+        expect(form.get('virtual_host_enabled').value).toBe(false);
+      });
+
+      it('should enable virtual_host_enabled when realms are populated and rgw module is enabled', fakeAsync(() => {
+        // Restore realms and simulate the rgw module becoming enabled
+        (rgwRealmService.getAllRealmsInfo as jasmine.Spy).and.returnValue(of(realmsInfo));
+        (rgwMultisiteService.getRgwModuleStatus as jasmine.Spy).and.returnValue(of(true));
+
+        component.setRgwFields();
+        tick();
+
+        // getRgwModuleStatus runs independently; trigger it to reflect enabled status
+        (component as any).getRgwModuleStatus();
+
+        expect(form.get('virtual_host_enabled').disabled).toBe(false);
+      }));
+    });
   });
 });

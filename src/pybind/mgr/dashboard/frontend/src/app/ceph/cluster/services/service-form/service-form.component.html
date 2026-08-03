@@ -538,9 +538,16 @@
             formControlName="virtual_host_enabled"
           >
             Enable virtual-host style bucket access
-            <cd-help-text i18n>
-              Allows bucket access via hostnames such as mybucket.s3.example.com.
-            </cd-help-text>
+            @if (realmList.length === 0) {
+              <cd-help-text i18n>
+                Requires a multisite realm, zonegroup, and zone. Create a realm to enable
+                virtual-host style bucket access.
+              </cd-help-text>
+            } @else {
+              <cd-help-text i18n>
+                Allows bucket access via hostnames such as mybucket.s3.example.com.
+              </cd-help-text>
+            }
           </cds-checkbox>
         </div>
         @if (serviceForm.controls.virtual_host_enabled.value) {
