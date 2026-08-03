@@ -29,6 +29,7 @@
 
 #include "include/types.h"
 #include "include/encoding.h"
+#include "include/expected.hpp"
 #include "common/simple_cache.hpp"
 #include "common/PriorityCache.h"
 
@@ -47,6 +48,14 @@ class PGMap;
 struct MonSession;
 class MOSDMap;
 struct Subscription;
+
+/// a common failure return type
+struct ErrorNMessage {
+  int error; ///\todo use std::error_code with positive err-vals
+  std::string message;
+  ErrorNMessage() : error(0) {}
+  ErrorNMessage(int e, const std::string &m) : error(e), message(m) {}
+};
 
 /// information about a particular peer's failure reports for one osd
 struct failure_reporter_t {
@@ -745,9 +754,8 @@ public:
       std::stringstream &ss,
       ceph::Formatter *f);
 
-  int enable_pool_ec_optimizations(pg_pool_t &pool,
-                                   std::stringstream *ss,
-                                   bool enable);
+  tl::expected<void, ErrorNMessage>
+  enable_pool_ec_optimizations(pg_pool_t &pool, bool enable);
   void maybe_enable_pool_split_ops(pg_pool_t &p);
   int prepare_command_pool_set(const cmdmap_t& cmdmap,
                                std::stringstream& ss);
