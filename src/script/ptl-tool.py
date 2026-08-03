@@ -745,6 +745,7 @@ class CommitParityCheck(BaseAuditCheck):
             try:
                 G.git.rev_parse('--verify', ref)
                 valid_ref = ref
+                log.debug(f"found main: {valid_ref}")
                 break
             except git.exc.GitCommandError:
                 pass
@@ -753,43 +754,49 @@ class CommitParityCheck(BaseAuditCheck):
             for commit, orig_sha in bp_cherry_picks:
                 try:
                     # Find merge commit using intersection of ancestry-path and first-parent
-                    ancestry = G.git.rev_list(f"{orig_sha}..{valid_ref}", '--ancestry-path').splitlines()
+                    log.debug(f"git rev-list --ancestry-path --topo-order {orig_sha}..{valid_ref}")
+                    ancestry = G.git.rev_list(f"{orig_sha}..{valid_ref}", '--ancestry-path', '--topo-order').splitlines()
+                    log.debug(f"git rev-list --first-parent {orig_sha}..{valid_ref}")
                     first_parent = G.git.rev_list(f"{orig_sha}..{valid_ref}", '--first-parent').splitlines()
                     
                     first_parent_set = set(first_parent)
                     merge_sha = None
                     for c in reversed(ancestry):
+                        log.debug(f"Examining ancestor {c}")
                         if c in first_parent_set:
+                            log.debug(f"Found ancestor in first parents")
                             merge_sha = c
                             break
 
-                    if merge_sha and merge_sha not in analyzed_merges:
-                        analyzed_merges.add(merge_sha)
-                        # Extract the original PR commits using merge parents (merge^1..merge^2)
-                        orig_pr_commits = G.git.rev_list(f"{merge_sha}^1..{merge_sha}^2").splitlines()
-                        orig_pr_commits.reverse() # chronological
-                        
-                        merge_msg = G.commit(merge_sha).summary
-                        m_pr = re.search(r'(?:Merge PR|Merge pull request) #(\d+)', merge_msg, re.IGNORECASE)
-                        pr_name = f"PR #{m_pr.group(1)}" if m_pr else f"Merge {merge_sha[:8]}"
-                        found_prs.add(pr_name)
-                        pr_mapping[pr_name] = []
+                    if merge_sha:
+                        log.info(f"found merge sha: {merge_sha}")
+                        if merge_sha not in analyzed_merges:
+                            analyzed_merges.add(merge_sha)
+                            # Extract the original PR commits using merge parents (merge^1..merge^2)
+                            orig_pr_commits = G.git.rev_list(f"{merge_sha}^1..{merge_sha}^2").splitlines()
+                            orig_pr_commits.reverse() # chronological
 
-                        for o_commit_sha in orig_pr_commits:
-                            o_summary = G.commit(o_commit_sha).summary
-                            bp_match = next((c for c, o_sha in bp_cherry_picks if o_commit_sha.startswith(o_sha)), None)
-                            
-                            pr_mapping[pr_name].append({
-                                'o_sha': o_commit_sha,
-                                'o_summary': o_summary,
-                                'bp_commit': bp_match,
-                                'm_sha': merge_sha
-                            })
-                            
-                            if bp_match:
-                                bp_commits_mapped.add(bp_match.hexsha)
-                            else:
-                                missing_commits.append((pr_name, o_commit_sha, o_summary, merge_sha))
+                            merge_msg = G.commit(merge_sha).summary
+                            m_pr = re.search(r'(?:Merge PR|Merge pull request) #(\d+)', merge_msg, re.IGNORECASE)
+                            pr_name = f"PR #{m_pr.group(1)}" if m_pr else f"Merge {merge_sha[:8]}"
+                            found_prs.add(pr_name)
+                            pr_mapping[pr_name] = []
+
+                            for o_commit_sha in orig_pr_commits:
+                                o_summary = G.commit(o_commit_sha).summary
+                                bp_match = next((c for c, o_sha in bp_cherry_picks if o_commit_sha.startswith(o_sha)), None)
+
+                                pr_mapping[pr_name].append({
+                                    'o_sha': o_commit_sha,
+                                    'o_summary': o_summary,
+                                    'bp_commit': bp_match,
+                                    'm_sha': merge_sha
+                                })
+
+                                if bp_match:
+                                    bp_commits_mapped.add(bp_match.hexsha)
+                                else:
+                                    missing_commits.append((pr_name, o_commit_sha, o_summary, merge_sha))
                 except git.exc.GitCommandError:
                     log.debug(f"Local DAG traversal skipped/failed for {orig_sha[:8]}")
         else:
