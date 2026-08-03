@@ -10,6 +10,7 @@
 #include <expected>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "common/AuditDB.h"
 
@@ -17,18 +18,20 @@
  * Helper for cephfs standalone tools: ensure `.audit` pool, open an audit DB in
  * standalone mode (SQLite-assigned seq), and pair begin/end commits.
  *
- * Both rows share the same JSON schema:
- *   { cmd, cmd_args, init_time, comp_time, status, retval }
+ * All rows share the same event_id so they can be queried as a group.
+ * JSON schemas:
+ *   log_begin        : { cmd, cmd_args, init_time, comp_time:null, status:null, retval:null }
+ *   log_intermediate : caller-supplied JSON string passed in to log_intermediate
+ *   log_end          : { cmd, cmd_args, init_time, comp_time, status, retval }
  * The first row (from @ref log_begin) stores null for comp_time/status/retval.
- * The second row (from @ref log_end or the destructor abort) fills all fields.
- * Both rows carry the same event_id so they can be queried as a pair.
+ * Intermediate rows (from @ref log_intermediate) carry caller-supplied JSON data.
+ * The final row (from @ref log_end or the destructor abort) fills all fields.
  *
  * If @ref log_begin succeeded and @ref log_end was not called, the destructor
  * inserts an abort row with status `"aborted"` and retval `-ECANCELED`.
  *
  * The caller must keep @p rados connected for the lifetime of this object.
  *
- * @note best-effort logging; tools should be prepared to skip audit on failure.
  */
 class ToolsAuditLogger {
 public:
@@ -70,7 +73,7 @@ public:
 
   /**
    * A basic helper that takes a vector of C style strings and returns a string
-   * which can be inserted directly as the cmd_args arg in log_end()
+   * which can be inserted directly as the cmd_args arg in log_begin()
    * 
    * @note constructs string with args separated by spaces, this is enough since
    * the pythonic auditman module can scrap the data using its advaced set of
@@ -100,6 +103,19 @@ public:
    * @ref log_begin so both rows belong to the same event.
    */
   void log_end(time_t comp_time, const std::string& status, int32_t retval);
+
+  /**
+   * Insert an intermediate row tied to the current in-flight event.
+   * Must be called after @ref log_begin and before @ref log_end.
+   * The @p intermediate_log_data must be a valid JSON string (typically
+   * produced by JSONFormatter); it is validated with JSONParser::parse before
+   * the commit is attempted. The row is committed under the same event_id as
+   * the surrounding begin/end pair so all rows can be correlated.
+   *
+   * @param timestamp  wall-clock time for this intermediate event.
+   * @param intermediate_log_data  JSON string payload for this row.
+   */
+  void log_intermediate(time_t timestamp, const std::string& intermediate_log_data);
 
   bool is_ready() const;
 

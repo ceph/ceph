@@ -5,6 +5,7 @@
 #include <fmt/format.h>
 
 #include "common/JSONFormatter.h"
+#include "common/ceph_json.h"
 
 #include "common/ceph_context.h"
 #include "common/debug.h"
@@ -156,6 +157,29 @@ void ToolsAuditLogger::log_end(
     cmd_args_in_flight  = {};
     init_time_in_flight = 0;
   } else {
+    lderr(cct) << "failed: event_id=" << event_id_in_flight
+               << " code=" << static_cast<int>(r.error().code)
+               << " detail=" << r.error().detail << dendl;
+  }
+}
+
+void ToolsAuditLogger::log_intermediate(
+    time_t timestamp,
+    const std::string& intermediate_log_data)
+{
+  if (!is_ready() || !begin_recorded) {
+    return;
+  }
+
+  JSONParser jp;
+  if (!jp.parse(intermediate_log_data.c_str(),
+                static_cast<int>(intermediate_log_data.size()))) {
+    lderr(cct) << "intermediate_log_data is not valid JSON; dropping" << dendl;
+    return;
+  }
+
+  auto r = db->commit(timestamp, intermediate_log_data, event_id_in_flight);
+  if (!r.has_value()) {
     lderr(cct) << "failed: event_id=" << event_id_in_flight
                << " code=" << static_cast<int>(r.error().code)
                << " detail=" << r.error().detail << dendl;
