@@ -308,6 +308,7 @@ Server::Server(MDSRank *m, MetricsHandler *metrics_handler) :
   dispatch_killpoint_random = g_conf().get_val<double>("mds_server_dispatch_killpoint_random");
   supported_features = feature_bitset_t(CEPHFS_FEATURES_MDS_SUPPORTED);
   supported_metric_spec = feature_bitset_t(CEPHFS_METRIC_FEATURES_ALL);
+  mds_allow_async_dirops = g_conf().get_val<bool>("mds_allow_async_dirops");
 }
 
 Server::~Server() {
