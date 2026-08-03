@@ -24,6 +24,56 @@ class PG;
 
 class PGRecovery;
 
+/// holds read locks on neighbor clones used for clone overlap recovery
+class RecoveryCloneLockManager {
+  std::map<hobject_t, ObjectContextRef> locks;
+
+  void unlock_all() {
+    for (auto& kv : locks) {
+      kv.second->put_read_lock();
+    }
+    locks.clear();
+  }
+public:
+  RecoveryCloneLockManager() = default;
+  RecoveryCloneLockManager(RecoveryCloneLockManager&& o) noexcept
+    : locks(std::move(o.locks)) {}
+  RecoveryCloneLockManager(const RecoveryCloneLockManager&) = delete;
+  RecoveryCloneLockManager& operator=(RecoveryCloneLockManager&& o) noexcept {
+    if (this != &o) {
+      unlock_all();
+      locks = std::move(o.locks);
+    }
+    return *this;
+  }
+  RecoveryCloneLockManager& operator=(const RecoveryCloneLockManager&) = delete;
+
+  bool try_lock_for_read(
+    const hobject_t& hoid,
+    ObjectContextRegistry& registry) {
+    if (locks.count(hoid)) {
+      return false;
+    }
+    auto obc = registry.maybe_get_cached_obc(hoid);
+    if (!obc || !obc->try_get_read_lock()) {
+      return false;
+    }
+    locks.emplace(hoid, std::move(obc));
+    return true;
+  }
+
+  void release_locks() {
+    unlock_all();
+  }
+
+  ~RecoveryCloneLockManager() {
+    // Safe to unlock from the dtor: unlock_for_read() only decrements
+    // and wakes waiters.  Also covers move-assign replacing a non-empty
+    // target without an explicit release_locks() call.
+    unlock_all();
+  }
+};
+
 class RecoveryBackend {
 public:
   class WaitForObjectRecovery;
@@ -151,6 +201,7 @@ protected:
     crimson::osd::ObjectContextRef head_ctx;
     crimson::osd::ObjectContextRef obc;
     object_stat_sum_t stat;
+    RecoveryCloneLockManager clone_lock_manager;
     bool is_complete() const {
       return recovery_progress.is_complete(recovery_info);
     }
@@ -161,6 +212,7 @@ protected:
     ObjectRecoveryInfo recovery_info;
     crimson::osd::ObjectContextRef obc;
     object_stat_sum_t stat;
+    RecoveryCloneLockManager clone_lock_manager;
   };
 
 public:

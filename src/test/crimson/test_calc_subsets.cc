@@ -24,11 +24,12 @@ TEST(head_subsets, dirty_region)
 // ****
 
   crimson::osd::subsets_t result =
-    crimson::osd::calc_head_subsets(obj_size,
-                                    empty_ss,
-                                    head,
-                                    missing,
-                                    last_backfill);
+    crimson::osd::commit_subsets_unlocked(
+      crimson::osd::calc_head_subsets(obj_size,
+                                      empty_ss,
+                                      head,
+                                      missing,
+                                      last_backfill));
 
   EXPECT_TRUE(result.clone_subsets.empty());
   EXPECT_TRUE(result.data_subset == expect_data_region);
@@ -47,11 +48,12 @@ TEST(head_subsets, head_all_clean)
 // ****
 
   crimson::osd::subsets_t result =
-    crimson::osd::calc_head_subsets(obj_size,
-                                    empty_ss,
-                                    head,
-                                    missing,
-                                    last_backfill);
+    crimson::osd::commit_subsets_unlocked(
+      crimson::osd::calc_head_subsets(obj_size,
+                                      empty_ss,
+                                      head,
+                                      missing,
+                                      last_backfill));
 
   EXPECT_TRUE(result.clone_subsets.empty());
   EXPECT_TRUE(result.data_subset.empty());
@@ -71,11 +73,12 @@ TEST(head_subsets, all_dirty)
 // ****
 
   crimson::osd::subsets_t result =
-    crimson::osd::calc_head_subsets(obj_size,
-                                    empty_ss,
-                                    head,
-                                    missing,
-                                    last_backfill);
+    crimson::osd::commit_subsets_unlocked(
+      crimson::osd::calc_head_subsets(obj_size,
+                                      empty_ss,
+                                      head,
+                                      missing,
+                                      last_backfill));
 
   EXPECT_TRUE(result.clone_subsets.empty());
   EXPECT_TRUE(result.data_subset.size() == obj_size);
@@ -118,11 +121,12 @@ TEST(head_subsets, clone_overlap)
 // ****
 
   crimson::osd::subsets_t result =
-    crimson::osd::calc_head_subsets(obj_size,
-                                    ss,
-                                    head,
-                                    missing,
-                                    last_backfill);
+    crimson::osd::commit_subsets_unlocked(
+      crimson::osd::calc_head_subsets(obj_size,
+                                      ss,
+                                      head,
+                                      missing,
+                                      last_backfill));
   EXPECT_TRUE(result.clone_subsets[clone] == expect_clone_subset);
 }
 
@@ -170,11 +174,12 @@ TEST(head_subsets, dirty_region_and_clone_overlap)
 // ****
 
   crimson::osd::subsets_t result =
-    crimson::osd::calc_head_subsets(obj_size,
-                                    ss,
-                                    head,
-                                    missing,
-                                    last_backfill);
+    crimson::osd::commit_subsets_unlocked(
+      crimson::osd::calc_head_subsets(obj_size,
+                                      ss,
+                                      head,
+                                      missing,
+                                      last_backfill));
   EXPECT_TRUE(result.clone_subsets[clone] == expect_clone_subset);
   EXPECT_TRUE(result.data_subset == expect_data_region);
 }
@@ -247,10 +252,11 @@ TEST(clone_subsets, overlap)
 // ****
 
   crimson::osd::subsets_t result =
-    crimson::osd::calc_clone_subsets(ss,
-                                     clone,
-                                     missing,
-                                     last_backfill);
+    crimson::osd::commit_subsets_unlocked(
+      crimson::osd::calc_clone_subsets(ss,
+                                       clone,
+                                       missing,
+                                       last_backfill));
   EXPECT_TRUE(result.clone_subsets[older_clone] == expect_clone_subset1);
   EXPECT_TRUE(result.clone_subsets[newest_clone] == expect_clone_subset2);
 }
