@@ -503,7 +503,7 @@ class RGWHTTPArgs {
   boost::optional<const std::string&>
   get_optional(std::string_view name) const;
   int get_bool(std::string_view name, bool *val, bool *exists) const;
-  int get_bool(const char *const name, bool *val, bool *exists) const;
+  int get_bool(const char *name, bool *val, bool *exists) const;
   void get_bool(const char *name, bool *val, bool def_val) const;
   int get_int(const char *name, int *val, int def_val) const;
 
@@ -1955,7 +1955,7 @@ extern bool verify_object_permission(const DoutPrefixProvider* dpp, req_state *s
 extern bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, req_state *s,
 					       int perm);
 extern int verify_object_lock(
-  const DoutPrefixProvider *dpp,
+  const DoutPrefixProvider* dpp,
   const rgw::sal::Attrs& attrs,
   const bool bypass_perm,
   const bool bypass_governance_mode);

@@ -505,13 +505,13 @@ void rgw_create_s3_canonical_header(
 
 void rgw_create_s3_canonical_header(
   const DoutPrefixProvider *dpp,
-  const char *const method,
-  const char *const content_md5,
-  const char *const content_type,
-  const char *const date,
+  const char *method,
+  const char *content_md5,
+  const char *content_type,
+  const char *date,
   const meta_map_t& meta_map,
   const meta_map_t& qs_map,
-  const char *const request_uri,
+  const char *request_uri,
   const std::map<std::string, std::string>& sub_resources,
   std::string& dest_str);
 bool rgw_create_s3_canonical_header(const DoutPrefixProvider *dpp,
@@ -644,7 +644,7 @@ static inline std::string gen_v4_canonical_uri(const req_info& info) {
 
 static inline const string calc_v4_payload_hash(const std::string_view payload)
 {
-  ceph::crypto::SHA256 *sha256_hash = calc_hash_sha256_open_stream();
+  ceph::crypto::SHA256* sha256_hash = calc_hash_sha256_open_stream();
   calc_hash_sha256_update_stream(sha256_hash, payload.data(), payload.length());
   const auto payload_hash = calc_hash_sha256_close_stream(&sha256_hash);
   return payload_hash;

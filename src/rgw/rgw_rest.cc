@@ -1858,7 +1858,7 @@ int RGWHandler_REST::validate_object_name(const string& object)
   return 0;
 }
 
-static http_op op_from_method(const char* const method)
+static http_op op_from_method(const char *method)
 {
   if (!method) {
     return OP_UNKNOWN;
@@ -2012,9 +2012,9 @@ void RGWRESTMgr::add_resource_route(std::string resource, std::unique_ptr<RGWRES
   });
 }
 
-RGWRESTMgr *RGWRESTMgr::get_resource_mgr(req_state *const s,
+RGWRESTMgr* RGWRESTMgr::get_resource_mgr(req_state* const s,
                                          const std::string_view uri,
-                                         std::string *const out_uri)
+                                         std::string* const out_uri)
 {
   *out_uri = uri;
 

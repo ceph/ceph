@@ -86,7 +86,7 @@ auto find_string_map_entry(const Map& map, const std::string_view key)
  * ?get the canonical amazon-style header for something?
  */
 
-template <typename M>
+template<typename M>
 static std::string
 get_canon_amz_hdrs(const M& map)
 {
@@ -195,13 +195,13 @@ void rgw_create_s3_canonical_header(
 
 void rgw_create_s3_canonical_header(
   const DoutPrefixProvider *dpp,
-  const char *const method,
-  const char *const content_md5,
-  const char *const content_type,
-  const char *const date,
+  const char *method,
+  const char *content_md5,
+  const char *content_type,
+  const char *date,
   const meta_map_t& meta_map,
   const meta_map_t& qs_map,
-  const char *const request_uri,
+  const char *request_uri,
   const std::map<std::string, std::string>& sub_resources,
   std::string& dest_str)
 {

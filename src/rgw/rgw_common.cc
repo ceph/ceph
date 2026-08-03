@@ -1127,7 +1127,7 @@ int RGWHTTPArgs::get_bool(const std::string_view name, bool *val, bool *exists) 
     return 0;
   }
 
-  const char *const s = iter->second.c_str();
+  const char *s = iter->second.c_str();
   if (strcasecmp(s, "false") == 0) {
     *val = false;
     return 0;
@@ -1141,7 +1141,7 @@ int RGWHTTPArgs::get_bool(const std::string_view name, bool *val, bool *exists) 
   return -EINVAL;
 }
 
-int RGWHTTPArgs::get_bool(const char *const name, bool *val, bool *exists) const
+int RGWHTTPArgs::get_bool(const char *name, bool *val, bool *exists) const
 {
   return get_bool(std::string_view { name }, val, exists);
 }
@@ -1837,7 +1837,7 @@ static bool rgw_object_retention_blocks_delete(const RGWObjectRetention& retenti
     !bypass_governance_mode;
 }
 
-int verify_object_lock(const DoutPrefixProvider *dpp,
+int verify_object_lock(const DoutPrefixProvider* dpp,
                        const rgw::sal::Attrs& attrs,
                        const bool bypass_perm,
                        const bool bypass_governance_mode)

@@ -71,11 +71,10 @@ class RGWMultiDelObject;
 
 namespace rgw::auth::registry { class StrategyRegistry; }
 
-int rgw_forward_request_to_master(const DoutPrefixProvider *dpp,
+int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
                                   const rgw::SiteConfig& site,
                                   const rgw_owner& effective_owner,
-                                  bufferlist *indata,
-                                  JSONParser *jp,
+                                  bufferlist* indata, JSONParser* jp,
                                   const req_info& req, rgw_err& err,
                                   optional_yield y);
 
@@ -830,9 +829,9 @@ public:
     : num_created(0) {
   }
 
-  void init(rgw::sal::Driver *const driver,
-            req_state *const s,
-            RGWHandler *const h) override;
+  void init(rgw::sal::Driver* const driver,
+            req_state* const s,
+            RGWHandler* const h) override;
 
   int verify_permission(optional_yield y) override;
   void execute(optional_yield y) override;

@@ -230,7 +230,7 @@ static int get_user_policy_from_attr(const DoutPrefixProvider *dpp,
  */
 int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp, 
                                        CephContext *cct,
-				       rgw::sal::Driver *driver,
+				       rgw::sal::Driver* driver,
 				       const rgw_owner& bucket_owner,
 				       map<string, bufferlist>& bucket_attrs,
 				       RGWAccessControlPolicy& policy,
@@ -252,11 +252,11 @@ int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp,
 
 static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp, 
                                     CephContext *cct,
-				    rgw::sal::Driver *driver,
+				    rgw::sal::Driver* driver,
 				    const ACLOwner& bucket_owner,
 				    RGWAccessControlPolicy& policy,
                                     string *storage_class,
-				    rgw::sal::Object *obj,
+				    rgw::sal::Object* obj,
                                     optional_yield y)
 {
   bufferlist bl;
@@ -1777,11 +1777,11 @@ int RGWOp::do_aws4_auth_completion()
   return 0;
 }
 
-int get_owner_quota_info(const DoutPrefixProvider *dpp,
-                         optional_yield y,
-                         rgw::sal::Driver *driver,
-                         const rgw_owner& owner,
-                         RGWQuota& quotas)
+int get_owner_quota_info(const DoutPrefixProvider* dpp,
+                                optional_yield y,
+                                rgw::sal::Driver* driver,
+                                const rgw_owner& owner,
+                                RGWQuota& quotas)
 {
   return std::visit(fu2::overload(
       [&] (const rgw_user& uid) {
@@ -3562,14 +3562,13 @@ static int get_account_max_buckets(const DoutPrefixProvider* dpp,
 }
 
 // list the user's buckets to check whether they're at their maximum
-static int check_owner_max_buckets(const DoutPrefixProvider *dpp,
-                                   rgw::sal::Driver *driver,
-                                   req_state *s,
+static int check_owner_max_buckets(const DoutPrefixProvider* dpp,
+                                   rgw::sal::Driver* driver, req_state* s,
                                    optional_yield y)
 {
   int32_t remaining = 0;
 
-  const rgw_account_id *account = std::get_if<rgw_account_id>(&s->owner.id);
+  const rgw_account_id* account = std::get_if<rgw_account_id>(&s->owner.id);
   if (account) {
     if (const int ret = get_account_max_buckets(dpp, y, driver, *account, remaining); ret < 0) {
       return ret;
@@ -8183,9 +8182,9 @@ int RGWBulkUploadOp::handle_dir_verify_permission(optional_yield y)
   return check_owner_max_buckets(this, driver, s, y);
 }
 
-void RGWBulkUploadOp::init(rgw::sal::Driver *const driver,
-                           req_state *const s,
-                           RGWHandler *const h)
+void RGWBulkUploadOp::init(rgw::sal::Driver* const driver,
+                           req_state* const s,
+                           RGWHandler* const h)
 {
   RGWOp::init(driver, s, h);
 }

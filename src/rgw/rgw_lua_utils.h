@@ -613,8 +613,8 @@ int Pairs(lua_State* L) {
     return TWO_RETURNVALS;
 }
 
-template <typename MapType = std::map<std::string, std::string>,
-  MetaTableClosure NewIndex = EmptyMetaTable::NewIndexClosure>
+template<typename MapType=std::map<std::string, std::string>,
+  MetaTableClosure NewIndex=EmptyMetaTable::NewIndexClosure>
 struct StringMapMetaTable : public EmptyMetaTable {
   static int IndexClosure(lua_State* L) {
     std::ignore = table_name_upvalue(L);

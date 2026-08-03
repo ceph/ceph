@@ -39,13 +39,11 @@ static bool parse_aws_s3_error(const std::string& input, rgw_err& err)
   return true;
 }
 
-int rgw_forward_request_to_master(const DoutPrefixProvider *dpp,
+int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
                                   const rgw::SiteConfig& site,
                                   const rgw_owner& effective_owner,
-                                  bufferlist *indata,
-                                  JSONParser *jp,
-                                  const req_info& req,
-                                  rgw_err& err,
+                                  bufferlist* indata, JSONParser* jp,
+                                  const req_info& req, rgw_err& err,
                                   optional_yield y)
 {
   const auto& period = site.get_period();
