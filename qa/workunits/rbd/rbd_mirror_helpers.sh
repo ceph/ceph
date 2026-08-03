@@ -2849,12 +2849,17 @@ test_group_snap_sync_state()
     local group_spec=$2
     local group_snap_id=$3
     local expected_state=$4
+    local has_complete_field=$5
 
     run_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format"
 
     # Get <state> and <snaps_synced> for the given group snapshot ID
     local state snaps_synced
     state=$(xmlstarlet sel -t -v "//group_snaps/group_snap[id='${group_snap_id}']/state" < "$CMD_STDOUT")
+    if ! $has_complete_field; then
+        test "$state" = "created" || { fail; return 1; }
+        return 0
+    fi
     snaps_synced=$(xmlstarlet sel -t -v "//group_snaps/group_snap[id='${group_snap_id}']/namespace/complete" < "$CMD_STDOUT")
 
     if [ "$expected_state" = "complete" ]; then
@@ -2895,8 +2900,9 @@ test_group_snap_sync_complete()
     local cluster=$1
     local group_spec=$2
     local group_snap_id=$3
+    local has_complete_field=$4
 
-    test_group_snap_sync_state "${cluster}" "${group_spec}" "${group_snap_id}" 'complete'
+    test_group_snap_sync_state "${cluster}" "${group_spec}" "${group_snap_id}" 'complete' "${has_complete_field}"
 }
 
 test_group_snap_sync_incomplete()
@@ -2924,11 +2930,12 @@ wait_for_test_group_snap_sync_complete()
     local cluster=$1
     local group_spec=$2
     local group_snap_id=$3
+    local has_complete_field=$4
     local s
 
     for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32 32 32 64 64 64 64 64; do
         sleep ${s}
-        test_group_snap_sync_complete "${cluster}" "${group_spec}" "${group_snap_id}" && return 0
+        test_group_snap_sync_complete "${cluster}" "${group_spec}" "${group_snap_id}" "${has_complete_field}" && return 0
 
         if  (( $(bc <<<"$s > 32") )); then
             # query the snap progress for each image in the group - debug info to check that sync is progressing
@@ -2946,8 +2953,13 @@ wait_for_group_snap_sync_complete()
     local cluster=$1
     local group_spec=$2
     local group_snap_id=$3
+    local snap_type=${4:-}
+    local has_complete_field=true
+    if [ "${snap_type}" = "user" ]; then
+        has_complete_field=false
+    fi
 
-    wait_for_test_group_snap_sync_complete "${cluster}" "${group_spec}" "${group_snap_id}"
+    wait_for_test_group_snap_sync_complete "${cluster}" "${group_spec}" "${group_snap_id}" "${has_complete_field}"
 }
 
 test_group_replay_state()
@@ -3102,6 +3114,73 @@ mirror_group_snapshot_and_wait_for_sync_complete()
     mirror_group_snapshot "${primary_cluster}" "${group_spec}" group_snap_id
     wait_for_group_snap_present "${secondary_cluster}" "${group_spec}" "${group_snap_id}"
     wait_for_group_snap_sync_complete "${secondary_cluster}" "${group_spec}" "${group_snap_id}"
+
+    if [ "$#" -gt 3 ]; then
+        local -n _group_snap_id=$4
+        _group_snap_id="${group_snap_id}"
+    fi
+}
+
+# get the uuid of the remote cluster from the ${cluster}'s pool info'
+# FIXME: works only for single peer, returns uuid of first peer from list
+get_peer_uuid()
+{
+    local cluster=$1
+    local pool=$2
+    local -n _uuid=$3
+
+    run_cmd "rbd --cluster ${cluster} mirror pool info --pool ${pool} --format xml --pretty-format"
+    _uuid=$(xmlstarlet sel -t -v "//peers/peer[1]/uuid" < "$CMD_STDOUT" )
+    if [[ -z "${_uuid}" ]]; then
+        fail "failed to get uuid of pool ${pool}"
+        return 1
+    fi
+}
+
+get_group_snap_peers()
+{
+    local cluster=$1
+    local group_spec=$2
+    local snap_id=$3
+    local -n _peers=$4
+
+    run_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format"
+    _peers=$(xmlstarlet sel -t -v "//group_snap[id='${snap_id}']/namespace/mirror_peer_uuids/peer_uuid" "$CMD_STDOUT")
+}
+
+test_peer_uuid_in_group_snap_peers()
+{
+    local cluster=$1
+    local group_spec=$2
+    local snap_id=$3
+    local peer_uuid=$4
+
+    test -n "${peer_uuid}" || { fail "peer_uuid is empty"; return 1; }
+    local peers
+    get_group_snap_peers "${cluster}" "${group_spec}" "${snap_id}" peers
+    echo "${peers}" | grep -qxF "${peer_uuid}" || {
+        fail "peer_uuid ${peer_uuid} not found in group snap ${snap_id}"
+        return 1
+    }
+}
+
+wait_for_peer_uuid_not_in_group_snap_peers()
+{
+    local cluster=$1
+    local group_spec=$2
+    local snap_id=$3
+    local peer_uuid=$4
+    local s
+
+    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32; do
+        sleep ${s}
+        if ! test_peer_uuid_in_group_snap_peers "${cluster}" "${group_spec}" "${snap_id}" "${peer_uuid}"; then
+            return 0
+        fi
+    done
+
+    fail "failed to wait to unlink peer_uuid ${peer_uuid} from group snap ${snap_id} on ${cluster}"
+    return 1
 }
 
 test_group_synced_image_status()
