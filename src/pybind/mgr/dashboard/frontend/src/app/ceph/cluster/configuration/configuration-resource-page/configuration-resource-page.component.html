@@ -1,0 +1,19 @@
+@if (selection) {
+  @switch (section) {
+    @case ('overview') {
+      <cd-resource-overview-card
+        i18n-title
+        title="Configuration details"
+        [columns]="4"
+        [fields]="overviewFields"
+      >
+      </cd-resource-overview-card>
+    }
+  }
+} @else if (notFound) {
+  <cd-alert-panel
+    type="error"
+    i18n
+    >No configuration option found.</cd-alert-panel
+  >
+}

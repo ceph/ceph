@@ -14,14 +14,11 @@ describe('Configuration page', () => {
     });
   });
 
-  describe('fields check', () => {
-    beforeEach(() => {
-      configuration.getExpandCollapseElement().click();
-    });
-
-    it('should check that details table opens (w/o tab header)', () => {
-      configuration.getStatusTables().should('be.visible');
-      configuration.getTabs().should('not.exist');
+  describe('resource page overview check', () => {
+    it('should open the first resource page and show the overview card', () => {
+      configuration.getResourcePage().should('be.visible').click();
+      configuration.getOverviewField('Name').should('be.visible');
+      configuration.getOverviewField('Current values').should('be.visible');
     });
   });
 
@@ -36,7 +33,7 @@ describe('Configuration page', () => {
       configuration.configClear(configName);
     });
 
-    it('should click and edit a configuration and results should appear in the table', () => {
+    it('should click and edit a configuration and results should appear in the overview card', () => {
       configuration.edit(
         configName,
         ['global', '1'],

@@ -5,6 +5,9 @@ import _ from 'lodash';
 
 import { CephfsListComponent } from './ceph/cephfs/cephfs-list/cephfs-list.component';
 import { ConfigurationFormComponent } from './ceph/cluster/configuration/configuration-form/configuration-form.component';
+import { ConfigurationResourceBreadcrumbResolver } from './ceph/cluster/configuration/configuration-resource-page/configuration-resource-breadcrumb.resolver';
+import { ConfigurationResourcePageComponent } from './ceph/cluster/configuration/configuration-resource-page/configuration-resource-page.component';
+import { ConfigurationResourceSidebarComponent } from './ceph/cluster/configuration/configuration-resource-sidebar/configuration-resource-sidebar.component';
 import { ConfigurationComponent } from './ceph/cluster/configuration/configuration.component';
 import { CreateClusterComponent } from './ceph/cluster/create-cluster/create-cluster.component';
 import { CrushmapComponent } from './ceph/cluster/crushmap/crushmap.component';
@@ -327,6 +330,19 @@ const routes: Routes = [
             path: 'edit/:name',
             component: ConfigurationFormComponent,
             data: { breadcrumbs: ActionLabels.EDIT }
+          },
+          {
+            path: ':name',
+            component: ConfigurationResourceSidebarComponent,
+            data: { breadcrumbs: ConfigurationResourceBreadcrumbResolver },
+            children: [
+              { path: '', redirectTo: 'overview', pathMatch: 'full' },
+              {
+                path: 'overview',
+                component: ConfigurationResourcePageComponent,
+                data: { breadcrumbs: 'Overview', section: 'overview' }
+              }
+            ]
           }
         ]
       },

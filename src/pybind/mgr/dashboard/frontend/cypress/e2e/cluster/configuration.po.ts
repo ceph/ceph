@@ -5,6 +5,13 @@ export class ConfigurationPageHelper extends PageHelper {
     index: { url: '#/configuration', id: 'cd-configuration' }
   };
 
+  getOverviewField(label: string) {
+    return cy
+      .get('.cd-overview-label')
+      .filter((_index, el) => el.textContent?.includes(label))
+      .closest('.cd-overview-item');
+  }
+
   private waitForEditForm(name: string) {
     cy.contains('h3', `Edit ${name}`).should('be.visible');
   }
@@ -20,7 +27,8 @@ export class ConfigurationPageHelper extends PageHelper {
   configClear(name: string) {
     this.navigateTo();
     const valList = ['global', 'mon', 'mgr', 'osd', 'mds']; // Editable values (client moved to separate section)
-    this.getFirstTableCell(name).click();
+    this.searchTable(name, 100);
+    this.getTableRow(name).find('[cdstabledata]').eq(1).click();
     cy.contains('button', 'Edit').click();
     this.waitForEditForm(name);
 
@@ -38,15 +46,11 @@ export class ConfigurationPageHelper extends PageHelper {
     // Enter config setting name into filter box
     this.searchTable(name, 100);
 
-    // Expand row
-    this.getExpandCollapseElement(name).click();
-
-    // Checks for visibility of details tab
-    this.getStatusTables().should('be.visible');
+    // Open the resource page for the config and verify the overview card values are cleared.
+    this.getResourcePage(name).should('be.visible').click();
 
     for (const i of valList) {
-      // Waits until values are not present in the details table
-      this.getStatusTables().should('not.contain.text', i + ':');
+      this.getOverviewField('Current values').should('not.contain.text', `${i}:`);
     }
   }
 
@@ -59,7 +63,8 @@ export class ConfigurationPageHelper extends PageHelper {
    */
   edit(name: string, ...values: [string, string][]) {
     this.clearFilter();
-    this.getFirstTableCell(name).click();
+    this.searchTable(name, 100);
+    this.getTableRow(name).find('[cdstabledata]').eq(1).click();
     cy.contains('button', 'Edit').click();
 
     this.waitForEditForm(name);
@@ -78,14 +83,11 @@ export class ConfigurationPageHelper extends PageHelper {
     // Enter config setting name into filter box
     this.searchTable(name, 100);
 
-    // Checks for visibility of config in table
-    this.getExpandCollapseElement(name).should('be.visible').click();
+    // Open the resource page for the config and verify the overview card values.
+    this.getResourcePage(name).should('be.visible').click();
 
-    // Clicks config
     values.forEach((value) => {
-      // iterates through list of values and
-      // checks if the value appears in details with the correct number attatched
-      cy.contains('[data-testid=config-details-table]', `${value[0]}\: ${value[1]}`);
+      this.getOverviewField('Current values').should('contain.text', `${value[0]}: ${value[1]}`);
     });
   }
 
