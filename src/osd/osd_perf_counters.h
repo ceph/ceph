@@ -218,6 +218,25 @@ enum osd_counter_idx_t {
   /// number of replicas
   l_osd_scrub_ec_reserv_secondaries_num,
 
+  // ----   write fan-out - stretch (EC and replicated)
+  l_osd_stretch_cross_zone_write_ops,
+  l_osd_stretch_cross_zone_write_bytes,
+  l_osd_stretch_cross_zone_write_lat,
+  l_osd_stretch_cross_zone_write_lat_hist,
+
+  // ----   recovery pushed - stretch (EC and replicated)
+  l_osd_stretch_cross_zone_recovery_push_ops,
+  l_osd_stretch_cross_zone_recovery_push_bytes,
+  l_osd_stretch_cross_zone_recovery_push_lat,
+  l_osd_stretch_cross_zone_recovery_push_lat_hist,
+
+  // ----   remote-zone reads - stretch (EC and replicated recovery pulls)
+  l_osd_stretch_cross_zone_read_ops,
+  l_osd_stretch_cross_zone_read_sent_bytes,
+  l_osd_stretch_cross_zone_read_recv_bytes,
+  l_osd_stretch_cross_zone_read_lat,
+  l_osd_stretch_cross_zone_read_lat_hist,
+
   l_osd_last,
 };
 
