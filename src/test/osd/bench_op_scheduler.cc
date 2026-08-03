@@ -5,8 +5,9 @@
  * ceph_bench_op_scheduler
  *
  * Isolation micro benchmarks comparing the OSD op schedulers (wpq,
- * mclock_scheduler) on identical synthetic workloads with a simulated
- * device drain rate.  See scheduler_bench.h for the harness.
+ * mclock_scheduler, bfq) on identical synthetic workloads with a
+ * simulated device drain rate.  See scheduler_bench.h for the
+ * harness; doc/dev/osd_internals/bfq_scheduler.rst for context.
  *
  * Usage:
  *   ceph_bench_op_scheduler [--rate-mb N] [--secs S] [--csv FILE]
@@ -40,6 +41,12 @@ struct Options {
 const std::vector<op_queue_type_t> kTypes = {
   op_queue_type_t::WeightedPriorityQueue,
   op_queue_type_t::mClockScheduler,
+  op_queue_type_t::BfqScheduler,
+};
+
+const std::unordered_map<int64_t, bfq_stream_t> kPoolMap = {
+  {1, bfq_stream_t::client_block},
+  {2, bfq_stream_t::client_object},
 };
 
 std::ofstream csv;
@@ -72,7 +79,7 @@ void run_matrix(const Options &opt, const std::string &scenario,
   std::printf("  %-16s %-14s %8s %7s %8s %9s\n",
 	      "scheduler", "stream", "MB/s", "share", "p50ms", "p99ms");
   for (auto type : kTypes) {
-    auto r = run_cell(g_ceph_context, type, specs,
+    auto r = run_cell(g_ceph_context, type, specs, kPoolMap,
 		      opt.rate_mb * 1e6, opt.secs, opt.warmup);
     report_cell(scenario, cell, type, specs, r);
   }
