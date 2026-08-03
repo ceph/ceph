@@ -184,6 +184,28 @@ Observability
 times and tags of both tree levels, per-stream queue depths and next
 budgets, and the strict queue.
 
+Microbenchmarks
+===============
+
+``ceph_bench_op_scheduler`` (built from ``src/test/osd``) runs identical
+synthetic workloads through wpq, mclock, and bfq in-process, pacing
+dequeues at a simulated device rate so saturation dynamics are
+meaningful; mclock's capacity model is calibrated to the same rate.  The
+scenarios: a backlogged victim vs an aggressor fanning out over 1..16
+client sessions (share isolation), a paced victim under a saturating
+aggressor (latency isolation), and client-vs-recovery (class weights).
+``unittest_scheduler_isolation`` asserts loose bounds on the bfq
+isolation properties; because the harness paces in wall time it skips
+itself unless ``CEPH_TEST_SCHEDULER_ISOLATION`` is set in the
+environment (shared CI executors are too noisy for it).
+
+The headline result: with an rbd-pool victim and an rgw-pool aggressor,
+wpq and mclock dilute the victim's share as 1/(sessions+1) -- wpq
+round-robins owners, and mclock maps *all* client ops to a single
+dmclock client -- while bfq holds the configured weight ratio flat
+regardless of session count, and bounds a paced victim's p99 queueing
+delay by budget rotation rather than by the aggressor's backlog depth.
+
 Follow-up candidates
 ====================
 

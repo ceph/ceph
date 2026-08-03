@@ -10,7 +10,7 @@
 #   ../src/test/osd/vstart_bench_scheduler.sh
 #
 # Tunables (env):
-#   SCHEDULERS      default "wpq mclock_scheduler"
+#   SCHEDULERS      default "wpq mclock_scheduler bfq"
 #   SESSIONS        aggressor session counts, default "1 4 16"
 #   SECS            victim measurement window per cell, default 12
 #   BLOCK           op size in bytes, default 65536
@@ -37,7 +37,7 @@
 set -uo pipefail
 
 BUILD_DIR=${BUILD_DIR:-$PWD}
-SCHEDULERS=${SCHEDULERS:-"wpq mclock_scheduler"}
+SCHEDULERS=${SCHEDULERS:-"wpq mclock_scheduler bfq"}
 SESSIONS=${SESSIONS:-"1 4 16"}
 SECS=${SECS:-12}
 BLOCK=${BLOCK:-65536}

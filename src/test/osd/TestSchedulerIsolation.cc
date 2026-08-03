@@ -3,8 +3,9 @@
 
 /*
  * Sanity checks for the scheduler_bench.h harness, run against the
- * in-tree op schedulers.  The harness paces in wall time, which is
- * unfit for shared CI executors, so these tests SKIP unless
+ * in-tree op schedulers, plus isolation assertions for the bfq op
+ * scheduler.  The harness paces in wall time, which is unfit for
+ * shared CI executors, so these tests SKIP unless
  * CEPH_TEST_SCHEDULER_ISOLATION is set in the environment.  Bounds
  * are deliberately loose even then.  The full comparative study lives
  * in ceph_bench_op_scheduler.
@@ -45,9 +46,15 @@ namespace {
 
 constexpr double kRate = 100e6;  // simulated device, bytes/sec
 
+const std::unordered_map<int64_t, bfq_stream_t> kPoolMap = {
+  {1, bfq_stream_t::client_block},
+  {2, bfq_stream_t::client_object},
+};
+
 const std::vector<op_queue_type_t> kTypes = {
   op_queue_type_t::WeightedPriorityQueue,
   op_queue_type_t::mClockScheduler,
+  op_queue_type_t::BfqScheduler,
 };
 
 }
@@ -71,7 +78,7 @@ TEST(SchedulerBenchSmoke, WorkConserving) {
     std::vector<StreamSpec> specs = {
       {.name = "only", .pool = 1, .first_owner = 1, .num_owners = 1},
     };
-    auto r = run_cell(g_ceph_context, type, specs, kRate, 2.0, 0.5);
+    auto r = run_cell(g_ceph_context, type, specs, kPoolMap, kRate, 2.0, 0.5);
     EXPECT_GT(r.total_mbps, 50.0)
       << get_op_queue_type_name(type) << " under-served the device";
     EXPECT_LT(r.total_mbps, 140.0)
@@ -80,8 +87,7 @@ TEST(SchedulerBenchSmoke, WorkConserving) {
 }
 
 // Two identical backlogged single-session streams must both make
-// sustained progress; neither wpq (owner round robin) nor mclock
-// (FIFO within a class) may starve one outright.
+// sustained progress; no scheduler may starve one outright.
 TEST(SchedulerBenchSmoke, EqualStreamsBothServed) {
   REQUIRE_ISOLATION_ENV();
   for (auto type : kTypes) {
@@ -89,10 +95,46 @@ TEST(SchedulerBenchSmoke, EqualStreamsBothServed) {
       {.name = "a", .pool = 1, .first_owner = 1, .num_owners = 1},
       {.name = "b", .pool = 2, .first_owner = 100, .num_owners = 1},
     };
-    auto r = run_cell(g_ceph_context, type, specs, kRate, 2.0, 0.5);
+    auto r = run_cell(g_ceph_context, type, specs, kPoolMap, kRate, 2.0, 0.5);
     EXPECT_GT(r.streams.at("a").share, 0.2)
       << get_op_queue_type_name(type) << " starved stream a";
     EXPECT_GT(r.streams.at("b").share, 0.2)
       << get_op_queue_type_name(type) << " starved stream b";
   }
+}
+
+// A backlogged rbd-pool victim must hold ~its weight share (50% at
+// equal weights) even when the rgw-pool aggressor fans out over 16
+// client sessions.  This is the property wpq (per-owner round robin)
+// and mclock (single dmclock client for all client ops) structurally
+// dilute with session count.
+TEST(BfqIsolation, ShareUnderSessionScaling) {
+  REQUIRE_ISOLATION_ENV();
+  std::vector<StreamSpec> specs = {
+    {.name = "victim", .pool = 1, .first_owner = 1, .num_owners = 1},
+    {.name = "aggr", .pool = 2, .first_owner = 100, .num_owners = 16},
+  };
+  auto r = run_cell(g_ceph_context, op_queue_type_t::BfqScheduler,
+		    specs, kPoolMap, kRate, 2.0, 0.5);
+  const double share = r.streams.at("victim").share;
+  EXPECT_GT(share, 0.35) << "victim diluted by aggressor sessions";
+  EXPECT_LT(share, 0.65) << "victim over-served";
+}
+
+// A paced victim (20% of device rate, under its fair share) must keep
+// its offered throughput with queueing delay bounded by budget
+// rotation, despite a saturating multi-session aggressor.
+TEST(BfqIsolation, PacedVictimServiced) {
+  REQUIRE_ISOLATION_ENV();
+  std::vector<StreamSpec> specs = {
+    {.name = "victim", .pool = 1, .first_owner = 1, .num_owners = 1,
+     .offered_ops_per_sec = kRate * 0.2 / 65536.0},
+    {.name = "aggr", .pool = 2, .first_owner = 100, .num_owners = 8},
+  };
+  auto r = run_cell(g_ceph_context, op_queue_type_t::BfqScheduler,
+		    specs, kPoolMap, kRate, 2.0, 0.5);
+  const auto &victim = r.streams.at("victim");
+  // offered 20 MB/s; allow generous scheduling/pacing slack
+  EXPECT_GT(victim.mbps, 12.0) << "victim throughput collapsed";
+  EXPECT_LT(victim.p99_ms, 500.0) << "victim latency unbounded";
 }

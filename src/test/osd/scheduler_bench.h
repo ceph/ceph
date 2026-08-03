@@ -8,7 +8,7 @@
  * implementation in-process, pacing dequeues at a simulated device
  * rate so that saturation dynamics (and therefore isolation) are
  * meaningful.  Runs in real time because mclock's dmclock tags are
- * wall-clock based; wpq is indifferent.
+ * wall-clock based; bfq and wpq are indifferent.
  */
 
 #pragma once
@@ -25,6 +25,7 @@
 
 #include "common/Clock.h"
 #include "common/ceph_context.h"
+#include "osd/scheduler/BfqScheduler.h"
 #include "osd/scheduler/OpScheduler.h"
 #include "osd/scheduler/OpSchedulerItem.h"
 
@@ -93,6 +94,7 @@ inline CellResult run_cell(
   CephContext *cct,
   op_queue_type_t type,
   const std::vector<StreamSpec> &specs,
+  const std::unordered_map<int64_t, bfq_stream_t> &pool_map,
   double rate_bytes_per_sec,
   double duration_sec,
   double warmup_sec)
@@ -101,6 +103,10 @@ inline CellResult run_cell(
 
   auto sched = make_scheduler(cct, 0, 1, 0, false /*is_rotational*/,
 			      "bluestore", type, 196 /*cutoff*/);
+  if (type == op_queue_type_t::BfqScheduler) {
+    auto pm = pool_map;
+    static_cast<BfqScheduler*>(sched.get())->set_pool_streams(std::move(pm));
+  }
 
   std::unordered_map<uint64_t, size_t> owner_stream;
   std::unordered_map<uint64_t, unsigned> owner_queued;
