@@ -11,9 +11,8 @@ There are three ways to get packages:
 
 - **Cephadm:** Cephadm can configure your Ceph repositories for you
   based on a release name or a specific Ceph version.  Each
-  :term:`Ceph Node` in your cluster must have internet access, or a local
-  container repository can be used.
-  For more details, see :ref:`cephadm_deploying_new_cluster`.
+  :term:`Ceph Node` in your cluster must have internet access or a local
+  package repository mirror can be used.
 
 - **Configure Repositories Manually:** You can manually configure your
   package management tool to retrieve Ceph packages and all enabling
@@ -28,33 +27,27 @@ There are three ways to get packages:
 Install Packages with Cephadm
 =============================
 
-#. Download cephadm
-
-   .. prompt:: bash $
-      :substitutions:
-
-      curl --silent --remote-name --location https://download.ceph.com/rpm-|stable-release|/el9/noarch/cephadm
-      chmod +x cephadm
-
+#. Install cephadm with the distribution-specific package manager or with curl.
+   For more details, see :ref:`get-cephadm`.
 #. Configure the Ceph repository based on the release name:
 
    .. prompt:: bash #
       :substitutions:
 
-      ./cephadm add-repo --release |stable-release|
+      cephadm add-repo --release |stable-release|
 
    For Octopus (15.2.0) and later releases, you can also specify a specific
    version:
 
    .. prompt:: bash #
 
-      ./cephadm add-repo --version 15.2.1
+      cephadm add-repo --version 15.2.1
 
    For development packages, you can specify a specific branch name:
 
    .. prompt:: bash #
 
-      ./cephadm add-repo --dev my-branch
+      cephadm add-repo --dev my-branch
 
 #. Install the appropriate packages.  You can install them using your
    package management tool (e.g., APT, Yum) directly, or you can
@@ -62,7 +55,7 @@ Install Packages with Cephadm
 
    .. prompt:: bash #
 
-      ./cephadm install ceph-common
+      cephadm install ceph-common
 
 
 Configure Repositories Manually
@@ -197,7 +190,7 @@ RHEL
 For major releases, you may add a Ceph entry to the ``/etc/yum.repos.d``
 directory. Create a ``ceph.repo`` file. In the example below, replace
 ``{ceph-release}`` with  a major release of Ceph (e.g., "|stable-release|")
-and ``{distro}`` with your Linux distribution (e.g., ``el8``, etc.).  You
+and ``{distro}`` with your Linux distribution (e.g., ``el9``, etc.).  You
 may view ``https://download.ceph.com/rpm-{ceph-release}/`` directory to see which
 distributions Ceph supports. Some Ceph packages (e.g., EPEL) must take priority
 over standard packages, so you must ensure that you set
@@ -237,18 +230,26 @@ packages have new features integrated quickly, while still undergoing several
 weeks of QA prior to release.
 
 The repository package installs the repository details on your local system for
-use with ``yum``. Replace ``{distro}`` with your Linux distribution, and
-``{release}`` with the specific release of Ceph
+use with ``yum``. Replace ``{distro}`` with your Linux distribution,
+``{ceph-release}`` with the specific release of Ceph, and ``{version}``
+with the latest repository package version number.
 
 .. prompt:: bash $
 
-   su -c 'rpm -Uvh https://download.ceph.com/rpms/{distro}/x86_64/ceph-{release}.el8.noarch.rpm'
+   su -c 'rpm -Uvh https://download.ceph.com/rpm-{ceph-release}/{distro}/noarch/ceph-release-{version}.{distro}.noarch.rpm'
 
-You can download the RPMs directly from
+You can download the RPMs directly from:
 
 .. code-block:: none
 
-   https://download.ceph.com/rpm-testing
+   https://download.ceph.com/rpm-{ceph-release}/{distro}/{arch}/
+
+For example:
+
+.. code-block:: none
+   :substitutions:
+
+   https://download.ceph.com/rpm-|stable-release|/el10/x86_64/
 
 .. tip:: For non-US users: There might be a mirror close to you where
          to download Ceph from. For more information see: :ref:`install-mirrors`.
@@ -274,14 +275,15 @@ There's no need to add another package repository manually.
 openEuler
 ^^^^^^^^^
 
-There are two Ceph releases supported in normal openEuler repositories. They are Ceph 12.2.8 in the openEuler-20.03-LTS series and Ceph 16.2.7 in the openEuler-22.03-LTS series. There’s no need to add another package repository manually.
+Ceph releases are available in the normal openEuler repositories.
+There is no need to add another package repository manually.
 You can install Ceph by executing the following:
 
 .. prompt:: bash $
 
    sudo yum -y install ceph
 
-Also you can download packages manually from https://repo.openeuler.org/openEuler-{release}/everything/{arch}/Packages/.
+Also you can download packages manually from ``https://repo.openeuler.org/openEuler-{release}/everything/{arch}/Packages/``.
 
 
 Ceph Development Packages
@@ -300,22 +302,22 @@ only.
 
 Add the package repository to your system's list of APT sources, but
 replace ``{BRANCH}`` with the branch you'd like to use (e.g.,
-wip-hack, master).  See `the shaman page`_ for a complete
+``wip-hack``, ``main``).  See `the shaman page`_ for a complete
 list of distributions we build.
 
 .. prompt:: bash $
 
    curl -L https://shaman.ceph.com/api/repos/ceph/{BRANCH}/latest/ubuntu/$(lsb_release -sc)/repo/ | sudo tee /etc/apt/sources.list.d/shaman.list
 
-.. note:: If the repository is not ready an HTTP 504 will be returned
+.. note:: If the repository is not ready, an HTTP 504 will be returned.
 
-The use of ``latest`` in the url, means it will figure out which is the last
-commit that has been built. Alternatively, a specific sha1 can be specified.
-For Ubuntu Xenial and the master branch of Ceph, it would look like
+The use of ``latest`` in the URL means it will figure out which is the last
+commit that has been built. Alternatively, a specific SHA1 can be specified.
+For Ubuntu Jammy and the ``main`` branch of Ceph, it would look like
 
 .. prompt:: bash $
 
-   curl -L https://shaman.ceph.com/api/repos/ceph/master/53e772a45fdf2d211c0c383106a66e1feedec8fd/ubuntu/xenial/repo/ | sudo tee /etc/apt/sources.list.d/shaman.list
+   curl -L https://shaman.ceph.com/api/repos/ceph/main/53e772a45fdf2d211c0c383106a66e1feedec8fd/ubuntu/jammy/repo/ | sudo tee /etc/apt/sources.list.d/shaman.list
 
 
 .. warning:: Development repositories are no longer available after two weeks.
@@ -329,20 +331,20 @@ of a repo file. It can be retrieved via an HTTP request, for example
 
 .. prompt:: bash $
 
-   curl -L https://shaman.ceph.com/api/repos/ceph/{BRANCH}/latest/centos/8/repo/ | sudo tee /etc/yum.repos.d/shaman.repo
+   curl -L https://shaman.ceph.com/api/repos/ceph/{BRANCH}/latest/rocky/10/repo/ | sudo tee /etc/yum.repos.d/shaman.repo
 
-The use of ``latest`` in the url, means it will figure out which is the last
-commit that has been built. Alternatively, a specific sha1 can be specified.
-For CentOS 8 and the master branch of Ceph, it would look like
+The use of ``latest`` in the URL means it will figure out which is the last
+commit that has been built. Alternatively, a specific SHA1 can be specified.
+For EL 10 and the ``main`` branch of Ceph, it would look like
 
 .. prompt:: bash $
 
-   curl -L https://shaman.ceph.com/api/repos/ceph/master/488e6be0edff7eb18343fd5c7e2d7ed56435888f/centos/8/repo/ | sudo tee /etc/apt/sources.list.d/shaman.list
+   curl -L https://shaman.ceph.com/api/repos/ceph/main/488e6be0edff7eb18343fd5c7e2d7ed56435888f/rocky/10/repo/ | sudo tee /etc/yum.repos.d/shaman.repo
 
 
 .. warning:: Development repositories are no longer available after two weeks.
 
-.. note:: If the repository is not ready an HTTP 504 will be returned
+.. note:: If the repository is not ready, an HTTP 504 will be returned.
 
 Download Packages Manually
 --------------------------
@@ -369,27 +371,30 @@ RPM Packages
 ~~~~~~~~~~~~
 
 Ceph requires additional third party libraries.
-To add the EPEL repository, execute the following
+To add the EPEL repository, execute a command of the following form. Replace
+``{distro_release}`` with the major version of your distribution, for example
+``10`` for EL 10.
 
 .. prompt:: bash $
 
-   sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
+   sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-{distro_release}.noarch.rpm
 
-Packages are currently built for the RHEL/CentOS8 (``el8``) platforms.  The
+Packages are built for various RHEL and derivative platforms.
+See :ref:`start-platforms` for more details.  The
 repository package installs the repository details on your local system for use
 with ``yum``. Replace ``{distro}`` with your distribution.
 
 .. prompt:: bash $
    :substitutions:
 
-   su -c 'rpm -Uvh https://download.ceph.com/rpm-|stable-release|/{distro}/noarch/ceph-{version}.{distro}.noarch.rpm'
+   su -c 'rpm -Uvh https://download.ceph.com/rpm-|stable-release|/{distro}/noarch/ceph-release-{version}.{distro}.noarch.rpm'
 
-For example, for CentOS 8  (``el8``)
+For example, for EL 10 (``el10``)
 
 .. prompt:: bash $
    :substitutions:
 
-   su -c 'rpm -Uvh https://download.ceph.com/rpm-|stable-release|/el8/noarch/ceph-release-1-0.el8.noarch.rpm'
+   su -c 'rpm -Uvh https://download.ceph.com/rpm-|stable-release|/el10/noarch/ceph-release-1-0.el10.noarch.rpm'
 
 You can download the RPMs directly from
 
@@ -400,12 +405,11 @@ You can download the RPMs directly from
 
 
 For earlier Ceph releases, replace ``{release-name}`` with the name
-with the name of the Ceph release. You may call ``lsb_release -sc`` on the command
-line to get the short codename.
+of the Ceph release and ``{distro}`` with your distribution.
 
 .. prompt:: bash $
 
-   su -c 'rpm -Uvh https://download.ceph.com/rpm-{release-name}/{distro}/noarch/ceph-{version}.{distro}.noarch.rpm'
+   su -c 'rpm -Uvh https://download.ceph.com/rpm-{release-name}/{distro}/noarch/ceph-release-{version}.{distro}.noarch.rpm'
 
 
 
