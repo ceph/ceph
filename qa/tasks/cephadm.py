@@ -740,6 +740,7 @@ def ceph_bootstrap(ctx, config):
         ctx.cluster.run(args=[
             'sudo', 'rm', '-f',
             '/etc/ceph/{}.conf'.format(cluster_name),
+            '/etc/ceph/{}.keyring'.format(cluster_name),
             '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
         ])
 
@@ -1504,14 +1505,17 @@ def distribute_config_and_admin_keyring(ctx, config):
             path='/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
             data=ctx.ceph[cluster_name].admin_keyring,
             sudo=True)
+        keyring = f"/etc/ceph/{cluster_name}.keyring"
+        remote.write_file(
+            path=keyring,
+            data=ctx.ceph[cluster_name].admin_keyring,
+            sudo=True)
+        ctx.ceph[cluster_name].keyring = keyring
     try:
         yield
     finally:
-        ctx.cluster.run(args=[
-            'sudo', 'rm', '-f',
-            '/etc/ceph/{}.conf'.format(cluster_name),
-            '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
-        ])
+        # ceph_bootstrap cleans up keys/confs
+        pass
 
 
 @contextlib.contextmanager
