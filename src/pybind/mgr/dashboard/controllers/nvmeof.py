@@ -1044,6 +1044,7 @@ else:
 
     @APIRouter("/nvmeof/subsystem/{nqn}/namespace", Scope.NVME_OF)
     @APIDoc("NVMe-oF Subsystem Namespace Management API", "NVMe-oF Subsystem Namespace")
+    # pylint: disable=too-many-public-methods
     class NVMeoFNamespace(RESTController):
         @pick("namespaces")
         @NvmeofCLICommand(
@@ -2056,6 +2057,51 @@ else:
                     subsystem_nqn=nqn,
                     nsid=int(nsid),
                     new_size=0
+                )
+            )
+
+        @ReadPermission
+        @Endpoint('PUT', '{nsid}/unpin')
+        @NvmeofCLICommand(
+            "nvmeof namespace unpin",
+            model=model.RequestStatus,
+            alias="nvmeof ns unpin",
+            success_message_template=(
+                'Unpinning load balancing group for namespace {nsid} '
+                'in {nqn}: Successful'
+            ),
+        )
+        @EndpointDoc(
+            "Unpin namespace load balancing group",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "nsid": Param(str, "NVMeoF Namespace ID"),
+                "gw_group": Param(str, "NVMeoF gateway group", True, None),
+                "server_address": Param(str, "NVMeoF gateway address", True, None),
+                "traddr": Param(str, "NVMeoF gateway address (deprecated)", True, None),
+            },
+        )
+        @convert_to_model(model.RequestStatus)
+        @handle_nvmeof_error
+        def unpin_ns(
+            self,
+            nqn: str,
+            nsid: str,
+            gw_group: Optional[str] = None,
+            server_address: Optional[str] = None,
+            traddr: Optional[str] = None
+        ):
+            server_address = resolve_nvmeof_server_address(
+                server_address=server_address,
+                traddr=traddr
+            )
+            return NVMeoFClient(
+                gw_group=gw_group,
+                server_address=server_address
+            ).stub.namespace_unpin(
+                NVMeoFClient.pb2.namespace_unpin_req(
+                    subsystem_nqn=nqn,
+                    nsid=int(nsid),
                 )
             )
 
