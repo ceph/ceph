@@ -6183,6 +6183,19 @@ PeeringState::NotBackfilling::NotBackfilling(my_context ctx)
   pl->publish_stats_to_osd();
 }
 
+boost::statechart::result
+PeeringState::NotBackfilling::react(const RequestBackfill &evt)
+{
+  DECLARE_LOCALS;
+
+  if (ps->pool.info.has_flag(pg_pool_t::FLAG_NOBACKFILL)) {
+    psdout(10) << "Ignoring RequestBackfill as the pool is flaged with FLAG_NOBACKFILL" << dendl;
+    return discard_event();
+  }
+  ps->state_clear(PG_STATE_BACKFILL_PAUSED);
+  return transit<WaitLocalBackfillReserved>();
+}
+
 boost::statechart::result PeeringState::NotBackfilling::react(const QueryUnfound& q)
 {
   DECLARE_LOCALS;
@@ -6532,6 +6545,18 @@ PeeringState::Activating::Activating(my_context ctx)
   context< PeeringMachine >().log_enter(state_name);
 }
 
+boost::statechart::result
+PeeringState::Activating::react(const RequestBackfill &evt)
+{
+  DECLARE_LOCALS;
+
+  if (ps->pool.info.has_flag(pg_pool_t::FLAG_NOBACKFILL)) {
+    ps->state_set(PG_STATE_BACKFILL_PAUSED);
+    return transit<NotBackfilling>();
+  }
+  return transit<WaitLocalBackfillReserved>();
+}
+
 void PeeringState::Activating::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
@@ -6719,6 +6744,11 @@ PeeringState::Recovering::react(const RequestBackfill &evt)
     pg_shard_t get_log_shard;
     // FIXME: Uh-oh we have to check this return value; choose_acting can fail!
     ps->choose_acting(get_log_shard, true);
+  }
+
+  if (ps->pool.info.has_flag(pg_pool_t::FLAG_NOBACKFILL)) {
+    ps->state_set(PG_STATE_BACKFILL_PAUSED);
+    return transit<NotBackfilling>();
   }
   return transit<WaitLocalBackfillReserved>();
 }
