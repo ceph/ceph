@@ -398,8 +398,12 @@ unsigned OSDMap::stretch_ec_num_acting_below_min_size(const pg_pool_t& pool,
   crush->get_subtree_of_type(pool.peering_crush_bucket_barrier, &zones);
   int deficit = 0;
   for (int zone : zones) {
+    if (pool.peering_crush_mandatory_member != CRUSH_ITEM_NONE &&
+        zone != (int)pool.peering_crush_mandatory_member) {
+      continue;
+    }
     vector<int> zone_osds;
-    crush->get_children_of_type(zone, 0 , &zone_osds);
+    crush->get_children_of_type(zone, 0, &zone_osds);
     set<int> zone_osd_set(zone_osds.begin(), zone_osds.end());
 
     unsigned zone_acting = 0;
