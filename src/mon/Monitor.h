@@ -1160,6 +1160,7 @@ private:
 // Release-independent features
 #define CEPH_MON_FEATURE_INCOMPAT_CEPHX_AUTH_AES256K CompatSet::Feature(31, "cephx auth aes256k")
 #define CEPH_MON_FEATURE_INCOMPAT_NVMEOF_BEACON_DIFF CompatSet::Feature(32, "nvmeof beacon diff")
+#define CEPH_MON_FEATURE_INCOMPAT_CONFIG_HISTORY_TRIM CompatSet::Feature(33, "config history trim")
 // make sure you add your feature to Monitor::get_supported_features
 
 
