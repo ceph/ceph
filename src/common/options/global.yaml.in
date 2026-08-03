@@ -4407,6 +4407,7 @@ options:
     sleep state for this duration. Once the idle period expires, it wakes up, scans
     for spillover files, and resumes migration if needed.
   default: 1200
+  min: 0
   see_also:
   - bluefs_spillover_cleaner
   flags:
@@ -4424,6 +4425,8 @@ options:
   default: 0.1
   flags:
   - runtime
+  min: 0.01
+  max: 1.0
   with_legacy: true
 - name: bluefs_debug_force_slow
   type: bool

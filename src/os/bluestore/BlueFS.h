@@ -1074,6 +1074,8 @@ private:
 
   struct RebalanceToDB : public SpilloverCleanerLogic {
     std::vector<std::pair<std::string, FileRef>> pending;
+    std::vector<std::pair<std::string, int>> skipped;
+    utime_t last_scan_time;
     std::deque<std::string> history;
     static constexpr size_t max_history = 100;
     size_t idx = 0;
