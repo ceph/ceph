@@ -44,6 +44,7 @@
 
 #include "rgw_zone.h"
 
+#include "rgw_asio_frontend_connection.h"
 #include "rgw_asio_frontend_timer.h"
 #include "rgw_dmclock_async_scheduler.h"
 
@@ -57,13 +58,11 @@ namespace http = boost::beast::http;
 namespace ssl = boost::asio::ssl;
 #endif
 
-struct Connection;
-
 using timeout_timer = rgw::basic_timeout_timer<ceph::coarse_mono_clock,
-      boost::asio::any_io_executor, Connection>;
+      boost::asio::any_io_executor, rgw::asio::Connection>;
 
-static constexpr size_t parse_buffer_size = 65536;
-using parse_buffer = boost::beast::flat_static_buffer<parse_buffer_size>;
+static constexpr size_t parse_buffer_size = rgw::asio::parse_buffer_size;
+using parse_buffer = rgw::asio::parse_buffer;
 
 // use mmap/mprotect to allocate 512k coroutine stacks
 auto make_stack_allocator() {
@@ -407,56 +406,8 @@ void handle_connection(boost::asio::io_context& context,
   }
 }
 
-// timeout support requires that connections are reference-counted, because the
-// timeout_handler can outlive the coroutine
-struct Connection : boost::intrusive::list_base_hook<>,
-                    boost::intrusive_ref_counter<Connection>
-{
-  tcp::socket socket;
-  parse_buffer buffer;
-
-  explicit Connection(tcp::socket&& socket) noexcept
-      : socket(std::move(socket)) {}
-
-  void close(boost::system::error_code& ec) {
-    socket.close(ec);
-  }
-
-  tcp::socket& get_socket() { return socket; }
-};
-
-class ConnectionList {
-  using List = boost::intrusive::list<Connection>;
-  List connections;
-  std::mutex mutex;
-
-  void remove(Connection& c) {
-    std::lock_guard lock{mutex};
-    if (c.is_linked()) {
-      connections.erase(List::s_iterator_to(c));
-    }
-  }
- public:
-  class Guard {
-    ConnectionList *list;
-    Connection *conn;
-   public:
-    Guard(ConnectionList *list, Connection *conn) : list(list), conn(conn) {}
-    ~Guard() { list->remove(*conn); }
-  };
-  [[nodiscard]] Guard add(Connection& conn) {
-    std::lock_guard lock{mutex};
-    connections.push_back(conn);
-    return Guard{this, &conn};
-  }
-  void close(boost::system::error_code& ec) {
-    std::lock_guard lock{mutex};
-    for (auto& conn : connections) {
-      conn.socket.close(ec);
-    }
-    connections.clear();
-  }
-};
+using rgw::asio::Connection;
+using rgw::asio::ConnectionList;
 
 namespace dmc = rgw::dmclock;
 class AsioFrontend {
@@ -1223,7 +1174,7 @@ void AsioFrontend::on_accept(Listener& l, tcp::socket stream)
 #endif
     boost::asio::spawn(make_strand(context), std::allocator_arg, make_stack_allocator(),
       [this, s=std::move(stream), ssl_ctx] (boost::asio::yield_context yield) mutable {
-        auto conn = boost::intrusive_ptr{new Connection(std::move(s))};
+        auto conn = boost::intrusive_ptr{new Connection(std::move(s), yield.get_executor())};
         auto c = connections.add(*conn);
         // wrap the tcp stream in an ssl stream
         boost::asio::ssl::stream<tcp::socket&> stream{conn->socket, *ssl_ctx};
@@ -1258,7 +1209,7 @@ void AsioFrontend::on_accept(Listener& l, tcp::socket stream)
 #endif // WITH_RADOSGW_BEAST_OPENSSL
     boost::asio::spawn(make_strand(context), std::allocator_arg, make_stack_allocator(),
       [this, s=std::move(stream)] (boost::asio::yield_context yield) mutable {
-        auto conn = boost::intrusive_ptr{new Connection(std::move(s))};
+        auto conn = boost::intrusive_ptr{new Connection(std::move(s), yield.get_executor())};
         auto c = connections.add(*conn);
         auto timeout = timeout_timer{yield.get_executor(), request_timeout, conn};
         boost::system::error_code ec;
@@ -1303,7 +1254,7 @@ void AsioFrontend::stop()
   }
 
   // close all connections
-  connections.close(ec);
+  connections.close();
   pause_mutex.cancel();
 }
 
@@ -1329,7 +1280,7 @@ void AsioFrontend::pause()
   const bool graceful_stop{ g_ceph_context->_conf->rgw_graceful_stop };
   if (!graceful_stop) {
     // close all connections so outstanding requests fail quickly
-    connections.close(ec);
+    connections.close();
   }
 
   // pause and wait until outstanding requests complete
