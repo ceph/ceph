@@ -569,6 +569,12 @@ The output reports the status of synchronization operations. For example:
                           incremental sync: 128/128 shards
                           data is caught up with source
 
+For scripting and monitoring, the same summary is available as structured
+JSON (typed shard counts, behind-shard lists, oldest incremental change,
+recovering shards) without dumping per-shard markers::
+
+   radosgw-admin sync status --format=json
+
 .. note:: Secondary zones accept bucket operations; however, secondary zones
    redirect bucket operations to the master zone and then synchronize with the
    master zone to receive the result of the bucket operations. If the master
