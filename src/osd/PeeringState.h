@@ -1021,7 +1021,7 @@ public:
   struct NotBackfilling : boost::statechart::state< NotBackfilling, Active>, NamedState {
     typedef boost::mpl::list<
       boost::statechart::custom_reaction< QueryUnfound >,
-      boost::statechart::transition< RequestBackfill, WaitLocalBackfillReserved>,
+      boost::statechart::custom_reaction< RequestBackfill >,
       boost::statechart::custom_reaction< RemoteBackfillReserved >,
       boost::statechart::custom_reaction< RemoteReservationRejectedTooFull >,
       boost::statechart::custom_reaction< PauseBackfill >,
@@ -1034,6 +1034,7 @@ public:
     boost::statechart::result react(const RemoteReservationRejectedTooFull& evt);
     boost::statechart::result react(const PauseBackfill &evt);
     boost::statechart::result react(const LocalBackfillReserved &ext);
+    boost::statechart::result react(const RequestBackfill &evt);
   };
 
   struct NotRecovering : boost::statechart::state< NotRecovering, Active>, NamedState {
@@ -1240,9 +1241,10 @@ public:
     typedef boost::mpl::list <
       boost::statechart::transition< AllReplicasRecovered, Recovered >,
       boost::statechart::transition< DoRecovery, WaitLocalRecoveryReserved >,
-      boost::statechart::transition< RequestBackfill, WaitLocalBackfillReserved >
+      boost::statechart::custom_reaction< RequestBackfill >
       > reactions;
     explicit Activating(my_context ctx);
+    boost::statechart::result react(const RequestBackfill &evt);
     void exit();
   };
 
