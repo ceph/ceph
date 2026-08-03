@@ -109,13 +109,44 @@ export interface ListenerItem {
   addr: string;
 }
 
+export type NvmeofInitiatorsResponse =
+  NvmeofSubsystemInitiator[] | { hosts?: NvmeofSubsystemInitiator[] };
+
+export function normalizeInitiators(
+  initiators: NvmeofInitiatorsResponse
+): NvmeofSubsystemInitiator[] {
+  if (initiators && 'hosts' in initiators && Array.isArray(initiators.hosts)) {
+    return initiators.hosts;
+  }
+  if (Array.isArray(initiators)) {
+    return initiators;
+  }
+  return [];
+}
+
+/**
+ * When `allow_any_host` is true, the subsystem allows all hosts unless specific
+ * (non-wildcard) initiators are present, indicating the wildcard was removed and
+ * access is now restricted.
+ */
+export function isSubsystemAllowAllHosts(
+  subsystem: Pick<NvmeofSubsystem, 'allow_any_host'> | null | undefined,
+  initiators: NvmeofInitiatorsResponse
+): boolean {
+  if (!subsystem?.allow_any_host) {
+    return false;
+  }
+  const hostsList = normalizeInitiators(initiators);
+  return hostsList.length === 0 || hostsList.some((initiator) => initiator.nqn === ALLOW_ALL_HOST);
+}
+
 /**
  * Determines the authentication status of a subsystem based on PSK and initiators.
  * Can be reused across subsystem pages.
  */
 export function getSubsystemAuthStatus(
   subsystem: NvmeofSubsystem,
-  _initiators: NvmeofSubsystemInitiator[] | { hosts?: NvmeofSubsystemInitiator[] }
+  _initiators: NvmeofInitiatorsResponse
 ): string {
   // Import enum value strings to avoid circular dependency
   const UNIDIRECTIONAL = 'Unidirectional';
@@ -123,13 +154,7 @@ export function getSubsystemAuthStatus(
 
   let auth = NO_AUTH;
 
-  let hostsList: NvmeofSubsystemInitiator[] = [];
-  if (_initiators && 'hosts' in _initiators && Array.isArray(_initiators.hosts)) {
-    hostsList = _initiators.hosts;
-  } else if (Array.isArray(_initiators)) {
-    hostsList = _initiators as NvmeofSubsystemInitiator[];
-  }
-
+  const hostsList = normalizeInitiators(_initiators);
   const hostHasDhchapKey = hostsList.some((host) => !!host.use_dhchap);
 
   if (hostHasDhchapKey) {
