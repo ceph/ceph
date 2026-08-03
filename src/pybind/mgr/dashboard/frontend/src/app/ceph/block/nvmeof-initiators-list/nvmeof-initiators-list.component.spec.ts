@@ -229,4 +229,23 @@ describe('NvmeofInitiatorsListComponent', () => {
 
     expect(component.allowAllHosts).toBe(true);
   }));
+
+  it('should keep Add enabled when allow-all hosts is active', fakeAsync(() => {
+    const allowAllSubsystem = { ...mockSubsystem, allow_any_host: true };
+    spyOn(nvmeofService, 'getInitiators').and.returnValue(
+      of([{ nqn: ALLOW_ALL_HOST, use_dhchap: false }])
+    );
+    spyOn(nvmeofService, 'getSubsystem').and.returnValue(of(allowAllSubsystem));
+
+    component.listInitiators();
+    component.getSubsystem();
+    tick();
+
+    const addAction = component.tableActions.find(
+      (action) => action.name === component.actionLabels.ADD
+    );
+    expect(component.hasAllHostsAllowed()).toBe(true);
+    expect(addAction.disable(component.selection)).toBe(false);
+    expect(addAction.canBePrimary(component.selection)).toBe(true);
+  }));
 });

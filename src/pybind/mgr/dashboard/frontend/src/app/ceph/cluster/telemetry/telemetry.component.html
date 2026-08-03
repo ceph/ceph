@@ -19,27 +19,38 @@
             Step {{ step }} of 2: Telemetry report configuration
           </div>
           <div class="card-body">
-            <p i18n>The telemetry module sends anonymous data about this Ceph cluster back to the Ceph developers
-              to help understand how Ceph is used and what problems users may be experiencing.<br/>
-              This data is visualized on <a href="https://telemetry-public.ceph.com/">public dashboards</a>
-              that allow the community to quickly see summary statistics on how many clusters are reporting,
-              their total capacity and OSD count, and version distribution trends.<br/><br/>
-              The data being reported does <b>not</b> contain any sensitive data like pool names, object names, object contents,
-              hostnames, or device serial numbers. It contains counters and statistics on how the cluster has been
-              deployed, the version of Ceph, the distribution of the hosts and other parameters which help the project
-              to gain a better understanding of the way Ceph is used. The data is sent secured to {{ sendToUrl }} and
-              {{ sendToDeviceUrl }} (device report).</p>
-            <div *ngIf="moduleEnabled"
-                 class="module-enabled-info">
+            <p i18n>
+              The telemetry module sends anonymous data about this Ceph cluster back to the Ceph
+              developers to help understand how Ceph is used and what problems users may be
+              experiencing.<br />
+              This data is visualized on
+              <a href="https://telemetry-public.ceph.com/">public dashboards</a> that allow the
+              community to quickly see summary statistics on how many clusters are reporting, their
+              total capacity and OSD count, and version distribution trends.<br /><br />
+              The data being reported does <b>not</b> contain any sensitive data like pool names,
+              object names, object contents, hostnames, or device serial numbers. It contains
+              counters and statistics on how the cluster has been deployed, the version of Ceph, the
+              distribution of the hosts and other parameters which help the project to gain a better
+              understanding of the way Ceph is used. The data is sent secured to {{ sendToUrl }} and
+              {{ sendToDeviceUrl }} (device report).
+            </p>
+            <div
+              *ngIf="moduleEnabled"
+              class="module-enabled-info"
+            >
               <p i18n>
                 The plugin is already <b>enabled</b>. Deactivate it to disable telemetry data
                 submission.
               </p>
-              <button type="button"
-                      cdsButton="secondary"
-                      size="sm"
-                      (click)="disableModule('The Telemetry module has been disabled successfully.')"
-                      i18n>Deactivate</button>
+              <button
+                type="button"
+                cdsButton="secondary"
+                size="sm"
+                (click)="disableModule('The Telemetry module has been disabled successfully.')"
+                i18n
+              >
+                Deactivate
+              </button>
             </div>
             <legend i18n>Channels</legend>
             <p i18n>
@@ -337,9 +348,11 @@
           </div>
           <div class="card-footer">
             <cds-button-set>
-              <button type="button"
-                      cdsButton="primary"
-                      (click)="next()">
+              <button
+                type="button"
+                cdsButton="primary"
+                (click)="next()"
+              >
                 <ng-container>{{ actionLabels.NEXT }}</ng-container>
               </button>
             </cds-button-set>

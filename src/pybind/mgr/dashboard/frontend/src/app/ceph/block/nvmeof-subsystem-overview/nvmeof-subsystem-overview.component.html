@@ -55,9 +55,9 @@
         >Hosts allowed</span
       >
       <div>
-        <span class="cds--type-body-compact-01">{{
-          subsystem.allow_any_host ? 'Any host' : 'Restricted'
-        }}</span>
+        <!-- Host access is a configuration mode (not a health state), so
+             avoid success/error status icons that imply one mode is broken. -->
+        <span class="cds--type-body-compact-01">{{ getHostAccessLabel(allowAllHosts) }}</span>
         <a
           cdsLink
           class="cds-ml-2"
