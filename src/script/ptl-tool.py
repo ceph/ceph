@@ -754,8 +754,8 @@ class CommitParityCheck(BaseAuditCheck):
             for commit, orig_sha in bp_cherry_picks:
                 try:
                     # Find merge commit using intersection of ancestry-path and first-parent
-                    log.debug(f"git rev-list --ancestry-path {orig_sha}..{valid_ref}")
-                    ancestry = G.git.rev_list(f"{orig_sha}..{valid_ref}", '--ancestry-path').splitlines()
+                    log.debug(f"git rev-list --ancestry-path --topo-order {orig_sha}..{valid_ref}")
+                    ancestry = G.git.rev_list(f"{orig_sha}..{valid_ref}", '--ancestry-path', '--topo-order').splitlines()
                     log.debug(f"git rev-list --first-parent {orig_sha}..{valid_ref}")
                     first_parent = G.git.rev_list(f"{orig_sha}..{valid_ref}", '--first-parent').splitlines()
                     
