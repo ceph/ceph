@@ -275,18 +275,24 @@ export class TelemetryComponent extends CdForm implements OnInit {
 
   onSubmit() {
     const updatedConfig = this.getChangedConfig();
-    const observables = [
-      this.telemetryService.enable(),
-      this.mgrModuleService.updateConfig('telemetry', updatedConfig)
-    ];
+    const observables = this.moduleEnabled
+      ? [this.mgrModuleService.updateConfig('telemetry', updatedConfig)]
+      : [
+          this.telemetryService.enable(),
+          this.mgrModuleService.updateConfig('telemetry', updatedConfig)
+        ];
 
     observableForkJoin(observables).subscribe(
       () => {
         this.telemetryNotificationService.setVisibility(false);
         this.notificationService.show(
           NotificationType.success,
-          $localize`The Telemetry module has been configured and activated successfully.`
+          this.moduleEnabled
+            ? $localize`Telemetry configuration has been updated successfully.`
+            : $localize`The Telemetry module has been configured and activated successfully.`
         );
+        this.newConfig = {};
+        this.router.navigate(['']);
       },
       () => {
         this.telemetryNotificationService.setVisibility(false);
@@ -297,10 +303,6 @@ export class TelemetryComponent extends CdForm implements OnInit {
         );
         // Reset the 'Update' button.
         this.previewForm.setErrors({ cdSubmitButton: true });
-      },
-      () => {
-        this.newConfig = {};
-        this.router.navigate(['']);
       }
     );
   }
