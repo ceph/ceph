@@ -1487,6 +1487,7 @@ public:
   }
 
   friend std::ostream &operator<<(std::ostream &, const laddr_t &);
+  friend struct fmt::formatter<laddr_t>;
   friend bool operator==(const laddr_t&, const laddr_t&) = default;
   friend bool operator==(const laddr_t &laddr,
 			 const laddr_offset_t &laddr_offset) {
@@ -3622,7 +3623,6 @@ template <> struct fmt::formatter<crimson::os::seastore::extent_types_t> : fmt::
 template <> struct fmt::formatter<crimson::os::seastore::journal_seq_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::backend_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::journal_tail_delta_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<crimson::os::seastore::laddr_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::laddr_hint_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::laddr_offset_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::laddr_list_t> : fmt::ostream_formatter {};
@@ -3651,6 +3651,42 @@ template <> struct fmt::formatter<crimson::os::seastore::write_result_t> : fmt::
 template <> struct fmt::formatter<crimson::os::seastore::omap_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<ceph::buffer::list> : fmt::ostream_formatter {};
 #endif
+
+namespace fmt {
+template <>
+struct formatter<crimson::os::seastore::laddr_t> {
+  constexpr auto
+  parse(format_parse_context& ctx)
+  {
+    return ctx.begin();
+  }
+
+  template <typename FormatContext>
+  auto
+  format(const crimson::os::seastore::laddr_t& laddr, FormatContext& ctx) const
+  {
+    if (laddr == crimson::os::seastore::L_ADDR_NULL) {
+      return fmt::format_to(ctx.out(), "L_ADDR_NULL");
+    }
+
+    fmt::format_to(ctx.out(), "L0x{:x}", laddr.value);
+    if (!laddr.is_global_address()) {
+      fmt::format_to(
+          ctx.out(), "({:x},{:x},{:x}", static_cast<int>(laddr.get_shard()),
+          laddr.get_pool(), laddr.get_reversed_hash());
+      if (laddr.is_object_address()) {
+        fmt::format_to(
+            ctx.out(), ",{:x},{:x},{:x},{:x}", laddr.get_local_object_id(),
+            laddr.get_local_clone_id(), static_cast<int>(laddr.is_metadata()),
+            laddr.get_offset_bytes());
+      }
+      fmt::format_to(ctx.out(), ")");
+    }
+    return ctx.out();
+  }
+};
+
+} // namespace fmt
 
 template <>
 struct std::hash<crimson::os::seastore::laddr_t> {
