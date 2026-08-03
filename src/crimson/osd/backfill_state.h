@@ -446,6 +446,8 @@ class BackfillState::ProgressTracker {
 
   BackfillMachine& backfill_machine;
   std::map<hobject_t, registry_item_t> registry;
+  // count of registry entries at enqueued_push stage, awaiting ObjectPushed.
+  size_t num_pending_pushes = 0;
 
   BackfillState& backfill_state() {
     return backfill_machine.backfill_state;
@@ -467,9 +469,17 @@ public:
 
   bool tracked_objects_completed() const;
 
+  // true when no push operations are awaiting ObjectPushed completion.
+  bool tracked_pushes_completed() const {
+    return num_pending_pushes == 0;
+  }
+
   bool enqueue_push(const hobject_t&);
   void enqueue_drop(const hobject_t&);
   void complete_to(const hobject_t&, const pg_stat_t&, bool may_push_to_max);
+
+  // drain all remaining drop entries from the registry, updating stats.
+  void complete_drops();
 };
 
 } // namespace crimson::osd
