@@ -937,14 +937,15 @@ ReplicatedRecoveryBackend::_handle_pull_response(
 		     push_op.data_included, push_op.data);
   bool complete = pull_info.is_complete();
   bool clear_omap = !push_op.before_progress.omap_complete;
+  const auto bytes_recovered = data.length();
+  const auto keys_recovered = push_op.omap_entries.size();
   co_await submit_push_data(pull_info.recovery_info,
 			    first, complete, clear_omap,
                             std::move(data_zeros), std::move(usable_intervals),
                             std::move(data), std::move(push_op.omap_header),
                             push_op.attrset, std::move(push_op.omap_entries), &t);
 
-  const auto bytes_recovered = data.length();
-  pull_info.stat.num_keys_recovered += push_op.omap_entries.size();
+  pull_info.stat.num_keys_recovered += keys_recovered;
   pull_info.stat.num_bytes_recovered += bytes_recovered;
 
   if (complete) {
