@@ -132,6 +132,33 @@ RBD_MIRROR_METADATA = ('ceph_daemon', 'id', 'instance_id', 'hostname',
 
 RBD_IMAGE_METADATA = ('pool_id', 'image_name')
 
+RBD_POOL_STAT_METRICS = {
+    'rbd_image_count': (
+        'image_count',
+        'RBD image count per pool',
+    ),
+    'rbd_image_provisioned_bytes': (
+        'image_provisioned_bytes',
+        'RBD image total HEAD provisioned bytes per pool',
+    ),
+    'rbd_image_snap_count': (
+        'image_snap_count',
+        'RBD image snapshot count per pool',
+    ),
+    'rbd_trash_image_count': (
+        'trash_count',
+        'RBD trash image count per pool',
+    ),
+    'rbd_trash_image_provisioned_bytes': (
+        'trash_provisioned_bytes',
+        'RBD trash image total HEAD provisioned bytes per pool',
+    ),
+    'rbd_trash_image_snap_count': (
+        'trash_snap_count',
+        'RBD trash image snapshot count per pool',
+    ),
+}
+
 DISK_OCCUPATION = ('ceph_daemon', 'device', 'db_device',
                    'wal_device', 'instance', 'devices', 'device_ids')
 
@@ -911,6 +938,14 @@ class Module(MgrModule, OrchestratorClientMixin):
             RBD_IMAGE_METADATA
         )
 
+        for metric_name, (_, metric_desc) in RBD_POOL_STAT_METRICS.items():
+            metrics[metric_name] = Metric(
+                'gauge',
+                metric_name,
+                metric_desc,
+                ('pool_id',)
+            )
+
         metrics['pg_total'] = Metric(
             'gauge',
             'pg_total',
@@ -1626,6 +1661,11 @@ class Module(MgrModule, OrchestratorClientMixin):
                 pool_name = pool['pool_name']
                 if 'rbd' in pool.get('application_metadata', {}):
                     with self.rados.open_ioctx(pool_name) as ioctx:
+                        pool_stats = rbd.pool_stats_get(ioctx)
+                        for metric_name, (stat_name, _) in RBD_POOL_STAT_METRICS.items():
+                            self.metrics[metric_name].set(
+                                pool_stats[stat_name], (str(pool_id),)
+                            )
                         for image_meta in rbd.list2(ioctx):
                             image_name = image_meta['name']
                             self.metrics['rbd_image_metadata'].set(
