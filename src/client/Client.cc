@@ -751,7 +751,8 @@ void Client::_finish_init()
     plb.add_u64_counter(l_c_caps_grant, "caps_grant", "Capability grants");
     plb.add_u64_counter(l_c_caps_revoke, "caps_revoke", "Capability revokes");
     plb.add_u64_counter(l_c_caps_release, "caps_release", "Capability releases");
-    plb.add_u64_counter(l_c_fscrypt_wr_amp, "fscrypt_wr_amp", "Extra bytes written due to padding and RMW");
+    plb.add_u64_avg(l_c_fscrypt_wr_amp, "fscrypt_wr_amp",
+		    "Average fscrypt write amplification ratio (x100)");
     plb.add_u64_counter(l_c_fscrypt_rd_amp, "fscrypt_rd_amp", "Extra bytes read due to block alignment");
     plb.add_time_avg(l_c_fscrypt_enc_lat, "fscrypt_enc_lat", "Encryption time");
     plb.add_time_avg(l_c_fscrypt_dec_lat, "fscrypt_dec_lat", "Decryption time");
@@ -12709,6 +12710,14 @@ int Client::WriteEncMgr::read_modify_write(Context *_iofinish)
   end_block_ofs = fscrypt_block_start(endoff - 1);
   ofs_in_end_block = fscrypt_ofs_in_block(endoff - 1);
 
+  // Write amplification is the ratio of aligned physical span to logical
+  // write size (e.g. write(4000, 8192) spans 0..12288 -> amp 1.5).
+  if (size > 0) {
+    uint64_t aligned_end = fscrypt_next_block_start(offset + size);
+    uint64_t amp_x100 = ((aligned_end - start_block_ofs) * 100) / size;
+    clnt->logger->inc(l_c_fscrypt_wr_amp, amp_x100);
+  }
+
   need_read_start = ofs_in_start_block > 0 || (ofs_in_start_block == 0 && ((endoff - offset) < FSCRYPT_BLOCK_SIZE));
   need_read_end = (endoff <= in->effective_size() && ofs_in_end_block < FSCRYPT_BLOCK_SIZE && start_block != end_block);
   read_start_size = FSCRYPT_BLOCK_SIZE;
@@ -12717,7 +12726,6 @@ int Client::WriteEncMgr::read_modify_write(Context *_iofinish)
 
 
   if (need_read_start) {
-    clnt->logger->inc(l_c_fscrypt_wr_amp, read_start_size);
     finish_read_start_ctx.reset(new iofinish_method_ctx<WriteEncMgr>(*this, &WriteEncMgr::finish_read_start_cb, &aioc));
 
     r = read(start_block_ofs, read_start_size, &startbl, finish_read_start_ctx.get());
@@ -12730,7 +12738,6 @@ int Client::WriteEncMgr::read_modify_write(Context *_iofinish)
   }
 
   if (need_read_end) {
-    clnt->logger->inc(l_c_fscrypt_wr_amp, FSCRYPT_BLOCK_SIZE);
     finish_read_end_ctx.reset(new iofinish_method_ctx<WriteEncMgr>(*this, &WriteEncMgr::finish_read_end_cb, &aioc));
 
     r = read(end_block_ofs, FSCRYPT_BLOCK_SIZE, &endbl, finish_read_end_ctx.get());
@@ -12856,9 +12863,6 @@ bool Client::WriteEncMgr::do_try_finish(int r)
     }
 
     size = encbl.length();
-    if (size > bl.length()) {
-      clnt->logger->inc(l_c_fscrypt_wr_amp, size - bl.length());
-    }
   }
 
   clnt->put_cap_ref(in, CEPH_CAP_FILE_RD);
