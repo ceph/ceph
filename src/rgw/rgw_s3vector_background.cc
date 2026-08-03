@@ -248,6 +248,10 @@ private:
       return result;
     }
 
+    ldpp_dout(this, 5) << "WARNING: lancedb_table_index_stats failed for '"
+        << vector_index_name << "': "
+        << (error_message ? error_message : "unknown") << dendl;
+
     if (error_message) {
       lancedb_free_string(error_message);
     }
@@ -321,19 +325,24 @@ private:
   // load the vector bucket as a regular Bucket for lock object operations.
   // vector buckets have default-placement set at creation, so PUT/GET/DELETE
   // by exact key works (indexless only skips bucket index updates).
+  // Load the regular S3 backing bucket (not the vector bucket) for lock operations.
+  // The vector bucket is created with BucketIndexType::Indexless and has no bucket
+  // index shards, so direct SAL writes (get_atomic_writer) fail with -ENOENT on
+  // get_bucket_shard(). The regular S3 bucket (same name) has normal index shards
+  // and is the same bucket that LanceDB uses for data storage via rgw_sal_wrapper.
+  // TODO: the backing S3 bucket is currently created externally (e.g. by tests);
+  // CreateVectorBucket should create it automatically for the RGW backend.
   int load_bucket_for_lock(const std::string& vector_bucket_name,
                            std::unique_ptr<rgw::sal::Bucket>& bucket,
                            optional_yield y) {
     rgw_bucket bucket_id;
     bucket_id.name = vector_bucket_name;
-    std::unique_ptr<rgw::sal::VectorBucket> vbucket;
-    int ret = driver->load_vector_bucket(this, bucket_id, &vbucket, y);
+    int ret = driver->load_bucket(this, bucket_id, &bucket, y);
     if (ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to load vector bucket for lock: "
+      ldpp_dout(this, 1) << "ERROR: failed to load bucket for lock: "
           << vector_bucket_name << " ret=" << ret << dendl;
       return ret;
     }
-    bucket = driver->get_bucket(vbucket->get_info());
     return 0;
   }
 
@@ -686,11 +695,15 @@ private:
         table, columns, 1, index_type, &vec_config, &error_message);
 
     if (result != LANCEDB_SUCCESS) {
+      const bool permanent = (result == LANCEDB_LANCE ||
+                              result == LANCEDB_INVALID_INPUT ||
+                              result == LANCEDB_NOT_SUPPORTED);
       ldpp_dout(this, 0) << "ERROR: lancedb_table_create_vector_index failed"
-          << " (error_code=" << result << "): "
+          << " (error_code=" << result
+          << ", " << (permanent ? "permanent" : "transient") << "): "
           << (error_message ? error_message : "unknown") << dendl;
       lancedb_free_string(error_message);
-      return -EIO;
+      return permanent ? -ENOTSUP : -EIO;
     }
     return 0;
   }
@@ -698,6 +711,11 @@ private:
   // ============================================================================
   // Core table processing: stats check → lock → build → cleanup
   // ============================================================================
+
+  static constexpr int RESULT_SUCCESS = 0;
+  static constexpr int RESULT_SKIPPED = 1;
+  static constexpr int RESULT_ALREADY_BUILDING = 2;
+  static constexpr int RESULT_REBUILD_DISABLED = 3;
 
   void restore_counters(const table_name_t& table_name,
                         uint64_t inserts, uint64_t deletes) {
@@ -728,7 +746,7 @@ private:
             << " (local_inserts=" << local_inserts
             << ", local_deletes=" << local_deletes << ")" << dendl;
         restore_counters(table_name, local_inserts, local_deletes);
-        return 1;
+        return RESULT_ALREADY_BUILDING;
       }
     }
 
@@ -738,7 +756,7 @@ private:
     if (insert_ratio_threshold <= 0.0 && delete_ratio_threshold <= 0.0) {
       ldpp_dout(this, 20) << "INFO: automatic index rebuild disabled for "
           << bucket_name << "." << index_name << dendl;
-      return 1;
+      return RESULT_REBUILD_DISABLED;
     }
 
     // step 3: open table
@@ -781,8 +799,18 @@ private:
         << " local_inserts=" << local_inserts
         << " local_deletes=" << local_deletes << dendl;
 
+    // step 4b: minimum row count check
+    const uint64_t min_rows = cct->_conf.get_val<uint64_t>("rgw_s3vector_index_min_rows");
+    const uint64_t total_rows_int = vector_index_status.num_indexed_rows + vector_index_status.num_unindexed_rows;
+    if (total_rows_int < min_rows) {
+      ldpp_dout(this, 5) << "INFO: " << bucket_name << "." << index_name
+          << " has " << total_rows_int << " rows, below minimum " << min_rows
+          << " for index build" << dendl;
+      return RESULT_SKIPPED;
+    }
+
     // step 5: insert ratio pre-check (stats are global ground truth, no lock needed)
-    const double total_rows = static_cast<double>(vector_index_status.num_indexed_rows + vector_index_status.num_unindexed_rows);
+    const double total_rows = static_cast<double>(total_rows_int);
     bool insert_rebuild = false;
     if (total_rows > 0 && insert_ratio_threshold > 0.0) {
       const double insert_ratio = static_cast<double>(vector_index_status.num_unindexed_rows) / total_rows;
@@ -794,7 +822,7 @@ private:
     if (!insert_rebuild && local_deletes == 0) {
       ldpp_dout(this, 1) << "INFO: " << bucket_name << "." << index_name
           << " below insert threshold and no local deletes, skipping" << dendl;
-      return 1;
+      return RESULT_SKIPPED;
     }
 
     // step 6: acquire distributed lock.
@@ -807,7 +835,7 @@ private:
       ldpp_dout(this, 5) << "INFO: lock held by another process for "
           << bucket_name << "." << index_name << ", skipping" << dendl;
       restore_counters(table_name, local_inserts, local_deletes);
-      return 1;
+      return RESULT_SKIPPED;
     }
     const std::string& lock_token = lock_result.token;
 
@@ -932,9 +960,14 @@ private:
         ldpp_dout(this, 1) << "INFO: vector index build complete for "
             << bucket_name << "." << index_name << dendl;
       }
+    } else if (build_ret == -ENOTSUP) {
+      ldpp_dout(this, 1) << "WARNING: vector index build not possible for "
+          << bucket_name << "." << index_name
+          << " (permanent error, not retrying)" << dendl;
     } else {
       ldpp_dout(this, 1) << "ERROR: vector index build FAILED for "
-          << bucket_name << "." << index_name << dendl;
+          << bucket_name << "." << index_name
+          << " (transient error, will retry)" << dendl;
       restore_counters(table_name, local_inserts, local_deletes);
     }
 
@@ -1054,7 +1087,6 @@ private:
       });
 
       // 2. scan tables for pending mutations
-      bool spawned_any = false;
       {
         std::shared_lock sl(tables_mutex);//this lock is held only for the duration of scanning the tables map, not for the entire processing of each table.
         const auto now = ceph::coarse_real_clock::now();
@@ -1088,7 +1120,6 @@ private:
           state.insert_count.fetch_sub(inserts, std::memory_order_relaxed);
           state.delete_count.fetch_sub(deletes, std::memory_order_relaxed);
           active_rebuild_count.fetch_add(1, std::memory_order_relaxed);
-          spawned_any = true;
 
           ldpp_dout(this, 1) << "INFO: spawning rebuild coroutine for "
               << name.first << "." << name.second
@@ -1133,10 +1164,7 @@ private:
       // 3. refresh distributed lock timestamps for active builds
       refresh_active_locks(yield);
 
-      if (!spawned_any) {
-        ldpp_dout(this, 20) << "INFO: no tables to process" << dendl;
-        async_sleep(yield, idle_sleep);
-      }
+      async_sleep(yield, idle_sleep);
     }
     ldpp_dout(this, 5) << "INFO: manager stopped. done processing all table and session operations" << dendl;
   }

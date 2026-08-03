@@ -5029,6 +5029,18 @@ options:
   - ivf_flat
   services:
   - rgw
+- name: rgw_s3vector_index_min_rows
+  type: uint
+  level: advanced
+  desc: Minimum number of rows required before the background manager attempts to build a vector index
+  long_desc: Tables with fewer than this many rows will not have their vector index
+    built, regardless of the insert ratio. This prevents repeated failed build
+    attempts on small tables that do not have enough data to train the index
+    algorithm (e.g. IVF_PQ requires at least 256 rows).
+  default: 256
+  min: 0
+  services:
+  - rgw
 - name: rgw_s3vector_index_insert_rebuild_ratio
   type: float
   level: advanced

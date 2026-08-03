@@ -2057,73 +2057,82 @@ namespace rgw::s3vector {
       bool use_distance,
       bool vector_query,
       bool use_metadata,
+      size_t batch_count = 1,
       const bool* matches = nullptr) {
-    if (auto schema = arrow::ImportSchema(c_schema_ptr); schema.ok()) {
-      if (auto array = arrow::ImportRecordBatch(reinterpret_cast<struct ArrowArray*>(*c_arrays_ptr), *schema); array.ok()) {
-        const auto& record_batch = *array;
-        const auto num_columns = static_cast<unsigned int>(record_batch->num_columns());
-        for (auto row = 0U; row < record_batch->num_rows(); row++) {
-          if (matches && !matches[row]) continue;
-          vector_item_t vector_item;
-          if (use_data) vector_item.data.emplace();
-          for (auto col = 0U; col < num_columns; col++) {
-            auto column = record_batch->column(col);
-            auto field = record_batch->schema()->field(col);
-
-            if (field->name() == key_field_str) {
-              const auto key_array = std::static_pointer_cast<arrow::StringArray>(column);
-              if (!key_array->IsNull(row)) {
-                vector_item.key = key_array->GetString(row);
-              } else {
-                vector_item.key = "";
-              }
-            } else if (field->name() == data_field_str && vector_item.data) {
-              const auto data_array = std::static_pointer_cast<arrow::FixedSizeListArray>(column);
-              if (!data_array->IsNull(row)) {
-                const auto values = std::static_pointer_cast<arrow::FloatArray>(data_array->values());
-                const auto start = data_array->value_offset(row);
-                const auto length = data_array->value_length();
-                for (auto i = 0; i < length; i++) {
-                  vector_item.data->push_back(values->Value(start + i));
-                }
-              } else {
-                ldpp_dout(dpp, 5) << "WARNING: s3vector got no data in record batch for index: " << index_name <<dendl;
-              }
-            } else if (field->name() == distance_field_str) {
-              if (!use_distance) continue;
-              const auto distance_array = std::static_pointer_cast<arrow::FloatArray>(column);
-              if (!distance_array->IsNull(row)) {
-                vector_item.distance = distance_array->Value(row);
-              } else {
-                ldpp_dout(dpp, 5) << "WARNING: s3vector got no distance in record batch for index: " << index_name <<dendl;
-              }
-            } else if (field->name() == metadata_field_str) {
-              if (!use_metadata) continue;
-              const auto metadata_array = std::static_pointer_cast<arrow::StringArray>(column);
-              if (!metadata_array->IsNull(row)) {
-                vector_item.metadata = metadata_array->GetString(row);
-              }
-            } else {
-              ldpp_dout(dpp, 5) << "WARNING: s3vector got unknown field: " << field->name() <<
-                " in record batch for index: " << index_name <<dendl;
-              continue;
-            }
-          }
-          vectors.push_back(vector_item);
-        }
-      } else {
-        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to import record batch from arrow arrays for index: " <<
-          index_name << ". error: " << array.status().ToString() << dendl;
-        lancedb_free_arrow_schema(reinterpret_cast<FFI_ArrowSchema*>(c_schema_ptr));
-        return -EINVAL;
-      }
-    } else {
+    auto schema_result = arrow::ImportSchema(c_schema_ptr);
+    if (!schema_result.ok()) {
       ldpp_dout(dpp, 1) << "ERROR: s3vector failed to import schema from arrow C ABI for index: " <<
-        index_name << ". error: " << schema.status().ToString() << dendl;
+        index_name << ". error: " << schema_result.status().ToString() << dendl;
+      lancedb_free_arrow_arrays(reinterpret_cast<FFI_ArrowArray**>(c_arrays_ptr), batch_count);
       return -EINVAL;
     }
+    auto schema = *schema_result;
 
-    lancedb_free_arrow_arrays(reinterpret_cast<FFI_ArrowArray**>(c_arrays_ptr), 1);
+    size_t match_offset = 0;
+    for (size_t batch_idx = 0; batch_idx < batch_count; batch_idx++) {
+      auto array = arrow::ImportRecordBatch(reinterpret_cast<struct ArrowArray*>(c_arrays_ptr[batch_idx]), schema);
+      if (!array.ok()) {
+        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to import record batch " << batch_idx
+            << " from arrow arrays for index: " << index_name
+            << ". error: " << array.status().ToString() << dendl;
+        lancedb_free_arrow_arrays(reinterpret_cast<FFI_ArrowArray**>(c_arrays_ptr), batch_count);
+        return -EINVAL;
+      }
+      const auto& record_batch = *array;
+      const auto num_columns = static_cast<unsigned int>(record_batch->num_columns());
+      for (auto row = 0U; row < record_batch->num_rows(); row++) {
+        if (matches && !matches[match_offset + row]) continue;
+        vector_item_t vector_item;
+        if (use_data) vector_item.data.emplace();
+        for (auto col = 0U; col < num_columns; col++) {
+          auto column = record_batch->column(col);
+          auto field = record_batch->schema()->field(col);
+
+          if (field->name() == key_field_str) {
+            const auto key_array = std::static_pointer_cast<arrow::StringArray>(column);
+            if (!key_array->IsNull(row)) {
+              vector_item.key = key_array->GetString(row);
+            } else {
+              vector_item.key = "";
+            }
+          } else if (field->name() == data_field_str && vector_item.data) {
+            const auto data_array = std::static_pointer_cast<arrow::FixedSizeListArray>(column);
+            if (!data_array->IsNull(row)) {
+              const auto values = std::static_pointer_cast<arrow::FloatArray>(data_array->values());
+              const auto start = data_array->value_offset(row);
+              const auto length = data_array->value_length();
+              for (auto i = 0; i < length; i++) {
+                vector_item.data->push_back(values->Value(start + i));
+              }
+            } else {
+              ldpp_dout(dpp, 5) << "WARNING: s3vector got no data in record batch for index: " << index_name <<dendl;
+            }
+          } else if (field->name() == distance_field_str) {
+            if (!use_distance) continue;
+            const auto distance_array = std::static_pointer_cast<arrow::FloatArray>(column);
+            if (!distance_array->IsNull(row)) {
+              vector_item.distance = distance_array->Value(row);
+            } else {
+              ldpp_dout(dpp, 5) << "WARNING: s3vector got no distance in record batch for index: " << index_name <<dendl;
+            }
+          } else if (field->name() == metadata_field_str) {
+            if (!use_metadata) continue;
+            const auto metadata_array = std::static_pointer_cast<arrow::StringArray>(column);
+            if (!metadata_array->IsNull(row)) {
+              vector_item.metadata = metadata_array->GetString(row);
+            }
+          } else {
+            ldpp_dout(dpp, 5) << "WARNING: s3vector got unknown field: " << field->name() <<
+              " in record batch for index: " << index_name <<dendl;
+            continue;
+          }
+        }
+        vectors.push_back(vector_item);
+      }
+      match_offset += record_batch->num_rows();
+    }
+
+    lancedb_free_arrow_arrays(reinterpret_cast<FFI_ArrowArray**>(c_arrays_ptr), batch_count);
     lancedb_free_arrow_schema(reinterpret_cast<FFI_ArrowSchema*>(c_schema_ptr));
     return 0;
   }
@@ -2159,7 +2168,7 @@ namespace rgw::s3vector {
       lancedb_free_arrow_schema(reinterpret_cast<FFI_ArrowSchema*>(c_schema_ptr));
       return 0;
     }
-    return populate_vectors_from_arrow(dpp, c_arrays_ptr, c_schema_ptr, vectors, index_name, use_data, use_distance, vector_query, use_metadata);
+    return populate_vectors_from_arrow(dpp, c_arrays_ptr, c_schema_ptr, vectors, index_name, use_data, use_distance, vector_query, use_metadata, count_out);
   }
 
   int get_vectors(const get_vectors_t& configuration, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, get_vectors_reply_t& reply) {
@@ -2677,7 +2686,7 @@ namespace rgw::s3vector {
       } else {
         const bool need_distance = configuration.return_distance || (effective_top_k > configuration.top_k);
         ret = populate_vectors_from_arrow(dpp, c_arrays_ptr, c_schema_ptr, reply.vectors, configuration.index_name,
-            false, need_distance, true, configuration.return_metadata, matches);
+            false, need_distance, true, configuration.return_metadata, count_out, matches);
         if (ret == 0 && reply.vectors.size() > configuration.top_k) {
           // if we received more than k vectors (due to using the factor when post filtering)
           // we return the top k ones based on distance
