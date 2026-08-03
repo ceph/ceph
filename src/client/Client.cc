@@ -12098,6 +12098,8 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
     // Release C_Read_Async_Finisher from managed pointer, we need to complete
     // immediately. The C_Read_Async_Finisher is safely handled and won't be
     // abandoned.
+
+    // Complete the crf immediately with 0 bytes
     io_finish.release()->complete(0);
 
     // Signal async completion
