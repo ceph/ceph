@@ -394,14 +394,7 @@ WriteAndZeroOp::WriteAndZeroOp(uint64_t write_offset, uint64_t write_length,
       write_offset(write_offset),
       write_length(write_length),
       zero_offset(zero_offset),
-      zero_length(zero_length) {
-  // write and zero ranges must not overlap
-  if (write_offset < zero_offset) {
-    ceph_assert(write_offset + write_length <= zero_offset);
-  } else {
-    ceph_assert(zero_offset + zero_length <= write_offset);
-  }
-}
+      zero_length(zero_length) {}
 
 std::unique_ptr<WriteAndZeroOp> WriteAndZeroOp::generate(uint64_t write_offset,
                                                           uint64_t write_length,
