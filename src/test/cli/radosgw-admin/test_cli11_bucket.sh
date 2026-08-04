@@ -353,29 +353,49 @@ check "list: --max-entries= form (dash)"       22 "Could not convert: --max-entr
 check "list: --max_entries= form (underscore)" 22 "Could not convert: --max-entries = banana" \
   bucket list --max_entries=banana
 
-# a value that itself looks like a flag (starts with --, contains '_') must
-# never be touched by the rewrite: only the flag NAME is rewritten, never
-# the value. --bucket has no underscore in its own name, so nothing here
-# is rewritten; the literal value is used as the bucket name.
-check "list: --bucket=--hello_world (glued value untouched)" 2 \
-  "ERROR: could not init bucket: (2) No such file or directory" \
+# The message below shows both halves: the NAME in dash form (rewritten) and the
+# VALUE verbatim (not). The value is itself a real flag spelled with underscores,
+# so it would be rewritten if the rewrite ever reached into values.
+check "list: --max-entries=--bucket_id (dash, flag-shaped value preserved)" 22 \
+  "Could not convert: --max-entries = --bucket_id" \
+  bucket list --max-entries=--bucket_id
+check "list: --max_entries=--bucket_id (underscore, flag-shaped value preserved)" 22 \
+  "Could not convert: --max-entries = --bucket_id" \
+  bucket list --max_entries=--bucket_id
+check "list: --max-entries --bucket_id (dash, space-form value preserved)" 22 \
+  "Could not convert: --max-entries = --bucket_id" \
+  bucket list --max-entries --bucket_id
+check "list: --max_entries --bucket_id (underscore, space-form value preserved)" 22 \
+  "Could not convert: --max-entries = --bucket_id" \
+  bucket list --max_entries --bucket_id
+
+# A flag-shaped token is taken as the flag's VALUE, not parsed as a flag:
+# --bucket reaches bucket init (exit 2) rather than being left without a value
+# (exit 1).
+check_cluster "list: --bucket=--hello_world (flag-shaped value taken)" 2 \
+  "ERROR: could not init bucket: (2) No such file or directory" -- \
   bucket list --bucket=--hello_world
-check "list: --bucket --hello_world (space-form value untouched)" 2 \
-  "ERROR: could not init bucket: (2) No such file or directory" \
+check_cluster "list: --bucket --hello_world (flag-shaped value taken, space form)" 2 \
+  "ERROR: could not init bucket: (2) No such file or directory" -- \
   bucket list --bucket --hello_world
-check "list: -b=--hello_world (short flag, glued value untouched)" 2 \
-  "ERROR: could not init bucket: (2) No such file or directory" \
+check_cluster "list: -b=--hello_world (short flag, glued value taken)" 2 \
+  "ERROR: could not init bucket: (2) No such file or directory" -- \
   bucket list -b=--hello_world
 
-# --bucket-id/--bucket_id: the flag NAME is rewritten (underscore -> dash),
-# but the flag-like glued/space-form VALUE is still passed through as-is.
-check "list: --bucket-id=--hello_world (dash, glued value untouched)" 0 '"demo"' \
+# --bucket-id/--bucket_id: the NAME is rewritten (underscore -> dash) and the
+# flag-shaped token is taken as its VALUE — exit 0, not the exit 1 the flag
+# would give if that token were parsed as a flag, leaving it without a value.
+# Without --bucket the id is ignored, so the listing runs and its content says
+# nothing about the id; only the exit code carries the result.
+check_cluster "list: --bucket-id=--hello_world (dash, flag-shaped value taken)" 0 "" -- \
   bucket list --bucket-id=--hello_world
-check "list: --bucket_id=--hello_world (underscore, glued value untouched)" 0 '"demo"' \
+check_cluster "list: --bucket_id=--hello_world (underscore, flag-shaped value taken)" 0 \
+  "Warning: --bucket_id should be spelled --bucket-id" -- \
   bucket list --bucket_id=--hello_world
-check "list: --bucket-id --hello_world (dash, space-form value untouched)" 0 '"demo"' \
+check_cluster "list: --bucket-id --hello_world (dash, space form, value taken)" 0 "" -- \
   bucket list --bucket-id --hello_world
-check "list: --bucket_id --hello_world (underscore, space-form value untouched)" 0 '"demo"' \
+check_cluster "list: --bucket_id --hello_world (underscore, space form, value taken)" 0 \
+  "Warning: --bucket_id should be spelled --bucket-id" -- \
   bucket list --bucket_id --hello_world
 
 # unknown flag keeps the user's own spelling (not rewritten, not recognized);
@@ -2307,6 +2327,11 @@ check "empty-= on int flag" 22 "Could not convert" bucket list --max-entries=
 check "empty-= on --uid"       1 "no value for uid"       bucket list --uid=
 check "empty-= on -i"          1 "no value for uid"       bucket list -i=
 check "empty-= on --bucket-id" 1 "no value for bucket-id" bucket stats --bucket-id=
+# non-empty short-flag '=': the value is split off the flag, so the message
+# names the user without a leading '=' (uncaught by -b=, which never echoes)
+check_cluster "non-empty -= on -i (value split off the flag)" 254 \
+  "ERROR: could not find user: nosuchuser_cli11" -- \
+  bucket list -i=nosuchuser_cli11
 # mid-line: "" is the value; the next word strays (the collapsed flag must not eat it)
 check "empty-= mid-line strays next word" 1 "unexpected argument: 'foo'" \
   bucket list --bucket= foo
