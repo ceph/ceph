@@ -43,23 +43,52 @@ void ShardedCache::SetStrictCapacityLimit(bool strict_capacity_limit) {
   strict_capacity_limit_ = strict_capacity_limit;
 }
 
+#if CEPH_ROCKSDB_SINCE(8, 7)
+rocksdb::Status ShardedCache::Insert(const rocksdb::Slice& key,
+                            rocksdb::Cache::ObjectPtr value,
+                            const rocksdb::Cache::CacheItemHelper* helper,
+                            size_t charge,
+                            rocksdb::Cache::Handle** handle, Priority priority,
+                            const rocksdb::Slice& /*compressed*/,
+                            rocksdb::CompressionType /*type*/) {
+#else
 rocksdb::Status ShardedCache::Insert(const rocksdb::Slice& key,
                             rocksdb::Cache::ObjectPtr value,
                             const rocksdb::Cache::CacheItemHelper* helper,
                             size_t charge,
                             rocksdb::Cache::Handle** handle, Priority priority) {
+#endif
+  // no compressed secondary cache, so compressed/type are ignored
   uint32_t hash = HashSlice(key);
   return GetShard(Shard(hash))
       ->Insert(key, hash, value, helper, charge, handle, priority);
 }
 
+#if CEPH_ROCKSDB_SINCE(8, 1)
+rocksdb::Cache::Handle* ShardedCache::CreateStandalone(
+    const rocksdb::Slice& key, rocksdb::Cache::ObjectPtr value,
+    const rocksdb::Cache::CacheItemHelper* helper, size_t charge,
+    bool allow_uncharged) {
+  uint32_t hash = HashSlice(key);
+  return GetShard(Shard(hash))
+      ->CreateStandalone(key, hash, value, helper, charge, allow_uncharged);
+}
+#endif
+
+#if CEPH_ROCKSDB_SINCE(8, 1)
+rocksdb::Cache::Handle* ShardedCache::Lookup(const rocksdb::Slice& key,
+                            const rocksdb::Cache::CacheItemHelper* /*helper*/,
+                            rocksdb::Cache::CreateContext* /*create_context*/,
+                            Priority /*priority*/,
+                            rocksdb::Statistics* /*stats*/) {
+#else
 rocksdb::Cache::Handle* ShardedCache::Lookup(const rocksdb::Slice& key,
                             const rocksdb::Cache::CacheItemHelper* /*helper*/,
                             rocksdb::Cache::CreateContext* /*create_context*/,
                             Priority /*priority*/, bool /*wait*/,
                             rocksdb::Statistics* /*stats*/) {
-  // Secondary cache is not supported by BinnedLRUCache, so the helper,
-  // create_context, priority, wait, and stats arguments are ignored here.
+#endif
+  // no secondary cache, so everything but the key is ignored
   uint32_t hash = HashSlice(key);
   return GetShard(Shard(hash))->Lookup(key, hash);
 }
