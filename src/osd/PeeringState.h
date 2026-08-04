@@ -973,13 +973,11 @@ public:
       post_event(RemoteReservationRevokedTooFull());
       return discard_event();
     }
-    void backfill_release_reservations();
     boost::statechart::result react(const Backfilled& evt);
     boost::statechart::result react(const RemoteReservationRevokedTooFull& evt);
     boost::statechart::result react(const RemoteReservationRevoked& evt);
     boost::statechart::result react(const DeferBackfill& evt);
     boost::statechart::result react(const UnfoundBackfill& evt);
-    void suspend_backfill();
     void exit();
   };
 
@@ -1710,6 +1708,8 @@ public:
     return rebuild_had_redundancy_loss;
   }
 
+  void suspend_backfill();
+  void backfill_release_reservations();
 private:
   bool check_prior_readable_down_osds(const OSDMapRef& map);
 
