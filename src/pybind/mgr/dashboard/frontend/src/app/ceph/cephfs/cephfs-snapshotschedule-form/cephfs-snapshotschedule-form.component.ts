@@ -347,11 +347,18 @@ export class CephfsSnapshotscheduleFormComponent
     }
 
     if (this.isSubvolume) {
-      snapScheduleObj['subvol'] = this.subvolume;
-    }
+      // When targetPath is provided (multi-path mirroring), derive subvol/group
+      // from that path so we don't reuse the first path's subvolume context.
+      const subvolumeGroup = targetPath ? path?.split?.('/')?.[2] : this.subvolumeGroup;
+      const subvolume = targetPath ? path?.split?.('/')?.[3] : this.subvolume;
+      const isDefaultSubvolumeGroup = targetPath
+        ? subvolumeGroup === DEFAULT_SUBVOLUME_GROUP
+        : this.isDefaultSubvolumeGroup;
 
-    if (this.isSubvolume && !this.isDefaultSubvolumeGroup) {
-      snapScheduleObj['group'] = this.subvolumeGroup;
+      snapScheduleObj['subvol'] = subvolume;
+      if (!isDefaultSubvolumeGroup) {
+        snapScheduleObj['group'] = subvolumeGroup;
+      }
     }
 
     return snapScheduleObj;
