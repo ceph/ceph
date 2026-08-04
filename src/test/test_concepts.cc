@@ -92,6 +92,10 @@ struct insert_range_only final : vector_backed_range {
   }
 };
 
+struct no_range_insertions final : vector_backed_range {
+  using vector_backed_range::vector_backed_range;
+};
+
 // Only exposes erase(I), to help verify can_remove_front() and pop_front()
 // can work without pop_front() directly being available:
 struct front_erasable final : vector_backed_range {
@@ -532,13 +536,13 @@ TEST_CASE("optional sizing helpers call supported operations only",
   X(insert_after, (ceph::concepts::has_insert_after<int_forward_list, int_forward_list::iterator, int>), \
     (ceph::concepts::has_insert_after<int_vector, int_vector::iterator, int>))  \
   X(append_range, (ceph::concepts::has_append_range<append_range_only, small_array>), \
-    (ceph::concepts::has_append_range<int_vector, small_array>))                \
+    (ceph::concepts::has_append_range<no_range_insertions, small_array>))       \
   X(insert_range_append, (ceph::concepts::has_insert_range_append<insert_range_only, small_array>), \
-    (ceph::concepts::has_insert_range_append<int_vector, small_array>))         \
+    (ceph::concepts::has_insert_range_append<no_range_insertions, small_array>)) \
   X(insert_iterator_range_append, (ceph::concepts::has_insert_iterator_range_append<int_vector, small_array>), \
     (ceph::concepts::has_insert_iterator_range_append<int_forward_list, small_array>)) \
   X(insert_range, (ceph::concepts::has_insert_range<insert_range_only, insert_range_only::iterator, small_array>), \
-    (ceph::concepts::has_insert_range<int_vector, int_vector::iterator, small_array>)) \
+    (ceph::concepts::has_insert_range<no_range_insertions, no_range_insertions::iterator, small_array>)) \
   X(insert_iterator_range, (ceph::concepts::has_insert_iterator_range<int_vector, int_vector::iterator, small_array>), \
     (ceph::concepts::has_insert_iterator_range<int_forward_list, int_forward_list::iterator, small_array>)) \
   X(emplace_front, (ceph::concepts::has_emplace_front<int_deque, int>),         \
