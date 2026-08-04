@@ -1988,6 +1988,86 @@ def manage_qa_tracker(args, R, session, branch, prs, tag, qa_tracker_description
                     else:
                         log.error(f"Failed to post comment: {r.status_code} {r.text}")
 
+
+def merge_pr_or_abort(G, tip, message, pr_number):
+    """
+    Attempt to merge a PR's tip commit with the given message.
+    
+    If the merge fails due to conflicts (git.exc.GitCommandError), this function
+    will automatically run 'git merge --abort' to restore a clean working tree/index,
+    log a clear error identifying the PR that failed, and exit via SystemExit.
+    
+    Args:
+        G: git.Repo object (the repository)
+        tip: commit object to merge
+        message: merge commit message
+        pr_number: PR number (for error reporting)
+    
+    Raises:
+        SystemExit: If the merge fails due to conflicts
+    """
+    try:
+        G.git.merge(tip.hexsha, '--no-ff', m=message)
+    except git.exc.GitCommandError as e:
+        log.error(f"Failed to merge PR #{pr_number}: merge conflict detected")
+        log.debug(f"Git error details: {e}")
+        
+        # Attempt to abort the merge to restore a clean state
+        try:
+            G.git.merge('--abort')
+            log.info("Successfully aborted conflicted merge, repository is clean")
+        except git.exc.GitCommandError as abort_error:
+            # If abort fails, log it but don't mask the original error
+            log.warning(f"Failed to abort merge (repository may be in inconsistent state): {abort_error}")
+        
+        raise SystemExit(f"PR #{pr_number} has merge conflicts with previously merged changes. "
+                        f"Please resolve conflicts manually or rebase the PR.")
+
+
+def ensure_clean_checkout(G):
+    """
+    Check for leftover in-progress operations or uncommitted changes.
+    
+    Verifies the repository is in a clean state before any operations begin.
+    If the repository has an unresolved merge, cherry-pick, or uncommitted
+    changes, this function will raise SystemExit with instructions for the
+    operator to manually clean up.
+    
+    This handles the case where a previous run of the tool was interrupted
+    (e.g., Ctrl-C) or crashed mid-operation, or where the operator has
+    uncommitted changes that could interfere with merging.
+    
+    Args:
+        G: git.Repo object (the repository)
+    
+    Raises:
+        SystemExit: If MERGE_HEAD exists, CHERRY_PICK_HEAD exists, or worktree is dirty
+    """
+    merge_head_path = os.path.join(G.git_dir, 'MERGE_HEAD')
+    cherry_pick_head_path = os.path.join(G.git_dir, 'CHERRY_PICK_HEAD')
+    
+    if os.path.exists(merge_head_path):
+        raise SystemExit(
+            "Repository has an in-progress merge. "
+            "Please manually run 'git merge --abort' or 'git reset --hard' to clean up, "
+            "then re-run this tool."
+        )
+    
+    if os.path.exists(cherry_pick_head_path):
+        raise SystemExit(
+            "Repository has an in-progress cherry-pick. "
+            "Please manually run 'git cherry-pick --abort' or 'git reset --hard' to clean up, "
+            "then re-run this tool."
+        )
+    
+    if G.is_dirty():
+        raise SystemExit(
+            "Repository has uncommitted changes. "
+            "Please commit, stash, or run 'git reset --hard' to clean up, "
+            "then re-run this tool."
+        )
+
+
 def build_branch(args):
     base = args.base
     label = args.label
@@ -2014,6 +2094,7 @@ def build_branch(args):
         get(session, endpoint, paging=False)
 
     G = git.Repo(args.git)
+    ensure_clean_checkout(G)
 
     R = None
     if args.create_qa or args.update_qa or args.audit or args.final_merge or args.qe_label:
@@ -2232,7 +2313,7 @@ def build_branch(args):
         else:
             new_contributors = []
 
-        G.git.merge(tip.hexsha, '--no-ff', m=message)
+        merge_pr_or_abort(G, tip, message, pr)
 
         if new_contributors and base == 'main':
             log.info("adding new contributors to githubmap in merge commit")
