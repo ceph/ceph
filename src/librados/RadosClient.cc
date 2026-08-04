@@ -233,8 +233,13 @@ int librados::RadosClient::connect()
   {
     MonClient mc_bootstrap(cct, poolctx);
     err = mc_bootstrap.get_monmap_and_config();
-    if (err < 0)
+    if (err < 0) {
+      // nothing has been set up yet, so this early return cannot go through the
+      // out: label, but the handle still has to leave CONNECTING behind or every
+      // later connect() on it returns -EINPROGRESS
+      state = DISCONNECTED;
       return err;
+    }
   }
 
   common_init_finish(cct);
