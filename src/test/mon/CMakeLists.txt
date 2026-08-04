@@ -18,6 +18,13 @@ add_executable(ceph_test_mon_msg
   )
 target_link_libraries(ceph_test_mon_msg os osdc global ${UNITTEST_LIBS})
 
+# unittest_monclient_retry
+add_executable(unittest_monclient_retry
+  test_monclient_retry.cc
+  )
+add_ceph_unittest(unittest_monclient_retry)
+target_link_libraries(unittest_monclient_retry mon global ${UNITTEST_LIBS})
+
 # unittest_config_map
 add_executable(unittest_config_map
   test_config_map.cc
