@@ -75,7 +75,8 @@ ECBackend::_read(const hobject_t& hoid,
     fast_read,
     object_size,
     make_gen_lambda_context<ec_extents_t &&>(
-      [hoid, off, len, promise=std::move(promise), FNAME](auto&& results) mutable {
+      [hoid, off, len, promise=std::move(promise), FNAME,
+       &dpp=this->dpp](auto&& results) mutable {
         ceph_assert(results.size() == 1);
         ceph_assert(results.count(hoid) == 1);
         auto& got = results.at(hoid);
@@ -86,10 +87,10 @@ ECBackend::_read(const hobject_t& hoid,
 	auto range = got.emap.get_containing_range(off, len);
 	ceph_assert(range.first != range.second);
 	ceph_assert(range.first.get_off() <= off);
-        DEBUG("offset: {}", off);
-        DEBUG("range offset: {}", range.first.get_off());
-        DEBUG("length: {}", len);
-        DEBUG("range length: {}", range.first.get_len());
+        DEBUGDPP("offset: {}", dpp, off);
+        DEBUGDPP("range offset: {}", dpp, range.first.get_off());
+        DEBUGDPP("length: {}", dpp, len);
+        DEBUGDPP("range length: {}", dpp, range.first.get_len());
 	ceph_assert(
 	  (off + len) <=
 	  (range.first.get_off() + range.first.get_len()));
@@ -319,8 +320,9 @@ ECBackend::submit_transaction(const std::set<pg_shard_t> &pg_shards,
 			      std::vector<pg_log_entry_t>&& log_entries,
                               const PGLog &pg_log)
 {
+  LOG_PREFIX(ECBackend::submit_transaction);
   const hobject_t& hoid = obc->obs.oi.soid;
-  logger().debug("{} hoid={} obc->attr_cache={}", __func__, hoid, obc->attr_cache);
+  DEBUGDPP("hoid={} obc->attr_cache={}", dpp, hoid, obc->attr_cache);
   auto op =
     std::make_unique<ECCrimsonOp>(
       std::move(txn), std::move(obc), pg_log, rmw_pipeline);
@@ -346,13 +348,13 @@ ECBackend::submit_transaction(const std::set<pg_shard_t> &pg_shards,
     read_pipeline,
     rmw_pipeline,
     &dpp);
-  logger().info("{}: op {} starting", "_submit_transaction", ""); //*op);
+  INFODPP("op {} starting", dpp, ""); //*op);
   rmw_pipeline.start_rmw(std::move(op));
-  logger().debug("ECBackend::{} started ec op", "_submit_transaction");
+  DEBUGDPP("started ec op", dpp);
   return make_ready_future<rep_op_ret_t>(
     seastar::now(),
-    on_all_commit->get_future().then_interruptible([] {
-      logger().debug("{}: op {} finished completely", "_submit_transaction", "");
+    on_all_commit->get_future().then_interruptible([FNAME, &dpp=this->dpp] {
+      DEBUGDPP("op {} finished completely", dpp, "");
       return seastar::now();
     })
   );
@@ -365,30 +367,30 @@ ECBackend::handle_sub_write(
   ECListener& pg)
 {
   LOG_PREFIX(ECBackend::handle_sub_write);
-  logger().info("{} from {}", __func__, from);
+  INFODPP("from {}", dpp, from);
   if (!op.temp_added.empty()) {
     add_temp_obj(std::begin(op.temp_added), std::end(op.temp_added));
   }
   ceph::os::Transaction txn;
   if (op.backfill_or_async_recovery) {
     for (const auto& obj : op.temp_removed) {
-      logger().info("{}: removing object {} since we won't get the transaction",
-		    __func__, obj);
+      INFODPP("removing object {} since we won't get the transaction",
+	      dpp, obj);
       txn.remove(coll->get_cid(),
 		 ghobject_t{obj, ghobject_t::NO_GEN, get_shard()});
     }
   }
   clear_temp_objs(op.temp_removed);
-  logger().debug("{}: missing before {}", __func__, "");
+  DEBUGDPP("missing before {}", dpp, "");
 
   // flag set to true during async recovery
   bool async = false;
   if (pg.is_missing_object(op.soid)) {
     async = true;
-    logger().debug("{}: {} is missing", __func__, op.soid);
+    DEBUGDPP("{} is missing", dpp, op.soid);
     for (const auto& e: op.log_entries) {
-      logger().debug("{}: add_next_event entry {}, is_delete {}",
-		      __func__, e, e.is_delete());
+      DEBUGDPP("add_next_event entry {}, is_delete {}",
+	       dpp, e, e.is_delete());
       pg.add_local_next_event(e);
     }
   }
@@ -402,16 +404,16 @@ ECBackend::handle_sub_write(
     txn,
     async);
   txn.append(op.t); // hack warn
-  logger().debug("{}:{}", __func__, __LINE__);
+  DEBUGDPP("line {}", dpp, __LINE__);
   if (op.at_version != eversion_t()) {
     // dummy rollforward transaction doesn't get at_version
     // (and doesn't advance it)
     pg.op_applied(op.at_version);
   }
-  logger().debug("{}:{}", __func__, __LINE__);
+  DEBUGDPP("line {}", dpp, __LINE__);
   return crimson::os::with_store_do_transaction(
-      store, coll, std::move(txn)).then([FNAME] {
-    DEBUG("transaction commited!");
+      store, coll, std::move(txn)).then([FNAME, &dpp=this->dpp] {
+    DEBUGDPP("transaction commited!", dpp);
     return write_iertr::now();
   });
 }
@@ -437,10 +439,10 @@ void ECBackend::handle_sub_write(
 {
   LOG_PREFIX(ECBackend::handle_sub_write);
   const auto tid = op.tid;
-  DEBUG("tid {}", tid);
+  DEBUGDPP("tid {}", dpp, tid);
   std::ignore = handle_sub_write(
     from, std::move(op), eclistener
-  ).si_then([tid, &eclistener, this] {
+  ).si_then([tid, &eclistener, FNAME, this] {
     assert(eclistener.pgb_is_primary());
     ECSubWriteReply reply;
     reply.tid = tid;
@@ -448,8 +450,7 @@ void ECBackend::handle_sub_write(
     reply.committed = true;
     reply.applied = true;
     reply.from = eclistener.whoami_shard();
-    logger().debug("ECBackend::{} from {}",
-		    "handle_sub_write::reply", reply.from);
+    DEBUGDPP("reply from {}", dpp, reply.from);
     return handle_rep_write_reply(std::move(reply));
   }, crimson::ct_error::assert_all("unexpected error"));
 }
@@ -461,7 +462,7 @@ ECBackend::handle_rep_write_op(
 {
   LOG_PREFIX(ECBackend::handle_rep_write_op);
   const auto tid = m->op.tid;
-  DEBUG("tid {} from {}", tid, m->op.from);
+  DEBUGDPP("tid {} from {}", dpp, tid, m->op.from);
   return handle_sub_write(
     m->op.from, std::move(m->op), pg
   ).si_then([&pg] {
@@ -475,14 +476,14 @@ ECBackend::write_iertr::future<>
 ECBackend::handle_rep_write_reply(ECSubWriteReply&& op)
 {
   LOG_PREFIX(ECBackend::handle_rep_write_reply);
-  DEBUG("handling reply from osd.{}, tid {}",  op.from.osd, op.tid);
+  DEBUGDPP("handling reply from osd.{}, tid {}", dpp, op.from.osd, op.tid);
   assert(rmw_pipeline.tid_to_op_map.contains(op.tid));
   const auto& from = op.from;
   auto& wop = *rmw_pipeline.tid_to_op_map.at(op.tid);
   if (op.committed) {
     // TODO: trace.event("sub write committed");
-    logger().debug("ECBackend::{} from {} pending_commits {}",
-		    __func__, from, wop.pending_commits);
+    DEBUGDPP("from {} pending_commits {}",
+	     dpp, from, wop.pending_commits);
     ceph_assert(wop.pending_commits > 0);
     --wop.pending_commits;
     // update_peer_last_complete_ondisk() is called by the higher
@@ -510,8 +511,8 @@ ECBackend::maybe_chunked_read(
   const uint32_t flags)
 {
   LOG_PREFIX(ECBackend::maybe_chunked_read);
-  DEBUG("obj {} off {} size {} flags {}", obj, off, size, flags);
-  DEBUG("oid is: {}", ghobject_t{obj, ghobject_t::NO_GEN, get_shard()});
+  DEBUGDPP("obj {} off {} size {} flags {}", dpp, obj, off, size, flags);
+  DEBUGDPP("oid is: {}", dpp, ghobject_t{obj, ghobject_t::NO_GEN, get_shard()});
   if (is_single_chunk(obj, op)) {
     return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::read>(
       store,
@@ -585,7 +586,7 @@ ECBackend::handle_rep_read_op(ECSubRead& op)
     reply.from = whoami;
     reply.tid = op.tid;
     using read_ertr = crimson::os::FuturizedStore::Shard::read_errorator;
-    DEBUG("op_list {}", op.to_read);
+    DEBUGDPP("op_list {}", dpp, op.to_read);
     return interruptor::do_for_each(op.to_read, [FNAME, &op, &reply, this] (auto read_item) {
       const auto& [obj, op_list] = read_item;
       // `obj=obj` is workaround for Clang's bug:
@@ -594,16 +595,17 @@ ECBackend::handle_rep_read_op(ECSubRead& op)
         const auto& [off, size, flags] = op_spec;
         return maybe_chunked_read(
           obj, op, off, size, flags
-        ).safe_then([&reply, obj, off=off, size=size, FNAME] (auto&& result_bl) {
-	  DEBUG("read requested={} len={}", size, result_bl.length());
+        ).safe_then([&reply, obj, off=off, size=size, FNAME,
+		     &dpp=this->dpp] (auto&& result_bl) {
+	  DEBUGDPP("read requested={} len={}", dpp, size, result_bl.length());
 	  reply.buffers_read[obj].emplace_back(off, std::move(result_bl));
 	  return read_ertr::now();
 	}).handle_error(read_ertr::all_same_way([&reply, obj, FNAME, this] (const auto& e) {
           assert(e.value() > 0);
 	  if (e.value() == ENOENT && fast_read) {
-	    INFO("ENOENT reading {}, fast, read, probably ok", obj);
+	    INFODPP("ENOENT reading {}, fast, read, probably ok", dpp, obj);
 	  } else {
-	    ERROR("Error {} reading {}", e.value(), obj);
+	    ERRORDPP("Error {} reading {}", dpp, e.value(), obj);
 	    // TODO: clog error logging
             reply.buffers_read.erase(obj);
             reply.errors[obj] = -e.value();
@@ -612,10 +614,10 @@ ECBackend::handle_rep_read_op(ECSubRead& op)
         }));
       });
     }).si_then([&op, &reply, FNAME, this] {
-      DEBUG("attrs_to_read {}", op.attrs_to_read.size());
+      DEBUGDPP("attrs_to_read {}", dpp, op.attrs_to_read.size());
       return interruptor::do_for_each(op.attrs_to_read,
 		                      [&reply, FNAME, this] (auto obj_attr) {
-	DEBUG("fulfilling attr request on obj {}", obj_attr);
+	DEBUGDPP("fulfilling attr request on obj {}", dpp, obj_attr);
 	if (reply.errors.count(obj_attr)) {
           return read_ertr::now();
 	}
@@ -647,11 +649,12 @@ ECBackend::handle_rep_read_reply(Ref<MOSDECSubOpReadReply> m)
 ECBackend::ll_read_ierrorator::future<>
 ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
 {
+  LOG_PREFIX(ECBackend::handle_rep_read_reply);
   const auto& from = mop.from;
-  logger().debug("{}: reply {} from {}", __func__, mop, from);
+  DEBUGDPP("reply {} from {}", dpp, mop, from);
   if (!read_pipeline.tid_to_read_map.contains(mop.tid)) {
     //canceled
-    logger().debug("{}: canceled", __func__);
+    DEBUGDPP("canceled", dpp);
     return ll_read_ierrorator::now();
   }
   auto& rop = read_pipeline.tid_to_read_map.at(mop.tid);
@@ -662,7 +665,7 @@ ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
     assert(!mop.errors.contains(obj));
     if (!rop.to_read.contains(obj)) {
       // We canceled this read! @see filter_read_op
-      logger().debug("{}: to_read skipping", __func__);
+      DEBUGDPP("to_read skipping", dpp);
       continue;
     }
     if (!rop.complete.contains(obj)) {
@@ -700,7 +703,7 @@ ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
     // if read error better not have sent an attribute
     if (!rop.to_read.count(hoid)) {
       // we canceled this read! @see filter_read_op
-      logger().debug("{}: to_read skipping", __func__);
+      DEBUGDPP("to_read skipping", dpp);
       continue;
     }
     if (!rop.complete.contains(hoid)) {
@@ -725,7 +728,7 @@ ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
       rop.to_read.at(hoid).zeros_for_decode.erase(from.shard);
     }
     complete.processed_read_requests.erase(from.shard);
-    logger().debug("{} shard={} error={}", __func__, from, err);
+    DEBUGDPP("shard={} error={}", dpp, from, err);
   }
   {
     auto it = read_pipeline.shard_to_read_map.find(from);
@@ -764,7 +767,7 @@ ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
       }
 
       if (err) {
-	logger().debug("{} minimum_to_decode failed {}", __func__, err);
+	DEBUGDPP("minimum_to_decode failed {}", dpp, err);
         if (all_sub_reads_done) {
           // If we don't have enough copies, try other pg_shard_ts if available.
           // During recovery there may be multiple osds with copies of the same shard,
@@ -793,13 +796,13 @@ ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
         if (!rop.complete.at(oid).errors.empty()) {
 	  using crimson::common::local_conf;
 	  if (local_conf()->osd_read_ec_check_for_errors) {
-	    logger().info("{}: not ignoring errors, use one shard err={}",
-			  __func__, err);
+	    INFODPP("not ignoring errors, use one shard err={}",
+		    dpp, err);
             err = rop.complete.at(oid).errors.begin()->second;
             rop.complete.at(oid).r = err;
 	  } else {
-	    logger().info("{}: error(s) ignored for {} enough copies available",
-			  __func__, oid);
+	    INFODPP("error(s) ignored for {} enough copies available",
+		    dpp, oid);
             rop.complete.at(oid).errors.clear();
 	  }
         }
@@ -814,7 +817,7 @@ ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
     read_pipeline.do_read_op(rop);
   } else if (rop.in_progress.empty() ||
              is_complete == rop.complete.size()) {
-    logger().debug("{}: complete {}", __func__, rop);
+    DEBUGDPP("complete {}", dpp, rop);
     /* If do_redundant_reads is set then there might be some in progress
      * reads remaining.  We need to make sure that these non-read shards
      * do not get padded. If there was no in progress read, then the zero
@@ -827,7 +830,7 @@ ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
     }
     read_pipeline.complete_read_op(std::move(rop));
   } else {
-    logger().info("{}: readop not completed yet: {}", __func__, rop);
+    INFODPP("readop not completed yet: {}", dpp, rop);
   }
   return ll_read_ierrorator::now();
 }
