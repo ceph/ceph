@@ -455,6 +455,9 @@ class TestVolumesHelper(CephFSTestCase):
         if root_snapped:
             self.mount_a.run_shell(['sudo', 'rmdir', './.snap/root_s1'])
             self.mount_a.run_shell(['sudo', 'rmdir', './.snap/root_s2'])
+        # Drain trash before tearDown/setUp deletes the FS and restarts MDS;
+        # otherwise mgr purge threads can hang awaiting replies and block later tests.
+        self._wait_for_trash_empty()
 
     def _create_subvolumes_and_snapshots(self, group, subvolname, snapshot, snap_root=False):
         # create group.
