@@ -6941,6 +6941,11 @@ boost::statechart::result PeeringState::Active::react(const ActMap&)
                              << unfound << " objects unfound and apparently lost";
   }
 
+  if (ps->state_test(PG_STATE_BACKFILL_PAUSED) &&
+      !ps->pool.info.has_flag(pg_pool_t::FLAG_NOBACKFILL)) {
+    // The pool's nobackfill flag has been cleared, restart backfilling
+    post_event(RequestBackfill());
+  }
   return forward_event();
 }
 
