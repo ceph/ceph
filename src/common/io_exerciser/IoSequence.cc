@@ -820,7 +820,7 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq14::_next() {
 }
 
 ceph::io_exerciser::Seq15::Seq15(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
-    : IoSequence(obj_size_range, seed, check_consistency), offset(0) {
+    : IoSequence(obj_size_range, seed, check_consistency) {
       select_random_object_size();
       if (obj_size < 4) {
         obj_size = 4;
@@ -1283,12 +1283,21 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq20::_next() {
 ceph::io_exerciser::Seq21::Seq21(std::pair<int, int> obj_size_range, int seed,
                                  bool check_consistency)
     : IoSequence(obj_size_range, seed, check_consistency),
-      stage(0),
-      barrier_pending(false) {
-  // Require at least 4 blocks so quarter/half operations are meaningful.
-  set_min_object_size(4);
-  select_random_object_size();
-  // obj_size is the protected member from IoSequence, set by select_random_object_size()
+      layout(Layout::Zero),
+      zero_offset(0),
+      zero_length(1),
+      write_offset(0),
+      write_length(1),
+      truncate_size(0),
+      mapext_length(0),
+      phase(Phase::BaselineWrite) {
+  // Do not set create=true: the baseline write auto-creates the object,
+  // making an explicit CreateOp redundant.
+  // Fix the object size to 10 blocks (20K at the default 2K block size).
+  // A fixed size avoids the sequence growing with obj_size_range while still
+  // providing enough range for all zero/write/truncate offset combinations.
+  set_min_object_size(10);
+  set_max_object_size(10);
 }
 
 Sequence ceph::io_exerciser::Seq21::get_id() const {
@@ -1296,82 +1305,94 @@ Sequence ceph::io_exerciser::Seq21::get_id() const {
 }
 
 std::string ceph::io_exerciser::Seq21::get_name() const {
-  return "Mapext verification: write, zero (create hole), write into hole, "
-         "truncate — verifying mapext after each stage";
+  return "Permutations of mapext verification across zero, write+zero, and "
+         "zero+truncate layouts";
 }
 
 std::unique_ptr<ceph::io_exerciser::IoOp>
 ceph::io_exerciser::Seq21::_next() {
-  // Each logical stage emits a BarrierOp on the first call (via barrier_pending),
-  // then the actual op on the subsequent call, ensuring writes are visible before
-  // the following MapextOp checks the extent map.
-
-  if (barrier_pending) {
-    barrier_pending = false;
-    return BarrierOp::generate();
-  }
-
-  switch (stage) {
-    case 0:
-      // Full write of the whole object.
-      stage = 1;
-      barrier_pending = true;
+  switch (phase) {
+    case Phase::BaselineWrite:
+      phase = Phase::BarrierBeforeLayout;
       return SingleWriteOp::generate(0, obj_size);
 
-    case 1:
-      // First mapext: expect the full object to be allocated.
-      stage = 2;
-      barrier_pending = true;
-      return MapextOp::generate(0, obj_size);
+    case Phase::BarrierBeforeLayout:
+      phase = Phase::EmitLayout;
+      return BarrierOp::generate();
 
-    case 2: {
-      // Zero the middle half of the object (block-aligned).
-      // offset = obj_size/4, length = obj_size/2
-      // Both are block-multiples, so 4K-aligned when block_size=4096.
-      uint64_t zero_off = obj_size / 4;
-      uint64_t zero_len = obj_size / 2;
-      stage = 3;
-      barrier_pending = true;
-      return ZeroOp::generate(zero_off, zero_len);
-    }
+    case Phase::EmitLayout:
+      phase = Phase::BarrierBeforeMapext;
+      switch (layout) {
+        case Layout::Zero:
+          mapext_length = obj_size;
+          return ZeroOp::generate(zero_offset, zero_length);
+        case Layout::WriteAndZero:
+          mapext_length = obj_size;
+          return WriteAndZeroOp::generate(
+              write_offset, write_length, zero_offset, zero_length);
+        case Layout::ZeroAndTruncate:
+          // After truncate the object is truncate_size blocks; clamp mapext.
+          mapext_length = truncate_size;
+          return ZeroAndTruncateOp::generate(
+              zero_offset, zero_length, truncate_size);
+      }
+      ceph_abort_msg("Unreachable layout in Seq20");
 
-    case 3:
-      // Second mapext: expect two allocated extents with a hole in the middle.
-      stage = 4;
-      barrier_pending = true;
-      return MapextOp::generate(0, obj_size);
+    case Phase::BarrierBeforeMapext:
+      phase = Phase::EmitMapext;
+      consistency = check_consistency;
+      return BarrierOp::generate();
 
-    case 4: {
-      // Write back into the first half of the zeroed region.
-      uint64_t write_off = obj_size / 4;
-      uint64_t write_len = obj_size / 4;
-      stage = 5;
-      barrier_pending = true;
-      return SingleWriteOp::generate(write_off, write_len);
-    }
+    case Phase::EmitMapext:
+      phase = Phase::Recreate;
+      return MapextOp::generate(0, mapext_length);
 
-    case 5:
-      // Third mapext: zeroed tail quarter is still a hole.
-      stage = 6;
-      barrier_pending = true;
-      return MapextOp::generate(0, obj_size);
-
-    case 6:
-      // Truncate to half the object size.
-      stage = 7;
-      barrier_pending = true;
-      return TruncateOp::generate(obj_size / 2);
-
-    case 7:
-      // Fourth mapext: query only [0, obj_size/2).
-      stage = 8;
-      barrier_pending = true;
-      return MapextOp::generate(0, obj_size / 2);
-
-    case 8:
-    default:
-      done = true;
+    case Phase::Recreate:
       remove = true;
+      barrier = true;
+
+      zero_length++;
+      if (zero_length > obj_size - zero_offset) {
+        zero_length = 1;
+        zero_offset++;
+        if (zero_offset >= obj_size) {
+          zero_offset = 0;
+          if (layout == Layout::Zero) {
+            layout = Layout::WriteAndZero;
+            write_offset = 0;
+            write_length = 1;
+          } else if (layout == Layout::WriteAndZero) {
+            write_length++;
+            if (write_length > obj_size - write_offset) {
+              write_length = 1;
+              write_offset++;
+              if (write_offset >= obj_size) {
+                layout = Layout::ZeroAndTruncate;
+                zero_offset = 0;
+                zero_length = 1;
+                truncate_size = 0;
+              }
+            }
+            if (layout == Layout::WriteAndZero) {
+              zero_offset = 0;
+              zero_length = 1;
+            }
+          } else {
+            truncate_size++;
+            if (truncate_size > obj_size) {
+              done = true;
+              remove = true;
+              return BarrierOp::generate();
+            }
+            zero_offset = 0;
+            zero_length = 1;
+          }
+        }
+      }
+
+      phase = Phase::BaselineWrite;
       return BarrierOp::generate();
   }
+
+  ceph_abort_msg("Unreachable phase in Seq20");
 }

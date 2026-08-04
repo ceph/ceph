@@ -1389,7 +1389,7 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
   if (dryrun) {
     int model_seed = rng();
     model = std::make_unique<ceph::io_exerciser::ObjectModel>(
-        primary_object_name, secondary_object_name, sbs.select(), model_seed);
+        primary_object_name, secondary_object_name, sbs.select(), model_seed, false);
   } else {
     const std::string pool = spo.select();
     dout(0) << "Pool name: " << pool << dendl;

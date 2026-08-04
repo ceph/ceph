@@ -10,13 +10,22 @@
 using ObjectModel = ceph::io_exerciser::ObjectModel;
 
 ObjectModel::ObjectModel(const std::string& primary_oid, const std::string& secondary_oid,
-                         uint64_t block_size, int seed, bool delete_objects)
+                         uint64_t block_size, int seed, bool is_replicated_pool,
+                         bool delete_objects)
     : Model(primary_oid, secondary_oid, block_size, delete_objects),
-      primary_created(false), secondary_created(false), rng(seed) {}
+      primary_created(false),
+      secondary_created(false),
+      allocation_mode(is_replicated_pool ? AllocationMode::Replicated
+                                         : AllocationMode::ErasureCoded),
+      rng(seed) {}
 
 int ObjectModel::get_seed(uint64_t offset) const {
   ceph_assert(offset < primary_contents.size());
   return primary_contents[offset];
+}
+
+uint64_t ObjectModel::get_primary_size() const {
+  return primary_contents.size();
 }
 
 std::vector<int> ObjectModel::get_seed_offsets(int seed) const {
@@ -33,12 +42,12 @@ std::vector<int> ObjectModel::get_seed_offsets(int seed) const {
 std::map<uint64_t, uint64_t> ObjectModel::get_expected_extent_map() const {
   ceph_assert(primary_created);
   std::map<uint64_t, uint64_t> extent_map;
-  uint64_t size = primary_contents.size();
+  uint64_t size = primary_allocated.size();
   uint64_t i = 0;
   while (i < size) {
-    if (primary_contents[i] != 0) {
+    if (primary_allocated[i]) {
       uint64_t start = i;
-      while (i < size && primary_contents[i] != 0) {
+      while (i < size && primary_allocated[i]) {
         ++i;
       }
       extent_map.emplace(start * block_size, (i - start) * block_size);
@@ -91,64 +100,124 @@ void ObjectModel::applyIoOp(IoOp& op) {
         num_io++;
       };
 
+  auto ensure_size = [&primary_contents = primary_contents,
+                      &primary_allocated = primary_allocated](uint64_t size) {
+    if (size > primary_contents.size()) {
+      primary_contents.resize(size);
+      primary_allocated.resize(size, false);
+    }
+  };
+
+  const uint64_t ec_alloc_unit = std::max<uint64_t>(1, 4096 / block_size);
+
+  auto mark_allocated = [&primary_allocated = primary_allocated,
+                         allocation_mode = allocation_mode,
+                         ec_alloc_unit](uint64_t offset, uint64_t length) {
+    uint64_t alloc_start = offset;
+    uint64_t alloc_end = offset + length;
+    if (allocation_mode == AllocationMode::ErasureCoded) {
+      alloc_start = p2align(offset, ec_alloc_unit);
+      alloc_end = p2roundup(offset + length, ec_alloc_unit);
+    }
+    alloc_end = std::min(alloc_end, primary_allocated.size());
+    std::fill(std::next(primary_allocated.begin(), alloc_start),
+              std::next(primary_allocated.begin(), alloc_end),
+              true);
+  };
+
+  auto zero_with_allocation =
+      [&primary_contents = primary_contents,
+       &primary_allocated = primary_allocated,
+       allocation_mode = allocation_mode,
+       ec_alloc_unit](uint64_t zero_start, uint64_t zero_end) {
+        if (zero_start >= primary_contents.size()) {
+          return;
+        }
+
+        zero_end = std::min<uint64_t>(zero_end, primary_contents.size());
+        if (allocation_mode == AllocationMode::Replicated) {
+          std::fill(std::next(primary_contents.begin(), zero_start),
+                    std::next(primary_contents.begin(), zero_end),
+                    0);
+          std::fill(std::next(primary_allocated.begin(), zero_start),
+                    std::next(primary_allocated.begin(), zero_end),
+                    false);
+          return;
+        }
+
+        const uint64_t hole_start = p2roundup(zero_start, ec_alloc_unit);
+        const uint64_t hole_end = p2align(zero_end, ec_alloc_unit);
+
+        std::fill(std::next(primary_contents.begin(), zero_start),
+                  std::next(primary_contents.begin(), hole_start),
+                  0);
+        std::fill(std::next(primary_allocated.begin(), zero_start),
+                  std::next(primary_allocated.begin(), hole_start),
+                  true);
+        std::fill(std::next(primary_contents.begin(), hole_end),
+                  std::next(primary_contents.begin(), zero_end),
+                  0);
+        std::fill(std::next(primary_allocated.begin(), hole_end),
+                  std::next(primary_allocated.begin(), zero_end),
+                  true);
+        std::fill(std::next(primary_contents.begin(), hole_start),
+                  std::next(primary_contents.begin(), hole_end),
+                  0);
+        std::fill(std::next(primary_allocated.begin(), hole_start),
+                  std::next(primary_allocated.begin(), hole_end),
+                  false);
+      };
+
   auto verify_write_and_record_and_generate_seed =
       [&generate_random, &primary_contents = primary_contents,
        &primary_created = primary_created,
        &num_io = num_io,
        &reads = reads,
-       &writes = writes]<OpType opType, int N>(ReadWriteOp<opType, N> writeOp) {
-        // Auto-create the object on first write, mirroring librados semantics.
-        if (!primary_created) {
-          primary_created = true;
-        }
-        for (int i = 0; i < N; i++) {
-          // Not allowed: write overlapping with parallel read or write
-          ceph_assert(!reads.intersects(writeOp.offset[i], writeOp.length[i]));
-          ceph_assert(!writes.intersects(writeOp.offset[i], writeOp.length[i]));
-          writes.union_insert(writeOp.offset[i], writeOp.length[i]);
-          if (writeOp.offset[i] + writeOp.length[i] > primary_contents.size()) {
-            primary_contents.resize(writeOp.offset[i] + writeOp.length[i]);
-          }
-          std::generate(std::execution::seq,
-                        std::next(primary_contents.begin(), writeOp.offset[i]),
-                        std::next(primary_contents.begin(),
-                                  writeOp.offset[i] + writeOp.length[i]),
-                        generate_random);
-        }
-        num_io++;
-      };
+       &writes = writes,
+       &ensure_size,
+       &mark_allocated]<OpType opType, int N>(ReadWriteOp<opType, N> writeOp) {
+         // Auto-create the object on first write, mirroring librados semantics.
+         if (!primary_created) {
+           primary_created = true;
+         }
+         for (int i = 0; i < N; i++) {
+           ceph_assert(!reads.intersects(writeOp.offset[i], writeOp.length[i]));
+           ceph_assert(!writes.intersects(writeOp.offset[i], writeOp.length[i]));
+           writes.union_insert(writeOp.offset[i], writeOp.length[i]);
+           ensure_size(writeOp.offset[i] + writeOp.length[i]);
+           std::generate(std::execution::seq,
+                         std::next(primary_contents.begin(), writeOp.offset[i]),
+                         std::next(primary_contents.begin(),
+                                   writeOp.offset[i] + writeOp.length[i]),
+                         generate_random);
+           mark_allocated(writeOp.offset[i], writeOp.length[i]);
+         }
+         num_io++;
+       };
 
   auto verify_zero_and_record =
-      [&primary_contents = primary_contents,
-       &primary_created = primary_created,
+      [&primary_created = primary_created,
+       &primary_contents = primary_contents,
+       &primary_allocated = primary_allocated,
        &num_io = num_io,
        &reads = reads,
-       &writes = writes]<OpType opType, int N>(ReadWriteOp<opType, N> writeOp) {
-        // Auto-create the object on first write, mirroring librados semantics.
-        if (!primary_created) {
-          primary_created = true;
-        }
-        for (int i = 0; i < N; i++) {
-          // Not allowed: write overlapping with parallel read or write
-          ceph_assert(!reads.intersects(writeOp.offset[i], writeOp.length[i]));
-          ceph_assert(!writes.intersects(writeOp.offset[i], writeOp.length[i]));
-          writes.union_insert(writeOp.offset[i], writeOp.length[i]);
-          uint64_t zero_end = writeOp.offset[i] + writeOp.length[i];
-          if (writeOp.offset[i] >= primary_contents.size()) {
-            // Zero starts beyond current object end: no-op on the OSD.
-            // (ZERO->TRUNCATE munge fires but offset >= oi.size -> no-op)
-          } else if (zero_end >= primary_contents.size()) {
-            // PrimaryLogPG munges ZERO -> TRUNCATE when the zero range
-            // covers to/past the end of the object.  Mirror that here.
-            primary_contents.resize(writeOp.offset[i]);
-          } else {
-            std::fill(std::next(primary_contents.begin(), writeOp.offset[i]),
-                      std::next(primary_contents.begin(), zero_end),
-                      0);
-          }
-        }
-        num_io++;
-      };
+       &writes = writes,
+       &zero_with_allocation]<OpType opType, int N>(ReadWriteOp<opType, N> writeOp) {
+         if (!primary_created) {
+           primary_created = true;
+         }
+         for (int i = 0; i < N; i++) {
+           ceph_assert(!reads.intersects(writeOp.offset[i], writeOp.length[i]));
+           ceph_assert(!writes.intersects(writeOp.offset[i], writeOp.length[i]));
+           writes.union_insert(writeOp.offset[i], writeOp.length[i]);
+           zero_with_allocation(writeOp.offset[i], writeOp.offset[i] + writeOp.length[i]);
+           if (writeOp.offset[i] + writeOp.length[i] >= primary_contents.size()) {
+             primary_contents.resize(writeOp.offset[i]);
+             primary_allocated.resize(writeOp.offset[i]);
+           }
+         }
+         num_io++;
+       };
 
   auto verify_failed_write_and_record =
       [&primary_contents = primary_contents,
@@ -180,6 +249,7 @@ void ObjectModel::applyIoOp(IoOp& op) {
       primary_created = secondary_created;
       secondary_created = temp;
       primary_contents.swap(secondary_contents);
+      primary_allocated.swap(secondary_allocated);
       reads.clear();
       writes.clear();
     } break;
@@ -191,7 +261,9 @@ void ObjectModel::applyIoOp(IoOp& op) {
       // The target object may be larger than the source - however, it will be replaced by a new object rather than overwriting
       // and padding the old object. Therefore, the target object should now be the same size as the source object.
       secondary_contents.resize(primary_contents.size());
+      secondary_allocated.resize(primary_allocated.size());
       std::copy(primary_contents.begin(), primary_contents.end(), secondary_contents.begin());
+      std::copy(primary_allocated.begin(), primary_allocated.end(), secondary_allocated.begin());
       break;
 
     case OpType::Create:
@@ -200,6 +272,7 @@ void ObjectModel::applyIoOp(IoOp& op) {
       ceph_assert(writes.empty());
       primary_created = true;
       primary_contents.resize(static_cast<CreateOp&>(op).size);
+      primary_allocated.resize(static_cast<CreateOp&>(op).size, true);
       std::generate(std::execution::seq, primary_contents.begin(), primary_contents.end(),
                     generate_random);
       break;
@@ -209,14 +282,8 @@ void ObjectModel::applyIoOp(IoOp& op) {
       ceph_assert(reads.empty());
       ceph_assert(writes.empty());
       auto new_size = static_cast<TruncateOp&>(op).size;
-      auto old_size = primary_contents.size();
-      bool expand = new_size > old_size;
       primary_contents.resize(new_size);
-      // Yes, truncate CAN be used to make an object bigger!
-      if (expand) {
-        std::generate(std::execution::seq, primary_contents.begin() + new_size, primary_contents.end(),
-                      generate_random);
-      }
+      primary_allocated.resize(new_size, false);
     } break;
 
     case OpType::Remove: {
@@ -229,6 +296,7 @@ void ObjectModel::applyIoOp(IoOp& op) {
       }
       primary_created = false;
       primary_contents.resize(0);
+      primary_allocated.resize(0);
     } break;
       
     case OpType::Read: {
@@ -375,12 +443,10 @@ void ObjectModel::applyIoOp(IoOp& op) {
       verify_zero_and_record(zeroOp);
     } break;
     case OpType::WriteAndZero: {
-      // Auto-create the object on first write, mirroring librados semantics.
       if (!primary_created) {
         primary_created = true;
       }
       WriteAndZeroOp& wzOp = static_cast<WriteAndZeroOp&>(op);
-      // Check and record both ranges
       ceph_assert(!reads.intersects(wzOp.write_offset, wzOp.write_length));
       ceph_assert(!writes.intersects(wzOp.write_offset, wzOp.write_length));
       ceph_assert(!reads.intersects(wzOp.zero_offset, wzOp.zero_length));
@@ -388,55 +454,45 @@ void ObjectModel::applyIoOp(IoOp& op) {
       writes.union_insert(wzOp.write_offset, wzOp.write_length);
       writes.union_insert(wzOp.zero_offset, wzOp.zero_length);
       uint64_t write_end = wzOp.write_offset + wzOp.write_length;
-      uint64_t zero_end = wzOp.zero_offset + wzOp.zero_length;
-      // The write sub-op may expand the object.
-      if (write_end > primary_contents.size()) {
-        primary_contents.resize(write_end);
-      }
+      ensure_size(write_end);
       std::generate(std::execution::seq,
                     std::next(primary_contents.begin(), wzOp.write_offset),
                     std::next(primary_contents.begin(), write_end),
                     generate_random);
-      if (wzOp.zero_offset >= primary_contents.size()) {
-        // Zero starts beyond current object end: no-op on the OSD.
-      } else if (zero_end >= primary_contents.size()) {
+      mark_allocated(wzOp.write_offset, wzOp.write_length);
+      zero_with_allocation(wzOp.zero_offset, wzOp.zero_offset + wzOp.zero_length);
+      if (wzOp.zero_offset + wzOp.zero_length >= primary_contents.size()) {
         primary_contents.resize(wzOp.zero_offset);
-      } else {
-        std::fill(std::next(primary_contents.begin(), wzOp.zero_offset),
-                  std::next(primary_contents.begin(), zero_end),
-                  0);
+        primary_allocated.resize(wzOp.zero_offset);
       }
       num_io++;
     } break;
     case OpType::ZeroAndTruncate: {
-      // Auto-create the object on first write, mirroring librados semantics.
       if (!primary_created) {
         primary_created = true;
       }
       ZeroAndTruncateOp& ztOp = static_cast<ZeroAndTruncateOp&>(op);
-      // Check and record zero range
       ceph_assert(!reads.intersects(ztOp.zero_offset, ztOp.zero_length));
       ceph_assert(!writes.intersects(ztOp.zero_offset, ztOp.zero_length));
       writes.union_insert(ztOp.zero_offset, ztOp.zero_length);
-      uint64_t zero_end = ztOp.zero_offset + ztOp.zero_length;
-      if (zero_end > primary_contents.size()) {
-        primary_contents.resize(zero_end);
+      ensure_size(ztOp.zero_offset + ztOp.zero_length);
+      if (ztOp.zero_offset + ztOp.zero_length >= primary_contents.size()) {
+        primary_contents.resize(ztOp.zero_offset);
+        primary_allocated.resize(ztOp.zero_offset);
+      } else {
+        zero_with_allocation(ztOp.zero_offset, ztOp.zero_offset + ztOp.zero_length);
       }
-      // Apply zero semantics to zero range
-      std::fill(std::next(primary_contents.begin(), ztOp.zero_offset),
-                std::next(primary_contents.begin(), zero_end),
-                0);
-      // Truncate
       primary_contents.resize(ztOp.truncate_size);
+      primary_allocated.resize(ztOp.truncate_size, false);
       num_io++;
     } break;
     case OpType::Mapext: {
       MapextOp& mop = static_cast<MapextOp&>(op);
       ceph_assert(primary_created);
-      ceph_assert(mop.offset[0] + mop.length[0] <= primary_contents.size());
-      // Not allowed: mapext overlapping with a parallel write
-      ceph_assert(!writes.intersects(mop.offset[0], mop.length[0]));
-      reads.union_insert(mop.offset[0], mop.length[0]);
+      if (mop.length[0] > 0) {
+        ceph_assert(!writes.intersects(mop.offset[0], mop.length[0]));
+        reads.union_insert(mop.offset[0], mop.length[0]);
+      }
       num_io++;
     } break;
     default:

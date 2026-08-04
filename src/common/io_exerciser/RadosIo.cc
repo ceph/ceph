@@ -62,7 +62,8 @@ RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
     : Model(primary_oid, secondary_oid, block_size, delete_objects),
       rados(rados),
       asio(asio),
-      om(std::make_unique<ObjectModel>(primary_oid, secondary_oid, block_size, seed, delete_objects)),
+      om(std::make_unique<ObjectModel>(primary_oid, secondary_oid, block_size, seed,
+                                       is_replicated_pool, delete_objects)),
       db(data_generation::DataGenerator::create_generator(
           data_generation_type, *om)),
       pool(pool),
@@ -262,8 +263,12 @@ void RadosIo::applyIoOp(IoOp& op) {
       auto write_op_info = std::make_shared<AsyncOpInfo<1>>(
           std::array<uint64_t, 1>{wzOp.write_offset},
           std::array<uint64_t, 1>{wzOp.write_length});
-      write_op_info->bufferlist[0] =
-          db->generate_data(wzOp.write_offset, wzOp.write_length);
+      if (wzOp.write_offset + wzOp.write_length <= om->get_primary_size()) {
+        write_op_info->bufferlist[0] =
+            db->generate_data(wzOp.write_offset, wzOp.write_length);
+      } else {
+        write_op_info->bufferlist[0].append_zero(wzOp.write_length * block_size);
+      }
       librados::ObjectWriteOperation wop;
       wop.write(wzOp.write_offset * block_size, write_op_info->bufferlist[0]);
       wop.zero(wzOp.zero_offset * block_size, wzOp.zero_length * block_size);
