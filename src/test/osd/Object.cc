@@ -204,3 +204,62 @@ bool ObjectDesc::check_sparse(const std::map<uint64_t, uint64_t>& extents,
   }
   return true;
 }
+
+interval_set<uint64_t> ObjectDesc::get_min_written_extents(uint64_t alignment) const
+{
+  interval_set<uint64_t> written = get_written_extents(alignment);
+
+  // alignment == 1 means replicated pool — no 4k-block concept, nothing to drop.
+  if (alignment <= 1) {
+    return written;
+  }
+
+  interval_set<uint64_t> min_written;
+
+  for (auto it = written.begin(); it != written.end(); ++it) {
+    const uint64_t ext_start = it.get_start();
+    const uint64_t ext_end   = ext_start + it.get_len();
+
+    // First aligned block boundary at or after ext_start.
+    const uint64_t first_full_block =
+      (ext_start + alignment - 1) / alignment * alignment;
+    // Last aligned block boundary at or before ext_end.
+    const uint64_t last_full_block = ext_end / alignment * alignment;
+
+    // Head partial fragment [ext_start, first_full_block) — keep as-is.
+    if (ext_start < first_full_block && first_full_block <= ext_end) {
+      min_written.insert(ext_start, first_full_block - ext_start);
+    } else if (first_full_block > ext_end) {
+      // The whole extent is smaller than one alignment unit — keep it.
+      min_written.insert(ext_start, ext_end - ext_start);
+      continue;
+    }
+
+    // Full aligned blocks [first_full_block, last_full_block).
+    // Keep a block only if it contains at least one non-zero byte.
+    for (uint64_t blk = first_full_block; blk < last_full_block; blk += alignment) {
+      ObjectDesc *mutable_this = const_cast<ObjectDesc *>(this);
+      iterator objiter = mutable_this->begin();
+      objiter.seek(blk);
+
+      bool all_zero = true;
+      for (uint64_t i = 0; i < alignment && !objiter.end(); ++i, ++objiter) {
+        if (*objiter != '\0') {
+          all_zero = false;
+          break;
+        }
+      }
+
+      if (!all_zero) {
+        min_written.insert(blk, alignment);
+      }
+    }
+
+    // Tail partial fragment [last_full_block, ext_end) — keep as-is.
+    if (last_full_block < ext_end) {
+      min_written.insert(last_full_block, ext_end - last_full_block);
+    }
+  }
+
+  return min_written;
+}
