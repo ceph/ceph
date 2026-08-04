@@ -1406,7 +1406,9 @@ The ``full`` flag is not honored anymore since the Mimic release, and
 
 Usage::
 
-    ceph osd set pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|notieragent
+    ceph osd set pause|noup|nodown|noout|noin|nobackfill|norebalance|
+    norecover|noscrub|nodeep-scrub|notieragent|nosnaptrim|
+    pglog_hardlimit|noautoscale
 
 Subcommand ``setcrushmap`` sets CRUSH map from input file.
 
@@ -1497,7 +1499,9 @@ Subcommand ``unset`` unsets cluster-wide <flag> by updating OSD map.
 
 Usage::
 
-    ceph osd unset pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|notieragent
+    ceph osd unset pause|noup|nodown|noout|noin|nobackfill|norebalance|
+    norecover|noscrub|nodeep-scrub|notieragent|nosnaptrim|
+    noautoscale
 
 
 pg
