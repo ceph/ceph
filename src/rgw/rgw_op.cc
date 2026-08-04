@@ -81,13 +81,17 @@
 
 #include "compressor/Compressor.h"
 
+#if defined(WITH_RADOSGW_D4N) && !defined(WITH_RADOSGW_STANDALONE)
+ #define RGW_HAVE_D4N_FILTER
+#endif
+
 #ifdef WITH_ARROW_FLIGHT
 #include "rgw_flight.h"
 #include "rgw_flight_frontend.h"
 #endif
 
-#ifdef WITH_RADOSGW_D4N
-#include "driver/d4n/rgw_sal_d4n.h"
+#ifdef RGW_HAVE_D4N_FILTER
+ #include "driver/d4n/rgw_sal_d4n.h"
 #endif
 
 #ifdef WITH_LTTNG
@@ -4853,7 +4857,7 @@ void RGWPutObj::execute(optional_yield y)
   }
   if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST"))
     s->object->set_cache_request();
-#ifdef WITH_RADOSGW_D4N
+#ifdef RGW_HAVE_D4N_FILTER
   if (g_conf().get_val<std::string>("rgw_filter") == "d4n") {
     if (s->info.env->get_optional("HTTP_X_RGW_REMOTE_CACHE_REQUEST")) {
       ldpp_dout(this, 20) << "This is a remote cache request !!!" << dendl;
@@ -6033,7 +6037,7 @@ void RGWDeleteObj::execute(optional_yield y)
       if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST"))
         s->object->set_cache_request();
 
-#ifdef WITH_RADOSGW_D4N
+#ifdef RGW_HAVE_D4N_FILTER
   if (g_conf().get_val<std::string>("rgw_filter") == "d4n") {
     if (s->info.env->get_optional("HTTP_X_RGW_REMOTE_CACHE_REQUEST")) {
       ldpp_dout(this, 20) << "This is a remote cache request !!!" << dendl;

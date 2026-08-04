@@ -42,8 +42,11 @@
 #include "driver/posix/rgw_sal_posix.h"
 #include "driver/dbstore/config/store.h"
 #endif
-#ifdef WITH_RADOSGW_D4N
-#include "driver/d4n/rgw_sal_d4n.h" 
+#if defined(WITH_RADOSGW_D4N) && !defined(WITH_RADOSGW_STANDALONE)
+ #define RGW_HAVE_D4N_FILTER
+#endif
+#ifdef RGW_HAVE_D4N_FILTER
+ #include "driver/d4n/rgw_sal_d4n.h"
 #endif
 
 #ifdef WITH_RADOSGW_MOTR
@@ -74,8 +77,8 @@ extern rgw::sal::Driver* newMotrStore(CephContext *cct);
 extern rgw::sal::Driver* newDaosStore(CephContext *cct);
 #endif
 extern rgw::sal::Driver* newBaseFilter(rgw::sal::Driver* next);
-#ifdef WITH_RADOSGW_D4N
-extern rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, boost::asio::io_context& io_context, bool admin);
+#ifdef RGW_HAVE_D4N_FILTER
+ extern rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, boost::asio::io_context& io_context, bool admin);
 #endif
 }
 
@@ -246,7 +249,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
       return nullptr;
     }
   } 
-#ifdef WITH_RADOSGW_D4N 
+#ifdef RGW_HAVE_D4N_FILTER
   else if (cfg.filter_name.compare("d4n") == 0) {
     rgw::sal::Driver* next = driver;
     driver = newD4NFilter(next, io_context, admin);
@@ -415,7 +418,7 @@ DriverManager::Config DriverManager::get_config(bool admin, CephContext* cct)
   if (config_filter == "base") {
     cfg.filter_name = "base";
   }
-#ifdef WITH_RADOSGW_D4N
+#ifdef RGW_HAVE_D4N_FILTER
   else if (config_filter == "d4n") {
     cfg.filter_name= "d4n";
   }
