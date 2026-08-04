@@ -67,8 +67,10 @@
 
   &__detail {
     overflow-y: auto;
+    overflow-x: hidden;
     padding: var(--cds-spacing-06) var(--cds-spacing-07);
     background-color: var(--cds-layer-01);
+    min-width: 0;
   }
 
   &__detail-header cd-notification-item {
@@ -87,6 +89,13 @@
   &__detail-text {
     margin: 0;
     color: var(--cds-text-primary);
+    overflow-wrap: break-word;
+  }
+
+  &__prometheus-link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--cds-spacing-02);
   }
 
   &__empty {
