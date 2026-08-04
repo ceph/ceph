@@ -290,6 +290,7 @@ list(APPEND librgw_daos_srcs
 )
 list(APPEND librgw_posix_srcs
   driver/posix/rgw_sal_posix.cc
+  driver/posix/fsent.cc
   driver/posix/lmdb-safe.cc
   driver/posix/posixDB.cc
   driver/posix/notify.cpp

@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; ind
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
@@ -15,357 +15,19 @@
 
 #pragma once
 
-#include "rgw_sal_filter.h"
 #include "rgw_sal_store.h"
+#include "fsent.h"
 #include "rgw_quota.h"
 #include "include/encoding.h"
 #include <cstdint>
 #include <memory>
 #include "common/dout.h"
-#include "bucket_cache.h"
 #include "user_cache.h"
 #include "posixDB.h"
 
 class RGWLC;
 
 namespace rgw { namespace sal {
-
-class POSIXDriver;
-class POSIXBucket;
-class POSIXObject;
-
-using DeleteResult = rgw::sal::Object::DeleteOp::Result;
-
-namespace posix {
-
-using BucketCache = file::listing::BucketCache<POSIXDriver, POSIXBucket>;
-
-/* integration w/bucket listing cache */
-using fill_cache_cb_t = file::listing::fill_cache_cb_t;
-
-struct ObjectType {
-  enum Type {
-    UNKNOWN = 0,
-    FILE = 1,
-    DIRECTORY = 2,
-    VERSIONED = 3,
-    MULTIPART = 4,
-    SYMLINK = 5,
-  };
-  uint32_t type{UNKNOWN};
-
-  ObjectType &operator=(ObjectType::Type &&_t) {
-    type = _t;
-    return *this;
-  };
-
-  ObjectType() {}
-  ObjectType(Type _t) : type(_t){}
-
-  bool operator==(const ObjectType &t) const { return (type == t.type); }
-  bool operator==(const ObjectType::Type &t) const { return (type == t); }
-
-  void encode(bufferlist &bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(type, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator &bl) {
-    DECODE_START(1, bl);
-    ceph::decode(type, bl);
-    DECODE_FINISH(bl);
-  }
-  friend inline std::ostream &operator<<(std::ostream &out,
-                                         const ObjectType &t) {
-    switch (t.type) {
-    case UNKNOWN:
-      out << "UNKNOWN";
-      break;
-    case FILE:
-      out << "FILE";
-      break;
-    case DIRECTORY:
-      out << "DIRECTORY";
-      break;
-    case VERSIONED:
-      out << "VERSIONED";
-      break;
-    case MULTIPART:
-      out << "MULTIPART";
-      break;
-    case SYMLINK:
-      out << "SYMLINK";
-      break;
-    }
-    return out;
-  }
-};
-WRITE_CLASS_ENCODER(ObjectType);
-
-class Directory;
-
-class FSEnt {
-protected:
-  std::string fname;
-  Directory* parent;
-  int fd{-1};
-  bool need_fsync{false};
-  bool exist{false};
-  struct statx stx;
-  bool stat_done{false};
-  CephContext* ctx;
-
-public:
-  static constexpr uint32_t FLAG_NONE =      0x0;
-  static constexpr uint32_t FLAG_CURRENT =   0x2;
-  static constexpr uint32_t FLAG_DELETE_MARKER =   0x4;
-
-  FSEnt(std::string _name, Directory* _parent, CephContext* _ctx) : fname(_name), parent(_parent), ctx(_ctx) {}
-  FSEnt(std::string _name, Directory* _parent, struct statx& _stx, CephContext* _ctx) : fname(_name), parent(_parent), exist(true), stx(_stx), stat_done(true), ctx(_ctx) {}
-  FSEnt(const FSEnt& _e) :
-    fname(_e.fname),
-    parent(_e.parent),
-    exist(_e.exist),
-    stx(_e.stx),
-    stat_done(_e.stat_done),
-    ctx(_e.ctx)
-  { }
-
-  virtual ~FSEnt() { }
-
-  int get_fd() { return fd; };
-  std::string& get_name() { return fname; }
-  Directory* get_parent() { return parent; }
-  bool exists() { return exist; }
-  struct statx& get_stx() { return stx; }
-  virtual ObjectType get_type() { return ObjectType::UNKNOWN; };
-
-  virtual int create(const DoutPrefixProvider *dpp, bool* existed = nullptr, bool temp_file = false) = 0;
-  virtual int open(const DoutPrefixProvider *dpp) = 0;
-  virtual int close() = 0;
-  virtual int stat(const DoutPrefixProvider *dpp, bool force = false);
-  virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children, DeleteResult* result) = 0;
-  virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) = 0;
-  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) = 0;
-  virtual int write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs, Attrs* extra_attrs);
-  virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs);
-  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) = 0;
-  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) = 0;
-  virtual std::unique_ptr<FSEnt> clone_base() = 0;
-  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags);
-  virtual std::string get_cur_version() { return ""; };
-};
-
-class File : public FSEnt {
-protected:
-
-public:
-  File(std::string _name, Directory* _parent, CephContext* _ctx) : FSEnt(_name, _parent, _ctx)
-    {}
-  File(std::string _name, Directory* _parent, struct statx& _stx, CephContext* _ctx) : FSEnt(_name, _parent, _stx, _ctx)
-    {}
-  File(const File& _f) : FSEnt(_f) {}
-  virtual ~File() { close(); }
-
-  virtual uint64_t get_size() { return stx.stx_size; }
-  virtual ObjectType get_type() override { return ObjectType::FILE; };
-
-
-  virtual int create(const DoutPrefixProvider *dpp, bool* existed = nullptr, bool temp_file = false) override;
-  virtual int open(const DoutPrefixProvider *dpp) override;
-  virtual int close() override;
-  virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
-  virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children, DeleteResult* result) override;
-  virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
-  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
-  virtual std::unique_ptr<FSEnt> clone_base() override {
-    return std::make_unique<File>(*this);
-  }
-  std::unique_ptr<File> clone() {
-    return std::make_unique<File>(*this);
-  }
-};
-
-class Directory : public FSEnt {
-protected:
-
-public:
-  Directory(std::string _name, Directory* _parent, CephContext* _ctx) : FSEnt(_name, _parent, _ctx)
-    {}
-  Directory(std::string _name, Directory* _parent, struct statx& _stx, CephContext* _ctx) : FSEnt(_name, _parent, _stx, _ctx)
-    {}
-  Directory(const Directory& _d) : FSEnt(_d) {}
-  virtual ~Directory() { close(); }
-
-  virtual ObjectType get_type() override { return ObjectType::DIRECTORY; };
-
-  virtual bool file_exists(std::string& name);
-
-  virtual int create(const DoutPrefixProvider *dpp, bool* existed = nullptr, bool temp_file = false) override;
-  virtual int open(const DoutPrefixProvider *dpp) override;
-  virtual int close() override;
-  virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
-  virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children, DeleteResult* result) override;
-  template <typename F>
-    int for_each(const DoutPrefixProvider* dpp, const F& func);
-  virtual int rename(const DoutPrefixProvider* dpp, optional_yield y, Directory* dst_dir, std::string dst_name);
-  virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual std::unique_ptr<FSEnt> clone_base() override {
-    return std::make_unique<Directory>(*this);
-  }
-  virtual std::unique_ptr<Directory> clone_dir() {
-    return std::make_unique<Directory>(*this);
-  }
-  std::unique_ptr<Directory> clone() {
-    return std::make_unique<Directory>(*this);
-  }
-  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
-  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
-  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags) override;
-
-  int get_ent(const DoutPrefixProvider *dpp, optional_yield y, const std::string& name, const std::string& version, std::unique_ptr<FSEnt>& ent);
-};
-
-class Symlink: public File {
-  std::unique_ptr<FSEnt> target;
-public:
-  Symlink(std::string _name, Directory* _parent, std::string _tgt, CephContext* _ctx) :
-    File(_name, _parent, _ctx)
-    { fill_target(nullptr, parent, fname,_tgt, target, _ctx); }
-  Symlink(std::string _name, Directory* _parent, CephContext* _ctx) :
-    File(_name, _parent, _ctx)
-    {}
-  Symlink(std::string _name, Directory* _parent, struct statx& _stx, std::string _tgt, CephContext* _ctx) :
-    File(_name, _parent, _stx, _ctx)
-    { fill_target(nullptr, parent, fname,_tgt, target, _ctx); }
-  Symlink(std::string _name, Directory* _parent, struct statx& _stx, CephContext* _ctx) :
-    File(_name, _parent, _stx, _ctx)
-    {}
-  Symlink(const Symlink& _s) : File(_s) {}
-  virtual ~Symlink() { close(); }
-
-  static int fill_target(const DoutPrefixProvider *dpp, Directory* parent, std::string sname, std::string tname, std::unique_ptr<FSEnt>& ent, CephContext* _ctx);
-
-  virtual ObjectType get_type() override { return ObjectType::SYMLINK; };
-  virtual int create(const DoutPrefixProvider *dpp, bool* existed = nullptr, bool temp_file = false) override;
-  virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
-  virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs) override;
-  FSEnt* get_target() { return target.get(); }
-  virtual std::unique_ptr<FSEnt> clone_base() override {
-    return std::make_unique<Symlink>(*this);
-  }
-  std::unique_ptr<Symlink> clone() {
-    return std::make_unique<Symlink>(*this);
-  }
-  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
-};
-
-class MPDirectory : public Directory {
-  std::string tmpname;
-protected:
-  std::map<std::string, int64_t> parts;
-  std::unique_ptr<FSEnt> cur_read_part;
-
-public:
-  MPDirectory(std::string _name, Directory* _parent, CephContext* _ctx) : Directory(_name, _parent, _ctx)
-    {}
-  MPDirectory(std::string _name, Directory* _parent, struct statx& _stx, CephContext* _ctx) : Directory(_name, _parent, _stx, _ctx)
-    {}
-  MPDirectory(const MPDirectory& _d) :
-    Directory(_d),
-    parts(_d.parts)
-    { if (_d.cur_read_part) cur_read_part = _d.cur_read_part->clone_base(); }
-  virtual ~MPDirectory() { close(); }
-
-  virtual ObjectType get_type() override { return ObjectType::MULTIPART; };
-  virtual int create(const DoutPrefixProvider *dpp, bool* existed = nullptr, bool temp_file = false) override;
-  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
-  virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children, DeleteResult* result) override;
-  virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
-  std::unique_ptr<File> get_part_file(int partnum);
-  const std::map<std::string, int64_t>& get_parts() const { return parts; }
-  virtual std::unique_ptr<FSEnt> clone_base() override {
-    return std::make_unique<MPDirectory>(*this);
-  }
-  virtual std::unique_ptr<Directory> clone_dir() override {
-    return std::make_unique<MPDirectory>(*this);
-  }
-  std::unique_ptr<MPDirectory> clone() {
-    return std::make_unique<MPDirectory>(*this);
-  }
-  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags) override;
-};
-
-class VersionedDirectory : public Directory {
-protected:
-  std::string instance_id;
-  std::unique_ptr<FSEnt> cur_version;
-
-public:
-  VersionedDirectory(std::string _name, Directory* _parent, CephContext* _ctx) : Directory(_name, _parent, _ctx)
-    {}
-  VersionedDirectory(std::string _name, Directory* _parent, std::string _instance_id, CephContext* _ctx) :
-    Directory(_name, _parent, _ctx),
-    instance_id(_instance_id)
-    {}
-  VersionedDirectory(std::string _name, Directory* _parent, std::unique_ptr<FSEnt>&& _cur, CephContext* _ctx) :
-    Directory(_name, _parent, _ctx),
-    cur_version(std::move(_cur))
-    {}
-  VersionedDirectory(std::string _name, Directory* _parent, struct statx& _stx, CephContext* _ctx) : Directory(_name, _parent, _stx, _ctx)
-    {}
-  VersionedDirectory(std::string _name, Directory* _parent, std::string _instance_id, struct statx& _stx, CephContext* _ctx) :
-    Directory(_name, _parent, _stx, _ctx),
-    instance_id(_instance_id)
-    {}
-  VersionedDirectory(const VersionedDirectory& _d) :
-    Directory(_d),
-    instance_id(_d.instance_id),
-    cur_version(_d.cur_version ? _d.cur_version->clone_base() : nullptr)
-    { }
-  VersionedDirectory(const Directory& _d) :
-    Directory(_d)
-    { }
-  virtual ~VersionedDirectory() { close(); }
-
-  virtual ObjectType get_type() override { return ObjectType::VERSIONED; };
-  virtual int create(const DoutPrefixProvider *dpp, bool* existed = nullptr, bool temp_file = false) override;
-  virtual int open(const DoutPrefixProvider *dpp) override;
-  virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
-  virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs) override;
-  virtual int write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs, Attrs* extra_attrs) override;
-  virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
-  virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children, DeleteResult* result) override;
-  virtual std::string get_cur_version() override;
-  std::string get_new_instance();
-  int remove_symlink(const DoutPrefixProvider *dpp, optional_yield y, std::string match = "");
-  int add_file(const DoutPrefixProvider *dpp, std::unique_ptr<FSEnt>&& file, bool* existed = nullptr, bool temp_file = false);
-  int add_delete_marker(const DoutPrefixProvider* dpp, optional_yield y, std::unique_ptr<File>& marker, const std::string &name);
-  FSEnt* get_cur_version_ent() { return cur_version.get(); };
-  int set_cur_version_ent(const DoutPrefixProvider *dpp, FSEnt* file);
-  virtual std::unique_ptr<FSEnt> clone_base() override {
-    return std::make_unique<VersionedDirectory>(*this);
-  }
-  virtual std::unique_ptr<Directory> clone_dir() override {
-    return std::make_unique<VersionedDirectory>(*this);
-  }
-  std::unique_ptr<VersionedDirectory> clone() {
-    return std::make_unique<VersionedDirectory>(*this);
-  }
-  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
-  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags) override;
-};
-
-std::string get_key_fname(rgw_obj_key& key, bool use_version);
-
-} // namespace posix
 
 class POSIXZoneGroup : public StoreZoneGroup {
   POSIXDriver* store;
@@ -402,7 +64,7 @@ public:
     return 1;
   }
   virtual int get_placement_tier(const rgw_placement_rule& rule,
-				 std::unique_ptr<PlacementTier>* tier) {
+				 std::unique_ptr<PlacementTier>* tier) override {
     return -1;
   }
   virtual int get_zone_by_id(const std::string& id, std::unique_ptr<Zone>* zone) override {
@@ -522,7 +184,7 @@ public:
     return *this;
   }
 
-  virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp);
+  virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
   virtual const std::string get_name() const override { return "posix"; }
   virtual std::string get_cluster_id(const DoutPrefixProvider* dpp,  optional_yield y) override { return "PLACEHOLDER"; };
   virtual std::unique_ptr<User> get_user(const rgw_user& u) override;
@@ -675,7 +337,7 @@ public:
   virtual int list_all_zones(const DoutPrefixProvider* dpp, std::list<std::string>& zone_ids) override;
   virtual int cluster_stat(RGWClusterStat& stats) override;
   virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
-  virtual std::unique_ptr<Restore> get_restore(void) { return nullptr; }
+  virtual std::unique_ptr<Restore> get_restore(void) override { return nullptr; }
   virtual bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y) override { return 0; }
 
   virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, rgw::sal::Object* src_obj, req_state* s,
@@ -734,7 +396,7 @@ public:
 				      const std::string& topic_queue) override { return -ENOTSUP; }
 
   virtual RGWLC* get_rgwlc(void) override { return lc; }
-  virtual rgw::restore::Restore* get_rgwrestore(void) { return nullptr; }
+  virtual rgw::restore::Restore* get_rgwrestore(void) override { return nullptr; }
   virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return NULL; }
 
   virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info, optional_yield y) override { return 0; }
@@ -1044,7 +706,7 @@ public:
   int rename(const DoutPrefixProvider* dpp, optional_yield y, Object* target_obj);
 
   /* enumerate all entries by callback, in any order */
-  int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, posix::fill_cache_cb_t& cb);
+  int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb);
 
   static MDB_cmp_func* lmdb_cmp() { return nullptr; }
 
@@ -1214,7 +876,7 @@ public:
   int get_owner(const DoutPrefixProvider *dpp, optional_yield y, std::unique_ptr<User> *owner);
   int copy(const DoutPrefixProvider *dpp, optional_yield y, POSIXBucket *sb,
            POSIXBucket *db, POSIXObject *dobj);
-  int fill_cache(const DoutPrefixProvider *dpp, optional_yield y, posix::fill_cache_cb_t& cb);
+  int fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb);
   int set_cur_version(const DoutPrefixProvider *dpp);
   int stat(const DoutPrefixProvider *dpp);
   int make_ent(posix::ObjectType type);
