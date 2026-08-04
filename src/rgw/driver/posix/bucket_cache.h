@@ -205,7 +205,7 @@ public:
   typedef cohort::lru::TreeX<BucketCacheEntry, bucket_avl_t, BucketCacheEntryLT, BucketCacheEntryEQ, std::string,
 			     std::mutex> bucket_avl_cache;
 
-  bool reclaim(const cohort::lru::ObjectFactory* newobj_fac) {
+  bool reclaim(const cohort::lru::ObjectFactory* newobj_fac) override {
     auto factory = dynamic_cast<const BucketCacheEntry<D, B>::Factory*>(newobj_fac);
     if (factory == nullptr) {
         return false;
