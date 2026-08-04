@@ -8,6 +8,10 @@
   to optionally retry the monmap/config bootstrap and authentication steps when
   ``connect()`` fails transiently, for example a cephx EPERM returned by a monitor
   that is mid-election. The default of 0 preserves the previous fail-immediately
+  behaviour for every other caller. ceph-mgr defaults ``rados_connect_retries``
+  to 5 for itself, so a transient connect failure during a mgr failover no
+  longer leaves an always-on module stuck in HEALTH_ERR until a manual
+  ``ceph mgr fail``; setting the option back to 0 for the mgr restores the old
   behaviour.
 
 * RGW: S3 ListObjects and ListObjectVersions now support the
