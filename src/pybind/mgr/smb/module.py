@@ -505,7 +505,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         successful_share_updates = []
         failed_share_updates = []
 
-        for result in result_group:
+        for result in result_group.resources():
             if result.success:
                 if isinstance(result.src, resources.Cluster):
                     cluster_updated = True
@@ -594,7 +594,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             successful_updates = []
             failed_updates = []
 
-            for result in result_group:
+            for result in result_group.resources():
                 if result.success and hasattr(result.src, 'share_id'):
                     successful_updates.append(result.src.share_id)
                 elif hasattr(result.src, 'share_id'):

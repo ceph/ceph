@@ -44,7 +44,7 @@ from .proto import (
     PathResolver,
 )
 from .resources import SMBResource
-from .results import ErrorResult, Result, ResultGroup
+from .results import ErrorResult, ResourceResult, ResultGroup
 from .utils import checked
 
 log = logging.getLogger(__name__)
@@ -148,7 +148,7 @@ class Staging:
             results.append(self._save(res))
         return results
 
-    def _save(self, resource: SMBResource) -> Result:
+    def _save(self, resource: SMBResource) -> ResourceResult:
         entry = resource_entry(self.destination_store, resource)
         if resource.intent == Intent.REMOVED:
             removed = entry.remove()
@@ -156,7 +156,9 @@ class Staging:
         else:
             state = entry.create_or_update(resource)
         log.debug('saved resource: %r; state: %s', resource, state)
-        result = Result(resource, success=True, status={'state': state})
+        result = ResourceResult(
+            resource, success=True, status={'state': state}
+        )
         return result
 
     def _prune(
