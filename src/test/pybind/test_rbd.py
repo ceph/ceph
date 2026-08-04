@@ -3087,12 +3087,11 @@ class TestGroups(object):
             RBD().remove(ioctx, name)
 
     def test_group_image_add(self):
+        assert_raises(ObjectNotFound, self.dne_group.add_image, ioctx, image_name)
         self.group.add_image(ioctx, image_name)
 
-    def test_group_image_list_empty(self):
-        eq([], list(self.group.list_images()))
-
     def test_group_image_list(self):
+        assert_raises(ObjectNotFound, self.dne_group.list_images)
         eq([], list(self.group.list_images()))
         self.group.add_image(ioctx, image_name)
         eq([image_name], [img['name'] for img in self.group.list_images()])
@@ -3114,6 +3113,7 @@ class TestGroups(object):
         eq([image_name], [img['name'] for img in self.group.list_images()])
 
     def test_group_get_id(self):
+        assert_raises(ObjectNotFound, self.dne_group.id)
         id = self.group.id()
         assert isinstance(id, str)
         assert len(id) > 0
@@ -3142,6 +3142,7 @@ class TestGroups(object):
             eq(group_name, group['name'])
 
         eq([image_name], [img['name'] for img in self.group.list_images()])
+        assert_raises(ObjectNotFound, self.dne_group.remove_image, ioctx, image_name)
         self.group.remove_image(ioctx, image_name)
         eq([], list(self.group.list_images()))
         with Image(ioctx, image_name) as image:
@@ -3157,6 +3158,7 @@ class TestGroups(object):
         assert_raises(ObjectNotFound, self.group.get_snap_info, "")
 
         self.group.create_snap(snap_name)
+        assert_raises(ObjectNotFound, self.dne_group.get_snap_info, snap_name)
         snap_info_dict = self.group.get_snap_info(snap_name)
         image_names = []
         assert sorted(snap_info_dict.keys()) == self.gp_snap_keys
@@ -3194,6 +3196,7 @@ class TestGroups(object):
         global snap_name
         assert_raises(ObjectNotFound, self.dne_group.list_snaps)
         eq([], list(self.group.list_snaps()))
+        assert_raises(ObjectNotFound, self.dne_group.create_snap, snap_name)
         self.group.create_snap(snap_name)
         eq([snap_name], [snap['name'] for snap in self.group.list_snaps()])
 
@@ -3203,6 +3206,7 @@ class TestGroups(object):
             eq(group_name, info['group_name'])
             eq(snap_name, info['group_snap_name'])
 
+        assert_raises(ObjectNotFound, self.dne_group.remove_snap, snap_name)
         self.group.remove_snap(snap_name)
         eq([], list(self.group.list_snaps()))
 
@@ -3270,6 +3274,7 @@ class TestGroups(object):
         eq([], list(self.group.list_snaps()))
         self.group.create_snap(snap_name)
         eq([snap_name], [snap['name'] for snap in self.group.list_snaps()])
+        assert_raises(ObjectNotFound, self.dne_group.rename_snap, snap_name, new_snap_name)
         self.group.rename_snap(snap_name, new_snap_name)
         eq([new_snap_name], [snap['name'] for snap in self.group.list_snaps()])
         self.group.remove_snap(new_snap_name)
@@ -3464,6 +3469,9 @@ class TestGroups(object):
         with Image(ioctx, self.image_names[2]) as image:
             image_snaps = list(image.list_snaps())
             assert [s['namespace'] for s in image_snaps] == [RBD_SNAP_NAMESPACE_TYPE_GROUP]
+
+        # no group exists
+        assert_raises(ObjectNotFound, self.dne_group.rollback_to_snap, snap_name1)
 
         # group = []
         assert_raises(InvalidArgument, self.group.rollback_to_snap, snap_name1)

@@ -259,6 +259,10 @@
   rather rigid and also challenging to disseminate in some environments.  The
   key can be embedded in the migration spec or just referenced from there while
   stored in the MON config-key store.
+* RBD: `Group::list_images` python API will now correctly raise an ObjectNotFound
+  error when invoked on a non-existent group. The C APIs `rbd_group_image_list`,
+  `rbd_snap_list`, `rbd_group_snap_list` and C++ API `group_image_list` will now
+  return ENOENT instead of masking the error and returning 0.
 
 >=20.0.0
 
