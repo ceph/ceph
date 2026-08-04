@@ -434,6 +434,7 @@ public:
     virtual void on_backfill_suspended() = 0;
     virtual void on_recovery_reserved() = 0;
     virtual void on_recovery_cancelled() = 0;
+    virtual void on_pool_migration_source_starting() = 0;
     virtual void on_pool_migration_source_reserved() = 0;
     virtual void on_pool_migration_source_suspended() = 0;
     virtual void on_pool_migration_target_reserved() = 0;
