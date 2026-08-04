@@ -526,6 +526,166 @@ public:
 		    bufferlist &to_check,
 		    const std::pair<uint64_t, uint64_t>& offlen);
   const ContDesc &most_recent();
+
+  // Returns the minimum set of byte ranges that MUST appear in the OSD's
+  // mapext result.  This is get_written_extents(alignment) minus any
+  // 4k-aligned, 4k-length blocks whose content is entirely zeros.
+  //
+  // Because writes and appends never produce zero bytes, a block is all-zeros
+  // if and only if no write/append layer covers it (i.e. it was zeroed by a
+  // ZeroGenerator or was never written).  After shard recovery/reconstruction
+  // the OSD is free to drop such blocks from its allocation map, so the model
+  // must not require them in the actual mapext result.
+  //
+  // Partial blocks at the edges of extents (smaller than a full alignment
+  // unit) are included in the returned set — they will be narrowed further
+  // by inward rounding in the caller (MapextOp::_finish) so that sub-4k
+  // edge fragments are not required in the actual result either.
+  interval_set<uint64_t> get_min_written_extents(uint64_t alignment) const;
+
+  // Returns the set of byte ranges that are allocated (have data) on the
+  // OSD, accounting for write-layer truncation and zero hole-punching.
+  //
+  // Layers are stored newest-first.  We scan newest→oldest maintaining a
+  // 'masked' set: the union of all byte ranges whose fate has already been
+  // decided by a newer layer (written as data OR punched as a hole).  An
+  // older layer may only contribute bytes that are not yet masked.
+  //
+  // This correctly handles all orderings:
+  //  - Zero newer than write:  hole is applied immediately; older write
+  //    bytes under the hole are masked out and never added to written.
+  //  - Write newer than zero:  write claims its bytes first (marks them
+  //    masked as data); the older zero's hole is clipped to the unmasked
+  //    remainder, so it cannot remove bytes the newer write restored.
+  //
+  // ZeroGenerator layers do not truncate.  Only write layers (VarLenGenerator,
+  // AppendGenerator, …) impose a truncation via get_length(); older data
+  // beyond any newer write-layer truncation is clamped away.
+  //
+  // EC pools (alignment > 1) have an additional consideration: the zero
+  // operation in PrimaryLogPG emits a literal-zero write for any partial
+  // alignment block at either edge of the zero range (head and tail).
+  // This write allocates the whole alignment-sized block on the OSD, even
+  // if no prior write ever touched it.  The tail partial block specifically
+  // — [hole_end, round_up(z_end, alignment)) — may not be covered by any
+  // older write layer, so it must be explicitly added to written here.
+  // (The head partial block [z_off, hole_start) is always within the
+  // previously-written object region, so older layers cover it naturally,
+  // but we add both for symmetry and correctness.)
+  interval_set<uint64_t> get_written_extents(uint64_t alignment = 1) const {
+    interval_set<uint64_t> written;
+    interval_set<uint64_t> masked;
+
+    // UINT64_MAX means "no write-layer truncation seen yet"
+    uint64_t min_write_trunc = UINT64_MAX;
+    for (auto &layer : layers) {
+      ContentsGenerator *gen = layer.first.get();
+      auto *zero_gen = dynamic_cast<ZeroGenerator *>(gen);
+      if (zero_gen != nullptr) {
+        // Compute the aligned hole range:
+        //   alignment == 1 (replicated): full zeroed range is deallocated.
+        //   alignment >  1 (EC):         only the aligned interior is
+        //                                deallocated; the partial head and
+        //                                tail blocks are zeroed in-place.
+        const uint64_t z_off = zero_gen->get_zero_offset();
+        const uint64_t z_end = z_off + zero_gen->get_zero_length();
+        uint64_t hole_start, hole_end;
+        if (alignment > 1) {
+          hole_start = (z_off + alignment - 1) / alignment * alignment; // round up
+          hole_end   = z_end / alignment * alignment;                   // round down
+        } else {
+          hole_start = z_off;
+          hole_end   = z_end;
+        }
+        // Clamp hole to min_write_trunc: bytes beyond the newest write-layer
+        // truncation point don't exist, so there is nothing to punch there.
+        if (min_write_trunc != UINT64_MAX && hole_end > min_write_trunc)
+          hole_end = min_write_trunc;
+        if (hole_start < hole_end) {
+          // Only act on the portion of the hole not already decided by a
+          // newer layer (a newer write may have re-allocated part of it).
+          interval_set<uint64_t> hole;
+          hole.insert(hole_start, hole_end - hole_start);
+          interval_set<uint64_t> unmasked;
+          unmasked.intersection_of(hole, masked);   // part already decided
+          hole.subtract(unmasked);                  // keep only undecided part
+          // hole now contains only bytes not yet masked: remove from written
+          // and mark as masked (decided as a hole by this layer).
+          interval_set<uint64_t> to_remove;
+          to_remove.intersection_of(written, hole);
+          written.subtract(to_remove);
+          masked.union_of(hole);
+        }
+        // For EC pools: the zero op emits a literal-zero write for the
+        // partial alignment block at each edge.  These writes allocate the
+        // full alignment-sized block on the OSD regardless of prior history.
+        // Add both edge blocks to written (unconditionally, bypassing the
+        // mask) so the model reflects those allocations.
+        if (alignment > 1) {
+          // Head partial block: [z_off, hole_start).
+          // Only present if the zero range starts mid-block.
+          if (z_off < hole_start) {
+            uint64_t head_block_end = hole_start;
+            if (min_write_trunc == UINT64_MAX || head_block_end <= min_write_trunc) {
+              interval_set<uint64_t> head_edge;
+              head_edge.insert(z_off, head_block_end - z_off);
+              interval_set<uint64_t> head_unmasked;
+              head_unmasked.intersection_of(head_edge, masked);
+              head_edge.subtract(head_unmasked);
+              written.union_of(head_edge);
+              masked.union_of(head_edge);
+            }
+          }
+          // Tail partial block: [hole_end, round_up(z_end, alignment)).
+          // Only present if the zero range ends mid-block.
+          // Note: hole_end may have been clamped by min_write_trunc above,
+          // but the unclamped z_end determines whether there is a real tail.
+          const uint64_t z_end_raw = z_off + zero_gen->get_zero_length();
+          const uint64_t tail_block_start = z_end_raw / alignment * alignment; // round down
+          const uint64_t tail_block_end   = (z_end_raw + alignment - 1) / alignment * alignment; // round up
+          if (tail_block_start < z_end_raw &&  // z_end is not already aligned
+              tail_block_start < tail_block_end) {
+            // The tail partial block [tail_block_start, tail_block_end) is
+            // allocated by the tail literal-zero write.  Clamp to object size.
+            uint64_t tbe = tail_block_end;
+            if (min_write_trunc != UINT64_MAX && tbe > min_write_trunc)
+              tbe = min_write_trunc;
+            if (tail_block_start < tbe) {
+              interval_set<uint64_t> tail_edge;
+              tail_edge.insert(tail_block_start, tbe - tail_block_start);
+              interval_set<uint64_t> tail_unmasked;
+              tail_unmasked.intersection_of(tail_edge, masked);
+              tail_edge.subtract(tail_unmasked);
+              written.union_of(tail_edge);
+              masked.union_of(tail_edge);
+            }
+          }
+        }
+        // ZeroGenerator does not truncate; no min_write_trunc update.
+      } else {
+        interval_set<uint64_t> layer_ranges;
+        gen->get_ranges(layer.second, layer_ranges);
+        // Clamp this layer's ranges to the truncation imposed by all
+        // newer write layers.
+        if (min_write_trunc != UINT64_MAX) {
+          interval_set<uint64_t> valid;
+          valid.insert(0, min_write_trunc);
+          layer_ranges.intersection_of(valid);
+        }
+        // Only add ranges not already decided by a newer layer.
+        interval_set<uint64_t> unmasked;
+        unmasked.intersection_of(layer_ranges, masked); // already decided
+        layer_ranges.subtract(unmasked);                // keep undecided only
+        written.union_of(layer_ranges);
+        masked.union_of(layer_ranges);
+        uint64_t trunc = gen->get_length(layer.second);
+        if (trunc < min_write_trunc)
+          min_write_trunc = trunc;
+      }
+    }
+
+    return written;
+  }
   ContentsGenerator *most_recent_gen() {
     return layers.begin()->first.get();
   }
