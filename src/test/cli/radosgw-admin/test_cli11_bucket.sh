@@ -1733,19 +1733,19 @@ check_warns "check: duplicate --fix value (last value wins)" 0 "" "$WARN_FIX_DUP
 # no-op, so these assert PARSE-level handling (value consumed vs left as a stray,
 # and the warn-and-accept warning). A real stray like "zzz" gives exit 22
 # "unexpected argument", so exit 0 here means the token was consumed by --fix.
-check "check: --fix (bare)"                                 0 "" \
+check_cluster "check: --fix (bare)"                                 0 "" -- \
   bucket check --fix
-check "check: --fix=true"                                   0 "" \
+check_cluster "check: --fix=true"                                   0 "" -- \
   bucket check --fix=true
-check "check: --fix true (space, bool consumed)"            0 "" \
+check_cluster "check: --fix true (space, bool consumed)"            0 "" -- \
   bucket check --fix true
-check "check: --fix=false"                                  0 "" \
+check_cluster "check: --fix=false"                                  0 "" -- \
   bucket check --fix=false
-check "check: --fix false (space, bool consumed)"           0 "" \
+check_cluster "check: --fix false (space, bool consumed)"           0 "" -- \
   bucket check --fix false
 # invalid value: warn-and-accept -> treated as set, exit 0 (legacy stored a
 # truthy -EINVAL silently; we keep the truthy result and add a warning).
-check "check: --fix=banana (warn-and-accept)"               0 "Warning: invalid value 'banana' for --fix, treating as set" \
+check_cluster "check: --fix=banana (warn-and-accept)"               0 "Warning: invalid value 'banana' for --fix, treating as set" -- \
   bucket check --fix=banana
 # "--fix banana" (space + non-bool): the legacy flag loop leaves banana behind,
 # so it is reported as a stray word after the loop (exit 1), matching legacy.
@@ -1754,32 +1754,32 @@ check "check: --fix banana (space non-bool, left as stray)"  1 "ERROR: unexpecte
 # parse-safety on an UNMIGRATED command: must not throw (old add_flag(int) gave
 # exit 104). Legacy ignores --fix here; we stay exit 0. (A spurious warning is
 # printed for an invalid value only -- known minor divergence, exit code right.)
-check "gc list --fix=banana (unmigrated stays parse-safe)"  0 "" \
+check_cluster "gc list --fix=banana (unmigrated stays parse-safe)"  0 "" -- \
   gc list --fix=banana
 
 # Binary-flag rollout: one "=banana" per migrated flag confirms it uses
 # add_multilevel_binary_flag (warn-and-accept, correct flag name) and is treated
 # as SET. The exit matches legacy's truthy -EINVAL outcome (verified bare ==
 # =true == =banana for each flag); the warning is the one intended addition.
-check "list: --allow-unordered=banana"          0 "Warning: invalid value 'banana' for --allow-unordered, treating as set" \
+check_cluster "list: --allow-unordered=banana"          0 "Warning: invalid value 'banana' for --allow-unordered, treating as set" -- \
   bucket list --allow-unordered=banana
-check "stats: --show-restore-stats=banana"      0 "Warning: invalid value 'banana' for --show-restore-stats, treating as set" \
+check_cluster "stats: --show-restore-stats=banana"      0 "Warning: invalid value 'banana' for --show-restore-stats, treating as set" -- \
   bucket stats --show-restore-stats=banana
-check "check: --remove-bad=banana"              0 "Warning: invalid value 'banana' for --remove-bad, treating as set" \
+check_cluster "check: --remove-bad=banana"              0 "Warning: invalid value 'banana' for --remove-bad, treating as set" -- \
   bucket check --remove-bad=banana
-check "check: --check-objects=banana"           0 "Warning: invalid value 'banana' for --check-objects, treating as set" \
+check_cluster "check: --check-objects=banana"           0 "Warning: invalid value 'banana' for --check-objects, treating as set" -- \
   bucket check --check-objects=banana
 # set -> locator path needs a bucket name -> exit 22 (same as bare/=true)
-check "check: --check-head-obj-locator=banana"  22 "Warning: invalid value 'banana' for --check-head-obj-locator, treating as set" \
+check_cluster "check: --check-head-obj-locator=banana"  22 "Warning: invalid value 'banana' for --check-head-obj-locator, treating as set" -- \
   bucket check --check-head-obj-locator=banana
-check "rm: --purge-objects=banana"              0 "Warning: invalid value 'banana' for --purge-objects, treating as set" \
+check_cluster "rm: --purge-objects=banana"              0 "Warning: invalid value 'banana' for --purge-objects, treating as set" -- \
   bucket rm --purge-objects=banana
-check "rm: --bypass-gc=banana"                  0 "Warning: invalid value 'banana' for --bypass-gc, treating as set" \
+check_cluster "rm: --bypass-gc=banana"                  0 "Warning: invalid value 'banana' for --bypass-gc, treating as set" -- \
   bucket rm --bypass-gc=banana
 # set -> corrupt-index guard fires (requires --yes-i-really-mean-it) -> exit 1
-check "rm: --inconsistent-index=banana"         1 "Warning: invalid value 'banana' for --inconsistent-index, treating as set" \
+check_cluster "rm: --inconsistent-index=banana"         1 "Warning: invalid value 'banana' for --inconsistent-index, treating as set" -- \
   bucket rm --inconsistent-index=banana
-check "rm: --yes-i-really-mean-it=banana"       0 "Warning: invalid value 'banana' for --yes-i-really-mean-it, treating as set" \
+check_cluster "rm: --yes-i-really-mean-it=banana"       0 "Warning: invalid value 'banana' for --yes-i-really-mean-it, treating as set" -- \
   bucket rm --yes-i-really-mean-it=banana
 
 # check multi-warning combinations
@@ -2476,9 +2476,9 @@ check_cluster "list: --bucket '' lists all buckets"            0 "" -- \
   bucket list --bucket ""
 
 # commands CLI11 does not know are parsed by the legacy code
-check "unmigrated: bucket sync status reaches legacy"          22 "ERROR: bucket not specified" \
+check_cluster "unmigrated: bucket sync status reaches legacy"          22 "ERROR: bucket not specified" -- \
   bucket sync status
-check "unmigrated: user info reaches legacy"                   22 "ERROR: --uid or --access-key required" \
+check_cluster "unmigrated: user info reaches legacy"                   22 "ERROR: --uid or --access-key required" -- \
   user info
 check "unknown command reaches legacy"                         1 "ERROR: Unrecognized argument: 'banana'" \
   banana list
