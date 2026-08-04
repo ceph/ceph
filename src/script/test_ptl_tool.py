@@ -139,6 +139,195 @@ def test_post_consolidated_review_noop_when_no_issues(ptl_tool):
     session.post.assert_not_called()
 
 
+# ---------------------------------------------------------------------------
+# merge_pr_or_abort(): merge conflicts must be handled gracefully with
+# automatic abort and clear error messaging
+# ---------------------------------------------------------------------------
+
+def test_merge_pr_or_abort_success(ptl_tool):
+    """Successful merge should complete without calling abort."""
+    G = mock.Mock()
+    tip = mock.Mock()
+    tip.hexsha = "abc123"
+    message = "Merge PR #123"
+    
+    ptl_tool.merge_pr_or_abort(G, tip, message, 123)
+    
+    G.git.merge.assert_called_once_with("abc123", '--no-ff', m=message)
+
+
+def test_merge_pr_or_abort_conflict_aborts_and_exits(ptl_tool, caplog):
+    """Merge conflict should trigger abort and raise SystemExit with clear message."""
+    G = mock.Mock()
+    tip = mock.Mock()
+    tip.hexsha = "abc123"
+    message = "Merge PR #456"
+    
+    # Simulate merge conflict
+    G.git.merge.side_effect = [
+        ptl_tool.git.exc.GitCommandError('merge', 'CONFLICT'),
+        None  # abort succeeds
+    ]
+    
+    with caplog.at_level(logging.ERROR, logger=ptl_tool.log.name):
+        with pytest.raises(SystemExit) as exc_info:
+            ptl_tool.merge_pr_or_abort(G, tip, message, 456)
+    
+    # Verify merge was attempted
+    assert G.git.merge.call_count == 2
+    G.git.merge.assert_any_call("abc123", '--no-ff', m=message)
+    G.git.merge.assert_any_call('--abort')
+    
+    # Verify error message mentions the PR number
+    message = str(exc_info.value)
+    assert "456" in message
+    assert "merge conflict" in message.lower()
+    
+    # Verify error was logged
+    assert any(
+        "Failed to merge PR #456" in r.message
+        for r in caplog.records
+    )
+
+
+def test_merge_pr_or_abort_conflict_abort_fails(ptl_tool, caplog):
+    """If abort also fails, original error should still be reported."""
+    G = mock.Mock()
+    tip = mock.Mock()
+    tip.hexsha = "abc123"
+    message = "Merge PR #789"
+    
+    # Simulate merge conflict AND abort failure
+    merge_error = ptl_tool.git.exc.GitCommandError('merge', 'CONFLICT')
+    abort_error = ptl_tool.git.exc.GitCommandError('merge --abort', 'fatal: no merge to abort')
+    G.git.merge.side_effect = [merge_error, abort_error]
+    
+    with caplog.at_level(logging.WARNING, logger=ptl_tool.log.name):
+        with pytest.raises(SystemExit) as exc_info:
+            ptl_tool.merge_pr_or_abort(G, tip, message, 789)
+    
+    # Verify both merge and abort were attempted
+    assert G.git.merge.call_count == 2
+    
+    # Verify the SystemExit message still references the original PR
+    message = str(exc_info.value)
+    assert "789" in message
+    
+    # Verify warning about abort failure was logged
+    assert any(
+        "Failed to abort merge" in r.message
+        for r in caplog.records if r.levelname == "WARNING"
+    )
+
+# ---------------------------------------------------------------------------
+# ensure_clean_checkout(): leftover in-progress merges from previous runs
+# must be detected and automatically cleaned up before any operations begin
+# ---------------------------------------------------------------------------
+
+def _fake_exists_for_multiple(path_results):
+    """os.path.exists side_effect that validates exact paths checked and returns
+    appropriate results for each. path_results is a dict mapping expected paths
+    to their return values."""
+    def fake_exists(path):
+        if path not in path_results:
+            raise AssertionError(f"unexpected exists() check on {path!r}, expected one of {list(path_results.keys())}")
+        return path_results[path]
+    return fake_exists
+
+
+def test_ensure_clean_checkout_clean_repo(ptl_tool):
+    """When no MERGE_HEAD, no CHERRY_PICK_HEAD, and worktree is clean, function should be a no-op."""
+    G = mock.Mock()
+    G.git_dir = "/fake/repo/.git"
+    G.is_dirty.return_value = False
+
+    path_results = {
+        "/fake/repo/.git/MERGE_HEAD": False,
+        "/fake/repo/.git/CHERRY_PICK_HEAD": False,
+    }
+    
+    with mock.patch("os.path.exists", side_effect=_fake_exists_for_multiple(path_results)):
+        ptl_tool.ensure_clean_checkout(G)
+
+    # Should check if worktree is dirty
+    G.is_dirty.assert_called_once()
+    
+    # Should not attempt to abort anything
+    G.git.merge.assert_not_called()
+
+
+def test_ensure_clean_checkout_merge_in_progress(ptl_tool):
+    """When MERGE_HEAD exists, function should raise SystemExit without attempting abort."""
+    G = mock.Mock()
+    G.git_dir = "/fake/repo/.git"
+
+    path_results = {
+        "/fake/repo/.git/MERGE_HEAD": True,
+    }
+    
+    with mock.patch("os.path.exists", side_effect=_fake_exists_for_multiple(path_results)):
+        with pytest.raises(SystemExit) as exc_info:
+            ptl_tool.ensure_clean_checkout(G)
+
+    # Should NOT call merge --abort (key behavioral change)
+    G.git.merge.assert_not_called()
+    
+    # Should raise SystemExit with helpful message
+    message = str(exc_info.value)
+    assert "in-progress merge" in message.lower()
+    assert "git merge --abort" in message
+
+
+def test_ensure_clean_checkout_cherry_pick_in_progress(ptl_tool):
+    """When CHERRY_PICK_HEAD exists (but not MERGE_HEAD), function should raise SystemExit."""
+    G = mock.Mock()
+    G.git_dir = "/fake/repo/.git"
+
+    path_results = {
+        "/fake/repo/.git/MERGE_HEAD": False,
+        "/fake/repo/.git/CHERRY_PICK_HEAD": True,
+    }
+    
+    with mock.patch("os.path.exists", side_effect=_fake_exists_for_multiple(path_results)):
+        with pytest.raises(SystemExit) as exc_info:
+            ptl_tool.ensure_clean_checkout(G)
+
+    # Should NOT call any git commands
+    G.git.merge.assert_not_called()
+    
+    # Should raise SystemExit with cherry-pick-specific message
+    message = str(exc_info.value)
+    assert "cherry-pick" in message.lower()
+    assert "git cherry-pick --abort" in message
+
+
+def test_ensure_clean_checkout_dirty_worktree(ptl_tool):
+    """When worktree is dirty (no HEAD files), function should raise SystemExit."""
+    G = mock.Mock()
+    G.git_dir = "/fake/repo/.git"
+    G.is_dirty.return_value = True
+
+    path_results = {
+        "/fake/repo/.git/MERGE_HEAD": False,
+        "/fake/repo/.git/CHERRY_PICK_HEAD": False,
+    }
+    
+    with mock.patch("os.path.exists", side_effect=_fake_exists_for_multiple(path_results)):
+        with pytest.raises(SystemExit) as exc_info:
+            ptl_tool.ensure_clean_checkout(G)
+
+    # Should have checked is_dirty
+    G.is_dirty.assert_called_once()
+    
+    # Should NOT call any git commands
+    G.git.merge.assert_not_called()
+    
+    # Should raise SystemExit with uncommitted changes message
+    message = str(exc_info.value)
+    assert "uncommitted changes" in message.lower()
+    assert "commit" in message.lower() or "stash" in message.lower()
+
+
 def test_log_flag_adds_filehandler(ptl_tool, tmp_path, monkeypatch):
     """Without a label, the log file should be the generic ptl-tool.log in cwd."""
     logger = ptl_tool.log
