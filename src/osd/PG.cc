@@ -1595,6 +1595,17 @@ void PG::on_active_actmap()
       (!recovery_state.get_osdmap()->test_flag(CEPH_OSDMAP_NOREBALANCE) ||
        recovery_state.is_degraded())) {
     queue_recovery();
+  } else if (pool.info.has_flag(pg_pool_t::FLAG_NOBACKFILL) &&
+             (state_test(PG_STATE_BACKFILL_WAIT) ||
+              state_test(PG_STATE_BACKFILLING) ||
+              state_test(PG_STATE_BACKFILL_TOOFULL) ||
+              state_test(PG_STATE_BACKFILL_UNFOUND))) {
+    queue_peering_event(
+      PGPeeringEventRef(
+        std::make_shared<PGPeeringEvent>(
+          get_osdmap_epoch(),
+          get_osdmap_epoch(),
+          PeeringState::PauseBackfill())));
   }
 }
 
