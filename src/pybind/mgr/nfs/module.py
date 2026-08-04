@@ -1,20 +1,19 @@
 import logging
 import threading
-from typing import Tuple, Optional, List, Dict, Any
-import yaml
+from typing import Any, Dict, List, Optional, Tuple
 
-from .cli import NFSCLICommand
-
-from mgr_module import MgrModule, Option, CLICheckNonemptyFileInput
 import object_format
 import orchestrator
-from orchestrator.module import IngressType
+import yaml
+from mgr_module import CLICheckNonemptyFileInput, MgrModule, Option
 from mgr_util import CephFSEarmarkResolver
+from orchestrator.module import IngressType
 
-from .export import ExportMgr, AppliedExportResults
-from .cluster import NFSCluster, ClusterQosAction
+from .cli import NFSCLICommand
+from .cluster import NFSCluster
+from .export import AppliedExportResults, ExportMgr
+from .qos_conf import QOSBandwidthControl, QOSOpsControl, QOSType, UserQoSType
 from .utils import available_clusters, cephfs_client_for_mgr
-from .qos_conf import QOSType, QOSBandwidthControl, UserQoSType, QOSOpsControl
 
 log = logging.getLogger(__name__)
 
@@ -295,8 +294,26 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def cluster_info(self, cluster_id: Optional[str] = None) -> Dict[str, Any]:
         return self.nfs.show_nfs_cluster_info(cluster_id=cluster_id)
 
-    def fetch_nfs_cluster_obj(self) -> NFSCluster:
-        return self.nfs
+    def get_cluster_qos(self, cluster_id: str,
+                        ret_bw_in_bytes: bool = False) -> Dict[str, Any]:
+        return self.nfs.get_cluster_qos(cluster_id, ret_bw_in_bytes)
+
+    def disable_cluster_qos_bw(self, cluster_id: str) -> None:
+        return self.nfs.disable_cluster_qos_bw(cluster_id)
+
+    def disable_cluster_qos_ops(self, cluster_id: str) -> None:
+        return self.nfs.disable_cluster_qos_ops(cluster_id)
+
+    def get_export_qos(self, cluster_id: str, pseudo_path: str,
+                       ret_bw_in_bytes: bool = False) -> Dict[str, Any]:
+        return self.export_mgr.get_export_qos(cluster_id, pseudo_path,
+                                              ret_bw_in_bytes)
+
+    def disable_export_qos_bw(self, cluster_id: str, pseudo_path: str) -> None:
+        return self.export_mgr.disable_export_qos_bw(cluster_id, pseudo_path)
+
+    def disable_export_qos_ops(self, cluster_id: str, pseudo_path: str) -> None:
+        return self.export_mgr.disable_export_qos_ops(cluster_id, pseudo_path)
 
     @CLICommand('nfs export qos enable bandwidth_control', perm='rw')
     @object_format.EmptyResponder()

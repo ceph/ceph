@@ -11709,17 +11709,17 @@ paths:
                   default: false
                   type: boolean
                 max_client_combined_bw:
-                  type: string
+                  type: integer
                 max_client_read_bw:
-                  type: string
+                  type: integer
                 max_client_write_bw:
-                  type: string
+                  type: integer
                 max_export_combined_bw:
-                  type: string
+                  type: integer
                 max_export_read_bw:
-                  type: string
+                  type: integer
                 max_export_write_bw:
-                  type: string
+                  type: integer
                 qos_type:
                   default: ''
                   type: string
@@ -12287,17 +12287,17 @@ paths:
                   default: false
                   type: boolean
                 max_client_combined_bw:
-                  type: string
+                  type: integer
                 max_client_read_bw:
-                  type: string
+                  type: integer
                 max_client_write_bw:
-                  type: string
+                  type: integer
                 max_export_combined_bw:
-                  type: string
+                  type: integer
                 max_export_read_bw:
-                  type: string
+                  type: integer
                 max_export_write_bw:
-                  type: string
+                  type: integer
                 pseudo_path:
                   type: string
               required:

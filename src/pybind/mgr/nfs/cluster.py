@@ -2,39 +2,27 @@ import ipaddress
 import logging
 import re
 import socket
-from typing import cast, Dict, List, Any, Optional, TYPE_CHECKING, Union
 from enum import Enum
-
-from mgr_module import NFS_POOL_NAME as POOL_NAME
-from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec, IngressSpec
-from object_format import ErrorResponse
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union, cast
 
 import orchestrator
+from ceph.deployment.service_spec import IngressSpec, NFSServiceSpec, PlacementSpec
+from mgr_module import NFS_POOL_NAME as POOL_NAME
+from object_format import ErrorResponse
 from orchestrator.module import IngressType
 
-from .exception import NFSInvalidOperation, ClusterNotFound
-from .utils import (
-    ManualRestartRequired,
-    NonFatalError,
-    available_clusters,
-    conf_obj_name,
-    restart_nfs_service,
-    user_conf_obj_name,
-    USER_CONF_PREFIX,
-    qos_conf_obj_name)
+from .exception import ClusterNotFound, NFSInvalidOperation
+from .ganesha_conf import GaneshaConfParser, format_block
+from .qos_conf import QOS, QOSBandwidthControl, QOSOpsControl, QOSParams, \
+    QOSType, validate_clust_qos_msg_interval
 from .rados_utils import NFSRados
-from .ganesha_conf import format_block, GaneshaConfParser
-from .qos_conf import (
-    QOS,
-    QOSType,
-    QOSBandwidthControl,
-    QOSOpsControl,
-    QOSParams,
-    validate_clust_qos_msg_interval)
+from .utils import USER_CONF_PREFIX, ManualRestartRequired, NonFatalError, \
+    available_clusters, conf_obj_name, qos_conf_obj_name, restart_nfs_service, \
+    user_conf_obj_name
 
 if TYPE_CHECKING:
-    from nfs.module import Module
     from mgr_module import MgrModule
+    from nfs.module import Module
 
 
 log = logging.getLogger(__name__)
@@ -717,7 +705,11 @@ class NFSCluster:
             log.exception(f"Setting NFS-Ganesha QoS bandwidth control config failed for {cluster_id}")
             raise ErrorResponse.wrap(e)
 
-    def enable_cluster_qos_ops(self, cluster_id: str, qos_type: QOSType, ops_obj: QOSOpsControl, skip_qos_type_validation: bool = False) -> None:
+    def enable_cluster_qos_ops(self,
+                               cluster_id: str,
+                               qos_type: QOSType,
+                               ops_obj: QOSOpsControl,
+                               skip_qos_type_validation: bool = False) -> None:
         try:
             qos_obj = self.get_cluster_qos_config(cluster_id)
             if qos_obj and not skip_qos_type_validation:
