@@ -27,6 +27,31 @@ from mgr_module import MgrModule, Option, OptionValue, ServiceInfoT
 
 ALL_CHANNELS = ['basic', 'ident', 'crash', 'device', 'perf']
 
+
+def _defaultdict_list() -> defaultdict:
+    return defaultdict(list)
+
+
+def _defaultdict_dict() -> defaultdict:
+    return defaultdict(dict)
+
+
+def _defaultdict_int() -> defaultdict:
+    return defaultdict(int)
+
+
+def _defaultdict_defaultdict_int() -> defaultdict:
+    return defaultdict(_defaultdict_int)
+
+
+def _defaultdict_defaultdict_defaultdict_int() -> defaultdict:
+    return defaultdict(_defaultdict_defaultdict_int)
+
+
+def _defaultdict_histogram() -> defaultdict:
+    """Six-level nested defaultdict(int) used by get_osd_histograms."""
+    return defaultdict(_defaultdict_defaultdict_defaultdict_int)
+
 LICENSE = 'sharing-1-0'
 LICENSE_NAME = 'Community Data License Agreement - Sharing - Version 1.0'
 LICENSE_URL = 'https://cdla.io/sharing-1-0/'
@@ -502,7 +527,7 @@ class Module(MgrModule):
         return  etype + '.' + m.hexdigest()
 
     def get_heap_stats(self) -> Dict[str, dict]:
-        result: Dict[str, dict] = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
+        result: Dict[str, dict] = defaultdict(_defaultdict_defaultdict_int)
         anonymized_daemons = {}
         osd_map = self.get('osd_map')
 
@@ -577,7 +602,7 @@ class Module(MgrModule):
         return parsed_output
 
     def get_mempool(self, mode: str = 'separated') -> Dict[str, dict]:
-        result: Dict[str, dict] = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
+        result: Dict[str, dict] = defaultdict(_defaultdict_defaultdict_int)
         anonymized_daemons = {}
         osd_map = self.get('osd_map')
 
@@ -633,11 +658,7 @@ class Module(MgrModule):
 
     def get_osd_histograms(self, mode: str = 'separated') -> List[Dict[str, dict]]:
         # Initialize result dict
-        result: Dict[str, dict] = defaultdict(lambda: defaultdict(
-                                              lambda: defaultdict(
-                                              lambda: defaultdict(
-                                              lambda: defaultdict(
-                                              lambda: defaultdict(int))))))
+        result: Dict[str, dict] = defaultdict(_defaultdict_histogram)
 
         # Get list of osd ids from the metadata
         osd_metadata = self.get('osd_metadata')
@@ -840,7 +861,7 @@ class Module(MgrModule):
         perf_counters = self.get_perf_counters()
 
         # Initialize 'result' dict
-        result: Dict[str, dict] = defaultdict(lambda: defaultdict(list))
+        result: Dict[str, dict] = defaultdict(_defaultdict_list)
 
         # 'separated' mode
         anonymized_daemon_dict = {}
@@ -879,7 +900,7 @@ class Module(MgrModule):
                 result[daemon][collection] = []
 
                 for sub_collection in sub_collection_list:
-                    sub_collection_result: Dict[str, dict] = defaultdict(lambda: defaultdict(dict))
+                    sub_collection_result: Dict[str, dict] = defaultdict(_defaultdict_dict)
                     sub_collection_result['labels'] = sub_collection['labels']
                     for sub_collection_counter_name, sub_collection_counter_info in sub_collection['counters'].items():
                         if mode == 'separated':
