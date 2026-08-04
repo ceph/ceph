@@ -868,8 +868,14 @@ void Replayer<I>::scan_for_unsynced_group_snapshots(
     // and the previous interrupted cycle, after which we reload the
     // replayer to start a new sync cycle.
     auto remote_snap_id = *unlink_snap_uuids.begin();
-    mirror_group_snapshot_unlink_peer(remote_snap_id);
-    load_replayer(locker);
+    m_in_flight_op_tracker.start_op();
+    auto on_unlink = new LambdaContext([this](int r) {
+      std::unique_lock locker{m_lock};
+      m_in_flight_op_tracker.finish_op();
+      load_replayer(&locker);
+      return;
+    });
+    mirror_group_snapshot_unlink_peer(locker, remote_snap_id, on_unlink);
     return;
   }
 
@@ -1443,15 +1449,16 @@ void Replayer<I>::handle_set_mirror_snapshot_complete(
     }
   }
 
-  {
-    std::unique_lock locker{m_lock};
-    m_last_snapshot_bytes = last_snapshot_bytes;
-  }
+  std::unique_lock locker{m_lock};
+  m_last_snapshot_bytes = last_snapshot_bytes;
 
   if (!m_last_synced_remote_snap_id.empty()) {
-    mirror_group_snapshot_unlink_peer(m_last_synced_remote_snap_id);
+    mirror_group_snapshot_unlink_peer(
+      &locker, m_last_synced_remote_snap_id, on_finish);
+  } else {
+    locker.unlock();
+    on_finish->complete(0);
   }
-  on_finish->complete(0);
 }
 
 template <typename I>
@@ -1695,7 +1702,11 @@ void Replayer<I>::handle_post_user_snapshot_created(
 }
 
 template <typename I>
-void Replayer<I>::mirror_group_snapshot_unlink_peer(const std::string &snap_id) {
+void Replayer<I>::mirror_group_snapshot_unlink_peer(
+  std::unique_lock<ceph::mutex>* locker,
+  const std::string &snap_id, Context* on_unlink) {
+  dout(10) << dendl;
+
   auto remote_snap = std::find_if(
       m_remote_group_snaps.begin(), m_remote_group_snaps.end(),
       [snap_id](const cls::rbd::GroupSnapshot &s) {
@@ -1703,44 +1714,132 @@ void Replayer<I>::mirror_group_snapshot_unlink_peer(const std::string &snap_id) 
       });
 
   if (remote_snap == m_remote_group_snaps.end()) {
+    locker->unlock();
+    on_unlink->complete(0);
     return;
   }
+  ceph_assert(*remote_snap != m_remote_group_snaps.back());
 
   auto rns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
       &remote_snap->snapshot_namespace);
   if (rns == nullptr) {
     derr << "remote group snapshot is not a mirror snapshot: "
          << snap_id << dendl;
+    locker->unlock();
+    on_unlink->complete(-EINVAL);
     return;
   }
 
-  if (rns->mirror_peer_uuids.count(m_remote_mirror_peer_uuid) != 0) {
-    rns->mirror_peer_uuids.erase(m_remote_mirror_peer_uuid);
-    auto comp = create_rados_callback(
-      new LambdaContext([this, snap_id](int r) {
-	handle_mirror_group_snapshot_unlink_peer(r, snap_id);
-      }));
-
-    librados::ObjectWriteOperation op;
-    librbd::cls_client::group_snap_set(&op, *remote_snap);
-    int r = m_remote_io_ctx.aio_operate(
-      librbd::util::group_header_name(m_remote_group_id), comp, &op);
-    ceph_assert(r == 0);
-    comp->release();
+  if (rns->mirror_peer_uuids.count(m_remote_mirror_peer_uuid) == 0) {
+    locker->unlock();
+    on_unlink->complete(0);
+    return;
   }
+
+  if (remote_snap->snaps.empty()) {
+    unlink_peer_uuid_from_group_snap(&(*remote_snap), on_unlink);
+    return;
+  }
+
+  unlink_peer_uuid_from_image_snaps(&(*remote_snap), on_unlink);
 }
 
 template <typename I>
-void Replayer<I>::handle_mirror_group_snapshot_unlink_peer(
-    int r, const std::string &snap_id) {
+void Replayer<I>::unlink_peer_uuid_from_image_snaps(
+    cls::rbd::GroupSnapshot* remote_snap, Context* on_unlink) {
+  auto snap_id = remote_snap->id;
+  dout(10) << snap_id << dendl;
+
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+  std::vector<cls::rbd::ImageSnapshotSpec> image_snaps = remote_snap->snaps;
+  auto ctx = new LambdaContext([this, remote_snap, on_unlink](int r) {
+    handle_unlink_peer_uuid_from_image_snaps(r, remote_snap, on_unlink);
+  });
+
+  C_Gather *unlink_gather_ctx = new C_Gather(g_ceph_context, ctx);
+  for (const auto &spec : image_snaps) {
+    if (spec.snap_id == CEPH_NOSNAP) {
+      continue;
+    }
+    std::string image_header_oid = librbd::util::header_name(spec.image_id);
+    librados::ObjectWriteOperation op;
+    librbd::cls_client::mirror_image_snapshot_unlink_peer(
+      &op, spec.snap_id, m_remote_mirror_peer_uuid);
+    auto img_snapshot_unlink = new LambdaContext(
+      [this, spec, new_sub_ctx=unlink_gather_ctx->new_sub()](int r) {
+        if (r == -ENOENT) {
+          r = 0;
+        }
+        if (r < 0) {
+          derr << "failed to unlink mirror peer from image snapshot "
+               << spec.snap_id << " of image " << spec.image_id
+               << ": " << cpp_strerror(r) << dendl;
+        }
+        new_sub_ctx->complete(r);
+      });
+    auto aio_comp = create_rados_callback(img_snapshot_unlink);
+    int r = m_remote_io_ctx.aio_operate(image_header_oid, aio_comp, &op);
+    ceph_assert(r == 0);
+    aio_comp->release();
+  }
+
+  unlink_gather_ctx->activate();
+}
+
+template <typename I>
+void Replayer<I>::handle_unlink_peer_uuid_from_image_snaps(
+    int r, cls::rbd::GroupSnapshot* remote_snap, Context* on_unlink) {
+  std::unique_lock locker{m_lock};
+  auto snap_id = remote_snap->id;
   dout(10) << snap_id << ", r=" << r << dendl;
 
   if (r < 0) {
-    derr << "failed to remove mirror_peer_uuid for snap_id: "
-         << snap_id  << " : " << cpp_strerror(r) << dendl;
+    derr << "failed to remove mirror_peer_uuid for image snapshots"
+         << " of group snapshot snap_id: " << snap_id << dendl;
+    locker.unlock();
+    on_unlink->complete(r);
+    return;
   }
 
-  return;
+  unlink_peer_uuid_from_group_snap(remote_snap, on_unlink);
+}
+
+template <typename I>
+void Replayer<I>::unlink_peer_uuid_from_group_snap(
+  cls::rbd::GroupSnapshot* remote_snap, Context* on_unlink) {
+  auto snap_id = remote_snap->id;
+  dout(10) << "unlinking peer uuid for remote group snapshot: "
+           << snap_id << dendl;
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+
+  auto &rns = std::get<cls::rbd::GroupSnapshotNamespaceMirror>(
+      remote_snap->snapshot_namespace);
+  rns.mirror_peer_uuids.erase(m_remote_mirror_peer_uuid);
+
+  auto comp = create_rados_callback(
+    new LambdaContext([this, snap_id, on_unlink](int r) {
+      handle_unlink_peer_uuid_from_group_snap(r, snap_id, on_unlink);
+    }));
+
+  librados::ObjectWriteOperation op;
+  librbd::cls_client::group_snap_set(&op, *remote_snap);
+  int r = m_remote_io_ctx.aio_operate(
+    librbd::util::group_header_name(m_remote_group_id), comp, &op);
+  ceph_assert(r == 0);
+  comp->release();
+}
+
+template <typename I>
+void Replayer<I>::handle_unlink_peer_uuid_from_group_snap(
+    int r, const std::string &group_snap_id, Context* on_unlink) {
+  dout(10) << group_snap_id << ", r=" << r << dendl;
+
+  if (r < 0) {
+    derr << "failed to remove mirror_peer_uuid for snap_id: "
+         << group_snap_id  << " : " << cpp_strerror(r) << dendl;
+  }
+
+  on_unlink->complete(r);
 }
 
 template <typename I>
