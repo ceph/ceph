@@ -61,10 +61,10 @@
   padding: var(--cds-spacing-06) var(--cds-spacing-07);
 
   &-title {
-    display: flex;
     align-items: center;
-    gap: var(--cds-spacing-03);
     color: var(--cds-text-primary);
+    display: flex;
+    gap: var(--cds-spacing-03);
   }
 
   &-description {
@@ -157,8 +157,8 @@ cds-loading {
 }
 
 .tearsheet-success-icon svg {
-  width: 2rem;
-  height: 2rem;
   fill: var(--cds-support-success);
   flex-shrink: 0;
+  height: 2rem;
+  width: 2rem;
 }

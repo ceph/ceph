@@ -44,7 +44,7 @@ const MULTI_CLUSTER_CONFIG = {
   }
 };
 
-const EMPTY_REALMS = { default_info: '', realms: [] };
+const EMPTY_REALMS = { default_info: '', realms: [] as string[] };
 const SOME_REALMS = { default_info: 'realm-a', realms: ['realm-a', 'realm-b'] };
 
 function buildDaemon(id = 'rgw.1', hostname = 'host1', port = 8080) {

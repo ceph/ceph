@@ -16,10 +16,10 @@
         [attr.data-testid]="headerTestId"
       >
         @if (successIcon) {
-          <cd-icon
-            type="success"
-            class="tearsheet-success-icon"
-          ></cd-icon>
+        <cd-icon
+          type="success"
+          class="tearsheet-success-icon"
+        ></cd-icon>
         }
         {{title}}
       </h4>
@@ -49,9 +49,7 @@
         </div>
       }
       <div cdsCol
-           [columnNumbers]="
-            !hideInfluencer ? { lg: 13, md: 13, sm: 13 } : { lg: 16, md: 16, sm: 16 }
-           "
+           [columnNumbers]="!hideInfluencer ? { lg: 13, md: 13, sm: 13 } : { lg: 16, md: 16, sm: 16 }"
            class="tearsheet-main">
         <!-- Tearsheet Content Area -->
         <div class="tearsheet-content tearsheet-content--full">
@@ -64,8 +62,7 @@
           <button cdsButton="ghost"
                   class="tearsheet-footer-cancel"
                   (click)="closeTearsheet()"
-                  size="xl"
-          >
+                  size="xl">
           @if (isSubmitLoading) {
             <ng-container i18n>Close</ng-container>
           } @else {
@@ -108,13 +105,12 @@
     class="tearsheet-header">
     <h4 cdsModalHeaderHeading
         class="cds--type-heading-04 tearsheet-header-title"
-        [attr.data-testid]="headerTestId"
-    >
+        [attr.data-testid]="headerTestId">
     @if (successIcon) {
-      <cd-icon
-        type="success"
-        class="tearsheet-success-icon"
-      ></cd-icon>
+    <cd-icon
+      type="success"
+      class="tearsheet-success-icon"
+    ></cd-icon>
     }
     {{title}}
     </h4>
@@ -142,11 +138,7 @@
     </div>
     }
     <div cdsCol
-         [columnNumbers]="
-          steps.length > 1 && !hideInfluencer
-            ? { lg: 13, md: 13, sm: 13 }
-            : { lg: 16, md: 16, sm: 16 }
-         "
+         [columnNumbers]="steps.length > 1 && !hideInfluencer ? { lg: 13, md: 13, sm: 13 } : { lg: 16, md: 16, sm: 16 }"
          class="tearsheet-main">
       @if (showRightInfluencer) {
       <!-- Tearsheet content with right influencer  -->

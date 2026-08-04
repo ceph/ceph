@@ -36,6 +36,7 @@ class MockHostComponent {
   ];
   title = 'Test Title';
   description = 'Test Description';
+  step1Valid: boolean | null = null;
 
   onSubmit() {}
 
