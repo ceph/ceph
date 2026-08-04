@@ -120,29 +120,12 @@ struct OrderingHandle {
   // we can easily optimize this dynalloc out as all concretes are
   // supposed to have exactly the same size.
   std::unique_ptr<OperationProxy> op;
-  seastar::shared_mutex *collection_ordering_lock = nullptr;
 
   // in the future we might add further constructors / template to type
   // erasure while extracting the location of tracking events.
   OrderingHandle(std::unique_ptr<OperationProxy> op) : op(std::move(op)) {}
   OrderingHandle(OrderingHandle &&other)
-    : op(std::move(other.op)),
-      collection_ordering_lock(other.collection_ordering_lock) {
-    other.collection_ordering_lock = nullptr;
-  }
-
-  seastar::future<> take_collection_lock(seastar::shared_mutex &mutex) {
-    ceph_assert(!collection_ordering_lock);
-    collection_ordering_lock = &mutex;
-    return collection_ordering_lock->lock();
-  }
-
-  void maybe_release_collection_lock() {
-    if (collection_ordering_lock) {
-      collection_ordering_lock->unlock();
-      collection_ordering_lock = nullptr;
-    }
-  }
+    : op(std::move(other.op)) {}
 
   template <typename T>
   seastar::future<> enter(T &t) {
@@ -155,10 +138,6 @@ struct OrderingHandle {
 
   seastar::future<> complete() {
     return op->complete();
-  }
-
-  ~OrderingHandle() {
-    maybe_release_collection_lock();
   }
 };
 

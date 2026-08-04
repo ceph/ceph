@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <deque>
 #include <map>
 #include <optional>
 #include <string>
@@ -53,7 +54,13 @@ public:
   SeastoreCollection(T&&... args) :
     FuturizedCollection(std::forward<T>(args)...) {}
 
-  seastar::shared_mutex ordering_lock;
+  struct batch_entry_t {
+    ceph::os::Transaction txn;
+    seastar::promise<> pr;
+    bool batchable = true;
+  };
+  std::deque<batch_entry_t> pending_txns;
+  bool collection_in_flight = false;
 };
 
 /**
@@ -251,6 +258,12 @@ public:
         iter = ext_transaction.begin();
       }
     };
+
+    seastar::future<> dispatch_collection(CollectionRef ch);
+    ceph::os::Transaction build_next_batch(
+      SeastoreCollection& coll,
+      std::vector<seastar::promise<>>& pending_txns_promises);
+    seastar::future<> run_one_batch(CollectionRef ch, ceph::os::Transaction&& t);
 
     TransactionManager::read_extent_iertr::future<std::optional<unsigned>>
     get_coll_bits(CollectionRef ch, Transaction &t) const;

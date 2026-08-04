@@ -3293,7 +3293,6 @@ struct shard_stats_t {
   uint64_t repeat_io_num = 0;
   uint64_t pending_io_num = 0;
   uint64_t starting_io_num = 0;
-  uint64_t waiting_collock_io_num = 0;
   uint64_t waiting_throttler_io_num = 0;
   uint64_t processing_inlock_io_num = 0;
   uint64_t processing_postlock_io_num = 0;
@@ -3336,7 +3335,6 @@ struct shard_stats_t {
     repeat_io_num += o.repeat_io_num;
     pending_io_num += o.pending_io_num;
     starting_io_num += o.starting_io_num;
-    waiting_collock_io_num += o.waiting_collock_io_num;
     waiting_throttler_io_num += o.waiting_throttler_io_num;
     processing_inlock_io_num += o.processing_inlock_io_num;
     processing_postlock_io_num += o.processing_postlock_io_num;
