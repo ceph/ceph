@@ -2048,6 +2048,160 @@ class TestMirroring(CephFSTestCase):
         self.remove_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 
+    def test_cephfs_mirror_hole_fill_sync(self):
+        """Test snapshot sync of an object first written after the older snapshot.
+
+        Filling a hole in the middle of a sparse file creates an object that
+        did not exist in the older snapshot.  No clone of that object covers
+        the older snapshot -- there was nothing to copy on write -- which
+        blockdiff used to treat as "unchanged since the older snapshot" and
+        silently drop from the diff, leaving the region zeroed on the remote.
+
+        The mtimes are pinned for the reason given in
+        test_cephfs_mirror_sparse_file_sync.
+        """
+        self.setup_mount_b(mds_perm='rw')
+        self.mount_a.run_shell(["mkdir", "d0"])
+
+        # 64MB sparse file with data only in the first object; blockdiff
+        # requires the file to exceed cephfs_mirror_blockdiff_min_file_size.
+        self.mount_a.run_shell(["truncate", "-s", "64M", "d0/sparse"])
+        self.mount_a.run_shell(["dd", "if=/dev/urandom", "of=d0/sparse", "bs=1M",
+                                "count=1", "conv=notrunc"])
+        self.mount_a.run_shell(["touch", "-m", "-d", "2020-01-01 00:00:00 UTC",
+                                "d0/sparse"])
+
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
+        self.peer_add(self.primary_fs_name, self.primary_fs_id,
+                      "client.mirror_remote@ceph", self.secondary_fs_name)
+
+        # snapshot 1: full sync
+        self.mount_a.run_shell(["mkdir", "d0/.snap/snap_a"])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               "client.mirror_remote@ceph", '/d0', 'snap_a', 1)
+        self.verify_snapshot('d0', 'snap_a')
+
+        # fill the hole at 32MB -- object 8 is created only now, so it has no
+        # clone covering snap_a.  The file is not touched after snap_b, so the
+        # newer side of the diff is the head inode and both ends of the diff
+        # resolve to the same (head) entry of the object's clone list.
+        self.mount_a.run_shell(["dd", "if=/dev/urandom", "of=d0/sparse", "bs=1M",
+                                "seek=32", "count=1", "conv=notrunc"])
+        self.mount_a.run_shell(["touch", "-m", "-d", "2020-01-01 00:00:02 UTC",
+                                "d0/sparse"])
+        self.mount_a.run_shell(["mkdir", "d0/.snap/snap_b"])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               "client.mirror_remote@ceph", '/d0', 'snap_b', 2)
+        self.verify_snapshot('d0', 'snap_b')
+
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_cephfs_mirror_hole_fill_sync_snapped_inode(self):
+        """Test hole fill sync when the newer snapshot is not the head version.
+
+        Same as test_cephfs_mirror_hole_fill_sync, except the hole filling
+        object is written again after the newer snapshot.  The older end of
+        the diff then falls back to the (last) "head" entry of the clone list
+        while the newer end resolves to an earlier clone, so the clone walk
+        used to run backwards and copy nothing at all.
+
+        All snapshots are taken before the directory is mirrored so that the
+        writes trailing each snapshot are guaranteed to have landed before
+        the incremental sync computes its diff.  The mtimes are pinned for
+        the reason given in test_cephfs_mirror_sparse_file_sync.
+        """
+        self.setup_mount_b(mds_perm='rw')
+        self.mount_a.run_shell(["mkdir", "d0"])
+
+        self.mount_a.run_shell(["truncate", "-s", "64M", "d0/sparse"])
+        self.mount_a.run_shell(["dd", "if=/dev/urandom", "of=d0/sparse", "bs=1M",
+                                "count=1", "conv=notrunc"])
+        self.mount_a.run_shell(["touch", "-m", "-d", "2020-01-01 00:00:00 UTC",
+                                "d0/sparse"])
+        self.mount_a.run_shell(["mkdir", "d0/.snap/snap_a"])
+
+        # object 8 comes into existence between snap_a and snap_b ...
+        self.mount_a.run_shell(["dd", "if=/dev/urandom", "of=d0/sparse", "bs=1M",
+                                "seek=32", "count=1", "conv=notrunc"])
+        self.mount_a.run_shell(["touch", "-m", "-d", "2020-01-01 00:00:02 UTC",
+                                "d0/sparse"])
+        self.mount_a.run_shell(["mkdir", "d0/.snap/snap_b"])
+
+        # ... and is rewritten after snap_b, so it gets a clone covering
+        # snap_b and .snap/snap_b/sparse resolves to a snapped inode.
+        self.mount_a.run_shell(["dd", "if=/dev/urandom", "of=d0/sparse", "bs=1M",
+                                "seek=32", "count=1", "conv=notrunc"])
+        self.mount_a.run_shell(["touch", "-m", "-d", "2020-01-01 00:00:04 UTC",
+                                "d0/sparse"])
+        self.mount_a.run_shell(["mkdir", "d0/.snap/snap_c"])
+
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
+        self.peer_add(self.primary_fs_name, self.primary_fs_id,
+                      "client.mirror_remote@ceph", self.secondary_fs_name)
+
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               "client.mirror_remote@ceph", '/d0', 'snap_c', 3)
+        self.verify_snapshot('d0', 'snap_a')
+        self.verify_snapshot('d0', 'snap_b')
+        self.verify_snapshot('d0', 'snap_c')
+
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_cephfs_mirror_blockdiff_untouched_after_snapshot(self):
+        """Test blockdiff for an object left untouched after the newer snapshot.
+
+        An object modified between the two compared snapshots and not written
+        again afterwards has no clone covering the newer snapshot, so the
+        newer end of the diff has to fall back to the "head" entry of the
+        clone list -- head is that object's content as of the newer snapshot.
+        Guards the fallback against being removed while fixing the older end.
+
+        The mtimes are pinned for the reason given in
+        test_cephfs_mirror_sparse_file_sync.
+        """
+        self.setup_mount_b(mds_perm='rw')
+        self.mount_a.run_shell(["mkdir", "d0"])
+
+        # 64MB dense file: every object exists in every snapshot below.
+        self.mount_a.run_shell(["dd", "if=/dev/urandom", "of=d0/dense", "bs=1M",
+                                "count=64"])
+        self.mount_a.run_shell(["touch", "-m", "-d", "2020-01-01 00:00:00 UTC",
+                                "d0/dense"])
+        self.mount_a.run_shell(["mkdir", "d0/.snap/snap_a"])
+
+        # object 0 changes between snap_a and snap_b ...
+        self.mount_a.run_shell(["dd", "if=/dev/urandom", "of=d0/dense", "bs=1M",
+                                "count=1", "conv=notrunc"])
+        self.mount_a.run_shell(["touch", "-m", "-d", "2020-01-01 00:00:02 UTC",
+                                "d0/dense"])
+        self.mount_a.run_shell(["mkdir", "d0/.snap/snap_b"])
+
+        # ... and object 8 -- not object 0 -- changes after snap_b, so the
+        # snap_a to snap_b diff must still report object 0.
+        self.mount_a.run_shell(["dd", "if=/dev/urandom", "of=d0/dense", "bs=1M",
+                                "seek=32", "count=1", "conv=notrunc"])
+        self.mount_a.run_shell(["touch", "-m", "-d", "2020-01-01 00:00:04 UTC",
+                                "d0/dense"])
+        self.mount_a.run_shell(["mkdir", "d0/.snap/snap_c"])
+
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
+        self.peer_add(self.primary_fs_name, self.primary_fs_id,
+                      "client.mirror_remote@ceph", self.secondary_fs_name)
+
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               "client.mirror_remote@ceph", '/d0', 'snap_c', 3)
+        self.verify_snapshot('d0', 'snap_a')
+        self.verify_snapshot('d0', 'snap_b')
+        self.verify_snapshot('d0', 'snap_c')
+
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
     def test_cephfs_mirror_with_parent_snapshot(self):
         """Test snapshot synchronization with parent directory snapshots"""
         self.mount_a.run_shell(["mkdir", "-p", "d0/d1/d2/d3"])

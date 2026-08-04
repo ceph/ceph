@@ -14748,35 +14748,59 @@ void MDCache::aggregate_snap_sets(const std::vector<std::unique_ptr<SnapSetConte
 
     if (snap_set->r == 0) {
       auto &clones = snap_set->snaps.clones;
-      auto it1 = std::find_if(clones.begin(), clones.end(),
-			      [snapid1](const librados::clone_info_t &clone)
-			      {
-				return snapid1 == clone.cloneid ||
-				  (std::find(clone.snaps.begin(), clone.snaps.end(), snapid1) != clone.snaps.end());
-			      });
+      if (clones.empty()) {
+	dout(10) << __func__ << ": no clones for objectid=" << snap_set->objectid << dendl;
+	continue;
+      }
+
+      auto find_clone = [&clones](snapid_t snapid) {
+	return std::find_if(clones.begin(), clones.end(),
+			    [snapid](const librados::clone_info_t &clone)
+			    {
+			      return snapid == clone.cloneid ||
+				(std::find(clone.snaps.begin(), clone.snaps.end(), snapid) != clone.snaps.end());
+			    });
+      };
+
+      auto it1 = find_clone(snapid1);
+      auto it2 = find_clone(snapid2);
+
+      interval_set<uint64_t> extent;
+      uint64_t offset = Striper::get_file_offset(g_ceph_context, &(in2->get_inode()->layout),
+						 snap_set->objectid, 0);
+
+      // No clone covers @snapid1 for one of two reasons: either the object
+      // was never written after @snapid1 -- in which case the newest version
+      // ("head") still holds the data as of @snapid1 -- or the object did not
+      // exist at @snapid1 at all. The clone list alone cannot tell the two
+      // apart since an object that does not exist has nothing to clone from.
+      // snapset.seq -- the seq of the SnapContext of the last write to this
+      // object -- disambiguates: had the object existed at @snapid1, a write
+      // after @snapid1 would have created a clone covering it. So a seq at or
+      // beyond @snapid1 with no matching clone means the object is new.
+      if (it1 == clones.end() && snap_set->snaps.seq >= snapid1) {
+	auto sz = it2 == clones.end() ? clones.back().size : it2->size;
+	dout(10) << __func__ << ": objectid=" << snap_set->objectid << " does not exist in snap "
+		 << snapid1 << " (seq=" << snap_set->snaps.seq << "): [" << offset << "~" << sz
+		 << "]" << dendl;
+	extents.union_insert(offset, sz);
+	dout(20) << __func__ << ": (modified) extents=" << extents << dendl;
+	continue;
+      }
+
       // point to "head" if not found
       if (it1 == clones.end()) {
-	it1 = std::prev(it1);
+	it1 = std::prev(clones.end());
       }
-      auto it2 = std::find_if(clones.begin(), clones.end(),
-			      [snapid2](const librados::clone_info_t &clone)
-			      {
-				return snapid2 == clone.cloneid ||
-				  (std::find(clone.snaps.begin(), clone.snaps.end(), snapid2) != clone.snaps.end());
-			      });
       // point to "head" if not found
       if (it2 == clones.end()) {
-	it2 = std::prev(it2);
+	it2 = std::prev(clones.end());
       }
 
       if (it1 == it2) {
 	dout(10) << __func__ << ": both snaps in same clone" << dendl;
 	continue;
       }
-
-      interval_set<uint64_t> extent;
-      uint64_t offset = Striper::get_file_offset(g_ceph_context, &(in2->get_inode()->layout),
-						 snap_set->objectid, 0);
 
       for (auto hops = std::distance(it1, it2); hops > 0; --hops) {
 	dout(20) << __func__ << ": [cloneid: " << it1->cloneid << " snaps: " << it1->snaps
