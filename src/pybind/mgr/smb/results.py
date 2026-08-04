@@ -1,4 +1,4 @@
-from typing import Iterable, Iterator, List, Optional
+from typing import Iterable, Iterator, List, Optional, Protocol
 
 import errno
 
@@ -9,7 +9,37 @@ from .utils import one
 _DOMAIN = 'domain'
 
 
-class Result:
+class Result(Protocol):
+    @property
+    def success(self) -> bool:
+        ...
+
+    def to_simplified(self) -> Simplified:
+        ...
+
+    def mgr_return_value(self) -> int:
+        ...
+
+    def mgr_status_value(self) -> str:
+        ...
+
+
+class BaseResult:
+    success = False
+
+    def to_simplified(self) -> Simplified:
+        return {'success': self.success}
+
+    def mgr_return_value(self) -> int:
+        return 0 if self.success else -errno.EAGAIN
+
+    def mgr_status_value(self) -> str:
+        if self.success:
+            return ""
+        return "resource failed to apply (see response data for details)"
+
+
+class ResourceResult(BaseResult):
     """Result of applying a single smb resource update to the system."""
 
     # Compatible with object formatter, thus suitable for being returned
@@ -36,14 +66,6 @@ class Result:
         ds['success'] = self.success
         return ds
 
-    def mgr_return_value(self) -> int:
-        return 0 if self.success else -errno.EAGAIN
-
-    def mgr_status_value(self) -> str:
-        if self.success:
-            return ""
-        return "resource failed to apply (see response data for details)"
-
     def replace_resource(self, resource: SMBResource) -> Self:
         return self.__class__(
             src=resource,
@@ -53,7 +75,7 @@ class Result:
         )
 
 
-class ErrorResult(Result, Exception):
+class ErrorResult(ResourceResult, Exception):
     """A Result subclass for wrapping an error condition."""
 
     def __init__(
@@ -65,7 +87,7 @@ class ErrorResult(Result, Exception):
         super().__init__(src, success=False, msg=msg, status=status)
 
 
-class InvalidResourceResult(Result):
+class InvalidResourceResult(BaseResult):
     def __init__(
         self,
         resource_data: Simplified,
@@ -108,11 +130,13 @@ class ResultGroup:
         match: Optional[Result] = None
         others: List[Result] = []
         for result in self._contents:
+            assert isinstance(result, ResourceResult)  # FIXME
             if result.src == target:
                 match = result
             else:
                 others.append(result)
         if match:
+            assert isinstance(match, ResourceResult)  # FIXME
             match.success = self.success
             match.status = {} if match.status is None else match.status
             match.status['additional_results'] = [
@@ -123,6 +147,20 @@ class ResultGroup:
 
     def __iter__(self) -> Iterator[Result]:
         return iter(self._contents)
+
+    def resources(self, check: bool = True) -> Iterator[ResourceResult]:
+        """Iterate over resource results in this result group.
+        If check is true (the default) raise an error if this is not
+        a successful result group.
+        """
+        for res in self._contents:
+            # check res.success to avoid iterating over contents twice
+            if check and not res.success:
+                raise ValueError(
+                    "getting resource results from failed result group"
+                )
+            if isinstance(res, ResourceResult):
+                yield res
 
     @property
     def success(self) -> bool:
@@ -150,7 +188,13 @@ class ResultGroup:
         """
         return self.__class__(
             initial_results=[
-                result.replace_resource(result.src.convert(operation))
+                _replace_resource(result, operation)
                 for result in self._contents
             ]
         )
+
+
+def _replace_resource(result: Result, operation: ConversionOp) -> Result:
+    if isinstance(result, ResourceResult):
+        return result.replace_resource(result.src.convert(operation))
+    return result

@@ -63,7 +63,7 @@ from .proto import (
     Simplified,
 )
 from .resources import SMBResource
-from .results import ErrorResult, Result, ResultGroup
+from .results import ErrorResult, ResourceResult, Result, ResultGroup
 from .rgw_auth import RGWAuthorizer
 from .staging import (
     Staging,
@@ -486,7 +486,7 @@ class ClusterConfigHandler:
         log.debug('staging resource: %r', resource)
         if create_only:
             if not staging.is_new(resource):
-                return Result(
+                return ResourceResult(
                     resource,
                     success=False,
                     msg='a resource with the same ID already exists',
@@ -506,7 +506,9 @@ class ClusterConfigHandler:
             log.debug('rejected resource: %r', resource)
             return err
         log.debug('checked resource: %r', resource)
-        result = Result(resource, success=True, status={'checked': True})
+        result = ResourceResult(
+            resource, success=True, status={'checked': True}
+        )
         return result
 
     def _choose_path_resolver(
@@ -629,7 +631,7 @@ class ClusterConfigHandler:
         chg_tls_ids: Set[str] = set()
         chg_rgw_cred_ids: Set[str] = set()
         chg_extc_ids: Set[str] = set()
-        for result in updated:
+        for result in updated.resources():
             state = (result.status or {}).get('state', None)
             if state in (State.PRESENT, State.NOT_PRESENT):
                 # these are the no-change states. we can ignore them
