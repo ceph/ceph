@@ -386,24 +386,44 @@ class Seq20 : public IoSequence {
 };
 
 class Seq21 : public IoSequence {
+ private:
+  enum class Phase {
+    BaselineWrite,
+    BarrierBeforeLayout,
+    EmitLayout,
+    BarrierBeforeMapext,
+    EmitMapext,
+    Recreate,
+  };
+
+  enum class Layout {
+    Zero,
+    WriteAndZero,
+    ZeroAndTruncate,
+  };
+
+  Layout layout;
+  uint64_t zero_offset;
+  uint64_t zero_length;
+  uint64_t write_offset;
+  uint64_t write_length;
+  uint64_t truncate_size;
+  uint64_t mapext_length;
+  Phase phase;
  public:
   Seq21(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
 
   Sequence get_id() const override;
   std::string get_name() const override;
   std::unique_ptr<IoOp> _next() override;
-
- private:
-  int stage;             // current stage index (0-8)
-  bool barrier_pending;  // true when the next call should emit a BarrierOp
 };
 
 class Seq15 : public IoSequence {
  private:
-  uint64_t offset;
-  uint64_t length;
-  uint64_t primary_size;
-  uint64_t secondary_size;
+  uint64_t offset = 0;
+  uint64_t length = 0;
+  uint64_t primary_size = 0;
+  uint64_t secondary_size = 0;
   bool doneread = true;
   bool donebarrier = false;
   enum class Stage {
@@ -417,7 +437,7 @@ class Seq15 : public IoSequence {
     READ_PRIMARY,
     DONE
   };
-  Stage stage;
+  Stage stage = Stage::WRITE_PRIMARY;
 
  public:
   Seq15(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
