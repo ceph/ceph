@@ -1121,6 +1121,28 @@ class TestCephadm(object):
                 [('nfs', 'foo2.host2')],
                 {'14649': {'id': 'nfs.foo-rgw.host1-rgw'}, '14650': {'id': 'nfs.foo2.host2-rgw'}},
             ),
+            # rgw-smb test cases
+            # Test 1: rgw-smb daemon matches smb daemon in cache - no stray
+            (
+                [('rgw-smb', '12345')],
+                [('smb', 'testcluster.a')],
+                [],
+                {'12345': {'id': 'smb.rgw.cluster.testcluster'}},
+            ),
+            # Test 2: multiple rgw-smb daemons match multiple smb daemons - no strays
+            (
+                [('rgw-smb', '12345'), ('rgw-smb', '12346')],
+                [('smb', 'cluster1.a'), ('smb', 'cluster2.b')],
+                [],
+                {'12345': {'id': 'smb.rgw.cluster.cluster1'}, '12346': {'id': 'smb.rgw.cluster.cluster2'}},
+            ),
+            # Test 3: rgw-smb daemon metadata doesn't match any smb daemon in cache - should be stray
+            (
+                [('rgw-smb', '12347')],
+                [('smb', 'cluster1.a'), ('smb', 'cluster2.b')],
+                [('rgw-smb', '12347')],
+                {'12347': {'id': 'smb.rgw.cluster.nonexistent'}},
+            ),
         ]
     )
     def test_check_for_stray_daemons(
@@ -1145,7 +1167,13 @@ class TestCephadm(object):
             # populate cephadm daemon cache
             dm = {}
             for daemon_type, daemon_id in cephadm_daemons:
-                dd = DaemonDescription(daemon_type=daemon_type, daemon_id=daemon_id)
+                # For SMB daemons, get based on service_name
+                if daemon_type == 'smb' and '.' in daemon_id:
+                    cluster_name = daemon_id.split('.')[0]
+                    dd = DaemonDescription(daemon_type=daemon_type, daemon_id=daemon_id,
+                                           service_name=f'smb.{cluster_name}')
+                else:
+                    dd = DaemonDescription(daemon_type=daemon_type, daemon_id=daemon_id)
                 dm[dd.name()] = dd
             cephadm_module.cache.update_host_daemons('host1', dm)
 
