@@ -54,7 +54,8 @@ class TestVolumesHelper(CephFSTestCase):
     def _raw_cmd(self, *args):
         return self.get_ceph_cmd_stdout(args)
 
-    def __check_clone_state(self, states, clone, clone_group=None, timo=120):
+    def __check_clone_state(self, states, clone, clone_group=None, timo=120,
+                             sleep=1):
         if isinstance(states, str):
             states = (states, )
 
@@ -66,7 +67,7 @@ class TestVolumesHelper(CephFSTestCase):
         msg = (f'Executed cmd "{args}" {timo} times; clone was never in '
                f'"{states}" state(s).')
 
-        with safe_while(tries=timo, sleep=1, action=msg) as proceed:
+        with safe_while(tries=timo, sleep=sleep, action=msg) as proceed:
             while proceed():
                 result = json.loads(self._fs_cmd(*args))
                 current_state = result["status"]["state"]
@@ -106,8 +107,10 @@ class TestVolumesHelper(CephFSTestCase):
     def _wait_for_clone_to_fail(self, clone, clone_group=None, timo=120):
         self.__check_clone_state("failed", clone, clone_group, timo)
 
-    def _wait_for_clone_to_be_in_progress(self, clone, clone_group=None, timo=120):
-        self.__check_clone_state("in-progress", clone, clone_group, timo)
+    def _wait_for_clone_to_be_in_progress(self, clone, clone_group=None,
+                                          timo=120, sleep=1):
+        self.__check_clone_state("in-progress", clone, clone_group, timo,
+                                 sleep=sleep)
 
     def _check_clone_canceled(self, clone, clone_group=None):
         self.__check_clone_state("canceled", clone, clone_group, timo=1)
@@ -8160,8 +8163,8 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # create subvolume
         self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
 
-        # do some IO
-        self._do_subvolume_io(subvolume, number_of_files=200)
+        # do some IO (enough data so in-progress lasts longer than the poll interval)
+        self._do_subvolume_io(subvolume, number_of_files=1000)
 
         # snapshot subvolume
         self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
@@ -8181,8 +8184,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         else:
             self.fail("clone status shouldn't show failure for pending clone")
 
-        # check clone1 to be in-progress
-        self._wait_for_clone_to_be_in_progress(clone1)
+        # Poll faster so a short in-progress window is not missed; keep ~120s
+        # wall-clock timeout (timo is try count, not seconds).
+        self._wait_for_clone_to_be_in_progress(clone1, timo=600, sleep=0.2)
 
         # in-progress clone1 shouldn't show failure status
         clone1_result = self._get_clone_status(clone1)
