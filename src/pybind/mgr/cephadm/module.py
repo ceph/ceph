@@ -3285,7 +3285,7 @@ Then run the following:
                                   <fsid>/removed/.
         """
         args = []
-        for host, dm in self.cache.daemons.items():
+        for host, dm in list(self.cache.daemons.items()):
             for name in names:
                 if name in dm:
                     args.append((name, host, force_delete_data))
@@ -4778,8 +4778,8 @@ Then run the following:
             'up_to_date': list(),
             'non_ceph_image_daemons': list()
         }
-        for host, dm in self.cache.daemons.items():
-            for name, dd in dm.items():
+        for host, dm in list(self.cache.daemons.items()):
+            for name, dd in list(dm.items()):
                 # check if the container digest for the digest we're checking upgrades for matches
                 # the container digests for the daemon if "use_repo_digest" setting is true
                 # or that the image name matches the daemon's image name if "use_repo_digest"
