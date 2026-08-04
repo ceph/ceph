@@ -6590,6 +6590,8 @@ PeeringState::WaitLocalPoolMigrationReserved::WaitLocalPoolMigrationReserved(my_
   context< PeeringMachine >().log_enter(state_name);
   DECLARE_LOCALS;
 
+  pl->on_pool_migration_source_starting();
+
   // If first attempt at acquiring reservation set WAIT,
   // if retrying then retain either TOOFULL or WAIT from
   // previous attempt
