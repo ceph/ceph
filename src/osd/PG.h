@@ -627,6 +627,7 @@ public:
   void on_backfill_suspended() override;
   void on_recovery_cancelled() override {}
   void on_recovery_reserved() override;
+  void on_pool_migration_source_starting() override {}
   void on_pool_migration_source_suspended() override;
   void on_pool_migration_source_reserved() override;
 
