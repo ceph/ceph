@@ -451,9 +451,16 @@ private:
   void handle_post_user_snapshot_created(
     int r, const std::string &group_snap_id, Context *on_finish);
 
-  void mirror_group_snapshot_unlink_peer(const std::string &snap_id);
-  void handle_mirror_group_snapshot_unlink_peer(
-      int r, const std::string &snap_id);
+  void mirror_group_snapshot_unlink_peer(const std::string &snap_id,
+                                         Context *on_unlink);
+  void unlink_peer_uuid_from_image_snaps(
+    cls::rbd::GroupSnapshot* remote_snap, Context* on_unlink);
+  void handle_unlink_peer_uuid_from_image_snaps(
+    int r, cls::rbd::GroupSnapshot* remote_snap, Context* on_unlink);
+  void unlink_peer_uuid_from_group_snap(
+    cls::rbd::GroupSnapshot* remote_snap, Context* on_unlink);
+  void handle_unlink_peer_uuid_from_group_snap(
+    int r, const std::string &group_snap_id, Context* on_unlink);
 
   void prune_image_snapshot(ImageReplayer<ImageCtxT>* image_replayer,
       uint64_t snap_id,
