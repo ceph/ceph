@@ -13,7 +13,7 @@ CEPHADM_SRC="/mnt/{{ ceph_dev_folder }}/src/cephadm/cephadm"
 cp $CEPHADM_SRC $CEPHADM
 
 mkdir -p /etc/ceph
-mon_ip=$(ifconfig eth0  | grep 'inet ' | awk '{ print $2}')
+mon_ip=$(ip -4 addr show eth0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
 
 bootstrap_extra_options='--allow-fqdn-hostname --dashboard-password-noupdate'
 
