@@ -56,7 +56,9 @@ import { NfsRateLimitComponent } from './nfs-rate-limit/nfs-rate-limit.component
     NfsDetailsComponent,
     NfsClusterComponent,
     NfsFormClientComponent,
-    NfsClusterDetailsComponent
+    NfsClusterDetailsComponent,
+    NfsClusterFormComponent,
+    NfsRateLimitComponent
   ],
   declarations: [
     NfsListComponent,

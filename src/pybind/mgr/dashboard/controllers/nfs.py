@@ -99,8 +99,7 @@ class NFSGaneshaCluster(RESTController):
     @EndpointDoc("Get the cluster QoS configuration for bandwidth and iops")
     @ReadPermission
     def qos(self, cluster_id: str):
-        cluster_obj = mgr.remote('nfs', 'fetch_nfs_cluster_obj')
-        return cluster_obj.get_cluster_qos(cluster_id, ret_bw_in_bytes=True)
+        return mgr.remote('nfs', 'get_cluster_qos', cluster_id, True)
 
     @Endpoint(method='PATCH', path='/qos/bw')
     @EndpointDoc("Enable/disable QoS configuration for bandwidth")
@@ -117,8 +116,7 @@ class NFSGaneshaCluster(RESTController):
                                      disable_qos: bool = False):
 
         if disable_qos:
-            cluster_obj = mgr.remote('nfs', 'fetch_nfs_cluster_obj')
-            return cluster_obj.disable_cluster_qos_bw(cluster_id)
+            return mgr.remote('nfs', 'disable_cluster_qos_bw', cluster_id)
         qos_obj = {}
         if max_export_write_bw:
             qos_obj['max_export_write_bw'] = str(max_export_write_bw)
@@ -147,8 +145,7 @@ class NFSGaneshaCluster(RESTController):
                                      disable_ops: bool = False):
 
         if disable_ops:
-            cluster_obj = mgr.remote('nfs', 'fetch_nfs_cluster_obj')
-            return cluster_obj.disable_cluster_qos_ops(cluster_id)
+            return mgr.remote('nfs', 'disable_cluster_qos_ops', cluster_id)
         obj = {}
         if max_export_iops:
             obj['max_export_iops'] = max_export_iops
@@ -291,8 +288,7 @@ class NFSGaneshaExports(RESTController):
     @EndpointDoc("Get the export QoS configuration for bandwidth and IOPS")
     @ReadPermission
     def qos(self, cluster_id: str, pseudo_path: str):
-        export_obj = mgr.remote('nfs', 'fetch_nfs_export_obj')
-        return export_obj.get_export_qos(cluster_id, pseudo_path, ret_bw_in_bytes=True)
+        return mgr.remote('nfs', 'get_export_qos', cluster_id, pseudo_path, True)
 
     @Endpoint(method='PATCH', path='/qos')
     @EndpointDoc("Enable/disable export QoS configuration for bandwidth")
@@ -308,8 +304,7 @@ class NFSGaneshaExports(RESTController):
                                     max_client_combined_bw: Optional[int] = None,
                                     disable_qos: bool = False):
         if disable_qos:
-            export_obj = mgr.remote('nfs', 'fetch_nfs_export_obj')
-            return export_obj.disable_export_qos_bw(cluster_id, pseudo_path)
+            return mgr.remote('nfs', 'disable_export_qos_bw', cluster_id, pseudo_path)
         qos_obj = {}
         if max_export_write_bw:
             qos_obj['max_export_write_bw'] = str(max_export_write_bw)
@@ -335,8 +330,7 @@ class NFSGaneshaExports(RESTController):
                                      max_client_iops: Optional[int] = 0,
                                      disable_qos_ops: bool = False):
         if disable_qos_ops:
-            export_obj = mgr.remote('nfs', 'fetch_nfs_export_obj')
-            return export_obj.disable_export_qos_ops(cluster_id, pseudo_path)
+            return mgr.remote('nfs', 'disable_export_qos_ops', cluster_id, pseudo_path)
         obj = {}
         if max_export_iops:
             obj['max_export_iops'] = max_export_iops

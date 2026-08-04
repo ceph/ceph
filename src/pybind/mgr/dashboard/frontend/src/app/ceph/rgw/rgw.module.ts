@@ -56,6 +56,7 @@ import { RgwSyncPrimaryZoneComponent } from './rgw-sync-primary-zone/rgw-sync-pr
 import { RgwSyncMetadataInfoComponent } from './rgw-sync-metadata-info/rgw-sync-metadata-info.component';
 import { RgwSyncDataInfoComponent } from './rgw-sync-data-info/rgw-sync-data-info.component';
 import { BucketTagModalComponent } from './bucket-tag-modal/bucket-tag-modal.component';
+import { NfsModule } from '../nfs/nfs.module';
 import { NfsFormComponent } from '../nfs/nfs-form/nfs-form.component';
 import { RgwMultisiteSyncPolicyComponent } from './rgw-multisite-sync-policy/rgw-multisite-sync-policy.component';
 import { RgwMultisiteSyncPolicyFormComponent } from './rgw-multisite-sync-policy-form/rgw-multisite-sync-policy-form.component';
@@ -190,7 +191,8 @@ import { NfsClusterFormComponent } from '../nfs/nfs-cluster-form/nfs-cluster-for
     TimePickerComponent,
     AreaChartComponent,
     ComponentsModule,
-    ContentSwitcherModule
+    ContentSwitcherModule,
+    NfsModule
   ],
   exports: [
     RgwDaemonResourcePageComponent,
