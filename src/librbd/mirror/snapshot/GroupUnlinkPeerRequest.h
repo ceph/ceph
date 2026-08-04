@@ -70,9 +70,14 @@ private:
   void process_snapshot(cls::rbd::GroupSnapshot group_snap,
                         std::string mirror_peer_uuid);
 
-  void remove_peer_uuid(cls::rbd::GroupSnapshot group_snap,
-                        std::string mirror_peer_uuid);
-  void handle_remove_peer_uuid(int r, cls::rbd::GroupSnapshot group_snap);
+  void remove_peer_uuid_from_image_snaps(cls::rbd::GroupSnapshot group_snap,
+                                         std::string mirror_peer_uuid);
+  void handle_remove_peer_uuid_from_image_snaps(int r,
+    cls::rbd::GroupSnapshot group_snap, std::string mirror_peer_uuid);
+  void remove_peer_uuid_from_group_snap(cls::rbd::GroupSnapshot group_snap,
+                                        std::string mirror_peer_uuid);
+  void handle_remove_peer_uuid_from_group_snap(
+      int r, cls::rbd::GroupSnapshot group_snap);
 
   void remove_group_snapshot(cls::rbd::GroupSnapshot group_snap);
   void handle_remove_group_snapshot(int r);

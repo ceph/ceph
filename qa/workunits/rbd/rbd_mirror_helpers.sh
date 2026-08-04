@@ -1011,6 +1011,17 @@ get_newest_mirror_snapshot_id_on_primary()
     _snap_id=$(xmlstarlet sel -t -v "(//snapshots/snapshot[namespace/complete='true']/id)[last()]" "$CMD_STDOUT" )
 }
 
+test_local_snap_present()
+{
+    local cluster=$1
+    local image_spec=$2
+    local snap_id=$3
+    local expected_snap_count=$4
+
+    run_cmd "rbd --cluster ${cluster} snap list -a ${image_spec} --format xml --pretty-format"
+    test "${expected_snap_count}" = "$(xmlstarlet sel -t -v "count(//snapshot[id='${snap_id}'])" < "$CMD_STDOUT")" || { fail; return 1; }
+}
+
 test_snap_present()
 {
     local secondary_cluster=$1
@@ -1818,6 +1829,15 @@ count_mirror_snaps()
         grep -c -F " mirror ("
 }
 
+count_mirror_group_snaps()
+{
+    local cluster=$1
+    local group_spec=$2
+
+    rbd --cluster ${cluster} group snap ls ${group_spec} |
+        grep -c -F " mirror ("
+}
+
 get_snaps_json()
 {
     local cluster=$1
@@ -2596,6 +2616,17 @@ get_pool_count()
     fi
 }
 
+get_remote_peer_uuid()
+{
+    local local_cluster=$1
+    local pool_name=$2
+    local remote_cluster=$3
+    local -n peer_uuid=$4
+
+    peer_uuid=$(rbd mirror pool info --cluster ${local_cluster} --pool ${pool_name} --format xml | \
+        xmlstarlet sel -t -v "//peers/peer[site_name='${remote_cluster}']/uuid")
+}
+
 get_pool_obj_count()
 {
     local cluster=$1
@@ -2629,6 +2660,86 @@ get_images_from_group_snap_info()
     run_cmd "rbd --cluster=${cluster} group snap info --format xml --pretty-format ${snap_spec}"
     # sed script removes extra path delimiter if namespace field is blank
     _images="$(xmlstarlet sel -t -m "//group_snapshot/images/image" -v "pool_name" -o "/" -v "namespace" -o "/" -v "image_name" -o " " < "$CMD_STDOUT" |  sed s/"\/\/"/"\/"/g )"
+}
+
+wait_for_group_snapshot_peer_uuid_removed()
+{
+    local cluster=$1
+    local group_spec=$2
+    local group_snap_id=$3
+    local mirror_peer_uuid=$4
+
+    test_group_snap_present "${cluster}" "${group_spec}" "${group_snap_id}" 1
+    # Verify the group snapshot mirror_peer_uuids list does not contain mirror_peer_uuid.
+    for s in 0.1 0.2 0.4 0.8 1 1 2 2 2 4 4 4 8 8 16; do
+        run_cmd "rbd --cluster=${cluster} group snap ls --format xml --pretty-format ${group_spec}"
+
+        local mirror_peer_uuids
+        # get multiple UUID's in multiple lines
+        mirror_peer_uuids=$(xmlstarlet sel -t -m "//group_snap[id='${group_snap_id}']/namespace/mirror_peer_uuids/peer_uuid" -v . -n < "$CMD_STDOUT" || true)
+
+        if ! grep -Fxq "${mirror_peer_uuid}" <<< "${mirror_peer_uuids}"; then
+            return 0
+        fi
+
+        sleep "${s}"
+    done
+    return 1
+}
+
+test_group_image_snapshots_peer_uuid_removed()
+{
+    local cluster=$1
+    local group_spec=$2
+    local group_snap_id=$3
+    local mirror_peer_uuid=$4
+
+    local group_snap_name
+    get_group_snap_name "${cluster}" "${group_spec}" "${group_snap_id}" group_snap_name
+    # Verify all image snapshots do not contain the mirror_peer_uuid.
+    local images
+    get_images_from_group_snap_info "${cluster}" "${group_spec}@${group_snap_name}" images
+
+    local image_spec
+    for image_spec in ${images}; do
+        local snap_id
+        get_image_snap_id_from_group_snap_info "${cluster}" "${group_spec}@${group_snap_name}" "${image_spec}" snap_id
+        test_local_snap_present "${cluster}" "${image_spec}" "${snap_id}" 1
+        run_cmd "rbd --cluster=${cluster} snap ls --all --format xml --pretty-format ${image_spec}"
+
+        local mirror_peer_uuids
+        # get multiple UUID's in multiple lines
+        mirror_peer_uuids=$(xmlstarlet sel -t -m "//snapshot[id='${snap_id}']/namespace/mirror_peer_uuids/peer_uuid" -v . -n < "$CMD_STDOUT" || true)
+
+        if grep -Fxq "${mirror_peer_uuid}" <<< "${mirror_peer_uuids}"; then
+            echo "mirror_peer_uuid ${mirror_peer_uuid} still present in ${image_spec} snapshot ${snap_id}"
+            return 1
+        fi
+    done
+
+    return 0
+}
+
+assert_image_snap_present_in_group_snap()
+{
+    local cluster=$1
+    local pool=$2
+    local group=$3
+    local image=$4
+    local group_snap_id=$5
+
+    local group_snap_name
+    get_group_snap_name "${cluster}" "${pool}/${group}" "${group_snap_id}" group_snap_name
+
+    local snap_id
+    get_image_snap_id_from_group_snap_info "${cluster}" "${pool}/${group}@${group_snap_name}" "${pool}/${image}" snap_id
+
+    if [ -z "${snap_id}" ]; then
+        echo "image ${image} has no snapshot associated with group snap ID ${group_snap_id}"
+        return 1
+    fi
+
+    test_local_snap_present "${cluster}" "${pool}/${image}" "${snap_id}" 1
 }
 
 get_image_snap_complete()
