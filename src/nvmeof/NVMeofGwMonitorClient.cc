@@ -45,8 +45,8 @@ NVMeofGwMonitorClient::NVMeofGwMonitorClient(int argc, const char **argv) :
   gwmap_epoch(0),
   last_map_time(std::chrono::steady_clock::now()),
   reset_timestamp(std::chrono::steady_clock::now()),
-  start_time(last_map_time),
-  cluster_beacon_diff_included(0),
+  start_time(last_map_time.load()),
+  cluster_beacon_diff_included(false),
   poolctx(),
   monc{g_ceph_context, poolctx},
   client_messenger(Messenger::create(g_ceph_context, "async", entity_name_t::CLIENT(-1), "client", getpid())),
@@ -249,31 +249,33 @@ void NVMeofGwMonitorClient::send_beacon()
   BeaconSubsystems subsystem_diff = current_subsystems;
   determine_subsystem_changes(prev_beacon_subsystems, subsystem_diff);
 
-  auto group_key = std::make_pair(pool, group);
-  NvmeGwClientState old_gw_state;
-  // if already got gateway state in the map
-  if (first_beacon == false && get_gw_state("old map", map, group_key, name, old_gw_state))
+  // gw_in_map is published by the dispatch thread, so we avoid reading `map` here
+  if (!first_beacon && gw_in_map.load())
     gw_availability = ok ? gw_availability_t::GW_AVAILABLE : gw_availability_t::GW_UNAVAILABLE;
   dout(1) << "sending beacon as gid " << monc.get_global_id() << " availability " << (int)gw_availability <<
-    " osdmap_epoch " << osdmap_epoch << " gwmap_epoch " << gwmap_epoch << dendl;
+    " osdmap_epoch " << osdmap_epoch.load() << " gwmap_epoch " << gwmap_epoch.load() << dendl;
+
+  // snapshot the cluster feature once so the chosen payload and the format
+  // flag below stay consistent if the dispatch thread updates it mid-beacon.
+  const bool diff_included = cluster_beacon_diff_included.load();
 
   // Check if NVMEOF_BEACON_DIFF feature is supported by the cluster
-  dout(10) << fmt::format("NVMEOF_BEACON_DIFF supported: {}",  cluster_beacon_diff_included ? "yes" : "no") << dendl;
+  dout(10) << fmt::format("NVMEOF_BEACON_DIFF supported: {}",  diff_included ? "yes" : "no") << dendl;
 
   // Send beacon with appropriate version based on cluster features
   auto m = ceph::make_message<MNVMeofGwBeacon>(
       name,
       pool,
       group,
-      cluster_beacon_diff_included ? subsystem_diff : current_subsystems,
+      diff_included ? subsystem_diff : current_subsystems,
       gw_availability,
-      osdmap_epoch,
-      gwmap_epoch,
+      osdmap_epoch.load(),
+      gwmap_epoch.load(),
       beacon_sequence,
       // Pass affected features to the constructor
-      cluster_beacon_diff_included ? 1 : 0
+      diff_included ? 1 : 0
   );
-  dout(10) << "sending beacon with diff support: " << (cluster_beacon_diff_included ? "enabled" : "disabled") << dendl;
+  dout(10) << "sending beacon with diff support: " << (diff_included ? "enabled" : "disabled") << dendl;
   
   monc.send_mon_message(std::move(m));
   ++beacon_sequence;
@@ -284,7 +286,7 @@ void NVMeofGwMonitorClient::disconnect_panic()
 {
   auto disconnect_panic_duration = g_conf().get_val<std::chrono::seconds>("nvmeof_mon_client_disconnect_panic").count();
   auto now = std::chrono::steady_clock::now();
-  auto elapsed_seconds = std::chrono::duration_cast<std::chrono::seconds>(now - last_map_time).count();
+  auto elapsed_seconds = std::chrono::duration_cast<std::chrono::seconds>(now - last_map_time.load()).count();
   if (elapsed_seconds > disconnect_panic_duration) {
     dout(4) << "Triggering a panic upon disconnection from the monitor, elapsed " << elapsed_seconds << ", configured disconnect panic duration " << disconnect_panic_duration << dendl;
     throw std::runtime_error("Lost connection to the monitor (beacon timeout).");
@@ -294,7 +296,7 @@ void NVMeofGwMonitorClient::disconnect_panic()
 void NVMeofGwMonitorClient::connect_panic()
 {
   // Return immediately if the gateway was assigned group ID by the monitor
-  if (set_group_id) {
+  if (set_group_id.load()) {
     return;
   }
   // If the gateway has not been assigned a group ID, panic after timeout
@@ -415,10 +417,11 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
   // ensure that the gateway state has not vanished
   ceph_assert(got_new_gw_state || !got_old_gw_state);
 
-  uint64_t old_cluster_beacon_diff_included = cluster_beacon_diff_included;
+  bool old_cluster_beacon_diff_included = cluster_beacon_diff_included.load();
   cluster_beacon_diff_included = (new_gw_state.map_features & NVMeofGwMap::FLAG_BEACONDIFF) != 0;
-  if (old_cluster_beacon_diff_included != cluster_beacon_diff_included) {
-    dout(0) << fmt::format("Updated cluster features: 0x{:x}", cluster_beacon_diff_included)
+  if (old_cluster_beacon_diff_included != cluster_beacon_diff_included.load()) {
+    dout(0) << fmt::format("Updated cluster features: NVMEOF_BEACON_DIFF {}",
+                           cluster_beacon_diff_included.load() ? "enabled" : "disabled")
             << dendl;
   }
 
@@ -443,13 +446,13 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
       dout(10) << "Can not find new gw state" << dendl;
       return;
     }
-    ceph_assert(!set_group_id);
-    while (!set_group_id) {
+    ceph_assert(!set_group_id.load());
+    while (!set_group_id.load()) {
       NVMeofGwMonitorGroupClient monitor_group_client(
           grpc::CreateChannel(monitor_address, gw_creds()));
       dout(10) << "GRPC set_group_id: " <<  new_gw_state.group_id << dendl;
       set_group_id = monitor_group_client.set_group_id( new_gw_state.group_id);
-      if (!set_group_id) {
+      if (!set_group_id.load()) {
 	      dout(10) << "GRPC set_group_id failed" << dendl;
 	      auto retry_timeout = g_conf().get_val<uint64_t>("mon_nvmeofgw_set_group_id_retry");
 	      usleep(retry_timeout);
@@ -548,12 +551,15 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
       }
     }
     // Update latest accepted osdmap epoch, for beacons
-    if (max_blocklist_epoch > osdmap_epoch) {
+    if (max_blocklist_epoch > osdmap_epoch.load()) {
       osdmap_epoch = max_blocklist_epoch;
-      dout(10) << "Ready for blocklist osd map epoch: " << osdmap_epoch << dendl;
+      dout(10) << "Ready for blocklist osd map epoch: " << osdmap_epoch.load() << dendl;
     }
   }
   map = new_map;
+  // publish, for the timer thread, whether this gateway is present in the
+  // committed map; see gw_in_map and send_beacon().
+  gw_in_map = got_new_gw_state;
 }
 
 Dispatcher::dispatch_result_t NVMeofGwMonitorClient::ms_dispatch2(const ref_t<Message>& m)
