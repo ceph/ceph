@@ -73,11 +73,57 @@ add_image_to_group()
     rbd group image add $group_name $image_name
 }
 
+get_image_id()
+{
+    local image_name=$1
+    rbd info "$image_name" --format=json | jq -r '.id'
+}
+
 remove_image_from_group()
 {
     local image_name=$1
     local group_name=$2
     rbd group image remove $group_name $image_name
+}
+
+force_remove_image_from_group()
+{
+    local image_name=$1
+    local group_name=$2
+
+    rbd group image remove --force "$group_name" "$image_name"
+}
+
+purge_image_from_group()
+{
+    local image_name=$1
+    local group_name=$2
+
+    rbd group image remove --purge-user-snaps "$group_name" "$image_name"
+}
+
+purge_image_from_group_by_id()
+{
+    local image_id=$1
+    local group_name=$2
+
+    rbd group image remove --purge-user-snaps \
+                           --image-id "$image_id" "$group_name"
+}
+
+force_purge_image_from_group()
+{
+    local image_name=$1
+    local group_name=$2
+
+    rbd group image remove --force --purge-user-snaps \
+                           "$group_name" "$image_name"
+}
+
+list_image_snaps()
+{
+    local image_name=$1
+    rbd snap ls "$image_name" --all
 }
 
 check_image_in_group()
@@ -104,6 +150,22 @@ check_image_not_in_group()
         fi
     done
     return 0
+}
+
+check_image_snapshot_exists()
+{
+    local image_name=$1
+    local snap_name=$2
+
+    list_image_snaps "$image_name" | grep -w "$snap_name"
+}
+
+check_image_snapshot_not_exists()
+{
+    local image_name=$1
+    local snap_name=$2
+
+    ! check_image_snapshot_exists "$image_name" "$snap_name"
 }
 
 create_snapshot()
@@ -303,6 +365,105 @@ check_snapshots_count_in_group $group $snap 100
 remove_snapshots $group $snap 100
 remove_group $group
 remove_image $image
+echo "PASSED"
+
+echo "TEST: remove image with --force"
+group="force_group"
+image="force_image"
+snap="snap1"
+create_image "$image"
+create_group "$group"
+add_image_to_group "$image" "$group"
+create_snapshot "$group" "$snap"
+force_remove_image_from_group "$image" "$group"
+check_snapshot_in_group "$group" "$snap"
+check_image_snapshot_exists "$image" "$snap"
+check_image_not_in_group "$image" "$group"
+remove_snapshot "$group" "$snap"
+remove_group "$group"
+remove_image "$image"
+echo "PASSED"
+
+echo "TEST: purge dependent user group snapshots"
+group="purge_group"
+image="purge_image"
+snap="snap1"
+create_image "$image"
+create_group "$group"
+add_image_to_group "$image" "$group"
+create_snapshot "$group" "$snap"
+check_snapshot_in_group "$group" "$snap"
+check_image_snapshot_exists "$image" "$snap"
+purge_image_from_group "$image" "$group"
+check_snapshot_not_in_group "$group" "$snap"
+check_image_not_in_group "$image" "$group"
+check_image_snapshot_not_exists "$image" "$snap"
+remove_group "$group"
+remove_image "$image"
+echo "PASSED"
+
+echo "TEST: purge preserves unrelated snapshots"
+group="purge_group"
+img1="image1"
+img2="image2"
+create_image "$img1"
+create_image "$img2"
+create_group "$group"
+add_image_to_group "$img1" "$group"
+create_snapshot "$group" "snap1"
+add_image_to_group "$img2" "$group"
+force_remove_image_from_group "$img1" "$group"
+create_snapshot "$group" "snap2"
+purge_image_from_group "$img2" "$group"
+check_snapshot_in_group "$group" "snap1"
+check_snapshot_not_in_group "$group" "snap2"
+check_image_snapshot_exists "$img1" "snap1"
+check_image_snapshot_not_exists "$img1" "snap2"
+check_image_snapshot_not_exists "$img2" "snap2"
+check_image_not_in_group "$img2" "$group"
+check_image_not_in_group "$img1" "$group"
+remove_snapshot "$group" "snap1"
+remove_group "$group"
+remove_image "$img1"
+remove_image "$img2"
+echo "PASSED"
+
+echo "TEST: purge with image-id"
+group="purge_group"
+image="purge_image"
+snap="snap1"
+create_image "$image"
+create_group "$group"
+add_image_to_group "$image" "$group"
+create_snapshot "$group" "$snap"
+check_snapshot_in_group "$group" "$snap"
+check_image_snapshot_exists "$image" "$snap"
+image_id=$(get_image_id "$image")
+purge_image_from_group_by_id "$image_id" "$group"
+check_snapshot_not_in_group "$group" "$snap"
+check_image_not_in_group "$image" "$group"
+check_image_snapshot_not_exists "$image" "$snap"
+remove_group "$group"
+remove_image "$image"
+echo "PASSED"
+
+echo "TEST: force and purge are mutually exclusive"
+group="purge_group"
+image="purge_image"
+snap="snap1"
+create_image "$image"
+create_group "$group"
+add_image_to_group "$image" "$group"
+create_snapshot "$group" "$snap"
+! force_purge_image_from_group "$image" "$group"
+check_image_in_group "$image" "$group"
+check_snapshot_in_group "$group" "$snap"
+check_image_snapshot_exists "$image" "$snap"
+remove_snapshot "$group" "$snap"
+remove_image_from_group "$image" "$group"
+check_image_not_in_group "$image" "$group"
+remove_group "$group"
+remove_image "$image"
 echo "PASSED"
 
 echo "OK"

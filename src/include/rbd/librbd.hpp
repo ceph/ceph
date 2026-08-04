@@ -290,6 +290,8 @@ namespace librbd {
     std::string passphrase;
   } encryption_luks_format_options_t;
 
+  typedef rbd_group_image_remove_mode_t group_image_remove_mode_t;
+
 class CEPH_RBD_API RBD
 {
 public:
@@ -500,9 +502,13 @@ public:
   int group_image_add(IoCtx& io_ctx, const char *group_name,
                       IoCtx& image_io_ctx, const char *image_name);
   int group_image_remove(IoCtx& io_ctx, const char *group_name,
-                         IoCtx& image_io_ctx, const char *image_name);
+                         IoCtx& image_io_ctx, const char *image_name,
+                         group_image_remove_mode_t mode =
+                           RBD_GROUP_IMAGE_REMOVE_DEFAULT);
   int group_image_remove_by_id(IoCtx& io_ctx, const char *group_name,
-                               IoCtx& image_io_ctx, const char *image_id);
+                               IoCtx& image_io_ctx, const char *image_id,
+                               group_image_remove_mode_t mode =
+                                 RBD_GROUP_IMAGE_REMOVE_DEFAULT);
   int group_image_list(IoCtx& io_ctx, const char *group_name,
                        std::vector<group_image_info_t> *images,
                        size_t group_image_info_size);

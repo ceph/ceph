@@ -174,8 +174,9 @@ TEST_F(TestGroup, add_image)
   ASSERT_EQ(0, rbd_group_image_list_cleanup(images,
                                             sizeof(rbd_group_image_info_t),
                                             num_images));
-  ASSERT_EQ(0, rbd_group_image_remove(ioctx, group_name, ioctx,
-                                      m_image_name.c_str()));
+  ASSERT_EQ(0, rbd_group_image_remove2(ioctx, group_name, ioctx,
+                                       m_image_name.c_str(),
+                                       RBD_GROUP_IMAGE_REMOVE_DEFAULT));
 
   ASSERT_EQ(0, rbd_get_features(image, &features));
   ASSERT_TRUE((features & RBD_FEATURE_OPERATIONS) == 0ULL);
@@ -253,6 +254,107 @@ TEST_F(TestGroup, add_imagePP)
   ASSERT_EQ(0U, images.size());
 
   ASSERT_EQ(0, rbd.group_remove(ioctx, group_name));
+}
+
+TEST_F(TestGroup, group_image_remove_default)
+{
+  REQUIRE_FORMAT_V2();
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  const char *group = "busy_group";
+
+  ASSERT_EQ(0, m_rbd.group_create(ioctx, group));
+  ASSERT_EQ(0, m_rbd.group_image_add(ioctx, group,
+                                     ioctx, m_image_name.c_str()));
+
+  ASSERT_EQ(0, m_rbd.group_snap_create(ioctx, group, "snap1"));
+
+  ASSERT_EQ(-EBUSY, m_rbd.group_image_remove(ioctx, group, ioctx,
+                                             m_image_name.c_str(),
+                                             RBD_GROUP_IMAGE_REMOVE_DEFAULT));
+
+  std::vector<librbd::group_image_info_t> images;
+  ASSERT_EQ(0, m_rbd.group_image_list(ioctx, group, &images,
+                                      sizeof(images[0])));
+  ASSERT_EQ(1U, images.size());
+  ASSERT_EQ(m_image_name, images[0].name);
+
+  std::vector<librbd::group_snap_info_t> snaps;
+  ASSERT_EQ(0, m_rbd.group_snap_list(ioctx, group, &snaps, sizeof(snaps[0])));
+  ASSERT_EQ(1U, snaps.size());
+  ASSERT_EQ("snap1", snaps[0].name);
+
+  ASSERT_EQ(0, m_rbd.group_snap_remove(ioctx, group, "snap1"));
+  ASSERT_EQ(0, m_rbd.group_image_remove(ioctx, group, ioctx,
+                                        m_image_name.c_str(),
+                                        RBD_GROUP_IMAGE_REMOVE_FORCE));
+  ASSERT_EQ(0, m_rbd.group_remove(ioctx, group));
+}
+
+TEST_F(TestGroup, group_image_remove_force)
+{
+  REQUIRE_FORMAT_V2();
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  const char *group = "force_group";
+
+  ASSERT_EQ(0, m_rbd.group_create(ioctx, group));
+  ASSERT_EQ(0, m_rbd.group_image_add(ioctx, group,
+                                     ioctx, m_image_name.c_str()));
+
+  ASSERT_EQ(0, m_rbd.group_snap_create(ioctx, group, "snap1"));
+
+  ASSERT_EQ(0, m_rbd.group_image_remove(ioctx, group, ioctx,
+                                        m_image_name.c_str(),
+                                        RBD_GROUP_IMAGE_REMOVE_FORCE));
+
+  std::vector<librbd::group_image_info_t> images;
+  ASSERT_EQ(0, m_rbd.group_image_list(ioctx, group, &images,
+                                      sizeof(images[0])));
+  ASSERT_TRUE(images.empty());
+
+  std::vector<librbd::group_snap_info_t> snaps;
+  ASSERT_EQ(0, m_rbd.group_snap_list(ioctx, group, &snaps, sizeof(snaps[0])));
+  ASSERT_EQ(1U, snaps.size());
+  ASSERT_EQ("snap1", snaps[0].name);
+
+  ASSERT_EQ(0, m_rbd.group_snap_remove(ioctx, group, "snap1"));
+  ASSERT_EQ(0, m_rbd.group_remove(ioctx, group));
+}
+
+TEST_F(TestGroup, group_image_remove_invalid_mode)
+{
+  REQUIRE_FORMAT_V2();
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  const char *group = "invalid_mode";
+
+  ASSERT_EQ(0, m_rbd.group_create(ioctx, group));
+  ASSERT_EQ(0, m_rbd.group_image_add(ioctx, group, ioctx,
+                                     m_image_name.c_str()));
+
+  // Construct an invalid enum value.
+  ASSERT_EQ(-EINVAL, m_rbd.group_image_remove(ioctx, group, ioctx,
+                                              m_image_name.c_str(),
+                                              static_cast<librbd::group_image_remove_mode_t>(2)));
+
+  // Verify the invalid mode did not modify the group.
+  std::vector<librbd::group_image_info_t> images;
+  ASSERT_EQ(0, m_rbd.group_image_list(ioctx, group, &images,
+                                      sizeof(images[0])));
+  ASSERT_EQ(1U, images.size());
+  ASSERT_EQ(m_image_name, images[0].name);
+
+  ASSERT_EQ(0, m_rbd.group_image_remove(ioctx, group, ioctx,
+                                        m_image_name.c_str(),
+                                        RBD_GROUP_IMAGE_REMOVE_FORCE));
+  ASSERT_EQ(0, m_rbd.group_remove(ioctx, group));
 }
 
 TEST_F(TestGroup, add_snapshot)
@@ -641,8 +743,12 @@ TEST_F(TestGroup, snap_list2)
                                    image_name2.c_str()));
   ASSERT_EQ(0, rbd_group_snap_create(ioctx, gp_name, gp_snap_names[2]));
 
-  ASSERT_EQ(0, rbd_group_image_remove(ioctx, gp_name, ioctx,
-                                      m_image_name.c_str()));
+  ASSERT_EQ(-EBUSY, rbd_group_image_remove2(ioctx, gp_name, ioctx,
+                                            m_image_name.c_str(),
+                                            RBD_GROUP_IMAGE_REMOVE_DEFAULT));
+  ASSERT_EQ(0, rbd_group_image_remove2(ioctx, gp_name, ioctx,
+                                       m_image_name.c_str(),
+                                       RBD_GROUP_IMAGE_REMOVE_FORCE)); // old default
   ASSERT_EQ(0, rbd_group_snap_create(ioctx, gp_name, gp_snap_names[3]));
 
   num_snaps = 3U;
@@ -733,8 +839,12 @@ TEST_F(TestGroup, snap_list2PP)
                                      image_name2.c_str()));
   ASSERT_EQ(0, m_rbd.group_snap_create(m_ioctx, gp_name, gp_snap_names[2]));
 
+  ASSERT_EQ(-EBUSY, m_rbd.group_image_remove(m_ioctx, gp_name, m_ioctx,
+                                             m_image_name.c_str(),
+                                             RBD_GROUP_IMAGE_REMOVE_DEFAULT));
   ASSERT_EQ(0, m_rbd.group_image_remove(m_ioctx, gp_name, m_ioctx,
-                                        m_image_name.c_str()));
+                                        m_image_name.c_str(),
+                                        RBD_GROUP_IMAGE_REMOVE_FORCE)); // old default
   ASSERT_EQ(0, m_rbd.group_snap_create(m_ioctx, gp_name, gp_snap_names[3]));
 
   ASSERT_EQ(0, m_rbd.group_snap_list2(m_ioctx, gp_name, &gp_snaps));
