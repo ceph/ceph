@@ -196,8 +196,8 @@ enum {
   l_bluestore_buffer_bytes,
   l_bluestore_buffer_hit_bytes,
   l_bluestore_buffer_miss_bytes,
+  l_bluestore_buffer_hits,
   l_bluestore_buffer_miss_lat, ////cost per miss
-  l_bluestore_buffer_read_reqs, 
   //****************************************
 
   // internal stats
@@ -2404,7 +2404,7 @@ public:
     uint64_t onode_shard_hits;
     uint64_t onode_shard_misses;
     uint64_t onode_shard_miss_latency_sum;
-    uint64_t buffer_read_reqs;
+    uint64_t buffer_hits;
     uint64_t buffer_miss_count;
     uint64_t buffer_miss_latency_sum;
     
@@ -2412,7 +2412,7 @@ public:
       : timestamp(ceph::mono_clock::zero()),
         onode_hits(0), onode_misses(0), onode_miss_latency_sum(0),
         onode_shard_hits(0), onode_shard_misses(0), onode_shard_miss_latency_sum(0),
-        buffer_read_reqs(0), buffer_miss_count(0), buffer_miss_latency_sum(0) {}
+        buffer_hits(0), buffer_miss_count(0), buffer_miss_latency_sum(0) {}
   };
 
   ceph::mutex cache_stats_lock = ceph::make_mutex("BlueStore::cache_stats_lock");
