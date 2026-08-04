@@ -15,6 +15,7 @@
 
 #include "common/perf_histogram.h"
 
+#include <algorithm>
 #include <limits>
 
 void PerfHistogramCommon::dump_formatted_axis(
@@ -32,6 +33,9 @@ void PerfHistogramCommon::dump_formatted_axis(
       break;
     case SCALE_LOG2:
       f->dump_string("scale_type", "log2");
+      break;
+    case SCALE_CUSTOM:
+      f->dump_string("scale_type", "custom");
       break;
     default:
       ceph_abort_msg("Invalid scale type");
@@ -64,6 +68,9 @@ int64_t get_quants(int64_t i, PerfHistogramCommon::scale_type_d st) {
       return i;
     case PerfHistogramCommon::SCALE_LOG2:
       return int64_t(1) << (i - 1);
+    // Custom axes carry explicit bounds and never quantize.
+    case PerfHistogramCommon::SCALE_CUSTOM:
+      break;
   }
   ceph_abort_msg("Invalid scale type");
 }
@@ -72,6 +79,12 @@ int64_t PerfHistogramCommon::get_bucket_for_axis(
     int64_t value, const PerfHistogramCommon::axis_config_d &ac) {
   if (value < ac.m_min) {
     return 0;
+  }
+
+  if (ac.m_scale_type == SCALE_CUSTOM) {
+    const auto it = std::lower_bound(
+        ac.m_custom_bounds.begin(), ac.m_custom_bounds.end(), value);
+    return 1 + std::distance(ac.m_custom_bounds.begin(), it);
   }
 
   value -= ac.m_min;
@@ -88,8 +101,18 @@ int64_t PerfHistogramCommon::get_bucket_for_axis(
         }
       }
       return ac.m_buckets - 1;
+    case SCALE_CUSTOM:
+      ceph_abort();
   }
   ceph_abort_msg("Invalid scale type");
+}
+
+static int64_t bucket_max_exclusive(
+    int64_t i, const PerfHistogramCommon::axis_config_d& ac) {
+  if (ac.m_scale_type == PerfHistogramCommon::SCALE_CUSTOM) {
+    return ac.m_custom_bounds[i - 1] + 1;
+  }
+  return ac.m_min + get_quants(i, ac.m_scale_type) * ac.m_quant_size;
 }
 
 std::vector<std::pair<int64_t, int64_t>>
@@ -101,8 +124,7 @@ PerfHistogramCommon::get_axis_bucket_ranges(
   // First bucket is for value < min
   int64_t min = ac.m_min;
   for (int64_t i = 1; i < ac.m_buckets - 1; i++) {
-    int64_t max_exclusive =
-        ac.m_min + get_quants(i, ac.m_scale_type) * ac.m_quant_size;
+    const int64_t max_exclusive = bucket_max_exclusive(i, ac);
 
     // Dump bucket range
     ret[i].first = min;

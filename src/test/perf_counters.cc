@@ -1118,6 +1118,7 @@ enum {
   TEST_PERFCOUNTERS_HIST_ELEMENT_FIRST = 400,
   TEST_PERFCOUNTERS_HIST_BYTES,
   TEST_PERFCOUNTERS_HIST_TIME,
+  TEST_PERFCOUNTERS_HIST_TIME_PROM_LOG2,
   TEST_PERFCOUNTERS_HIST_TIME_PROM,
   TEST_PERFCOUNTERS_HIST_COUNT,
   TEST_PERFCOUNTERS_HIST_ELEMENT_LAST,
@@ -1131,8 +1132,10 @@ static PerfCounters* setup_test_1d_histograms(CephContext* cct) {
                                 PerfHistogramCommon::axis_config_d::bytes("bytes", 512, 4));
   bld.add_time_histogram(TEST_PERFCOUNTERS_HIST_TIME, "latency",
                          PerfHistogramCommon::axis_config_d::latency("lat", 1000, 4));
-  bld.add_time_histogram(TEST_PERFCOUNTERS_HIST_TIME_PROM, "web_latency",
-                         PerfHistogramCommon::axis_config_d::web_latency("weblat", 6));
+  bld.add_time_histogram(TEST_PERFCOUNTERS_HIST_TIME_PROM_LOG2, "web_latency",
+                         PerfHistogramCommon::axis_config_d::web_latency_log2("weblat", 6));
+  bld.add_time_histogram(TEST_PERFCOUNTERS_HIST_TIME_PROM, "prom",
+                         PerfHistogramCommon::axis_config_d::web_latency("prom"));
   bld.add_u64_counter_histogram(TEST_PERFCOUNTERS_HIST_COUNT, "counter",
                                 PerfHistogramCommon::axis_config_d::count("count", 4, 100));
 
@@ -1269,6 +1272,88 @@ TEST(PerfCounters, Histograms1D) {
                 0
             ]
         },
+        "prom": {
+            "axes": [
+                {
+                    "name": "prom",
+                    "min": 0,
+                    "quant_size": 0,
+                    "buckets": 13,
+                    "scale_type": "custom",
+                    "unit": "nanoseconds",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0,
+                            "max": 5000000
+                        },
+                        {
+                            "min": 5000001,
+                            "max": 10000000
+                        },
+                        {
+                            "min": 10000001,
+                            "max": 25000000
+                        },
+                        {
+                            "min": 25000001,
+                            "max": 50000000
+                        },
+                        {
+                            "min": 50000001,
+                            "max": 100000000
+                        },
+                        {
+                            "min": 100000001,
+                            "max": 250000000
+                        },
+                        {
+                            "min": 250000001,
+                            "max": 500000000
+                        },
+                        {
+                            "min": 500000001,
+                            "max": 1000000000
+                        },
+                        {
+                            "min": 1000000001,
+                            "max": 2500000000
+                        },
+                        {
+                            "min": 2500000001,
+                            "max": 5000000000
+                        },
+                        {
+                            "min": 5000000001,
+                            "max": 10000000000
+                        },
+                        {
+                            "min": 10000000001
+                        }
+                    ]
+                }
+            ],
+            "sum": [
+                0
+            ],
+            "values": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+            ]
+        },
         "counter": {
             "axes": [
                 {
@@ -1340,6 +1425,15 @@ TEST(PerfCounters, Histograms1D) {
             "priority": 0,
             "units": "none"
         },
+        "prom": {
+            "type": 25,
+            "metric_type": "counter",
+            "value_type": "real-1d-histogram",
+            "description": "",
+            "nick": "",
+            "priority": 0,
+            "units": "none"
+        },
         "counter": {
             "type": 26,
             "metric_type": "counter",
@@ -1357,6 +1451,8 @@ TEST(PerfCounters, Histograms1D) {
   p->hinc(TEST_PERFCOUNTERS_HIST_BYTES, 1500);
   p->htinc(TEST_PERFCOUNTERS_HIST_TIME, utime_t(500ms));
   p->htinc(TEST_PERFCOUNTERS_HIST_TIME, 505ms);
+  p->htinc(TEST_PERFCOUNTERS_HIST_TIME_PROM_LOG2, 100ms);
+  p->htinc(TEST_PERFCOUNTERS_HIST_TIME_PROM_LOG2, 5ms);
   p->htinc(TEST_PERFCOUNTERS_HIST_TIME_PROM, 100ms);
   p->htinc(TEST_PERFCOUNTERS_HIST_TIME_PROM, 5ms);
   p->hinc(TEST_PERFCOUNTERS_HIST_COUNT, 100);
@@ -1483,6 +1579,88 @@ TEST(PerfCounters, Histograms1D) {
                 0,
                 1,
                 1
+            ]
+        },
+        "prom": {
+            "axes": [
+                {
+                    "name": "prom",
+                    "min": 0,
+                    "quant_size": 0,
+                    "buckets": 13,
+                    "scale_type": "custom",
+                    "unit": "nanoseconds",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0,
+                            "max": 5000000
+                        },
+                        {
+                            "min": 5000001,
+                            "max": 10000000
+                        },
+                        {
+                            "min": 10000001,
+                            "max": 25000000
+                        },
+                        {
+                            "min": 25000001,
+                            "max": 50000000
+                        },
+                        {
+                            "min": 50000001,
+                            "max": 100000000
+                        },
+                        {
+                            "min": 100000001,
+                            "max": 250000000
+                        },
+                        {
+                            "min": 250000001,
+                            "max": 500000000
+                        },
+                        {
+                            "min": 500000001,
+                            "max": 1000000000
+                        },
+                        {
+                            "min": 1000000001,
+                            "max": 2500000000
+                        },
+                        {
+                            "min": 2500000001,
+                            "max": 5000000000
+                        },
+                        {
+                            "min": 5000000001,
+                            "max": 10000000000
+                        },
+                        {
+                            "min": 10000000001
+                        }
+                    ]
+                }
+            ],
+            "sum": [
+                105000000
+            ],
+            "values": [
+                0,
+                1,
+                0,
+                0,
+                0,
+                1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
             ]
         },
         "counter": {

@@ -16,10 +16,13 @@
 #ifndef CEPH_COMMON_PERF_HISTOGRAM_H
 #define CEPH_COMMON_PERF_HISTOGRAM_H
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <limits>
 #include <memory>
+#include <span>
 #include <vector>
 
 #include "common/Formatter.h"
@@ -30,6 +33,7 @@ public:
   enum scale_type_d : uint8_t {
     SCALE_LINEAR = 1,
     SCALE_LOG2 = 2,
+    SCALE_CUSTOM = 3,
   };
 
   enum axis_unit_d : uint8_t {
@@ -54,8 +58,10 @@ public:
     int64_t m_quant_size = 0;
     int32_t m_buckets = 0;
     axis_unit_d m_unit = AXIS_UNIT_NONE;
+    /// Bucket upper edges for SCALE_CUSTOM, empty for the arithmetic scales.
+    std::span<const int64_t> m_custom_bounds;
     axis_config_d() = default;
-    axis_config_d(const char* name,
+    constexpr axis_config_d(const char* name,
 		  scale_type_d scale_type,
 		  int64_t min,
 		  int64_t quant_size,
@@ -68,12 +74,45 @@ public:
 	m_buckets(buckets),
         m_unit(unit)
     {}
+    // Custom axis variant. Note: does not take ownership of bounds
+    constexpr axis_config_d(const char* name,
+                  std::span<const int64_t> bounds,
+                  axis_unit_d unit = AXIS_UNIT_NONE,
+                  int64_t min = 0)
+        : m_name(name),
+          m_scale_type(SCALE_CUSTOM),
+          m_min(min),
+          m_quant_size(0),
+          m_buckets(static_cast<int32_t>(bounds.size()) + 2),
+          m_unit(unit),
+          m_custom_bounds(bounds)
+    {}
+
+    // Upper edge of each bucket, ascending order.
+    // [i] is the largest value that falls into bucket i+1.
+    // Matches the Prometheus "le" range convention
+    static constexpr auto web_latency_bounds_nanos = std::to_array<int64_t>({
+        5'000'000,
+        10'000'000,
+        25'000'000,
+        50'000'000,
+        100'000'000,
+        250'000'000,
+        500'000'000,
+        1'000'000'000,
+        2'500'000'000,
+        5'000'000'000,
+        10'000'000'000,
+    });
 
     static constexpr axis_config_d latency(const char* name, int64_t quant_ns = 100, int buckets = 32) {
       return {name, SCALE_LOG2, 0, quant_ns, buckets, AXIS_UNIT_NANOSECONDS};
     }
     // Prometheus-style buckets
-    static constexpr axis_config_d web_latency(const char* name, int buckets = 16) {
+    static constexpr axis_config_d web_latency(const char* name) {
+      return {name, web_latency_bounds_nanos, AXIS_UNIT_NANOSECONDS};
+    }
+    static constexpr axis_config_d web_latency_log2(const char* name, int buckets = 16) {
       return {name, SCALE_LOG2, 0, 1'000'000 /*1ms floor*/, buckets, AXIS_UNIT_NANOSECONDS};
     }
     static constexpr axis_config_d bytes(const char* name, int64_t quant_bytes=512, int buckets = 32) {
@@ -123,9 +162,26 @@ public:
     int i = 0;
     for (const auto &ac : axes_config) {
       ceph_assertf(ac.m_buckets > 0, "Must have at least one bucket on axis");
-      ceph_assertf(ac.m_quant_size > 0,
-             "Quantization unit must be non-zero positive integer value");
-
+      if (ac.m_scale_type == SCALE_CUSTOM) {
+        ceph_assertf(!ac.m_custom_bounds.empty(),
+            "Custom axis needs at least one bound");
+        ceph_assertf(
+            ac.m_buckets == static_cast<int32_t>(ac.m_custom_bounds.size()) + 2,
+            "Custom axis buckets must be bounds + underflow + overflow");
+        ceph_assertf(
+            std::adjacent_find(ac.m_custom_bounds.begin(),
+                ac.m_custom_bounds.end(),
+                std::greater_equal<int64_t>{}) == ac.m_custom_bounds.end(),
+            "Custom axis bounds must be strictly ascending");
+        ceph_assertf(ac.m_custom_bounds.front() >= ac.m_min,
+            "Custom axis bounds must not start below the axis minimum");
+        ceph_assertf(
+            ac.m_custom_bounds.back() < std::numeric_limits<int64_t>::max(),
+            "Custom axis bounds must stay below int64 max");
+      } else {
+        ceph_assertf(ac.m_quant_size > 0,
+            "Quantization unit must be non-zero positive integer value");
+      }
       m_axes_config[i++] = ac;
     }
 
