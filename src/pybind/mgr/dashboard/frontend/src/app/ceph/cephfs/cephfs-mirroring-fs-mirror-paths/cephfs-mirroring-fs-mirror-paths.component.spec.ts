@@ -231,13 +231,12 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
     component.ngOnInit();
 
     expect(component.columns).toBeDefined();
-    expect(component.columns.length).toBe(6);
+    expect(component.columns.length).toBe(5);
     expect(component.columns[0].prop).toBe('path');
     expect(component.columns[1].prop).toBe('syncStatus');
     expect(component.columns[2].prop).toBe('snapshotCount');
-    expect(component.columns[3].prop).toBe('checkpointCount');
-    expect(component.columns[4].prop).toBe('currentSyncSnapshot');
-    expect(component.columns[5].prop).toBe('lastSyncedSnapshot');
+    expect(component.columns[3].prop).toBe('currentSyncSnapshot');
+    expect(component.columns[4].prop).toBe('lastSyncedSnapshot');
 
     // Verify fsName is fetched and data is loaded
     expect(component.fsName).toBe('test-fs');
@@ -257,11 +256,14 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
     component.openAddPath();
 
     expect(cephfsService.list).toHaveBeenCalled();
-    expect(navigateByUrlSpy).toHaveBeenCalledWith('/cephfs/mirroring/(modal:add-path/7/test-fs)', {
-      state: {
-        returnUrl: '/cephfs/mirroring/test-fs/mirror-paths'
+    expect(navigateByUrlSpy).toHaveBeenCalledWith(
+      '/cephfs/mirroring/(modal:add-path/7/test-fs)',
+      {
+        state: {
+          returnUrl: '/cephfs/mirroring/test-fs/mirror-paths'
+        }
       }
-    });
+    );
   });
 
   it('should not open add-path wizard when fsName is missing', () => {
@@ -537,29 +539,15 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
   });
 
   describe('loadMirrorPaths', () => {
-    it('should load mirror paths successfully', () => {
+    it('should load mirror paths successfully without fetching checkpoints', () => {
       cephfsService.getMirrorStatus.mockReturnValue(of(mockMirrorStatusResponse));
-      cephfsService.listMirrorCheckpoints.mockImplementation((_, path: string) =>
-        of({
-          dir_root: path,
-          checkpoints:
-            path === '/path1'
-              ? [
-                  { snap_id: 1, snap_name: 'snap1' },
-                  { snap_id: 2, snap_name: 'snap2' }
-                ]
-              : [{ snap_id: 3, snap_name: 'snap3' }]
-        })
-      );
       component.fsName = 'test-fs';
 
       component.loadMirrorPaths();
 
       expect(cephfsService.getMirrorStatus).toHaveBeenCalledWith('test-fs');
-      expect(cephfsService.listMirrorCheckpoints).toHaveBeenCalledTimes(2);
+      expect(cephfsService.listMirrorCheckpoints).not.toHaveBeenCalled();
       expect(component.mirrorPaths.length).toBe(2);
-      expect(component.mirrorPaths[0].checkpointCount).toBe(2);
-      expect(component.mirrorPaths[1].checkpointCount).toBe(1);
     });
 
     it('should set empty array on error', () => {
@@ -620,12 +608,16 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       };
 
       component.fsName = 'test-fs';
+      component.ngOnInit();
+      // Simulate the template async pipe so checkpoint loading runs.
+      const checkpointSub = component.checkpointState$.subscribe();
       component.onPathClick(mockPath as any);
       tick();
 
       expect(component.selectedPath?.path).toBe('/test');
       expect(component.sidePanelOpen).toBe(true);
       expect(cephfsService.listMirrorCheckpoints).toHaveBeenCalledWith('test-fs', '/test');
+      checkpointSub.unsubscribe();
     }));
   });
 
@@ -680,7 +672,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       expect(component.snapshotPanels.length).toBe(2);
       expect(component.snapshotPanels[1].hasCheckpoint).toBe(true);
       expect(component.snapshotPanels[0].hasCheckpoint).toBe(false);
-      expect(component.selectedPathCheckpointCount).toBe(1);
+      expect(component.pathCheckpoints.length).toBe(1);
     });
 
     it('should toggle snapshot expansion', () => {

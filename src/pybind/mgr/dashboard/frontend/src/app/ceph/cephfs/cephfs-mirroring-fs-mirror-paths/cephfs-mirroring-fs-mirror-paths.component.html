@@ -76,6 +76,7 @@
     size="xl"
     (closed)="closeSidePanel()"
   >
+    @let checkpointState = checkpointState$ | async;
     <div class="panel-content">
       <cds-tabs type="line">
         <cds-tab
@@ -224,7 +225,7 @@
               <span class="cds--type-body-compact-01">|</span>
               <span class="cds--type-body-compact-01">
                 <ng-container i18n>Checkpoints</ng-container>:
-                <strong>{{ selectedPathCheckpointCount }}</strong>
+                <strong>{{ checkpointState?.checkpoints?.length ?? 0 }}</strong>
               </span>
               <span class="cds--type-body-compact-01">|</span>
               <span class="cds--type-body-compact-01">
@@ -243,7 +244,7 @@
               }
             </div>
 
-            @if (checkpointsLoading) {
+            @if (checkpointState?.loading) {
               <cds-inline-loading
                 [isActive]="true"
                 loadingText="Loading snapshots"
