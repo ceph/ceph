@@ -30,7 +30,7 @@
  * that we were able to apply our checks, it does *not* mean that the journal is
  * healthy.
  */
-int JournalScanner::scan(bool const full)
+int JournalScanner::scan(bool const full, EventCallback cb)
 {
   int r = 0;
 
@@ -39,17 +39,26 @@ int JournalScanner::scan(bool const full)
     return r;
   }
 
-  if (!is_mdlog || pointer_present) {
+  if (is_mdlog && !pointer_present) {
+    derr << "Aborting journal scan" << dendl;
+    return 0;
+  } else {
     r = scan_header();
     if (r < 0) {
       return r;
     }
   }
 
-  if (full && header_present) {
-    r = scan_events();
-    if (r < 0) {
-      return r;
+  // NOTE:: ensure the caller checks for header validity before scanning events
+  if (full) {
+    if (!header_valid) {
+      derr << "Aborting journal scan" << dendl;
+      return 0;
+    } else {
+      r = scan_events(cb);
+      if (r < 0) {
+        return r;
+      }
     }
   }
 
@@ -150,7 +159,7 @@ int JournalScanner::scan_header()
 }
 
 
-int JournalScanner::scan_events()
+int JournalScanner::scan_events(EventCallback cb)
 {
   uint64_t object_size = g_conf()->mds_log_segment_size;
   if (object_size == 0) {
@@ -207,7 +216,7 @@ int JournalScanner::scan_events()
     } else {
       dout(4) << "Read 0x" << std::hex << this_object.length() << std::dec
               << " bytes from " << oid << " gap=" << gap << dendl;
-      objects_valid.push_back(oid);
+      ++num_objects_valid;
       this_object.begin().copy(this_object.length(), read_buf);
     }
 
@@ -301,7 +310,12 @@ int JournalScanner::scan_events()
             }
 
             if (filter.apply(read_offset, *le)) {
-              events.insert_or_assign(read_offset, EventRecord(std::move(le), consumed));
+              EventRecord er(std::move(le), consumed);
+              if (cb) {
+                cb(read_offset, er);
+              } else {
+                events.insert_or_assign(read_offset, std::move(er));
+              }
             }
           } else {
             valid_entry = false;
@@ -312,7 +326,12 @@ int JournalScanner::scan_events()
              auto q = le_bl.cbegin();
              pi->decode(q);
 	     if (filter.apply(read_offset, *pi)) {
-	       events.insert_or_assign(read_offset, EventRecord(std::move(pi), consumed));
+	       EventRecord er(std::move(pi), consumed);
+	       if (cb) {
+	         cb(read_offset, er);
+	       } else {
+	         events.insert_or_assign(read_offset, std::move(er));
+	       }
 	     }
            } catch (const buffer::error &err) {
              valid_entry = false;
@@ -327,7 +346,7 @@ int JournalScanner::scan_events()
           read_offset += consumed;
           break;
         } else {
-          events_valid.push_back(read_offset);
+          ++num_events_valid;
           read_offset += consumed;
         }
       }
@@ -339,10 +358,12 @@ int JournalScanner::scan_events()
     ranges_invalid.push_back(Range(gap_start, -1));
   }
 
-  dout(4) << "Scanned objects, " << objects_missing.size() << " missing, " << objects_valid.size() << " valid" << dendl;
+  dout(4) << "Scanned objects, " << objects_missing.size() << " missing, " << num_objects_valid << " valid" << dendl;
   dout(4) << "Events scanned, " << ranges_invalid.size() << " gaps" << dendl;
-  dout(4) << "Found " << events_valid.size() << " valid events" << dendl;
-  dout(4) << "Selected " << events.size() << " events events for processing" << dendl;
+  dout(4) << "Found " << num_events_valid << " valid events" << dendl;
+  if (!cb) {
+    dout(4) << "Selected " << events.size() << " events for processing" << dendl;
+  }
 
   return 0;
 }
