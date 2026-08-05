@@ -91,4 +91,4 @@ Cluster with one API and then retrieve that data with the other API.
    Metrics <metrics>
    UADK Acceleration for Compression <uadk-accel>
    Bucket Logging <bucket_logging>
-
+   Full Object Deduplication <s3_objects_dedup>

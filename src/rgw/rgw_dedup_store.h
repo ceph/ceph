@@ -27,6 +27,7 @@
 #include "include/rados/buffer.h"
 #include "include/rados/librados.hpp"
 #include "rgw_dedup_utils.h"
+#include "BLAKE3/c/blake3.h"
 
 namespace rgw::dedup {
   struct key_t;
@@ -137,6 +138,7 @@ namespace rgw::dedup {
     disk_record_t(const rgw::sal::Bucket *p_bucket,
                   const std::string      &obj_name,
                   const parsed_etag_t    *p_parsed_etag,
+                  const std::string      &instance,
                   uint64_t                obj_size,
                   const std::string      &storage_class);
     disk_record_t() {}
@@ -160,10 +162,10 @@ namespace rgw::dedup {
       uint64_t      md5_high;        // High Bytes of the Object Data MD5
       uint64_t      md5_low;         // Low  Bytes of the Object Data MD5
       uint64_t      obj_bytes_size;
-      uint64_t      object_version;
 
       uint16_t      bucket_id_len;
       uint16_t      tenant_name_len;
+      uint16_t      instance_len;
       uint16_t      stor_class_len;
       uint16_t      ref_tag_len;
 
@@ -171,7 +173,7 @@ namespace rgw::dedup {
       uint8_t       pad[6];
 
       uint64_t      shared_manifest; // 64bit hash of the SRC object manifest
-      uint64_t      sha256[4];       // 4 * 8 Bytes of SHA256
+      uint64_t      hash[4];       // 4 * 8 Bytes of BLAKE3
     }s;
     std::string obj_name;
     // TBD: find pool name making it easier to get ioctx
@@ -179,10 +181,11 @@ namespace rgw::dedup {
     std::string bucket_id;
     std::string tenant_name;
     std::string ref_tag;
+    std::string instance;
     std::string stor_class;
     bufferlist  manifest_bl;
   };
-
+  static_assert(BLAKE3_OUT_LEN == sizeof(disk_record_t::packed_rec_t::hash));
   std::ostream &operator<<(std::ostream &stream, const disk_record_t & rec);
 
   static constexpr unsigned BLOCK_MAGIC = 0xFACE;
