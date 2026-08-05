@@ -170,6 +170,8 @@ private:
   int apply_sharding(const rocksdb::Options& opt,
 		     const std::string& sharding_text);
   int verify_sharding(const rocksdb::Options& opt,
+                      std::vector<ColumnFamily>& stored_sharding_def,
+                      std::vector<std::string>& rocksdb_cfs,
 		      std::vector<rocksdb::ColumnFamilyDescriptor>& existing_cfs,
 		      std::vector<std::pair<size_t, RocksDBStore::ColumnFamily> >& existing_cfs_shard,
 		      std::vector<rocksdb::ColumnFamilyDescriptor>& missing_cfs,
