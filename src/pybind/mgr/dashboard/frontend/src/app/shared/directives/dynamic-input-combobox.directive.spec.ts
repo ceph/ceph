@@ -8,7 +8,7 @@ import { ComboBoxItem } from '../models/combo-box.model';
   template: `<div cdDynamicInputCombobox [items]="[]"></div>`
 })
 class MockComponent {
-  items: ComboBoxItem[] = [{ content: 'Item1', name: 'Item1' }];
+  items: ComboBoxItem[] = [{ content: 'Item1', name: 'Item1', selected: false }];
   searchSubject = new Subject<string>();
   selectedItems: ComboBoxItem[] = [];
   updatedItems = new EventEmitter<ComboBoxItem[]>();

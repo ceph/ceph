@@ -61,7 +61,10 @@
   padding: var(--cds-spacing-06) var(--cds-spacing-07);
 
   &-title {
+    align-items: center;
     color: var(--cds-text-primary);
+    display: flex;
+    gap: var(--cds-spacing-03);
   }
 
   &-description {
@@ -151,4 +154,11 @@
 
 cds-loading {
   margin-right: var(--cds-spacing-05);
+}
+
+.tearsheet-success-icon svg {
+  fill: var(--cds-support-success);
+  flex-shrink: 0;
+  height: 2rem;
+  width: 2rem;
 }

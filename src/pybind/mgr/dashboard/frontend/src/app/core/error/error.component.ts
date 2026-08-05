@@ -107,6 +107,6 @@ export class ErrorComponent implements OnDestroy, OnInit {
   }
 
   enableModule(): void {
-    this.mgrModuleService.updateModuleState(this.module_name, false, null, this.navigateTo);
+    this.mgrModuleService.updateModuleState(this.module_name, false, undefined, this.navigateTo);
   }
 }

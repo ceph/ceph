@@ -1372,8 +1372,8 @@ class RgwMultisiteAutomation:
 
     def setup_multisite_replication(self, realm_name: str, zonegroup_name: str,
                                     zonegroup_endpoints: str, zone_name: str,
-                                    tier_type: str, zone_endpoints: str,
-                                    username: str, cluster_fsid: Optional[str] = None,
+                                    zone_endpoints: str, username: str,
+                                    cluster_fsid: Optional[str] = None,
                                     replication_zone_name: Optional[str] = None,
                                     cluster_details: Optional[str] = None,
                                     selectedRealmName: Optional[str] = None,
@@ -1396,8 +1396,7 @@ class RgwMultisiteAutomation:
         if not selectedRealmName:
             self.create_realm_and_zonegroup(
                 realm_name, zonegroup_name, zone_name, zonegroup_ip_url, username)
-            self.create_zone_and_user(zone_name, tier_type, zonegroup_name, username,
-                                      zone_ip_url)
+            self.create_zone_and_user(zone_name, zonegroup_name, username, zone_ip_url)
             self.restart_daemons()
 
         return self.export_and_import_realm(
@@ -1432,14 +1431,13 @@ class RgwMultisiteAutomation:
             self.update_progress("Failed to create realm or zonegroup", 'fail', str(e))
             raise
 
-    def create_zone_and_user(self, zone: str, tier_type: str, zg: str, username: str,
+    def create_zone_and_user(self, zone: str, zg: str, username: str,
                              zone_url: str):
         try:
             rgw_multisite_instance = RgwMultisite()
             if rgw_multisite_instance.create_zone(zone_name=zone, zonegroup_name=zg, default=True,
                                                   master=True, endpoints=zone_url,
-                                                  access_key=None, secret_key=None,
-                                                  tier_type=tier_type):
+                                                  access_key=None, secret_key=None):
                 self.progress_done += 1
                 user_details = rgw_multisite_instance.create_system_user(username, zone)
                 keys = user_details.get('keys', [{}])[0]
@@ -1449,7 +1447,7 @@ class RgwMultisiteAutomation:
                     rgw_multisite_instance.modify_zone(
                         zone_name=zone, zonegroup_name=zg, default='true',
                         master='true', endpoints=zone_url, access_key=access_key,
-                        secret_key=secret_key, tier_type=tier_type)
+                        secret_key=secret_key)
                 else:
                     raise DashboardException("Access key or secret key is missing",
                                              component='rgw', http_status_code=500)
@@ -1818,8 +1816,7 @@ class RgwRateLimit:
 
 class RgwMultisite:
     def migrate_to_multisite(self, realm_name: str, zonegroup_name: str, zone_name: str,
-                             zonegroup_endpoints: str, zone_endpoints: str, username: str,
-                             tier_type: str):
+                             zonegroup_endpoints: str, zone_endpoints: str, username: str):
         rgw_realm_create_cmd = ['realm', 'create', '--rgw-realm', realm_name, '--default']
         try:
             exit_code, _, err = mgr.send_rgwadmin_command(rgw_realm_create_cmd, False)
@@ -1895,8 +1892,7 @@ class RgwMultisite:
                                      default='true', master='true',
                                      endpoints=zone_endpoints,
                                      access_key=keys['access_key'],
-                                     secret_key=keys['secret_key'],
-                                     tier_type=tier_type)
+                                     secret_key=keys['secret_key'])
                 else:
                     raise DashboardException(msg='Access key or secret key is missing',
                                              http_status_code=500, component='rgw')
@@ -2437,7 +2433,7 @@ class RgwMultisite:
             raise DashboardException(error, http_status_code=500, component='rgw')
 
     def create_zone(self, zone_name, zonegroup_name, default, master, endpoints, access_key,
-                    secret_key, tier_type, sync_from: Optional[str] = None,
+                    secret_key, tier_type: Optional[str] = None, sync_from: Optional[str] = None,
                     sync_from_all: Optional[str] = None):
         rgw_zone_create_cmd = ['zone', 'create']
         cmd_create_zone_options = ['--rgw-zone', zone_name]
@@ -2457,7 +2453,7 @@ class RgwMultisite:
         if secret_key is not None:
             cmd_create_zone_options.append('--secret')
             cmd_create_zone_options.append(secret_key)
-        if tier_type:
+        if tier_type is not None:
             cmd_create_zone_options.append('--tier-type')
             cmd_create_zone_options.append(tier_type)
         if sync_from is not None:
@@ -2487,8 +2483,9 @@ class RgwMultisite:
         return '', ''
 
     def modify_zone(self, zone_name: str, zonegroup_name: str, default: str, master: str,
-                    endpoints: str, access_key: str, secret_key: str, tier_type: str,
-                    sync_from: Optional[str] = None, sync_from_all: Optional[str] = None):
+                    endpoints: str, access_key: str, secret_key: str,
+                    tier_type: Optional[str] = None, sync_from: Optional[str] = None,
+                    sync_from_all: Optional[str] = None):
         rgw_zone_modify_cmd = ['zone', 'modify', '--rgw-zonegroup',
                                zonegroup_name, '--rgw-zone', zone_name]
         if endpoints:
