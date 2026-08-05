@@ -1022,16 +1022,12 @@ PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn,
   int num_bytes)
 {
   if (!os.exists) {
-    return crimson::ct_error::enoent::make();
-  }
-
-  if (!os.exists) {
     logger().debug("{} {} does not exist",__func__, os.oi.soid);
-    return seastar::now();
+    return crimson::ct_error::enoent::make();
   }
   if (whiteout && os.oi.is_whiteout()) {
     logger().debug("{} whiteout set on {} ",__func__, os.oi.soid);
-    return seastar::now();
+    return crimson::ct_error::enoent::make();
   }
   txn.remove(coll->get_cid(),
 	     ghobject_t{os.oi.soid, ghobject_t::NO_GEN, get_shard()});
