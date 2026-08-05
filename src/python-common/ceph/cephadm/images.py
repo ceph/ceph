@@ -56,10 +56,10 @@ class DefaultImages(Enum):
         'quay.io/jaegertracing/jaeger-query:1.29', 'jaeger_query'
     )
     SAMBA = _create_image(
-        'quay.io/samba.org/samba-server:devbuilds-centos-any', 'samba'
+        'quay.io/samba.org/samba-server:ceph21-centos-any', 'samba'
     )
     SAMBA_METRICS = _create_image(
-        'quay.io/samba.org/samba-metrics:devbuilds-centos-any',
+        'quay.io/samba.org/samba-metrics:ceph21-centos-any',
         'samba_metrics',
     )
     NGINX = _create_image('quay.io/ceph/nginx:sclorg-nginx-126', 'nginx')
