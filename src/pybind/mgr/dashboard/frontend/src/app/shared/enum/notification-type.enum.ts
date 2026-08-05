@@ -1,5 +1,11 @@
 export enum NotificationType {
   error,
   info,
-  success
+  success,
+  warning
+}
+
+export enum NotificationApplication {
+  Ceph = 'Ceph',
+  Prometheus = 'Prometheus'
 }

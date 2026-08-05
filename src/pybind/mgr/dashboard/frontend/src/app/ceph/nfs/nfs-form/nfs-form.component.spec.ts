@@ -5,7 +5,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
+
 import { Observable, of } from 'rxjs';
 
 import { NfsFormClientComponent } from '~/app/ceph/nfs/nfs-form-client/nfs-form-client.component';
@@ -29,7 +29,6 @@ describe('NfsFormComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule,
       SharedModule,
-      ToastrModule.forRoot(),
       NgbTypeaheadModule
     ],
     providers: [

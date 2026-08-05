@@ -1,13 +1,11 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { fakeAsync, TestBed, tick } from '@angular/core/testing';
-
+import { fakeAsync, TestBed, tick, flush } from '@angular/core/testing';
 import _ from 'lodash';
-import { ToastrService } from 'ngx-toastr';
 
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { RbdService } from '../api/rbd.service';
 import { NotificationType } from '../enum/notification-type.enum';
-import { CdNotificationConfig } from '../models/cd-notification';
+import { CdNotification, CdNotificationConfig } from '../models/cd-notification';
 import { FinishedTask } from '../models/finished-task';
 import { CdDatePipe } from '../pipes/cd-date.pipe';
 import { NotificationService } from './notification.service';
@@ -15,17 +13,11 @@ import { TaskMessageService } from './task-message.service';
 
 describe('NotificationService', () => {
   let service: NotificationService;
-  const toastFakeService = {
-    error: () => true,
-    info: () => true,
-    success: () => true
-  };
 
   configureTestBed({
     providers: [
       NotificationService,
       TaskMessageService,
-      { provide: ToastrService, useValue: toastFakeService },
       { provide: CdDatePipe, useValue: { transform: (d: any) => d } },
       RbdService
     ],
@@ -33,6 +25,10 @@ describe('NotificationService', () => {
   });
 
   beforeEach(() => {
+    spyOn(window, 'setTimeout').and.callFake((fn: Function) => {
+      fn();
+      return 0;
+    });
     service = TestBed.inject(NotificationService);
     service.removeAll();
   });
@@ -58,7 +54,7 @@ describe('NotificationService', () => {
   it('should cancel a notification', fakeAsync(() => {
     const timeoutId = service.show(NotificationType.error, 'Simple test');
     service.cancel(timeoutId);
-    tick(5000);
+    flush();
     expect(service['dataSource'].getValue().length).toBe(0);
   }));
 
@@ -70,6 +66,7 @@ describe('NotificationService', () => {
       Object.keys(expected).forEach((key) => {
         expect(notification[key]).toBe(expected[key]);
       });
+      flush();
     };
 
     const addNotifications = (quantity: number) => {
@@ -87,11 +84,13 @@ describe('NotificationService', () => {
     it('should create a success notification and save it', fakeAsync(() => {
       service.show(new CdNotificationConfig(NotificationType.success, 'Simple test'));
       expectSavedNotificationToHave({ type: NotificationType.success });
+      flush();
     }));
 
     it('should create an error notification and save it', fakeAsync(() => {
       service.show(NotificationType.error, 'Simple test');
       expectSavedNotificationToHave({ type: NotificationType.error });
+      flush();
     }));
 
     it('should create an info notification and save it', fakeAsync(() => {
@@ -101,11 +100,13 @@ describe('NotificationService', () => {
         title: 'Simple test',
         message: undefined
       });
+      flush();
     }));
 
     it('should never have more then 10 notifications', fakeAsync(() => {
       addNotifications(15);
       expect(service['dataSource'].getValue().length).toBe(10);
+      flush();
     }));
 
     it('should show a success task notification, but not save it', fakeAsync(() => {
@@ -119,6 +120,7 @@ describe('NotificationService', () => {
       expect(service.show).toHaveBeenCalled();
       const notifications = service['dataSource'].getValue();
       expect(notifications.length).toBe(0);
+      flush();
     }));
 
     it('should be able to stop notifyTask from notifying', fakeAsync(() => {
@@ -129,6 +131,7 @@ describe('NotificationService', () => {
       service.cancel(timeoutId);
       tick(100);
       expect(service['dataSource'].getValue().length).toBe(0);
+      flush();
     }));
 
     it('should show a error task notification', fakeAsync(() => {
@@ -151,17 +154,29 @@ describe('NotificationService', () => {
       expect(service.show).toHaveBeenCalled();
       const notifications = service['dataSource'].getValue();
       expect(notifications.length).toBe(0);
+      flush();
     }));
 
-    it('combines different notifications with the same title', fakeAsync(() => {
+    it('deduplicates notifications with the same title, type, and message', fakeAsync(() => {
       service.show(NotificationType.error, '502 - Bad Gateway', 'Error occurred in path a');
-      tick(60);
+      tick(600);
+      service.show(NotificationType.error, '502 - Bad Gateway', 'Error occurred in path a');
+      tick(600);
+      const notifications = service['dataSource'].getValue();
+      expect(notifications.length).toBe(1);
+      expect(notifications[0].title).toBe('502 - Bad Gateway');
+      expect(notifications[0].occurrences).toBe(2);
+      flush();
+    }));
+
+    it('does not deduplicate notifications with different messages', fakeAsync(() => {
+      service.show(NotificationType.error, '502 - Bad Gateway', 'Error occurred in path a');
+      tick(600);
       service.show(NotificationType.error, '502 - Bad Gateway', 'Error occurred in path b');
-      expectSavedNotificationToHave({
-        type: NotificationType.error,
-        title: '502 - Bad Gateway',
-        message: '<ul><li>Error occurred in path a</li><li>Error occurred in path b</li></ul>'
-      });
+      tick(600);
+      const notifications = service['dataSource'].getValue();
+      expect(notifications.length).toBe(2);
+      flush();
     }));
 
     it('should remove a single notification', fakeAsync(() => {
@@ -171,6 +186,7 @@ describe('NotificationService', () => {
       service.remove(2);
       messages = service['dataSource'].getValue().map((notification) => notification.title);
       expect(messages).toEqual(['4', '3', '1', '0']);
+      flush();
     }));
 
     it('should remove all notifications', fakeAsync(() => {
@@ -178,6 +194,7 @@ describe('NotificationService', () => {
       expect(service['dataSource'].getValue().length).toBe(5);
       service.removeAll();
       expect(service['dataSource'].getValue().length).toBe(0);
+      flush();
     }));
   });
 
@@ -185,7 +202,10 @@ describe('NotificationService', () => {
     const n1 = new CdNotificationConfig(NotificationType.success, 'Some success');
     const n2 = new CdNotificationConfig(NotificationType.info, 'Some info');
 
-    const showArray = (arr: any[]) => arr.forEach((n) => service.show(n));
+    const showArray = (arr: any[]) => {
+      arr.forEach((n) => service.show(n));
+      tick(20);
+    };
 
     beforeEach(() => {
       spyOn(service, 'save').and.stub();
@@ -195,75 +215,69 @@ describe('NotificationService', () => {
       showArray([n1, n1, n2, n2]);
       tick(510);
       expect(service.save).toHaveBeenCalledTimes(2);
+      flush();
     }));
 
     it('filters out duplicated notifications presented in different calls', fakeAsync(() => {
-      showArray([n1, n2]);
-      showArray([n1, n2]);
-      tick(1000);
-      expect(service.save).toHaveBeenCalledTimes(2);
-    }));
-
-    it('will reset the timeout on every call', fakeAsync(() => {
-      showArray([n1, n2]);
-      tick(490);
-      showArray([n1, n2]);
-      tick(450);
-      expect(service.save).toHaveBeenCalledTimes(0);
-      tick(60);
-      expect(service.save).toHaveBeenCalledTimes(2);
-    }));
-
-    it('wont filter out duplicated notifications if timeout was reached before', fakeAsync(() => {
       showArray([n1, n2]);
       tick(510);
       showArray([n1, n2]);
       tick(510);
       expect(service.save).toHaveBeenCalledTimes(4);
+      flush();
+    }));
+
+    it('will reset the timeout on every call', fakeAsync(() => {
+      showArray([n1, n2]);
+      tick(400);
+      showArray([n1, n2]);
+      tick(510);
+      expect(service.save).toHaveBeenCalledTimes(2);
+      flush();
+    }));
+
+    it('wont filter out duplicated notifications if timeout was reached before', fakeAsync(() => {
+      showArray([n1, n2]);
+      tick(510);
+      (service.save as jasmine.Spy).calls.reset();
+      showArray([n1, n2]);
+      tick(510);
+      expect(service.save).toHaveBeenCalledTimes(2);
+      flush();
     }));
   });
 
   describe('showToasty', () => {
-    let toastr: ToastrService;
     const time = '2022-02-22T00:00:00.000Z';
 
     beforeEach(() => {
       const baseTime = new Date(time);
       spyOn(global, 'Date').and.returnValue(baseTime);
-      spyOn(window, 'setTimeout').and.callFake((fn) => fn());
-
-      toastr = TestBed.inject(ToastrService);
-      // spyOn needs to know the methods before spying and can't read the array for clarification
-      ['error', 'info', 'success'].forEach((method: 'error' | 'info' | 'success') =>
-        spyOn(toastr, method).and.stub()
-      );
     });
 
-    it('should show with only title defined', () => {
+    it('should show with only title defined', fakeAsync(() => {
       service.show(NotificationType.info, 'Some info');
-      expect(toastr.info).toHaveBeenCalledWith(
-        `<small class="date">${time}</small>` +
-          '<i class="float-end custom-icon ceph-icon" title="Ceph"></i>',
-        'Some info',
-        undefined
-      );
-    });
+      tick(510);
+      const toasts = service['activeToastsSource'].getValue();
+      expect(toasts.length).toBe(1);
+      expect(toasts[0].title).toBe('Some info');
+      flush();
+    }));
 
-    it('should show with title and message defined', () => {
+    it('should show with title and message defined', fakeAsync(() => {
       service.show(
         () =>
           new CdNotificationConfig(NotificationType.error, 'Some error', 'Some operation failed')
       );
-      expect(toastr.error).toHaveBeenCalledWith(
-        'Some operation failed<br>' +
-          `<small class="date">${time}</small>` +
-          '<i class="float-end custom-icon ceph-icon" title="Ceph"></i>',
-        'Some error',
-        undefined
-      );
-    });
+      tick(510);
+      const toasts = service['activeToastsSource'].getValue();
+      expect(toasts.length).toBe(1);
+      expect(toasts[0].title).toBe('Some error');
+      expect(toasts[0].subtitle).toBe('Some operation failed');
+      flush();
+    }));
 
-    it('should show with title, message and application defined', () => {
+    it('should show with title, message and application defined (application name hidden)', fakeAsync(() => {
       service.show(
         new CdNotificationConfig(
           NotificationType.success,
@@ -273,13 +287,74 @@ describe('NotificationService', () => {
           'Prometheus'
         )
       );
-      expect(toastr.success).toHaveBeenCalledWith(
-        'Some alert resolved<br>' +
-          `<small class="date">${time}</small>` +
-          '<i class="float-end custom-icon prometheus-icon" title="Prometheus"></i>',
-        'Alert resolved',
-        undefined
-      );
+      tick(510);
+      const toasts = service['activeToastsSource'].getValue();
+      expect(toasts.length).toBe(1);
+      expect(toasts[0].title).toBe('Alert resolved');
+      expect(toasts[0].subtitle).toBe('Some alert resolved');
+      expect(toasts[0].caption).not.toContain('Prometheus');
+      flush();
+    }));
+  });
+
+  describe('Active toast limit', () => {
+    it('should show only the latest 2 toasts', fakeAsync(() => {
+      for (let i = 0; i < 5; i++) {
+        service.show(NotificationType.error, `Error ${i}`, `Message ${i}`);
+        tick(600);
+      }
+      const toasts = service['activeToastsSource'].getValue();
+      expect(toasts.length).toBe(2);
+      expect(toasts[0].title).toBe('Error 4');
+      expect(toasts[1].title).toBe('Error 3');
+      flush();
+    }));
+  });
+
+  describe('Read state', () => {
+    it('should mark a notification as read', () => {
+      const config = new CdNotificationConfig(NotificationType.info, 'Test');
+      const notification = new CdNotification(config);
+      service.save(notification);
+
+      expect(service['hasUnreadSource'].getValue()).toBe(true);
+      service.markAsRead(notification.id);
+      expect(service['hasUnreadSource'].getValue()).toBe(false);
+    });
+
+    it('should mark all notifications as read', () => {
+      const n1 = new CdNotification(new CdNotificationConfig(NotificationType.info, 'A'));
+      const n2 = new CdNotification(new CdNotificationConfig(NotificationType.error, 'B'));
+      service.save(n1);
+      service.save(n2);
+
+      expect(service['hasUnreadSource'].getValue()).toBe(true);
+      service.markAllAsRead();
+      expect(service['hasUnreadSource'].getValue()).toBe(false);
+    });
+
+    it('should clear read state when a notification gets a new occurrence', () => {
+      const n1 = new CdNotification(new CdNotificationConfig(NotificationType.error, 'Err', 'msg'));
+      service.save(n1);
+      service.markAsRead(n1.id);
+      expect(service['hasUnreadSource'].getValue()).toBe(false);
+
+      const n2 = new CdNotification(new CdNotificationConfig(NotificationType.error, 'Err', 'msg'));
+      service.save(n2);
+      expect(service['hasUnreadSource'].getValue()).toBe(true);
+      expect(service['dataSource'].getValue()[0].occurrences).toBe(2);
+    });
+
+    it('should remove by id', () => {
+      const n1 = new CdNotification(new CdNotificationConfig(NotificationType.info, 'A'));
+      service.save(n1);
+      expect(service['dataSource'].getValue().length).toBe(1);
+      expect(service.removeById(n1.id)).toBe(true);
+      expect(service['dataSource'].getValue().length).toBe(0);
+    });
+
+    it('should return false when removing non-existent id', () => {
+      expect(service.removeById('nonexistent')).toBe(false);
     });
   });
 });

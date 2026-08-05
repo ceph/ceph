@@ -4,7 +4,6 @@ import { RgwUserAccountsFormComponent } from './rgw-user-accounts-form.component
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { RouterTestingModule } from '@angular/router/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ToastrModule } from 'ngx-toastr';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { of } from 'rxjs';
 import { RgwUserAccountsService } from '~/app/shared/api/rgw-user-accounts.service';
@@ -28,7 +27,6 @@ describe('RgwUserAccountsFormComponent', () => {
       declarations: [RgwUserAccountsFormComponent],
       imports: [
         ComponentsModule,
-        ToastrModule.forRoot(),
         HttpClientTestingModule,
         PipesModule,
         RouterTestingModule.withRoutes([

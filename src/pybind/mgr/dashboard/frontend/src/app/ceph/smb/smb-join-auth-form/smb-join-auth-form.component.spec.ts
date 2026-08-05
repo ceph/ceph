@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { SmbJoinAuthFormComponent } from './smb-join-auth-form.component';
-import { ToastrModule } from 'ngx-toastr';
+
 import { SharedModule } from '~/app/shared/shared.module';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -28,7 +28,7 @@ describe('SmbJoinAuthFormComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [ToastrModule.forRoot(), SharedModule, ReactiveFormsModule],
+      imports: [SharedModule, ReactiveFormsModule],
       declarations: [SmbJoinAuthFormComponent],
       providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])]
     }).compileComponents();

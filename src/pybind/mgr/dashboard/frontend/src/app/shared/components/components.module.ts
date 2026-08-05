@@ -12,7 +12,6 @@ import {
   NgbTimepickerModule,
   NgbTooltipModule
 } from '@ng-bootstrap/ng-bootstrap';
-import { ClickOutsideModule } from 'ng-click-outside';
 import { provideCharts, withDefaultRegisterables, BaseChartDirective } from 'ng2-charts';
 import { SimplebarAngularModule } from 'simplebar-angular';
 import {
@@ -68,7 +67,6 @@ import { HelperComponent } from './helper/helper.component';
 import { LanguageSelectorComponent } from './language-selector/language-selector.component';
 import { LoadingPanelComponent } from './loading-panel/loading-panel.component';
 import { ModalComponent } from './modal/modal.component';
-import { NotificationsSidebarComponent } from './notifications-sidebar/notifications-sidebar.component';
 import { OrchestratorDocPanelComponent } from './orchestrator-doc-panel/orchestrator-doc-panel.component';
 import { PwdExpirationNotificationComponent } from './pwd-expiration-notification/pwd-expiration-notification.component';
 import { RefreshSelectorComponent } from './refresh-selector/refresh-selector.component';
@@ -92,6 +90,7 @@ import { TearsheetComponent } from './tearsheet/tearsheet.component';
 import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
 import { DetailsCardComponent } from './details-card/details-card.component';
 import { SidePanelComponent } from './side-panel/side-panel.component';
+import { ToastComponent } from './notification-toast/notification-toast.component';
 
 // Icons
 import InfoIcon from '@carbon/icons/es/information/16';
@@ -125,6 +124,7 @@ import ArrowDown16 from '@carbon/icons/es/arrow--down/16';
 import Warning16 from '@carbon/icons/es/warning/16';
 import Deploy16 from '@carbon/icons/es/deploy/16';
 import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.component';
+import { ProductiveCardComponent } from './productive-card/productive-card.component';
 
 @NgModule({
   imports: [
@@ -139,7 +139,6 @@ import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.componen
     PipesModule,
     DirectivesModule,
     NgbDropdownModule,
-    ClickOutsideModule,
     SimplebarAngularModule,
     RouterModule,
     NgbDatepickerModule,
@@ -172,7 +171,8 @@ import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.componen
     LayerModule,
     LayoutModule,
     TilesModule,
-    ThemeModule
+    ThemeModule,
+    ProductiveCardComponent
   ],
   declarations: [
     SparklineComponent,
@@ -182,7 +182,6 @@ import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.componen
     UsageBarComponent,
     LoadingPanelComponent,
     ModalComponent,
-    NotificationsSidebarComponent,
     DeleteConfirmationModalComponent,
     ConfirmationModalComponent,
     LanguageSelectorComponent,
@@ -220,7 +219,8 @@ import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.componen
     TearsheetStepComponent,
     DetailsCardComponent,
     SidePanelComponent,
-    SidebarLayoutComponent
+    SidebarLayoutComponent,
+    ToastComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -232,7 +232,6 @@ import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.componen
     LoadingPanelComponent,
     UsageBarComponent,
     ModalComponent,
-    NotificationsSidebarComponent,
     LanguageSelectorComponent,
     GrafanaComponent,
     SelectComponent,
@@ -265,7 +264,9 @@ import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.componen
     TearsheetStepComponent,
     DetailsCardComponent,
     SidePanelComponent,
-    SidebarLayoutComponent
+    SidebarLayoutComponent,
+    ToastComponent,
+    ProductiveCardComponent
   ]
 })
 export class ComponentsModule {

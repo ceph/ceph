@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { CephfsSubvolumegroupFormComponent } from './cephfs-subvolumegroup-form.component';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
+
 import { SharedModule } from '~/app/shared/shared.module';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ReactiveFormsModule } from '@angular/forms';
@@ -19,7 +19,6 @@ describe('CephfsSubvolumegroupFormComponent', () => {
     providers: [NgbActiveModal],
     imports: [
       SharedModule,
-      ToastrModule.forRoot(),
       ReactiveFormsModule,
       HttpClientTestingModule,
       RouterTestingModule,
