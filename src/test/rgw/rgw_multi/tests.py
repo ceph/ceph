@@ -4,9 +4,11 @@ import string
 import time
 import logging
 import errno
+import contextlib
+import datetime
 import dateutil.parser
 import re
-import datetime
+import threading
 
 from itertools import combinations
 from itertools import zip_longest
@@ -24,6 +26,7 @@ from .multisite import Zone, ZoneGroup, Credentials
 
 from .conn import get_gateway_connection
 
+
 class Config:
     """ test configuration """
     def __init__(self, **kwargs):
@@ -33,6 +36,22 @@ class Config:
         # allow some time for realm reconfiguration after changing master zone
         self.reconfigure_delay = kwargs.get('reconfigure_delay', 5)
         self.tenant = kwargs.get('tenant', '')
+
+
+@contextlib.contextmanager
+def override_config(**kwargs):
+    """Temporarily override config values for a test."""
+    global config
+    old_values = {}
+    for key, value in kwargs.items():
+        old_values[key] = getattr(config, key)
+        setattr(config, key, value)
+    try:
+        yield
+    finally:
+        for key, value in old_values.items():
+            setattr(config, key, value)
+
 
 # rgw multisite tests, written against the interfaces provided in rgw_multi.
 # these tests must be initialized and run by another module that provides
@@ -6011,6 +6030,113 @@ def test_copy_obj_perm_check_between_zonegroups(zonegroup):
             assert False, "Expected AccessDenied error"
         except ClientError as e:
             assert e.response['Error']['Code'] == 'AccessDenied'
+
+def test_period_update_commit():
+    wkld_concurrency = 10
+    num_objects_to_upload = 1000
+    number_of_period_updates = 3
+    test_passed = False
+
+    # get client connection to generate s3 wkld
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary_zone_client_conn = zonegroup_conns.master_zone
+
+    # get cluster connection to another zone in the group
+    # to issue period update commits and verify replication
+    secondary_zone_cluster_conn = None
+    for zg in realm.current_period.zonegroups:
+        if zonegroup != zg:
+            continue
+        for zone in zg.zones:
+            if zone != zonegroup.master_zone:
+                secondary_zone_cluster_conn = zone
+                break
+        if secondary_zone_cluster_conn is not None:
+            break
+    else:
+        raise SkipTest("test_period_update_commit is skipped.")
+
+    bucket = primary_zone_client_conn.create_bucket(gen_bucket_name())
+    log.info(f"created bucket={bucket.name}")
+
+    def run_client_wkld(stop_event: threading.Event, key_range):
+        log.info(f"upload objects within range {key_range} to bucket={bucket.name}")
+        num_uploads = 0
+        while not stop_event.is_set():
+            start, end = key_range
+            for i in range(start, end + 1):
+                try:
+                    primary_zone_client_conn.s3_client.put_object(
+                        Bucket=bucket.name, Key=f"obj-{i:04d}", Body="..."
+                    )
+                    num_uploads += 1
+                    if stop_event.is_set():
+                        break
+                    time.sleep(0.01)
+                except Exception as e:
+                    log.debug(f"failed to upload object to bucket={bucket.name}: {e}")
+        log.info(
+            f"uploaded {num_uploads} times for the range {key_range} to bucket={bucket.name}"
+        )
+
+    try:
+        log.info("verify cluster is healthy before moving on")
+        try:
+            zonegroup_data_checkpoint(zonegroup_conns)
+        except:
+            log.info("restart gateways for a clean start")
+            for z in zonegroup_conns.rw_zones:
+                z.zone.start()
+
+        log.info("start client write-only workload to generate replication traffic")
+        client_write_only_wkld_thread_stop = threading.Event()
+        step = num_objects_to_upload // wkld_concurrency
+        key_ranges = [(i * step, (i + 1) * step - 1) for i in range(wkld_concurrency)]
+        client_write_only_wkld_threads = []
+        for key_range in key_ranges:
+            thread = threading.Thread(
+                target=run_client_wkld,
+                args=(client_write_only_wkld_thread_stop, key_range),
+                daemon=False,
+            )
+            thread.start()
+            client_write_only_wkld_threads.append(thread)
+
+        log.info("run period-update-commits and verify rgw instances reload properly")
+        for _ in range(number_of_period_updates):
+            log.info("issue period update commit")
+            zonegroup.period.update(secondary_zone_cluster_conn, commit=True)
+            log.info("verify data sync is making progress")
+            with override_config(checkpoint_retries=10, checkpoint_delay=60):
+                if not data_sync_making_progress(secondary_zone_cluster_conn):
+                    break  # the issue of realm reload freezing reproduced
+        client_write_only_wkld_thread_stop.set()  # stop client wkld
+        with override_config(checkpoint_retries=10, checkpoint_delay=60):
+            zonegroup_data_checkpoint(zonegroup_conns)
+        test_passed = True
+    except Exception as e:
+        log.error(f"test_period_update_commit failed: {e}")
+        raise
+    finally:
+        client_write_only_wkld_thread_stop.set()
+        for t in client_write_only_wkld_threads:
+            t.join()
+
+        # without a fix, an rgw instance may crash or freeze
+        # so restart all instances before further cleaning up
+        if not test_passed:
+            for z in zonegroup_conns.rw_zones:
+                z.zone.start()
+
+        log.info(f"delete {num_objects_to_upload} objects from bucket={bucket.name}")
+        for i in range(num_objects_to_upload):
+            primary_zone_client_conn.s3_client.delete_object(
+                Bucket=bucket.name,
+                Key=f"obj-{i:04d}",
+            )
+        log.info(f"delete bucket={bucket.name}")
+        primary_zone_client_conn.s3_client.delete_bucket(Bucket=bucket.name)
 
 def test_bucket_full_sync_when_the_bucket_is_deleted_in_the_meantime():
     num_objects_to_upload = (
