@@ -12,7 +12,9 @@ const jestConfig = {
   moduleNameMapper: {
     '\\.scss$': 'identity-obj-proxy',
     '~/(.*)$': '<rootDir>/src/$1',
-    '^@carbon/icons/es/(.*)$': '@carbon/icons/lib/$1.js'
+    '^@carbon/icons/es/(.*)$': '@carbon/icons/lib/$1.js',
+    '^lodash-es$': 'lodash',
+    '^@carbon/charts$': '<rootDir>/node_modules/@carbon/charts/dist/index.mjs'
   },
   moduleFileExtensions: ['ts', 'html', 'js', 'json', 'mjs', 'cjs'],
   preset: 'jest-preset-angular',

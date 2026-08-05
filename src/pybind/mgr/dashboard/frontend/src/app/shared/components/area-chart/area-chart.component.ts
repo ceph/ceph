@@ -13,11 +13,11 @@ import {
   ChartTabularData,
   ToolbarControlTypes,
   ScaleTypes,
-  ChartsModule
+  ChartsModule,
+  TickRotations
 } from '@carbon/charts-angular';
 import merge from 'lodash/merge';
 import { NumberFormatterService } from '../../services/number-formatter.service';
-import { DatePipe } from '@angular/common';
 import { ChartPoint } from '../../models/area-chart-point';
 import {
   DECIMAL,
@@ -26,6 +26,12 @@ import {
   getDivisor,
   getLabels
 } from '../../helpers/unit-format-utils';
+import { DatePipe } from '@angular/common';
+
+const DEFAULT_TICKS_COUNT = 4;
+const FIVE_MINUTE_SPAN_SECONDS = 300;
+const TIME_SPAN_TOLERANCE_SECONDS = 30;
+const TOOLTIP_TIME_FORMAT = 'MMM d, hh:mm a';
 
 @Component({
   selector: 'cd-area-chart',
@@ -59,8 +65,9 @@ export class AreaChartComponent implements OnChanges {
 
   private cdr = inject(ChangeDetectorRef);
   private numberFormatter: NumberFormatterService = inject(NumberFormatterService);
-  private datePipe = inject(DatePipe);
   private lastEmittedRawValues?: Record<string, number>;
+
+  private datePipe = inject(DatePipe);
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['rawData'] && this.rawData?.length) {
@@ -129,7 +136,22 @@ export class AreaChartComponent implements OnChanges {
     this.lastEmittedRawValues = { ...latestEntry.values };
   }
 
+  // Calculate time span in seconds from raw data timestamps
+  private getTimeSpanInSeconds(): number {
+    if (!this.rawData || this.rawData.length < 2) {
+      return 0;
+    }
+    const firstTimestamp = new Date(this.rawData[0].timestamp).getTime();
+    const lastTimestamp = new Date(this.rawData[this.rawData.length - 1].timestamp).getTime();
+    return (lastTimestamp - firstTimestamp) / 1000;
+  }
+
   private getChartOptions(max: number, labels: string[], divisor: number): AreaChartOptions {
+    const timeSpan = this.getTimeSpanInSeconds();
+    const isFiveMinuteSpan =
+      timeSpan > 0 &&
+      timeSpan >= FIVE_MINUTE_SPAN_SECONDS - TIME_SPAN_TOLERANCE_SECONDS &&
+      timeSpan <= FIVE_MINUTE_SPAN_SECONDS + TIME_SPAN_TOLERANCE_SECONDS;
     return {
       legend: {
         enabled: this.legendEnabled
@@ -139,8 +161,8 @@ export class AreaChartComponent implements OnChanges {
           mapsTo: 'date',
           scaleType: ScaleTypes.TIME,
           ticks: {
-            number: 4,
-            rotateIfSmallerThan: 0
+            number: DEFAULT_TICKS_COUNT,
+            rotation: isFiveMinuteSpan ? TickRotations.ALWAYS : TickRotations.AUTO
           }
         },
         left: {
@@ -161,9 +183,18 @@ export class AreaChartComponent implements OnChanges {
       tooltip: {
         enabled: true,
         showTotal: false,
-        valueFormatter: (value: number): string =>
-          (this.formatValueForChart(value, labels, divisor, this.decimals) || value).toString(),
-        customHTML: (data, defaultHTML) => this.formatChartTooltip(defaultHTML, data)
+        truncation: {
+          type: 'none'
+        },
+        valueFormatter: (value: number | Date, label: string): string => {
+          if (value instanceof Date && label === 'x-value') {
+            return this.datePipe.transform(value, TOOLTIP_TIME_FORMAT) ?? '';
+          }
+          return (
+            this.formatValueForChart(value, labels, divisor, this.decimals) || value
+          ).toString();
+        },
+        customHTML: (_data, defaultHTML) => this.formatChartTooltip(defaultHTML)
       },
       points: {
         enabled: false
@@ -193,15 +224,8 @@ export class AreaChartComponent implements OnChanges {
     };
   }
 
-  // Custom tooltip formatter to replace default timestamp with a formatted one.
-  formatChartTooltip(defaultHTML: string, data: { date: Date }[]): string {
-    if (!data?.length) return defaultHTML;
-
-    const formattedTime = this.datePipe.transform(data[0].date, 'dd MMM, HH:mm:ss');
-    return defaultHTML.replace(
-      /<p class="value">.*?<\/p>/,
-      `<p class="value">${formattedTime}</p>`
-    );
+  formatChartTooltip(defaultHTML: string): string {
+    return defaultHTML.replace(/<p>x-value<\/p>/i, `<p>${$localize`Time`}</p>`);
   }
 
   // Uses number formatter service to convert chart value based on unit and divisor.
