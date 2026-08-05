@@ -556,13 +556,10 @@ class FSPerfStats(object):
         return FilterSpec(mds_ranks, client_id, client_ip)
 
     def get_perf_data(self, cmd):
-        try:
-            filter_spec = self.extract_query_filters(cmd)
-        except ValueError as e:
-            return -errno.EINVAL, "", str(e)
+        filter_spec = self.extract_query_filters(cmd)
 
         counters = {}
         with self.lock:
             user_query = self.register_query(filter_spec)
             result = self.generate_report(user_query)
-        return 0, json.dumps(result), ""
+        return result

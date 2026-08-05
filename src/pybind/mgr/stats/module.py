@@ -3,11 +3,18 @@ performance stats for ceph filesystem (for now...)
 """
 
 import json
+import errno
 from typing import List, Dict
+from xml.dom.minidom import parseString
 
 from mgr_module import MgrModule, Option, NotifyType
 
 from .fs.perf_stats import FSPerfStats
+
+try:
+    from dicttoxml import dicttoxml # type: ignore[import-not-found] 
+except ImportError:
+    dicttoxml = None
 
 class Module(MgrModule):
     COMMANDS = [
@@ -37,5 +44,23 @@ class Module(MgrModule):
         prefix = cmd['prefix']
         # only supported command is `fs perf stats` right now
         if prefix.startswith('fs perf stats'):
-            return self.fs_perf_stats.get_perf_data(cmd)
+            try:
+                result = self.fs_perf_stats.get_perf_data(cmd)
+            except ValueError as e:
+                return -errno.EINVAL, "", str(e)
+            
+            if 'format' in cmd:
+                if cmd['format'] == 'json-pretty':
+                    return 0, json.dumps(result, indent=2), ""
+                elif cmd['format'] == 'xml':
+                    if dicttoxml is None:
+                        raise ImportError("dicttoxml package required for xml")
+                    result = json.loads(json.dumps(result, default=str))
+                    return 0, dicttoxml(result).decode('utf-8'), ""
+                elif cmd['format'] == 'xml-pretty':
+                    if dicttoxml is None:
+                        raise ImportError("dicttoxml package required for xml")
+                    res_xml = parseString(dicttoxml(result))
+                    return 0, res_xml.toprettyxml(), ""
+            return 0, json.dumps(result), ""
         raise NotImplementedError(cmd['prefix'])
