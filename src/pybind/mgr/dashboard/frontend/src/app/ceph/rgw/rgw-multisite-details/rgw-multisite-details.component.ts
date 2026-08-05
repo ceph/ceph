@@ -124,6 +124,10 @@ export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, O
   MODULE_NAME = 'rgw';
   NAVIGATE_TO = '/rgw/multisite';
 
+  get disableActions(): boolean {
+    return !this.permissions?.rgw?.create;
+  }
+
   constructor(
     private modalService: ModalService,
     private timerService: TimerService,
