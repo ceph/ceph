@@ -275,6 +275,138 @@ timeout = 1.0\n"""
             assert len(cephadm_module.spec_store.get_by_service_type('nvmeof')) == 1
 
     @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @patch("cephadm.module.NvmeofMetadataPoolHelper.create_pool_if_needed")
+    def test_apply_with_dotted_pool_accepted_over_existing_trimmed_service_id(
+            self, _create_pool, cephadm_module: CephadmOrchestrator):
+        """Backward-compat: a service stored with the old trimmed service_id ('nvmeof.gw_group1',
+        produced by the lstrip('.') bug) must not block a subsequent apply that uses the correct
+        dotted service_id ('.nvmeof.gw_group1'), since both refer to the same pool+group."""
+        old_spec = NvmeofServiceSpec(
+            service_id='nvmeof.gw_group1',   # old trimmed form (bug)
+            group='gw_group1',
+            pool='.nvmeof'
+        )
+        new_spec = NvmeofServiceSpec(
+            service_id='.nvmeof.gw_group1',  # correct dotted form (fixed)
+            group='gw_group1',
+            pool='.nvmeof'
+        )
+        with with_host(cephadm_module, 'test'):
+            cephadm_module._apply_service_spec(old_spec)
+            assert len(cephadm_module.spec_store.get_by_service_type('nvmeof')) == 1
+            # Must NOT raise — same pool+group, just a different service_id string
+            cephadm_module._apply_service_spec(new_spec)
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @patch("cephadm.module.NvmeofMetadataPoolHelper.create_pool_if_needed")
+    def test_apply_mismatched_service_id_does_not_create_duplicate(
+            self, _create_pool, cephadm_module: CephadmOrchestrator):
+        """Regression: applying a spec whose service_id uses a different form of the same
+        pool+group (e.g. 'nvmeof.mygroup1' when '.nvmeof.mygroup1' is already stored) must
+        update the existing service in-place, not create a second service under a new key.
+
+        Reproduces the scenario:
+          1. Fixed cluster has service stored as '.nvmeof.mygroup1'
+          2. User exports spec via 'ceph orch ls --export', edits it (or gets old form),
+             yielding service_id='nvmeof.mygroup1'
+          3. 'ceph orch apply -i spec.yml' must update, not duplicate.
+        """
+        stored_spec = NvmeofServiceSpec(
+            service_id='.nvmeof.mygroup1',
+            group='mygroup1',
+            pool='.nvmeof'
+        )
+        incoming_spec = NvmeofServiceSpec(
+            service_id='nvmeof.mygroup1',   # old trimmed form in the YAML
+            group='mygroup1',
+            pool='.nvmeof'
+        )
+        with with_host(cephadm_module, 'test'):
+            cephadm_module._apply_service_spec(stored_spec)
+            assert len(cephadm_module.spec_store.get_by_service_type('nvmeof')) == 1
+
+            cephadm_module._apply_service_spec(incoming_spec)
+
+            # Must still be exactly one service — no duplicate created
+            specs = cephadm_module.spec_store.get_by_service_type('nvmeof')
+            assert len(specs) == 1
+            # The stored service_id must win — incoming spec normalised to it
+            assert specs[0].spec.service_id == '.nvmeof.mygroup1'
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @patch("cephadm.module.NvmeofMetadataPoolHelper.create_pool_if_needed")
+    def test_apply_with_identical_dotted_pool_not_blocked(
+            self, _create_pool, cephadm_module: CephadmOrchestrator):
+        """Applying the same '.nvmeof' pool+group twice must update the existing service,
+        not raise the duplicate-group error."""
+        spec_first = NvmeofServiceSpec(
+            service_id='.nvmeof.gw_group1',
+            group='gw_group1',
+            pool='.nvmeof'
+        )
+        spec_second = NvmeofServiceSpec(
+            service_id='.nvmeof.gw_group1',
+            group='gw_group1',
+            pool='.nvmeof'
+        )
+        with with_host(cephadm_module, 'test'):
+            cephadm_module._apply_service_spec(spec_first)
+            # Must NOT raise — identical service
+            cephadm_module._apply_service_spec(spec_second)
+            assert len(cephadm_module.spec_store.get_by_service_type('nvmeof')) == 1
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_apply_nvmeof_pool_and_dotted_nvmeof_pool_are_different_services(
+            self, cephadm_module: CephadmOrchestrator):
+        """'nvmeof' and '.nvmeof' are distinct RADOS pools — pool identity uses exact
+        comparison so applying both for the same group must raise, even though their
+        names differ only by a leading dot."""
+        spec_undotted = NvmeofServiceSpec(
+            service_id='nvmeof.gw_group1',
+            group='gw_group1',
+            pool='nvmeof'
+        )
+        spec_dotted = NvmeofServiceSpec(
+            service_id='.nvmeof.gw_group1',
+            group='gw_group1',
+            pool='.nvmeof'
+        )
+        with with_host(cephadm_module, 'test'):
+            cephadm_module._apply_service_spec(spec_undotted)
+            with pytest.raises(
+                OrchestratorError,
+                match='Cannot create nvmeof service with group gw_group1'
+            ):
+                NvmeofMetadataPoolHelper_mock = patch(
+                    "cephadm.module.NvmeofMetadataPoolHelper.create_pool_if_needed"
+                )
+                with NvmeofMetadataPoolHelper_mock:
+                    cephadm_module._apply_service_spec(spec_dotted)
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_apply_dotted_custom_pool_and_undotted_custom_pool_are_different_services(
+            self, cephadm_module: CephadmOrchestrator):
+        """'.mypool' and 'mypool' are distinct pools — applying both for the same group
+        must raise."""
+        spec_undotted = NvmeofServiceSpec(
+            service_id='mypool.gw_group1',
+            group='gw_group1',
+            pool='mypool'
+        )
+        spec_dotted = NvmeofServiceSpec(
+            service_id='.mypool.gw_group1',
+            group='gw_group1',
+            pool='.mypool'
+        )
+        with with_host(cephadm_module, 'test'):
+            cephadm_module._apply_service_spec(spec_undotted)
+            with pytest.raises(
+                OrchestratorError,
+                match='Cannot create nvmeof service with group gw_group1'
+            ):
+                cephadm_module._apply_service_spec(spec_dotted)
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_validate_service_id_matches_group_on_apply(self, cephadm_module: CephadmOrchestrator):
         matching_nvmeof_spec_group_service_id = NvmeofServiceSpec(
             service_id='pool1.right_group',

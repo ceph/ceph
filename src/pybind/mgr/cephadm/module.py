@@ -4581,9 +4581,31 @@ Then run the following:
                     )
             for sspec in [s.spec for s in self.spec_store.get_by_service_type('nvmeof')]:
                 nspec = cast(NvmeofServiceSpec, sspec)
-                if nvmeof_spec.group == nspec.group and nvmeof_spec.service_id != nspec.service_id:
+                same_group = nvmeof_spec.group == nspec.group
+                # The pool field is always stored exactly as provided — only the service_id
+                # was affected by the historical lstrip('.') bug.  Use exact pool equality
+                # here so that a genuinely different pool (e.g. 'nvmeof' vs '.nvmeof') is
+                # never silently aliased.  The service_id branch handles the compat case:
+                # 'nvmeof.group' and '.nvmeof.group' share the same pool+group in practice,
+                # and the normalisation below will correct the stored key if needed.
+                same_service = (nvmeof_spec.service_id == nspec.service_id
+                                or (nvmeof_spec.pool == nspec.pool
+                                    and nvmeof_spec.group == nspec.group))
+                if same_group and not same_service:
                     raise OrchestratorError(f"Cannot create nvmeof service with group {nvmeof_spec.group}. That group is already "
                                             f"being used by the service {nspec.service_name()}")
+                # If it is the same service but the service_id differs (e.g. incoming spec
+                # uses the old lstrip('.') form 'nvmeof.group' while the stored one uses
+                # '.nvmeof.group' or vice versa), normalise the incoming spec to use the
+                # stored service_id so the spec_store updates the existing entry rather
+                # than inserting a duplicate under a different key.
+                if same_service and nvmeof_spec.service_id != nspec.service_id and nspec.service_id is not None:
+                    self.log.info(
+                        f"Normalising nvmeof service_id from '{nvmeof_spec.service_id}' "
+                        f"to existing '{nspec.service_id}'"
+                    )
+                    nvmeof_spec.service_id = nspec.service_id
+                    spec = nvmeof_spec
 
         if spec.placement.count is not None:
             if spec.service_type in ['mon', 'mgr']:
