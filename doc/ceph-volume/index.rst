@@ -2,7 +2,7 @@
 
 ceph-volume
 ===========
-Deploy OSDs with different device technologies like LVM or physical disks using
+Deploy OSDs with different device technologies like LVM or physical devices using
 pluggable tools (:doc:`lvm/index` itself is treated like a plugin) and trying to
 follow a predictable and robust way of preparing, activating, and starting OSDs.
 
@@ -12,7 +12,7 @@ follow a predictable and robust way of preparing, activating, and starting OSDs.
 
 **Command Line Subcommands**
 
-There is currently support for ``lvm``, and plain disks (with GPT partitions)
+There is currently support for ``lvm``, and plain devices (with GPT partitions)
 that may have been deployed with ``ceph-disk``.
 
 ``zfs`` support is available for running a FreeBSD cluster.
@@ -24,7 +24,7 @@ that may have been deployed with ``ceph-disk``.
 **Node inventory**
 
 The :ref:`ceph-volume-inventory` subcommand provides information and metadata
-about a node's physical disk inventory.
+about a node's physical device inventory.
 
 
 Migrating
@@ -53,8 +53,8 @@ ceph-disk <ceph-disk-replaced>` section.
 New deployments
 ^^^^^^^^^^^^^^^
 For new deployments, :ref:`ceph-volume-lvm` is recommended. It can use any
-logical volume as input for data OSDs, or it can setup a minimal/naive logical
-volume from a device.
+logical volume for OSDs, or it can set up a minimal logical
+volume on a device.
 
 Existing OSDs
 ^^^^^^^^^^^^^
