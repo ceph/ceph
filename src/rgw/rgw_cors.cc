@@ -17,6 +17,7 @@
 
 #include <iostream>
 #include <map>
+#include <vector>
 
 #include <boost/algorithm/string.hpp>
 
@@ -181,6 +182,64 @@ void RGWCORSRule::format_exp_headers(string& s) {
     // response header, so we escape '\n' to avoid header injection
     boost::replace_all_copy(std::back_inserter(s), header, "\n", "\\n");
   }
+}
+
+bool RGWCORSRule::matches_method(const char *req_meth)
+{
+  if (!req_meth || !*req_meth) {
+    dout(5) << "matches_method: req_meth is null or empty" << dendl;
+    return false;
+  }
+  if (allowed_methods == RGW_CORS_ALL) {
+    dout(10) << "matches_method: AllowedMethod * allows " << req_meth << dendl;
+    return true;
+  }
+  const uint8_t flags = get_multi_cors_method_flags(req_meth);
+  return flags != 0 && (allowed_methods & flags);
+}
+
+bool RGWCORSRule::matches_preflight_headers(const char *req_hdrs)
+{
+  if (!req_hdrs || !*req_hdrs) {
+    dout(20) << "matches_preflight_headers: no Access-Control-Request-Headers, "
+             << "passing per CORS spec 6.2.4" << dendl;
+    return true;
+  }
+  vector<string> hdrs;
+  get_str_vec(req_hdrs, hdrs);
+  for (const auto& hdr : hdrs) {
+    if (!is_header_allowed(hdr.c_str(), hdr.length())) {
+      dout(5) << "Header " << hdr << " is not registered in this rule" << dendl;
+      return false;
+    }
+  }
+  return true;
+}
+
+bool RGWCORSRule::matches(const char *origin,
+                          const char *req_meth,
+                          const char *req_hdrs)
+{
+  if (!origin || !*origin) {
+    return false;
+  }
+  return is_origin_present(origin)
+      && matches_method(req_meth)
+      && matches_preflight_headers(req_hdrs);
+}
+
+RGWCORSRule * RGWCORSConfiguration::match_rule(const char *origin,
+                                               const char *req_meth,
+                                               const char *req_hdrs)
+{
+  for (list<RGWCORSRule>::iterator it_r = rules.begin();
+       it_r != rules.end(); ++it_r) {
+    RGWCORSRule& r = (*it_r);
+    if (r.matches(origin, req_meth, req_hdrs)) {
+      return &r;
+    }
+  }
+  return NULL;
 }
 
 RGWCORSRule * RGWCORSConfiguration::host_name_rule(const char *origin) {
