@@ -158,9 +158,7 @@
                   </cds-progress-bar>
                 </div>
 
-                @if (
-                  selectedPath.filesSynced !== undefined && selectedPath.totalFiles !== undefined
-                ) {
+                @if (selectedPath.filesSynced !== undefined) {
                   <div class="cds-mb-4">
                     <div
                       class="cds--type-label-01 cds-mb-2"
@@ -169,14 +167,12 @@
                       Files Synced
                     </div>
                     <div class="cds--type-body-01">
-                      {{ selectedPath.filesSynced }}/{{ selectedPath.totalFiles }}
+                      {{ selectedPath.filesSynced }}
                     </div>
                   </div>
                 }
 
-                @if (
-                  selectedPath.bytesSynced !== undefined && selectedPath.totalBytes !== undefined
-                ) {
+                @if (selectedPath.bytesSynced !== undefined) {
                   <div class="cds-mb-4">
                     <div
                       class="cds--type-label-01 cds-mb-2"
@@ -185,9 +181,7 @@
                       Bytes Synced
                     </div>
                     <div class="cds--type-body-01">
-                      {{ selectedPath.bytesSynced | dimlessBinary }}/{{
-                        selectedPath.totalBytes | dimlessBinary
-                      }}
+                      {{ selectedPath.bytesSynced | dimlessBinary }}
                     </div>
                   </div>
                 }
@@ -317,16 +311,12 @@
                         </div>
                       </div>
 
-                      <div
-                        cdsGrid
-                        [narrow]="true"
-                        class="cds-mb-5 padding-inline-0"
-                      >
+                      <div class="cds-mb-5">
                         <div
-                          cdsCol
-                          [columnNumbers]="{ lg: 4, md: 4, sm: 4 }"
+                          cdsStack="horizontal"
+                          [gap]="7"
                         >
-                          <div class="cds-mb-4">
+                          <div>
                             <div
                               class="cds--type-label-01 cds-mb-2"
                               i18n
@@ -337,28 +327,7 @@
                               {{ snapshot.replicationStatusLabel }}
                             </div>
                           </div>
-                        </div>
-                        <div
-                          cdsCol
-                          [columnNumbers]="{ lg: 4, md: 4, sm: 4 }"
-                        >
-                          <div class="cds-mb-4">
-                            <div
-                              class="cds--type-label-01 cds-mb-2"
-                              i18n
-                            >
-                              Created
-                            </div>
-                            <div class="cds--type-body-01">
-                              {{ formatScheduleDate(snapshot.createdAt) }}
-                            </div>
-                          </div>
-                        </div>
-                        <div
-                          cdsCol
-                          [columnNumbers]="{ lg: 4, md: 4, sm: 4 }"
-                        >
-                          <div class="cds-mb-4">
+                          <div>
                             <div
                               class="cds--type-label-01 cds-mb-2"
                               i18n
@@ -366,15 +335,10 @@
                               Files synced
                             </div>
                             <div class="cds--type-body-01">
-                              {{ formatSnapshotFiles(snapshot.filesSynced, snapshot.totalFiles) }}
+                              {{ formatSnapshotFiles(snapshot.filesSynced) }}
                             </div>
                           </div>
-                        </div>
-                        <div
-                          cdsCol
-                          [columnNumbers]="{ lg: 4, md: 4, sm: 4 }"
-                        >
-                          <div class="cds-mb-4">
+                          <div>
                             <div
                               class="cds--type-label-01 cds-mb-2"
                               i18n
@@ -382,13 +346,8 @@
                               Size
                             </div>
                             <div class="cds--type-body-01">
-                              @if (
-                                snapshot.bytesSynced !== undefined &&
-                                snapshot.totalBytes !== undefined
-                              ) {
-                                {{ snapshot.bytesSynced | dimlessBinary }}/{{
-                                  snapshot.totalBytes | dimlessBinary
-                                }}
+                              @if (snapshot.bytesSynced !== undefined) {
+                                {{ snapshot.bytesSynced | dimlessBinary }}
                               } @else {
                                 -
                               }

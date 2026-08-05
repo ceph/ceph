@@ -64,7 +64,9 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
             last_synced_snap: {
               id: 1,
               name: 'snap-last',
-              sync_time_stamp: '1583.101609s'
+              sync_time_stamp: '1583.101609s',
+              sync_bytes: '150 MiB',
+              sync_files: 5000
             },
             snaps_synced: 10,
             snaps_deleted: 2,
@@ -93,7 +95,9 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
             },
             last_synced_snap: {
               id: 2,
-              name: 'snap-last-2'
+              name: 'snap-last-2',
+              sync_bytes: '50 MiB',
+              sync_files: 100
             },
             snaps_synced: 5,
             snaps_deleted: 1
@@ -326,9 +330,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
           iconClass: 'info',
           statusLabel: 'replication in-progress',
           filesSynced: 100,
-          totalFiles: 200,
-          bytesSynced: 1610612736,
-          totalBytes: 3221225472
+          bytesSynced: 1610612736
         },
         {
           name: 'snap-last',
@@ -336,10 +338,8 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
           icon: 'checkMarkOutline',
           iconClass: 'success',
           statusLabel: 'replicated.',
-          filesSynced: undefined,
-          totalFiles: undefined,
-          bytesSynced: 0,
-          createdAt: '1583.101609s'
+          filesSynced: 5000,
+          bytesSynced: 157286400
         }
       ]);
       expect(result[0].renamedSnapshotCount).toBe(1);
@@ -367,9 +367,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
           iconClass: 'muted',
           statusLabel: 'replication pending',
           filesSynced: 50,
-          totalFiles: 100,
-          bytesSynced: 1073741824,
-          totalBytes: 2147483648
+          bytesSynced: 1073741824
         },
         {
           name: 'snap-last-2',
@@ -377,16 +375,39 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
           icon: 'checkMarkOutline',
           iconClass: 'success',
           statusLabel: 'replicated.',
-          filesSynced: undefined,
-          totalFiles: undefined,
-          bytesSynced: 0,
-          createdAt: undefined
+          filesSynced: 100,
+          bytesSynced: 52428800
         }
       ]);
       expect(result[1].filesSynced).toBe(50);
       expect(result[1].totalFiles).toBe(100);
       expect(result[1].totalBytes).toBe(2147483648);
       expect(result[1].syncProgress).toBe(50);
+    });
+
+    it('should leave Size undefined when last synced snap has no sync_bytes', () => {
+      const data: MirrorStatusResponse = {
+        metrics: {
+          '/path1': {
+            peer: {
+              'peer-1': {
+                state: 'idle',
+                last_synced_snap: {
+                  id: 1,
+                  name: 'snap-only-name'
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = component.parseMirrorStatus(data);
+
+      expect(result[0].snapshots).toHaveLength(1);
+      expect(result[0].snapshots[0].name).toBe('snap-only-name');
+      expect(result[0].snapshots[0].status).toBe('replicated');
+      expect(result[0].snapshots[0].bytesSynced).toBeUndefined();
     });
 
     it('should skip paths without peer data', () => {
@@ -628,9 +649,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
         iconClass: 'info',
         statusLabel: 'replication in-progress',
         filesSynced: 100,
-        totalFiles: 200,
-        bytesSynced: 1024,
-        totalBytes: 2048
+        bytesSynced: 1024
       },
       {
         name: 'snap-last',
@@ -639,9 +658,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
         iconClass: 'success',
         statusLabel: 'replicated.',
         filesSynced: 50,
-        totalFiles: 50,
-        bytesSynced: 512,
-        totalBytes: 512
+        bytesSynced: 512
       }
     ];
 

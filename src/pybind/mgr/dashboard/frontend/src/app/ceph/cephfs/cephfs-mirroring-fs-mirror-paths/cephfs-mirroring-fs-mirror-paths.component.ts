@@ -45,10 +45,7 @@ interface SnapshotEntry {
   iconClass: string;
   statusLabel: string;
   filesSynced?: number;
-  totalFiles?: number;
   bytesSynced?: number;
-  totalBytes?: number;
-  createdAt?: string;
 }
 
 interface SnapshotPanelViewModel extends SnapshotEntry {
@@ -492,9 +489,10 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
             status: 'in-progress',
             eta: currentSnap?.eta,
             filesSynced: currentSnap?.files?.sync_files,
-            totalFiles: currentSnap?.files?.total_files,
-            bytesSynced: this.parseByteValue(currentSnap?.bytes?.sync_bytes),
-            totalBytes: this.parseByteValue(currentSnap?.bytes?.total_bytes)
+            bytesSynced:
+              currentSnap?.bytes?.sync_bytes != null
+                ? this.parseByteValue(String(currentSnap.bytes.sync_bytes))
+                : undefined
           })
         );
       } else if (currentName !== lastName) {
@@ -503,9 +501,10 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
             name: currentName,
             status: syncStatus === 'failed' ? 'failed' : 'pending',
             filesSynced: currentSnap?.files?.sync_files,
-            totalFiles: currentSnap?.files?.total_files,
-            bytesSynced: this.parseByteValue(currentSnap?.bytes?.sync_bytes),
-            totalBytes: this.parseByteValue(currentSnap?.bytes?.total_bytes)
+            bytesSynced:
+              currentSnap?.bytes?.sync_bytes != null
+                ? this.parseByteValue(String(currentSnap.bytes.sync_bytes))
+                : undefined
           })
         );
       }
@@ -517,12 +516,10 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
           name: lastName,
           status: 'replicated',
           filesSynced: lastSnap?.sync_files,
-          totalFiles: lastSnap?.sync_files,
-          bytesSynced: this.parseByteValue(
-            lastSnap?.sync_bytes != null ? String(lastSnap.sync_bytes) : undefined
-          ),
-          createdAt:
-            lastSnap?.sync_time_stamp != null ? String(lastSnap.sync_time_stamp) : undefined
+          bytesSynced:
+            lastSnap?.sync_bytes != null
+              ? this.parseByteValue(String(lastSnap.sync_bytes))
+              : undefined
         })
       );
     }
@@ -535,10 +532,7 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
     status: SnapshotReplicationStatus;
     eta?: string;
     filesSynced?: number;
-    totalFiles?: number;
     bytesSynced?: number;
-    totalBytes?: number;
-    createdAt?: string;
   }): SnapshotEntry {
     return {
       ...entry,
@@ -658,8 +652,7 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
         this.buildSnapshotPanel(
           this.createSnapshotEntry({
             name: checkpoint.snap_name,
-            status: 'replicated',
-            createdAt: checkpoint.created_at
+            status: 'replicated'
           }),
           checkpoint
         )
@@ -685,7 +678,6 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
       expanded: this.expandedSnapshotNames.has(snapshot.name),
       hasCheckpoint: !!checkpoint,
       checkpoint,
-      createdAt: checkpoint?.created_at ?? snapshot.createdAt,
       icon: display.icon,
       iconClass: display.iconClass,
       statusLabel: display.statusLabel,
@@ -806,11 +798,8 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
     });
   }
 
-  formatSnapshotFiles(filesSynced?: number, totalFiles?: number): string {
-    if (filesSynced === undefined || totalFiles === undefined) {
-      return '-';
-    }
-    return `${filesSynced}/${totalFiles}`;
+  formatSnapshotFiles(filesSynced?: number): string {
+    return filesSynced === undefined ? '-' : String(filesSynced);
   }
 
   private replicationStatusLabel(status: SnapshotReplicationStatus): string {
