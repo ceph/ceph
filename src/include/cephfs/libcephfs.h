@@ -645,6 +645,19 @@ int ceph_readdir_r(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp,
 int ceph_readdirplus_r(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp, struct dirent *de,
 		       struct ceph_statx *stx, unsigned want, unsigned flags, struct Inode **out);
 
+/* attr mask bits (up to an int in size) */
+#ifndef CEPH_SNAPDIFF_MODE
+#define CEPH_SNAPDIFF_MODE		(1 << 0)
+#define CEPH_SNAPDIFF_UID		(1 << 1)
+#define CEPH_SNAPDIFF_GID		(1 << 2)
+#define CEPH_SNAPDIFF_SIZE		(1 << 3)
+#define CEPH_SNAPDIFF_NLINK		(1 << 4)
+#define CEPH_SNAPDIFF_MTIME		(1 << 5)
+#define CEPH_SNAPDIFF_ATIME		(1 << 6)
+#define CEPH_SNAPDIFF_CTIME		(1 << 7)
+#define CEPH_SNAPDIFF_BTIME		(1 << 8)
+#endif
+
 struct ceph_snapdiff_info
 {
   struct ceph_mount_info* cmount;
@@ -652,6 +665,7 @@ struct ceph_snapdiff_info
   struct ceph_dir_result* dir_aux; // aux dir entry to identify the second snapshot.
                                    // Can point to the parent dir entry if entry-in-question
                                    // doesn't exist in the second snapshot
+  unsigned mask;                   // snapdiff file metadata mask (CEPH_SNAPDIFF_*)
 };
 
 struct ceph_file_blockdiff_result;
@@ -727,6 +741,7 @@ int ceph_file_blockdiff_finish(struct ceph_file_blockdiff_info* info);
  * @param rel_path subpath under the root to build delta for
  * @param snap1 the first snapshot name
  * @param snap2 the second snapshot name
+ * @param diff_mask file metadata change mask to apply for delta building
  * @param out resulting snapdiff stream handle to be used for snapdiff results
               retrieval via ceph_readdir_snapdiff
  * @returns 0 on success and negative error code otherwise
@@ -736,6 +751,7 @@ int ceph_open_snapdiff(struct ceph_mount_info* cmount,
                        const char* rel_path,
                        const char* snap1,
                        const char* snap2,
+                       unsigned diff_mask,
                        struct ceph_snapdiff_info* out);
 /**
  * Get the next snapshot delta entry.
