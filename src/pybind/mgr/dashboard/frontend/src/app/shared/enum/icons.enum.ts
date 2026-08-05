@@ -84,7 +84,7 @@ export enum Icons {
   eye = 'fa fa-eye', // Observability
   calendar = 'fa fa-calendar',
   externalUrl = 'fa fa-external-link', // links to external page
-  nfsExport = 'fa fa-server', // NFS export
+  nfsExport = 'fa fa-server', // NFS share
   userAccessLocked = 'user--access-locked', // User access locked
   chevronDown = 'chevron--down',
   connect = 'connect',

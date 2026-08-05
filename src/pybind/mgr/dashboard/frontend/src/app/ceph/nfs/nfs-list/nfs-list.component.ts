@@ -236,7 +236,7 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
 
     this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
       impact: DeletionImpact.high,
-      itemDescription: $localize`NFS export`,
+      itemDescription: $localize`NFS share`,
       itemNames: [`${cluster_id}:${export_id}`],
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
