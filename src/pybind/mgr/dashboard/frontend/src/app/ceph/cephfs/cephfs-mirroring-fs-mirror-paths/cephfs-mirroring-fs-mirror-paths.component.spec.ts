@@ -256,14 +256,11 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
     component.openAddPath();
 
     expect(cephfsService.list).toHaveBeenCalled();
-    expect(navigateByUrlSpy).toHaveBeenCalledWith(
-      '/cephfs/mirroring/(modal:add-path/7/test-fs)',
-      {
-        state: {
-          returnUrl: '/cephfs/mirroring/test-fs/mirror-paths'
-        }
+    expect(navigateByUrlSpy).toHaveBeenCalledWith('/cephfs/mirroring/(modal:add-path/7/test-fs)', {
+      state: {
+        returnUrl: '/cephfs/mirroring/test-fs/mirror-paths'
       }
-    );
+    });
   });
 
   it('should not open add-path wizard when fsName is missing', () => {
@@ -671,7 +668,10 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
 
       expect(component.snapshotPanels.length).toBe(2);
       expect(component.snapshotPanels[1].hasCheckpoint).toBe(true);
+      expect(component.snapshotPanels[1].statusLabel).toBe('checkpoint complete');
+      expect(component.snapshotPanels[1].replicationStatusLabel).toBe('Complete');
       expect(component.snapshotPanels[0].hasCheckpoint).toBe(false);
+      expect(component.snapshotPanels[0].statusLabel).toBe('replication in-progress');
       expect(component.pathCheckpoints.length).toBe(1);
     });
 
