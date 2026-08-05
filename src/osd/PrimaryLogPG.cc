@@ -10161,7 +10161,11 @@ void PrimaryLogPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
       }
     }
     if (cop->results.snaps.empty()) {
-      dout(10) << __func__ << " no more snaps for " << oid << dendl;
+      //FIXME: I think this code is now obsolete and will never run because we
+      //are doing the same job earlier in finish_copyfrom for the head object.
+      //Lets leave it here for now and see if it executes during the next
+      //teuthology run before deciding to delete it.
+      dout(10) << __func__ << " BILL - no more snaps for " << oid << dendl;
       if (cop->flags & CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION) {
         dout(10) << __func__ << " updating snapset for trimmed clone " << oid << dendl;
         // Clone needs to be trimmed by updating the snapset in the head object
@@ -10613,6 +10617,48 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
     ceph_assert(ctx->new_obs.oi.soid.snap == CEPH_NOSNAP);
     ctx->new_snapset = SnapSet();
     ctx->new_snapset.from_snap_set(cb->results->snapset, false);
+    if (cb->pool_migration) {
+      // During pool migration there may be snaps that are pending
+      // a trim in the source pool that will make it unnecessary
+      // to copy a clone. Detect these and remove then from the
+      // snapset.
+      const OSDMapRef& osdmap = get_osdmap();
+      int64_t src_pool = info.pgid.pgid.pool();
+      ceph_assert(osdmap->get_pg_pool(src_pool)->is_migration_target());
+      src_pool = *osdmap->get_pg_pool(src_pool)->migration_src;
+      for (auto it = ctx->new_snapset.clones.begin();
+           it != ctx->new_snapset.clones.end(); ) {
+        snapid_t clone = *it;
+        auto cs_it = ctx->new_snapset.clone_snaps.find(clone);
+        if (cs_it != ctx->new_snapset.clone_snaps.end()) {
+          // clone_snaps values are stored in descending order; filter out
+          // any individual snap ids that have been removed
+          vector<snapid_t>& snaps = cs_it->second;
+          snaps.erase(
+            std::remove_if(snaps.begin(), snaps.end(),
+              [&](snapid_t s) {
+                return osdmap->in_removed_snaps_queue(src_pool, s);
+              }),
+            snaps.end());
+          if (snaps.empty()) {
+            dout(10) << __func__ << " clone " << clone
+                     << " has been trimmed, removing from snapset" << dendl;
+            // Also fix up overlap for the next older clone
+            if (it != ctx->new_snapset.clones.begin()) {
+              auto prev = std::prev(it);
+              ctx->new_snapset.clone_overlap[*prev].intersection_of(
+                ctx->new_snapset.clone_overlap[clone]);
+            }
+            ctx->new_snapset.clone_overlap.erase(clone);
+            ctx->new_snapset.clone_size.erase(clone);
+            ctx->new_snapset.clone_snaps.erase(cs_it);
+            it = ctx->new_snapset.clones.erase(it);
+            continue;
+          }
+        }
+        ++it;
+      }
+    }
   }
 
   if (cb->results->has_omap) {
