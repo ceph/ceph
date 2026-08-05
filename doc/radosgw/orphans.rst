@@ -113,5 +113,3 @@ RGW. When larger objects are copied from bucket to bucket, only the
 shared. Those shared objects will contain the marker of the original
 bucket.
 
-.. _Data Layout in RADOS : ../layout
-.. _Pool Placement and Storage Classes : ../placement
