@@ -116,6 +116,17 @@ options:
   flags:
   - startup
 
+- name: crimson_osd_max_send_buffers
+  type: uint
+  level: advanced
+  default: 1024
+  min: 1
+  max: 65535
+  desc: Maximum buffer fragments to batch in a single outgoing network write
+  long_desc: Limits how many buffer::ptr entries are batched into one seastar
+             packet during the outgoing message sweep. Prevents overflow of the
+             seastar packet fragment counter (uint16_t).
+
 - name: crimson_allow_pg_split
   type: bool
   level: advanced
