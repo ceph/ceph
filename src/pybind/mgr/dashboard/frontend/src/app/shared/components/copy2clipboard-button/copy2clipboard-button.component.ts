@@ -8,7 +8,8 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 @Component({
   selector: 'cd-copy-2-clipboard-button',
   templateUrl: './copy2clipboard-button.component.html',
-  styleUrls: ['./copy2clipboard-button.component.scss']
+  styleUrls: ['./copy2clipboard-button.component.scss'],
+  standalone: false
 })
 export class Copy2ClipboardButtonComponent {
   // The text to be copied

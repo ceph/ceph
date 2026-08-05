@@ -11,7 +11,8 @@ import { NG_VALUE_ACCESSOR, ControlValueAccessor } from '@angular/forms';
   },
   providers: [
     { provide: NG_VALUE_ACCESSOR, useExisting: FormlyFileValueAccessorDirective, multi: true }
-  ]
+  ],
+  standalone: false
 })
 // https://github.com/angular/angular/issues/7341
 export class FormlyFileValueAccessorDirective implements ControlValueAccessor {

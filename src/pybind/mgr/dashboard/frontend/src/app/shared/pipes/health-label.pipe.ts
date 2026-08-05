@@ -3,7 +3,8 @@ import { Pipe, PipeTransform } from '@angular/core';
 import { HealthLabel } from '~/app/shared/enum/health-label.enum';
 
 @Pipe({
-  name: 'healthLabel'
+  name: 'healthLabel',
+  standalone: false
 })
 export class HealthLabelPipe implements PipeTransform {
   transform(value: any): any {

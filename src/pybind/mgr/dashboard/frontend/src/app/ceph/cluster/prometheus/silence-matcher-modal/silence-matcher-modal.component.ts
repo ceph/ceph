@@ -19,7 +19,8 @@ import { PrometheusSilenceMatcherService } from '~/app/shared/services/prometheu
 @Component({
   selector: 'cd-silence-matcher-modal',
   templateUrl: './silence-matcher-modal.component.html',
-  styleUrls: ['./silence-matcher-modal.component.scss']
+  styleUrls: ['./silence-matcher-modal.component.scss'],
+  standalone: false
 })
 export class SilenceMatcherModalComponent {
   @ViewChild(NgbTypeahead, { static: true })

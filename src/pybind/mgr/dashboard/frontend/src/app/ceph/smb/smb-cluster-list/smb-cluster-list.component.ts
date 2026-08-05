@@ -30,7 +30,8 @@ export const CLUSTER_PATH = 'cephfs/smb/cluster';
   selector: 'cd-smb-cluster-list',
   templateUrl: './smb-cluster-list.component.html',
   styleUrls: ['./smb-cluster-list.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(CLUSTER_PATH) }]
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(CLUSTER_PATH) }],
+  standalone: false
 })
 export class SmbClusterListComponent extends ListWithDetails implements OnInit {
   @ViewChild('table', { static: true })

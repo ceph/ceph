@@ -3,7 +3,8 @@ import { Pipe, PipeTransform } from '@angular/core';
 import _ from 'lodash';
 
 @Pipe({
-  name: 'map'
+  name: 'map',
+  standalone: false
 })
 export class MapPipe implements PipeTransform {
   transform(value: string | number, map?: object): any {

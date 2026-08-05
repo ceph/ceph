@@ -1,7 +1,8 @@
 import { Pipe, PipeTransform } from '@angular/core';
 
 @Pipe({
-  name: 'rbdConfigurationSource'
+  name: 'rbdConfigurationSource',
+  standalone: false
 })
 export class RbdConfigurationSourcePipe implements PipeTransform {
   transform(value: any): any {

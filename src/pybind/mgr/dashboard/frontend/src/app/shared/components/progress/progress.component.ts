@@ -4,7 +4,8 @@ import { Icons } from '../../enum/icons.enum';
 @Component({
   selector: 'cd-progress',
   templateUrl: './progress.component.html',
-  styleUrls: ['./progress.component.scss']
+  styleUrls: ['./progress.component.scss'],
+  standalone: false
 })
 export class ProgressComponent {
   icons = Icons;

@@ -12,7 +12,8 @@ import { TrimDirective } from './trim.directive';
     <form [formGroup]="trimForm">
       <input type="text" formControlName="trimInput" cdTrim />
     </form>
-  `
+  `,
+  standalone: false
 })
 export class TrimComponent {
   trimForm: CdFormGroup;

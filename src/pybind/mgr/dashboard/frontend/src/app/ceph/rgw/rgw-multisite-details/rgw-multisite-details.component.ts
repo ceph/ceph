@@ -50,7 +50,8 @@ const BASE_URL = 'rgw/multisite/configuration';
   selector: 'cd-rgw-multisite-details',
   templateUrl: './rgw-multisite-details.component.html',
   styleUrls: ['./rgw-multisite-details.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, OnInit {
   private sub = new Subscription();

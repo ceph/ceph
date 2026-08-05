@@ -13,7 +13,8 @@ import { DeleteConfirmationBodyContext } from '../../models/delete-confirmation.
 @Component({
   selector: 'cd-deletion-modal',
   templateUrl: './delete-confirmation-modal.component.html',
-  styleUrls: ['./delete-confirmation-modal.component.scss']
+  styleUrls: ['./delete-confirmation-modal.component.scss'],
+  standalone: false
 })
 export class DeleteConfirmationModalComponent extends BaseModal implements OnInit {
   @ViewChild(SubmitButtonComponent, { static: true })

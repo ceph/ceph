@@ -73,7 +73,7 @@
 
       <!-- Domain Settings -->
       <div class="form-item"
-           *ngIf="this.smbForm.get('auth_mode').value === AUTHMODE.ActiveDirectory">
+           *ngIf="smbForm.get('auth_mode').value === AUTHMODE.ActiveDirectory">
         <div cdsCol
              [columnNumbers]="{ md: 12 }"
              class="d-flex">
@@ -130,7 +130,7 @@
                     *ngFor="let _ of joinSources.controls; index as i">
         <div
           cdsRow
-          *ngIf="this.smbForm.get('auth_mode').value === AUTHMODE.User && usersGroups$ | async as usersGroups"
+          *ngIf="smbForm.get('auth_mode').value === AUTHMODE.User && usersGroups$ | async as usersGroups"
           class="form-item form-item-append"
         >
           <div
@@ -180,7 +180,7 @@
       </ng-container>
 
       <div class="form-item"
-           *ngIf="this.smbForm.get('auth_mode').value === AUTHMODE.User">
+           *ngIf="smbForm.get('auth_mode').value === AUTHMODE.User">
         <button cdsButton="tertiary"
                 type="button"
                 (click)="addUserGroupSetting()"
@@ -285,7 +285,7 @@
         </div>
 
         <!-- Custom DNS -->
-        @if (this.smbForm.get('auth_mode').value === AUTHMODE.ActiveDirectory) {
+        @if (smbForm.get('auth_mode').value === AUTHMODE.ActiveDirectory) {
           <ng-container formArrayName="custom_dns"
                         *ngFor="let _ of custom_dns.controls; index as i">
             <div cdsRow
@@ -360,7 +360,7 @@
         </div>
 
         <div
-          *ngIf="(this.smbForm.get('count').value > 1 && this.smbForm.get('clustering').value.toLowerCase() == CLUSTERING.Default) || this.smbForm.get('clustering').value.toLowerCase() == CLUSTERING.Always"
+          *ngIf="(smbForm.get('count').value > 1 && smbForm.get('clustering').value.toLowerCase() == CLUSTERING.Default) || smbForm.get('clustering').value.toLowerCase() == CLUSTERING.Always"
           class="form-item"
         >
 

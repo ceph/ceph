@@ -11,7 +11,8 @@ import { ConfigOptionTypes } from './config-option.types';
 @Component({
   selector: 'cd-config-option',
   templateUrl: './config-option.component.html',
-  styleUrls: ['./config-option.component.scss']
+  styleUrls: ['./config-option.component.scss'],
+  standalone: false
 })
 export class ConfigOptionComponent implements OnInit {
   @Input()

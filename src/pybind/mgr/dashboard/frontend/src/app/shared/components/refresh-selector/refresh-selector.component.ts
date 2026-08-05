@@ -5,7 +5,8 @@ import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.s
 @Component({
   selector: 'cd-refresh-selector',
   templateUrl: './refresh-selector.component.html',
-  styleUrls: ['./refresh-selector.component.scss']
+  styleUrls: ['./refresh-selector.component.scss'],
+  standalone: false
 })
 export class RefreshSelectorComponent implements OnInit {
   selectedInterval: number;

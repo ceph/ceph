@@ -14,7 +14,8 @@ import { FormatterService } from '../services/formatter.service';
 import { DimlessBinaryPerMinutePipe } from '../pipes/dimless-binary-per-minute.pipe';
 
 @Directive({
-  selector: '[cdDimlessBinaryPerMinute]'
+  selector: '[cdDimlessBinaryPerMinute]',
+  standalone: false
 })
 export class DimlessBinaryPerMinuteDirective implements OnInit {
   @Output()

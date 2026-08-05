@@ -8,7 +8,8 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 type Condition = string | string[] | Partial<{ [Property in keyof Permissions]: keyof Permission }>;
 
 @Directive({
-  selector: '[cdScope]'
+  selector: '[cdScope]',
+  standalone: false
 })
 export class AuthStorageDirective {
   permissions: Permissions;

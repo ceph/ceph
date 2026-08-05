@@ -15,7 +15,8 @@ import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 @Component({
   selector: 'cd-sparkline',
   templateUrl: './sparkline.component.html',
-  styleUrls: ['./sparkline.component.scss']
+  styleUrls: ['./sparkline.component.scss'],
+  standalone: false
 })
 export class SparklineComponent implements OnInit, OnChanges {
   @ViewChild('sparkCanvas', { static: true })

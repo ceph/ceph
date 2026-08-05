@@ -12,7 +12,8 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 @Component({
   selector: 'cd-logs',
   templateUrl: './logs.component.html',
-  styleUrls: ['./logs.component.scss']
+  styleUrls: ['./logs.component.scss'],
+  standalone: false
 })
 export class LogsComponent implements OnInit, OnDestroy {
   @Input()

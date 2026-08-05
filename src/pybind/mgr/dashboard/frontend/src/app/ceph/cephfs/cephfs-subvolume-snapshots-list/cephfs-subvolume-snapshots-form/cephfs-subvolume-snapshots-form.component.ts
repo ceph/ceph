@@ -14,7 +14,8 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 @Component({
   selector: 'cd-cephfs-subvolume-snapshots-form',
   templateUrl: './cephfs-subvolume-snapshots-form.component.html',
-  styleUrls: ['./cephfs-subvolume-snapshots-form.component.scss']
+  styleUrls: ['./cephfs-subvolume-snapshots-form.component.scss'],
+  standalone: false
 })
 export class CephfsSubvolumeSnapshotsFormComponent extends CdForm implements OnInit {
   subVolumeGroups: string[];

@@ -24,7 +24,8 @@ export const SHARE_PATH = 'cephfs/smb/share';
 @Component({
   selector: 'cd-smb-share-list',
   templateUrl: './smb-share-list.component.html',
-  styleUrls: ['./smb-share-list.component.scss']
+  styleUrls: ['./smb-share-list.component.scss'],
+  standalone: false
 })
 export class SmbShareListComponent implements OnInit {
   @Input()

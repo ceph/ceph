@@ -5,7 +5,8 @@ import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 @Component({
   selector: 'cd-nfs-details',
   templateUrl: './nfs-details.component.html',
-  styleUrls: ['./nfs-details.component.scss']
+  styleUrls: ['./nfs-details.component.scss'],
+  standalone: false
 })
 export class NfsDetailsComponent implements OnChanges {
   @Input()

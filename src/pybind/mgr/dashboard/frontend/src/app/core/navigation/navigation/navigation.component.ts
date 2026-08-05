@@ -21,7 +21,8 @@ import { SummaryService } from '~/app/shared/services/summary.service';
 @Component({
   selector: 'cd-navigation',
   templateUrl: './navigation.component.html',
-  styleUrls: ['./navigation.component.scss']
+  styleUrls: ['./navigation.component.scss'],
+  standalone: false
 })
 export class NavigationComponent implements OnInit, OnDestroy {
   clusterDetails: any[] = [];

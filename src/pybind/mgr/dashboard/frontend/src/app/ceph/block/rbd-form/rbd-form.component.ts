@@ -45,7 +45,8 @@ class ExternalData {
 @Component({
   selector: 'cd-rbd-form',
   templateUrl: './rbd-form.component.html',
-  styleUrls: ['./rbd-form.component.scss']
+  styleUrls: ['./rbd-form.component.scss'],
+  standalone: false
 })
 export class RbdFormComponent extends CdForm implements OnInit {
   poolPermission: Permission;

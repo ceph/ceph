@@ -16,10 +16,10 @@ describe('FeatureTogglesGuardService', () => {
   let router: Router;
   let ngZone: NgZone;
 
-  @Component({ selector: 'cd-cephfs', template: '' })
+  @Component({ selector: 'cd-cephfs', template: '', standalone: false })
   class CephfsComponent {}
 
-  @Component({ selector: 'cd-404', template: '' })
+  @Component({ selector: 'cd-404', template: '', standalone: false })
   class NotFoundComponent {}
 
   const routes: Routes = [

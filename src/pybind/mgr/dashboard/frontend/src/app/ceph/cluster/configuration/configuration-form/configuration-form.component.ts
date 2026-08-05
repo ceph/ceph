@@ -21,7 +21,8 @@ const RGW = 'rgw';
 @Component({
   selector: 'cd-configuration-form',
   templateUrl: './configuration-form.component.html',
-  styleUrls: ['./configuration-form.component.scss']
+  styleUrls: ['./configuration-form.component.scss'],
+  standalone: false
 })
 export class ConfigurationFormComponent extends CdForm implements OnInit {
   configForm: CdFormGroup;
