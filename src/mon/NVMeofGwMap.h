@@ -111,7 +111,7 @@ public:
   int process_gw_map_gw_down(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     bool &propose_pending);
-  int process_gw_map_gw_no_subsys_no_listeners(
+  int process_gw_map_gw_pass_to_created(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     bool &propose_pending);
   void update_active_timers(bool &propose_pending);
