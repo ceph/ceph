@@ -14,7 +14,8 @@ The following steps install and configure the Ceph iSCSI gateway for basic opera
 
 -  A running Ceph Luminous or later storage cluster
 
--  Red Hat Enterprise Linux/CentOS 7.5 (or newer); Linux kernel v4.16 (or newer)
+-  Linux kernel v4.16 (or newer); all currently supported distributions
+   satisfy this requirement
 
 -  The following packages must be installed from your Linux distribution's software repository:
 

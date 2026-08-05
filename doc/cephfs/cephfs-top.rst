@@ -169,4 +169,6 @@ Sample screenshot running `cephfs-top` with 2 filesystems:
 
 .. image:: cephfs-top.png
 
-.. note:: Minimum compatible Python version for cephfs-top is 3.6.0. cephfs-top is supported on distributions RHEL 8, Ubuntu 18.04, CentOS 8 and above.
+.. note:: The minimum compatible Python version for cephfs-top is 3.6.0.
+   cephfs-top runs on any distribution that provides a compatible Python
+   version; see :ref:`os-recommendations` for the supported platforms.
