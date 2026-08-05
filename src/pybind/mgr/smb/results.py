@@ -1,4 +1,12 @@
-from typing import Iterable, Iterator, List, Optional, Protocol
+from typing import (
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Protocol,
+    TypedDict,
+)
 
 import errno
 
@@ -198,3 +206,150 @@ def _replace_resource(result: Result, operation: ConversionOp) -> Result:
     if isinstance(result, ResourceResult):
         return result.replace_resource(result.src.convert(operation))
     return result
+
+
+class _DictValuesResult:
+    """Treat a generic dict as a result.
+    Special keys:
+        success -> success status
+        msg -> manager status
+        message -> manager status fallback
+
+    IMPORTANT - Try not to use this class in future code. This is added to
+    help support existing return values that were using loosely structured
+    dicts. Future code should be more consistent (across all return values
+    in the mgr module) and more structured & predictable.
+    """
+
+    def __init__(self, values: Dict) -> None:
+        self.values = values
+
+    @property
+    def success(self) -> bool:
+        return bool(self.values.get('success'))
+
+    def to_simplified(self) -> Simplified:
+        out = dict(self.values)
+        out['success'] = self.success  # ensure 'success' key
+        return out
+
+    def mgr_return_value(self) -> int:
+        return 0 if self.success else -errno.EAGAIN
+
+    def mgr_status_value(self) -> str:
+        if self.success:
+            return ''
+        msg = self.values.get('msg') or self.values.get('message')
+        return msg or 'unexpected error (see response data for details)'
+
+
+class _FailedCluster(TypedDict):
+    cluster_id: str
+    error: str
+
+
+class _FailedShare(TypedDict):
+    share_id: str
+    error: str
+
+
+class ClientCompatBatchResult(_DictValuesResult):
+    _required_keys = (
+        'cluster_id',
+        'client_compat',
+        'cluster_updated',
+        'successful_share_updates',
+        'failed_share_updates',
+        'total_shares',
+    )
+
+    @classmethod
+    def create(cls, values: Dict) -> Self:
+        for key in cls._required_keys:
+            if key not in values:
+                raise KeyError(f'missing required key: {key}')
+        return cls(values | {'success': not values['failed_share_updates']})
+
+
+class QoSBatchResult(_DictValuesResult):
+    _required_keys = (
+        'cluster_id',
+        'successful_updates',
+        'failed_updates',
+        'unchanged_shares',
+        'total_shares',
+    )
+    _unchanged_required_keys = (
+        'cluster_id',
+        'message',
+        'unchanged_shares',
+        'total_shares',
+    )
+
+    @classmethod
+    def create(cls, values: Dict) -> Self:
+        for key in cls._required_keys:
+            if key not in values:
+                raise KeyError(f'missing required key: {key}')
+        return cls(values | {'success': not values['failed_updates']})
+
+    @classmethod
+    def unchanged(cls, values: Dict) -> Self:
+        for key in cls._unchanged_required_keys:
+            if key not in values:
+                raise KeyError(f'missing required key: {key}')
+        return cls(values | {'success': True})
+
+    @classmethod
+    def unhandled_error(cls, msg: str) -> Self:
+        return cls({'success': False, 'msg': msg})
+
+
+class ClusterShareSummary:
+    def __init__(self) -> None:
+        self.successful_clusters: List[str] = []
+        self.successful_shares: List[str] = []
+        self.failed_clusters: List[_FailedCluster] = []
+        self.failed_shares: List[_FailedShare] = []
+
+    def build_dict(
+        self,
+        successful_shares_key: str = '',
+        failed_shares_key: str = '',
+        cluster_updated_key: str = '',
+        check_clusters_ok: bool = True,
+    ) -> Dict:
+        out: Dict = {}
+        if successful_shares_key:
+            out[successful_shares_key] = self.successful_shares
+        if failed_shares_key:
+            out[failed_shares_key] = self.failed_shares
+        if check_clusters_ok and self.failed_clusters:
+            raise ValueError('cluster failed to update')
+        if cluster_updated_key:
+            out[cluster_updated_key] = bool(self.successful_clusters)
+        return out
+
+    @classmethod
+    def from_result_group(cls, rg: ResultGroup) -> 'ClusterShareSummary':
+        cssum = cls()
+        for result in rg.resources(check=False):
+            cluster_id = str(getattr(result.src, 'cluster_id', ''))
+            share_id = str(getattr(result.src, 'share_id', ''))
+            if not cluster_id and not share_id:
+                continue
+            if cluster_id and not share_id:
+                if result.success:
+                    cssum.successful_clusters.append(cluster_id)
+                else:
+                    cssum.failed_clusters.append(
+                        {'cluster_id': cluster_id, 'error': result.msg}
+                    )
+            if cluster_id and share_id:
+                if result.success:
+                    cssum.successful_shares.append(share_id)
+                else:
+                    cssum.failed_shares.append(
+                        {'share_id': share_id, 'error': result.msg}
+                    )
+        return cssum
