@@ -62,7 +62,9 @@ import { RgwMultisiteSyncPolicyFormComponent } from './rgw-multisite-sync-policy
 import { RgwConfigurationPageComponent } from './rgw-configuration-page/rgw-configuration-page.component';
 import { RgwConfigDetailsComponent } from './rgw-config-details/rgw-config-details.component';
 import { RgwMultisiteWizardComponent } from './rgw-multisite-wizard/rgw-multisite-wizard.component';
-import { RgwMultisiteSyncPolicyDetailsComponent } from './rgw-multisite-sync-policy-details/rgw-multisite-sync-policy-details.component';
+import { RgwMultisiteSyncPolicyResourceSidebarComponent } from './rgw-multisite-sync-policy-resource-sidebar/rgw-multisite-sync-policy-resource-sidebar.component';
+import { RgwMultisiteSyncPolicyResourcePageComponent } from './rgw-multisite-sync-policy-resource-page/rgw-multisite-sync-policy-resource-page.component';
+import { RgwMultisiteSyncPolicyResourceBreadcrumbResolver } from './rgw-multisite-sync-policy-resource-page/rgw-multisite-sync-policy-resource-breadcrumb.resolver';
 import { RgwMultisiteSyncFlowModalComponent } from './rgw-multisite-sync-flow-modal/rgw-multisite-sync-flow-modal.component';
 import { RgwMultisiteSyncPipeModalComponent } from './rgw-multisite-sync-pipe-modal/rgw-multisite-sync-pipe-modal.component';
 import { RgwMultisiteTabsComponent } from './rgw-multisite-tabs/rgw-multisite-tabs.component';
@@ -234,7 +236,8 @@ import { RgwBucketTagsTableComponent } from './rgw-bucket-tags-table/rgw-bucket-
     RgwConfigDetailsComponent,
     RgwConfigurationPageComponent,
     RgwMultisiteWizardComponent,
-    RgwMultisiteSyncPolicyDetailsComponent,
+    RgwMultisiteSyncPolicyResourceSidebarComponent,
+    RgwMultisiteSyncPolicyResourcePageComponent,
     RgwMultisiteSyncFlowModalComponent,
     RgwMultisiteSyncPipeModalComponent,
     RgwMultisiteTabsComponent,
@@ -474,6 +477,37 @@ const routes: Routes = [
             path: `${URLVerbs.EDIT}/:groupName/:bucketName`,
             component: RgwMultisiteSyncPolicyFormComponent,
             outlet: 'modal'
+          }
+        ]
+      },
+      {
+        path: 'sync-policy/:groupName',
+        component: RgwMultisiteSyncPolicyResourceSidebarComponent,
+        data: {
+          breadcrumbs: RgwMultisiteSyncPolicyResourceBreadcrumbResolver,
+          showBreadcrumbsLayout: false
+        },
+        children: [
+          { path: '', redirectTo: 'overview', pathMatch: 'full' },
+          {
+            path: 'overview',
+            component: RgwMultisiteSyncPolicyResourcePageComponent,
+            data: { breadcrumbs: 'Overview', section: 'overview' }
+          },
+          {
+            path: 'symmetrical-flows',
+            component: RgwMultisiteSyncPolicyResourcePageComponent,
+            data: { breadcrumbs: 'Symmetrical Flows', section: 'symmetrical-flows' }
+          },
+          {
+            path: 'directional-flows',
+            component: RgwMultisiteSyncPolicyResourcePageComponent,
+            data: { breadcrumbs: 'Directional Flows', section: 'directional-flows' }
+          },
+          {
+            path: 'pipe',
+            component: RgwMultisiteSyncPolicyResourcePageComponent,
+            data: { breadcrumbs: 'Pipe', section: 'pipe' }
           }
         ]
       }
