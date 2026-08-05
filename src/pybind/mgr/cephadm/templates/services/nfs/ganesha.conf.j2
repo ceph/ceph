@@ -3,9 +3,9 @@ NFS_CORE_PARAM {
         Enable_NLM = {{ enable_nlm }};
         Enable_RQUOTA = false;
 {% if enable_rdma %}
-        Protocols = 3, 4, nfsrdma, rpcrdma;
+        Protocols = {{ protocols }}, nfsrdma, rpcrdma;
 {% else %}
-        Protocols = 3, 4;
+        Protocols = {{ protocols }};
 {% endif %}
         mount_path_pseudo = true;
         Enable_UDP = false;

@@ -1191,7 +1191,7 @@ class TestIngressService:
             'NFS_CORE_PARAM {\n'
             '        Enable_NLM = true;\n'
             '        Enable_RQUOTA = false;\n'
-            '        Protocols = 3, 4;\n'
+            '        Protocols = 4;\n'
             '        mount_path_pseudo = true;\n'
             '        Enable_UDP = false;\n'
             '        NFS_Port = 2049;\n'

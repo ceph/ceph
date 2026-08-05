@@ -262,7 +262,8 @@ class NFSService(CephService):
                 "tls_min_version": spec.tls_min_version,
                 "tls_ktls": spec.tls_ktls,
                 "tls_debug": spec.tls_debug,
-                "ceph_nodes": ceph_nodes
+                "ceph_nodes": ceph_nodes,
+                "protocols": "3, 4" if spec.enable_nfsv3 else "4"
             }
             if spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()
