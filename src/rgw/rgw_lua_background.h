@@ -2,8 +2,11 @@
 #include "common/dout.h"
 #include "rgw_common.h"
 #include <string>
+#include <set>
 #include <unordered_map>
 #include <variant>
+#include <shared_mutex>
+#include <boost/lockfree/queue.hpp>
 #include "rgw_lua_utils.h"
 #include "rgw_realm_reloader.h"
 
@@ -151,11 +154,18 @@ private:
   std::mutex pause_mutex;
   std::condition_variable cond;
 
+  std::map<std::string, std::unique_ptr<std::vector<char>>> lua_bytecode_cache; // script-name -> bytecode
+//  bool updating = false;
+  std::shared_mutex updating_mutex;
+  boost::lockfree::queue<std::string*> processing_q{16};
+
   void run();
 
   std::string rgw_script;
   int read_script();
   std::unique_ptr<lua_state_guard> initialize_lguard_state();
+
+  void process_scripts();
 
  public:
   Background(CephContext* _cct,
@@ -178,6 +188,10 @@ private:
   void pause() override;
   // Does not actually use `Driver` argument.
   void resume(rgw::sal::Driver*) override;
+
+  // for lua bytecode caching
+  void process_script_add(std::string script);
+  int get_script_bytecode(std::string key, std::vector<char>& lua_bytecode);
 };
 
 } //namespace rgw::lua
