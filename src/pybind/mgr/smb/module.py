@@ -193,6 +193,17 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             return results.ResultGroup(
                 [results.InvalidResourceResult(err.resource_data, str(err))]
             )
+        except sqlite_store.StoreUnavailable as err:
+            # Reached only via remote() calls (e.g. dashboard), which bypass
+            # cli.py's error_wrapper. Return a result instead of raising so a
+            # transient db outage doesn't surface as an unhandled exception.
+            return results.ResultGroup(
+                [
+                    results.InvalidResourceResult(
+                        {}, f'smb database temporarily unavailable: {err}'
+                    )
+                ]
+            )
 
     @SMBCLICommand('cluster ls', perm='r')
     def cluster_ls(self) -> List[str]:
@@ -398,20 +409,31 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         """Show resources fetched from the local config store based on resource
         type or resource type and id(s).
         """
-        if not resource_names:
-            resources = self._handler.all_resources()
-        else:
-            try:
-                resources = self._handler.matching_resources(resource_names)
-            except handler.InvalidResourceMatch as err:
-                raise cli.InvalidInputValue(str(err)) from err
-        if password_filter is not PasswordFilter.NONE:
-            op = (PasswordFilter.NONE, password_filter)
-            log.debug('Password filtering for smb show: %r', op)
-            resources = [r.convert(op) for r in resources]
-        if len(resources) == 1 and results is ShowResults.COLLAPSED:
-            return resources[0].to_simplified()
-        return {"resources": [r.to_simplified() for r in resources]}
+        try:
+            if not resource_names:
+                resources = self._handler.all_resources()
+            else:
+                try:
+                    resources = self._handler.matching_resources(
+                        resource_names
+                    )
+                except handler.InvalidResourceMatch as err:
+                    raise cli.InvalidInputValue(str(err)) from err
+            if password_filter is not PasswordFilter.NONE:
+                op = (PasswordFilter.NONE, password_filter)
+                log.debug('Password filtering for smb show: %r', op)
+                resources = [r.convert(op) for r in resources]
+            if len(resources) == 1 and results is ShowResults.COLLAPSED:
+                return resources[0].to_simplified()
+            return {"resources": [r.to_simplified() for r in resources]}
+        except sqlite_store.StoreUnavailable as err:
+            # Reached only via remote() calls (e.g. dashboard), which bypass
+            # cli.py's error_wrapper. Return a value instead of raising so a
+            # transient db outage doesn't surface as an unhandled exception.
+            return {
+                "error": f"smb database temporarily unavailable: {err}",
+                "resources": [],
+            }
 
     def submit_smb_spec(self, spec: SMBSpec) -> None:
         """Submit a new or updated smb spec object to ceph orchestration."""
