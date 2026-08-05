@@ -1,0 +1,10 @@
+roles:
+- - host.a
+  - client.0
+  - osd.0
+  - osd.1
+  - osd.2
+- - host.b
+  - osd.3
+  - osd.4
+  - osd.5
