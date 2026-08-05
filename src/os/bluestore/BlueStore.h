@@ -2298,43 +2298,27 @@ public:
 
     void flush() {
       std::unique_lock l(qlock);
-      while (true) {
-	// std::set flag before the check because the condition
-	// may become true outside qlock, and we need to make
-	// sure those threads see waiters and signal qcond.
-	++kv_submitted_waiters;
-	if (q.empty() || _is_all_kv_submitted()) {
-	  --kv_submitted_waiters;
-	  return;
-	}
-	qcond.wait(l);
-	--kv_submitted_waiters;
-      }
+      ++kv_submitted_waiters;
+      qcond.wait(l, [&]() {
+        return q.empty() || _is_all_kv_submitted();
+      });
+      --kv_submitted_waiters;
     }
 
     void flush_all_but_last() {
       std::unique_lock l(qlock);
       ceph_assert (q.size() >= 1);
-      while (true) {
-	// std::set flag before the check because the condition
-	// may become true outside qlock, and we need to make
-	// sure those threads see waiters and signal qcond.
-	++kv_submitted_waiters;
-	if (q.size() <= 1) {
-	  --kv_submitted_waiters;
-	  return;
-	} else {
-	  auto it = q.rbegin();
-	  it++;
-	  if (it->get_state() >= TransContext::STATE_KV_SUBMITTED) {
-	    --kv_submitted_waiters;
-	    return;
-          }
-	}
-	qcond.wait(l);
-	--kv_submitted_waiters;
-      }
-      }
+      ++kv_submitted_waiters;
+      qcond.wait(l, [&]() {
+        if (q.size() <= 1) {
+          return true;
+        }
+        auto it = q.rbegin();
+        it++;
+        return it->get_state() >= TransContext::STATE_KV_SUBMITTED;
+      });
+      --kv_submitted_waiters;
+    }
 
     bool flush_commit(Context *c) {
       std::lock_guard l(qlock);

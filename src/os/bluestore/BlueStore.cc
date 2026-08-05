@@ -14987,8 +14987,14 @@ void BlueStore::_txc_apply_kv(TransContext *txc, bool sync_submit_transaction)
     ceph_assert(r == 0);
     txc->set_state(TransContext::STATE_KV_SUBMITTED);
     if (txc->osr->kv_submitted_waiters) {
-      std::lock_guard l(txc->osr->qlock);
-      txc->osr->qcond.notify_all();
+      if (sync_submit_transaction) {
+        // We already have the lock
+        txc->osr->qcond.notify_all();
+      } else {
+        // We need to take a lock.
+        std::lock_guard l(txc->osr->qlock);
+        txc->osr->qcond.notify_all();
+      }
     }
 
 #if defined(WITH_LTTNG)
