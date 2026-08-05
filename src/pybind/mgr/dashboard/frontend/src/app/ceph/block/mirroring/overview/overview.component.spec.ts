@@ -2,6 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
+import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule, NgbProgressbarModule } from '@ng-bootstrap/ng-bootstrap';
@@ -9,6 +10,7 @@ import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
+import { Permission } from '~/app/shared/models/permissions';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { DaemonListComponent } from '../daemon-list/daemon-list.component';
@@ -78,6 +80,23 @@ describe('OverviewComponent', () => {
       });
       component.updateSiteName();
       expect(rbdMirroringService.setSiteName).toHaveBeenCalledWith('new-site-A');
+    });
+  });
+
+  describe('site name edit button visibility', () => {
+    const editButton = () =>
+      fixture.debugElement.query(By.css('[data-testid="site-name-edit-btn"]'));
+
+    it('should show the edit button when user has update permission', () => {
+      component.permission = new Permission(['read', 'update']);
+      fixture.detectChanges();
+      expect(editButton()).toBeTruthy();
+    });
+
+    it('should hide the edit button when user lacks update permission', () => {
+      component.permission = new Permission(['read']);
+      fixture.detectChanges();
+      expect(editButton()).toBeFalsy();
     });
   });
 });
