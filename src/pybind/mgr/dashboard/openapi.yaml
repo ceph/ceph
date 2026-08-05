@@ -3207,7 +3207,7 @@ paths:
                                       description: Ceph client name
                                       type: string
                                     cluster_name:
-                                      description: Remote cluster name
+                                      description: Remote site name
                                       type: string
                                     fs_name:
                                       description: Remote filesystem name
@@ -3282,7 +3282,7 @@ paths:
                                       description: Ceph client name
                                       type: string
                                     cluster_name:
-                                      description: Remote cluster name
+                                      description: Remote site name
                                       type: string
                                     fs_name:
                                       description: Remote filesystem name
