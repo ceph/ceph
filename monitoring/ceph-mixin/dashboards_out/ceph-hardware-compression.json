@@ -85,7 +85,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Amount of physical storage capacity saved through hardware compression.",
+      "description": "Amount of physical storage capacity saved through hardware compression. Displays N/A when physical used is below 100 GiB, as small amounts of internal metadata can produce misleading values.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -96,16 +96,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "yellow",
-                "value": 1099511627776
-              },
-              {
                 "color": "green",
-                "value": 10995116277760
+                "value": 0
               }
             ]
           },
@@ -145,7 +137,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(ceph_extblkdev_dev_log_util{cluster=~\"$cluster\", instance=~\"$instance\", ceph_daemon=~\"$osd\"}) - sum(ceph_extblkdev_dev_phy_util{cluster=~\"$cluster\", instance=~\"$instance\", ceph_daemon=~\"$osd\"})",
+          "expr": "(sum(ceph_extblkdev_dev_log_util{cluster=~\"$cluster\", instance=~\"$instance\", ceph_daemon=~\"$osd\"}) - sum(ceph_extblkdev_dev_phy_util{cluster=~\"$cluster\", instance=~\"$instance\", ceph_daemon=~\"$osd\"})) and (sum(ceph_extblkdev_dev_phy_util{cluster=~\"$cluster\", instance=~\"$instance\", ceph_daemon=~\"$osd\"}) > 107374182400)",
           "instant": false,
           "legendFormat": "Storage Saved",
           "range": true,
@@ -160,7 +152,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Ratio of logical data to physical storage after compression. Higher values indicate better compression efficiency.",
+      "description": "Ratio of logical data to physical storage after compression. Higher values indicate better compression efficiency. Displays N/A when physical used is below 100 GiB, as small amounts of internal metadata can produce misleading values.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -229,7 +221,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(ceph_extblkdev_dev_log_util{cluster=~\"$cluster\", instance=~\"$instance\", ceph_daemon=~\"$osd\"}) / clamp_min(sum(ceph_extblkdev_dev_phy_util{cluster=~\"$cluster\", instance=~\"$instance\", ceph_daemon=~\"$osd\"}), 1)",
+          "expr": "(sum(ceph_extblkdev_dev_log_util{cluster=~\"$cluster\", instance=~\"$instance\", ceph_daemon=~\"$osd\"}) / clamp_min(sum(ceph_extblkdev_dev_phy_util{cluster=~\"$cluster\", instance=~\"$instance\", ceph_daemon=~\"$osd\"}), 1)) and (sum(ceph_extblkdev_dev_phy_util{cluster=~\"$cluster\", instance=~\"$instance\", ceph_daemon=~\"$osd\"}) > 107374182400)",
           "instant": false,
           "legendFormat": "Compression Ratio",
           "range": true,
@@ -244,7 +236,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Percentage of storage capacity saved through compression. Shows cost savings and infrastructure efficiency.",
+      "description": "Percentage of storage capacity saved through compression. Shows cost savings and infrastructure efficiency. Displays N/A when physical used is below 100 GiB, as small amounts of internal metadata can produce misleading values.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -305,7 +297,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "100 * (1 - sum(ceph_extblkdev_dev_phy_util{cluster=~\"$cluster\", instance=~\"$instance\", ceph_daemon=~\"$osd\"}) / clamp_min(sum(ceph_extblkdev_dev_log_util{cluster=~\"$cluster\", instance=~\"$instance\", ceph_daemon=~\"$osd\"}), 1))",
+          "expr": "(100 * (1 - sum(ceph_extblkdev_dev_phy_util{cluster=~\"$cluster\", instance=~\"$instance\", ceph_daemon=~\"$osd\"}) / clamp_min(sum(ceph_extblkdev_dev_log_util{cluster=~\"$cluster\", instance=~\"$instance\", ceph_daemon=~\"$osd\"}), 1))) and (sum(ceph_extblkdev_dev_phy_util{cluster=~\"$cluster\", instance=~\"$instance\", ceph_daemon=~\"$osd\"}) > 107374182400)",
           "instant": false,
           "legendFormat": "Efficiency",
           "range": true,
@@ -812,20 +804,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "orange",
-                "value": 10995116277760
-              },
-              {
-                "color": "yellow",
-                "value": 54975581388800
-              },
-              {
                 "color": "green",
-                "value": 109951162777600
+                "value": 0
               }
             ]
           },
@@ -893,7 +873,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Historical compression effectiveness over time. Stable trend indicates consistent workload. Declining ratios suggest more incompressible data.",
+      "description": "Historical compression effectiveness over time. Stable trend indicates consistent workload. Declining ratios suggest more incompressible data. No data shown when physical used is below 100 GiB.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -977,7 +957,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "round(sum(ceph_extblkdev_dev_log_util{cluster=~\"$cluster\", instance=~\"$instance\", ceph_daemon=~\"$osd\"}) / sum(ceph_extblkdev_dev_phy_util{cluster=~\"$cluster\", instance=~\"$instance\", ceph_daemon=~\"$osd\"}), 0.01)",
+          "expr": "(round(sum(ceph_extblkdev_dev_log_util{cluster=~\"$cluster\", instance=~\"$instance\", ceph_daemon=~\"$osd\"}) / sum(ceph_extblkdev_dev_phy_util{cluster=~\"$cluster\", instance=~\"$instance\", ceph_daemon=~\"$osd\"}), 0.01)) and (sum(ceph_extblkdev_dev_phy_util{cluster=~\"$cluster\", instance=~\"$instance\", ceph_daemon=~\"$osd\"}) > 107374182400)",
           "instant": false,
           "legendFormat": "Compression Ratio",
           "range": true,

@@ -10,27 +10,37 @@
       </div>
       <!-- UserName -->
       <div class="form-item">
-        <cds-text-label labelInputID="username"
-                        cdRequiredField="Username"
-                        [invalid]="!userForm.controls.username.valid && userForm.controls.username.dirty"
-                        [invalidText]="usernameError"
-                        i18n>Username
-          <input cdsText
-                 placeholder="Username..."
-                 i18n-placeholder
-                 id="username"
-                 formControlName="username"
-                 [invalid]="!userForm.controls.username.valid && userForm.controls.username.dirty"
-                 autofocus
-                 ngbTooltip="White spaces at the beginning and end will be trimmed"
-                 i18n-ngbTooltip
-                 cdTrim>
+        <cds-text-label
+          labelInputID="username"
+          cdRequiredField="Username"
+          helperText="Username can only contain letters, numbers, '.', '_', '@', '+' or '-'."
+          i18n-helperText
+          [invalid]="!userForm.controls.username.valid && userForm.controls.username.dirty"
+          [invalidText]="usernameError"
+          i18n
+          >Username
+          <input
+            cdsText
+            placeholder="Username..."
+            i18n-placeholder
+            id="username"
+            formControlName="username"
+            maxlength="256"
+            [invalid]="!userForm.controls.username.valid && userForm.controls.username.dirty"
+            autofocus
+            ngbTooltip="White spaces at the beginning and end will be trimmed"
+            i18n-ngbTooltip
+            cdTrim
+          />
         </cds-text-label>
         <ng-template #usernameError>
           <span *ngIf="userForm.showError('username', formDir, 'required')">
             <ng-container i18n>
              This field is required.
             </ng-container>
+          </span>
+          <span *ngIf="userForm.showError('username', formDir, 'maxlength')">
+            <ng-container i18n> Username must not exceed 256 characters. </ng-container>
           </span>
           <span *ngIf="userForm.showError('username', formDir, 'notUnique')">
             <ng-container i18n>

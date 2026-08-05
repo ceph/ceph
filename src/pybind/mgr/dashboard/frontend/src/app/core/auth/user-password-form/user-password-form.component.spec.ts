@@ -3,12 +3,12 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
-
-import { ToastrModule } from 'ngx-toastr';
+import { of } from 'rxjs';
 
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { PasswordPolicyService } from '~/app/shared/services/password-policy.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
 import { UserPasswordFormComponent } from './user-password-form.component';
@@ -28,13 +28,13 @@ describe('UserPasswordFormComponent', () => {
       RouterTestingModule,
       ReactiveFormsModule,
       ComponentsModule,
-      ToastrModule.forRoot(),
       SharedModule
     ],
     declarations: [UserPasswordFormComponent]
   });
 
   beforeEach(() => {
+    spyOn(TestBed.inject(PasswordPolicyService), 'getHelpText').and.returnValue(of(''));
     fixture = TestBed.createComponent(UserPasswordFormComponent);
     component = fixture.componentInstance;
     form = component.userForm;
@@ -53,6 +53,19 @@ describe('UserPasswordFormComponent', () => {
   it('should validate old password required', () => {
     formHelper.expectErrorChange('oldpassword', '', 'required');
     formHelper.expectValidChange('oldpassword', 'foo');
+  });
+
+  it('should validate old and new password must be different', () => {
+    formHelper.setMultipleValues({
+      oldpassword: 'aaa',
+      newpassword: 'aaa'
+    });
+    formHelper.expectError('oldpassword', 'notmatch');
+    formHelper.expectError('newpassword', 'notmatch');
+
+    formHelper.setValue('newpassword', 'bbb');
+    formHelper.expectValid('oldpassword');
+    formHelper.expectValid('newpassword');
   });
 
   it('should validate password match', () => {
