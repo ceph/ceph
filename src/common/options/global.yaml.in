@@ -5316,6 +5316,32 @@ options:
   desc: Remove allocation info from RocksDB and store the info in a new allocation file
   default: true
   with_legacy: true
+- name: bluestore_allocation_recovery_threads
+  type: uint
+  level: basic
+  desc: Amount of threads for allocation recovery after OSD crash.
+  long_desc: The optimal value varies. For NVMe DBs may be as large as 8.
+    Value 0 selects legacy recovery.
+    Value 1 denotes new recovery but on single thread.
+  default: 0
+  with_legacy: false
+  flags:
+    - startup
+  see_also:
+    - bluestore_allocation_from_file
+- name: bluestore_debug_fast_recovery_compare_chance
+  type: float
+  level: dev
+  desc: For testing only. Compare legacy and multithread allocation recovery.
+  long_desc: Chance to perform compare between procedures.
+    Value in range <0..1>; defines chance to perform comparision between legacy
+    and multithreaded allocation recovery. 0 means never compare. 1 means always compare.
+  default: 0
+  with_legacy: false
+  flags:
+    - startup
+  see_also:
+    - bluestore_allocation_recovery_threads
 - name: bluestore_debug_inject_allocation_from_file_failure
   type: float
   level: dev
