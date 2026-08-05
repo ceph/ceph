@@ -7,7 +7,7 @@ tasks:
       - ceph orch device ls --refresh
 
 # stop kernel nfs server, if running
-- vip.exec:
+- exec:
     all-hosts:
       - systemctl stop nfs-server
 
@@ -42,7 +42,7 @@ tasks:
     host.a:
       - ceph nfs export create cephfs --fsname foofs --cluster-id foo --pseudo-path /fake
 
-- vip.exec:
+- template.exec:
     host.a:
       - mkdir /mnt/foo
       - sleep 5

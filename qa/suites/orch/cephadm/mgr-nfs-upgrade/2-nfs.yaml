@@ -1,7 +1,7 @@
 tasks:
 
 # stop kernel nfs server, if running
-- vip.exec:
+- exec:
     all-hosts:
       - systemctl stop nfs-server
 
@@ -20,7 +20,7 @@ tasks:
       # we can't do wait_for_service here because with octopus it's nfs.ganesha-foo not nfs.foo
       - while ! ceph orch ls | grep nfs | grep 2/2 ; do sleep 1 ; done
 
-- vip.exec:
+- exec:
     host.a:
       - mkdir /mnt/foo
       - while ! mount -t nfs $(hostname):/fake /mnt/foo -o sync ; do sleep 5 ; done
