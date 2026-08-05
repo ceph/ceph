@@ -464,7 +464,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         self,
         client_compat: ClientSupportMode,
         cluster_id: str,
-    ) -> Simplified:
+    ) -> results.Result:
         """Update client compatibility mode for an SMB cluster and all its shares"""
         # Get the existing cluster
         clusters = self._handler.matching_resources(
@@ -499,34 +499,24 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         # Apply the updates
         result_group = self._apply_res(resources_to_update)
-
-        # Process results
-        cluster_updated = False
-        successful_share_updates = []
-        failed_share_updates = []
-
-        for result in result_group.resources():
-            if result.success:
-                if isinstance(result.src, resources.Cluster):
-                    cluster_updated = True
-                elif hasattr(result.src, 'share_id'):
-                    successful_share_updates.append(result.src.share_id)
-            else:
-                if isinstance(result.src, resources.Share) and hasattr(
-                    result.src, 'share_id'
-                ):
-                    failed_share_updates.append(
-                        {"share_id": result.src.share_id, "error": result.msg}
-                    )
-
-        return {
-            "cluster_id": cluster_id,
-            "client_compat": client_compat.value,
-            "cluster_updated": cluster_updated,
-            "successful_share_updates": successful_share_updates,
-            "failed_share_updates": failed_share_updates,
-            "total_shares": len(active_shares),
-        }
+        try:
+            summary = results.ClusterShareSummary.from_result_group(
+                result_group
+            ).build_dict(
+                successful_shares_key='successful_share_updates',
+                failed_shares_key='failed_share_updates',
+                cluster_updated_key='cluster_updated',
+            )
+        except ValueError:
+            return result_group
+        return results.ClientCompatBatchResult.create(
+            {
+                'cluster_id': cluster_id,
+                'client_compat': client_compat.value,
+                'total_shares': len(active_shares),
+            }
+            | summary
+        )
 
     @SMBCLICommand('cluster update cephfs qos', perm='rw')
     def cluster_update_qos(
@@ -538,7 +528,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         write_bw_limit: Optional[str] = None,
         read_burst_mult: Optional[int] = None,
         write_burst_mult: Optional[int] = None,
-    ) -> Simplified:
+    ) -> results.Result:
         """Update QoS settings for all CephFS shares in a cluster"""
         try:
             shares = self._handler.matching_resources(
@@ -582,43 +572,36 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                     )
 
             if not shares_to_update:
-                return {
-                    "cluster_id": cluster_id,
-                    "message": "No shares required QoS updates",
-                    "unchanged_shares": unchanged_shares,
-                    "total_shares": len(active_shares),
-                }
+                return results.QoSBatchResult.unchanged(
+                    {
+                        "cluster_id": cluster_id,
+                        "message": "No shares required QoS updates",
+                        "unchanged_shares": unchanged_shares,
+                        "total_shares": len(active_shares),
+                    }
+                )
 
             result_group = self._apply_res(shares_to_update)
 
-            successful_updates = []
-            failed_updates = []
+            summary = results.ClusterShareSummary.from_result_group(
+                result_group
+            ).build_dict(
+                successful_shares_key='successful_updates',
+                failed_shares_key='failed_updates',
+            )
 
-            for result in result_group.resources():
-                if result.success and hasattr(result.src, 'share_id'):
-                    successful_updates.append(result.src.share_id)
-                elif hasattr(result.src, 'share_id'):
-                    failed_updates.append(
-                        {"share_id": result.src.share_id, "error": result.msg}
-                    )
-
-            return {
-                "cluster_id": cluster_id,
-                "successful_updates": successful_updates,
-                "failed_updates": failed_updates,
-                "unchanged_shares": unchanged_shares,
-                "total_shares": len(active_shares),
-                "success": len(failed_updates) == 0,
-            }
-
+            return results.QoSBatchResult.create(
+                {
+                    "cluster_id": cluster_id,
+                    "unchanged_shares": unchanged_shares,
+                    "total_shares": len(active_shares),
+                }
+                | summary
+            )
         except resources.InvalidResourceError as err:
-            return {
-                "success": False,
-                "error": str(err),
-                "resource": err.resource_data,
-            }
+            return results.InvalidResourceResult(err.resource_data, str(err))
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            return results.QoSBatchResult.unhandled_error(str(e))
 
     @SMBCLICommand('share ls', perm='r')
     def share_ls(self, cluster_id: str) -> List[str]:
@@ -713,7 +696,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @SMBCLICommand('share rm', perm='rw')
     def share_rm(
         self, cluster_id: str, share_id: str, wildcard: bool = False
-    ) -> Union[results.Result, results.ResultGroup]:
+    ) -> results.Result:
         """Remove an smb share"""
         if wildcard:
             return self._share_wildcard_rm(cluster_id, share_id)
