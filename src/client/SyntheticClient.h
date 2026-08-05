@@ -141,14 +141,14 @@ class SyntheticClient {
 
     n1 = cwd;
     n1.push_dentry( *it );
-    return n1.get_path().c_str();
+    return n1.c_str();
   }
   filepath n2;
   const char *get_random_sub() {
     ceph_assert(!contents.empty());
     int r = ((rand() % contents.size()) + (rand() % contents.size())) / 2;  // non-uniform distn
-    if (cwd.depth() && cwd.last_dentry().length()) 
-      r += cwd.last_dentry().c_str()[0];                                         // slightly permuted
+    if (cwd.depth() && cwd.last_dentry().size()) 
+      r += cwd.last_dentry().data()[0];                                         // slightly permuted
     r %= contents.size();
 
     std::map<std::string,struct stat*>::iterator it = contents.begin();
@@ -156,7 +156,7 @@ class SyntheticClient {
 
     n2 = cwd;
     n2.push_dentry( it->first );
-    return n2.get_path().c_str();
+    return n2.c_str();
   }
   
   filepath sub;
