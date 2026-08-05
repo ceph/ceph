@@ -42,6 +42,26 @@ class TestNoWorkqueue:
             encryption.set_dmcrypt_no_workqueue()
 
 
+class TestBypassWorkqueue:
+    def setup_method(self):
+        encryption.conf.dmcrypt_no_workqueue = None
+
+    @patch('ceph_volume.util.encryption.BackingDeviceRotation.is_rotational', return_value=False)
+    def test_bypass_workqueue_non_rotational_no_workqueue_set(self, m_is_rotational):
+        encryption.conf.dmcrypt_no_workqueue = True
+        assert encryption.bypass_workqueue('/dev/nvme0n1') is True
+
+    @patch('ceph_volume.util.encryption.BackingDeviceRotation.is_rotational', return_value=True)
+    def test_bypass_workqueue_rotational_no_workqueue_set(self, m_is_rotational):
+        encryption.conf.dmcrypt_no_workqueue = True
+        assert encryption.bypass_workqueue('/dev/sda') is False
+
+    @patch('ceph_volume.util.encryption.BackingDeviceRotation.is_rotational', return_value=False)
+    def test_bypass_workqueue_non_rotational_no_workqueue_not_set(self, m_is_rotational):
+        encryption.conf.dmcrypt_no_workqueue = None
+        assert not encryption.bypass_workqueue('/dev/nvme0n1')
+
+
 class TestGetKeySize(object):
     def test_get_size_from_conf_default(self, conf_ceph_stub):
         conf_ceph_stub('''
