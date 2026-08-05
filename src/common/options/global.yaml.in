@@ -4349,6 +4349,60 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: bluefs_spillover_cleaner
+  type: bool
+  level: advanced
+  desc: Enable Background BlueFS Spillover cleaner thread
+  long_desc: Enables a background cleaner thread in BlueFS that periodically scans files
+    that spilled over to the slow device and attempts to migrate them back to the
+    BlueFS DB device
+  default: false
+  see_also:
+  - bluefs_spillover_idle_time
+  - bluefs_spillover_cleaner_work_ratio
+  flags:
+  - runtime
+  with_legacy: true
+- name: bluefs_spillover_idle_time
+  type: uint
+  level: advanced
+  desc: Idle time in seconds before the BlueFS spillover cleaner wakes
+    up for the next scan cycle.
+  long_desc: When no spillover files remain to migrate, the cleaner enters an idle
+    sleep state for this duration. Once the idle period expires, it wakes up, scans
+    for spillover files, and resumes migration if needed.
+  default: 1200
+  min: 0
+  see_also:
+  - bluefs_spillover_cleaner
+  flags:
+  - runtime
+  with_legacy: true
+- name: bluefs_spillover_cleaner_work_ratio
+  type: float
+  level: advanced
+  desc: Fraction of time the BlueFS spillover cleaner spends performing work.
+  long_desc: Controls the rate of spillover migration work. After each migration
+    step, the cleaner targets to sleep proportionally to the time spent doing work
+    This reduces interference with foreground IO. For example, if a migration step
+    took 10 ms and the ratio is 0.1, the cleaner sleeps for ~90 ms before the next
+    step. This results in approximately 10% work time and 90% sleep time.
+  default: 0.1
+  flags:
+  - runtime
+  min: 0.01
+  max: 1.0
+  with_legacy: true
+- name: bluefs_debug_force_slow
+  type: bool
+  level: dev
+  desc: For testing. Force BlueFS to allocate files on slow device.
+  long_desc: When enabled, the RocksDBBlueFSVolumeSelector will ignore normal
+    placement policy and redirect allocations to slow device.
+  default: false
+  flags:
+  - runtime
+  with_legacy: true
 - name: bluestore_bluefs
   type: bool
   level: dev
